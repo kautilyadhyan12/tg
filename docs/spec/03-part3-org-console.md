@@ -4539,6 +4539,19 @@ charged, an agreement's link emailed or signed at the desk or from the link. A p
 settles later (its message, the worker) is read when the page next reads. 18-ii: the check-in log
 and the Leaderboard, whose timers go.
 
+18-iii (the feature's two extra passes): only the console's own website opens a line (another
+site's request, or one with no Origin, gets the same 404), and a request the browser drops while it
+is being checked takes no place. A line its browser stops reading is cut once 64 KB wait for it, and
+an ended line's connection is cut 2 seconds after. Every `ready` makes the page read again, the
+line's first too, so a change made while it opened is not missed; and so does Redis coming back,
+since news told while it was away is lost. A sign-in refresh lost to a blip is tried again, said from
+the second failure in a row; a sign-in really gone is said, and the page's own next read takes the
+person to sign in. News is told once the answer is worked out, so a change whose browser went away
+before the answer still reaches the other windows. A person may change what a gym shows of them (a
+name, Hide me, an age) 30 times an hour; a save that changes none of them is not counted. Who came,
+paged with Show more, reads as many pages again on news. Deploy `live` before the api, or together
+(`infra/README.md`).
+
 **Each place's rules** (18u, 18v; no lawyer, Kd 2026-10-23, `rulings/2026-10-23-18u-i.md`): renewal on or off per type (Quebec: no
 paid automatic renewal); a longest term (Ontario and Quebec 1 year; British Columbia 2 years
 without a 30-day exit; California, New York and Texas 3 years; Illinois a first term of 1

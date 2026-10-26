@@ -195,8 +195,9 @@ export async function updateProfile(
   deps: UsersDeps,
   userId: string,
   patch: UpdateProfileRequest,
+  onBefore?: (before: repo.ShownBefore) => void,
 ): Promise<UserProfile> {
-  const row = await repo.updateProfile(deps.sql, userId, patch);
+  const row = await repo.updateProfile(deps.sql, userId, patch, onBefore);
   if (row === null) throw new UsersError(401, "unauthorized", "authentication required");
   return await toUserProfile(deps.sql, row);
 }
@@ -253,6 +254,7 @@ export async function putFitnessProfile(
   deps: UsersDeps,
   userId: string,
   body: PutFitnessProfileRequest,
+  onAgeBefore?: (age: number | null) => void,
 ): Promise<FitnessProfile> {
   const onboardingCompleted = body.onboardingCompleted ?? false;
   const verify = onboardingCompleted
@@ -282,6 +284,7 @@ export async function putFitnessProfile(
       onboardingCompleted,
     },
     verify,
+    onAgeBefore,
   );
   // No row = the user was deleted mid-request (the upsert is active-only).
   if (row === null) throw new UsersError(401, "unauthorized", "authentication required");
@@ -611,7 +614,7 @@ export async function deleteAccount(
   deps: UsersDeps,
   userId: string,
   code: string,
-): Promise<{ emailSent: boolean }> {
+): Promise<{ emailSent: boolean; leftGymIds: string[] }> {
   const row = await repo.getProfile(deps.sql, userId);
   if (row === null) throw new UsersError(401, "unauthorized", "authentication required");
   if (row.email === null) {
@@ -638,7 +641,7 @@ export async function deleteAccount(
   // this write (a racing second tap): quiet success, no second undo email.
   // A repeat DELETE from a deleted session never gets here — authenticate
   // and the active-only profile read both 401 first.
-  if (deleted === null) return { emailSent: false };
+  if (deleted === null) return { emailSent: false, leftGymIds: [] };
   await revokeAllSessions(deps.sql, userId);
   // Memberships just closed = an entitlement change → bust (§4.1/§10 seam).
   await bustEntitlements(deps.redis, userId);
@@ -646,7 +649,7 @@ export async function deleteAccount(
   if (deleted.email !== null) {
     try {
       await deps.emailSender.sendAccountDeletionEmail(deleted.email, deleted.displayName, rawToken);
-      return { emailSent: true };
+      return { emailSent: true, leftGymIds: deleted.leftGymIds };
     } catch (err) {
       // R3.10 (T3 2026-07-11 finding 5): provider errors routinely echo the
       // recipient address / message content — log the error CLASS only,
@@ -659,12 +662,12 @@ export async function deleteAccount(
         },
         "email send failed",
       );
-      return { emailSent: false };
+      return { emailSent: false, leftGymIds: deleted.leftGymIds };
     }
   }
   // OAuth-only account without an email: no undo channel — log the event.
   deps.log.warn({ event: "account_deletion.no_email", userId }, "deletion without undo email");
-  return { emailSent: false };
+  return { emailSent: false, leftGymIds: deleted.leftGymIds };
 }
 
 /** Undo (Part 4 §5.2): token consume and window check are BOTH enforced;

@@ -296,7 +296,7 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
   const leaversGate = gate(leaversLimit);
 
   /** The box before an import with leavers: who moves, who loses the app, who keeps it. */
-  app.post("/v1/orgs/:gymId/member-list/uploads/:uploadId/leavers", { preHandler: [app.authenticate], onResponse: tellPeople }, async (req, reply) => {
+  app.post("/v1/orgs/:gymId/member-list/uploads/:uploadId/leavers", { preHandler: [app.authenticate], onSend: tellPeople }, async (req, reply) => {
     const params = parseOr400(memberListParamsSchema, req.params, req, reply);
     if (params === null) return;
     const body = parseOr400(memberListLeaversRequestSchema, req.body ?? {}, req, reply);
@@ -323,7 +323,7 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
 
   app.post(
     "/v1/orgs/:gymId/member-list/uploads/:uploadId/confirm",
-    { preHandler: [app.authenticate], onResponse: tellPeople },
+    { preHandler: [app.authenticate], onSend: tellPeople },
     async (req, reply) => {
       const params = parseOr400(memberListParamsSchema, req.params, req, reply);
       if (params === null) return;
@@ -547,7 +547,7 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
     return reply.status(200).send({ entry });
   });
 
-  app.post("/v1/orgs/:gymId/member-list/entries", { preHandler: [app.authenticate], onResponse: tellPeople }, async (req, reply) => {
+  app.post("/v1/orgs/:gymId/member-list/entries", { preHandler: [app.authenticate], onSend: tellPeople }, async (req, reply) => {
     const params = parseOr400(orgParamsSchema, req.params, req, reply);
     if (params === null) return;
     const body = parseOr400(memberListEntryInputSchema, req.body, req, reply);
@@ -555,7 +555,7 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
     return sendWrite(req, reply, await byHand.addEntry(listDeps, requireUserId(req), params.gymId, body, editGate(req, reply)));
   });
 
-  app.patch("/v1/orgs/:gymId/member-list/entries/:entryId", { preHandler: [app.authenticate], onResponse: tellPeople }, async (req, reply) => {
+  app.patch("/v1/orgs/:gymId/member-list/entries/:entryId", { preHandler: [app.authenticate], onSend: tellPeople }, async (req, reply) => {
     const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
     if (params === null) return;
     const body = parseOr400(memberListEntryPatchSchema, req.body, req, reply);
@@ -564,7 +564,7 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
     return sendWrite(req, reply, answer);
   });
 
-  app.delete("/v1/orgs/:gymId/member-list/entries/:entryId", { preHandler: [app.authenticate], onResponse: tellPeople }, async (req, reply) => {
+  app.delete("/v1/orgs/:gymId/member-list/entries/:entryId", { preHandler: [app.authenticate], onSend: tellPeople }, async (req, reply) => {
     const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
     if (params === null) return;
     const query = parseOr400(confirmPtSessionsQuerySchema, req.query ?? {}, req, reply);
@@ -580,7 +580,7 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
     }
   });
 
-  app.post("/v1/orgs/:gymId/member-list/entries/:entryId/restore", { preHandler: [app.authenticate], onResponse: tellPeople }, async (req, reply) => {
+  app.post("/v1/orgs/:gymId/member-list/entries/:entryId/restore", { preHandler: [app.authenticate], onSend: tellPeople }, async (req, reply) => {
     const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
     if (params === null) return;
     return sendWrite(req, reply, await byHand.restore(listDeps, requireUserId(req), params.gymId, params.entryId, editGate(req, reply)));
@@ -639,7 +639,7 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
     return sendWrite(req, reply, await byHand.notThisPerson(listDeps, requireUserId(req), params.gymId, params.entryId, body, editGate(req, reply)));
   });
 
-  app.post("/v1/orgs/:gymId/member-list/entries/:entryId/merge", { preHandler: [app.authenticate], onResponse: tellPeople }, async (req, reply) => {
+  app.post("/v1/orgs/:gymId/member-list/entries/:entryId/merge", { preHandler: [app.authenticate], onSend: tellPeople }, async (req, reply) => {
     const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
     if (params === null) return;
     const body = parseOr400(memberListMergeRequestSchema, req.body, req, reply);
@@ -658,7 +658,7 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
 
   app.post(
     "/v1/orgs/:gymId/member-list/entries/from-member/:userId",
-    { preHandler: [app.authenticate], onResponse: tellPeople },
+    { preHandler: [app.authenticate], onSend: tellPeople },
     async (req, reply) => {
       const params = parseOr400(memberParamsSchema, req.params, req, reply);
       if (params === null) return;
@@ -864,7 +864,7 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
     }
   });
 
-  app.delete("/v1/orgs/:gymId/member-list/former/:entryId", { preHandler: [app.authenticate], onResponse: tellPeople }, async (req, reply) => {
+  app.delete("/v1/orgs/:gymId/member-list/former/:entryId", { preHandler: [app.authenticate], onSend: tellPeople }, async (req, reply) => {
     const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
     if (params === null) return;
     const deleted = await byHand.deleteFormer(listDeps, requireUserId(req), params.gymId, params.entryId, editGate(req, reply));
@@ -1082,7 +1082,7 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
   });
 
   /** Remove the records selected: each to past members, and their app ended. */
-  app.post("/v1/orgs/:gymId/member-list/selected/remove", { preHandler: [app.authenticate], onResponse: tellPeople }, async (req, reply) => {
+  app.post("/v1/orgs/:gymId/member-list/selected/remove", { preHandler: [app.authenticate], onSend: tellPeople }, async (req, reply) => {
     const params = parseOr400(orgParamsSchema, req.params, req, reply);
     if (params === null) return;
     const body = parseOr400(memberListRemoveSelectedRequestSchema, req.body, req, reply);
@@ -1130,7 +1130,7 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
   });
 
   /** Delete permanently the past members the box showed, all or none. */
-  app.post("/v1/orgs/:gymId/member-list/selected/delete", { preHandler: [app.authenticate], onResponse: tellPeople }, async (req, reply) => {
+  app.post("/v1/orgs/:gymId/member-list/selected/delete", { preHandler: [app.authenticate], onSend: tellPeople }, async (req, reply) => {
     const params = parseOr400(orgParamsSchema, req.params, req, reply);
     if (params === null) return;
     const body = parseOr400(memberListDeleteSelectedRequestSchema, req.body, req, reply);
@@ -1150,7 +1150,7 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
 
   /** "Keep on list" for the people selected among those whose membership is over
    *  (21c-iii): the sign atop Members stops counting them. */
-  app.post("/v1/orgs/:gymId/member-list/selected/keep-listed", { preHandler: [app.authenticate], onResponse: tellPeople }, async (req, reply) => {
+  app.post("/v1/orgs/:gymId/member-list/selected/keep-listed", { preHandler: [app.authenticate], onSend: tellPeople }, async (req, reply) => {
     const params = parseOr400(orgParamsSchema, req.params, req, reply);
     if (params === null) return;
     const body = parseOr400(memberListKeepListedRequestSchema, req.body, req, reply);
@@ -1177,7 +1177,7 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
   });
 
   /** Remove the people ticked on "In the app": their app ended, their own record moved. */
-  app.post("/v1/orgs/:gymId/members/selected/remove", { preHandler: [app.authenticate], onResponse: tellPeople }, async (req, reply) => {
+  app.post("/v1/orgs/:gymId/members/selected/remove", { preHandler: [app.authenticate], onSend: tellPeople }, async (req, reply) => {
     const params = parseOr400(orgParamsSchema, req.params, req, reply);
     if (params === null) return;
     const body = parseOr400(memberRosterRemoveRequestSchema, req.body, req, reply);
@@ -1214,7 +1214,7 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
     },
   );
 
-  app.post("/v1/orgs/:gymId/member-list/remove-unlisted", { preHandler: [app.authenticate], onResponse: tellPeople }, async (req, reply) => {
+  app.post("/v1/orgs/:gymId/member-list/remove-unlisted", { preHandler: [app.authenticate], onSend: tellPeople }, async (req, reply) => {
     const params = parseOr400(orgParamsSchema, req.params, req, reply);
     if (params === null) return;
     const body = parseOr400(memberListRemoveUnlistedRequestSchema, req.body, req, reply);

@@ -65,7 +65,7 @@ interface Line {
 async function openLine(base: string, gymId: string, cookies: Cookies): Promise<Line> {
   const controller = new AbortController();
   const res = await fetch(`${base}/v1/orgs/${gymId}/live`, {
-    headers: { accept: "text/event-stream", "x-forwarded-for": nextIp(), cookie: cookieHeader(cookies) },
+    headers: { accept: "text/event-stream", "x-forwarded-for": nextIp(), cookie: cookieHeader(cookies), origin: baseEnv.WEB_ORIGIN },
     signal: controller.signal,
   });
   const line: Line = { status: res.status, messages: [], raw: "", close: () => {
@@ -112,6 +112,8 @@ d("live updates: the check-in log and the Leaderboard (real Postgres)", () => {
   let base = "";
   /** The server's limits, so a test can use one up. */
   const appRedis = createMemoryRedis();
+  /** The code each account deletion emailed, by address. */
+  const deleteCodes = new Map<string, string>();
   const api = (): App => {
     if (app === undefined) throw new Error("beforeAll did not build the app");
     return app;
@@ -133,6 +135,7 @@ d("live updates: the check-in log and the Leaderboard (real Postgres)", () => {
     await sql`DELETE FROM gyms WHERE id IN (${mine()})`;
     await sql`DELETE FROM workout_sets WHERE workout_id IN (SELECT id FROM workouts WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'livec-t-%@example.com'))`;
     await sql`DELETE FROM workouts WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'livec-t-%@example.com')`;
+    await sql`DELETE FROM sign_in_codes WHERE email LIKE 'livec-t-%@example.com'`;
     await sql`DELETE FROM users WHERE email LIKE 'livec-t-%@example.com'`;
     await sql`DELETE FROM plans WHERE code = ${PLAN}`;
   };
@@ -251,7 +254,14 @@ d("live updates: the check-in log and the Leaderboard (real Postgres)", () => {
       sendPasswordResetEmail: () => Promise.resolve(),
       sendSignInCodeEmail: () => Promise.resolve(),
     };
-    app = await buildApp(loadConfig(baseEnv), { redis: appRedis, emailSender: quietEmail, live: { heartbeatMs: 60_000 } });
+    const usersEmailSender = {
+      sendAccountDeleteCodeEmail: (to: string, code: string) => {
+        deleteCodes.set(to.toLowerCase(), code);
+        return Promise.resolve();
+      },
+      sendAccountDeletionEmail: () => Promise.resolve(),
+    };
+    app = await buildApp(loadConfig(baseEnv), { redis: appRedis, emailSender: quietEmail, usersEmailSender, live: { heartbeatMs: 60_000 } });
     base = await app.listen({ port: 0, host: "127.0.0.1" });
   }, T);
 
@@ -556,6 +566,69 @@ d("live updates: the check-in log and the Leaderboard (real Postgres)", () => {
       await settle();
       expect(heard(line)).toEqual([PEOPLE, PEOPLE, PEOPLE, BOARD]);
       line.close();
+    },
+    T,
+  );
+
+  it(
+    "a member may change what a gym shows of them 30 times an hour; a save that changes nothing is not counted",
+    async () => {
+      const gym = await makeBusiness("Live People Limit");
+      const hal = await makeUser("hal");
+      await makeMember(gym.org, gym.owner, hal);
+      const line = await openLine(base, gym.gymId, gym.owner.cookies);
+      const me = (payload: unknown) => send("PATCH", "/v1/users/me", hal.cookies, payload);
+      const body = (payload: unknown) => send("PUT", "/v1/users/me/fitness-profile", hal.cookies, payload);
+      const key = `rl:users_shown_changes:id:${hal.userId}`;
+      // 29 changes already this hour.
+      await appRedis.setex(key, 3600, "29");
+      // Saves that change nothing a gym shows are given back, however many.
+      for (let i = 0; i < 5; i += 1) expect((await me({ displayName: "Live hal" })).statusCode).toBe(200);
+      expect((await body({ heightCm: 175 })).statusCode).toBe(200);
+      expect(await appRedis.get(key)).toBe("29");
+      // The 30th change is taken and told.
+      expect((await me({ displayName: "Hal One" })).statusCode).toBe(200);
+      await until(() => heard(line).length >= 1);
+      // Past it: a new name, Hide me and a new age are refused, in words, and nothing is told.
+      for (const refused of [await me({ displayName: "Hal Two" }), await me({ leaderboardOptOut: true }), await body({ age: 40 })]) {
+        expect([refused.statusCode, (JSON.parse(refused.body) as { message: string }).message]).toEqual([
+          429,
+          "You've changed your name or profile many times in the last hour. Please try again later.",
+        ]);
+      }
+      // A save that sends nothing a gym shows is not stopped, nor a height with the age as saved.
+      expect((await me({ units: "imperial" })).statusCode).toBe(200);
+      expect((await body({ heightCm: 176 })).statusCode).toBe(200);
+      await settle();
+      expect(heard(line)).toEqual([PEOPLE]);
+      // 30, and the 3 refused: the height took none.
+      expect(await appRedis.get(key)).toBe("33");
+      const [row] = await sql<{ display_name: string; leaderboard_opt_out: boolean }[]>`SELECT display_name, leaderboard_opt_out FROM users WHERE id = ${hal.userId}`;
+      expect(row).toEqual({ display_name: "Hal One", leaderboard_opt_out: false });
+      line.close();
+    },
+    T,
+  );
+
+  it(
+    "an account deleted tells the gyms it left, a gym it joined just before too",
+    async () => {
+      const first = await makeBusiness("Live Deleted A");
+      const second = await makeBusiness("Live Deleted B");
+      const ivy = await makeUser("ivy");
+      await makeMember(first.org, first.owner, ivy);
+      await makeMember(second.org, second.owner, ivy);
+      const lineA = await openLine(base, first.gymId, first.owner.cookies);
+      const lineB = await openLine(base, second.gymId, second.owner.cookies);
+      expect((await post("/v1/users/me/delete-code", {}, ivy.cookies)).statusCode).toBe(200);
+      const code = deleteCodes.get(ivy.email.toLowerCase());
+      if (code === undefined) throw new Error("no delete code was emailed");
+      const deleted = await send("DELETE", "/v1/users/me", ivy.cookies, { code });
+      expect(deleted.statusCode, deleted.body).toBe(200);
+      await until(() => heard(lineA).length >= 1 && heard(lineB).length >= 1);
+      expect([heard(lineA), heard(lineB)]).toEqual([[PEOPLE], [PEOPLE]]);
+      lineA.close();
+      lineB.close();
     },
     T,
   );

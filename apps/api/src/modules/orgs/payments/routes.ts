@@ -320,7 +320,7 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     return reply.status(200).header("cache-control", "no-store").send(answer);
   });
 
-  app.post(`${entryUrl}/memberships/:membershipId/terminal-payment`, { preHandler: [app.authenticate, staffOnly(deps.sql, payStartLimit)], onResponse: tellMemberships }, async (req, reply) => {
+  app.post(`${entryUrl}/memberships/:membershipId/terminal-payment`, { preHandler: [app.authenticate, staffOnly(deps.sql, payStartLimit)], onSend: tellMemberships }, async (req, reply) => {
     const params = parseOr400(heldMembershipParamsSchema, req.params, req, reply);
     if (params === null) return;
     const body = parseOr400(terminalPaymentRequestSchema, req.body, req, reply);
@@ -329,7 +329,7 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     return reply.status(200).header("cache-control", "no-store").send(answer);
   });
 
-  app.post(`${entryUrl}/memberships/:membershipId/fees/:billId/terminal-payment`, { preHandler: [app.authenticate, staffOnly(deps.sql, payStartLimit)], onResponse: tellMemberships }, async (req, reply) => {
+  app.post(`${entryUrl}/memberships/:membershipId/fees/:billId/terminal-payment`, { preHandler: [app.authenticate, staffOnly(deps.sql, payStartLimit)], onSend: tellMemberships }, async (req, reply) => {
     const params = parseOr400(memberBillParamsSchema, req.params, req, reply);
     if (params === null) return;
     const body = parseOr400(terminalFeePaymentRequestSchema, req.body, req, reply);
@@ -341,7 +341,7 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
   // Charge card on file: a press is one trip to Square, answered in it; a busy desk takes many.
   const chargeLimit = createDualRateLimit({ name: "card_charge", max: 120, ipMax: 600, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
 
-  app.post(`${entryUrl}/memberships/:membershipId/card-charge`, { preHandler: [app.authenticate, staffOnly(deps.sql, chargeLimit)], onResponse: tellMemberships }, async (req, reply) => {
+  app.post(`${entryUrl}/memberships/:membershipId/card-charge`, { preHandler: [app.authenticate, staffOnly(deps.sql, chargeLimit)], onSend: tellMemberships }, async (req, reply) => {
     const params = parseOr400(heldMembershipParamsSchema, req.params, req, reply);
     if (params === null) return;
     const body = parseOr400(cardChargeRequestSchema, req.body, req, reply);
@@ -350,7 +350,7 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     return reply.status(200).header("cache-control", "no-store").send(answer);
   });
 
-  app.post(`${entryUrl}/memberships/:membershipId/fees/:billId/card-charge`, { preHandler: [app.authenticate, staffOnly(deps.sql, chargeLimit)], onResponse: tellMemberships }, async (req, reply) => {
+  app.post(`${entryUrl}/memberships/:membershipId/fees/:billId/card-charge`, { preHandler: [app.authenticate, staffOnly(deps.sql, chargeLimit)], onSend: tellMemberships }, async (req, reply) => {
     const params = parseOr400(memberBillParamsSchema, req.params, req, reply);
     if (params === null) return;
     const body = parseOr400(cardFeeChargeRequestSchema, req.body, req, reply);
@@ -368,7 +368,7 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     return reply.status(200).header("cache-control", "no-store").send(answer);
   });
 
-  app.post(`${entryUrl}/terminal-payments/:paymentId/cancel`, { preHandler: [app.authenticate, staffOnly(deps.sql, payStartLimit)], onResponse: tellMemberships }, async (req, reply) => {
+  app.post(`${entryUrl}/terminal-payments/:paymentId/cancel`, { preHandler: [app.authenticate, staffOnly(deps.sql, payStartLimit)], onSend: tellMemberships }, async (req, reply) => {
     const params = parseOr400(terminalPaymentParamsSchema, req.params, req, reply);
     if (params === null) return;
     const answer = await terminalPayments.cancelTerminalPayment(paymentsDeps, callerId(req), params.gymId, params.entryId, params.paymentId);
