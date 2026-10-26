@@ -126,6 +126,13 @@ const open = (org = ORG) => {
   );
 };
 const rows = () => screen.getAllByTestId('board-row').map((el) => el.textContent);
+/** Opened, and the first answer drawn, so the page's timers are set from it before a test moves the clock: a
+ *  test that moved it as soon as the board was asked for failed on a slow machine, the answer drawn after. */
+const openDrawn = async () => {
+  open();
+  await waitFor(() => expect(svc.board).toHaveBeenCalledTimes(1));
+  await screen.findAllByTestId('board-row');
+};
 
 beforeEach(() => {
   resetConsoleOrgs();
@@ -212,8 +219,7 @@ describe('the board for staff', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date('2026-10-07T06:00:00.000Z'));
     try {
-      open();
-      await waitFor(() => expect(svc.board).toHaveBeenCalledTimes(1));
+      await openDrawn();
       await act(async () => {
         await vi.advanceTimersByTimeAsync(120_000);
       });
@@ -231,8 +237,7 @@ describe('the board for staff', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date('2026-10-07T06:00:00.000Z'));
     try {
-      open();
-      await waitFor(() => expect(svc.board).toHaveBeenCalledTimes(1));
+      await openDrawn();
       await act(async () => {
         await vi.advanceTimersByTimeAsync(61_000);
       });
@@ -264,8 +269,7 @@ describe('the board for staff', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date('2026-10-07T06:00:00.000Z'));
     try {
-      open();
-      await waitFor(() => expect(svc.board).toHaveBeenCalledTimes(1));
+      await openDrawn();
       // A check-in waits for the minute, as the page has just read.
       tell({ what: 'visits', change: 'added' });
       await act(async () => {
@@ -295,8 +299,7 @@ describe('the board for staff', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date('2026-10-07T06:00:00.000Z'));
     try {
-      open();
-      await waitFor(() => expect(svc.board).toHaveBeenCalledTimes(1));
+      await openDrawn();
       tell({ what: 'people' });
       await act(async () => {
         await vi.advanceTimersByTimeAsync(59_000);
@@ -315,8 +318,7 @@ describe('the board for staff', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date('2026-10-07T06:00:00.000Z'));
     try {
-      open();
-      await waitFor(() => expect(svc.board).toHaveBeenCalledTimes(1));
+      await openDrawn();
       tell({ what: 'refused', message: "Live updates can't connect right now. The page keeps checking for changes until they're back." });
       expect(await screen.findByText("Live updates can't connect right now. The page keeps checking for changes until they're back.")).toBeTruthy();
       await act(async () => {
@@ -340,8 +342,7 @@ describe('the board for staff', () => {
     vi.setSystemTime(new Date('2026-10-07T18:29:30.000Z'));
     try {
       svc.board.mockResolvedValue(answer({ asOf: '2026-10-07T18:29:00.000Z' }));
-      open();
-      await waitFor(() => expect(svc.board).toHaveBeenCalledTimes(1));
+      await openDrawn();
       await act(async () => {
         await vi.advanceTimersByTimeAsync(32_000);
       });
@@ -393,8 +394,7 @@ describe('the board for staff', () => {
     // 23:59:30 in Kolkata.
     vi.setSystemTime(new Date('2026-10-07T18:29:30.000Z'));
     try {
-      open();
-      await waitFor(() => expect(svc.board).toHaveBeenCalledTimes(1));
+      await openDrawn();
       await act(async () => {
         await vi.advanceTimersByTimeAsync(20_000);
       });
