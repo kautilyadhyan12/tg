@@ -128,7 +128,8 @@ export function squareMembersNames(group: SquareMembersNamed): string {
 /** The box, in Settings → Payments, under Square Point of Sale. A word in [brackets] is a label on a
  *  screen, Square's or this app's (the console's ScreenWords). Square's own menus, read 2026-10-26: help
  *  article 8401, "Edit, merge, or delete customer profiles" ("Visit your Customer Directory in Square
- *  Dashboard and click the duplicate customer profile. Click ••• > Merge with another customer"). The
+ *  Dashboard and click the duplicate customer profile. Click ••• > Merge with another customer"; read again
+ *  2026-10-26: "By the customer's name, click ••• > Merge customer", the button Kd pressed that day). The
  *  terminal's own words, Kd's to overrule. */
 export const SQUARE_MEMBERS_WORDS = {
   noneTitle: "Add your members to your Square customer list",
@@ -147,7 +148,7 @@ export const SQUARE_MEMBERS_WORDS = {
     `Already in your Square customer list, with the same email or phone and the same name. They are linked, and nothing about them changes in Square (${n.toLocaleString("en-US")}):`,
   severalCustomersLead: (n: number): string =>
     `Left out, as Square has more than one customer who could be each of them (${n.toLocaleString("en-US")}):`,
-  severalCustomersFix: "Merge those customers in Square, then check again: in your Square Dashboard, open [Customer directory], click one of them, then [•••] → [Merge with another customer].",
+  severalCustomersFix: "Merge those customers in Square, then check again: in your Square Dashboard, open [Customer directory], click one of them, then [•••] → [Merge customer].",
   severalPeopleLead: (n: number): string => `Left out, as one customer in Square could be more than one of them (${n.toLocaleString("en-US")}):`,
   severalPeopleFix: "If they are the same person, join their records here, then check again.",
   duplicatesButton: "Open Possible duplicates",

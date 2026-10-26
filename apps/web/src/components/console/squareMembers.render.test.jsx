@@ -89,7 +89,7 @@ describe('before anything is added', () => {
     const several = within(box.getByTestId('square-members-several_customers'));
     expect(several.getByText('Left out, as Square has more than one customer who could be each of them (1):')).toBeTruthy();
     // Square's own menu words, each drawn as a label.
-    for (const name of ['Customer directory', '•••', 'Merge with another customer']) expect(several.getByText(name, { selector: '.c-ui' })).toBeTruthy();
+    for (const name of ['Customer directory', '•••', 'Merge customer']) expect(several.getByText(name, { selector: '.c-ui' })).toBeTruthy();
     const people = within(box.getByTestId('square-members-several_people'));
     expect(people.getByText('If they are the same person, join their records here, then check again.')).toBeTruthy();
     expect(people.getByRole('link', { name: 'Open Possible duplicates' }).getAttribute('href')).toBe('/console/iron-house/members/duplicates');
