@@ -11,11 +11,16 @@ import { z } from "zod";
 import type { AppConfig } from "../../config.js";
 import type { RedisLike } from "../../redis.js";
 import type { EmailSender } from "./email.js";
-import { errorSummary, type GoogleVerifier } from "./google.js";
+import { errorSummary, type GooglePhoneVerifier, type GoogleVerifier } from "./google.js";
 import { WrongGuessError } from "./errors.js";
 import { createDualRateLimit } from "./rateLimit.js";
 import type { RobotCheck } from "../orgs/gymPage/robotCheck.js";
-import { SIGN_IN_FREE_SENDS_PER_ADDRESS, SIGN_IN_ROBOT_WORDS, phoneRefreshRequestSchema } from "@app/shared";
+import {
+  SIGN_IN_FREE_SENDS_PER_ADDRESS,
+  SIGN_IN_ROBOT_WORDS,
+  googlePhoneSignInRequestSchema,
+  phoneRefreshRequestSchema,
+} from "@app/shared";
 import {
   changePasswordRequestSchema,
   forgotPasswordRequestSchema,
@@ -31,7 +36,7 @@ import { argon2idHasher } from "./service.js";
 import { createLogOnlyEmailSender } from "./email.js";
 // `cookieOptions` (GAP-2: sameSite 'none' + secure in production) lives in tokens.ts, so the
 // session cookies and the trial mark are set by one rule (round one of 2c, L4).
-import { ACCESS_COOKIE, OAUTH_STATE_COOKIE, REFRESH_COOKIE, cookieOptions, mintOpaqueToken } from "./tokens.js";
+import { ACCESS_COOKIE, OAUTH_STATE_COOKIE, REFRESH_COOKIE, cookieOptions, mintOpaqueToken, sha256Hex } from "./tokens.js";
 
 // The long-lived refresh token travels ONLY to the auth endpoints, not on
 // every API request (T3 2026-07-11; DECISIONS).
@@ -136,12 +141,15 @@ export function registerAuthRoutes(
     emailSender?: EmailSender;
     // null = Google not configured; the routes redirect cleanly (google.ts).
     googleVerifier?: GoogleVerifier | null;
+    /** The phone's Google sign-in; null = Google not configured, and the phone is told so. */
+    googlePhoneVerifier?: GooglePhoneVerifier | null;
     robotCheck: RobotCheck;
     /** Tests only: a hasher that can hold a password check open; unset is argon2id. */
     hasher?: service.PasswordHasher;
   },
 ): void {
   const googleVerifier = deps.googleVerifier ?? null;
+  const googlePhoneVerifier = deps.googlePhoneVerifier ?? null;
   const authDeps: service.AuthDeps = {
     sql: deps.sql,
     config: deps.config,
@@ -464,5 +472,68 @@ export function registerAuthRoutes(
     }
     setSessionCookies(reply, deps.config, tokens);
     return reply.redirect(`${deps.config.WEB_ORIGIN}/auth/google/success`);
+  });
+
+  // ── Google on the phone (ROADMAP Stage 5 item 12d) ────────────────────────
+  // The phone asks here for a one-time word, asks Google with it (Credential Manager), and
+  // sends back Google's signed answer, which carries the word. The word is kept in Redis
+  // for ten minutes and taken once, so a copied answer signs nobody in again. Asking for a
+  // word costs one Redis key: 1,000 an hour an address, a gym of 200 on one wi-fi trying
+  // five times each. A refused answer is charged to the address as the browser's callback
+  // is (GOOGLE_REFUSED_MAX), and the two share the count.
+  const GOOGLE_NONCE_TTL_S = 10 * 60;
+  const googleNonceKey = (nonce: string) => `google_nonce:${sha256Hex(nonce)}`;
+  const googlePhoneStartLimit = createDualRateLimit({
+    name: "google_phone_start",
+    max: 1000,
+    windowMs: HOUR_MS,
+    identifier: () => null,
+    redis: deps.redis,
+  });
+  const GOOGLE_PHONE_WORDS = {
+    google_not_configured: "Google sign-in isn't available. Sign in with your email.",
+    google_down: "Google sign-in isn't working right now. Try again, or sign in with your email.",
+    google_failed: "Google sign-in didn't work. Try again, or sign in with your email.",
+    google_busy: "Too many attempts. Please try again in a minute.",
+  } as const;
+  const googlePhoneRefusal = (req: FastifyRequest, reply: FastifyReply, status: number, error: keyof typeof GOOGLE_PHONE_WORDS) =>
+    reply.status(status).send({ error, message: GOOGLE_PHONE_WORDS[error], requestId: req.id });
+
+  app.post("/v1/auth/google/phone/start", { preHandler: [googlePhoneStartLimit] }, async (req, reply) => {
+    if (refusedFromABrowser(req, reply)) return;
+    if (googlePhoneVerifier === null) return googlePhoneRefusal(req, reply, 503, "google_not_configured");
+    const nonce = mintOpaqueToken();
+    if (!(await deps.redis.setex(googleNonceKey(nonce), GOOGLE_NONCE_TTL_S, "1"))) {
+      return googlePhoneRefusal(req, reply, 503, "google_down");
+    }
+    return reply.header("cache-control", "no-store").status(200).send({ nonce });
+  });
+
+  app.post("/v1/auth/google/phone", async (req, reply) => {
+    if (refusedFromABrowser(req, reply)) return;
+    const input = parseBody(googlePhoneSignInRequestSchema, req, reply);
+    if (input === null) return;
+    if (googlePhoneVerifier === null) return googlePhoneRefusal(req, reply, 503, "google_not_configured");
+    if (Number((await deps.redis.get(googleRefusedKey(req))) ?? "0") >= GOOGLE_REFUSED_MAX) {
+      return googlePhoneRefusal(req, reply, 429, "google_busy");
+    }
+    let identity: Awaited<ReturnType<GooglePhoneVerifier["verify"]>>;
+    try {
+      identity = await googlePhoneVerifier.verify(input.idToken);
+    } catch (err) {
+      app.log.warn({ event: "auth.google.phone_refused", err: errorSummary(err) }, "google phone sign-in refused");
+      await deps.redis.incrWithTtl(googleRefusedKey(req), GOOGLE_REFUSED_WINDOW_S);
+      return googlePhoneRefusal(req, reply, 401, "google_failed");
+    }
+    // Taken only once the answer is Google's: a junk body spends nobody's word.
+    const word = await deps.redis.take(googleNonceKey(identity.nonce));
+    if (word === null) return googlePhoneRefusal(req, reply, 503, "google_down");
+    if (word !== "1") {
+      app.log.warn({ event: "auth.google.phone_refused", err: "nonce not issued, expired or used" }, "google phone sign-in refused");
+      await deps.redis.incrWithTtl(googleRefusedKey(req), GOOGLE_REFUSED_WINDOW_S);
+      return googlePhoneRefusal(req, reply, 401, "google_failed");
+    }
+    const { user, tokens, isNewAccount } = await service.googleSignIn(authDeps, identity, requestMeta(req), "phone");
+    return reply.header("cache-control", "no-store").status(200).send({ user, isNewAccount, tokens });
   });
 }

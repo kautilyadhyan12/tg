@@ -65,6 +65,7 @@ const googleIdTokenClaimsSchema = z.object({
   email: z.string().min(1).optional(),
   email_verified: z.boolean().optional(),
   name: z.string().optional(),
+  nonce: z.string().optional(),
 });
 
 /** Parse verified id_token claims into a GoogleIdentity. email_verified must be
@@ -81,6 +82,63 @@ export function identityFromClaims(raw: unknown): GoogleIdentity {
     throw new Error("Google id_token email is not verified");
   }
   return { subject: claims.sub, email: claims.email, name: claims.name ?? null };
+}
+
+// ── the phone (ROADMAP Stage 5 item 12d) ─────────────────────────────────────
+// The phone asks Google itself (Android's Credential Manager) and sends us Google's signed
+// answer. Only the answer's signature, issuer, audience and time are trusted, all checked
+// here; the phone's word for anything is not.
+
+/** A phone's answer from Google, with the one-time word the server gave it to ask with. */
+export interface GooglePhoneIdentity extends GoogleIdentity {
+  nonce: string;
+}
+
+export interface GooglePhoneVerifier {
+  /** Throws on any answer that is not Google's, not made for this app, out of date, or
+   *  carries no confirmed email or no one-time word. */
+  verify(idToken: string): Promise<GooglePhoneIdentity>;
+}
+
+/** Google's public keys by key id, as PEM. The real ones are Google's own, fetched and
+ *  cached by the SDK; tests hand in their own so the SDK's own check runs on them. */
+export type GoogleKeys = () => Promise<Record<string, string>>;
+
+const GOOGLE_ISSUERS = ["accounts.google.com", "https://accounts.google.com"];
+
+/** The phone's verifier, or null when Google isn't configured. The audience is the same
+ *  client id the browser's sign-in uses: the phone asks Google with it as its server id. */
+export function createGooglePhoneVerifier(
+  config: Pick<AppConfig, "GOOGLE_CLIENT_ID">,
+  keys?: GoogleKeys,
+): GooglePhoneVerifier | null {
+  const clientId = config.GOOGLE_CLIENT_ID;
+  if (clientId === undefined) return null;
+  const client = new OAuth2Client({ clientId });
+  const googleKeys: GoogleKeys =
+    keys ??
+    (async () => {
+      const { certs } = await client.getFederatedSignonCertsAsync();
+      return Object.fromEntries(
+        Object.entries(certs).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+      );
+    });
+  return {
+    async verify(idToken) {
+      const ticket = await client.verifySignedJwtWithCertsAsync(idToken, await googleKeys(), clientId, GOOGLE_ISSUERS);
+      return phoneIdentityFromClaims(ticket.getPayload());
+    },
+  };
+}
+
+/** identityFromClaims, and the answer must carry the one-time word it was asked with. */
+export function phoneIdentityFromClaims(raw: unknown): GooglePhoneIdentity {
+  const identity = identityFromClaims(raw);
+  const { nonce } = googleIdTokenClaimsSchema.parse(raw);
+  if (nonce === undefined || nonce === "") {
+    throw new Error("Google id_token carried no nonce");
+  }
+  return { ...identity, nonce };
 }
 
 /** A LOG-SAFE one-line summary of an error — never the whole object. A
