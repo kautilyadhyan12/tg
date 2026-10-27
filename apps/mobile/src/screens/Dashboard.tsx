@@ -505,7 +505,7 @@ const styles = StyleSheet.create({
   rank: { width: 140, height: 210, justifyContent: "flex-end" },
   badges: { width: 230, height: 210 },
   recent: { gap: 4 },
-  recentArt: { position: "absolute", top: 0, bottom: 0, right: -10, width: "75%" },
+  recentArt: { position: "absolute", top: 0, right: -10, width: "75%", height: "100%", opacity: 0.6 },
   workout: { minHeight: 56, borderTopWidth: 1, borderTopColor: colours.line, paddingTop: 8 },
   ready: { height: 210, borderRadius: 22, justifyContent: "center" },
   readyWords: { padding: 18, gap: 14, alignItems: "flex-start", maxWidth: "62%" },
