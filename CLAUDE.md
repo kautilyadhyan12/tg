@@ -303,6 +303,17 @@ changes a phone screen follows all six.
 - Before Kd is asked, the terminal takes pictures of the real phone and looks at them beside
   the browser's. What looks plainer than the browser's is fixed first.
 
+**A phone screen fits every phone (Kd, 2026-10-28, `rulings/2026-10-27-31b.md`)**: phones of
+every size, a Samsung Fold or an iPhone Duo opened, the phone's largest text.
+- Pictures and words use the look's own pieces (`PictureTop`, `Txt`, `Field`; the limits are in
+  `look/sizing.ts`); a screen never sizes itself from the phone's width. A box drawn to a size
+  grows with its words (`minHeight`, never `height`, round words).
+- Before Kd is asked, the terminal tries the screen on his phone in four shapes and looks at each:
+  its own size, an opened folding phone (`adb shell wm size 1812x2176`, `wm density 420`), a small
+  phone (`720x1520` at `320`) and the largest text (`settings put system font_scale 1.5`). It reads
+  his settings first (`wm size`, `wm density`, `settings get system font_scale`) and puts them back
+  exactly (`wm size reset`, `wm density reset`, his own font scale), and says so.
+
 **Exercises (Kd, RULINGS 2026-10-12; spec Part 2 §11).** An exercise is data, made on the
 line: Kd names it and gives one or two good-form links; the videos are measured on his
 laptop and never go to git. ONE pose model, the one the phone runs, measures everything,
