@@ -3,13 +3,17 @@ import { Image, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useNavigation, type NavigationProp, type ParamListBase } from "@react-navigation/native";
 import {
   gamificationMeSchema,
+  mealPageSchema,
   progressOverviewSchema,
   progressTrendSchema,
+  runPageSchema,
   weeklyChallengesSchema,
   workoutPageSchema,
   type GamificationMe,
+  type MealPage,
   type ProgressOverview,
   type ProgressTrend,
+  type RunPage,
   type WeeklyChallenges,
   type WorkoutPage,
 } from "@app/shared";
@@ -31,12 +35,13 @@ import {
   count,
   hoursWords,
   latestBadges,
-  noWorkoutsWords,
+  noActivityWords,
   quoteOf,
+  recentActivity,
+  type ActivityKind,
   weekOf,
   weekTrained,
   windowWords,
-  workoutLine,
   xpToNext,
 } from "./dashboard/words";
 import { useRead, type Read } from "./dashboard/useRead";
@@ -53,6 +58,8 @@ export const DASHBOARD_READS = {
   week: "/v1/progress/trend?period=7d",
   challenges: "/v1/gamification/challenges",
   recent: "/v1/workouts?limit=3",
+  runs: "/v1/geo/runs?limit=3",
+  meals: "/v1/nutrition/meals?limit=3",
 } as const;
 
 export function DashboardScreen() {
@@ -63,7 +70,9 @@ export function DashboardScreen() {
   const week = useRead(DASHBOARD_READS.week, progressTrendSchema);
   const challenges = useRead(DASHBOARD_READS.challenges, weeklyChallengesSchema);
   const recent = useRead(DASHBOARD_READS.recent, workoutPageSchema);
-  const reads = [overview, me, week, challenges, recent];
+  const runs = useRead(DASHBOARD_READS.runs, runPageSchema);
+  const meals = useRead(DASHBOARD_READS.meals, mealPageSchema);
+  const reads = [overview, me, week, challenges, recent, runs, meals];
   const failed = reads.some((one) => one.read.kind === "failed");
   const now = new Date();
   // The workout and the Library are the exercise folders' (items 53, 63, 64); their tab says so.
@@ -90,9 +99,6 @@ export function DashboardScreen() {
               <Button label="Start Training" icon="play" compact onPress={toWorkout} style={styles.startSmall} />
             </View>
           }
-          eyebrow="Today’s Focus"
-          title={"Precision Training\nPowered by AI."}
-          titleColour="orangeLight"
         />
       }
     >
@@ -124,7 +130,7 @@ export function DashboardScreen() {
         <Rank />
         <Badges me={me.read} onPress={toMe} />
       </Swipe>
-      <Recent read={recent.read} />
+      <Recent workouts={recent.read} runs={runs.read} meals={meals.read} />
       <Ready onPress={toWorkout} />
     </Page>
   );
@@ -149,7 +155,7 @@ function Totals({ overview, me }: { overview: Read<ProgressOverview>; me: Read<G
         picture="totalworkout"
         icon="dumbbell"
         value={totals === null ? NOT_KNOWN : count(totals.totalWorkouts)}
-        label="Total Workouts"
+        label="Total Sessions"
       />
       <Stat
         picture="hourstrained"
@@ -403,36 +409,43 @@ function Badges({ me, onPress }: { me: Read<GamificationMe>; onPress: () => void
   );
 }
 
-function Recent({ read }: { read: Read<WorkoutPage> }) {
+const ACTIVITY_ICONS: Record<ActivityKind, IconName> = { workout: "dumbbell", run: "pin", meal: "utensils" };
+
+/** Everything done lately, of any kind. Shown only when all three lists are read: a list missing
+ *  would leave out what may be the newest thing. */
+function Recent({ workouts, runs, meals }: { workouts: Read<WorkoutPage>; runs: Read<RunPage>; meals: Read<MealPage> }) {
+  const rows =
+    workouts.kind === "ok" && runs.kind === "ok" && meals.kind === "ok"
+      ? recentActivity({ workouts: workouts.data.items, runs: runs.data.items, meals: meals.data.items })
+      : null;
   return (
     <Card style={styles.recent}>
       <Image source={pictures.recentworkout} resizeMode="contain" style={styles.recentArt} accessible={false} />
       <View style={[StyleSheet.absoluteFill, styles.statShade]} />
-      <Txt kind="h3" style={styles.boxTitle}>Recent Workouts</Txt>
-      {read.kind !== "ok" ? (
+      <Txt kind="h3" style={styles.boxTitle}>
+        Recent Activity
+      </Txt>
+      {rows === null || workouts.kind !== "ok" ? (
         <Txt kind="small">{NOT_KNOWN}</Txt>
-      ) : read.data.items.length === 0 ? (
-        <Txt kind="small">{noWorkoutsWords(read.data.hasAnyWorkouts, read.data.limitedToDays)}</Txt>
+      ) : rows.length === 0 ? (
+        <Txt kind="small">{noActivityWords(workouts.data.hasAnyWorkouts, workouts.data.limitedToDays)}</Txt>
       ) : (
-        read.data.items.map((w) => {
-          const line = workoutLine(w);
-          return (
-            <View key={w.id} style={[styles.row, styles.workout]}>
-              <Badge icon="dumbbell" />
-              <View style={styles.grow}>
-                <Txt kind="body" style={styles.semibold}>
-                  {line.day}
-                </Txt>
-                {line.detail === "" ? null : <Txt kind="tiny">{line.detail}</Txt>}
-              </View>
-              {line.kcal === null ? null : (
-                <Txt kind="small" colour="orange" style={styles.semibold}>
-                  {line.kcal}
-                </Txt>
-              )}
+        rows.map((row) => (
+          <View key={row.key} style={[styles.row, styles.workout]}>
+            <Badge icon={ACTIVITY_ICONS[row.kind]} />
+            <View style={styles.grow}>
+              <Txt kind="body" style={styles.semibold}>
+                {row.day}
+              </Txt>
+              {row.detail === "" ? null : <Txt kind="tiny">{row.detail}</Txt>}
             </View>
-          );
-        })
+            {row.value === null ? null : (
+              <Txt kind="small" colour="orange" style={styles.semibold}>
+                {row.value}
+              </Txt>
+            )}
+          </View>
+        ))
       )}
     </Card>
   );

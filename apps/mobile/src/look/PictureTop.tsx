@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Image, StyleSheet, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { pictureFadeUnderWords, sizes, type ColourName } from "./colours";
+import { pictureFadeUnderWords, sizes } from "./colours";
 import { pictures, type PictureName } from "./pictures";
 import { Txt } from "./Txt";
 
@@ -13,12 +13,11 @@ interface PictureTopProps {
   above?: ReactNode;
   eyebrow?: string;
   title?: string;
-  titleColour?: ColourName;
 }
 
 /** A page's own picture: edge to edge from the top of the phone, running into the page under it.
  *  Never a box of its own. The page's first words lie over it. */
-export function PictureTop({ picture, tall, above, eyebrow, title, titleColour }: PictureTopProps) {
+export function PictureTop({ picture, tall, above, eyebrow, title }: PictureTopProps) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   return (
@@ -29,11 +28,7 @@ export function PictureTop({ picture, tall, above, eyebrow, title, titleColour }
       {eyebrow === undefined && title === undefined ? null : (
         <View style={styles.words}>
           {eyebrow === undefined ? null : <Txt kind="eyebrow">{eyebrow}</Txt>}
-          {title === undefined ? null : (
-            <Txt kind="h2" {...(titleColour === undefined ? {} : { colour: titleColour })}>
-              {title}
-            </Txt>
-          )}
+          {title === undefined ? null : <Txt kind="h2">{title}</Txt>}
         </View>
       )}
     </View>

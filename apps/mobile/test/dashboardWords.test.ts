@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { WorkoutListItem } from "@app/shared";
+import type { Meal, RunSummary, WorkoutListItem } from "@app/shared";
 import {
   BADGE_NAMES,
   QUOTES,
@@ -9,14 +9,18 @@ import {
   challengeWords,
   count,
   dayWords,
+  distanceWords,
   hoursWords,
   latestBadges,
-  noWorkoutsWords,
+  mealRow,
+  noActivityWords,
   quoteOf,
+  recentActivity,
+  runRow,
   weekOf,
   weekTrained,
   windowWords,
-  workoutLine,
+  workoutRow,
   xpToNext,
 } from "../src/screens/dashboard/words";
 
@@ -110,31 +114,86 @@ const workout = (more: Partial<WorkoutListItem>): WorkoutListItem => ({
   ...more,
 });
 
-describe("a recent workout's row", () => {
-  it("everything known", () => {
-    expect(workoutLine(workout({}))).toEqual({ day: "Mon 26 Oct", detail: "38 min · 86 form", kcal: "312 kcal" });
+const run = (more: Partial<RunSummary>): RunSummary => ({
+  id: "7a6b5c4d-3e2f-4a1b-9c8d-7e6f5a4b3c2d",
+  startedAt: new Date(2026, 9, 27, 7, 0).toISOString(),
+  durationS: 31 * 60,
+  distanceM: 5230,
+  routeName: "Evening run",
+  kcalPoint: 310,
+  source: "mobile",
+  ...more,
+});
+
+const totals = { kcalPoint: 540, kcalLow: 480, kcalHigh: 600, proteinG: 30, carbsG: 60, fatG: 18 };
+const meal = (more: Partial<Meal>): Meal => ({
+  id: "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f",
+  takenAt: new Date(2026, 9, 27, 13, 0).toISOString(),
+  mealType: "lunch",
+  mealName: null,
+  items: [],
+  totals,
+  confirmed: true,
+  origin: "photo",
+  portionSource: "default",
+  nutritionSources: [],
+  calcVersion: 1,
+  itemsVersion: "v1",
+  ...more,
+});
+
+describe("Recent Activity: everything done lately, whatever kind", () => {
+  it("each kind's row, named by its day", () => {
+    expect(workoutRow(workout({}))).toMatchObject({ day: "Mon 26 Oct", detail: "Workout · 38 min · 86 form", value: "312 kcal" });
+    expect(runRow(run({}))).toMatchObject({ day: "Tue 27 Oct", detail: "Evening run · 31 min", value: "5.2 km" });
+    expect(mealRow(meal({}))).toMatchObject({ day: "Tue 27 Oct", detail: "Lunch · Meal scan", value: "540 kcal" });
+    expect(mealRow(meal({ mealName: "Dal and rice", origin: "manual" })).detail).toBe("Dal and rice · Logged");
+    expect(mealRow(meal({ mealType: null })).detail).toBe("Meal · Meal scan");
+    expect(runRow(run({ routeName: null })).detail).toBe("Run · 31 min");
   });
 
   it("what the server does not have is left out, never shown as 0", () => {
-    expect(workoutLine(workout({ durationMs: null, kcalPoint: null, avgFormScore: null }))).toEqual({
-      day: "Mon 26 Oct",
-      detail: "",
-      kcal: null,
-    });
-    expect(workoutLine(workout({ durationMs: null })).detail).toBe("86 form");
+    expect(workoutRow(workout({ durationMs: null, kcalPoint: null, avgFormScore: null }))).toMatchObject({ detail: "Workout", value: null });
     // Under half a minute is still a workout that happened: never "0 min".
-    expect(workoutLine(workout({ durationMs: 10_000, avgFormScore: null })).detail).toBe("1 min");
+    expect(workoutRow(workout({ durationMs: 10_000, avgFormScore: null })).detail).toBe("Workout · 1 min");
     // A date the phone cannot read still names the row.
-    expect(workoutLine(workout({ startedAt: "not a date" })).day).toBe("Workout");
+    expect(workoutRow(workout({ startedAt: "not a date" })).day).toBe("Workout");
     expect(dayWords("not a date")).toBeNull();
   });
 
-  it("no workouts: each person is told what is true for them", () => {
-    expect(noWorkoutsWords(false, 90)).toBe("No workouts yet.");
-    expect(noWorkoutsWords(false, null)).toBe("No workouts yet.");
-    expect(noWorkoutsWords(true, 90)).toBe("No workouts in the last 90 days.");
-    expect(noWorkoutsWords(true, null)).toBe("No workouts to show.");
-    expect(noWorkoutsWords(undefined, 90)).toBe("No workouts to show.");
+  it.each([
+    [850, "850 m"],
+    [999, "999 m"],
+    [1000, "1.0 km"],
+    [5230, "5.2 km"],
+    [5299, "5.2 km"],
+    [42195, "42.1 km"],
+  ])("%i m reads %s", (metres, words) => {
+    expect(distanceWords(metres)).toBe(words);
+  });
+
+  it("the newest three of all kinds together, newest first; a time the phone cannot read goes last", () => {
+    const rows = recentActivity({
+      workouts: [workout({ id: "00000000-0000-4000-8000-000000000001", startedAt: "2026-10-27T05:00:00.000Z" }), workout({ id: "00000000-0000-4000-8000-000000000002", startedAt: "2026-10-20T05:00:00.000Z" })],
+      runs: [run({ startedAt: "2026-10-27T09:00:00.000Z" })],
+      meals: [meal({ takenAt: "2026-10-27T07:00:00.000Z" }), meal({ id: "00000000-0000-4000-8000-000000000003", takenAt: "garbled" })],
+    });
+    expect(rows.map((row) => row.kind)).toEqual(["run", "meal", "workout"]);
+    expect(rows.map((row) => row.key)).toEqual([
+      "run-7a6b5c4d-3e2f-4a1b-9c8d-7e6f5a4b3c2d",
+      "meal-1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f",
+      "workout-00000000-0000-4000-8000-000000000001",
+    ]);
+    expect(recentActivity({ workouts: [], runs: [], meals: [meal({ takenAt: "garbled" })] }).map((row) => row.kind)).toEqual(["meal"]);
+    expect(recentActivity({ workouts: [], runs: [], meals: [] })).toEqual([]);
+  });
+
+  it("nothing recent: each person is told what is true for them", () => {
+    expect(noActivityWords(false, 90)).toBe("No activity yet.");
+    expect(noActivityWords(false, null)).toBe("No activity yet.");
+    expect(noActivityWords(true, 90)).toBe("No activity in the last 90 days.");
+    expect(noActivityWords(true, null)).toBe("No activity to show.");
+    expect(noActivityWords(undefined, 90)).toBe("No activity to show.");
   });
 });
 

@@ -50,7 +50,7 @@ describe("the five tabs", () => {
     ["Food", ["Fuel Your Training", "Your meals"]],
     ["Gym", ["Where you train", "You haven’t joined a gym or studio yet."]],
     ["Me", ["ravi@example.com", "Settings"]],
-    ["Dashboard", ["Ravi", "Recent Workouts"]],
+    ["Dashboard", ["Ravi", "Recent Activity"]],
   ])("%s opens its own page and lights its own tab", async (tab, shows) => {
     await render(<App extra={extra} store={signedIn()} ask={answers(true)} />);
     await open(tab === "Dashboard" ? "Me" : "Dashboard");

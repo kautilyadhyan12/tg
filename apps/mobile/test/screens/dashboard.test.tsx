@@ -65,6 +65,31 @@ const workoutRow = (id: string, startedAt: string) => ({
   qualityFlags: [],
 });
 const page = (items: unknown[], hasAnyWorkouts: boolean) => ({ items, nextCursor: null, limitedToDays: 90, hasAnyWorkouts });
+const list = (items: unknown[]) => ({ items, nextCursor: null });
+const runRow = (id: string, startedAt: string, routeName: string) => ({
+  id,
+  startedAt,
+  durationS: 31 * 60,
+  distanceM: 5230,
+  routeName,
+  kcalPoint: 310,
+  source: "mobile",
+});
+const mealRow = (id: string, takenAt: string, mealName: string | null) => ({
+  id,
+  takenAt,
+  mealType: "lunch",
+  mealName,
+  items: [],
+  totals: { kcalPoint: 540, kcalLow: 480, kcalHigh: 600, proteinG: 30, carbsG: 60, fatG: 18 },
+  confirmed: true,
+  origin: "photo",
+  portionSource: "default",
+  nutritionSources: [],
+  calcVersion: 1,
+  itemsVersion: "v1",
+});
+const hoursAgo = (hours: number) => new Date(Date.now() - hours * 3_600_000).toISOString();
 
 /** A person with a few weeks of training. */
 const trained: Record<string, Route> = {
@@ -72,8 +97,11 @@ const trained: Record<string, Route> = {
   "/v1/gamification/me": ok(gamification()),
   "/v1/progress/trend": ok({ points: [{ date: today, kcal: 348, workouts: 2 }], limitedToDays: 90 }),
   "/v1/gamification/challenges": ok(challenges),
-  "/v1/workouts": ok(page([workoutRow("1b6f0a3e-2c4d-4e5f-8a9b-0c1d2e3f4a5b", new Date().toISOString())], true)),
+  "/v1/workouts": ok(page([workoutRow("1b6f0a3e-2c4d-4e5f-8a9b-0c1d2e3f4a5b", hoursAgo(1))], true)),
+  "/v1/geo/runs": ok(list([runRow("5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a", hoursAgo(30), "Evening run")])),
+  "/v1/nutrition/meals": ok(list([mealRow("6e5d4c3b-2a1f-4e0d-9c8b-7a6f5e4d3c2b", hoursAgo(3), null)])),
 };
+const nothingElse = { "/v1/geo/runs": ok(list([])), "/v1/nutrition/meals": ok(list([])) };
 
 async function openApp(routes: Record<string, Route>, ask?: Ask) {
   const server = fakeServer({ "/v1/auth/refresh": ok({ tokens: tokens(2) }), ...routes });
@@ -99,6 +127,8 @@ describe("the worst thing: nobody else's numbers on this person's Dashboard", ()
       "/v1/progress/overview": overview(999, { totalKcal: 98765 }),
       "/v1/gamification/me": gamification({ xp: { total: 55555, level: 42, xpInLevel: 1, xpForNext: 2, progressPct: 50, nextLevelAt: 3 } }),
       "/v1/workouts": page([workoutRow("9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d", "2026-01-05T10:00:00.000Z")], true),
+      "/v1/geo/runs": list([runRow("8b7a6f5e-4d3c-4b2a-9f0e-1d2c3b4a5f6e", "2026-01-06T07:00:00.000Z", "Ravi's canal loop")]),
+      "/v1/nutrition/meals": list([mealRow("9c8b7a6f-5e4d-4c3b-8a2f-1e0d9c8b7a6f", "2026-01-06T13:00:00.000Z", "Ravi's thali")]),
     };
     const ashas: Record<string, unknown> = {
       "/v1/progress/overview": overview(3, { totalKcal: 410, totalDurationMs: 90 * 60_000 }),
@@ -106,6 +136,8 @@ describe("the worst thing: nobody else's numbers on this person's Dashboard", ()
       "/v1/progress/trend": { points: [], limitedToDays: 90 },
       "/v1/gamification/challenges": challenges,
       "/v1/workouts": page([], false),
+      "/v1/geo/runs": list([]),
+      "/v1/nutrition/meals": list([]),
     };
     const ask: Ask = async (url, init) => {
       const path = new URL(url).pathname;
@@ -120,7 +152,7 @@ describe("the worst thing: nobody else's numbers on this person's Dashboard", ()
     await render(<App extra={extra} ask={ask} store={memoryStore(kept(1))} wait={noWait} />);
     expect(await screen.findByRole("header", { name: "Ravi" })).toBeTruthy();
     await waitFor(() => {
-      expect(held).toHaveLength(3);
+      expect(held).toHaveLength(5);
     });
 
     // Ravi signs out with his reads still away, and Asha signs in on the same phone.
@@ -145,11 +177,11 @@ describe("the worst thing: nobody else's numbers on this person's Dashboard", ()
     await waitFor(() => {
       expect(screen.getByText("410")).toBeTruthy();
     });
-    for (const his of ["999", "98,765", "Level 42", "55,555 XP earned", "Ravi", "Mon 5 Jan", "42 min · 91 form", "348 kcal"]) {
+    for (const his of ["999", "98,765", "Level 42", "55,555 XP earned", "Ravi", "Mon 5 Jan", "Tue 6 Jan", "42 min · 91 form", "348 kcal", "canal loop", "thali", "5.2 km", "540 kcal"]) {
       expect([his, screen.queryAllByText(new RegExp(his)).length]).toEqual([his, 0]);
     }
     expect(screen.getAllByText("Level 7")).toHaveLength(1);
-    expect(screen.getByText("No workouts yet.")).toBeTruthy();
+    expect(screen.getByText("No activity yet.")).toBeTruthy();
   });
 });
 
@@ -158,7 +190,7 @@ describe("the Dashboard, with the person's own numbers", () => {
     const server = await openApp(trained);
     // The four numbers.
     expect(await screen.findByText("24")).toBeTruthy();
-    expect(screen.getByText("Total Workouts")).toBeTruthy();
+    expect(screen.getByText("Total Sessions")).toBeTruthy();
     // The window the four cover, said once over them.
     expect(screen.getAllByText("all time")).toHaveLength(1);
     expect(screen.getByText("18h")).toBeTruthy();
@@ -187,10 +219,16 @@ describe("the Dashboard, with the person's own numbers", () => {
     expect(screen.getByText("First Workout")).toBeTruthy();
     expect(screen.getByText("Your Rank")).toBeTruthy();
     expect(screen.getAllByText("Coming soon")).toHaveLength(1);
-    // A recent workout, named by its day.
-    expect(screen.getByText(dayWords(new Date().toISOString()) ?? "")).toBeTruthy();
-    expect(screen.getByText("42 min · 91 form")).toBeTruthy();
+    // Recent Activity: the workout, the meal and the run, newest first, each named by its day.
+    expect(screen.getByText("Recent Activity")).toBeTruthy();
+    const details = ["Workout · 42 min · 91 form", "Lunch · Meal scan", "Evening run · 31 min"];
+    for (const detail of details) expect(screen.getByText(detail)).toBeTruthy();
+    const order = screen.queryAllByText(/^(Workout ·|Lunch ·|Evening run ·)/).map((one) => String(one.props.children));
+    expect(order).toEqual(details);
+    expect(screen.getAllByText(dayWords(hoursAgo(1)) ?? "").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("348 kcal")).toBeTruthy();
+    expect(screen.getByText("540 kcal")).toBeTruthy();
+    expect(screen.getByText("5.2 km")).toBeTruthy();
     expect(screen.queryByText(/couldn’t load/)).toBeNull();
     // Recommended For You comes with its first option, Food (ROADMAP 34d-iii).
     expect(screen.queryByText("Recommended For You")).toBeNull();
@@ -207,8 +245,9 @@ describe("the Dashboard, with the person's own numbers", () => {
       "/v1/progress/trend": ok({ points: [], limitedToDays: 90 }),
       "/v1/gamification/challenges": ok(challenges),
       "/v1/workouts": ok(page([], false)),
+      ...nothingElse,
     });
-    expect(await screen.findByText("No workouts yet.")).toBeTruthy();
+    expect(await screen.findByText("No activity yet.")).toBeTruthy();
     expect(await screen.findByText("No badges yet.")).toBeTruthy();
     expect(screen.getByText("0 of 7 days active")).toBeTruthy();
     expect(screen.getByText("0 min")).toBeTruthy();
@@ -217,10 +256,10 @@ describe("the Dashboard, with the person's own numbers", () => {
   });
 
   it("somebody whose workouts are older than the plan's window is not told they have none", async () => {
-    await openApp({ ...trained, "/v1/workouts": ok(page([], true)), "/v1/progress/overview": ok(overview(0, { limitedToDays: 90 })) });
-    expect(await screen.findByText("No workouts in the last 90 days.")).toBeTruthy();
+    await openApp({ ...trained, ...nothingElse, "/v1/workouts": ok(page([], true)), "/v1/progress/overview": ok(overview(0, { limitedToDays: 90 })) });
+    expect(await screen.findByText("No activity in the last 90 days.")).toBeTruthy();
     expect(screen.getByText("last 90 days")).toBeTruthy();
-    expect(screen.queryByText("No workouts yet.")).toBeNull();
+    expect(screen.queryByText("No activity yet.")).toBeNull();
   });
 });
 
@@ -230,7 +269,7 @@ describe("a read that fails or is slow never shows a number it does not know", (
     const failing = (route: Route): Route => (body) => (up ? route(body) : refusal(503, "unavailable", "Down"));
     await openApp(Object.fromEntries(Object.entries(trained).map(([path, route]) => [path, failing(route)])));
     expect(await screen.findByText("Some of your numbers couldn’t load.")).toBeTruthy();
-    expect(screen.getByText("Total Workouts")).toBeTruthy();
+    expect(screen.getByText("Total Sessions")).toBeTruthy();
     // No figure anywhere but the calendar's own dates.
     const figures = screen.queryAllByText(/\d/).map((one) => String(one.props.children));
     const dates = weekOf(new Date()).map((day) => String(day.date));
@@ -253,6 +292,15 @@ describe("a read that fails or is slow never shows a number it does not know", (
     expect(screen.getAllByText("–").length).toBeGreaterThanOrEqual(4);
     expect(screen.queryByText("No badges yet.")).toBeNull();
     expect(screen.queryByText("Some of your numbers couldn’t load.")).toBeNull();
+  });
+
+  it("one of Recent Activity's three lists failing shows no list at all, never one missing the newest", async () => {
+    await openApp({ ...trained, "/v1/nutrition/meals": () => refusal(503, "unavailable", "Down") });
+    expect(await screen.findByText("Some of your numbers couldn’t load.")).toBeTruthy();
+    expect(screen.getByText("24")).toBeTruthy();
+    expect(screen.queryByText("Workout · 42 min · 91 form")).toBeNull();
+    expect(screen.queryByText("Evening run · 31 min")).toBeNull();
+    expect(screen.queryByText(/^No activity/)).toBeNull();
   });
 
   it("a reply in the wrong shape is a failed read, not a blank or a zero", async () => {

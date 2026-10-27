@@ -1,4 +1,4 @@
-import type { WeeklyChallenge, WorkoutListItem } from "@app/shared";
+import type { Meal, MealType, RunSummary, WeeklyChallenge, WorkoutListItem } from "@app/shared";
 
 // What the Dashboard says about the numbers the server sends (ROADMAP Stage 5 item 31a). The server
 // computes every number; these only put it into words. Nothing here guesses a number it was not sent.
@@ -84,26 +84,81 @@ export function dayWords(iso: string): string | null {
   return `${DAY_NAMES[(at.getDay() + 6) % 7] ?? ""} ${String(at.getDate())} ${MONTHS[at.getMonth()] ?? ""}`;
 }
 
-/** One recent workout's row: its day ("Mon 12 Oct"), under it "38 min · 86 form", and on its right the
- *  kcal; each part only when the server has it. */
-export function workoutLine(w: WorkoutListItem): { day: string; detail: string; kcal: string | null } {
-  const minutes = w.durationMs === null ? null : Math.max(1, Math.round(w.durationMs / 60_000));
-  const detail = [minutes === null ? null : `${count(minutes)} min`, w.avgFormScore === null ? null : `${count(w.avgFormScore)} form`]
-    .filter((p) => p !== null)
-    .join(" · ");
+export type ActivityKind = "workout" | "run" | "meal";
+
+/** One row of Recent Activity: named by its day, with what it was under it ("Workout · 38 min · 86 form",
+ *  "Evening run · 31 min", "Lunch · Meal scan") and its number on the right; each part only when known. */
+export interface ActivityRow {
+  key: string;
+  kind: ActivityKind;
+  at: string;
+  day: string;
+  detail: string;
+  value: string | null;
+}
+
+const MEAL_TYPES: Record<MealType, string> = { breakfast: "Breakfast", lunch: "Lunch", dinner: "Dinner", snack: "Snack" };
+
+const minutesWords = (minutes: number | null) => (minutes === null ? null : `${count(Math.max(1, Math.round(minutes)))} min`);
+const joined = (parts: (string | null)[]) => parts.filter((p) => p !== null).join(" · ");
+
+/** 5,230 m → "5.2 km"; under a kilometre, "850 m". */
+export function distanceWords(metres: number): string {
+  return metres < 1000 ? `${count(metres)} m` : `${(Math.floor(metres / 100) / 10).toFixed(1)} km`;
+}
+
+export function workoutRow(w: WorkoutListItem): ActivityRow {
   return {
+    key: `workout-${w.id}`,
+    kind: "workout",
+    at: w.startedAt,
     day: dayWords(w.startedAt) ?? "Workout",
-    detail,
-    kcal: w.kcalPoint === null ? null : `${count(w.kcalPoint)} kcal`,
+    detail: joined(["Workout", minutesWords(w.durationMs === null ? null : w.durationMs / 60_000), w.avgFormScore === null ? null : `${count(w.avgFormScore)} form`]),
+    value: w.kcalPoint === null ? null : `${count(w.kcalPoint)} kcal`,
   };
 }
 
-/** No recent workouts: a new person, somebody whose workouts are all older than the plan's window,
- *  and a server that did not say which. Each is told what is true for them. */
-export function noWorkoutsWords(hasAnyWorkouts: boolean | undefined, limitedToDays: number | null): string {
-  if (hasAnyWorkouts === false) return "No workouts yet.";
-  if (hasAnyWorkouts === true && limitedToDays !== null) return `No workouts in the ${windowWords(limitedToDays)}.`;
-  return "No workouts to show.";
+export function runRow(r: RunSummary): ActivityRow {
+  return {
+    key: `run-${r.id}`,
+    kind: "run",
+    at: r.startedAt,
+    day: dayWords(r.startedAt) ?? "Run",
+    detail: joined([r.routeName ?? "Run", minutesWords(r.durationS / 60)]),
+    value: distanceWords(r.distanceM),
+  };
+}
+
+export function mealRow(m: Meal): ActivityRow {
+  return {
+    key: `meal-${m.id}`,
+    kind: "meal",
+    at: m.takenAt,
+    day: dayWords(m.takenAt) ?? "Meal",
+    detail: joined([m.mealName ?? (m.mealType === null ? "Meal" : MEAL_TYPES[m.mealType]), m.origin === "photo" ? "Meal scan" : "Logged"]),
+    value: `${count(m.totals.kcalPoint)} kcal`,
+  };
+}
+
+/** The newest few of everything done, whatever kind; a time the phone cannot read goes last. */
+export function recentActivity(
+  lists: { workouts: readonly WorkoutListItem[]; runs: readonly RunSummary[]; meals: readonly Meal[] },
+  most = 3,
+): ActivityRow[] {
+  const rows = [...lists.workouts.map(workoutRow), ...lists.runs.map(runRow), ...lists.meals.map(mealRow)];
+  const when = (row: ActivityRow) => {
+    const t = Date.parse(row.at);
+    return Number.isNaN(t) ? -Infinity : t;
+  };
+  return rows.sort((a, b) => when(b) - when(a)).slice(0, most);
+}
+
+/** Nothing recent: a new person, somebody whose workouts are all older than the plan's window, and a
+ *  server that did not say which. Each is told what is true for them. */
+export function noActivityWords(hasAnyWorkouts: boolean | undefined, limitedToDays: number | null): string {
+  if (hasAnyWorkouts === false) return "No activity yet.";
+  if (hasAnyWorkouts === true && limitedToDays !== null) return `No activity in the ${windowWords(limitedToDays)}.`;
+  return "No activity to show.";
 }
 
 /** A weekly challenge in words, from its code and its target. */
