@@ -99,7 +99,18 @@ export const EQUIPMENT: readonly Row<Equipment>[] = [
   { value: "resistance_bands", label: "Resistance bands" },
   { value: "kettlebells", label: "Kettlebells" },
   { value: "pull_up_bar", label: "Pull-up bar" },
-  { value: "gym", label: "A gym" },
+];
+
+type TrainingPlace = OnboardingAnswers["trainingPlaces"][number];
+/** Screen 7's first question: where the person trains, any number (Kd, 2026-10-27). */
+export const PLACES: readonly Row<TrainingPlace>[] = [
+  { value: "home", label: "Home" },
+  { value: "gym", label: "Gym" },
+  { value: "yoga_studio", label: "Yoga studio" },
+  { value: "pilates_studio", label: "Pilates studio" },
+  { value: "crossfit_box", label: "CrossFit box" },
+  { value: "personal_trainer", label: "Personal trainer" },
+  { value: "outdoors", label: "Outdoors" },
 ];
 
 /** Screen 9's diet, in the order RULINGS 2026-09-10 names them. Each line says
@@ -142,7 +153,7 @@ export const SCREENS: readonly SetupScreen[] = [
   { id: "day", title: "Your day", desc: "How active you are outside workouts" },
   { id: "training", title: "Your training", desc: "Where you are starting from" },
   { id: "week", title: "Your week", desc: "How often, and for how long" },
-  { id: "equipment", title: "Equipment", desc: "What you have to train with" },
+  { id: "equipment", title: "Equipment", desc: "Where you train, and with what" },
   { id: "health", title: "Health", desc: "One question, so your plan is careful" },
   { id: "food", title: "Food", desc: "What you eat, so meals can be suggested" },
   { id: "gym", title: `Your ${ORG_TYPES_PHRASE}`, desc: `Only if a ${ORG_TYPES_PHRASE} invited you` },
@@ -194,7 +205,12 @@ export function screenAnswered(id: SetupScreenId, a: SetupAnswers): boolean {
     case "week":
       return answered(a.trainingDays) && answered(a.sessionMinutes);
     case "equipment":
-      return Array.isArray(a.availableEquipment) && a.availableEquipment.length > 0;
+      return (
+        Array.isArray(a.trainingPlaces) &&
+        a.trainingPlaces.length > 0 &&
+        Array.isArray(a.availableEquipment) &&
+        a.availableEquipment.length > 0
+      );
     case "health":
       return a.health?.answered === true;
     case "food":
@@ -307,6 +323,16 @@ export function cleanEquipment(loaded: unknown): Equipment[] {
   const set = new Set(strings(loaded));
   if (set.has("none") && set.size > 1) set.delete("none");
   return inOrder(set);
+}
+
+const PLACE_ORDER = PLACES.map((p) => p.value);
+
+/** One tap on "Where do you train?": ticked or unticked, in the screen's order. */
+export function togglePlace(current: unknown, value: TrainingPlace): TrainingPlace[] {
+  const next = new Set(strings(current));
+  if (next.has(value)) next.delete(value);
+  else next.add(value);
+  return PLACE_ORDER.filter((v) => next.has(v));
 }
 
 // ── Screen 1's goals: any number, and nothing to untick ─────────────────────

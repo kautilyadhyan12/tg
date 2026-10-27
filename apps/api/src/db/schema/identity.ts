@@ -176,7 +176,8 @@ export const userFitnessProfiles = pgTable(
     fitnessLevel: text("fitness_level"), // NULL until answered — unanswered is not 'beginner' (Kd-approved)
     fitnessGoals: text("fitness_goals").array(), // screen 1's "also work on"; value set CHECKed since 0028
     exerciseFrequency: integer("exercise_frequency"), // days per week
-    availableEquipment: text("available_equipment").array(), // value set CHECKed since 0028, "none" alone
+    availableEquipment: text("available_equipment").array(), // value set CHECKed since 0028, "none" alone; things only since 0168
+    trainingPlaces: text("training_places").array(), // where the person trains (0168; Kd 2026-10-27)
     sessionDurationMin: integer("session_duration_min"), // minutes
     preferredWorkoutTime: text("preferred_workout_time"),
     onboardingCompleted: boolean("onboarding_completed").notNull().default(false),
@@ -220,7 +221,11 @@ export const userFitnessProfiles = pgTable(
     ),
     check(
       "user_fitness_profiles_available_equipment_check",
-      sql`${t.availableEquipment} <@ ARRAY['none','dumbbells','resistance_bands','kettlebells','pull_up_bar','gym']::text[] AND NOT ('none' = ANY (${t.availableEquipment}) AND cardinality(${t.availableEquipment}) > 1)`,
+      sql`${t.availableEquipment} <@ ARRAY['none','dumbbells','resistance_bands','kettlebells','pull_up_bar']::text[] AND NOT ('none' = ANY (${t.availableEquipment}) AND cardinality(${t.availableEquipment}) > 1)`,
+    ),
+    check(
+      "user_fitness_profiles_training_places_check",
+      sql`${t.trainingPlaces} <@ ARRAY['home','gym','yoga_studio','pilates_studio','crossfit_box','personal_trainer','outdoors']::text[]`,
     ),
     check("user_fitness_profiles_pace_check", sql`${t.pace} IN ('gentle','steady','brisk')`),
     check(

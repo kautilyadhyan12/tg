@@ -108,15 +108,22 @@ export const fitnessGoalSchema = z.enum([
   "stress_relief",
   "stay_healthy",
 ]);
-/** `gym` is "A gym", beside the home equipment (RULINGS 2026-09-10, decision
- *  B; the label 2026-09-11). */
-export const equipmentSchema = z.enum([
-  "none",
-  "dumbbells",
-  "resistance_bands",
-  "kettlebells",
-  "pull_up_bar",
+/** What a person has to train with: things, never places (Kd, 2026-10-27: "is gym a
+ *  equipment?"). A gym is one of the places below; migration 0168 moved every stored
+ *  "gym" there. */
+export const equipmentSchema = z.enum(["none", "dumbbells", "resistance_bands", "kettlebells", "pull_up_bar"]);
+
+/** Where a person trains, any number of them (Kd, 2026-10-27, the setup's click-through:
+ *  "yoga gym crossfit pilates, personal trainer"). Asked on the Equipment screen above
+ *  the equipment; the weekly plan (6a) reads both. */
+export const trainingPlaceSchema = z.enum([
+  "home",
   "gym",
+  "yoga_studio",
+  "pilates_studio",
+  "crossfit_box",
+  "personal_trainer",
+  "outdoors",
 ]);
 export const workoutTimeSchema = z.enum(["morning", "afternoon", "evening"]);
 
@@ -183,11 +190,15 @@ export const fitnessGoalsArraySchema = uniqueArray(fitnessGoalSchema, fitnessGoa
  *  duplicates already refused it can never fire on its own; it stays as a
  *  bound on the size of the payload.
  *
- *  "No equipment" stands alone: "none and dumbbells" (or "none and a gym") is
+ *  "No equipment" stands alone: "none and dumbbells" is
  *  not an answer to "what do you have to train with?", and the plan builder
  *  (6a) would have to guess which half to believe. Both screens make it
  *  exclusive as you tap, and migration 0028 took "none" out of every pair the
  *  old form had stored, so ONE rail serves both surfaces. */
+/** THE places rail, for both surfaces that write `training_places`, as the
+ *  equipment rail is. */
+export const trainingPlacesArraySchema = uniqueArray(trainingPlaceSchema, trainingPlaceSchema.options.length);
+
 export const equipmentArraySchema = uniqueArray(equipmentSchema, equipmentSchema.options.length).refine(
   (a) => !a.includes("none") || a.length === 1,
   { message: "'none' cannot be combined with equipment" },
@@ -226,6 +237,7 @@ export const fitnessProfileSchema = z.object({
   weightGoal: weightGoalSchema.nullable(),
   exerciseFrequency: z.number().int().nullable(), // days per week
   availableEquipment: z.array(equipmentSchema),
+  trainingPlaces: z.array(trainingPlaceSchema),
   sessionDurationMin: z.number().int().nullable(), // minutes
   preferredWorkoutTime: workoutTimeSchema.nullable(),
   /** Screen 9's two answers (4b-ii), asked in Settings as well so they can be
@@ -268,6 +280,7 @@ export const putFitnessProfileRequestSchema = z
     weightGoal: weightGoalSchema.nullable().optional(),
     exerciseFrequency: z.number().int().min(1).max(7).nullable().optional(),
     availableEquipment: equipmentArraySchema.optional(),
+    trainingPlaces: trainingPlacesArraySchema.optional(),
     sessionDurationMin: z.number().int().min(5).max(240).nullable().optional(),
     preferredWorkoutTime: workoutTimeSchema.nullable().optional(),
     diet: dietSchema.nullable().optional(),

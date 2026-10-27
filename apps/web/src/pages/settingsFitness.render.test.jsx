@@ -94,24 +94,34 @@ describe("Settings → Fitness: screen 1's two questions", () => {
 
   it('draws line icons, never emoji', () => {
     draw({});
-    for (const name of [/Lose weight/, /Build muscle/, /A gym/]) expect(chip(name).querySelector('svg')).not.toBeNull();
+    for (const name of [/Lose weight/, /Build muscle/, /^Gym$/, /Yoga studio/, /Dumbbells/]) expect(chip(name).querySelector('svg')).not.toBeNull();
     expect(document.body.textContent).not.toMatch(/\p{Extended_Pictographic}/u);
   });
 });
 
 describe('Settings → Fitness: equipment', () => {
-  it('offers "A gym", and makes "No equipment" stand alone as you tap', async () => {
+  it('makes "No equipment" stand alone as you tap, and offers no gym among the equipment', async () => {
     draw({ availableEquipment: ['dumbbells'] });
-    fireEvent.click(chip(/A gym/));
-    expect(pressed(/A gym/)).toBe('true');
+    expect(screen.queryByRole('button', { name: /A gym/ })).toBeNull();
+    fireEvent.click(chip(/Kettlebells/));
+    expect(pressed(/Kettlebells/)).toBe('true');
     expect(pressed(/Dumbbells/)).toBe('true');
     fireEvent.click(chip(/No equipment/));
     expect(pressed(/No equipment/)).toBe('true');
-    expect(pressed(/A gym/)).toBe('false');
+    expect(pressed(/Kettlebells/)).toBe('false');
     expect(pressed(/Dumbbells/)).toBe('false');
     fireEvent.click(chip(/Kettlebells/));
     expect(pressed(/No equipment/)).toBe('false');
     expect(await save()).toMatchObject({ availableEquipment: ['kettlebells'] });
+  });
+
+  it('asks where the person trains, and saves the places with the rest of the tab', async () => {
+    draw({ trainingPlaces: ['home'] });
+    expect(pressed(/^Home$/)).toBe('true');
+    fireEvent.click(chip(/^Gym$/));
+    fireEvent.click(chip(/Personal trainer/));
+    fireEvent.click(chip(/^Home$/));
+    expect(await save()).toMatchObject({ trainingPlaces: ['gym', 'personal_trainer'] });
   });
 
   it('loads an old "none" beside equipment as the equipment alone', async () => {
@@ -183,6 +193,7 @@ describe("Settings → Fitness: screen 9's two food answers (4b-ii)", () => {
     expect([...container.querySelectorAll('label')].map((l) => l.textContent)).toEqual([
       'Fitness Level',
       'Your Goal',
+      'Where You Train',
       'Available Equipment',
       'Diet',
       'Session Duration — Not set',

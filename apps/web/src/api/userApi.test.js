@@ -105,7 +105,7 @@ describe('userService repoint (Card 6)', () => {
       expect(mergeFitnessProfile(null, {}).weightGoal).toBe(null);
     });
 
-    it('emits ONLY the 12 contract keys, even from the flat-merged profile (.strict() guard)', () => {
+    it('emits ONLY the contract keys, even from the flat-merged profile (.strict() guard)', () => {
       // Production passes {...fitnessProfile, ...user} — which carries id, email,
       // displayName, weightKg, updatedAt … A naive {...current, ...edits} would
       // forward those into the .strict() PUT body and 400. This pins the key set
@@ -122,7 +122,7 @@ describe('userService repoint (Card 6)', () => {
       expect(Object.keys(mergeFitnessProfile(flatMerged, {})).sort()).toEqual([
         'age', 'availableEquipment', 'diet', 'exerciseFrequency', 'fitnessGoals', 'fitnessLevel',
         'gender', 'heightCm', 'mealsPerDay', 'onboardingCompleted',
-        'preferredWorkoutTime', 'sessionDurationMin', 'targetWeightKg', 'weightGoal',
+        'preferredWorkoutTime', 'sessionDurationMin', 'targetWeightKg', 'trainingPlaces', 'weightGoal',
       ]);
     });
 

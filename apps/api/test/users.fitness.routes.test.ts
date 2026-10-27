@@ -183,6 +183,7 @@ d("users fitness-profile routes (real Postgres)", () => {
       weightGoal: null, // the weight choice that sets the calories: none yet
       exerciseFrequency: null,
       availableEquipment: [],
+      trainingPlaces: [],
       sessionDurationMin: null,
       preferredWorkoutTime: null,
       diet: null, // screen 9's two, never guessed: a diet nobody gave is no diet
@@ -268,6 +269,7 @@ d("users fitness-profile routes (real Postgres)", () => {
       fitnessLevel: null,
       fitnessGoals: [],
       availableEquipment: [],
+      trainingPlaces: [],
       onboardingCompleted: false, // omitted → false: a partial save cannot satisfy the gate
     });
   });
@@ -301,6 +303,7 @@ d("users fitness-profile routes (real Postgres)", () => {
       weightGoal: null, // no weight choice sent, so none is stored
       exerciseFrequency: null,
       availableEquipment: [],
+      trainingPlaces: [],
       sessionDurationMin: null,
       preferredWorkoutTime: null,
       diet: null,
@@ -334,7 +337,9 @@ d("users fitness-profile routes (real Postgres)", () => {
       { weightGoal: "keep" }, // the screen's word; the stored value is "maintain"
       { mainGoal: "posture" }, // the old one-goal field is gone
       { availableEquipment: ["barbell"] }, // outside the enum
-      { availableEquipment: ["none", "gym"] }, // "no equipment" stands alone
+      { availableEquipment: ["none", "kettlebells"] }, // "no equipment" stands alone
+      { availableEquipment: ["gym"] }, // a gym is a place since 0168, never equipment
+      { trainingPlaces: ["spa"] }, // not a place on the list
       { age: 17 }, // below the floor of 18 (RULINGS 2026-09-15: the app is for 18 and over)
       { age: 121 }, // above the ceiling of 120
       { exerciseFrequency: 8 }, // > 7 days in a week

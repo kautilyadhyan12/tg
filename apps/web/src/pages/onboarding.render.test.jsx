@@ -59,13 +59,13 @@ const { ProtectedRoute } = await import('../components/common/ProtectedRoute');
 const EMPTY = {
   displayName: 'kd.test', weightGoal: null, fitnessGoals: [], age: null, gender: null, heightCm: null, weightKg: null,
   targetWeightKg: null, pace: null, dayActivity: null, fitnessLevel: null, pushUpsMax: null, plankHoldSeconds: null,
-  trainingDays: null, sessionMinutes: null, availableEquipment: [], diet: null, mealsPerDay: null,
+  trainingDays: null, sessionMinutes: null, availableEquipment: [], trainingPlaces: [], diet: null, mealsPerDay: null,
   onboardingCompleted: false, updatedAt: null,
 };
 const ALL = {
   ...EMPTY, weightGoal: 'lose', age: 30, gender: 'female', heightCm: 165, weightKg: 70, targetWeightKg: 65,
   pace: 'steady', dayActivity: 'sitting', fitnessLevel: 'beginner', trainingDays: 3, sessionMinutes: 45,
-  availableEquipment: ['dumbbells'], diet: 'non_vegetarian', mealsPerDay: 3,
+  availableEquipment: ['dumbbells'], trainingPlaces: ['home'], diet: 'non_vegetarian', mealsPerDay: 3,
 };
 
 const UNANSWERED_HEALTH = {
@@ -842,17 +842,21 @@ describe('onboarding screens 1–7', () => {
     expect(pressed(/No equipment/)).toBe('false');
   });
 
-  it('offers a gym beside the home equipment, and "No equipment" still stands alone', async () => {
-    serve({ ...ALL, availableEquipment: [] });
+  it('asks where a person trains above the equipment, a gym among the places, and "No equipment" still stands alone', async () => {
+    serve({ ...ALL, availableEquipment: [], trainingPlaces: [] });
     draw();
     await heading('Equipment');
-    tap(/A gym/);
-    await saved({ availableEquipment: ['gym'] });
+    expect(screen.queryByRole('button', { name: /A gym/ })).toBeNull();
+    tap(/^Gym$/);
+    await saved({ trainingPlaces: ['gym'] });
+    tap(/Yoga studio/);
+    await stored({ trainingPlaces: ['gym', 'yoga_studio'] });
     tap(/Dumbbells/);
-    await stored({ availableEquipment: ['dumbbells', 'gym'] });
+    await stored({ availableEquipment: ['dumbbells'] });
     tap(/No equipment/);
     await stored({ availableEquipment: ['none'] });
-    expect(pressed(/A gym/)).toBe('false');
+    expect(pressed(/Dumbbells/)).toBe('false');
+    expect(pressed(/^Gym$/)).toBe('true');
   });
 
   it('asks screen 1 as one grid under one heading, the weight choice on top: a goal tap never touches the weight choice', async () => {
@@ -1387,7 +1391,7 @@ describe('onboarding screens 1–7', () => {
     expect(panel().textContent).toContain('1,267kcal a day');
     expect(panel().textContent).not.toContain('not medical advice');
     expect(workouts().textContent).toContain('3 workouts a week, 45 minutes each');
-    expect(workouts().textContent).toContain('Beginner · Dumbbells');
+    expect(workouts().textContent).toContain('Beginner · Home · Dumbbells');
     expect(workouts().textContent).not.toContain('Follow their advice');
     // Every screen that asks something, each with its answer and a way back to it.
     const rows = [
@@ -1397,7 +1401,7 @@ describe('onboarding screens 1–7', () => {
       ['Your day', 'Mostly sitting'],
       ['Your training', 'Beginner'],
       ['Your week', '3 days a week · 45 minutes'],
-      ['Equipment', 'Dumbbells'],
+      ['Equipment', 'Home · Dumbbells'],
       ['Health', 'No'],
       ['Food', 'Non-vegetarian · 3 meals a day'],
     ];

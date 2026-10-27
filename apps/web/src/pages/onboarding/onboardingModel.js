@@ -13,6 +13,7 @@ import {
   GOALS,
   LEVELS,
   PACES,
+  PLACES,
   WEIGHT_GOALS,
   cleanEquipment,
   directionOf,
@@ -43,6 +44,7 @@ export {
   MISSING_LABELS,
   MUSCLE_PACE_NOTE,
   PACES,
+  PLACES,
   PLANK_REST,
   PLAN_NOTE,
   PUSH_UPS_REST,
@@ -107,6 +109,7 @@ export {
   targetWrongSide,
   toggleEquipment,
   toggleGoal,
+  togglePlace,
   visibleScreens,
   weightLabel,
   weightParts,
@@ -132,12 +135,17 @@ const GENDER_LABEL = labels(GENDERS);
 const DAY_LABEL = labels(DAYS);
 const LEVEL_LABEL = labels(LEVELS);
 const EQUIPMENT_LABEL = labels(EQUIPMENT);
+const PLACE_LABEL = labels(PLACES);
 const DIET_LABEL = labels(DIETS);
 
 export const NOT_ANSWERED = 'Not answered';
 /** Words on one line, " · " between them, in the order given; nothing empty. */
 const joined = (parts) => parts.filter((p) => typeof p === 'string' && p !== '').join(' · ');
-const equipmentText = (a) => joined(cleanEquipment(a.availableEquipment).map((e) => EQUIPMENT_LABEL[e] ?? e));
+const equipmentText = (a) =>
+  joined([
+    ...(Array.isArray(a.trainingPlaces) ? a.trainingPlaces : []).map((p) => PLACE_LABEL[p] ?? p),
+    ...cleanEquipment(a.availableEquipment).map((e) => EQUIPMENT_LABEL[e] ?? e),
+  ]);
 
 /** What one screen holds, in the words that screen uses. */
 export function answerValue(id, a, units) {

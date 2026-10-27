@@ -1170,6 +1170,13 @@
       "when": 1790726400167,
       "tag": "0167_square_merges",
       "breakpoints": true
+    },
+    {
+      "idx": 167,
+      "version": "7",
+      "when": 1790726400168,
+      "tag": "0168_training_places",
+      "breakpoints": true
     }
   ]
 }

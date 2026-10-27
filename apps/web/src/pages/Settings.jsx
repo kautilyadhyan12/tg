@@ -13,10 +13,10 @@ import { useTransition } from '../context/TransitionContext';
 import { userService, heightToCm, weightToKg, convertHeight, convertWeight, mergeFitnessProfile, profilePatchFor } from '../api/userApi';
 import { onboardingService } from '../api/onboardingApi';
 import {
-  DIETS, EQUIPMENT, GOALS, MEALS_PER_DAY, WEIGHT_GOALS, cleanEquipment, healthyTargetLine, targetDirection, targetWrongSide,
-  toggleEquipment, toggleGoal, wrongSideText,
+  DIETS, EQUIPMENT, GOALS, MEALS_PER_DAY, PLACES, WEIGHT_GOALS, cleanEquipment, healthyTargetLine, targetDirection, targetWrongSide,
+  toggleEquipment, toggleGoal, togglePlace, wrongSideText,
 } from './onboarding/onboardingModel';
-import { DIET_ICONS, EQUIPMENT_ICONS, GOAL_ICONS, WEIGHT_GOAL_ICONS } from './onboarding/onboardingIcons';
+import { DIET_ICONS, EQUIPMENT_ICONS, GOAL_ICONS, PLACE_ICONS, WEIGHT_GOAL_ICONS } from './onboarding/onboardingIcons';
 import HealthQuestion from './onboarding/HealthQuestion';
 import { useHealthScreening } from './onboarding/useHealthScreening';
 import { ADULT_AGE, CURRENT_DISCLAIMER_VERSION, DISCLAIMER_WORDINGS, UNDER_AGE_LINE } from '@app/shared';
@@ -322,6 +322,7 @@ export function FitnessTab({ profile, onSaved, onChangeAge }) {
     fitnessGoals:         profile.fitnessGoals         || [],
     // An old "none" beside equipment loads as the equipment, as screen 7 does.
     availableEquipment:   cleanEquipment(profile.availableEquipment),
+    trainingPlaces:       profile.trainingPlaces       || [],
     sessionDuration:      profile.sessionDurationMin   ?? null,
     preferredWorkoutTime: profile.preferredWorkoutTime || '',
     exerciseFrequency:    profile.exerciseFrequency    ?? null,
@@ -335,6 +336,7 @@ export function FitnessTab({ profile, onSaved, onChangeAge }) {
   const pickWeightGoal = (value) => setForm((f) => ({ ...f, weightGoal: value }));
   const tickGoal = (value) => setForm((f) => ({ ...f, fitnessGoals: toggleGoal(f.fitnessGoals, value) }));
   const tickEquipment = (value) => setForm((f) => ({ ...f, availableEquipment: toggleEquipment(f.availableEquipment, value) }));
+  const tickPlace = (value) => setForm((f) => ({ ...f, trainingPlaces: togglePlace(f.trainingPlaces, value) }));
 
   // Every save here sends the stored age too, so an age under 18 kept from
   // before the app became 18+ (RULINGS 2026-09-15) holds this tab as well.
@@ -355,6 +357,7 @@ export function FitnessTab({ profile, onSaved, onChangeAge }) {
         weightGoal:           form.weightGoal,
         fitnessGoals:         form.fitnessGoals,
         availableEquipment:   form.availableEquipment,
+        trainingPlaces:       form.trainingPlaces,
         sessionDurationMin:   Number.isFinite(form.sessionDuration) ? form.sessionDuration : null,
         preferredWorkoutTime: form.preferredWorkoutTime || null,
         exerciseFrequency:    Number.isFinite(form.exerciseFrequency) ? form.exerciseFrequency : null,
@@ -421,6 +424,24 @@ export function FitnessTab({ profile, onSaved, onChangeAge }) {
               <Icon aria-hidden="true" className="w-4 h-4 flex-shrink-0" strokeWidth={1.75} />{label}
             </button>
           ))}
+        </div>
+      </Field>
+
+      <Field label="Where You Train" hint="Pick all that apply.">
+        <div className="flex flex-wrap gap-2">
+          {PLACES.map((place) => {
+            const Icon = PLACE_ICONS[place.value];
+            const on = form.trainingPlaces.includes(place.value);
+            return (
+              <button key={place.value} type="button"
+                aria-pressed={on}
+                onClick={() => tickPlace(place.value)}
+                className="py-1.5 px-3 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5"
+                style={chipStyle(on)}>
+                <Icon aria-hidden="true" className="w-3.5 h-3.5 flex-shrink-0" strokeWidth={1.75} />{place.label}
+              </button>
+            );
+          })}
         </div>
       </Field>
 
