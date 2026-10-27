@@ -538,7 +538,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 12c. [x] **"Before you start" on the phone** — merged 2026-10-14 (PR #271).
     - 12d. [x] **Sign in with Google on the phone** — merged 2026-10-27 (PR #369).
 13. **Invitations and Join** (spec Part 3 §10.2; split 2026-10-27: the email's button needs the app's own web address).
-    - 13a. [ ] **Join on the phone**: "You're invited" after "Before you start", what the gym can see, its waiver, Join, No thanks and Not me; the Gym tab's places and invitations, under a name that fits a yoga or Pilates studio too (Kd, 2026-10-23, `rulings/2026-10-23-18u-i.md`).
+    - 13a. [x] **Join on the phone** — merged 2026-10-27 (PR #372).
     - 13b. [ ] **The invitation email's button opens the app**, and on a phone without it the store buttons.
 14. [ ] **Setup**: the eleven screens and the plan, the health question, Safe mode, the consent taps.
 15. [ ] **The pass** (spec Part 3 §12.2) and the days you came; later, a pass the phone can make with no signal.
