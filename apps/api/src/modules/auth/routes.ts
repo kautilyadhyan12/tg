@@ -11,7 +11,8 @@ import { z } from "zod";
 import type { AppConfig } from "../../config.js";
 import type { RedisLike } from "../../redis.js";
 import type { EmailSender } from "./email.js";
-import { errorSummary, type GooglePhoneVerifier, type GoogleVerifier } from "./google.js";
+import { refusalReason, type GooglePhoneVerifier, type GoogleVerifier } from "./google.js";
+import { googleWordSecondsLeft, mintGoogleWord } from "./googleWord.js";
 import { WrongGuessError } from "./errors.js";
 import { createDualRateLimit } from "./rateLimit.js";
 import type { RobotCheck } from "../orgs/gymPage/robotCheck.js";
@@ -34,6 +35,7 @@ import {
 import * as service from "./service.js";
 import { argon2idHasher } from "./service.js";
 import { createLogOnlyEmailSender } from "./email.js";
+import { RobotCheckNeeded } from "./codes.js";
 // `cookieOptions` (GAP-2: sameSite 'none' + secure in production) lives in tokens.ts, so the
 // session cookies and the trial mark are set by one rule (round one of 2c, L4).
 import { ACCESS_COOKIE, OAUTH_STATE_COOKIE, REFRESH_COOKIE, cookieOptions, mintOpaqueToken, sha256Hex } from "./tokens.js";
@@ -187,7 +189,7 @@ export function registerAuthRoutes(
     identifier: (req) => req.authUser?.id ?? null,
     redis: deps.redis,
   });
-  // GOOGLE (R3.7). A callback drives a token exchange with Google and maybe a user
+  // GOOGLE IN THE BROWSER (R3.7). A callback drives a token exchange with Google and maybe a user
   // INSERT. A whole gym signs in on one wi-fi (ROADMAP Stage 4 item 10), so the address
   // is charged only for what one person there could not do for free: an answer Google
   // refused. 60 of those in a minute and the address waits out that minute before
@@ -200,34 +202,23 @@ export function registerAuthRoutes(
   const googleRefusedKey = (req: FastifyRequest) => `rl:google_refused:ip:${req.ip}`;
 
   // ── sign-in by email code (Kd 2026-09-07) ─────────────────────────────────
-  // The per-ADDRESS limits are in the database (three unused codes a day, five
-  // guesses a code). These Redis buckets are the wall against a client that VARIES
-  // the address, which the per-address rule cannot see: every send is an
-  // email Kd pays for. A gym's wi-fi or a phone company's gateway puts a whole
-  // gym on one internet address (ROADMAP Stage 4 item 10: 200 people in an hour),
-  // so the address's first 20 sends an hour go straight through and every send
-  // after needs the robot check (`codeRobotGate`), not a refusal. 500 an hour is
-  // the ceiling even with the check: 200 people at a code and a resend each, with
-  // room (all three of the database's own limit, from everybody, would be 600). On top sits ONE ceiling on sends a day
-  // across everyone — the outage-and-bill stop.
+  // The per-PERSON limits are in the database (three unused codes a day, then two more
+  // past the robot check; five guesses a code), so nothing here counts by the email
+  // typed: a stranger who typed somebody's address could otherwise use up that person's
+  // allowance and lock them out (the security pass on item 12, H2). These buckets are the
+  // wall against a client that VARIES the address: every send is an email Kd pays for. A
+  // gym's wi-fi or a phone company's gateway puts a whole gym on one internet address
+  // (ROADMAP Stage 4 item 10: 200 people in an hour), so the address's first 20 sends an
+  // hour go straight through and every send after needs the robot check
+  // (`codeRobotGate`), not a refusal. 500 an hour is the ceiling even with the check: 200
+  // people at a code and a resend each, with room. On top sits ONE ceiling on sends a day
+  // across everyone, the outage-and-bill stop.
   const codeSendLimit = createDualRateLimit({
     name: "code_send",
-    max: 10,
+    max: 500,
     ipMax: 500,
     windowMs: HOUR_MS,
-    identifier: identifierFrom,
-    redis: deps.redis,
-  });
-  // A guess is worth nothing past the code's own five (the database's rule, per code).
-  // The person is counted here; the ADDRESS only for wrong guesses at live codes
-  // (`guessRoom`, below), so junk and guesses at addresses with no code spend none of a
-  // gym's allowance — a whole gym's tries are 200 people at five each.
-  const codeVerifyLimit = createDualRateLimit({
-    name: "code_verify",
-    max: 20,
-    ipMax: null,
-    windowMs: HOUR_MS,
-    identifier: identifierFrom,
+    identifier: () => null,
     redis: deps.redis,
   });
   const DAY_S = 24 * 60 * 60;
@@ -235,8 +226,8 @@ export function registerAuthRoutes(
   // send has resolved (below), so a refusal never spends one of the day's sends.
   // Read-then-count can overshoot by the requests in flight together, nothing
   // against a stop in the thousands. A missing key and a Redis outage both
-  // read as "none yet" and open; codeSendLimit runs first and has already
-  // logged the outage, so it is never a silent open.
+  // read as "none yet" and open; with Redis down every send has passed the robot
+  // check first (`codeRobotGate`), so no robot reaches it.
   const DAY_CEILING_KEY = "rl:code_send:all:day";
   const dailySendCeiling = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
     const sentToday = Number((await deps.redis.get(DAY_CEILING_KEY)) ?? "0");
@@ -249,44 +240,54 @@ export function registerAuthRoutes(
     }
   };
 
-  // THE ROBOT CHECK, past the address's first 20 sends an hour. It runs before the
+  // THE ROBOT CHECK, past the address's first 20 sends an hour, and past a person's three
+  // free codes a day (the database's rule, `RobotCheckNeeded`). It runs before the
   // limits, so a request without a passed check counts against nobody's allowance —
   // not the address's, and not the person whose address a robot typed. A request that
   // would send nothing (the handler answers it 400) spends none of the 20. Every answer
   // is put to Cloudflare, and failures are never counted against the address: one person
   // there could otherwise lock out everybody sharing it; the floor of 600 a minute an
   // address bounds the asks. Each answer is used once (Cloudflare refuses it a second
-  // time). Redis down: let it through with a log; `codeSendLimit` and the day's ceiling
-  // still apply.
+  // time). REDIS DOWN: the 20 cannot be counted, nor the day's ceiling, so every send asks
+  // for the check, which needs no Redis (the security pass on item 12, H3).
   const HOUR_S = HOUR_MS / 1000;
+  /** The requests that passed the robot check, for the handler's day rule. */
+  const passedRobot = new WeakSet<FastifyRequest>();
+  const askForRobot = (req: FastifyRequest, reply: FastifyReply) =>
+    reply.status(403).send({ error: "robot_check", message: SIGN_IN_ROBOT_WORDS.robot_check, robotCheckKey: deps.robotCheck.siteKey, requestId: req.id });
   const codeRobotGate = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
     // Answered here, so a request that would send nothing reaches no count after this one.
     const body = parseBody(sendCodeRequestSchema, req, reply);
     if (body === null) return;
-    const sends = await deps.redis.incrWithTtl(`rl:code_send_free:ip:${req.ip}`, HOUR_S);
-    if (sends === null) {
-      req.log.warn({ event: "ratelimit.open_redis_down", limiter: "code_send_free" }, "rate limiter failing open (Redis unavailable)");
-      return;
-    }
-    if (sends <= SIGN_IN_FREE_SENDS_PER_ADDRESS) return;
     const token = body.robotToken;
-    if (token === undefined) {
-      await reply.status(403).send({ error: "robot_check", message: SIGN_IN_ROBOT_WORDS.robot_check, robotCheckKey: deps.robotCheck.siteKey, requestId: req.id });
-      return;
+    if (token !== undefined) {
+      const answer = await deps.robotCheck.verify(token, "sign_in");
+      if (answer === "unavailable") {
+        await reply.status(503).send({ error: "robot_unavailable", message: SIGN_IN_ROBOT_WORDS.robot_unavailable, requestId: req.id });
+        return;
+      }
+      if (answer !== "passed") {
+        await reply.status(403).send({ error: "robot_failed", message: SIGN_IN_ROBOT_WORDS.robot_failed, robotCheckKey: deps.robotCheck.siteKey, requestId: req.id });
+        return;
+      }
+      passedRobot.add(req);
     }
-    const answer = await deps.robotCheck.verify(token, "sign_in");
-    if (answer === "passed") return;
-    if (answer === "unavailable") {
-      await reply.status(503).send({ error: "robot_unavailable", message: SIGN_IN_ROBOT_WORDS.robot_unavailable, requestId: req.id });
-      return;
-    }
-    await reply.status(403).send({ error: "robot_failed", message: SIGN_IN_ROBOT_WORDS.robot_failed, robotCheckKey: deps.robotCheck.siteKey, requestId: req.id });
+    const sends = await deps.redis.incrWithTtl(`rl:code_send_free:ip:${req.ip}`, HOUR_S);
+    if (sends === null) req.log.warn({ event: "ratelimit.robot_check_redis_down", limiter: "code_send_free" }, "every code send asks for the robot check (Redis unavailable)");
+    const free = sends !== null && sends <= SIGN_IN_FREE_SENDS_PER_ADDRESS;
+    if (!free && !passedRobot.has(req)) await askForRobot(req, reply);
   };
 
   app.post("/v1/auth/code/send", { preHandler: [codeRobotGate, codeSendLimit, dailySendCeiling] }, async (req, reply) => {
     const input = parseBody(sendCodeRequestSchema, req, reply);
     if (input === null) return;
-    const rules = await service.requestSignInCode(authDeps, input.email);
+    let rules: Awaited<ReturnType<typeof service.requestSignInCode>>;
+    try {
+      rules = await service.requestSignInCode(authDeps, input.email, passedRobot.has(req) ? "passed" : "not_passed");
+    } catch (err) {
+      if (err instanceof RobotCheckNeeded) return askForRobot(req, reply);
+      throw err;
+    }
     // Only a send that resolved is counted against the day's ceiling.
     await deps.redis.incrWithTtl(DAY_CEILING_KEY, DAY_S);
     // One fixed body for known AND unknown addresses — asking never reveals
@@ -304,7 +305,7 @@ export function registerAuthRoutes(
     }
   };
 
-  app.post("/v1/auth/code/verify", { preHandler: [codeVerifyLimit, guessRoom] }, async (req, reply) => {
+  app.post("/v1/auth/code/verify", { preHandler: [guessRoom] }, async (req, reply) => {
     const input = parseBody(verifyCodeRequestSchema, req, reply);
     if (input === null) return;
     if (input.client === "phone" && refusedFromABrowser(req, reply)) return;
@@ -466,7 +467,7 @@ export function registerAuthRoutes(
       // 500 or a leaked reason (R8.1). R3.10: log a SAFE summary, never the raw
       // error — a gaxios failure carries client_secret + the auth code on
       // .config, which pino's redact paths do not cover (T3 finding).
-      app.log.warn({ event: "auth.google.callback_failed", reason: errorSummary(err) }, "google sign-in failed");
+      app.log.warn({ event: "auth.google.callback_failed", reason: refusalReason(err) }, "google sign-in failed");
       await deps.redis.incrWithTtl(googleRefusedKey(req), GOOGLE_REFUSED_WINDOW_S);
       return loginRedirect(reply, "google_failed");
     }
@@ -476,38 +477,26 @@ export function registerAuthRoutes(
 
   // ── Google on the phone (ROADMAP Stage 5 item 12d) ────────────────────────
   // The phone asks here for a one-time word, asks Google with it (Credential Manager), and
-  // sends back Google's signed answer, which carries the word. The word is kept in Redis
-  // for ten minutes and taken once, so a copied answer signs nobody in again. Asking for a
-  // word costs one Redis key: 1,000 an hour an address, a gym of 200 on one wi-fi trying
-  // five times each. A refused answer is charged to the address as the browser's callback
-  // is (GOOGLE_REFUSED_MAX), and the two share the count. Here every answer is counted on
-  // the way in, so a burst cannot pass the gate together, and one that signs somebody in
-  // gives its count back: what stays counted is what was refused.
-  const GOOGLE_NONCE_TTL_S = 10 * 60;
-  const googleNonceKey = (nonce: string) => `google_nonce:${sha256Hex(nonce)}`;
-  const googlePhoneStartLimit = createDualRateLimit({
-    name: "google_phone_start",
-    max: 1000,
-    windowMs: HOUR_MS,
-    identifier: () => null,
-    redis: deps.redis,
-  });
+  // sends back Google's signed answer, which carries the word. The server keeps nothing
+  // when it hands a word out (googleWord.ts); a word is marked used in Redis when an
+  // answer brings it back, so a copied answer signs nobody in again. NO PER-ADDRESS GATE
+  // HERE, unlike the browser's callback, which asks Google: every check on this road is
+  // local (Google's keys are cached by the SDK), so a refusal costs nothing, and a gate
+  // would only let one person on a gym's wi-fi keep Google off for everybody there (the
+  // security pass on item 12, H5). The app-wide floor still bounds an address.
+  const googleWordUsedKey = (word: string) => `google_word_used:${sha256Hex(word)}`;
   const GOOGLE_PHONE_WORDS = {
     google_not_configured: "Google sign-in isn’t available. Sign in with your email.",
     google_down: "Google sign-in isn’t working right now. Try again, or sign in with your email.",
     google_failed: "Google sign-in didn’t work. Try again, or sign in with your email.",
-    google_busy: "Too many attempts. Please try again in a minute.",
   } as const;
   const googlePhoneRefusal = (req: FastifyRequest, reply: FastifyReply, status: number, error: keyof typeof GOOGLE_PHONE_WORDS) =>
     reply.status(status).send({ error, message: GOOGLE_PHONE_WORDS[error], requestId: req.id });
 
-  app.post("/v1/auth/google/phone/start", { preHandler: [googlePhoneStartLimit] }, async (req, reply) => {
+  app.post("/v1/auth/google/phone/start", async (req, reply) => {
     if (refusedFromABrowser(req, reply)) return;
     if (googlePhoneVerifier === null) return googlePhoneRefusal(req, reply, 503, "google_not_configured");
-    const nonce = mintOpaqueToken();
-    if (!(await deps.redis.setex(googleNonceKey(nonce), GOOGLE_NONCE_TTL_S, "1"))) {
-      return googlePhoneRefusal(req, reply, 503, "google_down");
-    }
+    const nonce = mintGoogleWord(deps.config.JWT_SECRET, Date.now());
     return reply.header("cache-control", "no-store").status(200).send({ nonce, clientId: googlePhoneVerifier.clientId });
   });
 
@@ -516,33 +505,24 @@ export function registerAuthRoutes(
     const input = parseBody(googlePhoneSignInRequestSchema, req, reply);
     if (input === null) return;
     if (googlePhoneVerifier === null) return googlePhoneRefusal(req, reply, 503, "google_not_configured");
-    const refusedKey = googleRefusedKey(req);
-    // Redis down (null): let through, as the limiters do; the word below still needs Redis.
-    const tries = await deps.redis.incrWithTtl(refusedKey, GOOGLE_REFUSED_WINDOW_S);
-    const giveBack = () => deps.redis.decrIfPositive(refusedKey);
-    if (tries !== null && tries > GOOGLE_REFUSED_MAX) {
-      await giveBack();
-      return googlePhoneRefusal(req, reply, 429, "google_busy");
-    }
+    const refused = (reason: string) => {
+      app.log.warn({ event: "auth.google.phone_refused", reason }, "google phone sign-in refused");
+      return googlePhoneRefusal(req, reply, 401, "google_failed");
+    };
     let identity: Awaited<ReturnType<GooglePhoneVerifier["verify"]>>;
     try {
       identity = await googlePhoneVerifier.verify(input.idToken);
     } catch (err) {
-      app.log.warn({ event: "auth.google.phone_refused", reason: errorSummary(err) }, "google phone sign-in refused");
-      return googlePhoneRefusal(req, reply, 401, "google_failed");
+      return refused(refusalReason(err));
     }
-    // Taken only once the answer is Google's: a junk body spends nobody's word.
-    const word = await deps.redis.take(googleNonceKey(identity.nonce));
-    if (word === null) {
-      await giveBack();
-      return googlePhoneRefusal(req, reply, 503, "google_down");
-    }
-    if (word !== "1") {
-      app.log.warn({ event: "auth.google.phone_refused", reason: "nonce not issued, expired or used" }, "google phone sign-in refused");
-      return googlePhoneRefusal(req, reply, 401, "google_failed");
-    }
+    // Only once the answer is Google's: a junk body marks nobody's word.
+    const left = googleWordSecondsLeft(deps.config.JWT_SECRET, identity.nonce, Date.now());
+    if (left === null) return refused("word_not_ours");
+    // The first answer to bring the word back marks it, for the minutes it has left.
+    const uses = await deps.redis.incrWithTtl(googleWordUsedKey(identity.nonce), left);
+    if (uses === null) return googlePhoneRefusal(req, reply, 503, "google_down");
+    if (uses !== 1) return refused("word_used");
     const { user, tokens, isNewAccount } = await service.googleSignIn(authDeps, identity, requestMeta(req), "phone");
-    await giveBack();
     return reply.header("cache-control", "no-store").status(200).send({ user, isNewAccount, tokens });
   });
 }

@@ -144,11 +144,55 @@ export function phoneIdentityFromClaims(raw: unknown): GooglePhoneIdentity {
   return { ...identity, nonce };
 }
 
-/** A LOG-SAFE one-line summary of an error — never the whole object. A
- *  google-auth-library/gaxios failure carries the token-endpoint request on
- *  `.config` (client_secret + the auth code) and pino's redact paths
- *  (app.ts) do not cover it (R3.10), so logging `{ err }` would leak the
- *  secret. The message alone ("invalid_grant", "Bad Request") is safe. */
-export function errorSummary(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
+/** WHY GOOGLE'S SIGN-IN WAS REFUSED, AS A FIXED WORD — never the error itself. A
+ *  gaxios failure carries the token request on `.config` (client_secret and the auth
+ *  code), and google-auth-library writes the token into its own messages ("Token used
+ *  too late, … : {payload}", "Invalid token signature: <the token>"): a person's email,
+ *  name and photo link would reach the log (the security pass on item 12, H1). So the
+ *  message is only matched against the library's own words, and what is logged is one
+ *  of these. */
+export const GOOGLE_REFUSALS = [
+  "expired",
+  "too_early",
+  "bad_times",
+  "bad_signature",
+  "unknown_key",
+  "malformed",
+  "wrong_app",
+  "wrong_issuer",
+  "no_email",
+  "unverified",
+  "no_word",
+  "bad_claims",
+  "exchange_failed",
+  "other",
+] as const;
+export type GoogleRefusal = (typeof GOOGLE_REFUSALS)[number];
+
+const REFUSAL_BY_START: readonly [string, GoogleRefusal][] = [
+  ["Token used too late", "expired"],
+  ["Token used too early", "too_early"],
+  ["No issue time in token", "bad_times"],
+  ["No expiration time in token", "bad_times"],
+  ["iat field using invalid format", "bad_times"],
+  ["exp field using invalid format", "bad_times"],
+  ["Expiration time too far in future", "bad_times"],
+  ["Invalid token signature", "bad_signature"],
+  ["No pem found for envelope", "unknown_key"],
+  ["Wrong number of segments in token", "malformed"],
+  ["Can't parse token", "malformed"],
+  ["Wrong recipient", "wrong_app"],
+  ["Invalid issuer", "wrong_issuer"],
+  ["Google id_token carried no email", "no_email"],
+  ["Google id_token email is not verified", "unverified"],
+  ["Google id_token carried no nonce", "no_word"],
+  ["Google token response carried no id_token", "exchange_failed"],
+  ["invalid_grant", "exchange_failed"],
+];
+
+export function refusalReason(err: unknown): GoogleRefusal {
+  if (err instanceof z.ZodError) return "bad_claims";
+  if (!(err instanceof Error)) return "other";
+  const message = err.message;
+  return REFUSAL_BY_START.find(([start]) => message.startsWith(start))?.[1] ?? "other";
 }

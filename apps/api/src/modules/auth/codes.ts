@@ -2,10 +2,12 @@
 //   · a code lasts ten minutes and a resend REPLACES it
 //   · the resend is offered after sixty seconds
 //   · three UNUSED codes per address per rolling day (the first and two
-//     resends, Kd 2026-10-13); after that the address waits until tomorrow. A code that
+//     resends, Kd 2026-10-13); past them the sign-in door asks for the robot check and
+//     sends up to five (Kd 2026-10-27), then the address waits until tomorrow. A code that
 //     signed the person in does not count (Kd 2026-09-08): signing in twice
 //     in a day is normal, and the cap is against emails nobody proved
-//   · five wrong guesses kill the code
+//   · five wrong guesses kill the code; every wrong code is told in one sentence, so a
+//     stranger's guess never learns that somebody has a code waiting
 //   · the stored value is an HMAC, never the code; single use; one UPDATE
 //   · asking for a code never says whether the address has an account, and
 //     never creates one — the account is created when the code is PROVED
@@ -53,6 +55,14 @@ function tooManyToday(retryAfterMs: number): AuthError {
   );
 }
 
+/** Past the day's free codes: the sign-in door answers with the robot check. */
+export class RobotCheckNeeded extends Error {
+  constructor() {
+    super("past the day's free codes, the robot check is needed");
+    this.name = "RobotCheckNeeded";
+  }
+}
+
 function tooSoon(retryAfterMs: number): AuthError {
   const seconds = roundUpSeconds(retryAfterMs);
   return new AuthError(
@@ -71,11 +81,14 @@ function tooSoon(retryAfterMs: number): AuthError {
  *     person in is a sign-in, not a send to cap (Kd 2026-09-08).
  *   · The sixty-second gap is measured from the newest code of ANY state — a
  *     sign-in does not open the door to an immediate resend. */
-function refuseIfOverRules(recent: SignInCodeRow[], now: number): void {
+function refuseIfOverRules(recent: SignInCodeRow[], now: number, robot: RobotAnswer | undefined): void {
   const unproved = recent.filter((r) => r.usedAt === null);
-  if (unproved.length >= SIGN_IN_CODE_RULES.maxCodesPerDay) {
-    const oldest = unproved[unproved.length - 1];
-    const retryAt = (oldest?.createdAt.getTime() ?? now) + DAY_MS;
+  // A door with no robot check (the delete-account code) stops at the free three.
+  const cap = robot === undefined ? SIGN_IN_CODE_RULES.maxCodesPerDay : SIGN_IN_CODE_RULES.maxCodesPerDayWithRobotCheck;
+  if (unproved.length >= cap) {
+    // The day's window opens again when the cap-th newest of them is a day old.
+    const freeing = unproved[cap - 1];
+    const retryAt = (freeing?.createdAt.getTime() ?? now) + DAY_MS;
     throw tooManyToday(retryAt - now);
   }
   const latest = recent[0];
@@ -84,7 +97,11 @@ function refuseIfOverRules(recent: SignInCodeRow[], now: number): void {
     const sinceLast = now - latest.createdAt.getTime();
     if (sinceLast < gapMs) throw tooSoon(gapMs - sinceLast);
   }
+  if (robot === "not_passed" && unproved.length >= SIGN_IN_CODE_RULES.maxCodesPerDay) throw new RobotCheckNeeded();
 }
+
+/** Whether this request passed the robot check; a door with none passes undefined. */
+export type RobotAnswer = "passed" | "not_passed";
 
 /** Ask for a code. Enforces the day cap and the resend gap, mints and stores
  *  the code (hashed), sends it, and takes the row back if the send fails so a
@@ -92,12 +109,12 @@ function refuseIfOverRules(recent: SignInCodeRow[], now: number): void {
  *  the address has an account. */
 export async function requestCode(
   deps: CodeDeps,
-  input: { email: string; purpose: CodePurpose },
+  input: { email: string; purpose: CodePurpose; robot?: RobotAnswer },
   send: CodeSender,
 ): Promise<{ resendAfterSeconds: number; expiresInSeconds: number }> {
   const now = Date.now();
   const code = mintSixDigitCode();
-  const id = await repo.issueCode(deps.sql, {
+  const issued = await repo.issueCode(deps.sql, {
     email: input.email,
     purpose: input.purpose,
     codeHash: signInCodeHash(deps.config.JWT_SECRET, { purpose: input.purpose, email: input.email, code }),
@@ -105,7 +122,7 @@ export async function requestCode(
     pruneBefore: new Date(now - PRUNE_AFTER_MS),
     since: new Date(now - DAY_MS),
     check: (recent) => {
-      refuseIfOverRules(recent, now);
+      refuseIfOverRules(recent, now, input.robot);
     },
   });
 
@@ -116,7 +133,7 @@ export async function requestCode(
     // — and the person is told, plainly, rather than left waiting for an email
     // that is not coming. R3.10: error CLASS only; provider errors echo
     // addresses.
-    await repo.deleteCode(deps.sql, id);
+    await repo.withdrawCode(deps.sql, issued);
     deps.log.warn(
       { errName: err instanceof Error ? err.name : typeof err, event: "email.code.send_failed", purpose: input.purpose },
       "code email send failed",
@@ -130,12 +147,14 @@ export async function requestCode(
   };
 }
 
-const invalidCode = () =>
-  new AuthError(400, "invalid_code", "That code is wrong or has expired. Ask for a new one.");
+/** One sentence for a wrong, expired, used or burned code and for an address with none: a
+ *  count of tries left told a stranger that somebody there had a code waiting (the
+ *  security pass on item 12, L3). */
+export const WRONG_CODE_WORDS = "That code didn’t work. Check it and try again, or ask for a new one.";
+const invalidCode = () => new AuthError(400, "invalid_code", WRONG_CODE_WORDS);
 
-/** Prove a code. Wrong, expired, used, or no code at all → the same 400 (with
- *  the tries left, when there are any). Right → the code is consumed, single
- *  use, and the caller may act for the address. */
+/** Prove a code. Wrong, expired, used, or no code at all → the same 400. Right → the
+ *  code is consumed, single use, and the caller may act for the address. */
 export async function redeemCode(
   deps: CodeDeps,
   input: { email: string; purpose: CodePurpose; code: string },
@@ -155,16 +174,8 @@ export async function redeemCode(
   );
   const matches = expected.length === presented.length && timingSafeEqual(expected, presented);
   if (!matches) {
-    const left = SIGN_IN_CODE_RULES.maxAttempts - attempts;
-    if (left <= 0) {
-      await repo.expireCode(deps.sql, live.id);
-      throw new WrongGuessError(400, "invalid_code", "Too many wrong tries. Ask for a new code.");
-    }
-    throw new WrongGuessError(
-      400,
-      "invalid_code",
-      `That code is not right. You have ${String(left)} ${left === 1 ? "try" : "tries"} left.`,
-    );
+    if (SIGN_IN_CODE_RULES.maxAttempts - attempts <= 0) await repo.expireCode(deps.sql, live.id);
+    throw new WrongGuessError(400, "invalid_code", WRONG_CODE_WORDS);
   }
   // Two presentations of the right code at once: exactly one wins.
   if (!(await repo.consumeCode(deps.sql, live.id))) throw invalidCode();

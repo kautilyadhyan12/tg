@@ -4,12 +4,13 @@
 // handed that key in place of Google's: nothing here calls Google. Where TEST_REDIS_URL is
 // set (`test:local` and CI's database job) the one-time words live in the real Redis.
 import { createSign, generateKeyPairSync, type KeyObject } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import postgres from "postgres";
 import { googlePhoneStartResponseSchema, verifyCodePhoneResponseSchema } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createGooglePhoneVerifier } from "../src/modules/auth/google.js";
+import { mintGoogleWord } from "../src/modules/auth/googleWord.js";
 import { createIoRedis, createMemoryRedis } from "../src/redis.js";
 
 const url = process.env["DATABASE_URL"];
@@ -20,11 +21,15 @@ type App = Awaited<ReturnType<typeof buildApp>>;
 const CLIENT_ID = "our-app.apps.googleusercontent.com";
 const OTHER_APP = "somebody-elses-app.apps.googleusercontent.com";
 
+const JWT_SECRET = "gphone-test-secret-0123456789abcdef-32"; // dummy test value, gitleaks:allow
+/** A word in the server's shape whose signature is not the server's. */
+const forgedWord = () => mintGoogleWord("somebody-elses-secret-0123456789abcdef", Date.now());
+
 const baseEnv = {
   NODE_ENV: "test",
   DATABASE_URL: url ?? "",
   WEB_ORIGIN: "http://localhost:5173",
-  JWT_SECRET: "gphone-test-secret-0123456789abcdef-32", // dummy test value, gitleaks:allow
+  JWT_SECRET, // dummy test value, gitleaks:allow
   LOG_LEVEL: "error",
 };
 
@@ -93,16 +98,16 @@ d("sign in with Google on the phone (real Postgres)", () => {
 
   beforeAll(async () => {
     await sql`DELETE FROM users WHERE email LIKE 'gphone12d-%@example.com'`;
-    app = await buildApp(loadConfig(baseEnv), {
-      googlePhoneVerifier: createGooglePhoneVerifier({ GOOGLE_CLIENT_ID: CLIENT_ID }, keys),
-      redis: redisUrl === undefined || redisUrl === "" ? createMemoryRedis() : createIoRedis(redisUrl),
-    });
-    unconfigured = await buildApp(loadConfig(baseEnv), { googlePhoneVerifier: null });
-    // A real Redis answers once it has connected; until then the start says Google is down.
-    for (let i = 0; i < 50; i++) {
-      if ((await post("/v1/auth/google/phone/start", {})).statusCode === 200) break;
+    const redis = redisUrl === undefined || redisUrl === "" ? createMemoryRedis() : createIoRedis(redisUrl);
+    // A real Redis answers once it has connected; until then a sign-in says Google is down.
+    for (let i = 0; i < 50 && (await redis.incrWithTtl("gphone12d:warm", 5)) === null; i++) {
       await new Promise((done) => setTimeout(done, 100));
     }
+    app = await buildApp(loadConfig(baseEnv), {
+      googlePhoneVerifier: createGooglePhoneVerifier({ GOOGLE_CLIENT_ID: CLIENT_ID }, keys),
+      redis,
+    });
+    unconfigured = await buildApp(loadConfig(baseEnv), { googlePhoneVerifier: null });
   }, 60_000);
 
   afterAll(async () => {
@@ -134,6 +139,8 @@ d("sign in with Google on the phone (real Postgres)", () => {
       ["out of date", (n) => idToken(claimsFor(owner, n, { iat: nowS() - 7200, exp: nowS() - 3600, sub: "attacker" }))],
       ["no one-time word", () => idToken(claimsFor(owner, "", { nonce: undefined, sub: "attacker" }))],
       ["a one-time word the server never gave", () => idToken(claimsFor(owner, "a".repeat(64), { sub: "attacker" }))],
+      ["a word in the server's shape, signed by somebody else", () => idToken(claimsFor(owner, forgedWord(), { sub: "attacker" }))],
+      ["a word of the server's that ran out", () => idToken(claimsFor(owner, mintGoogleWord(JWT_SECRET, Date.now() - 11 * 60 * 1000), { sub: "attacker" }))],
       ["a signature cut off", (n) => idToken(claimsFor(owner, n, { sub: "attacker" })).slice(0, -10)],
     ];
     it.each(refusedCases)("an answer %s is refused and signs nobody in", async (_name, make) => {
@@ -181,6 +188,28 @@ d("sign in with Google on the phone (real Postgres)", () => {
     });
   });
 
+  // THE DATA-INTEGRITY PASS ON ITEM 12, H2: a squatter registered the address with a password,
+  // and the owner's first Google sign-in was cut between saving the link and proving the
+  // address. The next Google sign-in proves it: the squatter's password and session end.
+  it("a Google link saved without its proof is proved at the next Google sign-in", { timeout: 30_000 }, async () => {
+    const email = "gphone12d-squatted@example.com";
+    const password = "a-Squatters-pw-123"; // dummy fixture, gitleaks:allow
+    expect((await post("/v1/auth/register", { email, password, displayName: "Squatter" })).statusCode).toBe(201);
+    const squatter = await api().inject({ method: "POST", url: "/v1/auth/login", remoteAddress: nextIp(), headers: { "content-type": "application/json" }, payload: JSON.stringify({ email, password }) });
+    expect(squatter.statusCode).toBe(200);
+    const [account] = await accounts(email);
+    if (account === undefined) throw new Error("the squatter has no account");
+    // What the cut left: the link, and no proof.
+    await sql`INSERT INTO auth_identities (user_id, provider, subject) VALUES (${account}, 'google', ${`google-${email}`})`;
+    expect((await signIn(idToken(claimsFor(email, await nonce())))).statusCode).toBe(200);
+    const [row] = await sql<{ password_hash: string | null }[]>`SELECT password_hash FROM users WHERE id = ${account}`;
+    expect(row?.password_hash).toBeNull();
+    const browserLive = await sql`SELECT 1 FROM refresh_tokens WHERE user_id = ${account} AND client = 'web' AND revoked_at IS NULL`;
+    expect(browserLive).toHaveLength(0);
+    const again = await api().inject({ method: "POST", url: "/v1/auth/login", remoteAddress: nextIp(), headers: { "content-type": "application/json" }, payload: JSON.stringify({ email, password }) });
+    expect(again.statusCode).not.toBe(200);
+  });
+
   it("a new address gets its account and a phone's session", async () => {
     const email = "gphone12d-new@example.com";
     const res = await signIn(idToken(claimsFor(email, await nonce())));
@@ -223,36 +252,49 @@ d("sign in with Google on the phone (real Postgres)", () => {
     expect(errorOf(res)).toMatchObject({ error: "google_not_configured", message: "Google sign-in isn’t available. Sign in with your email." });
   });
 
-  it("a whole gym on one wi-fi signs in, and one person's refused tries do not stop them", { timeout: 60_000 }, async () => {
+  it("a whole gym on one wi-fi signs in, however many junk or copied answers one person there sends", { timeout: 60_000 }, async () => {
     const ip = nextIp();
-    for (let i = 0; i < 10; i++) {
-      expect((await signIn(idToken(claimsFor("gphone12d-owner@example.com", await nonce(ip), { aud: OTHER_APP })), ip)).statusCode).toBe(401);
-    }
-    for (let i = 0; i < 30; i++) {
+    const copied = idToken(claimsFor("gphone12d-wifi-copier@example.com", await nonce(ip)));
+    expect((await signIn(copied, ip)).statusCode).toBe(200);
+    // One person on the gym's wi-fi: junk, a stranger's key, another app, and the same copied answer.
+    const junk = [
+      "a.b.c",
+      idToken(claimsFor("gphone12d-owner@example.com", "e".repeat(64)), strangerKey.privateKey),
+      idToken(claimsFor("gphone12d-owner@example.com", "f".repeat(64), { aud: OTHER_APP })),
+      copied,
+    ];
+    const codes = (await Promise.all(Array.from({ length: 100 }, (_, i) => signIn(junk[i % junk.length] ?? "a.b.c", ip)))).map((res) => res.statusCode);
+    expect(codes.every((code) => code === 401)).toBe(true);
+    for (let i = 0; i < 20; i++) {
       const res = await signIn(idToken(claimsFor(`gphone12d-gym-${String(i)}@example.com`, await nonce(ip))), ip);
       expect(res.statusCode).toBe(200);
     }
   });
 
-  // Every kind of refusal counts: a word never given, a key that is not Google's, another app.
-  it.each<[string, () => string]>([
-    ["a word never given", () => idToken(claimsFor("gphone12d-owner@example.com", "b".repeat(64)))],
-    ["a key that is not Google's", () => idToken(claimsFor("gphone12d-owner@example.com", "c".repeat(64)), strangerKey.privateKey)],
-    ["made for another app", () => idToken(claimsFor("gphone12d-owner@example.com", "d".repeat(64), { aud: OTHER_APP }))],
-  ])("an address that keeps sending refused answers (%s) waits a minute", { timeout: 60_000 }, async (_name, make) => {
-    const ip = nextIp();
-    const bad = make();
-    for (let i = 0; i < 60; i++) expect((await signIn(bad, ip)).statusCode).toBe(401);
-    const res = await signIn(idToken(claimsFor("gphone12d-late@example.com", await nonce(ip))), ip);
-    expect(res.statusCode).toBe(429);
-    expect(errorOf(res).error).toBe("google_busy");
-  });
-
-  it("a hundred refused answers at once: no more than sixty are looked at", { timeout: 60_000 }, async () => {
-    const ip = nextIp();
-    const bad = idToken(claimsFor("gphone12d-owner@example.com", "e".repeat(64)), strangerKey.privateKey);
-    const codes = (await Promise.all(Array.from({ length: 100 }, () => signIn(bad, ip)))).map((res) => res.statusCode);
-    expect(codes.filter((code) => code === 401).length).toBeLessThanOrEqual(60);
-    expect(codes.filter((code) => code === 429).length).toBeGreaterThanOrEqual(40);
+  // THE LOG NEVER HOLDS THE PERSON (the security pass on item 12, H1): the Google library
+  // writes the token and its payload into its own messages.
+  it("a refused answer is logged as a short reason, never with the person's email, name or the token", async () => {
+    const warned = vi.spyOn(api().log, "warn");
+    try {
+      const email = "gphone12d-logged-priya@gmail.com";
+      const person = { name: "Priya Logged Sharma", picture: "https://lh3.googleusercontent.com/a/secretpic" };
+      const late = idToken(claimsFor(email, await nonce(), { ...person, iat: nowS() - 7200, exp: nowS() - 3600 }));
+      const forged = idToken(claimsFor(email, await nonce(), person), strangerKey.privateKey);
+      const cut = late.split(".").slice(0, 2).join(".");
+      for (const token of [late, forged, cut]) expect((await signIn(token)).statusCode).toBe(401);
+      const lines = warned.mock.calls.map((call) => JSON.stringify(call));
+      expect(lines.filter((line) => line.includes("auth.google.phone_refused"))).toHaveLength(3);
+      for (const line of lines) {
+        expect(line).not.toContain(email);
+        expect(line).not.toContain("Priya");
+        expect(line).not.toContain("secretpic");
+        expect(line).not.toContain("eyJ");
+      }
+      expect(lines.join("\n")).toMatch(/"reason":"expired"/);
+      expect(lines.join("\n")).toMatch(/"reason":"bad_signature"/);
+      expect(lines.join("\n")).toMatch(/"reason":"malformed"/);
+    } finally {
+      warned.mockRestore();
+    }
   });
 });
