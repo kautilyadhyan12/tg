@@ -16,11 +16,12 @@ import {
 import { Button } from "../look/Button";
 import { Badge, Card } from "../look/Card";
 import { Chip } from "../look/Chip";
-import { colours, orangeGradient, sizes } from "../look/colours";
+import { colours, sizes } from "../look/colours";
 import { CoverPage } from "../look/CoverPage";
 import { Field } from "../look/Field";
 import { Icon } from "../look/Icon";
 import { pictures } from "../look/pictures";
+import { Trail } from "../look/Progress";
 import { Sheet } from "../look/Sheet";
 import { fonts, Txt } from "../look/Txt";
 import type { Answer, Shape } from "../session/calls";
@@ -121,18 +122,7 @@ function BoxRow({ goal }: { goal: Goal }) {
         </Txt>
         {progress.kind === "done" ? <Icon name="check" size={14} colour="goodText" /> : null}
       </View>
-      {progress.kind === "going" && progress.share !== null ? <Bar share={progress.share} /> : null}
-    </View>
-  );
-}
-
-function Bar({ share }: { share: number }) {
-  const filled = Math.round(Math.max(0, Math.min(share, 1)) * 100);
-  return (
-    <View style={styles.bar}>
-      {/* An empty bar draws no fill: no gradient on a view with no width. */}
-      {filled > 0 ? <View style={[styles.barFill, { flex: filled }]} /> : null}
-      <View style={{ flex: 100 - filled }} />
+      {progress.kind === "going" && progress.share !== null ? <Trail share={progress.share} /> : null}
     </View>
   );
 }
@@ -311,7 +301,7 @@ function GoalRow({ goal, units, onPress, onSetup }: { goal: Goal; units: string;
             {progress.words}
           </Txt>
         </View>
-        {progress.kind === "going" && progress.share !== null ? <Bar share={progress.share} /> : null}
+        {progress.kind === "going" && progress.share !== null ? <Trail share={progress.share} /> : null}
         {goal.needs === null || goal.held !== null ? null : <SetupLink needs={goal.needs} onSetup={onSetup} />}
       </View>
       <Icon name="go" size={16} colour="textFaint" />
@@ -632,8 +622,6 @@ const styles = StyleSheet.create({
   boxArt: { position: "absolute", top: 34, bottom: -4, right: -8, width: "54%" },
   fill: { position: "absolute", width: "100%", height: "100%" },
   boxRow: { gap: 5, maxWidth: "56%" },
-  bar: { flexDirection: "row", height: 6, borderRadius: sizes.round, backgroundColor: colours.track, overflow: "hidden" },
-  barFill: { borderRadius: sizes.round, backgroundColor: colours.orange, experimental_backgroundImage: orangeGradient },
   notice: { flexDirection: "row", alignItems: "center", gap: 8 },
   list: { gap: 10 },
   goal: {

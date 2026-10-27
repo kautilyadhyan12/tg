@@ -25,6 +25,7 @@ import { Icon, type IconName } from "../look/Icon";
 import { Page } from "../look/Page";
 import { pictures, type PictureName } from "../look/pictures";
 import { PictureTop } from "../look/PictureTop";
+import { Steps } from "../look/Progress";
 import { fonts, Txt } from "../look/Txt";
 import { useSession } from "../session/SessionProvider";
 import { useZoneSaved } from "../session/TimeZoneSync";
@@ -386,7 +387,7 @@ function Challenges({ read }: { read: Read<WeeklyChallenges> }) {
                   {c.done ? "Done" : c.held === null ? challengeProgress(c) : "Paused in Safe mode"}
                 </Txt>
               </View>
-              <Bar share={c.done ? 100 : barShare((Math.min(c.current, c.target) / c.target) * 100)} />
+              <Steps share={c.done ? 1 : Math.min(c.current, c.target) / c.target} />
             </View>
           ))
         )}
