@@ -20,11 +20,12 @@ export function windowWords(limitedToDays: number | null): string {
   return limitedToDays === null ? "all time" : `last ${plural(limitedToDays, "day", "days")}`;
 }
 
-/** 64,800,000 ms → "18h"; under an hour, "45 min". Whole hours, rounded down, as the browser shows. */
-export function hoursWords(durationMs: number): { value: string; minutes: string } {
+/** 64,800,000 ms → "18h"; 380 minutes → "6h 20m"; under an hour, "45 min". Minutes rounded down. */
+export function hoursWords(durationMs: number): string {
   const minutes = Math.floor(durationMs / 60_000);
-  const value = minutes < 60 ? `${count(minutes)} min` : `${count(Math.floor(minutes / 60))}h`;
-  return { value, minutes: plural(minutes, "minute", "minutes") };
+  if (minutes < 60) return `${count(minutes)} min`;
+  const rest = minutes % 60;
+  return rest === 0 ? `${count(Math.floor(minutes / 60))}h` : `${count(Math.floor(minutes / 60))}h ${String(rest)}m`;
 }
 
 const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
@@ -83,16 +84,17 @@ export function dayWords(iso: string): string | null {
   return `${DAY_NAMES[(at.getDay() + 6) % 7] ?? ""} ${String(at.getDate())} ${MONTHS[at.getMonth()] ?? ""}`;
 }
 
-/** One recent workout's line: "Mon 12 Oct · 38 min", and on its right the kcal and the camera's form
- *  score, each only when the server has it. */
-export function workoutLine(w: WorkoutListItem): { when: string; kcal: string | null; form: string | null } {
-  const day = dayWords(w.startedAt);
+/** One recent workout's row: its day ("Mon 12 Oct"), under it "38 min · 86 form", and on its right the
+ *  kcal; each part only when the server has it. */
+export function workoutLine(w: WorkoutListItem): { day: string; detail: string; kcal: string | null } {
   const minutes = w.durationMs === null ? null : Math.max(1, Math.round(w.durationMs / 60_000));
-  const when = [day, minutes === null ? null : `${count(minutes)} min`].filter((p) => p !== null).join(" · ");
+  const detail = [minutes === null ? null : `${count(minutes)} min`, w.avgFormScore === null ? null : `${count(w.avgFormScore)} form`]
+    .filter((p) => p !== null)
+    .join(" · ");
   return {
-    when,
+    day: dayWords(w.startedAt) ?? "Workout",
+    detail,
     kcal: w.kcalPoint === null ? null : `${count(w.kcalPoint)} kcal`,
-    form: w.avgFormScore === null ? null : `${count(w.avgFormScore)} form`,
   };
 }
 

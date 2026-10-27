@@ -40,14 +40,16 @@ describe("numbers in words", () => {
   });
 
   it.each([
-    [0, "0 min", "0 minutes"],
-    [60_000, "1 min", "1 minute"],
-    [59 * 60_000, "59 min", "59 minutes"],
-    [60 * 60_000, "1h", "60 minutes"],
-    [1080 * 60_000, "18h", "1,080 minutes"],
-    [119 * 60_000 + 59_999, "1h", "119 minutes"],
-  ])("%i ms trained reads %s, %s", (ms, value, minutes) => {
-    expect(hoursWords(ms)).toEqual({ value, minutes });
+    [0, "0 min"],
+    [60_000, "1 min"],
+    [59 * 60_000 + 59_999, "59 min"],
+    [60 * 60_000, "1h"],
+    [380 * 60_000, "6h 20m"],
+    [1080 * 60_000, "18h"],
+    [119 * 60_000 + 59_999, "1h 59m"],
+    [60_005 * 60_000, "1,000h 5m"],
+  ])("%i ms trained reads %s", (ms, words) => {
+    expect(hoursWords(ms)).toBe(words);
   });
 
   it("XP to the next level, and the bar never past its ends", () => {
@@ -108,19 +110,22 @@ const workout = (more: Partial<WorkoutListItem>): WorkoutListItem => ({
   ...more,
 });
 
-describe("a recent workout's line", () => {
+describe("a recent workout's row", () => {
   it("everything known", () => {
-    expect(workoutLine(workout({}))).toEqual({ when: "Mon 26 Oct · 38 min", kcal: "312 kcal", form: "86 form" });
+    expect(workoutLine(workout({}))).toEqual({ day: "Mon 26 Oct", detail: "38 min · 86 form", kcal: "312 kcal" });
   });
 
   it("what the server does not have is left out, never shown as 0", () => {
     expect(workoutLine(workout({ durationMs: null, kcalPoint: null, avgFormScore: null }))).toEqual({
-      when: "Mon 26 Oct",
+      day: "Mon 26 Oct",
+      detail: "",
       kcal: null,
-      form: null,
     });
+    expect(workoutLine(workout({ durationMs: null })).detail).toBe("86 form");
     // Under half a minute is still a workout that happened: never "0 min".
-    expect(workoutLine(workout({ durationMs: 10_000 })).when).toBe("Mon 26 Oct · 1 min");
+    expect(workoutLine(workout({ durationMs: 10_000, avgFormScore: null })).detail).toBe("1 min");
+    // A date the phone cannot read still names the row.
+    expect(workoutLine(workout({ startedAt: "not a date" })).day).toBe("Workout");
     expect(dayWords("not a date")).toBeNull();
   });
 

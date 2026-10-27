@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { App } from "../../src/App";
 import { DASHBOARD_READS } from "../../src/screens/Dashboard";
-import { weekOf } from "../../src/screens/dashboard/words";
+import { dayWords, weekOf } from "../../src/screens/dashboard/words";
 import type { Ask } from "../../src/session/calls";
 import { RAVI, fakeServer, kept, memoryStore, never, profile, refusal, tokens, type Reply, type Route } from "../kit";
 
@@ -145,10 +145,10 @@ describe("the worst thing: nobody else's numbers on this person's Dashboard", ()
     await waitFor(() => {
       expect(screen.getByText("410")).toBeTruthy();
     });
-    for (const his of ["999", "98,765", "Level 42", "55,555 XP earned", "Ravi", "Mon 5 Jan · 42 min"]) {
+    for (const his of ["999", "98,765", "Level 42", "55,555 XP earned", "Ravi", "Mon 5 Jan", "42 min · 91 form", "348 kcal"]) {
       expect([his, screen.queryAllByText(new RegExp(his)).length]).toEqual([his, 0]);
     }
-    expect(screen.getAllByText("Level 7")).toHaveLength(2);
+    expect(screen.getAllByText("Level 7")).toHaveLength(1);
     expect(screen.getByText("No workouts yet.")).toBeTruthy();
   });
 });
@@ -159,12 +159,11 @@ describe("the Dashboard, with the person's own numbers", () => {
     // The four numbers.
     expect(await screen.findByText("24")).toBeTruthy();
     expect(screen.getByText("Total Workouts")).toBeTruthy();
+    // The window the four cover, said once over them.
     expect(screen.getAllByText("all time")).toHaveLength(1);
     expect(screen.getByText("18h")).toBeTruthy();
-    expect(screen.getByText("1,080 minutes · all time")).toBeTruthy();
     expect(screen.getByText("6,420")).toBeTruthy();
-    expect(screen.getByText("kcal · all time")).toBeTruthy();
-    expect(await screen.findAllByText("Level 7")).toHaveLength(2);
+    expect(await screen.findAllByText("Level 7")).toHaveLength(1);
     expect(screen.getByText("1,240 XP earned")).toBeTruthy();
     // Experience points: the next level, two workouts this week, the streak and its freezes.
     expect(screen.getByText("240/300 XP → Level 8")).toBeTruthy();
@@ -188,10 +187,10 @@ describe("the Dashboard, with the person's own numbers", () => {
     expect(screen.getByText("First Workout")).toBeTruthy();
     expect(screen.getByText("Your Rank")).toBeTruthy();
     expect(screen.getAllByText("Coming soon")).toHaveLength(1);
-    // A recent workout.
-    expect(screen.getByText(/ · 42 min$/)).toBeTruthy();
+    // A recent workout, named by its day.
+    expect(screen.getByText(dayWords(new Date().toISOString()) ?? "")).toBeTruthy();
+    expect(screen.getByText("42 min · 91 form")).toBeTruthy();
     expect(screen.getByText("348 kcal")).toBeTruthy();
-    expect(screen.getByText("91 form")).toBeTruthy();
     expect(screen.queryByText(/couldn’t load/)).toBeNull();
     // Recommended For You comes with its first option, Food (ROADMAP 34d-iii).
     expect(screen.queryByText("Recommended For You")).toBeNull();
@@ -220,7 +219,7 @@ describe("the Dashboard, with the person's own numbers", () => {
   it("somebody whose workouts are older than the plan's window is not told they have none", async () => {
     await openApp({ ...trained, "/v1/workouts": ok(page([], true)), "/v1/progress/overview": ok(overview(0, { limitedToDays: 90 })) });
     expect(await screen.findByText("No workouts in the last 90 days.")).toBeTruthy();
-    expect(screen.getAllByText(/last 90 days/).length).toBeGreaterThanOrEqual(3);
+    expect(screen.getByText("last 90 days")).toBeTruthy();
     expect(screen.queryByText("No workouts yet.")).toBeNull();
   });
 });

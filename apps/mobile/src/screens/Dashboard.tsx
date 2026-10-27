@@ -116,9 +116,9 @@ export function DashboardScreen() {
       <Experience me={me.read} week={week.read} now={now} />
       <ThisWeek week={week.read} now={now} />
       <Swipe>
+        <Motivation now={now} />
         <PictureLink picture="weight" label="Browse Exercises" onPress={toWorkout} />
         <PictureLink picture="running" label="View Progress" onPress={toMe} />
-        <Motivation now={now} />
       </Swipe>
       <Swipe>
         <Challenges read={challenges.read} />
@@ -139,41 +139,44 @@ function Totals({ overview, me }: { overview: Read<ProgressOverview>; me: Read<G
   const totals = known(overview, (o) => ({ ...o, window: windowWords(o.limitedToDays), hours: hoursWords(o.totalDurationMs) }));
   const xp = known(me, (m) => m.xp);
   return (
-    <View style={styles.grid}>
+    <View style={styles.tight}>
+      {totals === null ? null : (
+        <Txt kind="tiny" style={styles.windowWords}>
+          {totals.window}
+        </Txt>
+      )}
+      <View style={styles.grid}>
       <Stat
         picture="totalworkout"
         icon="dumbbell"
         value={totals === null ? NOT_KNOWN : count(totals.totalWorkouts)}
         label="Total Workouts"
-        sub={totals?.window ?? null}
       />
       <Stat
         picture="hourstrained"
         icon="clock"
-        value={totals === null ? NOT_KNOWN : totals.hours.value}
+        value={totals === null ? NOT_KNOWN : totals.hours}
         label="Hours Trained"
-        sub={totals === null ? null : `${totals.hours.minutes} · ${totals.window}`}
       />
       <Stat
         picture="caloriesburned"
         icon="flame"
         value={totals === null ? NOT_KNOWN : count(totals.totalKcal)}
         label="Calories Burned"
-        sub={totals === null ? null : `kcal · ${totals.window}`}
       />
       <Stat
         picture="currentlevel"
         icon="trophy"
         tone="gold"
         value={xp === null ? NOT_KNOWN : `Level ${count(xp.level)}`}
-        label="Current Level"
-        sub={xp === null ? null : `${count(xp.total)} XP earned`}
+        label={xp === null ? "Current Level" : `${count(xp.total)} XP earned`}
       />
+      </View>
     </View>
   );
 }
 
-function Stat(props: { picture: PictureName; icon: IconName; tone?: "orange" | "gold"; value: string; label: string; sub: string | null }) {
+function Stat(props: { picture: PictureName; icon: IconName; tone?: "orange" | "gold"; value: string; label: string }) {
   return (
     <Card style={styles.stat}>
       <Image source={pictures[props.picture]} resizeMode="contain" style={styles.statArt} accessible={false} />
@@ -181,10 +184,9 @@ function Stat(props: { picture: PictureName; icon: IconName; tone?: "orange" | "
       <Badge icon={props.icon} tone={props.tone ?? "orange"} />
       <View>
         <Txt kind="big">{props.value}</Txt>
-        <Txt kind="small" colour="text" style={styles.semibold}>
+        <Txt kind="tiny" colour="textSoft">
           {props.label}
         </Txt>
-        {props.sub === null ? null : <Txt kind="tiny">{props.sub}</Txt>}
       </View>
     </Card>
   );
@@ -202,12 +204,7 @@ function Experience({ me, week, now }: { me: Read<GamificationMe>; week: Read<Pr
           <Txt kind="h3">Experience Points</Txt>
         </View>
         <View style={styles.tight}>
-          <View style={styles.between}>
-            <Txt kind="tiny" colour="orange" style={styles.semibold}>
-              {data === null ? NOT_KNOWN : `Level ${count(data.xp.level)}`}
-            </Txt>
-            <Txt kind="tiny">{data === null ? "" : xpToNext(data.xp)}</Txt>
-          </View>
+          <Txt kind="tiny">{data === null ? NOT_KNOWN : xpToNext(data.xp)}</Txt>
           <Bar share={data === null ? 0 : barShare(data.xp.progressPct)} />
         </View>
         <View style={styles.three}>
@@ -252,9 +249,12 @@ function ThisWeek({ week, now }: { week: Read<ProgressTrend>; now: Date }) {
   return (
     <Card style={styles.split}>
       <View style={[styles.grow, styles.inner]}>
-        <View style={styles.titleRow}>
-          <Icon name="calendar" size={16} colour="orange" />
-          <Txt kind="h3">This Week</Txt>
+        <View style={styles.between}>
+          <View style={styles.titleRow}>
+            <Icon name="calendar" size={16} colour="orange" />
+            <Txt kind="h3">This Week</Txt>
+          </View>
+          <Txt kind="tiny">{trained === null ? NOT_KNOWN : activeDaysWords(trained.days)}</Txt>
         </View>
         <View style={styles.days}>
           {days.map((day, i) => {
@@ -282,9 +282,6 @@ function ThisWeek({ week, now }: { week: Read<ProgressTrend>; now: Date }) {
             );
           })}
         </View>
-        <Txt kind="tiny" style={styles.centre}>
-          {trained === null ? NOT_KNOWN : activeDaysWords(trained.days)}
-        </Txt>
       </View>
       <View style={styles.sideArtNarrow}>
         <Image source={pictures.thisweek} resizeMode="cover" style={styles.fill} accessible={false} />
@@ -333,9 +330,7 @@ function Motivation({ now }: { now: Date }) {
 function Challenges({ read }: { read: Read<WeeklyChallenges> }) {
   return (
     <View style={[styles.box, styles.challenges]}>
-      <Image source={pictures.rank} resizeMode="cover" style={[styles.fill, styles.faint]} accessible={false} />
-      <View style={[StyleSheet.absoluteFill, styles.shade]} />
-      <View style={styles.inner}>
+      <View style={[styles.grow, styles.inner]}>
         <View style={styles.titleRow}>
           <Icon name="target" size={16} colour="orange" />
           <Txt kind="h3">Weekly Challenges</Txt>
@@ -346,7 +341,7 @@ function Challenges({ read }: { read: Read<WeeklyChallenges> }) {
           read.data.challenges.map((c) => (
             <View key={c.code} style={styles.tight}>
               <View style={styles.between}>
-                <Txt kind="tiny" colour="text" style={[styles.semibold, styles.grow]} numberOfLines={1}>
+                <Txt kind="tiny" colour="textSoft" style={styles.grow} numberOfLines={1}>
                   {challengeWords(c)}
                 </Txt>
                 <Txt kind="tiny" colour={c.done ? "goodText" : "textSoft"}>
@@ -358,6 +353,9 @@ function Challenges({ read }: { read: Read<WeeklyChallenges> }) {
           ))
         )}
       </View>
+      <View style={styles.sideArt}>
+        <Image source={pictures.weeklychallenges} resizeMode="contain" style={styles.fill} accessible={false} />
+      </View>
     </View>
   );
 }
@@ -366,7 +364,8 @@ function Challenges({ read }: { read: Read<WeeklyChallenges> }) {
 function Rank() {
   return (
     <View style={[styles.box, styles.rank]}>
-      <Image source={pictures.weeklychallenges} resizeMode="cover" style={styles.rankArt} accessible={false} />
+      <Image source={pictures.rank} resizeMode="cover" style={styles.fill} accessible={false} />
+      <View style={[StyleSheet.absoluteFill, styles.shade]} />
       <View style={styles.inner}>
         <View style={styles.titleRow}>
           <Icon name="crown" size={16} colour="orange" />
@@ -421,17 +420,14 @@ function Recent({ read }: { read: Read<WorkoutPage> }) {
             <View key={w.id} style={[styles.row, styles.workout]}>
               <Badge icon="dumbbell" />
               <View style={styles.grow}>
-                <Txt kind="strong">Workout</Txt>
-                <Txt kind="tiny">{line.when}</Txt>
+                <Txt kind="strong">{line.day}</Txt>
+                {line.detail === "" ? null : <Txt kind="tiny">{line.detail}</Txt>}
               </View>
-              <View style={styles.right}>
-                {line.kcal === null ? null : (
-                  <Txt kind="small" colour="orange" style={styles.semibold}>
-                    {line.kcal}
-                  </Txt>
-                )}
-                {line.form === null ? null : <Txt kind="tiny">{line.form}</Txt>}
-              </View>
+              {line.kcal === null ? null : (
+                <Txt kind="small" colour="orange" style={styles.semibold}>
+                  {line.kcal}
+                </Txt>
+              )}
             </View>
           );
         })
@@ -443,11 +439,10 @@ function Recent({ read }: { read: Read<WorkoutPage> }) {
 function Ready({ onPress }: { onPress: () => void }) {
   return (
     <View style={[styles.box, styles.ready]}>
-      <Image source={pictures.ready} resizeMode="cover" style={styles.fill} accessible={false} />
-      <View style={[StyleSheet.absoluteFill, styles.shade]} />
+      <Image source={pictures.ready} resizeMode="cover" style={styles.readyArt} accessible={false} />
+      <View style={[StyleSheet.absoluteFill, styles.statShade]} />
       <View style={styles.readyWords}>
         <Txt kind="h2">Ready to start?</Txt>
-        <Txt kind="small">Your next workout is one tap away.</Txt>
         <Button label="Start Training" icon="play" small onPress={onPress} />
       </View>
     </View>
@@ -468,7 +463,8 @@ const styles = StyleSheet.create({
   faint: { opacity: 0.6 },
   shade: { experimental_backgroundImage: pictureShade },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  stat: { width: "47%", flexGrow: 1, minHeight: 118, gap: 8 },
+  windowWords: { textAlign: "right" },
+  stat: { width: "47%", flexGrow: 1, minHeight: 96, padding: 12, gap: 6 },
   statArt: { position: "absolute", top: 0, right: 0, width: "65%", height: "100%", opacity: 0.95 },
   statShade: { experimental_backgroundImage: boxShade },
   split: { flexDirection: "row", padding: 0, gap: 0 },
@@ -499,14 +495,15 @@ const styles = StyleSheet.create({
   quote: { width: 210, minHeight: 190 },
   quoteArt: { position: "absolute", right: 0, bottom: 0, width: 80, height: 150, opacity: 0.9 },
   quoteWords: { padding: 14, paddingRight: 80, gap: 8 },
-  challenges: { width: 290, minHeight: 150 },
-  rank: { width: 200, minHeight: 150 },
-  rankArt: { position: "absolute", right: -14, top: 0, height: "100%", width: 130, opacity: 0.9 },
-  badges: { width: 230, minHeight: 150 },
+  // Each picture is shown whole: weeklychallenges is square, rank is 2:3.
+  challenges: { flexDirection: "row", width: 320, height: 210 },
+  rank: { width: 140, height: 210, justifyContent: "flex-end" },
+  badges: { width: 230, height: 210 },
   recent: { gap: 4 },
   recentArt: { position: "absolute", right: 8, top: 2, width: 64, height: 48 },
   workout: { minHeight: 56, borderTopWidth: 1, borderTopColor: colours.line, paddingTop: 8 },
-  right: { alignItems: "flex-end" },
-  ready: { height: 190, borderRadius: 22, justifyContent: "flex-end" },
-  readyWords: { padding: 18, gap: 6, alignItems: "flex-start" },
+  // ready is 2:3, so 140 wide shows all of it at 210 high.
+  ready: { height: 210, borderRadius: 22, justifyContent: "center" },
+  readyArt: { position: "absolute", top: 0, right: 0, width: 140, height: 210 },
+  readyWords: { padding: 18, gap: 14, alignItems: "flex-start", maxWidth: "62%" },
 });
