@@ -38,6 +38,11 @@ export const colours = {
   badFill: "rgba(239,68,68,0.12)",
   badLine: "rgba(239,68,68,0.30)",
   gold: "#FFD66B",
+  /** Google's G on its sign-in button, in Google's own four colours; for nothing else. */
+  googleBlue: "#4285F4",
+  googleGreen: "#34A853",
+  googleYellow: "#FBBC05",
+  googleRed: "#EA4335",
   goldFill: "rgba(255,214,107,0.12)",
   goldLine: "rgba(255,214,107,0.25)",
   blue: "#60a5fa",

@@ -78,7 +78,9 @@ d("sign in with Google on the phone (real Postgres)", () => {
   const nonce = async (ip?: string): Promise<string> => {
     const res = await post("/v1/auth/google/phone/start", {}, ip === undefined ? {} : { ip });
     expect(res.statusCode).toBe(200);
-    return googlePhoneStartResponseSchema.parse(JSON.parse(res.body)).nonce;
+    const body = googlePhoneStartResponseSchema.parse(JSON.parse(res.body));
+    expect(body.clientId).toBe(CLIENT_ID);
+    return body.nonce;
   };
   const signIn = (token: string, ip?: string) => post("/v1/auth/google/phone", { idToken: token }, ip === undefined ? {} : { ip });
   const errorOf = (res: { body: string }) => JSON.parse(res.body) as { error: string; message: string };

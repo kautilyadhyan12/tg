@@ -506,7 +506,7 @@ export function registerAuthRoutes(
     if (!(await deps.redis.setex(googleNonceKey(nonce), GOOGLE_NONCE_TTL_S, "1"))) {
       return googlePhoneRefusal(req, reply, 503, "google_down");
     }
-    return reply.header("cache-control", "no-store").status(200).send({ nonce });
+    return reply.header("cache-control", "no-store").status(200).send({ nonce, clientId: googlePhoneVerifier.clientId });
   });
 
   app.post("/v1/auth/google/phone", async (req, reply) => {

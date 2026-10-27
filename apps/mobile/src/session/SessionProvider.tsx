@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { AppState } from "react-native";
 import type { Server } from "./calls";
+import type { AskGoogle } from "./google";
 import { createSession, type KeyStore, type Session, type SessionState } from "./session";
 
 const SessionContext = createContext<{ session: Session; state: SessionState } | null>(null);
@@ -9,19 +10,21 @@ const SessionContext = createContext<{ session: Session; state: SessionState } |
 export function SessionProvider({
   server,
   store,
+  google,
   wait,
   children,
 }: {
   server: Server;
   store: KeyStore;
+  google: AskGoogle;
   /** A test's stand-in for the pause between two tries of a refresh. */
   wait?: ((ms: number) => Promise<void>) | undefined;
   children: ReactNode;
 }) {
   const [state, setState] = useState<SessionState>({ kind: "starting" });
   const session = useMemo(
-    () => createSession({ server, store, onChange: setState, ...(wait === undefined ? {} : { wait }) }),
-    [server, store, wait],
+    () => createSession({ server, store, google, onChange: setState, ...(wait === undefined ? {} : { wait }) }),
+    [server, store, google, wait],
   );
 
   useEffect(() => {

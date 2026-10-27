@@ -95,6 +95,8 @@ export interface GooglePhoneIdentity extends GoogleIdentity {
 }
 
 export interface GooglePhoneVerifier {
+  /** The client id an answer must be made for; the phone asks Google with it. */
+  clientId: string;
   /** Throws on any answer that is not Google's, not made for this app, out of date, or
    *  carries no confirmed email or no one-time word. */
   verify(idToken: string): Promise<GooglePhoneIdentity>;
@@ -124,6 +126,7 @@ export function createGooglePhoneVerifier(
       );
     });
   return {
+    clientId,
     async verify(idToken) {
       const ticket = await client.verifySignedJwtWithCertsAsync(idToken, await googleKeys(), clientId, GOOGLE_ISSUERS);
       return phoneIdentityFromClaims(ticket.getPayload());

@@ -1,5 +1,6 @@
 import {
   SIGNED_IN_ELSEWHERE,
+  googlePhoneStartResponseSchema,
   phoneKeptSessionSchema,
   phoneRefreshResponseSchema,
   sendCodeResponseSchema,
@@ -10,6 +11,7 @@ import {
   type VerifyCodePhoneResponse,
 } from "@app/shared";
 import { call, post, type Answer, type Request, type Server, type Shape } from "./calls";
+import type { AskGoogle } from "./google";
 
 /** The phone's own key store (Android's Keystore, the iPhone's Keychain), or a test's stand-in. */
 export interface KeyStore {
@@ -40,9 +42,14 @@ const REFRESH_DUE_MS = 10 * 60 * 1000;
 
 const anything = { safeParse: (raw: unknown) => ({ success: true as const, data: raw }) };
 
+/** Sign in with Google: the server's answer, or Google's box closed by the person or broken. */
+export type GoogleSignIn = Answer<VerifyCodePhoneResponse> | { kind: "closed" } | { kind: "failed" };
+
 interface SessionOptions {
   server: Server;
   store: KeyStore;
+  /** Google's own box; without one, Google's sign-in is broken on this phone. */
+  google?: AskGoogle;
   onChange: (state: SessionState) => void;
   now?: () => number;
   wait?: (ms: number) => Promise<void>;
@@ -55,6 +62,8 @@ export interface Session {
   /** `robotToken`: the robot check's answer, only once the server has asked for it. */
   sendCode: (email: string, robotToken?: string) => Promise<Answer<SendCodeResponse>>;
   verifyCode: (email: string, code: string) => Promise<Answer<VerifyCodePhoneResponse>>;
+  /** The server's one-time word, Google's box with it, then Google's answer to the server. */
+  signInWithGoogle: () => Promise<GoogleSignIn>;
   /** One at a time: a second call while one is away waits for the same one. */
   refresh: () => Promise<void>;
   refreshIfDue: () => Promise<void>;
@@ -73,6 +82,7 @@ export interface Session {
 export function createSession({
   server,
   store,
+  google = () => Promise.resolve({ kind: "failed" }),
   onChange,
   now = Date.now,
   wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
@@ -213,6 +223,20 @@ export function createSession({
         { email, code, client: "phone" },
         verifyCodePhoneResponseSchema,
       );
+      if (answer.kind === "ok") {
+        const { user, tokens } = answer.data;
+        await keep({ refreshToken: tokens.refreshToken, user }, tokens.accessToken);
+        show({ kind: "in", user });
+      }
+      return answer;
+    },
+
+    signInWithGoogle: async () => {
+      const start = await post(server, "/v1/auth/google/phone/start", {}, googlePhoneStartResponseSchema);
+      if (start.kind !== "ok") return start;
+      const asked = await google(start.data.clientId, start.data.nonce);
+      if (asked.kind !== "token") return asked;
+      const answer = await post(server, "/v1/auth/google/phone", { idToken: asked.idToken }, verifyCodePhoneResponseSchema);
       if (answer.kind === "ok") {
         const { user, tokens } = answer.data;
         await keep({ refreshToken: tokens.refreshToken, user }, tokens.accessToken);
