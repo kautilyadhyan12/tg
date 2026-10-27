@@ -121,13 +121,14 @@ describe('the join panel', () => {
     expect(screen.getByText(/what a gym can see/i)).toBeTruthy();
     expect(screen.getByText(/form scores/i)).toBeTruthy();
     expect(screen.getByText(/streak/i)).toBeTruthy();
-    // The four NEVERs, each asserted on its own so deleting one row goes red.
-    expect(screen.getByText(/meals, or anything about nutrition/i)).toBeTruthy();
-    expect(screen.getByText(/weight or body measurements/i)).toBeTruthy();
+    // Meals, weight and measurements only with the member's yes; routes never (Kd, 2026-10-27).
+    // Each asserted on its own so deleting one row goes red.
+    expect(screen.getByText(/only if you allow it/i)).toBeTruthy();
+    expect(screen.getByText('Your meals and nutrition')).toBeTruthy();
+    expect(screen.getByText('Your weight and body measurements')).toBeTruthy();
     // The AI coach was deleted (2026-10-15): nothing names it.
     expect(screen.queryByText(/AI coach/i)).toBeNull();
-    expect(screen.getByText(/where you ran/i)).toBeTruthy();
-    expect(screen.getByText(/before you joined, or after you leave/i)).toBeTruthy();
+    expect(screen.getByText('Your running routes')).toBeTruthy();
   });
 
   it('applies with the typed code and reports WAITING, naming the gym', async () => {
@@ -249,7 +250,7 @@ describe('the join panel', () => {
     // sheet's row must be PRESENT, so a future edit cannot satisfy this test by
     // deleting the disclosure instead.
     expect(page).not.toMatch(/we'll email|email you|by email|emailed/i);
-    expect(page).toMatch(/email address you signed up with/i);
+    expect(page).toMatch(/your name and email address/i);
     expect(page).not.toMatch(/expire/i);
     expect(page).not.toMatch(/\b14 days?\b/i);
   });
@@ -300,7 +301,7 @@ describe('the join panel', () => {
       expect(screen.getByText(/Someone at the trainer confirms new clients from their side/i)).toBeTruthy(),
     );
     // The sheet under it names the place and the relationship in the same word.
-    expect(screen.getByText(/Only while you are a client\./i)).toBeTruthy();
+    expect(screen.getByText(/While you.re a client\./i)).toBeTruthy();
   });
 
   it('tells somebody already in the gym that they are already in', async () => {

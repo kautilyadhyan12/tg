@@ -20,11 +20,13 @@ interface FieldProps {
   /** Opens with the keyboard up: the one thing this step is for. */
   ready?: boolean;
   onDone?: () => void;
+  /** A person's name: each word starts with a capital. */
+  name?: boolean;
 }
 
 /** One line to type in, as tall as a main button; its edge turns orange while it is typed in.
  *  The box is a View round the input: Android drops an input's own padding when its edge is restyled. */
-export function Field({ label, bare = false, value, onChange, placeholder, keyboard, fills, maxLength, spaced = false, ready = false, onDone }: FieldProps) {
+export function Field({ label, bare = false, value, onChange, placeholder, keyboard, fills, maxLength, spaced = false, ready = false, onDone, name = false }: FieldProps) {
   const [on, setOn] = useState(false);
   return (
     <View style={styles.field}>
@@ -42,7 +44,7 @@ export function Field({ label, bare = false, value, onChange, placeholder, keybo
           placeholderTextColor={colours.textFaint}
           keyboardType={keyboard}
           autoComplete={fills}
-          autoCapitalize="none"
+          autoCapitalize={name ? "words" : "none"}
           autoCorrect={false}
           maxLength={maxLength}
           autoFocus={ready}

@@ -168,3 +168,19 @@ export const INVITATION_WORDS = {
   /** On the card after "Not me". */
   said_not_me: (gymName: string): string => `You told ${gymName} this invitation isn't for you. They'll check the address they have.`,
 } as const;
+
+/** "What {gym} can see" on every Join screen, the browser's and the phone's (Part 3 §2.4).
+ *  The email line is Kd's ruling of 2026-09-03. Meals, weight and measurements only with the
+ *  member's own yes (RULINGS 2026-09-22; Kd, 2026-10-27, `rulings/2026-10-27-13a.md`). A row
+ *  is never dropped because its feature is not built yet: the promise is about what a gym
+ *  may ever see. */
+export const GYM_CAN_SEE = [
+  "Your name and email address",
+  "Your workouts: dates, exercises, sets, reps, hold times and duration",
+  "Your form scores and form faults",
+  "Your streaks and challenges",
+] as const;
+
+export const GYM_SEES_IF_YOU_ALLOW = ["Your meals and nutrition", "Your weight and body measurements"] as const;
+
+export const GYM_NEVER_SEES = ["Your running routes"] as const;
