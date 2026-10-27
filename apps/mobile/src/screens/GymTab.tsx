@@ -36,8 +36,10 @@ export function GymScreen() {
   const { setKinds } = usePlaces();
   const [mine, setMine] = useState<Read<MyOrgsResponse> | null>(null);
   const [invites, setInvites] = useState<Read<MyInvitationsResponse> | null>(null);
-  /** How many times the invitations have been read: an answer on the phone stands until the next. */
+  /** The newest finished read of the invitations, numbered as reads start: an answer on the phone stands
+   *  until a read that started after it has come back. */
   const [invitesRead, setInvitesRead] = useState(0);
+  const invitesStarted = useRef(0);
   const [checking, setChecking] = useState(false);
   // "Check for an invitation" was pressed and found none: the sentence says what to do.
   const [checked, setChecked] = useState(false);
@@ -52,10 +54,12 @@ export function GymScreen() {
   }, [session, setKinds]);
 
   const readInvites = useCallback(async () => {
+    invitesStarted.current += 1;
+    const number = invitesStarted.current;
     const answer = await session.signedIn({ method: "GET", path: invitationsPath }, myInvitationsResponseSchema);
     if (!live.current) return;
     setInvites(answer.kind === "ok" ? answer : { kind: "failed" });
-    if (answer.kind === "ok") setInvitesRead((n) => n + 1);
+    if (answer.kind === "ok") setInvitesRead((newest) => Math.max(newest, number));
   }, [session]);
 
   const readAll = useCallback(
@@ -169,6 +173,7 @@ export function GymScreen() {
         label="Invitations"
         invitations={open}
         read={invitesRead}
+        started={() => invitesStarted.current}
         onAnswered={(_, kind) => {
           // The page says what happened; the places above read again under it.
           if (kind === "joined") void readMine();

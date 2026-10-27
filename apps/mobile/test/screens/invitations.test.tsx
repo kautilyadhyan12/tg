@@ -431,6 +431,45 @@ describe("the Gym tab", () => {
     }
   });
 
+  it("a read already on its way when the person declines does not undo the answer", async () => {
+    let reads = 0;
+    let finish: (reply: Reply) => void = () => undefined;
+    await openGym({
+      "/v1/orgs/invitations": () => {
+        reads += 1;
+        // Read 1 is the invitations step's, 2 the tab's; 3 leaves before Decline and comes back after it.
+        return reads === 3
+          ? new Promise<Reply>((resolve) => {
+              finish = resolve;
+            })
+          : waiting(invitation(IRON))(undefined);
+      },
+      [decline(IRON_ID)]: () => ({ status: 200, body: { state: "declined" } }),
+    });
+    await screen.findByText("Invited");
+    const clock = jest.spyOn(Date, "now").mockReturnValue(Date.now() + GYM_READ_AGAIN_MS + 1_000);
+    try {
+      await fireEvent.press(screen.getByRole("tab", { name: "Dashboard" }));
+      await fireEvent.press(await gymTab());
+      await waitFor(() => {
+        expect(reads).toBe(3);
+      });
+      await review("Iron House");
+      await press("Decline");
+      await press("Close");
+      expect(await screen.findByText("Declined")).toBeTruthy();
+      finish(waiting(invitation(IRON))(undefined) as Reply);
+      // Its answer has come back and been read: the person's own answer still stands.
+      await waitFor(() => {
+        expect(screen.queryByText("Invited")).toBeNull();
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(screen.getByText("Declined")).toBeTruthy();
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
   it("with the places read failing and the invitations read working, it says so and Try again reads again", async () => {
     let up = false;
     await openGym({
