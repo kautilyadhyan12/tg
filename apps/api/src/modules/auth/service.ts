@@ -232,7 +232,7 @@ export async function login(
 /** A live account that can't accept a Google sign-in (soft-deleted, etc.).
  *  Never distinguishes why (R3.7 spirit) — the route redirects generically. */
 const googleUnavailable = () =>
-  new AuthError(403, "google_unavailable", "This account is not available for Google sign-in");
+  new AuthError(403, "google_unavailable", "This account was deleted, so it can’t sign in. Use a different account.");
 
 /** Ported fallback (passport.js:55): Google display name, else "New User".
  *  display_name is NOT NULL (identity.ts:25). Bounded defensively. */

@@ -466,7 +466,7 @@ export function registerAuthRoutes(
       // 500 or a leaked reason (R8.1). R3.10: log a SAFE summary, never the raw
       // error — a gaxios failure carries client_secret + the auth code on
       // .config, which pino's redact paths do not cover (T3 finding).
-      app.log.warn({ event: "auth.google.callback_failed", err: errorSummary(err) }, "google sign-in failed");
+      app.log.warn({ event: "auth.google.callback_failed", reason: errorSummary(err) }, "google sign-in failed");
       await deps.redis.incrWithTtl(googleRefusedKey(req), GOOGLE_REFUSED_WINDOW_S);
       return loginRedirect(reply, "google_failed");
     }
@@ -480,7 +480,9 @@ export function registerAuthRoutes(
   // for ten minutes and taken once, so a copied answer signs nobody in again. Asking for a
   // word costs one Redis key: 1,000 an hour an address, a gym of 200 on one wi-fi trying
   // five times each. A refused answer is charged to the address as the browser's callback
-  // is (GOOGLE_REFUSED_MAX), and the two share the count.
+  // is (GOOGLE_REFUSED_MAX), and the two share the count. Here every answer is counted on
+  // the way in, so a burst cannot pass the gate together, and one that signs somebody in
+  // gives its count back: what stays counted is what was refused.
   const GOOGLE_NONCE_TTL_S = 10 * 60;
   const googleNonceKey = (nonce: string) => `google_nonce:${sha256Hex(nonce)}`;
   const googlePhoneStartLimit = createDualRateLimit({
@@ -491,9 +493,9 @@ export function registerAuthRoutes(
     redis: deps.redis,
   });
   const GOOGLE_PHONE_WORDS = {
-    google_not_configured: "Google sign-in isn't available. Sign in with your email.",
-    google_down: "Google sign-in isn't working right now. Try again, or sign in with your email.",
-    google_failed: "Google sign-in didn't work. Try again, or sign in with your email.",
+    google_not_configured: "Google sign-in isn’t available. Sign in with your email.",
+    google_down: "Google sign-in isn’t working right now. Try again, or sign in with your email.",
+    google_failed: "Google sign-in didn’t work. Try again, or sign in with your email.",
     google_busy: "Too many attempts. Please try again in a minute.",
   } as const;
   const googlePhoneRefusal = (req: FastifyRequest, reply: FastifyReply, status: number, error: keyof typeof GOOGLE_PHONE_WORDS) =>
@@ -514,26 +516,33 @@ export function registerAuthRoutes(
     const input = parseBody(googlePhoneSignInRequestSchema, req, reply);
     if (input === null) return;
     if (googlePhoneVerifier === null) return googlePhoneRefusal(req, reply, 503, "google_not_configured");
-    if (Number((await deps.redis.get(googleRefusedKey(req))) ?? "0") >= GOOGLE_REFUSED_MAX) {
+    const refusedKey = googleRefusedKey(req);
+    // Redis down (null): let through, as the limiters do; the word below still needs Redis.
+    const tries = await deps.redis.incrWithTtl(refusedKey, GOOGLE_REFUSED_WINDOW_S);
+    const giveBack = () => deps.redis.decrIfPositive(refusedKey);
+    if (tries !== null && tries > GOOGLE_REFUSED_MAX) {
+      await giveBack();
       return googlePhoneRefusal(req, reply, 429, "google_busy");
     }
     let identity: Awaited<ReturnType<GooglePhoneVerifier["verify"]>>;
     try {
       identity = await googlePhoneVerifier.verify(input.idToken);
     } catch (err) {
-      app.log.warn({ event: "auth.google.phone_refused", err: errorSummary(err) }, "google phone sign-in refused");
-      await deps.redis.incrWithTtl(googleRefusedKey(req), GOOGLE_REFUSED_WINDOW_S);
+      app.log.warn({ event: "auth.google.phone_refused", reason: errorSummary(err) }, "google phone sign-in refused");
       return googlePhoneRefusal(req, reply, 401, "google_failed");
     }
     // Taken only once the answer is Google's: a junk body spends nobody's word.
     const word = await deps.redis.take(googleNonceKey(identity.nonce));
-    if (word === null) return googlePhoneRefusal(req, reply, 503, "google_down");
+    if (word === null) {
+      await giveBack();
+      return googlePhoneRefusal(req, reply, 503, "google_down");
+    }
     if (word !== "1") {
-      app.log.warn({ event: "auth.google.phone_refused", err: "nonce not issued, expired or used" }, "google phone sign-in refused");
-      await deps.redis.incrWithTtl(googleRefusedKey(req), GOOGLE_REFUSED_WINDOW_S);
+      app.log.warn({ event: "auth.google.phone_refused", reason: "nonce not issued, expired or used" }, "google phone sign-in refused");
       return googlePhoneRefusal(req, reply, 401, "google_failed");
     }
     const { user, tokens, isNewAccount } = await service.googleSignIn(authDeps, identity, requestMeta(req), "phone");
+    await giveBack();
     return reply.header("cache-control", "no-store").status(200).send({ user, isNewAccount, tokens });
   });
 }

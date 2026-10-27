@@ -133,6 +133,8 @@ export function SignInScreen({ note }: { note: string | null }) {
 
   async function continueWithEmail(robotToken?: string) {
     if (busy) return;
+    // The other way in is being tried: what Google last said no longer stands.
+    setGoogleProblem("");
     if (typed.trim() === "") {
       setProblem("Enter your email address.");
       return;
@@ -211,6 +213,7 @@ export function SignInScreen({ note }: { note: string | null }) {
 
   const changeEmail = () => {
     setStep("email");
+    setGoogleProblem("");
     setCode("");
     setProblem("");
     setSaid("");

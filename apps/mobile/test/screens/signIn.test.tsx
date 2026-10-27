@@ -402,16 +402,16 @@ describe("Continue with Google", () => {
       "the server refuses Google's answer",
       {
         "/v1/auth/google/phone/start": started,
-        "/v1/auth/google/phone": () => refusal(401, "google_failed", "Google sign-in didn't work. Try again, or sign in with your email."),
+        "/v1/auth/google/phone": () => refusal(401, "google_failed", "Google sign-in didn’t work. Try again, or sign in with your email."),
       },
       { kind: "token", idToken: "google-answer" },
-      "Google sign-in didn't work. Try again, or sign in with your email.",
+      "Google sign-in didn’t work. Try again, or sign in with your email.",
     ],
     [
       "Google is not set up on the server",
-      { "/v1/auth/google/phone/start": () => refusal(503, "google_not_configured", "Google sign-in isn't available. Sign in with your email.") },
+      { "/v1/auth/google/phone/start": () => refusal(503, "google_not_configured", "Google sign-in isn’t available. Sign in with your email.") },
       { kind: "token", idToken: "google-answer" },
-      "Google sign-in isn't available. Sign in with your email.",
+      "Google sign-in isn’t available. Sign in with your email.",
     ],
     ["no internet", { "/v1/auth/google/phone/start": lost }, { kind: "token", idToken: "google-answer" }, NO_ANSWER],
   ])("%s: the line under the button says so, and the email way still works", async (_name, routes, answer, words) => {
@@ -422,6 +422,19 @@ describe("Continue with Google", () => {
     expect(await screen.findByText(words)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Continue" }).props.accessibilityState).toMatchObject({ disabled: false });
     expect(store.value).toBeNull();
+  });
+
+  it("Google's line goes once the email way is used, and does not come back with Use a different email", async () => {
+    const { google } = googleSays({ kind: "failed" });
+    await openApp({ "/v1/auth/google/phone/start": started, "/v1/auth/code/send": sent }, null, google);
+    await screen.findByText("Get started.");
+    await press("Continue with Google");
+    await screen.findByText(GOOGLE_FAILED);
+    await askForCode();
+    await screen.findByLabelText("6-digit code");
+    await press("Use a different email");
+    await screen.findByLabelText("Email");
+    expect(screen.queryByText(GOOGLE_FAILED)).toBeNull();
   });
 
   it("with no internet Google's box is never opened", async () => {

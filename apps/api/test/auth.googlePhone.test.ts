@@ -1,7 +1,8 @@
 // Sign in with Google on the phone (ROADMAP Stage 5 item 12d), against real Postgres.
 // DATABASE_URL-gated. Google's answers are real signed tokens made here with a test key,
 // checked by the REAL verifier (the SDK's own signature, issuer, audience and time check),
-// handed that key in place of Google's: nothing here calls Google.
+// handed that key in place of Google's: nothing here calls Google. Where TEST_REDIS_URL is
+// set (`test:local` and CI's database job) the one-time words live in the real Redis.
 import { createSign, generateKeyPairSync, type KeyObject } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
@@ -9,6 +10,7 @@ import { googlePhoneStartResponseSchema, verifyCodePhoneResponseSchema } from "@
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createGooglePhoneVerifier } from "../src/modules/auth/google.js";
+import { createIoRedis, createMemoryRedis } from "../src/redis.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -26,8 +28,11 @@ const baseEnv = {
   LOG_LEVEL: "error",
 };
 
+// A real Redis keeps an address's counts for a minute after a run: each run its own addresses.
+const RUN = 1 + Math.floor(Math.random() * 200);
 let ipCounter = 0;
-const nextIp = () => `10.42.${String(Math.floor(ipCounter / 250))}.${String((ipCounter++ % 250) + 1)}`;
+const nextIp = () => `10.${String(RUN)}.${String(Math.floor(ipCounter / 250))}.${String((ipCounter++ % 250) + 1)}`;
+const redisUrl = process.env["TEST_REDIS_URL"];
 
 const googleKey = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const strangerKey = generateKeyPairSync("rsa", { modulusLength: 2048 });
@@ -88,8 +93,16 @@ d("sign in with Google on the phone (real Postgres)", () => {
 
   beforeAll(async () => {
     await sql`DELETE FROM users WHERE email LIKE 'gphone12d-%@example.com'`;
-    app = await buildApp(loadConfig(baseEnv), { googlePhoneVerifier: createGooglePhoneVerifier({ GOOGLE_CLIENT_ID: CLIENT_ID }, keys) });
+    app = await buildApp(loadConfig(baseEnv), {
+      googlePhoneVerifier: createGooglePhoneVerifier({ GOOGLE_CLIENT_ID: CLIENT_ID }, keys),
+      redis: redisUrl === undefined || redisUrl === "" ? createMemoryRedis() : createIoRedis(redisUrl),
+    });
     unconfigured = await buildApp(loadConfig(baseEnv), { googlePhoneVerifier: null });
+    // A real Redis answers once it has connected; until then the start says Google is down.
+    for (let i = 0; i < 50; i++) {
+      if ((await post("/v1/auth/google/phone/start", {})).statusCode === 200) break;
+      await new Promise((done) => setTimeout(done, 100));
+    }
   }, 60_000);
 
   afterAll(async () => {
@@ -126,7 +139,7 @@ d("sign in with Google on the phone (real Postgres)", () => {
     it.each(refusedCases)("an answer %s is refused and signs nobody in", async (_name, make) => {
       const res = await signIn(make(await nonce()));
       expect(res.statusCode).toBe(401);
-      expect(errorOf(res)).toMatchObject({ error: "google_failed", message: "Google sign-in didn't work. Try again, or sign in with your email." });
+      expect(errorOf(res)).toMatchObject({ error: "google_failed", message: "Google sign-in didn’t work. Try again, or sign in with your email." });
       expect(res.body).not.toContain("refreshToken");
       const linked = await sql`SELECT 1 FROM auth_identities WHERE provider = 'google' AND subject = 'attacker'`;
       expect(linked).toHaveLength(0);
@@ -138,6 +151,15 @@ d("sign in with Google on the phone (real Postgres)", () => {
       const again = await signIn(token);
       expect(again.statusCode).toBe(401);
       expect(errorOf(again).error).toBe("google_failed");
+    });
+
+    it("the same answer sent ten times at once signs in once", async () => {
+      const email = "gphone12d-burst@example.com";
+      const token = idToken(claimsFor(email, await nonce()));
+      const codes = (await Promise.all(Array.from({ length: 10 }, () => signIn(token)))).map((res) => res.statusCode);
+      expect(codes.filter((code) => code === 200)).toHaveLength(1);
+      expect(codes.filter((code) => code === 401)).toHaveLength(9);
+      expect(await accounts(email)).toHaveLength(1);
     });
 
     it("a known address is matched to its own account, never a second one", async () => {
@@ -154,6 +176,7 @@ d("sign in with Google on the phone (real Postgres)", () => {
       await sql`UPDATE users SET status = 'deleted' WHERE email = ${email}`;
       const res = await signIn(idToken(claimsFor(email, await nonce())));
       expect(res.statusCode).toBe(403);
+      expect(errorOf(res)).toMatchObject({ error: "google_unavailable", message: "This account was deleted, so it can’t sign in. Use a different account." });
       expect(res.body).not.toContain("refreshToken");
     });
   });
@@ -197,7 +220,7 @@ d("sign in with Google on the phone (real Postgres)", () => {
     if (unconfigured === undefined) throw new Error("beforeAll did not build the app");
     const res = await post("/v1/auth/google/phone/start", {}, { to: unconfigured });
     expect(res.statusCode).toBe(503);
-    expect(errorOf(res)).toMatchObject({ error: "google_not_configured", message: "Google sign-in isn't available. Sign in with your email." });
+    expect(errorOf(res)).toMatchObject({ error: "google_not_configured", message: "Google sign-in isn’t available. Sign in with your email." });
   });
 
   it("a whole gym on one wi-fi signs in, and one person's refused tries do not stop them", { timeout: 60_000 }, async () => {
@@ -211,12 +234,25 @@ d("sign in with Google on the phone (real Postgres)", () => {
     }
   });
 
-  it("an address that keeps sending refused answers waits a minute", { timeout: 60_000 }, async () => {
+  // Every kind of refusal counts: a word never given, a key that is not Google's, another app.
+  it.each<[string, () => string]>([
+    ["a word never given", () => idToken(claimsFor("gphone12d-owner@example.com", "b".repeat(64)))],
+    ["a key that is not Google's", () => idToken(claimsFor("gphone12d-owner@example.com", "c".repeat(64)), strangerKey.privateKey)],
+    ["made for another app", () => idToken(claimsFor("gphone12d-owner@example.com", "d".repeat(64), { aud: OTHER_APP }))],
+  ])("an address that keeps sending refused answers (%s) waits a minute", { timeout: 60_000 }, async (_name, make) => {
     const ip = nextIp();
-    const bad = idToken(claimsFor("gphone12d-owner@example.com", "b".repeat(64)));
+    const bad = make();
     for (let i = 0; i < 60; i++) expect((await signIn(bad, ip)).statusCode).toBe(401);
     const res = await signIn(idToken(claimsFor("gphone12d-late@example.com", await nonce(ip))), ip);
     expect(res.statusCode).toBe(429);
     expect(errorOf(res).error).toBe("google_busy");
+  });
+
+  it("a hundred refused answers at once: no more than sixty are looked at", { timeout: 60_000 }, async () => {
+    const ip = nextIp();
+    const bad = idToken(claimsFor("gphone12d-owner@example.com", "e".repeat(64)), strangerKey.privateKey);
+    const codes = (await Promise.all(Array.from({ length: 100 }, () => signIn(bad, ip)))).map((res) => res.statusCode);
+    expect(codes.filter((code) => code === 401).length).toBeLessThanOrEqual(60);
+    expect(codes.filter((code) => code === 429).length).toBeGreaterThanOrEqual(40);
   });
 });
