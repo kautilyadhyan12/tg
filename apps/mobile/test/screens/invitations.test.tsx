@@ -267,6 +267,31 @@ describe("You're invited", () => {
   });
 });
 
+describe("an invitation opened again", () => {
+  it("after Decline it opens declined, with Join and no Decline; after Join its row no longer opens", async () => {
+    const lotusId = invitation(LOTUS).id;
+    const server = await signIn({
+      "/v1/orgs/invitations": waiting(invitation(IRON), invitation(LOTUS)),
+      [accept(lotusId)]: () => joinedTo(LOTUS),
+      [decline(IRON_ID)]: () => ({ status: 200, body: { state: "declined" } }),
+    });
+    await review("Iron House");
+    await press("Decline");
+    await press("Close");
+    await review("Iron House");
+    expect(await screen.findByText("You declined this invitation. You can still join.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Decline" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Join Iron House" })).toBeTruthy();
+    await press("Close");
+    await review("Lotus Yoga");
+    await press("Join Lotus Yoga");
+    await fireEvent.press(await screen.findByRole("button", { name: "Done" }));
+    expect(await screen.findByText("Joined")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^Lotus Yoga, / })).toBeNull();
+    expect(answers(server)).toEqual([decline(IRON_ID), accept(lotusId)]);
+  });
+});
+
 describe("the Gym tab", () => {
   it("a person in no place sees their address; Check for an invitation asks again and says what to do", async () => {
     let reads = 0;

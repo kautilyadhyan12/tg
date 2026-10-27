@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import {
   GYM_CAN_SEE,
   GYM_NEVER_SEES,
@@ -57,7 +57,15 @@ export function InvitationList({
 }) {
   const [open, setOpen] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Readonly<Record<string, Answered>>>({});
-  const shown = invitations.find((one) => one.id === open) ?? null;
+  const found = invitations.find((one) => one.id === open);
+  // Opened again after an answer, the page starts from that answer, never from the first read.
+  const answer = found === undefined ? undefined : answers[found.id];
+  const shown =
+    found === undefined
+      ? null
+      : answer === undefined
+        ? found
+        : { ...found, state: "declined" as const, notMe: answer === "not_me" || found.notMe };
   return (
     <>
       <RowGroup {...(label === undefined ? {} : { label })}>
@@ -67,10 +75,18 @@ export function InvitationList({
             title={invitation.gym.name}
             detail={placeLine(invitation.gym.orgType, invitation.gym.city)}
             lead={<Avatar name={invitation.gym.name} size={44} />}
-            end={<StatePill invitation={invitation} answered={answers[invitation.id]} />}
-            onPress={() => {
-              setOpen(invitation.id);
-            }}
+            end={
+              <View>
+                <StatePill invitation={invitation} answered={answers[invitation.id]} />
+              </View>
+            }
+            {...(answers[invitation.id] === "joined"
+              ? {}
+              : {
+                  onPress: () => {
+                    setOpen(invitation.id);
+                  },
+                })}
           />
         ))}
       </RowGroup>
@@ -227,7 +243,7 @@ function InvitationReview({
         <Txt kind="small" style={styles.centre}>
           {placeLine(gym.orgType, gym.city)}
         </Txt>
-        <Txt colour="text" style={styles.centre}>
+        <Txt colour="text" style={[styles.centre, styles.lead]}>
           {state === "declined" && notMe
             ? INVITATION_WORDS.said_not_me(gym.name)
             : state === "declined"
@@ -297,14 +313,18 @@ function InvitationReview({
 
       {/* The gym typed a wrong address. Nothing here says whom it meant. */}
       {notMe ? null : (
-        <Button
-          label="This invitation isn’t for me"
-          kind="quiet"
-          style={styles.middle}
-          busy={busy === "not_me"}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="This invitation isn’t for me"
+          accessibilityState={{ disabled: busy !== null, busy: busy === "not_me" }}
           disabled={busy !== null}
           onPress={() => void decline("not_me")}
-        />
+          style={styles.small}
+        >
+          <Txt kind="small" colour="textFaint" style={styles.underline}>
+            This invitation isn’t for me
+          </Txt>
+        </Pressable>
       )}
     </CoverPage>
   );
@@ -346,7 +366,9 @@ function CanSee({ gymName, person }: { gymName: string; person: string }) {
 function Line({ icon, colour, words }: { icon: IconName; colour: "goodText" | "textSoft" | "textFaint"; words: string }) {
   return (
     <View style={styles.line}>
-      <Icon name={icon} size={16} colour={colour} />
+      <View style={styles.mark}>
+        <Icon name={icon} size={16} colour={colour} />
+      </View>
       <Txt colour="text" style={styles.grow}>
         {words}
       </Txt>
@@ -356,6 +378,10 @@ function Line({ icon, colour, words }: { icon: IconName; colour: "goodText" | "t
 
 const styles = StyleSheet.create({
   head: { alignItems: "center", gap: 6, paddingTop: 8 },
+  lead: { marginTop: 10 },
+  mark: { paddingTop: 2 },
+  small: { alignSelf: "center", minHeight: 44, justifyContent: "center", paddingHorizontal: 8 },
+  underline: { textDecorationLine: "underline" },
   centre: { textAlign: "center" },
   middle: { alignSelf: "center" },
   grow: { flex: 1 },
