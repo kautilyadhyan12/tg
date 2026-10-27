@@ -557,10 +557,11 @@ const styles = StyleSheet.create({
   // Square, as its picture is, so the picture covers it whole.
   motivation: { width: 270, height: 270 },
   motivationWords: { paddingHorizontal: 16, paddingTop: 10 },
-  challenges: { width: 360, height: 210 },
+  // At least this tall, and taller with the phone's large text: the row's boxes grow together.
+  challenges: { width: 360, minHeight: 210 },
   challengeRow: { width: "52%" },
-  rank: { width: 140, height: 210, justifyContent: "flex-end" },
-  badges: { width: 230, height: 210 },
+  rank: { width: 140, minHeight: 210, justifyContent: "flex-end" },
+  badges: { width: 230, minHeight: 210 },
   recent: { gap: 4 },
   recentArt: { position: "absolute", top: 0, right: -10, width: "75%", height: "100%", opacity: 0.6 },
   workout: { minHeight: 56, borderTopWidth: 1, borderTopColor: colours.line, paddingTop: 8 },

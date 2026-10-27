@@ -28,8 +28,11 @@ export function PictureTop({ picture, tall, above, eyebrow, title, foot, fade = 
   const { width, height } = useWindowDimensions();
   const full = Math.round(width * tall);
   return (
-    <View style={[styles.band, { height: pictureTopHeight(width, height, tall) }]}>
-      <Image source={pictures[picture]} resizeMode="cover" style={[styles.photo, { height: full }]} accessible={false} />
+    <View style={{ height: pictureTopHeight(width, height, tall) }}>
+      {/* The picture alone is cut to the band; the words and the button on it never are. */}
+      <View style={[StyleSheet.absoluteFill, styles.clip]}>
+        <Image source={pictures[picture]} resizeMode="cover" style={[styles.photo, { height: full }]} accessible={false} />
+      </View>
       <View style={[StyleSheet.absoluteFill, fade === "light" ? styles.fadeLight : styles.fade]} />
       {above === undefined ? null : <View style={[styles.above, { top: insets.top + 12 }]}>{above}</View>}
       {eyebrow === undefined && title === undefined && foot === undefined ? null : (
@@ -44,7 +47,7 @@ export function PictureTop({ picture, tall, above, eyebrow, title, foot, fade = 
 }
 
 const styles = StyleSheet.create({
-  band: { overflow: "hidden" },
+  clip: { overflow: "hidden" },
   // A picture has a size of its own, so it is told its shape for the width; "cover" then cuts it to
   // fit, and a band shorter than it shows its foot.
   photo: { position: "absolute", left: 0, right: 0, bottom: 0, width: "100%" },

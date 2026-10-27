@@ -619,7 +619,8 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   // Under the title row, so View all is never over the drawing.
-  boxArt: { position: "absolute", top: 34, bottom: -4, right: -8, width: "54%" },
+  // Its left edge clear of the rows (56 %), so a long goal never runs onto it on a small phone.
+  boxArt: { position: "absolute", top: 34, bottom: -4, right: -8, width: "50%" },
   fill: { position: "absolute", width: "100%", height: "100%" },
   boxRow: { gap: 5, maxWidth: "56%" },
   notice: { flexDirection: "row", alignItems: "center", gap: 8 },
