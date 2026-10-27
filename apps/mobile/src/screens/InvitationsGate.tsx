@@ -7,7 +7,7 @@ import { Logo } from "../look/Card";
 import { colours, sizes } from "../look/colours";
 import { fonts, Txt } from "../look/Txt";
 import { useSession } from "../session/SessionProvider";
-import { InvitationCard, invitationsPath } from "./Invitation";
+import { InvitationList, invitationsPath } from "./Invitation";
 import { NOTE_CHECK_WAIT_MS } from "./BeforeYouStart";
 
 // "You're invited" (spec Part 3 §10.2): straight after "Before you start", a person whose address
@@ -72,19 +72,17 @@ function YoureInvited({ invitations, onDone }: { invitations: MyInvitation[]; on
       </View>
       <View style={styles.head}>
         <Txt kind="hero">{invitations.length === 1 ? "You’re invited" : `You have ${String(invitations.length)} invitations`}</Txt>
-        <Txt>You can also decide later, on the Gym tab.</Txt>
+        <Txt>You can also reply later from the Gym tab.</Txt>
       </View>
-      {invitations.map((invitation) => (
-        <InvitationCard
-          key={invitation.id}
-          invitation={invitation}
-          onAnswered={() => {
-            setAnswered((before) => new Set(before).add(invitation.id));
-          }}
-        />
-      ))}
+      <InvitationList
+        invitations={invitations}
+        onAnswered={(id) => {
+          setAnswered((before) => new Set(before).add(id));
+        }}
+      />
+      <View style={styles.grow} />
       {allAnswered ? (
-        <Button label="Continue" wide icon="go" onPress={onDone} />
+        <Button label="Continue" wide onPress={onDone} />
       ) : (
         <Button label="Not now" kind="quiet" style={styles.middle} onPress={onDone} />
       )}
@@ -97,6 +95,7 @@ const styles = StyleSheet.create({
   fill: { flexGrow: 1, paddingHorizontal: sizes.edge, gap: 20 },
   brand: { flexDirection: "row", alignItems: "center", gap: 10 },
   brandName: { fontFamily: fonts.bold, fontSize: 17, lineHeight: 22 },
-  head: { gap: 8 },
+  head: { gap: 8, marginTop: 12 },
   middle: { alignSelf: "center" },
+  grow: { flex: 1 },
 });

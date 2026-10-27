@@ -11,13 +11,14 @@ import {
   type MyOrgsResponse,
 } from "@app/shared";
 import { Button } from "../look/Button";
-import { Badge, Card } from "../look/Card";
+import { Avatar, Badge, Card } from "../look/Card";
 import { colours } from "../look/colours";
 import { Icon } from "../look/Icon";
 import { Page } from "../look/Page";
+import { Row, RowGroup } from "../look/Rows";
 import { Txt } from "../look/Txt";
 import { useSession } from "../session/SessionProvider";
-import { InvitationCard, invitationsPath } from "./Invitation";
+import { InvitationList, invitationsPath, placeLine } from "./Invitation";
 import { placesHeading } from "./placesHeading";
 import { NO_ANSWER } from "./SignIn";
 import { Soon } from "./Soon";
@@ -102,34 +103,32 @@ export function GymScreen() {
         </Card>
       ) : null}
 
-      {joined.map((org) => (
-        <Card key={org.id} style={styles.box}>
-          <View style={styles.row}>
-            <Badge icon="building" />
-            <View style={styles.grow}>
-              <Txt kind="h3" numberOfLines={1}>
-                {org.name}
-              </Txt>
-              {org.city === null ? null : <Txt kind="small">{org.city}</Txt>}
-            </View>
-          </View>
-        </Card>
-      ))}
+      {joined.length === 0 ? null : (
+        <RowGroup>
+          {joined.map((org) => (
+            <Row
+              key={org.id}
+              title={org.name}
+              detail={placeLine(org.orgType, org.city)}
+              lead={<Avatar name={org.name} size={44} />}
+            />
+          ))}
+        </RowGroup>
+      )}
       {joined.length === 0 ? null : <Soon icon="qr" title="Your pass" />}
 
-      {removed.map((org) => (
-        <Card key={org.id} style={styles.box}>
-          <View style={styles.row}>
-            <Badge icon="building" tone="plain" />
-            <View style={styles.grow}>
-              <Txt kind="h3">
-                You’re no longer a {orgWords(org.orgType).person} of {org.name}
-              </Txt>
-              <Txt kind="small">Your workouts, form scores and streak are still yours.</Txt>
-            </View>
-          </View>
-        </Card>
-      ))}
+      {removed.length === 0 ? null : (
+        <RowGroup>
+          {removed.map((org) => (
+            <Row
+              key={org.id}
+              title={org.name}
+              detail={`You’re no longer a ${orgWords(org.orgType).person} of ${org.name}`}
+              lead={<Badge icon="building" tone="plain" />}
+            />
+          ))}
+        </RowGroup>
+      )}
 
       {invites?.kind === "ok" && !invites.data.addressProved ? (
         <Card style={styles.box}>
@@ -147,16 +146,16 @@ export function GymScreen() {
         </View>
       ) : null}
 
-      {open.map((invitation) => (
-        <InvitationCard
-          key={invitation.id}
-          invitation={invitation}
-          onAnswered={(kind) => {
-            // The card says what happened in its own place; the list of places reads again under it.
+      {open.length === 0 ? null : (
+        <InvitationList
+          label="Invitations"
+          invitations={open}
+          onAnswered={(_, kind) => {
+            // The page says what happened; the places above read again under it.
             if (kind === "joined") void readMine();
           }}
         />
-      ))}
+      )}
 
       {nothing ? (
         <Card style={styles.none}>

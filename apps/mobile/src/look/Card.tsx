@@ -87,10 +87,10 @@ export function Logo() {
 }
 
 /** A person, by the first letter of their name. */
-export function Avatar({ name }: { name: string }) {
+export function Avatar({ name, size = 48 }: { name: string; size?: number }) {
   return (
-    <View style={styles.avatar}>
-      <Txt colour="onOrange" style={styles.initial}>
+    <View style={[styles.avatar, { width: size, height: size, borderRadius: Math.round(size * 0.3) }]}>
+      <Txt colour="onOrange" style={[styles.initial, { fontSize: Math.round(size * 0.42), lineHeight: Math.round(size * 0.5) }]}>
         {name.trim().charAt(0).toUpperCase()}
       </Txt>
     </View>

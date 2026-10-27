@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
-import { GYM_CAN_SEE, GYM_NEVER_SEES, INVITATION_WORDS, WAIVER_AGREE_LABEL, WAIVER_WORDS } from "@app/shared";
+import { GYM_CAN_SEE, GYM_NEVER_SEES, GYM_SEES_IF_YOU_ALLOW, INVITATION_WORDS, WAIVER_AGREE_LABEL, WAIVER_WORDS } from "@app/shared";
 import { App } from "../../src/App";
 import { RAVI, fakeServer, kept, lost, memoryStore, refusal, tokens, type Route } from "../kit";
 
@@ -74,13 +74,22 @@ async function openGym(routes: Record<string, Route>) {
 
 const press = (name: string) => fireEvent.press(screen.getByRole("button", { name }));
 const answers = (server: { paths: () => string[] }) => server.paths().filter((path) => /\/(accept|decline|not-me)$/.test(path));
+/** The invitation's row, by the place's name: it opens the invitation to review. */
+const review = async (gym: string) => fireEvent.press(await screen.findByRole("button", { name: new RegExp(`^${gym}, `) }));
+const disabled = (name: string): unknown => {
+  const state: unknown = screen.getByRole("button", { name }).props.accessibilityState;
+  return typeof state === "object" && state !== null && "disabled" in state ? state.disabled : undefined;
+};
 
 describe("the worst thing: nobody is put into a gym they did not press Join for, or without its waiver signed", () => {
-  it("the invitation is shown, and nothing is answered until a button is pressed", async () => {
+  it("the invitation is listed, opening it answers nothing, and closing it answers nothing", async () => {
     const server = await signIn({ "/v1/orgs/invitations": waiting(invitation(IRON)) });
     expect(await screen.findByRole("header", { name: "You’re invited" })).toBeTruthy();
-    expect(screen.getByText("You’re invited to Iron House")).toBeTruthy();
+    expect(screen.getByText("Invited")).toBeTruthy();
     expect(screen.queryAllByRole("tab")).toHaveLength(0);
+    await review("Iron House");
+    expect(await screen.findByText("Iron House invited you to join as a member.")).toBeTruthy();
+    await press("Close");
     expect(answers(server)).toEqual([]);
   });
 
@@ -93,16 +102,18 @@ describe("the worst thing: nobody is put into a gym they did not press Join for,
   });
 
   it.each([
-    ["No thanks", decline(IRON_ID), { state: "declined" }],
-    ["Not me", notMe(IRON_ID), { state: "declined", notMe: true }],
+    ["Decline", decline(IRON_ID), { state: "declined" }],
+    ["This invitation isn’t for me", notMe(IRON_ID), { state: "declined", notMe: true }],
   ])("%s sends only its own answer, never a Join", async (button, path, body) => {
     const server = await signIn({
       "/v1/orgs/invitations": waiting(invitation(IRON)),
       [path]: () => ({ status: 200, body }),
       [accept(IRON_ID)]: () => joinedTo(IRON),
     });
-    await screen.findByRole("header", { name: "You’re invited" });
+    await review("Iron House");
     await press(button);
+    await press("Close");
+    expect(await screen.findByText("Declined")).toBeTruthy();
     await screen.findByRole("button", { name: "Continue" });
     expect(answers(server)).toEqual([path]);
   });
@@ -112,17 +123,18 @@ describe("the worst thing: nobody is put into a gym they did not press Join for,
       "/v1/orgs/invitations": waiting(invitation(IRON, { waiver: WAIVER })),
       [accept(IRON_ID)]: () => joinedTo(IRON),
     });
-    await screen.findByText(WAIVER.text);
-    const join = () => screen.getByRole("button", { name: "Join" });
-    expect(join().props.accessibilityState).toMatchObject({ disabled: true });
-    expect(screen.getByText("To join, type your full name and tick the box.")).toBeTruthy();
-    await fireEvent.press(join());
-    await fireEvent.changeText(screen.getByLabelText("Your full name"), "  Ravi   Kumar ");
-    expect(join().props.accessibilityState).toMatchObject({ disabled: true });
+    await review("Iron House");
+    expect(await screen.findByText(WAIVER.text)).toBeTruthy();
+    expect(screen.getByText("Written by Iron House")).toBeTruthy();
+    expect(disabled("Join Iron House")).toBe(true);
+    expect(screen.getByText("Enter your full name and tick the box to join.")).toBeTruthy();
+    await press("Join Iron House");
+    await fireEvent.changeText(screen.getByLabelText("Full name"), "  Ravi   Kumar ");
+    expect(disabled("Join Iron House")).toBe(true);
     await fireEvent.press(screen.getByRole("checkbox", { name: WAIVER_AGREE_LABEL }));
     expect(answers(server)).toEqual([]);
-    await fireEvent.press(join());
-    expect(await screen.findByText("You’re in Iron House.")).toBeTruthy();
+    await press("Join Iron House");
+    expect(await screen.findByText("You’re a member of Iron House.")).toBeTruthy();
     const sent = server.asked.filter((one) => one.path === accept(IRON_ID));
     expect(sent.map((one) => one.body)).toEqual([{ waiver: { id: WAIVER.id, name: "Ravi Kumar" } }]);
     expect(sent[0]?.headers.authorization).toBe("Bearer access-1");
@@ -140,17 +152,18 @@ describe("the worst thing: nobody is put into a gym they did not press Join for,
           ? joinedTo(IRON)
           : refusal(409, "waiver_changed", WAIVER_WORDS.waiver_changed("Iron House")),
     });
+    await review("Iron House");
     await screen.findByText(WAIVER.text);
-    await fireEvent.changeText(screen.getByLabelText("Your full name"), "Ravi Kumar");
+    await fireEvent.changeText(screen.getByLabelText("Full name"), "Ravi Kumar");
     await fireEvent.press(screen.getByRole("checkbox", { name: WAIVER_AGREE_LABEL }));
-    await press("Join");
+    await press("Join Iron House");
     expect(await screen.findByText(WAIVER_WORDS.waiver_changed("Iron House"))).toBeTruthy();
     expect(await screen.findByText(NEW_WAIVER.text)).toBeTruthy();
     expect(screen.getByRole("checkbox", { name: WAIVER_AGREE_LABEL }).props.accessibilityState).toMatchObject({ checked: false });
-    expect(screen.getByRole("button", { name: "Join" }).props.accessibilityState).toMatchObject({ disabled: true });
+    expect(disabled("Join Iron House")).toBe(true);
     await fireEvent.press(screen.getByRole("checkbox", { name: WAIVER_AGREE_LABEL }));
-    await press("Join");
-    expect(await screen.findByText("You’re in Iron House.")).toBeTruthy();
+    await press("Join Iron House");
+    expect(await screen.findByText("You’re a member of Iron House.")).toBeTruthy();
     const bodies = server.asked.filter((one) => one.path === accept(IRON_ID)).map((one) => one.body);
     expect(bodies).toEqual([
       { waiver: { id: WAIVER.id, name: "Ravi Kumar" } },
@@ -158,27 +171,31 @@ describe("the worst thing: nobody is put into a gym they did not press Join for,
     ]);
   });
 
-  it("a gym that cannot take members has no Join, says so, and can still be answered with No thanks", async () => {
+  it("a gym that cannot take members has no Join, says so, and can still be declined", async () => {
     const server = await signIn({
       "/v1/orgs/invitations": waiting(invitation(IRON, { canTakeMembers: false })),
       [decline(IRON_ID)]: () => ({ status: 200, body: { state: "declined" } }),
     });
+    await review("Iron House");
     expect(await screen.findByText(INVITATION_WORDS.gym_not_taking_members("Iron House", "gym"))).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Join" })).toBeNull();
-    await press("No thanks");
-    expect(await screen.findByText("You said no thanks.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Join Iron House" })).toBeNull();
+    await press("Decline");
+    expect(await screen.findByText("You declined this invitation.")).toBeTruthy();
     expect(answers(server)).toEqual([decline(IRON_ID)]);
   });
 });
 
 describe("You're invited", () => {
-  it("shows what the gym can see and never sees, the browser's own lists", async () => {
+  it("shows what the gym can see, only with the person's yes, and never: the browser's own lists", async () => {
     await signIn({ "/v1/orgs/invitations": waiting(invitation(IRON)) });
+    await review("Iron House");
     expect(await screen.findByText("What Iron House can see")).toBeTruthy();
-    for (const line of [...GYM_CAN_SEE, ...GYM_NEVER_SEES]) expect(screen.getByText(line)).toBeTruthy();
+    expect(screen.getByText("Only if you allow it")).toBeTruthy();
+    for (const line of [...GYM_CAN_SEE, ...GYM_SEES_IF_YOU_ALLOW, ...GYM_NEVER_SEES]) expect(screen.getByText(line)).toBeTruthy();
+    expect(screen.queryByText(/before you joined/)).toBeNull();
   });
 
-  it("Join, then Continue to the tabs; the person's place is on the Gym tab", async () => {
+  it("Join, Done, then Continue to the tabs; the person's place is on the Gym tab", async () => {
     let member = false;
     await signIn({
       "/v1/orgs/invitations": () => waiting(...(member ? [] : [invitation(IRON)]))(undefined),
@@ -188,26 +205,30 @@ describe("You're invited", () => {
       },
       "/v1/orgs/mine": () => ({ status: 200, body: { orgs: member ? [org(IRON)] : [], formerOrgs: [] } }),
     });
-    await screen.findByRole("header", { name: "You’re invited" });
-    expect(screen.queryByRole("button", { name: "Continue" })).toBeNull();
-    await press("Join");
+    await review("Iron House");
+    await press("Join Iron House");
     expect(await screen.findByText("Your gym's features are on.")).toBeTruthy();
+    await press("Done");
+    expect(await screen.findByText("Joined")).toBeTruthy();
     await press("Continue");
     await fireEvent.press(await screen.findByRole("tab", { name: "Gym" }));
     expect(await screen.findByRole("header", { name: "My gyms" })).toBeTruthy();
     expect(await screen.findByText("Iron House")).toBeTruthy();
-    expect(screen.queryByText("You’re invited to Iron House")).toBeNull();
+    expect(screen.getByText("Gym · Pune")).toBeTruthy();
+    expect(screen.queryByText("Invited")).toBeNull();
   });
 
   it.each([
     ["the gym is full", () => refusal(409, "gym_full", INVITATION_WORDS.gym_full("Iron House")), INVITATION_WORDS.gym_full("Iron House")],
     ["no internet", lost, "Can’t connect. Check your internet and try again."],
-  ])("when %s, Join says so in the card and the person can go on", async (_, route, words) => {
+  ])("when %s, Join says so on the page and the person can go on", async (_, route, words) => {
     await signIn({ "/v1/orgs/invitations": waiting(invitation(IRON)), [accept(IRON_ID)]: route });
-    await screen.findByRole("header", { name: "You’re invited" });
-    await press("Join");
+    await review("Iron House");
+    await press("Join Iron House");
     expect(await screen.findByText(words)).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Join" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Join Iron House" })).toBeTruthy();
+    await press("Close");
+    expect(screen.getByText("Invited")).toBeTruthy();
     await press("Not now");
     expect(await screen.findByRole("tab", { name: "Dashboard" })).toBeTruthy();
   });
@@ -222,7 +243,7 @@ describe("You're invited", () => {
     expect(screen.queryByText("You’re invited")).toBeNull();
   });
 
-  it("two invitations, each answered in its own card", async () => {
+  it("two invitations, each answered on its own page", async () => {
     const lotusId = invitation(LOTUS).id;
     const server = await signIn({
       "/v1/orgs/invitations": waiting(invitation(IRON), invitation(LOTUS)),
@@ -230,13 +251,16 @@ describe("You're invited", () => {
       [decline(IRON_ID)]: () => ({ status: 200, body: { state: "declined" } }),
     });
     expect(await screen.findByRole("header", { name: "You have 2 invitations" })).toBeTruthy();
-    const [, lotusJoin] = screen.getAllByRole("button", { name: "Join" });
-    if (lotusJoin === undefined) throw new Error("two Join buttons");
-    await fireEvent.press(lotusJoin);
-    expect(await screen.findByText("You’re in Lotus Yoga.")).toBeTruthy();
+    expect(screen.getByText("Yoga studio")).toBeTruthy();
+    await review("Lotus Yoga");
+    await press("Join Lotus Yoga");
+    expect(await screen.findByText("You’re a member of Lotus Yoga.")).toBeTruthy();
     expect(screen.getByText("Your yoga studio's features are on.")).toBeTruthy();
+    await press("Done");
     expect(screen.queryByRole("button", { name: "Continue" })).toBeNull();
-    await press("No thanks");
+    await review("Iron House");
+    await press("Decline");
+    await press("Close");
     await fireEvent.press(await screen.findByRole("button", { name: "Continue" }));
     expect(await screen.findByRole("tab", { name: "Dashboard" })).toBeTruthy();
     expect(answers(server)).toEqual([accept(lotusId), decline(IRON_ID)]);
@@ -269,10 +293,12 @@ describe("the Gym tab", () => {
     });
     expect(await screen.findByRole("header", { name: "My yoga studios" })).toBeTruthy();
     expect(screen.getByText("Lotus Yoga")).toBeTruthy();
-    expect(await screen.findByText("You said no thanks. You can still join.")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "No thanks" })).toBeNull();
-    await press("Join");
-    expect(await screen.findByText("You’re in Iron House.")).toBeTruthy();
+    expect(await screen.findByText("Declined")).toBeTruthy();
+    await review("Iron House");
+    expect(await screen.findByText("You declined this invitation. You can still join.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Decline" })).toBeNull();
+    await press("Join Iron House");
+    expect(await screen.findByText("You’re a member of Iron House.")).toBeTruthy();
     expect(answers(server)).toEqual([accept(IRON_ID)]);
   });
 

@@ -1,5 +1,5 @@
-import { Check, X } from 'lucide-react';
-import { GYM_CAN_SEE, GYM_NEVER_SEES, orgWords } from '@app/shared';
+import { Check, Lock, X } from 'lucide-react';
+import { GYM_CAN_SEE, GYM_NEVER_SEES, GYM_SEES_IF_YOU_ALLOW, orgWords } from '@app/shared';
 
 // PART 3 §2.4 — "the join screen shows a 'What {org} can see' sheet with
 // exactly this list".
@@ -51,12 +51,12 @@ const NEVER_SEES = GYM_NEVER_SEES;
 
 function Row({ children, tone }) {
   const good = tone === 'good';
-  const Icon = good ? Check : X;
+  const Icon = good ? Check : tone === 'ask' ? Lock : X;
   return (
     <li className="flex items-start gap-2.5 py-1">
       <Icon
         className="w-4 h-4 flex-shrink-0 mt-0.5"
-        style={{ color: good ? '#4ade80' : 'rgba(255,255,255,0.35)' }}
+        style={{ color: good ? '#4ade80' : tone === 'ask' ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.35)' }}
       />
       <span className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
         {children}
@@ -84,12 +84,26 @@ export default function OrgVisibilitySheet({ orgName = null, orgType = undefined
       </h2>
 
       <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
-        Only while you are a {orgWords(orgType).person}.
+        While you&apos;re a {orgWords(orgType).person}.
       </p>
 
       <ul className="mt-3">
         {CAN_SEE.map((line) => (
           <Row key={line} tone="good">
+            {line}
+          </Row>
+        ))}
+      </ul>
+
+      <div
+        className="text-xs uppercase tracking-wider mt-4 mb-1"
+        style={{ color: 'rgba(255,255,255,0.35)' }}
+      >
+        Only if you allow it
+      </div>
+      <ul>
+        {GYM_SEES_IF_YOU_ALLOW.map((line) => (
+          <Row key={line} tone="ask">
             {line}
           </Row>
         ))}

@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
 import {
   GYM_CAN_SEE,
   GYM_NEVER_SEES,
+  GYM_SEES_IF_YOU_ALLOW,
   INVITATION_WORDS,
   WAIVER_AGREE_LABEL,
   WAIVER_NAME_MAX_CHARS,
@@ -18,19 +19,21 @@ import {
   type WaiverToRead,
 } from "@app/shared";
 import { Button } from "../look/Button";
-import { Badge, Card } from "../look/Card";
+import { Avatar, Pill } from "../look/Card";
 import { colours } from "../look/colours";
+import { CoverPage } from "../look/CoverPage";
 import { Field } from "../look/Field";
-import { Icon } from "../look/Icon";
+import { Icon, type IconName } from "../look/Icon";
+import { Row, RowGroup } from "../look/Rows";
 import { Tick } from "../look/Tick";
 import { Txt } from "../look/Txt";
 import { useSession } from "../session/SessionProvider";
 import { NO_ANSWER } from "./SignIn";
 
-// One invitation to one gym (spec Part 3 §10.2), the browser's InvitationCard fitted to a phone:
-// what the gym can see, the gym's waiver where it has one, and the ONE tap, Join. No thanks and
-// Not me are words beside it. Nothing is sent until the person presses; Join waits for the
-// waiver's name and tick, and the server checks everything again.
+// Invitations (spec Part 3 §10.2): one row each, and a page over the tab to review one —
+// who invited the person, what the place can see, its waiver — with Join held at the bottom.
+// Nothing is sent until the person presses; Join waits for the waiver's name and tick, and the
+// server checks everything again.
 
 export type Answered = "joined" | "declined" | "not_me";
 
@@ -38,7 +41,71 @@ export const invitationsPath = "/v1/orgs/invitations";
 const answerPath = (id: string, what: "accept" | "decline" | "not-me") =>
   `${invitationsPath}/${encodeURIComponent(id)}/${what}`;
 
-export function InvitationCard({ invitation, onAnswered }: { invitation: MyInvitation; onAnswered: (kind: Answered) => void }) {
+/** "Gym · Pune", "Yoga studio". */
+export const placeLine = (orgType: unknown, city: string | null) =>
+  city === null ? orgWords(orgType).itToMembersCap : `${orgWords(orgType).itToMembersCap} · ${city}`;
+
+/** Each invitation as a row; a press opens it to review. `onAnswered` once the server has answered. */
+export function InvitationList({
+  invitations,
+  label,
+  onAnswered,
+}: {
+  invitations: MyInvitation[];
+  label?: string;
+  onAnswered: (id: string, kind: Answered) => void;
+}) {
+  const [open, setOpen] = useState<string | null>(null);
+  const [answers, setAnswers] = useState<Readonly<Record<string, Answered>>>({});
+  const shown = invitations.find((one) => one.id === open) ?? null;
+  return (
+    <>
+      <RowGroup {...(label === undefined ? {} : { label })}>
+        {invitations.map((invitation) => (
+          <Row
+            key={invitation.id}
+            title={invitation.gym.name}
+            detail={placeLine(invitation.gym.orgType, invitation.gym.city)}
+            lead={<Avatar name={invitation.gym.name} size={44} />}
+            end={<StatePill invitation={invitation} answered={answers[invitation.id]} />}
+            onPress={() => {
+              setOpen(invitation.id);
+            }}
+          />
+        ))}
+      </RowGroup>
+      {shown === null ? null : (
+        <InvitationReview
+          key={shown.id}
+          invitation={shown}
+          onClose={() => {
+            setOpen(null);
+          }}
+          onAnswered={(kind) => {
+            setAnswers((before) => ({ ...before, [shown.id]: kind }));
+            onAnswered(shown.id, kind);
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function StatePill({ invitation, answered }: { invitation: MyInvitation; answered: Answered | undefined }) {
+  if (answered === "joined") return <Pill label="Joined" tone="good" icon="check" />;
+  if (answered !== undefined || invitation.state === "declined") return <Pill label="Declined" />;
+  return <Pill label="Invited" tone="orange" />;
+}
+
+function InvitationReview({
+  invitation,
+  onClose,
+  onAnswered,
+}: {
+  invitation: MyInvitation;
+  onClose: () => void;
+  onAnswered: (kind: Answered) => void;
+}) {
   const { session } = useSession();
   const { gym } = invitation;
   const words = orgWords(gym.orgType);
@@ -56,6 +123,7 @@ export function InvitationCard({ invitation, onAnswered }: { invitation: MyInvit
   const collapsed = notMe && !mistake;
   const plan = invitation.yourPlan !== null && invitation.canTakeMembers ? yourPlanWords(gym.name, invitation.yourPlan) : null;
   const waiverReady = waiver === null || waiverReadyToSign(signedName, agreed);
+  const canJoin = invitation.canTakeMembers && !collapsed;
 
   const join = async () => {
     setBusy("join");
@@ -99,44 +167,83 @@ export function InvitationCard({ invitation, onAnswered }: { invitation: MyInvit
 
   if (joined !== null) {
     return (
-      <Card style={styles.done}>
-        <View style={styles.row}>
-          <Badge icon="check" tone="good" />
-          <View style={styles.grow}>
-            <Txt kind="h3">You’re in {joined.name}.</Txt>
-            <Txt kind="small">
-              {joined.featuresOn
-                ? `Your ${words.itToMembers}'s features are on.`
-                : `Your ${words.itToMembers}'s features aren't on right now.`}
-            </Txt>
+      <CoverPage open title="Invitation" onClose={onClose} foot={<Button label="Done" wide onPress={onClose} />}>
+        <View style={styles.done}>
+          <View style={styles.doneMark}>
+            <Icon name="check" size={32} colour="goodText" />
           </View>
+          <Txt kind="h2" style={styles.centre}>
+            You’re a {words.person} of {joined.name}.
+          </Txt>
+          <Txt style={styles.centre}>
+            {joined.featuresOn
+              ? `Your ${words.itToMembers}'s features are on.`
+              : `Your ${words.itToMembers}'s features aren't on right now.`}
+          </Txt>
         </View>
-      </Card>
+      </CoverPage>
     );
   }
 
-  return (
-    <Card style={styles.card}>
-      <View style={styles.row}>
-        <Badge icon="mail" />
-        <View style={styles.grow}>
-          <Txt kind="h3">{collapsed ? gym.name : `You’re invited to ${gym.name}`}</Txt>
-          {gym.city === null ? null : <Txt kind="small">{gym.city}</Txt>}
-        </View>
-      </View>
-
-      {state === "declined" && notMe ? (
-        <Txt>{INVITATION_WORDS.said_not_me(gym.name)}</Txt>
-      ) : state === "declined" ? (
-        <Txt>{invitation.canTakeMembers ? "You said no thanks. You can still join." : "You said no thanks."}</Txt>
+  const foot = (
+    <>
+      {problem === "" ? null : <Txt colour="badText">{problem}</Txt>}
+      {canJoin ? (
+        <>
+          <Button
+            label={`Join ${gym.name}`}
+            wide
+            busy={busy === "join"}
+            disabled={busy !== null || !waiverReady}
+            onPress={() => void join()}
+          />
+          {waiverReady ? null : (
+            <Txt kind="tiny" style={styles.centre}>
+              Enter your full name and tick the box to join.
+            </Txt>
+          )}
+        </>
       ) : null}
+      {state === "pending" ? (
+        <Button
+          label="Decline"
+          kind="quiet"
+          style={styles.middle}
+          busy={busy === "decline"}
+          disabled={busy !== null}
+          onPress={() => void decline("decline")}
+        />
+      ) : null}
+    </>
+  );
+
+  return (
+    <CoverPage open title="Invitation" onClose={onClose} foot={foot}>
+      <View style={styles.head}>
+        <Avatar name={gym.name} size={64} />
+        <Txt kind="h1" style={styles.centre}>
+          {gym.name}
+        </Txt>
+        <Txt kind="small" style={styles.centre}>
+          {placeLine(gym.orgType, gym.city)}
+        </Txt>
+        <Txt colour="text" style={styles.centre}>
+          {state === "declined" && notMe
+            ? INVITATION_WORDS.said_not_me(gym.name)
+            : state === "declined"
+              ? invitation.canTakeMembers
+                ? "You declined this invitation. You can still join."
+                : "You declined this invitation."
+              : `${gym.name} invited you to join as a ${words.person}.`}
+        </Txt>
+      </View>
 
       {collapsed ? (
         invitation.canTakeMembers ? (
           <Button
-            label={`Pressed this by mistake? Join ${gym.name}`}
+            label={`Join ${gym.name} anyway`}
             kind="link"
-            style={styles.start}
+            style={styles.middle}
             onPress={() => {
               setMistake(true);
             }}
@@ -144,33 +251,37 @@ export function InvitationCard({ invitation, onAnswered }: { invitation: MyInvit
         ) : null
       ) : (
         <>
-          {invitation.canTakeMembers ? (
-            <CanSee gymName={gym.name} person={words.person} />
-          ) : (
-            <Txt>{INVITATION_WORDS.gym_not_taking_members(gym.name, gym.orgType)}</Txt>
+          {invitation.canTakeMembers ? null : (
+            <View style={styles.note}>
+              <Icon name="warn" size={18} colour="gold" />
+              <Txt colour="text" style={styles.grow}>
+                {INVITATION_WORDS.gym_not_taking_members(gym.name, gym.orgType)}
+              </Txt>
+            </View>
           )}
+
+          <CanSee gymName={gym.name} person={words.person} />
 
           {plan === null ? null : (
             <View testID="your-plan" style={styles.note}>
-              <Txt colour="text">{plan.lead}</Txt>
-              <Txt kind="small">{plan.cancel}</Txt>
+              <Icon name="star" size={18} colour="textSoft" />
+              <View style={styles.grow}>
+                <Txt colour="text">{plan.lead}</Txt>
+                <Txt kind="small">{plan.cancel}</Txt>
+              </View>
             </View>
           )}
 
           {invitation.canTakeMembers && waiver !== null ? (
-            <View style={styles.waiver}>
-              <Txt kind="h3">{gym.name}’s waiver</Txt>
-              <View style={styles.note}>
-                <Txt colour="text">{waiver.text}</Txt>
+            <View style={styles.section}>
+              <View>
+                <Txt kind="h3">Waiver</Txt>
+                <Txt kind="small">Written by {gym.name}</Txt>
               </View>
-              <Field
-                label="Your full name"
-                value={signedName}
-                onChange={setSignedName}
-                fills="name"
-                name
-                maxLength={WAIVER_NAME_MAX_CHARS}
-              />
+              <ScrollView nestedScrollEnabled style={styles.waiver} contentContainerStyle={styles.waiverWords}>
+                <Txt colour="text">{waiver.text}</Txt>
+              </ScrollView>
+              <Field label="Full name" value={signedName} onChange={setSignedName} fills="name" name maxLength={WAIVER_NAME_MAX_CHARS} />
               <Tick
                 label={WAIVER_AGREE_LABEL}
                 ticked={agreed}
@@ -181,78 +292,99 @@ export function InvitationCard({ invitation, onAnswered }: { invitation: MyInvit
               />
             </View>
           ) : null}
-
-          {invitation.canTakeMembers ? (
-            <>
-              <Button label="Join" wide busy={busy === "join"} disabled={busy !== null || !waiverReady} onPress={() => void join()} />
-              {waiverReady ? null : (
-                <Txt kind="tiny" style={styles.middle}>
-                  To join, type your full name and tick the box.
-                </Txt>
-              )}
-            </>
-          ) : null}
-          {state === "pending" ? (
-            <Button
-              label="No thanks"
-              kind="quiet"
-              style={styles.middle}
-              busy={busy === "decline"}
-              disabled={busy !== null}
-              onPress={() => void decline("decline")}
-            />
-          ) : null}
         </>
       )}
 
       {/* The gym typed a wrong address. Nothing here says whom it meant. */}
       {notMe ? null : (
-        <View style={styles.notMe}>
-          <Txt kind="small">Not a {words.person} of {gym.name}?</Txt>
-          <Button label="Not me" kind="link" busy={busy === "not_me"} disabled={busy !== null} onPress={() => void decline("not_me")} />
-        </View>
+        <Button
+          label="This invitation isn’t for me"
+          kind="quiet"
+          style={styles.middle}
+          busy={busy === "not_me"}
+          disabled={busy !== null}
+          onPress={() => void decline("not_me")}
+        />
       )}
-
-      {problem === "" ? null : <Txt colour="badText">{problem}</Txt>}
-    </Card>
+    </CoverPage>
   );
 }
 
-/** "What {gym} can see": the browser's own two lists, from @app/shared. */
+/** "What {gym} can see": the browser's own three lists, from @app/shared. */
 function CanSee({ gymName, person }: { gymName: string; person: string }) {
   return (
-    <View style={styles.note}>
-      <Txt kind="h3">What {gymName} can see</Txt>
-      <Txt kind="tiny">Only while you are a {person}.</Txt>
-      {GYM_CAN_SEE.map((line) => (
-        <View key={line} style={styles.line}>
-          <Icon name="check" size={16} colour="goodText" />
-          <Txt style={styles.grow}>{line}</Txt>
-        </View>
-      ))}
-      <Txt kind="tiny" style={styles.never}>
-        NEVER
+    <View style={styles.section}>
+      <View>
+        <Txt kind="h3">What {gymName} can see</Txt>
+        <Txt kind="small">While you’re a {person}.</Txt>
+      </View>
+      <View style={styles.list}>
+        {GYM_CAN_SEE.map((line) => (
+          <Line key={line} icon="check" colour="goodText" words={line} />
+        ))}
+      </View>
+      <View style={styles.list}>
+        <Txt kind="tiny" style={styles.caps}>
+          Only if you allow it
+        </Txt>
+        {GYM_SEES_IF_YOU_ALLOW.map((line) => (
+          <Line key={line} icon="shield" colour="textSoft" words={line} />
+        ))}
+      </View>
+      <View style={styles.list}>
+        <Txt kind="tiny" style={styles.caps}>
+          Never
+        </Txt>
+        {GYM_NEVER_SEES.map((line) => (
+          <Line key={line} icon="x" colour="textFaint" words={line} />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function Line({ icon, colour, words }: { icon: IconName; colour: "goodText" | "textSoft" | "textFaint"; words: string }) {
+  return (
+    <View style={styles.line}>
+      <Icon name={icon} size={16} colour={colour} />
+      <Txt colour="text" style={styles.grow}>
+        {words}
       </Txt>
-      {GYM_NEVER_SEES.map((line) => (
-        <View key={line} style={styles.line}>
-          <Icon name="x" size={16} colour="textFaint" />
-          <Txt style={styles.grow}>{line}</Txt>
-        </View>
-      ))}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { padding: 16, gap: 14, borderColor: colours.orangeLine },
-  done: { borderColor: colours.goodLine },
-  row: { flexDirection: "row", alignItems: "center", gap: 12 },
-  grow: { flex: 1 },
-  start: { alignSelf: "flex-start" },
+  head: { alignItems: "center", gap: 6, paddingTop: 8 },
+  centre: { textAlign: "center" },
   middle: { alignSelf: "center" },
-  note: { gap: 8, padding: 14, borderRadius: 14, borderWidth: 1, borderColor: colours.line, backgroundColor: colours.fill },
-  waiver: { gap: 12 },
-  line: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
-  never: { marginTop: 6, letterSpacing: 0.9 },
-  notMe: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 6 },
+  grow: { flex: 1 },
+  section: { gap: 12 },
+  list: { gap: 10 },
+  caps: { textTransform: "uppercase", letterSpacing: 0.9, marginTop: 2 },
+  line: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  note: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colours.line,
+    backgroundColor: colours.box,
+  },
+  waiver: { maxHeight: 220, borderRadius: 14, borderWidth: 1, borderColor: colours.line, backgroundColor: colours.box },
+  waiverWords: { padding: 14 },
+  done: { alignItems: "center", gap: 10, paddingTop: 48 },
+  doneMark: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colours.goodFill,
+    borderWidth: 1,
+    borderColor: colours.goodLine,
+  },
 });
+
