@@ -539,8 +539,11 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 12d. [x] **Sign in with Google on the phone** — merged 2026-10-27 (PR #369).
 13. **Invitations and Join** (spec Part 3 §10.2; split 2026-10-27: the email's button needs the app's own web address).
     - 13a. [x] **Join on the phone** — merged 2026-10-27 (PR #372).
-    - 13b. [ ] **The invitation email's button opens the app**, and on a phone without it the store buttons.
-14. [ ] **Setup**: the eleven screens and the plan, the health question, Safe mode, the consent taps.
+    - 13b. [ ] **The invitation email's button opens the app**, and on a phone without it the store buttons. Waits for the website's own address (Stage 4 item 1) and the app on the store (item 21): Android opens an app from a web link only when that https address names the app.
+14. **Setup**: the eleven screens and the plan, the health question, Safe mode, the consent taps (split 2026-10-27 in three).
+    - 14a. [x] **The first seven questions** — merged 2026-10-27 (PR #373).
+    - 14b. [ ] **The health question, Safe mode and its tap, and Food.**
+    - 14c. [ ] **Your plan and Finish, and Your gym**; setup then stands in front of the tabs until it is finished.
 15. [ ] **The pass** (spec Part 3 §12.2) and the days you came; later, a pass the phone can make with no signal.
 16. [ ] **Classes and booking with the waitlist, and personal training**; then My membership and receipts, once Stage 2's 18g and 18j are merged (18c, Pay {gym}, was dropped 2026-10-15), in sections: **Membership** (what they hold, when it renews, each payment with its receipt), **Purchases** (what they bought at the desk, each with its receipt), a refund under its payment (Kd, `rulings/2026-10-15-18m.md`); no receipt by email.
 17. [ ] **The gym's page**: Updates (post, photos, react, report, block), Events, Leaderboard, Challenges, a person's profile (spec Part 3 §15).

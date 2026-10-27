@@ -96,8 +96,8 @@ describe("the five tabs", () => {
     }
     await screen.findByRole("button", { name: "Try again" });
     const pressed = [...screen.getAllByRole("tab"), ...screen.getAllByRole("button")];
-    expect(pressed.map(label).slice(5)).toEqual(["Sign out", "Try again"]);
-    expect(pressed).toHaveLength(7);
+    expect(pressed.map(label).slice(5)).toEqual(["Your plan", "Sign out", "Try again"]);
+    expect(pressed).toHaveLength(8);
     const heights = pressed.map((one) => Number(drawn(one).height ?? drawn(one).minHeight ?? 0));
     expect(heights.filter((height) => height < 44)).toEqual([]);
   });

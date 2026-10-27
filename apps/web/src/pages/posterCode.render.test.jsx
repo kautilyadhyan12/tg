@@ -70,13 +70,13 @@ const { forgetInvitations, sayNotNow } = await import('../components/gym/invitat
 const EMPTY = {
   displayName: 'kd.test', weightGoal: null, fitnessGoals: [], age: null, gender: null, heightCm: null, weightKg: null,
   targetWeightKg: null, pace: null, dayActivity: null, fitnessLevel: null, pushUpsMax: null, plankHoldSeconds: null,
-  trainingDays: null, sessionMinutes: null, availableEquipment: [], diet: null, mealsPerDay: null,
+  trainingDays: null, sessionMinutes: null, availableEquipment: [], trainingPlaces: [], diet: null, mealsPerDay: null,
   onboardingCompleted: false, updatedAt: null,
 };
 /** Every question answered, keeping the weight (so no target screen). */
 const ALL = {
   ...EMPTY, weightGoal: 'maintain', age: 30, gender: 'female', heightCm: 165, weightKg: 70, dayActivity: 'sitting',
-  fitnessLevel: 'beginner', trainingDays: 3, sessionMinutes: 45, availableEquipment: ['dumbbells'],
+  fitnessLevel: 'beginner', trainingDays: 3, sessionMinutes: 45, availableEquipment: ['dumbbells'], trainingPlaces: ['home'],
   diet: 'non_vegetarian', mealsPerDay: 3,
 };
 

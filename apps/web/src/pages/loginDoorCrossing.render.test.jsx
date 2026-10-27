@@ -76,7 +76,7 @@ vi.mock('../api/onboardingApi', () => ({
           answers: {
             displayName: 'Kd', weightGoal: null, fitnessGoals: [], age: null, gender: null, heightCm: null, weightKg: null, targetWeightKg: null,
             pace: null, dayActivity: null, fitnessLevel: null, pushUpsMax: null, plankHoldSeconds: null,
-            trainingDays: null, sessionMinutes: null, availableEquipment: [], onboardingCompleted: false,
+            trainingDays: null, sessionMinutes: null, availableEquipment: [], trainingPlaces: [], onboardingCompleted: false,
             updatedAt: null,
           },
           plan: null,

@@ -815,16 +815,70 @@ d("0001_init on a real database", () => {
       await refused(sql`UPDATE user_fitness_profiles SET weight_goal = 'keep' WHERE user_id = ${ownerId}`);
       await refused(sql`UPDATE user_fitness_profiles SET fitness_goals = ARRAY['weight_loss'] WHERE user_id = ${ownerId}`);
       await refused(sql`UPDATE user_fitness_profiles SET available_equipment = ARRAY['barbell'] WHERE user_id = ${ownerId}`);
-      await refused(sql`UPDATE user_fitness_profiles SET available_equipment = ARRAY['none', 'gym'] WHERE user_id = ${ownerId}`);
+      await refused(sql`UPDATE user_fitness_profiles SET available_equipment = ARRAY['none', 'kettlebells'] WHERE user_id = ${ownerId}`);
+      // A gym is a place since 0168, never equipment.
+      await refused(sql`UPDATE user_fitness_profiles SET available_equipment = ARRAY['gym'] WHERE user_id = ${ownerId}`);
+      await refused(sql`UPDATE user_fitness_profiles SET training_places = ARRAY['spa'] WHERE user_id = ${ownerId}`);
       // What the screens send is taken.
       await sql`
         UPDATE user_fitness_profiles
-        SET weight_goal = 'maintain', fitness_goals = ARRAY['muscle_gain', 'balance'], available_equipment = ARRAY['gym', 'dumbbells']
+        SET weight_goal = 'maintain', fitness_goals = ARRAY['muscle_gain', 'balance'], available_equipment = ARRAY['kettlebells', 'dumbbells'],
+            training_places = ARRAY['gym', 'yoga_studio', 'personal_trainer']
         WHERE user_id = ${ownerId}`;
       await sql`UPDATE user_fitness_profiles SET available_equipment = ARRAY['none'] WHERE user_id = ${ownerId}`;
     } finally {
       await sql`DELETE FROM users WHERE id = ${ownerId}`;
     }
+  });
+
+  /** MIGRATION `0168`'s data statement, read out of the shipped file and run on a TEMPORARY copy of the
+   *  table (never the live one other suites write to): every "A gym" leaves the equipment and becomes the
+   *  place Gym, the rest of the equipment stays, a row with no gym is left alone, and a second run finds
+   *  nothing to do. Then the file's own two CHECKs go on over the result. All of it is rolled back. */
+  it("0168 moves A gym from the equipment to the places, and keeps the rest of the equipment", async () => {
+    const migration = await readFile(new URL("../drizzle/0168_training_places.sql", import.meta.url), "utf8");
+    const chunks = migration.split("--> statement-breakpoint").map((c) => c.trim());
+    const onCopy = (c: string) => c.replaceAll('"user_fitness_profiles"', '"ufp_0168"');
+    const moves = chunks.filter((c) => c.includes('UPDATE "user_fitness_profiles"')).map(onCopy);
+    const checks = chunks.filter((c) => c.includes("ADD CONSTRAINT")).map(onCopy);
+    const [move] = moves;
+    if (move === undefined || moves.length !== 1 || checks.length !== 2) {
+      throw new Error("0168 no longer holds one data statement and two CHECKs");
+    }
+    await sql
+      .begin(async (tx) => {
+        await tx`CREATE TEMP TABLE ufp_0168 (LIKE user_fitness_profiles INCLUDING DEFAULTS) ON COMMIT DROP`;
+        const person = async (equipment: string[] | null): Promise<string> => {
+          const [r] = await tx<{ user_id: string }[]>`
+            INSERT INTO ufp_0168 (user_id, available_equipment) VALUES (gen_random_uuid(), ${equipment}) RETURNING user_id`;
+          if (r === undefined) throw new Error("fixture insert failed");
+          return r.user_id;
+        };
+        const gymAndKit = await person(["gym", "dumbbells", "pull_up_bar"]);
+        const gymOnly = await person(["gym"]);
+        const kitOnly = await person(["kettlebells"]);
+        const nothing = await person(["none"]);
+        const unasked = await person(null);
+        await tx.unsafe(move);
+        await tx.unsafe(move);
+        for (const check of checks) await tx.unsafe(check);
+        const rows = await tx<{ user_id: string; available_equipment: string[] | null; training_places: string[] | null }[]>`
+          SELECT user_id, available_equipment, training_places FROM ufp_0168`;
+        const of = (id: string) => {
+          const r = rows.find((row) => row.user_id === id);
+          return { equipment: r?.available_equipment, places: r?.training_places };
+        };
+        expect(of(gymAndKit)).toEqual({ equipment: ["dumbbells", "pull_up_bar"], places: ["gym"] });
+        expect(of(gymOnly)).toEqual({ equipment: [], places: ["gym"] });
+        expect(of(kitOnly)).toEqual({ equipment: ["kettlebells"], places: null });
+        expect(of(nothing)).toEqual({ equipment: ["none"], places: null });
+        expect(of(unasked)).toEqual({ equipment: null, places: null });
+        throw new Error("ROLLBACK-0168-FIXTURE");
+      })
+      .catch((err: unknown) => {
+        if (err instanceof Error && err.message === "ROLLBACK-0168-FIXTURE") return;
+        throw err;
+      });
   });
 
   /** MIGRATION `0028`'s DATA STATEMENTS, read out of the shipped file and run

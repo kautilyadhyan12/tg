@@ -148,6 +148,7 @@ export interface FitnessProfileRow {
   fitnessGoals: string[];
   exerciseFrequency: number | null;
   availableEquipment: string[];
+  trainingPlaces: string[];
   sessionDurationMin: number | null;
   preferredWorkoutTime: string | null;
   onboardingCompleted: boolean;
@@ -171,6 +172,7 @@ interface FitnessProfileDbRow {
   fitness_goals: string[] | null;
   exercise_frequency: number | null;
   available_equipment: string[] | null;
+  training_places: string[] | null;
   session_duration_min: number | null;
   preferred_workout_time: string | null;
   onboarding_completed: boolean;
@@ -193,6 +195,7 @@ const toFitnessProfile = (r: FitnessProfileDbRow): FitnessProfileRow => ({
   fitnessGoals: r.fitness_goals ?? [],
   exerciseFrequency: r.exercise_frequency,
   availableEquipment: r.available_equipment ?? [],
+  trainingPlaces: r.training_places ?? [],
   sessionDurationMin: r.session_duration_min,
   preferredWorkoutTime: r.preferred_workout_time,
   onboardingCompleted: r.onboarding_completed,
@@ -218,6 +221,7 @@ const FITNESS_PROFILE_COLUMNS = [
   "fitness_goals",
   "exercise_frequency",
   "available_equipment",
+  "training_places",
   "session_duration_min",
   "preferred_workout_time",
   "onboarding_completed",
@@ -286,12 +290,12 @@ export async function upsertFitnessProfile(
     const rows = await tx<FitnessProfileDbRow[]>`
       INSERT INTO user_fitness_profiles
         (user_id, age, gender, height_cm, target_weight_kg, fitness_level,
-         fitness_goals, weight_goal, exercise_frequency, available_equipment,
+         fitness_goals, weight_goal, exercise_frequency, available_equipment, training_places,
          session_duration_min, preferred_workout_time, diet, meals_per_day,
          onboarding_completed, updated_at)
       SELECT u.id, ${input.age}, ${input.gender}, ${input.heightCm},
              ${input.targetWeightKg}, ${input.fitnessLevel}, ${input.fitnessGoals},
-             ${input.weightGoal}, ${input.exerciseFrequency}, ${input.availableEquipment},
+             ${input.weightGoal}, ${input.exerciseFrequency}, ${input.availableEquipment}, ${input.trainingPlaces},
              ${input.sessionDurationMin}, ${input.preferredWorkoutTime},
              ${input.diet}, ${input.mealsPerDay},
              ${input.onboardingCompleted}, now()
@@ -306,6 +310,7 @@ export async function upsertFitnessProfile(
         weight_goal = EXCLUDED.weight_goal,
         exercise_frequency = EXCLUDED.exercise_frequency,
         available_equipment = EXCLUDED.available_equipment,
+        training_places = COALESCE(EXCLUDED.training_places, user_fitness_profiles.training_places),
         session_duration_min = EXCLUDED.session_duration_min,
         preferred_workout_time = EXCLUDED.preferred_workout_time,
         diet = EXCLUDED.diet,
@@ -333,6 +338,9 @@ export interface FitnessProfileWrite {
   weightGoal: string | null;
   exerciseFrequency: number | null;
   availableEquipment: string[];
+  /** NULL keeps what is stored: a save from a screen that does not ask it (a browser tab older
+   *  than the question) never clears the places a person picked. */
+  trainingPlaces: string[] | null;
   sessionDurationMin: number | null;
   preferredWorkoutTime: string | null;
   diet: string | null;
@@ -443,6 +451,7 @@ export async function patchOnboarding(
     if (patch.trainingDays !== undefined) cols["exercise_frequency"] = patch.trainingDays;
     if (patch.sessionMinutes !== undefined) cols["session_duration_min"] = patch.sessionMinutes;
     if (patch.availableEquipment !== undefined) cols["available_equipment"] = patch.availableEquipment;
+    if (patch.trainingPlaces !== undefined) cols["training_places"] = patch.trainingPlaces;
     if (patch.diet !== undefined) cols["diet"] = patch.diet;
     if (patch.mealsPerDay !== undefined) cols["meals_per_day"] = patch.mealsPerDay;
     if (patch.onboardingCompleted !== undefined) cols["onboarding_completed"] = patch.onboardingCompleted;

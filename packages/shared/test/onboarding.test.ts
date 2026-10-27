@@ -47,6 +47,7 @@ const answersFixture = onboardingAnswersSchema.parse({
   trainingDays: null,
   sessionMinutes: null,
   availableEquipment: [],
+  trainingPlaces: [],
   diet: null,
   mealsPerDay: null,
   onboardingCompleted: false,
@@ -137,7 +138,8 @@ describe("one screen's save", () => {
       { dayActivity: "sitting" },
       { fitnessLevel: "beginner", pushUpsMax: 12, plankHoldSeconds: 45 },
       { trainingDays: 3, sessionMinutes: 45 },
-      { availableEquipment: ["dumbbells", "gym"] },
+      { availableEquipment: ["dumbbells", "kettlebells"] },
+      { trainingPlaces: ["gym", "yoga_studio", "personal_trainer"] },
       { diet: "vegan", mealsPerDay: 3 },
       { onboardingCompleted: true },
     ]) {
@@ -270,17 +272,26 @@ describe("one screen's save", () => {
     }
   });
 
-  it("refuses 'no equipment' beside anything else, a gym included, on both surfaces: one rail", () => {
+  it("refuses 'no equipment' beside anything else on both surfaces, and a gym as equipment: one rail", () => {
     // "What do you have to train with?" takes one answer: "none and dumbbells"
     // would reach the plan builder (6a) as two contradictory ones. Both
     // screens make "No equipment" exclusive as you tap.
-    for (const availableEquipment of [["none", "dumbbells"], ["none", "gym"]]) {
+    for (const availableEquipment of [["none", "dumbbells"], ["none", "kettlebells"], ["gym"], ["gym", "dumbbells"]]) {
       expect(patchOnboardingRequestSchema.safeParse({ availableEquipment }).success).toBe(false);
       expect(putFitnessProfileRequestSchema.safeParse({ availableEquipment }).success).toBe(false);
     }
-    for (const availableEquipment of [["none"], ["gym"], ["gym", "dumbbells"]]) {
+    for (const availableEquipment of [["none"], ["kettlebells", "dumbbells"]]) {
       expect(patchOnboardingRequestSchema.safeParse({ availableEquipment }).success).toBe(true);
       expect(putFitnessProfileRequestSchema.safeParse({ availableEquipment }).success).toBe(true);
+    }
+    // Where a person trains is its own answer, on both surfaces: any of the places, each once.
+    for (const trainingPlaces of [[], ["gym"], ["home", "gym", "yoga_studio", "pilates_studio", "crossfit_box", "personal_trainer", "outdoors"]]) {
+      expect(patchOnboardingRequestSchema.safeParse({ trainingPlaces }).success).toBe(true);
+      expect(putFitnessProfileRequestSchema.safeParse({ trainingPlaces }).success).toBe(true);
+    }
+    for (const trainingPlaces of [["spa"], ["gym", "gym"], ["dumbbells"]]) {
+      expect(patchOnboardingRequestSchema.safeParse({ trainingPlaces }).success).toBe(false);
+      expect(putFitnessProfileRequestSchema.safeParse({ trainingPlaces }).success).toBe(false);
     }
   });
 });
