@@ -1,8 +1,9 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useNavigation, type NavigationProp, type ParamListBase } from "@react-navigation/native";
 import {
   gamificationMeSchema,
+  goalsResponseSchema,
   mealPageSchema,
   progressOverviewSchema,
   progressTrendSchema,
@@ -46,6 +47,7 @@ import {
   xpToNext,
 } from "./dashboard/words";
 import { useRead, type Read } from "./dashboard/useRead";
+import { GOALS_READ, GoalsBox, GoalsPage } from "./Goals";
 import { greetingAt } from "./greeting";
 import { COMING_SOON } from "./Soon";
 
@@ -61,6 +63,7 @@ export const DASHBOARD_READS = {
   recent: "/v1/workouts?limit=3",
   runs: "/v1/geo/runs?limit=3",
   meals: "/v1/nutrition/meals?limit=3",
+  goals: GOALS_READ,
 } as const;
 
 export function DashboardScreen() {
@@ -75,7 +78,10 @@ export function DashboardScreen() {
   const recent = useRead(DASHBOARD_READS.recent, workoutPageSchema);
   const runs = useRead(DASHBOARD_READS.runs, runPageSchema);
   const meals = useRead(DASHBOARD_READS.meals, mealPageSchema);
-  const reads = [overview, me, week, challenges, recent, runs, meals];
+  // A goal's days are the person's own: read again once the zone is saved.
+  const goals = useRead(DASHBOARD_READS.goals, goalsResponseSchema, zoneSaved);
+  const [goalsOpen, setGoalsOpen] = useState(false);
+  const reads = [overview, me, week, challenges, recent, runs, meals, goals];
   const failed = reads.some((one) => one.read.kind === "failed");
   const now = new Date();
   // The workout and the Library are the exercise folders' (items 53, 63, 64); their tab says so.
@@ -123,6 +129,13 @@ export function DashboardScreen() {
       <Totals overview={overview.read} me={me.read} />
       <Experience me={me.read} week={week.read} now={now} />
       <ThisWeek week={week.read} now={now} />
+      <GoalsBox
+        read={goals.read}
+        onOpen={() => {
+          goals.again();
+          setGoalsOpen(true);
+        }}
+      />
       <Swipe>
         <Motivation now={now} />
         <PictureLink picture="weight" label="Browse Exercises" onPress={toWorkout} />
@@ -135,6 +148,7 @@ export function DashboardScreen() {
       </Swipe>
       <Recent workouts={recent.read} runs={runs.read} meals={meals.read} />
       <Ready onPress={toWorkout} />
+      <GoalsPage open={goalsOpen} onClose={() => { setGoalsOpen(false); }} read={goals.read} again={goals.again} />
     </Page>
   );
 }

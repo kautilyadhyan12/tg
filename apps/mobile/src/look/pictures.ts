@@ -1,5 +1,6 @@
 // The member web's own pictures, made small (spec Part 6 §16.3a): 900 pixels on the
 // long side, WebP. Made by docs/design/phone/compact.py; never the web's full-size files.
+// `goals` and `goalsbox` are Kd's own drawing (2026-10-27), made dark by reviews/pics31b.py.
 // `getstarted` is the browser's sign-in picture, cut by the same tool to sit at the top of a phone.
 import benchpress from "../../assets/pictures/benchpress.webp";
 import bicepcurls from "../../assets/pictures/bicepcurls.webp";
@@ -13,6 +14,8 @@ import experiencepoints from "../../assets/pictures/experiencepoints.webp";
 import food from "../../assets/pictures/food.webp";
 import foodbg from "../../assets/pictures/foodbg.webp";
 import getstarted from "../../assets/pictures/getstarted.webp";
+import goals from "../../assets/pictures/goals.webp";
+import goalsbox from "../../assets/pictures/goalsbox.webp";
 import hero from "../../assets/pictures/hero.webp";
 import hourstrained from "../../assets/pictures/hourstrained.webp";
 import jumpsquat from "../../assets/pictures/jumpsquat.webp";
@@ -47,6 +50,8 @@ export const pictures = {
   food,
   foodbg,
   getstarted,
+  goals,
+  goalsbox,
   hero,
   hourstrained,
   jumpsquat,

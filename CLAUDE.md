@@ -287,7 +287,9 @@ changes what it does; never drop one.
 app; it passed its click-through and Kd still called it not good. Every job that adds or
 changes a phone screen follows all six.
 - Before building, open that page in the browser, take its picture, and build THAT design:
-  its picture, its colours, its order, its glow. A screen the browser has is never invented.
+  its picture, its colours, its order, its glow. Since 2026-10-27 (`rulings/2026-10-27-31b.md`):
+  only where the browser's is the better screen; otherwise, or where the browser has none, the
+  terminal designs it and tells Kd before building.
 - Fitted to a thumb: no long lists and no rows of boxes. One main button; a second thing to
   do is words beside it, and a question is a box from the bottom.
 - The words are a finished app's, and few: a short label or one short line ("Coming soon",

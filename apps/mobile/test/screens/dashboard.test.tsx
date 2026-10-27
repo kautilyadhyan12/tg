@@ -3,6 +3,7 @@ import { App } from "../../src/App";
 import { DASHBOARD_READS } from "../../src/screens/Dashboard";
 import { dayWords, weekOf } from "../../src/screens/dashboard/words";
 import type { Ask } from "../../src/session/calls";
+import { goal } from "../goalFixture";
 import { RAVI, fakeServer, kept, memoryStore, never, profile, refusal, tokens, type Reply, type Route } from "../kit";
 
 const extra = { copyName: "Feature 2", apiUrl: "http://localhost:3000" };
@@ -103,6 +104,7 @@ const trained: Record<string, Route> = {
   "/v1/workouts": ok(page([workoutRow("1b6f0a3e-2c4d-4e5f-8a9b-0c1d2e3f4a5b", hoursAgo(1))], true)),
   "/v1/geo/runs": ok(list([runRow("5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a", hoursAgo(30), "Evening run")])),
   "/v1/nutrition/meals": ok(list([mealRow("6e5d4c3b-2a1f-4e0d-9c8b-7a6f5e4d3c2b", hoursAgo(3), null)])),
+  "/v1/goals": ok({ goals: [goal({ kind: "training_days", period: "week", target: 4, current: 2 })], max: 30 }),
 };
 const nothingElse = { "/v1/geo/runs": ok(list([])), "/v1/nutrition/meals": ok(list([])) };
 
