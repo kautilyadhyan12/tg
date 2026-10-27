@@ -313,6 +313,8 @@ every size, a Samsung Fold or an iPhone Duo opened, the phone's largest text.
   phone (`720x1520` at `320`) and the largest text (`settings put system font_scale 1.5`). It reads
   his settings first (`wm size`, `wm density`, `settings get system font_scale`) and puts them back
   exactly (`wm size reset`, `wm density reset`, his own font scale), and says so.
+- A screen built before 2026-10-28 gets the same check the next time a job touches it; the screens
+  still owed it are listed in `handoff/2026-10-27-31b.md`.
 
 **Exercises (Kd, RULINGS 2026-10-12; spec Part 2 §11).** An exercise is data, made on the
 line: Kd names it and gives one or two good-form links; the videos are measured on his
