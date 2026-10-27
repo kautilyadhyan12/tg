@@ -27,7 +27,9 @@ export function Clock() {
       <Txt kind="h1" style={styles.time}>
         {time}
       </Txt>
-      <Txt kind="small">{date}</Txt>
+      <Txt kind="small" colour="text">
+        {date}
+      </Txt>
     </View>
   );
 }
