@@ -74,8 +74,8 @@ describe("the icons and the pictures are the design's", () => {
 
   it("every drawn picture is in the app by its name, small", () => {
     // The sign-in and setup pictures are the browser's own pages', cut for a phone, and the two goals pictures are
-    // Kd's own drawing (31b); none is on the design canvas.
-    const drawn = [...Object.keys(JSON.parse(read(join(design, "images.json"))) as Record<string, string>), "getstarted", "goals", "goalsbox", "setup"].sort();
+    // Kd's own drawing (31b), as is the clock's picture; none is on the design canvas.
+    const drawn = [...Object.keys(JSON.parse(read(join(design, "images.json"))) as Record<string, string>), "getstarted", "goals", "goalsbox", "motivation", "setup"].sort();
     const folder = join(here, "assets", "pictures");
     const shipped = readdirSync(folder).sort();
     expect(shipped).toEqual(drawn.map((name) => `${name}.webp`));

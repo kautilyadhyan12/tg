@@ -39,7 +39,6 @@ import {
   hoursWords,
   latestBadges,
   noActivityWords,
-  quoteOf,
   recentActivity,
   type ActivityKind,
   weekOf,
@@ -47,6 +46,7 @@ import {
   windowWords,
   xpToNext,
 } from "./dashboard/words";
+import { Clock } from "./dashboard/Clock";
 import { useRead, type Read } from "./dashboard/useRead";
 import { GOALS_READ, GoalsBox, GoalsPage, type GoalsOpen } from "./Goals";
 import { greetingAt } from "./greeting";
@@ -138,7 +138,7 @@ export function DashboardScreen() {
         }}
       />
       <Swipe>
-        <Motivation now={now} />
+        <Motivation />
         <PictureLink picture="weight" label="Browse Exercises" onPress={toWorkout} />
         <PictureLink picture="running" label="View Progress" onPress={toMe} />
       </Swipe>
@@ -347,18 +347,14 @@ function PictureLink({ picture, label, onPress }: { picture: PictureName; label:
   );
 }
 
-function Motivation({ now }: { now: Date }) {
-  const quote = quoteOf(now);
+/** Kd's own picture (2026-10-28), darkened at the top where the clock lies. */
+function Motivation() {
   return (
-    <View style={[styles.box, styles.quote]}>
-      <Image source={pictures.dailymotivation} resizeMode="cover" style={styles.fill} accessible={false} />
-      <View style={[StyleSheet.absoluteFill, styles.statShade]} />
-      <View style={styles.quoteWords}>
+    <View style={[styles.box, styles.motivation]}>
+      <Image source={pictures.motivation} resizeMode="cover" style={styles.fill} accessible={false} />
+      <View style={styles.motivationWords}>
         <Txt kind="eyebrow">Daily Motivation</Txt>
-        <Txt kind="small" style={styles.italic}>
-          “{quote.text}”
-        </Txt>
-        <Txt kind="tiny">— {quote.author}</Txt>
+        <Clock />
       </View>
     </View>
   );
@@ -516,7 +512,6 @@ const styles = StyleSheet.create({
   name: { alignSelf: "stretch" },
   boxTitle: { fontSize: 14, lineHeight: 18, color: colours.textSoft },
   statLabel: { fontSize: 12, lineHeight: 16 },
-  italic: { fontStyle: "italic" },
   centre: { textAlign: "center" },
   fill: { position: "absolute", width: "100%", height: "100%" },
   shade: { experimental_backgroundImage: pictureShade },
@@ -551,8 +546,9 @@ const styles = StyleSheet.create({
   link: { width: 150, height: 200, justifyContent: "flex-end" },
   linkWords: { margin: 12 },
   // The pictures were widened to these boxes' shapes, so each covers its box without cutting its subject.
-  quote: { width: 220, height: 200 },
-  quoteWords: { padding: 14, paddingRight: 96, gap: 8 },
+  // Square, as its picture is, so the picture covers it whole.
+  motivation: { width: 270, height: 270 },
+  motivationWords: { padding: 16, gap: 10 },
   challenges: { width: 360, height: 210 },
   challengeRow: { width: "52%" },
   rank: { width: 140, height: 210, justifyContent: "flex-end" },

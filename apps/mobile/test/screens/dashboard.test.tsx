@@ -4,7 +4,7 @@ import { DASHBOARD_READS } from "../../src/screens/Dashboard";
 import { dayWords, weekOf } from "../../src/screens/dashboard/words";
 import type { Ask } from "../../src/session/calls";
 import { goal } from "../goalFixture";
-import { RAVI, fakeServer, kept, memoryStore, never, profile, refusal, tokens, type Reply, type Route } from "../kit";
+import { RAVI, fakeServer, isClockWords, kept, memoryStore, never, profile, refusal, tokens, type Reply, type Route } from "../kit";
 
 const extra = { copyName: "Feature 2", apiUrl: "http://localhost:3000" };
 const noWait = () => Promise.resolve();
@@ -348,10 +348,10 @@ describe("a read that fails or is slow never shows a number it does not know", (
     await openApp(Object.fromEntries(Object.entries(trained).map(([path, route]) => [path, failing(route)])));
     expect(await screen.findByText("Some of your numbers couldn’t load.")).toBeTruthy();
     expect(screen.getByText("Total Sessions")).toBeTruthy();
-    // No figure anywhere but the calendar's own dates.
+    // No figure anywhere but the calendar's own dates and the clock's time.
     const figures = screen.queryAllByText(/\d/).map((one) => String(one.props.children));
     const dates = weekOf(new Date()).map((day) => String(day.date));
-    expect(figures.filter((words) => !dates.includes(words))).toEqual([]);
+    expect(figures.filter((words) => !dates.includes(words) && !isClockWords(words))).toEqual([]);
     expect(label("[A-Z][a-z]{2} \\d+, trained")).toHaveLength(0);
 
     up = true;
