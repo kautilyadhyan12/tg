@@ -87,11 +87,12 @@ export function DashboardScreen() {
               <Txt kind="h1" numberOfLines={1} style={styles.name}>
                 {state.kind === "in" ? state.user.displayName : ""}
               </Txt>
-              <Button label="Start Workout" icon="play" small onPress={toWorkout} style={styles.startSmall} />
+              <Button label="Start Training" icon="play" compact onPress={toWorkout} style={styles.startSmall} />
             </View>
           }
           eyebrow="Today’s Focus"
           title={"Precision Training\nPowered by AI."}
+          titleColour="orangeLight"
         />
       }
     >
@@ -405,7 +406,7 @@ function Badges({ me, onPress }: { me: Read<GamificationMe>; onPress: () => void
 function Recent({ read }: { read: Read<WorkoutPage> }) {
   return (
     <Card style={styles.recent}>
-      <Image source={pictures.recentworkout} resizeMode="cover" style={styles.fill} accessible={false} />
+      <Image source={pictures.recentworkout} resizeMode="contain" style={styles.recentArt} accessible={false} />
       <View style={[StyleSheet.absoluteFill, styles.statShade]} />
       <Txt kind="h3" style={styles.boxTitle}>Recent Workouts</Txt>
       {read.kind !== "ok" ? (
@@ -460,7 +461,7 @@ const styles = StyleSheet.create({
   semibold: { fontFamily: fonts.semibold },
   hello: { alignItems: "flex-start" },
   name: { alignSelf: "stretch" },
-  startSmall: { marginTop: 12, paddingHorizontal: 14 },
+  startSmall: { marginTop: 12 },
   boxTitle: { fontSize: 14, lineHeight: 18, color: colours.textSoft },
   statLabel: { fontSize: 12, lineHeight: 16 },
   italic: { fontStyle: "italic" },
@@ -473,8 +474,8 @@ const styles = StyleSheet.create({
   statArt: { position: "absolute", top: 0, right: 0, width: "65%", height: "100%", opacity: 0.95 },
   statShade: { experimental_backgroundImage: boxShade },
   split: { flexDirection: "row", padding: 0, gap: 0 },
-  sideArt: { width: 92, borderLeftWidth: 1, borderLeftColor: colours.line },
-  sideArtNarrow: { width: 76, borderLeftWidth: 1, borderLeftColor: colours.line },
+  sideArt: { width: 92 },
+  sideArtNarrow: { width: 76 },
   three: { flexDirection: "row", gap: 6 },
   figure: { flex: 1, alignItems: "center" },
   bar: { flexDirection: "row", height: 6, borderRadius: sizes.round, backgroundColor: colours.track, overflow: "hidden" },
@@ -504,6 +505,7 @@ const styles = StyleSheet.create({
   rank: { width: 140, height: 210, justifyContent: "flex-end" },
   badges: { width: 230, height: 210 },
   recent: { gap: 4 },
+  recentArt: { position: "absolute", top: 0, bottom: 0, right: -10, width: "75%" },
   workout: { minHeight: 56, borderTopWidth: 1, borderTopColor: colours.line, paddingTop: 8 },
   ready: { height: 210, borderRadius: 22, justifyContent: "center" },
   readyWords: { padding: 18, gap: 14, alignItems: "flex-start", maxWidth: "62%" },

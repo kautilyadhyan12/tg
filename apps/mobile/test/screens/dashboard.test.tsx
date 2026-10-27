@@ -264,16 +264,20 @@ describe("a read that fails or is slow never shows a number it does not know", (
 });
 
 describe("its buttons open where each thing lives", () => {
+  // Start Training is on the page twice: under the greeting, and in Ready to start.
   it.each([
-    ["Start Workout", "Workout"],
-    ["Browse Exercises", "Workout"],
-    ["Start Training", "Workout"],
-    ["View Progress", "Me"],
-    ["Latest Badges, View all", "Me"],
-  ])("%s opens %s", async (button, tab) => {
+    ["Start Training", 0, "Workout"],
+    ["Start Training", 1, "Workout"],
+    ["Browse Exercises", 0, "Workout"],
+    ["View Progress", 0, "Me"],
+    ["Latest Badges, View all", 0, "Me"],
+  ] as const)("%s (%i) opens %s", async (button, which, tab) => {
     await openApp(trained);
     await screen.findByText("24");
-    await fireEvent.press(screen.getByRole("button", { name: button }));
+    const pressed = screen.getAllByRole("button", { name: button })[which];
+    if (pressed === undefined) throw new Error(`${button} ${String(which)} was expected`);
+    expect(screen.getAllByRole("button", { name: button })).toHaveLength(button === "Start Training" ? 2 : 1);
+    await fireEvent.press(pressed);
     await waitFor(() => {
       expect(screen.getByRole("tab", { name: tab }).props.accessibilityState).toEqual({ selected: true });
     });
