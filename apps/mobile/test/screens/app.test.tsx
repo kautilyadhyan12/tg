@@ -2,6 +2,8 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { StyleSheet, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import { App, TABS } from "../../src/App";
 import { colours } from "../../src/look/colours";
+import { DASHBOARD_READS } from "../../src/screens/Dashboard";
+import { weekOf } from "../../src/screens/dashboard/words";
 import { fakeServer, kept, memoryStore, tokens } from "../kit";
 
 const extra = { copyName: "Feature 1", apiUrl: "http://localhost:3000" };
@@ -48,7 +50,7 @@ describe("the five tabs", () => {
     ["Food", ["Fuel Your Training", "Your meals"]],
     ["Gym", ["My gyms", "Your gym"]],
     ["Me", ["ravi@example.com", "Settings"]],
-    ["Dashboard", ["Ravi", "Your day"]],
+    ["Dashboard", ["Ravi", "Recent Workouts"]],
   ])("%s opens its own page and lights its own tab", async (tab, shows) => {
     await render(<App extra={extra} store={signedIn()} ask={answers(true)} />);
     await open(tab === "Dashboard" ? "Me" : "Dashboard");
@@ -72,7 +74,12 @@ describe("the five tabs", () => {
       await open(tab.name);
       // What is not built yet says so in two words: the tab's own row, and on Me its two pictures.
       expect(await screen.findAllByText("Coming soon")).toHaveLength(tab.name === "Me" ? 3 : 1);
-      const withDigits = screen.queryAllByText(/\d/).map(words);
+      // The Dashboard's calendar shows this week's dates; its numbers did not load here, so none shows.
+      const dates = tab.name === "Dashboard" ? weekOf(new Date()).map((day) => String(day.date)) : [];
+      const withDigits = screen
+        .queryAllByText(/\d/)
+        .map(words)
+        .filter((one) => !dates.includes(String(one)));
       const copyLine = [["Feature 1 test copy · ", "Connected"]];
       expect([tab.name, withDigits]).toEqual([tab.name, tab.name === "Me" ? copyLine : []]);
     }
@@ -110,7 +117,9 @@ describe("Me says which copy this is and whether it reaches its server", () => {
     await open("Me");
     expect(await screen.findByText("Feature 1 test copy · Connected")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
-    expect(asked.filter((url) => !url.includes("/v1/auth/"))).toEqual(["http://localhost:3000/health"]);
+    // Besides the sign-in and the Dashboard's own reads, Me asks only its server's health.
+    const dashboard = Object.values(DASHBOARD_READS).map((path) => `http://localhost:3000${path}`);
+    expect(asked.filter((url) => !url.includes("/v1/auth/") && !dashboard.includes(url))).toEqual(["http://localhost:3000/health"]);
   });
 
   it("not reached, then Try again reaches it", async () => {

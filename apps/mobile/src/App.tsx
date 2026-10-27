@@ -24,7 +24,8 @@ import { phoneKeyStore } from "./session/keyStore";
 import type { KeyStore } from "./session/session";
 import { askGoogle, type AskGoogle } from "./session/google";
 import { SessionProvider, useSession } from "./session/SessionProvider";
-import { FoodScreen, GymScreen, MeScreen, DashboardScreen, WorkoutScreen } from "./screens/tabs";
+import { DashboardScreen } from "./screens/Dashboard";
+import { FoodScreen, GymScreen, MeScreen, WorkoutScreen } from "./screens/tabs";
 
 /** The five tabs, in their order (spec Part 6 §16.3a). A tab's name is the word under its icon. */
 export const TABS = [
