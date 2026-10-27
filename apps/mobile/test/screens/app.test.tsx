@@ -2,6 +2,8 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { StyleSheet, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import { App, TABS } from "../../src/App";
 import { colours } from "../../src/look/colours";
+import { DASHBOARD_READS } from "../../src/screens/Dashboard";
+import { weekOf } from "../../src/screens/dashboard/words";
 import { fakeServer, kept, memoryStore, tokens } from "../kit";
 
 const extra = { copyName: "Feature 1", apiUrl: "http://localhost:3000" };
@@ -48,7 +50,7 @@ describe("the five tabs", () => {
     ["Food", ["Fuel Your Training", "Your meals"]],
     ["Gym", ["Where you train", "You haven’t joined a gym or studio yet."]],
     ["Me", ["ravi@example.com", "Settings"]],
-    ["Dashboard", ["Ravi", "Your day"]],
+    ["Dashboard", ["Ravi", "Recent Activity"]],
   ])("%s opens its own page and lights its own tab", async (tab, shows) => {
     await render(<App extra={extra} store={signedIn()} ask={answers(true)} />);
     await open(tab === "Dashboard" ? "Me" : "Dashboard");
@@ -74,7 +76,12 @@ describe("the five tabs", () => {
       // Gym, for somebody in no gym yet, has nothing to come: it says how an invitation reaches them.
       expect(await screen.findAllByText(tab.name === "Gym" ? "Check for an invitation" : "Coming soon")).toBeTruthy();
       expect(screen.queryAllByText("Coming soon")).toHaveLength(tab.name === "Me" ? 3 : tab.name === "Gym" ? 0 : 1);
-      const withDigits = screen.queryAllByText(/\d/).map(words);
+      // The Dashboard's calendar shows this week's dates; its numbers did not load here, so none shows.
+      const dates = tab.name === "Dashboard" ? weekOf(new Date()).map((day) => String(day.date)) : [];
+      const withDigits = screen
+        .queryAllByText(/\d/)
+        .map(words)
+        .filter((one) => !dates.includes(String(one)));
       const copyLine = [["Feature 1 test copy · ", "Connected"]];
       expect([tab.name, withDigits]).toEqual([tab.name, tab.name === "Me" ? copyLine : []]);
     }
@@ -112,10 +119,11 @@ describe("Me says which copy this is and whether it reaches its server", () => {
     await open("Me");
     expect(await screen.findByText("Feature 1 test copy · Connected")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
-    // Besides sign-in, the invitations and the places asked on opening, only the copy's own check.
-    expect(asked.filter((url) => !url.includes("/v1/auth/") && !url.includes("/v1/orgs/"))).toEqual([
-      "http://localhost:3000/health",
-    ]);
+    // Besides sign-in, the invitations and the places asked on opening, the profile's time zone and
+    // the Dashboard's own reads, only the copy's own check.
+    const dashboard = Object.values(DASHBOARD_READS).map((path) => `http://localhost:3000${path}`);
+    const opening = (url: string) => url.includes("/v1/auth/") || url.includes("/v1/orgs/") || url.endsWith("/v1/users/me");
+    expect(asked.filter((url) => !opening(url) && !dashboard.includes(url))).toEqual(["http://localhost:3000/health"]);
   });
 
   it("not reached, then Try again reaches it", async () => {

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
-import type { VisionEvidence } from "@app/shared";
+import { mealPageSchema, type VisionEvidence } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createIoRedis, createMemoryRedis, type RedisLike } from "../src/redis.js";
@@ -192,6 +192,7 @@ d("a meal saved under the phone's own id (real Postgres)", () => {
     const rows = await rowsOf(alice.userId);
     expect(rows.map((r) => r.id)).toEqual([id]);
     const list = await inject("GET", "/v1/nutrition/meals?limit=50", alice.access);
+    expect(mealPageSchema.safeParse(list.json()).success).toBe(true);
     const kcal = list.json<{ items: { totals: { kcalPoint: number } }[] }>().items.reduce((sum, m) => sum + m.totals.kcalPoint, 0);
     expect(kcal).toBe(first.json<MealBody>().meal.totals.kcalPoint);
   }, 30_000);

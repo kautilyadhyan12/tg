@@ -70,6 +70,10 @@ export const runSummarySchema = z.object({
 });
 export type RunSummary = z.infer<typeof runSummarySchema>;
 
+/** GET /v1/geo/runs: a page of the person's runs, newest first. */
+export const runPageSchema = z.object({ items: z.array(runSummarySchema), nextCursor: z.string().nullable() });
+export type RunPage = z.infer<typeof runPageSchema>;
+
 export const runDetailSchema = runSummarySchema.extend({ polyline: z.string().nullable() });
 export type RunDetail = z.infer<typeof runDetailSchema>;
 

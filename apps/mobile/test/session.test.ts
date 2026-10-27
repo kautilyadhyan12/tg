@@ -165,7 +165,7 @@ describe("opening the app", () => {
     await session.start();
     expect(session.state()).toEqual(signedInAs(RAVI));
     expect(server.asked).toEqual([
-      { path: "/v1/auth/refresh", body: { refreshToken: "refresh-1" }, headers: { "content-type": "application/json" } },
+      { method: "POST", path: "/v1/auth/refresh", body: { refreshToken: "refresh-1" }, headers: { "content-type": "application/json" } },
     ]);
     expect(store.value).toBe(kept(2));
     expect(session.accessToken()).toBe("access-2");
@@ -316,8 +316,9 @@ describe("signing in with a code", () => {
     expect(await session.sendCode(RAVI.email)).toMatchObject({ kind: "ok", data: { resendAfterSeconds: 60 } });
     expect((await session.verifyCode(RAVI.email, "123456")).kind).toBe("ok");
     expect(server.asked).toEqual([
-      { path: "/v1/auth/code/send", body: { email: RAVI.email }, headers: { "content-type": "application/json" } },
+      { method: "POST", path: "/v1/auth/code/send", body: { email: RAVI.email }, headers: { "content-type": "application/json" } },
       {
+        method: "POST",
         path: "/v1/auth/code/verify",
         body: { email: RAVI.email, code: "123456", client: "phone" },
         headers: { "content-type": "application/json" },

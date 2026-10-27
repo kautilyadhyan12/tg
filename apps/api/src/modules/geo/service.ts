@@ -122,6 +122,14 @@ export async function listRuns(
   return { items: page.map(asRunSummary), next: rows.length > limit ? (page.at(-1) ?? null) : null };
 }
 
+export async function runTotals(deps: ReadDeps, userId: string, since: Date | null) {
+  return repo.getRunTotals(deps.sql, userId, since);
+}
+
+export async function runDays(deps: ReadDeps, userId: string, since: Date | null, timeZone: string) {
+  return repo.getRunDays(deps.sql, userId, since, timeZone);
+}
+
 export async function getRun(deps: ReadDeps, userId: string, id: string): Promise<RunDetail | null> {
   const row = await repo.getRun(deps.sql, userId, id);
   // Detail includes the polyline (owner-only — the route WHERE already bound it

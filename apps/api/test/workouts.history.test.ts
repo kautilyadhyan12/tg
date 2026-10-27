@@ -4,6 +4,7 @@
 // run date so streak reconciliation can never rot the suite.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
+import { progressOverviewSchema, progressTrendSchema } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { seed } from "../src/db/seed.js";
@@ -473,6 +474,38 @@ d("workouts history + progress + gamification (real Postgres)", () => {
     expect(r.bestAvgForm?.value).toBe(84);
     expect(r.totalWorkouts).toBe(4);
     expect(r.longestStreak).toBe(3);
+  });
+
+  it("runs come apart from workouts: the person's own, in the window, on their own day; never a stranger's", { timeout: 30_000 }, async () => {
+    // Alice: a run today and one 10 days ago (outside 7d, inside 30d); Bob: a run today.
+    await sql`
+      INSERT INTO runs (id, user_id, started_at, duration_s, distance_m, route_name, kcal_point, source) VALUES
+        (gen_random_uuid(), ${userA}, now() - interval '1 hour', 1800, 5000, 'Canal', 310, 'mobile'),
+        (gen_random_uuid(), ${userA}, now() - interval '10 days', 1200, 3000, NULL, NULL, 'mobile'),
+        (gen_random_uuid(), ${userB}, now() - interval '1 hour', 3600, 9000, 'Bob''s', 700, 'mobile')`;
+    try {
+      const week = progressOverviewSchema.parse(
+        (await inject({ method: "GET", url: "/v1/progress/overview?period=7d", access: cookieA })).json(),
+      );
+      expect([week.totalRuns, week.runDurationMs, week.runKcal]).toEqual([1, 1_800_000, 310]);
+      expect(week.totalWorkouts).toBe(4); // the browser's "Total Workouts" is untouched
+      const month = progressOverviewSchema.parse(
+        (await inject({ method: "GET", url: "/v1/progress/overview?period=30d", access: cookieA })).json(),
+      );
+      expect([month.totalRuns, month.runDurationMs, month.runKcal]).toEqual([2, 3_000_000, 310]);
+
+      const trend = progressTrendSchema.parse(
+        (await inject({ method: "GET", url: "/v1/progress/trend?period=30d", access: cookieA })).json(),
+      );
+      expect(trend.runDays.reduce((n, d) => n + d.runs, 0)).toBe(2);
+      expect(trend.points.reduce((n, p) => n + p.workouts, 0)).toBe(4); // the workout points are untouched
+      // Alice's time zone is unset (UTC), so a run an hour ago is keyed on the UTC day it fell on.
+      const [{ day } = { day: "" }] = await sql<{ day: string }[]>`
+        SELECT to_char((now() - interval '1 hour') AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day`;
+      expect(trend.runDays.some((d) => d.date === day)).toBe(true);
+    } finally {
+      await sql`DELETE FROM runs WHERE user_id IN (${userA}, ${userB})`;
+    }
   });
 
   it("progress query is strict: bad period / unknown keys are 400", { timeout: 30_000 }, async () => {

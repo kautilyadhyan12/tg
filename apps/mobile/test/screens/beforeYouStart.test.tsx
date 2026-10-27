@@ -161,8 +161,10 @@ describe("ticking it", () => {
     });
     expect(await screen.findByRole("tab", { name: "Dashboard" })).toBeTruthy();
     const asks = server.asked.filter((one) => one.path === "/v1/users/me").map((one) => one.headers.authorization);
-    // Sent again with the new token, never the one the server refused.
-    expect(asks).toEqual(["Bearer access-2", "Bearer access-3"]);
+    // Sent again with the new token, never the one the server refused; the time zone's own read of
+    // the profile comes after, with the new one too.
+    expect(asks.slice(0, 2)).toEqual(["Bearer access-2", "Bearer access-3"]);
+    expect(asks.slice(2).filter((token) => token !== "Bearer access-3")).toEqual([]);
     expect(server.paths().filter((path) => path === "/v1/auth/refresh")).toHaveLength(2);
   });
 });

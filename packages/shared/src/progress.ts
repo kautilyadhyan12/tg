@@ -41,6 +41,11 @@ export const progressOverviewSchema = z.object({
   currentStreak: z.number().int(),
   longestStreak: z.number().int(),
   consistencyPct: z.number().int(),
+  /** The person's runs in the same window, apart from the workouts above: the browser's "Total
+   *  Workouts" counts workouts alone, and the phone's "Total Sessions" adds these in (ROADMAP 31a). */
+  totalRuns: z.number().int(),
+  runDurationMs: z.number().int(),
+  runKcal: z.number().int(),
   limitedToDays,
 });
 export type ProgressOverview = z.infer<typeof progressOverviewSchema>;
@@ -52,7 +57,9 @@ export const trendPointSchema = z.object({
   kcal: z.number().int(),
   workouts: z.number().int(),
 });
-export const progressTrendSchema = z.object({ points: z.array(trendPointSchema), limitedToDays });
+/** The days with a run, keyed the same way, apart from the workout points above (ROADMAP 31a). */
+export const runDaySchema = z.object({ date: z.string(), runs: z.number().int() });
+export const progressTrendSchema = z.object({ points: z.array(trendPointSchema), runDays: z.array(runDaySchema), limitedToDays });
 export type ProgressTrend = z.infer<typeof progressTrendSchema>;
 
 export const weeklyPointSchema = z.object({

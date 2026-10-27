@@ -57,6 +57,10 @@ export const orangeGradient = `linear-gradient(135deg, ${colours.orange}, ${colo
 export const pictureShade =
   "linear-gradient(to top, rgba(10,9,8,0.94) 0%, rgba(10,9,8,0.45) 50%, rgba(10,9,8,0.05) 100%)";
 
+/** Across a box with a picture on its right: the box's own colour under the words, clear over the picture. */
+export const boxShade =
+  "linear-gradient(90deg, rgba(18,17,16,1) 0%, rgba(18,17,16,1) 30%, rgba(18,17,16,0.7) 50%, rgba(18,17,16,0.1) 100%)";
+
 /** A page's own picture running into the page under it, a little darker at the top for the phone's clock. */
 export const pictureFade =
   "linear-gradient(to top, rgba(10,9,8,1) 0%, rgba(10,9,8,0.8) 24%, rgba(10,9,8,0.16) 60%, rgba(10,9,8,0.3) 100%)";

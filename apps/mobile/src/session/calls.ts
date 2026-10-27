@@ -2,7 +2,7 @@ import { apiRefusalSchema } from "@app/shared";
 
 export interface AskInit {
   signal: AbortSignal;
-  method?: "GET" | "POST";
+  method?: "GET" | "POST" | "PATCH";
   headers?: Record<string, string>;
   body?: string;
 }
@@ -36,7 +36,7 @@ export function post<T>(server: Server, path: string, body: unknown, shape: Shap
 }
 
 export interface Request {
-  method: "GET" | "POST";
+  method: "GET" | "POST" | "PATCH";
   path: string;
   body?: unknown;
   /** A signed-in request's access token. */
@@ -59,10 +59,10 @@ export async function call<T>(server: Server, request: Request, shape: Shape<T>,
         signal: stop.signal,
         method: request.method,
         headers: {
-          ...(request.method === "POST" ? { "content-type": "application/json" } : {}),
+          ...(request.method === "GET" ? {} : { "content-type": "application/json" }),
           ...(request.token === undefined ? {} : { authorization: `Bearer ${request.token}` }),
         },
-        ...(request.method === "POST" ? { body: JSON.stringify(request.body ?? {}) } : {}),
+        ...(request.method === "GET" ? {} : { body: JSON.stringify(request.body ?? {}) }),
       }),
       late,
     ]);

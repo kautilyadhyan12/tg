@@ -7,40 +7,13 @@ import { PictureTop } from "../look/PictureTop";
 import { Sheet } from "../look/Sheet";
 import { Txt } from "../look/Txt";
 import { useSession } from "../session/SessionProvider";
-import { greetingAt } from "./greeting";
 import { ThisCopy } from "./ThisCopy";
 import { COMING_SOON, Soon } from "./Soon";
 
 // Each tab's page as the look draws it (docs/design/phone/pages). Its own picture runs edge to
 // edge from the top and into the page, never a box of its own, with the page's first words over it.
 // No page says its tab's name again above itself: the lit tab below already does.
-// What a page holds comes with each feature's own job.
-
-export function DashboardScreen() {
-  const { state } = useSession();
-  return (
-    <Page
-      top={
-        <PictureTop
-          picture="hero"
-          tall={0.9}
-          above={
-            <>
-              <Txt kind="small">{greetingAt(new Date().getHours())}</Txt>
-              <Txt kind="h1" numberOfLines={1}>
-                {state.kind === "in" ? state.user.displayName : ""}
-              </Txt>
-            </>
-          }
-          eyebrow="Today’s Focus"
-          title={"Precision Training\nPowered by AI."}
-        />
-      }
-    >
-      <Soon icon="grid" title="Your day" />
-    </Page>
-  );
-}
+// What a page holds comes with each feature's own job; the Dashboard has its own file.
 
 export function WorkoutScreen() {
   return (
