@@ -61,7 +61,7 @@ describe('userService repoint (Card 6)', () => {
     const current = {
       age: 25, gender: 'male', heightCm: 175, targetWeightKg: 70,
       fitnessLevel: 'beginner', fitnessGoals: ['muscle_gain'], exerciseFrequency: 3,
-      availableEquipment: ['dumbbells'], sessionDurationMin: 30,
+      availableEquipment: ['dumbbells'], trainingPlaces: ['gym'], sessionDurationMin: 30,
       preferredWorkoutTime: 'morning',
     };
 
@@ -73,6 +73,7 @@ describe('userService repoint (Card 6)', () => {
       expect(out.heightCm).toBe(178);
       expect(out.fitnessGoals).toEqual(['muscle_gain']);       // NOT wiped
       expect(out.availableEquipment).toEqual(['dumbbells']);   // NOT wiped
+      expect(out.trainingPlaces).toEqual(['gym']);             // NOT wiped
       expect(out.fitnessLevel).toBe('beginner');               // NOT wiped
       expect(out.gender).toBe('male');                         // untouched current
     });
@@ -105,7 +106,7 @@ describe('userService repoint (Card 6)', () => {
       expect(mergeFitnessProfile(null, {}).weightGoal).toBe(null);
     });
 
-    it('emits ONLY the 12 contract keys, even from the flat-merged profile (.strict() guard)', () => {
+    it('emits ONLY the contract keys, even from the flat-merged profile (.strict() guard)', () => {
       // Production passes {...fitnessProfile, ...user} — which carries id, email,
       // displayName, weightKg, updatedAt … A naive {...current, ...edits} would
       // forward those into the .strict() PUT body and 400. This pins the key set
@@ -122,7 +123,7 @@ describe('userService repoint (Card 6)', () => {
       expect(Object.keys(mergeFitnessProfile(flatMerged, {})).sort()).toEqual([
         'age', 'availableEquipment', 'diet', 'exerciseFrequency', 'fitnessGoals', 'fitnessLevel',
         'gender', 'heightCm', 'mealsPerDay', 'onboardingCompleted',
-        'preferredWorkoutTime', 'sessionDurationMin', 'targetWeightKg', 'weightGoal',
+        'preferredWorkoutTime', 'sessionDurationMin', 'targetWeightKg', 'trainingPlaces', 'weightGoal',
       ]);
     });
 

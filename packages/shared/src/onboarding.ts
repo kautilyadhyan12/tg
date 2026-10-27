@@ -28,6 +28,8 @@ import {
   fitnessLevelSchema,
   genderSchema,
   mealsPerDaySchema,
+  trainingPlaceSchema,
+  trainingPlacesArraySchema,
   weightGoalSchema,
 } from "./users.js";
 
@@ -71,6 +73,8 @@ export const onboardingAnswersSchema = z
     trainingDays: z.number().int().nullable(),
     sessionMinutes: z.number().int().nullable(),
     availableEquipment: z.array(equipmentSchema),
+    /** Screen 7's first question: where the person trains (Kd, 2026-10-27). */
+    trainingPlaces: z.array(trainingPlaceSchema),
     /** Screen 9's two answers. Neither moves a calorie: the meal ideas after a
      *  workout follow the diet, the meal suggestions (7a) will read both, and
      *  the plan number never does. */
@@ -117,6 +121,7 @@ export const patchOnboardingRequestSchema = z
     trainingDays: trainingDaysSchema.nullable().optional(),
     sessionMinutes: sessionMinutesSchema.nullable().optional(),
     availableEquipment: equipmentArraySchema.optional(),
+    trainingPlaces: trainingPlacesArraySchema.optional(),
     diet: dietSchema.nullable().optional(),
     mealsPerDay: mealsPerDaySchema.nullable().optional(),
     onboardingCompleted: z.boolean().optional(),

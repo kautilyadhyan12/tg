@@ -328,6 +328,7 @@ d("onboarding v2 routes (real Postgres)", () => {
       trainingDays: null,
       sessionMinutes: null,
       availableEquipment: [],
+      trainingPlaces: [],
       diet: null,
       mealsPerDay: null,
       onboardingCompleted: false,
@@ -639,7 +640,10 @@ d("onboarding v2 routes (real Postgres)", () => {
       { availableEquipment: ["dumbbells", "dumbbells"] }, // a set, not a list
       { availableEquipment: ["barbell"] },
       { availableEquipment: ["none", "dumbbells"] }, // "no equipment" stands alone
-      { availableEquipment: ["none", "gym"] }, // a gym included
+      { availableEquipment: ["none", "kettlebells"] }, // "No equipment" beside a thing
+      { availableEquipment: ["gym"] }, // a gym is a place since 0168, never equipment
+      { trainingPlaces: ["spa"] }, // not a place on the list
+      { trainingPlaces: ["gym", "gym"] }, // the same place twice
       { weightGoal: "lose", goal: "lose" }, // the plan's own word for the choice is never a field
       { targetKcal: 1200 }, // nor is any number of the plan's
       { displayName: "" }, // a name is changed, never blanked
@@ -653,6 +657,24 @@ d("onboarding v2 routes (real Postgres)", () => {
       SELECT count(*)::text AS n FROM user_fitness_profiles WHERE user_id = ${userId}`;
     expect(rows[0]?.n).toBe("0");
     expect((await get(cookies)).answers["weightGoal"]).toBeNull();
+  });
+
+  it("where a person trains is kept as tapped, apart from the equipment, and read on the profile too", async () => {
+    const { cookies } = await makeUser("ob-places@example.com");
+    const first = await patchOk(cookies, { trainingPlaces: ["gym", "yoga_studio"] });
+    expect(first.answers["trainingPlaces"]).toEqual(["gym", "yoga_studio"]);
+    expect(first.answers["availableEquipment"]).toEqual([]);
+    // A tap on the equipment never touches the places, nor the other way round.
+    await patchOk(cookies, { availableEquipment: ["dumbbells"] });
+    await patchOk(cookies, { trainingPlaces: ["home", "personal_trainer"] });
+    const now = await get(cookies);
+    expect(now.answers["trainingPlaces"]).toEqual(["home", "personal_trainer"]);
+    expect(now.answers["availableEquipment"]).toEqual(["dumbbells"]);
+    const profile = await inject({ method: "GET", url: "/v1/users/me/fitness-profile", cookies });
+    expect((JSON.parse(profile.body) as { fitnessProfile: Record<string, unknown> }).fitnessProfile["trainingPlaces"]).toEqual([
+      "home",
+      "personal_trainer",
+    ]);
   });
 
   it("the macro rings read the plan: the screens' own number, whatever the weight choice", { timeout: 60_000 }, async () => {
@@ -777,6 +799,7 @@ d("onboarding v2 routes (real Postgres)", () => {
       trainingDays: null,
       sessionMinutes: null,
       availableEquipment: [],
+      trainingPlaces: [],
       diet: null,
       mealsPerDay: null,
       onboardingCompleted: false,
@@ -966,7 +989,7 @@ d("onboarding v2 routes (real Postgres)", () => {
     await refused(sql`UPDATE user_fitness_profiles SET weight_goal = 'keep' WHERE user_id = ${userId}`);
     await refused(sql`UPDATE user_fitness_profiles SET fitness_goals = ARRAY['weight_loss'] WHERE user_id = ${userId}`);
     await refused(sql`UPDATE user_fitness_profiles SET available_equipment = ARRAY['barbell'] WHERE user_id = ${userId}`);
-    await refused(sql`UPDATE user_fitness_profiles SET available_equipment = ARRAY['none', 'gym'] WHERE user_id = ${userId}`);
+    await refused(sql`UPDATE user_fitness_profiles SET available_equipment = ARRAY['none', 'kettlebells'] WHERE user_id = ${userId}`);
     await refused(sql`UPDATE user_fitness_profiles SET pace = 'extreme' WHERE user_id = ${userId}`);
     await refused(sql`UPDATE user_fitness_profiles SET day_activity = 'lying_down' WHERE user_id = ${userId}`);
     await refused(sql`UPDATE user_fitness_profiles SET push_ups_max = 501 WHERE user_id = ${userId}`);
@@ -1606,7 +1629,7 @@ d("onboarding v2 routes (real Postgres)", () => {
     await completeScreens(cookies); // the profile row exists, so an update needs no FK check
     const write = {
       age: 31, gender: "female", heightCm: 165, targetWeightKg: 65, fitnessLevel: "beginner", fitnessGoals: [],
-      weightGoal: "lose", exerciseFrequency: 3, availableEquipment: ["dumbbells"], sessionDurationMin: 45,
+      weightGoal: "lose", exerciseFrequency: 3, availableEquipment: ["dumbbells"], trainingPlaces: [], sessionDurationMin: 45,
       preferredWorkoutTime: null, diet: "vegan", mealsPerDay: 3, onboardingCompleted: false,
     };
     const out = await interleave(holdUsersRow(userId), () => upsertFitnessProfile(sql, userId, write), async (pids) => {
@@ -1633,7 +1656,7 @@ d("onboarding v2 routes (real Postgres)", () => {
 
     const settingsSave = {
       age: 30, gender: "female", heightCm: 165, targetWeightKg: 65, fitnessLevel: "beginner", fitnessGoals: [],
-      weightGoal: "lose", exerciseFrequency: 3, availableEquipment: ["dumbbells"], sessionDurationMin: 45,
+      weightGoal: "lose", exerciseFrequency: 3, availableEquipment: ["dumbbells"], trainingPlaces: [], sessionDurationMin: 45,
       preferredWorkoutTime: null, diet: "non_vegetarian", mealsPerDay: 3, onboardingCompleted: true,
     };
     const out = await interleave(

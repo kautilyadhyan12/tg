@@ -13,6 +13,8 @@ import {
   Drumstick,
   Dumbbell,
   Egg,
+  Flame,
+  Flower2,
   Footprints,
   HeartPulse,
   House,
@@ -25,8 +27,10 @@ import {
   Sun,
   Target,
   TrendingDown,
+  Trees,
   TrendingUp,
   User,
+  UserCheck,
   Utensils,
   Vegan,
   Weight,
@@ -126,5 +130,15 @@ export const EQUIPMENT_ICONS = {
   resistance_bands: InfinityIcon,
   kettlebells: Weight,
   pull_up_bar: PullUpBar,
+};
+
+/** Screen 7's first question: where the person trains (Kd, 2026-10-27). */
+export const PLACE_ICONS = {
+  home: House,
   gym: Building2,
+  yoga_studio: Flower2,
+  pilates_studio: PersonStanding,
+  crossfit_box: Flame,
+  personal_trainer: UserCheck,
+  outdoors: Trees,
 };

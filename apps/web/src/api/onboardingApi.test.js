@@ -7,7 +7,7 @@ import { detectTimezone } from './userApi';
 const EMPTY = {
   displayName: 'Kd', weightGoal: null, fitnessGoals: [], age: null, gender: null, heightCm: null, weightKg: null, targetWeightKg: null, pace: null,
   dayActivity: null, fitnessLevel: null, pushUpsMax: null, plankHoldSeconds: null, trainingDays: null,
-  sessionMinutes: null, availableEquipment: [], diet: null, mealsPerDay: null, onboardingCompleted: false,
+  sessionMinutes: null, availableEquipment: [], trainingPlaces: [], diet: null, mealsPerDay: null, onboardingCompleted: false,
   updatedAt: null,
 };
 const CORE = ['goal', 'age', 'gender', 'heightCm', 'weightKg', 'dayActivity', 'trainingDays', 'sessionMinutes'];

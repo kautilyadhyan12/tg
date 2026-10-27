@@ -19,6 +19,7 @@ import {
   healthyWeightFloorKg,
   missingPlanInputSchema,
   missingSetupAnswerSchema,
+  trainingPlaceSchema,
   MUSCLE_GAIN_PACE,
   patchOnboardingRequestSchema,
   planFlagSchema,
@@ -31,6 +32,7 @@ import {
   Barbell,
   DIET_ICONS,
   EQUIPMENT_ICONS,
+  PLACE_ICONS,
   GOAL_ICONS,
   LEVEL_ICONS,
   OneLegBalance,
@@ -51,14 +53,14 @@ const HEALTH_ANSWERED = { answered: true, hasCondition: false, checkFirst: null,
 const EMPTY = {
   displayName: 'Kd', weightGoal: null, fitnessGoals: [], age: null, gender: null, heightCm: null, weightKg: null,
   targetWeightKg: null, pace: null, dayActivity: null, fitnessLevel: null, pushUpsMax: null, plankHoldSeconds: null,
-  trainingDays: null, sessionMinutes: null, availableEquipment: [], diet: null, mealsPerDay: null,
+  trainingDays: null, sessionMinutes: null, availableEquipment: [], trainingPlaces: [], diet: null, mealsPerDay: null,
   onboardingCompleted: false, updatedAt: null,
   health: NO_HEALTH_ANSWER,
 };
 const ALL = {
   ...EMPTY, weightGoal: 'lose', age: 30, gender: 'female', heightCm: 165, weightKg: 70, targetWeightKg: 65,
   pace: 'steady', dayActivity: 'sitting', fitnessLevel: 'beginner', trainingDays: 3, sessionMinutes: 45,
-  availableEquipment: ['dumbbells'], diet: 'non_vegetarian', mealsPerDay: 3, health: HEALTH_ANSWERED,
+  availableEquipment: ['dumbbells'], trainingPlaces: ['home'], diet: 'non_vegetarian', mealsPerDay: 3, health: HEALTH_ANSWERED,
 };
 
 describe('what the screens offer is exactly what the server accepts', () => {
@@ -70,6 +72,7 @@ describe('what the screens offer is exactly what the server accepts', () => {
     expect(values(m.DAYS)).toEqual([...dayActivitySchema.options].sort());
     expect(values(m.LEVELS)).toEqual([...fitnessLevelSchema.options].sort());
     expect(values(m.EQUIPMENT)).toEqual([...equipmentSchema.options].sort());
+    expect(values(m.PLACES)).toEqual([...trainingPlaceSchema.options].sort());
     expect(values(m.DIETS)).toEqual([...dietSchema.options].sort());
   });
 
@@ -86,7 +89,7 @@ describe('what the screens offer is exactly what the server accepts', () => {
     expect(accepts({ mealsPerDay: Math.max(...m.MEALS_PER_DAY) + 1 })).toBe(false);
   });
 
-  it("screen 1 words the two questions as the goals ruling does, and screen 7 offers a gym (RULINGS 2026-09-10)", () => {
+  it("screen 1 words the two questions as the goals ruling does, and screen 7 asks where before what (Kd, 2026-10-27)", () => {
     expect(m.WEIGHT_GOALS.map((g) => g.label)).toEqual(['Lose weight', 'Keep my weight', 'Gain weight']);
     expect(m.GOALS.map((g) => g.label)).toEqual([
       'Build muscle',
@@ -99,8 +102,9 @@ describe('what the screens offer is exactly what the server accepts', () => {
       'Stress relief',
       'Stay healthy',
     ]);
-    // Kd, at 4a-iv's click-through: "the bracket everything there not needed".
-    expect(m.EQUIPMENT.at(-1)).toEqual({ value: 'gym', label: 'A gym' });
+    // A gym is a place, not equipment (Kd, 2026-10-27).
+    expect(m.EQUIPMENT.map((e) => e.label)).toEqual(['No equipment', 'Dumbbells', 'Resistance bands', 'Kettlebells', 'Pull-up bar']);
+    expect(m.PLACES.map((p) => p.label)).toEqual(['Home', 'Gym', 'Yoga studio', 'Pilates studio', 'CrossFit box', 'Personal trainer', 'Outdoors']);
   });
 
   it('every weight choice, goal, level and kind of equipment has a line icon, and nothing else does', () => {
@@ -112,6 +116,7 @@ describe('what the screens offer is exactly what the server accepts', () => {
     covered(GOAL_ICONS, fitnessGoalSchema.options);
     covered(LEVEL_ICONS, fitnessLevelSchema.options);
     covered(EQUIPMENT_ICONS, equipmentSchema.options);
+    covered(PLACE_ICONS, trainingPlaceSchema.options);
     covered(DIET_ICONS, dietSchema.options);
     // Every screen, the plan screen included, on the step bar and the plan's rows.
     covered(STEP_ICONS, m.SCREENS.map((s) => s.id));
@@ -283,21 +288,26 @@ describe('which screens a person sees, and where they land', () => {
 });
 
 describe('"No equipment" stands alone', () => {
-  it('clears the rest when tapped, a gym included, and is cleared by anything else', () => {
+  it('clears the rest when tapped, and is cleared by anything else', () => {
     expect(m.toggleEquipment(['dumbbells', 'kettlebells'], 'none')).toEqual(['none']);
-    expect(m.toggleEquipment(['gym', 'dumbbells'], 'none')).toEqual(['none']);
+    expect(m.toggleEquipment(['kettlebells', 'dumbbells'], 'none')).toEqual(['none']);
     expect(m.toggleEquipment(['none'], 'dumbbells')).toEqual(['dumbbells']);
-    expect(m.toggleEquipment(['none'], 'gym')).toEqual(['gym']);
+    expect(m.toggleEquipment(['none'], 'kettlebells')).toEqual(['kettlebells']);
     expect(m.toggleEquipment(['none'], 'none')).toEqual([]);
     expect(m.toggleEquipment(['pull_up_bar'], 'dumbbells')).toEqual(['dumbbells', 'pull_up_bar']);
-    // A gym beside home equipment: both are real answers.
-    expect(m.toggleEquipment(['dumbbells'], 'gym')).toEqual(['dumbbells', 'gym']);
     expect(m.toggleEquipment(['dumbbells', 'pull_up_bar'], 'dumbbells')).toEqual(['pull_up_bar']);
+  });
+
+  it("ticks and unticks a place in the screen's order, any number of them", () => {
+    expect(m.togglePlace([], 'gym')).toEqual(['gym']);
+    expect(m.togglePlace(['outdoors'], 'home')).toEqual(['home', 'outdoors']);
+    expect(m.togglePlace(['home', 'gym'], 'home')).toEqual(['gym']);
+    expect(m.togglePlace(undefined, 'yoga_studio')).toEqual(['yoga_studio']);
   });
 
   it('never produces a set the server refuses, whatever the taps', () => {
     let set = [];
-    for (const tap of ['dumbbells', 'none', 'gym', 'kettlebells', 'pull_up_bar', 'none', 'none', 'resistance_bands', 'gym', 'dumbbells']) {
+    for (const tap of ['dumbbells', 'none', 'kettlebells', 'pull_up_bar', 'none', 'none', 'resistance_bands', 'dumbbells']) {
       set = m.toggleEquipment(set, tap);
       expect(accepts({ availableEquipment: set }), JSON.stringify(set)).toBe(true);
     }
@@ -597,7 +607,7 @@ describe('a target under the lowest healthy weight is said on screen 3 as it is 
     // The plan screen names it by the same row, and the plan box says the line beside it.
     expect(m.answerValue('target', same, 'metric')).toMatch(/^50\.3 kg · /);
     const flags = [{ code: 'target_below_healthy_weight', floorKg: 50.4 }];
-    expect(m.flagLines({ flags }, 'lose', 'metric', m.targetShownValue('lose', same, 'metric'))).toEqual([FIRST]);
+    expect(m.flagLines({ flags, workings: { resting: { age: LOW.age } } }, 'lose', 'metric', m.targetShownValue('lose', same, 'metric'))).toEqual([FIRST]);
     // A target on the wrong side, or with no weight to keep to, reads as its own row.
     expect(m.targetShownRow('lose', { ...LOW, targetWeightKg: 83 }, 'metric')).toEqual({ whole: 83, tenth: 0 });
     expect(m.targetShownRow('lose', { ...LOW, weightKg: null }, 'metric')).toEqual({ whole: 45, tenth: 0 });
@@ -951,7 +961,8 @@ describe('the plan screen (ROADMAP 4c)', () => {
       fitnessGoals: ['muscle_gain', 'posture'],
       pushUpsMax: 12,
       plankHoldSeconds: 90,
-      availableEquipment: ['dumbbells', 'gym'],
+      availableEquipment: ['dumbbells', 'kettlebells'],
+      trainingPlaces: ['gym', 'yoga_studio'],
       diet: 'vegetarian_eggs',
       mealsPerDay: 4,
     };
@@ -962,7 +973,7 @@ describe('the plan screen (ROADMAP 4c)', () => {
       { id: 'day', title: 'Your day', value: 'Mostly sitting' },
       { id: 'training', title: 'Your training', value: 'Beginner · 12 push-ups · 1 min 30 s plank' },
       { id: 'week', title: 'Your week', value: '3 days a week · 45 minutes' },
-      { id: 'equipment', title: 'Equipment', value: 'Dumbbells · A gym' },
+      { id: 'equipment', title: 'Equipment', value: 'Gym · Yoga studio · Dumbbells · Kettlebells' },
       { id: 'health', title: 'Health', value: 'No' },
       { id: 'food', title: 'Food', value: 'Vegetarian with eggs · 4 meals a day' },
     ]);
@@ -998,8 +1009,8 @@ describe('the plan screen (ROADMAP 4c)', () => {
     expect(m.workoutsLine(ALL)).toBe('3 workouts a week, 45 minutes each');
     expect(m.workoutsLine({ ...ALL, trainingDays: 1, sessionMinutes: 20 })).toBe('1 workout a week, 20 minutes each');
     expect(m.workoutsLine({ ...ALL, sessionMinutes: null })).toBeNull();
-    expect(m.workoutsDetail(ALL)).toBe('Beginner · Dumbbells');
-    expect(m.workoutsDetail({ ...ALL, availableEquipment: ['none'] })).toBe('Beginner · No equipment');
+    expect(m.workoutsDetail(ALL)).toBe('Beginner · Home · Dumbbells');
+    expect(m.workoutsDetail({ ...ALL, availableEquipment: ['none'] })).toBe('Beginner · Home · No equipment');
     // The clearance is the person's word; the app cannot know it.
     expect(m.CLEARED_LINE).toBe('You told us a professional has cleared you. Follow their advice.');
   });

@@ -127,6 +127,19 @@ d("users fitness-profile routes (real Postgres)", () => {
   const put = (cookies: Record<string, string>, body: unknown) =>
     inject({ method: "PUT", url: "/v1/users/me/fitness-profile", body, cookies });
 
+  it("keeps where a person trains: saved, replaced, and kept by a save that leaves it out", { timeout: 30_000 }, async () => {
+    const { cookies } = await makeUser("ofp-places@example.com");
+    expect((await put(cookies, { age: 30, trainingPlaces: ["gym", "outdoors"] })).statusCode).toBe(200);
+    expect((await getProfile(cookies))["trainingPlaces"]).toEqual(["gym", "outdoors"]);
+    // A tab older than the question sends no places: they stay as picked.
+    expect((await put(cookies, { age: 31 })).statusCode).toBe(200);
+    expect(await getProfile(cookies)).toMatchObject({ age: 31, trainingPlaces: ["gym", "outdoors"] });
+    expect((await put(cookies, { age: 31, trainingPlaces: ["home"] })).statusCode).toBe(200);
+    expect((await getProfile(cookies))["trainingPlaces"]).toEqual(["home"]);
+    expect((await put(cookies, { age: 31, trainingPlaces: [] })).statusCode).toBe(200);
+    expect((await getProfile(cookies))["trainingPlaces"]).toEqual([]);
+  });
+
   /** The gate the web reads: `onboardingCompleted` on GET /v1/users/me. */
   const finishedOnMe = async (cookies: Record<string, string>) => {
     const res = await inject({ method: "GET", url: "/v1/users/me", cookies });
@@ -183,6 +196,7 @@ d("users fitness-profile routes (real Postgres)", () => {
       weightGoal: null, // the weight choice that sets the calories: none yet
       exerciseFrequency: null,
       availableEquipment: [],
+      trainingPlaces: [],
       sessionDurationMin: null,
       preferredWorkoutTime: null,
       diet: null, // screen 9's two, never guessed: a diet nobody gave is no diet
@@ -268,6 +282,7 @@ d("users fitness-profile routes (real Postgres)", () => {
       fitnessLevel: null,
       fitnessGoals: [],
       availableEquipment: [],
+      trainingPlaces: [],
       onboardingCompleted: false, // omitted → false: a partial save cannot satisfy the gate
     });
   });
@@ -301,6 +316,7 @@ d("users fitness-profile routes (real Postgres)", () => {
       weightGoal: null, // no weight choice sent, so none is stored
       exerciseFrequency: null,
       availableEquipment: [],
+      trainingPlaces: [],
       sessionDurationMin: null,
       preferredWorkoutTime: null,
       diet: null,
@@ -334,7 +350,9 @@ d("users fitness-profile routes (real Postgres)", () => {
       { weightGoal: "keep" }, // the screen's word; the stored value is "maintain"
       { mainGoal: "posture" }, // the old one-goal field is gone
       { availableEquipment: ["barbell"] }, // outside the enum
-      { availableEquipment: ["none", "gym"] }, // "no equipment" stands alone
+      { availableEquipment: ["none", "kettlebells"] }, // "no equipment" stands alone
+      { availableEquipment: ["gym"] }, // a gym is a place since 0168, never equipment
+      { trainingPlaces: ["spa"] }, // not a place on the list
       { age: 17 }, // below the floor of 18 (RULINGS 2026-09-15: the app is for 18 and over)
       { age: 121 }, // above the ceiling of 120
       { exerciseFrequency: 8 }, // > 7 days in a week

@@ -76,6 +76,7 @@ export function mergeFitnessProfile(current, edits) {
     weightGoal: current?.weightGoal ?? null,
     exerciseFrequency: current?.exerciseFrequency ?? null,
     availableEquipment: current?.availableEquipment ?? [],
+    trainingPlaces: current?.trainingPlaces ?? [],
     sessionDurationMin: current?.sessionDurationMin ?? null,
     preferredWorkoutTime: current?.preferredWorkoutTime ?? null,
     // Screen 9's two answers (4b-ii). Carried like every other field: the PUT

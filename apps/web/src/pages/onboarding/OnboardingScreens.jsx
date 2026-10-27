@@ -18,7 +18,7 @@ import GymMembershipCard from '../../components/gym/GymMembershipCard';
 import InvitationsPanel from '../../components/gym/InvitationsPanel';
 import HealthQuestion from './HealthQuestion';
 import NumberWheel from './NumberWheel';
-import { DIET_ICONS, EQUIPMENT_ICONS, GOAL_ICONS, LEVEL_ICONS, STEP_ICONS, WEIGHT_GOAL_ICONS } from './onboardingIcons';
+import { DIET_ICONS, EQUIPMENT_ICONS, GOAL_ICONS, LEVEL_ICONS, PLACE_ICONS, STEP_ICONS, WEIGHT_GOAL_ICONS } from './onboardingIcons';
 import {
   AGE_REST,
   CLEARED_LINE,
@@ -32,6 +32,7 @@ import {
   LEVELS,
   MEALS_PER_DAY,
   PACES,
+  PLACES,
   PLANK_REST,
   PUSH_UPS_REST,
   SESSION_MINUTES,
@@ -65,6 +66,7 @@ import {
   targetWrongSide,
   toggleEquipment,
   toggleGoal,
+  togglePlace,
   weightParts,
   weightShown,
   weightWholes,
@@ -688,9 +690,23 @@ export function WeekScreen({ answers, save }) {
 // ── Screen 7 ────────────────────────────────────────────────────────────────
 export function EquipmentScreen({ answers, save }) {
   const shown = cleanEquipment(answers.availableEquipment);
+  const places = Array.isArray(answers.trainingPlaces) ? answers.trainingPlaces : [];
   return (
     <div className="space-y-3">
-      <Question>What do you have to train with?</Question>
+      <Question>Where do you train?</Question>
+      <p className="text-gray-400 text-xs">Pick all that apply.</p>
+      <div className="grid grid-cols-2 gap-2">
+        {PLACES.map((p) => (
+          <Choice
+            key={`place-${p.value}`}
+            selected={places.includes(p.value)}
+            onSelect={() => save({ trainingPlaces: togglePlace(places, p.value) })}
+            icon={PLACE_ICONS[p.value]}
+            label={p.label}
+          />
+        ))}
+      </div>
+      <Question>What equipment do you have?</Question>
       <p className="text-gray-400 text-xs">Pick all that apply, or No equipment.</p>
       {EQUIPMENT.map((e) => (
         <Choice
