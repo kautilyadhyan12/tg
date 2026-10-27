@@ -14,7 +14,7 @@ interface Places {
 /** How many seconds the tabs wait for the sign-in to reach the server before giving up asking. */
 const PLACES_WAIT_TICKS = 30;
 
-const PlacesContext =createContext<Places>({ kinds: null, setKinds: () => undefined });
+const PlacesContext = createContext<Places>({ kinds: null, setKinds: () => undefined });
 
 export const usePlaces = () => useContext(PlacesContext);
 

@@ -44,22 +44,30 @@ const answerPath = (id: string, what: "accept" | "decline" | "not-me") =>
 export const placeLine = (orgType: unknown, city: string | null) =>
   city === null ? orgWords(orgType).itToMembersCap : `${orgWords(orgType).itToMembersCap} · ${city}`;
 
-/** Each invitation in its own box; View invitation opens it to review. `onAnswered` once the server has answered. */
+/** Each invitation in its own box; View invitation opens it to review. `onAnswered` once the server has answered.
+ *  `read` counts the server's reads of these invitations: an answer stands only until the next read,
+ *  which says what is true now (the gym may have invited the person again since). */
 export function InvitationList({
   invitations,
   label,
+  read = 0,
   onAnswered,
 }: {
   invitations: MyInvitation[];
   label?: string;
+  read?: number;
   onAnswered: (id: string, kind: Answered) => void;
 }) {
   // The invitation as it was opened: the page stays open, with what happened, after the list has moved on.
   const [open, setOpen] = useState<MyInvitation | null>(null);
-  const [answers, setAnswers] = useState<Readonly<Record<string, Answered>>>({});
+  const [answers, setAnswers] = useState<Readonly<Record<string, { kind: Answered; read: number }>>>({});
+  const answered = (id: string): Answered | undefined => {
+    const one = answers[id];
+    return one !== undefined && one.read === read ? one.kind : undefined;
+  };
   const found = open ?? undefined;
   // Opened again after an answer, the page starts from that answer, never from the first read.
-  const answer = found === undefined ? undefined : answers[found.id];
+  const answer = found === undefined ? undefined : answered(found.id);
   const shown =
     found === undefined
       ? null
@@ -77,9 +85,9 @@ export function InvitationList({
         {invitations.map((invitation) => (
           <Card key={invitation.id} style={styles.invite}>
             <PlaceHead name={invitation.gym.name} orgType={invitation.gym.orgType} city={invitation.gym.city}>
-              <StatePill invitation={invitation} answered={answers[invitation.id]} />
+              <StatePill invitation={invitation} answered={answered(invitation.id)} />
             </PlaceHead>
-            {answers[invitation.id] === "joined" ? null : (
+            {answered(invitation.id) === "joined" ? null : (
               <Button
                 label="View invitation"
                 say={`View invitation from ${invitation.gym.name}`}
@@ -102,7 +110,7 @@ export function InvitationList({
             setOpen(null);
           }}
           onAnswered={(kind) => {
-            setAnswers((before) => ({ ...before, [shown.id]: kind }));
+            setAnswers((before) => ({ ...before, [shown.id]: { kind, read } }));
             onAnswered(shown.id, kind);
           }}
         />

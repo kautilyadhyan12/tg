@@ -1,7 +1,9 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { GYM_CAN_SEE, GYM_NEVER_SEES, GYM_SEES_IF_YOU_ALLOW, INVITATION_WORDS, WAIVER_AGREE_LABEL, WAIVER_WORDS } from "@app/shared";
 import { App } from "../../src/App";
-import { RAVI, fakeServer, kept, lost, memoryStore, refusal, tokens, type Route } from "../kit";
+import { NOTE_CHECK_WAIT_MS } from "../../src/screens/BeforeYouStart";
+import { GYM_READ_AGAIN_MS } from "../../src/screens/GymTab";
+import { RAVI, fakeServer, kept, lost, memoryStore, never, refusal, tokens, type Route } from "../kit";
 
 const extra = { copyName: "Feature 1", apiUrl: "http://localhost:3000" };
 const noWait = () => Promise.resolve();
@@ -281,6 +283,25 @@ describe("You're invited", () => {
   });
 });
 
+describe("the fourth tab's word, and a read that never answers", () => {
+  it("a yoga member's tab reads Studio on the Dashboard, before the tab is ever opened", async () => {
+    const server = fakeServer({
+      "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }),
+      "/v1/orgs/mine": () => ({ status: 200, body: { orgs: [org(LOTUS)], formerOrgs: [] } }),
+    });
+    await render(<App extra={extra} ask={server.ask} store={memoryStore(kept(1))} wait={noWait} />);
+    expect(await screen.findByRole("tab", { name: "Studio" }, { timeout: 4_000 })).toBeTruthy();
+    expect(screen.queryByRole("tab", { name: "Gym" })).toBeNull();
+    expect(screen.getByRole("tab", { name: "Dashboard" }).props.accessibilityState).toEqual({ selected: true });
+  });
+
+  it("an invitations read that never answers lets the person on to the tabs", async () => {
+    await signIn({ "/v1/orgs/invitations": never });
+    expect(await screen.findByRole("tab", { name: "Dashboard" }, { timeout: NOTE_CHECK_WAIT_MS + 3_000 })).toBeTruthy();
+    expect(screen.queryByText("You’re invited")).toBeNull();
+  });
+});
+
 describe("an invitation opened again", () => {
   it("after Decline it opens declined, with Join and no Decline; after Join its row no longer opens", async () => {
     const lotusId = invitation(LOTUS).id;
@@ -365,6 +386,61 @@ describe("the Gym tab", () => {
     expect(screen.getAllByText("Iron House")).toHaveLength(1);
     expect(screen.queryByText("Invitations")).toBeNull();
     expect(screen.queryByRole("button", { name: "View invitation from Iron House" })).toBeNull();
+  });
+
+  it.each([
+    ["Join", "joined"],
+    ["Decline", "declined"],
+  ])("after %s, a gym that invites the person again shows a new invitation on the next read", async (button) => {
+    // The server keeps one invitation per gym and address: Invite again makes the same one waiting.
+    let answered = false;
+    const server = await openGym({
+      "/v1/orgs/mine": () => ({
+        status: 200,
+        body: answered ? { orgs: [], formerOrgs: [{ ...org(IRON), removedAt: "2026-10-27T10:00:00.000Z" }] } : { orgs: [], formerOrgs: [] },
+      }),
+      "/v1/orgs/invitations": waiting(invitation(IRON)),
+      [accept(IRON_ID)]: () => {
+        answered = true;
+        return joinedTo(IRON);
+      },
+      [decline(IRON_ID)]: () => {
+        answered = true;
+        return { status: 200, body: { state: "declined" } };
+      },
+    });
+    await review("Iron House");
+    await press(button === "Join" ? "Join Iron House" : "Decline");
+    await press(button === "Join" ? "Done" : "Close");
+    expect(await screen.findByText(button === "Join" ? "Joined" : "Declined")).toBeTruthy();
+    // Later: the tab is opened again and reads the server, which has the invitation waiting again.
+    const later = Date.now() + GYM_READ_AGAIN_MS + 1_000;
+    const clock = jest.spyOn(Date, "now").mockReturnValue(later);
+    try {
+      await fireEvent.press(screen.getByRole("tab", { name: "Dashboard" }));
+      await fireEvent.press(await gymTab());
+      expect(await screen.findByText("Invited")).toBeTruthy();
+      expect(screen.queryByText("Joined")).toBeNull();
+      expect(screen.queryByText("Declined")).toBeNull();
+      await review("Iron House");
+      expect(await screen.findByText("Iron House invited you to join as a member.")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Decline" })).toBeTruthy();
+      expect(server.paths().filter((path) => path === "/v1/orgs/invitations").length).toBeGreaterThanOrEqual(2);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it("with the places read failing and the invitations read working, it says so and Try again reads again", async () => {
+    let up = false;
+    await openGym({
+      "/v1/orgs/mine": () => (up ? { status: 200, body: { orgs: [org(IRON)], formerOrgs: [] } } : refusal(500, "internal", "Something went wrong.")),
+    });
+    expect(await screen.findByText("Couldn’t load your places.")).toBeTruthy();
+    up = true;
+    await press("Try again");
+    expect(await screen.findByText("Iron House")).toBeTruthy();
+    expect(screen.queryByText("Couldn’t load your places.")).toBeNull();
   });
 
   it("a place that removed the person says so", async () => {

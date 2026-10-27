@@ -44,9 +44,9 @@ import { GYM_CAN_SEE, GYM_NEVER_SEES, GYM_SEES_IF_YOU_ALLOW, orgWords } from '@a
 // It is FIRST because it is the only thing on the list that is not something
 // the member did at the gym, and a person deciding whether to join should read
 // it before the training rows.
-// The two lists live in @app/shared, so the phone app draws the same ones.
-const CAN_SEE = GYM_CAN_SEE;
-const NEVER_SEES = GYM_NEVER_SEES;
+// The three lists live in @app/shared, so the phone app draws the same ones. They knowingly differ
+// from §2.4's quote above: meals, weight and measurements only with the member's yes (RULINGS
+// 2026-09-22), and no "before joining / after leaving" line (Kd, rulings/2026-10-27-13a.md).
 
 
 function Row({ children, tone }) {
@@ -88,7 +88,7 @@ export default function OrgVisibilitySheet({ orgName = null, orgType = undefined
       </p>
 
       <ul className="mt-3">
-        {CAN_SEE.map((line) => (
+        {GYM_CAN_SEE.map((line) => (
           <Row key={line} tone="good">
             {line}
           </Row>
@@ -116,7 +116,7 @@ export default function OrgVisibilitySheet({ orgName = null, orgType = undefined
         Never
       </div>
       <ul>
-        {NEVER_SEES.map((line) => (
+        {GYM_NEVER_SEES.map((line) => (
           <Row key={line} tone="bad">
             {line}
           </Row>

@@ -36,6 +36,8 @@ export function GymScreen() {
   const { setKinds } = usePlaces();
   const [mine, setMine] = useState<Read<MyOrgsResponse> | null>(null);
   const [invites, setInvites] = useState<Read<MyInvitationsResponse> | null>(null);
+  /** How many times the invitations have been read: an answer on the phone stands until the next. */
+  const [invitesRead, setInvitesRead] = useState(0);
   const [checking, setChecking] = useState(false);
   // "Check for an invitation" was pressed and found none: the sentence says what to do.
   const [checked, setChecked] = useState(false);
@@ -51,7 +53,9 @@ export function GymScreen() {
 
   const readInvites = useCallback(async () => {
     const answer = await session.signedIn({ method: "GET", path: invitationsPath }, myInvitationsResponseSchema);
-    if (live.current) setInvites(answer.kind === "ok" ? answer : { kind: "failed" });
+    if (!live.current) return;
+    setInvites(answer.kind === "ok" ? answer : { kind: "failed" });
+    if (answer.kind === "ok") setInvitesRead((n) => n + 1);
   }, [session]);
 
   const readAll = useCallback(
@@ -110,6 +114,15 @@ export function GymScreen() {
         </Card>
       ) : null}
 
+      {mine?.kind === "failed" && invites?.kind === "ok" ? (
+        <View style={styles.row}>
+          <Txt kind="small" style={styles.grow}>
+            Couldn’t load your places.
+          </Txt>
+          <Button label="Try again" kind="link" busy={checking} onPress={() => void checkAgain()} />
+        </View>
+      ) : null}
+
       {joined.map((org) => (
         <Card key={org.id} style={styles.box}>
           <PlaceHead name={org.name} orgType={org.orgType} city={org.city}>
@@ -155,6 +168,7 @@ export function GymScreen() {
       <InvitationList
         label="Invitations"
         invitations={open}
+        read={invitesRead}
         onAnswered={(_, kind) => {
           // The page says what happened; the places above read again under it.
           if (kind === "joined") void readMine();
