@@ -536,7 +536,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
         - 12b-i. [x] **The sign-in itself** — merged 2026-10-14 (PR #256).
         - 12b-ii. [x] **The robot check on the phone** — merged 2026-10-14 (PR #263).
     - 12c. [x] **"Before you start" on the phone** — merged 2026-10-14 (PR #271).
-    - 12d. [ ] **Sign in with Google on the phone**: Google's own sign-in box, and a server route that takes its answer. Needs Kd's step in Google's console for each copy of the app, told to him in its plan.
+    - 12d. [x] **Sign in with Google on the phone** — merged 2026-10-27 (PR #369).
 13. [ ] **Invitations and Join**, with what the gym can see (spec Part 3 §10.2); My Gyms, under a name that fits a yoga or Pilates studio too (Kd, 2026-10-23, `rulings/2026-10-23-18u-i.md`); the invitation email's button opens the app.
 14. [ ] **Setup**: the eleven screens and the plan, the health question, Safe mode, the consent taps.
 15. [ ] **The pass** (spec Part 3 §12.2) and the days you came; later, a pass the phone can make with no signal.
