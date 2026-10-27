@@ -47,7 +47,7 @@ import {
   xpToNext,
 } from "./dashboard/words";
 import { useRead, type Read } from "./dashboard/useRead";
-import { GOALS_READ, GoalsBox, GoalsPage } from "./Goals";
+import { GOALS_READ, GoalsBox, GoalsPage, type GoalsOpen } from "./Goals";
 import { greetingAt } from "./greeting";
 import { COMING_SOON } from "./Soon";
 
@@ -80,7 +80,7 @@ export function DashboardScreen() {
   const meals = useRead(DASHBOARD_READS.meals, mealPageSchema);
   // A goal's days are the person's own: read again once the zone is saved.
   const goals = useRead(DASHBOARD_READS.goals, goalsResponseSchema, zoneSaved);
-  const [goalsOpen, setGoalsOpen] = useState(false);
+  const [goalsOpen, setGoalsOpen] = useState<GoalsOpen | null>(null);
   const reads = [overview, me, week, challenges, recent, runs, meals, goals];
   const failed = reads.some((one) => one.read.kind === "failed");
   const now = new Date();
@@ -131,9 +131,9 @@ export function DashboardScreen() {
       <ThisWeek week={week.read} now={now} />
       <GoalsBox
         read={goals.read}
-        onOpen={() => {
+        onOpen={(on) => {
           goals.again();
-          setGoalsOpen(true);
+          setGoalsOpen(on);
         }}
       />
       <Swipe>
@@ -148,7 +148,14 @@ export function DashboardScreen() {
       </Swipe>
       <Recent workouts={recent.read} runs={runs.read} meals={meals.read} />
       <Ready onPress={toWorkout} />
-      <GoalsPage open={goalsOpen} onClose={() => { setGoalsOpen(false); }} read={goals.read} again={goals.again} />
+      <GoalsPage
+        open={goalsOpen}
+        onClose={() => {
+          setGoalsOpen(null);
+        }}
+        read={goals.read}
+        again={goals.again}
+      />
     </Page>
   );
 }

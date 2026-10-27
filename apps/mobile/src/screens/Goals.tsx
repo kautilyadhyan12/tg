@@ -15,7 +15,7 @@ import {
 import { Button } from "../look/Button";
 import { Badge, Card } from "../look/Card";
 import { Chip } from "../look/Chip";
-import { boxShade, colours, orangeGradient, sizes } from "../look/colours";
+import { colours, orangeGradient, sizes } from "../look/colours";
 import { CoverPage } from "../look/CoverPage";
 import { Field } from "../look/Field";
 import { Icon } from "../look/Icon";
@@ -35,10 +35,12 @@ import {
   exerciseName,
   freePeriods,
   goalLine,
+  goalName,
   goalProgress,
   newGoalId,
   startingTarget,
   summaryWords,
+  targetLabel,
   type Progress,
 } from "./goals/words";
 
@@ -60,14 +62,18 @@ function failureWords(answer: Answer<unknown>): string {
   return answer.kind === "refused" ? answer.message : NO_CONNECTION;
 }
 
+/** What the Dashboard opens: the list, or the list with Add a goal open over it. */
+export type GoalsOpen = "list" | "add";
+
 /** The Dashboard's box: how many are reached, and the first three goals. */
-export function GoalsBox({ read, onOpen }: { read: Read<GoalsResponse>; onOpen: () => void }) {
+export function GoalsBox({ read, onOpen }: { read: Read<GoalsResponse>; onOpen: (on: GoalsOpen) => void }) {
   const goals = read.kind === "ok" ? read.data.goals : null;
   const summary = goals === null ? null : summaryWords(goals);
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel="Your Goals, View all" onPress={onOpen} style={styles.box}>
-      <Image source={pictures.goalsbox} resizeMode="contain" style={styles.boxArt} accessible={false} />
-      <View style={[StyleSheet.absoluteFill, styles.boxShade]} />
+    <Pressable accessibilityRole="button" accessibilityLabel="Your Goals, View all" onPress={() => { onOpen("list"); }} style={styles.box}>
+      <View style={styles.boxArt}>
+        <Image source={pictures.goalsbox} resizeMode="contain" style={styles.fill} accessible={false} />
+      </View>
       <View style={styles.inner}>
         <View style={styles.between}>
           <View style={styles.titleRow}>
@@ -83,7 +89,10 @@ export function GoalsBox({ read, onOpen }: { read: Read<GoalsResponse>; onOpen: 
         {goals === null ? (
           <Txt kind="small">{NOT_KNOWN}</Txt>
         ) : goals.length === 0 ? (
-          <Txt kind="small">No goals yet.</Txt>
+          <>
+            <Txt kind="small">No goals yet.</Txt>
+            <Button label="Add a goal" icon="plus" compact onPress={() => { onOpen("add"); }} />
+          </>
         ) : (
           <>
             {summary === null ? null : <Txt kind="big">{summary}</Txt>}
@@ -126,7 +135,7 @@ function Bar({ share }: { share: number }) {
 }
 
 interface GoalsPageProps {
-  open: boolean;
+  open: GoalsOpen | null;
   onClose: () => void;
   read: Read<GoalsResponse>;
   again: () => void;
@@ -144,7 +153,8 @@ export function GoalsPage({ open, onClose, read, again }: GoalsPageProps) {
   const full = goals !== null && max !== null && goals.length >= max;
 
   useEffect(() => {
-    if (!open) setNotice(null);
+    setNotice(null);
+    setAdding(open === "add");
   }, [open]);
 
   const done = (words: string) => {
@@ -156,7 +166,7 @@ export function GoalsPage({ open, onClose, read, again }: GoalsPageProps) {
 
   return (
     <CoverPage
-      open={open}
+      open={open !== null}
       title="Your Goals"
       picture="goals"
       onClose={onClose}
@@ -242,7 +252,7 @@ function GoalRow({ goal, units, onPress }: { goal: Goal; units: string; onPress:
     >
       <Badge icon={KIND_ICONS[goal.kind]} tone={progress.kind === "held" || progress.kind === "needs" ? "gold" : "orange"} />
       <View style={[styles.grow, styles.tight]}>
-        <Txt kind="body" style={styles.semibold} numberOfLines={2}>
+        <Txt kind="body" colour="text" style={styles.semibold} numberOfLines={2}>
           {line}
         </Txt>
         <View style={styles.titleRow}>
@@ -281,13 +291,12 @@ function Editor(props: {
       {max === null ? (
         <Txt kind="small">{props.kind === "weight" ? "Your target weight sets this goal." : "Your plan sets this number."}</Txt>
       ) : (
-        <Field label={`Target, ${unitLabel(props.kind)}`} value={props.typed} onChange={props.onTyped} keyboard="number-pad" maxLength={6} />
+        <Field label={targetLabel(props.kind, props.period)} value={props.typed} onChange={props.onTyped} keyboard="number-pad" maxLength={6} />
       )}
     </>
   );
 }
 
-const unitLabel = (kind: GoalKind): string => GOAL_KIND_RULES[kind].unit;
 
 /** One goal: change its period or number, or remove it, which asks first. */
 function GoalSheet({ goal, units, onClose, onDone }: { goal: Goal | null; units: string; onClose: () => void; onDone: (words: string) => void }) {
@@ -339,7 +348,7 @@ function GoalSheet({ goal, units, onClose, onDone }: { goal: Goal | null; units:
   };
 
   return (
-    <Sheet open title={asking ? "Remove this goal?" : KIND_NAMES[goal.kind]} onClose={onClose}>
+    <Sheet open title={asking ? "Remove this goal?" : goalName(goal)} onClose={onClose}>
       {asking ? (
         <>
           <Txt kind="small">{goalLine(goal, units)}</Txt>
@@ -543,15 +552,17 @@ const styles = StyleSheet.create({
   centre: { textAlign: "center" },
   boxTitle: { fontSize: 14, lineHeight: 18, color: colours.textSoft },
   box: {
+    minHeight: 150,
     backgroundColor: colours.box,
     borderWidth: 1,
     borderColor: colours.line,
     borderRadius: sizes.boxRadius,
     overflow: "hidden",
   },
-  boxArt: { position: "absolute", top: 0, right: -6, width: "52%", height: "100%" },
-  boxShade: { experimental_backgroundImage: boxShade },
-  boxRow: { gap: 5, maxWidth: "72%" },
+  // Under the title row, so View all is never over the drawing.
+  boxArt: { position: "absolute", top: 34, bottom: -4, right: -8, width: "54%" },
+  fill: { position: "absolute", width: "100%", height: "100%" },
+  boxRow: { gap: 5, maxWidth: "56%" },
   bar: { flexDirection: "row", height: 6, borderRadius: sizes.round, backgroundColor: colours.track, overflow: "hidden" },
   barFill: { borderRadius: sizes.round, backgroundColor: colours.orange, experimental_backgroundImage: orangeGradient },
   notice: { flexDirection: "row", alignItems: "center", gap: 8 },

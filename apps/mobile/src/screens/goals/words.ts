@@ -203,6 +203,20 @@ export function checkTarget(typed: string, kind: GoalKind, period: GoalPeriod | 
   return { ok: true, target: n };
 }
 
+const UNIT_LABELS: Readonly<Record<Goal["unit"], string>> = { days: "Days", kcal: "Kcal", minutes: "Minutes", reps: "Reps", kg: "Kg", g: "Grams" };
+
+/** The number box's label: "Days a week", "Kcal a day", "Days in a row", "Reps". */
+export function targetLabel(kind: GoalKind, period: GoalPeriod | null): string {
+  if (kind === "streak") return "Days in a row";
+  const unit = UNIT_LABELS[GOAL_KIND_RULES[kind].unit];
+  return period === null ? unit : `${unit} ${EACH[period]}`;
+}
+
+/** A goal's own name, as a box opened on it is headed: its exercise for reps in one set. */
+export function goalName(goal: Pick<Goal, "kind" | "exerciseSlug">): string {
+  return goal.kind === "reps_in_set" ? exerciseName(goal.exerciseSlug) : KIND_NAMES[goal.kind];
+}
+
 /** A goal id made on the phone, in small letters: the same request sent twice is one goal. */
 export function newGoalId(random: () => number = Math.random): string {
   const hex = Array.from({ length: 32 }, () => Math.floor(random() * 16).toString(16));

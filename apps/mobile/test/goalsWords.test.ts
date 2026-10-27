@@ -7,10 +7,12 @@ import {
   exerciseName,
   freePeriods,
   goalLine,
+  goalName,
   goalProgress,
   newGoalId,
   startingTarget,
   summaryWords,
+  targetLabel,
   weightWords,
 } from "../src/screens/goals/words";
 
@@ -130,6 +132,21 @@ describe("adding and changing", () => {
     [" 30 ", "active_minutes", "day", { ok: true, target: 30 }],
   ] as const)("%j for %s %s", (typed, kind, period, result) => {
     expect(checkTarget(typed, kind, period)).toEqual(result);
+  });
+
+  it.each([
+    ["training_days", "week", "Days a week"],
+    ["calories_burned", "day", "Kcal a day"],
+    ["active_minutes", "month", "Minutes a month"],
+    ["streak", null, "Days in a row"],
+    ["reps_in_set", null, "Reps"],
+  ] as const)("the number box for %s %s reads %s", (kind, period, label) => {
+    expect(targetLabel(kind, period)).toBe(label);
+  });
+
+  it("a reps goal is named by its exercise", () => {
+    expect(goalName({ kind: "reps_in_set", exerciseSlug: "jump_squat" })).toBe("Jump squat");
+    expect(goalName({ kind: "protein", exerciseSlug: null })).toBe("Protein");
   });
 
   it("a goal id is a UUID in small letters, new each time", () => {

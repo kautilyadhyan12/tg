@@ -75,6 +75,13 @@ async function openGoals(goals: Goals, more: Record<string, Route> = {}) {
   return server;
 }
 
+/** The page's own Add a goal, held at its foot; the Dashboard's empty box has one too. */
+function pageAdd() {
+  const button = screen.getAllByRole("button", { name: "Add a goal" }).at(-1);
+  if (button === undefined) throw new Error("Add a goal was expected");
+  return button;
+}
+
 const writes = (server: ReturnType<typeof goalsServer>) => server.asked.filter((one) => one.method === "PUT" || one.method === "DELETE");
 
 describe("the worst thing: nobody is handed a weight to lose that the health rules hold, and nobody sees another's goals", () => {
@@ -94,7 +101,7 @@ describe("the worst thing: nobody is handed a weight to lose that the health rul
       list: [],
       put: () => refusal(409, "goal_held", "Your plan holds your weight steady, so it sets no weight to lose."),
     });
-    await fireEvent.press(screen.getByRole("button", { name: "Add a goal" }));
+    await fireEvent.press(pageAdd());
     await fireEvent.press(screen.getByRole("radio", { name: "Weight" }));
     expect(screen.getByText("Your target weight sets this goal.")).toBeTruthy();
     await fireEvent.press(screen.getByRole("button", { name: "Add goal" }));
@@ -167,10 +174,18 @@ describe("Your Goals on the Dashboard", () => {
     expect(screen.getByRole("button", { name: "Eat 140 g protein a day, 86 of 140 g today" })).toBeTruthy();
   });
 
+  it("an empty box's Add a goal opens the page with Add a goal already open", async () => {
+    const server = goalsServer({ list: [] });
+    await render(<App extra={extra} ask={server.ask} store={memoryStore(kept(1))} wait={noWait} />);
+    expect(await screen.findByText("No goals yet.")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Add a goal" }));
+    expect(await screen.findByRole("radio", { name: "Training days" })).toBeTruthy();
+  });
+
   it("with no goals it says so, and Add a goal is there", async () => {
     await openGoals({ list: [] });
     expect(screen.getAllByText("No goals yet.").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByRole("button", { name: "Add a goal" })).toBeTruthy();
+    expect(pageAdd()).toBeTruthy();
   });
 
   it("a failed read shows no number, and Try again reads it again", async () => {
@@ -204,7 +219,7 @@ describe("change and remove", () => {
         }),
     });
     await fireEvent.press(await screen.findByRole("button", { name: "Train 4 days a week, 2 of 4 days this week" }));
-    await fireEvent.changeText(screen.getByLabelText("Target, days"), "5");
+    await fireEvent.changeText(screen.getByLabelText("Days a week"), "5");
     await fireEvent.press(screen.getByRole("button", { name: "Save" }));
     await fireEvent.press(screen.getByRole("button", { name: "Save" }));
     expect(writes(server)).toHaveLength(1);
@@ -220,7 +235,7 @@ describe("change and remove", () => {
   it("a number too big is not sent, and the box says the range", async () => {
     const server = await openGoals({ list: [TRAIN] });
     await fireEvent.press(await screen.findByRole("button", { name: "Train 4 days a week, 2 of 4 days this week" }));
-    await fireEvent.changeText(screen.getByLabelText("Target, days"), "9");
+    await fireEvent.changeText(screen.getByLabelText("Days a week"), "9");
     await fireEvent.press(screen.getByRole("button", { name: "Save" }));
     expect(screen.getByText("Enter a number from 1 to 7.")).toBeTruthy();
     expect(writes(server)).toEqual([]);
@@ -230,7 +245,7 @@ describe("change and remove", () => {
     const server = await openGoals({ list: [TRAIN] });
     await fireEvent.press(await screen.findByRole("button", { name: "Train 4 days a week, 2 of 4 days this week" }));
     await fireEvent.press(screen.getByRole("radio", { name: "Month" }));
-    expect(screen.getByLabelText("Target, days").props.value).toBe("12");
+    expect(screen.getByLabelText("Days a month").props.value).toBe("12");
     await fireEvent.press(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => {
       expect(writes(server)[0]?.body).toEqual({ kind: "training_days", period: "month", target: 12, exerciseId: null });
@@ -290,13 +305,13 @@ describe("add a goal", () => {
         };
       });
     const server = await openGoals(goals);
-    await fireEvent.press(screen.getByRole("button", { name: "Add a goal" }));
+    await fireEvent.press(pageAdd());
     // Protein has one period and is kept already; training days still has month and year.
     expect(screen.queryByRole("radio", { name: "Protein" })).toBeNull();
     await fireEvent.press(screen.getByRole("radio", { name: "Training days" }));
     expect(screen.queryByRole("radio", { name: "Week" })).toBeNull();
     expect(screen.getByRole("radio", { name: "Month", selected: true })).toBeTruthy();
-    expect(screen.getByLabelText("Target, days").props.value).toBe("12");
+    expect(screen.getByLabelText("Days a month").props.value).toBe("12");
     await fireEvent.press(screen.getByRole("button", { name: "Add goal" }));
     await fireEvent.press(screen.getByRole("button", { name: "Add goal" }));
     // Pressed twice while the first is away: sent once.
@@ -324,7 +339,7 @@ describe("add a goal", () => {
         return { status: 201, body: { goal: goal({ id, kind: "streak", target: 7, current: 0, ...(body as object) }) } };
       },
     });
-    await fireEvent.press(screen.getByRole("button", { name: "Add a goal" }));
+    await fireEvent.press(pageAdd());
     await fireEvent.press(screen.getByRole("radio", { name: "Streak" }));
     await fireEvent.press(screen.getByRole("button", { name: "Add goal" }));
     expect(await screen.findByText("No connection. Try again.")).toBeTruthy();
@@ -340,7 +355,7 @@ describe("add a goal", () => {
       list: [],
       put: (id, body) => ({ status: 201, body: { goal: goal({ id, kind: "reps_in_set", exerciseSlug: "squat", target: 10, current: null, reached: false, ...(body as object) }) } }),
     });
-    await fireEvent.press(screen.getByRole("button", { name: "Add a goal" }));
+    await fireEvent.press(pageAdd());
     await fireEvent.press(screen.getByRole("radio", { name: "Reps in one set" }));
     await fireEvent.press(screen.getByRole("button", { name: "Add goal" }));
     expect(screen.getByText("Pick an exercise.")).toBeTruthy();
