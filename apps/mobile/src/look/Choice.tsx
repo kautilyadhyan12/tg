@@ -150,6 +150,7 @@ const styles = StyleSheet.create({
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: {
     flexDirection: "row",
+    alignSelf: "flex-start",
     alignItems: "center",
     gap: 6,
     height: sizes.press,

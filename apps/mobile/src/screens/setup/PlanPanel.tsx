@@ -64,7 +64,9 @@ export function PlanPanel({ plan, direction, units, targetShown }: PlanPanelProp
         <Txt colour="orange" style={styles.howLabel}>
           How is this worked out?
         </Txt>
-        <Icon name={open ? "updown" : "down"} size={14} colour="orange" />
+        <View style={open ? styles.up : null}>
+          <Icon name="down" size={14} colour="orange" />
+        </View>
       </Pressable>
       {open ? (
         <View style={styles.steps}>
@@ -89,6 +91,7 @@ const styles = StyleSheet.create({
   flag: { fontFamily: fonts.medium, fontSize: 13, lineHeight: 18 },
   how: { flexDirection: "row", alignItems: "center", gap: 4, minHeight: 32, alignSelf: "flex-start" },
   howLabel: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 18 },
+  up: { transform: [{ rotate: "180deg" }] },
   steps: { gap: 10 },
   step: { gap: 2 },
 });
