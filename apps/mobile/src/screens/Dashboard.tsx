@@ -15,7 +15,7 @@ import {
 } from "@app/shared";
 import { Button } from "../look/Button";
 import { Badge, Card, Pill } from "../look/Card";
-import { colours, orangeGradient, pictureShade, sizes } from "../look/colours";
+import { boxShade, colours, orangeGradient, pictureShade, sizes } from "../look/colours";
 import { Icon, type IconName } from "../look/Icon";
 import { Page } from "../look/Page";
 import { pictures, type PictureName } from "../look/pictures";
@@ -177,6 +177,7 @@ function Stat(props: { picture: PictureName; icon: IconName; tone?: "orange" | "
   return (
     <Card style={styles.stat}>
       <Image source={pictures[props.picture]} resizeMode="contain" style={styles.statArt} accessible={false} />
+      <View style={[StyleSheet.absoluteFill, styles.statShade]} />
       <Badge icon={props.icon} tone={props.tone ?? "orange"} />
       <View>
         <Txt kind="big">{props.value}</Txt>
@@ -238,7 +239,8 @@ function Figure({ value, label }: { value: string; label: string }) {
 function Bar({ share }: { share: number }) {
   return (
     <View style={styles.bar}>
-      <View style={[styles.barFill, { flex: share }]} />
+      {/* An empty bar draws no fill: no gradient on a view with no width. */}
+      {share > 0 ? <View style={[styles.barFill, { flex: share }]} /> : null}
       <View style={{ flex: 100 - share }} />
     </View>
   );
@@ -467,7 +469,8 @@ const styles = StyleSheet.create({
   shade: { experimental_backgroundImage: pictureShade },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   stat: { width: "47%", flexGrow: 1, minHeight: 118, gap: 8 },
-  statArt: { position: "absolute", right: -6, bottom: 6, width: 88, height: 88, opacity: 0.9 },
+  statArt: { position: "absolute", top: 0, right: 0, width: "65%", height: "100%", opacity: 0.95 },
+  statShade: { experimental_backgroundImage: boxShade },
   split: { flexDirection: "row", padding: 0, gap: 0 },
   sideArt: { width: 92, borderLeftWidth: 1, borderLeftColor: colours.line },
   sideArtNarrow: { width: 76, borderLeftWidth: 1, borderLeftColor: colours.line },
@@ -478,7 +481,8 @@ const styles = StyleSheet.create({
   days: { flexDirection: "row", justifyContent: "space-between" },
   day: { alignItems: "center", gap: 6 },
   dot: { width: 30, height: 30, borderRadius: 15, backgroundColor: colours.fill, alignItems: "center", justifyContent: "center" },
-  dotDone: { backgroundColor: colours.orange, experimental_backgroundImage: orangeGradient },
+  // Flat: a gradient on these crashed Android 15 on Kd's phone (IllegalArgumentException in LinearGradient).
+  dotDone: { backgroundColor: colours.orange },
   dotNow: { borderWidth: 1.5, borderColor: colours.orange, backgroundColor: colours.orangeFill },
   dayName: { fontFamily: fonts.bold, textTransform: "uppercase" },
   swipe: { marginRight: -sizes.edge },
