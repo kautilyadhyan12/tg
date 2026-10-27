@@ -4,6 +4,7 @@
 // overrides.geo (buildApp seam).
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
+import { runPageSchema } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createMemoryRedis } from "../src/redis.js";
@@ -250,6 +251,7 @@ d("geo routes + geocode cache (real Postgres, fake ORS)", () => {
 
     const list = await inject("GET", "/v1/geo/runs", cookieA);
     expect(list.statusCode).toBe(200);
+    expect(runPageSchema.safeParse(list.json()).success).toBe(true);
     const listed = list.json<{ items: { id: string; routeName: string; polyline?: string }[] }>().items;
     const mine = listed.find((r) => r.id === runId);
     expect(mine?.routeName).toBe("Evening run");

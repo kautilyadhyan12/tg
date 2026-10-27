@@ -4,9 +4,11 @@ import { App } from "../../src/App";
 import type { AskGoogle, GoogleAnswer } from "../../src/session/google";
 import { GOOGLE_FAILED, NO_ANSWER } from "../../src/screens/SignIn";
 import { pictures } from "../../src/look/pictures";
+import { DASHBOARD_READS } from "../../src/screens/Dashboard";
 import { RAVI, fakeServer, kept, lost, memoryStore, refusal, tokens, type Route } from "../kit";
 
 const extra = { copyName: "Feature 1", apiUrl: "http://localhost:3000" };
+const DASHBOARD_PATHS: string[] = Object.values(DASHBOARD_READS).map((path) => path.split("?")[0] ?? path);
 
 const sent: Route = () => ({
   status: 200,
@@ -49,9 +51,13 @@ describe("the worst thing, on the screen", () => {
     await fireEvent.press(screen.getByRole("tab", { name: "Me" }));
     expect(await screen.findByText("ravi@example.com")).toBeTruthy();
     // Every later try has had no answer either, and the person is where they were.
+    // Four tries on opening; the Dashboard's reads, when they come after those, share four more.
+    const refreshes = () => server.paths().filter((path) => path === "/v1/auth/refresh").length;
     await waitFor(() => {
-      expect(server.paths().filter((path) => path === "/v1/auth/refresh")).toHaveLength(4);
+      expect(refreshes()).toBeGreaterThanOrEqual(4);
     });
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+    expect([4, 8]).toContain(refreshes());
     expect(screen.getByText("ravi@example.com")).toBeTruthy();
     expect(screen.queryByText("Get started.")).toBeNull();
     expect(store.value).toBe(kept(1));
@@ -193,17 +199,21 @@ describe("signing in by email code", () => {
     // On the Dashboard, greeted by name.
     expect(await screen.findByRole("header", { name: "Ravi" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "Dashboard" }).props.accessibilityState).toEqual({ selected: true });
-    expect(server.asked.map((one) => [one.path, one.body])).toEqual([
+    // The Dashboard's own reads aside (test/screens/dashboard.test.tsx).
+    const signingIn = server.asked.filter((one) => !DASHBOARD_PATHS.includes(one.path));
+    expect(signingIn.map((one) => [one.path, one.body])).toEqual([
       ["/v1/auth/code/send", { email: "ravi@example.com" }],
       ["/v1/auth/code/verify", { email: "ravi@example.com", code: "123456", client: "phone" }],
       // "Before you start" is asked of the server, as the person signed in now.
       ["/v1/users/me", undefined],
       // Then what any gym has invited this address to, before the tabs.
       ["/v1/orgs/invitations", undefined],
+      // The profile once more, for the time zone the server keys the person's days in.
+      ["/v1/users/me", undefined],
       // And the places the person is in, for the Gym tab's word.
       ["/v1/orgs/mine", undefined],
     ]);
-    expect(server.asked.at(-1)?.headers.authorization).toBe("Bearer access-1");
+    expect(signingIn.at(-1)?.headers.authorization).toBe("Bearer access-1");
     // The server said they ticked it, so the phone keeps that with the sign-in.
     expect(store.value).toBe(kept(1));
     await fireEvent.press(screen.getByRole("tab", { name: "Me" }));

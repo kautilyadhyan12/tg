@@ -15,6 +15,8 @@ interface ButtonProps {
   /** A mark of its own in the icon's place, such as Google's G. */
   lead?: ReactNode;
   small?: boolean;
+  /** Drawn 34 tall over a picture where a full button would hide it; its touch area stays 44. */
+  compact?: boolean;
   wide?: boolean;
   /** Drawn faint, and a press does nothing. */
   disabled?: boolean;
@@ -34,7 +36,7 @@ const ink: Record<ButtonKind, ColourName> = {
   quiet: "textSoft",
 };
 
-/** A main button is 48 tall, a small one 44; nothing pressed is smaller. */
+/** A main button is 48 tall, a small one 44; a compact one is drawn 34 tall and still pressed over 44. */
 export function Button({
   label,
   onPress,
@@ -42,6 +44,7 @@ export function Button({
   icon,
   lead,
   small = false,
+  compact = false,
   wide = false,
   disabled = false,
   busy = false,
@@ -56,10 +59,12 @@ export function Button({
       accessibilityState={{ disabled: disabled || busy, busy }}
       disabled={disabled || busy}
       onPress={onPress}
+      hitSlop={compact ? COMPACT_SLOP : undefined}
       style={({ pressed }) => [
         styles.button,
         styles[kind],
         small || words ? styles.small : null,
+        compact ? styles.compact : null,
         words ? styles.words : null,
         wide ? styles.wide : null,
         pressed ? styles.pressed : null,
@@ -71,8 +76,8 @@ export function Button({
         <ActivityIndicator color={colours[ink[kind]]} />
       ) : (
         <>
-          {lead ?? (icon === undefined ? null : <Icon name={icon} size={small ? 16 : 18} colour={ink[kind]} />)}
-          <Txt colour={ink[kind]} style={small || words ? styles.smallLabel : styles.label}>
+          {lead ?? (icon === undefined ? null : <Icon name={icon} size={compact ? 14 : small ? 16 : 18} colour={ink[kind]} />)}
+          <Txt colour={ink[kind]} style={compact ? styles.compactLabel : small || words ? styles.smallLabel : styles.label}>
             {label}
           </Txt>
         </>
@@ -80,6 +85,8 @@ export function Button({
     </Pressable>
   );
 }
+
+const COMPACT_SLOP = { top: 5, bottom: 5, left: 4, right: 4 };
 
 const styles = StyleSheet.create({
   button: {
@@ -101,10 +108,12 @@ const styles = StyleSheet.create({
   link: {},
   quiet: {},
   small: { height: sizes.press, paddingHorizontal: 16 },
+  compact: { height: 34, paddingHorizontal: 13, gap: 6 },
   words: { paddingHorizontal: 4 },
   wide: { alignSelf: "stretch" },
   pressed: { opacity: 0.85, transform: [{ scale: 0.98 }] },
   disabled: { opacity: 0.45 },
   label: { fontFamily: fonts.semibold, fontSize: 15, lineHeight: 20 },
   smallLabel: { fontFamily: fonts.semibold, fontSize: 14, lineHeight: 20 },
+  compactLabel: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 18 },
 });

@@ -85,6 +85,35 @@ export async function listRuns(
   return rows.map(toRun);
 }
 
+/** Progress's numbers (ROADMAP 31a): the person's runs since `since`, counted and summed. */
+export async function getRunTotals(
+  sql: Sql,
+  userId: string,
+  since: Date | null,
+): Promise<{ count: number; durationMs: number; kcal: number }> {
+  const [r] = await sql<{ n: string; dur: string; kcal: string }[]>`
+    SELECT count(*) AS n, coalesce(sum(duration_s), 0) AS dur, coalesce(sum(kcal_point), 0) AS kcal
+    FROM runs
+    WHERE user_id = ${userId} AND (${since === null} OR started_at >= ${since})`;
+  return { count: Number(r?.n ?? 0), durationMs: Number(r?.dur ?? 0) * 1000, kcal: Number(r?.kcal ?? 0) };
+}
+
+/** The days with a run since `since`, in the person's own time zone (a safeTimeZone-validated IANA
+ *  name, always a parameterized value), oldest first. */
+export async function getRunDays(
+  sql: Sql,
+  userId: string,
+  since: Date | null,
+  timeZone: string,
+): Promise<{ date: string; runs: number }[]> {
+  const rows = await sql<{ day: string; n: string }[]>`
+    SELECT to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day, count(*) AS n
+    FROM runs
+    WHERE user_id = ${userId} AND (${since === null} OR started_at >= ${since})
+    GROUP BY day ORDER BY day ASC`;
+  return rows.map((r) => ({ date: r.day, runs: Number(r.n) }));
+}
+
 export async function getRun(sql: Sql, userId: string, id: string): Promise<RunRow | null> {
   const rows = await sql<RunDbRow[]>`
     SELECT id, started_at, duration_s, distance_m, route_name, kcal_point, source, polyline

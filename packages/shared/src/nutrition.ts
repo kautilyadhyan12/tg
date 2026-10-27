@@ -303,6 +303,10 @@ export const mealSchema = z.object({
 });
 export type Meal = z.infer<typeof mealSchema>;
 
+/** GET /v1/nutrition/meals: a page of the person's meals, newest first. */
+export const mealPageSchema = z.object({ items: z.array(mealSchema), nextCursor: z.string().nullable() });
+export type MealPage = z.infer<typeof mealPageSchema>;
+
 export const dishwareInputSchema = z.object({
   label: z.string().trim().min(1).max(100), containerClass: z.string().trim().min(1).max(80),
   volumeMl: z.number().int().positive().max(10_000), foodHint: z.string().trim().min(1).max(120).nullable().optional(),

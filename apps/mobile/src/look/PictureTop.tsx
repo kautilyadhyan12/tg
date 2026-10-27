@@ -13,11 +13,13 @@ interface PictureTopProps {
   above?: ReactNode;
   eyebrow?: string;
   title?: string;
+  /** At its foot, under the title's place: the page's one thing to do. */
+  foot?: ReactNode;
 }
 
 /** A page's own picture: edge to edge from the top of the phone, running into the page under it.
  *  Never a box of its own. The page's first words lie over it. */
-export function PictureTop({ picture, tall, above, eyebrow, title }: PictureTopProps) {
+export function PictureTop({ picture, tall, above, eyebrow, title, foot }: PictureTopProps) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   return (
@@ -25,10 +27,11 @@ export function PictureTop({ picture, tall, above, eyebrow, title }: PictureTopP
       <Image source={pictures[picture]} resizeMode="cover" style={styles.photo} accessible={false} />
       <View style={[StyleSheet.absoluteFill, styles.fade]} />
       {above === undefined ? null : <View style={[styles.above, { top: insets.top + 12 }]}>{above}</View>}
-      {eyebrow === undefined && title === undefined ? null : (
+      {eyebrow === undefined && title === undefined && foot === undefined ? null : (
         <View style={styles.words}>
           {eyebrow === undefined ? null : <Txt kind="eyebrow">{eyebrow}</Txt>}
           {title === undefined ? null : <Txt kind="h2">{title}</Txt>}
+          {foot}
         </View>
       )}
     </View>
