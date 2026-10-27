@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { StyleSheet, Text, type StyleProp, type TextStyle } from "react-native";
 import { colours, type ColourName } from "./colours";
+import { MOST_TEXT_GROWTH } from "./sizing";
 
 /** Inter, one file a weight: Android picks a weight by the font's name. */
 export const fonts = {
@@ -29,6 +30,7 @@ export function Txt({ kind = "body", colour, style, numberOfLines, children }: T
     <Text
       accessibilityRole={kind === "hero" || kind === "h1" || kind === "h2" || kind === "h3" ? "header" : undefined}
       numberOfLines={numberOfLines}
+      maxFontSizeMultiplier={MOST_TEXT_GROWTH}
       style={[kinds[kind], colour === undefined ? null : { color: colours[colour] }, style]}
     >
       {children}

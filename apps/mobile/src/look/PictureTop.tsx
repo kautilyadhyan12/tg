@@ -3,6 +3,7 @@ import { Image, StyleSheet, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { pictureFadeLight, pictureFadeUnderWords, sizes } from "./colours";
 import { pictures, type PictureName } from "./pictures";
+import { pictureTopHeight } from "./sizing";
 import { Txt } from "./Txt";
 
 interface PictureTopProps {
@@ -20,13 +21,15 @@ interface PictureTopProps {
 }
 
 /** A page's own picture: edge to edge from the top of the phone, running into the page under it.
- *  Never a box of its own. The page's first words lie over it. */
+ *  Never a box of its own. The page's first words lie over it. On a wide screen it takes part of the
+ *  screen's height and keeps its foot, where its figures and words are. */
 export function PictureTop({ picture, tall, above, eyebrow, title, foot, fade = "words" }: PictureTopProps) {
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
+  const full = Math.round(width * tall);
   return (
-    <View style={{ height: Math.round(width * tall) }}>
-      <Image source={pictures[picture]} resizeMode="cover" style={styles.photo} accessible={false} />
+    <View style={[styles.band, { height: pictureTopHeight(width, height, tall) }]}>
+      <Image source={pictures[picture]} resizeMode="cover" style={[styles.photo, { height: full }]} accessible={false} />
       <View style={[StyleSheet.absoluteFill, fade === "light" ? styles.fadeLight : styles.fade]} />
       {above === undefined ? null : <View style={[styles.above, { top: insets.top + 12 }]}>{above}</View>}
       {eyebrow === undefined && title === undefined && foot === undefined ? null : (
@@ -41,8 +44,10 @@ export function PictureTop({ picture, tall, above, eyebrow, title, foot, fade = 
 }
 
 const styles = StyleSheet.create({
-  // A picture has a size of its own, so it is told the band's; "cover" then cuts it to fit.
-  photo: { position: "absolute", width: "100%", height: "100%" },
+  band: { overflow: "hidden" },
+  // A picture has a size of its own, so it is told its shape for the width; "cover" then cuts it to
+  // fit, and a band shorter than it shows its foot.
+  photo: { position: "absolute", left: 0, right: 0, bottom: 0, width: "100%" },
   fade: { experimental_backgroundImage: pictureFadeUnderWords },
   fadeLight: { experimental_backgroundImage: pictureFadeLight },
   above: { position: "absolute", left: sizes.edge, right: sizes.edge },

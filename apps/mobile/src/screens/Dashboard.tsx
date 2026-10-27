@@ -110,7 +110,11 @@ export function DashboardScreen() {
               </Txt>
             </View>
           }
-          foot={<Button label="Start Training" icon="play" compact onPress={toWorkout} />}
+          foot={
+            <View style={styles.footDrop}>
+              <Button label="Start Training" icon="play" compact onPress={toWorkout} />
+            </View>
+          }
         />
       }
     >
@@ -511,6 +515,8 @@ const styles = StyleSheet.create({
   semibold: { fontFamily: fonts.semibold },
   hello: { alignItems: "flex-start" },
   name: { alignSelf: "stretch" },
+  // A little lower than the picture's own foot, on the ground under the figures (Kd).
+  footDrop: { transform: [{ translateY: 12 }] },
   boxTitle: { fontSize: 14, lineHeight: 18, color: colours.textSoft },
   statLabel: { fontSize: 12, lineHeight: 16 },
   centre: { textAlign: "center" },
