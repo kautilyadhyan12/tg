@@ -555,7 +555,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 30a. [x] **Keep, change, remove and measure a goal** — merged 2026-10-13 (PR #233).
     - 30b. [x] **The starter set from the setup answers** — merged 2026-10-13 (PR #234).
 31. **Today** (Stage 1's 5b), the Dashboard tab (split 2026-10-27: the numbers the server already keeps first).
-    - 31a. [ ] **The Dashboard as drawn**: the four numbers, level and XP, the streak with its freezes, this week, the weekly challenges, the latest badges, recent activity (workouts, runs, meals). The Recommended box (7a-ii) comes with its first option, Food, in 34d-iii.
+    - 31a. [x] **The Dashboard as drawn** — merged 2026-10-27 (PR #371).
     - 31b. [ ] **Today's rings and the goals**: today's food against the day's numbers, saying why a plan holds no calorie cut, and the goal list with change, remove and add (30a).
 32. **Food** (split 2026-10-13: the server part needs no phone).
     - 32a. [x] **A meal sent twice from the phone is saved once** — merged 2026-10-13 (PR #238).
