@@ -73,6 +73,10 @@ export const pictureFade =
 export const pictureFadeUnderWords =
   "linear-gradient(to top, rgba(10,9,8,1) 0%, rgba(10,9,8,0.82) 20%, rgba(10,9,8,0.18) 55%, rgba(10,9,8,0.62) 100%)";
 
+/** The same, kept off the picture's lower part, where its own light is the point (the Dashboard's fire). */
+export const pictureFadeLight =
+  "linear-gradient(to top, rgba(10,9,8,1) 0%, rgba(10,9,8,0.6) 10%, rgba(10,9,8,0) 24%, rgba(10,9,8,0) 72%, rgba(10,9,8,0.55) 100%)";
+
 /** The glow of what is pressed, the ring round a box being typed in, and the lift of a box from the bottom. */
 export const shadows = {
   button: "0 6px 22px rgba(255,138,31,0.38), inset 0 1px 0 rgba(255,255,255,0.22)",

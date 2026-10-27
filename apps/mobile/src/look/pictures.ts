@@ -1,5 +1,6 @@
 // The member web's own pictures, made small (spec Part 6 §16.3a): 900 pixels on the
 // long side, WebP. Made by docs/design/phone/compact.py; never the web's full-size files.
+// `cave` is Kd's "prehistoric-cave-brightened" (2026-10-28), its fire made to glow, for the Dashboard's top.
 // `motivation` is Kd's "Glowing spear ring and lone warrior" (2026-10-28), darkened for the clock.
 // `goals` and `goalsbox` are Kd's own drawing (2026-10-27), made dark by reviews/pics31b.py.
 // `getstarted` is the browser's sign-in picture, cut by the same tool to sit at the top of a phone.
@@ -7,6 +8,7 @@
 import benchpress from "../../assets/pictures/benchpress.webp";
 import bicepcurls from "../../assets/pictures/bicepcurls.webp";
 import caloriesburned from "../../assets/pictures/caloriesburned.webp";
+import cave from "../../assets/pictures/cave.webp";
 import chairsquat from "../../assets/pictures/chairsquat.webp";
 import currentlevel from "../../assets/pictures/currentlevel.webp";
 import cyclingcrunch from "../../assets/pictures/cyclingcrunch.webp";
@@ -45,6 +47,7 @@ export const pictures = {
   benchpress,
   bicepcurls,
   caloriesburned,
+  cave,
   chairsquat,
   currentlevel,
   cyclingcrunch,

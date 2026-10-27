@@ -98,8 +98,10 @@ export function DashboardScreen() {
     <Page
       top={
         <PictureTop
-          picture="hero"
-          tall={0.9}
+          picture="cave"
+          // The picture's own shape, so none of it is cut; its fire is not dimmed.
+          tall={1.208}
+          fade="light"
           above={
             <View style={styles.hello}>
               <Txt kind="small">{greetingAt(now.getHours())}</Txt>
@@ -353,7 +355,6 @@ function Motivation() {
     <View style={[styles.box, styles.motivation]}>
       <Image source={pictures.motivation} resizeMode="cover" style={styles.fill} accessible={false} />
       <View style={styles.motivationWords}>
-        <Txt kind="eyebrow">Daily Motivation</Txt>
         <Clock />
       </View>
     </View>
@@ -543,12 +544,13 @@ const styles = StyleSheet.create({
     borderRadius: sizes.boxRadius,
     overflow: "hidden",
   },
-  link: { width: 150, height: 200, justifyContent: "flex-end" },
+  // As tall as the clock box beside them, so the row lines up.
+  link: { width: 190, height: 270, justifyContent: "flex-end" },
   linkWords: { margin: 12 },
   // The pictures were widened to these boxes' shapes, so each covers its box without cutting its subject.
   // Square, as its picture is, so the picture covers it whole.
   motivation: { width: 270, height: 270 },
-  motivationWords: { padding: 16, gap: 10 },
+  motivationWords: { paddingHorizontal: 16, paddingTop: 10 },
   challenges: { width: 360, height: 210 },
   challengeRow: { width: "52%" },
   rank: { width: 140, height: 210, justifyContent: "flex-end" },
