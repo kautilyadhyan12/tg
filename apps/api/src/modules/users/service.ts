@@ -278,7 +278,7 @@ export async function putFitnessProfile(
       weightGoal: body.weightGoal ?? null,
       exerciseFrequency: body.exerciseFrequency ?? null,
       availableEquipment: body.availableEquipment ?? [],
-      trainingPlaces: body.trainingPlaces ?? [],
+      trainingPlaces: body.trainingPlaces ?? null,
       sessionDurationMin: body.sessionDurationMin ?? null,
       preferredWorkoutTime: body.preferredWorkoutTime ?? null,
       diet: body.diet ?? null,

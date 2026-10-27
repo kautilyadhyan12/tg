@@ -310,7 +310,7 @@ export async function upsertFitnessProfile(
         weight_goal = EXCLUDED.weight_goal,
         exercise_frequency = EXCLUDED.exercise_frequency,
         available_equipment = EXCLUDED.available_equipment,
-        training_places = EXCLUDED.training_places,
+        training_places = COALESCE(EXCLUDED.training_places, user_fitness_profiles.training_places),
         session_duration_min = EXCLUDED.session_duration_min,
         preferred_workout_time = EXCLUDED.preferred_workout_time,
         diet = EXCLUDED.diet,
@@ -338,7 +338,9 @@ export interface FitnessProfileWrite {
   weightGoal: string | null;
   exerciseFrequency: number | null;
   availableEquipment: string[];
-  trainingPlaces: string[];
+  /** NULL keeps what is stored: a save from a screen that does not ask it (a browser tab older
+   *  than the question) never clears the places a person picked. */
+  trainingPlaces: string[] | null;
   sessionDurationMin: number | null;
   preferredWorkoutTime: string | null;
   diet: string | null;

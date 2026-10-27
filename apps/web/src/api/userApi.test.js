@@ -61,7 +61,7 @@ describe('userService repoint (Card 6)', () => {
     const current = {
       age: 25, gender: 'male', heightCm: 175, targetWeightKg: 70,
       fitnessLevel: 'beginner', fitnessGoals: ['muscle_gain'], exerciseFrequency: 3,
-      availableEquipment: ['dumbbells'], sessionDurationMin: 30,
+      availableEquipment: ['dumbbells'], trainingPlaces: ['gym'], sessionDurationMin: 30,
       preferredWorkoutTime: 'morning',
     };
 
@@ -73,6 +73,7 @@ describe('userService repoint (Card 6)', () => {
       expect(out.heightCm).toBe(178);
       expect(out.fitnessGoals).toEqual(['muscle_gain']);       // NOT wiped
       expect(out.availableEquipment).toEqual(['dumbbells']);   // NOT wiped
+      expect(out.trainingPlaces).toEqual(['gym']);             // NOT wiped
       expect(out.fitnessLevel).toBe('beginner');               // NOT wiped
       expect(out.gender).toBe('male');                         // untouched current
     });

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { Image, KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -50,17 +50,36 @@ const phoneLanguage = (): string => Intl.DateTimeFormat().resolvedOptions().loca
 
 export function Setup({ open, onClose }: { open: boolean; onClose: () => void }) {
   const insets = useSafeAreaInsets();
+  // Android's back leaves as the ✕ does: the name typed is saved first, and a blank one stays to be fixed.
+  const leave = useRef<() => void>(onClose);
   return (
-    <Modal visible={open} animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
+    <Modal
+      testID="setup"
+      visible={open}
+      animationType="slide"
+      statusBarTranslucent
+      navigationBarTranslucent
+      onRequestClose={() => {
+        leave.current();
+      }}
+    >
       <KeyboardAvoidingView accessibilityViewIsModal behavior="padding" style={[styles.page, { paddingTop: insets.top }]}>
         <Image source={pictures.setup} resizeMode="cover" accessible={false} style={styles.picture} />
-        {open ? <SetupBody onClose={onClose} bottom={insets.bottom} /> : null}
+        {open ? <SetupBody onClose={onClose} leave={leave} bottom={insets.bottom} /> : null}
       </KeyboardAvoidingView>
     </Modal>
   );
 }
 
-function SetupBody({ onClose, bottom }: { onClose: () => void; bottom: number }) {
+function SetupBody({
+  onClose,
+  leave,
+  bottom,
+}: {
+  onClose: () => void;
+  leave: RefObject<() => void>;
+  bottom: number;
+}) {
   const { session } = useSession();
   const ob = useSetupAnswers({
     onSaved: (saved) => {
@@ -119,6 +138,9 @@ function SetupBody({ onClose, bottom }: { onClose: () => void; bottom: number })
   const close = () => {
     if (commitName()) onClose();
   };
+  useEffect(() => {
+    leave.current = close;
+  });
   const back = index > 0 ? screens[index - 1] : undefined;
 
   if (screen === undefined || ob.status !== "ready" || ob.first === null) {

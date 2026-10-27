@@ -35,7 +35,7 @@ export function Options<V extends string | number>({
           <Pressable
             key={String(o.value)}
             accessibilityRole="button"
-            accessibilityLabel={o.label}
+            accessibilityLabel={[o.label, o.desc, o.note].filter((words) => typeof words === "string" && words !== "").join(". ")}
             accessibilityState={{ selected: on }}
             onPress={() => {
               onPick(o.value);

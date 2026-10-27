@@ -194,6 +194,17 @@ describe("the worst thing: nobody's plan is built on an age, height or weight th
     expect(screen.getByText("40 years")).toBeTruthy();
   });
 
+  it("a scale let go slowly, with no flick after it, saves the row it stopped on", async () => {
+    const { saves } = await openSetup({ weightGoal: "maintain" });
+    await screen.findByRole("header", { name: "About you" });
+    const list = screen.getByTestId("Height scale");
+    await fireEvent(list, "scrollBeginDrag");
+    await fireEvent(list, "scrollEndDrag", { nativeEvent: { contentOffset: { x: 72 * TICK, y: 0 }, velocity: { x: 0, y: 0 } } });
+    await waitFor(() => {
+      expect(saves()).toEqual([{ heightCm: 172 }]);
+    });
+  });
+
   it("the resting row is saved only when the person moves the scale", async () => {
     const { saves } = await openSetup({ weightGoal: "maintain" });
     await screen.findByRole("header", { name: "About you" });
@@ -329,6 +340,23 @@ describe("setup on the phone", () => {
       expect(screen.getByText("Ravi Kumar")).toBeTruthy();
     });
     expect(store.value).toContain("Ravi Kumar");
+  });
+
+  it("Android's back leaves as the close button does: the name typed is saved, a blank one is not", async () => {
+    const { saves } = await openSetup({ weightGoal: "maintain" });
+    await screen.findByRole("header", { name: "About you" });
+    await fireEvent.changeText(screen.getByLabelText("Your name"), "   ");
+    await fireEvent(screen.getByTestId("setup"), "requestClose");
+    expect(await screen.findByText("Type the name we should call you.")).toBeTruthy();
+    expect(saves()).toEqual([]);
+    await fireEvent.changeText(screen.getByLabelText("Your name"), "Ravi K");
+    await fireEvent(screen.getByTestId("setup"), "requestClose");
+    await waitFor(() => {
+      expect(saves()).toEqual([{ displayName: "Ravi K" }]);
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Ravi K")).toBeTruthy();
+    });
   });
 
   it("a blank name is not saved, and setup says what to do", async () => {

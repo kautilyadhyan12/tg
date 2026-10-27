@@ -127,6 +127,19 @@ d("users fitness-profile routes (real Postgres)", () => {
   const put = (cookies: Record<string, string>, body: unknown) =>
     inject({ method: "PUT", url: "/v1/users/me/fitness-profile", body, cookies });
 
+  it("keeps where a person trains: saved, replaced, and kept by a save that leaves it out", { timeout: 30_000 }, async () => {
+    const { cookies } = await makeUser("ofp-places@example.com");
+    expect((await put(cookies, { age: 30, trainingPlaces: ["gym", "outdoors"] })).statusCode).toBe(200);
+    expect((await getProfile(cookies))["trainingPlaces"]).toEqual(["gym", "outdoors"]);
+    // A tab older than the question sends no places: they stay as picked.
+    expect((await put(cookies, { age: 31 })).statusCode).toBe(200);
+    expect(await getProfile(cookies)).toMatchObject({ age: 31, trainingPlaces: ["gym", "outdoors"] });
+    expect((await put(cookies, { age: 31, trainingPlaces: ["home"] })).statusCode).toBe(200);
+    expect((await getProfile(cookies))["trainingPlaces"]).toEqual(["home"]);
+    expect((await put(cookies, { age: 31, trainingPlaces: [] })).statusCode).toBe(200);
+    expect((await getProfile(cookies))["trainingPlaces"]).toEqual([]);
+  });
+
   /** The gate the web reads: `onboardingCompleted` on GET /v1/users/me. */
   const finishedOnMe = async (cookies: Record<string, string>) => {
     const res = await inject({ method: "GET", url: "/v1/users/me", cookies });
