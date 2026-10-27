@@ -21,6 +21,8 @@ interface ButtonProps {
   /** Its own work is away: it turns, and a press does nothing. */
   busy?: boolean;
   style?: StyleProp<ViewStyle>;
+  /** What a screen reader says, where the label alone does not say what it is for. */
+  say?: string;
 }
 
 const ink: Record<ButtonKind, ColourName> = {
@@ -44,12 +46,13 @@ export function Button({
   disabled = false,
   busy = false,
   style,
+  say,
 }: ButtonProps) {
   const words = kind === "link" || kind === "quiet";
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={say ?? label}
       accessibilityState={{ disabled: disabled || busy, busy }}
       disabled={disabled || busy}
       onPress={onPress}

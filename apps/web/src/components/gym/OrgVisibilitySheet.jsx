@@ -1,5 +1,5 @@
-import { Check, X } from 'lucide-react';
-import { orgWords } from '@app/shared';
+import { Check, Lock, X } from 'lucide-react';
+import { GYM_CAN_SEE, GYM_NEVER_SEES, GYM_SEES_IF_YOU_ALLOW, orgWords } from '@app/shared';
 
 // PART 3 §2.4 — "the join screen shows a 'What {org} can see' sheet with
 // exactly this list".
@@ -44,28 +44,19 @@ import { orgWords } from '@app/shared';
 // It is FIRST because it is the only thing on the list that is not something
 // the member did at the gym, and a person deciding whether to join should read
 // it before the training rows.
-const CAN_SEE = [
-  'Your name and the email address you signed up with',
-  'The days you trained, which exercises, your sets, reps, hold time and how long you went for',
-  'Your form scores and which faults came up',
-  'Your streak, and any challenges you take part in',
-];
+// The three lists live in @app/shared, so the phone app draws the same ones. They knowingly differ
+// from §2.4's quote above: meals, weight and measurements only with the member's yes (RULINGS
+// 2026-09-22), and no "before joining / after leaving" line (Kd, rulings/2026-10-27-13a.md).
 
-const NEVER_SEES = [
-  'Your meals, or anything about nutrition',
-  'Your weight or body measurements',
-  'Where you ran — your routes on the map',
-  'Anything from before you joined, or after you leave',
-];
 
 function Row({ children, tone }) {
   const good = tone === 'good';
-  const Icon = good ? Check : X;
+  const Icon = good ? Check : tone === 'ask' ? Lock : X;
   return (
     <li className="flex items-start gap-2.5 py-1">
       <Icon
         className="w-4 h-4 flex-shrink-0 mt-0.5"
-        style={{ color: good ? '#4ade80' : 'rgba(255,255,255,0.35)' }}
+        style={{ color: good ? '#4ade80' : tone === 'ask' ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.35)' }}
       />
       <span className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
         {children}
@@ -93,12 +84,26 @@ export default function OrgVisibilitySheet({ orgName = null, orgType = undefined
       </h2>
 
       <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
-        Only while you are a {orgWords(orgType).person}.
+        While you&apos;re a {orgWords(orgType).person}.
       </p>
 
       <ul className="mt-3">
-        {CAN_SEE.map((line) => (
+        {GYM_CAN_SEE.map((line) => (
           <Row key={line} tone="good">
+            {line}
+          </Row>
+        ))}
+      </ul>
+
+      <div
+        className="text-xs uppercase tracking-wider mt-4 mb-1"
+        style={{ color: 'rgba(255,255,255,0.35)' }}
+      >
+        Only if you allow it
+      </div>
+      <ul>
+        {GYM_SEES_IF_YOU_ALLOW.map((line) => (
+          <Row key={line} tone="ask">
             {line}
           </Row>
         ))}
@@ -111,7 +116,7 @@ export default function OrgVisibilitySheet({ orgName = null, orgType = undefined
         Never
       </div>
       <ul>
-        {NEVER_SEES.map((line) => (
+        {GYM_NEVER_SEES.map((line) => (
           <Row key={line} tone="bad">
             {line}
           </Row>

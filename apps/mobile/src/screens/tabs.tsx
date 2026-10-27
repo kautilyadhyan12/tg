@@ -31,18 +31,6 @@ export function FoodScreen() {
   );
 }
 
-export function GymScreen() {
-  return (
-    <Page>
-      <View style={styles.head}>
-        <Txt kind="h1">My gyms</Txt>
-        <Txt kind="small">Where you train, when it’s open, and your pass to check in.</Txt>
-      </View>
-      <Soon icon="building" title="Your gym" />
-    </Page>
-  );
-}
-
 export function MeScreen() {
   return (
     <Page>
@@ -116,7 +104,6 @@ function SignOut() {
 }
 
 const styles = StyleSheet.create({
-  head: { gap: 4 },
   two: { flexDirection: "row", gap: 10 },
   half: { flex: 1 },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },

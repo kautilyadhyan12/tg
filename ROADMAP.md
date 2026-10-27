@@ -537,7 +537,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
         - 12b-ii. [x] **The robot check on the phone** — merged 2026-10-14 (PR #263).
     - 12c. [x] **"Before you start" on the phone** — merged 2026-10-14 (PR #271).
     - 12d. [x] **Sign in with Google on the phone** — merged 2026-10-27 (PR #369).
-13. [ ] **Invitations and Join**, with what the gym can see (spec Part 3 §10.2); My Gyms, under a name that fits a yoga or Pilates studio too (Kd, 2026-10-23, `rulings/2026-10-23-18u-i.md`); the invitation email's button opens the app.
+13. **Invitations and Join** (spec Part 3 §10.2; split 2026-10-27: the email's button needs the app's own web address).
+    - 13a. [x] **Join on the phone** — merged 2026-10-27 (PR #372).
+    - 13b. [ ] **The invitation email's button opens the app**, and on a phone without it the store buttons.
 14. [ ] **Setup**: the eleven screens and the plan, the health question, Safe mode, the consent taps.
 15. [ ] **The pass** (spec Part 3 §12.2) and the days you came; later, a pass the phone can make with no signal.
 16. [ ] **Classes and booking with the waitlist, and personal training**; then My membership and receipts, once Stage 2's 18g and 18j are merged (18c, Pay {gym}, was dropped 2026-10-15), in sections: **Membership** (what they hold, when it renews, each payment with its receipt), **Purchases** (what they bought at the desk, each with its receipt), a refund under its payment (Kd, `rulings/2026-10-15-18m.md`); no receipt by email.

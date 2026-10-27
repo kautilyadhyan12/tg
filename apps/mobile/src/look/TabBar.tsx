@@ -5,19 +5,25 @@ import { colours, sizes } from "./colours";
 import { Icon, type IconName } from "./Icon";
 import { fonts, Txt } from "./Txt";
 
-/** The five tabs at the bottom; the one you are on is orange. */
-export function TabBar({ state, navigation, icons }: BottomTabBarProps & { icons: Record<string, IconName> }) {
+/** The five tabs at the bottom; the one you are on is orange. `labels`: a word in place of a tab's own name. */
+export function TabBar({
+  state,
+  navigation,
+  icons,
+  labels = {},
+}: BottomTabBarProps & { icons: Record<string, IconName>; labels?: Record<string, string> }) {
   const insets = useSafeAreaInsets();
   return (
     <View style={[styles.bar, { height: sizes.tabBar + insets.bottom, paddingBottom: insets.bottom }]}>
       {state.routes.map((route, index) => {
         const on = state.index === index;
+        const label = labels[route.name] ?? route.name;
         return (
           <Pressable
             key={route.key}
             accessibilityRole="tab"
             accessibilityState={{ selected: on }}
-            accessibilityLabel={route.name}
+            accessibilityLabel={label}
             onPress={() => {
               const press = navigation.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
               if (!on && !press.defaultPrevented) navigation.navigate(route.name);
@@ -28,7 +34,7 @@ export function TabBar({ state, navigation, icons }: BottomTabBarProps & { icons
               <Icon name={icons[route.name] ?? "grid"} size={22} colour={on ? "orange" : "textFaint"} />
             </View>
             <Txt colour={on ? "orange" : "textFaint"} style={on ? styles.labelOn : styles.label}>
-              {route.name}
+              {label}
             </Txt>
           </Pressable>
         );

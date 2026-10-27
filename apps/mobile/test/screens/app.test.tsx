@@ -48,7 +48,7 @@ describe("the five tabs", () => {
   it.each([
     ["Workout", ["Your workouts"]],
     ["Food", ["Fuel Your Training", "Your meals"]],
-    ["Gym", ["My gyms", "Your gym"]],
+    ["Gym", ["Where you train", "You haven’t joined a gym or studio yet."]],
     ["Me", ["ravi@example.com", "Settings"]],
     ["Dashboard", ["Ravi", "Recent Workouts"]],
   ])("%s opens its own page and lights its own tab", async (tab, shows) => {
@@ -73,7 +73,9 @@ describe("the five tabs", () => {
     for (const tab of TABS) {
       await open(tab.name);
       // What is not built yet says so in two words: the tab's own row, and on Me its two pictures.
-      expect(await screen.findAllByText("Coming soon")).toHaveLength(tab.name === "Me" ? 3 : 1);
+      // Gym, for somebody in no gym yet, has nothing to come: it says how an invitation reaches them.
+      expect(await screen.findAllByText(tab.name === "Gym" ? "Check for an invitation" : "Coming soon")).toBeTruthy();
+      expect(screen.queryAllByText("Coming soon")).toHaveLength(tab.name === "Me" ? 3 : tab.name === "Gym" ? 0 : 1);
       // The Dashboard's calendar shows this week's dates; its numbers did not load here, so none shows.
       const dates = tab.name === "Dashboard" ? weekOf(new Date()).map((day) => String(day.date)) : [];
       const withDigits = screen
@@ -117,9 +119,12 @@ describe("Me says which copy this is and whether it reaches its server", () => {
     await open("Me");
     expect(await screen.findByText("Feature 1 test copy · Connected")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
-    // Besides the sign-in and the Dashboard's own reads, Me asks only its server's health.
+    // Besides sign-in, the invitations and the places asked on opening, and the Dashboard's own reads,
+    // only the copy's own check.
     const dashboard = Object.values(DASHBOARD_READS).map((path) => `http://localhost:3000${path}`);
-    expect(asked.filter((url) => !url.includes("/v1/auth/") && !dashboard.includes(url))).toEqual(["http://localhost:3000/health"]);
+    expect(asked.filter((url) => !url.includes("/v1/auth/") && !url.includes("/v1/orgs/") && !dashboard.includes(url))).toEqual([
+      "http://localhost:3000/health",
+    ]);
   });
 
   it("not reached, then Try again reaches it", async () => {

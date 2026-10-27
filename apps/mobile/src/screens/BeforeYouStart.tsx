@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   CURRENT_DISCLAIMER_VERSION,
@@ -10,8 +10,8 @@ import {
 import { appVersion } from "../appExtra";
 import { Button } from "../look/Button";
 import { Card, Logo } from "../look/Card";
-import { colours, orangeGradient, sizes } from "../look/colours";
-import { Icon } from "../look/Icon";
+import { colours, sizes } from "../look/colours";
+import { Tick } from "../look/Tick";
 import { fonts, Txt } from "../look/Txt";
 import { useSession } from "../session/SessionProvider";
 import { NO_ANSWER } from "./SignIn";
@@ -129,21 +129,14 @@ function BeforeYouStart({ problemAtStart, onThrough }: { problemAtStart: string;
         <Txt colour="text" style={styles.words}>
           {NOTE_WORDS}
         </Txt>
-        <Pressable
-          accessibilityRole="checkbox"
-          accessibilityLabel="I have read and understood this"
-          accessibilityState={{ checked: ticked, disabled: ticked || busy, busy }}
-          disabled={ticked || busy}
+        <Tick
+          label="I have read and understood this"
+          ticked={ticked}
+          disabled={ticked}
+          busy={busy}
           onPress={() => void tick()}
-          style={styles.tickRow}
-        >
-          <View testID="note-tick-box" style={[styles.box, ticked ? styles.boxOn : null]}>
-            {ticked ? <Icon name="check" size={13} colour="onOrange" /> : null}
-          </View>
-          <Txt colour={ticked ? "text" : "textSoft"} style={styles.tickLabel}>
-            I have read and understood this
-          </Txt>
-        </Pressable>
+          testID="note-tick-box"
+        />
         {ticked ? null : <Txt kind="tiny">Tick this to continue.</Txt>}
       </Card>
 
@@ -169,17 +162,5 @@ const styles = StyleSheet.create({
   brandName: { fontFamily: fonts.bold, fontSize: 17, lineHeight: 22 },
   card: { padding: 18, gap: 14 },
   words: { fontSize: 14, lineHeight: 22 },
-  tickRow: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: sizes.press },
-  box: {
-    width: 22,
-    height: 22,
-    borderRadius: 7,
-    borderWidth: 2,
-    borderColor: colours.textFaint,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  boxOn: { borderColor: colours.orange, backgroundColor: colours.orange, experimental_backgroundImage: orangeGradient },
-  tickLabel: { flex: 1, fontFamily: fonts.medium, fontSize: 15, lineHeight: 20 },
   middle: { alignSelf: "center" },
 });

@@ -194,8 +194,8 @@ describe("the Dashboard, with the person's own numbers", () => {
     expect(screen.queryByText(/couldn’t load/)).toBeNull();
     // Recommended For You comes with its first option, Food (ROADMAP 34d-iii).
     expect(screen.queryByText("Recommended For You")).toBeNull();
-    // Each read once, as the person signed in, and only these.
-    const reads = server.asked.filter((one) => !one.path.startsWith("/v1/auth/") && one.path !== "/v1/users/me");
+    // Each read once, as the person signed in, and only these (the Gym tab's places are read at opening too).
+    const reads = server.asked.filter((one) => !one.path.startsWith("/v1/auth/") && !one.path.startsWith("/v1/orgs/") && one.path !== "/v1/users/me");
     expect(reads.map((one) => one.path).sort()).toEqual(Object.values(DASHBOARD_READS).map((p) => p.split("?")[0]).sort());
     expect(new Set(reads.map((one) => one.headers.authorization))).toEqual(new Set(["Bearer access-2"]));
   });
