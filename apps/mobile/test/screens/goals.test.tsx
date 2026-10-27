@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import type { Goal } from "@app/shared";
 import { App } from "../../src/App";
 import type { Ask, AskInit } from "../../src/session/calls";
@@ -103,7 +103,7 @@ describe("the worst thing: nobody is handed a weight to lose that the health rul
     });
     await fireEvent.press(pageAdd());
     await fireEvent.press(screen.getByRole("radio", { name: "Weight" }));
-    expect(screen.getByText("Your target weight sets this goal.")).toBeTruthy();
+    expect(screen.getByText("Your target weight in Your plan sets this goal.")).toBeTruthy();
     await fireEvent.press(screen.getByRole("button", { name: "Add goal" }));
     expect(await screen.findByText("Your plan holds your weight steady, so it sets no weight to lose.")).toBeTruthy();
     expect(writes(server)).toHaveLength(1);
@@ -366,5 +366,98 @@ describe("add a goal", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Add goal" }));
     expect(await screen.findByText("Goal added.")).toBeTruthy();
     expect(writes(server)[0]?.body).toEqual({ kind: "reps_in_set", period: null, target: 10, exerciseId: SQUAT.id });
+  });
+});
+
+describe("a goal whose number is setup's opens setup on that answer", () => {
+  const answers = {
+    displayName: "Ravi",
+    weightGoal: "gain",
+    fitnessGoals: [],
+    age: null,
+    gender: null,
+    heightCm: null,
+    weightKg: 70,
+    targetWeightKg: null,
+    pace: null,
+    dayActivity: null,
+    fitnessLevel: null,
+    pushUpsMax: null,
+    plankHoldSeconds: null,
+    trainingDays: null,
+    sessionMinutes: null,
+    availableEquipment: [],
+    trainingPlaces: [],
+    diet: null,
+    mealsPerDay: null,
+    onboardingCompleted: false,
+    updatedAt: null,
+  };
+  const setup = {
+    "/v1/users/me/onboarding": ok({
+      answers,
+      plan: null,
+      missing: ["age", "gender", "heightCm", "targetWeightKg", "pace", "dayActivity", "trainingDays", "sessionMinutes"],
+    }),
+  };
+  const WANTS_TARGET = goal({ kind: "weight", direction: "at_least", target: null, current: 70, reached: null, needs: "target_weight" });
+
+  it("Set target opens setup on Your target; closing it reads the goals again", async () => {
+    const server = await openGoals({ list: [WANTS_TARGET] }, setup);
+    expect(await screen.findByText("Pick a target weight to set this goal")).toBeTruthy();
+    const before = server.paths().filter((p) => p === "/v1/goals").length;
+    await fireEvent.press(screen.getByRole("button", { name: "Set target" }));
+    expect(await screen.findByRole("header", { name: "Your target" })).toBeTruthy();
+    await fireEvent.press(within(screen.getByTestId("setup")).getByRole("button", { name: "Close" }));
+    await waitFor(() => {
+      expect(server.paths().filter((p) => p === "/v1/goals").length).toBeGreaterThan(before);
+    });
+  });
+
+  it("adding Weight says the target is Your plan's, and Change target opens it there", async () => {
+    await openGoals({ list: [] }, setup);
+    await fireEvent.press(pageAdd());
+    await fireEvent.press(screen.getByRole("radio", { name: "Weight" }));
+    expect(screen.getByText("Your target weight in Your plan sets this goal.")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Change target" }));
+    expect(await screen.findByRole("header", { name: "Your target" })).toBeTruthy();
+  });
+
+  it("Protein's number is the plan's: See your plan opens setup", async () => {
+    await openGoals({ list: [PROTEIN] }, setup);
+    await fireEvent.press(await screen.findByRole("button", { name: /^Eat 140 g protein/ }));
+    await fireEvent.press(screen.getByRole("button", { name: "See your plan" }));
+    expect(await screen.findByTestId("setup")).toBeTruthy();
+    expect(screen.queryByRole("textbox", { name: /a day$/ })).toBeNull();
+  });
+});
+
+describe("check-ins are a gym's: offered only to a member of a place", () => {
+  const IRON = {
+    id: "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f",
+    name: "Iron House",
+    city: "Pune",
+    orgType: "gym",
+    slug: "iron-house",
+    timezone: "Asia/Kolkata",
+    locale: "en",
+    currencyDisplay: "INR",
+    status: "active",
+    staffRole: null,
+    isMember: true,
+    joinedAt: "2026-10-01T00:00:00.000Z",
+  };
+
+  it("somebody in no gym is not offered Check-ins", async () => {
+    await openGoals({ list: [] });
+    await fireEvent.press(pageAdd());
+    expect(screen.getByRole("radio", { name: "Training days" })).toBeTruthy();
+    expect(screen.queryByRole("radio", { name: "Check-ins" })).toBeNull();
+  });
+
+  it("a member of a gym is", async () => {
+    await openGoals({ list: [] }, { "/v1/orgs/mine": ok({ orgs: [IRON], formerOrgs: [] }) });
+    await fireEvent.press(pageAdd());
+    expect(await screen.findByRole("radio", { name: "Check-ins" })).toBeTruthy();
   });
 });

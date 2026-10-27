@@ -11,6 +11,7 @@ import {
   type GoalPeriod,
   type GoalsResponse,
   type PutGoalRequest,
+  type SetupScreenId,
 } from "@app/shared";
 import { Button } from "../look/Button";
 import { Badge, Card } from "../look/Card";
@@ -25,6 +26,8 @@ import { fonts, Txt } from "../look/Txt";
 import type { Answer, Shape } from "../session/calls";
 import { useSession } from "../session/SessionProvider";
 import { NOT_KNOWN, count } from "./dashboard/words";
+import { usePlaces } from "./places";
+import { Setup } from "./setup/Setup";
 import type { Read } from "./dashboard/useRead";
 import {
   KIND_ICONS,
@@ -148,6 +151,8 @@ export function GoalsPage({ open, onClose, read, again }: GoalsPageProps) {
   const [picked, setPicked] = useState<Goal | null>(null);
   const [adding, setAdding] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  // Setup over the page, on the answer a goal waits for; "where" is wherever the person left off.
+  const [setupAt, setSetupAt] = useState<SetupScreenId | "where" | null>(null);
   const goals = read.kind === "ok" ? read.data.goals : null;
   const max = read.kind === "ok" ? read.data.max : null;
   const full = goals !== null && max !== null && goals.length >= max;
@@ -156,6 +161,13 @@ export function GoalsPage({ open, onClose, read, again }: GoalsPageProps) {
     setNotice(null);
     setAdding(open === "add");
   }, [open]);
+
+  const toSetup = (at: SetupScreenId | "where") => {
+    setPicked(null);
+    setAdding(false);
+    setNotice(null);
+    setSetupAt(at);
+  };
 
   const done = (words: string) => {
     setPicked(null);
@@ -224,12 +236,39 @@ export function GoalsPage({ open, onClose, read, again }: GoalsPageProps) {
                 setNotice(null);
                 setPicked(goal);
               }}
+              onSetup={toSetup}
             />
           ))}
         </View>
       )}
-      <GoalSheet goal={picked} units={units} onClose={() => { setPicked(null); }} onDone={done} />
-      {goals === null ? null : <AddSheet open={adding} goals={goals} onClose={() => { setAdding(false); }} onDone={done} />}
+      <GoalSheet
+        goal={picked}
+        units={units}
+        onClose={() => {
+          setPicked(null);
+        }}
+        onDone={done}
+        onSetup={toSetup}
+      />
+      {goals === null ? null : (
+        <AddSheet
+          open={adding}
+          goals={goals}
+          onClose={() => {
+            setAdding(false);
+          }}
+          onDone={done}
+          onSetup={toSetup}
+        />
+      )}
+      <Setup
+        open={setupAt !== null}
+        at={setupAt === "where" ? null : setupAt}
+        onClose={() => {
+          setSetupAt(null);
+          again();
+        }}
+      />
     </CoverPage>
   );
 }
@@ -240,7 +279,18 @@ function progressColour(progress: Progress) {
   return "orange" as const;
 }
 
-function GoalRow({ goal, units, onPress }: { goal: Goal; units: string; onPress: () => void }) {
+type ToSetup = (at: SetupScreenId | "where") => void;
+
+/** The button that opens the answer a goal waits for: the target weight, or setup where it was left. */
+function SetupLink({ needs, onSetup }: { needs: NonNullable<Goal["needs"]>; onSetup: ToSetup }) {
+  return needs === "target_weight" ? (
+    <Button label="Set target" kind="link" onPress={() => { onSetup("target"); }} />
+  ) : (
+    <Button label="Finish setup" kind="link" onPress={() => { onSetup("where"); }} />
+  );
+}
+
+function GoalRow({ goal, units, onPress, onSetup }: { goal: Goal; units: string; onPress: () => void; onSetup: ToSetup }) {
   const progress = goalProgress(goal, units);
   const line = goalLine(goal, units);
   return (
@@ -262,6 +312,7 @@ function GoalRow({ goal, units, onPress }: { goal: Goal; units: string; onPress:
           </Txt>
         </View>
         {progress.kind === "going" && progress.share !== null ? <Bar share={progress.share} /> : null}
+        {goal.needs === null || goal.held !== null ? null : <SetupLink needs={goal.needs} onSetup={onSetup} />}
       </View>
       <Icon name="go" size={16} colour="textFaint" />
     </Pressable>
@@ -276,6 +327,7 @@ function Editor(props: {
   onPeriod: (period: GoalPeriod) => void;
   typed: string;
   onTyped: (typed: string) => void;
+  onSetup: ToSetup;
 }) {
   const choices = props.periods.filter((p): p is GoalPeriod => p !== null);
   const max = goalTargetMax(props.kind, props.period);
@@ -289,7 +341,17 @@ function Editor(props: {
         </View>
       ) : null}
       {max === null ? (
-        <Txt kind="small">{props.kind === "weight" ? "Your target weight sets this goal." : "Your plan sets this number."}</Txt>
+        // Its number is setup's own, so the way to change it is setup, opened on that answer.
+        <View style={styles.between}>
+          <Txt kind="small" style={styles.grow}>
+            {props.kind === "weight" ? "Your target weight in Your plan sets this goal." : "Your plan sets this number."}
+          </Txt>
+          {props.kind === "weight" ? (
+            <Button label="Change target" kind="link" onPress={() => { props.onSetup("target"); }} />
+          ) : (
+            <Button label="See your plan" kind="link" onPress={() => { props.onSetup("where"); }} />
+          )}
+        </View>
       ) : (
         <Field label={targetLabel(props.kind, props.period)} value={props.typed} onChange={props.onTyped} keyboard="number-pad" maxLength={6} />
       )}
@@ -299,7 +361,8 @@ function Editor(props: {
 
 
 /** One goal: change its period or number, or remove it, which asks first. */
-function GoalSheet({ goal, units, onClose, onDone }: { goal: Goal | null; units: string; onClose: () => void; onDone: (words: string) => void }) {
+function GoalSheet(props: { goal: Goal | null; units: string; onClose: () => void; onDone: (words: string) => void; onSetup: ToSetup }) {
+  const { goal, units, onClose, onDone, onSetup } = props;
   const { session } = useSession();
   const [period, setPeriod] = useState<GoalPeriod | null>(null);
   const [typed, setTyped] = useState("");
@@ -376,6 +439,7 @@ function GoalSheet({ goal, units, onClose, onDone }: { goal: Goal | null; units:
                 setTyped(t);
                 setError(null);
               }}
+              onSetup={onSetup}
             />
           ) : null}
           {error === null ? null : <Txt kind="small" colour="badText">{error}</Txt>}
@@ -390,8 +454,12 @@ function GoalSheet({ goal, units, onClose, onDone }: { goal: Goal | null; units:
 }
 
 /** Add a goal: what to track, then how often and the number, and the exercise for reps in one set. */
-function AddSheet({ open, goals, onClose, onDone }: { open: boolean; goals: readonly Goal[]; onClose: () => void; onDone: (words: string) => void }) {
+function AddSheet(props: { open: boolean; goals: readonly Goal[]; onClose: () => void; onDone: (words: string) => void; onSetup: ToSetup }) {
+  const { open, goals, onClose, onDone, onSetup } = props;
   const { session, state } = useSession();
+  // Check-ins are a gym's front-desk scans: offered only to a member of a place, never as a goal stuck at 0.
+  const { kinds: places } = usePlaces();
+  const member = places !== null && places.length > 0;
   const me = state.kind === "in" ? state.user.id : null;
   const [kind, setKind] = useState<GoalKind | null>(null);
   const [period, setPeriod] = useState<GoalPeriod | null>(null);
@@ -457,7 +525,7 @@ function AddSheet({ open, goals, onClose, onDone }: { open: boolean; goals: read
     else setError(failureWords(answer));
   };
 
-  const kinds = KIND_ORDER.filter((k) => freePeriods(k, goals).length > 0);
+  const kinds = KIND_ORDER.filter((k) => freePeriods(k, goals).length > 0 && (k !== "gym_visits" || member));
   // One reps goal an exercise: those already kept are not offered again.
   const taken = kind === "reps_in_set" ? goals.filter((g) => g.kind === "reps_in_set").map((g) => g.exerciseId) : [];
   const matches =
@@ -529,6 +597,7 @@ function AddSheet({ open, goals, onClose, onDone }: { open: boolean; goals: read
               setTyped(t);
               setError(null);
             }}
+            onSetup={onSetup}
           />
           {error === null ? null : <Txt kind="small" colour="badText">{error}</Txt>}
           <View style={styles.actions}>

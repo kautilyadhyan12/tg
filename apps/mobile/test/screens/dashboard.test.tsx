@@ -247,7 +247,8 @@ describe("the Dashboard, with the person's own numbers", () => {
     const otherDay = weekOf(new Date()).find((day) => !day.today)?.key ?? "";
     await openApp({
       ...trained,
-      "/v1/progress/overview": ok(overview(24, { totalRuns: 3, runDurationMs: 30 * 60_000, runKcal: 100 })),
+      // 37 sessions: a number no day of the week's calendar can show.
+      "/v1/progress/overview": ok(overview(24, { totalRuns: 13, runDurationMs: 30 * 60_000, runKcal: 100 })),
       "/v1/progress/trend": ok({
         points: [{ date: today, kcal: 348, workouts: 2 }],
         runDays: [
@@ -257,7 +258,7 @@ describe("the Dashboard, with the person's own numbers", () => {
         limitedToDays: 90,
       }),
     });
-    expect(await screen.findByText("27")).toBeTruthy();
+    expect(await screen.findByText("37")).toBeTruthy();
     expect(screen.getByText("Total Sessions")).toBeTruthy();
     expect(screen.getByText("18h 30m")).toBeTruthy();
     expect(screen.getByText("6,520")).toBeTruthy();
