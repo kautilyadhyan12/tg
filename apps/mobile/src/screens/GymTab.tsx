@@ -92,7 +92,11 @@ export function GymScreen() {
 
   const joined = mine?.kind === "ok" ? mine.data.orgs.filter((org) => org.isMember) : [];
   const removed = mine?.kind === "ok" ? mine.data.formerOrgs : [];
-  const open = invites?.kind === "ok" && invites.data.addressProved ? invites.data.invitations : [];
+  // A place the person has joined is listed once, as theirs, never again as an invitation.
+  const open =
+    invites?.kind === "ok" && invites.data.addressProved
+      ? invites.data.invitations.filter((invitation) => !joined.some((org) => org.id === invitation.gym.id))
+      : [];
   const nothing = mine?.kind === "ok" && invites?.kind === "ok" && invites.data.addressProved && joined.length === 0 && open.length === 0;
 
   return (
@@ -147,16 +151,15 @@ export function GymScreen() {
         </View>
       ) : null}
 
-      {open.length === 0 ? null : (
-        <InvitationList
-          label="Invitations"
-          invitations={open}
-          onAnswered={(_, kind) => {
-            // The page says what happened; the places above read again under it.
-            if (kind === "joined") void readMine();
-          }}
-        />
-      )}
+      {/* Kept even when the list empties, so a page opened from it stays open with what happened. */}
+      <InvitationList
+        label="Invitations"
+        invitations={open}
+        onAnswered={(_, kind) => {
+          // The page says what happened; the places above read again under it.
+          if (kind === "joined") void readMine();
+        }}
+      />
 
       {nothing ? (
         <Card style={styles.none}>

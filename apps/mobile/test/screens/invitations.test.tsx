@@ -68,6 +68,12 @@ async function signIn(routes: Record<string, Route>) {
 async function openGym(routes: Record<string, Route>) {
   const server = fakeServer({ "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }), ...routes });
   await render(<App extra={extra} ask={server.ask} store={memoryStore(kept(1))} wait={noWait} />);
+  // An invitation still waiting is asked first, before the tabs: it is put off here.
+  await waitFor(() => {
+    expect(screen.queryAllByRole("tab").length + screen.queryAllByRole("button", { name: "Not now" }).length).toBeGreaterThan(0);
+  });
+  const notNow = screen.queryByRole("button", { name: "Not now" });
+  if (notNow !== null) await fireEvent.press(notNow);
   await fireEvent.press(await gymTab());
   return server;
 }
@@ -336,6 +342,29 @@ describe("the Gym tab", () => {
     await press("Join Iron House");
     expect(await screen.findByText("You’re a member of Iron House.")).toBeTruthy();
     expect(answers(server)).toEqual([accept(IRON_ID)]);
+  });
+
+  it("joined from the tab, the page still says so, and the place is then listed once, as a member", async () => {
+    let member = false;
+    await openGym({
+      "/v1/orgs/mine": () => ({ status: 200, body: { orgs: member ? [org(IRON)] : [], formerOrgs: [] } }),
+      "/v1/orgs/invitations": waiting(invitation(IRON)),
+      [accept(IRON_ID)]: () => {
+        member = true;
+        return joinedTo(IRON);
+      },
+    });
+    await review("Iron House");
+    await press("Join Iron House");
+    expect(await screen.findByText("You’re a member of Iron House.")).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByText("Member")).toBeTruthy();
+    });
+    expect(screen.getByText("You’re a member of Iron House.")).toBeTruthy();
+    await press("Done");
+    expect(screen.getAllByText("Iron House")).toHaveLength(1);
+    expect(screen.queryByText("Invitations")).toBeNull();
+    expect(screen.queryByRole("button", { name: "View invitation from Iron House" })).toBeNull();
   });
 
   it("a place that removed the person says so", async () => {

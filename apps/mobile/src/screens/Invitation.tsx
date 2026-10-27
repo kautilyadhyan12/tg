@@ -54,9 +54,10 @@ export function InvitationList({
   label?: string;
   onAnswered: (id: string, kind: Answered) => void;
 }) {
-  const [open, setOpen] = useState<string | null>(null);
+  // The invitation as it was opened: the page stays open, with what happened, after the list has moved on.
+  const [open, setOpen] = useState<MyInvitation | null>(null);
   const [answers, setAnswers] = useState<Readonly<Record<string, Answered>>>({});
-  const found = invitations.find((one) => one.id === open);
+  const found = open ?? undefined;
   // Opened again after an answer, the page starts from that answer, never from the first read.
   const answer = found === undefined ? undefined : answers[found.id];
   const shown =
@@ -68,7 +69,7 @@ export function InvitationList({
   return (
     <>
       <View style={styles.cards}>
-        {label === undefined ? null : (
+        {label === undefined || invitations.length === 0 ? null : (
           <Txt kind="tiny" style={styles.caps}>
             {label}
           </Txt>
@@ -86,7 +87,7 @@ export function InvitationList({
                 small
                 wide
                 onPress={() => {
-                  setOpen(invitation.id);
+                  setOpen(invitation);
                 }}
               />
             )}
@@ -360,14 +361,14 @@ function CanSee({ gymName, person }: { gymName: string; person: string }) {
   return (
     <Card style={styles.panel}>
       <View style={styles.row}>
-        <Badge icon="eyeoff" />
+        <Badge icon="shield" />
         <View style={styles.grow}>
           <Txt kind="h3">What {gymName} can see</Txt>
           <Txt kind="small">While you’re a {person}.</Txt>
         </View>
       </View>
       <Group tone="good" title="Can see" icon="check" lines={GYM_CAN_SEE} />
-      <Group tone="gold" title="Only if you allow it" icon="shield" lines={GYM_SEES_IF_YOU_ALLOW} />
+      <Group tone="gold" title="Only if you allow it" icon="sliders" lines={GYM_SEES_IF_YOU_ALLOW} />
       <Group tone="plain" title="Never" icon="x" lines={GYM_NEVER_SEES} />
     </Card>
   );
