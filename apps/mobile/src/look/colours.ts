@@ -16,7 +16,7 @@ export const colours = {
   /** A box of words over a picture. */
   veil: "rgba(10,9,8,0.7)",
   /** A choice over a page's own picture: dark enough to read, clear enough to see the picture through. */
-  overPicture: "rgba(16,15,13,0.5)",
+  overPicture: "rgba(16,15,13,0.62)",
   /** Behind a box from the bottom, and that box's handle. */
   scrim: "rgba(0,0,0,0.66)",
   grab: "rgba(255,255,255,0.18)",

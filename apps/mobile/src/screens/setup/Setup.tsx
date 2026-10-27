@@ -210,7 +210,7 @@ function Bar({ onClose, onBack, step, steps }: { onClose: () => void; onBack?: (
 
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: colours.page },
-  picture: { position: "absolute", top: 0, left: 0, width: "100%", height: "100%", opacity: 0.5 },
+  picture: { position: "absolute", top: 0, left: 0, width: "100%", height: "100%", opacity: 0.28 },
   bar: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 8, paddingTop: 6 },
   round: { width: sizes.press, height: sizes.press, alignItems: "center", justifyContent: "center", borderRadius: sizes.round },
   steps: { flex: 1, flexDirection: "row", gap: 4 },

@@ -93,7 +93,7 @@ export function Grid({ cells, columns }: { cells: readonly Cell[]; columns: numb
             </Pressable>
           ))}
           {Array.from({ length: columns - row.length }, (_, i) => (
-            <View key={`gap-${String(i)}`} style={styles.gap} />
+            <View key={`gap-${String(i)}`} accessible={false} style={[styles.cell, styles.unseen]} />
           ))}
         </View>
       ))}
@@ -191,7 +191,8 @@ const styles = StyleSheet.create({
   markOn: { borderColor: colours.orange, backgroundColor: colours.orange },
   gridRow: { flexDirection: "row", gap: 10 },
   cell: { ...box, flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, height: sizes.button, paddingHorizontal: 8 },
-  gap: { flex: 1 },
+  // The empty place at the end of a short row is a box like the others, unseen, so every box is one width.
+  unseen: { opacity: 0 },
   cellLabel: { fontFamily: fonts.medium, fontSize: 14, lineHeight: 18, color: colours.text },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: { ...box, flexDirection: "row", alignItems: "center", alignSelf: "flex-start", gap: 6, height: sizes.press, paddingHorizontal: 16, borderRadius: sizes.round },
