@@ -303,16 +303,28 @@ d("sign-in by email code (real Postgres)", () => {
     expect((await send(email)).statusCode).toBe(200);
   });
 
-  it("a stranger who asks for somebody's codes cannot lock them out: the owner passes the check and gets theirs", { timeout: 30_000 }, async () => {
+  it("junk checks typed at somebody's address count against nobody: their own code still signs them in", { timeout: 30_000 }, async () => {
     const email = "code-stranger@example.com";
+    expect((await send(email)).statusCode).toBe(200);
+    for (let i = 0; i < 25; i++) expect((await verify(email, "nope")).statusCode).toBe(400);
+    await ageCodes(email, "61 seconds");
+    expect((await send(email)).statusCode).toBe(200);
+    expect((await verify(email, lastCodeFor(email))).statusCode).toBe(200);
+  });
+
+  // Kd's choice (2026-10-27, rulings/2026-10-27-12-passes.md): four a day, then tomorrow, even
+  // though a person who passes the check by hand can use up somebody else's four.
+  it("four codes used up by anybody, the fourth past the check, and the address waits until tomorrow", { timeout: 30_000 }, async () => {
+    const email = "code-stranger-day@example.com";
     for (let i = 0; i < 3; i++) {
       expect((await send(email)).statusCode).toBe(200);
       await ageCodes(email, "61 seconds");
     }
-    // Junk checks typed at the address count against nobody either.
-    for (let i = 0; i < 25; i++) expect((await verify(email, "nope")).statusCode).toBe(400);
     expect((await send(email, "pass")).statusCode).toBe(200);
-    expect((await verify(email, lastCodeFor(email))).statusCode).toBe(200);
+    await ageCodes(email, "61 seconds");
+    const owner = await send(email, "pass");
+    expect(owner.statusCode).toBe(429);
+    expect((JSON.parse(owner.body) as { error: string }).error).toBe("code_limit");
   });
 
   it("a code that signed you in does not count against the day: sign in, then three more codes are still allowed", { timeout: 30_000 }, async () => {

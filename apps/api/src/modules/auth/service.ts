@@ -412,7 +412,8 @@ export async function refresh(
   // A newer phone sign-in ended this one: no theft, so nothing more to end, and the
   // phone is told why (spec Part 3 §10.5).
   if (row.revokedReason === "signed_in_elsewhere") throw signedInElsewhere();
-  /** The phone's lost reply (repo.reissueAfterLostReply); null where it is not one. */
+  /** The phone's lost reply (repo.reissueAfterLostReply); null where it is not one. A token
+   *  answered as often as a lost reply may be is refused, and nothing is ended. */
   const afterLostReply = async (): Promise<SessionTokens | null> => {
     if (row.client !== "phone") return null;
     const owner = await repo.findUserById(deps.sql, row.userId);
@@ -427,7 +428,8 @@ export async function refresh(
       ip: meta.ip,
       userAgent: meta.userAgent,
     });
-    return reissued
+    if (reissued === "full") throw invalidRefresh();
+    return reissued === "reissued"
       ? { accessToken: signAccessToken(row.userId, deps.config, row.familyId), refreshToken: again }
       : null;
   };

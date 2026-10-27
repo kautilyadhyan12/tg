@@ -432,16 +432,21 @@ d("the phone app's sign-in: one phone at a time (real Postgres)", () => {
     tokensIn(await phoneRefresh(kept.refreshToken));
   });
 
-  it("answers to one lost reply are capped: at most five live, and the newest always works", { timeout: 30_000 }, async () => {
+  it("answers to one lost reply are capped at ten, and copies past them push nothing out", { timeout: 30_000 }, async () => {
     const email = "phone12a-capped@example.com";
     const phone = await phoneSignIn(email);
-    let newest = phone;
-    for (let i = 0; i < 8; i++) newest = tokensIn(await phoneRefresh(phone.refreshToken));
+    // The phone's own answer: it refreshed, and holds what came back.
+    const held = tokensIn(await phoneRefresh(phone.refreshToken));
+    // Somebody with a copy of the old token sends it again and again.
+    for (let i = 0; i < 9; i++) expect((await phoneRefresh(phone.refreshToken)).statusCode).toBe(200);
+    for (let i = 0; i < 3; i++) expect(errorOf(await phoneRefresh(phone.refreshToken)).error).toBe("invalid_refresh");
     const live = await sql<{ n: number }[]>`
       SELECT count(*)::int AS n FROM refresh_tokens
       WHERE user_id = ${await userIdOf(email)} AND client = 'phone' AND revoked_at IS NULL`;
-    expect(live[0]?.n).toBe(5);
-    tokensIn(await phoneRefresh(newest.refreshToken));
+    expect(live[0]?.n).toBe(10);
+    // The phone's own answer still works, and using it ends the copies' answers.
+    tokensIn(await phoneRefresh(held.refreshToken));
+    expect(await livePhoneFamilies(await userIdOf(email))).toHaveLength(1);
   });
 
   it("two tries of one refresh at the same instant both get an answer, and one sign-in is left", { timeout: 30_000 }, async () => {

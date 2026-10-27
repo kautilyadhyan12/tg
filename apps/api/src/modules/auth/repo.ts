@@ -468,9 +468,10 @@ export async function rotateRefreshToken(
  *  tries in flight, or a request delivered twice, each get an answer that works, and the
  *  phone keeps whichever reached it (the data-integrity pass on item 12, H1: ending the
  *  earlier answer signed the phone out when the replies crossed). The first of them used
- *  ends the rest (rotateRefreshToken), and at most LOST_REPLY_ANSWERS are live at once:
- *  past that the oldest is ended (the security pass, L1). false: none of that holds, and
- *  the caller treats the token as reused.
+ *  ends the rest (rotateRefreshToken). At most LOST_REPLY_ANSWERS are live at once: past
+ *  that the token is answered "full" and NOTHING is ended, so a copy sent again and again
+ *  cannot push out the answer the phone holds (the security pass, L1, and its re-check).
+ *  "not_lost": none of that holds, and the caller treats the token as reused.
  *
  *  No clock on it (12b-i's review): a reply lost in a lift and the app opened the next
  *  day is the same lost reply (CLAUDE.md §4: a lost connection never signs anybody
@@ -492,7 +493,7 @@ export async function reissueAfterLostReply(
     ip: string | null;
     userAgent: string | null;
   },
-): Promise<boolean> {
+): Promise<"reissued" | "not_lost" | "full"> {
   return await sql.begin(async (tx) => {
     await waitOutRotations(tx, input.userId);
     // The newest answer to this token is still unused: its reply was what was lost.
@@ -503,7 +504,11 @@ export async function reissueAfterLostReply(
         AND old.revoked_reason IS NULL AND old.expires_at > now()
         AND successor.user_id = old.user_id AND successor.family_id = old.family_id
         AND successor.revoked_at IS NULL AND successor.expires_at > now()`;
-    if (open.length === 0) return false;
+    if (open.length === 0) return "not_lost";
+    const live = await tx<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM refresh_tokens
+      WHERE user_id = ${input.userId} AND family_id = ${input.familyId} AND revoked_at IS NULL`;
+    if ((live[0]?.n ?? 0) >= LOST_REPLY_ANSWERS) return "full";
     const rows = await tx<{ id: string }[]>`
       INSERT INTO refresh_tokens (user_id, family_id, token_hash, expires_at, ip, user_agent, client)
       VALUES (${input.userId}, ${input.familyId}, ${input.newTokenHash}, ${input.expiresAt},
@@ -515,19 +520,13 @@ export async function reissueAfterLostReply(
     await tx`
       UPDATE refresh_tokens SET replaced_by = ${newId}
       WHERE id = ${input.oldId} AND user_id = ${input.userId}`;
-    await tx`
-      UPDATE refresh_tokens SET revoked_at = now()
-      WHERE id IN (
-        SELECT id FROM refresh_tokens
-        WHERE user_id = ${input.userId} AND family_id = ${input.familyId} AND revoked_at IS NULL
-        ORDER BY created_at DESC, id DESC
-        OFFSET ${LOST_REPLY_ANSWERS})`;
-    return true;
+    return "reissued";
   });
 }
 
-/** Answers to one lost reply that may be live at once: three tries a refresh, and room. */
-export const LOST_REPLY_ANSWERS = 5;
+/** Answers to one lost reply that may be live at once: the phone tries four times each time
+ *  it is opened (a refresh and three tries after it), so two openings with no reply, and room. */
+export const LOST_REPLY_ANSWERS = 10;
 
 /** True where the token that replaced this one was ended by a newer phone sign-in: the
  *  phone holding this one never received that token, and is told why all the same. */
