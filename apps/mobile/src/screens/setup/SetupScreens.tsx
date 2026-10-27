@@ -274,6 +274,9 @@ function TargetScale({
 
 // ── Screen 1 ────────────────────────────────────────────────────────────────
 
+/** Under "Your weight", the choice's own verb: "Lose weight" reads "Lose". */
+const WEIGHT_WORD: Readonly<Record<Direction, string>> = { lose: "Lose", maintain: "Keep", gain: "Gain" };
+
 /** The ONE weight choice, which alone sets the calories (RULINGS 2026-09-10); under it, any
  *  number of goals, none of which moves them. */
 export function GoalScreen({ answers, save }: ScreenProps) {
@@ -282,7 +285,7 @@ export function GoalScreen({ answers, save }: ScreenProps) {
     <View style={styles.screen}>
       <Section title="Your weight">
         <Segments
-          options={WEIGHT_GOALS.map((g) => ({ value: g.value, label: g.label.replace(" weight", "").replace("my ", ""), say: g.label }))}
+          options={WEIGHT_GOALS.map((g) => ({ value: g.value, label: WEIGHT_WORD[g.value], say: g.label }))}
           selected={answers.weightGoal}
           onPick={(value) => {
             if (answers.weightGoal !== value) save({ weightGoal: value });

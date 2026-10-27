@@ -129,7 +129,7 @@ function SetupBody({ onClose, bottom }: { onClose: () => void; bottom: number })
           {ob.status === "failed" ? (
             <>
               <Txt style={styles.centre}>{LOAD_FAILED}</Txt>
-              <Button label="Try again" kind="plain" onPress={ob.retry} />
+              <Button label="Try again" kind="plain" style={styles.self} onPress={ob.retry} />
             </>
           ) : null}
         </View>
@@ -219,7 +219,8 @@ const styles = StyleSheet.create({
   body: { paddingHorizontal: sizes.edge, paddingTop: 10, paddingBottom: 28, gap: 18 },
   middle: { flex: 1, alignItems: "center", justifyContent: "center", gap: 14, padding: sizes.edge },
   centre: { textAlign: "center" },
+  self: { alignSelf: "center" },
   problem: { fontFamily: fonts.medium, fontSize: 13, lineHeight: 18, color: colours.badText, textAlign: "center" },
   foot: { gap: 8, paddingTop: 10, paddingHorizontal: sizes.edge, alignItems: "flex-end" },
-  next: { minWidth: 150 },
+  next: { minWidth: 150, alignSelf: "flex-end" },
 });

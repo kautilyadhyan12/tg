@@ -54,9 +54,12 @@ export function Ruler({ label, rows, index, isSet, shown, empty = "Not set", maj
   const clamp = (i: number) => Math.max(0, Math.min(last, i));
   const rowAt = (x: number) => clamp(Math.round(x / TICK));
 
-  useEffect(() => {
+  // Onto the answer's row whenever it changes from outside, and again once the scale knows its own
+  // length: placed before its width is known, a row near the end is cut short and left short.
+  const place = () => {
     if (!dragging.current) list.current?.scrollToOffset({ offset: index * TICK, animated: false });
-  }, [index, rows.length, width]);
+  };
+  useEffect(place, [index, rows.length, width]);
 
   const settle = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     if (!dragging.current) return;
@@ -136,6 +139,7 @@ export function Ruler({ label, rows, index, isSet, shown, empty = "Not set", maj
             if (Math.abs(e.nativeEvent.velocity?.x ?? 0) < 0.05) settle(e);
           }}
           onMomentumScrollEnd={settle}
+          onContentSizeChange={place}
         />
         <View pointerEvents="none" style={[styles.fade, styles.fadeLeft]} />
         <View pointerEvents="none" style={[styles.fade, styles.fadeRight]} />
@@ -153,7 +157,7 @@ const styles = StyleSheet.create({
   value: { fontFamily: fonts.bold, fontSize: 20, lineHeight: 24 },
   valueOn: { color: colours.orangeLight },
   valueOff: { color: colours.textFaint, fontFamily: fonts.medium, fontSize: 15 },
-  track: { height: HEIGHT, overflow: "hidden" },
+  track: { height: HEIGHT, overflow: "hidden", backgroundColor: colours.page, borderRadius: 12 },
   resting: { opacity: 0.45 },
   cell: { width: TICK, height: HEIGHT, alignItems: "center", overflow: "visible" },
   tick: { width: 1.5, borderRadius: 1, backgroundColor: colours.textFaint },
