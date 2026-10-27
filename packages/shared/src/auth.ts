@@ -53,6 +53,11 @@ export const SIGN_IN_CODE_RULES = {
   /** Three UNUSED codes per address per rolling day — the first and two
    *  resends (Kd 2026-10-13). A code that signed the person in does not count. */
   maxCodesPerDay: 3,
+  /** Past those three, ONE more sign-in code goes out after the robot check, four in a
+   *  day, then tomorrow (Kd 2026-10-27): a robot cannot run up the emails. A person who
+   *  knows somebody's address and passes the check by hand can still use up that day's
+   *  four; Kd chose that over more emails a day, and Google's sign-in is not counted. */
+  maxCodesPerDayWithRobotCheck: 4,
   /** Five wrong guesses kill the code. */
   maxAttempts: 5,
 } as const;

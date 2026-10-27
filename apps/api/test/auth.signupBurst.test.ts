@@ -167,18 +167,18 @@ d("a whole gym signing up on one internet address (real Postgres)", () => {
     expect(refused).toEqual([]);
   });
 
-  it("on a busy address, ONE person still gets three codes a day, and the fourth is refused", { timeout: 30_000 }, async () => {
+  it("on a busy address, ONE person still gets four codes a day past the check, and the fifth is refused", { timeout: 30_000 }, async () => {
     const ip = gymAddress();
     await makeBusy(ip);
     const email = "burst-daycap@example.com";
-    for (let sentSoFar = 0; sentSoFar < 3; sentSoFar++) {
+    for (let sentSoFar = 0; sentSoFar < 4; sentSoFar++) {
       expect([sentSoFar, (await askForCode(ip, email)).statusCode]).toEqual([sentSoFar, 200]);
       await ageCodes(email, "61 seconds");
     }
-    const fourth = await askForCode(ip, email);
-    expect(fourth.statusCode).toBe(429);
-    expect(errorOf(fourth)).toBe("code_limit");
-    expect(await codesFor(email)).toBe(3);
+    const fifth = await askForCode(ip, email);
+    expect(fifth.statusCode).toBe(429);
+    expect(errorOf(fifth)).toBe("code_limit");
+    expect(await codesFor(email)).toBe(4);
   });
 
   it("on a busy address, five wrong guesses still kill ONE person's code; the right one is then refused", { timeout: 30_000 }, async () => {
@@ -194,15 +194,33 @@ d("a whole gym signing up on one internet address (real Postgres)", () => {
     expect((await sql`SELECT 1 FROM users WHERE email = ${email}`).length).toBe(0);
   });
 
-  it("on a busy address, ONE person still gets ten sends an hour, and the eleventh is refused", { timeout: 30_000 }, async () => {
-    const ip = gymAddress();
-    await makeBusy(ip);
+  it("a stranger typing one person's address over and over never locks them out for the hour", { timeout: 30_000 }, async () => {
+    const stranger = gymAddress();
     const email = "burst-hourly@example.com";
-    // Inside the sixty-second gap every send after the first is "too soon"; each still counts.
-    for (let i = 0; i < 10; i++) expect(errorOf(await askForCode(ip, email)) ?? "sent").not.toBe("rate_limited");
-    const eleventh = await askForCode(ip, email);
-    expect(eleventh.statusCode).toBe(429);
-    expect(errorOf(eleventh)).toBe("rate_limited");
+    expect((await askForCode(stranger, email)).statusCode).toBe(200);
+    // Inside the sixty-second gap every send is "too soon", and none is counted against the person.
+    for (let i = 0; i < 15; i++) expect(errorOf(await askForCode(stranger, email))).toBe("code_too_soon");
+    await ageCodes(email, "61 seconds");
+    expect((await askForCode(elsewhere(), email)).statusCode).toBe(200);
+  });
+
+  it("with Redis down every send asks for the robot check, and one that passes still gets its code", { timeout: 30_000 }, async () => {
+    const memory = createMemoryRedis();
+    memory.down = true;
+    const outage = await buildApp(loadConfig(baseEnv), { emailSender: sender, robotCheck: robot, googleVerifier: google, redis: memory });
+    try {
+      const ask = (body: object) =>
+        outage.inject({ method: "POST", url: "/v1/auth/code/send", remoteAddress: gymAddress(), headers: { "content-type": "application/json" }, payload: JSON.stringify(body) });
+      const email = "burst-redis-down@example.com";
+      const asked = await ask({ email });
+      expect(asked.statusCode).toBe(403);
+      expect(errorOf(asked)).toBe("robot_check");
+      expect(await codesFor(email)).toBe(0);
+      expect((await ask({ email, robotToken: `pass-${email}` })).statusCode).toBe(200);
+      expect(await codesFor(email)).toBe(1);
+    } finally {
+      await outage.close();
+    }
   });
 
   // ── the robot check ───────────────────────────────────────────────────────
@@ -258,11 +276,12 @@ d("a whole gym signing up on one internet address (real Postgres)", () => {
     expect(robot.asked).toBe(askedBefore);
   });
 
-  it("an answer sent while the address is under 20 is never asked about; one too long is a 400", { timeout: 30_000 }, async () => {
+  it("an answer sent while the address is under 20 is checked like any other; one too long is a 400", { timeout: 30_000 }, async () => {
     const ip = gymAddress();
-    const askedBefore = robot.asked;
-    expect((await post(ip, "/v1/auth/code/send", { email: "burst-early@example.com", robotToken: "made-up" })).statusCode).toBe(200);
-    expect(robot.asked).toBe(askedBefore);
+    const failed = await post(ip, "/v1/auth/code/send", { email: "burst-early@example.com", robotToken: "made-up" });
+    expect(failed.statusCode).toBe(403);
+    expect(errorOf(failed)).toBe("robot_failed");
+    expect(await codesFor("burst-early@example.com")).toBe(0);
     const long = await post(ip, "/v1/auth/code/send", { email: "burst-long@example.com", robotToken: "x".repeat(2049) });
     expect(long.statusCode).toBe(400);
   });

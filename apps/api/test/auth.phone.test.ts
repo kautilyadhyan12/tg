@@ -392,13 +392,61 @@ d("the phone app's sign-in: one phone at a time (real Postgres)", () => {
     const again = tokensIn(await phoneRefresh(first.refreshToken));
     const third = tokensIn(await phoneRefresh(first.refreshToken));
     expect(new Set([first.refreshToken, tokensIn(lost).refreshToken, again.refreshToken, third.refreshToken]).size).toBe(4);
-    // Only the last one received is live, and it carries on.
+    // One sign-in, and the last one received carries on; using it ends the other answers.
     expect(await livePhoneFamilies(await userIdOf(email))).toHaveLength(1);
+    tokensIn(await phoneRefresh(third.refreshToken));
     const live = await sql<{ n: number }[]>`
       SELECT count(*)::int AS n FROM refresh_tokens
       WHERE user_id = ${await userIdOf(email)} AND client = 'phone' AND revoked_at IS NULL`;
     expect(live[0]?.n).toBe(1);
-    tokensIn(await phoneRefresh(third.refreshToken));
+  });
+
+  // THE DATA-INTEGRITY PASS ON ITEM 12, H1: two answers to one lost reply crossed on the way,
+  // and the phone kept the one the server had made first. Each answer must work.
+  it.each([
+    ["the first answer made", 0],
+    ["the second answer made", 1],
+  ] as const)("two tries of a lost reply in flight together: the phone keeps %s, and stays signed in", { timeout: 30_000 }, async (_name, kept) => {
+    const email = `phone12a-crossed-${String(kept)}@example.com`;
+    const phone = await phoneSignIn(email);
+    expect((await phoneRefresh(phone.refreshToken)).statusCode).toBe(200); // its reply lost
+    const answers = await Promise.all([phoneRefresh(phone.refreshToken), phoneRefresh(phone.refreshToken)]);
+    const made = await sql<{ token_hash: string }[]>`
+      SELECT token_hash FROM refresh_tokens
+      WHERE user_id = ${await userIdOf(email)} AND client = 'phone' AND revoked_at IS NULL
+      ORDER BY created_at, id`;
+    const byOrder = made.map((row) => row.token_hash);
+    const held = answers.map((a) => tokensIn(a)).find((t) => sha256Hex(t.refreshToken) === byOrder[kept + 1]);
+    if (held === undefined) throw new Error("no answer was made in that order");
+    const next = tokensIn(await phoneRefresh(held.refreshToken));
+    tokensIn(await phoneRefresh(next.refreshToken));
+    expect(await livePhoneFamilies(await userIdOf(email))).toHaveLength(1);
+  });
+
+  it("a late copy of a lost reply's try, after the phone took an answer, does not sign the phone out", { timeout: 30_000 }, async () => {
+    const email = "phone12a-latecopy@example.com";
+    const phone = await phoneSignIn(email);
+    expect((await phoneRefresh(phone.refreshToken)).statusCode).toBe(200); // lost
+    const kept = tokensIn(await phoneRefresh(phone.refreshToken)); // the answer the phone took
+    expect((await phoneRefresh(phone.refreshToken)).statusCode).toBe(200); // a copy delivered late
+    tokensIn(await phoneRefresh(kept.refreshToken));
+  });
+
+  it("answers to one lost reply are capped at ten, and copies past them push nothing out", { timeout: 30_000 }, async () => {
+    const email = "phone12a-capped@example.com";
+    const phone = await phoneSignIn(email);
+    // The phone's own answer: it refreshed, and holds what came back.
+    const held = tokensIn(await phoneRefresh(phone.refreshToken));
+    // Somebody with a copy of the old token sends it again and again.
+    for (let i = 0; i < 9; i++) expect((await phoneRefresh(phone.refreshToken)).statusCode).toBe(200);
+    for (let i = 0; i < 3; i++) expect(errorOf(await phoneRefresh(phone.refreshToken)).error).toBe("invalid_refresh");
+    const live = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM refresh_tokens
+      WHERE user_id = ${await userIdOf(email)} AND client = 'phone' AND revoked_at IS NULL`;
+    expect(live[0]?.n).toBe(10);
+    // The phone's own answer still works, and using it ends the copies' answers.
+    tokensIn(await phoneRefresh(held.refreshToken));
+    expect(await livePhoneFamilies(await userIdOf(email))).toHaveLength(1);
   });
 
   it("two tries of one refresh at the same instant both get an answer, and one sign-in is left", { timeout: 30_000 }, async () => {
@@ -406,11 +454,14 @@ d("the phone app's sign-in: one phone at a time (real Postgres)", () => {
     const first = await phoneSignIn(email);
     const answers = await Promise.all([phoneRefresh(first.refreshToken), phoneRefresh(first.refreshToken)]);
     expect(answers.map((a) => a.statusCode)).toEqual([200, 200]);
-    const live = await sql<{ token_hash: string }[]>`
-      SELECT token_hash FROM refresh_tokens
+    // One sign-in; whichever answer the phone kept carries on, and using it ends the other.
+    expect(await livePhoneFamilies(await userIdOf(email))).toHaveLength(1);
+    const kept = tokensIn(answers[1]);
+    tokensIn(await phoneRefresh(kept.refreshToken));
+    const live = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM refresh_tokens
       WHERE user_id = ${await userIdOf(email)} AND client = 'phone' AND revoked_at IS NULL`;
-    expect(live).toHaveLength(1);
-    expect(answers.map((a) => sha256Hex(tokensIn(a).refreshToken))).toContain(live[0]?.token_hash);
+    expect(live[0]?.n).toBe(1);
   });
 
   // THE PHONE'S WORST THING (12b-i's review): a reply lost in a lift, and the app opened again
@@ -427,12 +478,13 @@ d("the phone app's sign-in: one phone at a time (real Postgres)", () => {
       UPDATE refresh_tokens SET revoked_at = revoked_at - ${later}::interval, created_at = created_at - ${later}::interval
       WHERE user_id = ${await userIdOf(email)}`;
     const back = tokensIn(await phoneRefresh(phone.refreshToken));
-    // One sign-in is live, the one the phone now holds, and it carries on.
+    // The one the phone now holds is live, and it carries on.
     const live = await sql<{ token_hash: string }[]>`
       SELECT token_hash FROM refresh_tokens
       WHERE user_id = ${await userIdOf(email)} AND client = 'phone' AND revoked_at IS NULL`;
-    expect(live.map((row) => row.token_hash)).toEqual([sha256Hex(back.refreshToken)]);
+    expect(live.map((row) => row.token_hash)).toContain(sha256Hex(back.refreshToken));
     tokensIn(await phoneRefresh(back.refreshToken));
+    expect(await livePhoneFamilies(await userIdOf(email))).toHaveLength(1);
   });
 
   it("a token past its own life is not answered again, lost reply or none", { timeout: 30_000 }, async () => {
@@ -453,11 +505,12 @@ d("the phone app's sign-in: one phone at a time (real Postgres)", () => {
     expect(errorOf(await phoneRefresh(usedThird.refreshToken)).error).toBe("invalid_refresh");
 
     // A thief sends the old token before the phone has refreshed again, and is answered;
-    // the phone, holding the token that answer ended, refreshes next, and that ends the thief's too.
+    // the phone refreshes next, which ends the thief's answer, and the thief's next try is
+    // reuse, which ends the whole sign-in.
     const owner = await phoneSignIn("phone12a-thief@example.com");
     const ownerNext = tokensIn(await phoneRefresh(owner.refreshToken));
     const thief = tokensIn(await phoneRefresh(owner.refreshToken));
-    expect(errorOf(await phoneRefresh(ownerNext.refreshToken)).error).toBe("invalid_refresh");
+    tokensIn(await phoneRefresh(ownerNext.refreshToken));
     expect(errorOf(await phoneRefresh(thief.refreshToken)).error).toBe("invalid_refresh");
     expect(await livePhoneFamilies(await userIdOf("phone12a-thief@example.com"))).toEqual([]);
   });

@@ -10,7 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
-import { requestCode } from "../src/modules/auth/codes.js";
+import { WRONG_CODE_WORDS, requestCode } from "../src/modules/auth/codes.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
 import { AuthError } from "../src/modules/auth/errors.js";
 import type { UsersEmailSender } from "../src/modules/users/email.js";
@@ -93,7 +93,8 @@ d("sign-in by email code (real Postgres)", () => {
       ...(opts.body !== undefined ? { payload: JSON.stringify(opts.body) } : {}),
     });
 
-  const send = (email: string) => inject({ method: "POST", url: "/v1/auth/code/send", body: { email } });
+  const send = (email: string, robotToken?: string) =>
+    inject({ method: "POST", url: "/v1/auth/code/send", body: robotToken === undefined ? { email } : { email, robotToken } });
   const verify = (email: string, code: string) =>
     inject({ method: "POST", url: "/v1/auth/code/verify", body: { email, code } });
   const lastCodeFor = (email: string): string => {
@@ -110,7 +111,12 @@ d("sign-in by email code (real Postgres)", () => {
   beforeAll(async () => {
     await sql`DELETE FROM sign_in_codes WHERE email LIKE 'code-%@example.com'`;
     await sql`DELETE FROM users WHERE email LIKE 'code-%@example.com'`;
-    app = await buildApp(loadConfig(baseEnv), { emailSender: sender, usersEmailSender: usersSender });
+    app = await buildApp(loadConfig(baseEnv), {
+      emailSender: sender,
+      usersEmailSender: usersSender,
+      // The robot check as Cloudflare answers: "pass" passes, anything else does not.
+      robotCheck: { siteKey: "code-site-key", verify: (token) => Promise.resolve(token === "pass" ? ("passed" as const) : ("failed" as const)) },
+    });
   }, 60_000);
 
   afterAll(async () => {
@@ -200,14 +206,13 @@ d("sign-in by email code (real Postgres)", () => {
     const code = lastCodeFor(email);
     const wrong = code === "000000" ? "000001" : "000000";
 
-    for (let i = 1; i <= 4; i++) {
+    // Every wrong code is told in the same sentence, the fifth too: a count of tries left
+    // told a stranger that somebody had a code waiting (security pass on item 12, L3).
+    for (let i = 1; i <= 5; i++) {
       const res = await verify(email, wrong);
       expect(res.statusCode).toBe(400);
-      expect((JSON.parse(res.body) as { message: string }).message).toContain(`${String(5 - i)} `);
+      expect((JSON.parse(res.body) as { message: string }).message).toBe(WRONG_CODE_WORDS);
     }
-    const fifth = await verify(email, wrong);
-    expect(fifth.statusCode).toBe(400);
-    expect((JSON.parse(fifth.body) as { message: string }).message).toMatch(/too many wrong tries/i);
     // Dead IN THE DATABASE, not merely refused by the app: the fifth guess
     // expired the row in the same statement that counted it (mutant A3).
     const row = (await sql<{ attempts: number; dead: boolean }[]>`
@@ -230,8 +235,7 @@ d("sign-in by email code (real Postgres)", () => {
     const wrong = code === "000000" ? "000001" : "000000";
     const guess = await verify(email, wrong);
     expect(guess.statusCode).toBe(400);
-    expect((JSON.parse(guess.body) as { message: string }).message).toMatch(/expired/i);
-    expect((JSON.parse(guess.body) as { message: string }).message).not.toMatch(/tries left/i);
+    expect((JSON.parse(guess.body) as { message: string }).message).toBe(WRONG_CODE_WORDS);
     const res = await verify(email, code);
     expect(res.statusCode).toBe(400);
   });
@@ -273,21 +277,54 @@ d("sign-in by email code (real Postgres)", () => {
     expect((await sql`SELECT 1 FROM users WHERE email = ${email}`).length).toBe(0);
   });
 
-  it("three codes a day per address, the first and two resends: the fourth is refused until the day has passed", { timeout: 30_000 }, async () => {
+  it("three codes a day free, then one more past the robot check, then none until the day has passed", { timeout: 30_000 }, async () => {
     const email = "code-daycap@example.com";
     for (let sentSoFar = 0; sentSoFar < 3; sentSoFar++) {
       expect([sentSoFar, (await send(email)).statusCode]).toEqual([sentSoFar, 200]);
       await ageCodes(email, "61 seconds");
     }
-
+    // The fourth asks for the robot check (Kd 2026-10-27), and a failed check sends nothing.
     const fourth = await send(email);
-    expect(fourth.statusCode).toBe(429);
-    expect((JSON.parse(fourth.body) as { error: string; message: string }).error).toBe("code_limit");
-    expect((JSON.parse(fourth.body) as { message: string }).message).toMatch(/too many codes today/i);
+    expect(fourth.statusCode).toBe(403);
+    expect(JSON.parse(fourth.body)).toMatchObject({ error: "robot_check", robotCheckKey: "code-site-key" });
+    expect((await send(email, "wrong")).statusCode).toBe(403);
+    expect(await sql`SELECT 1 FROM sign_in_codes WHERE email = ${email}`).toHaveLength(3);
+    for (const n of [4]) {
+      expect([n, (await send(email, "pass")).statusCode]).toEqual([n, 200]);
+      await ageCodes(email, "61 seconds");
+    }
+    const fifth = await send(email, "pass");
+    expect(fifth.statusCode).toBe(429);
+    expect((JSON.parse(fifth.body) as { error: string; message: string }).error).toBe("code_limit");
+    expect((JSON.parse(fifth.body) as { message: string }).message).toMatch(/too many codes today/i);
 
     // Tomorrow: the old ones fall out of the window.
     await ageCodes(email, "24 hours");
     expect((await send(email)).statusCode).toBe(200);
+  });
+
+  it("junk checks typed at somebody's address count against nobody: their own code still signs them in", { timeout: 30_000 }, async () => {
+    const email = "code-stranger@example.com";
+    expect((await send(email)).statusCode).toBe(200);
+    for (let i = 0; i < 25; i++) expect((await verify(email, "nope")).statusCode).toBe(400);
+    await ageCodes(email, "61 seconds");
+    expect((await send(email)).statusCode).toBe(200);
+    expect((await verify(email, lastCodeFor(email))).statusCode).toBe(200);
+  });
+
+  // Kd's choice (2026-10-27, rulings/2026-10-27-12-passes.md): four a day, then tomorrow, even
+  // though a person who passes the check by hand can use up somebody else's four.
+  it("four codes used up by anybody, the fourth past the check, and the address waits until tomorrow", { timeout: 30_000 }, async () => {
+    const email = "code-stranger-day@example.com";
+    for (let i = 0; i < 3; i++) {
+      expect((await send(email)).statusCode).toBe(200);
+      await ageCodes(email, "61 seconds");
+    }
+    expect((await send(email, "pass")).statusCode).toBe(200);
+    await ageCodes(email, "61 seconds");
+    const owner = await send(email, "pass");
+    expect(owner.statusCode).toBe(429);
+    expect((JSON.parse(owner.body) as { error: string }).error).toBe("code_limit");
   });
 
   it("a code that signed you in does not count against the day: sign in, then three more codes are still allowed", { timeout: 30_000 }, async () => {
@@ -303,9 +340,7 @@ d("sign-in by email code (real Postgres)", () => {
     await ageCodes(email, "61 seconds");
     expect((await send(email)).statusCode).toBe(200); // unused 3 of 3
     await ageCodes(email, "61 seconds");
-    const fifth = await send(email);
-    expect(fifth.statusCode).toBe(429);
-    expect((JSON.parse(fifth.body) as { error: string }).error).toBe("code_limit");
+    expect((await send(email)).statusCode).toBe(403); // past the free three: the robot check
   });
 
   it("asking again immediately after signing in is still refused as too soon", { timeout: 30_000 }, async () => {
@@ -347,6 +382,20 @@ d("sign-in by email code (real Postgres)", () => {
     expect(outcomes.sort()).toEqual(["code_too_soon", "code_too_soon", "issued"]);
     expect((await sql`SELECT 1 FROM sign_in_codes WHERE email = ${email}`).length).toBe(1);
     expect(sent).toHaveLength(1);
+  });
+
+  it("a resend whose email fails leaves the code already sent working", { timeout: 30_000 }, async () => {
+    const email = "code-resend-fails@example.com";
+    expect((await send(email)).statusCode).toBe(200);
+    const first = lastCodeFor(email);
+    await ageCodes(email, "61 seconds");
+    const deps = { sql, config: loadConfig(baseEnv), log: api().log };
+    const failed = await requestCode(deps, { email, purpose: "sign_in" }, () => Promise.reject(new Error("smtp down"))).then(
+      () => "issued",
+      (err: unknown) => (err instanceof AuthError ? err.code : "other"),
+    );
+    expect(failed).toBe("code_send_failed");
+    expect((await verify(email, first)).statusCode).toBe(200);
   });
 
   it("asking never reveals whether the address has an account: the two answers are identical", { timeout: 30_000 }, async () => {

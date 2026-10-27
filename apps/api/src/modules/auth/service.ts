@@ -246,8 +246,13 @@ function oauthDisplayName(name: string | null): string {
  *  (DECISIONS: no verified column). Google asserts the address; a proved
  *  sign-in code proves it. The first proof also ends any password and session
  *  set up before it (repo). Runs before the new session is issued. */
-async function ensureEmailVerified(deps: AuthDeps, userId: string): Promise<void> {
-  await repo.recordVerifiedEmail(deps.sql, userId, sha256Hex(mintOpaqueToken()));
+async function ensureEmailVerified(deps: AuthDeps, userId: string, googleSubject?: string): Promise<void> {
+  await repo.recordVerifiedEmail(
+    deps.sql,
+    userId,
+    sha256Hex(mintOpaqueToken()),
+    googleSubject === undefined ? undefined : { provider: "google", subject: googleSubject },
+  );
 }
 
 /** Google sign-in: log in the linked identity, else link Google to an existing
@@ -265,6 +270,9 @@ export async function googleSignIn(
   if (linkedUserId !== null) {
     const user = await repo.findUserById(deps.sql, linkedUserId);
     if (user === null || user.status !== "active") throw googleUnavailable();
+    // A link saved before 12d's fix could lack its proof: Google still vouches for this
+    // address, so it is proved now (once; a no-op when it already is).
+    if (user.email?.toLowerCase() === identity.email.toLowerCase()) await ensureEmailVerified(deps, user.id);
     return { user: await toAuthUser(deps.sql, user), tokens: await issueSession(deps, user.id, meta, client), isNewAccount: false };
   }
 
@@ -274,8 +282,7 @@ export async function googleSignIn(
   const byEmail = await repo.findUserByEmail(deps.sql, identity.email);
   if (byEmail !== null) {
     if (byEmail.status !== "active") throw googleUnavailable();
-    await repo.linkAuthIdentity(deps.sql, { userId: byEmail.id, provider: "google", subject: identity.subject });
-    await ensureEmailVerified(deps, byEmail.id);
+    await ensureEmailVerified(deps, byEmail.id, identity.subject);
     return { user: await toAuthUser(deps.sql, byEmail), tokens: await issueSession(deps, byEmail.id, meta, client), isNewAccount: false };
   }
 
@@ -288,12 +295,10 @@ export async function googleSignIn(
     // Lost a concurrent create race on the email → re-resolve and link.
     const raced = await repo.findUserByEmail(deps.sql, identity.email);
     if (raced === null || raced.status !== "active") throw googleUnavailable();
-    await repo.linkAuthIdentity(deps.sql, { userId: raced.id, provider: "google", subject: identity.subject });
-    await ensureEmailVerified(deps, raced.id);
+    await ensureEmailVerified(deps, raced.id, identity.subject);
     return { user: await toAuthUser(deps.sql, raced), tokens: await issueSession(deps, raced.id, meta, client), isNewAccount: false };
   }
-  await repo.linkAuthIdentity(deps.sql, { userId: newUserId, provider: "google", subject: identity.subject });
-  await ensureEmailVerified(deps, newUserId);
+  await ensureEmailVerified(deps, newUserId, identity.subject);
   const created = await repo.findUserById(deps.sql, newUserId);
   if (created === null) throw new Error("created Google user could not be re-read");
   return { user: await toAuthUser(deps.sql, created), tokens: await issueSession(deps, newUserId, meta, client), isNewAccount: true };
@@ -318,8 +323,9 @@ const codeDeps = (deps: AuthDeps): codes.CodeDeps => ({ sql: deps.sql, config: d
 export async function requestSignInCode(
   deps: AuthDeps,
   email: string,
+  robot: codes.RobotAnswer,
 ): Promise<{ resendAfterSeconds: number; expiresInSeconds: number }> {
-  return await codes.requestCode(codeDeps(deps), { email, purpose: "sign_in" }, (to, code) =>
+  return await codes.requestCode(codeDeps(deps), { email, purpose: "sign_in", robot }, (to, code) =>
     deps.emailSender.sendSignInCodeEmail(to, code),
   );
 }
@@ -406,7 +412,8 @@ export async function refresh(
   // A newer phone sign-in ended this one: no theft, so nothing more to end, and the
   // phone is told why (spec Part 3 §10.5).
   if (row.revokedReason === "signed_in_elsewhere") throw signedInElsewhere();
-  /** The phone's lost reply (repo.reissueAfterLostReply); null where it is not one. */
+  /** The phone's lost reply (repo.reissueAfterLostReply); null where it is not one. A token
+   *  answered as often as a lost reply may be is refused, and nothing is ended. */
   const afterLostReply = async (): Promise<SessionTokens | null> => {
     if (row.client !== "phone") return null;
     const owner = await repo.findUserById(deps.sql, row.userId);
@@ -421,7 +428,8 @@ export async function refresh(
       ip: meta.ip,
       userAgent: meta.userAgent,
     });
-    return reissued
+    if (reissued === "full") throw invalidRefresh();
+    return reissued === "reissued"
       ? { accessToken: signAccessToken(row.userId, deps.config, row.familyId), refreshToken: again }
       : null;
   };

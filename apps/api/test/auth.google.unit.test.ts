@@ -3,9 +3,9 @@
 // path can't reach in-process:
 //   B/C: identityFromClaims — email_verified must be exactly `true` (an absent
 //        claim is NOT trusted; it auto-links into an existing password account).
-//   A:   errorSummary — a log-safe summary, never the secret-bearing error object.
+//   A:   refusalReason — a fixed word for the log, never the error or its message.
 import { describe, expect, it } from "vitest";
-import { errorSummary, identityFromClaims } from "../src/modules/auth/google.js";
+import { GOOGLE_REFUSALS, identityFromClaims, refusalReason } from "../src/modules/auth/google.js";
 
 describe("identityFromClaims", () => {
   it("verified email → identity", () => {
@@ -40,20 +40,34 @@ describe("identityFromClaims", () => {
   });
 });
 
-describe("errorSummary", () => {
-  it("returns only the message — never the secret-bearing .config", () => {
-    // A gaxios-shaped error: the token-endpoint request rides on .config.
+describe("refusalReason", () => {
+  it("a gaxios failure gives a fixed word, never its secret-bearing .config", () => {
     const err = Object.assign(new Error("invalid_grant"), {
       config: { data: "client_secret=SUPER_SECRET_VALUE&code=THE_AUTH_CODE" },
       response: { data: { error: "invalid_grant" } },
     });
-    const summary = errorSummary(err);
-    expect(summary).toBe("invalid_grant");
-    expect(summary).not.toContain("SUPER_SECRET_VALUE");
-    expect(summary).not.toContain("THE_AUTH_CODE");
+    expect(refusalReason(err)).toBe("exchange_failed");
   });
 
-  it("non-Error value → String()", () => {
-    expect(errorSummary("boom")).toBe("boom");
+  // The library's own words, which carry the token or its payload (google-auth-library 9.15.1).
+  const payload = JSON.stringify({ email: "priya@gmail.com", name: "Priya Sharma", sub: "1122334455" });
+  it.each<[string, string]>([
+    [`Token used too late, 1793082169.049 > 1793078969: ${payload}`, "expired"],
+    [`Token used too early, 1 < 2: ${payload}`, "too_early"],
+    [`Invalid token signature: eyJhbGciOiJSUzI1NiJ9.${Buffer.from(payload).toString("base64url")}.sig`, "bad_signature"],
+    [`Wrong number of segments in token: eyJhbGciOiJ9`, "malformed"],
+    [`No pem found for envelope: {"alg":"RS256","kid":"x"}`, "unknown_key"],
+    [`Wrong recipient, payload audience != requiredAudience`, "wrong_app"],
+    [`Invalid issuer, expected one of [accounts.google.com], but got evil`, "wrong_issuer"],
+    [`Expiration time too far in future: ${payload}`, "bad_times"],
+    ["Something nobody has written yet, with priya@gmail.com in it", "other"],
+  ])("%s → %s, and nothing of the person", (message, reason) => {
+    const said = refusalReason(new Error(message));
+    expect(said).toBe(reason);
+    expect(GOOGLE_REFUSALS).toContain(said);
+  });
+
+  it("a value that is not an error is other", () => {
+    expect(refusalReason("boom")).toBe("other");
   });
 });

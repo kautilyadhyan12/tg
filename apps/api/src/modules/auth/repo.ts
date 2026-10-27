@@ -143,18 +143,6 @@ export async function createPasswordlessUser(
   }
 }
 
-/** Idempotent link (ON CONFLICT on auth_identities_provider_subject_uq): a
- *  replayed callback is a no-op, never a 23505. */
-export async function linkAuthIdentity(
-  sql: Sql,
-  input: { userId: string; provider: string; subject: string },
-): Promise<void> {
-  await sql`
-    INSERT INTO auth_identities (user_id, provider, subject)
-    VALUES (${input.userId}, ${input.provider}, ${input.subject})
-    ON CONFLICT (provider, subject) DO NOTHING`;
-}
-
 /** Marks an account's email verified by writing a CONSUMED verify_email
  *  token — the exact shape isEmailVerified() derives from (DECISIONS
  *  2026-07-11: users has NO verified column). Google asserts the email, and a
@@ -165,9 +153,19 @@ export async function recordVerifiedEmail(
   sql: Sql,
   userId: string,
   markerHash: string,
+  /** A sign-in's link (Google), written in the proof's own transaction: a request cut
+   *  between the two would leave a link whose address was never proved, and every later
+   *  sign-in by that link would skip the proof (data-integrity pass on item 12, H2). */
+  link?: { provider: string; subject: string },
 ): Promise<void> {
   await sql.begin(async (tx) => {
     await tx`SELECT 1 FROM users WHERE id = ${userId} FOR UPDATE`;
+    if (link !== undefined) {
+      await tx`
+        INSERT INTO auth_identities (user_id, provider, subject)
+        VALUES (${userId}, ${link.provider}, ${link.subject})
+        ON CONFLICT (provider, subject) DO NOTHING`;
+    }
     const proved = await tx<{ one: number }[]>`
       SELECT 1 AS one FROM one_time_tokens
       WHERE user_id = ${userId} AND purpose = 'verify_email' AND used_at IS NOT NULL
@@ -440,6 +438,8 @@ export async function rotateRefreshToken(
   },
 ): Promise<void> {
   await sql.begin(async (tx) => {
+    // The users row first, the order a re-issue and a phone sign-in take it in.
+    await waitOutRotations(tx, input.userId);
     const rows = await tx<{ id: string }[]>`
       INSERT INTO refresh_tokens (user_id, family_id, token_hash, expires_at, ip, user_agent, client)
       VALUES (${input.userId}, ${input.familyId}, ${input.newTokenHash}, ${input.expiresAt},
@@ -447,27 +447,37 @@ export async function rotateRefreshToken(
       RETURNING id`;
     const newId = rows[0]?.id;
     if (newId === undefined) throw new Error("refresh token rotation insert returned no row");
-    // Before the old row is taken: the users row first, the order revoking takes them in.
     await markUsed(tx, input.userId);
     const revoked = await tx<{ id: string }[]>`
       UPDATE refresh_tokens SET revoked_at = now(), replaced_by = ${newId}
       WHERE id = ${input.oldId} AND user_id = ${input.userId} AND revoked_at IS NULL
       RETURNING id`;
     if (revoked.length === 0) throw new RefreshRotationRaceError();
+    // The first answer to a lost reply that is used ends the others (reissueAfterLostReply).
+    await tx`
+      UPDATE refresh_tokens SET revoked_at = now()
+      WHERE user_id = ${input.userId} AND family_id = ${input.familyId} AND revoked_at IS NULL
+        AND id <> ${newId}`;
   });
 }
 
 /** A PHONE'S REFRESH WHOSE REPLY WAS LOST. The phone sends the same token again; the
  *  first try already rotated it, so the token it holds is revoked and its successor is
  *  one the phone never received. While that successor has never been used, and the
- *  token is inside its own life, the successor is ended and a new one issued in its
- *  place. false: none of that holds, and the caller treats the token as reused.
+ *  token is inside its own life, a new one is issued BESIDE it, never in its place: two
+ *  tries in flight, or a request delivered twice, each get an answer that works, and the
+ *  phone keeps whichever reached it (the data-integrity pass on item 12, H1: ending the
+ *  earlier answer signed the phone out when the replies crossed). The first of them used
+ *  ends the rest (rotateRefreshToken). At most LOST_REPLY_ANSWERS are live at once: past
+ *  that the token is answered "full" and NOTHING is ended, so a copy sent again and again
+ *  cannot push out the answer the phone holds (the security pass, L1, and its re-check).
+ *  "not_lost": none of that holds, and the caller treats the token as reused.
  *
  *  No clock on it (12b-i's review): a reply lost in a lift and the app opened the next
  *  day is the same lost reply (CLAUDE.md §4: a lost connection never signs anybody
- *  out). What tells a thief from the phone is the successor, not the minute: once it
- *  has been used the old token is reuse; and a thief answered here is ended, with the
- *  whole sign-in, by the phone's own next refresh.
+ *  out). What tells a thief from the phone is the successor, not the minute: once one
+ *  has been used the old token is reuse; and a thief answered here is ended by the
+ *  phone's own next refresh, and the whole sign-in with it when the thief tries again.
  *
  *  The ended successor keeps no `replaced_by`, so it is never itself given this grace:
  *  if somebody does hold it (a thief used the old token, and the phone holds the
@@ -483,19 +493,22 @@ export async function reissueAfterLostReply(
     ip: string | null;
     userAgent: string | null;
   },
-): Promise<boolean> {
+): Promise<"reissued" | "not_lost" | "full"> {
   return await sql.begin(async (tx) => {
     await waitOutRotations(tx, input.userId);
-    const ended = await tx<{ id: string }[]>`
-      UPDATE refresh_tokens AS successor SET revoked_at = now()
-      FROM refresh_tokens AS old
+    // The newest answer to this token is still unused: its reply was what was lost.
+    const open = await tx<{ id: string }[]>`
+      SELECT successor.id FROM refresh_tokens AS old
+      JOIN refresh_tokens AS successor ON successor.id = old.replaced_by
       WHERE old.id = ${input.oldId} AND old.user_id = ${input.userId} AND old.client = 'phone'
         AND old.revoked_reason IS NULL AND old.expires_at > now()
-        AND successor.id = old.replaced_by AND successor.user_id = old.user_id
-        AND successor.family_id = old.family_id AND successor.revoked_at IS NULL
-        AND successor.expires_at > now()
-      RETURNING successor.id`;
-    if (ended.length === 0) return false;
+        AND successor.user_id = old.user_id AND successor.family_id = old.family_id
+        AND successor.revoked_at IS NULL AND successor.expires_at > now()`;
+    if (open.length === 0) return "not_lost";
+    const live = await tx<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM refresh_tokens
+      WHERE user_id = ${input.userId} AND family_id = ${input.familyId} AND revoked_at IS NULL`;
+    if ((live[0]?.n ?? 0) >= LOST_REPLY_ANSWERS) return "full";
     const rows = await tx<{ id: string }[]>`
       INSERT INTO refresh_tokens (user_id, family_id, token_hash, expires_at, ip, user_agent, client)
       VALUES (${input.userId}, ${input.familyId}, ${input.newTokenHash}, ${input.expiresAt},
@@ -507,9 +520,13 @@ export async function reissueAfterLostReply(
     await tx`
       UPDATE refresh_tokens SET replaced_by = ${newId}
       WHERE id = ${input.oldId} AND user_id = ${input.userId}`;
-    return true;
+    return "reissued";
   });
 }
+
+/** Answers to one lost reply that may be live at once: the phone tries four times each time
+ *  it is opened (a refresh and three tries after it), so two openings with no reply, and room. */
+export const LOST_REPLY_ANSWERS = 10;
 
 /** True where the token that replaced this one was ended by a newer phone sign-in: the
  *  phone holding this one never received that token, and is told why all the same. */
@@ -654,7 +671,7 @@ export async function issueCode(
     since: Date;
     check: (recent: SignInCodeRow[]) => void;
   },
-): Promise<string> {
+): Promise<IssuedCode> {
   return await sql.begin(async (tx) => {
     // hashtext is int4; the lock takes a bigint, and the cast is implicit.
     await tx`SELECT pg_advisory_xact_lock(hashtext(${`${input.email}|${input.purpose}`}))`;
@@ -665,23 +682,43 @@ export async function issueCode(
       WHERE email = ${input.email} AND purpose = ${input.purpose} AND created_at >= ${input.since}
       ORDER BY created_at DESC`;
     input.check(recent.map(signInCodeColumns));
-    await tx`
-      UPDATE sign_in_codes SET expires_at = now()
-      WHERE email = ${input.email} AND purpose = ${input.purpose}
-        AND used_at IS NULL AND expires_at > now()`;
+    const ended = await tx<{ id: string; expires_at: Date }[]>`
+      WITH live AS (
+        SELECT id, expires_at FROM sign_in_codes
+        WHERE email = ${input.email} AND purpose = ${input.purpose}
+          AND used_at IS NULL AND expires_at > now()
+        FOR UPDATE)
+      UPDATE sign_in_codes AS code SET expires_at = now()
+      FROM live WHERE code.id = live.id
+      RETURNING live.id, live.expires_at`;
     const rows = await tx<{ id: string }[]>`
       INSERT INTO sign_in_codes (email, purpose, code_hash, expires_at)
       VALUES (${input.email}, ${input.purpose}, ${input.codeHash}, ${input.expiresAt})
       RETURNING id`;
     const id = rows[0]?.id;
     if (id === undefined) throw new Error("sign-in code insert returned no row");
-    return id;
+    return { id, ended: ended.map((row) => ({ id: row.id, expiresAt: row.expires_at })) };
   });
 }
 
-/** A code whose email never went out must not count against the day's two. */
-export async function deleteCode(sql: Sql, id: string): Promise<void> {
-  await sql`DELETE FROM sign_in_codes WHERE id = ${id}`;
+/** The new code, and the live code it ended, with the life it had left. */
+export interface IssuedCode {
+  id: string;
+  ended: { id: string; expiresAt: Date }[];
+}
+
+/** A code whose email never went out is taken back, and the code it ended is given its
+ *  life back if nobody used it meanwhile: the code already in the person's inbox still
+ *  works (data-integrity pass on item 12, L1). One transaction. */
+export async function withdrawCode(sql: Sql, issued: IssuedCode): Promise<void> {
+  await sql.begin(async (tx) => {
+    await tx`DELETE FROM sign_in_codes WHERE id = ${issued.id}`;
+    for (const code of issued.ended) {
+      await tx`
+        UPDATE sign_in_codes SET expires_at = ${code.expiresAt}
+        WHERE id = ${code.id} AND used_at IS NULL AND ${code.expiresAt}::timestamptz > now()`;
+    }
+  });
 }
 
 /** The one code this address may still prove: unused and unexpired. */
