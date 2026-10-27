@@ -331,9 +331,12 @@ function Challenges({ read }: { read: Read<WeeklyChallenges> }) {
   return (
     <View style={[styles.box, styles.challenges]}>
       <View style={[styles.grow, styles.inner]}>
-        <View style={styles.titleRow}>
-          <Icon name="target" size={16} colour="orange" />
-          <Txt kind="h3">Weekly Challenges</Txt>
+        <View style={[styles.between, styles.challengesTop]}>
+          <View style={styles.titleRow}>
+            <Icon name="target" size={16} colour="orange" />
+            <Txt kind="h3">Weekly Challenges</Txt>
+          </View>
+          <Image source={pictures.weeklychallenges} resizeMode="cover" style={styles.challengesArt} accessible={false} />
         </View>
         {read.kind !== "ok" ? (
           <Txt kind="small">{NOT_KNOWN}</Txt>
@@ -352,9 +355,6 @@ function Challenges({ read }: { read: Read<WeeklyChallenges> }) {
             </View>
           ))
         )}
-      </View>
-      <View style={styles.sideArt}>
-        <Image source={pictures.weeklychallenges} resizeMode="contain" style={styles.fill} accessible={false} />
       </View>
     </View>
   );
@@ -496,7 +496,9 @@ const styles = StyleSheet.create({
   quoteArt: { position: "absolute", right: 0, bottom: 0, width: 80, height: 150, opacity: 0.9 },
   quoteWords: { padding: 14, paddingRight: 80, gap: 8 },
   // Each picture is shown whole: weeklychallenges is square, rank is 2:3.
-  challenges: { flexDirection: "row", width: 320, height: 210 },
+  challenges: { width: 300, height: 210 },
+  challengesTop: { alignItems: "flex-start" },
+  challengesArt: { width: 64, height: 64, borderRadius: 14, marginTop: -4, marginRight: -4 },
   rank: { width: 140, height: 210, justifyContent: "flex-end" },
   badges: { width: 230, height: 210 },
   recent: { gap: 4 },
