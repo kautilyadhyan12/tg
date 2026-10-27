@@ -100,7 +100,7 @@ export function DashboardScreen() {
         <PictureTop
           picture="cave"
           // The picture's own shape, so none of it is cut; its fire is not dimmed.
-          tall={1.208}
+          tall={1}
           fade="light"
           above={
             <View style={styles.hello}>
