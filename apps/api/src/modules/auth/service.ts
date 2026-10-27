@@ -229,10 +229,10 @@ export async function login(
 
 // ── Google sign-in (google-login card; v1 §6.1) ─────────────────────────────
 
-/** A live account that can't accept a Google sign-in (soft-deleted, etc.).
- *  Never distinguishes why (R3.7 spirit) — the route redirects generically. */
+/** An account that can't accept a Google sign-in: deleted, the only status besides
+ *  active. The phone shows these words; the browser's callback redirects generically. */
 const googleUnavailable = () =>
-  new AuthError(403, "google_unavailable", "This account is not available for Google sign-in");
+  new AuthError(403, "google_unavailable", "This account was deleted, so it can’t sign in. Use a different account.");
 
 /** Ported fallback (passport.js:55): Google display name, else "New User".
  *  display_name is NOT NULL (identity.ts:25). Bounded defensively. */
@@ -252,18 +252,20 @@ async function ensureEmailVerified(deps: AuthDeps, userId: string): Promise<void
 
 /** Google sign-in: log in the linked identity, else link Google to an existing
  *  same-email account (password untouched — passport.js:41-43), else create an
- *  OAuth-only user. Returns a session exactly like password login. */
+ *  OAuth-only user. Returns a session exactly like password login; a phone's is a phone's
+ *  (one phone at a time), as a sign-in by code from the phone is. */
 export async function googleSignIn(
   deps: AuthDeps,
   identity: { subject: string; email: string; name: string | null },
   meta: RequestMeta,
-): Promise<{ user: AuthUser; tokens: SessionTokens }> {
+  client: SessionClient = "web",
+): Promise<{ user: AuthUser; tokens: SessionTokens; isNewAccount: boolean }> {
   // 1. Known Google identity → straight login.
   const linkedUserId = await repo.findUserIdByAuthIdentity(deps.sql, "google", identity.subject);
   if (linkedUserId !== null) {
     const user = await repo.findUserById(deps.sql, linkedUserId);
     if (user === null || user.status !== "active") throw googleUnavailable();
-    return { user: await toAuthUser(deps.sql, user), tokens: await issueSession(deps, user.id, meta) };
+    return { user: await toAuthUser(deps.sql, user), tokens: await issueSession(deps, user.id, meta, client), isNewAccount: false };
   }
 
   // 2. Existing account with this email → link Google to it, then log in. A
@@ -274,7 +276,7 @@ export async function googleSignIn(
     if (byEmail.status !== "active") throw googleUnavailable();
     await repo.linkAuthIdentity(deps.sql, { userId: byEmail.id, provider: "google", subject: identity.subject });
     await ensureEmailVerified(deps, byEmail.id);
-    return { user: await toAuthUser(deps.sql, byEmail), tokens: await issueSession(deps, byEmail.id, meta) };
+    return { user: await toAuthUser(deps.sql, byEmail), tokens: await issueSession(deps, byEmail.id, meta, client), isNewAccount: false };
   }
 
   // 3. Brand-new OAuth-only user from the Google profile.
@@ -288,13 +290,13 @@ export async function googleSignIn(
     if (raced === null || raced.status !== "active") throw googleUnavailable();
     await repo.linkAuthIdentity(deps.sql, { userId: raced.id, provider: "google", subject: identity.subject });
     await ensureEmailVerified(deps, raced.id);
-    return { user: await toAuthUser(deps.sql, raced), tokens: await issueSession(deps, raced.id, meta) };
+    return { user: await toAuthUser(deps.sql, raced), tokens: await issueSession(deps, raced.id, meta, client), isNewAccount: false };
   }
   await repo.linkAuthIdentity(deps.sql, { userId: newUserId, provider: "google", subject: identity.subject });
   await ensureEmailVerified(deps, newUserId);
   const created = await repo.findUserById(deps.sql, newUserId);
   if (created === null) throw new Error("created Google user could not be re-read");
-  return { user: await toAuthUser(deps.sql, created), tokens: await issueSession(deps, newUserId, meta) };
+  return { user: await toAuthUser(deps.sql, created), tokens: await issueSession(deps, newUserId, meta, client), isNewAccount: true };
 }
 
 // ── sign-in by email code (Kd 2026-09-07) ───────────────────────────────────

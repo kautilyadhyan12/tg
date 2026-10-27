@@ -22,6 +22,7 @@ import { CopyContext, ThisCopy } from "./screens/ThisCopy";
 import type { Ask } from "./session/calls";
 import { phoneKeyStore } from "./session/keyStore";
 import type { KeyStore } from "./session/session";
+import { askGoogle, type AskGoogle } from "./session/google";
 import { SessionProvider, useSession } from "./session/SessionProvider";
 import { FoodScreen, GymScreen, MeScreen, DashboardScreen, WorkoutScreen } from "./screens/tabs";
 
@@ -56,6 +57,7 @@ interface AppProps {
   extra?: PhoneAppExtra | null;
   ask?: Ask;
   store?: KeyStore;
+  google?: AskGoogle;
   wait?: (ms: number) => Promise<void>;
 }
 
@@ -84,7 +86,7 @@ function FiveTabs() {
   );
 }
 
-export function App({ extra, ask = fetch, store = phoneKeyStore, wait }: AppProps) {
+export function App({ extra, ask = fetch, store = phoneKeyStore, google = askGoogle, wait }: AppProps) {
   // A font that cannot be read must not leave a blank page: the phone's own font shows instead.
   const [fontsReady, fontsFailed] = useFonts({ Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold });
   const copy = useMemo(() => ({ extra: extra === undefined ? readAppExtra() : extra, ask }), [extra, ask]);
@@ -102,7 +104,7 @@ export function App({ extra, ask = fetch, store = phoneKeyStore, wait }: AppProp
               <ThisCopy />
             </Page>
           ) : (
-            <SessionProvider server={server} store={store} wait={wait}>
+            <SessionProvider server={server} store={store} google={google} wait={wait}>
               <SignedInOrOut />
             </SessionProvider>
           )}

@@ -1,6 +1,8 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { AppState, StyleSheet, type AppStateStatus, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import { App } from "../../src/App";
+import type { AskGoogle, GoogleAnswer } from "../../src/session/google";
+import { GOOGLE_FAILED, NO_ANSWER } from "../../src/screens/SignIn";
 import { pictures } from "../../src/look/pictures";
 import { RAVI, fakeServer, kept, lost, memoryStore, refusal, tokens, type Route } from "../kit";
 
@@ -18,10 +20,10 @@ const signsIn =
 const noWait = () => Promise.resolve();
 
 /** The app as a phone opens it: `held` is what its key store kept from last time. */
-async function openApp(routes: Record<string, Route>, held: string | null = null) {
+async function openApp(routes: Record<string, Route>, held: string | null = null, google?: AskGoogle) {
   const server = fakeServer(routes);
   const store = memoryStore(held);
-  await render(<App extra={extra} ask={server.ask} store={store} wait={noWait} />);
+  await render(<App extra={extra} ask={server.ask} store={store} wait={noWait} {...(google === undefined ? {} : { google })} />);
   return { server, store };
 }
 
@@ -162,12 +164,14 @@ describe("signing in by email code", () => {
     expect(screen.getByText("Sign in or create your account")).toBeTruthy();
     // The browser's own picture, across the top.
     expect(screen.getByTestId("get-started-picture").props.source).toBe(pictures.getstarted);
-    // Few words: the mark, the heading, one line, the box's own words, the button and the terms.
+    // Few words: the mark, the heading, one line, the box's own words, the two ways in and the terms.
     expect(screen.getAllByText(/./).map((line) => String(line.props.children))).toEqual([
       "AI Home Gym",
       "Get started.",
       "Sign in or create your account",
       "Continue",
+      "or",
+      "Continue with Google",
       "By continuing you agree to our Terms & Privacy Policy",
     ]);
     expect(screen.getByLabelText("Email").props.placeholder).toBe("Email address");
@@ -346,5 +350,99 @@ describe("signing in by email code", () => {
     const pressed = [...screen.getAllByRole("button"), screen.getByLabelText("6-digit code")];
     expect(pressed).toHaveLength(4);
     expect(pressed.map((one) => Number(drawn(one).height ?? 0)).filter((height) => height < 44)).toEqual([]);
+  });
+});
+
+describe("Continue with Google", () => {
+  const NONCE = "f".repeat(64);
+  const CLIENT = "our-app.apps.googleusercontent.com";
+  const started: Route = () => ({ status: 200, body: { nonce: NONCE, clientId: CLIENT } });
+  /** Google's box, answering as told, and what it was asked with. */
+  const googleSays = (answer: GoogleAnswer) => {
+    const asked: [string, string][] = [];
+    const google: AskGoogle = (clientId, nonce) => {
+      asked.push([clientId, nonce]);
+      return Promise.resolve(answer);
+    };
+    return { google, asked };
+  };
+
+  it("the person's account from Google's box, then the tabs; the sign-in is kept on the phone", async () => {
+    const { google, asked } = googleSays({ kind: "token", idToken: "google-answer" });
+    const { server, store } = await openApp({ "/v1/auth/google/phone/start": started, "/v1/auth/google/phone": signsIn() }, null, google);
+    await screen.findByText("Get started.");
+    await press("Continue with Google");
+    expect(await screen.findByRole("header", { name: "Ravi" })).toBeTruthy();
+    // Google was asked with the server's own word and client id, and its answer went only to the server.
+    expect(asked).toEqual([[CLIENT, NONCE]]);
+    expect(server.asked.slice(0, 2).map((one) => [one.path, one.body])).toEqual([
+      ["/v1/auth/google/phone/start", {}],
+      ["/v1/auth/google/phone", { idToken: "google-answer" }],
+    ]);
+    expect(store.value).toBe(kept(1));
+  });
+
+  it("Google's box closed by the person: nothing is said and nobody is signed in", async () => {
+    const { google } = googleSays({ kind: "closed" });
+    const { server, store } = await openApp({ "/v1/auth/google/phone/start": started }, null, google);
+    await screen.findByText("Get started.");
+    await press("Continue with Google");
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Continue with Google" }).props.accessibilityState).toMatchObject({ busy: false });
+    });
+    expect(server.paths()).not.toContain("/v1/auth/google/phone");
+    expect(screen.queryByText(GOOGLE_FAILED)).toBeNull();
+    expect(screen.getByText("Get started.")).toBeTruthy();
+    expect(store.value).toBeNull();
+  });
+
+  it.each<[string, Record<string, Route>, GoogleAnswer, string]>([
+    ["Google's box is broken on this phone", { "/v1/auth/google/phone/start": started }, { kind: "failed" }, GOOGLE_FAILED],
+    [
+      "the server refuses Google's answer",
+      {
+        "/v1/auth/google/phone/start": started,
+        "/v1/auth/google/phone": () => refusal(401, "google_failed", "Google sign-in didn’t work. Try again, or sign in with your email."),
+      },
+      { kind: "token", idToken: "google-answer" },
+      "Google sign-in didn’t work. Try again, or sign in with your email.",
+    ],
+    [
+      "Google is not set up on the server",
+      { "/v1/auth/google/phone/start": () => refusal(503, "google_not_configured", "Google sign-in isn’t available. Sign in with your email.") },
+      { kind: "token", idToken: "google-answer" },
+      "Google sign-in isn’t available. Sign in with your email.",
+    ],
+    ["no internet", { "/v1/auth/google/phone/start": lost }, { kind: "token", idToken: "google-answer" }, NO_ANSWER],
+  ])("%s: the line under the button says so, and the email way still works", async (_name, routes, answer, words) => {
+    const { google } = googleSays(answer);
+    const { store } = await openApp(routes, null, google);
+    await screen.findByText("Get started.");
+    await press("Continue with Google");
+    expect(await screen.findByText(words)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Continue" }).props.accessibilityState).toMatchObject({ disabled: false });
+    expect(store.value).toBeNull();
+  });
+
+  it("Google's line goes once the email way is used, and does not come back with Use a different email", async () => {
+    const { google } = googleSays({ kind: "failed" });
+    await openApp({ "/v1/auth/google/phone/start": started, "/v1/auth/code/send": sent }, null, google);
+    await screen.findByText("Get started.");
+    await press("Continue with Google");
+    await screen.findByText(GOOGLE_FAILED);
+    await askForCode();
+    await screen.findByLabelText("6-digit code");
+    await press("Use a different email");
+    await screen.findByLabelText("Email");
+    expect(screen.queryByText(GOOGLE_FAILED)).toBeNull();
+  });
+
+  it("with no internet Google's box is never opened", async () => {
+    const { google, asked } = googleSays({ kind: "token", idToken: "google-answer" });
+    await openApp({ "/v1/auth/google/phone/start": lost }, null, google);
+    await screen.findByText("Get started.");
+    await press("Continue with Google");
+    await screen.findByText(NO_ANSWER);
+    expect(asked).toEqual([]);
   });
 });

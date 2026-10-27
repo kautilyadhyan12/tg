@@ -7,7 +7,7 @@
     "phone": "node scripts/phone.mjs",
     "start": "node scripts/phone.mjs --start",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src test scripts index.ts app.config.ts metro.config.js jest.config.js vitest.config.ts",
+    "lint": "eslint src test scripts plugins index.ts app.config.ts metro.config.js jest.config.js vitest.config.ts",
     "test": "vitest run && jest"
   },
   "dependencies": {
@@ -22,6 +22,8 @@
     "expo-secure-store": "57.0.4",
     "react": "19.2.3",
     "react-native": "0.86.3",
+    "react-native-nitro-google-signin": "2.3.0",
+    "react-native-nitro-modules": "0.37.1",
     "react-native-safe-area-context": "5.7.0",
     "react-native-screens": "4.26.2",
     "react-native-svg": "15.15.4",

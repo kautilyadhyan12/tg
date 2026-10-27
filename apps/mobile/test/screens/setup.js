@@ -21,3 +21,5 @@ jest.mock("react-native-webview", () => {
   }
   return { WebView, boxes };
 });
+// Google's package runs only on a phone; a screen test hands the app its own Google instead.
+jest.mock("react-native-nitro-google-signin", () => ({ GoogleOneTapSignIn: {} }));

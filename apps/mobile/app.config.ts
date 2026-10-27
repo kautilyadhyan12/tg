@@ -57,7 +57,8 @@ export function configFor(copy: Copy): ExpoConfig {
     scheme: copy.scheme,
     android: { package: copy.applicationId },
     // Keeps the key store's sign-in out of Android's backups, so it never lands on another phone.
-    plugins: ["expo-secure-store"],
+    // shortNativeBuild: C++ build folders kept under Windows' path limit (its own file says why).
+    plugins: ["expo-secure-store", "./plugins/shortNativeBuild.js"],
     extra,
   };
 }

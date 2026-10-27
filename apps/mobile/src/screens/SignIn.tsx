@@ -6,6 +6,7 @@ import { Button } from "../look/Button";
 import { Card, Logo } from "../look/Card";
 import { colours, pictureFade, sizes } from "../look/colours";
 import { Field } from "../look/Field";
+import { GoogleMark } from "../look/GoogleMark";
 import { Icon } from "../look/Icon";
 import { pictures } from "../look/pictures";
 import { fonts, Txt } from "../look/Txt";
@@ -17,9 +18,10 @@ import { CopyContext } from "./ThisCopy";
 // The browser's "Get started" page, fitted to a phone (apps/web/src/pages/Login.jsx): its
 // picture fills the top and its form sits under it, by the thumb. Sign-up and sign-in are
 // the same act: an email, the 6-digit code, and a new address gets its account on the spot.
-// Google's button comes with ROADMAP Stage 5 item 12d.
+// Or Google: its own box from the bottom, and the server checks what Google answered.
 
 export const NO_ANSWER = "Can’t connect. Check your internet and try again.";
+export const GOOGLE_FAILED = "Google sign-in didn’t work. Try again, or sign in with your email.";
 /** The resend gap in words, from the number the server enforces. */
 const gapWords = (seconds: number) =>
   seconds === 60 ? "a minute" : seconds % 60 === 0 ? `${String(seconds / 60)} minutes` : `${String(seconds)} seconds`;
@@ -56,6 +58,9 @@ export function SignInScreen({ note }: { note: string | null }) {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState("");
   const [said, setSaid] = useState("");
+  /** Google's sign-in is away, and what it last said, under its own button. */
+  const [googleBusy, setGoogleBusy] = useState(false);
+  const [googleProblem, setGoogleProblem] = useState("");
   /** How the code step was reached: a code went out, or the server refused inside its gap and none did. */
   const [arrival, setArrival] = useState<"sent" | "too-soon">("sent");
   /** A code whose check got no answer: the server may have taken it and its reply been lost. */
@@ -128,6 +133,8 @@ export function SignInScreen({ note }: { note: string | null }) {
 
   async function continueWithEmail(robotToken?: string) {
     if (busy) return;
+    // The other way in is being tried: what Google last said no longer stands.
+    setGoogleProblem("");
     if (typed.trim() === "") {
       setProblem("Enter your email address.");
       return;
@@ -190,8 +197,23 @@ export function SignInScreen({ note }: { note: string | null }) {
     setRobot(null);
   };
 
+  async function continueWithGoogle() {
+    if (busy || googleBusy) return;
+    setGoogleBusy(true);
+    setGoogleProblem("");
+    setProblem("");
+    const answer = await session.signInWithGoogle();
+    // Signed in: the tabs take this screen's place.
+    if (answer.kind === "ok") return;
+    // Closed by the person: nothing to say, and the page is as it was.
+    if (answer.kind === "failed") setGoogleProblem(GOOGLE_FAILED);
+    else if (answer.kind !== "closed") setGoogleProblem(wordsFor(answer, GOOGLE_FAILED));
+    setGoogleBusy(false);
+  }
+
   const changeEmail = () => {
     setStep("email");
+    setGoogleProblem("");
     setCode("");
     setProblem("");
     setSaid("");
@@ -289,7 +311,24 @@ export function SignInScreen({ note }: { note: string | null }) {
               onDone={() => void continueWithEmail()}
             />
             {problem === "" ? null : <Txt colour="badText">{problem}</Txt>}
-            <Button label="Continue" wide busy={busy} onPress={() => void continueWithEmail()} />
+            <Button label="Continue" wide busy={busy} disabled={googleBusy} onPress={() => void continueWithEmail()} />
+            <View style={styles.or}>
+              <View style={styles.orLine} />
+              <Txt kind="tiny" colour="textFaint">
+                or
+              </Txt>
+              <View style={styles.orLine} />
+            </View>
+            <Button
+              label="Continue with Google"
+              kind="plain"
+              wide
+              lead={<GoogleMark />}
+              busy={googleBusy}
+              disabled={busy}
+              onPress={() => void continueWithGoogle()}
+            />
+            {googleProblem === "" ? null : <Txt colour="badText">{googleProblem}</Txt>}
           </View>
         ) : (
           <View style={styles.form}>
@@ -358,6 +397,8 @@ const styles = StyleSheet.create({
   note: { flexDirection: "row", alignItems: "center", gap: 10 },
   noteWords: { flex: 1 },
   form: { gap: 14 },
+  or: { flexDirection: "row", alignItems: "center", gap: 12 },
+  orLine: { flex: 1, height: 1, backgroundColor: colours.line },
   links: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
   centre: { textAlign: "center" },
   terms: { paddingTop: 20, paddingHorizontal: sizes.edge, textAlign: "center" },

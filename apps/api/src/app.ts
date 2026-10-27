@@ -17,7 +17,7 @@ import { fromOurWebsite } from "./modules/auth/fromOurWebsite.js";
 import { accessClaimsOf, registerAuthenticate } from "./modules/auth/plugin.js";
 import { AuthError, type PasswordHasher } from "./modules/auth/service.js";
 import { registerAuthRoutes } from "./modules/auth/routes.js";
-import { createGoogleVerifier, type GoogleVerifier } from "./modules/auth/google.js";
+import { createGooglePhoneVerifier, createGoogleVerifier, type GooglePhoneVerifier, type GoogleVerifier } from "./modules/auth/google.js";
 import { registerWorkoutRoutes } from "./modules/workouts/routes.js";
 import {
   createDevUsersEmailSender,
@@ -83,6 +83,8 @@ export interface BuildAppOverrides {
   /** google-login: tests inject a fake GoogleVerifier to drive the OAuth flow
    *  without calling Google; unset in prod builds the real one from config. */
   googleVerifier?: GoogleVerifier;
+  /** 12d: tests build the real phone verifier with their own signing keys. */
+  googlePhoneVerifier?: GooglePhoneVerifier | null;
   /** orgs: tests inject a deterministic byte source to drive the join-code and
    *  slug collision retries; unset uses node:crypto. */
   orgs?: OrgRouteOverrides;
@@ -367,6 +369,7 @@ export async function buildApp(
     redis,
     robotCheck,
     googleVerifier: overrides.googleVerifier ?? createGoogleVerifier(config),
+    googlePhoneVerifier: overrides.googlePhoneVerifier === undefined ? createGooglePhoneVerifier(config) : overrides.googlePhoneVerifier,
     emailSender,
     ...(overrides.passwordHasher === undefined ? {} : { hasher: overrides.passwordHasher }),
   });

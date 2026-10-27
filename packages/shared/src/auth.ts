@@ -151,6 +151,16 @@ export type PhoneSessionTokens = z.infer<typeof phoneSessionTokensSchema>;
 export const verifyCodePhoneResponseSchema = verifyCodeResponseSchema.extend({ tokens: phoneSessionTokensSchema });
 export type VerifyCodePhoneResponse = z.infer<typeof verifyCodePhoneResponseSchema>;
 
+/** Sign in with Google on the phone (item 12d). The server hands out a one-time word that
+ *  Google writes into its answer, so each answer from Google signs in once, and the client
+ *  id the phone asks Google with: the server's own, so the two never differ. */
+export const googlePhoneStartResponseSchema = z.object({ nonce: oneTimeTokenSchema, clientId: z.string().min(1).max(200) });
+export type GooglePhoneStartResponse = z.infer<typeof googlePhoneStartResponseSchema>;
+
+/** Google's signed answer as the phone got it; the server checks it, never the phone. */
+export const googlePhoneSignInRequestSchema = z.object({ idToken: z.string().min(1).max(8192) }).strict();
+export type GooglePhoneSignInRequest = z.infer<typeof googlePhoneSignInRequestSchema>;
+
 /** The phone's own refresh and sign-out: its token travels in the body, never a cookie. */
 export const phoneRefreshRequestSchema = z.object({ refreshToken: oneTimeTokenSchema }).strict();
 export type PhoneRefreshRequest = z.infer<typeof phoneRefreshRequestSchema>;

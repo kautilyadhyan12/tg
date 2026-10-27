@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, type StyleProp, type ViewStyle } from "react-native";
 import { colours, orangeGradient, shadows, sizes, type ColourName } from "./colours";
 import { Icon, type IconName } from "./Icon";
@@ -11,6 +12,8 @@ interface ButtonProps {
   onPress: () => void;
   kind?: ButtonKind;
   icon?: IconName;
+  /** A mark of its own in the icon's place, such as Google's G. */
+  lead?: ReactNode;
   small?: boolean;
   wide?: boolean;
   /** Drawn faint, and a press does nothing. */
@@ -35,6 +38,7 @@ export function Button({
   onPress,
   kind = "main",
   icon,
+  lead,
   small = false,
   wide = false,
   disabled = false,
@@ -64,7 +68,7 @@ export function Button({
         <ActivityIndicator color={colours[ink[kind]]} />
       ) : (
         <>
-          {icon === undefined ? null : <Icon name={icon} size={small ? 16 : 18} colour={ink[kind]} />}
+          {lead ?? (icon === undefined ? null : <Icon name={icon} size={small ? 16 : 18} colour={ink[kind]} />)}
           <Txt colour={ink[kind]} style={small || words ? styles.smallLabel : styles.label}>
             {label}
           </Txt>
