@@ -1,52 +1,59 @@
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import { colours, sizes } from "./colours";
+import { colours, orangeGradient, sizes } from "./colours";
 import { Icon } from "./Icon";
 import { fonts, Txt } from "./Txt";
 
-// What a person picks by tapping, as the browser's setup draws it: a card for one of a few
-// answers with a line under each, a chip for any number of short ones, and a row of segments
-// for a short scale (1 to 7 days, kilograms or pounds). Picked reads orange, with a tick.
+// What a person picks by tapping. One of a few with a line each: rows in ONE rounded group, a
+// round mark on the picked one, as a phone's own settings lists draw it. Any number of short
+// ones: chips. A short scale (kg or lb, 1 to 7 days): segments in one track. Picked reads orange.
 
-interface ChoiceProps {
+export interface Option<V> {
+  value: V;
   label: string;
   desc?: string;
-  /** A short gold line under the description: why this one suits the person. */
+  /** A short gold line: why this one suits the person. */
   note?: string | null;
-  selected: boolean;
-  onPress: () => void;
 }
 
-/** One answer, the width of the page. */
-export function Choice({ label, desc, note, selected, onPress }: ChoiceProps) {
+/** One of a few, in one group. */
+export function Options<V extends string | number>({
+  options,
+  selected,
+  onPick,
+}: {
+  options: readonly Option<V>[];
+  selected: V | null | undefined;
+  onPick: (value: V) => void;
+}) {
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      style={({ pressed }) => [styles.choice, selected ? styles.on : null, pressed ? styles.pressed : null]}
-    >
-      <View style={styles.grow}>
-        <Txt kind="strong" colour={selected ? "text" : "textSoft"}>
-          {label}
-        </Txt>
-        {desc === undefined ? null : <Txt kind="small">{desc}</Txt>}
-        {note === undefined || note === null ? null : (
-          <Txt colour="orangeLight" style={styles.note}>
-            {note}
-          </Txt>
-        )}
-      </View>
-      {selected ? <Picked /> : null}
-    </Pressable>
-  );
-}
-
-function Picked() {
-  return (
-    <View style={styles.tick}>
-      <Icon name="check" size={13} colour="onOrange" />
+    <View style={styles.group}>
+      {options.map((o, i) => {
+        const on = o.value === selected;
+        return (
+          <Fragment key={String(o.value)}>
+            {i === 0 ? null : <View style={styles.rule} />}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={o.label}
+              accessibilityState={{ selected: on }}
+              onPress={() => {
+                onPick(o.value);
+              }}
+              style={({ pressed }) => [styles.row, pressed ? styles.pressedRow : null]}
+            >
+              <View style={styles.grow}>
+                <Txt style={[styles.rowLabel, on ? styles.rowLabelOn : null]}>{o.label}</Txt>
+                {o.desc === undefined ? null : <Txt style={styles.desc}>{o.desc}</Txt>}
+                {o.note === undefined || o.note === null ? null : <Txt style={styles.note}>{o.note}</Txt>}
+              </View>
+              <View style={[styles.mark, on ? styles.markOn : null]}>
+                {on ? <Icon name="check" size={12} colour="onOrange" /> : null}
+              </View>
+            </Pressable>
+          </Fragment>
+        );
+      })}
     </View>
   );
 }
@@ -59,12 +66,10 @@ export function Chip({ label, selected, onPress }: { label: string; selected: bo
       accessibilityLabel={label}
       accessibilityState={{ selected }}
       onPress={onPress}
-      style={({ pressed }) => [styles.chip, selected ? styles.on : null, pressed ? styles.pressed : null]}
+      style={({ pressed }) => [styles.chip, selected ? styles.chipOn : null, pressed ? styles.pressed : null]}
     >
-      {selected ? <Icon name="check" size={14} colour="orange" /> : null}
-      <Txt colour={selected ? "text" : "textSoft"} style={styles.chipLabel}>
-        {label}
-      </Txt>
+      {selected ? <Icon name="check" size={13} colour="orangeLight" /> : null}
+      <Txt style={[styles.chipLabel, selected ? styles.chipLabelOn : null]}>{label}</Txt>
     </Pressable>
   );
 }
@@ -78,11 +83,9 @@ interface Segment<V> {
   label: string;
   /** What a screen reader says, where the label is only a number. */
   say?: string;
-  /** A second, smaller line. */
-  desc?: string;
 }
 
-/** One of a few, side by side in one row. */
+/** One of a few, side by side in one track. */
 export function Segments<V extends string | number>({
   options,
   selected,
@@ -93,7 +96,7 @@ export function Segments<V extends string | number>({
   onPick: (value: V) => void;
 }) {
   return (
-    <View style={styles.segments}>
+    <View style={styles.track}>
       {options.map((o) => {
         const on = o.value === selected;
         return (
@@ -105,16 +108,11 @@ export function Segments<V extends string | number>({
             onPress={() => {
               onPick(o.value);
             }}
-            style={({ pressed }) => [styles.segment, on ? styles.on : null, pressed ? styles.pressed : null]}
+            style={({ pressed }) => [styles.segment, on ? styles.segmentOn : null, pressed ? styles.pressed : null]}
           >
-            <Txt colour={on ? "text" : "textSoft"} style={styles.segmentLabel}>
+            <Txt numberOfLines={1} style={[styles.segmentLabel, on ? styles.segmentLabelOn : null]}>
               {o.label}
             </Txt>
-            {o.desc === undefined ? null : (
-              <Txt kind="tiny" style={styles.centre}>
-                {o.desc}
-              </Txt>
-            )}
           </Pressable>
         );
       })}
@@ -123,57 +121,66 @@ export function Segments<V extends string | number>({
 }
 
 const styles = StyleSheet.create({
-  choice: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    minHeight: sizes.button + 8,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+  group: {
     borderRadius: 16,
+    backgroundColor: colours.glass,
+    borderWidth: 1,
+    borderColor: colours.line,
+    overflow: "hidden",
+  },
+  rule: { height: 1, marginLeft: 14, backgroundColor: colours.line },
+  row: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: sizes.button, paddingHorizontal: 14, paddingVertical: 10 },
+  pressedRow: { backgroundColor: colours.fill },
+  grow: { flex: 1, gap: 1 },
+  rowLabel: { fontFamily: fonts.medium, fontSize: 15, lineHeight: 20, color: colours.text },
+  rowLabelOn: { fontFamily: fonts.semibold, color: colours.orangeLight },
+  desc: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 16, color: colours.textFaint },
+  note: { fontFamily: fonts.semibold, fontSize: 12, lineHeight: 16, color: colours.gold },
+  mark: {
+    width: 20,
+    height: 20,
+    borderRadius: sizes.round,
     borderWidth: 1.5,
     borderColor: colours.lineStrong,
-    backgroundColor: colours.box,
-  },
-  on: { borderColor: colours.orange, backgroundColor: colours.orangeFill },
-  pressed: { opacity: 0.85 },
-  grow: { flex: 1, gap: 2 },
-  note: { fontFamily: fonts.semibold, fontSize: 12, lineHeight: 16, marginTop: 2 },
-  tick: {
-    width: 22,
-    height: 22,
-    borderRadius: sizes.round,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colours.orange,
   },
+  markOn: { borderColor: colours.orange, backgroundColor: colours.orange },
+  pressed: { opacity: 0.8 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: {
     flexDirection: "row",
-    alignSelf: "flex-start",
     alignItems: "center",
-    gap: 6,
+    alignSelf: "flex-start",
+    gap: 5,
     height: sizes.press,
     paddingHorizontal: 14,
     borderRadius: sizes.round,
-    borderWidth: 1.5,
-    borderColor: colours.lineStrong,
-    backgroundColor: colours.box,
+    borderWidth: 1,
+    borderColor: colours.line,
+    backgroundColor: colours.fill,
   },
-  chipLabel: { fontFamily: fonts.medium, fontSize: 14, lineHeight: 18 },
-  segments: { flexDirection: "row", gap: 6 },
+  chipOn: { borderColor: colours.orangeLine, backgroundColor: colours.orangeFill },
+  chipLabel: { fontFamily: fonts.medium, fontSize: 14, lineHeight: 18, color: colours.textSoft },
+  chipLabelOn: { color: colours.orangeLight },
+  track: {
+    flexDirection: "row",
+    padding: 3,
+    gap: 3,
+    borderRadius: sizes.round,
+    backgroundColor: colours.fill,
+    borderWidth: 1,
+    borderColor: colours.line,
+  },
   segment: {
     flex: 1,
-    minHeight: sizes.press,
-    paddingVertical: 8,
-    paddingHorizontal: 4,
+    height: sizes.press - 6,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: colours.lineStrong,
-    backgroundColor: colours.box,
+    paddingHorizontal: 4,
+    borderRadius: sizes.round,
   },
-  segmentLabel: { fontFamily: fonts.bold, fontSize: 15, lineHeight: 20, textAlign: "center" },
-  centre: { textAlign: "center" },
+  segmentOn: { backgroundColor: colours.orange, experimental_backgroundImage: orangeGradient },
+  segmentLabel: { fontFamily: fonts.medium, fontSize: 14, lineHeight: 18, color: colours.textSoft },
+  segmentLabelOn: { fontFamily: fonts.semibold, color: colours.onOrange },
 });

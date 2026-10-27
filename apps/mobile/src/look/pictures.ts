@@ -1,6 +1,7 @@
 // The member web's own pictures, made small (spec Part 6 §16.3a): 900 pixels on the
 // long side, WebP. Made by docs/design/phone/compact.py; never the web's full-size files.
 // `getstarted` is the browser's sign-in picture, cut by the same tool to sit at the top of a phone.
+// `setup` is the browser's setup picture (its Vitruvian figure), its lines drawn light and glowing for the dark page.
 import benchpress from "../../assets/pictures/benchpress.webp";
 import bicepcurls from "../../assets/pictures/bicepcurls.webp";
 import caloriesburned from "../../assets/pictures/caloriesburned.webp";
@@ -26,6 +27,7 @@ import recommended from "../../assets/pictures/recommended.webp";
 import ropping from "../../assets/pictures/ropping.webp";
 import running from "../../assets/pictures/running.webp";
 import setting from "../../assets/pictures/setting.webp";
+import setup from "../../assets/pictures/setup.webp";
 import squat from "../../assets/pictures/squat.webp";
 import thisweek from "../../assets/pictures/thisweek.webp";
 import totalworkout from "../../assets/pictures/totalworkout.webp";
@@ -60,6 +62,7 @@ export const pictures = {
   ropping,
   running,
   setting,
+  setup,
   squat,
   thisweek,
   totalworkout,

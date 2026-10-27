@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { StyleSheet, View } from "react-native";
 import {
   ADULT_AGE,
@@ -8,13 +8,12 @@ import {
   GENDERS,
   GOALS,
   HEIGHT_REST,
-  INCHES,
   LEVELS,
   PACES,
+  PLACES,
   PLANK_REST,
   PUSH_UPS_REST,
   SESSION_MINUTES,
-  TENTHS,
   TRAINING_DAYS,
   UNDER_AGE_LINE,
   WEIGHT_GOALS,
@@ -27,7 +26,6 @@ import {
   heightCmList,
   heightFeetList,
   heightParts,
-  heightShown,
   kgFromParts,
   paceNote,
   paceText,
@@ -36,37 +34,35 @@ import {
   plankShown,
   pushUpList,
   pushUpShown,
-  stepIn,
-  stepInches,
+  range,
   targetRest,
   targetShownRow,
-  targetTenths,
   targetWholes,
   targetWrongSide,
   toggleEquipment,
   toggleGoal,
+  togglePlace,
   weightParts,
   weightShown,
   weightWholes,
   wrongSideText,
-  type ImperialHeight,
   type PatchOnboardingRequest,
   type PlanNumbers,
   type SetupAnswers,
   type Units,
   type WeightParts,
 } from "@app/shared";
-import { Chip, Chips, Choice, Segments } from "../../look/Choice";
+import { Chip, Chips, Options, Segments } from "../../look/Choice";
 import { Field } from "../../look/Field";
 import { Icon } from "../../look/Icon";
-import { Card } from "../../look/Card";
-import { Txt } from "../../look/Txt";
-import { Wheel, type WheelColumn } from "../../look/Wheel";
+import { Ruler } from "../../look/Ruler";
+import { fonts, Txt } from "../../look/Txt";
+import { colours } from "../../look/colours";
 
-// Setup's first seven screens, the browser's own (apps/web/src/pages/onboarding/OnboardingScreens.jsx)
-// fitted to a phone: every tap and every wheel saves at once through `save`; the one typed box,
-// the name, saves when the person leaves it. Nothing here decides a number: the plan panel shows
-// the server's.
+// Setup's first seven screens on the phone. Every tap and every slide saves at once through
+// `save`; the one typed box, the name, saves when the person leaves it. Nothing here decides a
+// number: the plan bar shows the server's. Drawn for a phone, not copied from the browser (Kd,
+// 2026-10-27): few words, one group a question, measures on sliding scales.
 
 type Direction = "lose" | "maintain" | "gain";
 export type Save = (patch: PatchOnboardingRequest) => void;
@@ -88,30 +84,31 @@ export interface ScreenProps {
   plan: PlanNumbers | null;
 }
 
-/** Whether the server takes this one answer: a wheel never saves a number the contract refuses. */
+/** Whether the server takes this one answer: a scale never saves a number the contract refuses. */
 const takes = (patch: PatchOnboardingRequest): boolean => patchOnboardingRequestSchema.safeParse(patch).success;
-
-/** A pick of the rows already on show is not a new answer, and saves nothing: 70 kg reads
- *  154.3 lb, and 154.3 lb back is 69.99 kg, a weigh-in the person never made. */
-const sameRows = (a: WeightParts, b: WeightParts): boolean => a.whole === b.whole && a.tenth === b.tenth;
 
 const at = <T,>(list: readonly T[], i: number, fallback: T): T => list[i] ?? fallback;
 
-function Question({ children, hint }: { children: string; hint?: string }) {
+/** A weight as tenths of a kilogram or pound, the scale's one row a tenth. */
+const tenthsOf = ({ whole, tenth }: WeightParts): number => whole * 10 + tenth;
+const partsOf = (tenths: number): WeightParts => ({ whole: Math.floor(tenths / 10), tenth: tenths % 10 });
+const wholeMark = (t: number): string | null => (t % 10 === 0 ? String(t / 10) : null);
+const halfMark = (t: number): boolean => t % 5 === 0;
+
+function Section({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
   return (
-    <View style={styles.question}>
-      <Txt kind="h3">{children}</Txt>
-      {hint === undefined ? null : <Txt kind="small">{hint}</Txt>}
+    <View style={styles.section}>
+      <View style={styles.sectionHead}>
+        <Txt style={styles.sectionTitle}>{title}</Txt>
+        {hint === undefined ? null : <Txt style={styles.hint}>{hint}</Txt>}
+      </View>
+      {children}
     </View>
   );
 }
 
 function Problem({ children }: { children: string | null }) {
-  return children === null ? null : (
-    <Txt colour="badText" kind="small" style={styles.problem}>
-      {children}
-    </Txt>
-  );
+  return children === null ? null : <Txt style={styles.problem}>{children}</Txt>;
 }
 
 const UNIT_OPTIONS = [
@@ -121,245 +118,178 @@ const UNIT_OPTIONS = [
 
 function UnitSwitch({ units, onChange }: { units: Units; onChange: (units: Units) => void }) {
   return (
-    <View style={styles.block}>
-      <Question>Units</Question>
-      <Segments options={UNIT_OPTIONS} selected={units} onPick={onChange} />
+    <View style={styles.unitRow}>
+      <Txt style={styles.sectionTitle}>Units</Txt>
+      <View style={styles.unitSwitch}>
+        <Segments options={UNIT_OPTIONS} selected={units} onPick={onChange} />
+      </View>
     </View>
   );
 }
 
-// ── The wheels ──────────────────────────────────────────────────────────────
+// ── The measures ────────────────────────────────────────────────────────────
 
-function AgeWheel({ age, save }: { age: number | null; save: Save }) {
-  const list = ageList(age);
-  const shownAt = age ?? AGE_REST;
-  const pick = (v: number) => {
-    if (v !== age && takes({ age: v })) save({ age: v });
-  };
+function AgeScale({ age, save }: { age: number | null; save: Save }) {
+  const rows = ageList(age);
   return (
-    <View style={styles.block}>
-      <Wheel
-        question="Age"
-        shown={age === null ? "Not set" : `${String(age)} years`}
+    <View style={styles.measure}>
+      <Ruler
+        label="Age"
+        rows={rows}
+        index={Math.max(0, rows.indexOf(age ?? AGE_REST))}
         isSet={age !== null}
-        unit="years"
-        stepLabel="Age"
-        onStep={(by) => {
-          pick(stepIn(list, shownAt, by));
+        shown={(v) => `${String(v)} years`}
+        major={(v) => (v % 10 === 0 ? String(v) : null)}
+        mid={(v) => v % 5 === 0}
+        onPick={(i) => {
+          const v = at(rows, i, age ?? AGE_REST);
+          if (v !== age && takes({ age: v })) save({ age: v });
         }}
-        columns={[{ label: "Age", values: list, index: list.indexOf(shownAt), format: String, onPick: (i) => { pick(at(list, i, shownAt)); } }]}
       />
       <Problem>{age !== null && age < ADULT_AGE ? UNDER_AGE_LINE : null}</Problem>
     </View>
   );
 }
 
-function HeightWheel({ cm, units, save }: { cm: number | null; units: Units; save: Save }) {
+function HeightScale({ cm, units, save }: { cm: number | null; units: Units; save: Save }) {
   const isSet = cm !== null;
   const set = (value: number) => {
     if (value !== cm && takes({ heightCm: value })) save({ heightCm: value });
   };
   if (units === "imperial") {
-    const parts: ImperialHeight = isSet ? heightParts(cm, "imperial") : HEIGHT_REST.imperial;
+    // One row an inch. The rows on show are the stored answer (175 cm reads 5 ft 9 in, and
+    // 5 ft 9 in back is 175.26 cm): picked again, they save nothing.
+    const parts = isSet ? heightParts(cm, "imperial") : HEIGHT_REST.imperial;
     const feet = heightFeetList(parts.ft);
-    // The rows on show are the answer already stored (175 cm reads 5 ft 9 in, and 5 ft 9 in
-    // back is 175.26 cm): picked again, they save nothing.
-    const pick = (next: ImperialHeight) => {
-      if (isSet && next.ft === parts.ft && next.inch === parts.inch) return;
-      set(cmFromParts(next, "imperial"));
-    };
+    const rows = range(at(feet, 0, 3) * 12, at(feet, feet.length - 1, 8) * 12 + 11);
+    const here = parts.ft * 12 + parts.inch;
     return (
-      <Wheel
-        question="Height"
-        shown={isSet ? heightShown(parts, "imperial") : "Not set"}
+      <Ruler
+        label="Height"
+        rows={rows}
+        index={Math.max(0, rows.indexOf(here))}
         isSet={isSet}
-        stepLabel="Height"
-        onStep={(by) => {
-          pick(stepInches(parts, by));
+        shown={(inches) => `${String(Math.floor(inches / 12))} ft ${String(inches % 12)} in`}
+        major={(inches) => (inches % 12 === 0 ? `${String(inches / 12)} ft` : null)}
+        mid={(inches) => inches % 6 === 0}
+        onPick={(i) => {
+          const inches = at(rows, i, here);
+          if (isSet && inches === here) return;
+          set(cmFromParts({ ft: Math.floor(inches / 12), inch: inches % 12 }, "imperial"));
         }}
-        columns={[
-          {
-            label: "Height, feet",
-            values: feet,
-            index: feet.indexOf(parts.ft),
-            format: (v) => `${String(v)} ft`,
-            onPick: (i) => {
-              pick({ ft: at(feet, i, parts.ft), inch: parts.inch });
-            },
-          },
-          {
-            label: "Height, inches",
-            values: INCHES,
-            index: parts.inch,
-            format: (v) => `${String(v)} in`,
-            onPick: (i) => {
-              pick({ ft: parts.ft, inch: at(INCHES, i, parts.inch) });
-            },
-          },
-        ]}
       />
     );
   }
   const shownCm = isSet ? heightParts(cm, "metric").cm : HEIGHT_REST.metric.cm;
-  const list = heightCmList(shownCm);
-  const pick = (value: number) => {
-    if (!(isSet && value === shownCm)) set(value);
-  };
+  const rows = heightCmList(shownCm);
   return (
-    <Wheel
-      question="Height"
-      shown={isSet ? heightShown({ cm: shownCm }, "metric") : "Not set"}
+    <Ruler
+      label="Height"
+      rows={rows}
+      index={Math.max(0, rows.indexOf(shownCm))}
       isSet={isSet}
-      unit="cm"
-      stepLabel="Height"
-      onStep={(by) => {
-        pick(stepIn(list, shownCm, by));
+      shown={(v) => `${String(v)} cm`}
+      major={(v) => (v % 10 === 0 ? String(v) : null)}
+      mid={(v) => v % 5 === 0}
+      onPick={(i) => {
+        const v = at(rows, i, shownCm);
+        if (!(isSet && v === shownCm)) set(v);
       }}
-      columns={[
-        {
-          label: "Height in centimetres",
-          values: list,
-          index: list.indexOf(shownCm),
-          format: String,
-          onPick: (i) => {
-            pick(at(list, i, shownCm));
-          },
-        },
-      ]}
     />
   );
 }
 
-interface WeightWheelProps {
-  question: string;
-  shown: string;
-  isSet: boolean;
-  rows: WeightParts;
-  wholes: readonly number[];
-  tenths: readonly number[];
-  units: Units;
-  onPick: (parts: WeightParts) => void;
-}
-
-/** A weight on two columns, whole kilos or pounds and tenths. */
-function WeightWheel({ question, shown, isSet, rows, wholes, tenths, units, onPick }: WeightWheelProps) {
-  const unitWord = units === "imperial" ? "pound" : "kilogram";
-  const columns: WheelColumn[] = [
-    {
-      label: `${question} in whole ${unitWord}s`,
-      values: wholes,
-      index: wholes.indexOf(rows.whole),
-      format: String,
-      onPick: (i) => {
-        onPick({ whole: at(wholes, i, rows.whole), tenth: rows.tenth });
-      },
-    },
-    {
-      label: `${question}, tenths of a ${unitWord}`,
-      values: tenths,
-      index: tenths.indexOf(rows.tenth),
-      format: (v) => `.${String(v)}`,
-      onPick: (i) => {
-        onPick({ whole: rows.whole, tenth: at(tenths, i, rows.tenth) });
-      },
-    },
-  ];
+function WeightScale({ weightKg, units, save }: { weightKg: number | null; units: Units; save: Save }) {
+  const isSet = weightKg !== null;
+  const shown: WeightParts = isSet ? weightParts(weightKg, units) : { whole: WEIGHT_REST[units], tenth: 0 };
+  const wholes = weightWholes(units, shown.whole);
+  const rows = range(at(wholes, 0, shown.whole) * 10, at(wholes, wholes.length - 1, shown.whole) * 10 + 9);
+  const here = tenthsOf(shown);
   return (
-    <Wheel
-      question={question}
-      shown={shown}
+    <Ruler
+      label="Weight"
+      rows={rows}
+      index={Math.max(0, rows.indexOf(here))}
       isSet={isSet}
-      unit={units === "imperial" ? "lb" : "kg"}
-      stepLabel={question}
-      onStep={(by) => {
-        onPick({ whole: stepIn(wholes, rows.whole, by), tenth: rows.tenth });
+      shown={(t) => weightShown(partsOf(t), units)}
+      major={wholeMark}
+      mid={halfMark}
+      onPick={(i) => {
+        const t = at(rows, i, here);
+        // Compared as rows, never as kilograms: 70 kg reads 154.3 lb, and 154.3 lb back is
+        // 69.99 kg, a weigh-in the person never made (RULINGS 2026-09-10).
+        if (isSet && t === here) return;
+        const kg = kgFromParts(partsOf(t), units);
+        if (kg !== weightKg && takes({ weightKg: kg })) save({ weightKg: kg });
       }}
-      columns={columns}
     />
   );
 }
 
-/** Screen 3's wheel (Kd, 2026-09-11): only weights on the goal's side of the current weight are
+/** Screen 3's scale (Kd, 2026-09-11): only weights on the goal's side of the current weight are
  *  on it. A target under the lowest healthy weight stays pickable and is said at once (Kd,
  *  2026-09-14). */
-function TargetWheel({
+function TargetScale({
   target,
   weightKg,
   direction,
   units,
   save,
-  healthy,
 }: {
   target: number | null;
   weightKg: number;
   direction: Direction | null;
   units: Units;
   save: Save;
-  healthy: string | null;
 }) {
   const weight = weightParts(weightKg, units);
   const wrong = targetWrongSide(direction, target, weightKg);
   const isSet = target !== null && !wrong;
-  const rows = isSet ? targetShownRow(direction, { targetWeightKg: target, weightKg }, units) : targetRest(direction, weight);
-  const pick = (parts: WeightParts) => {
-    const row = clampTarget(direction, weight, parts);
-    if (isSet && sameRows(row, rows)) return;
-    const kg = kgFromParts(row, units);
-    if (targetWrongSide(direction, kg, weightKg)) return;
-    if (kg !== target && takes({ targetWeightKg: kg })) save({ targetWeightKg: kg });
-  };
+  const shown = isSet ? targetShownRow(direction, { targetWeightKg: target, weightKg }, units) : targetRest(direction, weight);
+  const wholes = targetWholes(units, direction, weight, shown);
+  const rows =
+    direction === "gain"
+      ? range(tenthsOf(weight) + 1, at(wholes, wholes.length - 1, weight.whole + 1) * 10 + 9)
+      : range(at(wholes, 0, weight.whole) * 10, tenthsOf(weight) - 1);
+  const here = tenthsOf(shown);
   return (
-    <View style={styles.block}>
-      <WeightWheel
-        question="Target weight"
-        shown={target === null ? "Not set" : weightShown(isSet ? rows : weightParts(target, units), units)}
-        isSet={isSet}
-        rows={rows}
-        wholes={targetWholes(units, direction, weight, rows)}
-        tenths={targetTenths(direction, weight, rows.whole)}
-        units={units}
-        onPick={pick}
-      />
-      {wrong && target !== null ? (
-        <Problem>{wrongSideText(direction, target, weightKg, units)}</Problem>
-      ) : (
-        <Txt kind="small">
-          {direction === "gain" ? "The weight you want to build up to." : "The weight you want to reach."} You weigh{" "}
-          {weightShown(weight, units)}.
-        </Txt>
-      )}
-      {healthy === null ? null : (
-        <Card style={styles.warn}>
-          <Icon name="warn" size={16} colour="orangeLight" />
-          <Txt colour="orangeLight" kind="small" style={styles.grow}>
-            {healthy}
-          </Txt>
-        </Card>
-      )}
-    </View>
+    <Ruler
+      label="Target weight"
+      rows={rows}
+      index={Math.max(0, rows.indexOf(here))}
+      isSet={isSet}
+      shown={(t) => weightShown(partsOf(t), units)}
+      major={wholeMark}
+      mid={halfMark}
+      onPick={(i) => {
+        const row = clampTarget(direction, weight, partsOf(at(rows, i, here)));
+        if (isSet && tenthsOf(row) === here) return;
+        const kg = kgFromParts(row, units);
+        if (targetWrongSide(direction, kg, weightKg)) return;
+        if (kg !== target && takes({ targetWeightKg: kg })) save({ targetWeightKg: kg });
+      }}
+    />
   );
 }
 
 // ── Screen 1 ────────────────────────────────────────────────────────────────
 
-/** The ONE weight choice on top, which alone sets the calories (RULINGS 2026-09-10); under it,
- *  any number of goals, none of which moves them. Nothing fights anything else. */
+/** The ONE weight choice, which alone sets the calories (RULINGS 2026-09-10); under it, any
+ *  number of goals, none of which moves them. */
 export function GoalScreen({ answers, save }: ScreenProps) {
   const also = Array.isArray(answers.fitnessGoals) ? answers.fitnessGoals : [];
   return (
     <View style={styles.screen}>
-      <View style={styles.block}>
-        <Question>Your weight</Question>
+      <Section title="Your weight">
         <Segments
-          options={WEIGHT_GOALS}
+          options={WEIGHT_GOALS.map((g) => ({ value: g.value, label: g.label.replace(" weight", "").replace("my ", ""), say: g.label }))}
           selected={answers.weightGoal}
           onPick={(value) => {
             if (answers.weightGoal !== value) save({ weightGoal: value });
           }}
         />
-      </View>
-      <View style={styles.block}>
-        <Question hint="Pick any">Also work on</Question>
+      </Section>
+      <Section title="Also work on" hint="Pick any">
         <Chips>
           {GOALS.map((g) => (
             <Chip
@@ -372,7 +302,7 @@ export function GoalScreen({ answers, save }: ScreenProps) {
             />
           ))}
         </Chips>
-      </View>
+      </Section>
     </View>
   );
 }
@@ -380,51 +310,30 @@ export function GoalScreen({ answers, save }: ScreenProps) {
 // ── Screen 2 ────────────────────────────────────────────────────────────────
 
 export function AboutScreen({ answers, save, units, setUnits, name }: ScreenProps) {
-  const weightKg = answers.weightKg ?? null;
-  const weightSet = weightKg !== null;
-  const weightRows: WeightParts = weightSet ? weightParts(weightKg, units) : { whole: WEIGHT_REST[units], tenth: 0 };
   return (
     <View style={styles.screen}>
-      <View style={styles.block}>
-        <Field label="What should we call you?" value={name.text} onChange={name.change} onDone={name.commit} name maxLength={100} />
+      <View>
+        <Field label="Your name" value={name.text} onChange={name.change} onDone={name.commit} name maxLength={100} />
         <Problem>{name.error}</Problem>
       </View>
-      <UnitSwitch units={units} onChange={setUnits} />
-      <AgeWheel age={answers.age ?? null} save={save} />
-      <View style={styles.block}>
-        <Question hint="Used to estimate how much energy your body burns.">Gender</Question>
-        <View style={styles.two}>
+      <Section title="Gender">
+        <Chips>
           {GENDERS.map((g) => (
-            <View key={g.value} style={styles.half}>
-              <Choice
-                label={g.label}
-                selected={answers.gender === g.value}
-                onPress={() => {
-                  if (answers.gender !== g.value) save({ gender: g.value });
-                }}
-              />
-            </View>
+            <Chip
+              key={g.value}
+              label={g.label}
+              selected={answers.gender === g.value}
+              onPress={() => {
+                if (answers.gender !== g.value) save({ gender: g.value });
+              }}
+            />
           ))}
-        </View>
-      </View>
-      <HeightWheel cm={answers.heightCm ?? null} units={units} save={save} />
-      <View style={styles.block}>
-        <WeightWheel
-          question="Weight"
-          shown={weightSet ? weightShown(weightRows, units) : "Not set"}
-          isSet={weightSet}
-          rows={weightRows}
-          wholes={weightWholes(units, weightRows.whole)}
-          tenths={TENTHS}
-          units={units}
-          onPick={(parts) => {
-            if (weightSet && sameRows(parts, weightRows)) return;
-            const kg = kgFromParts(parts, units);
-            if (kg !== weightKg && takes({ weightKg: kg })) save({ weightKg: kg });
-          }}
-        />
-        <Txt kind="small">Saved in your weigh-in history.</Txt>
-      </View>
+        </Chips>
+      </Section>
+      <UnitSwitch units={units} onChange={setUnits} />
+      <AgeScale age={answers.age ?? null} save={save} />
+      <HeightScale cm={answers.heightCm ?? null} units={units} save={save} />
+      <WeightScale weightKg={answers.weightKg ?? null} units={units} save={save} />
     </View>
   );
 }
@@ -435,36 +344,43 @@ export function TargetScreen({ answers, save, units, setUnits, direction, plan }
   const target = answers.targetWeightKg ?? null;
   const weightKg = answers.weightKg ?? null;
   const verb = direction === "gain" ? "Gain" : "Lose";
+  const healthy = healthyTargetLine(direction, answers, units);
+  const wrong = weightKg !== null && target !== null && targetWrongSide(direction, target, weightKg);
   return (
     <View style={styles.screen}>
       <UnitSwitch units={units} onChange={setUnits} />
       {weightKg === null ? (
-        <Txt>Set your weight on About you first.</Txt>
+        <Txt style={styles.hint}>Set your weight on About you first.</Txt>
       ) : (
-        <TargetWheel
-          target={target}
-          weightKg={weightKg}
-          direction={direction}
-          units={units}
-          save={save}
-          healthy={healthyTargetLine(direction, answers, units)}
-        />
+        <View style={styles.measure}>
+          <TargetScale target={target} weightKg={weightKg} direction={direction} units={units} save={save} />
+          {wrong ? (
+            <Problem>{wrongSideText(direction, target, weightKg, units)}</Problem>
+          ) : (
+            <Txt style={styles.hint}>You weigh {weightShown(weightParts(weightKg, units), units)}.</Txt>
+          )}
+          {healthy === null ? null : (
+            <View style={styles.warn}>
+              <Icon name="warn" size={14} colour="gold" />
+              <Txt style={styles.warnWords}>{healthy}</Txt>
+            </View>
+          )}
+        </View>
       )}
-      <View style={styles.block}>
-        <Question>How fast?</Question>
-        {PACES.map((p) => (
-          <Choice
-            key={p.value}
-            label={p.label}
-            desc={`${verb} ${paceText(p.value, units)}`}
-            note={paceNote(p.value, direction, answers, plan)}
-            selected={answers.pace === p.value}
-            onPress={() => {
-              if (answers.pace !== p.value) save({ pace: p.value });
-            }}
-          />
-        ))}
-      </View>
+      <Section title="How fast?">
+        <Options
+          options={PACES.map((p) => ({
+            value: p.value,
+            label: p.label,
+            desc: `${verb} ${paceText(p.value, units)}`,
+            note: paceNote(p.value, direction, answers, plan),
+          }))}
+          selected={answers.pace}
+          onPick={(value) => {
+            if (answers.pace !== value) save({ pace: value });
+          }}
+        />
+      </Section>
     </View>
   );
 }
@@ -473,20 +389,15 @@ export function TargetScreen({ answers, save, units, setUnits, direction, plan }
 
 export function DayScreen({ answers, save }: ScreenProps) {
   return (
-    <View style={styles.block}>
-      <Question>What does a normal day look like, not counting workouts?</Question>
-      {DAYS.map((d) => (
-        <Choice
-          key={d.value}
-          label={d.label}
-          desc={d.desc}
-          selected={answers.dayActivity === d.value}
-          onPress={() => {
-            if (answers.dayActivity !== d.value) save({ dayActivity: d.value });
-          }}
-        />
-      ))}
-    </View>
+    <Section title="A normal day, not counting workouts">
+      <Options
+        options={DAYS}
+        selected={answers.dayActivity}
+        onPick={(value) => {
+          if (answers.dayActivity !== value) save({ dayActivity: value });
+        }}
+      />
+    </Section>
   );
 }
 
@@ -510,83 +421,58 @@ export function TrainingScreen({ answers, save }: ScreenProps) {
   const plank = answers.plankHoldSeconds ?? null;
   const pushRows = pushUpList(pushUps);
   const plankRows = plankList(plank);
-  const pushAt = pushUps ?? PUSH_UPS_REST;
-  const plankAt = plank ?? PLANK_REST;
-  const empty = (key: Check) => (unsure[key] ? "Not sure" : "Not set");
+  const unsureChip = (key: Check, isSet: boolean) => (
+    <Chip
+      label="Not sure"
+      selected={!isSet && unsure[key]}
+      onPress={() => {
+        notSure(key);
+      }}
+    />
+  );
   return (
     <View style={styles.screen}>
-      <View style={styles.block}>
-        <Question>How fit do you feel right now?</Question>
-        {LEVELS.map((l) => (
-          <Choice
-            key={l.value}
-            label={l.label}
-            desc={l.desc}
-            selected={answers.fitnessLevel === l.value}
-            onPress={() => {
-              if (answers.fitnessLevel !== l.value) save({ fitnessLevel: l.value });
-            }}
-          />
-        ))}
-      </View>
-      <Txt kind="small">A guess is fine. Used to set your first week’s workouts.</Txt>
-      <View style={styles.block}>
-        <Wheel
-          question="How many push-ups can you do in a row?"
-          shown={pushUps === null ? empty("pushUpsMax") : pushUpShown(pushUps)}
+      <Section title="How fit do you feel?">
+        <Options
+          options={LEVELS}
+          selected={answers.fitnessLevel}
+          onPick={(value) => {
+            if (answers.fitnessLevel !== value) save({ fitnessLevel: value });
+          }}
+        />
+      </Section>
+      <Txt style={styles.hint}>A guess is fine. It sets your first week’s workouts.</Txt>
+      <View style={styles.measure}>
+        <Ruler
+          label="Push-ups in a row"
+          rows={pushRows}
+          index={Math.max(0, pushRows.indexOf(pushUps ?? PUSH_UPS_REST))}
           isSet={pushUps !== null}
-          stepLabel="Push-ups"
-          onStep={(by) => {
-            pick("pushUpsMax", stepIn(pushRows, pushAt, by));
-          }}
-          columns={[
-            {
-              label: "Push-ups in a row",
-              values: pushRows,
-              index: pushRows.indexOf(pushAt),
-              format: String,
-              onPick: (i) => {
-                pick("pushUpsMax", at(pushRows, i, pushAt));
-              },
-            },
-          ]}
-        />
-        <Chip
-          label="Not sure"
-          selected={pushUps === null && unsure.pushUpsMax}
-          onPress={() => {
-            notSure("pushUpsMax");
+          empty={unsure.pushUpsMax ? "Not sure" : "Not set"}
+          shown={pushUpShown}
+          major={(v) => (v % 10 === 0 ? String(v) : null)}
+          mid={(v) => v % 5 === 0}
+          onPick={(i) => {
+            pick("pushUpsMax", at(pushRows, i, PUSH_UPS_REST));
           }}
         />
+        {unsureChip("pushUpsMax", pushUps !== null)}
       </View>
-      <View style={styles.block}>
-        <Wheel
-          question="How long can you hold a plank?"
-          shown={plank === null ? empty("plankHoldSeconds") : plankShown(plank)}
+      <View style={styles.measure}>
+        <Ruler
+          label="Plank hold"
+          rows={plankRows}
+          index={Math.max(0, plankRows.indexOf(plank ?? PLANK_REST))}
           isSet={plank !== null}
-          stepLabel="Plank"
-          onStep={(by) => {
-            pick("plankHoldSeconds", stepIn(plankRows, plankAt, by));
-          }}
-          columns={[
-            {
-              label: "Plank hold",
-              values: plankRows,
-              index: plankRows.indexOf(plankAt),
-              format: plankShown,
-              onPick: (i) => {
-                pick("plankHoldSeconds", at(plankRows, i, plankAt));
-              },
-            },
-          ]}
-        />
-        <Chip
-          label="Not sure"
-          selected={plank === null && unsure.plankHoldSeconds}
-          onPress={() => {
-            notSure("plankHoldSeconds");
+          empty={unsure.plankHoldSeconds ? "Not sure" : "Not set"}
+          shown={plankShown}
+          major={(v) => (v % 60 === 0 ? plankShown(v) : null)}
+          mid={(v) => v % 30 === 0}
+          onPick={(i) => {
+            pick("plankHoldSeconds", at(plankRows, i, PLANK_REST));
           }}
         />
+        {unsureChip("plankHoldSeconds", plank !== null)}
       </View>
     </View>
   );
@@ -601,8 +487,7 @@ export function WeekScreen({ answers, save }: ScreenProps) {
     .sort((a, b) => a - b);
   return (
     <View style={styles.screen}>
-      <View style={styles.block}>
-        <Question>How many days a week can you train?</Question>
+      <Section title="Days a week">
         <Segments
           options={TRAINING_DAYS.map((n) => ({ value: n, label: String(n), say: `${String(n)} ${n === 1 ? "day" : "days"} a week` }))}
           selected={answers.trainingDays}
@@ -610,56 +495,70 @@ export function WeekScreen({ answers, save }: ScreenProps) {
             if (answers.trainingDays !== n) save({ trainingDays: n });
           }}
         />
-      </View>
-      <View style={styles.block}>
-        <Question>How long is one session?</Question>
-        <Chips>
-          {lengths.map((m) => (
-            <Chip
-              key={m}
-              label={`${String(m)} min`}
-              selected={answers.sessionMinutes === m}
-              onPress={() => {
-                if (answers.sessionMinutes !== m) save({ sessionMinutes: m });
-              }}
-            />
-          ))}
-        </Chips>
-      </View>
+      </Section>
+      <Section title="Minutes a session">
+        <Segments
+          options={lengths.map((m) => ({ value: m, label: String(m), say: `${String(m)} minutes` }))}
+          selected={answers.sessionMinutes}
+          onPick={(m) => {
+            if (answers.sessionMinutes !== m) save({ sessionMinutes: m });
+          }}
+        />
+      </Section>
     </View>
   );
 }
 
 // ── Screen 7 ────────────────────────────────────────────────────────────────
 
+/** Where the person trains, then what they have (Kd, 2026-10-27: a gym is a place, not equipment). */
 export function EquipmentScreen({ answers, save }: ScreenProps) {
   const shown = cleanEquipment(answers.availableEquipment);
+  const places = Array.isArray(answers.trainingPlaces) ? answers.trainingPlaces : [];
   return (
-    <View style={styles.block}>
-      <Question hint="Pick all that apply, or No equipment.">What do you have to train with?</Question>
-      <Chips>
-        {EQUIPMENT.map((e) => (
-          <Chip
-            key={e.value}
-            label={e.label}
-            selected={shown.includes(e.value)}
-            onPress={() => {
-              save({ availableEquipment: toggleEquipment(shown, e.value) });
-            }}
-          />
-        ))}
-      </Chips>
+    <View style={styles.screen}>
+      <Section title="Where do you train?" hint="Pick any">
+        <Chips>
+          {PLACES.map((p) => (
+            <Chip
+              key={p.value}
+              label={p.label}
+              selected={places.includes(p.value)}
+              onPress={() => {
+                save({ trainingPlaces: togglePlace(places, p.value) });
+              }}
+            />
+          ))}
+        </Chips>
+      </Section>
+      <Section title="What equipment do you have?" hint="Pick any">
+        <Chips>
+          {EQUIPMENT.map((e) => (
+            <Chip
+              key={e.value}
+              label={e.label}
+              selected={shown.includes(e.value)}
+              onPress={() => {
+                save({ availableEquipment: toggleEquipment(shown, e.value) });
+              }}
+            />
+          ))}
+        </Chips>
+      </Section>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { gap: 24 },
-  block: { gap: 10 },
-  question: { gap: 2 },
-  problem: { marginTop: -4 },
-  two: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  half: { width: "48.5%" },
-  warn: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
-  grow: { flex: 1 },
+  screen: { gap: 26 },
+  section: { gap: 10 },
+  sectionHead: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: 10 },
+  sectionTitle: { fontFamily: fonts.semibold, fontSize: 15, lineHeight: 20, color: colours.text },
+  hint: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18, color: colours.textFaint },
+  problem: { fontFamily: fonts.medium, fontSize: 13, lineHeight: 18, color: colours.badText, marginTop: 4 },
+  unitRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  unitSwitch: { width: 170 },
+  measure: { gap: 8 },
+  warn: { flexDirection: "row", gap: 8, alignItems: "flex-start" },
+  warnWords: { flex: 1, fontFamily: fonts.medium, fontSize: 13, lineHeight: 18, color: colours.gold },
 });

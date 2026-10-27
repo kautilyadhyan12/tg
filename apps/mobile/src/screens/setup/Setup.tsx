@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Image, KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   defaultUnits,
@@ -11,13 +11,12 @@ import {
   type Units,
 } from "@app/shared";
 import { Button } from "../../look/Button";
-import { Badge } from "../../look/Card";
 import { colours, orangeGradient, sizes } from "../../look/colours";
-import { Icon, type IconName } from "../../look/Icon";
-import { Txt } from "../../look/Txt";
-import { WheelGroup } from "../../look/Wheel";
+import { Icon } from "../../look/Icon";
+import { pictures } from "../../look/pictures";
+import { fonts, Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
-import { PlanPanel } from "./PlanPanel";
+import { PlanBar } from "./PlanPanel";
 import {
   AboutScreen,
   DayScreen,
@@ -30,9 +29,9 @@ import {
 } from "./SetupScreens";
 import { LOAD_FAILED, useSetupAnswers } from "./useSetupAnswers";
 
-// Setup on the phone (ROADMAP Stage 5 item 14a): the browser's setup, a page over the tabs, one
-// screen at a time with Back and Continue held at the bottom. Every answer is saved the moment it
-// is given, and the server's daily number sits on every screen from the moment it exists.
+// Setup on the phone (ROADMAP Stage 5 item 14a): a page over the tabs, one screen at a time, the
+// browser's setup picture glowing behind it. Every answer is saved the moment it is given, and the
+// server's daily number sits on every screen from the moment it exists.
 
 const VIEWS: Partial<Record<SetupScreenId, (props: ScreenProps) => React.JSX.Element>> = {
   goal: GoalScreen,
@@ -42,16 +41,6 @@ const VIEWS: Partial<Record<SetupScreenId, (props: ScreenProps) => React.JSX.Ele
   training: TrainingScreen,
   week: WeekScreen,
   equipment: EquipmentScreen,
-};
-
-const ICONS: Partial<Record<SetupScreenId, IconName>> = {
-  goal: "target",
-  about: "user",
-  target: "chart",
-  day: "sun",
-  training: "zap",
-  week: "clock",
-  equipment: "dumbbell",
 };
 
 export const NAME_NEEDED = "Type the name we should call you.";
@@ -64,6 +53,7 @@ export function Setup({ open, onClose }: { open: boolean; onClose: () => void })
   return (
     <Modal visible={open} animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
       <KeyboardAvoidingView accessibilityViewIsModal behavior="padding" style={[styles.page, { paddingTop: insets.top }]}>
+        <Image source={pictures.setup} resizeMode="contain" accessible={false} style={styles.picture} />
         {open ? <SetupBody onClose={onClose} bottom={insets.bottom} /> : null}
       </KeyboardAvoidingView>
     </Modal>
@@ -129,6 +119,7 @@ function SetupBody({ onClose, bottom }: { onClose: () => void; bottom: number })
   const close = () => {
     if (commitName()) onClose();
   };
+  const back = index > 0 ? screens[index - 1] : undefined;
 
   if (screen === undefined || ob.status !== "ready" || ob.first === null) {
     return (
@@ -148,122 +139,87 @@ function SetupBody({ onClose, bottom }: { onClose: () => void; bottom: number })
 
   const View_ = VIEWS[screen.id];
   const answered = screenAnswered(screen.id, answers);
-  const progress = screens.length > 1 ? index / (screens.length - 1) : 1;
 
   return (
-    <WheelGroup>
-      {(release) => (
-        <>
-          <Bar onClose={close} step={`Step ${String(index + 1)} of ${String(screens.length)}`} progress={progress} />
-          <ScrollView
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={styles.body}
-            onScrollBeginDrag={release}
-          >
-            <View style={styles.title}>
-              <Badge icon={ICONS[screen.id] ?? "target"} />
-              <View style={styles.grow}>
-                <Txt kind="h2">{screen.title}</Txt>
-                <Txt kind="small">{screen.desc}</Txt>
-              </View>
-            </View>
-            <PlanPanel
-              plan={ob.plan}
-              direction={direction}
-              units={units}
-              targetShown={targetShownValue(direction, answers, units)}
-            />
-            {View_ === undefined ? null : (
-              <View_
-                answers={answers}
-                save={ob.save}
-                units={units}
-                setUnits={setUnits}
-                name={name}
-                direction={direction}
-                plan={ob.plan}
-              />
-            )}
-          </ScrollView>
-          <View style={[styles.foot, { paddingBottom: bottom + 12 }]}>
-            {ob.problem === null ? null : (
-              <Txt colour="badText" kind="small" style={styles.centre}>
-                {ob.problem}
-              </Txt>
-            )}
-            <View style={styles.buttons}>
-              {index > 0 ? (
-                <Button
-                  label="Back"
-                  kind="plain"
-                  disabled={busy}
-                  onPress={() => {
-                    const back = screens[index - 1];
-                    if (back !== undefined) setPicked(back.id);
-                  }}
-                />
-              ) : null}
-              <Button
-                label={isLast ? "Done" : "Continue"}
-                wide
-                style={styles.grow}
-                disabled={!answered}
-                busy={busy}
-                onPress={() => {
-                  void goOn(() => {
-                    if (isLast) onClose();
-                    else setPicked(screens[index + 1]?.id ?? screen.id);
-                  });
-                }}
-              />
-            </View>
-          </View>
-        </>
-      )}
-    </WheelGroup>
+    <>
+      <Bar
+        onClose={close}
+        onBack={
+          back === undefined || busy
+            ? undefined
+            : () => {
+                setPicked(back.id);
+              }
+        }
+        step={index}
+        steps={screens.length}
+      />
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.body}>
+        <Txt kind="h1">{screen.title}</Txt>
+        <PlanBar plan={ob.plan} direction={direction} units={units} targetShown={targetShownValue(direction, answers, units)} />
+        {View_ === undefined ? null : (
+          <View_ answers={answers} save={ob.save} units={units} setUnits={setUnits} name={name} direction={direction} plan={ob.plan} />
+        )}
+      </ScrollView>
+      <View style={[styles.foot, { paddingBottom: bottom + 12 }]}>
+        {ob.problem === null ? null : <Txt style={styles.problem}>{ob.problem}</Txt>}
+        <Button
+          label={isLast ? "Done" : "Continue"}
+          kind={answered ? "main" : "plain"}
+          style={styles.next}
+          disabled={!answered}
+          busy={busy}
+          onPress={() => {
+            void goOn(() => {
+              if (isLast) onClose();
+              else setPicked(screens[index + 1]?.id ?? screen.id);
+            });
+          }}
+        />
+      </View>
+    </>
   );
 }
 
-function Bar({ onClose, step, progress }: { onClose: () => void; step?: string; progress?: number }) {
+/** Back on the left, a thin bar of the steps, and close on the right. */
+function Bar({ onClose, onBack, step, steps }: { onClose: () => void; onBack?: (() => void) | undefined; step?: number; steps?: number }) {
   return (
     <View style={styles.bar}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} style={styles.close}>
+      {onBack === undefined ? (
+        <View style={styles.round} />
+      ) : (
+        <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={onBack} style={styles.round}>
+          <Icon name="back" size={20} />
+        </Pressable>
+      )}
+      {step === undefined || steps === undefined ? (
+        <View style={styles.steps} />
+      ) : (
+        <View accessible accessibilityLabel={`Step ${String(step + 1)} of ${String(steps)}`} style={styles.steps}>
+          {Array.from({ length: steps }, (_, i) => (
+            <View key={i} style={[styles.stepBar, i <= step ? styles.stepDone : null]} />
+          ))}
+        </View>
+      )}
+      <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} style={styles.round}>
         <Icon name="x" size={20} />
       </Pressable>
-      <View style={styles.grow}>
-        {step === undefined ? null : (
-          <>
-            <Txt kind="tiny">{step}</Txt>
-            <View style={styles.track}>
-              <View style={[styles.fillBar, { flex: progress ?? 0 }]} />
-              <View style={{ flex: 1 - (progress ?? 0) }} />
-            </View>
-          </>
-        )}
-      </View>
-      <View style={styles.close} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: colours.page },
-  bar: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 8, paddingVertical: 8 },
-  close: { width: sizes.press, height: sizes.press, alignItems: "center", justifyContent: "center", borderRadius: sizes.round },
-  track: { flexDirection: "row", height: 6, marginTop: 6, borderRadius: sizes.round, backgroundColor: colours.track, overflow: "hidden" },
-  fillBar: { height: 6, borderRadius: sizes.round, backgroundColor: colours.orange, experimental_backgroundImage: orangeGradient },
-  body: { paddingHorizontal: sizes.edge, paddingTop: 8, paddingBottom: 24, gap: 20 },
-  title: { flexDirection: "row", alignItems: "center", gap: 12 },
-  grow: { flex: 1 },
+  picture: { position: "absolute", alignSelf: "center", top: "16%", width: "92%", height: "62%", opacity: 0.32 },
+  bar: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 8, paddingTop: 6 },
+  round: { width: sizes.press, height: sizes.press, alignItems: "center", justifyContent: "center", borderRadius: sizes.round },
+  steps: { flex: 1, flexDirection: "row", gap: 4 },
+  stepBar: { flex: 1, height: 4, borderRadius: 2, backgroundColor: colours.track },
+  stepDone: { backgroundColor: colours.orange, experimental_backgroundImage: orangeGradient },
+  body: { paddingHorizontal: sizes.edge, paddingTop: 10, paddingBottom: 28, gap: 18 },
   middle: { flex: 1, alignItems: "center", justifyContent: "center", gap: 14, padding: sizes.edge },
   centre: { textAlign: "center" },
-  foot: {
-    gap: 8,
-    paddingTop: 12,
-    paddingHorizontal: sizes.edge,
-    borderTopWidth: 1,
-    borderTopColor: colours.line,
-    backgroundColor: colours.page,
-  },
-  buttons: { flexDirection: "row", gap: 10 },
+  problem: { fontFamily: fonts.medium, fontSize: 13, lineHeight: 18, color: colours.badText, textAlign: "center" },
+  foot: { gap: 8, paddingTop: 10, paddingHorizontal: sizes.edge, alignItems: "flex-end" },
+  next: { minWidth: 150 },
 });

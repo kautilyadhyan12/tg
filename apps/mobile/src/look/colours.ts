@@ -65,6 +65,10 @@ export const pictureFade =
 export const pictureFadeUnderWords =
   "linear-gradient(to top, rgba(10,9,8,1) 0%, rgba(10,9,8,0.82) 20%, rgba(10,9,8,0.18) 55%, rgba(10,9,8,0.62) 100%)";
 
+/** A scale's two ends, fading into the page, so it reads as running on beyond the screen. */
+export const scaleFadeLeft = "linear-gradient(to right, rgba(10,9,8,1) 0%, rgba(10,9,8,0) 100%)";
+export const scaleFadeRight = "linear-gradient(to left, rgba(10,9,8,1) 0%, rgba(10,9,8,0) 100%)";
+
 /** The glow of what is pressed, the ring round a box being typed in, and the lift of a box from the bottom. */
 export const shadows = {
   button: "0 6px 22px rgba(255,138,31,0.38), inset 0 1px 0 rgba(255,255,255,0.22)",
