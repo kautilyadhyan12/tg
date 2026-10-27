@@ -15,6 +15,8 @@ export const colours = {
   fieldOnLine: "rgba(255,138,31,0.4)",
   /** A box of words over a picture. */
   veil: "rgba(10,9,8,0.7)",
+  /** A choice over a page's own picture: dark enough to read, clear enough to see the picture through. */
+  overPicture: "rgba(16,15,13,0.5)",
   /** Behind a box from the bottom, and that box's handle. */
   scrim: "rgba(0,0,0,0.66)",
   grab: "rgba(255,255,255,0.18)",
@@ -68,10 +70,6 @@ export const pictureFade =
 /** The same under a page's first words: darker at the top, where a greeting or the clock is read. */
 export const pictureFadeUnderWords =
   "linear-gradient(to top, rgba(10,9,8,1) 0%, rgba(10,9,8,0.82) 20%, rgba(10,9,8,0.18) 55%, rgba(10,9,8,0.62) 100%)";
-
-/** A scale's two ends, fading into the page, so it reads as running on beyond the screen. */
-export const scaleFadeLeft = "linear-gradient(to right, rgba(10,9,8,1) 0%, rgba(10,9,8,0) 100%)";
-export const scaleFadeRight = "linear-gradient(to left, rgba(10,9,8,1) 0%, rgba(10,9,8,0) 100%)";
 
 /** The glow of what is pressed, the ring round a box being typed in, and the lift of a box from the bottom. */
 export const shadows = {

@@ -53,7 +53,7 @@ export function Setup({ open, onClose }: { open: boolean; onClose: () => void })
   return (
     <Modal visible={open} animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
       <KeyboardAvoidingView accessibilityViewIsModal behavior="padding" style={[styles.page, { paddingTop: insets.top }]}>
-        <Image source={pictures.setup} resizeMode="contain" accessible={false} style={styles.picture} />
+        <Image source={pictures.setup} resizeMode="cover" accessible={false} style={styles.picture} />
         {open ? <SetupBody onClose={onClose} bottom={insets.bottom} /> : null}
       </KeyboardAvoidingView>
     </Modal>
@@ -210,7 +210,7 @@ function Bar({ onClose, onBack, step, steps }: { onClose: () => void; onBack?: (
 
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: colours.page },
-  picture: { position: "absolute", alignSelf: "center", top: "16%", width: "92%", height: "62%", opacity: 0.32 },
+  picture: { position: "absolute", top: 0, left: 0, width: "100%", height: "100%", opacity: 0.5 },
   bar: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 8, paddingTop: 6 },
   round: { width: sizes.press, height: sizes.press, alignItems: "center", justifyContent: "center", borderRadius: sizes.round },
   steps: { flex: 1, flexDirection: "row", gap: 4 },

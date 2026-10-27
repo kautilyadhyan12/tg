@@ -8,7 +8,7 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from "react-native";
-import { colours, scaleFadeLeft, scaleFadeRight } from "./colours";
+import { colours } from "./colours";
 import { fonts, Txt } from "./Txt";
 
 // A scale to slide, as a bathroom scale or a tape measure reads: ticks running sideways under a
@@ -141,8 +141,6 @@ export function Ruler({ label, rows, index, isSet, shown, empty = "Not set", maj
           onMomentumScrollEnd={settle}
           onContentSizeChange={place}
         />
-        <View pointerEvents="none" style={[styles.fade, styles.fadeLeft]} />
-        <View pointerEvents="none" style={[styles.fade, styles.fadeRight]} />
         <View pointerEvents="none" style={[styles.marker, { left: width / 2 - 1.5 }, isSet || sliding !== null ? styles.markerOn : null]} />
       </View>
     </View>
@@ -157,7 +155,7 @@ const styles = StyleSheet.create({
   value: { fontFamily: fonts.bold, fontSize: 20, lineHeight: 24 },
   valueOn: { color: colours.orangeLight },
   valueOff: { color: colours.textFaint, fontFamily: fonts.medium, fontSize: 15 },
-  track: { height: HEIGHT, overflow: "hidden", backgroundColor: colours.page, borderRadius: 12 },
+  track: { height: HEIGHT, overflow: "hidden" },
   resting: { opacity: 0.45 },
   cell: { width: TICK, height: HEIGHT, alignItems: "center", overflow: "visible" },
   tick: { width: 1.5, borderRadius: 1, backgroundColor: colours.textFaint },
@@ -175,9 +173,6 @@ const styles = StyleSheet.create({
     lineHeight: 14,
     color: colours.textFaint,
   },
-  fade: { position: "absolute", top: 0, bottom: 0, width: 40 },
-  fadeLeft: { left: 0, experimental_backgroundImage: scaleFadeLeft },
-  fadeRight: { right: 0, experimental_backgroundImage: scaleFadeRight },
   marker: { position: "absolute", top: 0, width: 3, height: 34, borderRadius: 2, backgroundColor: colours.textFaint },
   markerOn: { backgroundColor: colours.orange },
 });

@@ -52,7 +52,7 @@ import {
   type Units,
   type WeightParts,
 } from "@app/shared";
-import { Chip, Chips, Options, Segments } from "../../look/Choice";
+import { Chip, Grid, Options, Segments } from "../../look/Choice";
 import { Field } from "../../look/Field";
 import { Icon } from "../../look/Icon";
 import { Ruler } from "../../look/Ruler";
@@ -293,18 +293,18 @@ export function GoalScreen({ answers, save }: ScreenProps) {
         />
       </Section>
       <Section title="Also work on" hint="Pick any">
-        <Chips>
-          {GOALS.map((g) => (
-            <Chip
-              key={g.value}
-              label={g.label}
-              selected={also.includes(g.value)}
-              onPress={() => {
-                save({ fitnessGoals: toggleGoal(also, g.value) });
-              }}
-            />
-          ))}
-        </Chips>
+        <Grid
+          columns={2}
+          cells={GOALS.map((g) => ({
+            key: g.value,
+            label: g.label === "Endurance and running" ? "Endurance" : g.label,
+            say: g.label,
+            selected: also.includes(g.value),
+            onPress: () => {
+              save({ fitnessGoals: toggleGoal(also, g.value) });
+            },
+          }))}
+        />
       </Section>
     </View>
   );
@@ -320,18 +320,17 @@ export function AboutScreen({ answers, save, units, setUnits, name }: ScreenProp
         <Problem>{name.error}</Problem>
       </View>
       <Section title="Gender">
-        <Chips>
-          {GENDERS.map((g) => (
-            <Chip
-              key={g.value}
-              label={g.label}
-              selected={answers.gender === g.value}
-              onPress={() => {
-                if (answers.gender !== g.value) save({ gender: g.value });
-              }}
-            />
-          ))}
-        </Chips>
+        <Grid
+          columns={2}
+          cells={GENDERS.map((g) => ({
+            key: g.value,
+            label: g.label,
+            selected: answers.gender === g.value,
+            onPress: () => {
+              if (answers.gender !== g.value) save({ gender: g.value });
+            },
+          }))}
+        />
       </Section>
       <UnitSwitch units={units} onChange={setUnits} />
       <AgeScale age={answers.age ?? null} save={save} />
@@ -490,22 +489,32 @@ export function WeekScreen({ answers, save }: ScreenProps) {
     .sort((a, b) => a - b);
   return (
     <View style={styles.screen}>
-      <Section title="Days a week">
-        <Segments
-          options={TRAINING_DAYS.map((n) => ({ value: n, label: String(n), say: `${String(n)} ${n === 1 ? "day" : "days"} a week` }))}
-          selected={answers.trainingDays}
-          onPick={(n) => {
-            if (answers.trainingDays !== n) save({ trainingDays: n });
-          }}
+      <Section title="How many days a week can you train?">
+        <Grid
+          columns={4}
+          cells={TRAINING_DAYS.map((n) => ({
+            key: String(n),
+            label: `${String(n)} ${n === 1 ? "day" : "days"}`,
+            say: `${String(n)} ${n === 1 ? "day" : "days"} a week`,
+            selected: answers.trainingDays === n,
+            onPress: () => {
+              if (answers.trainingDays !== n) save({ trainingDays: n });
+            },
+          }))}
         />
       </Section>
-      <Section title="Minutes a session">
-        <Segments
-          options={lengths.map((m) => ({ value: m, label: String(m), say: `${String(m)} minutes` }))}
-          selected={answers.sessionMinutes}
-          onPick={(m) => {
-            if (answers.sessionMinutes !== m) save({ sessionMinutes: m });
-          }}
+      <Section title="How long is each workout?">
+        <Grid
+          columns={3}
+          cells={lengths.map((m) => ({
+            key: String(m),
+            label: `${String(m)} min`,
+            say: `${String(m)} minutes`,
+            selected: answers.sessionMinutes === m,
+            onPress: () => {
+              if (answers.sessionMinutes !== m) save({ sessionMinutes: m });
+            },
+          }))}
         />
       </Section>
     </View>
@@ -521,32 +530,30 @@ export function EquipmentScreen({ answers, save }: ScreenProps) {
   return (
     <View style={styles.screen}>
       <Section title="Where do you train?" hint="Pick any">
-        <Chips>
-          {PLACES.map((p) => (
-            <Chip
-              key={p.value}
-              label={p.label}
-              selected={places.includes(p.value)}
-              onPress={() => {
-                save({ trainingPlaces: togglePlace(places, p.value) });
-              }}
-            />
-          ))}
-        </Chips>
+        <Grid
+          columns={2}
+          cells={PLACES.map((p) => ({
+            key: p.value,
+            label: p.label,
+            selected: places.includes(p.value),
+            onPress: () => {
+              save({ trainingPlaces: togglePlace(places, p.value) });
+            },
+          }))}
+        />
       </Section>
       <Section title="What equipment do you have?" hint="Pick any">
-        <Chips>
-          {EQUIPMENT.map((e) => (
-            <Chip
-              key={e.value}
-              label={e.label}
-              selected={shown.includes(e.value)}
-              onPress={() => {
-                save({ availableEquipment: toggleEquipment(shown, e.value) });
-              }}
-            />
-          ))}
-        </Chips>
+        <Grid
+          columns={2}
+          cells={EQUIPMENT.map((e) => ({
+            key: e.value,
+            label: e.label,
+            selected: shown.includes(e.value),
+            onPress: () => {
+              save({ availableEquipment: toggleEquipment(shown, e.value) });
+            },
+          }))}
+        />
       </Section>
     </View>
   );

@@ -1,12 +1,13 @@
-import { Fragment, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { colours, orangeGradient, sizes } from "./colours";
 import { Icon } from "./Icon";
 import { fonts, Txt } from "./Txt";
 
-// What a person picks by tapping. One of a few with a line each: rows in ONE rounded group, a
-// round mark on the picked one, as a phone's own settings lists draw it. Any number of short
-// ones: chips. A short scale (kg or lb, 1 to 7 days): segments in one track. Picked reads orange.
+// What a person picks by tapping, drawn over a page's own picture, which shows through every box
+// (Kd, 2026-10-27). One of a few with a line each: a card each, spaced apart, a round mark on the
+// picked one. Several short ones: a grid of equal boxes, a few to a row, never a scatter. A short
+// scale (kg or lb, lose · keep · gain): segments in one track. Picked reads orange.
 
 export interface Option<V> {
   value: V;
@@ -16,7 +17,7 @@ export interface Option<V> {
   note?: string | null;
 }
 
-/** One of a few, in one group. */
+/** One of a few: a card each. */
 export function Options<V extends string | number>({
   options,
   selected,
@@ -27,38 +28,80 @@ export function Options<V extends string | number>({
   onPick: (value: V) => void;
 }) {
   return (
-    <View style={styles.group}>
-      {options.map((o, i) => {
+    <View style={styles.cards}>
+      {options.map((o) => {
         const on = o.value === selected;
         return (
-          <Fragment key={String(o.value)}>
-            {i === 0 ? null : <View style={styles.rule} />}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={o.label}
-              accessibilityState={{ selected: on }}
-              onPress={() => {
-                onPick(o.value);
-              }}
-              style={({ pressed }) => [styles.row, pressed ? styles.pressedRow : null]}
-            >
-              <View style={styles.grow}>
-                <Txt style={[styles.rowLabel, on ? styles.rowLabelOn : null]}>{o.label}</Txt>
-                {o.desc === undefined ? null : <Txt style={styles.desc}>{o.desc}</Txt>}
-                {o.note === undefined || o.note === null ? null : <Txt style={styles.note}>{o.note}</Txt>}
-              </View>
-              <View style={[styles.mark, on ? styles.markOn : null]}>
-                {on ? <Icon name="check" size={12} colour="onOrange" /> : null}
-              </View>
-            </Pressable>
-          </Fragment>
+          <Pressable
+            key={String(o.value)}
+            accessibilityRole="button"
+            accessibilityLabel={o.label}
+            accessibilityState={{ selected: on }}
+            onPress={() => {
+              onPick(o.value);
+            }}
+            style={({ pressed }) => [styles.card, on ? styles.on : null, pressed ? styles.pressed : null]}
+          >
+            <View style={styles.grow}>
+              <Txt style={[styles.cardLabel, on ? styles.labelOn : null]}>{o.label}</Txt>
+              {o.desc === undefined ? null : <Txt style={styles.desc}>{o.desc}</Txt>}
+              {o.note === undefined || o.note === null ? null : <Txt style={styles.note}>{o.note}</Txt>}
+            </View>
+            <View style={[styles.mark, on ? styles.markOn : null]}>
+              {on ? <Icon name="check" size={12} colour="onOrange" /> : null}
+            </View>
+          </Pressable>
         );
       })}
     </View>
   );
 }
 
-/** One of any number: a short word in a round box. */
+export interface Cell {
+  key: string;
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+  /** What a screen reader says, where the label alone does not. */
+  say?: string;
+}
+
+/** Short choices in rows of equal boxes, `columns` to a row; a last row short of boxes keeps their width. */
+export function Grid({ cells, columns }: { cells: readonly Cell[]; columns: number }) {
+  const rows: Cell[][] = [];
+  cells.forEach((cell, i) => {
+    if (i % columns === 0) rows.push([]);
+    rows[rows.length - 1]?.push(cell);
+  });
+  return (
+    <View style={styles.cards}>
+      {rows.map((row, r) => (
+        <View key={`row-${String(r)}`} style={styles.gridRow}>
+          {row.map((cell) => (
+            <Pressable
+              key={cell.key}
+              accessibilityRole="button"
+              accessibilityLabel={cell.say ?? cell.label}
+              accessibilityState={{ selected: cell.selected }}
+              onPress={cell.onPress}
+              style={({ pressed }) => [styles.cell, cell.selected ? styles.on : null, pressed ? styles.pressed : null]}
+            >
+              {cell.selected ? <Icon name="check" size={14} colour="orangeLight" /> : null}
+              <Txt numberOfLines={1} style={[styles.cellLabel, cell.selected ? styles.labelOn : null]}>
+                {cell.label}
+              </Txt>
+            </Pressable>
+          ))}
+          {Array.from({ length: columns - row.length }, (_, i) => (
+            <View key={`gap-${String(i)}`} style={styles.gap} />
+          ))}
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/** One of any number, alone on its line: "Not sure". */
 export function Chip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
   return (
     <Pressable
@@ -66,10 +109,10 @@ export function Chip({ label, selected, onPress }: { label: string; selected: bo
       accessibilityLabel={label}
       accessibilityState={{ selected }}
       onPress={onPress}
-      style={({ pressed }) => [styles.chip, selected ? styles.chipOn : null, pressed ? styles.pressed : null]}
+      style={({ pressed }) => [styles.chip, selected ? styles.on : null, pressed ? styles.pressed : null]}
     >
       {selected ? <Icon name="check" size={13} colour="orangeLight" /> : null}
-      <Txt style={[styles.chipLabel, selected ? styles.chipLabelOn : null]}>{label}</Txt>
+      <Txt style={[styles.cellLabel, selected ? styles.labelOn : null]}>{label}</Txt>
     </Pressable>
   );
 }
@@ -81,7 +124,6 @@ export function Chips({ children }: { children: ReactNode }) {
 interface Segment<V> {
   value: V;
   label: string;
-  /** What a screen reader says, where the label is only a number. */
   say?: string;
 }
 
@@ -120,25 +162,26 @@ export function Segments<V extends string | number>({
   );
 }
 
+const box = {
+  borderRadius: 14,
+  borderWidth: 1,
+  borderColor: colours.lineStrong,
+  backgroundColor: colours.overPicture,
+} as const;
+
 const styles = StyleSheet.create({
-  group: {
-    borderRadius: 16,
-    backgroundColor: colours.box,
-    borderWidth: 1,
-    borderColor: colours.line,
-    overflow: "hidden",
-  },
-  rule: { height: 1, marginLeft: 14, backgroundColor: colours.line },
-  row: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: sizes.button, paddingHorizontal: 14, paddingVertical: 10 },
-  pressedRow: { backgroundColor: colours.raised },
-  grow: { flex: 1, gap: 1 },
-  rowLabel: { fontFamily: fonts.medium, fontSize: 15, lineHeight: 20, color: colours.text },
-  rowLabelOn: { fontFamily: fonts.semibold, color: colours.orangeLight },
-  desc: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 16, color: colours.textFaint },
+  cards: { gap: 10 },
+  card: { ...box, flexDirection: "row", alignItems: "center", gap: 12, minHeight: sizes.button + 8, paddingHorizontal: 14, paddingVertical: 12 },
+  on: { borderColor: colours.orange, backgroundColor: colours.orangeFill },
+  pressed: { opacity: 0.8 },
+  grow: { flex: 1, gap: 2 },
+  cardLabel: { fontFamily: fonts.semibold, fontSize: 15, lineHeight: 20, color: colours.text },
+  labelOn: { color: colours.orangeLight },
+  desc: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 17, color: colours.textSoft },
   note: { fontFamily: fonts.semibold, fontSize: 12, lineHeight: 16, color: colours.gold },
   mark: {
-    width: 20,
-    height: 20,
+    width: 22,
+    height: 22,
     borderRadius: sizes.round,
     borderWidth: 1.5,
     borderColor: colours.lineStrong,
@@ -146,40 +189,22 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   markOn: { borderColor: colours.orange, backgroundColor: colours.orange },
-  pressed: { opacity: 0.8 },
+  gridRow: { flexDirection: "row", gap: 10 },
+  cell: { ...box, flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, height: sizes.button, paddingHorizontal: 8 },
+  gap: { flex: 1 },
+  cellLabel: { fontFamily: fonts.medium, fontSize: 14, lineHeight: 18, color: colours.text },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: {
-    flexDirection: "row",
-    alignItems: "center",
-    alignSelf: "flex-start",
-    gap: 5,
-    height: sizes.press,
-    paddingHorizontal: 14,
-    borderRadius: sizes.round,
-    borderWidth: 1,
-    borderColor: colours.lineStrong,
-    backgroundColor: colours.box,
-  },
-  chipOn: { borderColor: colours.orange, backgroundColor: colours.raised },
-  chipLabel: { fontFamily: fonts.medium, fontSize: 14, lineHeight: 18, color: colours.textSoft },
-  chipLabelOn: { color: colours.orangeLight },
+  chip: { ...box, flexDirection: "row", alignItems: "center", alignSelf: "flex-start", gap: 6, height: sizes.press, paddingHorizontal: 16, borderRadius: sizes.round },
   track: {
     flexDirection: "row",
     padding: 3,
     gap: 3,
     borderRadius: sizes.round,
-    backgroundColor: colours.box,
+    backgroundColor: colours.overPicture,
     borderWidth: 1,
     borderColor: colours.lineStrong,
   },
-  segment: {
-    flex: 1,
-    height: sizes.press - 6,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 4,
-    borderRadius: sizes.round,
-  },
+  segment: { flex: 1, height: sizes.press - 6, alignItems: "center", justifyContent: "center", paddingHorizontal: 4, borderRadius: sizes.round },
   segmentOn: { backgroundColor: colours.orange, experimental_backgroundImage: orangeGradient },
   segmentLabel: { fontFamily: fonts.medium, fontSize: 14, lineHeight: 18, color: colours.textSoft },
   segmentLabelOn: { fontFamily: fonts.semibold, color: colours.onOrange },
