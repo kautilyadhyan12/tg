@@ -1,13 +1,16 @@
 import { useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { Button } from "../look/Button";
-import { Avatar, Card, PictureCard } from "../look/Card";
+import { Avatar, Badge, Card, PictureCard } from "../look/Card";
+import { sizes } from "../look/colours";
+import { Icon } from "../look/Icon";
 import { Page } from "../look/Page";
 import { PictureTop } from "../look/PictureTop";
 import { Sheet } from "../look/Sheet";
 import { Txt } from "../look/Txt";
 import { useSession } from "../session/SessionProvider";
 import { greetingAt } from "./greeting";
+import { Setup } from "./setup/Setup";
 import { ThisCopy } from "./ThisCopy";
 import { COMING_SOON, Soon } from "./Soon";
 
@@ -62,6 +65,7 @@ export function MeScreen() {
   return (
     <Page>
       <Account />
+      <YourPlan />
       <View style={styles.two}>
         <PictureCard picture="progress" height={120} label="Progress" icon="chart" pill={COMING_SOON} style={styles.half} />
         <PictureCard
@@ -102,6 +106,38 @@ function Account() {
   );
 }
 
+/** Setup's answers: the goal, the body and the week the plan is built on, opened over the tab. */
+function YourPlan() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Your plan"
+        style={styles.press}
+        onPress={() => {
+          setOpen(true);
+        }}
+      >
+        <Card style={styles.row}>
+          <Badge icon="target" />
+          <View style={styles.grow}>
+            <Txt kind="strong">Your plan</Txt>
+            <Txt kind="small">Your goal, body and week</Txt>
+          </View>
+          <Icon name="go" size={18} colour="textFaint" />
+        </Card>
+      </Pressable>
+      <Setup
+        open={open}
+        onClose={() => {
+          setOpen(false);
+        }}
+      />
+    </>
+  );
+}
+
 /** The way out of the account; nothing happens until the person says so in the box from the bottom. */
 function SignOut() {
   const { session } = useSession();
@@ -136,4 +172,5 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: 12 },
   grow: { flex: 1 },
   middle: { alignSelf: "center" },
+  press: { minHeight: sizes.press },
 });

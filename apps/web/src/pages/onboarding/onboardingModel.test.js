@@ -597,7 +597,7 @@ describe('a target under the lowest healthy weight is said on screen 3 as it is 
     // The plan screen names it by the same row, and the plan box says the line beside it.
     expect(m.answerValue('target', same, 'metric')).toMatch(/^50\.3 kg · /);
     const flags = [{ code: 'target_below_healthy_weight', floorKg: 50.4 }];
-    expect(m.flagLines({ flags }, 'lose', 'metric', m.targetShownValue('lose', same, 'metric'))).toEqual([FIRST]);
+    expect(m.flagLines({ flags, workings: { resting: { age: LOW.age } } }, 'lose', 'metric', m.targetShownValue('lose', same, 'metric'))).toEqual([FIRST]);
     // A target on the wrong side, or with no weight to keep to, reads as its own row.
     expect(m.targetShownRow('lose', { ...LOW, targetWeightKg: 83 }, 'metric')).toEqual({ whole: 83, tenth: 0 });
     expect(m.targetShownRow('lose', { ...LOW, weightKg: null }, 'metric')).toEqual({ whole: 45, tenth: 0 });

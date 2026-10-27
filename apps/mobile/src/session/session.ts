@@ -77,6 +77,8 @@ export interface Session {
   signUpNote: () => string | null;
   /** Kept with the sign-in, once the server has said the person ticked that version. */
   keepSignUpNote: (version: string) => Promise<void>;
+  /** The name the server now holds for this person, kept with the sign-in and shown at once. */
+  keepName: (displayName: string) => Promise<void>;
 }
 
 export function createSession({
@@ -270,6 +272,14 @@ export function createSession({
       const mine = kept;
       if (mine === null) return;
       mine.signUpNote = version;
+      await writeKept(mine);
+    },
+
+    keepName: async (displayName) => {
+      const mine = kept;
+      if (mine === null || mine.user.displayName === displayName) return;
+      mine.user = { ...mine.user, displayName };
+      show({ kind: "in", user: mine.user });
       await writeKept(mine);
     },
 
