@@ -68,14 +68,20 @@ async function signIn(routes: Record<string, Route>) {
 async function openGym(routes: Record<string, Route>) {
   const server = fakeServer({ "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }), ...routes });
   await render(<App extra={extra} ask={server.ask} store={memoryStore(kept(1))} wait={noWait} />);
-  await fireEvent.press(await screen.findByRole("tab", { name: "Gym" }));
+  await fireEvent.press(await gymTab());
   return server;
 }
 
+/** The fourth tab, whatever word the person's places give it. */
+const gymTab = async () => {
+  const tab = (await screen.findAllByRole("tab"))[3];
+  if (tab === undefined) throw new Error("no fourth tab");
+  return tab;
+};
 const press = (name: string) => fireEvent.press(screen.getByRole("button", { name }));
 const answers = (server: { paths: () => string[] }) => server.paths().filter((path) => /\/(accept|decline|not-me)$/.test(path));
-/** The invitation's row, by the place's name: it opens the invitation to review. */
-const review = async (gym: string) => fireEvent.press(await screen.findByRole("button", { name: new RegExp(`^${gym}, `) }));
+/** The invitation's View invitation, by the place's name: it opens the invitation to review. */
+const review = async (gym: string) => fireEvent.press(await screen.findByRole("button", { name: `View invitation from ${gym}` }));
 const disabled = (name: string): unknown => {
   const state: unknown = screen.getByRole("button", { name }).props.accessibilityState;
   return typeof state === "object" && state !== null && "disabled" in state ? state.disabled : undefined;
@@ -190,7 +196,9 @@ describe("You're invited", () => {
     await signIn({ "/v1/orgs/invitations": waiting(invitation(IRON)) });
     await review("Iron House");
     expect(await screen.findByText("What Iron House can see")).toBeTruthy();
+    expect(screen.getByText("Can see")).toBeTruthy();
     expect(screen.getByText("Only if you allow it")).toBeTruthy();
+    expect(screen.getByText("Never")).toBeTruthy();
     for (const line of [...GYM_CAN_SEE, ...GYM_SEES_IF_YOU_ALLOW, ...GYM_NEVER_SEES]) expect(screen.getByText(line)).toBeTruthy();
     expect(screen.queryByText(/before you joined/)).toBeNull();
   });
@@ -211,7 +219,7 @@ describe("You're invited", () => {
     await press("Done");
     expect(await screen.findByText("Joined")).toBeTruthy();
     await press("Continue");
-    await fireEvent.press(await screen.findByRole("tab", { name: "Gym" }));
+    await fireEvent.press(await gymTab());
     expect(await screen.findByRole("header", { name: "My gyms" })).toBeTruthy();
     expect(await screen.findByText("Iron House")).toBeTruthy();
     expect(screen.getByText("Gym · Pune")).toBeTruthy();
@@ -287,7 +295,7 @@ describe("an invitation opened again", () => {
     await press("Join Lotus Yoga");
     await fireEvent.press(await screen.findByRole("button", { name: "Done" }));
     expect(await screen.findByText("Joined")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /^Lotus Yoga, / })).toBeNull();
+    expect(screen.queryByRole("button", { name: "View invitation from Lotus Yoga" })).toBeNull();
     expect(answers(server)).toEqual([decline(IRON_ID), accept(lotusId)]);
   });
 });
@@ -318,6 +326,9 @@ describe("the Gym tab", () => {
     });
     expect(await screen.findByRole("header", { name: "My yoga studios" })).toBeTruthy();
     expect(screen.getByText("Lotus Yoga")).toBeTruthy();
+    // The tab under its icon is a studio's, never "Gym".
+    expect(await screen.findByRole("tab", { name: "Studio" })).toBeTruthy();
+    expect(screen.queryByRole("tab", { name: "Gym" })).toBeNull();
     expect(await screen.findByText("Declined")).toBeTruthy();
     await review("Iron House");
     expect(await screen.findByText("You declined this invitation. You can still join.")).toBeTruthy();

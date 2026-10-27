@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { orgTypeSchema } from "@app/shared";
-import { placesHeading } from "../src/screens/placesHeading";
+import { placesHeading, tabWord } from "../src/screens/placesHeading";
 
 // The Gym tab's heading for every kind of business the app takes, alone, mixed and none
 // (Kd, rulings/2026-10-23-18u-i.md: a yoga or Pilates member is never told "gyms").
@@ -29,5 +29,26 @@ describe("the Gym tab's heading", () => {
       expect(heading).toMatch(/^My /);
       if (type !== "gym") expect(heading === "My gyms").toBe(false);
     }
+  });
+});
+
+describe("the Gym tab's word under its icon", () => {
+  it.each([
+    [[], "Gym"],
+    [["gym"], "Gym"],
+    [["crossfit_box"], "Gym"],
+    [["gym", "crossfit_box"], "Gym"],
+    [["yoga_studio"], "Studio"],
+    [["pilates_studio", "studio"], "Studio"],
+    [["personal_trainer"], "Trainer"],
+    [["clinic"], "Clinic"],
+    [["gym", "yoga_studio"], "Places"],
+    [["boxing_club"], "Gym"],
+  ])("%j reads %s", (types, word) => {
+    expect(tabWord(types)).toBe(word);
+  });
+
+  it("no kind is named so long it crowds the bar", () => {
+    for (const type of orgTypeSchema.options) expect(tabWord([type]).length).toBeLessThanOrEqual(7);
   });
 });

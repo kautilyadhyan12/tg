@@ -11,14 +11,14 @@ import {
   type MyOrgsResponse,
 } from "@app/shared";
 import { Button } from "../look/Button";
-import { Avatar, Badge, Card } from "../look/Card";
+import { Badge, Card, Pill } from "../look/Card";
 import { colours } from "../look/colours";
 import { Icon } from "../look/Icon";
 import { Page } from "../look/Page";
-import { Row, RowGroup } from "../look/Rows";
 import { Txt } from "../look/Txt";
 import { useSession } from "../session/SessionProvider";
-import { InvitationList, invitationsPath, placeLine } from "./Invitation";
+import { InvitationList, PlaceHead, invitationsPath } from "./Invitation";
+import { usePlaces } from "./places";
 import { placesHeading } from "./placesHeading";
 import { NO_ANSWER } from "./SignIn";
 import { Soon } from "./Soon";
@@ -33,6 +33,7 @@ type Read<T> = { kind: "ok"; data: T } | { kind: "failed" };
 
 export function GymScreen() {
   const { session } = useSession();
+  const { setKinds } = usePlaces();
   const [mine, setMine] = useState<Read<MyOrgsResponse> | null>(null);
   const [invites, setInvites] = useState<Read<MyInvitationsResponse> | null>(null);
   const [checking, setChecking] = useState(false);
@@ -43,8 +44,10 @@ export function GymScreen() {
 
   const readMine = useCallback(async () => {
     const answer = await session.signedIn({ method: "GET", path: "/v1/orgs/mine" }, myOrgsResponseSchema);
-    if (live.current) setMine(answer.kind === "ok" ? answer : { kind: "failed" });
-  }, [session]);
+    if (!live.current) return;
+    setMine(answer.kind === "ok" ? answer : { kind: "failed" });
+    if (answer.kind === "ok") setKinds(answer.data.orgs.filter((org) => org.isMember).map((org) => org.orgType));
+  }, [session, setKinds]);
 
   const readInvites = useCallback(async () => {
     const answer = await session.signedIn({ method: "GET", path: invitationsPath }, myInvitationsResponseSchema);
@@ -103,32 +106,30 @@ export function GymScreen() {
         </Card>
       ) : null}
 
-      {joined.length === 0 ? null : (
-        <RowGroup>
-          {joined.map((org) => (
-            <Row
-              key={org.id}
-              title={org.name}
-              detail={placeLine(org.orgType, org.city)}
-              lead={<Avatar name={org.name} size={44} />}
-            />
-          ))}
-        </RowGroup>
-      )}
+      {joined.map((org) => (
+        <Card key={org.id} style={styles.box}>
+          <PlaceHead name={org.name} orgType={org.orgType} city={org.city}>
+            <Pill label="Member" tone="good" icon="check" />
+          </PlaceHead>
+        </Card>
+      ))}
       {joined.length === 0 ? null : <Soon icon="qr" title="Your pass" />}
 
-      {removed.length === 0 ? null : (
-        <RowGroup>
-          {removed.map((org) => (
-            <Row
-              key={org.id}
-              title={org.name}
-              detail={`You’re no longer a ${orgWords(org.orgType).person} of ${org.name}`}
-              lead={<Badge icon="building" tone="plain" />}
-            />
-          ))}
-        </RowGroup>
-      )}
+      {removed.map((org) => (
+        <Card key={org.id} style={styles.box}>
+          <View style={styles.row}>
+            <Badge icon="building" tone="plain" />
+            <View style={styles.grow}>
+              <Txt kind="h3" numberOfLines={1}>
+                {org.name}
+              </Txt>
+              <Txt kind="small">
+                You’re no longer a {orgWords(org.orgType).person} of {org.name}
+              </Txt>
+            </View>
+          </View>
+        </Card>
+      ))}
 
       {invites?.kind === "ok" && !invites.data.addressProved ? (
         <Card style={styles.box}>

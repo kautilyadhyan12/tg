@@ -26,6 +26,8 @@ import type { KeyStore } from "./session/session";
 import { askGoogle, type AskGoogle } from "./session/google";
 import { SessionProvider, useSession } from "./session/SessionProvider";
 import { GymScreen } from "./screens/GymTab";
+import { PlacesProvider, usePlaces } from "./screens/places";
+import { tabWord } from "./screens/placesHeading";
 import { FoodScreen, MeScreen, DashboardScreen, WorkoutScreen } from "./screens/tabs";
 
 /** The five tabs, in their order (spec Part 6 §16.3a). A tab's name is the word under its icon. */
@@ -80,8 +82,19 @@ function SignedInOrOut() {
 
 function FiveTabs() {
   return (
+    <PlacesProvider>
+      <TabsOfPlaces />
+    </PlacesProvider>
+  );
+}
+
+/** The Gym tab is named for the places the person joined ("Studio" for a yoga studio). */
+function TabsOfPlaces() {
+  const { kinds } = usePlaces();
+  const labels = { Gym: tabWord(kinds ?? []) };
+  return (
     <NavigationContainer theme={theme}>
-      <Tabs.Navigator screenOptions={{ headerShown: false }} tabBar={(props) => <TabBar {...props} icons={tabIcons} />}>
+      <Tabs.Navigator screenOptions={{ headerShown: false }} tabBar={(props) => <TabBar {...props} icons={tabIcons} labels={labels} />}>
         {TABS.map((tab) => (
           <Tabs.Screen key={tab.name} name={tab.name} component={tab.screen} />
         ))}

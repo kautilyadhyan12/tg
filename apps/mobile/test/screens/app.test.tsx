@@ -112,8 +112,8 @@ describe("Me says which copy this is and whether it reaches its server", () => {
     await open("Me");
     expect(await screen.findByText("Feature 1 test copy · Connected")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
-    // Besides sign-in and the invitations asked on opening, only the copy's own check.
-    expect(asked.filter((url) => !url.includes("/v1/auth/") && !url.includes("/v1/orgs/invitations"))).toEqual([
+    // Besides sign-in, the invitations and the places asked on opening, only the copy's own check.
+    expect(asked.filter((url) => !url.includes("/v1/auth/") && !url.includes("/v1/orgs/"))).toEqual([
       "http://localhost:3000/health",
     ]);
   });
