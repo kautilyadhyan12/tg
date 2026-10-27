@@ -7,7 +7,7 @@
     "phone": "node scripts/phone.mjs",
     "start": "node scripts/phone.mjs --start",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src test scripts index.ts app.config.ts metro.config.js jest.config.js vitest.config.ts",
+    "lint": "eslint src test scripts plugins index.ts app.config.ts metro.config.js jest.config.js vitest.config.ts",
     "test": "vitest run && jest"
   },
   "dependencies": {

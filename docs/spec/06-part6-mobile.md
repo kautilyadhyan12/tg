@@ -594,7 +594,15 @@ The terminal's own choices, each a job's to better with a reason.
   moment it is made and Continue waits for it; a tick the server confirmed is kept with the
   sign-in, so a person who ticked opens with no internet. No answer, a late one or a refusal
   is never a tick. A signed-in request (`session.signedIn`) is only ever sent, or sent again
-  after a refresh, as the person who made it.
+  after a refresh, as the person who made it. **Built in 12d:** Google. "Continue with
+  Google" under Continue, as the browser draws it, opens Google's own box from the bottom
+  (Android's Credential Manager; `apps/mobile/src/session/google.ts` alone knows the
+  package). The phone first asks the server for a one-time word and the client id, Google
+  writes the word into its signed answer, and the server checks the answer itself
+  (signature, issuer, the website's client id as audience, time, a confirmed email) and
+  takes the word once, so a copied answer signs nobody in. A new address gets its account,
+  a known one its own (the browser's same three steps), as a phone. Each copy of the app is
+  an Android client in Google's console (its id and the debug key's SHA-1).
 - **Kept on the phone until the server has it** (§4): what a person DOES (a workout, a
   meal, a weigh-in, a run) is written to the phone first and sent when the internet is
   there, each route safe to call twice. Built once, with the workout (item 61), then used
