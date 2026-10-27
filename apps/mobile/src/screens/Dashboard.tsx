@@ -96,9 +96,9 @@ export function DashboardScreen() {
               <Txt kind="h1" numberOfLines={1} style={styles.name}>
                 {state.kind === "in" ? state.user.displayName : ""}
               </Txt>
-              <Button label="Start Training" icon="play" compact onPress={toWorkout} style={styles.startSmall} />
             </View>
           }
+          foot={<Button label="Start Training" icon="play" compact onPress={toWorkout} />}
         />
       }
     >
@@ -474,7 +474,6 @@ const styles = StyleSheet.create({
   semibold: { fontFamily: fonts.semibold },
   hello: { alignItems: "flex-start" },
   name: { alignSelf: "stretch" },
-  startSmall: { marginTop: 12 },
   boxTitle: { fontSize: 14, lineHeight: 18, color: colours.textSoft },
   statLabel: { fontSize: 12, lineHeight: 16 },
   italic: { fontStyle: "italic" },
