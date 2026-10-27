@@ -44,7 +44,7 @@ const screeningOf = ({ hasCondition, checkFirst = null }) => ({
 
 const PROFILE = {
   age: 30, gender: 'female', heightCm: 165, targetWeightKg: 65, fitnessLevel: 'beginner',
-  fitnessGoals: ['balance'], weightGoal: 'lose', exerciseFrequency: 3, availableEquipment: ['dumbbells'],
+  fitnessGoals: ['balance'], weightGoal: 'lose', exerciseFrequency: 3, availableEquipment: ['dumbbells'], trainingPlaces: [],
   sessionDurationMin: 45, preferredWorkoutTime: null, onboardingCompleted: true, updatedAt: null,
 };
 

@@ -41,7 +41,7 @@ const CONFIRM =
 /** A person who finished setup: losing weight, Better balance ticked. */
 const ANSWERED = {
   age: 30, gender: 'female', heightCm: 165, targetWeightKg: 65, fitnessLevel: 'beginner',
-  fitnessGoals: ['balance'], weightGoal: 'lose', exerciseFrequency: 3, availableEquipment: [],
+  fitnessGoals: ['balance'], weightGoal: 'lose', exerciseFrequency: 3, availableEquipment: [], trainingPlaces: [],
   sessionDurationMin: 45, preferredWorkoutTime: null, onboardingCompleted: true,
   updatedAt: null,
 };
@@ -49,7 +49,7 @@ const ANSWERED = {
  *  the server's empty profile. */
 const CLEARED = {
   age: null, gender: null, heightCm: null, targetWeightKg: null, fitnessLevel: null,
-  fitnessGoals: [], weightGoal: null, exerciseFrequency: null, availableEquipment: [],
+  fitnessGoals: [], weightGoal: null, exerciseFrequency: null, availableEquipment: [], trainingPlaces: [],
   sessionDurationMin: null, preferredWorkoutTime: null, onboardingCompleted: false,
   updatedAt: null,
 };
