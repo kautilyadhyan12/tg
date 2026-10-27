@@ -119,12 +119,11 @@ describe("Me says which copy this is and whether it reaches its server", () => {
     await open("Me");
     expect(await screen.findByText("Feature 1 test copy · Connected")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
-    // Besides sign-in, the invitations and the places asked on opening, and the Dashboard's own reads,
-    // only the copy's own check.
+    // Besides sign-in, the invitations and the places asked on opening, the profile's time zone and
+    // the Dashboard's own reads, only the copy's own check.
     const dashboard = Object.values(DASHBOARD_READS).map((path) => `http://localhost:3000${path}`);
-    expect(asked.filter((url) => !url.includes("/v1/auth/") && !url.includes("/v1/orgs/") && !dashboard.includes(url))).toEqual([
-      "http://localhost:3000/health",
-    ]);
+    const opening = (url: string) => url.includes("/v1/auth/") || url.includes("/v1/orgs/") || url.endsWith("/v1/users/me");
+    expect(asked.filter((url) => !opening(url) && !dashboard.includes(url))).toEqual(["http://localhost:3000/health"]);
   });
 
   it("not reached, then Try again reaches it", async () => {

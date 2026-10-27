@@ -19,11 +19,14 @@ const overview = (totalWorkouts: number, more: object = {}) => ({
   currentStreak: 12,
   longestStreak: 20,
   consistencyPct: 0,
+  totalRuns: 0,
+  runDurationMs: 0,
+  runKcal: 0,
   limitedToDays: null,
   ...more,
 });
 const gamification = (more: object = {}) => ({
-  streak: { current: 12, longest: 20, lastActivityDate: today, freezesAvailable: 2 },
+  streak: { current: 12, longest: 20, lastActivityDate: today, freezesAvailable: 3 },
   xp: { total: 1240, level: 7, xpInLevel: 240, xpForNext: 300, progressPct: 80, nextLevelAt: 1300 },
   achievements: [
     { code: "first_workout", earnedAt: "2026-10-01T10:00:00.000Z" },
@@ -95,7 +98,7 @@ const hoursAgo = (hours: number) => new Date(Date.now() - hours * 3_600_000).toI
 const trained: Record<string, Route> = {
   "/v1/progress/overview": ok(overview(24)),
   "/v1/gamification/me": ok(gamification()),
-  "/v1/progress/trend": ok({ points: [{ date: today, kcal: 348, workouts: 2 }], limitedToDays: 90 }),
+  "/v1/progress/trend": ok({ points: [{ date: today, kcal: 348, workouts: 2 }], runDays: [], limitedToDays: 90 }),
   "/v1/gamification/challenges": ok(challenges),
   "/v1/workouts": ok(page([workoutRow("1b6f0a3e-2c4d-4e5f-8a9b-0c1d2e3f4a5b", hoursAgo(1))], true)),
   "/v1/geo/runs": ok(list([runRow("5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a", hoursAgo(30), "Evening run")])),
@@ -133,7 +136,7 @@ describe("the worst thing: nobody else's numbers on this person's Dashboard", ()
     const ashas: Record<string, unknown> = {
       "/v1/progress/overview": overview(3, { totalKcal: 410, totalDurationMs: 90 * 60_000 }),
       "/v1/gamification/me": gamification({ achievements: [] }),
-      "/v1/progress/trend": { points: [], limitedToDays: 90 },
+      "/v1/progress/trend": { points: [], runDays: [], limitedToDays: 90 },
       "/v1/gamification/challenges": challenges,
       "/v1/workouts": page([], false),
       "/v1/geo/runs": list([]),
@@ -197,12 +200,12 @@ describe("the Dashboard, with the person's own numbers", () => {
     expect(screen.getByText("6,420")).toBeTruthy();
     expect(await screen.findAllByText("Level 7")).toHaveLength(1);
     expect(screen.getByText("1,240 XP earned")).toBeTruthy();
-    // Experience points: the next level, two workouts this week, the streak and its freezes.
+    // Experience points: the next level, two workouts this week, the streak and its freezes, each
+    // number beside its own word.
     expect(screen.getByText("240/300 XP → Level 8")).toBeTruthy();
-    expect(screen.getByText("this week")).toBeTruthy();
-    expect(screen.getAllByText("2").length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText("12")).toBeTruthy();
-    expect(screen.getByText("freezes left")).toBeTruthy();
+    expect(label("2 this week")).toHaveLength(1);
+    expect(label("12 day streak")).toHaveLength(1);
+    expect(label("3 freezes left")).toHaveLength(1);
     // This week: today ticked, one day of seven.
     expect(label("[A-Z][a-z]{2} \\d+, trained, today")).toHaveLength(1);
     expect(label("[A-Z][a-z]{2} \\d+, trained")).toHaveLength(1);
@@ -238,11 +241,34 @@ describe("the Dashboard, with the person's own numbers", () => {
     expect(new Set(reads.map((one) => one.headers.authorization))).toEqual(new Set(["Bearer access-2"]));
   });
 
+  it("Total Sessions, the hours, the calories and the week count runs with the workouts", async () => {
+    const otherDay = weekOf(new Date()).find((day) => !day.today)?.key ?? "";
+    await openApp({
+      ...trained,
+      "/v1/progress/overview": ok(overview(24, { totalRuns: 3, runDurationMs: 30 * 60_000, runKcal: 100 })),
+      "/v1/progress/trend": ok({
+        points: [{ date: today, kcal: 348, workouts: 2 }],
+        runDays: [
+          { date: today, runs: 1 },
+          { date: otherDay, runs: 1 },
+        ],
+        limitedToDays: 90,
+      }),
+    });
+    expect(await screen.findByText("27")).toBeTruthy();
+    expect(screen.getByText("Total Sessions")).toBeTruthy();
+    expect(screen.getByText("18h 30m")).toBeTruthy();
+    expect(screen.getByText("6,520")).toBeTruthy();
+    expect(label("4 this week")).toHaveLength(1);
+    expect(screen.getByText("2 of 7 days active")).toBeTruthy();
+    expect(label("[A-Z][a-z]{2} \\d+, trained")).toHaveLength(2);
+  });
+
   it("a new person: true zeros, and words for what is not there yet", async () => {
     await openApp({
       "/v1/progress/overview": ok(overview(0, { totalKcal: 0, totalDurationMs: 0 })),
       "/v1/gamification/me": ok(gamification({ achievements: [], streak: { current: 0, longest: 0, lastActivityDate: null, freezesAvailable: 1 }, xp: { total: 0, level: 1, xpInLevel: 0, xpForNext: 100, progressPct: 0, nextLevelAt: 100 } })),
-      "/v1/progress/trend": ok({ points: [], limitedToDays: 90 }),
+      "/v1/progress/trend": ok({ points: [], runDays: [], limitedToDays: 90 }),
       "/v1/gamification/challenges": ok(challenges),
       "/v1/workouts": ok(page([], false)),
       ...nothingElse,
@@ -251,7 +277,8 @@ describe("the Dashboard, with the person's own numbers", () => {
     expect(await screen.findByText("No badges yet.")).toBeTruthy();
     expect(screen.getByText("0 of 7 days active")).toBeTruthy();
     expect(screen.getByText("0 min")).toBeTruthy();
-    expect(screen.getByText("freeze left")).toBeTruthy();
+    expect(label("1 freeze left")).toHaveLength(1);
+    expect(label("0 this week")).toHaveLength(1);
     expect(label("[A-Z][a-z]{2} \\d+, trained")).toHaveLength(0);
   });
 
@@ -260,6 +287,54 @@ describe("the Dashboard, with the person's own numbers", () => {
     expect(await screen.findByText("No activity in the last 90 days.")).toBeTruthy();
     expect(screen.getByText("last 90 days")).toBeTruthy();
     expect(screen.queryByText("No activity yet.")).toBeNull();
+  });
+});
+
+describe("the person's own time zone", () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  const inZone = (zone: string) => {
+    const real = new Intl.DateTimeFormat().resolvedOptions();
+    jest.spyOn(Intl.DateTimeFormat.prototype, "resolvedOptions").mockReturnValue({ ...real, timeZone: zone });
+  };
+
+  it("a phone in India with no zone on the server saves its own, and the week is read again in it", async () => {
+    inZone("Asia/Kolkata");
+    const saved: unknown[] = [];
+    const server = await openApp({
+      ...trained,
+      "/v1/users/me": (body) => {
+        if (body !== undefined) saved.push(body);
+        return { status: 200, body: { user: { ...profile(true).user, timezone: saved.length > 0 ? "Asia/Kolkata" : null } } };
+      },
+    });
+    await waitFor(() => {
+      expect(saved).toEqual([{ timezone: "Asia/Kolkata" }]);
+    });
+    const changes = server.asked.filter((one) => one.path === "/v1/users/me" && one.method === "PATCH");
+    expect(changes.map((one) => one.headers.authorization)).toEqual(["Bearer access-2"]);
+    // The week, the streak and the totals are read once more, after the zone is saved.
+    await waitFor(() => {
+      expect(server.paths().filter((path) => path === "/v1/progress/trend")).toHaveLength(2);
+    });
+    expect(server.paths().filter((path) => path === "/v1/gamification/me")).toHaveLength(2);
+    expect(server.paths().filter((path) => path === "/v1/progress/overview")).toHaveLength(2);
+  });
+
+  it("a zone the server already has is not saved again", async () => {
+    inZone("Asia/Kolkata");
+    const server = await openApp({
+      ...trained,
+      "/v1/users/me": () => ({ status: 200, body: { user: { ...profile(true).user, timezone: "Asia/Kolkata" } } }),
+    });
+    expect(await screen.findByText("24")).toBeTruthy();
+    await waitFor(() => {
+      expect(server.paths().filter((path) => path === "/v1/users/me").length).toBeGreaterThanOrEqual(1);
+    });
+    expect(server.asked.filter((one) => one.method === "PATCH")).toEqual([]);
+    expect(server.paths().filter((path) => path === "/v1/progress/trend")).toHaveLength(1);
   });
 });
 

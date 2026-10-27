@@ -208,6 +208,8 @@ describe("signing in by email code", () => {
       ["/v1/users/me", undefined],
       // Then what any gym has invited this address to, before the tabs.
       ["/v1/orgs/invitations", undefined],
+      // The profile once more, for the time zone the server keys the person's days in.
+      ["/v1/users/me", undefined],
       // And the places the person is in, for the Gym tab's word.
       ["/v1/orgs/mine", undefined],
     ]);

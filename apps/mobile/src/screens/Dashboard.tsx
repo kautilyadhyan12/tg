@@ -26,6 +26,7 @@ import { pictures, type PictureName } from "../look/pictures";
 import { PictureTop } from "../look/PictureTop";
 import { fonts, Txt } from "../look/Txt";
 import { useSession } from "../session/SessionProvider";
+import { useZoneSaved } from "../session/TimeZoneSync";
 import {
   NOT_KNOWN,
   activeDaysWords,
@@ -65,9 +66,11 @@ export const DASHBOARD_READS = {
 export function DashboardScreen() {
   const { state } = useSession();
   const go = useNavigation<NavigationProp<ParamListBase>>();
-  const overview = useRead(DASHBOARD_READS.overview, progressOverviewSchema);
-  const me = useRead(DASHBOARD_READS.me, gamificationMeSchema);
-  const week = useRead(DASHBOARD_READS.week, progressTrendSchema);
+  // The week, the streak and the totals are keyed by day in the person's zone: read again once it is saved.
+  const zoneSaved = useZoneSaved();
+  const overview = useRead(DASHBOARD_READS.overview, progressOverviewSchema, zoneSaved);
+  const me = useRead(DASHBOARD_READS.me, gamificationMeSchema, zoneSaved);
+  const week = useRead(DASHBOARD_READS.week, progressTrendSchema, zoneSaved);
   const challenges = useRead(DASHBOARD_READS.challenges, weeklyChallengesSchema);
   const recent = useRead(DASHBOARD_READS.recent, workoutPageSchema);
   const runs = useRead(DASHBOARD_READS.runs, runPageSchema);
@@ -141,7 +144,13 @@ function known<T, R>(read: Read<T>, pick: (data: T) => R): R | null {
 }
 
 function Totals({ overview, me }: { overview: Read<ProgressOverview>; me: Read<GamificationMe> }) {
-  const totals = known(overview, (o) => ({ ...o, window: windowWords(o.limitedToDays), hours: hoursWords(o.totalDurationMs) }));
+  // Sessions are workouts and runs together (Kd's "Total Sessions"); the server sends them apart.
+  const totals = known(overview, (o) => ({
+    sessions: o.totalWorkouts + o.totalRuns,
+    kcal: o.totalKcal + o.runKcal,
+    hours: hoursWords(o.totalDurationMs + o.runDurationMs),
+    window: windowWords(o.limitedToDays),
+  }));
   const xp = known(me, (m) => m.xp);
   return (
     <View style={styles.tight}>
@@ -154,7 +163,7 @@ function Totals({ overview, me }: { overview: Read<ProgressOverview>; me: Read<G
       <Stat
         picture="totalworkout"
         icon="dumbbell"
-        value={totals === null ? NOT_KNOWN : count(totals.totalWorkouts)}
+        value={totals === null ? NOT_KNOWN : count(totals.sessions)}
         label="Total Sessions"
       />
       <Stat
@@ -166,7 +175,7 @@ function Totals({ overview, me }: { overview: Read<ProgressOverview>; me: Read<G
       <Stat
         picture="caloriesburned"
         icon="flame"
-        value={totals === null ? NOT_KNOWN : count(totals.totalKcal)}
+        value={totals === null ? NOT_KNOWN : count(totals.kcal)}
         label="Calories Burned"
       />
       <Stat
@@ -199,7 +208,7 @@ function Stat(props: { picture: PictureName; icon: IconName; tone?: "orange" | "
 
 function Experience({ me, week, now }: { me: Read<GamificationMe>; week: Read<ProgressTrend>; now: Date }) {
   const data = known(me, (m) => m);
-  const thisWeek = known(week, (w) => weekTrained(w.points, weekOf(now)).workouts);
+  const thisWeek = known(week, (w) => weekTrained(w.points, weekOf(now), w.runDays).workouts);
   const freezes = data?.streak.freezesAvailable ?? null;
   return (
     <Card style={styles.split}>
@@ -227,7 +236,7 @@ function Experience({ me, week, now }: { me: Read<GamificationMe>; week: Read<Pr
 
 function Figure({ value, label }: { value: string; label: string }) {
   return (
-    <View style={styles.figure}>
+    <View style={styles.figure} accessible accessibilityLabel={`${value} ${label}`}>
       <Txt kind="big" colour="orange">
         {value}
       </Txt>
@@ -250,7 +259,7 @@ function Bar({ share }: { share: number }) {
 
 function ThisWeek({ week, now }: { week: Read<ProgressTrend>; now: Date }) {
   const days = weekOf(now);
-  const trained = known(week, (w) => weekTrained(w.points, days));
+  const trained = known(week, (w) => weekTrained(w.points, days, w.runDays));
   return (
     <Card style={styles.split}>
       <View style={[styles.grow, styles.inner]}>

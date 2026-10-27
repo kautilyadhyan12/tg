@@ -25,6 +25,7 @@ import { phoneKeyStore } from "./session/keyStore";
 import type { KeyStore } from "./session/session";
 import { askGoogle, type AskGoogle } from "./session/google";
 import { SessionProvider, useSession } from "./session/SessionProvider";
+import { TimeZoneSync } from "./session/TimeZoneSync";
 import { DashboardScreen } from "./screens/Dashboard";
 import { GymScreen } from "./screens/GymTab";
 import { PlacesProvider, usePlaces } from "./screens/places";
@@ -74,9 +75,11 @@ function SignedInOrOut() {
   if (state.kind === "out") return <SignInScreen note={state.note} />;
   return (
     <SignUpNoteGate key={state.user.id}>
-      <InvitationsGate>
-        <FiveTabs />
-      </InvitationsGate>
+      <TimeZoneSync>
+        <InvitationsGate>
+          <FiveTabs />
+        </InvitationsGate>
+      </TimeZoneSync>
     </SignUpNoteGate>
   );
 }

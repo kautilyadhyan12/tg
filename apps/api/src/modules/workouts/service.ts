@@ -24,6 +24,7 @@ import type { RedisLike } from "../../redis.js";
 import { z } from "zod";
 import { getUserSyncContext } from "../users/service.js";
 import { getAfterWorkoutIdeas } from "../nutrition/service.js";
+import { runDays, runTotals } from "../geo/service.js";
 import {
   KCAL_CALC_VERSION_V1,
   KCAL_CALC_VERSION_V2,
@@ -385,8 +386,9 @@ export async function progressOverview(
   const now = new Date();
   const gate = await historyGate(deps, userId);
   const since = clamp(sinceFor(period, now), gate.floor);
-  const [agg, streak] = await Promise.all([
+  const [agg, runs, streak] = await Promise.all([
     repo.getOverviewAgg(deps.sql, userId, since),
+    runTotals(deps, userId, since),
     (async () => {
       const ctx = await getUserSyncContext(deps.sql, userId);
       return reconciledStreak({ sql: deps.sql }, userId, ctx.timezone);
@@ -404,6 +406,9 @@ export async function progressOverview(
     currentStreak: streak.current,
     longestStreak: streak.longest,
     consistencyPct,
+    totalRuns: runs.count,
+    runDurationMs: runs.durationMs,
+    runKcal: runs.kcal,
     limitedToDays: gate.limitedToDays,
   };
 }
@@ -415,8 +420,9 @@ export async function progressTrend(
 ): Promise<ProgressTrend> {
   const gate = await historyGate(deps, userId);
   const since = clamp(sinceFor(period, new Date()), gate.floor);
-  const points = await repo.getDailyTrend(deps.sql, userId, since, await userTz(deps.sql, userId));
-  return { points, limitedToDays: gate.limitedToDays };
+  const tz = await userTz(deps.sql, userId);
+  const [points, days] = await Promise.all([repo.getDailyTrend(deps.sql, userId, since, tz), runDays(deps, userId, since, tz)]);
+  return { points, runDays: days, limitedToDays: gate.limitedToDays };
 }
 
 export async function progressWeekly(

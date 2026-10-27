@@ -24,7 +24,8 @@ export const kept = (n: number, user = RAVI, signUpNote: string | null = CURRENT
 export const profile = (agreed: boolean, user = RAVI) => ({
   user: {
     ...user,
-    timezone: null,
+    // The machine's own zone, so the phone has nothing to save unless a test says otherwise.
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     weightKg: null,
     leaderboardOptOut: false,
     onboardingCompleted: false,
@@ -50,6 +51,7 @@ export const refusal = (status: number, error: string, message: string, more: ob
 });
 
 export interface Asked {
+  method: string;
   path: string;
   body: unknown;
   headers: Record<string, string>;
@@ -71,6 +73,7 @@ export function fakeServer(routes: Record<string, Route>): { ask: Ask; asked: As
   const ask: Ask = async (url: string, init: AskInit) => {
     const path = new URL(url).pathname;
     asked.push({
+      method: init.method ?? "GET",
       path,
       body: init.body === undefined ? undefined : (JSON.parse(init.body) as unknown),
       headers: init.headers ?? {},

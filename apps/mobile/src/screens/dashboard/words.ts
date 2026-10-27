@@ -52,11 +52,16 @@ export function weekOf(now: Date): WeekDay[] {
   });
 }
 
-/** The days of this week with a workout, and how many workouts, from the server's days. Two workouts
- *  on one day are one day trained and two workouts. */
-export function weekTrained(points: readonly { date: string; workouts: number }[], week: readonly WeekDay[]) {
+/** The days of this week with a workout or a run, and how many sessions, from the server's days. Two
+ *  on one day are one day trained and two sessions. */
+export function weekTrained(
+  points: readonly { date: string; workouts: number }[],
+  week: readonly WeekDay[],
+  runDays: readonly { date: string; runs: number }[] = [],
+) {
   const byDay = new Map<string, number>();
   for (const p of points) byDay.set(p.date, (byDay.get(p.date) ?? 0) + Math.max(0, p.workouts));
+  for (const r of runDays) byDay.set(r.date, (byDay.get(r.date) ?? 0) + Math.max(0, r.runs));
   const trained = week.map((day) => (byDay.get(day.key) ?? 0) > 0);
   const workouts = week.reduce((n, day) => n + (byDay.get(day.key) ?? 0), 0);
   return { trained, days: trained.filter(Boolean).length, workouts };
@@ -188,7 +193,7 @@ export function challengeWords(c: Pick<WeeklyChallenge, "code" | "target">): str
   }
 }
 
-/** "1 of 3"; kcal and minutes read as numbers of their own. */
+/** "1 of 3", "800 of 1,500": done of the target, never past it. */
 export function challengeProgress(c: Pick<WeeklyChallenge, "current" | "target">): string {
   return `${count(Math.min(c.current, c.target))} of ${count(c.target)}`;
 }
