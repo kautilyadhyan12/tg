@@ -56,13 +56,16 @@ export interface Asked {
 }
 
 /** A server of the routes it is handed; any other path answers 404. `/health` is up, and the
- *  profile says the person ticked "Before you start", unless told. */
+ *  profile says the person ticked "Before you start", and no gym has invited or taken them, unless told. */
 export function fakeServer(routes: Record<string, Route>): { ask: Ask; asked: Asked[]; paths: () => string[] } {
   const asked: Asked[] = [];
   const all: Record<string, Route> = {
     "/health": () => ({ status: 200, body: { status: "ok" } }),
     // Somebody who ticked "Before you start" long ago, unless a test says otherwise.
     "/v1/users/me": () => ({ status: 200, body: profile(true) }),
+    // No invitation waiting and no gym joined, unless a test says otherwise.
+    "/v1/orgs/invitations": () => ({ status: 200, body: { address: RAVI.email, addressProved: true, invitations: [] } }),
+    "/v1/orgs/mine": () => ({ status: 200, body: { orgs: [], formerOrgs: [] } }),
     ...routes,
   };
   const ask: Ask = async (url: string, init: AskInit) => {

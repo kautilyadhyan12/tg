@@ -1,5 +1,5 @@
 import { Check, X } from 'lucide-react';
-import { orgWords } from '@app/shared';
+import { GYM_CAN_SEE, GYM_NEVER_SEES, orgWords } from '@app/shared';
 
 // PART 3 §2.4 — "the join screen shows a 'What {org} can see' sheet with
 // exactly this list".
@@ -44,19 +44,10 @@ import { orgWords } from '@app/shared';
 // It is FIRST because it is the only thing on the list that is not something
 // the member did at the gym, and a person deciding whether to join should read
 // it before the training rows.
-const CAN_SEE = [
-  'Your name and the email address you signed up with',
-  'The days you trained, which exercises, your sets, reps, hold time and how long you went for',
-  'Your form scores and which faults came up',
-  'Your streak, and any challenges you take part in',
-];
+// The two lists live in @app/shared, so the phone app draws the same ones.
+const CAN_SEE = GYM_CAN_SEE;
+const NEVER_SEES = GYM_NEVER_SEES;
 
-const NEVER_SEES = [
-  'Your meals, or anything about nutrition',
-  'Your weight or body measurements',
-  'Where you ran — your routes on the map',
-  'Anything from before you joined, or after you leave',
-];
 
 function Row({ children, tone }) {
   const good = tone === 'good';

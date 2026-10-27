@@ -46,7 +46,7 @@ describe("the five tabs", () => {
   it.each([
     ["Workout", ["Your workouts"]],
     ["Food", ["Fuel Your Training", "Your meals"]],
-    ["Gym", ["My gyms", "Your gym"]],
+    ["Gym", ["Where you train", "You haven’t joined a gym or studio yet."]],
     ["Me", ["ravi@example.com", "Settings"]],
     ["Dashboard", ["Ravi", "Your day"]],
   ])("%s opens its own page and lights its own tab", async (tab, shows) => {
@@ -71,7 +71,9 @@ describe("the five tabs", () => {
     for (const tab of TABS) {
       await open(tab.name);
       // What is not built yet says so in two words: the tab's own row, and on Me its two pictures.
-      expect(await screen.findAllByText("Coming soon")).toHaveLength(tab.name === "Me" ? 3 : 1);
+      // Gym, for somebody in no gym yet, has nothing to come: it says how an invitation reaches them.
+      expect(await screen.findAllByText(tab.name === "Gym" ? "Check for an invitation" : "Coming soon")).toBeTruthy();
+      expect(screen.queryAllByText("Coming soon")).toHaveLength(tab.name === "Me" ? 3 : tab.name === "Gym" ? 0 : 1);
       const withDigits = screen.queryAllByText(/\d/).map(words);
       const copyLine = [["Feature 1 test copy · ", "Connected"]];
       expect([tab.name, withDigits]).toEqual([tab.name, tab.name === "Me" ? copyLine : []]);
@@ -110,7 +112,10 @@ describe("Me says which copy this is and whether it reaches its server", () => {
     await open("Me");
     expect(await screen.findByText("Feature 1 test copy · Connected")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
-    expect(asked.filter((url) => !url.includes("/v1/auth/"))).toEqual(["http://localhost:3000/health"]);
+    // Besides sign-in and the invitations asked on opening, only the copy's own check.
+    expect(asked.filter((url) => !url.includes("/v1/auth/") && !url.includes("/v1/orgs/invitations"))).toEqual([
+      "http://localhost:3000/health",
+    ]);
   });
 
   it("not reached, then Try again reaches it", async () => {

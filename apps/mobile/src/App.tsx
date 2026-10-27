@@ -17,6 +17,7 @@ import type { IconName } from "./look/Icon";
 import { Page } from "./look/Page";
 import { TabBar } from "./look/TabBar";
 import { SignUpNoteGate } from "./screens/BeforeYouStart";
+import { InvitationsGate } from "./screens/InvitationsGate";
 import { SignInScreen } from "./screens/SignIn";
 import { CopyContext, ThisCopy } from "./screens/ThisCopy";
 import type { Ask } from "./session/calls";
@@ -24,7 +25,8 @@ import { phoneKeyStore } from "./session/keyStore";
 import type { KeyStore } from "./session/session";
 import { askGoogle, type AskGoogle } from "./session/google";
 import { SessionProvider, useSession } from "./session/SessionProvider";
-import { FoodScreen, GymScreen, MeScreen, DashboardScreen, WorkoutScreen } from "./screens/tabs";
+import { GymScreen } from "./screens/GymTab";
+import { FoodScreen, MeScreen, DashboardScreen, WorkoutScreen } from "./screens/tabs";
 
 /** The five tabs, in their order (spec Part 6 §16.3a). A tab's name is the word under its icon. */
 export const TABS = [
@@ -62,14 +64,16 @@ interface AppProps {
 }
 
 /** Signed out, the sign-in screen and nothing of anybody's; signed in, "Before you start" until
- *  the person has ticked it, then the five tabs. */
+ *  the person has ticked it, then any invitation waiting, then the five tabs. */
 function SignedInOrOut() {
   const { state } = useSession();
   if (state.kind === "starting") return <View style={styles.page} />;
   if (state.kind === "out") return <SignInScreen note={state.note} />;
   return (
     <SignUpNoteGate key={state.user.id}>
-      <FiveTabs />
+      <InvitationsGate>
+        <FiveTabs />
+      </InvitationsGate>
     </SignUpNoteGate>
   );
 }
