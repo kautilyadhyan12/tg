@@ -202,7 +202,7 @@ export function registerAuthRoutes(
   const googleRefusedKey = (req: FastifyRequest) => `rl:google_refused:ip:${req.ip}`;
 
   // ── sign-in by email code (Kd 2026-09-07) ─────────────────────────────────
-  // The per-PERSON limits are in the database (three unused codes a day, then two more
+  // The per-PERSON limits are in the database (three unused codes a day, then one more
   // past the robot check; five guesses a code), so nothing here counts by the email
   // typed: a stranger who typed somebody's address could otherwise use up that person's
   // allowance and lock them out (the security pass on item 12, H2). These buckets are the

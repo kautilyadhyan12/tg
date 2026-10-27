@@ -3,7 +3,7 @@
 //   · the resend is offered after sixty seconds
 //   · three UNUSED codes per address per rolling day (the first and two
 //     resends, Kd 2026-10-13); past them the sign-in door asks for the robot check and
-//     sends up to five (Kd 2026-10-27), then the address waits until tomorrow. A code that
+//     sends one more (Kd 2026-10-27: "keep 3 and if asks again then 1 after robot check"), then the address waits until tomorrow. A code that
 //     signed the person in does not count (Kd 2026-09-08): signing in twice
 //     in a day is normal, and the cap is against emails nobody proved
 //   · five wrong guesses kill the code; every wrong code is told in one sentence, so a

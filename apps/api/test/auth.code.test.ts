@@ -277,7 +277,7 @@ d("sign-in by email code (real Postgres)", () => {
     expect((await sql`SELECT 1 FROM users WHERE email = ${email}`).length).toBe(0);
   });
 
-  it("three codes a day free, then two more past the robot check, then none until the day has passed", { timeout: 30_000 }, async () => {
+  it("three codes a day free, then one more past the robot check, then none until the day has passed", { timeout: 30_000 }, async () => {
     const email = "code-daycap@example.com";
     for (let sentSoFar = 0; sentSoFar < 3; sentSoFar++) {
       expect([sentSoFar, (await send(email)).statusCode]).toEqual([sentSoFar, 200]);
@@ -289,14 +289,14 @@ d("sign-in by email code (real Postgres)", () => {
     expect(JSON.parse(fourth.body)).toMatchObject({ error: "robot_check", robotCheckKey: "code-site-key" });
     expect((await send(email, "wrong")).statusCode).toBe(403);
     expect(await sql`SELECT 1 FROM sign_in_codes WHERE email = ${email}`).toHaveLength(3);
-    for (const n of [4, 5]) {
+    for (const n of [4]) {
       expect([n, (await send(email, "pass")).statusCode]).toEqual([n, 200]);
       await ageCodes(email, "61 seconds");
     }
-    const sixth = await send(email, "pass");
-    expect(sixth.statusCode).toBe(429);
-    expect((JSON.parse(sixth.body) as { error: string; message: string }).error).toBe("code_limit");
-    expect((JSON.parse(sixth.body) as { message: string }).message).toMatch(/too many codes today/i);
+    const fifth = await send(email, "pass");
+    expect(fifth.statusCode).toBe(429);
+    expect((JSON.parse(fifth.body) as { error: string; message: string }).error).toBe("code_limit");
+    expect((JSON.parse(fifth.body) as { message: string }).message).toMatch(/too many codes today/i);
 
     // Tomorrow: the old ones fall out of the window.
     await ageCodes(email, "24 hours");

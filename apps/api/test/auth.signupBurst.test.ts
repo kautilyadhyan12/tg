@@ -167,18 +167,18 @@ d("a whole gym signing up on one internet address (real Postgres)", () => {
     expect(refused).toEqual([]);
   });
 
-  it("on a busy address, ONE person still gets five codes a day past the check, and the sixth is refused", { timeout: 30_000 }, async () => {
+  it("on a busy address, ONE person still gets four codes a day past the check, and the fifth is refused", { timeout: 30_000 }, async () => {
     const ip = gymAddress();
     await makeBusy(ip);
     const email = "burst-daycap@example.com";
-    for (let sentSoFar = 0; sentSoFar < 5; sentSoFar++) {
+    for (let sentSoFar = 0; sentSoFar < 4; sentSoFar++) {
       expect([sentSoFar, (await askForCode(ip, email)).statusCode]).toEqual([sentSoFar, 200]);
       await ageCodes(email, "61 seconds");
     }
-    const sixth = await askForCode(ip, email);
-    expect(sixth.statusCode).toBe(429);
-    expect(errorOf(sixth)).toBe("code_limit");
-    expect(await codesFor(email)).toBe(5);
+    const fifth = await askForCode(ip, email);
+    expect(fifth.statusCode).toBe(429);
+    expect(errorOf(fifth)).toBe("code_limit");
+    expect(await codesFor(email)).toBe(4);
   });
 
   it("on a busy address, five wrong guesses still kill ONE person's code; the right one is then refused", { timeout: 30_000 }, async () => {
