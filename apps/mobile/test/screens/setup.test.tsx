@@ -93,6 +93,17 @@ function missingOf(a: OnboardingAnswers): string[] {
 
 const SETUP = "/v1/users/me/onboarding";
 
+// Setup starts in the phone's own units (pounds on a US phone), so each test says which phone it is.
+const realOptions = new Intl.DateTimeFormat().resolvedOptions();
+let phoneLanguage = "en-IN";
+beforeEach(() => {
+  phoneLanguage = "en-IN";
+  jest.spyOn(Intl.DateTimeFormat.prototype, "resolvedOptions").mockImplementation(() => ({ ...realOptions, locale: phoneLanguage }));
+});
+afterEach(() => {
+  jest.restoreAllMocks();
+});
+
 /** Signed in on this phone already, on Me, with setup opened from "Your plan". The stand-in keeps
  *  what each save sends; `failNext` refuses the next save. */
 async function openSetup(start: Partial<OnboardingAnswers> = {}) {
@@ -186,6 +197,19 @@ describe("the worst thing: nobody's plan is built on an age, height or weight th
 });
 
 describe("setup on the phone", () => {
+  it("a US phone opens in pounds, and its + saves the pounds picked as kilograms", async () => {
+    phoneLanguage = "en-US";
+    const { saves } = await openSetup({ weightGoal: "maintain" });
+    await screen.findByRole("header", { name: "About you" });
+    expect(selected("Pounds, feet and inches")).toBe(true);
+    expect(screen.getByLabelText("Weight in whole pounds")).toBeTruthy();
+    await press("Weight: one more");
+    await waitFor(() => {
+      expect(saves()).toEqual([{ weightKg: 70.31 }]);
+    });
+    expect(screen.getByText("155.0 lb")).toBeTruthy();
+  });
+
   it("opens on the first question not answered, and Continue waits for its answer", async () => {
     const { saves } = await openSetup();
     expect(await screen.findByRole("header", { name: "Your goal" })).toBeTruthy();
