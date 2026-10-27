@@ -19,6 +19,8 @@ export const colours = {
   overPicture: "rgba(16,15,13,0.62)",
   /** Behind a box from the bottom, and that box's handle. */
   scrim: "rgba(0,0,0,0.66)",
+  /** Behind words that lie on a bright picture. */
+  wordShadow: "rgba(0,0,0,0.8)",
   grab: "rgba(255,255,255,0.18)",
   track: "rgba(255,255,255,0.08)",
   line: "rgba(255,255,255,0.06)",

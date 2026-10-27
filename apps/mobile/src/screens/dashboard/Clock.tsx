@@ -28,10 +28,10 @@ export function Clock() {
   return (
     <View accessible accessibilityRole="timer" accessibilityLabel={`${time}, ${date}`} style={styles.clock}>
       <View style={styles.row}>
-        <Txt style={styles.time}>{time.slice(0, cut)}</Txt>
-        <Txt style={styles.half}>{time.slice(cut + 1)}</Txt>
+        <Txt style={[styles.time, styles.shadow]}>{time.slice(0, cut)}</Txt>
+        <Txt style={[styles.half, styles.shadow]}>{time.slice(cut + 1)}</Txt>
       </View>
-      <Txt colour="text" style={styles.date}>
+      <Txt colour="text" style={[styles.date, styles.shadow]}>
         {date}
       </Txt>
     </View>
@@ -41,6 +41,8 @@ export function Clock() {
 const styles = StyleSheet.create({
   clock: { gap: 2 },
   row: { flexDirection: "row", alignItems: "baseline", gap: 5 },
+  // A soft shadow, so the words read where the picture brightens under them.
+  shadow: { textShadowColor: colours.wordShadow, textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 8 },
   // Figures of one width, so the seconds turning over never shift the line.
   time: { fontFamily: fonts.display, fontSize: 46, lineHeight: 54, letterSpacing: 0.5, color: colours.text, fontVariant: ["tabular-nums"] },
   half: { fontFamily: fonts.display, fontSize: 22, letterSpacing: 0.5, color: colours.text },
