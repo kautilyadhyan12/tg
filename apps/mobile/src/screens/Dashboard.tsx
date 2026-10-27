@@ -377,17 +377,26 @@ function Challenges({ read }: { read: Read<WeeklyChallenges> }) {
         {read.kind !== "ok" ? (
           <Txt kind="small">{NOT_KNOWN}</Txt>
         ) : (
+          // In the box's left half: the picture's own figures stand in the right half, never under a row.
           read.data.challenges.map((c) => (
-            <View key={c.code} style={styles.tight}>
-              <View style={styles.between}>
-                <Txt kind="tiny" colour="textSoft" style={styles.grow} numberOfLines={1}>
-                  {challengeWords(c)}
+            <View key={c.code} style={[styles.tight, styles.challengeRow]}>
+              <Txt kind="tiny" colour="textSoft" numberOfLines={1}>
+                {challengeWords(c)}
+              </Txt>
+              {c.held !== null && !c.done ? (
+                <Txt kind="tiny" colour="orange" style={styles.semibold}>
+                  Paused in Safe mode
                 </Txt>
-                <Txt kind="tiny" colour={c.done ? "goodText" : "orange"} style={styles.semibold}>
-                  {c.done ? "Done" : c.held === null ? challengeProgress(c) : "Paused in Safe mode"}
-                </Txt>
-              </View>
-              <Steps share={c.done ? 1 : Math.min(c.current, c.target) / c.target} />
+              ) : (
+                <View style={styles.between}>
+                  <View style={styles.grow}>
+                    <Steps share={c.done ? 1 : Math.min(c.current, c.target) / c.target} />
+                  </View>
+                  <Txt kind="tiny" colour={c.done ? "goodText" : "orange"} style={styles.semibold}>
+                    {c.done ? "Done" : challengeProgress(c)}
+                  </Txt>
+                </View>
+              )}
             </View>
           ))
         )}
@@ -544,7 +553,8 @@ const styles = StyleSheet.create({
   // The pictures were widened to these boxes' shapes, so each covers its box without cutting its subject.
   quote: { width: 220, height: 200 },
   quoteWords: { padding: 14, paddingRight: 96, gap: 8 },
-  challenges: { width: 300, height: 210 },
+  challenges: { width: 360, height: 210 },
+  challengeRow: { width: "52%" },
   rank: { width: 140, height: 210, justifyContent: "flex-end" },
   badges: { width: 230, height: 210 },
   recent: { gap: 4 },
