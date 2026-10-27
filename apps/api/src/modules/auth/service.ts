@@ -229,8 +229,8 @@ export async function login(
 
 // ── Google sign-in (google-login card; v1 §6.1) ─────────────────────────────
 
-/** A live account that can't accept a Google sign-in (soft-deleted, etc.).
- *  Never distinguishes why (R3.7 spirit) — the route redirects generically. */
+/** An account that can't accept a Google sign-in: deleted, the only status besides
+ *  active. The phone shows these words; the browser's callback redirects generically. */
 const googleUnavailable = () =>
   new AuthError(403, "google_unavailable", "This account was deleted, so it can’t sign in. Use a different account.");
 
