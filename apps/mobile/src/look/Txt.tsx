@@ -8,6 +8,9 @@ export const fonts = {
   medium: "Inter_500Medium",
   semibold: "Inter_600SemiBold",
   bold: "Inter_700Bold",
+  /** Oswald, tall and condensed: the Dashboard clock alone (Kd, 2026-10-28). */
+  display: "Oswald_600SemiBold",
+  displayLight: "Oswald_400Regular",
 } as const;
 
 export type TxtKind = keyof typeof kinds;

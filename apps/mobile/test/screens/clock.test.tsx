@@ -11,23 +11,25 @@ describe("the Daily Motivation clock", () => {
 
   it("shows the time with its seconds and the date, and turns over on each whole second", async () => {
     await render(<Clock />);
-    expect(screen.getByText("10:20:11 am")).toBeTruthy();
+    expect(screen.getByText("10:20:11")).toBeTruthy();
+    expect(screen.getByText("am")).toBeTruthy();
     expect(screen.getByText("Tue, 27 Oct 2026")).toBeTruthy();
+    expect(screen.getByLabelText("10:20:11 am, Tue, 27 Oct 2026")).toBeTruthy();
     await act(async () => {
       jest.advanceTimersByTime(599);
       await Promise.resolve();
     });
-    expect(screen.getByText("10:20:11 am")).toBeTruthy();
+    expect(screen.getByText("10:20:11")).toBeTruthy();
     await act(async () => {
       jest.advanceTimersByTime(1);
       await Promise.resolve();
     });
-    expect(screen.getByText("10:20:12 am")).toBeTruthy();
+    expect(screen.getByText("10:20:12")).toBeTruthy();
     await act(async () => {
       jest.advanceTimersByTime(48 * 1000);
       await Promise.resolve();
     });
-    expect(screen.getByText("10:21:00 am")).toBeTruthy();
+    expect(screen.getByText("10:21:00")).toBeTruthy();
   });
 
   it("stops when it leaves the screen", async () => {

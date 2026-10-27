@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
+import { colours } from "../../look/colours";
 import { fonts, Txt } from "../../look/Txt";
 import { clockDateWords, clockWords, msToNextSecond } from "./words";
 
@@ -22,12 +23,15 @@ export function Clock() {
   }, []);
   const time = clockWords(now);
   const date = clockDateWords(now);
+  // "10:20:11" tall, its "am" smaller beside it.
+  const cut = time.lastIndexOf(" ");
   return (
     <View accessible accessibilityRole="timer" accessibilityLabel={`${time}, ${date}`} style={styles.clock}>
-      <Txt kind="h1" style={styles.time}>
-        {time}
-      </Txt>
-      <Txt kind="small" colour="text">
+      <View style={styles.row}>
+        <Txt style={styles.time}>{time.slice(0, cut)}</Txt>
+        <Txt style={styles.half}>{time.slice(cut + 1)}</Txt>
+      </View>
+      <Txt colour="text" style={styles.date}>
         {date}
       </Txt>
     </View>
@@ -36,6 +40,9 @@ export function Clock() {
 
 const styles = StyleSheet.create({
   clock: { gap: 2 },
+  row: { flexDirection: "row", alignItems: "baseline", gap: 5 },
   // Figures of one width, so the seconds turning over never shift the line.
-  time: { fontFamily: fonts.bold, fontVariant: ["tabular-nums"] },
+  time: { fontFamily: fonts.display, fontSize: 46, lineHeight: 54, letterSpacing: 0.5, color: colours.text, fontVariant: ["tabular-nums"] },
+  half: { fontFamily: fonts.display, fontSize: 22, letterSpacing: 0.5, color: colours.text },
+  date: { fontFamily: fonts.displayLight, fontSize: 14, lineHeight: 18, letterSpacing: 2.4, textTransform: "uppercase" },
 });
