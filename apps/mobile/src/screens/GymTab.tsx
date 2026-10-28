@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { AppState, StyleSheet, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   INVITATION_WORDS,
   ORG_TYPES_PHRASE,
   checkinPassResponseSchema,
+  gymAttendanceHistoryResponseSchema,
   myInvitationsResponseSchema,
   myOrgsResponseSchema,
   orgWords,
@@ -21,11 +22,12 @@ import { useSession } from "../session/SessionProvider";
 import { InvitationList, PlaceHead, invitationsPath } from "./Invitation";
 import { usePlaces } from "./places";
 import { placesHeading } from "./placesHeading";
+import { DaysYouCame } from "./gym/DaysYouCame";
 import { PASS_PATH, PassSheet } from "./gym/Pass";
 import { NO_ANSWER } from "./SignIn";
 
 // The Gym tab (docs/design/phone/pages/Gym and GymNone): the places the person joined, each with
-// Show my pass, a place that removed them, and every invitation still open for their address. It reads again when the
+// Show my pass and the days they came there, a place that removed them, and every invitation still open for their address. It reads again when the
 // tab is opened or the app comes back, at most every 30 seconds.
 
 export const GYM_READ_AGAIN_MS = 30_000;
@@ -49,8 +51,12 @@ export function GymScreen() {
   // The kind of place whose Show my pass was pressed, or null with the pass closed. The pass is the
   // person's, the same at every place; the kind says only who scans it.
   const [passOrgType, setPassOrgType] = useState<string | null>(null);
+  // Counted up when each place's days are to be read again: with the places, and when the pass closes,
+  // as a scan at the desk while it was open made a visit.
+  const [visitsRead, setVisitsRead] = useState(0);
 
   const fetchPass = useCallback(() => session.signedIn({ method: "GET", path: PASS_PATH }, checkinPassResponseSchema), [session]);
+  const fetchVisits = useCallback((path: string) => session.signedIn({ method: "GET", path }, gymAttendanceHistoryResponseSchema), [session]);
 
   const readMine = useCallback(async () => {
     const answer = await session.signedIn({ method: "GET", path: "/v1/orgs/mine" }, myOrgsResponseSchema);
@@ -73,6 +79,7 @@ export function GymScreen() {
       const now = Date.now();
       if (!always && now - lastRead.current < GYM_READ_AGAIN_MS) return;
       lastRead.current = now;
+      setVisitsRead((n) => n + 1);
       await Promise.all([readMine(), readInvites()]);
     },
     [readMine, readInvites],
@@ -134,17 +141,28 @@ export function GymScreen() {
       ) : null}
 
       {joined.map((org) => (
-        <Card key={org.id} style={styles.box}>
-          <PlaceHead name={org.name} orgType={org.orgType} city={org.city}>
-            <Pill label="Member" tone="good" icon="check" />
-          </PlaceHead>
-          <Txt kind="small">
-            {org.orgType === "personal_trainer" ? "Show your pass to your trainer when you arrive." : "Show your pass at the front desk when you arrive."}
-          </Txt>
-          <Button label="Show my pass" icon="qr" wide onPress={() => { setPassOrgType(org.orgType); }} />
-        </Card>
+        <Fragment key={org.id}>
+          <Card style={styles.box}>
+            <PlaceHead name={org.name} orgType={org.orgType} city={org.city}>
+              <Pill label="Member" tone="good" icon="check" />
+            </PlaceHead>
+            <Txt kind="small">
+              {org.orgType === "personal_trainer" ? "Show your pass to your trainer when you arrive." : "Show your pass at the front desk when you arrive."}
+            </Txt>
+            <Button label="Show my pass" icon="qr" wide onPress={() => { setPassOrgType(org.orgType); }} />
+          </Card>
+          <DaysYouCame gymId={org.id} read={visitsRead} fetchVisits={fetchVisits} />
+        </Fragment>
       ))}
-      <PassSheet open={passOrgType !== null} trainer={passOrgType === "personal_trainer"} onClose={() => { setPassOrgType(null); }} fetchPass={fetchPass} />
+      <PassSheet
+        open={passOrgType !== null}
+        trainer={passOrgType === "personal_trainer"}
+        onClose={() => {
+          setPassOrgType(null);
+          setVisitsRead((n) => n + 1);
+        }}
+        fetchPass={fetchPass}
+      />
 
       {removed.map((org) => (
         <Card key={org.id} style={styles.box}>
