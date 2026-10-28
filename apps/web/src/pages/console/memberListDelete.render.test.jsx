@@ -103,7 +103,7 @@ describe('the Delete permanently box', () => {
     open(() => Promise.resolve(lost()), vi.fn(), { squareTo: '/console/iron/settings#payments' });
     const group = within(await screen.findByTestId('delete-square-notReached'));
     expect(group.getByText('Can’t be reached in Square (3)')).toBeTruthy();
-    expect(group.getByText('The app added them to your Square customer list, but it can’t reach your Square, so they stay there.')).toBeTruthy();
+    expect(group.getByText('The app added them to your Square customer list, but it can’t reach your Square, or needs another permission from it, so they stay there.')).toBeTruthy();
     expect(group.getByRole('link', { name: 'Connect Square' }).getAttribute('href')).toBe('/console/iron/settings#payments');
     cleanup();
     open(() => Promise.resolve(lost()), vi.fn(), { squareTo: null });
@@ -168,7 +168,7 @@ describe('the box words', () => {
     expect(deleteSquareLineOne('deletes', 'Ada Lovelace')).toBe('Ada Lovelace is in your Square customer list, added by the app, and is deleted from it too. If Square is still charging them, or they were changed in Square, they stay.');
     expect(deleteSquareLineOne('stays', 'Ada Lovelace')).toBe('Ada Lovelace is in your Square customer list, but the app didn’t add them, so they stay there.');
     expect(deleteSquareLineOne('shared', 'Ada Lovelace')).toBe('Ada Lovelace is also used by somebody else in your Square customer list, so they stay there.');
-    expect(deleteSquareLineOne('not_reached', 'Ada Lovelace')).toBe('The app can’t reach your Square, so Ada Lovelace stays in your Square customer list.');
+    expect(deleteSquareLineOne('not_reached', 'Ada Lovelace')).toBe('The app can’t reach your Square, or needs another permission from it, so Ada Lovelace stays in your Square customer list.');
     expect(deleteSquareLineOne('none', 'Ada Lovelace')).toBeNull();
     expect(deletedOneSquareLine(1)).toBe(' They are also being deleted from your Square customer list.');
     expect(deletedOneSquareLine(0)).toBe('');

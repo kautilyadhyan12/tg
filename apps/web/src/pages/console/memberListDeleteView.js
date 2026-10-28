@@ -64,7 +64,7 @@ const SQUARE_GROUPS = [
   {
     key: 'notReached',
     title: (n) => `Can’t be reached in Square (${count(n)})`,
-    why: 'The app added them to your Square customer list, but it can’t reach your Square, so they stay there.',
+    why: 'The app added them to your Square customer list, but it can’t reach your Square, or needs another permission from it, so they stay there.',
   },
 ];
 
@@ -89,7 +89,7 @@ export function deleteSquareLineOne(kind, name) {
   if (kind === 'deletes') return `${name} is in your Square customer list, added by the app, and is deleted from it too. If Square is still charging them, or they were changed in Square, they stay.`;
   if (kind === 'stays') return `${name} is in your Square customer list, but the app didn’t add them, so they stay there.`;
   if (kind === 'shared') return `${name} is also used by somebody else in your Square customer list, so they stay there.`;
-  if (kind === 'not_reached') return `The app can’t reach your Square, so ${name} stays in your Square customer list.`;
+  if (kind === 'not_reached') return `The app can’t reach your Square, or needs another permission from it, so ${name} stays in your Square customer list.`;
   return null;
 }
 

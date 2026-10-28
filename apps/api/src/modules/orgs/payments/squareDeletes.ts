@@ -42,8 +42,9 @@ export interface SquareDeletesRun {
 type Outcome = "deleted" | "kept" | "deferred" | "given_up";
 
 /** Whether one of Square's own subscriptions still charges the customer (round one, High 1): Square cancels a customer's
- *  subscriptions with it, and the app does not make them. A status that cannot be read counts as charging; more pages than a
- *  customer can have is not guessed at. */
+ *  subscriptions with it, and the app does not make them. A subscription whose status is missing counts as charging; one the
+ *  adapter cannot read at all leaves the customer, as "refused" does (re-check, Low 1); more pages than a customer can have is not
+ *  guessed at. */
 async function chargedBySquare(api: SquareApi, token: string, customerId: string): Promise<"charged" | "clear" | "unanswered" | "refused"> {
   let cursor: string | null = null;
   for (let page = 0; page < 5; page++) {
@@ -51,6 +52,7 @@ async function chargedBySquare(api: SquareApi, token: string, customerId: string
     if (got.kind === "unavailable") return "unanswered";
     if (got.kind === "refused") return got.status === 401 ? "unanswered" : "refused";
     if (got.value.subscriptions.some((s) => s.status === null || SQUARE_SUBSCRIPTION_CHARGES.includes(s.status))) return "charged";
+    if (got.value.unread > 0) return "refused";
     if (got.value.cursor === null) return "clear";
     cursor = got.value.cursor;
   }

@@ -126,6 +126,8 @@ export function fakeSquare() {
     loseCustomers: boolean;
     subscriptionsDown: boolean;
     subscriptionsRefused: boolean;
+    /** SearchSubscriptions sends a subscription the app cannot read (re-check, Low 1). */
+    subscriptionsUnread: boolean;
     /** UpdateCustomer (18d-iii-b-ii-b-ii-b-i): gives no answer; refuses these phones or emails (a number Square does
      *  not know); is told, for the next N changes, that the customer changed meanwhile (CONFLICT). */
     updateDown: boolean;
@@ -168,6 +170,7 @@ export function fakeSquare() {
     loseCustomers: false,
     subscriptionsDown: false,
     subscriptionsRefused: false,
+    subscriptionsUnread: false,
     updateDown: false,
     updateRefused: new Set<string>(),
     conflictNext: 0,
@@ -310,7 +313,7 @@ export function fakeSquare() {
       if (a === undefined) return Promise.resolve(unauthorized);
       if (state.subscriptionsRefused) return Promise.resolve({ kind: "refused", status: 403, code: "INSUFFICIENT_SCOPES" });
       const hits = subscriptions.filter((x) => x.accountId === a.merchantId && q.customerIds.includes(x.customerId));
-      return Promise.resolve({ kind: "ok", value: { subscriptions: hits.map((x) => ({ customerId: x.customerId, status: x.status })), cursor: null } });
+      return Promise.resolve({ kind: "ok", value: { subscriptions: hits.map((x) => ({ customerId: x.customerId, status: x.status })), cursor: null, unread: state.subscriptionsUnread ? 1 : 0 } });
     },
     // A card saved from Square's form (`cnon:ok-VISA-1111-…`), on the customer asked or, for an old id of a merged
     // one, on the customer it is now (18d-iii-b-ii-b-ii-a).

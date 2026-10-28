@@ -148,7 +148,7 @@ export interface SquareApi {
   searchSubscriptions(
     accessToken: string,
     q: { customerIds: readonly string[]; cursor: string | null },
-  ): Promise<SquareResult<{ subscriptions: { customerId: string | null; status: string | null }[]; cursor: string | null }>>;
+  ): Promise<SquareResult<{ subscriptions: { customerId: string | null; status: string | null }[]; cursor: string | null; unread: number }>>;
   /** Charge a card on file (18d-iii-i). `idempotencyKey`: asked again, Square gives back the same
    *  payment, paid or failed, and never takes the money twice (measured 2026-10-23). */
   createCardPayment(accessToken: string, payment: NewCardPayment): Promise<CardPaymentResult>;
@@ -423,13 +423,15 @@ export function createSquareApi(opts: {
       });
       if (result.kind !== "ok") return result;
       const subscriptions: { customerId: string | null; status: string | null }[] = [];
+      let unread = 0;
       for (const raw of result.value.subscriptions ?? []) {
         const one = squareSubscriptionSchema.safeParse(raw);
-        // One that cannot be read says nothing about anybody: Square still charges whoever it is, so it is
-        // counted as a subscription of none of these customers rather than guessed.
+        // One that cannot be read says nothing about anybody: Members in Square counts it as a subscription of none of these
+        // customers rather than guessing; `unread` says how many, for a reader that must not guess (Delete permanently).
         if (one.success) subscriptions.push({ customerId: one.data.customer_id ?? null, status: one.data.status ?? null });
+        else unread += 1;
       }
-      return { kind: "ok", value: { subscriptions, cursor: result.value.cursor ?? null } };
+      return { kind: "ok", value: { subscriptions, cursor: result.value.cursor ?? null, unread } };
     },
     async createCard(accessToken, c) {
       const result = await call("POST", "/v2/cards", squareCardAnswerSchema, bearer(accessToken), {

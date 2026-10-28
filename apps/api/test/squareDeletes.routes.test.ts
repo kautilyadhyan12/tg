@@ -610,6 +610,19 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
       expect(logged.some((l) => l.event === "square.customer_delete_subscriptions_refused")).toBe(true);
     });
 
+    it("a subscription Square sends that the app cannot read leaves the customer: it is not guessed to be clear", async () => {
+      const { gym, customerId } = await madeAndForgotten("Unreadable Subscription Gym");
+      square.state.subscriptionsUnread = true;
+      try {
+        await minutes(1);
+      } finally {
+        square.state.subscriptionsUnread = false;
+      }
+      expect(asked(gym)).toEqual([]);
+      expect(held(gym, customerId)).not.toBeNull();
+      expect(await owedRows(gym)).toEqual([]);
+    });
+
     it("a gym whose connection cannot read Square's subscriptions cannot be asked first: the box says the app cannot reach Square, nothing is owed, and the customer stays", async () => {
       const gym = await makeGym("No Permission Gym");
       const id = await person(gym, "Dov Ash", { email: `dov.${uniq()}@gmail.com` });
