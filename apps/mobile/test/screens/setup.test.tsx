@@ -1,8 +1,8 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
-import { DISCLAIMER_WORDINGS, deriveHealthFlags, missingPlanInputSchema, type OnboardingAnswers } from "@app/shared";
+import { CHECK_FIRST_PICK, DISCLAIMER_WORDINGS, deriveHealthFlags, missingPlanInputSchema, type OnboardingAnswers } from "@app/shared";
 import { App } from "../../src/App";
-import { ANSWER_FAILED, NOTE_VERSION } from "../../src/screens/setup/useHealthStep";
-import { SAVE_FAILED } from "../../src/screens/setup/useSetupAnswers";
+import { ANSWER_FAILED, NOTE_VERSION, TICK_FAILED } from "../../src/screens/setup/useHealthStep";
+import { LOAD_FAILED, SAVE_FAILED } from "../../src/screens/setup/useSetupAnswers";
 import { fakeServer, kept, memoryStore, refusal, tokens, type Reply } from "../kit";
 
 const extra = { copyName: "Feature 1", apiUrl: "http://localhost:3000" };
@@ -128,9 +128,26 @@ afterEach(() => {
  *  what each save sends; `failNext` refuses the next save. */
 async function openSetup(
   start: Partial<OnboardingAnswers> = {},
-  { health = null, ticks = [] }: { health?: Stored; ticks?: { purpose: string; wordingVersion: string }[] } = {},
+  {
+    health = null,
+    ticks = [],
+    healthLoadFails = false,
+  }: { health?: Stored; ticks?: { purpose: string; wordingVersion: string }[]; healthLoadFails?: boolean } = {},
 ) {
-  const held = { answers: { ...EMPTY, ...start }, failNext: false, health, failHealth: false, ticks: ticks.map((t) => consentRow(t.purpose, t.wordingVersion)) };
+  const held = {
+    answers: { ...EMPTY, ...start },
+    failNext: false,
+    health,
+    failHealth: false,
+    /** The next health save waits until `release` is called: true lands it, false refuses it. */
+    holdHealth: false,
+    release: (ok: boolean): void => {
+      void ok;
+    },
+    failHealthLoad: healthLoadFails,
+    failTick: false,
+    ticks: ticks.map((t) => consentRow(t.purpose, t.wordingVersion)),
+  };
   const reply = (): Reply => {
     const missing = missingOf(held.answers);
     return { status: 200, body: { answers: { ...held.answers }, plan: missing.length > 0 ? null : PLAN, missing } };
@@ -146,6 +163,19 @@ async function openSetup(
       return reply();
     },
     [HEALTH]: (body) => {
+      if (body === undefined && held.failHealthLoad) {
+        held.failHealthLoad = false;
+        return refusal(503, "unavailable", "Not now.");
+      }
+      if (body !== undefined && held.holdHealth) {
+        held.holdHealth = false;
+        return new Promise<Reply>((resolve) => {
+          held.release = (ok) => {
+            if (ok) held.health = body as Stored;
+            resolve(ok ? { status: 200, body: { healthScreening: screeningOf(held.health) } } : refusal(503, "unavailable", "Not saved."));
+          };
+        });
+      }
       if (body !== undefined) {
         if (held.failHealth) {
           held.failHealth = false;
@@ -158,6 +188,10 @@ async function openSetup(
     },
     [CONSENTS]: (body) => {
       if (body === undefined) return { status: 200, body: { consents: held.ticks, total: held.ticks.length } };
+      if (held.failTick) {
+        held.failTick = false;
+        return refusal(503, "unavailable", "Not now.");
+      }
       const row = consentRow((body as { purpose: string }).purpose, (body as { wordingVersion: string }).wordingVersion);
       held.ticks.unshift(row);
       return { status: 201, body: { consent: row } };
@@ -167,7 +201,8 @@ async function openSetup(
   await render(<App extra={extra} ask={server.ask} store={store} wait={noWait} />);
   await fireEvent.press(await screen.findByRole("tab", { name: "Me" }));
   await fireEvent.press(await screen.findByRole("button", { name: "Your plan" }));
-  await screen.findByLabelText(/^Step \d+ of \d+$/);
+  if (healthLoadFails) await screen.findByText(LOAD_FAILED);
+  else await screen.findByLabelText(/^Step \d+ of \d+$/);
   const saves = () => server.asked.filter((one) => one.path === SETUP && one.body !== undefined).map((one) => one.body);
   const healthSaves = () => server.asked.filter((one) => one.path === HEALTH && one.body !== undefined).map((one) => one.body);
   const tickSaves = () => server.asked.filter((one) => one.path === CONSENTS && one.body !== undefined).map((one) => one.body);
@@ -179,7 +214,7 @@ const selected = (name: string | RegExp): unknown => {
   const state: unknown = screen.getByRole("button", { name }).props.accessibilityState;
   return typeof state === "object" && state !== null && "selected" in state ? state.selected : undefined;
 };
-const disabled = (name: string): unknown => {
+const disabled = (name: string | RegExp): unknown => {
   const state: unknown = screen.getByRole("button", { name }).props.accessibilityState;
   return typeof state === "object" && state !== null && "disabled" in state ? state.disabled : undefined;
 };
@@ -272,7 +307,7 @@ describe("the worst thing: a health answer is saved exactly as the person tapped
     expect(await screen.findByRole("header", { name: "Health" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: NOT_YET })).toBeNull();
     await press("Yes");
-    expect(await screen.findByText("Pick one to save your answer.")).toBeTruthy();
+    expect(await screen.findByText(CHECK_FIRST_PICK)).toBeTruthy();
     expect(healthSaves()).toEqual([]);
     expect(disabled("Continue")).toBe(true);
     await press(NOT_YET);
@@ -285,7 +320,7 @@ describe("the worst thing: a health answer is saved exactly as the person tapped
     });
     expect(selected(NOT_YET)).toBe(true);
     expect(selected("Yes")).toBe(true);
-    expect(screen.queryByText("Pick one to save your answer.")).toBeNull();
+    expect(screen.queryByText(CHECK_FIRST_PICK)).toBeNull();
   });
 
   it("No is saved as a no with no Check first, and cleared as cleared", async () => {
@@ -325,6 +360,87 @@ describe("the worst thing: a health answer is saved exactly as the person tapped
     expect(selected("Yes")).toBe(true);
     expect(selected(NOT_YET)).toBe(true);
     expect(selected(CLEARED)).toBe(false);
+  });
+});
+
+describe("round one: nobody leaves Health on an answer the server does not hold", () => {
+  const STORED_NO = { health: { hasCondition: false, checkFirst: null }, ticks: TICKED } as const;
+  const onHealth = async (opts: Parameters<typeof openSetup>[1]) => {
+    const set = await openSetup(BEFORE_FOOD, opts);
+    await screen.findByRole("header", { name: "Food" });
+    await press("Back");
+    await screen.findByRole("header", { name: "Health" });
+    return set;
+  };
+
+  it("Continue is held while an answer saves; a refused one is said under Continue and the stored No stays", async () => {
+    const { held } = await onHealth({ ...STORED_NO });
+    expect(disabled("Continue")).toBe(false);
+    held.holdHealth = true;
+    await press("Yes");
+    await press(NOT_YET);
+    await waitFor(() => {
+      expect(disabled("Continue")).toBe(true);
+    });
+    expect(disabled("No")).toBe(true);
+    expect(disabled("Yes")).toBe(true);
+    expect(disabled(CLEARED)).toBe(true);
+    held.release(false);
+    expect(await screen.findByText(ANSWER_FAILED)).toBeTruthy();
+    expect(selected("No")).toBe(true);
+    expect(held.health).toEqual({ hasCondition: false, checkFirst: null });
+    expect(screen.getByRole("header", { name: "Health" })).toBeTruthy();
+  });
+
+  it("Yes tapped over a stored No holds Continue until Check first is picked, or No is tapped again", async () => {
+    const { healthSaves } = await onHealth({ ...STORED_NO });
+    await press("Yes");
+    expect(selected("Yes")).toBe(true);
+    expect(disabled("Continue")).toBe(true);
+    await press("No");
+    expect(disabled("Continue")).toBe(false);
+    expect(healthSaves()).toEqual([]);
+    await press("Yes");
+    await press(CLEARED);
+    await waitFor(() => {
+      expect(disabled("Continue")).toBe(false);
+    });
+    expect(healthSaves()).toEqual([{ hasCondition: true, checkFirst: "cleared" }]);
+  });
+
+  it("a tick on older words is asked again, and ticking it keeps the person on Health", async () => {
+    await openSetup(BEFORE_FOOD, { health: { hasCondition: false, checkFirst: null }, ticks: [{ purpose: "health_step", wordingVersion: "v1" }] });
+    await screen.findByRole("header", { name: "Health" });
+    await fireEvent.press(tickBox());
+    await waitFor(() => {
+      expect(ticked()).toBe(true);
+    });
+    expect(screen.getByRole("header", { name: "Health" })).toBeTruthy();
+    expect(disabled("Continue")).toBe(false);
+  });
+
+  it("a tick the server refuses stays unticked, says so, and Continue stays held", async () => {
+    const { held } = await openSetup(BEFORE_FOOD, { health: { hasCondition: false, checkFirst: null } });
+    await screen.findByRole("header", { name: "Health" });
+    held.failTick = true;
+    await fireEvent.press(tickBox());
+    expect(await screen.findByText(TICK_FAILED)).toBeTruthy();
+    expect(ticked()).toBe(false);
+    expect(disabled("Continue")).toBe(true);
+  });
+
+  it("a tick held with the question unanswered does not open Continue", async () => {
+    await openSetup(BEFORE_FOOD, { ticks: TICKED });
+    await screen.findByRole("header", { name: "Health" });
+    expect(ticked()).toBe(true);
+    expect(disabled("Continue")).toBe(true);
+  });
+
+  it("a health answer that does not load shows no screen, and Try again loads it", async () => {
+    await openSetup(BEFORE_FOOD, { healthLoadFails: true });
+    expect(screen.queryByLabelText(/^Step \d+ of \d+$/)).toBeNull();
+    await press("Try again");
+    expect(await screen.findByRole("header", { name: "Health" })).toBeTruthy();
   });
 });
 

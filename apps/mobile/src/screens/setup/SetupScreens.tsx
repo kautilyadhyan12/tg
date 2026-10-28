@@ -5,6 +5,7 @@ import {
   AGE_REST,
   CHECK_FIRST_HEADING,
   CHECK_FIRST_OPTIONS,
+  CHECK_FIRST_PICK,
   CURRENT_DISCLAIMER_VERSION,
   DAYS,
   DIETS,
@@ -587,10 +588,9 @@ const CHECK_FIRST: readonly CheckFirst[] = ["cleared", "not_yet"];
  *  the two and stores nothing; until one is picked the screen holds what the server has. "Not yet"
  *  is Safe mode. The note's tick is kept in the consent log the moment it is made. */
 export function HealthScreen({ health, healthSaved }: ScreenProps) {
-  const [pendingYes, setPendingYes] = useState(false);
   const screening = health.screening;
   const stored = screening?.answered === true ? screening.hasCondition : null;
-  const yes = pendingYes ? true : stored;
+  const yes = health.pendingYes ? true : stored;
   const checkFirst = stored === true ? (screening?.checkFirst ?? null) : null;
   const busy = health.saving;
 
@@ -617,9 +617,9 @@ export function HealthScreen({ health, healthSaved }: ScreenProps) {
               key: "no",
               label: "No",
               selected: yes === false,
+              disabled: busy,
               onPress: () => {
-                if (busy) return;
-                setPendingYes(false);
+                health.openYes(false);
                 if (stored !== false) void send(false, null);
               },
             },
@@ -627,8 +627,9 @@ export function HealthScreen({ health, healthSaved }: ScreenProps) {
               key: "yes",
               label: "Yes",
               selected: yes === true,
+              disabled: busy,
               onPress: () => {
-                if (!busy) setPendingYes(true);
+                if (stored !== true) health.openYes(true);
               },
             },
           ]}
@@ -640,13 +641,13 @@ export function HealthScreen({ health, healthSaved }: ScreenProps) {
             options={CHECK_FIRST.map((value) => ({ value, label: CHECK_FIRST_OPTIONS[value].label, desc: CHECK_FIRST_OPTIONS[value].detail }))}
             selected={checkFirst}
             solid
+            disabled={busy}
             onPick={(value) => {
-              if (busy) return;
-              setPendingYes(false);
-              if (value !== checkFirst) void send(true, value);
+              if (value === checkFirst) health.openYes(false);
+              else void send(true, value);
             }}
           />
-          {stored === true ? null : <Txt style={styles.hint}>Pick one to save your answer.</Txt>}
+          {stored === true ? null : <Txt style={styles.hint}>{CHECK_FIRST_PICK}</Txt>}
         </Section>
       ) : null}
       <Card style={[styles.box, styles.note]}>
@@ -661,7 +662,6 @@ export function HealthScreen({ health, healthSaved }: ScreenProps) {
         />
         {health.ticked ? null : <Txt style={styles.hint}>Tick this to continue.</Txt>}
       </Card>
-      <Problem>{health.problem}</Problem>
     </View>
   );
 }

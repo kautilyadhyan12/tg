@@ -60,6 +60,8 @@ export const HEALTH_QUESTION_NOTE =
  *  the calorie cut, cleared or not — the app cannot know what the yes is — so
  *  both say so (RULINGS 2026-09-09). */
 export const CHECK_FIRST_HEADING = "Check first";
+/** Under the two, while a Yes has been tapped and neither is picked yet: nothing is saved until one is. */
+export const CHECK_FIRST_PICK = "Pick one of the two to save your answer.";
 export const CHECK_FIRST_OPTIONS: Readonly<Record<CheckFirst, { label: string; detail: string }>> = {
   cleared: {
     label: "A professional has cleared me",

@@ -105,11 +105,13 @@ function SetupBody({
   // Screen 8's answer comes from its own route, laid beside the rest as the browser does.
   const answers: SetupAnswers = { ...ob.answers, health: health.screening };
   const screens = visibleScreens(answers).filter((s) => VIEWS[s.id] !== undefined);
-  /** The health screen is done only with its note ticked as well. */
-  const done = (id: SetupScreenId, a: SetupAnswers): boolean => screenAnswered(id, a) && (id !== "health" || health.ticked);
+  /** The health screen is done with its answer saved, no Yes left waiting for "Check first", and its note ticked. */
+  const done = (id: SetupScreenId, a: SetupAnswers, ticked: boolean = health.ticked): boolean =>
+    screenAnswered(id, a) && (id !== "health" || (ticked && !health.pendingYes));
+  /** Where the person lands, from the answers and the tick as they stood on opening: a tick never moves them on. */
   const firstOpen = () => {
     const from: SetupAnswers = ob.first === null ? answers : { ...ob.first, health: health.first };
-    return screens.find((s) => !done(s.id, from))?.id ?? "goal";
+    return screens.find((s) => !done(s.id, from, health.firstTicked === true))?.id ?? "goal";
   };
   const current = picked ?? (ob.first === null ? "goal" : firstOpen());
   const index = Math.max(0, screens.findIndex((s) => s.id === current));
@@ -141,7 +143,7 @@ function SetupBody({
 
   /** On only once every save so far has landed, so a later screen never stands on an answer the server refused. */
   const goOn = async (then: () => void) => {
-    if (!commitName()) return;
+    if (!commitName() || health.saving) return;
     setBusy(true);
     const saved = await ob.settled();
     setBusy(false);
@@ -218,12 +220,14 @@ function SetupBody({
         )}
       </ScrollView>
       <View style={[styles.foot, { paddingBottom: bottom + 12 }]}>
+        {/* Said here, under Continue, so it is seen on whichever screen the person is on. */}
         {ob.problem === null ? null : <Txt style={styles.problem}>{ob.problem}</Txt>}
+        {health.problem === null ? null : <Txt style={styles.problem}>{health.problem}</Txt>}
         <Button
           label={isLast ? "Done" : "Continue"}
           kind={answered ? "main" : "plain"}
           style={styles.next}
-          disabled={!answered}
+          disabled={!answered || health.saving}
           busy={busy}
           onPress={() => {
             void goOn(() => {

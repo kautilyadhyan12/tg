@@ -33,6 +33,10 @@ interface State {
   saving: boolean;
   /** The server holds this person's tick on today's words. */
   ticked: boolean;
+  /** The tick as it stood when setup opened: where the person lands, so a tick never moves them on. */
+  firstTicked: boolean | null;
+  /** Yes tapped and "Check first" not yet picked: nothing is saved, and the question is not answered. */
+  pendingYes: boolean;
   ticking: boolean;
   problem: string | null;
 }
@@ -45,6 +49,8 @@ export function useHealthStep() {
     screening: null,
     saving: false,
     ticked: false,
+    firstTicked: null,
+    pendingYes: false,
     ticking: false,
     problem: null,
   });
@@ -71,6 +77,7 @@ export function useHealthStep() {
       first: s.first ?? healthScreening,
       screening: healthScreening,
       ticked: s.ticked || ticked,
+      firstTicked: s.firstTicked ?? ticked,
     }));
   }, [session]);
 
@@ -90,6 +97,7 @@ export function useHealthStep() {
       setState((s) => ({
         ...s,
         saving: true,
+        pendingYes: false,
         problem: null,
         screening: {
           answered: true,
@@ -121,7 +129,12 @@ export function useHealthStep() {
     setState((s) => ({ ...s, ticking: false, ticked: s.ticked || reply.kind === "ok", problem: reply.kind === "ok" ? null : TICK_FAILED }));
   }, [session]);
 
-  return { ...state, answer, tick, retry };
+  /** Yes tapped over a stored No opens the two "Check first" answers; No or a save closes them. */
+  const openYes = useCallback((open: boolean) => {
+    setState((s) => ({ ...s, pendingYes: open }));
+  }, []);
+
+  return { ...state, answer, tick, retry, openYes };
 }
 
 export type HealthStep = ReturnType<typeof useHealthStep>;

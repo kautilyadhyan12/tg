@@ -23,11 +23,14 @@ export function Options<V extends string | number>({
   selected,
   onPick,
   solid = false,
+  disabled = false,
 }: {
   options: readonly Option<V>[];
   selected: V | null | undefined;
   onPick: (value: V) => void;
   solid?: boolean;
+  /** Held while an answer is on its way: dimmed, and a tap does nothing. */
+  disabled?: boolean;
 }) {
   return (
     <View style={styles.cards}>
@@ -38,7 +41,8 @@ export function Options<V extends string | number>({
             key={String(o.value)}
             accessibilityRole="button"
             accessibilityLabel={[o.label, o.desc, o.note].filter((words) => typeof words === "string" && words !== "").join(". ")}
-            accessibilityState={{ selected: on }}
+            accessibilityState={{ selected: on, disabled }}
+            disabled={disabled}
             onPress={() => {
               onPick(o.value);
             }}
@@ -48,6 +52,7 @@ export function Options<V extends string | number>({
               on ? styles.on : null,
               solid && on ? styles.solidOn : null,
               pressed ? styles.pressed : null,
+              disabled ? styles.off : null,
             ]}
           >
             <View style={styles.grow}>
@@ -72,6 +77,8 @@ export interface Cell {
   onPress: () => void;
   /** What a screen reader says, where the label alone does not. */
   say?: string;
+  /** Held while an answer is on its way: dimmed, and a tap does nothing. */
+  disabled?: boolean;
 }
 
 /** Short choices in rows of equal boxes, `columns` to a row; a last row short of boxes keeps their width. */
@@ -90,9 +97,15 @@ export function Grid({ cells, columns }: { cells: readonly Cell[]; columns: numb
               key={cell.key}
               accessibilityRole="button"
               accessibilityLabel={cell.say ?? cell.label}
-              accessibilityState={{ selected: cell.selected }}
+              accessibilityState={{ selected: cell.selected, disabled: cell.disabled === true }}
+              disabled={cell.disabled === true}
               onPress={cell.onPress}
-              style={({ pressed }) => [styles.cell, cell.selected ? styles.on : null, pressed ? styles.pressed : null]}
+              style={({ pressed }) => [
+                styles.cell,
+                cell.selected ? styles.on : null,
+                pressed ? styles.pressed : null,
+                cell.disabled === true ? styles.off : null,
+              ]}
             >
               {cell.selected ? <Icon name="check" size={14} colour="orangeLight" /> : null}
               <Txt numberOfLines={1} style={[styles.cellLabel, cell.selected ? styles.labelOn : null]}>
@@ -184,6 +197,7 @@ const styles = StyleSheet.create({
   solid: { backgroundColor: colours.box },
   solidOn: { backgroundColor: colours.boxPicked },
   pressed: { opacity: 0.8 },
+  off: { opacity: 0.5 },
   grow: { flex: 1, gap: 2 },
   cardLabel: { fontFamily: fonts.semibold, fontSize: 15, lineHeight: 20, color: colours.text },
   labelOn: { color: colours.orangeLight },
