@@ -292,6 +292,77 @@ describe("the pass while it is open", () => {
     expect(asked).toEqual([0, 45_000]);
   });
 
+  /** A server answer the test lets go by hand. */
+  function heldAnswer() {
+    let go: (answer: Answer<CheckinPassResponse>) => void = () => undefined;
+    const answer = new Promise<Answer<CheckinPassResponse>>((resolve) => {
+      go = resolve;
+    });
+    return { answer, go: (reply: Answer<CheckinPassResponse>) => { go(reply); } };
+  }
+
+  it("after Close nothing more is asked, even when an answer was still away", async () => {
+    const held = heldAnswer();
+    const fetchPass: FetchPass = jest.fn(() => held.answer);
+    const view = await render(<PassSheet open trainer={false} onClose={() => undefined} fetchPass={fetchPass} />);
+    await later(0);
+    await view.rerender(<PassSheet open={false} trainer={false} onClose={() => undefined} fetchPass={fetchPass} />);
+    held.go(good(RAVI_PASS, 20_000));
+    await later(120_000);
+    expect(fetchPass).toHaveBeenCalledTimes(1);
+  });
+
+  it("a slow answer comes off 30 seconds after it was asked for, not after it arrived", async () => {
+    const asked: number[] = [];
+    let n = 0;
+    const fetchPass: FetchPass = jest.fn(() => {
+      asked.push(Date.now() - start);
+      n += 1;
+      if (n > 1) return new Promise<never>(() => undefined);
+      // The server answers 8 seconds later, with its window ending 20 seconds after that.
+      return new Promise((resolve) => setTimeout(() => { resolve(good(RAVI_PASS, 20_000)); }, 8_000));
+    });
+    await render(<PassSheet open trainer={false} onClose={() => undefined} fetchPass={fetchPass} />);
+    await later(8_000);
+    expect(drawn()).toBe(RAVI_PASS);
+    await later(21_999);
+    expect(drawn()).toBe(RAVI_PASS);
+    await later(1);
+    expect(drawn()).toBeNull();
+    // The next was asked for 20 seconds after the answer, less the 8 it took: 20 s from the start.
+    expect(asked).toEqual([0, 20_000]);
+  });
+
+  it("an answer that lands while the app is in the background asks nothing more", async () => {
+    const held = heldAnswer();
+    const fetchPass: FetchPass = jest.fn(() => held.answer);
+    await render(<PassSheet open trainer={false} onClose={() => undefined} fetchPass={fetchPass} />);
+    await later(0);
+    const was = AppState.currentState;
+    Object.defineProperty(AppState, "currentState", { value: "background", configurable: true });
+    try {
+      await appMoves("background");
+      held.go(good(RAVI_PASS, 20_000));
+      await later(60_000);
+      expect(fetchPass).toHaveBeenCalledTimes(1);
+    } finally {
+      Object.defineProperty(AppState, "currentState", { value: was, configurable: true });
+    }
+  });
+
+  it("where brightness is the whole phone's, the app in the background gives it back, and in front takes it again", async () => {
+    const { fetchPass } = answers(good(RAVI_PASS, 20_000), null);
+    await render(<PassSheet open trainer={false} onClose={() => undefined} fetchPass={fetchPass} />);
+    await later(0);
+    expect(Brightness.setBrightnessAsync).toHaveBeenLastCalledWith(1);
+    await appMoves("background");
+    await later(0);
+    expect(Brightness.setBrightnessAsync).toHaveBeenLastCalledWith(0.4);
+    await appMoves("active");
+    await later(0);
+    expect(Brightness.setBrightnessAsync).toHaveBeenLastCalledWith(1);
+  });
+
   it("the screen is kept awake and at full brightness while it is open, and both go back when it closes", async () => {
     const { fetchPass } = answers(good(RAVI_PASS, 20_000));
     const view = await render(<PassSheet open trainer={false} onClose={() => undefined} fetchPass={fetchPass} />);
@@ -302,6 +373,9 @@ describe("the pass while it is open", () => {
     await view.rerender(<PassSheet open={false} trainer={false} onClose={() => undefined} fetchPass={fetchPass} />);
     await later(0);
     expect(deactivateKeepAwake).toHaveBeenCalledTimes(1);
+    // The same hold it took, or the screen would never sleep again while the app is open.
+    expect(jest.mocked(deactivateKeepAwake).mock.calls[0]?.[0]).toBe(jest.mocked(activateKeepAwakeAsync).mock.calls[0]?.[0]);
+    expect(jest.mocked(activateKeepAwakeAsync).mock.calls[0]?.[0]).toEqual(expect.any(String));
     // Not Android: the brightness the phone had before is set again.
     expect(Brightness.setBrightnessAsync).toHaveBeenLastCalledWith(0.4);
   });

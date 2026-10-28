@@ -3,6 +3,7 @@ import { KeyboardAvoidingView, Modal, Pressable, StyleSheet, View } from "react-
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colours, shadows, sizes } from "./colours";
 import { Icon } from "./Icon";
+import { MIDDLE_INSET } from "./sizing";
 import { Txt } from "./Txt";
 
 interface SheetProps {
@@ -14,7 +15,8 @@ interface SheetProps {
   place?: "bottom" | "middle";
 }
 
-/** The box from the bottom: a question, or a short task, over the page it was opened from. */
+/** The box from the bottom, or in the middle (`place`): a question, or a short task, over the page it
+ *  was opened from. */
 export function Sheet({ open, title, onClose, children, place = "bottom" }: SheetProps) {
   const middle = place === "middle";
   const insets = useSafeAreaInsets();
@@ -66,7 +68,7 @@ const styles = StyleSheet.create({
     boxShadow: shadows.sheet,
   },
   liftMiddle: { justifyContent: "center", paddingHorizontal: sizes.edge },
-  sheetMiddle: { paddingTop: 16, paddingBottom: 20, paddingHorizontal: 16, borderBottomWidth: 1, borderRadius: 24 },
+  sheetMiddle: { paddingTop: 16, paddingBottom: 20, paddingHorizontal: MIDDLE_INSET - sizes.edge, borderBottomWidth: 1, borderRadius: 24 },
   grab: { alignSelf: "center", width: 40, height: 4, borderRadius: 999, backgroundColor: colours.grab },
   head: { flexDirection: "row", alignItems: "center", gap: 10 },
   title: { flex: 1 },

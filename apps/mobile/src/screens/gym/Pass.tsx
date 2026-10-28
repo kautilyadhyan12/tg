@@ -5,9 +5,9 @@ import * as Brightness from "expo-brightness";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import type { CheckinPassResponse } from "@app/shared";
 import { Button } from "../../look/Button";
-import { colours, sizes } from "../../look/colours";
+import { colours } from "../../look/colours";
 import { Sheet } from "../../look/Sheet";
-import { passSide } from "../../look/sizing";
+import { MIDDLE_INSET, passSide } from "../../look/sizing";
 import { Txt } from "../../look/Txt";
 import type { Answer } from "../../session/calls";
 import { PASS_GOOD_MS, PASS_QUIET_CELLS, nextPassDelayMs, passCells, passPath } from "./passView";
@@ -165,7 +165,7 @@ function PassCode({ pass }: { pass: string }) {
   if (cells === null) return <Txt colour="badText">{PASS_COULD_NOT}</Txt>;
   const across = cells.length + PASS_QUIET_CELLS * 2;
   // A whole number of points a cell, so no cell's edge is blurred into the next.
-  const side = Math.max(1, Math.floor(passSide(width, height, sizes.edge * 2) / across)) * across;
+  const side = Math.max(1, Math.floor(passSide(width, height, MIDDLE_INSET) / across)) * across;
   return (
     // Black on white whatever the app's colours: that is what a scanner reads.
     <View accessible accessibilityRole="image" accessibilityLabel="Your check-in pass" style={[styles.code, { width: side, height: side }]}>
@@ -178,28 +178,40 @@ function PassCode({ pass }: { pass: string }) {
 }
 
 /** The screen kept awake and at full brightness while the pass is open, and put back when it closes.
- *  Android brightens this app's own window and gives the phone's setting back on close; elsewhere the
- *  brightness before is kept and set again. A phone that can do neither still shows the pass. */
+ *  Android brightens this app's own window and gives the phone's setting back on close. Elsewhere the
+ *  brightness is the whole phone's: the brightness before is kept and set again on close, and while
+ *  the app is in the background, so other apps are not left bright. A phone that can do neither still
+ *  shows the pass. */
 function useBrightAndAwake() {
   useEffect(() => {
+    const android = Platform.OS === "android";
     let before: number | null = null;
+    // One change at a time, in order: a close straight after opening waits for the brightening.
+    let last: Promise<unknown> = Promise.resolve();
+    const then = (step: () => Promise<unknown> | undefined) => {
+      last = last.then(step).catch(() => undefined);
+    };
+    const brighten = () => {
+      then(async () => {
+        if (!android) before = await Brightness.getBrightnessAsync();
+        await Brightness.setBrightnessAsync(1);
+      });
+    };
+    const giveBack = () => {
+      then(() => (android ? Brightness.restoreSystemBrightnessAsync() : before === null ? undefined : Brightness.setBrightnessAsync(before)));
+    };
     void activateKeepAwakeAsync(AWAKE_TAG).catch(() => undefined);
-    const brightened = (async () => {
-      if (Platform.OS !== "android") before = await Brightness.getBrightnessAsync();
-      await Brightness.setBrightnessAsync(1);
-    })().catch(() => undefined);
+    brighten();
+    const moved = android
+      ? null
+      : AppState.addEventListener("change", (state) => {
+          if (state === "active") brighten();
+          else if (state === "background") giveBack();
+        });
     return () => {
+      moved?.remove();
       void deactivateKeepAwake(AWAKE_TAG).catch(() => undefined);
-      // After the brightening has landed, or a close straight after opening would leave it bright.
-      void brightened
-        .then(() =>
-          Platform.OS === "android"
-            ? Brightness.restoreSystemBrightnessAsync()
-            : before === null
-              ? undefined
-              : Brightness.setBrightnessAsync(before),
-        )
-        .catch(() => undefined);
+      giveBack();
     };
   }, []);
 }

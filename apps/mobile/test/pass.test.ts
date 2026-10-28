@@ -2,7 +2,7 @@
 // with the desk's reader (apps/web/src/components/gym/checkinPassView.test.js); the phone draws the
 // very same cells, so what the desk reads off the browser it reads off the phone.
 import { describe, expect, it } from "vitest";
-import { passSide } from "../src/look/sizing";
+import { MIDDLE_INSET, passSide } from "../src/look/sizing";
 import { PASS_GOOD_MS, PASS_QUIET_CELLS, nextPassDelayMs, passCells, passPath } from "../src/screens/gym/passView";
 
 // The browser's file is JavaScript, with no types: it is read when the tests run.
@@ -66,19 +66,23 @@ describe("when the next pass is asked for", () => {
   });
 });
 
-// Screen shapes in the phone's own points (dp), width by height.
+// Screen shapes in the phone's own points (dp), width by height; the inset the pass's box draws with.
 describe("the pass's code on phones of every size", () => {
+  it("stands inside the middle box: the page's edge and the box's own padding, each side", () => {
+    expect(MIDDLE_INSET).toBe(32);
+  });
+
   it.each([
-    ["a phone like Kd's", 412, 915, 380],
-    ["a small phone", 360, 760, 328],
-  ])("%s: the sheet's whole width", (_name, width, height, side) => {
-    expect(passSide(width, height, 16)).toBe(side);
+    ["a phone like Kd's", 412, 915, 348],
+    ["a small phone", 360, 760, 296],
+  ])("%s: the box's whole width", (_name, width, height, side) => {
+    expect(passSide(width, height, MIDDLE_INSET)).toBe(side);
   });
 
   it.each([
     ["a folding phone opened", 690, 829, 415],
     ["a phone on its side", 915, 412, 206],
   ])("%s: at most half the screen's height, so its words stay on screen", (_name, width, height, side) => {
-    expect(passSide(width, height, 16)).toBe(side);
+    expect(passSide(width, height, MIDDLE_INSET)).toBe(side);
   });
 });

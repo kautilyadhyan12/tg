@@ -46,9 +46,9 @@ export function GymScreen() {
   const [checked, setChecked] = useState(false);
   const lastRead = useRef(0);
   const live = useRef(true);
-  // The place whose Show my pass was pressed, or null with the pass closed. The pass is the
-  // person's, the same at every place; the place says only who scans it.
-  const [passFor, setPassFor] = useState<string | null>(null);
+  // The kind of place whose Show my pass was pressed, or null with the pass closed. The pass is the
+  // person's, the same at every place; the kind says only who scans it.
+  const [passOrgType, setPassOrgType] = useState<string | null>(null);
 
   const fetchPass = useCallback(() => session.signedIn({ method: "GET", path: PASS_PATH }, checkinPassResponseSchema), [session]);
 
@@ -141,10 +141,10 @@ export function GymScreen() {
           <Txt kind="small">
             {org.orgType === "personal_trainer" ? "Show your pass to your trainer when you arrive." : "Show your pass at the front desk when you arrive."}
           </Txt>
-          <Button label="Show my pass" icon="qr" wide onPress={() => { setPassFor(org.orgType); }} />
+          <Button label="Show my pass" icon="qr" wide onPress={() => { setPassOrgType(org.orgType); }} />
         </Card>
       ))}
-      <PassSheet open={passFor !== null} trainer={passFor === "personal_trainer"} onClose={() => { setPassFor(null); }} fetchPass={fetchPass} />
+      <PassSheet open={passOrgType !== null} trainer={passOrgType === "personal_trainer"} onClose={() => { setPassOrgType(null); }} fetchPass={fetchPass} />
 
       {removed.map((org) => (
         <Card key={org.id} style={styles.box}>
