@@ -40,7 +40,8 @@ const kinds = (sql: SqlOrTx, gymId: string, entryIds: readonly string[]) => sql`
            WHEN ${usedByAnother(sql)} THEN 'shared'
            WHEN NOT EXISTS (SELECT 1 FROM gym_payment_connections n
                             WHERE n.gym_id = c.gym_id AND n.provider = 'square' AND n.environment = c.environment
-                              AND n.state = 'connected' AND n.account_id = c.account_id) THEN 'not_reached'
+                              AND n.state = 'connected' AND n.account_id = c.account_id
+                              AND 'SUBSCRIPTIONS_READ' = ANY(n.scopes)) THEN 'not_reached'
            ELSE 'deletes'
          END AS kind
   FROM gym_square_customers c
@@ -73,17 +74,18 @@ export function deletedLines(rows: readonly StandingRow[]): string[] {
 }
 
 /** Record these records' customers as owed their deletion, under the gym's lock and before the records are deleted (their links
- *  go with them). How many. Written once for a customer: the same press sent again writes nothing new. */
+ *  go with them). How many people: one with a customer in two Square accounts counts once (round one, Low 4). Written once for a
+ *  customer: the same press sent again writes nothing new. */
 export async function oweDeletes(tx: TransactionSql, gymId: string, entryIds: readonly string[], at: Date): Promise<number> {
   if (entryIds.length === 0) return 0;
-  const rows = await tx<{ id: string }[]>`
+  const rows = await tx<{ reference_id: string }[]>`
     WITH k AS (${kinds(tx, gymId, entryIds)})
     INSERT INTO gym_square_customer_deletes (gym_id, environment, account_id, customer_id, reference_id, not_before)
     SELECT k.gym_id, k.environment, k.account_id, k.customer_id, k.made_as, ${at}
     FROM k WHERE k.kind = 'deletes'
     ON CONFLICT (gym_id, environment, account_id, reference_id) DO NOTHING
-    RETURNING id`;
-  return rows.length;
+    RETURNING reference_id`;
+  return new Set(rows.map((r) => r.reference_id)).size;
 }
 
 export interface OwedDelete {

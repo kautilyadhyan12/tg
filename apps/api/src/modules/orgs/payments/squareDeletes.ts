@@ -12,11 +12,13 @@
 // (measured in its test area, 2026-10-28), so the two do not depend on each other. Square's message that the customer was deleted
 // finds no record that holds it and changes nothing.
 import { squareMadeByMerge } from "@app/shared";
+import type { SquareApi } from "./square.js";
 import * as repo from "./repo.js";
 import { REVOKE_MAX_TRIES, REVOKE_RETRY_MS, accessContext, type PaymentsDeps } from "./service.js";
 import type { SquareSettings } from "./settings.js";
 import { decideDelete } from "./squareDeleteRule.js";
 import * as deletes from "./squareDeletesRepo.js";
+import { SQUARE_SUBSCRIPTION_CHARGES } from "./squareMembersRepo.js";
 
 export const SQUARE_DELETES = {
   /** Customers taken a minute, for every gym together. */
@@ -39,8 +41,31 @@ export interface SquareDeletesRun {
 
 type Outcome = "deleted" | "kept" | "deferred" | "given_up";
 
-/** Ask Square about the customer and delete it if it is still the one the app made. */
-async function deleteOne(deps: PaymentsDeps, square: SquareSettings, token: string, owed: deletes.OwedDelete, customerId: string): Promise<Outcome> {
+/** Whether one of Square's own subscriptions still charges the customer (round one, High 1): Square cancels a customer's
+ *  subscriptions with it, and the app does not make them. A status that cannot be read counts as charging; more pages than a
+ *  customer can have is not guessed at. */
+async function chargedBySquare(api: SquareApi, token: string, customerId: string): Promise<"charged" | "clear" | "unanswered" | "refused"> {
+  let cursor: string | null = null;
+  for (let page = 0; page < 5; page++) {
+    const got = await api.searchSubscriptions(token, { customerIds: [customerId], cursor });
+    if (got.kind === "unavailable") return "unanswered";
+    if (got.kind === "refused") return got.status === 401 ? "unanswered" : "refused";
+    if (got.value.subscriptions.some((s) => s.status === null || SQUARE_SUBSCRIPTION_CHARGES.includes(s.status))) return "charged";
+    if (got.value.cursor === null) return "clear";
+    cursor = got.value.cursor;
+  }
+  return "unanswered";
+}
+
+/** Ask Square about the customer and delete it if it is still the one the app made and Square is not charging it. */
+async function deleteOne(
+  deps: PaymentsDeps,
+  square: SquareSettings,
+  token: string,
+  scopes: readonly string[],
+  owed: deletes.OwedDelete,
+  customerId: string,
+): Promise<Outcome> {
   const got = await square.api.retrieveCustomer(token, customerId);
   if (got.kind === "unavailable") return "deferred";
   if (got.kind === "refused") {
@@ -49,11 +74,23 @@ async function deleteOne(deps: PaymentsDeps, square: SquareSettings, token: stri
     return "deferred";
   }
   const used = await deletes.usedNow(deps.sql, { environment: square.environment, accountId: owed.accountId, customerId });
-  const decision = decideDelete(got.value, { customerId, referenceId: owed.referenceId }, used);
-  if (decision.kind === "keep") {
-    deps.log.info({ event: "square.customer_delete_kept", gymId: owed.gymId, why: decision.why }, "a customer owed its deletion is left in Square");
+  const identity = { customerId, referenceId: owed.referenceId };
+  const first = decideDelete(got.value, identity, used, false);
+  const kept = (why: string): "kept" => {
+    deps.log.info({ event: "square.customer_delete_kept", gymId: owed.gymId, why }, "a customer owed its deletion is left in Square");
     return "kept";
+  };
+  if (first.kind === "keep") return kept(first.why);
+  // Asked only of a customer that would be deleted: whether Square's own subscriptions still charge it.
+  if (!scopes.includes("SUBSCRIPTIONS_READ")) return kept("cannot_check_subscriptions");
+  const charge = await chargedBySquare(square.api, token, customerId);
+  if (charge === "unanswered") return "deferred";
+  if (charge === "refused") {
+    deps.log.error({ event: "square.customer_delete_subscriptions_refused", gymId: owed.gymId }, "Square would not show whether it still charges a customer owed its deletion");
+    return kept("cannot_check_subscriptions");
   }
+  const decision = decideDelete(got.value, identity, used, charge === "charged");
+  if (decision.kind === "keep") return kept(decision.why);
   const sent = await square.api.deleteCustomer(token, customerId, decision.version);
   if (sent.kind === "ok") return "deleted";
   if (sent.kind === "refused") {
@@ -73,7 +110,8 @@ async function work(deps: PaymentsDeps, square: SquareSettings, owed: deletes.Ow
     deps.log.warn({ event: "square.customer_delete_unreachable", deleteId: owed.id }, "a customer owed its deletion is in a Square account this gym is no longer connected to");
     return "given_up";
   }
-  if (owed.customerId !== null) return await deleteOne(deps, square, token, owed, owed.customerId);
+  const scopes = row?.scopes ?? [];
+  if (owed.customerId !== null) return await deleteOne(deps, square, token, scopes, owed, owed.customerId);
 
   const found = await square.api.searchCustomers(token, { referenceId: owed.referenceId });
   if (found.kind !== "ok") return "deferred";
@@ -82,7 +120,7 @@ async function work(deps: PaymentsDeps, square: SquareSettings, owed: deletes.Ow
   const ids = found.value.customers.filter((c) => c.reference_id === owed.referenceId && !squareMadeByMerge(c)).map((c) => c.id);
   if (ids.length === 0) return owed.tries + 1 < SQUARE_DELETES.searchTries ? "deferred" : "kept";
   const outcomes: Outcome[] = [];
-  for (const id of ids) outcomes.push(await deleteOne(deps, square, token, owed, id));
+  for (const id of ids) outcomes.push(await deleteOne(deps, square, token, scopes, owed, id));
   if (outcomes.includes("deferred")) return "deferred";
   return outcomes.includes("deleted") ? "deleted" : "kept";
 }

@@ -49,7 +49,7 @@ const SQUARE_GROUPS = [
   {
     key: 'deletes',
     title: (n) => `Also deleted from your Square customer list (${count(n)})`,
-    why: 'The app added them to your Square customer list, so they are deleted from it too.',
+    why: 'The app added them to your Square customer list, so they are deleted from it too. One that Square is still charging, or that was changed in Square, stays.',
   },
   {
     key: 'stays',
@@ -59,7 +59,7 @@ const SQUARE_GROUPS = [
   {
     key: 'shared',
     title: (n) => `Also used by somebody else (${count(n)})`,
-    why: 'Somebody else here also uses them in your Square customer list, so they stay there.',
+    why: 'Somebody else also uses them in your Square customer list, so they stay there.',
   },
   {
     key: 'notReached',
@@ -86,7 +86,7 @@ export const SQUARE_OWNER_ONLY = 'Only the owner can connect Square.';
 
 /** The same on one past member's page, or null where they are not in the Square customer list. */
 export function deleteSquareLineOne(kind, name) {
-  if (kind === 'deletes') return `${name} is in your Square customer list, added by the app, and is deleted from it too.`;
+  if (kind === 'deletes') return `${name} is in your Square customer list, added by the app, and is deleted from it too. If Square is still charging them, or they were changed in Square, they stay.`;
   if (kind === 'stays') return `${name} is in your Square customer list, but the app didn’t add them, so they stay there.`;
   if (kind === 'shared') return `${name} is also used by somebody else in your Square customer list, so they stay there.`;
   if (kind === 'not_reached') return `The app can’t reach your Square, so ${name} stays in your Square customer list.`;

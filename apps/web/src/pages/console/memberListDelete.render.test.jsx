@@ -66,7 +66,7 @@ describe('the Delete permanently box', () => {
     const deletes = within(await screen.findByTestId('delete-square-deletes'));
     expect(deletes.getByText('Also deleted from your Square customer list (2)')).toBeTruthy();
     expect(within(deletes.getByTestId('delete-square-deletes-names')).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Mira Clickdel', 'Zoe Clickdel']);
-    expect(deletes.getByText('The app added them to your Square customer list, so they are deleted from it too.')).toBeTruthy();
+    expect(deletes.getByText('The app added them to your Square customer list, so they are deleted from it too. One that Square is still charging, or that was changed in Square, stays.')).toBeTruthy();
     const stays = within(screen.getByTestId('delete-square-stays'));
     expect(stays.getByText('Stay in your Square customer list (1)')).toBeTruthy();
     expect(within(stays.getByTestId('delete-square-stays-names')).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Noah Clickdel']);
@@ -74,7 +74,7 @@ describe('the Delete permanently box', () => {
     const shared = within(screen.getByTestId('delete-square-shared'));
     expect(shared.getByText('Also used by somebody else (1)')).toBeTruthy();
     expect(within(shared.getByTestId('delete-square-shared-names')).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Ola Berg']);
-    expect(shared.getByText('Somebody else here also uses them in your Square customer list, so they stay there.')).toBeTruthy();
+    expect(shared.getByText('Somebody else also uses them in your Square customer list, so they stay there.')).toBeTruthy();
     expect(screen.queryByTestId('delete-square-notReached')).toBeNull();
     expect(screen.queryByText('Connect Square')).toBeNull();
   });
@@ -165,7 +165,7 @@ describe('the box words', () => {
   });
 
   it('says the same for one person, and what is being deleted after', () => {
-    expect(deleteSquareLineOne('deletes', 'Ada Lovelace')).toBe('Ada Lovelace is in your Square customer list, added by the app, and is deleted from it too.');
+    expect(deleteSquareLineOne('deletes', 'Ada Lovelace')).toBe('Ada Lovelace is in your Square customer list, added by the app, and is deleted from it too. If Square is still charging them, or they were changed in Square, they stay.');
     expect(deleteSquareLineOne('stays', 'Ada Lovelace')).toBe('Ada Lovelace is in your Square customer list, but the app didn’t add them, so they stay there.');
     expect(deleteSquareLineOne('shared', 'Ada Lovelace')).toBe('Ada Lovelace is also used by somebody else in your Square customer list, so they stay there.');
     expect(deleteSquareLineOne('not_reached', 'Ada Lovelace')).toBe('The app can’t reach your Square, so Ada Lovelace stays in your Square customer list.');

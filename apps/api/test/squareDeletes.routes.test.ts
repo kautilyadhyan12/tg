@@ -564,6 +564,76 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
       expect(logged.some((l) => l.event === "square.customer_delete_given_up")).toBe(true);
     });
 
+    // Round one, High 1: deleting a customer cancels Square's own subscriptions on it, and the app does not make them.
+    it.each(["ACTIVE", "PENDING", "PAUSED"])("a customer one of Square's own subscriptions still charges (%s) is left: it is asked about, never deleted", async (status) => {
+      const { gym, customerId } = await madeAndForgotten(`Charged ${status} Gym`);
+      square.subscription(gym.acct, customerId, status);
+      await minutes(2);
+      expect(asked(gym)).toEqual([]);
+      expect(held(gym, customerId)).not.toBeNull();
+      expect(await owedRows(gym)).toEqual([]);
+      expect(logged.some((l) => l.event === "square.customer_delete_kept" && l.why === "charged_by_square")).toBe(true);
+    });
+
+    it.each(["CANCELED", "DEACTIVATED"])("a customer whose subscription has ended (%s) is deleted", async (status) => {
+      const { gym, customerId } = await madeAndForgotten(`Ended ${status} Gym`);
+      square.subscription(gym.acct, customerId, status);
+      await minutes(1);
+      expect(held(gym, customerId)).toBeNull();
+    });
+
+    it("Square's subscriptions not answering is tried again: nothing is deleted on a guess", async () => {
+      const { gym, customerId } = await madeAndForgotten("Subscriptions Down Gym");
+      square.state.subscriptionsDown = true;
+      try {
+        await minutes(1);
+        expect(asked(gym), "not deleted while it cannot be checked").toEqual([]);
+        expect((await owedRows(gym))[0]?.tries).toBe(1);
+      } finally {
+        square.state.subscriptionsDown = false;
+      }
+      await minutes(1);
+      expect(held(gym, customerId)).toBeNull();
+    });
+
+    it("Square refusing to show its subscriptions leaves the customer, said in the log", async () => {
+      const { gym, customerId } = await madeAndForgotten("Subscriptions Refused Gym");
+      square.state.subscriptionsRefused = true;
+      try {
+        await minutes(1);
+      } finally {
+        square.state.subscriptionsRefused = false;
+      }
+      expect(asked(gym)).toEqual([]);
+      expect(held(gym, customerId)).not.toBeNull();
+      expect(await owedRows(gym)).toEqual([]);
+      expect(logged.some((l) => l.event === "square.customer_delete_subscriptions_refused")).toBe(true);
+    });
+
+    it("a gym whose connection cannot read Square's subscriptions cannot be asked first: the box says the app cannot reach Square, nothing is owed, and the customer stays", async () => {
+      const gym = await makeGym("No Permission Gym");
+      const id = await person(gym, "Dov Ash", { email: `dov.${uniq()}@gmail.com` });
+      expect((await addMembers(gym)).state).toBe("added");
+      const customerId = await customerIdOf(gym, id);
+      await sql`UPDATE gym_payment_connections SET scopes = array_remove(scopes, 'SUBSCRIPTIONS_READ') WHERE gym_id = ${gym.id}`;
+      const { preview, done } = await deleteForGood(gym, id);
+      expect(preview.square).toEqual({ deletes: 0, stays: 0, shared: 0, notReached: 1 });
+      expect(done.squareDeleting).toBe(0);
+      await minutes(1);
+      expect(asked(gym)).toEqual([]);
+      expect(held(gym, customerId)).not.toBeNull();
+    });
+
+    it("the permission taken away between the press and the worker: the customer is left, said in the log", async () => {
+      const { gym, customerId } = await madeAndForgotten("Permission Lost Gym");
+      await sql`UPDATE gym_payment_connections SET scopes = array_remove(scopes, 'SUBSCRIPTIONS_READ') WHERE gym_id = ${gym.id}`;
+      await minutes(1);
+      expect(asked(gym)).toEqual([]);
+      expect(held(gym, customerId)).not.toBeNull();
+      expect(await owedRows(gym)).toEqual([]);
+      expect(logged.some((l) => l.event === "square.customer_delete_kept" && l.why === "cannot_check_subscriptions")).toBe(true);
+    });
+
     it("a gym no longer connected to that Square account cannot reach the customer: the box says so, nothing is owed, and the customer stays", async () => {
       const gym = await makeGym("Moved Gym");
       const id = await person(gym, "Cal Ng", { email: `cal.${uniq()}@gmail.com` });
@@ -629,6 +699,59 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
       expect(await owedRows(a)).toEqual([]);
       expect(logged.some((l) => l.event === "square.customer_delete_kept" && l.why === "used_by_another")).toBe(true);
     });
+
+    // Round one, tests: the other ways another record can use a customer, decided at the box and at the worker's send.
+    /** Another record's card saved on this customer. */
+    const cardOn = async (gym: Gym, entryId: string, customerId: string): Promise<void> => {
+      const [agreement] = await sql<{ id: string }[]>`
+        INSERT INTO gym_card_agreements (gym_id, entry_id, words, screen, brand, last4, agreed_at)
+        VALUES (${gym.id}, ${entryId}, ${"I agree to this card being kept for my membership."}, 'desk', 'VISA', '4242', now()) RETURNING id`;
+      await sql`
+        INSERT INTO gym_member_cards (gym_id, entry_id, environment, account_id, customer_id, card_id, brand, last4, exp_month, exp_year, saved_from, agreement_id, saved_at, updated_at)
+        VALUES (${gym.id}, ${entryId}, 'production', ${gym.acct.merchantId}, ${customerId}, ${`ccof:test${uniq()}`}, 'VISA', '4242', 12, 2031, 'desk', ${agreement?.id ?? ""}, now(), now())`;
+    };
+    /** A check about to link another record to this customer. */
+    const planOn = async (gym: Gym, entryId: string, customerId: string): Promise<void> => {
+      const [run] = await sql<{ run_id: string }[]>`SELECT run_id FROM gym_square_member_runs WHERE gym_id = ${gym.id} AND environment = 'production'`;
+      await sql`
+        INSERT INTO gym_square_member_plan (gym_id, environment, entry_id, run_id, decision, customer_id, digest, looked_at)
+        VALUES (${gym.id}, 'production', ${entryId}, ${run?.run_id ?? ""}, 'link', ${customerId}, md5('x'), now())`;
+    };
+    for (const [how, claim] of [
+      ["a card of another record saved on it", cardOn],
+      ["a check about to link another record to it", planOn],
+    ] as const) {
+      it(`${how}: the box says somebody else uses it, and nothing is owed`, async () => {
+        const gym = await makeGym(`Used Box Gym ${how.length}`);
+        const mine = await person(gym, "Hal Moss", { email: `hal.${uniq()}@gmail.com` });
+        expect((await addMembers(gym)).state).toBe("added");
+        const other = await person(gym, "Ira Moss", { email: `ira.${uniq()}@gmail.com` });
+        const customerId = await customerIdOf(gym, mine);
+        await claim(gym, other, customerId);
+        const { preview, done } = await deleteForGood(gym, mine);
+        expect(preview.square).toEqual({ deletes: 0, stays: 0, shared: 1, notReached: 0 });
+        expect(done.squareDeleting).toBe(0);
+        await minutes(1);
+        expect(asked(gym)).toEqual([]);
+        expect(held(gym, customerId)).not.toBeNull();
+      });
+
+      it(`${how}, after the press and before the worker: it is not deleted`, async () => {
+        const gym = await makeGym(`Used Send Gym ${how.length}`);
+        const mine = await person(gym, "Jo Penn", { email: `jo.${uniq()}@gmail.com` });
+        expect((await addMembers(gym)).state).toBe("added");
+        const other = await person(gym, "Kai Penn", { email: `kai.${uniq()}@gmail.com` });
+        const customerId = await customerIdOf(gym, mine);
+        const { done } = await deleteForGood(gym, mine);
+        expect(done.squareDeleting).toBe(1);
+        await claim(gym, other, customerId);
+        await minutes(2);
+        expect(asked(gym)).toEqual([]);
+        expect(held(gym, customerId)).not.toBeNull();
+        expect(await owedRows(gym)).toEqual([]);
+        expect(logged.some((l) => l.event === "square.customer_delete_kept" && l.why === "used_by_another")).toBe(true);
+      });
+    }
 
     it("another gym with its own Square account never has anything asked of it", async () => {
       const a = await makeGym("Own Account A");

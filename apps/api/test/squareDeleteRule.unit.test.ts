@@ -13,7 +13,7 @@ const owed = { customerId: "CUS1", referenceId: RECORD };
 const keep = (why: KeepWhy): DeleteDecision => ({ kind: "keep", why });
 
 describe("decideDelete", () => {
-  const cases: { name: string; now: Parameters<typeof decideDelete>[0]; used?: boolean; want: DeleteDecision }[] = [
+  const cases: { name: string; now: Parameters<typeof decideDelete>[0]; used?: boolean; charged?: boolean; want: DeleteDecision }[] = [
     { name: "the customer the app made, never changed", now: { id: "CUS1", reference_id: RECORD, creation_source: "THIRD_PARTY", version: 0 }, want: { kind: "delete", version: 0 } },
     { name: "the customer the app made, changed since (the version read is sent)", now: { id: "CUS1", reference_id: RECORD, creation_source: "THIRD_PARTY", version: 4 }, want: { kind: "delete", version: 4 } },
     { name: "Square sent no version: none is sent", now: { id: "CUS1", reference_id: RECORD, creation_source: "THIRD_PARTY" }, want: { kind: "delete", version: null } },
@@ -30,8 +30,11 @@ describe("decideDelete", () => {
     { name: "a customer carrying another record's id", now: { id: "CUS1", reference_id: OTHER, creation_source: "THIRD_PARTY", version: 0 }, want: keep("not_made_by_app") },
     { name: "the reference id in capitals is not the one the app gave", now: { id: "CUS1", reference_id: RECORD.toUpperCase(), creation_source: "THIRD_PARTY", version: 0 }, want: keep("not_made_by_app") },
     { name: "the customer the app made, but another record here uses it", now: { id: "CUS1", reference_id: RECORD, creation_source: "THIRD_PARTY", version: 0 }, used: true, want: keep("used_by_another") },
+    { name: "the customer the app made, which one of Square's own subscriptions still charges", now: { id: "CUS1", reference_id: RECORD, creation_source: "THIRD_PARTY", version: 0 }, charged: true, want: keep("charged_by_square") },
+    { name: "used by another record and charged: the first reason stands", now: { id: "CUS1", reference_id: RECORD, creation_source: "THIRD_PARTY", version: 0 }, used: true, charged: true, want: keep("used_by_another") },
+    { name: "charged, but Square answered with another customer: that reason stands", now: { id: "CPAT", reference_id: RECORD, creation_source: "THIRD_PARTY", version: 0 }, charged: true, want: keep("answered_as_another") },
   ];
-  it.each(cases)("$name", ({ now, used, want }) => {
-    expect(decideDelete(now, owed, used ?? false)).toEqual(want);
+  it.each(cases)("$name", ({ now, used, charged, want }) => {
+    expect(decideDelete(now, owed, used ?? false, charged ?? false)).toEqual(want);
   });
 });

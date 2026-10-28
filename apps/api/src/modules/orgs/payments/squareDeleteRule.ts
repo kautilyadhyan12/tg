@@ -5,7 +5,8 @@
 // THE WORST THING is deleting somebody else's customer: Sam, added on his mum Pat's email, whose customer Square merged into
 // Pat's, deleted for good along with a Square customer that is now Pat's own, with her subscription and loyalty points. So a
 // customer is deleted only when Square answers with the very id asked for, made through the API and not by a merge, still
-// carrying the reference id the app gave it, and no other record uses it. Anything else is left in Square as it is.
+// carrying the reference id the app gave it, no other record uses it, and Square is not charging it with a subscription of its
+// own (Square cancels a customer's subscriptions with it: round one, High 1). Anything else is left in Square as it is.
 import { squareMadeByMerge, type SquareCustomer } from "@app/shared";
 
 export type KeepWhy =
@@ -14,7 +15,9 @@ export type KeepWhy =
   | "made_by_merge"
   /** Its reference id is not the one the app gave it: not the customer the app made. */
   | "not_made_by_app"
-  | "used_by_another";
+  | "used_by_another"
+  /** One of Square's own subscriptions still charges it (ACTIVE, PENDING or PAUSED): deleting the customer would cancel it. */
+  | "charged_by_square";
 
 export type DeleteDecision = { kind: "delete"; version: number | null } | { kind: "keep"; why: KeepWhy };
 
@@ -22,10 +25,12 @@ export function decideDelete(
   now: Pick<SquareCustomer, "id" | "reference_id" | "creation_source" | "version">,
   owed: { customerId: string; referenceId: string },
   usedByAnother: boolean,
+  chargedBySquare: boolean,
 ): DeleteDecision {
   if (now.id !== owed.customerId) return { kind: "keep", why: "answered_as_another" };
   if (squareMadeByMerge(now)) return { kind: "keep", why: "made_by_merge" };
   if (now.reference_id !== owed.referenceId) return { kind: "keep", why: "not_made_by_app" };
   if (usedByAnother) return { kind: "keep", why: "used_by_another" };
+  if (chargedBySquare) return { kind: "keep", why: "charged_by_square" };
   return { kind: "delete", version: now.version ?? null };
 }

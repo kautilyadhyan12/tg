@@ -829,7 +829,7 @@ describe('a person on the list', () => {
 
     it('a customer the app added is said to be deleted from Square too, and the done line says it is being deleted', async () => {
       const box = await ask('deletes');
-      expect(box.getByTestId('delete-square').textContent).toBe('Ada Lovelace is in your Square customer list, added by the app, and is deleted from it too.');
+      expect(box.getByTestId('delete-square').textContent).toBe('Ada Lovelace is in your Square customer list, added by the app, and is deleted from it too. If Square is still charging them, or they were changed in Square, they stay.');
       fireEvent.click(box.getByRole('button', { name: 'Delete permanently' }));
       expect((await screen.findByTestId('deleted-note')).textContent).toBe('Ada Lovelace was deleted permanently. They are also being deleted from your Square customer list.');
     });
