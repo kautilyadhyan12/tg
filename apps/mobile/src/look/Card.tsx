@@ -9,12 +9,17 @@ interface CardProps {
   /** The web's see-through box, where a page's own picture shows behind it. */
   glass?: boolean;
   style?: StyleProp<ViewStyle>;
+  testID?: string;
   children: ReactNode;
 }
 
 /** A page's box: dark, with a thin line round it. */
-export function Card({ glass = false, style, children }: CardProps) {
-  return <View style={[styles.card, glass ? styles.glass : null, styles.pad, style]}>{children}</View>;
+export function Card({ glass = false, style, testID, children }: CardProps) {
+  return (
+    <View testID={testID} style={[styles.card, glass ? styles.glass : null, styles.pad, style]}>
+      {children}
+    </View>
+  );
 }
 
 interface PictureCardProps {
