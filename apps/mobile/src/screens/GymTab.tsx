@@ -24,15 +24,17 @@ import { InvitationList, PlaceHead, invitationsPath } from "./Invitation";
 import { usePlaces } from "./places";
 import { placesHeading } from "./placesHeading";
 import { DaysYouCame } from "./gym/DaysYouCame";
-import { PASS_PATH, PassSheet } from "./gym/Pass";
+import { OWN_PASS_AFTER_MS, PASS_PATH, PassSheet } from "./gym/Pass";
 import { makePhonePass } from "./gym/phonePass";
 import { NO_ANSWER } from "./SignIn";
 
 // The Gym tab (docs/design/phone/pages/Gym and GymNone): the places the person joined, each with
 // Show my pass and the days they came there, a place that removed them, and every invitation still open for their address. It reads again when the
 // tab is opened or the app comes back, at most every 30 seconds. With the internet it also asks once
-// for this sign-in's key for passes with no signal; with none, Show my pass stays where the places
-// could not be read, for the pass works anywhere the person belongs (ROADMAP Stage 5 item 15c).
+// for this sign-in's key for passes with no signal; with none, Show my pass stands alone where the
+// places could not be read, or are more than two seconds away (a phone opened with no signal tries
+// for a minute before it says so), for the pass works anywhere the person belongs (ROADMAP Stage 5
+// item 15c).
 
 export const GYM_READ_AGAIN_MS = 30_000;
 export const PHONE_KEY_PATH = `${PASS_PATH}/phone-key`;
@@ -45,6 +47,8 @@ export function GymScreen() {
   const [ownKey, setOwnKey] = useState<string | null>(() => session.passKey());
   // Asked once while the tab is open: the key is this sign-in's for as long as it lasts.
   const keyAsked = useRef(false);
+  // The places have been waited for long enough to offer the pass without them.
+  const [placesSlow, setPlacesSlow] = useState(false);
   const { setKinds } = usePlaces();
   const [mine, setMine] = useState<Read<MyOrgsResponse> | null>(null);
   const [invites, setInvites] = useState<Read<MyInvitationsResponse> | null>(null);
@@ -124,6 +128,15 @@ export function GymScreen() {
     };
   }, [readAll]);
 
+  useEffect(() => {
+    const wait = setTimeout(() => {
+      setPlacesSlow(true);
+    }, OWN_PASS_AFTER_MS);
+    return () => {
+      clearTimeout(wait);
+    };
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       void readAll(false);
@@ -152,15 +165,16 @@ export function GymScreen() {
     <Page>
       <Txt kind="h1">{placesHeading(joined.map((org) => org.orgType))}</Txt>
 
+      {/* First, so it stays where it was when the failure comes in under it. */}
+      {makeOwnPass !== null && (mine?.kind === "failed" || (mine === null && placesSlow)) ? (
+        <Button label="Show my pass" icon="qr" wide onPress={() => { setPassOrgType("unknown"); }} />
+      ) : null}
+
       {mine === null || invites === null ? null : mine.kind === "failed" && invites.kind === "failed" ? (
         <Card style={styles.box}>
           <Txt colour="badText">{NO_ANSWER}</Txt>
           <Button label="Try again" kind="soft" small busy={checking} onPress={() => void checkAgain()} />
         </Card>
-      ) : null}
-
-      {mine?.kind === "failed" && makeOwnPass !== null ? (
-        <Button label="Show my pass" icon="qr" wide onPress={() => { setPassOrgType("unknown"); }} />
       ) : null}
 
       {mine?.kind === "failed" && invites?.kind === "ok" ? (

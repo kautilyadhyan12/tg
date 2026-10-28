@@ -18,7 +18,7 @@ import {
 import { passCells, passPath } from "../../src/screens/gym/passView";
 import { makePhonePass } from "../../src/screens/gym/phonePass";
 import type { Answer, Ask } from "../../src/session/calls";
-import { RAVI, fakeServer, kept, memoryStore, profile, refusal, tokens, type Reply, type Route } from "../kit";
+import { RAVI, fakeServer, kept, memoryStore, never, profile, refusal, tokens, type Reply, type Route } from "../kit";
 
 const extra = { copyName: "Feature 1", apiUrl: "http://localhost:3000" };
 const noWait = () => Promise.resolve();
@@ -437,6 +437,23 @@ describe("a pass with no signal", () => {
     // The same key with another person's id makes another pass: this one names Ravi alone.
     const ashas = makePhonePass(OWN_KEY, ASHA.id, Date.now());
     expect(drawn(now, before, ashas)).not.toBe(ashas);
+  });
+
+  it("opened where the server never answers, Show my pass is offered after two seconds, not after a minute of retries", async () => {
+    const server = fakeServer({ "/v1/auth/refresh": never, "/v1/orgs/mine": never, [PASS_PATH]: never });
+    await render(<App extra={extra} ask={server.ask} store={memoryStore(keptWithKey(1))} wait={() => new Promise(() => undefined)} />);
+    await fireEvent.press(await gymTab());
+    expect(screen.queryByRole("button", { name: "Show my pass" })).toBeNull();
+    await fireEvent.press(await screen.findByRole("button", { name: "Show my pass" }, { timeout: 4_000 }));
+    // The pass waits two seconds for the server's, then draws the phone's own.
+    const now = makePhonePass(OWN_KEY, RAVI.id, Date.now());
+    await waitFor(
+      () => {
+        expect(drawn(now, makePhonePass(OWN_KEY, RAVI.id, Date.now()))).not.toBeNull();
+      },
+      { timeout: 4_000 },
+    );
+    expect(drawn(now, makePhonePass(OWN_KEY, RAVI.id, Date.now()))).not.toBe("something else");
   });
 
   it("with no key kept, no signal shows what it did before, and no Show my pass where the places could not be read", async () => {
