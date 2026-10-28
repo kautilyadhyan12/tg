@@ -33,6 +33,8 @@ export const SQUARE_COPIES_WORK = {
   atOnce: 2,
   /** Square refused their details: tried again this long after. */
   refusedAgainMs: 24 * 60 * 60_000,
+  /** Batches in a row Square answers nobody in, before the pass gives up for this minute. */
+  failedBatchesBeforeStopping: 2,
 } as const;
 
 export interface CopyStep {
@@ -65,7 +67,10 @@ async function copyOne(deps: PaymentsDeps, ready: Ready, country: ReturnType<typ
   if (got.kind === "refused") {
     if (got.status === 401) return "stopped";
     if (got.status === 404) return await gone();
-    return await refuse(got.status, got.code);
+    // Nothing was sent, so nothing is said of their details: asked again, and a member Square keeps failing on never
+    // holds the others up.
+    deps.log.warn({ event: "square.member_read_refused", gymId: row.gymId, status: got.status, code: got.code }, "Square would not show a member's customer");
+    return "unanswered";
   }
   const now: SquareCustomer = got.value;
   // Square answered with another customer: this one was merged into it, and it may be somebody else's. Nothing is sent.
@@ -73,7 +78,7 @@ async function copyOne(deps: PaymentsDeps, ready: Ready, country: ReturnType<typ
     await followMerge(deps, square, row.accountId, p.customerId, now);
     return "left";
   }
-  const change = changesToCopy(read, due, { givenName: now.given_name, familyName: now.family_name, email: now.email_address, phone: now.phone_number }, country);
+  const change = changesToCopy(read, due, { givenName: now.given_name, familyName: now.family_name, email: now.email_address, phone: now.phone_number }, country, p.joined);
   if (copyIsEmpty(change)) {
     await copies.advance(deps.sql, { ...at, read, due, now: deps.now() });
     return "same";
@@ -85,7 +90,10 @@ async function copyOne(deps: PaymentsDeps, ready: Ready, country: ReturnType<typ
     if (sent.status === 404) return await gone();
     // The customer changed in Square since it was read: asked about again on the next minute.
     if (sent.status === 409) return "left";
-    return await refuse(sent.status, sent.code);
+    // Square said what is wrong with what was sent (a phone number it does not accept, an email, a name too long).
+    if (sent.status === 400) return await refuse(sent.status, sent.code);
+    deps.log.warn({ event: "square.member_change_not_answered", gymId: row.gymId, status: sent.status, code: sent.code }, "Square did not answer a member's change");
+    return "unanswered";
   }
   // Square changed another customer than the one asked for (merged in the instant between the ask and the change):
   // the merge is followed; what was sent cannot be taken back, so it is said.
@@ -109,25 +117,38 @@ export async function copySome(deps: PaymentsDeps, ready: Ready, run: members.Ru
   await copies.adoptUnknown(deps.sql, { ...at, now });
   const refusedBefore = new Date(now.getTime() - SQUARE_COPIES_WORK.refusedAgainMs);
   const tally = { copied: 0, refused: 0 };
+  /** Some member was left for the next minute (Square changed them meanwhile, or gave no answer). */
   let left = false;
+  /** Batches in a row where Square answered nobody: Square is down, and the rest wait for the next minute. A single
+   *  member Square keeps failing on never holds the others up. */
+  let failedBatches = 0;
+  /** Square answered somebody, and somebody it did not. */
+  let answered = false;
+  let failed = false;
+  /** Square answers nobody this minute: said in the box, and asked again the next. */
+  const silent = async (): Promise<CopyStep> => {
+    await members.setUnanswered(deps.sql, { gymId: run.gymId, environment: run.environment, runId: run.runId, now: deps.now() });
+    return { step: "unanswered", ...tally };
+  };
   let after: string | null = null;
   while (budget.left >= 2) {
     const batch = await copies.dueCopies(deps.sql, { ...at, refusedBefore, after, limit: Math.min(Math.floor(budget.left / 2), SQUARE_COPIES_WORK.atOnce) });
-    if (batch.length === 0) return { step: left ? "more" : "done", ...tally };
+    if (batch.length === 0) return failed && !answered ? await silent() : { step: left ? "more" : "done", ...tally };
     after = batch[batch.length - 1]?.entryId ?? after;
     budget.left -= 2 * batch.length;
     const outcomes = await Promise.all(batch.map((p) => copyOne(deps, ready, country, p)));
     for (const o of outcomes) {
       if (o === "copied") tally.copied += 1;
       else if (o === "refused") tally.refused += 1;
-      else if (o === "left") left = true;
+      else if (o === "left" || o === "unanswered") left = true;
+      if (o === "unanswered") failed = true;
+      else answered = true;
     }
     if (outcomes.includes("stopped")) return { step: "stopped", ...tally };
-    if (outcomes.includes("unanswered")) {
-      await members.setUnanswered(deps.sql, { gymId: run.gymId, environment: run.environment, runId: run.runId, now: deps.now() });
-      return { step: "unanswered", ...tally };
-    }
+    failedBatches = outcomes.every((o) => o === "unanswered") ? failedBatches + 1 : 0;
+    if (failedBatches >= SQUARE_COPIES_WORK.failedBatchesBeforeStopping) return await silent();
   }
-  // The minute's calls are spent: the next minute goes on.
-  return { step: "more", ...tally };
+  // The minute's calls are spent: the next minute goes on, if anybody is still due.
+  const rest = left ? [] : await copies.dueCopies(deps.sql, { ...at, refusedBefore, after, limit: 1 });
+  return { step: left || rest.length > 0 ? "more" : "done", ...tally };
 }

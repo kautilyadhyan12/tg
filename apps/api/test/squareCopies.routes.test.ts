@@ -8,12 +8,16 @@
 // else's customer. Sam, added on his mum Pat's email, is merged by Square into Pat's customer, the app not yet told;
 // Sam changes his phone, and it must never become Pat's. Every claim is read from Square's own record of what it
 // was asked and what it holds now, never from the reply alone.
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { cardAgreementWords, squareConnectResponseSchema, squareFinishResponseSchema, squareMembersNamesResponseSchema, squareMembersResponseSchema, type SquareMembers } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
+import * as paymentsRepo from "../src/modules/orgs/payments/repo.js";
+import { accessContext } from "../src/modules/orgs/payments/service.js";
+import { copySome } from "../src/modules/orgs/payments/squareCopies.js";
+import * as membersRepo from "../src/modules/orgs/payments/squareMembersRepo.js";
 import { squareSettings } from "../src/modules/orgs/payments/settings.js";
 import { processSquareWork } from "../src/modules/orgs/payments/work.js";
 import { account, fakeSquare, type Account } from "./fakeSquareTerminal.js";
@@ -24,6 +28,8 @@ const d = describe.skipIf(url === undefined || url === "");
 
 const PASSWORD = "a-Perfectly-fine-pw-1"; // dummy fixture, gitleaks:allow
 const LOCK_KEY = Buffer.alloc(32, 13).toString("base64"); // dummy test key, gitleaks:allow
+const WEBHOOK_KEY = "square-copies-webhook-key"; // dummy test key, gitleaks:allow
+const WEBHOOK_URL = "https://hooks.example.test/v1/webhooks/square";
 const baseEnv = {
   NODE_ENV: "test",
   DATABASE_URL: url ?? "",
@@ -34,6 +40,8 @@ const baseEnv = {
   SQUARE_ENV: "production",
   SQUARE_APPLICATION_SECRET: "sq0csp-SQUARECOPIESSECRET", // dummy, gitleaks:allow
   PAYMENT_TOKENS_KEY: LOCK_KEY,
+  SQUARE_WEBHOOK_SIGNATURE_KEY: WEBHOOK_KEY,
+  SQUARE_WEBHOOK_URL: WEBHOOK_URL,
 };
 
 const T = 240_000;
@@ -73,7 +81,8 @@ d("A member's change copied to Square (real Postgres)", { timeout: T }, () => {
   const quiet = { info: () => undefined, warn: () => undefined, error: () => undefined };
   const gyms: Gym[] = [];
   /** The worker's minute, for this test's gyms alone. */
-  const work = () => processSquareWork({ sql, square: squareSettings(config(), square.api), log: quiet, now: () => clock }, [], gyms.map((g) => g.id));
+  const work = (eventIds: readonly string[] = []) =>
+    processSquareWork({ sql, square: squareSettings(config(), square.api), log: quiet, now: () => clock }, eventIds, gyms.map((g) => g.id));
   /** The worker takes ten gyms a minute, oldest first: after the clock jumps a day every gym of this file is due, so a
    *  gym far down the file is reached on a later minute. */
   const workUntil = async (done: () => boolean, minutes = 6): Promise<void> => {
@@ -84,6 +93,7 @@ d("A member's change copied to Square (real Postgres)", { timeout: T }, () => {
   const cleanup = async () => {
     const myUsers = sql`SELECT id FROM users WHERE email LIKE 'sqc-t-%@example.com'`;
     await sql`DELETE FROM gym_square_customer_merges WHERE account_id LIKE 'MSQC%'`;
+    await sql`DELETE FROM webhook_events WHERE provider = 'square' AND event_id LIKE 'sqc-t-%'`;
     await sql`DELETE FROM gym_square_member_runs WHERE gym_id IN (${mineSql})`;
     await sql`DELETE FROM gym_member_cards WHERE gym_id IN (${mineSql})`;
     await sql`DELETE FROM gym_card_agreements WHERE gym_id IN (${mineSql})`;
@@ -191,6 +201,23 @@ d("A member's change copied to Square (real Postgres)", { timeout: T }, () => {
     if (id === null || id === undefined) throw new Error("not in Square");
     return id;
   };
+  /** Square's signed message, through the real route; `customer.deleted` for each old customer of a merge. */
+  const signed = async (acct: Account, type: string, data: { type: string; id: string }): Promise<string> => {
+    const eventId = `sqc-t-${uniq()}`;
+    const payload = JSON.stringify({ merchant_id: acct.merchantId, type, event_id: eventId, data });
+    const signature = createHmac("sha256", WEBHOOK_KEY).update(WEBHOOK_URL + payload).digest("base64");
+    const res = await api().inject({
+      method: "POST",
+      url: "/v1/webhooks/square",
+      remoteAddress: nextIp(),
+      headers: { "content-type": "application/json", "x-square-hmacsha256-signature": signature },
+      payload,
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    await sql`UPDATE webhook_events SET not_before = ${clock} WHERE provider = 'square' AND event_id = ${eventId}`;
+    return eventId;
+  };
+  const deleted = (acct: Account, customerId: string) => signed(acct, "customer.deleted", { type: "customer", id: customerId });
   /** One person's page, as staff read it. */
   const pageOf = async (gym: Gym, entryId: string) => {
     const res = await send("GET", entryUrl(gym, entryId), gym.owner.cookies);
@@ -261,7 +288,7 @@ d("A member's change copied to Square (real Postgres)", { timeout: T }, () => {
       expect(held(gym, merged).phone, "and Pat's still has hers").toBe("+13125550100");
     });
 
-    it("the same, though the app was told of the merge: Sam is separated from Pat's customer, and his change is his own customer's", async () => {
+    it("the same, though Square told the app of the merge: Sam is separated from Pat's customer, gets one of his own, and his later change reaches that one, never Pat's", async () => {
       const gym = await makeGym("Elm Street Gym");
       const pat = `pat.elm.${uniq()}@gmail.com`;
       square.customer(gym.acct, { id: "CPATELM", given_name: "Pat", family_name: "Smith", email_address: pat, phone_number: "+13125550101" });
@@ -269,16 +296,31 @@ d("A member's change copied to Square (real Postgres)", { timeout: T }, () => {
       expect((await addMembers(gym)).state).toBe("added");
       const samFirst = await customerIdOf(gym, sam);
       const merged = square.merge(gym.acct, ["CPATELM", samFirst]);
+      // Square's signed message that each old customer was deleted, through the real route: the app follows the merge.
+      await work([await deleted(gym.acct, "CPATELM"), await deleted(gym.acct, samFirst)]);
+      expect((await link(gym, sam))?.customer_id ?? null, "Sam is no longer Pat's merged customer").not.toBe(merged);
+      await work();
+      const samNow = await customerIdOf(gym, sam);
+      expect(samNow).toMatch(/^CUS/);
+      expect(samNow).not.toBe(merged);
+      expect(held(gym, samNow)).toMatchObject({ given: "Sam", family: "Smith", phone: "+13125550178" });
+      // His phone changes: it goes to his own customer, once, and Pat's is exactly as she has it.
       await change(gym, sam, { phone: "+13125550198" });
       await work();
-      expect(asked(gym)).toEqual([]);
-      expect(held(gym, merged).phone).toBe("+13125550101");
+      expect(held(gym, samNow).phone).toBe("+13125550198");
+      expect(asked(gym).map((c) => c.customerId)).toEqual([samNow]);
+      expect(held(gym, merged)).toMatchObject({ given: "Pat", family: "Smith", email: pat, phone: "+13125550101" });
     });
 
-    it("Square merges the customer in the instant between the app's question and its change: what was sent cannot be taken back, but the merge is followed and Sam is not left on Pat's customer", async () => {
+    // THE ONE WINDOW THE APP CANNOT CLOSE (round one, High 2; the handoff's "Open" line; Kd's to accept or not): between the
+    // app's question and its change Square can merge the customer, and an update sent to a merged-away id changes the
+    // merged customer (measured 2026-10-26); a customer never changed has version 0, as the merged one starts, so Square's
+    // version check does not refuse it. This test says what happens then, as it is: the change lands on Pat's customer, and
+    // the app, told by Square's answer, follows the merge so Sam is separated from her.
+    it("KNOWN RESIDUAL: Square merges the customer in the instant between the app's question and its change: Pat's customer takes Sam's phone, and the merge is followed so Sam is separated from her", async () => {
       const gym = await makeGym("Quick Gym");
       const pat = `pat.quick.${uniq()}@gmail.com`;
-      square.customer(gym.acct, { id: "CPATQUICK", given_name: "Pat", family_name: "Smith", email_address: pat });
+      square.customer(gym.acct, { id: "CPATQUICK", given_name: "Pat", family_name: "Smith", email_address: pat, phone_number: "+13125550103" });
       const sam = await person(gym, "Sam Smith", { email: pat, phone: "+13125550179" });
       expect((await addMembers(gym)).state).toBe("added");
       const samFirst = await customerIdOf(gym, sam);
@@ -289,9 +331,13 @@ d("A member's change copied to Square (real Postgres)", { timeout: T }, () => {
       await change(gym, sam, { phone: "+13125550197" });
       await work();
       expect(merged).not.toBe("");
+      // The residual, named: the change reached Square's merged customer before the app could know.
+      expect(held(gym, merged).phone, "the change landed on the merged customer").toBe("+13125550197");
       await work();
       expect((await link(gym, sam))?.customer_id, "Sam is not left on the merged customer").not.toBe(merged);
-      expect(await customerIdOf(gym, sam)).toMatch(/^CUS/);
+      const samNow = await customerIdOf(gym, sam);
+      expect(samNow).toMatch(/^CUS/);
+      expect(held(gym, samNow), "and is added again with his own details").toMatchObject({ given: "Sam", phone: "+13125550197" });
     });
 
     it("a change at one gym never reaches another gym's Square account", async () => {
@@ -380,13 +426,28 @@ d("A member's change copied to Square (real Postgres)", { timeout: T }, () => {
       expect(row?.copy_refused_at).toBeNull();
     });
 
-    it("an uppercase-only or spacing-only edit of the name sends nothing", async () => {
+    it("a name edit that only moves spaces sends nothing; a case or accent correction of a customer the app made is copied, and of one the business typed is not overwritten", async () => {
       const gym = await makeGym("Case Gym");
       const dee = await person(gym, "Dee Park", { email: `dee.${uniq()}@gmail.com` });
+      const jose = await person(gym, "Jose Diaz", { email: `jose.${uniq()}@gmail.com` });
+      const email = `rae.till.${uniq()}@gmail.com`;
+      square.customer(gym.acct, { id: "CRAETILL", given_name: "RAE", family_name: "WELLS", email_address: email });
+      const rae = await person(gym, "Rae Wells", { email });
       expect((await addMembers(gym)).state).toBe("added");
-      await change(gym, dee, { fullName: "DEE  PARK" });
+      expect((await link(gym, rae))?.joined_at, "Rae was Square's before").toBeInstanceOf(Date);
+      await change(gym, dee, { fullName: "Dee   Park" });
       await work();
-      expect(asked(gym)).toEqual([]);
+      expect(asked(gym), "spaces only: nothing").toEqual([]);
+      // A correction of the record that the app made the customer from: copied exactly.
+      await change(gym, dee, { fullName: "dee park" });
+      await change(gym, jose, { fullName: "José Díaz" });
+      // The business typed Rae in capitals itself: the same words, so left as it typed them.
+      await change(gym, rae, { fullName: "Rae  wells" });
+      await work();
+      expect(held(gym, await customerIdOf(gym, dee))).toMatchObject({ given: "dee", family: "park" });
+      expect(held(gym, await customerIdOf(gym, jose))).toMatchObject({ given: "José", family: "Díaz" });
+      expect(held(gym, "CRAETILL")).toMatchObject({ given: "RAE", family: "WELLS", version: 0 });
+      expect(asked(gym).map((c) => c.customerId).sort()).toEqual([await customerIdOf(gym, dee), await customerIdOf(gym, jose)].sort());
     });
   });
 
@@ -501,6 +562,90 @@ d("A member's change copied to Square (real Postgres)", { timeout: T }, () => {
       const next = await customerIdOf(gym, jon);
       expect(next).not.toBe(first);
       expect(held(gym, next).phone).toBe("+13125550201");
+    });
+  });
+
+  describe("a member Square keeps failing on, and what is not their details' fault (round one, Low 4 to 6)", () => {
+    /** Six members in Square, each with a phone of their own; the ids in the order the worker meets them. */
+    const six = async (gym: Gym, label: string): Promise<{ id: string; customer: string; phone: string }[]> => {
+      const made: string[] = [];
+      const phones = new Map<string, string>();
+      for (const [i, name] of ["Aa", "Bb", "Cc", "Dd", "Ee", "Ff"].entries()) {
+        const phone = `+1312555${String(7000 + i)}`;
+        const id = await person(gym, `${label} ${name}`, { email: `${label.toLowerCase()}.${String(i)}.${uniq()}@gmail.com`, phone });
+        phones.set(id, phone);
+        made.push(id);
+      }
+      expect((await addMembers(gym)).state).toBe("added");
+      const out: { id: string; customer: string; phone: string }[] = [];
+      for (const id of [...made].sort()) out.push({ id, customer: await customerIdOf(gym, id), phone: phones.get(id) ?? "" });
+      return out;
+    };
+    const newPhone = (n: number) => `+1312555${String(8000 + n)}`;
+
+    it("one customer Square never answers for does not hold up the members behind it, and the box does not say Square is down", async () => {
+      const gym = await makeGym("Stuck Gym");
+      const members = await six(gym, "Stuck");
+      const [first, ...rest] = members;
+      if (first === undefined) throw new Error("no members");
+      square.state.updateFails.add(first.customer);
+      for (const [i, m] of members.entries()) await change(gym, m.id, { phone: newPhone(i) });
+      await work();
+      for (const [i, m] of members.entries()) {
+        if (m.id === first.id) expect(held(gym, m.customer).phone, "the stuck one is as it was").toBe(m.phone);
+        else expect(held(gym, m.customer).phone, `member ${String(i)} was reached in the same minute`).toBe(newPhone(i));
+      }
+      expect(rest).toHaveLength(5);
+      expect((await box(gym)).unanswered, "Square answered the others").toBe(false);
+      expect((await box(gym)).groups.not_copied.count, "and nobody's details were refused").toBe(0);
+    });
+
+    it("Square down for everybody: the pass gives up after two batches, says so in the box, and goes on when Square answers", async () => {
+      const gym = await makeGym("Down All Gym");
+      const members = await six(gym, "Downall");
+      for (const [i, m] of members.entries()) await change(gym, m.id, { phone: newPhone(i) });
+      square.state.updateDown = true;
+      await work();
+      expect(asked(gym).length, "two batches of two, no more").toBeLessThanOrEqual(4);
+      expect((await box(gym)).unanswered).toBe(true);
+      square.state.updateDown = false;
+      await work();
+      for (const [i, m] of members.entries()) expect(held(gym, m.customer).phone).toBe(newPhone(i));
+      expect((await box(gym)).unanswered).toBe(false);
+    });
+
+    it("Square refusing to show a customer, or refusing a change with a 403, is not their details: nobody is named, and the others are copied", async () => {
+      const gym = await makeGym("Forbidden Gym");
+      const members = await six(gym, "Forbid");
+      const [read, change403, ...ok] = members;
+      if (read === undefined || change403 === undefined) throw new Error("no members");
+      square.state.readRefused.add(read.customer);
+      square.state.updateStatus.set(change403.customer, 403);
+      for (const [i, m] of members.entries()) await change(gym, m.id, { phone: newPhone(i) });
+      await work();
+      for (const m of ok) expect(held(gym, m.customer).phone).toBe(newPhone(members.findIndex((x) => x.id === m.id)));
+      expect((await box(gym)).groups.not_copied.count, "nobody is told to check an email that is fine").toBe(0);
+      for (const m of [read, change403]) {
+        expect((await link(gym, m.id))?.copy_refused_at).toBeNull();
+        expect((await pageOf(gym, m.id)).squareCopyRefused).toBe(false);
+      }
+    });
+
+    it("with the minute's calls spent, a gym with nobody due is not woken again, and one with somebody due is", async () => {
+      const gym = await makeGym("Spent Gym");
+      const eve = await person(gym, "Eve Moss", { email: `eve.${uniq()}@gmail.com`, phone: "+13125550290" });
+      expect((await addMembers(gym)).state).toBe("added");
+      const settings = squareSettings(config(), square.api);
+      if (settings === null) throw new Error("no Square settings");
+      const row = await paymentsRepo.readConnection(sql, gym.id, "production");
+      const token = row?.accessToken == null ? null : settings.tokens.open(row.accessToken, accessContext(gym.id));
+      const run = await membersRepo.readRun(sql, gym.id, "production");
+      if (row === null || token === null || run === null || row.locationId === null) throw new Error("not connected");
+      const ready = { square: settings, row: { ...row, locationId: row.locationId }, token };
+      const deps = { sql, square: settings, log: quiet, now: () => clock };
+      expect((await copySome(deps, ready, run, { left: 1 })).step, "nobody is due").toBe("done");
+      await change(gym, eve, { phone: "+13125550291" });
+      expect((await copySome(deps, ready, run, { left: 1 })).step, "somebody is due and the calls are spent").toBe("more");
     });
   });
 

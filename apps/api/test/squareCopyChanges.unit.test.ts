@@ -33,6 +33,7 @@ describe("changesToCopy: only what changed, and only where Square does not alrea
     ["a phone Square has none of", { ...amy, phone: "+13125550199" }, onlyPhone, { ...inSquare, phone: null }, { phone: "+13125550199" }],
     ["a phone taken off the record: cleared in Square", { ...amy, phone: null }, onlyPhone, inSquare, { phone: null }],
     ["a phone taken off, and Square has none", { ...amy, phone: null }, onlyPhone, { ...inSquare, phone: null }, {}],
+    ["a phone put on, and Square's is one the list cannot read: sent", { ...amy, phone: "+13125550199" }, onlyPhone, { ...inSquare, phone: "call after 5" }, { phone: "+13125550199" }],
     ["a phone taken off, and Square's is one the list cannot read: left", { ...amy, phone: null }, onlyPhone, { ...inSquare, phone: "call after 5" }, {}],
     // An email.
     ["a new email", { ...amy, email: "amy.lee@yahoo.com" }, onlyEmail, inSquare, { email: "amy.lee@yahoo.com" }],
@@ -44,10 +45,6 @@ describe("changesToCopy: only what changed, and only where Square does not alrea
     ["Square's email is the new one already", { ...amy, email: "amy.lee@yahoo.com" }, onlyEmail, { ...inSquare, email: "amy.lee@yahoo.com" }, {}],
     // A name: the words, folded, whichever way Square splits them.
     ["a name Square holds as given and family", amy, onlyName, inSquare, {}],
-    ["the same name in capitals", { ...amy, fullName: "AMY LEE" }, onlyName, inSquare, {}],
-    ["the same name, Square holding it in capitals", amy, onlyName, { ...inSquare, givenName: "AMY", familyName: "LEE" }, {}],
-    ["the same name with an accent", { ...amy, fullName: "Zoë Brontë" }, onlyName, { ...inSquare, givenName: "Zoe", familyName: "Bronte" }, {}],
-    ["the same name split another way", { ...amy, fullName: "Mary Jane Watson" }, onlyName, { ...inSquare, givenName: "Mary", familyName: "Jane Watson" }, {}],
     ["a name fixed (Lea to Lee)", amy, onlyName, { ...inSquare, familyName: "Lea" }, { givenName: "Amy", familyName: "Lee" }],
     ["a name that gained a surname", { ...amy, fullName: "Amy Lee-Chen" }, onlyName, inSquare, { givenName: "Amy", familyName: "Lee-Chen" }],
     ["a middle name added", { ...amy, fullName: "Amy Louise Lee" }, onlyName, inSquare, { givenName: "Amy Louise", familyName: "Lee" }],
@@ -70,7 +67,9 @@ describe("changesToCopy: only what changed, and only where Square does not alrea
     }],
     ["everything changed, and Square holds it all already", amy, all, inSquare, {}],
   ])("%s", (_name, record, due, now, expected) => {
-    expect(changesToCopy(record, due, now, US)).toEqual(expected);
+    // The same for a customer the app made and for one the business had.
+    expect(changesToCopy(record, due, now, US, false)).toEqual(expected);
+    expect(changesToCopy(record, due, now, US, true)).toEqual(expected);
   });
 
   it("an empty change is empty; one part is not", () => {
@@ -81,7 +80,59 @@ describe("changesToCopy: only what changed, and only where Square does not alrea
   it("reads Square's phone with the gym's country, as the list reads its own", () => {
     // A till in London typed "020 7946 0958"; the list keeps +442079460958.
     const london: CopyRecord = { fullName: "Amy Lee", email: null, phone: "+442079460958" };
-    expect(changesToCopy(london, onlyPhone, { phone: "020 7946 0958" }, "GB")).toEqual({});
-    expect(changesToCopy(london, onlyPhone, { phone: "020 7946 0958" }, US)).toEqual({ phone: "+442079460958" });
+    expect(changesToCopy(london, onlyPhone, { phone: "020 7946 0958" }, "GB", false)).toEqual({});
+    expect(changesToCopy(london, onlyPhone, { phone: "020 7946 0958" }, US, false)).toEqual({ phone: "+442079460958" });
+  });
+});
+
+// A name: exact for a customer the app made (it holds what the app sent), folded for one the business typed, and the marks of
+// every script but Latin kept, because in Devanagari, Thai or Arabic they tell different names apart (round one, High 1).
+describe("changesToCopy: a name", () => {
+  const both = [false, true] as const;
+  const given = (givenName: string, familyName: string | null): CopyNow => ({ givenName, familyName, email: null, phone: null });
+  const rec = (fullName: string): CopyRecord => ({ fullName, email: null, phone: null });
+
+  it.each<[string, CopyRecord, CopyNow, CopyChange]>([
+    ["a customer the app made, as it sent the name", rec("Amy Lee"), given("Amy", "Lee"), {}],
+    ["spacing only is not a change", rec("Amy   Lee"), given("Amy", "Lee"), {}],
+    ["a case-only correction is copied", rec("amy lee"), given("Amy", "Lee"), { givenName: "amy", familyName: "lee" }],
+    ["an accent-only correction is copied", rec("José Díaz"), given("Jose", "Diaz"), { givenName: "José", familyName: "Díaz" }],
+    ["Square split it another way", rec("Mary Jane Watson"), given("Mary", "Jane Watson"), { givenName: "Mary Jane", familyName: "Watson" }],
+  ])("made by the app: %s", (_n, record, now, expected) => {
+    expect(changesToCopy(record, onlyName, now, US, false)).toEqual(expected);
+  });
+
+  it.each<[string, CopyRecord, CopyNow, CopyChange]>([
+    ["capitals on the record", rec("AMY LEE"), given("Amy", "Lee"), {}],
+    ["capitals in Square", rec("Amy Lee"), given("AMY", "LEE"), {}],
+    ["an accent the business left off", rec("Zoë Brontë"), given("Zoe", "Bronte"), {}],
+    ["an accent the record left off", rec("Jose Diaz"), given("José", "Díaz"), {}],
+    ["split another way", rec("Mary Jane Watson"), given("Mary", "Jane Watson"), {}],
+    ["an apostrophe", rec("Sean O'Brien"), given("Sean", "OBrien"), {}],
+    ["an initial typed, and the name changed here", rec("Amy Lee"), given("AMY L.", "LEE"), { givenName: "Amy", familyName: "Lee" }],
+    ["a name only of punctuation is no name", rec("---"), { givenName: null, familyName: null }, {}],
+  ])("typed in Square by the business: %s", (_n, record, now, expected) => {
+    expect(changesToCopy(record, onlyName, now, US, true)).toEqual(expected);
+  });
+
+  // Different names that a fold of every mark would call one: the real change is copied, whoever made the customer.
+  it.each<[string, CopyRecord, CopyNow, CopyChange]>([
+    ["Devanagari, a vowel sign changed (Reena to Raana)", rec("राना"), given("रीना", null), { givenName: "राना", familyName: null }],
+    ["Devanagari, a surname vowel sign changed", rec("रीना सुंह"), given("रीना", "सिंह"), { givenName: "रीना", familyName: "सुंह" }],
+    ["Thai, a tone mark added", rec("สมชาย น้ำ"), given("สมชาย", "นำ"), { givenName: "สมชาย", familyName: "น้ำ" }],
+    ["Arabic, vowel marks added", rec("مُحَمَّد"), given("محمد", null), { givenName: "مُحَمَّد", familyName: null }],
+    ["Arabic, vowel marks taken off", rec("محمد"), given("مُحَمَّد", null), { givenName: "محمد", familyName: null }],
+    ["Chinese, the given name changed", rec("田中 次郎"), given("田中", "太郎"), { givenName: "田中", familyName: "次郎" }],
+  ])("another script: %s", (_n, record, now, expected) => {
+    for (const joined of both) expect(changesToCopy(record, onlyName, now, US, joined)).toEqual(expected);
+  });
+
+  it.each<[string, CopyRecord, CopyNow]>([
+    ["Devanagari, the same", rec("रीना सिंह"), given("रीना", "सिंह")],
+    ["Thai, the same", rec("สมชาย น้ำ"), given("สมชาย", "น้ำ")],
+    ["Arabic, the same", rec("مُحَمَّد"), given("مُحَمَّد", null)],
+    ["Chinese, the same", rec("田中 太郎"), given("田中", "太郎")],
+  ])("another script, already held: %s", (_n, record, now) => {
+    for (const joined of both) expect(changesToCopy(record, onlyName, now, US, joined)).toEqual({});
   });
 });

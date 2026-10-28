@@ -125,6 +125,10 @@ export function fakeSquare() {
     updateDown: boolean;
     updateRefused: Set<string>;
     conflictNext: number;
+    /** These customers give no answer to UpdateCustomer; are refused on RetrieveCustomer (403); are refused on UpdateCustomer with the status given. */
+    updateFails: Set<string>;
+    readRefused: Set<string>;
+    updateStatus: Map<string, number>;
     /** Runs once, as an UpdateCustomer arrives: Square changes something in the instant between the ask and the change. */
     beforeUpdate: (() => void) | null;
     now: () => Date;
@@ -153,6 +157,9 @@ export function fakeSquare() {
     updateDown: false,
     updateRefused: new Set<string>(),
     conflictNext: 0,
+    updateFails: new Set<string>(),
+    readRefused: new Set<string>(),
+    updateStatus: new Map<string, number>(),
     beforeUpdate: null,
     now: () => new Date(),
   };
@@ -321,6 +328,7 @@ export function fakeSquare() {
       if (state.down) return Promise.resolve(unavailable);
       const a = tokenAccount(token);
       if (a === undefined) return Promise.resolve(unauthorized);
+      if (state.readRefused.has(id)) return Promise.resolve({ kind: "refused", status: 403, code: "FORBIDDEN" });
       // An old id of a merged customer answers as the customer it is now ("If you call RetrieveCustomer using the
       // ID of customer A or B, the Customers API returns customer C").
       const c = customers.get(mergedInto.get(id) ?? id);
@@ -331,10 +339,12 @@ export function fakeSquare() {
       return Promise.resolve({ kind: "ok", value: out });
     },
     updateCustomer(token, id, change) {
-      if (state.updateDown || state.down) return Promise.resolve(unavailable);
       const a = tokenAccount(token);
       if (a === undefined) return Promise.resolve(unauthorized);
       customersChanged.push({ ...change, customerId: id, accountId: a.merchantId });
+      if (state.updateDown || state.down || state.updateFails.has(id)) return Promise.resolve(unavailable);
+      const refusedWith = state.updateStatus.get(id);
+      if (refusedWith !== undefined) return Promise.resolve({ kind: "refused", status: refusedWith, code: "FORBIDDEN" });
       const hook = state.beforeUpdate;
       state.beforeUpdate = null;
       hook?.();
