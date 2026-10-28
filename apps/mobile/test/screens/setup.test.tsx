@@ -1,11 +1,12 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
-import { CHECK_FIRST_PICK, DISCLAIMER_WORDINGS, deriveHealthFlags, missingPlanInputSchema, type OnboardingAnswers } from "@app/shared";
+import { CHECK_FIRST_PICK, CURRENT_DISCLAIMER_VERSION, DISCLAIMER_WORDINGS, deriveHealthFlags, missingPlanInputSchema, type OnboardingAnswers } from "@app/shared";
 import { App } from "../../src/App";
-import { ANSWER_FAILED, NOTE_VERSION, TICK_FAILED } from "../../src/screens/setup/useHealthStep";
+import { ANSWER_FAILED, NOTE_VERSION, PLAN_NOTE_VERSION, TICK_FAILED } from "../../src/screens/setup/useHealthStep";
 import { LOAD_FAILED, SAVE_FAILED } from "../../src/screens/setup/useSetupAnswers";
-import { fakeServer, kept, memoryStore, refusal, tokens, type Reply } from "../kit";
+import { RAVI, fakeServer, kept, memoryStore, profile, refusal, tokens, type Reply } from "../kit";
 
 const extra = { copyName: "Feature 1", apiUrl: "http://localhost:3000" };
+const NOTE_VERSION_SIGN_UP = CURRENT_DISCLAIMER_VERSION.sign_up;
 const noWait = () => Promise.resolve();
 /** The distance between two ticks of a scale. */
 const TICK = 12;
@@ -124,15 +125,25 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
-/** Signed in on this phone already, on Me, with setup opened from "Your plan". The stand-in keeps
- *  what each save sends; `failNext` refuses the next save. */
+/** Signed in on this phone already, on Me, with setup opened from "Your plan"; or, `front`, as the
+ *  app opens for somebody who has not finished setup. The stand-in keeps what each save sends;
+ *  `failNext` refuses the next save. A finish is refused, as the server refuses it, while an answer
+ *  setup needs is not stored, naming what is open; `invitations` are waiting. */
 async function openSetup(
   start: Partial<OnboardingAnswers> = {},
   {
     health = null,
     ticks = [],
     healthLoadFails = false,
-  }: { health?: Stored; ticks?: { purpose: string; wordingVersion: string }[]; healthLoadFails?: boolean } = {},
+    front = false,
+    invitations = [],
+  }: {
+    health?: Stored;
+    ticks?: { purpose: string; wordingVersion: string }[];
+    healthLoadFails?: boolean;
+    front?: boolean;
+    invitations?: object[];
+  } = {},
 ) {
   const held = {
     answers: { ...EMPTY, ...start },
@@ -154,10 +165,21 @@ async function openSetup(
   };
   const server = fakeServer({
     "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }),
+    "/v1/users/me": () => ({ status: 200, body: profile(true, RAVI, held.answers.onboardingCompleted) }),
+    "/v1/orgs/invitations": () => ({ status: 200, body: { address: RAVI.email, addressProved: true, invitations } }),
     [SETUP]: (body) => {
       if (body !== undefined && held.failNext) {
         held.failNext = false;
         return refusal(400, "validation_failed", "Not saved.");
+      }
+      if (typeof body === "object" && body !== null && "onboardingCompleted" in body) {
+        const open = [
+          ...missingOf(held.answers),
+          ...(held.health === null ? ["health"] : []),
+          ...(held.answers.diet === null ? ["diet"] : []),
+          ...(held.answers.mealsPerDay === null ? ["mealsPerDay"] : []),
+        ];
+        if (open.length > 0) return refusal(409, "onboarding_incomplete", "Finish setup first.", { missing: open });
       }
       if (typeof body === "object" && body !== null) Object.assign(held.answers, body);
       return reply();
@@ -197,11 +219,27 @@ async function openSetup(
       return { status: 201, body: { consent: row } };
     },
   });
-  const store = memoryStore(kept(1));
+  const store = memoryStore(kept(1, RAVI, NOTE_VERSION_SIGN_UP, !front));
   await render(<App extra={extra} ask={server.ask} store={store} wait={noWait} />);
-  await fireEvent.press(await screen.findByRole("tab", { name: "Me" }));
-  await fireEvent.press(await screen.findByRole("button", { name: "Your plan" }));
-  if (healthLoadFails) await screen.findByText(LOAD_FAILED);
+  if (!front) {
+    await fireEvent.press(await screen.findByRole("tab", { name: "Me" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Your plan" }));
+  }
+  if (front) {
+    // "You're invited" comes first for an invitation waiting; Not now goes on to setup.
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("button", { name: "Not now" }) ??
+          screen.queryByLabelText(/^Step \d+ of \d+$/) ??
+          screen.queryByRole("tab", { name: "Dashboard" }),
+      ).toBeTruthy();
+    });
+    const later = screen.queryByRole("button", { name: "Not now" });
+    if (later !== null) await fireEvent.press(later);
+    await waitFor(() => {
+      expect(screen.queryByLabelText(/^Step \d+ of \d+$/) ?? screen.queryByRole("tab", { name: "Dashboard" })).toBeTruthy();
+    });
+  } else if (healthLoadFails) await screen.findByText(LOAD_FAILED);
   else await screen.findByLabelText(/^Step \d+ of \d+$/);
   const saves = () => server.asked.filter((one) => one.path === SETUP && one.body !== undefined).map((one) => one.body);
   const healthSaves = () => server.asked.filter((one) => one.path === HEALTH && one.body !== undefined).map((one) => one.body);
@@ -477,20 +515,19 @@ describe("the health note's tick and Food", () => {
     expect(ticked()).toBe(false);
   });
 
-  it("Food saves the diet and the meals a day, and Done closes setup once both are saved", async () => {
+  it("Food saves the diet and the meals a day, and Continue goes on to the plan once both are saved", async () => {
     const { saves } = await openSetup(BEFORE_FOOD, { health: { hasCondition: false, checkFirst: null }, ticks: TICKED });
     await screen.findByRole("header", { name: "Food" });
-    expect(stepOf()).toBe("Step 9 of 9");
-    expect(disabled("Done")).toBe(true);
+    expect(stepOf()).toBe("Step 9 of 10");
+    expect(disabled("Continue")).toBe(true);
     await press(/^Vegetarian with eggs\./);
     await press("4 meals a day");
     await waitFor(() => {
-      expect(disabled("Done")).toBe(false);
+      expect(disabled("Continue")).toBe(false);
     });
-    await press("Done");
-    await waitFor(() => {
-      expect(screen.queryByLabelText(/^Step \d+ of \d+$/)).toBeNull();
-    });
+    await press("Continue");
+    expect(await screen.findByRole("header", { name: "Your plan" })).toBeTruthy();
+    expect(stepOf()).toBe("Step 10 of 10");
     expect(saves()).toEqual([{ diet: "vegetarian_eggs" }, { mealsPerDay: 4 }]);
   });
 });
@@ -511,7 +548,7 @@ describe("setup on the phone", () => {
   it("opens on the first question not answered, Continue waits for its answer, and Back goes back", async () => {
     const { saves } = await openSetup();
     expect(await screen.findByRole("header", { name: "Your goal" })).toBeTruthy();
-    expect(stepOf()).toBe("Step 1 of 9");
+    expect(stepOf()).toBe("Step 1 of 10");
     expect(disabled("Continue")).toBe(true);
     await press("Keep my weight");
     await press("Build muscle");
@@ -519,7 +556,7 @@ describe("setup on the phone", () => {
       expect(disabled("Continue")).toBe(false);
     });
     // Keep my weight asks for no target, so the steps are six.
-    expect(stepOf()).toBe("Step 1 of 8");
+    expect(stepOf()).toBe("Step 1 of 9");
     await press("Continue");
     expect(await screen.findByRole("header", { name: "About you" })).toBeTruthy();
     expect(saves()).toEqual([{ weightGoal: "maintain" }, { fitnessGoals: ["muscle_gain"] }]);
@@ -530,7 +567,7 @@ describe("setup on the phone", () => {
   it("a person who left halfway comes back to the first question still open", async () => {
     await openSetup({ ...ALL, dayActivity: null, fitnessLevel: null });
     expect(await screen.findByRole("header", { name: "Your day" })).toBeTruthy();
-    expect(stepOf()).toBe("Step 4 of 9");
+    expect(stepOf()).toBe("Step 4 of 10");
   });
 
   it("the server's daily number is on every screen once it has one, and opens how it is worked out", async () => {
@@ -642,5 +679,170 @@ describe("setup on the phone", () => {
     await press("Close");
     expect(await screen.findByText("Type the name we should call you.")).toBeTruthy();
     expect(saves()).toEqual([]);
+  });
+});
+
+// ── 14c: the place step, the plan, Finish, and setup in front of the tabs ───────────────────────
+
+const EVERYTHING: Partial<OnboardingAnswers> = { ...ALL, diet: "non_vegetarian", mealsPerDay: 3 };
+const ANSWERED_NO: Stored = { hasCondition: false, checkFirst: null };
+const BOTH_TICKED = [...TICKED, { purpose: "plan_screen", wordingVersion: PLAN_NOTE_VERSION }];
+const planTick = () => screen.getByRole("checkbox", { name: "I have read and understood this" });
+const finishes = (saves: () => unknown[]) =>
+  saves().filter((one) => typeof one === "object" && one !== null && "onboardingCompleted" in one);
+const LOTUS = { id: "2d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f6a", name: "Lotus Yoga", city: null, orgType: "yoga_studio" };
+const IRON = { id: "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f", name: "Iron House", city: "Pune", orgType: "gym" };
+const invitationFrom = (gym: { id: string; name: string; city: string | null; orgType: string }, id: string) => ({
+  id,
+  state: "pending",
+  gym,
+  canTakeMembers: true,
+  notMe: false,
+  yourPlan: null,
+  waiver: null,
+});
+
+describe("the worst thing: nobody reaches the tabs without the health answer and both notes ticked", () => {
+  it("a person who has not finished setup opens the app on setup, never the tabs, with no way to close it", async () => {
+    await openSetup({}, { front: true });
+    expect(await screen.findByRole("header", { name: "Your goal" })).toBeTruthy();
+    expect(screen.queryByRole("tab", { name: "Dashboard" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Sign out" })).toBeTruthy();
+  });
+
+  it("Finish waits for the plan's tick, and nothing is sent until it is pressed", async () => {
+    const { saves, tickSaves } = await openSetup(EVERYTHING, { front: true, health: ANSWERED_NO, ticks: TICKED });
+    expect(await screen.findByRole("header", { name: "Your plan" })).toBeTruthy();
+    expect(disabled("Finish setup")).toBe(true);
+    expect(screen.getByText("Tick this to finish setup.")).toBeTruthy();
+    await press("Finish setup");
+    expect(finishes(saves)).toEqual([]);
+    await fireEvent.press(planTick());
+    await waitFor(() => {
+      expect(disabled("Finish setup")).toBe(false);
+    });
+    expect(tickSaves()).toEqual([{ purpose: "plan_screen", wordingVersion: PLAN_NOTE_VERSION, appVersion: expect.any(String) as unknown }]);
+    expect(finishes(saves)).toEqual([]);
+  });
+
+  it("a health answer the server no longer holds stops Finish there, says so, and opens the question", async () => {
+    const { held, saves } = await openSetup(EVERYTHING, { front: true, health: ANSWERED_NO, ticks: BOTH_TICKED });
+    await screen.findByRole("header", { name: "Your plan" });
+    // Reset on another device after this phone read it.
+    held.health = null;
+    await press("Finish setup");
+    expect(await screen.findByText("Before you finish, answer the health question.")).toBeTruthy();
+    expect(screen.queryByRole("tab", { name: "Dashboard" })).toBeNull();
+    expect(finishes(saves)).toHaveLength(1);
+    expect(held.answers.onboardingCompleted).toBe(false);
+    await press("Go to Health");
+    expect(await screen.findByRole("header", { name: "Health" })).toBeTruthy();
+    expect(selected("No")).toBe(false);
+    expect(selected("Yes")).toBe(false);
+  });
+
+  it("with every answer and both ticks, Finish is stored, says so, and Start opens the tabs; the phone remembers it", async () => {
+    const { held, saves, store } = await openSetup(EVERYTHING, { front: true, health: ANSWERED_NO, ticks: BOTH_TICKED });
+    await screen.findByRole("header", { name: "Your plan" });
+    await press("Finish setup");
+    expect(await screen.findByRole("header", { name: "You’re all set" })).toBeTruthy();
+    expect(finishes(saves)).toEqual([{ availableEquipment: ["dumbbells"], onboardingCompleted: true }]);
+    expect(held.answers.onboardingCompleted).toBe(true);
+    expect(JSON.parse(store.value ?? "")).toMatchObject({ setupDone: true });
+    await press("Start");
+    expect(await screen.findByRole("tab", { name: "Dashboard" })).toBeTruthy();
+  });
+});
+
+describe("the plan screen", () => {
+  it("shows the week asked for and every answer, and Adjust goes to that answer and straight back", async () => {
+    await openSetup(EVERYTHING, { health: ANSWERED_NO, ticks: BOTH_TICKED });
+    await screen.findByRole("header", { name: "Your plan" });
+    expect(screen.getByText("3 workouts a week, 45 minutes each")).toBeTruthy();
+    expect(screen.getByText("Beginner · Home · Dumbbells")).toBeTruthy();
+    expect(screen.getByText("3 days a week · 45 minutes")).toBeTruthy();
+    await press("Adjust Your week");
+    expect(await screen.findByRole("header", { name: "Your week" })).toBeTruthy();
+    await press("Back to your plan");
+    expect(await screen.findByRole("header", { name: "Your plan" })).toBeTruthy();
+  });
+
+  it("Adjust to a new weight goal asks its target first", async () => {
+    await openSetup({ ...EVERYTHING, weightGoal: "maintain", targetWeightKg: null, pace: null }, { health: ANSWERED_NO, ticks: BOTH_TICKED });
+    await screen.findByRole("header", { name: "Your plan" });
+    await press("Adjust Your goal");
+    await screen.findByRole("header", { name: "Your goal" });
+    await press(/^Lose weight/);
+    await waitFor(() => {
+      expect(disabled("Continue")).toBe(false);
+    });
+    await press("Continue");
+    expect(await screen.findByRole("header", { name: "Your target" })).toBeTruthy();
+  });
+
+  it("in Safe mode it names no workouts and says why", async () => {
+    await openSetup(EVERYTHING, { health: { hasCondition: true, checkFirst: "not_yet" }, ticks: BOTH_TICKED });
+    await screen.findByRole("header", { name: "Your plan" });
+    expect(screen.queryByText("3 workouts a week, 45 minutes each")).toBeNull();
+    expect(screen.getByText(/^Safe mode: no workout or run plans/)).toBeTruthy();
+  });
+
+  it("for somebody who finished long ago it is their plan, with Done, never Finish again", async () => {
+    const { saves } = await openSetup({ ...EVERYTHING, onboardingCompleted: true }, { health: ANSWERED_NO, ticks: BOTH_TICKED });
+    await screen.findByRole("header", { name: "Your plan" });
+    expect(screen.queryByRole("button", { name: "Finish setup" })).toBeNull();
+    await press("Done");
+    await waitFor(() => {
+      expect(screen.queryByLabelText(/^Step \d+ of \d+$/)).toBeNull();
+    });
+    expect(finishes(saves)).toEqual([]);
+  });
+});
+
+describe("the place step", () => {
+  it("is asked only while an invitation is waiting (Not now on You’re invited), named for the place that sent it", async () => {
+    await openSetup(EVERYTHING, {
+      front: true,
+      health: ANSWERED_NO,
+      ticks: BOTH_TICKED,
+      invitations: [invitationFrom(LOTUS, "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e")],
+    });
+    await screen.findByRole("header", { name: "Your plan" });
+    expect(stepOf()).toBe("Step 11 of 11");
+    await press("Back");
+    expect(await screen.findByRole("header", { name: "Your yoga studio" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "View invitation from Lotus Yoga" })).toBeTruthy();
+    expect(disabled("Continue")).toBe(false);
+  });
+
+  it("two kinds of place are where you train", async () => {
+    await openSetup(EVERYTHING, {
+      front: true,
+      health: ANSWERED_NO,
+      ticks: BOTH_TICKED,
+      invitations: [invitationFrom(LOTUS, "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e"), invitationFrom(IRON, "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d")],
+    });
+    await screen.findByRole("header", { name: "Your plan" });
+    await press("Back");
+    expect(await screen.findByRole("header", { name: "Where you train" })).toBeTruthy();
+  });
+});
+
+describe("setup in front of the tabs", () => {
+  it("Sign out asks first, and Cancel keeps the person where they were", async () => {
+    const { store } = await openSetup({}, { front: true });
+    await screen.findByRole("header", { name: "Your goal" });
+    await press("Sign out");
+    expect(screen.getByText("Sign out?")).toBeTruthy();
+    await press("Cancel");
+    expect(screen.queryByText("Sign out?")).toBeNull();
+    expect(store.value).not.toBeNull();
+  });
+
+  it("a person who finished in the browser goes straight to the tabs, and the phone remembers it", async () => {
+    const { store } = await openSetup({ ...EVERYTHING, onboardingCompleted: true }, { front: true });
+    expect(await screen.findByRole("tab", { name: "Dashboard" })).toBeTruthy();
+    expect(JSON.parse(store.value ?? "")).toMatchObject({ setupDone: true });
   });
 });

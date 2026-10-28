@@ -2,11 +2,19 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import { Image, KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
+  SCREENS,
+  SCREEN_OF_MISSING,
+  cleanEquipment,
   defaultUnits,
   directionOf,
+  missingText,
+  myInvitationsResponseSchema,
+  openSetupAnswers,
+  orgWords,
   screenAnswered,
   targetShownValue,
   visibleScreens,
+  type MyInvitation,
   type SetupAnswers,
   type SetupScreenId,
   type Units,
@@ -17,6 +25,8 @@ import { Icon } from "../../look/Icon";
 import { pictures } from "../../look/pictures";
 import { fonts, Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
+import { invitationsPath } from "../Invitation";
+import { SignOutAsk } from "../SignOutAsk";
 import { PlanBar } from "./PlanPanel";
 import {
   AboutScreen,
@@ -25,6 +35,8 @@ import {
   FoodScreen,
   GoalScreen,
   HealthScreen,
+  PlaceScreen,
+  PlanScreen,
   TargetScreen,
   TrainingScreen,
   WeekScreen,
@@ -33,11 +45,12 @@ import {
 import { useHealthStep } from "./useHealthStep";
 import { LOAD_FAILED, useSetupAnswers } from "./useSetupAnswers";
 
-// Setup on the phone (ROADMAP Stage 5 items 14a and 14b): a page over the tabs, one screen at a time, the
-// browser's setup picture glowing behind it. Every answer is saved the moment it is given, and the
-// server's daily number sits on every screen from the moment it exists.
+// Setup on the phone (ROADMAP Stage 5 items 14a to 14c): one screen at a time, the browser's setup
+// picture glowing behind it. Every answer is saved the moment it is given, and the server's daily
+// number sits on every screen from the moment it exists. In front of the tabs until it is finished
+// ("front"), with Sign out its only way out; opened from Me or a goal after that ("over"), with close.
 
-const VIEWS: Partial<Record<SetupScreenId, (props: ScreenProps) => React.JSX.Element>> = {
+const VIEWS: Record<SetupScreenId, (props: ScreenProps) => React.JSX.Element> = {
   goal: GoalScreen,
   about: AboutScreen,
   target: TargetScreen,
@@ -47,6 +60,8 @@ const VIEWS: Partial<Record<SetupScreenId, (props: ScreenProps) => React.JSX.Ele
   equipment: EquipmentScreen,
   health: HealthScreen,
   food: FoodScreen,
+  gym: PlaceScreen,
+  plan: PlanScreen,
 };
 
 export const NAME_NEEDED = "Type the name we should call you.";
@@ -54,11 +69,30 @@ export const NAME_NEEDED = "Type the name we should call you.";
 /** The phone's own language tag, which says whether it weighs in pounds. */
 const phoneLanguage = (): string => Intl.DateTimeFormat().resolvedOptions().locale;
 
-/** `at`: the screen it opens on, where another page sends the person to one answer (31b: a goal's target). */
-export function Setup({ open, onClose, at = null }: { open: boolean; onClose: () => void; at?: SetupScreenId | null }) {
+/** The place step's heading, in the words of the places that invited the person: "Your yoga
+ *  studio", "Your trainer"; more than one kind is "Where you train". */
+export function placeTitle(invitations: readonly MyInvitation[]): string {
+  const kinds = new Set(invitations.map((one) => orgWords(one.gym.orgType).itToMembers));
+  const [only] = kinds;
+  return kinds.size === 1 && only !== undefined ? `Your ${only}` : "Where you train";
+}
+
+type Mode = "over" | "front";
+
+interface SetupProps {
+  open: boolean;
+  /** Close; in front of the tabs, the end of setup. */
+  onClose: () => void;
+  /** `at`: the screen it opens on, where another page sends the person to one answer (31b: a goal's target). */
+  at?: SetupScreenId | null;
+  mode?: Mode;
+}
+
+export function Setup({ open, onClose, at = null, mode = "over" }: SetupProps) {
   const insets = useSafeAreaInsets();
-  // Android's back leaves as the ✕ does: the name typed is saved first, and a blank one stays to be fixed.
-  const leave = useRef<() => void>(onClose);
+  // Android's back leaves as the ✕ does: the name typed is saved first, and a blank one stays to be
+  // fixed. In front of the tabs it goes back a step, and nowhere from the first.
+  const leave = useRef<() => void>(mode === "over" ? onClose : () => undefined);
   return (
     <Modal
       testID="setup"
@@ -72,10 +106,28 @@ export function Setup({ open, onClose, at = null }: { open: boolean; onClose: ()
     >
       <KeyboardAvoidingView accessibilityViewIsModal behavior="padding" style={[styles.page, { paddingTop: insets.top }]}>
         <Image source={pictures.setup} resizeMode="cover" accessible={false} style={styles.picture} />
-        {open ? <SetupBody onClose={onClose} leave={leave} bottom={insets.bottom} at={at} /> : null}
+        {open ? <SetupBody onClose={onClose} leave={leave} bottom={insets.bottom} at={at} mode={mode} /> : null}
       </KeyboardAvoidingView>
     </Modal>
   );
+}
+
+/** The invitations waiting when setup opened, read once: the place step is asked only for them. A
+ *  read that fails asks nothing, as the Gym tab lists them too. */
+function useWaiting(): MyInvitation[] | null {
+  const { session } = useSession();
+  const [waiting, setWaiting] = useState<MyInvitation[] | null>(null);
+  useEffect(() => {
+    const run = { live: true };
+    void (async () => {
+      const answer = await session.signedIn({ method: "GET", path: invitationsPath }, myInvitationsResponseSchema);
+      if (run.live) setWaiting(answer.kind === "ok" ? answer.data.invitations.filter((one) => one.state === "pending") : []);
+    })();
+    return () => {
+      run.live = false;
+    };
+  }, [session]);
+  return waiting;
 }
 
 function SetupBody({
@@ -83,11 +135,13 @@ function SetupBody({
   leave,
   bottom,
   at,
+  mode,
 }: {
   onClose: () => void;
   leave: RefObject<() => void>;
   bottom: number;
   at: SetupScreenId | null;
+  mode: Mode;
 }) {
   const { session } = useSession();
   const ob = useSetupAnswers({
@@ -96,28 +150,48 @@ function SetupBody({
     },
   });
   const health = useHealthStep();
+  const waiting = useWaiting();
   const [picked, setPicked] = useState<SetupScreenId | null>(at);
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
   const [units, setUnits] = useState<Units>(() => defaultUnits(phoneLanguage()));
   const [busy, setBusy] = useState(false);
+  /** On a screen opened by the plan's Adjust: its Continue goes to the first answer still open, or back to the plan. */
+  const [adjusting, setAdjusting] = useState(false);
+  /** The questions a refused finish named, until the person moves. */
+  const [refused, setRefused] = useState<string[] | null>(null);
+  const [finished, setFinished] = useState(false);
+  const [askingOut, setAskingOut] = useState(false);
 
   // Screen 8's answer comes from its own route, laid beside the rest as the browser does.
   const answers: SetupAnswers = { ...ob.answers, health: health.screening };
-  const screens = visibleScreens(answers).filter((s) => VIEWS[s.id] !== undefined);
+  const screens = visibleScreens(answers).filter((s) => s.id !== "gym" || (waiting ?? []).length > 0);
   /** The health screen is done with its answer saved, no Yes left waiting for "Check first", and its note ticked. */
   const done = (id: SetupScreenId, a: SetupAnswers, ticked: boolean = health.ticked): boolean =>
     screenAnswered(id, a) && (id !== "health" || (ticked && !health.pendingYes));
+  /** The first screen still open in `from`, or the plan when none is. */
+  const openIn = (from: SetupAnswers, ticked: boolean): SetupScreenId =>
+    screens.find((s) => s.id !== "plan" && !done(s.id, from, ticked))?.id ?? "plan";
   /** Where the person lands, from the answers and the tick as they stood on opening: a tick never moves them on. */
-  const firstOpen = () => {
-    const from: SetupAnswers = ob.first === null ? answers : { ...ob.first, health: health.first };
-    return screens.find((s) => !done(s.id, from, health.firstTicked === true))?.id ?? "goal";
-  };
+  const firstOpen = () => openIn(ob.first === null ? answers : { ...ob.first, health: health.first }, health.firstTicked === true);
   const current = picked ?? (ob.first === null ? "goal" : firstOpen());
   const index = Math.max(0, screens.findIndex((s) => s.id === current));
   const screen = screens[index];
-  const isLast = index === screens.length - 1;
   const direction = directionOf(answers.weightGoal);
+  const isPlan = screen?.id === "plan";
+  const nextId = adjusting ? openIn(answers, health.ticked) : (screens[index + 1]?.id ?? "plan");
+  const setupDone = ob.answers.onboardingCompleted === true;
+
+  const goTo = (id: SetupScreenId) => {
+    setPicked(id);
+    setRefused(null);
+    // Arriving back on the plan, by any way, ends an adjustment.
+    if (id === "plan") setAdjusting(false);
+  };
+  const adjust = (id: SetupScreenId) => {
+    goTo(id);
+    setAdjusting(true);
+  };
 
   /** The name box saves when the person leaves it. A name is never blank. */
   const commitName = (): boolean => {
@@ -153,16 +227,98 @@ function SetupBody({
   const close = () => {
     if (commitName()) onClose();
   };
-  useEffect(() => {
-    leave.current = close;
-  });
   const back = index > 0 ? screens[index - 1] : undefined;
+  useEffect(() => {
+    leave.current =
+      mode === "over"
+        ? close
+        : () => {
+            if (back !== undefined && !busy) goTo(back.id);
+          };
+  });
+
+  /** Somebody who finished on another phone or in the browser is not asked again. */
+  const finishedElsewhere = mode === "front" && ob.first?.onboardingCompleted === true;
+  useEffect(() => {
+    if (!finishedElsewhere) return;
+    void (async () => {
+      await session.keepSetupDone(true);
+      onClose();
+    })();
+  }, [finishedElsewhere, onClose, session]);
+
+  // What still stands between the person and Finish, in the server's words: what the plan lacks,
+  // the answers only setup asks, and the health note's tick, each with the way to its screen.
+  const open = openSetupAnswers(refused ?? (ob.plan === null ? ob.missing : []), answers);
+  const toAnswer = [
+    ...new Set<SetupScreenId>([
+      ...open.map((k) => SCREEN_OF_MISSING[k]).filter((id): id is SetupScreenId => id !== undefined),
+      ...(health.ticked ? [] : ["health" as const]),
+    ]),
+  ];
+  const canFinish = open.length === 0 && health.ticked && health.planTicked && !health.pendingYes && !health.saving && !busy;
+
+  const finish = async () => {
+    if (!commitName()) return;
+    setBusy(true);
+    const result = await ob.finish({ availableEquipment: cleanEquipment(answers.availableEquipment) });
+    if (result.ok) await session.keepSetupDone(true);
+    setBusy(false);
+    if (result.ok) {
+      setFinished(true);
+      return;
+    }
+    if (result.missing !== null) {
+      setRefused(result.missing);
+      // The server holds no health answer, whatever this screen believed (a reset elsewhere).
+      if (result.missing.includes("health")) health.forget();
+    }
+  };
+
+  const right =
+    mode === "over"
+      ? { onClose: close }
+      : {
+          onSignOut: () => {
+            setAskingOut(true);
+          },
+        };
+  const signOutAsk = (
+    <SignOutAsk
+      open={askingOut}
+      onClose={() => {
+        setAskingOut(false);
+      }}
+    />
+  );
+
+  if (finished) {
+    return (
+      <View style={[styles.middle, { paddingBottom: bottom + 24 }]}>
+        <View style={styles.doneMark}>
+          <Icon name="check" size={30} colour="onOrange" />
+        </View>
+        <Txt kind="h1" style={styles.centre}>
+          You’re all set
+        </Txt>
+        <Button label="Start" style={styles.self} onPress={onClose} />
+      </View>
+    );
+  }
 
   const failed = ob.status === "failed" || health.status === "failed";
-  if (screen === undefined || ob.status !== "ready" || ob.first === null || health.status !== "ready") {
+  if (
+    screen === undefined ||
+    ob.status !== "ready" ||
+    ob.first === null ||
+    health.status !== "ready" ||
+    waiting === null ||
+    finishedElsewhere
+  ) {
     return (
       <>
-        <Bar onClose={close} />
+        <Bar {...right} />
+        {signOutAsk}
         <View style={styles.middle}>
           {failed ? (
             <>
@@ -185,64 +341,110 @@ function SetupBody({
 
   const View_ = VIEWS[screen.id];
   const answered = done(screen.id, answers);
+  const title = screen.id === "gym" ? placeTitle(waiting) : screen.title;
 
   return (
     <>
       <Bar
-        onClose={close}
+        {...right}
         onBack={
           back === undefined || busy
             ? undefined
             : () => {
-                setPicked(back.id);
+                goTo(back.id);
               }
         }
         step={index}
         steps={screens.length}
       />
+      {signOutAsk}
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.body}>
-        <Txt kind="h1">{screen.title}</Txt>
+        <Txt kind="h1">{title}</Txt>
         <PlanBar plan={ob.plan} direction={direction} units={units} targetShown={targetShownValue(direction, answers, units)} />
-        {View_ === undefined ? null : (
-          <View_
-            answers={answers}
-            save={ob.save}
-            units={units}
-            setUnits={setUnits}
-            name={name}
-            direction={direction}
-            plan={ob.plan}
-            health={health}
-            healthSaved={() => {
-              ob.save({});
+        <View_
+          answers={answers}
+          save={ob.save}
+          units={units}
+          setUnits={setUnits}
+          name={name}
+          direction={direction}
+          plan={ob.plan}
+          health={health}
+          healthSaved={() => {
+            // A refusal that named this question has just been answered.
+            setRefused((named) => (named === null ? null : named.filter((k) => k !== "health")));
+            ob.save({});
+          }}
+          invitations={waiting}
+          adjust={adjust}
+          busy={busy || health.saving}
+        />
+        {isPlan && !setupDone && toAnswer.length > 0 ? (
+          <View accessibilityRole="summary" style={styles.open}>
+            {open.length > 0 ? <Txt style={styles.openWords}>Before you finish, answer {missingText(open)}.</Txt> : null}
+            {health.ticked ? null : <Txt style={styles.openWords}>Read the note on the Health screen and tick it.</Txt>}
+            {toAnswer.map((id) => (
+              <Button
+                key={id}
+                label={`Go to ${SCREENS.find((s) => s.id === id)?.title ?? id}`}
+                kind="soft"
+                small
+                disabled={busy}
+                onPress={() => {
+                  adjust(id);
+                }}
+              />
+            ))}
+          </View>
+        ) : null}
+      </ScrollView>
+      <View style={[styles.foot, { paddingBottom: bottom + 12 }]}>
+        {/* Said here, under the button, so it is seen on whichever screen the person is on. */}
+        {ob.problem === null ? null : <Txt style={styles.problem}>{ob.problem}</Txt>}
+        {health.problem === null ? null : <Txt style={styles.problem}>{health.problem}</Txt>}
+        {isPlan && !setupDone ? (
+          <Button
+            label="Finish setup"
+            kind={canFinish ? "main" : "plain"}
+            style={styles.next}
+            disabled={!canFinish}
+            busy={busy}
+            onPress={() => void finish()}
+          />
+        ) : (
+          <Button
+            label={isPlan ? "Done" : adjusting && nextId === "plan" ? "Back to your plan" : "Continue"}
+            kind={answered ? "main" : "plain"}
+            style={styles.next}
+            disabled={!answered || health.saving}
+            busy={busy}
+            onPress={() => {
+              void goOn(() => {
+                if (isPlan) close();
+                else goTo(nextId);
+              });
             }}
           />
         )}
-      </ScrollView>
-      <View style={[styles.foot, { paddingBottom: bottom + 12 }]}>
-        {/* Said here, under Continue, so it is seen on whichever screen the person is on. */}
-        {ob.problem === null ? null : <Txt style={styles.problem}>{ob.problem}</Txt>}
-        {health.problem === null ? null : <Txt style={styles.problem}>{health.problem}</Txt>}
-        <Button
-          label={isLast ? "Done" : "Continue"}
-          kind={answered ? "main" : "plain"}
-          style={styles.next}
-          disabled={!answered || health.saving}
-          busy={busy}
-          onPress={() => {
-            void goOn(() => {
-              if (isLast) onClose();
-              else setPicked(screens[index + 1]?.id ?? screen.id);
-            });
-          }}
-        />
       </View>
     </>
   );
 }
 
-/** Back on the left, a thin bar of the steps, and close on the right. */
-function Bar({ onClose, onBack, step, steps }: { onClose: () => void; onBack?: (() => void) | undefined; step?: number; steps?: number }) {
+/** Back on the left, a thin bar of the steps, and close on the right; in front of the tabs, Sign out there. */
+function Bar({
+  onClose,
+  onSignOut,
+  onBack,
+  step,
+  steps,
+}: {
+  onClose?: () => void;
+  onSignOut?: () => void;
+  onBack?: (() => void) | undefined;
+  step?: number;
+  steps?: number;
+}) {
   return (
     <View style={styles.bar}>
       {onBack === undefined ? (
@@ -261,9 +463,13 @@ function Bar({ onClose, onBack, step, steps }: { onClose: () => void; onBack?: (
           ))}
         </View>
       )}
-      <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} style={styles.round}>
-        <Icon name="x" size={20} />
-      </Pressable>
+      {onSignOut === undefined ? (
+        <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} style={styles.round}>
+          <Icon name="x" size={20} />
+        </Pressable>
+      ) : (
+        <Button label="Sign out" kind="quiet" small onPress={onSignOut} />
+      )}
     </View>
   );
 }
@@ -277,10 +483,21 @@ const styles = StyleSheet.create({
   stepBar: { flex: 1, height: 4, borderRadius: 2, backgroundColor: colours.track },
   stepDone: { backgroundColor: colours.orange, experimental_backgroundImage: orangeGradient },
   body: { paddingHorizontal: sizes.edge, paddingTop: 10, paddingBottom: 28, gap: 18 },
-  middle: { flex: 1, alignItems: "center", justifyContent: "center", gap: 14, padding: sizes.edge },
+  middle: { flex: 1, alignItems: "center", justifyContent: "center", gap: 18, padding: sizes.edge },
   centre: { textAlign: "center" },
-  self: { alignSelf: "center" },
+  self: { alignSelf: "center", minWidth: 150 },
   problem: { fontFamily: fonts.medium, fontSize: 13, lineHeight: 18, color: colours.badText, textAlign: "center" },
   foot: { gap: 8, paddingTop: 10, paddingHorizontal: sizes.edge, alignItems: "flex-end" },
   next: { minWidth: 150, alignSelf: "flex-end" },
+  open: { gap: 10, padding: 16, borderRadius: 18, borderWidth: 1, borderColor: colours.line, backgroundColor: colours.box },
+  openWords: { fontFamily: fonts.medium, fontSize: 14, lineHeight: 20, color: colours.text },
+  doneMark: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colours.orange,
+    experimental_backgroundImage: orangeGradient,
+  },
 });
