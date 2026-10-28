@@ -256,7 +256,10 @@ function SetupBody({
       ...(health.ticked ? [] : ["health" as const]),
     ]),
   ];
-  const canFinish = open.length === 0 && health.ticked && health.planTicked && !health.pendingYes && !health.saving && !busy;
+  // Every screen answered, as the browser asks: the server's own check does not ask for the level,
+  // the places or the equipment.
+  const allAnswered = screens.every((s) => s.id === "plan" || done(s.id, answers));
+  const canFinish = allAnswered && open.length === 0 && health.ticked && health.planTicked && !health.pendingYes && !health.saving && !busy;
 
   const finish = async () => {
     if (!commitName()) return;

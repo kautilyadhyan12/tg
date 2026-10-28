@@ -1,9 +1,13 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { AppState } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { CHECK_FIRST_PICK, CURRENT_DISCLAIMER_VERSION, DISCLAIMER_WORDINGS, deriveHealthFlags, missingPlanInputSchema, type OnboardingAnswers } from "@app/shared";
 import { App } from "../../src/App";
+import { SessionProvider, useSession } from "../../src/session/SessionProvider";
+import { Setup } from "../../src/screens/setup/Setup";
 import { ANSWER_FAILED, NOTE_VERSION, PLAN_NOTE_VERSION, TICK_FAILED } from "../../src/screens/setup/useHealthStep";
 import { LOAD_FAILED, SAVE_FAILED } from "../../src/screens/setup/useSetupAnswers";
-import { RAVI, fakeServer, kept, memoryStore, profile, refusal, tokens, type Reply } from "../kit";
+import { RAVI, fakeServer, kept, lost, memoryStore, profile, refusal, tokens, type Reply } from "../kit";
 
 const extra = { copyName: "Feature 1", apiUrl: "http://localhost:3000" };
 const NOTE_VERSION_SIGN_UP = CURRENT_DISCLAIMER_VERSION.sign_up;
@@ -844,5 +848,103 @@ describe("setup in front of the tabs", () => {
     const { store } = await openSetup({ ...EVERYTHING, onboardingCompleted: true }, { front: true });
     expect(await screen.findByRole("tab", { name: "Dashboard" })).toBeTruthy();
     expect(JSON.parse(store.value ?? "")).toMatchObject({ setupDone: true });
+  });
+});
+
+describe("round one's gaps", () => {
+  it("the health note not ticked holds Finish on the plan, says so, and opens Health", async () => {
+    // No screen leads here with the note unticked; opened on the plan, as a goal opens setup on one answer.
+    function OnceSignedIn() {
+      const { state } = useSession();
+      return state.kind === "in" ? <Setup open at="plan" onClose={() => undefined} /> : null;
+    }
+    const server = fakeServer({
+      "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }),
+      [SETUP]: () => ({ status: 200, body: { answers: { ...EMPTY, ...EVERYTHING }, plan: PLAN, missing: [] } }),
+      [HEALTH]: () => ({ status: 200, body: { healthScreening: screeningOf(ANSWERED_NO) } }),
+      [CONSENTS]: () => ({ status: 200, body: { consents: [consentRow("plan_screen", PLAN_NOTE_VERSION)], total: 1 } }),
+    });
+    await render(
+      <SafeAreaProvider>
+        <SessionProvider server={{ apiUrl: extra.apiUrl, ask: server.ask }} store={memoryStore(kept(1))} wait={noWait}>
+          <OnceSignedIn />
+        </SessionProvider>
+      </SafeAreaProvider>,
+    );
+    expect(await screen.findByText("Read the note on the Health screen and tick it.")).toBeTruthy();
+    expect(disabled("Finish setup")).toBe(true);
+    await press("Finish setup");
+    expect(server.asked.filter((one) => one.path === SETUP && one.body !== undefined)).toEqual([]);
+    await press("Go to Health");
+    expect(await screen.findByRole("header", { name: "Health" })).toBeTruthy();
+  });
+
+  it("in front of the tabs, Android's back on the first screen leaves nobody on the tabs", async () => {
+    await openSetup({}, { front: true });
+    await screen.findByRole("header", { name: "Your goal" });
+    await fireEvent(screen.getByTestId("setup"), "requestClose");
+    expect(screen.getByRole("header", { name: "Your goal" })).toBeTruthy();
+    expect(screen.queryByRole("tab", { name: "Dashboard" })).toBeNull();
+  });
+});
+
+describe("the setup gate's answers", () => {
+  /** The app opened for a person not known to be set up, the profile route as each test says; the
+   *  app's coming back to the front is called by hand. */
+  async function openGate(profileRoute: () => Reply | Promise<Reply>) {
+    const listeners: ((state: string) => void)[] = [];
+    jest.spyOn(AppState, "addEventListener").mockImplementation((_type, handler) => {
+      listeners.push(handler as (state: string) => void);
+      return { remove: () => undefined };
+    });
+    const route = { now: profileRoute };
+    const server = fakeServer({
+      "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }),
+      "/v1/users/me": () => route.now(),
+      [SETUP]: () => ({ status: 200, body: { answers: EMPTY, plan: null, missing: missingOf(EMPTY) } }),
+    });
+    const store = memoryStore(kept(1, RAVI, NOTE_VERSION_SIGN_UP, false));
+    await render(<App extra={extra} ask={server.ask} store={store} wait={noWait} />);
+    return {
+      route,
+      store,
+      front: async () => {
+        await act(async () => {
+          for (const one of listeners) one("active");
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        });
+      },
+    };
+  }
+  const notSetUp = () => ({ status: 200, body: profile(true, RAVI, false) });
+  const setUp = () => ({ status: 200, body: profile(true, RAVI, true) });
+
+  it("with no answer the tabs open, and coming back to the front with 'not finished' puts setup in front", async () => {
+    const gate = await openGate(lost);
+    expect(await screen.findByRole("tab", { name: "Dashboard" })).toBeTruthy();
+    gate.route.now = notSetUp;
+    await gate.front();
+    expect(await screen.findByRole("header", { name: "Your goal" })).toBeTruthy();
+  });
+
+  it("finished in the browser while setup is open: coming back to the front lets them through, and the phone keeps it", async () => {
+    const gate = await openGate(notSetUp);
+    expect(await screen.findByRole("header", { name: "Your goal" })).toBeTruthy();
+    gate.route.now = setUp;
+    await gate.front();
+    expect(await screen.findByRole("tab", { name: "Dashboard" })).toBeTruthy();
+    expect(JSON.parse(gate.store.value ?? "")).toMatchObject({ setupDone: true });
+  });
+
+  it("a person the phone knows is set up is not asked again", async () => {
+    // The profile says not set up; asked, the gate would put setup in front.
+    const server = fakeServer({
+      "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }),
+      "/v1/users/me": notSetUp,
+    });
+    await render(<App extra={extra} ask={server.ask} store={memoryStore(kept(1))} wait={noWait} />);
+    expect(await screen.findByRole("tab", { name: "Dashboard" })).toBeTruthy();
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+    expect(screen.queryByRole("header", { name: "Your goal" })).toBeNull();
   });
 });

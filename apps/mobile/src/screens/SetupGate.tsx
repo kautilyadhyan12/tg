@@ -9,9 +9,11 @@ import { Setup } from "./setup/Setup";
 // Setup in front of the tabs until it is finished (ROADMAP Stage 5 item 14c; the browser's own rule):
 // after "Before you start" and any invitation, a person who has not finished setup meets it, with
 // Sign out its only way out. A finish the server confirmed is kept with the sign-in, and the
-// server is not asked again. Until then it is asked on every opening; with no internet the tabs
-// open, as the other gates do, and it is asked again each time the app comes back to the front: a
-// person it says has not finished meets setup then.
+// server is not asked again. Until then it is asked on every opening; with no internet, or no
+// answer in a few seconds, the tabs open, as the other gates do, and it is asked again each time
+// the app comes back to the front. Unlike the invitations, an answer that says "not finished"
+// puts setup in front of tabs already open, a late first answer as well: nobody uses the app
+// without setup. An answer that says "finished" (in the browser, say) lets them through.
 
 type Phase = "checking" | "setup" | "through";
 
@@ -35,8 +37,7 @@ export function SetupGate({ children }: { children: ReactNode }) {
       }
       const done = answer.data.user.onboardingCompleted;
       await session.keepSetupDone(done);
-      // Setup already open finishes by its own Finish, never by a late answer.
-      if (live()) setPhase((now) => (now === "setup" ? now : done ? "through" : "setup"));
+      if (live()) setPhase(done ? "through" : "setup");
     };
     const shown = setTimeout(() => {
       if (run.live) setPhase((now) => (now === "checking" ? "through" : now));
