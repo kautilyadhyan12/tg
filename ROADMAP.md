@@ -546,7 +546,10 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 14a. [x] **The first seven questions** — merged 2026-10-27 (PR #373).
     - 14b. [x] **The health question, Safe mode and its tap, and Food** — merged 2026-10-28 (PR #375).
     - 14c. [x] **Your plan and Finish, and the place that invited you; setup in front of the tabs** — merged 2026-10-28 (PR #377).
-15. [ ] **The pass** (spec Part 3 §12.2) and the days you came; later, a pass the phone can make with no signal.
+15. **The pass** (spec Part 3 §12.2) and the days you came (split 2026-10-28 in three: the pass first).
+    - 15a. [x] **Show my pass** — merged 2026-10-28 (PR #378).
+    - 15b. [ ] **Days you came**: the month of visits under each place, a day's times behind a tap.
+    - 15c. [ ] **A pass with no signal**: one the phone can make offline, which the desk still takes once.
 16. [ ] **Classes and booking with the waitlist, and personal training**; then My membership and receipts, once Stage 2's 18g and 18j are merged (18c, Pay {gym}, was dropped 2026-10-15), in sections: **Membership** (what they hold, when it renews, each payment with its receipt), **Purchases** (what they bought at the desk, each with its receipt), a refund under its payment (Kd, `rulings/2026-10-15-18m.md`); no receipt by email.
 17. [ ] **The gym's page**: Updates (post, photos, react, report, block), Events, Leaderboard, Challenges, a person's profile (spec Part 3 §15).
 18. [ ] **Inbox, Contact the gym, and phone notifications** (spec Part 3 §16.1; Part 6 §6): the class reminder, a place is free, a message. Needs Kd's Firebase project.

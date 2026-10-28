@@ -3,6 +3,9 @@
 // A screen names these; it never writes a colour of its own.
 export const colours = {
   page: "#0A0908",
+  /** The pass's code: black on white whatever the look, as a scanner reads it. */
+  passLight: "#FFFFFF",
+  passDark: "#000000",
   box: "#121110",
   raised: "#1A1815",
   tabBar: "#0D0C0B",
