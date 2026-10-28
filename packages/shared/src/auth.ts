@@ -3,6 +3,7 @@
 // password 8–128, one-time tokens ≤128 (authController.js:107,193,234,238).
 // All request bodies are .strict() so unknown keys are rejected (Part IV #5).
 import { z } from "zod";
+import { checkinPhoneDayKeySchema } from "./checkinPhoneKey.js";
 import { ROBOT_CHECK_TOKEN_MAX_CHARS } from "./robotCheck.js";
 
 /** citext in the DB handles case; trim + lowercase here so rate-limit
@@ -190,6 +191,10 @@ export const phoneKeptSessionSchema = z.object({
   signUpNote: z.string().regex(/^v\d{1,4}$/).optional(),
   /** The server has said this person finished setup, so the tabs open with no internet. */
   setupDone: z.boolean().optional(),
+  /** This sign-in's keys for passes with no signal, today's and tomorrow's (`checkinPhoneKeyResponseSchema`). */
+  passKeys: z.array(checkinPhoneDayKeySchema).max(2).optional(),
+  /** The last places the server answered held at least one the person belongs to. */
+  belongs: z.boolean().optional(),
 });
 export type PhoneKeptSession = z.infer<typeof phoneKeptSessionSchema>;
 

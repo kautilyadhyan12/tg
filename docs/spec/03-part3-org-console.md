@@ -2374,13 +2374,17 @@ off (12.7). Door machines and the gym's other software stay after launch (RULING
 the app draws as a QR: gym, person and a 30-second window, signed with a server secret
 (HMAC-SHA256), about 60 characters so a cheap scanner reads it off a phone. The app
 asks again every 30 seconds while the pass is on screen. The scan accepts the current
-window and the one before it (clocks, slow hands) and each pass ONCE (a Redis key that
-lives as long as the window), so a screenshot or a second phone showing the same pass
+window and the one before it (clocks, slow hands) and each pass ONCE (a Redis key), so a screenshot or a second phone showing the same pass
 gets "Show a fresh pass". A pass is used up by a visit and by nothing else: read at a
 desk where its person is not a member, or when the visit could not be saved, it still
-works (the two extra passes, 2026-10-03). 10 passes a minute a person. The phone needs
-the internet to show a pass; a pass the phone can make offline is the phone app's later
-work. The pass is drawn as wide as the phone allows, with a quarter of the code spare
+works (the two extra passes, 2026-10-03). 10 passes a minute a person. **With no signal
+the phone makes the pass itself** (Stage 5 item 15c, 2026-10-28): the same layout with the
+window's top bit set, signed with a key the server derives from its pass secret, the person,
+the phone's sign-in and the UTC day, and never stores; the phone is given today's and
+tomorrow's, so a pass made ahead lasts until tomorrow ends at most. The desk takes it only
+while that sign-in is live, in the window before its own, its own and the next, sharing its
+window's one use with the server's pass; one read a window early takes the desk's window too,
+so a person has two windows open at most. The used-pass key lives 120 seconds. The pass is drawn as wide as the phone allows, with a quarter of the code spare
 (error correction Q, the same 33 cells), so a patch of glare does not stop it reading,
 and the phone's screen is kept awake while it is open (ROADMAP 16f).
 

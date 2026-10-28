@@ -26,6 +26,7 @@ import {
   checkinDevicesResponseSchema,
   checkinLogResponseSchema,
   checkinPassResponseSchema,
+  checkinPhoneKeyResponseSchema,
   checkinPeopleResponseSchema,
   checkinRulesPreviewResponseSchema,
   checkinRulesResponseSchema,
@@ -45,6 +46,7 @@ import {
   type CheckinLogResponse,
   type CheckinNotice,
   type CheckinPassResponse,
+  type CheckinPhoneKeyResponse,
   type CheckinPeopleResponse,
   type CheckinPersonFound,
   type CheckinPick,
@@ -72,7 +74,7 @@ import { heldOnListOf, heldWithOwedOf } from "../memberships/onList.js";
 import { deskSignaturesOf, signaturesOf, waiverInUse } from "../waiver/repo.js";
 import { signedRecords } from "../waiver/signed.js";
 import { markCameAtCheckin, unmarkAfterVisitRemoved } from "../classes/attendance.js";
-import { looksLikePass, makePass, passWindow, readPass, windowEndsAt } from "./pass.js";
+import { looksLikePass, makePass, passDay, passWindow, phoneMadeBy, phonePassKey, readPass, windowEndsAt } from "./pass.js";
 import * as repo from "./repo.js";
 import { decideScan, type ScanPerson, type ScanRead } from "./scanRule.js";
 
@@ -88,8 +90,9 @@ export interface CheckinDeps {
 
 type Limit = () => Promise<boolean>;
 
-/** A pass is spent for a little longer than it can be read (its window and the next). */
-const USED_PASS_TTL_S = 90;
+/** A pass is spent for longer than it can be read: a phone's is read for 90 seconds at most
+ *  (the window before its own, its own and the next). */
+const USED_PASS_TTL_S = 120;
 export const DEVICE_SCANS_PER_MINUTE = 120;
 
 const sha256 = (value: string): string => createHash("sha256").update(value).digest("hex");
@@ -143,6 +146,26 @@ export async function getPass(deps: CheckinDeps, limit: Limit, userId: string): 
   return checkinPassResponseSchema.parse({
     pass: makePass(deps.passKey, userId, window),
     refreshAt: windowEndsAt(window).toISOString(),
+  });
+}
+
+/** The phone's own keys for passes with no signal, today's and tomorrow's (UTC): only for a
+ *  phone's sign-in that is live, never a browser's, so a browser cannot make passes that outlive
+ *  it. */
+export async function getPhonePassKey(
+  deps: CheckinDeps,
+  limit: Limit,
+  user: { id: string; familyId: string | null },
+): Promise<CheckinPhoneKeyResponse | null> {
+  if (!(await limit())) return null;
+  if (deps.passKey === null) throw new OrgsError(503, "passes_off", CHECKIN_WORDS.passes_off);
+  const live = await repo.livePhoneSignIns(deps.sql, user.id, deps.now());
+  if (user.familyId === null || !live.includes(user.familyId)) throw new OrgsError(403, "phone_only", CHECKIN_WORDS.phone_only);
+  const passKey = deps.passKey;
+  const familyId = user.familyId;
+  const today = passDay(passWindow(deps.now()));
+  return checkinPhoneKeyResponseSchema.parse({
+    keys: [today, today + 1].map((day) => ({ day, key: phonePassKey(passKey, user.id, familyId, day).toString("base64url") })),
   });
 }
 
@@ -581,21 +604,30 @@ async function waiverSignaturesOf(
 }
 
 /** What a read pass is, taking its one use if it is fresh; `spent` is where that use is
- *  kept, so it can be given back. */
-async function readThePass(deps: CheckinDeps, code: string): Promise<{ read: ScanRead; userId: string | null; spent: string | null }> {
+ *  kept, so it can be given back. A phone's pass read a window early takes the desk's window
+ *  too, so one person has two windows open at once at most, as with the server's pass. */
+async function readThePass(deps: CheckinDeps, code: string): Promise<{ read: ScanRead; userId: string | null; spent: string[] }> {
   if (deps.passKey === null) throw new OrgsError(503, "passes_off", CHECKIN_WORDS.passes_off);
-  const pass = readPass(deps.passKey, code, passWindow(deps.now()));
-  if (pass.kind !== "fresh") return { read: { kind: "pass", pass: pass.kind }, userId: null, spent: null };
-  const spent = `checkin:pass_used:${pass.userId}:${String(pass.window)}`;
-  const uses = await deps.redis.incrWithTtl(spent, USED_PASS_TTL_S);
-  // Without Redis a pass could be shown twice, so it is refused; key tags still work.
-  if (uses === null) throw new OrgsError(503, "checkin_unavailable", CHECKIN_WORDS.checkin_unavailable);
-  if (uses > 1) {
-    // This read's own count goes back, so a first read that is given back leaves none.
-    await deps.redis.decrIfPositive(spent);
-    return { read: { kind: "pass", pass: "used" }, userId: null, spent: null };
+  const phoneUser = phoneMadeBy(code);
+  const phoneSignIns = phoneUser === null ? [] : await repo.livePhoneSignIns(deps.sql, phoneUser, deps.now());
+  const nowWindow = passWindow(deps.now());
+  const pass = readPass(deps.passKey, code, nowWindow, phoneSignIns);
+  if (pass.kind !== "fresh") return { read: { kind: "pass", pass: pass.kind }, userId: null, spent: [] };
+  const windows = pass.window > nowWindow ? [pass.window, nowWindow] : [pass.window];
+  const taken: string[] = [];
+  for (const window of windows) {
+    const spent = `checkin:pass_used:${pass.userId}:${String(window)}`;
+    const uses = await deps.redis.incrWithTtl(spent, USED_PASS_TTL_S);
+    if (uses !== null) taken.push(spent);
+    if (uses === null || uses > 1) {
+      // This read's own counts go back, so a first read that is given back leaves none.
+      for (const each of taken) await deps.redis.decrIfPositive(each);
+      // Without Redis a pass could be shown twice, so it is refused; key tags still work.
+      if (uses === null) throw new OrgsError(503, "checkin_unavailable", CHECKIN_WORDS.checkin_unavailable);
+      return { read: { kind: "pass", pass: "used" }, userId: null, spent: [] };
+    }
   }
-  return { read: { kind: "pass", pass: "fresh" }, userId: pass.userId, spent };
+  return { read: { kind: "pass", pass: "fresh" }, userId: pass.userId, spent: taken };
 }
 
 export async function scan(deps: CheckinDeps, device: repo.DeskDevice, code: string): Promise<CheckinScanResponse> {
@@ -603,7 +635,7 @@ export async function scan(deps: CheckinDeps, device: repo.DeskDevice, code: str
   let read: ScanRead;
   let named: Named | null = null;
   let name: () => Promise<Named | null> = () => Promise.resolve(null);
-  let spent: string | null = null;
+  let spent: string[] = [];
   let visit: Visit;
   try {
     if (looksLikePass(code)) {
@@ -630,12 +662,12 @@ export async function scan(deps: CheckinDeps, device: repo.DeskDevice, code: str
     await repo.touchDevice(deps.sql, gymId, device.deviceId);
     visit = await writeVisit(deps, gymId, read, named, name, { deviceId: device.deviceId, markedBy: null }, device);
   } catch (err) {
-    if (spent !== null) await deps.redis.decrIfPositive(spent);
+    for (const each of spent) await deps.redis.decrIfPositive(each);
     throw err;
   }
   // A pass is used up by a visit and by nothing else: shown at a desk where its person is
   // not a member, it still works at their own.
-  if (spent !== null && visit.result !== "checked_in" && visit.result !== "already") await deps.redis.decrIfPositive(spent);
+  if (visit.result !== "checked_in" && visit.result !== "already") for (const each of spent) await deps.redis.decrIfPositive(each);
 
   const gymName = device.gymName;
   if (visit.result === "fresh_pass_needed" || visit.result === "not_a_member" || visit.result === "see_staff") {
