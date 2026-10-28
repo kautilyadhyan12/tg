@@ -12,6 +12,7 @@ import { RAVI, fakeServer, kept, lost, memoryStore, profile, refusal, tokens, ty
 const extra = { copyName: "Feature 1", apiUrl: "http://localhost:3000" };
 const NOTE_VERSION_SIGN_UP = CURRENT_DISCLAIMER_VERSION.sign_up;
 const noWait = () => Promise.resolve();
+const noGoogle = () => Promise.resolve({ kind: "failed" as const });
 /** The distance between two ticks of a scale. */
 const TICK = 12;
 
@@ -866,7 +867,7 @@ describe("round one's gaps", () => {
     });
     await render(
       <SafeAreaProvider>
-        <SessionProvider server={{ apiUrl: extra.apiUrl, ask: server.ask }} store={memoryStore(kept(1))} wait={noWait}>
+        <SessionProvider server={{ apiUrl: extra.apiUrl, ask: server.ask }} store={memoryStore(kept(1))} google={noGoogle} wait={noWait}>
           <OnceSignedIn />
         </SessionProvider>
       </SafeAreaProvider>,
