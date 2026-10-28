@@ -1,0 +1,2821 @@
+{
+ "about": "Kd's eight plates, 2026-10-28 (ROADMAP 33a-ii): GPT-6 Luna's reply to each photo at high detail; for each food, the table food the words found on the loaded USDA table and our list that day (null where none did), the close foods the match check is put against, and Luna's own answer to that check (the close food it named, or null for none), from one real check a plate.",
+ "plates": [
+  {
+   "photo": "download-1",
+   "reply": {
+    "meal_name": "Open-faced toast and coffee",
+    "items": [
+     [
+      "bread toast",
+      "toast",
+      2,
+      150,
+      400,
+      13,
+      70,
+      8
+     ],
+     [
+      "avocado",
+      "avocado",
+      1,
+      60,
+      96,
+      1,
+      5,
+      9
+     ],
+     [
+      "fried egg",
+      "fried egg",
+      1,
+      55,
+      100,
+      7,
+      0,
+      8
+     ],
+     [
+      "bacon",
+      "bacon",
+      2,
+      35,
+      190,
+      12,
+      1,
+      15
+     ],
+     [
+      "ham",
+      "ham",
+      3,
+      60,
+      90,
+      12,
+      2,
+      3
+     ],
+     [
+      "apple",
+      "apple",
+      1,
+      70,
+      36,
+      0,
+      10,
+      0
+     ],
+     [
+      "brie cheese",
+      "brie",
+      4,
+      60,
+      200,
+      12,
+      0,
+      17
+     ],
+     [
+      "chopped nuts",
+      "mixed nuts",
+      null,
+      10,
+      60,
+      2,
+      2,
+      5
+     ],
+     [
+      "coffee with milk",
+      "cappuccino",
+      1,
+      180,
+      90,
+      5,
+      8,
+      4
+     ]
+    ],
+    "unknown_items": [],
+    "photo_quality": "good"
+   },
+   "foods": [
+    {
+     "found": null,
+     "close": [],
+     "lunaPick": null
+    },
+    {
+     "found": {
+      "canonical": "avocado",
+      "name": "Avocado",
+      "kcal": 160
+     },
+     "close": [
+      {
+       "canonical": "avocado",
+       "name": "Avocado",
+       "kcal": 160
+      },
+      {
+       "canonical": "avocado_oil",
+       "name": "Avocado oil",
+       "kcal": 884
+      },
+      {
+       "canonical": "usda_fndds_2709223",
+       "name": "Avocado, raw",
+       "kcal": 160
+      },
+      {
+       "canonical": "usda_fndds_2710248",
+       "name": "Avocado, for use on a sandwich",
+       "kcal": 160
+      },
+      {
+       "canonical": "usda_fndds_2710208",
+       "name": "Avocado dressing",
+       "kcal": 427
+      },
+      {
+       "canonical": "usda_sr_171706",
+       "name": "Avocados, raw, California",
+       "kcal": 167
+      },
+      {
+       "canonical": "usda_sr_171707",
+       "name": "Avocados, raw, Florida",
+       "kcal": 120
+      }
+     ],
+     "lunaPick": "Avocado"
+    },
+    {
+     "found": {
+      "canonical": "egg_fried",
+      "name": "Egg (fried)",
+      "kcal": 196
+     },
+     "close": [
+      {
+       "canonical": "egg_fried",
+       "name": "Egg (fried)",
+       "kcal": 196
+      },
+      {
+       "canonical": "spring_roll",
+       "name": "Egg roll (vegetable, fried)",
+       "kcal": 270
+      },
+      {
+       "canonical": "usda_fndds_2710048",
+       "name": "Fried eggplant",
+       "kcal": 218
+      },
+      {
+       "canonical": "usda_fndds_2707157",
+       "name": "Egg, whole, fried with margarine",
+       "kcal": 171
+      },
+      {
+       "canonical": "usda_fndds_2707158",
+       "name": "Egg, whole, fried with oil",
+       "kcal": 192
+      },
+      {
+       "canonical": "usda_fndds_2707159",
+       "name": "Egg, whole, fried with butter",
+       "kcal": 182
+      },
+      {
+       "canonical": "usda_fndds_2707156",
+       "name": "Egg, whole, fried no added fat",
+       "kcal": 143
+      }
+     ],
+     "lunaPick": "Egg (fried)"
+    },
+    {
+     "found": {
+      "canonical": "bacon_cooked",
+      "name": "Bacon (cooked)",
+      "kcal": 548
+     },
+     "close": [
+      {
+       "canonical": "bacon_cooked",
+       "name": "Bacon (cooked)",
+       "kcal": 548
+      },
+      {
+       "canonical": "turkey_bacon_cooked",
+       "name": "Turkey bacon (cooked)",
+       "kcal": 368
+      },
+      {
+       "canonical": "usda_fndds_2710239",
+       "name": "Bacon, for use with vegetables",
+       "kcal": 468
+      },
+      {
+       "canonical": "usda_fndds_2706979",
+       "name": "Bacon, lettuce, tomato sandwich on white",
+       "kcal": 231
+      },
+      {
+       "canonical": "usda_fndds_2706980",
+       "name": "Bacon, lettuce, tomato sandwich on wheat",
+       "kcal": 229
+      },
+      {
+       "canonical": "usda_fndds_2710256",
+       "name": "Bacon, for use on a sandwich",
+       "kcal": 494
+      },
+      {
+       "canonical": "usda_fndds_2705885",
+       "name": "Bacon, NS as to type of meat, cooked",
+       "kcal": 484
+      }
+     ],
+     "lunaPick": "Bacon (cooked)"
+    },
+    {
+     "found": {
+      "canonical": "ham_sliced",
+      "name": "Ham (sliced)",
+      "kcal": 164
+     },
+     "close": [
+      {
+       "canonical": "ham_sliced",
+       "name": "Ham (sliced)",
+       "kcal": 164
+      },
+      {
+       "canonical": "hamburger_fast_food",
+       "name": "Hamburger (fast food)",
+       "kcal": 285
+      },
+      {
+       "canonical": "usda_fndds_2705878",
+       "name": "Ham",
+       "kcal": 117
+      },
+      {
+       "canonical": "usda_fndds_2705879",
+       "name": "Ham, prosciutto",
+       "kcal": 195
+      },
+      {
+       "canonical": "usda_fndds_2705880",
+       "name": "Ham, canned",
+       "kcal": 167
+      },
+      {
+       "canonical": "usda_fndds_2705881",
+       "name": "Ham, ground",
+       "kcal": 167
+      },
+      {
+       "canonical": "usda_fndds_2710240",
+       "name": "Ham, for use with vegetables",
+       "kcal": 117
+      }
+     ],
+     "lunaPick": "Ham"
+    },
+    {
+     "found": {
+      "canonical": "apple",
+      "name": "Apple",
+      "kcal": 52
+     },
+     "close": [
+      {
+       "canonical": "apple",
+       "name": "Apple",
+       "kcal": 52
+      },
+      {
+       "canonical": "apple_cider_vinegar",
+       "name": "Apple cider vinegar",
+       "kcal": 21
+      },
+      {
+       "canonical": "apple_juice",
+       "name": "Apple juice",
+       "kcal": 46
+      },
+      {
+       "canonical": "usda_fndds_2709196",
+       "name": "Apple, dried",
+       "kcal": 243
+      },
+      {
+       "canonical": "usda_fndds_2709215",
+       "name": "Apple, raw",
+       "kcal": 61
+      },
+      {
+       "canonical": "usda_fndds_2709220",
+       "name": "Apple, baked",
+       "kcal": 113
+      },
+      {
+       "canonical": "usda_fndds_2709294",
+       "name": "Apple, candied",
+       "kcal": 134
+      },
+      {
+       "canonical": "usda_fndds_2709319",
+       "name": "Apple cider",
+       "kcal": 46
+      }
+     ],
+     "lunaPick": "Apple"
+    },
+    {
+     "found": {
+      "canonical": "brie",
+      "name": "Brie",
+      "kcal": 334
+     },
+     "close": [
+      {
+       "canonical": "brie",
+       "name": "Brie",
+       "kcal": 334
+      },
+      {
+       "canonical": "usda_fndds_2705708",
+       "name": "Cheese, Brie",
+       "kcal": 334
+      },
+      {
+       "canonical": "usda_sr_172177",
+       "name": "Cheese, brie",
+       "kcal": 334
+      },
+      {
+       "canonical": "usda_sr_170453",
+       "name": "Potatoes, o'brien, frozen, unprepared",
+       "kcal": 76
+      },
+      {
+       "canonical": "usda_sr_170454",
+       "name": "Potatoes, o'brien, frozen, prepared",
+       "kcal": 204
+      },
+      {
+       "canonical": "usda_sr_170498",
+       "name": "Potatoes, o'brien, home-prepared",
+       "kcal": 81
+      }
+     ],
+     "lunaPick": "Brie"
+    },
+    {
+     "found": {
+      "canonical": "mixed_nuts",
+      "name": "Mixed nuts",
+      "kcal": 607
+     },
+     "close": [
+      {
+       "canonical": "mixed_nuts",
+       "name": "Mixed nuts",
+       "kcal": 607
+      },
+      {
+       "canonical": "usda_fndds_2707504",
+       "name": "Mixed nuts, NFS",
+       "kcal": 610
+      },
+      {
+       "canonical": "usda_fndds_2707505",
+       "name": "Mixed nuts, unroasted",
+       "kcal": 616
+      },
+      {
+       "canonical": "usda_fndds_2707511",
+       "name": "Mixed nuts, honey roasted",
+       "kcal": 586
+      },
+      {
+       "canonical": "usda_fndds_2707506",
+       "name": "Mixed nuts, with peanuts, salted",
+       "kcal": 610
+      },
+      {
+       "canonical": "usda_fndds_2707508",
+       "name": "Mixed nuts, with peanuts, unsalted",
+       "kcal": 615
+      }
+     ],
+     "lunaPick": "Mixed nuts"
+    },
+    {
+     "found": {
+      "canonical": "cappuccino",
+      "name": "Cappuccino",
+      "kcal": 27
+     },
+     "close": [
+      {
+       "canonical": "cappuccino",
+       "name": "Cappuccino",
+       "kcal": 27
+      },
+      {
+       "canonical": "usda_fndds_2710472",
+       "name": "Coffee, Cappuccino",
+       "kcal": 27
+      },
+      {
+       "canonical": "usda_fndds_2710473",
+       "name": "Coffee, Cappuccino, nonfat",
+       "kcal": 19
+      },
+      {
+       "canonical": "usda_fndds_2710475",
+       "name": "Coffee, Cappuccino, decaffeinated",
+       "kcal": 27
+      },
+      {
+       "canonical": "usda_fndds_2710476",
+       "name": "Coffee, Cappuccino, decaffeinated, nonfat",
+       "kcal": 19
+      },
+      {
+       "canonical": "usda_fndds_2710474",
+       "name": "Coffee, Cappuccino, with non-dairy milk",
+       "kcal": 17
+      },
+      {
+       "canonical": "usda_fndds_2710388",
+       "name": "Coffee, Latte, with non-dairy milk",
+       "kcal": 28
+      },
+      {
+       "canonical": "usda_fndds_2710391",
+       "name": "Coffee, Latte, with non-dairy milk, flavored",
+       "kcal": 40
+      },
+      {
+       "canonical": "usda_fndds_2710394",
+       "name": "Coffee, Latte, decaffeinated, with non-dairy milk",
+       "kcal": 28
+      },
+      {
+       "canonical": "usda_fndds_2710412",
+       "name": "Coffee, Cafe Mocha, with non-dairy milk",
+       "kcal": 50
+      }
+     ],
+     "lunaPick": null
+    }
+   ]
+  },
+  {
+   "photo": "download-2",
+   "reply": {
+    "meal_name": "Breakfast",
+    "items": [
+     [
+      "toast",
+      "toast",
+      1,
+      55,
+      145,
+      5,
+      27,
+      2
+     ],
+     [
+      "avocado",
+      "avocado",
+      null,
+      70,
+      112,
+      1,
+      6,
+      10
+     ],
+     [
+      "fried egg",
+      "fried egg",
+      1,
+      55,
+      100,
+      7,
+      0,
+      8
+     ],
+     [
+      "sausage",
+      "sausage",
+      2,
+      120,
+      360,
+      16,
+      4,
+      31
+     ],
+     [
+      "asparagus",
+      "asparagus",
+      null,
+      70,
+      15,
+      2,
+      3,
+      0
+     ],
+     [
+      "cherry tomatoes",
+      "cherry tomatoes",
+      null,
+      100,
+      18,
+      1,
+      4,
+      0
+     ],
+     [
+      "shrimp",
+      "shrimp",
+      null,
+      100,
+      100,
+      24,
+      0,
+      1
+     ],
+     [
+      "iced coffee with milk",
+      "iced coffee with milk",
+      1,
+      250,
+      100,
+      5,
+      11,
+      4
+     ]
+    ],
+    "unknown_items": [],
+    "photo_quality": "good"
+   },
+   "foods": [
+    {
+     "found": null,
+     "close": [],
+     "lunaPick": null
+    },
+    {
+     "found": {
+      "canonical": "avocado",
+      "name": "Avocado",
+      "kcal": 160
+     },
+     "close": [
+      {
+       "canonical": "avocado",
+       "name": "Avocado",
+       "kcal": 160
+      },
+      {
+       "canonical": "avocado_oil",
+       "name": "Avocado oil",
+       "kcal": 884
+      },
+      {
+       "canonical": "usda_fndds_2709223",
+       "name": "Avocado, raw",
+       "kcal": 160
+      },
+      {
+       "canonical": "usda_fndds_2710248",
+       "name": "Avocado, for use on a sandwich",
+       "kcal": 160
+      },
+      {
+       "canonical": "usda_fndds_2710208",
+       "name": "Avocado dressing",
+       "kcal": 427
+      },
+      {
+       "canonical": "usda_sr_171706",
+       "name": "Avocados, raw, California",
+       "kcal": 167
+      },
+      {
+       "canonical": "usda_sr_171707",
+       "name": "Avocados, raw, Florida",
+       "kcal": 120
+      }
+     ],
+     "lunaPick": "Avocado"
+    },
+    {
+     "found": {
+      "canonical": "egg_fried",
+      "name": "Egg (fried)",
+      "kcal": 196
+     },
+     "close": [
+      {
+       "canonical": "egg_fried",
+       "name": "Egg (fried)",
+       "kcal": 196
+      },
+      {
+       "canonical": "spring_roll",
+       "name": "Egg roll (vegetable, fried)",
+       "kcal": 270
+      },
+      {
+       "canonical": "usda_fndds_2710048",
+       "name": "Fried eggplant",
+       "kcal": 218
+      },
+      {
+       "canonical": "usda_fndds_2707157",
+       "name": "Egg, whole, fried with margarine",
+       "kcal": 171
+      },
+      {
+       "canonical": "usda_fndds_2707158",
+       "name": "Egg, whole, fried with oil",
+       "kcal": 192
+      },
+      {
+       "canonical": "usda_fndds_2707159",
+       "name": "Egg, whole, fried with butter",
+       "kcal": 182
+      },
+      {
+       "canonical": "usda_fndds_2707156",
+       "name": "Egg, whole, fried no added fat",
+       "kcal": 143
+      }
+     ],
+     "lunaPick": "Egg (fried)"
+    },
+    {
+     "found": {
+      "canonical": "pork_sausage_cooked",
+      "name": "Pork sausage (cooked)",
+      "kcal": 325
+     },
+     "close": [
+      {
+       "canonical": "pork_sausage_cooked",
+       "name": "Pork sausage (cooked)",
+       "kcal": 325
+      },
+      {
+       "canonical": "sausage_roll",
+       "name": "Sausage roll",
+       "kcal": 352
+      },
+      {
+       "canonical": "usda_fndds_2706190",
+       "name": "Sausage, NFS",
+       "kcal": 325
+      },
+      {
+       "canonical": "usda_fndds_2706644",
+       "name": "Sausage, potatoes, and vegetables excluding carrots, broccoli, and dark-green leafy; gravy",
+       "kcal": 128
+      },
+      {
+       "canonical": "usda_fndds_2706643",
+       "name": "Sausage, potatoes, and vegetables including carrots, broccoli, and/or dark-green leafy; gravy",
+       "kcal": 128
+      },
+      {
+       "canonical": "usda_fndds_2706639",
+       "name": "Sausage, noodles, and vegetables excluding carrots, broccoli, and dark-green leafy; tomato-based sauce",
+       "kcal": 131
+      },
+      {
+       "canonical": "usda_fndds_2706640",
+       "name": "Sausage, noodles, and vegetables including carrots, broccoli, and/or dark-green leafy; tomato-based sauce",
+       "kcal": 127
+      }
+     ],
+     "lunaPick": "Pork sausage (cooked)"
+    },
+    {
+     "found": {
+      "canonical": "asparagus_cooked",
+      "name": "Asparagus (cooked)",
+      "kcal": 22
+     },
+     "close": [
+      {
+       "canonical": "asparagus_cooked",
+       "name": "Asparagus (cooked)",
+       "kcal": 22
+      },
+      {
+       "canonical": "usda_fndds_2709767",
+       "name": "Asparagus, raw",
+       "kcal": 20
+      },
+      {
+       "canonical": "usda_fndds_2709841",
+       "name": "Asparagus, fresh, cooked with oil",
+       "kcal": 49
+      },
+      {
+       "canonical": "usda_fndds_2709843",
+       "name": "Asparagus, frozen, cooked with oil",
+       "kcal": 44
+      },
+      {
+       "canonical": "usda_fndds_2709845",
+       "name": "Asparagus, canned, cooked with oil",
+       "kcal": 45
+      },
+      {
+       "canonical": "usda_fndds_2709834",
+       "name": "Asparagus, fresh, cooked, no added fat",
+       "kcal": 21
+      }
+     ],
+     "lunaPick": "Asparagus (cooked)"
+    },
+    {
+     "found": null,
+     "close": [],
+     "lunaPick": null
+    },
+    {
+     "found": {
+      "canonical": "shrimp_cooked",
+      "name": "Shrimp (cooked)",
+      "kcal": 99
+     },
+     "close": [
+      {
+       "canonical": "shrimp_cooked",
+       "name": "Shrimp (cooked)",
+       "kcal": 99
+      },
+      {
+       "canonical": "shrimp_summer_roll_rice_paper",
+       "name": "Shrimp summer roll (rice paper)",
+       "kcal": 112
+      },
+      {
+       "canonical": "egg_foo_yung_with_shrimp",
+       "name": "Egg foo yung (with shrimp)",
+       "kcal": 125
+      },
+      {
+       "canonical": "usda_fndds_2706360",
+       "name": "Shrimp, NFS",
+       "kcal": 146
+      },
+      {
+       "canonical": "usda_fndds_2706362",
+       "name": "Shrimp, grilled",
+       "kcal": 110
+      },
+      {
+       "canonical": "usda_fndds_2706364",
+       "name": "Shrimp, fried",
+       "kcal": 218
+      },
+      {
+       "canonical": "usda_fndds_2706366",
+       "name": "Shrimp, dried",
+       "kcal": 250
+      },
+      {
+       "canonical": "usda_fndds_2706367",
+       "name": "Shrimp, canned",
+       "kcal": 100
+      }
+     ],
+     "lunaPick": "Shrimp (cooked)"
+    },
+    {
+     "found": {
+      "canonical": "usda_fndds_2710436",
+      "name": "Coffee, Iced Latte, with non-dairy milk, flavored",
+      "kcal": 31
+     },
+     "close": [
+      {
+       "canonical": "usda_fndds_2710436",
+       "name": "Coffee, Iced Latte, with non-dairy milk, flavored",
+       "kcal": 31
+      },
+      {
+       "canonical": "usda_fndds_2710433",
+       "name": "Coffee, Iced Latte, with non-dairy milk",
+       "kcal": 24
+      },
+      {
+       "canonical": "usda_fndds_2710439",
+       "name": "Coffee, Iced Latte, decaffeinated, with non-dairy milk",
+       "kcal": 18
+      },
+      {
+       "canonical": "usda_fndds_2710445",
+       "name": "Coffee, Iced Cafe Mocha, with non-dairy milk",
+       "kcal": 42
+      },
+      {
+       "canonical": "usda_fndds_2710442",
+       "name": "Coffee, Iced Latte, decaffeinated, with non-dairy milk, flavored",
+       "kcal": 31
+      }
+     ],
+     "lunaPick": null
+    }
+   ]
+  },
+  {
+   "photo": "download-3",
+   "reply": {
+    "meal_name": "Shrimp and chicken plate with juice",
+    "items": [
+     [
+      "shrimp",
+      "shrimp",
+      null,
+      90,
+      90,
+      22,
+      0,
+      1
+     ],
+     [
+      "chicken",
+      "cooked chicken",
+      null,
+      150,
+      300,
+      36,
+      2,
+      16
+     ],
+     [
+      "boiled egg",
+      "boiled egg",
+      2,
+      100,
+      155,
+      13,
+      1,
+      11
+     ],
+     [
+      "broccoli",
+      "broccoli",
+      null,
+      100,
+      35,
+      2,
+      7,
+      0
+     ],
+     [
+      "corn",
+      "corn on the cob",
+      null,
+      80,
+      77,
+      3,
+      17,
+      1
+     ],
+     [
+      "kabocha squash",
+      "kabocha squash",
+      null,
+      80,
+      36,
+      1,
+      9,
+      0
+     ],
+     [
+      "orange juice",
+      "orange juice",
+      1,
+      250,
+      112,
+      2,
+      26,
+      0
+     ]
+    ],
+    "unknown_items": [],
+    "photo_quality": "good"
+   },
+   "foods": [
+    {
+     "found": {
+      "canonical": "shrimp_cooked",
+      "name": "Shrimp (cooked)",
+      "kcal": 99
+     },
+     "close": [
+      {
+       "canonical": "shrimp_cooked",
+       "name": "Shrimp (cooked)",
+       "kcal": 99
+      },
+      {
+       "canonical": "shrimp_summer_roll_rice_paper",
+       "name": "Shrimp summer roll (rice paper)",
+       "kcal": 112
+      },
+      {
+       "canonical": "egg_foo_yung_with_shrimp",
+       "name": "Egg foo yung (with shrimp)",
+       "kcal": 125
+      },
+      {
+       "canonical": "usda_fndds_2706360",
+       "name": "Shrimp, NFS",
+       "kcal": 146
+      },
+      {
+       "canonical": "usda_fndds_2706362",
+       "name": "Shrimp, grilled",
+       "kcal": 110
+      },
+      {
+       "canonical": "usda_fndds_2706364",
+       "name": "Shrimp, fried",
+       "kcal": 218
+      },
+      {
+       "canonical": "usda_fndds_2706366",
+       "name": "Shrimp, dried",
+       "kcal": 250
+      },
+      {
+       "canonical": "usda_fndds_2706367",
+       "name": "Shrimp, canned",
+       "kcal": 100
+      }
+     ],
+     "lunaPick": "Shrimp (cooked)"
+    },
+    {
+     "found": {
+      "canonical": "usda_fndds_2706056",
+      "name": "Chicken wing, NS as to cooking method",
+      "kcal": 257
+     },
+     "close": [
+      {
+       "canonical": "usda_fndds_2706056",
+       "name": "Chicken wing, NS as to cooking method",
+       "kcal": 257
+      },
+      {
+       "canonical": "chicken_breast_cooked",
+       "name": "Chicken breast (cooked)",
+       "kcal": 165
+      },
+      {
+       "canonical": "chicken_thigh_cooked",
+       "name": "Chicken thigh (cooked)",
+       "kcal": 179
+      },
+      {
+       "canonical": "chicken_drumstick_cooked",
+       "name": "Chicken drumstick (cooked)",
+       "kcal": 155
+      },
+      {
+       "canonical": "chicken_breast_grilled",
+       "name": "Chicken breast (grilled)",
+       "kcal": 151
+      },
+      {
+       "canonical": "usda_fndds_2706066",
+       "name": "Chicken wing, fried, coated, from pre-cooked",
+       "kcal": 294
+      },
+      {
+       "canonical": "usda_fndds_2706058",
+       "name": "Chicken wing, baked or broiled, from pre-cooked",
+       "kcal": 257
+      },
+      {
+       "canonical": "usda_fndds_2705953",
+       "name": "Chicken breast, NS as to cooking method, skin eaten",
+       "kcal": 175
+      },
+      {
+       "canonical": "usda_fndds_2706000",
+       "name": "Chicken drumstick, NS as to cooking method, skin eaten",
+       "kcal": 206
+      },
+      {
+       "canonical": "usda_fndds_2706081",
+       "name": "Chicken, back",
+       "kcal": 298
+      },
+      {
+       "canonical": "usda_fndds_2706083",
+       "name": "Chicken, tail",
+       "kcal": 454
+      },
+      {
+       "canonical": "usda_fndds_2706091",
+       "name": "Chicken, ground",
+       "kcal": 201
+      }
+     ],
+     "lunaPick": null
+    },
+    {
+     "found": {
+      "canonical": "egg_hard_boiled",
+      "name": "Egg (hard-boiled)",
+      "kcal": 155
+     },
+     "close": [
+      {
+       "canonical": "egg_hard_boiled",
+       "name": "Egg (hard-boiled)",
+       "kcal": 155
+      },
+      {
+       "canonical": "usda_fndds_2707154",
+       "name": "Egg, whole, boiled or poached",
+       "kcal": 143
+      },
+      {
+       "canonical": "usda_sr_173424",
+       "name": "Egg, whole, cooked, hard-boiled",
+       "kcal": 155
+      },
+      {
+       "canonical": "usda_sr_169229",
+       "name": "Eggplant, cooked, boiled, drained, without salt",
+       "kcal": 35
+      },
+      {
+       "canonical": "usda_sr_169352",
+       "name": "Eggplant, cooked, boiled, drained, with salt",
+       "kcal": 33
+      }
+     ],
+     "lunaPick": "Egg (hard-boiled)"
+    },
+    {
+     "found": {
+      "canonical": "broccoli_cooked",
+      "name": "Broccoli (cooked)",
+      "kcal": 35
+     },
+     "close": [
+      {
+       "canonical": "broccoli_cooked",
+       "name": "Broccoli (cooked)",
+       "kcal": 35
+      },
+      {
+       "canonical": "broccoli_raw",
+       "name": "Broccoli (raw)",
+       "kcal": 34
+      },
+      {
+       "canonical": "beef_and_broccoli",
+       "name": "Beef and broccoli",
+       "kcal": 160
+      },
+      {
+       "canonical": "usda_fndds_2709643",
+       "name": "Broccoli, raw",
+       "kcal": 39
+      },
+      {
+       "canonical": "usda_fndds_2709657",
+       "name": "Broccoli, chinese, raw",
+       "kcal": 26
+      },
+      {
+       "canonical": "usda_fndds_2709658",
+       "name": "Broccoli, Chinese, cooked",
+       "kcal": 50
+      },
+      {
+       "canonical": "usda_fndds_2709644",
+       "name": "Broccoli, cooked, from restaurant",
+       "kcal": 77
+      },
+      {
+       "canonical": "usda_fndds_2710792",
+       "name": "Broccoli, cooked, as ingredient",
+       "kcal": 41
+      }
+     ],
+     "lunaPick": "Broccoli (cooked)"
+    },
+    {
+     "found": {
+      "canonical": "usda_sr_168400",
+      "name": "Corn, sweet, yellow, frozen, kernels on cob, unprepared",
+      "kcal": 98
+     },
+     "close": [
+      {
+       "canonical": "usda_sr_168400",
+       "name": "Corn, sweet, yellow, frozen, kernels on cob, unprepared",
+       "kcal": 98
+      },
+      {
+       "canonical": "corn_cooked",
+       "name": "Corn (cooked)",
+       "kcal": 96
+      },
+      {
+       "canonical": "corn_dog",
+       "name": "Corn dog",
+       "kcal": 250
+      },
+      {
+       "canonical": "cornbread",
+       "name": "Cornbread",
+       "kcal": 287
+      },
+      {
+       "canonical": "usda_sr_169365",
+       "name": "Corn, sweet, white, frozen, kernels on cob, unprepared",
+       "kcal": 98
+      },
+      {
+       "canonical": "usda_sr_168544",
+       "name": "Corn, sweet, white, frozen, kernels cut off cob, unprepared",
+       "kcal": 88
+      },
+      {
+       "canonical": "usda_sr_168399",
+       "name": "Corn, sweet, yellow, frozen, kernels cut off cob, boiled, drained, without salt",
+       "kcal": 81
+      },
+      {
+       "canonical": "usda_sr_168401",
+       "name": "Corn, sweet, yellow, frozen, kernels on cob, cooked, boiled, drained, without salt",
+       "kcal": 94
+      },
+      {
+       "canonical": "usda_fndds_2709783",
+       "name": "Corn, raw",
+       "kcal": 86
+      },
+      {
+       "canonical": "usda_fndds_2709923",
+       "name": "Corn, creamed",
+       "kcal": 72
+      },
+      {
+       "canonical": "usda_fndds_2709909",
+       "name": "Corn, cooked, from restaurant",
+       "kcal": 119
+      },
+      {
+       "canonical": "usda_fndds_2710046",
+       "name": "Corn, scalloped or pudding",
+       "kcal": 116
+      }
+     ],
+     "lunaPick": null
+    },
+    {
+     "found": null,
+     "close": [],
+     "lunaPick": null
+    },
+    {
+     "found": {
+      "canonical": "orange_juice",
+      "name": "Orange juice",
+      "kcal": 45
+     },
+     "close": [
+      {
+       "canonical": "orange_juice",
+       "name": "Orange juice",
+       "kcal": 45
+      },
+      {
+       "canonical": "usda_fndds_2709186",
+       "name": "Orange juice, 100%, NFS",
+       "kcal": 47
+      },
+      {
+       "canonical": "usda_fndds_2709187",
+       "name": "Orange juice, 100%,  freshly squeezed",
+       "kcal": 47
+      },
+      {
+       "canonical": "usda_fndds_2709190",
+       "name": "Orange juice, 100%, frozen, reconstituted",
+       "kcal": 42
+      },
+      {
+       "canonical": "usda_fndds_2709191",
+       "name": "Orange juice, 100%, frozen, not reconstituted",
+       "kcal": 148
+      },
+      {
+       "canonical": "usda_fndds_2709192",
+       "name": "Orange juice, 100%, with calcium added, frozen, reconstituted",
+       "kcal": 42
+      }
+     ],
+     "lunaPick": null
+    }
+   ]
+  },
+  {
+   "photo": "download-4",
+   "reply": {
+    "meal_name": "Salmon dinner",
+    "items": [
+     [
+      "grilled salmon",
+      "salmon",
+      2,
+      300,
+      624,
+      66,
+      0,
+      38
+     ],
+     [
+      "roasted potatoes",
+      "potatoes",
+      1,
+      220,
+      330,
+      6,
+      49,
+      13
+     ],
+     [
+      "broccoli",
+      "broccoli",
+      1,
+      140,
+      49,
+      4,
+      10,
+      1
+     ],
+     [
+      "lemon wedges",
+      "lemon",
+      null,
+      35,
+      10,
+      0,
+      3,
+      0
+     ]
+    ],
+    "unknown_items": [],
+    "photo_quality": "good"
+   },
+   "foods": [
+    {
+     "found": {
+      "canonical": "salmon_cooked",
+      "name": "Salmon (cooked)",
+      "kcal": 206
+     },
+     "close": [
+      {
+       "canonical": "salmon_cooked",
+       "name": "Salmon (cooked)",
+       "kcal": 206
+      },
+      {
+       "canonical": "salmon_canned",
+       "name": "Salmon (canned)",
+       "kcal": 136
+      },
+      {
+       "canonical": "salmon_nigiri_sushi",
+       "name": "Salmon nigiri (sushi)",
+       "kcal": 107
+      },
+      {
+       "canonical": "usda_sr_175174",
+       "name": "Salmon, sockeye, canned, total can contents",
+       "kcal": 153
+      },
+      {
+       "canonical": "usda_sr_169813",
+       "name": "Salmon, red (sockeye), filets with skin, smoked (Alaska Native)",
+       "kcal": 345
+      },
+      {
+       "canonical": "usda_sr_173723",
+       "name": "Salmon, sockeye, canned, drained solids, without skin and bones",
+       "kcal": 158
+      },
+      {
+       "canonical": "usda_fndds_2706826",
+       "name": "Salmon salad",
+       "kcal": 213
+      },
+      {
+       "canonical": "usda_fndds_2707023",
+       "name": "Salmon cake sandwich",
+       "kcal": 279
+      },
+      {
+       "canonical": "usda_fndds_2706287",
+       "name": "Fish, salmon, grilled",
+       "kcal": 259
+      }
+     ],
+     "lunaPick": "Fish, salmon, grilled"
+    },
+    {
+     "found": {
+      "canonical": "potato_baked",
+      "name": "Potato (baked)",
+      "kcal": 93
+     },
+     "close": [
+      {
+       "canonical": "potato_baked",
+       "name": "Potato (baked)",
+       "kcal": 93
+      },
+      {
+       "canonical": "mashed_potatoes",
+       "name": "Mashed potatoes",
+       "kcal": 113
+      },
+      {
+       "canonical": "roast_potatoes",
+       "name": "Roast potatoes",
+       "kcal": 126
+      },
+      {
+       "canonical": "usda_sr_170032",
+       "name": "Potatoes, raw, skin",
+       "kcal": 58
+      },
+      {
+       "canonical": "usda_sr_170444",
+       "name": "Potatoes, canned, drained solids",
+       "kcal": 60
+      },
+      {
+       "canonical": "usda_sr_167604",
+       "name": "Potatoes, hash brown, refrigerated, unprepared",
+       "kcal": 84
+      },
+      {
+       "canonical": "usda_sr_169768",
+       "name": "Potatoes, mashed, ready-to-eat",
+       "kcal": 106
+      },
+      {
+       "canonical": "usda_sr_170026",
+       "name": "Potatoes, flesh and skin, raw",
+       "kcal": 77
+      },
+      {
+       "canonical": "usda_fndds_2709402",
+       "name": "Potato, roasted, NFS",
+       "kcal": 126
+      },
+      {
+       "canonical": "usda_fndds_2709415",
+       "name": "Potato, roasted, ready-to-heat",
+       "kcal": 126
+      },
+      {
+       "canonical": "usda_fndds_2709404",
+       "name": "Potato, roasted, from fresh, peel eaten, no added fat",
+       "kcal": 93
+      },
+      {
+       "canonical": "usda_fndds_2709406",
+       "name": "Potato, roasted, from fresh, peel eaten, made with oil",
+       "kcal": 131
+      }
+     ],
+     "lunaPick": "Potato, roasted, from fresh, peel eaten, made with oil"
+    },
+    {
+     "found": {
+      "canonical": "broccoli_cooked",
+      "name": "Broccoli (cooked)",
+      "kcal": 35
+     },
+     "close": [
+      {
+       "canonical": "broccoli_cooked",
+       "name": "Broccoli (cooked)",
+       "kcal": 35
+      },
+      {
+       "canonical": "broccoli_raw",
+       "name": "Broccoli (raw)",
+       "kcal": 34
+      },
+      {
+       "canonical": "beef_and_broccoli",
+       "name": "Beef and broccoli",
+       "kcal": 160
+      },
+      {
+       "canonical": "usda_fndds_2709643",
+       "name": "Broccoli, raw",
+       "kcal": 39
+      },
+      {
+       "canonical": "usda_fndds_2709657",
+       "name": "Broccoli, chinese, raw",
+       "kcal": 26
+      },
+      {
+       "canonical": "usda_fndds_2709658",
+       "name": "Broccoli, Chinese, cooked",
+       "kcal": 50
+      },
+      {
+       "canonical": "usda_fndds_2709644",
+       "name": "Broccoli, cooked, from restaurant",
+       "kcal": 77
+      },
+      {
+       "canonical": "usda_fndds_2710792",
+       "name": "Broccoli, cooked, as ingredient",
+       "kcal": 41
+      }
+     ],
+     "lunaPick": "Broccoli (cooked)"
+    },
+    {
+     "found": {
+      "canonical": "lemon",
+      "name": "Lemon",
+      "kcal": 29
+     },
+     "close": [
+      {
+       "canonical": "lemon",
+       "name": "Lemon",
+       "kcal": 29
+      },
+      {
+       "canonical": "usda_fndds_2709168",
+       "name": "Lemon, raw",
+       "kcal": 29
+      },
+      {
+       "canonical": "usda_fndds_2709169",
+       "name": "Lemon pie filling",
+       "kcal": 354
+      },
+      {
+       "canonical": "usda_fndds_2710170",
+       "name": "Lemon-butter sauce",
+       "kcal": 671
+      },
+      {
+       "canonical": "usda_fndds_2709181",
+       "name": "Lemon juice, 100%, freshly squeezed",
+       "kcal": 22
+      },
+      {
+       "canonical": "usda_fndds_2709182",
+       "name": "Lemon juice, 100%, canned or bottled",
+       "kcal": 17
+      }
+     ],
+     "lunaPick": "Lemon"
+    }
+   ]
+  },
+  {
+   "photo": "download-5",
+   "reply": {
+    "meal_name": "Breakfast",
+    "items": [
+     [
+      "toast",
+      "toast",
+      1,
+      40,
+      106,
+      3.6,
+      19.8,
+      1.4
+     ],
+     [
+      "avocado",
+      "avocado",
+      1,
+      90,
+      144,
+      1.8,
+      7.7,
+      13.2
+     ],
+     [
+      "scrambled eggs",
+      "scrambled eggs",
+      1,
+      120,
+      190,
+      12.5,
+      2,
+      14.5
+     ],
+     [
+      "strawberries",
+      "strawberries",
+      null,
+      180,
+      58,
+      1.2,
+      13.9,
+      0.5
+     ]
+    ],
+    "unknown_items": [],
+    "photo_quality": "good"
+   },
+   "foods": [
+    {
+     "found": null,
+     "close": [],
+     "lunaPick": null
+    },
+    {
+     "found": {
+      "canonical": "avocado",
+      "name": "Avocado",
+      "kcal": 160
+     },
+     "close": [
+      {
+       "canonical": "avocado",
+       "name": "Avocado",
+       "kcal": 160
+      },
+      {
+       "canonical": "avocado_oil",
+       "name": "Avocado oil",
+       "kcal": 884
+      },
+      {
+       "canonical": "usda_fndds_2709223",
+       "name": "Avocado, raw",
+       "kcal": 160
+      },
+      {
+       "canonical": "usda_fndds_2710248",
+       "name": "Avocado, for use on a sandwich",
+       "kcal": 160
+      },
+      {
+       "canonical": "usda_fndds_2710208",
+       "name": "Avocado dressing",
+       "kcal": 427
+      },
+      {
+       "canonical": "usda_sr_171706",
+       "name": "Avocados, raw, California",
+       "kcal": 167
+      },
+      {
+       "canonical": "usda_sr_171707",
+       "name": "Avocados, raw, Florida",
+       "kcal": 120
+      }
+     ],
+     "lunaPick": "Avocado"
+    },
+    {
+     "found": {
+      "canonical": "eggs_scrambled",
+      "name": "Eggs (scrambled)",
+      "kcal": 149
+     },
+     "close": [
+      {
+       "canonical": "eggs_scrambled",
+       "name": "Eggs (scrambled)",
+       "kcal": 149
+      },
+      {
+       "canonical": "usda_fndds_2707199",
+       "name": "Egg omelet or scrambled egg, made with margarine",
+       "kcal": 171
+      },
+      {
+       "canonical": "usda_fndds_2707200",
+       "name": "Egg omelet or scrambled egg, made with oil",
+       "kcal": 192
+      },
+      {
+       "canonical": "usda_fndds_2707201",
+       "name": "Egg omelet or scrambled egg, made with butter",
+       "kcal": 182
+      },
+      {
+       "canonical": "usda_fndds_2707205",
+       "name": "Egg omelet or scrambled egg, no added fat",
+       "kcal": 143
+      },
+      {
+       "canonical": "usda_fndds_2707290",
+       "name": "Egg white, omelet, scrambled, or fried, with cheese",
+       "kcal": 132
+      }
+     ],
+     "lunaPick": "Egg omelet or scrambled egg, made with oil"
+    },
+    {
+     "found": {
+      "canonical": "strawberries",
+      "name": "Strawberries",
+      "kcal": 32
+     },
+     "close": [
+      {
+       "canonical": "strawberries",
+       "name": "Strawberries",
+       "kcal": 32
+      },
+      {
+       "canonical": "usda_fndds_2709283",
+       "name": "Strawberries, raw",
+       "kcal": 36
+      },
+      {
+       "canonical": "usda_fndds_2709284",
+       "name": "Strawberries, canned",
+       "kcal": 92
+      },
+      {
+       "canonical": "usda_fndds_2709285",
+       "name": "Strawberries, frozen",
+       "kcal": 35
+      },
+      {
+       "canonical": "usda_sr_167762",
+       "name": "Strawberries, raw",
+       "kcal": 32
+      },
+      {
+       "canonical": "usda_sr_168174",
+       "name": "Strawberries, frozen, sweetened, sliced",
+       "kcal": 96
+      }
+     ],
+     "lunaPick": "Strawberries"
+    }
+   ]
+  },
+  {
+   "photo": "download-6",
+   "reply": {
+    "meal_name": "Breakfast plate",
+    "items": [
+     [
+      "toast",
+      "toast",
+      2,
+      70,
+      185,
+      6,
+      33,
+      3
+     ],
+     [
+      "peanut butter",
+      "peanut butter",
+      1,
+      25,
+      147,
+      6,
+      5,
+      12
+     ],
+     [
+      "raspberry jam",
+      "jam",
+      1,
+      20,
+      50,
+      0,
+      13,
+      0
+     ],
+     [
+      "avocado",
+      "avocado",
+      1,
+      100,
+      160,
+      2,
+      9,
+      15
+     ],
+     [
+      "scrambled eggs",
+      "scrambled eggs",
+      1,
+      150,
+      230,
+      16,
+      2,
+      18
+     ],
+     [
+      "blueberries",
+      "blueberries",
+      1,
+      65,
+      37,
+      0,
+      9,
+      0
+     ],
+     [
+      "raspberries",
+      "raspberries",
+      1,
+      55,
+      29,
+      1,
+      7,
+      0
+     ],
+     [
+      "seeds",
+      "mixed seeds",
+      null,
+      3,
+      17,
+      1,
+      1,
+      1
+     ]
+    ],
+    "unknown_items": [],
+    "photo_quality": "good"
+   },
+   "foods": [
+    {
+     "found": null,
+     "close": [],
+     "lunaPick": null
+    },
+    {
+     "found": {
+      "canonical": "peanut_butter",
+      "name": "Peanut butter",
+      "kcal": 598
+     },
+     "close": [
+      {
+       "canonical": "peanut_butter",
+       "name": "Peanut butter",
+       "kcal": 598
+      },
+      {
+       "canonical": "peanut_butter_and_jelly_sandwich",
+       "name": "Peanut butter and jelly sandwich",
+       "kcal": 361
+      },
+      {
+       "canonical": "peanut_sauce_peanut_butter_and_soy_sauce",
+       "name": "Peanut sauce (peanut butter and soy sauce)",
+       "kcal": 257
+      },
+      {
+       "canonical": "usda_fndds_2707537",
+       "name": "Peanut butter",
+       "kcal": 598
+      },
+      {
+       "canonical": "usda_fndds_2707538",
+       "name": "Peanut butter, lower sodium",
+       "kcal": 598
+      },
+      {
+       "canonical": "usda_fndds_2707540",
+       "name": "Peanut butter, lower sugar",
+       "kcal": 650
+      },
+      {
+       "canonical": "usda_fndds_2707541",
+       "name": "Peanut butter, reduced fat",
+       "kcal": 520
+      },
+      {
+       "canonical": "usda_fndds_2707542",
+       "name": "Peanut butter, vitamin and mineral fortified",
+       "kcal": 591
+      }
+     ],
+     "lunaPick": "Peanut butter"
+    },
+    {
+     "found": {
+      "canonical": "jam",
+      "name": "Jam",
+      "kcal": 278
+     },
+     "close": [
+      {
+       "canonical": "jam",
+       "name": "Jam",
+       "kcal": 278
+      },
+      {
+       "canonical": "jambalaya",
+       "name": "Jambalaya",
+       "kcal": 161
+      },
+      {
+       "canonical": "usda_fndds_2710301",
+       "name": "Jam",
+       "kcal": 278
+      },
+      {
+       "canonical": "usda_fndds_2710299",
+       "name": "Jam or jelly, NFS",
+       "kcal": 261
+      },
+      {
+       "canonical": "usda_fndds_2710304",
+       "name": "Jam or jelly, sugar free",
+       "kcal": 121
+      },
+      {
+       "canonical": "usda_fndds_2710305",
+       "name": "Jam or jelly, reduced sugar",
+       "kcal": 151
+      },
+      {
+       "canonical": "usda_fndds_2710306",
+       "name": "Jam or jelly, fruit juice sweetened",
+       "kcal": 212
+      }
+     ],
+     "lunaPick": "Jam"
+    },
+    {
+     "found": {
+      "canonical": "avocado",
+      "name": "Avocado",
+      "kcal": 160
+     },
+     "close": [
+      {
+       "canonical": "avocado",
+       "name": "Avocado",
+       "kcal": 160
+      },
+      {
+       "canonical": "avocado_oil",
+       "name": "Avocado oil",
+       "kcal": 884
+      },
+      {
+       "canonical": "usda_fndds_2709223",
+       "name": "Avocado, raw",
+       "kcal": 160
+      },
+      {
+       "canonical": "usda_fndds_2710248",
+       "name": "Avocado, for use on a sandwich",
+       "kcal": 160
+      },
+      {
+       "canonical": "usda_fndds_2710208",
+       "name": "Avocado dressing",
+       "kcal": 427
+      },
+      {
+       "canonical": "usda_sr_171706",
+       "name": "Avocados, raw, California",
+       "kcal": 167
+      },
+      {
+       "canonical": "usda_sr_171707",
+       "name": "Avocados, raw, Florida",
+       "kcal": 120
+      }
+     ],
+     "lunaPick": "Avocado"
+    },
+    {
+     "found": {
+      "canonical": "eggs_scrambled",
+      "name": "Eggs (scrambled)",
+      "kcal": 149
+     },
+     "close": [
+      {
+       "canonical": "eggs_scrambled",
+       "name": "Eggs (scrambled)",
+       "kcal": 149
+      },
+      {
+       "canonical": "usda_fndds_2707199",
+       "name": "Egg omelet or scrambled egg, made with margarine",
+       "kcal": 171
+      },
+      {
+       "canonical": "usda_fndds_2707200",
+       "name": "Egg omelet or scrambled egg, made with oil",
+       "kcal": 192
+      },
+      {
+       "canonical": "usda_fndds_2707201",
+       "name": "Egg omelet or scrambled egg, made with butter",
+       "kcal": 182
+      },
+      {
+       "canonical": "usda_fndds_2707205",
+       "name": "Egg omelet or scrambled egg, no added fat",
+       "kcal": 143
+      },
+      {
+       "canonical": "usda_fndds_2707290",
+       "name": "Egg white, omelet, scrambled, or fried, with cheese",
+       "kcal": 132
+      }
+     ],
+     "lunaPick": "Egg omelet or scrambled egg, made with oil"
+    },
+    {
+     "found": {
+      "canonical": "blueberries",
+      "name": "Blueberries",
+      "kcal": 57
+     },
+     "close": [
+      {
+       "canonical": "blueberries",
+       "name": "Blueberries",
+       "kcal": 57
+      },
+      {
+       "canonical": "usda_fndds_2709198",
+       "name": "Blueberries, dried",
+       "kcal": 317
+      },
+      {
+       "canonical": "usda_fndds_2709275",
+       "name": "Blueberries, raw",
+       "kcal": 64
+      },
+      {
+       "canonical": "usda_fndds_2709277",
+       "name": "Blueberries, frozen",
+       "kcal": 51
+      },
+      {
+       "canonical": "usda_sr_171711",
+       "name": "Blueberries, raw",
+       "kcal": 57
+      },
+      {
+       "canonical": "usda_sr_168158",
+       "name": "Blueberries, dried, sweetened",
+       "kcal": 317
+      }
+     ],
+     "lunaPick": "Blueberries"
+    },
+    {
+     "found": {
+      "canonical": "raspberries",
+      "name": "Raspberries",
+      "kcal": 52
+     },
+     "close": [
+      {
+       "canonical": "raspberries",
+       "name": "Raspberries",
+       "kcal": 52
+      },
+      {
+       "canonical": "usda_fndds_2709281",
+       "name": "Raspberries, raw",
+       "kcal": 57
+      },
+      {
+       "canonical": "usda_fndds_2709282",
+       "name": "Raspberries, frozen",
+       "kcal": 57
+      },
+      {
+       "canonical": "usda_sr_167755",
+       "name": "Raspberries, raw",
+       "kcal": 52
+      },
+      {
+       "canonical": "usda_sr_167808",
+       "name": "Raspberries, puree, seedless",
+       "kcal": 41
+      },
+      {
+       "canonical": "usda_sr_167757",
+       "name": "Raspberries, frozen, red, sweetened",
+       "kcal": 103
+      }
+     ],
+     "lunaPick": "Raspberries"
+    },
+    {
+     "found": {
+      "canonical": "usda_fndds_2707589",
+      "name": "Mixed seeds",
+      "kcal": 580
+     },
+     "close": [
+      {
+       "canonical": "usda_fndds_2707589",
+       "name": "Mixed seeds",
+       "kcal": 580
+      },
+      {
+       "canonical": "chia_seeds",
+       "name": "Chia seeds",
+       "kcal": 486
+      },
+      {
+       "canonical": "flax_seeds",
+       "name": "Flax seeds",
+       "kcal": 534
+      },
+      {
+       "canonical": "sunflower_seeds",
+       "name": "Sunflower seeds",
+       "kcal": 584
+      },
+      {
+       "canonical": "usda_sr_167969",
+       "name": "Snacks, trail mix, regular, with chocolate chips, salted nuts and seeds",
+       "kcal": 484
+      },
+      {
+       "canonical": "usda_sr_170655",
+       "name": "Snacks, trail mix, regular, with chocolate chips, unsalted nuts and seeds",
+       "kcal": 484
+      },
+      {
+       "canonical": "usda_sr_169414",
+       "name": "Seeds, flaxseed",
+       "kcal": 534
+      },
+      {
+       "canonical": "usda_sr_168591",
+       "name": "Seeds, lotus seeds, raw",
+       "kcal": 89
+      },
+      {
+       "canonical": "usda_sr_170144",
+       "name": "Seeds, breadfruit seeds, raw",
+       "kcal": 191
+      },
+      {
+       "canonical": "usda_sr_170145",
+       "name": "Seeds, breadfruit seeds, boiled",
+       "kcal": 168
+      },
+      {
+       "canonical": "usda_sr_170148",
+       "name": "Seeds, hemp seed, hulled",
+       "kcal": 553
+      }
+     ],
+     "lunaPick": "Mixed seeds"
+    }
+   ]
+  },
+  {
+   "photo": "download",
+   "reply": {
+    "meal_name": "Toast and sandwich with iced coffee",
+    "items": [
+     [
+      "thick toast with spread",
+      "toast",
+      1,
+      150,
+      400,
+      12,
+      55,
+      15
+     ],
+     [
+      "banana slices",
+      "banana",
+      null,
+      100,
+      89,
+      1,
+      23,
+      0
+     ],
+     [
+      "white chocolate pieces",
+      "white chocolate",
+      null,
+      15,
+      80,
+      1,
+      9,
+      5
+     ],
+     [
+      "open sandwich",
+      "open-faced sandwich",
+      1,
+      220,
+      430,
+      22,
+      35,
+      24
+     ],
+     [
+      "boiled egg",
+      "boiled egg",
+      2,
+      100,
+      155,
+      13,
+      1,
+      11
+     ],
+     [
+      "bacon",
+      "bacon",
+      2,
+      50,
+      230,
+      16,
+      1,
+      18
+     ],
+     [
+      "leafy greens",
+      "arugula",
+      null,
+      20,
+      5,
+      1,
+      1,
+      0
+     ],
+     [
+      "iced coffee with milk",
+      "iced coffee",
+      1,
+      300,
+      140,
+      5,
+      18,
+      5
+     ]
+    ],
+    "unknown_items": [],
+    "photo_quality": "good"
+   },
+   "foods": [
+    {
+     "found": null,
+     "close": [],
+     "lunaPick": null
+    },
+    {
+     "found": {
+      "canonical": "banana",
+      "name": "Banana",
+      "kcal": 89
+     },
+     "close": [
+      {
+       "canonical": "banana",
+       "name": "Banana",
+       "kcal": 89
+      },
+      {
+       "canonical": "banana_bread",
+       "name": "Banana bread",
+       "kcal": 326
+      },
+      {
+       "canonical": "usda_fndds_2709224",
+       "name": "Banana, raw",
+       "kcal": 97
+      },
+      {
+       "canonical": "usda_fndds_2709225",
+       "name": "Banana, baked",
+       "kcal": 161
+      },
+      {
+       "canonical": "usda_fndds_2705660",
+       "name": "Banana split",
+       "kcal": 199
+      },
+      {
+       "canonical": "usda_fndds_2705697",
+       "name": "Banana pudding",
+       "kcal": 160
+      },
+      {
+       "canonical": "usda_fndds_2709200",
+       "name": "Banana chips",
+       "kcal": 519
+      }
+     ],
+     "lunaPick": "Banana"
+    },
+    {
+     "found": {
+      "canonical": "usda_fndds_2710339",
+      "name": "White chocolate candy",
+      "kcal": 539
+     },
+     "close": [
+      {
+       "canonical": "usda_fndds_2710339",
+       "name": "White chocolate candy",
+       "kcal": 539
+      },
+      {
+       "canonical": "usda_fndds_2708261",
+       "name": "Pretzels, hard, white chocolate coated",
+       "kcal": 445
+      },
+      {
+       "canonical": "usda_fndds_2707864",
+       "name": "Cake or cupcake, chocolate with white icing, bakery",
+       "kcal": 355
+      },
+      {
+       "canonical": "usda_fndds_2707893",
+       "name": "Cake or cupcake, white with chocolate icing, bakery",
+       "kcal": 349
+      },
+      {
+       "canonical": "usda_fndds_2707865",
+       "name": "Cake or cupcake, chocolate with white icing, from mix",
+       "kcal": 349
+      }
+     ],
+     "lunaPick": "White chocolate candy"
+    },
+    {
+     "found": null,
+     "close": [],
+     "lunaPick": null
+    },
+    {
+     "found": {
+      "canonical": "egg_hard_boiled",
+      "name": "Egg (hard-boiled)",
+      "kcal": 155
+     },
+     "close": [
+      {
+       "canonical": "egg_hard_boiled",
+       "name": "Egg (hard-boiled)",
+       "kcal": 155
+      },
+      {
+       "canonical": "usda_fndds_2707154",
+       "name": "Egg, whole, boiled or poached",
+       "kcal": 143
+      },
+      {
+       "canonical": "usda_sr_173424",
+       "name": "Egg, whole, cooked, hard-boiled",
+       "kcal": 155
+      },
+      {
+       "canonical": "usda_sr_169229",
+       "name": "Eggplant, cooked, boiled, drained, without salt",
+       "kcal": 35
+      },
+      {
+       "canonical": "usda_sr_169352",
+       "name": "Eggplant, cooked, boiled, drained, with salt",
+       "kcal": 33
+      }
+     ],
+     "lunaPick": "Egg (hard-boiled)"
+    },
+    {
+     "found": {
+      "canonical": "bacon_cooked",
+      "name": "Bacon (cooked)",
+      "kcal": 548
+     },
+     "close": [
+      {
+       "canonical": "bacon_cooked",
+       "name": "Bacon (cooked)",
+       "kcal": 548
+      },
+      {
+       "canonical": "turkey_bacon_cooked",
+       "name": "Turkey bacon (cooked)",
+       "kcal": 368
+      },
+      {
+       "canonical": "usda_fndds_2710239",
+       "name": "Bacon, for use with vegetables",
+       "kcal": 468
+      },
+      {
+       "canonical": "usda_fndds_2706979",
+       "name": "Bacon, lettuce, tomato sandwich on white",
+       "kcal": 231
+      },
+      {
+       "canonical": "usda_fndds_2706980",
+       "name": "Bacon, lettuce, tomato sandwich on wheat",
+       "kcal": 229
+      },
+      {
+       "canonical": "usda_fndds_2710256",
+       "name": "Bacon, for use on a sandwich",
+       "kcal": 494
+      },
+      {
+       "canonical": "usda_fndds_2705885",
+       "name": "Bacon, NS as to type of meat, cooked",
+       "kcal": 484
+      }
+     ],
+     "lunaPick": null
+    },
+    {
+     "found": {
+      "canonical": "arugula",
+      "name": "Arugula",
+      "kcal": 25
+     },
+     "close": [
+      {
+       "canonical": "arugula",
+       "name": "Arugula",
+       "kcal": 25
+      },
+      {
+       "canonical": "usda_sr_169387",
+       "name": "Arugula, raw",
+       "kcal": 25
+      },
+      {
+       "canonical": "usda_fndds_2709791",
+       "name": "Lettuce, arugula, raw",
+       "kcal": 25
+      },
+      {
+       "canonical": "usda_fndds_2706596",
+       "name": "Beef, potatoes, and vegetables excluding carrots, broccoli, and dark-green leafy; gravy",
+       "kcal": 126
+      },
+      {
+       "canonical": "usda_fndds_2706615",
+       "name": "Beef, noodles, and vegetables excluding carrots, broccoli, and dark-green leafy; gravy",
+       "kcal": 131
+      },
+      {
+       "canonical": "usda_fndds_2706627",
+       "name": "Beef, rice, and vegetables excluding carrots, broccoli, and dark-green leafy; gravy",
+       "kcal": 135
+      },
+      {
+       "canonical": "usda_fndds_2706632",
+       "name": "Beef, dumplings, and vegetables excluding carrots, broccoli, and dark-green leafy; gravy",
+       "kcal": 130
+      },
+      {
+       "canonical": "usda_fndds_2706644",
+       "name": "Sausage, potatoes, and vegetables excluding carrots, broccoli, and dark-green leafy; gravy",
+       "kcal": 128
+      }
+     ],
+     "lunaPick": "Arugula"
+    },
+    {
+     "found": {
+      "canonical": "usda_fndds_2710430",
+      "name": "Iced Coffee, pre-lightened and pre-sweetened",
+      "kcal": 31
+     },
+     "close": [
+      {
+       "canonical": "usda_fndds_2710430",
+       "name": "Iced Coffee, pre-lightened and pre-sweetened",
+       "kcal": 31
+      },
+      {
+       "canonical": "usda_fndds_2710428",
+       "name": "Iced Coffee, brewed",
+       "kcal": 1
+      },
+      {
+       "canonical": "usda_fndds_2710429",
+       "name": "Iced Coffee, brewed, decaffeinated",
+       "kcal": 0
+      },
+      {
+       "canonical": "usda_fndds_2710431",
+       "name": "Coffee, Iced Latte",
+       "kcal": 27
+      },
+      {
+       "canonical": "usda_fndds_2710432",
+       "name": "Coffee, Iced Latte, nonfat",
+       "kcal": 19
+      },
+      {
+       "canonical": "usda_fndds_2710433",
+       "name": "Coffee, Iced Latte, with non-dairy milk",
+       "kcal": 24
+      },
+      {
+       "canonical": "usda_fndds_2710436",
+       "name": "Coffee, Iced Latte, with non-dairy milk, flavored",
+       "kcal": 31
+      },
+      {
+       "canonical": "usda_fndds_2710439",
+       "name": "Coffee, Iced Latte, decaffeinated, with non-dairy milk",
+       "kcal": 18
+      },
+      {
+       "canonical": "usda_fndds_2710445",
+       "name": "Coffee, Iced Cafe Mocha, with non-dairy milk",
+       "kcal": 42
+      },
+      {
+       "canonical": "usda_fndds_2710442",
+       "name": "Coffee, Iced Latte, decaffeinated, with non-dairy milk, flavored",
+       "kcal": 31
+      }
+     ],
+     "lunaPick": null
+    }
+   ]
+  },
+  {
+   "photo": "minimalist-meal-planner-inspiration-idea-120",
+   "reply": {
+    "meal_name": "Chicken and vegetable plate",
+    "items": [
+     [
+      "boiled egg",
+      "boiled egg",
+      2,
+      100,
+      155,
+      13,
+      1,
+      11
+     ],
+     [
+      "roasted potato",
+      "roasted potato",
+      null,
+      150,
+      225,
+      4,
+      34,
+      9
+     ],
+     [
+      "roasted chicken",
+      "roasted chicken",
+      null,
+      170,
+      330,
+      48,
+      0,
+      14
+     ],
+     [
+      "corn",
+      "corn",
+      null,
+      100,
+      96,
+      3,
+      21,
+      1
+     ],
+     [
+      "grated carrot",
+      "carrot",
+      null,
+      120,
+      49,
+      1,
+      12,
+      0
+     ],
+     [
+      "broccoli",
+      "broccoli",
+      null,
+      150,
+      53,
+      4,
+      11,
+      1
+     ]
+    ],
+    "unknown_items": [],
+    "photo_quality": "good"
+   },
+   "foods": [
+    {
+     "found": {
+      "canonical": "egg_hard_boiled",
+      "name": "Egg (hard-boiled)",
+      "kcal": 155
+     },
+     "close": [
+      {
+       "canonical": "egg_hard_boiled",
+       "name": "Egg (hard-boiled)",
+       "kcal": 155
+      },
+      {
+       "canonical": "usda_fndds_2707154",
+       "name": "Egg, whole, boiled or poached",
+       "kcal": 143
+      },
+      {
+       "canonical": "usda_sr_173424",
+       "name": "Egg, whole, cooked, hard-boiled",
+       "kcal": 155
+      },
+      {
+       "canonical": "usda_sr_169229",
+       "name": "Eggplant, cooked, boiled, drained, without salt",
+       "kcal": 35
+      },
+      {
+       "canonical": "usda_sr_169352",
+       "name": "Eggplant, cooked, boiled, drained, with salt",
+       "kcal": 33
+      }
+     ],
+     "lunaPick": "Egg (hard-boiled)"
+    },
+    {
+     "found": {
+      "canonical": "roast_potatoes",
+      "name": "Roast potatoes",
+      "kcal": 126
+     },
+     "close": [
+      {
+       "canonical": "roast_potatoes",
+       "name": "Roast potatoes",
+       "kcal": 126
+      },
+      {
+       "canonical": "usda_fndds_2709402",
+       "name": "Potato, roasted, NFS",
+       "kcal": 126
+      },
+      {
+       "canonical": "usda_fndds_2709415",
+       "name": "Potato, roasted, ready-to-heat",
+       "kcal": 126
+      },
+      {
+       "canonical": "usda_fndds_2709404",
+       "name": "Potato, roasted, from fresh, peel eaten, no added fat",
+       "kcal": 93
+      },
+      {
+       "canonical": "usda_fndds_2709406",
+       "name": "Potato, roasted, from fresh, peel eaten, made with oil",
+       "kcal": 131
+      },
+      {
+       "canonical": "usda_fndds_2709407",
+       "name": "Potato, roasted, from fresh, peel eaten, made with butter",
+       "kcal": 123
+      }
+     ],
+     "lunaPick": "Roast potatoes"
+    },
+    {
+     "found": {
+      "canonical": "rotisserie_chicken",
+      "name": "Rotisserie chicken",
+      "kcal": 164
+     },
+     "close": [
+      {
+       "canonical": "rotisserie_chicken",
+       "name": "Rotisserie chicken",
+       "kcal": 164
+      },
+      {
+       "canonical": "usda_fndds_2706087",
+       "name": "Chicken, chicken roll, roasted",
+       "kcal": 164
+      },
+      {
+       "canonical": "usda_fndds_2706057",
+       "name": "Chicken wing, baked, broiled, or roasted, from raw",
+       "kcal": 252
+      },
+      {
+       "canonical": "usda_fndds_2705955",
+       "name": "Chicken breast, baked, broiled, or roasted, skin eaten, from raw",
+       "kcal": 192
+      },
+      {
+       "canonical": "usda_fndds_2706002",
+       "name": "Chicken drumstick, baked, broiled, or roasted, skin eaten, from raw",
+       "kcal": 190
+      },
+      {
+       "canonical": "usda_fndds_2706029",
+       "name": "Chicken thigh, baked, broiled, or roasted, skin eaten, from raw",
+       "kcal": 231
+      }
+     ],
+     "lunaPick": "Rotisserie chicken"
+    },
+    {
+     "found": {
+      "canonical": "corn_cooked",
+      "name": "Corn (cooked)",
+      "kcal": 96
+     },
+     "close": [
+      {
+       "canonical": "corn_cooked",
+       "name": "Corn (cooked)",
+       "kcal": 96
+      },
+      {
+       "canonical": "corn_dog",
+       "name": "Corn dog",
+       "kcal": 250
+      },
+      {
+       "canonical": "cornbread",
+       "name": "Cornbread",
+       "kcal": 287
+      },
+      {
+       "canonical": "usda_fndds_2709783",
+       "name": "Corn, raw",
+       "kcal": 86
+      },
+      {
+       "canonical": "usda_fndds_2709923",
+       "name": "Corn, creamed",
+       "kcal": 72
+      },
+      {
+       "canonical": "usda_fndds_2709909",
+       "name": "Corn, cooked, from restaurant",
+       "kcal": 119
+      },
+      {
+       "canonical": "usda_fndds_2710046",
+       "name": "Corn, scalloped or pudding",
+       "kcal": 116
+      },
+      {
+       "canonical": "usda_fndds_2709917",
+       "name": "Corn, fresh, cooked with oil",
+       "kcal": 109
+      }
+     ],
+     "lunaPick": "Corn (cooked)"
+    },
+    {
+     "found": {
+      "canonical": "carrots_raw",
+      "name": "Carrots (raw)",
+      "kcal": 41
+     },
+     "close": [
+      {
+       "canonical": "carrots_raw",
+       "name": "Carrots (raw)",
+       "kcal": 41
+      },
+      {
+       "canonical": "carrots_cooked",
+       "name": "Carrots (cooked)",
+       "kcal": 35
+      },
+      {
+       "canonical": "usda_sr_170500",
+       "name": "Carrot, dehydrated",
+       "kcal": 341
+      },
+      {
+       "canonical": "usda_fndds_2709683",
+       "name": "Carrot juice, 100%",
+       "kcal": 40
+      },
+      {
+       "canonical": "usda_sr_170491",
+       "name": "Carrot juice, canned",
+       "kcal": 40
+      },
+      {
+       "canonical": "usda_fndds_2709660",
+       "name": "Carrots, raw",
+       "kcal": 44
+      },
+      {
+       "canonical": "usda_fndds_2709661",
+       "name": "Carrots, raw, salad",
+       "kcal": 212
+      }
+     ],
+     "lunaPick": "Carrots (raw)"
+    },
+    {
+     "found": {
+      "canonical": "broccoli_cooked",
+      "name": "Broccoli (cooked)",
+      "kcal": 35
+     },
+     "close": [
+      {
+       "canonical": "broccoli_cooked",
+       "name": "Broccoli (cooked)",
+       "kcal": 35
+      },
+      {
+       "canonical": "broccoli_raw",
+       "name": "Broccoli (raw)",
+       "kcal": 34
+      },
+      {
+       "canonical": "beef_and_broccoli",
+       "name": "Beef and broccoli",
+       "kcal": 160
+      },
+      {
+       "canonical": "usda_fndds_2709643",
+       "name": "Broccoli, raw",
+       "kcal": 39
+      },
+      {
+       "canonical": "usda_fndds_2709657",
+       "name": "Broccoli, chinese, raw",
+       "kcal": 26
+      },
+      {
+       "canonical": "usda_fndds_2709658",
+       "name": "Broccoli, Chinese, cooked",
+       "kcal": 50
+      },
+      {
+       "canonical": "usda_fndds_2709644",
+       "name": "Broccoli, cooked, from restaurant",
+       "kcal": 77
+      },
+      {
+       "canonical": "usda_fndds_2710792",
+       "name": "Broccoli, cooked, as ingredient",
+       "kcal": 41
+      }
+     ],
+     "lunaPick": "Broccoli (cooked)"
+    }
+   ]
+  }
+ ]
+}
