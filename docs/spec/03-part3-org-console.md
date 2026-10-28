@@ -4360,8 +4360,9 @@ is a gym with no country. People who use the app for themselves may be anywhere.
   worker's minute copies a change to a member's name, email or phone to their customer there, to one the app
   added and to one it only linked alike, and only the part that changed. Each customer keeps the three parts
   of the record as hashes, as Square last agreed with them (made, linked or copied; migration `0170`); a part
-  that differs is a change, and a part Square already holds is not sent (a name of the same words however
-  Square splits them, an email in its folded form, a phone in E.164), so what the business typed in Square
+  that differs is a change, and a part Square already holds is not sent (an email in its folded form, a phone in E.164; a name exactly as
+  the app sent it, for a customer the app made, and by its folded words, case, punctuation and Latin accents off,
+  for one the business typed, every other script keeping its marks), so what the business typed in Square
   stays. A part taken off the record is cleared in Square. The app asks Square for the customer first and
   sends the changed parts with the version it read (UpdateCustomer; Square refuses any other version with 409
   CONFLICT, measured in its test area on 2026-10-28, and the change is asked again the next minute). Square
