@@ -5,7 +5,7 @@
 // read at high detail; Gemini and the Groq spare are gone (rulings/2026-10-28-33a.md).
 // The model carries its price. Every reply is parsed through the scanner's schemas
 // in @app/shared.
-import { MAX_SCAN_FOODS, mealVisionEvidenceSchema, openAiCompletionSchema, type VisionEvidence } from "@app/shared";
+import { MAX_SCAN_FOODS, foodMatchPicksSchema, mealVisionEvidenceSchema, openAiCompletionSchema, type VisionEvidence } from "@app/shared";
 import type { AppConfig } from "../../config.js";
 
 export type MealVisionModel = AppConfig["MEAL_VISION_MODEL"];
@@ -114,6 +114,49 @@ function parseEvidence(text: string, usage: VisionUsage): VisionResult {
   return { evidence: evidence.data, ...usage };
 }
 
+/** One chat completion from OpenAI, as the scanner sends it: only the
+ *  instructions and what they are about leave — no user, safety_identifier or
+ *  metadata field, so nothing in the request says whose meal it is. store:false
+ *  keeps the request out of OpenAI's stored completions; its own abuse-monitoring
+ *  copy (up to 30 days) is outside our control
+ *  (developers.openai.com/api/docs/guides/your-data, read 2026-10-28).
+ *  reasoning_effort "none" is thinking off: reasoning tokens bill as output. */
+async function openAiChat(
+  apiKey: string,
+  model: string,
+  content: readonly unknown[],
+  limits: { maxOutputTokens: number; timeoutMs: number },
+  fetchImpl: typeof fetch,
+): Promise<{ text: string; usage: VisionUsage }> {
+  let response: Response;
+  try {
+    response = await fetchImpl("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model,
+        store: false,
+        reasoning_effort: "none",
+        max_completion_tokens: limits.maxOutputTokens,
+        response_format: { type: "json_object" },
+        messages: [{ role: "user", content }],
+      }),
+      signal: AbortSignal.timeout(limits.timeoutMs),
+    });
+  } catch { throw new VisionProviderError("vision network failure", "unavailable"); }
+  if (!response.ok) throw httpFailure(response.status);
+  let raw: unknown;
+  try { raw = await response.json(); } catch { throw new VisionProviderError("vision non-JSON response", "unavailable"); }
+  const completion = openAiCompletionSchema.safeParse(raw);
+  if (!completion.success) throw new VisionProviderError("vision malformed completion", "unavailable");
+  const [choice] = completion.data.choices;
+  const usage = { tokensIn: completion.data.usage.prompt_tokens, tokensOut: completion.data.usage.completion_tokens };
+  if (choice.message.refusal !== null || choice.finish_reason === "content_filter") throw new VisionProviderError("vision blocked", "unreadable", usage);
+  const text = choice.message.content ?? "";
+  if (text === "") throw new VisionProviderError("vision empty completion", "unreadable", usage);
+  return { text, usage };
+}
+
 export function createOpenAiVisionProvider(
   apiKey: string,
   model: string,
@@ -121,43 +164,75 @@ export function createOpenAiVisionProvider(
   detail: OpenAiImageDetail = MEAL_SCAN_IMAGE_DETAIL,
 ): VisionProvider {
   return { async analyze(imageBase64, mimeType) {
-    let response: Response;
-    try {
-      // Only the instructions and the photo leave: no user, safety_identifier or
-      // metadata field, so nothing in the request says whose plate it is.
-      // store:false keeps the request out of OpenAI's stored completions; its own
-      // abuse-monitoring copy (up to 30 days) is outside our control
-      // (developers.openai.com/api/docs/guides/your-data, read 2026-10-28).
-      // reasoning_effort "none" is thinking off: reasoning tokens bill as output.
-      response = await fetchImpl("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify({
-          model,
-          store: false,
-          reasoning_effort: "none",
-          max_completion_tokens: VISION_MAX_OUTPUT_TOKENS,
-          response_format: { type: "json_object" },
-          messages: [{ role: "user", content: [
-            { type: "text", text: MEAL_VISION_PROMPT },
-            { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}`, detail } },
-          ] }],
-        }),
-        signal: AbortSignal.timeout(VISION_TIMEOUT_MS),
-      });
-    } catch { throw new VisionProviderError("vision network failure", "unavailable"); }
-    if (!response.ok) throw httpFailure(response.status);
-    let raw: unknown;
-    try { raw = await response.json(); } catch { throw new VisionProviderError("vision non-JSON response", "unavailable"); }
-    const completion = openAiCompletionSchema.safeParse(raw);
-    if (!completion.success) throw new VisionProviderError("vision malformed completion", "unavailable");
-    const [choice] = completion.data.choices;
-    const usage = { tokensIn: completion.data.usage.prompt_tokens, tokensOut: completion.data.usage.completion_tokens };
-    if (choice.message.refusal !== null || choice.finish_reason === "content_filter") throw new VisionProviderError("vision blocked", "unreadable", usage);
-    const text = choice.message.content ?? "";
-    if (text === "") throw new VisionProviderError("vision empty completion", "unreadable", usage);
+    const { text, usage } = await openAiChat(apiKey, model, [
+      { type: "text", text: MEAL_VISION_PROMPT },
+      { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}`, detail } },
+    ], { maxOutputTokens: VISION_MAX_OUTPUT_TOKENS, timeoutMs: VISION_TIMEOUT_MS }, fetchImpl);
     return parseEvidence(text, usage);
   } };
+}
+
+// ── The match check (ROADMAP 33a-ii) ─────────────────────────────────────────
+// Word matching cannot tell "milk" from "non-dairy milk", or thigh meat from a
+// wing: on Kd's eight plates it put 4 of 55 foods on the wrong food (2026-10-28).
+// So a food whose table match is not plain (`scanMatch.isPlainMatch`) is put to
+// the model as text — never the photo — with the close foods the tables hold,
+// and it names the one that is the same food, or none. Measured that day on the
+// eight plates, one check a plate: all four wrong foods became the right food or
+// the model's estimate and none became a wrong one, at 104–215 micro-USD and
+// 1.5–7.8 s a check (rulings/2026-10-28-33a-ii.md).
+
+/** A close food a scanned food is checked against: its name and kcal per 100 g. */
+export interface MatchEntry { name: string; kcal: number }
+/** A scanned food to check: as the model named it, what the photo showed, and its close foods. */
+export interface MatchFood { name: string; hint: string; grams: number | null; kcal: number | null; entries: readonly MatchEntry[] }
+/** For each food asked about, in order, the index of its entry that is the same food, or null. */
+export interface MatchAnswer extends VisionUsage { picks: (number | null)[] }
+export interface MatchChecker { check(foods: readonly MatchFood[]): Promise<MatchAnswer> }
+
+/** A check that does not answer in this time leaves its foods to the model's estimate. */
+export const MATCH_CHECK_TIMEOUT_MS = 15_000;
+/** Twenty foods' picks fit in well under this. */
+export const MATCH_CHECK_MAX_OUTPUT_TOKENS = 400;
+
+export const MATCH_CHECK_PROMPT = `You check a meal app's food matches. Each food below was seen in a meal photo, with its weight and calories as estimated from the photo. Under it are entries from the app's food tables, each with its calories per 100 g. For each food, give the number of the entry that is the same food, prepared the same way, as the one on the plate, or null if no entry is. Answer null when an entry is a different food, a different part (a wing for thigh meat), a different kind (non-dairy or a substitute where the plate's food is not), cooked a different way that changes its calories (baked where the plate's is roasted in oil), or raw, frozen or unprepared where the plate's food is ready to eat. Use the calories as a guide: an entry far from the photo's calories per 100 g is usually another food. Return one JSON object only, on one line, with one pick for every food: {"picks":[{"food":1,"entry":3},{"food":2,"entry":null}]}`;
+
+/** The foods to check, as the model reads them under the instructions. */
+export function matchQuestionText(foods: readonly MatchFood[]): string {
+  return foods.map((food, at) => {
+    const named = food.hint === "" || food.hint.toLowerCase() === food.name.toLowerCase() ? food.name : `${food.name} (${food.hint})`;
+    const amount = food.grams === null || food.kcal === null ? "amount not estimated" : `${String(food.grams)} g, ${String(food.kcal)} kcal`;
+    const entries = food.entries.map((entry, n) => `  ${String(n + 1)}. ${entry.name}: ${String(Math.round(entry.kcal))} kcal per 100 g`);
+    return [`Food ${String(at + 1)}: ${named}, ${amount}`, ...entries].join("\n");
+  }).join("\n");
+}
+
+/** The model's JSON text → one pick a food. A food it gave no pick, or an entry
+ *  number it was not offered, is no answer for that food (null); a second pick for
+ *  one food is not read. A reply that breaks the shape is unreadable, with its usage. */
+function parsePicks(text: string, foods: readonly MatchFood[], usage: VisionUsage): MatchAnswer {
+  let content: unknown;
+  try { content = JSON.parse(text); } catch { throw new VisionProviderError("match check malformed JSON", "unreadable", usage); }
+  const parsed = foodMatchPicksSchema.safeParse(content);
+  if (!parsed.success) throw new VisionProviderError("match check malformed shape", "unreadable", usage);
+  const picks = foods.map((food, at): number | null => {
+    const entry = parsed.data.picks.find((pick) => pick.food === at + 1)?.entry ?? null;
+    return entry !== null && entry >= 1 && entry <= food.entries.length ? entry - 1 : null;
+  });
+  return { picks, ...usage };
+}
+
+export function createOpenAiMatchChecker(apiKey: string, model: string, fetchImpl: typeof fetch = fetch): MatchChecker {
+  return { async check(foods) {
+    const { text, usage } = await openAiChat(apiKey, model, [{ type: "text", text: `${MATCH_CHECK_PROMPT}\n\n${matchQuestionText(foods)}` }],
+      { maxOutputTokens: MATCH_CHECK_MAX_OUTPUT_TOKENS, timeoutMs: MATCH_CHECK_TIMEOUT_MS }, fetchImpl);
+    return parsePicks(text, foods, usage);
+  } };
+}
+
+/** The match check on the scanner's own model and key, or null when the key is unset. */
+export function createMealMatchChecker(config: AppConfig, fetchImpl: typeof fetch = fetch): MatchChecker | null {
+  return config.OPENAI_API_KEY === undefined ? null : createOpenAiMatchChecker(config.OPENAI_API_KEY, config.MEAL_VISION_MODEL, fetchImpl);
 }
 
 /** The scanner the config names, or null when that provider's key is unset:

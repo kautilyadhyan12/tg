@@ -43,7 +43,7 @@ import { dishwareGrams, foodMeasures, gramsPerMl, measureGrams, scanStart, start
 import type { FoodReference, FoodSearchProvider } from "./openfoodfacts.adapter.js";
 import { itemsVersion, ownPer100g, savedPlaces } from "./mealEdit.js";
 import * as repo from "./repo.js";
-import { ESTIMATE_CANONICAL_PREFIX, estimateFood, priceScannedFood, type ScanLookups, type ScanPrice } from "./scanMatch.js";
+import { ESTIMATE_CANONICAL_PREFIX, checkedPrice, closeFoodsOf, estimateFood, isPlainMatch, priceScannedFood, type ScanLookups, type ScanPrice } from "./scanMatch.js";
 import type {
   ConfirmMealRequest, ManualMealRequest, MealEditItem, MealEditPreviewRequest, MealPreview, NoDeficitReason, NutritionTargetsResponse,
   OwnTargetsHeld, PatchMealRequest, PlanResponse, PreviewMealRequest, PutNutritionTargetsRequest,
@@ -52,6 +52,8 @@ import {
   MEAL_VISION_MODELS,
   VisionProviderError,
   visionCostMicro,
+  type MatchAnswer,
+  type MatchChecker,
   type MealVisionModel,
   type VisionProvider,
   type VisionResult,
@@ -101,6 +103,9 @@ export interface NutritionDeps {
   redis: RedisLike;
   /** null = the scanner model's key unset → scanning 503s cleanly, rest of module works. */
   vision: VisionProvider | null;
+  /** The match check on the scanner's model (ROADMAP 33a-ii); null with the key unset,
+   *  where no scan runs either, and in tests that price by the tables alone. */
+  matchChecker: MatchChecker | null;
   /** The configured scanner model: it prices and names every ledger row. */
   visionModel: MealVisionModel;
   foods: FoodSearchProvider;
@@ -927,6 +932,64 @@ async function scanFailed(
     : new ScanFailedError(retakeToken, SCAN_UNAVAILABLE, 503, "nutrition_unavailable");
 }
 
+/** The close foods a checked food is put against (ROADMAP 33a-ii): the food the
+ *  tables found, our list's foods for the model's hint and name and the search
+ *  box's best three for each, and USDA's best five for each. */
+async function closeFoodsFor(deps: NutritionDeps, item: VisionEvidence["items"][number], found: FoodReference): Promise<FoodReference[]> {
+  const names = [...new Set([item.canonical_hint, shownFoodName(item)])];
+  const curated = names.flatMap((name) => {
+    const own = findCurated(name);
+    return [...(own === null ? [] : [own]), ...searchCurated(name, 3)];
+  }).map(asReference);
+  const usda = (await Promise.all(names.map((name) => repo.searchUsdaFoods(deps.sql, name, 5)))).flat().map(asUsdaReference);
+  return closeFoodsOf(found, [...curated, ...usda]);
+}
+
+/** Every food whose table match is not plain (`isPlainMatch`) is checked by the
+ *  model in ONE question for the plate, text only, never the photo; what it
+ *  answers prices each (`checkedPrice`). A check that fails leaves each of them to
+ *  the model's estimate, never to the food words found: the scan still answers,
+ *  and the failure is logged. An answered check is ledgered like the scan. */
+async function checkMatches(
+  deps: NutritionDeps,
+  userId: string,
+  requestId: string,
+  items: VisionEvidence["items"],
+  found: ScanPrice[],
+): Promise<ScanPrice[]> {
+  if (deps.matchChecker === null) return found;
+  const ourList = { ourList: (hint: string) => findCurated(hint) };
+  const unclear = found.flatMap((price, at) => {
+    const item = items[at];
+    return price.kind === "table" && item !== undefined && !isPlainMatch(item, price.food, ourList) ? [{ at, item, food: price.food }] : [];
+  });
+  if (unclear.length === 0) return found;
+  const close = await Promise.all(unclear.map(({ item, food }) => closeFoodsFor(deps, item, food)));
+  let answer: MatchAnswer | null = null;
+  try {
+    answer = await deps.matchChecker.check(unclear.map(({ item }, n) => ({
+      name: shownFoodName(item), hint: item.canonical_hint, grams: item.grams, kcal: item.kcal,
+      entries: (close[n] ?? []).map((food) => ({ name: food.name, kcal: food.kcal })),
+    })));
+  } catch (err) {
+    if (err instanceof VisionProviderError && err.usage !== undefined) await ledger(deps, userId, err.usage);
+    const failure = { event: "nutrition.match_check_failed", userId, model: deps.visionModel, foods: unclear.length, requestId };
+    if (err instanceof VisionProviderError) {
+      deps.log.warn({ ...failure, kind: err.kind, reason: err.message }, "meal match check failed");
+    } else {
+      deps.log.error({ ...failure, kind: "fault", err }, "meal match check fault");
+      deps.reportError(err, requestId);
+    }
+  }
+  // Ledgered outside the check's try: an answer already paid for is a check that
+  // answered, and a ledger that cannot be written fails the scan as the scan's own does.
+  if (answer !== null) await ledger(deps, userId, answer);
+  const picks = answer?.picks ?? [];
+  const checked = [...found];
+  for (const [n, { at, item, food }] of unclear.entries()) checked[at] = checkedPrice(item, food, close[n] ?? [], picks[n] ?? null);
+  return checked;
+}
+
 /** Stages 1 and 2: the model reads the photo, and each food it names is resolved
  *  to grams. A photo that cannot be read asks for a retake; any other failure is
  *  thrown for analyzePhoto to answer. */
@@ -968,7 +1031,8 @@ async function readMealPhoto(
   // measures. Each food is priced on its own, so they are asked together: a plate
   // of unlisted foods waits for its slowest packaged-product search, not their sum.
   const lookups = scanLookups(deps);
-  const found = await Promise.all(result.evidence.items.map((evidence) => priceScannedFood(evidence, lookups)));
+  const found = await checkMatches(deps, userId, requestId, result.evidence.items,
+    await Promise.all(result.evidence.items.map((evidence) => priceScannedFood(evidence, lookups))));
   const tableFoods = await withMore(deps, found.flatMap((price) => (price.kind === "table" ? [price.food] : [])));
   let nextTableFood = 0;
   const prices = found.map((price): ScanPrice => (price.kind === "table" ? { ...price, food: tableFoods[nextTableFood++] ?? price.food } : price));
