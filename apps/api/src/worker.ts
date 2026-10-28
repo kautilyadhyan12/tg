@@ -720,7 +720,7 @@ if (square === null) {
       const startedAt = Date.now();
       const run = await processSquareWork({ sql, square, log, now: () => new Date(), news });
       const revokes = run.revokes.sent + run.revokes.deferred + run.revokes.givenUp;
-      const cardStops = run.cardStops.sent + run.cardStops.deferred + run.cardStops.givenUp;
+      const cardStops = run.cardStops.sent + run.cardStops.deferred + run.cardStops.givenUp + run.customerDeletes.deleted + run.customerDeletes.kept + run.customerDeletes.deferred + run.customerDeletes.givenUp;
       const terminalSaves = run.terminalSaves.asked + run.terminalSaves.forgotten;
       const terminalPayments = run.terminalPayments.asked + run.terminalPayments.forgotten;
       const cardCharges = run.cardCharges.asked + run.cardCharges.charged;

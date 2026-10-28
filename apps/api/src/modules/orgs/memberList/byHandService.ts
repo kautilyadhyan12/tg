@@ -73,6 +73,7 @@ import { moveGiftLinks } from "../referrals/memberGiftRepo.js";
 import { movePayerLinks } from "../payers/repo.js";
 import { moveCards } from "../payments/cardsRepo.js";
 import { copyRefusedFor } from "../payments/squareCopiesRepo.js";
+import { oweDeletes, rollUp, standingOf } from "../payments/squareDeletesRepo.js";
 
 type Sql = MemberListDeps["sql"];
 
@@ -91,11 +92,13 @@ async function detailOf(
   /** The caller holds `billing.members`: the row says Overdue where the bill does (17i-ii). */
   seesBills = false,
 ): Promise<MemberListEntryDetail> {
-  const [fields, reached, invitation, squareCopyRefused] = await Promise.all([
+  const [fields, reached, invitation, squareCopyRefused, squareStanding] = await Promise.all([
     repo.listFields(sql, gymId),
     repo.membersAgainstList(sql, gymId, { email: entry.values.email, phone: entry.values.phone, entryIds: [entry.id] }),
     invitationsOf(sql, settings, gymId, [{ id: entry.id, email: entry.values.email }]),
     copyRefusedFor(sql, gymId, entry.id),
+    // Only a past member's page offers Delete permanently, so only theirs asks what it does about their customer in Square.
+    entry.formerAt === null ? Promise.resolve(null) : standingOf(sql, gymId, [entry.id]).then(rollUp),
   ]);
   // The people whose record this certainly is (`whose.ts`), and on a current record the
   // people on an email it shares with other records whom the list can't place: shown,
@@ -177,6 +180,7 @@ async function detailOf(
     waiverInUse: waiver !== null,
     waiverDesk: desk === undefined ? null : { name: desk.name, signer: desk.signer, at: desk.at.toISOString(), by: desk.by },
     squareCopyRefused,
+    squareOnDelete: squareStanding ?? "none",
   };
 }
 
@@ -864,6 +868,8 @@ export async function deleteFormer(
     if (stored.formerAt === null) throw new OrgsError(409, "not_former", MEMBER_LIST_BY_HAND_WORDS.not_former);
     // Their number is never given to somebody new (5e-i).
     await repo.keepGoingMemberNumber(tx, gymId, stored.values.memberNumber);
+    // The customer the app added in Square is owed its deletion while the link to it exists (18d-iii-b-ii-b-ii-b-ii).
+    const squareDeleting = await oweDeletes(tx, gymId, [entryId], deps.now());
     // Past members only, whatever was checked above (5e-ii).
     if (!(await repo.deleteEntry(tx, gymId, entryId, deps.now(), { onlyPast: true }))) throw notFound();
     const version = await repo.bumpListVersion(tx, gymId);
@@ -875,7 +881,7 @@ export async function deleteFormer(
       targetId: entryId,
       meta: {},
     });
-    return { deleted: true as const, version };
+    return { deleted: true as const, version, squareDeleting };
   });
 }
 

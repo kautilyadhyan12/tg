@@ -96,8 +96,8 @@ interface CustomerKey {
  *  none, in one statement, so saves at the same instant all read the one key. */
 export async function claimCustomer(sql: SqlOrTx, c: CustomerKey, key: string): Promise<{ customerId: string } | { makingKey: string }> {
   await sql`
-    INSERT INTO gym_square_customers (gym_id, entry_id, environment, account_id, making_key)
-    VALUES (${c.gymId}, ${c.entryId}, ${c.environment}, ${c.accountId}, ${key})
+    INSERT INTO gym_square_customers (gym_id, entry_id, environment, account_id, making_key, made_as)
+    VALUES (${c.gymId}, ${c.entryId}, ${c.environment}, ${c.accountId}, ${key}, ${c.entryId})
     ON CONFLICT (gym_id, entry_id, environment, account_id) DO NOTHING`;
   const [row] = await sql<{ customer_id: string | null; making_key: string | null }[]>`
     SELECT customer_id, making_key FROM gym_square_customers

@@ -1191,6 +1191,13 @@
       "when": 1790726400170,
       "tag": "0170_square_copied_changes",
       "breakpoints": true
+    },
+    {
+      "idx": 170,
+      "version": "7",
+      "when": 1790726400171,
+      "tag": "0171_square_customer_deletes",
+      "breakpoints": true
     }
   ]
 }

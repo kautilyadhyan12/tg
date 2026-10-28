@@ -121,6 +121,9 @@ export const gymSquareCustomers = pgTable(
     makingKey: uuid("making_key"),
     /** Linked to a customer Square already had (0166; ROADMAP 18d-iii-b-ii-b-i), not one the app made. */
     joinedAt: timestamp("joined_at", { withTimezone: true }),
+    /** The reference id the app gave the customer when it made it (0171; ROADMAP 18d-iii-b-ii-b-ii-b-ii): the record's id then.
+     *  Null for a customer Square already had. A customer Square shows with another reference id is not the one the app made. */
+    madeAs: uuid("made_as"),
     /** What the record's name, email and phone were when Square last agreed with them (0170; ROADMAP
      *  18d-iii-b-ii-b-ii-b-i), each as an md5 hash, null for none: a part that differs now is a change to copy. Null
      *  `copied_at`: not known yet, taken from the record on the next look without sending anything. */
@@ -150,6 +153,33 @@ export const gymSquareCustomers = pgTable(
     // Square's customer on a payment taken in Square's own app, found (0164; 18d-iii-b-i).
     index("gym_square_customers_customer_idx").on(t.environment, t.accountId, t.customerId).where(sql`${t.customerId} IS NOT NULL`),
     foreignKey({ name: "gym_square_customers_entry_fk", columns: [t.gymId, t.entryId], foreignColumns: [gymMemberListEntries.gymId, gymMemberListEntries.id] }).onDelete("cascade"),
+  ],
+);
+
+/** Customers Square is still to be told to delete (0171; ROADMAP 18d-iii-b-ii-b-ii-b-ii): written in the step that deletes a
+ *  record for good, sent by the worker until Square says so. Square's id and the reference id the customer was made with,
+ *  never a name, an email or a phone. `customer_id` null: the answer to making it was lost; found by its reference id. */
+export const gymSquareCustomerDeletes = pgTable(
+  "gym_square_customer_deletes",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    environment: text("environment").notNull(),
+    accountId: text("account_id").notNull(),
+    customerId: text("customer_id"),
+    referenceId: uuid("reference_id").notNull(),
+    tries: integer("tries").notNull().default(0),
+    notBefore: timestamp("not_before", { withTimezone: true }).notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    check("gym_square_customer_deletes_environment_check", sql`${t.environment} IN ('sandbox','production')`),
+    check("gym_square_customer_deletes_ids_check", sql`${t.accountId} ~ '^[A-Za-z0-9_-]{1,64}$' AND (${t.customerId} IS NULL OR ${t.customerId} ~ '^[A-Za-z0-9_-]{1,64}$')`),
+    check("gym_square_customer_deletes_tries_check", sql`${t.tries} >= 0`),
+    uniqueIndex("gym_square_customer_deletes_reference_uq").on(t.gymId, t.environment, t.accountId, t.referenceId),
+    index("gym_square_customer_deletes_due_idx").on(t.notBefore),
   ],
 );
 

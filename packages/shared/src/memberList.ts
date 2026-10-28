@@ -2150,6 +2150,11 @@ export const memberListDeletePreviewSchema = z
     onList: z.number().int().min(0),
     tooMany: z.boolean(),
     digest: sha256Schema,
+    /** Of the past members it deletes, how many have a customer in the gym's Square that the app added and that is deleted
+     *  from Square too (`deletes`); how many are linked to a customer that stays there, because it was already in Square, Square
+     *  merged it or another record uses it (`stays`); and how many have a customer the app added that the app cannot reach,
+     *  because the gym is not connected to that Square account (`notReached`). A person is counted once. */
+    square: z.object({ deletes: z.number().int().min(0), stays: z.number().int().min(0), notReached: z.number().int().min(0) }).strict().default({ deletes: 0, stays: 0, notReached: 0 }),
   })
   .strict();
 export type MemberListDeletePreview = z.infer<typeof memberListDeletePreviewSchema>;
@@ -2161,13 +2166,19 @@ export type MemberListDeleteSelectedRequest = z.infer<typeof memberListDeleteSel
 /** `nothingLeft`: nobody chosen is a past member any more (the same press sent again after it
  *  was done, or a colleague deleted or put them back), so nothing was deleted. */
 export const memberListDeletedSchema = z
-  .object({ deleted: z.number().int().min(0), nothingLeft: z.boolean().default(false), version: z.number().int().min(0) })
+  .object({
+    deleted: z.number().int().min(0),
+    nothingLeft: z.boolean().default(false),
+    version: z.number().int().min(0),
+    /** Customers now owed their deletion at Square, which the worker sends within minutes (18d-iii-b-ii-b-ii-b-ii). */
+    squareDeleting: z.number().int().min(0).default(0),
+  })
   .strict();
 export type MemberListDeleted = z.infer<typeof memberListDeletedSchema>;
 export const memberListDeletedResponseSchema = z.object({ done: memberListDeletedSchema });
 
 /** The past members chosen are no longer the ones the box showed: nothing was deleted. */
-export const MEMBER_LIST_DELETE_CHANGED_WORDS = "Who is ticked has changed since you opened this. Check the names again, then delete.";
+export const MEMBER_LIST_DELETE_CHANGED_WORDS = "This has changed since you opened it. Check the box again, then delete.";
 /** That refusal, with the box as it is now. */
 export const memberListDeleteRefusedSchema = z.object({ error: z.literal("delete_changed"), message: z.string(), preview: memberListDeletePreviewSchema });
 
@@ -2516,6 +2527,10 @@ export const memberListEntryDetailSchema = memberListEntrySchema.extend({
   /** Their customer in the gym's Square would not take the change to their name, email or phone as it is now
    *  (18d-iii-b-ii-b-ii-b-i): the page says so, as Members in Square does. */
   squareCopyRefused: z.boolean().default(false),
+  /** On a past member's page, what Delete permanently does about their customer in the gym's Square (18d-iii-b-ii-b-ii-b-ii): it
+   *  is deleted from Square too (`deletes`), stays there (`stays`: it was already in Square, Square merged it or another record
+   *  uses it), cannot be reached because the gym is not connected (`not_reached`), or they have none (`none`). */
+  squareOnDelete: z.enum(["none", "deletes", "stays", "not_reached"]).default("none"),
 });
 export type MemberListEntryDetail = z.infer<typeof memberListEntryDetailSchema>;
 
@@ -2559,7 +2574,7 @@ export const memberListEntryWrittenSchema = z
 export type MemberListEntryWritten = z.infer<typeof memberListEntryWrittenSchema>;
 
 export const memberListEntryDeletedSchema = z
-  .object({ deleted: z.literal(true), version: z.number().int().min(0) })
+  .object({ deleted: z.literal(true), version: z.number().int().min(0), squareDeleting: z.number().int().min(0).default(0) })
   .strict();
 export type MemberListEntryDeleted = z.infer<typeof memberListEntryDeletedSchema>;
 

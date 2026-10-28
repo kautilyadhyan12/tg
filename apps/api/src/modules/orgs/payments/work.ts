@@ -21,6 +21,7 @@ import { processTerminalPayments } from "./terminalPayments.js";
 import { processCardCharges, type CardChargeRun } from "./cardCharges.js";
 import { SQUARE_PAYMENT_EVENTS, lookBeforeCharging, sweepSquarePayments, takeInSquarePayment, type SweepRun } from "./squareAppPayments.js";
 import { processSquareMembers, type SquareMembersRun } from "./squareMembers.js";
+import { sendOwedCustomerDeletes, type SquareDeletesRun } from "./squareDeletes.js";
 import { forgetListing } from "./squareMembersRepo.js";
 
 export const SQUARE_REVOKED_EVENT = "oauth.authorization.revoked";
@@ -52,6 +53,8 @@ export interface SquareWorkRun {
   revokes: { sent: number; deferred: number; givenUp: number };
   /** Cards Square was owed a stop of (18d-ii). */
   cardStops: { sent: number; deferred: number; givenUp: number };
+  /** Customers owed their deletion at Square after a record was deleted for good (18d-iii-b-ii-b-ii-b-ii). */
+  customerDeletes: SquareDeletesRun;
   renewed: number;
   renewalsWaiting: number;
   startsForgotten: number;
@@ -148,6 +151,7 @@ export async function processSquareWork(deps: PaymentsDeps, eventIds: readonly s
     forgotten: 0,
     revokes: { sent: 0, deferred: 0, givenUp: 0 },
     cardStops: { sent: 0, deferred: 0, givenUp: 0 },
+    customerDeletes: { deleted: 0, kept: 0, deferred: 0, givenUp: 0 },
     renewed: 0,
     renewalsWaiting: 0,
     startsForgotten: 0,
@@ -210,6 +214,7 @@ export async function processSquareWork(deps: PaymentsDeps, eventIds: readonly s
 
   run.revokes = await sendOwedRevokes(deps, square, null, 50, gymIds);
   run.cardStops = await sendOwedCardDisables(deps, square, null, 50, gymIds);
+  run.customerDeletes = await sendOwedCustomerDeletes(deps, square, gymIds);
   run.terminalSaves = await processTerminalSaves(deps, square, gymIds);
   run.terminalPayments = await processTerminalPayments(deps, square, gymIds);
   const addLook = (look: SweepRun): void => {

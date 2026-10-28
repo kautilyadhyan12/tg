@@ -2,14 +2,17 @@ import { useEffect, useState } from 'react';
 import { AlertTriangle, Check, Loader2, X } from 'lucide-react';
 import { MEMBER_LIST_SELECTION_CHANGED_WORDS } from '@app/shared';
 import { deleteRefused, errorText, selectionChanged } from '../../api/orgsApi';
+import PlaceLink from '../../components/console/PlaceLink';
 import { Names } from './MemberListRemove';
-import { DELETE_WHAT_HAPPENS, deleteButton, deleteDoneLine, deleteKeptLine, deleteNobodyLine, deleteQuestion } from './memberListDeleteView';
+import { DELETE_WHAT_HAPPENS, SQUARE_OWNER_ONLY, deleteButton, deleteDoneLine, deleteKeptLine, deleteNobodyLine, deleteQuestion, deleteSquareLines } from './memberListDeleteView';
 
 // The Delete permanently box for the past members selected (5e-ii; Kd's click-through,
 // 2026-10-16). Before anyone is deleted it names who, and who ticked is not and why; the
 // press sends back the box's digest, and if anyone changed since, the server deletes nobody
-// and answers with the new box, shown here instead. Laid out as the Remove box is.
-export default function MemberListDelete({ words, load, press, onSelectionChanged, onDeleted, onClose }) {
+// and answers with the new box, shown here instead. Laid out as the Remove box is. It also says how many of them have a
+// customer in the gym's Square that the app added, which is deleted from Square too (18d-iii-b-ii-b-ii-b-ii); `squareTo` opens
+// Connect Square for whoever may, for the customers the app cannot reach.
+export default function MemberListDelete({ words, load, press, onSelectionChanged, onDeleted, onClose, squareTo = null }) {
   const [preview, setPreview] = useState(null);
   const [error, setError] = useState(null);
   const [note, setNote] = useState(null);
@@ -110,6 +113,7 @@ export default function MemberListDelete({ words, load, press, onSelectionChange
     const question = deleteQuestion(preview, words);
     const nobody = deleteNobodyLine(preview, words);
     const kept = deleteKeptLine(preview, words);
+    const squareLines = question !== null ? deleteSquareLines(preview.square) : [];
     body = (
       <>
         {question !== null ? (
@@ -117,6 +121,26 @@ export default function MemberListDelete({ words, load, press, onSelectionChange
             <h3 className="c-s16 c-w6 c-t1">{question}</h3>
             <Names people={preview.names.map((name, i) => ({ id: String(i), name }))} total={preview.count} testId="delete-names" />
             <p className="c-s14 c-t2">{DELETE_WHAT_HAPPENS}</p>
+          </section>
+        ) : null}
+        {squareLines.length > 0 ? (
+          <section className="flex flex-col gap-2" data-testid="delete-square">
+            {squareLines.map((line) => (
+              <p key={line.key} className="c-s14 c-t2" data-testid={`delete-square-${line.key}`}>
+                {line.text}
+              </p>
+            ))}
+            {preview.square.notReached > 0 ? (
+              squareTo !== null ? (
+                <PlaceLink to={squareTo} data-testid="delete-square-connect">
+                  Connect Square
+                </PlaceLink>
+              ) : (
+                <p className="c-s14 c-t2" data-testid="delete-square-owner">
+                  {SQUARE_OWNER_ONLY}
+                </p>
+              )
+            ) : null}
           </section>
         ) : null}
         {nobody !== null ? <p className="c-s15 c-t1" data-testid="delete-nobody">{nobody}</p> : null}

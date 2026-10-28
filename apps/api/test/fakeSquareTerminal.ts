@@ -16,7 +16,11 @@
 // it carries a version, 0 when made and one more with each change; a version that is not the current one is refused
 // (409 CONFLICT); a part left out stays, a null clears it; a phone or email Square cannot read is refused
 // (INVALID_PHONE_NUMBER, INVALID_EMAIL_ADDRESS), as is a customer left with no name, email or phone (BAD_REQUEST); an
-// old id of a merged customer changes the merged one (2026-10-26).
+// old id of a merged customer changes the merged one (2026-10-26). A customer is deleted as it was on 2026-10-28
+// (`.cost/18d-iii-b-ii-b-ii-b-ii/probe-delete.mts`): a version that is not the current one is refused (409 CONFLICT), a
+// customer already deleted or never there is 404, and the old id of a merged customer answers 200 and leaves the merged
+// customer alone (`state.deleteViaOldId` makes Square behave worse, to prove the app does not lean on that). A customer
+// made through the API reads `THIRD_PARTY`.
 import { randomBytes } from "node:crypto";
 import type { SquareCatalogTax, SquareCustomer, SquareCustomerFound, SquareLocation, SquareOrder, SquarePayment, SquareTerminalCheckout } from "@app/shared";
 import type { CardPaymentResult, NewCardPayment, NewSquareCustomer, NewTerminalCheckout, SquareApi, SquareCustomerChange, SquareResult } from "../src/modules/orgs/payments/square.js";
@@ -84,6 +88,8 @@ export function fakeSquare() {
   const customerReads: string[] = [];
   /** Every UpdateCustomer asked, by the id asked about, with what was sent. */
   const customersChanged: (SquareCustomerChange & { customerId: string; accountId: string })[] = [];
+  /** Every DeleteCustomer asked, by the id asked about, with the version sent (18d-iii-b-ii-b-ii-b-ii). */
+  const customersDeleteAsked: { customerId: string; version: number | null; accountId: string }[] = [];
   // `down`: no answer at all. `refuseNew`: a new checkout is refused (the Terminal is not signed in).
   // `loseAnswers`: a new checkout is made and its answer lost on the way. `refuseRead`: Square
   // refuses to show a checkout (a permission taken away).
@@ -131,6 +137,14 @@ export function fakeSquare() {
     updateStatus: Map<string, number>;
     /** Runs once, as an UpdateCustomer arrives: Square changes something in the instant between the ask and the change. */
     beforeUpdate: (() => void) | null;
+    /** DeleteCustomer (18d-iii-b-ii-b-ii-b-ii): gives no answer; gives no answer to these customers; is refused for these customers with
+     *  the status given; runs once as a delete arrives. `deleteViaOldId`: what Square does when asked to delete the old id of a merged
+     *  customer: nothing (measured 2026-10-28), or delete the merged customer (the worst case, which the app must not lean on). */
+    deleteDown: boolean;
+    deleteFails: Set<string>;
+    deleteStatus: Map<string, number>;
+    beforeDelete: (() => void) | null;
+    deleteViaOldId: "nothing" | "deletes_merged";
     now: () => Date;
   } = {
     down: false,
@@ -161,6 +175,11 @@ export function fakeSquare() {
     readRefused: new Set<string>(),
     updateStatus: new Map<string, number>(),
     beforeUpdate: null,
+    deleteDown: false,
+    deleteFails: new Set<string>(),
+    deleteStatus: new Map<string, number>(),
+    beforeDelete: null,
+    deleteViaOldId: "nothing",
     now: () => new Date(),
   };
   let n = 0;
@@ -249,7 +268,7 @@ export function fakeSquare() {
       if (known !== undefined) return Promise.resolve(known.body === body ? { kind: "ok", value: { id: known.id } } : { kind: "refused", status: 400, code: "IDEMPOTENCY_KEY_REUSED" });
       n += 1;
       const id = `CUS${String(n)}${randomBytes(4).toString("hex").toUpperCase()}`;
-      customers.set(id, { id, accountId: a.merchantId, given_name: c.givenName, family_name: c.familyName, email_address: c.email, phone_number: c.phone, reference_id: c.referenceId });
+      customers.set(id, { id, accountId: a.merchantId, given_name: c.givenName, family_name: c.familyName, email_address: c.email, phone_number: c.phone, reference_id: c.referenceId, creation_source: "THIRD_PARTY" });
       customerKeys.set(keyed, { body, id });
       if (state.loseCustomers) return Promise.resolve(unavailable);
       return Promise.resolve({ kind: "ok", value: { id } });
@@ -382,6 +401,32 @@ export function fakeSquare() {
       const out: SquareCustomer & { accountId?: string } = { ...next };
       delete out.accountId;
       return Promise.resolve({ kind: "ok", value: out });
+    },
+    deleteCustomer(token, id, version) {
+      const a = tokenAccount(token);
+      if (a === undefined) return Promise.resolve(unauthorized);
+      customersDeleteAsked.push({ customerId: id, version, accountId: a.merchantId });
+      if (state.deleteDown || state.down || state.deleteFails.has(id)) return Promise.resolve(unavailable);
+      const refusedWith = state.deleteStatus.get(id);
+      if (refusedWith !== undefined) return Promise.resolve({ kind: "refused", status: refusedWith, code: "FORBIDDEN" });
+      const hook = state.beforeDelete;
+      state.beforeDelete = null;
+      hook?.();
+      // The old id of a merged customer: 200 and the merged customer stays, as Square's test area answered (2026-10-28).
+      const now = mergedInto.get(id);
+      if (now !== undefined) {
+        if (state.deleteViaOldId === "deletes_merged") {
+          customers.delete(now);
+          gone.add(now);
+        }
+        return Promise.resolve({ kind: "ok", value: null });
+      }
+      const c = customers.get(id);
+      if (c === undefined || c.accountId !== a.merchantId) return Promise.resolve(notFound);
+      if (version !== null && version !== (c.version ?? 0)) return Promise.resolve({ kind: "refused", status: 409, code: "CONFLICT" });
+      customers.delete(id);
+      gone.add(id);
+      return Promise.resolve({ kind: "ok", value: null });
     },
     disableCard: () => Promise.resolve(unavailable),
     revokeAccount: () => Promise.resolve({ kind: "ok", value: null }),
@@ -679,7 +724,7 @@ export function fakeSquare() {
   const madeWithKey = (account: Account, key: string, c: NewSquareCustomer) => {
     n += 1;
     const id = `CUS${String(n)}${randomBytes(4).toString("hex").toUpperCase()}`;
-    customers.set(id, { id, accountId: account.merchantId, given_name: c.givenName, family_name: c.familyName, email_address: c.email, phone_number: c.phone, reference_id: c.referenceId });
+    customers.set(id, { id, accountId: account.merchantId, given_name: c.givenName, family_name: c.familyName, email_address: c.email, phone_number: c.phone, reference_id: c.referenceId, creation_source: "THIRD_PARTY" });
     customerKeys.set(`${account.merchantId}:${key}`, { body: JSON.stringify({ g: c.givenName, f: c.familyName, e: c.email, p: c.phone, r: c.referenceId }), id });
     return id;
   };
@@ -720,6 +765,7 @@ export function fakeSquare() {
     customerListings,
     customerReads,
     customersChanged,
+    customersDeleteAsked,
     refund,
     listed,
   };

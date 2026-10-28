@@ -32,6 +32,9 @@ export type SquareTokenStatus = z.infer<typeof squareTokenStatusSchema>;
 
 export const squareRevokeSchema = z.object({ success: z.boolean() });
 
+/** DeleteCustomer's answer: `{}`, read as it was in Square's test area on 2026-10-28. */
+export const squareEmptyAnswerSchema = z.object({});
+
 export const squareMerchantSchema = z.object({
   merchant: z.object({
     id: squareObjectIdSchema,

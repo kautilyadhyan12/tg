@@ -812,6 +812,52 @@ describe('a person on the list', () => {
     expect(onChanged).toHaveBeenCalled();
   });
 
+  // 18d-iii-b-ii-b-ii-b-ii: the question says what Delete permanently does about their customer in the gym's Square.
+  describe('Delete permanently and their customer in Square', () => {
+    const past = (squareOnDelete) => entryAnswer({ ...adaOld, squareOnDelete });
+    const ask = async (squareOnDelete, props = {}) => {
+      orgService.getMemberListEntry.mockResolvedValue(past(squareOnDelete));
+      orgService.deleteFormerMemberListEntry.mockResolvedValue({ data: { deleted: true, version: 5, squareDeleting: squareOnDelete === 'deletes' ? 1 : 0 } });
+      render(
+        <MemoryRouter>
+          <MemberListPerson gymId={GYM} entryId={ADA_OLD} list={LIST} words={WORDS} readOnly={false} canRemove onClose={onClose} onChanged={onChanged} {...props} />
+        </MemoryRouter>,
+      );
+      fireEvent.click(await dialog().findByRole('button', { name: 'Delete permanently' }));
+      return within(screen.getByTestId('confirm-delete'));
+    };
+
+    it('a customer the app added is said to be deleted from Square too, and the done line says it is being deleted', async () => {
+      const box = await ask('deletes');
+      expect(box.getByTestId('delete-square').textContent).toBe('Ada Lovelace was added to your Square customer list by the app. That customer is deleted from Square too.');
+      fireEvent.click(box.getByRole('button', { name: 'Delete permanently' }));
+      expect((await screen.findByTestId('deleted-note')).textContent).toBe('Ada Lovelace was deleted permanently. Their customer is being deleted from Square.');
+    });
+
+    it('a customer that stays is said to stay, and the done line says nothing of Square', async () => {
+      const box = await ask('stays');
+      expect(box.getByTestId('delete-square').textContent).toBe('Ada Lovelace is linked to a customer that stays in Square, because the app didn’t add it or someone else here also uses it.');
+      fireEvent.click(box.getByRole('button', { name: 'Delete permanently' }));
+      expect((await screen.findByTestId('deleted-note')).textContent).toBe('Ada Lovelace was deleted permanently.');
+    });
+
+    it('nobody in Square: the question says nothing about Square', async () => {
+      const box = await ask('none');
+      expect(box.queryByTestId('delete-square')).toBeNull();
+      expect(box.queryByTestId('delete-square-connect')).toBeNull();
+    });
+
+    it('a customer the app cannot reach: the owner gets the button to Connect Square, anybody else reads who can', async () => {
+      const owner = await ask('not_reached', { gym: { slug: 'iron-house', orgType: 'gym', staffRole: 'owner' } });
+      expect(owner.getByTestId('delete-square').textContent).toBe('The app can’t reach your Square, so the customer it added for Ada Lovelace stays there.');
+      expect(owner.getByRole('link', { name: 'Connect Square' }).getAttribute('href')).toBe('/console/iron-house/settings#payments');
+      cleanup();
+      const manager = await ask('not_reached', { gym: { slug: 'iron-house', orgType: 'gym', staffRole: 'manager', privileges: ['members.read', 'members.confirm', 'members.remove'] } });
+      expect(manager.queryByRole('link', { name: 'Connect Square' })).toBeNull();
+      expect(manager.getByTestId('delete-square-owner').textContent).toBe('Only the owner can connect Square.');
+    });
+  });
+
   it("goes ahead with a change that leaves app members off the list only when staff say so", async () => {
     orgService.changeMemberListEntry
       .mockRejectedValueOnce(refusal(409, { error: 'leaves_list', message: 'This would leave people who use the app off your list.', members: 1 }))

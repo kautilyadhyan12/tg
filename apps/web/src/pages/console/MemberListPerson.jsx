@@ -44,6 +44,7 @@ import { paymentsToMatchService } from '../../api/paymentsToMatchApi';
 import { canManageMemberships } from './membershipTypesView';
 import { viewerPrivileges } from './consoleView';
 import { canOpenPlace, placeFor } from './consolePlaces';
+import { SQUARE_OWNER_ONLY, deleteSquareLineOne, deletedOneSquareLine } from './memberListDeleteView';
 import { useCameBack } from './useCameBack';
 import { useLiveNews } from './liveNews';
 import PlaceLink from '../../components/console/PlaceLink';
@@ -467,6 +468,8 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     el.focus({ preventScroll: true });
   }, [refusal, maybe]);
   const [deleted, setDeleted] = useState(null);
+  /** Customers in the gym's Square now being deleted with the person just deleted (18d-iii-b-ii-b-ii-b-ii). */
+  const [deletedSquare, setDeletedSquare] = useState(0);
   // Join: the search, the record picked, and which of the two is kept.
   const [joinQuery, setJoinQuery] = useState('');
   const [joinResults, setJoinResults] = useState(null);
@@ -1008,8 +1011,9 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     setNotice(null);
     setRefusal(null);
     try {
-      await orgService.deleteFormerMemberListEntry(gymId, asked);
+      const res = await orgService.deleteFormerMemberListEntry(gymId, asked);
       if (wanted.current !== asked) return;
+      setDeletedSquare(res?.data?.squareDeleting ?? 0);
       setDeleted(name || 'This person');
       setEntry(null);
       onChanged();
@@ -1754,12 +1758,31 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
         </Ask>
       );
     }
+    // What Delete permanently does about their customer in the gym's Square (18d-iii-b-ii-b-ii-b-ii).
+    const squareLine = deleteSquareLineOne(p.squareOnDelete, name);
+    const squareTo = placeFor(gym?.slug, viewerPrivileges(gym), 'payments');
     return (
       <Ask testId="confirm-delete" question={`Delete ${name} permanently?`}>
         <p className="c-s14 c-t2 m-0">
           Their details and history are deleted and can&apos;t be brought back. Payments they made stay in your takings and
           reports, as &ldquo;A deleted member&rdquo;.
         </p>
+        {squareLine !== null ? (
+          <p className="c-s14 c-t2 m-0" data-testid="delete-square">
+            {squareLine}
+          </p>
+        ) : null}
+        {p.squareOnDelete === 'not_reached' ? (
+          squareTo !== null ? (
+            <PlaceLink to={squareTo} data-testid="delete-square-connect">
+              Connect Square
+            </PlaceLink>
+          ) : (
+            <p className="c-s14 c-t2 m-0" data-testid="delete-square-owner">
+              {SQUARE_OWNER_ONLY}
+            </p>
+          )
+        ) : null}
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={() => void deleteForGood()} disabled={busy || readOnly} className={DANGER}>
             Delete permanently
@@ -1891,7 +1914,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   if (deleted !== null) {
     body = (
       <p className="c-s14 c-t2 m-0" data-testid="deleted-note">
-        {deleted} was deleted permanently.
+        {deleted} was deleted permanently.{deletedOneSquareLine(deletedSquare)}
       </p>
     );
   } else if (id === null || (mode === 'edit' && shown !== null)) {
