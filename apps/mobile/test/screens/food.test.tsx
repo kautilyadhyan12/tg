@@ -391,3 +391,21 @@ describe("round one's findings, on the screen", () => {
     expect(screen.queryByText(/takenAt/)).toBeNull();
   });
 });
+
+describe("the re-check's finding", () => {
+  it("two quick presses on Add keep one meal", async () => {
+    const server = await openFood({ meals: [] });
+    await fireEvent.press(await screen.findByRole("button", { name: "Add to Breakfast" }));
+    await fireEvent.changeText(screen.getByLabelText("Search food"), "oats");
+    await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 379 kcal per 100 g, USDA" }));
+    const add = await screen.findByRole("button", { name: "Add Oats, rolled · 307 kcal" });
+    void fireEvent.press(add);
+    void fireEvent.press(add);
+    expect(await screen.findByText("Oats, rolled added.")).toBeTruthy();
+    await waitFor(() => {
+      expect(posts(server).length).toBeGreaterThan(0);
+    });
+    expect(new Set(posts(server).map((p) => (p.body as { id: string }).id)).size).toBe(1);
+    expect(screen.getAllByRole("button", { name: /^Oats, rolled, 307 kcal/ })).toHaveLength(1);
+  });
+});

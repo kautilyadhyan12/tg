@@ -600,6 +600,9 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
   const [priced, setPriced] = useState<Priced>({ kind: "none" });
   const [allMeasures, setAllMeasures] = useState(false);
   const [full, setFull] = useState(false);
+  // Held from the first press until the meal is kept: a second tap never logs it twice.
+  const [adding, setAdding] = useState(false);
+  const addingNow = useRef(false);
   // The box fits between the top of the screen and the keyboard: its title and the search box stay in
   // view, and the list under them scrolls.
   const { height } = useWindowDimensions();
@@ -626,6 +629,8 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
     setAmount(null);
     setPriced({ kind: "none" });
     setFull(false);
+    setAdding(false);
+    addingNow.current = false;
   }, [type]);
 
   // The search, a moment after the last letter; only the newest answer is drawn.
@@ -685,10 +690,12 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
   const name = mealTypeName(type);
   const preview = priced.kind === "ok" && priced.for === key ? priced.preview : null;
   const refusedWords = priced.kind === "refused" && priced.for === key ? priced.words : null;
-  const held = item === null || tooSmall || refusedWords !== null || outbox === null;
+  const held = item === null || tooSmall || refusedWords !== null || outbox === null || adding;
 
   const add = async () => {
-    if (food === null || item === null || held) return;
+    if (food === null || item === null || held || addingNow.current) return;
+    addingNow.current = true;
+    setAdding(true);
     const id = newGoalId();
     const kept = await outbox.add({
       id,
@@ -697,6 +704,8 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
       totals: preview?.totals ?? null,
       tried: false,
     });
+    addingNow.current = false;
+    setAdding(false);
     if (kept) onAdded(type, food.name);
     else setFull(true);
   };
