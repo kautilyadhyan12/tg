@@ -437,6 +437,26 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
       expect(held(gym, "CLEOTILL"), "the business's own customer is untouched").toMatchObject({ given: "Leo", family: "Grant", email, version: 0 });
     });
 
+    it("a customer the app made and Square then merged, which the app followed, is no longer one the app made: the box says it stays and nothing is owed", async () => {
+      const gym = await makeGym("Followed Gym");
+      const email = `amy.lee.${uniq()}@gmail.com`;
+      const amy = await person(gym, "Amy Lee", { email, phone: "+13125550150" });
+      expect((await addMembers(gym)).state).toBe("added");
+      const made = await customerIdOf(gym, amy);
+      // The business also typed Amy in at the till, then merged the two in its Square Dashboard; Square told the app, which followed.
+      square.customer(gym.acct, { id: "CAMYTILL", given_name: "Amy", family_name: "Lee", email_address: email });
+      const merged = square.merge(gym.acct, [made, "CAMYTILL"]);
+      await work([await signed(gym.acct, "customer.deleted", { type: "customer", id: made }), await signed(gym.acct, "customer.deleted", { type: "customer", id: "CAMYTILL" })]);
+      expect(await link(gym, amy), "Amy keeps the merged customer, as one Square made").toMatchObject({ customer_id: merged, joined_at: expect.any(Date) as Date });
+      const { preview, done } = await deleteForGood(gym, amy);
+      expect(preview.square).toEqual({ deletes: 0, stays: 1, notReached: 0 });
+      expect(done.squareDeleting).toBe(0);
+      expect(await owedRows(gym)).toEqual([]);
+      await minutes(2);
+      expect(asked(gym)).toEqual([]);
+      expect(held(gym, merged), "the merged customer is still in Square").not.toBeNull();
+    });
+
     it("several people in one press: each counted once by what happens to their customer, and only the app's are deleted", async () => {
       const gym = await makeGym("Mixed Gym");
       const email = `mix.${uniq()}@gmail.com`;
