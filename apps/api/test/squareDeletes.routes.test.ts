@@ -277,7 +277,7 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
   describe("THE WORST THING: deleting somebody else's customer", () => {
     /** Pat has a customer in Square; Sam is on her email and was added to Square by the app with a customer of his own; Square then
      *  merged the two in its Dashboard, which keeps the older customer's details, Pat's, and the app has not heard. */
-    const samMergedIntoPat = async (name: string) => {
+    const samMergedIntoPat = async (name: string, looksLikeSams = false) => {
       const gym = await makeGym(name);
       const pat = `pat.smith.${uniq()}@gmail.com`;
       square.customer(gym.acct, { id: `CPAT${uniq()}`, given_name: "Pat", family_name: "Smith", email_address: pat, phone_number: "+13125550100" });
@@ -286,7 +286,9 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
       expect((await addMembers(gym)).state).toBe("added");
       const samFirst = await customerIdOf(gym, sam);
       expect(samFirst).toMatch(/^CUS/);
-      const merged = square.merge(gym.acct, [patId, samFirst]);
+      // `looksLikeSams`: the worst a merge can look like, with Sam's own reference id and a source that does not say it was a
+      // merge, so nothing but the id Square answers with tells the app the customer is no longer Sam's.
+      const merged = square.merge(gym.acct, [patId, samFirst], looksLikeSams ? { reference_id: sam, creation_source: "THIRD_PARTY" } : {});
       return { gym, pat, sam, samFirst, merged };
     };
 
@@ -313,6 +315,21 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
         await minutes(2);
         expect(asked(gym)).toEqual([]);
         expect(held(gym, merged), "Pat's customer survives even a Square that deletes through the old id").toMatchObject({ given: "Pat", email: pat, phone: "+13125550100" });
+      } finally {
+        square.state.deleteViaOldId = "nothing";
+      }
+    });
+
+    it("even a merged customer that looks exactly like Sam's own (his reference id, no sign of a merge) is never deleted: only the id Square answers with says it is no longer his", async () => {
+      const { gym, pat, sam, samFirst, merged } = await samMergedIntoPat("Look-Alike Gym", true);
+      square.state.deleteViaOldId = "deletes_merged";
+      try {
+        await deleteForGood(gym, sam);
+        await minutes(2);
+        expect(asked(gym), "Square was never asked to delete anything").toEqual([]);
+        expect(held(gym, merged), "Pat's customer is exactly as Pat has it").toMatchObject({ email: pat, phone: "+13125550100" });
+        expect(held(gym, samFirst)).toBeNull();
+        expect(logged.some((l) => l.event === "square.customer_delete_kept" && l.why === "answered_as_another")).toBe(true);
       } finally {
         square.state.deleteViaOldId = "nothing";
       }
