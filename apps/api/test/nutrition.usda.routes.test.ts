@@ -25,7 +25,6 @@ const env = {
   WEB_ORIGIN: "http://localhost:5173",
   JWT_SECRET: "usda7a-test-secret-0123456789abcdef-32", // gitleaks:allow
   LOG_LEVEL: "error",
-  GROQ_API_KEY: "usda7a-fake-provider-key", // gitleaks:allow
 };
 
 const FIRST_ID = 90_000_201;

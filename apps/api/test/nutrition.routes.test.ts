@@ -16,7 +16,7 @@ vi.mock("@sentry/node", () => sentry);
 
 const url=process.env["DATABASE_URL"];const d=describe.skipIf(url===undefined||url==="");
 const PASSWORD="p26a-safe-test-password-1"; // gitleaks:allow
-const env={NODE_ENV:"test",DATABASE_URL:url??"",WEB_ORIGIN:"http://localhost:5173",JWT_SECRET:"p26a-test-secret-0123456789abcdef-32",LOG_LEVEL:"error",GROQ_API_KEY:"p26a-fake-provider-key"}; // gitleaks:allow
+const env={NODE_ENV:"test",DATABASE_URL:url??"",WEB_ORIGIN:"http://localhost:5173",JWT_SECRET:"p26a-test-secret-0123456789abcdef-32",LOG_LEVEL:"error"};
 type App=Awaited<ReturnType<typeof buildApp>>;
 /** A scanned food as the reply is read (one list per food, RULINGS 2026-09-16), with no estimate of its own unless one is given: a food no table has is then named under "Not in the total", as these tests expect, and not estimated. */
 const seen=(o:{name:string;canonical_hint:string;count?:number|null;grams?:number|null;kcal?:number|null;protein_g?:number|null;carbs_g?:number|null;fat_g?:number|null}):VisionItem=>({count:null,grams:null,kcal:null,protein_g:null,carbs_g:null,fat_g:null,...o});
@@ -45,12 +45,12 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
   it("confirms a photo meal, records ledger, and fires photo badge",async()=>{const scanResponse=await inject("POST","/v1/nutrition/analyze-photo",cookieA,{imageBase64:jpeg,mimeType:"image/jpeg"});expect(scanResponse.statusCode,scanResponse.body).toBe(200);const scan=scanResponse.json<{scanToken:string;items:{canonical:string}[]}>();scanToken=scan.scanToken;const confirmed=await inject("POST","/v1/nutrition/meals",cookieA,{scanToken,takenAt:new Date().toISOString(),items:scan.items.map((i)=>({canonical:i.canonical,grams:100}))});expect(confirmed.statusCode,confirmed.body).toBe(201);const meal=confirmed.json<{meal:{id:string;origin:string}}>().meal;mealId=meal.id;expect(meal.origin).toBe("photo");const [counts]=await sql<{photo:string;costs:string}[]>`SELECT (SELECT count(*) FROM meal_logs WHERE user_id=${userA} AND origin='photo') AS photo,(SELECT count(*) FROM api_cost_events WHERE user_id=${userA} AND feature='meal_scan') AS costs`;expect(counts?.photo).toBe("1");expect(Number(counts?.costs)).toBeGreaterThanOrEqual(2);const earned=await sql<{code:string}[]>`SELECT code FROM user_achievements WHERE user_id=${userA}`;expect(earned.map((v)=>v.code)).toEqual(expect.arrayContaining(["first_meal","photo_meal"]));},30_000);
 
   it("the ledger row names the configured scanner and prices it at that model's own list price (RULINGS 2026-09-15)",async()=>{
-    // The fake provider reports 100 in + 200 out; the config's default model is Gemini 3.5 Flash-Lite ($0.30 / $2.50 per 1M): 30 + 500 micro-USD.
+    // The fake provider reports 100 in + 200 out; the scanner is GPT-6 Luna ($0.10 / $0.50 per 1M): 10 + 100 micro-USD.
     const rows=await sql<{provider:string;units:string;unit_type:string;cost_micro:string}[]>`SELECT provider, units, unit_type, cost_micro FROM api_cost_events WHERE user_id=${userA} AND feature='meal_scan' ORDER BY at DESC LIMIT 1`;
-    expect(rows[0]?.provider).toBe("gemini:gemini-3.5-flash-lite");
+    expect(rows[0]?.provider).toBe("openai:gpt-6-luna");
     expect(rows[0]?.unit_type).toBe("tokens");
     expect(Number(rows[0]?.units)).toBe(300);
-    expect(String(rows[0]?.cost_micro)).toBe("530");
+    expect(String(rows[0]?.cost_micro)).toBe("110");
   },30_000);
 
   it("PATCH preserves originals in meal_log_corrections; foreign user gets 404",async()=>{const patch=await inject("PATCH",`/v1/nutrition/meals/${mealId}`,cookieA,{mealName:"Corrected meal"});expect(patch.statusCode).toBe(200);const rows=await sql<{field:string;original:unknown;corrected:unknown}[]>`SELECT field,original,corrected FROM meal_log_corrections WHERE meal_log_id=${mealId}`;expect(rows.some((r)=>r.field==="meal_name"&&r.original==="Dal and roti"&&r.corrected==="Corrected meal")).toBe(true);expect((await inject("GET",`/v1/nutrition/meals/${mealId}`,cookieB)).statusCode).toBe(404);expect((await inject("PATCH",`/v1/nutrition/meals/${mealId}`,cookieB,{mealName:"stolen"})).statusCode).toBe(404);},30_000);
@@ -803,18 +803,18 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
   const UNAVAILABLE={error:"nutrition_unavailable",message:"Meal scanning is temporarily unavailable."};
   /** A failed scan's body without its request id, which is checked to be there. */
   const bodyOf=(res:Scanned)=>{const{requestId,...body}=res.json<Failed>();expect(typeof requestId).toBe("string");return body;};
-  const googleReply=(status:number,body:unknown)=>new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json"}});
+  const providerReply=(status:number,body:unknown)=>new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json"}});
 
   it("a scanner outage is never blamed on the photo and costs no scan: busy twice, then unavailable and not called for five minutes; per person; nothing ledgered; a log line each",async()=>{
     let now=Date.now();
-    const google=scripted(
+    const scanner=scripted(
       new VisionProviderError("vision HTTP 429","unavailable"),
       new VisionProviderError("vision network failure","unavailable"),
       new VisionProviderError("vision malformed completion","unavailable"),
       new VisionProviderError("vision HTTP 503","unavailable"),
       goodEvidence,
     );
-    const s=await scanApp("p26a-outage@example.com",{clock:()=>now,vision:google});
+    const s=await scanApp("p26a-outage@example.com",{clock:()=>now,vision:scanner});
     try{
       const logged=vi.spyOn(s.app.log,"error").mockImplementation(()=>undefined);
       const first=await s.scan();
@@ -827,24 +827,24 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
       // The third failure pauses this person's scans, so it no longer says "in a minute".
       expect(bodyOf(third)).toEqual(UNAVAILABLE);
       expect(await s.scansUsed()).toBe("0");
-      expect(google.calls).toBe(3);
+      expect(scanner.calls).toBe(3);
       // Paused: refused before it takes anything, and the scanner is not called.
       expect(bodyOf(await s.scan())).toEqual(UNAVAILABLE);
-      expect([google.calls,await s.scansUsed()]).toEqual([3,"0"]);
+      expect([scanner.calls,await s.scansUsed()]).toEqual([3,"0"]);
       // The pause is this person's: someone else meeting the same outage reaches the scanner, and is told it is busy.
       const other=await s.person("p26a-outage-other@example.com");
       const theirs=await other.scan();
       expect(bodyOf(theirs)).toEqual({error:"scanner_unavailable",message:BUSY});
-      expect(google.calls).toBe(4);
+      expect(scanner.calls).toBe(4);
       // A moment before five minutes from the first failure, still paused; at five minutes, the scan goes through and is counted.
       now+=5*60_000-1;
       expect(bodyOf(await s.scan())).toEqual(UNAVAILABLE);
-      expect(google.calls).toBe(4);
+      expect(scanner.calls).toBe(4);
       now+=1;
       const good=await s.scan();
       expect(good.statusCode,good.body).toBe(200);
-      expect([google.calls,await s.scansUsed()]).toEqual([5,"1"]);
-      const line=(res:Scanned,reason:string,userId=s.userId)=>({event:"nutrition.scan_failed",userId,model:"gemini-3.5-flash-lite",kind:"unavailable",reason,requestId:res.json<Failed>().requestId});
+      expect([scanner.calls,await s.scansUsed()]).toEqual([5,"1"]);
+      const line=(res:Scanned,reason:string,userId=s.userId)=>({event:"nutrition.scan_failed",userId,model:"gpt-6-luna",kind:"unavailable",reason,requestId:res.json<Failed>().requestId});
       expect(loggedFailures(logged.mock.calls)).toEqual([line(first,"vision HTTP 429"),line(second,"vision network failure"),line(third,"vision malformed completion"),line(theirs,"vision HTTP 503",other.userId)]);
       // An outage brings back no usage, so the one row is the good scan's.
       expect((await s.costRows()).map((r)=>r.units)).toEqual([300]);
@@ -853,8 +853,8 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
 
   it("a scan that rode a free retry gets a new one back from any scanner failure, and one held through the pause still works after it",async()=>{
     let now=Date.now();
-    const google=scripted({...goodEvidence,photo_quality:"poor"},new VisionProviderError("vision HTTP 429","unavailable"),new VisionProviderError("vision HTTP 403","refused"),new TypeError("a fault"),goodEvidence);
-    const s=await scanApp("p26a-retry-back@example.com",{clock:()=>now,vision:google});
+    const scanner=scripted({...goodEvidence,photo_quality:"poor"},new VisionProviderError("vision HTTP 429","unavailable"),new VisionProviderError("vision HTTP 403","refused"),new TypeError("a fault"),goodEvidence);
+    const s=await scanApp("p26a-retry-back@example.com",{clock:()=>now,vision:scanner});
     try{
       vi.spyOn(s.app.log,"error").mockImplementation(()=>undefined);
       // The photo's own failure is counted, with its one free retake (§3.5).
@@ -874,7 +874,7 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
       // Three failures: paused. The free retry held is not spent by the refusal, and no scan is counted.
       const held=freeRetryOf(fault);
       expect(bodyOf(await s.scan(held))).toEqual(UNAVAILABLE);
-      expect([google.calls,await s.scansUsed()]).toEqual([4,"1"]);
+      expect([scanner.calls,await s.scansUsed()]).toEqual([4,"1"]);
       // Five minutes after the first failure the pause is over, and the free retry held still works.
       now+=5*60_000-60_000;
       const good=await s.scan(held);
@@ -894,8 +894,8 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
       ()=>new Promise<VisionResult>((_resolve,reject)=>{hung.fail=reject;reached();}),
       ()=>Promise.resolve({evidence:goodEvidence,tokensIn:100,tokensOut:200}),
     ];
-    const google:VisionProvider={analyze:()=>answers.shift()?.()??Promise.reject(new Error("no answer left"))};
-    const s=await scanApp("p26a-over-limit@example.com",{vision:google});
+    const scanner:VisionProvider={analyze:()=>answers.shift()?.()??Promise.reject(new Error("no answer left"))};
+    const s=await scanApp("p26a-over-limit@example.com",{vision:scanner});
     try{
       vi.spyOn(s.app.log,"error").mockImplementation(()=>undefined);
       const last=s.scan();
@@ -915,11 +915,11 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     }finally{await s.app.close();}
   },30_000);
 
-  it("a photo Google refuses costs no scan: unavailable with nothing to retry, and after three refusals in five minutes Google is not called again",async()=>{
-    // A file that starts with JPEG bytes and is no picture, which Google answers 400.
+  it("a photo OpenAI refuses costs no scan: unavailable with nothing to retry, and after three refusals in five minutes OpenAI is not called again",async()=>{
+    // A file that starts with JPEG bytes and is no picture, which OpenAI answers 400.
     let calls=0;
-    const refuses:typeof fetch=()=>{calls++;return Promise.resolve(googleReply(400,{error:{code:400,message:"Unable to process input image.",status:"INVALID_ARGUMENT"}}));};
-    const s=await scanApp("p26a-refused@example.com",{env:{GEMINI_API_KEY:"p26a-gemini-test-key"},fetchForScanner:refuses}); // gitleaks:allow
+    const refuses:typeof fetch=()=>{calls++;return Promise.resolve(providerReply(400,{error:{message:"You uploaded an unsupported image.",type:"invalid_request_error",param:null,code:"invalid_image_format"}}));};
+    const s=await scanApp("p26a-refused@example.com",{env:{OPENAI_API_KEY:"p26a-openai-test-key"},fetchForScanner:refuses}); // gitleaks:allow
     try{
       const logged=vi.spyOn(s.app.log,"error").mockImplementation(()=>undefined);
       const tries:Scanned[]=[];
@@ -927,19 +927,19 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
       expect(tries.map((r)=>r.statusCode)).toEqual([503,503,503,503,503]);
       for(const res of tries)expect(bodyOf(res)).toEqual(UNAVAILABLE);
       expect([calls,await s.scansUsed()]).toEqual([3,"0"]);
-      expect(loggedFailures(logged.mock.calls)).toEqual(tries.slice(0,3).map((res)=>({event:"nutrition.scan_failed",userId:s.userId,model:"gemini-3.5-flash-lite",kind:"refused",reason:"vision HTTP 400",requestId:res.json<Failed>().requestId})));
+      expect(loggedFailures(logged.mock.calls)).toEqual(tries.slice(0,3).map((res)=>({event:"nutrition.scan_failed",userId:s.userId,model:"gpt-6-luna",kind:"refused",reason:"vision HTTP 400",requestId:res.json<Failed>().requestId})));
       expect(await s.costRows()).toEqual([]);
     }finally{await s.app.close();}
   },30_000);
 
-  it("through the real scanner, Google's 429 and a reply that is not Google's are busy and cost no scan, and neither is ledgered",async()=>{
+  it("through the real scanner, OpenAI's 429 and a reply that is not OpenAI's are busy and cost no scan, and neither is ledgered",async()=>{
     const answers=[
-      googleReply(429,{error:{code:429,status:"RESOURCE_EXHAUSTED"}}),
-      googleReply(200,{candidates:"not Gemini's"}),
-      googleReply(200,{candidates:[{content:{parts:[{text:JSON.stringify(wire(goodEvidence))}]}}],usageMetadata:{promptTokenCount:400,candidatesTokenCount:100}}),
+      providerReply(429,{error:{message:"Rate limit reached",type:"requests",code:"rate_limit_exceeded"}}),
+      providerReply(200,{choices:"not OpenAI's"}),
+      providerReply(200,{choices:[{message:{content:JSON.stringify(wire(goodEvidence)),refusal:null},finish_reason:"stop"}],usage:{prompt_tokens:400,completion_tokens:100}}),
     ];
-    const google:typeof fetch=()=>{const next=answers.shift();return next===undefined?Promise.reject(new Error("no answer left")):Promise.resolve(next);};
-    const s=await scanApp("p26a-google-busy@example.com",{env:{GEMINI_API_KEY:"p26a-gemini-test-key"},fetchForScanner:google}); // gitleaks:allow
+    const openai:typeof fetch=()=>{const next=answers.shift();return next===undefined?Promise.reject(new Error("no answer left")):Promise.resolve(next);};
+    const s=await scanApp("p26a-openai-busy@example.com",{env:{OPENAI_API_KEY:"p26a-openai-test-key"},fetchForScanner:openai}); // gitleaks:allow
     try{
       vi.spyOn(s.app.log,"error").mockImplementation(()=>undefined);
       expect(bodyOf(await s.scan())).toEqual({error:"scanner_unavailable",message:BUSY});
@@ -949,7 +949,8 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
       expect(good.statusCode,good.body).toBe(200);
       expect(answers).toEqual([]);
       expect(await s.scansUsed()).toBe("1");
-      expect(await s.costRows()).toEqual([{provider:"gemini:gemini-3.5-flash-lite",units:500,costMicro:"370"}]);
+      // 400 in at $0.10 and 100 out at $0.50 per 1M: 40 + 50 micro-USD.
+      expect(await s.costRows()).toEqual([{provider:"openai:gpt-6-luna",units:500,costMicro:"90"}]);
     }finally{await s.app.close();}
   },30_000);
 
@@ -969,8 +970,8 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
       expect(sentry.captureException).toHaveBeenCalledTimes(1);
       expect(await s.scansUsed()).toBe("0");
       expect(loggedFailures(logged.mock.calls)).toEqual([
-        {event:"nutrition.scan_failed",userId:s.userId,model:"gemini-3.5-flash-lite",kind:"fault",reason:"TypeError",requestId:body.requestId,err:fault},
-        {event:"nutrition.scan_failed",userId:s.userId,model:"gemini-3.5-flash-lite",kind:"refused",reason:"vision HTTP 403",requestId:refused.json<Failed>().requestId},
+        {event:"nutrition.scan_failed",userId:s.userId,model:"gpt-6-luna",kind:"fault",reason:"TypeError",requestId:body.requestId,err:fault},
+        {event:"nutrition.scan_failed",userId:s.userId,model:"gpt-6-luna",kind:"refused",reason:"vision HTTP 403",requestId:refused.json<Failed>().requestId},
       ]);
       expect(await s.costRows()).toEqual([]);
     }finally{await s.app.close();}
@@ -1016,7 +1017,7 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
       expect(second.json<Failed>()).toMatchObject({error:"retake_required",message:photo});
       expect(second.json<Failed>()).not.toHaveProperty("retakeToken");
       expect(await s.scansUsed()).toBe("1");
-      const warning=(res:Scanned)=>({event:"nutrition.scan_failed",userId:s.userId,model:"gemini-3.5-flash-lite",kind:"unreadable",reason:"vision malformed evidence shape",requestId:res.json<Failed>().requestId});
+      const warning=(res:Scanned)=>({event:"nutrition.scan_failed",userId:s.userId,model:"gpt-6-luna",kind:"unreadable",reason:"vision malformed evidence shape",requestId:res.json<Failed>().requestId});
       expect(loggedFailures(warned.mock.calls)).toEqual([warning(first),warning(second)]);
       expect((await s.costRows()).map((r)=>r.units)).toEqual([30,30]);
     }finally{await s.app.close();}
@@ -1047,8 +1048,8 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     }finally{await s.app.close();}
   },30_000);
 
-  it("the real scanner is wired in: with no key the scan answers 503 before a scan is counted; with a key it calls Gemini",async()=>{
-    // The test config sets no GEMINI_API_KEY, and Gemini is the default model.
+  it("the real scanner is wired in: with no key the scan answers 503 before a scan is counted; with a key it calls OpenAI",async()=>{
+    // The test config sets no OPENAI_API_KEY.
     const off=await scanApp("p26a-nokey@example.com");
     try{
       const res=await off.scan();
@@ -1057,29 +1058,25 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
       expect(await off.scansUsed()).toBeNull();
     }finally{await off.app.close();}
 
-    const calls:{url:string;key:string|null}[]=[];
-    const gemini:typeof fetch=(input,init)=>{
-      calls.push({url:typeof input==="string"?input:input instanceof URL?input.href:input.url,key:new Headers(init?.headers).get("x-goog-api-key")});
-      const reply={candidates:[{content:{parts:[{text:JSON.stringify(wire(goodEvidence))}]}}],usageMetadata:{promptTokenCount:400,candidatesTokenCount:100}};
+    const calls:{url:string;key:string|null;body:unknown}[]=[];
+    const openai:typeof fetch=(input,init)=>{
+      calls.push({url:typeof input==="string"?input:input instanceof URL?input.href:input.url,key:new Headers(init?.headers).get("authorization"),body:typeof init?.body==="string"?JSON.parse(init.body):null});
+      const reply={choices:[{message:{content:JSON.stringify(wire(goodEvidence)),refusal:null},finish_reason:"stop"}],usage:{prompt_tokens:400,completion_tokens:100}};
       return Promise.resolve(new Response(JSON.stringify(reply),{status:200,headers:{"content-type":"application/json"}}));
     };
-    const on=await scanApp("p26a-realkey@example.com",{env:{GEMINI_API_KEY:"p26a-gemini-test-key"},fetchForScanner:gemini}); // gitleaks:allow
+    const on=await scanApp("p26a-realkey@example.com",{env:{OPENAI_API_KEY:"p26a-openai-test-key"},fetchForScanner:openai}); // gitleaks:allow
     try{
       const res=await on.scan();
       expect(res.statusCode,res.body).toBe(200);
-      expect(calls).toEqual([{url:"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",key:"p26a-gemini-test-key"}]); // gitleaks:allow
+      expect(calls.map(({url,key})=>({url,key}))).toEqual([{url:"https://api.openai.com/v1/chat/completions",key:"Bearer p26a-openai-test-key"}]); // gitleaks:allow
+      // The worst thing (33a), through the real route: the person's id, email and name never leave with the photo.
+      const sent=JSON.stringify(calls[0]?.body);
+      for(const who of [on.userId,"p26a-realkey@example.com","P26a Scan"])expect(sent).not.toContain(who);
+      expect(calls[0]?.body).toMatchObject({model:"gpt-6-luna",store:false});
+      expect(Object.keys(calls[0]?.body??{}).sort()).toEqual(["max_completion_tokens","messages","model","reasoning_effort","response_format","store"]);
       expect(await on.scansUsed()).toBe("1");
-      // 400 in at $0.30 and 100 out at $2.50 per 1M: 120 + 250 micro-USD.
-      expect(await on.costRows()).toEqual([{provider:"gemini:gemini-3.5-flash-lite",units:500,costMicro:"370"}]);
+      // 400 in at $0.10 and 100 out at $0.50 per 1M: 40 + 50 micro-USD.
+      expect(await on.costRows()).toEqual([{provider:"openai:gpt-6-luna",units:500,costMicro:"90"}]);
     }finally{await on.app.close();}
-  },30_000);
-
-  it("the spare model names and prices its own ledger rows when MEAL_VISION_MODEL picks it",async()=>{
-    const s=await scanApp("p26a-spare@example.com",{env:{MEAL_VISION_MODEL:"qwen/qwen3.6-27b"},vision:scripted(goodEvidence)});
-    try{
-      expect((await s.scan()).statusCode).toBe(200);
-      // 100 in at $0.60 and 200 out at $3.00 per 1M: 60 + 600 micro-USD.
-      expect(await s.costRows()).toEqual([{provider:"groq:qwen/qwen3.6-27b",units:300,costMicro:"660"}]);
-    }finally{await s.app.close();}
   },30_000);
 });

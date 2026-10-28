@@ -1,29 +1,25 @@
 // Part 2B §3.2 Stage 1: vision identifies the foods and the portion evidence, and
 // gives its own estimate of each food's grams, calories and macros, which the
 // app shows only where no food table has the food (RULINGS 2026-09-15, amended
-// 2026-09-16). The scanner runs on Gemini (RULINGS 2026-08-24); Groq stays as a
-// switched-off spare. MEAL_VISION_MODEL picks one at boot, and every model
-// carries its price. Every reply is parsed through the scanner's schemas in
-// @app/shared.
-import { MAX_SCAN_FOODS, geminiReplySchema, groqCompletionSchema, mealVisionEvidenceSchema, openAiCompletionSchema, type VisionEvidence } from "@app/shared";
+// 2026-09-16). The scanner runs on OpenAI's GPT-6 Luna, thinking off, the photo
+// read at high detail; Gemini and the Groq spare are gone (rulings/2026-10-28-33a.md).
+// The model carries its price. Every reply is parsed through the scanner's schemas
+// in @app/shared.
+import { MAX_SCAN_FOODS, mealVisionEvidenceSchema, openAiCompletionSchema, type VisionEvidence } from "@app/shared";
 import type { AppConfig } from "../../config.js";
 
 export type MealVisionModel = AppConfig["MEAL_VISION_MODEL"];
 
-/** Every model the scanner may run on: its provider, and its public list price
+/** The model the scanner runs on: its provider, and its public list price
  *  in integer micro-USD per 1M tokens (a photo is input tokens). A model the
  *  config allows without a row here fails the type check, so no scan is ever
  *  priced by guess.
- *  gemini-3.5-flash-lite: $0.30 in, $2.50 out (ai.google.dev/gemini-api/docs/pricing, read 2026-09-15).
- *  qwen/qwen3.6-27b: $0.60 in, $3.00 out (console.groq.com/docs/models, read 2026-09-15).
  *  gpt-6-luna: $0.10 in, $0.50 out (developers.openai.com/api/docs/pricing, Standard, read 2026-10-28). */
 export const MEAL_VISION_MODELS: Readonly<Record<MealVisionModel, {
-  provider: "gemini" | "groq" | "openai";
+  provider: "openai";
   inputMicroUsdPerMillion: bigint;
   outputMicroUsdPerMillion: bigint;
 }>> = {
-  "gemini-3.5-flash-lite": { provider: "gemini", inputMicroUsdPerMillion: 300_000n, outputMicroUsdPerMillion: 2_500_000n },
-  "qwen/qwen3.6-27b": { provider: "groq", inputMicroUsdPerMillion: 600_000n, outputMicroUsdPerMillion: 3_000_000n },
   "gpt-6-luna": { provider: "openai", inputMicroUsdPerMillion: 100_000n, outputMicroUsdPerMillion: 500_000n },
 };
 
@@ -45,19 +41,12 @@ export const VISION_TIMEOUT_MS = 30_000;
  *  number of foods a reply may list (`MAX_SCAN_FOODS`) is sized to fit inside it. */
 export const VISION_MAX_OUTPUT_TOKENS = 1000;
 
-/** How many tokens Gemini spends reading the photo. Gemini 3 reads a photo as
- *  about 280 tokens at low, 560 at medium and 1,120 when left unset
- *  (ai.google.dev/gemini-api/docs/media-resolution, read 2026-09-15); null
- *  leaves it to the model. Low found every food the other two settings found
- *  on Kd's eight plates (2026-09-15), so the cheapest setting is the one used. */
-export type GeminiMediaResolution = "MEDIA_RESOLUTION_LOW" | "MEDIA_RESOLUTION_MEDIUM" | "MEDIA_RESOLUTION_HIGH" | null;
-export const MEAL_SCAN_MEDIA_RESOLUTION: GeminiMediaResolution = "MEDIA_RESOLUTION_LOW";
-
-/** How much of the photo OpenAI reads. On its newest models "low" fits the photo
- *  within 512 × 512 (developers.openai.com/api/docs/guides/images-vision, read
- *  2026-10-28), the nearest to Gemini's low setting that found every food on Kd's
- *  eight plates. */
-export const MEAL_SCAN_IMAGE_DETAIL = "low";
+/** How much of the photo OpenAI reads. "low" fits it within 512 × 512; "high"
+ *  reads the 768 px the app sends (developers.openai.com/api/docs/guides/images-vision,
+ *  read 2026-10-28). On Kd's eight plates, 2026-10-28, low missed 4 of 55 foods and
+ *  high 1, at $0.000147 and $0.000176 a scan: Kd picked high. */
+export type OpenAiImageDetail = "low" | "high";
+export const MEAL_SCAN_IMAGE_DETAIL: OpenAiImageDetail = "high";
 
 export interface VisionUsage { tokensIn: number; tokensOut: number; }
 export interface VisionResult extends VisionUsage { evidence: VisionEvidence; }
@@ -125,30 +114,12 @@ function parseEvidence(text: string, usage: VisionUsage): VisionResult {
   return { evidence: evidence.data, ...usage };
 }
 
-export function createGroqVisionProvider(apiKey: string, model: string, fetchImpl: typeof fetch = fetch): VisionProvider {
-  return { async analyze(imageBase64, mimeType) {
-    let response: Response;
-    try {
-      // Qwen 3.x models on Groq default to reasoning, which burns the token
-      // budget before the JSON; reasoning_effort:"none" disables it (Groq
-      // docs/reasoning, checked 2026-07-16 — the parameter is Qwen-only).
-      const qwenOpts = model.startsWith("qwen/") ? { reasoning_effort: "none" } : {};
-      response = await fetchImpl("https://api.groq.com/openai/v1/chat/completions", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` }, body: JSON.stringify({ model, temperature: 0, max_tokens: VISION_MAX_OUTPUT_TOKENS, response_format: { type: "json_object" }, ...qwenOpts, messages: [{ role: "user", content: [{ type: "text", text: MEAL_VISION_PROMPT }, { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}` } }] }] }), signal: AbortSignal.timeout(VISION_TIMEOUT_MS) });
-    } catch { throw new VisionProviderError("vision network failure", "unavailable"); }
-    if (!response.ok) throw httpFailure(response.status);
-    let raw: unknown;
-    try { raw = await response.json(); } catch { throw new VisionProviderError("vision non-JSON response", "unavailable"); }
-    const completion = groqCompletionSchema.safeParse(raw);
-    if (!completion.success) throw new VisionProviderError("vision malformed completion", "unavailable");
-    const [choice] = completion.data.choices;
-    const usage = { tokensIn: completion.data.usage.prompt_tokens, tokensOut: completion.data.usage.completion_tokens };
-    const text = choice.message.content ?? "";
-    if (text === "") throw new VisionProviderError("vision empty completion", "unreadable", usage);
-    return parseEvidence(text, usage);
-  } };
-}
-
-export function createOpenAiVisionProvider(apiKey: string, model: string, fetchImpl: typeof fetch = fetch): VisionProvider {
+export function createOpenAiVisionProvider(
+  apiKey: string,
+  model: string,
+  fetchImpl: typeof fetch = fetch,
+  detail: OpenAiImageDetail = MEAL_SCAN_IMAGE_DETAIL,
+): VisionProvider {
   return { async analyze(imageBase64, mimeType) {
     let response: Response;
     try {
@@ -169,7 +140,7 @@ export function createOpenAiVisionProvider(apiKey: string, model: string, fetchI
           response_format: { type: "json_object" },
           messages: [{ role: "user", content: [
             { type: "text", text: MEAL_VISION_PROMPT },
-            { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}`, detail: MEAL_SCAN_IMAGE_DETAIL } },
+            { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}`, detail } },
           ] }],
         }),
         signal: AbortSignal.timeout(VISION_TIMEOUT_MS),
@@ -189,64 +160,8 @@ export function createOpenAiVisionProvider(apiKey: string, model: string, fetchI
   } };
 }
 
-export function createGeminiVisionProvider(
-  apiKey: string,
-  model: string,
-  fetchImpl: typeof fetch = fetch,
-  mediaResolution: GeminiMediaResolution = MEAL_SCAN_MEDIA_RESOLUTION,
-): VisionProvider {
-  return { async analyze(imageBase64, mimeType) {
-    let response: Response;
-    try {
-      // The key rides in a header, never the URL, so nothing that logs a URL
-      // can carry it. The prompt goes before the photo, as Google's guide asks
-      // for a single image. Temperature stays at Gemini 3's default: Google's
-      // Gemini 3 guide warns that below 1.0 it can loop or degrade (Part 2B
-      // §3.2's temperature 0 was set for the earlier models; Kd ruled the
-      // default, RULINGS 2026-09-16). Thinking is pinned to "minimal", since thought
-      // tokens bill as output. No response schema: 3.5 Flash-Lite refuses the
-      // evidence contract's item shape with a 400, so JSON mode and the prompt
-      // carry the contract, and the evidence schema parses every reply, as on Groq.
-      response = await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-        method: "POST",
-        headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: MEAL_VISION_PROMPT }, { inlineData: { mimeType, data: imageBase64 } }] }],
-          generationConfig: {
-            maxOutputTokens: VISION_MAX_OUTPUT_TOKENS,
-            responseMimeType: "application/json",
-            thinkingConfig: { thinkingLevel: "minimal" },
-            ...(mediaResolution === null ? {} : { mediaResolution }),
-          },
-        }),
-        signal: AbortSignal.timeout(VISION_TIMEOUT_MS),
-      });
-    } catch { throw new VisionProviderError("vision network failure", "unavailable"); }
-    if (!response.ok) throw httpFailure(response.status);
-    let raw: unknown;
-    try { raw = await response.json(); } catch { throw new VisionProviderError("vision non-JSON response", "unavailable"); }
-    const reply = geminiReplySchema.safeParse(raw);
-    if (!reply.success) throw new VisionProviderError("vision malformed completion", "unavailable");
-    const meta = reply.data.usageMetadata;
-    // Thought tokens bill at the output price, so they count as output.
-    const usage = { tokensIn: meta.promptTokenCount, tokensOut: meta.candidatesTokenCount + meta.thoughtsTokenCount };
-    if (reply.data.promptFeedback?.blockReason !== undefined) throw new VisionProviderError("vision blocked", "unreadable", usage);
-    const parts = reply.data.candidates[0]?.content?.parts ?? [];
-    const text = parts.filter((p) => p.thought !== true).map((p) => p.text ?? "").join("");
-    if (text === "") throw new VisionProviderError("vision empty completion", "unreadable", usage);
-    return parseEvidence(text, usage);
-  } };
-}
-
 /** The scanner the config names, or null when that provider's key is unset:
  *  scanning then answers 503 and the rest of the app runs. */
 export function createMealVisionProvider(config: AppConfig, fetchImpl: typeof fetch = fetch): VisionProvider | null {
-  const model = config.MEAL_VISION_MODEL;
-  if (MEAL_VISION_MODELS[model].provider === "openai") {
-    return config.OPENAI_API_KEY === undefined ? null : createOpenAiVisionProvider(config.OPENAI_API_KEY, model, fetchImpl);
-  }
-  if (MEAL_VISION_MODELS[model].provider === "gemini") {
-    return config.GEMINI_API_KEY === undefined ? null : createGeminiVisionProvider(config.GEMINI_API_KEY, model, fetchImpl);
-  }
-  return config.GROQ_API_KEY === undefined ? null : createGroqVisionProvider(config.GROQ_API_KEY, model, fetchImpl);
+  return config.OPENAI_API_KEY === undefined ? null : createOpenAiVisionProvider(config.OPENAI_API_KEY, config.MEAL_VISION_MODEL, fetchImpl);
 }

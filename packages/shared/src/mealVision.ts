@@ -116,13 +116,6 @@ export const mealVisionEvidenceSchema = z.preprocess((v) => dropFields(RETIRED_E
 })));
 export type VisionEvidence = z.infer<typeof mealVisionEvidenceSchema>;
 
-/** Groq's OpenAI-style chat completion, as far as the scanner reads it. A
- *  choice whose content is empty or null is the model answering with nothing. */
-export const groqCompletionSchema = z.object({
-  choices: z.array(z.object({ message: z.object({ content: z.string().nullable().default(null) }) })).nonempty(),
-  usage: z.object({ prompt_tokens: z.number().int().nonnegative().default(0), completion_tokens: z.number().int().nonnegative().default(0) }).default({ prompt_tokens: 0, completion_tokens: 0 }),
-});
-
 /** OpenAI's chat completion, as far as the scanner reads it. A choice whose
  *  content is empty or null is the model answering with nothing; a refusal or a
  *  content filter is the model declining the photo. Usage is required: every
@@ -138,17 +131,4 @@ export const openAiCompletionSchema = z.object({
     completion_tokens: z.number().int().nonnegative(),
     completion_tokens_details: z.object({ reasoning_tokens: z.number().int().nonnegative().default(0) }).default({}),
   }),
-});
-
-/** Gemini's generateContent reply, as far as the scanner reads it. */
-export const geminiReplySchema = z.object({
-  candidates: z.array(z.object({
-    content: z.object({ parts: z.array(z.object({ text: z.string().optional(), thought: z.boolean().optional() })).default([]) }).optional(),
-  })).default([]),
-  promptFeedback: z.object({ blockReason: z.string().optional() }).optional(),
-  usageMetadata: z.object({
-    promptTokenCount: z.number().int().nonnegative().default(0),
-    candidatesTokenCount: z.number().int().nonnegative().default(0),
-    thoughtsTokenCount: z.number().int().nonnegative().default(0),
-  }).default({}),
 });

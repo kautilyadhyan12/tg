@@ -32,28 +32,19 @@ const envSchema = z.object({
   // own, and this api only tells it what changed, through Redis. LIVE_PORT is that server's port.
   LIVE_LINES: z.enum(["here", "apart"]).default("here"),
   LIVE_PORT: z.coerce.number().int().min(1).max(65535).default(3100),
-  // Groq: the meal scanner's spare model (below). Unset = that model 503s
-  // cleanly, the rest of the app runs.
-  GROQ_API_KEY: z.string().min(1).optional(),
-  // The meal scanner on Gemini (RULINGS 2026-08-24). Its 2.5 Flash-Lite
-  // answers "no longer available to new users" (HTTP 404, 2026-09-15), so it
-  // runs on 3.5 Flash-Lite, with Groq's qwen3.6-27b kept as the spare. A
-  // closed list, because each model is priced in vision.adapter.ts. The chosen
-  // model's key unset = scanning 503s cleanly, the rest of the app runs (the
-  // GROQ_API_KEY precedent).
-  GEMINI_API_KEY: z.string().min(1).optional(),
-  // The meal scanner on OpenAI's GPT-6 Luna (rulings/2026-10-28-32b-i.md). Unset = a
-  // scan on Luna 503s cleanly, as above.
+  // The meal scanner on OpenAI's GPT-6 Luna (rulings/2026-10-28-33a.md). A closed
+  // list, because the model is priced in vision.adapter.ts. Key unset = scanning
+  // 503s cleanly, the rest of the app runs.
   OPENAI_API_KEY: z.string().min(1).optional(),
-  MEAL_VISION_MODEL: z.enum(["gemini-3.5-flash-lite", "qwen/qwen3.6-27b", "gpt-6-luna"]).default("gemini-3.5-flash-lite"),
+  MEAL_VISION_MODEL: z.enum(["gpt-6-luna"]).default("gpt-6-luna"),
   // P2.6b: geo route generation via ORS (v1 §6.1). Unset = route generation
-  // 503s cleanly (fail-closed, GROQ_API_KEY precedent); the browse/read side
+  // 503s cleanly (fail-closed, OPENAI_API_KEY precedent); the browse/read side
   // (saved_routes, runs) works without it.
   ORS_API_KEY: z.string().min(1).optional(),
   // google-login card: v1 §6.1's Google OAuth. All three unset = Google
   // sign-in cleanly disabled (the routes redirect with ?error=google_not_
   // configured), the rest of auth runs — porting the old `googleConfigured`
-  // guard (passport.js:8-12), same pattern as GROQ_API_KEY. CALLBACK_URL must
+  // guard (passport.js:8-12), same pattern as OPENAI_API_KEY. CALLBACK_URL must
   // exactly match the redirect URI registered in the Google Cloud console.
   GOOGLE_CLIENT_ID: z.string().min(1).optional(),
   GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
