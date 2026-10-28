@@ -701,7 +701,7 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
                     <Txt kind="strong" numberOfLines={2}>
                       {f.name}
                     </Txt>
-                    <SourceLine source={f.source} before={`${count(Math.round(f.kcal))} kcal per 100 g · `} />
+                    <SourceLine source={f.source} before={`${count(Math.round(f.kcal))} kcal per 100 g ·`} />
                   </Pressable>
                 ))
               : null}
