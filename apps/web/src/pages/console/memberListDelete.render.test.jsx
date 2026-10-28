@@ -53,7 +53,7 @@ describe('the Delete permanently box', () => {
 
   // 18d-iii-b-ii-b-ii-b-ii: the box says what Delete permanently does about their customers in the gym's Square.
   it('says how many of them have a customer the app added, which is deleted from Square too, and how many stay', async () => {
-    open(() => Promise.resolve(preview({ square: { deletes: 2, stays: 1, notReached: 0 } })), vi.fn());
+    open(() => Promise.resolve(preview({ count: 5, square: { deletes: 2, stays: 1, notReached: 0 } })), vi.fn());
     const square = within(await screen.findByTestId('delete-square'));
     expect(square.getByTestId('delete-square-deletes').textContent).toBe('2 of them were added to your Square customer list by the app. Those customers are deleted from Square too.');
     expect(square.getByTestId('delete-square-stays').textContent).toBe('One of them is linked to a customer that stays in Square, because the app didn’t add it or someone else here also uses it.');
@@ -72,12 +72,12 @@ describe('the Delete permanently box', () => {
   });
 
   it('where the app cannot reach Square it says so, with the button that opens Connect Square for whoever may, and who can for whoever may not', async () => {
-    open(() => Promise.resolve(preview({ square: { deletes: 0, stays: 0, notReached: 3 } })), vi.fn(), { squareTo: '/console/iron/settings#payments' });
+    open(() => Promise.resolve(preview({ count: 4, square: { deletes: 0, stays: 0, notReached: 3 } })), vi.fn(), { squareTo: '/console/iron/settings#payments' });
     expect((await screen.findByTestId('delete-square-notReached')).textContent).toBe('The app can’t reach your Square, so the customers it added for 3 of them stay there.');
     expect(screen.getByRole('link', { name: 'Connect Square' }).getAttribute('href')).toBe('/console/iron/settings#payments');
     cleanup();
-    open(() => Promise.resolve(preview({ square: { deletes: 0, stays: 0, notReached: 1 } })), vi.fn(), { squareTo: null });
-    expect((await screen.findByTestId('delete-square-notReached')).textContent).toBe('The app can’t reach your Square, so the customer it added for one of them stays there.');
+    open(() => Promise.resolve(preview({ count: 1, names: ['Bina Das'], square: { deletes: 0, stays: 0, notReached: 1 } })), vi.fn(), { squareTo: null });
+    expect((await screen.findByTestId('delete-square-notReached')).textContent).toBe('The app can’t reach your Square, so the customer it added for them stays there.');
     expect(screen.queryByRole('link', { name: 'Connect Square' })).toBeNull();
     expect(screen.getByTestId('delete-square-owner').textContent).toBe('Only the owner can connect Square.');
   });
@@ -116,18 +116,33 @@ describe('the box words', () => {
   });
 
   it('says what happens to Square customers, one line for each kind, and none where there are none', () => {
-    expect(deleteSquareLines({ deletes: 0, stays: 0, notReached: 0 })).toEqual([]);
-    expect(deleteSquareLines(undefined)).toEqual([]);
-    expect(deleteSquareLines({ deletes: 1, stays: 0, notReached: 0 }).map((l) => l.text)).toEqual([
+    expect(deleteSquareLines({ deletes: 0, stays: 0, notReached: 0 }, 3)).toEqual([]);
+    expect(deleteSquareLines(undefined, 3)).toEqual([]);
+    // One of several, several of several, all of them, and one person on their own.
+    expect(deleteSquareLines({ deletes: 1, stays: 0, notReached: 0 }, 4).map((l) => l.text)).toEqual([
       'One of them was added to your Square customer list by the app. That customer is deleted from Square too.',
     ]);
-    expect(deleteSquareLines({ deletes: 1200, stays: 2, notReached: 1 }).map((l) => l.key)).toEqual(['deletes', 'stays', 'notReached']);
-    expect(deleteSquareLines({ deletes: 1200, stays: 2, notReached: 1 })[0].text).toBe(
+    expect(deleteSquareLines({ deletes: 1200, stays: 2, notReached: 1 }, 1500).map((l) => l.key)).toEqual(['deletes', 'stays', 'notReached']);
+    expect(deleteSquareLines({ deletes: 1200, stays: 2, notReached: 1 }, 1500)[0].text).toBe(
       '1,200 of them were added to your Square customer list by the app. Those customers are deleted from Square too.',
     );
-    expect(deleteSquareLines({ deletes: 0, stays: 2, notReached: 0 })[0].text).toBe(
+    expect(deleteSquareLines({ deletes: 0, stays: 2, notReached: 0 }, 5)[0].text).toBe(
       '2 of them are linked to customers that stay in Square, because the app didn’t add them or someone else here also uses them.',
     );
+    expect(deleteSquareLines({ deletes: 3, stays: 0, notReached: 0 }, 3)[0].text).toBe(
+      'All of them were added to your Square customer list by the app. Those customers are deleted from Square too.',
+    );
+    expect(deleteSquareLines({ deletes: 1, stays: 0, notReached: 0 }, 1)[0].text).toBe(
+      'They were added to your Square customer list by the app. That customer is deleted from Square too.',
+    );
+    expect(deleteSquareLines({ deletes: 0, stays: 1, notReached: 0 }, 1)[0].text).toBe(
+      'They are linked to a customer that stays in Square, because the app didn’t add it or someone else here also uses it.',
+    );
+    expect(deleteSquareLines({ deletes: 0, stays: 2, notReached: 0 }, 2)[0].text).toBe(
+      'All of them are linked to customers that stay in Square, because the app didn’t add them or someone else here also uses them.',
+    );
+    expect(deleteSquareLines({ deletes: 0, stays: 0, notReached: 2 }, 2)[0].text).toBe('The app can’t reach your Square, so the customers it added for all of them stay there.');
+    expect(deleteSquareLines({ deletes: 0, stays: 0, notReached: 1 }, 1)[0].text).toBe('The app can’t reach your Square, so the customer it added for them stays there.');
   });
 
   it('says the same for one person, and what is being deleted after', () => {

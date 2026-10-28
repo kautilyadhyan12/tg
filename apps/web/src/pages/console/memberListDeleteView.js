@@ -46,35 +46,40 @@ export function deleteDoneLine(done, words) {
 // Square, Square merged it, or another record uses it), and whose the app cannot reach.
 const CANT_REACH = 'The app can’t reach your Square';
 
+/** "One of them", "3 of them", "All of them", or "They" for one person: how many of those the box deletes are meant. `total`: how many
+ *  the box deletes in all. */
+const ofThem = (n, total) => {
+  if (total === 1) return 'They';
+  if (n === total) return 'All of them';
+  return n === 1 ? 'One of them' : `${count(n)} of them`;
+};
+
 /** The lines under the names, each with a key; none for a gym with nobody in Square. */
-export function deleteSquareLines(square) {
+export function deleteSquareLines(square, total) {
   const lines = [];
   const { deletes = 0, stays = 0, notReached = 0 } = square ?? {};
   if (deletes > 0) {
     lines.push({
       key: 'deletes',
-      text:
-        deletes === 1
-          ? 'One of them was added to your Square customer list by the app. That customer is deleted from Square too.'
-          : `${count(deletes)} of them were added to your Square customer list by the app. Those customers are deleted from Square too.`,
+      text: `${ofThem(deletes, total)} ${deletes === 1 && total !== 1 ? 'was' : 'were'} added to your Square customer list by the app. ${
+        deletes === 1 ? 'That customer is' : 'Those customers are'
+      } deleted from Square too.`,
     });
   }
   if (stays > 0) {
     lines.push({
       key: 'stays',
-      text:
-        stays === 1
-          ? "One of them is linked to a customer that stays in Square, because the app didn’t add it or someone else here also uses it."
-          : `${count(stays)} of them are linked to customers that stay in Square, because the app didn’t add them or someone else here also uses them.`,
+      text: `${ofThem(stays, total)} ${stays === 1 && total !== 1 ? 'is' : 'are'} linked to ${
+        stays === 1 ? 'a customer that stays' : 'customers that stay'
+      } in Square, because the app didn’t add ${stays === 1 ? 'it' : 'them'} or someone else here also uses ${stays === 1 ? 'it' : 'them'}.`,
     });
   }
   if (notReached > 0) {
     lines.push({
       key: 'notReached',
-      text:
-        notReached === 1
-          ? `${CANT_REACH}, so the customer it added for one of them stays there.`
-          : `${CANT_REACH}, so the customers it added for ${count(notReached)} of them stay there.`,
+      text: `${CANT_REACH}, so the ${notReached === 1 ? 'customer' : 'customers'} it added for ${
+        total === 1 ? 'them' : notReached === total ? 'all of them' : notReached === 1 ? 'one of them' : `${count(notReached)} of them`
+      } ${notReached === 1 ? 'stays' : 'stay'} there.`,
     });
   }
   return lines;

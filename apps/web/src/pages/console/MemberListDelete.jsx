@@ -113,7 +113,7 @@ export default function MemberListDelete({ words, load, press, onSelectionChange
     const question = deleteQuestion(preview, words);
     const nobody = deleteNobodyLine(preview, words);
     const kept = deleteKeptLine(preview, words);
-    const squareLines = question !== null ? deleteSquareLines(preview.square) : [];
+    const squareLines = question !== null ? deleteSquareLines(preview.square, preview.count) : [];
     body = (
       <>
         {question !== null ? (

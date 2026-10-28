@@ -422,6 +422,21 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
       expect(held(gym, customerId)).toBeNull();
     });
 
+    it("a customer the app made whose answer was lost, found again by Members in Square by the record's id: it is the app's, and deleted with the person", async () => {
+      const gym = await makeGym("Lost Answer Gym");
+      const email = `ola.${uniq()}@gmail.com`;
+      const ola = await person(gym, "Ola Berg", { email, phone: "+13125550160" });
+      // Square made it for this record, with the record's id as its reference, and the app never heard.
+      const made = square.madeWithKey(gym.acct, randomUUID(), { idempotencyKey: "lost", givenName: "Ola", familyName: "Berg", email, phone: "+13125550160", referenceId: ola });
+      expect((await addMembers(gym)).state).toBe("added");
+      expect(await link(gym, ola), "linked as the app's own, carrying the record's id").toMatchObject({ customer_id: made, joined_at: null, made_as: ola });
+      const { preview, done } = await deleteForGood(gym, ola);
+      expect(preview.square).toEqual({ deletes: 1, stays: 0, notReached: 0 });
+      expect(done.squareDeleting).toBe(1);
+      await minutes(1);
+      expect(held(gym, made)).toBeNull();
+    });
+
     it("a customer that was already in Square and only linked stays, and the box says so", async () => {
       const gym = await makeGym("Linked Gym");
       const email = `leo.${uniq()}@gmail.com`;
