@@ -722,7 +722,7 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
       ["a check about to link another record to it", planOn],
     ] as const) {
       it(`${how}: the box says somebody else uses it, and nothing is owed`, async () => {
-        const gym = await makeGym(`Used Box Gym ${how.length}`);
+        const gym = await makeGym(`Used Box Gym ${String(how.length)}`);
         const mine = await person(gym, "Hal Moss", { email: `hal.${uniq()}@gmail.com` });
         expect((await addMembers(gym)).state).toBe("added");
         const other = await person(gym, "Ira Moss", { email: `ira.${uniq()}@gmail.com` });
@@ -737,7 +737,7 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
       });
 
       it(`${how}, after the press and before the worker: it is not deleted`, async () => {
-        const gym = await makeGym(`Used Send Gym ${how.length}`);
+        const gym = await makeGym(`Used Send Gym ${String(how.length)}`);
         const mine = await person(gym, "Jo Penn", { email: `jo.${uniq()}@gmail.com` });
         expect((await addMembers(gym)).state).toBe("added");
         const other = await person(gym, "Kai Penn", { email: `kai.${uniq()}@gmail.com` });
