@@ -121,10 +121,29 @@ export const gymSquareCustomers = pgTable(
     makingKey: uuid("making_key"),
     /** Linked to a customer Square already had (0166; ROADMAP 18d-iii-b-ii-b-i), not one the app made. */
     joinedAt: timestamp("joined_at", { withTimezone: true }),
+    /** What the record's name, email and phone were when Square last agreed with them (0169; ROADMAP
+     *  18d-iii-b-ii-b-ii-b-i), each as an md5 hash, null for none: a part that differs now is a change to copy. Null
+     *  `copied_at`: not known yet, taken from the record on the next look without sending anything. */
+    copiedName: text("copied_name"),
+    copiedEmail: text("copied_email"),
+    copiedPhone: text("copied_phone"),
+    copiedAt: timestamp("copied_at", { withTimezone: true }),
+    /** Square would not take the record's details with this digest (name, email and phone): left until they change
+     *  or a day has passed. */
+    copyRefusedDigest: text("copy_refused_digest"),
+    copyRefusedAt: timestamp("copy_refused_at", { withTimezone: true }),
     createdAt: createdAt(),
   },
   (t) => [
     primaryKey({ name: "gym_square_customers_pk", columns: [t.gymId, t.entryId, t.environment, t.accountId] }),
+    check(
+      "gym_square_customers_copied_check",
+      sql`(${t.copiedName} IS NULL OR ${t.copiedName} ~ '^[0-9a-f]{32}$') AND (${t.copiedEmail} IS NULL OR ${t.copiedEmail} ~ '^[0-9a-f]{32}$') AND (${t.copiedPhone} IS NULL OR ${t.copiedPhone} ~ '^[0-9a-f]{32}$')`,
+    ),
+    check(
+      "gym_square_customers_refused_check",
+      sql`(${t.copyRefusedDigest} IS NULL) = (${t.copyRefusedAt} IS NULL) AND (${t.copyRefusedDigest} IS NULL OR ${t.copyRefusedDigest} ~ '^[0-9a-f]{32}$')`,
+    ),
     check("gym_square_customers_environment_check", sql`${t.environment} IN ('sandbox','production')`),
     check("gym_square_customers_ids_check", sql`${t.accountId} ~ '^[A-Za-z0-9_-]{1,64}$' AND (${t.customerId} IS NULL OR ${t.customerId} ~ '^[A-Za-z0-9_-]{1,64}$')`),
     check("gym_square_customers_made_check", sql`(${t.customerId} IS NULL) = (${t.makingKey} IS NOT NULL)`),
