@@ -31,7 +31,6 @@ const env = {
   WEB_ORIGIN: "http://localhost:5173",
   JWT_SECRET: "edit7a-test-secret-0123456789abcdef-3232", // gitleaks:allow
   LOG_LEVEL: "error",
-  GROQ_API_KEY: "edit7a-fake-provider-key", // gitleaks:allow
 };
 
 const food = (start: string) => {

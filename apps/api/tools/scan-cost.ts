@@ -19,8 +19,11 @@ export const PHOTO_TYPES: ReadonlyMap<string, string> = new Map([
   [".jpg", "image/jpeg"], [".jpeg", "image/jpeg"], [".png", "image/png"], [".webp", "image/webp"],
 ]);
 
+/** The env line the scanner's key is read from. */
+export const SCAN_KEY_NAME = "OPENAI_API_KEY";
+
 export interface ScanCostArgs {
-  /** The env file holding GEMINI_API_KEY. Only that line is read. */
+  /** The env file holding OPENAI_API_KEY. Only that line is read. */
   envFile: string;
   /** Where each reply and the run's results are written; never inside the repository. */
   outDir: string;
@@ -35,7 +38,7 @@ export function scanCostArgs(argv: readonly string[], repoRoot: string): ScanCos
   const envFile = argValue(argv, "env");
   const outDir = argValue(argv, "out");
   const paths = argv.filter((a) => !a.startsWith("--"));
-  if (envFile === undefined || envFile === "") return { problem: "--env=<file> is needed: the file holding GEMINI_API_KEY" };
+  if (envFile === undefined || envFile === "") return { problem: `--env=<file> is needed: the file holding ${SCAN_KEY_NAME}` };
   if (outDir === undefined || outDir === "") return { problem: "--out=<folder> is needed: where each reply and the results are written" };
   if (paths.length === 0) return { problem: "name at least one photo, or a folder of them" };
   // Relative to the repository: "" or a path that does not climb out is inside
@@ -47,12 +50,13 @@ export function scanCostArgs(argv: readonly string[], repoRoot: string): ScanCos
   return { envFile, outDir, paths };
 }
 
-/** The GEMINI_API_KEY line's value, unquoted, or null. Nothing else in the file is
- *  read, and the value is never part of an error — on this machine the same file
- *  holds the address of the real database. */
-export function geminiKeyFrom(envText: string): string | null {
+/** The value of the line named `name` (SCAN_KEY_NAME), unquoted, or null.
+ *  Nothing else in the file is read, and the value is never part of an error — on
+ *  this machine the same file holds the address of the real database. */
+export function keyFrom(envText: string, name: string): string | null {
+  const pattern = new RegExp(`^\\s*(?:export\\s+)?${name}\\s*=(.*)$`);
   for (const line of envText.split(/\r?\n/)) {
-    const found = /^\s*(?:export\s+)?GEMINI_API_KEY\s*=(.*)$/.exec(line);
+    const found = pattern.exec(line);
     if (found === null) continue;
     const value = (found[1] ?? "").trim().replace(/^(["'])(.*)\1$/, "$2").trim();
     return value === "" ? null : value;
