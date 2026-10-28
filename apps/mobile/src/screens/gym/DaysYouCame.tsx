@@ -123,14 +123,17 @@ export function DaysYouCame({ gymId, read, fetchVisits }: DaysYouCameProps) {
   return (
     <Card style={styles.box} testID={`days-${gymId}`}>
       <View style={styles.head}>
-        <Txt kind="h3" style={styles.grow}>
+        <Txt kind="h3" style={styles.heading}>
           Days you came
         </Txt>
-        <MonthArrow icon="back" say="Previous month" onPress={() => { move(-1); }} />
-        <Txt colour="text" style={styles.month}>
-          {monthName(month, thisMonth)}
-        </Txt>
-        <MonthArrow icon="go" say="Next month" disabled={atNow} onPress={() => { move(1); }} />
+        {/* On its own line under the heading when the two do not fit side by side. */}
+        <View style={styles.months}>
+          <MonthArrow icon="back" say="Previous month" onPress={() => { move(-1); }} />
+          <Txt colour="text" style={styles.month}>
+            {monthName(month, thisMonth)}
+          </Txt>
+          <MonthArrow icon="go" say="Next month" disabled={atNow} onPress={() => { move(1); }} />
+        </View>
       </View>
 
       {fresh && held.status === "failed" ? (
@@ -225,7 +228,7 @@ function Day({ cell, monthName: name, onPress }: { cell: DayCell; monthName: str
       onPress={onPress}
       style={[styles.cell, cell.future ? styles.future : null]}
     >
-      <View style={[styles.dot, cell.came ? styles.came : cell.today ? styles.today : null]}>
+      <View style={[styles.dot, cell.today ? styles.today : null, cell.came ? styles.came : cell.today ? styles.todayFill : null]}>
         <Txt colour={cell.came ? "onOrange" : cell.today ? "orange" : "textSoft"} style={styles.number}>
           {cell.day}
         </Txt>
@@ -239,7 +242,9 @@ const DOT = 32;
 
 const styles = StyleSheet.create({
   box: { padding: 16, gap: 12 },
-  head: { flexDirection: "row", alignItems: "center", gap: 4 },
+  head: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", rowGap: 8, columnGap: 12 },
+  heading: { flexGrow: 1 },
+  months: { flexDirection: "row", alignItems: "center", gap: 4, marginLeft: "auto" },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },
   grow: { flex: 1 },
   month: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 18, textAlign: "center", paddingHorizontal: 2 },
@@ -261,9 +266,22 @@ const styles = StyleSheet.create({
   weekHead: { flex: 1, textAlign: "center", fontFamily: fonts.bold, letterSpacing: 0.66, textTransform: "uppercase" },
   cell: { flex: 1, alignItems: "center", justifyContent: "center", minHeight: sizes.press - 4, paddingVertical: 2 },
   future: { opacity: 0.35 },
-  dot: { minWidth: DOT, minHeight: DOT, borderRadius: sizes.round, alignItems: "center", justifyContent: "center", paddingHorizontal: 2, backgroundColor: colours.fill },
+  // Every day has the same ring, seen only on today, and a day that turns orange changes only its fill:
+  // today losing its ring as its colour came in stopped the app on Android (2026-10-28).
+  dot: {
+    minWidth: DOT,
+    minHeight: DOT,
+    borderRadius: sizes.round,
+    borderWidth: 1.5,
+    borderColor: "transparent",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 2,
+    backgroundColor: colours.fill,
+  },
   came: { backgroundColor: colours.orange, experimental_backgroundImage: orangeGradient },
-  today: { borderWidth: 1.5, borderColor: colours.orange, backgroundColor: colours.orangeFill },
+  today: { borderColor: colours.orange },
+  todayFill: { backgroundColor: colours.orangeFill },
   number: { fontFamily: fonts.semibold, fontSize: 12, lineHeight: 16 },
   times: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
 });
