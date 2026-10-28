@@ -23,6 +23,16 @@ jest.mock("react-native-webview", () => {
 });
 // Google's package runs only on a phone; a screen test hands the app its own Google instead.
 jest.mock("react-native-nitro-google-signin", () => ({ GoogleOneTapSignIn: {} }));
+// The screen's brightness and keeping it awake are the phone's own; a test reads what was asked.
+jest.mock("expo-brightness", () => ({
+  getBrightnessAsync: jest.fn(() => Promise.resolve(0.4)),
+  setBrightnessAsync: jest.fn(() => Promise.resolve()),
+  restoreSystemBrightnessAsync: jest.fn(() => Promise.resolve()),
+}));
+jest.mock("expo-keep-awake", () => ({
+  activateKeepAwakeAsync: jest.fn(() => Promise.resolve()),
+  deactivateKeepAwake: jest.fn(() => Promise.resolve()),
+}));
 // The phone's own files: a screen test that logs a meal hands the app its own store
 // (`mealStore`); every other test gets this one, in memory, which forgets nothing between tests.
 jest.mock("expo-file-system", () => {

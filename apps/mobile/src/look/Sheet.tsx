@@ -3,6 +3,7 @@ import { KeyboardAvoidingView, Modal, Pressable, StyleSheet, View } from "react-
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colours, shadows, sizes } from "./colours";
 import { Icon } from "./Icon";
+import { MIDDLE_INSET } from "./sizing";
 import { Txt } from "./Txt";
 
 interface SheetProps {
@@ -10,10 +11,14 @@ interface SheetProps {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  /** "middle": a box in the middle of the screen, for a thing to be shown rather than answered (the pass). */
+  place?: "bottom" | "middle";
 }
 
-/** The box from the bottom: a question, or a short task, over the page it was opened from. */
-export function Sheet({ open, title, onClose, children }: SheetProps) {
+/** The box from the bottom, or in the middle (`place`): a question, or a short task, over the page it
+ *  was opened from. */
+export function Sheet({ open, title, onClose, children, place = "bottom" }: SheetProps) {
+  const middle = place === "middle";
   const insets = useSafeAreaInsets();
   return (
     <Modal
@@ -26,9 +31,12 @@ export function Sheet({ open, title, onClose, children }: SheetProps) {
     >
       <Pressable accessible={false} onPress={onClose} style={styles.scrim} />
       {/* Lifted over the keyboard, so a box being typed in is never under it. */}
-      <KeyboardAvoidingView behavior="padding" pointerEvents="box-none" style={styles.lift}>
-        <View accessibilityViewIsModal style={[styles.sheet, { paddingBottom: insets.bottom + 24 }]}>
-          <View style={styles.grab} />
+      <KeyboardAvoidingView behavior="padding" pointerEvents="box-none" style={[styles.lift, middle ? styles.liftMiddle : null]}>
+        <View
+          accessibilityViewIsModal
+          style={[styles.sheet, middle ? styles.sheetMiddle : { paddingBottom: insets.bottom + 24 }]}
+        >
+          {middle ? null : <View style={styles.grab} />}
           <View style={styles.head}>
             <Txt kind="h2" style={styles.title}>
               {title}
@@ -59,6 +67,8 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     boxShadow: shadows.sheet,
   },
+  liftMiddle: { justifyContent: "center", paddingHorizontal: sizes.edge },
+  sheetMiddle: { paddingTop: 16, paddingBottom: 20, paddingHorizontal: MIDDLE_INSET - sizes.edge, borderBottomWidth: 1, borderRadius: 24 },
   grab: { alignSelf: "center", width: 40, height: 4, borderRadius: 999, backgroundColor: colours.grab },
   head: { flexDirection: "row", alignItems: "center", gap: 10 },
   title: { flex: 1 },
