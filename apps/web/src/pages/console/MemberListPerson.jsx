@@ -45,6 +45,7 @@ import { canManageMemberships } from './membershipTypesView';
 import { viewerPrivileges } from './consoleView';
 import { canOpenPlace, placeFor } from './consolePlaces';
 import { useCameBack } from './useCameBack';
+import { useLiveNews } from './liveNews';
 import PlaceLink from '../../components/console/PlaceLink';
 import MoreMenu from '../../components/console/MoreMenu';
 import SentencePlace from '../../components/console/SentencePlace';
@@ -588,6 +589,20 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   // Somebody who set memberships up in another tab finds them here on coming back: a form
   // with nothing to pick from reads the price list again.
   useCameBack(adding && !sells, () => setPriceAsk((n) => n + 1));
+  // Square's answer to a changed phone or email comes a minute after Save, from the worker: when the line says it has
+  // moved on, the page reads whether Square took the change again, and changes that line alone (18d-iii-b-ii-b-ii-b-i).
+  useLiveNews(gymId, (message) => {
+    const asked = wanted.current;
+    if (message.what !== 'squareMembers' || asked === null) return;
+    orgService
+      .getMemberListEntry(gymId, asked)
+      .then((res) => {
+        if (wanted.current !== asked) return;
+        const refused = res.data.entry.squareCopyRefused === true;
+        setEntry((e) => (e !== null && e.entryId === asked && e.squareCopyRefused !== refused ? { ...e, squareCopyRefused: refused } : e));
+      })
+      .catch(() => undefined);
+  });
 
   useEffect(() => {
     const before = document.body.style.overflow;

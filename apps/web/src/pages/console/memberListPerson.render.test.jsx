@@ -8,7 +8,7 @@
 // save goes to the person on screen; the server answering for a different record is
 // refused; and Join removes exactly the record shown under "Remove".
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
+import { act, render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { MEMBER_INVITE_EMAIL_REASON_WORDS, MEMBER_LIST_BY_HAND_WORDS } from '@app/shared';
 import {
@@ -20,6 +20,12 @@ import {
 } from '@app/shared';
 
 // The person's Memberships box (17a-ii) has its own tests in `memberMemberships.render.test.jsx`.
+// What the live line tells this page: the callbacks it was given, so a test can say the worker found something out.
+const liveListeners = [];
+vi.mock('./liveNews', async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual, useLiveNews: (_gymId, onMessage) => void (liveListeners[0] = onMessage) };
+});
 vi.mock('./MemberMemberships', () => ({ default: () => null }));
 // Their tags and staff notes (5d) have their own tests in `memberNotes.render.test.jsx`.
 const notesDrawn = vi.fn();
@@ -712,6 +718,24 @@ describe('a person on the list', () => {
     openBox(ADA);
     expect(await dialog().findByText('Eli Nunez')).toBeTruthy();
     expect(dialog().queryByTestId('square-copy-refused')).toBeNull();
+  });
+
+  it("Square's refusal that comes a minute after Save appears on the open page by itself, and goes by itself", async () => {
+    orgService.getMemberListEntry.mockResolvedValue(entryAnswer({ ...person(ADA, 'Eli Nunez'), squareCopyRefused: false }));
+    openBox(ADA);
+    expect(await dialog().findByText('Eli Nunez')).toBeTruthy();
+    expect(dialog().queryByTestId('square-copy-refused')).toBeNull();
+    // The worker asked Square, which would not take the number: the line on the live line says Members in Square moved on.
+    orgService.getMemberListEntry.mockResolvedValue(entryAnswer({ ...person(ADA, 'Eli Nunez'), squareCopyRefused: true }));
+    await act(async () => liveListeners[0]?.({ what: 'squareMembers' }));
+    expect(await dialog().findByTestId('square-copy-refused')).toBeTruthy();
+    // Something else said on the line changes nothing.
+    orgService.getMemberListEntry.mockResolvedValue(entryAnswer({ ...person(ADA, 'Eli Nunez'), squareCopyRefused: false }));
+    await act(async () => liveListeners[0]?.({ what: 'people' }));
+    expect(dialog().queryByTestId('square-copy-refused')).not.toBeNull();
+    // Square took it after all: the line goes.
+    await act(async () => liveListeners[0]?.({ what: 'squareMembers' }));
+    await waitFor(() => expect(dialog().queryByTestId('square-copy-refused')).toBeNull());
   });
 
   it("a past member still in the app is removed from it here, as from 'Using the app' (Kd, 2026-09-27: one card in both places)", async () => {
