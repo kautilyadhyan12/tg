@@ -6,6 +6,8 @@ import {
   DISCLAIMER_WORDINGS,
   FOOD_ALLERGY_CAUTION,
   HEALTH_QUESTION,
+  HEALTH_QUESTION_ITEMS,
+  HEALTH_QUESTION_LEAD,
   HEALTH_QUESTION_NOTE,
   PHOTO_SCAN_CAUTION,
   UNANSWERED_HEALTH_SCREENING,
@@ -86,6 +88,16 @@ describe("the words both screens show (4b-i)", () => {
       "Do you have a medical condition, an injury, or are you pregnant, or take any medicine, including for weight loss, or anything else that could affect exercise or eating?",
     );
     expect(HEALTH_QUESTION.match(/\?/g)).toHaveLength(1);
+  });
+
+  it("the phone's list asks everything the sentence asks, in its order, as one question", () => {
+    expect(HEALTH_QUESTION_LEAD.match(/\?/g)).toHaveLength(1);
+    expect(HEALTH_QUESTION_ITEMS).toHaveLength(5);
+    const asks = ["medical condition", "injury", "pregnan", "medicine, including for weight loss", "anything else that could affect exercise or eating"];
+    asks.forEach((part, i) => {
+      expect(HEALTH_QUESTION.toLowerCase(), part).toContain(part);
+      expect(HEALTH_QUESTION_ITEMS[i]?.toLowerCase(), part).toContain(part);
+    });
   });
 
   it("says what is kept, and that is BOTH stored facts, not just the yes or no", () => {

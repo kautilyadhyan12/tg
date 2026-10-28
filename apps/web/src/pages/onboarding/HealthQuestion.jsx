@@ -15,7 +15,7 @@
 // says the question is not finished.
 import { useState } from 'react';
 import { Check, HeartPulse, ShieldCheck } from 'lucide-react';
-import { CHECK_FIRST_HEADING, CHECK_FIRST_OPTIONS, HEALTH_QUESTION, HEALTH_QUESTION_NOTE } from '@app/shared';
+import { CHECK_FIRST_HEADING, CHECK_FIRST_OPTIONS, CHECK_FIRST_PICK, HEALTH_QUESTION, HEALTH_QUESTION_NOTE } from '@app/shared';
 
 const YES_NO = [
   { value: false, label: 'No' },
@@ -127,7 +127,7 @@ export default function HealthQuestion({ screening, onAnswer, busy = false }) {
           </div>
           {stored !== true && (
             <p role="status" className="text-2xs mt-3" style={{ color: 'rgba(255,255,255,0.55)' }}>
-              Pick one of the two to save your answer.
+              {CHECK_FIRST_PICK}
             </p>
           )}
         </div>

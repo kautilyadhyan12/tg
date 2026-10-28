@@ -68,6 +68,12 @@ export function fakeServer(routes: Record<string, Route>): { ask: Ask; asked: As
     // No invitation waiting and no gym joined, unless a test says otherwise.
     "/v1/orgs/invitations": () => ({ status: 200, body: { address: RAVI.email, addressProved: true, invitations: [] } }),
     "/v1/orgs/mine": () => ({ status: 200, body: { orgs: [], formerOrgs: [] } }),
+    // Setup's health question not answered and its note never ticked, unless a test says otherwise.
+    "/v1/users/me/health-screening": () => ({
+      status: 200,
+      body: { healthScreening: { answered: false, hasCondition: null, checkFirst: null, safeMode: false, noCalorieCut: false, updatedAt: null } },
+    }),
+    "/v1/users/me/consents": () => ({ status: 200, body: { consents: [], total: 0 } }),
     ...routes,
   };
   const ask: Ask = async (url: string, init: AskInit) => {
