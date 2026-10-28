@@ -3,9 +3,11 @@
 import { describe, expect, it } from "vitest";
 import { CHECKIN_PASS_LENGTH, checkinPassResponseSchema } from "@app/shared";
 import {
+  WINDOWS_A_DAY,
   looksLikePass,
   makePass,
   makePhonePass,
+  passDay,
   passWindow,
   phoneMadeBy,
   phonePassKey,
@@ -103,59 +105,86 @@ describe("a pass the phone makes with no signal", () => {
   const RIYAS_PHONE = "5d1c9a3e-2b7f-4e60-8c14-9f0a6b3d2e71";
   const RIYAS_OLD_PHONE = "8a2e4c6f-1d3b-4f57-9e08-2c4a6b8d0f13";
   const ARJUNS_PHONE = "3c5e7a9b-0d2f-4416-8b3d-5f7a9c1e3b20";
-  const phoneKey = phonePassKey(KEY, RIYA, RIYAS_PHONE);
+  const TODAY = passDay(NOW);
+  const phoneKey = phonePassKey(KEY, RIYA, RIYAS_PHONE, TODAY);
 
-  it("THE WORST THING: it reads only with a live sign-in's key of its own person, never another phone's or person's", () => {
+  it("THE WORST THING: it reads only with a live sign-in of its own person, never another phone's or person's", () => {
     const pass = makePhonePass(phoneKey, RIYA, NOW);
-    expect(readPass(KEY, pass, NOW, [phoneKey])).toEqual({ kind: "fresh", userId: RIYA, window: NOW });
+    expect(readPass(KEY, pass, NOW, [RIYAS_PHONE])).toEqual({ kind: "fresh", userId: RIYA, window: NOW });
     // Signed out, or replaced by a newer phone: its sign-in is not live, so no key is tried.
     expect(readPass(KEY, pass, NOW, [])).toEqual({ kind: "garbled" });
-    expect(readPass(KEY, pass, NOW, [phonePassKey(KEY, RIYA, RIYAS_OLD_PHONE)])).toEqual({ kind: "garbled" });
+    expect(readPass(KEY, pass, NOW, [RIYAS_OLD_PHONE])).toEqual({ kind: "garbled" });
     // Arjun's live phone does not make Riya's pass good.
-    expect(readPass(KEY, pass, NOW, [phonePassKey(KEY, ARJUN, ARJUNS_PHONE)])).toEqual({ kind: "garbled" });
-    // Riya's phone's key cannot make Arjun's pass: the key is tried against Arjun's sign-ins.
+    expect(readPass(KEY, pass, NOW, [ARJUNS_PHONE])).toEqual({ kind: "garbled" });
+    // Riya's phone's key cannot make Arjun's pass: the key is derived from the person in the pass.
     const forged = makePhonePass(phoneKey, ARJUN, NOW);
     expect(phoneMadeBy(forged)).toBe(ARJUN);
-    expect(readPass(KEY, forged, NOW, [phonePassKey(KEY, ARJUN, ARJUNS_PHONE)])).toEqual({ kind: "garbled" });
+    expect(readPass(KEY, forged, NOW, [RIYAS_PHONE])).toEqual({ kind: "garbled" });
+    expect(readPass(KEY, forged, NOW, [ARJUNS_PHONE])).toEqual({ kind: "garbled" });
+  });
+
+  it("THE WORST THING: a pass made ahead with the phone's clock moved on is good only with that day's key, which the phone holds for today and tomorrow alone", () => {
+    // A week ahead: the phone has no key for that day, and today's key does not make a pass for it.
+    const weekAhead = NOW + 7 * WINDOWS_A_DAY;
+    expect(readPass(KEY, makePhonePass(phoneKey, RIYA, weekAhead), weekAhead, [RIYAS_PHONE])).toEqual({ kind: "garbled" });
+    // Tomorrow's own key makes tomorrow's pass, and only tomorrow's.
+    const tomorrowsKey = phonePassKey(KEY, RIYA, RIYAS_PHONE, TODAY + 1);
+    const tomorrow = (TODAY + 1) * WINDOWS_A_DAY + 100;
+    expect(readPass(KEY, makePhonePass(tomorrowsKey, RIYA, tomorrow), tomorrow, [RIYAS_PHONE])).toEqual({
+      kind: "fresh",
+      userId: RIYA,
+      window: tomorrow,
+    });
+    expect(readPass(KEY, makePhonePass(tomorrowsKey, RIYA, NOW), NOW, [RIYAS_PHONE])).toEqual({ kind: "garbled" });
+  });
+
+  it("across midnight each window is read with its own day's key", () => {
+    const last = (TODAY + 1) * WINDOWS_A_DAY - 1;
+    const first = last + 1;
+    expect(passDay(first)).toBe(TODAY + 1);
+    const lastPass = makePhonePass(phoneKey, RIYA, last);
+    const firstPass = makePhonePass(phonePassKey(KEY, RIYA, RIYAS_PHONE, TODAY + 1), RIYA, first);
+    expect(readPass(KEY, lastPass, first, [RIYAS_PHONE])).toEqual({ kind: "fresh", userId: RIYA, window: last });
+    expect(readPass(KEY, firstPass, last, [RIYAS_PHONE])).toEqual({ kind: "fresh", userId: RIYA, window: first });
   });
 
   it("the server's key never reads as the phone's, nor the phone's key as the server's", () => {
     const server = makePass(KEY, RIYA, NOW);
     expect(phoneMadeBy(server)).toBeNull();
     // A pass the server signed with its top bit set is not a phone's pass.
-    expect(readPass(KEY, makePhonePass(KEY, RIYA, NOW), NOW, [phoneKey])).toEqual({ kind: "garbled" });
+    expect(readPass(KEY, makePhonePass(KEY, RIYA, NOW), NOW, [RIYAS_PHONE])).toEqual({ kind: "garbled" });
     // A phone's key on a pass that says the server made it.
-    expect(readPass(KEY, makePass(phoneKey, RIYA, NOW), NOW, [phoneKey])).toEqual({ kind: "garbled" });
+    expect(readPass(KEY, makePass(phoneKey, RIYA, NOW), NOW, [RIYAS_PHONE])).toEqual({ kind: "garbled" });
   });
 
   it("is fresh in the window before its own, its own and the next, and old outside them", () => {
     const pass = makePhonePass(phoneKey, RIYA, NOW);
-    expect(readPass(KEY, pass, NOW - 1, [phoneKey])).toEqual({ kind: "fresh", userId: RIYA, window: NOW });
-    expect(readPass(KEY, pass, NOW + 1, [phoneKey])).toEqual({ kind: "fresh", userId: RIYA, window: NOW });
-    expect(readPass(KEY, pass, NOW - 2, [phoneKey])).toEqual({ kind: "old" });
-    expect(readPass(KEY, pass, NOW + 2, [phoneKey])).toEqual({ kind: "old" });
+    expect(readPass(KEY, pass, NOW - 1, [RIYAS_PHONE])).toEqual({ kind: "fresh", userId: RIYA, window: NOW });
+    expect(readPass(KEY, pass, NOW + 1, [RIYAS_PHONE])).toEqual({ kind: "fresh", userId: RIYA, window: NOW });
+    expect(readPass(KEY, pass, NOW - 2, [RIYAS_PHONE])).toEqual({ kind: "old" });
+    expect(readPass(KEY, pass, NOW + 2, [RIYAS_PHONE])).toEqual({ kind: "old" });
   });
 
   it("names the same window as the server's pass, so the two share its one use", () => {
-    const read = readPass(KEY, makePhonePass(phoneKey, RIYA, NOW), NOW, [phoneKey]);
+    const read = readPass(KEY, makePhonePass(phoneKey, RIYA, NOW), NOW, [RIYAS_PHONE]);
     expect(read).toEqual(readPass(KEY, makePass(KEY, RIYA, NOW), NOW));
   });
 
   it("any one letter changed is garbled", () => {
     const pass = makePhonePass(phoneKey, RIYA, NOW);
     for (let index = 4; index < pass.length; index++) {
-      expect(readPass(KEY, flip(pass, index), NOW, [phoneKey])).toEqual({ kind: "garbled" });
+      expect(readPass(KEY, flip(pass, index), NOW, [RIYAS_PHONE])).toEqual({ kind: "garbled" });
     }
   });
 
   it("reads among several live sign-ins, whichever made it", () => {
     const pass = makePhonePass(phoneKey, RIYA, NOW);
-    const keys = [phonePassKey(KEY, RIYA, RIYAS_OLD_PHONE), phoneKey];
-    expect(readPass(KEY, pass, NOW, keys)).toEqual({ kind: "fresh", userId: RIYA, window: NOW });
+    expect(readPass(KEY, pass, NOW, [RIYAS_OLD_PHONE, RIYAS_PHONE])).toEqual({ kind: "fresh", userId: RIYA, window: NOW });
   });
 
   it("is the phone's own: the same key and pass as `apps/mobile/test/phonePass.test.ts`", () => {
-    expect(phoneKey.toString("base64url")).toBe("6kk2P5Zj8znws7IlJEBdalqwCFQdAxL2lgYYZUO3B6Q");
-    expect(makePhonePass(phoneKey, RIYA, NOW)).toBe("AHGPBNXSYHUNJJGDXHRPPINVY3MOSCBYIRGA7RUBX36QQGXAG4EUIIT26HXPAE");
+    expect(TODAY).toBe(20_486);
+    expect(phoneKey.toString("base64url")).toBe("xtpsaxfmZP6_Zz-UOUee-3_RiCU70Cbvl8KMNtj8rNQ"); // dummy test value, gitleaks:allow
+    expect(makePhonePass(phoneKey, RIYA, NOW)).toBe("AHGPBNXSYHUNJJGDXHRPPINVY3MOSCBYIRGAF3JPZDEIBNSNC6QQMGEZ6QC4ZU");
   });
 });

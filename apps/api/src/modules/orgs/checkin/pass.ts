@@ -11,11 +11,13 @@
 //
 // A PASS THE PHONE MAKES WITH NO SIGNAL (ROADMAP Stage 5 item 15c). The same layout, with
 // the window's top bit set and the MAC made with the phone's own key: one derived from the
-// server's key, the person and the phone's sign-in, so the server keeps no new secret.
-// It reads only while that sign-in is live: signed out, or replaced by a newer phone, the
-// phone's passes are dead. Its window may be the desk's, the one before or the one after (a
-// phone's clock with no signal is not corrected), and it shares its window's one use with
-// the server's pass for the same window.
+// server's key, the person, the phone's sign-in and the day (UTC), so the server keeps no new
+// secret. It reads only while that sign-in is live: signed out, or replaced by a newer phone,
+// the phone's passes are dead. The phone is given today's key and tomorrow's, so a pass made
+// ahead with the phone's clock moved on is good until tomorrow ends at most. Its window may be
+// the desk's, the one before or the one after (a phone's clock with no signal is not
+// corrected); it shares its window's one use with the server's pass for the same window, and
+// one read a window early takes the desk's window too, so two windows at most are open.
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { CHECKIN_PASS_LENGTH, CHECKIN_PASS_PREFIX, CHECKIN_PASS_WINDOW_SECONDS } from "@app/shared";
 
@@ -26,6 +28,8 @@ const DOMAIN = Buffer.from("aihg-checkin-pass-v1", "utf8");
 const PHONE_KEY_DOMAIN = Buffer.from("aihg-checkin-phone-key-v1", "utf8");
 /** The window's top bit: the phone made this pass. Windows stay below it until the year 4000. */
 const PHONE_MADE = 0x80000000;
+/** Windows in a day: 2,880 of 30 seconds. */
+export const WINDOWS_A_DAY = 86_400 / CHECKIN_PASS_WINDOW_SECONDS;
 
 export type PassRead =
   | { kind: "fresh"; userId: string; window: number }
@@ -112,9 +116,21 @@ export function makePass(key: Buffer, userId: string, window: number): string {
   return sign(key, userId, window);
 }
 
-/** The key a phone signs its own passes with, for one sign-in (`familyId`): 32 bytes. */
-export function phonePassKey(key: Buffer, userId: string, familyId: string): Buffer {
-  return createHmac("sha256", key).update(PHONE_KEY_DOMAIN).update(uuidBytes(userId)).update(uuidBytes(familyId)).digest();
+/** The UTC day a window falls in, which names the phone's key for it. */
+export function passDay(window: number): number {
+  return Math.floor(window / WINDOWS_A_DAY);
+}
+
+/** The key a phone signs its own passes with, for one sign-in (`familyId`) and one day: 32 bytes. */
+export function phonePassKey(key: Buffer, userId: string, familyId: string, day: number): Buffer {
+  const dayBytes = Buffer.alloc(4);
+  dayBytes.writeUInt32BE(day);
+  return createHmac("sha256", key)
+    .update(PHONE_KEY_DOMAIN)
+    .update(uuidBytes(userId))
+    .update(uuidBytes(familyId))
+    .update(dayBytes)
+    .digest();
 }
 
 /** The pass a phone makes with no signal; the phone's own copy is `apps/mobile`'s `phonePass.ts`. */
@@ -139,18 +155,21 @@ export function phoneMadeBy(raw: string): string | null {
 }
 
 /** What a read pass is: fresh, old, or garbled (not ours, altered, cut short by the scanner,
- *  or made by a phone whose sign-in is not in `phoneKeys`). The server's pass is fresh in its
- *  own window or the one after; a phone's in the window before, its own, or the one after. */
-export function readPass(key: Buffer, raw: string, nowWindow: number, phoneKeys: readonly Buffer[] = []): PassRead {
+ *  or made by a phone whose sign-in is not in `phoneSignIns`, its person's live ones). The
+ *  server's pass is fresh in its own window or the one after; a phone's in the window before,
+ *  its own, or the one after. */
+export function readPass(key: Buffer, raw: string, nowWindow: number, phoneSignIns: readonly string[] = []): PassRead {
   const pass = open(raw);
   if (pass === null) return { kind: "garbled" };
+  const window = (pass.win.readUInt32BE() & ~PHONE_MADE) >>> 0;
+  const userId = uuidOf(pass.user);
+  // A phone's pass is signed with its sign-in's key for the day of the window it names.
+  const keys = pass.phoneMade ? phoneSignIns.map((family) => phonePassKey(key, userId, family, passDay(window))) : [key];
   // Every key is tried, so the time taken does not say which sign-in it was.
-  const keys = pass.phoneMade ? phoneKeys : [key];
   let signed = false;
   for (const each of keys) if (timingSafeEqual(pass.tag, mac(each, pass.user, pass.win))) signed = true;
   if (!signed) return { kind: "garbled" };
-  const window = (pass.win.readUInt32BE() & ~PHONE_MADE) >>> 0;
   const late = nowWindow - window;
   if (late !== 0 && late !== 1 && !(pass.phoneMade && late === -1)) return { kind: "old" };
-  return { kind: "fresh", userId: uuidOf(pass.user), window };
+  return { kind: "fresh", userId, window };
 }
