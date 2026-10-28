@@ -33,7 +33,11 @@ import { DashboardScreen } from "./screens/Dashboard";
 import { GymScreen } from "./screens/GymTab";
 import { PlacesProvider, usePlaces } from "./screens/places";
 import { tabWord } from "./screens/placesHeading";
-import { FoodScreen, MeScreen, WorkoutScreen } from "./screens/tabs";
+import { FoodScreen } from "./screens/Food";
+import { mealFile } from "./screens/food/fileStore";
+import { MealOutboxProvider } from "./screens/food/MealOutbox";
+import type { TextStore } from "./screens/food/outbox";
+import { MeScreen, WorkoutScreen } from "./screens/tabs";
 
 /** The five tabs, in their order (spec Part 6 §16.3a). A tab's name is the word under its icon. */
 export const TABS = [
@@ -68,11 +72,13 @@ interface AppProps {
   store?: KeyStore;
   google?: AskGoogle;
   wait?: (ms: number) => Promise<void>;
+  /** Where a person's waiting meals are kept: the phone's own file, or a test's. */
+  mealStore?: (userId: string) => TextStore;
 }
 
 /** Signed out, the sign-in screen and nothing of anybody's; signed in, "Before you start" until
  *  the person has ticked it, then any invitation waiting, then the five tabs. */
-function SignedInOrOut() {
+function SignedInOrOut({ mealStore }: { mealStore: (userId: string) => TextStore }) {
   const { state } = useSession();
   if (state.kind === "starting") return <View style={styles.page} />;
   if (state.kind === "out") return <SignInScreen note={state.note} />;
@@ -80,17 +86,19 @@ function SignedInOrOut() {
     <SignUpNoteGate key={state.user.id}>
       <TimeZoneSync>
         <InvitationsGate>
-          <FiveTabs />
+          <FiveTabs mealStore={mealStore} />
         </InvitationsGate>
       </TimeZoneSync>
     </SignUpNoteGate>
   );
 }
 
-function FiveTabs() {
+function FiveTabs({ mealStore }: { mealStore: (userId: string) => TextStore }) {
   return (
     <PlacesProvider>
-      <TabsOfPlaces />
+      <MealOutboxProvider store={mealStore}>
+        <TabsOfPlaces />
+      </MealOutboxProvider>
     </PlacesProvider>
   );
 }
@@ -110,7 +118,7 @@ function TabsOfPlaces() {
   );
 }
 
-export function App({ extra, ask = fetch, store = phoneKeyStore, google = askGoogle, wait }: AppProps) {
+export function App({ extra, ask = fetch, store = phoneKeyStore, google = askGoogle, wait, mealStore = mealFile }: AppProps) {
   // A font that cannot be read must not leave a blank page: the phone's own font shows instead.
   const [fontsReady, fontsFailed] = useFonts({
     Inter_400Regular,
@@ -136,7 +144,7 @@ export function App({ extra, ask = fetch, store = phoneKeyStore, google = askGoo
             </Page>
           ) : (
             <SessionProvider server={server} store={store} google={google} wait={wait}>
-              <SignedInOrOut />
+              <SignedInOrOut mealStore={mealStore} />
             </SessionProvider>
           )}
         </CopyContext.Provider>

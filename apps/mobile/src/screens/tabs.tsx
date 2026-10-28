@@ -26,14 +26,6 @@ export function WorkoutScreen() {
   );
 }
 
-export function FoodScreen() {
-  return (
-    <Page top={<PictureTop picture="food" tall={0.62} eyebrow="Nutrition" title="Fuel Your Training" />}>
-      <Soon icon="apple" title="Your meals" />
-    </Page>
-  );
-}
-
 export function MeScreen() {
   return (
     <Page>

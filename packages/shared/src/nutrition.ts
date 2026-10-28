@@ -306,6 +306,8 @@ export type Meal = z.infer<typeof mealSchema>;
 /** GET /v1/nutrition/meals: a page of the person's meals, newest first. */
 export const mealPageSchema = z.object({ items: z.array(mealSchema), nextCursor: z.string().nullable() });
 export type MealPage = z.infer<typeof mealPageSchema>;
+/** POST, GET and PATCH of one meal answer with it. */
+export const mealResponseSchema = z.object({ meal: mealSchema });
 
 export const dishwareInputSchema = z.object({
   label: z.string().trim().min(1).max(100), containerClass: z.string().trim().min(1).max(80),
@@ -755,3 +757,31 @@ export const foodWeekResponseSchema = z.object({
   facts: z.object({ kcal: factSchema, proteinG: factSchema, carbsG: factSchema, fatG: factSchema }).strict(),
 }).strict();
 export type FoodWeekResponse = z.infer<typeof foodWeekResponseSchema>;
+
+// ── Meals kept on the phone until the server has them (ROADMAP Stage 5 32b-i) ──
+// The phone writes each meal it logs, and each removal of one, to a file of its
+// own before anything is sent, and reads that file back through this shape on
+// every start: a file the app wrote is still an input (CLAUDE.md §4).
+
+/** A meal waiting to be sent: what is sent, and what the day's list shows of it. */
+export const waitingMealSchema = z.object({
+  /** The meal's own id, the one `body` carries: the server keeps one meal for it (32a). */
+  id: z.string().uuid().toLowerCase(),
+  body: manualMealRequestSchema,
+  /** The server's preview of it, where one came back before it was logged. */
+  items: z.array(mealItemSchema).nullable(),
+  totals: mealTotalsSchema.nullable(),
+  /** Sent at least once: its save may have reached the server, so a removal is sent after it. */
+  tried: z.boolean(),
+}).strict().refine((m) => m.body.id === m.id, { message: "the body carries the meal's own id" });
+export type WaitingMeal = z.infer<typeof waitingMealSchema>;
+
+export const mealOutboxEntrySchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("save"), meal: waitingMealSchema }).strict(),
+  z.object({ kind: z.literal("remove"), id: z.string().uuid().toLowerCase() }).strict(),
+]);
+export type MealOutboxEntry = z.infer<typeof mealOutboxEntrySchema>;
+
+/** The file, in the order its entries are sent. */
+export const mealOutboxFileSchema = z.object({ version: z.literal(1), entries: z.array(mealOutboxEntrySchema).max(500) }).strict();
+export type MealOutboxFile = z.infer<typeof mealOutboxFileSchema>;
