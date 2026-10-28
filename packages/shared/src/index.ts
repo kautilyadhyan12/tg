@@ -53,6 +53,7 @@ export * from "./gymPage.js";
 export * from "./robotCheck.js";
 export * from "./staffInvites.js";
 export * from "./checkin.js";
+export * from "./checkinPhoneKey.js";
 export * from "./checkinRules.js";
 export * from "./waiver.js";
 export * from "./membershipAgreement.js";

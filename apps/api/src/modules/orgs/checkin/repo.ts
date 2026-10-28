@@ -247,6 +247,15 @@ export async function currentNames(sql: SqlOrTx, gymId: string): Promise<{ id: s
   return rows.map((row) => ({ id: row.id, name: row.name }));
 }
 
+/** The person's phone sign-ins that are live now (one at a time, but a sign-in that is ending
+ *  may still be here): the ones whose passes the desk takes. */
+export async function livePhoneSignIns(sql: SqlOrTx, userId: string, now: Date): Promise<string[]> {
+  const rows = await sql<{ family_id: string }[]>`
+    SELECT DISTINCT family_id FROM refresh_tokens
+    WHERE user_id = ${userId} AND client = 'phone' AND revoked_at IS NULL AND expires_at > ${now}`;
+  return rows.map((row) => row.family_id);
+}
+
 /** "Last seen", written at most once a minute. */
 export async function touchDevice(sql: SqlOrTx, gymId: string, deviceId: string): Promise<void> {
   await sql`

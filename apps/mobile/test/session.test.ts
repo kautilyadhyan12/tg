@@ -465,3 +465,84 @@ describe("a late write never undoes a sign-out", () => {
     expect(store.value).toBe(after);
   });
 });
+
+// The keys for passes with no signal (ROADMAP Stage 5 item 15c) are this sign-in's alone.
+describe("the keys for passes with no signal", () => {
+  const KEYS = [
+    { day: 20_486, key: "6kk2P5Zj8znws7IlJEBdalqwCFQdAxL2lgYYZUO3B6Q" }, // dummy test value, gitleaks:allow
+    { day: 20_487, key: "7kk2P5Zj8znws7IlJEBdalqwCFQdAxL2lgYYZUO3B6Q" }, // dummy test value, gitleaks:allow
+  ];
+  const OTHER = [{ day: 20_487, key: "8kk2P5Zj8znws7IlJEBdalqwCFQdAxL2lgYYZUO3B6Q" }]; // dummy test value, gitleaks:allow
+  const refreshed = { "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }) };
+
+  it("are kept in the key store with the sign-in, and stay through a refresh", async () => {
+    const { session, store } = phone(refreshed, kept(1));
+    await session.start();
+    expect(session.passKeys()).toEqual([]);
+    await session.keepPassKeys(KEYS, session.signInNumber());
+    expect(session.passKeys()).toEqual(KEYS);
+    expect(JSON.parse(store.value ?? "{}")).toMatchObject({ refreshToken: "refresh-2", passKeys: KEYS });
+    await session.refresh();
+    expect(session.passKeys()).toEqual(KEYS);
+    expect(JSON.parse(store.value ?? "{}")).toMatchObject({ passKeys: KEYS });
+  });
+
+  it("THE WORST THING: signing out takes them away, and a new sign-in starts with none", async () => {
+    const { session, store } = phone(
+      {
+        ...refreshed,
+        "/v1/auth/logout": () => ({ status: 200, body: {} }),
+        "/v1/auth/code/verify": () => ({ status: 200, body: { user: MEERA, isNewAccount: false, tokens: tokens(7) } }),
+      },
+      kept(1),
+    );
+    await session.start();
+    await session.keepPassKeys(KEYS, session.signInNumber());
+    await session.keepBelongs(true);
+    await session.signOut();
+    expect(session.passKeys()).toEqual([]);
+    expect(session.belongs()).toBeNull();
+    expect(store.value ?? "").not.toContain(KEYS[0]?.key ?? "?");
+    await session.verifyCode(MEERA.email, "123456");
+    expect(session.passKeys()).toEqual([]);
+    expect(store.value ?? "").not.toContain(KEYS[0]?.key ?? "?");
+  });
+
+  it("THE WORST THING: keys that come back after a sign-out and a new sign-in are not kept with the new one", async () => {
+    const { session, store } = phone(
+      {
+        ...refreshed,
+        "/v1/auth/logout": () => ({ status: 200, body: {} }),
+        "/v1/auth/code/verify": () => ({ status: 200, body: { user: RAVI, isNewAccount: false, tokens: tokens(7) } }),
+      },
+      kept(1),
+    );
+    await session.start();
+    const asked = session.signInNumber();
+    await session.signOut();
+    await session.verifyCode(RAVI.email, "123456");
+    await session.keepPassKeys(KEYS, asked);
+    expect(session.passKeys()).toEqual([]);
+    expect(store.value ?? "").not.toContain(KEYS[0]?.key ?? "?");
+    // The new sign-in's own keys are kept, and newer ones replace them.
+    await session.keepPassKeys(KEYS, session.signInNumber());
+    await session.keepPassKeys(OTHER, session.signInNumber());
+    expect(session.passKeys()).toEqual(OTHER);
+  });
+
+  it("whether the person belongs anywhere is kept with the sign-in, unknown until the places are read", async () => {
+    const { session, store } = phone(refreshed, kept(1));
+    await session.start();
+    expect(session.belongs()).toBeNull();
+    await session.keepBelongs(false);
+    expect(session.belongs()).toBe(false);
+    expect(JSON.parse(store.value ?? "{}")).toMatchObject({ belongs: false });
+  });
+
+  it("a key store written before this job, with no keys, still opens signed in", async () => {
+    const { session } = phone(refreshed, kept(1));
+    await session.start();
+    expect(session.state()).toEqual(signedInAs(RAVI));
+    expect(session.passKeys()).toEqual([]);
+  });
+});

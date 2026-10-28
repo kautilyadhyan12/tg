@@ -1,6 +1,7 @@
 // Check-in at the front desk (spec Part 3 §12; ROADMAP 16a). The member's pass, the
 // gym's desk devices, and the scan that reads a pass or a key tag.
 import { z } from "zod";
+import { checkinPhoneDayKeySchema } from "./checkinPhoneKey.js";
 import { checkinStopReasonSchema } from "./checkinRules.js";
 import { gymAttendanceMethodSchema, gymClockFormatSchema } from "./orgs.js";
 
@@ -20,6 +21,10 @@ export const checkinPassResponseSchema = z
   })
   .strict();
 export type CheckinPassResponse = z.infer<typeof checkinPassResponseSchema>;
+
+/** The phone's keys for passes with no signal (`checkinPhoneKey.ts`), today's and tomorrow's. Given only to the phone's own sign-in, and kept in its key store. */
+export const checkinPhoneKeyResponseSchema = z.object({ keys: z.array(checkinPhoneDayKeySchema).min(1).max(2) }).strict();
+export type CheckinPhoneKeyResponse = z.infer<typeof checkinPhoneKeyResponseSchema>;
 
 /** What the desk read: a pass, or a gym's own key tag (its member number). A USB
  *  scanner types it and presses Enter, so it is trimmed and nothing more. */
@@ -144,6 +149,7 @@ export const CHECKIN_WORDS = {
   device_not_recognised: "This device isn't set up to check people in. Ask the owner for a new link in Settings → Check-in devices.",
   link_not_valid: "This link has already been used or has run out. Ask for a new one in Settings → Check-in devices.",
   passes_off: "Passes aren't working right now. Staff can check you in.",
+  phone_only: "Only the app on your phone can do this.",
   checkin_unavailable: "Check-in isn't working right now. Please try again in a moment.",
   checkin_paused: "Check-in is unavailable. Please see a member of staff.",
   too_many_devices: `You can have up to ${String(CHECKIN_DEVICES_MAX)} check-in devices.`,
