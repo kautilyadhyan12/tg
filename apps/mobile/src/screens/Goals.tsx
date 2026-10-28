@@ -436,7 +436,7 @@ function GoalSheet(props: {
             <Editor
               kind={goal.kind}
               // Its own period and those the person has no goal of yet: another kept one would be refused.
-              periods={[goal.period, ...freePeriods(goal.kind, goals).filter((p) => p !== goal.period)]}
+              periods={rule.periods.filter((p) => p === goal.period || freePeriods(goal.kind, goals).includes(p))}
               period={period}
               onPeriod={(p) => {
                 setPeriod(p);

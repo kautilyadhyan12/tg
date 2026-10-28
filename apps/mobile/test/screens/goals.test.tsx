@@ -264,6 +264,13 @@ describe("change and remove", () => {
     expect(screen.queryByRole("radio", { name: "Month" })).toBeNull();
   });
 
+  it("a monthly goal's periods stay in their own order", async () => {
+    const MONTHLY = goal({ id: "6a7b8c9d-0e1f-4a2b-8c3d-4e5f6a7b8c9d", kind: "training_days", period: "month", target: 12, current: 7 });
+    await openGoals({ list: [MONTHLY] });
+    await fireEvent.press(await screen.findByRole("button", { name: /^Train 12 days a month/ }));
+    expect(screen.getAllByRole("radio").map((one) => String(one.props.accessibilityLabel))).toEqual(["Week", "Month", "Year"]);
+  });
+
   it("a number too big is not sent, and the box says the range", async () => {
     const server = await openGoals({ list: [TRAIN] });
     await fireEvent.press(await screen.findByRole("button", { name: "Train 4 days a week, 2 of 4 days this week" }));
