@@ -6,6 +6,7 @@ import {
   sendCodeResponseSchema,
   verifyCodePhoneResponseSchema,
   type AuthUser,
+  type CheckinPhoneDayKey,
   type PhoneKeptSession,
   type SendCodeResponse,
   type VerifyCodePhoneResponse,
@@ -82,13 +83,16 @@ export interface Session {
   /** Whether the server has said this person finished setup, as this phone last heard it. */
   setupDone: () => boolean;
   keepSetupDone: (done: boolean) => Promise<void>;
-  /** This sign-in's key for passes with no signal, or null until the server has given it. */
-  passKey: () => string | null;
+  /** This sign-in's keys for passes with no signal, none until the server has given them. */
+  passKeys: () => readonly CheckinPhoneDayKey[];
   /** Which sign-in this is: a new number at each sign-in and sign-out, never at a refresh. */
   signInNumber: () => number;
-  /** Kept with the sign-in it was asked for (`signIn`), so a key that comes back after a sign-out
-   *  or another sign-in is dropped, and signing out takes it away. */
-  keepPassKey: (key: string, signIn: number) => Promise<void>;
+  /** Kept with the sign-in they were asked for (`signIn`), so keys that come back after a sign-out
+   *  or another sign-in are dropped, and signing out takes them away. */
+  keepPassKeys: (keys: readonly CheckinPhoneDayKey[], signIn: number) => Promise<void>;
+  /** Whether the last places the server answered held one the person belongs to; null before any. */
+  belongs: () => boolean | null;
+  keepBelongs: (belongs: boolean) => Promise<void>;
 }
 
 export function createSession({
@@ -298,14 +302,23 @@ export function createSession({
       await writeKept(mine);
     },
 
-    passKey: () => kept?.passKey ?? null,
+    passKeys: () => kept?.passKeys ?? [],
 
     signInNumber: () => signIns,
 
-    keepPassKey: async (key, signIn) => {
+    keepPassKeys: async (keys, signIn) => {
       const mine = kept;
-      if (mine === null || signIn !== signIns || mine.passKey === key) return;
-      mine.passKey = key;
+      if (mine === null || signIn !== signIns) return;
+      mine.passKeys = keys.slice(0, 2);
+      await writeKept(mine);
+    },
+
+    belongs: () => kept?.belongs ?? null,
+
+    keepBelongs: async (belongs) => {
+      const mine = kept;
+      if (mine === null || mine.belongs === belongs) return;
+      mine.belongs = belongs;
       await writeKept(mine);
     },
 

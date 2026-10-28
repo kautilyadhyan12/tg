@@ -1,20 +1,27 @@
 // A pass the phone makes itself, for when it has no signal (ROADMAP Stage 5 item 15c; spec Part 3
 // §12.2). The server's own layout, with the window's top bit set and the code signed with this
-// phone's key, which the server gave to this sign-in alone (`apps/api`'s `pass.ts`, its
-// `makePhonePass`). The desk takes it only while this sign-in is live, and each window once.
+// phone's key for the window's day (UTC), which the server gave to this sign-in alone, today's
+// and tomorrow's (`apps/api`'s `pass.ts`, its `makePhonePass`). The desk takes it only while
+// this sign-in is live, and each window once.
 import { hmac } from "@noble/hashes/hmac";
 import { sha256 } from "@noble/hashes/sha2";
-import { CHECKIN_PASS_PREFIX, CHECKIN_PASS_WINDOW_SECONDS } from "@app/shared";
+import { CHECKIN_PASS_PREFIX, CHECKIN_PASS_WINDOW_SECONDS, type CheckinPhoneDayKey } from "@app/shared";
 
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 const BASE64URL = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 const DOMAIN = "aihg-checkin-pass-v1";
 const MAC_BYTES = 16;
 const PHONE_MADE = 0x80000000;
+const WINDOWS_A_DAY = 86_400 / CHECKIN_PASS_WINDOW_SECONDS;
 
 /** The 30-second window an instant falls in, as the server counts them. */
 export function phoneWindow(nowMs: number): number {
   return Math.floor(nowMs / 1000 / CHECKIN_PASS_WINDOW_SECONDS);
+}
+
+/** The UTC day an instant falls in, as the server numbers the keys. */
+export function phoneDay(nowMs: number): number {
+  return Math.floor(phoneWindow(nowMs) / WINDOWS_A_DAY);
 }
 
 /** How long until the next window begins, when the phone's pass changes. */
@@ -61,13 +68,17 @@ function base32(bytes: Uint8Array): string {
   return out;
 }
 
-/** This window's pass, signed with the phone's key, or null when the key, the person or the time
- *  cannot be read: then nothing is drawn, never a pass the desk would refuse. */
-export function makePhonePass(key: string, userId: string, nowMs: number): string | null {
-  const secret = fromBase64url(key);
+/** This window's pass, signed with the phone's key for its day, or null when there is no key for
+ *  the day, or the key, the person or the time cannot be read: then nothing is drawn, never a pass
+ *  the desk would refuse. */
+export function makePhonePass(keys: readonly CheckinPhoneDayKey[], userId: string, nowMs: number): string | null {
+  if (!Number.isFinite(nowMs) || nowMs < 0) return null;
+  const window = phoneWindow(nowMs);
+  const held = keys.find((one) => one.day === Math.floor(window / WINDOWS_A_DAY));
+  const secret = held === undefined ? null : fromBase64url(held.key);
   const user = uuidBytes(userId);
-  if (secret === null || user === null || !Number.isFinite(nowMs) || nowMs < 0) return null;
-  const field = (phoneWindow(nowMs) | PHONE_MADE) >>> 0;
+  if (secret === null || user === null) return null;
+  const field = (window | PHONE_MADE) >>> 0;
   const win = Uint8Array.of(field >>> 24, (field >>> 16) & 0xff, (field >>> 8) & 0xff, field & 0xff);
   const signed = new Uint8Array(DOMAIN.length + 16 + 4);
   for (let at = 0; at < DOMAIN.length; at++) signed[at] = DOMAIN.charCodeAt(at);

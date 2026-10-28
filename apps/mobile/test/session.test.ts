@@ -466,25 +466,28 @@ describe("a late write never undoes a sign-out", () => {
   });
 });
 
-// The key for passes with no signal (ROADMAP Stage 5 item 15c) is this sign-in's alone.
-describe("the key for passes with no signal", () => {
-  const KEY = "6kk2P5Zj8znws7IlJEBdalqwCFQdAxL2lgYYZUO3B6Q"; // dummy test value, gitleaks:allow
-  const OTHER = "7kk2P5Zj8znws7IlJEBdalqwCFQdAxL2lgYYZUO3B6Q"; // dummy test value, gitleaks:allow
+// The keys for passes with no signal (ROADMAP Stage 5 item 15c) are this sign-in's alone.
+describe("the keys for passes with no signal", () => {
+  const KEYS = [
+    { day: 20_486, key: "6kk2P5Zj8znws7IlJEBdalqwCFQdAxL2lgYYZUO3B6Q" }, // dummy test value, gitleaks:allow
+    { day: 20_487, key: "7kk2P5Zj8znws7IlJEBdalqwCFQdAxL2lgYYZUO3B6Q" }, // dummy test value, gitleaks:allow
+  ];
+  const OTHER = [{ day: 20_487, key: "8kk2P5Zj8znws7IlJEBdalqwCFQdAxL2lgYYZUO3B6Q" }]; // dummy test value, gitleaks:allow
   const refreshed = { "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }) };
 
-  it("is kept in the key store with the sign-in, and stays through a refresh", async () => {
+  it("are kept in the key store with the sign-in, and stay through a refresh", async () => {
     const { session, store } = phone(refreshed, kept(1));
     await session.start();
-    expect(session.passKey()).toBeNull();
-    await session.keepPassKey(KEY, session.signInNumber());
-    expect(session.passKey()).toBe(KEY);
-    expect(JSON.parse(store.value ?? "{}")).toMatchObject({ refreshToken: "refresh-2", passKey: KEY });
+    expect(session.passKeys()).toEqual([]);
+    await session.keepPassKeys(KEYS, session.signInNumber());
+    expect(session.passKeys()).toEqual(KEYS);
+    expect(JSON.parse(store.value ?? "{}")).toMatchObject({ refreshToken: "refresh-2", passKeys: KEYS });
     await session.refresh();
-    expect(session.passKey()).toBe(KEY);
-    expect(JSON.parse(store.value ?? "{}")).toMatchObject({ passKey: KEY });
+    expect(session.passKeys()).toEqual(KEYS);
+    expect(JSON.parse(store.value ?? "{}")).toMatchObject({ passKeys: KEYS });
   });
 
-  it("THE WORST THING: signing out takes it away, and a new sign-in starts with none", async () => {
+  it("THE WORST THING: signing out takes them away, and a new sign-in starts with none", async () => {
     const { session, store } = phone(
       {
         ...refreshed,
@@ -494,16 +497,18 @@ describe("the key for passes with no signal", () => {
       kept(1),
     );
     await session.start();
-    await session.keepPassKey(KEY, session.signInNumber());
+    await session.keepPassKeys(KEYS, session.signInNumber());
+    await session.keepBelongs(true);
     await session.signOut();
-    expect(session.passKey()).toBeNull();
-    expect(store.value ?? "").not.toContain(KEY);
+    expect(session.passKeys()).toEqual([]);
+    expect(session.belongs()).toBeNull();
+    expect(store.value ?? "").not.toContain(KEYS[0]?.key ?? "?");
     await session.verifyCode(MEERA.email, "123456");
-    expect(session.passKey()).toBeNull();
-    expect(store.value ?? "").not.toContain(KEY);
+    expect(session.passKeys()).toEqual([]);
+    expect(store.value ?? "").not.toContain(KEYS[0]?.key ?? "?");
   });
 
-  it("THE WORST THING: a key that comes back after a sign-out and a new sign-in is not kept with the new one", async () => {
+  it("THE WORST THING: keys that come back after a sign-out and a new sign-in are not kept with the new one", async () => {
     const { session, store } = phone(
       {
         ...refreshed,
@@ -516,18 +521,28 @@ describe("the key for passes with no signal", () => {
     const asked = session.signInNumber();
     await session.signOut();
     await session.verifyCode(RAVI.email, "123456");
-    await session.keepPassKey(KEY, asked);
-    expect(session.passKey()).toBeNull();
-    expect(store.value ?? "").not.toContain(KEY);
-    // The new sign-in's own key is kept, and a newer one replaces it.
-    await session.keepPassKey(OTHER, session.signInNumber());
-    expect(session.passKey()).toBe(OTHER);
+    await session.keepPassKeys(KEYS, asked);
+    expect(session.passKeys()).toEqual([]);
+    expect(store.value ?? "").not.toContain(KEYS[0]?.key ?? "?");
+    // The new sign-in's own keys are kept, and newer ones replace them.
+    await session.keepPassKeys(KEYS, session.signInNumber());
+    await session.keepPassKeys(OTHER, session.signInNumber());
+    expect(session.passKeys()).toEqual(OTHER);
   });
 
-  it("a key store written before this job, with no key, still opens signed in", async () => {
+  it("whether the person belongs anywhere is kept with the sign-in, unknown until the places are read", async () => {
+    const { session, store } = phone(refreshed, kept(1));
+    await session.start();
+    expect(session.belongs()).toBeNull();
+    await session.keepBelongs(false);
+    expect(session.belongs()).toBe(false);
+    expect(JSON.parse(store.value ?? "{}")).toMatchObject({ belongs: false });
+  });
+
+  it("a key store written before this job, with no keys, still opens signed in", async () => {
     const { session } = phone(refreshed, kept(1));
     await session.start();
     expect(session.state()).toEqual(signedInAs(RAVI));
-    expect(session.passKey()).toBeNull();
+    expect(session.passKeys()).toEqual([]);
   });
 });

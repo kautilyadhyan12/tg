@@ -25,15 +25,16 @@ import { usePlaces } from "./places";
 import { placesHeading } from "./placesHeading";
 import { DaysYouCame } from "./gym/DaysYouCame";
 import { OWN_PASS_AFTER_MS, PASS_PATH, PassSheet } from "./gym/Pass";
-import { makePhonePass } from "./gym/phonePass";
+import { makePhonePass, phoneDay } from "./gym/phonePass";
 import { NO_ANSWER } from "./SignIn";
 
 // The Gym tab (docs/design/phone/pages/Gym and GymNone): the places the person joined, each with
 // Show my pass and the days they came there, a place that removed them, and every invitation still open for their address. It reads again when the
-// tab is opened or the app comes back, at most every 30 seconds. With the internet it also asks once
-// for this sign-in's key for passes with no signal; with none, Show my pass stands alone where the
-// places could not be read, or are more than two seconds away (a phone opened with no signal tries
-// for a minute before it says so), for the pass works anywhere the person belongs (ROADMAP Stage 5
+// tab is opened or the app comes back, at most every 30 seconds. With the internet it also asks for
+// this sign-in's keys for passes with no signal, today's and tomorrow's, whenever the phone lacks
+// tomorrow's; with none, Show my pass stands alone where the places could not be read, or are more
+// than two seconds away (a phone opened with no signal tries for a minute before it says so), for the
+// pass works anywhere the person belongs, unless the last places read held none (ROADMAP Stage 5
 // item 15c).
 
 export const GYM_READ_AGAIN_MS = 30_000;
@@ -44,9 +45,10 @@ type Read<T> = { kind: "ok"; data: T } | { kind: "failed" };
 export function GymScreen() {
   const { session, state } = useSession();
   const userId = state.kind === "in" ? state.user.id : null;
-  const [ownKey, setOwnKey] = useState<string | null>(() => session.passKey());
-  // Asked once while the tab is open: the key is this sign-in's for as long as it lasts.
-  const keyAsked = useRef(false);
+  const [ownKeys, setOwnKeys] = useState(() => session.passKeys());
+  // One ask at a time; a refusal that this is not a phone's sign-in ends the asking.
+  const keyAsking = useRef(false);
+  const keyRefused = useRef(false);
   // The places have been waited for long enough to offer the pass without them.
   const [placesSlow, setPlacesSlow] = useState(false);
   const { setKinds } = usePlaces();
@@ -70,22 +72,24 @@ export function GymScreen() {
 
   const fetchPass = useCallback(() => session.signedIn({ method: "GET", path: PASS_PATH }, checkinPassResponseSchema), [session]);
   const makeOwnPass = useMemo(
-    () => (ownKey === null || userId === null ? null : (nowMs: number) => makePhonePass(ownKey, userId, nowMs)),
-    [ownKey, userId],
+    () => (ownKeys.length === 0 || userId === null ? null : (nowMs: number) => makePhonePass(ownKeys, userId, nowMs)),
+    [ownKeys, userId],
   );
 
-  const readPhoneKey = useCallback(async () => {
-    if (keyAsked.current) return;
-    keyAsked.current = true;
+  const readPhoneKeys = useCallback(async () => {
+    const tomorrow = phoneDay(Date.now()) + 1;
+    if (keyAsking.current || keyRefused.current || session.passKeys().some((held) => held.day === tomorrow)) return;
+    keyAsking.current = true;
     const signIn = session.signInNumber();
     const answer = await session.signedIn({ method: "GET", path: PHONE_KEY_PATH }, checkinPhoneKeyResponseSchema);
-    if (answer.kind !== "ok") {
-      // Asked again with the next read; a refusal is this sign-in's answer and is not.
-      if (answer.kind === "no_answer") keyAsked.current = false;
-      return;
+    keyAsking.current = false;
+    if (answer.kind === "ok") {
+      await session.keepPassKeys(answer.data.keys, signIn);
+      if (live.current) setOwnKeys(session.passKeys());
+    } else if (answer.kind === "refused" && answer.status === 403) {
+      // Not a phone's sign-in: the same answer every time. Anything else is asked again with the next read.
+      keyRefused.current = true;
     }
-    await session.keepPassKey(answer.data.key, signIn);
-    if (live.current) setOwnKey(session.passKey());
   }, [session]);
 
   const fetchVisits = useCallback((path: string) => session.signedIn({ method: "GET", path }, gymAttendanceHistoryResponseSchema), [session]);
@@ -94,7 +98,11 @@ export function GymScreen() {
     const answer = await session.signedIn({ method: "GET", path: "/v1/orgs/mine" }, myOrgsResponseSchema);
     if (!live.current) return;
     setMine(answer.kind === "ok" ? answer : { kind: "failed" });
-    if (answer.kind === "ok") setKinds(answer.data.orgs.filter((org) => org.isMember).map((org) => org.orgType));
+    if (answer.kind === "ok") {
+      const kinds = answer.data.orgs.filter((org) => org.isMember).map((org) => org.orgType);
+      setKinds(kinds);
+      await session.keepBelongs(kinds.length > 0);
+    }
   }, [session, setKinds]);
 
   const readInvites = useCallback(async () => {
@@ -112,9 +120,9 @@ export function GymScreen() {
       if (!always && now - lastRead.current < GYM_READ_AGAIN_MS) return;
       lastRead.current = now;
       setVisitsRead((n) => n + 1);
-      await Promise.all([readMine(), readInvites(), readPhoneKey()]);
+      await Promise.all([readMine(), readInvites(), readPhoneKeys()]);
     },
-    [readMine, readInvites, readPhoneKey],
+    [readMine, readInvites, readPhoneKeys],
   );
 
   useEffect(() => {
@@ -166,7 +174,7 @@ export function GymScreen() {
       <Txt kind="h1">{placesHeading(joined.map((org) => org.orgType))}</Txt>
 
       {/* First, so it stays where it was when the failure comes in under it. */}
-      {makeOwnPass !== null && (mine?.kind === "failed" || (mine === null && placesSlow)) ? (
+      {makeOwnPass !== null && session.belongs() !== false && (mine?.kind === "failed" || (mine === null && placesSlow)) ? (
         <Button label="Show my pass" icon="qr" wide onPress={() => { setPassOrgType("unknown"); }} />
       ) : null}
 

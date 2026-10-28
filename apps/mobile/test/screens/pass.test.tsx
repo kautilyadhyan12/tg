@@ -6,6 +6,7 @@ import type { CheckinPassResponse } from "@app/shared";
 import { App } from "../../src/App";
 import { PHONE_KEY_PATH } from "../../src/screens/GymTab";
 import {
+  OFFLINE_ASK_AGAIN_MS,
   OWN_PASS_AFTER_MS,
   PASS_COULD_NOT,
   PASS_GETTING,
@@ -16,9 +17,9 @@ import {
   type MakeOwnPass,
 } from "../../src/screens/gym/Pass";
 import { passCells, passPath } from "../../src/screens/gym/passView";
-import { makePhonePass } from "../../src/screens/gym/phonePass";
+import { makePhonePass, phoneDay } from "../../src/screens/gym/phonePass";
 import type { Answer, Ask } from "../../src/session/calls";
-import { RAVI, fakeServer, kept, memoryStore, never, profile, refusal, tokens, type Reply, type Route } from "../kit";
+import { RAVI, fakeServer, kept, lost as lostRoute, memoryStore, never, profile, refusal, tokens, type Reply, type Route } from "../kit";
 
 const extra = { copyName: "Feature 1", apiUrl: "http://localhost:3000" };
 const noWait = () => Promise.resolve();
@@ -57,7 +58,13 @@ function drawn(...more: (string | null)[]): string | null {
 
 // This sign-in's key for passes with no signal (the server's own test key, apps/api).
 const OWN_KEY = "6kk2P5Zj8znws7IlJEBdalqwCFQdAxL2lgYYZUO3B6Q"; // dummy test value, gitleaks:allow
-const keptWithKey = (n: number) => JSON.stringify({ ...(JSON.parse(kept(n)) as object), passKey: OWN_KEY });
+// Today's and tomorrow's keys, and the day the timed tests run on (2026-10-28).
+const OWN_KEYS = [phoneDay(Date.now()), phoneDay(Date.now()) + 1, phoneDay(Date.parse("2026-10-28T10:00:00.000Z"))].map((day) => ({
+  day,
+  key: OWN_KEY,
+}));
+const keptWithKey = (n: number, more: object = {}) =>
+  JSON.stringify({ ...(JSON.parse(kept(n)) as object), passKeys: OWN_KEYS.slice(0, 2), ...more });
 
 const gymTab = async () => {
   const tab = (await screen.findAllByRole("tab"))[3];
@@ -431,11 +438,11 @@ describe("a pass with no signal", () => {
     await fireEvent.press(await gymTab());
     await fireEvent.press(await screen.findByRole("button", { name: "Show my pass" }));
     expect(await screen.findByText(PASS_OFFLINE)).toBeTruthy();
-    const now = makePhonePass(OWN_KEY, RAVI.id, Date.now());
-    const before = makePhonePass(OWN_KEY, RAVI.id, Date.now() - 30_000);
+    const now = makePhonePass(OWN_KEYS, RAVI.id, Date.now());
+    const before = makePhonePass(OWN_KEYS, RAVI.id, Date.now() - 30_000);
     expect([now, before]).toContain(drawn(now, before));
     // The same key with another person's id makes another pass: this one names Ravi alone.
-    const ashas = makePhonePass(OWN_KEY, ASHA.id, Date.now());
+    const ashas = makePhonePass(OWN_KEYS, ASHA.id, Date.now());
     expect(drawn(now, before, ashas)).not.toBe(ashas);
   });
 
@@ -446,14 +453,14 @@ describe("a pass with no signal", () => {
     expect(screen.queryByRole("button", { name: "Show my pass" })).toBeNull();
     await fireEvent.press(await screen.findByRole("button", { name: "Show my pass" }, { timeout: 4_000 }));
     // The pass waits two seconds for the server's, then draws the phone's own.
-    const now = makePhonePass(OWN_KEY, RAVI.id, Date.now());
+    const now = makePhonePass(OWN_KEYS, RAVI.id, Date.now());
     await waitFor(
       () => {
-        expect(drawn(now, makePhonePass(OWN_KEY, RAVI.id, Date.now()))).not.toBeNull();
+        expect(drawn(now, makePhonePass(OWN_KEYS, RAVI.id, Date.now()))).not.toBeNull();
       },
       { timeout: 4_000 },
     );
-    expect(drawn(now, makePhonePass(OWN_KEY, RAVI.id, Date.now()))).not.toBe("something else");
+    expect(drawn(now, makePhonePass(OWN_KEYS, RAVI.id, Date.now()))).not.toBe("something else");
   });
 
   it("with no key kept, no signal shows what it did before, and no Show my pass where the places could not be read", async () => {
@@ -467,7 +474,7 @@ describe("a pass with no signal", () => {
     const server = fakeServer({
       "/v1/auth/refresh": ok({ tokens: tokens(2) }),
       "/v1/orgs/mine": mine(IRON),
-      [PHONE_KEY_PATH]: ok({ key: OWN_KEY }),
+      [PHONE_KEY_PATH]: ok({ keys: OWN_KEYS.slice(0, 2) }),
     });
     const store = memoryStore(kept(1));
     await render(<App extra={extra} ask={server.ask} store={store} wait={noWait} />);
@@ -478,6 +485,49 @@ describe("a pass with no signal", () => {
     await fireEvent.press(screen.getByRole("tab", { name: "Me" }));
     await fireEvent.press(await gymTab());
     expect(server.paths().filter((path) => path === PHONE_KEY_PATH)).toHaveLength(1);
+  });
+
+  it("nobody whose last places held none is offered the pass with no signal", async () => {
+    const lost: Ask = (url, init) =>
+      fakeServer({}).ask(url, init).then(() => {
+        throw new TypeError("Network request failed");
+      });
+    await render(<App extra={extra} ask={lost} store={memoryStore(keptWithKey(1, { belongs: false }))} wait={noWait} />);
+    await fireEvent.press(await gymTab());
+    expect(await screen.findByRole("button", { name: "Try again" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Show my pass" })).toBeNull();
+  });
+
+  it("keys that got no answer, or a refusal other than this not being a phone, are asked for again with the next read; not after that refusal", async () => {
+    for (const [first, again] of [
+      [lostRoute, 2],
+      [() => refusal(429, "rate_limited", "Too many requests."), 2],
+      [() => refusal(403, "phone_only", "Only the app on your phone can do this."), 1],
+    ] as const) {
+      let n = 0;
+      const server = fakeServer({
+        "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+        "/v1/orgs/mine": () => (n === 0 ? refusal(500, "internal_error", "Something went wrong") : mine(IRON)()),
+        "/v1/invitations/mine": () => refusal(500, "internal_error", "Something went wrong"),
+        [PHONE_KEY_PATH]: () => {
+          n += 1;
+          return n === 1 ? first() : ok({ keys: OWN_KEYS.slice(0, 2) })();
+        },
+      });
+      const store = memoryStore(kept(1));
+      const view = await render(<App extra={extra} ask={server.ask} store={store} wait={noWait} />);
+      await fireEvent.press(await gymTab());
+      await fireEvent.press(await screen.findByRole("button", { name: "Try again" }));
+      await waitFor(() => {
+        expect(server.paths().filter((path) => path === PHONE_KEY_PATH)).toHaveLength(again);
+      });
+      if (again === 2) {
+        await waitFor(() => {
+          expect(store.value ?? "").toContain(OWN_KEY);
+        });
+      } else expect(store.value ?? "").not.toContain(OWN_KEY);
+      await view.unmount();
+    }
   });
 
   it("a key the server refuses is not kept", async () => {
@@ -498,8 +548,8 @@ describe("a pass with no signal", () => {
 
 describe("a pass with no signal, while it is open", () => {
   const start = Date.parse("2026-10-28T10:00:05.000Z");
-  const own: MakeOwnPass = (nowMs) => makePhonePass(OWN_KEY, RAVI.id, nowMs);
-  const ownAt = (ms: number) => makePhonePass(OWN_KEY, RAVI.id, start + ms);
+  const own: MakeOwnPass = (nowMs) => makePhonePass(OWN_KEYS, RAVI.id, nowMs);
+  const ownAt = (ms: number) => makePhonePass(OWN_KEYS, RAVI.id, start + ms);
 
   beforeEach(() => {
     jest.useFakeTimers({ now: start });
@@ -541,6 +591,25 @@ describe("a pass with no signal, while it is open", () => {
       await Promise.resolve();
     });
     expect(drawn(ownAt(0))).toBe(RAVI_PASS);
+  });
+
+  it("with the phone's own pass on screen the server is asked again, and when the signal is back its pass and words return", async () => {
+    let answers = 0;
+    const fetchPass: FetchPass = jest.fn(() => {
+      answers += 1;
+      return Promise.resolve<Answer<CheckinPassResponse>>(answers < 3 ? { kind: "no_answer" } : good(RAVI_PASS));
+    });
+    await render(<PassSheet open trainer={false} onClose={() => undefined} fetchPass={fetchPass} makeOwnPass={own} />);
+    await later(0);
+    expect(screen.getByText(PASS_OFFLINE)).toBeTruthy();
+    await later(OFFLINE_ASK_AGAIN_MS);
+    expect(fetchPass).toHaveBeenCalledTimes(2);
+    expect(screen.getByText(PASS_OFFLINE)).toBeTruthy();
+    await later(OFFLINE_ASK_AGAIN_MS);
+    expect(fetchPass).toHaveBeenCalledTimes(3);
+    expect(drawn(ownAt(50_000))).toBe(RAVI_PASS);
+    expect(screen.queryByText(PASS_OFFLINE)).toBeNull();
+    expect(screen.getByText("It changes every 30 seconds.")).toBeTruthy();
   });
 
   it("with no answer it says it is offline and makes a new pass as each window begins", async () => {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, AppState, Platform, StyleSheet, View, useWindowDimensions } from "react-native";
 import Svg, { Path, Rect } from "react-native-svg";
 import * as Brightness from "expo-brightness";
@@ -23,15 +23,18 @@ import { untilNextWindowMs } from "./phonePass";
 //
 // With no signal (ROADMAP Stage 5 item 15c) the phone shows the pass it makes itself with this
 // sign-in's key, new each window: when the server cannot be reached, and while its answer is more
-// than two seconds away (a phone opened with no signal tries for a while before it says so). The
-// server's pass, once it comes, is shown instead.
+// than two seconds away (a phone opened with no signal tries for a while before it says so). With
+// it on screen the server is asked again every 25 seconds and when the app comes back to the front,
+// and the server's pass, once it comes, is shown instead.
 
 export const PASS_PATH = "/v1/users/me/checkin-pass";
 export const PASS_COULD_NOT = "We couldn’t get your pass just now. Please try again.";
 export const PASS_GETTING = "Getting your pass…";
-export const PASS_OFFLINE = "You’re offline. Your pass still works.";
+export const PASS_OFFLINE = "You’re offline. Show this at the desk.";
 /** How long the server's pass is waited for before the phone's own is shown. */
 export const OWN_PASS_AFTER_MS = 2_000;
+/** How often the server is asked again while the phone's own pass is on screen with no signal. */
+export const OFFLINE_ASK_AGAIN_MS = 25_000;
 
 const AWAKE_TAG = "pass";
 
@@ -65,6 +68,9 @@ function PassBody({ trainer, fetchPass, makeOwnPass }: { trainer: boolean; fetch
   // Bumped by Try again, which starts the asking over.
   const [attempt, setAttempt] = useState(0);
   const own = useOwnPass(makeOwnPass);
+  // Read by the asking below, which is not started again when it changes.
+  const canOwn = useRef(false);
+  canOwn.current = own !== null;
   // The server's pass has been waited for long enough to show the phone's own.
   const [slow, setSlow] = useState(false);
   useBrightAndAwake();
@@ -107,14 +113,21 @@ function PassBody({ trainer, fetchPass, makeOwnPass }: { trainer: boolean; fetch
       if (stale !== null) clearTimeout(stale);
       stale = null;
       if (answer.kind !== "ok") {
-        // The old pass goes with the failure, and nothing asks again by itself: Try again does.
-        failed = true;
+        // The old pass goes with the failure.
         shownAt = null;
+        const offline = answer.kind === "no_answer";
         setShown({
           status: "failed",
           message: answer.kind === "refused" && answer.message !== "" ? answer.message : PASS_COULD_NOT,
-          offline: answer.kind === "no_answer",
+          offline,
         });
+        // With no signal and the phone's own pass on screen, the server is asked again, so its pass
+        // and its words come back with the signal. Otherwise nothing asks again by itself: Try again does.
+        if (offline && canOwn.current) {
+          if (AppState.currentState !== "background") next = setTimeout(() => void ask(), OFFLINE_ASK_AGAIN_MS);
+          return;
+        }
+        failed = true;
         return;
       }
       const age = Date.now() - askedAt;
