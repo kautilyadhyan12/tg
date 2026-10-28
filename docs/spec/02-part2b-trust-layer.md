@@ -567,7 +567,7 @@ actually did.
 under India's DPDP Act 2023 and GDPR for EU users means the v1 §18 items
 (export, deletion, consent copy) are launch requirements, not polish — and
 "photos are analyzed, never stored" is both a compliance simplification
-and a marketing line. Put it in the scan UI itself.
+and a marketing line. Put it in the scan UI itself. *(AMENDED 2026-10-28, `rulings/2026-10-28-33a.md`: since the scanner runs on OpenAI, the line is "Photos are analyzed and never kept by the app. The scanning service keeps a copy for up to 30 days to check for abuse." OpenAI keeps API inputs that long for abuse monitoring; only its zero-data-retention approval would make the old line true.)*
 
 ---
 

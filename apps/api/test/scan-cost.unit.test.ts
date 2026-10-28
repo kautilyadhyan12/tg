@@ -48,19 +48,19 @@ describe("the scanner's key", () => {
   it("is the model's own key line's value, unquoted, and nothing else in the file", () => {
     expect(SCAN_KEY_NAME).toBe("OPENAI_API_KEY");
     const file = ["DATABASE_URL=postgres://someone:secret@example/db", "GROQ_API_KEY=groq-value", "GEMINI_API_KEY=gemini-value", "OPENAI_API_KEY=openai-value", ""].join("\r\n"); // gitleaks:allow
-    expect(keyFrom(file, "GEMINI_API_KEY")).toBe("gemini-value");
-    expect(keyFrom(file, "OPENAI_API_KEY")).toBe("openai-value");
-    expect(keyFrom('GEMINI_API_KEY="quoted value"\n', "GEMINI_API_KEY")).toBe("quoted value");
-    expect(keyFrom("export GEMINI_API_KEY='single'\n", "GEMINI_API_KEY")).toBe("single");
-    expect(keyFrom("  GEMINI_API_KEY = spaced \n", "GEMINI_API_KEY")).toBe("spaced");
+    expect(keyFrom(file, SCAN_KEY_NAME)).toBe("openai-value");
+    expect(keyFrom('OPENAI_API_KEY="quoted value"\n', SCAN_KEY_NAME)).toBe("quoted value");
+    expect(keyFrom("export OPENAI_API_KEY='single'\n", SCAN_KEY_NAME)).toBe("single");
+    expect(keyFrom("  OPENAI_API_KEY = spaced \n", SCAN_KEY_NAME)).toBe("spaced");
   });
 
   it("is missing where the line is absent, empty, or another name", () => {
-    expect(keyFrom("", "GEMINI_API_KEY")).toBeNull();
-    expect(keyFrom("GEMINI_API_KEY=\n", "GEMINI_API_KEY")).toBeNull();
-    expect(keyFrom('GEMINI_API_KEY=""\n', "GEMINI_API_KEY")).toBeNull();
-    expect(keyFrom("OLD_GEMINI_API_KEY=value\n# GEMINI_API_KEY=commented\n", "GEMINI_API_KEY")).toBeNull();
-    expect(keyFrom("GEMINI_API_KEY=gemini-value\n", "OPENAI_API_KEY")).toBeNull();
+    expect(keyFrom("", SCAN_KEY_NAME)).toBeNull();
+    expect(keyFrom("OPENAI_API_KEY=\n", SCAN_KEY_NAME)).toBeNull();
+    expect(keyFrom('OPENAI_API_KEY=""\n', SCAN_KEY_NAME)).toBeNull();
+    expect(keyFrom("OLD_OPENAI_API_KEY=value\n# OPENAI_API_KEY=commented\n", SCAN_KEY_NAME)).toBeNull();
+    // Another provider's line is not the scanner's key.
+    expect(keyFrom("GEMINI_API_KEY=gemini-value\n", SCAN_KEY_NAME)).toBeNull();
   });
 });
 

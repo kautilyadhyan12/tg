@@ -375,7 +375,7 @@ describe("P2.6a nutrition pure pipeline", () => {
   };
 
   // ── The scanner on OpenAI's GPT-6 Luna (rulings/2026-10-28-33a.md).
-  it("OpenAI: only the instructions and the photo leave — no user, no identifier, nothing stored, thinking off, low detail, the key in a header", async () => {
+  it("OpenAI: only the instructions and the photo leave — no user, no identifier, nothing stored, thinking off, high detail, the key in a header", async () => {
     // The worst thing (33a): a person's meal photo reaching OpenAI with who they
     // are on it, or kept there for later. The body is compared WHOLE, so any field
     // added to it (user, safety_identifier, metadata, store:true) turns this red.
