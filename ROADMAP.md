@@ -294,7 +294,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
              - 18d-iii-b-ii-b-ii-a. [x] **Square's merges followed** — merged 2026-10-26 (PR #365).
              - 18d-iii-b-ii-b-ii-b. **Changes copied, and deleted for good taken out**, in two parts since 2026-10-28 (`handoff/2026-10-28-18d-iii-b-ii-b-ii-b-i.md` keeps its line as first written):
                - 18d-iii-b-ii-b-ii-b-i. [x] **A changed name, email or phone copied to Square** — merged 2026-10-28 (PR #379).
-               - 18d-iii-b-ii-b-ii-b-ii. [ ] **Delete permanently takes the customer the app added out of Square**: never one that was already in Square, never one Square has merged into somebody else's; the box says how many. Web folder 1.
+               - 18d-iii-b-ii-b-ii-b-ii. [x] **Delete permanently takes the customer the app added out of Square** — merged 2026-10-29 (PR #384).
          - 18d-iii-b-ii-c. [ ] **Match once for the rest** (Kd, 2026-10-24): Match links Square's customer to the person, so their later payments have their name and bill filled in, one press; Unlink on their page; a card saved later uses the linked customer. Web folder 1.
      - 18d-iv. [ ] **Refund a card payment through Square** (`rulings/2026-10-15-18o.md`); a chargeback shown on its payment with Square's 7-day deadline (Kd, 2026-10-22). Web folder 1.
      - 18d-v. [ ] **KWAZO listed in Square's App Marketplace, at launch** (Kd, 2026-10-20): once the site is online with Square's live return address. Square's partner page: "Any developer" can list, no fee or developer-country rule named; Square's quality review first. Unproven for a developer in India until applied.

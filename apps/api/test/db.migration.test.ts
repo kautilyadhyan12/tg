@@ -938,6 +938,71 @@ d("0001_init on a real database", () => {
       });
   });
 
+  /** MIGRATION `0171`'s data statement, read out of the shipped file and run on a TEMPORARY copy of the table (never the live one other
+   *  suites write to): a customer the app made before the reference id was kept carries its record's id, which is what it was made
+   *  with; a customer Square already had (linked) carries none; one already marked keeps its mark; a second run finds nothing to do.
+   *  Then the new table's own checks: one deletion owed a record, Square's ids only, and none for a gym that is gone. All rolled back. */
+  it("0171 marks every customer the app made with the record's id, and leaves a linked customer unmarked", async () => {
+    const migration = await readFile(new URL("../drizzle/0171_square_customer_deletes.sql", import.meta.url), "utf8");
+    const chunks = migration.split("--> statement-breakpoint").map((c) => c.trim());
+    const fills = chunks.filter((c) => c.includes('UPDATE "gym_square_customers"'));
+    const [fill] = fills;
+    if (fill === undefined || fills.length !== 1) throw new Error("0171 no longer holds exactly one data statement");
+    const onCopy = fill.replaceAll('"gym_square_customers"', '"gsc_0171"');
+    await sql
+      .begin(async (tx) => {
+        await tx`CREATE TEMP TABLE gsc_0171 (LIKE gym_square_customers INCLUDING DEFAULTS) ON COMMIT DROP`;
+        const gym = "00000000-0000-4000-8000-000000000171";
+        const row = async (entryId: string, customerId: string | null, joined: boolean, madeAs: string | null) => {
+          await tx`
+            INSERT INTO gsc_0171 (gym_id, entry_id, environment, account_id, customer_id, making_key, joined_at, made_as)
+            VALUES (${gym}, ${entryId}, 'production', 'ACCT171', ${customerId}, ${customerId === null ? randomUUID() : null}, ${joined ? new Date() : null}, ${madeAs})`;
+        };
+        const made = randomUUID();
+        const linked = randomUUID();
+        const making = randomUUID();
+        const marked = randomUUID();
+        const other = randomUUID();
+        await row(made, "CMADE", false, null);
+        await row(linked, "CLINKED", true, null);
+        await row(making, null, false, null);
+        await row(marked, "CMARKED", false, other);
+        await tx.unsafe(onCopy);
+        await tx.unsafe(onCopy);
+        const rows = await tx<{ entry_id: string; made_as: string | null }[]>`SELECT entry_id, made_as FROM gsc_0171`;
+        const of = (id: string) => rows.find((r) => r.entry_id === id)?.made_as;
+        expect(of(made), "a customer the app made carries its record's id").toBe(made);
+        expect(of(making), "a customer being made too").toBe(making);
+        expect(of(linked), "a customer Square already had carries none").toBeNull();
+        expect(of(marked), "one already marked keeps its mark").toBe(other);
+        throw new Error("ROLLBACK-0171-FIXTURE");
+      })
+      .catch((err: unknown) => {
+        if (err instanceof Error && err.message === "ROLLBACK-0171-FIXTURE") return;
+        throw err;
+      });
+    // The owed deletions' own checks, on the live table inside a transaction that is rolled back.
+    await sql
+      .begin(async (tx) => {
+        const [g] = await tx<{ id: string }[]>`SELECT id FROM gyms LIMIT 1`;
+        if (g === undefined) return;
+        const ref = randomUUID();
+        const insert = (q: typeof tx, customerId: string | null, account: string, reference: string = ref) =>
+          q`INSERT INTO gym_square_customer_deletes (gym_id, environment, account_id, customer_id, reference_id, not_before)
+             VALUES (${g.id}, 'production', ${account}, ${customerId}, ${reference}, now())`;
+        await insert(tx, "CCUST1", "ACCT171");
+        // Each refusal in a savepoint of its own: a refused statement ends the transaction it is in.
+        await expect(tx.savepoint((sp) => insert(sp, "CCUST1", "ACCT171")), "owed once for a record").rejects.toThrow(/gym_square_customer_deletes_reference_uq/);
+        await expect(tx.savepoint((sp) => insert(sp, "../v2/payments", "ACCT171", randomUUID())), "Square's own characters only").rejects.toThrow(/gym_square_customer_deletes_ids_check/);
+        await expect(tx.savepoint((sp) => insert(sp, "CCUST2", "not an account", randomUUID()))).rejects.toThrow(/gym_square_customer_deletes_ids_check/);
+        throw new Error("ROLLBACK-0171-CHECKS");
+      })
+      .catch((err: unknown) => {
+        if (err instanceof Error && err.message === "ROLLBACK-0171-CHECKS") return;
+        throw err;
+      });
+  });
+
   /** MIGRATION `0028`'s DATA STATEMENTS, read out of the shipped file and run
    *  on the old shapes they exist for — on a TEMPORARY copy of the table, so
    *  this test never locks or alters the live one that other suites are

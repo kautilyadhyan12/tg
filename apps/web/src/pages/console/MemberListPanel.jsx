@@ -16,7 +16,7 @@ import MemberListUpload from './MemberListUpload';
 import { saveFile } from './saveFile';
 import { staffTag, viewerPrivileges } from './consoleView';
 import { renewalsWaiting } from './membershipWordsView';
-import { canOpenPlace, membershipBoxTo } from './consolePlaces';
+import { canOpenPlace, membershipBoxTo, placeFor } from './consolePlaces';
 import {
   CHIP_KINDS,
   EMPTY_FILTERS,
@@ -1130,6 +1130,7 @@ export default function MemberListPanel({
           onSelectionChanged={deleteMoved}
           onDeleted={removedSelected}
           onClose={() => setDeleteFor(null)}
+          squareTo={placeFor(gym?.slug, viewerPrivileges(gym), 'payments')}
         />
       ) : null}
 

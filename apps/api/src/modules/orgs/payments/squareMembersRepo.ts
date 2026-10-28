@@ -400,8 +400,10 @@ export async function linkCustomer(
     LIMIT 1`;
   if (other !== undefined) return "taken";
   const rows = await tx<{ entry_id: string }[]>`
-    INSERT INTO gym_square_customers (gym_id, entry_id, environment, account_id, customer_id, joined_at, copied_name, copied_email, copied_phone, copied_at)
+    INSERT INTO gym_square_customers (gym_id, entry_id, environment, account_id, customer_id, joined_at, made_as, copied_name, copied_email, copied_phone, copied_at)
     SELECT ${r.gymId}, e.id, ${r.environment}, ${r.accountId}, ${r.customerId}, ${r.joined ? r.now : null},
+           -- A customer the app made (its answer lost) carries this record's id as its reference: what Delete permanently looks for.
+           ${r.joined ? tx`NULL::uuid` : tx`e.id`},
            md5(e.full_name), md5(NULLIF(lower(btrim(e.email::text)), '')), md5(NULLIF(e.phone_e164, '')), ${r.now}
     FROM gym_member_list_entries e WHERE e.gym_id = ${r.gymId} AND e.id = ${r.entryId} AND e.former_at IS NULL
     ON CONFLICT DO NOTHING

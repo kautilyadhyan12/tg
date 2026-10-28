@@ -39,6 +39,7 @@ import {
   squarePaymentSchema,
   squarePaymentsPageSchema,
   squarePaymentRefusalSchema,
+  squareEmptyAnswerSchema,
   squareRevokeSchema,
   squareSubscriptionSchema,
   squareSubscriptionsPageSchema,
@@ -96,6 +97,11 @@ export interface SquareApi {
    *  refuses (409 CONFLICT) a `version` that is not the customer's current one, which is how a change made in Square
    *  since the customer was read is never written over. */
   updateCustomer(accessToken: string, customerId: string, change: SquareCustomerChange): Promise<SquareResult<SquareCustomer>>;
+  /** Delete a customer for good (18d-iii-b-ii-b-ii-b-ii). Square refuses (409 CONFLICT) a `version` that is not the customer's
+   *  current one, answers 404 for one already deleted, and answers 200 for the old id of a merged customer and leaves the
+   *  merged customer alone (measured in its test area, 2026-10-28). A card saved on the customer stays on, and can still be
+   *  stopped. */
+  deleteCustomer(accessToken: string, customerId: string, version: number | null): Promise<SquareResult<null>>;
   /** No charge or update can reach the card after this; disabling one already disabled is
    *  allowed and changes nothing. */
   disableCard(accessToken: string, cardId: string): Promise<SquareResult<SquareCard>>;
@@ -142,7 +148,7 @@ export interface SquareApi {
   searchSubscriptions(
     accessToken: string,
     q: { customerIds: readonly string[]; cursor: string | null },
-  ): Promise<SquareResult<{ subscriptions: { customerId: string | null; status: string | null }[]; cursor: string | null }>>;
+  ): Promise<SquareResult<{ subscriptions: { customerId: string | null; status: string | null }[]; cursor: string | null; unread: number }>>;
   /** Charge a card on file (18d-iii-i). `idempotencyKey`: asked again, Square gives back the same
    *  payment, paid or failed, and never takes the money twice (measured 2026-10-23). */
   createCardPayment(accessToken: string, payment: NewCardPayment): Promise<CardPaymentResult>;
@@ -280,7 +286,7 @@ export function createSquareApi(opts: {
 
   /** Square's status and body, or null for no answer at all. */
   async function send(
-    method: "GET" | "POST" | "PUT",
+    method: "GET" | "POST" | "PUT" | "DELETE",
     path: string,
     authorization: string | null,
     body?: unknown,
@@ -312,7 +318,7 @@ export function createSquareApi(opts: {
   }
 
   async function call<T extends z.ZodTypeAny>(
-    method: "GET" | "POST" | "PUT",
+    method: "GET" | "POST" | "PUT" | "DELETE",
     path: string,
     schema: T,
     authorization: string | null,
@@ -417,13 +423,15 @@ export function createSquareApi(opts: {
       });
       if (result.kind !== "ok") return result;
       const subscriptions: { customerId: string | null; status: string | null }[] = [];
+      let unread = 0;
       for (const raw of result.value.subscriptions ?? []) {
         const one = squareSubscriptionSchema.safeParse(raw);
-        // One that cannot be read says nothing about anybody: Square still charges whoever it is, so it is
-        // counted as a subscription of none of these customers rather than guessed.
+        // One that cannot be read says nothing about anybody: Members in Square counts it as a subscription of none of these
+        // customers rather than guessing; `unread` says how many, for a reader that must not guess (Delete permanently).
         if (one.success) subscriptions.push({ customerId: one.data.customer_id ?? null, status: one.data.status ?? null });
+        else unread += 1;
       }
-      return { kind: "ok", value: { subscriptions, cursor: result.value.cursor ?? null } };
+      return { kind: "ok", value: { subscriptions, cursor: result.value.cursor ?? null, unread } };
     },
     async createCard(accessToken, c) {
       const result = await call("POST", "/v2/cards", squareCardAnswerSchema, bearer(accessToken), {
@@ -456,6 +464,12 @@ export function createSquareApi(opts: {
       const clears = Object.values(body).includes(null);
       const result = await call("PUT", `/v2/customers/${customerId}`, squareCustomerAnswerSchema, bearer(accessToken), body, clears ? { "X-Clear-Null": "true" } : {});
       return result.kind === "ok" ? { kind: "ok", value: result.value.customer } : result;
+    },
+    async deleteCustomer(accessToken, customerId, version) {
+      if (!/^[A-Za-z0-9_-]{1,64}$/.test(customerId)) throw new Error("not a Square customer id");
+      const query = version === null ? "" : `?version=${String(version)}`;
+      const result = await call("DELETE", `/v2/customers/${customerId}${query}`, squareEmptyAnswerSchema, bearer(accessToken));
+      return result.kind === "ok" ? { kind: "ok", value: null } : result;
     },
     async disableCard(accessToken, cardId) {
       const result = await call("POST", `${cardPath(cardId)}/disable`, squareCardAnswerSchema, bearer(accessToken), {});

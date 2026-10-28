@@ -721,12 +721,13 @@ if (square === null) {
       const run = await processSquareWork({ sql, square, log, now: () => new Date(), news });
       const revokes = run.revokes.sent + run.revokes.deferred + run.revokes.givenUp;
       const cardStops = run.cardStops.sent + run.cardStops.deferred + run.cardStops.givenUp;
+      const customerDeletes = run.customerDeletes.deleted + run.customerDeletes.kept + run.customerDeletes.deferred + run.customerDeletes.givenUp;
       const terminalSaves = run.terminalSaves.asked + run.terminalSaves.forgotten;
       const terminalPayments = run.terminalPayments.asked + run.terminalPayments.forgotten;
       const cardCharges = run.cardCharges.asked + run.cardCharges.charged;
       const sweeps = run.sweeps.payments + run.sweeps.unanswered;
       const squareMembers = run.members.pages + run.members.looked + run.members.copied + run.members.unanswered;
-      if (run.removed + run.unchanged + run.deferred + run.givenUp + run.forgotten + revokes + cardStops + terminalSaves + terminalPayments + cardCharges + sweeps + squareMembers + run.renewed + run.renewalsWaiting > 0) {
+      if (run.removed + run.unchanged + run.deferred + run.givenUp + run.forgotten + revokes + cardStops + customerDeletes + terminalSaves + terminalPayments + cardCharges + sweeps + squareMembers + run.renewed + run.renewalsWaiting > 0) {
         log.info({ ...run, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
       }
     },
