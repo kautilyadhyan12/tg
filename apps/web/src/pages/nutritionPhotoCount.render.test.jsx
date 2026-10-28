@@ -74,8 +74,8 @@ const pickerOf = (rowEl) => [
 describe('the photo sheet as a short list', () => {
   it('shows every food on one line, closed, with its amount in words and its calories', async () => {
     const row = await scanPlate();
-    expect(lineOf(row('Chicken nuggets')).textContent).toBe('Chicken nuggetsOur list · 6 × nugget · 96 g120 kcal');
-    expect(lineOf(row('Grapes')).textContent).toBe('GrapesOur list · ~50 g · estimate120 kcal');
+    expect(lineOf(row('Chicken nuggets')).textContent).toBe('Chicken nuggetsVerified · 6 × nugget · 96 g120 kcal');
+    expect(lineOf(row('Grapes')).textContent).toBe('GrapesVerified · ~50 g · estimate120 kcal');
     // Closed: no picker on the sheet at all.
     expect(screen.queryByRole('spinbutton', { name: 'Amount' })).toBeNull();
   });
@@ -84,7 +84,7 @@ describe('the photo sheet as a short list', () => {
     const APPLE = item('Apple', 'apple', 180, { measures: [{ id: 'serving', name: 'apple', grams: 180 }], startsAt: { measure: 'serving', amount: 1 }, portionEstimated: true });
     scanReturns([APPLE]);
     const row = await scanPlate();
-    expect(lineOf(row('Apple')).textContent).toBe('AppleOur list · ~1 × apple · 180 g · estimate120 kcal');
+    expect(lineOf(row('Apple')).textContent).toBe('AppleVerified · ~1 × apple · 180 g · estimate120 kcal');
     open(row('Apple'));
     expect(pickerOf(row('Apple'))).toEqual(['apple · 180 g', '1']);
   });
@@ -124,12 +124,12 @@ describe('where a scanned row starts', () => {
     fireEvent.click(within(row('Chicken nuggets')).getByRole('button', { name: 'More' }));
     expect(pickerOf(row('Chicken nuggets'))).toEqual(['nugget · 16 g', '6.5']);
     // The server has not answered for 6.5: the line says the amount and no grams.
-    expect(lineOf(row('Chicken nuggets')).textContent).toContain('Our list · 6.5 × nugget');
+    expect(lineOf(row('Chicken nuggets')).textContent).toContain('Verified · 6.5 × nugget');
     open(row('Grapes'));
     fireEvent.click(within(row('Grapes')).getByRole('button', { name: 'More' }));
     expect(pickerOf(row('Grapes'))).toEqual(['grams', '60']);
     expect(within(row('Grapes')).queryByText(/estimate/)).toBeNull();
-    expect(lineOf(row('Grapes')).textContent).toContain('Our list · 60 g');
+    expect(lineOf(row('Grapes')).textContent).toContain('Verified · 60 g');
     // Back at the start, it is the scanner's guess again.
     fireEvent.click(within(row('Grapes')).getByRole('button', { name: 'Less' }));
     expect(within(row('Grapes')).getByText('~50 g · estimate')).toBeTruthy();

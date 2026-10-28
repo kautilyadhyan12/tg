@@ -23,3 +23,35 @@ jest.mock("react-native-webview", () => {
 });
 // Google's package runs only on a phone; a screen test hands the app its own Google instead.
 jest.mock("react-native-nitro-google-signin", () => ({ GoogleOneTapSignIn: {} }));
+// The phone's own files: a screen test that logs a meal hands the app its own store
+// (`mealStore`); every other test gets this one, in memory, which forgets nothing between tests.
+jest.mock("expo-file-system", () => {
+  const files = new Map();
+  class File {
+    constructor(dir, name) {
+      this.uri = `${dir.uri}/${name}`;
+    }
+    get exists() {
+      return files.has(this.uri);
+    }
+    text() {
+      return Promise.resolve(files.get(this.uri) ?? "");
+    }
+    create() {
+      files.set(this.uri, "");
+    }
+    delete() {
+      files.delete(this.uri);
+    }
+    write(text) {
+      files.set(this.uri, text);
+    }
+    move(to) {
+      files.set(to.uri, files.get(this.uri));
+      files.delete(this.uri);
+      this.uri = to.uri;
+      return Promise.resolve();
+    }
+  }
+  return { File, Paths: { document: { uri: "documents" } } };
+});

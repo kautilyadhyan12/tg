@@ -562,8 +562,12 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 31b. [x] **Your Goals on the Dashboard** — merged 2026-10-28 (PR #374).
 32. **Food** (split 2026-10-13: the server part needs no phone).
     - 32a. [x] **A meal sent twice from the phone is saved once** — merged 2026-10-13 (PR #238).
-    - 32b. [ ] **The Food screen**: search, add by measure, the rings and a person's own numbers, change a logged food, saved dishes with rename and delete. Waits for items 10 to 12; sends every meal with its own id, made in small letters (32a). Its plan settles a removed meal whose save arrives again, which today saves it anew: the phone never sends a save once its removal is queued, or the server keeps removed ids. Feature folder 2's database holds the food table since 2026-10-13.
-33. [ ] **A meal photo with the phone's camera, and barcode scan** (item 5; Stage 4 item 8). A scanned barcode reads the product's own page at Open Food Facts, which sends the minerals, vitamin D and the serving size that its search leaves out (34a's review).
+    - 32b. **The Food screen** (split 2026-10-28: logging first).
+      - 32b-i. [x] **Log a meal on the phone** — merged 2026-10-28 (PR #376).
+      - 32b-ii. [ ] **Change a logged meal, your own numbers, saved dishes**: name, time, section and a food's amount; the rings' own-numbers switch; saved dishes added, renamed and removed, each saved once (32a's note); recent foods, the last 10 with one-tap Add (Kd, 2026-10-28).
+33. **The meal scan** (Kd, 2026-10-28: the scanner moves to GPT-6 Luna first).
+    - 33a. [ ] **The meal scan on GPT-6 Luna, thinking off** (built straight after 32b-i, before 32b-ii: Kd's "go", 2026-10-28): OpenAI's terms read first (age, how long a photo is kept, training); Kd's eight plates through today's model and Luna, foods found, calories and the measured cost a scan side by side; Gemini and the Groq spare removed if Luna holds up, else Kd decides. Needs Kd's OpenAI key with a monthly limit. Risky.
+    - 33b. [ ] **A meal photo with the phone's camera, and barcode scan** (item 5; Stage 4 item 8). A scanned barcode reads the product's own page at Open Food Facts, which sends the minerals, vitamin D and the serving size that its search leaves out (34a's review).
 34. **More food** (split 2026-10-13: the parts on the server need no phone).
     - 34a. [x] **Ten more figures kept with every food in a meal** — merged 2026-10-13 (PR #245).
     - 34b. [ ] **The ten figures on the Food screen** (7a-v, the rest): on a saved meal, the photo sheet's rows and under the rings, each beside a published daily reference whose source its plan names; "about, N items not known"; a product's figures said to be from its label. Waits for 32b.

@@ -6,7 +6,7 @@ import { MAX_AMOUNT, amountRefusal } from './measures';
 
 /** Where a food's numbers come from, as the box says it under them. */
 export const SOURCE_WORDS = {
-  curated: 'From the food list',
+  curated: 'Verified · from the food list',
   usda: 'From the food list · USDA FoodData Central',
   openfoodfacts: 'Packaged product · Open Food Facts',
   estimate: "The scan's estimate",

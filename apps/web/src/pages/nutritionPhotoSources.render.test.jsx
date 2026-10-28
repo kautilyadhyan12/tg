@@ -95,7 +95,7 @@ describe('the photo sheet names where each food’s numbers come from', () => {
     // No preview answer here: the sheet shows the scan's own numbers.
     svc.previewMeal = vi.fn(async () => { throw new Error('no preview'); });
     const row = await scanPlate();
-    expect(within(row('Avocado')).getByText('Our list')).toBeTruthy();
+    expect(within(row('Avocado')).getByText('Verified')).toBeTruthy();
     expect(within(row('Pumpkin, cooked')).getByText('USDA')).toBeTruthy();
     expect(within(row('Yakult Original · Yakult')).getByText('Packaged product')).toBeTruthy();
     expect(within(row('avocado toast')).getByText('~120 g · estimate')).toBeTruthy();

@@ -228,13 +228,19 @@ d("a meal saved under the phone's own id (real Postgres)", () => {
   }, 30_000);
 
   // As built, and 32b's to settle (ROADMAP 32b): the server keeps no list of removed ids.
-  it("a removed meal's id is free again: the same send after the removal saves it anew", async () => {
+  it("a removed meal stays removed: a late send of it keeps nothing, for its owner or anybody else", async () => {
     const id = randomUUID();
     const body = typed(id);
     expect((await save(alice.access, body)).statusCode).toBe(201);
+    const before = (await rowsOf(alice.userId)).length;
     expect((await inject("DELETE", `/v1/nutrition/meals/${id}`, alice.access)).statusCode).toBe(204);
-    expect((await save(alice.access, body)).statusCode).toBe(201);
-    expect(await rowsOf(alice.userId)).toHaveLength(1);
+    const late = await save(alice.access, body);
+    expect(late.statusCode, late.body).toBe(404);
+    expect(await rowsOf(alice.userId)).toHaveLength(before - 1);
+    expect((await save(bob.access, body)).statusCode).toBe(404);
+    expect((await rowsOf(bob.userId)).some((r) => r.id === id)).toBe(false);
+    // Removing it again finds nothing, as before.
+    expect((await inject("DELETE", `/v1/nutrition/meals/${id}`, alice.access)).statusCode).toBe(404);
   }, 30_000);
 
   it("the same photo meal sent twice is one meal, though its photo can be saved only once", async () => {
