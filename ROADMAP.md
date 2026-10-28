@@ -572,7 +572,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 32b-ii. [ ] **Change a logged meal, your own numbers, saved dishes**: name, time, section and a food's amount; the rings' own-numbers switch; saved dishes added, renamed and removed, each saved once (32a's note); recent foods, the last 10 with one-tap Add (Kd, 2026-10-28).
 33. **The meal scan** (Kd, 2026-10-28: the scanner moves to GPT-6 Luna first).
     - 33a. [x] **The meal scan on GPT-6 Luna, thinking off** — merged 2026-10-28 (PR #380).
-    - 33a-ii. [ ] **Luna checks the scan's unclear food matches** (Kd: "OK GO", 2026-10-28; before 32b-ii): a food whose match words found is put to Luna once a plate, text only, with its close foods; the one it names, else its estimate (`rulings/2026-10-28-33a-ii.md`). Risky.
+    - 33a-ii. [x] **Luna checks the scan's unclear food matches** — merged 2026-10-28 (PR #382).
     - 33b. [ ] **A meal photo with the phone's camera, and barcode scan** (item 5; Stage 4 item 8). A scanned barcode reads the product's own page at Open Food Facts, which sends the minerals, vitamin D and the serving size that its search leaves out (34a's review). The photo is redrawn on the phone before it is sent, as the web's is, so no location tag reaches OpenAI (33a's review). "Not this?" on every scanned food opens its other close foods and a search; each food's title is what Luna saw, with where its numbers come from under it (Kd, 2026-10-28).
 34. **More food** (split 2026-10-13: the parts on the server need no phone).
     - 34a. [x] **Ten more figures kept with every food in a meal** — merged 2026-10-13 (PR #245).
