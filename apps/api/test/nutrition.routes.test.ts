@@ -16,7 +16,7 @@ vi.mock("@sentry/node", () => sentry);
 
 const url=process.env["DATABASE_URL"];const d=describe.skipIf(url===undefined||url==="");
 const PASSWORD="p26a-safe-test-password-1"; // gitleaks:allow
-const env={NODE_ENV:"test",DATABASE_URL:url??"",WEB_ORIGIN:"http://localhost:5173",JWT_SECRET:"p26a-test-secret-0123456789abcdef-32",LOG_LEVEL:"error"};
+const env={NODE_ENV:"test",DATABASE_URL:url??"",WEB_ORIGIN:"http://localhost:5173",JWT_SECRET:"p26a-test-secret-0123456789abcdef-32",LOG_LEVEL:"error"}; // gitleaks:allow
 type App=Awaited<ReturnType<typeof buildApp>>;
 /** A scanned food as the reply is read (one list per food, RULINGS 2026-09-16), with no estimate of its own unless one is given: a food no table has is then named under "Not in the total", as these tests expect, and not estimated. */
 const seen=(o:{name:string;canonical_hint:string;count?:number|null;grams?:number|null;kcal?:number|null;protein_g?:number|null;carbs_g?:number|null;fat_g?:number|null}):VisionItem=>({count:null,grams:null,kcal:null,protein_g:null,carbs_g:null,fat_g:null,...o});

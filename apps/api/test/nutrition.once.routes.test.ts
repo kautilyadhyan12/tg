@@ -15,7 +15,7 @@ const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
 const redisUrl = process.env["TEST_REDIS_URL"];
 const PASSWORD = "p32a-safe-test-password-1"; // gitleaks:allow
-const env = { NODE_ENV: "test", DATABASE_URL: url ?? "", WEB_ORIGIN: "http://localhost:5173", JWT_SECRET: "p32a-test-secret-0123456789abcdef-32", LOG_LEVEL: "error" };
+const env = { NODE_ENV: "test", DATABASE_URL: url ?? "", WEB_ORIGIN: "http://localhost:5173", JWT_SECRET: "p32a-test-secret-0123456789abcdef-32", LOG_LEVEL: "error" }; // gitleaks:allow
 type App = Awaited<ReturnType<typeof buildApp>>;
 
 const evidence: VisionEvidence = {

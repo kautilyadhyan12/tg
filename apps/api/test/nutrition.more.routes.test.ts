@@ -17,7 +17,7 @@ import { USDA_NUTRIENTS, type UsdaEntry, type UsdaNutrient } from "../tools/usda
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
 const PASSWORD = "p34a-safe-test-password-1"; // gitleaks:allow
-const env = { NODE_ENV: "test", DATABASE_URL: url ?? "", WEB_ORIGIN: "http://localhost:5173", JWT_SECRET: "p34a-test-secret-0123456789abcdef-32", LOG_LEVEL: "error" };
+const env = { NODE_ENV: "test", DATABASE_URL: url ?? "", WEB_ORIGIN: "http://localhost:5173", JWT_SECRET: "p34a-test-secret-0123456789abcdef-32", LOG_LEVEL: "error" }; // gitleaks:allow
 
 const FIRST_ID = 90_001_001;
 const LAST_ID = 90_001_099;
