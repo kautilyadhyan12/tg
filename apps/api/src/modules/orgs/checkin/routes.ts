@@ -1,6 +1,7 @@
 // Check-in's routes (spec Part 3 §12; ROADMAP 16a).
 //
 //   GET  /v1/users/me/checkin-pass                       a member's pass (signed in)
+//   GET  /v1/users/me/checkin-pass/phone-key             the phone's key for passes with no signal
 //   GET  /v1/orgs/:gymId/checkin-devices                 the gym's devices (`org.manage`)
 //   POST /v1/orgs/:gymId/checkin-devices                 add one, with its one-time link
 //   POST /v1/orgs/:gymId/checkin-devices/:deviceId/link  a new link; the old key stops
@@ -96,6 +97,12 @@ function requireUserId(req: FastifyRequest): string {
   const userId = req.authUser?.id;
   if (userId === undefined) throw new Error("authenticate preHandler did not run");
   return userId;
+}
+
+function requireAuthUser(req: FastifyRequest): { id: string; familyId: string | null } {
+  const user = req.authUser;
+  if (user === undefined) throw new Error("authenticate preHandler did not run");
+  return user;
 }
 
 export interface CheckinRouteDeps {
@@ -213,6 +220,12 @@ export function registerCheckinRoutes(app: FastifyInstance, deps: CheckinRouteDe
     const pass = await service.getPass(checkinDeps, gate(passLimit)(req, reply), requireUserId(req));
     if (pass === null) return;
     return reply.status(200).header("cache-control", "no-store").send(pass);
+  });
+
+  app.get("/v1/users/me/checkin-pass/phone-key", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const key = await service.getPhonePassKey(checkinDeps, gate(passLimit)(req, reply), requireAuthUser(req));
+    if (key === null) return;
+    return reply.status(200).header("cache-control", "no-store").send(key);
   });
 
   app.get("/v1/orgs/:gymId/checkin-devices", { preHandler: [app.authenticate] }, async (req, reply) => {

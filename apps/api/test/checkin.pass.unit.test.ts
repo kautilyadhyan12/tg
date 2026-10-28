@@ -2,7 +2,16 @@
 // nothing but its own key's passes read as fresh.
 import { describe, expect, it } from "vitest";
 import { CHECKIN_PASS_LENGTH, checkinPassResponseSchema } from "@app/shared";
-import { looksLikePass, makePass, passWindow, readPass, windowEndsAt } from "../src/modules/orgs/checkin/pass.js";
+import {
+  looksLikePass,
+  makePass,
+  makePhonePass,
+  passWindow,
+  phoneMadeBy,
+  phonePassKey,
+  readPass,
+  windowEndsAt,
+} from "../src/modules/orgs/checkin/pass.js";
 
 const KEY = Buffer.from("test-checkin-pass-key-0123456789abcdef", "utf8"); // dummy test value, gitleaks:allow
 const OTHER_KEY = Buffer.from("another-checkin-pass-key-0123456789ab", "utf8"); // dummy test value, gitleaks:allow
@@ -86,5 +95,67 @@ describe("the check-in pass", () => {
     expect(windowEndsAt(window).getTime() - now.getTime()).toBeGreaterThan(0);
     expect(windowEndsAt(window).getTime() - now.getTime()).toBeLessThanOrEqual(30_000);
     expect(passWindow(windowEndsAt(window))).toBe(window + 1);
+  });
+});
+
+// A pass the phone makes with no signal (ROADMAP Stage 5 item 15c).
+describe("a pass the phone makes with no signal", () => {
+  const RIYAS_PHONE = "5d1c9a3e-2b7f-4e60-8c14-9f0a6b3d2e71";
+  const RIYAS_OLD_PHONE = "8a2e4c6f-1d3b-4f57-9e08-2c4a6b8d0f13";
+  const ARJUNS_PHONE = "3c5e7a9b-0d2f-4416-8b3d-5f7a9c1e3b20";
+  const phoneKey = phonePassKey(KEY, RIYA, RIYAS_PHONE);
+
+  it("THE WORST THING: it reads only with a live sign-in's key of its own person, never another phone's or person's", () => {
+    const pass = makePhonePass(phoneKey, RIYA, NOW);
+    expect(readPass(KEY, pass, NOW, [phoneKey])).toEqual({ kind: "fresh", userId: RIYA, window: NOW });
+    // Signed out, or replaced by a newer phone: its sign-in is not live, so no key is tried.
+    expect(readPass(KEY, pass, NOW, [])).toEqual({ kind: "garbled" });
+    expect(readPass(KEY, pass, NOW, [phonePassKey(KEY, RIYA, RIYAS_OLD_PHONE)])).toEqual({ kind: "garbled" });
+    // Arjun's live phone does not make Riya's pass good.
+    expect(readPass(KEY, pass, NOW, [phonePassKey(KEY, ARJUN, ARJUNS_PHONE)])).toEqual({ kind: "garbled" });
+    // Riya's phone's key cannot make Arjun's pass: the key is tried against Arjun's sign-ins.
+    const forged = makePhonePass(phoneKey, ARJUN, NOW);
+    expect(phoneMadeBy(forged)).toBe(ARJUN);
+    expect(readPass(KEY, forged, NOW, [phonePassKey(KEY, ARJUN, ARJUNS_PHONE)])).toEqual({ kind: "garbled" });
+  });
+
+  it("the server's key never reads as the phone's, nor the phone's key as the server's", () => {
+    const server = makePass(KEY, RIYA, NOW);
+    expect(phoneMadeBy(server)).toBeNull();
+    // A pass the server signed with its top bit set is not a phone's pass.
+    expect(readPass(KEY, makePhonePass(KEY, RIYA, NOW), NOW, [phoneKey])).toEqual({ kind: "garbled" });
+    // A phone's key on a pass that says the server made it.
+    expect(readPass(KEY, makePass(phoneKey, RIYA, NOW), NOW, [phoneKey])).toEqual({ kind: "garbled" });
+  });
+
+  it("is fresh in the window before its own, its own and the next, and old outside them", () => {
+    const pass = makePhonePass(phoneKey, RIYA, NOW);
+    expect(readPass(KEY, pass, NOW - 1, [phoneKey])).toEqual({ kind: "fresh", userId: RIYA, window: NOW });
+    expect(readPass(KEY, pass, NOW + 1, [phoneKey])).toEqual({ kind: "fresh", userId: RIYA, window: NOW });
+    expect(readPass(KEY, pass, NOW - 2, [phoneKey])).toEqual({ kind: "old" });
+    expect(readPass(KEY, pass, NOW + 2, [phoneKey])).toEqual({ kind: "old" });
+  });
+
+  it("names the same window as the server's pass, so the two share its one use", () => {
+    const read = readPass(KEY, makePhonePass(phoneKey, RIYA, NOW), NOW, [phoneKey]);
+    expect(read).toEqual(readPass(KEY, makePass(KEY, RIYA, NOW), NOW));
+  });
+
+  it("any one letter changed is garbled", () => {
+    const pass = makePhonePass(phoneKey, RIYA, NOW);
+    for (let index = 4; index < pass.length; index++) {
+      expect(readPass(KEY, flip(pass, index), NOW, [phoneKey])).toEqual({ kind: "garbled" });
+    }
+  });
+
+  it("reads among several live sign-ins, whichever made it", () => {
+    const pass = makePhonePass(phoneKey, RIYA, NOW);
+    const keys = [phonePassKey(KEY, RIYA, RIYAS_OLD_PHONE), phoneKey];
+    expect(readPass(KEY, pass, NOW, keys)).toEqual({ kind: "fresh", userId: RIYA, window: NOW });
+  });
+
+  it("is the phone's own: the same key and pass as `apps/mobile/test/phonePass.test.ts`", () => {
+    expect(phoneKey.toString("base64url")).toBe("6kk2P5Zj8znws7IlJEBdalqwCFQdAxL2lgYYZUO3B6Q");
+    expect(makePhonePass(phoneKey, RIYA, NOW)).toBe("AHGPBNXSYHUNJJGDXHRPPINVY3MOSCBYIRGA7RUBX36QQGXAG4EUIIT26HXPAE");
   });
 });

@@ -26,6 +26,7 @@ import {
   checkinDevicesResponseSchema,
   checkinLogResponseSchema,
   checkinPassResponseSchema,
+  checkinPhoneKeyResponseSchema,
   checkinPeopleResponseSchema,
   checkinRulesPreviewResponseSchema,
   checkinRulesResponseSchema,
@@ -45,6 +46,7 @@ import {
   type CheckinLogResponse,
   type CheckinNotice,
   type CheckinPassResponse,
+  type CheckinPhoneKeyResponse,
   type CheckinPeopleResponse,
   type CheckinPersonFound,
   type CheckinPick,
@@ -72,7 +74,7 @@ import { heldOnListOf, heldWithOwedOf } from "../memberships/onList.js";
 import { deskSignaturesOf, signaturesOf, waiverInUse } from "../waiver/repo.js";
 import { signedRecords } from "../waiver/signed.js";
 import { markCameAtCheckin, unmarkAfterVisitRemoved } from "../classes/attendance.js";
-import { looksLikePass, makePass, passWindow, readPass, windowEndsAt } from "./pass.js";
+import { looksLikePass, makePass, passWindow, phoneMadeBy, phonePassKey, readPass, windowEndsAt } from "./pass.js";
 import * as repo from "./repo.js";
 import { decideScan, type ScanPerson, type ScanRead } from "./scanRule.js";
 
@@ -88,8 +90,9 @@ export interface CheckinDeps {
 
 type Limit = () => Promise<boolean>;
 
-/** A pass is spent for a little longer than it can be read (its window and the next). */
-const USED_PASS_TTL_S = 90;
+/** A pass is spent for longer than it can be read: a phone's is read for 90 seconds at most
+ *  (the window before its own, its own and the next). */
+const USED_PASS_TTL_S = 120;
 export const DEVICE_SCANS_PER_MINUTE = 120;
 
 const sha256 = (value: string): string => createHash("sha256").update(value).digest("hex");
@@ -144,6 +147,20 @@ export async function getPass(deps: CheckinDeps, limit: Limit, userId: string): 
     pass: makePass(deps.passKey, userId, window),
     refreshAt: windowEndsAt(window).toISOString(),
   });
+}
+
+/** The phone's own key for passes with no signal: only for a phone's sign-in that is live, never
+ *  a browser's, so a browser cannot make passes that outlive it. */
+export async function getPhonePassKey(
+  deps: CheckinDeps,
+  limit: Limit,
+  user: { id: string; familyId: string | null },
+): Promise<CheckinPhoneKeyResponse | null> {
+  if (!(await limit())) return null;
+  if (deps.passKey === null) throw new OrgsError(503, "passes_off", CHECKIN_WORDS.passes_off);
+  const live = await repo.livePhoneSignIns(deps.sql, user.id, deps.now());
+  if (user.familyId === null || !live.includes(user.familyId)) throw new OrgsError(403, "phone_only", CHECKIN_WORDS.phone_only);
+  return checkinPhoneKeyResponseSchema.parse({ key: phonePassKey(deps.passKey, user.id, user.familyId).toString("base64url") });
 }
 
 // ── DEVICES (Settings → Check-in devices) ──
@@ -584,7 +601,13 @@ async function waiverSignaturesOf(
  *  kept, so it can be given back. */
 async function readThePass(deps: CheckinDeps, code: string): Promise<{ read: ScanRead; userId: string | null; spent: string | null }> {
   if (deps.passKey === null) throw new OrgsError(503, "passes_off", CHECKIN_WORDS.passes_off);
-  const pass = readPass(deps.passKey, code, passWindow(deps.now()));
+  const passKey = deps.passKey;
+  const phoneUser = phoneMadeBy(code);
+  const phoneKeys =
+    phoneUser === null
+      ? []
+      : (await repo.livePhoneSignIns(deps.sql, phoneUser, deps.now())).map((family) => phonePassKey(passKey, phoneUser, family));
+  const pass = readPass(passKey, code, passWindow(deps.now()), phoneKeys);
   if (pass.kind !== "fresh") return { read: { kind: "pass", pass: pass.kind }, userId: null, spent: null };
   const spent = `checkin:pass_used:${pass.userId}:${String(pass.window)}`;
   const uses = await deps.redis.incrWithTtl(spent, USED_PASS_TTL_S);
