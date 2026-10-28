@@ -20,7 +20,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import postgres from "postgres";
 import { z } from "zod";
-import { mealPhotoAnalysisSchema, mealPreviewSchema, mealSchema, mealVisionEvidenceSchema, type Meal, type MealPhotoAnalysis, type MealPhotoItem, type VisionEvidence, type VisionItem } from "@app/shared";
+import { MAX_MATCH_ENTRIES, mealPhotoAnalysisSchema, mealPreviewSchema, mealSchema, mealVisionEvidenceSchema, type Meal, type MealPhotoAnalysis, type MealPhotoItem, type VisionEvidence, type VisionItem } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createMemoryRedis } from "../src/redis.js";
@@ -720,9 +720,13 @@ d("the scanner prices every food it sees (real Postgres)", () => {
         answer = fail;
         const sheet = await scanOn(target(), access, plate(ICED_COFFEE));
         expect(sheet.items.map((i) => [i.name, i.nutritionSource, i.kcalPoint]), `answer ${String(n)}`).toEqual([["iced coffee with milk", "estimate", 100]]);
-        // It was asked, with the food words found first among its close foods.
+        // It was asked, with the food words found first among its close foods, then
+        // USDA's search for the name, at most twelve.
         expect(asked).toHaveLength(1);
-        expect(asked[0]?.[0]?.entries[0]?.name).toBe(NON_DAIRY);
+        const entries = asked[0]?.[0]?.entries.map((e) => e.name) ?? [];
+        expect(entries[0]).toBe(NON_DAIRY);
+        expect(entries).toContain("Coffee, Iced Latte, with non-dairy milk");
+        expect(entries.length).toBeLessThanOrEqual(MAX_MATCH_ENTRIES);
       }
     }, 60_000);
 
@@ -745,6 +749,48 @@ d("the scanner prices every food it sees (real Postgres)", () => {
       const res = await injectOn(target(), "POST", "/v1/nutrition/meals/preview", access, { scanToken: sheet.scanToken, items: sheet.items.map((i) => ({ canonical: i.canonical, measure: i.startsAt.measure, amount: i.startsAt.amount })) });
       expect(res.statusCode, res.body).toBe(200);
       expect(mealPreviewSchema.parse(res.json()).items.map((i) => i.name)).toEqual(["Roast potatoes"]);
+    }, 60_000);
+
+    it("prices each checked food by its own pick, in the check's order, past a plain food first on the plate", async () => {
+      const access = await sessionOn(target(), "scan7b-check-order@example.com");
+      asked.length = 0;
+      // Words find our cooked pork sausage by a shorter name, and our baked potato for "potatoes".
+      const SAUSAGE = seen("scored pork sausage", "scored pork sausage", [96, 312, 13, 1, 28]);
+      const ROASTED = seen("roasted potatoes", "potatoes", [200, 300, 5, 40, 13]);
+      answer = (foods) => Promise.resolve({
+        picks: foods.map((f) => { const at = f.entries.findIndex((e) => e.name === (f.hint === "potatoes" ? "Roast potatoes" : "Pork sausage (cooked)")); return at === -1 ? null : at; }),
+        tokensIn: 1400, tokensOut: 70,
+      });
+      const sheet = await scanOn(target(), access, plate(DAL, SAUSAGE, ROASTED));
+      expect(asked.map((foods) => foods.map((f) => f.hint))).toEqual([["scored pork sausage", "potatoes"]]);
+      // Two different picks, neither at the first place, or this case could not tell the orders apart.
+      expect(asked[0]?.[1]?.entries.findIndex((e) => e.name === "Roast potatoes")).toBeGreaterThan(0);
+      expect(sheet.items.map((i) => i.name)).toEqual(["Dal (lentil curry)", "Pork sausage (cooked)", "Roast potatoes"]);
+    }, 60_000);
+
+    it("ledgers a check that answered with nothing usable, and a ledger that cannot be written fails the scan as the scan's own does", async () => {
+      const email = "scan7b-check-paid@example.com";
+      const access = await sessionOn(target(), email);
+      answer = () => Promise.reject(new VisionProviderError("match check malformed JSON", "unreadable", { tokensIn: 1400, tokensOut: 70 }));
+      const before = await costRows(email);
+      const sheet = await scanOn(target(), access, plate(ICED_COFFEE));
+      expect(sheet.items.map((i) => i.nutritionSource)).toEqual(["estimate"]);
+      expect((await costRows(email)) - before).toBe(2);
+
+      // The check answers, and its cost row cannot be written: the scan fails and costs nothing.
+      answer = (foods) => Promise.resolve({ picks: foods.map(() => null), tokensIn: 1400, tokensOut: 70 });
+      const realInsert = repo.insertCostEvent;
+      let calls = 0;
+      const insert = vi.spyOn(repo, "insertCostEvent").mockImplementation((...args) => {
+        calls++;
+        return calls === 2 ? Promise.reject(new Error("the ledger is down")) : realInsert(...args);
+      });
+      try {
+        vision.queue.push(plate(ICED_COFFEE));
+        const res = await injectOn(target(), "POST", "/v1/nutrition/analyze-photo", access, { imageBase64: jpeg, mimeType: "image/jpeg" });
+        expect(res.statusCode, res.body).toBe(503);
+        expect(calls).toBe(2);
+      } finally { insert.mockRestore(); }
     }, 60_000);
 
     it("asks nothing about a plain match of our own list, and asks once for a plate's unclear foods, with no person in the question", async () => {

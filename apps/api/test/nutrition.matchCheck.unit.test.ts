@@ -6,7 +6,7 @@
 // The route and the real table run in nutrition.scan.routes.test.ts.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { MAX_MATCH_ENTRIES, foodMatchPicksSchema, mealVisionEvidenceSchema, type VisionItem } from "@app/shared";
 import { findCurated } from "../src/modules/nutrition/foods.js";
@@ -15,6 +15,7 @@ import { checkedPrice, closeFoodsOf, isPlainMatch, type ScanPrice } from "../src
 import {
   MATCH_CHECK_MAX_OUTPUT_TOKENS,
   MATCH_CHECK_PROMPT,
+  MATCH_CHECK_TIMEOUT_MS,
   VisionProviderError,
   createOpenAiMatchChecker,
   matchQuestionText,
@@ -169,16 +170,33 @@ describe("the match check on OpenAI", () => {
     ].join("\n"));
   });
 
-  it("reads one pick a food: a number it was not offered, a food it skipped and a second pick are no answer", async () => {
+  it("reads one pick a food: a number it was not offered, a food it skipped and a second pick are no answer for that food alone", async () => {
     const check = (content: string) => createOpenAiMatchChecker("k", "gpt-6-luna", answering(completion(content)).fetchImpl).check(FOODS);
     expect(await check('{"picks":[{"food":1,"entry":2},{"food":2,"entry":null}]}')).toEqual({ picks: [1, null], tokensIn: 1400, tokensOut: 70 });
     expect((await check('{"picks":[{"food":1,"entry":3},{"food":2,"entry":1}]}')).picks).toEqual([null, 0]);
     expect((await check('{"picks":[{"food":2,"entry":1}]}')).picks).toEqual([null, 0]);
     expect((await check('{"picks":[{"food":1,"entry":1},{"food":1,"entry":2}]}')).picks).toEqual([0, null]);
+    // "entry": 0 is a way to say none, and 13 is past any list: that food is none, the other keeps its pick.
+    expect((await check('{"picks":[{"food":1,"entry":0},{"food":2,"entry":1}]}')).picks).toEqual([null, 0]);
+    expect((await check(`{"picks":[{"food":1,"entry":2},{"food":2,"entry":${String(MAX_MATCH_ENTRIES + 1)}}]}`)).picks).toEqual([1, null]);
+    // A food it was not asked about is no other food's answer.
+    expect((await check('{"picks":[{"food":0,"entry":1},{"food":3,"entry":1},{"food":1,"entry":2}]}')).picks).toEqual([1, null]);
+  });
+
+  it("gives the check its own time limit, half the photo's", async () => {
+    expect(MATCH_CHECK_TIMEOUT_MS).toBe(15_000);
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    try {
+      await createOpenAiMatchChecker("k", "gpt-6-luna", answering(completion('{"picks":[]}')).fetchImpl).check(FOODS);
+      expect(timeout).toHaveBeenCalledWith(MATCH_CHECK_TIMEOUT_MS);
+    } finally { timeout.mockRestore(); }
+    // A check the time limit cuts off is an outage, and its foods go to the estimate.
+    const aborted: typeof fetch = () => Promise.reject(new DOMException("The operation was aborted due to timeout", "TimeoutError"));
+    expect((await failure(createOpenAiMatchChecker("k", "m", aborted).check(FOODS))).kind).toBe("unavailable");
   });
 
   it("fails closed, with the usage kept, on a reply that breaks the shape, a refusal or an empty answer; an outage and a refusal of the request are told apart", async () => {
-    for (const content of ['{"picks":[{"food":1,"entry":"2"}]}', '{"picks":[{"food":0,"entry":1}]}', '{"pick":[]}', "not json", '{"picks":[{"food":1,"entry":1,"why":"same"}]}']) {
+    for (const content of ['{"picks":[{"food":1,"entry":"2"}]}', '{"picks":[{"food":1.5,"entry":1}]}', '{"pick":[]}', "not json", '{"picks":[{"food":1,"entry":1,"why":"same"}]}']) {
       const err = await failure(createOpenAiMatchChecker("k", "m", answering(completion(content)).fetchImpl).check(FOODS));
       expect(err.kind, content).toBe("unreadable");
       expect(err.usage, content).toEqual({ tokensIn: 1400, tokensOut: 70 });
@@ -187,7 +205,7 @@ describe("the match check on OpenAI", () => {
     expect((await failure(createOpenAiMatchChecker("k", "m", answering(completion("")).fetchImpl).check(FOODS))).kind).toBe("unreadable");
     expect((await failure(createOpenAiMatchChecker("k", "m", answering({}, 429).fetchImpl).check(FOODS))).kind).toBe("unavailable");
     expect((await failure(createOpenAiMatchChecker("k", "m", answering({}, 400).fetchImpl).check(FOODS))).kind).toBe("refused");
-    expect(foodMatchPicksSchema.safeParse({ picks: [{ food: 1, entry: MAX_MATCH_ENTRIES + 1 }] }).success).toBe(false);
+    expect(foodMatchPicksSchema.safeParse({ picks: Array.from({ length: 21 }, (_, n) => ({ food: n + 1, entry: null })) }).success).toBe(false);
   });
 });
 

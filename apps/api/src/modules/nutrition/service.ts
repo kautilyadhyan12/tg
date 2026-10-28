@@ -52,6 +52,7 @@ import {
   MEAL_VISION_MODELS,
   VisionProviderError,
   visionCostMicro,
+  type MatchAnswer,
   type MatchChecker,
   type MealVisionModel,
   type VisionProvider,
@@ -964,14 +965,12 @@ async function checkMatches(
   });
   if (unclear.length === 0) return found;
   const close = await Promise.all(unclear.map(({ item, food }) => closeFoodsFor(deps, item, food)));
-  let picks: readonly (number | null)[] = [];
+  let answer: MatchAnswer | null = null;
   try {
-    const answer = await deps.matchChecker.check(unclear.map(({ item }, n) => ({
+    answer = await deps.matchChecker.check(unclear.map(({ item }, n) => ({
       name: shownFoodName(item), hint: item.canonical_hint, grams: item.grams, kcal: item.kcal,
       entries: (close[n] ?? []).map((food) => ({ name: food.name, kcal: food.kcal })),
     })));
-    await ledger(deps, userId, answer);
-    picks = answer.picks;
   } catch (err) {
     if (err instanceof VisionProviderError && err.usage !== undefined) await ledger(deps, userId, err.usage);
     const failure = { event: "nutrition.match_check_failed", userId, model: deps.visionModel, foods: unclear.length, requestId };
@@ -982,6 +981,10 @@ async function checkMatches(
       deps.reportError(err, requestId);
     }
   }
+  // Ledgered outside the check's try: an answer already paid for is a check that
+  // answered, and a ledger that cannot be written fails the scan as the scan's own does.
+  if (answer !== null) await ledger(deps, userId, answer);
+  const picks = answer?.picks ?? [];
   const checked = [...found];
   for (const [n, { at, item, food }] of unclear.entries()) checked[at] = checkedPrice(item, food, close[n] ?? [], picks[n] ?? null);
   return checked;

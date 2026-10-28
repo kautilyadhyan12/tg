@@ -301,13 +301,14 @@ name says which kind it is where the scanned name did not ("grilled sandwich" is
 turkey sandwich). Amended again the same day, from the reviews of PR #80 and #81 and
 their re-checks.)* *(AMENDED 2026-10-28, ROADMAP 33a-ii, Kd's "go": words cannot tell
 "milk" from "non-dairy milk", or thigh meat from a wing. So every food whose match is
-not our curated table's food for the model's whole name (a USDA food, a packaged
-product, the curated table's food of a shorter name, or a name that finds another
-curated food) is checked by the scanning model in ONE further question for the plate:
+not our curated table's food for the model's canonical hint, where its name finds no
+other curated food (a USDA food, a packaged product, the curated table's food of a
+shorter name, or a name that finds another curated food), is checked by the scanning model in ONE further question for the plate:
 text only, never the photo or the person, the food as seen with up to twelve close
 foods from the tables. It is priced by the close food the model names as the same
 food, where that food's energy is within three times of what it saw; otherwise, or
-when the check fails, by the model's own estimate, never by the food words found.)*
+when the check fails, by the model's own estimate, never by the food words found; with
+no usable estimate either, it is left out of the total and named.)*
 
 **Stage 4 — The confirmation moment (three seconds, one tap).** *(AMENDED 2026-09-16, RULINGS, the portion redesign; built at ROADMAP 7a-iv-b: each item starts at one of its food's measures or at the photo's grams marked "~120 g · estimate", and is corrected in the measure picker — a measure and how many, or a saved dish and how full — never S/M/L cards; the total is a single number, "about" while an estimate is in it.)* Before
 anything is saved, one compact sheet: each item as a chip with its portion

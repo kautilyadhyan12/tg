@@ -217,7 +217,7 @@ function parsePicks(text: string, foods: readonly MatchFood[], usage: VisionUsag
   if (!parsed.success) throw new VisionProviderError("match check malformed shape", "unreadable", usage);
   const picks = foods.map((food, at): number | null => {
     const entry = parsed.data.picks.find((pick) => pick.food === at + 1)?.entry ?? null;
-    return entry !== null && entry <= food.entries.length ? entry - 1 : null;
+    return entry !== null && entry >= 1 && entry <= food.entries.length ? entry - 1 : null;
   });
   return { picks, ...usage };
 }
