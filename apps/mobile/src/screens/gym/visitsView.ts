@@ -1,4 +1,4 @@
-// Days you came: the month of a person's visits at one place, on the place's own clock. The browser's
+// Attendance: the month of a person's visits at one place, on the place's own clock. The browser's
 // rules (apps/web/src/components/gym/attendanceView.js), the same days. Pure, so tested alone.
 //
 // Every date here is the gym's: a visit's `day` was stamped in the gym's zone, and the server's window
@@ -8,8 +8,8 @@ import type { GymAttendanceVisit } from "@app/shared";
 
 export type ClockFormat = "12h" | "24h";
 
-/** The words on a day staff added later: its time is when it was added, never when the person came. */
-export const ADDED_LATER = "Added later by staff";
+/** The words on a visit staff added later: its time is when it was added, never when the person came. */
+export const ADDED_LATER = "Added by staff";
 
 /** Monday first, as the browser and the gym's opening hours. */
 export const WEEK_HEADS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
@@ -62,6 +62,9 @@ export function monthWindow(key: string): { from: string; to: string } | null {
   if (parseMonth(key) === null) return null;
   return { from: `${key}-01`, to: `${shiftMonth(key, 1)}-01` };
 }
+
+/** The months, short, for the month picker. */
+export const MONTHS_SHORT = MONTH_SHORT;
 
 /** "October", or "October 2025" when it is not this year's. */
 export function monthName(key: string, thisMonth: string | null): string {
@@ -147,5 +150,5 @@ export function monthGrid(key: string, visits: readonly GymAttendanceVisit[], zo
 
 /** What an empty month says: about that month, never about ever. */
 export function emptyMonthNote(key: string, thisMonth: string | null): string {
-  return key === thisMonth ? "No visits yet this month." : `No visits in ${monthName(key, null)}.`;
+  return key === thisMonth ? "No check-ins yet this month." : `No check-ins in ${monthName(key, null)}.`;
 }

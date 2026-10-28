@@ -144,8 +144,8 @@ describe("the words", () => {
   });
 
   it("an empty month speaks of that month only", () => {
-    expect(emptyMonthNote("2026-10", "2026-10")).toBe("No visits yet this month.");
-    expect(emptyMonthNote("2026-09", "2026-10")).toBe("No visits in September 2026.");
+    expect(emptyMonthNote("2026-10", "2026-10")).toBe("No check-ins yet this month.");
+    expect(emptyMonthNote("2026-09", "2026-10")).toBe("No check-ins in September 2026.");
   });
 
   it.each([

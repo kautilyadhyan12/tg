@@ -62,7 +62,7 @@ const gymTab = async () => {
   return tab;
 };
 const box = (place: Place) => within(screen.getByTestId(`days-${place.id}`));
-const cameDays = (place: Place) => box(place).queryAllByLabelText(/, you came$/).map((day) => String(day.props.accessibilityLabel));
+const cameDays = (place: Place) => box(place).queryAllByLabelText(/, checked in$/).map((day) => String(day.props.accessibilityLabel));
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -77,14 +77,14 @@ describe("the worst thing: a place's days are its own, and a failed read never s
     await render(<App extra={extra} ask={ask} store={memoryStore(kept(1))} wait={noWait} />);
     await fireEvent.press(await gymTab());
     await waitFor(() => {
-      expect(cameDays(IRON)).toEqual([`1 ${nameOf(thisMonth)}, you came`]);
-      expect(cameDays(MEERA)).toEqual([`2 ${nameOf(thisMonth)}, you came`]);
+      expect(cameDays(IRON)).toEqual([`1 ${nameOf(thisMonth)}, checked in`]);
+      expect(cameDays(MEERA)).toEqual([`2 ${nameOf(thisMonth)}, checked in`]);
     });
     expect(new Set(months.map((m) => m.gymId))).toEqual(new Set([IRON.id, MEERA.id]));
     expect(months.every((m) => m.from === `${thisMonth}-01` && m.to === `${shiftMonth(thisMonth, 1)}-01`)).toBe(true);
   });
 
-  it("a read that fails says so, draws no month and no 'No visits', and Try again reads it", async () => {
+  it("a read that fails says so, draws no month and no 'No check-ins', and Try again reads it", async () => {
     let fail = true;
     const { ask } = withHistory({ "/v1/auth/refresh": ok({ tokens: tokens(2) }), "/v1/orgs/mine": mine(IRON) }, (_, month) =>
       fail ? { status: 500, body: { error: "internal", message: "Something went wrong." } } : { status: 200, body: history([visitOn(month, 1)]) },
@@ -92,14 +92,14 @@ describe("the worst thing: a place's days are its own, and a failed read never s
     await render(<App extra={extra} ask={ask} store={memoryStore(kept(1))} wait={noWait} />);
     await fireEvent.press(await gymTab());
     expect(await screen.findByText(DAYS_COULD_NOT)).toBeTruthy();
-    expect(screen.queryByText(/^No visits/)).toBeNull();
+    expect(screen.queryByText(/^No check-ins/)).toBeNull();
     expect(box(IRON).queryByText("Mon")).toBeNull();
     expect(cameDays(IRON)).toEqual([]);
 
     fail = false;
     await fireEvent.press(box(IRON).getByRole("button", { name: "Try again" }));
     await waitFor(() => {
-      expect(cameDays(IRON)).toEqual([`1 ${nameOf(thisMonth)}, you came`]);
+      expect(cameDays(IRON)).toEqual([`1 ${nameOf(thisMonth)}, checked in`]);
     });
     expect(screen.queryByText(DAYS_COULD_NOT)).toBeNull();
   });
@@ -119,17 +119,17 @@ describe("the worst thing: a place's days are its own, and a failed read never s
       expect(held.length).toBeGreaterThan(0);
     });
     await fireEvent.press(box(IRON).getByRole("button", { name: "Previous month" }));
-    expect(await box(IRON).findByText(`No visits in ${monthName(lastMonth, null)}.`)).toBeTruthy();
+    expect(await box(IRON).findByText(`No check-ins in ${monthName(lastMonth, null)}.`)).toBeTruthy();
     await act(async () => {
       for (const go of held) go();
       await new Promise((resolve) => setTimeout(resolve, 50));
     });
     expect(cameDays(IRON)).toEqual([]);
-    expect(box(IRON).getByText(`No visits in ${monthName(lastMonth, null)}.`)).toBeTruthy();
+    expect(box(IRON).getByText(`No check-ins in ${monthName(lastMonth, null)}.`)).toBeTruthy();
   });
 });
 
-describe("Days you came", () => {
+describe("Attendance", () => {
   it("a day they came opens its times, on the gym's clock, and one staff added later says so", async () => {
     const { ask } = withHistory({ "/v1/auth/refresh": ok({ tokens: tokens(2) }), "/v1/orgs/mine": mine(IRON) }, (_, month) => ({
       status: 200,
@@ -137,29 +137,54 @@ describe("Days you came", () => {
     }));
     await render(<App extra={extra} ask={ask} store={memoryStore(kept(1))} wait={noWait} />);
     await fireEvent.press(await gymTab());
-    await fireEvent.press(await box(IRON).findByLabelText(`1 ${nameOf(thisMonth)}, you came`));
+    await fireEvent.press(await box(IRON).findByLabelText(`1 ${nameOf(thisMonth)}, checked in`));
     expect(await screen.findByText("6:02 PM")).toBeTruthy();
-    expect(screen.getByText("You were here")).toBeTruthy();
+    expect(screen.getAllByText("Checked in")[0]).toBeTruthy();
     await fireEvent.press(screen.getByRole("button", { name: "Close" }));
     await waitFor(() => {
       expect(screen.queryByText("6:02 PM")).toBeNull();
     });
-    await fireEvent.press(box(IRON).getByLabelText(`2 ${nameOf(thisMonth)}, you came`));
-    expect(await screen.findByText("Added later by staff")).toBeTruthy();
+    await fireEvent.press(box(IRON).getByLabelText(`2 ${nameOf(thisMonth)}, checked in`));
+    expect(await screen.findByText("Added by staff")).toBeTruthy();
   });
 
   it("a day nobody came on opens nothing, and the next month is not offered from this one", async () => {
     const { ask } = withHistory({ "/v1/auth/refresh": ok({ tokens: tokens(2) }), "/v1/orgs/mine": mine(IRON) }, () => ({ status: 200, body: history([]) }));
     await render(<App extra={extra} ask={ask} store={memoryStore(kept(1))} wait={noWait} />);
     await fireEvent.press(await gymTab());
-    expect(await box(IRON).findByText("No visits yet this month.")).toBeTruthy();
+    expect(await box(IRON).findByText("No check-ins yet this month.")).toBeTruthy();
     await fireEvent.press(box(IRON).getByLabelText(`1 ${nameOf(thisMonth)}`));
-    expect(screen.queryByText("You were here")).toBeNull();
+    expect(screen.queryByText("Checked in")).toBeNull();
     expect(box(IRON).getByRole("button", { name: "Next month" })).toBeDisabled();
     await fireEvent.press(box(IRON).getByRole("button", { name: "Previous month" }));
     await waitFor(() => {
       expect(box(IRON).getByRole("button", { name: "Next month" })).toBeEnabled();
     });
+  });
+
+  it("the month's name opens every month: one picked is read, and the months to come are not offered", async () => {
+    const { ask, months } = withHistory({ "/v1/auth/refresh": ok({ tokens: tokens(2) }), "/v1/orgs/mine": mine(IRON) }, (_, month) => ({
+      status: 200,
+      body: history(month === thisMonth ? [visitOn(month, 1)] : []),
+    }));
+    await render(<App extra={extra} ask={ask} store={memoryStore(kept(1))} wait={noWait} />);
+    await fireEvent.press(await gymTab());
+    await box(IRON).findByLabelText(`1 ${nameOf(thisMonth)}, checked in`);
+    await fireEvent.press(box(IRON).getByRole("button", { name: `${nameOf(thisMonth)}, choose a month` }));
+    expect(screen.getByText("Choose a month")).toBeTruthy();
+    const year = Number(thisMonth.slice(0, 4));
+    expect(screen.getByRole("button", { name: "Next year" })).toBeDisabled();
+    const next = shiftMonth(thisMonth, 1);
+    if (next.startsWith(String(year))) {
+      expect(screen.getByRole("button", { name: `${nameOf(next).slice(0, 3)} ${String(year)}` })).toBeDisabled();
+    }
+
+    await fireEvent.press(screen.getByRole("button", { name: "Previous year" }));
+    await fireEvent.press(screen.getByRole("button", { name: `Mar ${String(year - 1)}` }));
+    expect(await box(IRON).findByText(`No check-ins in March ${String(year - 1)}.`)).toBeTruthy();
+    expect(months.at(-1)).toMatchObject({ gymId: IRON.id, from: `${String(year - 1)}-03-01`, to: `${String(year - 1)}-04-01` });
+    expect(cameDays(IRON)).toEqual([]);
+    expect(screen.queryByText("Choose a month")).toBeNull();
   });
 
   it("a month with more visits than one answer says some are not shown", async () => {
@@ -169,7 +194,7 @@ describe("Days you came", () => {
     }));
     await render(<App extra={extra} ask={ask} store={memoryStore(kept(1))} wait={noWait} />);
     await fireEvent.press(await gymTab());
-    expect(await box(IRON).findByText("Some visits this month aren’t shown.")).toBeTruthy();
+    expect(await box(IRON).findByText("Some check-ins this month aren’t shown.")).toBeTruthy();
   });
 
   it("closing the pass reads the month again, so a visit the desk just scanned shows", async () => {
@@ -187,7 +212,7 @@ describe("Days you came", () => {
     );
     await render(<App extra={extra} ask={ask} store={memoryStore(kept(1))} wait={noWait} />);
     await fireEvent.press(await gymTab());
-    expect(await box(IRON).findByText("No visits yet this month.")).toBeTruthy();
+    expect(await box(IRON).findByText("No check-ins yet this month.")).toBeTruthy();
     const before = months.length;
     await fireEvent.press(screen.getByRole("button", { name: "Show my pass" }));
     await waitFor(() => {
@@ -195,7 +220,7 @@ describe("Days you came", () => {
     });
     await fireEvent.press(screen.getByRole("button", { name: "Close" }));
     await waitFor(() => {
-      expect(cameDays(IRON)).toEqual([`1 ${nameOf(thisMonth)}, you came`]);
+      expect(cameDays(IRON)).toEqual([`1 ${nameOf(thisMonth)}, checked in`]);
     });
     expect(months.length).toBe(before + 1);
   });

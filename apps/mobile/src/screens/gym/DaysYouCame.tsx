@@ -2,13 +2,15 @@ import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import type { GymAttendanceHistoryResponse, GymAttendanceVisit } from "@app/shared";
 import { Button } from "../../look/Button";
-import { Card, Pill } from "../../look/Card";
-import { colours, orangeGradient, sizes } from "../../look/colours";
+import { Card } from "../../look/Card";
+import { colours, sizes } from "../../look/colours";
 import { Icon } from "../../look/Icon";
 import { Sheet } from "../../look/Sheet";
 import { fonts, Txt } from "../../look/Txt";
 import type { Answer } from "../../session/calls";
 import {
+  ADDED_LATER,
+  MONTHS_SHORT,
   WEEK_HEADS,
   dayIn,
   dayLabel,
@@ -22,15 +24,15 @@ import {
   type DayCell,
 } from "./visitsView";
 
-// Days you came (docs/design/phone/pages/Gym): one place's month of visits, under that place's pass
-// box, on the place's own clock. A day they came is tapped for its times.
+// Attendance (docs/design/phone/pages/Gym): one place's month of visits, under that place's pass
+// box, on the place's own clock. A day they came is tapped for its times; the month's name opens every month.
 //
 // MOUNTED ONCE PER PLACE, KEYED BY ITS ID, so nothing here can carry one place's visits to another.
 // It reads the month on screen when it is shown, when a month is stepped to, and each time `read`
 // changes (the tab opened, the app back in front, the pass closed after a scan).
 
-export const DAYS_COULD_NOT = "Couldn’t load the days you came.";
-export const DAYS_MORE = "Some visits this month aren’t shown.";
+export const DAYS_COULD_NOT = "Couldn’t load your attendance.";
+export const DAYS_MORE = "Some check-ins this month aren’t shown.";
 
 export const historyPath = (gymId: string, window: { from: string; to: string }) =>
   `/v1/orgs/${encodeURIComponent(gymId)}/attendance/history?from=${window.from}&to=${window.to}`;
@@ -63,6 +65,8 @@ export function DaysYouCame({ gymId, read, fetchVisits }: DaysYouCameProps) {
   const [openDay, setOpenDay] = useState<string | null>(null);
   // Bumped by Try again.
   const [attempt, setAttempt] = useState(0);
+  // The month picker is open.
+  const [picking, setPicking] = useState(false);
   // Reads are numbered as they start: an answer stands only if no later read has started.
   const started = useRef(0);
 
@@ -124,14 +128,22 @@ export function DaysYouCame({ gymId, read, fetchVisits }: DaysYouCameProps) {
     <Card style={styles.box} testID={`days-${gymId}`}>
       <View style={styles.head}>
         <Txt kind="h3" style={styles.heading}>
-          Days you came
+          Attendance
         </Txt>
         {/* On its own line under the heading when the two do not fit side by side. */}
         <View style={styles.months}>
           <MonthArrow icon="back" say="Previous month" onPress={() => { move(-1); }} />
-          <Txt colour="text" style={styles.month}>
-            {monthName(month, thisMonth)}
-          </Txt>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${monthName(month, thisMonth)}, choose a month`}
+            onPress={() => { setPicking(true); }}
+            style={({ pressed }) => [styles.monthButton, pressed ? styles.pressed : null]}
+          >
+            <Txt colour="text" style={styles.month}>
+              {monthName(month, thisMonth)}
+            </Txt>
+            <Icon name="down" size={14} colour="textSoft" />
+          </Pressable>
           <MonthArrow icon="go" say="Next month" disabled={atNow} onPress={() => { move(1); }} />
         </View>
       </View>
@@ -172,19 +184,93 @@ export function DaysYouCame({ gymId, read, fetchVisits }: DaysYouCameProps) {
 
       <Sheet open={opened !== null} title={opened === null ? "" : dayLabel(opened.date)} onClose={() => { setOpenDay(null); }}>
         {opened === null ? null : (
-          <>
-            <Txt>You were here</Txt>
-            {opened.times.length > 0 ? (
-              <View style={styles.times}>
-                {opened.times.map((time, i) => (
-                  <Pill key={`${String(i)}-${time}`} label={time} tone="orange" icon="clock" />
-                ))}
+          <View style={styles.visits}>
+            {(opened.times.length > 0 ? opened.times : [""]).map((time, i) => (
+              <View key={`${String(i)}-${time}`} style={styles.visit}>
+                <Icon name={time === ADDED_LATER ? "user" : "check"} size={18} colour="orange" />
+                <Txt colour="text" style={styles.grow}>
+                  {time === ADDED_LATER ? ADDED_LATER : "Checked in"}
+                </Txt>
+                {time === ADDED_LATER || time === "" ? null : <Txt colour="text" style={styles.time}>{time}</Txt>}
               </View>
-            ) : null}
-          </>
+            ))}
+          </View>
         )}
       </Sheet>
+
+      <MonthPicker
+        open={picking}
+        month={month}
+        thisMonth={thisMonth}
+        onClose={() => { setPicking(false); }}
+        onPick={(picked) => {
+          setPicking(false);
+          setOpenDay(null);
+          setStep(picked);
+        }}
+      />
     </Card>
+  );
+}
+
+/** Every month of a year, to jump to one: the months after this one are not offered. */
+function MonthPicker({
+  open,
+  month,
+  thisMonth,
+  onClose,
+  onPick,
+}: {
+  open: boolean;
+  month: string;
+  thisMonth: string | null;
+  onClose: () => void;
+  onPick: (month: string) => void;
+}) {
+  const [year, setYear] = useState(() => Number(month.slice(0, 4)));
+  // Opened on the year of the month on screen.
+  useEffect(() => {
+    if (open) setYear(Number(month.slice(0, 4)));
+  }, [open, month]);
+  const lastYear = thisMonth === null ? Infinity : Number(thisMonth.slice(0, 4));
+  const rows = [0, 1, 2, 3].map((r) => [0, 1, 2].map((c) => r * 3 + c));
+  return (
+    <Sheet open={open} title="Choose a month" onClose={onClose}>
+      <View style={styles.yearRow}>
+        <MonthArrow icon="back" say="Previous year" onPress={() => { setYear((y) => y - 1); }} />
+        <Txt colour="text" style={styles.year}>
+          {String(year)}
+        </Txt>
+        <MonthArrow icon="go" say="Next year" disabled={year >= lastYear} onPress={() => { setYear((y) => y + 1); }} />
+      </View>
+      <View style={styles.monthGrid}>
+        {rows.map((row) => (
+          <View key={row[0]} style={styles.monthRow}>
+            {row.map((index) => {
+              const key = `${String(year).padStart(4, "0")}-${String(index + 1).padStart(2, "0")}`;
+              const later = thisMonth !== null && key > thisMonth;
+              const on = key === month;
+              const name = MONTHS_SHORT[index] ?? "";
+              return (
+                <Pressable
+                  key={key}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${name} ${String(year)}`}
+                  accessibilityState={{ disabled: later, selected: on }}
+                  disabled={later}
+                  onPress={() => { onPick(key); }}
+                  style={({ pressed }) => [styles.monthCell, on ? styles.monthOn : null, later ? styles.arrowOff : null, pressed ? styles.pressed : null]}
+                >
+                  <Txt colour={on ? "orange" : "text"} style={styles.monthWord}>
+                    {name}
+                  </Txt>
+                </Pressable>
+              );
+            })}
+          </View>
+        ))}
+      </View>
+    </Sheet>
   );
 }
 
@@ -218,27 +304,36 @@ function MonthArrow({ icon, say, disabled = false, onPress }: { icon: "back" | "
   );
 }
 
+/** A day they came is a flame with its date in white, as the browser draws it (Kd, 2026-10-28); today is
+ *  its date in orange, underlined; any other day is its date alone. */
 function Day({ cell, monthName: name, onPress }: { cell: DayCell; monthName: string; onPress: () => void }) {
   const month = name.split(" ")[0] ?? "";
   return (
     <Pressable
       accessibilityRole={cell.came ? "button" : "text"}
-      accessibilityLabel={cell.came ? `${String(cell.day)} ${month}, you came` : `${String(cell.day)} ${month}`}
+      accessibilityLabel={cell.came ? `${String(cell.day)} ${month}, checked in` : `${String(cell.day)} ${month}`}
       disabled={!cell.came}
       onPress={onPress}
       style={[styles.cell, cell.future ? styles.future : null]}
     >
-      <View style={[styles.dot, cell.today ? styles.today : null, cell.came ? styles.came : cell.today ? styles.todayFill : null]}>
-        <Txt colour={cell.came ? "onOrange" : cell.today ? "orange" : "textSoft"} style={styles.number}>
+      <View style={styles.mark}>
+        {cell.came ? (
+          <View style={styles.flame} pointerEvents="none">
+            <Icon name="flame" size={FLAME} colour="orange" filled />
+          </View>
+        ) : null}
+        <Txt colour={cell.came ? "onOrange" : cell.today ? "orange" : "textSoft"} style={cell.came ? styles.cameNumber : cell.today ? styles.todayNumber : styles.number}>
           {cell.day}
         </Txt>
+        {cell.today && !cell.came ? <View style={styles.todayLine} /> : null}
       </View>
     </Pressable>
   );
 }
 
 const ARROW_SLOP = { top: 4, bottom: 4, left: 4, right: 4 };
-const DOT = 32;
+// The flame fills its day; its date sits a little low, in the flame's full lower part.
+const FLAME = 38;
 
 const styles = StyleSheet.create({
   box: { padding: 16, gap: 12 },
@@ -266,22 +361,30 @@ const styles = StyleSheet.create({
   weekHead: { flex: 1, textAlign: "center", fontFamily: fonts.bold, letterSpacing: 0.66, textTransform: "uppercase" },
   cell: { flex: 1, alignItems: "center", justifyContent: "center", minHeight: sizes.press - 4, paddingVertical: 2 },
   future: { opacity: 0.35 },
-  // Every day has the same ring, seen only on today, and a day that turns orange changes only its fill:
-  // today losing its ring as its colour came in stopped the app on Android (2026-10-28).
-  dot: {
-    minWidth: DOT,
-    minHeight: DOT,
+  mark: { minWidth: FLAME, minHeight: FLAME, alignItems: "center", justifyContent: "center" },
+  flame: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, alignItems: "center", justifyContent: "center" },
+  number: { fontFamily: fonts.medium, fontSize: 13, lineHeight: 18 },
+  todayNumber: { fontFamily: fonts.bold, fontSize: 13, lineHeight: 18 },
+  todayLine: { width: 12, height: 2, borderRadius: sizes.round, marginTop: 2, backgroundColor: colours.orange },
+  cameNumber: { fontFamily: fonts.bold, fontSize: 12, lineHeight: 16, paddingTop: 7 },
+  monthButton: { flexDirection: "row", alignItems: "center", gap: 2, minHeight: sizes.press, paddingHorizontal: 4 },
+  visits: { gap: 4 },
+  visit: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: sizes.press, borderBottomWidth: 1, borderBottomColor: colours.line },
+  time: { fontFamily: fonts.semibold, fontSize: 15, lineHeight: 20 },
+  yearRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  year: { fontFamily: fonts.semibold, fontSize: 15, lineHeight: 20 },
+  monthGrid: { gap: 8 },
+  monthRow: { flexDirection: "row", gap: 8 },
+  monthCell: {
+    flex: 1,
+    minHeight: sizes.press,
     borderRadius: sizes.round,
-    borderWidth: 1.5,
-    borderColor: "transparent",
+    borderWidth: 1,
+    borderColor: colours.line,
+    backgroundColor: colours.fill,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 2,
-    backgroundColor: colours.fill,
   },
-  came: { backgroundColor: colours.orange, experimental_backgroundImage: orangeGradient },
-  today: { borderColor: colours.orange },
-  todayFill: { backgroundColor: colours.orangeFill },
-  number: { fontFamily: fonts.semibold, fontSize: 12, lineHeight: 16 },
-  times: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  monthOn: { borderColor: colours.orangeLine, backgroundColor: colours.orangeFill },
+  monthWord: { fontFamily: fonts.semibold, fontSize: 14, lineHeight: 20 },
 });
