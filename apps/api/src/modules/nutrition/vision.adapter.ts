@@ -5,7 +5,7 @@
 // switched-off spare. MEAL_VISION_MODEL picks one at boot, and every model
 // carries its price. Every reply is parsed through the scanner's schemas in
 // @app/shared.
-import { MAX_SCAN_FOODS, geminiReplySchema, groqCompletionSchema, mealVisionEvidenceSchema, type VisionEvidence } from "@app/shared";
+import { MAX_SCAN_FOODS, geminiReplySchema, groqCompletionSchema, mealVisionEvidenceSchema, openAiCompletionSchema, type VisionEvidence } from "@app/shared";
 import type { AppConfig } from "../../config.js";
 
 export type MealVisionModel = AppConfig["MEAL_VISION_MODEL"];
@@ -15,14 +15,16 @@ export type MealVisionModel = AppConfig["MEAL_VISION_MODEL"];
  *  config allows without a row here fails the type check, so no scan is ever
  *  priced by guess.
  *  gemini-3.5-flash-lite: $0.30 in, $2.50 out (ai.google.dev/gemini-api/docs/pricing, read 2026-09-15).
- *  qwen/qwen3.6-27b: $0.60 in, $3.00 out (console.groq.com/docs/models, read 2026-09-15). */
+ *  qwen/qwen3.6-27b: $0.60 in, $3.00 out (console.groq.com/docs/models, read 2026-09-15).
+ *  gpt-6-luna: $0.10 in, $0.50 out (developers.openai.com/api/docs/pricing, Standard, read 2026-10-28). */
 export const MEAL_VISION_MODELS: Readonly<Record<MealVisionModel, {
-  provider: "gemini" | "groq";
+  provider: "gemini" | "groq" | "openai";
   inputMicroUsdPerMillion: bigint;
   outputMicroUsdPerMillion: bigint;
 }>> = {
   "gemini-3.5-flash-lite": { provider: "gemini", inputMicroUsdPerMillion: 300_000n, outputMicroUsdPerMillion: 2_500_000n },
   "qwen/qwen3.6-27b": { provider: "groq", inputMicroUsdPerMillion: 600_000n, outputMicroUsdPerMillion: 3_000_000n },
+  "gpt-6-luna": { provider: "openai", inputMicroUsdPerMillion: 100_000n, outputMicroUsdPerMillion: 500_000n },
 };
 
 /** A scan's cost in integer micro-USD at its model's list price; BigInt
@@ -50,6 +52,12 @@ export const VISION_MAX_OUTPUT_TOKENS = 1000;
  *  on Kd's eight plates (2026-09-15), so the cheapest setting is the one used. */
 export type GeminiMediaResolution = "MEDIA_RESOLUTION_LOW" | "MEDIA_RESOLUTION_MEDIUM" | "MEDIA_RESOLUTION_HIGH" | null;
 export const MEAL_SCAN_MEDIA_RESOLUTION: GeminiMediaResolution = "MEDIA_RESOLUTION_LOW";
+
+/** How much of the photo OpenAI reads. On its newest models "low" fits the photo
+ *  within 512 × 512 (developers.openai.com/api/docs/guides/images-vision, read
+ *  2026-10-28), the nearest to Gemini's low setting that found every food on Kd's
+ *  eight plates. */
+export const MEAL_SCAN_IMAGE_DETAIL = "low";
 
 export interface VisionUsage { tokensIn: number; tokensOut: number; }
 export interface VisionResult extends VisionUsage { evidence: VisionEvidence; }
@@ -140,6 +148,47 @@ export function createGroqVisionProvider(apiKey: string, model: string, fetchImp
   } };
 }
 
+export function createOpenAiVisionProvider(apiKey: string, model: string, fetchImpl: typeof fetch = fetch): VisionProvider {
+  return { async analyze(imageBase64, mimeType) {
+    let response: Response;
+    try {
+      // Only the instructions and the photo leave: no user, safety_identifier or
+      // metadata field, so nothing in the request says whose plate it is.
+      // store:false keeps the request out of OpenAI's stored completions; its own
+      // abuse-monitoring copy (up to 30 days) is outside our control
+      // (developers.openai.com/api/docs/guides/your-data, read 2026-10-28).
+      // reasoning_effort "none" is thinking off: reasoning tokens bill as output.
+      response = await fetchImpl("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model,
+          store: false,
+          reasoning_effort: "none",
+          max_completion_tokens: VISION_MAX_OUTPUT_TOKENS,
+          response_format: { type: "json_object" },
+          messages: [{ role: "user", content: [
+            { type: "text", text: MEAL_VISION_PROMPT },
+            { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}`, detail: MEAL_SCAN_IMAGE_DETAIL } },
+          ] }],
+        }),
+        signal: AbortSignal.timeout(VISION_TIMEOUT_MS),
+      });
+    } catch { throw new VisionProviderError("vision network failure", "unavailable"); }
+    if (!response.ok) throw httpFailure(response.status);
+    let raw: unknown;
+    try { raw = await response.json(); } catch { throw new VisionProviderError("vision non-JSON response", "unavailable"); }
+    const completion = openAiCompletionSchema.safeParse(raw);
+    if (!completion.success) throw new VisionProviderError("vision malformed completion", "unavailable");
+    const [choice] = completion.data.choices;
+    const usage = { tokensIn: completion.data.usage.prompt_tokens, tokensOut: completion.data.usage.completion_tokens };
+    if (choice.message.refusal !== null || choice.finish_reason === "content_filter") throw new VisionProviderError("vision blocked", "unreadable", usage);
+    const text = choice.message.content ?? "";
+    if (text === "") throw new VisionProviderError("vision empty completion", "unreadable", usage);
+    return parseEvidence(text, usage);
+  } };
+}
+
 export function createGeminiVisionProvider(
   apiKey: string,
   model: string,
@@ -193,6 +242,9 @@ export function createGeminiVisionProvider(
  *  scanning then answers 503 and the rest of the app runs. */
 export function createMealVisionProvider(config: AppConfig, fetchImpl: typeof fetch = fetch): VisionProvider | null {
   const model = config.MEAL_VISION_MODEL;
+  if (MEAL_VISION_MODELS[model].provider === "openai") {
+    return config.OPENAI_API_KEY === undefined ? null : createOpenAiVisionProvider(config.OPENAI_API_KEY, model, fetchImpl);
+  }
   if (MEAL_VISION_MODELS[model].provider === "gemini") {
     return config.GEMINI_API_KEY === undefined ? null : createGeminiVisionProvider(config.GEMINI_API_KEY, model, fetchImpl);
   }

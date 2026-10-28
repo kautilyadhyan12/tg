@@ -123,6 +123,23 @@ export const groqCompletionSchema = z.object({
   usage: z.object({ prompt_tokens: z.number().int().nonnegative().default(0), completion_tokens: z.number().int().nonnegative().default(0) }).default({ prompt_tokens: 0, completion_tokens: 0 }),
 });
 
+/** OpenAI's chat completion, as far as the scanner reads it. A choice whose
+ *  content is empty or null is the model answering with nothing; a refusal or a
+ *  content filter is the model declining the photo. Usage is required: every
+ *  answered scan is billed, so a reply that does not say what it cost is not one. */
+export const openAiCompletionSchema = z.object({
+  choices: z.array(z.object({
+    message: z.object({ content: z.string().nullable().default(null), refusal: z.string().nullable().default(null) }),
+    finish_reason: z.string().nullable().default(null),
+  })).nonempty(),
+  usage: z.object({
+    prompt_tokens: z.number().int().nonnegative(),
+    // Thinking tokens are counted inside completion_tokens and billed as output.
+    completion_tokens: z.number().int().nonnegative(),
+    completion_tokens_details: z.object({ reasoning_tokens: z.number().int().nonnegative().default(0) }).default({}),
+  }),
+});
+
 /** Gemini's generateContent reply, as far as the scanner reads it. */
 export const geminiReplySchema = z.object({
   candidates: z.array(z.object({

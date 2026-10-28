@@ -10,6 +10,8 @@ import {
   createGeminiVisionProvider,
   createGroqVisionProvider,
   createMealVisionProvider,
+  createOpenAiVisionProvider,
+  MEAL_SCAN_IMAGE_DETAIL,
   visionCostMicro,
 } from "../src/modules/nutrition/vision.adapter.js";
 import { servingOf } from "../src/modules/nutrition/openfoodfacts.adapter.js";
@@ -48,7 +50,11 @@ describe("P2.6a nutrition pure pipeline", () => {
     expect(MEAL_VISION_MODELS).toEqual({
       "gemini-3.5-flash-lite": { provider: "gemini", inputMicroUsdPerMillion: 300_000n, outputMicroUsdPerMillion: 2_500_000n },
       "qwen/qwen3.6-27b": { provider: "groq", inputMicroUsdPerMillion: 600_000n, outputMicroUsdPerMillion: 3_000_000n },
+      "gpt-6-luna": { provider: "openai", inputMicroUsdPerMillion: 100_000n, outputMicroUsdPerMillion: 500_000n },
     });
+    // GPT-6 Luna, $0.10 in / $0.50 out (developers.openai.com/api/docs/pricing, read 2026-10-28): 53 + 115.
+    expect(visionCostMicro("gpt-6-luna", 530, 230)).toBe(168n);
+    expect(visionCostMicro("gpt-6-luna", 5, 0)).toBe(1n); // 0.5 rounds up
     // 530 in + 230 out on Gemini: 159 + 575 micro-USD.
     expect(visionCostMicro("gemini-3.5-flash-lite", 530, 230)).toBe(734n);
     expect(visionCostMicro("qwen/qwen3.6-27b", 100, 200)).toBe(660n);
@@ -460,10 +466,76 @@ describe("P2.6a nutrition pure pipeline", () => {
     }
   });
 
+  // ── The scanner on OpenAI's GPT-6 Luna (rulings/2026-10-28-32b-i.md).
+  const openAi = (content: string | null, usage: unknown = { prompt_tokens: 420, completion_tokens: 160, completion_tokens_details: { reasoning_tokens: 0 } }, extra: Record<string, unknown> = {}) => ({
+    id: "chatcmpl-x", object: "chat.completion", model: "gpt-6-luna",
+    choices: [{ index: 0, message: { role: "assistant", content, refusal: null, ...extra }, finish_reason: "stop" }],
+    usage,
+  });
+
+  it("OpenAI: only the instructions and the photo leave — no user, no identifier, nothing stored, thinking off, low detail, the key in a header", async () => {
+    // The worst thing (33a): a person's meal photo reaching OpenAI with who they
+    // are on it, or kept there for later. The body is compared WHOLE, so any field
+    // added to it (user, safety_identifier, metadata, store:true) turns this red.
+    const { seen, fetchImpl } = geminiFetch(openAi('{"meal_name":"x","items":[],"unknown_items":[],"photo_quality":"good"}'));
+    await createOpenAiVisionProvider("dummy-openai-key", "gpt-6-luna", fetchImpl).analyze("AA==", "image/jpeg"); // gitleaks:allow
+    const [call] = seen;
+    expect(seen).toHaveLength(1);
+    expect(call?.url).toBe("https://api.openai.com/v1/chat/completions");
+    expect(call?.url).not.toContain("dummy-openai-key");
+    expect(call?.init?.method).toBe("POST");
+    expect(call?.init?.headers).toEqual({ "content-type": "application/json", authorization: "Bearer dummy-openai-key" }); // gitleaks:allow
+    expect(call?.init?.signal).toBeInstanceOf(AbortSignal);
+    expect(MEAL_SCAN_IMAGE_DETAIL).toBe("low");
+    expect(sentBody(call)).toEqual({
+      model: "gpt-6-luna",
+      store: false,
+      reasoning_effort: "none",
+      max_completion_tokens: VISION_MAX_OUTPUT_TOKENS,
+      response_format: { type: "json_object" },
+      messages: [{ role: "user", content: [
+        { type: "text", text: MEAL_VISION_PROMPT },
+        { type: "image_url", image_url: { url: "data:image/jpeg;base64,AA==", detail: "low" } },
+      ] }],
+    });
+    // JSON mode needs the word JSON in the instructions, or OpenAI refuses the request.
+    expect(MEAL_VISION_PROMPT).toContain("JSON");
+  });
+
+  it("OpenAI: reads a reply's foods and bills its tokens; a refusal, a content filter, an empty answer and broken JSON fail closed with the usage kept", async () => {
+    const read = await createOpenAiVisionProvider("k", "gpt-6-luna", geminiFetch(openAi(
+      '{"meal_name":"Dal and rice","items":[["dal","dal",null,180,210,12,30,5],["rice","rice",null,150,195,4,42,0.4]],"unknown_items":[],"photo_quality":"good"}',
+    )).fetchImpl).analyze("AA==", "image/jpeg");
+    expect(read.evidence.items.map((i) => [i.canonical_hint, i.grams, i.kcal])).toEqual([["dal", 180, 210], ["rice", 150, 195]]);
+    expect(read).toMatchObject({ tokensIn: 420, tokensOut: 160 });
+    const usage = { prompt_tokens: 420, completion_tokens: 12 };
+    const cases: [string, unknown, string][] = [
+      ["a refusal", openAi(null, usage, { refusal: "I can't help with that." }), "vision blocked"],
+      ["a content filter", { ...openAi("", usage), choices: [{ message: { content: "" }, finish_reason: "content_filter" }] }, "vision blocked"],
+      ["null content", openAi(null, usage), "vision empty completion"],
+      ["empty content", openAi("", usage), "vision empty completion"],
+      ["broken JSON", openAi("{not json", usage), "vision malformed evidence JSON"],
+      ["a food in the old field form", openAi('{"meal_name":"x","items":[{"name":"x","canonical_hint":"x","kcal":1}],"photo_quality":"good"}', usage), "vision malformed evidence shape"],
+    ];
+    for (const [label, reply, message] of cases) {
+      const err = await failure(createOpenAiVisionProvider("k", "gpt-6-luna", geminiFetch(reply).fetchImpl).analyze("AA==", "image/jpeg"));
+      expect([err.message, err.kind, err.usage], label).toEqual([message, "unreadable", { tokensIn: 420, tokensOut: 12 }]);
+    }
+    // A reply that does not say what it cost is not OpenAI's answer: no ledger row is made up.
+    const noUsage: Record<string, unknown> = { ...openAi("{}") };
+    delete noUsage["usage"];
+    const noCost: [string, unknown][] = [["no usage", noUsage], ["empty usage", openAi("{}", {})], ["no output count", openAi("{}", { prompt_tokens: 420 })]];
+    for (const [label, reply] of noCost) {
+      const err = await failure(createOpenAiVisionProvider("k", "gpt-6-luna", geminiFetch(reply).fetchImpl).analyze("AA==", "image/jpeg"));
+      expect([err.message, err.kind, err.usage], label).toEqual(["vision malformed completion", "unavailable", undefined]);
+    }
+  });
+
   type MakeProvider = (f: typeof fetch) => ReturnType<typeof createGroqVisionProvider>;
   const viaGemini: MakeProvider = (f) => createGeminiVisionProvider("k", "m", f);
   const viaGroq: MakeProvider = (f) => createGroqVisionProvider("k", "m", f);
-  const makers: [string, MakeProvider][] = [["gemini", viaGemini], ["groq", viaGroq]];
+  const viaOpenAi: MakeProvider = (f) => createOpenAiVisionProvider("k", "m", f);
+  const makers: [string, MakeProvider][] = [["gemini", viaGemini], ["groq", viaGroq], ["openai", viaOpenAi]];
 
   it("an empty answer from the model is unreadable with its usage kept, on both providers", async () => {
     const reply = (body: unknown): typeof fetch => () => Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } }));
@@ -516,7 +588,7 @@ describe("P2.6a nutrition pure pipeline", () => {
     afterEach(() => { vi.restoreAllMocks(); });
     it("is given up on after 30 seconds, on both providers, and reads as the scanner's outage", async () => {
       expect(VISION_TIMEOUT_MS).toBe(30_000);
-      for (const make of [createGeminiVisionProvider, createGroqVisionProvider]) {
+      for (const make of [createGeminiVisionProvider, createGroqVisionProvider, createOpenAiVisionProvider]) {
         // The clock is the platform's: the timeout's own signal is handed back
         // already fired, and the fetch below answers only when its signal fires.
         const fired = AbortSignal.abort(new DOMException("The operation timed out.", "TimeoutError"));
@@ -571,6 +643,7 @@ describe("P2.6a nutrition pure pipeline", () => {
     expect(createMealVisionProvider(loadConfig({ ...base, GROQ_API_KEY: "g" }))).toBeNull(); // the spare's key does not run Gemini
     expect(createMealVisionProvider(loadConfig({ ...base, MEAL_VISION_MODEL: "qwen/qwen3.6-27b" }))).toBeNull();
     expect(createMealVisionProvider(loadConfig({ ...base, MEAL_VISION_MODEL: "qwen/qwen3.6-27b", GEMINI_API_KEY: "k" }))).toBeNull();
+    expect(createMealVisionProvider(loadConfig({ ...base, MEAL_VISION_MODEL: "gpt-6-luna", GEMINI_API_KEY: "k", GROQ_API_KEY: "g" }))).toBeNull();
     // Each model's provider calls its own host.
     const urls: string[] = [];
     const capture: typeof fetch = (input) => { urls.push(urlOf(input)); return Promise.resolve(new Response("{}", { status: 500 })); };
@@ -581,9 +654,11 @@ describe("P2.6a nutrition pure pipeline", () => {
     };
     await run(loadConfig({ ...base, GEMINI_API_KEY: "k" }));
     await run(loadConfig({ ...base, MEAL_VISION_MODEL: "qwen/qwen3.6-27b", GROQ_API_KEY: "g" }));
+    await run(loadConfig({ ...base, MEAL_VISION_MODEL: "gpt-6-luna", OPENAI_API_KEY: "o" }));
     expect(urls).toEqual([
       "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
       "https://api.groq.com/openai/v1/chat/completions",
+      "https://api.openai.com/v1/chat/completions",
     ]);
     // A model with no price row cannot be configured at all.
     expect(() => loadConfig({ ...base, MEAL_VISION_MODEL: "gemini-2.5-flash-lite" })).toThrow(/MEAL_VISION_MODEL/);

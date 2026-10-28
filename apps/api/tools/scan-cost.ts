@@ -19,8 +19,17 @@ export const PHOTO_TYPES: ReadonlyMap<string, string> = new Map([
   [".jpg", "image/jpeg"], [".jpeg", "image/jpeg"], [".png", "image/png"], [".webp", "image/webp"],
 ]);
 
+/** The env line each provider's key is read from. */
+export const SCAN_KEY_NAMES: Readonly<Record<(typeof MEAL_VISION_MODELS)[MealVisionModel]["provider"], string>> = {
+  gemini: "GEMINI_API_KEY",
+  groq: "GROQ_API_KEY",
+  openai: "OPENAI_API_KEY",
+};
+
 export interface ScanCostArgs {
-  /** The env file holding GEMINI_API_KEY. Only that line is read. */
+  /** The model the photos are read by; gpt-6-luna unless --model names another. */
+  model: MealVisionModel;
+  /** The env file holding that model's key. Only that line is read. */
   envFile: string;
   /** Where each reply and the run's results are written; never inside the repository. */
   outDir: string;
@@ -34,8 +43,11 @@ export interface ScanCostArgs {
 export function scanCostArgs(argv: readonly string[], repoRoot: string): ScanCostArgs | { problem: string } {
   const envFile = argValue(argv, "env");
   const outDir = argValue(argv, "out");
+  const modelArg = argValue(argv, "model") ?? "gpt-6-luna";
   const paths = argv.filter((a) => !a.startsWith("--"));
-  if (envFile === undefined || envFile === "") return { problem: "--env=<file> is needed: the file holding GEMINI_API_KEY" };
+  const model = Object.keys(MEAL_VISION_MODELS).find((m): m is MealVisionModel => m === modelArg);
+  if (model === undefined) return { problem: `--model is one of ${Object.keys(MEAL_VISION_MODELS).join(", ")}` };
+  if (envFile === undefined || envFile === "") return { problem: `--env=<file> is needed: the file holding ${SCAN_KEY_NAMES[MEAL_VISION_MODELS[model].provider]}` };
   if (outDir === undefined || outDir === "") return { problem: "--out=<folder> is needed: where each reply and the results are written" };
   if (paths.length === 0) return { problem: "name at least one photo, or a folder of them" };
   // Relative to the repository: "" or a path that does not climb out is inside
@@ -44,15 +56,16 @@ export function scanCostArgs(argv: readonly string[], repoRoot: string): ScanCos
   if (fromRoot === "" || (!fromRoot.startsWith("..") && !isAbsolute(fromRoot))) {
     return { problem: "--out is inside the repository, which is public: pick a folder outside it" };
   }
-  return { envFile, outDir, paths };
+  return { model, envFile, outDir, paths };
 }
 
-/** The GEMINI_API_KEY line's value, unquoted, or null. Nothing else in the file is
- *  read, and the value is never part of an error — on this machine the same file
- *  holds the address of the real database. */
-export function geminiKeyFrom(envText: string): string | null {
+/** The value of the line named `name` (one of SCAN_KEY_NAMES), unquoted, or null.
+ *  Nothing else in the file is read, and the value is never part of an error — on
+ *  this machine the same file holds the address of the real database. */
+export function keyFrom(envText: string, name: string): string | null {
+  const pattern = new RegExp(`^\\s*(?:export\\s+)?${name}\\s*=(.*)$`);
   for (const line of envText.split(/\r?\n/)) {
-    const found = /^\s*(?:export\s+)?GEMINI_API_KEY\s*=(.*)$/.exec(line);
+    const found = pattern.exec(line);
     if (found === null) continue;
     const value = (found[1] ?? "").trim().replace(/^(["'])(.*)\1$/, "$2").trim();
     return value === "" ? null : value;

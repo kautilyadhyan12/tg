@@ -42,7 +42,10 @@ const envSchema = z.object({
   // model's key unset = scanning 503s cleanly, the rest of the app runs (the
   // GROQ_API_KEY precedent).
   GEMINI_API_KEY: z.string().min(1).optional(),
-  MEAL_VISION_MODEL: z.enum(["gemini-3.5-flash-lite", "qwen/qwen3.6-27b"]).default("gemini-3.5-flash-lite"),
+  // The meal scanner on OpenAI's GPT-6 Luna (rulings/2026-10-28-32b-i.md). Unset = a
+  // scan on Luna 503s cleanly, as above.
+  OPENAI_API_KEY: z.string().min(1).optional(),
+  MEAL_VISION_MODEL: z.enum(["gemini-3.5-flash-lite", "qwen/qwen3.6-27b", "gpt-6-luna"]).default("gemini-3.5-flash-lite"),
   // P2.6b: geo route generation via ORS (v1 §6.1). Unset = route generation
   // 503s cleanly (fail-closed, GROQ_API_KEY precedent); the browse/read side
   // (saved_routes, runs) works without it.

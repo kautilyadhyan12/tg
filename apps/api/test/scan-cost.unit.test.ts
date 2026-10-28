@@ -4,7 +4,7 @@
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { MAX_PHOTOS_PER_RUN, PHOTO_TYPES, SCAN_COST_GATE_MICRO_USD, geminiKeyFrom, scanCostArgs, summarizeScanCost } from "../tools/scan-cost.js";
+import { MAX_PHOTOS_PER_RUN, PHOTO_TYPES, SCAN_COST_GATE_MICRO_USD, SCAN_KEY_NAMES, keyFrom, scanCostArgs, summarizeScanCost } from "../tools/scan-cost.js";
 
 const REPO = resolve(import.meta.dirname, "../../..");
 /** Folders outside the repository on any system: beside it, and the system's own temp folder. */
@@ -18,7 +18,11 @@ const problemOf = (argv: string[]): string => {
 
 describe("the command line", () => {
   it("needs the env file, the output folder and at least one photo", () => {
-    expect(scanCostArgs(["--env=.env", `--out=${OUT}`, PLATES], REPO)).toEqual({ envFile: ".env", outDir: OUT, paths: [PLATES] });
+    expect(scanCostArgs(["--env=.env", `--out=${OUT}`, PLATES], REPO)).toEqual({ model: "gpt-6-luna", envFile: ".env", outDir: OUT, paths: [PLATES] });
+    expect(scanCostArgs(["--model=gemini-3.5-flash-lite", "--env=.env", `--out=${OUT}`, PLATES], REPO)).toMatchObject({ model: "gemini-3.5-flash-lite" });
+    expect(problemOf(["--model=gpt-6", "--env=.env", `--out=${OUT}`, PLATES])).toContain("--model");
+    expect(problemOf([`--out=${OUT}`, PLATES])).toContain("OPENAI_API_KEY");
+    expect(problemOf(["--model=gemini-3.5-flash-lite", `--out=${OUT}`, PLATES])).toContain("GEMINI_API_KEY");
     expect(problemOf([`--out=${OUT}`, PLATES])).toContain("--env");
     expect(problemOf(["--env=", `--out=${OUT}`, PLATES])).toContain("--env");
     expect(problemOf(["--env=.env", PLATES])).toContain("--out");
@@ -44,19 +48,22 @@ describe("the command line", () => {
 });
 
 describe("the scanner's key", () => {
-  it("is the GEMINI_API_KEY line's value, unquoted, and nothing else in the file", () => {
-    const file = ["DATABASE_URL=postgres://someone:secret@example/db", "GROQ_API_KEY=groq-value", "GEMINI_API_KEY=gemini-value", ""].join("\r\n"); // gitleaks:allow
-    expect(geminiKeyFrom(file)).toBe("gemini-value");
-    expect(geminiKeyFrom('GEMINI_API_KEY="quoted value"\n')).toBe("quoted value");
-    expect(geminiKeyFrom("export GEMINI_API_KEY='single'\n")).toBe("single");
-    expect(geminiKeyFrom("  GEMINI_API_KEY = spaced \n")).toBe("spaced");
+  it("is the model's own key line's value, unquoted, and nothing else in the file", () => {
+    expect(SCAN_KEY_NAMES).toEqual({ gemini: "GEMINI_API_KEY", groq: "GROQ_API_KEY", openai: "OPENAI_API_KEY" });
+    const file = ["DATABASE_URL=postgres://someone:secret@example/db", "GROQ_API_KEY=groq-value", "GEMINI_API_KEY=gemini-value", "OPENAI_API_KEY=openai-value", ""].join("\r\n"); // gitleaks:allow
+    expect(keyFrom(file, "GEMINI_API_KEY")).toBe("gemini-value");
+    expect(keyFrom(file, "OPENAI_API_KEY")).toBe("openai-value");
+    expect(keyFrom('GEMINI_API_KEY="quoted value"\n', "GEMINI_API_KEY")).toBe("quoted value");
+    expect(keyFrom("export GEMINI_API_KEY='single'\n", "GEMINI_API_KEY")).toBe("single");
+    expect(keyFrom("  GEMINI_API_KEY = spaced \n", "GEMINI_API_KEY")).toBe("spaced");
   });
 
   it("is missing where the line is absent, empty, or another name", () => {
-    expect(geminiKeyFrom("")).toBeNull();
-    expect(geminiKeyFrom("GEMINI_API_KEY=\n")).toBeNull();
-    expect(geminiKeyFrom('GEMINI_API_KEY=""\n')).toBeNull();
-    expect(geminiKeyFrom("OLD_GEMINI_API_KEY=value\n# GEMINI_API_KEY=commented\n")).toBeNull();
+    expect(keyFrom("", "GEMINI_API_KEY")).toBeNull();
+    expect(keyFrom("GEMINI_API_KEY=\n", "GEMINI_API_KEY")).toBeNull();
+    expect(keyFrom('GEMINI_API_KEY=""\n', "GEMINI_API_KEY")).toBeNull();
+    expect(keyFrom("OLD_GEMINI_API_KEY=value\n# GEMINI_API_KEY=commented\n", "GEMINI_API_KEY")).toBeNull();
+    expect(keyFrom("GEMINI_API_KEY=gemini-value\n", "OPENAI_API_KEY")).toBeNull();
   });
 });
 
