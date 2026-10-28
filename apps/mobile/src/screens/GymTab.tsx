@@ -4,6 +4,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import {
   INVITATION_WORDS,
   ORG_TYPES_PHRASE,
+  checkinPassResponseSchema,
   myInvitationsResponseSchema,
   myOrgsResponseSchema,
   orgWords,
@@ -20,11 +21,11 @@ import { useSession } from "../session/SessionProvider";
 import { InvitationList, PlaceHead, invitationsPath } from "./Invitation";
 import { usePlaces } from "./places";
 import { placesHeading } from "./placesHeading";
+import { PASS_PATH, PassSheet } from "./gym/Pass";
 import { NO_ANSWER } from "./SignIn";
-import { Soon } from "./Soon";
 
-// The Gym tab (docs/design/phone/pages/Gym and GymNone): the places the person joined, a place
-// that removed them, and every invitation still open for their address. It reads again when the
+// The Gym tab (docs/design/phone/pages/Gym and GymNone): the places the person joined, each with
+// Show my pass, a place that removed them, and every invitation still open for their address. It reads again when the
 // tab is opened or the app comes back, at most every 30 seconds.
 
 export const GYM_READ_AGAIN_MS = 30_000;
@@ -45,6 +46,11 @@ export function GymScreen() {
   const [checked, setChecked] = useState(false);
   const lastRead = useRef(0);
   const live = useRef(true);
+  // The kind of place whose Show my pass was pressed, or null with the pass closed. The pass is the
+  // person's, the same at every place; the kind says only who scans it.
+  const [passOrgType, setPassOrgType] = useState<string | null>(null);
+
+  const fetchPass = useCallback(() => session.signedIn({ method: "GET", path: PASS_PATH }, checkinPassResponseSchema), [session]);
 
   const readMine = useCallback(async () => {
     const answer = await session.signedIn({ method: "GET", path: "/v1/orgs/mine" }, myOrgsResponseSchema);
@@ -132,9 +138,13 @@ export function GymScreen() {
           <PlaceHead name={org.name} orgType={org.orgType} city={org.city}>
             <Pill label="Member" tone="good" icon="check" />
           </PlaceHead>
+          <Txt kind="small">
+            {org.orgType === "personal_trainer" ? "Show your pass to your trainer when you arrive." : "Show your pass at the front desk when you arrive."}
+          </Txt>
+          <Button label="Show my pass" icon="qr" wide onPress={() => { setPassOrgType(org.orgType); }} />
         </Card>
       ))}
-      {joined.length === 0 ? null : <Soon icon="qr" title="Your pass" />}
+      <PassSheet open={passOrgType !== null} trainer={passOrgType === "personal_trainer"} onClose={() => { setPassOrgType(null); }} fetchPass={fetchPass} />
 
       {removed.map((org) => (
         <Card key={org.id} style={styles.box}>
