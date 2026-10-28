@@ -183,6 +183,8 @@ export const SQUARE_MEMBERS_WORDS = {
   waitingLead: (n: number): string => `Being added (${n.toLocaleString("en-US")}):`,
   /** Square would not take a change to the details of somebody who is in Square (18d-iii-b-ii-b-ii-b-i). */
   notCopiedLead: (n: number): string => `Square didn't accept the change to their details (${n.toLocaleString("en-US")}):`,
+  /** On their own page: the same, for one person. */
+  personNotCopied: "Square didn't accept the change to their details, so they still have their old details in Square. Check their email address and phone number.",
   notCopiedFix: "They still have their old details in Square. Check their email address and phone number on their page. The app tries again tomorrow, or when their details change.",
   /** Square merged their customer into one with another name, twice (18d-iii-b-ii-b-ii-a). */
   mergedAwayLead: (n: number): string =>

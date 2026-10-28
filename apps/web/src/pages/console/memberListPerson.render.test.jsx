@@ -702,6 +702,18 @@ describe('a person on the list', () => {
     });
   });
 
+  it("Square would not take the change to their details: the page says so beside their contact, and says nothing when it did", async () => {
+    orgService.getMemberListEntry.mockResolvedValue(entryAnswer({ ...person(ADA, 'Eli Nunez'), squareCopyRefused: true }));
+    openBox(ADA);
+    const line = within(await dialog().findByTestId('square-copy-refused'));
+    expect(line.getByText("Square didn't accept the change to their details, so they still have their old details in Square. Check their email address and phone number.")).toBeTruthy();
+    cleanup();
+    orgService.getMemberListEntry.mockResolvedValue(entryAnswer({ ...person(ADA, 'Eli Nunez'), squareCopyRefused: false }));
+    openBox(ADA);
+    expect(await dialog().findByText('Eli Nunez')).toBeTruthy();
+    expect(dialog().queryByTestId('square-copy-refused')).toBeNull();
+  });
+
   it("a past member still in the app is removed from it here, as from 'Using the app' (Kd, 2026-09-27: one card in both places)", async () => {
     const grace = {
       ...person(ADA, 'Grace Hall'),

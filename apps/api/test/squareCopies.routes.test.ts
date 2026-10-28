@@ -191,6 +191,12 @@ d("A member's change copied to Square (real Postgres)", { timeout: T }, () => {
     if (id === null || id === undefined) throw new Error("not in Square");
     return id;
   };
+  /** One person's page, as staff read it. */
+  const pageOf = async (gym: Gym, entryId: string) => {
+    const res = await send("GET", entryUrl(gym, entryId), gym.owner.cookies);
+    expect(res.statusCode, res.body).toBe(200);
+    return (JSON.parse(res.body) as { entry: { squareCopyRefused: boolean } }).entry;
+  };
   /** What Square holds of a customer now. */
   const held = (gym: Gym, customerId: string) => {
     const c = square.customersOf(gym.acct).find((x) => x.id === customerId);
@@ -396,6 +402,8 @@ d("A member's change copied to Square (real Postgres)", { timeout: T }, () => {
       expect(held(gym, customer).phone, "Square keeps the old phone").toBe("+13125550160");
       const seen = await box(gym);
       expect(seen.groups.not_copied).toEqual({ count: 1, names: ["Eli Nunez"] });
+      // Their own page says it too, so nobody has to know to look in Settings.
+      expect((await pageOf(gym, eli)).squareCopyRefused).toBe(true);
       expect((await link(gym, eli))?.copy_refused_at).toBeInstanceOf(Date);
       // Not asked again and again.
       const after = asked(gym).length;
@@ -414,6 +422,7 @@ d("A member's change copied to Square (real Postgres)", { timeout: T }, () => {
       expect(held(gym, customer).phone).toBe("+13125550162");
       expect((await box(gym)).groups.not_copied.count).toBe(0);
       expect((await link(gym, eli))?.copy_refused_at).toBeNull();
+      expect((await pageOf(gym, eli)).squareCopyRefused).toBe(false);
     });
 
     it("a refusal is tried again a day later", async () => {

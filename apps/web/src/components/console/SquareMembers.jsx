@@ -246,6 +246,8 @@ export default function SquareMembers({ org, owner, readOnly }) {
           {leftOut}
           {adds + links === 0 ? <Line>{W.nothingToAdd}</Line> : null}
         </div>
+        {/* What happens to their details from now on (18d-iii-b-ii-b-ii-b-i). */}
+        {adds + links > 0 ? <Line soft>{W.copiesNote}</Line> : null}
         {data.expired ? (
           <>
             <Line soft>{W.expired}</Line>
@@ -286,8 +288,11 @@ export default function SquareMembers({ org, owner, readOnly }) {
   return (
     <Step icon="done" title={W.addedTitle} testId="square-members-step">
       <Line>{W.addedDetail(data.inSquare, data.members)}</Line>
+      <Line soft>{W.copiesNote}</Line>
       {/* Square's own subscriptions charge some of them, as the last look read them (round one, Low 5). */}
       <Group org={org} data={data} group="billed" lead={W.billedLead} fix={W.billedFix} />
+      {/* In Square, but Square would not take the change to their details (18d-iii-b-ii-b-ii-b-i). */}
+      <Group org={org} data={data} group="not_copied" lead={W.notCopiedLead} fix={W.notCopiedFix} />
       {notIn > 0 ? (
         <div className="flex flex-col gap-2" data-testid="square-members-not-in">
           <Line>{W.notInLead}</Line>

@@ -72,6 +72,7 @@ import { unlistedDigest, unlistedGroup, unlistedPage } from "./unlisted.js";
 import { moveGiftLinks } from "../referrals/memberGiftRepo.js";
 import { movePayerLinks } from "../payers/repo.js";
 import { moveCards } from "../payments/cardsRepo.js";
+import { copyRefusedFor } from "../payments/squareCopiesRepo.js";
 
 type Sql = MemberListDeps["sql"];
 
@@ -90,10 +91,11 @@ async function detailOf(
   /** The caller holds `billing.members`: the row says Overdue where the bill does (17i-ii). */
   seesBills = false,
 ): Promise<MemberListEntryDetail> {
-  const [fields, reached, invitation] = await Promise.all([
+  const [fields, reached, invitation, squareCopyRefused] = await Promise.all([
     repo.listFields(sql, gymId),
     repo.membersAgainstList(sql, gymId, { email: entry.values.email, phone: entry.values.phone, entryIds: [entry.id] }),
     invitationsOf(sql, settings, gymId, [{ id: entry.id, email: entry.values.email }]),
+    copyRefusedFor(sql, gymId, entry.id),
   ]);
   // The people whose record this certainly is (`whose.ts`), and on a current record the
   // people on an email it shares with other records whom the list can't place: shown,
@@ -174,6 +176,7 @@ async function detailOf(
     })),
     waiverInUse: waiver !== null,
     waiverDesk: desk === undefined ? null : { name: desk.name, signer: desk.signer, at: desk.at.toISOString(), by: desk.by },
+    squareCopyRefused,
   };
 }
 

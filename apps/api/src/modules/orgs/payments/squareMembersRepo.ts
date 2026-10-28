@@ -579,7 +579,7 @@ const NOT_COPIED = (sql: SqlOrTx, gymId: string, environment: SquareEnvironment,
   SELECT 'not_copied', e.id, e.full_name, e.listed_seq
   FROM gym_square_customers c JOIN gym_member_list_entries e ON e.gym_id = c.gym_id AND e.id = c.entry_id
   WHERE c.gym_id = ${gymId} AND c.environment = ${environment} AND c.account_id = ${accountId} AND c.customer_id IS NOT NULL
-    AND e.former_at IS NULL AND c.copy_refused_digest = ${DIGEST(sql)}`;
+    AND e.former_at IS NULL AND c.copy_refused_digest IS NOT NULL AND c.copy_refused_digest = ${DIGEST(sql)}`;
 
 /** The groups of a check waiting for the press: what the press would still do, by the plan; nobody the
  *  worker has added or linked meanwhile, as new members are once members were added (round one, High 3). */

@@ -2513,6 +2513,9 @@ export const memberListEntryDetailSchema = memberListEntrySchema.extend({
   waiverInUse: z.boolean().default(false),
   /** This record's signature of that waiver, made at the desk (3e-ii), or null. */
   waiverDesk: deskSignedSchema.nullable().default(null),
+  /** Their customer in the gym's Square would not take the change to their name, email or phone as it is now
+   *  (18d-iii-b-ii-b-ii-b-i): the page says so, as Members in Square does. */
+  squareCopyRefused: z.boolean().default(false),
 });
 export type MemberListEntryDetail = z.infer<typeof memberListEntryDetailSchema>;
 

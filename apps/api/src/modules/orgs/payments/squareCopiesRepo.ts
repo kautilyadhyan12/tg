@@ -79,6 +79,20 @@ export async function dueCopies(sql: SqlOrTx, q: At & { refusedBefore: Date; aft
   }));
 }
 
+/** Their customer in the Square account the gym is connected to would not take their details as they are now: the member's
+ *  own page says so. */
+export async function copyRefusedFor(sql: SqlOrTx, gymId: string, entryId: string): Promise<boolean> {
+  const [row] = await sql<{ refused: boolean }[]>`
+    SELECT EXISTS (
+      SELECT 1 FROM gym_square_customers c
+      JOIN gym_member_list_entries e ON e.gym_id = c.gym_id AND e.id = c.entry_id
+      JOIN gym_payment_connections pc ON pc.gym_id = c.gym_id AND pc.provider = 'square' AND pc.environment = c.environment
+                                     AND pc.account_id = c.account_id AND pc.state = 'connected'
+      WHERE c.gym_id = ${gymId} AND c.entry_id = ${entryId} AND c.customer_id IS NOT NULL AND e.former_at IS NULL
+        AND c.copy_refused_digest IS NOT NULL AND c.copy_refused_digest = ${DIGEST(sql)}) AS refused`;
+  return row?.refused === true;
+}
+
 interface Copying extends At {
   entryId: string;
   /** Only while the record is still linked to this customer. */
