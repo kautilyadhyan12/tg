@@ -31,7 +31,7 @@ import {
 } from "./schemas.js";
 import * as dietPlan from "./dietPlanService.js";
 import * as service from "./service.js";
-import { createMealVisionProvider, type VisionProvider } from "./vision.adapter.js";
+import { createMealMatchChecker, createMealVisionProvider, type MatchChecker, type VisionProvider } from "./vision.adapter.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -45,6 +45,8 @@ declare module "fastify" {
 
 export interface NutritionRouteOverrides {
   visionProvider?: VisionProvider;
+  /** null switches the match check off: the foods are priced by the tables alone. */
+  matchChecker?: MatchChecker | null;
   foodSearchProvider?: FoodSearchProvider;
 }
 
@@ -113,6 +115,7 @@ export function registerNutritionRoutes(
     sql: deps.sql,
     redis: deps.redis,
     vision: overrides.visionProvider ?? createMealVisionProvider(deps.config),
+    matchChecker: overrides.matchChecker === undefined ? createMealMatchChecker(deps.config) : overrides.matchChecker,
     visionModel: deps.config.MEAL_VISION_MODEL,
     foods: overrides.foodSearchProvider ?? createOpenFoodFactsProvider(),
     log: app.log,

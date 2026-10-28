@@ -6,7 +6,7 @@
 //
 // The table lookups are handed in, so the order below is tested on its own; the
 // service gives it our list, the USDA table and packaged products.
-import { DIET_LADDER, isNoValueWord, type Diet, type Per100g, type VisionItem } from "@app/shared";
+import { DIET_LADDER, MAX_MATCH_ENTRIES, isNoValueWord, type Diet, type Per100g, type VisionItem } from "@app/shared";
 import { NOISE_WORDS, slug } from "./foods.js";
 import type { FoodReference } from "./openfoodfacts.adapter.js";
 
@@ -319,4 +319,42 @@ export function estimateFood(name: string, per100g: Per100g, grams: number, take
   let canonical = base;
   for (let n = 2; taken.has(canonical); n++) canonical = `${base}_${String(n)}`;
   return { canonical, name, ...per100g, fiberG: null, serving: grams, unit: "g", source: "estimate" };
+}
+
+// ── The match check (ROADMAP 33a-ii) ─────────────────────────────────────────
+
+/** Whether a table food is the plain answer to a scanned food, which the model is
+ *  not asked about again: our list's food for the model's whole canonical_hint,
+ *  where its name, read alone, finds no other food on the list. Any other table
+ *  answer — USDA's, a packaged product's, our list's by a shorter name, or a hint
+ *  whose name says more ("roasted potatoes" named, "potatoes" hinted, our baked
+ *  potato found) — was found by words, and words cannot tell "milk" from
+ *  "non-dairy milk": the model checks it (`checkedPrice`). */
+export function isPlainMatch(item: VisionItem, food: FoodReference, lookups: Pick<ScanLookups, "ourList">): boolean {
+  if (lookups.ourList(item.canonical_hint)?.canonical !== food.canonical) return false;
+  const byName = isNoValueWord(item.name) ? null : lookups.ourList(item.name);
+  return byName === null || byName.canonical === food.canonical;
+}
+
+/** The close foods a checked food is put against: the food the tables found first,
+ *  then the others in the order given, each once, at most `MAX_MATCH_ENTRIES`. */
+export function closeFoodsOf(found: FoodReference, others: readonly FoodReference[]): FoodReference[] {
+  const close: FoodReference[] = [];
+  for (const food of [found, ...others]) {
+    if (close.length < MAX_MATCH_ENTRIES && !close.some((c) => c.canonical === food.canonical)) close.push(food);
+  }
+  return close;
+}
+
+/** What a checked food is priced by: the close food the model named as the same
+ *  food, where its energy agrees with the plate (`isWrongFood`, still the safety
+ *  net); otherwise — the model said none, named no food it was offered, or the
+ *  check failed — the model's own estimate, never the food words found. With no
+ *  usable estimate either, nothing prices it, and it is named. */
+export function checkedPrice(item: VisionItem, found: FoodReference, close: readonly FoodReference[], pick: number | null): ScanPrice {
+  const estimate = estimatePer100g(item);
+  const picked = pick === null ? undefined : close[pick];
+  if (picked !== undefined && !isWrongFood(picked.kcal, estimate)) return { kind: "table", food: picked };
+  if (estimate !== null && item.grams !== null) return { kind: "estimate", per100g: estimate, grams: item.grams, overruled: picked ?? found };
+  return { kind: "none" };
 }

@@ -132,3 +132,18 @@ export const openAiCompletionSchema = z.object({
     completion_tokens_details: z.object({ reasoning_tokens: z.number().int().nonnegative().default(0) }).default({}),
   }),
 });
+
+/** The most close foods one scanned food is checked against (ROADMAP 33a-ii). */
+export const MAX_MATCH_ENTRIES = 12;
+
+/** The model's answer to the match check (ROADMAP 33a-ii): for each food it was
+ *  asked about, by its number, the number of the close food that is the same food,
+ *  or null for none. Numbers are read against the question by the api, so one out
+ *  of range is no answer for that food, never another food's. */
+export const foodMatchPicksSchema = z.object({
+  picks: z.array(z.object({
+    food: z.number().int().min(1).max(MAX_SCAN_FOODS),
+    entry: z.number().int().min(1).max(MAX_MATCH_ENTRIES).nullable(),
+  }).strict()).max(MAX_SCAN_FOODS),
+}).strict();
+export type FoodMatchPicks = z.infer<typeof foodMatchPicksSchema>;

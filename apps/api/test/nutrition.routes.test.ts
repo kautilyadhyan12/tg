@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import postgres from "postgres";
+import { z } from "zod";
 import { bodyMeasurementListResponseSchema, bodyMeasurementSchema, mealPhotoAnalysisSchema, nutritionTargetsResponseSchema, type VisionEvidence, type VisionItem } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
@@ -1077,6 +1078,37 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
       expect(await on.scansUsed()).toBe("1");
       // 400 in at $0.10 and 100 out at $0.50 per 1M: 40 + 50 micro-USD.
       expect(await on.costRows()).toEqual([{provider:"openai:gpt-6-luna",units:500,costMicro:"90"}]);
+    }finally{await on.app.close();}
+  },30_000);
+
+  it("the real match check is wired in (33a-ii): a food words found is asked about in a second call, text only, with no photo and no person, and ledgered",async()=>{
+    // "roasted potatoes" hinted "potatoes": words find our baked potato, so it is checked.
+    const evidence:VisionEvidence={meal_name:"Potatoes",items:[seen({name:"roasted potatoes",canonical_hint:"potatoes",grams:200,kcal:300,protein_g:5,carbs_g:40,fat_g:13})],unknown_items:[],photo_quality:"good"};
+    const sentSchema=z.object({messages:z.array(z.object({content:z.array(z.object({type:z.string()}).passthrough())}))}).passthrough();
+    const calls:{body:z.infer<typeof sentSchema>}[]=[];
+    const openai:typeof fetch=(_input,init)=>{
+      const body=sentSchema.parse(JSON.parse(typeof init?.body==="string"?init.body:"{}"));
+      calls.push({body});
+      const photo=body.messages[0]?.content.some((c)=>c.type==="image_url")===true;
+      const content=photo?JSON.stringify(wire(evidence)):'{"picks":[{"food":1,"entry":null}]}';
+      const reply={choices:[{message:{content,refusal:null},finish_reason:"stop"}],usage:photo?{prompt_tokens:400,completion_tokens:100}:{prompt_tokens:1000,completion_tokens:40}};
+      return Promise.resolve(new Response(JSON.stringify(reply),{status:200,headers:{"content-type":"application/json"}}));
+    };
+    const on=await scanApp("p26a-matchcheck@example.com",{env:{OPENAI_API_KEY:"p26a-openai-test-key"},fetchForScanner:openai}); // gitleaks:allow
+    try{
+      const res=await on.scan();
+      expect(res.statusCode,res.body).toBe(200);
+      expect(res.json<{items:{name:string;nutritionSource:string}[]}>().items.map((i)=>[i.name,i.nutritionSource])).toEqual([["roasted potatoes","estimate"]]);
+      expect(calls).toHaveLength(2);
+      const check=calls[1]?.body;
+      expect(Object.keys(check??{}).sort()).toEqual(["max_completion_tokens","messages","model","reasoning_effort","response_format","store"]);
+      expect(check).toMatchObject({model:"gpt-6-luna",store:false});
+      expect(check?.messages[0]?.content.map((c)=>c.type)).toEqual(["text"]);
+      const sent=JSON.stringify(check);
+      for(const who of [on.userId,"p26a-matchcheck@example.com","P26a Scan"])expect(sent).not.toContain(who);
+      expect(sent).toContain("Potato (baked)");
+      // The scan, then the check: 1000 in at $0.10 and 40 out at $0.50 per 1M is 100 + 20 micro-USD.
+      expect((await on.costRows()).sort((a,b)=>a.units-b.units)).toEqual([{provider:"openai:gpt-6-luna",units:500,costMicro:"90"},{provider:"openai:gpt-6-luna",units:1040,costMicro:"120"}]);
     }finally{await on.app.close();}
   },30_000);
 });
