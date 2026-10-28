@@ -40,7 +40,7 @@ interface PassSheetProps {
 
 export function PassSheet({ open, trainer, onClose, fetchPass }: PassSheetProps) {
   return (
-    <Sheet open={open} title="Your pass" onClose={onClose}>
+    <Sheet open={open} title="Your pass" onClose={onClose} place="middle">
       {open ? <PassBody trainer={trainer} fetchPass={fetchPass} /> : null}
     </Sheet>
   );
@@ -165,7 +165,7 @@ function PassCode({ pass }: { pass: string }) {
   if (cells === null) return <Txt colour="badText">{PASS_COULD_NOT}</Txt>;
   const across = cells.length + PASS_QUIET_CELLS * 2;
   // A whole number of points a cell, so no cell's edge is blurred into the next.
-  const side = Math.max(1, Math.floor(passSide(width, height, sizes.edge) / across)) * across;
+  const side = Math.max(1, Math.floor(passSide(width, height, sizes.edge * 2) / across)) * across;
   return (
     // Black on white whatever the app's colours: that is what a scanner reads.
     <View accessible accessibilityRole="image" accessibilityLabel="Your check-in pass" style={[styles.code, { width: side, height: side }]}>
