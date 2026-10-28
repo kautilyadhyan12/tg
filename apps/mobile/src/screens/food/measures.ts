@@ -88,3 +88,15 @@ export function loggedAmount(item: Pick<MealItem, "measure" | "gramsPoint">): st
 }
 
 const FILL_WORDS: Readonly<Record<number, string>> = { 0.25: "quarter full", 0.5: "half full", 0.75: "three quarters full", 1: "full" };
+
+/** How many measures are offered before "More measures": a few chips, never a wall of them. */
+export const FIRST_MEASURES = 4;
+
+/** The measures offered: the first few, in the server's order, and the one picked if it is further
+ *  down; every one once the person asks for more. */
+export function shownMeasures(measures: readonly FoodMeasure[], picked: string | null, all: boolean): FoodMeasure[] {
+  if (all || measures.length <= FIRST_MEASURES + 1) return [...measures];
+  const first = measures.slice(0, FIRST_MEASURES);
+  const chosen = measures.find((m) => m.id === picked);
+  return chosen === undefined || first.includes(chosen) ? first : [...first, chosen];
+}

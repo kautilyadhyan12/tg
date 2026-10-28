@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, Pressable, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from "react-native";
+import { AppState, Keyboard, Pressable, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   foodSearchResponseSchema,
@@ -57,6 +58,7 @@ import {
   loggedAmount,
   measureWords,
   startingAmount,
+  shownMeasures,
   stepped,
   underAGram,
   unitWords,
@@ -522,6 +524,12 @@ function MealSheet({ row, onClose, onRemove }: { row: Row | null; onClose: () =>
   );
 }
 
+/** What sits above the box's list, and the box's own foot: its handle and title, the search box. */
+const SHEET_ABOVE_LIST = 150;
+const SHEET_ABOVE_SEARCH = SHEET_ABOVE_LIST + 70;
+/** The list never shrinks below one food's row. */
+const SHEET_LIST_LEAST = 120;
+
 const SOURCE_WORDS: Readonly<Record<FoodSearchItem["source"], string>> = {
   curated: "Our list",
   usda: "USDA",
@@ -542,8 +550,24 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
   const [food, setFood] = useState<FoodSearchItem | null>(null);
   const [amount, setAmount] = useState<Amount | null>(null);
   const [priced, setPriced] = useState<Priced>({ kind: "none" });
-  // The box from the bottom never covers more than most of the screen; its list scrolls.
+  const [allMeasures, setAllMeasures] = useState(false);
+  // The box fits between the top of the screen and the keyboard: its title and the search box stay in
+  // view, and the list under them scrolls.
   const { height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const [keyboard, setKeyboard] = useState(0);
+  useEffect(() => {
+    const shown = Keyboard.addListener("keyboardDidShow", (e) => {
+      setKeyboard(e.endCoordinates.height);
+    });
+    const hidden = Keyboard.addListener("keyboardDidHide", () => {
+      setKeyboard(0);
+    });
+    return () => {
+      shown.remove();
+      hidden.remove();
+    };
+  }, []);
 
   useEffect(() => {
     if (type === null) return;
@@ -628,10 +652,10 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
 
   return (
     <Sheet open title={`Add to ${name}`} onClose={onClose}>
-      <ScrollView style={{ maxHeight: Math.round(height * 0.6) }} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.sheetList}>
+      {food === null ? <Field label="Search food" bare value={query} onChange={setQuery} placeholder="Search food" ready maxLength={100} /> : null}
+      <ScrollView style={{ maxHeight: Math.max(SHEET_LIST_LEAST, height - keyboard - insets.top - (food === null ? SHEET_ABOVE_SEARCH : SHEET_ABOVE_LIST)) }} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.sheetList}>
         {food === null ? (
           <>
-            <Field label="Search food" bare value={query} onChange={setQuery} placeholder="Search food" ready maxLength={100} />
             {found.kind === "looking" ? <Txt kind="small">Searching…</Txt> : null}
             {found.kind === "failed" ? <Txt kind="small" colour="badText">{found.words}</Txt> : null}
             {found.kind === "ok" && found.items.length === 0 ? <Txt kind="small">No food found. Try another word.</Txt> : null}
@@ -643,6 +667,7 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
                     accessibilityLabel={`${f.name}, ${count(Math.round(f.kcal))} kcal per 100 g, ${SOURCE_WORDS[f.source]}`}
                     onPress={() => {
                       setFood(f);
+                      setAllMeasures(false);
                       setAmount(startingAmount(f));
                     }}
                     style={({ pressed }) => [styles.found, pressed ? styles.pressed : null]}
@@ -700,7 +725,7 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
               </View>
             )}
             <View style={styles.chips}>
-              {food.measures.map((m) => (
+              {shownMeasures(food.measures, amount?.measure ?? null, allMeasures).map((m) => (
                 <Chip
                   key={m.id}
                   label={measureWords(m)}
@@ -711,6 +736,16 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
                 />
               ))}
             </View>
+            {shownMeasures(food.measures, amount?.measure ?? null, allMeasures).length < food.measures.length ? (
+              <Button
+                label={`More measures (${String(food.measures.length - shownMeasures(food.measures, amount?.measure ?? null, false).length)})`}
+                kind="link"
+                style={styles.start}
+                onPress={() => {
+                  setAllMeasures(true);
+                }}
+              />
+            ) : null}
             {tooSmall ? <Txt kind="small" colour="badText">That comes to less than a gram. Pick a larger amount.</Txt> : null}
             {refusedWords === null ? null : (
               <Txt kind="small" colour="badText">

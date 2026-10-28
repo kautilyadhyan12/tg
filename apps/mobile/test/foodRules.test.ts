@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Meal, MealPage, NutritionTargetsResponse } from "@app/shared";
 import { MOST_MEAL_PAGES, addDays, daySums, dayWords, leftWords, noCutWords, sectionOf, walkDay } from "../src/screens/food/day";
-import { amountFor, chosenItem, loggedAmount, measureWords, startingAmount, stepped, underAGram, unitWords } from "../src/screens/food/measures";
+import { FIRST_MEASURES, amountFor, chosenItem, shownMeasures, loggedAmount, measureWords, startingAmount, stepped, underAGram, unitWords } from "../src/screens/food/measures";
 
 const at = (y: number, m: number, d: number, h: number) => new Date(y, m - 1, d, h).toISOString();
 
@@ -153,5 +153,20 @@ describe("an amount", () => {
     expect(loggedAmount({ gramsPoint: 237, measure: { id: "usda-1", name: "cup", amount: 1.5 } })).toBe("1.5 × cup · 237 g");
     expect(loggedAmount({ gramsPoint: 60 })).toBe("60 g");
     expect(loggedAmount({ gramsPoint: 180, measure: { id: "dish", name: "My bowl", amount: 0.5 } })).toBe("My bowl, half full · 180 g");
+  });
+});
+
+describe("the measures offered", () => {
+  const m = (n: number) => ({ id: `usda-${String(n)}`, name: `m${String(n)}`, grams: n });
+  const banana = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(m);
+
+  it("are a few, with the one picked kept in view, and every one when asked", () => {
+    expect(shownMeasures(banana, "usda-1", false).map((x) => x.id)).toEqual(["usda-1", "usda-2", "usda-3", "usda-4"]);
+    expect(shownMeasures(banana, "usda-9", false).map((x) => x.id)).toEqual(["usda-1", "usda-2", "usda-3", "usda-4", "usda-9"]);
+    expect(shownMeasures(banana, "usda-1", true)).toHaveLength(10);
+  });
+
+  it("are all shown when there is only one more than the few", () => {
+    expect(shownMeasures(banana.slice(0, FIRST_MEASURES + 1), null, false)).toHaveLength(FIRST_MEASURES + 1);
   });
 });
