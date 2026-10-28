@@ -396,8 +396,9 @@ async function makeCustomer(deps: PaymentsDeps, ready: Ready, gymId: string, per
     await cards.abandonCustomer(deps.sql, key, claimed.makingKey);
     return "refused";
   }
-  // What Square was made with is what it agrees with (a customer a card save made is not: the next look takes the record's).
-  const sent = result.kind === "ok" ? { fullName: person.fullName, email: person.email, phone: person.phone, at: deps.now() } : null;
+  // What Square agrees with from now on: the record as it was sent, or, for a customer a card save made with less, as it is (only
+  // a change to it is ever sent), so the first change made to the member is copied (18d-iii-b-ii-b-ii-b-i).
+  const sent = { fullName: person.fullName, email: person.email, phone: person.phone, at: deps.now() };
   if (await cards.finishCustomer(deps.sql, key, claimed.makingKey, customerId, sent)) return "done";
   // Another save wrote it first with the same key, or let the row go meanwhile: written as customerFor does.
   const now = await cards.claimCustomer(deps.sql, key, randomUUID());

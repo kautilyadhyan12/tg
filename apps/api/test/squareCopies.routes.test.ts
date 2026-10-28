@@ -11,7 +11,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
-import { squareConnectResponseSchema, squareFinishResponseSchema, squareMembersNamesResponseSchema, squareMembersResponseSchema, type SquareMembers } from "@app/shared";
+import { cardAgreementWords, squareConnectResponseSchema, squareFinishResponseSchema, squareMembersNamesResponseSchema, squareMembersResponseSchema, type SquareMembers } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { squareSettings } from "../src/modules/orgs/payments/settings.js";
@@ -551,6 +551,28 @@ d("A member's change copied to Square (real Postgres)", { timeout: T }, () => {
       await change(gym, mia, { phone: "+13125550233" });
       await work();
       expect(held(gym, customer).phone).toBe("+13125550233");
+    });
+  });
+
+  describe("a customer a card save made", () => {
+    it("is marked when the card makes it, so the first change made to the member is copied", async () => {
+      const gym = await makeGym("Card First Gym");
+      await person(gym, "Pia Voss", { email: `pia.${uniq()}@gmail.com`, phone: "+13125550240" });
+      expect((await addMembers(gym)).state).toBe("added");
+      // Added after the press, and a card saved at the desk before the worker adds them: the card makes their customer.
+      const nia = await person(gym, "Nia Cole", { email: `nia.${uniq()}@gmail.com`, phone: "+13125550241" });
+      const saved = await send("POST", `${entryUrl(gym, nia)}/card`, gym.owner.cookies, {
+        sourceId: `cnon:ok-VISA-4242-12-2030-${uniq()}`,
+        agreed: true,
+        agreement: cardAgreementWords(gym.name),
+        requestKey: randomUUID(),
+      });
+      expect(saved.statusCode, saved.body).toBe(200);
+      const customer = await customerIdOf(gym, nia);
+      expect((await link(gym, nia))?.copied_at, "marked when the card made the customer").toBeInstanceOf(Date);
+      await change(gym, nia, { phone: "+13125550242" });
+      await work();
+      expect(held(gym, customer).phone, "the first change is copied, not taken as what Square holds").toBe("+13125550242");
     });
   });
 

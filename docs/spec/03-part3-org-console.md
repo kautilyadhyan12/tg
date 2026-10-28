@@ -4367,8 +4367,9 @@ is a gym with no country. People who use the app for themselves may be anywhere.
   CONFLICT, measured in its test area on 2026-10-28, and the change is asked again the next minute). Square
   answering with another customer than the one asked for means it merged them, possibly into somebody else's,
   and nothing is sent: the merge is followed as above. A customer Square deleted is let go as when Square
-  tells the app. A customer a card save made, or one linked before this, is taken to hold the record as it is
-  at the next look, and nothing is sent on that guess. A past member's change waits until they are put back. A
+  tells the app. A customer is marked as agreeing with its record when a card save or Members in Square makes it, and by
+  the migration for every one made before, so the first change made to a member is copied; a row no path marked
+  is taken to hold the record as it is at the next look, and nothing is sent on that guess. A past member's change waits until they are put back. A
   change Square refuses (a phone number it does not accept, such as +1 555 555 0100: INVALID_PHONE_NUMBER) is
   left, named under Members in Square ("Square didn't accept the change to their details") and on the member's
   own page, and asked again a day later or when their details change. The box says, under the check and once

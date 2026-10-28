@@ -381,6 +381,9 @@ export async function customerFor(deps: PaymentsDeps, ready: Ready, gymId: strin
   const key = { gymId, entryId: person.entryId, environment: ready.square.environment, accountId: ready.row.accountId };
   const claimed = await cards.claimCustomer(deps.sql, key, randomUUID());
   if ("customerId" in claimed) return claimed.customerId;
+  // What Square agrees with from now on (18d-iii-b-ii-b-ii-b-i): the record as it is, so the first change made to it is copied
+  // (a phone not sent here is not Square's, but only a change to it is ever sent).
+  const sent = { fullName: person.fullName, email: person.email, phone: person.phone, at: deps.now() };
   const { givenName, familyName } = cardNameParts(person.fullName);
   const result = await ready.square.api.createCustomer(ready.token, {
     idempotencyKey: claimed.makingKey,
@@ -402,10 +405,10 @@ export async function customerFor(deps: PaymentsDeps, ready: Ready, gymId: strin
           ? found.value.customers.filter((c) => c.reference_id === person.entryId && !squareMadeByMerge(c)).sort((x, y) => (x.id < y.id ? -1 : 1))[0]
           : undefined;
       if (made === undefined) throw unavailable();
-      if (await cards.finishCustomer(deps.sql, key, claimed.makingKey, made.id)) return made.id;
+      if (await cards.finishCustomer(deps.sql, key, claimed.makingKey, made.id, sent)) return made.id;
       const now = await cards.claimCustomer(deps.sql, key, randomUUID());
       if ("customerId" in now) return now.customerId;
-      await cards.finishCustomer(deps.sql, key, now.makingKey, made.id);
+      await cards.finishCustomer(deps.sql, key, now.makingKey, made.id, sent);
       return made.id;
     }
     if (result.kind === "refused") {
@@ -414,13 +417,13 @@ export async function customerFor(deps: PaymentsDeps, ready: Ready, gymId: strin
     }
     throw refusalError(result);
   }
-  if (await cards.finishCustomer(deps.sql, key, claimed.makingKey, result.value.id)) return result.value.id;
+  if (await cards.finishCustomer(deps.sql, key, claimed.makingKey, result.value.id, sent)) return result.value.id;
   // Another save wrote it first, asked with the same key: Square's answer is the same customer.
   // Or another save Square refused let the row go meanwhile: the customer Square made here is
   // the person's, and is written, so no row is left being made for a later save to ask again.
   const now = await cards.claimCustomer(deps.sql, key, randomUUID());
   if ("customerId" in now) return now.customerId;
-  await cards.finishCustomer(deps.sql, key, now.makingKey, result.value.id);
+  await cards.finishCustomer(deps.sql, key, now.makingKey, result.value.id, sent);
   return result.value.id;
 }
 
