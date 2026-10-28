@@ -43,13 +43,17 @@ export function PlanBar({ plan, direction, units, targetShown }: PlanProps) {
         }}
         style={({ pressed }) => [styles.bar, pressed ? styles.pressed : null]}
       >
-        <Icon name="flame" size={16} colour="orange" />
-        <Txt style={styles.number}>{kcalText(plan.targetKcal)}</Txt>
-        <Txt style={styles.unit}>kcal a day</Txt>
-        {flagged ? <View style={styles.dot} /> : null}
-        <View style={styles.grow} />
-        <Txt style={styles.how}>How it’s worked out</Txt>
-        <Icon name="go" size={14} colour="orange" />
+        {/* Two halves that fall onto two lines on a narrow phone rather than run off its edge. */}
+        <View style={styles.half}>
+          <Icon name="flame" size={16} colour="orange" />
+          <Txt style={styles.number}>{kcalText(plan.targetKcal)}</Txt>
+          <Txt style={styles.unit}>kcal a day</Txt>
+          {flagged ? <View style={styles.dot} /> : null}
+        </View>
+        <View style={styles.half}>
+          <Txt style={styles.how}>How it’s worked out</Txt>
+          <Icon name="go" size={14} colour="orange" />
+        </View>
       </Pressable>
       <PlanSheet open={open} onClose={() => { setOpen(false); }} plan={plan} direction={direction} units={units} targetShown={targetShown} />
     </>
@@ -150,10 +154,14 @@ function PlanSheet({ open, onClose, plan, direction, units, targetShown }: PlanP
 const styles = StyleSheet.create({
   bar: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
-    gap: 6,
+    justifyContent: "space-between",
+    columnGap: 10,
+    rowGap: 2,
     minHeight: sizes.press,
     paddingHorizontal: 14,
+    paddingVertical: 6,
     borderRadius: sizes.round,
     backgroundColor: colours.orangeFill,
     borderWidth: 1,
@@ -163,7 +171,7 @@ const styles = StyleSheet.create({
   number: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 20, color: colours.orangeLight },
   unit: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18, color: colours.textSoft },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colours.gold },
-  grow: { flex: 1 },
+  half: { flexDirection: "row", alignItems: "center", gap: 6 },
   how: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 18, color: colours.orange },
   sheetBody: { maxHeight: 560 },
   sheetContent: { gap: 14, paddingBottom: 8 },

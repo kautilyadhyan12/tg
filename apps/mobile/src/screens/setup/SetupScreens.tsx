@@ -3,12 +3,24 @@ import { StyleSheet, View } from "react-native";
 import {
   ADULT_AGE,
   AGE_REST,
+  CHECK_FIRST_HEADING,
+  CHECK_FIRST_OPTIONS,
+  CHECK_FIRST_PICK,
+  CLEARED_LINE,
+  CURRENT_DISCLAIMER_VERSION,
   DAYS,
+  DIETS,
+  DISCLAIMER_WORDINGS,
   EQUIPMENT,
+  FINISH_HINT,
   GENDERS,
   GOALS,
+  HEALTH_QUESTION_ITEMS,
+  HEALTH_QUESTION_LEAD,
+  HEALTH_QUESTION_NOTE,
   HEIGHT_REST,
   LEVELS,
+  MEALS_PER_DAY,
   PACES,
   PLACES,
   PLANK_REST,
@@ -19,6 +31,7 @@ import {
   WEIGHT_GOALS,
   WEIGHT_REST,
   ageList,
+  answerRows,
   clampTarget,
   cleanEquipment,
   cmFromParts,
@@ -45,21 +58,31 @@ import {
   weightParts,
   weightShown,
   weightWholes,
+  workoutsDetail,
+  workoutsLine,
   wrongSideText,
+  type CheckFirst,
+  type MyInvitation,
   type PatchOnboardingRequest,
   type PlanNumbers,
   type SetupAnswers,
+  type SetupScreenId,
   type Units,
   type WeightParts,
 } from "@app/shared";
+import { Button } from "../../look/Button";
+import { Card } from "../../look/Card";
 import { Chip, Grid, Options, Segments } from "../../look/Choice";
 import { Field } from "../../look/Field";
 import { Icon } from "../../look/Icon";
 import { Ruler } from "../../look/Ruler";
+import { Tick } from "../../look/Tick";
 import { fonts, Txt } from "../../look/Txt";
 import { colours } from "../../look/colours";
+import { InvitationList } from "../Invitation";
+import type { HealthStep } from "./useHealthStep";
 
-// Setup's first seven screens on the phone. Every tap and every slide saves at once through
+// Setup's screens on the phone. Every tap and every slide saves at once through
 // `save`; the one typed box, the name, saves when the person leaves it. Nothing here decides a
 // number: the plan bar shows the server's. Drawn for a phone, not copied from the browser (Kd,
 // 2026-10-27): few words, one group a question, measures on sliding scales.
@@ -82,6 +105,15 @@ export interface ScreenProps {
   name: NameBox;
   direction: Direction | null;
   plan: PlanNumbers | null;
+  health: HealthStep;
+  /** A health answer the server took: the daily number is read again, as any yes stops the calorie cut. */
+  healthSaved: () => void;
+  /** The invitations waiting when setup opened, for the place step. */
+  invitations: MyInvitation[];
+  /** The plan screen's way back to one answer; Continue there then comes straight back. */
+  adjust: (id: SetupScreenId) => void;
+  /** A save or a finish is away: no way back to an answer opens meanwhile. */
+  busy: boolean;
 }
 
 /** Whether the server takes this one answer: a scale never saves a number the contract refuses. */
@@ -559,6 +591,210 @@ export function EquipmentScreen({ answers, save }: ScreenProps) {
   );
 }
 
+// ── Screen 8 ────────────────────────────────────────────────────────────────
+
+const healthNote = DISCLAIMER_WORDINGS.health_step[CURRENT_DISCLAIMER_VERSION.health_step];
+const CHECK_FIRST: readonly CheckFirst[] = ["cleared", "not_yet"];
+
+/** The one health question (RULINGS 2026-09-07 and 2026-09-10) as a heading and a list, every part
+ *  of the browser's sentence in its order, and the words in dark boxes, never on the picture (Kd,
+ *  2026-10-28: "looking like a article, text on text"). A yes is
+ *  NOT saved until "Check first" is answered: the server refuses a yes with no choice, so Yes opens
+ *  the two and stores nothing; until one is picked the screen holds what the server has. "Not yet"
+ *  is Safe mode. The note's tick is kept in the consent log the moment it is made. */
+export function HealthScreen({ health, healthSaved }: ScreenProps) {
+  const screening = health.screening;
+  const stored = screening?.answered === true ? screening.hasCondition : null;
+  const yes = health.pendingYes ? true : stored;
+  const checkFirst = stored === true ? (screening?.checkFirst ?? null) : null;
+  const busy = health.saving;
+
+  const send = async (hasCondition: boolean, choice: CheckFirst | null) => {
+    if (await health.answer(hasCondition ? { hasCondition, checkFirst: choice } : { hasCondition })) healthSaved();
+  };
+
+  return (
+    <View style={styles.screen}>
+      <Section title={HEALTH_QUESTION_LEAD}>
+        <View style={styles.box}>
+          {HEALTH_QUESTION_ITEMS.map((item) => (
+            <View key={item} style={styles.item}>
+              <View style={styles.bullet} />
+              <Txt style={styles.itemWords}>{item}</Txt>
+            </View>
+          ))}
+          <Txt style={styles.boxNote}>{HEALTH_QUESTION_NOTE}</Txt>
+        </View>
+        <Grid
+          columns={2}
+          cells={[
+            {
+              key: "no",
+              label: "No",
+              selected: yes === false,
+              disabled: busy,
+              onPress: () => {
+                health.openYes(false);
+                if (stored !== false) void send(false, null);
+              },
+            },
+            {
+              key: "yes",
+              label: "Yes",
+              selected: yes === true,
+              disabled: busy,
+              onPress: () => {
+                if (stored !== true) health.openYes(true);
+              },
+            },
+          ]}
+        />
+      </Section>
+      {yes === true ? (
+        <Section title={CHECK_FIRST_HEADING}>
+          <Options
+            options={CHECK_FIRST.map((value) => ({ value, label: CHECK_FIRST_OPTIONS[value].label, desc: CHECK_FIRST_OPTIONS[value].detail }))}
+            selected={checkFirst}
+            solid
+            disabled={busy}
+            onPick={(value) => {
+              if (value === checkFirst) health.openYes(false);
+              else void send(true, value);
+            }}
+          />
+          {stored === true ? null : <Txt style={styles.hint}>{CHECK_FIRST_PICK}</Txt>}
+        </Section>
+      ) : null}
+      <Card style={[styles.box, styles.note]}>
+        <Txt style={styles.noteWords}>{healthNote}</Txt>
+        <Tick
+          label="I have read and understood this"
+          ticked={health.ticked}
+          disabled={health.ticked}
+          busy={health.ticking}
+          onPress={() => void health.tick()}
+          testID="health-tick-box"
+        />
+        {health.ticked ? null : <Txt style={styles.hint}>Tick this to continue.</Txt>}
+      </Card>
+    </View>
+  );
+}
+
+// ── Screen 9 ────────────────────────────────────────────────────────────────
+
+/** The diet and how many meals a day (RULINGS 2026-09-10). Neither moves a calorie; the meal
+ *  ideas read both, so neither is ever guessed. */
+export function FoodScreen({ answers, save }: ScreenProps) {
+  return (
+    <View style={styles.screen}>
+      <Section title="How do you eat?">
+        <Options
+          options={DIETS}
+          selected={answers.diet}
+          solid
+          onPick={(value) => {
+            if (answers.diet !== value) save({ diet: value });
+          }}
+        />
+      </Section>
+      <Section title="How many meals a day?" hint="Snacks count">
+        <Grid
+          columns={MEALS_PER_DAY.length}
+          cells={MEALS_PER_DAY.map((n) => ({
+            key: String(n),
+            label: String(n),
+            say: `${String(n)} meals a day`,
+            selected: answers.mealsPerDay === n,
+            onPress: () => {
+              if (answers.mealsPerDay !== n) save({ mealsPerDay: n });
+            },
+          }))}
+        />
+      </Section>
+    </View>
+  );
+}
+
+// ── The place that invited them ─────────────────────────────────────────────
+
+/** Asked only when an invitation is still waiting (Kd, 2026-10-28): the same boxes as the Gym tab.
+ *  Continue is lit, so it can be left for later; no words on the picture say so. */
+export function PlaceScreen({ invitations }: ScreenProps) {
+  return <InvitationList invitations={invitations} onAnswered={() => undefined} />;
+}
+
+// ── The last screen: your plan ──────────────────────────────────────────────
+
+const planNote = DISCLAIMER_WORDINGS.plan_screen[CURRENT_DISCLAIMER_VERSION.plan_screen];
+
+/** The week of workouts, or in Safe mode why there is none (RULINGS 2026-09-07); every answer with
+ *  Adjust; the plan's note and its tick, which Finish waits for. No workout is named: those come
+ *  with the weekly plan. */
+export function PlanScreen({ answers, units, health, adjust, busy }: ScreenProps) {
+  const screening = health.screening;
+  const safeMode = screening?.safeMode === true;
+  const cleared = screening?.hasCondition === true && screening.checkFirst === "cleared";
+  const week = workoutsLine(answers);
+  const detail = workoutsDetail(answers);
+  return (
+    <View style={styles.screen}>
+      <Card style={[styles.box, styles.note]}>
+        <View style={styles.eyebrow}>
+          <Icon name="dumbbell" size={14} colour="orange" />
+          <Txt kind="eyebrow">Your workouts</Txt>
+        </View>
+        {safeMode ? (
+          <View style={styles.warn}>
+            <Icon name="shield" size={18} colour="gold" />
+            <Txt style={styles.softWords}>{CHECK_FIRST_OPTIONS.not_yet.detail}</Txt>
+          </View>
+        ) : (
+          <>
+            {week === null ? null : <Txt kind="big">{week}</Txt>}
+            {detail === "" ? null : <Txt kind="small">{detail}</Txt>}
+            {cleared ? <Txt style={styles.warnWords}>{CLEARED_LINE}</Txt> : null}
+          </>
+        )}
+      </Card>
+      <Section title="Your answers">
+        <View style={[styles.box, styles.rows]}>
+          {answerRows(answers, units).map((row, i) => (
+            <View key={row.id} style={[styles.answer, i === 0 ? null : styles.answerLine]}>
+              <View accessible style={styles.answerWords}>
+                <Txt kind="tiny">{row.title}</Txt>
+                <Txt style={styles.answerValue}>{row.value}</Txt>
+              </View>
+              <Button
+                label="Adjust"
+                say={`Adjust ${row.title}`}
+                kind="link"
+                small
+                disabled={busy}
+                onPress={() => {
+                  adjust(row.id);
+                }}
+              />
+            </View>
+          ))}
+        </View>
+      </Section>
+      <Card style={[styles.box, styles.note]}>
+        <Txt style={styles.noteWords}>{planNote}</Txt>
+        <Tick
+          label="I have read and understood this"
+          ticked={health.planTicked}
+          disabled={health.planTicked}
+          busy={health.planTicking}
+          onPress={() => void health.tickPlan()}
+          testID="plan-tick-box"
+        />
+        {health.planTicked ? null : <Txt style={styles.hint}>{FINISH_HINT}</Txt>}
+      </Card>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   screen: { gap: 26 },
   section: { gap: 10 },
@@ -570,5 +806,19 @@ const styles = StyleSheet.create({
   unitSwitch: { width: 170 },
   measure: { gap: 8 },
   warn: { flexDirection: "row", gap: 8, alignItems: "flex-start" },
+  box: { gap: 10, padding: 16, borderRadius: 18, borderWidth: 1, borderColor: colours.line, backgroundColor: colours.overWords },
+  item: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  bullet: { width: 6, height: 6, borderRadius: 3, marginTop: 7, backgroundColor: colours.orange },
+  itemWords: { flex: 1, fontFamily: fonts.medium, fontSize: 15, lineHeight: 20, color: colours.text },
+  boxNote: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 17, color: colours.textFaint, marginTop: 4 },
+  note: { gap: 10 },
+  noteWords: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 19, color: colours.textSoft },
   warnWords: { flex: 1, fontFamily: fonts.medium, fontSize: 13, lineHeight: 18, color: colours.gold },
+  eyebrow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  rows: { gap: 0, paddingVertical: 4 },
+  answer: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10 },
+  answerLine: { borderTopWidth: 1, borderTopColor: colours.line },
+  answerWords: { flex: 1, gap: 2 },
+  answerValue: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 19, color: colours.textSoft },
+  softWords: { flex: 1, fontFamily: fonts.regular, fontSize: 14, lineHeight: 20, color: colours.textSoft },
 });

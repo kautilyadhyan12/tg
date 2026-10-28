@@ -21,6 +21,7 @@ import { Page } from "./look/Page";
 import { TabBar } from "./look/TabBar";
 import { SignUpNoteGate } from "./screens/BeforeYouStart";
 import { InvitationsGate } from "./screens/InvitationsGate";
+import { SetupGate } from "./screens/SetupGate";
 import { SignInScreen } from "./screens/SignIn";
 import { CopyContext, ThisCopy } from "./screens/ThisCopy";
 import type { Ask } from "./session/calls";
@@ -77,7 +78,8 @@ interface AppProps {
 }
 
 /** Signed out, the sign-in screen and nothing of anybody's; signed in, "Before you start" until
- *  the person has ticked it, then any invitation waiting, then the five tabs. */
+ *  the person has ticked it, then any invitation waiting, then setup until it is finished, then
+ *  the five tabs. */
 function SignedInOrOut({ mealStore }: { mealStore: (userId: string) => TextStore }) {
   const { state } = useSession();
   if (state.kind === "starting") return <View style={styles.page} />;
@@ -86,7 +88,9 @@ function SignedInOrOut({ mealStore }: { mealStore: (userId: string) => TextStore
     <SignUpNoteGate key={state.user.id}>
       <TimeZoneSync>
         <InvitationsGate>
-          <FiveTabs mealStore={mealStore} />
+          <SetupGate>
+            <FiveTabs mealStore={mealStore} />
+          </SetupGate>
         </InvitationsGate>
       </TimeZoneSync>
     </SignUpNoteGate>

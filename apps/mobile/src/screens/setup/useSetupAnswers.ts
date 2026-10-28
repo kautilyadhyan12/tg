@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   createSaveQueue,
+  onboardingIncompleteBodySchema,
   onboardingResponseSchema,
   settleEdits,
   type OnboardingAnswers,
@@ -18,6 +19,10 @@ import { useSession } from "../../session/SessionProvider";
 
 export const LOAD_FAILED = "Couldn’t load your answers. Check your connection and try again.";
 export const SAVE_FAILED = "Couldn’t save that answer. Check your connection and try again.";
+export const FINISH_FAILED = "Couldn’t finish just now. Please try again.";
+
+/** A finish: done, or refused with the questions still open (null: no answer, said in `problem`). */
+export type Finished = { ok: true } | { ok: false; missing: string[] | null };
 
 /** The phone's own time zone, so a finish date is counted in the person's own day; the day itself is never sent. */
 export function setupPath(zone: string = Intl.DateTimeFormat().resolvedOptions().timeZone): string {
@@ -112,6 +117,30 @@ export function useSetupAnswers({ onSaved }: { onSaved?: (answers: OnboardingAns
     [queue],
   );
 
+  /** Every save answered first, then the server decides: it refuses a finish that still lacks an
+   *  answer and names what is open. */
+  const finish = useCallback(
+    async (extra: PatchOnboardingRequest): Promise<Finished> => {
+      if (!(await queue.settled())) return { ok: false, missing: null };
+      const answer = await session.signedIn(
+        { method: "PATCH", path: setupPath(), body: { ...extra, onboardingCompleted: true } },
+        onboardingResponseSchema,
+      );
+      if (answer.kind === "ok") {
+        take(answer.data);
+        setState((s) => ({ ...s, edits: settleEdits(s.edits, extra), problem: null }));
+        return { ok: true };
+      }
+      const refused = answer.kind === "refused" ? onboardingIncompleteBodySchema.safeParse(answer.body) : null;
+      const missing = refused?.success === true ? refused.data.missing : null;
+      setState((s) => ({ ...s, problem: missing === null ? FINISH_FAILED : null }));
+      // Read back what is stored, so the plan and the list agree with it.
+      queue.save({});
+      return { ok: false, missing };
+    },
+    [queue, session, take],
+  );
+
   const answers: SetupAnswers = { ...(state.server ?? {}), ...state.edits };
   return {
     status: state.status,
@@ -122,6 +151,7 @@ export function useSetupAnswers({ onSaved }: { onSaved?: (answers: OnboardingAns
     problem: state.problem,
     save,
     settled: queue.settled,
+    finish,
     retry,
   };
 }

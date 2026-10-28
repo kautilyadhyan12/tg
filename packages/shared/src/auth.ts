@@ -188,6 +188,8 @@ export const phoneKeptSessionSchema = z.object({
   refreshToken: oneTimeTokenSchema,
   user: authUserSchema,
   signUpNote: z.string().regex(/^v\d{1,4}$/).optional(),
+  /** The server has said this person finished setup, so the tabs open with no internet. */
+  setupDone: z.boolean().optional(),
 });
 export type PhoneKeptSession = z.infer<typeof phoneKeptSessionSchema>;
 

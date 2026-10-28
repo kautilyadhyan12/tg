@@ -542,8 +542,8 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 13b. [ ] **The invitation email's button opens the app**, and on a phone without it the store buttons. Waits for the website's own address (Stage 4 item 1) and the app on the store (item 21): Android opens an app from a web link only when that https address names the app.
 14. **Setup**: the eleven screens and the plan, the health question, Safe mode, the consent taps (split 2026-10-27 in three).
     - 14a. [x] **The first seven questions** — merged 2026-10-27 (PR #373).
-    - 14b. [ ] **The health question, Safe mode and its tap, and Food.**
-    - 14c. [ ] **Your plan and Finish, and Your gym**; setup then stands in front of the tabs until it is finished.
+    - 14b. [x] **The health question, Safe mode and its tap, and Food** — merged 2026-10-28 (PR #375).
+    - 14c. [x] **Your plan and Finish, and the place that invited you; setup in front of the tabs** — merged 2026-10-28 (PR #377).
 15. [ ] **The pass** (spec Part 3 §12.2) and the days you came; later, a pass the phone can make with no signal.
 16. [ ] **Classes and booking with the waitlist, and personal training**; then My membership and receipts, once Stage 2's 18g and 18j are merged (18c, Pay {gym}, was dropped 2026-10-15), in sections: **Membership** (what they hold, when it renews, each payment with its receipt), **Purchases** (what they bought at the desk, each with its receipt), a refund under its payment (Kd, `rulings/2026-10-15-18m.md`); no receipt by email.
 17. [ ] **The gym's page**: Updates (post, photos, react, report, block), Events, Leaderboard, Challenges, a person's profile (spec Part 3 §15).
@@ -563,7 +563,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 32. **Food** (split 2026-10-13: the server part needs no phone).
     - 32a. [x] **A meal sent twice from the phone is saved once** — merged 2026-10-13 (PR #238).
     - 32b. **The Food screen** (split 2026-10-28: logging first).
-      - 32b-i. [ ] **Log a meal on the phone**: the day's macros, the four meals, add by search and measure, remove; kept on the phone until the server has it.
+      - 32b-i. [x] **Log a meal on the phone** — merged 2026-10-28 (PR #376).
       - 32b-ii. [ ] **Change a logged meal, your own numbers, saved dishes**: name, time, section and a food's amount; the rings' own-numbers switch; saved dishes added, renamed and removed, each saved once (32a's note); recent foods, the last 10 with one-tap Add (Kd, 2026-10-28).
 33. **The meal scan** (Kd, 2026-10-28: the scanner moves to GPT-6 Luna first).
     - 33a. [ ] **The meal scan on GPT-6 Luna, thinking off** (built straight after 32b-i, before 32b-ii: Kd's "go", 2026-10-28): OpenAI's terms read first (age, how long a photo is kept, training); Kd's eight plates through today's model and Luna, foods found, calories and the measured cost a scan side by side; Gemini and the Groq spare removed if Luna holds up, else Kd decides. Needs Kd's OpenAI key with a monthly limit. Risky.

@@ -79,6 +79,9 @@ export interface Session {
   keepSignUpNote: (version: string) => Promise<void>;
   /** The name the server now holds for this person, kept with the sign-in and shown at once. */
   keepName: (displayName: string) => Promise<void>;
+  /** Whether the server has said this person finished setup, as this phone last heard it. */
+  setupDone: () => boolean;
+  keepSetupDone: (done: boolean) => Promise<void>;
 }
 
 export function createSession({
@@ -272,6 +275,15 @@ export function createSession({
       const mine = kept;
       if (mine === null) return;
       mine.signUpNote = version;
+      await writeKept(mine);
+    },
+
+    setupDone: () => kept?.setupDone === true,
+
+    keepSetupDone: async (done) => {
+      const mine = kept;
+      if (mine === null || (mine.setupDone === true) === done) return;
+      mine.setupDone = done;
       await writeKept(mine);
     },
 
