@@ -137,6 +137,9 @@ importers:
       expo:
         specifier: 57.0.25
         version: 57.0.25(@babel/core@7.29.7)(@expo/dom-webview@57.0.1)(react-dom@19.2.7(react@19.2.3))(react-native-webview@13.16.1(react-native@0.86.3(@babel/core@7.29.7)(@react-native/jest-preset@0.86.3(@babel/core@7.29.7)(react@19.2.3))(@types/react@19.2.2)(react@19.2.3))(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.7)(@react-native/jest-preset@0.86.3(@babel/core@7.29.7)(react@19.2.3))(@types/react@19.2.2)(react@19.2.3))(react@19.2.3)(typescript@5.9.3)
+      expo-brightness:
+        specifier: 57.0.2
+        version: 57.0.2(expo@57.0.25)(react-native@0.86.3(@babel/core@7.29.7)(@react-native/jest-preset@0.86.3(@babel/core@7.29.7)(react@19.2.3))(@types/react@19.2.2)(react@19.2.3))
       expo-constants:
         specifier: 57.0.19
         version: 57.0.19(expo@57.0.25)(react-native@0.86.3(@babel/core@7.29.7)(@react-native/jest-preset@0.86.3(@babel/core@7.29.7)(react@19.2.3))(@types/react@19.2.2)(react@19.2.3))
@@ -146,9 +149,15 @@ importers:
       expo-font:
         specifier: 57.0.4
         version: 57.0.4(expo@57.0.25)(react-native@0.86.3(@babel/core@7.29.7)(@react-native/jest-preset@0.86.3(@babel/core@7.29.7)(react@19.2.3))(@types/react@19.2.2)(react@19.2.3))(react@19.2.3)
+      expo-keep-awake:
+        specifier: 57.0.2
+        version: 57.0.2(expo@57.0.25)(react@19.2.3)
       expo-secure-store:
         specifier: 57.0.4
         version: 57.0.4(expo@57.0.25)
+      qrcode-generator:
+        specifier: 2.0.4
+        version: 2.0.4
       react:
         specifier: 19.2.3
         version: 19.2.3
@@ -3944,6 +3953,12 @@ packages:
     peerDependencies:
       expo: '*'
       react: '*'
+      react-native: '*'
+
+  expo-brightness@57.0.2:
+    resolution: {integrity: sha512-X5x1qVeUGpb6GMe4AWjQSiJTfwgzRjQGMKnVy7w37xtUW6G2rML9rnddh7mId6ZaCgE+anbb6m66sOGdMGAkvQ==}
+    peerDependencies:
+      expo: '*'
       react-native: '*'
 
   expo-constants@57.0.19:
@@ -10685,6 +10700,11 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
       - typescript
+
+  expo-brightness@57.0.2(expo@57.0.25)(react-native@0.86.3(@babel/core@7.29.7)(@react-native/jest-preset@0.86.3(@babel/core@7.29.7)(react@19.2.3))(@types/react@19.2.2)(react@19.2.3)):
+    dependencies:
+      expo: 57.0.25(@babel/core@7.29.7)(@expo/dom-webview@57.0.1)(react-dom@19.2.7(react@19.2.3))(react-native-webview@13.16.1(react-native@0.86.3(@babel/core@7.29.7)(@react-native/jest-preset@0.86.3(@babel/core@7.29.7)(react@19.2.3))(@types/react@19.2.2)(react@19.2.3))(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.7)(@react-native/jest-preset@0.86.3(@babel/core@7.29.7)(react@19.2.3))(@types/react@19.2.2)(react@19.2.3))(react@19.2.3)(typescript@5.9.3)
+      react-native: 0.86.3(@babel/core@7.29.7)(@react-native/jest-preset@0.86.3(@babel/core@7.29.7)(react@19.2.3))(@types/react@19.2.2)(react@19.2.3)
 
   expo-constants@57.0.19(expo@57.0.25)(react-native@0.86.3(@babel/core@7.29.7)(@react-native/jest-preset@0.86.3(@babel/core@7.29.7)(react@19.2.3))(@types/react@19.2.2)(react@19.2.3)):
     dependencies:

@@ -15,3 +15,12 @@ export function pictureTopHeight(width: number, screenHeight: number, tall: numb
 /** How far the phone's own text-size setting may grow the app's words: the boxes are drawn to a size,
  *  and words past this would spill out of them. */
 export const MOST_TEXT_GROWTH = 1.3;
+
+/** The most of the screen's height the pass's code takes, so its words and Close stay on screen. */
+export const PASS_MOST = 0.5;
+
+/** How wide the pass's code is drawn: the sheet's whole width, but never more than its share of the
+ *  screen's height (an opened Fold, a phone on its side). */
+export function passSide(width: number, screenHeight: number, edge: number): number {
+  return Math.round(Math.max(0, Math.min(width - edge * 2, screenHeight * PASS_MOST)));
+}
