@@ -29,7 +29,7 @@ server `geo` module as already planned.
 `meal-photos/` R2 bucket): analysis is in-memory, one vision call, photo
 discarded. Delete that bucket from the infra plan; the privacy line
 "photos are analyzed, never stored" appears in the scan UI and in every
-org-facing privacy sheet — it matters double for clinics.
+org-facing privacy sheet — it matters double for clinics. *(AMENDED 2026-10-28, `rulings/2026-10-28-33a.md`: since the scanner runs on OpenAI, the line is "Photos are analyzed and never kept by the app. The scanning service keeps a copy for up to 30 days to check for abuse." OpenAI keeps API inputs that long for abuse monitoring; only its zero-data-retention approval would make the old line true.)*
 3. **"Gym Dashboard" → "Organization Console."** Four segments (new gyms,
 premium-aspiring gyms, boutique/PT studios, physio clinics) resolve to
 **three product org types** — `gym` (both gym segments; "premium-aspiring"
@@ -4355,6 +4355,28 @@ is a gym with no country. People who use the app for themselves may be anywhere.
   added, says: "In Square, Duplicate Suggestion lists customers who share an email or phone, such as a child on a
   parent's email. Merge them only if they are the same person." (Square alerts the business only to customers who
   share an email or phone, help article 8401.)
+  *As built, 18d-iii-b-ii-b-ii-b-i (Kd, 2026-10-28: "go"; `rulings/2026-10-28-18d-iii-b-ii-b-ii-b-i.md`):* **A
+  changed name, email or phone copied to Square.** Once the owner has added the gym's members to Square, the
+  worker's minute copies a change to a member's name, email or phone to their customer there, to one the app
+  added and to one it only linked alike, and only the part that changed. Each customer keeps the three parts
+  of the record as hashes, as Square last agreed with them (made, linked or copied; migration `0170`); a part
+  that differs is a change, and a part Square already holds is not sent (an email in its folded form, a phone in E.164; a name exactly as
+  the app sent it, for a customer the app made, and by its folded words, case, punctuation and Latin accents off,
+  for one the business typed, every other script keeping its marks), so what the business typed in Square
+  stays. A part taken off the record is cleared in Square. The app asks Square for the customer first and
+  sends the changed parts with the version it read (UpdateCustomer; Square refuses any other version with 409
+  CONFLICT, measured in its test area on 2026-10-28, and the change is asked again the next minute). Square
+  answering with another customer than the one asked for means it merged them, possibly into somebody else's,
+  and nothing is sent: the merge is followed as above. A customer Square deleted is let go as when Square
+  tells the app. A customer is marked as agreeing with its record when a card save or Members in Square makes it, and by
+  the migration for every one made before, so the first change made to a member is copied; a row no path marked
+  is taken to hold the record as it is at the next look, and nothing is sent on that guess. A past member's change waits until they are put back. A
+  change Square refuses (a phone number it does not accept, such as +1 555 555 0100: INVALID_PHONE_NUMBER) is
+  left, named under Members in Square ("Square didn't accept the change to their details") and on the member's
+  own page, and asked again a day later or when their details change. The box says, under the check and once
+  members are added, that a change is copied and only the part that changed. The calls are the box's (150 a
+  minute for every gym together, two members at a time, two calls each); a gym whose owner never pressed Add
+  members to Square has nothing copied.
 - **Cash, bank transfer, a card on another machine, and UPI in India** (18r): recorded.
 
 Our own app for the Square Reader is ruled out (Kd, 2026-10-21): no gym app found runs the

@@ -78,7 +78,7 @@ const RUN_COLUMNS = (sql: SqlOrTx) =>
   sql`gym_id, environment, account_id, run_id, state, automatic, started_at, listed_upto, cursor, looked, listed_at, checked_at, added_at, failure, unanswered_at, list_version, look_due_at`;
 
 /** A record's name, email and phone as one value: a check read them so, and adding asks again. */
-const DIGEST = (sql: SqlOrTx) => sql`md5(e.full_name || chr(10) || coalesce(e.email::text, '') || chr(10) || coalesce(e.phone_e164, ''))`;
+export const DIGEST = (sql: SqlOrTx) => sql`md5(e.full_name || chr(10) || coalesce(e.email::text, '') || chr(10) || coalesce(e.phone_e164, ''))`;
 
 /** Linked in this account: Square's customer made or chosen, or being made now (a card being saved). */
 const LINKED = (sql: SqlOrTx, environment: SquareEnvironment, accountId: string) => sql`
@@ -400,8 +400,9 @@ export async function linkCustomer(
     LIMIT 1`;
   if (other !== undefined) return "taken";
   const rows = await tx<{ entry_id: string }[]>`
-    INSERT INTO gym_square_customers (gym_id, entry_id, environment, account_id, customer_id, joined_at)
-    SELECT ${r.gymId}, e.id, ${r.environment}, ${r.accountId}, ${r.customerId}, ${r.joined ? r.now : null}
+    INSERT INTO gym_square_customers (gym_id, entry_id, environment, account_id, customer_id, joined_at, copied_name, copied_email, copied_phone, copied_at)
+    SELECT ${r.gymId}, e.id, ${r.environment}, ${r.accountId}, ${r.customerId}, ${r.joined ? r.now : null},
+           md5(e.full_name), md5(NULLIF(lower(btrim(e.email::text)), '')), md5(NULLIF(e.phone_e164, '')), ${r.now}
     FROM gym_member_list_entries e WHERE e.gym_id = ${r.gymId} AND e.id = ${r.entryId} AND e.former_at IS NULL
     ON CONFLICT DO NOTHING
     RETURNING entry_id`;
@@ -486,6 +487,13 @@ export async function writeLook(
       billed = EXCLUDED.billed, looked_at = EXCLUDED.looked_at, outcome = EXCLUDED.outcome, done_at = EXCLUDED.done_at`;
 }
 
+/** The run is taken again at once: changes still to copy, or Square gave no answer (18d-iii-b-ii-b-ii-b-i). */
+export async function wake(sql: SqlOrTx, r: { gymId: string; environment: SquareEnvironment; runId: string; at: Date }): Promise<void> {
+  await sql`
+    UPDATE gym_square_member_runs SET look_due_at = ${r.at}
+    WHERE gym_id = ${r.gymId} AND environment = ${r.environment} AND run_id = ${r.runId}`;
+}
+
 /** The list looked at up to `version`; the next look a day on where somebody is still not in Square. */
 export async function caughtUp(sql: SqlOrTx, r: { gymId: string; environment: SquareEnvironment; runId: string; version: number | null; lookDueAt: Date }): Promise<void> {
   await sql`
@@ -563,7 +571,15 @@ const emptyGroups = (): Groups => ({
   refused: none(),
   waiting: none(),
   merged_away: none(),
+  not_copied: none(),
 });
+
+/** In Square, and Square would not take the change to their details as they are now (18d-iii-b-ii-b-ii-b-i). */
+const NOT_COPIED = (sql: SqlOrTx, gymId: string, environment: SquareEnvironment, accountId: string) => sql`
+  SELECT 'not_copied', e.id, e.full_name, e.listed_seq
+  FROM gym_square_customers c JOIN gym_member_list_entries e ON e.gym_id = c.gym_id AND e.id = c.entry_id
+  WHERE c.gym_id = ${gymId} AND c.environment = ${environment} AND c.account_id = ${accountId} AND c.customer_id IS NOT NULL
+    AND e.former_at IS NULL AND c.copy_refused_digest IS NOT NULL AND c.copy_refused_digest = ${DIGEST(sql)}`;
 
 /** The groups of a check waiting for the press: what the press would still do, by the plan; nobody the
  *  worker has added or linked meanwhile, as new members are once members were added (round one, High 3). */
@@ -576,7 +592,8 @@ const CHECKED_GROUPS = (sql: SqlOrTx, gymId: string, environment: SquareEnvironm
   SELECT 'billed', e.id, e.full_name, e.listed_seq
   FROM gym_square_member_plan p JOIN gym_member_list_entries e ON e.gym_id = p.gym_id AND e.id = p.entry_id
   WHERE p.gym_id = ${gymId} AND p.environment = ${environment} AND p.run_id = ${runId} AND p.billed AND e.former_at IS NULL
-    AND p.outcome IS NULL AND NOT ${MADE(sql, environment, accountId)}`;
+    AND p.outcome IS NULL AND NOT ${MADE(sql, environment, accountId)}
+  UNION ALL ${NOT_COPIED(sql, gymId, environment, accountId)}`;
 
 /** The groups once members were added: the current members not in Square, and why. */
 const NOT_IN_GROUPS = (sql: SqlOrTx, gymId: string, environment: SquareEnvironment, accountId: string) => sql`
@@ -592,7 +609,8 @@ const NOT_IN_GROUPS = (sql: SqlOrTx, gymId: string, environment: SquareEnvironme
   -- In Square, and charged by Square's own subscriptions, as the last look read them (round one, Low 5).
   SELECT 'billed', e.id, e.full_name, e.listed_seq
   FROM gym_square_member_plan p JOIN gym_member_list_entries e ON e.gym_id = p.gym_id AND e.id = p.entry_id
-  WHERE p.gym_id = ${gymId} AND p.environment = ${environment} AND p.billed AND e.former_at IS NULL AND ${MADE(sql, environment, accountId)}`;
+  WHERE p.gym_id = ${gymId} AND p.environment = ${environment} AND p.billed AND e.former_at IS NULL AND ${MADE(sql, environment, accountId)}
+  UNION ALL ${NOT_COPIED(sql, gymId, environment, accountId)}`;
 
 const nameOf = (fullName: string): string => (fullName.trim() === "" ? NO_NAME : fullName.trim().slice(0, 200));
 

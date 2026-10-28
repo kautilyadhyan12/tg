@@ -1,23 +1,24 @@
 // What a meal scan costs on the real scanner (ROADMAP 7a-iii-b). Each photo goes
-// through the production Gemini adapter — the prompt, picture detail and thinking
+// through the production OpenAI adapter — the prompt, picture detail and thinking
 // setting a person's scan uses — and the tool prints each call's tokens and cost,
 // the foods it read with the model's own estimates, and the average a scan
 // against Kd's gate of $0.00086 (RULINGS 2026-09-16).
 //
-//   corepack pnpm --filter api exec tsx tools/measure-scan-cost.ts --env=<file with GEMINI_API_KEY> --out=<folder outside the repo> <photo or folder> ...
+//   corepack pnpm --filter api exec tsx tools/measure-scan-cost.ts --env=<file with OPENAI_API_KEY> --out=<folder outside the repo> <photo or folder> ...
 //
 // EVERY PHOTO IS A PAID CALL, and Kd counts them (RULINGS 2026-09-15: one test
 // call, never a sweep): at most ten photos a run, one call each, never retried.
-// The key comes from the GEMINI_API_KEY line of --env and nothing else in that
+// The key comes from the OPENAI_API_KEY line of --env and nothing else in that
 // file is read; it is never printed. The repository is public, so --out may not
 // be inside it, and no photo belongs in it either.
 import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { basename, extname, join, resolve } from "node:path";
-import { geminiReplySchema } from "@app/shared";
-import { VisionProviderError, createGeminiVisionProvider, visionCostMicro, type MealVisionModel } from "../src/modules/nutrition/vision.adapter.js";
-import { MAX_PHOTOS_PER_RUN, PHOTO_TYPES, geminiKeyFrom, scanCostArgs, summarizeScanCost, type ScanCall } from "./scan-cost.js";
+import { openAiCompletionSchema } from "@app/shared";
+import { VisionProviderError, createOpenAiVisionProvider, visionCostMicro, type MealVisionModel } from "../src/modules/nutrition/vision.adapter.js";
+import { MAX_PHOTOS_PER_RUN, PHOTO_TYPES, SCAN_KEY_NAME, keyFrom, scanCostArgs, summarizeScanCost, type ScanCall } from "./scan-cost.js";
 
-const MODEL: MealVisionModel = "gemini-3.5-flash-lite";
+const MODEL: MealVisionModel = "gpt-6-luna";
+
 /** Between calls, so a free-plan key stays under its requests-a-minute limit. */
 const PAUSE_MS = 8_000;
 
@@ -37,20 +38,20 @@ if (photos.length === 0 || photos.length > MAX_PHOTOS_PER_RUN) {
   console.error(`measure-scan-cost: ${String(photos.length)} photos named; a run takes 1 to ${String(MAX_PHOTOS_PER_RUN)}, each a paid call`);
   process.exit(2);
 }
-const key = geminiKeyFrom(readFileSync(args.envFile, "utf8"));
+const key = keyFrom(readFileSync(args.envFile, "utf8"), SCAN_KEY_NAME);
 if (key === null) {
-  console.error(`measure-scan-cost: no GEMINI_API_KEY line with a value in ${args.envFile}`);
+  console.error(`measure-scan-cost: no ${SCAN_KEY_NAME} line with a value in ${args.envFile}`);
   process.exit(2);
 }
 mkdirSync(args.outDir, { recursive: true });
 
-/** The model's own text out of Gemini's reply envelope, without thought parts. */
+/** The model's own text out of the reply envelope, and the thinking it billed
+ *  (OpenAI counts it inside completion_tokens). */
 const modelText = (envelope: string): { text: string; thoughts: number } | null => {
   try {
-    const reply = geminiReplySchema.safeParse(JSON.parse(envelope));
-    if (!reply.success) return null;
-    const parts = reply.data.candidates[0]?.content?.parts ?? [];
-    return { text: parts.filter((p) => p.thought !== true).map((p) => p.text ?? "").join(""), thoughts: reply.data.usageMetadata.thoughtsTokenCount };
+    const completion = openAiCompletionSchema.safeParse(JSON.parse(envelope));
+    if (!completion.success) return null;
+    return { text: completion.data.choices[0].message.content ?? "", thoughts: completion.data.usage.completion_tokens_details.reasoning_tokens };
   } catch {
     return null;
   }
@@ -69,12 +70,12 @@ for (const [at, photo] of photos.entries()) {
     return new Response(envelope, { status: res.status, headers: res.headers });
   };
   const started = Date.now();
-  const provider = createGeminiVisionProvider(key, MODEL, keepReply);
+  const scanner = createOpenAiVisionProvider(key, MODEL, keepReply);
   let usage: ScanCall["usage"] = null;
   let outcome: string;
   let foods: string[] = [];
   try {
-    const read = await provider.analyze(readFileSync(photo).toString("base64"), mimeType);
+    const read = await scanner.analyze(readFileSync(photo).toString("base64"), mimeType);
     usage = { tokensIn: read.tokensIn, tokensOut: read.tokensOut };
     outcome = `${String(read.evidence.items.length)} foods, photo ${read.evidence.photo_quality}`;
     foods = read.evidence.items.map((i) =>

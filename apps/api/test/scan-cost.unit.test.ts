@@ -4,7 +4,7 @@
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { MAX_PHOTOS_PER_RUN, PHOTO_TYPES, SCAN_COST_GATE_MICRO_USD, geminiKeyFrom, scanCostArgs, summarizeScanCost } from "../tools/scan-cost.js";
+import { MAX_PHOTOS_PER_RUN, PHOTO_TYPES, SCAN_COST_GATE_MICRO_USD, SCAN_KEY_NAME, keyFrom, scanCostArgs, summarizeScanCost } from "../tools/scan-cost.js";
 
 const REPO = resolve(import.meta.dirname, "../../..");
 /** Folders outside the repository on any system: beside it, and the system's own temp folder. */
@@ -19,6 +19,7 @@ const problemOf = (argv: string[]): string => {
 describe("the command line", () => {
   it("needs the env file, the output folder and at least one photo", () => {
     expect(scanCostArgs(["--env=.env", `--out=${OUT}`, PLATES], REPO)).toEqual({ envFile: ".env", outDir: OUT, paths: [PLATES] });
+    expect(problemOf([`--out=${OUT}`, PLATES])).toContain("OPENAI_API_KEY");
     expect(problemOf([`--out=${OUT}`, PLATES])).toContain("--env");
     expect(problemOf(["--env=", `--out=${OUT}`, PLATES])).toContain("--env");
     expect(problemOf(["--env=.env", PLATES])).toContain("--out");
@@ -44,37 +45,41 @@ describe("the command line", () => {
 });
 
 describe("the scanner's key", () => {
-  it("is the GEMINI_API_KEY line's value, unquoted, and nothing else in the file", () => {
-    const file = ["DATABASE_URL=postgres://someone:secret@example/db", "GROQ_API_KEY=groq-value", "GEMINI_API_KEY=gemini-value", ""].join("\r\n"); // gitleaks:allow
-    expect(geminiKeyFrom(file)).toBe("gemini-value");
-    expect(geminiKeyFrom('GEMINI_API_KEY="quoted value"\n')).toBe("quoted value");
-    expect(geminiKeyFrom("export GEMINI_API_KEY='single'\n")).toBe("single");
-    expect(geminiKeyFrom("  GEMINI_API_KEY = spaced \n")).toBe("spaced");
+  it("is the model's own key line's value, unquoted, and nothing else in the file", () => {
+    expect(SCAN_KEY_NAME).toBe("OPENAI_API_KEY");
+    const file = ["DATABASE_URL=postgres://someone:secret@example/db", "GROQ_API_KEY=groq-value", "GEMINI_API_KEY=gemini-value", "OPENAI_API_KEY=openai-value", ""].join("\r\n"); // gitleaks:allow
+    expect(keyFrom(file, SCAN_KEY_NAME)).toBe("openai-value");
+    expect(keyFrom('OPENAI_API_KEY="quoted value"\n', SCAN_KEY_NAME)).toBe("quoted value");
+    expect(keyFrom("export OPENAI_API_KEY='single'\n", SCAN_KEY_NAME)).toBe("single");
+    expect(keyFrom("  OPENAI_API_KEY = spaced \n", SCAN_KEY_NAME)).toBe("spaced");
   });
 
   it("is missing where the line is absent, empty, or another name", () => {
-    expect(geminiKeyFrom("")).toBeNull();
-    expect(geminiKeyFrom("GEMINI_API_KEY=\n")).toBeNull();
-    expect(geminiKeyFrom('GEMINI_API_KEY=""\n')).toBeNull();
-    expect(geminiKeyFrom("OLD_GEMINI_API_KEY=value\n# GEMINI_API_KEY=commented\n")).toBeNull();
+    expect(keyFrom("", SCAN_KEY_NAME)).toBeNull();
+    expect(keyFrom("OPENAI_API_KEY=\n", SCAN_KEY_NAME)).toBeNull();
+    expect(keyFrom('OPENAI_API_KEY=""\n', SCAN_KEY_NAME)).toBeNull();
+    expect(keyFrom("OLD_OPENAI_API_KEY=value\n# OPENAI_API_KEY=commented\n", SCAN_KEY_NAME)).toBeNull();
+    // Another provider's line is not the scanner's key.
+    expect(keyFrom("GEMINI_API_KEY=gemini-value\n", SCAN_KEY_NAME)).toBeNull();
   });
 });
 
 describe("a run's cost", () => {
   it("is the exact average a billed scan, at the model's list price, against Kd's gate", () => {
     expect(SCAN_COST_GATE_MICRO_USD).toBe(860);
-    // Kd's eight plates on 2026-09-16, as the tool measured them: 802.425 micro-USD a scan.
-    const plates = [[606, 222], [617, 393], [617, 262], [617, 300], [607, 177], [611, 160], [606, 311], [617, 155]] as const;
-    const run = summarizeScanCost(plates.map(([tokensIn, tokensOut], at) => ({ photo: String(at), usage: { tokensIn, tokensOut } })), "gemini-3.5-flash-lite");
-    expect(run).toEqual({ calls: 8, billed: 8, averageMicroUsd: 802.425, overGate: false });
+    // Kd's eight plates on GPT-6 Luna at high detail, 2026-10-28, as the tool measured
+    // them: 7,600 in at $0.10 and 1,298 out at $0.50 per 1M, 176.125 micro-USD a scan.
+    const plates = [[1029, 146], [914, 198], [914, 180], [914, 171], [1030, 105], [856, 126], [1029, 182], [914, 190]] as const;
+    const run = summarizeScanCost(plates.map(([tokensIn, tokensOut], at) => ({ photo: String(at), usage: { tokensIn, tokensOut } })), "gpt-6-luna");
+    expect(run).toEqual({ calls: 8, billed: 8, averageMicroUsd: 176.125, overGate: false });
   });
 
   it("counts only the calls the model answered, and is over the gate only past $0.00086", () => {
-    // 2,000 in and 104 out on Gemini is 600 + 260 = 860 micro-USD: at the gate, not over it.
-    const atGate = summarizeScanCost([{ photo: "a", usage: { tokensIn: 2000, tokensOut: 104 } }, { photo: "b", usage: null }], "gemini-3.5-flash-lite");
+    // 2,000 in and 1,320 out on Luna is 200 + 660 = 860 micro-USD: at the gate, not over it.
+    const atGate = summarizeScanCost([{ photo: "a", usage: { tokensIn: 2000, tokensOut: 1320 } }, { photo: "b", usage: null }], "gpt-6-luna");
     expect(atGate).toEqual({ calls: 2, billed: 1, averageMicroUsd: 860, overGate: false });
-    const past = summarizeScanCost([{ photo: "a", usage: { tokensIn: 2002, tokensOut: 104 } }], "gemini-3.5-flash-lite");
+    const past = summarizeScanCost([{ photo: "a", usage: { tokensIn: 2000, tokensOut: 1321 } }], "gpt-6-luna");
     expect(past.overGate).toBe(true);
-    expect(summarizeScanCost([{ photo: "a", usage: null }], "gemini-3.5-flash-lite")).toEqual({ calls: 1, billed: 0, averageMicroUsd: null, overGate: false });
+    expect(summarizeScanCost([{ photo: "a", usage: null }], "gpt-6-luna")).toEqual({ calls: 1, billed: 0, averageMicroUsd: null, overGate: false });
   });
 });

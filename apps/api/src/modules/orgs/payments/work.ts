@@ -155,7 +155,7 @@ export async function processSquareWork(deps: PaymentsDeps, eventIds: readonly s
     terminalPayments: { asked: 0, forgotten: 0 },
     cardCharges: { asked: 0, charged: 0, paid: 0, declined: 0 },
     sweeps: { looked: 0, payments: 0, unanswered: 0 },
-    members: { pages: 0, added: 0, linked: 0, looked: 0, unanswered: 0 },
+    members: { pages: 0, added: 0, linked: 0, looked: 0, copied: 0, unanswered: 0 },
   };
   const square = deps.square;
   if (square === null) return run;

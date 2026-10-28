@@ -107,10 +107,22 @@ export async function claimCustomer(sql: SqlOrTx, c: CustomerKey, key: string): 
   throw new Error("a Square customer row was neither made nor being made");
 }
 
-/** Square made the customer asked for with `key`. False when another save wrote it first. */
-export async function finishCustomer(sql: SqlOrTx, c: CustomerKey, key: string, customerId: string): Promise<boolean> {
+/** Square made the customer asked for with `key`. False when another save wrote it first. `sent`: the name, email and
+ *  phone the customer was made with, which Square agrees with from then on (18d-iii-b-ii-b-ii-b-i); left out where
+ *  they are not known, the next look takes them from the record. */
+export async function finishCustomer(
+  sql: SqlOrTx,
+  c: CustomerKey,
+  key: string,
+  customerId: string,
+  sent: { fullName: string; email: string | null; phone: string | null; at: Date } | null = null,
+): Promise<boolean> {
   const rows = await sql<{ entry_id: string }[]>`
-    UPDATE gym_square_customers SET customer_id = ${customerId}, making_key = NULL
+    UPDATE gym_square_customers SET customer_id = ${customerId}, making_key = NULL,
+      copied_name = CASE WHEN ${sent !== null}::boolean THEN md5(${sent?.fullName ?? null}::text) END,
+      copied_email = CASE WHEN ${sent !== null}::boolean THEN md5(NULLIF(lower(btrim(${sent?.email ?? null}::text)), '')) END,
+      copied_phone = CASE WHEN ${sent !== null}::boolean THEN md5(NULLIF(${sent?.phone ?? null}::text, '')) END,
+      copied_at = CASE WHEN ${sent !== null}::boolean THEN ${sent?.at ?? null}::timestamptz END
     WHERE gym_id = ${c.gymId} AND entry_id = ${c.entryId} AND environment = ${c.environment}
       AND account_id = ${c.accountId} AND making_key = ${key}
     RETURNING entry_id`;

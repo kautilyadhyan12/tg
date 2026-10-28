@@ -12,10 +12,14 @@
 // digits) or reference id, and made once a key: the same key with the same customer gives back the same
 // one, with another is refused (IDEMPOTENCY_KEY_REUSED), as Square's idempotency does; nothing checks for
 // duplicates ("CreateCustomer ... don't check for duplicate records"). Square's own subscriptions are
-// searched by their customers.
+// searched by their customers. A customer is changed as Square's test area changed one on 2026-10-28 (`.cost/18d-iii-b-ii-b-ii-b-i/probe-update.mts`):
+// it carries a version, 0 when made and one more with each change; a version that is not the current one is refused
+// (409 CONFLICT); a part left out stays, a null clears it; a phone or email Square cannot read is refused
+// (INVALID_PHONE_NUMBER, INVALID_EMAIL_ADDRESS), as is a customer left with no name, email or phone (BAD_REQUEST); an
+// old id of a merged customer changes the merged one (2026-10-26).
 import { randomBytes } from "node:crypto";
 import type { SquareCatalogTax, SquareCustomer, SquareCustomerFound, SquareLocation, SquareOrder, SquarePayment, SquareTerminalCheckout } from "@app/shared";
-import type { CardPaymentResult, NewCardPayment, NewSquareCustomer, NewTerminalCheckout, SquareApi, SquareResult } from "../src/modules/orgs/payments/square.js";
+import type { CardPaymentResult, NewCardPayment, NewSquareCustomer, NewTerminalCheckout, SquareApi, SquareCustomerChange, SquareResult } from "../src/modules/orgs/payments/square.js";
 
 export interface Account {
   merchantId: string;
@@ -78,6 +82,8 @@ export function fakeSquare() {
   const gone = new Set<string>();
   /** Every RetrieveCustomer asked, by the id asked about. */
   const customerReads: string[] = [];
+  /** Every UpdateCustomer asked, by the id asked about, with what was sent. */
+  const customersChanged: (SquareCustomerChange & { customerId: string; accountId: string })[] = [];
   // `down`: no answer at all. `refuseNew`: a new checkout is refused (the Terminal is not signed in).
   // `loseAnswers`: a new checkout is made and its answer lost on the way. `refuseRead`: Square
   // refuses to show a checkout (a permission taken away).
@@ -114,6 +120,17 @@ export function fakeSquare() {
     loseCustomers: boolean;
     subscriptionsDown: boolean;
     subscriptionsRefused: boolean;
+    /** UpdateCustomer (18d-iii-b-ii-b-ii-b-i): gives no answer; refuses these phones or emails (a number Square does
+     *  not know); is told, for the next N changes, that the customer changed meanwhile (CONFLICT). */
+    updateDown: boolean;
+    updateRefused: Set<string>;
+    conflictNext: number;
+    /** These customers give no answer to UpdateCustomer; are refused on RetrieveCustomer (403); are refused on UpdateCustomer with the status given. */
+    updateFails: Set<string>;
+    readRefused: Set<string>;
+    updateStatus: Map<string, number>;
+    /** Runs once, as an UpdateCustomer arrives: Square changes something in the instant between the ask and the change. */
+    beforeUpdate: (() => void) | null;
     now: () => Date;
   } = {
     down: false,
@@ -137,6 +154,13 @@ export function fakeSquare() {
     loseCustomers: false,
     subscriptionsDown: false,
     subscriptionsRefused: false,
+    updateDown: false,
+    updateRefused: new Set<string>(),
+    conflictNext: 0,
+    updateFails: new Set<string>(),
+    readRefused: new Set<string>(),
+    updateStatus: new Map<string, number>(),
+    beforeUpdate: null,
     now: () => new Date(),
   };
   let n = 0;
@@ -304,12 +328,58 @@ export function fakeSquare() {
       if (state.down) return Promise.resolve(unavailable);
       const a = tokenAccount(token);
       if (a === undefined) return Promise.resolve(unauthorized);
+      if (state.readRefused.has(id)) return Promise.resolve({ kind: "refused", status: 403, code: "FORBIDDEN" });
       // An old id of a merged customer answers as the customer it is now ("If you call RetrieveCustomer using the
       // ID of customer A or B, the Customers API returns customer C").
       const c = customers.get(mergedInto.get(id) ?? id);
       if (c === undefined) return Promise.resolve(gone.has(id) ? notFound : unavailable);
       if (c.accountId !== a.merchantId) return Promise.resolve(notFound);
-      const out: SquareCustomer & { accountId?: string } = { ...c };
+      const out: SquareCustomer & { accountId?: string } = { ...c, version: c.version ?? 0 };
+      delete out.accountId;
+      return Promise.resolve({ kind: "ok", value: out });
+    },
+    updateCustomer(token, id, change) {
+      const a = tokenAccount(token);
+      if (a === undefined) return Promise.resolve(unauthorized);
+      customersChanged.push({ ...change, customerId: id, accountId: a.merchantId });
+      if (state.updateDown || state.down || state.updateFails.has(id)) return Promise.resolve(unavailable);
+      const refusedWith = state.updateStatus.get(id);
+      if (refusedWith !== undefined) return Promise.resolve({ kind: "refused", status: refusedWith, code: "FORBIDDEN" });
+      const hook = state.beforeUpdate;
+      state.beforeUpdate = null;
+      hook?.();
+      // An old id of a merged customer changes the merged one, as Square's test area did (2026-10-26).
+      const at = mergedInto.get(id) ?? id;
+      const c = customers.get(at);
+      if (c === undefined) return Promise.resolve(notFound);
+      if (c.accountId !== a.merchantId) return Promise.resolve(notFound);
+      if (change.givenName === undefined && change.familyName === undefined && change.email === undefined && change.phone === undefined) {
+        return Promise.resolve({ kind: "refused", status: 400, code: "BAD_REQUEST" });
+      }
+      const version = c.version ?? 0;
+      if (state.conflictNext > 0) {
+        state.conflictNext -= 1;
+        customers.set(at, { ...c, version: version + 1 });
+        return Promise.resolve({ kind: "refused", status: 409, code: "CONFLICT" });
+      }
+      if (change.version !== null && change.version !== version) return Promise.resolve({ kind: "refused", status: 409, code: "CONFLICT" });
+      if (change.phone != null && (!/^\+[1-9][0-9]{7,14}$/.test(change.phone) || state.updateRefused.has(change.phone))) {
+        return Promise.resolve({ kind: "refused", status: 400, code: "INVALID_PHONE_NUMBER" });
+      }
+      if (change.email != null && (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(change.email) || change.email.length > 254 || state.updateRefused.has(change.email.toLowerCase()))) {
+        return Promise.resolve({ kind: "refused", status: 400, code: "INVALID_EMAIL_ADDRESS" });
+      }
+      const next: SquareCustomer & { accountId: string } = {
+        ...c,
+        ...(change.givenName === undefined ? {} : { given_name: change.givenName }),
+        ...(change.familyName === undefined ? {} : { family_name: change.familyName }),
+        ...(change.email === undefined ? {} : { email_address: change.email }),
+        ...(change.phone === undefined ? {} : { phone_number: change.phone }),
+        version: version + 1,
+      };
+      if (!next.given_name && !next.family_name && !next.email_address && !next.phone_number) return Promise.resolve({ kind: "refused", status: 400, code: "BAD_REQUEST" });
+      customers.set(at, next);
+      const out: SquareCustomer & { accountId?: string } = { ...next };
       delete out.accountId;
       return Promise.resolve({ kind: "ok", value: out });
     },
@@ -649,6 +719,7 @@ export function fakeSquare() {
     customersMade,
     customerListings,
     customerReads,
+    customersChanged,
     refund,
     listed,
   };

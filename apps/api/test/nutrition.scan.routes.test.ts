@@ -48,7 +48,6 @@ const env = {
   WEB_ORIGIN: "http://localhost:5173",
   JWT_SECRET: "scan7b-test-secret-0123456789abcdef-32", // gitleaks:allow
   LOG_LEVEL: "error",
-  GROQ_API_KEY: "scan7b-fake-provider-key", // gitleaks:allow
 };
 const jpeg = (() => { const bytes = Buffer.alloc(1200, 1); bytes[0] = 0xff; bytes[1] = 0xd8; bytes[2] = 0xff; return bytes.toString("base64"); })();
 

@@ -209,8 +209,8 @@ export const equipmentArraySchema = uniqueArray(equipmentSchema, equipmentSchema
  *  mark off before the plan exists to say what each pace eats. */
 export const ADULT_AGE = 18;
 
-/** No age under ADULT_AGE is saved (RULINGS 2026-09-15: Google's Gemini terms forbid an
- *  app likely to be used by under-18s, and the meal scanner runs on Gemini). Both
+/** No age under ADULT_AGE is saved (RULINGS 2026-09-15, set by Gemini's terms; kept by Kd
+ *  on 2026-10-28 when the scanner left Gemini, rulings/2026-10-28-33a.md). Both
  *  places that save an age read this one rail. The plan's own rails keep 16
  *  (plan.ts), so its under-18 rules stay as a floor: a typed age cannot be checked. */
 export const ageSchema = z.number().int().min(ADULT_AGE).max(120);

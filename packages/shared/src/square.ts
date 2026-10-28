@@ -116,6 +116,9 @@ export const squareCustomerAnswerSchema = z.object({
     reference_id: z.string().max(255).nullish(),
     /** `MERGE`: a customer Square made by merging others (18d-iii-b-ii-b-ii-a). */
     creation_source: z.string().max(60).nullish(),
+    /** 0 when made, one more with each change; UpdateCustomer wants the current one and refuses (409 CONFLICT)
+     *  any other (measured in Square's test area, 2026-10-28; 18d-iii-b-ii-b-ii-b-i). */
+    version: z.number().int().min(0).nullish(),
   }),
 });
 export type SquareCustomer = z.infer<typeof squareCustomerAnswerSchema>["customer"];

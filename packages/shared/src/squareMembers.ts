@@ -35,8 +35,9 @@ export type SquareMembersState = z.infer<typeof squareMembersStateSchema>;
  *  more than one of them), `billed` (Square's own subscriptions charge them). After it, the people not in
  *  Square: `several_customers`, `several_people`, `refused` (Square would not take them), `waiting`
  *  (being added) and `merged_away` (Square merged their customer into one with another name twice within 30
- *  days: 18d-iii-b-ii-b-ii-a). */
-export const SQUARE_MEMBERS_GROUPS = ["add", "link", "several_customers", "several_people", "billed", "refused", "waiting", "merged_away"] as const;
+ *  days: 18d-iii-b-ii-b-ii-a). `not_copied`: in Square, but Square would not take the change to their name, email
+ *  or phone (18d-iii-b-ii-b-ii-b-i). */
+export const SQUARE_MEMBERS_GROUPS = ["add", "link", "several_customers", "several_people", "billed", "refused", "waiting", "merged_away", "not_copied"] as const;
 export const squareMembersGroupSchema = z.enum(SQUARE_MEMBERS_GROUPS);
 export type SquareMembersGroup = z.infer<typeof squareMembersGroupSchema>;
 
@@ -85,6 +86,7 @@ export const squareMembersSchema = z
         refused: squareMembersNamedSchema,
         waiting: squareMembersNamedSchema,
         merged_away: squareMembersNamedSchema,
+        not_copied: squareMembersNamedSchema,
       })
       .strict(),
   })
@@ -145,7 +147,7 @@ export const SQUARE_MEMBERS_WORDS = {
   checkedOther: (gym: string): string => `The owner of ${gym} is checking who to add to Square.`,
   addLead: (n: number): string => `Will be added to your Square customer list, with their name, email and phone (${n.toLocaleString("en-US")}):`,
   linkLead: (n: number): string =>
-    `Already in your Square customer list, with the same email or phone and the same name. They are linked, and nothing about them changes in Square (${n.toLocaleString("en-US")}):`,
+    `Already in your Square customer list, with the same email or phone and the same name. They are linked, and nothing about them changes in Square now (${n.toLocaleString("en-US")}):`,
   severalCustomersLead: (n: number): string =>
     `Left out, as Square has more than one customer who could be each of them (${n.toLocaleString("en-US")}):`,
   severalCustomersFix: "Merge those customers in Square, then check again: in your Square Dashboard, open [Customer directory], click one of them, then [•••] → [Merge customer].",
@@ -154,6 +156,8 @@ export const SQUARE_MEMBERS_WORDS = {
   duplicatesButton: "Open Possible duplicates",
   billedLead: (n: number): string => `Square already charges ${n === 1 ? "this member" : "these members"} with its own subscriptions (${n.toLocaleString("en-US")}):`,
   billedFix: "If you also charge their card here, they pay twice. Cancel those subscriptions in Square first.",
+  /** Under the check and under the added box (18d-iii-b-ii-b-ii-b-i): what happens to a member's details from now on. */
+  copiesNote: "When you change a member's name, email or phone here, the change is copied to their customer in Square. Only the part you changed is sent.",
   seeAll: "See all",
   hideAll: "Hide",
   showMore: "Show more",
@@ -177,6 +181,11 @@ export const SQUARE_MEMBERS_WORDS = {
   refusedLead: (n: number): string => `Square didn't accept their details (${n.toLocaleString("en-US")}):`,
   refusedFix: "Check their email address and phone number on their page. The app tries again tomorrow, or when their details change.",
   waitingLead: (n: number): string => `Being added (${n.toLocaleString("en-US")}):`,
+  /** Square would not take a change to the details of somebody who is in Square (18d-iii-b-ii-b-ii-b-i). */
+  notCopiedLead: (n: number): string => `Square didn't accept the change to their details (${n.toLocaleString("en-US")}):`,
+  /** On their own page: the same, for one person. */
+  personNotCopied: "Square didn't accept the change to their details, so they still have their old details in Square. Check their email address and phone number.",
+  notCopiedFix: "They still have their old details in Square. Check their email address and phone number on their page. The app tries again tomorrow, or when their details change.",
   /** Square merged their customer into one with another name, twice (18d-iii-b-ii-b-ii-a). */
   mergedAwayLead: (n: number): string =>
     `Left out, as Square merged them into another customer with a different name, twice (${n.toLocaleString("en-US")}):`,

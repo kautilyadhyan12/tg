@@ -58,8 +58,8 @@ d("the deleted chat coach (real Postgres)", () => {
         WEB_ORIGIN: "http://localhost:5173",
         JWT_SECRET: "coach-deleted-secret-0123456789abcdef-32", // dummy test value, gitleaks:allow
         LOG_LEVEL: "error",
-        // A key set must not bring the coach back: nothing reads it for chat.
-        GROQ_API_KEY: "gsk_not_a_real_key", // dummy test value, gitleaks:allow
+        // An AI key set must not bring the coach back: nothing reads it for chat.
+        OPENAI_API_KEY: "sk-not-a-real-key", // dummy test value, gitleaks:allow
       }),
     );
   }, 60_000);

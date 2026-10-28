@@ -40,6 +40,7 @@ import * as repo from "./repo.js";
 import { accessContext, requireGymOwner, type PaymentsDeps } from "./service.js";
 import type { SquareSettings } from "./settings.js";
 import * as members from "./squareMembersRepo.js";
+import { copySome } from "./squareCopies.js";
 import { squareEmail, squareMembersPlan, squarePhone, type PlanCustomer, type PlanMember } from "./squareMembersPlan.js";
 
 export const SQUARE_MEMBERS_WORK = {
@@ -66,11 +67,13 @@ export interface SquareMembersRun {
   added: number;
   linked: number;
   looked: number;
+  /** Members' changed details copied to their customers in Square. */
+  copied: number;
   unanswered: number;
 }
 
 /** Calls to Square still allowed: shared by every gym of one minute's work. */
-interface Budget {
+export interface Budget {
   left: number;
 }
 
@@ -79,7 +82,7 @@ const notConnected = (): OrgsError => new OrgsError(409, "square_not_connected",
 /** What Square needs to have allowed for the check: its own subscriptions read (added for this job). */
 export const readsSubscriptions = (row: repo.ConnectionRow): boolean => row.scopes.includes("SUBSCRIPTIONS_READ");
 
-interface Ready {
+export interface Ready {
   square: SquareSettings;
   row: repo.ConnectionRow & { locationId: string };
   token: string;
@@ -393,11 +396,14 @@ async function makeCustomer(deps: PaymentsDeps, ready: Ready, gymId: string, per
     await cards.abandonCustomer(deps.sql, key, claimed.makingKey);
     return "refused";
   }
-  if (await cards.finishCustomer(deps.sql, key, claimed.makingKey, customerId)) return "done";
+  // What Square agrees with from now on: the record as it was sent, or, for a customer a card save made with less, as it is (only
+  // a change to it is ever sent), so the first change made to the member is copied (18d-iii-b-ii-b-ii-b-i).
+  const sent = { fullName: person.fullName, email: person.email, phone: person.phone, at: deps.now() };
+  if (await cards.finishCustomer(deps.sql, key, claimed.makingKey, customerId, sent)) return "done";
   // Another save wrote it first with the same key, or let the row go meanwhile: written as customerFor does.
   const now = await cards.claimCustomer(deps.sql, key, randomUUID());
   if ("customerId" in now) return "done";
-  await cards.finishCustomer(deps.sql, key, now.makingKey, customerId);
+  await cards.finishCustomer(deps.sql, key, now.makingKey, customerId, sent);
   return "done";
 }
 
@@ -588,7 +594,7 @@ async function lookSome(deps: PaymentsDeps, ready: Ready, run: members.RunRow, b
 /** Each gym's check or adding nobody holds, and each gym's new members once members were added: a few pages
  *  or people a gym, then the lease let go. `gymIds`: only these gyms, for a test; production passes null. */
 export async function processSquareMembers(deps: PaymentsDeps, square: SquareSettings, gymIds: readonly string[] | null = null): Promise<SquareMembersRun> {
-  const tally: SquareMembersRun = { pages: 0, added: 0, linked: 0, looked: 0, unanswered: 0 };
+  const tally: SquareMembersRun = { pages: 0, added: 0, linked: 0, looked: 0, copied: 0, unanswered: 0 };
   const budget: Budget = { left: SQUARE_MEMBERS_WORK.callsByWorker };
   const now = deps.now();
   const runs = await members.claimDueRuns(deps.sql, {
@@ -620,6 +626,15 @@ export async function processSquareMembers(deps: PaymentsDeps, square: SquareSet
         tally.looked += look.looked;
         tally.added += look.added;
         tally.linked += look.linked;
+        // Members in Square, whose details changed here: copied to their customers (18d-iii-b-ii-b-ii-b-i). After the look, so
+        // a run left to be taken again (details still to copy, or Square not answering) is woken last.
+        if (look.step !== "unanswered" && look.step !== "stopped") {
+          const copy = await copySome(deps, ready, run, budget);
+          if (copy.copied + copy.refused > 0) news = true;
+          tally.copied += copy.copied;
+          if (copy.step === "unanswered") step = "unanswered";
+          if (copy.step === "more" || copy.step === "unanswered") await members.wake(deps.sql, { gymId: run.gymId, environment: run.environment, runId: run.runId, at: deps.now() });
+        }
       }
       if (step === "unanswered") tally.unanswered += 1;
       if (news) tell(deps, run.gymId);
