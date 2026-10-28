@@ -17,13 +17,16 @@ const nothing: Shape<null> = { safeParse: (raw) => (raw === null ? { success: tr
 const now = (answer: Answer<unknown>): boolean =>
   answer.kind === "no_answer" || (answer.kind === "refused" && (answer.status === 401 || answer.status === 429 || answer.status >= 500));
 
+const REFUSED_WORDS = "This meal couldn't be saved. Add it again.";
+
 export function mealSender(session: Session) {
   return {
     save: async (meal: WaitingMeal): Promise<SendResult> => {
       const answer = await session.signedIn({ method: "POST", path: "/v1/nutrition/meals", body: meal.body }, mealResponseSchema);
       if (answer.kind === "ok") return { kind: "done", meal: answer.data.meal };
       if (now(answer) || answer.kind !== "refused") return { kind: "later" };
-      return { kind: "refused", message: answer.message };
+      // A shape the server would not read is the app's fault, never words for the person.
+      return { kind: "refused", message: answer.error === "validation_error" ? REFUSED_WORDS : answer.message };
     },
     remove: async (id: string): Promise<SendResult> => {
       const answer = await session.signedIn({ method: "DELETE", path: `/v1/nutrition/meals/${id}` }, nothing);
@@ -76,7 +79,7 @@ export function MealOutboxProvider({ store, children }: { store: (userId: string
   return <OutboxContext.Provider value={outbox}>{children}</OutboxContext.Provider>;
 }
 
-const EMPTY: OutboxView = { waiting: [], removing: new Set(), refused: [], sent: 0 };
+const EMPTY: OutboxView = { waiting: [], landed: [], removing: new Set(), refused: [], sent: 0, unsaved: false };
 const noListen = () => () => undefined;
 
 /** The outbox and what it holds now; null until the person's file is open. */

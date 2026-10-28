@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { WaitingMeal } from "@app/shared";
+import { MEAL_OUTBOX_MOST, type Meal, type WaitingMeal } from "@app/shared";
 import { createOutbox, type SendResult, type Sender, type TextStore } from "../src/screens/food/outbox";
 
 // The worst thing this job could do to a person (32b-i's plan): a meal logged with no signal is lost
@@ -84,7 +84,7 @@ describe("a meal logged on the phone", () => {
     await second.send();
     expect([...api.meals.keys()]).toEqual([A]);
     expect(second.view().waiting).toEqual([]);
-    expect(JSON.parse(phone.text ?? "")).toEqual({ version: 1, entries: [] });
+    expect(JSON.parse(phone.text ?? "")).toEqual({ version: 1, entries: [], refused: [] });
   });
 
   it("whose reply was lost is sent again under the same id, and the server keeps one meal", async () => {
@@ -193,6 +193,9 @@ describe("a meal removed", () => {
     expect(new Set(api.calls.slice(0, -1))).toEqual(new Set([`save ${A}`]));
     expect(api.calls.at(-1)).toBe(`remove ${A}`);
     expect(api.meals.size).toBe(0);
+    // Hidden until a read of the day begun after the removal comes back.
+    expect(box.view().removing.has(A)).toBe(true);
+    box.settle(box.view().sent);
     expect(box.view().removing.size).toBe(0);
   });
 
@@ -234,10 +237,12 @@ describe("a meal removed", () => {
 });
 
 describe("the phone's file", () => {
-  it("that is not a list of meals is read as none", async () => {
-    const box = createOutbox(file("{not json"), server().sender);
+  it("that is not a list of meals is read as none, and kept aside as it was", async () => {
+    const kept: string[] = [];
+    const box = createOutbox({ ...file("{not json"), aside: (t) => { kept.push(t); return Promise.resolve(); } }, server().sender);
     await box.start();
     expect(box.view().waiting).toEqual([]);
+    expect(kept).toEqual(["{not json"]);
   });
 
   it("whose meal carries another id than its own is refused whole", async () => {
@@ -245,5 +250,109 @@ describe("the phone's file", () => {
     const box = createOutbox(file(JSON.stringify({ version: 1, entries: [{ kind: "save", meal: bad }] })), server().sender);
     await box.start();
     expect(box.view().waiting).toEqual([]);
+  });
+});
+
+describe("round one's findings", () => {
+  it("one failed write never stops the writing: a meal logged after it is kept and sent", async () => {
+    const phone = file();
+    const api = server();
+    api.online = false;
+    let fail = true;
+    const flaky: TextStore = {
+      read: phone.read,
+      write: (text) => (fail ? Promise.reject(new Error("disk full")) : phone.write(text)),
+    };
+    const box = createOutbox(flaky, api.sender);
+    await box.start();
+    await box.add(meal(A, "Oats"));
+    expect(box.view().unsaved).toBe(true);
+    fail = false;
+    await box.add(meal(B, "Rice"));
+    expect(box.view().unsaved).toBe(false);
+    box.stop();
+
+    api.online = true;
+    const again = createOutbox(phone, api.sender);
+    await again.start();
+    await again.send();
+    expect([...api.meals.keys()].sort()).toEqual([A, B].sort());
+  });
+
+  it("one entry it cannot read costs only that entry, and the file is kept aside before it is written over", async () => {
+    const good = { kind: "save", meal: meal(A) };
+    const bad = { kind: "save", meal: { ...meal(B), body: { ...meal(B).body, mealName: "x".repeat(201) } } };
+    const text = JSON.stringify({ version: 1, entries: [good, bad] });
+    const kept: string[] = [];
+    const phone = { ...file(text), aside: (t: string) => { kept.push(t); return Promise.resolve(); } };
+    const api = server();
+    const box = createOutbox(phone, api.sender);
+    await box.start();
+    await box.send();
+    expect([...api.meals.keys()]).toEqual([A]);
+    expect(kept).toEqual([text]);
+  });
+
+  it("a meal whose time is more than a day ahead of the phone's clock is still read; the server judges it", async () => {
+    const ahead = { ...meal(A), body: { ...meal(A).body, takenAt: "2099-01-01T08:00:00.000Z" } };
+    const box = createOutbox(file(JSON.stringify({ version: 1, entries: [{ kind: "save", meal: ahead }] })), server().sender);
+    await box.start();
+    expect(box.view().waiting.map((m) => m.id)).toEqual([A]);
+  });
+
+  it("past the most the file holds, a meal is refused at once and the others are kept", async () => {
+    const api = server();
+    api.online = false;
+    const entries = Array.from({ length: MEAL_OUTBOX_MOST }, (_, i) => ({
+      kind: "save",
+      meal: meal(`00000000-0000-4000-8000-${String(i).padStart(12, "0")}`),
+    }));
+    const box = createOutbox(file(JSON.stringify({ version: 1, entries })), api.sender);
+    await box.start();
+    expect(await box.add(meal(A))).toBe(false);
+    expect(box.view().waiting).toHaveLength(MEAL_OUTBOX_MOST);
+  });
+
+  it("a meal just saved stays shown as the server answered it, and one just removed stays hidden, until a read begun after holds them", async () => {
+    const api = server();
+    const answered = { id: A } as Meal;
+    const sender: Sender = {
+      save: async (m) => ((await api.sender.save(m)).kind === "done" ? { kind: "done", meal: answered } : { kind: "later" }),
+      remove: api.sender.remove,
+    };
+    const box = createOutbox(file(), sender);
+    await box.start();
+    await box.add(meal(A));
+    await box.send();
+    expect(box.view().landed).toEqual([answered]);
+    box.settle(0);
+    expect(box.view().landed).toEqual([answered]);
+    box.settle(box.view().sent);
+    expect(box.view().landed).toEqual([]);
+
+    await box.remove(A);
+    await box.send();
+    expect(box.view().removing.has(A)).toBe(true);
+    box.settle(box.view().sent);
+    expect(box.view().removing.has(A)).toBe(false);
+  });
+
+  it("a meal the server refused is still said after a restart, until OK is pressed", async () => {
+    const phone = file();
+    const api = server();
+    api.refuse = "This meal couldn't be saved. Add it again.";
+    const first = createOutbox(phone, api.sender);
+    await first.start();
+    await first.add(meal(A));
+    await first.send();
+    first.stop();
+    const second = createOutbox(phone, api.sender);
+    await second.start();
+    expect(second.view().refused.map((r) => r.id)).toEqual([A]);
+    second.forget(A);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const third = createOutbox(phone, api.sender);
+    await third.start();
+    expect(third.view().refused).toEqual([]);
   });
 });

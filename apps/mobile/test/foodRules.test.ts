@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Meal, MealPage, NutritionTargetsResponse } from "@app/shared";
-import { MOST_MEAL_PAGES, aboutKcal, addDays, creditsFor, hasEstimate, itemMark, monthWeeks, monthWords, daySums, dayWords, leftWords, noCutWords, sectionOf, walkDay } from "../src/screens/food/day";
+import { MOST_MEAL_PAGES, aboutKcal, addDays, creditsFor, hasEstimate, itemMark, monthWeeks, monthWords, uncountedWords, daySums, dayWords, leftWords, noCutWords, sectionOf, walkDay } from "../src/screens/food/day";
 import { FIRST_MEASURES, amountFor, chosenItem, shownMeasures, loggedAmount, measureWords, startingAmount, stepped, underAGram, unitWords } from "../src/screens/food/measures";
 
 const at = (y: number, m: number, d: number, h: number) => new Date(y, m - 1, d, h).toISOString();
@@ -214,5 +214,12 @@ describe("the food data's credits", () => {
       "Packaged products contain information from Open Food Facts, which is made available here under the Open Database License (ODbL).",
     );
     expect(off?.parts.flatMap((p) => ("link" in p ? [p.link] : []))).toEqual(["https://openfoodfacts.org", "https://opendatacommons.org/licenses/odbl/1-0/"]);
+  });
+});
+
+describe("a meal still waiting for its numbers", () => {
+  it("is said, one or many", () => {
+    expect(uncountedWords(1)).toBe("1 meal is waiting for its numbers. They come once it is sent.");
+    expect(uncountedWords(3)).toBe("3 meals are waiting for their numbers. They come once they are sent.");
   });
 });

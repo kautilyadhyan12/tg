@@ -179,3 +179,10 @@ export function creditsFor(sources: ReadonlySet<string>): Credit[] {
   }
   return credits;
 }
+
+/** The rings' line while a meal logged with no signal has no numbers yet. */
+export function uncountedWords(n: number): string {
+  return n === 1
+    ? "1 meal is waiting for its numbers. They come once it is sent."
+    : `${count(n)} meals are waiting for their numbers. They come once they are sent.`;
+}

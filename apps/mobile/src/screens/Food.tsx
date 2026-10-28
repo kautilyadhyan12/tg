@@ -50,6 +50,7 @@ import {
   monthWeeks,
   monthWords,
   noCutWords,
+  uncountedWords,
   sameDay,
   sectionOf,
   startOfDay,
@@ -107,19 +108,24 @@ function serverRow(meal: Meal): Row {
 type DayRead = { kind: "loading" } | { kind: "ok"; rows: Row[]; cut: boolean } | { kind: "failed" };
 
 /** The day's meals from the server, read when the tab opens, when the day changes, when the app comes
- *  back, and each time the server takes a waiting meal; only the newest read is drawn. */
-function useDayMeals(day: Date, sent: number): { read: DayRead; again: () => void } {
+ *  back, and each time the server takes a waiting meal; only the newest read is drawn. A read that
+ *  comes back tells the outbox how many sends it began after (`settle`): until then a meal just sent
+ *  is shown as the server answered it, and one just removed stays hidden. */
+function useDayMeals(day: Date, sent: number, settle: (upTo: number) => void): { read: DayRead; again: () => void } {
   const { session, state } = useSession();
   const me = state.kind === "in" ? state.user.id : null;
   const zone = useZoneSaved();
   const [read, setRead] = useState<DayRead>({ kind: "loading" });
   const latest = useRef(0);
   const shown = useRef<number | null>(null);
+  const sentNow = useRef(sent);
+  sentNow.current = sent;
 
   const again = useCallback(() => {
     if (me === null) return;
     latest.current += 1;
     const mine = latest.current;
+    const upTo = sentNow.current;
     const dayKey = day.getTime();
     if (shown.current !== dayKey) setRead({ kind: "loading" });
     void walkDay(async (cursor) => {
@@ -136,8 +142,9 @@ function useDayMeals(day: Date, sent: number): { read: DayRead; again: () => voi
       }
       shown.current = dayKey;
       setRead({ kind: "ok", rows: walked.meals.map(serverRow), cut: walked.cut });
+      settle(upTo);
     });
-  }, [session, me, day]);
+  }, [session, me, day, settle]);
 
   useEffect(() => {
     again();
@@ -159,7 +166,8 @@ function useDayMeals(day: Date, sent: number): { read: DayRead; again: () => voi
 export function FoodScreen() {
   const [day, setDay] = useState(() => startOfDay(new Date()));
   const { outbox, view } = useMealOutbox();
-  const { read, again } = useDayMeals(day, view.sent);
+  const settle = useCallback((upTo: number) => outbox?.settle(upTo), [outbox]);
+  const { read, again } = useDayMeals(day, view.sent, settle);
   const targets = useRead(TARGETS_READ, nutritionTargetsResponseSchema);
   const [adding, setAdding] = useState<MealType | null>(null);
   const [open, setOpen] = useState<Row | null>(null);
@@ -168,11 +176,13 @@ export function FoodScreen() {
   const [picking, setPicking] = useState(false);
   const today = sameDay(day, new Date());
 
-  // The server's meals, less those removed here, with the ones still waiting on the phone.
+  // The server's meals, less those removed here, with the ones just sent that this read began before,
+  // and the ones still waiting on the phone.
   const rows: Row[] | null =
     read.kind === "ok"
       ? [
           ...read.rows.filter((r) => !view.removing.has(r.id)),
+          ...view.landed.filter((m) => inDay(m.takenAt, day) && !read.rows.some((r) => r.id === m.id)).map(serverRow),
           ...view.waiting
             .filter((m) => inDay(m.body.takenAt, day) && !read.rows.some((r) => r.id === m.id))
             .map((m): Row => ({
@@ -209,7 +219,8 @@ export function FoodScreen() {
         today={today}
         targets={targets.read}
         retry={targets.again}
-        eaten={rows === null ? null : daySums(rows)}
+        eaten={rows === null || rows.some((r) => r.totals === null) ? null : daySums(rows)}
+        uncounted={rows === null ? 0 : rows.filter((r) => r.totals === null).length}
         about={rows !== null && rows.some((r) => hasEstimate(r.items))}
         onSetup={setSetupAt}
       />
@@ -286,6 +297,7 @@ export function FoodScreen() {
         }}
       />
       <MealSheet
+        unsaved={view.unsaved}
         row={open}
         onClose={() => { setOpen(null); }}
         onRemove={(row) => {
@@ -327,7 +339,10 @@ interface MacrosProps {
   today: boolean;
   targets: ReturnType<typeof useRead<NutritionTargetsResponse>>["read"];
   retry: () => void;
+  /** Null when a meal on the day has no numbers yet (`uncounted`). */
   eaten: Sums | null;
+  /** Meals logged with no signal before the server priced them: their numbers come once sent. */
+  uncounted: number;
   /** A food on the day holds the scan's estimate: what is left is "about". */
   about: boolean;
   onSetup: (at: SetupScreenId | "where") => void;
@@ -336,7 +351,7 @@ interface MacrosProps {
 /** The day's four rings against the person's daily numbers, what is left of them today, and why the
  *  calories hold no cut where the plan holds none. With no daily numbers it says which answer is
  *  missing and opens setup on it. */
-function Macros({ title, today, targets, retry, eaten, about, onSetup }: MacrosProps) {
+function Macros({ title, today, targets, retry, eaten, uncounted, about, onSetup }: MacrosProps) {
   const left = (target: number, had: number, unit: "kcal" | "g") => `${about ? "about " : ""}${leftWords(target, had, unit)}`;
   const heading = (
     <View style={styles.titleRow}>
@@ -421,6 +436,11 @@ function Macros({ title, today, targets, retry, eaten, about, onSetup }: MacrosP
             {left(goal.carbsG, eaten.carbsG, "g")} · Fat {left(goal.fatG, eaten.fatG, "g")}
           </Txt>
         </View>
+      ) : null}
+      {uncounted > 0 ? (
+        <Txt kind="small">
+          {uncountedWords(uncounted)}
+        </Txt>
       ) : null}
       {t.source === "own" ? <Txt kind="tiny">These are your own daily numbers.</Txt> : null}
       {noCut === null ? null : (
@@ -507,7 +527,7 @@ function amountLine(items: MealItem[] | null): string {
 }
 
 /** A meal's foods, and Remove meal, which asks first. */
-function MealSheet({ row, onClose, onRemove }: { row: Row | null; onClose: () => void; onRemove: (row: Row) => void }) {
+function MealSheet({ row, unsaved, onClose, onRemove }: { row: Row | null; unsaved: boolean; onClose: () => void; onRemove: (row: Row) => void }) {
   const [asking, setAsking] = useState(false);
   useEffect(() => {
     setAsking(false);
@@ -525,7 +545,9 @@ function MealSheet({ row, onClose, onRemove }: { row: Row | null; onClose: () =>
         </>
       ) : (
         <>
-          {row.waiting ? <Txt kind="small">Saved on this phone. It’s sent when you’re online.</Txt> : null}
+          {row.waiting ? (
+            <Txt kind="small">{unsaved ? "Waiting to send. It couldn’t be saved on this phone yet, so keep the app open." : "Saved on this phone. It’s sent when you’re online."}</Txt>
+          ) : null}
           {(row.items ?? []).map((item, i) => (
             <View key={`${item.canonical}-${String(i)}`} style={styles.item}>
               <View style={styles.grow}>
@@ -577,6 +599,7 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
   const [amount, setAmount] = useState<Amount | null>(null);
   const [priced, setPriced] = useState<Priced>({ kind: "none" });
   const [allMeasures, setAllMeasures] = useState(false);
+  const [full, setFull] = useState(false);
   // The box fits between the top of the screen and the keyboard: its title and the search box stay in
   // view, and the list under them scrolls.
   const { height } = useWindowDimensions();
@@ -602,6 +625,7 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
     setFood(null);
     setAmount(null);
     setPriced({ kind: "none" });
+    setFull(false);
   }, [type]);
 
   // The search, a moment after the last letter; only the newest answer is drawn.
@@ -663,17 +687,18 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
   const refusedWords = priced.kind === "refused" && priced.for === key ? priced.words : null;
   const held = item === null || tooSmall || refusedWords !== null || outbox === null;
 
-  const add = () => {
+  const add = async () => {
     if (food === null || item === null || held) return;
     const id = newGoalId();
-    void outbox.add({
+    const kept = await outbox.add({
       id,
       body: { id, mealName: food.name, takenAt: new Date().toISOString(), mealType: type, items: [item] },
       items: preview?.items ?? null,
       totals: preview?.totals ?? null,
       tried: false,
     });
-    onAdded(type, food.name);
+    if (kept) onAdded(type, food.name);
+    else setFull(true);
   };
 
   return (
@@ -786,8 +811,15 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
               label={preview === null ? `Add ${food.name}` : `Add ${food.name} · ${kcalWords(preview.totals.kcalPoint)}`}
               wide
               disabled={held}
-              onPress={add}
+              onPress={() => {
+                void add();
+              }}
             />
+            {full ? (
+              <Txt kind="small" colour="badText">
+                Too many meals are waiting to be sent. Go online to send them, then add this one.
+              </Txt>
+            ) : null}
           </>
         )}
         <Credits sources={new Set(food === null ? (found.kind === "ok" ? found.items.map((f) => f.source) : []) : [food.source])} />

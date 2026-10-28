@@ -761,13 +761,22 @@ export type FoodWeekResponse = z.infer<typeof foodWeekResponseSchema>;
 // ── Meals kept on the phone until the server has them (ROADMAP Stage 5 32b-i) ──
 // The phone writes each meal it logs, and each removal of one, to a file of its
 // own before anything is sent, and reads that file back through this shape on
-// every start: a file the app wrote is still an input (CLAUDE.md §4).
+// every start: a file the app wrote is still an input (CLAUDE.md §4). The phone reads it
+// entry by entry, so one entry it cannot read never costs the others.
+
+/** The most entries the file holds: a phone that has been offline for weeks still keeps them all. */
+export const MEAL_OUTBOX_MOST = 500;
+
+/** What is sent for a waiting meal: the typed meal's request, its time read without the server's
+ *  "not more than a day ahead" rule, which is the server's to apply when it is sent; a phone whose
+ *  clock was ahead and is put right must not lose the meal. */
+export const waitingMealBodySchema = manualMealRequestSchema.extend({ takenAt: z.string().datetime() });
 
 /** A meal waiting to be sent: what is sent, and what the day's list shows of it. */
 export const waitingMealSchema = z.object({
   /** The meal's own id, the one `body` carries: the server keeps one meal for it (32a). */
   id: z.string().uuid().toLowerCase(),
-  body: manualMealRequestSchema,
+  body: waitingMealBodySchema,
   /** The server's preview of it, where one came back before it was logged. */
   items: z.array(mealItemSchema).nullable(),
   totals: mealTotalsSchema.nullable(),
@@ -782,6 +791,18 @@ export const mealOutboxEntrySchema = z.discriminatedUnion("kind", [
 ]);
 export type MealOutboxEntry = z.infer<typeof mealOutboxEntrySchema>;
 
-/** The file, in the order its entries are sent. */
-export const mealOutboxFileSchema = z.object({ version: z.literal(1), entries: z.array(mealOutboxEntrySchema).max(500) }).strict();
+/** A meal the server would not take, kept until the person has read why. */
+export const mealOutboxRefusedSchema = z.object({
+  id: z.string().uuid().toLowerCase(),
+  name: z.string().max(200),
+  message: z.string().max(500),
+}).strict();
+export type MealOutboxRefused = z.infer<typeof mealOutboxRefusedSchema>;
+
+/** The file, its entries in the order they are sent. */
+export const mealOutboxFileSchema = z.object({
+  version: z.literal(1),
+  entries: z.array(mealOutboxEntrySchema).max(MEAL_OUTBOX_MOST),
+  refused: z.array(mealOutboxRefusedSchema).max(MEAL_OUTBOX_MOST).optional(),
+}).strict();
 export type MealOutboxFile = z.infer<typeof mealOutboxFileSchema>;

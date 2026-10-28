@@ -232,7 +232,8 @@ const lockMealId = async (tx: TransactionSql, id: string): Promise<void> => {
 /** A meal saved under the phone's own id (ROADMAP 32a): the same id sent twice is
  *  one meal. `claim` runs once the row is written and before it is kept, so
  *  whatever it throws leaves no meal. `created` false: this person already has
- *  that meal, returned as it is now. null: the id is somebody else's. */
+ *  that meal, returned as it is now. null: the id is somebody else's, or a meal
+ *  removed (`deleteMeal`): a save that arrives after its meal's removal keeps nothing. */
 export async function createMealOnce(
   sql: Sql,
   userId: string,
@@ -242,6 +243,8 @@ export async function createMealOnce(
 ): Promise<{ meal: MealRow; created: boolean } | null> {
   return await sql.begin(async (tx) => {
     await lockMealId(tx, id);
+    const removed = await tx`SELECT 1 FROM meal_removed_ids WHERE id = ${id}`;
+    if (removed.length > 0) return null;
     const row = await insertMeal(tx, userId, id, input);
     if (row === null) {
       const kept = await getMeal(tx, userId, id);
@@ -397,10 +400,17 @@ export async function updateMeal(sql: Sql, userId: string, id: string, patch: Me
   });
 }
 
+/** Removes the person's meal and keeps its id for them, under the lock a save of that id
+ *  takes, so a save of it still on its way keeps nothing (`createMealOnce`). */
 export async function deleteMeal(sql: Sql, userId: string, id: string): Promise<boolean> {
-  const rows = await sql<{ id: string }[]>`
-    DELETE FROM meal_logs WHERE id = ${id} AND user_id = ${userId} RETURNING id`;
-  return rows.length > 0;
+  return await sql.begin(async (tx) => {
+    await lockMealId(tx, id);
+    const rows = await tx<{ id: string }[]>`
+      DELETE FROM meal_logs WHERE id = ${id} AND user_id = ${userId} RETURNING id`;
+    if (rows.length === 0) return false;
+    await tx`INSERT INTO meal_removed_ids (id, user_id) VALUES (${id}, ${userId}) ON CONFLICT (id) DO NOTHING`;
+    return true;
+  });
 }
 
 // ── dishware (2B Stage 5 rung-1 memory) ─────────────────────────────────────

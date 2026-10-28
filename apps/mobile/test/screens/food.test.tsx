@@ -90,6 +90,8 @@ interface Food {
   targets?: NutritionTargetsResponse;
   /** How a meal's save answers; by default as the server does (32a: one meal for an id). */
   save?: (body: { id: string }) => Reply;
+  /** The day's list has no answer (a flaky signal). */
+  listFails?: boolean;
 }
 
 /** A server holding the person's meals: GET lists them newest first, POST keeps one, DELETE removes one. */
@@ -127,6 +129,7 @@ function foodServer(food: Food, more: Record<string, Route> = {}) {
       food.meals = [meal, ...food.meals];
       return answer({ status: 201, body: { meal } });
     }
+    if (food.listFails === true) return answer({ status: 503, body: { error: "unavailable", message: "Try again.", requestId: "r" } });
     const newest = [...food.meals].sort((a, b) => Date.parse(b.takenAt) - Date.parse(a.takenAt));
     return answer({ status: 200, body: { items: newest, nextCursor: null } });
   };
@@ -159,7 +162,12 @@ describe("the worst thing: a meal is never lost or counted twice, and no calorie
     expect(await screen.findByText("Your plan has no calorie cut, so these calories keep your weight.")).toBeTruthy();
     expect(screen.getByLabelText("Calories, 0 of 2,300 kcal")).toBeTruthy();
     expect(screen.getByText(/^2,300 kcal left/)).toBeTruthy();
-    expect(screen.queryByText(/\b(1,\d{3}|[5-9]\d{2}) kcal\b/)).toBeNull();
+    // Every calorie figure on the page is the plan's own 2,300, or none eaten: never a smaller target.
+    const figures = screen
+      .getAllByText(/[\d,]+ kcal/)
+      .flatMap((t) => String(t.props.children instanceof Array ? t.props.children.join("") : t.props.children).match(/[\d,]+(?= kcal)/g) ?? []);
+    expect(figures.length).toBeGreaterThan(0);
+    expect(figures.filter((n) => n !== "2,300" && n !== "0")).toEqual([]);
   });
 
   it("a meal logged with no signal waits on the phone, survives a restart, and is saved once when the signal is back", async () => {
@@ -189,7 +197,7 @@ describe("the worst thing: a meal is never lost or counted twice, and no calorie
       expect(screen.queryByText("Waiting to send")).toBeNull();
     });
     expect(await screen.findByText("1 × cup · 81 g")).toBeTruthy();
-    expect(JSON.parse(phone.kept.get(RAVI.id) ?? "")).toEqual({ version: 1, entries: [] });
+    expect(JSON.parse(phone.kept.get(RAVI.id) ?? "")).toEqual({ version: 1, entries: [], refused: [] });
   });
 
   it("a meal removed while its save had no answer is removed on the server after it, and never comes back", async () => {
@@ -274,8 +282,6 @@ describe("the day's food", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Previous day" }));
     expect(await screen.findByText("Yesterday")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Add to Breakfast" })).toBeNull();
-    const day = screen.getByText("Yesterday").parent?.parent;
-    expect(day === null || day === undefined ? null : within(day)).not.toBeNull();
   });
 });
 
@@ -329,5 +335,59 @@ describe("picking a day", () => {
     expect(await screen.findByRole("button", { name: `${label}, pick a day` })).toBeTruthy();
     expect(screen.queryByText("Pick a day")).toBeNull();
     expect(screen.queryByRole("button", { name: "Add to Breakfast" })).toBeNull();
+  });
+});
+
+describe("round one's findings, on the screen", () => {
+  it("a meal the server has just saved stays on the day though the next read of the day fails", async () => {
+    const food: Food = { meals: [] };
+    await openFood(food);
+    await screen.findByText("No breakfast logged yet.");
+    food.listFails = true;
+    await addOats();
+    await waitFor(() => {
+      expect(food.meals).toHaveLength(1);
+    });
+    expect(await screen.findByRole("button", { name: "Oats, rolled, 307 kcal" })).toBeTruthy();
+    expect(screen.queryByText("Waiting to send")).toBeNull();
+    expect(screen.getByLabelText("Calories, 307 of 2,300 kcal")).toBeTruthy();
+  });
+
+  it("a meal just removed stays off the day though the next read of the day fails", async () => {
+    const meal = savedMeal("55555555-5555-4555-8555-555555555555", { mealName: "Oats, rolled", takenAt: new Date().toISOString(), mealType: "lunch" });
+    const food: Food = { meals: [meal] };
+    await openFood(food);
+    await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 307 kcal" }));
+    food.listFails = true;
+    await fireEvent.press(screen.getByRole("button", { name: "Remove meal" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Remove meal" }));
+    await waitFor(() => {
+      expect(food.meals).toEqual([]);
+    });
+    expect(screen.queryByRole("button", { name: "Oats, rolled, 307 kcal" })).toBeNull();
+    expect(screen.getByText("No lunch logged yet.")).toBeTruthy();
+  });
+
+  it("a meal logged before its numbers came back makes the day's figures not known, and says why", async () => {
+    const server = foodServer({ meals: [], save: () => lost() }, { "/v1/nutrition/meals/preview": () => lost() });
+    await render(<App extra={extra} ask={server.ask} store={memoryStore(kept(1))} wait={noWait} mealStore={files().store} />);
+    await fireEvent.press(await screen.findByRole("tab", { name: "Food" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Add to Breakfast" }));
+    await fireEvent.changeText(screen.getByLabelText("Search food"), "oats");
+    await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 379 kcal per 100 g, USDA" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Add Oats, rolled" }));
+    expect(await screen.findByText("1 meal is waiting for its numbers. They come once it is sent.")).toBeTruthy();
+    expect(screen.getByLabelText("Calories, not known of 2,300 kcal")).toBeTruthy();
+    expect(screen.queryByText(/kcal left/)).toBeNull();
+  });
+
+  it("a meal the server refuses for its shape is said in the app's own words, never the server's codes", async () => {
+    await openFood({
+      meals: [],
+      save: () => ({ status: 400, body: { error: "validation_error", message: "takenAt: custom", requestId: "r" } }),
+    });
+    await addOats();
+    expect(await screen.findByText("Oats, rolled wasn’t saved. This meal couldn't be saved. Add it again.")).toBeTruthy();
+    expect(screen.queryByText(/takenAt/)).toBeNull();
   });
 });
