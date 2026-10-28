@@ -66,6 +66,16 @@ export function goalTargetMax(kind: GoalKind, period: GoalPeriod | null): number
   return period === null ? rule.targetMax : rule.targetMax * GOAL_PERIOD_DAYS[period];
 }
 
+/** The exercise families whose sets are held for time and never counted (spec Part 2 §5: F10
+ *  `hold_isometric`, F12 `mobility_hold_flow`), and the one F12 move the camera counts in slow
+ *  cycles (Mode D). A "reps in one set" goal names only an exercise that counts reps. */
+const HOLD_FAMILIES: readonly string[] = ["F10", "F12"];
+const COUNTED_IN_HOLD_FAMILIES: readonly string[] = ["cat_cow"];
+
+export function exerciseCountsReps(exercise: { family: string; slug: string }): boolean {
+  return !HOLD_FAMILIES.includes(exercise.family) || COUNTED_IN_HOLD_FAMILIES.includes(exercise.slug);
+}
+
 /** How many goals one person may keep. */
 export const MAX_GOALS = 30;
 

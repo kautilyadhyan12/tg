@@ -9,6 +9,7 @@
 import type { Sql } from "postgres";
 
 export interface CatalogRow {
+  id: string;
   slug: string;
   nameKey: string;
   family: string;
@@ -28,6 +29,7 @@ export async function listLiveExercises(
 ): Promise<CatalogRow[]> {
   const rows = await sql<
     {
+      id: string;
       slug: string;
       name_key: string;
       family: string;
@@ -39,13 +41,14 @@ export async function listLiveExercises(
       muscles: string[] | null;
     }[]
   >`
-    SELECT slug, name_key, family, tier, tracking, met, difficulty, equipment, muscles
+    SELECT id, slug, name_key, family, tier, tracking, met, difficulty, equipment, muscles
     FROM exercises
     WHERE status = 'live'
       AND (${input.cursor}::text IS NULL OR slug > ${input.cursor})
     ORDER BY slug ASC
     LIMIT ${input.limit + 1}`;
   return rows.map((r) => ({
+    id: r.id,
     slug: r.slug,
     nameKey: r.name_key,
     family: r.family,

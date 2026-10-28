@@ -3,7 +3,8 @@ import { App } from "../../src/App";
 import { DASHBOARD_READS } from "../../src/screens/Dashboard";
 import { dayWords, weekOf } from "../../src/screens/dashboard/words";
 import type { Ask } from "../../src/session/calls";
-import { RAVI, fakeServer, kept, memoryStore, never, profile, refusal, tokens, type Reply, type Route } from "../kit";
+import { goal } from "../goalFixture";
+import { RAVI, fakeServer, isClockWords, kept, memoryStore, never, profile, refusal, tokens, type Reply, type Route } from "../kit";
 
 const extra = { copyName: "Feature 2", apiUrl: "http://localhost:3000" };
 const noWait = () => Promise.resolve();
@@ -103,6 +104,7 @@ const trained: Record<string, Route> = {
   "/v1/workouts": ok(page([workoutRow("1b6f0a3e-2c4d-4e5f-8a9b-0c1d2e3f4a5b", hoursAgo(1))], true)),
   "/v1/geo/runs": ok(list([runRow("5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a", hoursAgo(30), "Evening run")])),
   "/v1/nutrition/meals": ok(list([mealRow("6e5d4c3b-2a1f-4e0d-9c8b-7a6f5e4d3c2b", hoursAgo(3), null)])),
+  "/v1/goals": ok({ goals: [goal({ kind: "training_days", period: "week", target: 4, current: 2 })], max: 30 }),
 };
 const nothingElse = { "/v1/geo/runs": ok(list([])), "/v1/nutrition/meals": ok(list([])) };
 
@@ -245,7 +247,8 @@ describe("the Dashboard, with the person's own numbers", () => {
     const otherDay = weekOf(new Date()).find((day) => !day.today)?.key ?? "";
     await openApp({
       ...trained,
-      "/v1/progress/overview": ok(overview(24, { totalRuns: 3, runDurationMs: 30 * 60_000, runKcal: 100 })),
+      // 37 sessions: a number no day of the week's calendar can show.
+      "/v1/progress/overview": ok(overview(24, { totalRuns: 13, runDurationMs: 30 * 60_000, runKcal: 100 })),
       "/v1/progress/trend": ok({
         points: [{ date: today, kcal: 348, workouts: 2 }],
         runDays: [
@@ -255,7 +258,7 @@ describe("the Dashboard, with the person's own numbers", () => {
         limitedToDays: 90,
       }),
     });
-    expect(await screen.findByText("27")).toBeTruthy();
+    expect(await screen.findByText("37")).toBeTruthy();
     expect(screen.getByText("Total Sessions")).toBeTruthy();
     expect(screen.getByText("18h 30m")).toBeTruthy();
     expect(screen.getByText("6,520")).toBeTruthy();
@@ -345,10 +348,10 @@ describe("a read that fails or is slow never shows a number it does not know", (
     await openApp(Object.fromEntries(Object.entries(trained).map(([path, route]) => [path, failing(route)])));
     expect(await screen.findByText("Some of your numbers couldn’t load.")).toBeTruthy();
     expect(screen.getByText("Total Sessions")).toBeTruthy();
-    // No figure anywhere but the calendar's own dates.
+    // No figure anywhere but the calendar's own dates and the clock's time.
     const figures = screen.queryAllByText(/\d/).map((one) => String(one.props.children));
     const dates = weekOf(new Date()).map((day) => String(day.date));
-    expect(figures.filter((words) => !dates.includes(words))).toEqual([]);
+    expect(figures.filter((words) => !dates.includes(words) && !isClockWords(words))).toEqual([]);
     expect(label("[A-Z][a-z]{2} \\d+, trained")).toHaveLength(0);
 
     up = true;

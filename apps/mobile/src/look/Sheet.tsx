@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Modal, Pressable, StyleSheet, View } from "react-native";
+import { KeyboardAvoidingView, Modal, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colours, shadows, sizes } from "./colours";
 import { Icon } from "./Icon";
@@ -25,29 +25,29 @@ export function Sheet({ open, title, onClose, children }: SheetProps) {
       onRequestClose={onClose}
     >
       <Pressable accessible={false} onPress={onClose} style={styles.scrim} />
-      <View accessibilityViewIsModal style={[styles.sheet, { paddingBottom: insets.bottom + 24 }]}>
-        <View style={styles.grab} />
-        <View style={styles.head}>
-          <Txt kind="h2" style={styles.title}>
-            {title}
-          </Txt>
-          <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} style={styles.close}>
-            <Icon name="x" size={18} />
-          </Pressable>
+      {/* Lifted over the keyboard, so a box being typed in is never under it. */}
+      <KeyboardAvoidingView behavior="padding" pointerEvents="box-none" style={styles.lift}>
+        <View accessibilityViewIsModal style={[styles.sheet, { paddingBottom: insets.bottom + 24 }]}>
+          <View style={styles.grab} />
+          <View style={styles.head}>
+            <Txt kind="h2" style={styles.title}>
+              {title}
+            </Txt>
+            <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} style={styles.close}>
+              <Icon name="x" size={18} />
+            </Pressable>
+          </View>
+          {children}
         </View>
-        {children}
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
   scrim: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, backgroundColor: colours.scrim },
+  lift: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, justifyContent: "flex-end" },
   sheet: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
     gap: 14,
     paddingTop: 10,
     paddingHorizontal: sizes.edge,

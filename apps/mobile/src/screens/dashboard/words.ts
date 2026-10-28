@@ -230,20 +230,21 @@ export function latestBadges(earned: readonly { code: string; earnedAt: string }
     .slice(0, most);
 }
 
-/** The browser's seven, one a day of the week. */
-export const QUOTES = [
-  { text: "The only bad workout is the one that didn’t happen.", author: "Unknown" },
-  { text: "Strength does not come from the body. It comes from the will.", author: "Gandhi" },
-  { text: "Take care of your body. It’s the only place you have to live.", author: "Jim Rohn" },
-  { text: "The pain you feel today will be the strength you feel tomorrow.", author: "Arnold Schwarzenegger" },
-  { text: "Your body can stand almost anything. It’s your mind you have to convince.", author: "Unknown" },
-  {
-    text: "Fitness is not about being better than someone else. It’s about being better than you used to be.",
-    author: "Khloe Kardashian",
-  },
-  { text: "The difference between the impossible and the possible lies in determination.", author: "Tommy Lasorda" },
-] as const;
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
-export function quoteOf(now: Date): (typeof QUOTES)[number] {
-  return QUOTES[now.getDay() % QUOTES.length] ?? QUOTES[0];
+/** The Daily Motivation box's clock, in the phone's own time zone: "10:20:11 am". Written here, not
+ *  with the phone's own formatting, which differs between Android versions. */
+export function clockWords(now: Date): string {
+  const h = now.getHours();
+  return `${String(h % 12 === 0 ? 12 : h % 12)}:${pad(now.getMinutes())}:${pad(now.getSeconds())} ${h < 12 ? "am" : "pm"}`;
+}
+
+/** The date under it: "Tue, 27 Oct 2026". */
+export function clockDateWords(now: Date): string {
+  return `${WEEKDAYS[now.getDay()] ?? ""}, ${String(now.getDate())} ${MONTHS[now.getMonth()] ?? ""} ${String(now.getFullYear())}`;
+}
+
+/** How long until the next whole second, so the clock turns over when the phone's own clock does. */
+export function msToNextSecond(now: Date): number {
+  return 1000 - now.getMilliseconds();
 }

@@ -101,3 +101,7 @@ export function memoryStore(value: string | null = null): KeyStore & { value: st
   };
   return store;
 }
+
+/** The Dashboard clock's own words, "10:20:11" and "Tue, 27 Oct 2026": the phone's time, not a number the server sends. */
+export const isClockWords = (words: string): boolean =>
+  /^\d{1,2}:\d{2}:\d{2}$/.test(words) || /^[A-Z][a-z]{2}, \d{1,2} [A-Z][a-z]{2} \d{4}$/.test(words);

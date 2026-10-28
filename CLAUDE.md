@@ -287,7 +287,9 @@ changes what it does; never drop one.
 app; it passed its click-through and Kd still called it not good. Every job that adds or
 changes a phone screen follows all six.
 - Before building, open that page in the browser, take its picture, and build THAT design:
-  its picture, its colours, its order, its glow. A screen the browser has is never invented.
+  its picture, its colours, its order, its glow. Since 2026-10-27 (`rulings/2026-10-27-31b.md`):
+  only where the browser's is the better screen; otherwise, or where the browser has none, the
+  terminal designs it and tells Kd before building.
 - Fitted to a thumb: no long lists and no rows of boxes. One main button; a second thing to
   do is words beside it, and a question is a box from the bottom.
 - The words are a finished app's, and few: a short label or one short line ("Coming soon",
@@ -300,6 +302,19 @@ changes a phone screen follows all six.
   into the page under it, and the page's first words lie over it.
 - Before Kd is asked, the terminal takes pictures of the real phone and looks at them beside
   the browser's. What looks plainer than the browser's is fixed first.
+
+**A phone screen fits every phone (Kd, 2026-10-28, `rulings/2026-10-27-31b.md`)**: phones of
+every size, a Samsung Fold or an iPhone Duo opened, the phone's largest text.
+- Pictures and words use the look's own pieces (`PictureTop`, `Txt`, `Field`; the limits are in
+  `look/sizing.ts`); a screen never sizes itself from the phone's width. A box drawn to a size
+  grows with its words (`minHeight`, never `height`, round words).
+- Before Kd is asked, the terminal tries the screen on his phone in four shapes and looks at each:
+  its own size, an opened folding phone (`adb shell wm size 1812x2176`, `wm density 420`), a small
+  phone (`720x1520` at `320`) and the largest text (`settings put system font_scale 1.5`). It reads
+  his settings first (`wm size`, `wm density`, `settings get system font_scale`) and puts them back
+  exactly (`wm size reset`, `wm density reset`, his own font scale), and says so.
+- A screen built before 2026-10-28 gets the same check the next time a job touches it; the screens
+  still owed it are listed in `handoff/2026-10-27-31b.md`.
 
 **Exercises (Kd, RULINGS 2026-10-12; spec Part 2 §11).** An exercise is data, made on the
 line: Kd names it and gives one or two good-form links; the videos are measured on his

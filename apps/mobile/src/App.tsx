@@ -7,6 +7,9 @@ import {
   Inter_700Bold,
   useFonts,
 } from "@expo-google-fonts/inter";
+// Two weights only, each from its own file, so the other four are never in the app.
+import { Oswald_400Regular } from "@expo-google-fonts/oswald/400Regular";
+import { Oswald_600SemiBold } from "@expo-google-fonts/oswald/600SemiBold";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { DarkTheme, NavigationContainer, type Theme } from "@react-navigation/native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -109,7 +112,14 @@ function TabsOfPlaces() {
 
 export function App({ extra, ask = fetch, store = phoneKeyStore, google = askGoogle, wait }: AppProps) {
   // A font that cannot be read must not leave a blank page: the phone's own font shows instead.
-  const [fontsReady, fontsFailed] = useFonts({ Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold });
+  const [fontsReady, fontsFailed] = useFonts({
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
+    Oswald_400Regular,
+    Oswald_600SemiBold,
+  });
   const copy = useMemo(() => ({ extra: extra === undefined ? readAppExtra() : extra, ask }), [extra, ask]);
   const apiUrl = copy.extra?.apiUrl;
   const server = useMemo(() => (apiUrl === undefined ? null : { apiUrl, ask }), [apiUrl, ask]);
