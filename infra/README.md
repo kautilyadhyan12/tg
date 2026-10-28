@@ -58,11 +58,12 @@ Only these are hard-required (no default, not optional):
 | `JWT_SECRET` | 32+ chars enforced. |
 | `REDIS_URL` | Required **in production only**, via config's `.refine()`. Upstash in prod. |
 
-Everything else has a default or is optional; an unset `GEMINI_API_KEY` cleanly
-disables the meal scanner rather than breaking boot (`MEAL_VISION_MODEL` names the model; Gemini 3.5
-Flash-Lite by default, Groq's `qwen/qwen3.6-27b` as the spare, which then needs
-`GROQ_API_KEY` instead), and the same pattern covers `ORS_API_KEY` and the three
-`GOOGLE_*` values.
+Everything else has a default or is optional; an unset `OPENAI_API_KEY` cleanly
+disables the meal scanner rather than breaking boot (`MEAL_VISION_MODEL` names the model,
+OpenAI's `gpt-6-luna`, since 2026-10-28; Gemini and the Groq spare are gone), and the
+same pattern covers `ORS_API_KEY` and the three `GOOGLE_*` values. The OpenAI key is
+prepaid credit with auto-reload off: before the first real gym, Kd buys the expected
+month's credit (`rulings/2026-10-28-33a.md`).
 
 **Secrets never enter the repo or the image (R3.6).** Production values go in
 `infra/api.env` **on the host** — gitignored, dockerignored, and listed in the

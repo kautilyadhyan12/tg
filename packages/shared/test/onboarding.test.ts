@@ -55,7 +55,7 @@ const answersFixture = onboardingAnswersSchema.parse({
 });
 
 // The worst thing this rule could do: let a 17-year-old save an age and go on into
-// the app (and its Gemini meal scanner), or turn away somebody who is 18
+// the app, or turn away somebody who is 18
 // (RULINGS 2026-09-15; ROADMAP Stage 4 item 9).
 describe("the app is for 18 and over, on both places that save an age", () => {
   it("refuses every age under 18 and takes 18 and every age above it, to 120", () => {

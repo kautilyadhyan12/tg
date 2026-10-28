@@ -29,7 +29,7 @@ server `geo` module as already planned.
 `meal-photos/` R2 bucket): analysis is in-memory, one vision call, photo
 discarded. Delete that bucket from the infra plan; the privacy line
 "photos are analyzed, never stored" appears in the scan UI and in every
-org-facing privacy sheet — it matters double for clinics.
+org-facing privacy sheet — it matters double for clinics. *(AMENDED 2026-10-28, `rulings/2026-10-28-33a.md`: since the scanner runs on OpenAI, the line is "Photos are analyzed and never kept by the app. The scanning service keeps a copy for up to 30 days to check for abuse." OpenAI keeps API inputs that long for abuse monitoring; only its zero-data-retention approval would make the old line true.)*
 3. **"Gym Dashboard" → "Organization Console."** Four segments (new gyms,
 premium-aspiring gyms, boutique/PT studios, physio clinics) resolve to
 **three product org types** — `gym` (both gym segments; "premium-aspiring"
