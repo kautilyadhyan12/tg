@@ -718,17 +718,10 @@ export function FoodScreen({ answers, save }: ScreenProps) {
 
 // ── The place that invited them ─────────────────────────────────────────────
 
-/** Asked only when an invitation is still waiting (Kd, 2026-10-28): the same boxes as the Gym tab. */
+/** Asked only when an invitation is still waiting (Kd, 2026-10-28): the same boxes as the Gym tab.
+ *  Continue is lit, so it can be left for later; no words on the picture say so. */
 export function PlaceScreen({ invitations }: ScreenProps) {
-  return (
-    <View style={styles.screen}>
-      <InvitationList
-        invitations={invitations}
-        onAnswered={() => undefined}
-      />
-      <Txt style={styles.hint}>You can also reply later.</Txt>
-    </View>
-  );
+  return <InvitationList invitations={invitations} onAnswered={() => undefined} />;
 }
 
 // ── The last screen: your plan ──────────────────────────────────────────────
