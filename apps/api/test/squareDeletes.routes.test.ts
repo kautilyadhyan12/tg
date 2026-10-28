@@ -296,7 +296,7 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
       const { gym, pat, sam, samFirst, merged } = await samMergedIntoPat("Iron Barn");
       const { preview, done } = await deleteForGood(gym, sam);
       // The app has not heard of the merge: the box and the press are for Sam's own customer, as far as it knows.
-      expect(preview.square).toEqual({ deletes: 1, stays: 0, notReached: 0 });
+      expect(preview.square).toEqual({ deletes: 1, stays: 0, shared: 0, notReached: 0 });
       expect(done).toMatchObject({ deleted: 1, squareDeleting: 1 });
       expect(await stillThere(gym, sam)).toBe(false);
       await minutes(2);
@@ -384,7 +384,7 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
       const boId = await customerIdOf(gym, bo);
       expect(await link(gym, amy), "made by the app: it carries the record's id").toMatchObject({ joined_at: null, made_as: amy });
       const { preview, done } = await deleteForGood(gym, amy);
-      expect(preview).toMatchObject({ count: 1, square: { deletes: 1, stays: 0, notReached: 0 } });
+      expect(preview).toMatchObject({ count: 1, square: { deletes: 1, stays: 0, shared: 0, notReached: 0 }, squareNames: { deletes: ["Amy Lee"], stays: [], shared: [], notReached: [] } });
       expect(done).toMatchObject({ deleted: 1, squareDeleting: 1 });
       expect(await owedRows(gym)).toEqual([{ customer_id: amyId, reference_id: amy, tries: 0 }]);
       expect(held(gym, amyId), "the worker sends it, the press does not").not.toBeNull();
@@ -414,7 +414,7 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
       const customerId = await customerIdOf(gym, nia);
       expect(await link(gym, nia)).toMatchObject({ joined_at: null, made_as: nia });
       const { preview, done } = await deleteForGood(gym, nia);
-      expect(preview.square).toEqual({ deletes: 1, stays: 0, notReached: 0 });
+      expect(preview.square).toEqual({ deletes: 1, stays: 0, shared: 0, notReached: 0 });
       expect(done.squareDeleting).toBe(1);
       const [stop] = await sql<{ n: string }[]>`SELECT count(*) AS n FROM gym_card_disables WHERE gym_id = ${gym.id}`;
       expect(Number(stop?.n), "the card is owed its stop, as before").toBe(1);
@@ -431,7 +431,7 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
       expect((await addMembers(gym)).state).toBe("added");
       expect(await link(gym, ola), "linked as the app's own, carrying the record's id").toMatchObject({ customer_id: made, joined_at: null, made_as: ola });
       const { preview, done } = await deleteForGood(gym, ola);
-      expect(preview.square).toEqual({ deletes: 1, stays: 0, notReached: 0 });
+      expect(preview.square).toEqual({ deletes: 1, stays: 0, shared: 0, notReached: 0 });
       expect(done.squareDeleting).toBe(1);
       await minutes(1);
       expect(held(gym, made)).toBeNull();
@@ -445,7 +445,7 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
       expect((await addMembers(gym)).state).toBe("added");
       expect(await link(gym, leo)).toMatchObject({ customer_id: "CLEOTILL", joined_at: expect.any(Date) as Date });
       const { preview, done } = await deleteForGood(gym, leo);
-      expect(preview.square).toEqual({ deletes: 0, stays: 1, notReached: 0 });
+      expect(preview.square).toEqual({ deletes: 0, stays: 1, shared: 0, notReached: 0 });
       expect(done.squareDeleting).toBe(0);
       await minutes(2);
       expect(asked(gym), "Square was not asked to delete anything").toEqual([]);
@@ -464,7 +464,7 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
       await work([await signed(gym.acct, "customer.deleted", { type: "customer", id: made }), await signed(gym.acct, "customer.deleted", { type: "customer", id: "CAMYTILL" })]);
       expect(await link(gym, amy), "Amy keeps the merged customer, as one Square made").toMatchObject({ customer_id: merged, joined_at: expect.any(Date) as Date });
       const { preview, done } = await deleteForGood(gym, amy);
-      expect(preview.square).toEqual({ deletes: 0, stays: 1, notReached: 0 });
+      expect(preview.square).toEqual({ deletes: 0, stays: 1, shared: 0, notReached: 0 });
       expect(done.squareDeleting).toBe(0);
       expect(await owedRows(gym)).toEqual([]);
       await minutes(2);
@@ -483,7 +483,11 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
       const noSquare = await person(gym, "No Square", { email: `none.${uniq()}@gmail.com` });
       const madeIds = [await customerIdOf(gym, madeOne), await customerIdOf(gym, madeTwo)];
       const { preview, done } = await deleteForGood(gym, till, madeOne, madeTwo, noSquare);
-      expect(preview).toMatchObject({ count: 4, square: { deletes: 2, stays: 1, notReached: 0 } });
+      expect(preview).toMatchObject({
+        count: 4,
+        square: { deletes: 2, stays: 1, shared: 0, notReached: 0 },
+        squareNames: { deletes: ["Made One", "Made Two"], stays: ["Till One"], shared: [], notReached: [] },
+      });
       expect(done).toMatchObject({ deleted: 4, squareDeleting: 2 });
       await minutes(2);
       expect(asked(gym).map((a) => a.customerId).sort()).toEqual([...madeIds].sort());
@@ -567,7 +571,8 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
       const customerId = await customerIdOf(gym, id);
       await sql`UPDATE gym_payment_connections SET account_id = 'MSQDOTHERACCOUNT' WHERE gym_id = ${gym.id}`;
       const { preview, done } = await deleteForGood(gym, id);
-      expect(preview.square).toEqual({ deletes: 0, stays: 0, notReached: 1 });
+      expect(preview.square).toEqual({ deletes: 0, stays: 0, shared: 0, notReached: 1 });
+      expect(preview.squareNames.notReached).toEqual(["Cal Ng"]);
       expect(done.squareDeleting).toBe(0);
       expect(await owedRows(gym)).toEqual([]);
       await minutes(1);
@@ -598,7 +603,8 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
       const customerId = await customerIdOf(a, inA);
       expect(await customerIdOf(b, inB), "Branch B linked the customer Branch A made").toBe(customerId);
       const { preview, done } = await deleteForGood(a, inA);
-      expect(preview.square).toEqual({ deletes: 0, stays: 1, notReached: 0 });
+      expect(preview.square).toEqual({ deletes: 0, stays: 0, shared: 1, notReached: 0 });
+      expect(preview.squareNames.shared, "the box names her").toEqual(["Dana Cole"]);
       expect(done.squareDeleting).toBe(0);
       await minutes(2);
       expect(asked(a)).toEqual([]);
@@ -703,7 +709,7 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
       expect(res.statusCode, res.body).toBe(409);
       const body = JSON.parse(res.body) as { error: string; preview: MemberListDeletePreview };
       expect(body.error).toBe("delete_changed");
-      expect(body.preview.square).toEqual({ deletes: 0, stays: 1, notReached: 0 });
+      expect(body.preview.square).toEqual({ deletes: 0, stays: 1, shared: 0, notReached: 0 });
       expect(await stillThere(gym, id), "nobody was deleted").toBe(true);
       expect(await owedRows(gym)).toEqual([]);
     });
@@ -725,7 +731,7 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
       const id = await person(gym, "Jan Fox", { email: `jan.${uniq()}@gmail.com` });
       await takeOff(gym, id);
       const shown = await boxFor(gym, id);
-      expect(shown.square).toEqual({ deletes: 0, stays: 0, notReached: 0 });
+      expect(shown.square).toEqual({ deletes: 0, stays: 0, shared: 0, notReached: 0 });
       const res = await send("POST", `/v1/orgs/${gym.id}/member-list/selected/delete`, gym.owner.cookies, { selection: tick(id), digest: shown.digest });
       expect(res.statusCode, res.body).toBe(200);
       expect(memberListDeletedResponseSchema.parse(JSON.parse(res.body)).done).toMatchObject({ deleted: 1, squareDeleting: 0 });
@@ -777,6 +783,22 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
       expect(JSON.parse(res.body)).toMatchObject({ deleted: true, squareDeleting: 0 });
       await minutes(1);
       expect(held(gym, "CMOTILL")).not.toBeNull();
+    });
+  });
+
+  describe("one person's page, a customer another gym uses", () => {
+    it("says it is shared, so they stay", async () => {
+      const a = await makeGym("Page Branch A");
+      const b = await makeGym("Page Branch B", a.acct);
+      const email = `gil.${uniq()}@gmail.com`;
+      const inA = await person(a, "Gil Roe", { email, phone: "+13125550170" });
+      expect((await addMembers(a)).state).toBe("added");
+      const inB = await person(b, "Gil Roe", { email, phone: "+13125550170" });
+      expect((await addMembers(b)).state).toBe("added");
+      expect(await customerIdOf(b, inB)).toBe(await customerIdOf(a, inA));
+      await takeOff(a, inA);
+      const page = JSON.parse((await send("GET", entryUrl(a, inA), a.owner.cookies)).body) as { entry: { squareOnDelete: string } };
+      expect(page.entry.squareOnDelete).toBe("shared");
     });
   });
 

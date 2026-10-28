@@ -8,9 +8,9 @@ import type { SquareEnvironment } from "./square.js";
 type SqlOrTx = Sql | TransactionSql;
 
 /** What happens to a record's customer in Square when the record is deleted for good: `deletes`; `stays` (Square had it before the
- *  app linked it, Square merged it, or another record uses it); `not_reached` (the app made it, but the gym is not connected to
- *  that Square account now). */
-export type Standing = "deletes" | "stays" | "not_reached";
+ *  app linked it, or Square merged it); `shared` (the app made it, but another record uses it); `not_reached` (the app made it, but
+ *  the gym is not connected to that Square account now). */
+export type Standing = "deletes" | "stays" | "shared" | "not_reached";
 
 export interface StandingRow {
   entryId: string;
@@ -37,7 +37,7 @@ const kinds = (sql: SqlOrTx, gymId: string, entryIds: readonly string[]) => sql`
   SELECT c.gym_id, c.entry_id, c.environment, c.account_id, c.customer_id, c.made_as,
          CASE
            WHEN c.joined_at IS NOT NULL OR c.made_as IS NULL THEN 'stays'
-           WHEN ${usedByAnother(sql)} THEN 'stays'
+           WHEN ${usedByAnother(sql)} THEN 'shared'
            WHEN NOT EXISTS (SELECT 1 FROM gym_payment_connections n
                             WHERE n.gym_id = c.gym_id AND n.provider = 'square' AND n.environment = c.environment
                               AND n.state = 'connected' AND n.account_id = c.account_id) THEN 'not_reached'
@@ -53,13 +53,14 @@ export async function standingOf(sql: SqlOrTx, gymId: string, entryIds: readonly
   return rows.map((r) => ({ entryId: r.entry_id, customerId: r.customer_id, kind: r.kind }));
 }
 
-/** One person's standing: the customer deleted if any of theirs is, else one that cannot be reached, else one that stays; null for
- *  none in Square. */
+/** One person's standing: the customer deleted if any of theirs is, else one that cannot be reached, else one that stays, else one
+ *  that is shared; null for none in Square. */
 export function rollUp(rows: readonly StandingRow[]): Standing | null {
   if (rows.length === 0) return null;
   if (rows.some((r) => r.kind === "deletes")) return "deletes";
   if (rows.some((r) => r.kind === "not_reached")) return "not_reached";
-  return "stays";
+  if (rows.some((r) => r.kind === "stays")) return "stays";
+  return "shared";
 }
 
 /** The customers the box says are deleted, each as a line the digest holds: Square's id, or the record's own where the app does not

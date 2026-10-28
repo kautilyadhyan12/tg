@@ -829,14 +829,14 @@ describe('a person on the list', () => {
 
     it('a customer the app added is said to be deleted from Square too, and the done line says it is being deleted', async () => {
       const box = await ask('deletes');
-      expect(box.getByTestId('delete-square').textContent).toBe('Ada Lovelace was added to your Square customer list by the app. That customer is deleted from Square too.');
+      expect(box.getByTestId('delete-square').textContent).toBe('Ada Lovelace is in your Square customer list, added by the app, and is deleted from it too.');
       fireEvent.click(box.getByRole('button', { name: 'Delete permanently' }));
-      expect((await screen.findByTestId('deleted-note')).textContent).toBe('Ada Lovelace was deleted permanently. Their customer is being deleted from Square.');
+      expect((await screen.findByTestId('deleted-note')).textContent).toBe('Ada Lovelace was deleted permanently. They are also being deleted from your Square customer list.');
     });
 
     it('a customer that stays is said to stay, and the done line says nothing of Square', async () => {
       const box = await ask('stays');
-      expect(box.getByTestId('delete-square').textContent).toBe('Ada Lovelace is linked to a customer that stays in Square, because the app didn’t add it or someone else here also uses it.');
+      expect(box.getByTestId('delete-square').textContent).toBe('Ada Lovelace is in your Square customer list, but the app didn’t add them, so they stay there.');
       fireEvent.click(box.getByRole('button', { name: 'Delete permanently' }));
       expect((await screen.findByTestId('deleted-note')).textContent).toBe('Ada Lovelace was deleted permanently.');
     });
@@ -849,7 +849,7 @@ describe('a person on the list', () => {
 
     it('a customer the app cannot reach: the owner gets the button to Connect Square, anybody else reads who can', async () => {
       const owner = await ask('not_reached', { gym: { slug: 'iron-house', orgType: 'gym', staffRole: 'owner' } });
-      expect(owner.getByTestId('delete-square').textContent).toBe('The app can’t reach your Square, so the customer it added for Ada Lovelace stays there.');
+      expect(owner.getByTestId('delete-square').textContent).toBe('The app can’t reach your Square, so Ada Lovelace stays in your Square customer list.');
       expect(owner.getByRole('link', { name: 'Connect Square' }).getAttribute('href')).toBe('/console/iron-house/settings#payments');
       cleanup();
       const manager = await ask('not_reached', { gym: { slug: 'iron-house', orgType: 'gym', staffRole: 'manager', privileges: ['members.read', 'members.confirm', 'members.remove'] } });

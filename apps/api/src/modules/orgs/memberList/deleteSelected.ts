@@ -27,18 +27,23 @@ function digestOf(gymId: string, ids: readonly string[], standing: readonly squa
     .digest("hex");
 }
 
-/** Each person counted once, by what Delete permanently does about their customer in Square. */
-function squareCounts(standing: readonly squareDeletes.StandingRow[]): MemberListDeletePreview["square"] {
+/** Each person counted once, by what Delete permanently does about their place in the gym's Square customer list, and named: in the
+ *  order the box lists the people. */
+function squareGroups(records: Records, standing: readonly squareDeletes.StandingRow[]): Pick<MemberListDeletePreview, "square" | "squareNames"> {
   const byPerson = new Map<string, squareDeletes.StandingRow[]>();
   for (const row of standing) byPerson.set(row.entryId, [...(byPerson.get(row.entryId) ?? []), row]);
-  const counts = { deletes: 0, stays: 0, notReached: 0 };
-  for (const rows of byPerson.values()) {
-    const kind = squareDeletes.rollUp(rows);
-    if (kind === "deletes") counts.deletes += 1;
-    else if (kind === "stays") counts.stays += 1;
-    else if (kind === "not_reached") counts.notReached += 1;
+  const names: MemberListDeletePreview["squareNames"] = { deletes: [], stays: [], shared: [], notReached: [] };
+  for (const record of records) {
+    const kind = squareDeletes.rollUp(byPerson.get(record.id) ?? []);
+    if (kind === "deletes") names.deletes.push(record.fullName);
+    else if (kind === "stays") names.stays.push(record.fullName);
+    else if (kind === "shared") names.shared.push(record.fullName);
+    else if (kind === "not_reached") names.notReached.push(record.fullName);
   }
-  return counts;
+  return {
+    square: { deletes: names.deletes.length, stays: names.stays.length, shared: names.shared.length, notReached: names.notReached.length },
+    squareNames: names,
+  };
 }
 
 function previewOf(gymId: string, records: Records, standing: readonly squareDeletes.StandingRow[]): MemberListDeletePreview {
@@ -49,7 +54,7 @@ function previewOf(gymId: string, records: Records, standing: readonly squareDel
     onList: records.length - past.length,
     tooMany: past.length > MEMBER_LIST_DELETE_MAX,
     digest: digestOf(gymId, past.map((record) => record.id), standing),
-    square: squareCounts(standing),
+    ...squareGroups(past, standing),
   };
 }
 

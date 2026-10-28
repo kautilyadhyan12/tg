@@ -2150,11 +2150,24 @@ export const memberListDeletePreviewSchema = z
     onList: z.number().int().min(0),
     tooMany: z.boolean(),
     digest: sha256Schema,
-    /** Of the past members it deletes, how many have a customer in the gym's Square that the app added and that is deleted
-     *  from Square too (`deletes`); how many are linked to a customer that stays there, because it was already in Square, Square
-     *  merged it or another record uses it (`stays`); and how many have a customer the app added that the app cannot reach,
-     *  because the gym is not connected to that Square account (`notReached`). A person is counted once. */
-    square: z.object({ deletes: z.number().int().min(0), stays: z.number().int().min(0), notReached: z.number().int().min(0) }).strict().default({ deletes: 0, stays: 0, notReached: 0 }),
+    /** Of the past members it deletes, how many are in the gym's Square customer list because the app added them, and are deleted
+     *  from it too (`deletes`); how many are in it but the app did not add them (it was already there, or Square merged them), so they
+     *  stay (`stays`); how many the app added but another record also uses, so they stay (`shared`); and how many the app added that
+     *  the app cannot reach, because the gym is not connected to that Square account (`notReached`). A person is counted once. */
+    square: z
+      .object({ deletes: z.number().int().min(0), stays: z.number().int().min(0), shared: z.number().int().min(0).default(0), notReached: z.number().int().min(0) })
+      .strict()
+      .default({ deletes: 0, stays: 0, shared: 0, notReached: 0 }),
+    /** Who they are, each group in the order of `names`: the box names every person it says something about. */
+    squareNames: z
+      .object({
+        deletes: z.array(z.string().max(MEMBER_LIST_MAX_NAME_CHARS)).max(MEMBER_LIST_DELETE_NAMES_SHOWN),
+        stays: z.array(z.string().max(MEMBER_LIST_MAX_NAME_CHARS)).max(MEMBER_LIST_DELETE_NAMES_SHOWN),
+        shared: z.array(z.string().max(MEMBER_LIST_MAX_NAME_CHARS)).max(MEMBER_LIST_DELETE_NAMES_SHOWN),
+        notReached: z.array(z.string().max(MEMBER_LIST_MAX_NAME_CHARS)).max(MEMBER_LIST_DELETE_NAMES_SHOWN),
+      })
+      .strict()
+      .default({ deletes: [], stays: [], shared: [], notReached: [] }),
   })
   .strict();
 export type MemberListDeletePreview = z.infer<typeof memberListDeletePreviewSchema>;
@@ -2527,10 +2540,10 @@ export const memberListEntryDetailSchema = memberListEntrySchema.extend({
   /** Their customer in the gym's Square would not take the change to their name, email or phone as it is now
    *  (18d-iii-b-ii-b-ii-b-i): the page says so, as Members in Square does. */
   squareCopyRefused: z.boolean().default(false),
-  /** On a past member's page, what Delete permanently does about their customer in the gym's Square (18d-iii-b-ii-b-ii-b-ii): it
-   *  is deleted from Square too (`deletes`), stays there (`stays`: it was already in Square, Square merged it or another record
-   *  uses it), cannot be reached because the gym is not connected (`not_reached`), or they have none (`none`). */
-  squareOnDelete: z.enum(["none", "deletes", "stays", "not_reached"]).default("none"),
+  /** On a past member's page, what Delete permanently does about their place in the gym's Square customer list (18d-iii-b-ii-b-ii-b-ii):
+   *  they are deleted from it too (`deletes`), stay in it because the app did not add them (`stays`), stay because another record also
+   *  uses them (`shared`), cannot be reached because the gym is not connected (`not_reached`), or are not in it (`none`). */
+  squareOnDelete: z.enum(["none", "deletes", "stays", "shared", "not_reached"]).default("none"),
 });
 export type MemberListEntryDetail = z.infer<typeof memberListEntryDetailSchema>;
 

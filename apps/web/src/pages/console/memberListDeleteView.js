@@ -32,71 +32,68 @@ export function deleteButton(preview) {
   return `Delete ${count(preview.count)} permanently`;
 }
 
-/** "3 past members deleted permanently. 2 customers are being deleted from your Square customer list." */
+/** "3 past members deleted permanently. 2 of them are being deleted from your Square customer list too." */
 export function deleteDoneLine(done, words) {
   if (done.nothingLeft) return `None of these are past ${words.people} any more, so nothing was deleted.`;
   const deleted = `${pastPeople(done.deleted, words)} deleted permanently.`;
   const n = done.squareDeleting ?? 0;
   if (n === 0) return deleted;
-  return `${deleted} ${count(n)} ${n === 1 ? 'customer is' : 'customers are'} being deleted from your Square customer list.`;
+  const who = n === done.deleted ? (n === 1 ? 'They are' : 'All of them are') : n === 1 ? 'One of them is' : `${count(n)} of them are`;
+  return `${deleted} ${who} being deleted from your Square customer list too.`;
 }
 
-// What Delete permanently does about customers in the gym's Square (18d-iii-b-ii-b-ii-b-ii). `square` is the box's own count of
-// the past members it deletes: whose customer the app added (deleted from Square too), whose customer stays (it was already in
-// Square, Square merged it, or another record uses it), and whose the app cannot reach.
-const CANT_REACH = 'The app can’t reach your Square';
+// What Delete permanently does about the people in the gym's Square customer list (18d-iii-b-ii-b-ii-b-ii). Square calls everybody it
+// holds a customer, and so does its list: a member is in it, added by the app or by the gym itself. The box names every person it says
+// something about, one reason for each group.
+const SQUARE_GROUPS = [
+  {
+    key: 'deletes',
+    title: (n) => `Also deleted from your Square customer list (${count(n)})`,
+    why: 'The app added them to your Square customer list, so they are deleted from it too.',
+  },
+  {
+    key: 'stays',
+    title: (n) => `Stay in your Square customer list (${count(n)})`,
+    why: 'They are in your Square customer list, but the app didn’t add them, so they stay there.',
+  },
+  {
+    key: 'shared',
+    title: (n) => `Also used by somebody else (${count(n)})`,
+    why: 'Somebody else here also uses them in your Square customer list, so they stay there.',
+  },
+  {
+    key: 'notReached',
+    title: (n) => `Can’t be reached in Square (${count(n)})`,
+    why: 'The app added them to your Square customer list, but it can’t reach your Square, so they stay there.',
+  },
+];
 
-/** "One of them", "3 of them", "All of them", or "They" for one person: how many of those the box deletes are meant. `total`: how many
- *  the box deletes in all. */
-const ofThem = (n, total) => {
-  if (total === 1) return 'They';
-  if (n === total) return 'All of them';
-  return n === 1 ? 'One of them' : `${count(n)} of them`;
-};
-
-/** The lines under the names, each with a key; none for a gym with nobody in Square. */
-export function deleteSquareLines(square, total) {
-  const lines = [];
-  const { deletes = 0, stays = 0, notReached = 0 } = square ?? {};
-  if (deletes > 0) {
-    lines.push({
-      key: 'deletes',
-      text: `${ofThem(deletes, total)} ${deletes === 1 && total !== 1 ? 'was' : 'were'} added to your Square customer list by the app. ${
-        deletes === 1 ? 'That customer is' : 'Those customers are'
-      } deleted from Square too.`,
-    });
-  }
-  if (stays > 0) {
-    lines.push({
-      key: 'stays',
-      text: `${ofThem(stays, total)} ${stays === 1 && total !== 1 ? 'is' : 'are'} linked to ${
-        stays === 1 ? 'a customer that stays' : 'customers that stay'
-      } in Square, because the app didn’t add ${stays === 1 ? 'it' : 'them'} or someone else here also uses ${stays === 1 ? 'it' : 'them'}.`,
-    });
-  }
-  if (notReached > 0) {
-    lines.push({
-      key: 'notReached',
-      text: `${CANT_REACH}, so the ${notReached === 1 ? 'customer' : 'customers'} it added for ${
-        total === 1 ? 'them' : notReached === total ? 'all of them' : notReached === 1 ? 'one of them' : `${count(notReached)} of them`
-      } ${notReached === 1 ? 'stays' : 'stay'} there.`,
-    });
-  }
-  return lines;
+/** The groups the box shows under the names, each with its people, its count and its one reason; none for a gym with nobody in Square. */
+export function deleteSquareGroups(preview) {
+  const square = preview?.square ?? {};
+  const names = preview?.squareNames ?? {};
+  return SQUARE_GROUPS.filter((g) => (square[g.key] ?? 0) > 0).map((g) => ({
+    key: g.key,
+    title: g.title(square[g.key]),
+    why: g.why,
+    total: square[g.key],
+    people: (names[g.key] ?? []).map((name, i) => ({ id: `${g.key}-${String(i)}`, name })),
+  }));
 }
 
-/** Who can open Connect Square, for the line about customers the app cannot reach. */
+/** Who can open Connect Square, for the group the app cannot reach. */
 export const SQUARE_OWNER_ONLY = 'Only the owner can connect Square.';
 
-/** The same on one past member's page, or null where they have no customer in Square. */
+/** The same on one past member's page, or null where they are not in the Square customer list. */
 export function deleteSquareLineOne(kind, name) {
-  if (kind === 'deletes') return `${name} was added to your Square customer list by the app. That customer is deleted from Square too.`;
-  if (kind === 'stays') return `${name} is linked to a customer that stays in Square, because the app didn’t add it or someone else here also uses it.`;
-  if (kind === 'not_reached') return `${CANT_REACH}, so the customer it added for ${name} stays there.`;
+  if (kind === 'deletes') return `${name} is in your Square customer list, added by the app, and is deleted from it too.`;
+  if (kind === 'stays') return `${name} is in your Square customer list, but the app didn’t add them, so they stay there.`;
+  if (kind === 'shared') return `${name} is also used by somebody else in your Square customer list, so they stay there.`;
+  if (kind === 'not_reached') return `The app can’t reach your Square, so ${name} stays in your Square customer list.`;
   return null;
 }
 
-/** "Their customer is being deleted from Square." after one person is deleted, or '' where there is none. */
+/** " They are also being deleted from your Square customer list." after one person is deleted, or '' where they are not in it. */
 export function deletedOneSquareLine(squareDeleting) {
-  return squareDeleting > 0 ? ' Their customer is being deleted from Square.' : '';
+  return squareDeleting > 0 ? ' They are also being deleted from your Square customer list.' : '';
 }

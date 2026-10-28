@@ -4,7 +4,7 @@ import { MEMBER_LIST_SELECTION_CHANGED_WORDS } from '@app/shared';
 import { deleteRefused, errorText, selectionChanged } from '../../api/orgsApi';
 import PlaceLink from '../../components/console/PlaceLink';
 import { Names } from './MemberListRemove';
-import { DELETE_WHAT_HAPPENS, SQUARE_OWNER_ONLY, deleteButton, deleteDoneLine, deleteKeptLine, deleteNobodyLine, deleteQuestion, deleteSquareLines } from './memberListDeleteView';
+import { DELETE_WHAT_HAPPENS, SQUARE_OWNER_ONLY, deleteButton, deleteDoneLine, deleteKeptLine, deleteNobodyLine, deleteQuestion, deleteSquareGroups } from './memberListDeleteView';
 
 // The Delete permanently box for the past members selected (5e-ii; Kd's click-through,
 // 2026-10-16). Before anyone is deleted it names who, and who ticked is not and why; the
@@ -113,7 +113,7 @@ export default function MemberListDelete({ words, load, press, onSelectionChange
     const question = deleteQuestion(preview, words);
     const nobody = deleteNobodyLine(preview, words);
     const kept = deleteKeptLine(preview, words);
-    const squareLines = question !== null ? deleteSquareLines(preview.square, preview.count) : [];
+    const squareGroups = question !== null ? deleteSquareGroups(preview) : [];
     body = (
       <>
         {question !== null ? (
@@ -123,14 +123,12 @@ export default function MemberListDelete({ words, load, press, onSelectionChange
             <p className="c-s14 c-t2">{DELETE_WHAT_HAPPENS}</p>
           </section>
         ) : null}
-        {squareLines.length > 0 ? (
-          <section className="flex flex-col gap-2" data-testid="delete-square">
-            {squareLines.map((line) => (
-              <p key={line.key} className="c-s14 c-t2" data-testid={`delete-square-${line.key}`}>
-                {line.text}
-              </p>
-            ))}
-            {preview.square.notReached > 0 ? (
+        {squareGroups.map((group) => (
+          <section key={group.key} className="flex flex-col gap-2" data-testid={`delete-square-${group.key}`}>
+            <h3 className="c-s16 c-w6 c-t1">{group.title}</h3>
+            <Names people={group.people} total={group.total} testId={`delete-square-${group.key}-names`} />
+            <p className="c-s14 c-t2">{group.why}</p>
+            {group.key === 'notReached' ? (
               squareTo !== null ? (
                 <PlaceLink to={squareTo} data-testid="delete-square-connect">
                   Connect Square
@@ -142,7 +140,7 @@ export default function MemberListDelete({ words, load, press, onSelectionChange
               )
             ) : null}
           </section>
-        ) : null}
+        ))}
         {nobody !== null ? <p className="c-s15 c-t1" data-testid="delete-nobody">{nobody}</p> : null}
         {kept !== null ? (
           <p className="c-s14 c-t2" data-testid="delete-kept">
