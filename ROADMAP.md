@@ -559,7 +559,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 30b. [x] **The starter set from the setup answers** — merged 2026-10-13 (PR #234).
 31. **Today** (Stage 1's 5b), the Dashboard tab (split 2026-10-27: the numbers the server already keeps first).
     - 31a. [x] **The Dashboard as drawn** — merged 2026-10-27 (PR #371).
-    - 31b. [ ] **Today's rings and the goals**: today's food against the day's numbers, saying why a plan holds no calorie cut, and the goal list with change, remove and add (30a).
+    - 31b. [x] **Your Goals on the Dashboard** — merged 2026-10-28 (PR #374).
 32. **Food** (split 2026-10-13: the server part needs no phone).
     - 32a. [x] **A meal sent twice from the phone is saved once** — merged 2026-10-13 (PR #238).
     - 32b. [ ] **The Food screen**: search, add by measure, the rings and a person's own numbers, change a logged food, saved dishes with rename and delete. Waits for items 10 to 12; sends every meal with its own id, made in small letters (32a). Its plan settles a removed meal whose save arrives again, which today saves it anew: the phone never sends a save once its removal is queued, or the server keeps removed ids. Feature folder 2's database holds the food table since 2026-10-13.
