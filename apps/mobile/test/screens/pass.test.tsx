@@ -308,6 +308,8 @@ describe("the pass while it is open", () => {
     await later(0);
     await view.rerender(<PassSheet open={false} trainer={false} onClose={() => undefined} fetchPass={fetchPass} />);
     held.go(good(RAVI_PASS, 20_000));
+    // The answer lands first; only then does the clock move on.
+    await later(0);
     await later(120_000);
     expect(fetchPass).toHaveBeenCalledTimes(1);
   });
@@ -343,6 +345,8 @@ describe("the pass while it is open", () => {
     try {
       await appMoves("background");
       held.go(good(RAVI_PASS, 20_000));
+      // The answer lands first; only then does the clock move on.
+      await later(0);
       await later(60_000);
       expect(fetchPass).toHaveBeenCalledTimes(1);
     } finally {
