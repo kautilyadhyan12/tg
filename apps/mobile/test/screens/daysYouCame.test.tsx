@@ -1,9 +1,11 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
+import { StyleSheet, type StyleProp, type ViewStyle } from "react-native";
+import { gymAttendanceHistoryResponseSchema, type GymAttendanceHistoryResponse } from "@app/shared";
 import { App } from "../../src/App";
-import { DAYS_COULD_NOT } from "../../src/screens/gym/DaysYouCame";
+import { DAYS_COULD_NOT, DAYS_MORE, DaysYouCame, HISTORY_PAGES, type FetchVisits } from "../../src/screens/gym/DaysYouCame";
 import { PASS_PATH } from "../../src/screens/gym/Pass";
 import { dayIn, monthName, shiftMonth } from "../../src/screens/gym/visitsView";
-import type { Ask } from "../../src/session/calls";
+import type { Answer, Ask } from "../../src/session/calls";
 import { fakeServer, kept, memoryStore, tokens, type Reply } from "../kit";
 
 const extra = { copyName: "Feature 1", apiUrl: "http://localhost:3000" };
@@ -31,26 +33,36 @@ const thisMonth = (dayIn("Asia/Kolkata", new Date()) ?? "").slice(0, 7);
 const lastMonth = shiftMonth(thisMonth, -1);
 const nameOf = (key: string) => (monthName(key, null).split(" ")[0] ?? "");
 
-/** A visit on `day` of the month asked for, at 12:32 UTC: 6:02 PM in India. */
-const visitOn = (month: string, day: number, hoursStatus = "in_session") => {
+/** A visit on `day` of the month asked for, at `at` UTC (12:32: 6:02 PM in India). */
+const visitOn = (month: string, day: number, hoursStatus = "in_session", at = "12:32:00.000Z") => {
   const date = `${month}-${String(day).padStart(2, "0")}`;
-  return { day: date, markedAt: `${date}T12:32:00.000Z`, method: "pass", hoursStatus, session: null };
+  return { day: date, markedAt: `${date}T${at}`, method: "pass", hoursStatus, session: null };
 };
-const history = (visits: unknown[], nextCursor: string | null = null) => ({
-  attendance: { timezone: "Asia/Kolkata", clockFormat: "12h", visits, nextCursor },
+const history = (visits: unknown[], nextCursor: string | null = null, timezone = "Asia/Kolkata") => ({
+  attendance: { timezone, clockFormat: "12h", visits, nextCursor },
 });
 
-/** A server whose history answers are made from the place and the month in the address. */
-function withHistory(routes: Parameters<typeof fakeServer>[0], answer: (gymId: string, month: string) => Reply | Promise<Reply>) {
+/** What a day in this month is called, with "today" on the gym's today. */
+const dayName = (month: string, day: number, checkedIn: boolean) => {
+  const today = dayIn("Asia/Kolkata", new Date()) === `${month}-${String(day).padStart(2, "0")}`;
+  return `${String(day)} ${nameOf(month)}${today ? ", today" : ""}${checkedIn ? ", checked in" : ""}`;
+};
+
+/** A server whose history answers are made from the place, the month and the page in the address. */
+function withHistory(
+  routes: Parameters<typeof fakeServer>[0],
+  answer: (gymId: string, month: string, cursor: string | null) => Reply | Promise<Reply>,
+) {
   const server = fakeServer(routes);
-  const months: { gymId: string; from: string; to: string }[] = [];
+  const months: { gymId: string; from: string; to: string; cursor: string | null }[] = [];
   const ask: Ask = async (url, init) => {
     const where = new URL(url);
     const m = /^\/v1\/orgs\/([^/]+)\/attendance\/history$/.exec(where.pathname);
     if (m?.[1] === undefined) return server.ask(url, init);
     const from = where.searchParams.get("from") ?? "";
-    months.push({ gymId: m[1], from, to: where.searchParams.get("to") ?? "" });
-    const reply = await answer(m[1], from.slice(0, 7));
+    const cursor = where.searchParams.get("cursor");
+    months.push({ gymId: m[1], from, to: where.searchParams.get("to") ?? "", cursor });
+    const reply = await answer(m[1], from.slice(0, 7), cursor);
     return { ok: reply.status < 300, status: reply.status, json: () => Promise.resolve(reply.body) };
   };
   return { ask, months };
@@ -77,8 +89,8 @@ describe("the worst thing: a place's days are its own, and a failed read never s
     await render(<App extra={extra} ask={ask} store={memoryStore(kept(1))} wait={noWait} />);
     await fireEvent.press(await gymTab());
     await waitFor(() => {
-      expect(cameDays(IRON)).toEqual([`1 ${nameOf(thisMonth)}, checked in`]);
-      expect(cameDays(MEERA)).toEqual([`2 ${nameOf(thisMonth)}, checked in`]);
+      expect(cameDays(IRON)).toEqual([dayName(thisMonth, 1, true)]);
+      expect(cameDays(MEERA)).toEqual([dayName(thisMonth, 2, true)]);
     });
     expect(new Set(months.map((m) => m.gymId))).toEqual(new Set([IRON.id, MEERA.id]));
     expect(months.every((m) => m.from === `${thisMonth}-01` && m.to === `${shiftMonth(thisMonth, 1)}-01`)).toBe(true);
@@ -99,7 +111,7 @@ describe("the worst thing: a place's days are its own, and a failed read never s
     fail = false;
     await fireEvent.press(box(IRON).getByRole("button", { name: "Try again" }));
     await waitFor(() => {
-      expect(cameDays(IRON)).toEqual([`1 ${nameOf(thisMonth)}, checked in`]);
+      expect(cameDays(IRON)).toEqual([dayName(thisMonth, 1, true)]);
     });
     expect(screen.queryByText(DAYS_COULD_NOT)).toBeNull();
   });
@@ -137,14 +149,14 @@ describe("Attendance", () => {
     }));
     await render(<App extra={extra} ask={ask} store={memoryStore(kept(1))} wait={noWait} />);
     await fireEvent.press(await gymTab());
-    await fireEvent.press(await box(IRON).findByLabelText(`1 ${nameOf(thisMonth)}, checked in`));
+    await fireEvent.press(await box(IRON).findByLabelText(dayName(thisMonth, 1, true)));
     expect(await screen.findByText("6:02 PM")).toBeTruthy();
     expect(screen.getAllByText("Checked in")[0]).toBeTruthy();
     await fireEvent.press(screen.getByRole("button", { name: "Close" }));
     await waitFor(() => {
       expect(screen.queryByText("6:02 PM")).toBeNull();
     });
-    await fireEvent.press(box(IRON).getByLabelText(`2 ${nameOf(thisMonth)}, checked in`));
+    await fireEvent.press(box(IRON).getByLabelText(dayName(thisMonth, 2, true)));
     expect(await screen.findByText("Added by staff")).toBeTruthy();
   });
 
@@ -153,7 +165,7 @@ describe("Attendance", () => {
     await render(<App extra={extra} ask={ask} store={memoryStore(kept(1))} wait={noWait} />);
     await fireEvent.press(await gymTab());
     expect(await box(IRON).findByText("No check-ins yet this month.")).toBeTruthy();
-    await fireEvent.press(box(IRON).getByLabelText(`1 ${nameOf(thisMonth)}`));
+    await fireEvent.press(box(IRON).getByLabelText(dayName(thisMonth, 1, false)));
     expect(screen.queryByText("Checked in")).toBeNull();
     expect(box(IRON).getByRole("button", { name: "Next month" })).toBeDisabled();
     await fireEvent.press(box(IRON).getByRole("button", { name: "Previous month" }));
@@ -169,7 +181,7 @@ describe("Attendance", () => {
     }));
     await render(<App extra={extra} ask={ask} store={memoryStore(kept(1))} wait={noWait} />);
     await fireEvent.press(await gymTab());
-    await box(IRON).findByLabelText(`1 ${nameOf(thisMonth)}, checked in`);
+    await box(IRON).findByLabelText(dayName(thisMonth, 1, true));
     await fireEvent.press(box(IRON).getByRole("button", { name: `${nameOf(thisMonth)}, choose a month` }));
     expect(screen.getByText("Choose a month")).toBeTruthy();
     const year = Number(thisMonth.slice(0, 4));
@@ -220,8 +232,95 @@ describe("Attendance", () => {
     });
     await fireEvent.press(screen.getByRole("button", { name: "Close" }));
     await waitFor(() => {
-      expect(cameDays(IRON)).toEqual([`1 ${nameOf(thisMonth)}, checked in`]);
+      expect(cameDays(IRON)).toEqual([dayName(thisMonth, 1, true)]);
     });
     expect(months.length).toBe(before + 1);
+  });
+});
+
+describe("Attendance on the gym's clock, page by page", () => {
+  const PLACE = "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f";
+  type Asked = { from: string; cursor: string | null };
+  /** The box alone, its answers made from the month and the page asked for. */
+  function served(answer: (month: string, cursor: string | null) => Answer<GymAttendanceHistoryResponse>) {
+    const asked: Asked[] = [];
+    const fetchVisits: FetchVisits = (path) => {
+      const where = new URL(`http://x${path}`);
+      const from = where.searchParams.get("from") ?? "";
+      const cursor = where.searchParams.get("cursor");
+      asked.push({ from, cursor });
+      return Promise.resolve(answer(from.slice(0, 7), cursor));
+    };
+    return { fetchVisits, asked };
+  }
+  const ok = (body: unknown): Answer<GymAttendanceHistoryResponse> => ({ kind: "ok", data: gymAttendanceHistoryResponseSchema.parse(body) });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it("the month, today and the next arrow are the gym's, not the phone's", async () => {
+    // 12:00 UTC on 31 October: still the 31st in India and in UTC, already 1 November at a gym in Kiritimati.
+    jest.useFakeTimers({
+      now: Date.parse("2026-10-31T12:00:00.000Z"),
+      doNotFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "setImmediate", "clearImmediate", "nextTick", "queueMicrotask"],
+    });
+    const { fetchVisits, asked } = served(() => ok(history([], null, "Pacific/Kiritimati")));
+    await render(<DaysYouCame gymId={PLACE} read={0} fetchVisits={fetchVisits} />);
+    expect(await screen.findByRole("button", { name: "November, choose a month" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Next month" })).toBeDisabled();
+    expect(screen.getByLabelText("1 November, today")).toBeTruthy();
+    expect(StyleSheet.flatten(screen.getByLabelText("2 November").props.style as StyleProp<ViewStyle>).opacity).toBe(0.35);
+    expect(StyleSheet.flatten(screen.getByLabelText("1 November, today").props.style as StyleProp<ViewStyle>).opacity).toBeUndefined();
+    expect(asked.at(-1)?.from).toBe("2026-11-01");
+  });
+
+  it("a check-in's time is on the gym's clock, not the phone's", async () => {
+    // 09:02 UTC is 6:02 PM in Tokyo, 2:32 PM in India and 9:02 AM in UTC.
+    const { fetchVisits } = served((month) => ok(history([visitOn(month, 1, "in_session", "09:02:00.000Z")], null, "Asia/Tokyo")));
+    await render(<DaysYouCame gymId={PLACE} read={0} fetchVisits={fetchVisits} />);
+    await fireEvent.press(await screen.findByLabelText(/^1 \w+(, today)?, checked in$/));
+    expect(await screen.findByText("6:02 PM")).toBeTruthy();
+  });
+
+  it("a month in more than one answer is read to its end, and only what is still left says so", async () => {
+    const { fetchVisits, asked } = served((month, cursor) =>
+      ok(cursor === null ? history([visitOn(month, 1)], "page-2") : history([visitOn(month, 2)], null)),
+    );
+    await render(<DaysYouCame gymId={PLACE} read={0} fetchVisits={fetchVisits} />);
+    await waitFor(() => {
+      expect(screen.queryAllByLabelText(/, checked in$/)).toHaveLength(2);
+    });
+    expect(asked.map((one) => one.cursor)).toEqual([null, "page-2"]);
+    expect(screen.queryByText(DAYS_MORE)).toBeNull();
+
+    const endless = served((month, cursor) => ok(history([visitOn(month, cursor === null ? 1 : 2)], "again")));
+    await render(<DaysYouCame gymId={PLACE} read={0} fetchVisits={endless.fetchVisits} />);
+    expect(await screen.findByText(DAYS_MORE)).toBeTruthy();
+    expect(endless.asked).toHaveLength(HISTORY_PAGES);
+  });
+
+  it("Try again turns while its read is away, and a second press asks nothing more", async () => {
+    let fail = true;
+    const waiting: (() => void)[] = [];
+    const asked: number[] = [];
+    const fetchVisits: FetchVisits = async () => {
+      asked.push(1);
+      if (fail) return { kind: "no_answer" };
+      await new Promise<void>((resolve) => waiting.push(resolve));
+      return ok(history([]));
+    };
+    await render(<DaysYouCame gymId={PLACE} read={0} fetchVisits={fetchVisits} />);
+    const again = await screen.findByRole("button", { name: "Try again" });
+    fail = false;
+    await fireEvent.press(again);
+    expect(screen.getByRole("button", { name: "Try again" })).toBeDisabled();
+    await fireEvent.press(screen.getByRole("button", { name: "Try again" }));
+    expect(asked).toHaveLength(2);
+    await act(async () => {
+      for (const go of waiting) go();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(await screen.findByText("No check-ins yet this month.")).toBeTruthy();
   });
 });

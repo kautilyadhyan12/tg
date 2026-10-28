@@ -11,6 +11,7 @@ import { fonts, Txt } from "../../look/Txt";
 import type { Answer } from "../../session/calls";
 import {
   ADDED_LATER,
+  FIRST_MONTH,
   MONTHS_SHORT,
   WEEK_HEADS,
   dayIn,
@@ -35,8 +36,11 @@ import {
 export const DAYS_COULD_NOT = "Couldn’t load your attendance.";
 export const DAYS_MORE = "Some check-ins this month aren’t shown.";
 
-export const historyPath = (gymId: string, window: { from: string; to: string }) =>
-  `/v1/orgs/${encodeURIComponent(gymId)}/attendance/history?from=${window.from}&to=${window.to}`;
+export const historyPath = (gymId: string, window: { from: string; to: string }, cursor: string | null = null) =>
+  `/v1/orgs/${encodeURIComponent(gymId)}/attendance/history?from=${window.from}&to=${window.to}${cursor === null ? "" : `&cursor=${encodeURIComponent(cursor)}`}`;
+
+/** The most answers read for one month: 100 check-ins each, more than anybody makes in a month. */
+export const HISTORY_PAGES = 5;
 
 export type FetchVisits = (path: string) => Promise<Answer<GymAttendanceHistoryResponse>>;
 
@@ -64,8 +68,9 @@ export function DaysYouCame({ gymId, read, fetchVisits }: DaysYouCameProps) {
   // The month stepped to, or null for the place's month now.
   const [step, setStep] = useState<string | null>(null);
   const [openDay, setOpenDay] = useState<string | null>(null);
-  // Bumped by Try again.
+  // Bumped by Try again; `trying` while its read is away.
   const [attempt, setAttempt] = useState(0);
+  const [trying, setTrying] = useState(false);
   // The month picker is open.
   const [picking, setPicking] = useState(false);
   // Reads are numbered as they start: an answer stands only if no later read has started.
@@ -84,19 +89,34 @@ export function DaysYouCame({ gymId, read, fetchVisits }: DaysYouCameProps) {
     started.current += 1;
     const number = started.current;
     let live = true;
-    void fetchVisits(historyPath(gymId, window)).then((answer) => {
+    const readMonth = async () => {
+      // The month's answers, page after page, while the server says there are more.
+      const first = await fetchVisits(historyPath(gymId, window));
+      if (first.kind !== "ok") return null;
+      const { attendance } = first.data;
+      const visits = [...attendance.visits];
+      let cursor = attendance.nextCursor;
+      for (let page = 1; cursor !== null && page < HISTORY_PAGES && live; page += 1) {
+        const next = await fetchVisits(historyPath(gymId, window, cursor));
+        if (next.kind !== "ok") break;
+        visits.push(...next.data.attendance.visits);
+        cursor = next.data.attendance.nextCursor;
+      }
+      return { attendance, visits, more: cursor !== null };
+    };
+    void readMonth().then((answer) => {
       if (!live || number !== started.current) return;
-      if (answer.kind === "ok") {
-        const { attendance } = answer.data;
-        setZone(attendance.timezone);
+      setTrying(false);
+      if (answer !== null) {
+        setZone(answer.attendance.timezone);
         setHeld({
           status: "ready",
           forMonth: month,
           // Only this month's days, whatever the answer holds.
-          visits: attendance.visits.filter((visit) => visit.day >= window.from && visit.day < window.to),
-          zone: attendance.timezone,
-          clock: attendance.clockFormat,
-          more: attendance.nextCursor !== null,
+          visits: answer.visits.filter((visit) => visit.day >= window.from && visit.day < window.to),
+          zone: answer.attendance.timezone,
+          clock: answer.attendance.clockFormat,
+          more: answer.more,
         });
       } else {
         // A month already on screen stays: a failed look again is no reason to take it away.
@@ -115,6 +135,7 @@ export function DaysYouCame({ gymId, read, fetchVisits }: DaysYouCameProps) {
   if (grid === null) return null;
   const opened = ready === null ? null : (grid.cells.find((cell) => cell.date === openDay && cell.came) ?? null);
   const atNow = thisMonth !== null && month >= thisMonth;
+  const atFirst = month <= FIRST_MONTH;
 
   const move = (by: number) => {
     setOpenDay(null);
@@ -133,7 +154,7 @@ export function DaysYouCame({ gymId, read, fetchVisits }: DaysYouCameProps) {
         </Txt>
         {/* On its own line under the heading when the two do not fit side by side. */}
         <View style={styles.months}>
-          <MonthArrow icon="back" say="Previous month" onPress={() => { move(-1); }} />
+          <MonthArrow icon="back" say="Previous month" disabled={atFirst} onPress={() => { move(-1); }} />
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`${monthName(month, thisMonth)}, choose a month`}
@@ -154,7 +175,15 @@ export function DaysYouCame({ gymId, read, fetchVisits }: DaysYouCameProps) {
           <Txt kind="small" colour="badText" style={styles.grow}>
             {DAYS_COULD_NOT}
           </Txt>
-          <Button label="Try again" kind="link" onPress={() => { setAttempt((n) => n + 1); }} />
+          <Button
+            label="Try again"
+            kind="link"
+            busy={trying}
+            onPress={() => {
+              setTrying(true);
+              setAttempt((n) => n + 1);
+            }}
+          />
         </View>
       ) : (
         <>
@@ -234,11 +263,12 @@ function MonthPicker({
     if (open) setYear(Number(month.slice(0, 4)));
   }, [open, month]);
   const lastYear = thisMonth === null ? Infinity : Number(thisMonth.slice(0, 4));
+  const firstYear = Number(FIRST_MONTH.slice(0, 4));
   const rows = [0, 1, 2, 3].map((r) => [0, 1, 2].map((c) => r * 3 + c));
   return (
     <Sheet open={open} title="Choose a month" onClose={onClose}>
       <View style={styles.yearRow}>
-        <MonthArrow icon="back" say="Previous year" onPress={() => { setYear((y) => y - 1); }} />
+        <MonthArrow icon="back" say="Previous year" disabled={year <= firstYear} onPress={() => { setYear((y) => y - 1); }} />
         <Txt colour="text" style={styles.year}>
           {String(year)}
         </Txt>
@@ -249,7 +279,7 @@ function MonthPicker({
           <View key={row[0]} style={styles.monthRow}>
             {row.map((index) => {
               const key = `${String(year).padStart(4, "0")}-${String(index + 1).padStart(2, "0")}`;
-              const later = thisMonth !== null && key > thisMonth;
+              const later = (thisMonth !== null && key > thisMonth) || key < FIRST_MONTH;
               const on = key === month;
               const name = MONTHS_SHORT[index] ?? "";
               return (
@@ -312,7 +342,7 @@ function Day({ cell, monthName: name, onPress }: { cell: DayCell; monthName: str
   return (
     <Pressable
       accessibilityRole={cell.came ? "button" : "text"}
-      accessibilityLabel={cell.came ? `${String(cell.day)} ${month}, checked in` : `${String(cell.day)} ${month}`}
+      accessibilityLabel={`${String(cell.day)} ${month}${cell.today ? ", today" : ""}${cell.came ? ", checked in" : ""}`}
       disabled={!cell.came}
       onPress={onPress}
       style={[styles.cell, cell.future ? styles.future : null]}

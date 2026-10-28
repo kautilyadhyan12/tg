@@ -11,6 +11,9 @@ export type ClockFormat = "12h" | "24h";
 /** The words on a visit staff added later: its time is when it was added, never when the person came. */
 export const ADDED_LATER = "Added by staff";
 
+/** The earliest month the arrows and the month picker go back to. */
+export const FIRST_MONTH = "2000-01";
+
 /** Monday first, as the browser and the gym's opening hours. */
 export const WEEK_HEADS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 
@@ -125,13 +128,16 @@ export interface MonthGrid {
   cells: DayCell[];
 }
 
-/** One month as days, with the days somebody came marked. `today` is the gym's, or null: nothing is
- *  then dimmed or ringed. A visit outside the month is not drawn in it. */
+/** One month as days, with the days somebody came marked; a day's check-ins earliest first, any added by
+ *  staff last. `today` is the gym's, or null: nothing is then marked today or faded. A visit outside
+ *  the month is not drawn in it. */
 export function monthGrid(key: string, visits: readonly GymAttendanceVisit[], zone: string, clock: ClockFormat, today: string | null): MonthGrid | null {
   const parsed = parseMonth(key);
   if (parsed === null) return null;
   const byDay = new Map<string, string[]>();
-  for (const visit of visits) {
+  const order = (visit: GymAttendanceVisit) => (visit.hoursStatus === "added_later" ? 1 : 0);
+  const sorted = [...visits].sort((a, b) => order(a) - order(b) || Date.parse(a.markedAt) - Date.parse(b.markedAt));
+  for (const visit of sorted) {
     const times = byDay.get(visit.day) ?? [];
     const time = visit.hoursStatus === "added_later" ? ADDED_LATER : visitTime(visit.markedAt, zone, clock);
     if (time !== "") times.push(time);

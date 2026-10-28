@@ -95,10 +95,16 @@ describe("the month as days", () => {
     expect(grid?.leading).toBe(leading);
   });
 
-  it("marks only the days somebody came, with every time of that day", () => {
+  it("marks only the days somebody came, with every check-in of that day earliest first, any added by staff last", () => {
+    // Newest first, as the server sends them.
     const grid = monthGrid(
       "2026-10",
-      [visit("2026-10-27", "2026-10-27T12:32:00Z"), visit("2026-10-27", "2026-10-27T01:00:00Z"), visit("2026-10-03", "2026-10-03T03:30:00Z")],
+      [
+        visit("2026-10-27", "2026-10-27T15:00:00Z", "added_later"),
+        visit("2026-10-27", "2026-10-27T12:32:00Z"),
+        visit("2026-10-27", "2026-10-27T01:00:00Z"),
+        visit("2026-10-03", "2026-10-03T03:30:00Z"),
+      ],
       "Asia/Kolkata",
       "12h",
       "2026-10-28",
@@ -106,7 +112,7 @@ describe("the month as days", () => {
     const came = grid?.cells.filter((cell) => cell.came).map((cell) => [cell.date, cell.times]);
     expect(came).toEqual([
       ["2026-10-03", ["9:00 AM"]],
-      ["2026-10-27", ["6:02 PM", "6:30 AM"]],
+      ["2026-10-27", ["6:30 AM", "6:02 PM", ADDED_LATER]],
     ]);
   });
 
