@@ -4359,7 +4359,7 @@ is a gym with no country. People who use the app for themselves may be anywhere.
   changed name, email or phone copied to Square.** Once the owner has added the gym's members to Square, the
   worker's minute copies a change to a member's name, email or phone to their customer there, to one the app
   added and to one it only linked alike, and only the part that changed. Each customer keeps the three parts
-  of the record as hashes, as Square last agreed with them (made, linked or copied; migration `0169`); a part
+  of the record as hashes, as Square last agreed with them (made, linked or copied; migration `0170`); a part
   that differs is a change, and a part Square already holds is not sent (a name of the same words however
   Square splits them, an email in its folded form, a phone in E.164), so what the business typed in Square
   stays. A part taken off the record is cleared in Square. The app asks Square for the customer first and

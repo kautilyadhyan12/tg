@@ -22,6 +22,7 @@ import { DIET_ICONS, EQUIPMENT_ICONS, GOAL_ICONS, LEVEL_ICONS, PLACE_ICONS, STEP
 import {
   AGE_REST,
   CLEARED_LINE,
+  FINISH_HINT,
   DAYS,
   DIETS,
   EQUIPMENT,
@@ -723,7 +724,6 @@ export function EquipmentScreen({ answers, save }) {
 
 // The disclaimer taps (the health step's and the plan's) are the one tick the
 // sign-up note also draws, `DisclaimerTick`.
-const FINISH_HINT = 'Tick this to finish setup.';
 
 // ── Screen 8 ─────────────────────────────────────────────────────────
 // The one health question, and the disclaimer tap that goes with it. The

@@ -16,19 +16,25 @@ export const RAVI = {
 };
 
 export const tokens = (n: number) => ({ accessToken: `access-${String(n)}`, refreshToken: `refresh-${String(n)}` });
-/** A sign-in the phone kept, with the person's tick on today's "Before you start" unless told `null`. */
-export const kept = (n: number, user = RAVI, signUpNote: string | null = CURRENT_DISCLAIMER_VERSION.sign_up) =>
-  JSON.stringify({ refreshToken: `refresh-${String(n)}`, user, ...(signUpNote === null ? {} : { signUpNote }) });
+/** A sign-in the phone kept, with the person's tick on today's "Before you start" unless told `null`,
+ *  and setup finished unless told `false`. */
+export const kept = (n: number, user = RAVI, signUpNote: string | null = CURRENT_DISCLAIMER_VERSION.sign_up, setupDone = true) =>
+  JSON.stringify({
+    refreshToken: `refresh-${String(n)}`,
+    user,
+    ...(signUpNote === null ? {} : { signUpNote }),
+    ...(setupDone ? { setupDone } : {}),
+  });
 
-/** The person's profile as the server sends it; `agreed`: their tick on today's sign-up note. */
-export const profile = (agreed: boolean, user = RAVI) => ({
+/** The person's profile as the server sends it; `agreed`: their tick on today's sign-up note, `setupDone`: setup finished. */
+export const profile = (agreed: boolean, user = RAVI, setupDone = true) => ({
   user: {
     ...user,
     // The machine's own zone, so the phone has nothing to save unless a test says otherwise.
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     weightKg: null,
     leaderboardOptOut: false,
-    onboardingCompleted: false,
+    onboardingCompleted: setupDone,
     signUpDisclaimerAgreed: agreed,
     createdAt: "2026-10-14T09:00:00.000Z",
   },

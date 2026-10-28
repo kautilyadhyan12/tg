@@ -121,7 +121,7 @@ export const gymSquareCustomers = pgTable(
     makingKey: uuid("making_key"),
     /** Linked to a customer Square already had (0166; ROADMAP 18d-iii-b-ii-b-i), not one the app made. */
     joinedAt: timestamp("joined_at", { withTimezone: true }),
-    /** What the record's name, email and phone were when Square last agreed with them (0169; ROADMAP
+    /** What the record's name, email and phone were when Square last agreed with them (0170; ROADMAP
      *  18d-iii-b-ii-b-ii-b-i), each as an md5 hash, null for none: a part that differs now is a change to copy. Null
      *  `copied_at`: not known yet, taken from the record on the next look without sending anything. */
     copiedName: text("copied_name"),

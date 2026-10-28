@@ -184,6 +184,7 @@ d("DPDP data export (real Postgres)", () => {
       RETURNING id`;
     await sql`INSERT INTO meal_log_corrections (meal_log_id, field, original, corrected)
               VALUES (${meal[0]?.id ?? ""}, ${`grams-${label}`}, ${sql.json({ g: 100 })}, ${sql.json({ g: 120 })})`;
+    await sql`INSERT INTO meal_removed_ids (id, user_id) VALUES (gen_random_uuid(), ${userId})`;
     await sql`INSERT INTO user_dishware (user_id, label, container_class, volume_ml)
               VALUES (${userId}, ${`Katori ${label}`}, 'katori', 175)`;
     // runs.id and workouts.id are client-generated (no DB default) — the only

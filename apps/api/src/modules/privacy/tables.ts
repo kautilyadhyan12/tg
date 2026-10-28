@@ -32,6 +32,9 @@
 /** Deleted directly, keyed on their own `user_id` column. */
 export const DIRECT_DELETE_TABLES = [
   "meal_logs", // §5.2 "meal_logs(+corrections)"
+  // The ids of meals the person removed (migration 0169, ROADMAP Stage 5 32b-i): kept so a late
+  // save from the phone cannot bring a removed meal back. Their own record, deleted and exported.
+  "meal_removed_ids",
   "user_dishware", // §5.2 "dishware"
   // §5.2's "coach threads/messages": those tables were dropped with the coach (ROADMAP 9b).
   "runs", // §5.2 "runs/saved_routes/schedules"

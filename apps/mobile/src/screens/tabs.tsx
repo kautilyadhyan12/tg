@@ -6,10 +6,10 @@ import { sizes } from "../look/colours";
 import { Icon } from "../look/Icon";
 import { Page } from "../look/Page";
 import { PictureTop } from "../look/PictureTop";
-import { Sheet } from "../look/Sheet";
 import { Txt } from "../look/Txt";
 import { useSession } from "../session/SessionProvider";
 import { Setup } from "./setup/Setup";
+import { SignOutAsk } from "./SignOutAsk";
 import { ThisCopy } from "./ThisCopy";
 import { COMING_SOON, Soon } from "./Soon";
 
@@ -22,14 +22,6 @@ export function WorkoutScreen() {
   return (
     <Page top={<PictureTop picture="exhero" tall={0.62} eyebrow="Exercise Library" title="Exercises" />}>
       <Soon icon="dumbbell" title="Your workouts" />
-    </Page>
-  );
-}
-
-export function FoodScreen() {
-  return (
-    <Page top={<PictureTop picture="food" tall={0.62} eyebrow="Nutrition" title="Fuel Your Training" />}>
-      <Soon icon="apple" title="Your meals" />
     </Page>
   );
 }
@@ -113,7 +105,6 @@ function YourPlan() {
 
 /** The way out of the account; nothing happens until the person says so in the box from the bottom. */
 function SignOut() {
-  const { session } = useSession();
   const [asking, setAsking] = useState(false);
   const close = () => {
     setAsking(false);
@@ -129,12 +120,7 @@ function SignOut() {
           setAsking(true);
         }}
       />
-      <Sheet open={asking} title="Sign out?" onClose={close}>
-        <View style={styles.two}>
-          <Button label="Cancel" kind="plain" style={styles.half} onPress={close} />
-          <Button label="Sign out" kind="danger" icon="logout" style={styles.half} onPress={() => void session.signOut()} />
-        </View>
-      </Sheet>
+      <SignOutAsk open={asking} onClose={close} />
     </>
   );
 }

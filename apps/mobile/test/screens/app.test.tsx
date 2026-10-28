@@ -47,7 +47,7 @@ describe("the five tabs", () => {
 
   it.each([
     ["Workout", ["Your workouts"]],
-    ["Food", ["Fuel Your Training", "Your meals"]],
+    ["Food", ["Fuel Your Training", "Today’s Macros"]],
     ["Gym", ["Where you train", "You haven’t joined a gym or studio yet."]],
     ["Me", ["ravi@example.com", "Settings"]],
     ["Dashboard", ["Ravi", "Recent Activity"]],

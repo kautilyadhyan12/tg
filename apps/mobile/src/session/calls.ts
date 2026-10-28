@@ -20,7 +20,16 @@ export interface Shape<T> {
 /** `no_answer`: no reply, a late one, or one that is not this api's. It never signs anybody out. */
 export type Answer<T> =
   | { kind: "ok"; data: T }
-  | { kind: "refused"; status: number; error: string; message: string; retryAfterSeconds: number | null; robotCheckKey: string | null }
+  | {
+      kind: "refused";
+      status: number;
+      error: string;
+      message: string;
+      retryAfterSeconds: number | null;
+      robotCheckKey: string | null;
+      /** The whole reply, for a refusal that says more than its words (a finish names what is open). */
+      body: unknown;
+    }
   | { kind: "no_answer" };
 
 export interface Server {
@@ -82,7 +91,7 @@ export async function call<T>(server: Server, request: Request, shape: Shape<T>,
     const refusal = apiRefusalSchema.safeParse(raw);
     if (!refusal.success) return { kind: "no_answer" };
     const { error, message, retryAfterSeconds, robotCheckKey } = refusal.data;
-    return { kind: "refused", status: reply.status, error, message, retryAfterSeconds: retryAfterSeconds ?? null, robotCheckKey: robotCheckKey ?? null };
+    return { kind: "refused", status: reply.status, error, message, retryAfterSeconds: retryAfterSeconds ?? null, robotCheckKey: robotCheckKey ?? null, body: raw };
   } catch {
     return { kind: "no_answer" };
   } finally {
