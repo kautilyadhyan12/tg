@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, Keyboard, Pressable, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from "react-native";
+import { AppState, Keyboard, Linking, Pressable, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import {
@@ -36,13 +36,19 @@ import { useRead } from "./dashboard/useRead";
 import {
   MEAL_PAGE_SIZE,
   MEAL_TYPES,
+  aboutKcal,
   addDays,
+  creditsFor,
   daySums,
   dayWords,
+  hasEstimate,
   inDay,
+  itemMark,
   kcalWords,
   leftWords,
   mealTypeName,
+  monthWeeks,
+  monthWords,
   noCutWords,
   sameDay,
   sectionOf,
@@ -159,6 +165,7 @@ export function FoodScreen() {
   const [open, setOpen] = useState<Row | null>(null);
   const [said, setSaid] = useState<{ section: MealType; words: string } | null>(null);
   const [setupAt, setSetupAt] = useState<SetupScreenId | "where" | null>(null);
+  const [picking, setPicking] = useState(false);
   const today = sameDay(day, new Date());
 
   // The server's meals, less those removed here, with the ones still waiting on the phone.
@@ -203,6 +210,7 @@ export function FoodScreen() {
         targets={targets.read}
         retry={targets.again}
         eaten={rows === null ? null : daySums(rows)}
+        about={rows !== null && rows.some((r) => hasEstimate(r.items))}
         onSetup={setSetupAt}
       />
       <View style={styles.dayRow}>
@@ -214,10 +222,15 @@ export function FoodScreen() {
         >
           <Icon name="back" size={18} />
         </Pressable>
-        <View style={styles.dayWords}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${dayWords(day, new Date())}, pick a day`}
+          onPress={() => { setPicking(true); }}
+          style={({ pressed }) => [styles.dayWords, pressed ? styles.pressed : null]}
+        >
           <Icon name="calendar" size={16} colour="orange" />
           <Txt kind="h3">{dayWords(day, new Date())}</Txt>
-        </View>
+        </Pressable>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={today ? "This is today" : "Next day"}
@@ -261,6 +274,7 @@ export function FoodScreen() {
             />
           ))}
           {read.kind === "ok" && read.cut ? <Txt kind="small">Meals this far back couldn’t all be read.</Txt> : null}
+          <Credits sources={new Set(rows.flatMap((r) => (r.items ?? []).map((i) => i.nutritionSource)))} />
         </>
       )}
       <AddFood
@@ -278,6 +292,15 @@ export function FoodScreen() {
           setOpen(null);
           void outbox?.remove(row.id);
           setSaid({ section: row.section, words: `${row.name} removed.` });
+        }}
+      />
+      <MonthPick
+        open={picking}
+        day={day}
+        onClose={() => { setPicking(false); }}
+        onPick={(picked) => {
+          setPicking(false);
+          goTo(picked);
         }}
       />
       <Setup
@@ -305,13 +328,16 @@ interface MacrosProps {
   targets: ReturnType<typeof useRead<NutritionTargetsResponse>>["read"];
   retry: () => void;
   eaten: Sums | null;
+  /** A food on the day holds the scan's estimate: what is left is "about". */
+  about: boolean;
   onSetup: (at: SetupScreenId | "where") => void;
 }
 
 /** The day's four rings against the person's daily numbers, what is left of them today, and why the
  *  calories hold no cut where the plan holds none. With no daily numbers it says which answer is
  *  missing and opens setup on it. */
-function Macros({ title, today, targets, retry, eaten, onSetup }: MacrosProps) {
+function Macros({ title, today, targets, retry, eaten, about, onSetup }: MacrosProps) {
+  const left = (target: number, had: number, unit: "kcal" | "g") => `${about ? "about " : ""}${leftWords(target, had, unit)}`;
   const heading = (
     <View style={styles.titleRow}>
       <Icon name="target" size={16} colour="orange" />
@@ -391,8 +417,8 @@ function Macros({ title, today, targets, retry, eaten, onSetup }: MacrosProps) {
             Remaining today
           </Txt>
           <Txt kind="small" colour="text">
-            {leftWords(goal.kcal, eaten.kcal, "kcal")} · Protein {leftWords(goal.proteinG, eaten.proteinG, "g")} · Carbs{" "}
-            {leftWords(goal.carbsG, eaten.carbsG, "g")} · Fat {leftWords(goal.fatG, eaten.fatG, "g")}
+            {left(goal.kcal, eaten.kcal, "kcal")} · Protein {left(goal.proteinG, eaten.proteinG, "g")} · Carbs{" "}
+            {left(goal.carbsG, eaten.carbsG, "g")} · Fat {left(goal.fatG, eaten.fatG, "g")}
           </Txt>
         </View>
       ) : null}
@@ -428,7 +454,7 @@ function Section({ type, rows, canAdd, said, onAdd, onOpen }: SectionProps) {
         <View style={styles.grow}>
           <Txt kind="h3">{name}</Txt>
           <Txt kind="tiny">
-            {rows.length === 1 ? "1 meal" : `${count(rows.length)} meals`} · {unknown ? NOT_KNOWN : kcalWords(sums.kcal)}
+            {rows.length === 1 ? "1 meal" : `${count(rows.length)} meals`} · {unknown ? NOT_KNOWN : aboutKcal(sums.kcal, rows.some((r) => hasEstimate(r.items)))}
           </Txt>
         </View>
         {canAdd ? (
@@ -454,7 +480,7 @@ function Section({ type, rows, canAdd, said, onAdd, onOpen }: SectionProps) {
           <Pressable
             key={row.id}
             accessibilityRole="button"
-            accessibilityLabel={`${row.name}, ${row.totals === null ? "calories not known yet" : kcalWords(row.totals.kcalPoint)}${row.waiting ? ", waiting to send" : ""}`}
+            accessibilityLabel={`${row.name}, ${row.totals === null ? "calories not known yet" : aboutKcal(row.totals.kcalPoint, hasEstimate(row.items))}${row.waiting ? ", waiting to send" : ""}`}
             onPress={() => { onOpen(row); }}
             style={({ pressed }) => [styles.meal, pressed ? styles.pressed : null]}
           >
@@ -465,7 +491,7 @@ function Section({ type, rows, canAdd, said, onAdd, onOpen }: SectionProps) {
               <Txt kind="tiny">{row.waiting ? "Waiting to send" : amountLine(row.items)}</Txt>
             </View>
             <Txt kind="small" colour="text">
-              {row.totals === null ? NOT_KNOWN : kcalWords(row.totals.kcalPoint)}
+              {row.totals === null ? NOT_KNOWN : aboutKcal(row.totals.kcalPoint, hasEstimate(row.items))}
             </Txt>
           </Pressable>
         ))
@@ -477,7 +503,7 @@ function Section({ type, rows, canAdd, said, onAdd, onOpen }: SectionProps) {
 function amountLine(items: MealItem[] | null): string {
   if (items === null || items.length === 0) return "";
   const [only] = items;
-  return items.length === 1 && only !== undefined ? loggedAmount(only) : `${count(items.length)} foods`;
+  return items.length === 1 && only !== undefined ? loggedAmount(only) + itemMark(only) : `${count(items.length)} foods`;
 }
 
 /** A meal's foods, and Remove meal, which asks first. */
@@ -504,7 +530,7 @@ function MealSheet({ row, onClose, onRemove }: { row: Row | null; onClose: () =>
             <View key={`${item.canonical}-${String(i)}`} style={styles.item}>
               <View style={styles.grow}>
                 <Txt kind="strong">{item.name}</Txt>
-                <Txt kind="tiny">{loggedAmount(item)}</Txt>
+                <Txt kind="tiny">{loggedAmount(item) + itemMark(item)}</Txt>
               </View>
               <Txt kind="small" colour="text">
                 {kcalWords(item.kcalPoint)}
@@ -513,7 +539,7 @@ function MealSheet({ row, onClose, onRemove }: { row: Row | null; onClose: () =>
           ))}
           {row.totals === null ? null : (
             <Txt kind="small">
-              {kcalWords(row.totals.kcalPoint)} · Protein {count(Math.round(row.totals.proteinG))} g · Carbs {count(Math.round(row.totals.carbsG))} g · Fat{" "}
+              {aboutKcal(row.totals.kcalPoint, hasEstimate(row.items))} · Protein {count(Math.round(row.totals.proteinG))} g · Carbs {count(Math.round(row.totals.carbsG))} g · Fat{" "}
               {count(Math.round(row.totals.fatG))} g
             </Txt>
           )}
@@ -531,7 +557,7 @@ const SHEET_ABOVE_SEARCH = SHEET_ABOVE_LIST + 70;
 const SHEET_LIST_LEAST = 120;
 
 const SOURCE_WORDS: Readonly<Record<FoodSearchItem["source"], string>> = {
-  curated: "Our list",
+  curated: "Verified",
   usda: "USDA",
   openfoodfacts: "Packaged product",
   estimate: "Estimate",
@@ -675,9 +701,7 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
                     <Txt kind="strong" numberOfLines={2}>
                       {f.name}
                     </Txt>
-                    <Txt kind="tiny">
-                      {count(Math.round(f.kcal))} kcal per 100 g · {SOURCE_WORDS[f.source]}
-                    </Txt>
+                    <SourceLine source={f.source} before={`${count(Math.round(f.kcal))} kcal per 100 g · `} />
                   </Pressable>
                 ))
               : null}
@@ -687,7 +711,7 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
             <View style={styles.row}>
               <View style={styles.grow}>
                 <Txt kind="strong">{food.name}</Txt>
-                <Txt kind="tiny">{SOURCE_WORDS[food.source]}</Txt>
+                <SourceLine source={food.source} />
               </View>
               <Button
                 label="Change"
@@ -766,12 +790,135 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
             />
           </>
         )}
+        <Credits sources={new Set(food === null ? (found.kind === "ok" ? found.items.map((f) => f.source) : []) : [food.source])} />
       </ScrollView>
     </Sheet>
   );
 }
 
+/** Where a food's numbers come from; the hand-checked foods with a tick. */
+function SourceLine({ source, before = "" }: { source: FoodSearchItem["source"]; before?: string }) {
+  return (
+    <View style={styles.source}>
+      <Txt kind="tiny">{before}</Txt>
+      {source === "curated" ? <Icon name="check" size={12} colour="goodText" /> : null}
+      <Txt kind="tiny" colour={source === "curated" ? "goodText" : "textFaint"}>
+        {SOURCE_WORDS[source]}
+      </Txt>
+    </View>
+  );
+}
+
+/** The food data's own credits, for the sources on screen (food/day.ts, `creditsFor`). */
+function Credits({ sources }: { sources: ReadonlySet<string> }) {
+  const credits = creditsFor(sources);
+  if (credits.length === 0) return null;
+  return (
+    <View style={styles.credits}>
+      {credits.map((credit) => (
+        <Txt key={credit.key} kind="tiny">
+          {credit.parts.map((part) =>
+            "link" in part ? (
+              <Txt
+                key={part.text}
+                kind="tiny"
+                colour="textSoft"
+                style={styles.link}
+                onPress={() => { void Linking.openURL(part.link); }}
+              >
+                {part.text}
+              </Txt>
+            ) : (
+              part.text
+            ),
+          )}
+        </Txt>
+      ))}
+    </View>
+  );
+}
+
+const WEEKDAY_LETTERS = ["M", "T", "W", "T", "F", "S", "S"] as const;
+
+/** A month to pick a day from, as standard apps draw it: today and the days before it, never after. */
+function MonthPick({ open, day, onClose, onPick }: { open: boolean; day: Date; onClose: () => void; onPick: (day: Date) => void }) {
+  const [month, setMonth] = useState(() => new Date(day.getFullYear(), day.getMonth(), 1));
+  useEffect(() => {
+    if (open) setMonth(new Date(day.getFullYear(), day.getMonth(), 1));
+  }, [open, day]);
+  if (!open) return null;
+  const today = startOfDay(new Date());
+  const thisMonth = month.getFullYear() === today.getFullYear() && month.getMonth() === today.getMonth();
+  return (
+    <Sheet open title="Pick a day" onClose={onClose}>
+      <View style={styles.monthHead}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Previous month"
+          onPress={() => { setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1)); }}
+          style={styles.arrow}
+        >
+          <Icon name="back" size={18} />
+        </Pressable>
+        <Txt kind="h3" style={styles.monthName}>
+          {monthWords(month)}
+        </Txt>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Next month"
+          accessibilityState={{ disabled: thisMonth }}
+          disabled={thisMonth}
+          onPress={() => { setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1)); }}
+          style={[styles.arrow, thisMonth ? styles.dim : null]}
+        >
+          <Icon name="go" size={18} />
+        </Pressable>
+      </View>
+      <View style={styles.week}>
+        {WEEKDAY_LETTERS.map((letter, i) => (
+          <Txt key={`${letter}${String(i)}`} kind="tiny" style={styles.cell}>
+            {letter}
+          </Txt>
+        ))}
+      </View>
+      {monthWeeks(month).map((week, w) => (
+        <View key={String(w)} style={styles.week}>
+          {week.map((d, i) => {
+            if (d === null) return <View key={`gap${String(i)}`} style={styles.cell} />;
+            const after = d.getTime() > today.getTime();
+            const on = sameDay(d, day);
+            return (
+              <Pressable
+                key={d.getDate()}
+                accessibilityRole="button"
+                accessibilityLabel={dayWords(d, new Date())}
+                accessibilityState={{ disabled: after, selected: on }}
+                disabled={after}
+                onPress={() => { onPick(d); }}
+                style={[styles.cell, styles.dayCell, on ? styles.dayOn : null, after ? styles.dim : null]}
+              >
+                <Txt kind="small" colour={on ? "onOrange" : sameDay(d, today) ? "orange" : "text"}>
+                  {String(d.getDate())}
+                </Txt>
+              </Pressable>
+            );
+          })}
+        </View>
+      ))}
+    </Sheet>
+  );
+}
+
 const styles = StyleSheet.create({
+  source: { flexDirection: "row", alignItems: "center", gap: 4, flexWrap: "wrap" },
+  credits: { gap: 6, paddingTop: 4 },
+  link: { textDecorationLine: "underline" },
+  monthHead: { flexDirection: "row", alignItems: "center", gap: 10 },
+  monthName: { flex: 1, textAlign: "center" },
+  week: { flexDirection: "row" },
+  cell: { flex: 1, textAlign: "center", alignItems: "center", justifyContent: "center" },
+  dayCell: { minHeight: sizes.press, borderRadius: sizes.round },
+  dayOn: { backgroundColor: colours.orange },
   grow: { flex: 1 },
   row: { flexDirection: "row", alignItems: "center", gap: 10 },
   centre: { textAlign: "center" },

@@ -278,3 +278,56 @@ describe("the day's food", () => {
     expect(day === null || day === undefined ? null : within(day)).not.toBeNull();
   });
 });
+
+describe("what the numbers are, and where they come from", () => {
+  it("a scanned meal's estimate says so beside the food and makes its calories about; the data's credit is named", async () => {
+    const scanned = savedMeal("33333333-3333-4333-8333-333333333333", { mealName: "Lunch plate", takenAt: new Date().toISOString(), mealType: "lunch" });
+    scanned.items = [{ ...scanned.items[0], nutritionSource: "estimate" } as Meal["items"][number]];
+    await openFood({ meals: [scanned] });
+    const row = await screen.findByRole("button", { name: "Lunch plate, about 307 kcal" });
+    expect(within(row).getByText("1 × cup · 81 g · estimate")).toBeTruthy();
+    expect(screen.getByText(/^about 1,993 kcal left/)).toBeTruthy();
+    expect(screen.queryByText(/USDA FoodData Central/)).toBeNull();
+  });
+
+  it("a USDA food on the day carries USDA's credit, and a hand-checked food in the search reads Verified", async () => {
+    const meal = savedMeal("44444444-4444-4444-8444-444444444444", { mealName: "Oats, rolled", takenAt: new Date().toISOString(), mealType: "breakfast" });
+    const server = foodServer({ meals: [meal] }, { "/v1/nutrition/foods": ok({ items: [{ ...OATS, source: "curated" }] }) });
+    await render(<App extra={extra} ask={server.ask} store={memoryStore(kept(1))} wait={noWait} mealStore={files().store} />);
+    await fireEvent.press(await screen.findByRole("tab", { name: "Food" }));
+    expect(await screen.findByRole("link", { name: "USDA FoodData Central" })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Add to Breakfast" }));
+    await fireEvent.changeText(screen.getByLabelText("Search food"), "oats");
+    expect(await screen.findByRole("button", { name: "Oats, rolled, 379 kcal per 100 g, Verified" })).toBeTruthy();
+    expect(screen.queryByText(/Our list/)).toBeNull();
+  });
+
+  it("a packaged product in the search carries Open Food Facts' licence notice", async () => {
+    const server = foodServer({ meals: [] }, { "/v1/nutrition/foods": ok({ items: [{ ...OATS, source: "openfoodfacts" }] }) });
+    await render(<App extra={extra} ask={server.ask} store={memoryStore(kept(1))} wait={noWait} mealStore={files().store} />);
+    await fireEvent.press(await screen.findByRole("tab", { name: "Food" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Add to Breakfast" }));
+    await fireEvent.changeText(screen.getByLabelText("Search food"), "oats");
+    expect(await screen.findByRole("link", { name: "Open Database License (ODbL)" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Open Food Facts" })).toBeTruthy();
+  });
+});
+
+describe("picking a day", () => {
+  it("opens a month, goes to the day pressed, and offers no day after today", async () => {
+    await openFood({ meals: [] });
+    await fireEvent.press(await screen.findByRole("button", { name: "Today, pick a day" }));
+    expect(screen.getByText("Pick a day")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Next month" }).props.accessibilityState).toMatchObject({ disabled: true });
+    await fireEvent.press(screen.getByRole("button", { name: "Previous month" }));
+    const now = new Date();
+    const fifteenth = new Date(now.getFullYear(), now.getMonth() - 1, 15);
+    const label = `${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][fifteenth.getDay()] ?? ""}, 15 ${
+      ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][fifteenth.getMonth()] ?? ""
+    }`;
+    await fireEvent.press(screen.getByRole("button", { name: label }));
+    expect(await screen.findByRole("button", { name: `${label}, pick a day` })).toBeTruthy();
+    expect(screen.queryByText("Pick a day")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add to Breakfast" })).toBeNull();
+  });
+});

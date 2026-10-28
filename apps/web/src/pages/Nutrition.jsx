@@ -26,7 +26,7 @@ const MAX_ITEMS = 30;
 // Where a scanned food's numbers came from, as the photo sheet tags its row
 // (ROADMAP 7a-iii-b): a food table, or the scanner's own estimate for a food no
 // table has.
-const SOURCE_TAGS = { curated: 'Our list', usda: 'USDA', openfoodfacts: 'Packaged product', estimate: 'Estimate' };
+const SOURCE_TAGS = { curated: 'Verified', usda: 'USDA', openfoodfacts: 'Packaged product', estimate: 'Estimate' };
 /** Whether any of these items is priced by the scanner's own estimate, which
  *  makes their total "about". */
 const hasEstimate = (items) => (items || []).some((i) => i?.nutritionSource === 'estimate');

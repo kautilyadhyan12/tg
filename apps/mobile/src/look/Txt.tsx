@@ -21,14 +21,17 @@ interface TxtProps {
   colour?: ColourName;
   style?: StyleProp<TextStyle>;
   numberOfLines?: number;
+  /** Words that open something: a link inside a line. */
+  onPress?: () => void;
   children: ReactNode;
 }
 
 /** Every word on a screen. No size here is under 11. */
-export function Txt({ kind = "body", colour, style, numberOfLines, children }: TxtProps) {
+export function Txt({ kind = "body", colour, style, numberOfLines, onPress, children }: TxtProps) {
   return (
     <Text
-      accessibilityRole={kind === "hero" || kind === "h1" || kind === "h2" || kind === "h3" ? "header" : undefined}
+      accessibilityRole={onPress !== undefined ? "link" : kind === "hero" || kind === "h1" || kind === "h2" || kind === "h3" ? "header" : undefined}
+      onPress={onPress}
       numberOfLines={numberOfLines}
       maxFontSizeMultiplier={MOST_TEXT_GROWTH}
       style={[kinds[kind], colour === undefined ? null : { color: colours[colour] }, style]}

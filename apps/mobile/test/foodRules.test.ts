@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Meal, MealPage, NutritionTargetsResponse } from "@app/shared";
-import { MOST_MEAL_PAGES, addDays, daySums, dayWords, leftWords, noCutWords, sectionOf, walkDay } from "../src/screens/food/day";
+import { MOST_MEAL_PAGES, aboutKcal, addDays, creditsFor, hasEstimate, itemMark, monthWeeks, monthWords, daySums, dayWords, leftWords, noCutWords, sectionOf, walkDay } from "../src/screens/food/day";
 import { FIRST_MEASURES, amountFor, chosenItem, shownMeasures, loggedAmount, measureWords, startingAmount, stepped, underAGram, unitWords } from "../src/screens/food/measures";
 
 const at = (y: number, m: number, d: number, h: number) => new Date(y, m - 1, d, h).toISOString();
@@ -168,5 +168,51 @@ describe("the measures offered", () => {
 
   it("are all shown when there is only one more than the few", () => {
     expect(shownMeasures(banana.slice(0, FIRST_MEASURES + 1), null, false)).toHaveLength(FIRST_MEASURES + 1);
+  });
+});
+
+describe("a scan's estimate", () => {
+  it("makes a meal's calories about, and says so beside the food, as on the browser", () => {
+    expect(hasEstimate([{ nutritionSource: "usda" }, { nutritionSource: "estimate" }])).toBe(true);
+    expect(hasEstimate([{ nutritionSource: "curated" }, { nutritionSource: "own" }])).toBe(false);
+    expect(hasEstimate(null)).toBe(false);
+    expect(aboutKcal(462, true)).toBe("about 462 kcal");
+    expect(aboutKcal(1250, false)).toBe("1,250 kcal");
+    expect([itemMark({ nutritionSource: "estimate" }), itemMark({ nutritionSource: "own" }), itemMark({ nutritionSource: "usda" })]).toEqual([
+      " · estimate",
+      " · your numbers",
+      "",
+    ]);
+  });
+});
+
+describe("the month to pick a day from", () => {
+  it("runs Monday to Sunday, with no day before the 1st or after the last", () => {
+    const october = monthWeeks(new Date(2026, 9, 1));
+    expect(monthWords(new Date(2026, 9, 1))).toBe("October 2026");
+    // 1 October 2026 is a Thursday.
+    expect(october[0]?.map((d) => d?.getDate() ?? null)).toEqual([null, null, null, 1, 2, 3, 4]);
+    expect(october.flat().filter((d) => d !== null)).toHaveLength(31);
+    expect(october.every((w) => w.length === 7)).toBe(true);
+    expect(october.at(-1)?.map((d) => d?.getDate() ?? null)).toEqual([26, 27, 28, 29, 30, 31, null]);
+    // February 2027 starts on a Monday and fills four weeks exactly.
+    expect(monthWeeks(new Date(2027, 1, 1))).toHaveLength(4);
+  });
+});
+
+describe("the food data's credits", () => {
+  const words = (c: ReturnType<typeof creditsFor>[number]) => c.parts.map((p) => p.text).join("");
+
+  it("name USDA and carry Open Food Facts' licence notice, each only where its food is on screen", () => {
+    expect(creditsFor(new Set(["curated", "estimate"]))).toEqual([]);
+    const both = creditsFor(new Set(["usda", "openfoodfacts"]));
+    expect(both.map((c) => c.key)).toEqual(["usda", "openfoodfacts"]);
+    const usda = both[0];
+    expect(usda === undefined ? "" : words(usda)).toBe("Food data from USDA FoodData Central, U.S. Department of Agriculture, Agricultural Research Service.");
+    const off = both[1];
+    expect(off === undefined ? "" : words(off)).toBe(
+      "Packaged products contain information from Open Food Facts, which is made available here under the Open Database License (ODbL).",
+    );
+    expect(off?.parts.flatMap((p) => ("link" in p ? [p.link] : []))).toEqual(["https://openfoodfacts.org", "https://opendatacommons.org/licenses/odbl/1-0/"]);
   });
 });
