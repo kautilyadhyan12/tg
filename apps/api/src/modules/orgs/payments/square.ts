@@ -92,6 +92,10 @@ export interface SquareApi {
   /** 404 is a customer the gym deleted inside Square. What Square has of them (their name, email and
    *  phone) is shown beside a payment from Square Point of Sale linked to nobody here (18d-iii-b-ii-a). */
   retrieveCustomer(accessToken: string, customerId: string): Promise<SquareResult<SquareCustomer>>;
+  /** Change what Square holds of a customer (18d-iii-b-ii-b-ii-b-i): only the parts given, a null clearing one. Square
+   *  refuses (409 CONFLICT) a `version` that is not the customer's current one, which is how a change made in Square
+   *  since the customer was read is never written over. */
+  updateCustomer(accessToken: string, customerId: string, change: SquareCustomerChange): Promise<SquareResult<SquareCustomer>>;
   /** No charge or update can reach the card after this; disabling one already disabled is
    *  allowed and changes nothing. */
   disableCard(accessToken: string, cardId: string): Promise<SquareResult<SquareCard>>;
@@ -202,6 +206,16 @@ export interface NewSquareCustomer {
   referenceId: string;
 }
 
+/** What UpdateCustomer is asked to change: a part left out stays as it is; null clears it. `version`: the customer's
+ *  current version, read just before. */
+export interface SquareCustomerChange {
+  version: number | null;
+  givenName?: string | null;
+  familyName?: string | null;
+  email?: string | null;
+  phone?: string | null;
+}
+
 /** Each customer on a page read on its own, so one that cannot be read never hides the rest. */
 function readCustomers(raw: readonly unknown[] | null | undefined): { customers: SquareCustomerFound[]; unread: number } {
   const customers: SquareCustomerFound[] = [];
@@ -265,7 +279,13 @@ export function createSquareApi(opts: {
   const base = squareBaseUrl(opts.environment);
 
   /** Square's status and body, or null for no answer at all. */
-  async function send(method: "GET" | "POST", path: string, authorization: string | null, body?: unknown): Promise<{ status: number; ok: boolean; json: unknown } | null> {
+  async function send(
+    method: "GET" | "POST" | "PUT",
+    path: string,
+    authorization: string | null,
+    body?: unknown,
+    headers: Record<string, string> = {},
+  ): Promise<{ status: number; ok: boolean; json: unknown } | null> {
     let response: Response;
     try {
       response = await doFetch(`${base}${path}`, {
@@ -274,6 +294,7 @@ export function createSquareApi(opts: {
           "Content-Type": "application/json",
           "Square-Version": SQUARE_VERSION,
           ...(authorization === null ? {} : { Authorization: authorization }),
+          ...headers,
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         signal: AbortSignal.timeout(SQUARE_TIMEOUT_MS),
@@ -291,13 +312,14 @@ export function createSquareApi(opts: {
   }
 
   async function call<T extends z.ZodTypeAny>(
-    method: "GET" | "POST",
+    method: "GET" | "POST" | "PUT",
     path: string,
     schema: T,
     authorization: string | null,
     body?: unknown,
+    headers: Record<string, string> = {},
   ): Promise<SquareResult<z.infer<T>>> {
-    const sent = await send(method, path, authorization, body);
+    const sent = await send(method, path, authorization, body, headers);
     if (sent === null) return { kind: "unavailable", status: null };
     if (sent.status === 429 || sent.status >= 500) return { kind: "unavailable", status: sent.status };
     if (!sent.ok) {
@@ -418,6 +440,21 @@ export function createSquareApi(opts: {
     async retrieveCustomer(accessToken, customerId) {
       if (!/^[A-Za-z0-9_-]{1,64}$/.test(customerId)) throw new Error("not a Square customer id");
       const result = await call("GET", `/v2/customers/${customerId}`, squareCustomerAnswerSchema, bearer(accessToken));
+      return result.kind === "ok" ? { kind: "ok", value: result.value.customer } : result;
+    },
+    async updateCustomer(accessToken, customerId, c) {
+      if (!/^[A-Za-z0-9_-]{1,64}$/.test(customerId)) throw new Error("not a Square customer id");
+      const body = {
+        ...(c.version === null ? {} : { version: c.version }),
+        ...(c.givenName === undefined ? {} : { given_name: c.givenName }),
+        ...(c.familyName === undefined ? {} : { family_name: c.familyName }),
+        ...(c.email === undefined ? {} : { email_address: c.email }),
+        ...(c.phone === undefined ? {} : { phone_number: c.phone }),
+      };
+      // "Clear a field: null, with the header X-Clear-Null" (Customers API, read 2026-10-28); a null cleared it in
+      // Square's test area without the header too (2026-10-28).
+      const clears = Object.values(body).includes(null);
+      const result = await call("PUT", `/v2/customers/${customerId}`, squareCustomerAnswerSchema, bearer(accessToken), body, clears ? { "X-Clear-Null": "true" } : {});
       return result.kind === "ok" ? { kind: "ok", value: result.value.customer } : result;
     },
     async disableCard(accessToken, cardId) {

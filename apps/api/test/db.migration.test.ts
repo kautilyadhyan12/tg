@@ -881,6 +881,63 @@ d("0001_init on a real database", () => {
       });
   });
 
+  /** MIGRATION `0170`'s data statement, read out of the shipped file and run on TEMPORARY copies of the two tables (never the live
+   *  ones other suites write to): a customer made or linked before copying existed is marked as agreeing with its record as the
+   *  record is now (each part as the md5 of its folded value, none for a part the record lacks); a customer being made is left
+   *  alone, and so is one already marked; a second run finds nothing to do. All of it is rolled back. */
+  it("0170 marks every customer made before copying existed as agreeing with its record as it is now", async () => {
+    const migration = await readFile(new URL("../drizzle/0170_square_copied_changes.sql", import.meta.url), "utf8");
+    const chunks = migration.split("--> statement-breakpoint").map((c) => c.trim());
+    const fills = chunks.filter((c) => c.includes('UPDATE "gym_square_customers"'));
+    const [fill] = fills;
+    if (fill === undefined || fills.length !== 1) throw new Error("0170 no longer holds exactly one data statement");
+    const onCopy = fill.replaceAll('"gym_square_customers"', '"gsc_0170"').replaceAll('"gym_member_list_entries"', '"gmle_0170"');
+    await sql
+      .begin(async (tx) => {
+        await tx`CREATE TEMP TABLE gmle_0170 (LIKE gym_member_list_entries INCLUDING DEFAULTS) ON COMMIT DROP`;
+        await tx`CREATE TEMP TABLE gsc_0170 (LIKE gym_square_customers INCLUDING DEFAULTS) ON COMMIT DROP`;
+        const gym = "00000000-0000-4000-8000-000000000170";
+        const entry = async (fullName: string, email: string | null, phone: string | null): Promise<string> => {
+          const [r] = await tx<{ id: string }[]>`
+            INSERT INTO gmle_0170 (gym_id, full_name, email, phone_e164, identity_key, source)
+            VALUES (${gym}, ${fullName}, ${email}, ${phone}, ${fullName}, 'typed') RETURNING id`;
+          if (r === undefined) throw new Error("fixture insert failed");
+          return r.id;
+        };
+        const customer = async (entryId: string, customerId: string | null) => {
+          await tx`
+            INSERT INTO gsc_0170 (gym_id, entry_id, environment, account_id, customer_id, making_key)
+            VALUES (${gym}, ${entryId}, 'production', 'ACCT170', ${customerId}, ${customerId === null ? randomUUID() : null})`;
+        };
+        const amy = await entry("Amy Lee", "Amy.Lee@Gmail.com", "+13125550142");
+        const bo = await entry("Bo", null, null);
+        const cy = await entry("Cy Young", "cy@gmail.com", null);
+        const dee = await entry("Dee Park", "dee@gmail.com", "+13125550199");
+        await customer(amy, "CAMY");
+        await customer(bo, "CBO");
+        await customer(cy, null);
+        await customer(dee, "CDEE");
+        const marked = "0123456789abcdef0123456789abcdef";
+        await tx`UPDATE gsc_0170 SET copied_name = ${marked}, copied_at = now() WHERE entry_id = ${dee}`;
+        await tx.unsafe(onCopy);
+        await tx.unsafe(onCopy);
+        const rows = await tx<{ entry_id: string; copied_name: string | null; copied_email: string | null; copied_phone: string | null; known: boolean }[]>`
+          SELECT entry_id, copied_name, copied_email, copied_phone, copied_at IS NOT NULL AS known FROM gsc_0170`;
+        const of = (id: string) => rows.find((r) => r.entry_id === id);
+        const [h] = await tx<{ name: string; email: string; phone: string; bo: string }[]>`
+          SELECT md5('Amy Lee') AS name, md5('amy.lee@gmail.com') AS email, md5('+13125550142') AS phone, md5('Bo') AS bo`;
+        expect(of(amy)).toMatchObject({ copied_name: h?.name, copied_email: h?.email, copied_phone: h?.phone, known: true });
+        expect(of(bo)).toMatchObject({ copied_name: h?.bo, copied_email: null, copied_phone: null, known: true });
+        expect(of(cy), "a customer being made is left alone").toMatchObject({ copied_name: null, known: false });
+        expect(of(dee), "a customer already marked keeps its mark").toMatchObject({ copied_name: marked, copied_email: null, known: true });
+        throw new Error("ROLLBACK-0170-FIXTURE");
+      })
+      .catch((err: unknown) => {
+        if (err instanceof Error && err.message === "ROLLBACK-0170-FIXTURE") return;
+        throw err;
+      });
+  });
+
   /** MIGRATION `0028`'s DATA STATEMENTS, read out of the shipped file and run
    *  on the old shapes they exist for — on a TEMPORARY copy of the table, so
    *  this test never locks or alters the live one that other suites are

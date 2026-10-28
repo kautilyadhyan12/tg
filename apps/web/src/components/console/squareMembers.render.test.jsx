@@ -21,7 +21,7 @@ const { readOnlyNote } = await import('../../pages/console/billingView');
 const ORG = { id: '11111111-1111-4111-8111-111111111111', slug: 'iron-house', name: 'Iron House', orgType: 'gym', staffRole: 'owner' };
 const RUN = '22222222-2222-4222-8222-222222222222';
 const group = (count = 0, names = []) => ({ count, names });
-const GROUPS = { add: group(), link: group(), several_customers: group(), several_people: group(), billed: group(), refused: group(), waiting: group(), merged_away: group() };
+const GROUPS = { add: group(), link: group(), several_customers: group(), several_people: group(), billed: group(), refused: group(), waiting: group(), merged_away: group(), not_copied: group() };
 const members = (over = {}) => ({
   state: 'none',
   runId: null,
@@ -82,7 +82,7 @@ describe('before anything is added', () => {
     const box = within(screen.getByTestId('square-members-check'));
     expect(box.getByText('Will be added to your Square customer list, with their name, email and phone (3):')).toBeTruthy();
     expect(within(box.getByTestId('square-members-add')).getByText('Amy Lee, Ben Ortiz and Sam Smith')).toBeTruthy();
-    expect(box.getByText('Already in your Square customer list, with the same email or phone and the same name. They are linked, and nothing about them changes in Square (1):')).toBeTruthy();
+    expect(box.getByText('Already in your Square customer list, with the same email or phone and the same name. They are linked, and nothing about them changes in Square now (1):')).toBeTruthy();
     const billed = within(box.getByTestId('square-members-billed'));
     expect(billed.getByText('Square already charges this member with its own subscriptions (1):')).toBeTruthy();
     expect(billed.getByText('If you also charge their card here, they pay twice. Cancel those subscriptions in Square first.')).toBeTruthy();
@@ -90,6 +90,8 @@ describe('before anything is added', () => {
     expect(several.getByText('Left out, as Square has more than one customer who could be each of them (1):')).toBeTruthy();
     // Square's own menu words, each drawn as a label.
     for (const name of ['Customer directory', '•••', 'Merge customer']) expect(several.getByText(name, { selector: '.c-ui' })).toBeTruthy();
+    // What happens to their details from now on, before anything is added.
+    expect(screen.getByText("When you change a member's name, email or phone here, the change is copied to their customer in Square. Only the part you changed is sent.")).toBeTruthy();
     const people = within(box.getByTestId('square-members-several_people'));
     expect(people.getByText('If they are the same person, join their records here, then check again.')).toBeTruthy();
     expect(people.getByRole('link', { name: 'Open Possible duplicates' }).getAttribute('href')).toBe('/console/iron-house/members/duplicates');
@@ -201,6 +203,25 @@ describe('who may, and while Square is read', () => {
     expect(step.getByText('Check their email address and phone number on their page. The app tries again tomorrow, or when their details change.')).toBeTruthy();
     expect(step.getByText('Being added (1):')).toBeTruthy();
     expect(step.getByText('Theo Park')).toBeTruthy();
+  });
+
+  it("once added, the line says changes are copied, and names members in Square whose changed details Square would not take, with what to do", async () => {
+    open(members({ state: 'added', runId: RUN, automatic: true, inSquare: 5, groups: { not_copied: group(2, ['Eli Nunez', 'Fay Ross']) } }));
+    const step = await line();
+    expect(await step.findByText("When you change a member's name, email or phone here, the change is copied to their customer in Square. Only the part you changed is sent.")).toBeTruthy();
+    const none = within(step.getByTestId('square-members-not_copied'));
+    expect(none.getByText("Square didn't accept the change to their details (2):")).toBeTruthy();
+    expect(none.getByText('Eli Nunez and Fay Ross')).toBeTruthy();
+    expect(none.getByText('They still have their old details in Square. Check their email address and phone number on their page. The app tries again tomorrow, or when their details change.')).toBeTruthy();
+    // Nobody is named as not in Square: these members are in it.
+    expect(step.queryByTestId('square-members-not-in')).toBeNull();
+  });
+
+  it("once added, with nobody refused, no line about changes Square would not take is drawn", async () => {
+    open(members({ state: 'added', runId: RUN, automatic: true, inSquare: 5 }));
+    const step = await line();
+    expect(await step.findByText(/^5 of 5 current members are in Square/)).toBeTruthy();
+    expect(step.queryByTestId('square-members-not_copied')).toBeNull();
   });
 
   it('once added, members Square charges with its own subscriptions are named, with what to do', async () => {

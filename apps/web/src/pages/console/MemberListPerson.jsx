@@ -37,7 +37,7 @@ import { METHOD_NEEDED, firstBillPart, giveBody, joiningFeeFor, membershipChoice
 import { discountsForType, membershipSummary } from './sellDiscountsView';
 import { FriendGiftNote } from './FriendGift';
 import { JoiningFeeTick, MembershipTotal } from './MembershipDiscount';
-import { leadMatchLine } from '@app/shared';
+import { SQUARE_MEMBERS_WORDS, leadMatchLine } from '@app/shared';
 import { canRecordPayments } from './memberBillsView';
 import { canMatchPayments } from './paymentsToMatchAccess';
 import { paymentsToMatchService } from '../../api/paymentsToMatchApi';
@@ -45,6 +45,7 @@ import { canManageMemberships } from './membershipTypesView';
 import { viewerPrivileges } from './consoleView';
 import { canOpenPlace, placeFor } from './consolePlaces';
 import { useCameBack } from './useCameBack';
+import { useLiveNews } from './liveNews';
 import PlaceLink from '../../components/console/PlaceLink';
 import MoreMenu from '../../components/console/MoreMenu';
 import SentencePlace from '../../components/console/SentencePlace';
@@ -588,6 +589,20 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   // Somebody who set memberships up in another tab finds them here on coming back: a form
   // with nothing to pick from reads the price list again.
   useCameBack(adding && !sells, () => setPriceAsk((n) => n + 1));
+  // Square's answer to a changed phone or email comes a minute after Save, from the worker: when the line says it has
+  // moved on, the page reads whether Square took the change again, and changes that line alone (18d-iii-b-ii-b-ii-b-i).
+  useLiveNews(gymId, (message) => {
+    const asked = wanted.current;
+    if (message.what !== 'squareMembers' || asked === null) return;
+    orgService
+      .getMemberListEntry(gymId, asked)
+      .then((res) => {
+        if (wanted.current !== asked) return;
+        const refused = res.data.entry.squareCopyRefused === true;
+        setEntry((e) => (e !== null && e.entryId === asked && e.squareCopyRefused !== refused ? { ...e, squareCopyRefused: refused } : e));
+      })
+      .catch(() => undefined);
+  });
 
   useEffect(() => {
     const before = document.body.style.overflow;
@@ -1485,6 +1500,13 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
                 Remove from app
               </button>
             ) : null}
+          </div>
+        ) : null}
+        {p.squareCopyRefused === true ? (
+          // Square would not take the change to their details (18d-iii-b-ii-b-ii-b-i); Members in Square names them too.
+          <div className="c-callout items-center flex-wrap" data-testid="square-copy-refused">
+            <AlertTriangle aria-hidden="true" className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--warn)' }} />
+            <span className="c-s14 flex-1 min-w-[180px]">{SQUARE_MEMBERS_WORDS.personNotCopied}</span>
           </div>
         ) : null}
         {(p.review ?? []).length > 0 ? <ReviewBox lines={p.review} busy={busy} readOnly={readOnly} onCorrect={(line) => void markCorrect(line)} /> : null}
