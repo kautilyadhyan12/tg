@@ -3,12 +3,20 @@ import { StyleSheet, View } from "react-native";
 import {
   ADULT_AGE,
   AGE_REST,
+  CHECK_FIRST_HEADING,
+  CHECK_FIRST_OPTIONS,
+  CURRENT_DISCLAIMER_VERSION,
   DAYS,
+  DIETS,
+  DISCLAIMER_WORDINGS,
   EQUIPMENT,
   GENDERS,
   GOALS,
+  HEALTH_QUESTION,
+  HEALTH_QUESTION_NOTE,
   HEIGHT_REST,
   LEVELS,
+  MEALS_PER_DAY,
   PACES,
   PLACES,
   PLANK_REST,
@@ -46,18 +54,22 @@ import {
   weightShown,
   weightWholes,
   wrongSideText,
+  type CheckFirst,
   type PatchOnboardingRequest,
   type PlanNumbers,
   type SetupAnswers,
   type Units,
   type WeightParts,
 } from "@app/shared";
+import { Card } from "../../look/Card";
 import { Chip, Grid, Options, Segments } from "../../look/Choice";
 import { Field } from "../../look/Field";
 import { Icon } from "../../look/Icon";
 import { Ruler } from "../../look/Ruler";
+import { Tick } from "../../look/Tick";
 import { fonts, Txt } from "../../look/Txt";
 import { colours } from "../../look/colours";
+import type { HealthStep } from "./useHealthStep";
 
 // Setup's first seven screens on the phone. Every tap and every slide saves at once through
 // `save`; the one typed box, the name, saves when the person leaves it. Nothing here decides a
@@ -82,6 +94,9 @@ export interface ScreenProps {
   name: NameBox;
   direction: Direction | null;
   plan: PlanNumbers | null;
+  health: HealthStep;
+  /** A health answer the server took: the daily number is read again, as any yes stops the calorie cut. */
+  healthSaved: () => void;
 }
 
 /** Whether the server takes this one answer: a scale never saves a number the contract refuses. */
@@ -559,6 +574,120 @@ export function EquipmentScreen({ answers, save }: ScreenProps) {
   );
 }
 
+// ── Screen 8 ────────────────────────────────────────────────────────────────
+
+const healthNote = DISCLAIMER_WORDINGS.health_step[CURRENT_DISCLAIMER_VERSION.health_step];
+const CHECK_FIRST: readonly CheckFirst[] = ["cleared", "not_yet"];
+
+/** The one health question (RULINGS 2026-09-07 and 2026-09-10), in the browser's words. A yes is
+ *  NOT saved until "Check first" is answered: the server refuses a yes with no choice, so Yes opens
+ *  the two and stores nothing; until one is picked the screen holds what the server has. "Not yet"
+ *  is Safe mode. The note's tick is kept in the consent log the moment it is made. */
+export function HealthScreen({ health, healthSaved }: ScreenProps) {
+  const [pendingYes, setPendingYes] = useState(false);
+  const screening = health.screening;
+  const stored = screening?.answered === true ? screening.hasCondition : null;
+  const yes = pendingYes ? true : stored;
+  const checkFirst = stored === true ? (screening?.checkFirst ?? null) : null;
+  const busy = health.saving;
+
+  const send = async (hasCondition: boolean, choice: CheckFirst | null) => {
+    if (await health.answer(hasCondition ? { hasCondition, checkFirst: choice } : { hasCondition })) healthSaved();
+  };
+
+  return (
+    <View style={styles.screen}>
+      <Section title={HEALTH_QUESTION}>
+        <Txt style={styles.hint}>{HEALTH_QUESTION_NOTE}</Txt>
+        <Grid
+          columns={2}
+          cells={[
+            {
+              key: "no",
+              label: "No",
+              selected: yes === false,
+              onPress: () => {
+                if (busy) return;
+                setPendingYes(false);
+                if (stored !== false) void send(false, null);
+              },
+            },
+            {
+              key: "yes",
+              label: "Yes",
+              selected: yes === true,
+              onPress: () => {
+                if (!busy) setPendingYes(true);
+              },
+            },
+          ]}
+        />
+      </Section>
+      {yes === true ? (
+        <Section title={CHECK_FIRST_HEADING}>
+          <Options
+            options={CHECK_FIRST.map((value) => ({ value, label: CHECK_FIRST_OPTIONS[value].label, desc: CHECK_FIRST_OPTIONS[value].detail }))}
+            selected={checkFirst}
+            onPick={(value) => {
+              if (busy) return;
+              setPendingYes(false);
+              if (value !== checkFirst) void send(true, value);
+            }}
+          />
+          {stored === true ? null : <Txt style={styles.hint}>Pick one to save your answer.</Txt>}
+        </Section>
+      ) : null}
+      <Card glass style={styles.note}>
+        <Txt style={styles.noteWords}>{healthNote}</Txt>
+        <Tick
+          label="I have read and understood this"
+          ticked={health.ticked}
+          disabled={health.ticked}
+          busy={health.ticking}
+          onPress={() => void health.tick()}
+          testID="health-tick-box"
+        />
+        {health.ticked ? null : <Txt style={styles.hint}>Tick this to continue.</Txt>}
+      </Card>
+      <Problem>{health.problem}</Problem>
+    </View>
+  );
+}
+
+// ── Screen 9 ────────────────────────────────────────────────────────────────
+
+/** The diet and how many meals a day (RULINGS 2026-09-10). Neither moves a calorie; the meal
+ *  ideas read both, so neither is ever guessed. */
+export function FoodScreen({ answers, save }: ScreenProps) {
+  return (
+    <View style={styles.screen}>
+      <Section title="How do you eat?">
+        <Options
+          options={DIETS}
+          selected={answers.diet}
+          onPick={(value) => {
+            if (answers.diet !== value) save({ diet: value });
+          }}
+        />
+      </Section>
+      <Section title="How many meals a day?" hint="Snacks count">
+        <Grid
+          columns={MEALS_PER_DAY.length}
+          cells={MEALS_PER_DAY.map((n) => ({
+            key: String(n),
+            label: String(n),
+            say: `${String(n)} meals a day`,
+            selected: answers.mealsPerDay === n,
+            onPress: () => {
+              if (answers.mealsPerDay !== n) save({ mealsPerDay: n });
+            },
+          }))}
+        />
+      </Section>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   screen: { gap: 26 },
   section: { gap: 10 },
@@ -570,5 +699,7 @@ const styles = StyleSheet.create({
   unitSwitch: { width: 170 },
   measure: { gap: 8 },
   warn: { flexDirection: "row", gap: 8, alignItems: "flex-start" },
+  note: { gap: 10 },
+  noteWords: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 19, color: colours.textSoft },
   warnWords: { flex: 1, fontFamily: fonts.medium, fontSize: 13, lineHeight: 18, color: colours.gold },
 });

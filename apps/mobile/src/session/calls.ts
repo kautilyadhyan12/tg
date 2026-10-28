@@ -2,7 +2,7 @@ import { apiRefusalSchema } from "@app/shared";
 
 export interface AskInit {
   signal: AbortSignal;
-  method?: "GET" | "POST" | "PATCH";
+  method?: "GET" | "POST" | "PATCH" | "PUT";
   headers?: Record<string, string>;
   body?: string;
 }
@@ -36,7 +36,7 @@ export function post<T>(server: Server, path: string, body: unknown, shape: Shap
 }
 
 export interface Request {
-  method: "GET" | "POST" | "PATCH";
+  method: "GET" | "POST" | "PATCH" | "PUT";
   path: string;
   body?: unknown;
   /** A signed-in request's access token. */

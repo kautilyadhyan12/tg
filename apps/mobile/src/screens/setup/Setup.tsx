@@ -7,6 +7,7 @@ import {
   screenAnswered,
   targetShownValue,
   visibleScreens,
+  type SetupAnswers,
   type SetupScreenId,
   type Units,
 } from "@app/shared";
@@ -21,15 +22,18 @@ import {
   AboutScreen,
   DayScreen,
   EquipmentScreen,
+  FoodScreen,
   GoalScreen,
+  HealthScreen,
   TargetScreen,
   TrainingScreen,
   WeekScreen,
   type ScreenProps,
 } from "./SetupScreens";
+import { useHealthStep } from "./useHealthStep";
 import { LOAD_FAILED, useSetupAnswers } from "./useSetupAnswers";
 
-// Setup on the phone (ROADMAP Stage 5 item 14a): a page over the tabs, one screen at a time, the
+// Setup on the phone (ROADMAP Stage 5 items 14a and 14b): a page over the tabs, one screen at a time, the
 // browser's setup picture glowing behind it. Every answer is saved the moment it is given, and the
 // server's daily number sits on every screen from the moment it exists.
 
@@ -41,6 +45,8 @@ const VIEWS: Partial<Record<SetupScreenId, (props: ScreenProps) => React.JSX.Ele
   training: TrainingScreen,
   week: WeekScreen,
   equipment: EquipmentScreen,
+  health: HealthScreen,
+  food: FoodScreen,
 };
 
 export const NAME_NEEDED = "Type the name we should call you.";
@@ -86,17 +92,21 @@ function SetupBody({
       void session.keepName(saved.displayName);
     },
   });
+  const health = useHealthStep();
   const [picked, setPicked] = useState<SetupScreenId | null>(null);
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
   const [units, setUnits] = useState<Units>(() => defaultUnits(phoneLanguage()));
   const [busy, setBusy] = useState(false);
 
-  const answers = ob.answers;
+  // Screen 8's answer comes from its own route, laid beside the rest as the browser does.
+  const answers: SetupAnswers = { ...ob.answers, health: health.screening };
   const screens = visibleScreens(answers).filter((s) => VIEWS[s.id] !== undefined);
+  /** The health screen is done only with its note ticked as well. */
+  const done = (id: SetupScreenId, a: SetupAnswers): boolean => screenAnswered(id, a) && (id !== "health" || health.ticked);
   const firstOpen = () => {
-    const from = ob.first ?? answers;
-    return screens.find((s) => !screenAnswered(s.id, from))?.id ?? "goal";
+    const from: SetupAnswers = ob.first === null ? answers : { ...ob.first, health: health.first };
+    return screens.find((s) => !done(s.id, from))?.id ?? "goal";
   };
   const current = picked ?? (ob.first === null ? "goal" : firstOpen());
   const index = Math.max(0, screens.findIndex((s) => s.id === current));
@@ -143,15 +153,24 @@ function SetupBody({
   });
   const back = index > 0 ? screens[index - 1] : undefined;
 
-  if (screen === undefined || ob.status !== "ready" || ob.first === null) {
+  const failed = ob.status === "failed" || health.status === "failed";
+  if (screen === undefined || ob.status !== "ready" || ob.first === null || health.status !== "ready") {
     return (
       <>
         <Bar onClose={close} />
         <View style={styles.middle}>
-          {ob.status === "failed" ? (
+          {failed ? (
             <>
               <Txt style={styles.centre}>{LOAD_FAILED}</Txt>
-              <Button label="Try again" kind="plain" style={styles.self} onPress={ob.retry} />
+              <Button
+                label="Try again"
+                kind="plain"
+                style={styles.self}
+                onPress={() => {
+                  if (ob.status === "failed") ob.retry();
+                  if (health.status === "failed") health.retry();
+                }}
+              />
             </>
           ) : null}
         </View>
@@ -160,7 +179,7 @@ function SetupBody({
   }
 
   const View_ = VIEWS[screen.id];
-  const answered = screenAnswered(screen.id, answers);
+  const answered = done(screen.id, answers);
 
   return (
     <>
@@ -180,7 +199,19 @@ function SetupBody({
         <Txt kind="h1">{screen.title}</Txt>
         <PlanBar plan={ob.plan} direction={direction} units={units} targetShown={targetShownValue(direction, answers, units)} />
         {View_ === undefined ? null : (
-          <View_ answers={answers} save={ob.save} units={units} setUnits={setUnits} name={name} direction={direction} plan={ob.plan} />
+          <View_
+            answers={answers}
+            save={ob.save}
+            units={units}
+            setUnits={setUnits}
+            name={name}
+            direction={direction}
+            plan={ob.plan}
+            health={health}
+            healthSaved={() => {
+              ob.save({});
+            }}
+          />
         )}
       </ScrollView>
       <View style={[styles.foot, { paddingBottom: bottom + 12 }]}>
