@@ -336,6 +336,11 @@ d("goals routes (real Postgres)", () => {
 
     const named = randomUUID();
     expect((await put(cookies, named, { kind: "reps_in_set", period: null, target: 15, exerciseId: squatId })).statusCode).toBe(201);
+    // Cat-cow is in the stretches' family and still counted, in slow cycles.
+    const [catCow] = await sql<{ id: string }[]>`SELECT id FROM exercises WHERE slug = 'cat_cow' AND status = 'live'`;
+    const cycles = randomUUID();
+    expect((await put(cookies, cycles, { kind: "reps_in_set", period: null, target: 8, exerciseId: catCow?.id ?? "" })).statusCode).toBe(201);
+    expect((await inject({ method: "DELETE", url: `/v1/goals/${cycles}`, cookies })).statusCode).toBe(204);
     const slug = await sql<{ slug: string }[]>`SELECT slug FROM exercises WHERE id = ${squatId}`;
     expect(await one(cookies, named)).toMatchObject({ exerciseId: squatId, exerciseSlug: slug[0]?.slug, window: null });
 
@@ -389,6 +394,15 @@ d("goals routes (real Postgres)", () => {
     const unknown = await put(cookies, id, { kind: "reps_in_set", period: null, target: 10, exerciseId: randomUUID() });
     expect(unknown.statusCode).toBe(400);
     expect(errorOf(unknown)).toBe("unknown_exercise");
+
+    // The library's own holds (spec Part 2 §5: F10 and F12) record a time, never reps.
+    const holds = await sql<{ id: string; slug: string }[]>`
+      SELECT id, slug FROM exercises WHERE status = 'live' AND slug IN ('plank', 'wall_sit', 'tree_pose', 'hamstring_stretch')`;
+    expect(holds.map((h) => h.slug).sort()).toEqual(["hamstring_stretch", "plank", "tree_pose", "wall_sit"]);
+    for (const hold of holds) {
+      const res = await put(cookies, randomUUID(), { kind: "reps_in_set", period: null, target: 10, exerciseId: hold.id });
+      expect([hold.slug, res.statusCode, errorOf(res)]).toEqual([hold.slug, 400, "exercise_not_counted"]);
+    }
 
     expect(await sql`SELECT id FROM user_goals WHERE user_id = ${userId}`).toHaveLength(0);
   });

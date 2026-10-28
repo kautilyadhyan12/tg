@@ -1,8 +1,9 @@
-import type { ReactNode } from "react";
-import { Image, Pressable, ScrollView, StyleSheet, View } from "react-native";
-import { useNavigation, type NavigationProp, type ParamListBase } from "@react-navigation/native";
+import { useEffect, useState, type ReactNode } from "react";
+import { AppState, Image, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { useIsFocused, useNavigation, type NavigationProp, type ParamListBase } from "@react-navigation/native";
 import {
   gamificationMeSchema,
+  goalsResponseSchema,
   mealPageSchema,
   progressOverviewSchema,
   progressTrendSchema,
@@ -24,6 +25,7 @@ import { Icon, type IconName } from "../look/Icon";
 import { Page } from "../look/Page";
 import { pictures, type PictureName } from "../look/pictures";
 import { PictureTop } from "../look/PictureTop";
+import { Steps } from "../look/Progress";
 import { fonts, Txt } from "../look/Txt";
 import { useSession } from "../session/SessionProvider";
 import { useZoneSaved } from "../session/TimeZoneSync";
@@ -37,7 +39,6 @@ import {
   hoursWords,
   latestBadges,
   noActivityWords,
-  quoteOf,
   recentActivity,
   type ActivityKind,
   weekOf,
@@ -45,7 +46,9 @@ import {
   windowWords,
   xpToNext,
 } from "./dashboard/words";
+import { Clock } from "./dashboard/Clock";
 import { useRead, type Read } from "./dashboard/useRead";
+import { GOALS_READ, GoalsBox, GoalsPage, type GoalsOpen } from "./Goals";
 import { greetingAt } from "./greeting";
 import { COMING_SOON } from "./Soon";
 
@@ -61,6 +64,7 @@ export const DASHBOARD_READS = {
   recent: "/v1/workouts?limit=3",
   runs: "/v1/geo/runs?limit=3",
   meals: "/v1/nutrition/meals?limit=3",
+  goals: GOALS_READ,
 } as const;
 
 export function DashboardScreen() {
@@ -75,7 +79,21 @@ export function DashboardScreen() {
   const recent = useRead(DASHBOARD_READS.recent, workoutPageSchema);
   const runs = useRead(DASHBOARD_READS.runs, runPageSchema);
   const meals = useRead(DASHBOARD_READS.meals, mealPageSchema);
-  const reads = [overview, me, week, challenges, recent, runs, meals];
+  // A goal's days are the person's own: read again once the zone is saved.
+  const goals = useRead(DASHBOARD_READS.goals, goalsResponseSchema, zoneSaved);
+  const [goalsOpen, setGoalsOpen] = useState<GoalsOpen | null>(null);
+  // The clock ticks only while the Dashboard is what the person sees.
+  const focused = useIsFocused();
+  const [awake, setAwake] = useState(AppState.currentState === "active");
+  useEffect(() => {
+    const heard = AppState.addEventListener("change", (next) => {
+      setAwake(next === "active");
+    });
+    return () => {
+      heard.remove();
+    };
+  }, []);
+  const reads = [overview, me, week, challenges, recent, runs, meals, goals];
   const failed = reads.some((one) => one.read.kind === "failed");
   const now = new Date();
   // The workout and the Library are the exercise folders' (items 53, 63, 64); their tab says so.
@@ -91,8 +109,10 @@ export function DashboardScreen() {
     <Page
       top={
         <PictureTop
-          picture="hero"
-          tall={0.9}
+          picture="cave"
+          // The picture's own shape, so none of it is cut; its fire is not dimmed.
+          tall={1}
+          fade="light"
           above={
             <View style={styles.hello}>
               <Txt kind="small">{greetingAt(now.getHours())}</Txt>
@@ -101,7 +121,11 @@ export function DashboardScreen() {
               </Txt>
             </View>
           }
-          foot={<Button label="Start Training" icon="play" compact onPress={toWorkout} />}
+          foot={
+            <View style={styles.footDrop}>
+              <Button label="Start Training" icon="play" compact onPress={toWorkout} />
+            </View>
+          }
         />
       }
     >
@@ -123,8 +147,15 @@ export function DashboardScreen() {
       <Totals overview={overview.read} me={me.read} />
       <Experience me={me.read} week={week.read} now={now} />
       <ThisWeek week={week.read} now={now} />
+      <GoalsBox
+        read={goals.read}
+        onOpen={(on) => {
+          goals.again();
+          setGoalsOpen(on);
+        }}
+      />
       <Swipe>
-        <Motivation now={now} />
+        <Motivation running={focused && awake && goalsOpen === null} />
         <PictureLink picture="weight" label="Browse Exercises" onPress={toWorkout} />
         <PictureLink picture="running" label="View Progress" onPress={toMe} />
       </Swipe>
@@ -135,6 +166,14 @@ export function DashboardScreen() {
       </Swipe>
       <Recent workouts={recent.read} runs={runs.read} meals={meals.read} />
       <Ready onPress={toWorkout} />
+      <GoalsPage
+        open={goalsOpen}
+        onClose={() => {
+          setGoalsOpen(null);
+        }}
+        read={goals.read}
+        again={goals.again}
+      />
     </Page>
   );
 }
@@ -325,18 +364,13 @@ function PictureLink({ picture, label, onPress }: { picture: PictureName; label:
   );
 }
 
-function Motivation({ now }: { now: Date }) {
-  const quote = quoteOf(now);
+/** Kd's own picture (2026-10-28), darkened at the top where the clock lies. */
+function Motivation({ running }: { running: boolean }) {
   return (
-    <View style={[styles.box, styles.quote]}>
-      <Image source={pictures.dailymotivation} resizeMode="cover" style={styles.fill} accessible={false} />
-      <View style={[StyleSheet.absoluteFill, styles.statShade]} />
-      <View style={styles.quoteWords}>
-        <Txt kind="eyebrow">Daily Motivation</Txt>
-        <Txt kind="small" style={styles.italic}>
-          “{quote.text}”
-        </Txt>
-        <Txt kind="tiny">— {quote.author}</Txt>
+    <View style={[styles.box, styles.motivation]}>
+      <Image source={pictures.motivation} resizeMode="cover" style={styles.fill} accessible={false} />
+      <View style={styles.motivationWords}>
+        <Clock running={running} />
       </View>
     </View>
   );
@@ -355,17 +389,26 @@ function Challenges({ read }: { read: Read<WeeklyChallenges> }) {
         {read.kind !== "ok" ? (
           <Txt kind="small">{NOT_KNOWN}</Txt>
         ) : (
+          // In the box's left half: the picture's own figures stand in the right half, never under a row.
           read.data.challenges.map((c) => (
-            <View key={c.code} style={styles.tight}>
-              <View style={styles.between}>
-                <Txt kind="tiny" colour="textSoft" style={styles.grow} numberOfLines={1}>
-                  {challengeWords(c)}
+            <View key={c.code} style={[styles.tight, styles.challengeRow]}>
+              <Txt kind="tiny" colour="textSoft" numberOfLines={1}>
+                {challengeWords(c)}
+              </Txt>
+              {c.held !== null && !c.done ? (
+                <Txt kind="tiny" colour="orange" style={styles.semibold}>
+                  Paused in Safe mode
                 </Txt>
-                <Txt kind="tiny" colour={c.done ? "goodText" : "orange"} style={styles.semibold}>
-                  {c.done ? "Done" : c.held === null ? challengeProgress(c) : "Paused in Safe mode"}
-                </Txt>
-              </View>
-              <Bar share={c.done ? 100 : barShare((Math.min(c.current, c.target) / c.target) * 100)} />
+              ) : (
+                <View style={styles.between}>
+                  <View style={styles.grow}>
+                    <Steps share={c.done ? 1 : Math.min(c.current, c.target) / c.target} />
+                  </View>
+                  <Txt kind="tiny" colour={c.done ? "goodText" : "orange"} style={styles.semibold}>
+                    {c.done ? "Done" : challengeProgress(c)}
+                  </Txt>
+                </View>
+              )}
             </View>
           ))
         )}
@@ -483,9 +526,10 @@ const styles = StyleSheet.create({
   semibold: { fontFamily: fonts.semibold },
   hello: { alignItems: "flex-start" },
   name: { alignSelf: "stretch" },
+  // A little lower than the picture's own foot, on the ground under the figures (Kd).
+  footDrop: { transform: [{ translateY: 12 }] },
   boxTitle: { fontSize: 14, lineHeight: 18, color: colours.textSoft },
   statLabel: { fontSize: 12, lineHeight: 16 },
-  italic: { fontStyle: "italic" },
   centre: { textAlign: "center" },
   fill: { position: "absolute", width: "100%", height: "100%" },
   shade: { experimental_backgroundImage: pictureShade },
@@ -517,14 +561,18 @@ const styles = StyleSheet.create({
     borderRadius: sizes.boxRadius,
     overflow: "hidden",
   },
-  link: { width: 150, height: 200, justifyContent: "flex-end" },
+  // As tall as the clock box beside them, so the row lines up.
+  link: { width: 190, height: 270, justifyContent: "flex-end" },
   linkWords: { margin: 12 },
   // The pictures were widened to these boxes' shapes, so each covers its box without cutting its subject.
-  quote: { width: 220, height: 200 },
-  quoteWords: { padding: 14, paddingRight: 96, gap: 8 },
-  challenges: { width: 300, height: 210 },
-  rank: { width: 140, height: 210, justifyContent: "flex-end" },
-  badges: { width: 230, height: 210 },
+  // Square, as its picture is, so the picture covers it whole.
+  motivation: { width: 270, height: 270 },
+  motivationWords: { paddingHorizontal: 16, paddingTop: 10 },
+  // At least this tall, and taller with the phone's large text: the row's boxes grow together.
+  challenges: { width: 360, minHeight: 210 },
+  challengeRow: { width: "52%" },
+  rank: { width: 140, minHeight: 210, justifyContent: "flex-end" },
+  badges: { width: 230, minHeight: 210 },
   recent: { gap: 4 },
   recentArt: { position: "absolute", top: 0, right: -10, width: "75%", height: "100%", opacity: 0.6 },
   workout: { minHeight: 56, borderTopWidth: 1, borderTopColor: colours.line, paddingTop: 8 },

@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { Meal, RunSummary, WorkoutListItem } from "@app/shared";
 import {
   BADGE_NAMES,
-  QUOTES,
   activeDaysWords,
   barShare,
+  clockDateWords,
+  clockWords,
+  msToNextSecond,
   challengeProgress,
   challengeWords,
   count,
@@ -14,7 +16,6 @@ import {
   latestBadges,
   mealRow,
   noActivityWords,
-  quoteOf,
   recentActivity,
   runRow,
   weekOf,
@@ -240,8 +241,20 @@ describe("the latest badges", () => {
   });
 });
 
-it("one quote a day of the week, the browser's seven", () => {
-  expect(QUOTES).toHaveLength(7);
-  expect(quoteOf(new Date(2026, 9, 25)).author).toBe("Unknown"); // a Sunday
-  expect(quoteOf(new Date(2026, 9, 27)).author).toBe("Jim Rohn"); // a Tuesday
+describe("the clock in the Daily Motivation box", () => {
+  it.each([
+    [new Date(2026, 9, 27, 10, 20, 11), "10:20:11 am", "Tue, 27 Oct 2026"],
+    [new Date(2026, 9, 27, 0, 5, 9), "12:05:09 am", "Tue, 27 Oct 2026"],
+    [new Date(2026, 9, 27, 12, 0, 0), "12:00:00 pm", "Tue, 27 Oct 2026"],
+    [new Date(2026, 9, 25, 23, 59, 59), "11:59:59 pm", "Sun, 25 Oct 2026"],
+    [new Date(2027, 0, 1, 13, 7, 3), "1:07:03 pm", "Fri, 1 Jan 2027"],
+  ])("%s reads %s, %s", (now, time, date) => {
+    expect(clockWords(now)).toBe(time);
+    expect(clockDateWords(now)).toBe(date);
+  });
+
+  it("turns over on the phone's own whole second", () => {
+    expect(msToNextSecond(new Date(2026, 9, 27, 10, 20, 11, 250))).toBe(750);
+    expect(msToNextSecond(new Date(2026, 9, 27, 10, 20, 11, 0))).toBe(1000);
+  });
 });

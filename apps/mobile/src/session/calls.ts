@@ -2,7 +2,7 @@ import { apiRefusalSchema } from "@app/shared";
 
 export interface AskInit {
   signal: AbortSignal;
-  method?: "GET" | "POST" | "PATCH" | "PUT";
+  method?: Method;
   headers?: Record<string, string>;
   body?: string;
 }
@@ -35,8 +35,13 @@ export function post<T>(server: Server, path: string, body: unknown, shape: Shap
   return call(server, { method: "POST", path, body }, shape, waitMs);
 }
 
+export type Method = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
+
+/** A body is sent with these, and only these. */
+const WITH_BODY: readonly Method[] = ["POST", "PATCH", "PUT"];
+
 export interface Request {
-  method: "GET" | "POST" | "PATCH" | "PUT";
+  method: Method;
   path: string;
   body?: unknown;
   /** A signed-in request's access token. */
@@ -59,15 +64,16 @@ export async function call<T>(server: Server, request: Request, shape: Shape<T>,
         signal: stop.signal,
         method: request.method,
         headers: {
-          ...(request.method === "GET" ? {} : { "content-type": "application/json" }),
+          ...(WITH_BODY.includes(request.method) ? { "content-type": "application/json" } : {}),
           ...(request.token === undefined ? {} : { authorization: `Bearer ${request.token}` }),
         },
-        ...(request.method === "GET" ? {} : { body: JSON.stringify(request.body ?? {}) }),
+        ...(WITH_BODY.includes(request.method) ? { body: JSON.stringify(request.body ?? {}) } : {}),
       }),
       late,
     ]);
     if (reply === LATE) return { kind: "no_answer" };
-    const raw = await Promise.race([reply.json(), late]);
+    // 204 has no body: its shape is read against null.
+    const raw = reply.status === 204 ? null : await Promise.race([reply.json(), late]);
     if (raw === LATE) return { kind: "no_answer" };
     if (reply.ok) {
       const parsed = shape.safeParse(raw);

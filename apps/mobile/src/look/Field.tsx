@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { StyleSheet, TextInput, View, type TextInputProps } from "react-native";
 import { colours, shadows, sizes } from "./colours";
+import { MOST_TEXT_GROWTH } from "./sizing";
 import { fonts, Txt } from "./Txt";
 
 interface FieldProps {
@@ -38,6 +39,7 @@ export function Field({ label, bare = false, value, onChange, placeholder, keybo
       <View style={[styles.box, on ? styles.on : null]}>
         <TextInput
           accessibilityLabel={label}
+          maxFontSizeMultiplier={MOST_TEXT_GROWTH}
           value={value}
           onChangeText={onChange}
           placeholder={placeholder}

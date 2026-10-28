@@ -4,7 +4,7 @@ import { App, TABS } from "../../src/App";
 import { colours } from "../../src/look/colours";
 import { DASHBOARD_READS } from "../../src/screens/Dashboard";
 import { weekOf } from "../../src/screens/dashboard/words";
-import { fakeServer, kept, memoryStore, tokens } from "../kit";
+import { fakeServer, isClockWords, kept, memoryStore, tokens } from "../kit";
 
 const extra = { copyName: "Feature 1", apiUrl: "http://localhost:3000" };
 /** The server, with its health check up or down; a kept sign-in is always given its new token. */
@@ -76,12 +76,13 @@ describe("the five tabs", () => {
       // Gym, for somebody in no gym yet, has nothing to come: it says how an invitation reaches them.
       expect(await screen.findAllByText(tab.name === "Gym" ? "Check for an invitation" : "Coming soon")).toBeTruthy();
       expect(screen.queryAllByText("Coming soon")).toHaveLength(tab.name === "Me" ? 3 : tab.name === "Gym" ? 0 : 1);
-      // The Dashboard's calendar shows this week's dates; its numbers did not load here, so none shows.
+      // The Dashboard's calendar shows this week's dates and its clock the phone's time; its numbers did
+      // not load here, so none shows.
       const dates = tab.name === "Dashboard" ? weekOf(new Date()).map((day) => String(day.date)) : [];
       const withDigits = screen
         .queryAllByText(/\d/)
         .map(words)
-        .filter((one) => !dates.includes(String(one)));
+        .filter((one) => !dates.includes(String(one)) && !isClockWords(String(one)));
       const copyLine = [["Feature 1 test copy · ", "Connected"]];
       expect([tab.name, withDigits]).toEqual([tab.name, tab.name === "Me" ? copyLine : []]);
     }

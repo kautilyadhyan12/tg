@@ -129,6 +129,15 @@ d("exercises routes (real Postgres)", () => {
     expect(slugs).not.toContain("zz_p22_hidden");
   });
 
+  it("each exercise carries its own id, the one a goal names", { timeout: 30_000 }, async () => {
+    const { cookies } = await makeUser("p22e-ids@example.com");
+    const page = JSON.parse((await get("/v1/exercises?limit=100", { cookies })).body) as { items: { id: string; slug: string }[] };
+    const rows = await sql<{ id: string; slug: string }[]>`SELECT id, slug FROM exercises WHERE status = 'live'`;
+    const bySlug = new Map(rows.map((r) => [r.slug, r.id]));
+    expect(page.items.length).toBeGreaterThan(0);
+    for (const item of page.items) expect([item.slug, item.id]).toEqual([item.slug, bySlug.get(item.slug)]);
+  });
+
   it("cursor pagination walks the catalog without dupes or gaps (R7.3)", { timeout: 30_000 }, async () => {
     const { cookies } = await makeUser("p22e-paging@example.com");
     const all = JSON.parse((await get("/v1/exercises?limit=100", { cookies })).body) as {

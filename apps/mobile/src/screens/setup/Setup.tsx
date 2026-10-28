@@ -54,7 +54,8 @@ export const NAME_NEEDED = "Type the name we should call you.";
 /** The phone's own language tag, which says whether it weighs in pounds. */
 const phoneLanguage = (): string => Intl.DateTimeFormat().resolvedOptions().locale;
 
-export function Setup({ open, onClose }: { open: boolean; onClose: () => void }) {
+/** `at`: the screen it opens on, where another page sends the person to one answer (31b: a goal's target). */
+export function Setup({ open, onClose, at = null }: { open: boolean; onClose: () => void; at?: SetupScreenId | null }) {
   const insets = useSafeAreaInsets();
   // Android's back leaves as the ✕ does: the name typed is saved first, and a blank one stays to be fixed.
   const leave = useRef<() => void>(onClose);
@@ -71,7 +72,7 @@ export function Setup({ open, onClose }: { open: boolean; onClose: () => void })
     >
       <KeyboardAvoidingView accessibilityViewIsModal behavior="padding" style={[styles.page, { paddingTop: insets.top }]}>
         <Image source={pictures.setup} resizeMode="cover" accessible={false} style={styles.picture} />
-        {open ? <SetupBody onClose={onClose} leave={leave} bottom={insets.bottom} /> : null}
+        {open ? <SetupBody onClose={onClose} leave={leave} bottom={insets.bottom} at={at} /> : null}
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -81,10 +82,12 @@ function SetupBody({
   onClose,
   leave,
   bottom,
+  at,
 }: {
   onClose: () => void;
   leave: RefObject<() => void>;
   bottom: number;
+  at: SetupScreenId | null;
 }) {
   const { session } = useSession();
   const ob = useSetupAnswers({
@@ -93,7 +96,7 @@ function SetupBody({
     },
   });
   const health = useHealthStep();
-  const [picked, setPicked] = useState<SetupScreenId | null>(null);
+  const [picked, setPicked] = useState<SetupScreenId | null>(at);
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
   const [units, setUnits] = useState<Units>(() => defaultUnits(phoneLanguage()));

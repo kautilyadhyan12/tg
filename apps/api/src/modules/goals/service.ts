@@ -3,6 +3,7 @@
 import type { Sql } from "postgres";
 import {
   MAX_GOALS,
+  exerciseCountsReps,
   goalKindSchema,
   goalPeriodSchema,
   goalsResponseSchema,
@@ -187,8 +188,13 @@ export async function putGoal(
         throw new GoalsError(409, "goal_limit", `You can keep up to ${String(MAX_GOALS)} goals. Remove one to add another.`);
       }
       // Asked only of a new goal: a kept one is still changeable after its exercise leaves the library.
-      if (body.exerciseId !== null && !(await repo.liveExerciseExists(tx, body.exerciseId))) {
-        throw new GoalsError(400, "unknown_exercise", "That exercise is not in the library.");
+      if (body.exerciseId !== null) {
+        const exercise = await repo.liveExercise(tx, body.exerciseId);
+        if (exercise === null) throw new GoalsError(400, "unknown_exercise", "That exercise is not in the library.");
+        // A hold has no reps, so its goal would sit at 0.
+        if (!exerciseCountsReps(exercise)) {
+          throw new GoalsError(400, "exercise_not_counted", "That exercise is held for time, so it has no reps in a set.");
+        }
       }
       // An id somebody else holds fails on the key, and reads as no goal at all.
       await repo.insertGoal(tx, userId, id, body);

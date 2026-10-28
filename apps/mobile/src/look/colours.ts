@@ -19,6 +19,8 @@ export const colours = {
   overPicture: "rgba(16,15,13,0.62)",
   /** Behind a box from the bottom, and that box's handle. */
   scrim: "rgba(0,0,0,0.66)",
+  /** Behind words that lie on a bright picture. */
+  wordShadow: "rgba(0,0,0,0.8)",
   grab: "rgba(255,255,255,0.18)",
   track: "rgba(255,255,255,0.08)",
   line: "rgba(255,255,255,0.06)",
@@ -71,11 +73,16 @@ export const pictureFade =
 export const pictureFadeUnderWords =
   "linear-gradient(to top, rgba(10,9,8,1) 0%, rgba(10,9,8,0.82) 20%, rgba(10,9,8,0.18) 55%, rgba(10,9,8,0.62) 100%)";
 
+/** The same, kept off the picture's lower part, where its own light is the point (the Dashboard's fire). */
+export const pictureFadeLight =
+  "linear-gradient(to top, rgba(10,9,8,1) 0%, rgba(10,9,8,0.45) 7%, rgba(10,9,8,0) 13%, rgba(10,9,8,0) 72%, rgba(10,9,8,0.55) 100%)";
+
 /** The glow of what is pressed, the ring round a box being typed in, and the lift of a box from the bottom. */
 export const shadows = {
   button: "0 6px 22px rgba(255,138,31,0.38), inset 0 1px 0 rgba(255,255,255,0.22)",
   logo: "0 0 20px rgba(255,138,31,0.35)",
   fieldOn: "0 0 0 3px rgba(255,138,31,0.08)",
+  chip: "0 4px 14px rgba(255,138,31,0.3)",
   sheet: "0 -12px 48px rgba(0,0,0,0.6)",
 } as const;
 
