@@ -489,7 +489,7 @@ const styles = StyleSheet.create({
   problem: { fontFamily: fonts.medium, fontSize: 13, lineHeight: 18, color: colours.badText, textAlign: "center" },
   foot: { gap: 8, paddingTop: 10, paddingHorizontal: sizes.edge, alignItems: "flex-end" },
   next: { minWidth: 150, alignSelf: "flex-end" },
-  open: { gap: 10, padding: 16, borderRadius: 18, borderWidth: 1, borderColor: colours.line, backgroundColor: colours.box },
+  open: { gap: 10, padding: 16, borderRadius: 18, borderWidth: 1, borderColor: colours.line, backgroundColor: colours.overWords },
   openWords: { fontFamily: fonts.medium, fontSize: 14, lineHeight: 20, color: colours.text },
   doneMark: {
     width: 64,

@@ -17,7 +17,7 @@ export interface Option<V> {
   note?: string | null;
 }
 
-/** One of a few: a card each. `solid` for cards of long words, which the picture must not show through. */
+/** One of a few: a card each. `solid` for cards of long words, darker so the words read over the picture. */
 export function Options<V extends string | number>({
   options,
   selected,
@@ -194,7 +194,7 @@ const styles = StyleSheet.create({
   cards: { gap: 10 },
   card: { ...box, flexDirection: "row", alignItems: "center", gap: 12, minHeight: sizes.button + 8, paddingHorizontal: 14, paddingVertical: 12 },
   on: { borderColor: colours.orange, backgroundColor: colours.orangeFill },
-  solid: { backgroundColor: colours.box },
+  solid: { backgroundColor: colours.overWords },
   solidOn: { backgroundColor: colours.boxPicked },
   pressed: { opacity: 0.8 },
   off: { opacity: 0.5 },

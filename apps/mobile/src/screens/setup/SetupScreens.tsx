@@ -747,7 +747,7 @@ export function PlanScreen({ answers, units, health, adjust, busy }: ScreenProps
         {safeMode ? (
           <View style={styles.warn}>
             <Icon name="shield" size={18} colour="gold" />
-            <Txt style={styles.itemWords}>{CHECK_FIRST_OPTIONS.not_yet.detail}</Txt>
+            <Txt style={styles.softWords}>{CHECK_FIRST_OPTIONS.not_yet.detail}</Txt>
           </View>
         ) : (
           <>
@@ -806,7 +806,7 @@ const styles = StyleSheet.create({
   unitSwitch: { width: 170 },
   measure: { gap: 8 },
   warn: { flexDirection: "row", gap: 8, alignItems: "flex-start" },
-  box: { gap: 10, padding: 16, borderRadius: 18, borderWidth: 1, borderColor: colours.line, backgroundColor: colours.box },
+  box: { gap: 10, padding: 16, borderRadius: 18, borderWidth: 1, borderColor: colours.line, backgroundColor: colours.overWords },
   item: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   bullet: { width: 6, height: 6, borderRadius: 3, marginTop: 7, backgroundColor: colours.orange },
   itemWords: { flex: 1, fontFamily: fonts.medium, fontSize: 15, lineHeight: 20, color: colours.text },
@@ -819,5 +819,6 @@ const styles = StyleSheet.create({
   answer: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10 },
   answerLine: { borderTopWidth: 1, borderTopColor: colours.line },
   answerWords: { flex: 1, gap: 2 },
-  answerValue: { fontFamily: fonts.medium, fontSize: 14, lineHeight: 19, color: colours.text },
+  answerValue: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 19, color: colours.textSoft },
+  softWords: { flex: 1, fontFamily: fonts.regular, fontSize: 14, lineHeight: 20, color: colours.textSoft },
 });
