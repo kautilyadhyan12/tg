@@ -3,7 +3,7 @@
 // password 8–128, one-time tokens ≤128 (authController.js:107,193,234,238).
 // All request bodies are .strict() so unknown keys are rejected (Part IV #5).
 import { z } from "zod";
-import { checkinPhoneDayKeySchema } from "./checkin.js";
+import { checkinPhoneDayKeySchema } from "./checkinPhoneKey.js";
 import { ROBOT_CHECK_TOKEN_MAX_CHARS } from "./robotCheck.js";
 
 /** citext in the DB handles case; trim + lowercase here so rate-limit

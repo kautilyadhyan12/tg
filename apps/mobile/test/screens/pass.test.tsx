@@ -487,6 +487,18 @@ describe("a pass with no signal", () => {
     expect(server.paths().filter((path) => path === PHONE_KEY_PATH)).toHaveLength(1);
   });
 
+  it("a phone whose keys are for days gone by is not offered the pass with no signal: it could make none", async () => {
+    const lost: Ask = (url, init) =>
+      fakeServer({}).ask(url, init).then(() => {
+        throw new TypeError("Network request failed");
+      });
+    const old = [{ day: phoneDay(Date.now()) - 3, key: OWN_KEY }, { day: phoneDay(Date.now()) - 2, key: OWN_KEY }];
+    await render(<App extra={extra} ask={lost} store={memoryStore(keptWithKey(1, { passKeys: old }))} wait={noWait} />);
+    await fireEvent.press(await gymTab());
+    expect(await screen.findByRole("button", { name: "Try again" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Show my pass" })).toBeNull();
+  });
+
   it("nobody whose last places held none is offered the pass with no signal", async () => {
     const lost: Ask = (url, init) =>
       fakeServer({}).ask(url, init).then(() => {

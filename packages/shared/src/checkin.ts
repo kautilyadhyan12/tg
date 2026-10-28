@@ -1,6 +1,7 @@
 // Check-in at the front desk (spec Part 3 §12; ROADMAP 16a). The member's pass, the
 // gym's desk devices, and the scan that reads a pass or a key tag.
 import { z } from "zod";
+import { checkinPhoneDayKeySchema } from "./checkinPhoneKey.js";
 import { checkinStopReasonSchema } from "./checkinRules.js";
 import { gymAttendanceMethodSchema, gymClockFormatSchema } from "./orgs.js";
 
@@ -21,11 +22,7 @@ export const checkinPassResponseSchema = z
   .strict();
 export type CheckinPassResponse = z.infer<typeof checkinPassResponseSchema>;
 
-/** One day's key the phone signs its own passes with when it has no signal (ROADMAP Stage 5 item
- *  15c): 32 bytes, base64url, for the UTC day numbered from 1970. */
-export const checkinPhoneDayKeySchema = z.object({ day: z.number().int().nonnegative(), key: z.string().regex(/^[A-Za-z0-9_-]{43}$/) }).strict();
-export type CheckinPhoneDayKey = z.infer<typeof checkinPhoneDayKeySchema>;
-/** Today's key and tomorrow's. Given only to the phone's own sign-in, and kept in its key store. */
+/** The phone's keys for passes with no signal (`checkinPhoneKey.ts`), today's and tomorrow's. Given only to the phone's own sign-in, and kept in its key store. */
 export const checkinPhoneKeyResponseSchema = z.object({ keys: z.array(checkinPhoneDayKeySchema).min(1).max(2) }).strict();
 export type CheckinPhoneKeyResponse = z.infer<typeof checkinPhoneKeyResponseSchema>;
 

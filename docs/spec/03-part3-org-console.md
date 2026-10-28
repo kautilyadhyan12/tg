@@ -2374,8 +2374,7 @@ off (12.7). Door machines and the gym's other software stay after launch (RULING
 the app draws as a QR: gym, person and a 30-second window, signed with a server secret
 (HMAC-SHA256), about 60 characters so a cheap scanner reads it off a phone. The app
 asks again every 30 seconds while the pass is on screen. The scan accepts the current
-window and the one before it (clocks, slow hands) and each pass ONCE (a Redis key that
-lives as long as the window), so a screenshot or a second phone showing the same pass
+window and the one before it (clocks, slow hands) and each pass ONCE (a Redis key), so a screenshot or a second phone showing the same pass
 gets "Show a fresh pass". A pass is used up by a visit and by nothing else: read at a
 desk where its person is not a member, or when the visit could not be saved, it still
 works (the two extra passes, 2026-10-03). 10 passes a minute a person. **With no signal

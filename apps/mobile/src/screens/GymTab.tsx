@@ -174,7 +174,7 @@ export function GymScreen() {
       <Txt kind="h1">{placesHeading(joined.map((org) => org.orgType))}</Txt>
 
       {/* First, so it stays where it was when the failure comes in under it. */}
-      {makeOwnPass !== null && session.belongs() !== false && (mine?.kind === "failed" || (mine === null && placesSlow)) ? (
+      {(makeOwnPass?.(Date.now()) ?? null) !== null && session.belongs() !== false && (mine?.kind === "failed" || (mine === null && placesSlow)) ? (
         <Button label="Show my pass" icon="qr" wide onPress={() => { setPassOrgType("unknown"); }} />
       ) : null}
 
