@@ -4,7 +4,7 @@
 // (ROADMAP Stage 5 item 14a) so the browser and the phone ask the same things in
 // the same words. Every NUMBER of the plan is the server's (GET/PATCH
 // /v1/users/me/onboarding); nothing here computes a plan.
-import type { HealthScreening } from "./health.js";
+import { CHECK_FIRST_OPTIONS, type HealthScreening } from "./health.js";
 import type { OnboardingAnswers } from "./onboarding.js";
 import {
   MUSCLE_GAIN_PACE,
@@ -931,3 +931,112 @@ export function createSaveQueue<P extends Record<string, unknown>, R>({
     },
   };
 }
+
+// ── The plan screen (ROADMAP 4c; moved here from the web in Stage 5 item 14c) ─
+// The last screen: the week of workouts, what every answer is, a way back to
+// each screen that asked it, and the plan's own note. Every word is read from
+// the answers and the tables above, never kept as a second copy.
+
+const labelsOf = <V extends string>(table: readonly Row<V>[]): Readonly<Record<string, string>> =>
+  Object.fromEntries(table.map((row) => [row.value, row.label]));
+const WEIGHT_GOAL_LABEL = labelsOf(WEIGHT_GOALS);
+const GOAL_LABEL = labelsOf(GOALS);
+const GENDER_LABEL = labelsOf(GENDERS);
+const DAY_LABEL = labelsOf(DAYS);
+const LEVEL_LABEL = labelsOf(LEVELS);
+const EQUIPMENT_LABEL = labelsOf(EQUIPMENT);
+const PLACE_LABEL = labelsOf(PLACES);
+const DIET_LABEL = labelsOf(DIETS);
+
+export const NOT_ANSWERED = "Not answered";
+/** Beside the plan's note until it is ticked. */
+export const FINISH_HINT = "Tick this to finish setup.";
+/** A yes a professional has cleared: the normal plan, and this line with it
+ *  (RULINGS 2026-09-09). The clearance is the person's word, so the line says who told it. */
+export const CLEARED_LINE = "You told us a professional has cleared you. Follow their advice.";
+
+/** Words on one line, " · " between them, in the order given; nothing empty. */
+const joined = (parts: readonly (string | null | undefined)[]): string =>
+  parts.filter((p): p is string => typeof p === "string" && p !== "").join(" · ");
+const labelOf = (table: Readonly<Record<string, string>>, value: string | null | undefined): string | undefined =>
+  value === null || value === undefined ? undefined : table[value];
+const equipmentText = (a: SetupAnswers): string =>
+  joined([
+    ...(Array.isArray(a.trainingPlaces) ? a.trainingPlaces : []).map((p) => PLACE_LABEL[p] ?? p),
+    ...cleanEquipment(a.availableEquipment).map((e) => EQUIPMENT_LABEL[e] ?? e),
+  ]);
+
+/** What one screen holds, in the words that screen uses. */
+export function answerValue(id: SetupScreenId, a: SetupAnswers, units: Units): string {
+  switch (id) {
+    case "goal":
+      // The weight choice, then the goals beside it, as screen 1's grid has them.
+      if (!answered(a.weightGoal)) return NOT_ANSWERED;
+      return joined([
+        WEIGHT_GOAL_LABEL[a.weightGoal],
+        ...(Array.isArray(a.fitnessGoals) ? a.fitnessGoals : []).map((g) => GOAL_LABEL[g] ?? g),
+      ]);
+    case "about":
+      return (
+        joined([
+          a.displayName,
+          answered(a.age) ? `${String(a.age)} years` : null,
+          labelOf(GENDER_LABEL, a.gender),
+          answered(a.heightCm) ? heightShown(heightParts(a.heightCm, units), units) : null,
+          answered(a.weightKg) ? weightShown(weightParts(a.weightKg, units), units) : null,
+        ]) || NOT_ANSWERED
+      );
+    case "target":
+      if (!answered(a.targetWeightKg) || !answered(a.pace)) return NOT_ANSWERED;
+      // On the row its scale shows, so the plan screen and screen 3 read it alike.
+      return `${weightShown(targetShownRow(directionOf(a.weightGoal), a, units), units)} · ${PACE_LABEL[a.pace]}, ${paceText(a.pace, units)}`;
+    case "day":
+      return labelOf(DAY_LABEL, a.dayActivity) ?? NOT_ANSWERED;
+    case "training":
+      if (!answered(a.fitnessLevel)) return NOT_ANSWERED;
+      return joined([
+        LEVEL_LABEL[a.fitnessLevel],
+        answered(a.pushUpsMax) ? pushUpShown(a.pushUpsMax) : null,
+        answered(a.plankHoldSeconds) ? `${plankShown(a.plankHoldSeconds)} plank` : null,
+      ]);
+    case "week":
+      if (!answered(a.trainingDays) || !answered(a.sessionMinutes)) return NOT_ANSWERED;
+      return `${String(a.trainingDays)} ${a.trainingDays === 1 ? "day" : "days"} a week · ${String(a.sessionMinutes)} minutes`;
+    case "equipment":
+      return equipmentText(a) || NOT_ANSWERED;
+    case "health":
+      if (a.health?.answered !== true) return NOT_ANSWERED;
+      return a.health.hasCondition === true
+        ? joined(["Yes", a.health.checkFirst === null ? null : CHECK_FIRST_OPTIONS[a.health.checkFirst].label])
+        : "No";
+    case "food":
+      if (!answered(a.diet) || !answered(a.mealsPerDay)) return NOT_ANSWERED;
+      return `${DIET_LABEL[a.diet] ?? a.diet} · ${String(a.mealsPerDay)} meals a day`;
+    case "gym":
+    case "plan":
+      return NOT_ANSWERED;
+  }
+}
+
+export interface AnswerRow {
+  id: SetupScreenId;
+  title: string;
+  value: string;
+}
+
+/** The plan screen's rows: every screen that asks something, in the order
+ *  they are met, each with what it holds. */
+export const answerRows = (a: SetupAnswers, units: Units): AnswerRow[] =>
+  visibleScreens(a)
+    .filter((s) => s.id !== "gym" && s.id !== "plan")
+    .map((s) => ({ id: s.id, title: s.title, value: answerValue(s.id, a, units) }));
+
+/** The week of workouts as the person asked for it, or null until both
+ *  answers are in. It names no workout: those come with the weekly plan (6a). */
+export function workoutsLine(a: SetupAnswers): string | null {
+  if (!answered(a.trainingDays) || !answered(a.sessionMinutes)) return null;
+  return `${String(a.trainingDays)} ${a.trainingDays === 1 ? "workout" : "workouts"} a week, ${String(a.sessionMinutes)} minutes each`;
+}
+
+/** The level and the equipment the workouts are for: "Beginner · Dumbbells". */
+export const workoutsDetail = (a: SetupAnswers): string => joined([labelOf(LEVEL_LABEL, a.fitnessLevel), equipmentText(a)]);

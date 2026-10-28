@@ -13,13 +13,14 @@ import { useSession } from "../../session/SessionProvider";
 
 // Setup's health screen (ROADMAP Stage 5 item 14b): the one health question on its own route
 // (GET and PUT /v1/users/me/health-screening), and the tick beside its note, kept in the consent
-// log (POST /v1/users/me/consents). The browser's own rules (`useHealthScreening`,
+// log (POST /v1/users/me/consents); the plan screen's tick beside its own note too (14c). The browser's own rules (`useHealthScreening`,
 // `useDisclaimerTap`): an answer shows at once and the server's reply replaces it; a save that
 // fails puts back what the server holds, so the screen never keeps an answer it refused.
 
 export const HEALTH_PATH = "/v1/users/me/health-screening";
 export const CONSENTS_PATH = "/v1/users/me/consents";
 export const NOTE_VERSION = CURRENT_DISCLAIMER_VERSION.health_step;
+export const PLAN_NOTE_VERSION = CURRENT_DISCLAIMER_VERSION.plan_screen;
 export const ANSWER_FAILED = "Couldn’t save that answer. Check your connection and try again.";
 export const TICK_FAILED = "Couldn’t record that just now. Please try again.";
 
@@ -38,6 +39,9 @@ interface State {
   /** Yes tapped and "Check first" not yet picked: nothing is saved, and the question is not answered. */
   pendingYes: boolean;
   ticking: boolean;
+  /** The server holds this person's tick on today's plan note. */
+  planTicked: boolean;
+  planTicking: boolean;
   problem: string | null;
 }
 
@@ -52,6 +56,8 @@ export function useHealthStep() {
     firstTicked: null,
     pendingYes: false,
     ticking: false,
+    planTicked: false,
+    planTicking: false,
     problem: null,
   });
   // What the SERVER last said, which a failed save falls back to.
@@ -67,8 +73,10 @@ export function useHealthStep() {
       return;
     }
     // A log that does not load only asks for the tick again.
-    const ticked =
-      log.kind === "ok" && log.data.consents.some((c) => c.purpose === "health_step" && c.wordingVersion === NOTE_VERSION);
+    const has = (purpose: string, version: string) =>
+      log.kind === "ok" && log.data.consents.some((c) => c.purpose === purpose && c.wordingVersion === version);
+    const ticked = has("health_step", NOTE_VERSION);
+    const planTicked = has("plan_screen", PLAN_NOTE_VERSION);
     const { healthScreening } = health.data;
     stored.current = healthScreening;
     setState((s) => ({
@@ -78,6 +86,7 @@ export function useHealthStep() {
       screening: healthScreening,
       ticked: s.ticked || ticked,
       firstTicked: s.firstTicked ?? ticked,
+      planTicked: s.planTicked || planTicked,
     }));
   }, [session]);
 
@@ -119,7 +128,7 @@ export function useHealthStep() {
     [session],
   );
 
-  /** The tick beside the note, kept in the log the moment it is made. */
+  /** The tick beside the health note, kept in the log the moment it is made. */
   const tick = useCallback(async () => {
     setState((s) => ({ ...s, ticking: true, problem: null }));
     const reply = await session.signedIn(
@@ -129,12 +138,35 @@ export function useHealthStep() {
     setState((s) => ({ ...s, ticking: false, ticked: s.ticked || reply.kind === "ok", problem: reply.kind === "ok" ? null : TICK_FAILED }));
   }, [session]);
 
+  /** The tick beside the plan's note, the same way. */
+  const tickPlan = useCallback(async () => {
+    setState((s) => ({ ...s, planTicking: true, problem: null }));
+    const reply = await session.signedIn(
+      { method: "POST", path: CONSENTS_PATH, body: { purpose: "plan_screen", wordingVersion: PLAN_NOTE_VERSION, appVersion: appVersion() } },
+      consentRecordResponseSchema,
+    );
+    setState((s) => ({
+      ...s,
+      planTicking: false,
+      planTicked: s.planTicked || reply.kind === "ok",
+      problem: reply.kind === "ok" ? null : TICK_FAILED,
+    }));
+  }, [session]);
+
   /** Yes tapped over a stored No opens the two "Check first" answers; No or a save closes them. */
   const openYes = useCallback((open: boolean) => {
     setState((s) => ({ ...s, pendingYes: open }));
   }, []);
 
-  return { ...state, answer, tick, retry, openYes };
+  /** A finish refused over the health question: the server holds no answer, whatever this
+   *  screen believed (a reset on another device), so the stale one goes with the refusal. */
+  const forget = useCallback(() => {
+    const none: HealthScreening = { answered: false, hasCondition: null, checkFirst: null, safeMode: false, noCalorieCut: false, updatedAt: null };
+    stored.current = none;
+    setState((s) => ({ ...s, screening: none, pendingYes: false }));
+  }, []);
+
+  return { ...state, answer, tick, tickPlan, retry, openYes, forget };
 }
 
 export type HealthStep = ReturnType<typeof useHealthStep>;

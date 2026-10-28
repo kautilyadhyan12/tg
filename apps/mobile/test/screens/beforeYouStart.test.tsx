@@ -110,7 +110,8 @@ describe("ticking it", () => {
     expect(store.value).toBe(kept(2, RAVI, null));
     await press("Continue");
     expect(await screen.findByRole("tab", { name: "Dashboard" })).toBeTruthy();
-    expect(store.value).toBe(kept(2, RAVI, NOTE_VERSION));
+    // Setup's finish, the server's word, is kept beside it (test/screens/setupGate.test.tsx).
+    expect(JSON.parse(store.value ?? "")).toEqual(JSON.parse(kept(2, RAVI, NOTE_VERSION)));
   });
 
   it("a tick the server refuses says why, and the person stays on the note", async () => {
@@ -130,7 +131,7 @@ describe("ticking it", () => {
     expect(await screen.findByRole("tab", { name: "Dashboard" })).toBeTruthy();
     expect(screen.queryByText("Before you start")).toBeNull();
     await waitFor(() => {
-      expect(store.value).toBe(kept(2, RAVI, NOTE_VERSION));
+      expect(JSON.parse(store.value ?? "")).toEqual(JSON.parse(kept(2, RAVI, NOTE_VERSION)));
     });
   });
 

@@ -15,8 +15,11 @@ export const colours = {
   fieldOnLine: "rgba(255,138,31,0.4)",
   /** A box of words over a picture. */
   veil: "rgba(10,9,8,0.7)",
-  /** A picked box drawn solid: orangeFill laid over `box`, for words the picture must not show through. */
-  boxPicked: "#2A1D12",
+  /** A picked box of long words: orangeFill over `overWords`. */
+  boxPicked: "rgba(42,29,18,0.84)",
+  /** A box of long words over a page's own picture: darker than `overPicture`, so the words read
+   *  easily, and still clear enough to see the picture through (Kd, 2026-10-28). */
+  overWords: "rgba(16,15,13,0.8)",
   /** A choice over a page's own picture: dark enough to read, clear enough to see the picture through. */
   overPicture: "rgba(16,15,13,0.62)",
   /** Behind a box from the bottom, and that box's handle. */
