@@ -12,7 +12,8 @@ import {
   EQUIPMENT,
   GENDERS,
   GOALS,
-  HEALTH_QUESTION,
+  HEALTH_QUESTION_ITEMS,
+  HEALTH_QUESTION_LEAD,
   HEALTH_QUESTION_NOTE,
   HEIGHT_REST,
   LEVELS,
@@ -579,7 +580,9 @@ export function EquipmentScreen({ answers, save }: ScreenProps) {
 const healthNote = DISCLAIMER_WORDINGS.health_step[CURRENT_DISCLAIMER_VERSION.health_step];
 const CHECK_FIRST: readonly CheckFirst[] = ["cleared", "not_yet"];
 
-/** The one health question (RULINGS 2026-09-07 and 2026-09-10), in the browser's words. A yes is
+/** The one health question (RULINGS 2026-09-07 and 2026-09-10) as a heading and a list, every part
+ *  of the browser's sentence in its order, and the words in dark boxes, never on the picture (Kd,
+ *  2026-10-28: "looking like a article, text on text"). A yes is
  *  NOT saved until "Check first" is answered: the server refuses a yes with no choice, so Yes opens
  *  the two and stores nothing; until one is picked the screen holds what the server has. "Not yet"
  *  is Safe mode. The note's tick is kept in the consent log the moment it is made. */
@@ -597,8 +600,16 @@ export function HealthScreen({ health, healthSaved }: ScreenProps) {
 
   return (
     <View style={styles.screen}>
-      <Section title={HEALTH_QUESTION}>
-        <Txt style={styles.hint}>{HEALTH_QUESTION_NOTE}</Txt>
+      <Section title={HEALTH_QUESTION_LEAD}>
+        <View style={styles.box}>
+          {HEALTH_QUESTION_ITEMS.map((item) => (
+            <View key={item} style={styles.item}>
+              <View style={styles.bullet} />
+              <Txt style={styles.itemWords}>{item}</Txt>
+            </View>
+          ))}
+          <Txt style={styles.boxNote}>{HEALTH_QUESTION_NOTE}</Txt>
+        </View>
         <Grid
           columns={2}
           cells={[
@@ -628,6 +639,7 @@ export function HealthScreen({ health, healthSaved }: ScreenProps) {
           <Options
             options={CHECK_FIRST.map((value) => ({ value, label: CHECK_FIRST_OPTIONS[value].label, desc: CHECK_FIRST_OPTIONS[value].detail }))}
             selected={checkFirst}
+            solid
             onPick={(value) => {
               if (busy) return;
               setPendingYes(false);
@@ -637,7 +649,7 @@ export function HealthScreen({ health, healthSaved }: ScreenProps) {
           {stored === true ? null : <Txt style={styles.hint}>Pick one to save your answer.</Txt>}
         </Section>
       ) : null}
-      <Card glass style={styles.note}>
+      <Card style={[styles.box, styles.note]}>
         <Txt style={styles.noteWords}>{healthNote}</Txt>
         <Tick
           label="I have read and understood this"
@@ -665,6 +677,7 @@ export function FoodScreen({ answers, save }: ScreenProps) {
         <Options
           options={DIETS}
           selected={answers.diet}
+          solid
           onPick={(value) => {
             if (answers.diet !== value) save({ diet: value });
           }}
@@ -699,6 +712,11 @@ const styles = StyleSheet.create({
   unitSwitch: { width: 170 },
   measure: { gap: 8 },
   warn: { flexDirection: "row", gap: 8, alignItems: "flex-start" },
+  box: { gap: 10, padding: 16, borderRadius: 18, borderWidth: 1, borderColor: colours.line, backgroundColor: colours.box },
+  item: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  bullet: { width: 6, height: 6, borderRadius: 3, marginTop: 7, backgroundColor: colours.orange },
+  itemWords: { flex: 1, fontFamily: fonts.medium, fontSize: 15, lineHeight: 20, color: colours.text },
+  boxNote: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 17, color: colours.textFaint, marginTop: 4 },
   note: { gap: 10 },
   noteWords: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 19, color: colours.textSoft },
   warnWords: { flex: 1, fontFamily: fonts.medium, fontSize: 13, lineHeight: 18, color: colours.gold },

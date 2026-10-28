@@ -17,15 +17,17 @@ export interface Option<V> {
   note?: string | null;
 }
 
-/** One of a few: a card each. */
+/** One of a few: a card each. `solid` for cards of long words, which the picture must not show through. */
 export function Options<V extends string | number>({
   options,
   selected,
   onPick,
+  solid = false,
 }: {
   options: readonly Option<V>[];
   selected: V | null | undefined;
   onPick: (value: V) => void;
+  solid?: boolean;
 }) {
   return (
     <View style={styles.cards}>
@@ -40,7 +42,13 @@ export function Options<V extends string | number>({
             onPress={() => {
               onPick(o.value);
             }}
-            style={({ pressed }) => [styles.card, on ? styles.on : null, pressed ? styles.pressed : null]}
+            style={({ pressed }) => [
+              styles.card,
+              solid ? styles.solid : null,
+              on ? styles.on : null,
+              solid && on ? styles.solidOn : null,
+              pressed ? styles.pressed : null,
+            ]}
           >
             <View style={styles.grow}>
               <Txt style={[styles.cardLabel, on ? styles.labelOn : null]}>{o.label}</Txt>
@@ -173,6 +181,8 @@ const styles = StyleSheet.create({
   cards: { gap: 10 },
   card: { ...box, flexDirection: "row", alignItems: "center", gap: 12, minHeight: sizes.button + 8, paddingHorizontal: 14, paddingVertical: 12 },
   on: { borderColor: colours.orange, backgroundColor: colours.orangeFill },
+  solid: { backgroundColor: colours.box },
+  solidOn: { backgroundColor: colours.boxPicked },
   pressed: { opacity: 0.8 },
   grow: { flex: 1, gap: 2 },
   cardLabel: { fontFamily: fonts.semibold, fontSize: 15, lineHeight: 20, color: colours.text },

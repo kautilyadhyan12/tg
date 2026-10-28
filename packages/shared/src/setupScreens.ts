@@ -119,7 +119,7 @@ export const DIETS: readonly RowWithDesc<NonNullable<OnboardingAnswers["diet"]>>
   { value: "vegetarian", label: "Vegetarian", desc: "No meat or fish. Milk and dairy are fine" },
   { value: "vegetarian_eggs", label: "Vegetarian with eggs", desc: "No meat or fish. Eggs and dairy are fine" },
   { value: "non_vegetarian", label: "Non-vegetarian", desc: "Anything — meat, fish, eggs and dairy" },
-  { value: "vegan", label: "Vegan", desc: "No animal food at all" },
+  { value: "vegan", label: "Vegan", desc: "No animal food" },
 ];
 
 /** How many sittings the day's food is split across. */

@@ -32,6 +32,18 @@ export type CheckFirst = z.infer<typeof checkFirstSchema>;
 export const HEALTH_QUESTION =
   "Do you have a medical condition, an injury, or are you pregnant, or take any medicine, including for weight loss, or anything else that could affect exercise or eating?";
 
+/** The same question as a heading and a list, for a phone's narrow screen (Kd, 2026-10-28: the
+ *  one sentence read "like an article"). Every part of `HEALTH_QUESTION` is here, in its order;
+ *  it is still one yes or no for all of them. */
+export const HEALTH_QUESTION_LEAD = "Do any of these apply to you?";
+export const HEALTH_QUESTION_ITEMS: readonly string[] = [
+  "A medical condition",
+  "An injury",
+  "Pregnancy",
+  "Any medicine, including for weight loss",
+  "Anything else that could affect exercise or eating",
+];
+
 /** What is kept, on the screen that asks it. BOTH stored facts are named: the
  *  yes or no, and on a yes the "Check first" choice — the ruling's own words
  *  are "the server stores only the yes/no and the choice" (RULINGS
