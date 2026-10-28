@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
+import Svg, { Defs, LinearGradient, Path, Stop } from "react-native-svg";
 import type { GymAttendanceHistoryResponse, GymAttendanceVisit } from "@app/shared";
 import { Button } from "../../look/Button";
 import { Card } from "../../look/Card";
@@ -185,8 +186,8 @@ export function DaysYouCame({ gymId, read, fetchVisits }: DaysYouCameProps) {
       <Sheet open={opened !== null} title={opened === null ? "" : dayLabel(opened.date)} onClose={() => { setOpenDay(null); }}>
         {opened === null ? null : (
           <View style={styles.visits}>
-            {(opened.times.length > 0 ? opened.times : [""]).map((time, i) => (
-              <View key={`${String(i)}-${time}`} style={styles.visit}>
+            {(opened.times.length > 0 ? opened.times : [""]).map((time, i, all) => (
+              <View key={`${String(i)}-${time}`} style={[styles.visit, i < all.length - 1 ? styles.visitLine : null]}>
                 <Icon name={time === ADDED_LATER ? "user" : "check"} size={18} colour="orange" />
                 <Txt colour="text" style={styles.grow}>
                   {time === ADDED_LATER ? ADDED_LATER : "Checked in"}
@@ -319,7 +320,15 @@ function Day({ cell, monthName: name, onPress }: { cell: DayCell; monthName: str
       <View style={styles.mark}>
         {cell.came ? (
           <View style={styles.flame} pointerEvents="none">
-            <Icon name="flame" size={FLAME} colour="orange" filled />
+            <Svg width={FLAME} height={FLAME} viewBox="0 0 24 24">
+              <Defs>
+                <LinearGradient id="flame" x1="0" y1="0" x2="0" y2="1">
+                  <Stop offset="0" stopColor={colours.orangeLight} />
+                  <Stop offset="1" stopColor={colours.orange} />
+                </LinearGradient>
+              </Defs>
+              <Path d={FLAME_SHAPE} fill="url(#flame)" />
+            </Svg>
           </View>
         ) : null}
         <Txt colour={cell.came ? "onOrange" : cell.today ? "orange" : "textSoft"} style={cell.came ? styles.cameNumber : cell.today ? styles.todayNumber : styles.number}>
@@ -332,8 +341,10 @@ function Day({ cell, monthName: name, onPress }: { cell: DayCell; monthName: str
 }
 
 const ARROW_SLOP = { top: 4, bottom: 4, left: 4, right: 4 };
-// The flame fills its day; its date sits a little low, in the flame's full lower part.
-const FLAME = 38;
+// A solid flame that fills its day; its date sits in the round lower part, centred at 15.5 of 24.
+const FLAME = 44;
+const FLAME_SHAPE =
+  "M12 1.5c.6 3.2 2.6 5.3 4.4 7.3 1.8 2 3.1 3.9 3.1 6.7a7.5 7.5 0 0 1-15 0c0-2.6 1.2-4.6 2.6-6.1.2 1.4.7 2.3 1.5 2.8C8.8 8.6 10.4 4.6 12 1.5z";
 
 const styles = StyleSheet.create({
   box: { padding: 16, gap: 12 },
@@ -366,10 +377,11 @@ const styles = StyleSheet.create({
   number: { fontFamily: fonts.medium, fontSize: 13, lineHeight: 18 },
   todayNumber: { fontFamily: fonts.bold, fontSize: 13, lineHeight: 18 },
   todayLine: { width: 12, height: 2, borderRadius: sizes.round, marginTop: 2, backgroundColor: colours.orange },
-  cameNumber: { fontFamily: fonts.bold, fontSize: 12, lineHeight: 16, paddingTop: 7 },
+  cameNumber: { fontFamily: fonts.bold, fontSize: 12, lineHeight: 16, paddingTop: 13 },
   monthButton: { flexDirection: "row", alignItems: "center", gap: 2, minHeight: sizes.press, paddingHorizontal: 4 },
   visits: { gap: 4 },
-  visit: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: sizes.press, borderBottomWidth: 1, borderBottomColor: colours.line },
+  visit: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: sizes.press },
+  visitLine: { borderBottomWidth: 1, borderBottomColor: colours.line },
   time: { fontFamily: fonts.semibold, fontSize: 15, lineHeight: 20 },
   yearRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   year: { fontFamily: fonts.semibold, fontSize: 15, lineHeight: 20 },
