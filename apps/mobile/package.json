@@ -14,6 +14,7 @@
     "@app/shared": "workspace:*",
     "@expo-google-fonts/inter": "0.4.2",
     "@expo-google-fonts/oswald": "0.4.2",
+    "@noble/hashes": "1.8.0",
     "@react-navigation/bottom-tabs": "7.19.2",
     "@react-navigation/native": "7.4.1",
     "expo": "57.0.25",

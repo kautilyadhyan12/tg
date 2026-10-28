@@ -190,6 +190,8 @@ export const phoneKeptSessionSchema = z.object({
   signUpNote: z.string().regex(/^v\d{1,4}$/).optional(),
   /** The server has said this person finished setup, so the tabs open with no internet. */
   setupDone: z.boolean().optional(),
+  /** This sign-in's key for passes with no signal (`checkinPhoneKeyResponseSchema`). */
+  passKey: z.string().regex(/^[A-Za-z0-9_-]{43}$/).optional(),
 });
 export type PhoneKeptSession = z.infer<typeof phoneKeptSessionSchema>;
 

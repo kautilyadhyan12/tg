@@ -4,10 +4,21 @@ import * as Brightness from "expo-brightness";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import type { CheckinPassResponse } from "@app/shared";
 import { App } from "../../src/App";
-import { PASS_COULD_NOT, PASS_GETTING, PASS_PATH, PassSheet, type FetchPass } from "../../src/screens/gym/Pass";
+import { PHONE_KEY_PATH } from "../../src/screens/GymTab";
+import {
+  OWN_PASS_AFTER_MS,
+  PASS_COULD_NOT,
+  PASS_GETTING,
+  PASS_OFFLINE,
+  PASS_PATH,
+  PassSheet,
+  type FetchPass,
+  type MakeOwnPass,
+} from "../../src/screens/gym/Pass";
 import { passCells, passPath } from "../../src/screens/gym/passView";
+import { makePhonePass } from "../../src/screens/gym/phonePass";
 import type { Answer, Ask } from "../../src/session/calls";
-import { RAVI, fakeServer, kept, memoryStore, profile, tokens, type Reply } from "../kit";
+import { RAVI, fakeServer, kept, memoryStore, profile, refusal, tokens, type Reply, type Route } from "../kit";
 
 const extra = { copyName: "Feature 1", apiUrl: "http://localhost:3000" };
 const noWait = () => Promise.resolve();
@@ -35,14 +46,18 @@ const org = (gym: Place) => ({
 const mine = (...gyms: Place[]) => ok({ orgs: gyms.map(org), formerOrgs: [] });
 const passOf = (pass: string, refreshAt = new Date(Date.now() + 20_000).toISOString()) => ({ pass, refreshAt });
 
-/** The code on screen, as the pass it draws, or null with none drawn. */
-function drawn(): string | null {
+/** The code on screen, as the pass it draws, or null with none drawn; `more`: other passes it may be. */
+function drawn(...more: (string | null)[]): string | null {
   const code = screen.queryByTestId("pass-code");
   if (code === null) return null;
   const d: unknown = code.props.d;
-  for (const pass of [RAVI_PASS, ASHA_PASS, NEXT_PASS]) if (d === passPath(passCells(pass) ?? [])) return pass;
+  for (const pass of [RAVI_PASS, ASHA_PASS, NEXT_PASS, ...more]) if (pass !== null && d === passPath(passCells(pass) ?? [])) return pass;
   return "something else";
 }
+
+// This sign-in's key for passes with no signal (the server's own test key, apps/api).
+const OWN_KEY = "6kk2P5Zj8znws7IlJEBdalqwCFQdAxL2lgYYZUO3B6Q"; // dummy test value, gitleaks:allow
+const keptWithKey = (n: number) => JSON.stringify({ ...(JSON.parse(kept(n)) as object), passKey: OWN_KEY });
 
 const gymTab = async () => {
   const tab = (await screen.findAllByRole("tab"))[3];
@@ -225,7 +240,7 @@ describe("the pass while it is open", () => {
     // The second is asked for 20 s on, when the first's window ends (its own 20 s from then).
     const queue = [good(RAVI_PASS, 20_000), good(NEXT_PASS, 30_000)];
     const fetchPass: FetchPass = jest.fn(() => Promise.resolve(queue.shift() ?? good(NEXT_PASS, 30_000)));
-    await render(<PassSheet open trainer={false} onClose={() => undefined} fetchPass={fetchPass} />);
+    await render(<PassSheet open trainer={false} onClose={() => undefined} fetchPass={fetchPass} makeOwnPass={null} />);
     await later(0);
     expect(drawn()).toBe(RAVI_PASS);
     await later(19_999);
@@ -237,7 +252,7 @@ describe("the pass while it is open", () => {
 
   it("a pass whose renewal has not come is taken off 30 seconds after it was asked for", async () => {
     const { fetchPass, asked } = answers(good(RAVI_PASS, 20_000), null);
-    await render(<PassSheet open trainer={false} onClose={() => undefined} fetchPass={fetchPass} />);
+    await render(<PassSheet open trainer={false} onClose={() => undefined} fetchPass={fetchPass} makeOwnPass={null} />);
     await later(0);
     await later(29_999);
     expect(drawn()).toBe(RAVI_PASS);
@@ -249,7 +264,7 @@ describe("the pass while it is open", () => {
 
   it("no answer takes the pass off and says so; nothing asks again until Try again", async () => {
     const { fetchPass, asked } = answers(good(RAVI_PASS, 20_000), { kind: "no_answer" }, good(NEXT_PASS, 20_000));
-    await render(<PassSheet open trainer={false} onClose={() => undefined} fetchPass={fetchPass} />);
+    await render(<PassSheet open trainer={false} onClose={() => undefined} fetchPass={fetchPass} makeOwnPass={null} />);
     await later(0);
     await later(20_000);
     expect(drawn()).toBeNull();
@@ -272,7 +287,7 @@ describe("the pass while it is open", () => {
       robotCheckKey: null,
       body: {},
     });
-    await render(<PassSheet open trainer={false} onClose={() => undefined} fetchPass={fetchPass} />);
+    await render(<PassSheet open trainer={false} onClose={() => undefined} fetchPass={fetchPass} makeOwnPass={null} />);
     await later(0);
     expect(screen.getByText("Too many passes. Try again in a minute.")).toBeTruthy();
     expect(drawn()).toBeNull();
@@ -280,7 +295,7 @@ describe("the pass while it is open", () => {
 
   it("in the background it asks nothing; back in front, a pass past its 30 seconds comes off and the next is asked for", async () => {
     const { fetchPass, asked } = answers(good(RAVI_PASS, 20_000), null);
-    await render(<PassSheet open trainer={false} onClose={() => undefined} fetchPass={fetchPass} />);
+    await render(<PassSheet open trainer={false} onClose={() => undefined} fetchPass={fetchPass} makeOwnPass={null} />);
     await later(0);
     await appMoves("background");
     await later(25_000);
@@ -304,9 +319,9 @@ describe("the pass while it is open", () => {
   it("after Close nothing more is asked, even when an answer was still away", async () => {
     const held = heldAnswer();
     const fetchPass: FetchPass = jest.fn(() => held.answer);
-    const view = await render(<PassSheet open trainer={false} onClose={() => undefined} fetchPass={fetchPass} />);
+    const view = await render(<PassSheet open trainer={false} onClose={() => undefined} fetchPass={fetchPass} makeOwnPass={null} />);
     await later(0);
-    await view.rerender(<PassSheet open={false} trainer={false} onClose={() => undefined} fetchPass={fetchPass} />);
+    await view.rerender(<PassSheet open={false} trainer={false} onClose={() => undefined} fetchPass={fetchPass} makeOwnPass={null} />);
     held.go(good(RAVI_PASS, 20_000));
     // The answer lands first; only then does the clock move on.
     await later(0);
@@ -324,7 +339,7 @@ describe("the pass while it is open", () => {
       // The server answers 8 seconds later, with its window ending 20 seconds after that.
       return new Promise((resolve) => setTimeout(() => { resolve(good(RAVI_PASS, 20_000)); }, 8_000));
     });
-    await render(<PassSheet open trainer={false} onClose={() => undefined} fetchPass={fetchPass} />);
+    await render(<PassSheet open trainer={false} onClose={() => undefined} fetchPass={fetchPass} makeOwnPass={null} />);
     await later(8_000);
     expect(drawn()).toBe(RAVI_PASS);
     await later(21_999);
@@ -338,7 +353,7 @@ describe("the pass while it is open", () => {
   it("an answer that lands while the app is in the background asks nothing more", async () => {
     const held = heldAnswer();
     const fetchPass: FetchPass = jest.fn(() => held.answer);
-    await render(<PassSheet open trainer={false} onClose={() => undefined} fetchPass={fetchPass} />);
+    await render(<PassSheet open trainer={false} onClose={() => undefined} fetchPass={fetchPass} makeOwnPass={null} />);
     await later(0);
     const was = AppState.currentState;
     Object.defineProperty(AppState, "currentState", { value: "background", configurable: true });
@@ -356,7 +371,7 @@ describe("the pass while it is open", () => {
 
   it("where brightness is the whole phone's, the app in the background gives it back, and in front takes it again", async () => {
     const { fetchPass } = answers(good(RAVI_PASS, 20_000), null);
-    await render(<PassSheet open trainer={false} onClose={() => undefined} fetchPass={fetchPass} />);
+    await render(<PassSheet open trainer={false} onClose={() => undefined} fetchPass={fetchPass} makeOwnPass={null} />);
     await later(0);
     expect(Brightness.setBrightnessAsync).toHaveBeenLastCalledWith(1);
     await appMoves("background");
@@ -369,12 +384,12 @@ describe("the pass while it is open", () => {
 
   it("the screen is kept awake and at full brightness while it is open, and both go back when it closes", async () => {
     const { fetchPass } = answers(good(RAVI_PASS, 20_000));
-    const view = await render(<PassSheet open trainer={false} onClose={() => undefined} fetchPass={fetchPass} />);
+    const view = await render(<PassSheet open trainer={false} onClose={() => undefined} fetchPass={fetchPass} makeOwnPass={null} />);
     await later(0);
     expect(activateKeepAwakeAsync).toHaveBeenCalledTimes(1);
     expect(Brightness.setBrightnessAsync).toHaveBeenCalledWith(1);
     expect(deactivateKeepAwake).not.toHaveBeenCalled();
-    await view.rerender(<PassSheet open={false} trainer={false} onClose={() => undefined} fetchPass={fetchPass} />);
+    await view.rerender(<PassSheet open={false} trainer={false} onClose={() => undefined} fetchPass={fetchPass} makeOwnPass={null} />);
     await later(0);
     expect(deactivateKeepAwake).toHaveBeenCalledTimes(1);
     // The same hold it took, or the screen would never sleep again while the app is open.
@@ -389,15 +404,160 @@ describe("the pass while it is open", () => {
     Object.defineProperty(Platform, "OS", { value: "android", configurable: true });
     try {
       const { fetchPass } = answers(good(RAVI_PASS, 20_000));
-      const view = await render(<PassSheet open trainer={false} onClose={() => undefined} fetchPass={fetchPass} />);
+      const view = await render(<PassSheet open trainer={false} onClose={() => undefined} fetchPass={fetchPass} makeOwnPass={null} />);
       await later(0);
       expect(Brightness.getBrightnessAsync).not.toHaveBeenCalled();
-      await view.rerender(<PassSheet open={false} trainer={false} onClose={() => undefined} fetchPass={fetchPass} />);
+      await view.rerender(<PassSheet open={false} trainer={false} onClose={() => undefined} fetchPass={fetchPass} makeOwnPass={null} />);
       await later(0);
       expect(Brightness.restoreSystemBrightnessAsync).toHaveBeenCalledTimes(1);
       expect(Brightness.setBrightnessAsync).toHaveBeenCalledTimes(1);
     } finally {
       Object.defineProperty(Platform, "OS", { value: was, configurable: true });
     }
+  });
+});
+
+describe("a pass with no signal", () => {
+  const lostAll = (routes: Record<string, Route>): Ask => {
+    const server = fakeServer(routes);
+    return (url, init) =>
+      server.ask(url, init).then(() => {
+        throw new TypeError("Network request failed");
+      });
+  };
+
+  it("THE WORST THING: with no signal at all, Show my pass still opens, and draws this person's own pass made on the phone", async () => {
+    await render(<App extra={extra} ask={lostAll({})} store={memoryStore(keptWithKey(1))} wait={noWait} />);
+    await fireEvent.press(await gymTab());
+    await fireEvent.press(await screen.findByRole("button", { name: "Show my pass" }));
+    expect(await screen.findByText(PASS_OFFLINE)).toBeTruthy();
+    const now = makePhonePass(OWN_KEY, RAVI.id, Date.now());
+    const before = makePhonePass(OWN_KEY, RAVI.id, Date.now() - 30_000);
+    expect([now, before]).toContain(drawn(now, before));
+    // The same key with another person's id makes another pass: this one names Ravi alone.
+    const ashas = makePhonePass(OWN_KEY, ASHA.id, Date.now());
+    expect(drawn(now, before, ashas)).not.toBe(ashas);
+  });
+
+  it("with no key kept, no signal shows what it did before, and no Show my pass where the places could not be read", async () => {
+    await render(<App extra={extra} ask={lostAll({})} store={memoryStore(kept(1))} wait={noWait} />);
+    await fireEvent.press(await gymTab());
+    expect(await screen.findByRole("button", { name: "Try again" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Show my pass" })).toBeNull();
+  });
+
+  it("the Gym tab asks for the key once with the internet and keeps it with the sign-in", async () => {
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [PHONE_KEY_PATH]: ok({ key: OWN_KEY }),
+    });
+    const store = memoryStore(kept(1));
+    await render(<App extra={extra} ask={server.ask} store={store} wait={noWait} />);
+    await fireEvent.press(await gymTab());
+    await waitFor(() => {
+      expect(store.value ?? "").toContain(OWN_KEY);
+    });
+    await fireEvent.press(screen.getByRole("tab", { name: "Me" }));
+    await fireEvent.press(await gymTab());
+    expect(server.paths().filter((path) => path === PHONE_KEY_PATH)).toHaveLength(1);
+  });
+
+  it("a key the server refuses is not kept", async () => {
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [PHONE_KEY_PATH]: () => refusal(403, "phone_only", "Only the app on your phone can do this."),
+    });
+    const store = memoryStore(kept(1));
+    await render(<App extra={extra} ask={server.ask} store={store} wait={noWait} />);
+    await fireEvent.press(await gymTab());
+    await waitFor(() => {
+      expect(server.paths()).toContain(PHONE_KEY_PATH);
+    });
+    expect(JSON.parse(store.value ?? "{}")).not.toHaveProperty("passKey");
+  });
+});
+
+describe("a pass with no signal, while it is open", () => {
+  const start = Date.parse("2026-10-28T10:00:05.000Z");
+  const own: MakeOwnPass = (nowMs) => makePhonePass(OWN_KEY, RAVI.id, nowMs);
+  const ownAt = (ms: number) => makePhonePass(OWN_KEY, RAVI.id, start + ms);
+
+  beforeEach(() => {
+    jest.useFakeTimers({ now: start });
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+  const later = async (ms: number) => {
+    await act(async () => {
+      jest.advanceTimersByTime(ms);
+      await Promise.resolve();
+    });
+  };
+  const good = (pass: string): Answer<CheckinPassResponse> => ({
+    kind: "ok",
+    data: { pass, refreshAt: new Date(Date.now() + 20_000).toISOString() },
+  });
+
+  it("the server's pass, when it comes at once, is the one drawn", async () => {
+    const fetchPass: FetchPass = jest.fn(() => Promise.resolve(good(RAVI_PASS)));
+    await render(<PassSheet open trainer={false} onClose={() => undefined} fetchPass={fetchPass} makeOwnPass={own} />);
+    await later(0);
+    await later(OWN_PASS_AFTER_MS);
+    expect(drawn(ownAt(0))).toBe(RAVI_PASS);
+  });
+
+  it("while the server is slow the phone's own is drawn after two seconds, with no word of being offline; the server's replaces it", async () => {
+    let answer: (reply: Answer<CheckinPassResponse>) => void = () => undefined;
+    const fetchPass: FetchPass = jest.fn(() => new Promise<Answer<CheckinPassResponse>>((resolve) => (answer = resolve)));
+    await render(<PassSheet open trainer={false} onClose={() => undefined} fetchPass={fetchPass} makeOwnPass={own} />);
+    await later(OWN_PASS_AFTER_MS - 1);
+    expect(drawn()).toBeNull();
+    await later(1);
+    expect(drawn(ownAt(0))).toBe(ownAt(0));
+    expect(screen.queryByText(PASS_OFFLINE)).toBeNull();
+    await act(async () => {
+      answer(good(RAVI_PASS));
+      await Promise.resolve();
+    });
+    expect(drawn(ownAt(0))).toBe(RAVI_PASS);
+  });
+
+  it("with no answer it says it is offline and makes a new pass as each window begins", async () => {
+    const fetchPass: FetchPass = jest.fn(() => Promise.resolve<Answer<CheckinPassResponse>>({ kind: "no_answer" }));
+    await render(<PassSheet open trainer={false} onClose={() => undefined} fetchPass={fetchPass} makeOwnPass={own} />);
+    await later(0);
+    expect(screen.getByText(PASS_OFFLINE)).toBeTruthy();
+    expect(drawn(ownAt(0))).toBe(ownAt(0));
+    expect(screen.queryByText(PASS_COULD_NOT)).toBeNull();
+    // The window began at 10:00:00; the next begins at 10:00:30, 25 seconds on.
+    await later(24_999);
+    expect(drawn(ownAt(0))).toBe(ownAt(0));
+    await later(1);
+    expect(ownAt(25_000)).not.toBe(ownAt(0));
+    expect(drawn(ownAt(25_000))).toBe(ownAt(25_000));
+  });
+
+  it("a refusal is never covered by the phone's own pass: the server's words show", async () => {
+    const words = "Passes aren't working right now. Staff can check you in.";
+    const fetchPass: FetchPass = jest.fn(() =>
+      Promise.resolve<Answer<CheckinPassResponse>>({
+        kind: "refused",
+        status: 503,
+        error: "passes_off",
+        message: words,
+        retryAfterSeconds: null,
+        robotCheckKey: null,
+        body: {},
+      }),
+    );
+    await render(<PassSheet open trainer={false} onClose={() => undefined} fetchPass={fetchPass} makeOwnPass={own} />);
+    await later(0);
+    await later(OWN_PASS_AFTER_MS);
+    expect(screen.getByText(words)).toBeTruthy();
+    expect(drawn(ownAt(0))).toBeNull();
   });
 });

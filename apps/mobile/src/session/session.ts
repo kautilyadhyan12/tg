@@ -82,6 +82,13 @@ export interface Session {
   /** Whether the server has said this person finished setup, as this phone last heard it. */
   setupDone: () => boolean;
   keepSetupDone: (done: boolean) => Promise<void>;
+  /** This sign-in's key for passes with no signal, or null until the server has given it. */
+  passKey: () => string | null;
+  /** Which sign-in this is: a new number at each sign-in and sign-out, never at a refresh. */
+  signInNumber: () => number;
+  /** Kept with the sign-in it was asked for (`signIn`), so a key that comes back after a sign-out
+   *  or another sign-in is dropped, and signing out takes it away. */
+  keepPassKey: (key: string, signIn: number) => Promise<void>;
 }
 
 export function createSession({
@@ -97,6 +104,7 @@ export function createSession({
   let access: { token: string; at: number } | null = null;
   /** The refresh that is away, and whose sign-in it is for: one at a time for each. */
   let refreshing: { run: Promise<void>; of: PhoneKeptSession } | null = null;
+  let signIns = 0;
 
   const show = (next: SessionState) => {
     state = next;
@@ -150,6 +158,7 @@ export function createSession({
 
   /** Memory first, so nothing of the last person is shown; then the key store, which must not keep them. */
   const forget = async () => {
+    signIns += 1;
     kept = null;
     access = null;
     try {
@@ -230,6 +239,7 @@ export function createSession({
       );
       if (answer.kind === "ok") {
         const { user, tokens } = answer.data;
+        signIns += 1;
         await keep({ refreshToken: tokens.refreshToken, user }, tokens.accessToken);
         show({ kind: "in", user });
       }
@@ -244,6 +254,7 @@ export function createSession({
       const answer = await post(server, "/v1/auth/google/phone", { idToken: asked.idToken }, verifyCodePhoneResponseSchema);
       if (answer.kind === "ok") {
         const { user, tokens } = answer.data;
+        signIns += 1;
         await keep({ refreshToken: tokens.refreshToken, user }, tokens.accessToken);
         show({ kind: "in", user });
       }
@@ -284,6 +295,17 @@ export function createSession({
       const mine = kept;
       if (mine === null || (mine.setupDone === true) === done) return;
       mine.setupDone = done;
+      await writeKept(mine);
+    },
+
+    passKey: () => kept?.passKey ?? null,
+
+    signInNumber: () => signIns,
+
+    keepPassKey: async (key, signIn) => {
+      const mine = kept;
+      if (mine === null || signIn !== signIns || mine.passKey === key) return;
+      mine.passKey = key;
       await writeKept(mine);
     },
 

@@ -465,3 +465,69 @@ describe("a late write never undoes a sign-out", () => {
     expect(store.value).toBe(after);
   });
 });
+
+// The key for passes with no signal (ROADMAP Stage 5 item 15c) is this sign-in's alone.
+describe("the key for passes with no signal", () => {
+  const KEY = "6kk2P5Zj8znws7IlJEBdalqwCFQdAxL2lgYYZUO3B6Q"; // dummy test value, gitleaks:allow
+  const OTHER = "7kk2P5Zj8znws7IlJEBdalqwCFQdAxL2lgYYZUO3B6Q"; // dummy test value, gitleaks:allow
+  const refreshed = { "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }) };
+
+  it("is kept in the key store with the sign-in, and stays through a refresh", async () => {
+    const { session, store } = phone(refreshed, kept(1));
+    await session.start();
+    expect(session.passKey()).toBeNull();
+    await session.keepPassKey(KEY, session.signInNumber());
+    expect(session.passKey()).toBe(KEY);
+    expect(JSON.parse(store.value ?? "{}")).toMatchObject({ refreshToken: "refresh-2", passKey: KEY });
+    await session.refresh();
+    expect(session.passKey()).toBe(KEY);
+    expect(JSON.parse(store.value ?? "{}")).toMatchObject({ passKey: KEY });
+  });
+
+  it("THE WORST THING: signing out takes it away, and a new sign-in starts with none", async () => {
+    const { session, store } = phone(
+      {
+        ...refreshed,
+        "/v1/auth/logout": () => ({ status: 200, body: {} }),
+        "/v1/auth/code/verify": () => ({ status: 200, body: { user: MEERA, isNewAccount: false, tokens: tokens(7) } }),
+      },
+      kept(1),
+    );
+    await session.start();
+    await session.keepPassKey(KEY, session.signInNumber());
+    await session.signOut();
+    expect(session.passKey()).toBeNull();
+    expect(store.value ?? "").not.toContain(KEY);
+    await session.verifyCode(MEERA.email, "123456");
+    expect(session.passKey()).toBeNull();
+    expect(store.value ?? "").not.toContain(KEY);
+  });
+
+  it("THE WORST THING: a key that comes back after a sign-out and a new sign-in is not kept with the new one", async () => {
+    const { session, store } = phone(
+      {
+        ...refreshed,
+        "/v1/auth/logout": () => ({ status: 200, body: {} }),
+        "/v1/auth/code/verify": () => ({ status: 200, body: { user: RAVI, isNewAccount: false, tokens: tokens(7) } }),
+      },
+      kept(1),
+    );
+    await session.start();
+    const asked = session.signInNumber();
+    await session.signOut();
+    await session.verifyCode(RAVI.email, "123456");
+    await session.keepPassKey(KEY, asked);
+    expect(session.passKey()).toBeNull();
+    expect(store.value ?? "").not.toContain(KEY);
+    // The new sign-in's own key is kept, and a newer one replaces it.
+    await session.keepPassKey(OTHER, session.signInNumber());
+    expect(session.passKey()).toBe(OTHER);
+  });
+
+  it("a key store written before this job, with no key, still opens signed in", async () => {
+    const { session } = phone(refreshed, kept(1));
+    await session.start();
+    expect(session.state()).toEqual(signedInAs(RAVI));
+    expect(session.passKey()).toBeNull();
+  });
+});

@@ -1,10 +1,11 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, StyleSheet, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   INVITATION_WORDS,
   ORG_TYPES_PHRASE,
   checkinPassResponseSchema,
+  checkinPhoneKeyResponseSchema,
   gymAttendanceHistoryResponseSchema,
   myInvitationsResponseSchema,
   myOrgsResponseSchema,
@@ -24,18 +25,26 @@ import { usePlaces } from "./places";
 import { placesHeading } from "./placesHeading";
 import { DaysYouCame } from "./gym/DaysYouCame";
 import { PASS_PATH, PassSheet } from "./gym/Pass";
+import { makePhonePass } from "./gym/phonePass";
 import { NO_ANSWER } from "./SignIn";
 
 // The Gym tab (docs/design/phone/pages/Gym and GymNone): the places the person joined, each with
 // Show my pass and the days they came there, a place that removed them, and every invitation still open for their address. It reads again when the
-// tab is opened or the app comes back, at most every 30 seconds.
+// tab is opened or the app comes back, at most every 30 seconds. With the internet it also asks once
+// for this sign-in's key for passes with no signal; with none, Show my pass stays where the places
+// could not be read, for the pass works anywhere the person belongs (ROADMAP Stage 5 item 15c).
 
 export const GYM_READ_AGAIN_MS = 30_000;
+export const PHONE_KEY_PATH = `${PASS_PATH}/phone-key`;
 
 type Read<T> = { kind: "ok"; data: T } | { kind: "failed" };
 
 export function GymScreen() {
-  const { session } = useSession();
+  const { session, state } = useSession();
+  const userId = state.kind === "in" ? state.user.id : null;
+  const [ownKey, setOwnKey] = useState<string | null>(() => session.passKey());
+  // Asked once while the tab is open: the key is this sign-in's for as long as it lasts.
+  const keyAsked = useRef(false);
   const { setKinds } = usePlaces();
   const [mine, setMine] = useState<Read<MyOrgsResponse> | null>(null);
   const [invites, setInvites] = useState<Read<MyInvitationsResponse> | null>(null);
@@ -56,6 +65,25 @@ export function GymScreen() {
   const [visitsRead, setVisitsRead] = useState(0);
 
   const fetchPass = useCallback(() => session.signedIn({ method: "GET", path: PASS_PATH }, checkinPassResponseSchema), [session]);
+  const makeOwnPass = useMemo(
+    () => (ownKey === null || userId === null ? null : (nowMs: number) => makePhonePass(ownKey, userId, nowMs)),
+    [ownKey, userId],
+  );
+
+  const readPhoneKey = useCallback(async () => {
+    if (keyAsked.current) return;
+    keyAsked.current = true;
+    const signIn = session.signInNumber();
+    const answer = await session.signedIn({ method: "GET", path: PHONE_KEY_PATH }, checkinPhoneKeyResponseSchema);
+    if (answer.kind !== "ok") {
+      // Asked again with the next read; a refusal is this sign-in's answer and is not.
+      if (answer.kind === "no_answer") keyAsked.current = false;
+      return;
+    }
+    await session.keepPassKey(answer.data.key, signIn);
+    if (live.current) setOwnKey(session.passKey());
+  }, [session]);
+
   const fetchVisits = useCallback((path: string) => session.signedIn({ method: "GET", path }, gymAttendanceHistoryResponseSchema), [session]);
 
   const readMine = useCallback(async () => {
@@ -80,9 +108,9 @@ export function GymScreen() {
       if (!always && now - lastRead.current < GYM_READ_AGAIN_MS) return;
       lastRead.current = now;
       setVisitsRead((n) => n + 1);
-      await Promise.all([readMine(), readInvites()]);
+      await Promise.all([readMine(), readInvites(), readPhoneKey()]);
     },
-    [readMine, readInvites],
+    [readMine, readInvites, readPhoneKey],
   );
 
   useEffect(() => {
@@ -131,6 +159,10 @@ export function GymScreen() {
         </Card>
       ) : null}
 
+      {mine?.kind === "failed" && makeOwnPass !== null ? (
+        <Button label="Show my pass" icon="qr" wide onPress={() => { setPassOrgType("unknown"); }} />
+      ) : null}
+
       {mine?.kind === "failed" && invites?.kind === "ok" ? (
         <View style={styles.row}>
           <Txt kind="small" style={styles.grow}>
@@ -162,6 +194,7 @@ export function GymScreen() {
           setVisitsRead((n) => n + 1);
         }}
         fetchPass={fetchPass}
+        makeOwnPass={makeOwnPass}
       />
 
       {removed.map((org) => (
