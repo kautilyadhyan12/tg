@@ -150,7 +150,9 @@ export function goalProgress(goal: Goal, units: string): Progress {
   }
   if (cur === null || t === null) return { kind: "going", words: NOT_KNOWN, share: null };
   if (goal.direction === "at_most") {
-    if (cur > t) return { kind: "going", words: `${count(cur - t)} ${UNIT_WORDS[goal.unit](cur - t)} over${now}`, share: 1 };
+    // Over its number: the words alone, never a trail climbed to the top as if it were reached.
+    if (cur > t) return { kind: "going", words: `${count(cur - t)} ${UNIT_WORDS[goal.unit](cur - t)} over${now}`, share: null };
+    if (goal.reached === true) return { kind: "done", words: `${count(cur)} of ${count(t)} ${UNIT_WORDS[goal.unit](t)}${now}` };
     return { kind: "going", words: `${count(cur)} of ${count(t)} ${UNIT_WORDS[goal.unit](t)}${now}`, share: t > 0 ? cur / t : 0 };
   }
   if (goal.reached === true) return { kind: "done", words: `${count(cur)} of ${count(t)} ${UNIT_WORDS[goal.unit](t)}${now}` };

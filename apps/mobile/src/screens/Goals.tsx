@@ -3,6 +3,7 @@ import { Image, Pressable, StyleSheet, View } from "react-native";
 import {
   GOAL_KIND_RULES,
   catalogPageSchema,
+  exerciseCountsReps,
   goalResponseSchema,
   goalTargetMax,
   type ExerciseCatalogItem,
@@ -53,8 +54,10 @@ import {
 // and holds what the health rules hold; the phone only sends what the person picked.
 
 export const GOALS_READ = "/v1/goals";
-/** The exercises a "reps in one set" goal can name: those the camera counts in reps. */
+/** The exercise library, a page at a time; a "reps in one set" goal names one that counts reps. */
 export const EXERCISES_READ = "/v1/exercises?limit=100";
+/** The most pages read: the library holds 58 today, so this is far past any real size. */
+const MOST_EXERCISE_PAGES = 20;
 
 const goalPath = (id: string) => `/v1/goals/${id}`;
 const NO_CONNECTION = "No connection. Try again.";
@@ -74,7 +77,14 @@ export function GoalsBox({ read, onOpen }: { read: Read<GoalsResponse>; onOpen: 
   const goals = read.kind === "ok" ? read.data.goals : null;
   const summary = goals === null ? null : summaryWords(goals);
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel="Your Goals, View all" onPress={() => { onOpen("list"); }} style={styles.box}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={summary === null ? "Your Goals, View all" : `Your Goals, ${summary}, View all`}
+      onPress={() => {
+        onOpen("list");
+      }}
+      style={styles.box}
+    >
       <View style={styles.boxArt}>
         <Image source={pictures.goalsbox} resizeMode="contain" style={styles.fill} accessible={false} />
       </View>
@@ -233,6 +243,7 @@ export function GoalsPage({ open, onClose, read, again }: GoalsPageProps) {
       )}
       <GoalSheet
         goal={picked}
+        goals={goals ?? []}
         units={units}
         onClose={() => {
           setPicked(null);
@@ -351,8 +362,15 @@ function Editor(props: {
 
 
 /** One goal: change its period or number, or remove it, which asks first. */
-function GoalSheet(props: { goal: Goal | null; units: string; onClose: () => void; onDone: (words: string) => void; onSetup: ToSetup }) {
-  const { goal, units, onClose, onDone, onSetup } = props;
+function GoalSheet(props: {
+  goal: Goal | null;
+  goals: readonly Goal[];
+  units: string;
+  onClose: () => void;
+  onDone: (words: string) => void;
+  onSetup: ToSetup;
+}) {
+  const { goal, goals, units, onClose, onDone, onSetup } = props;
   const { session } = useSession();
   const [period, setPeriod] = useState<GoalPeriod | null>(null);
   const [typed, setTyped] = useState("");
@@ -417,7 +435,8 @@ function GoalSheet(props: { goal: Goal | null; units: string; onClose: () => voi
           {shown ? (
             <Editor
               kind={goal.kind}
-              periods={rule.periods}
+              // Its own period and those the person has no goal of yet: another kept one would be refused.
+              periods={[goal.period, ...freePeriods(goal.kind, goals).filter((p) => p !== goal.period)]}
               period={period}
               onPeriod={(p) => {
                 setPeriod(p);
@@ -469,12 +488,25 @@ function AddSheet(props: { open: boolean; goals: readonly Goal[]; onClose: () =>
     setBusy(false);
   }, [open]);
 
+  /** Every page of the library, then only what counts reps: never a hold, whose goal would sit at 0. */
   const loadExercises = async () => {
     setExercises("loading");
-    const answer = await session.signedIn({ method: "GET", path: EXERCISES_READ }, catalogPageSchema);
-    const now = session.state();
-    if (now.kind !== "in" || now.user.id !== me) return;
-    setExercises(answer.kind === "ok" ? answer.data.items.filter((e) => e.tracking === "pose") : "failed");
+    const all: ExerciseCatalogItem[] = [];
+    let cursor: string | null = null;
+    for (let page = 0; page < MOST_EXERCISE_PAGES; page += 1) {
+      const path: string = cursor === null ? EXERCISES_READ : `${EXERCISES_READ}&cursor=${encodeURIComponent(cursor)}`;
+      const answer = await session.signedIn({ method: "GET", path }, catalogPageSchema);
+      const now = session.state();
+      if (now.kind !== "in" || now.user.id !== me) return;
+      if (answer.kind !== "ok") {
+        setExercises("failed");
+        return;
+      }
+      all.push(...answer.data.items);
+      cursor = answer.data.nextCursor;
+      if (cursor === null) break;
+    }
+    setExercises(all.filter((e) => e.tracking === "pose" && exerciseCountsReps(e)));
   };
 
   const pick = (k: GoalKind) => {

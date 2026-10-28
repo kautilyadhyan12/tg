@@ -32,6 +32,24 @@ describe("the Daily Motivation clock", () => {
     expect(screen.getByText("10:21:00")).toBeTruthy();
   });
 
+  it("does not tick while the Dashboard is hidden, and shows the right time when it is back", async () => {
+    const set = jest.spyOn(globalThis, "setTimeout");
+    const ticks = () => set.mock.calls.filter(([run]) => run.name === "tick").length;
+    const view = await render(<Clock running={false} />);
+    await act(async () => {
+      jest.advanceTimersByTime(5000);
+      await Promise.resolve();
+    });
+    expect(ticks()).toBe(0);
+    await view.rerender(<Clock running />);
+    expect(screen.getByText("10:20:16")).toBeTruthy();
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+      await Promise.resolve();
+    });
+    expect(ticks()).toBeGreaterThan(0);
+  });
+
   it("stops when it leaves the screen", async () => {
     const set = jest.spyOn(globalThis, "setTimeout");
     const ticks = () => set.mock.calls.filter(([run]) => run.name === "tick").length;

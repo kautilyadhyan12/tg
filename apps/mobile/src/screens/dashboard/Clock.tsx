@@ -5,10 +5,13 @@ import { fonts, Txt } from "../../look/Txt";
 import { clockDateWords, clockWords, msToNextSecond } from "./words";
 
 /** The time with its seconds and the date under it, in the phone's own time zone (Kd, 2026-10-28).
- *  It keeps its own time, so each second redraws the clock alone, never the Dashboard round it. */
-export function Clock() {
+ *  It keeps its own time, so each second redraws the clock alone, never the Dashboard round it.
+ *  `running` false (the Dashboard not on screen): no ticks, and the right time the moment it is. */
+export function Clock({ running = true }: { running?: boolean }) {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
+    if (!running) return;
+    setNow(new Date());
     let timer: ReturnType<typeof setTimeout>;
     // Set to the next whole second each time, so it never drifts from the phone's own clock.
     const tick = () => {
@@ -20,7 +23,7 @@ export function Clock() {
     return () => {
       clearTimeout(timer);
     };
-  }, []);
+  }, [running]);
   const time = clockWords(now);
   const date = clockDateWords(now);
   // "10:20:11" tall, its "am" smaller beside it.

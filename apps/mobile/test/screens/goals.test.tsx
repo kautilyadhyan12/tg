@@ -22,8 +22,21 @@ const MINOR_WEIGHT = goal({
   reached: null,
   held: { code: "no_weight_loss", reasons: ["under_18"] },
 });
-const SQUAT = { id: "6f7a8b9c-0d1e-4f2a-9b4c-5d6e7f809102", slug: "squat", nameKey: "exercise.squat", family: "squat", tier: "T1", tracking: "pose", met: 5, difficulty: 2, equipment: null, muscles: null };
-const PLANK = { ...SQUAT, id: "7a8b9c0d-1e2f-4a3b-8c5d-6e7f80910213", slug: "plank", tracking: "timer" };
+// The library's own rows as the server sends them (families and tracking as on `aihg_b`, 2026-10-28):
+// every one is "pose", and the holds are told apart by family (spec Part 2 §5).
+const row = (id: string, slug: string, family: string) => ({
+  id, slug, nameKey: `exercise.${slug}`, family, tier: "T1", tracking: "pose", met: 4, difficulty: 2, equipment: null, muscles: null,
+});
+const SQUAT = row("6f7a8b9c-0d1e-4f2a-9b4c-5d6e7f809102", "squat", "F1");
+const LIBRARY = [
+  SQUAT,
+  row("7a8b9c0d-1e2f-4a3b-8c5d-6e7f80910213", "plank", "F10"),
+  row("8b9c0d1e-2f3a-4b4c-9d6e-7f8091021324", "wall_sit", "F10"),
+  row("9c0d1e2f-3a4b-4c5d-8e7f-809102132435", "tree_pose", "F12"),
+  row("0d1e2f3a-4b5c-4d6e-9f80-910213243546", "cat_cow", "F12"),
+];
+/** A second page, past the first's cursor. */
+const TUCK_JUMP = row("1e2f3a4b-5c6d-4e7f-8091-021324354657", "tuck_jump", "F11");
 
 /** The Dashboard's reads answer with nothing much; the goals routes are the test's. */
 const quiet: Record<string, Route> = {
@@ -33,7 +46,7 @@ const quiet: Record<string, Route> = {
   "/v1/workouts": ok({ items: [], nextCursor: null, limitedToDays: 90, hasAnyWorkouts: false }),
   "/v1/geo/runs": ok({ items: [], nextCursor: null }),
   "/v1/nutrition/meals": ok({ items: [], nextCursor: null }),
-  "/v1/exercises": ok({ items: [SQUAT, PLANK], nextCursor: null }),
+  "/v1/exercises": ok({ items: LIBRARY, nextCursor: null }),
 };
 
 interface Goals {
@@ -41,6 +54,8 @@ interface Goals {
   /** How PUT and DELETE answer; by default as the server does. */
   put?: (id: string, body: unknown) => Reply | Promise<Reply>;
   remove?: (id: string) => Reply | Promise<Reply>;
+  /** The exercise library by cursor ("" the first page), where a test pages it. */
+  pages?: Record<string, { items: unknown[]; nextCursor: string | null }>;
 }
 
 /** A server holding the person's goals: GET lists them, PUT keeps one, DELETE removes one. */
@@ -48,6 +63,11 @@ function goalsServer(goals: Goals, more: Record<string, Route> = {}) {
   const server = fakeServer({ ...quiet, ...more, "/v1/goals": () => ({ status: 200, body: { goals: goals.list, max: 30 } }) });
   const ask: Ask = async (url: string, init: AskInit) => {
     const path = new URL(url).pathname;
+    if (path === "/v1/exercises" && goals.pages !== undefined) {
+      const page = goals.pages[new URL(url).searchParams.get("cursor") ?? ""] ?? { items: [], nextCursor: null };
+      server.asked.push({ method: "GET", path: `${path}?cursor=${new URL(url).searchParams.get("cursor") ?? ""}`, body: undefined, headers: init.headers ?? {} });
+      return { ok: true, status: 200, json: () => Promise.resolve(page) };
+    }
     const id = /^\/v1\/goals\/(.+)$/.exec(path)?.[1];
     if (id === undefined) return server.ask(url, init);
     const body = init.body === undefined ? undefined : (JSON.parse(init.body) as unknown);
@@ -71,7 +91,7 @@ function goalsServer(goals: Goals, more: Record<string, Route> = {}) {
 async function openGoals(goals: Goals, more: Record<string, Route> = {}) {
   const server = goalsServer(goals, more);
   await render(<App extra={extra} ask={server.ask} store={memoryStore(kept(1))} wait={noWait} />);
-  await fireEvent.press(await screen.findByRole("button", { name: "Your Goals, View all" }));
+  await fireEvent.press(await screen.findByRole("button", { name: /^Your Goals, (.+, )?View all$/ }));
   return server;
 }
 
@@ -162,12 +182,14 @@ describe("Your Goals on the Dashboard", () => {
     const server = goalsServer({ list: [TRAIN, MINUTES, PROTEIN, FOOD] });
     await render(<App extra={extra} ask={server.ask} store={memoryStore(kept(1))} wait={noWait} />);
     expect(await screen.findByText("1 of 4 reached")).toBeTruthy();
+    // A screen reader hears the summary with the box's name, not the name alone.
+    expect(screen.getByRole("button", { name: "Your Goals, 1 of 4 reached, View all" })).toBeTruthy();
     expect(screen.getByText("Train 4 days a week")).toBeTruthy();
     expect(screen.getByText("150 active minutes a week")).toBeTruthy();
     expect(screen.getByText("Eat 140 g protein a day")).toBeTruthy();
     expect(screen.queryByText("Log food 5 days a week")).toBeNull();
 
-    await fireEvent.press(screen.getByRole("button", { name: "Your Goals, View all" }));
+    await fireEvent.press(screen.getByRole("button", { name: /^Your Goals, (.+, )?View all$/ }));
     expect(await screen.findByRole("button", { name: "Log food 5 days a week, 1 of 5 days this week" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Train 4 days a week, 2 of 4 days this week" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "150 active minutes a week, 160 of 150 minutes this week" })).toBeTruthy();
@@ -197,7 +219,7 @@ describe("Your Goals on the Dashboard", () => {
         ? Promise.resolve({ ok: false, status: 503, json: () => Promise.resolve(refusal(503, "unavailable", "Down").body) })
         : server.ask(url, init);
     await render(<App extra={extra} ask={ask} store={memoryStore(kept(1))} wait={noWait} />);
-    await fireEvent.press(await screen.findByRole("button", { name: "Your Goals, View all" }));
+    await fireEvent.press(await screen.findByRole("button", { name: /^Your Goals, (.+, )?View all$/ }));
     expect(await screen.findByText("Your goals couldn’t load.")).toBeTruthy();
     expect(screen.queryByText(/of 4/)).toBeNull();
     up = true;
@@ -230,6 +252,16 @@ describe("change and remove", () => {
     });
     expect(await screen.findByText("Goal saved.")).toBeTruthy();
     expect(await screen.findByRole("button", { name: "Train 5 days a week, 2 of 5 days this week" })).toBeTruthy();
+  });
+
+  it("changing a goal offers only periods the person has no goal of yet, besides its own", async () => {
+    const MONTHLY = goal({ id: "6a7b8c9d-0e1f-4a2b-8c3d-4e5f6a7b8c9d", kind: "training_days", period: "month", target: 12, current: 7 });
+    await openGoals({ list: [TRAIN, MONTHLY] });
+    await fireEvent.press(await screen.findByRole("button", { name: /^Train 4 days a week/ }));
+    expect(screen.getByRole("radio", { name: "Week", selected: true })).toBeTruthy();
+    expect(screen.getByRole("radio", { name: "Year" })).toBeTruthy();
+    // Month is the other goal's: picking it would be refused as a goal kept twice.
+    expect(screen.queryByRole("radio", { name: "Month" })).toBeNull();
   });
 
   it("a number too big is not sent, and the box says the range", async () => {
@@ -350,6 +382,28 @@ describe("add a goal", () => {
     expect(paths[0]).toBe(paths[1]);
   });
 
+  it("reps in one set offers no hold: plank, wall sit and tree pose record a time, never reps", async () => {
+    await openGoals({ list: [] });
+    await fireEvent.press(pageAdd());
+    await fireEvent.press(screen.getByRole("radio", { name: "Reps in one set" }));
+    expect(await screen.findByRole("button", { name: "Squat" })).toBeTruthy();
+    // Cat-cow is a stretch the camera still counts, in slow cycles.
+    expect(screen.getByRole("button", { name: "Cat cow" })).toBeTruthy();
+    for (const hold of ["Plank", "Wall sit", "Tree pose"]) expect([hold, screen.queryByRole("button", { name: hold })]).toEqual([hold, null]);
+  });
+
+  it("reads every page of the library, so an exercise past the first hundred can be picked", async () => {
+    const server = await openGoals({
+      list: [],
+      pages: { "": { items: LIBRARY, nextCursor: "worlds_greatest_stretch" }, worlds_greatest_stretch: { items: [TUCK_JUMP], nextCursor: null } },
+    });
+    await fireEvent.press(pageAdd());
+    await fireEvent.press(screen.getByRole("radio", { name: "Reps in one set" }));
+    await fireEvent.changeText(await screen.findByLabelText("Exercise"), "tuck");
+    expect(await screen.findByRole("button", { name: "Tuck jump" })).toBeTruthy();
+    expect(server.paths().filter((p) => p.startsWith("/v1/exercises"))).toEqual(["/v1/exercises?cursor=", "/v1/exercises?cursor=worlds_greatest_stretch"]);
+  });
+
   it("reps in one set names an exercise the camera counts in reps", async () => {
     const server = await openGoals({
       list: [],
@@ -360,8 +414,6 @@ describe("add a goal", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Add goal" }));
     expect(screen.getByText("Pick an exercise.")).toBeTruthy();
     expect(await screen.findByRole("button", { name: "Squat" })).toBeTruthy();
-    // A timed hold has no reps.
-    expect(screen.queryByRole("button", { name: "Plank" })).toBeNull();
     await fireEvent.press(screen.getByRole("button", { name: "Squat" }));
     await fireEvent.press(screen.getByRole("button", { name: "Add goal" }));
     expect(await screen.findByText("Goal added.")).toBeTruthy();

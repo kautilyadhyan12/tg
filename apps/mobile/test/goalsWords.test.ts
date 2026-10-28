@@ -80,6 +80,13 @@ describe("each kind in words", () => {
     );
   });
 
+  it("a calories goal kept to is ticked done; one over its number draws no climbed trail", () => {
+    const within = goal({ kind: "calories_within", direction: "at_most", target: 2100, current: 1900, reached: true });
+    expect(goalProgress(within, "metric")).toEqual({ kind: "done", words: "1,900 of 2,100 kcal today" });
+    const over = goal({ kind: "calories_within", direction: "at_most", target: 2100, current: 2300, reached: false });
+    expect(goalProgress(over, "metric")).toEqual({ kind: "going", words: "200 kcal over today", share: null });
+  });
+
   it("a reached goal is done; a share fills the bar only where more is closer or the day fills up", () => {
     expect(goalProgress(goal({ kind: "training_days", period: "week", target: 4, current: 5, reached: true }), "metric").kind).toBe("done");
     expect(goalProgress(goal({ kind: "training_days", period: "week" }), "metric")).toMatchObject({ share: 0.5 });

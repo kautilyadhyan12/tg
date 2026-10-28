@@ -152,9 +152,11 @@ function isUnique(err: unknown, constraint: string): boolean {
   );
 }
 
-export async function liveExerciseExists(sql: SqlOrTx, exerciseId: string): Promise<boolean> {
-  const rows = await sql`SELECT 1 FROM exercises WHERE id = ${exerciseId} AND status = 'live'`;
-  return rows.length > 0;
+/** A live exercise's family and slug, or null when it is not in the library. */
+export async function liveExercise(sql: SqlOrTx, exerciseId: string): Promise<{ family: string; slug: string } | null> {
+  const rows = await sql<{ family: string; slug: string }[]>`
+    SELECT family, slug FROM exercises WHERE id = ${exerciseId} AND status = 'live'`;
+  return rows[0] ?? null;
 }
 
 /** Workout totals by the person's own day, from `from` to `to`. The instant bounds are a

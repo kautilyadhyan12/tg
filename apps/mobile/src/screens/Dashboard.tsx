@@ -1,6 +1,6 @@
-import { useState, type ReactNode } from "react";
-import { Image, Pressable, ScrollView, StyleSheet, View } from "react-native";
-import { useNavigation, type NavigationProp, type ParamListBase } from "@react-navigation/native";
+import { useEffect, useState, type ReactNode } from "react";
+import { AppState, Image, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { useIsFocused, useNavigation, type NavigationProp, type ParamListBase } from "@react-navigation/native";
 import {
   gamificationMeSchema,
   goalsResponseSchema,
@@ -82,6 +82,17 @@ export function DashboardScreen() {
   // A goal's days are the person's own: read again once the zone is saved.
   const goals = useRead(DASHBOARD_READS.goals, goalsResponseSchema, zoneSaved);
   const [goalsOpen, setGoalsOpen] = useState<GoalsOpen | null>(null);
+  // The clock ticks only while the Dashboard is what the person sees.
+  const focused = useIsFocused();
+  const [awake, setAwake] = useState(AppState.currentState === "active");
+  useEffect(() => {
+    const heard = AppState.addEventListener("change", (next) => {
+      setAwake(next === "active");
+    });
+    return () => {
+      heard.remove();
+    };
+  }, []);
   const reads = [overview, me, week, challenges, recent, runs, meals, goals];
   const failed = reads.some((one) => one.read.kind === "failed");
   const now = new Date();
@@ -144,7 +155,7 @@ export function DashboardScreen() {
         }}
       />
       <Swipe>
-        <Motivation />
+        <Motivation running={focused && awake && goalsOpen === null} />
         <PictureLink picture="weight" label="Browse Exercises" onPress={toWorkout} />
         <PictureLink picture="running" label="View Progress" onPress={toMe} />
       </Swipe>
@@ -354,12 +365,12 @@ function PictureLink({ picture, label, onPress }: { picture: PictureName; label:
 }
 
 /** Kd's own picture (2026-10-28), darkened at the top where the clock lies. */
-function Motivation() {
+function Motivation({ running }: { running: boolean }) {
   return (
     <View style={[styles.box, styles.motivation]}>
       <Image source={pictures.motivation} resizeMode="cover" style={styles.fill} accessible={false} />
       <View style={styles.motivationWords}>
-        <Clock />
+        <Clock running={running} />
       </View>
     </View>
   );
