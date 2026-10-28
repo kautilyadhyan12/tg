@@ -564,7 +564,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 32a. [x] **A meal sent twice from the phone is saved once** — merged 2026-10-13 (PR #238).
     - 32b. **The Food screen** (split 2026-10-28: logging first).
       - 32b-i. [ ] **Log a meal on the phone**: the day's macros, the four meals, add by search and measure, remove; kept on the phone until the server has it.
-      - 32b-ii. [ ] **Change a logged meal, your own numbers, saved dishes**: name, time, section and a food's amount; the rings' own-numbers switch; saved dishes added, renamed and removed, each saved once (32a's note).
+      - 32b-ii. [ ] **Change a logged meal, your own numbers, saved dishes**: name, time, section and a food's amount; the rings' own-numbers switch; saved dishes added, renamed and removed, each saved once (32a's note); recent foods, the last 10 with one-tap Add (Kd, 2026-10-28).
 33. **The meal scan** (Kd, 2026-10-28: the scanner moves to GPT-6 Luna first).
     - 33a. [ ] **The meal scan on GPT-6 Luna, thinking off** (built straight after 32b-i, before 32b-ii: Kd's "go", 2026-10-28): OpenAI's terms read first (age, how long a photo is kept, training); Kd's eight plates through today's model and Luna, foods found, calories and the measured cost a scan side by side; Gemini and the Groq spare removed if Luna holds up, else Kd decides. Needs Kd's OpenAI key with a monthly limit. Risky.
     - 33b. [ ] **A meal photo with the phone's camera, and barcode scan** (item 5; Stage 4 item 8). A scanned barcode reads the product's own page at Open Food Facts, which sends the minerals, vitamin D and the serving size that its search leaves out (34a's review).
