@@ -78,6 +78,19 @@ export const mealLogCorrections = pgTable(
   },
 );
 
+/** A removed meal's id, kept for its owner (0169): a late save of it keeps nothing. */
+export const mealRemovedIds = pgTable(
+  "meal_removed_ids",
+  {
+    id: uuid("id").primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    removedAt: timestamp("removed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("meal_removed_ids_user_idx").on(t.userId)],
+);
+
 export const bodyMeasurements = pgTable(
   "body_measurements", // existing feature (audit find), kept; org-invisible by §2.4 boundary
   {

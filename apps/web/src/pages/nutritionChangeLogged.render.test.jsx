@@ -141,7 +141,7 @@ describe('a food already logged', () => {
     // Nothing changed, nothing to save, and no preview asked for.
     expect(box.getByRole('button', { name: 'Save' }).disabled).toBe(true);
     expect(box.getByText('990 kcal')).toBeTruthy();
-    expect(box.getByText('From the food list')).toBeTruthy();
+    expect(box.getByText('Verified · from the food list')).toBeTruthy();
 
     fireEvent.change(box.getByRole('spinbutton', { name: 'Amount' }), { target: { value: '200' } });
     await waitFor(() => expect(svc.previewMealEdit).toHaveBeenCalledWith(MEAL_ID, [{ from: 0 }, { canonical: 'chicken_breast', measure: 'g', amount: 200, from: 1 }], READ_AT));
