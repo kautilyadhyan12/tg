@@ -172,7 +172,8 @@ describe('what a class says', () => {
     const booked = klass({ mine: mine('booked'), can: can({ cancel: 'free' }) });
     expect(cancelAsk(booked)).toEqual({
       title: 'Cancel your booking?',
-      lines: ['Spin, Thu 8 Oct at 1:30 pm', 'Free to cancel until Thu 8 Oct, 11:30 am.'],
+      // No fee and no pack: nothing follows that costs, so nothing is called free.
+      lines: ['Spin, Thu 8 Oct at 1:30 pm'],
       yes: 'Cancel booking',
       no: 'Keep it',
     });
@@ -182,7 +183,7 @@ describe('what a class says', () => {
     const late = cancelAsk(klass({ mine: mine('booked', { packCharged: true }), can: can({ cancel: 'late' }) }));
     expect(late.title).toBe('Cancel late?');
     expect(late.lines[1]).toBe("It's too late to cancel for free. Cancelling now counts as a late cancel, and the class stays used on your pack.");
-    expect(cancelAsk(klass({ mine: mine('booked'), can: can({ cancel: 'late' }) })).lines[1]).toBe("It's too late to cancel for free. Cancelling now counts as a late cancel.");
+    expect(cancelAsk(klass({ mine: mine('booked'), can: can({ cancel: 'late' }) })).lines[1]).toBe("Cancelling this close to the start counts as a late cancel. There's no fee.");
     expect(cancelAsk(klass({ mine: mine('waitlisted', { waitlistPlace: 2 }), can: can({ cancel: 'free' }) }))).toMatchObject({
       title: 'Leave the waitlist?',
       yes: 'Leave waitlist',

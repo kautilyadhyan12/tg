@@ -131,13 +131,13 @@ describe("the worst thing: nothing is booked twice, no fee is taken that was not
     await openClasses(server.ask, IRON);
     await fireEvent.press(await screen.findByLabelText("Cancel booking: Spin, 6:30 PM · 45 min"));
     expect(await screen.findByText("Cancel late?")).toBeTruthy();
-    expect(screen.getByText(/one-time late cancel fee of ₹500\.00 will be added to your bill/)).toBeTruthy();
+    expect(screen.getByText(/and a one-time late cancel fee of ₹500\.00 will be added to your bill/)).toBeTruthy();
     // Nothing is sent until the box's own Yes.
     expect(server.asked.filter((one) => one.path.endsWith("/cancel"))).toHaveLength(0);
 
     await fireEvent.press(screen.getByLabelText("Cancel booking"));
-    expect(await screen.findByText(/one-time late cancel fee of ₹700\.00 will be added to your bill/)).toBeTruthy();
-    expect(screen.queryByText(/₹500\.00 will be added/)).toBeNull();
+    expect(await screen.findByText(/and a one-time late cancel fee of ₹700\.00 will be added to your bill/)).toBeTruthy();
+    expect(screen.queryByText(/and a one-time late cancel fee of ₹500\.00/)).toBeNull();
     expect(server.asked.filter((one) => one.path.endsWith("/cancel"))).toHaveLength(1);
 
     await fireEvent.press(screen.getByLabelText("Cancel booking"));
@@ -147,6 +147,39 @@ describe("the worst thing: nothing is booked twice, no fee is taken that was not
       { lateOk: true, feeMinor: 50_000 },
       { lateOk: true, feeMinor: 70_000 },
     ]);
+  });
+
+  it("a class that would cost to cancel says so before Book, and Book asks first; Not now sends nothing", async () => {
+    const fees = { lateCancelMinor: 20_000, noShowMinor: 30_000, currency: "INR" };
+    // Inside its free-cancel time: it starts in an hour, and free cancelling ended a minute ago.
+    const soon = klass(S1, "Stretch", {
+      startsAt: new Date(Date.now() + 60 * 60_000).toISOString(),
+      freeCancelUntil: new Date(Date.now() - 60_000).toISOString(),
+      fees,
+    });
+    const gym = held([soon]);
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [classesOf(IRON)]: gym.read,
+      [bookingOf(IRON, S1)]: () => gym.keep({ ...soon, booked: 9, mine: { status: "booked", waitlistPlace: null, packCharged: false }, can: can({ cancel: "late" }) }),
+    });
+    await openClasses(server.ask, IRON);
+    expect(
+      await classBox(S1).findByText("This class starts soon. If you book and then cancel, a one-time late cancel fee of ₹200.00 will be added to your bill."),
+    ).toBeTruthy();
+    expect(classBox(S1).getByText("If you don’t come, a one-time no-show fee of ₹300.00 will be added to your bill.")).toBeTruthy();
+
+    await fireEvent.press(classBox(S1).getByLabelText("Book: Stretch, 6:30 PM · 45 min"));
+    expect(await screen.findByText("Book?")).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText("Not now"));
+    expect(server.asked.filter((one) => one.path === bookingOf(IRON, S1))).toHaveLength(0);
+
+    await fireEvent.press(classBox(S1).getByLabelText("Book: Stretch, 6:30 PM · 45 min"));
+    await fireEvent.press(await screen.findByLabelText("Book", { exact: true }));
+    expect(await classBox(S1).findByText("You’re booked")).toBeTruthy();
+    expect(server.asked.filter((one) => one.path === bookingOf(IRON, S1))).toHaveLength(1);
+    expect(classBox(S1).getByText("If you cancel now, a one-time late cancel fee of ₹200.00 will be added to your bill.")).toBeTruthy();
   });
 
   it("each place's page reads and shows only that place's classes", async () => {

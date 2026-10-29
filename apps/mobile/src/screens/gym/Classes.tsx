@@ -28,7 +28,8 @@ import {
   couldNotRead,
   dayHeading,
   emptyWeek,
-  feesText,
+  bookAsk,
+  feeLines,
   lateFee,
   mineText,
   newRequestKey,
@@ -44,7 +45,8 @@ import {
 
 // A place's classes for its member (spec Part 3 §13.4 and §13.6; ROADMAP Stage 5 item 16a): the coming
 // classes a week at a time, under their days, with Book, Join waitlist, Claim place and Cancel. The
-// browser's screen (apps/web/src/components/gym/Classes.jsx), as a page over the Gym tab. The server
+// browser's screen (apps/web/src/components/gym/Classes.jsx), as a page over the Gym tab; what a late
+// cancel and a no-show cost is said before Book, and Book asks first where any cancel would cost. The server
 // decides every one; a class shows what the server last said about it. Read when it opens, on a new
 // week, after each answer, when the app comes back, and when an online class's link is due or ends.
 
@@ -90,6 +92,8 @@ function ClassesBody({ place, onClose, bottom }: { place: ClassesPlace; onClose:
   const [said, setSaid] = useState<Record<string, Said | undefined>>({});
   // The class the box asks about, as it will be cancelled: its fee is the one the request says yes to.
   const [asking, setAsking] = useState<ClassBookingView | null>(null);
+  // The class and the press that Book's own box asks about, before anything is sent.
+  const [confirming, setConfirming] = useState<{ c: ClassBookingView; action: Take } | null>(null);
   // One key a tap: kept while its answer is unknown, so a second press books once.
   const keys = useRef(new Map<string, string>());
   // Reads are numbered as they start: an answer stands only if no later read has started.
@@ -208,6 +212,7 @@ function ClassesBody({ place, onClose, bottom }: { place: ClassesPlace; onClose:
   const days = list === null ? [] : byDay(list.classes);
   const note = list === null ? null : zoneNote(list.classes, place.name, phoneZone());
   const ask = asking === null ? null : cancelAsk(asking, place.clockFormat);
+  const bookBox = confirming === null ? null : bookAsk(confirming.c, confirming.action, place.clockFormat, Date.now());
 
   return (
     <>
@@ -288,7 +293,10 @@ function ClassesBody({ place, onClose, bottom }: { place: ClassesPlace; onClose:
                     clock={place.clockFormat}
                     busy={busyId === c.sessionId}
                     said={said[c.sessionId]}
-                    onTake={(action) => void take(c, action)}
+                    onTake={(action) => {
+                      if (bookAsk(c, action, place.clockFormat, Date.now()) === null) void take(c, action);
+                      else setConfirming({ c, action });
+                    }}
                     onGive={() => {
                       setAsking(c);
                     }}
@@ -304,6 +312,41 @@ function ClassesBody({ place, onClose, bottom }: { place: ClassesPlace; onClose:
           </>
         )}
       </ScrollView>
+      <Sheet
+        open={bookBox !== null}
+        place="middle"
+        title={bookBox?.title ?? ""}
+        onClose={() => {
+          setConfirming(null);
+        }}
+      >
+        {bookBox === null || confirming === null ? null : (
+          <View style={styles.ask}>
+            {bookBox.lines.map((line) => (
+              <Txt key={line} colour="text">
+                {line}
+              </Txt>
+            ))}
+            <Button
+              label={bookBox.yes}
+              wide
+              onPress={() => {
+                const { c, action } = confirming;
+                setConfirming(null);
+                void take(c, action);
+              }}
+            />
+            <Button
+              label={bookBox.no}
+              kind="quiet"
+              style={styles.middle}
+              onPress={() => {
+                setConfirming(null);
+              }}
+            />
+          </View>
+        )}
+      </Sheet>
       <Sheet
         open={ask !== null}
         place="middle"
@@ -350,7 +393,7 @@ function ClassBox({ c, clock, busy, said, onTake, onGive }: ClassBoxProps) {
   const mine = mineText(c, Date.now());
   const places = placesText(c);
   const why = whyText(c, clock);
-  const fees = feesText(c);
+  const fees = feeLines(c, clock, Date.now());
   const online = onlineText(c);
   const when = whenText(c, clock);
   return (
@@ -405,7 +448,11 @@ function ClassBox({ c, clock, busy, said, onTake, onGive }: ClassBoxProps) {
       {give === null ? null : (
         <Button label={give.label} kind="plain" small wide disabled={busy} say={`${give.label}: ${c.className}, ${when}`} onPress={onGive} />
       )}
-      {fees === null ? null : <Txt kind="tiny">{fees}</Txt>}
+      {fees.map((line) => (
+        <Txt key={line} kind="small">
+          {line}
+        </Txt>
+      ))}
     </Card>
   );
 }

@@ -4,7 +4,6 @@
 import {
   CLASS_BOOKING_WORDS,
   CLASS_ONLINE_WORDS,
-  classFeesLine,
   formatMinor,
   lateCancelFeeWords,
   reminderClock,
@@ -158,14 +157,6 @@ export function actionsOf(c: ClassBookingView): { take: Take | null; give: { lat
   return { take, give };
 }
 
-/** The fees a late cancel and a no-show would cost this person, under the buttons; null where neither
- *  costs anything, or there is nothing to book or give up. */
-export function feesText(c: ClassBookingView): string | null {
-  if (c.fees === null || c.cancelled) return null;
-  const { take, give } = actionsOf(c);
-  return take === null && give === null ? null : classFeesLine(c.fees);
-}
-
 /** One plain line for a class the person cannot book or wait for, or null. */
 export function whyText(c: ClassBookingView, clock: GymClockFormat): string | null {
   if (c.cancelled) return CLASS_BOOKING_WORDS.class_cancelled;
@@ -245,15 +236,54 @@ export function cancelAsk(c: ClassBookingView, clock: GymClockFormat): CancelAsk
           : CLASS_BOOKING_WORDS.late_cancel;
     return { title: "Cancel late?", lines: [what, words], yes: "Cancel booking", no: "Keep it" };
   }
+  // "Free" is said only where something follows that is not: a fee, or a pack's class.
+  const pack = c.mine?.packCharged === true;
+  if (!pack && fee === 0) return { title: "Cancel your booking?", lines: [what], yes: "Cancel booking", no: "Keep it" };
   const until = instantText(c.freeCancelUntil, c.timezone, clock);
   const free = until === "" ? "Free to cancel now." : `Free to cancel until ${until}.`;
   const after =
-    c.mine?.packCharged === true
-      ? " Your pack gets the class back."
-      : fee > 0 && c.fees !== null
-        ? ` After that there is a one-time late cancel fee of ${formatMinor(fee, c.fees.currency)}.`
-        : "";
+    pack || c.fees === null ? " Your pack gets the class back." : ` After that there is a one-time late cancel fee of ${formatMinor(fee, c.fees.currency)}.`;
   return { title: "Cancel your booking?", lines: [what, `${free}${after}`], yes: "Cancel booking", no: "Keep it" };
+}
+
+/** What a class's fees mean for this person, said under it before they book and while they hold a
+ *  place: when free cancelling ends and what a late cancel costs after it, and what not coming costs.
+ *  Empty where neither costs anything. `now` is the phone's clock, against the gym's free-cancel time. */
+export function feeLines(c: ClassBookingView, clock: GymClockFormat, now: number): string[] {
+  if (c.fees === null || c.cancelled) return [];
+  const { take, give } = actionsOf(c);
+  if (take === null && give === null) return [];
+  const lines: string[] = [];
+  const late = c.fees.lateCancelMinor;
+  if (late > 0) {
+    const money = formatMinor(late, c.fees.currency);
+    const until = instantText(c.freeCancelUntil, c.timezone, clock);
+    const stillFree = give !== null ? c.can.cancel === "free" : Date.parse(c.freeCancelUntil) > now;
+    if (stillFree && until !== "") lines.push(`Free to cancel until ${until}. After that, a one-time late cancel fee of ${money}.`);
+    else if (give !== null && c.mine?.status === "booked") lines.push(`If you cancel now, a one-time late cancel fee of ${money} will be added to your bill.`);
+    else lines.push(`This class starts soon. If you book and then cancel, a one-time late cancel fee of ${money} will be added to your bill.`);
+  }
+  if (c.fees.noShowMinor > 0) {
+    lines.push(`If you don’t come, a one-time no-show fee of ${formatMinor(c.fees.noShowMinor, c.fees.currency)} will be added to your bill.`);
+  }
+  return lines;
+}
+
+/** The box before a booking that could not be cancelled without a fee: the class starts inside its
+ *  free-cancel time. Null where Book needs no question. */
+export function bookAsk(c: ClassBookingView, take: Take, clock: GymClockFormat, now: number): CancelAsk | null {
+  const fee = lateFee(c);
+  if (fee === 0 || c.fees === null || Date.parse(c.freeCancelUntil) > now) return null;
+  const what = `${c.className}, ${shortDay(c.localDate)} at ${reminderClock(c.localStartMinute, clock) ?? ""}`;
+  return {
+    title: `${take.label}?`,
+    lines: [
+      what,
+      `This class starts soon, so it can’t be cancelled for free. If you book and then cancel, a one-time late cancel fee of ${formatMinor(fee, c.fees.currency)} will be added to your bill.`,
+    ],
+    yes: take.label,
+    no: "Not now",
+  };
 }
 
 /** What is said once a cancel has gone through, from the class as the server now has it. */

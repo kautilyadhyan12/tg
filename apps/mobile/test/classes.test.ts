@@ -5,7 +5,8 @@ import {
   askedLate,
   cancelAsk,
   dayHeading,
-  feesText,
+  bookAsk,
+  feeLines,
   mineText,
   newRequestKey,
   nextReadAt,
@@ -131,7 +132,6 @@ describe("why a class cannot be booked, on the gym's clock", () => {
 describe("the box before a cancel: every fee it names is the one sent", () => {
   it.each([
     ["leave the waitlist", klass({ mine: waiting(2), can: { cancel: "free" } }), "Leave the waitlist?", "You lose your place in line."],
-    ["free, plain", klass({ mine: booked(), can: { cancel: "free" } }), "Cancel your booking?", "Free to cancel until Mon 2 Nov, 4:30 PM."],
     ["free, from a pack", klass({ mine: booked(true), can: { cancel: "free" } }), "Cancel your booking?", "Free to cancel until Mon 2 Nov, 4:30 PM. Your pack gets the class back."],
     [
       "free, with a fee later",
@@ -139,7 +139,7 @@ describe("the box before a cancel: every fee it names is the one sent", () => {
       "Cancel your booking?",
       "Free to cancel until Mon 2 Nov, 4:30 PM. After that there is a one-time late cancel fee of ₹500.00.",
     ],
-    ["late, no fee", klass({ mine: booked(), can: { cancel: "late" } }), "Cancel late?", "It's too late to cancel for free. Cancelling now counts as a late cancel."],
+    ["late, no fee", klass({ mine: booked(), can: { cancel: "late" } }), "Cancel late?", "Cancelling this close to the start counts as a late cancel. There's no fee."],
     [
       "late, on a pack",
       klass({ mine: booked(true), can: { cancel: "late" } }),
@@ -158,6 +158,13 @@ describe("the box before a cancel: every fee it names is the one sent", () => {
     expect(ask.lines).toEqual(["Spin, Mon 2 Nov at 6:30 PM", line]);
   });
 
+  it("with no fee and no pack, nothing is called free, as nothing follows that costs", () => {
+    const free = cancelAsk(klass({ mine: booked(), can: { cancel: "free" } }), "12h");
+    expect(free).toEqual({ title: "Cancel your booking?", lines: ["Spin, Mon 2 Nov at 6:30 PM"], yes: "Cancel booking", no: "Keep it" });
+    const late = cancelAsk(klass({ mine: booked(), can: { cancel: "late" } }), "12h").lines.join(" ");
+    expect(late).not.toMatch(/free/i);
+  });
+
   it("the server's late answer brings its own fee, and a body it cannot read brings none", () => {
     const c = klass({ mine: booked(), can: { cancel: "free" }, fees: INR });
     const now = askedLate(c, { error: "late_cancel", packCharged: false, feeMinor: 70_000, currency: "INR" });
@@ -169,10 +176,51 @@ describe("the box before a cancel: every fee it names is the one sent", () => {
     expect(askedLate(klass({ mine: booked(), can: { cancel: "free" } }), { packCharged: true }).mine?.packCharged).toBe(true);
   });
 
-  it("the fees line shows only where there is something to book or give up", () => {
-    expect(feesText(klass({ can: { book: true }, fees: INR }))).toBe("One-time fee for each late cancel ₹500.00 · no-show ₹800.00");
-    expect(feesText(klass({ can: { why: "class_started" }, fees: INR }))).toBeNull();
-    expect(feesText(klass({ can: { book: true } }))).toBeNull();
+});
+
+describe("what a fee costs is said before Book, and Book asks first where any cancel would cost", () => {
+  // The class's free cancel ends 11:00 UTC (4:30 PM in India).
+  const before = Date.parse("2026-11-02T10:00:00.000Z");
+  const inside = Date.parse("2026-11-02T11:30:00.000Z");
+  const free = "Free to cancel until Mon 2 Nov, 4:30 PM. After that, a one-time late cancel fee of ₹500.00.";
+  const soon = "This class starts soon. If you book and then cancel, a one-time late cancel fee of ₹500.00 will be added to your bill.";
+  const noShow = "If you don’t come, a one-time no-show fee of ₹800.00 will be added to your bill.";
+
+  it.each([
+    ["bookable, before the free cancel ends", klass({ can: { book: true }, fees: INR }), before, [free, noShow]],
+    ["bookable, inside it", klass({ can: { book: true }, fees: INR }), inside, [soon, noShow]],
+    ["the waitlist, inside it", klass({ booked: 12, can: { joinWaitlist: true }, fees: INR }), inside, [soon, noShow]],
+    ["booked, still free", klass({ mine: booked(), can: { cancel: "free" }, fees: INR }), before, [free, noShow]],
+    [
+      "booked, late by the server's word",
+      klass({ mine: booked(), can: { cancel: "late" }, fees: INR }),
+      before,
+      ["If you cancel now, a one-time late cancel fee of ₹500.00 will be added to your bill.", noShow],
+    ],
+    ["a no-show fee alone", klass({ can: { book: true }, fees: { ...INR, lateCancelMinor: 0 } }), inside, [noShow]],
+    ["no fee", klass({ can: { book: true } }), inside, []],
+    ["nothing to book or give up", klass({ can: { why: "class_started" }, fees: INR }), inside, []],
+    ["cancelled by the gym", klass({ cancelled: true, fees: INR }), inside, []],
+  ])("%s", (_, c, now, lines) => {
+    expect(feeLines(c, "12h", now)).toEqual(lines);
+  });
+
+  it("Book asks first only inside the free-cancel time and only with a late cancel fee", () => {
+    const c = klass({ can: { book: true }, fees: INR });
+    const book = { kind: "book" as const, label: "Book", joinWaitlist: false };
+    expect(bookAsk(c, book, "12h", inside)).toEqual({
+      title: "Book?",
+      lines: [
+        "Spin, Mon 2 Nov at 6:30 PM",
+        "This class starts soon, so it can’t be cancelled for free. If you book and then cancel, a one-time late cancel fee of ₹500.00 will be added to your bill.",
+      ],
+      yes: "Book",
+      no: "Not now",
+    });
+    expect(bookAsk(c, book, "12h", before)).toBeNull();
+    expect(bookAsk(klass({ can: { book: true } }), book, "12h", inside)).toBeNull();
+    expect(bookAsk(klass({ can: { book: true }, fees: { ...INR, lateCancelMinor: 0 } }), book, "12h", inside)).toBeNull();
+    expect(bookAsk(c, { kind: "waitlist", label: "Join waitlist", joinWaitlist: true }, "12h", inside)?.yes).toBe("Join waitlist");
   });
 });
 
