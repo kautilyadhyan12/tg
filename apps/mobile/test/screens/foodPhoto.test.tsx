@@ -586,15 +586,18 @@ describe("a food the photo got wrong, and one no list has (Kd, 2026-10-30)", () 
     await fireEvent.press(await screen.findByRole("button", { name: "More" }));
     await fireEvent.press(await screen.findByRole("button", { name: /^Update Milk, whole/ }));
     expect(await screen.findByText("Your meal")).toBeTruthy();
+    // Named the person's own way (Kd, 2026-10-30: the foods' names grow too long); blank, the foods name it.
+    expect(screen.getByLabelText("Meal name").props.placeholder).toBe("Chicken taco & Milk, whole");
+    await fireEvent.changeText(screen.getByLabelText("Meal name"), "  Taco night ");
     const keep = await screen.findByRole("button", { name: `Save meal to ${section}` });
     await fireEvent.press(keep);
     await fireEvent.press(keep);
-    expect(await screen.findByText("Chicken taco & Milk, whole added.")).toBeTruthy();
+    expect(await screen.findByText("Taco night added.")).toBeTruthy();
     await waitFor(() => {
       expect(saves(server)).toHaveLength(1);
     });
     expect(saves(server)[0]?.body).toMatchObject({
-      mealName: "Chicken taco & Milk, whole",
+      mealName: "Taco night",
       items: [{ name: "Chicken taco", grams: 150, own: { proteinG: 18, carbsG: 20, fatG: 9 } }, { canonical: "milk_whole", measure: "g", amount: 250 }],
     });
   });

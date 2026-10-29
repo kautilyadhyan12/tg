@@ -1131,6 +1131,8 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
   const [searching, setSearching] = useState(true);
   // A food on the meal opened again to change: put back in its own place.
   const [changing, setChanging] = useState<string | null>(null);
+  // The meal's own name, as the person types it; blank, the foods name it (Kd, 2026-10-30).
+  const [mealName, setMealName] = useState("");
   const [ownAgain, setOwnAgain] = useState<OwnFoodItem | null>(null);
   const addingNow = useRef(false);
   // The box fits between the top of the screen and the keyboard: its title and the search box stay in
@@ -1168,6 +1170,7 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
     setSearching(true);
     setChanging(null);
     setOwnAgain(null);
+    setMealName("");
   }, [type]);
 
   // The person's recent foods, read each time the box opens; with no answer the box offers the search.
@@ -1248,18 +1251,18 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
     addingNow.current = true;
     setAdding(true);
     const id = newGoalId();
-    const mealName = basketName(basket);
+    const named = mealName.trim() === "" ? basketName(basket) : mealName.trim().slice(0, 200);
     const numbers = basketNumbers(basket);
     const kept = await outbox.add({
       id,
-      body: { id, mealName, takenAt: new Date().toISOString(), mealType: type, items: basket.map((f) => f.chosen) },
+      body: { id, mealName: named, takenAt: new Date().toISOString(), mealType: type, items: basket.map((f) => f.chosen) },
       items: numbers?.items ?? null,
       totals: numbers?.totals ?? null,
       tried: false,
     });
     addingNow.current = false;
     setAdding(false);
-    if (kept) onAdded(type, mealName);
+    if (kept) onAdded(type, named);
     else setFull(true);
   };
   /** A food on the meal's list, and back to the search for the next. */
@@ -1353,7 +1356,8 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
     const numbers = basketNumbers(basket);
     return (
       <Sheet open title={`Add to ${name}`} onClose={close} onBack={back}>
-        <ScrollView style={{ maxHeight: Math.max(SHEET_LIST_LEAST, height - insets.top - SHEET_ABOVE_LIST - SHEET_FOOT) }} contentContainerStyle={styles.sheetList}>
+        <ScrollView style={{ maxHeight: Math.max(SHEET_LIST_LEAST, height - keyboard - insets.top - SHEET_ABOVE_LIST - SHEET_FOOT) }} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.sheetList}>
+          <Field label="Meal name" value={mealName} onChange={setMealName} placeholder={basketName(basket)} maxLength={200} />
           <Txt kind="tiny" style={styles.label}>
             Your meal
           </Txt>
