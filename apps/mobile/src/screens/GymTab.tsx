@@ -25,13 +25,14 @@ import { usePlaces } from "./places";
 import { placesHeading } from "./placesHeading";
 import { ClassesPage, type ClassesPlace } from "./gym/Classes";
 import { DaysYouCame } from "./gym/DaysYouCame";
+import { MembershipPage, type MembershipPlace } from "./gym/Membership";
 import { PersonalTrainingPage, type PtPlace } from "./gym/PersonalTraining";
 import { OWN_PASS_AFTER_MS, PASS_PATH, PassSheet } from "./gym/Pass";
 import { makePhonePass, phoneDay } from "./gym/phonePass";
 import { NO_ANSWER } from "./SignIn";
 
 // The Gym tab (docs/design/phone/pages/Gym and GymNone): the places the person joined, each with
-// Show my pass, its Classes, its Personal training and the days they came there, a place that removed them, and every invitation still open for their address. It reads again when the
+// Show my pass, its Classes, its Personal training, My membership and the days they came there, a place that removed them, and every invitation still open for their address. It reads again when the
 // tab is opened or the app comes back, at most every 30 seconds. With the internet it also asks for
 // this sign-in's keys for passes with no signal, today's and tomorrow's, whenever the phone lacks
 // tomorrow's; with none, Show my pass stands alone where the places could not be read, or are more
@@ -75,6 +76,7 @@ export function GymScreen() {
   const [classesAt, setClassesAt] = useState<ClassesPlace | null>(null);
   // The place whose Personal training page is open over the tab, or null.
   const [ptAt, setPtAt] = useState<PtPlace | null>(null);
+  const [membershipAt, setMembershipAt] = useState<MembershipPlace | null>(null);
 
   const fetchPass = useCallback(() => session.signedIn({ method: "GET", path: PASS_PATH }, checkinPassResponseSchema), [session]);
   const makeOwnPass = useMemo(
@@ -229,6 +231,15 @@ export function GymScreen() {
                   setPtAt({ id: org.id, name: org.name, orgType: org.orgType, clockFormat: org.clockFormat });
                 }}
               />
+              <Button
+                label="My membership"
+                kind="link"
+                icon="folder"
+                say={`My membership at ${org.name}`}
+                onPress={() => {
+                  setMembershipAt({ id: org.id, name: org.name });
+                }}
+              />
             </View>
           </Card>
           <DaysYouCame gymId={org.id} read={visitsRead} fetchVisits={fetchVisits} />
@@ -254,6 +265,12 @@ export function GymScreen() {
         place={ptAt}
         onClose={() => {
           setPtAt(null);
+        }}
+      />
+      <MembershipPage
+        place={membershipAt}
+        onClose={() => {
+          setMembershipAt(null);
         }}
       />
 
@@ -328,7 +345,7 @@ const styles = StyleSheet.create({
   none: { padding: 18, gap: 10 },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },
   grow: { flex: 1 },
-  // Classes and Personal training side by side, one under the other where they do not fit.
+  // Classes, Personal training and My membership side by side, one under the other where they do not fit.
   links: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", columnGap: 24 },
   address: {
     flexDirection: "row",
