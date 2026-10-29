@@ -46,6 +46,8 @@ export const FILL_CHOICES = [
 ] as const;
 
 const DISH_KEY = "dish:";
+/** No measure picked: the one picked was tapped again (Kd, 32b-ii-b). The amount waits for one. */
+export const NO_MEASURE = "";
 /** A saved dish as the picker's measure. */
 export const dishMeasure = (id: string): string => `${DISH_KEY}${id}`;
 /** The saved dish a measure names, or null for a food's own measure. */
@@ -54,6 +56,7 @@ export const dishOf = (measure: string): string | null => (measure.startsWith(DI
 /** What is sent for the food, or null while the amount is no amount. A dish is sent with how full it
  *  was, and is no amount until that is picked. */
 export function chosenItem(canonical: string, amount: Amount): ChosenItem | null {
+  if (amount.measure === NO_MEASURE) return null;
   const dish = dishOf(amount.measure);
   if (dish !== null) {
     const fill = FILL_CHOICES.find((f) => String(f.value) === amount.amount);

@@ -16,7 +16,7 @@ import { count } from "../dashboard/words";
 import { newGoalId } from "../goals/words";
 import { DISH_SIZES, MOST_DISH_ML, MOST_DISH_NAME, dishWaiting, dishWords, newDish, type DishSize } from "./dishes";
 import { useMealOutbox } from "./MealOutbox";
-import { FILL_CHOICES, amountFor, dishMeasure, dishOf, measureWords, shownMeasures, stepped, unitWords, type Amount } from "./measures";
+import { FILL_CHOICES, NO_MEASURE, amountFor, dishMeasure, dishOf, measureWords, shownMeasures, stepped, unitWords, type Amount } from "./measures";
 
 // A food's amount (ROADMAP 32b-i, 32b-ii-b): by one of its own measures and how many, or by one of the
 // person's saved dishes and how full it was, as the browser's measure picker offers them. Saving,
@@ -91,7 +91,7 @@ export function AmountPicker({
   /** What the amount weighs, as the server worked it out; null while it has not answered. */
   grams: number | null;
   /** The food's usual amount, which a picked option tapped again goes back to (Kd, 32b-ii-b: "clicking
-   *  it again does not unselect it"). An amount always has one measure, so the usual one stays. */
+   *  it again does not unselect it"); the usual one tapped again leaves none picked. */
   usual: Amount;
 }) {
   const [all, setAll] = useState(false);
@@ -143,7 +143,11 @@ export function AmountPicker({
       <Txt kind="tiny" style={styles.label}>
         Amount
       </Txt>
-      {dishId === null ? (
+      {amount.measure === NO_MEASURE ? (
+        <Txt kind="small" colour="textSoft">
+          Pick an amount.
+        </Txt>
+      ) : dishId === null ? (
         <View style={styles.amountRow}>
           <Pressable accessibilityRole="button" accessibilityLabel="Less" onPress={() => { onAmount(stepped(amount, -1)); }} style={styles.step}>
             <Icon name="minus" size={18} />
@@ -175,8 +179,9 @@ export function AmountPicker({
             label={measureWords(m)}
             on={amount.measure === m.id}
             onPress={() => {
+              // Tapped again: un-picked, back to the food's usual amount, or to none where it was that.
               if (amount.measure !== m.id) onAmount(amountFor(m));
-              else if (m.id !== usual.measure) onAmount(usual);
+              else onAmount(m.id !== usual.measure ? usual : { measure: NO_MEASURE, amount: "" });
             }}
           />
         ))}
