@@ -318,8 +318,12 @@ export function estimateFood(name: string, per100g: Per100g, grams: number, take
   const base = `${ESTIMATE_CANONICAL_PREFIX}${slug(name).slice(0, 100) || "food"}`;
   let canonical = base;
   for (let n = 2; taken.has(canonical); n++) canonical = `${base}_${String(n)}`;
-  return { canonical, name, ...per100g, fiberG: null, serving: grams, unit: "g", source: "estimate" };
+  return { canonical, name: capitalFirst(name), ...per100g, fiberG: null, serving: grams, unit: "g", source: "estimate" };
 }
+
+/** A food's name as a list shows it: the model writes some in small letters ("toast", "iced coffee"),
+ *  beside our list's "Avocado" (33b-i's walk on the phone). */
+export const capitalFirst = (name: string): string => name.charAt(0).toLocaleUpperCase("en") + name.slice(1);
 
 // ── The match check (ROADMAP 33a-ii) ─────────────────────────────────────────
 

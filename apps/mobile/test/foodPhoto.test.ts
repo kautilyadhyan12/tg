@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { MEAL_SCAN_SAVE_SECONDS, type MealPhotoAnalysis, type WaitingMeal } from "@app/shared";
+import { MEAL_PHOTO_KEPT_MOST, MEAL_SCAN_SAVE_SECONDS, type MealPhotoAnalysis, type WaitingMeal } from "@app/shared";
 import { saveBody } from "../src/screens/food/outbox";
 import {
   againWords,
@@ -19,6 +19,7 @@ import {
   sheetLeftMs,
   sheetRows,
   toBase64,
+  totalsWords,
   withExtra,
   withRowAmount,
 } from "../src/screens/food/photo";
@@ -226,9 +227,24 @@ describe("the photo's meal while it is reviewed", () => {
     expect(readSheetFile(JSON.stringify({ ...JSON.parse(text), version: 2 }), NOW)).toBeNull();
   });
 
-  it("names the meal it saves to, with its calories once known", () => {
-    expect(saveWords("lunch", 487)).toBe("Save to Lunch · 487 kcal");
-    expect(saveWords("snack", null)).toBe("Save to Snack");
+  it("keeps the photo as it was sent, so it is shown when the meal is reopened; never one too large to keep", () => {
+    const photo = toBase64(new Uint8Array(3000).fill(9));
+    const sheet = newSheet(ANALYSIS, NOW, photo);
+    expect(sheet.photo).toBe(photo);
+    expect(readSheetFile(sheetFileText(sheet), NOW)?.photo).toBe(photo);
+    expect(newSheet(ANALYSIS, NOW, "A".repeat(MEAL_PHOTO_KEPT_MOST + 4)).photo).toBeUndefined();
+    expect(newSheet(ANALYSIS, NOW).photo).toBeUndefined();
+    // A file whose photo is not base64 is not read.
+    expect(readSheetFile(JSON.stringify({ ...JSON.parse(sheetFileText(sheet)), photo: "<script>" }), NOW)).toBeNull();
+  });
+
+  it("names the meal it saves to, and the meal's numbers in one line", () => {
+    expect(saveWords("lunch")).toBe("Save to Lunch");
+    expect(saveWords("snack")).toBe("Save to Snack");
+    // Each number stays with its unit where the line wraps on a small phone.
+    expect(totalsWords({ kcalPoint: 1846, kcalLow: 1800, kcalHigh: 1900, proteinG: 56.4, carbsG: 51, fatG: 47 })).toBe(
+      "1,846 kcal · Protein 56 g · Carbs 51 g · Fat 47 g",
+    );
   });
 });
 

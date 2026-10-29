@@ -720,7 +720,7 @@ d("the scanner prices every food it sees (real Postgres)", () => {
         asked.length = 0;
         answer = fail;
         const sheet = await scanOn(target(), access, plate(ICED_COFFEE));
-        expect(sheet.items.map((i) => [i.name, i.nutritionSource, i.kcalPoint]), `answer ${String(n)}`).toEqual([["iced coffee with milk", "estimate", 100]]);
+        expect(sheet.items.map((i) => [i.name, i.nutritionSource, i.kcalPoint]), `answer ${String(n)}`).toEqual([["Iced coffee with milk", "estimate", 100]]);
         // It was asked, with the food words found first among its close foods, then
         // USDA's search for the name, at most twelve.
         expect(asked).toHaveLength(1);
@@ -804,7 +804,7 @@ d("the scanner prices every food it sees (real Postgres)", () => {
       expect(asked).toHaveLength(0);
 
       const mixed = await scanOn(target(), access, plate(DAL, ICED_COFFEE, seen("roasted potatoes", "potatoes", [200, 300, 5, 40, 13])));
-      expect(mixed.items.map((i) => [i.name, i.nutritionSource])).toEqual([["Dal (lentil curry)", "curated"], ["iced coffee with milk", "estimate"], ["roasted potatoes", "estimate"]]);
+      expect(mixed.items.map((i) => [i.name, i.nutritionSource])).toEqual([["Dal (lentil curry)", "curated"], ["Iced coffee with milk", "estimate"], ["Roasted potatoes", "estimate"]]);
       expect(asked.map((foods) => foods.map((f) => f.name))).toEqual([["iced coffee with milk", "roasted potatoes"]]);
       const question = JSON.stringify(asked);
       const userId = (await sql<{ id: string }[]>`SELECT id FROM users WHERE email = ${email}`)[0]?.id ?? "no id";
@@ -835,7 +835,7 @@ d("the scanner prices every food it sees (real Postgres)", () => {
       // decaffeinated one (0) are other drinks, and the pre-lightened one (31) agrees;
       // one of its 248 g cups is near the 200 g the photo saw.
       "download-2.json": [
-        ["avocado toast with egg", "estimate", "~220 g", 220, 380], ["Asparagus (cooked)", "curated", "~60 g", 60, 13], ["cherry tomatoes", "estimate", "~60 g", 60, 11],
+        ["Avocado toast with egg", "estimate", "~220 g", 220, 380], ["Asparagus (cooked)", "curated", "~60 g", 60, 13], ["Cherry tomatoes", "estimate", "~60 g", 60, 11],
         ["Pork sausage (cooked)", "curated", "2 × serving", 96, 312], ["Shrimp (cooked)", "curated", "5 × large/jumbo shrimp", 75, 74], ["Iced Coffee, pre-lightened and pre-sweetened", "usda", "1 × cup (8 fl oz)", 248, 77],
       ],
       // Pumpkin at the 60 g the model saw in its two pieces: two of USDA's cups are 460 g.
@@ -851,16 +851,16 @@ d("the scanner prices every food it sees (real Postgres)", () => {
       ],
       // 100 g of scrambled eggs are no large egg of 61 g (RULINGS 2026-09-16).
       "download-5.json": [
-        ["avocado toast", "estimate", "~120 g", 120, 280], ["Eggs (scrambled)", "curated", "~100 g", 100, 149], ["Strawberries", "curated", "1 × cup, halves", 152, 49],
+        ["Avocado toast", "estimate", "~120 g", 120, 280], ["Eggs (scrambled)", "curated", "~100 g", 100, 149], ["Strawberries", "curated", "1 × cup, halves", 152, 49],
       ],
       "download-6.json": [
-        ["bread", "estimate", "~60 g", 60, 160], ["Peanut butter", "curated", "1 × 2 tbsp", 32, 191], ["Jam", "curated", "1 × tbsp", 20, 56],
+        ["Bread", "estimate", "~60 g", 60, 160], ["Peanut butter", "curated", "1 × 2 tbsp", 32, 191], ["Jam", "curated", "1 × tbsp", 20, 56],
         ["Avocado", "curated", "1 × serving", 50, 80], ["Eggs (scrambled)", "curated", "~120 g", 120, 179], ["Blueberries", "curated", "~50 g", 50, 29],
         ["Raspberries", "curated", "~40 g", 40, 21],
       ],
       // A 250 g mug of iced coffee is one of its 248 g cups, never USDA's 496 g "medium".
       "download.json": [
-        ["banana toast", "estimate", "~220 g", 220, 450], ["egg bacon toast", "estimate", "~250 g", 250, 420], ["Iced Coffee, pre-lightened and pre-sweetened", "usda", "1 × cup (8 fl oz)", 248, 77],
+        ["Banana toast", "estimate", "~220 g", 220, 450], ["Egg bacon toast", "estimate", "~250 g", 250, 420], ["Iced Coffee, pre-lightened and pre-sweetened", "usda", "1 × cup (8 fl oz)", 248, 77],
       ],
       // The eight plates as the model wrote them once asked for every food it can see
       // apart (ROADMAP 7a-iv-f): what it joined into a dish is now rows, and a food a
@@ -870,7 +870,7 @@ d("the scanner prices every food it sees (real Postgres)", () => {
       // "Deli ham" is USDA's deli ham: "deli" says no way of cooking, cutting or serving a
       // food, so the name is never shortened to our sliced ham (the reviews of PR #80 and #81).
       "download-1-apart.json": [
-        ["toast", "estimate", "~120 g", 120, 320], ["Avocado", "curated", "1 × serving", 50, 80], ["Egg (fried)", "curated", "1 × egg", 46, 90],
+        ["Toast", "estimate", "~120 g", 120, 320], ["Avocado", "curated", "1 × serving", 50, 80], ["Egg (fried)", "curated", "1 × egg", 46, 90],
         ["Bacon (cooked)", "curated", "~24 g", 24, 132], ["Cheese, Brie", "usda", "6 × cube", 102, 341], ["Ham, prepackaged or deli, luncheon meat", "usda", "~60 g", 60, 61],
         ["Apple", "curated", "~60 g", 60, 31], ["Mixed nuts", "curated", "~10 g", 10, 61], ["Arugula", "curated", "1 × half cup", 10, 3],
         ["Cappuccino", "curated", "1 × cup", 240, 65],
@@ -880,7 +880,7 @@ d("the scanner prices every food it sees (real Postgres)", () => {
       // still no table's: our list has no pumpkin, and USDA's name has no "roasted".
       "download-3-apart.json": [
         ["Chicken thigh (cooked)", "curated", "~150 g", 150, 269], ["Shrimp (cooked)", "curated", "7 × small/medium shrimp", 70, 69], ["Egg (hard-boiled)", "curated", "1 × egg", 50, 78],
-        ["pumpkin", "estimate", "~60 g", 60, 30], ["Broccoli (cooked)", "curated", "~80 g", 80, 28], ["Corn (cooked)", "curated", "~60 g", 60, 58],
+        ["Pumpkin", "estimate", "~60 g", 60, 30], ["Broccoli (cooked)", "curated", "~80 g", 80, 28], ["Corn (cooked)", "curated", "~60 g", 60, 58],
         ["Orange juice", "curated", "1 × cup", 248, 112],
       ],
       "download-4-apart.json": [
@@ -912,12 +912,12 @@ d("the scanner prices every food it sees (real Postgres)", () => {
       // list's; a cherry is a food of its own, so "cherry tomato" is never shortened to a
       // tomato, and a toast is no table's.
       "download-2-apart.json": [
-        ["toast", "estimate", "~60 g", 60, 160], ["Avocado", "curated", "1 × serving", 50, 80], ["Egg (fried)", "curated", "1 × egg", 46, 90],
-        ["Asparagus (cooked)", "curated", "~45 g", 45, 10], ["cherry tomato", "estimate", "~70 g", 70, 12], ["Shrimp (cooked)", "curated", "4 × large/jumbo shrimp", 60, 59],
+        ["Toast", "estimate", "~60 g", 60, 160], ["Avocado", "curated", "1 × serving", 50, 80], ["Egg (fried)", "curated", "1 × egg", 46, 90],
+        ["Asparagus (cooked)", "curated", "~45 g", 45, 10], ["Cherry tomato", "estimate", "~70 g", 70, 12], ["Shrimp (cooked)", "curated", "4 × large/jumbo shrimp", 60, 59],
         ["Pork sausage (cooked)", "curated", "2 × serving", 96, 312], ["Latte", "curated", "1 × cup (8 fl oz)", 240, 103],
       ],
       "download-5-apart.json": [
-        ["toast", "estimate", "~35 g", 35, 90], ["Avocado", "curated", "1 × serving", 50, 80], ["Eggs (scrambled)", "curated", "~100 g", 100, 149],
+        ["Toast", "estimate", "~35 g", 35, 90], ["Avocado", "curated", "1 × serving", 50, 80], ["Eggs (scrambled)", "curated", "~100 g", 100, 149],
         ["Strawberries", "curated", "1 × cup, halves", 152, 49],
       ],
       "minimalist-meal-planner-inspiration-idea-120.json": [

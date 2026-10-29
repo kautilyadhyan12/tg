@@ -1,4 +1,5 @@
 import {
+  MEAL_PHOTO_KEPT_MOST,
   MEAL_PHOTO_MAX_BYTES,
   MEAL_SCAN_SAVE_SECONDS,
   cleanPhoto,
@@ -12,7 +13,8 @@ import {
   type PhotoSheetFood,
 } from "@app/shared";
 import type { Answer } from "../../session/calls";
-import { MONTH_NAMES, kcalWords, mealTypeName, sectionOf } from "./day";
+import { count } from "../dashboard/words";
+import { MONTH_NAMES, mealTypeName, sectionOf } from "./day";
 import { chosenItem, formatAmount } from "./measures";
 
 // A meal logged from a photo (ROADMAP Stage 5 33b-i), as the browser's photo sheet does it: the photo
@@ -131,14 +133,16 @@ export type PhotoSheet = Omit<PhotoSheetFile, "version">;
 /** The amount a scanned food starts at: where the server started it. */
 const startOf = (item: MealPhotoAnalysis["items"][number]): PhotoSheetAmount => ({ measure: item.startsAt.measure, amount: formatAmount(item.startsAt.amount) });
 
-/** A scan just back: each food where the server started it, the meal the time of day says. */
-export function newSheet(analysis: MealPhotoAnalysis, now: Date): PhotoSheet {
+/** A scan just back: each food where the server started it, the meal the time of day says, and the
+ *  photo as it was sent, kept where it is no larger than a kept photo may be. */
+export function newSheet(analysis: MealPhotoAnalysis, now: Date, photo: string | null = null): PhotoSheet {
   return {
     scannedAt: now.toISOString(),
     analysis,
     amounts: analysis.items.map(startOf),
     extras: [],
     mealType: sectionOf({ mealType: null, takenAt: now.toISOString() }),
+    ...(photo !== null && photo.length <= MEAL_PHOTO_KEPT_MOST ? { photo } : {}),
   };
 }
 
@@ -249,12 +253,19 @@ export function readSheetFile(text: string | null, now: Date): PhotoSheet | null
   }
   const parsed = photoSheetFileSchema.safeParse(raw);
   if (!parsed.success) return null;
-  const { scannedAt, analysis, amounts, extras, mealType } = parsed.data;
-  const sheet: PhotoSheet = { scannedAt, analysis, amounts, extras, mealType };
+  const { scannedAt, analysis, amounts, extras, mealType, photo } = parsed.data;
+  const sheet: PhotoSheet = { scannedAt, analysis, amounts, extras, mealType, ...(photo === undefined ? {} : { photo }) };
   if (sheet.amounts.length !== sheet.analysis.items.length) return null;
   return sheetLeftMs(sheet, now) >= SHEET_LEAST_LEFT_MS ? sheet : null;
 }
 
-/** The save button's words: "Save to Lunch · 487 kcal". */
-export const saveWords = (mealType: MealType, kcal: number | null): string =>
-  `Save to ${mealTypeName(mealType)}${kcal === null ? "" : ` · ${kcalWords(kcal)}`}`;
+/** The save button's words: "Save to Lunch". The meal's numbers are the line above it, so the button
+ *  stays one line on the smallest phone. */
+export const saveWords = (mealType: MealType): string => `Save to ${mealTypeName(mealType)}`;
+
+/** The meal's numbers in one line, each number kept with its unit where the line wraps:
+ *  "846 kcal · Protein 56 g · Carbs 51 g · Fat 47 g". */
+export function totalsWords(totals: MealPreview["totals"]): string {
+  const g = (n: number) => `${count(Math.round(n))} g`;
+  return `${count(totals.kcalPoint)} kcal · Protein ${g(totals.proteinG)} · Carbs ${g(totals.carbsG)} · Fat ${g(totals.fatG)}`;
+}

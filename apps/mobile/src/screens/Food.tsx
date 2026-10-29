@@ -240,17 +240,13 @@ export function FoodScreen() {
       }
     >
       {photoKept ? (
-        <Card style={styles.kept}>
-          <View style={styles.row}>
-            <Icon name="camera" size={18} colour="orange" />
-            <Txt kind="small" colour="text" style={styles.grow}>
-              Your photo meal isn’t saved yet.
-            </Txt>
-          </View>
-          <View style={styles.row}>
-            <Button label="Finish" kind="soft" small onPress={() => { setPhotoOpen(true); }} />
-            <Button label="Discard" kind="quiet" onPress={() => { setDiscarding(true); }} />
-          </View>
+        // Finish is the picture's own button above; this says why, and offers the other way out.
+        <Card style={[styles.row, styles.kept]}>
+          <Icon name="camera" size={18} colour="orange" />
+          <Txt kind="small" colour="text" style={styles.grow}>
+            Your photo meal isn’t saved yet.
+          </Txt>
+          <Button label="Discard" kind="quiet" onPress={() => { setDiscarding(true); }} />
         </Card>
       ) : null}
       {view.refused.map((r) => (

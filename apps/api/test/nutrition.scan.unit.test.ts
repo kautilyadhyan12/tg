@@ -617,6 +617,9 @@ describe("an estimate row", () => {
     expect(estimateFood("???", figures, 90, new Set()).canonical).toBe("est_food");
     // A canonical is at most 120 characters where a meal's item is sent back.
     expect(estimateFood("a".repeat(300), figures, 90, new Set()).canonical).toHaveLength(104);
+    // Named as a list shows a food, whatever letters the model wrote it in (33b-i); its canonical as before.
+    expect(estimateFood("iced coffee", figures, 200, new Set())).toMatchObject({ canonical: "est_iced_coffee", name: "Iced coffee" });
+    expect(estimateFood("élan bar", figures, 40, new Set()).name).toBe("Élan bar");
   });
 
   it("never shares a canonical with another food of the same scan", () => {

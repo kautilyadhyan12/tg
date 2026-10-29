@@ -1152,7 +1152,7 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     try{
       const res=await on.scan();
       expect(res.statusCode,res.body).toBe(200);
-      expect(res.json<{items:{name:string;nutritionSource:string}[]}>().items.map((i)=>[i.name,i.nutritionSource])).toEqual([["roasted potatoes","estimate"]]);
+      expect(res.json<{items:{name:string;nutritionSource:string}[]}>().items.map((i)=>[i.name,i.nutritionSource])).toEqual([["Roasted potatoes","estimate"]]);
       expect(calls).toHaveLength(2);
       const check=calls[1]?.body;
       expect(Object.keys(check??{}).sort()).toEqual(["max_completion_tokens","messages","model","reasoning_effort","response_format","store"]);

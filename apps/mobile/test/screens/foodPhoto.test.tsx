@@ -261,7 +261,8 @@ describe("a meal from a photo", () => {
     expect(screen.getByRole("button", { name: "Change Eggs (scrambled), 120 g · estimate" })).toBeTruthy();
     expect(screen.getByText("green sauce")).toBeTruthy();
     await fireEvent.press(screen.getByRole("radio", { name: "Snack" }));
-    const save = await screen.findByRole("button", { name: "Save to Snack · 340 kcal" });
+    expect(await screen.findByText("340 kcal · Protein 10 g · Carbs 20 g · Fat 4 g")).toBeTruthy();
+    const save = screen.getByRole("button", { name: "Save to Snack" });
     // Two quick taps: one meal.
     await fireEvent.press(save);
     await fireEvent.press(save);
@@ -301,7 +302,8 @@ describe("a meal from a photo", () => {
     await fireEvent.changeText(screen.getByLabelText("Search food"), "milk");
     await fireEvent.press(await screen.findByRole("button", { name: "Add Milk, whole, 144 kcal · 240 g" }));
     expect(await screen.findByText("Milk, whole added.")).toBeTruthy();
-    await fireEvent.press(await screen.findByRole("button", { name: /^Save to .* · 344 kcal$/ }));
+    expect(await screen.findByText(/^344\skcal · /)).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: /^Save to / }));
     await waitFor(() => {
       expect(saves(server)).toHaveLength(1);
     });
@@ -359,14 +361,21 @@ describe("a photo meal is never thrown away by leaving it", () => {
     expect(await screen.findByText("Toast and eggs")).toBeTruthy();
     await fireEvent.press(screen.getByRole("button", { name: "Close" }));
     expect(await screen.findByText("Your photo meal isn’t saved yet.")).toBeTruthy();
-    await fireEvent.press(screen.getByRole("button", { name: "Finish" }));
+    // One way back in: the picture's own button says what it opens.
+    expect(screen.queryByRole("button", { name: "Finish" })).toBeNull();
+    await fireEvent.press(screen.getByRole("button", { name: "Finish photo meal" }));
     expect(await screen.findByText("Toast and eggs")).toBeTruthy();
     await fireEvent.press(screen.getByRole("button", { name: "Close" }));
     await screen.unmount();
 
+    // After a restart the meal comes back with the photo as it was sent.
     await openFood({ meals: [], scans: [] }, stores);
     expect(await screen.findByText("Your photo meal isn’t saved yet.")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Finish photo meal" })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Finish photo meal" }));
+    expect(await screen.findByText("Toast and eggs")).toBeTruthy();
+    const sent = (scansAsked(server)[0]?.body as { imageBase64: string }).imageBase64;
+    expect(screen.getByTestId("meal-picture").props.source).toEqual({ uri: `data:image/jpeg;base64,${sent}` });
+    await fireEvent.press(screen.getByRole("button", { name: "Close" }));
     await fireEvent.press(screen.getByRole("button", { name: "Discard" }));
     expect(await screen.findByText("Its foods aren’t saved, and the scan it used isn’t given back.")).toBeTruthy();
     await fireEvent.press(screen.getAllByRole("button", { name: "Discard" }).at(-1) ?? screen.getByText("x"));

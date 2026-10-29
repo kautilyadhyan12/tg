@@ -916,6 +916,8 @@ export type MealOutboxFile = z.infer<typeof mealOutboxFileSchema>;
 // The scan has already used one of the person's scans, so leaving the review keeps it: the phone
 // writes it to a file of the person's own and opens it again while the server can still save it.
 
+/** The most of a kept photo, in base64 letters: a photo drawn no larger than 768 px is about 100 KB. */
+export const MEAL_PHOTO_KEPT_MOST = 2_000_000;
 /** An amount as the phone's picker holds it: a measure of the food (or a saved dish) and how many. */
 export const photoSheetAmountSchema = z.object({ measure: z.string().max(80), amount: z.string().max(20) }).strict();
 export type PhotoSheetAmount = z.infer<typeof photoSheetAmountSchema>;
@@ -935,5 +937,7 @@ export const photoSheetFileSchema = z.object({
   /** Foods the photo missed, added by search. */
   extras: z.array(z.object({ food: photoSheetFoodSchema, amount: photoSheetAmountSchema }).strict()).max(30),
   mealType: mealTypeSchema,
+  /** The photo as it was sent (made small and cleaned), shown over the meal again when it is reopened. */
+  photo: z.string().max(MEAL_PHOTO_KEPT_MOST).regex(/^[A-Za-z0-9+/]*={0,2}$/).optional(),
 }).strict();
 export type PhotoSheetFile = z.infer<typeof photoSheetFileSchema>;

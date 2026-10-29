@@ -19,10 +19,12 @@ import { Chip } from "../../look/Chip";
 import { colours, orangeGradient, pictureFade, shadows, sizes } from "../../look/colours";
 import { Field } from "../../look/Field";
 import { Icon } from "../../look/Icon";
+import { pictures } from "../../look/pictures";
 import { Sheet } from "../../look/Sheet";
+import { pictureTopHeight } from "../../look/sizing";
 import { Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
-import { NOT_KNOWN, count } from "../dashboard/words";
+import { NOT_KNOWN } from "../dashboard/words";
 import { newGoalId } from "../goals/words";
 import { AmountPicker, useDishes } from "./AmountPicker";
 import { MEAL_TYPES, kcalWords } from "./day";
@@ -40,6 +42,7 @@ import {
   sheetItems,
   sheetNumbers,
   sheetRows,
+  totalsWords,
   withExtra,
   withRowAmount,
   type PhotoSheet,
@@ -56,6 +59,8 @@ import { Credits, SourceLine } from "./SourceLine";
 /** A scan takes the server up to about fifty seconds: the photo, then the check of unclear foods. */
 const SCAN_WAIT_MS = 75_000;
 const NO_CONNECTION = "No connection. Try again.";
+/** The photo's band over the review, as tall as a page's own picture is for the phone's shape. */
+const PHOTO_TALL = 0.78;
 const UNREADABLE = "That photo couldn’t be read. Try another one.";
 
 type Stage = { kind: "camera" } | { kind: "reading"; uri: string } | { kind: "review" };
@@ -87,7 +92,6 @@ export function MealPhoto({ open, kept, onClose, onSaved, onSearch }: MealPhotoP
   const me = state.kind === "in" ? state.user.id : null;
   const [stage, setStage] = useState<Stage>({ kind: "camera" });
   const [notice, setNotice] = useState<{ words: string; search: boolean } | null>(null);
-  const [photo, setPhoto] = useState<string | null>(null);
   // A free try the server gave for a photo it could not read, or for a scan its scanner failed.
   const retake = useRef<string | null>(null);
   const sheet = kept.sheet ?? null;
@@ -132,8 +136,7 @@ export function MealPhoto({ open, kept, onClose, onSaved, onSearch }: MealPhotoP
       if (now.kind !== "in" || now.user.id !== me) return;
       if (answer.kind === "ok") {
         retake.current = null;
-        setPhoto(`data:image/jpeg;base64,${sending}`);
-        kept.keep(newSheet(answer.data, new Date()));
+        kept.keep(newSheet(answer.data, new Date(), sending));
         setStage({ kind: "review" });
         return;
       }
@@ -164,18 +167,15 @@ export function MealPhoto({ open, kept, onClose, onSaved, onSearch }: MealPhotoP
         ) : sheet === null ? null : (
           <Review
             sheet={sheet}
-            photo={photo}
             keep={kept.keep}
             onClose={onClose}
             onNewPhoto={() => {
               kept.forget();
-              setPhoto(null);
               setNotice(null);
               setStage({ kind: "camera" });
             }}
             onSaved={(type, name) => {
               kept.forget();
-              setPhoto(null);
               onSaved(type, name);
             }}
           />
@@ -331,14 +331,12 @@ type Priced = { kind: "none" } | { kind: "ok"; preview: MealPreview; for: string
  *  missed added; the meal it was; and Save. Every number is the server's. */
 function Review({
   sheet,
-  photo,
   keep,
   onClose,
   onNewPhoto,
   onSaved,
 }: {
   sheet: PhotoSheet;
-  photo: string | null;
   keep: (sheet: PhotoSheet) => void;
   onClose: () => void;
   onNewPhoto: () => void;
@@ -347,7 +345,7 @@ function Review({
   const { session } = useSession();
   const { outbox } = useMealOutbox();
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const [priced, setPriced] = useState<Priced>({ kind: "none" });
   const [openRow, setOpenRow] = useState<string | null>(null);
   const [finding, setFinding] = useState<string | null>(null);
@@ -415,12 +413,25 @@ function Review({
   return (
     <View style={styles.page}>
       <ScrollView contentContainerStyle={styles.reviewList} keyboardShouldPersistTaps="handled">
-        <View style={{ height: Math.round(width * 0.78) }}>
-          {photo === null ? null : <Image source={{ uri: photo }} resizeMode="cover" style={StyleSheet.absoluteFill} accessible={false} />}
+        <View style={[styles.band, { height: pictureTopHeight(width, height, PHOTO_TALL) }]}>
+          {/* The picture alone is cut to the band, as a page's own picture is (look/PictureTop). */}
+          <View style={[StyleSheet.absoluteFill, styles.band]}>
+            <Image
+              source={sheet.photo === undefined ? pictures.food : { uri: `data:image/jpeg;base64,${sheet.photo}` }}
+              resizeMode="cover"
+              style={styles.bandPicture}
+              testID="meal-picture"
+              accessible={false}
+            />
+          </View>
           <View style={[StyleSheet.absoluteFill, styles.fade]} />
           <View style={styles.photoWords}>
             <Txt kind="eyebrow">From your photo</Txt>
             <Txt kind="h1">{name}</Txt>
+          </View>
+          {/* Part of the photo, so it scrolls away with it and never lies over the meal's words. */}
+          <View style={[styles.topBar, { top: insets.top + 12 }]}>
+            <Round icon="x" say="Close" onPress={onClose} />
           </View>
         </View>
         <View style={styles.reviewBody}>
@@ -476,8 +487,7 @@ function Review({
       <View style={[styles.reviewFoot, { paddingBottom: insets.bottom + 14 }]}>
         {numbers === null ? null : (
           <Txt kind="small" colour="text">
-            {kcalWords(numbers.totals.kcalPoint)} · Protein {count(Math.round(numbers.totals.proteinG))} g · Carbs {count(Math.round(numbers.totals.carbsG))} g · Fat{" "}
-            {count(Math.round(numbers.totals.fatG))} g
+            {totalsWords(numbers.totals)}
           </Txt>
         )}
         {refusedWords === null ? null : (
@@ -492,11 +502,8 @@ function Review({
         ) : null}
         <View style={styles.footRow}>
           <Button label="New photo" kind="link" onPress={() => { setAsk("newPhoto"); }} />
-          <Button label={saveWords(sheet.mealType, numbers?.totals.kcalPoint ?? null)} disabled={held} onPress={() => { void save(); }} style={styles.grow} />
+          <Button label={saveWords(sheet.mealType)} disabled={held} onPress={() => { void save(); }} style={styles.grow} />
         </View>
-      </View>
-      <View style={[styles.topBar, { top: insets.top + 12 }]}>
-        <Round icon="x" say="Close" onPress={onClose} />
       </View>
       {row === null ? null : (
         <Sheet open title={row.name} onClose={() => { setOpenRow(null); }}>
@@ -525,7 +532,7 @@ function Review({
         }}
       />
       <Sheet open={ask === "newPhoto"} title="Take a new photo?" onClose={() => { setAsk("none"); }}>
-        <Txt kind="small">It uses another scan. This meal isn’t saved.</Txt>
+        <Txt kind="small">A new photo uses another of your scans, and this meal won’t be saved.</Txt>
         <Button label="Take new photo" wide onPress={() => { setAsk("none"); onNewPhoto(); }} />
         <Button label="Keep this one" kind="quiet" wide onPress={() => { setAsk("none"); }} />
       </Sheet>
@@ -723,6 +730,8 @@ const styles = StyleSheet.create({
   veil: { backgroundColor: colours.veil },
   readingWords: { flex: 1, alignItems: "center", justifyContent: "center", gap: 14 },
   reviewList: { paddingBottom: 24 },
+  band: { overflow: "hidden" },
+  bandPicture: { width: "100%", height: "100%" },
   fade: { experimental_backgroundImage: pictureFade },
   photoWords: { position: "absolute", left: sizes.edge, right: sizes.edge, bottom: 6, gap: 6 },
   reviewBody: { paddingHorizontal: sizes.edge, paddingTop: sizes.gap, gap: sizes.gap },
