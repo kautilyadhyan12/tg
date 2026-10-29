@@ -614,18 +614,19 @@ describe("changing a logged meal (32b-ii-a)", () => {
   });
 });
 
-describe("recent foods (32b-ii-a)", () => {
+describe("previously logged foods (32b-ii-a)", () => {
   const recentOats: RecentFood = {
     canonical: "oats_rolled",
     source: "usda",
     add: { measure: "usda-1", amount: 1.5 },
     item: { ...item(121.5, 461), measure: { id: "usda-1", name: "cup", amount: 1.5 } } as RecentFood["item"],
+    measures: OATS.measures,
   };
 
   it("Add to a meal opens on the person's recent foods, and one tap adds one at the amount last had", async () => {
     const server = await openFood({ meals: [], recent: [recentOats] });
     await fireEvent.press(await screen.findByRole("button", { name: "Add to Lunch" }));
-    expect(await screen.findByText("Recent")).toBeTruthy();
+    expect(await screen.findByText("Previously logged")).toBeTruthy();
     await fireEvent.press(await screen.findByRole("button", { name: "Add Oats, rolled, 1.5 × cup · 122 g, 461 kcal" }));
     expect(await screen.findByText("Oats, rolled added.")).toBeTruthy();
     await waitFor(() => {
@@ -643,13 +644,28 @@ describe("recent foods (32b-ii-a)", () => {
     expect(screen.getByLabelText("Calories, 461 of 2,300 kcal")).toBeTruthy();
   });
 
+  it("a food logged before opens at the amount last had, to change before it is added", async () => {
+    const server = await openFood({ meals: [], recent: [recentOats] });
+    await fireEvent.press(await screen.findByRole("button", { name: "Add to Lunch" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 1.5 × cup · 122 g, 461 kcal" }));
+    expect(screen.getByLabelText("Amount").props.value).toBe("1.5");
+    expect(screen.getByRole("radio", { name: "cup · 81 g" }).props.accessibilityState).toMatchObject({ selected: true });
+    await fireEvent.press(screen.getByRole("button", { name: "More" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Add Oats, rolled · 307 kcal" }));
+    expect(await screen.findByText("Oats, rolled added.")).toBeTruthy();
+    await waitFor(() => {
+      expect(posts(server)).toHaveLength(1);
+    });
+    expect(posts(server)[0]?.body).toMatchObject({ mealType: "lunch", items: [{ canonical: "oats_rolled", measure: "usda-1", amount: 2 }] });
+  });
+
   it("a search hides the recent foods, and an empty search brings them back", async () => {
     await openFood({ meals: [], recent: [recentOats] });
     await fireEvent.press(await screen.findByRole("button", { name: "Add to Lunch" }));
-    expect(await screen.findByText("Recent")).toBeTruthy();
+    expect(await screen.findByText("Previously logged")).toBeTruthy();
     await fireEvent.changeText(screen.getByLabelText("Search food"), "oat");
-    expect(screen.queryByText("Recent")).toBeNull();
+    expect(screen.queryByText("Previously logged")).toBeNull();
     await fireEvent.changeText(screen.getByLabelText("Search food"), "");
-    expect(await screen.findByText("Recent")).toBeTruthy();
+    expect(await screen.findByText("Previously logged")).toBeTruthy();
   });
 });

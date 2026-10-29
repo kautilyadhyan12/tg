@@ -379,13 +379,15 @@ export const foodSearchResponseSchema = z.object({ items: z.array(foodSearchItem
 /** The most recent foods Add to a meal opens on. */
 export const RECENT_FOODS_MOST = 10;
 /** One of the person's last different foods, at the amount they last had: what Add sends for it
- *  (`canonical` with `add`), and the food as it was last logged, the server's own numbers for that
- *  amount, shown until the server has priced it again. */
+ *  (`canonical` with `add`), the food as it was last logged, the server's own numbers for that
+ *  amount, shown until the server has priced it again, and the food's measures now, so it opens in
+ *  the measure picker as a searched food does (Kd, 2026-10-29). */
 export const recentFoodSchema = z.object({
   canonical: z.string().min(1).max(120),
   source: z.enum(["curated", "usda", "openfoodfacts"]),
   add: measureStartSchema,
   item: mealItemSchema,
+  measures: z.array(foodMeasureSchema).min(1),
 }).strict();
 export type RecentFood = z.infer<typeof recentFoodSchema>;
 export const recentFoodsResponseSchema = z.object({ items: z.array(recentFoodSchema).max(RECENT_FOODS_MOST) }).strict();

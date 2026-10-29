@@ -3,6 +3,9 @@
 // they last had, so one tap adds it again. Pure, so the pick is one table test.
 import { RECENT_FOODS_MOST, measureIdSchema, type MealItem, type RecentFood } from "@app/shared";
 
+/** A recent food before its measures are read (the service adds them). */
+export type RecentPick = Omit<RecentFood, "measures">;
+
 /** How many of the person's newest meals the list is read from. */
 export const RECENT_MEALS_READ = 60;
 
@@ -11,9 +14,9 @@ export const RECENT_MEALS_READ = 60;
  *  estimate or by the person's own numbers is left out: added again, its table would price it, not
  *  what they had. A food last had by a saved dish, or by a measure the food list no longer names, is
  *  added again by its grams. */
-export function recentFoods(meals: readonly { items: readonly MealItem[] }[]): RecentFood[] {
+export function recentFoods(meals: readonly { items: readonly MealItem[] }[]): RecentPick[] {
   const seen = new Set<string>();
-  const out: RecentFood[] = [];
+  const out: RecentPick[] = [];
   for (const meal of meals) {
     for (const item of meal.items) {
       if (out.length >= RECENT_FOODS_MOST) return out;

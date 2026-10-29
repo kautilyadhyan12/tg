@@ -956,16 +956,19 @@ const SOURCE_WORDS: Readonly<Record<FoodSearchItem["source"], string>> = {
 };
 
 type Found = { kind: "idle" } | { kind: "looking" } | { kind: "ok"; items: FoodSearchItem[] } | { kind: "failed"; words: string };
+/** A food in the picker: one found by the search, or one the person logged before. */
+type Picked = Pick<FoodSearchItem, "canonical" | "name" | "source" | "measures" | "startsAt">;
 type Priced = { kind: "none" } | { kind: "ok"; preview: MealPreview; for: string } | { kind: "refused"; words: string; for: string };
 
-/** Add to a meal: search, pick a food, its amount by one of its own measures, Add. The server prices
- *  the amount before it is added; Add keeps the meal on the phone and sends it. */
+/** Add to a meal: the foods logged before, or a search; a food's amount by one of its own measures,
+ *  Add. The server prices the amount before it is added; Add keeps the meal on the phone and sends
+ *  it. A food logged before is added in one tap at the amount last had, or opened to change it. */
 function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: () => void; onAdded: (type: MealType, name: string) => void }) {
   const { session } = useSession();
   const { outbox } = useMealOutbox();
   const [query, setQuery] = useState("");
   const [found, setFound] = useState<Found>({ kind: "idle" });
-  const [food, setFood] = useState<FoodSearchItem | null>(null);
+  const [food, setFood] = useState<Picked | null>(null);
   const [amount, setAmount] = useState<Amount | null>(null);
   const [priced, setPriced] = useState<Priced>({ kind: "none" });
   const [allMeasures, setAllMeasures] = useState(false);
@@ -1113,32 +1116,40 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
             {showRecent ? (
               <>
                 <Txt kind="tiny" style={styles.label}>
-                  Recent
+                  Previously logged
                 </Txt>
                 {recent.map((f) => (
-                  <Pressable
-                    key={f.canonical}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Add ${f.item.name}, ${loggedAmount(f.item)}, ${kcalWords(f.item.kcalPoint)}`}
-                    accessibilityState={{ disabled: adding || outbox === null }}
-                    disabled={adding || outbox === null}
-                    onPress={() => {
-                      void addRecent(f);
-                    }}
-                    style={({ pressed }) => [styles.found, styles.recent, pressed ? styles.pressed : null]}
-                  >
-                    <View style={styles.grow}>
+                  <View key={f.canonical} style={[styles.found, styles.recent]}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`${f.item.name}, ${loggedAmount(f.item)}, ${kcalWords(f.item.kcalPoint)}`}
+                      onPress={() => {
+                        setFood({ canonical: f.canonical, name: f.item.name, source: f.source, measures: f.measures, startsAt: f.add });
+                        setAllMeasures(false);
+                        setAmount(startingAmount({ startsAt: f.add }));
+                      }}
+                      style={({ pressed }) => [styles.grow, pressed ? styles.pressed : null]}
+                    >
                       <Txt kind="strong" numberOfLines={2}>
                         {f.item.name}
                       </Txt>
                       <Txt kind="tiny">
                         {loggedAmount(f.item)} · {kcalWords(f.item.kcalPoint)}
                       </Txt>
-                    </View>
-                    <View style={styles.add}>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Add ${f.item.name}, ${loggedAmount(f.item)}, ${kcalWords(f.item.kcalPoint)}`}
+                      accessibilityState={{ disabled: adding || outbox === null }}
+                      disabled={adding || outbox === null}
+                      onPress={() => {
+                        void addRecent(f);
+                      }}
+                      style={({ pressed }) => [styles.add, pressed ? styles.pressed : null]}
+                    >
                       <Icon name="plus" size={18} colour="orange" />
-                    </View>
-                  </Pressable>
+                    </Pressable>
+                  </View>
                 ))}
                 {full ? (
                   <Txt kind="small" colour="badText">

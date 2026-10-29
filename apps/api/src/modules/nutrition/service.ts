@@ -43,7 +43,7 @@ import { CURATED_FOODS, curatedPieceFdcId, curatedUsdaFdcId, findCurated, findCu
 import { dishwareGrams, foodMeasures, gramsPerMl, measureGrams, scanStart, startingMeasure, type UsdaPortion } from "./measures.js";
 import type { FoodReference, FoodSearchProvider } from "./openfoodfacts.adapter.js";
 import { itemsVersion, ownPer100g, savedPlaces } from "./mealEdit.js";
-import { RECENT_MEALS_READ, recentFoods } from "./recentFoods.js";
+import { RECENT_MEALS_READ, recentFoods, type RecentPick } from "./recentFoods.js";
 import * as repo from "./repo.js";
 import { ESTIMATE_CANONICAL_PREFIX, checkedPrice, closeFoodsOf, estimateFood, isPlainMatch, priceScannedFood, type ScanLookups, type ScanPrice } from "./scanMatch.js";
 import type {
@@ -319,9 +319,23 @@ const asUsdaReference = (row: repo.UsdaFoodRow): FoodReference => ({
  *  USDA's. */
 const PACKAGED_RESERVE = 3;
 
-/** The person's own recent foods (32b-ii-a): one read of their newest meals, nobody else's. */
-export async function recentFoodsOf(deps: Pick<NutritionDeps, "sql">, userId: string): Promise<RecentFood[]> {
-  return recentFoods(await repo.newestMealItems(deps.sql, userId, RECENT_MEALS_READ));
+/** The person's own recent foods (32b-ii-a): one read of their newest meals, nobody else's, and
+ *  each food's measures now, with ONE read of the USDA measures they share, as a logged food's are
+ *  (`mealMeasures`). A food no table has any more is left out: added again, nothing would price it.
+ *  Its amount is by grams where the measure it was last had is no longer one of its own. */
+export async function recentFoodsOf(deps: NutritionDeps, userId: string): Promise<RecentFood[]> {
+  const found: { pick: RecentPick; food: FoodReference }[] = [];
+  for (const pick of recentFoods(await repo.newestMealItems(deps.sql, userId, RECENT_MEALS_READ))) {
+    const food = await foodOfItem(deps, pick.item, pick.canonical);
+    if (food !== null) found.push({ pick, food });
+  }
+  const measures = await measuresOf(deps, found.map((f) => f.food));
+  return found.flatMap(({ pick }, at) => {
+    const own = measures[at] ?? [];
+    if (own.length === 0) return [];
+    const add = own.some((m) => m.id === pick.add.measure) ? pick.add : { measure: "g", amount: Math.max(1, Math.round(pick.item.gramsPoint)) };
+    return [{ ...pick, add, measures: own }];
+  });
 }
 
 export async function searchFoods(deps: NutritionDeps, query: string, limit: number): Promise<FoodSearchItem[]> {

@@ -175,10 +175,26 @@ d("a meal's change sent twice, and recent foods (real Postgres)", () => {
       [PANEER.canonical, { measure: "g", amount: 150 }],
     ]);
     expect(before[1]?.item.measure).toEqual({ id: "serving", name: "roti", amount: 3 });
+    // Each comes with its own measures, so it opens in the measure picker.
+    expect(before[1]?.measures.map((m) => m.id)).toContain("serving");
+    expect(before.every((f) => f.measures.some((m) => m.id === "g"))).toBe(true);
     // A removed meal's foods are no longer recent; Bob's chana is never Alice's.
     expect((await inject("DELETE", `/v1/nutrition/meals/${gone.id}`, alice)).statusCode).toBe(204);
     expect((await recent(alice)).map((f) => f.canonical)).toEqual([ROTI.canonical, PANEER.canonical]);
     expect((await recent(bob)).map((f) => [f.canonical, f.add])).toEqual([[CHANA.canonical, { measure: "g", amount: 250 }]]);
     expect((await inject("GET", "/v1/nutrition/foods/recent", "")).statusCode).toBe(401);
+  }, 60_000);
+
+  it("leaves out a food no table has any more: added again, nothing would price it", async () => {
+    const [bobRow] = await sql<{ id: string }[]>`SELECT id FROM users WHERE email = 'chg32b-bob@example.com'`;
+    const gone = [{
+      name: "A food nobody has now", canonical: "chg32b_no_such_food", gramsPoint: 100, gramsRange: [100, 100], portionSource: "default",
+      nutritionSource: "curated", kcalPoint: 100, kcalLow: 100, kcalHigh: 100, proteinG: 1, carbsG: 1, fatG: 1,
+    }];
+    await sql`
+      INSERT INTO meal_logs (user_id, taken_at, meal_name, items, kcal_point, kcal_low, kcal_high, protein_g, carbs_g, fat_g,
+                             origin, portion_source, nutrition_sources, calc_version)
+      VALUES (${bobRow?.id ?? ""}, now(), 'Gone', ${sql.json(gone)}, 100, 100, 100, 1, 1, 1, 'manual', 'default', ${["curated"]}, 1)`;
+    expect((await recent(bob)).map((f) => f.canonical)).toEqual([CHANA.canonical]);
   }, 60_000);
 });
