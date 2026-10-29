@@ -43,7 +43,7 @@ describe("Unlink's box", () => {
     expect(unlinkBoxLines({ customerName: null, also: false, waiting: 3, matched: 0, card: null, added: true }, 'John Smith').lines).toEqual([
       '3 payments from this customer waiting on this page go back to Payments to match.',
       'Their next payments in Square Point of Sale wait in Payments to match, and the app won’t link this customer to John Smith again by itself.',
-      'John Smith is then added to your Square customer list again, not as this customer.',
+      'John Smith is then added to your Square customer list as a customer of their own.',
     ]);
     expect(unlinkBoxLines({ ...BOX, waiting: 0, matched: 2, card: null }, 'Amy Lee').lines).toEqual([
       'In Square, this customer is Pat Smith.',

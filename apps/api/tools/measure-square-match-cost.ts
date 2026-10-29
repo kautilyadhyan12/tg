@@ -7,7 +7,9 @@
 //   - Match's box for the person picked (it works out whether the customer is the person), at the gym of 2,000;
 //   - Match with the tick on: the payment on its bill, the customer linked, every other waiting payment of it the person's;
 //   - the same press at the small gyms;
-//   - the list's first page and the person's page afterwards, with the rows now theirs.
+//   - the list's first page and the person's page afterwards, with the rows now theirs;
+//   - Unlink (18d-iii-b-ii-c-ii): the person's links read, its box, the press with ~110 and with 1,000 payments going back,
+//     and Members in Square's read of what staff unlinked, for the whole gym of 2,000.
 // Two numbers each: total, and how long the one thread is busy and answers nobody.
 //
 //   corepack pnpm --filter api exec tsx tools/measure-square-match-cost.ts
@@ -20,6 +22,8 @@ import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 import postgres from "postgres";
 import { openDueBills } from "../src/modules/orgs/memberships/billsRepo.js";
 import { matchPayment, readMatchBills, readPaymentsToMatch } from "../src/modules/orgs/payments/paymentsToMatch.js";
+import { readSquareLinks, readUnlinkBox, unlinkSquareCustomer } from "../src/modules/orgs/payments/squareUnlink.js";
+import { unlinkedAmong } from "../src/modules/orgs/payments/squareUnlinkRepo.js";
 import { dayInTz } from "../src/modules/gamification/streak.js";
 import { squareAppWaitingFor } from "../src/modules/orgs/payments/paymentsToMatchBills.js";
 import { accessContext } from "../src/modules/orgs/payments/service.js";
@@ -44,6 +48,8 @@ async function cleanup(): Promise<void> {
   const gyms = sql`SELECT id FROM gyms WHERE slug LIKE ${PREFIX + "%"}`;
   await sql`DELETE FROM gym_square_app_payments WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_square_payment_sweeps WHERE gym_id IN (${gyms})`;
+  await sql`DELETE FROM gym_square_unlinked_customers WHERE gym_id IN (${gyms})`;
+  await sql`DELETE FROM gym_card_disables WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_square_old_customers WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_square_customers WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_payment_connections WHERE gym_id IN (${gyms})`;
@@ -257,6 +263,19 @@ console.log(`${"  customers linked, and payments at the big gym now their person
 await sql.unsafe("VACUUM ANALYZE gym_square_app_payments");
 many(`a page of Payments to match (25), the first, after, at the gym of ${String(BIG)}`, await runs(() => readPaymentsToMatch(deps, big.owner, big.id, 0)));
 many(`the person's page, what waits for them, the person with ${String(HEAVY)} waiting`, await runs(() => squareAppWaitingFor(sql, big.id, heavy.entryId, dayInTz(new Date(), "America/Chicago"))));
+
+// Unlink, on the people the presses above linked.
+many(`Unlink: the person's links, read with their page, at the gym of ${String(BIG)}`, await runs((i) => readSquareLinks(deps, big.owner, big.id, big.pending[i]?.entryId ?? "")));
+many(`Unlink's box, ${String(HEAVY)} of the customer's payments theirs, at the gym of ${String(BIG)}`, await runs(() => readUnlinkBox(deps, big.owner, big.id, heavy.entryId, heavy.customerId)));
+const unpress = (gym: Gym, p: Pending) => unlinkSquareCustomer(deps, gym.owner, gym.id, p.entryId, p.customerId, { requestKey: randomUUID(), card: null });
+many(`Unlink, ~110 payments going back to Payments to match, at the gym of ${String(BIG)}`, await runs((i) => unpress(big, big.pending[i] ?? heavy)));
+many(`Unlink, ${String(HEAVY)} payments going back (once), at the gym of ${String(BIG)}`, await runs(() => unpress(big, heavy), 1));
+many(`Unlink, 10 payments going back, at a gym of ${String(PEOPLE)}`, await runs((i) => unpress(small[i % GYMS] ?? big, small[i % GYMS]?.pending[i] ?? heavy)));
+const [back] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_square_app_payments WHERE gym_id = ${big.id} AND state = 'waiting' AND entry_id IS NULL`;
+const [said] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_square_unlinked_customers WHERE gym_id = ANY(${all}::uuid[])`;
+console.log(`${"  payments at the big gym nobody's again, and customers staff unlinked".padEnd(78)} ${String(back?.n ?? 0)}, ${String(said?.n ?? 0)}`);
+many(`Members in Square's read of what staff unlinked, the whole gym of ${String(BIG)}`, await runs(() => unlinkedAmong(sql, { gymId: big.id, environment: "production", accountId: big.acct.merchantId, entryIds: null })));
+many(`the person's page, what waits for them, after Unlink, the person who had ${String(HEAVY)}`, await runs(() => squareAppWaitingFor(sql, big.id, heavy.entryId, dayInTz(new Date(), "America/Chicago"))));
 
 delay.disable();
 console.log(`longest single stall of the thread during all of it: ${fmt(delay.max / 1e6)}`);

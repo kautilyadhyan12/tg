@@ -74,10 +74,19 @@ async function readyFor(deps: PaymentsDeps, gymId: string, gym: repo.GymForPayme
 
 /** What Square has of the customer now: its name for the box, and what the payments going back keep so staff can tell who it
  *  is. Null where Square does not say, or answers with another customer (merged since). */
-async function customerNow(ready: Ready | null, customerId: string): Promise<{ name: string | null; email: string | null; phone: string | null } | null> {
+async function customerNow(
+  deps: PaymentsDeps,
+  gymId: string,
+  ready: Ready | null,
+  customerId: string,
+): Promise<{ name: string | null; email: string | null; phone: string | null } | null> {
   if (ready === null) return null;
   const read = await ready.square.api.retrieveCustomer(ready.token, customerId);
-  if (read.kind !== "ok" || read.value.id !== customerId) return null;
+  if (read.kind !== "ok") {
+    deps.log.warn({ event: "square.unlink_customer_unread", gymId, status: read.status }, "Square did not show the customer being unlinked");
+    return null;
+  }
+  if (read.value.id !== customerId) return null;
   return customerSeen(read.value);
 }
 
@@ -89,7 +98,7 @@ export async function readUnlinkBox(deps: PaymentsDeps, userId: string, gymId: s
   const link = environment === null ? undefined : (await unlinks.matchedLinks(deps.sql, gymId, entryId, environment)).find((l) => l.customerId === customerId);
   if (link === undefined) throw gone();
   const at = { gymId, entryId, environment: link.environment, accountId: link.accountId, customerId, also: link.also };
-  const [facts, seen] = await Promise.all([unlinks.unlinkFacts(deps.sql, at), customerNow(await readyFor(deps, gymId, gym, link.accountId), customerId)]);
+  const [facts, seen] = await Promise.all([unlinks.unlinkFacts(deps.sql, at), customerNow(deps, gymId, await readyFor(deps, gymId, gym, link.accountId), customerId)]);
   return squareUnlinkBoxSchema.parse({ customerName: seen?.name ?? null, also: link.also, ...facts });
 }
 
@@ -116,7 +125,7 @@ export async function unlinkSquareCustomer(
   if (link === undefined) throw gone();
   // Square is asked about the customer outside every lock: the payments going back keep its name, email and phone, as a payment
   // of a customer linked to nobody does. Square not answering leaves them as "Unknown"; it never stops the press.
-  const seen = await customerNow(await readyFor(deps, gymId, gym, link.accountId), customerId);
+  const seen = await customerNow(deps, gymId, await readyFor(deps, gymId, gym, link.accountId), customerId);
 
   const now = deps.now();
   const done = await deps.sql.begin(async (tx) => {

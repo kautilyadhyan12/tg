@@ -35,7 +35,7 @@ export function unlinkBoxLines(box, personName) {
     );
   }
   lines.push(`Their next payments in Square Point of Sale wait in Payments to match, and the app won’t link this customer to ${personName} again by itself.`);
-  if (box.added) lines.push(`${personName} is then added to your Square customer list again, not as this customer.`);
+  if (box.added) lines.push(`${personName} is then added to your Square customer list as a customer of their own.`);
   return { question: `Unlink this Square customer from ${personName}?`, lines };
 }
 
