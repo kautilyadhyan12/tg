@@ -22,6 +22,7 @@ import {
   type ChosenItem,
   type FoodMeasure,
   type FoodSearchItem,
+  type RecentFood,
   type LoggedMeasure,
   type Meal,
   type MealIdeasResponse,
@@ -42,6 +43,7 @@ import { CURATED_FOODS, curatedPieceFdcId, curatedUsdaFdcId, findCurated, findCu
 import { dishwareGrams, foodMeasures, gramsPerMl, measureGrams, scanStart, startingMeasure, type UsdaPortion } from "./measures.js";
 import type { FoodReference, FoodSearchProvider } from "./openfoodfacts.adapter.js";
 import { itemsVersion, ownPer100g, savedPlaces } from "./mealEdit.js";
+import { RECENT_MEALS_READ, recentFoods, type RecentPick } from "./recentFoods.js";
 import * as repo from "./repo.js";
 import { ESTIMATE_CANONICAL_PREFIX, checkedPrice, closeFoodsOf, estimateFood, isPlainMatch, priceScannedFood, type ScanLookups, type ScanPrice } from "./scanMatch.js";
 import type {
@@ -316,6 +318,27 @@ const asUsdaReference = (row: repo.UsdaFoodRow): FoodReference => ({
  *  leaves two places), one goes to USDA and one to a jar; and a single place is
  *  USDA's. */
 const PACKAGED_RESERVE = 3;
+
+/** The person's own recent foods (32b-ii-a): one read of their newest meals, nobody else's, and
+ *  each food's measures now, with ONE read of the USDA measures they share, as a logged food's are
+ *  (`mealMeasures`). A food no table has any more is left out: added again, nothing would price it.
+ *  Its amount is by grams where the measure it was last had is no longer one of its own. */
+export async function recentFoodsOf(deps: NutritionDeps, userId: string): Promise<RecentFood[]> {
+  const found: { pick: RecentPick; food: FoodReference }[] = [];
+  for (const pick of recentFoods(await repo.newestMealItems(deps.sql, userId, RECENT_MEALS_READ))) {
+    // Found by its own name in our tables or the cache only: never searched for outside, where a
+    // product of a similar name would be listed as the person's food.
+    const food = await foodOfItem(deps, pick.item, pick.canonical, false);
+    if (food !== null) found.push({ pick, food });
+  }
+  const measures = await measuresOf(deps, found.map((f) => f.food));
+  return found.flatMap(({ pick }, at) => {
+    const own = measures[at] ?? [];
+    if (own.length === 0) return [];
+    const add = own.some((m) => m.id === pick.add.measure) ? pick.add : { measure: "g", amount: Math.max(1, Math.round(pick.item.gramsPoint)) };
+    return [{ ...pick, add, measures: own }];
+  });
+}
 
 export async function searchFoods(deps: NutritionDeps, query: string, limit: number): Promise<FoodSearchItem[]> {
   return await withMeasures(deps, await searchFoodReferences(deps, query, limit));
@@ -1378,9 +1401,9 @@ const savedFood = (item: MealItem, figures: Per100g | null): FoodReference => ({
 /** The food a saved item is weighed by, and priced by unless the person's own
  *  numbers price it: the scan's figures it carries (no table has that food), else
  *  its table's entry, as when it was saved; null where no table has it now. */
-async function foodOfItem(deps: NutritionDeps, item: MealItem | undefined, canonical: string): Promise<FoodReference | null> {
+async function foodOfItem(deps: NutritionDeps, item: MealItem | undefined, canonical: string, search = true): Promise<FoodReference | null> {
   const scanned = item === undefined ? null : scanFiguresOf(item);
-  return item !== undefined && scanned !== null ? savedFood(item, scanned) : await findFood(deps, canonical);
+  return item !== undefined && scanned !== null ? savedFood(item, scanned) : await findFood(deps, canonical, search);
 }
 
 /** The person's own numbers an edited food is priced by, per 100 g, or null for its
@@ -1514,6 +1537,11 @@ export async function patchMeal(
   id: string,
   input: PatchMealRequest,
 ): Promise<Meal | null> {
+  // Sent again after it was made: answered with the meal, as a save sent twice is (32a).
+  if (input.changeId !== undefined) {
+    const made = await repo.mealAfterChange(deps.sql, userId, id, input.changeId);
+    if (made !== null) return asMeal(made);
+  }
   const before = await repo.getMeal(deps.sql, userId, id);
   if (before === null) return null;
   // The contract sends items only with the itemsVersion they were read at.
@@ -1527,6 +1555,7 @@ export async function patchMeal(
       ...(input.mealType === undefined ? {} : { mealType: input.mealType }),
       ...(input.mealName === undefined ? {} : { mealName: input.mealName }),
       ...(items === undefined ? {} : { items }),
+      ...(input.changeId === undefined ? {} : { changeId: input.changeId }),
     });
     if (row === null) return null;
     await keepTodaysTargets(deps, userId, row.takenAt);

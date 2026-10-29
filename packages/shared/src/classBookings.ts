@@ -256,7 +256,9 @@ export const CLASS_BOOKING_WORDS = {
   payment_overdue: OVERDUE_BOOKING_WORDS,
   no_booking: "You don't have a booking for this class.",
   cancel_started: "This class has already started, so the booking can't be cancelled.",
-  late_cancel: "It's too late to cancel for free. Cancelling now counts as a late cancel.",
+  /** A late cancel with no fee and no pack. Never "for free", which says a cost follows; and not "no
+   *  fee" either, as a membership with so many bookings a week still counts it. */
+  late_cancel: "Cancelling this close to the start counts as a late cancel.",
   late_cancel_pack: "It's too late to cancel for free. Cancelling now counts as a late cancel, and the class stays used on your pack.",
   request_reused: "That didn't go through. Try again.",
   class_not_found: "That class was not found.",
@@ -312,6 +314,18 @@ export function classFeesLine(fees: ClassFees & { currency: string }): string | 
 const feeMinorSchema = z.number().int().min(0).max(MEMBERSHIP_PRICE_MINOR_MAX);
 
 export const classFeesSchema = z.object({ lateCancelMinor: feeMinorSchema, noShowMinor: feeMinorSchema }).strict();
+
+/** What a 409 `late_cancel` answer says beside its error, for a class or a personal training session: the late
+ *  cancel fee it costs now in the gym's money (0 for none), and whether a pack's class or session stays used. A
+ *  member's box is asked again with it. */
+export const lateCancelRefusalSchema = z.object({
+  // Each field is read alone: one that cannot be read (the server sends "" for a gym with no currency) is none, and
+  // never takes the others with it.
+  packCharged: z.boolean().catch(false),
+  feeMinor: feeMinorSchema.catch(0),
+  currency: z.string().regex(/^[A-Z]{3}$/).nullable().catch(null),
+});
+export type LateCancelRefusal = z.infer<typeof lateCancelRefusalSchema>;
 
 // ── THE WIRE ──
 

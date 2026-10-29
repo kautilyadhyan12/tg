@@ -1203,7 +1203,14 @@
       "idx": 171,
       "version": "7",
       "when": 1790726400172,
-      "tag": "0172_square_matched_customers",
+      "tag": "0172_meal_last_change_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 172,
+      "version": "7",
+      "when": 1790726400173,
+      "tag": "0173_square_matched_customers",
       "breakpoints": true
     }
   ]

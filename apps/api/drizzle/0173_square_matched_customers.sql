@@ -1,5 +1,6 @@
 -- Match once for the rest, first half (ROADMAP Stage 2 item 18d-iii-b-ii-c-i; spec Part 3 §14.8). Forward-only. Hand-written, as
 -- `0016` onwards are; its journal entry is part of this commit.
+-- Renumbered from 0172 on 2026-10-29: 32b-ii-a's `0172_meal_last_change_id` merged first, and its journal entry is stamped one later.
 --
 -- `gym_square_old_customers`: a customer of a record besides the one `gym_square_customers` keeps. It holds the old customers a
 -- record was at a merge in Square (0167: `merged_at`) and now the customers staff matched to the record from a payment

@@ -1003,24 +1003,24 @@ d("0001_init on a real database", () => {
       });
   });
 
-  /** MIGRATION `0172`'s data statement, read out of the shipped file and run on a TEMPORARY copy of the table (never the live one other
+  /** MIGRATION `0173`'s data statement, read out of the shipped file and run on a TEMPORARY copy of the table (never the live one other
    *  suites write to): a payment that waits for want of its customer being known, whose sale was not kept and whose entered part is not
    *  known, waits as an unread sale (staff choose the bill); one whose entered part is known, one that waits for another reason, and one
    *  marked not for a bill are left alone; a second run finds nothing to do. Then the old customers' own check on a copy that carries
    *  the table's checks: a customer is a merged one or a matched one, never both and never neither. All rolled back. */
-  it("0172 keeps a payment waiting for want of its customer as an unread sale, and a record's other customer as merged or matched, never both", async () => {
-    const migration = await readFile(new URL("../drizzle/0172_square_matched_customers.sql", import.meta.url), "utf8");
+  it("0173 keeps a payment waiting for want of its customer as an unread sale, and a record's other customer as merged or matched, never both", async () => {
+    const migration = await readFile(new URL("../drizzle/0173_square_matched_customers.sql", import.meta.url), "utf8");
     const chunks = migration.split("--> statement-breakpoint").map((c) => c.trim());
     const fills = chunks.filter((c) => c.includes('UPDATE "gym_square_app_payments"'));
     const [fill] = fills;
-    if (fill === undefined || fills.length !== 1) throw new Error("0172 no longer holds exactly one data statement");
-    const onCopy = fill.replaceAll('"gym_square_app_payments"', '"gsap_0172"');
+    if (fill === undefined || fills.length !== 1) throw new Error("0173 no longer holds exactly one data statement");
+    const onCopy = fill.replaceAll('"gym_square_app_payments"', '"gsap_0173"');
     await sql
       .begin(async (tx) => {
-        await tx`CREATE TEMP TABLE gsap_0172 (LIKE gym_square_app_payments INCLUDING DEFAULTS) ON COMMIT DROP`;
+        await tx`CREATE TEMP TABLE gsap_0173 (LIKE gym_square_app_payments INCLUDING DEFAULTS) ON COMMIT DROP`;
         const row = async (state: string, reason: string, entryId: string | null, entered: number | null, notBill: string | null = null): Promise<string> => {
           const [r] = await tx<{ id: string }[]>`
-            INSERT INTO gsap_0172 (environment, account_id, square_payment_id, location_id, amount_minor, currency, taken_at, state, reason, entry_id, entered_minor, not_bill, created_at, updated_at)
+            INSERT INTO gsap_0173 (environment, account_id, square_payment_id, location_id, amount_minor, currency, taken_at, state, reason, entry_id, entered_minor, not_bill, created_at, updated_at)
             VALUES ('production', 'ACCT172', ${`P${randomUUID()}`.slice(0, 40)}, 'L172', 2500, 'USD', now(), ${state}, ${reason}, ${entryId}, ${entered}, ${notBill}, now(), now())
             RETURNING id`;
           if (r === undefined) throw new Error("fixture insert failed");
@@ -1033,33 +1033,33 @@ d("0001_init on a real database", () => {
         const marked = await row("not_bill", "not_linked", null, null, "other");
         await tx.unsafe(onCopy);
         await tx.unsafe(onCopy);
-        const rows = await tx<{ id: string; sale_reason: string | null }[]>`SELECT id, sale_reason FROM gsap_0172`;
+        const rows = await tx<{ id: string; sale_reason: string | null }[]>`SELECT id, sale_reason FROM gsap_0173`;
         const of = (id: string) => rows.find((r) => r.id === id)?.sale_reason;
         expect(of(unknownUnread), "waits as an unread sale: staff choose the bill").toBe("sale_unread");
         expect(of(unknownTyped), "its entered part is known, so it was a typed sale").toBeNull();
         expect(of(someonesBill)).toBeNull();
         expect(of(noCustomer)).toBeNull();
         expect(of(marked), "marked not for a bill is left alone").toBeNull();
-        throw new Error("ROLLBACK-0172-FIXTURE");
+        throw new Error("ROLLBACK-0173-FIXTURE");
       })
       .catch((err: unknown) => {
-        if (err instanceof Error && err.message === "ROLLBACK-0172-FIXTURE") return;
+        if (err instanceof Error && err.message === "ROLLBACK-0173-FIXTURE") return;
         throw err;
       });
     await sql
       .begin(async (tx) => {
-        await tx`CREATE TEMP TABLE gsoc_0172 (LIKE gym_square_old_customers INCLUDING CONSTRAINTS) ON COMMIT DROP`;
+        await tx`CREATE TEMP TABLE gsoc_0173 (LIKE gym_square_old_customers INCLUDING CONSTRAINTS) ON COMMIT DROP`;
         const insert = (q: typeof tx, merged: boolean, matched: boolean, customerId: string) =>
-          q`INSERT INTO gsoc_0172 (gym_id, entry_id, environment, account_id, customer_id, merged_at, matched_at)
+          q`INSERT INTO gsoc_0173 (gym_id, entry_id, environment, account_id, customer_id, merged_at, matched_at)
              VALUES (${randomUUID()}, ${randomUUID()}, 'production', 'ACCT172', ${customerId}, ${merged ? new Date() : null}, ${matched ? new Date() : null})`;
         await insert(tx, true, false, "CMERGED");
         await insert(tx, false, true, "CMATCHED");
         await expect(tx.savepoint((sp) => insert(sp, true, true, "CBOTH")), "not both").rejects.toThrow(/gym_square_old_customers_how_check/);
         await expect(tx.savepoint((sp) => insert(sp, false, false, "CNEITHER")), "not neither").rejects.toThrow(/gym_square_old_customers_how_check/);
-        throw new Error("ROLLBACK-0172-CHECKS");
+        throw new Error("ROLLBACK-0173-CHECKS");
       })
       .catch((err: unknown) => {
-        if (err instanceof Error && err.message === "ROLLBACK-0172-CHECKS") return;
+        if (err instanceof Error && err.message === "ROLLBACK-0173-CHECKS") return;
         throw err;
       });
   });

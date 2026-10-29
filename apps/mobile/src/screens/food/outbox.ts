@@ -5,6 +5,7 @@ import {
   type Meal,
   type MealOutboxEntry,
   type MealOutboxRefused,
+  type WaitingChange,
   type WaitingMeal,
 } from "@app/shared";
 
@@ -14,6 +15,8 @@ import {
 // A save carries the meal's own id: sent twice, the server keeps one meal (32a), and a meal removed
 // there keeps its id, so a late save of it keeps nothing (0169). A meal removed before it was ever
 // sent is simply dropped and never reaches the server.
+// A change to a saved meal (32b-ii-a) is kept the same way, after the meal's save, and carries an id
+// of its own: sent twice, the server makes it once (0172).
 
 /** Where the file lives: the phone's own, or a test's. `aside` keeps a copy of a file that could not
  *  all be read, before it is written over. */
@@ -30,7 +33,9 @@ export type SendResult = { kind: "done"; meal?: Meal } | { kind: "later" } | { k
 export interface Sender {
   save: (meal: WaitingMeal) => Promise<SendResult>;
   remove: (id: string) => Promise<SendResult>;
+  change: (change: WaitingChange) => Promise<SendResult>;
 }
+
 
 /** A meal the server would not take, said on the Food screen until the person presses OK. */
 export type Refused = MealOutboxRefused;
@@ -42,6 +47,8 @@ export interface OutboxView {
   landed: Meal[];
   /** Meals removed here that a read of the day may still hold: hidden from the day. */
   removing: ReadonlySet<string>;
+  /** Changes to saved meals the server does not have yet, each meal's in the order made. */
+  changing: ReadonlyMap<string, readonly WaitingChange[]>;
   refused: Refused[];
   /** Bumped each time the server took something, so the day is read again. */
   sent: number;
@@ -57,6 +64,9 @@ export interface Outbox {
   /** false: the file already holds as many as it may, and the meal is not kept. */
   add: (meal: WaitingMeal) => Promise<boolean>;
   remove: (id: string) => Promise<void>;
+  /** A change to a meal, kept after everything waiting, so after the meal's own save. false: the file
+   *  already holds as many as it may, and the change is not kept. */
+  change: (change: WaitingChange) => Promise<boolean>;
   /** Sends what is waiting, in order, until the server cannot take more just now. */
   send: () => Promise<void>;
   forget: (id: string) => void;
@@ -121,7 +131,12 @@ export function createOutbox(store: TextStore, sender: Sender): Outbox {
     for (const e of entries) if (e.kind === "remove") removing.add(e.id);
     const waiting = entries.flatMap((e) => (e.kind === "save" && !removing.has(e.meal.id) ? [e.meal] : []));
     const shown = landed.filter((l) => !removing.has(l.meal.id)).map((l) => l.meal);
-    return { waiting, landed: shown, removing, refused, sent, unsaved: flags.unsaved };
+    const changing = new Map<string, WaitingChange[]>();
+    for (const e of entries) {
+      if (e.kind !== "change" || removing.has(e.change.id)) continue;
+      changing.set(e.change.id, [...(changing.get(e.change.id) ?? []), e.change]);
+    }
+    return { waiting, landed: shown, removing, changing, refused, sent, unsaved: flags.unsaved };
   }
 
   function changed() {
@@ -157,20 +172,26 @@ export function createOutbox(store: TextStore, sender: Sender): Outbox {
       const head = entries[0];
       if (head === undefined || stopped()) return;
       // Marked before the first wait: a removal made from here on is sent after this save.
-      if (head.kind === "save" && !head.meal.tried) {
-        head.meal.tried = true;
+      const sending = head.kind === "save" ? head.meal : head.kind === "change" ? head.change : null;
+      if (sending !== null && !sending.tried) {
+        sending.tried = true;
         await keep();
         if (stopped()) return;
       }
-      const result = head.kind === "save" ? await sender.save(head.meal) : await sender.remove(head.id);
+      const result =
+        head.kind === "save" ? await sender.save(head.meal) : head.kind === "change" ? await sender.change(head.change) : await sender.remove(head.id);
       if (stopped() || result.kind === "later") return;
       entries = entries.filter((e) => e !== head);
       if (result.kind === "refused" && head.kind === "save") {
         refused = [...refused, { id: head.meal.id, name: head.meal.body.mealName.slice(0, 200), message: result.message.slice(0, 500) }];
       }
+      if (result.kind === "refused" && head.kind === "change") {
+        // Said as "Your change to Oats wasn't saved." on the Food screen.
+        refused = [...refused, { id: head.change.body.changeId, name: `Your change to ${head.change.name}`.slice(0, 200), message: result.message.slice(0, 500) }];
+      }
       if (result.kind === "done") {
         sent += 1;
-        if (head.kind === "save" && result.meal !== undefined) landed = [...landed, { seq: sent, meal: result.meal }];
+        if (head.kind !== "remove" && result.meal !== undefined) landed = [...landed, { seq: sent, meal: result.meal }];
         if (head.kind === "remove") gone = [...gone, { seq: sent, id: head.id }];
       }
       await keep();
@@ -234,9 +255,19 @@ export function createOutbox(store: TextStore, sender: Sender): Outbox {
       // Never sent: the server never heard of it. A removal is always kept, whatever the count.
       if (save?.kind === "save" && !save.meal.tried) entries = entries.filter((_, i) => i !== at);
       else entries = [...entries, { kind: "remove", id }];
+      // Its changes not yet sent change nothing now.
+      entries = entries.filter((e) => e.kind !== "change" || e.change.id !== id || e.change.tried);
       changed();
       await keep();
       void send();
+    },
+    change: async (change) => {
+      if (entries.length >= MEAL_OUTBOX_MOST) return false;
+      entries = [...entries, { kind: "change", change: { ...change, tried: false } }];
+      changed();
+      await keep();
+      void send();
+      return true;
     },
     send,
     forget: (id) => {

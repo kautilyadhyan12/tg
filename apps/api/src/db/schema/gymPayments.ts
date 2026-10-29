@@ -691,10 +691,10 @@ export const gymSquareAppPayments = pgTable(
     customerPhone: text("customer_phone"),
     /** The name the gym gave the Square device that took it (0165). */
     deviceName: text("device_name"),
-    /** Why it waits because of what was sold, whoever paid (0172; 18d-iii-b-ii-c): kept, so a payment that waited for
+    /** Why it waits because of what was sold, whoever paid (0173; 18d-iii-b-ii-c): kept, so a payment that waited for
      *  want of its customer being known still says it once the customer is linked. */
     saleReason: text("sale_reason"),
-    /** What Match did about Square's customer on the payment (0172): the same press answered the same twice. */
+    /** What Match did about Square's customer on the payment (0173): the same press answered the same twice. */
     linkResult: text("link_result"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
@@ -873,7 +873,7 @@ export const gymSquareMemberPlan = pgTable(
   ],
 );
 
-/** A customer of a record besides the one `gym_square_customers` keeps (0167, 0172): the old customer each record of a gym
+/** A customer of a record besides the one `gym_square_customers` keeps (0167, 0173): the old customer each record of a gym
  *  was, at a merge in Square (`merged_at`; ROADMAP 18d-iii-b-ii-b-ii-a, round one), and a customer staff matched to the record
  *  from a payment (`matched_at`; 18d-iii-b-ii-c), Square having made a second customer for the same person. A payment under
  *  either is that record's; only an old id no record here was is read as the customer it is now. Exactly one of the two is set. */

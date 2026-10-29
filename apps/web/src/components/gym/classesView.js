@@ -204,16 +204,14 @@ export function cancelAsk(c) {
       no: 'Keep it',
     };
   }
+  // "Free" is said only where something follows that is not: a fee, or a pack's class.
   return {
     title: 'Cancel your booking?',
-    lines: [
-      what,
-      c.mine?.packCharged
-        ? `Free to cancel until ${instantText(c.freeCancelUntil, c.timezone)}. Your pack gets the class back.`
-        : lateFee(c) > 0
-          ? `Free to cancel until ${instantText(c.freeCancelUntil, c.timezone)}. After that there is a one-time late cancel fee of ${formatMinor(lateFee(c), c.fees.currency)}.`
-          : `Free to cancel until ${instantText(c.freeCancelUntil, c.timezone)}.`,
-    ],
+    lines: c.mine?.packCharged
+      ? [what, `Free to cancel until ${instantText(c.freeCancelUntil, c.timezone)}. Your pack gets the class back.`]
+      : lateFee(c) > 0
+        ? [what, `Free to cancel until ${instantText(c.freeCancelUntil, c.timezone)}. After that there is a one-time late cancel fee of ${formatMinor(lateFee(c), c.fees.currency)}.`]
+        : [what],
     yes: 'Cancel booking',
     no: 'Keep it',
   };
