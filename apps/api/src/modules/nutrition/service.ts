@@ -47,7 +47,7 @@ import { RECENT_MEALS_READ, recentFoods, type RecentPick } from "./recentFoods.j
 import * as repo from "./repo.js";
 import { ESTIMATE_CANONICAL_PREFIX, checkedPrice, closeFoodsOf, estimateFood, isPlainMatch, priceScannedFood, type ScanLookups, type ScanPrice } from "./scanMatch.js";
 import type {
-  ConfirmMealRequest, ManualMealRequest, MealEditItem, MealEditPreviewRequest, MealPreview, NoDeficitReason, NutritionTargetsResponse,
+  ConfirmMealRequest, CreateDishwareRequest, ManualMealRequest, MealEditItem, MealEditPreviewRequest, MealPreview, NoDeficitReason, NutritionTargetsResponse,
   OwnTargetsHeld, PatchMealRequest, PlanResponse, PreviewMealRequest, PutNutritionTargetsRequest,
 } from "./schemas.js";
 import {
@@ -1591,9 +1591,10 @@ export async function listDishware(
 export async function createDishware(
   deps: ReadDeps,
   userId: string,
-  v: Parameters<typeof repo.createDishware>[2],
-): Promise<repo.DishwareRow> {
-  return await repo.createDishware(deps.sql, userId, v);
+  v: CreateDishwareRequest,
+): Promise<{ dish: repo.DishwareRow; created: boolean } | null> {
+  const { id, ...dish } = v;
+  return await repo.createDishware(deps.sql, userId, dish, id);
 }
 export async function updateDishware(
   deps: ReadDeps,

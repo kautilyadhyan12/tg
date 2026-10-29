@@ -318,6 +318,18 @@ export const dishwareInputSchema = z.object({
 }).strict();
 export const patchDishwareSchema = dishwareInputSchema.partial().refine((v) => Object.keys(v).length > 0, { message: "at least one field required" });
 export type DishwareInput = z.infer<typeof dishwareInputSchema>;
+/** POST /v1/nutrition/dishware. With the phone's own `id` (ROADMAP 32b-ii-b) the same dish sent
+ *  twice is saved once, and the second answer is the dish as it is now. Kept in small letters. */
+export const createDishwareRequestSchema = dishwareInputSchema.extend({ id: z.string().uuid().toLowerCase().optional() }).strict();
+export type CreateDishwareRequest = z.infer<typeof createDishwareRequestSchema>;
+/** The person's saved dishes, newest first (GET /v1/nutrition/dishware). */
+export const dishwareSchema = z.object({
+  id: z.string().uuid(), label: z.string(), containerClass: z.string(), volumeMl: z.number().int().positive(),
+  foodHint: z.string().nullable(), createdAt: z.string(),
+}).strict();
+export type Dishware = z.infer<typeof dishwareSchema>;
+export const dishwarePageSchema = z.object({ items: z.array(dishwareSchema), nextCursor: z.string().nullable() }).strict();
+export const dishwareResponseSchema = z.object({ dishware: dishwareSchema }).strict();
 export type PatchDishware = z.infer<typeof patchDishwareSchema>;
 
 export const bodyMeasurementInputSchema = z.object({
