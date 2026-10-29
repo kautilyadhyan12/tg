@@ -214,6 +214,36 @@ describe("the worst thing: nothing is booked twice, no fee is taken that was not
     expect(keyOf(sent[1])).toBe(keyOf(sent[0]));
   });
 
+  it("a session at that time cancelled before the press never ends its key: pressed again, it books once", async () => {
+    let first = true;
+    const S2 = "22222222-2222-4222-8222-222222222222";
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      // They cancelled a 10:00 session on this day before; the time is offered again.
+      [ptOf(IRON)]: ok(ptWeek(DAY, { lastDay: "2099-12-31", history: [pt(600, DAY, { status: "cancelled", cancel: null })] })),
+      [`${ptOf(IRON)}/sessions`]: () => {
+        if (first) {
+          first = false;
+          return lost();
+        }
+        return { status: 200, body: { session: pt(600, DAY, { id: S2 }) } };
+      },
+    });
+    await openPt(server.ask, IRON);
+    await fireEvent.press(await screen.findByLabelText(/^Book 10:00 AM – 11:00 AM with Sam Trainer, /));
+    await fireEvent.press(await screen.findByLabelText("Book session"));
+    expect(await page().findByText("Can’t connect. Check your internet and try again.")).toBeTruthy();
+    await fireEvent.press(page().getByLabelText("Later"));
+    await fireEvent.press(await page().findByLabelText("Earlier"));
+    await fireEvent.press(await screen.findByLabelText(/^Book 10:00 AM – 11:00 AM with Sam Trainer, /));
+    await fireEvent.press(await screen.findByLabelText("Book session"));
+    expect(await page().findByText(/^Booked: /)).toBeTruthy();
+    const sent = books(server.asked, IRON);
+    expect(sent).toHaveLength(2);
+    expect(keyOf(sent[1])).toBe(keyOf(sent[0]));
+  });
+
   it("a read that lands while Book is still on its way never ends its key: pressed again, it books once", async () => {
     const listeners: ((state: string) => void)[] = [];
     // Left in place for the rest of the file: put back mid-file, it breaks every later render.

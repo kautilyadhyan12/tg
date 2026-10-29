@@ -91,9 +91,9 @@ function PtBody({ place, onClose, bottom }: { place: PtPlace; onClose: () => voi
   const [choosing, setChoosing] = useState<Choosing | null>(null);
   // The session the box asks about, as it will be cancelled: its fee is the one the request says yes to.
   const [asking, setAsking] = useState<MemberPtSession | null>(null);
-  // One key a time pressed: kept while its answer is unknown, until a read shows a session of theirs at that time, so a
-  // second press books once.
-  const keys = useRef(new Map<string, string>());
+  // One key a time pressed: kept while its answer is unknown, until a read shows a session of theirs at that time that
+  // was not there when the key was made, so a second press books once.
+  const keys = useRef(new Map<string, { key: string; known: ReadonlySet<string> }>());
   // Reads are numbered as they start: an answer stands only if no later read has started.
   const started = useRef(0);
   const live = useRef(true);
@@ -106,11 +106,14 @@ function PtBody({ place, onClose, bottom }: { place: PtPlace; onClose: () => voi
       const answer = await session.signedIn({ method: "GET", path: `${ptPath(place.id)}?week=${String(week)}` }, memberPtResponseSchema);
       if (!live.current || number !== started.current) return;
       if (answer.kind === "ok") {
-        // A press is answered once a session of theirs, of any status, stands at its day and minute: a kept key
-        // outliving that would answer a session cancelled since. Any other key stays, as its press may still be on
-        // its way: a new key for it would book a second session.
-        const theirs = new Set([...answer.data.sessions, ...answer.data.history].map((s) => `${s.localDate}|${String(s.localStartMinute)}`));
-        for (const id of [...keys.current.keys()]) if (theirs.has(id.slice(id.indexOf("|") + 1))) keys.current.delete(id);
+        // A press is answered once a session of theirs, of any status, stands at its day and minute that was not there
+        // when its key was made: a kept key outliving that would answer a session cancelled since. Any other key stays,
+        // as its press may still be on its way: a new key for it would book a second session.
+        const theirs = [...answer.data.sessions, ...answer.data.history];
+        for (const [id, kept] of [...keys.current]) {
+          const slot = id.slice(id.indexOf("|") + 1);
+          if (theirs.some((s) => `${s.localDate}|${String(s.localStartMinute)}` === slot && !kept.known.has(s.id))) keys.current.delete(id);
+        }
         setHeld({ kind: "ok", view: answer.data });
         // A read made by itself never takes the times away over a lost connection; a place that no longer shows them
         // (a 404) does.
@@ -146,8 +149,10 @@ function PtBody({ place, onClose, bottom }: { place: PtPlace; onClose: () => voi
   const book = async (c: Choosing) => {
     if (busy) return;
     const id = `${c.trainerId}|${c.localDate}|${String(c.minute)}`;
-    const key = keys.current.get(id) ?? newRequestKey();
-    keys.current.set(id, key);
+    const shown = held.kind === "ok" ? [...held.view.sessions, ...held.view.history] : [];
+    const kept = keys.current.get(id) ?? { key: newRequestKey(), known: new Set(shown.map((s) => s.id)) };
+    keys.current.set(id, kept);
+    const key = kept.key;
     setBusy(true);
     setSaid(null);
     const answer = await session.signedIn(
@@ -163,7 +168,7 @@ function PtBody({ place, onClose, bottom }: { place: PtPlace; onClose: () => voi
     setChoosing(null);
     if (answer.kind === "no_answer") {
       // No answer keeps its key: pressed again, the server books once.
-      keys.current.set(id, key);
+      keys.current.set(id, kept);
       tell({ text: NO_ANSWER, bad: true });
       return;
     }
