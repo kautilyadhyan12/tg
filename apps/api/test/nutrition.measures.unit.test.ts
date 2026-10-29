@@ -61,7 +61,7 @@ describe("the measures a food carries", () => {
     [
       "SR Legacy's amount in its own column",
       usdaFood(70, "half cup", [portion(1, "cup", 70, 0.5), portion(2, "spears (1/2\" base)", 60, 4)]),
-      ["usda-1 half cup 70", "usda-2 4 spears (1/2\" base) 60", "g g 1", OZ],
+      ["usda-1 half cup 70", "usda-2 4 spears 60", "g g 1", OZ],
     ],
     [
       "never a row of amount 0 whose text states none (frozen kale's 94 g package), even where the table still serves by it",
@@ -85,8 +85,8 @@ describe("the measures a food carries", () => {
       "our list's own serving first, where no USDA measure has its name (an apple of 180 g)",
       own(180, "apple", APPLE_PORTIONS),
       [
-        "serving apple 180", "usda-1 cup, quartered or chopped 125", "usda-2 cup slices 109", "usda-3 large (3-1/4\" dia) 223",
-        "usda-4 medium (3\" dia) 182", "usda-5 small (2-3/4\" dia) 149", "usda-6 extra small (2-1/2\" dia) 101", "usda-7 NLEA serving 242",
+        "serving apple 180", "usda-1 cup, quartered or chopped 125", "usda-2 cup slices 109", "usda-3 large 223",
+        "usda-4 medium 182", "usda-5 small 149", "usda-6 extra small 101", "usda-7 serving 242",
         "g g 1", OZ,
       ],
     ],
@@ -294,7 +294,8 @@ describe("where a food the photo scan saw starts on the photo sheet (RULINGS 202
     // No count, nothing to multiply; no grams, nothing to check a count against.
     ["no count: the photo's grams, even where a measure weighs them", fed(portion(1, "cup", 158)), null, 158, estimate("g", 158, 158)],
     ["no grams: our food's own serving, as Add food starts it", own(180, "apple", [portion(4, "medium (3\" dia)", 182)]), 2, null, estimate("serving", 1, 180)],
-    ["no grams: a USDA food's first measure, as Add food starts it", fed(portion(1, "1 cup", 230, null), portion(2, "1 piece", 45, null)), 2, null, estimate("usda-1", 1, 230)],
+    ["no grams: a USDA food's count, as Add food starts it (32b-ii-b)", fed(portion(1, "1 cup", 230, null), portion(2, "1 piece", 45, null)), 2, null, estimate("usda-2", 1, 45)],
+    ["no grams and no count: a USDA food's first measure", fed(portion(1, "1 cup", 230, null), portion(2, "1 tbsp", 15, null)), 2, null, estimate("usda-1", 1, 230)],
     // The photo's own grams, to the whole gram and never under one.
     ["the photo's grams to the whole gram", fed(), null, 12.4, estimate("g", 12, 12)],
     ["never under a gram", fed(), null, 0.3, estimate("g", 1, 1)],
@@ -413,9 +414,10 @@ describe("the USDA entry a food of our list has its measures from", () => {
       expect(new Set(ids).size).toBe(ids.length);
     });
 
-    it("starts the food where it started, and counts a photo's pieces", () => {
+    it("starts the food at a count of its pieces, and counts a photo's pieces", () => {
       const measures = foodMeasures(shrimp);
-      expect(startingMeasure(shrimp, measures)).toEqual({ measure: "g", amount: 100 });
+      // Served by 100 g on our list: one of its pieces, not grams (32b-ii-b).
+      expect(startingMeasure(shrimp, measures)).toEqual({ measure: "piece-1", amount: 1 });
       expect(scanStart(shrimp, measures, 5, 75)).toEqual({ measure: "piece-3", amount: 5, grams: 75, estimated: false });
       expect(scanStart(shrimp, measures, 7, 70)).toEqual({ measure: "piece-2", amount: 7, grams: 70, estimated: false });
       // No count of any measure is near: the photo's grams, an estimate.

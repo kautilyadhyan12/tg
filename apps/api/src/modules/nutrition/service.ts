@@ -322,7 +322,9 @@ const PACKAGED_RESERVE = 3;
 /** The person's own recent foods (32b-ii-a): one read of their newest meals, nobody else's, and
  *  each food's measures now, with ONE read of the USDA measures they share, as a logged food's are
  *  (`mealMeasures`). A food no table has any more is left out: added again, nothing would price it.
- *  Its amount is by grams where the measure it was last had is no longer one of its own. */
+ *  Where it was last had by a saved dish, or by a measure that is no longer one of its own, it starts
+ *  where the search starts it, at a count of it where it has one (32b-ii-b; the phone opens it at
+ *  that dish where the person still has one of that name). */
 export async function recentFoodsOf(deps: NutritionDeps, userId: string): Promise<RecentFood[]> {
   const found: { pick: RecentPick; food: FoodReference }[] = [];
   for (const pick of recentFoods(await repo.newestMealItems(deps.sql, userId, RECENT_MEALS_READ))) {
@@ -332,10 +334,11 @@ export async function recentFoodsOf(deps: NutritionDeps, userId: string): Promis
     if (food !== null) found.push({ pick, food });
   }
   const measures = await measuresOf(deps, found.map((f) => f.food));
-  return found.flatMap(({ pick }, at) => {
+  return found.flatMap(({ pick, food }, at) => {
     const own = measures[at] ?? [];
     if (own.length === 0) return [];
-    const add = own.some((m) => m.id === pick.add.measure) ? pick.add : { measure: "g", amount: Math.max(1, Math.round(pick.item.gramsPoint)) };
+    const byDish = pick.item.measure?.id === "dish";
+    const add = !byDish && own.some((m) => m.id === pick.add.measure) ? pick.add : startingMeasure(servingOfFood(food), own);
     return [{ ...pick, add, measures: own }];
   });
 }

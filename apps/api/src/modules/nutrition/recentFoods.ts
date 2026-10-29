@@ -13,7 +13,7 @@ export const RECENT_MEALS_READ = 60;
  *  `RECENT_FOODS_MOST`. A food is the same food by its canonical name. A food priced by the scan's
  *  estimate or by the person's own numbers is left out: added again, its table would price it, not
  *  what they had. A food last had by a saved dish, or by a measure the food list no longer names, is
- *  added again by its grams. */
+ *  given here by its grams; the service then starts it where the search does (`recentFoodsOf`). */
 export function recentFoods(meals: readonly { items: readonly MealItem[] }[]): RecentPick[] {
   const seen = new Set<string>();
   const out: RecentPick[] = [];

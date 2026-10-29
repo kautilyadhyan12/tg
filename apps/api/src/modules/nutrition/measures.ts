@@ -104,6 +104,70 @@ export function usdaMeasureName(portion: Pick<UsdaPortion, "amount" | "unit">): 
   return readable(`${String(amount)} ${words}`);
 }
 
+/** A measure's name in a shopper's words (ROADMAP 32b-ii-b, Kd's click-through: "the options are
+ *  bizarre and will need someone to have a scientific degree"), or null for a measure nobody would
+ *  pick. USDA's table writes its sizes in inches ("large (3-1/4" dia)"), its survey codes ("NFS",
+ *  "NS as to size", "NLEA serving") and its yield notes ("unit (yield from 1 lb ready-to-cook…)")
+ *  into the name; 725 of its 2,935 names carry one (counted 2026-10-29,
+ *  `tools/measure-names-sweep.ts`). The picker shows each measure's grams beside it, so a size in
+ *  inches says nothing a person can use: it goes. A bracket that names a size people read on a
+ *  label ("can (12 fl oz)") or a plain word ("fl oz (no ice)") stays. A measure of raw weight that
+ *  names what it yields cooked ("oz yields", "unit (yield from 1 lb …)"), and a measure by area or
+ *  length ("surface inch", "linear inch"), is left out; a cheese's "cubic inch" is a cube. Each rule
+ *  reads the name's shape — a bracket, an inch mark, a code — never a food. */
+export function plainMeasureName(name: string): string | null {
+  let n = name.trim();
+  if (/^(?:surface|linear) inch\b/i.test(n)) return null;
+  n = n.replace(/^cubic inch\b/i, "cube");
+  // A raw amount and what it yields ("oz yields", "package (10 oz) yields", "cup in shell, edible
+  // yield"): its grams are not of the thing it names. A yield note in a bracket on a cooked piece
+  // ("wing (yield after cooking…)") only says where the piece's weight came from, so the piece stays,
+  // unless it is a weight or a recipe's unit ("unit (yield from 1 lb …)").
+  if (/yield/i.test(n.replace(/\([^()]*\)?/g, ""))) return null;
+  if (/yield/i.test(n) && YIELD_HEAD.test(n)) return null;
+  // Brackets that hold an inch size, a code, a yield or an "include" note go; any other stays.
+  n = n.replace(/\s*\(([^()]*)\)?/g, (whole: string, inside: string) => (CODED_BRACKET.test(inside) ? "" : whole));
+  n = n
+    .replace(/\bNLEA\s+serving\b/gi, "serving")
+    .replace(/,?\s*\bNS as to\b[^,]*/g, "")
+    .replace(/,?\s*\b(?:NFS|NS)\b/g, "")
+    .replace(/,?\s*\bexcluding refuse\b/gi, "")
+    // "roll 1 serving", "3 oz (1 serving)": one of the measure is the one serving.
+    .replace(/\s*\(?\s*1\s*serving\s*\)?$/i, "")
+    // An inch mark left outside a bracket: "regular or 6" submarine".
+    .replace(/(\d)"/g, "$1-inch")
+    .replace(/\(\s+/g, "(")
+    .replace(/\s+\)/g, ")")
+    .replace(/\s{2,}/g, " ")
+    .replace(DANGLING, "")
+    .trim();
+  // "3 oz (3 oz)": a bracket that says the name again.
+  const twice = /^(.+?)\s*\((.+)\)$/.exec(n);
+  if (twice !== null && sameName(twice[1] ?? "", twice[2] ?? "")) n = (twice[1] ?? "").trim();
+  // "56 grams" says nothing grams do not: the picker offers grams already.
+  if (/^\d*\.?\d+\s*(?:g|grams?)$/i.test(n)) return null;
+  return n === "" ? null : n;
+}
+
+/** What a yield note's measure is before it: a weight, or "unit" of a recipe — a raw amount. */
+const YIELD_HEAD = /^(?:\d*\.?\d+\s+)?(?:half\s+)?(?:oz|lb|g|unit|cup|package)\b/i;
+/** A bracket's text that is a size in inches, a survey code, a yield or an "include" note. */
+const CODED_BRACKET = /["”]|\bdia\b|\bdiameter\b|\binch|\bNLEA\b|\bNF?S\b|yield|\binclude|\d+\s*x\s*\d+/i;
+
+/** Whether a measure is a count of the food — a slice, an apple, a serving — and not a weight or
+ *  a volume (a cup, a tablespoon, an ounce), read off its name. */
+export function isCount(name: string): boolean {
+  return !VOLUME_OR_WEIGHT.test(name.trim());
+}
+const VOLUME_OR_WEIGHT =
+  /^(?:\d*\.?\d+\s+|half\s+|quarter\s+)?(?:cups?|tbsp|tablespoons?|tsp|teaspoons?|fl oz|oz|ounces?|lbs?|pounds?|g|grams?|kg|ml|l|liters?|litres?|quarts?|pints?|gallons?)\b/i;
+
+/** A count a food starts at weighs near what the food is served by: from a twentieth of its serving
+ *  to two and a half times it. A slice of bacon (8 g of a 100 g serving) or a large apple (223 g of
+ *  a 125 g cup) is one; a whole head of lettuce (360 g) or a 284 g frozen package of a 67 g serving
+ *  is not. */
+export const START_COUNT_SHARE = { least: 1 / 20, most: 2.5 } as const;
+
 /** What a food's measures are made from: its own serving (grams of one `unit`)
  *  and the USDA household measures of the entry it is, or cites — none where it
  *  has no USDA entry, or the table is not loaded. `ownServing` is false for a food
@@ -149,8 +213,9 @@ function servingMeasure(source: MeasureSource, usda: readonly FoodMeasure[]): Fo
   if (!source.ownServing || !(serving > 0 && serving <= MAX_ITEM_GRAMS)) return null;
   if (byWeight(unit)) return serving === 100 ? null : { id: "serving", name: "serving", grams: serving };
   if (sameName(unit, OUNCE.name) || unit.trim() === "") return null;
-  if (usda.some((m) => sameName(m.name, unit) && nearServing(serving, m.grams))) return null;
-  return { id: "serving", name: unit.trim().slice(0, 60), grams: serving };
+  const named = plainMeasureName(unit) ?? unit.trim();
+  if (usda.some((m) => sameName(m.name, named) && nearServing(serving, m.grams))) return null;
+  return { id: "serving", name: named.slice(0, 60), grams: serving };
 }
 
 /** Every measure the food can be logged by, in the order a picker shows them: its
@@ -168,7 +233,8 @@ export function foodMeasures(source: MeasureSource): FoodMeasure[] {
   const add = (portions: readonly UsdaPortion[], prefix: "usda" | "piece"): void => {
     for (const portion of portions) {
       if (!isHouseholdMeasure(portion)) continue;
-      const name = usdaMeasureName(portion);
+      const name = plainMeasureName(usdaMeasureName(portion));
+      if (name === null) continue;
       if (!(portion.gramWeight > 0 && portion.gramWeight <= MAX_ITEM_GRAMS)) continue;
       if (sameName(name, GRAM.name) || sameName(name, OUNCE.name)) continue;
       if (usda.some((m) => sameName(m.name, name) && sameWeight(m.grams, portion.gramWeight))) continue;
@@ -182,25 +248,48 @@ export function foodMeasures(source: MeasureSource): FoodMeasure[] {
 }
 
 /** The measure and amount a food starts at when it is picked — its serving, by
- *  whichever measure is it: its own serving once; else the USDA measure of its
+ *  whichever measure is it: our list's own serving once; else the USDA measure of its
  *  serving's name nearest its weight (the one that took the serving's place, or,
- *  where the serving's own row is no measure, the nearest size of that name). A
- *  serving of "oz" starts at one ounce where it weighs one, else at its grams (dark
- *  chocolate served by 30 g starts at 30 g, not at an ounce's 28), never at another
- *  measure: a graham cracker crust served by the ounce is not its 183 g crust. Only
- *  then a USDA food's first measure; else the serving's grams. */
+ *  where the serving's own row is no measure, the nearest size of that name), where
+ *  it is our list's serving or a count of the food. A serving of "oz" starts at one
+ *  ounce where it weighs one, else at its grams (dark chocolate served by 30 g starts
+ *  at 30 g, not at an ounce's 28), never at another measure: a graham cracker crust
+ *  served by the ounce is not its 183 g crust. Otherwise a count of the food, the first
+ *  of its measures that weighs near its serving (`START_COUNT_SHARE`):
+ *  a food of our list served by 100 g, or a USDA food whose first measure is a cup,
+ *  starts at one slice or one apple, never at grams (ROADMAP 32b-ii-b). Only then the
+ *  serving's measure of another kind, a USDA food's first measure, or the grams. */
 export function startingMeasure(source: Pick<MeasureSource, "serving" | "unit" | "ownServing">, measures: readonly FoodMeasure[]): { measure: string; amount: number } {
   const { serving, unit } = source;
   const usda = measures.filter((m) => m.id.startsWith("usda-"));
-  const nearest = usda
-    .filter((m) => sameName(m.name, unit))
-    .sort((a, b) => Math.abs(a.grams - serving) - Math.abs(b.grams - serving))[0];
-  const own = measures.find((m) => m.id === "serving") ?? nearest;
-  if (own !== undefined) return { measure: own.id, amount: 1 };
+  const own = servingOf(source, measures);
+  // Our list's own serving is the measure it is eaten by; a USDA food's serving is only the first
+  // of its measures, and where that is a cup or a weight, a count of the food comes first (ROADMAP
+  // 32b-ii-b, Kd: "I was not able to select quantity like number of apples").
+  if (own !== undefined && (source.ownServing || isCount(own.name))) return { measure: own.id, amount: 1 };
   const grams = { measure: GRAM.id, amount: serving > 0 && serving <= MAX_ITEM_GRAMS ? serving : 100 };
   if (sameName(unit, OUNCE.name)) return isOneOunce(serving) ? { measure: OUNCE.id, amount: 1 } : grams;
+  const count = measures.find(
+    (m) =>
+      (m.id.startsWith("usda-") || m.id.startsWith("piece-")) &&
+      isCount(m.name) &&
+      m.grams >= serving * START_COUNT_SHARE.least &&
+      m.grams <= serving * START_COUNT_SHARE.most,
+  );
+  if (count !== undefined) return { measure: count.id, amount: 1 };
+  if (own !== undefined) return { measure: own.id, amount: 1 };
   const first = source.ownServing ? undefined : usda[0];
   return first === undefined ? grams : { measure: first.id, amount: 1 };
+}
+
+/** The measure that is the food's serving: our list's own, or the USDA measure of the serving's name
+ *  nearest its weight. */
+function servingOf(source: Pick<MeasureSource, "serving" | "unit">, measures: readonly FoodMeasure[]): FoodMeasure | undefined {
+  const named = plainMeasureName(source.unit) ?? source.unit;
+  const nearest = measures
+    .filter((m) => m.id.startsWith("usda-") && sameName(m.name, named))
+    .sort((a, b) => Math.abs(a.grams - source.serving) - Math.abs(b.grams - source.serving))[0];
+  return measures.find((m) => m.id === "serving") ?? nearest;
 }
 
 /** The grams `amount` of a measure weighs, to the whole gram. */
@@ -258,7 +347,9 @@ export function scanStart(
     if (grams > MAX_ITEM_GRAMS || 100 * off > SCAN_START_TOLERANCE_PERCENT * seenGrams) return null;
     return { measure: measure.id, amount: count, grams, estimated: false, off };
   };
-  const serving = source.ownServing ? measures.find((m) => m.id === start.measure) : undefined;
+  // Our list's serving, the measure the food is eaten by; never a count Add food starts a food served
+  // by weight at, which the photo's grams decide among the food's other measures.
+  const serving = source.ownServing ? servingOf(source, measures) : undefined;
   let best = serving === undefined ? null : near(serving);
   if (best === null) {
     for (const measure of measures) {
