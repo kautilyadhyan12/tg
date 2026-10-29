@@ -206,7 +206,7 @@ async function changeNumbers() {
 async function pickOats() {
   await fireEvent.press(await screen.findByRole("button", { name: "Add to Breakfast" }));
   await fireEvent.changeText(screen.getByLabelText("Search food"), "oats");
-  await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 379 kcal per 100 g, USDA" }));
+  await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 307 kcal · 1 cup, USDA" }));
 }
 
 describe("the worst thing: own calories the safety rules forbid are never shown as in use", () => {
@@ -358,7 +358,8 @@ describe("saved dishes", () => {
     await fireEvent.press(await screen.findByRole("button", { name: "Change Oats, rolled, 1 × cup · 81 g" }));
     await fireEvent.press(await screen.findByRole("radio", { name: "My blue bowl · 375 ml" }));
     await fireEvent.press(screen.getByRole("radio", { name: "My blue bowl, three quarters full" }));
-    expect(await screen.findByText(/^113 g · 428 kcal/)).toBeTruthy();
+    expect(await screen.findByText("= 113 g")).toBeTruthy();
+    expect(screen.getByText(/^428 kcal · Meal total/)).toBeTruthy();
     await fireEvent.press(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => {
       expect(s.sent.some((a) => a.method === "PATCH")).toBe(true);
@@ -417,11 +418,14 @@ async function pressBack() {
 }
 
 describe("the dishes everybody has (Kd, 32b-ii-b: keep them, and a way to make your own)", () => {
-  it("offers a cup, a mug and a bowl with no dish saved, weighs a food with one, and never offers to rename them", async () => {
+  it("offers a mug and a bowl with no dish saved, weighs a food with one, and never offers to rename them", async () => {
     const state: State = { targets: targets(), dishes: [], meals: [] };
     const s = await openFood(state);
     await pickOats();
-    for (const name of ["Cup · 240 ml", "Mug · 325 ml", "Bowl · 375 ml", "New dish"]) expect(await screen.findByRole("radio", { name })).toBeTruthy();
+    for (const name of ["Mug · 325 ml", "Bowl · 375 ml", "New dish"]) expect(await screen.findByRole("radio", { name })).toBeTruthy();
+    // Oats have a cup of their own: the cup everybody has is not offered a second time.
+    expect(screen.getByRole("radio", { name: "cup · 81 g" })).toBeTruthy();
+    expect(screen.queryByRole("radio", { name: "Cup · 240 ml" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Edit your dishes" })).toBeNull();
     await fireEvent.press(screen.getByRole("radio", { name: "Bowl · 375 ml" }));
     await fireEvent.press(screen.getByRole("radio", { name: "Bowl, half full" }));
@@ -481,6 +485,28 @@ describe("Kd's click-through (32b-ii-b): back goes one step, a count shows its g
     await pressBack();
     expect(await screen.findByRole("button", { name: "Remove meal" })).toBeTruthy();
     expect(screen.queryByLabelText("Amount")).toBeNull();
+  });
+
+  it("opens a food logged by a dish the person still has at that dish and how full, to change it", async () => {
+    const meal: Meal = {
+      id: "55555555-5555-4555-8555-555555555555",
+      takenAt: new Date().toISOString(),
+      mealType: "breakfast",
+      mealName: "Oats, rolled",
+      items: [item(113, 428, { id: "dish", name: "My blue bowl", amount: 0.75 })] as Meal["items"],
+      totals: totals(428),
+      confirmed: true,
+      origin: "manual",
+      portionSource: "user_dishware",
+      nutritionSources: ["usda"],
+      calcVersion: 1,
+      itemsVersion: "v1",
+    };
+    await openFood({ targets: targets(), dishes: [BOWL], meals: [meal] });
+    await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 428 kcal" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Change Oats, rolled, My blue bowl, three quarters full · 113 g" }));
+    expect(await screen.findByRole("radio", { name: "My blue bowl, three quarters full", selected: true })).toBeTruthy();
+    expect(await screen.findByText("= 113 g")).toBeTruthy();
   });
 
   it("shows what a count weighs beside it, as the server works it out", async () => {

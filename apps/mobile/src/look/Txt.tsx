@@ -23,16 +23,20 @@ interface TxtProps {
   numberOfLines?: number;
   /** Words that open something: a link inside a line. */
   onPress?: () => void;
+  /** A number in a fixed space (a ring's): it grows smaller to fit whole, never cut to "1,3…". */
+  fit?: boolean;
   children: ReactNode;
 }
 
 /** Every word on a screen. No size here is under 11. */
-export function Txt({ kind = "body", colour, style, numberOfLines, onPress, children }: TxtProps) {
+export function Txt({ kind = "body", colour, style, numberOfLines, onPress, fit = false, children }: TxtProps) {
   return (
     <Text
       accessibilityRole={onPress !== undefined ? "link" : kind === "hero" || kind === "h1" || kind === "h2" || kind === "h3" ? "header" : undefined}
       onPress={onPress}
       numberOfLines={numberOfLines}
+      adjustsFontSizeToFit={fit}
+      minimumFontScale={fit ? 0.6 : undefined}
       maxFontSizeMultiplier={MOST_TEXT_GROWTH}
       style={[kinds[kind], colour === undefined ? null : { color: colours[colour] }, style]}
     >

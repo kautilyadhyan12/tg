@@ -1,3 +1,4 @@
+import { count } from "../dashboard/words";
 import { MAX_ITEM_GRAMS, isCountMeasure, isWeightMeasure, type ChosenItem, type FoodMeasure, type FoodSearchItem, type MealItem } from "@app/shared";
 
 // Adding a food by one of its own measures, as the browser does (apps/web/src/components/nutrition/
@@ -120,10 +121,30 @@ export const FIRST_COUNTS = 4;
  *  none of those. The rest wait behind More measures, in the server's order; every one once the
  *  person asks for more. */
 export function shownMeasures(measures: readonly FoodMeasure[], picked: string | null, all: boolean): FoodMeasure[] {
-  if (all) return [...measures];
   const own = measures.filter((m) => m.id !== "g" && m.id !== "oz");
-  const counts = own.filter((m) => isCountMeasure(m.name)).slice(0, FIRST_COUNTS);
+  // Two counts of one weight are one choice offered twice ("egg · 46 g", "large · 46 g"): the first.
+  const counts = own
+    .filter((m) => isCountMeasure(m.name))
+    .filter((m, i, all) => !all.slice(0, i).some((e) => Math.abs(e.grams - m.grams) < 0.5))
+    .slice(0, FIRST_COUNTS);
   const scoop = own.find((m) => !isCountMeasure(m.name) && !isWeightMeasure(m.name));
   const first = counts.length > 0 ? counts : scoop === undefined ? [] : [scoop];
-  return measures.filter((m) => first.includes(m) || m.id === "g" || m.id === picked);
+  const main = measures.filter((m) => first.includes(m) || m.id === "g" || m.id === picked);
+  const rest = measures.filter((m) => !main.includes(m));
+  // One more is shown, never hidden behind a link of its own.
+  return all || rest.length <= 1 ? [...main, ...rest] : main;
+}
+
+/** A found food as the search lists it: its calories at the amount it starts at, as a person counts
+ *  it ("94 kcal · 1 apple"), never per 100 g. */
+export function startWords(food: Pick<FoodSearchItem, "kcal" | "measures" | "startsAt">): string {
+  const m = food.measures.find((x) => x.id === food.startsAt.measure);
+  const amount = food.startsAt.amount;
+  const grams = (m?.grams ?? 1) * amount;
+  const kcal = Math.round((food.kcal * grams) / 100);
+  // A measure that says its own amount ("half cup", "2 tbsp") is not "1 half cup".
+  const named = amount === 1 && /^(?:\d|half\b|quarter\b)/i.test(m?.name ?? "");
+  const words =
+    m === undefined || m.id === "g" ? `${formatAmount(grams)} g` : m.id === "oz" ? `${formatAmount(amount)} oz` : named ? m.name : `${formatAmount(amount)} ${m.name}`;
+  return `${count(kcal)} kcal · ${words}`;
 }

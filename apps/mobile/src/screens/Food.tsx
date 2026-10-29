@@ -70,6 +70,7 @@ import {
   chosenItem,
   dishMeasure,
   loggedAmount,
+  startWords,
   startingAmount,
   underAGram,
   type Amount,
@@ -454,7 +455,7 @@ function Macros({ title, today, targets, retry, eaten, uncounted, about, onSetup
               <View style={styles.ringBox}>
                 <Ring share={had === null || of <= 0 ? 0 : had / of} colour={m.colour} />
                 <View style={styles.ringWords}>
-                  <Txt kind="strong" numberOfLines={1}>
+                  <Txt kind="strong" numberOfLines={1} fit>
                     {had === null ? NOT_KNOWN : count(had)}
                   </Txt>
                 </View>
@@ -878,6 +879,19 @@ function FoodAmount({
   const [saving, setSaving] = useState(false);
   const [panel, setPanel] = useState(false);
   const { dishes, again: dishesAgain } = useDishes();
+  const { height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  // Logged by a dish the person still has: it opens at that dish, as full as it was, once the dishes
+  // are read (Kd, 32b-ii-b: a food logged by a dish opened at grams).
+  const dishOpened = useRef(false);
+  useEffect(() => {
+    const m = item?.measure;
+    if (dishOpened.current || m?.id !== "dish" || dishes.kind !== "ok") return;
+    dishOpened.current = true;
+    const dish = dishesOffered(dishes).find((d) => d.label === m.name);
+    const fill = FILL_CHOICES.find((c) => c.value === m.amount);
+    if (dish !== undefined && fill !== undefined) setAmount({ measure: dishMeasure(dish.id), amount: String(fill.value) });
+  }, [dishes, item]);
   const measure = amount === null ? undefined : measures.find((m) => m.id === amount.measure);
   const chosen = item === undefined || amount === null ? null : chosenItem(item.canonical, amount);
   const tooSmall = amount !== null && underAGram(measure, amount);
@@ -935,6 +949,7 @@ function FoodAmount({
 
   return (
     <>
+      <ScrollView style={{ maxHeight: Math.max(SHEET_LIST_LEAST, height - insets.top - SHEET_ABOVE_LIST - (panel ? 0 : SHEET_FOOT + (onRemove === null ? 0 : 60))) }} contentContainerStyle={styles.sheetList}>
       <Txt kind="tiny">
         Logged: {loggedAmount(item) + itemMark(item)} · {kcalWords(item.kcalPoint)}
       </Txt>
@@ -959,14 +974,20 @@ function FoodAmount({
               {refusedWords}
             </Txt>
           )}
+        </>
+      )}
+      </ScrollView>
+      {/* The food's numbers and Save stay in view under the list, on the smallest phone too. */}
+      {panel ? null : (
+        <View style={styles.foot}>
           {now === undefined || preview === null ? null : (
             <Txt kind="small" colour="text">
-              {count(Math.round(now.gramsPoint))} g · {kcalWords(now.kcalPoint)} · Meal total {kcalWords(preview.totals.kcalPoint)}
+              {kcalWords(now.kcalPoint)} · Meal total {kcalWords(preview.totals.kcalPoint)}
             </Txt>
           )}
           <Button label="Save" wide disabled={held} onPress={save} />
           {onRemove === null ? null : <Button label="Remove from meal" icon="trash" kind="quiet" wide onPress={onRemove} />}
-        </>
+        </View>
       )}
     </>
   );
@@ -975,6 +996,8 @@ function FoodAmount({
 /** What sits above the box's list, and the box's own foot: its handle and title, the search box. */
 const SHEET_ABOVE_LIST = 150;
 const SHEET_ABOVE_SEARCH = SHEET_ABOVE_LIST + 70;
+/** The box's foot under a picked food's list: its numbers and Add. */
+const SHEET_FOOT = 130;
 /** The list never shrinks below one food's row. */
 const SHEET_LIST_LEAST = 120;
 
@@ -1159,7 +1182,7 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
   return (
     <Sheet open title={`Add to ${name}`} onClose={onClose} onBack={back}>
       {food === null ? <Field label="Search food" bare value={query} onChange={setQuery} placeholder="Search food" ready maxLength={100} /> : null}
-      <ScrollView style={{ maxHeight: Math.max(SHEET_LIST_LEAST, height - keyboard - insets.top - (food === null ? SHEET_ABOVE_SEARCH : SHEET_ABOVE_LIST)) }} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.sheetList}>
+      <ScrollView style={{ maxHeight: Math.max(SHEET_LIST_LEAST, height - keyboard - insets.top - (food === null ? SHEET_ABOVE_SEARCH : SHEET_ABOVE_LIST + (panel ? 0 : SHEET_FOOT))) }} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.sheetList}>
         {food === null ? (
           <>
             {showRecent ? (
@@ -1202,7 +1225,7 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
                   <Pressable
                     key={f.canonical}
                     accessibilityRole="button"
-                    accessibilityLabel={`${f.name}, ${count(Math.round(f.kcal))} kcal per 100 g, ${SOURCE_WORDS[f.source]}`}
+                    accessibilityLabel={`${f.name}, ${startWords(f)}, ${SOURCE_WORDS[f.source]}`}
                     onPress={() => {
                       setFood(f);
                       setAmount(startingAmount(f));
@@ -1212,7 +1235,7 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
                     <Txt kind="strong" numberOfLines={2}>
                       {f.name}
                     </Txt>
-                    <SourceLine source={f.source} before={`${count(Math.round(f.kcal))} kcal per 100 g ·`} />
+                    <SourceLine source={f.source} before={`${startWords(f)} ·`} />
                   </Pressable>
                 ))
               : null}
@@ -1247,31 +1270,12 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
             )}
             {panel ? null : (
               <>
-              {tooSmall ? <Txt kind="small" colour="badText">That comes to less than a gram. Pick a larger amount.</Txt> : null}
-              {refusedWords === null ? null : (
-                <Txt kind="small" colour="badText">
-                  {refusedWords}
-                </Txt>
-              )}
-              {preview === null ? null : (
-                <Txt kind="small" colour="text">
-                  {count(Math.round(preview.items[0]?.gramsPoint ?? 0))} g · {kcalWords(preview.totals.kcalPoint)} · Protein {count(Math.round(preview.totals.proteinG))} g · Carbs{" "}
-                  {count(Math.round(preview.totals.carbsG))} g · Fat {count(Math.round(preview.totals.fatG))} g
-                </Txt>
-              )}
-              <Button
-                label={preview === null ? `Add ${food.name}` : `Add ${food.name} · ${kcalWords(preview.totals.kcalPoint)}`}
-                wide
-                disabled={held}
-                onPress={() => {
-                  void add();
-                }}
-              />
-              {full ? (
-                <Txt kind="small" colour="badText">
-                  Too many meals are waiting to be sent. Go online to send them, then add this one.
-                </Txt>
-              ) : null}
+                {tooSmall ? <Txt kind="small" colour="badText">That comes to less than a gram. Pick a larger amount.</Txt> : null}
+                {refusedWords === null ? null : (
+                  <Txt kind="small" colour="badText">
+                    {refusedWords}
+                  </Txt>
+                )}
               </>
             )}
           </>
@@ -1282,6 +1286,30 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
           }
         />
       </ScrollView>
+      {/* The food's numbers and its Add stay in view under the list, on the smallest phone too. */}
+      {food === null || panel ? null : (
+        <View style={styles.foot}>
+          {preview === null ? null : (
+            <Txt kind="small" colour="text">
+              {kcalWords(preview.totals.kcalPoint)} · Protein {count(Math.round(preview.totals.proteinG))} g · Carbs{" "}
+              {count(Math.round(preview.totals.carbsG))} g · Fat {count(Math.round(preview.totals.fatG))} g
+            </Txt>
+          )}
+          <Button
+            label={preview === null ? `Add ${food.name}` : `Add ${food.name} · ${kcalWords(preview.totals.kcalPoint)}`}
+            wide
+            disabled={held}
+            onPress={() => {
+              void add();
+            }}
+          />
+          {full ? (
+            <Txt kind="small" colour="badText">
+              Too many meals are waiting to be sent. Go online to send them, then add this one.
+            </Txt>
+          ) : null}
+        </View>
+      )}
     </Sheet>
   );
 }
@@ -1462,6 +1490,7 @@ const styles = StyleSheet.create({
   },
   item: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 48 },
   sheetList: { gap: 12, paddingBottom: 4 },
+  foot: { gap: 10 },
   found: { minHeight: 56, justifyContent: "center", gap: 2, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colours.line },
   recent: { flexDirection: "row", alignItems: "center", gap: 10 },
   amountRow: { flexDirection: "row", alignItems: "center", gap: 8 },

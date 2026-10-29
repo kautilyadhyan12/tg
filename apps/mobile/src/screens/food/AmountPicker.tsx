@@ -190,7 +190,10 @@ export function AmountPicker({
         {list.length > 0 ? <Button label="Edit" kind="link" onPress={() => { setPanel("edit"); }} say="Edit your dishes" /> : null}
       </View>
       <View style={styles.chips}>
-        {dishesOffered(dishes).map((d) => (
+        {dishesOffered(dishes)
+          // The cup everybody has is the food's own cup where it has one: offered once.
+          .filter((d) => d.id === dishId || !STANDARD_DISHES.some((s) => s.id === d.id && measures.some((m) => m.name.toLowerCase() === s.label.toLowerCase())))
+          .map((d) => (
           <Chip
             key={d.id}
             label={dishWords(d)}
