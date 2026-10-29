@@ -870,11 +870,11 @@ function FoodAmount({
 }) {
   const { session } = useSession();
   const item = saved.items[at];
-  const [amount, setAmount] = useState<Amount | null>(() => {
-    if (item === undefined) return null;
-    const start = amountOf(item);
-    return measures.some((m) => m.id === start.measure) ? start : { measure: "g", amount: String(Math.max(1, Math.round(item.gramsPoint))) };
-  });
+  // The amount it was logged by, where that is one of its measures, else its grams.
+  const logged = item === undefined ? null : amountOf(item);
+  const usual: Amount =
+    logged !== null && measures.some((m) => m.id === logged.measure) ? logged : { measure: "g", amount: String(Math.max(1, Math.round(item?.gramsPoint ?? 1))) };
+  const [amount, setAmount] = useState<Amount | null>(() => (item === undefined ? null : usual));
   const [priced, setPriced] = useState<Priced>({ kind: "none" });
   const [saving, setSaving] = useState(false);
   const [panel, setPanel] = useState(false);
@@ -961,6 +961,7 @@ function FoodAmount({
         onDishes={dishesAgain}
         onPanel={setPanel}
         grams={now === undefined || preview === null ? null : now.gramsPoint}
+        usual={usual}
       />
       {panel ? null : (
         <>
@@ -1266,6 +1267,7 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
                 onDishes={dishesAgain}
                 onPanel={setPanel}
                 grams={preview?.items[0]?.gramsPoint ?? null}
+                usual={startingAmount(food)}
               />
             )}
             {panel ? null : (

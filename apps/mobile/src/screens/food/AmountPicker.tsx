@@ -78,6 +78,7 @@ export function AmountPicker({
   onDishes,
   onPanel,
   grams,
+  usual,
 }: {
   measures: readonly FoodMeasure[];
   amount: Amount;
@@ -89,6 +90,9 @@ export function AmountPicker({
   onPanel: (open: boolean) => void;
   /** What the amount weighs, as the server worked it out; null while it has not answered. */
   grams: number | null;
+  /** The food's usual amount, which a picked option tapped again goes back to (Kd, 32b-ii-b: "clicking
+   *  it again does not unselect it"). An amount always has one measure, so the usual one stays. */
+  usual: Amount;
 }) {
   const [all, setAll] = useState(false);
   const [panel, setPanelState] = useState<Panel>("pick");
@@ -172,6 +176,7 @@ export function AmountPicker({
             on={amount.measure === m.id}
             onPress={() => {
               if (amount.measure !== m.id) onAmount(amountFor(m));
+              else if (m.id !== usual.measure) onAmount(usual);
             }}
           />
         ))}
@@ -200,7 +205,7 @@ export function AmountPicker({
             label={dishWords(d)}
             on={dishId === d.id}
             onPress={() => {
-              if (dishId !== d.id) onAmount({ measure: dishMeasure(d.id), amount: "" });
+              onAmount(dishId !== d.id ? { measure: dishMeasure(d.id), amount: "" } : usual);
             }}
           />
         ))}
@@ -228,7 +233,7 @@ export function AmountPicker({
                   accessibilityRole="radio"
                   accessibilityLabel={`${dish?.label ?? "Dish"}, ${f.words}`}
                   accessibilityState={{ selected: on }}
-                  onPress={() => { onAmount({ measure: amount.measure, amount: String(f.value) }); }}
+                  onPress={() => { onAmount({ measure: amount.measure, amount: on ? "" : String(f.value) }); }}
                   style={({ pressed }) => [styles.fill, on ? styles.fillOn : null, pressed ? styles.pressed : null]}
                 >
                   <FillDish containerClass={dish?.containerClass ?? "bowl"} fill={f.value} colour={on ? "orange" : "textSoft"} />

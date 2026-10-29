@@ -528,6 +528,28 @@ describe("Kd's click-through (32b-ii-b): back goes one step, a count shows its g
     expect(await screen.findByText("= 113 g")).toBeTruthy();
   });
 
+  it("un-picks a dish, a measure and how full when they are tapped again, back to the food's usual amount", async () => {
+    await openFood({ targets: targets(), dishes: [BOWL], meals: [] });
+    await pickOats();
+    // A dish tapped again: back to a cup, the amount oats start at.
+    await fireEvent.press(await screen.findByRole("radio", { name: "My blue bowl · 375 ml" }));
+    await fireEvent.press(screen.getByRole("radio", { name: "My blue bowl, half full" }));
+    expect(screen.getByRole("radio", { name: "My blue bowl, half full", selected: true })).toBeTruthy();
+    // How full tapped again: not picked.
+    await fireEvent.press(screen.getByRole("radio", { name: "My blue bowl, half full" }));
+    expect(screen.getByText("Pick how full it was.")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("radio", { name: "My blue bowl · 375 ml" }));
+    expect(screen.getByRole("radio", { name: "cup · 81 g", selected: true })).toBeTruthy();
+    expect(screen.getByLabelText("Amount").props.value).toBe("1");
+    // Grams tapped again: back to the cup. The cup tapped again stays: an amount needs a measure.
+    await fireEvent.press(screen.getByRole("radio", { name: "grams" }));
+    expect(screen.getByRole("radio", { name: "grams", selected: true })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("radio", { name: "grams" }));
+    expect(screen.getByRole("radio", { name: "cup · 81 g", selected: true })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("radio", { name: "cup · 81 g" }));
+    expect(screen.getByRole("radio", { name: "cup · 81 g", selected: true })).toBeTruthy();
+  });
+
   it("shows what a count weighs beside it, as the server works it out", async () => {
     await openFood({ targets: targets(), dishes: [], meals: [] });
     await pickOats();
