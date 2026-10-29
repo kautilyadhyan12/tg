@@ -1,45 +1,17 @@
 import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { mealPreviewSchema, ownFoodItemSchema, type OwnFoodItem } from "@app/shared";
+import { mealPreviewSchema, type OwnFoodItem } from "@app/shared";
 import { Button } from "../../look/Button";
 import { Field } from "../../look/Field";
 import { Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
 import { kcalWords } from "./day";
 import { formatAmount } from "./measures";
+import { ownFoodOf, type Typed } from "./ownFoodRule";
 
 // A food no list has, added with the person's own numbers (ROADMAP Stage 5 33b-i; Kd, 2026-10-30), as
 // MyFitnessPal's Quick Add and Cronometer's custom food: its name, how much was eaten, and its protein,
 // carbs and fat for that much. The server prices it, its calories from those three (4, 4 and 9 a gram).
-
-const TOO_HEAVY = "Protein, carbs and fat together can’t weigh more than the food itself.";
-
-/** What the form holds, as typed. */
-interface Typed {
-  name: string;
-  grams: string;
-  proteinG: string;
-  carbsG: string;
-  fatG: string;
-}
-
-const number = (text: string): number | null => {
-  const t = text.trim().replace(",", ".");
-  if (t === "") return null;
-  const n = Number(t);
-  return Number.isFinite(n) ? n : null;
-};
-
-/** The food as it is sent, or why it cannot be yet. A box left empty is none of that. */
-export function ownFoodOf(typed: Typed): { food: OwnFoodItem } | { missing: string } {
-  const grams = number(typed.grams);
-  const figures = { proteinG: number(typed.proteinG) ?? 0, carbsG: number(typed.carbsG) ?? 0, fatG: number(typed.fatG) ?? 0 };
-  if (typed.name.trim() === "") return { missing: "Enter the food’s name." };
-  if (grams === null || grams <= 0) return { missing: "Enter how many grams you ate." };
-  if (figures.proteinG + figures.carbsG + figures.fatG > grams) return { missing: TOO_HEAVY };
-  const parsed = ownFoodItemSchema.safeParse({ name: typed.name.trim(), grams, own: figures });
-  return parsed.success ? { food: parsed.data } : { missing: "Check the numbers: each is grams, 0 or more." };
-}
 
 const typedOf = (food: OwnFoodItem | null, name: string, grams: number | null): Typed =>
   food === null
