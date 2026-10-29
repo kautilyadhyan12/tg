@@ -191,9 +191,17 @@ export function isCountMeasure(name: string): boolean {
 export function isWeightMeasure(name: string): boolean {
   return WEIGHT.test(name.trim());
 }
-const WEIGHT = /^(?:\d*\.?\d+\s+|half\s+)?(?:oz|ounces?|lbs?|pounds?|g|grams?|kg)\b/i;
-const VOLUME_OR_WEIGHT =
-  /^(?:\d*\.?\d+\s+|half\s+|quarter\s+)?(?:cups?|tbsp|tablespoons?|tsp|teaspoons?|fl oz|oz|ounces?|lbs?|pounds?|g|grams?|kg|ml|l|liters?|litres?|quarts?|pints?|gallons?|glass(?:es)?)\b/i;
+/** What can come before a unit: "2 ", "0.75 ", "1/2 ", "½ ", "half ", or a number glued to it ("250ml"). */
+const AMOUNT_BEFORE = String.raw`(?:\d*\.?\d+\s*|\d+\s*\/\s*\d+\s*|[½⅓⅔¼¾⅛]\s*|half\s+|quarter\s+)?`;
+/** A unit ends where no letter follows it: "l" is a litre, "large" is not. */
+const UNIT_END = String.raw`(?![a-z])`;
+const WEIGHT = new RegExp(String.raw`^${AMOUNT_BEFORE}(?:oz|ounces?|lbs?|pounds?|g|grams?|kg)${UNIT_END}`, "i");
+/** A volume or a weight as recipes and labels write it (32b-ii-b's review, L5: "½ cup", "2 tbs",
+ *  "T", "c", "dl", "250ml", "fl. oz", "cupful" too). */
+const VOLUME_OR_WEIGHT = new RegExp(
+  String.raw`^${AMOUNT_BEFORE}(?:cups?|cupfuls?|c|tbsp|tbs|tablespoons?|t|tsp|teaspoons?|fl\.?\s*oz|oz|ounces?|lbs?|pounds?|g|grams?|kg|ml|cl|dl|l|liters?|litres?|quarts?|pints?|gallons?|glass(?:es)?)${UNIT_END}`,
+  "i",
+);
 /** The measure and amount a food starts at where the person has not picked one. */
 export const measureStartSchema = z.object({ measure: measureIdSchema, amount: z.number().positive() }).strict();
 const measureItemSchema = z
@@ -406,6 +414,9 @@ export const foodSearchItemSchema = z.object({
   source: nutritionSourceSchema,
   measures: z.array(foodMeasureSchema).min(1),
   startsAt: measureStartSchema,
+  /** Its calories at the amount it starts at, as the server prices that amount: the search lists a
+   *  food by them ("94 kcal · 1 apple"), never per 100 g (ROADMAP 32b-ii-b). */
+  startsKcal: z.number().int().nonnegative(),
 }).strict().refine((food) => food.measures.some((m) => m.id === food.startsAt.measure), {
   message: "a food starts at one of its own measures",
 });

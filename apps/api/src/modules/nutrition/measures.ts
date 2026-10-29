@@ -222,12 +222,22 @@ function servingMeasure(source: MeasureSource, usda: readonly FoodMeasure[]): Fo
  *  entry's first measure, never the borrowed entry's. */
 export function foodMeasures(source: MeasureSource): FoodMeasure[] {
   const usda: FoodMeasure[] = [];
+  const rawOf = new Map<string, string>();
   const add = (portions: readonly UsdaPortion[], prefix: "usda" | "piece"): void => {
     for (const portion of portions) {
       if (!isHouseholdMeasure(portion)) continue;
-      const name = plainMeasureName(usdaMeasureName(portion));
-      if (name === null) continue;
+      const plain = plainMeasureName(usdaMeasureName(portion));
+      if (plain === null) continue;
       if (!(portion.gramWeight > 0 && portion.gramWeight <= MAX_ITEM_GRAMS)) continue;
+      // Two names made one by the cleaning, of two weights (a pineapple's "slice (4-2/3" dia…)" of
+      // 166 g and "slice (3-1/2" dia…)" of 84 g), are told apart by size: the later one is "small" or
+      // "large" beside the first, or, where that name is taken too, USDA's own fuller name (32b-ii-b's
+      // review, L4). USDA's own two sizes of ONE name stay as USDA names them, told apart by grams.
+      const raw = usdaMeasureName(portion);
+      const first = usda.find((m) => sameName(m.name, plain) && !sameWeight(m.grams, portion.gramWeight) && !sameName(rawOf.get(m.id) ?? m.name, raw));
+      const sized = first === undefined ? plain : `${portion.gramWeight < first.grams ? "small" : "large"} ${plain}`;
+      const name = sized !== plain && usda.some((m) => sameName(m.name, sized)) ? raw : sized;
+      rawOf.set(`${prefix}-${String(portion.seqNum)}`, raw);
       if (sameName(name, GRAM.name) || sameName(name, OUNCE.name)) continue;
       if (usda.some((m) => sameName(m.name, name) && sameWeight(m.grams, portion.gramWeight))) continue;
       usda.push({ id: `${prefix}-${String(portion.seqNum)}`, name, grams: portion.gramWeight });
@@ -285,6 +295,18 @@ export function startingMeasure(source: Pick<MeasureSource, "serving" | "unit" |
   return first === undefined ? grams : { measure: first.id, amount: 1 };
 }
 
+/** The food's serving as a start: our list's own, or the USDA measure of its name, an ounce, a USDA
+ *  food's first measure, or its grams — never a count chosen for Add food. */
+function servingStart(source: Pick<MeasureSource, "serving" | "unit" | "ownServing">, measures: readonly FoodMeasure[]): { measure: string; amount: number } {
+  const { serving, unit } = source;
+  const own = servingOf(source, measures);
+  if (own !== undefined) return { measure: own.id, amount: 1 };
+  const grams = { measure: GRAM.id, amount: serving > 0 && serving <= MAX_ITEM_GRAMS ? serving : 100 };
+  if (sameName(unit, OUNCE.name)) return isOneOunce(serving) ? { measure: OUNCE.id, amount: 1 } : grams;
+  const first = source.ownServing ? undefined : measures.find((m) => m.id.startsWith("usda-"));
+  return first === undefined ? grams : { measure: first.id, amount: 1 };
+}
+
 /** The measure that is the food's serving: our list's own, or the USDA measure of the serving's name
  *  nearest its weight. */
 function servingOf(source: Pick<MeasureSource, "serving" | "unit">, measures: readonly FoodMeasure[]): FoodMeasure | undefined {
@@ -336,7 +358,9 @@ export function scanStart(
   count: number | null,
   seenGrams: number | null,
 ): ScanStart {
-  const start = startingMeasure(source, measures);
+  // With no grams, the food's serving, as Add food started it before it started at a count: a
+  // count of a twentieth of a serving (one tiny shrimp) is no estimate of a plate.
+  const start = servingStart(source, measures);
   if (seenGrams === null) {
     const measure = measures.find((m) => m.id === start.measure) ?? GRAM;
     return { ...start, grams: measureGrams(measure, start.amount), estimated: true };

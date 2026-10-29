@@ -294,8 +294,8 @@ describe("where a food the photo scan saw starts on the photo sheet (RULINGS 202
     // No count, nothing to multiply; no grams, nothing to check a count against.
     ["no count: the photo's grams, even where a measure weighs them", fed(portion(1, "cup", 158)), null, 158, estimate("g", 158, 158)],
     ["no grams: our food's own serving, as Add food starts it", own(180, "apple", [portion(4, "medium (3\" dia)", 182)]), 2, null, estimate("serving", 1, 180)],
-    ["no grams: a USDA food's count, as Add food starts it (32b-ii-b)", fed(portion(1, "1 cup", 230, null), portion(2, "1 piece", 45, null)), 2, null, estimate("usda-2", 1, 45)],
-    ["no grams and no count: a USDA food's first measure", fed(portion(1, "1 cup", 230, null), portion(2, "1 tbsp", 15, null)), 2, null, estimate("usda-1", 1, 230)],
+    // Its serving, never the count Add food starts at: a piece of 45 g is no estimate of a plate (32b-ii-b's review, H1).
+    ["no grams: a USDA food's first measure, its serving", fed(portion(1, "1 cup", 230, null), portion(2, "1 piece", 45, null)), 2, null, estimate("usda-1", 1, 230)],
     // The photo's own grams, to the whole gram and never under one.
     ["the photo's grams to the whole gram", fed(), null, 12.4, estimate("g", 12, 12)],
     ["never under a gram", fed(), null, 0.3, estimate("g", 1, 1)],
@@ -418,6 +418,8 @@ describe("the USDA entry a food of our list has its measures from", () => {
       const measures = foodMeasures(shrimp);
       // Served by 100 g on our list: one of its pieces, not grams (32b-ii-b).
       expect(startingMeasure(shrimp, measures)).toEqual({ measure: "piece-1", amount: 1 });
+      // A photo of shrimp the model could not weigh is its serving, 100 g, never one 5 g shrimp.
+      expect(scanStart(shrimp, measures, 3, null)).toEqual({ measure: "g", amount: 100, grams: 100, estimated: true });
       expect(scanStart(shrimp, measures, 5, 75)).toEqual({ measure: "piece-3", amount: 5, grams: 75, estimated: false });
       expect(scanStart(shrimp, measures, 7, 70)).toEqual({ measure: "piece-2", amount: 7, grams: 70, estimated: false });
       // No count of any measure is near: the photo's grams, an estimate.

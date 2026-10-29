@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
-import { nutritionTargetsResponseSchema, type NutritionTargetsResponse, type OwnNutritionTargets } from "@app/shared";
+import { OWN_TARGETS_MAX_KCAL, OWN_TARGETS_MAX_MACRO_G, nutritionTargetsResponseSchema, type NutritionTargetsResponse, type OwnNutritionTargets } from "@app/shared";
 import { Button } from "../../look/Button";
 import { Options } from "../../look/Choice";
 import { Field } from "../../look/Field";
@@ -65,8 +65,11 @@ export function OwnNumbers({
   }, [open]);
 
   const values = { kcal: wholeNumber(typed.kcal), proteinG: wholeNumber(typed.proteinG), carbsG: wholeNumber(typed.carbsG), fatG: wholeNumber(typed.fatG) };
+  // The most the server takes; past it the box says so, never "whole numbers" (review, L2).
+  const tooMuch =
+    (values.kcal ?? 0) > OWN_TARGETS_MAX_KCAL || [values.proteinG, values.carbsG, values.fatG].some((v) => (v ?? 0) > OWN_TARGETS_MAX_MACRO_G);
   const four: OwnNutritionTargets | null =
-    values.kcal === null || values.proteinG === null || values.carbsG === null || values.fatG === null
+    values.kcal === null || values.proteinG === null || values.carbsG === null || values.fatG === null || tooMuch
       ? null
       : { kcal: values.kcal, proteinG: values.proteinG, carbsG: values.carbsG, fatG: values.fatG };
   const hold = holdWords(targets.ownHeld);
@@ -127,7 +130,9 @@ export function OwnNumbers({
             ))}
           </View>
           <Txt kind="small">
-            {four === null
+            {tooMuch
+              ? `Calories go up to ${count(OWN_TARGETS_MAX_KCAL)} kcal a day; protein, carbs and fat up to ${count(OWN_TARGETS_MAX_MACRO_G)} g.`
+              : four === null
               ? "Fill in all four numbers."
               : `Your protein, carbs and fat come to ${count(macroKcal(four))} kcal. They don’t have to match your calories.`}
           </Txt>

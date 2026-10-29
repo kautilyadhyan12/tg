@@ -60,7 +60,7 @@ import {
   walkDay,
   type Sums,
 } from "./food/day";
-import { AmountPicker, dishesOffered, pickedDish, useDishes } from "./food/AmountPicker";
+import { AmountPicker, dishByName, pickedDish, useDishes } from "./food/AmountPicker";
 import { useMealOutbox } from "./food/MealOutbox";
 import { holdWords } from "./food/numbers";
 import { OwnNumbers } from "./food/OwnNumbers";
@@ -169,14 +169,17 @@ export function FoodScreen() {
   const settle = useCallback((upTo: number) => outbox?.settle(upTo), [outbox]);
   const { read, again } = useDayMeals(day, view.sent, settle);
   const targets = useRead(TARGETS_READ, nutritionTargetsResponseSchema);
-  // The rings as the server answered a save of the daily numbers, until a read of them says so too.
+  // The rings as the server answered a save of the daily numbers, until a read begun after the save
+  // comes back: from then the reads are drawn, whatever they say (32b-ii-b's review, H2).
   const [justSaved, setJustSaved] = useState<NutritionTargetsResponse | null>(null);
+  const savedAfter = useRef(0);
   const [numbers, setNumbers] = useState(false);
-  const [numbersSaid, setNumbersSaid] = useState<string | null>(null);
+  // What a save of the numbers did, said on the card while the numbers drawn are still the ones saved.
+  const [numbersSaid, setNumbersSaid] = useState<{ words: string; source: NutritionTargetsResponse["source"] } | null>(null);
   const readTargets = targets.read;
   useEffect(() => {
-    if (readTargets.kind === "ok" && justSaved !== null && JSON.stringify(readTargets.data) === JSON.stringify(justSaved)) setJustSaved(null);
-  }, [readTargets, justSaved]);
+    if (justSaved !== null && targets.shownFrom > savedAfter.current) setJustSaved(null);
+  }, [targets.shownFrom, justSaved]);
   const shownTargets: typeof readTargets = justSaved === null ? readTargets : { kind: "ok", data: justSaved };
   const [adding, setAdding] = useState<MealType | null>(null);
   const [open, setOpen] = useState<Row | null>(null);
@@ -229,7 +232,7 @@ export function FoodScreen() {
         today={today}
         targets={shownTargets}
         retry={targets.again}
-        said={numbersSaid}
+        said={numbersSaid !== null && shownTargets.kind === "ok" && shownTargets.data.source === numbersSaid.source ? numbersSaid.words : null}
         onChange={() => {
           setNumbersSaid(null);
           setNumbers(true);
@@ -341,8 +344,9 @@ export function FoodScreen() {
           onClose={() => { setNumbers(false); }}
           onSaved={(answer) => {
             setNumbers(false);
+            savedAfter.current = targets.begun();
             setJustSaved(answer);
-            setNumbersSaid(answer.source === "own" ? "Now using your own numbers." : "Now using the app’s plan.");
+            setNumbersSaid({ words: answer.source === "own" ? "Now using your own numbers." : "Now using the app’s plan.", source: answer.source });
             targets.again();
           }}
         />
@@ -888,9 +892,9 @@ function FoodAmount({
     const m = item?.measure;
     if (dishOpened.current || m?.id !== "dish" || dishes.kind !== "ok") return;
     dishOpened.current = true;
-    const dish = dishesOffered(dishes).find((d) => d.label === m.name);
+    const dish = dishByName(dishes, m.name);
     const fill = FILL_CHOICES.find((c) => c.value === m.amount);
-    if (dish !== undefined && fill !== undefined) setAmount({ measure: dishMeasure(dish.id), amount: String(fill.value) });
+    if (dish !== null && fill !== undefined) setAmount({ measure: dishMeasure(dish.id), amount: String(fill.value) });
   }, [dishes, item]);
   const measure = amount === null ? undefined : measures.find((m) => m.id === amount.measure);
   const chosen = item === undefined || amount === null ? null : chosenItem(item.canonical, amount);
@@ -1166,9 +1170,10 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
     // Last had by a saved dish the person still has: that dish, as full as it was then. A dish that is
     // gone starts it where the server says, a count of it where it has one.
     const m = f.item.measure;
-    const dish = m?.id === "dish" ? dishesOffered(dishes).find((d) => d.label === m.name) : undefined;
+    // Only once the dishes are read: before then it opens where the server starts it.
+    const dish = m?.id === "dish" && dishes.kind === "ok" ? dishByName(dishes, m.name) : null;
     const fill = FILL_CHOICES.find((c) => c.value === m?.amount);
-    setAmount(dish !== undefined && fill !== undefined ? { measure: dishMeasure(dish.id), amount: String(fill.value) } : startingAmount({ startsAt: f.add }));
+    setAmount(dish !== null && fill !== undefined ? { measure: dishMeasure(dish.id), amount: String(fill.value) } : startingAmount({ startsAt: f.add }));
   };
   const showRecent = food === null && query.trim() === "" && recent.length > 0;
   // The phone's back button: from a food's amount, back to the foods.

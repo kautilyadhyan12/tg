@@ -138,16 +138,15 @@ export function shownMeasures(measures: readonly FoodMeasure[], picked: string |
   return all || rest.length <= 1 ? [...main, ...rest] : main;
 }
 
-/** A found food as the search lists it: its calories at the amount it starts at, as a person counts
- *  it ("94 kcal · 1 apple"), never per 100 g. */
-export function startWords(food: Pick<FoodSearchItem, "kcal" | "measures" | "startsAt">): string {
+/** A found food as the search lists it: the server's calories at the amount it starts at, as a person
+ *  counts it ("94 kcal · 1 apple"), never per 100 g. */
+export function startWords(food: Pick<FoodSearchItem, "startsKcal" | "measures" | "startsAt">): string {
   const m = food.measures.find((x) => x.id === food.startsAt.measure);
   const amount = food.startsAt.amount;
   const grams = (m?.grams ?? 1) * amount;
-  const kcal = Math.round((food.kcal * grams) / 100);
   // A measure that says its own amount ("half cup", "2 tbsp") is not "1 half cup".
   const named = amount === 1 && /^(?:\d|half\b|quarter\b)/i.test(m?.name ?? "");
   const words =
     m === undefined || m.id === "g" ? `${formatAmount(grams)} g` : m.id === "oz" ? `${formatAmount(amount)} oz` : named ? m.name : `${formatAmount(amount)} ${m.name}`;
-  return `${count(kcal)} kcal · ${words}`;
+  return `${count(food.startsKcal)} kcal · ${words}`;
 }

@@ -37,6 +37,7 @@ const OATS = {
     { id: "usda-1", name: "cup", grams: 81 },
   ],
   startsAt: { measure: "usda-1", amount: 1 },
+  startsKcal: 307,
 };
 const item = (grams: number, kcal: number) => ({
   name: "Oats, rolled",

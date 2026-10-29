@@ -157,7 +157,11 @@ describe("an amount", () => {
 });
 
 describe("a found food as the search lists it (Kd, 32b-ii-b: never per 100 g)", () => {
-  const food = (startsAt: { measure: string; amount: number }, measures: { id: string; name: string; grams: number }[]) => ({ kcal: 52, startsAt, measures });
+  // The server's calories at the start, as the search sends them.
+  const food = (startsAt: { measure: string; amount: number }, measures: { id: string; name: string; grams: number }[]) => {
+    const m = measures.find((x) => x.id === startsAt.measure);
+    return { startsKcal: Math.round((52 * (m?.grams ?? 1) * startsAt.amount) / 100), startsAt, measures };
+  };
   it("is its calories at the amount it starts at, in the words a person counts by", () => {
     expect(startWords(food({ measure: "serving", amount: 1 }, [{ id: "serving", name: "apple", grams: 180 }]))).toBe("94 kcal · 1 apple");
     expect(startWords(food({ measure: "usda-1", amount: 1 }, [{ id: "usda-1", name: "half cup", grams: 122 }]))).toBe("63 kcal · half cup");

@@ -42,6 +42,7 @@ const OATS = {
     { id: "usda-1", name: "cup", grams: 81 },
   ],
   startsAt: { measure: "usda-1", amount: 1 },
+  startsKcal: 307,
 };
 const item = (grams: number, kcal: number, measure: { id: string; name: string; amount: number }) => ({
   name: "Oats, rolled",
@@ -77,6 +78,8 @@ interface State {
   dishes: Dishware[];
   /** A dish's save has no signal. */
   dishLost?: boolean;
+  /** A dish's save is made, and its answer lost on the way back. */
+  dishMadeLost?: boolean;
   meals: Meal[];
   mealLost?: boolean;
 }
@@ -135,6 +138,7 @@ function server(state: State) {
       if (known !== undefined) return answer({ status: 200, body: { dishware: known } });
       const made = dish(id, String(body?.label), String(body?.containerClass), Number(body?.volumeMl));
       state.dishes = [made, ...state.dishes];
+      if (state.dishMadeLost === true) return lost() as never;
       return answer({ status: 201, body: { dishware: made } });
     }
     if (dishId !== undefined) {
@@ -145,7 +149,12 @@ function server(state: State) {
         state.dishes = state.dishes.filter((d) => d.id !== dishId);
         return answer({ status: 204, body: undefined });
       }
-      const renamed = { ...had, label: String(body?.label) };
+      const renamed = {
+        ...had,
+        label: String(body?.label),
+        ...(body?.volumeMl === undefined ? {} : { volumeMl: Number(body.volumeMl) }),
+        ...(typeof body?.containerClass === "string" ? { containerClass: body.containerClass } : {}),
+      };
       state.dishes = state.dishes.map((d) => (d.id === dishId ? renamed : d));
       return answer({ status: 200, body: { dishware: renamed } });
     }
@@ -235,6 +244,20 @@ describe("the worst thing: own calories the safety rules forbid are never shown 
     expect(screen.queryByText("Now using your own numbers.")).toBeNull();
   });
 
+  it("after a save, draws the next read of the numbers whatever it says: a health answer changed since holds them back (review, H2)", async () => {
+    const held = targets({ own: OWN, ownHeld: { code: "no_cut_below_maintenance", maintenanceKcal: 2300, reasons: ["health_answer"] } });
+    // The server takes the save, and by the next read the health answer changed on the web.
+    const state: State = { targets: held, dishes: [], meals: [], put: () => ({ status: 200, body: targets({ source: "own", own: OWN, targets: { ...PLAN, ...OWN } }) }) };
+    await openFood(state);
+    await changeNumbers();
+    await fireEvent.press(screen.getByRole("button", { name: "My own. 2,000 kcal · Protein 150 g · Carbs 200 g · Fat 60 g" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Use my numbers" }));
+    expect(await screen.findByLabelText("Calories, 0 of 2,300 kcal")).toBeTruthy();
+    expect(screen.getByText("Your plan holds no calorie cut now, so your own calories can’t be used below 2,300 kcal a day, what keeps your weight.")).toBeTruthy();
+    expect(screen.queryByLabelText(/of 2,000 kcal/)).toBeNull();
+    expect(screen.queryByText("Now using your own numbers.")).toBeNull();
+  });
+
   it("own numbers the server holds back are kept, and the rings show the plan's with the reason", async () => {
     const held = { ...PLAN, noCalorieCut: true };
     await openFood({
@@ -282,6 +305,19 @@ describe("the daily numbers", () => {
     expect(screen.getByRole("button", { name: "My own. 2,000\u00a0kcal · Protein\u00a0150\u00a0g · Carbs\u00a0200\u00a0g · Fat\u00a060\u00a0g" })).toBeTruthy();
   });
 
+  it("says the most it takes, not \"whole numbers\", for a number past it (review, L2)", async () => {
+    const s = await openFood({ targets: targets(), dishes: [], meals: [] });
+    await changeNumbers();
+    await fireEvent.press(screen.getByRole("button", { name: "My own. Set your own numbers" }));
+    await fireEvent.changeText(screen.getByLabelText("Calories (kcal)"), "25000");
+    expect(screen.getByText("Calories go up to 20,000 kcal a day; protein, carbs and fat up to 2,000 g.")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Use my numbers" }));
+    expect(puts(s)).toHaveLength(0);
+    await fireEvent.changeText(screen.getByLabelText("Calories (kcal)"), "2000");
+    await fireEvent.changeText(screen.getByLabelText("Protein (g)"), "3000");
+    expect(screen.getByText("Calories go up to 20,000 kcal a day; protein, carbs and fat up to 2,000 g.")).toBeTruthy();
+  });
+
   it("with no signal says so and changes nothing", async () => {
     const s = await openFood({ targets: targets(), dishes: [], meals: [], put: () => lost() });
     await changeNumbers();
@@ -314,6 +350,25 @@ describe("saved dishes", () => {
     expect(sent[0]).toEqual({ label: "Soup bowl", containerClass: "cereal_bowl", volumeMl: 375, id: sent[0]?.id });
     expect(sent[1]?.id).toBe(sent[0]?.id);
     expect(state.dishes).toHaveLength(1);
+  });
+
+  it("keeps the size typed now when a dish saved without an answer is sent again changed (review, L1)", async () => {
+    const state: State = { targets: targets(), dishes: [], meals: [], dishMadeLost: true };
+    const s = await openFood(state);
+    await pickOats();
+    await fireEvent.press(await screen.findByRole("radio", { name: "New dish" }));
+    await fireEvent.changeText(screen.getByLabelText("Name your dish"), "Soup bowl");
+    await fireEvent.press(screen.getByRole("radio", { name: "Bowl · 375 ml" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Save dish" }));
+    expect(await screen.findByText("No connection. Try again.")).toBeTruthy();
+    // The server has the bowl; the person changes it to a mug and saves again.
+    delete state.dishMadeLost;
+    await fireEvent.press(screen.getByRole("radio", { name: "Mug · 325 ml" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Save dish" }));
+    expect(await screen.findByRole("radio", { name: "Soup bowl · 325 ml", selected: true })).toBeTruthy();
+    expect(state.dishes).toHaveLength(1);
+    expect(state.dishes[0]).toMatchObject({ label: "Soup bowl", volumeMl: 325, containerClass: "mug" });
+    expect(s.sent.filter((a) => a.method === "PATCH").map((a) => a.body)).toEqual([{ label: "Soup bowl", containerClass: "mug", volumeMl: 325 }]);
   });
 
   it("weighs a food with a saved dish once how full it was is picked, and logs it with the dish", async () => {
@@ -554,6 +609,31 @@ describe("Kd's click-through (32b-ii-b): back goes one step, a count shows its g
     expect(screen.getByRole("button", { name: "Add Oats, rolled" }).props.accessibilityState).toMatchObject({ disabled: true });
     await fireEvent.press(screen.getByRole("radio", { name: "grams" }));
     expect(screen.getByLabelText("Amount").props.value).toBe("100");
+  });
+
+  it("opens a food last had by a dish at the person's own dish of that name, and at none where two share it (review, L3)", async () => {
+    const recentOats: RecentFood = {
+      canonical: "oats_rolled",
+      source: "usda",
+      item: item(150, 568, { id: "dish", name: "Bowl", amount: 0.5 }) as RecentFood["item"],
+      add: { measure: "usda-1", amount: 1 },
+      measures: OATS.measures,
+    };
+    const mine = dish("cccccccc-cccc-4ccc-8ccc-cccccccccccc", "Bowl", "bowl", 500);
+    const s = await openFood({ targets: targets(), dishes: [mine], meals: [], recent: [recentOats] });
+    await fireEvent.press(await screen.findByRole("button", { name: "Add to Breakfast" }));
+    await fireEvent.press(await screen.findByRole("button", { name: /^Oats, rolled, Bowl, half full/ }));
+    await waitFor(() => {
+      expect(s.sent.filter((a) => a.path === "/v1/nutrition/meals/preview").at(-1)?.body).toEqual({ items: [{ canonical: "oats_rolled", dishwareId: mine.id, fillLevel: 0.5 }] });
+    });
+    await screen.unmount();
+
+    // Two of the person's own share the name: it opens where the server starts it, never at a guess.
+    const other = dish("dddddddd-dddd-4ddd-8ddd-dddddddddddd", "Bowl", "bowl", 700);
+    await openFood({ targets: targets(), dishes: [mine, other], meals: [], recent: [recentOats] });
+    await fireEvent.press(await screen.findByRole("button", { name: "Add to Breakfast" }));
+    await fireEvent.press(await screen.findByRole("button", { name: /^Oats, rolled, Bowl, half full/ }));
+    expect(await screen.findByRole("radio", { name: "cup · 81 g", selected: true })).toBeTruthy();
   });
 
   it("shows what a count weighs beside it, as the server works it out", async () => {

@@ -41,7 +41,7 @@ import { LEAST_MEAL_KCAL, suggestAfterWorkout, suggestMeals, type AfterWorkoutId
 import { ownTargetsHeld, targetsFromPlan } from "./targets.js";
 import { foodWeek, spanDays } from "./foodWeek.js";
 import { CURATED_FOODS, curatedPieceFdcId, curatedUsdaFdcId, findCurated, findCuratedVersions, holdsEveryWord, searchCurated } from "./foods.js";
-import { dishwareGrams, foodMeasures, gramsPerMl, measureGrams, scanStart, startingMeasure, type UsdaPortion } from "./measures.js";
+import { GRAM, dishwareGrams, foodMeasures, gramsPerMl, measureGrams, scanStart, startingMeasure, type UsdaPortion } from "./measures.js";
 import type { FoodReference, FoodSearchProvider } from "./openfoodfacts.adapter.js";
 import { itemsVersion, ownPer100g, savedPlaces } from "./mealEdit.js";
 import { RECENT_MEALS_READ, recentFoods, type RecentPick } from "./recentFoods.js";
@@ -397,10 +397,14 @@ async function withMeasures(deps: NutritionDeps, foods: readonly FoodReference[]
   const measures = await measuresOf(deps, foods);
   return foods.map((food, at) => {
     const own = measures[at] ?? foodMeasures({ ...servingOfFood(food), portions: [] });
+    const startsAt = startingMeasure(servingOfFood(food), own);
+    const start = own.find((m) => m.id === startsAt.measure) ?? GRAM;
     return {
       ...asReference(food),
       measures: own,
-      startsAt: startingMeasure(servingOfFood(food), own),
+      startsAt,
+      // The grams a save of that amount weighs, priced as a save prices them (`nutritionItem`).
+      startsKcal: Math.max(0, Math.round((food.kcal * measureGrams(start, startsAt.amount)) / 100)),
     };
   });
 }

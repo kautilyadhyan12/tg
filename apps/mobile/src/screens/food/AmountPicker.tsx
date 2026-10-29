@@ -59,6 +59,14 @@ export type PickDish = Pick<Dishware, "id" | "label" | "containerClass" | "volum
  *  "keep the things already built, just give an option to create one on own"). */
 export const dishesOffered = (dishes: Dishes): PickDish[] => [...STANDARD_DISHES, ...(dishes.kind === "ok" ? dishes.list : [])];
 
+/** The dish a logged amount names, by its name: the person's own where exactly one of theirs has it,
+ *  else the one everybody has of that name; none where two of theirs share it (review, L3). */
+export function dishByName(dishes: Dishes, name: string): PickDish | null {
+  const own = (dishes.kind === "ok" ? dishes.list : []).filter((d) => d.label === name);
+  if (own.length > 0) return own.length === 1 ? (own[0] ?? null) : null;
+  return STANDARD_DISHES.find((d) => d.label === name) ?? null;
+}
+
 /** The dish a measure names, where it is still one of them. */
 export function pickedDish(dishes: Dishes, measure: string): PickDish | null {
   const id = dishOf(measure);
@@ -282,9 +290,23 @@ function NewDish({ onCancel, onSaved }: { onCancel: () => void; onSaved: (dish: 
     setBusy(true);
     setTrouble(null);
     const answer = await session.signedIn({ method: "POST", path: "/v1/nutrition/dishware", body: { ...body, id } }, dishwareResponseSchema);
+    if (answer.kind !== "ok") {
+      setBusy(false);
+      setTrouble(answer.kind === "no_answer" || answer.status >= 500 ? NO_CONNECTION : "That dish couldn’t be saved. Check its size and try again.");
+      return;
+    }
+    // A send whose answer was lost did save the dish; changed since and sent again under the same id,
+    // the server answers with the dish as first saved. What was typed now is what is kept (review, L1).
+    const kept = answer.data.dishware;
+    if (kept.label === body.label && kept.volumeMl === body.volumeMl && kept.containerClass === body.containerClass) {
+      setBusy(false);
+      onSaved(kept);
+      return;
+    }
+    const fixed = await session.signedIn({ method: "PATCH", path: `/v1/nutrition/dishware/${id}`, body }, dishwareResponseSchema);
     setBusy(false);
-    if (answer.kind === "ok") onSaved(answer.data.dishware);
-    else setTrouble(answer.kind === "no_answer" || answer.status >= 500 ? NO_CONNECTION : "That dish couldn’t be saved. Check its size and try again.");
+    if (fixed.kind === "ok") onSaved(fixed.data.dishware);
+    else setTrouble(fixed.kind === "no_answer" || fixed.status >= 500 ? NO_CONNECTION : "That dish couldn’t be saved. Check its size and try again.");
   };
 
   return (

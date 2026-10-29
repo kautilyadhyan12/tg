@@ -4,7 +4,7 @@
 // loaded table holds them (2026-10-29, `tools/measure-names-sweep.ts`, and the foods' portions read
 // from `usda_food_portions`), and names the rules have never seen.
 import { describe, expect, it } from "vitest";
-import { isCountMeasure } from "@app/shared";
+import { isCountMeasure, isWeightMeasure } from "@app/shared";
 import { foodMeasures, plainMeasureName, startingMeasure, usdaMeasureName, type MeasureSource, type UsdaPortion } from "../src/modules/nutrition/measures.js";
 
 describe("a measure's name in a shopper's words", () => {
@@ -81,6 +81,19 @@ describe("a measure's name in a shopper's words", () => {
     for (const name of ["apple", "slice cooked", "large", "serving", "half breast, bone and skin removed", "cube", "leaf outer", "2 biscuits"]) expect(isCountMeasure(name), name).toBe(true);
     for (const name of ["cup", "cup, shredded", "half cup", "3 oz", "oz", "fl oz", "tbsp", "2 tbsp", "tablespoon", "tsp", "lb", "g", "ml", "quart"]) expect(isCountMeasure(name), name).toBe(false);
   });
+
+  it("reads a volume or a weight as labels and recipes write it, and a count it has never seen as a count (32b-ii-b's review, L5)", () => {
+    // Open Food Facts labels and recipes: never a count.
+    for (const name of ["1/2 cup", "1 / 3 cup", "½ cup", "¼ cup", "2 tbs", "tbs", "T", "c", "half c", "dl", "cl", "250ml", "250 ml", "fl. oz", "fl oz", "cupful", "0.75 cup", "glass", "1 l", "500g", "lbs"]) {
+      expect(isCountMeasure(name), name).toBe(false);
+    }
+    // Counts, some the rules never saw: a letter after a unit's letters makes it a word, not a unit.
+    for (const name of ["tray", "tortilla", "large", "loaf", "garlic clove", "cookie", "chapati", "katori", "litchi", "cracker", "2 biscuits", "1 taco", "dosa", "glazed donut"]) {
+      expect(isCountMeasure(name), name).toBe(true);
+    }
+    for (const name of ["3 oz", "500g", "1/2 lb", "kg"]) expect(isWeightMeasure(name), name).toBe(true);
+    for (const name of ["cup", "fl oz", "250ml", "slice", "garlic clove"]) expect(isWeightMeasure(name), name).toBe(false);
+  });
 });
 
 /** A USDA row as the table holds it: SR Legacy's amount in its own column. */
@@ -98,6 +111,21 @@ const startName = (source: MeasureSource): string => {
   const measure = measures.find((m) => m.id === start.measure);
   return `${String(start.amount)} ${measure?.name ?? "?"} · ${String(measure?.grams ?? 0)} g`;
 };
+
+describe("two measures of one plain name (32b-ii-b's review, L4)", () => {
+  it("are told apart by size, never two chips of one name (pineapple, SR 169124)", () => {
+    const pineapple = usda([row(1, 1, "cup, chunks", 165), row(2, 1, "fruit", 905), row(3, 1, 'slice (4-2/3" dia x 3/4" thick)', 166), row(4, 1, 'slice (3-1/2" dia x 3/4" thick)', 84), row(5, 1, 'slice, thin (3-1/2" dia x 1/2" thick)', 56)]);
+    expect(foodMeasures(pineapple).map((m) => `${m.name} ${String(m.grams)}`)).toEqual(["cup, chunks 165", "fruit 905", "slice 166", "small slice 84", "slice, thin 56", "g 1", "oz 28.349523125"]);
+    const names = foodMeasures(pineapple).map((m) => m.name);
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  it("fall back to USDA's own name where the size word is taken too", () => {
+    const three = usda([row(1, 1, "slice (4\" dia)", 100), row(2, 1, "slice (3\" dia)", 60), row(3, 1, "slice (2\" dia)", 30)]);
+    const names = foodMeasures(three).map((m) => m.name);
+    expect(names.slice(0, 3)).toEqual(["slice", "small slice", 'slice (2" dia)']);
+  });
+});
 
 describe("where a food starts: at a count of it where it has one (USDA's own rows, 2026-10-29)", () => {
   it.each([
