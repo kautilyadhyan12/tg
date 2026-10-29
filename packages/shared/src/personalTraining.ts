@@ -423,7 +423,7 @@ export function ptWords(orgType: unknown) {
     limit_week: "This person has used all the personal training sessions their membership includes for that week.",
     limit_month: "This person has used all the personal training sessions their membership includes for that month.",
     started: "This session has already started, so it can't be cancelled.",
-    late_cancel: "It's too late to cancel for free.",
+    late_cancel: "Cancelling this close to the start counts as a late cancel.",
     kept_used: "This session was already cancelled as a late cancel. The session stays used.",
     not_kept: "This session was already cancelled, and not as a late cancel. No session was used.",
     not_started: "This session hasn't started yet. Mark it once it has.",
