@@ -226,8 +226,8 @@ export async function takeIn(
   const customerSeenNow = customer !== null && who === "unknown" && sale.lines !== "items" ? await customerOf(square, owner, customer) : null;
   const kept = { ...facts, enteredMinor: sale.enteredMinor, customer: customerSeenNow, saleReason: squareAppSaleWait(sale) };
 
-  const waits = await deps.sql.begin(async (tx) => await decideAndKeep(tx, { payment, owner, facts: kept, entryId, atHome, sale, who, today, now }));
-  if (waits) await tellTaken(deps, owner.gymId, entryId);
+  const decided = await deps.sql.begin(async (tx) => await decideAndKeep(tx, { payment, owner, facts: kept, entryId, atHome, sale, who, today, now }));
+  if (decided.waits) await tellTaken(deps, owner.gymId, decided.entryId);
   return "done";
 }
 
@@ -243,7 +243,8 @@ async function tellTaken(deps: PaymentsDeps, gymId: string, entryId: string | nu
 }
 
 /** Under the gym's lock, and the record's of the person Square's customer is and of everybody they pay for
- *  (the lock a card charge takes): kept waiting for staff, or a shop sale. True where it was kept waiting now. */
+ *  (the lock a card charge takes): kept waiting for staff, or a shop sale. `waits`: it was kept waiting now;
+ *  `entryId`: whose it is, as decided under the lock. */
 async function decideAndKeep(
   tx: TransactionSql,
   d: {
@@ -257,21 +258,33 @@ async function decideAndKeep(
     today: string;
     now: Date;
   },
-): Promise<boolean> {
-  const { payment, owner, facts, entryId, atHome, sale, who, today, now } = d;
+): Promise<{ waits: boolean; entryId: string | null }> {
+  const { payment, owner, atHome, sale, today, now } = d;
+  let { facts, entryId, who } = d;
   const { environment, accountId } = facts;
   // The gym's lock first, as every payment by hand takes it: two messages about one payment, or a
   // message and the hourly look, decide one after the other, and the second finds the first's row.
   await lockGym(tx, owner.gymId);
+  // Square's customer was nobody's here when the payment was looked at: a Match that linked it in the instant before this lock
+  // is read again under it, so the payment is the person's at once (18d-iii-b-ii-c, round one, Low 2).
+  if (who === "unknown" && facts.customerId !== null) {
+    const linkedNow = await taken.linkedRecords(tx, { environment, accountId, customerId: facts.customerId, gymIds: [owner.gymId] });
+    const [only] = linkedNow;
+    if (only !== undefined) {
+      who = linkedNow.length === 1 ? "one" : "several";
+      entryId = linkedNow.length === 1 ? only.entryId : null;
+      facts = { ...facts, customer: null };
+    }
+  }
   if (entryId !== null) {
     const paidFor = await tx<{ entry_id: string }[]>`SELECT entry_id FROM gym_member_payers WHERE gym_id = ${owner.gymId} AND payer_entry_id = ${entryId}`;
     await lockEntries(tx, owner.gymId, [entryId, ...paidFor.map((r) => r.entry_id)]);
   }
-  if (await taken.known(tx, environment, accountId, payment.id)) return false;
+  if (await taken.known(tx, environment, accountId, payment.id)) return { waits: false, entryId };
   const kept = { ...facts, entryId };
   // Money Square has given back on it, in part or in whole: never on a bill (refunds are 18d-iv's).
-  if ((payment.refunded_money?.amount ?? 0) > 0) return await taken.insertTaken(tx, kept, { state: "waiting", reason: "refunded" }, now);
-  if (!atHome) return await taken.insertTaken(tx, kept, { state: "waiting", reason: "other_location" }, now);
+  if ((payment.refunded_money?.amount ?? 0) > 0) return { waits: await taken.insertTaken(tx, kept, { state: "waiting", reason: "refunded" }, now), entryId };
+  if (!atHome) return { waits: await taken.insertTaken(tx, kept, { state: "waiting", reason: "other_location" }, now), entryId };
   // Another money than the gym's own: no bill of the gym's is that amount.
   const sameMoney = payment.amount_money.currency === owner.currency;
   const candidates = entryId === null || !sameMoney ? [] : await taken.candidatesFor(tx, owner.gymId, entryId, today, now);
@@ -288,10 +301,10 @@ async function decideAndKeep(
   if (decision.kind === "shop_sale") {
     // Nobody's details are kept on a shop sale: no screen shows it, and it is no bill's.
     await taken.insertTaken(tx, { ...kept, customer: null }, { state: "shop_sale" }, now);
-    return false;
+    return { waits: false, entryId };
   }
   // Unique on Square's own id: false where a look that chose another gym kept it first, and theirs stands.
-  return await taken.insertTaken(tx, kept, { state: "waiting", reason: decision.reason }, now);
+  return { waits: await taken.insertTaken(tx, kept, { state: "waiting", reason: decision.reason }, now), entryId };
 }
 
 // ── The hourly look ──────────────────────────────────────────────────────────

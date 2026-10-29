@@ -240,12 +240,16 @@ describe("linking Square's customer (18d-iii-b-ii-c)", () => {
     // The same name on both sides, or none seen: never "Amy Lee … to Amy Lee".
     expect(said('linked', 'Amy Lee')).toBe(`${base} The Square customer is now linked to Amy Lee. Their next payments come to their page.`);
     expect(said('linked', null)).toBe(`${base} The Square customer is now linked to Amy Lee. Their next payments come to their page.`);
-    expect(said('taken')).toBe(`${base} Amy L wasn’t linked: it is already linked to someone else here.`);
+    // Never "here": the holder may be at another business on the same Square account (round one, High 1).
+    expect(said('taken')).toBe(`${base} Amy L wasn’t linked: it is already linked to someone else.`);
     expect(said('gone')).toBe(`${base} Amy L wasn’t linked: it is no longer in your Square customer list.`);
     expect(said('merged')).toBe(`${base} Amy L wasn’t linked: Square has merged it into another customer.`);
     expect(said('past')).toBe(`${base} Amy L wasn’t linked: Amy Lee is a past member.`);
     expect(said('unchecked')).toBe(`${base} Amy L wasn’t linked: the app couldn’t check it in Square.`);
-    expect(said('taken', null)).toBe(`${base} The Square customer wasn’t linked: it is already linked to someone else here.`);
+    expect(said('taken', null)).toBe(`${base} The Square customer wasn’t linked: it is already linked to someone else.`);
+    // An answer with no person's name still reads as a whole sentence (round one, Low 3): never "them is a past member".
+    expect(said('past', null, null)).toBe(`${base} The Square customer wasn’t linked: the person is a past member.`);
+    expect(said('linked', null, null)).toBe(`${base} The Square customer is now linked. Their next payments come to their page.`);
   });
   it("the tick's label and note: on where they match, off where the app can't tell, none where it is somebody else's", () => {
     expect(linkLabel('Amy Lee')).toBe('Link this Square customer to Amy Lee');
@@ -261,7 +265,11 @@ describe("linking Square's customer (18d-iii-b-ii-c)", () => {
     expect(linkNote({ offer: 'link', customerName: 'Amy L', also: true, byName: null }, 'Amy Lee')).toMatch(/Amy Lee already has a customer in your Square customer list. This one is linked to them as well.$/);
     expect(linkNote({ offer: 'taken', customerName: 'Pat Smith', also: false, byName: 'Pat Smith' }, 'Amy Lee')).toBeNull();
     expect(linkTakenLine({ offer: 'taken', customerName: 'Pat Smith', also: false, byName: 'Pat Smith' }, 'Sam Smith')).toBe('This Square customer is already linked to Pat Smith, so it can’t be linked to Sam Smith.');
-    expect(linkTakenLine({ offer: 'taken', customerName: null, also: false, byName: null }, 'Sam Smith')).toBe('This Square customer is already linked to someone else here, so it can’t be linked to Sam Smith.');
+    expect(linkTakenLine({ offer: 'taken', customerName: null, also: false, byName: null, elsewhere: false }, 'Sam Smith')).toBe('This Square customer is already linked to someone else, so it can’t be linked to Sam Smith.');
+    // Somebody at another business on the same Square account: never named, never "here" (round one, High 1).
+    expect(linkTakenLine({ offer: 'taken', customerName: 'Amy Lee', also: false, byName: null, elsewhere: true }, 'Amy Lee')).toBe(
+      'This Square customer is already linked to someone at another business that uses the same Square account, so it can’t be linked to Amy Lee.',
+    );
   });
 });
 

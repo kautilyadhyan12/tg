@@ -147,6 +147,9 @@ export function fakeSquare() {
     deleteStatus: Map<string, number>;
     beforeDelete: (() => void) | null;
     deleteViaOldId: "nothing" | "deletes_merged";
+    /** Runs once, as RetrieveOrder arrives, before Square answers: something happens in the app between the take-in's first
+     *  look at a payment and its decision (18d-iii-b-ii-c, round one, Low 2: a Match links the customer meanwhile). */
+    beforeOrder: (() => Promise<void>) | null;
     now: () => Date;
   } = {
     down: false,
@@ -183,6 +186,7 @@ export function fakeSquare() {
     deleteStatus: new Map<string, number>(),
     beforeDelete: null,
     deleteViaOldId: "nothing",
+    beforeOrder: null,
     now: () => new Date(),
   };
   let n = 0;
@@ -576,6 +580,11 @@ export function fakeSquare() {
       });
     },
     retrieveOrder(token, id) {
+      const before = state.beforeOrder;
+      if (before !== null) {
+        state.beforeOrder = null;
+        return before().then(() => api.retrieveOrder(token, id));
+      }
       if (state.down || state.ordersUnanswered.has(id)) return Promise.resolve(unavailable);
       const a = tokenAccount(token);
       if (a === undefined) return Promise.resolve(unauthorized);

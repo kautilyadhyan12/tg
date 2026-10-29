@@ -241,26 +241,31 @@ export function linkNote(link, personName) {
   return parts.join(' ');
 }
 
-/** Where the customer can't be linked because somebody else here has it. */
-export const linkTakenLine = (link, personName) => `This Square customer is already linked to ${link.byName ?? 'someone else here'}, so it can’t be linked to ${personName}.`;
+/** Where the customer can't be linked because somebody else has it: somebody here, by name, or somebody at another business
+ *  on the same Square account, whose name is not this gym's to see (round one, High 1). */
+export function linkTakenLine(link, personName) {
+  if (link.elsewhere === true) return `This Square customer is already linked to someone at another business that uses the same Square account, so it can’t be linked to ${personName}.`;
+  return `This Square customer is already linked to ${link.byName ?? 'someone else'}, so it can’t be linked to ${personName}.`;
+}
 
-/** What Match did about the customer, said after the press; empty where nothing was asked. */
+/** What Match did about the customer, said after the press; empty where nothing was asked. The person's name can be
+ *  missing (an older answer), and the sentence still reads whole (round one, Low 3). */
 export function linkDoneLine(link) {
   if (link === undefined || link.result === 'none') return '';
-  const person = link.personName ?? 'them';
+  const person = link.personName ?? null;
   const who = upper(customerWho(link.customerName, person));
   switch (link.result) {
     case 'linked':
     case 'also':
-      return ` ${who} is now linked to ${person}. Their next payments come to their page.`;
+      return ` ${who} is now linked${person === null ? '' : ` to ${person}`}. Their next payments come to their page.`;
     case 'taken':
-      return ` ${who} wasn’t linked: it is already linked to someone else here.`;
+      return ` ${who} wasn’t linked: it is already linked to someone else.`;
     case 'gone':
       return ` ${who} wasn’t linked: it is no longer in your Square customer list.`;
     case 'merged':
       return ` ${who} wasn’t linked: Square has merged it into another customer.`;
     case 'past':
-      return ` ${who} wasn’t linked: ${person} is a past member.`;
+      return ` ${who} wasn’t linked: ${person ?? 'the person'} is a past member.`;
     default:
       return ` ${who} wasn’t linked: the app couldn’t check it in Square.`;
   }

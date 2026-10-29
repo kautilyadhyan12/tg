@@ -26,6 +26,8 @@ import {
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { openDueBills } from "../src/modules/orgs/memberships/billsRepo.js";
+import { linkMatched } from "../src/modules/orgs/payments/squareMatchRepo.js";
+import { linkCustomer, takenAmong, takenCustomers } from "../src/modules/orgs/payments/squareMembersRepo.js";
 import { squareSettings } from "../src/modules/orgs/payments/settings.js";
 import { processSquareWork } from "../src/modules/orgs/payments/work.js";
 import { account, fakeSquare, type Account } from "./fakeSquareTerminal.js";
@@ -349,7 +351,7 @@ d("Match links Square's customer (real Postgres)", { timeout: T }, () => {
 
     // Staff pick Sam: the same email, but Pat Smith is not Sam Smith, so the app cannot tell and offers the tick, off.
     const box = await boxFor(gym, row.id, sam.entryId);
-    expect(box.link).toEqual({ offer: "ask", customerName: "Pat Smith", also: false, byName: null });
+    expect(box.link).toEqual({ offer: "ask", customerName: "Pat Smith", also: false, byName: null, elsewhere: false });
 
     // Staff press Match with the tick off (nothing sent): the payment goes on Sam's bill, and nothing is linked, anywhere.
     const matched = await match(gym, row.id, sam);
@@ -388,7 +390,7 @@ d("Match links Square's customer (real Postgres)", { timeout: T }, () => {
     expect([otherRow.reason, otherRow.entry_id, otherRow.customer_name]).toEqual(["not_linked", null, "Amy Lee"]);
 
     // The same name and the same email: the app can tell, so the tick is on.
-    expect((await boxFor(gym, firstRow.id, amy.entryId)).link).toEqual({ offer: "link", customerName: "Amy Lee", also: false, byName: null });
+    expect((await boxFor(gym, firstRow.id, amy.entryId)).link).toEqual({ offer: "link", customerName: "Amy Lee", also: false, byName: null, elsewhere: false });
     const matched = await match(gym, firstRow.id, amy, { linkTo: amy.entryId });
     expect(matched.statusCode, matched.body).toBe(200);
     expect(matchPaymentResponseSchema.parse(JSON.parse(matched.body)).matched.link).toEqual({ result: "linked", customerName: "Amy Lee", personName: "Amy Lee" });
@@ -437,7 +439,7 @@ d("Match links Square's customer (real Postgres)", { timeout: T }, () => {
     const row = await rowOf(paid.id);
     expect([row.reason, row.entry_id]).toEqual(["not_linked", null]);
 
-    expect((await boxFor(gym, row.id, amy.entryId)).link).toEqual({ offer: "link", customerName: "Amy Lee", also: true, byName: null });
+    expect((await boxFor(gym, row.id, amy.entryId)).link).toEqual({ offer: "link", customerName: "Amy Lee", also: true, byName: null, elsewhere: false });
     const matched = await match(gym, row.id, amy, { linkTo: amy.entryId });
     expect(matched.statusCode, matched.body).toBe(200);
     expect(matchPaymentResponseSchema.parse(JSON.parse(matched.body)).matched.link.result).toBe("also");
@@ -472,7 +474,7 @@ d("Match links Square's customer (real Postgres)", { timeout: T }, () => {
       INSERT INTO gym_square_customers (gym_id, entry_id, environment, account_id, customer_id, joined_at)
       VALUES (${gym.id}, ${pat}, 'production', ${gym.acct.merchantId}, ${cust}, now())`;
 
-    expect((await boxFor(gym, row.id, sam.entryId)).link).toEqual({ offer: "taken", customerName: "Pat Smith", also: false, byName: "Pat Smith" });
+    expect((await boxFor(gym, row.id, sam.entryId)).link).toEqual({ offer: "taken", customerName: "Pat Smith", also: false, byName: "Pat Smith", elsewhere: false });
     const matched = await match(gym, row.id, sam, { linkTo: sam.entryId });
     expect(matched.statusCode, matched.body).toBe(200);
     expect(matchPaymentResponseSchema.parse(JSON.parse(matched.body)).matched.link).toEqual({ result: "taken", customerName: "Pat Smith", personName: "Sam Smith" });
@@ -554,10 +556,10 @@ d("Match links Square's customer (real Postgres)", { timeout: T }, () => {
     expect(matchPaymentResponseSchema.parse(JSON.parse(p.body)).matched.link.result).toBe("linked");
     expect(matchPaymentResponseSchema.parse(JSON.parse(q.body)).matched.link.result).toBe("linked");
     expect(await mainLinks(gym, bea.entryId)).toHaveLength(1);
-    // A press again later: the same answer, from the payment.
+    // A press again later: the same answer, from the payment, naming the person as the record is now (round one, Low 3).
     const later = await match(gym, b.id, bea, { linkTo: bea.entryId, requestKey: key });
     expect(later.statusCode, later.body).toBe(200);
-    expect(matchPaymentResponseSchema.parse(JSON.parse(later.body)).matched.link).toEqual({ result: "linked", customerName: null, personName: null });
+    expect(matchPaymentResponseSchema.parse(JSON.parse(later.body)).matched.link).toEqual({ result: "linked", customerName: null, personName: "Bea Lee" });
   });
 
   it("a stranger, a person of another gym and a bill that isn't theirs: nothing is linked or matched", async () => {
@@ -638,5 +640,197 @@ d("Match links Square's customer (real Postgres)", { timeout: T }, () => {
     expect(matchPaymentResponseSchema.parse(JSON.parse(pressed.body)).matched.link.result).toBe("none");
     expect(await mainLinks(gym, joe)).toEqual([]);
     expect(await alsoLinks(gym, joe)).toEqual([]);
+  });
+
+  // ── Round one's findings (reviews/18d-iii-b-ii-c-i-2-findings.md) ──
+
+  /** A payment from Square Point of Sale waiting at this gym, written as the take-in keeps one whose customer is nobody's
+   *  here, with Square's own payment behind it so Match can ask about it. */
+  const waitingRow = async (gym: Gym, customerId: string, name: string, amount: number, reason = "not_linked"): Promise<string> => {
+    const paid = square.appPayment(gym.acct, { amount, customerId, locationId: gym.locationId });
+    const [row] = await sql<{ id: string }[]>`
+      INSERT INTO gym_square_app_payments
+        (environment, account_id, square_payment_id, gym_id, location_id, customer_id, amount_minor, tip_minor, currency,
+         taken_at, state, reason, entry_id, entered_minor, customer_name, created_at, updated_at)
+      VALUES ('production', ${gym.acct.merchantId}, ${paid.id}, ${gym.id}, ${gym.locationId}, ${customerId}, ${amount}, 0, 'USD',
+              ${clock}, 'waiting', ${reason}, NULL, ${amount}, ${name}, ${clock}, ${clock})
+      RETURNING id`;
+    if (row === undefined) throw new Error("no row");
+    return row.id;
+  };
+
+  it("High 1 and Low 1: a customer somebody at another business on the same Square account has is never linked, the box says so without a name or a 'here', and that holds after that business disconnects", async () => {
+    clock = new Date();
+    const shared = account(`MSML${uniq()}`);
+    const other = await makeGym(`Other Business ${uniq()}`, shared);
+    const gym = await makeGym(`This Business ${uniq()}`, shared);
+    const typeId = await typeOf(gym);
+    const email = `sml-r-xb${uniq()}@example.com`;
+    const amy = await owing(gym, typeId, await person(gym, "Amy Lee", { email }));
+    const amyThere = await person(other, "Amy Lee", { email });
+    const cust = till(gym, { given: "Amy", family: "Lee" }, { email });
+    await sql`
+      INSERT INTO gym_square_customers (gym_id, entry_id, environment, account_id, customer_id, joined_at)
+      VALUES (${other.id}, ${amyThere}, 'production', ${shared.merchantId}, ${cust}, now())`;
+    const first = await waitingRow(gym, cust, "Amy Lee", 2500);
+    const later = await waitingRow(gym, cust, "Amy Lee", 2500);
+
+    // Nobody here has it: the box names nobody and says where it is.
+    expect((await boxFor(gym, first, amy.entryId)).link).toEqual({ offer: "taken", customerName: "Amy Lee", also: false, byName: null, elsewhere: true });
+
+    // The other business disconnects Square; its people keep their customers, and this one still can't link it.
+    const off = await send("DELETE", `/v1/orgs/${other.id}/payments/square`, other.owner.cookies);
+    expect(off.statusCode, off.body).toBe(200);
+    expect((await mainLinks(other, amyThere)).map((l) => l.customer_id)).toEqual([cust]);
+    expect((await boxFor(gym, later, amy.entryId)).link).toMatchObject({ offer: "taken", elsewhere: true });
+    const pressed = await match(gym, first, amy, { linkTo: amy.entryId });
+    expect(pressed.statusCode, pressed.body).toBe(200);
+    expect(matchPaymentResponseSchema.parse(JSON.parse(pressed.body)).matched.link.result).toBe("taken");
+    expect((await second(amy))?.status).toBe("paid");
+    expect(await everyLink(gym)).toEqual({ main: [], also: [] });
+  });
+
+  it("Low 5: two gyms of one Square account linking one customer at the same instant: the second waits for the first, and finds it taken", async () => {
+    clock = new Date();
+    const shared = account(`MSML${uniq()}`);
+    const one = await makeGym(`Race One ${uniq()}`, shared);
+    const two = await makeGym(`Race Two ${uniq()}`, shared);
+    const email = `sml-r-rl${uniq()}@example.com`;
+    const atOne = await person(one, "Amy Lee", { email });
+    const atTwo = await person(two, "Amy Lee", { email });
+    const cust = till(one, { given: "Amy", family: "Lee" }, { email });
+    const at = { environment: "production" as const, accountId: shared.merchantId, customerId: cust, referenceOf: null };
+    let release: () => void = () => undefined;
+    const hold = new Promise<void>((done) => {
+      release = done;
+    });
+    let firstLinked: () => void = () => undefined;
+    const linkedOnce = new Promise<void>((done) => {
+      firstLinked = done;
+    });
+    const first = sql.begin(async (tx) => {
+      const out = await linkMatched(tx, { ...at, gymId: one.id, entryId: atOne, now: new Date() });
+      firstLinked();
+      await hold;
+      return out;
+    });
+    await linkedOnce;
+    let secondOut: string | null = null;
+    const secondPress = sql
+      .begin(async (tx) => await linkMatched(tx, { ...at, gymId: two.id, entryId: atTwo, now: new Date() }))
+      .then((out) => {
+        secondOut = out;
+        return out;
+      });
+    await new Promise((done) => setTimeout(done, 600));
+    expect(secondOut, "the second gym waits on the customer's lock").toBeNull();
+    release();
+    expect(await first).toBe("linked");
+    expect(await secondPress).toBe("taken");
+    expect(await mainLinks(two, atTwo)).toEqual([]);
+  });
+
+  it("Low 2: a payment taken in while a Match links its customer is the person's at once, never left nobody's", async () => {
+    clock = new Date();
+    const gym = await makeGym(`Take-in Race ${uniq()}`);
+    const typeId = await typeOf(gym);
+    const email = `sml-r-tr${uniq()}@example.com`;
+    const amy = await owing(gym, typeId, await person(gym, "Amy Lee", { email }));
+    const cust = till(gym, { given: "Amy", family: "Lee" }, { email });
+    // Square's order is asked for after the take-in found the customer nobody's; in that instant a Match links it.
+    square.state.beforeOrder = async () => {
+      await sql`
+        INSERT INTO gym_square_customers (gym_id, entry_id, environment, account_id, customer_id, joined_at)
+        VALUES (${gym.id}, ${amy.entryId}, 'production', ${gym.acct.merchantId}, ${cust}, now())`;
+    };
+    const paid = await takenIn(gym, { amount: 2500, customerId: cust });
+    expect(square.state.beforeOrder).toBeNull();
+    expect(await rowOf(paid.id)).toMatchObject({ state: "waiting", reason: "ready", entry_id: amy.entryId, customer_name: null });
+  });
+
+  it("Square's customer carrying another record's id, Square refusing to show it, a mixed sale, a payment several people's and one marked Not for a bill", async () => {
+    clock = new Date();
+    const gym = await makeGym(`Edge Gym ${uniq()}`);
+    const typeId = await typeOf(gym);
+    const email = `sml-r-ed${uniq()}@example.com`;
+
+    // Its reference id is Zed's: the app made it for Zed, its answer lost. Never Amy's.
+    const amy = await owing(gym, typeId, await person(gym, "Amy Lee", { email }));
+    const zed = await person(gym, "Zed Park");
+    const zeds = `C${uniq()}`;
+    square.customer(gym.acct, { id: zeds, given_name: "Amy", family_name: "Lee", email_address: email, reference_id: zed });
+    const viaRef = await rowOf((await takenIn(gym, { amount: 2500, customerId: zeds })).id);
+    expect(viaRef.reason).toBe("not_linked");
+    const refPress = await match(gym, viaRef.id, amy, { linkTo: amy.entryId });
+    expect(refPress.statusCode, refPress.body).toBe(200);
+    expect(matchPaymentResponseSchema.parse(JSON.parse(refPress.body)).matched.link.result).toBe("taken");
+    expect(await mainLinks(gym, amy.entryId)).toEqual([]);
+
+    // Square won't show the customer (403): never linked, the payment matched all the same.
+    const bo = await owing(gym, typeId, await person(gym, "Bo Chen"));
+    const bos = till(gym, { given: "Bo", family: "Chen" });
+    const boRow = await rowOf((await takenIn(gym, { amount: 2500, customerId: bos })).id);
+    square.state.readRefused.add(bos);
+    const boPress = await match(gym, boRow.id, bo, { linkTo: bo.entryId });
+    square.state.readRefused.delete(bos);
+    expect(boPress.statusCode, boPress.body).toBe(200);
+    expect(matchPaymentResponseSchema.parse(JSON.parse(boPress.body)).matched.link.result).toBe("unchecked");
+    expect((await second(bo))?.status).toBe("paid");
+    expect(await mainLinks(gym, bo.entryId)).toEqual([]);
+
+    // Cy: a typed sale to match, a mixed sale, a payment marked Not for a bill, and a row several people's, all of one customer.
+    const cy = await owing(gym, typeId, await person(gym, "Cy Moss", { email: `sml-r-cy${uniq()}@example.com` }));
+    const cys = till(gym, { given: "Cy", family: "Moss" });
+    const typed = await rowOf((await takenIn(gym, { amount: 2500, customerId: cys })).id);
+    const mixedPaid = await takenIn(gym, { amount: 3000, customerId: cys, lines: ["CUSTOM_AMOUNT", "ITEM"] });
+    const [mixedKept] = await sql<{ sale_reason: string | null }[]>`SELECT sale_reason FROM gym_square_app_payments WHERE square_payment_id = ${mixedPaid.id}`;
+    expect(mixedKept?.sale_reason, "the take-in keeps why the sale itself waits").toBe("mixed_sale");
+    const marked = await rowOf((await takenIn(gym, { amount: 1200, customerId: cys })).id);
+    const mark = await send("POST", `${toMatchUrl(gym)}/${marked.id}/not-a-bill`, gym.owner.cookies, { why: "other" });
+    expect(mark.statusCode, mark.body).toBe(200);
+    const several = await waitingRow(gym, cys, "Cy Moss", 900, "several_people");
+
+    const pressed = await match(gym, typed.id, cy, { linkTo: cy.entryId });
+    expect(pressed.statusCode, pressed.body).toBe(200);
+    expect(matchPaymentResponseSchema.parse(JSON.parse(pressed.body)).matched.link.result).toBe("linked");
+    // The mixed sale is Cy's, still waiting for what was sold, never for a bill tick.
+    const mixedNow = await rowOf(mixedPaid.id);
+    expect(mixedNow).toMatchObject({ state: "waiting", reason: "mixed_sale", entry_id: cy.entryId });
+    expect((await listed(gym, mixedNow.id))?.bill).toBeNull();
+    // The one several people's stays as it was.
+    expect(await byId(several)).toMatchObject({ state: "waiting", reason: "several_people", entry_id: null });
+    // The one marked is Cy's too, still marked; Undo puts it back as his (round one, Low 4).
+    expect(await byId(marked.id)).toMatchObject({ state: "not_bill", entry_id: cy.entryId });
+    const undo = await send("POST", `${toMatchUrl(gym)}/${marked.id}/undo`, gym.owner.cookies);
+    expect(undo.statusCode, undo.body).toBe(200);
+    expect(await byId(marked.id)).toMatchObject({ state: "waiting", reason: "no_bill", entry_id: cy.entryId });
+  });
+
+  it("a customer matched as a person's second customer is theirs to Members in Square too: never linked to another record", async () => {
+    clock = new Date();
+    const gym = await makeGym(`Second Taken ${uniq()}`);
+    const typeId = await typeOf(gym);
+    const email = `sml-r-st${uniq()}@example.com`;
+    const amy = await owing(gym, typeId, await person(gym, "Amy Lee", { email }));
+    const own = till(gym, { given: "Amy", family: "Lee" }, { email });
+    await sql`
+      INSERT INTO gym_square_customers (gym_id, entry_id, environment, account_id, customer_id, joined_at)
+      VALUES (${gym.id}, ${amy.entryId}, 'production', ${gym.acct.merchantId}, ${own}, now())`;
+    const twin = till(gym, { given: "Amy", family: "Lee" }, { email });
+    const row = await rowOf((await takenIn(gym, { amount: 2500, customerId: twin })).id);
+    const pressed = await match(gym, row.id, amy, { linkTo: amy.entryId });
+    expect(matchPaymentResponseSchema.parse(JSON.parse(pressed.body)).matched.link.result).toBe("also");
+    // A second record of the same name, as a duplicate on the list would be (the same email is refused as the same person).
+    const dee = await person(gym, "Amy Lee", { email: `sml-r-st2${uniq()}@example.com` });
+    expect(await takenCustomers(sql, gym.id, "production", gym.acct.merchantId)).toContain(twin);
+    expect(await takenAmong(sql, gym.id, "production", gym.acct.merchantId, [twin])).toEqual(new Set([twin]));
+    const tried = await sql
+      .begin(async (tx) => {
+        const out = await linkCustomer(tx, { gymId: gym.id, entryId: dee, environment: "production", accountId: gym.acct.merchantId, customerId: twin, joined: true, now: new Date() });
+        throw new Error(`ROLLBACK:${out}`);
+      })
+      .catch((err: unknown) => (err instanceof Error ? err.message : ""));
+    expect(tried).toBe("ROLLBACK:taken");
+    expect(await mainLinks(gym, dee)).toEqual([]);
   });
 });

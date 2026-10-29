@@ -137,7 +137,8 @@ export type MatchPaid = z.infer<typeof matchPaidSchema>;
  *  the tick is off and staff say; `taken`: the customer is already linked to somebody else here, so it can't be.
  *  `also`: the person has another customer in the gym's Square already, and this one is linked as theirs too.
  *  `customerName`: Square's name for the customer, as seen when the payment was taken in (null: none seen).
- *  `byName`: who it is linked to, for `taken`. */
+ *  `byName`: who it is linked to here, for `taken`. `elsewhere`: for `taken`, nobody here has it, but somebody at
+ *  another business on the same Square account does (round one, High 1), whose name is never shown here. */
 export const MATCH_LINK_OFFERS = ["link", "ask", "taken"] as const;
 export const matchLinkOfferSchema = z
   .object({
@@ -145,6 +146,7 @@ export const matchLinkOfferSchema = z
     customerName: z.string().min(1).max(200).nullable(),
     also: z.boolean(),
     byName: z.string().nullable(),
+    elsewhere: z.boolean(),
   })
   .strict();
 export type MatchLinkOffer = z.infer<typeof matchLinkOfferSchema>;

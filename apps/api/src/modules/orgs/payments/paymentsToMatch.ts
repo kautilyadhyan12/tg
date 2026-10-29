@@ -163,12 +163,15 @@ async function linkOfferFor(deps: PaymentsDeps, gym: repo.GymForPayments, gymId:
   const customerName = row.customer?.name ?? null;
   if (holders.some((h) => h.gymId === gymId && h.entryId === entryId)) return null;
   if (holders.length > 0) {
+    // Somebody here, named; or only somebody at another business on the same Square account, never named here and never
+    // called "here" (round one, High 1).
+    if (!holders.some((h) => h.gymId === gymId)) return { offer: "taken", customerName, also: false, byName: null, elsewhere: true };
     const names = (await toMatch.linkedNames(deps.sql, { gymId, environment: row.environment, accountId: row.accountId, customerIds: [row.customerId] })).get(row.customerId) ?? [];
-    return { offer: "taken", customerName, also: false, byName: names.length === 0 ? null : names.join(", ") };
+    return { offer: "taken", customerName, also: false, byName: names.length === 0 ? null : names.join(", "), elsewhere: false };
   }
   const offer = matchLinkOffer(row.customer, { entryId, fullName: person.fullName, email: person.email, phoneE164: person.phoneE164 }, readCountry(gym.country));
   const also = await linking.hasOwnCustomer(deps.sql, { gymId, entryId, environment: row.environment, accountId: row.accountId });
-  return { offer, customerName, also, byName: null };
+  return { offer, customerName, also, byName: null, elsewhere: false };
 }
 
 /** Match's box, for one person: the bills a payment can go on, theirs and those of anybody they pay for,
@@ -215,7 +218,14 @@ export async function readMatchBills(deps: PaymentsDeps, userId: string, gymId: 
 
 /** A press of Match again, after its payment went on the bill: the same answer, where it asks for that same
  *  bill and amount; the key with anything else in it is refused, never answered as matched. */
-async function matchedAnswer(deps: PaymentsDeps, gymId: string, row: toMatch.TakenRow, body: MatchPaymentRequest | null = null, link: MatchLinkResult | null = null): Promise<MatchPaymentResponse> {
+async function matchedAnswer(
+  deps: PaymentsDeps,
+  gymId: string,
+  row: toMatch.TakenRow,
+  body: MatchPaymentRequest | null = null,
+  link: MatchLinkResult | null = null,
+  linkTo: string | null = body?.linkTo ?? null,
+): Promise<MatchPaymentResponse> {
   const [paid] = await deps.sql<
     { amount_minor: number; currency: string; receipt_number: number; entry_id: string; full_name: string; held_membership_id: string; bill_id: string; period_index: number | null; fee: string | null }[]
   >`
@@ -230,8 +240,11 @@ async function matchedAnswer(deps: PaymentsDeps, gymId: string, row: toMatch.Tak
   if (body !== null && (paid.entry_id !== body.entryId || paid.held_membership_id !== body.membershipId || paid.amount_minor !== body.amountMinor || !sameBill)) {
     throw new OrgsError(409, "payment_to_match_key_reused", W.key_reused);
   }
-  // The same press again is told what the first did about Square's customer, kept with the payment.
-  const told = link ?? { result: linkResultOf(row.linkResult), customerName: null, personName: null };
+  // The same press again is told what the first did about Square's customer, kept with the payment, and the name of the
+  // person it named, as the record is now (round one, Low 3); Square's details of the customer went with the match.
+  const result = linkResultOf(row.linkResult);
+  const named = link === null && result !== "none" && linkTo !== null ? await linking.readLinkPerson(deps.sql, gymId, linkTo) : null;
+  const told = link ?? { result, customerName: null, personName: named?.fullName ?? null };
   return matchPaymentResponseSchema.parse({
     matched: { entryId: paid.entry_id, name: paid.full_name, amountMinor: paid.amount_minor, currency: paid.currency, receiptNumber: paid.receipt_number, link: told },
   });
@@ -327,7 +340,7 @@ export async function matchPayment(deps: PaymentsDeps, userId: string, gymId: st
     const linked = await linkInStep(tx, { asked, gymId, userId, paymentId, row: locked, linkTo: body.linkTo, now });
     return { row: { ...locked, state: "recorded", memberPaymentId: recorded.paymentId, recordKey: body.requestKey }, link: linked.link, told: linked.told };
   });
-  return { answer: await matchedAnswer(deps, gymId, done.row, null, done.link), entryIds: peopleTold(body.entryId, row.entryId, ...done.told) };
+  return { answer: await matchedAnswer(deps, gymId, done.row, null, done.link, body.linkTo), entryIds: peopleTold(body.entryId, row.entryId, ...done.told) };
 }
 
 /** Square's customer on the payment, asked for: what is to be done about linking it to the person who paid. The person must

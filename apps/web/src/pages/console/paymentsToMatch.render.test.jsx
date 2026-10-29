@@ -320,6 +320,14 @@ describe('Payments to match', () => {
       expect(svc.match.mock.calls[0][2].linkTo).toBeNull();
     });
 
+    it('a customer somebody at another business on the same Square account has: said so, with no name, no "here" and no tick', async () => {
+      const { box } = await pickAmy({ offer: 'taken', customerName: 'Amy Lee', also: false, byName: null, elsewhere: true });
+      expect(box.queryByRole('checkbox')).toBeNull();
+      expect(box.getByTestId('match-link-taken').textContent).toBe(
+        'This Square customer is already linked to someone at another business that uses the same Square account, so it can’t be linked to Amy Lee.',
+      );
+    });
+
     it('with nothing to link there is no line at all, and nothing is sent', async () => {
       const { box } = await pickAmy(null);
       expect(box.queryByTestId('match-link')).toBeNull();

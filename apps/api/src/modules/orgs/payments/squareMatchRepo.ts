@@ -24,21 +24,34 @@ export async function readLinkPerson(sql: SqlOrTx, gymId: string, entryId: strin
   return row === undefined ? null : { entryId: row.id, fullName: row.full_name, email: row.email, phoneE164: row.phone_e164, past: row.past };
 }
 
-/** Every gym connected to this Square account: a customer is one person's across all of them. */
-async function gymsOfAccount(sql: SqlOrTx, environment: SquareEnvironment, accountId: string, gymId: string): Promise<string[]> {
+/** Every gym that may hold this customer of the Square account: connected to it now, or holding the customer (or the one Square
+ *  merged it into) in a row of its own, connected or not. A gym that disconnected keeps its people's customers, and holds them
+ *  again when it connects (round one, Low 1). */
+async function gymsHolding(sql: SqlOrTx, a: { gymId: string; environment: SquareEnvironment; accountId: string; customerId: string }): Promise<string[]> {
   const rows = await sql<{ gym_id: string }[]>`
-    SELECT gym_id FROM gym_payment_connections
-    WHERE provider = 'square' AND environment = ${environment} AND account_id = ${accountId} AND state = 'connected'`;
-  return [...new Set([gymId, ...rows.map((r) => r.gym_id)])];
+    WITH ids AS (
+      SELECT ${a.customerId}::text AS id
+      UNION
+      SELECT to_customer_id FROM gym_square_customer_merges
+      WHERE environment = ${a.environment} AND account_id = ${a.accountId} AND from_customer_id = ${a.customerId}
+    )
+    SELECT gym_id FROM gym_payment_connections WHERE provider = 'square' AND environment = ${a.environment} AND account_id = ${a.accountId}
+    UNION
+    SELECT gym_id FROM gym_square_customers WHERE environment = ${a.environment} AND account_id = ${a.accountId} AND customer_id IN (SELECT id FROM ids)
+    UNION
+    SELECT gym_id FROM gym_member_cards WHERE environment = ${a.environment} AND account_id = ${a.accountId} AND customer_id IN (SELECT id FROM ids)
+    UNION
+    SELECT gym_id FROM gym_square_old_customers WHERE environment = ${a.environment} AND account_id = ${a.accountId} AND customer_id IN (SELECT id FROM ids)`;
+  return [...new Set([a.gymId, ...rows.map((r) => r.gym_id)])];
 }
 
-/** The records that are this Square customer, in this gym and in any other gym connected to the account: the one the app
- *  made for them, a card's, a customer staff matched to them, and the old customer a merge in Square made of it. */
+/** The records that are this Square customer, in this gym and in any other gym of the account: the one the app made for them,
+ *  a card's, a customer staff matched to them, and the old customer a merge in Square made of it. */
 export async function holdersOf(
   sql: SqlOrTx,
   a: { gymId: string; environment: SquareEnvironment; accountId: string; customerId: string },
 ): Promise<{ gymId: string; entryId: string }[]> {
-  return await linkedRecords(sql, { environment: a.environment, accountId: a.accountId, customerId: a.customerId, gymIds: await gymsOfAccount(sql, a.environment, a.accountId, a.gymId) });
+  return await linkedRecords(sql, { environment: a.environment, accountId: a.accountId, customerId: a.customerId, gymIds: await gymsHolding(sql, a) });
 }
 
 /** The person has a customer of their own in this Square account already (made, linked, or being made). */
@@ -62,6 +75,9 @@ export async function linkMatched(
 ): Promise<LinkOutcome> {
   const person = await readLinkPerson(tx, a.gymId, a.entryId);
   if (person === null || person.past) return "past";
+  // The customer's own lock, to the end of the transaction: two gyms of one Square account, each under its own gym's lock,
+  // never both find it nobody's and both link it (round one, Low 5). Taken only here, always after a gym's lock.
+  await tx`SELECT pg_advisory_xact_lock(hashtextextended(${`square-customer:${a.environment}:${a.accountId}:${a.customerId}`}, 0))`;
   const holders = await holdersOf(tx, a);
   if (holders.some((h) => h.gymId !== a.gymId || h.entryId !== a.entryId)) return "taken";
   if (holders.length > 0) return "already";
@@ -79,7 +95,8 @@ export async function linkMatched(
 /** The customer is the person's now: the payments of it still waiting, that nobody's customer could be told for, are the
  *  person's, so they show on the person's page and hold their card. A payment that waited for want of the customer being
  *  known waits for what was sold (kept with it), else for its bill, worked out again from today's bills when it is read.
- *  Square's details of the customer, kept only to tell who it was, go. Answers the payments changed. */
+ *  One marked Not for a bill is the person's too, still marked, so Undo puts it back as theirs (round one, Low 4). Square's
+ *  details of the customer, kept only to tell who it was, go. Answers the payments changed. */
 export async function resolveWaiting(
   tx: TransactionSql,
   a: { gymId: string; entryId: string; environment: SquareEnvironment; accountId: string; customerId: string; now: Date },
@@ -90,7 +107,7 @@ export async function resolveWaiting(
         reason = CASE WHEN reason = 'not_linked' THEN COALESCE(sale_reason, 'no_bill') ELSE reason END,
         customer_name = NULL, customer_email = NULL, customer_phone = NULL, updated_at = ${a.now}
     WHERE gym_id = ${a.gymId} AND environment = ${a.environment} AND account_id = ${a.accountId} AND customer_id = ${a.customerId}
-      AND state = 'waiting' AND entry_id IS NULL AND reason <> 'several_people'
+      AND state IN ('waiting', 'not_bill') AND entry_id IS NULL AND reason <> 'several_people'
     RETURNING id`;
   return rows.length;
 }
