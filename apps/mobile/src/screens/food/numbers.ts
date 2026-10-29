@@ -16,9 +16,9 @@ export function wholeNumber(text: string): number | null {
 /** What protein, carbs and fat come to in calories: said, never made to match. */
 export const macroKcal = (v: Pick<Four, "proteinG" | "carbsG" | "fatG">): number => v.proteinG * 4 + v.carbsG * 4 + v.fatG * 9;
 
-/** The four numbers in one line. */
+/** The four numbers in one line, each held with its unit so a line never breaks between them. */
 export const fourWords = (v: Four): string =>
-  `${count(v.kcal)} kcal · Protein ${count(v.proteinG)} g · Carbs ${count(v.carbsG)} g · Fat ${count(v.fatG)} g`;
+  [`${count(v.kcal)}\u00a0kcal`, `Protein\u00a0${count(v.proteinG)}\u00a0g`, `Carbs\u00a0${count(v.carbsG)}\u00a0g`, `Fat\u00a0${count(v.fatG)}\u00a0g`].join(" · ");
 
 /** Why the person's own numbers cannot be used today, in their words, naming the number that holds
  *  them; null when nothing holds them. Every line is true whether or not they were picked. */

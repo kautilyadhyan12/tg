@@ -373,22 +373,23 @@ function EditDishes({ list, onChanged, onDone }: { list: readonly Dishware[]; on
       {list.length === 0 ? <Txt kind="small">You have no saved dishes.</Txt> : null}
       {list.map((d) => (
         <View key={d.id} style={styles.dish}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Rename ${d.label}`}
+          <View style={styles.grow}>
+            <Txt kind="strong" numberOfLines={2}>
+              {d.label}
+            </Txt>
+            <Txt kind="tiny">{String(d.volumeMl)} ml</Txt>
+          </View>
+          <Button
+            label="Rename"
+            kind="link"
+            say={`Rename ${d.label}`}
             onPress={() => {
               setSaid(null);
               setTrouble(null);
               setName(d.label);
               setEditing({ kind: "rename", dish: d });
             }}
-            style={({ pressed }) => [styles.grow, pressed ? styles.pressed : null]}
-          >
-            <Txt kind="strong" numberOfLines={2}>
-              {d.label}
-            </Txt>
-            <Txt kind="tiny">{String(d.volumeMl)} ml · Rename</Txt>
-          </Pressable>
+          />
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Remove ${d.label}`}

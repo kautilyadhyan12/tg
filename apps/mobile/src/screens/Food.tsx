@@ -483,7 +483,7 @@ function Macros({ title, today, targets, retry, eaten, uncounted, about, onSetup
           {uncountedWords(uncounted)}
         </Txt>
       ) : null}
-      {t.source === "own" ? <Txt kind="tiny">These are your own daily numbers.</Txt> : null}
+      {t.source === "own" && said === null ? <Txt kind="tiny">These are your own daily numbers.</Txt> : null}
       {hold === null ? null : (
         <Txt kind="small" colour="gold">
           {hold}

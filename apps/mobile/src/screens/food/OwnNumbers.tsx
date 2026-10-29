@@ -118,6 +118,7 @@ export function OwnNumbers({
                   value={typed[f.key]}
                   onChange={(text) => {
                     setTyped((before) => ({ ...before, [f.key]: text }));
+                    setTrouble(null);
                   }}
                   keyboard="number-pad"
                   maxLength={6}
@@ -153,6 +154,6 @@ export function OwnNumbers({
 
 const styles = StyleSheet.create({
   list: { gap: 12, paddingBottom: 4 },
-  fields: { flexDirection: "row", flexWrap: "wrap", columnGap: 10 },
+  fields: { flexDirection: "row", flexWrap: "wrap", columnGap: 10, rowGap: 12 },
   half: { flexGrow: 1, flexBasis: 140 },
 });

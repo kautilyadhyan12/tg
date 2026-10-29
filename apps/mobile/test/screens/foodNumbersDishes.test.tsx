@@ -263,7 +263,8 @@ describe("the daily numbers", () => {
     expect(await screen.findByText("Now using your own numbers.")).toBeTruthy();
     expect(puts(s)[0]?.body).toEqual({ source: "own", ...OWN });
     expect(screen.getByLabelText("Calories, 0 of 2,000 kcal")).toBeTruthy();
-    expect(screen.getByText("These are your own daily numbers.")).toBeTruthy();
+    // Said once: the card's own line waits until the word of the save has gone.
+    expect(screen.queryByText("These are your own daily numbers.")).toBeNull();
   });
 
   it("switches back to the app's plan and keeps the person's own numbers", async () => {
@@ -271,13 +272,13 @@ describe("the daily numbers", () => {
     const s = await openFood(state);
     expect(await screen.findByLabelText("Calories, 0 of 2,000 kcal")).toBeTruthy();
     await changeNumbers();
-    await fireEvent.press(screen.getByRole("button", { name: "App’s plan. 2,300 kcal · Protein 120 g · Carbs 280 g · Fat 75 g" }));
+    await fireEvent.press(screen.getByRole("button", { name: "App’s plan. 2,300\u00a0kcal · Protein\u00a0120\u00a0g · Carbs\u00a0280\u00a0g · Fat\u00a075\u00a0g" }));
     await fireEvent.press(screen.getByRole("button", { name: "Use the app’s plan" }));
     expect(await screen.findByText("Now using the app’s plan.")).toBeTruthy();
     expect(puts(s)[0]?.body).toEqual({ source: "app" });
     expect(screen.getByLabelText("Calories, 0 of 2,300 kcal")).toBeTruthy();
     await changeNumbers();
-    expect(screen.getByRole("button", { name: "My own. 2,000 kcal · Protein 150 g · Carbs 200 g · Fat 60 g" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "My own. 2,000\u00a0kcal · Protein\u00a0150\u00a0g · Carbs\u00a0200\u00a0g · Fat\u00a060\u00a0g" })).toBeTruthy();
   });
 
   it("with no signal says so and changes nothing", async () => {

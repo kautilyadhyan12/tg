@@ -78,7 +78,9 @@ describe("the rings' own numbers", () => {
 
   it("says what the macros come to and the four in one line", () => {
     expect(macroKcal({ proteinG: 150, carbsG: 200, fatG: 60 })).toBe(1940);
-    expect(fourWords({ kcal: 2300, proteinG: 120, carbsG: 280, fatG: 75 })).toBe("2,300 kcal · Protein 120 g · Carbs 280 g · Fat 75 g");
+    expect(fourWords({ kcal: 2300, proteinG: 120, carbsG: 280, fatG: 75 }).replaceAll("\u00a0", " ")).toBe("2,300 kcal · Protein 120 g · Carbs 280 g · Fat 75 g");
+    // A unit never stands alone at the start of a line.
+    expect(fourWords({ kcal: 2300, proteinG: 120, carbsG: 280, fatG: 75 })).toContain("Fat\u00a075\u00a0g");
   });
 
   it("names the number that holds the person's own back, for every reason the server gives", () => {
