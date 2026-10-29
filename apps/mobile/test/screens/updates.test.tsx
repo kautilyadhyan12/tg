@@ -329,8 +329,8 @@ describe("the posts, as the browser shows them", () => {
     await openUpdates(server.ask, IRON);
     const open = await page().findByLabelText("Open photo 1 of 1");
     const source = within(page().getByTestId(`post-${P1}`)).getByTestId(`photo-${PHOTO}`).props.source as { uri?: string; headers?: Record<string, string> };
-    expect(source?.uri).toBe(`http://localhost:3000${postOf(IRON, P1)}/photos/${PHOTO}`);
-    expect(source?.headers?.authorization).toBe("Bearer access-2");
+    expect(source.uri).toBe(`http://localhost:3000${postOf(IRON, P1)}/photos/${PHOTO}`);
+    expect(source.headers?.authorization).toBe("Bearer access-2");
     await fireEvent.press(open);
     expect(await screen.findByText("Photo 1 of 1")).toBeTruthy();
   });
