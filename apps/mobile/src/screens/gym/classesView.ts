@@ -99,7 +99,7 @@ export function placesText(c: ClassBookingView): string | null {
   const waiting = `${String(c.waitlisted)} on the waitlist`;
   if (left <= 0) return c.waitlisted > 0 ? `Full · ${waiting}` : "Full";
   const noReason = c.can.why === null || c.can.why === "waitlist_full";
-  if (c.waitlisted > 0 && !c.can.book && !c.can.claim && noReason && c.mine?.status !== "booked") return `Full · ${waiting}`;
+  if (c.waitlisted > 0 && !c.can.book && !c.can.claim && noReason && c.mine?.status !== "booked") return `Full · ${waiting} · a free place is going to the first in line`;
   return left === 1 ? "1 place left" : `${String(left)} of ${String(c.places)} places left`;
 }
 
@@ -289,4 +289,4 @@ export function emptyWeek(week: number, name: string): string {
 }
 
 /** The line under a list the server cut short. */
-export const MORE_CLASSES = "This week has more classes than shown here.";
+export const MORE_CLASSES = "These 7 days have more classes than this page shows. The later ones are not listed.";

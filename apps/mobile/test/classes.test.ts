@@ -54,7 +54,11 @@ describe("how full a class is", () => {
     ["the last place", klass({ booked: 11, can: { book: true } }), "1 place left"],
     ["full, nobody waiting", klass({ booked: 12, can: { joinWaitlist: true } }), "Full"],
     ["full, two waiting", klass({ booked: 12, waitlisted: 2, can: { joinWaitlist: true } }), "Full · 2 on the waitlist"],
-    ["a free place that is the first in line's", klass({ booked: 11, waitlisted: 1, can: { joinWaitlist: true } }), "Full · 1 on the waitlist"],
+    [
+      "a free place that is the first in line's",
+      klass({ booked: 11, waitlisted: 1, can: { joinWaitlist: true } }),
+      "Full · 1 on the waitlist · a free place is going to the first in line",
+    ],
     ["a free place, and they may claim it", klass({ booked: 11, waitlisted: 1, mine: waiting(1), can: { claim: true, cancel: "free" } }), "1 place left"],
     ["a free place they may not book (membership)", klass({ booked: 11, waitlisted: 1, can: { why: "not_covered" } }), "1 place left"],
     ["no limit", klass({ places: null, can: { book: true } }), null],
