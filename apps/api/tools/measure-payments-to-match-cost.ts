@@ -242,7 +242,7 @@ many(
     const p = toMatch[i];
     if (p === undefined) throw new Error("no payment");
     const [m] = await sql<{ id: string }[]>`SELECT id FROM gym_held_memberships WHERE gym_id = ${big.id} AND entry_id = ${p.entryId}`;
-    await matchPayment(deps, big.owner, big.id, p.rowId, { requestKey: randomUUID(), entryId: p.entryId, membershipId: m?.id ?? "", target: { kind: "period", periodIndex: 1 }, amountMinor: 2500 });
+    await matchPayment(deps, big.owner, big.id, p.rowId, { requestKey: randomUUID(), entryId: p.entryId, membershipId: m?.id ?? "", target: { kind: "period", periodIndex: 1 }, amountMinor: 2500, linkTo: null });
   }),
 );
 const marking = big.people.slice(RUNS, RUNS * 2);

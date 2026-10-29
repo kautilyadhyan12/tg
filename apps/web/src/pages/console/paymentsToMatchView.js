@@ -214,8 +214,66 @@ export const amountQuestion = (row) => `How much of the ${money(row.amountMinor,
 
 export const matchButton = (minor, currency) => `Match ${money(minor, currency)} to this bill`;
 
-/** Said in the row once it is matched. */
-export const matchedLine = (matched) => `Matched: ${money(matched.amountMinor, matched.currency)} on ${matched.name}'s bill. Receipt ${String(matched.receiptNumber)}.`;
+// ── Linking Square's customer (18d-iii-b-ii-c) ──
+// Under "Who paid?", for a payment whose Square customer is linked to nobody here: link them to the person, so that
+// customer's next payments come to the person's page by themselves. "Your Square customer list" is what the gym
+// already calls it; the tick is on only where the app can tell they are the same person.
+
+/** The Square customer in a sentence: by Square's name where it differs from the person's, else "the Square customer", so
+ *  a line never reads "Amy Lee … to Amy Lee". */
+const customerWho = (customerName, personName) => (customerName === null || customerName === personName ? 'the Square customer' : customerName);
+const upper = (text) => text.charAt(0).toUpperCase() + text.slice(1);
+
+/** The tick's own label. The payment's row above it already names the customer. */
+export const linkLabel = (personName) => `Link this Square customer to ${personName}`;
+
+/** Under the tick: what linking does, and, where the app can't tell, to tick it only if they are the same person. */
+export function linkNote(link, personName) {
+  if (link.offer === 'taken') return null;
+  const parts = [];
+  if (link.offer === 'ask') {
+    parts.push(`The app can’t tell they are the same person. Tick this only if ${customerWho(link.customerName, personName)} is ${personName}.`);
+  } else {
+    parts.push('Their name and contact details match.');
+  }
+  parts.push(`This customer’s next payments in Square Point of Sale then come to ${personName}’s page, with their bill ticked.`);
+  if (link.also) parts.push(`${personName} already has a customer in your Square customer list. This one is linked to them as well.`);
+  return parts.join(' ');
+}
+
+/** Where the customer can't be linked because somebody else has it: somebody here, by name, or somebody at another business
+ *  on the same Square account, whose name is not this gym's to see (round one, High 1). */
+export function linkTakenLine(link, personName) {
+  if (link.elsewhere === true) return `This Square customer is already linked to someone at another business that uses the same Square account, so it can’t be linked to ${personName}.`;
+  return `This Square customer is already linked to ${link.byName ?? 'someone else'}, so it can’t be linked to ${personName}.`;
+}
+
+/** What Match did about the customer, said after the press; empty where nothing was asked. The person's name can be
+ *  missing (an older answer), and the sentence still reads whole (round one, Low 3). */
+export function linkDoneLine(link) {
+  if (link === undefined || link.result === 'none') return '';
+  const person = link.personName ?? null;
+  const who = upper(customerWho(link.customerName, person));
+  switch (link.result) {
+    case 'linked':
+    case 'also':
+      return ` ${who} is now linked${person === null ? '' : ` to ${person}`}. Their next payments come to their page.`;
+    case 'taken':
+      return ` ${who} wasn’t linked: it is already linked to someone else.`;
+    case 'gone':
+      return ` ${who} wasn’t linked: it is no longer in your Square customer list.`;
+    case 'merged':
+      return ` ${who} wasn’t linked: Square has merged it into another customer.`;
+    case 'past':
+      return ` ${who} wasn’t linked: ${person ?? 'the person'} is a past member.`;
+    default:
+      return ` ${who} wasn’t linked: the app couldn’t check it in Square.`;
+  }
+}
+
+/** Said in the row once it is matched, and what was done about Square's customer. */
+export const matchedLine = (matched) =>
+  `Matched: ${money(matched.amountMinor, matched.currency)} on ${matched.name}'s bill. Receipt ${String(matched.receiptNumber)}.${linkDoneLine(matched.link)}`;
 
 // ── Not for a bill ──
 

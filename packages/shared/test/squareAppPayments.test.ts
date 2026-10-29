@@ -14,6 +14,7 @@ import {
   squareAppEnteredMinor,
   squareAppLinesOf,
   squareAppPaidInParts,
+  squareAppSaleWait,
   squareOrderAddedMinor,
   squareOrderAddsOnTop,
   squareTaxName,
@@ -145,6 +146,38 @@ describe("squareAppDecision: why a payment from Square's own app waits, and when
 
   it("a week is seven days", () => {
     expect(SQUARE_APP.aheadDays).toBe(7);
+  });
+});
+
+// Why a payment waits because of what was sold, whoever paid (18d-iii-b-ii-c): kept with the payment so that one that waited for
+// want of its customer being known still says it once the customer is linked. The order of the reasons is the decision's own.
+describe("squareAppSaleWait: the part of why a payment waits that is about the sale", () => {
+  const typed = { lines: "typed", addedOnTop: false, enteredMinor: 2500, paidInParts: false } as const;
+  it.each([
+    ["a typed sale, one payment, nothing added", typed, null],
+    ["a typed sale with tax added on top where the part typed is shown", { ...typed, addedOnTop: true, enteredMinor: 2500 }, null],
+    ["tax added on top and the part typed not shown", { ...typed, addedOnTop: true, enteredMinor: null }, "square_tax"],
+    ["typed amounts and items together", { ...typed, lines: "mixed" }, "mixed_sale"],
+    ["a sale that could not be read", { ...typed, lines: "unread", enteredMinor: null }, "sale_unread"],
+    ["one payment of several for one sale", { ...typed, paidInParts: true, enteredMinor: null }, "paid_in_parts"],
+    // The decision's own order: mixed, then unread, then in parts, then tax.
+    ["mixed and in parts: mixed first", { ...typed, lines: "mixed", paidInParts: true }, "mixed_sale"],
+    ["in parts and taxed: in parts first", { ...typed, paidInParts: true, addedOnTop: true, enteredMinor: null }, "paid_in_parts"],
+    // Items are never a bill's sale: the decision settles them before this is asked.
+    ["items alone", { ...typed, lines: "items" }, null],
+  ] as const)("%s", (_what, sale, expected) => {
+    expect(squareAppSaleWait(sale)).toBe(expected);
+  });
+  it("squareAppDecision says exactly what it says, for every sale, once the customer is one record", () => {
+    for (const [, sale, expected] of [
+      ["", { ...typed, lines: "mixed" }, "mixed_sale"],
+      ["", { ...typed, lines: "unread", enteredMinor: null }, "sale_unread"],
+      ["", { ...typed, paidInParts: true, enteredMinor: null }, "paid_in_parts"],
+      ["", { ...typed, addedOnTop: true, enteredMinor: null }, "square_tax"],
+    ] as const) {
+      const decided = squareAppDecision({ ...sale, customer: "one", amountMinor: 2500, today: "2026-10-29", candidates: [] });
+      expect(decided).toEqual({ kind: "wait", reason: expected });
+    }
   });
 });
 

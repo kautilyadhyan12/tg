@@ -130,8 +130,31 @@ export const matchPaidSchema = z
   .strict();
 export type MatchPaid = z.infer<typeof matchPaidSchema>;
 
+/** What Match's box offers to do about Square's customer on the payment, for the person picked as who paid
+ *  (18d-iii-b-ii-c; spec Part 3 §14.8): link them, so that customer's next payments come to the person's page.
+ *  `link`: the customer and the person agree (the same email or phone, and the same name), so the box's tick is
+ *  on; `ask`: the app can't tell they are the same person (a parent paying for a child has her own customer), so
+ *  the tick is off and staff say; `taken`: the customer is already linked to somebody else here, so it can't be.
+ *  `also`: the person has another customer in the gym's Square already, and this one is linked as theirs too.
+ *  `customerName`: Square's name for the customer, as seen when the payment was taken in (null: none seen).
+ *  `byName`: who it is linked to here, for `taken`. `elsewhere`: for `taken`, nobody here has it, but somebody at
+ *  another business on the same Square account does (round one, High 1), whose name is never shown here. */
+export const MATCH_LINK_OFFERS = ["link", "ask", "taken"] as const;
+export const matchLinkOfferSchema = z
+  .object({
+    offer: z.enum(MATCH_LINK_OFFERS),
+    customerName: z.string().min(1).max(200).nullable(),
+    also: z.boolean(),
+    byName: z.string().nullable(),
+    elsewhere: z.boolean(),
+  })
+  .strict();
+export type MatchLinkOffer = z.infer<typeof matchLinkOfferSchema>;
+
 /** Match's box, for one person: their bills (and those of anybody they pay for), and their newest
- *  payments. `amountMinor`: what goes on the bill, where the app can tell. */
+ *  payments. `amountMinor`: what goes on the bill, where the app can tell. `link`: what the box offers to do
+ *  about Square's customer on the payment; null where there is nothing to link (no customer was added to the
+ *  sale, or the customer is this person's already). */
 export const matchBillsResponseSchema = z
   .object({
     person: salePersonSchema,
@@ -142,6 +165,7 @@ export const matchBillsResponseSchema = z
     /** The bill ticked when the box opens: the first one due of exactly `amountMinor`; null for none. */
     suggested: z.number().int().min(0).nullable(),
     paid: z.array(matchPaidSchema).max(5),
+    link: matchLinkOfferSchema.nullable(),
   })
   .strict();
 export type MatchBillsResponse = z.infer<typeof matchBillsResponseSchema>;
@@ -149,7 +173,9 @@ export type MatchBillsResponse = z.infer<typeof matchBillsResponseSchema>;
 export const matchBillsQuerySchema = z.object({ entryId: z.string().uuid() }).strict();
 
 /** Match. `requestKey` is the box's own: the same press sent twice puts the payment on the bill once.
- *  `amountMinor`: what the screen showed going on the bill. */
+ *  `amountMinor`: what the screen showed going on the bill. `linkTo`: the person who paid, whose Square customer
+ *  on the payment is to be linked to them (18d-iii-b-ii-c); null, which nothing but the box's tick sends, links
+ *  nobody. */
 export const matchPaymentRequestSchema = z
   .object({
     requestKey: z.string().uuid(),
@@ -157,9 +183,27 @@ export const matchPaymentRequestSchema = z
     membershipId: z.string().uuid(),
     target: matchTargetSchema,
     amountMinor: z.number().int().min(1).max(99_999_999),
+    linkTo: z.string().uuid().nullable().default(null),
   })
   .strict();
 export type MatchPaymentRequest = z.infer<typeof matchPaymentRequestSchema>;
+
+/** What Match did about the Square customer it was asked to link: `linked` (it is the person's customer now),
+ *  `also` (the person had another customer, and this one is theirs too), `taken` (somebody else here has it),
+ *  `gone` (Square no longer has it), `merged` (Square has merged it into another customer since), `unchecked`
+ *  (Square wouldn't say), `past` (the person is a past member), `none` (nothing was asked, or the payment had
+ *  no customer). */
+export const MATCH_LINK_RESULTS = ["none", "linked", "also", "taken", "gone", "merged", "unchecked", "past"] as const;
+export const matchLinkResultSchema = z
+  .object({
+    result: z.enum(MATCH_LINK_RESULTS),
+    /** Square's name for the customer; null where it was not seen, or the same press is answered again. */
+    customerName: z.string().min(1).max(200).nullable(),
+    /** The person it was to be linked to. */
+    personName: z.string().nullable(),
+  })
+  .strict();
+export type MatchLinkResult = z.infer<typeof matchLinkResultSchema>;
 
 export const matchPaymentResponseSchema = z
   .object({
@@ -170,6 +214,7 @@ export const matchPaymentResponseSchema = z
         amountMinor: minorSchema,
         currency: currencySchema,
         receiptNumber: z.number().int().min(1).max(2_147_483_647),
+        link: matchLinkResultSchema,
       })
       .strict(),
   })

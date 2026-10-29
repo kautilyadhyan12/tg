@@ -139,29 +139,31 @@ export async function readTaken(
   lock = false,
 ): Promise<TakenRow | null> {
   const rows = lock
-    ? await sql<(RawWaiting & { state: string; not_bill: string | null; member_payment_id: string | null; record_key: string; reason: string | null })[]>`
-        SELECT ${COLUMNS(sql)}, w.state, w.not_bill, w.member_payment_id, w.record_key
+    ? await sql<(RawWaiting & { state: string; not_bill: string | null; member_payment_id: string | null; record_key: string; reason: string | null; link_result: string | null })[]>`
+        SELECT ${COLUMNS(sql)}, w.state, w.not_bill, w.member_payment_id, w.record_key, w.link_result
         FROM gym_square_app_payments w
         LEFT JOIN gym_member_list_entries e ON e.gym_id = w.gym_id AND e.id = w.entry_id
         WHERE w.gym_id = ${gymId} AND w.id = ${id}
         FOR UPDATE OF w`
-    : await sql<(RawWaiting & { state: string; not_bill: string | null; member_payment_id: string | null; record_key: string; reason: string | null })[]>`
-        SELECT ${COLUMNS(sql)}, w.state, w.not_bill, w.member_payment_id, w.record_key
+    : await sql<(RawWaiting & { state: string; not_bill: string | null; member_payment_id: string | null; record_key: string; reason: string | null; link_result: string | null })[]>`
+        SELECT ${COLUMNS(sql)}, w.state, w.not_bill, w.member_payment_id, w.record_key, w.link_result
         FROM gym_square_app_payments w
         LEFT JOIN gym_member_list_entries e ON e.gym_id = w.gym_id AND e.id = w.entry_id
         WHERE w.gym_id = ${gymId} AND w.id = ${id}`;
   const row = rows[0];
   if (row === undefined) return null;
-  return { ...toTaken(row), state: row.state, notBill: row.not_bill, memberPaymentId: row.member_payment_id, recordKey: row.record_key };
+  return { ...toTaken(row), state: row.state, notBill: row.not_bill, memberPaymentId: row.member_payment_id, recordKey: row.record_key, linkResult: row.link_result };
 }
 
-/** A payment from Square Point of Sale in any state: `reason` is why it waits (kept while it is marked). */
+/** A payment from Square Point of Sale in any state: `reason` is why it waits (kept while it is marked). `linkResult`:
+ *  what Match did about Square's customer on it (18d-iii-b-ii-c); null where nothing was asked. */
 export type TakenRow = Omit<WaitingRow, "reason"> & {
   reason: SquareAppWaitReason | null;
   state: string;
   notBill: string | null;
   memberPaymentId: string | null;
   recordKey: string;
+  linkResult: string | null;
 };
 
 /** Matched by staff: on the bill now, as `recorded`, under the request's key. Square's details of its
