@@ -3,9 +3,11 @@
 // are printed as they are, never moved to the phone's zone.
 import {
   CLASS_BOOKING_WORDS,
+  CLASS_ONLINE_LINK_REFUSED,
   CLASS_ONLINE_WORDS,
   formatMinor,
   lateCancelRefusalSchema,
+  pressableOnlineLink,
   reminderClock,
   type ClassBookingView,
   type GymClockFormat,
@@ -170,12 +172,19 @@ export function whyText(c: ClassBookingView, clock: GymClockFormat): string | nu
   return CLASS_BOOKING_WORDS[why];
 }
 
+/** How long past a class's end, by this phone's clock, a link the server last sent is still offered:
+ *  the read at its end may get no answer, and this phone's clock may be a few minutes fast. */
+export const LINK_AFTER_END_MS = 5 * 60_000;
+
 /** An online class as this member meets it; null for a class at the gym. The link comes only to
- *  somebody who holds a place, from 30 minutes before the class until it ends. */
-export function onlineText(c: ClassBookingView): { line: string; link: string | null } | null {
+ *  somebody who holds a place, from 30 minutes before the class until it ends, and only one that
+ *  keeps the shared link rule is offered. */
+export function onlineText(c: ClassBookingView, now: number): { line: string; link: string | null } | null {
   if (c.online === null || c.cancelled) return null;
-  const link = c.online.state === "open" && typeof c.online.link === "string" && c.online.link.startsWith("https://") ? c.online.link : null;
-  return { line: CLASS_ONLINE_WORDS[c.online.state], link };
+  if (c.online.state !== "open") return { line: CLASS_ONLINE_WORDS[c.online.state], link: null };
+  if (now > Date.parse(c.startsAt) + c.minutes * 60_000 + LINK_AFTER_END_MS) return { line: CLASS_ONLINE_WORDS.closed, link: null };
+  const link = pressableOnlineLink(c.online.link);
+  return link === null ? { line: CLASS_ONLINE_LINK_REFUSED, link: null } : { line: CLASS_ONLINE_WORDS.open, link };
 }
 
 /** How often the list is read again while a link is due and not here, by this phone's clock. */
@@ -347,3 +356,6 @@ export function emptyWeek(week: number, name: string): string {
 
 /** The line under a list the server cut short. */
 export const MORE_CLASSES = "These 7 days have more classes than this page shows. The later ones are not listed.";
+
+/** Book answered with the booking an earlier press made, cancelled since. */
+export const EARLIER_CANCELLED = "Your earlier booking was cancelled. Press Book to book again.";

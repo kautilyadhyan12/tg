@@ -99,6 +99,17 @@ export function classOnlineView(i: {
   return { state: "open", opensAtMs, link: i.link };
 }
 
+/** The link a member's screen may offer to press: the stored one only where it keeps the
+ *  rule above, as a link kept before that rule was tightened may not. */
+export function pressableOnlineLink(link: string | null): string | null {
+  if (link === null) return null;
+  const read = classOnlineLinkSchema.safeParse(link);
+  return read.success ? read.data : null;
+}
+
+/** What a member reads where the gym's link breaks that rule. */
+export const CLASS_ONLINE_LINK_REFUSED = "Online class. This link can't be opened. Ask the front desk.";
+
 /** What a member reads on an online class, by state. */
 export const CLASS_ONLINE_WORDS: Record<ClassOnlineState, string> = {
   not_booked: "Online class. Book it to get the link.",

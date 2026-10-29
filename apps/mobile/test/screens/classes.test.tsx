@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
+import { AppState } from "react-native";
 import { lateCancelFeeWords } from "@app/shared";
 import { App } from "../../src/App";
 import type { Ask } from "../../src/session/calls";
@@ -232,6 +233,101 @@ describe("the worst thing: nothing is booked twice, no fee is taken that was not
     expect(keys[1]).not.toBe(keys[0]);
   });
 
+  it("a kept key answered with its booking cancelled since, with no read between, says so; the next press is a new request", async () => {
+    let tries = 0;
+    const cancelled = klass(S1, "Spin", { mine: { status: "cancelled", waitlistPlace: null, packCharged: false }, can: can({ book: true }) });
+    const gym = held([klass(S1, "Spin")]);
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [classesOf(IRON)]: gym.read,
+      [bookingOf(IRON, S1)]: () => {
+        tries += 1;
+        // It booked, the answer was lost, and the booking was cancelled in the browser since.
+        if (tries === 1) return lost();
+        // The same key again is answered with what it made: that booking, cancelled.
+        if (tries === 2) return gym.keep(cancelled);
+        return gym.keep(klass(S1, "Spin", { booked: 9, mine: { status: "booked", waitlistPlace: null, packCharged: false }, can: can({ cancel: "free" }) }));
+      },
+    });
+    await openClasses(server.ask, IRON);
+    await fireEvent.press(await screen.findByLabelText("Book: Spin, 6:30 PM · 45 min"));
+    expect(await classBox(S1).findByText("Can’t connect. Check your internet and try again.")).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText("Book: Spin, 6:30 PM · 45 min"));
+    expect(await classBox(S1).findByText("Your earlier booking was cancelled. Press Book to book again.")).toBeTruthy();
+    expect(classBox(S1).queryByText("You’re booked")).toBeNull();
+    await fireEvent.press(screen.getByLabelText("Book: Spin, 6:30 PM · 45 min"));
+    expect(await classBox(S1).findByText("You’re booked")).toBeTruthy();
+    const keys = server.asked.filter((one) => one.path === bookingOf(IRON, S1)).map((one) => (one.body as { requestKey: string }).requestKey);
+    expect(keys).toHaveLength(3);
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[2]).not.toBe(keys[0]);
+  });
+
+  it("while one class's press is on its way, every other class's buttons wait for it", async () => {
+    let answer: ((reply: Reply) => void) | null = null;
+    const gym = held([klass(S1, "Spin"), klass(S2, "Yoga")]);
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [classesOf(IRON)]: gym.read,
+      [bookingOf(IRON, S1)]: () =>
+        new Promise<Reply>((resolve) => {
+          answer = resolve;
+        }),
+    });
+    await openClasses(server.ask, IRON);
+    await fireEvent.press(await screen.findByLabelText("Book: Spin, 6:30 PM · 45 min"));
+    await waitFor(() => {
+      expect(answer).not.toBeNull();
+    });
+    expect(screen.getByLabelText("Book: Yoga, 6:30 PM · 45 min").props.accessibilityState).toMatchObject({ disabled: true });
+    await fireEvent.press(screen.getByLabelText("Book: Yoga, 6:30 PM · 45 min"));
+    expect(server.asked.filter((one) => one.path === bookingOf(IRON, S2))).toHaveLength(0);
+    await act(() => {
+      answer?.(gym.keep(klass(S1, "Spin", { booked: 9, mine: { status: "booked", waitlistPlace: null, packCharged: false }, can: can({ cancel: "free" }) })));
+    });
+    expect(await classBox(S1).findByText("You’re booked")).toBeTruthy();
+    expect(screen.getByLabelText("Book: Yoga, 6:30 PM · 45 min").props.accessibilityState).toMatchObject({ disabled: false });
+  });
+
+  it("a Book answered after Later reads the week on screen, never the week it was pressed in", async () => {
+    let answer: ((reply: Reply) => void) | null = null;
+    const weeks: string[] = [];
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [bookingOf(IRON, S1)]: () =>
+        new Promise<Reply>((resolve) => {
+          answer = resolve;
+        }),
+    });
+    const ask: Ask = async (url, init) => {
+      const where = new URL(url);
+      if (where.pathname !== classesOf(IRON)) return server.ask(url, init);
+      const n = where.searchParams.get("week") ?? "";
+      weeks.push(n);
+      const body = n === "0" ? week([klass(S1, "Spin")]) : week([klass(S2, "Pilates", { localDate: "2026-11-09" })], { week: 1, from: "2026-11-08", to: "2026-11-14" });
+      return { ok: true, status: 200, json: () => Promise.resolve(body) };
+    };
+    await openClasses(ask, IRON);
+    await fireEvent.press(await screen.findByLabelText("Book: Spin, 6:30 PM · 45 min"));
+    await waitFor(() => {
+      expect(answer).not.toBeNull();
+    });
+    await fireEvent.press(screen.getByLabelText("Later"));
+    expect(await screen.findByText("Pilates")).toBeTruthy();
+    await act(() => {
+      answer?.({ status: 200, body: { booking: klass(S1, "Spin", { booked: 9, mine: { status: "booked", waitlistPlace: null, packCharged: false }, can: can({ cancel: "free" }) }) } });
+    });
+    await waitFor(() => {
+      expect(weeks).toEqual(["0", "1", "1"]);
+    });
+    expect(await screen.findByText("Pilates")).toBeTruthy();
+    expect(screen.queryByText("Spin")).toBeNull();
+    expect(screen.getByText("8 Nov – 14 Nov")).toBeTruthy();
+  });
+
   it("a free cancel answered after the free time ran out is asked again as a late cancel, with the server's fee", async () => {
     const booked = klass(S1, "Spin", { mine: { status: "booked", waitlistPlace: null, packCharged: false }, can: can({ cancel: "free" }) });
     const server = fakeServer({
@@ -375,5 +471,31 @@ describe("the Classes page", () => {
     await fireEvent.press(screen.getByLabelText("Earlier"));
     expect(await screen.findByText("Spin")).toBeTruthy();
     expect(weeks).toEqual(["0", "1", "0"]);
+  });
+
+  it("a place that no longer shows the classes, found when the app comes back, takes them off the screen", async () => {
+    const listeners: ((state: string) => void)[] = [];
+    // The last test of the file: put back mid-file, this breaks every later render.
+    jest.spyOn(AppState, "addEventListener").mockImplementation((_type, handler) => {
+      listeners.push(handler as (state: string) => void);
+      return { remove: () => undefined };
+    });
+    let gone = false;
+    const online = { state: "open", opensAt: "2026-11-02T12:30:00.000Z", link: "https://zoom.us/j/1" };
+    const booked = klass(S1, "Spin", { mine: { status: "booked", waitlistPlace: null, packCharged: false }, can: can({ cancel: "free" }), online });
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [classesOf(IRON)]: () => (gone ? refusal(404, "org_not_found", "Organisation not found.") : { status: 200, body: week([booked]) }),
+    });
+    await openClasses(server.ask, IRON);
+    expect(await screen.findByText("Spin")).toBeTruthy();
+    gone = true;
+    await act(() => {
+      for (const listener of listeners) listener("active");
+    });
+    expect(await page().findByText("Iron House’s classes aren’t available right now.")).toBeTruthy();
+    expect(page().queryByText("Spin")).toBeNull();
+    expect(page().queryByText("Join class")).toBeNull();
   });
 });
