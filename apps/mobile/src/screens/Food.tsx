@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, Keyboard, Linking, Pressable, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from "react-native";
+import { AppState, Keyboard, Linking, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import {
@@ -32,8 +32,7 @@ import { Page } from "../look/Page";
 import { PictureTop } from "../look/PictureTop";
 import { Ring } from "../look/Ring";
 import { Sheet } from "../look/Sheet";
-import { MOST_TEXT_GROWTH } from "../look/sizing";
-import { fonts, Txt } from "../look/Txt";
+import { Txt } from "../look/Txt";
 import { useSession } from "../session/SessionProvider";
 import { useZoneSaved } from "../session/TimeZoneSync";
 import { NOT_KNOWN, count } from "./dashboard/words";
@@ -61,18 +60,19 @@ import {
   walkDay,
   type Sums,
 } from "./food/day";
+import { AmountPicker, dishByName, pickedDish, useDishes } from "./food/AmountPicker";
 import { useMealOutbox } from "./food/MealOutbox";
+import { holdWords } from "./food/numbers";
+import { OwnNumbers } from "./food/OwnNumbers";
 import {
-  amountFor,
+  FILL_CHOICES,
   amountRefusal,
   chosenItem,
+  dishMeasure,
   loggedAmount,
-  measureWords,
+  startWords,
   startingAmount,
-  shownMeasures,
-  stepped,
   underAGram,
-  unitWords,
   type Amount,
 } from "./food/measures";
 import {
@@ -169,6 +169,18 @@ export function FoodScreen() {
   const settle = useCallback((upTo: number) => outbox?.settle(upTo), [outbox]);
   const { read, again } = useDayMeals(day, view.sent, settle);
   const targets = useRead(TARGETS_READ, nutritionTargetsResponseSchema);
+  // The rings as the server answered a save of the daily numbers, until a read begun after the save
+  // comes back: from then the reads are drawn, whatever they say (32b-ii-b's review, H2).
+  const [justSaved, setJustSaved] = useState<NutritionTargetsResponse | null>(null);
+  const savedAfter = useRef(0);
+  const [numbers, setNumbers] = useState(false);
+  // What a save of the numbers did, said on the card while the numbers drawn are still the ones saved.
+  const [numbersSaid, setNumbersSaid] = useState<{ words: string; source: NutritionTargetsResponse["source"] } | null>(null);
+  const readTargets = targets.read;
+  useEffect(() => {
+    if (justSaved !== null && targets.shownFrom > savedAfter.current) setJustSaved(null);
+  }, [targets.shownFrom, justSaved]);
+  const shownTargets: typeof readTargets = justSaved === null ? readTargets : { kind: "ok", data: justSaved };
   const [adding, setAdding] = useState<MealType | null>(null);
   const [open, setOpen] = useState<Row | null>(null);
   const [said, setSaid] = useState<{ section: MealType; words: string } | null>(null);
@@ -218,8 +230,13 @@ export function FoodScreen() {
       <Macros
         title={today ? "Today’s Macros" : `Macros · ${dayWords(day, new Date())}`}
         today={today}
-        targets={targets.read}
+        targets={shownTargets}
         retry={targets.again}
+        said={numbersSaid !== null && shownTargets.kind === "ok" && shownTargets.data.source === numbersSaid.source ? numbersSaid.words : null}
+        onChange={() => {
+          setNumbersSaid(null);
+          setNumbers(true);
+        }}
         eaten={rows === null || rows.some((r) => r.totals === null) ? null : daySums(rows)}
         uncounted={rows === null ? 0 : rows.filter((r) => r.totals === null).length}
         about={rows !== null && rows.some((r) => hasEstimate(r.items))}
@@ -320,11 +337,26 @@ export function FoodScreen() {
           goTo(picked);
         }}
       />
+      {shownTargets.kind === "ok" ? (
+        <OwnNumbers
+          open={numbers}
+          targets={shownTargets.data}
+          onClose={() => { setNumbers(false); }}
+          onSaved={(answer) => {
+            setNumbers(false);
+            savedAfter.current = targets.begun();
+            setJustSaved(answer);
+            setNumbersSaid({ words: answer.source === "own" ? "Now using your own numbers." : "Now using the app’s plan.", source: answer.source });
+            targets.again();
+          }}
+        />
+      ) : null}
       <Setup
         open={setupAt !== null}
         at={setupAt === "where" ? null : setupAt}
         onClose={() => {
           setSetupAt(null);
+          setJustSaved(null);
           targets.again();
         }}
       />
@@ -351,12 +383,16 @@ interface MacrosProps {
   /** A food on the day holds the scan's estimate: what is left is "about". */
   about: boolean;
   onSetup: (at: SetupScreenId | "where") => void;
+  /** What a save of the daily numbers did, said on the card. */
+  said: string | null;
+  /** Opens the daily numbers: the app's plan or the person's own. */
+  onChange: () => void;
 }
 
 /** The day's four rings against the person's daily numbers, what is left of them today, and why the
  *  calories hold no cut where the plan holds none. With no daily numbers it says which answer is
  *  missing and opens setup on it. */
-function Macros({ title, today, targets, retry, eaten, uncounted, about, onSetup }: MacrosProps) {
+function Macros({ title, today, targets, retry, eaten, uncounted, about, onSetup, said, onChange }: MacrosProps) {
   const left = (target: number, had: number, unit: "kcal" | "g") => `${about ? "about " : ""}${leftWords(target, had, unit)}`;
   const heading = (
     <View style={styles.titleRow}>
@@ -404,9 +440,16 @@ function Macros({ title, today, targets, retry, eaten, uncounted, about, onSetup
   }
   const goal = t.targets;
   const noCut = noCutWords(t);
+  const hold = holdWords(t.ownHeld);
   return (
     <Card style={styles.macros}>
-      {heading}
+      <View style={styles.row}>
+        <View style={[styles.titleRow, styles.grow]}>
+          <Icon name="target" size={16} colour="orange" />
+          <Txt kind="h3">{title}</Txt>
+        </View>
+        <Button label="Change" kind="link" say="Change your daily numbers" onPress={onChange} />
+      </View>
       <View style={styles.rings}>
         {MACROS.map((m) => {
           const of = goal[m.key];
@@ -416,7 +459,7 @@ function Macros({ title, today, targets, retry, eaten, uncounted, about, onSetup
               <View style={styles.ringBox}>
                 <Ring share={had === null || of <= 0 ? 0 : had / of} colour={m.colour} />
                 <View style={styles.ringWords}>
-                  <Txt kind="strong" numberOfLines={1}>
+                  <Txt kind="strong" numberOfLines={1} fit>
                     {had === null ? NOT_KNOWN : count(had)}
                   </Txt>
                 </View>
@@ -447,7 +490,20 @@ function Macros({ title, today, targets, retry, eaten, uncounted, about, onSetup
           {uncountedWords(uncounted)}
         </Txt>
       ) : null}
-      {t.source === "own" ? <Txt kind="tiny">These are your own daily numbers.</Txt> : null}
+      {t.source === "own" && said === null ? <Txt kind="tiny">These are your own daily numbers.</Txt> : null}
+      {hold === null ? null : (
+        <Txt kind="small" colour="gold">
+          {hold}
+        </Txt>
+      )}
+      {said === null ? null : (
+        <View style={styles.row}>
+          <Icon name="check" size={14} colour="goodText" />
+          <Txt kind="small" colour="goodText" style={styles.grow}>
+            {said}
+          </Txt>
+        </View>
+      )}
       {noCut === null ? null : (
         <View style={styles.row}>
           <Icon name="shield" size={14} colour="gold" />
@@ -564,6 +620,12 @@ function MealSheet({
     setMode({ kind: "foods" });
     setFull(false);
   }, [rowId]);
+  // The phone's back button: from a food, its removal, the meal's details or its removal, back a step.
+  const back = (): boolean => {
+    if (mode.kind === "foods") return false;
+    setMode(mode.kind === "removeFood" ? { kind: "food", at: mode.at } : { kind: "foods" });
+    return true;
+  };
   // Each food's own measures, for the server's meal as it is now.
   useEffect(() => {
     setMeasures(null);
@@ -592,7 +654,7 @@ function MealSheet({
 
   if (mode.kind === "remove") {
     return (
-      <Sheet open title="Remove this meal?" onClose={onClose}>
+      <Sheet open title="Remove this meal?" onClose={onClose} onBack={back}>
         <Txt kind="small">
           {row.name} comes off {mealTypeName(row.section).toLowerCase()} and out of the day’s totals.
         </Txt>
@@ -604,7 +666,7 @@ function MealSheet({
 
   if (mode.kind === "details") {
     return (
-      <Sheet open title="Edit meal" onClose={onClose}>
+      <Sheet open title="Edit meal" onClose={onClose} onBack={back}>
         <MealDetails
           row={row}
           onSave={(fields) => {
@@ -626,7 +688,7 @@ function MealSheet({
   if (saved !== null && item !== undefined && mode.kind === "removeFood") {
     const at = mode.at;
     return (
-      <Sheet open title={`Remove ${item.name}?`} onClose={onClose}>
+      <Sheet open title={`Remove ${item.name}?`} onClose={onClose} onBack={back}>
         <Txt kind="small">
           {item.name} comes off {row.name} and out of the day’s totals.
         </Txt>
@@ -655,7 +717,7 @@ function MealSheet({
   if (saved !== null && item !== undefined && mode.kind === "food") {
     const at = mode.at;
     return (
-      <Sheet open title={item.name} onClose={onClose}>
+      <Sheet open title={item.name} onClose={onClose} onBack={back}>
         <FoodAmount
           key={`${row.id}-${String(at)}-${measures === null ? "own" : "server"}`}
           mealId={row.id}
@@ -812,18 +874,35 @@ function FoodAmount({
 }) {
   const { session } = useSession();
   const item = saved.items[at];
-  const [amount, setAmount] = useState<Amount | null>(() => {
-    if (item === undefined) return null;
-    const start = amountOf(item);
-    return measures.some((m) => m.id === start.measure) ? start : { measure: "g", amount: String(Math.max(1, Math.round(item.gramsPoint))) };
-  });
-  const [allMeasures, setAllMeasures] = useState(false);
+  // The amount it was logged by, where that is one of its measures, else its grams.
+  const logged = item === undefined ? null : amountOf(item);
+  const usual: Amount =
+    logged !== null && measures.some((m) => m.id === logged.measure) ? logged : { measure: "g", amount: String(Math.max(1, Math.round(item?.gramsPoint ?? 1))) };
+  const [amount, setAmount] = useState<Amount | null>(() => (item === undefined ? null : usual));
   const [priced, setPriced] = useState<Priced>({ kind: "none" });
   const [saving, setSaving] = useState(false);
+  const [panel, setPanel] = useState(false);
+  const { dishes, again: dishesAgain } = useDishes();
+  const { height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  // Logged by a dish the person still has: it opens at that dish, as full as it was, once the dishes
+  // are read (Kd, 32b-ii-b: a food logged by a dish opened at grams).
+  const dishOpened = useRef(false);
+  useEffect(() => {
+    const m = item?.measure;
+    if (dishOpened.current || m?.id !== "dish" || dishes.kind !== "ok") return;
+    dishOpened.current = true;
+    const dish = dishByName(dishes, m.name);
+    const fill = FILL_CHOICES.find((c) => c.value === m.amount);
+    if (dish !== null && fill !== undefined) setAmount({ measure: dishMeasure(dish.id), amount: String(fill.value) });
+  }, [dishes, item]);
   const measure = amount === null ? undefined : measures.find((m) => m.id === amount.measure);
   const chosen = item === undefined || amount === null ? null : chosenItem(item.canonical, amount);
   const tooSmall = amount !== null && underAGram(measure, amount);
-  const items = chosen === null || !("measure" in chosen) ? null : withAmount(saved.items, at, chosen.canonical, { measure: chosen.measure, amount: chosen.amount });
+  const items =
+    chosen === null || "grams" in chosen
+      ? null
+      : withAmount(saved.items, at, chosen.canonical, "measure" in chosen ? { measure: chosen.measure, amount: chosen.amount } : { dishwareId: chosen.dishwareId, fillLevel: chosen.fillLevel });
   const key = items === null ? "" : JSON.stringify(items);
 
   // The server's numbers for the meal at the new amount, a moment after it changes.
@@ -857,7 +936,6 @@ function FoodAmount({
   const refusedWords = priced.kind === "refused" && priced.for === key ? priced.words : null;
   const now = preview?.items[at];
   const held = items === null || tooSmall || refusedWords !== null || saving;
-  const shown = shownMeasures(measures, amount.measure, allMeasures);
 
   const save = () => {
     if (items === null || held) return;
@@ -868,77 +946,54 @@ function FoodAmount({
       preview,
       foods: saved.items.map((it, i) => ({
         name: it.name,
-        amount: i !== at ? loggedAmount(it) + itemMark(it) : now === undefined ? typedAmount(measure, typed) : loggedAmount(now) + itemMark(now),
+        amount: i !== at ? loggedAmount(it) + itemMark(it) : now === undefined ? typedAmount(measure, typed, pickedDish(dishes, amount.measure)) : loggedAmount(now) + itemMark(now),
       })),
     });
   };
 
   return (
     <>
+      <ScrollView style={{ maxHeight: Math.max(SHEET_LIST_LEAST, height - insets.top - SHEET_ABOVE_LIST - (panel ? 0 : SHEET_FOOT + (onRemove === null ? 0 : 60))) }} contentContainerStyle={styles.sheetList}>
       <Txt kind="tiny">
         Logged: {loggedAmount(item) + itemMark(item)} · {kcalWords(item.kcalPoint)}
       </Txt>
-      <Txt kind="tiny" style={styles.label}>
-        Amount
-      </Txt>
-      <View style={styles.amountRow}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Less" onPress={() => { setAmount(stepped(amount, -1)); }} style={styles.step}>
-          <Icon name="minus" size={18} />
-        </Pressable>
-        <TextInput
-          accessibilityLabel="Amount"
-          value={amount.amount}
-          onChangeText={(text) => { setAmount({ measure: amount.measure, amount: text }); }}
-          keyboardType="decimal-pad"
-          maxLength={8}
-          maxFontSizeMultiplier={MOST_TEXT_GROWTH}
-          selectionColor={colours.orange}
-          style={styles.amount}
-        />
-        <Pressable accessibilityRole="button" accessibilityLabel="More" onPress={() => { setAmount(stepped(amount, 1)); }} style={styles.step}>
-          <Icon name="plus" size={18} />
-        </Pressable>
-        <Txt kind="small" colour="text" style={styles.grow} numberOfLines={2}>
-          {unitWords(measure)}
-        </Txt>
-      </View>
-      <View style={styles.chips}>
-        {shown.map((m) => (
-          <Chip
-            key={m.id}
-            label={measureWords(m)}
-            on={amount.measure === m.id}
-            onPress={() => {
-              if (amount.measure !== m.id) setAmount(amountFor(m));
-            }}
-          />
-        ))}
-      </View>
-      {shown.length < measures.length ? (
-        <Button
-          label={`More measures (${String(measures.length - shownMeasures(measures, amount.measure, false).length)})`}
-          kind="link"
-          style={styles.start}
-          onPress={() => { setAllMeasures(true); }}
-        />
-      ) : null}
-      {tooSmall ? (
-        <Txt kind="small" colour="badText">
-          That comes to less than a gram. Pick a larger amount.
-        </Txt>
-      ) : null}
-      {refusedWords === null ? null : (
-        <Txt kind="small" colour="badText">
-          {refusedWords}
-        </Txt>
+      <AmountPicker
+        measures={measures}
+        amount={amount}
+        onAmount={setAmount}
+        dishes={dishes}
+        onDishes={dishesAgain}
+        onPanel={setPanel}
+        grams={now === undefined || preview === null ? null : now.gramsPoint}
+        usual={usual}
+      />
+      {panel ? null : (
+        <>
+          {tooSmall ? (
+            <Txt kind="small" colour="badText">
+              That comes to less than a gram. Pick a larger amount.
+            </Txt>
+          ) : null}
+          {refusedWords === null ? null : (
+            <Txt kind="small" colour="badText">
+              {refusedWords}
+            </Txt>
+          )}
+        </>
       )}
-      {now === undefined || preview === null ? null : (
-        <Txt kind="small" colour="text">
-          {count(Math.round(now.gramsPoint))} g · {kcalWords(now.kcalPoint)} · Meal total {kcalWords(preview.totals.kcalPoint)}
-        </Txt>
+      </ScrollView>
+      {/* The food's numbers and Save stay in view under the list, on the smallest phone too. */}
+      {panel ? null : (
+        <View style={styles.foot}>
+          {now === undefined || preview === null ? null : (
+            <Txt kind="small" colour="text">
+              {kcalWords(now.kcalPoint)} · Meal total {kcalWords(preview.totals.kcalPoint)}
+            </Txt>
+          )}
+          <Button label="Save" wide disabled={held} onPress={save} />
+          {onRemove === null ? null : <Button label="Remove from meal" icon="trash" kind="quiet" wide onPress={onRemove} />}
+        </View>
       )}
-      <Button label="Save" wide disabled={held} onPress={save} />
-      {onRemove === null ? null : <Button label="Remove from meal" icon="trash" kind="quiet" wide onPress={onRemove} />}
     </>
   );
 }
@@ -946,6 +1001,8 @@ function FoodAmount({
 /** What sits above the box's list, and the box's own foot: its handle and title, the search box. */
 const SHEET_ABOVE_LIST = 150;
 const SHEET_ABOVE_SEARCH = SHEET_ABOVE_LIST + 70;
+/** The box's foot under a picked food's list: its numbers and Add. */
+const SHEET_FOOT = 130;
 /** The list never shrinks below one food's row. */
 const SHEET_LIST_LEAST = 120;
 
@@ -973,7 +1030,8 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
   const [food, setFood] = useState<Picked | null>(null);
   const [amount, setAmount] = useState<Amount | null>(null);
   const [priced, setPriced] = useState<Priced>({ kind: "none" });
-  const [allMeasures, setAllMeasures] = useState(false);
+  const [panel, setPanel] = useState(false);
+  const { dishes, again: dishesAgain } = useDishes();
   const [full, setFull] = useState(false);
   const [recent, setRecent] = useState<RecentFood[]>([]);
   // Held from the first press until the meal is kept: a second tap never logs it twice.
@@ -1005,6 +1063,7 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
     setAmount(null);
     setPriced({ kind: "none" });
     setFull(false);
+    setPanel(false);
     setAdding(false);
     addingNow.current = false;
   }, [type]);
@@ -1108,15 +1167,28 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
   };
   const open = (f: RecentFood) => {
     setFood({ canonical: f.canonical, name: f.item.name, source: f.source, measures: f.measures, startsAt: f.add, last: f });
-    setAllMeasures(false);
-    setAmount(startingAmount({ startsAt: f.add }));
+    // Last had by a saved dish the person still has: that dish, as full as it was then. A dish that is
+    // gone starts it where the server says, a count of it where it has one.
+    const m = f.item.measure;
+    // Only once the dishes are read: before then it opens where the server starts it.
+    const dish = m?.id === "dish" && dishes.kind === "ok" ? dishByName(dishes, m.name) : null;
+    const fill = FILL_CHOICES.find((c) => c.value === m?.amount);
+    setAmount(dish !== null && fill !== undefined ? { measure: dishMeasure(dish.id), amount: String(fill.value) } : startingAmount({ startsAt: f.add }));
   };
   const showRecent = food === null && query.trim() === "" && recent.length > 0;
+  // The phone's back button: from a food's amount, back to the foods.
+  const back = (): boolean => {
+    if (food === null) return false;
+    setFood(null);
+    setAmount(null);
+    setPanel(false);
+    return true;
+  };
 
   return (
-    <Sheet open title={`Add to ${name}`} onClose={onClose}>
+    <Sheet open title={`Add to ${name}`} onClose={onClose} onBack={back}>
       {food === null ? <Field label="Search food" bare value={query} onChange={setQuery} placeholder="Search food" ready maxLength={100} /> : null}
-      <ScrollView style={{ maxHeight: Math.max(SHEET_LIST_LEAST, height - keyboard - insets.top - (food === null ? SHEET_ABOVE_SEARCH : SHEET_ABOVE_LIST)) }} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.sheetList}>
+      <ScrollView style={{ maxHeight: Math.max(SHEET_LIST_LEAST, height - keyboard - insets.top - (food === null ? SHEET_ABOVE_SEARCH : SHEET_ABOVE_LIST + (panel ? 0 : SHEET_FOOT))) }} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.sheetList}>
         {food === null ? (
           <>
             {showRecent ? (
@@ -1159,10 +1231,9 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
                   <Pressable
                     key={f.canonical}
                     accessibilityRole="button"
-                    accessibilityLabel={`${f.name}, ${count(Math.round(f.kcal))} kcal per 100 g, ${SOURCE_WORDS[f.source]}`}
+                    accessibilityLabel={`${f.name}, ${startWords(f)}, ${SOURCE_WORDS[f.source]}`}
                     onPress={() => {
                       setFood(f);
-                      setAllMeasures(false);
                       setAmount(startingAmount(f));
                     }}
                     style={({ pressed }) => [styles.found, pressed ? styles.pressed : null]}
@@ -1170,7 +1241,7 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
                     <Txt kind="strong" numberOfLines={2}>
                       {f.name}
                     </Txt>
-                    <SourceLine source={f.source} before={`${count(Math.round(f.kcal))} kcal per 100 g ·`} />
+                    <SourceLine source={f.source} before={`${startWords(f)} ·`} />
                   </Pressable>
                 ))
               : null}
@@ -1191,79 +1262,29 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
                 }}
               />
             </View>
-            <Txt kind="tiny" style={styles.label}>
-              Amount
-            </Txt>
             {amount === null ? null : (
-              <View style={styles.amountRow}>
-                <Pressable accessibilityRole="button" accessibilityLabel="Less" onPress={() => { setAmount(stepped(amount, -1)); }} style={styles.step}>
-                  <Icon name="minus" size={18} />
-                </Pressable>
-                <TextInput
-                  accessibilityLabel="Amount"
-                  value={amount.amount}
-                  onChangeText={(text) => { setAmount({ measure: amount.measure, amount: text }); }}
-                  keyboardType="decimal-pad"
-                  maxLength={8}
-                  maxFontSizeMultiplier={MOST_TEXT_GROWTH}
-                  selectionColor={colours.orange}
-                  style={styles.amount}
-                />
-                <Pressable accessibilityRole="button" accessibilityLabel="More" onPress={() => { setAmount(stepped(amount, 1)); }} style={styles.step}>
-                  <Icon name="plus" size={18} />
-                </Pressable>
-                <Txt kind="small" colour="text" style={styles.grow} numberOfLines={2}>
-                  {unitWords(measure)}
-                </Txt>
-              </View>
-            )}
-            <View style={styles.chips}>
-              {shownMeasures(food.measures, amount?.measure ?? null, allMeasures).map((m) => (
-                <Chip
-                  key={m.id}
-                  label={measureWords(m)}
-                  on={amount?.measure === m.id}
-                  onPress={() => {
-                    if (amount?.measure !== m.id) setAmount(amountFor(m));
-                  }}
-                />
-              ))}
-            </View>
-            {shownMeasures(food.measures, amount?.measure ?? null, allMeasures).length < food.measures.length ? (
-              <Button
-                label={`More measures (${String(food.measures.length - shownMeasures(food.measures, amount?.measure ?? null, false).length)})`}
-                kind="link"
-                style={styles.start}
-                onPress={() => {
-                  setAllMeasures(true);
-                }}
+              <AmountPicker
+                key={food.canonical}
+                measures={food.measures}
+                amount={amount}
+                onAmount={setAmount}
+                dishes={dishes}
+                onDishes={dishesAgain}
+                onPanel={setPanel}
+                grams={preview?.items[0]?.gramsPoint ?? null}
+                usual={startingAmount(food)}
               />
-            ) : null}
-            {tooSmall ? <Txt kind="small" colour="badText">That comes to less than a gram. Pick a larger amount.</Txt> : null}
-            {refusedWords === null ? null : (
-              <Txt kind="small" colour="badText">
-                {refusedWords}
-              </Txt>
             )}
-            {preview === null ? null : (
-              <Txt kind="small" colour="text">
-                {count(Math.round(preview.items[0]?.gramsPoint ?? 0))} g · {kcalWords(preview.totals.kcalPoint)} · Protein {count(Math.round(preview.totals.proteinG))} g · Carbs{" "}
-                {count(Math.round(preview.totals.carbsG))} g · Fat {count(Math.round(preview.totals.fatG))} g
-              </Txt>
+            {panel ? null : (
+              <>
+                {tooSmall ? <Txt kind="small" colour="badText">That comes to less than a gram. Pick a larger amount.</Txt> : null}
+                {refusedWords === null ? null : (
+                  <Txt kind="small" colour="badText">
+                    {refusedWords}
+                  </Txt>
+                )}
+              </>
             )}
-            <Button
-              label={preview === null ? `Add ${food.name}` : `Add ${food.name} · ${kcalWords(preview.totals.kcalPoint)}`}
-              wide
-              disabled={held}
-              onPress={() => {
-                void add();
-              }}
-            />
-            {full ? (
-              <Txt kind="small" colour="badText">
-                Too many meals are waiting to be sent. Go online to send them, then add this one.
-              </Txt>
-            ) : null}
           </>
         )}
         <Credits
@@ -1272,6 +1293,30 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
           }
         />
       </ScrollView>
+      {/* The food's numbers and its Add stay in view under the list, on the smallest phone too. */}
+      {food === null || panel ? null : (
+        <View style={styles.foot}>
+          {preview === null ? null : (
+            <Txt kind="small" colour="text">
+              {kcalWords(preview.totals.kcalPoint)} · Protein {count(Math.round(preview.totals.proteinG))} g · Carbs{" "}
+              {count(Math.round(preview.totals.carbsG))} g · Fat {count(Math.round(preview.totals.fatG))} g
+            </Txt>
+          )}
+          <Button
+            label={preview === null ? `Add ${food.name}` : `Add ${food.name} · ${kcalWords(preview.totals.kcalPoint)}`}
+            wide
+            disabled={held}
+            onPress={() => {
+              void add();
+            }}
+          />
+          {full ? (
+            <Txt kind="small" colour="badText">
+              Too many meals are waiting to be sent. Go online to send them, then add this one.
+            </Txt>
+          ) : null}
+        </View>
+      )}
     </Sheet>
   );
 }
@@ -1452,6 +1497,7 @@ const styles = StyleSheet.create({
   },
   item: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 48 },
   sheetList: { gap: 12, paddingBottom: 4 },
+  foot: { gap: 10 },
   found: { minHeight: 56, justifyContent: "center", gap: 2, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colours.line },
   recent: { flexDirection: "row", alignItems: "center", gap: 10 },
   amountRow: { flexDirection: "row", alignItems: "center", gap: 8 },
@@ -1466,19 +1512,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   clock: { minWidth: 96, textAlign: "center" },
-  amount: {
-    width: 80,
-    minHeight: sizes.press,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colours.fieldLine,
-    backgroundColor: colours.field,
-    color: colours.text,
-    fontFamily: fonts.semibold,
-    fontSize: 16,
-    textAlign: "center",
-    padding: 0,
-  },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
 });
 

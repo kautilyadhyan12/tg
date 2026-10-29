@@ -199,8 +199,20 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     const items=res.json<{items:Record<string,unknown>[]}>().items;
     expect(items[0]?.["canonical"]).toBe("ham_sliced");
     expect(items.length).toBeGreaterThan(0);
-    for(const item of items)expect(Object.keys(item).sort()).toEqual(["canonical","carbsG","fatG","fiberG","kcal","measures","name","proteinG","serving","source","startsAt","unit"]);
+    for(const item of items)expect(Object.keys(item).sort()).toEqual(["canonical","carbsG","fatG","fiberG","kcal","measures","name","proteinG","serving","source","startsAt","startsKcal","unit"]);
   },30_000);
+
+  it("search lists each food's calories at its start as a save of that amount prices them (32b-ii-b's review, L6)",async()=>{
+    for(const q of ["apple","rice","bacon","ham"]){
+      const res=await inject("GET",`/v1/nutrition/foods?q=${q}&limit=3`,cookieA);
+      expect(res.statusCode,res.body).toBe(200);
+      for(const food of res.json<{items:{canonical:string;startsAt:{measure:string;amount:number};startsKcal:number}[]}>().items){
+        const priced=await inject("POST","/v1/nutrition/meals/preview",cookieA,{items:[{canonical:food.canonical,measure:food.startsAt.measure,amount:food.startsAt.amount}]});
+        expect(priced.statusCode,priced.body).toBe(200);
+        expect(priced.json<{totals:{kcalPoint:number}}>().totals.kcalPoint,`${q}: ${food.canonical}`).toBe(food.startsKcal);
+      }
+    }
+  },60_000);
 
   // T3 (manual-off-foods) violation 1: an OFF slug EMBEDDING a curated
   // canonical (off_banana_chips ⊃ banana) must save the OFF macros the search

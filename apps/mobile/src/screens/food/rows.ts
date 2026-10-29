@@ -9,7 +9,7 @@ import {
   type WaitingMeal,
 } from "@app/shared";
 import { itemMark, sectionOf } from "./day";
-import { formatAmount, loggedAmount, type Amount } from "./measures";
+import { FILL_CHOICES, formatAmount, loggedAmount, type Amount } from "./measures";
 
 // A meal on the day's list, and how a change to it reads while it waits to be sent (ROADMAP 32b-ii-a).
 // Every number is the server's: a meal's foods changed with no signal have no numbers until it is sent.
@@ -124,7 +124,12 @@ export function measuresWithoutServer(item: MealItem): FoodMeasure[] {
 }
 
 /** The meal's foods with food `at` at a new amount: every other food named as it was saved. */
-export function withAmount(saved: readonly MealItem[], at: number, canonical: string, amount: { measure: string; amount: number }): MealEditItem[] {
+export function withAmount(
+  saved: readonly MealItem[],
+  at: number,
+  canonical: string,
+  amount: { measure: string; amount: number } | { dishwareId: string; fillLevel: number },
+): MealEditItem[] {
   return saved.map((_, i): MealEditItem => (i === at ? { from: i, canonical, ...amount } : { from: i }));
 }
 
@@ -150,7 +155,8 @@ export function totalsOf(items: readonly MealItem[]): Meal["totals"] {
 export const totalsWithout = (saved: readonly MealItem[], at: number): Meal["totals"] => totalsOf(saved.filter((_, i) => i !== at));
 
 /** A new amount as it reads before the server has weighed it: "3 × roti", "150 g", "2 oz". */
-export function typedAmount(measure: FoodMeasure | undefined, amount: number): string {
+export function typedAmount(measure: FoodMeasure | undefined, amount: number, dish: { label: string } | null = null): string {
+  if (dish !== null) return `${dish.label}, ${FILL_CHOICES.find((f) => f.value === amount)?.words ?? "how full not picked"}`;
   if (measure === undefined || measure.id === "g") return `${formatAmount(amount)} g`;
   if (measure.id === "oz") return `${formatAmount(amount)} oz`;
   return `${formatAmount(amount)} × ${measure.name}`;

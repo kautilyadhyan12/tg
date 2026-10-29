@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Meal, MealPage, NutritionTargetsResponse } from "@app/shared";
 import { MOST_MEAL_PAGES, aboutKcal, addDays, creditsFor, hasEstimate, itemMark, monthWeeks, monthWords, uncountedWords, daySums, dayWords, leftWords, noCutWords, sectionOf, walkDay } from "../src/screens/food/day";
-import { FIRST_MEASURES, amountFor, chosenItem, shownMeasures, loggedAmount, measureWords, startingAmount, stepped, underAGram, unitWords } from "../src/screens/food/measures";
+import { amountFor, startWords, chosenItem, shownMeasures, loggedAmount, measureWords, startingAmount, stepped, underAGram, unitWords } from "../src/screens/food/measures";
 
 const at = (y: number, m: number, d: number, h: number) => new Date(y, m - 1, d, h).toISOString();
 
@@ -156,18 +156,55 @@ describe("an amount", () => {
   });
 });
 
-describe("the measures offered", () => {
-  const m = (n: number) => ({ id: `usda-${String(n)}`, name: `m${String(n)}`, grams: n });
-  const banana = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(m);
+describe("a found food as the search lists it (Kd, 32b-ii-b: never per 100 g)", () => {
+  // The server's calories at the start, as the search sends them.
+  const food = (startsAt: { measure: string; amount: number }, measures: { id: string; name: string; grams: number }[]) => {
+    const m = measures.find((x) => x.id === startsAt.measure);
+    return { startsKcal: Math.round((52 * (m?.grams ?? 1) * startsAt.amount) / 100), startsAt, measures };
+  };
+  it("is its calories at the amount it starts at, in the words a person counts by", () => {
+    expect(startWords(food({ measure: "serving", amount: 1 }, [{ id: "serving", name: "apple", grams: 180 }]))).toBe("94 kcal · 1 apple");
+    expect(startWords(food({ measure: "usda-1", amount: 1 }, [{ id: "usda-1", name: "half cup", grams: 122 }]))).toBe("63 kcal · half cup");
+    expect(startWords(food({ measure: "usda-1", amount: 1 }, [{ id: "usda-1", name: "2 tbsp", grams: 32 }]))).toBe("17 kcal · 2 tbsp");
+    expect(startWords(food({ measure: "usda-1", amount: 2 }, [{ id: "usda-1", name: "slice", grams: 25 }]))).toBe("26 kcal · 2 slice");
+    expect(startWords(food({ measure: "g", amount: 100 }, [{ id: "g", name: "g", grams: 1 }]))).toBe("52 kcal · 100 g");
+  });
+});
 
-  it("are a few, with the one picked kept in view, and every one when asked", () => {
-    expect(shownMeasures(banana, "usda-1", false).map((x) => x.id)).toEqual(["usda-1", "usda-2", "usda-3", "usda-4"]);
-    expect(shownMeasures(banana, "usda-9", false).map((x) => x.id)).toEqual(["usda-1", "usda-2", "usda-3", "usda-4", "usda-9"]);
-    expect(shownMeasures(banana, "usda-1", true)).toHaveLength(10);
+describe("the measures offered (Kd, 32b-ii-b: the apple's cups confused him)", () => {
+  // The foods' measures as the server sends them now (search, 2026-10-29).
+  const ms = (...rows: [string, string, number][]) => rows.map(([id, name, grams]) => ({ id, name, grams }));
+  const G: [string, string, number] = ["g", "g", 1];
+  const OZ: [string, string, number] = ["oz", "oz", 28.35];
+  const apple = ms(["serving", "apple", 180], ["usda-1", "cup, quartered or chopped", 125], ["usda-2", "cup slices", 109], ["usda-3", "large", 223], ["usda-4", "medium", 182], ["usda-5", "small", 149], ["usda-6", "extra small", 101], ["usda-7", "serving", 242], G, OZ);
+  const milk = ms(["usda-1", "cup", 244], ["usda-2", "fl oz", 30.5], ["usda-3", "tbsp", 15.2], ["usda-4", "quart", 976], G, OZ);
+  const bacon = ms(["usda-1", "3 oz", 85], ["usda-2", "slice cooked", 8.1], G, OZ);
+  const rice = ms(["usda-1", "cup", 158], G, OZ);
+  const paneer = ms(G, OZ);
+  const ids = (shown: { name: string }[]) => shown.map((x) => x.name);
+
+  it("are the food's counts and grams: an apple, its sizes, never its cups", () => {
+    expect(ids(shownMeasures(apple, "serving", false))).toEqual(["apple", "large", "medium", "small", "g"]);
   });
 
-  it("are all shown when there is only one more than the few", () => {
-    expect(shownMeasures(banana.slice(0, FIRST_MEASURES + 1), null, false)).toHaveLength(FIRST_MEASURES + 1);
+  it("are a cup and grams for a food poured or scooped, and its count for a food counted", () => {
+    expect(ids(shownMeasures(milk, "usda-1", false))).toEqual(["cup", "g"]);
+    // One more than those is shown, never hidden behind "More measures (1)".
+    expect(ids(shownMeasures(rice, "usda-1", false))).toEqual(["cup", "g", "oz"]);
+    expect(ids(shownMeasures(bacon, "usda-2", false))).toEqual(["slice cooked", "g"]);
+    expect(ids(shownMeasures(paneer, "g", false))).toEqual(["g", "oz"]);
+  });
+
+  it("offer two counts of one weight once: an egg, and a large one that weighs the same", () => {
+    const egg = ms(["serving", "egg", 46], ["usda-1", "large", 46], ["usda-2", "cup", 243], G, OZ);
+    expect(ids(shownMeasures(egg, "serving", false))).toEqual(["egg", "g"]);
+  });
+
+  it("keep the one picked in view, and show every one when asked", () => {
+    expect(ids(shownMeasures(apple, "usda-1", false))).toEqual(["apple", "cup, quartered or chopped", "large", "medium", "small", "g"]);
+    expect(ids(shownMeasures(milk, "oz", false))).toEqual(["cup", "g", "oz"]);
+    // Every one when asked, the ones offered first still first.
+    expect(ids(shownMeasures(apple, "serving", true))).toEqual(["apple", "large", "medium", "small", "g", "cup, quartered or chopped", "cup slices", "extra small", "serving", "oz"]);
   });
 });
 

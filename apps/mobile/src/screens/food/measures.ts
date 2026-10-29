@@ -1,9 +1,10 @@
-import { MAX_ITEM_GRAMS, type ChosenItem, type FoodMeasure, type FoodSearchItem, type MealItem } from "@app/shared";
+import { count } from "../dashboard/words";
+import { MAX_ITEM_GRAMS, isCountMeasure, isWeightMeasure, type ChosenItem, type FoodMeasure, type FoodSearchItem, type MealItem } from "@app/shared";
 
 // Adding a food by one of its own measures, as the browser does (apps/web/src/components/nutrition/
 // measures.js, RULINGS 2026-09-16). The SERVER works out every gram and calorie from its own list of
 // the food's measures: these only shape what the picker offers, what it sends, and how an item reads.
-// A saved dish as a measure comes with 32b-ii.
+// A saved dish is a measure too (32b-ii-b): its key is "dish:" and its id, its amount how full it was.
 
 /** What the picker holds: one of the food's measures and the amount as typed. */
 export interface Amount {
@@ -35,8 +36,32 @@ export function stepped(amount: Amount, direction: 1 | -1): Amount {
   return { measure: amount.measure, amount: formatAmount(Math.min(MAX_ITEM_GRAMS, Math.max(lowest, next))) };
 }
 
-/** What is sent for the food, or null while the amount is no amount. */
+/** How full a dish was, in words, never as a fraction (Kd, RULINGS 2026-09-17): nothing is picked
+ *  until the person picks it (Kd, 2026-07-18). */
+export const FILL_CHOICES = [
+  { label: "Quarter", words: "quarter full", value: 0.25 },
+  { label: "Half", words: "half full", value: 0.5 },
+  { label: "Three quarters", words: "three quarters full", value: 0.75 },
+  { label: "Full", words: "full", value: 1 },
+] as const;
+
+const DISH_KEY = "dish:";
+/** No measure picked: the one picked was tapped again (Kd, 32b-ii-b). The amount waits for one. */
+export const NO_MEASURE = "";
+/** A saved dish as the picker's measure. */
+export const dishMeasure = (id: string): string => `${DISH_KEY}${id}`;
+/** The saved dish a measure names, or null for a food's own measure. */
+export const dishOf = (measure: string): string | null => (measure.startsWith(DISH_KEY) ? measure.slice(DISH_KEY.length) : null);
+
+/** What is sent for the food, or null while the amount is no amount. A dish is sent with how full it
+ *  was, and is no amount until that is picked. */
 export function chosenItem(canonical: string, amount: Amount): ChosenItem | null {
+  if (amount.measure === NO_MEASURE) return null;
+  const dish = dishOf(amount.measure);
+  if (dish !== null) {
+    const fill = FILL_CHOICES.find((f) => String(f.value) === amount.amount);
+    return fill === undefined ? null : { canonical, dishwareId: dish, fillLevel: fill.value };
+  }
   const n = Number(amount.amount.trim().replace(",", "."));
   if (amount.amount.trim() === "" || !Number.isFinite(n) || n <= 0 || n > MAX_ITEM_GRAMS) return null;
   return { canonical, measure: amount.measure, amount: n };
@@ -53,6 +78,7 @@ export function underAGram(measure: FoodMeasure | undefined, amount: Amount): bo
 const AMOUNT_REFUSALS: Readonly<Record<string, string>> = {
   portion_out_of_range: "That amount is too small or too large. Pick another amount.",
   unknown_measure: "That measure isn't one of this food's. Pick one from the list.",
+  unknown_dishware: "That dish isn't saved any more. Pick another measure.",
 };
 export const amountRefusal = (error: string): string | null => AMOUNT_REFUSALS[error] ?? null;
 
@@ -87,16 +113,40 @@ export function loggedAmount(item: Pick<MealItem, "measure" | "gramsPoint">): st
   return `${formatAmount(m.amount)} × ${m.name} · ${grams}`;
 }
 
-const FILL_WORDS: Readonly<Record<number, string>> = { 0.25: "quarter full", 0.5: "half full", 0.75: "three quarters full", 1: "full" };
+const FILL_WORDS: Readonly<Record<number, string>> = Object.fromEntries(FILL_CHOICES.map((f) => [f.value, f.words]));
 
-/** How many measures are offered before "More measures": a few chips, never a wall of them. */
-export const FIRST_MEASURES = 4;
+/** How many of a food's counts are offered before "More measures": the food and a few sizes. */
+export const FIRST_COUNTS = 4;
 
-/** The measures offered: the first few, in the server's order, and the one picked if it is further
- *  down; every one once the person asks for more. */
+/** The measures offered first, as a person thinks of the food (Kd, 32b-ii-b: "cup, quartered or
+ *  chopped, cup slices and many more" confused him): its counts — an apple, a large one, a medium
+ *  one — or, where it has none, its first cup or spoon; then grams; and the one picked where it is
+ *  none of those. The rest wait behind More measures, in the server's order; every one once the
+ *  person asks for more. */
 export function shownMeasures(measures: readonly FoodMeasure[], picked: string | null, all: boolean): FoodMeasure[] {
-  if (all || measures.length <= FIRST_MEASURES + 1) return [...measures];
-  const first = measures.slice(0, FIRST_MEASURES);
-  const chosen = measures.find((m) => m.id === picked);
-  return chosen === undefined || first.includes(chosen) ? first : [...first, chosen];
+  const own = measures.filter((m) => m.id !== "g" && m.id !== "oz");
+  // Two counts of one weight are one choice offered twice ("egg · 46 g", "large · 46 g"): the first.
+  const counts = own
+    .filter((m) => isCountMeasure(m.name))
+    .filter((m, i, all) => !all.slice(0, i).some((e) => Math.abs(e.grams - m.grams) < 0.5))
+    .slice(0, FIRST_COUNTS);
+  const scoop = own.find((m) => !isCountMeasure(m.name) && !isWeightMeasure(m.name));
+  const first = counts.length > 0 ? counts : scoop === undefined ? [] : [scoop];
+  const main = measures.filter((m) => first.includes(m) || m.id === "g" || m.id === picked);
+  const rest = measures.filter((m) => !main.includes(m));
+  // One more is shown, never hidden behind a link of its own.
+  return all || rest.length <= 1 ? [...main, ...rest] : main;
+}
+
+/** A found food as the search lists it: the server's calories at the amount it starts at, as a person
+ *  counts it ("94 kcal · 1 apple"), never per 100 g. */
+export function startWords(food: Pick<FoodSearchItem, "startsKcal" | "measures" | "startsAt">): string {
+  const m = food.measures.find((x) => x.id === food.startsAt.measure);
+  const amount = food.startsAt.amount;
+  const grams = (m?.grams ?? 1) * amount;
+  // A measure that says its own amount ("half cup", "2 tbsp") is not "1 half cup".
+  const named = amount === 1 && /^(?:\d|half\b|quarter\b)/i.test(m?.name ?? "");
+  const words =
+    m === undefined || m.id === "g" ? `${formatAmount(grams)} g` : m.id === "oz" ? `${formatAmount(amount)} oz` : named ? m.name : `${formatAmount(amount)} ${m.name}`;
+  return `${count(food.startsKcal)} kcal · ${words}`;
 }

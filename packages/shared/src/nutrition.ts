@@ -181,6 +181,27 @@ export const foodMeasureSchema = z.object({
   id: measureIdSchema, name: z.string().min(1).max(60), grams: z.number().positive().max(MAX_ITEM_GRAMS),
 }).strict();
 export type FoodMeasure = z.infer<typeof foodMeasureSchema>;
+/** Whether a measure is a count of the food — an apple, a slice, a large one, a serving — and not
+ *  a weight or a volume (an ounce, a cup, a tablespoon), read off its name (ROADMAP 32b-ii-b). The
+ *  server starts a food at a count, and the phone's amount box offers its counts first. */
+export function isCountMeasure(name: string): boolean {
+  return !VOLUME_OR_WEIGHT.test(name.trim());
+}
+/** Whether a measure is a weight ("3 oz", "lb"), which says nothing grams do not. */
+export function isWeightMeasure(name: string): boolean {
+  return WEIGHT.test(name.trim());
+}
+/** What can come before a unit: "2 ", "0.75 ", "1/2 ", "½ ", "half ", or a number glued to it ("250ml"). */
+const AMOUNT_BEFORE = String.raw`(?:\d*\.?\d+\s*|\d+\s*\/\s*\d+\s*|[½⅓⅔¼¾⅛]\s*|half\s+|quarter\s+)?`;
+/** A unit ends where no letter or hyphen follows it: "l" is a litre; "large" and "T-bone" are not. */
+const UNIT_END = String.raw`(?![a-z-])`;
+const WEIGHT = new RegExp(String.raw`^${AMOUNT_BEFORE}(?:oz|ounces?|lbs?|pounds?|g|grams?|kg)${UNIT_END}`, "i");
+/** A volume or a weight as recipes and labels write it (32b-ii-b's review, L5: "½ cup", "2 tbs",
+ *  "T", "c", "dl", "250ml", "fl. oz", "cupful" too). */
+const VOLUME_OR_WEIGHT = new RegExp(
+  String.raw`^${AMOUNT_BEFORE}(?:cups?|cupfuls?|c|tbsp|tbs|tablespoons?|t|tsp|teaspoons?|fl\.?\s*oz|oz|ounces?|lbs?|pounds?|g|grams?|kg|ml|cl|dl|l|liters?|litres?|quarts?|pints?|gallons?|glass(?:es)?)${UNIT_END}`,
+  "i",
+);
 /** The measure and amount a food starts at where the person has not picked one. */
 export const measureStartSchema = z.object({ measure: measureIdSchema, amount: z.number().positive() }).strict();
 const measureItemSchema = z
@@ -318,6 +339,30 @@ export const dishwareInputSchema = z.object({
 }).strict();
 export const patchDishwareSchema = dishwareInputSchema.partial().refine((v) => Object.keys(v).length > 0, { message: "at least one field required" });
 export type DishwareInput = z.infer<typeof dishwareInputSchema>;
+/** The dishes everybody has, ready to pick without saving one (Kd, 32b-ii-b: "keep the things
+ *  already built, just give an option to create one on own"): the sizes the browser's Save a dish
+ *  offers. Fixed ids nobody's own dish can take; never renamed or removed. */
+export const STANDARD_DISHES = [
+  { id: "00000000-0000-4000-8000-00000000d151", label: "Cup", containerClass: "cup", volumeMl: 240 },
+  { id: "00000000-0000-4000-8000-00000000d152", label: "Mug", containerClass: "mug", volumeMl: 325 },
+  { id: "00000000-0000-4000-8000-00000000d153", label: "Bowl", containerClass: "cereal_bowl", volumeMl: 375 },
+] as const;
+export const standardDish = (id: string) => STANDARD_DISHES.find((d) => d.id === id.toLowerCase()) ?? null;
+
+/** POST /v1/nutrition/dishware. With the phone's own `id` (ROADMAP 32b-ii-b) the same dish sent
+ *  twice is saved once, and the second answer is the dish as it is now. Kept in small letters. */
+export const createDishwareRequestSchema = dishwareInputSchema
+  .extend({ id: z.string().uuid().toLowerCase().refine((id) => standardDish(id) === null, { message: "a dish everybody has" }).optional() })
+  .strict();
+export type CreateDishwareRequest = z.infer<typeof createDishwareRequestSchema>;
+/** The person's saved dishes, newest first (GET /v1/nutrition/dishware). */
+export const dishwareSchema = z.object({
+  id: z.string().uuid(), label: z.string(), containerClass: z.string(), volumeMl: z.number().int().positive(),
+  foodHint: z.string().nullable(), createdAt: z.string(),
+}).strict();
+export type Dishware = z.infer<typeof dishwareSchema>;
+export const dishwarePageSchema = z.object({ items: z.array(dishwareSchema), nextCursor: z.string().nullable() }).strict();
+export const dishwareResponseSchema = z.object({ dishware: dishwareSchema }).strict();
 export type PatchDishware = z.infer<typeof patchDishwareSchema>;
 
 export const bodyMeasurementInputSchema = z.object({
@@ -369,6 +414,9 @@ export const foodSearchItemSchema = z.object({
   source: nutritionSourceSchema,
   measures: z.array(foodMeasureSchema).min(1),
   startsAt: measureStartSchema,
+  /** Its calories at the amount it starts at, as the server prices that amount: the search lists a
+   *  food by them ("94 kcal · 1 apple"), never per 100 g (ROADMAP 32b-ii-b). */
+  startsKcal: z.number().int().nonnegative(),
 }).strict().refine((food) => food.measures.some((m) => m.id === food.startsAt.measure), {
   message: "a food starts at one of its own measures",
 });

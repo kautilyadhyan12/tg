@@ -19,6 +19,7 @@ import {
   moreForGrams,
   moreNutrientsSchema,
   shownFoodName,
+  standardDish,
   type ChosenItem,
   type FoodMeasure,
   type FoodSearchItem,
@@ -40,14 +41,14 @@ import { LEAST_MEAL_KCAL, suggestAfterWorkout, suggestMeals, type AfterWorkoutId
 import { ownTargetsHeld, targetsFromPlan } from "./targets.js";
 import { foodWeek, spanDays } from "./foodWeek.js";
 import { CURATED_FOODS, curatedPieceFdcId, curatedUsdaFdcId, findCurated, findCuratedVersions, holdsEveryWord, searchCurated } from "./foods.js";
-import { dishwareGrams, foodMeasures, gramsPerMl, measureGrams, scanStart, startingMeasure, type UsdaPortion } from "./measures.js";
+import { GRAM, dishwareGrams, foodMeasures, gramsPerMl, measureGrams, scanStart, startingMeasure, type UsdaPortion } from "./measures.js";
 import type { FoodReference, FoodSearchProvider } from "./openfoodfacts.adapter.js";
 import { itemsVersion, ownPer100g, savedPlaces } from "./mealEdit.js";
 import { RECENT_MEALS_READ, recentFoods, type RecentPick } from "./recentFoods.js";
 import * as repo from "./repo.js";
 import { ESTIMATE_CANONICAL_PREFIX, checkedPrice, closeFoodsOf, estimateFood, isPlainMatch, priceScannedFood, type ScanLookups, type ScanPrice } from "./scanMatch.js";
 import type {
-  ConfirmMealRequest, ManualMealRequest, MealEditItem, MealEditPreviewRequest, MealPreview, NoDeficitReason, NutritionTargetsResponse,
+  ConfirmMealRequest, CreateDishwareRequest, ManualMealRequest, MealEditItem, MealEditPreviewRequest, MealPreview, NoDeficitReason, NutritionTargetsResponse,
   OwnTargetsHeld, PatchMealRequest, PlanResponse, PreviewMealRequest, PutNutritionTargetsRequest,
 } from "./schemas.js";
 import {
@@ -322,7 +323,9 @@ const PACKAGED_RESERVE = 3;
 /** The person's own recent foods (32b-ii-a): one read of their newest meals, nobody else's, and
  *  each food's measures now, with ONE read of the USDA measures they share, as a logged food's are
  *  (`mealMeasures`). A food no table has any more is left out: added again, nothing would price it.
- *  Its amount is by grams where the measure it was last had is no longer one of its own. */
+ *  Where it was last had by a saved dish, or by a measure that is no longer one of its own, it starts
+ *  where the search starts it, at a count of it where it has one (32b-ii-b; the phone opens it at
+ *  that dish where the person still has one of that name). */
 export async function recentFoodsOf(deps: NutritionDeps, userId: string): Promise<RecentFood[]> {
   const found: { pick: RecentPick; food: FoodReference }[] = [];
   for (const pick of recentFoods(await repo.newestMealItems(deps.sql, userId, RECENT_MEALS_READ))) {
@@ -332,10 +335,11 @@ export async function recentFoodsOf(deps: NutritionDeps, userId: string): Promis
     if (food !== null) found.push({ pick, food });
   }
   const measures = await measuresOf(deps, found.map((f) => f.food));
-  return found.flatMap(({ pick }, at) => {
+  return found.flatMap(({ pick, food }, at) => {
     const own = measures[at] ?? [];
     if (own.length === 0) return [];
-    const add = own.some((m) => m.id === pick.add.measure) ? pick.add : { measure: "g", amount: Math.max(1, Math.round(pick.item.gramsPoint)) };
+    const byDish = pick.item.measure?.id === "dish";
+    const add = !byDish && own.some((m) => m.id === pick.add.measure) ? pick.add : startingMeasure(servingOfFood(food), own);
     return [{ ...pick, add, measures: own }];
   });
 }
@@ -393,10 +397,14 @@ async function withMeasures(deps: NutritionDeps, foods: readonly FoodReference[]
   const measures = await measuresOf(deps, foods);
   return foods.map((food, at) => {
     const own = measures[at] ?? foodMeasures({ ...servingOfFood(food), portions: [] });
+    const startsAt = startingMeasure(servingOfFood(food), own);
+    const start = own.find((m) => m.id === startsAt.measure) ?? GRAM;
     return {
       ...asReference(food),
       measures: own,
-      startsAt: startingMeasure(servingOfFood(food), own),
+      startsAt,
+      // The grams a save of that amount weighs, priced as a save prices them (`nutritionItem`).
+      startsKcal: Math.max(0, Math.round((food.kcal * measureGrams(start, startsAt.amount)) / 100)),
     };
   });
 }
@@ -455,7 +463,8 @@ async function amountOf(
   if ("grams" in chosen) return { grams: chosen.grams, dishwareRung: null, measure: null };
   const tooSmallOrLarge = (grams: number): boolean => grams < 1 || grams > MAX_ITEM_GRAMS;
   if ("dishwareId" in chosen) {
-    const dish = await repo.getDishware(deps.sql, userId, chosen.dishwareId);
+    // The person's own dish, or one everybody has (a cup, a mug, a bowl).
+    const dish = (await repo.getDishware(deps.sql, userId, chosen.dishwareId)) ?? standardDish(chosen.dishwareId);
     if (dish === null) throw new NutritionError(400, "unknown_dishware", "Dishware not found.");
     const grams = dishwareGrams(dish.volumeMl, chosen.fillLevel, gramsPerMl(measures));
     // Symmetric with the grams arm's bounds (chosenItemsSchema: positive, ≤10_000):
@@ -1591,9 +1600,10 @@ export async function listDishware(
 export async function createDishware(
   deps: ReadDeps,
   userId: string,
-  v: Parameters<typeof repo.createDishware>[2],
-): Promise<repo.DishwareRow> {
-  return await repo.createDishware(deps.sql, userId, v);
+  v: CreateDishwareRequest,
+): Promise<{ dish: repo.DishwareRow; created: boolean } | null> {
+  const { id, ...dish } = v;
+  return await repo.createDishware(deps.sql, userId, dish, id);
 }
 export async function updateDishware(
   deps: ReadDeps,

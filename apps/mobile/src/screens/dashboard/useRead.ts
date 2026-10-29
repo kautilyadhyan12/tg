@@ -13,7 +13,11 @@ export type Read<T> = { kind: "loading" } | { kind: "ok"; data: T } | { kind: "f
  *  saved). Its answer is drawn only for the person who asked, and only while the page is there: a
  *  reply that comes after a sign-out, or after somebody else signs in, is dropped. A read asked for
  *  while one is away goes once that one is back, so a later change is never missed. */
-export function useRead<T>(path: string, shape: Shape<T>, fresh = 0): { read: Read<T>; again: () => void } {
+export function useRead<T>(
+  path: string,
+  shape: Shape<T>,
+  fresh = 0,
+): { read: Read<T>; again: () => void; begun: () => number; shownFrom: number } {
   const { session, state } = useSession();
   const navigation = useNavigation();
   const me = state.kind === "in" ? state.user.id : null;
@@ -21,6 +25,10 @@ export function useRead<T>(path: string, shape: Shape<T>, fresh = 0): { read: Re
   const alive = useRef(true);
   const away = useRef(false);
   const wanted = useRef(false);
+  // Each read sent is numbered; `shownFrom` is the number of the read the page shows, so a page can
+  // tell a read begun after something it did from one already on its way.
+  const sent = useRef(0);
+  const [shownFrom, setShownFrom] = useState(0);
 
   const again = useCallback(() => {
     if (me === null) return;
@@ -29,12 +37,17 @@ export function useRead<T>(path: string, shape: Shape<T>, fresh = 0): { read: Re
       return;
     }
     away.current = true;
+    sent.current += 1;
+    const mine = sent.current;
     void session.signedIn({ method: "GET", path }, shape).then((answer) => {
       away.current = false;
       if (!alive.current) return;
       const now = session.state();
       if (now.kind !== "in" || now.user.id !== me) return;
-      if (answer.kind === "ok") setRead({ kind: "ok", data: answer.data });
+      if (answer.kind === "ok") {
+        setRead({ kind: "ok", data: answer.data });
+        setShownFrom(mine);
+      }
       else setRead((before) => (before.kind === "ok" ? before : { kind: "failed" }));
       if (wanted.current) {
         wanted.current = false;
@@ -60,5 +73,6 @@ export function useRead<T>(path: string, shape: Shape<T>, fresh = 0): { read: Re
 
   useFocusEffect(again);
 
-  return { read, again };
+  const begun = useCallback(() => sent.current, []);
+  return { read, again, begun, shownFrom };
 }
