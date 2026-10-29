@@ -554,7 +554,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 15a. [x] **Show my pass** — merged 2026-10-28 (PR #378).
     - 15b. [x] **Attendance (Days you came)** — merged 2026-10-28 (PR #381).
     - 15c. [x] **A pass with no signal** — merged 2026-10-29 (PR #383).
-16. **Classes and booking with the waitlist, and personal training; then My membership and receipts** (split 2026-10-29 in three; 18c, Pay {gym}, was dropped 2026-10-15). Risky; the two extra passes run once, after 16c.
+16. **Classes and booking with the waitlist, and personal training; then My membership and receipts** (split 2026-10-29 in three; 18c, Pay {gym}, was dropped 2026-10-15). Risky; the two extra passes ran once, after 16c (2026-10-29, PR #392).
     - 16a. [x] **Classes** — merged 2026-10-29 (PR #385).
     - 16b. [x] **Personal training** — merged 2026-10-29 (PR #388).
     - 16c. [x] **My membership and receipts** — merged 2026-10-29 (PR #390).
