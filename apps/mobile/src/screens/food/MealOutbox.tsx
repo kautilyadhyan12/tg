@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { AppState } from "react-native";
-import { mealResponseSchema, type WaitingMeal } from "@app/shared";
+import { mealResponseSchema, type WaitingChange, type WaitingMeal } from "@app/shared";
 import type { Answer, Shape } from "../../session/calls";
 import type { Session } from "../../session/session";
 import { useSession } from "../../session/SessionProvider";
@@ -18,6 +18,8 @@ const now = (answer: Answer<unknown>): boolean =>
   answer.kind === "no_answer" || (answer.kind === "refused" && (answer.status === 401 || answer.status === 429 || answer.status >= 500));
 
 const REFUSED_WORDS = "This meal couldn't be saved. Add it again.";
+const CHANGED_ELSEWHERE = "The meal was changed on another device. Open it and make the change again.";
+const CHANGE_REFUSED = "Open the meal and make the change again.";
 
 export function mealSender(session: Session) {
   return {
@@ -33,6 +35,15 @@ export function mealSender(session: Session) {
       if (answer.kind === "ok") return { kind: "done" };
       // Already gone, or never there: nothing is left to remove.
       return now(answer) ? { kind: "later" } : { kind: "done" };
+    },
+    change: async (change: WaitingChange): Promise<SendResult> => {
+      const answer = await session.signedIn({ method: "PATCH", path: `/v1/nutrition/meals/${change.id}`, body: change.body }, mealResponseSchema);
+      if (answer.kind === "ok") return { kind: "done", meal: answer.data.meal };
+      if (now(answer) || answer.kind !== "refused") return { kind: "later" };
+      // Removed, or never saved: there is no meal left to change.
+      if (answer.status === 404) return { kind: "done" };
+      if (answer.error === "meal_changed") return { kind: "refused", message: CHANGED_ELSEWHERE };
+      return { kind: "refused", message: answer.error === "validation_error" ? CHANGE_REFUSED : answer.message };
     },
   };
 }
@@ -64,7 +75,7 @@ export function MealOutboxProvider({ store, children }: { store: (userId: string
     begin();
     const timer = setInterval(() => {
       if (!ready) begin();
-      else if (made.view().waiting.length > 0 || made.view().removing.size > 0) go();
+      else if (made.view().waiting.length > 0 || made.view().removing.size > 0 || made.view().changing.size > 0) go();
     }, SEND_AGAIN_MS);
     const heard = AppState.addEventListener("change", (next) => {
       if (next === "active") go();
@@ -79,7 +90,7 @@ export function MealOutboxProvider({ store, children }: { store: (userId: string
   return <OutboxContext.Provider value={outbox}>{children}</OutboxContext.Provider>;
 }
 
-const EMPTY: OutboxView = { waiting: [], landed: [], removing: new Set(), refused: [], sent: 0, unsaved: false };
+const EMPTY: OutboxView = { waiting: [], landed: [], removing: new Set(), changing: new Map(), refused: [], sent: 0, unsaved: false };
 const noListen = () => () => undefined;
 
 /** The outbox and what it holds now; null until the person's file is open. */

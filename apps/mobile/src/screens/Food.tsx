@@ -4,17 +4,22 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   foodSearchResponseSchema,
+  mealMeasuresResponseSchema,
   mealPageSchema,
   mealPreviewSchema,
   nutritionTargetsResponseSchema,
+  recentFoodsResponseSchema,
   type ChosenItem,
+  type FoodMeasure,
   type FoodSearchItem,
-  type Meal,
+  type MealEditItem,
   type MealItem,
   type MealPreview,
   type MealType,
   type NutritionTargetsResponse,
+  type RecentFood,
   type SetupScreenId,
+  type WaitingChange,
   missingText,
 } from "@app/shared";
 import { Button } from "../look/Button";
@@ -52,7 +57,6 @@ import {
   noCutWords,
   uncountedWords,
   sameDay,
-  sectionOf,
   startOfDay,
   walkDay,
   type Sums,
@@ -71,39 +75,35 @@ import {
   unitWords,
   type Amount,
 } from "./food/measures";
+import {
+  amountOf,
+  clockWords,
+  foodLines,
+  foodsHeld,
+  measuresWithoutServer,
+  serverRow,
+  steppedTime,
+  totalsOf,
+  totalsWithout,
+  typedAmount,
+  waitingRow,
+  withAmount,
+  withChanges,
+  without,
+  type Row,
+} from "./food/rows";
 import { newGoalId } from "./goals/words";
 import { Soon } from "./Soon";
 import { Setup } from "./setup/Setup";
 
-// The Food tab (ROADMAP Stage 5 item 32b-i): the day's macros against the person's daily numbers,
-// the day's four meals, a food added by search and measure, and a meal removed. Every number is the
-// server's. A meal logged is kept on the phone until the server has it (food/outbox.ts).
+// The Food tab (ROADMAP Stage 5 items 32b-i and 32b-ii-a): the day's macros against the person's daily
+// numbers, the day's four meals, a food added by search and measure or from the person's recent foods,
+// a meal changed or removed. Every number is the server's. A meal logged, and a change to one, is kept
+// on the phone until the server has it (food/outbox.ts).
 
 export const TARGETS_READ = "/v1/nutrition/targets";
 const NO_CONNECTION = "No connection. Try again.";
-
-/** One meal on the day's list: the server's, or one still waiting on the phone. */
-interface Row {
-  id: string;
-  name: string;
-  takenAt: string;
-  section: MealType;
-  items: MealItem[] | null;
-  totals: Meal["totals"] | null;
-  waiting: boolean;
-}
-
-function serverRow(meal: Meal): Row {
-  return {
-    id: meal.id,
-    name: meal.mealName ?? meal.items[0]?.name ?? "Meal",
-    takenAt: meal.takenAt,
-    section: sectionOf(meal),
-    items: meal.items,
-    totals: meal.totals,
-    waiting: false,
-  };
-}
+const MEAL_CHANGED_WORDS = "This meal was changed on another device. Close it and open it again.";
 
 type DayRead = { kind: "loading" } | { kind: "ok"; rows: Row[]; cut: boolean } | { kind: "failed" };
 
@@ -176,26 +176,27 @@ export function FoodScreen() {
   const [picking, setPicking] = useState(false);
   const today = sameDay(day, new Date());
 
-  // The server's meals, less those removed here, with the ones just sent that this read began before,
-  // and the ones still waiting on the phone.
+  // The server's meals, less those removed here, each as the server last answered it where that came
+  // after this read began; the ones just sent that this read began before; the ones still waiting on
+  // the phone; and every change still waiting laid over them.
+  const landed = new Map(view.landed.map((m) => [m.id, m]));
   const rows: Row[] | null =
     read.kind === "ok"
       ? [
-          ...read.rows.filter((r) => !view.removing.has(r.id)),
-          ...view.landed.filter((m) => inDay(m.takenAt, day) && !read.rows.some((r) => r.id === m.id)).map(serverRow),
-          ...view.waiting
-            .filter((m) => inDay(m.body.takenAt, day) && !read.rows.some((r) => r.id === m.id))
-            .map((m): Row => ({
-              id: m.id,
-              name: m.body.mealName,
-              takenAt: m.body.takenAt,
-              section: m.body.mealType ?? sectionOf({ mealType: null, takenAt: m.body.takenAt }),
-              items: m.items,
-              totals: m.totals,
-              waiting: true,
-            })),
-        ].sort((a, b) => Date.parse(a.takenAt) - Date.parse(b.takenAt))
+          ...read.rows.filter((r) => !view.removing.has(r.id)).map((r) => {
+            const newer = landed.get(r.id);
+            return newer === undefined ? r : serverRow(newer);
+          }),
+          // The newest answer for each meal: a meal saved and then changed has landed twice.
+          ...[...landed.values()].filter((m) => !read.rows.some((r) => r.id === m.id)).map(serverRow),
+          ...view.waiting.filter((m) => !read.rows.some((r) => r.id === m.id) && !landed.has(m.id)).map(waitingRow),
+        ]
+          .map((r) => withChanges(r, view.changing.get(r.id)))
+          .filter((r) => inDay(r.takenAt, day))
+          .sort((a, b) => Date.parse(a.takenAt) - Date.parse(b.takenAt))
       : null;
+  // The meal open in its box, as the day now reads it: a change saved there shows at once.
+  const openRow = open === null ? null : (rows?.find((r) => r.id === open.id) ?? open);
 
   const goTo = (next: Date) => {
     setSaid(null);
@@ -298,12 +299,16 @@ export function FoodScreen() {
       />
       <MealSheet
         unsaved={view.unsaved}
-        row={open}
+        row={openRow}
         onClose={() => { setOpen(null); }}
         onRemove={(row) => {
           setOpen(null);
           void outbox?.remove(row.id);
           setSaid({ section: row.section, words: `${row.name} removed.` });
+        }}
+        onChanged={(section, words) => {
+          setOpen(null);
+          setSaid({ section, words });
         }}
       />
       <MonthPick
@@ -526,49 +531,415 @@ function amountLine(items: MealItem[] | null): string {
   return items.length === 1 && only !== undefined ? loggedAmount(only) + itemMark(only) : `${count(items.length)} foods`;
 }
 
-/** A meal's foods, and Remove meal, which asks first. */
-function MealSheet({ row, unsaved, onClose, onRemove }: { row: Row | null; unsaved: boolean; onClose: () => void; onRemove: (row: Row) => void }) {
-  const [asking, setAsking] = useState(false);
+type Mode = { kind: "foods" } | { kind: "remove" } | { kind: "details" } | { kind: "food"; at: number } | { kind: "removeFood"; at: number };
+
+const HELD_WORDS = {
+  not_sent: "You can change its foods once it’s sent.",
+  change_waiting: "Your last change to its foods is waiting to send. You can change them again once it’s sent.",
+} as const;
+
+/** A meal's foods, each changed by its amount or removed; its name, meal and time; and Remove meal.
+ *  Each removal asks first. A change is kept on the phone and sent as a meal is (food/outbox.ts). */
+function MealSheet({
+  row,
+  unsaved,
+  onClose,
+  onRemove,
+  onChanged,
+}: {
+  row: Row | null;
+  unsaved: boolean;
+  onClose: () => void;
+  onRemove: (row: Row) => void;
+  onChanged: (section: MealType, words: string) => void;
+}) {
+  const { session } = useSession();
+  const { outbox } = useMealOutbox();
+  const [mode, setMode] = useState<Mode>({ kind: "foods" });
+  const [measures, setMeasures] = useState<FoodMeasure[][] | null>(null);
+  const [full, setFull] = useState(false);
+  const rowId = row?.id ?? null;
+  const savedVersion = row?.saved?.itemsVersion ?? null;
   useEffect(() => {
-    setAsking(false);
-  }, [row]);
+    setMode({ kind: "foods" });
+    setFull(false);
+  }, [rowId]);
+  // Each food's own measures, for the server's meal as it is now.
+  useEffect(() => {
+    setMeasures(null);
+    if (rowId === null || savedVersion === null) return undefined;
+    let stale = false;
+    void session.signedIn({ method: "GET", path: `/v1/nutrition/meals/${rowId}/measures` }, mealMeasuresResponseSchema).then((answer) => {
+      if (!stale && answer.kind === "ok") setMeasures(answer.data.measures);
+    });
+    return () => {
+      stale = true;
+    };
+  }, [rowId, savedVersion, session]);
   if (row === null) return null;
+
+  const keep = async (change: Omit<WaitingChange, "id" | "name" | "tried">, section: MealType, words: string) => {
+    if (outbox === null) return;
+    const kept = await outbox.change({ id: row.id, name: row.name, tried: false, ...change });
+    if (kept) onChanged(section, words);
+    else setFull(true);
+  };
+  const fullWords = full ? (
+    <Txt kind="small" colour="badText">
+      Too many changes are waiting to be sent. Go online to send them, then make this one.
+    </Txt>
+  ) : null;
+
+  if (mode.kind === "remove") {
+    return (
+      <Sheet open title="Remove this meal?" onClose={onClose}>
+        <Txt kind="small">
+          {row.name} comes off {mealTypeName(row.section).toLowerCase()} and out of the day’s totals.
+        </Txt>
+        <Button label="Remove meal" kind="danger" wide onPress={() => { onRemove(row); }} />
+        <Button label="Keep it" kind="quiet" wide onPress={() => { setMode({ kind: "foods" }); }} />
+      </Sheet>
+    );
+  }
+
+  if (mode.kind === "details") {
+    return (
+      <Sheet open title="Edit meal" onClose={onClose}>
+        <MealDetails
+          row={row}
+          onSave={(fields) => {
+            void keep(
+              { body: { ...fields, changeId: newGoalId() }, items: null, totals: null, foods: null },
+              fields.mealType ?? row.section,
+              `${fields.mealName ?? row.name} updated.`,
+            );
+          }}
+          onCancel={() => { setMode({ kind: "foods" }); }}
+        />
+        {fullWords}
+      </Sheet>
+    );
+  }
+
+  const saved = row.saved;
+  const item = (mode.kind === "food" || mode.kind === "removeFood") && saved !== null ? saved.items[mode.at] : undefined;
+  if (saved !== null && item !== undefined && mode.kind === "removeFood") {
+    const at = mode.at;
+    return (
+      <Sheet open title={`Remove ${item.name}?`} onClose={onClose}>
+        <Txt kind="small">
+          {item.name} comes off {row.name} and out of the day’s totals.
+        </Txt>
+        <Button
+          label="Remove food"
+          kind="danger"
+          wide
+          onPress={() => {
+            void keep(
+              {
+                body: { items: without(saved.items, at), itemsVersion: saved.itemsVersion, changeId: newGoalId() },
+                items: saved.items.filter((_, i) => i !== at),
+                totals: totalsWithout(saved.items, at),
+                foods: null,
+              },
+              row.section,
+              `${item.name} removed from ${row.name}.`,
+            );
+          }}
+        />
+        <Button label="Keep it" kind="quiet" wide onPress={() => { setMode({ kind: "food", at }); }} />
+        {fullWords}
+      </Sheet>
+    );
+  }
+  if (saved !== null && item !== undefined && mode.kind === "food") {
+    const at = mode.at;
+    return (
+      <Sheet open title={item.name} onClose={onClose}>
+        <FoodAmount
+          key={`${row.id}-${String(at)}-${measures === null ? "own" : "server"}`}
+          mealId={row.id}
+          saved={saved}
+          at={at}
+          measures={measures?.[at] ?? measuresWithoutServer(item)}
+          onSave={(edit) => {
+            void keep(
+              {
+                body: { items: edit.items, itemsVersion: saved.itemsVersion, changeId: newGoalId() },
+                items: edit.preview?.items ?? null,
+                totals: edit.preview?.totals ?? null,
+                foods: edit.foods,
+              },
+              row.section,
+              `${item.name} updated.`,
+            );
+          }}
+          onRemove={saved.items.length > 1 ? () => { setMode({ kind: "removeFood", at }); } : null}
+        />
+        {fullWords}
+      </Sheet>
+    );
+  }
+
+  const held = foodsHeld(row);
+  const lines = foodLines(row);
   return (
-    <Sheet open title={asking ? "Remove this meal?" : row.name} onClose={onClose}>
-      {asking ? (
-        <>
-          <Txt kind="small">
-            {row.name} comes off {mealTypeName(row.section).toLowerCase()} and out of the day’s totals.
-          </Txt>
-          <Button label="Remove meal" kind="danger" wide onPress={() => { onRemove(row); }} />
-          <Button label="Keep it" kind="quiet" wide onPress={() => { setAsking(false); }} />
-        </>
-      ) : (
-        <>
-          {row.waiting ? (
-            <Txt kind="small">{unsaved ? "Waiting to send. It couldn’t be saved on this phone yet, so keep the app open." : "Saved on this phone. It’s sent when you’re online."}</Txt>
-          ) : null}
-          {(row.items ?? []).map((item, i) => (
-            <View key={`${item.canonical}-${String(i)}`} style={styles.item}>
-              <View style={styles.grow}>
-                <Txt kind="strong">{item.name}</Txt>
-                <Txt kind="tiny">{loggedAmount(item) + itemMark(item)}</Txt>
-              </View>
-              <Txt kind="small" colour="text">
-                {kcalWords(item.kcalPoint)}
-              </Txt>
+    <Sheet open title={row.name} onClose={onClose}>
+      {row.waiting ? (
+        <Txt kind="small">{unsaved ? "Waiting to send. It couldn’t be saved on this phone yet, so keep the app open." : "Saved on this phone. It’s sent when you’re online."}</Txt>
+      ) : null}
+      <View style={styles.row}>
+        <Txt kind="small" style={styles.grow}>
+          {mealTypeName(row.section)} · {clockWords(row.takenAt)}
+        </Txt>
+        <Button label="Edit" kind="link" onPress={() => { setMode({ kind: "details" }); }} />
+      </View>
+      {lines.map((line, i) => {
+        const inner = (
+          <>
+            <View style={styles.grow}>
+              <Txt kind="strong">{line.name}</Txt>
+              <Txt kind="tiny">{line.amount}</Txt>
             </View>
-          ))}
-          {row.totals === null ? null : (
-            <Txt kind="small">
-              {aboutKcal(row.totals.kcalPoint, hasEstimate(row.items))} · Protein {count(Math.round(row.totals.proteinG))} g · Carbs {count(Math.round(row.totals.carbsG))} g · Fat{" "}
-              {count(Math.round(row.totals.fatG))} g
+            <Txt kind="small" colour="text">
+              {line.kcal === null ? NOT_KNOWN : kcalWords(line.kcal)}
             </Txt>
-          )}
-          <Button label="Remove meal" icon="trash" kind="danger" wide onPress={() => { setAsking(true); }} />
-        </>
+          </>
+        );
+        return held === null ? (
+          <Pressable
+            key={`${line.name}-${String(i)}`}
+            accessibilityRole="button"
+            accessibilityLabel={`Change ${line.name}, ${line.amount}`}
+            onPress={() => { setMode({ kind: "food", at: i }); }}
+            style={({ pressed }) => [styles.item, pressed ? styles.pressed : null]}
+          >
+            {inner}
+            <Icon name="go" size={16} colour="textSoft" />
+          </Pressable>
+        ) : (
+          <View key={`${line.name}-${String(i)}`} style={styles.item}>
+            {inner}
+          </View>
+        );
+      })}
+      {held === null ? null : <Txt kind="small">{HELD_WORDS[held]}</Txt>}
+      {row.totals === null ? null : (
+        <Txt kind="small">
+          {aboutKcal(row.totals.kcalPoint, hasEstimate(row.items))} · Protein {count(Math.round(row.totals.proteinG))} g · Carbs {count(Math.round(row.totals.carbsG))} g · Fat{" "}
+          {count(Math.round(row.totals.fatG))} g
+        </Txt>
       )}
+      <Button label="Remove meal" icon="trash" kind="danger" wide onPress={() => { setMode({ kind: "remove" }); }} />
     </Sheet>
+  );
+}
+
+type DetailFields = { mealName?: string; mealType?: MealType; takenAt?: string };
+
+/** A meal's name, which of the day's four meals it is, and its time, saved together. Only what was
+ *  changed is sent. */
+function MealDetails({ row, onSave, onCancel }: { row: Row; onSave: (fields: DetailFields) => void; onCancel: () => void }) {
+  const [name, setName] = useState(row.name);
+  const [type, setType] = useState<MealType>(row.section);
+  const [time, setTime] = useState(row.takenAt);
+  const trimmed = name.trim();
+  const save = () => {
+    const fields: DetailFields = {};
+    if (trimmed !== row.name) fields.mealName = trimmed;
+    if (type !== row.section || row.mealType === null) fields.mealType = type;
+    if (time !== row.takenAt) fields.takenAt = time;
+    if (Object.keys(fields).length === 0) onCancel();
+    else onSave(fields);
+  };
+  return (
+    <>
+      <Field label="Name" value={name} onChange={setName} maxLength={200} />
+      <Txt kind="tiny" style={styles.label}>
+        Meal
+      </Txt>
+      <View style={styles.chips}>
+        {MEAL_TYPES.map((m) => (
+          <Chip key={m.type} label={m.name} on={type === m.type} onPress={() => { setType(m.type); }} />
+        ))}
+      </View>
+      <Txt kind="tiny" style={styles.label}>
+        Time
+      </Txt>
+      <View style={styles.amountRow}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Earlier" onPress={() => { setTime(steppedTime(time, -1)); }} style={styles.step}>
+          <Icon name="minus" size={18} />
+        </Pressable>
+        <Txt kind="strong" style={styles.clock}>
+          {clockWords(time)}
+        </Txt>
+        <Pressable accessibilityRole="button" accessibilityLabel="Later" onPress={() => { setTime(steppedTime(time, 1)); }} style={styles.step}>
+          <Icon name="plus" size={18} />
+        </Pressable>
+      </View>
+      {trimmed === "" ? (
+        <Txt kind="small" colour="badText">
+          Enter a name for this meal.
+        </Txt>
+      ) : null}
+      <Button label="Save" wide disabled={trimmed === ""} onPress={save} />
+    </>
+  );
+}
+
+interface FoodEdit {
+  items: MealEditItem[];
+  preview: MealPreview | null;
+  foods: { name: string; amount: string }[];
+}
+
+/** A logged food's new amount, by one of its own measures, with the server's numbers for it; Save, and
+ *  Remove from meal where the meal holds other foods. */
+function FoodAmount({
+  mealId,
+  saved,
+  at,
+  measures,
+  onSave,
+  onRemove,
+}: {
+  mealId: string;
+  saved: { items: MealItem[]; itemsVersion: string };
+  at: number;
+  measures: FoodMeasure[];
+  onSave: (edit: FoodEdit) => void;
+  onRemove: (() => void) | null;
+}) {
+  const { session } = useSession();
+  const item = saved.items[at];
+  const [amount, setAmount] = useState<Amount | null>(() => {
+    if (item === undefined) return null;
+    const start = amountOf(item);
+    return measures.some((m) => m.id === start.measure) ? start : { measure: "g", amount: String(Math.max(1, Math.round(item.gramsPoint))) };
+  });
+  const [allMeasures, setAllMeasures] = useState(false);
+  const [priced, setPriced] = useState<Priced>({ kind: "none" });
+  const [saving, setSaving] = useState(false);
+  const measure = amount === null ? undefined : measures.find((m) => m.id === amount.measure);
+  const chosen = item === undefined || amount === null ? null : chosenItem(item.canonical, amount);
+  const tooSmall = amount !== null && underAGram(measure, amount);
+  const items = chosen === null || !("measure" in chosen) ? null : withAmount(saved.items, at, chosen.canonical, { measure: chosen.measure, amount: chosen.amount });
+  const key = items === null ? "" : JSON.stringify(items);
+
+  // The server's numbers for the meal at the new amount, a moment after it changes.
+  useEffect(() => {
+    if (items === null || tooSmall) {
+      setPriced({ kind: "none" });
+      return undefined;
+    }
+    let stale = false;
+    const timer = setTimeout(() => {
+      void session
+        .signedIn({ method: "POST", path: `/v1/nutrition/meals/${mealId}/preview`, body: { items, itemsVersion: saved.itemsVersion } }, mealPreviewSchema)
+        .then((answer) => {
+          if (stale) return;
+          if (answer.kind === "ok") setPriced({ kind: "ok", preview: answer.data, for: key });
+          else if (answer.kind === "refused" && answer.error === "meal_changed") setPriced({ kind: "refused", words: MEAL_CHANGED_WORDS, for: key });
+          else if (answer.kind === "refused" && amountRefusal(answer.error) !== null) setPriced({ kind: "refused", words: amountRefusal(answer.error) ?? "", for: key });
+          else setPriced({ kind: "none" });
+        });
+    }, 300);
+    return () => {
+      stale = true;
+      clearTimeout(timer);
+    };
+    // `key` is the whole of `items`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, tooSmall, session, mealId, saved.itemsVersion]);
+
+  if (item === undefined || amount === null) return null;
+  const preview = priced.kind === "ok" && priced.for === key ? priced.preview : null;
+  const refusedWords = priced.kind === "refused" && priced.for === key ? priced.words : null;
+  const now = preview?.items[at];
+  const held = items === null || tooSmall || refusedWords !== null || saving;
+  const shown = shownMeasures(measures, amount.measure, allMeasures);
+
+  const save = () => {
+    if (items === null || held) return;
+    setSaving(true);
+    const typed = Number(amount.amount.trim().replace(",", "."));
+    onSave({
+      items,
+      preview,
+      foods: saved.items.map((it, i) => ({
+        name: it.name,
+        amount: i !== at ? loggedAmount(it) + itemMark(it) : now === undefined ? typedAmount(measure, typed) : loggedAmount(now) + itemMark(now),
+      })),
+    });
+  };
+
+  return (
+    <>
+      <Txt kind="tiny">
+        Logged: {loggedAmount(item) + itemMark(item)} · {kcalWords(item.kcalPoint)}
+      </Txt>
+      <Txt kind="tiny" style={styles.label}>
+        Amount
+      </Txt>
+      <View style={styles.amountRow}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Less" onPress={() => { setAmount(stepped(amount, -1)); }} style={styles.step}>
+          <Icon name="minus" size={18} />
+        </Pressable>
+        <TextInput
+          accessibilityLabel="Amount"
+          value={amount.amount}
+          onChangeText={(text) => { setAmount({ measure: amount.measure, amount: text }); }}
+          keyboardType="decimal-pad"
+          maxLength={8}
+          maxFontSizeMultiplier={MOST_TEXT_GROWTH}
+          selectionColor={colours.orange}
+          style={styles.amount}
+        />
+        <Pressable accessibilityRole="button" accessibilityLabel="More" onPress={() => { setAmount(stepped(amount, 1)); }} style={styles.step}>
+          <Icon name="plus" size={18} />
+        </Pressable>
+        <Txt kind="small" colour="text" style={styles.grow} numberOfLines={2}>
+          {unitWords(measure)}
+        </Txt>
+      </View>
+      <View style={styles.chips}>
+        {shown.map((m) => (
+          <Chip
+            key={m.id}
+            label={measureWords(m)}
+            on={amount.measure === m.id}
+            onPress={() => {
+              if (amount.measure !== m.id) setAmount(amountFor(m));
+            }}
+          />
+        ))}
+      </View>
+      {shown.length < measures.length ? (
+        <Button
+          label={`More measures (${String(measures.length - shownMeasures(measures, amount.measure, false).length)})`}
+          kind="link"
+          style={styles.start}
+          onPress={() => { setAllMeasures(true); }}
+        />
+      ) : null}
+      {tooSmall ? (
+        <Txt kind="small" colour="badText">
+          That comes to less than a gram. Pick a larger amount.
+        </Txt>
+      ) : null}
+      {refusedWords === null ? null : (
+        <Txt kind="small" colour="badText">
+          {refusedWords}
+        </Txt>
+      )}
+      {now === undefined || preview === null ? null : (
+        <Txt kind="small" colour="text">
+          {count(Math.round(now.gramsPoint))} g · {kcalWords(now.kcalPoint)} · Meal total {kcalWords(preview.totals.kcalPoint)}
+        </Txt>
+      )}
+      <Button label="Save" wide disabled={held} onPress={save} />
+      {onRemove === null ? null : <Button label="Remove from meal" icon="trash" kind="quiet" wide onPress={onRemove} />}
+    </>
   );
 }
 
@@ -586,20 +957,25 @@ const SOURCE_WORDS: Readonly<Record<FoodSearchItem["source"], string>> = {
 };
 
 type Found = { kind: "idle" } | { kind: "looking" } | { kind: "ok"; items: FoodSearchItem[] } | { kind: "failed"; words: string };
+/** A food in the picker: one found by the search, or one the person logged before, with the food as
+ *  it was last logged, whose numbers stand in at that same amount until the server's come back. */
+type Picked = Pick<FoodSearchItem, "canonical" | "name" | "source" | "measures" | "startsAt"> & { last?: RecentFood };
 type Priced = { kind: "none" } | { kind: "ok"; preview: MealPreview; for: string } | { kind: "refused"; words: string; for: string };
 
-/** Add to a meal: search, pick a food, its amount by one of its own measures, Add. The server prices
- *  the amount before it is added; Add keeps the meal on the phone and sends it. */
+/** Add to a meal: the foods logged before, or a search; a food's amount by one of its own measures,
+ *  Add. The server prices the amount before it is added; Add keeps the meal on the phone and sends
+ *  it. A food logged before opens at the amount last had, its name or its + alike (Kd, 2026-10-29). */
 function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: () => void; onAdded: (type: MealType, name: string) => void }) {
   const { session } = useSession();
   const { outbox } = useMealOutbox();
   const [query, setQuery] = useState("");
   const [found, setFound] = useState<Found>({ kind: "idle" });
-  const [food, setFood] = useState<FoodSearchItem | null>(null);
+  const [food, setFood] = useState<Picked | null>(null);
   const [amount, setAmount] = useState<Amount | null>(null);
   const [priced, setPriced] = useState<Priced>({ kind: "none" });
   const [allMeasures, setAllMeasures] = useState(false);
   const [full, setFull] = useState(false);
+  const [recent, setRecent] = useState<RecentFood[]>([]);
   // Held from the first press until the meal is kept: a second tap never logs it twice.
   const [adding, setAdding] = useState(false);
   const addingNow = useRef(false);
@@ -632,6 +1008,19 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
     setAdding(false);
     addingNow.current = false;
   }, [type]);
+
+  // The person's recent foods, read each time the box opens; with no answer the box offers the search.
+  useEffect(() => {
+    setRecent([]);
+    if (type === null) return undefined;
+    let stale = false;
+    void session.signedIn({ method: "GET", path: "/v1/nutrition/foods/recent" }, recentFoodsResponseSchema).then((answer) => {
+      if (!stale && answer.kind === "ok") setRecent(answer.data.items);
+    });
+    return () => {
+      stale = true;
+    };
+  }, [type, session]);
 
   // The search, a moment after the last letter; only the newest answer is drawn.
   useEffect(() => {
@@ -692,23 +1081,37 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
   const refusedWords = priced.kind === "refused" && priced.for === key ? priced.words : null;
   const held = item === null || tooSmall || refusedWords !== null || outbox === null || adding;
 
-  const add = async () => {
-    if (food === null || item === null || held || addingNow.current) return;
+  const keep = async (name: string, chosen: ChosenItem, numbers: { items: MealItem[]; totals: MealPreview["totals"] } | null) => {
+    if (outbox === null || addingNow.current) return;
     addingNow.current = true;
     setAdding(true);
     const id = newGoalId();
     const kept = await outbox.add({
       id,
-      body: { id, mealName: food.name, takenAt: new Date().toISOString(), mealType: type, items: [item] },
-      items: preview?.items ?? null,
-      totals: preview?.totals ?? null,
+      body: { id, mealName: name, takenAt: new Date().toISOString(), mealType: type, items: [chosen] },
+      items: numbers?.items ?? null,
+      totals: numbers?.totals ?? null,
       tried: false,
     });
     addingNow.current = false;
     setAdding(false);
-    if (kept) onAdded(type, food.name);
+    if (kept) onAdded(type, name);
     else setFull(true);
   };
+  const add = async () => {
+    if (food === null || item === null || held) return;
+    // With no answer from the server yet, a food logged before at the amount last had keeps the
+    // server's numbers from then until it has priced it again.
+    const last = food.last;
+    const same = last !== undefined && "measure" in item && item.measure === last.add.measure && item.amount === last.add.amount;
+    await keep(food.name, item, preview ?? (same ? { items: [last.item], totals: totalsOf([last.item]) } : null));
+  };
+  const open = (f: RecentFood) => {
+    setFood({ canonical: f.canonical, name: f.item.name, source: f.source, measures: f.measures, startsAt: f.add, last: f });
+    setAllMeasures(false);
+    setAmount(startingAmount({ startsAt: f.add }));
+  };
+  const showRecent = food === null && query.trim() === "" && recent.length > 0;
 
   return (
     <Sheet open title={`Add to ${name}`} onClose={onClose}>
@@ -716,6 +1119,38 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
       <ScrollView style={{ maxHeight: Math.max(SHEET_LIST_LEAST, height - keyboard - insets.top - (food === null ? SHEET_ABOVE_SEARCH : SHEET_ABOVE_LIST)) }} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.sheetList}>
         {food === null ? (
           <>
+            {showRecent ? (
+              <>
+                <Txt kind="tiny" style={styles.label}>
+                  Previously logged
+                </Txt>
+                {recent.map((f) => (
+                  <View key={f.canonical} style={[styles.found, styles.recent]}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`${f.item.name}, ${loggedAmount(f.item)}, ${kcalWords(f.item.kcalPoint)}`}
+                      onPress={() => { open(f); }}
+                      style={({ pressed }) => [styles.grow, pressed ? styles.pressed : null]}
+                    >
+                      <Txt kind="strong" numberOfLines={2}>
+                        {f.item.name}
+                      </Txt>
+                      <Txt kind="tiny">
+                        {loggedAmount(f.item)} · {kcalWords(f.item.kcalPoint)}
+                      </Txt>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Add ${f.item.name}`}
+                      onPress={() => { open(f); }}
+                      style={({ pressed }) => [styles.add, pressed ? styles.pressed : null]}
+                    >
+                      <Icon name="plus" size={18} colour="orange" />
+                    </Pressable>
+                  </View>
+                ))}
+              </>
+            ) : null}
             {found.kind === "looking" ? <Txt kind="small">Searching…</Txt> : null}
             {found.kind === "failed" ? <Txt kind="small" colour="badText">{found.words}</Txt> : null}
             {found.kind === "ok" && found.items.length === 0 ? <Txt kind="small">No food found. Try another word.</Txt> : null}
@@ -831,7 +1266,11 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
             ) : null}
           </>
         )}
-        <Credits sources={new Set(food === null ? (found.kind === "ok" ? found.items.map((f) => f.source) : []) : [food.source])} />
+        <Credits
+          sources={
+            new Set(food === null ? [...(found.kind === "ok" ? found.items.map((f) => f.source) : []), ...(showRecent ? recent.map((f) => f.source) : [])] : [food.source])
+          }
+        />
       </ScrollView>
     </Sheet>
   );
@@ -1014,6 +1453,7 @@ const styles = StyleSheet.create({
   item: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 48 },
   sheetList: { gap: 12, paddingBottom: 4 },
   found: { minHeight: 56, justifyContent: "center", gap: 2, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colours.line },
+  recent: { flexDirection: "row", alignItems: "center", gap: 10 },
   amountRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   step: {
     width: sizes.press,
@@ -1025,6 +1465,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  clock: { minWidth: 96, textAlign: "center" },
   amount: {
     width: 80,
     minHeight: sizes.press,

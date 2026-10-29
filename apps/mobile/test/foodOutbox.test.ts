@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MEAL_OUTBOX_MOST, type Meal, type WaitingMeal } from "@app/shared";
+import { MEAL_OUTBOX_MOST, type Meal, type WaitingChange, type WaitingMeal } from "@app/shared";
 import { createOutbox, type SendResult, type Sender, type TextStore } from "../src/screens/food/outbox";
 
 // The worst thing this job could do to a person (32b-i's plan): a meal logged with no signal is lost
@@ -36,9 +36,12 @@ function file(text: string | null = null): TextStore & { text: string | null } {
 function server() {
   const meals = new Map<string, string>();
   const calls: string[] = [];
+  /** Each change the server made, by its id, as 0172 keeps them: sent again, made once. */
+  const made: string[] = [];
   const s = {
     meals,
     calls,
+    made,
     online: true,
     loseAnswers: false,
     refuse: null as string | null,
@@ -58,10 +61,171 @@ function server() {
         meals.delete(id);
         return Promise.resolve({ kind: "done" });
       },
+      change: async (c: WaitingChange): Promise<SendResult> => {
+        calls.push(`change ${c.id} ${c.body.changeId}`);
+        if (s.hold !== null) await s.hold;
+        if (!s.online) return { kind: "later" };
+        if (s.refuse !== null) return { kind: "refused", message: s.refuse };
+        if (meals.has(c.id) && !made.includes(c.body.changeId)) {
+          made.push(c.body.changeId);
+          if (c.body.mealName !== undefined) meals.set(c.id, c.body.mealName);
+        }
+        return s.loseAnswers ? { kind: "later" } : { kind: "done" };
+      },
     } satisfies Sender,
   };
   return s;
 }
+
+const C1 = "33333333-3333-4333-8333-333333333333";
+const C2 = "44444444-4444-4444-8444-444444444444";
+const C3 = "55555555-5555-4555-8555-555555555555";
+
+/** A change to a saved meal, as the Food screen makes one. */
+function rename(id: string, changeId: string, mealName: string): WaitingChange {
+  return { id, name: "Banana", body: { mealName, changeId }, items: null, totals: null, foods: null, tried: false };
+}
+function newFoods(id: string, changeId: string, grams: number): WaitingChange {
+  return {
+    id,
+    name: "Banana",
+    body: { items: [{ from: 0, canonical: "banana", measure: "g", amount: grams }], itemsVersion: "v1", changeId },
+    items: null,
+    totals: null,
+    foods: [{ name: "Banana", amount: `${String(grams)} g` }],
+    tried: false,
+  };
+}
+
+describe("the worst thing: a change made with no signal is never lost, and is made once", () => {
+  it("is kept through a restart, sent when the signal is back, and made once though its answer was lost", async () => {
+    const phone = file();
+    const api = server();
+    api.meals.set(A, "Banana");
+    api.online = false;
+    const first = createOutbox(phone, api.sender);
+    await first.start();
+    expect(await first.change(rename(A, C1, "Banana and honey"))).toBe(true);
+    await first.send();
+    expect(first.view().changing.get(A)?.map((c) => c.body.mealName)).toEqual(["Banana and honey"]);
+    first.stop();
+
+    // The app is closed and opened again; the signal is back, and the first answer is lost.
+    api.online = true;
+    api.loseAnswers = true;
+    const second = createOutbox(phone, api.sender);
+    await second.start();
+    expect(second.view().changing.get(A)?.map((c) => c.body.changeId)).toEqual([C1]);
+    await second.send();
+    api.loseAnswers = false;
+    await second.send();
+    expect(api.calls.filter((c) => c.startsWith("change")).length).toBeGreaterThan(1);
+    expect(api.made).toEqual([C1]);
+    expect(api.meals.get(A)).toBe("Banana and honey");
+    expect(second.view().changing.size).toBe(0);
+  });
+
+  it("a change to a meal still waiting is sent after the meal's save", async () => {
+    const api = server();
+    api.online = false;
+    const box = createOutbox(file(), api.sender);
+    await box.start();
+    await box.add(meal(A));
+    await box.change(rename(A, C1, "Banana and honey"));
+    api.online = true;
+    api.calls.length = 0;
+    await box.send();
+    expect(api.calls).toEqual([`save ${A}`, `change ${A} ${C1}`]);
+    expect(api.meals.get(A)).toBe("Banana and honey");
+  });
+
+  it("changes are made in the order made, each once, the newest name kept", async () => {
+    const api = server();
+    api.meals.set(A, "Banana");
+    api.online = false;
+    const box = createOutbox(file(), api.sender);
+    await box.start();
+    await box.change(newFoods(A, C1, 120));
+    await box.change(rename(A, C2, "First"));
+    await box.change(rename(A, C3, "Second"));
+    await box.send();
+    expect(box.view().changing.get(A)?.map((c) => c.body.changeId)).toEqual([C1, C2, C3]);
+    api.online = true;
+    api.loseAnswers = true;
+    await box.send();
+    api.loseAnswers = false;
+    await box.send();
+    expect(api.made).toEqual([C1, C2, C3]);
+    expect(api.meals.get(A)).toBe("Second");
+  });
+
+  it("a change made while another is on its way is sent after it", async () => {
+    const api = server();
+    api.meals.set(A, "Banana");
+    let land: () => void = () => undefined;
+    api.hold = new Promise<void>((resolve) => {
+      land = resolve;
+    });
+    const box = createOutbox(file(), api.sender);
+    await box.start();
+    await box.change(rename(A, C1, "First"));
+    await box.change(rename(A, C2, "Second"));
+    land();
+    api.hold = null;
+    await box.send();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(api.made).toEqual([C1, C2]);
+    expect(api.meals.get(A)).toBe("Second");
+  });
+
+  it("a meal removed before it was ever sent takes its changes with it", async () => {
+    const api = server();
+    const box = createOutbox(file(), api.sender);
+    // Not started: the file is still being read, so nothing is sent yet.
+    await box.add(meal(A));
+    await box.change(rename(A, C1, "Banana and honey"));
+    await box.remove(A);
+    expect(box.view().changing.size).toBe(0);
+    await box.start();
+    await box.send();
+    expect(api.calls).toEqual([]);
+  });
+
+  it("a change sent with no answer is sent before the meal's removal", async () => {
+    const api = server();
+    api.meals.set(A, "Banana");
+    api.online = false;
+    const box = createOutbox(file(), api.sender);
+    await box.start();
+    await box.change(rename(A, C1, "Banana and honey"));
+    await box.remove(A);
+    // Hidden with the meal; sent before its removal, which then leaves nothing.
+    expect(box.view().changing.size).toBe(0);
+    api.online = true;
+    api.calls.length = 0;
+    await box.send();
+    expect(api.calls).toEqual([`change ${A} ${C1}`, `remove ${A}`]);
+    expect(api.meals.size).toBe(0);
+  });
+
+  it("a change the server will not make is said by its own id, through a restart, until OK", async () => {
+    const phone = file();
+    const api = server();
+    api.meals.set(A, "Banana");
+    api.refuse = "The meal was changed on another device. Open it and make the change again.";
+    const box = createOutbox(phone, api.sender);
+    await box.start();
+    await box.change(rename(A, C1, "Banana and honey"));
+    await box.send();
+    box.stop();
+    const again = createOutbox(phone, api.sender);
+    await again.start();
+    expect(again.view().refused).toEqual([{ id: C1, name: "Your change to Banana", message: "The meal was changed on another device. Open it and make the change again." }]);
+    expect(again.view().changing.size).toBe(0);
+    again.forget(C1);
+    expect(again.view().refused).toEqual([]);
+  });
+});
 
 describe("a meal logged on the phone", () => {
   it("logged with no signal, is kept through a restart and saved once when the signal is back", async () => {
@@ -112,6 +276,7 @@ describe("a meal logged on the phone", () => {
         return api.sender.save(m);
       },
       remove: api.sender.remove,
+      change: api.sender.change,
     };
     const box = createOutbox(phone, watching);
     await box.start();
@@ -319,6 +484,7 @@ describe("round one's findings", () => {
     const sender: Sender = {
       save: async (m) => ((await api.sender.save(m)).kind === "done" ? { kind: "done", meal: answered } : { kind: "later" }),
       remove: api.sender.remove,
+      change: api.sender.change,
     };
     const box = createOutbox(file(), sender);
     await box.start();

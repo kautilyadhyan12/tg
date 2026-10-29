@@ -333,6 +333,9 @@ export interface MealPatch {
   mealType?: MealType | null;
   mealName?: string;
   items?: { items: MealItem[]; readAt: string };
+  /** The phone's own id for this change (ROADMAP 32b-ii-a): the same change sent twice is made
+   *  once, and the second answer is the meal as it is now. */
+  changeId?: string;
 }
 
 /** PATCH: corrections rows (originals preserved — P4 doctrine) for every
@@ -344,14 +347,16 @@ export interface MealPatch {
  *  throws MealChangedError and writes nothing. */
 export async function updateMeal(sql: Sql, userId: string, id: string, patch: MealPatch): Promise<MealRow | null> {
   return await sql.begin(async (tx) => {
-    const beforeRows = await tx<MealDbRow[]>`
+    const beforeRows = await tx<(MealDbRow & { last_change_id: string | null })[]>`
       SELECT id, taken_at, meal_type, meal_name, items, kcal_point, kcal_low, kcal_high,
              protein_g, carbs_g, fat_g, confirmed, origin, portion_source,
-             nutrition_sources, calc_version FROM meal_logs
+             nutrition_sources, calc_version, last_change_id FROM meal_logs
       WHERE id = ${id} AND user_id = ${userId} FOR UPDATE`;
     const beforeRaw = beforeRows[0];
     if (beforeRaw === undefined) return null;
     const before = toMeal(beforeRaw);
+    // This change was made already: by a send the phone gave up on, which the server still held.
+    if (patch.changeId !== undefined && beforeRaw.last_change_id === patch.changeId) return before;
     if (patch.items !== undefined && itemsVersion(before.items) !== patch.items.readAt) throw new MealChangedError();
     const next = {
       takenAt: patch.takenAt ?? before.takenAt,
@@ -379,6 +384,8 @@ export async function updateMeal(sql: Sql, userId: string, id: string, patch: Me
         VALUES (${id}, 'items', ${tx.json(before.items)}, ${tx.json(next.items)}, ${originalRung})`;
     }
 
+    // A change with no id of its own (the browser's) keeps the last id: that change, sent again,
+    // is still made already, and never writes over this one.
     // meal_type edits get no corrections row: the label is user preference,
     // not a Stage-5 estimation-telemetry signal (2B corrections doctrine).
     const rows = await tx<MealDbRow[]>`
@@ -390,7 +397,8 @@ export async function updateMeal(sql: Sql, userId: string, id: string, patch: Me
         kcal_point = ${t.kcalPoint}, kcal_low = ${t.kcalLow}, kcal_high = ${t.kcalHigh},
         protein_g = ${t.proteinG}, carbs_g = ${t.carbsG}, fat_g = ${t.fatG},
         portion_source = ${worst(next.items)},
-        nutrition_sources = ${sources(next.items)}
+        nutrition_sources = ${sources(next.items)},
+        last_change_id = COALESCE(${patch.changeId ?? null}::uuid, last_change_id)
       WHERE id = ${id} AND user_id = ${userId}
       RETURNING id, taken_at, meal_type, meal_name, items, kcal_point, kcal_low, kcal_high,
              protein_g, carbs_g, fat_g, confirmed, origin, portion_source,
@@ -398,6 +406,24 @@ export async function updateMeal(sql: Sql, userId: string, id: string, patch: Me
     const row = rows[0];
     return row === undefined ? null : toMeal(row);
   });
+}
+
+/** The foods of the person's newest `meals` meals, newest first (recent foods, 32b-ii-a). */
+export async function newestMealItems(sql: Sql, userId: string, meals: number): Promise<{ items: MealItem[] }[]> {
+  const rows = await sql<{ items: unknown }[]>`
+    SELECT items FROM meal_logs WHERE user_id = ${userId}
+    ORDER BY taken_at DESC, id DESC LIMIT ${meals}`;
+  return rows.map((r) => ({ items: parseItems(r.items) }));
+}
+
+/** The person's meal where its last change is this one (`MealPatch.changeId`), else null. */
+export async function mealAfterChange(sql: Sql, userId: string, id: string, changeId: string): Promise<MealRow | null> {
+  const rows = await sql<MealDbRow[]>`
+    SELECT id, taken_at, meal_type, meal_name, items, kcal_point, kcal_low, kcal_high,
+             protein_g, carbs_g, fat_g, confirmed, origin, portion_source,
+             nutrition_sources, calc_version FROM meal_logs
+    WHERE id = ${id} AND user_id = ${userId} AND last_change_id = ${changeId}`;
+  return rows[0] === undefined ? null : toMeal(rows[0]);
 }
 
 /** Removes the person's meal and keeps its id for them, under the lock a save of that id
