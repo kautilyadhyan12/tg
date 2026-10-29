@@ -7,6 +7,7 @@ import type { SquareMembersGroup, SquareMembersNamed } from "@app/shared";
 import { NO_NAME } from "../register/repo.js";
 import type { MemberPlan } from "./squareMembersPlan.js";
 import type { SquareEnvironment } from "./square.js";
+import { unlinkedAt } from "./squareUnlinkRepo.js";
 
 type SqlOrTx = Sql | TransactionSql;
 
@@ -398,6 +399,9 @@ export async function linkCustomer(
     SELECT customer_id FROM gym_square_customers
     WHERE gym_id = ${r.gymId} AND entry_id = ${r.entryId} AND environment = ${r.environment} AND account_id = ${r.accountId}`;
   if (linked !== undefined) return "already";
+  // Staff unlinked this customer from them on their page (18d-iii-b-ii-c-ii): never theirs again by itself. Match's tick
+  // forgets that first (`linkMatched`), as staff said so.
+  if ((await unlinkedAt(tx, r)) !== null) return "taken";
   const [other] = await tx<{ entry_id: string }[]>`
     SELECT entry_id FROM gym_square_customers
     WHERE gym_id = ${r.gymId} AND environment = ${r.environment} AND account_id = ${r.accountId} AND customer_id = ${r.customerId} AND entry_id <> ${r.entryId}

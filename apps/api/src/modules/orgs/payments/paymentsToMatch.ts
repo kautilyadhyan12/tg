@@ -51,6 +51,7 @@ import { customerSeen } from "./squareAppPayments.js";
 import { matchLinkOffer } from "./squareMatchLink.js";
 import * as linking from "./squareMatchRepo.js";
 import { recordIdsAmong } from "./squareMembersRepo.js";
+import { unlinkedAt } from "./squareUnlinkRepo.js";
 
 const NO_BILLING = "Recording payments isn't part of your role. Ask the owner to turn on \"Record members' payments\" for you.";
 const W = PAYMENTS_TO_MATCH_WORDS;
@@ -58,7 +59,7 @@ const gone = (): OrgsError => new OrgsError(404, "payment_to_match_gone", W.gone
 
 /** The privileges Match and the person's page need, as Failed payments asks them, so nobody is shown a
  *  press they are refused. A write is refused while the console is read-only. */
-async function allowed(deps: PaymentsDeps, gymId: string, userId: string, write: boolean): Promise<repo.GymForPayments> {
+export async function allowed(deps: PaymentsDeps, gymId: string, userId: string, write: boolean): Promise<repo.GymForPayments> {
   const { privileges } = write ? await requireWritablePrivilege(deps, gymId, userId, "members.confirm") : await requirePrivilege(deps, gymId, userId, "members.confirm");
   if (!privileges.includes(BILLING)) throw new OrgsError(403, "forbidden", NO_BILLING);
   const gym = await repo.readGym(deps.sql, gymId);
@@ -171,6 +172,9 @@ async function linkOfferFor(deps: PaymentsDeps, gym: repo.GymForPayments, gymId:
   }
   const offer = matchLinkOffer(row.customer, { entryId, fullName: person.fullName, email: person.email, phoneE164: person.phoneE164 }, readCountry(gym.country));
   const also = await linking.hasOwnCustomer(deps.sql, { gymId, entryId, environment: row.environment, accountId: row.accountId });
+  // Staff unlinked this customer from them on their page (18d-iii-b-ii-c-ii): off, whatever the rule says, until staff tick it.
+  const unlinked = await unlinkedAt(deps.sql, { gymId, entryId, environment: row.environment, accountId: row.accountId, customerId: row.customerId });
+  if (unlinked !== null) return { offer: "ask", customerName, also, byName: null, elsewhere: false, unlinkedAt: unlinked.toISOString() };
   return { offer, customerName, also, byName: null, elsewhere: false };
 }
 

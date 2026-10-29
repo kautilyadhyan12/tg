@@ -15,6 +15,8 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
   return { ...actual, orgService: orgApi };
 });
 // The person's card box: here it saves a card on one press, as Square's form or a Terminal would.
+// The Square customer list with Unlink (18d-iii-b-ii-c-ii) reads its own route; its own tests are memberSquareLinks.render.
+vi.mock('./MemberSquareLinks', () => ({ default: () => null }));
 vi.mock('./MemberCard', () => ({
   default: ({ entryId, onCardSaved }) => (
     <div aria-label={`card box ${entryId}`}>

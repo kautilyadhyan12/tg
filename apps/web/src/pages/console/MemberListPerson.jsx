@@ -31,6 +31,7 @@ import MemberMemberships from './MemberMemberships';
 import MemberPurchases from './MemberPurchases';
 import MemberPayer from './MemberPayer';
 import MemberCard from './MemberCard';
+import MemberSquareLinks from './MemberSquareLinks';
 import MemberNotes from './MemberNotes';
 import MembershipChoice from './MembershipChoice';
 import { METHOD_NEEDED, firstBillPart, giveBody, joiningFeeFor, membershipChoice, newRequestKey, typeWithTax } from './heldMembershipsView';
@@ -470,6 +471,8 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   const [deleted, setDeleted] = useState(null);
   /** Customers in the gym's Square now being deleted with the person just deleted (18d-iii-b-ii-b-ii-b-ii). */
   const [deletedSquare, setDeletedSquare] = useState(0);
+  /** Unlink pressed on this page (18d-iii-b-ii-c-ii): Card on file reads the card again, as a card saved on that customer went. */
+  const [squareUnlinks, setSquareUnlinks] = useState(0);
   // Join: the search, the record picked, and which of the two is kept.
   const [joinQuery, setJoinQuery] = useState('');
   const [joinResults, setJoinResults] = useState(null);
@@ -1540,7 +1543,19 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
         />
         <MemberPayer key={`payer-${p.entryId}`} gymId={gymId} gym={gym} entryId={p.entryId} name={p.fullName} readOnly={readOnly} onChanged={onChanged} />
         {/* The card on file is for staff holding the payments tick alone (18d-ii). */}
-        {canRecordPayments(viewerPrivileges(gym)) ? <MemberCard key={`card-${p.entryId}`} gymId={gymId} gym={gym} entryId={p.entryId} name={p.fullName} readOnly={readOnly} /> : null}
+        {canRecordPayments(viewerPrivileges(gym)) ? (
+          <MemberCard key={`card-${p.entryId}-${String(squareUnlinks)}`} gymId={gymId} gym={gym} entryId={p.entryId} name={p.fullName} readOnly={readOnly} />
+        ) : null}
+        {/* The customers Match linked to them, with Unlink, for staff who match payments (18d-iii-b-ii-c-ii). */}
+        <MemberSquareLinks
+          key={`square-links-${p.entryId}`}
+          gymId={gymId}
+          gym={gym}
+          entryId={p.entryId}
+          name={p.fullName}
+          readOnly={readOnly}
+          onUnlinked={() => setSquareUnlinks((n) => n + 1)}
+        />
         <MemberPurchases key={`purchases-${p.entryId}`} gymId={gymId} gym={gym} entryId={p.entryId} name={p.fullName} past={p.formerAt !== null} />
         <MemberNotes key={`notes-${p.entryId}`} gymId={gymId} entryId={p.entryId} name={p.fullName} readOnly={readOnly} timeZone={gym?.timezone ?? null} />
         {membership.length > 0 ? (

@@ -297,7 +297,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
                - 18d-iii-b-ii-b-ii-b-ii. [x] **Delete permanently takes the customer the app added out of Square** — merged 2026-10-29 (PR #384).
          - 18d-iii-b-ii-c. **Match once for the rest**, in two parts since 2026-10-29 (`handoff/2026-10-29-18d-iii-b-ii-c-i.md` keeps its line as first written):
            - 18d-iii-b-ii-c-i. [x] **Match links Square's customer to the person who paid** — merged 2026-10-29 (PR #386).
-           - 18d-iii-b-ii-c-ii. [ ] **Unlink on their page**: a customer linked by Match taken back from the person, with what happens to their payments and card; Members in Square does not link it again by itself. Web folder 1.
+           - 18d-iii-b-ii-c-ii. [x] **Unlink on their page** — merged 2026-10-29 (PR #391).
        - 18d-iii-b-iii. [ ] **Memberships as Square items: a planning job, no building**, after 18d-iii-b-ii-c-ii, on Opus max (Kd, 2026-10-29: "YES"; `rulings/2026-10-29-18d-iii-b-ii-c-i.md`): staff pick the member and the membership item in Square's own app and the bill is paid by itself; one way at the desk; businesses already on Square moved over smoothly. Memberships only: shop items stay in Square's own reports (Kd, the same day).
          It tries in Square's test account the item's ID on an order, tax on a membership item, prices that differ by person, changing only items the app made, and Square's own Subscriptions; it ends with the build jobs, each for Kd's go. Web folder 1.
      - 18d-iv. [ ] **Refund a card payment through Square** (`rulings/2026-10-15-18o.md`); a chargeback shown on its payment with Square's 7-day deadline (Kd, 2026-10-22). Web folder 1.

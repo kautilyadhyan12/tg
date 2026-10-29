@@ -59,6 +59,7 @@ import * as merges from "./squareMergesRepo.js";
 import { REVOKE_MAX_TRIES, REVOKE_RETRY_MS, accessContext, missingScopes, terminalsOffered, type PaymentsDeps } from "./service.js";
 import type { SquareSettings } from "./settings.js";
 import type { SquareEnvironment, SquareResult } from "./square.js";
+import { unlinkedAt } from "./squareUnlinkRepo.js";
 import * as terminalSaves from "./terminalCardsRepo.js";
 import * as terminalsRepo from "./terminalsRepo.js";
 
@@ -494,6 +495,7 @@ async function save(deps: PaymentsDeps, s: SaveFor): Promise<void> {
   if (outcome.kind === "paid_by") throw paidBy(outcome.payer, person.fullName);
   if (outcome.kind === "not_ready") throw notReady();
   if (outcome.kind === "merged_away") throw new OrgsError(409, "card_merged_away", MEMBER_CARD_WORDS.merged_away);
+  if (outcome.kind === "unlinked") throw new OrgsError(409, "card_unlinked", MEMBER_CARD_WORDS.unlinked);
 }
 
 /** A card Square saved, as it may be kept. */
@@ -577,7 +579,8 @@ export type Kept =
   | { kind: "gone"; owed: string[] }
   | { kind: "paid_by"; payer: string; owed: string[] }
   | { kind: "not_ready"; owed: string[] }
-  | { kind: "merged_away"; owed: string[] };
+  | { kind: "merged_away"; owed: string[] }
+  | { kind: "unlinked"; owed: string[] };
 
 /** The card goes on the record, under the gym's lock (the caller's), only while it is still the
  *  gym's record, paid for by nobody, and the gym still on the connection the save began with;
@@ -596,6 +599,9 @@ export async function keepCard(tx: TransactionSql, k: KeepCard): Promise<Kept> {
   // Square the card would sit on another person's profile, chargeable at the till. Let go; the next save makes the
   // person a customer of their own (round one, High 2).
   if (k.afterMerge === true && !(await cards.isLinkedTo(tx, { gymId, entryId, environment, accountId, customerId: k.customerId }))) return { kind: "merged_away", owed: await owe() };
+  // Staff unlinked that customer from the person while the card was being saved (18d-iii-b-ii-c-ii): kept there, it would sit on
+  // somebody else's Square profile. Let go; the next save makes the person a customer of their own.
+  if ((await unlinkedAt(tx, { gymId, entryId, environment, accountId, customerId: k.customerId })) !== null) return { kind: "unlinked", owed: await owe() };
   const before = await cards.readCard(tx, gymId, entryId, true);
   // The same press sent twice: Square gave back the same card, already kept.
   if (before !== null && before.environment === environment && before.accountId === accountId && before.cardId === card.cardId) return { kind: "saved", owed: [] };

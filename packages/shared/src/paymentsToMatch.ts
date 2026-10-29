@@ -147,6 +147,9 @@ export const matchLinkOfferSchema = z
     also: z.boolean(),
     byName: z.string().nullable(),
     elsewhere: z.boolean(),
+    /** Staff unlinked this customer from this person on their page (18d-iii-b-ii-c-ii), when: the tick is off whatever the rule
+     *  says, and only ticking it links them again. */
+    unlinkedAt: z.string().datetime({ offset: true }).optional(),
   })
   .strict();
 export type MatchLinkOffer = z.infer<typeof matchLinkOfferSchema>;
