@@ -19,6 +19,14 @@ const files = sources(join(here, "src"));
 const read = (path: string) => readFileSync(path, "utf8");
 const short = (path: string) => path.slice(here.length + 1).replaceAll("\\", "/");
 
+describe("a chip grows with its words", () => {
+  it("is drawn at least 40 tall and never to a fixed height", () => {
+    const chip = read(join(here, "src", "look", "Chip.tsx"));
+    expect(chip).toMatch(/minHeight: 40/);
+    expect(chip).not.toMatch(/[^A-Za-z]height: \d/);
+  });
+});
+
 describe("the look is drawn once", () => {
   it("no screen writes a colour of its own", () => {
     const written = files

@@ -4381,6 +4381,27 @@ is a gym with no country. People who use the app for themselves may be anywhere.
   members are added, that a change is copied and only the part that changed. The calls are the box's (150 a
   minute for every gym together, two members at a time, two calls each); a gym whose owner never pressed Add
   members to Square has nothing copied.
+  *As built, 18d-iii-b-ii-c-i (Kd, 2026-10-29: "go"; `rulings/2026-10-29-18d-iii-b-ii-c-i.md`):* **Match links
+  Square's customer to the person who paid** ("match once, then automatic"). In Match's box, for a payment whose
+  Square customer is linked to nobody, a line under "Who paid?" offers to link that customer to the person
+  picked, so the customer's next payments come to the person's page with the bill ticked: "Link this
+  Square customer to Amy Lee". The tick is on only where the app can tell they are the same person, by
+  Members in Square's rule (the same email or phone AND the same name); where it cannot (Pat Smith, who is not on
+  the list, paying for her son Sam on his email), it is off, says why, and nothing is linked unless the press
+  sends it (`linkTo`, which nothing but the tick sends). A customer somebody else here, or at another gym of the
+  Square account, already has is never linked (the box names who); nor one whose reference id is another record
+  of this gym's, nor a past member's. Before the payment goes on its bill Square is asked about the customer
+  too: one it has deleted, merged since, or will not show is never linked by an old number (the press says so in
+  its done line, and Square not answering changes nothing). The link is made in the step that puts the payment on
+  its bill, under the gym's lock, so a press sent twice or by two staff links once: the person's customer if they
+  have none in that Square account (a card saved later is saved on it; copied changes reach it as for any
+  linked customer), else a second customer of theirs (Square makes one from a card payment), kept in
+  `gym_square_old_customers` with `matched_at` where a merge's old customers have `merged_at`. Every other
+  payment of that customer still waiting becomes the person's (their page, their card held), waiting for what
+  was sold if that was why (`sale_reason`, kept at the take-in) or else for its bill, worked out again from
+  today's bills; a payment taken in afterwards is theirs at once. Staff activity says "Linked a customer in your
+  Square customer list to Amy Lee", with nothing of the customer's own details; the payment keeps what Match
+  did (`link_result`) so the same press answered again is answered the same. Unlinking is the second half.
 - **Cash, bank transfer, a card on another machine, and UPI in India** (18r): recorded.
 
 Our own app for the Square Reader is ruled out (Kd, 2026-10-21): no gym app found runs the

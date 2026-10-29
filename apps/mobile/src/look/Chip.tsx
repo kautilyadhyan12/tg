@@ -4,7 +4,7 @@ import { Icon, type IconName } from "./Icon";
 import { fonts, Txt } from "./Txt";
 
 /** One of a few choices side by side (helmet.html's `.chip`): the picked one is orange and glows.
- *  Drawn 40 tall and pressed over 44. */
+ *  Drawn at least 40 tall, growing with its words, and pressed over 44. */
 export function Chip({ label, on, onPress, icon }: { label: string; on: boolean; onPress: () => void; icon?: IconName }) {
   return (
     <Pressable
@@ -30,7 +30,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    height: 40,
+    minHeight: 40,
     paddingHorizontal: 16,
     borderRadius: sizes.round,
     borderWidth: 1,
