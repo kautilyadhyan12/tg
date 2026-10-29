@@ -5,7 +5,6 @@ import {
   CLASS_BOOKING_WORDS,
   CLASS_ONLINE_WORDS,
   formatMinor,
-  lateCancelFeeWords,
   reminderClock,
   type ClassBookingView,
   type GymClockFormat,
@@ -221,7 +220,7 @@ export interface CancelAsk {
 
 /** What the box asks before a booking is cancelled or a waitlist left. Every fee in it is the one the
  *  request then says yes to. */
-export function cancelAsk(c: ClassBookingView, clock: GymClockFormat): CancelAsk {
+export function cancelAsk(c: ClassBookingView, clock: GymClockFormat, gym: string): CancelAsk {
   const what = `${c.className}, ${shortDay(c.localDate)} at ${reminderClock(c.localStartMinute, clock) ?? ""}`;
   if (c.mine?.status === "waitlisted") {
     return { title: "Leave the waitlist?", lines: [what, "You lose your place in line."], yes: "Leave waitlist", no: "Stay on it" };
@@ -230,7 +229,7 @@ export function cancelAsk(c: ClassBookingView, clock: GymClockFormat): CancelAsk
   if (c.can.cancel === "late") {
     const words =
       fee > 0 && c.fees !== null
-        ? lateCancelFeeWords(fee, c.fees.currency)
+        ? `It’s too late to cancel for free. Cancelling now counts as a late cancel, and ${gym} adds a one-time late cancel fee of ${formatMinor(fee, c.fees.currency)} to your bill.`
         : c.mine?.packCharged === true
           ? CLASS_BOOKING_WORDS.late_cancel_pack
           : CLASS_BOOKING_WORDS.late_cancel;
@@ -242,14 +241,14 @@ export function cancelAsk(c: ClassBookingView, clock: GymClockFormat): CancelAsk
   const until = instantText(c.freeCancelUntil, c.timezone, clock);
   const free = until === "" ? "Free to cancel now." : `Free to cancel until ${until}.`;
   const after =
-    pack || c.fees === null ? " Your pack gets the class back." : ` After that there is a one-time late cancel fee of ${formatMinor(fee, c.fees.currency)}.`;
+    pack || c.fees === null ? " Your pack gets the class back." : ` After that, ${gym} charges a one-time late cancel fee of ${formatMinor(fee, c.fees.currency)}.`;
   return { title: "Cancel your booking?", lines: [what, `${free}${after}`], yes: "Cancel booking", no: "Keep it" };
 }
 
 /** What a class's fees mean for this person, said under it before they book and while they hold a
  *  place: when free cancelling ends and what a late cancel costs after it, and what not coming costs.
  *  Empty where neither costs anything. `now` is the phone's clock, against the gym's free-cancel time. */
-export function feeLines(c: ClassBookingView, clock: GymClockFormat, now: number): string[] {
+export function feeLines(c: ClassBookingView, clock: GymClockFormat, now: number, gym: string): string[] {
   if (c.fees === null || c.cancelled) return [];
   const { take, give } = actionsOf(c);
   if (take === null && give === null) return [];
@@ -262,14 +261,14 @@ export function feeLines(c: ClassBookingView, clock: GymClockFormat, now: number
     // is judged by the time.
     const booked = c.mine?.status === "booked";
     const stillFree = booked ? c.can.cancel === "free" : !insideFreeCancel(c, now);
-    if (stillFree && until !== "") lines.push(`Free to cancel until ${until}. After that, a one-time late cancel fee of ${money}.`);
-    else if (booked) lines.push(`If you cancel now, a one-time late cancel fee of ${money} will be added to your bill.`);
-    else if (!freeCancelPassed(c, now) && until !== "") lines.push(endsSoon(until, money));
-    else if (c.mine?.status === "waitlisted") lines.push(`This class starts soon. If you get a place and then cancel, a one-time late cancel fee of ${money} will be added to your bill.`);
-    else lines.push(`This class starts soon. If you book and then cancel, a one-time late cancel fee of ${money} will be added to your bill.`);
+    if (stillFree && until !== "") lines.push(`Free to cancel until ${until}. After that, ${gym} charges a one-time late cancel fee of ${money}.`);
+    else if (booked) lines.push(`If you cancel now, ${gym} adds a one-time late cancel fee of ${money} to your bill.`);
+    else if (!freeCancelPassed(c, now) && until !== "") lines.push(endsSoon(until, money, gym));
+    else if (c.mine?.status === "waitlisted") lines.push(`This class starts soon. If you get a place and then cancel, ${gym} adds a one-time late cancel fee of ${money} to your bill.`);
+    else lines.push(`This class starts soon. If you book and then cancel, ${gym} adds a one-time late cancel fee of ${money} to your bill.`);
   }
   if (c.fees.noShowMinor > 0) {
-    lines.push(`If you don’t come, a one-time no-show fee of ${formatMinor(c.fees.noShowMinor, c.fees.currency)} will be added to your bill.`);
+    lines.push(`If you don’t come, ${gym} adds a one-time no-show fee of ${formatMinor(c.fees.noShowMinor, c.fees.currency)} to your bill.`);
   }
   return lines;
 }
@@ -290,13 +289,13 @@ function freeCancelPassed(c: ClassBookingView, now: number): boolean {
   return Number.isNaN(until) || until <= now;
 }
 
-/** Inside the margin: free cancelling has not ended yet, and ends in minutes. */
-const endsSoon = (until: string, money: string) =>
-  `Free cancelling ends at ${until}. If you cancel after that, a one-time late cancel fee of ${money} will be added to your bill.`;
+/** Inside the margin: free cancelling has not ended yet, and ends in minutes. The fee is the gym's own. */
+const endsSoon = (until: string, money: string, gym: string) =>
+  `Free cancelling ends at ${until}. If you cancel after that, ${gym} adds a one-time late cancel fee of ${money} to your bill.`;
 
 /** The box before a booking that could not be cancelled without a late cancel fee: the class starts
  *  inside its free-cancel time. Null where Book needs no question. */
-export function bookAsk(c: ClassBookingView, take: Take, clock: GymClockFormat, now: number): CancelAsk | null {
+export function bookAsk(c: ClassBookingView, take: Take, clock: GymClockFormat, now: number, gym: string): CancelAsk | null {
   const fee = lateFee(c);
   if (fee === 0 || c.fees === null || !insideFreeCancel(c, now)) return null;
   const what = `${c.className}, ${shortDay(c.localDate)} at ${reminderClock(c.localStartMinute, clock) ?? ""}`;
@@ -307,8 +306,8 @@ export function bookAsk(c: ClassBookingView, take: Take, clock: GymClockFormat, 
     lines: [
       what,
       !freeCancelPassed(c, now) && until !== ""
-        ? endsSoon(until, money)
-        : `This class starts soon, so it can’t be cancelled for free. If you book and then cancel, a one-time late cancel fee of ${money} will be added to your bill.`,
+        ? endsSoon(until, money, gym)
+        : `This class starts soon, so it can’t be cancelled for free. If you book and then cancel, ${gym} adds a one-time late cancel fee of ${money} to your bill.`,
     ],
     yes: take.label,
     no: "Not now",

@@ -6,9 +6,7 @@ import {
   PT_RECORD_SHARED_WORDS,
   addDays,
   bookingPeriod,
-  classFeesLine,
   formatMinor,
-  lateCancelFeeWords,
   orgWords,
   ptMemberWords,
   ptNotOnListWords,
@@ -122,14 +120,24 @@ export interface PtDay {
   trainers: PtTrainer[];
 }
 
+/** The gym's own fees for a session booked on a day: "Iron House’s fees: ₹200.00 for each late cancel, ₹300.00 for
+ *  each no-show."; null for none. */
+export function ptFeesLine(fees: Fees, gym: string): string | null {
+  const parts = [
+    fees.lateCancelMinor > 0 ? `${formatMinor(fees.lateCancelMinor, fees.currency)} for each late cancel` : null,
+    fees.noShowMinor > 0 ? `${formatMinor(fees.noShowMinor, fees.currency)} for each no-show` : null,
+  ].filter((part): part is string => part !== null);
+  return parts.length === 0 ? null : `${gym}’s fees: ${parts.join(", ")}.`;
+}
+
 /** One day of the page: what a booking on it would use, and each trainer's times on it. */
-export function ptDay(view: MemberPtResponse, localDate: string, orgType: unknown, clock: GymClockFormat): PtDay {
+export function ptDay(view: MemberPtResponse, localDate: string, orgType: unknown, clock: GymClockFormat, gym: string): PtDay {
   const day = view.days.find((d) => d.localDate === localDate);
   const pay = day === undefined ? null : payText(view, day, orgType);
   return {
     pay,
     // What a session booked on this day would cost if cancelled late or missed.
-    fees: day === undefined || day.fees === null || (pay !== null && !pay.can) ? null : classFeesLine(day.fees),
+    fees: day === undefined || day.fees === null || (pay !== null && !pay.can) ? null : ptFeesLine(day.fees, gym),
     // A day past the last one the gym has opened has no time to press, and says why.
     notOpen: localDate > view.lastDay ? `Booking for this day isn’t open yet. You can book up to ${shortDay(view.lastDay)}.` : null,
     // A day nothing pays for shows its times, and none of them is a button.
@@ -173,7 +181,7 @@ export interface Ask {
 }
 
 /** What the box asks before a session is cancelled. Every fee in it is the one the request then says yes to. */
-export function ptCancelAsk(s: MemberPtSession, timezone: string, clock: GymClockFormat): Ask {
+export function ptCancelAsk(s: MemberPtSession, timezone: string, clock: GymClockFormat, gym: string): Ask {
   const what = sessionText(s, clock);
   const fee = lateFee(s);
   const money = s.fees === null ? "" : formatMinor(fee, s.fees.currency);
@@ -185,7 +193,7 @@ export function ptCancelAsk(s: MemberPtSession, timezone: string, clock: GymCloc
       lines: [
         what,
         fee > 0 && s.fees !== null
-          ? `${lateCancelFeeWords(fee, s.fees.currency)}${counts}`
+          ? `${tooLate}, and ${gym} adds a one-time late cancel fee of ${money} to your bill.${counts}`
           : s.packCharged
             ? `${tooLate}, and the session stays used on your pack.`
             : s.usesLimit
@@ -203,29 +211,29 @@ export function ptCancelAsk(s: MemberPtSession, timezone: string, clock: GymCloc
     : s.usesLimit
       ? " Cancel now and it won’t count as one of the sessions your membership includes."
       : "";
-  const after = fee > 0 ? ` After that, a one-time late cancel fee of ${money}.` : "";
+  const after = fee > 0 ? ` After that, ${gym} charges a one-time late cancel fee of ${money}.` : "";
   if (gives === "" && after === "") return { title: "Cancel your session?", lines: [what], yes: "Cancel session", no: "Keep it" };
   const at = instantText(s.freeCancelUntil, timezone, clock);
   const free = at === "" ? "Free to cancel now." : `Free to cancel until ${at}.`;
   return { title: "Cancel your session?", lines: [what, `${free}${after}${gives}`], yes: "Cancel session", no: "Keep it" };
 }
 
-const noShowLine = (fees: Fees): string[] =>
-  fees.noShowMinor > 0 ? [`If you don’t come, a one-time no-show fee of ${formatMinor(fees.noShowMinor, fees.currency)} will be added to your bill.`] : [];
+const noShowLine = (fees: Fees, gym: string): string[] =>
+  fees.noShowMinor > 0 ? [`If you don’t come, ${gym} adds a one-time no-show fee of ${formatMinor(fees.noShowMinor, fees.currency)} to your bill.`] : [];
 
 /** What a coming session's fees mean for this person, under it: when free cancelling ends and what a late cancel
  *  costs after it, and what not coming costs. Empty where neither costs anything, or it can no longer be cancelled. */
-export function sessionFeeLines(s: MemberPtSession, timezone: string, clock: GymClockFormat): string[] {
+export function sessionFeeLines(s: MemberPtSession, timezone: string, clock: GymClockFormat, gym: string): string[] {
   if (s.fees === null || s.cancel === null) return [];
   const lines: string[] = [];
   const fee = lateFee(s);
   if (fee > 0) {
     const money = formatMinor(fee, s.fees.currency);
     const until = instantText(s.freeCancelUntil, timezone, clock);
-    if (s.cancel === "free" && until !== "") lines.push(`Free to cancel until ${until}. After that, a one-time late cancel fee of ${money}.`);
-    else lines.push(`If you cancel now, a one-time late cancel fee of ${money} will be added to your bill.`);
+    if (s.cancel === "free" && until !== "") lines.push(`Free to cancel until ${until}. After that, ${gym} charges a one-time late cancel fee of ${money}.`);
+    else lines.push(`If you cancel now, ${gym} adds a one-time late cancel fee of ${money} to your bill.`);
   }
-  return [...lines, ...noShowLine(s.fees)];
+  return [...lines, ...noShowLine(s.fees, gym)];
 }
 
 const offsetAt = (ms: number, zone: string): number | null => {
@@ -271,7 +279,7 @@ export interface BookTime {
 /** The box before a booking: a pressed time books nothing until the member says so. It names the session, what it
  *  uses, and what a late cancel and a no-show would cost; inside the gym's free-cancel time, that it can't be
  *  cancelled for free. `now` is the phone's clock. */
-export function ptBookAsk(view: MemberPtResponse, time: BookTime, pay: Pay | null, clock: GymClockFormat, now: number): Ask {
+export function ptBookAsk(view: MemberPtResponse, time: BookTime, pay: Pay | null, clock: GymClockFormat, now: number, gym: string): Ask {
   const fees = view.days.find((d) => d.localDate === time.localDate)?.fees ?? null;
   const lines = [`${time.dayLabel} · ${time.timeText} · with ${time.trainerName}`, ...(pay === null ? [] : [pay.text])];
   if (fees !== null && fees.lateCancelMinor > 0) {
@@ -279,13 +287,13 @@ export function ptBookAsk(view: MemberPtResponse, time: BookTime, pay: Pay | nul
     const starts = gymInstant(time.localDate, time.minute, view.timezone);
     const untilMs = starts === null ? null : starts - view.freeCancelMinutes * 60_000;
     const until = untilMs === null ? "" : instantText(new Date(untilMs).toISOString(), view.timezone, clock);
-    if (untilMs === null || until === "") lines.push(`If you book and then cancel late, a one-time late cancel fee of ${money} will be added to your bill.`);
-    else if (untilMs - now > CLOCK_MARGIN_MS) lines.push(`Free to cancel until ${until}. After that, a one-time late cancel fee of ${money}.`);
+    if (untilMs === null || until === "") lines.push(`If you book and then cancel late, ${gym} adds a one-time late cancel fee of ${money} to your bill.`);
+    else if (untilMs - now > CLOCK_MARGIN_MS) lines.push(`Free to cancel until ${until}. After that, ${gym} charges a one-time late cancel fee of ${money}.`);
     else if (untilMs > now)
-      lines.push(`Free cancelling ends at ${until}. If you cancel after that, a one-time late cancel fee of ${money} will be added to your bill.`);
-    else lines.push(`This session starts soon, so it can’t be cancelled for free. If you book and then cancel, a one-time late cancel fee of ${money} will be added to your bill.`);
+      lines.push(`Free cancelling ends at ${until}. If you cancel after that, ${gym} adds a one-time late cancel fee of ${money} to your bill.`);
+    else lines.push(`This session starts soon, so it can’t be cancelled for free. If you book and then cancel, ${gym} adds a one-time late cancel fee of ${money} to your bill.`);
   }
-  return { title: "Book this session?", lines: fees === null ? lines : [...lines, ...noShowLine(fees)], yes: "Book session", no: "Not now" };
+  return { title: "Book this session?", lines: fees === null ? lines : [...lines, ...noShowLine(fees, gym)], yes: "Book session", no: "Not now" };
 }
 
 const FEE_STATE_WORDS = { owed: "Payment due", paid: "Paid", waived: "Waived" } as const;

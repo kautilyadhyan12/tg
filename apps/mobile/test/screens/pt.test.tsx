@@ -163,10 +163,10 @@ describe("the worst thing: nothing is booked twice, no fee is taken that was not
     expect(screen.getAllByText("You have 10 sessions: 3 sessions left. Each booking uses 1 session.")).toHaveLength(2);
     expect(
       screen.getByText(
-        "This session starts soon, so it can’t be cancelled for free. If you book and then cancel, a one-time late cancel fee of ₹500.00 will be added to your bill.",
+        "This session starts soon, so it can’t be cancelled for free. If you book and then cancel, Iron House adds a one-time late cancel fee of ₹500.00 to your bill.",
       ),
     ).toBeTruthy();
-    expect(screen.getByText("If you don’t come, a one-time no-show fee of ₹800.00 will be added to your bill.")).toBeTruthy();
+    expect(screen.getByText("If you don’t come, Iron House adds a one-time no-show fee of ₹800.00 to your bill.")).toBeTruthy();
     await fireEvent.press(screen.getByLabelText("Not now"));
     expect(books(server.asked, IRON)).toHaveLength(0);
   });
@@ -187,12 +187,12 @@ describe("the worst thing: nothing is booked twice, no fee is taken that was not
     await openPt(server.ask, IRON);
     await fireEvent.press(await screen.findByLabelText(/^Cancel session: /));
     expect(await screen.findByText("Cancel late?")).toBeTruthy();
-    expect(screen.getByText(/and a one-time late cancel fee of ₹500\.00 will be added to your bill\.$/)).toBeTruthy();
+    expect(screen.getByText(/and Iron House adds a one-time late cancel fee of ₹500\.00 to your bill\.$/)).toBeTruthy();
     const cancels = () => server.asked.filter((one) => one.path.endsWith("/cancel"));
     expect(cancels()).toHaveLength(0);
 
     await fireEvent.press(screen.getByLabelText("Cancel session"));
-    expect(await screen.findByText(/and a one-time late cancel fee of ₹700\.00 will be added to your bill\.$/)).toBeTruthy();
+    expect(await screen.findByText(/and Iron House adds a one-time late cancel fee of ₹700\.00 to your bill\.$/)).toBeTruthy();
     expect(cancels()).toHaveLength(1);
     await fireEvent.press(screen.getByLabelText("Cancel session"));
     expect(await page().findByText("Cancelled late. A one-time late cancel fee of ₹700.00 was added to your bill.")).toBeTruthy();
@@ -260,8 +260,8 @@ describe("the page", () => {
     });
     await openPt(server.ask, IRON);
     expect(await page().findByText("Your sessions")).toBeTruthy();
-    expect(page().getByText(/^Free to cancel until .*, 8:00 AM\. After that, a one-time late cancel fee of ₹500\.00\.$/)).toBeTruthy();
-    expect(page().getByText("If you don’t come, a one-time no-show fee of ₹800.00 will be added to your bill.")).toBeTruthy();
+    expect(page().getByText(/^Free to cancel until .*, 8:00 AM\. After that, Iron House charges a one-time late cancel fee of ₹500\.00\.$/)).toBeTruthy();
+    expect(page().getByText("If you don’t come, Iron House adds a one-time no-show fee of ₹800.00 to your bill.")).toBeTruthy();
     expect(page().getByText("You missed this session")).toBeTruthy();
     expect(page().getByText("One-time no-show fee ₹800.00 · Payment due")).toBeTruthy();
   });

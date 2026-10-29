@@ -195,13 +195,13 @@ function PtBody({ place, onClose, bottom }: { place: PtPlace; onClose: () => voi
   const view = held.kind === "ok" ? held.view : null;
   const row = view === null ? null : ptDays(view);
   const shown = row === null ? null : row.days.some((d) => d.localDate === picked) ? picked : row.first;
-  const day = view === null || shown === null ? null : ptDay(view, shown, place.orgType, place.clockFormat);
+  const day = view === null || shown === null ? null : ptDay(view, shown, place.orgType, place.clockFormat, place.name);
   const shownLabel = row?.days.find((d) => d.localDate === shown)?.label ?? "";
   const empty = view === null ? null : emptyText(view, place.name, place.orgType);
   const note = view === null ? null : ptZoneNote(view.timezone, place.name, phoneZone(), new Date());
   const lastWeek = week === MEMBER_PT_WEEKS - 1 || (view !== null && view.to >= view.lastDay);
-  const bookBox = choosing === null || view === null ? null : ptBookAsk(view, choosing, choosing.pay, place.clockFormat, Date.now());
-  const ask = asking === null || view === null ? null : ptCancelAsk(asking, view.timezone, place.clockFormat);
+  const bookBox = choosing === null || view === null ? null : ptBookAsk(view, choosing, choosing.pay, place.clockFormat, Date.now(), place.name);
+  const ask = asking === null || view === null ? null : ptCancelAsk(asking, view.timezone, place.clockFormat, place.name);
 
   return (
     <>
@@ -253,7 +253,7 @@ function PtBody({ place, onClose, bottom }: { place: PtPlace; onClose: () => voi
                       </Txt>
                     </View>
                     {s.packCharged ? <Txt kind="small">1 session used from your pack</Txt> : null}
-                    {sessionFeeLines(s, held.view.timezone, place.clockFormat).map((line) => (
+                    {sessionFeeLines(s, held.view.timezone, place.clockFormat, place.name).map((line) => (
                       <Txt key={line} kind="small">
                         {line}
                       </Txt>

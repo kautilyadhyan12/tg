@@ -15,6 +15,7 @@ import {
   ptDay,
   ptDays,
   ptFeeText,
+  ptFeesLine,
   ptZoneNote,
   sessionFeeLines,
   sessionSpan,
@@ -107,7 +108,7 @@ describe("what a booking on a day uses, or why it can't be made", () => {
     const v = view({ trainers: [{ trainerId: T1, name: null, sessionMinutes: 45, days: [{ localDate: "2030-03-04", free: [600], opensLater: false }] }] }, [
       { pays: { membership: null, sessionsLeft: null } },
     ]);
-    const day = ptDay(v, "2030-03-04", "gym", "12h");
+    const day = ptDay(v, "2030-03-04", "gym", "12h", "Iron House");
     expect(day.pay).toBeNull();
     expect(day.can).toBe(true);
     expect(day.trainers[0]?.name).toBe("a member of staff");
@@ -116,14 +117,30 @@ describe("what a booking on a day uses, or why it can't be made", () => {
 
   it("a day nothing pays for shows its times and says no fees", () => {
     const v = view({}, [{ pays: null, why: "no_membership", fees: INR }]);
-    const day = ptDay(v, "2030-03-04", "gym", "12h");
+    const day = ptDay(v, "2030-03-04", "gym", "12h", "Iron House");
     expect(day.can).toBe(false);
     expect(day.fees).toBeNull();
   });
 
   it("a day past the last open one says so", () => {
-    expect(ptDay(view({ lastDay: "2030-03-04" }, [{}, {}]), "2030-03-05", "gym", "24h").notOpen).toBe(
+    expect(ptDay(view({ lastDay: "2030-03-04" }, [{}, {}]), "2030-03-05", "gym", "24h", "Iron House").notOpen).toBe(
       "Booking for this day isn’t open yet. You can book up to Mon 4 Mar.",
+    );
+  });
+});
+
+describe("the gym's own fees for a day", () => {
+  it.each([
+    ["both", INR, "Iron House’s fees: ₹500.00 for each late cancel, ₹800.00 for each no-show."],
+    ["a late cancel alone", { ...INR, noShowMinor: 0 }, "Iron House’s fees: ₹500.00 for each late cancel."],
+    ["a no-show alone", { ...INR, lateCancelMinor: 0 }, "Iron House’s fees: ₹800.00 for each no-show."],
+    ["none", { ...INR, lateCancelMinor: 0, noShowMinor: 0 }, null],
+  ])("%s", (_, fees, words) => {
+    expect(ptFeesLine(fees, "Iron House")).toBe(words);
+  });
+  it("is said on a day something pays for", () => {
+    expect(ptDay(view({}, [{ fees: INR }]), "2030-03-04", "gym", "12h", "Iron House").fees).toBe(
+      "Iron House’s fees: ₹500.00 for each late cancel, ₹800.00 for each no-show.",
     );
   });
 });
@@ -167,27 +184,27 @@ describe("the box before a cancel: every fee in it is the one sent", () => {
       "free, a pack and a fee",
       session({ packCharged: true, fees: INR }),
       "Cancel your session?",
-      ["Free to cancel until Mon 4 Mar, 8:00 AM. After that, a one-time late cancel fee of ₹500.00. Cancel now and your pack gets the session back."],
+      ["Free to cancel until Mon 4 Mar, 8:00 AM. After that, Iron House charges a one-time late cancel fee of ₹500.00. Cancel now and your pack gets the session back."],
     ],
-    ["free, a fee after", session({ fees: INR }), "Cancel your session?", ["Free to cancel until Mon 4 Mar, 8:00 AM. After that, a one-time late cancel fee of ₹500.00."]],
+    ["free, a fee after", session({ fees: INR }), "Cancel your session?", ["Free to cancel until Mon 4 Mar, 8:00 AM. After that, Iron House charges a one-time late cancel fee of ₹500.00."]],
     [
       "free, a limit and a fee",
       session({ fees: INR, usesLimit: true }),
       "Cancel your session?",
-      ["Free to cancel until Mon 4 Mar, 8:00 AM. After that, a one-time late cancel fee of ₹500.00. Cancel now and it won’t count as one of the sessions your membership includes."],
+      ["Free to cancel until Mon 4 Mar, 8:00 AM. After that, Iron House charges a one-time late cancel fee of ₹500.00. Cancel now and it won’t count as one of the sessions your membership includes."],
     ],
     [
       "late, a fee",
       session({ cancel: "late", fees: INR }),
       "Cancel late?",
-      ["It's too late to cancel for free. Cancelling now counts as a late cancel, and a one-time late cancel fee of ₹500.00 will be added to your bill."],
+      ["It’s too late to cancel for free. Cancelling now counts as a late cancel, and Iron House adds a one-time late cancel fee of ₹500.00 to your bill."],
     ],
     [
       "late, a fee and a limit",
       session({ cancel: "late", fees: INR, usesLimit: true }),
       "Cancel late?",
       [
-        "It's too late to cancel for free. Cancelling now counts as a late cancel, and a one-time late cancel fee of ₹500.00 will be added to your bill. It still counts as one of the sessions your membership includes.",
+        "It’s too late to cancel for free. Cancelling now counts as a late cancel, and Iron House adds a one-time late cancel fee of ₹500.00 to your bill. It still counts as one of the sessions your membership includes.",
       ],
     ],
     ["late, a pack", session({ cancel: "late", packCharged: true }), "Cancel late?", ["It’s too late to cancel for free. Cancelling now counts as a late cancel, and the session stays used on your pack."]],
@@ -199,27 +216,27 @@ describe("the box before a cancel: every fee in it is the one sent", () => {
     ],
     ["late, nothing costs", session({ cancel: "late" }), "Cancel late?", ["Cancelling this close to the start counts as a late cancel. There’s no fee."]],
   ])("%s", (_, s, title, more) => {
-    const ask = ptCancelAsk(s, "Asia/Kolkata", "12h");
+    const ask = ptCancelAsk(s, "Asia/Kolkata", "12h", "Iron House");
     expect(ask.title).toBe(title);
     expect(ask.lines[0]).toBe("Mon 4 Mar · 10:00 AM – 11:00 AM · with Sam Trainer");
     expect(ask.lines.slice(1)).toEqual(more);
     expect(ask.yes).toBe("Cancel session");
   });
   it("never says free where nothing follows", () => {
-    expect(ptCancelAsk(session(), "Asia/Kolkata", "12h").lines.join(" ")).not.toMatch(/free/i);
-    expect(ptCancelAsk(session({ cancel: "late" }), "Asia/Kolkata", "12h").lines.join(" ")).not.toMatch(/for free/i);
+    expect(ptCancelAsk(session(), "Asia/Kolkata", "12h", "Iron House").lines.join(" ")).not.toMatch(/free/i);
+    expect(ptCancelAsk(session({ cancel: "late" }), "Asia/Kolkata", "12h", "Iron House").lines.join(" ")).not.toMatch(/for free/i);
   });
 });
 
 describe("under a coming session", () => {
   it.each([
     ["no fees", session(), []],
-    ["a free cancel with fees", session({ fees: INR }), ["Free to cancel until Mon 4 Mar, 8:00 AM. After that, a one-time late cancel fee of ₹500.00.", "If you don’t come, a one-time no-show fee of ₹800.00 will be added to your bill."]],
-    ["a late cancel with fees", session({ fees: INR, cancel: "late" }), ["If you cancel now, a one-time late cancel fee of ₹500.00 will be added to your bill.", "If you don’t come, a one-time no-show fee of ₹800.00 will be added to your bill."]],
-    ["a no-show fee alone", session({ fees: { ...INR, lateCancelMinor: 0 } }), ["If you don’t come, a one-time no-show fee of ₹800.00 will be added to your bill."]],
+    ["a free cancel with fees", session({ fees: INR }), ["Free to cancel until Mon 4 Mar, 8:00 AM. After that, Iron House charges a one-time late cancel fee of ₹500.00.", "If you don’t come, Iron House adds a one-time no-show fee of ₹800.00 to your bill."]],
+    ["a late cancel with fees", session({ fees: INR, cancel: "late" }), ["If you cancel now, Iron House adds a one-time late cancel fee of ₹500.00 to your bill.", "If you don’t come, Iron House adds a one-time no-show fee of ₹800.00 to your bill."]],
+    ["a no-show fee alone", session({ fees: { ...INR, lateCancelMinor: 0 } }), ["If you don’t come, Iron House adds a one-time no-show fee of ₹800.00 to your bill."]],
     ["started", session({ fees: INR, cancel: null }), []],
   ])("%s", (_, s, lines) => {
-    expect(sessionFeeLines(s, "Asia/Kolkata", "12h")).toEqual(lines);
+    expect(sessionFeeLines(s, "Asia/Kolkata", "12h", "Iron House")).toEqual(lines);
   });
 });
 
@@ -255,8 +272,8 @@ describe("the box before a booking says what it uses and what a cancel and a no-
       [
         "Today · Mon 4 Mar · 10:00 AM – 11:00 AM · with Sam Trainer",
         pay.text,
-        "Free to cancel until Mon 4 Mar, 8:00 AM. After that, a one-time late cancel fee of ₹500.00.",
-        "If you don’t come, a one-time no-show fee of ₹800.00 will be added to your bill.",
+        "Free to cancel until Mon 4 Mar, 8:00 AM. After that, Iron House charges a one-time late cancel fee of ₹500.00.",
+        "If you don’t come, Iron House adds a one-time no-show fee of ₹800.00 to your bill.",
       ],
     ],
     [
@@ -266,8 +283,8 @@ describe("the box before a booking says what it uses and what a cancel and a no-
       at("2030-03-04T02:27:00Z"),
       [
         "Today · Mon 4 Mar · 10:00 AM – 11:00 AM · with Sam Trainer",
-        "Free cancelling ends at Mon 4 Mar, 8:00 AM. If you cancel after that, a one-time late cancel fee of ₹500.00 will be added to your bill.",
-        "If you don’t come, a one-time no-show fee of ₹800.00 will be added to your bill.",
+        "Free cancelling ends at Mon 4 Mar, 8:00 AM. If you cancel after that, Iron House adds a one-time late cancel fee of ₹500.00 to your bill.",
+        "If you don’t come, Iron House adds a one-time no-show fee of ₹800.00 to your bill.",
       ],
     ],
     [
@@ -277,12 +294,12 @@ describe("the box before a booking says what it uses and what a cancel and a no-
       at("2030-03-04T03:00:00Z"),
       [
         "Today · Mon 4 Mar · 10:00 AM – 11:00 AM · with Sam Trainer",
-        "This session starts soon, so it can’t be cancelled for free. If you book and then cancel, a one-time late cancel fee of ₹500.00 will be added to your bill.",
-        "If you don’t come, a one-time no-show fee of ₹800.00 will be added to your bill.",
+        "This session starts soon, so it can’t be cancelled for free. If you book and then cancel, Iron House adds a one-time late cancel fee of ₹500.00 to your bill.",
+        "If you don’t come, Iron House adds a one-time no-show fee of ₹800.00 to your bill.",
       ],
     ],
   ])("%s", (_, v, p, now, lines) => {
-    const ask = ptBookAsk(v, time, p, "12h", now);
+    const ask = ptBookAsk(v, time, p, "12h", now, "Iron House");
     expect(ask.title).toBe("Book this session?");
     expect(ask.lines).toEqual(lines);
     expect([ask.yes, ask.no]).toEqual(["Book session", "Not now"]);
