@@ -28,3 +28,7 @@ export const PASS_MOST = 0.5;
 export function passSide(width: number, screenHeight: number, edge: number): number {
   return Math.round(Math.max(0, Math.min(width - edge * 2, screenHeight * PASS_MOST)));
 }
+
+/** The most of the screen's height a receipt in the middle box takes before it scrolls, so its title and Done stay
+ *  on screen. */
+export const RECEIPT_MOST = 0.6;
