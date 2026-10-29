@@ -65,8 +65,10 @@ import { useMealOutbox } from "./food/MealOutbox";
 import { holdWords } from "./food/numbers";
 import { OwnNumbers } from "./food/OwnNumbers";
 import {
+  FILL_CHOICES,
   amountRefusal,
   chosenItem,
+  dishMeasure,
   loggedAmount,
   startingAmount,
   underAGram,
@@ -613,6 +615,12 @@ function MealSheet({
     setMode({ kind: "foods" });
     setFull(false);
   }, [rowId]);
+  // The phone's back button: from a food, its removal, the meal's details or its removal, back a step.
+  const back = (): boolean => {
+    if (mode.kind === "foods") return false;
+    setMode(mode.kind === "removeFood" ? { kind: "food", at: mode.at } : { kind: "foods" });
+    return true;
+  };
   // Each food's own measures, for the server's meal as it is now.
   useEffect(() => {
     setMeasures(null);
@@ -641,7 +649,7 @@ function MealSheet({
 
   if (mode.kind === "remove") {
     return (
-      <Sheet open title="Remove this meal?" onClose={onClose}>
+      <Sheet open title="Remove this meal?" onClose={onClose} onBack={back}>
         <Txt kind="small">
           {row.name} comes off {mealTypeName(row.section).toLowerCase()} and out of the day’s totals.
         </Txt>
@@ -653,7 +661,7 @@ function MealSheet({
 
   if (mode.kind === "details") {
     return (
-      <Sheet open title="Edit meal" onClose={onClose}>
+      <Sheet open title="Edit meal" onClose={onClose} onBack={back}>
         <MealDetails
           row={row}
           onSave={(fields) => {
@@ -675,7 +683,7 @@ function MealSheet({
   if (saved !== null && item !== undefined && mode.kind === "removeFood") {
     const at = mode.at;
     return (
-      <Sheet open title={`Remove ${item.name}?`} onClose={onClose}>
+      <Sheet open title={`Remove ${item.name}?`} onClose={onClose} onBack={back}>
         <Txt kind="small">
           {item.name} comes off {row.name} and out of the day’s totals.
         </Txt>
@@ -704,7 +712,7 @@ function MealSheet({
   if (saved !== null && item !== undefined && mode.kind === "food") {
     const at = mode.at;
     return (
-      <Sheet open title={item.name} onClose={onClose}>
+      <Sheet open title={item.name} onClose={onClose} onBack={back}>
         <FoodAmount
           key={`${row.id}-${String(at)}-${measures === null ? "own" : "server"}`}
           mealId={row.id}
@@ -930,7 +938,15 @@ function FoodAmount({
       <Txt kind="tiny">
         Logged: {loggedAmount(item) + itemMark(item)} · {kcalWords(item.kcalPoint)}
       </Txt>
-      <AmountPicker measures={measures} amount={amount} onAmount={setAmount} dishes={dishes} onDishes={dishesAgain} onPanel={setPanel} />
+      <AmountPicker
+        measures={measures}
+        amount={amount}
+        onAmount={setAmount}
+        dishes={dishes}
+        onDishes={dishesAgain}
+        onPanel={setPanel}
+        grams={now === undefined || preview === null ? null : now.gramsPoint}
+      />
       {panel ? null : (
         <>
           {tooSmall ? (
@@ -1123,12 +1139,25 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
   };
   const open = (f: RecentFood) => {
     setFood({ canonical: f.canonical, name: f.item.name, source: f.source, measures: f.measures, startsAt: f.add, last: f });
-    setAmount(startingAmount({ startsAt: f.add }));
+    // Last had by a saved dish the person still has: that dish, as full as it was then. A dish that is
+    // gone starts it where the server says, a count of it where it has one.
+    const m = f.item.measure;
+    const dish = m?.id === "dish" && dishes.kind === "ok" ? dishes.list.find((d) => d.label === m.name) : undefined;
+    const fill = FILL_CHOICES.find((c) => c.value === m?.amount);
+    setAmount(dish !== undefined && fill !== undefined ? { measure: dishMeasure(dish.id), amount: String(fill.value) } : startingAmount({ startsAt: f.add }));
   };
   const showRecent = food === null && query.trim() === "" && recent.length > 0;
+  // The phone's back button: from a food's amount, back to the foods.
+  const back = (): boolean => {
+    if (food === null) return false;
+    setFood(null);
+    setAmount(null);
+    setPanel(false);
+    return true;
+  };
 
   return (
-    <Sheet open title={`Add to ${name}`} onClose={onClose}>
+    <Sheet open title={`Add to ${name}`} onClose={onClose} onBack={back}>
       {food === null ? <Field label="Search food" bare value={query} onChange={setQuery} placeholder="Search food" ready maxLength={100} /> : null}
       <ScrollView style={{ maxHeight: Math.max(SHEET_LIST_LEAST, height - keyboard - insets.top - (food === null ? SHEET_ABOVE_SEARCH : SHEET_ABOVE_LIST)) }} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.sheetList}>
         {food === null ? (
@@ -1213,6 +1242,7 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
                 dishes={dishes}
                 onDishes={dishesAgain}
                 onPanel={setPanel}
+                grams={preview?.items[0]?.gramsPoint ?? null}
               />
             )}
             {panel ? null : (

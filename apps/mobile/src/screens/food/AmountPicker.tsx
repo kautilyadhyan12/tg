@@ -7,6 +7,7 @@ import { colours, sizes } from "../../look/colours";
 import { Field } from "../../look/Field";
 import { FillDish } from "../../look/FillDish";
 import { Icon } from "../../look/Icon";
+import { useSheetBack } from "../../look/Sheet";
 import { MOST_TEXT_GROWTH } from "../../look/sizing";
 import { fonts, Txt } from "../../look/Txt";
 import type { Shape } from "../../session/calls";
@@ -58,6 +59,9 @@ export function pickedDish(dishes: Dishes, measure: string): Dishware | null {
 
 type Panel = "pick" | "new" | "edit";
 
+/** What an amount weighs, beside it: "= 180 g", or "= … g" while the server works it out. */
+const gramsWords = (grams: number | null): string => (grams === null ? "= … g" : `= ${String(Math.round(grams))} g`);
+
 export function AmountPicker({
   measures,
   amount,
@@ -65,6 +69,7 @@ export function AmountPicker({
   dishes,
   onDishes,
   onPanel,
+  grams,
 }: {
   measures: readonly FoodMeasure[];
   amount: Amount;
@@ -74,6 +79,8 @@ export function AmountPicker({
   onDishes: () => void;
   /** A dish being saved or the dishes being changed fill the box: the food's own button waits. */
   onPanel: (open: boolean) => void;
+  /** What the amount weighs, as the server worked it out; null while it has not answered. */
+  grams: number | null;
 }) {
   const [all, setAll] = useState(false);
   const [panel, setPanelState] = useState<Panel>("pick");
@@ -81,6 +88,12 @@ export function AmountPicker({
     setPanelState(next);
     onPanel(next !== "pick");
   };
+  // The phone's back button: from a new dish or your dishes, back to the amount.
+  useSheetBack(2, () => {
+    if (panel === "pick") return false;
+    setPanel("pick");
+    return true;
+  });
   const measure = measures.find((m) => m.id === amount.measure);
   const dishId = dishOf(amount.measure);
   const dish = pickedDish(dishes, amount.measure);
@@ -138,6 +151,8 @@ export function AmountPicker({
           <Txt kind="small" colour="text" style={styles.grow} numberOfLines={2}>
             {unitWords(measure)}
           </Txt>
+          {/* A count is never a number alone: what it weighs is beside it (Kd, 32b-ii-b). */}
+          {amount.measure === "g" ? null : <Txt kind="strong">{gramsWords(grams)}</Txt>}
         </View>
       ) : null}
       <View style={styles.chips}>
@@ -212,7 +227,7 @@ export function AmountPicker({
               );
             })}
           </View>
-          {FILL_CHOICES.some((f) => amount.amount === String(f.value)) ? null : <Txt kind="small">Pick how full it was.</Txt>}
+          {FILL_CHOICES.some((f) => amount.amount === String(f.value)) ? <Txt kind="strong">{gramsWords(grams)}</Txt> : <Txt kind="small">Pick how full it was.</Txt>}
         </>
       )}
     </>
@@ -244,17 +259,17 @@ function NewDish({ onCancel, onSaved }: { onCancel: () => void; onSaved: (dish: 
   return (
     <>
       <Txt kind="h3">New dish</Txt>
-      <Field label="Name" value={name} onChange={setName} placeholder="My blue bowl" maxLength={MOST_DISH_NAME} />
+      <Field label="Name your dish" value={name} onChange={setName} maxLength={MOST_DISH_NAME} />
       <Txt kind="tiny" style={styles.label}>
-        Size
+        How big is it?
       </Txt>
       <View style={styles.chips}>
         {DISH_SIZES.map((s) => (
           <Chip key={s.label} label={`${s.label} · ${String(s.volumeMl)} ml`} on={size === s.label} onPress={() => { setSize(s.label); }} />
         ))}
-        <Chip label="Type ml" on={size === "ml"} onPress={() => { setSize("ml"); }} />
+        <Chip label="Another size" on={size === "ml"} onPress={() => { setSize("ml"); }} />
       </View>
-      {size === "ml" ? <Field label="Size in ml" value={ml} onChange={setMl} keyboard="number-pad" maxLength={5} ready /> : null}
+      {size === "ml" ? <Field label="Its size in ml" value={ml} onChange={setMl} keyboard="number-pad" maxLength={5} ready /> : null}
       {trouble === null ? null : (
         <Txt kind="small" colour="badText">
           {trouble}
@@ -277,6 +292,12 @@ function EditDishes({ list, onChanged, onDone }: { list: readonly Dishware[]; on
   const [busy, setBusy] = useState(false);
   const [trouble, setTrouble] = useState<string | null>(null);
   const [said, setSaid] = useState<string | null>(null);
+  // The phone's back button: from renaming or removing a dish, back to your dishes.
+  useSheetBack(3, () => {
+    if (editing.kind === "list") return false;
+    setEditing({ kind: "list" });
+    return true;
+  });
 
   const failed = (answer: { kind: "no_answer" } | { kind: "refused"; status: number }, gone: string): void => {
     if (answer.kind === "refused" && answer.status === 404) {
