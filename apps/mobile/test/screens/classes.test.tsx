@@ -132,12 +132,12 @@ describe("the worst thing: nothing is booked twice, no fee is taken that was not
     await openClasses(server.ask, IRON);
     await fireEvent.press(await screen.findByLabelText("Cancel booking: Spin, 6:30 PM · 45 min"));
     expect(await screen.findByText("Cancel late?")).toBeTruthy();
-    expect(screen.getByText(/and a one-time late cancel fee of ₹500\.00 will be added to your bill/)).toBeTruthy();
+    expect(screen.getByText(/and Iron House adds a one-time late cancel fee of ₹500\.00 to your bill/)).toBeTruthy();
     // Nothing is sent until the box's own Yes.
     expect(server.asked.filter((one) => one.path.endsWith("/cancel"))).toHaveLength(0);
 
     await fireEvent.press(screen.getByLabelText("Cancel booking"));
-    expect(await screen.findByText(/and a one-time late cancel fee of ₹700\.00 will be added to your bill/)).toBeTruthy();
+    expect(await screen.findByText(/and Iron House adds a one-time late cancel fee of ₹700\.00 to your bill/)).toBeTruthy();
     expect(screen.queryByText(/and a one-time late cancel fee of ₹500\.00/)).toBeNull();
     expect(server.asked.filter((one) => one.path.endsWith("/cancel"))).toHaveLength(1);
 
@@ -167,9 +167,9 @@ describe("the worst thing: nothing is booked twice, no fee is taken that was not
     });
     await openClasses(server.ask, IRON);
     expect(
-      await classBox(S1).findByText("This class starts soon. If you book and then cancel, a one-time late cancel fee of ₹200.00 will be added to your bill."),
+      await classBox(S1).findByText("This class starts soon. If you book and then cancel, Iron House adds a one-time late cancel fee of ₹200.00 to your bill."),
     ).toBeTruthy();
-    expect(classBox(S1).getByText("If you don’t come, a one-time no-show fee of ₹300.00 will be added to your bill.")).toBeTruthy();
+    expect(classBox(S1).getByText("If you don’t come, Iron House adds a one-time no-show fee of ₹300.00 to your bill.")).toBeTruthy();
 
     await fireEvent.press(classBox(S1).getByLabelText("Book: Stretch, 6:30 PM · 45 min"));
     expect(await screen.findByText("Book?")).toBeTruthy();
@@ -180,7 +180,7 @@ describe("the worst thing: nothing is booked twice, no fee is taken that was not
     await fireEvent.press(await screen.findByLabelText("Book", { exact: true }));
     expect(await classBox(S1).findByText("You’re booked")).toBeTruthy();
     expect(server.asked.filter((one) => one.path === bookingOf(IRON, S1))).toHaveLength(1);
-    expect(classBox(S1).getByText("If you cancel now, a one-time late cancel fee of ₹200.00 will be added to your bill.")).toBeTruthy();
+    expect(classBox(S1).getByText("If you cancel now, Iron House adds a one-time late cancel fee of ₹200.00 to your bill.")).toBeTruthy();
   });
 
   it("a refused Book's key is never sent again: the next press is a new request", async () => {
@@ -250,7 +250,7 @@ describe("the worst thing: nothing is booked twice, no fee is taken that was not
     expect(await screen.findByText("Cancel your booking?")).toBeTruthy();
     await fireEvent.press(screen.getByLabelText("Cancel booking", { exact: true }));
     expect(await screen.findByText("Cancel late?")).toBeTruthy();
-    expect(screen.getByText(/and a one-time late cancel fee of ₹200\.00 will be added to your bill/)).toBeTruthy();
+    expect(screen.getByText(/and Iron House adds a one-time late cancel fee of ₹200\.00 to your bill/)).toBeTruthy();
     expect(server.asked.filter((one) => one.path.endsWith("/cancel")).map((one) => one.body)).toEqual([{ lateOk: false }]);
   });
 

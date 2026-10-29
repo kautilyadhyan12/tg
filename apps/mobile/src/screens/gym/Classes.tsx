@@ -212,8 +212,8 @@ function ClassesBody({ place, onClose, bottom }: { place: ClassesPlace; onClose:
 
   const days = list === null ? [] : byDay(list.classes);
   const note = list === null ? null : zoneNote(list.classes, place.name, phoneZone());
-  const ask = asking === null ? null : cancelAsk(asking, place.clockFormat);
-  const bookBox = confirming === null ? null : bookAsk(confirming.c, confirming.action, place.clockFormat, Date.now());
+  const ask = asking === null ? null : cancelAsk(asking, place.clockFormat, place.name);
+  const bookBox = confirming === null ? null : bookAsk(confirming.c, confirming.action, place.clockFormat, Date.now(), place.name);
 
   return (
     <>
@@ -292,10 +292,11 @@ function ClassesBody({ place, onClose, bottom }: { place: ClassesPlace; onClose:
                     key={c.sessionId}
                     c={c}
                     clock={place.clockFormat}
+                    gym={place.name}
                     busy={busyId === c.sessionId}
                     said={said[c.sessionId]}
                     onTake={(action) => {
-                      if (bookAsk(c, action, place.clockFormat, Date.now()) === null) void take(c, action);
+                      if (bookAsk(c, action, place.clockFormat, Date.now(), place.name) === null) void take(c, action);
                       else setConfirming({ c, action });
                     }}
                     onGive={() => {
@@ -383,18 +384,19 @@ function ClassesBody({ place, onClose, bottom }: { place: ClassesPlace; onClose:
 interface ClassBoxProps {
   c: ClassBookingView;
   clock: GymClockFormat;
+  gym: string;
   busy: boolean;
   said: Said | undefined;
   onTake: (action: Take) => void;
   onGive: () => void;
 }
 
-function ClassBox({ c, clock, busy, said, onTake, onGive }: ClassBoxProps) {
+function ClassBox({ c, clock, gym, busy, said, onTake, onGive }: ClassBoxProps) {
   const { take, give } = actionsOf(c);
   const mine = mineText(c, Date.now());
   const places = placesText(c);
   const why = whyText(c, clock);
-  const fees = feeLines(c, clock, Date.now());
+  const fees = feeLines(c, clock, Date.now(), gym);
   const online = onlineText(c);
   const when = whenText(c, clock);
   return (
