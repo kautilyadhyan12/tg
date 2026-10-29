@@ -116,6 +116,8 @@ describe("a membership", () => {
       [{ kind: "one_time", renewsOn: null, endsOn: null }, "Started 4 Oct 2026"],
       [{ status: "frozen", renewsOn: null, frozenOn: "2026-10-20" }, "Started 4 Oct 2026 · Frozen since 20 Oct 2026"],
       [{ status: "ended", renewsOn: null, endsOn: "2026-11-03" }, "4 Oct 2026 to 3 Nov 2026"],
+      [{ status: "ended", renewsOn: null, endsOn: null }, "Started 4 Oct 2026"],
+      [{ status: "ended", renewsOn: null, endsOn: "2026-10-04" }, "For 4 Oct 2026 only"],
       [{ status: "cancelled", renewsOn: null, endsOn: "2026-10-20" }, "Started 4 Oct 2026 · Cancelled 20 Oct 2026"],
       [{ status: "cancelled", renewsOn: null, endsOn: "2026-10-01" }, "Was to start 4 Oct 2026 · Cancelled 1 Oct 2026"],
       // From the gym's own list: its start day was worked back, and is never said.

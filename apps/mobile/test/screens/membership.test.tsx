@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
+import { AppState } from "react-native";
 import { myMembershipResponseSchema, receiptSchema } from "@app/shared";
 import { App } from "../../src/App";
 import type { Ask } from "../../src/session/calls";
@@ -203,7 +204,7 @@ describe("the worst thing: nobody else's money on this phone, and no fee reads P
       [pathOf(IRON)]: ok(answer("Iron House", { paidBy: "Priya Sharma", memberships: [membership(M1, "Gold Monthly", { priceMinor: null, payments: [] })] })),
     });
     await openMembership(paidFor.ask, IRON);
-    expect(await page().findByText("Paid by Priya Sharma. The payments and receipts for your membership are in their app.")).toBeTruthy();
+    expect(await page().findByText("Paid by Priya Sharma. Ask Iron House for the payments and receipts.")).toBeTruthy();
     expect(page().getByText("Started 4 Oct 2026 · Renews 4 Nov 2026")).toBeTruthy();
     expect(page().queryByText(/₹/)).toBeNull();
     expect(page().queryByText("No payments yet.")).toBeNull();
@@ -217,7 +218,13 @@ describe("the worst thing: nobody else's money on this phone, and no fee reads P
       [pathOf(IRON)]: ok(
         answer("Iron House", {
           memberships: [membership(M1, "Gold Monthly", { payments: [payment(12)] })],
-          paysFor: [{ name: "Aarav Sharma", memberships: [membership(M2, "Junior Monthly", { payments: [payment(15, { amountMinor: 80_000 })] })], earlierNotShown: 0 }],
+          paysFor: [
+            {
+              name: "Aarav Sharma",
+              memberships: [membership(M2, "Junior Monthly", { payments: [payment(15, { amountMinor: 80_000 })], fees: [fee({ forName: "Junior Judo", state: "overdue" })] })],
+              earlierNotShown: 0,
+            },
+          ],
         }),
       ),
     });
@@ -228,6 +235,10 @@ describe("the worst thing: nobody else's money on this phone, and no fee reads P
     expect(theirs.getByText("Junior Monthly")).toBeTruthy();
     expect(theirs.getByText("₹800.00 · Cash")).toBeTruthy();
     expect(theirs.queryByText("Gold Monthly")).toBeNull();
+    expect(theirs.getByText("Late cancel fee · Junior Judo")).toBeTruthy();
+    // The reader's own Fees part is theirs alone: with no fee of their own it is not drawn at all.
+    expect(page().queryByText("Fees")).toBeNull();
+    expect(page().getAllByText("Late cancel fee · Junior Judo")).toHaveLength(1);
     const own = within(page().getByTestId(`membership-${M1}`));
     expect(own.getByText("₹1,500.00 · Cash")).toBeTruthy();
     expect(own.queryByText("₹800.00 · Cash")).toBeNull();
@@ -246,7 +257,7 @@ describe("the worst thing: nobody else's money on this phone, and no fee reads P
     await openMembership(server.ask, IRON);
     expect(await page().findByText(words)).toBeTruthy();
     expect(page().queryByText("Memberships")).toBeNull();
-    expect(page().queryByText("You have no membership at Iron House yet.")).toBeNull();
+    expect(page().queryByText("Iron House hasn’t added a membership for you here.")).toBeNull();
   });
 
   it("only the receipt pressed is shown: a second press's answer wins, and an answer under another number is no answer", async () => {
@@ -278,6 +289,10 @@ describe("the worst thing: nobody else's money on this phone, and no fee reads P
 });
 
 describe("the My membership page", () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it("a membership with what is owed, a payment and the refund under it, each opening its receipt", async () => {
     const server = fakeServer({
       "/v1/auth/refresh": ok({ tokens: tokens(2) }),
@@ -369,7 +384,7 @@ describe("the My membership page", () => {
       ),
     });
     await openMembership(server.ask, IRON);
-    expect(await page().findByText("You have no membership at Iron House yet.")).toBeTruthy();
+    expect(await page().findByText("Iron House hasn’t added a membership for you here.")).toBeTruthy();
     const sale = within(page().getByTestId("purchase-20"));
     expect(sale.getByText("2 × Water bottle")).toBeTruthy();
     expect(sale.getByText("₹130.00")).toBeTruthy();
@@ -428,5 +443,44 @@ describe("the My membership page", () => {
     await fireEvent.press(page().getByLabelText("Back"));
     await fireEvent.press(await screen.findByLabelText(`My membership at ${LOTUS.name}`));
     expect(await page().findByText("Lotus Yoga isn’t showing your membership right now.")).toBeTruthy();
+  });
+  it("a membership from the place's own list with nothing paid here says nothing about payments: it is paid in the place's other software", async () => {
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [pathOf(IRON)]: ok(
+        answer("Iron House", {
+          memberships: [membership(M1, "Gold Monthly", { fromList: true, payments: [] }), membership(M2, "Silver Monthly", { payments: [] })],
+        }),
+      ),
+    });
+    await openMembership(server.ask, IRON);
+    const listed = within(await page().findByTestId(`membership-${M1}`));
+    expect(listed.getByText("Renews 4 Nov 2026")).toBeTruthy();
+    expect(listed.queryByText("No payments yet.")).toBeNull();
+    // One staff gave in the app, with nothing paid on it, still says so.
+    expect(within(page().getByTestId(`membership-${M2}`)).getByText("No payments yet.")).toBeTruthy();
+  });
+
+  it("a page whose place no longer shows it, found when the app comes back, takes the old money off the screen", async () => {
+    let gone = false;
+    const listeners: ((state: string) => void)[] = [];
+    jest.spyOn(AppState, "addEventListener").mockImplementation((_type, handler) => {
+      listeners.push(handler as (state: string) => void);
+      return { remove: () => undefined };
+    });
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [pathOf(IRON)]: () => (gone ? refusal(404, "org_not_found", "Organisation not found.") : { status: 200, body: answer("Iron House") }),
+    });
+    await openMembership(server.ask, IRON);
+    expect(await page().findByText("Gold Monthly")).toBeTruthy();
+    gone = true;
+    await act(() => {
+      for (const listener of listeners) listener("active");
+    });
+    expect(await page().findByText("Iron House isn’t showing your membership right now.")).toBeTruthy();
+    expect(page().queryByText("Gold Monthly")).toBeNull();
   });
 });

@@ -75,7 +75,7 @@ export function datesText(m: MyMembership): string | null {
     const first = endsOn !== null && endsOn < m.startsOn ? `Was to start ${start}` : `Started ${start}`;
     return endsOn === null ? `${first} · Cancelled` : `${first} · Cancelled ${ends}`;
   }
-  if (status === "ended") return endsOn === null || endsOn === m.startsOn ? start : `${start} to ${ends}`;
+  if (status === "ended") return endsOn === null ? `Started ${start}` : endsOn === m.startsOn ? `For ${start} only` : `${start} to ${ends}`;
   if (status === "frozen") return m.frozenOn === null ? `Started ${start} · Frozen` : `Started ${start} · Frozen since ${dayText(m.frozenOn)}`;
   const first = status === "upcoming" ? `Starts ${start}` : `Started ${start}`;
   if (renewsOn !== null) return `${first} · Renews ${dayText(renewsOn)}`;
@@ -113,7 +113,8 @@ export function refundText(r: { amountMinor: number; method: MemberPaymentMethod
   return { title: `${formatMinor(r.amountMinor, currency)} given back · ${methodWords(r.method)}`, line: dayText(r.refundedOn) };
 }
 
-/** Said under a membership with a price and nothing paid on it yet. */
+/** Said under a membership given in the app with a price and nothing paid on it yet. One from the place's own list
+ *  with nothing paid here is paid in its other software, as the overdue messages read it: nothing is said. */
 export const NO_PAYMENTS = "No payments yet.";
 
 /** A fee and the membership it is on, as the Fees part draws it. */
@@ -181,14 +182,15 @@ export function noRecordText(view: MyMembershipResponse): string | null {
   return null;
 }
 
-/** Said where somebody else pays: their payments and receipts are in the payer's app, not here. */
-export const paidByText = (name: string) => `Paid by ${name}. The payments and receipts for your membership are in their app.`;
+/** Said where somebody else pays: their payments and receipts are not shown here. The payer may have no app. */
+export const paidByText = (name: string, gym: string) => `Paid by ${name}. Ask ${gym} for the payments and receipts.`;
 
 /** Said under somebody the reader pays for. */
 export const paysForText = (name: string) => `You pay for ${name}’s membership.`;
 
-export const noMembershipText = (gym: string) => `You have no membership at ${gym} yet.`;
-export const theirNoMembershipText = (name: string, gym: string) => `${name} has no membership at ${gym} now.`;
+/** Said where the app holds no membership: a place may keep its memberships outside the app, so never "you have none". */
+export const noMembershipText = (gym: string) => `${gym} hasn’t added a membership for you here.`;
+export const theirNoMembershipText = (name: string, gym: string) => `${gym} hasn’t added a membership for ${name} here.`;
 
 /** The lines under a list the server cut short: the place keeps the rest. */
 export const olderPayments = (gym: string) => `Older payments aren’t shown here. ${gym} has them.`;

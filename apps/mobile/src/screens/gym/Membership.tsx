@@ -90,8 +90,8 @@ function MembershipBody({ place, onClose, bottom }: { place: MembershipPlace; on
       const answer = await session.signedIn({ method: "GET", path: myMembershipPath(place.id) }, myMembershipResponseSchema);
       if (!live.current || number !== started.current) return;
       if (answer.kind === "ok") setHeld({ kind: "ok", view: answer.data });
-      // A read made by itself never takes the page away.
-      else if (!quiet) setHeld({ kind: "failed", status: answer.kind === "refused" ? answer.status : null });
+      // A read made by itself never takes the page away over a lost connection; a place that no longer shows it does.
+      else if (!quiet || (answer.kind === "refused" && answer.status === 404)) setHeld({ kind: "failed", status: answer.kind === "refused" ? answer.status : null });
     },
     [session, place.id],
   );
@@ -191,7 +191,7 @@ function Sections({ view, receiptButton }: { view: MyMembershipResponse; receipt
         </Txt>
         {view.paidBy === null ? null : (
           <Txt colour="text">
-            {paidByText(view.paidBy)}
+            {paidByText(view.paidBy, gym)}
           </Txt>
         )}
         {view.memberships.length === 0 ? <Txt>{noMembershipText(gym)}</Txt> : null}
@@ -322,7 +322,7 @@ function MembershipCard({ m, gym, paidBy, receiptButton }: { m: MyMembership; gy
           </View>
         );
       })}
-      {!paidBy && m.payments.length === 0 && m.priceMinor !== null && m.priceMinor > 0 ? <Txt kind="small">{NO_PAYMENTS}</Txt> : null}
+      {!paidBy && !m.fromList && m.payments.length === 0 && m.priceMinor !== null && m.priceMinor > 0 ? <Txt kind="small">{NO_PAYMENTS}</Txt> : null}
       {m.olderPeriodsNotShown > 0 ? <Txt kind="small">{olderPayments(gym)}</Txt> : null}
     </Card>
   );
