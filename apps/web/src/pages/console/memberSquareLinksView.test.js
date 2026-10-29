@@ -69,12 +69,12 @@ describe("Unlink's box: what else the press does (round one, Low 2)", () => {
   it('a sale of shop items from them becomes a shop sale, and a payment marked Not for a bill stays marked', () => {
     expect(unlinkBoxLines({ ...BOX, waiting: 0, waitingMinor: 0, shopItems: 1, shopItemsMinor: 3000, notBill: 1, matched: 0, card: null }, 'Sam Smith').lines).toEqual([
       'The $30.00 sale of shop items from Pat Smith becomes a shop sale and leaves this page.',
-      'The payment from Pat Smith marked Not for a bill stays marked.',
+      'The payment from Pat Smith marked Not for a bill stays marked and leaves this page.',
       'Pat Smith’s future Square payments won’t show here.',
     ]);
     expect(unlinkBoxLines({ ...BOX, waiting: 0, waitingMinor: 0, shopItems: 2, shopItemsMinor: 5000, notBill: 3, matched: 0, card: null }, 'Sam Smith').lines.slice(0, 2)).toEqual([
       'The 2 sales of shop items from Pat Smith ($50.00 in all) become shop sales and leave this page.',
-      'The 3 payments from Pat Smith marked Not for a bill stay marked.',
+      'The 3 payments from Pat Smith marked Not for a bill stay marked and leave this page.',
     ]);
   });
 });

@@ -36,7 +36,7 @@ export function unlinkBoxLines(box, personName) {
   else if (box.shopItems > 1 && box.currency !== null) {
     lines.push(`The ${String(box.shopItems)} sales of shop items from ${them} (${formatMinor(box.shopItemsMinor, box.currency)} in all) become shop sales and leave this page.`);
   }
-  if (box.notBill > 0) lines.push(`${box.notBill === 1 ? 'The payment' : `The ${String(box.notBill)} payments`} from ${them} marked Not for a bill ${box.notBill === 1 ? 'stays' : 'stay'} marked.`);
+  if (box.notBill > 0) lines.push(`${box.notBill === 1 ? 'The payment' : `The ${String(box.notBill)} payments`} from ${them} marked Not for a bill ${box.notBill === 1 ? 'stays marked and leaves' : 'stay marked and leave'} this page.`);
   if (box.card !== null) lines.push(`${personName}’s card (${cardName(box.card)}) is removed, because it was saved under ${them} in Square. Add the card again.`);
   if (box.matched > 0) lines.push('Payments already recorded stay as they are.');
   lines.push(`${name === null ? 'This customer’s' : `${name}’s`} future Square payments won’t show here.`);
