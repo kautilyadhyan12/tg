@@ -315,6 +315,16 @@ const feeMinorSchema = z.number().int().min(0).max(MEMBERSHIP_PRICE_MINOR_MAX);
 
 export const classFeesSchema = z.object({ lateCancelMinor: feeMinorSchema, noShowMinor: feeMinorSchema }).strict();
 
+/** What a 409 `late_cancel` answer says beside its error, for a class or a personal training session: the late
+ *  cancel fee it costs now in the gym's money (0 for none), and whether a pack's class or session stays used. A
+ *  member's box is asked again with it. */
+export const lateCancelRefusalSchema = z.object({
+  packCharged: z.boolean().default(false),
+  feeMinor: feeMinorSchema.default(0),
+  currency: z.string().regex(/^[A-Z]{3}$/).nullable().default(null),
+});
+export type LateCancelRefusal = z.infer<typeof lateCancelRefusalSchema>;
+
 // ── THE WIRE ──
 
 export const bookClassRequestSchema = z.object({ requestKey: z.string().uuid(), joinWaitlist: z.boolean() }).strict();

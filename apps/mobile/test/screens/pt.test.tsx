@@ -150,6 +150,35 @@ describe("the worst thing: nothing is booked twice, no fee is taken that was not
     expect(keyOf(sent[1])).not.toBe(keyOf(sent[0]));
   });
 
+  it("a kept key ends when the page is read again: a session cancelled since is never answered to the next press", async () => {
+    let first = true;
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [ptOf(IRON)]: ok(ptWeek(DAY, { lastDay: "2099-12-31" })),
+      [`${ptOf(IRON)}/sessions`]: () => {
+        if (first) {
+          first = false;
+          return lost();
+        }
+        return { status: 200, body: { session: pt(600, DAY) } };
+      },
+    });
+    await openPt(server.ask, IRON);
+    await fireEvent.press(await screen.findByLabelText(/^Book 10:00 AM – 11:00 AM with Sam Trainer, /));
+    await fireEvent.press(await screen.findByLabelText("Book session"));
+    expect(await page().findByText("Can’t connect. Check your internet and try again.")).toBeTruthy();
+    // The page is read again (a week on and back).
+    await fireEvent.press(page().getByLabelText("Later"));
+    await fireEvent.press(await page().findByLabelText("Earlier"));
+    await fireEvent.press(await screen.findByLabelText(/^Book 10:00 AM – 11:00 AM with Sam Trainer, /));
+    await fireEvent.press(await screen.findByLabelText("Book session"));
+    expect(await page().findByText(/^Booked: /)).toBeTruthy();
+    const sent = books(server.asked, IRON);
+    expect(sent).toHaveLength(2);
+    expect(keyOf(sent[1])).not.toBe(keyOf(sent[0]));
+  });
+
   it("the box before Book names the pack, the late cancel fee and the no-show fee; inside the free-cancel time it says it can't be cancelled for free", async () => {
     const server = fakeServer({
       "/v1/auth/refresh": ok({ tokens: tokens(2) }),

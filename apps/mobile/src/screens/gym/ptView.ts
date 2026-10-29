@@ -7,6 +7,7 @@ import {
   addDays,
   bookingPeriod,
   formatMinor,
+  lateCancelRefusalSchema,
   orgWords,
   ptMemberWords,
   ptNotOnListWords,
@@ -255,17 +256,20 @@ const offsetAt = (ms: number, zone: string): number | null => {
   }
 };
 
-/** The instant a gym's day and minute is, in its zone; null where the zone or the day cannot be read. In an hour
- *  the clocks skip it is the moment after the skip. */
+/** The instant a gym's day and minute is, in its zone; null where the zone or the day cannot be read. A time the
+ *  clocks pass twice is the later one, as the server's Postgres makes it (`AT TIME ZONE`); a time they skip is never
+ *  offered by the server. */
 export function gymInstant(localDate: string, minute: number, zone: string): number | null {
   const [y, m, d] = localDate.split("-").map(Number);
   if (y === undefined || m === undefined || d === undefined) return null;
   const wall = Date.UTC(y, m - 1, d, 0, minute);
   if (Number.isNaN(wall)) return null;
-  const first = offsetAt(wall, zone);
-  if (first === null) return null;
-  const second = offsetAt(wall - first, zone);
-  return second === null ? null : wall - second;
+  // The zone's offset a day either side: a change of the clocks lies between them, never two.
+  const offsets = [offsetAt(wall - 86_400_000, zone), offsetAt(wall + 86_400_000, zone)];
+  const fits = offsets.flatMap((offset) => (offset !== null && offsetAt(wall - offset, zone) === offset ? [wall - offset] : []));
+  if (fits.length > 0) return Math.max(...fits);
+  const before = offsets[0];
+  return before === undefined || before === null ? null : wall - before;
 }
 
 export interface BookTime {
@@ -347,15 +351,13 @@ export function bookedText(s: MemberPtSession, clock: GymClockFormat): { text: s
 /** The session as a late cancel the server now asks for, with the fee it says it costs now (its 409's
  *  `packCharged`, `feeMinor` and `currency`). */
 export function askedLate(s: MemberPtSession, body: unknown): MemberPtSession {
-  const field = (name: string): unknown => (typeof body === "object" && body !== null && name in body ? Reflect.get(body, name) : undefined);
-  const fee = field("feeMinor");
-  const said = field("currency");
-  const feeMinor = typeof fee === "number" && Number.isInteger(fee) && fee > 0 ? fee : 0;
-  const currency = typeof said === "string" && /^[A-Z]{3}$/.test(said) ? said : null;
+  const read = lateCancelRefusalSchema.safeParse(body);
+  // An answer that is not the shape is no fee, never a guessed one.
+  const { packCharged, feeMinor, currency } = read.success ? read.data : { packCharged: false, feeMinor: 0, currency: null };
   return {
     ...s,
     cancel: "late",
-    packCharged: field("packCharged") === true,
+    packCharged,
     fees: feeMinor > 0 && currency !== null ? { lateCancelMinor: feeMinor, noShowMinor: s.fees?.noShowMinor ?? 0, currency } : null,
   };
 }

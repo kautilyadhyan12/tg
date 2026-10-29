@@ -5,6 +5,7 @@ import {
   CLASS_BOOKING_WORDS,
   CLASS_ONLINE_WORDS,
   formatMinor,
+  lateCancelRefusalSchema,
   reminderClock,
   type ClassBookingView,
   type GymClockFormat,
@@ -322,15 +323,13 @@ export function cancelledText(c: ClassBookingView): string {
 /** The class as a late cancel the server now asks for, with the fee it says it costs now (its 409's
  *  `packCharged`, `feeMinor` and `currency`). */
 export function askedLate(c: ClassBookingView, body: unknown): ClassBookingView {
-  const field = (name: string): unknown => (typeof body === "object" && body !== null && name in body ? Reflect.get(body, name) : undefined);
-  const fee = field("feeMinor");
-  const said = field("currency");
-  const feeMinor = typeof fee === "number" && Number.isInteger(fee) && fee > 0 ? fee : 0;
-  const currency = typeof said === "string" && /^[A-Z]{3}$/.test(said) ? said : null;
+  const read = lateCancelRefusalSchema.safeParse(body);
+  // An answer that is not the shape is no fee, never a guessed one.
+  const { packCharged, feeMinor, currency } = read.success ? read.data : { packCharged: false, feeMinor: 0, currency: null };
   return {
     ...c,
     can: { ...c.can, cancel: "late" },
-    mine: c.mine === null ? null : { ...c.mine, packCharged: field("packCharged") === true },
+    mine: c.mine === null ? null : { ...c.mine, packCharged },
     fees: feeMinor > 0 && currency !== null ? { lateCancelMinor: feeMinor, noShowMinor: c.fees?.noShowMinor ?? 0, currency } : null,
   };
 }

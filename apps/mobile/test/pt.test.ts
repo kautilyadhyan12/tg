@@ -248,6 +248,14 @@ describe("the instant a gym's day and minute is", () => {
     ["London on the day the clocks go forward, after", "2030-03-31", 10 * 60, "Europe/London", "2030-03-31T09:00:00.000Z"],
     ["London on the day the clocks go back, after", "2030-10-27", 10 * 60, "Europe/London", "2030-10-27T10:00:00.000Z"],
     ["just after midnight in Auckland", "2030-03-04", 5, "Pacific/Auckland", "2030-03-03T11:05:00.000Z"],
+    // A time the clocks pass twice is the later one, as the server's Postgres makes it (each expected instant was
+    // read from Postgres: `(t::timestamp AT TIME ZONE z) AT TIME ZONE 'UTC'`).
+    ["New York, the hour passed twice, 1:00", "2026-11-01", 60, "America/New_York", "2026-11-01T06:00:00.000Z"],
+    ["New York, the hour passed twice, 1:30", "2026-11-01", 90, "America/New_York", "2026-11-01T06:30:00.000Z"],
+    ["St John's, the hour passed twice", "2026-11-01", 90, "America/St_Johns", "2026-11-01T05:00:00.000Z"],
+    ["Havana, the hour passed twice", "2026-11-01", 30, "America/Havana", "2026-11-01T05:30:00.000Z"],
+    ["London, the hour passed twice", "2030-10-27", 90, "Europe/London", "2030-10-27T01:30:00.000Z"],
+    ["Sydney, the hour passed twice", "2027-04-04", 150, "Australia/Sydney", "2027-04-03T16:30:00.000Z"],
   ])("%s", (_, day, minute, zone, at) => {
     expect(new Date(gymInstant(day, minute, zone) ?? 0).toISOString()).toBe(at);
   });

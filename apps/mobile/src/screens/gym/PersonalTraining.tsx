@@ -91,7 +91,7 @@ function PtBody({ place, onClose, bottom }: { place: PtPlace; onClose: () => voi
   const [choosing, setChoosing] = useState<Choosing | null>(null);
   // The session the box asks about, as it will be cancelled: its fee is the one the request says yes to.
   const [asking, setAsking] = useState<MemberPtSession | null>(null);
-  // One key a time pressed: kept while its answer is unknown, so a second press books once.
+  // One key a time pressed: kept while its answer is unknown, until the page is read again, so a second press books once.
   const keys = useRef(new Map<string, string>());
   // Reads are numbered as they start: an answer stands only if no later read has started.
   const started = useRef(0);
@@ -104,9 +104,13 @@ function PtBody({ place, onClose, bottom }: { place: PtPlace; onClose: () => voi
       const number = started.current;
       const answer = await session.signedIn({ method: "GET", path: `${ptPath(place.id)}?week=${String(week)}` }, memberPtResponseSchema);
       if (!live.current || number !== started.current) return;
-      if (answer.kind === "ok") setHeld({ kind: "ok", view: answer.data });
-      // A read made by itself never takes the times away.
-      else if (!quiet) setHeld({ kind: "failed", status: answer.kind === "refused" ? answer.status : null });
+      if (answer.kind === "ok") {
+        // A press with no answer is answered by the page as it now is: booked, its time is no longer offered; not, it
+        // is a new press. A kept key outliving it would answer a session cancelled since.
+        keys.current.clear();
+        setHeld({ kind: "ok", view: answer.data });
+        // A read made by itself never takes the times away.
+      } else if (!quiet) setHeld({ kind: "failed", status: answer.kind === "refused" ? answer.status : null });
     },
     [session, place.id, week],
   );
