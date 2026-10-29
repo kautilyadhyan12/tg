@@ -25,12 +25,13 @@ import { usePlaces } from "./places";
 import { placesHeading } from "./placesHeading";
 import { ClassesPage, type ClassesPlace } from "./gym/Classes";
 import { DaysYouCame } from "./gym/DaysYouCame";
+import { PersonalTrainingPage, type PtPlace } from "./gym/PersonalTraining";
 import { OWN_PASS_AFTER_MS, PASS_PATH, PassSheet } from "./gym/Pass";
 import { makePhonePass, phoneDay } from "./gym/phonePass";
 import { NO_ANSWER } from "./SignIn";
 
 // The Gym tab (docs/design/phone/pages/Gym and GymNone): the places the person joined, each with
-// Show my pass, its Classes and the days they came there, a place that removed them, and every invitation still open for their address. It reads again when the
+// Show my pass, its Classes, its Personal training and the days they came there, a place that removed them, and every invitation still open for their address. It reads again when the
 // tab is opened or the app comes back, at most every 30 seconds. With the internet it also asks for
 // this sign-in's keys for passes with no signal, today's and tomorrow's, whenever the phone lacks
 // tomorrow's; with none, Show my pass stands alone where the places could not be read, or are more
@@ -72,6 +73,8 @@ export function GymScreen() {
   const [visitsRead, setVisitsRead] = useState(0);
   // The place whose Classes page is open over the tab, or null.
   const [classesAt, setClassesAt] = useState<ClassesPlace | null>(null);
+  // The place whose Personal training page is open over the tab, or null.
+  const [ptAt, setPtAt] = useState<PtPlace | null>(null);
 
   const fetchPass = useCallback(() => session.signedIn({ method: "GET", path: PASS_PATH }, checkinPassResponseSchema), [session]);
   const makeOwnPass = useMemo(
@@ -217,6 +220,16 @@ export function GymScreen() {
                 setClassesAt({ id: org.id, name: org.name, clockFormat: org.clockFormat });
               }}
             />
+            <Button
+              label="Personal training"
+              kind="link"
+              icon="dumbbell"
+              style={styles.middle}
+              say={`Personal training at ${org.name}`}
+              onPress={() => {
+                setPtAt({ id: org.id, name: org.name, orgType: org.orgType, clockFormat: org.clockFormat });
+              }}
+            />
           </Card>
           <DaysYouCame gymId={org.id} read={visitsRead} fetchVisits={fetchVisits} />
         </Fragment>
@@ -235,6 +248,12 @@ export function GymScreen() {
         place={classesAt}
         onClose={() => {
           setClassesAt(null);
+        }}
+      />
+      <PersonalTrainingPage
+        place={ptAt}
+        onClose={() => {
+          setPtAt(null);
         }}
       />
 
