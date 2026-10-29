@@ -162,28 +162,52 @@ describe("a session's words on the gym's clock", () => {
 describe("the box before a cancel: every fee in it is the one sent", () => {
   it.each([
     ["free, nothing follows", session(), "Cancel your session?", []],
-    ["free, a pack", session({ packCharged: true }), "Cancel your session?", [expect.stringMatching(/until Mon 4 Mar, 8:00 AM\. Your pack gets the session back\.$/)]],
-    ["free, a fee after", session({ fees: INR }), "Cancel your session?", ["Iron House lets you cancel for free until Mon 4 Mar, 8:00 AM. After that there is a one-time late cancel fee of ₹500.00."]],
+    ["free, a pack", session({ packCharged: true }), "Cancel your session?", ["Free to cancel until Mon 4 Mar, 8:00 AM. Cancel now and your pack gets the session back."]],
+    [
+      "free, a pack and a fee",
+      session({ packCharged: true, fees: INR }),
+      "Cancel your session?",
+      ["Free to cancel until Mon 4 Mar, 8:00 AM. After that, a one-time late cancel fee of ₹500.00. Cancel now and your pack gets the session back."],
+    ],
+    ["free, a fee after", session({ fees: INR }), "Cancel your session?", ["Free to cancel until Mon 4 Mar, 8:00 AM. After that, a one-time late cancel fee of ₹500.00."]],
     [
       "free, a limit and a fee",
       session({ fees: INR, usesLimit: true }),
       "Cancel your session?",
-      [expect.stringMatching(/no longer counts as one of the sessions your membership includes\. After Mon 4 Mar, 8:00 AM there is a one-time late cancel fee of ₹500\.00\.$/)],
+      ["Free to cancel until Mon 4 Mar, 8:00 AM. After that, a one-time late cancel fee of ₹500.00. Cancel now and it won’t count as one of the sessions your membership includes."],
     ],
-    ["late, a fee", session({ cancel: "late", fees: INR }), "Cancel late?", [expect.stringMatching(/a one-time late cancel fee of ₹500\.00 will be added to your bill\.$/)]],
-    ["late, a pack", session({ cancel: "late", packCharged: true }), "Cancel late?", [expect.stringMatching(/the session stays used on your pack\.$/)]],
-    ["late, a limit", session({ cancel: "late", usesLimit: true }), "Cancel late?", [expect.stringMatching(/it still counts as one of the sessions your membership includes\.$/)]],
+    [
+      "late, a fee",
+      session({ cancel: "late", fees: INR }),
+      "Cancel late?",
+      ["It's too late to cancel for free. Cancelling now counts as a late cancel, and a one-time late cancel fee of ₹500.00 will be added to your bill."],
+    ],
+    [
+      "late, a fee and a limit",
+      session({ cancel: "late", fees: INR, usesLimit: true }),
+      "Cancel late?",
+      [
+        "It's too late to cancel for free. Cancelling now counts as a late cancel, and a one-time late cancel fee of ₹500.00 will be added to your bill. It still counts as one of the sessions your membership includes.",
+      ],
+    ],
+    ["late, a pack", session({ cancel: "late", packCharged: true }), "Cancel late?", ["It’s too late to cancel for free. Cancelling now counts as a late cancel, and the session stays used on your pack."]],
+    [
+      "late, a limit",
+      session({ cancel: "late", usesLimit: true }),
+      "Cancel late?",
+      ["It’s too late to cancel for free. Cancelling now counts as a late cancel, and it still counts as one of the sessions your membership includes."],
+    ],
     ["late, nothing costs", session({ cancel: "late" }), "Cancel late?", ["Cancelling this close to the start counts as a late cancel. There’s no fee."]],
   ])("%s", (_, s, title, more) => {
-    const ask = ptCancelAsk(s, "Asia/Kolkata", "Iron House", "12h");
+    const ask = ptCancelAsk(s, "Asia/Kolkata", "12h");
     expect(ask.title).toBe(title);
     expect(ask.lines[0]).toBe("Mon 4 Mar · 10:00 AM – 11:00 AM · with Sam Trainer");
     expect(ask.lines.slice(1)).toEqual(more);
     expect(ask.yes).toBe("Cancel session");
   });
   it("never says free where nothing follows", () => {
-    expect(ptCancelAsk(session(), "Asia/Kolkata", "Iron House", "12h").lines.join(" ")).not.toMatch(/free/i);
-    expect(ptCancelAsk(session({ cancel: "late" }), "Asia/Kolkata", "Iron House", "12h").lines.join(" ")).not.toMatch(/for free/i);
+    expect(ptCancelAsk(session(), "Asia/Kolkata", "12h").lines.join(" ")).not.toMatch(/free/i);
+    expect(ptCancelAsk(session({ cancel: "late" }), "Asia/Kolkata", "12h").lines.join(" ")).not.toMatch(/for free/i);
   });
 });
 

@@ -175,6 +175,8 @@ function PtBody({ place, onClose, bottom }: { place: PtPlace; onClose: () => voi
       // The free time ran out while the box was open, or the fee changed: asked again, with the fee the server
       // says it costs now.
       setAsking(askedLate(s, answer.body));
+      // The page under the box says the same.
+      void load(true);
       return;
     }
     setAsking(null);
@@ -199,7 +201,7 @@ function PtBody({ place, onClose, bottom }: { place: PtPlace; onClose: () => voi
   const note = view === null ? null : ptZoneNote(view.timezone, place.name, phoneZone(), new Date());
   const lastWeek = week === MEMBER_PT_WEEKS - 1 || (view !== null && view.to >= view.lastDay);
   const bookBox = choosing === null || view === null ? null : ptBookAsk(view, choosing, choosing.pay, place.clockFormat, Date.now());
-  const ask = asking === null || view === null ? null : ptCancelAsk(asking, view.timezone, place.name, place.clockFormat);
+  const ask = asking === null || view === null ? null : ptCancelAsk(asking, view.timezone, place.clockFormat);
 
   return (
     <>

@@ -212,7 +212,7 @@ describe("the worst thing: nothing is booked twice, no fee is taken that was not
     await openPt(server.ask, IRON);
     await fireEvent.press(await screen.findByLabelText(/^Cancel session: /));
     expect(await screen.findByText("Cancel your session?")).toBeTruthy();
-    expect(screen.getByText(/Your pack gets the session back\.$/)).toBeTruthy();
+    expect(screen.getByText(/Cancel now and your pack gets the session back\.$/)).toBeTruthy();
     await fireEvent.press(screen.getByLabelText("Cancel session"));
     expect(await page().findByText("Cancelled.")).toBeTruthy();
     expect(server.asked.filter((one) => one.path.endsWith("/cancel")).map((one) => one.body)).toEqual([{ lateOk: false }]);

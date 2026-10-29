@@ -8,6 +8,7 @@ import {
   bookingPeriod,
   classFeesLine,
   formatMinor,
+  lateCancelFeeWords,
   orgWords,
   ptMemberWords,
   ptNotOnListWords,
@@ -172,23 +173,23 @@ export interface Ask {
 }
 
 /** What the box asks before a session is cancelled. Every fee in it is the one the request then says yes to. */
-export function ptCancelAsk(s: MemberPtSession, timezone: string, gymName: string, clock: GymClockFormat): Ask {
+export function ptCancelAsk(s: MemberPtSession, timezone: string, clock: GymClockFormat): Ask {
   const what = sessionText(s, clock);
   const fee = lateFee(s);
   const money = s.fees === null ? "" : formatMinor(fee, s.fees.currency);
   if (s.cancel === "late") {
-    const passed = `${gymName}’s time to cancel for free has passed. Cancelling now counts as a late cancel`;
+    const tooLate = "It’s too late to cancel for free. Cancelling now counts as a late cancel";
     const counts = s.usesLimit ? " It still counts as one of the sessions your membership includes." : "";
     return {
       title: "Cancel late?",
       lines: [
         what,
-        fee > 0
-          ? `${passed}, and a one-time late cancel fee of ${money} will be added to your bill.${counts}`
+        fee > 0 && s.fees !== null
+          ? `${lateCancelFeeWords(fee, s.fees.currency)}${counts}`
           : s.packCharged
-            ? `${passed}, and the session stays used on your pack.`
+            ? `${tooLate}, and the session stays used on your pack.`
             : s.usesLimit
-              ? `${passed}, and it still counts as one of the sessions your membership includes.`
+              ? `${tooLate}, and it still counts as one of the sessions your membership includes.`
               : // Nothing follows that costs: never "for free".
                 "Cancelling this close to the start counts as a late cancel. There’s no fee.",
       ],
@@ -196,21 +197,17 @@ export function ptCancelAsk(s: MemberPtSession, timezone: string, gymName: strin
       no: "Keep it",
     };
   }
+  // "Free" is said only where something follows that is not: a fee, a pack's session, a membership's.
+  const gives = s.packCharged
+    ? " Cancel now and your pack gets the session back."
+    : s.usesLimit
+      ? " Cancel now and it won’t count as one of the sessions your membership includes."
+      : "";
+  const after = fee > 0 ? ` After that, a one-time late cancel fee of ${money}.` : "";
+  if (gives === "" && after === "") return { title: "Cancel your session?", lines: [what], yes: "Cancel session", no: "Keep it" };
   const at = instantText(s.freeCancelUntil, timezone, clock);
-  const until = `${gymName} lets you cancel for free until ${at}.`;
-  return {
-    title: "Cancel your session?",
-    // "Free" is said only where something follows that is not.
-    lines: s.packCharged
-      ? [what, `${until} Your pack gets the session back.`]
-      : s.usesLimit
-        ? [what, `${until} It then no longer counts as one of the sessions your membership includes.${fee > 0 ? ` After ${at} there is a one-time late cancel fee of ${money}.` : ""}`]
-        : fee > 0
-          ? [what, `${until} After that there is a one-time late cancel fee of ${money}.`]
-          : [what],
-    yes: "Cancel session",
-    no: "Keep it",
-  };
+  const free = at === "" ? "Free to cancel now." : `Free to cancel until ${at}.`;
+  return { title: "Cancel your session?", lines: [what, `${free}${after}${gives}`], yes: "Cancel session", no: "Keep it" };
 }
 
 const noShowLine = (fees: Fees): string[] =>

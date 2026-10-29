@@ -210,26 +210,26 @@ export function GymScreen() {
               {org.orgType === "personal_trainer" ? "Show your pass to your trainer when you arrive." : "Show your pass at the front desk when you arrive."}
             </Txt>
             <Button label="Show my pass" icon="qr" wide onPress={() => { setPassOrgType(org.orgType); }} />
-            <Button
-              label="Classes"
-              kind="link"
-              icon="calendar"
-              style={styles.middle}
-              say={`Classes at ${org.name}`}
-              onPress={() => {
-                setClassesAt({ id: org.id, name: org.name, clockFormat: org.clockFormat });
-              }}
-            />
-            <Button
-              label="Personal training"
-              kind="link"
-              icon="dumbbell"
-              style={styles.middle}
-              say={`Personal training at ${org.name}`}
-              onPress={() => {
-                setPtAt({ id: org.id, name: org.name, orgType: org.orgType, clockFormat: org.clockFormat });
-              }}
-            />
+            <View style={styles.links}>
+              <Button
+                label="Classes"
+                kind="link"
+                icon="calendar"
+                say={`Classes at ${org.name}`}
+                onPress={() => {
+                  setClassesAt({ id: org.id, name: org.name, clockFormat: org.clockFormat });
+                }}
+              />
+              <Button
+                label="Personal training"
+                kind="link"
+                icon="dumbbell"
+                say={`Personal training at ${org.name}`}
+                onPress={() => {
+                  setPtAt({ id: org.id, name: org.name, orgType: org.orgType, clockFormat: org.clockFormat });
+                }}
+              />
+            </View>
           </Card>
           <DaysYouCame gymId={org.id} read={visitsRead} fetchVisits={fetchVisits} />
         </Fragment>
@@ -328,7 +328,8 @@ const styles = StyleSheet.create({
   none: { padding: 18, gap: 10 },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },
   grow: { flex: 1 },
-  middle: { alignSelf: "center" },
+  // Classes and Personal training side by side, one under the other where they do not fit.
+  links: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", columnGap: 24 },
   address: {
     flexDirection: "row",
     alignItems: "center",
