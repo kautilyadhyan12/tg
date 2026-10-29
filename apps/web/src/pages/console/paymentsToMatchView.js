@@ -227,11 +227,15 @@ const upper = (text) => text.charAt(0).toUpperCase() + text.slice(1);
 /** The tick's own label. The payment's row above it already names the customer. */
 export const linkLabel = (personName) => `Link this Square customer to ${personName}`;
 
-/** Under the tick: what linking does, and, where the app can't tell, to tick it only if they are the same person. */
-export function linkNote(link, personName) {
+/** Under the tick: what linking does, and, where the app can't tell, to tick it only if they are the same person. Where staff
+ *  unlinked this customer from them on their page (18d-iii-b-ii-c-ii), it says so and when, in the gym's own time. */
+export function linkNote(link, personName, timezone = undefined) {
   if (link.offer === 'taken') return null;
   const parts = [];
-  if (link.offer === 'ask') {
+  if (typeof link.unlinkedAt === 'string') {
+    const day = new Intl.DateTimeFormat('en-GB', { timeZone: timezone, day: 'numeric', month: 'short' }).format(new Date(link.unlinkedAt));
+    parts.push(`This Square customer was unlinked from ${personName} on ${day}. Tick this only if ${customerWho(link.customerName, personName)} is ${personName}.`);
+  } else if (link.offer === 'ask') {
     parts.push(`The app can’t tell they are the same person. Tick this only if ${customerWho(link.customerName, personName)} is ${personName}.`);
   } else {
     parts.push('Their name and contact details match.');

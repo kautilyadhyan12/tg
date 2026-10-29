@@ -261,13 +261,6 @@ d("Unlink on their page (real Postgres)", { timeout: T }, () => {
     if (row === undefined) throw new Error("not taken in");
     return row;
   };
-  /** The payment's row by its own id here. */
-  const byId = async (id: string) => {
-    const [row] = await sql<{ state: string; reason: string | null; entry_id: string | null; link_result: string | null }[]>`
-      SELECT state, reason, entry_id, link_result FROM gym_square_app_payments WHERE id = ${id}`;
-    if (row === undefined) throw new Error("no such payment row");
-    return row;
-  };
   const billsOf = (h: Holder) =>
     sql<{ id: string; period_index: number | null; fee: string | null; status: string; amount_minor: number }[]>`
       SELECT id, period_index, fee, status, amount_minor FROM gym_member_bills WHERE held_membership_id = ${h.membershipId} ORDER BY period_index NULLS LAST, created_at`;
@@ -316,8 +309,6 @@ d("Unlink on their page (real Postgres)", { timeout: T }, () => {
     return id;
   };
   const visa = (last4: string) => `cnon:ok-VISA-${last4}-12-2031-${uniq()}`;
-  /** The cards Square holds in this gym's account. */
-  const cardsIn = (gym: Gym) => [...square.cards.values()].filter((c) => c.accountId === gym.acct.merchantId);
 
   beforeAll(async () => {
     await cleanup();
@@ -638,6 +629,24 @@ d("Unlink on their page (real Postgres)", { timeout: T }, () => {
     expect(await remembered(gym)).toEqual([]);
     expect((await linksOf(gym, amy.entryId)).map((l) => l.customerId)).toEqual([cust]);
     expect((await unlink(gym, amy.entryId, cust)).statusCode).toBe(200);
+  });
+
+  it("two records of one person joined: what staff said holds for the record kept; a record deleted for good takes it with it", async () => {
+    clock = new Date();
+    const { gym, amy, cust } = await amyLinked("Join");
+    expect((await unlink(gym, amy.entryId, cust)).statusCode).toBe(200);
+    // Amy on the list a second time, by her phone; she is joined into it.
+    const again = await person(gym, "Amy Lee", { email: `sul-r-join2${uniq()}@example.com` });
+    const joined = await send("POST", `${entryUrl(gym, amy.entryId)}/merge`, gym.owner.cookies, { keepEntryId: again, acknowledgeLeavesList: true });
+    expect(joined.statusCode, joined.body).toBe(200);
+    expect(await remembered(gym)).toEqual([{ entry_id: again, customer_id: cust }]);
+    expect(
+      await sql.begin((tx) => linkCustomer(tx, { gymId: gym.id, entryId: again, environment: "production", accountId: gym.acct.merchantId, customerId: cust, joined: true, now: clock })),
+    ).toBe("taken");
+    // It goes with its record: the database deletes it with the record, whichever way the record goes.
+    const [rule] = await sql<{ confdeltype: string }[]>`
+      SELECT confdeltype FROM pg_constraint WHERE conname = 'gym_square_unlinked_customers_entry_fk'`;
+    expect(rule?.confdeltype).toBe("c");
   });
 
   it("a stranger, another gym, staff who don't record payments, another gym's person and a link Match didn't make are refused, and nothing changes", async () => {

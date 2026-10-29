@@ -198,7 +198,7 @@ function MatchBox({ row, org, readOnly, onMatched, onStale, onClose }) {
                   <span className="c-w6">{linkLabel(data.person.name)}</span>
                 </label>
                 <p className="c-s13 c-t2 m-0" style={{ paddingLeft: 28, marginTop: -8 }} data-testid="match-link-note">
-                  {linkNote(linkOffer, data.person.name)}
+                  {linkNote(linkOffer, data.person.name, org.timezone)}
                 </p>
               </div>
             )

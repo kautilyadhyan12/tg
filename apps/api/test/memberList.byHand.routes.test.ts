@@ -1218,6 +1218,10 @@ d("member list: keeping it by hand (real Postgres)", () => {
       // kept record, and gone with a record deleted for good (`squareMerges.routes.test.ts`).
       "gym_square_old_customers.entry_id",
       "gym_square_old_customers.gym_id",
+      // Staff unlinked a Square customer from the record on its page (0174; 18d-iii-b-ii-c-ii): copied by the join to the kept
+      // record, so nothing links that customer to the person again, and gone with a record deleted for good (`squareUnlink.routes.test.ts`).
+      "gym_square_unlinked_customers.entry_id",
+      "gym_square_unlinked_customers.gym_id",
       // A card being saved on the gym's Square Terminal (0148; 18d-ii-b-ii): not moved by the join.
       // A record joined or deleted for good lets go of it (`entry_id` alone to null), and whatever
       // the Terminal then saves is stopped at Square (`terminalCards.routes.test.ts`).
