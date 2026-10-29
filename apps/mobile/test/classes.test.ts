@@ -273,12 +273,27 @@ describe("online classes", () => {
     link,
   });
 
+  const DURING = Date.parse("2026-11-02T13:10:00.000Z");
+
   it("the link only when the server sends it open, and only an https one", () => {
-    expect(onlineText(klass({ online: online("open", LINK) }))).toEqual({ line: "Online class. Your link is ready.", link: LINK });
-    expect(onlineText(klass({ online: online("open", "http://meet.example.org/spin") }))?.link).toBeNull();
-    expect(onlineText(klass({ online: online("early") }))?.link).toBeNull();
-    expect(onlineText(klass({ cancelled: true, online: online("closed") }))).toBeNull();
-    expect(onlineText(klass())).toBeNull();
+    expect(onlineText(klass({ online: online("open", LINK) }), DURING)).toEqual({ line: "Online class. Your link is ready.", link: LINK });
+    expect(onlineText(klass({ online: online("open", "http://meet.example.org/spin") }), DURING)?.link).toBeNull();
+    expect(onlineText(klass({ online: online("early") }), DURING)?.link).toBeNull();
+    expect(onlineText(klass({ cancelled: true, online: online("closed") }), DURING)).toBeNull();
+    expect(onlineText(klass(), DURING)).toBeNull();
+  });
+
+  it("a stored link the shared rule refuses is never offered to press, and says to ask the desk", () => {
+    // Links a gym could have stored before the rule was tightened on 2026-10-10.
+    for (const bad of ["https://user:pw@203.0.113.7/j/1", "https://xn--pple-43d.com/j/1", `https://zoom.us/j/1${String.fromCharCode(0x202e)}`, "https://203.0.113.7/j/1", "https://zoom.us/j/1 2"]) {
+      expect(onlineText(klass({ online: online("open", bad) }), DURING)).toEqual({ line: "Online class. This link can't be opened. Ask the front desk.", link: null });
+    }
+  });
+
+  it("a link the server last sent is dropped five minutes after the class ends by this phone's clock", () => {
+    const ends = Date.parse(klass().startsAt) + klass().minutes * 60_000;
+    expect(onlineText(klass({ online: online("open", LINK) }), ends + 4 * 60_000)?.link).toBe(LINK);
+    expect(onlineText(klass({ online: online("open", LINK) }), ends + 6 * 60_000)).toEqual({ line: "Online class.", link: null });
   });
 
   it("is read again when its link is due, while it is missing, and when the class ends", () => {

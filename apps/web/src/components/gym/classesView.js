@@ -1,4 +1,4 @@
-import { CLASS_BOOKING_WORDS, CLASS_ONLINE_WORDS, classFeesLine, formatMinor, lateCancelFeeWords } from '@app/shared';
+import { CLASS_BOOKING_WORDS, CLASS_ONLINE_LINK_REFUSED, CLASS_ONLINE_WORDS, classFeesLine, formatMinor, lateCancelFeeWords, pressableOnlineLink } from '@app/shared';
 import { dayLabel, ordinal, timeText } from './leaderboardView';
 
 // A MEMBER'S CLASSES, IN WORDS (spec Part 3 §13.6; ROADMAP 17d). Pure. A class's day and
@@ -35,8 +35,10 @@ export function onlineText(c) {
   const online = c?.online ?? null;
   if (online === null || c.cancelled === true) return null;
   const line = CLASS_ONLINE_WORDS[online.state] ?? CLASS_ONLINE_WORDS.closed;
-  const link = online.state === 'open' && typeof online.link === 'string' && online.link.startsWith('https://') ? online.link : null;
-  return { line, link, ready: link !== null };
+  if (online.state !== 'open') return { line, link: null, ready: false };
+  // Only a link that keeps the shared rule is offered: one stored before it was tightened may not.
+  const link = pressableOnlineLink(typeof online.link === 'string' ? online.link : null);
+  return link === null ? { line: CLASS_ONLINE_LINK_REFUSED, link: null, ready: false } : { line, link, ready: true };
 }
 
 /** How often the list is read again while a link is due and not here, by this device's clock. */

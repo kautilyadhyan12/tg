@@ -1,6 +1,6 @@
 // A MEMBER'S CLASSES, IN WORDS (ROADMAP 17d).
 import { describe, expect, it } from 'vitest';
-import { actionsOf, byDay, cancelAsk, cancelledText, clockText, dayHeading, instantText, mineText, nextReadAt, placesText, weekText, whenText, whyText, zoneNote } from './classesView';
+import { actionsOf, byDay, cancelAsk, cancelledText, clockText, dayHeading, instantText, mineText, nextReadAt, onlineText, placesText, weekText, whenText, whyText, zoneNote } from './classesView';
 
 const can = (over = {}) => ({ book: false, joinWaitlist: false, claim: false, cancel: null, why: null, ...over });
 const klass = (over = {}) => ({
@@ -194,5 +194,19 @@ describe('what a class says', () => {
   it('says which kind of cancel went through', () => {
     expect(cancelledText(klass({ mine: mine('cancelled') }))).toBe('Cancelled.');
     expect(cancelledText(klass({ mine: mine('late_cancelled') }))).toBe('Cancelled late.');
+  });
+});
+
+describe("an online class's link", () => {
+  const open = (link) => klass({ online: { state: 'open', opensAt: '2026-10-08T12:00:00.000Z', link } });
+
+  it('offers a link that keeps the shared rule', () => {
+    expect(onlineText(open('https://zoom.us/j/1'))).toEqual({ line: 'Online class. Your link is ready.', link: 'https://zoom.us/j/1', ready: true });
+  });
+
+  it('never offers a stored link the rule refuses, and says to ask the desk', () => {
+    for (const bad of ['https://user:pw@203.0.113.7/j/1', 'https://xn--pple-43d.com/j/1', `https://zoom.us/j/1${String.fromCharCode(0x202e)}`, 'https://203.0.113.7/j/1', 'http://zoom.us/j/1']) {
+      expect(onlineText(open(bad))).toEqual({ line: "Online class. This link can't be opened. Ask the front desk.", link: null, ready: false });
+    }
   });
 });

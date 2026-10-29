@@ -19,6 +19,7 @@ import { Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
 import { NO_ANSWER } from "../SignIn";
 import {
+  EARLIER_CANCELLED,
   MORE_CLASSES,
   actionsOf,
   askedLate,
@@ -114,8 +115,9 @@ function ClassesBody({ place, onClose, bottom }: { place: ClassesPlace; onClose:
         for (const c of answer.data.classes) if (c.mine !== null) keys.current.delete(c.sessionId);
         setMissedAt(null);
         setHeld({ kind: "ok", list: answer.data });
-      } else if (quiet) {
-        // A read made by itself never takes the classes away; it is tried again.
+      } else if (quiet && !(answer.kind === "refused" && answer.status === 404)) {
+        // A read made by itself never takes the classes away over a lost connection; it is tried again. A place
+        // that no longer shows them (a 404) takes them away.
         setMissedAt(Date.now());
       } else {
         setHeld({ kind: "failed", status: answer.kind === "refused" ? answer.status : null });
@@ -123,6 +125,12 @@ function ClassesBody({ place, onClose, bottom }: { place: ClassesPlace; onClose:
     },
     [session, place.id, week],
   );
+
+  // The read for the week on screen now: a press answered after Earlier or Later reads that week, not its own.
+  const loadNow = useRef(load);
+  useEffect(() => {
+    loadNow.current = load;
+  }, [load]);
 
   useEffect(() => {
     live.current = true;
@@ -172,10 +180,14 @@ function ClassesBody({ place, onClose, bottom }: { place: ClassesPlace; onClose:
       return;
     }
     keys.current.delete(c.sessionId);
-    if (answer.kind === "ok") put(answer.data.booking);
-    else say(c.sessionId, { text: answer.message, bad: true });
+    if (answer.kind === "ok") {
+      put(answer.data.booking);
+      // A key kept from a press whose booking was cancelled since is answered with that cancelled booking.
+      const status = answer.data.booking.mine?.status;
+      if (status === undefined || status === "cancelled" || status === "late_cancelled") say(c.sessionId, { text: EARLIER_CANCELLED, bad: true });
+    } else say(c.sessionId, { text: answer.message, bad: true });
     // One booking changes what the others say (a week's bookings, a pack's last class).
-    void load(true);
+    void loadNow.current(true);
   };
 
   const give = async (c: ClassBookingView) => {
@@ -201,7 +213,7 @@ function ClassesBody({ place, onClose, bottom }: { place: ClassesPlace; onClose:
     } else {
       say(c.sessionId, { text: answer.kind === "refused" ? answer.message : NO_ANSWER, bad: true });
     }
-    void load(true);
+    void loadNow.current(true);
   };
 
   const go = (to: number) => {
@@ -294,6 +306,7 @@ function ClassesBody({ place, onClose, bottom }: { place: ClassesPlace; onClose:
                     clock={place.clockFormat}
                     gym={place.name}
                     busy={busyId === c.sessionId}
+                    blocked={busyId !== null && busyId !== c.sessionId}
                     said={said[c.sessionId]}
                     onTake={(action) => {
                       if (bookAsk(c, action, place.clockFormat, Date.now(), place.name) === null) void take(c, action);
@@ -386,18 +399,20 @@ interface ClassBoxProps {
   clock: GymClockFormat;
   gym: string;
   busy: boolean;
+  /** Another class's press is on its way: this one's buttons wait for it. */
+  blocked: boolean;
   said: Said | undefined;
   onTake: (action: Take) => void;
   onGive: () => void;
 }
 
-function ClassBox({ c, clock, gym, busy, said, onTake, onGive }: ClassBoxProps) {
+function ClassBox({ c, clock, gym, busy, blocked, said, onTake, onGive }: ClassBoxProps) {
   const { take, give } = actionsOf(c);
   const mine = mineText(c, Date.now());
   const places = placesText(c);
   const why = whyText(c, clock);
   const fees = feeLines(c, clock, Date.now(), gym);
-  const online = onlineText(c);
+  const online = onlineText(c, Date.now());
   const when = whenText(c, clock);
   return (
     <Card testID={`class-${c.sessionId}`} style={styles.box}>
@@ -442,6 +457,7 @@ function ClassBox({ c, clock, gym, busy, said, onTake, onGive }: ClassBoxProps) 
           small
           wide
           busy={busy}
+          disabled={blocked}
           say={`${take.label}: ${c.className}, ${when}`}
           onPress={() => {
             onTake(take);
@@ -449,7 +465,7 @@ function ClassBox({ c, clock, gym, busy, said, onTake, onGive }: ClassBoxProps) 
         />
       )}
       {give === null ? null : (
-        <Button label={give.label} kind="plain" small wide disabled={busy} say={`${give.label}: ${c.className}, ${when}`} onPress={onGive} />
+        <Button label={give.label} kind="plain" small wide disabled={busy || blocked} say={`${give.label}: ${c.className}, ${when}`} onPress={onGive} />
       )}
       {fees.map((line) => (
         <Txt key={line} kind="small">
