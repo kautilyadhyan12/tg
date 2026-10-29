@@ -484,14 +484,24 @@ export async function getDishware(sql: Sql, userId: string, id: string): Promise
   return r === undefined ? null : toDishware(r);
 }
 
-export async function createDishware(sql: Sql, userId: string, v: DishwareInput): Promise<DishwareRow> {
+/** A dish saved. Under the phone's own id (ROADMAP 32b-ii-b) the same dish sent twice is one dish:
+ *  `created` false and the dish as it is now. An id that is somebody else's dish is null. */
+export async function createDishware(
+  sql: Sql,
+  userId: string,
+  v: DishwareInput,
+  id?: string,
+): Promise<{ dish: DishwareRow; created: boolean } | null> {
   const rows = await sql<DishwareDbRow[]>`
-    INSERT INTO user_dishware (user_id, label, container_class, volume_ml, food_hint)
-    VALUES (${userId}, ${v.label}, ${v.containerClass}, ${v.volumeMl}, ${v.foodHint ?? null})
+    INSERT INTO user_dishware (id, user_id, label, container_class, volume_ml, food_hint)
+    VALUES (coalesce(${id ?? null}::uuid, gen_random_uuid()), ${userId}, ${v.label}, ${v.containerClass}, ${v.volumeMl}, ${v.foodHint ?? null})
+    ON CONFLICT (id) DO NOTHING
     RETURNING id, label, container_class, volume_ml, food_hint, created_at`;
   const r = rows[0];
-  if (r === undefined) throw new Error("dishware insert returned no row");
-  return toDishware(r);
+  if (r !== undefined) return { dish: toDishware(r), created: true };
+  if (id === undefined) throw new Error("dishware insert returned no row");
+  const kept = await getDishware(sql, userId, id);
+  return kept === null ? null : { dish: kept, created: false };
 }
 
 export async function updateDishware(

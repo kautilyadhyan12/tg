@@ -669,6 +669,7 @@ describe("where each priced food's row starts on the photo sheet (ROADMAP 7a-iv-
 
   it("is where Add food starts the food, an estimate, where the model gave no grams", () => {
     const sheet = scanSheet(evidence({ ...pumpkin, grams: null }), [table(usdaPumpkin)], pumpkinMeasures);
+    // Its serving, a cup: never the piece Add food starts it at, a fraction of a plate (32b-ii-b's review, H1).
     expect(sheet.items[0]).toMatchObject({ gramsPoint: 230, startsAt: { measure: "usda-1", amount: 1 }, portionEstimated: true, kcalPoint: 120 });
   });
 

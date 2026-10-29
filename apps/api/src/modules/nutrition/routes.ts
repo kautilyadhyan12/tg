@@ -13,9 +13,9 @@ import { createOpenFoodFactsProvider, type FoodSearchProvider } from "./openfood
 import {
   analyzeMealPhotoRequestSchema,
   bodyMeasurementInputSchema,
+  createDishwareRequestSchema,
   createMealRequestSchema,
   dietPlanDayParamsSchema,
-  dishwareInputSchema,
   foodSearchQuerySchema,
   foodWeekQuerySchema,
   makeDietPlanRequestSchema,
@@ -388,10 +388,14 @@ export function registerNutritionRoutes(
     });
   });
 
+  // With the phone's own `id` the same dish sent twice is one dish: 201 when it is saved, 200 with
+  // the dish as it is now when it already was, 404 for an id that is somebody else's (ROADMAP 32b-ii-b).
   app.post("/v1/nutrition/dishware", { preHandler: [app.authenticate] }, async (req, reply) => {
-    const v = parse(dishwareInputSchema, req.body, req, reply);
+    const v = parse(createDishwareRequestSchema, req.body, req, reply);
     if (v === null) return;
-    return reply.status(201).send({ dishware: await service.createDishware(readDeps, authedUserId(req), v) });
+    const saved = await service.createDishware(readDeps, authedUserId(req), v);
+    if (saved === null) return notFound(req, reply);
+    return reply.status(saved.created ? 201 : 200).send({ dishware: saved.dish });
   });
 
   app.patch<{ Params: { id: string } }>(

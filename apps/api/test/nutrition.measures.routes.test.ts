@@ -145,8 +145,8 @@ d("adding a food by measure (real Postgres)", () => {
     // A food of our list: its own serving, then the measures of the USDA entry it cites.
     const apple = (await search("apple")).find((f) => f.canonical === "apple");
     expect(brief(apple)).toEqual([[
-      "serving apple 180", "usda-1 cup, quartered or chopped 125", "usda-2 cup slices 109", "usda-3 large (3-1/4\" dia) 223",
-      "usda-4 medium (3\" dia) 182", "usda-5 small (2-3/4\" dia) 149", "usda-6 extra small (2-1/2\" dia) 101", "usda-7 NLEA serving 242",
+      "serving apple 180", "usda-1 cup, quartered or chopped 125", "usda-2 cup slices 109", "usda-3 large 223",
+      "usda-4 medium 182", "usda-5 small 149", "usda-6 extra small 101", "usda-7 serving 242",
       "g g 1", ounce,
     ], { measure: "serving", amount: 1 }]);
 
@@ -183,7 +183,7 @@ d("adding a food by measure (real Postgres)", () => {
     // 1.5 × 182 g = 273 g of apple at 52 kcal per 100 g: 142 kcal. 3 × 15 g = 45 g of
     // porridge at 71: 32 kcal. 2 × 125 g = 250 g of yogurt at 96: 240 kcal.
     expect(meal.items.map((i) => [i.canonical, i.gramsPoint, i.kcalPoint, i.measure])).toEqual([
-      ["apple", 273, Math.round((apple.kcal * 273) / 100), { id: "usda-4", name: "medium (3\" dia)", amount: 1.5 }],
+      ["apple", 273, Math.round((apple.kcal * 273) / 100), { id: "usda-4", name: "medium", amount: 1.5 }],
       [PORRIDGE, 45, 32, { id: "usda-2", name: "tablespoon", amount: 3 }],
       ["off_zqxmeasure_pot", 250, 240, { id: "serving", name: "pot", amount: 2 }],
     ]);
@@ -240,7 +240,7 @@ d("adding a food by measure (real Postgres)", () => {
     });
     expect(added.statusCode, added.body).toBe(200);
     expect(mealOf(added.body).items.map((i) => [i.canonical, i.gramsPoint, i.measure?.name, i.measure?.amount])).toEqual([
-      ["apple", 273, "medium (3\" dia)", 1.5],
+      ["apple", 273, "medium", 1.5],
       [PORRIDGE, 45, "tablespoon", 3],
       ["off_zqxmeasure_pot", 250, "pot", 2],
       [NUTS, 12, "nut", 10],
@@ -265,11 +265,11 @@ d("adding a food by measure (real Postgres)", () => {
     expect(await twice(
       [{ canonical: "apple", grams: 100 }, { canonical: "apple", measure: "usda-4", amount: 1 }],
       [{ canonical: "apple", grams: 100 }, { canonical: "apple", grams: 182 }, { canonical: NUTS, measure: "usda-2", amount: 10 }],
-    )).toEqual([["apple", 100, null], ["apple", 182, "medium (3\" dia)"], [NUTS, 12, "nut"]]);
+    )).toEqual([["apple", 100, null], ["apple", 182, "medium"], [NUTS, 12, "nut"]]);
     expect(await twice(
       [{ canonical: "apple", measure: "usda-4", amount: 1 }, { canonical: "apple", grams: 182 }],
       [{ canonical: "apple", grams: 182 }, { canonical: "apple", grams: 182 }],
-    )).toEqual([["apple", 182, "medium (3\" dia)"], ["apple", 182, null]]);
+    )).toEqual([["apple", 182, "medium"], ["apple", 182, null]]);
 
     // A stranger can neither read the meal nor change it by a measure.
     expect((await inject("GET", `/v1/nutrition/meals/${mealId}`, bob)).statusCode).toBe(404);

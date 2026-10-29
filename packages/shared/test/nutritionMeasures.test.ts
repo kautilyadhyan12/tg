@@ -53,6 +53,7 @@ describe("foodSearchItemSchema", () => {
     canonical: "apple", name: "Apple", kcal: 52, proteinG: 0.26, carbsG: 13.81, fatG: 0.17, fiberG: 2.4, serving: 180, unit: "apple", source: "curated",
     measures: [{ id: "serving", name: "apple", grams: 180 }, { id: "g", name: "g", grams: 1 }],
     startsAt: { measure: "serving", amount: 1 },
+    startsKcal: 94,
   };
 
   it("carries at least one measure, and the one the food starts at", () => {
