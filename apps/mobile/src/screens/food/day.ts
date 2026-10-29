@@ -126,7 +126,7 @@ export function itemMark(item: Pick<MealItem, "nutritionSource">): string {
   return "";
 }
 
-const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"] as const;
+export const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"] as const;
 
 /** "October 2026". */
 export const monthWords = (month: Date): string => `${MONTH_NAMES[month.getMonth()] ?? ""} ${String(month.getFullYear())}`;

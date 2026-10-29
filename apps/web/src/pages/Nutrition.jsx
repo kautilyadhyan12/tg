@@ -6,7 +6,7 @@ import {
   Sparkles, Check, Tag, Pencil, ChevronDown,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { MEAL_SCAN_TTL_SECONDS, PHOTO_SCAN_CAUTION } from '@app/shared';
+import { MEAL_SCAN_SAVE_SECONDS, PHOTO_SCAN_CAUTION } from '@app/shared';
 import { nutritionService, composeAddIngredient, missingAnswers, toDisplayTargets, toRingChoice } from '../api/nutritionApi';
 import LoggedFoodSheet from '../components/nutrition/LoggedFoodSheet';
 import MacroRings from '../components/nutrition/MacroRings';
@@ -1106,7 +1106,7 @@ function PhotoModal({ open, onClose, onSave }) {
     } catch (err) {
       toast.error(
         amountRefusal(err) ?? (err.response?.data?.error === 'invalid_scan'
-          ? `This scan can only be saved for ${MEAL_SCAN_TTL_SECONDS / 60} minutes — take the photo again.`
+          ? `This scan can only be saved for ${MEAL_SCAN_SAVE_SECONDS / 3600} hours — take the photo again.`
           : err.response?.status === 400
             ? 'One of the foods could not be logged — try removing or re-adding it.'
             : 'Failed to log the meal'),

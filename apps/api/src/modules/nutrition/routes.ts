@@ -6,6 +6,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import type { z } from "zod";
+import { MEAL_PHOTO_MAX_BYTES, cleanPhoto } from "@app/shared";
 import type { AppConfig } from "../../config.js";
 import type { RedisLike } from "../../redis.js";
 import { requireQuota } from "../quotas/service.js";
@@ -143,7 +144,10 @@ export function registerNutritionRoutes(
       return;
     }
     const bytes = Buffer.from(input.imageBase64, "base64");
-    if (bytes.length < 1000 || bytes.length > 10 * 1024 * 1024 || !validMagic(bytes, input.mimeType)) {
+    // Rebuilt from the parts that draw the picture before the scanner sees it: whatever a client
+    // sent, no place or time it was taken goes on to OpenAI (ROADMAP Stage 5 33b-i).
+    const cleaned = bytes.length < 1000 || !validMagic(bytes, input.mimeType) ? null : cleanPhoto(bytes, MEAL_PHOTO_MAX_BYTES);
+    if (cleaned === null || !cleaned.ok) {
       void reply.status(400).send({
         error: "invalid_image",
         message: "Image must be a JPEG, PNG, or WebP up to 10 MB.",
@@ -151,7 +155,7 @@ export function registerNutritionRoutes(
       });
       return;
     }
-    req.nutritionScanInput = { imageBase64: input.imageBase64, mimeType: input.mimeType };
+    req.nutritionScanInput = { imageBase64: Buffer.from(cleaned.bytes).toString("base64"), mimeType: cleaned.type };
     req.nutritionUsedRetake = false;
     if (input.retakeToken !== undefined) {
       await service.consumeRetake(nutritionDeps, authedUserId(req), input.retakeToken);

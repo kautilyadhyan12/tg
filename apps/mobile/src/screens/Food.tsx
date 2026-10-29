@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, Keyboard, Linking, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
+import { AppState, Keyboard, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import {
@@ -42,7 +42,6 @@ import {
   MEAL_TYPES,
   aboutKcal,
   addDays,
-  creditsFor,
   daySums,
   dayWords,
   hasEstimate,
@@ -56,12 +55,15 @@ import {
   noCutWords,
   uncountedWords,
   sameDay,
+  sectionOf,
   startOfDay,
   walkDay,
   type Sums,
 } from "./food/day";
 import { AmountPicker, dishByName, pickedDish, useDishes } from "./food/AmountPicker";
 import { useMealOutbox } from "./food/MealOutbox";
+import { MealPhoto } from "./food/MealPhoto";
+import { useKeptSheet } from "./food/PhotoSheetStore";
 import { holdWords } from "./food/numbers";
 import { OwnNumbers } from "./food/OwnNumbers";
 import {
@@ -93,7 +95,7 @@ import {
   type Row,
 } from "./food/rows";
 import { newGoalId } from "./goals/words";
-import { Soon } from "./Soon";
+import { Credits, SOURCE_WORDS, SourceLine } from "./food/SourceLine";
 import { Setup } from "./setup/Setup";
 
 // The Food tab (ROADMAP Stage 5 items 32b-i and 32b-ii-a): the day's macros against the person's daily
@@ -186,6 +188,11 @@ export function FoodScreen() {
   const [said, setSaid] = useState<{ section: MealType; words: string } | null>(null);
   const [setupAt, setSetupAt] = useState<SetupScreenId | "where" | null>(null);
   const [picking, setPicking] = useState(false);
+  // A meal from a photo (33b-i): the camera, and the photo meal kept until it is saved.
+  const kept = useKeptSheet();
+  const [photoOpen, setPhotoOpen] = useState(false);
+  const [discarding, setDiscarding] = useState(false);
+  const photoKept = kept.sheet !== null && kept.sheet !== undefined;
   const today = sameDay(day, new Date());
 
   // The server's meals, less those removed here, each as the server last answered it where that came
@@ -214,10 +221,38 @@ export function FoodScreen() {
     setSaid(null);
     setDay(startOfDay(next));
   };
+  // A meal logged now lands today: the day goes there, and says so in the meal it went to.
+  const loggedNow = (type: MealType, name: string) => {
+    goTo(new Date());
+    setSaid({ section: type, words: `${name} added.` });
+  };
 
   return (
-    <Page top={<PictureTop picture="food" tall={0.62} eyebrow="Nutrition" title="Fuel Your Training" />}>
-      <Soon icon="camera" title="Log meal from photo" />
+    <Page
+      top={
+        <PictureTop
+          picture="food"
+          tall={0.62}
+          eyebrow="Nutrition"
+          title="Fuel Your Training"
+          foot={<Button label={photoKept ? "Finish photo meal" : "Log meal from photo"} icon="camera" onPress={() => { setSaid(null); setPhotoOpen(true); }} />}
+        />
+      }
+    >
+      {photoKept ? (
+        <Card style={styles.kept}>
+          <View style={styles.row}>
+            <Icon name="camera" size={18} colour="orange" />
+            <Txt kind="small" colour="text" style={styles.grow}>
+              Your photo meal isn’t saved yet.
+            </Txt>
+          </View>
+          <View style={styles.row}>
+            <Button label="Finish" kind="soft" small onPress={() => { setPhotoOpen(true); }} />
+            <Button label="Discard" kind="quiet" onPress={() => { setDiscarding(true); }} />
+          </View>
+        </Card>
+      ) : null}
       {view.refused.map((r) => (
         <Card key={r.id} style={styles.refused}>
           <Icon name="warn" size={18} colour="badText" />
@@ -306,6 +341,33 @@ export function FoodScreen() {
           <Credits sources={new Set(rows.flatMap((r) => (r.items ?? []).map((i) => i.nutritionSource)))} />
         </>
       )}
+      <MealPhoto
+        open={photoOpen}
+        kept={kept}
+        onClose={() => { setPhotoOpen(false); }}
+        onSaved={(type, name) => {
+          setPhotoOpen(false);
+          loggedNow(type, name);
+        }}
+        onSearch={() => {
+          setPhotoOpen(false);
+          goTo(new Date());
+          setAdding(sectionOf({ mealType: null, takenAt: new Date().toISOString() }));
+        }}
+      />
+      <Sheet open={discarding} title="Discard your photo meal?" onClose={() => { setDiscarding(false); }}>
+        <Txt kind="small">Its foods aren’t saved, and the scan it used isn’t given back.</Txt>
+        <Button
+          label="Discard"
+          kind="danger"
+          wide
+          onPress={() => {
+            setDiscarding(false);
+            kept.forget();
+          }}
+        />
+        <Button label="Keep it" kind="quiet" wide onPress={() => { setDiscarding(false); }} />
+      </Sheet>
       <AddFood
         type={adding}
         onClose={() => { setAdding(null); }}
@@ -1006,12 +1068,6 @@ const SHEET_FOOT = 130;
 /** The list never shrinks below one food's row. */
 const SHEET_LIST_LEAST = 120;
 
-const SOURCE_WORDS: Readonly<Record<FoodSearchItem["source"], string>> = {
-  curated: "Verified",
-  usda: "USDA",
-  openfoodfacts: "Packaged product",
-  estimate: "Estimate",
-};
 
 type Found = { kind: "idle" } | { kind: "looking" } | { kind: "ok"; items: FoodSearchItem[] } | { kind: "failed"; words: string };
 /** A food in the picker: one found by the search, or one the person logged before, with the food as
@@ -1321,48 +1377,6 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
   );
 }
 
-/** Where a food's numbers come from; the hand-checked foods with a tick. */
-function SourceLine({ source, before = "" }: { source: FoodSearchItem["source"]; before?: string }) {
-  return (
-    <View style={styles.source}>
-      <Txt kind="tiny">{before}</Txt>
-      {source === "curated" ? <Icon name="check" size={12} colour="goodText" /> : null}
-      <Txt kind="tiny" colour={source === "curated" ? "goodText" : "textFaint"}>
-        {SOURCE_WORDS[source]}
-      </Txt>
-    </View>
-  );
-}
-
-/** The food data's own credits, for the sources on screen (food/day.ts, `creditsFor`). */
-function Credits({ sources }: { sources: ReadonlySet<string> }) {
-  const credits = creditsFor(sources);
-  if (credits.length === 0) return null;
-  return (
-    <View style={styles.credits}>
-      {credits.map((credit) => (
-        <Txt key={credit.key} kind="tiny">
-          {credit.parts.map((part) =>
-            "link" in part ? (
-              <Txt
-                key={part.text}
-                kind="tiny"
-                colour="textSoft"
-                style={styles.link}
-                onPress={() => { void Linking.openURL(part.link); }}
-              >
-                {part.text}
-              </Txt>
-            ) : (
-              part.text
-            ),
-          )}
-        </Txt>
-      ))}
-    </View>
-  );
-}
-
 const WEEKDAY_LETTERS = ["M", "T", "W", "T", "F", "S", "S"] as const;
 
 /** A month to pick a day from, as standard apps draw it: today and the days before it, never after. */
@@ -1435,9 +1449,6 @@ function MonthPick({ open, day, onClose, onPick }: { open: boolean; day: Date; o
 }
 
 const styles = StyleSheet.create({
-  source: { flexDirection: "row", alignItems: "center", gap: 4, flexWrap: "wrap" },
-  credits: { gap: 6, paddingTop: 4 },
-  link: { textDecorationLine: "underline" },
   monthHead: { flexDirection: "row", alignItems: "center", gap: 10 },
   monthName: { flex: 1, textAlign: "center" },
   week: { flexDirection: "row" },
@@ -1451,6 +1462,7 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.8 },
   label: { textTransform: "uppercase", letterSpacing: 0.9 },
   refused: { flexDirection: "row", alignItems: "center", gap: 10, borderColor: colours.badLine },
+  kept: { gap: 10, borderColor: colours.orangeLine },
   titleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   macros: { gap: 14 },
   rings: { flexDirection: "row", justifyContent: "space-between", gap: 6 },

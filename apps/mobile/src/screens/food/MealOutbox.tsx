@@ -4,7 +4,7 @@ import { mealResponseSchema, type WaitingChange, type WaitingMeal } from "@app/s
 import type { Answer, Shape } from "../../session/calls";
 import type { Session } from "../../session/session";
 import { useSession } from "../../session/SessionProvider";
-import { createOutbox, type Outbox, type OutboxView, type SendResult, type TextStore } from "./outbox";
+import { createOutbox, saveBody, type Outbox, type OutboxView, type SendResult, type TextStore } from "./outbox";
 
 /** While something waits, it is sent again this often, besides on opening and coming back to the app. */
 export const SEND_AGAIN_MS = 15_000;
@@ -20,13 +20,15 @@ const now = (answer: Answer<unknown>): boolean =>
 const REFUSED_WORDS = "This meal couldn't be saved. Add it again.";
 const CHANGED_ELSEWHERE = "The meal was changed on another device. Open it and make the change again.";
 const CHANGE_REFUSED = "Open the meal and make the change again.";
+const SCAN_GONE = "Its photo scan ran out before the phone was back online. Take the photo again.";
 
 export function mealSender(session: Session) {
   return {
     save: async (meal: WaitingMeal): Promise<SendResult> => {
-      const answer = await session.signedIn({ method: "POST", path: "/v1/nutrition/meals", body: meal.body }, mealResponseSchema);
+      const answer = await session.signedIn({ method: "POST", path: "/v1/nutrition/meals", body: saveBody(meal) }, mealResponseSchema);
       if (answer.kind === "ok") return { kind: "done", meal: answer.data.meal };
       if (now(answer) || answer.kind !== "refused") return { kind: "later" };
+      if (answer.error === "invalid_scan") return { kind: "refused", message: SCAN_GONE };
       // A shape the server would not read is the app's fault, never words for the person.
       return { kind: "refused", message: answer.error === "validation_error" ? REFUSED_WORDS : answer.message };
     },

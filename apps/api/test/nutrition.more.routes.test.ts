@@ -8,6 +8,7 @@ import { createOpenFoodFactsProvider } from "../src/modules/nutrition/openfoodfa
 import type { VisionProvider, VisionResult } from "../src/modules/nutrition/vision.adapter.js";
 import { importUsda } from "../tools/usda-table.js";
 import { USDA_NUTRIENTS, type UsdaEntry, type UsdaNutrient } from "../tools/usda-files.js";
+import { MEAL_PHOTO } from "./fixtures/mealPhoto.js";
 
 // The ten further figures of a food in a meal (ROADMAP 34a): fibre, sugars,
 // saturated and unsaturated fat, sodium, potassium, calcium, iron, magnesium and vitamin D, from
@@ -73,7 +74,7 @@ const evidence: VisionEvidence = {
   photo_quality: "good",
 };
 const vision: VisionProvider = { analyze: () => Promise.resolve({ evidence, tokensIn: 100, tokensOut: 200 } satisfies VisionResult) };
-const jpeg = (() => { const bytes = Buffer.alloc(1200, 1); bytes[0] = 0xff; bytes[1] = 0xd8; bytes[2] = 0xff; return bytes.toString("base64"); })();
+const jpeg = MEAL_PHOTO;
 
 interface Item { canonical: string; gramsPoint: number; nutritionSource: string; more?: MoreNutrients }
 interface MealReply { id: string; itemsVersion: string; items: Item[] }

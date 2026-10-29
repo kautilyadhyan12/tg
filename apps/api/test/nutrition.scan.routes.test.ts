@@ -29,6 +29,7 @@ import { VisionProviderError, type MatchAnswer, type MatchChecker, type MatchFoo
 import * as repo from "../src/modules/nutrition/repo.js";
 import { importUsda } from "../tools/usda-table.js";
 import { USDA_NUTRIENTS, type UsdaEntry, type UsdaNutrient, type UsdaPortion, type UsdaRelease } from "../tools/usda-files.js";
+import { MEAL_PHOTO } from "./fixtures/mealPhoto.js";
 
 const sentry = vi.hoisted(() => ({ init: vi.fn(), captureException: vi.fn(), httpIntegration: vi.fn() }));
 vi.mock("@sentry/node", () => sentry);
@@ -49,7 +50,7 @@ const env = {
   JWT_SECRET: "scan7b-test-secret-0123456789abcdef-32", // gitleaks:allow
   LOG_LEVEL: "error",
 };
-const jpeg = (() => { const bytes = Buffer.alloc(1200, 1); bytes[0] = 0xff; bytes[1] = 0xd8; bytes[2] = 0xff; return bytes.toString("base64"); })();
+const jpeg = MEAL_PHOTO;
 
 /** This file's USDA ids. The other USDA test files hold 90,000,001–099, 201–299 and
  *  401–499, and run beside this one: an id two files share is saved over and deleted. */

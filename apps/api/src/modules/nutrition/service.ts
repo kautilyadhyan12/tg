@@ -10,6 +10,7 @@ import {
   DIET_LABEL_CAUTION,
   FOOD_ALLERGY_CAUTION,
   MAX_ITEM_GRAMS,
+  MEAL_SCAN_SAVE_SECONDS,
   MEAL_SCAN_TTL_SECONDS,
   MORE_NOT_KNOWN,
   isNoValueWord,
@@ -64,7 +65,9 @@ import {
 } from "./vision.adapter.js";
 
 export const RETAKE_TTL_SECONDS = MEAL_SCAN_TTL_SECONDS;
-const SCAN_TTL_SECONDS = MEAL_SCAN_TTL_SECONDS;
+/** A scan's draft, kept until it is saved, which takes it, or a day has passed: a phone that logged
+ *  the meal with no signal sends it later (ROADMAP Stage 5 33b-i). */
+const SCAN_TTL_SECONDS = MEAL_SCAN_SAVE_SECONDS;
 const FOOD_CACHE_TTL_SECONDS = 24 * 60 * 60;
 const CALC_VERSION = 1;
 

@@ -13,6 +13,7 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createMemoryRedis } from "../src/redis.js";
 import type { VisionProvider } from "../src/modules/nutrition/vision.adapter.js";
+import { MEAL_PHOTO } from "./fixtures/mealPhoto.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -46,7 +47,7 @@ const memberFile = Buffer.from(
   [`Full Name,Email`, `${MEMBER_NAME},${randomUUID()}@realgym.example`].join("\r\n"),
   "utf8",
 ).toString("base64");
-const photo = (() => { const bytes = randomBytes(3000); bytes[0] = 0xff; bytes[1] = 0xd8; bytes[2] = 0xff; return bytes.toString("base64"); })();
+const photo = MEAL_PHOTO;
 
 /** What the SDK holds of the request it is serving, as far as this test reads it. */
 const heldRequestSchema = z.object({ normalizedRequest: z.object({ method: z.string(), data: z.unknown().optional() }) });
