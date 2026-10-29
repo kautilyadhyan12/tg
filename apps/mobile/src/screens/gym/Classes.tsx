@@ -46,7 +46,7 @@ import {
 // A place's classes for its member (spec Part 3 §13.4 and §13.6; ROADMAP Stage 5 item 16a): the coming
 // classes a week at a time, under their days, with Book, Join waitlist, Claim place and Cancel. The
 // browser's screen (apps/web/src/components/gym/Classes.jsx), as a page over the Gym tab; what a late
-// cancel and a no-show cost is said before Book, and Book asks first where any cancel would cost. The server
+// cancel and a no-show cost is said before Book, and Book asks first where a late cancel fee would be due. The server
 // decides every one; a class shows what the server last said about it. Read when it opens, on a new
 // week, after each answer, when the app comes back, and when an online class's link is due or ends.
 
@@ -109,8 +109,9 @@ function ClassesBody({ place, onClose, bottom }: { place: ClassesPlace; onClose:
       const answer = await session.signedIn({ method: "GET", path: classesPath(place.id, week) }, memberClassesResponseSchema);
       if (!live.current || number !== started.current) return;
       if (answer.kind === "ok") {
-        // A class they hold needs no kept key: the press it was for has plainly been answered.
-        for (const c of answer.data.classes) if (c.mine?.status === "booked" || c.mine?.status === "waitlisted") keys.current.delete(c.sessionId);
+        // A class with a booking of theirs on it, of any status, needs no kept key: the press it was for
+        // has plainly been answered, and a booking cancelled since must not be answered to the next press.
+        for (const c of answer.data.classes) if (c.mine !== null) keys.current.delete(c.sessionId);
         setMissedAt(null);
         setHeld({ kind: "ok", list: answer.data });
       } else if (quiet) {

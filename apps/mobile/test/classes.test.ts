@@ -139,7 +139,7 @@ describe("the box before a cancel: every fee it names is the one sent", () => {
       "Cancel your booking?",
       "Free to cancel until Mon 2 Nov, 4:30 PM. After that there is a one-time late cancel fee of ₹500.00.",
     ],
-    ["late, no fee", klass({ mine: booked(), can: { cancel: "late" } }), "Cancel late?", "Cancelling this close to the start counts as a late cancel. There's no fee."],
+    ["late, no fee", klass({ mine: booked(), can: { cancel: "late" } }), "Cancel late?", "Cancelling this close to the start counts as a late cancel."],
     [
       "late, on a pack",
       klass({ mine: booked(true), can: { cancel: "late" } }),
@@ -184,12 +184,20 @@ describe("what a fee costs is said before Book, and Book asks first where any ca
   const inside = Date.parse("2026-11-02T11:30:00.000Z");
   const free = "Free to cancel until Mon 2 Nov, 4:30 PM. After that, a one-time late cancel fee of ₹500.00.";
   const soon = "This class starts soon. If you book and then cancel, a one-time late cancel fee of ₹500.00 will be added to your bill.";
+  const soonWaiting = "This class starts soon. If you get a place and then cancel, a one-time late cancel fee of ₹500.00 will be added to your bill.";
+  // Four minutes before the free cancel ends by the phone's clock: inside the margin.
+  const nearly = Date.parse("2026-11-02T10:56:00.000Z");
   const noShow = "If you don’t come, a one-time no-show fee of ₹800.00 will be added to your bill.";
 
   it.each([
     ["bookable, before the free cancel ends", klass({ can: { book: true }, fees: INR }), before, [free, noShow]],
     ["bookable, inside it", klass({ can: { book: true }, fees: INR }), inside, [soon, noShow]],
     ["the waitlist, inside it", klass({ booked: 12, can: { joinWaitlist: true }, fees: INR }), inside, [soon, noShow]],
+    ["bookable, inside the clock margin", klass({ can: { book: true }, fees: INR }), nearly, [soon, noShow]],
+    ["waiting, before the free cancel ends", klass({ booked: 12, mine: waiting(2), can: { cancel: "free" }, fees: INR }), before, [free, noShow]],
+    // Leaving a waitlist is always free by the server's word: the time decides, never `can.cancel`.
+    ["waiting, inside it", klass({ booked: 12, mine: waiting(2), can: { cancel: "free" }, fees: INR }), inside, [soonWaiting, noShow]],
+    ["a place to claim, inside it", klass({ booked: 11, mine: waiting(1), can: { claim: true, cancel: "free" }, fees: INR }), inside, [soonWaiting, noShow]],
     ["booked, still free", klass({ mine: booked(), can: { cancel: "free" }, fees: INR }), before, [free, noShow]],
     [
       "booked, late by the server's word",
@@ -218,6 +226,7 @@ describe("what a fee costs is said before Book, and Book asks first where any ca
       no: "Not now",
     });
     expect(bookAsk(c, book, "12h", before)).toBeNull();
+    expect(bookAsk(c, book, "12h", nearly)?.yes).toBe("Book");
     expect(bookAsk(klass({ can: { book: true } }), book, "12h", inside)).toBeNull();
     expect(bookAsk(klass({ can: { book: true }, fees: { ...INR, lateCancelMinor: 0 } }), book, "12h", inside)).toBeNull();
     expect(bookAsk(c, { kind: "waitlist", label: "Join waitlist", joinWaitlist: true }, "12h", inside)?.yes).toBe("Join waitlist");

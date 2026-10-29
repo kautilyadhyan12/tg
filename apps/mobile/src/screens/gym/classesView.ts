@@ -258,9 +258,13 @@ export function feeLines(c: ClassBookingView, clock: GymClockFormat, now: number
   if (late > 0) {
     const money = formatMinor(late, c.fees.currency);
     const until = instantText(c.freeCancelUntil, c.timezone, clock);
-    const stillFree = give !== null ? c.can.cancel === "free" : Date.parse(c.freeCancelUntil) > now;
+    // A held place has the server's word; leaving a waitlist is always free, so a place still to come
+    // is judged by the time.
+    const booked = c.mine?.status === "booked";
+    const stillFree = booked ? c.can.cancel === "free" : !insideFreeCancel(c, now);
     if (stillFree && until !== "") lines.push(`Free to cancel until ${until}. After that, a one-time late cancel fee of ${money}.`);
-    else if (give !== null && c.mine?.status === "booked") lines.push(`If you cancel now, a one-time late cancel fee of ${money} will be added to your bill.`);
+    else if (booked) lines.push(`If you cancel now, a one-time late cancel fee of ${money} will be added to your bill.`);
+    else if (c.mine?.status === "waitlisted") lines.push(`This class starts soon. If you get a place and then cancel, a one-time late cancel fee of ${money} will be added to your bill.`);
     else lines.push(`This class starts soon. If you book and then cancel, a one-time late cancel fee of ${money} will be added to your bill.`);
   }
   if (c.fees.noShowMinor > 0) {
@@ -269,11 +273,21 @@ export function feeLines(c: ClassBookingView, clock: GymClockFormat, now: number
   return lines;
 }
 
-/** The box before a booking that could not be cancelled without a fee: the class starts inside its
- *  free-cancel time. Null where Book needs no question. */
+/** How long before the gym's free-cancel time the phone already treats a class as inside it: a phone
+ *  clock a few minutes slow then still warns, rather than skipping Book's box. */
+export const CLOCK_MARGIN_MS = 5 * 60_000;
+
+/** The class is inside its free-cancel time, or close enough to it by this phone's clock. */
+export function insideFreeCancel(c: ClassBookingView, now: number): boolean {
+  const until = Date.parse(c.freeCancelUntil);
+  return Number.isNaN(until) || until - now <= CLOCK_MARGIN_MS;
+}
+
+/** The box before a booking that could not be cancelled without a late cancel fee: the class starts
+ *  inside its free-cancel time. Null where Book needs no question. */
 export function bookAsk(c: ClassBookingView, take: Take, clock: GymClockFormat, now: number): CancelAsk | null {
   const fee = lateFee(c);
-  if (fee === 0 || c.fees === null || Date.parse(c.freeCancelUntil) > now) return null;
+  if (fee === 0 || c.fees === null || !insideFreeCancel(c, now)) return null;
   const what = `${c.className}, ${shortDay(c.localDate)} at ${reminderClock(c.localStartMinute, clock) ?? ""}`;
   return {
     title: `${take.label}?`,
