@@ -195,9 +195,9 @@ function MatchBox({ row, org, readOnly, onMatched, onStale, onClose }) {
               <div className="flex flex-col gap-1" data-testid="match-link">
                 <label htmlFor={`match-link-${row.id}`} className="flex items-start gap-3 c-s15 c-t1" style={{ minHeight: 44 }}>
                   <input id={`match-link-${row.id}`} type="checkbox" className="mt-1" checked={link} disabled={state.busy} onChange={(e) => setLink(e.target.checked)} />
-                  <span className="c-w6">{linkLabel(linkOffer, data.person.name)}</span>
+                  <span className="c-w6">{linkLabel(data.person.name)}</span>
                 </label>
-                <p className="c-s13 c-t2 m-0" style={{ paddingLeft: 28 }} data-testid="match-link-note">
+                <p className="c-s13 c-t2 m-0" style={{ paddingLeft: 28, marginTop: -8 }} data-testid="match-link-note">
                   {linkNote(linkOffer, data.person.name)}
                 </p>
               </div>

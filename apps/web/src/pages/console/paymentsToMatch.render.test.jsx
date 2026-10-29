@@ -265,20 +265,20 @@ describe('Payments to match', () => {
 
     it("where the app can tell they are the same person the tick is on, says what it does, and Match sends it; the row says it is linked", async () => {
       const { amy, box } = await pickAmy({ offer: 'link', customerName: 'Amy L', also: false, byName: null });
-      const tick = box.getByRole('checkbox', { name: 'Link Amy L in your Square customer list to Amy Lee' });
+      const tick = box.getByRole('checkbox', { name: 'Link this Square customer to Amy Lee' });
       expect(tick.checked).toBe(true);
-      expect(box.getByTestId('match-link-note').textContent).toBe('Their name and contact details match. Their next payments in Square Point of Sale then come to Amy Lee’s page, with their bill ticked.');
+      expect(box.getByTestId('match-link-note').textContent).toBe('Their name and contact details match. This customer’s next payments in Square Point of Sale then come to Amy Lee’s page, with their bill ticked.');
       svc.match.mockResolvedValue(matchedAmy({ result: 'linked', customerName: 'Amy L', personName: 'Amy Lee' }));
       fireEvent.click(box.getByRole('button', { name: 'Match $15.00 to this bill' }));
-      await within(amy).findByText("Matched: $15.00 on Amy Lee's bill. Receipt 61. Amy L in your Square customer list is now linked to Amy Lee. Their next payments come to their page.");
+      await within(amy).findByText("Matched: $15.00 on Amy Lee's bill. Receipt 61. Amy L is now linked to Amy Lee. Their next payments come to their page.");
       expect(svc.match.mock.calls[0][2]).toMatchObject({ entryId: AMY.entryId, linkTo: AMY.entryId });
     });
 
     it("where it can't tell, the tick is off and says to tick only if they are the same person; nothing is sent unless it is ticked", async () => {
       const { amy, box } = await pickAmy({ offer: 'ask', customerName: 'Pat Smith', also: false, byName: null });
-      const tick = box.getByRole('checkbox', { name: 'Link Pat Smith in your Square customer list to Amy Lee' });
+      const tick = box.getByRole('checkbox', { name: 'Link this Square customer to Amy Lee' });
       expect(tick.checked).toBe(false);
-      expect(box.getByTestId('match-link-note').textContent).toContain('Pat Smith has a different name or contact details from Amy Lee. Tick this only if they are the same person.');
+      expect(box.getByTestId('match-link-note').textContent).toContain('The app can’t tell they are the same person. Tick this only if Pat Smith is Amy Lee.');
       svc.match.mockResolvedValue(matchedAmy());
       fireEvent.click(box.getByRole('button', { name: 'Match $15.00 to this bill' }));
       await within(amy).findByText("Matched: $15.00 on Amy Lee's bill. Receipt 61.");
@@ -313,7 +313,7 @@ describe('Payments to match', () => {
     it("a customer somebody else has is said so, with no tick, and nothing is sent", async () => {
       const { box } = await pickAmy({ offer: 'taken', customerName: 'Pat Smith', also: false, byName: 'Pat Smith' });
       expect(box.queryByRole('checkbox')).toBeNull();
-      expect(box.getByTestId('match-link-taken').textContent).toBe('Pat Smith is already linked to Pat Smith, so it can’t be linked to Amy Lee.');
+      expect(box.getByTestId('match-link-taken').textContent).toBe('This Square customer is already linked to Pat Smith, so it can’t be linked to Amy Lee.');
       svc.match.mockResolvedValue(matchedAmy());
       fireEvent.click(box.getByRole('button', { name: 'Match $15.00 to this bill' }));
       await waitFor(() => expect(svc.match).toHaveBeenCalledTimes(1));
@@ -339,7 +339,7 @@ describe('Payments to match', () => {
       const finder = box.getByLabelText('Find them by name, email or member number');
       fireEvent.change(finder, { target: { value: 'Ben' } });
       fireEvent.click(await box.findByRole('button', { name: /^Ben Ortiz · No\. 12/ }));
-      await box.findByRole('checkbox', { name: 'Link Amy Lee in your Square customer list to Ben Ortiz' });
+      await box.findByRole('checkbox', { name: 'Link this Square customer to Ben Ortiz' });
       expect(box.getByRole('checkbox').checked).toBe(false);
     });
   });

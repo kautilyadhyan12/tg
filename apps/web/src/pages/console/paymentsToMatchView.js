@@ -219,38 +219,40 @@ export const matchButton = (minor, currency) => `Match ${money(minor, currency)}
 // customer's next payments come to the person's page by themselves. "Your Square customer list" is what the gym
 // already calls it; the tick is on only where the app can tell they are the same person.
 
-const LINK_FALLBACK = 'this customer';
+/** The Square customer in a sentence: by Square's name where it differs from the person's, else "the Square customer", so
+ *  a line never reads "Amy Lee … to Amy Lee". */
+const customerWho = (customerName, personName) => (customerName === null || customerName === personName ? 'the Square customer' : customerName);
+const upper = (text) => text.charAt(0).toUpperCase() + text.slice(1);
 
-/** The tick's own label: "Link Amy L in your Square customer list to Amy Lee". */
-export const linkLabel = (link, personName) => `Link ${link.customerName ?? LINK_FALLBACK} in your Square customer list to ${personName}`;
+/** The tick's own label. The payment's row above it already names the customer. */
+export const linkLabel = (personName) => `Link this Square customer to ${personName}`;
 
 /** Under the tick: what linking does, and, where the app can't tell, to tick it only if they are the same person. */
 export function linkNote(link, personName) {
   if (link.offer === 'taken') return null;
   const parts = [];
   if (link.offer === 'ask') {
-    parts.push(`${link.customerName ?? 'Square’s customer'} has a different name or contact details from ${personName}. Tick this only if they are the same person.`);
+    parts.push(`The app can’t tell they are the same person. Tick this only if ${customerWho(link.customerName, personName)} is ${personName}.`);
   } else {
     parts.push('Their name and contact details match.');
   }
-  parts.push(`Their next payments in Square Point of Sale then come to ${personName}’s page, with their bill ticked.`);
+  parts.push(`This customer’s next payments in Square Point of Sale then come to ${personName}’s page, with their bill ticked.`);
   if (link.also) parts.push(`${personName} already has a customer in your Square customer list. This one is linked to them as well.`);
   return parts.join(' ');
 }
 
 /** Where the customer can't be linked because somebody else here has it. */
-export const linkTakenLine = (link, personName) =>
-  `${link.customerName ?? 'This customer'} is already linked to ${link.byName ?? 'someone else here'}, so it can’t be linked to ${personName}.`;
+export const linkTakenLine = (link, personName) => `This Square customer is already linked to ${link.byName ?? 'someone else here'}, so it can’t be linked to ${personName}.`;
 
 /** What Match did about the customer, said after the press; empty where nothing was asked. */
 export function linkDoneLine(link) {
   if (link === undefined || link.result === 'none') return '';
-  const who = link.customerName ?? 'Their Square customer';
   const person = link.personName ?? 'them';
+  const who = upper(customerWho(link.customerName, person));
   switch (link.result) {
     case 'linked':
     case 'also':
-      return ` ${link.customerName === null ? 'Their Square customer' : `${link.customerName} in your Square customer list`} is now linked to ${person}. Their next payments come to their page.`;
+      return ` ${who} is now linked to ${person}. Their next payments come to their page.`;
     case 'taken':
       return ` ${who} wasn’t linked: it is already linked to someone else here.`;
     case 'gone':
