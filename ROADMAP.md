@@ -569,7 +569,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 32a. [x] **A meal sent twice from the phone is saved once** — merged 2026-10-13 (PR #238).
     - 32b. **The Food screen** (split 2026-10-28: logging first).
       - 32b-i. [x] **Log a meal on the phone** — merged 2026-10-28 (PR #376).
-      - 32b-ii. [ ] **Change a logged meal, your own numbers, saved dishes**: name, time, section and a food's amount; the rings' own-numbers switch; saved dishes added, renamed and removed, each saved once (32a's note); recent foods, the last 10 with one-tap Add (Kd, 2026-10-28).
+      - 32b-ii. **Change a logged meal, your own numbers, saved dishes** (split 2026-10-29: changing meals first).
+        - 32b-ii-a. [ ] **Change a logged meal, and recent foods**: name, meal, time, a food's amount or removal, kept on the phone until sent; Add opens on the last 10 foods, one tap each.
+        - 32b-ii-b. [ ] **Your own numbers, and saved dishes**: the rings' own-numbers switch; saved dishes added, picked, renamed and removed, each saved once (32a's note).
 33. **The meal scan** (Kd, 2026-10-28: the scanner moves to GPT-6 Luna first).
     - 33a. [x] **The meal scan on GPT-6 Luna, thinking off** — merged 2026-10-28 (PR #380).
     - 33a-ii. [x] **Luna checks the scan's unclear food matches** — merged 2026-10-28 (PR #382).
