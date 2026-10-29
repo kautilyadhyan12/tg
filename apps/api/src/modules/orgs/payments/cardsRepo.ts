@@ -356,6 +356,12 @@ export async function moveCards(tx: TransactionSql, gymId: string, goneId: strin
     SELECT gym_id, ${keepId}, environment, account_id, customer_id, merged_at, matched_at FROM gym_square_old_customers
     WHERE gym_id = ${gymId} AND entry_id = ${goneId}
     ON CONFLICT DO NOTHING`;
+  // What staff said when they unlinked a customer from the record not kept (18d-iii-b-ii-c-ii) holds for the one kept.
+  await tx`
+    INSERT INTO gym_square_unlinked_customers (gym_id, entry_id, environment, account_id, customer_id, unlinked_at, unlinked_by, request_key, moved, card_brand, card_last4)
+    SELECT gym_id, ${keepId}, environment, account_id, customer_id, unlinked_at, unlinked_by, request_key, moved, card_brand, card_last4
+    FROM gym_square_unlinked_customers WHERE gym_id = ${gymId} AND entry_id = ${goneId}
+    ON CONFLICT DO NOTHING`;
   await tx`
     UPDATE gym_square_customers g SET entry_id = ${keepId}
     WHERE g.gym_id = ${gymId} AND g.entry_id = ${goneId}

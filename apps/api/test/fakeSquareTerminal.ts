@@ -56,6 +56,8 @@ export type CardBehaviour = "pays" | "declines" | "insufficient" | "expired" | {
 
 export function fakeSquare() {
   const cards = new Map<string, { accountId: string; customerId: string; behaviour: CardBehaviour }>();
+  /** Every card DisableCard stopped, in order. */
+  const stopped: string[] = [];
   const cardPayments = new Map<string, { body: NewCardPayment; result: CardPaymentResult }>();
   /** Every payment a card on file was charged, as Square took it: COMPLETED ones are money taken. */
   const charged: (SquarePayment & { accountId: string; cardId: string; key: string })[] = [];
@@ -150,6 +152,10 @@ export function fakeSquare() {
     /** Runs once, as RetrieveOrder arrives, before Square answers: something happens in the app between the take-in's first
      *  look at a payment and its decision (18d-iii-b-ii-c, round one, Low 2: a Match links the customer meanwhile). */
     beforeOrder: (() => Promise<void>) | null;
+    /** DisableCard answers (18d-iii-b-ii-c-ii): the card is stopped and listed in `stopped`. Off, it gives no answer, as before. */
+    disables: boolean;
+    /** Runs once, as a CreateCard arrives, before Square answers: something happens in the app while a card is being saved. */
+    beforeCard: (() => Promise<void>) | null;
     now: () => Date;
   } = {
     down: false,
@@ -187,6 +193,8 @@ export function fakeSquare() {
     beforeDelete: null,
     deleteViaOldId: "nothing",
     beforeOrder: null,
+    disables: false,
+    beforeCard: null,
     now: () => new Date(),
   };
   let n = 0;
@@ -321,7 +329,12 @@ export function fakeSquare() {
     },
     // A card saved from Square's form (`cnon:ok-VISA-1111-…`), on the customer asked or, for an old id of a merged
     // one, on the customer it is now (18d-iii-b-ii-b-ii-a).
-    createCard(token, c) {
+    async createCard(token, c) {
+      const before = state.beforeCard;
+      if (before !== null) {
+        state.beforeCard = null;
+        await before();
+      }
       if (state.down) return Promise.resolve(unavailable);
       const a = tokenAccount(token);
       if (a === undefined) return Promise.resolve(unauthorized);
@@ -435,7 +448,18 @@ export function fakeSquare() {
       gone.add(id);
       return Promise.resolve({ kind: "ok", value: null });
     },
-    disableCard: () => Promise.resolve(unavailable),
+    disableCard(token, cardId) {
+      if (!state.disables || state.down) return Promise.resolve(unavailable);
+      const a = tokenAccount(token);
+      if (a === undefined) return Promise.resolve(unauthorized);
+      const card = cards.get(cardId);
+      if (card?.accountId !== a.merchantId) return Promise.resolve(notFound);
+      stopped.push(cardId);
+      return Promise.resolve({
+        kind: "ok",
+        value: { id: cardId, card_brand: "VISA", last_4: "1111", exp_month: 12, exp_year: 2031, customer_id: card.customerId, merchant_id: a.merchantId, enabled: false },
+      });
+    },
     revokeAccount: () => Promise.resolve({ kind: "ok", value: null }),
     createDeviceCode: () => Promise.resolve(unavailable),
     retrieveDeviceCode: () => Promise.resolve(unavailable),
@@ -762,6 +786,7 @@ export function fakeSquare() {
     at,
     card,
     cards,
+    stopped,
     charged,
     taken,
     appPayment,

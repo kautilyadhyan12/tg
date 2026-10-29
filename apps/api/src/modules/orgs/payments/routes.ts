@@ -55,6 +55,11 @@
 //   POST   /v1/orgs/:gymId/payments-to-match/:paymentId/not-a-bill        Not a bill payment
 //   POST   /v1/orgs/:gymId/payments-to-match/:paymentId/undo              Undo of Not a bill payment
 //
+// Unlink on a person's page (ROADMAP 18d-iii-b-ii-c-ii), as Match: `billing.members` and `members.confirm`:
+//   GET    …/member-list/entries/:entryId/square-links                       the customers Match linked to them
+//   GET    …/member-list/entries/:entryId/square-links/:customerId/unlink    Unlink's box, before anything changes
+//   POST   …/member-list/entries/:entryId/square-links/:customerId/unlink    Unlink
+//
 // Members in Square (ROADMAP 18d-iii-b-ii-b-i): any staff read the box, the owner checks and adds:
 //   GET    /v1/orgs/:gymId/payments/square/members                       the box
 //   POST   /v1/orgs/:gymId/payments/square/members/check                 Add members to Square, Check again
@@ -69,6 +74,8 @@ import {
   notABillRequestSchema,
   paymentToMatchParamsSchema,
   paymentsToMatchQuerySchema,
+  squareLinkParamsSchema,
+  squareUnlinkRequestSchema,
   saveCardRequestSchema,
   squareCardIdSchema,
   terminalFeePaymentRequestSchema,
@@ -104,6 +111,7 @@ import * as cardCharges from "./cardCharges.js";
 import * as cards from "./cards.js";
 import * as failedPayments from "./failedPayments.js";
 import * as paymentsToMatch from "./paymentsToMatch.js";
+import * as squareUnlink from "./squareUnlink.js";
 import * as service from "./service.js";
 import * as squareMembers from "./squareMembers.js";
 import { SQUARE_PAYMENT_EVENTS, squareAppCheck } from "./squareAppPayments.js";
@@ -452,6 +460,33 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     const params = parseOr400(paymentToMatchParamsSchema, req.params, req, reply);
     if (params === null) return;
     const done = await paymentsToMatch.putBackToMatch(paymentsDeps, callerId(req), params.gymId, params.paymentId);
+    tellMatched(params.gymId, done.entryIds);
+    return reply.status(200).header("cache-control", "no-store").send(done.answer);
+  });
+
+  // Unlink on a person's page: read and pressed as Match is, by the same staff and the same limits.
+  const linksUrl = "/v1/orgs/:gymId/member-list/entries/:entryId/square-links";
+
+  app.get(linksUrl, { preHandler: [app.authenticate, staffOnly(deps.sql, toMatchReadLimit)] }, async (req, reply) => {
+    const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const answer = await squareUnlink.readSquareLinks(paymentsDeps, callerId(req), params.gymId, params.entryId);
+    return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  app.get(`${linksUrl}/:customerId/unlink`, { preHandler: [app.authenticate, staffOnly(deps.sql, toMatchReadLimit)] }, async (req, reply) => {
+    const params = parseOr400(squareLinkParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const answer = await squareUnlink.readUnlinkBox(paymentsDeps, callerId(req), params.gymId, params.entryId, params.customerId);
+    return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  app.post(`${linksUrl}/:customerId/unlink`, { preHandler: [app.authenticate, staffOnly(deps.sql, toMatchWriteLimit)] }, async (req, reply) => {
+    const params = parseOr400(squareLinkParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(squareUnlinkRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const done = await squareUnlink.unlinkSquareCustomer(paymentsDeps, callerId(req), params.gymId, params.entryId, params.customerId, body);
     tellMatched(params.gymId, done.entryIds);
     return reply.status(200).header("cache-control", "no-store").send(done.answer);
   });

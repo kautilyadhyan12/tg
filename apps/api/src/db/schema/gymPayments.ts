@@ -124,6 +124,9 @@ export const gymSquareCustomers = pgTable(
     /** The reference id the app gave the customer when it made it (0171; ROADMAP 18d-iii-b-ii-b-ii-b-ii): the record's id then.
      *  Null for a customer Square already had. A customer Square shows with another reference id is not the one the app made. */
     madeAs: uuid("made_as"),
+    /** Linked by Match from a payment (0174; ROADMAP 18d-iii-b-ii-c-ii), not by Members in Square, a card or a merge: only such a
+     *  link is offered for Unlink. */
+    matchedAt: timestamp("matched_at", { withTimezone: true }),
     /** What the record's name, email and phone were when Square last agreed with them (0170; ROADMAP
      *  18d-iii-b-ii-b-ii-b-i), each as an md5 hash, null for none: a part that differs now is a change to copy. Null
      *  `copied_at`: not known yet, taken from the record on the next look without sending anything. */
@@ -894,6 +897,37 @@ export const gymSquareOldCustomers = pgTable(
     check("gym_square_old_customers_environment_check", sql`${t.environment} IN ('sandbox','production')`),
     check("gym_square_old_customers_ids_check", sql`${t.accountId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.customerId} ~ '^[A-Za-z0-9_-]{1,64}$'`),
     check("gym_square_old_customers_how_check", sql`(${t.mergedAt} IS NULL) <> (${t.matchedAt} IS NULL)`),
+  ],
+);
+
+/** Staff unlinked this Square customer from this record (0174; ROADMAP 18d-iii-b-ii-c-ii): nothing links it to them again by
+ *  itself, only staff ticking Match's link for them again. `request_key` and what the press did answer the same press twice. */
+export const gymSquareUnlinkedCustomers = pgTable(
+  "gym_square_unlinked_customers",
+  {
+    gymId: uuid("gym_id").notNull(),
+    entryId: uuid("entry_id").notNull(),
+    environment: text("environment").notNull(),
+    accountId: text("account_id").notNull(),
+    customerId: text("customer_id").notNull(),
+    unlinkedAt: timestamp("unlinked_at", { withTimezone: true }).notNull(),
+    unlinkedBy: uuid("unlinked_by").references(() => users.id, { onDelete: "set null" }),
+    requestKey: uuid("request_key").notNull(),
+    moved: integer("moved").notNull().default(0),
+    cardBrand: text("card_brand"),
+    cardLast4: text("card_last4"),
+  },
+  (t) => [
+    primaryKey({ name: "gym_square_unlinked_customers_pk", columns: [t.gymId, t.environment, t.accountId, t.customerId, t.entryId] }),
+    foreignKey({ name: "gym_square_unlinked_customers_entry_fk", columns: [t.gymId, t.entryId], foreignColumns: [gymMemberListEntries.gymId, gymMemberListEntries.id] }).onDelete("cascade"),
+    check("gym_square_unlinked_customers_environment_check", sql`${t.environment} IN ('sandbox','production')`),
+    check("gym_square_unlinked_customers_ids_check", sql`${t.accountId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.customerId} ~ '^[A-Za-z0-9_-]{1,64}$'`),
+    check("gym_square_unlinked_customers_moved_check", sql`${t.moved} >= 0`),
+    check(
+      "gym_square_unlinked_customers_card_check",
+      sql`(${t.cardBrand} IS NULL) = (${t.cardLast4} IS NULL) AND (${t.cardBrand} IS NULL OR ${t.cardBrand} ~ '^[A-Z_]{1,40}$') AND (${t.cardLast4} IS NULL OR ${t.cardLast4} ~ '^[0-9]{4}$')`,
+    ),
+    index("gym_square_unlinked_customers_customer_idx").on(t.environment, t.accountId, t.customerId),
   ],
 );
 
