@@ -292,6 +292,8 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
   // Match linking Square's customer to the person who paid (18d-iii-b-ii-c); the customer's own details are never kept here.
   "org.square_customer_matched": (s) =>
     text(s, "also") === "yes" ? `Linked another customer in your Square customer list to ${person(s)}` : `Linked a customer in your Square customer list to ${person(s)}`,
+  // Unlink on the person's page (18d-iii-b-ii-c-ii), the same words turned round; nothing of the customer's own details.
+  "org.square_customer_unlinked": (s) => `Unlinked a customer in your Square customer list from ${person(s)}`,
   "org.member_bill_cancelled": (s) => {
     const amount = money(s, "amountMinor");
     return `Cancelled ${whose(s, "bill")}${amount === null ? "" : ` of ${amount}`}`;

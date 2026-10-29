@@ -91,8 +91,9 @@ function PtBody({ place, onClose, bottom }: { place: PtPlace; onClose: () => voi
   const [choosing, setChoosing] = useState<Choosing | null>(null);
   // The session the box asks about, as it will be cancelled: its fee is the one the request says yes to.
   const [asking, setAsking] = useState<MemberPtSession | null>(null);
-  // One key a time pressed: kept while its answer is unknown, until the page is read again, so a second press books once.
-  const keys = useRef(new Map<string, string>());
+  // One key a time pressed: kept while its answer is unknown, until a read shows a session of theirs at that time that
+  // was not there when the key was made, so a second press books once.
+  const keys = useRef(new Map<string, { key: string; known: ReadonlySet<string> }>());
   // Reads are numbered as they start: an answer stands only if no later read has started.
   const started = useRef(0);
   const live = useRef(true);
@@ -105,15 +106,27 @@ function PtBody({ place, onClose, bottom }: { place: PtPlace; onClose: () => voi
       const answer = await session.signedIn({ method: "GET", path: `${ptPath(place.id)}?week=${String(week)}` }, memberPtResponseSchema);
       if (!live.current || number !== started.current) return;
       if (answer.kind === "ok") {
-        // A press with no answer is answered by the page as it now is: booked, its time is no longer offered; not, it
-        // is a new press. A kept key outliving it would answer a session cancelled since.
-        keys.current.clear();
+        // A press is answered once a session of theirs, of any status, stands at its day and minute that was not there
+        // when its key was made: a kept key outliving that would answer a session cancelled since. Any other key stays,
+        // as its press may still be on its way: a new key for it would book a second session.
+        const theirs = [...answer.data.sessions, ...answer.data.history];
+        for (const [id, kept] of [...keys.current]) {
+          const slot = id.slice(id.indexOf("|") + 1);
+          if (theirs.some((s) => `${s.localDate}|${String(s.localStartMinute)}` === slot && !kept.known.has(s.id))) keys.current.delete(id);
+        }
         setHeld({ kind: "ok", view: answer.data });
-        // A read made by itself never takes the times away.
-      } else if (!quiet) setHeld({ kind: "failed", status: answer.kind === "refused" ? answer.status : null });
+        // A read made by itself never takes the times away over a lost connection; a place that no longer shows them
+        // (a 404) does.
+      } else if (!quiet || (answer.kind === "refused" && answer.status === 404)) setHeld({ kind: "failed", status: answer.kind === "refused" ? answer.status : null });
     },
     [session, place.id, week],
   );
+
+  // The read for the week on screen now: a press answered after Earlier or Later reads that week, not its own.
+  const loadNow = useRef(load);
+  useEffect(() => {
+    loadNow.current = load;
+  }, [load]);
 
   useEffect(() => {
     live.current = true;
@@ -136,8 +149,10 @@ function PtBody({ place, onClose, bottom }: { place: PtPlace; onClose: () => voi
   const book = async (c: Choosing) => {
     if (busy) return;
     const id = `${c.trainerId}|${c.localDate}|${String(c.minute)}`;
-    const key = keys.current.get(id) ?? newRequestKey();
-    keys.current.set(id, key);
+    const shown = held.kind === "ok" ? [...held.view.sessions, ...held.view.history] : [];
+    const kept = keys.current.get(id) ?? { key: newRequestKey(), known: new Set(shown.map((s) => s.id)) };
+    keys.current.set(id, kept);
+    const key = kept.key;
     setBusy(true);
     setSaid(null);
     const answer = await session.signedIn(
@@ -153,13 +168,14 @@ function PtBody({ place, onClose, bottom }: { place: PtPlace; onClose: () => voi
     setChoosing(null);
     if (answer.kind === "no_answer") {
       // No answer keeps its key: pressed again, the server books once.
+      keys.current.set(id, kept);
       tell({ text: NO_ANSWER, bad: true });
       return;
     }
     keys.current.delete(id);
     tell(answer.kind === "ok" ? bookedText(answer.data.session, place.clockFormat) : { text: answer.message, bad: true });
     // The times are not as this page showed them: read them again.
-    void load(true);
+    void loadNow.current(true);
   };
 
   const cancel = async (s: MemberPtSession) => {
@@ -180,13 +196,13 @@ function PtBody({ place, onClose, bottom }: { place: PtPlace; onClose: () => voi
       // says it costs now.
       setAsking(askedLate(s, answer.body));
       // The page under the box says the same.
-      void load(true);
+      void loadNow.current(true);
       return;
     }
     setAsking(null);
     if (answer.kind === "ok") tell({ text: ptCancelledText(answer.data.session), bad: false });
     else tell({ text: answer.kind === "refused" ? answer.message : NO_ANSWER, bad: true });
-    void load(true);
+    void loadNow.current(true);
   };
 
   const go = (to: number) => {

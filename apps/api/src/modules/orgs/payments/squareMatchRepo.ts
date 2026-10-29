@@ -5,6 +5,7 @@ import type { Sql, TransactionSql } from "postgres";
 import type { SquareEnvironment } from "./square.js";
 import { linkedRecords } from "./squareAppPaymentsRepo.js";
 import { linkCustomer } from "./squareMembersRepo.js";
+import { forgetUnlinked } from "./squareUnlinkRepo.js";
 
 type SqlOrTx = Sql | TransactionSql;
 
@@ -82,8 +83,16 @@ export async function linkMatched(
   if (holders.some((h) => h.gymId !== a.gymId || h.entryId !== a.entryId)) return "taken";
   if (holders.length > 0) return "already";
   if (a.referenceOf !== null && a.referenceOf !== a.entryId) return "taken";
+  // Staff ticked it: what they said when they unlinked this customer from the person (18d-iii-b-ii-c-ii) no longer stands.
+  await forgetUnlinked(tx, a);
   const first = await linkCustomer(tx, { gymId: a.gymId, entryId: a.entryId, environment: a.environment, accountId: a.accountId, customerId: a.customerId, joined: true, now: a.now });
-  if (first === "linked") return "linked";
+  if (first === "linked") {
+    // Linked by Match, so it is offered for Unlink on their page.
+    await tx`
+      UPDATE gym_square_customers SET matched_at = ${a.now}
+      WHERE gym_id = ${a.gymId} AND entry_id = ${a.entryId} AND environment = ${a.environment} AND account_id = ${a.accountId} AND customer_id = ${a.customerId}`;
+    return "linked";
+  }
   if (first === "taken") return "taken";
   await tx`
     INSERT INTO gym_square_old_customers (gym_id, entry_id, environment, account_id, customer_id, matched_at)

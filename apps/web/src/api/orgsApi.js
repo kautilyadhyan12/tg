@@ -119,6 +119,9 @@ import {
   memberGymTagsResponseSchema,
   memberPayersResponseSchema,
   memberCardResponseSchema,
+  squareLinksResponseSchema,
+  squareUnlinkBoxSchema,
+  squareUnlinkResponseSchema,
   terminalSaveResponseSchema,
   terminalPaymentResponseSchema,
   cardChargeResponseSchema,
@@ -1852,6 +1855,14 @@ export const orgService = {
       'their card on file',
       authApi.delete(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/card`),
     ),
+  /** The customers in the gym's Square customer list that Match linked to a person, and Unlink (ROADMAP 18d-iii-b-ii-c-ii),
+   *  for staff who match payments. The box is read first; Unlink carries the card it named. */
+  getSquareLinks: (gymId, entryId) =>
+    readThrough(squareLinksResponseSchema, 'their Square customer list', authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/square-links`)),
+  getUnlinkBox: (gymId, entryId, customerId) =>
+    readThrough(squareUnlinkBoxSchema, 'what Unlink does', authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/square-links/${encodeURIComponent(customerId)}/unlink`)),
+  unlinkSquareCustomer: (gymId, entryId, customerId, body) =>
+    readThrough(squareUnlinkResponseSchema, 'Unlink', authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/square-links/${encodeURIComponent(customerId)}/unlink`, body)),
   /** Save card on Terminal (ROADMAP 18d-ii-b-ii): the agreement goes to the gym's Square Terminal,
    *  then the card the person gives there. Asked about every few seconds until it ends. */
   startTerminalSave: (gymId, entryId, body) =>

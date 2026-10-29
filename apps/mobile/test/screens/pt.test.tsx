@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
+import { AppState } from "react-native";
 import { App } from "../../src/App";
 import type { Ask } from "../../src/session/calls";
 import { fakeServer, kept, lost, memoryStore, refusal, tokens, type Reply } from "../kit";
@@ -150,15 +151,21 @@ describe("the worst thing: nothing is booked twice, no fee is taken that was not
     expect(keyOf(sent[1])).not.toBe(keyOf(sent[0]));
   });
 
-  it("a kept key ends when the page is read again: a session cancelled since is never answered to the next press", async () => {
+  it("a kept key ends once a read shows a session of theirs at that time: one cancelled since is never answered to the next press", async () => {
     let first = true;
+    let cancelledSince = false;
     const server = fakeServer({
       "/v1/auth/refresh": ok({ tokens: tokens(2) }),
       "/v1/orgs/mine": mine(IRON),
-      [ptOf(IRON)]: ok(ptWeek(DAY, { lastDay: "2099-12-31" })),
+      [ptOf(IRON)]: () => ({
+        status: 200,
+        body: ptWeek(DAY, { lastDay: "2099-12-31", history: cancelledSince ? [pt(600, DAY, { status: "cancelled", cancel: null })] : [] }),
+      }),
       [`${ptOf(IRON)}/sessions`]: () => {
         if (first) {
           first = false;
+          // The first press booked, and its answer was lost; the session was then cancelled on the browser.
+          cancelledSince = true;
           return lost();
         }
         return { status: 200, body: { session: pt(600, DAY) } };
@@ -177,6 +184,138 @@ describe("the worst thing: nothing is booked twice, no fee is taken that was not
     const sent = books(server.asked, IRON);
     expect(sent).toHaveLength(2);
     expect(keyOf(sent[1])).not.toBe(keyOf(sent[0]));
+  });
+
+  it("a read that shows no session of theirs at that time keeps the key: the press may still be on its way", async () => {
+    let first = true;
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [ptOf(IRON)]: ok(ptWeek(DAY, { lastDay: "2099-12-31" })),
+      [`${ptOf(IRON)}/sessions`]: () => {
+        if (first) {
+          first = false;
+          return lost();
+        }
+        return { status: 200, body: { session: pt(600, DAY) } };
+      },
+    });
+    await openPt(server.ask, IRON);
+    await fireEvent.press(await screen.findByLabelText(/^Book 10:00 AM – 11:00 AM with Sam Trainer, /));
+    await fireEvent.press(await screen.findByLabelText("Book session"));
+    expect(await page().findByText("Can’t connect. Check your internet and try again.")).toBeTruthy();
+    await fireEvent.press(page().getByLabelText("Later"));
+    await fireEvent.press(await page().findByLabelText("Earlier"));
+    await fireEvent.press(await screen.findByLabelText(/^Book 10:00 AM – 11:00 AM with Sam Trainer, /));
+    await fireEvent.press(await screen.findByLabelText("Book session"));
+    expect(await page().findByText(/^Booked: /)).toBeTruthy();
+    const sent = books(server.asked, IRON);
+    expect(sent).toHaveLength(2);
+    expect(keyOf(sent[1])).toBe(keyOf(sent[0]));
+  });
+
+  it("a session at that time cancelled before the press never ends its key: pressed again, it books once", async () => {
+    let first = true;
+    const S2 = "22222222-2222-4222-8222-222222222222";
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      // They cancelled a 10:00 session on this day before; the time is offered again.
+      [ptOf(IRON)]: ok(ptWeek(DAY, { lastDay: "2099-12-31", history: [pt(600, DAY, { status: "cancelled", cancel: null })] })),
+      [`${ptOf(IRON)}/sessions`]: () => {
+        if (first) {
+          first = false;
+          return lost();
+        }
+        return { status: 200, body: { session: pt(600, DAY, { id: S2 }) } };
+      },
+    });
+    await openPt(server.ask, IRON);
+    await fireEvent.press(await screen.findByLabelText(/^Book 10:00 AM – 11:00 AM with Sam Trainer, /));
+    await fireEvent.press(await screen.findByLabelText("Book session"));
+    expect(await page().findByText("Can’t connect. Check your internet and try again.")).toBeTruthy();
+    await fireEvent.press(page().getByLabelText("Later"));
+    await fireEvent.press(await page().findByLabelText("Earlier"));
+    await fireEvent.press(await screen.findByLabelText(/^Book 10:00 AM – 11:00 AM with Sam Trainer, /));
+    await fireEvent.press(await screen.findByLabelText("Book session"));
+    expect(await page().findByText(/^Booked: /)).toBeTruthy();
+    const sent = books(server.asked, IRON);
+    expect(sent).toHaveLength(2);
+    expect(keyOf(sent[1])).toBe(keyOf(sent[0]));
+  });
+
+  it("a read that lands while Book is still on its way never ends its key: pressed again, it books once", async () => {
+    const listeners: ((state: string) => void)[] = [];
+    // Left in place for the rest of the file: put back mid-file, it breaks every later render.
+    jest.spyOn(AppState, "addEventListener").mockImplementation((_type, handler) => {
+      listeners.push(handler as (state: string) => void);
+      return { remove: () => undefined };
+    });
+    let failFirst: (() => void) | null = null;
+    let first = true;
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [ptOf(IRON)]: ok(ptWeek(DAY)),
+      [`${ptOf(IRON)}/sessions`]: () => {
+        if (first) {
+          first = false;
+          return new Promise<Reply>((_resolve, reject) => {
+            failFirst = () => {
+              reject(new TypeError("Network request failed"));
+            };
+          });
+        }
+        return { status: 200, body: { session: pt(600, DAY) } };
+      },
+    });
+    await openPt(server.ask, IRON);
+    await fireEvent.press(await screen.findByLabelText(/^Book 10:00 AM – 11:00 AM with Sam Trainer, /));
+    await fireEvent.press(await screen.findByLabelText("Book session"));
+    await waitFor(() => {
+      expect(failFirst).not.toBeNull();
+    });
+    // The app goes away and comes back while Book is out: the page is read, still offering that time.
+    const reads = server.asked.filter((one) => one.method === "GET" && one.path.startsWith(ptOf(IRON))).length;
+    await act(() => {
+      for (const listener of listeners) listener("active");
+    });
+    await waitFor(() => {
+      expect(server.asked.filter((one) => one.method === "GET" && one.path.startsWith(ptOf(IRON))).length).toBe(reads + 1);
+    });
+    await act(() => {
+      failFirst?.();
+    });
+    expect(await page().findByText("Can’t connect. Check your internet and try again.")).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText(/^Book 10:00 AM – 11:00 AM with Sam Trainer, /));
+    await fireEvent.press(await screen.findByLabelText("Book session"));
+    expect(await page().findByText(/^Booked: /)).toBeTruthy();
+    const sent = books(server.asked, IRON);
+    expect(sent).toHaveLength(2);
+    expect(keyOf(sent[1])).toBe(keyOf(sent[0]));
+  });
+
+  it("a place that no longer shows the page, found when the app comes back, takes the sessions off the screen", async () => {
+    const listeners: ((state: string) => void)[] = [];
+    // Left in place for the rest of the file: put back mid-file, it breaks every later render.
+    jest.spyOn(AppState, "addEventListener").mockImplementation((_type, handler) => {
+      listeners.push(handler as (state: string) => void);
+      return { remove: () => undefined };
+    });
+    let gone = false;
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [ptOf(IRON)]: () => (gone ? refusal(404, "org_not_found", "Organisation not found.") : { status: 200, body: ptWeek(DAY, { sessions: [pt(600, DAY)] }) }),
+    });
+    await openPt(server.ask, IRON);
+    expect(await page().findByText("Cancel session")).toBeTruthy();
+    gone = true;
+    await act(() => {
+      for (const listener of listeners) listener("active");
+    });
+    expect(await page().findByText("Iron House’s personal training isn’t available right now.")).toBeTruthy();
+    expect(page().queryByText("Cancel session")).toBeNull();
   });
 
   it("the box before Book names the pack, the late cancel fee and the no-show fee; inside the free-cancel time it says it can't be cancelled for free", async () => {

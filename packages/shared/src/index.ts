@@ -100,5 +100,6 @@ export * from "./squareAppPayments.js";
 export * from "./matchBill.js";
 export * from "./paymentsToMatch.js";
 export * from "./squareMembers.js";
+export * from "./squareLinks.js";
 export * from "./liveUpdates.js";
 export * from "./setupScreens.js";

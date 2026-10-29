@@ -40,6 +40,7 @@ import * as repo from "./repo.js";
 import { accessContext, requireGymOwner, type PaymentsDeps } from "./service.js";
 import type { SquareSettings } from "./settings.js";
 import * as members from "./squareMembersRepo.js";
+import { unlinkedAmong } from "./squareUnlinkRepo.js";
 import { copySome } from "./squareCopies.js";
 import { squareEmail, squareMembersPlan, squarePhone, type PlanCustomer, type PlanMember } from "./squareMembersPlan.js";
 
@@ -291,16 +292,17 @@ async function checkSome(deps: PaymentsDeps, ready: Ready, run: members.RunRow, 
 async function decide(deps: PaymentsDeps, ready: Ready, run: members.RunRow): Promise<Step> {
   const at = { gymId: run.gymId, environment: run.environment, runId: run.runId };
   const environment = run.environment;
-  const [people, candidates, taken, known] = await Promise.all([
+  const [people, candidates, taken, known, unlinked] = await Promise.all([
     members.recordsToPlace(deps.sql, run.gymId, environment, run.accountId, run.listedUpto),
     members.readCandidates(deps.sql, at),
     members.takenCustomers(deps.sql, run.gymId, environment, run.accountId),
     members.contactsOf(deps.sql, run.gymId),
+    unlinkedAmong(deps.sql, { gymId: run.gymId, environment, accountId: run.accountId, entryIds: null }),
   ]);
   const plan = squareMembersPlan(
     people.map((p): PlanMember => ({ entryId: p.entryId, fullName: p.fullName, email: p.email, phone: p.phone })),
     candidates.map((c): PlanCustomer => ({ id: c.customerId, givenName: c.givenName, familyName: c.familyName, email: c.email, phone: c.phone, referenceId: c.referenceId })),
-    { taken, recordIds: known.recordIds },
+    { taken, recordIds: known.recordIds, unlinked },
   );
   const linking = [...new Set([...plan.values()].flatMap((p) => (p.kind === "ours" || p.kind === "link" ? [p.customerId] : [])))];
   const billed = await chargedBySquare(deps, ready, linking);
@@ -538,10 +540,11 @@ async function lookSome(deps: PaymentsDeps, ready: Ready, run: members.RunRow, b
       members.recordIdsAmong(deps.sql, run.gymId, found.flatMap((c) => (c.referenceId === null ? [] : [c.referenceId]))),
     ]);
     const people = [person, ...sharing.filter((s) => s.entryId !== person.entryId)];
+    const unlinked = await unlinkedAmong(deps.sql, { gymId: run.gymId, environment, accountId: run.accountId, entryIds: people.map((p) => p.entryId) });
     const plan = squareMembersPlan(
       people.map((p): PlanMember => ({ entryId: p.entryId, fullName: p.fullName, email: p.email, phone: p.phone })),
       found,
-      { taken, recordIds },
+      { taken, recordIds, unlinked },
     );
     const mine = plan.get(person.entryId) ?? { kind: "add" as const };
     let outcome: members.Outcome | null = null;

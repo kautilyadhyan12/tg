@@ -1643,11 +1643,11 @@ export async function patchMeal(
   }
   const before = await repo.getMeal(deps.sql, userId, id);
   if (before === null) return null;
-  // The contract sends items only with the itemsVersion they were read at.
-  const items = input.items === undefined || input.itemsVersion === undefined
-    ? undefined
-    : { items: await editedItems(deps, userId, before.items, input.items, input.itemsVersion), readAt: input.itemsVersion };
   try {
+    // The contract sends items only with the itemsVersion they were read at.
+    const items = input.items === undefined || input.itemsVersion === undefined
+      ? undefined
+      : { items: await editedItems(deps, userId, before.items, input.items, input.itemsVersion), readAt: input.itemsVersion };
     const row = await repo.updateMeal(deps.sql, userId, id, {
       ...(input.takenAt === undefined ? {} : { takenAt: new Date(input.takenAt) }),
       // undefined = keep; explicit null = clear the label.
@@ -1662,8 +1662,15 @@ export async function patchMeal(
     if (input.takenAt !== undefined) await awardMealBadges(deps, userId);
     return asMeal(row);
   } catch (err) {
-    if (err instanceof repo.MealChangedError) throw mealChanged();
-    throw err;
+    const changed = err instanceof repo.MealChangedError || (err instanceof NutritionError && err.code === "meal_changed");
+    if (!changed) throw err;
+    // Sent twice at once, the other send can make this very change between this one's check above and its read:
+    // answered with the meal, never "changed since it was opened".
+    if (input.changeId !== undefined) {
+      const made = await repo.mealAfterChange(deps.sql, userId, id, input.changeId);
+      if (made !== null) return asMeal(made);
+    }
+    throw mealChanged();
   }
 }
 
