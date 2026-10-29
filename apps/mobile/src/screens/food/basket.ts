@@ -1,9 +1,13 @@
-import type { Meal, MealChoice, MealItem } from "@app/shared";
+import type { FoodSearchItem, Meal, MealChoice, MealItem, RecentFood } from "@app/shared";
+import type { Amount } from "./measures";
 import { totalsOf } from "./rows";
 
 // Several foods added to one meal before it is saved (ROADMAP Stage 5 33b-i; Kd, 2026-10-30: "i eat
 // oats and milk but after selecting oats it directly gets added i cannot choose milk"), as MyFitnessPal
 // and Cronometer add foods to a meal: each food picked goes on a list, and one save keeps them as one meal.
+
+/** A food as the amount box holds it: one the search found, or one logged before (`last`). */
+export type BasketPick = Pick<FoodSearchItem, "canonical" | "name" | "source" | "measures" | "startsAt"> & { last?: RecentFood };
 
 /** A food on the list: what is sent for it, its amount as it reads, and the server's numbers for it
  *  where they came back before it was put on the list. */
@@ -13,6 +17,13 @@ export interface BasketFood {
   chosen: MealChoice;
   amount: string;
   item: MealItem | null;
+  /** What it was picked from, so a tap opens it again to change: the food and its amount as picked. */
+  again?: { food: BasketPick; amount: Amount } | undefined;
+}
+
+/** The list with a food put back in its own place (changed), or added at its end. */
+export function withBasketFood<T extends BasketFood>(list: readonly T[], food: T, at: string | null): T[] {
+  return at !== null && list.some((f) => f.key === at) ? list.map((f) => (f.key === at ? { ...food, key: at } : f)) : [...list, food];
 }
 
 /** The meal's name: its one food, its two, or the first and how many more. */

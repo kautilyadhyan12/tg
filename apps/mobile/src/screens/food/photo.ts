@@ -235,6 +235,14 @@ export function sheetRows(sheet: PhotoSheet): SheetRow[] {
   return [...scanned, ...sheet.extras.map((x, i) => pickRow(x, `x${String(i)}`, null))];
 }
 
+/** What a food still needs before the meal can be priced and saved: how full its dish was, or an
+ *  amount; null where it has one. One food left so stops the whole meal, so the screen names it. */
+export function rowNeeds(row: Pick<SheetRow, "own" | "canonical" | "amount">): "fill" | "amount" | null {
+  if (row.own !== null || row.canonical === null) return null;
+  if (chosenItem(row.canonical, row.amount) !== null) return null;
+  return row.amount.measure.startsWith("dish:") ? "fill" : "amount";
+}
+
 /** What is sent for the meal, or null while a food on it has no amount, or none is left on it. */
 export function sheetItems(sheet: PhotoSheet): MealChoice[] | null {
   const rows = sheetRows(sheet);

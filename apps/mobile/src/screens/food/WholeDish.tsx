@@ -4,9 +4,10 @@ import { STANDARD_DISHES, recentFoodsResponseSchema } from "@app/shared";
 import { Chip } from "../../look/Chip";
 import { colours } from "../../look/colours";
 import { FillDish } from "../../look/FillDish";
+import { Sheet } from "../../look/Sheet";
 import { Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
-import { dishByName, dishesOffered, useDishes, type PickDish } from "./AmountPicker";
+import { NewDish, dishByName, dishesOffered, useDishes, type PickDish } from "./AmountPicker";
 import { FILL_CHOICES } from "./measures";
 
 // The whole meal eaten from one dish (ROADMAP Stage 5 33b-i; Kd, 2026-10-30), drawn as the dishes are in
@@ -50,7 +51,9 @@ function useLastDish(dishes: ReturnType<typeof useDishes>["dishes"]): PickDish {
 
 /** The dishes and the filled pictures. `held`: why it cannot be used yet, said in place of the pictures. */
 export function WholeDish({ applied, held, onUse }: { applied: DishShown | null; held: string | null; onUse: (picked: DishPicked) => void }) {
-  const { dishes } = useDishes();
+  const { dishes, again } = useDishes();
+  // A dish of the person's own, made here as in a food's own box.
+  const [making, setMaking] = useState(false);
   const last = useLastDish(dishes);
   const offered = dishesOffered(dishes);
   const shown = applied === null ? null : (offered.find((d) => d.id === applied.id) ?? (applied.name === undefined ? null : dishByName(dishes, applied.name)));
@@ -59,6 +62,17 @@ export function WholeDish({ applied, held, onUse }: { applied: DishShown | null;
   const on = (fill: number): boolean => applied !== null && shown !== null && shown.id === dish.id && applied.fill === fill;
   return (
     <View style={styles.box}>
+      {/* A box of its own, lifted above the keyboard, as a food's own dishes are made. */}
+      <Sheet open={making} title="Eaten from one dish" onClose={() => { setMaking(false); }}>
+        <NewDish
+          onCancel={() => { setMaking(false); }}
+          onSaved={(saved) => {
+            again();
+            setPicked(saved);
+            setMaking(false);
+          }}
+        />
+      </Sheet>
       <Txt kind="tiny" style={styles.label}>
         Eaten from one dish
       </Txt>
@@ -66,6 +80,7 @@ export function WholeDish({ applied, held, onUse }: { applied: DishShown | null;
         {offered.map((d) => (
           <Chip key={d.id} label={`${d.label} · ${String(d.volumeMl)} ml`} on={dish.id === d.id} onPress={() => { setPicked(d); }} />
         ))}
+        <Chip label="New dish" icon="plus" on={false} onPress={() => { setMaking(true); }} />
       </View>
       {held === null ? (
         <View style={styles.fills}>

@@ -16,6 +16,7 @@ import {
   type MealItem,
   type MealPreview,
   type MealType,
+  type OwnFoodItem,
   type NutritionTargetsResponse,
   type RecentFood,
   type SetupScreenId,
@@ -65,7 +66,7 @@ import { useMealOutbox } from "./food/MealOutbox";
 import { MealPhoto } from "./food/MealPhoto";
 import { useKeptSheet } from "./food/PhotoSheetStore";
 import { holdWords } from "./food/numbers";
-import { basketName, basketNumbers, foodsWords, type BasketFood } from "./food/basket";
+import { basketName, basketNumbers, foodsWords, withBasketFood, type BasketFood, type BasketPick } from "./food/basket";
 import { OwnFood } from "./food/OwnFood";
 import { sharedDishOfItems, wholeDishEdits } from "./food/dishShares";
 import { WholeDish, type DishPicked } from "./food/WholeDish";
@@ -1098,7 +1099,7 @@ const SHEET_LIST_LEAST = 120;
 type Found = { kind: "idle" } | { kind: "looking" } | { kind: "ok"; items: FoodSearchItem[] } | { kind: "failed"; words: string };
 /** A food in the picker: one found by the search, or one the person logged before, with the food as
  *  it was last logged, whose numbers stand in at that same amount until the server's come back. */
-type Picked = Pick<FoodSearchItem, "canonical" | "name" | "source" | "measures" | "startsAt"> & { last?: RecentFood };
+type Picked = BasketPick;
 type Priced = { kind: "none" } | { kind: "ok"; preview: MealPreview; for: string } | { kind: "refused"; words: string; for: string };
 
 /** Add to a meal: the foods logged before, or a search; a food's amount by one of its own measures,
@@ -1125,6 +1126,12 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
   const [basket, setBasket] = useState<BasketFood[]>([]);
   // Leaving with foods on the list asks first: they are never thrown away by a back press.
   const [leaving, setLeaving] = useState(false);
+  // The meal so far, or the search for its next food: after each Add the meal is shown, with Add
+  // another food and Save (Kd, 2026-10-30).
+  const [searching, setSearching] = useState(true);
+  // A food on the meal opened again to change: put back in its own place.
+  const [changing, setChanging] = useState<string | null>(null);
+  const [ownAgain, setOwnAgain] = useState<OwnFoodItem | null>(null);
   const addingNow = useRef(false);
   // The box fits between the top of the screen and the keyboard: its title and the search box stay in
   // view, and the list under them scrolls.
@@ -1158,6 +1165,9 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
     setOwn(false);
     setBasket([]);
     setLeaving(false);
+    setSearching(true);
+    setChanging(null);
+    setOwnAgain(null);
   }, [type]);
 
   // The person's recent foods, read each time the box opens; with no answer the box offers the search.
@@ -1254,12 +1264,15 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
   };
   /** A food on the meal's list, and back to the search for the next. */
   const toList = (entry: Omit<BasketFood, "key">) => {
-    setBasket((now) => [...now, { ...entry, key: newGoalId() }]);
+    setBasket((now) => withBasketFood(now, { ...entry, key: newGoalId() }, changing));
+    setChanging(null);
+    setOwnAgain(null);
     setFood(null);
     setAmount(null);
     setOwn(false);
     setPanel(false);
     setQuery("");
+    setSearching(false);
   };
   const add = () => {
     if (food === null || item === null || held) return;
@@ -1269,7 +1282,7 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
     const same = last !== undefined && "measure" in item && item.measure === last.add.measure && item.amount === last.add.amount;
     const priced = preview?.items[0] ?? (same ? last.item : null);
     const words = priced === null ? typedAmount(measure, Number(amount?.amount ?? 0), pickedDish(dishes, amount?.measure ?? "")) : loggedAmount(priced) + itemMark(priced);
-    toList({ name: food.name, chosen: item, amount: words, item: priced });
+    toList({ name: food.name, chosen: item, amount: words, item: priced, ...(amount === null ? {} : { again: { food, amount } }) });
   };
   const open = (f: RecentFood) => {
     setFood({ canonical: f.canonical, name: f.item.name, source: f.source, measures: f.measures, startsAt: f.add, last: f });
@@ -1293,7 +1306,9 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
       return true;
     }
     if (food === null && basket.length > 0) {
-      setLeaving(true);
+      // From the search, back to the meal; from the meal, the question.
+      if (searching) setSearching(false);
+      else setLeaving(true);
       return true;
     }
     if (food === null) return false;
@@ -1303,6 +1318,22 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
     return true;
   };
 
+  /** A food of the meal opened again to change, in its own place. */
+  const reopen = (f: BasketFood) => {
+    if ("own" in f.chosen) {
+      setChanging(f.key);
+      setSearching(true);
+      setOwnAgain(f.chosen);
+      setQuery(f.chosen.name);
+      setOwn(true);
+      return;
+    }
+    if (f.again === undefined) return;
+    setChanging(f.key);
+    setSearching(true);
+    setFood(f.again.food);
+    setAmount(f.again.amount);
+  };
   // The X: with foods on the list it asks first, as the back button does.
   const close = () => {
     if (basket.length > 0 && !leaving) setLeaving(true);
@@ -1318,47 +1349,75 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
     );
   }
 
+  if (basket.length > 0 && !searching && food === null && !own) {
+    const numbers = basketNumbers(basket);
+    return (
+      <Sheet open title={`Add to ${name}`} onClose={close} onBack={back}>
+        <ScrollView style={{ maxHeight: Math.max(SHEET_LIST_LEAST, height - insets.top - SHEET_ABOVE_LIST - SHEET_FOOT) }} contentContainerStyle={styles.sheetList}>
+          <Txt kind="tiny" style={styles.label}>
+            Your meal
+          </Txt>
+          {basket.map((f) => (
+            <View key={f.key} style={styles.basketRow}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Change ${f.name}, ${f.amount}`}
+                onPress={() => { reopen(f); }}
+                style={({ pressed }) => [styles.grow, pressed ? styles.pressed : null]}
+              >
+                <Txt kind="strong" numberOfLines={2}>
+                  {f.name}
+                </Txt>
+                <Txt kind="tiny">{f.amount}</Txt>
+              </Pressable>
+              <Txt kind="small" colour="text">
+                {f.item === null ? "" : kcalWords(f.item.kcalPoint)}
+              </Txt>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Take ${f.name} off`}
+                onPress={() => { setBasket((now) => now.filter((x) => x.key !== f.key)); }}
+                style={({ pressed }) => [styles.arrow, pressed ? styles.pressed : null]}
+              >
+                <Icon name="x" size={16} colour="textSoft" />
+              </Pressable>
+            </View>
+          ))}
+          <Button label="Add another food" icon="plus" kind="soft" wide onPress={() => { setSearching(true); }} />
+        </ScrollView>
+        <View style={styles.foot}>
+          {numbers === null ? null : (
+            <Txt kind="small" colour="text">
+              {kcalWords(numbers.totals.kcalPoint)} · Protein {count(Math.round(numbers.totals.proteinG))} g · Carbs {count(Math.round(numbers.totals.carbsG))} g · Fat{" "}
+              {count(Math.round(numbers.totals.fatG))} g
+            </Txt>
+          )}
+          <Button label={`Save meal to ${name}`} wide disabled={outbox === null || adding} onPress={() => { void save(); }} />
+          {full ? (
+            <Txt kind="small" colour="badText">
+              Too many meals are waiting to be sent. Go online to send them, then save this one.
+            </Txt>
+          ) : null}
+        </View>
+      </Sheet>
+    );
+  }
+
   return (
     <Sheet open title={own ? "Your own food" : `Add to ${name}`} onClose={close} onBack={back}>
+      {food === null && !own && basket.length > 0 ? (
+        <Button label={`Back to your meal · ${foodsWords(basket.length)}`} icon="back" kind="link" onPress={() => { setSearching(false); }} style={styles.start} />
+      ) : null}
       {own ? (
         <ScrollView style={{ maxHeight: Math.max(SHEET_LIST_LEAST, height - keyboard - insets.top - SHEET_ABOVE_LIST) }} keyboardShouldPersistTaps="handled">
-          <OwnFood start={null} name={query.trim()} action="Add" onDone={(mine) => { toList({ name: mine.name, chosen: mine, amount: `${formatAmount(mine.grams)} g · your numbers`, item: null }); }} />
+          <OwnFood start={ownAgain} name={query.trim()} action="Add" onDone={(mine) => { toList({ name: mine.name, chosen: mine, amount: `${formatAmount(mine.grams)} g · your numbers`, item: null }); }} />
         </ScrollView>
       ) : null}
       {food === null && !own ? <Field label="Search food" bare value={query} onChange={setQuery} placeholder="Search food" ready maxLength={100} /> : null}
       {own ? null : (
-      <ScrollView style={{ maxHeight: Math.max(SHEET_LIST_LEAST, height - keyboard - insets.top - (food === null ? SHEET_ABOVE_SEARCH + (basket.length > 0 ? SHEET_FOOT : 0) : SHEET_ABOVE_LIST + (panel ? 0 : SHEET_FOOT))) }} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.sheetList}>
+      <ScrollView style={{ maxHeight: Math.max(SHEET_LIST_LEAST, height - keyboard - insets.top - (food === null ? SHEET_ABOVE_SEARCH + (basket.length > 0 ? 50 : 0) : SHEET_ABOVE_LIST + (panel ? 0 : SHEET_FOOT))) }} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.sheetList}>
         {food === null ? (
           <>
-            {basket.length === 0 ? null : (
-              <View style={styles.basket}>
-                <Txt kind="tiny" style={styles.label}>
-                  On this meal
-                </Txt>
-                {basket.map((f) => (
-                  <View key={f.key} style={styles.basketRow}>
-                    <View style={styles.grow}>
-                      <Txt kind="strong" numberOfLines={2}>
-                        {f.name}
-                      </Txt>
-                      <Txt kind="tiny">{f.amount}</Txt>
-                    </View>
-                    <Txt kind="small" colour="text">
-                      {f.item === null ? "" : kcalWords(f.item.kcalPoint)}
-                    </Txt>
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel={`Take ${f.name} off`}
-                      onPress={() => { setBasket((now) => now.filter((x) => x.key !== f.key)); }}
-                      style={({ pressed }) => [styles.arrow, pressed ? styles.pressed : null]}
-                    >
-                      <Icon name="x" size={16} colour="textSoft" />
-                    </Pressable>
-                  </View>
-                ))}
-                <Txt kind="small">Add another food, or save the meal.</Txt>
-              </View>
-            )}
             {showRecent ? (
               <>
                 <Txt kind="tiny" style={styles.label}>
@@ -1485,7 +1544,7 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
             </Txt>
           )}
           <Button
-            label={preview === null ? `Add ${food.name}` : `Add ${food.name} · ${kcalWords(preview.totals.kcalPoint)}`}
+            label={`${changing === null ? "Add" : "Update"} ${food.name}${preview === null ? "" : ` · ${kcalWords(preview.totals.kcalPoint)}`}`}
             wide
             disabled={held}
             onPress={() => {
@@ -1494,26 +1553,6 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
           />
         </View>
       )}
-      {/* The meal's list saved as one, in view under the search whatever its length. */}
-      {food === null && !own && basket.length > 0 ? (
-        <View style={styles.foot}>
-          {(() => {
-            const numbers = basketNumbers(basket);
-            return numbers === null ? null : (
-              <Txt kind="small" colour="text">
-                {kcalWords(numbers.totals.kcalPoint)} · Protein {count(Math.round(numbers.totals.proteinG))} g · Carbs {count(Math.round(numbers.totals.carbsG))} g · Fat{" "}
-                {count(Math.round(numbers.totals.fatG))} g
-              </Txt>
-            );
-          })()}
-          <Button label={`Save ${foodsWords(basket.length)} to ${name}`} wide disabled={outbox === null || adding} onPress={() => { void save(); }} />
-          {full ? (
-            <Txt kind="small" colour="badText">
-              Too many meals are waiting to be sent. Go online to send them, then save this one.
-            </Txt>
-          ) : null}
-        </View>
-      ) : null}
     </Sheet>
   );
 }
@@ -1653,7 +1692,6 @@ const styles = StyleSheet.create({
   foot: { gap: 10 },
   found: { minHeight: 56, justifyContent: "center", gap: 2, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colours.line },
   recent: { flexDirection: "row", alignItems: "center", gap: 10 },
-  basket: { gap: 8, paddingBottom: 6, borderBottomWidth: 1, borderBottomColor: colours.line },
   basketRow: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 48 },
   amountRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   step: {

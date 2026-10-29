@@ -31,7 +31,7 @@ import { newGoalId } from "../goals/words";
 import { AmountPicker, useDishes } from "./AmountPicker";
 import { MEAL_TYPES, kcalWords } from "./day";
 import { useMealOutbox } from "./MealOutbox";
-import { NO_MEASURE, amountRefusal, loggedAmount, startWords, startingAmount } from "./measures";
+import { amountRefusal, loggedAmount, startWords, startingAmount } from "./measures";
 import { typedAmount } from "./rows";
 import {
   JPEG_QUALITY,
@@ -49,6 +49,7 @@ import {
   withRowAmount,
   withRowFood,
   withWholeDish,
+  rowNeeds,
   type PhotoSheet,
   type SheetRow,
 } from "./photo";
@@ -420,6 +421,8 @@ function Review({
 
   const row = rows.find((r) => r.key === openRow) ?? null;
   const rowAt = row === null ? -1 : rows.indexOf(row);
+  // The first food left without an amount: it holds the whole meal's numbers and its save.
+  const unfinished = rows.find((r) => rowNeeds(r) !== null);
   // What each food weighs now, by row, as the server last priced it.
   const rowGrams = rows.map((_, i) => numbers?.items[i]?.gramsPoint ?? null);
   // The row the search changes, and what it weighs now: the food picked in its place starts there.
@@ -499,7 +502,13 @@ function Review({
           {rows.some((r) => r.own === null) ? (
             <WholeDish
               applied={sharedDish(rows.filter((r) => r.own === null).map((r) => r.amount))}
-              held={rowGrams.some((g, i) => g === null && rows[i]?.own === null) ? "The dishes show once the foods’ weights are worked out." : null}
+              held={
+                unfinished !== undefined
+                  ? `${unfinished.name} needs an amount first.`
+                  : rowGrams.some((g, i) => g === null && rows[i]?.own === null)
+                    ? "Working out the foods’ weights…"
+                    : null
+              }
               onUse={({ dish, fill }) => {
                 const next = withWholeDish(sheet, dish.id, fill.value, rowGrams);
                 if (next === null) return;
@@ -515,6 +524,11 @@ function Review({
         {numbers === null ? null : (
           <Txt kind="small" colour="text">
             {totalsWords(numbers.totals)}
+          </Txt>
+        )}
+        {unfinished === undefined ? null : (
+          <Txt kind="small" colour="badText">
+            {unfinished.name}: {rowNeeds(unfinished) === "fill" ? "pick how full the dish was" : "pick an amount"}. Tap it to finish, then save.
           </Txt>
         )}
         {refusedWords === null ? null : (
@@ -597,14 +611,18 @@ function Review({
  *  them; the amount as picked while the server works it out. */
 function FoodRow({ row, item, onPress }: { row: SheetRow; item: MealItem | null; onPress: () => void }) {
   const measure = row.measures.find((m) => m.id === row.amount.measure);
+  // A food not finished says what it needs, in red: until it has it, no food of the meal is priced.
+  const needs = rowNeeds(row);
   const amount =
-    item !== null
-      ? loggedAmount(item)
-      : row.amount.measure === NO_MEASURE
+    needs === "fill"
+      ? "Pick how full the dish was"
+      : needs === "amount"
         ? "Pick an amount"
-        : measure === undefined
-          ? NOT_KNOWN
-          : typedAmount(measure, Number(row.amount.amount));
+        : item !== null
+          ? loggedAmount(item)
+          : measure === undefined
+            ? NOT_KNOWN
+            : typedAmount(measure, Number(row.amount.amount));
   // The scan's guess of how much, still untouched, a food whose numbers are the scan's own, and the
   // person's own food.
   const mark = row.source === "own" ? " · your numbers" : row.estimated || row.source === "estimate" ? " · estimate" : "";
@@ -620,9 +638,9 @@ function FoodRow({ row, item, onPress }: { row: SheetRow; item: MealItem | null;
         <Txt kind="strong" numberOfLines={2}>
           {row.name}
         </Txt>
-        <Txt kind="tiny">
+        <Txt kind="tiny" colour={needs === null ? "textFaint" : "badText"}>
           {amount}
-          {mark}
+          {needs === null ? mark : ""}
         </Txt>
         {row.wasSeen === null ? null : <Txt kind="tiny">Changed from {row.wasSeen}</Txt>}
       </View>
