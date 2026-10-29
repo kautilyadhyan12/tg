@@ -35,6 +35,9 @@ import {
   forWords,
   heldLine,
   keepDone,
+  linkLabel,
+  linkNote,
+  linkTakenLine,
   markedLine,
   matchButton,
   matchedLine,
@@ -69,6 +72,9 @@ function MatchBox({ row, org, readOnly, onMatched, onStale, onClose }) {
   const [box, setBox] = useState({ for: null, data: null, error: null });
   const [picked, setPicked] = useState(null);
   const [amount, setAmount] = useState('');
+  // Link Square's customer on the payment to the person who paid: on where the app can tell they are the same
+  // person, off where it can't (18d-iii-b-ii-c). Set again whenever the person changes.
+  const [link, setLink] = useState(false);
   const [key, setKey] = useState(newKey);
   const [state, setState] = useState({ busy: false, error: null });
   const words = orgWords(org.orgType);
@@ -86,11 +92,13 @@ function MatchBox({ row, org, readOnly, onMatched, onStale, onClose }) {
       (data) => {
         if (!live) return;
         setBox({ for: entryId, data, error: null });
+        setLink(data.link?.offer === 'link');
         setPicked(data.suggested);
         setAmount(amountStart(latest.current.row, data.suggested === null ? null : (data.bills[data.suggested] ?? null)));
       },
       (err) => {
         if (!live) return;
+        setLink(false);
         setBox({ for: entryId, data: null, error: errorText(err, "We couldn't load their bills. Try again.") });
         if (errorStatus(err) === 409 || errorStatus(err) === 404) latest.current.onStale();
       },
@@ -101,6 +109,7 @@ function MatchBox({ row, org, readOnly, onMatched, onStale, onClose }) {
   }, [org.id, row.id, entryId]);
 
   const data = box.for === entryId ? box.data : null;
+  const linkOffer = data?.link ?? null;
   const bill = data === null || picked === null ? null : (data.bills[picked] ?? null);
   const fixed = data?.amountMinor ?? null;
   const asked = fixed === null && bill !== null ? amountFor(amount, row, bill) : null;
@@ -116,6 +125,8 @@ function MatchBox({ row, org, readOnly, onMatched, onStale, onClose }) {
         membershipId: bill.membershipId,
         target: bill.target,
         amountMinor: onBill,
+        // Only the tick sends it: nobody's customer is linked by a press that did not say so.
+        linkTo: link && linkOffer !== null && linkOffer.offer !== 'taken' ? data.person.entryId : null,
       });
       setState({ busy: false, error: null });
       onMatched(answer.matched);
@@ -174,6 +185,24 @@ function MatchBox({ row, org, readOnly, onMatched, onStale, onClose }) {
         ) : box.error !== null ? (
           <Refusal>{box.error}</Refusal>
         ) : data !== null ? (
+          <>
+          {linkOffer !== null ? (
+            linkOffer.offer === 'taken' ? (
+              <p className="c-s14 c-t2 m-0" data-testid="match-link-taken">
+                {linkTakenLine(linkOffer, data.person.name)}
+              </p>
+            ) : (
+              <div className="flex flex-col gap-1" data-testid="match-link">
+                <label htmlFor={`match-link-${row.id}`} className="flex items-start gap-3 c-s15 c-t1" style={{ minHeight: 44 }}>
+                  <input id={`match-link-${row.id}`} type="checkbox" className="mt-1" checked={link} disabled={state.busy} onChange={(e) => setLink(e.target.checked)} />
+                  <span className="c-w6">{linkLabel(data.person.name)}</span>
+                </label>
+                <p className="c-s13 c-t2 m-0" style={{ paddingLeft: 28, marginTop: -8 }} data-testid="match-link-note">
+                  {linkNote(linkOffer, data.person.name)}
+                </p>
+              </div>
+            )
+          ) : null}
           <fieldset className="flex flex-col gap-2" style={{ border: 0, padding: 0, margin: 0 }}>
             <legend className="c-label">Which bill was it for?</legend>
             {data.bills.length === 0 ? (
@@ -219,6 +248,7 @@ function MatchBox({ row, org, readOnly, onMatched, onStale, onClose }) {
               </div>
             ) : null}
           </fieldset>
+          </>
         ) : null
       ) : null}
 

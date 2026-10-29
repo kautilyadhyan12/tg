@@ -289,6 +289,9 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
   "org.square_app_payment_not_bill": (s) =>
     `Marked ${pay(s)} taken in Square Point of Sale${s.about === null ? "" : ` from ${s.about}`} as ${text(s, "why") === "by_hand" ? "already recorded on a bill by hand" : "not a bill payment"}`,
   "org.square_app_payment_put_back": (s) => `Put ${pay(s)} taken in Square Point of Sale${s.about === null ? "" : ` from ${s.about}`} back in Payments to match`,
+  // Match linking Square's customer to the person who paid (18d-iii-b-ii-c); the customer's own details are never kept here.
+  "org.square_customer_matched": (s) =>
+    text(s, "also") === "yes" ? `Linked another customer in your Square customer list to ${person(s)}` : `Linked a customer in your Square customer list to ${person(s)}`,
   "org.member_bill_cancelled": (s) => {
     const amount = money(s, "amountMinor");
     return `Cancelled ${whose(s, "bill")}${amount === null ? "" : ` of ${amount}`}`;

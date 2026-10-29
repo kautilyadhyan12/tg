@@ -99,6 +99,20 @@ export type SquareAppDecision =
 
 const order = (a: SquareAppCandidate, b: SquareAppCandidate): number => (a.dueOn < b.dueOn ? -1 : a.dueOn > b.dueOn ? 1 : 0);
 
+/** Why a payment waits because of what was sold, whoever paid (18d-iii-b-ii-c): typed amounts and items together,
+ *  or a sale that could not be read; one payment of several for one sale, never a bill's whole; or tax or a charge
+ *  Square added on top of what staff typed, without showing the part typed, so how much is for a bill is the desk's to
+ *  say. Null where the sale itself leaves nothing in doubt. It is kept with the payment, so a payment that waited for
+ *  want of its customer being known still says it when the customer is linked. */
+export type SquareAppSaleWait = "mixed_sale" | "sale_unread" | "paid_in_parts" | "square_tax";
+export function squareAppSaleWait(p: { lines: SquareAppLines; addedOnTop: boolean; enteredMinor: number | null; paidInParts: boolean }): SquareAppSaleWait | null {
+  if (p.lines === "mixed") return "mixed_sale";
+  if (p.lines === "unread") return "sale_unread";
+  if (p.paidInParts) return "paid_in_parts";
+  if (p.addedOnTop && p.enteredMinor === null) return "square_tax";
+  return null;
+}
+
 /** Why a payment taken in Square's own app waits, or that it is a shop sale. `amountMinor` is Square's
  *  amount without any tip; `enteredMinor` the part staff typed, where Square shows it
  *  (`squareAppEnteredMinor`). */
@@ -125,13 +139,8 @@ export function squareAppDecision(p: {
   if (p.customer === "none") return { kind: "wait", reason: "no_customer" };
   if (p.customer === "unknown") return { kind: "wait", reason: "not_linked" };
   if (p.customer === "several") return { kind: "wait", reason: "several_people" };
-  if (p.lines === "mixed") return { kind: "wait", reason: "mixed_sale" };
-  if (p.lines === "unread") return { kind: "wait", reason: "sale_unread" };
-  // One payment of several for one sale: never a bill's whole, whatever it comes to.
-  if (p.paidInParts) return { kind: "wait", reason: "paid_in_parts" };
-  // Square added tax or a charge on top: what goes on a bill is the part staff typed, where Square shows
-  // it; where it does not, staff say how much.
-  if (p.addedOnTop && p.enteredMinor === null) return { kind: "wait", reason: "square_tax" };
+  const sale = squareAppSaleWait(p);
+  if (sale !== null) return { kind: "wait", reason: sale };
   const amount = p.enteredMinor ?? p.amountMinor;
 
   const same = p.candidates.filter((c) => c.leftMinor === amount);

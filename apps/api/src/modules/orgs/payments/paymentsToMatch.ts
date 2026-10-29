@@ -19,7 +19,10 @@ import {
   paymentToMatchStateResponseSchema,
   paymentsToMatchResponseSchema,
   paymentsToMatchSummarySchema,
+  squareMadeByMerge,
   type MatchBillsResponse,
+  type MatchLinkOffer,
+  type MatchLinkResult,
   type MatchPaid,
   type MatchPaymentRequest,
   type MatchPaymentResponse,
@@ -33,16 +36,21 @@ import {
 import type { TransactionSql } from "postgres";
 import { dayInTz } from "../../gamification/streak.js";
 import { lockGym } from "../memberList/repo.js";
+import { readCountry } from "../memberList/phone.js";
 import { recordPaymentIn, type BillWriteOutcome } from "../memberships/billsRepo.js";
 import { squareMoneyOut } from "../memberships/billsSql.js";
 import { recordFeePaymentIn, type FeeWriteOutcome } from "../memberships/feesRepo.js";
 import { insertAudit } from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
-import { BILLING, orgNotFound, readyOrThrow, stateOf } from "./cards.js";
+import { BILLING, orgNotFound, readyOrThrow, stateOf, type Ready } from "./cards.js";
 import { billsOfPerson, boxTick, loadBills, ticksFor } from "./paymentsToMatchBills.js";
 import * as toMatch from "./paymentsToMatchRepo.js";
 import * as repo from "./repo.js";
 import { readsOrders, type PaymentsDeps } from "./service.js";
+import { customerSeen } from "./squareAppPayments.js";
+import { matchLinkOffer } from "./squareMatchLink.js";
+import * as linking from "./squareMatchRepo.js";
+import { recordIdsAmong } from "./squareMembersRepo.js";
 
 const NO_BILLING = "Recording payments isn't part of your role. Ask the owner to turn on \"Record members' payments\" for you.";
 const W = PAYMENTS_TO_MATCH_WORDS;
@@ -143,6 +151,29 @@ async function waiting(deps: PaymentsDeps, gymId: string, paymentId: string): Pr
  *  says, up to the whole payment. */
 const forTheBill = (row: toMatch.TakenRow): number | null => row.enteredMinor ?? null;
 
+/** What the box offers to do about Square's customer on the payment for the person picked as who paid (18d-iii-b-ii-c):
+ *  nothing where the payment has no customer, the customer was somebody's when it was taken in, or already is this
+ *  person's, or they are a past member; the customer is somebody else's here (`taken`); or link them, the tick on where
+ *  the app can tell they are the same person (`link`) and off where it cannot (`ask`). */
+async function linkOfferFor(deps: PaymentsDeps, gym: repo.GymForPayments, gymId: string, row: toMatch.TakenRow, entryId: string): Promise<MatchLinkOffer | null> {
+  if (row.customerId === null || row.entryId !== null) return null;
+  const person = await linking.readLinkPerson(deps.sql, gymId, entryId);
+  if (person === null || person.past) return null;
+  const holders = await linking.holdersOf(deps.sql, { gymId, environment: row.environment, accountId: row.accountId, customerId: row.customerId });
+  const customerName = row.customer?.name ?? null;
+  if (holders.some((h) => h.gymId === gymId && h.entryId === entryId)) return null;
+  if (holders.length > 0) {
+    // Somebody here, named; or only somebody at another business on the same Square account, never named here and never
+    // called "here" (round one, High 1).
+    if (!holders.some((h) => h.gymId === gymId)) return { offer: "taken", customerName, also: false, byName: null, elsewhere: true };
+    const names = (await toMatch.linkedNames(deps.sql, { gymId, environment: row.environment, accountId: row.accountId, customerIds: [row.customerId] })).get(row.customerId) ?? [];
+    return { offer: "taken", customerName, also: false, byName: names.length === 0 ? null : names.join(", "), elsewhere: false };
+  }
+  const offer = matchLinkOffer(row.customer, { entryId, fullName: person.fullName, email: person.email, phoneE164: person.phoneE164 }, readCountry(gym.country));
+  const also = await linking.hasOwnCustomer(deps.sql, { gymId, entryId, environment: row.environment, accountId: row.accountId });
+  return { offer, customerName, also, byName: null, elsewhere: false };
+}
+
 /** Match's box, for one person: the bills a payment can go on, theirs and those of anybody they pay for,
  *  by the rules Record payment takes them by, and their newest payments, so one already recorded by hand
  *  is seen. */
@@ -181,12 +212,20 @@ export async function readMatchBills(deps: PaymentsDeps, userId: string, gymId: 
     bills: out.slice(0, 200),
     suggested: suggested < 0 ? null : suggested,
     paid,
+    link: await linkOfferFor(deps, gym, gymId, row, entryId),
   });
 }
 
 /** A press of Match again, after its payment went on the bill: the same answer, where it asks for that same
  *  bill and amount; the key with anything else in it is refused, never answered as matched. */
-async function matchedAnswer(deps: PaymentsDeps, gymId: string, row: toMatch.TakenRow, body: MatchPaymentRequest | null = null): Promise<MatchPaymentResponse> {
+async function matchedAnswer(
+  deps: PaymentsDeps,
+  gymId: string,
+  row: toMatch.TakenRow,
+  body: MatchPaymentRequest | null = null,
+  link: MatchLinkResult | null = null,
+  linkTo: string | null = body?.linkTo ?? null,
+): Promise<MatchPaymentResponse> {
   const [paid] = await deps.sql<
     { amount_minor: number; currency: string; receipt_number: number; entry_id: string; full_name: string; held_membership_id: string; bill_id: string; period_index: number | null; fee: string | null }[]
   >`
@@ -201,10 +240,22 @@ async function matchedAnswer(deps: PaymentsDeps, gymId: string, row: toMatch.Tak
   if (body !== null && (paid.entry_id !== body.entryId || paid.held_membership_id !== body.membershipId || paid.amount_minor !== body.amountMinor || !sameBill)) {
     throw new OrgsError(409, "payment_to_match_key_reused", W.key_reused);
   }
+  // The same press again is told what the first did about Square's customer, kept with the payment, and the name of the
+  // person it named, as the record is now (round one, Low 3); Square's details of the customer went with the match.
+  const result = linkResultOf(row.linkResult);
+  const named = link === null && result !== "none" && linkTo !== null ? await linking.readLinkPerson(deps.sql, gymId, linkTo) : null;
+  const told = link ?? { result, customerName: null, personName: named?.fullName ?? null };
   return matchPaymentResponseSchema.parse({
-    matched: { entryId: paid.entry_id, name: paid.full_name, amountMinor: paid.amount_minor, currency: paid.currency, receiptNumber: paid.receipt_number },
+    matched: { entryId: paid.entry_id, name: paid.full_name, amountMinor: paid.amount_minor, currency: paid.currency, receiptNumber: paid.receipt_number, link: told },
   });
 }
+
+const linkResultOf = (kept: string | null): MatchLinkResult["result"] =>
+  kept === "linked" || kept === "also" || kept === "taken" || kept === "gone" || kept === "merged" || kept === "unchecked" || kept === "past" ? kept : "none";
+
+/** Square's customer on the payment, asked for before the payment goes on its bill, and what is to be done about linking
+ *  it: asked with Square's own answer, outside every lock. */
+type LinkAsk = { kind: "none" } | { kind: "result"; result: "gone" | "merged" | "unchecked" | "past"; customerName: string | null; personName: string } | { kind: "link"; customerName: string | null; personName: string; referenceOf: string | null };
 
 /** What a write answers, and the people whose page reads again: the bill's, and the payment's person. */
 export interface Told<T> {
@@ -247,6 +298,10 @@ export async function matchPayment(deps: PaymentsDeps, userId: string, gymId: st
     throw new OrgsError(409, "payment_to_match_refunded", W.refunded);
   }
 
+  // Staff asked for Square's customer on it to be linked to the person who paid: Square is asked about that customer too,
+  // outside every lock, so a customer it has merged or deleted since is never linked by an old number.
+  const asked = body.linkTo === null || row.customerId === null || row.entryId !== null ? ({ kind: "none" } as const) : await askAboutLink(deps, ready, gymId, row, { ...body, linkTo: body.linkTo }, row.customerId);
+
   const now = deps.now();
   const today = dayInTz(now, gym.timezone);
   const done = await deps.sql.begin(async (tx) => {
@@ -255,7 +310,7 @@ export async function matchPayment(deps: PaymentsDeps, userId: string, gymId: st
     const locked = await toMatch.readTaken(tx, gymId, paymentId, true);
     if (locked === null || locked.state === "shop_sale") throw gone();
     if (locked.state === "recorded") {
-      if (locked.recordKey === body.requestKey) return locked;
+      if (locked.recordKey === body.requestKey) return { row: locked, link: null, told: [] };
       throw new OrgsError(409, "payment_to_match_matched", W.matched);
     }
     if (locked.state === "not_bill") throw new OrgsError(409, "payment_to_match_marked", W.marked);
@@ -281,9 +336,69 @@ export async function matchPayment(deps: PaymentsDeps, userId: string, gymId: st
     if (!(await toMatch.markMatched(tx, gymId, paymentId, { memberPaymentId: recorded.paymentId, entryId: body.entryId, recordKey: body.requestKey }, now))) {
       throw new Error("a payment to match was not marked under the gym's lock");
     }
-    return { ...locked, state: "recorded", memberPaymentId: recorded.paymentId, recordKey: body.requestKey };
+    // The customer is linked in the same step: the payment is on its bill and the customer is the person's, or neither.
+    const linked = await linkInStep(tx, { asked, gymId, userId, paymentId, row: locked, linkTo: body.linkTo, now });
+    return { row: { ...locked, state: "recorded", memberPaymentId: recorded.paymentId, recordKey: body.requestKey }, link: linked.link, told: linked.told };
   });
-  return { answer: await matchedAnswer(deps, gymId, done), entryIds: peopleTold(body.entryId, row.entryId) };
+  return { answer: await matchedAnswer(deps, gymId, done.row, null, done.link, body.linkTo), entryIds: peopleTold(body.entryId, row.entryId, ...done.told) };
+}
+
+/** Square's customer on the payment, asked for: what is to be done about linking it to the person who paid. The person must
+ *  be this gym's, and the bill must be theirs or of somebody they pay for. */
+async function askAboutLink(
+  deps: PaymentsDeps,
+  ready: Ready,
+  gymId: string,
+  row: toMatch.TakenRow,
+  body: MatchPaymentRequest & { linkTo: string },
+  customerId: string,
+): Promise<LinkAsk> {
+  const person = await linking.readLinkPerson(deps.sql, gymId, body.linkTo);
+  if (person === null) throw new OrgsError(404, "entry_not_found", "That person was not found on your list.");
+  const theirs = (await toMatch.peopleOfMany(deps.sql, gymId, [body.linkTo])).get(body.linkTo) ?? [];
+  if (!theirs.some((p) => p.entryId === body.entryId)) throw new OrgsError(409, "payment_to_match_changed", W.changed);
+  const seen = row.customer?.name ?? null;
+  if (person.past) return { kind: "result", result: "past", customerName: seen, personName: person.fullName };
+  const read = await ready.square.api.retrieveCustomer(ready.token, customerId);
+  if (read.kind === "unavailable") throw new OrgsError(503, "square_unavailable", W.square_unavailable);
+  if (read.kind === "refused") return { kind: "result", result: read.status === 404 ? "gone" : "unchecked", customerName: seen, personName: person.fullName };
+  const customerName = customerSeen(read.value)?.name ?? seen;
+  if (read.value.id !== customerId) return { kind: "result", result: "merged", customerName, personName: person.fullName };
+  // A customer carrying a record of this gym's id as its reference is that record's (the app made it, its answer lost).
+  const reference = squareMadeByMerge(read.value) ? null : (read.value.reference_id ?? null);
+  const referenceOf = reference !== null && (await recordIdsAmong(deps.sql, gymId, [reference])).has(reference) ? reference : null;
+  return { kind: "link", customerName, personName: person.fullName, referenceOf };
+}
+
+/** Under the gym's lock, in the step that puts the payment on its bill: the customer linked as asked, the person's other
+ *  waiting payments from it theirs, and what was done kept with the payment. The people whose page reads again. */
+async function linkInStep(
+  tx: TransactionSql,
+  a: { asked: LinkAsk; gymId: string; userId: string; paymentId: string; row: toMatch.TakenRow; linkTo: string | null; now: Date },
+): Promise<{ link: MatchLinkResult | null; told: string[] }> {
+  const { asked } = a;
+  if (asked.kind === "none" || a.linkTo === null || a.row.customerId === null) return { link: null, told: [] };
+  if (asked.kind === "result") {
+    await linking.setLinkResult(tx, a.gymId, a.paymentId, asked.result);
+    return { link: { result: asked.result, customerName: asked.customerName, personName: asked.personName }, told: [] };
+  }
+  const at = { gymId: a.gymId, environment: a.row.environment, accountId: a.row.accountId, customerId: a.row.customerId };
+  const outcome = await linking.linkMatched(tx, { ...at, entryId: a.linkTo, referenceOf: asked.referenceOf, now: a.now });
+  const result: Exclude<MatchLinkResult["result"], "none"> = outcome === "already" ? "linked" : outcome;
+  await linking.setLinkResult(tx, a.gymId, a.paymentId, result);
+  if (outcome === "taken" || outcome === "past") return { link: { result, customerName: asked.customerName, personName: asked.personName }, told: [] };
+  await linking.resolveWaiting(tx, { ...at, entryId: a.linkTo, now: a.now });
+  if (outcome !== "already") {
+    await insertAudit(tx, {
+      actorUserId: a.userId,
+      gymId: a.gymId,
+      action: "org.square_customer_matched",
+      targetType: "member_list_entry",
+      targetId: a.linkTo,
+      meta: { also: outcome === "also" ? "yes" : "no" },
+    });
+  }
+  return { link: { result, customerName: asked.customerName, personName: asked.personName }, told: await linking.peopleHeldWith(tx, a.gymId, a.linkTo) };
 }
 
 /** Why the step Record payment takes would not put it on that bill, as staff read it. */

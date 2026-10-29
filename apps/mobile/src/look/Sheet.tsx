@@ -1,10 +1,25 @@
-import type { ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { KeyboardAvoidingView, Modal, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colours, shadows, sizes } from "./colours";
 import { Icon } from "./Icon";
 import { MIDDLE_INSET } from "./sizing";
 import { Txt } from "./Txt";
+
+/** A step back inside a box: true where it went back a step, false where it had none to go. */
+type Step = () => boolean;
+type Steps = { add: (depth: number, step: Step) => () => void };
+const BackSteps = createContext<Steps | null>(null);
+
+/** The phone's back button goes back one step inside the box, as Android's own apps do (Kd's
+ *  click-through, 32b-ii-b: back from a dish's Edit closed the whole box). `depth` says how deep the
+ *  step sits: the deepest step that can go back does, and the box closes only where none can. */
+export function useSheetBack(depth: number, step: Step): void {
+  const steps = useContext(BackSteps);
+  const latest = useRef(step);
+  latest.current = step;
+  useEffect(() => (steps === null ? undefined : steps.add(depth, () => latest.current())), [steps, depth]);
+}
 
 interface SheetProps {
   open: boolean;
@@ -13,13 +28,33 @@ interface SheetProps {
   children: ReactNode;
   /** "middle": a box in the middle of the screen, for a thing to be shown rather than answered (the pass). */
   place?: "bottom" | "middle";
+  /** The box's own step back, after any deeper one (`useSheetBack`): true where it went back a step. */
+  onBack?: () => boolean;
 }
 
 /** The box from the bottom, or in the middle (`place`): a question, or a short task, over the page it
  *  was opened from. */
-export function Sheet({ open, title, onClose, children, place = "bottom" }: SheetProps) {
+export function Sheet({ open, title, onClose, children, place = "bottom", onBack }: SheetProps) {
   const middle = place === "middle";
   const insets = useSafeAreaInsets();
+  const registered = useRef<{ depth: number; step: Step }[]>([]);
+  const steps = useMemo<Steps>(
+    () => ({
+      add: (depth, step) => {
+        const entry = { depth, step };
+        registered.current.push(entry);
+        return () => {
+          registered.current = registered.current.filter((e) => e !== entry);
+        };
+      },
+    }),
+    [],
+  );
+  const back = useCallback(() => {
+    const deepest = [...registered.current].sort((a, b) => b.depth - a.depth);
+    if (deepest.some((e) => e.step()) || onBack?.() === true) return;
+    onClose();
+  }, [onClose, onBack]);
   return (
     <Modal
       visible={open}
@@ -27,7 +62,8 @@ export function Sheet({ open, title, onClose, children, place = "bottom" }: Shee
       animationType="fade"
       statusBarTranslucent
       navigationBarTranslucent
-      onRequestClose={onClose}
+      onRequestClose={back}
+      testID="sheet"
     >
       <Pressable accessible={false} onPress={onClose} style={styles.scrim} />
       {/* Lifted over the keyboard, so a box being typed in is never under it. */}
@@ -45,7 +81,7 @@ export function Sheet({ open, title, onClose, children, place = "bottom" }: Shee
               <Icon name="x" size={18} />
             </Pressable>
           </View>
-          {children}
+          <BackSteps.Provider value={steps}>{children}</BackSteps.Provider>
         </View>
       </KeyboardAvoidingView>
     </Modal>

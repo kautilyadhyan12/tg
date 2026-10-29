@@ -691,11 +691,18 @@ export const gymSquareAppPayments = pgTable(
     customerPhone: text("customer_phone"),
     /** The name the gym gave the Square device that took it (0165). */
     deviceName: text("device_name"),
+    /** Why it waits because of what was sold, whoever paid (0173; 18d-iii-b-ii-c): kept, so a payment that waited for
+     *  want of its customer being known still says it once the customer is linked. */
+    saleReason: text("sale_reason"),
+    /** What Match did about Square's customer on the payment (0173): the same press answered the same twice. */
+    linkResult: text("link_result"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
   },
   (t) => [
     check("gym_square_app_payments_environment_check", sql`${t.environment} IN ('sandbox','production')`),
+    check("gym_square_app_payments_sale_reason_check", sql`${t.saleReason} IS NULL OR ${t.saleReason} IN ('mixed_sale','sale_unread','paid_in_parts','square_tax')`),
+    check("gym_square_app_payments_link_result_check", sql`${t.linkResult} IS NULL OR ${t.linkResult} IN ('linked','also','taken','gone','merged','unchecked','past')`),
     check(
       "gym_square_app_payments_ids_check",
       sql`${t.accountId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.squarePaymentId} ~ '^[A-Za-z0-9_-]{1,192}$' AND ${t.locationId} ~ '^[A-Za-z0-9_-]{1,64}$' AND (${t.customerId} IS NULL OR ${t.customerId} ~ '^[A-Za-z0-9_-]{1,64}$')`,
@@ -866,8 +873,10 @@ export const gymSquareMemberPlan = pgTable(
   ],
 );
 
-/** The old customer each record of a gym was, at a merge in Square (0167; ROADMAP 18d-iii-b-ii-b-ii-a, round one): a
- *  payment under it is that record's; only an old id no record here was is read as the customer it is now. */
+/** A customer of a record besides the one `gym_square_customers` keeps (0167, 0173): the old customer each record of a gym
+ *  was, at a merge in Square (`merged_at`; ROADMAP 18d-iii-b-ii-b-ii-a, round one), and a customer staff matched to the record
+ *  from a payment (`matched_at`; 18d-iii-b-ii-c), Square having made a second customer for the same person. A payment under
+ *  either is that record's; only an old id no record here was is read as the customer it is now. Exactly one of the two is set. */
 export const gymSquareOldCustomers = pgTable(
   "gym_square_old_customers",
   {
@@ -876,13 +885,15 @@ export const gymSquareOldCustomers = pgTable(
     environment: text("environment").notNull(),
     accountId: text("account_id").notNull(),
     customerId: text("customer_id").notNull(),
-    mergedAt: timestamp("merged_at", { withTimezone: true }).notNull(),
+    mergedAt: timestamp("merged_at", { withTimezone: true }),
+    matchedAt: timestamp("matched_at", { withTimezone: true }),
   },
   (t) => [
     primaryKey({ name: "gym_square_old_customers_pk", columns: [t.gymId, t.environment, t.accountId, t.customerId, t.entryId] }),
     foreignKey({ name: "gym_square_old_customers_entry_fk", columns: [t.gymId, t.entryId], foreignColumns: [gymMemberListEntries.gymId, gymMemberListEntries.id] }).onDelete("cascade"),
     check("gym_square_old_customers_environment_check", sql`${t.environment} IN ('sandbox','production')`),
     check("gym_square_old_customers_ids_check", sql`${t.accountId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.customerId} ~ '^[A-Za-z0-9_-]{1,64}$'`),
+    check("gym_square_old_customers_how_check", sql`(${t.mergedAt} IS NULL) <> (${t.matchedAt} IS NULL)`),
   ],
 );
 

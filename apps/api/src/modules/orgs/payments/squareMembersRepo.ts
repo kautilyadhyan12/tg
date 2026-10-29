@@ -226,7 +226,11 @@ export async function takenAmong(sql: SqlOrTx, gymId: string, environment: Squar
     UNION
     SELECT customer_id FROM gym_member_cards
     WHERE gym_id = ${gymId} AND environment = ${environment} AND account_id = ${accountId} AND customer_id = ANY(${[...customerIds]}::text[])
-      AND merged_away_at IS NULL`;
+      AND merged_away_at IS NULL
+    UNION
+    SELECT customer_id FROM gym_square_old_customers
+    WHERE gym_id = ${gymId} AND environment = ${environment} AND account_id = ${accountId} AND customer_id = ANY(${[...customerIds]}::text[])
+      AND matched_at IS NOT NULL`;
   return new Set(rows.map((x) => x.customer_id));
 }
 
@@ -301,14 +305,18 @@ export async function recordsToPlace(sql: SqlOrTx, gymId: string, environment: S
   return rows.map((r) => ({ entryId: r.id, fullName: r.full_name, email: r.email, phone: r.phone_e164, digest: r.digest }));
 }
 
-/** Square customers already a record's of this gym, in this account: made or chosen, or a card's. */
+/** Square customers already a record's of this gym, in this account: made or chosen, or a card's, or one staff matched to a
+ *  record from a payment (18d-iii-b-ii-c). */
 export async function takenCustomers(sql: SqlOrTx, gymId: string, environment: SquareEnvironment, accountId: string): Promise<Set<string>> {
   const rows = await sql<{ customer_id: string }[]>`
     SELECT customer_id FROM gym_square_customers
     WHERE gym_id = ${gymId} AND environment = ${environment} AND account_id = ${accountId} AND customer_id IS NOT NULL
     UNION
     SELECT customer_id FROM gym_member_cards
-    WHERE gym_id = ${gymId} AND environment = ${environment} AND account_id = ${accountId} AND merged_away_at IS NULL`;
+    WHERE gym_id = ${gymId} AND environment = ${environment} AND account_id = ${accountId} AND merged_away_at IS NULL
+    UNION
+    SELECT customer_id FROM gym_square_old_customers
+    WHERE gym_id = ${gymId} AND environment = ${environment} AND account_id = ${accountId} AND matched_at IS NOT NULL`;
   return new Set(rows.map((r) => r.customer_id));
 }
 
@@ -397,6 +405,10 @@ export async function linkCustomer(
     SELECT entry_id FROM gym_member_cards
     WHERE gym_id = ${r.gymId} AND environment = ${r.environment} AND account_id = ${r.accountId} AND customer_id = ${r.customerId} AND entry_id <> ${r.entryId}
       AND merged_away_at IS NULL
+    UNION ALL
+    SELECT entry_id FROM gym_square_old_customers
+    WHERE gym_id = ${r.gymId} AND environment = ${r.environment} AND account_id = ${r.accountId} AND customer_id = ${r.customerId} AND entry_id <> ${r.entryId}
+      AND matched_at IS NOT NULL
     LIMIT 1`;
   if (other !== undefined) return "taken";
   const rows = await tx<{ entry_id: string }[]>`

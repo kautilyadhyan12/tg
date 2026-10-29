@@ -654,7 +654,7 @@ d("the scanner prices every food it sees (real Postgres)", () => {
   // it is, no packaged products, and the USDA rows above — so a change to how a food
   // is looked up, priced or started shows here as a diff, and a new finding is a new
   // plate, never a new word list (RULINGS 2026-09-15).
-  it("counts our list's shrimp by the piece, and keeps everything else its cited entry's (ROADMAP 34c-i)", async () => {
+  it("counts our list's shrimp by the piece, starts it at one, and keeps everything else its cited entry's (ROADMAP 34c-i, 32b-ii-b)", async () => {
     const found = await inject("GET", "/v1/nutrition/foods?q=shrimp&limit=15", alice);
     expect(found.statusCode, found.body).toBe(200);
     const shrimp = z.object({ items: z.array(z.object({ canonical: z.string(), measures: z.array(z.object({ id: z.string(), name: z.string(), grams: z.number() })), startsAt: z.unknown() })) })
@@ -663,7 +663,7 @@ d("the scanner prices every food it sees (real Postgres)", () => {
     expect([shrimp?.measures.map((m) => `${m.id} ${m.name} ${String(m.grams)}`), shrimp?.startsAt]).toEqual([[
       "usda-1 3 oz 85", "piece-1 tiny shrimp 5", "piece-2 small/medium shrimp 10", "piece-3 large/jumbo shrimp 15", "piece-4 prawn 20", "piece-5 cup 135",
       "g g 1", "oz oz 28.349523125",
-    ], { measure: "g", amount: 100 }]);
+    ], { measure: "piece-1", amount: 1 }]);
 
     // "usda-1" is what a meal saved before the pieces came holds for "3 oz": two of it are 170 g, never two 5 g shrimp.
     const saved = await inject("POST", "/v1/nutrition/meals", alice, {
@@ -826,7 +826,7 @@ d("the scanner prices every food it sees (real Postgres)", () => {
       // photo saw, no longer our list's 100 g (RULINGS 2026-09-16); ten grams of almonds
       // counted 1 are no one 1 g almond (RULINGS 2026-09-17).
       "download-1.json": [
-        ["French bread / sourdough", "curated", "2 × slice", 100, 272], ["Avocado", "curated", "1 × NLEA Serving", 50, 80], ["Egg (fried)", "curated", "1 × egg", 46, 90],
+        ["French bread / sourdough", "curated", "2 × slice", 100, 272], ["Avocado", "curated", "1 × serving", 50, 80], ["Egg (fried)", "curated", "1 × egg", 46, 90],
         ["Bacon (cooked)", "curated", "~30 g", 30, 164], ["Brie", "curated", "~50 g", 50, 167], ["Ham (sliced)", "curated", "1 × slice", 28, 46],
         ["Apple", "curated", "~40 g", 40, 21], ["Almonds", "curated", "~10 g", 10, 58], ["Latte", "curated", "1 × cup (8 fl oz)", 240, 103],
       ],
@@ -854,7 +854,7 @@ d("the scanner prices every food it sees (real Postgres)", () => {
       ],
       "download-6.json": [
         ["bread", "estimate", "~60 g", 60, 160], ["Peanut butter", "curated", "1 × 2 tbsp", 32, 191], ["Jam", "curated", "1 × tbsp", 20, 56],
-        ["Avocado", "curated", "1 × NLEA Serving", 50, 80], ["Eggs (scrambled)", "curated", "~120 g", 120, 179], ["Blueberries", "curated", "~50 g", 50, 29],
+        ["Avocado", "curated", "1 × serving", 50, 80], ["Eggs (scrambled)", "curated", "~120 g", 120, 179], ["Blueberries", "curated", "~50 g", 50, 29],
         ["Raspberries", "curated", "~40 g", 40, 21],
       ],
       // A 250 g mug of iced coffee is one of its 248 g cups, never USDA's 496 g "medium".
@@ -869,8 +869,8 @@ d("the scanner prices every food it sees (real Postgres)", () => {
       // "Deli ham" is USDA's deli ham: "deli" says no way of cooking, cutting or serving a
       // food, so the name is never shortened to our sliced ham (the reviews of PR #80 and #81).
       "download-1-apart.json": [
-        ["toast", "estimate", "~120 g", 120, 320], ["Avocado", "curated", "1 × NLEA Serving", 50, 80], ["Egg (fried)", "curated", "1 × egg", 46, 90],
-        ["Bacon (cooked)", "curated", "~24 g", 24, 132], ["Cheese, Brie", "usda", "6 × cubic inch", 102, 341], ["Ham, prepackaged or deli, luncheon meat", "usda", "~60 g", 60, 61],
+        ["toast", "estimate", "~120 g", 120, 320], ["Avocado", "curated", "1 × serving", 50, 80], ["Egg (fried)", "curated", "1 × egg", 46, 90],
+        ["Bacon (cooked)", "curated", "~24 g", 24, 132], ["Cheese, Brie", "usda", "6 × cube", 102, 341], ["Ham, prepackaged or deli, luncheon meat", "usda", "~60 g", 60, 61],
         ["Apple", "curated", "~60 g", 60, 31], ["Mixed nuts", "curated", "~10 g", 10, 61], ["Arugula", "curated", "1 × half cup", 10, 3],
         ["Cappuccino", "curated", "1 × cup", 240, 65],
       ],
@@ -892,13 +892,13 @@ d("the scanner prices every food it sees (real Postgres)", () => {
       // never at two 35 g cups of bread cubes (the reviews of PR #80 and #81).
       "download-6-apart.json": [
         ["White bread", "curated", "2 × slice", 58, 154], ["Peanut butter", "curated", "1 × 2 tbsp", 32, 191], ["Jam", "curated", "~30 g", 30, 83],
-        ["Sesame seeds", "curated", "~5 g", 5, 29], ["Avocado", "curated", "1 × NLEA Serving", 50, 80], ["Eggs (scrambled)", "curated", "~120 g", 120, 179],
+        ["Sesame seeds", "curated", "~5 g", 5, 29], ["Avocado", "curated", "1 × serving", 50, 80], ["Eggs (scrambled)", "curated", "~120 g", 120, 179],
         ["Blueberries", "curated", "1 × 50 berries", 68, 39], ["Raspberries", "curated", "~50 g", 50, 26],
       ],
       // "Sweet corn" and "steamed broccoli" are our list's cooked corn and broccoli here too.
       "minimalist-meal-planner-inspiration-idea-120-apart.json": [
-        ["Egg (hard-boiled)", "curated", "3 × egg", 150, 233], ["Roast potatoes", "curated", "~120 g", 120, 151], ["Corn (cooked)", "curated", "1 × ear small (5-1/2\" to 6-1/2\" long)", 89, 85],
-        ["Carrots (raw)", "curated", "1 × large (7-1/4\" to 8-/1/2\" long)", 72, 30], ["Broccoli (cooked)", "curated", "1 × half cup, chopped", 78, 27], ["Chicken breast (grilled)", "curated", "1 × piece", 196, 296],
+        ["Egg (hard-boiled)", "curated", "3 × egg", 150, 233], ["Roast potatoes", "curated", "~120 g", 120, 151], ["Corn (cooked)", "curated", "1 × ear small", 89, 85],
+        ["Carrots (raw)", "curated", "1 × large", 72, 30], ["Broccoli (cooked)", "curated", "1 × half cup, chopped", 78, 27], ["Chicken breast (grilled)", "curated", "1 × piece", 196, 296],
       ],
       // The banana the model saw at 100 g starts at our list's own banana, 120 g, within
       // 30 % of it, before USDA's 101 g small one, which is nearer (the reviews of PR #80 and #81).
@@ -911,17 +911,17 @@ d("the scanner prices every food it sees (real Postgres)", () => {
       // list's; a cherry is a food of its own, so "cherry tomato" is never shortened to a
       // tomato, and a toast is no table's.
       "download-2-apart.json": [
-        ["toast", "estimate", "~60 g", 60, 160], ["Avocado", "curated", "1 × NLEA Serving", 50, 80], ["Egg (fried)", "curated", "1 × egg", 46, 90],
+        ["toast", "estimate", "~60 g", 60, 160], ["Avocado", "curated", "1 × serving", 50, 80], ["Egg (fried)", "curated", "1 × egg", 46, 90],
         ["Asparagus (cooked)", "curated", "~45 g", 45, 10], ["cherry tomato", "estimate", "~70 g", 70, 12], ["Shrimp (cooked)", "curated", "4 × large/jumbo shrimp", 60, 59],
         ["Pork sausage (cooked)", "curated", "2 × serving", 96, 312], ["Latte", "curated", "1 × cup (8 fl oz)", 240, 103],
       ],
       "download-5-apart.json": [
-        ["toast", "estimate", "~35 g", 35, 90], ["Avocado", "curated", "1 × NLEA Serving", 50, 80], ["Eggs (scrambled)", "curated", "~100 g", 100, 149],
+        ["toast", "estimate", "~35 g", 35, 90], ["Avocado", "curated", "1 × serving", 50, 80], ["Eggs (scrambled)", "curated", "~100 g", 100, 149],
         ["Strawberries", "curated", "1 × cup, halves", 152, 49],
       ],
       "minimalist-meal-planner-inspiration-idea-120.json": [
         ["Egg (hard-boiled)", "curated", "3 × egg", 150, 233], ["Roast potatoes", "curated", "~120 g", 120, 151], ["Chicken breast (cooked)", "curated", "1 × cup, chopped or diced", 140, 231],
-        ["Corn (cooked)", "curated", "1 × ear medium (6-3/4\" to 7-1/2\" long)", 103, 99], ["Broccoli (cooked)", "curated", "1 × half cup, chopped", 78, 27],
+        ["Corn (cooked)", "curated", "1 × ear medium", 103, 99], ["Broccoli (cooked)", "curated", "1 × half cup, chopped", 78, 27],
       ],
       // Whole pieces whose count agrees with the grams start at that many.
       "review-counts.json": [
@@ -981,12 +981,12 @@ d("the scanner prices every food it sees (real Postgres)", () => {
       // kcal the model saw within its own error — over USDA's food holding every word,
       // unless that is more than 10 kcal per 100 g nearer (the reviews of PR #80 and #81).
       "review-shorter-names.json": [
-        ["Corn (cooked)", "curated", "1 × ear small (5-1/2\" to 6-1/2\" long)", 89, 85],
+        ["Corn (cooked)", "curated", "1 × ear small", 89, 85],
         ["Potato (baked)", "curated", "1 × potato large", 299, 278], // a jacket potato, our baked potato by another name
         ["Rice (white, cooked)", "curated", "~150 g", 150, 195], // basmati rice, a long-grain white rice by name
         ["Egg white", "curated", "2 × white", 66, 34], // boiled egg whites
         ["Rice (white, cooked)", "curated", "~150 g", 150, 195], // steamed rice: USDA's Chinese restaurant rice is 151, ours 130, as seen
-        ["Carrots (raw)", "curated", "10 × strip large (3\" long)", 70, 29], // baby carrots, a size: USDA's toddler food (26) is no nearer the 36 seen
+        ["Carrots (raw)", "curated", "10 × strip large", 70, 29], // baby carrots, a size: USDA's toddler food (26) is no nearer the 36 seen
         ["Tea, hot, leaf, green", "usda", "1 × cup", 240, 2], // "green" is what the tea is: USDA's green tea, never our black
         // A version our list does not hold is the model's estimate: "masala" is no way of
         // cooking a dosa, and steamed dumplings may be pork or vegetable: a photo cannot say which.
@@ -1052,7 +1052,7 @@ d("the scanner prices every food it sees (real Postgres)", () => {
         // Pan fried: our cooked chicken breast. Served by weight, it has no serving of its own to
         // start a count at, so its count of one starts at USDA's nearest measure, a chopped cup.
         ["Chicken breast (cooked)", "curated", "1 × cup, chopped or diced", 140, 231],
-        ["Pork chop (cooked)", "curated", "1 × chop without refuse (Yield from 1…)", 157, 328], // grilled: our cooked pork chop, by its whole name
+        ["Pork chop (cooked)", "curated", "1 × chop without refuse", 157, 328], // grilled: our cooked pork chop, by its whole name
       ],
       // A word several of our foods answer to is the list's pick for that word alone
       // (RULINGS 2026-09-12): a shortened name never lands on one, because the word the

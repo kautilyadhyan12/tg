@@ -37,6 +37,7 @@ const OATS = {
     { id: "usda-1", name: "cup", grams: 81 },
   ],
   startsAt: { measure: "usda-1", amount: 1 },
+  startsKcal: 307,
 };
 const item = (grams: number, kcal: number) => ({
   name: "Oats, rolled",
@@ -217,7 +218,7 @@ const patches = (server: ReturnType<typeof foodServer>) => server.asked.filter((
 async function addOats() {
   await fireEvent.press(await screen.findByRole("button", { name: "Add to Breakfast" }));
   await fireEvent.changeText(screen.getByLabelText("Search food"), "oats");
-  await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 379 kcal per 100 g, USDA" }));
+  await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 307 kcal · 1 cup, USDA" }));
   const add = await screen.findByRole("button", { name: "Add Oats, rolled · 307 kcal" });
   await fireEvent.press(add);
 }
@@ -371,7 +372,7 @@ describe("what the numbers are, and where they come from", () => {
     expect(await screen.findByRole("link", { name: "USDA FoodData Central" })).toBeTruthy();
     await fireEvent.press(screen.getByRole("button", { name: "Add to Breakfast" }));
     await fireEvent.changeText(screen.getByLabelText("Search food"), "oats");
-    expect(await screen.findByRole("button", { name: "Oats, rolled, 379 kcal per 100 g, Verified" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Oats, rolled, 307 kcal · 1 cup, Verified" })).toBeTruthy();
     expect(screen.queryByText(/Our list/)).toBeNull();
   });
 
@@ -464,7 +465,7 @@ describe("round one's findings, on the screen", () => {
     await fireEvent.press(await screen.findByRole("tab", { name: "Food" }));
     await fireEvent.press(await screen.findByRole("button", { name: "Add to Breakfast" }));
     await fireEvent.changeText(screen.getByLabelText("Search food"), "oats");
-    await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 379 kcal per 100 g, USDA" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 307 kcal · 1 cup, USDA" }));
     await fireEvent.press(await screen.findByRole("button", { name: "Add Oats, rolled" }));
     expect(await screen.findByText("1 meal is waiting for its numbers. They come once it is sent.")).toBeTruthy();
     expect(screen.getByLabelText("Calories, not known of 2,300 kcal")).toBeTruthy();
@@ -500,7 +501,7 @@ describe("the re-check's finding", () => {
     const server = await openFood({ meals: [] }, store);
     await fireEvent.press(await screen.findByRole("button", { name: "Add to Breakfast" }));
     await fireEvent.changeText(screen.getByLabelText("Search food"), "oats");
-    await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 379 kcal per 100 g, USDA" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 307 kcal · 1 cup, USDA" }));
     const add = await screen.findByRole("button", { name: "Add Oats, rolled · 307 kcal" });
     await fireEvent.press(add);
     await fireEvent.press(add);
@@ -562,7 +563,8 @@ describe("changing a logged meal (32b-ii-a)", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Change Oats, rolled, 1 × cup · 81 g" }));
     expect(screen.getByText("Logged: 1 × cup · 81 g · 307 kcal")).toBeTruthy();
     await fireEvent.press(await screen.findByRole("button", { name: "More" }));
-    expect(await screen.findByText("122 g · 461 kcal · Meal total 461 kcal")).toBeTruthy();
+    expect(await screen.findByText("461 kcal · Meal total 461 kcal")).toBeTruthy();
+    expect(screen.getByText("= 122 g")).toBeTruthy();
     await fireEvent.press(screen.getByRole("button", { name: "Save" }));
     expect(await screen.findByText("Oats, rolled updated.")).toBeTruthy();
     await waitFor(() => {
