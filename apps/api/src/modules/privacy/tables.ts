@@ -531,6 +531,10 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // 18d-iii-b-ii-b-i), on gym_payment_connections' footing: the gym's record; `ON DELETE set null`.
   // The row says where the gym's check of its Square customer list stands, never anybody's details.
   "gym_square_member_runs",
+  // gym_square_unlinked_customers.unlinked_by — which member of staff pressed Unlink on a person's page (`0174`;
+  // 18d-iii-b-ii-c-ii), on gym_member_cards' footing: the gym's record; `ON DELETE set null`. It holds Square's ids and
+  // what the press did, never anybody's details, and goes with its record.
+  "gym_square_unlinked_customers",
   // gym_member_cards.saved_by — who saved a person's card on file, a member of staff at the desk
   // or the member in the app (`0144`; 18d-ii), on gym_leads' footing: the gym's record; `ON
   // DELETE set null`. The card is a record's, not an account's, and holds no card number:
