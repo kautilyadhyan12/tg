@@ -407,6 +407,9 @@ d("Unlink on their page (real Postgres)", { timeout: T }, () => {
       also: false,
       waiting: 1,
       waitingMinor: 1000,
+      shopItems: 0,
+      shopItemsMinor: 0,
+      notBill: 0,
       currency: "USD",
       matched: 1,
       card: { brand: "VISA", last4: "1111" },
@@ -525,7 +528,19 @@ d("Unlink on their page (real Postgres)", { timeout: T }, () => {
     expect((await rowOf(underOwn.id)).entry_id).toBe(amy.entryId);
 
     expect((await linksOf(gym, amy.entryId)).map((l) => [l.customerId, l.also])).toEqual([[second2, true]]);
-    expect(await unlinkBox(gym, amy.entryId, second2)).toEqual({ customerName: "Amy Lee", also: true, waiting: 1, waitingMinor: 1000, currency: "USD", matched: 1, card: null, added: false });
+    expect(await unlinkBox(gym, amy.entryId, second2)).toEqual({
+      customerName: "Amy Lee",
+      also: true,
+      waiting: 1,
+      waitingMinor: 1000,
+      currency: "USD",
+      shopItems: 0,
+      shopItemsMinor: 0,
+      notBill: 0,
+      matched: 1,
+      card: null,
+      added: false,
+    });
     const res = await unlink(gym, amy.entryId, second2);
     expect(res.statusCode, res.body).toBe(200);
     expect(squareUnlinkResponseSchema.parse(JSON.parse(res.body)).unlinked).toEqual({ customerName: "Amy Lee", moved: 1, card: null, added: false });
@@ -543,10 +558,13 @@ d("Unlink on their page (real Postgres)", { timeout: T }, () => {
     const key = randomUUID();
     const both = await Promise.all([unlink(gym, amy.entryId, cust, { requestKey: key }), unlink(gym, amy.entryId, cust, { requestKey: key })]);
     expect(both.map((r) => r.statusCode)).toEqual([200, 200]);
-    expect(both.map((r) => squareUnlinkResponseSchema.parse(JSON.parse(r.body)).unlinked.moved)).toEqual([1, 1]);
+    // The same press answers the same whole answer, Square's name for the customer included (round one, Low 1).
+    const answers = both.map((r) => squareUnlinkResponseSchema.parse(JSON.parse(r.body)).unlinked);
+    expect(answers[0]).toEqual({ customerName: "Amy Lee", moved: 1, card: null, added: false });
+    expect(answers[1]).toEqual(answers[0]);
     const later = await unlink(gym, amy.entryId, cust, { requestKey: key });
     expect(later.statusCode, later.body).toBe(200);
-    expect(squareUnlinkResponseSchema.parse(JSON.parse(later.body)).unlinked.moved).toBe(1);
+    expect(squareUnlinkResponseSchema.parse(JSON.parse(later.body)).unlinked).toEqual(answers[0]);
     const fresh = await unlink(gym, amy.entryId, cust);
     expect([fresh.statusCode, errorOf(fresh)]).toEqual([409, "square_link_gone"]);
     expect(await remembered(gym)).toHaveLength(1);
@@ -656,6 +674,65 @@ d("Unlink on their page (real Postgres)", { timeout: T }, () => {
     const [rule] = await sql<{ confdeltype: string }[]>`
       SELECT confdeltype FROM pg_constraint WHERE conname = 'gym_square_unlinked_customers_entry_fk'`;
     expect(rule?.confdeltype).toBe("c");
+  });
+
+  it("round one, High 1: Sam's two records joined, Pat's customer linked to the one not kept with his card on it: the record kept offers Unlink, which stops the card and sends Pat's payments back", async () => {
+    clock = new Date();
+    square.state.disables = true;
+    const gym = await makeGym(`Join2 Gym ${uniq()}`);
+    const typeId = await typeOf(gym);
+    const patEmail = `sul-r-jp${uniq()}@example.com`;
+    const samA = await owing(gym, typeId, await person(gym, "Sam Smith", { email: patEmail }));
+    const pat = till(gym, { given: "Pat", family: "Smith" }, { email: patEmail });
+    const first = await rowOf((await takenIn(gym, { amount: 2500, customerId: pat })).id);
+    expect((await match(gym, first.id, samA, { linkTo: samA.entryId })).statusCode).toBe(200);
+    expect((await saveCard(gym, samA.entryId, "7777")).statusCode).toBe(200);
+    const [card] = await cardRow(gym, samA.entryId);
+    expect(card?.customer_id).toBe(pat);
+    // Sam on the list a second time, with a customer of his own in Square; the first record is joined into it.
+    const samB = await person(gym, "Sam Smith", { email: `sul-r-jb${uniq()}@example.com` });
+    const own = till(gym, { given: "Sam", family: "Smith" });
+    await sql`
+      INSERT INTO gym_square_customers (gym_id, entry_id, environment, account_id, customer_id, joined_at)
+      VALUES (${gym.id}, ${samB}, 'production', ${gym.acct.merchantId}, ${own}, now())`;
+    const joined = await send("POST", `${entryUrl(gym, samA.entryId)}/merge`, gym.owner.cookies, { keepEntryId: samB, acknowledgeLeavesList: true });
+    expect(joined.statusCode, joined.body).toBe(200);
+    // The record kept has his own customer, Pat's as a second one he can unlink, and the card saved on Pat's.
+    expect((await mainLinks(gym, samB))[0]?.customer_id).toBe(own);
+    expect((await linksOf(gym, samB)).map((l) => [l.customerId, l.also])).toEqual([[pat, true]]);
+    expect((await cardRow(gym, samB))[0]?.customer_id).toBe(pat);
+    expect(await unlinkBox(gym, samB, pat)).toMatchObject({ customerName: "Pat Smith", also: true, card: { brand: "VISA", last4: "7777" }, added: false });
+    const res = await unlink(gym, samB, pat, { card: { brand: "VISA", last4: "7777" } });
+    expect(res.statusCode, res.body).toBe(200);
+    expect(await cardRow(gym, samB)).toEqual([]);
+    expect(square.stopped).toContain(card?.card_id);
+    expect((await mainLinks(gym, samB))[0]?.customer_id).toBe(own);
+    expect(await alsoLinks(gym, samB)).toEqual([]);
+    const next = await rowOf((await takenIn(gym, { amount: 2500, customerId: pat })).id);
+    expect([next.state, next.entry_id]).toEqual(["waiting", null]);
+  });
+
+  it("round one, Low 2: the box names a sale of shop items and a payment marked Not for a bill, and Unlink does to each what it said", async () => {
+    clock = new Date();
+    const { gym, amy, cust, other } = await amyLinked("Shop");
+    const otherRow = await rowOf(other.id);
+    expect((await send("POST", `${toMatchUrl(gym)}/${otherRow.id}/not-a-bill`, gym.owner.cookies, { why: "other" })).statusCode).toBe(200);
+    // A sale of shop items from her customer, waiting on her page because she owed that much.
+    const shopId = randomUUID();
+    await sql`
+      INSERT INTO gym_square_app_payments (id, environment, account_id, square_payment_id, gym_id, location_id, customer_id, amount_minor, currency, taken_at,
+                                           state, reason, entry_id, created_at, updated_at)
+      VALUES (${shopId}, 'production', ${gym.acct.merchantId}, ${`PSUL${uniq()}`}, ${gym.id}, ${gym.locationId}, ${cust}, 3000, 'USD', ${clock},
+              'waiting', 'shop_items', ${amy.entryId}, ${clock}, ${clock})`;
+    expect(await unlinkBox(gym, amy.entryId, cust)).toMatchObject({ waiting: 0, shopItems: 1, shopItemsMinor: 3000, currency: "USD", notBill: 1 });
+    expect((await unlink(gym, amy.entryId, cust)).statusCode).toBe(200);
+    // The sale is a shop sale, as for a customer linked to nobody; the marked payment stays marked, nobody's.
+    const [shop] = await sql<{ state: string; reason: string | null; entry_id: string | null }[]>`SELECT state, reason, entry_id FROM gym_square_app_payments WHERE id = ${shopId}`;
+    expect(shop).toEqual({ state: "shop_sale", reason: null, entry_id: null });
+    expect(await rowOf(other.id)).toMatchObject({ state: "not_bill", entry_id: null });
+    // Undo puts it back in Payments to match as nobody's, waiting for staff to choose who paid.
+    expect((await send("POST", `${toMatchUrl(gym)}/${otherRow.id}/undo`, gym.owner.cookies)).statusCode).toBe(200);
+    expect(await rowOf(other.id)).toMatchObject({ state: "waiting", reason: "not_linked", entry_id: null });
   });
 
   it("a stranger, another gym, staff who don't record payments, another gym's person and a link Match didn't make are refused, and nothing changes", async () => {

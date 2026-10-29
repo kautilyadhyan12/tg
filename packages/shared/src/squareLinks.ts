@@ -50,6 +50,11 @@ export const squareUnlinkBoxSchema = z
     /** What those waiting payments come to, in `currency` (null where none waits). */
     waitingMinor: z.number().int().min(0),
     currency: currencySchema.nullable(),
+    /** Sales of shop items from this customer waiting here only because the person owed that much: shop sales once unlinked.
+     *  `notBill`: their payments marked Not for a bill, which stay marked. In `currency` where it is the waiting one. */
+    shopItems: z.number().int().min(0),
+    shopItemsMinor: z.number().int().min(0),
+    notBill: z.number().int().min(0),
     matched: z.number().int().min(0),
     card: cardSchema.nullable(),
     added: z.boolean(),

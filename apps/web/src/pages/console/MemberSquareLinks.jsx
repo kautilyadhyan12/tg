@@ -144,6 +144,13 @@ export default function MemberSquareLinks({ gymId, gym, entryId, name, readOnly,
         readBox(opened.customerId, errorText(err, 'This has changed since you opened it. Check the box again, then unlink.'));
         return;
       }
+      // Unlinked already (by somebody else, or Match changed it): the box closes, the list is read again, and it says so there.
+      if (err?.response?.data?.error === 'square_link_gone') {
+        setAsk(null);
+        setDone({ entryId, line: errorText(err, 'This Square customer isn’t linked to them any more.'), moved: 0 });
+        read();
+        return;
+      }
       setAsk({ ...opened, busy: false, problem: errorText(err, "We couldn't unlink this customer. Try again.") });
     }
   };

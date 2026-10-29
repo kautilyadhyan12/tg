@@ -37,7 +37,7 @@ const GYM = '11111111-1111-4111-8111-111111111111';
 const SAM = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const IRON = { name: 'Iron House', slug: 'iron-house', timezone: 'America/Chicago', privileges: ['members.confirm', 'billing.members'] };
 const LINK = { customerId: 'CPAT', customerName: 'Pat Smith', also: false, linkedAt: '2026-10-29T18:30:00.000Z', from: { amountMinor: 2000, currency: 'USD', takenAt: '2026-10-29T18:29:00.000Z' } };
-const BOX = { customerName: 'Pat Smith', also: false, waiting: 1, waitingMinor: 700, currency: 'USD', matched: 1, card: { brand: 'VISA', last4: '1111' }, added: false };
+const BOX = { customerName: 'Pat Smith', also: false, waiting: 1, waitingMinor: 700, currency: 'USD', shopItems: 0, shopItemsMinor: 0, notBill: 0, matched: 1, card: { brand: 'VISA', last4: '1111' }, added: false };
 const ok = (data) => Promise.resolve({ data });
 const refused = (status, error, message) => Promise.reject(Object.assign(new Error(message), { response: { status, data: { error, message } } }));
 
@@ -101,6 +101,20 @@ describe('Linked Square customer', () => {
     expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'This has changed since you opened it. Check the box again, then unlink.');
     expect(await screen.findByText(/Sam Smith’s card \(Visa ending 1111\)/)).toBeTruthy();
     expect(orgService.getUnlinkBox).toHaveBeenCalledTimes(2);
+  });
+
+  it('unlinked already by somebody else: the box closes, the list is read again, and that is said where the box was (round one, Low 4)', async () => {
+    orgService.getSquareLinks.mockReturnValueOnce(ok({ links: [LINK] })).mockReturnValueOnce(ok({ links: [] }));
+    orgService.getUnlinkBox.mockReturnValue(ok(BOX));
+    orgService.unlinkSquareCustomer.mockImplementation(() => refused(409, 'square_link_gone', 'This Square customer isn’t linked to them any more.'));
+    show();
+    fireEvent.click(await screen.findByRole('button', { name: 'Unlink' }));
+    await screen.findByText('Unlink Pat Smith from Sam Smith?');
+    fireEvent.click(screen.getByRole('button', { name: 'Unlink' }));
+    expect(await screen.findByRole('status')).toHaveProperty('textContent', 'This Square customer isn’t linked to them any more.');
+    expect(screen.queryByText('Unlink Pat Smith from Sam Smith?')).toBeNull();
+    await waitFor(() => expect(orgService.getSquareLinks).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole('button', { name: 'Unlink' })).toBeNull();
   });
 
   it('Cancel closes the box and sends nothing; a refusal is said in the box', async () => {

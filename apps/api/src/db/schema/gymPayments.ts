@@ -914,6 +914,7 @@ export const gymSquareUnlinkedCustomers = pgTable(
     unlinkedBy: uuid("unlinked_by").references(() => users.id, { onDelete: "set null" }),
     requestKey: uuid("request_key").notNull(),
     moved: integer("moved").notNull().default(0),
+    added: boolean("added").notNull().default(false),
     cardBrand: text("card_brand"),
     cardLast4: text("card_last4"),
   },

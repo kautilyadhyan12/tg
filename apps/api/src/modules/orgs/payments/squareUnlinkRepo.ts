@@ -65,20 +65,37 @@ const ANYBODY_REASONS = ["refunded", "other_location"] as const;
 export async function unlinkFacts(
   sql: SqlOrTx,
   a: { gymId: string; entryId: string; environment: SquareEnvironment; accountId: string; customerId: string; also: boolean },
-): Promise<{ waiting: number; waitingMinor: number; currency: string | null; matched: number; card: { brand: string; last4: string } | null; added: boolean }> {
+): Promise<{
+  waiting: number;
+  waitingMinor: number;
+  currency: string | null;
+  shopItems: number;
+  shopItemsMinor: number;
+  notBill: number;
+  matched: number;
+  card: { brand: string; last4: string } | null;
+  added: boolean;
+}> {
   const ids = await idsOf(sql, a);
-  const [counts] = await sql<{ waiting: number; waiting_minor: number; currency: string | null; matched: number }[]>`
+  const [counts] = await sql<{ waiting: number; waiting_minor: number; currency: string | null; shop_items: number; shop_items_minor: number; not_bill: number; matched: number }[]>`
     SELECT count(*) FILTER (WHERE state = 'waiting' AND entry_id = ${a.entryId} AND reason <> 'shop_items')::int AS waiting,
            coalesce(sum(amount_minor) FILTER (WHERE state = 'waiting' AND entry_id = ${a.entryId} AND reason <> 'shop_items'), 0)::int AS waiting_minor,
-           min(currency) FILTER (WHERE state = 'waiting' AND entry_id = ${a.entryId} AND reason <> 'shop_items') AS currency,
+           min(currency) FILTER (WHERE state IN ('waiting', 'not_bill') AND entry_id = ${a.entryId}) AS currency,
+           count(*) FILTER (WHERE state IN ('waiting', 'not_bill') AND entry_id = ${a.entryId} AND reason = 'shop_items')::int AS shop_items,
+           coalesce(sum(amount_minor) FILTER (WHERE state IN ('waiting', 'not_bill') AND entry_id = ${a.entryId} AND reason = 'shop_items'), 0)::int AS shop_items_minor,
+           count(*) FILTER (WHERE state = 'not_bill' AND entry_id = ${a.entryId} AND reason <> 'shop_items')::int AS not_bill,
            count(*) FILTER (WHERE state = 'recorded')::int AS matched
     FROM gym_square_app_payments
     WHERE gym_id = ${a.gymId} AND environment = ${a.environment} AND account_id = ${a.accountId} AND customer_id = ANY(${ids}::text[])`;
-  const card = a.also ? undefined : (await cardOn(sql, a, ids))[0];
+  // A second customer can hold the person's card too: a join of two records moves the card of the one not kept (round one, High 1).
+  const card = (await cardOn(sql, a, ids))[0];
   return {
     waiting: counts?.waiting ?? 0,
     waitingMinor: counts?.waiting_minor ?? 0,
     currency: counts?.currency ?? null,
+    shopItems: counts?.shop_items ?? 0,
+    shopItemsMinor: counts?.shop_items_minor ?? 0,
+    notBill: counts?.not_bill ?? 0,
     matched: counts?.matched ?? 0,
     card: card === undefined ? null : { brand: card.brand, last4: card.last4 },
     added: !a.also && (await addsByItself(sql, a)),
@@ -118,13 +135,18 @@ async function addsByItself(sql: SqlOrTx, a: { gymId: string; entryId: string; e
 export async function unlinkedBefore(
   sql: SqlOrTx,
   a: { gymId: string; entryId: string; environment: SquareEnvironment; customerId: string; requestKey: string },
-): Promise<{ moved: number; card: { brand: string; last4: string } | null } | null> {
-  const [row] = await sql<{ moved: number; card_brand: string | null; card_last4: string | null }[]>`
-    SELECT moved, card_brand, card_last4 FROM gym_square_unlinked_customers
+): Promise<{ accountId: string; moved: number; card: { brand: string; last4: string } | null; added: boolean } | null> {
+  const [row] = await sql<{ account_id: string; moved: number; card_brand: string | null; card_last4: string | null; added: boolean }[]>`
+    SELECT account_id, moved, card_brand, card_last4, added FROM gym_square_unlinked_customers
     WHERE gym_id = ${a.gymId} AND entry_id = ${a.entryId} AND environment = ${a.environment} AND customer_id = ${a.customerId}
       AND request_key = ${a.requestKey}`;
   if (row === undefined) return null;
-  return { moved: row.moved, card: row.card_brand === null || row.card_last4 === null ? null : { brand: row.card_brand, last4: row.card_last4 } };
+  return {
+    accountId: row.account_id,
+    moved: row.moved,
+    card: row.card_brand === null || row.card_last4 === null ? null : { brand: row.card_brand, last4: row.card_last4 },
+    added: row.added,
+  };
 }
 
 export type UnlinkStep =
@@ -167,7 +189,7 @@ export async function unlinkInStep(
   if (accountId === undefined) return { kind: "gone" };
   const at = { gymId: a.gymId, entryId: a.entryId, environment: a.environment, accountId };
   const ids = await idsOf(tx, { ...at, customerId: a.customerId });
-  const [card] = main === undefined ? [] : await cardOn(tx, at, ids, true);
+  const [card] = await cardOn(tx, at, ids, true);
   // A card saved since the box was read would be stopped unseen: the box is read again.
   if (card !== undefined && (a.card === null || a.card.brand !== card.brand || a.card.last4 !== card.last4)) return { kind: "changed" };
   // Money on its way through Square from that card: it goes once Square has answered.
@@ -219,16 +241,16 @@ export async function unlinkInStep(
     RETURNING state`;
   const back = moved.filter((r) => r.state === "waiting").length;
 
+  // No customer here any more: Members in Square, where it adds members by itself, looks at them again on its next minute.
+  const added = main !== undefined && (await addsByItself(tx, at));
   await tx`
-    INSERT INTO gym_square_unlinked_customers (gym_id, entry_id, environment, account_id, customer_id, unlinked_at, unlinked_by, request_key, moved, card_brand, card_last4)
-    VALUES (${a.gymId}, ${a.entryId}, ${a.environment}, ${accountId}, ${a.customerId}, ${a.now}, ${a.userId}, ${a.requestKey}, ${back},
+    INSERT INTO gym_square_unlinked_customers (gym_id, entry_id, environment, account_id, customer_id, unlinked_at, unlinked_by, request_key, moved, added, card_brand, card_last4)
+    VALUES (${a.gymId}, ${a.entryId}, ${a.environment}, ${accountId}, ${a.customerId}, ${a.now}, ${a.userId}, ${a.requestKey}, ${back}, ${added},
             ${card?.brand ?? null}, ${card?.last4 ?? null})
     ON CONFLICT (gym_id, environment, account_id, customer_id, entry_id) DO UPDATE SET
       unlinked_at = EXCLUDED.unlinked_at, unlinked_by = EXCLUDED.unlinked_by, request_key = EXCLUDED.request_key,
-      moved = EXCLUDED.moved, card_brand = EXCLUDED.card_brand, card_last4 = EXCLUDED.card_last4`;
+      moved = EXCLUDED.moved, added = EXCLUDED.added, card_brand = EXCLUDED.card_brand, card_last4 = EXCLUDED.card_last4`;
 
-  // No customer here any more: Members in Square, where it adds members by itself, looks at them again on its next minute.
-  const added = main !== undefined && (await addsByItself(tx, at));
   if (added) {
     await tx`DELETE FROM gym_square_member_plan WHERE gym_id = ${a.gymId} AND environment = ${a.environment} AND entry_id = ${a.entryId}`;
     await tx`

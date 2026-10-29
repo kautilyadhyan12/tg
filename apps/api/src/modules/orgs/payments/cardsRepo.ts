@@ -358,9 +358,20 @@ export async function moveCards(tx: TransactionSql, gymId: string, goneId: strin
     ON CONFLICT DO NOTHING`;
   // What staff said when they unlinked a customer from the record not kept (18d-iii-b-ii-c-ii) holds for the one kept.
   await tx`
-    INSERT INTO gym_square_unlinked_customers (gym_id, entry_id, environment, account_id, customer_id, unlinked_at, unlinked_by, request_key, moved, card_brand, card_last4)
-    SELECT gym_id, ${keepId}, environment, account_id, customer_id, unlinked_at, unlinked_by, request_key, moved, card_brand, card_last4
+    INSERT INTO gym_square_unlinked_customers (gym_id, entry_id, environment, account_id, customer_id, unlinked_at, unlinked_by, request_key, moved, added, card_brand, card_last4)
+    SELECT gym_id, ${keepId}, environment, account_id, customer_id, unlinked_at, unlinked_by, request_key, moved, added, card_brand, card_last4
     FROM gym_square_unlinked_customers WHERE gym_id = ${gymId} AND entry_id = ${goneId}
+    ON CONFLICT DO NOTHING`;
+  // A customer Match linked to the record not kept, where the kept record has its own in that account: the kept record's second
+  // customer, still offered for Unlink, so a wrong link moved by the join can be undone, with a card saved on it
+  // (18d-iii-b-ii-c-ii, round one, High 1).
+  await tx`
+    INSERT INTO gym_square_old_customers (gym_id, entry_id, environment, account_id, customer_id, matched_at)
+    SELECT g.gym_id, ${keepId}, g.environment, g.account_id, g.customer_id, g.matched_at FROM gym_square_customers g
+    WHERE g.gym_id = ${gymId} AND g.entry_id = ${goneId} AND g.matched_at IS NOT NULL AND g.customer_id IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM gym_square_customers k
+        WHERE k.gym_id = g.gym_id AND k.entry_id = ${keepId} AND k.environment = g.environment AND k.account_id = g.account_id)
     ON CONFLICT DO NOTHING`;
   await tx`
     UPDATE gym_square_customers g SET entry_id = ${keepId}

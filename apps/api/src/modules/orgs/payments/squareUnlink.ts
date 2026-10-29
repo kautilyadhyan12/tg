@@ -120,10 +120,17 @@ export async function unlinkSquareCustomer(
   const environment = await personHere(deps, gymId, entryId);
   if (environment === null) throw gone();
   const key = { gymId, entryId, environment, customerId, requestKey: body.requestKey };
-  const answered = async (before: { moved: number; card: { brand: string; last4: string } | null }): Promise<{ answer: SquareUnlinkResponse; entryIds: string[] }> => ({
-    answer: squareUnlinkResponseSchema.parse({ unlinked: { customerName: null, moved: before.moved, card: before.card, added: false }, links: await linksOf(deps, gym, gymId, entryId, environment) }),
-    entryIds: [],
-  });
+  // The same press sent again (its first answer lost): what it did, the customer named again by Square (round one, Low 1).
+  const answered = async (before: NonNullable<Awaited<ReturnType<typeof unlinks.unlinkedBefore>>>): Promise<{ answer: SquareUnlinkResponse; entryIds: string[] }> => {
+    const named = await customerNow(deps, gymId, await readyFor(deps, gymId, gym, before.accountId), customerId);
+    return {
+      answer: squareUnlinkResponseSchema.parse({
+        unlinked: { customerName: named?.name ?? null, moved: before.moved, card: before.card, added: before.added },
+        links: await linksOf(deps, gym, gymId, entryId, environment),
+      }),
+      entryIds: [],
+    };
+  };
   const before = await unlinks.unlinkedBefore(deps.sql, key);
   if (before !== null) return await answered(before);
   const link = (await unlinks.matchedLinks(deps.sql, gymId, entryId, environment)).find((l) => l.customerId === customerId);

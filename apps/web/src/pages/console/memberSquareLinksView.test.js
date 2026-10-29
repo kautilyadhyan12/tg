@@ -4,7 +4,19 @@ import { describe, expect, it } from 'vitest';
 import { linkLine, linkedOn, linksTitle, unlinkBoxLines, unlinkedLine } from './memberSquareLinksView';
 
 const LINK = { customerId: 'CPAT', customerName: 'Pat Smith', also: false, linkedAt: '2026-10-29T18:30:00.000Z', from: null };
-const BOX = { customerName: 'Pat Smith', also: false, waiting: 1, waitingMinor: 700, currency: 'USD', matched: 1, card: { brand: 'VISA', last4: '1111' }, added: false };
+const BOX = {
+  customerName: 'Pat Smith',
+  also: false,
+  waiting: 1,
+  waitingMinor: 700,
+  currency: 'USD',
+  shopItems: 0,
+  shopItemsMinor: 0,
+  notBill: 0,
+  matched: 1,
+  card: { brand: 'VISA', last4: '1111' },
+  added: false,
+};
 
 describe('the box on their page', () => {
   it('names who is linked, and what that does, in two short sentences', () => {
@@ -43,13 +55,27 @@ describe("Unlink's box", () => {
       lines: [
         'The 3 payments from this customer waiting here ($60.00 in all) move to Payments to match.',
         'This customer’s future Square payments won’t show here.',
-        'John Smith is added to Square as a customer of their own.',
+        'John Smith will be added to Square as a customer of their own.',
       ],
     });
     expect(unlinkBoxLines({ ...BOX, customerName: 'Amy Lee', waiting: 0, waitingMinor: 0, currency: null, card: null }, 'Amy Lee')).toEqual({
       question: 'Unlink this Square customer from Amy Lee?',
       lines: ['Payments already recorded stay as they are.', 'This customer’s future Square payments won’t show here.'],
     });
+  });
+});
+
+describe("Unlink's box: what else the press does (round one, Low 2)", () => {
+  it('a sale of shop items from them becomes a shop sale, and a payment marked Not for a bill stays marked', () => {
+    expect(unlinkBoxLines({ ...BOX, waiting: 0, waitingMinor: 0, shopItems: 1, shopItemsMinor: 3000, notBill: 1, matched: 0, card: null }, 'Sam Smith').lines).toEqual([
+      'The $30.00 sale of shop items from Pat Smith becomes a shop sale and leaves this page.',
+      'The payment from Pat Smith marked Not for a bill stays marked.',
+      'Pat Smith’s future Square payments won’t show here.',
+    ]);
+    expect(unlinkBoxLines({ ...BOX, waiting: 0, waitingMinor: 0, shopItems: 2, shopItemsMinor: 5000, notBill: 3, matched: 0, card: null }, 'Sam Smith').lines.slice(0, 2)).toEqual([
+      'The 2 sales of shop items from Pat Smith ($50.00 in all) become shop sales and leave this page.',
+      'The 3 payments from Pat Smith marked Not for a bill stay marked.',
+    ]);
   });
 });
 

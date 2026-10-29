@@ -8,7 +8,8 @@
 -- `gym_square_unlinked_customers`: staff unlinked this Square customer from this record, so nothing links it to them again by
 -- itself (Members in Square's check and its own look, Match's tick on by itself, a card save under way). Only staff ticking
 -- Match's link again for that person takes it away. Square's ids, never a person's details. `request_key` and what the press did
--- (`moved`, the card stopped) answer the same press sent twice the same. It goes with its record.
+-- (`moved`, the card stopped, `added`: Members in Square adds them) answer the same press sent twice the same. It goes with its
+-- record.
 ALTER TABLE "gym_square_customers" ADD COLUMN "matched_at" timestamp with time zone;
 --> statement-breakpoint
 CREATE TABLE "gym_square_unlinked_customers" (
@@ -21,6 +22,7 @@ CREATE TABLE "gym_square_unlinked_customers" (
 	"unlinked_by" uuid,
 	"request_key" uuid NOT NULL,
 	"moved" integer DEFAULT 0 NOT NULL,
+	"added" boolean DEFAULT false NOT NULL,
 	"card_brand" text,
 	"card_last4" text,
 	CONSTRAINT "gym_square_unlinked_customers_pk" PRIMARY KEY("gym_id","environment","account_id","customer_id","entry_id"),
