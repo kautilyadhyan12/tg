@@ -187,13 +187,16 @@ describe("what a fee costs is said before Book, and Book asks first where any ca
   const soonWaiting = "This class starts soon. If you get a place and then cancel, a one-time late cancel fee of ₹500.00 will be added to your bill.";
   // Four minutes before the free cancel ends by the phone's clock: inside the margin.
   const nearly = Date.parse("2026-11-02T10:56:00.000Z");
+  const endsSoon = "Free cancelling ends at Mon 2 Nov, 4:30 PM. If you cancel after that, a one-time late cancel fee of ₹500.00 will be added to your bill.";
   const noShow = "If you don’t come, a one-time no-show fee of ₹800.00 will be added to your bill.";
 
   it.each([
     ["bookable, before the free cancel ends", klass({ can: { book: true }, fees: INR }), before, [free, noShow]],
     ["bookable, inside it", klass({ can: { book: true }, fees: INR }), inside, [soon, noShow]],
     ["the waitlist, inside it", klass({ booked: 12, can: { joinWaitlist: true }, fees: INR }), inside, [soon, noShow]],
-    ["bookable, inside the clock margin", klass({ can: { book: true }, fees: INR }), nearly, [soon, noShow]],
+    // Inside the margin free cancelling has not ended: nothing says it has.
+    ["bookable, inside the clock margin", klass({ can: { book: true }, fees: INR }), nearly, [endsSoon, noShow]],
+    ["waiting, inside the clock margin", klass({ booked: 12, mine: waiting(2), can: { cancel: "free" }, fees: INR }), nearly, [endsSoon, noShow]],
     ["waiting, before the free cancel ends", klass({ booked: 12, mine: waiting(2), can: { cancel: "free" }, fees: INR }), before, [free, noShow]],
     // Leaving a waitlist is always free by the server's word: the time decides, never `can.cancel`.
     ["waiting, inside it", klass({ booked: 12, mine: waiting(2), can: { cancel: "free" }, fees: INR }), inside, [soonWaiting, noShow]],
@@ -226,7 +229,7 @@ describe("what a fee costs is said before Book, and Book asks first where any ca
       no: "Not now",
     });
     expect(bookAsk(c, book, "12h", before)).toBeNull();
-    expect(bookAsk(c, book, "12h", nearly)?.yes).toBe("Book");
+    expect(bookAsk(c, book, "12h", nearly)?.lines).toEqual(["Spin, Mon 2 Nov at 6:30 PM", endsSoon]);
     expect(bookAsk(klass({ can: { book: true } }), book, "12h", inside)).toBeNull();
     expect(bookAsk(klass({ can: { book: true }, fees: { ...INR, lateCancelMinor: 0 } }), book, "12h", inside)).toBeNull();
     expect(bookAsk(c, { kind: "waitlist", label: "Join waitlist", joinWaitlist: true }, "12h", inside)?.yes).toBe("Join waitlist");

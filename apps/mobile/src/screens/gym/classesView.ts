@@ -264,6 +264,7 @@ export function feeLines(c: ClassBookingView, clock: GymClockFormat, now: number
     const stillFree = booked ? c.can.cancel === "free" : !insideFreeCancel(c, now);
     if (stillFree && until !== "") lines.push(`Free to cancel until ${until}. After that, a one-time late cancel fee of ${money}.`);
     else if (booked) lines.push(`If you cancel now, a one-time late cancel fee of ${money} will be added to your bill.`);
+    else if (!freeCancelPassed(c, now) && until !== "") lines.push(endsSoon(until, money));
     else if (c.mine?.status === "waitlisted") lines.push(`This class starts soon. If you get a place and then cancel, a one-time late cancel fee of ${money} will be added to your bill.`);
     else lines.push(`This class starts soon. If you book and then cancel, a one-time late cancel fee of ${money} will be added to your bill.`);
   }
@@ -283,17 +284,31 @@ export function insideFreeCancel(c: ClassBookingView, now: number): boolean {
   return Number.isNaN(until) || until - now <= CLOCK_MARGIN_MS;
 }
 
+/** The free-cancel time has passed by this phone's clock; inside the margin before it, it has not. */
+function freeCancelPassed(c: ClassBookingView, now: number): boolean {
+  const until = Date.parse(c.freeCancelUntil);
+  return Number.isNaN(until) || until <= now;
+}
+
+/** Inside the margin: free cancelling has not ended yet, and ends in minutes. */
+const endsSoon = (until: string, money: string) =>
+  `Free cancelling ends at ${until}. If you cancel after that, a one-time late cancel fee of ${money} will be added to your bill.`;
+
 /** The box before a booking that could not be cancelled without a late cancel fee: the class starts
  *  inside its free-cancel time. Null where Book needs no question. */
 export function bookAsk(c: ClassBookingView, take: Take, clock: GymClockFormat, now: number): CancelAsk | null {
   const fee = lateFee(c);
   if (fee === 0 || c.fees === null || !insideFreeCancel(c, now)) return null;
   const what = `${c.className}, ${shortDay(c.localDate)} at ${reminderClock(c.localStartMinute, clock) ?? ""}`;
+  const money = formatMinor(fee, c.fees.currency);
+  const until = instantText(c.freeCancelUntil, c.timezone, clock);
   return {
     title: `${take.label}?`,
     lines: [
       what,
-      `This class starts soon, so it can’t be cancelled for free. If you book and then cancel, a one-time late cancel fee of ${formatMinor(fee, c.fees.currency)} will be added to your bill.`,
+      !freeCancelPassed(c, now) && until !== ""
+        ? endsSoon(until, money)
+        : `This class starts soon, so it can’t be cancelled for free. If you book and then cancel, a one-time late cancel fee of ${money} will be added to your bill.`,
     ],
     yes: take.label,
     no: "Not now",

@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
+import { lateCancelFeeWords } from "@app/shared";
 import { App } from "../../src/App";
 import type { Ask } from "../../src/session/calls";
 import { fakeServer, kept, lost, memoryStore, refusal, tokens, type Reply } from "../kit";
@@ -124,7 +125,7 @@ describe("the worst thing: nothing is booked twice, no fee is taken that was not
       [classesOf(IRON)]: gym.read,
       [`${bookingOf(IRON, S1)}/cancel`]: () => {
         tries += 1;
-        if (tries === 1) return refusal(409, "late_cancel", "Cancelling this close to the start counts as a late cancel, and a one-time late cancel fee of ₹700.00 will be added to your bill.", { packCharged: false, feeMinor: 70_000, currency: "INR" });
+        if (tries === 1) return refusal(409, "late_cancel", lateCancelFeeWords(70_000, "INR"), { packCharged: false, feeMinor: 70_000, currency: "INR" });
         return gym.keep({ ...late, mine: { status: "late_cancelled", waitlistPlace: null, packCharged: false }, can: can() });
       },
     });
@@ -203,6 +204,34 @@ describe("the worst thing: nothing is booked twice, no fee is taken that was not
     expect(keys[1]).not.toBe(keys[0]);
   });
 
+  it("a Book with no answer that did book, then cancelled elsewhere, is not answered to the next press: a read ends its key", async () => {
+    let tries = 0;
+    const gym = held([klass(S1, "Spin")]);
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [classesOf(IRON)]: gym.read,
+      [bookingOf(IRON, S1)]: () => {
+        tries += 1;
+        if (tries > 1) return gym.keep(klass(S1, "Spin", { booked: 9, mine: { status: "booked", waitlistPlace: null, packCharged: false }, can: can({ cancel: "free" }) }));
+        // It booked, the answer was lost, and the booking was cancelled in the browser since.
+        gym.keep(klass(S1, "Spin", { mine: { status: "cancelled", waitlistPlace: null, packCharged: false }, can: can({ book: true }) }));
+        return lost();
+      },
+    });
+    await openClasses(server.ask, IRON);
+    await fireEvent.press(await screen.findByLabelText("Book: Spin, 6:30 PM · 45 min"));
+    expect(await classBox(S1).findByText("Can’t connect. Check your internet and try again.")).toBeTruthy();
+    // The page reads the week again (a week away and back), and the read shows the cancelled booking.
+    await fireEvent.press(screen.getByLabelText("Later"));
+    await fireEvent.press(await screen.findByLabelText("Earlier"));
+    await fireEvent.press(await screen.findByLabelText("Book: Spin, 6:30 PM · 45 min"));
+    expect(await classBox(S1).findByText("You’re booked")).toBeTruthy();
+    const keys = server.asked.filter((one) => one.path === bookingOf(IRON, S1)).map((one) => (one.body as { requestKey: string }).requestKey);
+    expect(keys).toHaveLength(2);
+    expect(keys[1]).not.toBe(keys[0]);
+  });
+
   it("a free cancel answered after the free time ran out is asked again as a late cancel, with the server's fee", async () => {
     const booked = klass(S1, "Spin", { mine: { status: "booked", waitlistPlace: null, packCharged: false }, can: can({ cancel: "free" }) });
     const server = fakeServer({
@@ -210,7 +239,7 @@ describe("the worst thing: nothing is booked twice, no fee is taken that was not
       "/v1/orgs/mine": mine(IRON),
       [classesOf(IRON)]: ok(week([booked])),
       [`${bookingOf(IRON, S1)}/cancel`]: () =>
-        refusal(409, "late_cancel", "Cancelling this close to the start counts as a late cancel, and a one-time late cancel fee of ₹200.00 will be added to your bill.", {
+        refusal(409, "late_cancel", lateCancelFeeWords(20_000, "INR"), {
           packCharged: false,
           feeMinor: 20_000,
           currency: "INR",
