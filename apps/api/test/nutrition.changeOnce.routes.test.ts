@@ -34,7 +34,15 @@ const food = (start: string) => {
 const ROTI = food("Roti / Chapati (homemade");
 const PANEER = food("Paneer");
 const CHANA = food("Chana masala");
-const noPackaged: FoodSearchProvider = { search: () => Promise.resolve([]) };
+/** Every search sent to Open Food Facts, which offers one product for any words: Previously logged
+ *  must never search for a food it cannot find by its own name (round one, L1). */
+const searches: string[] = [];
+const packaged: FoodSearchProvider = {
+  search: (query) => {
+    searches.push(query);
+    return Promise.resolve([{ canonical: "off_5000000000001", name: "Some protein bar", kcal: 380, proteinG: 30, carbsG: 40, fatG: 12, fiberG: null, serving: 60, unit: "g", source: "openfoodfacts" }]);
+  },
+};
 
 d("a meal's change sent twice, and recent foods (real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 4 });
@@ -77,7 +85,7 @@ d("a meal's change sent twice, and recent foods (real Postgres)", () => {
 
   beforeAll(async () => {
     await clean();
-    app = await buildApp(loadConfig(env), { redis: createMemoryRedis(), nutrition: { foodSearchProvider: noPackaged } });
+    app = await buildApp(loadConfig(env), { redis: createMemoryRedis(), nutrition: { foodSearchProvider: packaged } });
     alice = await session("chg32b-alice@example.com");
     bob = await session("chg32b-bob@example.com");
   }, 60_000);
@@ -185,7 +193,7 @@ d("a meal's change sent twice, and recent foods (real Postgres)", () => {
     expect((await inject("GET", "/v1/nutrition/foods/recent", "")).statusCode).toBe(401);
   }, 60_000);
 
-  it("leaves out a food no table has any more: added again, nothing would price it", async () => {
+  it("leaves out a food no table has any more, and searches for it nowhere", async () => {
     const [bobRow] = await sql<{ id: string }[]>`SELECT id FROM users WHERE email = 'chg32b-bob@example.com'`;
     const gone = [{
       name: "A food nobody has now", canonical: "chg32b_no_such_food", gramsPoint: 100, gramsRange: [100, 100], portionSource: "default",
@@ -195,6 +203,8 @@ d("a meal's change sent twice, and recent foods (real Postgres)", () => {
       INSERT INTO meal_logs (user_id, taken_at, meal_name, items, kcal_point, kcal_low, kcal_high, protein_g, carbs_g, fat_g,
                              origin, portion_source, nutrition_sources, calc_version)
       VALUES (${bobRow?.id ?? ""}, now(), 'Gone', ${sql.json(gone)}, 100, 100, 100, 1, 1, 1, 'manual', 'default', ${["curated"]}, 1)`;
+    searches.length = 0;
     expect((await recent(bob)).map((f) => f.canonical)).toEqual([CHANA.canonical]);
+    expect(searches).toEqual([]);
   }, 60_000);
 });

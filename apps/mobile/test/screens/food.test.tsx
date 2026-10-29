@@ -152,7 +152,8 @@ function foodServer(food: Food, more: Record<string, Route> = {}) {
     server.asked.push({ method, path, body, headers: init.headers ?? {} });
     if (method === "PATCH" && id !== undefined && body !== undefined) {
       if (food.patch === "lost") return lost() as never;
-      if (food.patch === "changed") return answer({ status: 409, body: { error: "meal_changed", message: "This meal has changed since it was opened. Open it again.", requestId: "r" } });
+      // As the server: only a change to the foods carries the version it was made from, so only it is refused.
+      if (food.patch === "changed" && (body as { items?: unknown }).items !== undefined) return answer({ status: 409, body: { error: "meal_changed", message: "This meal has changed since it was opened. Open it again.", requestId: "r" } });
       const at = food.meals.findIndex((m) => m.id === id);
       const meal = food.meals[at];
       if (meal === undefined) return answer({ status: 404, body: { error: "not_found", message: "Not found", requestId: "r" } });
@@ -419,6 +420,29 @@ describe("round one's findings, on the screen", () => {
     expect(screen.getByLabelText("Calories, 307 of 2,300 kcal")).toBeTruthy();
   });
 
+  it("a meal saved and then changed, before a read of the day holds either, is one row counted once", async () => {
+    const food: Food = { meals: [] };
+    await openFood(food);
+    await screen.findByText("No breakfast logged yet.");
+    food.listFails = true;
+    await addOats();
+    await waitFor(() => {
+      expect(food.meals).toHaveLength(1);
+    });
+    await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 307 kcal" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Edit" }));
+    await fireEvent.changeText(screen.getByLabelText("Name"), "Big oats");
+    await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => {
+      expect(food.meals[0]?.mealName).toBe("Big oats");
+    });
+    await waitFor(() => {
+      expect(screen.queryByText("Waiting to send")).toBeNull();
+    });
+    expect(screen.getAllByRole("button", { name: /, 307 kcal/ }).map((b) => String(b.props.accessibilityLabel))).toEqual(["Big oats, 307 kcal"]);
+    expect(screen.getByLabelText("Calories, 307 of 2,300 kcal")).toBeTruthy();
+  });
+
   it("a meal just removed stays off the day though the next read of the day fails", async () => {
     const meal = savedMeal("55555555-5555-4555-8555-555555555555", { mealName: "Oats, rolled", takenAt: new Date().toISOString(), mealType: "lunch" });
     const food: Food = { meals: [meal] };
@@ -492,11 +516,11 @@ describe("the re-check's finding", () => {
 
 describe("changing a logged meal (32b-ii-a)", () => {
   const LUNCH = "66666666-6666-4666-8666-666666666666";
-  const noonToday = () => {
+  const halfPastMidnight = () => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 30).toISOString();
   };
-  const lunch = () => savedMeal(LUNCH, { mealName: "Oats, rolled", takenAt: noonToday(), mealType: "lunch" });
+  const lunch = () => savedMeal(LUNCH, { mealName: "Oats, rolled", takenAt: halfPastMidnight(), mealType: "lunch" });
 
   it("the worst thing: a meal renamed and moved with no signal waits, survives a restart, and is changed once", async () => {
     const phone = files();
@@ -586,8 +610,8 @@ describe("changing a logged meal (32b-ii-a)", () => {
     const food: Food = { meals: [lunch()], patch: "changed" };
     await openFood(food);
     await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 307 kcal" }));
-    await fireEvent.press(screen.getByRole("button", { name: "Edit" }));
-    await fireEvent.press(screen.getByRole("button", { name: "Earlier" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Change Oats, rolled, 1 × cup · 81 g" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "More" }));
     await fireEvent.press(screen.getByRole("button", { name: "Save" }));
     expect(
       await screen.findByText("Your change to Oats, rolled wasn’t saved. The meal was changed on another device. Open it and make the change again."),
@@ -610,7 +634,7 @@ describe("changing a logged meal (32b-ii-a)", () => {
     await waitFor(() => {
       expect(patches(server)).toHaveLength(1);
     });
-    expect(patches(server)[0]?.body).toEqual({ takenAt: new Date(Date.parse(noonToday()) + 30 * 60_000).toISOString(), changeId: expect.stringMatching(/^[0-9a-f-]{36}$/) as unknown });
+    expect(patches(server)[0]?.body).toEqual({ takenAt: new Date(Date.parse(halfPastMidnight()) + 30 * 60_000).toISOString(), changeId: expect.stringMatching(/^[0-9a-f-]{36}$/) as unknown });
   });
 });
 

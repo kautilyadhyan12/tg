@@ -326,7 +326,9 @@ const PACKAGED_RESERVE = 3;
 export async function recentFoodsOf(deps: NutritionDeps, userId: string): Promise<RecentFood[]> {
   const found: { pick: RecentPick; food: FoodReference }[] = [];
   for (const pick of recentFoods(await repo.newestMealItems(deps.sql, userId, RECENT_MEALS_READ))) {
-    const food = await foodOfItem(deps, pick.item, pick.canonical);
+    // Found by its own name in our tables or the cache only: never searched for outside, where a
+    // product of a similar name would be listed as the person's food.
+    const food = await foodOfItem(deps, pick.item, pick.canonical, false);
     if (food !== null) found.push({ pick, food });
   }
   const measures = await measuresOf(deps, found.map((f) => f.food));
@@ -1399,9 +1401,9 @@ const savedFood = (item: MealItem, figures: Per100g | null): FoodReference => ({
 /** The food a saved item is weighed by, and priced by unless the person's own
  *  numbers price it: the scan's figures it carries (no table has that food), else
  *  its table's entry, as when it was saved; null where no table has it now. */
-async function foodOfItem(deps: NutritionDeps, item: MealItem | undefined, canonical: string): Promise<FoodReference | null> {
+async function foodOfItem(deps: NutritionDeps, item: MealItem | undefined, canonical: string, search = true): Promise<FoodReference | null> {
   const scanned = item === undefined ? null : scanFiguresOf(item);
-  return item !== undefined && scanned !== null ? savedFood(item, scanned) : await findFood(deps, canonical);
+  return item !== undefined && scanned !== null ? savedFood(item, scanned) : await findFood(deps, canonical, search);
 }
 
 /** The person's own numbers an edited food is priced by, per 100 g, or null for its

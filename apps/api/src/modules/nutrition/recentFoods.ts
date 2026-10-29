@@ -1,6 +1,6 @@
-// ROADMAP Stage 5 32b-ii-a (Kd, 2026-10-28) — the person's recent foods, as MyFitnessPal,
-// Cronometer and MacroFactor open Add food on: their last different foods, each at the amount
-// they last had, so one tap adds it again. Pure, so the pick is one table test.
+// ROADMAP Stage 5 32b-ii-a (Kd, 2026-10-28 and 2026-10-29) — the foods a person logged before, as
+// MyFitnessPal, Cronometer and MacroFactor open Add food on: their last different foods, each opening
+// at the amount they last had. Pure, so the pick is one table test.
 import { RECENT_FOODS_MOST, measureIdSchema, type MealItem, type RecentFood } from "@app/shared";
 
 /** A recent food before its measures are read (the service adds them). */

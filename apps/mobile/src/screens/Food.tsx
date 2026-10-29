@@ -187,7 +187,8 @@ export function FoodScreen() {
             const newer = landed.get(r.id);
             return newer === undefined ? r : serverRow(newer);
           }),
-          ...view.landed.filter((m) => !read.rows.some((r) => r.id === m.id)).map(serverRow),
+          // The newest answer for each meal: a meal saved and then changed has landed twice.
+          ...[...landed.values()].filter((m) => !read.rows.some((r) => r.id === m.id)).map(serverRow),
           ...view.waiting.filter((m) => !read.rows.some((r) => r.id === m.id) && !landed.has(m.id)).map(waitingRow),
         ]
           .map((r) => withChanges(r, view.changing.get(r.id)))
