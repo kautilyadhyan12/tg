@@ -428,7 +428,19 @@ function Review({
   // What each food weighs now, by row, as the server last priced it.
   const rowGrams = rows.map((_, i) => numbers?.items[i]?.gramsPoint ?? null);
   // Before one food that is a part of one dish changes, the others are put back at their grams.
-  const loosened = (): PhotoSheet => withSharesAsGrams(sheet, rowGrams) ?? sheet;
+  // While a part's weight is still being worked out (or the phone has no signal), the change waits and
+  // says so: falling back to the shares would refill the dish with the others (re-check, N1).
+  const loosened = (): PhotoSheet | null => {
+    const next = withSharesAsGrams(sheet, rowGrams);
+    if (next === null) setSaid("Wait a moment: the foods’ weights are still being worked out.");
+    return next;
+  };
+  const change = (make: (base: PhotoSheet) => PhotoSheet): boolean => {
+    const base = loosened();
+    if (base === null) return false;
+    keep(make(base));
+    return true;
+  };
   // The row the search changes, and what it weighs now: the food picked in its place starts there.
   const changing = finding?.change == null ? null : (rows.find((r) => r.key === finding.change) ?? null);
   const changingGrams = changing === null ? null : (numbers?.items[rows.indexOf(changing)]?.gramsPoint ?? null);
@@ -558,11 +570,12 @@ function Review({
         <Sheet open title={row.name} onClose={() => { setOpenRow(null); }}>
           <RowAmount
             row={row}
+            waiting={rows.some((r, i) => r.amount.share !== undefined && rowGrams[i] === null)}
             grams={numbers?.items[rowAt]?.gramsPoint ?? null}
             kcal={numbers?.items[rowAt]?.kcalPoint ?? null}
-            onAmount={(amount) => { keep(withRowAmount(loosened(), row.key, amount)); }}
+            onAmount={(amount) => { change((base) => withRowAmount(base, row.key, amount)); }}
             onOwn={(own) => {
-              keep(withRowFood(loosened(), row.key, { own }));
+              if (!change((base) => withRowFood(base, row.key, { own }))) return;
               setOpenRow(null);
               setSaid(`${own.name} updated.`);
             }}
@@ -574,14 +587,14 @@ function Review({
               row.wasSeen === null
                 ? null
                 : () => {
-                    keep(withRowFood(loosened(), row.key, null));
+                    if (!change((base) => withRowFood(base, row.key, null))) return;
                     setOpenRow(null);
                     setSaid(`Back to ${row.wasSeen ?? ""}.`);
                   }
             }
             onDone={() => { setOpenRow(null); }}
             onRemove={() => {
-              keep(withRowAmount(loosened(), row.key, null));
+              if (!change((base) => withRowAmount(base, row.key, null))) return;
               setOpenRow(null);
               setSaid(`${row.name} taken off.`);
             }}
@@ -600,7 +613,7 @@ function Review({
             keep(withExtra(sheet, pick));
             setSaid(`${name} added.`);
           } else {
-            keep(withRowFood(loosened(), changing.key, pick));
+            if (!change((base) => withRowFood(base, changing.key, pick))) return;
             setSaid(`${changing.name} changed to ${name}.`);
           }
           setFinding(null);
@@ -671,8 +684,11 @@ function RowAmount({
   onUndo,
   onDone,
   onRemove,
+  waiting,
 }: {
   row: SheetRow;
+  /** A part of one dish whose weight is still being worked out: a change waits for it. */
+  waiting: boolean;
   grams: number | null;
   kcal: number | null;
   onAmount: (amount: { measure: string; amount: string }) => void;
@@ -690,6 +706,11 @@ function RowAmount({
       <SourceLine source={row.source} />
       <View style={styles.grow} />
       <Button label="Not this? Change food" kind="link" onPress={onChange} />
+      {waiting ? (
+        <Txt kind="small" colour="gold" style={styles.full}>
+          Wait a moment: the foods’ weights are still being worked out.
+        </Txt>
+      ) : null}
     </View>
   );
   const undo = onUndo === null ? null : <Button label={`Back to ${row.wasSeen ?? ""}`} kind="quiet" wide onPress={onUndo} />;
@@ -904,6 +925,7 @@ const styles = StyleSheet.create({
   reviewFoot: { gap: 10, paddingTop: 12, paddingHorizontal: sizes.edge, borderTopWidth: 1, borderTopColor: colours.line, backgroundColor: colours.box },
   footRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   sheetFoot: { gap: 10 },
+  full: { width: "100%" },
   notThis: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
   findList: { maxHeight: 360 },
   found: { minHeight: 56, justifyContent: "center", gap: 2, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colours.line },

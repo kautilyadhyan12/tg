@@ -156,6 +156,8 @@ interface Phone {
   save?: Route;
   /** The server no longer holds the scan: its previews are refused. */
   scanGone?: boolean;
+  /** The previews stop answering (no signal), from the moment this is set. */
+  previewsLost?: boolean;
 }
 
 function savedMeal(body: { id: string; takenAt: string; mealType?: string; items: Sent[] }): Meal {
@@ -185,6 +187,7 @@ function photoServer(phone: Phone) {
     "/v1/nutrition/dishware": ok({ items: [], nextCursor: null }),
     "/v1/nutrition/analyze-photo": (body) => (phone.scans.shift() ?? ok(SCAN))(body),
     "/v1/nutrition/meals/preview": (body) => {
+      if (phone.previewsLost === true) return lost();
       if (phone.scanGone === true && (body as { scanToken?: string }).scanToken !== undefined) return refusal(400, "invalid_scan", "Invalid or expired scan token.");
       const items = (body as { items: Sent[] }).items.map(priced);
       return { status: 200, body: { items, totals: sum(items) } };
@@ -542,6 +545,22 @@ describe("a food the photo got wrong, and one no list has (Kd, 2026-10-30)", () 
     expect(screen.getByRole("button", { name: "Change Toast, Pick how full the dish was" })).toBeTruthy();
     expect(screen.getByText("Toast needs an amount first.")).toBeTruthy();
     expect(screen.getByRole("button", { name: /^Save to / }).props.accessibilityState).toMatchObject({ disabled: true });
+  });
+
+  it("one part of a shared dish changed before the weights come back waits, and never refills the dish (re-check, N1)", async () => {
+    const phone: Phone = { meals: [], scans: [] };
+    await openFood(phone);
+    await takePhoto();
+    expect(await screen.findByText(/^340\skcal · /)).toBeTruthy();
+    // The signal drops as the dish is applied: its parts' weights never come back.
+    phone.previewsLost = true;
+    await fireEvent.press(screen.getByRole("button", { name: "Bowl, full" }));
+    await fireEvent.press(await screen.findByRole("button", { name: /^Change Eggs \(scrambled\), / }));
+    await fireEvent.press(screen.getByRole("button", { name: "Take off the meal" }));
+    expect(await screen.findAllByText("Wait a moment: the foods’ weights are still being worked out.")).toBeTruthy();
+    // Nothing changed: both parts are still on the meal, as they were.
+    expect(screen.getByRole("button", { name: /^Change Toast, / })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Change Eggs \(scrambled\), / })).toBeTruthy();
   });
 
   it("a scan the server no longer holds says so, and is not saved", async () => {
