@@ -48,11 +48,13 @@ import {
   withExtra,
   withRowAmount,
   withRowFood,
+  withWholeDish,
   type PhotoSheet,
   type SheetRow,
 } from "./photo";
 import type { KeptSheet } from "./PhotoSheetStore";
 import { OwnFood } from "./OwnFood";
+import { WholeDish } from "./WholeDish";
 import { Credits, SourceLine } from "./SourceLine";
 
 // Log a meal from a photo (ROADMAP Stage 5 33b-i). The live camera opens at once, as food apps open
@@ -63,12 +65,13 @@ import { Credits, SourceLine } from "./SourceLine";
 /** A scan takes the server up to about fifty seconds: the photo, then the check of unclear foods. */
 const SCAN_WAIT_MS = 75_000;
 const NO_CONNECTION = "No connection. Try again.";
+const SCAN_GONE = "This photo’s scan has run out, so this meal can’t be saved. Take a new photo.";
 /** The photo's band over the review, as tall as a page's own picture is for the phone's shape. */
 const PHOTO_TALL = 0.78;
 const UNREADABLE = "That photo couldn’t be read. Try another one.";
 
 type Stage = { kind: "camera" } | { kind: "reading"; uri: string } | { kind: "review" };
-type Ask = "none" | "newPhoto";
+type Ask = "none" | "newPhoto" | "wholeDish";
 
 interface MealPhotoProps {
   open: boolean;
@@ -375,6 +378,8 @@ function Review({
       void session.signedIn({ method: "POST", path: "/v1/nutrition/meals/preview", body: { items, scanToken } }, mealPreviewSchema).then((answer) => {
         if (stale) return;
         if (answer.kind === "ok") setPriced({ kind: "ok", preview: answer.data, for: key });
+        // The server no longer holds the scan (kept a day): it can only be taken again.
+        else if (answer.kind === "refused" && answer.error === "invalid_scan") setPriced({ kind: "refused", words: SCAN_GONE, for: key });
         else if (answer.kind === "refused" && amountRefusal(answer.error) !== null) setPriced({ kind: "refused", words: amountRefusal(answer.error) ?? "", for: key });
         else setPriced({ kind: "none" });
       });
@@ -414,6 +419,8 @@ function Review({
 
   const row = rows.find((r) => r.key === openRow) ?? null;
   const rowAt = row === null ? -1 : rows.indexOf(row);
+  // What each food weighs now, by row, as the server last priced it.
+  const rowGrams = rows.map((_, i) => numbers?.items[i]?.gramsPoint ?? null);
   // The row the search changes, and what it weighs now: the food picked in its place starts there.
   const changing = finding?.change == null ? null : (rows.find((r) => r.key === finding.change) ?? null);
   const changingGrams = changing === null ? null : (numbers?.items[rows.indexOf(changing)]?.gramsPoint ?? null);
@@ -487,7 +494,10 @@ function Review({
               ))}
             </View>
           )}
-          <Button label="Add a food it missed" icon="plus" kind="soft" small onPress={() => { setSaid(null); setFinding({ query: "", change: null }); }} />
+          <View style={styles.actions}>
+            <Button label="Add a food it missed" icon="plus" kind="soft" small onPress={() => { setSaid(null); setFinding({ query: "", change: null }); }} />
+            <Button label="Eaten from one dish?" kind="link" onPress={() => { setSaid(null); setAsk("wholeDish"); }} />
+          </View>
           <Credits sources={new Set(rows.map((r) => r.source))} />
         </View>
       </ScrollView>
@@ -564,6 +574,20 @@ function Review({
           setFinding(null);
         }}
       />
+      {ask === "wholeDish" ? (
+        <Sheet open title="Eaten from one dish" onClose={() => { setAsk("none"); }}>
+          <WholeDish
+            held={rowGrams.some((g, i) => g === null && rows[i]?.own === null) ? "Wait a moment: the foods’ weights are still being worked out." : null}
+            onUse={({ dish, fill }) => {
+              const next = withWholeDish(sheet, dish.id, fill.value, rowGrams);
+              if (next === null) return;
+              keep(next);
+              setAsk("none");
+              setSaid(`Shared out over ${dish.label}, ${fill.words}.`);
+            }}
+          />
+        </Sheet>
+      ) : null}
       <Sheet open={ask === "newPhoto"} title="Take a new photo?" onClose={() => { setAsk("none"); }}>
         <Txt kind="small">A new photo uses another of your scans, and this meal won’t be saved.</Txt>
         <Button label="Take new photo" wide onPress={() => { setAsk("none"); onNewPhoto(); }} />
@@ -858,6 +882,7 @@ const styles = StyleSheet.create({
   reviewFoot: { gap: 10, paddingTop: 12, paddingHorizontal: sizes.edge, borderTopWidth: 1, borderTopColor: colours.line, backgroundColor: colours.box },
   footRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   sheetFoot: { gap: 10 },
+  actions: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 8 },
   notThis: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
   findList: { maxHeight: 360 },
   found: { minHeight: 56, justifyContent: "center", gap: 2, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colours.line },

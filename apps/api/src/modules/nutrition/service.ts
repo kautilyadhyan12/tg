@@ -472,7 +472,9 @@ async function amountOf(
     // The person's own dish, or one everybody has (a cup, a mug, a bowl).
     const dish = (await repo.getDishware(deps.sql, userId, chosen.dishwareId)) ?? standardDish(chosen.dishwareId);
     if (dish === null) throw new NutritionError(400, "unknown_dishware", "Dishware not found.");
-    const grams = dishwareGrams(dish.volumeMl, chosen.fillLevel, gramsPerMl(measures));
+    // The meal eaten from one dish: the dish weighed as this food, and the food's share of it.
+    const share = chosen.share ?? 1;
+    const grams = dishwareGrams(dish.volumeMl, chosen.fillLevel * share, gramsPerMl(measures));
     // Symmetric with the grams arm's bounds (chosenItemsSchema: positive, ≤10_000):
     // a round-to-0 (tiny dish × low fill) would persist a MealItem the shared
     // contract declares impossible, and more than 10_000 would pass the cap the
@@ -480,7 +482,7 @@ async function amountOf(
     if (tooSmallOrLarge(grams)) {
       throw new NutritionError(400, "portion_out_of_range", "That portion is too small or too large to log — pick a different fill or enter grams.");
     }
-    return { grams, dishwareRung: "user_dishware", measure: { id: "dish", name: dish.label, amount: chosen.fillLevel } };
+    return { grams, dishwareRung: "user_dishware", measure: { id: "dish", name: dish.label, amount: chosen.fillLevel, ...(chosen.share === undefined ? {} : { share }) } };
   }
   const measure = measures.find((m) => m.id === chosen.measure);
   if (measure === undefined) throw new NutritionError(400, "unknown_measure", "That measure is not one of this food's.");

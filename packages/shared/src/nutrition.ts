@@ -115,6 +115,8 @@ export function sumMoreNutrients(items: readonly { more?: MoreNutrients | undefi
  *  measures existed, has none. */
 export const loggedMeasureSchema = z.object({
   id: z.string().min(1).max(40), name: z.string().min(1).max(100), amount: z.number().positive(),
+  /** A dish the whole meal was eaten from: this food's part of it (ROADMAP Stage 5 33b-i). */
+  share: z.number().positive().max(1).optional(),
 }).strict();
 export type LoggedMeasure = z.infer<typeof loggedMeasureSchema>;
 
@@ -182,8 +184,10 @@ export const MAX_ITEM_GRAMS = 10_000;
 const gramsItemSchema = z
   .object({ canonical: z.string().min(1).max(120), grams: z.number().positive().max(MAX_ITEM_GRAMS) })
   .strict();
+/** `share`: the meal was eaten from one dish, and this food is that part of it (Kd, 2026-10-30): the
+ *  server weighs the dish as `fillLevel` full and gives the food its share. */
 const dishwareItemSchema = z
-  .object({ canonical: z.string().min(1).max(120), dishwareId: z.string().uuid(), fillLevel: z.number().positive().max(1) })
+  .object({ canonical: z.string().min(1).max(120), dishwareId: z.string().uuid(), fillLevel: z.number().positive().max(1), share: z.number().positive().max(1).optional() })
   .strict();
 
 // ROADMAP 7a-iv-a — a food logged by one of its own measures (RULINGS 2026-09-16,
@@ -949,7 +953,11 @@ export type MealOutboxFile = z.infer<typeof mealOutboxFileSchema>;
 /** The most of a kept photo, in base64 letters: a photo drawn no larger than 768 px is about 100 KB. */
 export const MEAL_PHOTO_KEPT_MOST = 2_000_000;
 /** An amount as the phone's picker holds it: a measure of the food (or a saved dish) and how many. */
-export const photoSheetAmountSchema = z.object({ measure: z.string().max(80), amount: z.string().max(20) }).strict();
+export const photoSheetAmountSchema = z.object({
+  measure: z.string().max(80), amount: z.string().max(20),
+  /** A dish the whole meal was eaten from: this food's part of it, as sent (`dishwareItemSchema`). */
+  share: z.number().positive().max(1).optional(),
+}).strict();
 export type PhotoSheetAmount = z.infer<typeof photoSheetAmountSchema>;
 /** A food added to the photo's meal by search, as the search sent it. */
 export const photoSheetFoodSchema = z.object({

@@ -17,7 +17,8 @@ import {
 import type { Answer } from "../../session/calls";
 import { count } from "../dashboard/words";
 import { MONTH_NAMES, mealTypeName, sectionOf } from "./day";
-import { chosenItem, formatAmount } from "./measures";
+import { chosenItem, dishMeasure, formatAmount } from "./measures";
+import { sharesOf } from "./dishShares";
 
 // A meal logged from a photo (ROADMAP Stage 5 33b-i), as the browser's photo sheet does it: the photo
 // made small and rebuilt on the phone, so the place and time it was taken never leave it; the scan's
@@ -323,4 +324,18 @@ export const saveWords = (mealType: MealType): string => `Save to ${mealTypeName
 export function totalsWords(totals: MealPreview["totals"]): string {
   const g = (n: number) => `${count(Math.round(n))} g`;
   return `${count(totals.kcalPoint)} kcal · Protein ${g(totals.proteinG)} · Carbs ${g(totals.carbsG)} · Fat ${g(totals.fatG)}`;
+}
+
+/** The whole meal eaten from one dish (Kd, 2026-10-30): each food of the lists given its part of
+ *  the dish, in the proportions of what each weighs now (`grams`, by row, from the server's numbers);
+ *  the person's own foods keep their grams. Null while a food's weight is not known yet. */
+export function withWholeDish(sheet: PhotoSheet, dishId: string, fill: number, grams: readonly (number | null)[]): PhotoSheet | null {
+  const rows = sheetRows(sheet);
+  const sharing = rows.flatMap((r, i) => (r.own === null ? [{ key: r.key, grams: grams[i] ?? null }] : []));
+  if (sharing.length === 0 || sharing.some((r) => r.grams === null)) return null;
+  const shares = sharesOf(sharing.map((r) => r.grams ?? 0));
+  return sharing.reduce(
+    (next, r, i) => withRowAmount(next, r.key, { measure: dishMeasure(dishId), amount: String(fill), share: shares[i] ?? 1 }),
+    sheet,
+  );
 }

@@ -67,6 +67,8 @@ import { MealPhoto } from "./food/MealPhoto";
 import { useKeptSheet } from "./food/PhotoSheetStore";
 import { holdWords } from "./food/numbers";
 import { OwnFood } from "./food/OwnFood";
+import { wholeDishEdits } from "./food/dishShares";
+import { WholeDish } from "./food/WholeDish";
 import { OwnNumbers } from "./food/OwnNumbers";
 import {
   FILL_CHOICES,
@@ -647,7 +649,7 @@ function amountLine(items: MealItem[] | null): string {
   return items.length === 1 && only !== undefined ? loggedAmount(only) + itemMark(only) : `${count(items.length)} foods`;
 }
 
-type Mode = { kind: "foods" } | { kind: "remove" } | { kind: "details" } | { kind: "food"; at: number } | { kind: "removeFood"; at: number };
+type Mode = { kind: "foods" } | { kind: "remove" } | { kind: "details" } | { kind: "wholeDish" } | { kind: "food"; at: number } | { kind: "removeFood"; at: number };
 
 const HELD_WORDS = {
   not_sent: "You can change its foods once it’s sent.",
@@ -720,6 +722,35 @@ function MealSheet({
         </Txt>
         <Button label="Remove meal" kind="danger" wide onPress={() => { onRemove(row); }} />
         <Button label="Keep it" kind="quiet" wide onPress={() => { setMode({ kind: "foods" }); }} />
+      </Sheet>
+    );
+  }
+
+  // The whole meal eaten from one dish (Kd, 2026-10-30): each food of the lists its part of it, in
+  // the proportions they were saved at; the person's own foods kept as they are.
+  if (mode.kind === "wholeDish" && row.saved !== null) {
+    const saved = row.saved;
+    const own = (i: number): boolean => saved.items[i]?.nutritionSource === "own";
+    return (
+      <Sheet open title="Eaten from one dish" onClose={onClose} onBack={back}>
+        <WholeDish
+          held={saved.items.every((_, i) => own(i)) ? "This meal has only your own foods, which keep their grams." : null}
+          onUse={({ dish, fill }) => {
+            const items = wholeDishEdits(saved.items, dish.id, fill.value);
+            if (items === null) return;
+            void keep(
+              {
+                body: { items, itemsVersion: saved.itemsVersion, changeId: newGoalId() },
+                items: null,
+                totals: null,
+                foods: saved.items.map((it, i) => ({ name: it.name, amount: !own(i) ? `Part of ${dish.label}, ${fill.words}` : loggedAmount(it) + itemMark(it) })),
+              },
+              row.section,
+              `${row.name} shared out over ${dish.label}, ${fill.words}.`,
+            );
+          }}
+        />
+        {fullWords}
       </Sheet>
     );
   }
@@ -846,6 +877,9 @@ function MealSheet({
         );
       })}
       {held === null ? null : <Txt kind="small">{HELD_WORDS[held]}</Txt>}
+      {held === null && lines.length > 1 ? (
+        <Button label="Eaten from one dish?" kind="link" onPress={() => { setMode({ kind: "wholeDish" }); }} style={styles.start} />
+      ) : null}
       {row.totals === null ? null : (
         <Txt kind="small">
           {aboutKcal(row.totals.kcalPoint, hasEstimate(row.items))} · Protein {count(Math.round(row.totals.proteinG))} g · Carbs {count(Math.round(row.totals.carbsG))} g · Fat{" "}

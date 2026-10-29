@@ -56,7 +56,10 @@ const PER_GRAM: Record<string, { name: string; kcal: number; source: string }> =
   milk_whole: { name: "Milk, whole", kcal: 0.6, source: "usda" },
 };
 type Own = { name: string; grams: number; own: { proteinG: number; carbsG: number; fatG: number } };
-type Sent = { canonical: string; measure: string; amount: number } | Own;
+type Dish = { canonical: string; dishwareId: string; fillLevel: number; share?: number };
+type Sent = { canonical: string; measure: string; amount: number } | Own | Dish;
+/** The bowl everybody has holds 375 ml; these foods weigh a gram a millilitre. */
+const BOWL_ML = 375;
 /** As the server prices them: a food of the lists by its own figures, the person's own food by its
  *  protein, carbs and fat at 4, 4 and 9 kcal a gram. */
 function priced(sent: Sent) {
@@ -75,8 +78,17 @@ function priced(sent: Sent) {
       ...sent.own,
     };
   }
+  const food = PER_GRAM[sent.canonical] ?? { name: sent.canonical, kcal: 1, source: "usda" };
+  if ("dishwareId" in sent) {
+    const grams = Math.round(BOWL_ML * sent.fillLevel * (sent.share ?? 1));
+    const kcal = Math.round(grams * food.kcal);
+    return {
+      name: food.name, canonical: sent.canonical, gramsPoint: grams, gramsRange: [grams, grams], portionSource: "user_dishware", nutritionSource: food.source,
+      kcalPoint: kcal, kcalLow: kcal, kcalHigh: kcal, proteinG: 5, carbsG: 10, fatG: 2,
+      measure: { id: "dish", name: "Bowl", amount: sent.fillLevel, ...(sent.share === undefined ? {} : { share: sent.share }) },
+    };
+  }
   const item = sent;
-  const food = PER_GRAM[item.canonical] ?? { name: item.canonical, kcal: 1, source: "usda" };
   const grams = item.measure === "serving" ? item.amount * 30 : item.amount;
   const kcal = Math.round(grams * food.kcal);
   return {
@@ -142,6 +154,8 @@ interface Phone {
   scans: Route[];
   /** How a meal's save answers; by default as the server does. */
   save?: Route;
+  /** The server no longer holds the scan: its previews are refused. */
+  scanGone?: boolean;
 }
 
 function savedMeal(body: { id: string; takenAt: string; mealType?: string; items: Sent[] }): Meal {
@@ -168,8 +182,10 @@ function photoServer(phone: Phone) {
     "/v1/nutrition/targets": ok(TARGETS),
     "/v1/nutrition/foods": ok({ items: [TOAST_FOUND, MILK] }),
     "/v1/nutrition/foods/recent": ok({ items: [] }),
+    "/v1/nutrition/dishware": ok({ items: [], nextCursor: null }),
     "/v1/nutrition/analyze-photo": (body) => (phone.scans.shift() ?? ok(SCAN))(body),
     "/v1/nutrition/meals/preview": (body) => {
+      if (phone.scanGone === true && (body as { scanToken?: string }).scanToken !== undefined) return refusal(400, "invalid_scan", "Invalid or expired scan token.");
       const items = (body as { items: Sent[] }).items.map(priced);
       return { status: 200, body: { items, totals: sum(items) } };
     },
@@ -488,6 +504,42 @@ describe("a food the photo got wrong, and one no list has (Kd, 2026-10-30)", () 
       { canonical: "toast", measure: "serving", amount: 2 },
       { name: "Chicken taco", grams: 120, own: { proteinG: 18, carbsG: 20, fatG: 9 } },
     ]);
+  });
+
+  it("shares the whole meal out over one dish, in the amounts the photo saw (Kd, 2026-10-30)", async () => {
+    const server = await openFood({ meals: [], scans: [] });
+    await takePhoto();
+    expect(await screen.findByText(/^340\skcal · /)).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Eaten from one dish?" }));
+    expect(await screen.findByText("Pick the dish and how full it was.")).toBeTruthy();
+    await fireEvent.press(await screen.findByRole("radio", { name: "Bowl · 375 ml" }));
+    await fireEvent.press(screen.getByRole("radio", { name: "Full" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Use Bowl, full" }));
+    expect(await screen.findByText("Shared out over Bowl, full.")).toBeTruthy();
+    // Toast 60 g and eggs 120 g: a third and two thirds of the bowl.
+    expect(await screen.findByRole("button", { name: "Change Toast, Part of Bowl, full · 125 g" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Change Eggs (scrambled), Part of Bowl, full · 250 g · estimate" })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: /^Save to / }));
+    await waitFor(() => {
+      expect(saves(server)).toHaveLength(1);
+    });
+    expect((saves(server)[0]?.body as { items: unknown }).items).toEqual([
+      { canonical: "toast", dishwareId: "00000000-0000-4000-8000-00000000d153", fillLevel: 1, share: 0.333 },
+      { canonical: "eggs_scrambled", dishwareId: "00000000-0000-4000-8000-00000000d153", fillLevel: 1, share: 0.667 },
+    ]);
+  });
+
+  it("a scan the server no longer holds says so, and is not saved", async () => {
+    const server = await openFood({ meals: [], scans: [], scanGone: true });
+    await takePhoto();
+    await fireEvent.press(await screen.findByRole("button", { name: "Change Toast, 2 × slice · 60 g" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "More" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Done" }));
+    expect(await screen.findByText("This photo’s scan has run out, so this meal can’t be saved. Take a new photo.")).toBeTruthy();
+    const save = screen.getByRole("button", { name: /^Save to / });
+    expect(save.props.accessibilityState).toMatchObject({ disabled: true });
+    await fireEvent.press(save);
+    expect(saves(server)).toEqual([]);
   });
 
   it("logs a typed meal of the person's own food where the search has none", async () => {

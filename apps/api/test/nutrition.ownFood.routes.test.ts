@@ -8,9 +8,10 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
-import { mealPreviewSchema, mealResponseSchema, type VisionEvidence } from "@app/shared";
+import { STANDARD_DISHES, mealPreviewSchema, mealResponseSchema, type VisionEvidence } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
+import { CURATED_FOODS } from "../src/modules/nutrition/foods.js";
 import { createMemoryRedis } from "../src/redis.js";
 import type { FoodSearchProvider } from "../src/modules/nutrition/openfoodfacts.adapter.js";
 import type { VisionProvider } from "../src/modules/nutrition/vision.adapter.js";
@@ -149,5 +150,42 @@ d("a food no list has, added with the person's own numbers (real Postgres)", () 
     });
     expect(changed.statusCode, changed.body).toBe(200);
     expect(mealResponseSchema.parse(changed.json()).meal.items.map((i) => [i.name, i.nutritionSource, i.gramsPoint, i.kcalPoint])).toEqual([["Chicken taco", "own", 300, 466]]);
+  });
+  it("a meal eaten from one dish: each food its share of the dish, together the dish's own grams (Kd, 2026-10-30)", async () => {
+    const bowl = STANDARD_DISHES[2].id;
+    const [rice, dal] = [CURATED_FOODS.find((f) => f.name.startsWith("Rice (white")), CURATED_FOODS.find((f) => f.name.startsWith("Dal"))];
+    if (rice === undefined || dal === undefined) throw new Error("rice and dal are on our list");
+    const alone = async (canonical: string, fillLevel = 1) => {
+      const res = await inject("POST", "/v1/nutrition/meals/preview", alice, { items: [{ canonical, dishwareId: bowl, fillLevel }] });
+      expect(res.statusCode, res.body).toBe(200);
+      return mealPreviewSchema.parse(res.json()).items[0]?.gramsPoint ?? 0;
+    };
+    // Each food's full bowl, as a dish weighs it now.
+    const [riceBowl, dalBowl] = [await alone(rice.canonical), await alone(dal.canonical)];
+    const shared = await inject("POST", "/v1/nutrition/meals", alice, {
+      id: randomUUID(), mealName: "Rice and dal", takenAt: now(),
+      items: [{ canonical: rice.canonical, dishwareId: bowl, fillLevel: 1, share: 0.6 }, { canonical: dal.canonical, dishwareId: bowl, fillLevel: 1, share: 0.4 }],
+    });
+    expect(shared.statusCode, shared.body).toBe(201);
+    const meal = mealResponseSchema.parse(shared.json()).meal;
+    expect(meal.items.map((i) => i.gramsPoint)).toEqual([Math.round(riceBowl * 0.6), Math.round(dalBowl * 0.4)]);
+    expect(meal.items.map((i) => i.measure)).toEqual([
+      { id: "dish", name: "Bowl", amount: 1, share: 0.6 },
+      { id: "dish", name: "Bowl", amount: 1, share: 0.4 },
+    ]);
+    // A share past the whole dish, or none at all, is refused.
+    for (const share of [0, 1.2]) {
+      const bad = await inject("POST", "/v1/nutrition/meals/preview", alice, { items: [{ canonical: rice.canonical, dishwareId: bowl, fillLevel: 1, share }] });
+      expect(bad.statusCode).toBe(400);
+    }
+    // The same for a meal already logged: its foods shared out of half a bowl, and its own food kept.
+    const typed = await inject("POST", "/v1/nutrition/meals", alice, { id: randomUUID(), mealName: "Plate", takenAt: now(), items: [{ canonical: rice.canonical, grams: 100 }, TACO] });
+    const plate = mealResponseSchema.parse(typed.json()).meal;
+    const changed = await inject("PATCH", `/v1/nutrition/meals/${plate.id}`, alice, {
+      items: [{ from: 0, canonical: rice.canonical, dishwareId: bowl, fillLevel: 0.5, share: 1 }, { from: 1 }], itemsVersion: plate.itemsVersion, changeId: randomUUID(),
+    });
+    expect(changed.statusCode, changed.body).toBe(200);
+    const after = mealResponseSchema.parse(changed.json()).meal;
+    expect(after.items.map((i) => [i.name, i.gramsPoint])).toEqual([[rice.name, await alone(rice.canonical, 0.5)], ["Chicken taco", 150]]);
   });
 });
