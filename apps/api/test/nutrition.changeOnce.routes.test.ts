@@ -174,7 +174,7 @@ d("a meal's change sent twice, and recent foods (real Postgres)", () => {
       [ROTI.canonical, { measure: "serving", amount: 3 }],
       [PANEER.canonical, { measure: "g", amount: 150 }],
     ]);
-    expect(before[1]?.measure).toEqual({ id: "serving", name: "roti", amount: 3 });
+    expect(before[1]?.item.measure).toEqual({ id: "serving", name: "roti", amount: 3 });
     // A removed meal's foods are no longer recent; Bob's chana is never Alice's.
     expect((await inject("DELETE", `/v1/nutrition/meals/${gone.id}`, alice)).statusCode).toBe(204);
     expect((await recent(alice)).map((f) => f.canonical)).toEqual([ROTI.canonical, PANEER.canonical]);

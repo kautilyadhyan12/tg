@@ -24,12 +24,9 @@ export function recentFoods(meals: readonly { items: readonly MealItem[] }[]): R
       const byMeasure = m !== undefined && m.id !== "g" && measureIdSchema.safeParse(m.id).success;
       out.push({
         canonical: item.canonical,
-        name: item.name,
         source,
         add: byMeasure ? { measure: m.id, amount: m.amount } : { measure: "g", amount: Math.max(1, Math.round(item.gramsPoint)) },
-        measure: byMeasure ? m : null,
-        gramsPoint: item.gramsPoint,
-        kcalPoint: item.kcalPoint,
+        item,
       });
     }
   }

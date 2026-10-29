@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
-import type { Meal, NutritionTargetsResponse } from "@app/shared";
+import type { Meal, NutritionTargetsResponse, RecentFood } from "@app/shared";
 import { App } from "../../src/App";
 import type { TextStore } from "../../src/screens/food/outbox";
 import type { Ask, AskInit } from "../../src/session/calls";
@@ -92,7 +92,33 @@ interface Food {
   save?: (body: { id: string }) => Reply;
   /** The day's list has no answer (a flaky signal). */
   listFails?: boolean;
+  /** A change to a meal: no signal (`lost`), or made and its answer lost on the way back (`made_lost`),
+   *  or refused as made from an older state of the meal (`changed`). */
+  patch?: "lost" | "made_lost" | "changed";
+  /** Each change the server made, by its id: sent again, it is made once (0172). */
+  made?: string[];
+  recent?: RecentFood[];
 }
+
+type Edit = { from?: number; canonical?: string; measure?: string; amount?: number };
+
+/** The meal's foods after an edit, priced as the server prices oats: 81 g and 307 kcal a cup. */
+function edited(meal: Meal, edits: Edit[]): Meal["items"] {
+  return edits.map((e) => {
+    const kept = e.from === undefined ? undefined : meal.items[e.from];
+    if (e.canonical === undefined && kept !== undefined) return kept;
+    const cups = e.measure === "g" ? (e.amount ?? 0) / 81 : (e.amount ?? 0);
+    return item(Math.round(81 * cups * 10) / 10, Math.round(307 * cups)) as Meal["items"][number];
+  });
+}
+const sum = (items: Meal["items"]) => ({
+  kcalPoint: items.reduce((n, i) => n + i.kcalPoint, 0),
+  kcalLow: items.reduce((n, i) => n + i.kcalLow, 0),
+  kcalHigh: items.reduce((n, i) => n + i.kcalHigh, 0),
+  proteinG: items.reduce((n, i) => n + i.proteinG, 0),
+  carbsG: items.reduce((n, i) => n + i.carbsG, 0),
+  fatG: items.reduce((n, i) => n + i.fatG, 0),
+});
 
 /** A server holding the person's meals: GET lists them newest first, POST keeps one, DELETE removes one. */
 function foodServer(food: Food, more: Record<string, Route> = {}) {
@@ -108,9 +134,48 @@ function foodServer(food: Food, more: Record<string, Route> = {}) {
     const method = init.method ?? "GET";
     const body = init.body === undefined ? undefined : (JSON.parse(init.body) as Record<string, unknown>);
     const id = /^\/v1\/nutrition\/meals\/([0-9a-f-]{36})$/.exec(path)?.[1];
+    const [, of, part] = /^\/v1\/nutrition\/meals\/([0-9a-f-]{36})\/(measures|preview)$/.exec(path) ?? [];
+    const answer = (reply: Reply) => ({ ok: reply.status < 300, status: reply.status, json: () => Promise.resolve(reply.body) });
+    if (path === "/v1/nutrition/foods/recent") {
+      server.asked.push({ method, path, body, headers: init.headers ?? {} });
+      return answer({ status: 200, body: { items: food.recent ?? [] } });
+    }
+    if (of !== undefined) {
+      server.asked.push({ method, path, body, headers: init.headers ?? {} });
+      const meal = food.meals.find((m) => m.id === of);
+      if (meal === undefined) return answer({ status: 404, body: { error: "not_found", message: "Not found", requestId: "r" } });
+      if (part === "measures") return answer({ status: 200, body: { measures: meal.items.map(() => OATS.measures) } });
+      const items = edited(meal, (body as { items: Edit[] }).items);
+      return answer({ status: 200, body: { items, totals: sum(items) } });
+    }
     if (path !== "/v1/nutrition/meals" && id === undefined) return server.ask(url, init);
     server.asked.push({ method, path, body, headers: init.headers ?? {} });
-    const answer = (reply: Reply) => ({ ok: reply.status < 300, status: reply.status, json: () => Promise.resolve(reply.body) });
+    if (method === "PATCH" && id !== undefined && body !== undefined) {
+      if (food.patch === "lost") return lost() as never;
+      if (food.patch === "changed") return answer({ status: 409, body: { error: "meal_changed", message: "This meal has changed since it was opened. Open it again.", requestId: "r" } });
+      const at = food.meals.findIndex((m) => m.id === id);
+      const meal = food.meals[at];
+      if (meal === undefined) return answer({ status: 404, body: { error: "not_found", message: "Not found", requestId: "r" } });
+      const change = body as { changeId: string; mealName?: string; mealType?: string; takenAt?: string; items?: Edit[] };
+      food.made = food.made ?? [];
+      let now = meal;
+      if (!food.made.includes(change.changeId)) {
+        food.made.push(change.changeId);
+        const items = change.items === undefined ? meal.items : edited(meal, change.items);
+        now = {
+          ...meal,
+          mealName: change.mealName ?? meal.mealName,
+          mealType: (change.mealType ?? meal.mealType) as Meal["mealType"],
+          takenAt: change.takenAt ?? meal.takenAt,
+          items,
+          totals: sum(items),
+          itemsVersion: change.items === undefined ? meal.itemsVersion : `v${String(food.made.length + 1)}`,
+        };
+        food.meals = food.meals.map((m, i) => (i === at ? now : m));
+      }
+      if (food.patch === "made_lost") return lost() as never;
+      return answer({ status: 200, body: { meal: now } });
+    }
     if (method === "DELETE" && id !== undefined) {
       const had = food.meals.some((m) => m.id === id);
       food.meals = food.meals.filter((m) => m.id !== id);
@@ -145,6 +210,7 @@ async function openFood(food: Food, store = files().store) {
 
 const posts = (server: ReturnType<typeof foodServer>) => server.asked.filter((a) => a.method === "POST" && a.path === "/v1/nutrition/meals");
 const deletes = (server: ReturnType<typeof foodServer>) => server.asked.filter((a) => a.method === "DELETE");
+const patches = (server: ReturnType<typeof foodServer>) => server.asked.filter((a) => a.method === "PATCH");
 
 /** Adds a cup of oats to Breakfast from the Food tab. */
 async function addOats() {
@@ -394,18 +460,196 @@ describe("round one's findings, on the screen", () => {
 
 describe("the re-check's finding", () => {
   it("two quick presses on Add keep one meal", async () => {
-    const server = await openFood({ meals: [] });
+    // The phone's file is slow to write, so the second press lands while the first is still being kept.
+    let written: () => void = () => undefined;
+    const slow = new Promise<void>((resolve) => {
+      written = resolve;
+    });
+    const phone = files();
+    const store = (userId: string): TextStore => ({
+      read: phone.store(userId).read,
+      write: async (text) => {
+        await slow;
+        await phone.store(userId).write(text);
+      },
+    });
+    const server = await openFood({ meals: [] }, store);
     await fireEvent.press(await screen.findByRole("button", { name: "Add to Breakfast" }));
     await fireEvent.changeText(screen.getByLabelText("Search food"), "oats");
     await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 379 kcal per 100 g, USDA" }));
     const add = await screen.findByRole("button", { name: "Add Oats, rolled · 307 kcal" });
-    void fireEvent.press(add);
-    void fireEvent.press(add);
+    await fireEvent.press(add);
+    await fireEvent.press(add);
+    written();
     expect(await screen.findByText("Oats, rolled added.")).toBeTruthy();
     await waitFor(() => {
       expect(posts(server).length).toBeGreaterThan(0);
     });
     expect(new Set(posts(server).map((p) => (p.body as { id: string }).id)).size).toBe(1);
     expect(screen.getAllByRole("button", { name: /^Oats, rolled, 307 kcal/ })).toHaveLength(1);
+  });
+});
+
+describe("changing a logged meal (32b-ii-a)", () => {
+  const LUNCH = "66666666-6666-4666-8666-666666666666";
+  const noonToday = () => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 30).toISOString();
+  };
+  const lunch = () => savedMeal(LUNCH, { mealName: "Oats, rolled", takenAt: noonToday(), mealType: "lunch" });
+
+  it("the worst thing: a meal renamed and moved with no signal waits, survives a restart, and is changed once", async () => {
+    const phone = files();
+    const food: Food = { meals: [lunch()], patch: "made_lost" };
+    const first = await openFood(food, phone.store);
+    await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 307 kcal" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Edit meal" }));
+    await fireEvent.changeText(screen.getByLabelText("Name"), "Big oats");
+    await fireEvent.press(screen.getByRole("radio", { name: "Dinner" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Big oats updated.")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Big oats, 307 kcal, waiting to send" })).toBeTruthy();
+    expect(screen.getByText("No lunch logged yet.")).toBeTruthy();
+    await waitFor(() => {
+      expect(patches(first).length).toBeGreaterThan(0);
+    });
+    await screen.unmount();
+
+    // The app opened again, the signal back: the change is sent again under its own id, and made once.
+    delete food.patch;
+    const second = await openFood(food, phone.store);
+    await waitFor(() => {
+      expect(screen.queryByText("Waiting to send")).toBeNull();
+    });
+    const ids = [...patches(first), ...patches(second)].map((p) => (p.body as { changeId: string }).changeId);
+    expect(new Set(ids).size).toBe(1);
+    expect(ids.length).toBeGreaterThan(1);
+    expect(food.made).toHaveLength(1);
+    expect(food.meals[0]).toMatchObject({ mealName: "Big oats", mealType: "dinner" });
+    expect(patches(second)[0]?.body).toEqual({ mealName: "Big oats", mealType: "dinner", changeId: ids[0] });
+    expect(await screen.findByRole("button", { name: "Big oats, 307 kcal" })).toBeTruthy();
+    expect(JSON.parse(phone.kept.get(RAVI.id) ?? "")).toEqual({ version: 1, entries: [], refused: [] });
+  });
+
+  it("changes a food's amount with the server's numbers, and the day's totals follow", async () => {
+    const food: Food = { meals: [lunch()] };
+    const server = await openFood(food);
+    await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 307 kcal" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Change Oats, rolled, 1 × cup · 81 g" }));
+    expect(screen.getByText("Logged: 1 × cup · 81 g · 307 kcal")).toBeTruthy();
+    await fireEvent.press(await screen.findByRole("button", { name: "More" }));
+    expect(await screen.findByText("122 g · 461 kcal · Meal total 461 kcal")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Oats, rolled updated.")).toBeTruthy();
+    await waitFor(() => {
+      expect(patches(server)).toHaveLength(1);
+    });
+    expect(patches(server)[0]?.body).toMatchObject({ items: [{ from: 0, canonical: "oats_rolled", measure: "usda-1", amount: 1.5 }], itemsVersion: "v1" });
+    expect(await screen.findByLabelText("Calories, 461 of 2,300 kcal")).toBeTruthy();
+  });
+
+  it("removes one food only after asking, and offers no removal of a meal's only food", async () => {
+    const two = { ...lunch(), mealName: "Lunch plate", items: [item(81, 307), { ...item(40, 152), name: "Banana", canonical: "banana" }] as Meal["items"] };
+    two.totals = sum(two.items);
+    const food: Food = { meals: [two] };
+    const server = await openFood(food);
+    await fireEvent.press(await screen.findByRole("button", { name: "Lunch plate, 459 kcal" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Change Oats, rolled, 1 × cup · 81 g" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Remove from meal" }));
+    expect(screen.getByText("Remove Oats, rolled?")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Keep it" }));
+    expect(patches(server)).toHaveLength(0);
+    await fireEvent.press(screen.getByRole("button", { name: "Remove from meal" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Remove food" }));
+    expect(await screen.findByText("Oats, rolled removed from Lunch plate.")).toBeTruthy();
+    await waitFor(() => {
+      expect(food.meals[0]?.items.map((i) => i.name)).toEqual(["Banana"]);
+    });
+    expect(patches(server)[0]?.body).toMatchObject({ items: [{ from: 1 }], itemsVersion: "v1" });
+    expect(await screen.findByLabelText("Calories, 152 of 2,300 kcal")).toBeTruthy();
+
+    await fireEvent.press(await screen.findByRole("button", { name: "Lunch plate, 152 kcal" }));
+    await fireEvent.press(screen.getByRole("button", { name: /^Change Banana/ }));
+    expect(screen.queryByRole("button", { name: "Remove from meal" })).toBeNull();
+  });
+
+  it("a meal still waiting to be sent keeps its foods as they are until it is sent", async () => {
+    await openFood({ meals: [], save: () => lost() });
+    await addOats();
+    await fireEvent.press(await screen.findByRole("button", { name: /^Oats, rolled, 307 kcal, waiting to send$/ }));
+    expect(screen.getByText("You can change its foods once it’s sent.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^Change Oats/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "Edit meal" })).toBeTruthy();
+  });
+
+  it("a change made after the meal was changed on another device is said, and the meal stays as the server has it", async () => {
+    const food: Food = { meals: [lunch()], patch: "changed" };
+    await openFood(food);
+    await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 307 kcal" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Edit meal" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Earlier" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+    expect(
+      await screen.findByText("Your change to Oats, rolled wasn’t saved. The meal was changed on another device. Open it and make the change again."),
+    ).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Oats, rolled, 307 kcal" })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "OK" }));
+    expect(screen.queryByText(/wasn’t saved/)).toBeNull();
+  });
+
+  it("moves a meal's time a quarter of an hour at a time, and sends only the time", async () => {
+    const food: Food = { meals: [lunch()] };
+    const server = await openFood(food);
+    await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 307 kcal" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Edit meal" }));
+    expect(screen.getByText("12:30 AM")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Later" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Later" }));
+    expect(screen.getByText("1:00 AM")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => {
+      expect(patches(server)).toHaveLength(1);
+    });
+    expect(patches(server)[0]?.body).toEqual({ takenAt: new Date(Date.parse(noonToday()) + 30 * 60_000).toISOString(), changeId: expect.stringMatching(/^[0-9a-f-]{36}$/) as unknown });
+  });
+});
+
+describe("recent foods (32b-ii-a)", () => {
+  const recentOats: RecentFood = {
+    canonical: "oats_rolled",
+    source: "usda",
+    add: { measure: "usda-1", amount: 1.5 },
+    item: { ...item(121.5, 461), measure: { id: "usda-1", name: "cup", amount: 1.5 } } as RecentFood["item"],
+  };
+
+  it("Add to a meal opens on the person's recent foods, and one tap adds one at the amount last had", async () => {
+    const server = await openFood({ meals: [], recent: [recentOats] });
+    await fireEvent.press(await screen.findByRole("button", { name: "Add to Lunch" }));
+    expect(await screen.findByText("Recent")).toBeTruthy();
+    await fireEvent.press(await screen.findByRole("button", { name: "Add Oats, rolled, 1.5 × cup · 122 g, 461 kcal" }));
+    expect(await screen.findByText("Oats, rolled added.")).toBeTruthy();
+    await waitFor(() => {
+      expect(posts(server)).toHaveLength(1);
+    });
+    expect(posts(server)[0]?.body).toMatchObject({ mealName: "Oats, rolled", mealType: "lunch", items: [{ canonical: "oats_rolled", measure: "usda-1", amount: 1.5 }] });
+    expect(screen.getByText(/^Food data from /)).toBeTruthy();
+  });
+
+  it("with no signal, a recent food is added with its numbers and waits to send", async () => {
+    await openFood({ meals: [], recent: [recentOats], save: () => lost() });
+    await fireEvent.press(await screen.findByRole("button", { name: "Add to Lunch" }));
+    await fireEvent.press(await screen.findByRole("button", { name: /^Add Oats, rolled, 1.5 × cup/ }));
+    expect(await screen.findByRole("button", { name: "Oats, rolled, 461 kcal, waiting to send" })).toBeTruthy();
+    expect(screen.getByLabelText("Calories, 461 of 2,300 kcal")).toBeTruthy();
+  });
+
+  it("a search hides the recent foods, and an empty search brings them back", async () => {
+    await openFood({ meals: [], recent: [recentOats] });
+    await fireEvent.press(await screen.findByRole("button", { name: "Add to Lunch" }));
+    expect(await screen.findByText("Recent")).toBeTruthy();
+    await fireEvent.changeText(screen.getByLabelText("Search food"), "oat");
+    expect(screen.queryByText("Recent")).toBeNull();
+    await fireEvent.changeText(screen.getByLabelText("Search food"), "");
+    expect(await screen.findByText("Recent")).toBeTruthy();
   });
 });

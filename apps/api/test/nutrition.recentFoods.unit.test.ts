@@ -65,11 +65,8 @@ describe("recent foods", () => {
     expect(picked(meals).map(([c]) => c)).toEqual(Array.from({ length: RECENT_FOODS_MOST }, (_, i) => `food_${String(i)}`));
   });
 
-  it("reads as the logged food did: its name, measure, grams and calories", () => {
-    const [oats] = recentFoods([{ items: [item("oats", { name: "Oats, rolled", measure: { id: "usda-12", name: "cup", amount: 1.5 }, gramsPoint: 122, kcalPoint: 462 })] }]);
-    expect(oats).toEqual({
-      canonical: "oats", name: "Oats, rolled", source: "curated", add: { measure: "usda-12", amount: 1.5 },
-      measure: { id: "usda-12", name: "cup", amount: 1.5 }, gramsPoint: 122, kcalPoint: 462,
-    });
+  it("carries the food as it was last logged, the server's own numbers for that amount", () => {
+    const logged = item("oats", { name: "Oats, rolled", measure: { id: "usda-12", name: "cup", amount: 1.5 }, gramsPoint: 122, kcalPoint: 462 });
+    expect(recentFoods([{ items: [logged] }])).toEqual([{ canonical: "oats", source: "curated", add: { measure: "usda-12", amount: 1.5 }, item: logged }]);
   });
 });

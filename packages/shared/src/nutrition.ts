@@ -379,12 +379,13 @@ export const foodSearchResponseSchema = z.object({ items: z.array(foodSearchItem
 /** The most recent foods Add to a meal opens on. */
 export const RECENT_FOODS_MOST = 10;
 /** One of the person's last different foods, at the amount they last had: what Add sends for it
- *  (`canonical` with `add`), and how it reads (`measure` and `gramsPoint`, as the logged item's). */
+ *  (`canonical` with `add`), and the food as it was last logged, the server's own numbers for that
+ *  amount, shown until the server has priced it again. */
 export const recentFoodSchema = z.object({
-  canonical: z.string().min(1).max(120), name: z.string().min(1),
+  canonical: z.string().min(1).max(120),
   source: z.enum(["curated", "usda", "openfoodfacts"]),
   add: measureStartSchema,
-  measure: loggedMeasureSchema.nullable(), gramsPoint: z.number().positive(), kcalPoint: z.number().int().nonnegative(),
+  item: mealItemSchema,
 }).strict();
 export type RecentFood = z.infer<typeof recentFoodSchema>;
 export const recentFoodsResponseSchema = z.object({ items: z.array(recentFoodSchema).max(RECENT_FOODS_MOST) }).strict();
@@ -803,9 +804,36 @@ export const waitingMealSchema = z.object({
 }).strict().refine((m) => m.body.id === m.id, { message: "the body carries the meal's own id" });
 export type WaitingMeal = z.infer<typeof waitingMealSchema>;
 
+/** A change to a saved meal waiting to be sent (ROADMAP 32b-ii-a): what the PATCH carries, its time
+ *  read without the server's "not more than a day ahead" rule, as a waiting meal's is. */
+export const waitingChangeBodySchema = z.object({
+  mealName: z.string().trim().min(1).max(200).optional(), takenAt: z.string().datetime().optional(),
+  mealType: mealTypeSchema.nullable().optional(),
+  items: mealEditItemsSchema.optional(), itemsVersion: itemsVersionSchema.optional(),
+  changeId: z.string().uuid().toLowerCase(),
+}).strict();
+export type WaitingChangeBody = z.infer<typeof waitingChangeBodySchema>;
+
+/** A change waiting to be sent: what is sent, and what the day's list shows of it while it waits. */
+export const waitingChangeSchema = z.object({
+  /** The meal's id. */
+  id: z.string().uuid().toLowerCase(),
+  /** The meal's name when the change was made, said if the server will not take it. */
+  name: z.string().max(200),
+  body: waitingChangeBodySchema,
+  /** With a change to the foods: the server's preview of them, where one came back. */
+  items: z.array(mealItemSchema).nullable(),
+  totals: mealTotalsSchema.nullable(),
+  /** With a change to the foods: each food as it reads, `[i]` for `body.items[i]`. */
+  foods: z.array(z.object({ name: z.string().max(200), amount: z.string().max(200) }).strict()).max(30).nullable(),
+  tried: z.boolean(),
+}).strict();
+export type WaitingChange = z.infer<typeof waitingChangeSchema>;
+
 export const mealOutboxEntrySchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("save"), meal: waitingMealSchema }).strict(),
   z.object({ kind: z.literal("remove"), id: z.string().uuid().toLowerCase() }).strict(),
+  z.object({ kind: z.literal("change"), change: waitingChangeSchema }).strict(),
 ]);
 export type MealOutboxEntry = z.infer<typeof mealOutboxEntrySchema>;
 
