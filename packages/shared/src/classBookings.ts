@@ -319,9 +319,11 @@ export const classFeesSchema = z.object({ lateCancelMinor: feeMinorSchema, noSho
  *  cancel fee it costs now in the gym's money (0 for none), and whether a pack's class or session stays used. A
  *  member's box is asked again with it. */
 export const lateCancelRefusalSchema = z.object({
-  packCharged: z.boolean().default(false),
-  feeMinor: feeMinorSchema.default(0),
-  currency: z.string().regex(/^[A-Z]{3}$/).nullable().default(null),
+  // Each field is read alone: one that cannot be read (the server sends "" for a gym with no currency) is none, and
+  // never takes the others with it.
+  packCharged: z.boolean().catch(false),
+  feeMinor: feeMinorSchema.catch(0),
+  currency: z.string().regex(/^[A-Z]{3}$/).nullable().catch(null),
 });
 export type LateCancelRefusal = z.infer<typeof lateCancelRefusalSchema>;
 

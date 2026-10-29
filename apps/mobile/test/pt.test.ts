@@ -365,6 +365,14 @@ describe("a late cancel the server asks for again", () => {
   ])("%s is no fee", (_, body) => {
     expect(askedLate(session({ fees: INR }), body).fees).toBeNull();
   });
+  it("a pack's session stays said as used when the currency can't be read", () => {
+    const now = askedLate(session({ packCharged: true }), { error: "late_cancel", packCharged: true, feeMinor: 0, currency: "" });
+    expect(now.packCharged).toBe(true);
+    expect(now.fees).toBeNull();
+    expect(ptCancelAsk(now, "Asia/Kolkata", "12h", "Iron House").lines[1]).toBe(
+      "It’s too late to cancel for free. Cancelling now counts as a late cancel, and the session stays used on your pack.",
+    );
+  });
 });
 
 describe("the page's other lines", () => {
