@@ -1,4 +1,4 @@
-import { MAX_ITEM_GRAMS, type ChosenItem, type FoodMeasure, type FoodSearchItem, type MealItem } from "@app/shared";
+import { MAX_ITEM_GRAMS, isCountMeasure, isWeightMeasure, type ChosenItem, type FoodMeasure, type FoodSearchItem, type MealItem } from "@app/shared";
 
 // Adding a food by one of its own measures, as the browser does (apps/web/src/components/nutrition/
 // measures.js, RULINGS 2026-09-16). The SERVER works out every gram and calorie from its own list of
@@ -111,14 +111,19 @@ export function loggedAmount(item: Pick<MealItem, "measure" | "gramsPoint">): st
 
 const FILL_WORDS: Readonly<Record<number, string>> = Object.fromEntries(FILL_CHOICES.map((f) => [f.value, f.words]));
 
-/** How many measures are offered before "More measures": a few chips, never a wall of them. */
-export const FIRST_MEASURES = 4;
+/** How many of a food's counts are offered before "More measures": the food and a few sizes. */
+export const FIRST_COUNTS = 4;
 
-/** The measures offered: the first few, in the server's order, and the one picked if it is further
- *  down; every one once the person asks for more. */
+/** The measures offered first, as a person thinks of the food (Kd, 32b-ii-b: "cup, quartered or
+ *  chopped, cup slices and many more" confused him): its counts — an apple, a large one, a medium
+ *  one — or, where it has none, its first cup or spoon; then grams; and the one picked where it is
+ *  none of those. The rest wait behind More measures, in the server's order; every one once the
+ *  person asks for more. */
 export function shownMeasures(measures: readonly FoodMeasure[], picked: string | null, all: boolean): FoodMeasure[] {
-  if (all || measures.length <= FIRST_MEASURES + 1) return [...measures];
-  const first = measures.slice(0, FIRST_MEASURES);
-  const chosen = measures.find((m) => m.id === picked);
-  return chosen === undefined || first.includes(chosen) ? first : [...first, chosen];
+  if (all) return [...measures];
+  const own = measures.filter((m) => m.id !== "g" && m.id !== "oz");
+  const counts = own.filter((m) => isCountMeasure(m.name)).slice(0, FIRST_COUNTS);
+  const scoop = own.find((m) => !isCountMeasure(m.name) && !isWeightMeasure(m.name));
+  const first = counts.length > 0 ? counts : scoop === undefined ? [] : [scoop];
+  return measures.filter((m) => first.includes(m) || m.id === "g" || m.id === picked);
 }

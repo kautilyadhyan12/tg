@@ -6,7 +6,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
-import { dishwarePageSchema, dishwareResponseSchema } from "@app/shared";
+import { STANDARD_DISHES, dishwarePageSchema, dishwareResponseSchema, mealPreviewSchema } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createMemoryRedis } from "../src/redis.js";
@@ -131,6 +131,25 @@ d("a dish sent twice from the phone, and a person's own dishes (real Postgres)",
     const bad = await inject("POST", "/v1/nutrition/dishware", alice, { ...BOWL, id: "not-an-id" });
     expect(bad.statusCode, bad.body).toBe(400);
     expect((await inject("POST", "/v1/nutrition/dishware", "", { ...BOWL, id: randomUUID() })).statusCode).toBe(401);
+  });
+
+  it("weighs a food with a dish everybody has, for anybody, and never saves a dish under its id", async () => {
+    const bowl = STANDARD_DISHES[2];
+    for (const access of [alice, bob]) {
+      const priced = await inject("POST", "/v1/nutrition/meals/preview", access, { items: [{ canonical: RICE?.canonical ?? "", dishwareId: bowl.id, fillLevel: 0.5 }] });
+      expect(priced.statusCode, priced.body).toBe(200);
+      const item = mealPreviewSchema.parse(priced.json()).items[0];
+      expect(item?.measure).toEqual({ id: "dish", name: "Bowl", amount: 0.5 });
+      expect(item?.gramsPoint).toBeGreaterThan(0);
+    }
+    // Nobody's own dish takes its id, so nobody can change what it weighs for everybody else.
+    const taken = await inject("POST", "/v1/nutrition/dishware", alice, { label: "Mine now", containerClass: "bowl", volumeMl: 2000, id: bowl.id });
+    expect(taken.statusCode, taken.body).toBe(400);
+    expect(await rowsUnder(bowl.id)).toHaveLength(0);
+    // Not a dish of the person's own: it is never listed, renamed or removed.
+    expect((await dishes(alice)).some((d) => d.id === bowl.id)).toBe(false);
+    expect((await inject("PATCH", `/v1/nutrition/dishware/${bowl.id}`, alice, { label: "Renamed" })).statusCode).toBe(404);
+    expect((await inject("DELETE", `/v1/nutrition/dishware/${bowl.id}`, alice)).statusCode).toBe(404);
   });
 
   it("renames and removes the person's own dish", async () => {

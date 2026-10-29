@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
-import type { Dishware, Meal, NutritionTargetsResponse, RecentFood } from "@app/shared";
+import { STANDARD_DISHES, type Dishware, type Meal, type NutritionTargetsResponse, type RecentFood } from "@app/shared";
 import { App } from "../../src/App";
 import type { TextStore } from "../../src/screens/food/outbox";
 import type { Ask, AskInit } from "../../src/session/calls";
@@ -94,7 +94,7 @@ function server(state: State) {
   const priced = (body: { items: Record<string, unknown>[] }) => {
     const items = body.items.map((i) => {
       if (typeof i.dishwareId === "string") {
-        const d = state.dishes.find((x) => x.id === i.dishwareId);
+        const d = [...STANDARD_DISHES, ...state.dishes].find((x) => x.id === i.dishwareId);
         if (d === undefined) return null;
         const grams = Math.round(d.volumeMl * Number(i.fillLevel) * 0.4);
         return item(grams, Math.round(grams * 3.79), { id: "dish", name: d.label, amount: Number(i.fillLevel) });
@@ -367,7 +367,7 @@ describe("saved dishes", () => {
   });
 
   it("renames a dish, and removes one only after asking", async () => {
-    const SMALL = dish("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "Mug", "mug", 325);
+    const SMALL = dish("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "Travel mug", "mug", 400);
     const state: State = { targets: targets(), dishes: [BOWL, SMALL], meals: [] };
     const s = await openFood(state);
     await pickOats();
@@ -378,18 +378,18 @@ describe("saved dishes", () => {
     expect(await screen.findByText("Renamed to Soup bowl.")).toBeTruthy();
     expect(s.sent.find((a) => a.method === "PATCH")?.body).toEqual({ label: "Soup bowl" });
 
-    await fireEvent.press(await screen.findByRole("button", { name: "Remove Mug" }));
-    expect(screen.getByText("Mug comes off your dishes. Meals you logged with it keep their amounts.")).toBeTruthy();
+    await fireEvent.press(await screen.findByRole("button", { name: "Remove Travel mug" }));
+    expect(screen.getByText("Travel mug comes off your dishes. Meals you logged with it keep their amounts.")).toBeTruthy();
     await fireEvent.press(screen.getByRole("button", { name: "Keep it" }));
     expect(s.sent.filter((a) => a.method === "DELETE")).toHaveLength(0);
-    await fireEvent.press(screen.getByRole("button", { name: "Remove Mug" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Remove Travel mug" }));
     await fireEvent.press(screen.getByRole("button", { name: "Remove dish" }));
-    expect(await screen.findByText("Mug removed.")).toBeTruthy();
+    expect(await screen.findByText("Travel mug removed.")).toBeTruthy();
     expect(s.sent.filter((a) => a.method === "DELETE").map((a) => a.path)).toEqual([`/v1/nutrition/dishware/${SMALL.id}`]);
     expect(state.dishes.map((d) => d.label)).toEqual(["Soup bowl"]);
     await fireEvent.press(screen.getByRole("button", { name: "Done" }));
     expect(await screen.findByRole("radio", { name: "Soup bowl · 375 ml" })).toBeTruthy();
-    expect(screen.queryByRole("radio", { name: "Mug · 325 ml" })).toBeNull();
+    expect(screen.queryByRole("radio", { name: "Travel mug · 400 ml" })).toBeNull();
   });
 
   it("keeps a dish that a meal waiting to be sent was weighed with", async () => {
@@ -415,6 +415,22 @@ async function pressBack() {
   if (top === undefined) throw new Error("no box is open");
   await fireEvent(top, "requestClose");
 }
+
+describe("the dishes everybody has (Kd, 32b-ii-b: keep them, and a way to make your own)", () => {
+  it("offers a cup, a mug and a bowl with no dish saved, weighs a food with one, and never offers to rename them", async () => {
+    const state: State = { targets: targets(), dishes: [], meals: [] };
+    const s = await openFood(state);
+    await pickOats();
+    for (const name of ["Cup · 240 ml", "Mug · 325 ml", "Bowl · 375 ml", "New dish"]) expect(await screen.findByRole("radio", { name })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Edit your dishes" })).toBeNull();
+    await fireEvent.press(screen.getByRole("radio", { name: "Bowl · 375 ml" }));
+    await fireEvent.press(screen.getByRole("radio", { name: "Bowl, half full" }));
+    await waitFor(() => {
+      expect(s.sent.filter((a) => a.path === "/v1/nutrition/meals/preview").at(-1)?.body).toEqual({ items: [{ canonical: "oats_rolled", dishwareId: STANDARD_DISHES[2].id, fillLevel: 0.5 }] });
+    });
+    expect(dishPosts(s)).toHaveLength(0);
+  });
+});
 
 describe("Kd's click-through (32b-ii-b): back goes one step, a count shows its grams, a food last had by a dish opens at it", () => {
   it("goes back one step at a time: renaming a dish, your dishes, the food's amount, the foods, then closes", async () => {

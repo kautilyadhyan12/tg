@@ -60,7 +60,7 @@ import {
   walkDay,
   type Sums,
 } from "./food/day";
-import { AmountPicker, pickedDish, useDishes } from "./food/AmountPicker";
+import { AmountPicker, dishesOffered, pickedDish, useDishes } from "./food/AmountPicker";
 import { useMealOutbox } from "./food/MealOutbox";
 import { holdWords } from "./food/numbers";
 import { OwnNumbers } from "./food/OwnNumbers";
@@ -1142,7 +1142,7 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
     // Last had by a saved dish the person still has: that dish, as full as it was then. A dish that is
     // gone starts it where the server says, a count of it where it has one.
     const m = f.item.measure;
-    const dish = m?.id === "dish" && dishes.kind === "ok" ? dishes.list.find((d) => d.label === m.name) : undefined;
+    const dish = m?.id === "dish" ? dishesOffered(dishes).find((d) => d.label === m.name) : undefined;
     const fill = FILL_CHOICES.find((c) => c.value === m?.amount);
     setAmount(dish !== undefined && fill !== undefined ? { measure: dishMeasure(dish.id), amount: String(fill.value) } : startingAmount({ startsAt: f.add }));
   };

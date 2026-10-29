@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Pressable, StyleSheet, TextInput, View } from "react-native";
-import { dishwarePageSchema, dishwareResponseSchema, type Dishware, type FoodMeasure } from "@app/shared";
+import { STANDARD_DISHES, dishwarePageSchema, dishwareResponseSchema, type Dishware, type FoodMeasure } from "@app/shared";
 import { Button } from "../../look/Button";
 import { Chip } from "../../look/Chip";
 import { colours, sizes } from "../../look/colours";
@@ -51,10 +51,17 @@ export function useDishes(): { dishes: Dishes; again: () => void } {
   return { dishes, again };
 }
 
-/** The dish a measure names, where the person still has it. */
-export function pickedDish(dishes: Dishes, measure: string): Dishware | null {
+/** A dish to weigh a food with: one everybody has, or one of the person's own. */
+export type PickDish = Pick<Dishware, "id" | "label" | "containerClass" | "volumeMl">;
+
+/** The dishes offered: a cup, a mug and a bowl everybody has, then the person's own (Kd, 32b-ii-b:
+ *  "keep the things already built, just give an option to create one on own"). */
+export const dishesOffered = (dishes: Dishes): PickDish[] => [...STANDARD_DISHES, ...(dishes.kind === "ok" ? dishes.list : [])];
+
+/** The dish a measure names, where it is still one of them. */
+export function pickedDish(dishes: Dishes, measure: string): PickDish | null {
   const id = dishOf(measure);
-  return id === null || dishes.kind !== "ok" ? null : (dishes.list.find((d) => d.id === id) ?? null);
+  return id === null ? null : (dishesOffered(dishes).find((d) => d.id === id) ?? null);
 }
 
 type Panel = "pick" | "new" | "edit";
@@ -98,6 +105,7 @@ export function AmountPicker({
   const dishId = dishOf(amount.measure);
   const dish = pickedDish(dishes, amount.measure);
   const shown = shownMeasures(measures, amount.measure, all);
+  // The person's own dishes, which they may rename and remove.
   const list = dishes.kind === "ok" ? dishes.list : [];
 
   if (panel === "new") {
@@ -177,12 +185,12 @@ export function AmountPicker({
       ) : null}
       <View style={styles.headRow}>
         <Txt kind="tiny" style={[styles.label, styles.grow]}>
-          Your dishes
+          Dishes
         </Txt>
         {list.length > 0 ? <Button label="Edit" kind="link" onPress={() => { setPanel("edit"); }} say="Edit your dishes" /> : null}
       </View>
       <View style={styles.chips}>
-        {list.map((d) => (
+        {dishesOffered(dishes).map((d) => (
           <Chip
             key={d.id}
             label={dishWords(d)}
@@ -391,7 +399,7 @@ function EditDishes({ list, onChanged, onDone }: { list: readonly Dishware[]; on
           </Txt>
         </View>
       )}
-      {list.length === 0 ? <Txt kind="small">You have no saved dishes.</Txt> : null}
+      {list.length === 0 ? <Txt kind="small">You have no dishes of your own.</Txt> : null}
       {list.map((d) => (
         <View key={d.id} style={styles.dish}>
           <View style={styles.grow}>

@@ -12,7 +12,7 @@
 //   - for a food of our list whose cited entry names no piece, the measures of the
 //     USDA entry that does (`pieces`), under ids of their own;
 //   - always grams and ounces.
-import { MAX_ITEM_GRAMS, type FoodMeasure } from "@app/shared";
+import { MAX_ITEM_GRAMS, isCountMeasure, isWeightMeasure, type FoodMeasure } from "@app/shared";
 
 export const GRAM: FoodMeasure = { id: "g", name: "g", grams: 1 };
 /** An ounce is a sixteenth of the international pound, which is 0.45359237 kg
@@ -154,14 +154,6 @@ const YIELD_HEAD = /^(?:\d*\.?\d+\s+)?(?:half\s+)?(?:oz|lb|g|unit|cup|package)\b
 /** A bracket's text that is a size in inches, a survey code, a yield or an "include" note. */
 const CODED_BRACKET = /["”]|\bdia\b|\bdiameter\b|\binch|\bNLEA\b|\bNF?S\b|yield|\binclude|\d+\s*x\s*\d+/i;
 
-/** Whether a measure is a count of the food — a slice, an apple, a serving — and not a weight or
- *  a volume (a cup, a tablespoon, an ounce), read off its name. */
-export function isCount(name: string): boolean {
-  return !VOLUME_OR_WEIGHT.test(name.trim());
-}
-const VOLUME_OR_WEIGHT =
-  /^(?:\d*\.?\d+\s+|half\s+|quarter\s+)?(?:cups?|tbsp|tablespoons?|tsp|teaspoons?|fl oz|oz|ounces?|lbs?|pounds?|g|grams?|kg|ml|l|liters?|litres?|quarts?|pints?|gallons?)\b/i;
-
 /** A count a food starts at weighs near what the food is served by: from a twentieth of its serving
  *  to two and a half times it. A slice of bacon (8 g of a 100 g serving) or a large apple (223 g of
  *  a 125 g cup) is one; a whole head of lettuce (360 g) or a 284 g frozen package of a 67 g serving
@@ -257,8 +249,9 @@ export function foodMeasures(source: MeasureSource): FoodMeasure[] {
  *  served by the ounce is not its 183 g crust. Otherwise a count of the food, the first
  *  of its measures that weighs near its serving (`START_COUNT_SHARE`):
  *  a food of our list served by 100 g, or a USDA food whose first measure is a cup,
- *  starts at one slice or one apple, never at grams (ROADMAP 32b-ii-b). Only then the
- *  serving's measure of another kind, a USDA food's first measure, or the grams. */
+ *  starts at one slice or one apple, never at grams (ROADMAP 32b-ii-b). Then the
+ *  serving's measure of another kind; for our list's food served by weight, a cup or a spoon of it
+ *  near its serving (a cup of rice); a USDA food's first measure; or the grams. */
 export function startingMeasure(source: Pick<MeasureSource, "serving" | "unit" | "ownServing">, measures: readonly FoodMeasure[]): { measure: string; amount: number } {
   const { serving, unit } = source;
   const usda = measures.filter((m) => m.id.startsWith("usda-"));
@@ -266,18 +259,28 @@ export function startingMeasure(source: Pick<MeasureSource, "serving" | "unit" |
   // Our list's own serving is the measure it is eaten by; a USDA food's serving is only the first
   // of its measures, and where that is a cup or a weight, a count of the food comes first (ROADMAP
   // 32b-ii-b, Kd: "I was not able to select quantity like number of apples").
-  if (own !== undefined && (source.ownServing || isCount(own.name))) return { measure: own.id, amount: 1 };
+  if (own !== undefined && (source.ownServing || isCountMeasure(own.name))) return { measure: own.id, amount: 1 };
   const grams = { measure: GRAM.id, amount: serving > 0 && serving <= MAX_ITEM_GRAMS ? serving : 100 };
   if (sameName(unit, OUNCE.name)) return isOneOunce(serving) ? { measure: OUNCE.id, amount: 1 } : grams;
   const count = measures.find(
     (m) =>
       (m.id.startsWith("usda-") || m.id.startsWith("piece-")) &&
-      isCount(m.name) &&
+      isCountMeasure(m.name) &&
       m.grams >= serving * START_COUNT_SHARE.least &&
       m.grams <= serving * START_COUNT_SHARE.most,
   );
   if (count !== undefined) return { measure: count.id, amount: 1 };
   if (own !== undefined) return { measure: own.id, amount: 1 };
+  // A food poured or scooped, rice or dal or milk: a cup of it, where that is near its serving (Kd:
+  // "will milk or other liquid or mashed foods also have count?").
+  const scoop = measures.find(
+    (m) =>
+      (m.id.startsWith("usda-") || m.id.startsWith("piece-")) &&
+      !isWeightMeasure(m.name) &&
+      m.grams >= serving * START_COUNT_SHARE.least &&
+      m.grams <= serving * START_COUNT_SHARE.most,
+  );
+  if (source.ownServing && scoop !== undefined) return { measure: scoop.id, amount: 1 };
   const first = source.ownServing ? undefined : usda[0];
   return first === undefined ? grams : { measure: first.id, amount: 1 };
 }

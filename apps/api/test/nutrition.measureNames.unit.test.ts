@@ -4,7 +4,8 @@
 // loaded table holds them (2026-10-29, `tools/measure-names-sweep.ts`, and the foods' portions read
 // from `usda_food_portions`), and names the rules have never seen.
 import { describe, expect, it } from "vitest";
-import { foodMeasures, isCount, plainMeasureName, startingMeasure, usdaMeasureName, type MeasureSource, type UsdaPortion } from "../src/modules/nutrition/measures.js";
+import { isCountMeasure } from "@app/shared";
+import { foodMeasures, plainMeasureName, startingMeasure, usdaMeasureName, type MeasureSource, type UsdaPortion } from "../src/modules/nutrition/measures.js";
 
 describe("a measure's name in a shopper's words", () => {
   it.each([
@@ -77,8 +78,8 @@ describe("a measure's name in a shopper's words", () => {
   });
 
   it("tells a count from a weight or a volume", () => {
-    for (const name of ["apple", "slice cooked", "large", "serving", "half breast, bone and skin removed", "cube", "leaf outer", "2 biscuits"]) expect(isCount(name), name).toBe(true);
-    for (const name of ["cup", "cup, shredded", "half cup", "3 oz", "oz", "fl oz", "tbsp", "2 tbsp", "tablespoon", "tsp", "lb", "g", "ml", "quart"]) expect(isCount(name), name).toBe(false);
+    for (const name of ["apple", "slice cooked", "large", "serving", "half breast, bone and skin removed", "cube", "leaf outer", "2 biscuits"]) expect(isCountMeasure(name), name).toBe(true);
+    for (const name of ["cup", "cup, shredded", "half cup", "3 oz", "oz", "fl oz", "tbsp", "2 tbsp", "tablespoon", "tsp", "lb", "g", "ml", "quart"]) expect(isCountMeasure(name), name).toBe(false);
   });
 });
 
@@ -106,7 +107,9 @@ describe("where a food starts: at a count of it where it has one (USDA's own row
     ["avocado (SR 171705)", ours([row(1, 1, "cup, cubes", 150), row(2, 1, "cup, pureed", 230), row(3, 1, "cup, sliced", 146), row(4, 1, "avocado, NS as to Florida or California", 201), row(5, 1, "NLEA Serving", 50)]), "1 avocado · 201 g"],
     ["chicken breast (SR 171477): no recipe unit", ours([row(1, 1, "cup, chopped or diced", 140), row(2, 1, "unit (yield from 1 lb ready-to-cook chicken)", 52), row(3, 0.5, "breast, bone and skin removed", 86)]), "1 half breast, bone and skin removed · 86 g"],
     ["scrambled eggs (SR 172187)", ours([row(1, 1, "large", 61), row(2, 1, "tbsp", 13.7), row(3, 1, "cup", 220)]), "1 large · 61 g"],
-    ["white rice (SR 168878): no count, so its grams", ours([row(1, 1, "cup", 158)]), "100 g · 1 g"],
+    ["white rice (SR 168878): no count, so a cup", ours([row(1, 1, "cup", 158)]), "1 cup · 158 g"],
+    ["a food weighed only by the ounce: its grams", ours([row(1, 3, "oz", 85)]), "100 g · 1 g"],
+    ["paneer: no measure at all, its grams", ours([]), "100 g · 1 g"],
     // A USDA food whose first row is a cup.
     ["apples, raw (SR 171688)", usda([row(1, 1, "cup, quartered or chopped", 125), row(2, 1, "cup slices", 109), row(3, 1, 'large (3-1/4" dia)', 223), row(4, 1, 'medium (3" dia)', 182)]), "1 large · 223 g"],
     // Never a whole package: frozen greens served by a third of a cup.

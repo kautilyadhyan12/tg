@@ -19,6 +19,7 @@ import {
   moreForGrams,
   moreNutrientsSchema,
   shownFoodName,
+  standardDish,
   type ChosenItem,
   type FoodMeasure,
   type FoodSearchItem,
@@ -458,7 +459,8 @@ async function amountOf(
   if ("grams" in chosen) return { grams: chosen.grams, dishwareRung: null, measure: null };
   const tooSmallOrLarge = (grams: number): boolean => grams < 1 || grams > MAX_ITEM_GRAMS;
   if ("dishwareId" in chosen) {
-    const dish = await repo.getDishware(deps.sql, userId, chosen.dishwareId);
+    // The person's own dish, or one everybody has (a cup, a mug, a bowl).
+    const dish = (await repo.getDishware(deps.sql, userId, chosen.dishwareId)) ?? standardDish(chosen.dishwareId);
     if (dish === null) throw new NutritionError(400, "unknown_dishware", "Dishware not found.");
     const grams = dishwareGrams(dish.volumeMl, chosen.fillLevel, gramsPerMl(measures));
     // Symmetric with the grams arm's bounds (chosenItemsSchema: positive, ≤10_000):

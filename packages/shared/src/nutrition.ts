@@ -181,6 +181,19 @@ export const foodMeasureSchema = z.object({
   id: measureIdSchema, name: z.string().min(1).max(60), grams: z.number().positive().max(MAX_ITEM_GRAMS),
 }).strict();
 export type FoodMeasure = z.infer<typeof foodMeasureSchema>;
+/** Whether a measure is a count of the food — an apple, a slice, a large one, a serving — and not
+ *  a weight or a volume (an ounce, a cup, a tablespoon), read off its name (ROADMAP 32b-ii-b). The
+ *  server starts a food at a count, and the phone's amount box offers its counts first. */
+export function isCountMeasure(name: string): boolean {
+  return !VOLUME_OR_WEIGHT.test(name.trim());
+}
+/** Whether a measure is a weight ("3 oz", "lb"), which says nothing grams do not. */
+export function isWeightMeasure(name: string): boolean {
+  return WEIGHT.test(name.trim());
+}
+const WEIGHT = /^(?:\d*\.?\d+\s+|half\s+)?(?:oz|ounces?|lbs?|pounds?|g|grams?|kg)\b/i;
+const VOLUME_OR_WEIGHT =
+  /^(?:\d*\.?\d+\s+|half\s+|quarter\s+)?(?:cups?|tbsp|tablespoons?|tsp|teaspoons?|fl oz|oz|ounces?|lbs?|pounds?|g|grams?|kg|ml|l|liters?|litres?|quarts?|pints?|gallons?|glass(?:es)?)\b/i;
 /** The measure and amount a food starts at where the person has not picked one. */
 export const measureStartSchema = z.object({ measure: measureIdSchema, amount: z.number().positive() }).strict();
 const measureItemSchema = z
@@ -318,9 +331,21 @@ export const dishwareInputSchema = z.object({
 }).strict();
 export const patchDishwareSchema = dishwareInputSchema.partial().refine((v) => Object.keys(v).length > 0, { message: "at least one field required" });
 export type DishwareInput = z.infer<typeof dishwareInputSchema>;
+/** The dishes everybody has, ready to pick without saving one (Kd, 32b-ii-b: "keep the things
+ *  already built, just give an option to create one on own"): the sizes the browser's Save a dish
+ *  offers. Fixed ids nobody's own dish can take; never renamed or removed. */
+export const STANDARD_DISHES = [
+  { id: "00000000-0000-4000-8000-00000000d151", label: "Cup", containerClass: "cup", volumeMl: 240 },
+  { id: "00000000-0000-4000-8000-00000000d152", label: "Mug", containerClass: "mug", volumeMl: 325 },
+  { id: "00000000-0000-4000-8000-00000000d153", label: "Bowl", containerClass: "cereal_bowl", volumeMl: 375 },
+] as const;
+export const standardDish = (id: string) => STANDARD_DISHES.find((d) => d.id === id.toLowerCase()) ?? null;
+
 /** POST /v1/nutrition/dishware. With the phone's own `id` (ROADMAP 32b-ii-b) the same dish sent
  *  twice is saved once, and the second answer is the dish as it is now. Kept in small letters. */
-export const createDishwareRequestSchema = dishwareInputSchema.extend({ id: z.string().uuid().toLowerCase().optional() }).strict();
+export const createDishwareRequestSchema = dishwareInputSchema
+  .extend({ id: z.string().uuid().toLowerCase().refine((id) => standardDish(id) === null, { message: "a dish everybody has" }).optional() })
+  .strict();
 export type CreateDishwareRequest = z.infer<typeof createDishwareRequestSchema>;
 /** The person's saved dishes, newest first (GET /v1/nutrition/dishware). */
 export const dishwareSchema = z.object({
