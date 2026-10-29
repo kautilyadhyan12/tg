@@ -503,7 +503,7 @@ describe("changing a logged meal (32b-ii-a)", () => {
     const food: Food = { meals: [lunch()], patch: "made_lost" };
     const first = await openFood(food, phone.store);
     await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 307 kcal" }));
-    await fireEvent.press(screen.getByRole("button", { name: "Edit meal" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Edit" }));
     await fireEvent.changeText(screen.getByLabelText("Name"), "Big oats");
     await fireEvent.press(screen.getByRole("radio", { name: "Dinner" }));
     await fireEvent.press(screen.getByRole("button", { name: "Save" }));
@@ -579,14 +579,14 @@ describe("changing a logged meal (32b-ii-a)", () => {
     await fireEvent.press(await screen.findByRole("button", { name: /^Oats, rolled, 307 kcal, waiting to send$/ }));
     expect(screen.getByText("You can change its foods once it’s sent.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /^Change Oats/ })).toBeNull();
-    expect(screen.getByRole("button", { name: "Edit meal" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Edit" })).toBeTruthy();
   });
 
   it("a change made after the meal was changed on another device is said, and the meal stays as the server has it", async () => {
     const food: Food = { meals: [lunch()], patch: "changed" };
     await openFood(food);
     await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 307 kcal" }));
-    await fireEvent.press(screen.getByRole("button", { name: "Edit meal" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Edit" }));
     await fireEvent.press(screen.getByRole("button", { name: "Earlier" }));
     await fireEvent.press(screen.getByRole("button", { name: "Save" }));
     expect(
@@ -601,7 +601,7 @@ describe("changing a logged meal (32b-ii-a)", () => {
     const food: Food = { meals: [lunch()] };
     const server = await openFood(food);
     await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 307 kcal" }));
-    await fireEvent.press(screen.getByRole("button", { name: "Edit meal" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Edit" }));
     expect(screen.getByText("12:30 AM")).toBeTruthy();
     await fireEvent.press(screen.getByRole("button", { name: "Later" }));
     await fireEvent.press(screen.getByRole("button", { name: "Later" }));

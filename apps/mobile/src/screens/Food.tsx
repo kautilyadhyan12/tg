@@ -687,9 +687,12 @@ function MealSheet({
       {row.waiting ? (
         <Txt kind="small">{unsaved ? "Waiting to send. It couldn’t be saved on this phone yet, so keep the app open." : "Saved on this phone. It’s sent when you’re online."}</Txt>
       ) : null}
-      <Txt kind="tiny">
-        {mealTypeName(row.section)} · {clockWords(row.takenAt)}
-      </Txt>
+      <View style={styles.row}>
+        <Txt kind="small" style={styles.grow}>
+          {mealTypeName(row.section)} · {clockWords(row.takenAt)}
+        </Txt>
+        <Button label="Edit" kind="link" onPress={() => { setMode({ kind: "details" }); }} />
+      </View>
       {lines.map((line, i) => {
         const inner = (
           <>
@@ -726,7 +729,6 @@ function MealSheet({
           {count(Math.round(row.totals.fatG))} g
         </Txt>
       )}
-      <Button label="Edit meal" kind="soft" wide onPress={() => { setMode({ kind: "details" }); }} />
       <Button label="Remove meal" icon="trash" kind="danger" wide onPress={() => { setMode({ kind: "remove" }); }} />
     </Sheet>
   );
