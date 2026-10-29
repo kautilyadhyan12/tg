@@ -201,8 +201,8 @@ function foodServer(food: Food, more: Record<string, Route> = {}) {
   return { ...server, ask };
 }
 
-async function openFood(food: Food, store = files().store) {
-  const server = foodServer(food);
+async function openFood(food: Food, store = files().store, more: Record<string, Route> = {}) {
+  const server = foodServer(food, more);
   await render(<App extra={extra} ask={server.ask} store={memoryStore(kept(1))} wait={noWait} mealStore={store} />);
   await fireEvent.press(await screen.findByRole("tab", { name: "Food" }));
   return server;
@@ -623,11 +623,14 @@ describe("previously logged foods (32b-ii-a)", () => {
     measures: OATS.measures,
   };
 
-  it("Add to a meal opens on the person's recent foods, and one tap adds one at the amount last had", async () => {
+  it("Add to a meal opens on the foods logged before; the + opens one at the amount last had, logged only on Add", async () => {
     const server = await openFood({ meals: [], recent: [recentOats] });
     await fireEvent.press(await screen.findByRole("button", { name: "Add to Lunch" }));
     expect(await screen.findByText("Previously logged")).toBeTruthy();
-    await fireEvent.press(await screen.findByRole("button", { name: "Add Oats, rolled, 1.5 × cup · 122 g, 461 kcal" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Add Oats, rolled" }));
+    expect(screen.getByLabelText("Amount").props.value).toBe("1.5");
+    expect(posts(server)).toHaveLength(0);
+    await fireEvent.press(await screen.findByRole("button", { name: "Add Oats, rolled · 307 kcal" }));
     expect(await screen.findByText("Oats, rolled added.")).toBeTruthy();
     await waitFor(() => {
       expect(posts(server)).toHaveLength(1);
@@ -636,10 +639,11 @@ describe("previously logged foods (32b-ii-a)", () => {
     expect(screen.getByText(/^Food data from /)).toBeTruthy();
   });
 
-  it("with no signal, a recent food is added with its numbers and waits to send", async () => {
-    await openFood({ meals: [], recent: [recentOats], save: () => lost() });
+  it("with no signal, a food logged before is added at the amount last had with its numbers then, and waits to send", async () => {
+    await openFood({ meals: [], recent: [recentOats], save: () => lost() }, undefined, { "/v1/nutrition/meals/preview": () => lost() });
     await fireEvent.press(await screen.findByRole("button", { name: "Add to Lunch" }));
-    await fireEvent.press(await screen.findByRole("button", { name: /^Add Oats, rolled, 1.5 × cup/ }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Add Oats, rolled" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Add Oats, rolled" }));
     expect(await screen.findByRole("button", { name: "Oats, rolled, 461 kcal, waiting to send" })).toBeTruthy();
     expect(screen.getByLabelText("Calories, 461 of 2,300 kcal")).toBeTruthy();
   });

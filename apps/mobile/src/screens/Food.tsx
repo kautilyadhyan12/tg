@@ -956,13 +956,14 @@ const SOURCE_WORDS: Readonly<Record<FoodSearchItem["source"], string>> = {
 };
 
 type Found = { kind: "idle" } | { kind: "looking" } | { kind: "ok"; items: FoodSearchItem[] } | { kind: "failed"; words: string };
-/** A food in the picker: one found by the search, or one the person logged before. */
-type Picked = Pick<FoodSearchItem, "canonical" | "name" | "source" | "measures" | "startsAt">;
+/** A food in the picker: one found by the search, or one the person logged before, with the food as
+ *  it was last logged, whose numbers stand in at that same amount until the server's come back. */
+type Picked = Pick<FoodSearchItem, "canonical" | "name" | "source" | "measures" | "startsAt"> & { last?: RecentFood };
 type Priced = { kind: "none" } | { kind: "ok"; preview: MealPreview; for: string } | { kind: "refused"; words: string; for: string };
 
 /** Add to a meal: the foods logged before, or a search; a food's amount by one of its own measures,
  *  Add. The server prices the amount before it is added; Add keeps the meal on the phone and sends
- *  it. A food logged before is added in one tap at the amount last had, or opened to change it. */
+ *  it. A food logged before opens at the amount last had, its name or its + alike (Kd, 2026-10-29). */
 function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: () => void; onAdded: (type: MealType, name: string) => void }) {
   const { session } = useSession();
   const { outbox } = useMealOutbox();
@@ -1098,12 +1099,16 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
   };
   const add = async () => {
     if (food === null || item === null || held) return;
-    await keep(food.name, item, preview);
+    // With no answer from the server yet, a food logged before at the amount last had keeps the
+    // server's numbers from then until it has priced it again.
+    const last = food.last;
+    const same = last !== undefined && "measure" in item && item.measure === last.add.measure && item.amount === last.add.amount;
+    await keep(food.name, item, preview ?? (same ? { items: [last.item], totals: totalsOf([last.item]) } : null));
   };
-  // One tap: the food at the amount last had, shown with the server's numbers from then until the
-  // server has priced it again.
-  const addRecent = async (f: RecentFood) => {
-    await keep(f.item.name, { canonical: f.canonical, ...f.add }, { items: [f.item], totals: totalsOf([f.item]) });
+  const open = (f: RecentFood) => {
+    setFood({ canonical: f.canonical, name: f.item.name, source: f.source, measures: f.measures, startsAt: f.add, last: f });
+    setAllMeasures(false);
+    setAmount(startingAmount({ startsAt: f.add }));
   };
   const showRecent = food === null && query.trim() === "" && recent.length > 0;
 
@@ -1123,11 +1128,7 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel={`${f.item.name}, ${loggedAmount(f.item)}, ${kcalWords(f.item.kcalPoint)}`}
-                      onPress={() => {
-                        setFood({ canonical: f.canonical, name: f.item.name, source: f.source, measures: f.measures, startsAt: f.add });
-                        setAllMeasures(false);
-                        setAmount(startingAmount({ startsAt: f.add }));
-                      }}
+                      onPress={() => { open(f); }}
                       style={({ pressed }) => [styles.grow, pressed ? styles.pressed : null]}
                     >
                       <Txt kind="strong" numberOfLines={2}>
@@ -1139,23 +1140,14 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
                     </Pressable>
                     <Pressable
                       accessibilityRole="button"
-                      accessibilityLabel={`Add ${f.item.name}, ${loggedAmount(f.item)}, ${kcalWords(f.item.kcalPoint)}`}
-                      accessibilityState={{ disabled: adding || outbox === null }}
-                      disabled={adding || outbox === null}
-                      onPress={() => {
-                        void addRecent(f);
-                      }}
+                      accessibilityLabel={`Add ${f.item.name}`}
+                      onPress={() => { open(f); }}
                       style={({ pressed }) => [styles.add, pressed ? styles.pressed : null]}
                     >
                       <Icon name="plus" size={18} colour="orange" />
                     </Pressable>
                   </View>
                 ))}
-                {full ? (
-                  <Txt kind="small" colour="badText">
-                    Too many meals are waiting to be sent. Go online to send them, then add this one.
-                  </Txt>
-                ) : null}
               </>
             ) : null}
             {found.kind === "looking" ? <Txt kind="small">Searching…</Txt> : null}
