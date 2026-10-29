@@ -7,7 +7,7 @@ import { placeFor } from './consolePlaces';
 import { consoleIsReadOnly } from './billingView';
 import { useLiveNews } from './liveNews';
 import { canMatchPayments } from './paymentsToMatchAccess';
-import { SQUARE_LINKS_TITLE, linkLine, unlinkBoxLines, unlinkedLine } from './memberSquareLinksView';
+import { linkLine, linkedOn, linksTitle, unlinkBoxLines, unlinkedLine } from './memberSquareLinksView';
 
 // SQUARE CUSTOMER LIST, ON A PERSON'S PAGE (ROADMAP 18d-iii-b-ii-c-ii; spec Part 3 §14.8), for staff who match payments: the
 // customers Match linked to this person, each with Unlink. Unlink opens a box under the button that says, before anything
@@ -149,8 +149,8 @@ export default function MemberSquareLinks({ gymId, gym, entryId, name, readOnly,
   };
 
   return (
-    <section className="c-card px-4 py-3 md:px-5 md:py-4 flex flex-col gap-2" aria-label={SQUARE_LINKS_TITLE} data-testid="square-links">
-      <h3 className="c-h2">{SQUARE_LINKS_TITLE}</h3>
+    <section className="c-card px-4 py-3 md:px-5 md:py-4 flex flex-col gap-2" aria-label={linksTitle(state.links)} data-testid="square-links">
+      <h3 className="c-h2">{linksTitle(state.links)}</h3>
       {state.error !== null ? <p className="c-s14 c-t2 m-0">{state.error}</p> : null}
       {done !== null && done.entryId === entryId ? (
         <div className="flex flex-wrap items-center gap-2">
@@ -166,7 +166,8 @@ export default function MemberSquareLinks({ gymId, gym, entryId, name, readOnly,
       ) : null}
       {state.links.map((link) => (
         <div key={link.customerId} className="flex flex-col gap-2" data-testid="square-link">
-          <p className="c-s15 c-t1 m-0">{linkLine(link, gym?.timezone)}</p>
+          <p className="c-s15 c-t1 m-0">{linkLine(link, who)}</p>
+          <p className="c-s13 c-t2 m-0">{linkedOn(link, gym?.timezone)}</p>
           {opened?.customerId === link.customerId ? (
             <UnlinkAsk ask={opened} name={who} onYes={() => void unlink()} onBack={() => setAsk(null)} />
           ) : changing ? (

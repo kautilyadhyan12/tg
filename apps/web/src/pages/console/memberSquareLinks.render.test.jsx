@@ -1,4 +1,4 @@
-// The Square customer list on a person's page, with Unlink (ROADMAP 18d-iii-b-ii-c-ii).
+// The linked Square customer on a person's page, with Unlink (ROADMAP 18d-iii-b-ii-c-ii).
 //
 // THE WORST THING THIS BOX COULD DO: unlink without saying first what changes, or stop a card the box never named. So the first
 // test: Unlink opens a box naming the customer, the payments that go back and the card that is stopped; nothing is sent until the
@@ -36,8 +36,8 @@ const MemberSquareLinks = (await import('./MemberSquareLinks')).default;
 const GYM = '11111111-1111-4111-8111-111111111111';
 const SAM = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const IRON = { name: 'Iron House', slug: 'iron-house', timezone: 'America/Chicago', privileges: ['members.confirm', 'billing.members'] };
-const LINK = { customerId: 'CPAT', also: false, linkedAt: '2026-10-29T18:30:00.000Z', from: { amountMinor: 2000, currency: 'USD', takenAt: '2026-10-29T18:29:00.000Z' } };
-const BOX = { customerName: 'Pat Smith', also: false, waiting: 1, matched: 1, card: { brand: 'VISA', last4: '1111' }, added: false };
+const LINK = { customerId: 'CPAT', customerName: 'Pat Smith', also: false, linkedAt: '2026-10-29T18:30:00.000Z', from: { amountMinor: 2000, currency: 'USD', takenAt: '2026-10-29T18:29:00.000Z' } };
+const BOX = { customerName: 'Pat Smith', also: false, waiting: 1, waitingMinor: 700, currency: 'USD', matched: 1, card: { brand: 'VISA', last4: '1111' }, added: false };
 const ok = (data) => Promise.resolve({ data });
 const refused = (status, error, message) => Promise.reject(Object.assign(new Error(message), { response: { status, data: { error, message } } }));
 
@@ -55,20 +55,20 @@ afterEach(() => {
   live.listeners.clear();
 });
 
-describe('Square customer list: the worst thing', () => {
+describe('Linked Square customer: the worst thing', () => {
   it('Unlink says what changes before anything does, and the press carries this person, that customer and the card the box named', async () => {
     orgService.getSquareLinks.mockReturnValue(ok({ links: [LINK] }));
     orgService.getUnlinkBox.mockReturnValue(ok(BOX));
     orgService.unlinkSquareCustomer.mockReturnValue(ok({ unlinked: { customerName: 'Pat Smith', moved: 1, card: BOX.card, added: false }, links: [] }));
     const onUnlinked = vi.fn();
     show({ onUnlinked });
-    expect(await screen.findByText(/Linked to a customer in your Square customer list when \$20\.00 paid on 29 Oct was matched\./)).toBeTruthy();
+    expect(await screen.findByText('Pat Smith in Square is linked to Sam Smith. Square payments made under Pat Smith show on this page.')).toBeTruthy();
+    expect(screen.getByText('Linked on 29 Oct.')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Unlink' }));
-    expect(await screen.findByText('Unlink this Square customer from Sam Smith?')).toBeTruthy();
-    expect(screen.getByText('In Square, this customer is Pat Smith.')).toBeTruthy();
-    expect(screen.getByText(/Sam Smith’s card on file, Visa ending 1111, is saved on this customer/)).toBeTruthy();
-    expect(screen.getByText('1 payment from this customer waiting on this page goes back to Payments to match.')).toBeTruthy();
+    expect(await screen.findByText('Unlink Pat Smith from Sam Smith?')).toBeTruthy();
+    expect(screen.getByText('The $7.00 payment from Pat Smith moves to Payments to match.')).toBeTruthy();
+    expect(screen.getByText('Sam Smith’s card (Visa ending 1111) is removed, because it was saved under Pat Smith in Square. Add the card again.')).toBeTruthy();
     expect(orgService.getUnlinkBox).toHaveBeenCalledWith(GYM, SAM, 'CPAT');
     // Opening the box sends nothing.
     expect(orgService.unlinkSquareCustomer).not.toHaveBeenCalled();
@@ -76,7 +76,7 @@ describe('Square customer list: the worst thing', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Unlink' }));
     expect(await screen.findByRole('status')).toHaveProperty(
       'textContent',
-      'Unlinked. Pat Smith’s payments in Square Point of Sale no longer come to Sam Smith’s page. 1 payment went back to Payments to match. Their Visa ending 1111 was removed. Save their card again.',
+      'Unlinked. Pat Smith’s Square payments no longer show on this page. The payment is in Payments to match. Add Sam Smith’s card again.',
     );
     const [gymId, entryId, customerId, body] = orgService.unlinkSquareCustomer.mock.calls[0];
     expect([gymId, entryId, customerId, body.card]).toEqual([GYM, SAM, 'CPAT', BOX.card]);
@@ -88,18 +88,18 @@ describe('Square customer list: the worst thing', () => {
   });
 });
 
-describe('Square customer list', () => {
+describe('Linked Square customer', () => {
   it('a card saved since the box was read: the box is read again, saying why, and nothing is unlinked unseen', async () => {
     orgService.getSquareLinks.mockReturnValue(ok({ links: [LINK] }));
     orgService.getUnlinkBox.mockReturnValueOnce(ok({ ...BOX, card: null })).mockReturnValueOnce(ok(BOX));
     orgService.unlinkSquareCustomer.mockImplementation(() => refused(409, 'square_unlink_changed', 'This has changed since you opened it. Check the box again, then unlink.'));
     show();
     fireEvent.click(await screen.findByRole('button', { name: 'Unlink' }));
-    expect(await screen.findByText('Unlink this Square customer from Sam Smith?')).toBeTruthy();
-    expect(screen.queryByText(/card on file/)).toBeNull();
+    expect(await screen.findByText('Unlink Pat Smith from Sam Smith?')).toBeTruthy();
+    expect(screen.queryByText(/Sam Smith’s card/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Unlink' }));
     expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'This has changed since you opened it. Check the box again, then unlink.');
-    expect(await screen.findByText(/Sam Smith’s card on file, Visa ending 1111/)).toBeTruthy();
+    expect(await screen.findByText(/Sam Smith’s card \(Visa ending 1111\)/)).toBeTruthy();
     expect(orgService.getUnlinkBox).toHaveBeenCalledTimes(2);
   });
 
@@ -110,13 +110,13 @@ describe('Square customer list', () => {
     show();
     fireEvent.click(await screen.findByRole('button', { name: 'Unlink' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
-    expect(screen.queryByText('Unlink this Square customer from Sam Smith?')).toBeNull();
+    expect(screen.queryByText('Unlink Pat Smith from Sam Smith?')).toBeNull();
     expect(orgService.unlinkSquareCustomer).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Unlink' }));
-    await screen.findByText('Unlink this Square customer from Sam Smith?');
+    await screen.findByText('Unlink Pat Smith from Sam Smith?');
     fireEvent.click(screen.getByRole('button', { name: 'Unlink' }));
     expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'A payment is being taken on their card right now. Try again in a minute.');
-    expect(screen.getByText('Unlink this Square customer from Sam Smith?')).toBeTruthy();
+    expect(screen.getByText('Unlink Pat Smith from Sam Smith?')).toBeTruthy();
   });
 
   it('nothing for a person Match linked nobody to, for staff who do not match payments, or in a read-only console', async () => {
@@ -126,12 +126,12 @@ describe('Square customer list', () => {
     expect(container.textContent).toBe('');
     cleanup();
     show({ gym: { ...IRON, privileges: ['members.confirm'] } });
-    expect(screen.queryByText(/Square customer list/)).toBeNull();
+    expect(screen.queryByText(/Linked Square customer/)).toBeNull();
     expect(orgService.getSquareLinks).toHaveBeenCalledTimes(1);
     cleanup();
     orgService.getSquareLinks.mockReturnValue(ok({ links: [LINK] }));
     show({ readOnly: true });
-    expect(await screen.findByText(/Linked to a customer in your Square customer list/)).toBeTruthy();
+    expect(await screen.findByText(/Pat Smith in Square is linked to Sam Smith/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Unlink' })).toBeNull();
   });
 

@@ -65,16 +65,20 @@ const ANYBODY_REASONS = ["refunded", "other_location"] as const;
 export async function unlinkFacts(
   sql: SqlOrTx,
   a: { gymId: string; entryId: string; environment: SquareEnvironment; accountId: string; customerId: string; also: boolean },
-): Promise<{ waiting: number; matched: number; card: { brand: string; last4: string } | null; added: boolean }> {
+): Promise<{ waiting: number; waitingMinor: number; currency: string | null; matched: number; card: { brand: string; last4: string } | null; added: boolean }> {
   const ids = await idsOf(sql, a);
-  const [counts] = await sql<{ waiting: number; matched: number }[]>`
+  const [counts] = await sql<{ waiting: number; waiting_minor: number; currency: string | null; matched: number }[]>`
     SELECT count(*) FILTER (WHERE state = 'waiting' AND entry_id = ${a.entryId} AND reason <> 'shop_items')::int AS waiting,
+           coalesce(sum(amount_minor) FILTER (WHERE state = 'waiting' AND entry_id = ${a.entryId} AND reason <> 'shop_items'), 0)::int AS waiting_minor,
+           min(currency) FILTER (WHERE state = 'waiting' AND entry_id = ${a.entryId} AND reason <> 'shop_items') AS currency,
            count(*) FILTER (WHERE state = 'recorded')::int AS matched
     FROM gym_square_app_payments
     WHERE gym_id = ${a.gymId} AND environment = ${a.environment} AND account_id = ${a.accountId} AND customer_id = ANY(${ids}::text[])`;
   const card = a.also ? undefined : (await cardOn(sql, a, ids))[0];
   return {
     waiting: counts?.waiting ?? 0,
+    waitingMinor: counts?.waiting_minor ?? 0,
+    currency: counts?.currency ?? null,
     matched: counts?.matched ?? 0,
     card: card === undefined ? null : { brand: card.brand, last4: card.last4 },
     added: !a.also && (await addsByItself(sql, a)),

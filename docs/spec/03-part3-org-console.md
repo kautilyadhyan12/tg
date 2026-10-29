@@ -4403,16 +4403,20 @@ is a gym with no country. People who use the app for themselves may be anywhere.
   Square customer list to Amy Lee", with nothing of the customer's own details; the payment keeps what Match
   did (`link_result`) so the same press answered again is answered the same. Unlinking is the second half (below).
   *As built, 18d-iii-b-ii-c-ii (Kd, 2026-10-29: "go"; `rulings/2026-10-29-18d-iii-b-ii-c-ii.md`):* **Unlink on their page.** A
-  person's page has a box, **Square customer list**, for staff who match payments, wherever Match linked a customer to them
+  person's page has a box, **Linked Square customer**, for staff who match payments, wherever Match linked a customer to them
   (`gym_square_customers.matched_at`, migration `0174`, for their customer; `gym_square_old_customers.matched_at` for a second
-  one): "Linked to a customer in your Square customer list when $20.00 paid on 29 Oct was matched. This customer's payments
-  in Square Point of Sale come to this page.", with **Unlink**. A link Members in Square, a card or a merge made is not
+  one), naming the customer as Square names them (asked when the box is read, never kept): "Pat Smith in Square is linked to
+  Sam Smith. Square payments made under Pat Smith show on this page." and "Linked on 29 Oct.", with **Unlink** (Kd's
+  click-through: short sentences that name who). A link Members in Square, a card or a merge made is not
   offered. Unlink opens a box under the button that says, before anything changes, who the customer is in Square (asked of
   Square then, never kept), how many of their payments waiting on the page go back to Payments to match, the person's card on
   file saved on that customer, which is removed and stopped in Square (a card cannot move to another customer in Square, so
   staff save it again, which makes the person a customer of their own), how many of the customer's payments already on bills
   stay (Not this bill takes one off), that the app won't link the customer to them again by itself, and, where Members in
-  Square adds members by itself, that the person is added as a customer of their own; Cancel changes nothing. The press
+  Square adds members by itself, that the person is added as a customer of their own ("Unlink Pat Smith from Sam Smith?",
+  "The $7.00 payment from Pat Smith moves to Payments to match.", "Sam Smith's card (Visa ending 1111) is removed, because
+  it was saved under Pat Smith in Square. Add the card again.", "Payments already recorded stay as they are.", "Pat Smith's
+  future Square payments won't show here."); Cancel changes nothing. The press
   carries the card the box named (a card saved since: the box is read again) and its own key (the same press twice is
   answered the same); it waits while a payment is being taken on that card or a card is being saved on the Terminal. In one
   step under the gym's lock: the link goes, with the old ids it stood for; the card is deleted and its stop owed and sent;
@@ -4422,11 +4426,10 @@ is a gym with no country. People who use the app for themselves may be anywhere.
   (`gym_square_unlinked_customers`, Square's ids only, carried by a join of two records, gone with a record deleted for
   good). Every way of linking reads it: Members in Square's rule (the check and its own look) never makes that customer the
   person's, its link step refuses it, a typed card saved at the same instant is let go ("Their Square customer was unlinked
-  from them while the card was being saved…"), and Match's tick for them is off, saying "This Square customer was unlinked
-  from Sam Smith on 29 Oct. Tick this only if Pat Smith is Sam Smith."; staff ticking it link them again and the word goes.
-  After the press the box says "Unlinked. Pat Smith's payments in Square Point of Sale no longer come to Sam Smith's page. 1
-  payment went back to Payments to match. Their Visa ending 1111 was removed. Save their card again." with Open Payments to
-  match; Card on file reads again; Staff activity says "Unlinked a customer in your Square customer list from Sam Smith".
+  from them while the card was being saved…"), and Match's tick for them is off, saying
+  "You unlinked Pat Smith from Sam Smith on 29 Oct. Tick this only if they are the same person."; staff ticking
+  it link them again and the word goes. After the press the box says "Unlinked. Pat Smith's Square payments no longer show
+  on this page. The payment is in Payments to match. Add Sam Smith's card again." with Open Payments to match; Card on file reads again; Staff activity says "Unlinked a customer in your Square customer list from Sam Smith".
 - **Cash, bank transfer, a card on another machine, and UPI in India** (18r): recorded.
 
 Our own app for the Square Reader is ruled out (Kd, 2026-10-21): no gym app found runs the

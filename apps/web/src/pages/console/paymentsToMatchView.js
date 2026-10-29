@@ -234,7 +234,8 @@ export function linkNote(link, personName, timezone = undefined) {
   const parts = [];
   if (typeof link.unlinkedAt === 'string') {
     const day = new Intl.DateTimeFormat('en-GB', { timeZone: timezone, day: 'numeric', month: 'short' }).format(new Date(link.unlinkedAt));
-    parts.push(`This Square customer was unlinked from ${personName} on ${day}. Tick this only if ${customerWho(link.customerName, personName)} is ${personName}.`);
+    const who = customerWho(link.customerName, personName);
+    parts.push(`You unlinked ${who} from ${personName} on ${day}. Tick this only if they are the same person.`);
   } else if (link.offer === 'ask') {
     parts.push(`The app can’t tell they are the same person. Tick this only if ${customerWho(link.customerName, personName)} is ${personName}.`);
   } else {

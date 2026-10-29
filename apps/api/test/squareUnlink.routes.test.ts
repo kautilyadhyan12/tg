@@ -399,10 +399,19 @@ d("Unlink on their page (real Postgres)", { timeout: T }, () => {
 
     // Sam's page offers Unlink, naming the payment whose Match linked it.
     expect(await linksOf(gym, sam.entryId)).toEqual([
-      { customerId: pat, also: false, linkedAt: expect.any(String) as string, from: { amountMinor: 2500, currency: "USD", takenAt: expect.any(String) as string } },
+      { customerId: pat, customerName: "Pat Smith", also: false, linkedAt: expect.any(String) as string, from: { amountMinor: 2500, currency: "USD", takenAt: expect.any(String) as string } },
     ]);
     // The box says, before anything changes, who it is in Square and what goes; reading it changes nothing.
-    expect(await unlinkBox(gym, sam.entryId, pat)).toEqual({ customerName: "Pat Smith", also: false, waiting: 1, matched: 1, card: { brand: "VISA", last4: "1111" }, added: false });
+    expect(await unlinkBox(gym, sam.entryId, pat)).toEqual({
+      customerName: "Pat Smith",
+      also: false,
+      waiting: 1,
+      waitingMinor: 1000,
+      currency: "USD",
+      matched: 1,
+      card: { brand: "VISA", last4: "1111" },
+      added: false,
+    });
     expect((await mainLinks(gym, sam.entryId))[0]?.customer_id).toBe(pat);
     expect(square.stopped).toEqual([]);
 
@@ -516,7 +525,7 @@ d("Unlink on their page (real Postgres)", { timeout: T }, () => {
     expect((await rowOf(underOwn.id)).entry_id).toBe(amy.entryId);
 
     expect((await linksOf(gym, amy.entryId)).map((l) => [l.customerId, l.also])).toEqual([[second2, true]]);
-    expect(await unlinkBox(gym, amy.entryId, second2)).toEqual({ customerName: "Amy Lee", also: true, waiting: 1, matched: 1, card: null, added: false });
+    expect(await unlinkBox(gym, amy.entryId, second2)).toEqual({ customerName: "Amy Lee", also: true, waiting: 1, waitingMinor: 1000, currency: "USD", matched: 1, card: null, added: false });
     const res = await unlink(gym, amy.entryId, second2);
     expect(res.statusCode, res.body).toBe(200);
     expect(squareUnlinkResponseSchema.parse(JSON.parse(res.body)).unlinked).toEqual({ customerName: "Amy Lee", moved: 1, card: null, added: false });

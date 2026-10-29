@@ -37,8 +37,9 @@ const W = SQUARE_UNLINK_WORDS;
 const gone = (): OrgsError => new OrgsError(409, "square_link_gone", W.gone);
 const notFound = (): OrgsError => new OrgsError(404, "entry_not_found", "That person was not found on your list.");
 
-const shown = (l: unlinks.MatchedLinkRow): SquareLink => ({
+const shown = (l: unlinks.MatchedLinkRow, customerName: string | null): SquareLink => ({
   customerId: l.customerId,
+  customerName,
   also: l.also,
   linkedAt: l.linkedAt.toISOString(),
   from: l.from === null ? null : { amountMinor: l.from.amountMinor, currency: l.from.currency, takenAt: l.from.takenAt.toISOString() },
@@ -50,15 +51,19 @@ async function personHere(deps: PaymentsDeps, gymId: string, entryId: string): P
   return deps.square?.environment ?? null;
 }
 
-async function linksOf(deps: PaymentsDeps, gymId: string, entryId: string, environment: SquareEnvironment | null): Promise<SquareLink[]> {
-  return environment === null ? [] : (await unlinks.matchedLinks(deps.sql, gymId, entryId, environment)).map(shown);
+/** The customers Match linked to the person, each named as Square names them now, so staff read who it is: Square is asked only
+ *  for a person with such a link. */
+async function linksOf(deps: PaymentsDeps, gym: repo.GymForPayments, gymId: string, entryId: string, environment: SquareEnvironment | null): Promise<SquareLink[]> {
+  if (environment === null) return [];
+  const links = await unlinks.matchedLinks(deps.sql, gymId, entryId, environment);
+  return await Promise.all(links.map(async (l) => shown(l, (await customerNow(deps, gymId, await readyFor(deps, gymId, gym, l.accountId), l.customerId))?.name ?? null)));
 }
 
 /** The customers Match linked to the person, for their page. */
 export async function readSquareLinks(deps: PaymentsDeps, userId: string, gymId: string, entryId: string): Promise<SquareLinksResponse> {
-  await allowed(deps, gymId, userId, false);
+  const gym = await allowed(deps, gymId, userId, false);
   const environment = await personHere(deps, gymId, entryId);
-  return squareLinksResponseSchema.parse({ links: await linksOf(deps, gymId, entryId, environment) });
+  return squareLinksResponseSchema.parse({ links: await linksOf(deps, gym, gymId, entryId, environment) });
 }
 
 /** The gym's own connection, where it is to the account the link is in; null otherwise (Square is then not asked). */
@@ -116,7 +121,7 @@ export async function unlinkSquareCustomer(
   if (environment === null) throw gone();
   const key = { gymId, entryId, environment, customerId, requestKey: body.requestKey };
   const answered = async (before: { moved: number; card: { brand: string; last4: string } | null }): Promise<{ answer: SquareUnlinkResponse; entryIds: string[] }> => ({
-    answer: squareUnlinkResponseSchema.parse({ unlinked: { customerName: null, moved: before.moved, card: before.card, added: false }, links: await linksOf(deps, gymId, entryId, environment) }),
+    answer: squareUnlinkResponseSchema.parse({ unlinked: { customerName: null, moved: before.moved, card: before.card, added: false }, links: await linksOf(deps, gym, gymId, entryId, environment) }),
     entryIds: [],
   });
   const before = await unlinks.unlinkedBefore(deps.sql, key);
@@ -155,7 +160,7 @@ export async function unlinkSquareCustomer(
   if (step.disableId !== null && deps.square !== null) await sendOwedCardDisables(deps, deps.square, [step.disableId]);
   const answer = squareUnlinkResponseSchema.parse({
     unlinked: { customerName: seen?.name ?? null, moved: step.moved, card: step.card, added: step.added },
-    links: await linksOf(deps, gymId, entryId, environment),
+    links: await linksOf(deps, gym, gymId, entryId, environment),
   });
   return { answer, entryIds: done.told };
 }

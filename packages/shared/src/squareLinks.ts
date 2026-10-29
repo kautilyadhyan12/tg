@@ -14,11 +14,13 @@ const currencySchema = z.string().regex(/^[A-Z]{3}$/);
 const squareCustomerIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
 const cardSchema = z.object({ brand: z.string().regex(/^[A-Z_]{1,40}$/), last4: z.string().regex(/^[0-9]{4}$/) }).strict();
 
-/** One customer Match linked to the person. `also`: a second customer of theirs, besides one they had. `from`: the payment
- *  whose Match linked it, so staff know it; null where it is no longer here. */
+/** One customer Match linked to the person. `customerName`: Square's name for them, asked when the page reads it (null where
+ *  Square did not say). `also`: a second customer of theirs, besides one they had. `from`: the payment whose Match linked it;
+ *  null where it is no longer here. */
 export const squareLinkSchema = z
   .object({
     customerId: squareCustomerIdSchema,
+    customerName: z.string().min(1).max(200).nullable(),
     also: z.boolean(),
     linkedAt: z.string().datetime({ offset: true }),
     from: z.object({ amountMinor: minorSchema, currency: currencySchema, takenAt: z.string().datetime({ offset: true }) }).strict().nullable(),
@@ -45,6 +47,9 @@ export const squareUnlinkBoxSchema = z
     customerName: z.string().min(1).max(200).nullable(),
     also: z.boolean(),
     waiting: z.number().int().min(0),
+    /** What those waiting payments come to, in `currency` (null where none waits). */
+    waitingMinor: z.number().int().min(0),
+    currency: currencySchema.nullable(),
     matched: z.number().int().min(0),
     card: cardSchema.nullable(),
     added: z.boolean(),
