@@ -10,6 +10,7 @@ import {
   nutritionTargetsResponseSchema,
   recentFoodsResponseSchema,
   type ChosenItem,
+  type MealChoice,
   type FoodMeasure,
   type FoodSearchItem,
   type MealEditItem,
@@ -65,6 +66,7 @@ import { useMealOutbox } from "./food/MealOutbox";
 import { MealPhoto } from "./food/MealPhoto";
 import { useKeptSheet } from "./food/PhotoSheetStore";
 import { holdWords } from "./food/numbers";
+import { OwnFood } from "./food/OwnFood";
 import { OwnNumbers } from "./food/OwnNumbers";
 import {
   FILL_CHOICES,
@@ -1088,6 +1090,8 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
   const [recent, setRecent] = useState<RecentFood[]>([]);
   // Held from the first press until the meal is kept: a second tap never logs it twice.
   const [adding, setAdding] = useState(false);
+  // A food no list has, added with the person's own numbers (33b-i): its form in place of the search.
+  const [own, setOwn] = useState(false);
   const addingNow = useRef(false);
   // The box fits between the top of the screen and the keyboard: its title and the search box stay in
   // view, and the list under them scrolls.
@@ -1118,6 +1122,7 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
     setPanel(false);
     setAdding(false);
     addingNow.current = false;
+    setOwn(false);
   }, [type]);
 
   // The person's recent foods, read each time the box opens; with no answer the box offers the search.
@@ -1192,7 +1197,7 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
   const refusedWords = priced.kind === "refused" && priced.for === key ? priced.words : null;
   const held = item === null || tooSmall || refusedWords !== null || outbox === null || adding;
 
-  const keep = async (name: string, chosen: ChosenItem, numbers: { items: MealItem[]; totals: MealPreview["totals"] } | null) => {
+  const keep = async (name: string, chosen: MealChoice, numbers: { items: MealItem[]; totals: MealPreview["totals"] } | null) => {
     if (outbox === null || addingNow.current) return;
     addingNow.current = true;
     setAdding(true);
@@ -1230,6 +1235,10 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
   const showRecent = food === null && query.trim() === "" && recent.length > 0;
   // The phone's back button: from a food's amount, back to the foods.
   const back = (): boolean => {
+    if (own) {
+      setOwn(false);
+      return true;
+    }
     if (food === null) return false;
     setFood(null);
     setAmount(null);
@@ -1238,8 +1247,19 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
   };
 
   return (
-    <Sheet open title={`Add to ${name}`} onClose={onClose} onBack={back}>
-      {food === null ? <Field label="Search food" bare value={query} onChange={setQuery} placeholder="Search food" ready maxLength={100} /> : null}
+    <Sheet open title={own ? "Your own food" : `Add to ${name}`} onClose={onClose} onBack={back}>
+      {own ? (
+        <ScrollView style={{ maxHeight: Math.max(SHEET_LIST_LEAST, height - keyboard - insets.top - SHEET_ABOVE_LIST) }} keyboardShouldPersistTaps="handled">
+          <OwnFood start={null} name={query.trim()} action="Add" onDone={(mine) => { void keep(mine.name, mine, null); }} />
+          {full ? (
+            <Txt kind="small" colour="badText">
+              Too many meals are waiting to be sent. Go online to send them, then add this one.
+            </Txt>
+          ) : null}
+        </ScrollView>
+      ) : null}
+      {food === null && !own ? <Field label="Search food" bare value={query} onChange={setQuery} placeholder="Search food" ready maxLength={100} /> : null}
+      {own ? null : (
       <ScrollView style={{ maxHeight: Math.max(SHEET_LIST_LEAST, height - keyboard - insets.top - (food === null ? SHEET_ABOVE_SEARCH : SHEET_ABOVE_LIST + (panel ? 0 : SHEET_FOOT))) }} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.sheetList}>
         {food === null ? (
           <>
@@ -1297,6 +1317,19 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
                   </Pressable>
                 ))
               : null}
+            {found.kind === "ok" && query.trim() !== "" ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Add ${query.trim()} with your own numbers`}
+                onPress={() => { setOwn(true); }}
+                style={({ pressed }) => [styles.found, pressed ? styles.pressed : null]}
+              >
+                <Txt kind="strong" colour="orange" numberOfLines={2}>
+                  Add “{query.trim()}” with your own numbers
+                </Txt>
+                <Txt kind="tiny">Not on the list? Enter what you ate.</Txt>
+              </Pressable>
+            ) : null}
           </>
         ) : (
           <>
@@ -1345,6 +1378,7 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
           }
         />
       </ScrollView>
+      )}
       {/* The food's numbers and its Add stay in view under the list, on the smallest phone too. */}
       {food === null || panel ? null : (
         <View style={styles.foot}>

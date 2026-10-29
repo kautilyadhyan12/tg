@@ -28,10 +28,13 @@ import {
   type LoggedMeasure,
   type Meal,
   type MealIdeasResponse,
+  type MealChoice,
   type MealItem,
+  type OwnFoodItem,
   type MealPhotoItem,
   type Per100g,
   type VisionEvidence,
+  isOwnFood,
 } from "@app/shared";
 import type { RedisLike } from "../../redis.js";
 import { onMealLogged } from "../gamification/service.js";
@@ -41,7 +44,7 @@ import { getUserFoodAnswers, getUserPlanAndCutRules, getUserSyncContext } from "
 import { LEAST_MEAL_KCAL, suggestAfterWorkout, suggestMeals, type AfterWorkoutIdea, type DayNumbers } from "./suggest.js";
 import { ownTargetsHeld, targetsFromPlan } from "./targets.js";
 import { foodWeek, spanDays } from "./foodWeek.js";
-import { CURATED_FOODS, curatedPieceFdcId, curatedUsdaFdcId, findCurated, findCuratedVersions, holdsEveryWord, searchCurated } from "./foods.js";
+import { CURATED_FOODS, curatedPieceFdcId, curatedUsdaFdcId, findCurated, findCuratedVersions, holdsEveryWord, searchCurated, slug } from "./foods.js";
 import { GRAM, dishwareGrams, foodMeasures, gramsPerMl, measureGrams, scanStart, startingMeasure, type UsdaPortion } from "./measures.js";
 import type { FoodReference, FoodSearchProvider } from "./openfoodfacts.adapter.js";
 import { itemsVersion, ownPer100g, savedPlaces } from "./mealEdit.js";
@@ -493,6 +496,8 @@ async function findFood(deps: NutritionDeps, query: string, search = true): Prom
   // draft and the meal saved from it: nothing may look one up by name, or a
   // request could price a food at figures no table and no scan gave it.
   if (query.startsWith(ESTIMATE_CANONICAL_PREFIX)) return null;
+  // An own_* canonical is a person's own food (33b-i), priced by their numbers on the meal alone.
+  if (query.startsWith(OWN_CANONICAL_PREFIX)) return null;
   // A usda_* canonical is one row of our own table and nothing else: it must
   // not reach findCurated's fuzzy match, and one the table does not hold must
   // not be handed to OpenFoodFacts as if it were a food's NAME (searching their
@@ -1143,6 +1148,45 @@ async function peekDraft(deps: NutritionDeps, userId: string, value: string): Pr
  *  so it is EXCLUDED from the Stage-5 correction pair entirely — an addition is
  *  not an estimate error; DECISIONS 2026-07-17). ONE implementation for confirm
  *  and preview so live math cannot diverge from what is saved (T3). */
+/** A person's own food (ROADMAP Stage 5 33b-i) goes under a name of this kind, which no list answers
+ *  to (`findFood`), so it is only ever priced by the numbers the meal keeps for it. */
+const OWN_CANONICAL_PREFIX = "own_";
+
+/** A person's own food as a meal keeps it: its name, the grams eaten, priced by their own protein,
+ *  carbs and fat (`ownPer100g`), under a canonical of its own in the meal. */
+function ownFoodItem(choice: OwnFoodItem, taken: Set<string>): MealItem {
+  const figures = ownPer100g(choice.own, choice.grams);
+  if (figures === null) throw ownNumbersTooHeavy(choice.grams);
+  const base = `${OWN_CANONICAL_PREFIX}${slug(choice.name).slice(0, 100) || "food"}`;
+  let canonical = base;
+  for (let k = 2; taken.has(canonical); k++) canonical = `${base}_${String(k)}`;
+  taken.add(canonical);
+  const food: FoodReference = {
+    canonical, name: choice.name, ...figures, fiberG: null, serving: choice.grams, unit: "g", source: "estimate", more: MORE_NOT_KNOWN,
+  };
+  return { ...nutritionItem(food, choice.grams, [choice.grams, choice.grams], "default"), nutritionSource: "own", per100g: figures };
+}
+
+/** A new meal's foods priced in their order: a person's own by their numbers, the rest by
+ *  `priceTable` (the lists, or the scan's draft), as `asPriced` gives an own food's item back. */
+async function withOwnFoods<T>(
+  choices: readonly MealChoice[],
+  priceTable: (table: ChosenItem[]) => Promise<T[]>,
+  asPriced: (item: MealItem) => T,
+): Promise<T[]> {
+  const table = choices.filter((c): c is ChosenItem => !isOwnFood(c));
+  const priced = table.length === 0 ? [] : await priceTable(table);
+  const taken = new Set(table.map((c) => c.canonical));
+  let next = 0;
+  return choices.map((choice) => {
+    if (isOwnFood(choice)) return asPriced(ownFoodItem(choice, taken));
+    const item = priced[next];
+    next += 1;
+    if (item === undefined) throw new Error("a food of the lists was not priced");
+    return item;
+  });
+}
+
 async function resolveDraftItems(
   deps: NutritionDeps,
   userId: string,
@@ -1194,7 +1238,8 @@ async function buildConfirmItems(
   const items: MealItem[] = [];
   const originalItems: MealItem[] = [];
   const correctedItems: MealItem[] = [];
-  for (const { item, original } of await resolveDraftItems(deps, userId, draft, input.items)) {
+  const resolved = await withOwnFoods(input.items, (table) => resolveDraftItems(deps, userId, draft, table), (item) => ({ item, original: null }));
+  for (const { item, original } of resolved) {
     items.push(item);
     // Only ESTIMATED items form the Stage-5 correction pair. An added item was
     // never estimated, so it belongs to the meal but not to the estimate-error
@@ -1337,7 +1382,7 @@ export async function resolveChosenItems(
 export async function createManualMeal(deps: NutritionDeps, userId: string, input: ManualMealRequest): Promise<SavedMeal> {
   const kept = await alreadySaved(deps, userId, input.id);
   if (kept !== null) return kept;
-  const items = await resolveChosenItems(deps, userId, input.items);
+  const items = await withOwnFoods(input.items, (table) => resolveChosenItems(deps, userId, table), (item) => item);
   return await writeMeal(deps, userId, input.id, {
     takenAt: new Date(input.takenAt),
     mealType: input.mealType ?? null,
@@ -1360,12 +1405,12 @@ export async function previewMeal(
   input: PreviewMealRequest,
 ): Promise<MealPreview> {
   if (input.scanToken === undefined) {
-    const items = await resolveChosenItems(deps, userId, input.items);
+    const items = await withOwnFoods(input.items, (table) => resolveChosenItems(deps, userId, table), (item) => item);
     return { items, totals: totals(items) };
   }
   const draft = await peekDraft(deps, userId, input.scanToken);
   // Same resolution as confirmMeal (extras + dishware included) so preview == save.
-  const items = (await resolveDraftItems(deps, userId, draft, input.items)).map(({ item }) => item);
+  const items = await withOwnFoods(input.items, async (table) => (await resolveDraftItems(deps, userId, draft, table)).map(({ item }) => item), (item) => item);
   return { items, totals: totals(items) };
 }
 
@@ -1425,14 +1470,16 @@ function ownFigures(edit: FoodEdit, prior: MealItem | undefined, grams: number):
   if (edit.own === null) return null;
   if (edit.own === undefined) return prior?.nutritionSource === "own" ? (prior.per100g ?? null) : null;
   const figures = ownPer100g(edit.own, grams);
-  if (figures === null) {
-    throw new NutritionError(
-      400,
-      "own_numbers_too_heavy",
-      `Protein, carbs and fat together can't weigh more than the food itself (${gramsFigure.format(grams)} g).`,
-    );
-  }
+  if (figures === null) throw ownNumbersTooHeavy(grams);
   return figures;
+}
+
+function ownNumbersTooHeavy(grams: number): NutritionError {
+  return new NutritionError(
+    400,
+    "own_numbers_too_heavy",
+    `Protein, carbs and fat together can't weigh more than the food itself (${gramsFigure.format(grams)} g).`,
+  );
 }
 
 /** Grams in a refusal: up to one decimal, en-US, as the screen writes them. */

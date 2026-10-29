@@ -22,6 +22,7 @@ import {
   totalsWords,
   withExtra,
   withRowAmount,
+  withRowFood,
 } from "../src/screens/food/photo";
 
 // A meal photo on the phone (ROADMAP Stage 5 33b-i).
@@ -177,6 +178,8 @@ const ANALYSIS: MealPhotoAnalysis = {
   confirmed: false,
 };
 const MILK = { canonical: "milk_whole", name: "Milk, whole", source: "usda" as const, measures, startsAt: { measure: "g" as const, amount: 240 } };
+/** Kd's chicken taco, the photo having seen beef: 150 g, 18 g protein, 20 g carbs, 9 g fat. */
+const TACO = { name: "Chicken taco", grams: 150, own: { proteinG: 18, carbsG: 20, fatG: 9 } };
 
 describe("the photo's meal while it is reviewed", () => {
   it("starts each food where the server started it, in the meal the time of day says", () => {
@@ -199,11 +202,46 @@ describe("the photo's meal while it is reviewed", () => {
     const off = withRowAmount(sheet, "s0", null);
     expect(sheetItems(off)).toEqual([{ canonical: "eggs_scrambled", measure: "g", amount: 120 }]);
     expect(atScan(off)).toBe(false);
-    const milk = withExtra(off, MILK, { measure: "g", amount: "240" });
+    const milk = withExtra(off, { food: MILK, amount: { measure: "g", amount: "240" } });
     expect(sheetItems(milk)).toEqual([{ canonical: "eggs_scrambled", measure: "g", amount: 120 }, { canonical: "milk_whole", measure: "g", amount: 240 }]);
     expect(atScan(milk)).toBe(false);
     expect([...onSheet(milk)].sort()).toEqual(["eggs_scrambled", "milk_whole", "toast"]);
     expect(sheetItems(withRowAmount(milk, "x0", null))).toEqual([{ canonical: "eggs_scrambled", measure: "g", amount: 120 }]);
+  });
+
+  it("changes a food the photo got wrong to another, sends that one in its place, and goes back to what the photo saw", () => {
+    const sheet = newSheet(ANALYSIS, NOW);
+    const milk = withRowFood(sheet, "s0", { food: MILK, amount: { measure: "g", amount: "60" } });
+    expect(sheetRows(milk).map((r) => [r.key, r.name, r.wasSeen, r.added])).toEqual([
+      ["s0", "Milk, whole", "Toast", false],
+      ["s1", "Eggs (scrambled)", null, false],
+    ]);
+    expect(sheetItems(milk)).toEqual([{ canonical: "milk_whole", measure: "g", amount: 60 }, { canonical: "eggs_scrambled", measure: "g", amount: 120 }]);
+    expect(atScan(milk)).toBe(false);
+    // The scan's toast stays off the search's list, and the food in its place is not offered twice.
+    expect([...onSheet(milk)].sort()).toEqual(["eggs_scrambled", "milk_whole", "toast"]);
+    // Its amount changes the food in its place; Undo is the toast at its own amount again.
+    const more = withRowAmount(milk, "s0", { measure: "g", amount: "90" });
+    expect(sheetItems(more)?.[0]).toEqual({ canonical: "milk_whole", measure: "g", amount: 90 });
+    expect(sheetItems(withRowFood(more, "s0", null))?.[0]).toEqual({ canonical: "toast", measure: "serving", amount: 2 });
+    expect(atScan(withRowFood(more, "s0", null))).toBe(true);
+    // Taken off, the place goes with it, and a later Undo has nothing to bring back.
+    const off = withRowAmount(more, "s0", null);
+    expect(sheetItems(off)).toEqual([{ canonical: "eggs_scrambled", measure: "g", amount: 120 }]);
+    expect(off.replaced[0]).toBeNull();
+  });
+
+  it("sends the person's own food as their numbers, in a row's place or added", () => {
+    const sheet = withExtra(withRowFood(newSheet(ANALYSIS, NOW), "s0", { own: TACO }), { own: { ...TACO, name: "Salsa", grams: 30, own: { proteinG: 0, carbsG: 3, fatG: 0 } } });
+    expect(sheetRows(sheet).map((r) => [r.name, r.source, r.canonical, r.amount.amount, r.wasSeen])).toEqual([
+      ["Chicken taco", "own", null, "150", "Toast"],
+      ["Eggs (scrambled)", "curated", "eggs_scrambled", "120", null],
+      ["Salsa", "own", null, "30", null],
+    ]);
+    expect(sheetItems(sheet)).toEqual([TACO, { canonical: "eggs_scrambled", measure: "g", amount: 120 }, { name: "Salsa", grams: 30, own: { proteinG: 0, carbsG: 3, fatG: 0 } }]);
+    // Changed in its own form, it is the new numbers.
+    const changed = withRowFood(sheet, "x0", { own: { ...TACO, name: "Salsa", grams: 40, own: { proteinG: 0, carbsG: 4, fatG: 0 } } });
+    expect(sheetItems(changed)?.[2]).toEqual({ name: "Salsa", grams: 40, own: { proteinG: 0, carbsG: 4, fatG: 0 } });
   });
 
   it("sends nothing while a food has no amount or no food is left", () => {
@@ -214,7 +252,7 @@ describe("the photo's meal while it is reviewed", () => {
   });
 
   it("is kept and read back whole while it can still be saved, and never after", () => {
-    const sheet = withExtra(newSheet(ANALYSIS, NOW), MILK, { measure: "g", amount: "240" });
+    const sheet = withExtra(withExtra(newSheet(ANALYSIS, NOW), { food: MILK, amount: { measure: "g", amount: "240" } }), { own: TACO });
     const text = sheetFileText(sheet);
     expect(readSheetFile(text, NOW)).toEqual(sheet);
     expect(sheetLeftMs(sheet, NOW)).toBe(MEAL_SCAN_SAVE_SECONDS * 1000);
@@ -224,6 +262,7 @@ describe("the photo's meal while it is reviewed", () => {
     expect(readSheetFile("", NOW)).toBeNull();
     expect(readSheetFile("{", NOW)).toBeNull();
     expect(readSheetFile(JSON.stringify({ ...JSON.parse(text), amounts: [null] }), NOW)).toBeNull();
+    expect(readSheetFile(JSON.stringify({ ...JSON.parse(text), replaced: [null] }), NOW)).toBeNull();
     expect(readSheetFile(JSON.stringify({ ...JSON.parse(text), version: 2 }), NOW)).toBeNull();
   });
 

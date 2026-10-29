@@ -6,7 +6,7 @@ import {
   Sparkles, Check, Tag, Pencil, ChevronDown,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { MEAL_SCAN_SAVE_SECONDS, PHOTO_SCAN_CAUTION } from '@app/shared';
+import { MEAL_SCAN_SAVE_SECONDS, PHOTO_SCAN_CAUTION, mealTypeAtHour } from '@app/shared';
 import { nutritionService, composeAddIngredient, missingAnswers, toDisplayTargets, toRingChoice } from '../api/nutritionApi';
 import LoggedFoodSheet from '../components/nutrition/LoggedFoodSheet';
 import MacroRings from '../components/nutrition/MacroRings';
@@ -1736,15 +1736,10 @@ function PhotoModal({ open, onClose, onSave }) {
 
 // ── Fallback buckets for UNLABELED meals only (Kd ruling 2026-07-17:
 // mealType is the stored user-chosen label; this time derivation survives
-// purely as the display fallback for rows without one). before 11 =
-// breakfast · 11–16 = lunch · 16–19 = snack · 19–22 = dinner · else snack.
+// purely as the display fallback for rows without one), by the one rule the
+// phone uses too (`mealTypeAtHour`, Kd 2026-10-30: dinner until midnight).
 function bucketOf(takenAt) {
-  const h = new Date(takenAt).getHours();
-  if (h < 11) return 'breakfast';
-  if (h < 16) return 'lunch';
-  if (h < 19) return 'snack';
-  if (h < 22) return 'dinner';
-  return 'snack';
+  return mealTypeAtHour(new Date(takenAt).getHours());
 }
 
 // ── Card 5d: local-day helpers for the previous-days view ─────────────────────

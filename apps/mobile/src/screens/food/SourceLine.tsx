@@ -7,15 +7,19 @@ import { creditsFor } from "./day";
 // Where a food's numbers come from, and the food data's own credits, for every screen that lists
 // foods: the Food tab and a meal photo's review (ROADMAP Stage 5 32b-i, 33b-i).
 
-export const SOURCE_WORDS: Readonly<Record<FoodSearchItem["source"], string>> = {
+/** Where a food's numbers come from: a list's, the scan's estimate, or the person's own (33b-i). */
+export type FoodSource = FoodSearchItem["source"] | "own";
+
+export const SOURCE_WORDS: Readonly<Record<FoodSource, string>> = {
   curated: "Verified",
   usda: "USDA",
   openfoodfacts: "Packaged product",
   estimate: "Estimate",
+  own: "Your numbers",
 };
 
 /** Where a food's numbers come from; the hand-checked foods with a tick. */
-export function SourceLine({ source, before = "" }: { source: FoodSearchItem["source"]; before?: string }) {
+export function SourceLine({ source, before = "" }: { source: FoodSource; before?: string }) {
   return (
     <View style={styles.source}>
       <Txt kind="tiny">{before}</Txt>

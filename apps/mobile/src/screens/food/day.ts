@@ -1,4 +1,4 @@
-import type { Meal, MealItem, MealPage, MealType, NutritionTargetsResponse } from "@app/shared";
+import { mealTypeAtHour, type Meal, type MealItem, type MealPage, type MealType, type NutritionTargetsResponse } from "@app/shared";
 import { count } from "../dashboard/words";
 
 // One day of the person's food, in the phone's own days, as the browser reads it
@@ -45,12 +45,7 @@ export function dayWords(day: Date, now: Date): string {
 /** A meal saved with no section of its own sits where its hour puts it, as on the browser. */
 export function sectionOf(meal: Pick<Meal, "mealType" | "takenAt">): MealType {
   if (meal.mealType !== null) return meal.mealType;
-  const h = new Date(meal.takenAt).getHours();
-  if (h < 11) return "breakfast";
-  if (h < 16) return "lunch";
-  if (h < 19) return "snack";
-  if (h < 22) return "dinner";
-  return "snack";
+  return mealTypeAtHour(new Date(meal.takenAt).getHours());
 }
 
 /** The day's meals from newest-first pages. `cut`: the day lies deeper than the pages read. */

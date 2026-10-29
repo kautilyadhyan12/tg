@@ -66,12 +66,14 @@ describe("the day's meals", () => {
 
   it("sit in the section the person picked, else where the hour puts it", () => {
     expect(sectionOf({ mealType: "dinner", takenAt: at(2026, 10, 27, 8) })).toBe("dinner");
-    expect([7, 12, 17, 20, 23].map((h) => sectionOf({ mealType: null, takenAt: at(2026, 10, 27, h) }))).toEqual([
+    // Dinner until midnight, a late-night snack after it (Kd, 2026-10-30).
+    expect([2, 7, 12, 17, 20, 23].map((h) => sectionOf({ mealType: null, takenAt: at(2026, 10, 27, h) }))).toEqual([
+      "snack",
       "breakfast",
       "lunch",
       "snack",
       "dinner",
-      "snack",
+      "dinner",
     ]);
   });
 

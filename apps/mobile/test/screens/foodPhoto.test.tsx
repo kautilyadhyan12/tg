@@ -55,8 +55,27 @@ const PER_GRAM: Record<string, { name: string; kcal: number; source: string }> =
   eggs_scrambled: { name: "Eggs (scrambled)", kcal: 1.5, source: "estimate" },
   milk_whole: { name: "Milk, whole", kcal: 0.6, source: "usda" },
 };
-type Sent = { canonical: string; measure: string; amount: number };
-function priced(item: Sent) {
+type Own = { name: string; grams: number; own: { proteinG: number; carbsG: number; fatG: number } };
+type Sent = { canonical: string; measure: string; amount: number } | Own;
+/** As the server prices them: a food of the lists by its own figures, the person's own food by its
+ *  protein, carbs and fat at 4, 4 and 9 kcal a gram. */
+function priced(sent: Sent) {
+  if ("own" in sent) {
+    const kcal = Math.round(4 * sent.own.proteinG + 4 * sent.own.carbsG + 9 * sent.own.fatG);
+    return {
+      name: sent.name,
+      canonical: `own_${sent.name.toLowerCase().replace(/[^a-z]+/g, "_")}`,
+      gramsPoint: sent.grams,
+      gramsRange: [sent.grams, sent.grams],
+      portionSource: "default",
+      nutritionSource: "own",
+      kcalPoint: kcal,
+      kcalLow: kcal,
+      kcalHigh: kcal,
+      ...sent.own,
+    };
+  }
+  const item = sent;
   const food = PER_GRAM[item.canonical] ?? { name: item.canonical, kcal: 1, source: "usda" };
   const grams = item.measure === "serving" ? item.amount * 30 : item.amount;
   const kcal = Math.round(grams * food.kcal);
@@ -407,6 +426,86 @@ describe("a photo meal is never thrown away by leaving it", () => {
     await waitFor(() => {
       expect(screen.queryByText("Waiting to send")).toBeNull();
     });
+  });
+});
+
+describe("a food the photo got wrong, and one no list has (Kd, 2026-10-30)", () => {
+  it("changes a food to another from the search, at the grams it weighed, and goes back to what the photo saw", async () => {
+    const server = await openFood({ meals: [], scans: [] });
+    await takePhoto();
+    await fireEvent.press(await screen.findByRole("button", { name: "Change Toast, 2 × slice · 60 g" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Not this? Change food" }));
+    expect(await screen.findByText("Change Toast")).toBeTruthy();
+    await fireEvent.changeText(screen.getByLabelText("Search food"), "milk");
+    await fireEvent.press(await screen.findByRole("button", { name: "Change to Milk, whole, 144 kcal · 240 g" }));
+    expect(await screen.findByText("Toast changed to Milk, whole.")).toBeTruthy();
+    expect(screen.getByText("Changed from Toast")).toBeTruthy();
+    // Undo, from the food's own box.
+    await fireEvent.press(await screen.findByRole("button", { name: /^Change Milk, whole, 60 g/ }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Back to Toast" }));
+    expect(await screen.findByText("Back to Toast.")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Change Toast, 2 × slice · 60 g" })).toBeTruthy();
+    // Changed again, and saved: the milk goes in the toast's place, at the 60 g the toast weighed.
+    await fireEvent.press(screen.getByRole("button", { name: "Change Toast, 2 × slice · 60 g" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Not this? Change food" }));
+    await fireEvent.changeText(screen.getByLabelText("Search food"), "milk");
+    await fireEvent.press(await screen.findByRole("button", { name: "Change to Milk, whole, 144 kcal · 240 g" }));
+    await fireEvent.press(await screen.findByRole("button", { name: /^Save to / }));
+    await waitFor(() => {
+      expect(saves(server)).toHaveLength(1);
+    });
+    expect((saves(server)[0]?.body as { items: unknown }).items).toEqual([
+      { canonical: "milk_whole", measure: "g", amount: 60 },
+      { canonical: "eggs_scrambled", measure: "g", amount: 120 },
+    ]);
+  });
+
+  it("puts the person's own food in a food's place, starting at the grams it weighed, priced by their numbers", async () => {
+    const server = await openFood({ meals: [], scans: [] });
+    await takePhoto();
+    await fireEvent.press(await screen.findByRole("button", { name: "Change Eggs (scrambled), 120 g · estimate" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Not this? Change food" }));
+    await fireEvent.changeText(screen.getByLabelText("Search food"), "chicken taco");
+    await fireEvent.press(await screen.findByRole("button", { name: "Add chicken taco with your own numbers" }));
+    expect(await screen.findByText("Your own food")).toBeTruthy();
+    expect(screen.getByLabelText("Food name").props.value).toBe("chicken taco");
+    expect(screen.getByLabelText("How much you ate, in grams").props.value).toBe("120");
+    await fireEvent.changeText(screen.getByLabelText("Food name"), "Chicken taco");
+    // Numbers heavier than the food say so, never a grey button alone.
+    await fireEvent.changeText(screen.getByLabelText("Protein (g)"), "200");
+    expect(await screen.findByText("Protein, carbs and fat together can’t weigh more than the food itself.")).toBeTruthy();
+    await fireEvent.changeText(screen.getByLabelText("Protein (g)"), "18");
+    await fireEvent.changeText(screen.getByLabelText("Carbs (g)"), "20");
+    await fireEvent.changeText(screen.getByLabelText("Fat (g)"), "9");
+    await fireEvent.press(await screen.findByRole("button", { name: "Add Chicken taco · 233 kcal" }));
+    expect(await screen.findByText("Eggs (scrambled) changed to Chicken taco.")).toBeTruthy();
+    expect(screen.getByText("Changed from Eggs (scrambled)")).toBeTruthy();
+    await fireEvent.press(await screen.findByRole("button", { name: /^Save to / }));
+    await waitFor(() => {
+      expect(saves(server)).toHaveLength(1);
+    });
+    expect((saves(server)[0]?.body as { items: unknown }).items).toEqual([
+      { canonical: "toast", measure: "serving", amount: 2 },
+      { name: "Chicken taco", grams: 120, own: { proteinG: 18, carbsG: 20, fatG: 9 } },
+    ]);
+  });
+
+  it("logs a typed meal of the person's own food where the search has none", async () => {
+    const server = await openFood({ meals: [], scans: [] });
+    const section = mealTypeName(sectionOf({ mealType: null, takenAt: new Date().toISOString() }));
+    await fireEvent.press(await screen.findByRole("button", { name: `Add to ${section}` }));
+    await fireEvent.changeText(screen.getByLabelText("Search food"), "Chicken taco");
+    await fireEvent.press(await screen.findByRole("button", { name: "Add Chicken taco with your own numbers" }));
+    await fireEvent.changeText(screen.getByLabelText("How much you ate, in grams"), "150");
+    await fireEvent.changeText(screen.getByLabelText("Protein (g)"), "18");
+    await fireEvent.changeText(screen.getByLabelText("Carbs (g)"), "20");
+    await fireEvent.changeText(screen.getByLabelText("Fat (g)"), "9");
+    await fireEvent.press(await screen.findByRole("button", { name: "Add Chicken taco · 233 kcal" }));
+    expect(await screen.findByText("Chicken taco added.")).toBeTruthy();
+    await waitFor(() => {
+      expect(saves(server)).toHaveLength(1);
+    });
+    expect(saves(server)[0]?.body).toMatchObject({ mealName: "Chicken taco", items: [{ name: "Chicken taco", grams: 150, own: { proteinG: 18, carbsG: 20, fatG: 9 } }] });
   });
 });
 

@@ -13,6 +13,8 @@ import {
   type MealItem,
   type MealPreview,
   type MealType,
+  type OwnFoodItem,
+  type PhotoSheetPick,
 } from "@app/shared";
 import { Button } from "../../look/Button";
 import { Chip } from "../../look/Chip";
@@ -45,10 +47,12 @@ import {
   totalsWords,
   withExtra,
   withRowAmount,
+  withRowFood,
   type PhotoSheet,
   type SheetRow,
 } from "./photo";
 import type { KeptSheet } from "./PhotoSheetStore";
+import { OwnFood } from "./OwnFood";
 import { Credits, SourceLine } from "./SourceLine";
 
 // Log a meal from a photo (ROADMAP Stage 5 33b-i). The live camera opens at once, as food apps open
@@ -348,7 +352,7 @@ function Review({
   const { width, height } = useWindowDimensions();
   const [priced, setPriced] = useState<Priced>({ kind: "none" });
   const [openRow, setOpenRow] = useState<string | null>(null);
-  const [finding, setFinding] = useState<string | null>(null);
+  const [finding, setFinding] = useState<{ query: string; change: string | null } | null>(null);
   const [ask, setAsk] = useState<Ask>("none");
   const [said, setSaid] = useState<string | null>(null);
   const [full, setFull] = useState(false);
@@ -410,6 +414,9 @@ function Review({
 
   const row = rows.find((r) => r.key === openRow) ?? null;
   const rowAt = row === null ? -1 : rows.indexOf(row);
+  // The row the search changes, and what it weighs now: the food picked in its place starts there.
+  const changing = finding?.change == null ? null : (rows.find((r) => r.key === finding.change) ?? null);
+  const changingGrams = changing === null ? null : (numbers?.items[rows.indexOf(changing)]?.gramsPoint ?? null);
   return (
     <View style={styles.page}>
       <ScrollView contentContainerStyle={styles.reviewList} keyboardShouldPersistTaps="handled">
@@ -475,12 +482,12 @@ function Review({
                   <Txt kind="small" style={styles.grow}>
                     {u}
                   </Txt>
-                  <Button label="Add" kind="link" say={`Add ${u}`} onPress={() => { setSaid(null); setFinding(u); }} />
+                  <Button label="Add" kind="link" say={`Add ${u}`} onPress={() => { setSaid(null); setFinding({ query: u, change: null }); }} />
                 </View>
               ))}
             </View>
           )}
-          <Button label="Add a food it missed" icon="plus" kind="soft" small onPress={() => { setSaid(null); setFinding(""); }} />
+          <Button label="Add a food it missed" icon="plus" kind="soft" small onPress={() => { setSaid(null); setFinding({ query: "", change: null }); }} />
           <Credits sources={new Set(rows.map((r) => r.source))} />
         </View>
       </ScrollView>
@@ -512,6 +519,24 @@ function Review({
             grams={numbers?.items[rowAt]?.gramsPoint ?? null}
             kcal={numbers?.items[rowAt]?.kcalPoint ?? null}
             onAmount={(amount) => { keep(withRowAmount(sheet, row.key, amount)); }}
+            onOwn={(own) => {
+              keep(withRowFood(sheet, row.key, { own }));
+              setOpenRow(null);
+              setSaid(`${own.name} updated.`);
+            }}
+            onChange={() => {
+              setOpenRow(null);
+              setFinding({ query: "", change: row.key });
+            }}
+            onUndo={
+              row.wasSeen === null
+                ? null
+                : () => {
+                    keep(withRowFood(sheet, row.key, null));
+                    setOpenRow(null);
+                    setSaid(`Back to ${row.wasSeen ?? ""}.`);
+                  }
+            }
             onDone={() => { setOpenRow(null); }}
             onRemove={() => {
               keep(withRowAmount(sheet, row.key, null));
@@ -522,13 +547,21 @@ function Review({
         </Sheet>
       )}
       <FindFood
-        query={finding}
+        query={finding?.query ?? null}
+        changing={changing === null ? null : changing.name}
+        grams={changingGrams}
         taken={onSheet(sheet)}
         onClose={() => { setFinding(null); }}
-        onPick={(food) => {
-          keep(withExtra(sheet, { canonical: food.canonical, name: food.name, source: food.source, measures: food.measures, startsAt: food.startsAt }, startingAmount(food)));
+        onPick={(pick) => {
+          const name = "own" in pick ? pick.own.name : pick.food.name;
+          if (changing === null) {
+            keep(withExtra(sheet, pick));
+            setSaid(`${name} added.`);
+          } else {
+            keep(withRowFood(sheet, changing.key, pick));
+            setSaid(`${changing.name} changed to ${name}.`);
+          }
           setFinding(null);
-          setSaid(`${food.name} added.`);
         }}
       />
       <Sheet open={ask === "newPhoto"} title="Take a new photo?" onClose={() => { setAsk("none"); }}>
@@ -552,8 +585,9 @@ function FoodRow({ row, item, onPress }: { row: SheetRow; item: MealItem | null;
         : measure === undefined
           ? NOT_KNOWN
           : typedAmount(measure, Number(row.amount.amount));
-  // The scan's guess of how much, still untouched, and a food whose numbers are the scan's own.
-  const mark = row.estimated || row.source === "estimate" ? " · estimate" : "";
+  // The scan's guess of how much, still untouched, a food whose numbers are the scan's own, and the
+  // person's own food.
+  const mark = row.source === "own" ? " · your numbers" : row.estimated || row.source === "estimate" ? " · estimate" : "";
   const kcal = item?.kcalPoint ?? null;
   return (
     <Pressable
@@ -570,6 +604,7 @@ function FoodRow({ row, item, onPress }: { row: SheetRow; item: MealItem | null;
           {amount}
           {mark}
         </Txt>
+        {row.wasSeen === null ? null : <Txt kind="tiny">Changed from {row.wasSeen}</Txt>}
       </View>
       <Txt kind="small" colour="text">
         {kcal === null ? "" : kcalWords(kcal)}
@@ -585,6 +620,9 @@ function RowAmount({
   grams,
   kcal,
   onAmount,
+  onOwn,
+  onChange,
+  onUndo,
   onDone,
   onRemove,
 }: {
@@ -592,14 +630,36 @@ function RowAmount({
   grams: number | null;
   kcal: number | null;
   onAmount: (amount: { measure: string; amount: string }) => void;
+  onOwn: (own: OwnFoodItem) => void;
+  onChange: () => void;
+  onUndo: (() => void) | null;
   onDone: () => void;
   onRemove: () => void;
 }) {
   const { dishes, again } = useDishes();
   const [panel, setPanel] = useState(false);
+  // Not the food it is: another from the search, or the person's own. Back to what the photo saw.
+  const notThis = (
+    <View style={styles.notThis}>
+      <SourceLine source={row.source} />
+      <View style={styles.grow} />
+      <Button label="Not this? Change food" kind="link" onPress={onChange} />
+    </View>
+  );
+  const undo = onUndo === null ? null : <Button label={`Back to ${row.wasSeen ?? ""}`} kind="quiet" wide onPress={onUndo} />;
+  if (row.own !== null) {
+    return (
+      <>
+        {notThis}
+        <OwnFood start={row.own} name={row.own.name} action="Save" onDone={onOwn} />
+        {undo}
+        <Button label="Take off the meal" icon="trash" kind="quiet" wide onPress={onRemove} />
+      </>
+    );
+  }
   return (
     <>
-      <SourceLine source={row.source} />
+      {notThis}
       <AmountPicker measures={row.measures} amount={row.amount} onAmount={onAmount} dishes={dishes} onDishes={again} onPanel={setPanel} grams={grams} usual={row.usual} />
       {panel ? null : (
         <View style={styles.sheetFoot}>
@@ -609,6 +669,7 @@ function RowAmount({
             </Txt>
           )}
           <Button label="Done" wide onPress={onDone} />
+          {undo}
           <Button label="Take off the meal" icon="trash" kind="quiet" wide onPress={onRemove} />
         </View>
       )}
@@ -618,14 +679,44 @@ function RowAmount({
 
 type Found = { kind: "idle" } | { kind: "looking" } | { kind: "ok"; items: FoodSearchItem[] } | { kind: "failed"; words: string };
 
-/** A food the photo missed, found by search and added at its usual amount. `query` null: closed. */
-function FindFood({ query, taken, onClose, onPick }: { query: string | null; taken: ReadonlySet<string>; onClose: () => void; onPick: (food: FoodSearchItem) => void }) {
+/** A food found by search: one the photo missed, added at its usual amount, or the one a row is
+ *  changed to (`changing`, the row's name), at the grams the row weighs. Where the list has none, the
+ *  person's own food. `query` null: closed. */
+function FindFood({
+  query,
+  changing,
+  grams,
+  taken,
+  onClose,
+  onPick,
+}: {
+  query: string | null;
+  changing: string | null;
+  grams: number | null;
+  taken: ReadonlySet<string>;
+  onClose: () => void;
+  onPick: (pick: PhotoSheetPick) => void;
+}) {
   const { session } = useSession();
   const [typed, setTyped] = useState("");
   const [found, setFound] = useState<Found>({ kind: "idle" });
+  const [own, setOwn] = useState(false);
   useEffect(() => {
     if (query !== null) setTyped(query);
+    setOwn(false);
   }, [query]);
+  // The phone's back button: from the own food's form, back to the search.
+  const back = (): boolean => {
+    if (!own) return false;
+    setOwn(false);
+    return true;
+  };
+  const pick = (f: FoodSearchItem) => {
+    const food = { canonical: f.canonical, name: f.name, source: f.source, measures: f.measures, startsAt: f.startsAt };
+    // In a row's place it starts at what the row weighs; added, where the server starts it.
+    const amount = changing !== null && grams !== null ? { measure: "g", amount: String(Math.max(1, Math.round(grams))) } : startingAmount(f);
+    onPick({ food, amount });
+  };
   useEffect(() => {
     const q = typed.trim();
     if (query === null || q === "") {
@@ -648,8 +739,19 @@ function FindFood({ query, taken, onClose, onPick }: { query: string | null; tak
   }, [typed, query, session]);
   if (query === null) return null;
   const list = found.kind === "ok" ? found.items.filter((f) => !taken.has(f.canonical)) : [];
+  const title = changing === null ? "Add a food" : `Change ${changing}`;
+  if (own) {
+    return (
+      <Sheet open title="Your own food" onClose={onClose} onBack={back}>
+        <ScrollView style={styles.findList} keyboardShouldPersistTaps="handled">
+          <OwnFood start={null} name={typed.trim()} grams={changing === null ? null : grams} action="Add" onDone={(food) => { onPick({ own: food }); }} />
+        </ScrollView>
+      </Sheet>
+    );
+  }
+  const q = typed.trim();
   return (
-    <Sheet open title="Add a food" onClose={onClose}>
+    <Sheet open title={title} onClose={onClose}>
       <Field label="Search food" bare value={typed} onChange={setTyped} placeholder="Search food" ready maxLength={100} />
       <ScrollView style={styles.findList} keyboardShouldPersistTaps="handled">
         {found.kind === "looking" ? <Txt kind="small">Searching…</Txt> : null}
@@ -663,8 +765,8 @@ function FindFood({ query, taken, onClose, onPick }: { query: string | null; tak
           <Pressable
             key={f.canonical}
             accessibilityRole="button"
-            accessibilityLabel={`Add ${f.name}, ${startWords(f)}`}
-            onPress={() => { onPick(f); }}
+            accessibilityLabel={`${changing === null ? "Add" : "Change to"} ${f.name}, ${startWords(f)}`}
+            onPress={() => { pick(f); }}
             style={({ pressed }) => [styles.found, pressed ? styles.pressed : null]}
           >
             <Txt kind="strong" numberOfLines={2}>
@@ -673,6 +775,19 @@ function FindFood({ query, taken, onClose, onPick }: { query: string | null; tak
             <SourceLine source={f.source} before={`${startWords(f)} ·`} />
           </Pressable>
         ))}
+        {found.kind === "ok" && q !== "" ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Add ${q} with your own numbers`}
+            onPress={() => { setOwn(true); }}
+            style={({ pressed }) => [styles.found, pressed ? styles.pressed : null]}
+          >
+            <Txt kind="strong" colour="orange" numberOfLines={2}>
+              Add “{q}” with your own numbers
+            </Txt>
+            <Txt kind="tiny">Not on the list? Enter what you ate.</Txt>
+          </Pressable>
+        ) : null}
         <Credits sources={new Set(list.map((f) => f.source))} />
       </ScrollView>
     </Sheet>
@@ -743,6 +858,7 @@ const styles = StyleSheet.create({
   reviewFoot: { gap: 10, paddingTop: 12, paddingHorizontal: sizes.edge, borderTopWidth: 1, borderTopColor: colours.line, backgroundColor: colours.box },
   footRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   sheetFoot: { gap: 10 },
+  notThis: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
   findList: { maxHeight: 360 },
   found: { minHeight: 56, justifyContent: "center", gap: 2, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colours.line },
 });

@@ -4,13 +4,15 @@ import {
   MEAL_SCAN_SAVE_SECONDS,
   cleanPhoto,
   photoSheetFileSchema,
-  type ChosenItem,
+  type MealChoice,
   type MealPhotoAnalysis,
   type MealPreview,
   type MealType,
+  type OwnFoodItem,
   type PhotoSheetAmount,
   type PhotoSheetFile,
   type PhotoSheetFood,
+  type PhotoSheetPick,
 } from "@app/shared";
 import type { Answer } from "../../session/calls";
 import { count } from "../dashboard/words";
@@ -140,6 +142,7 @@ export function newSheet(analysis: MealPhotoAnalysis, now: Date, photo: string |
     scannedAt: now.toISOString(),
     analysis,
     amounts: analysis.items.map(startOf),
+    replaced: analysis.items.map(() => null),
     extras: [],
     mealType: sectionOf({ mealType: null, takenAt: now.toISOString() }),
     ...(photo !== null && photo.length <= MEAL_PHOTO_KEPT_MOST ? { photo } : {}),
@@ -153,12 +156,16 @@ export const sheetLeftMs = (sheet: Pick<PhotoSheet, "scannedAt">, now: Date): nu
 /** A kept photo meal is opened again only while a save still has this long. */
 export const SHEET_LEAST_LEFT_MS = 60_000;
 
-/** One food on the photo's meal, as its row reads it. `at` is its place among the foods sent. */
+/** Where a row's numbers come from: a list's, the scan's estimate, or the person's own. */
+export type RowSource = PhotoSheetFood["source"] | "own";
+
+/** One food on the photo's meal, as its row reads it. */
 export interface SheetRow {
   key: string;
   name: string;
-  canonical: string;
-  source: PhotoSheetFood["source"];
+  /** The list's food, or null for the person's own food (`own`). */
+  canonical: string | null;
+  source: RowSource;
   measures: MealPhotoAnalysis["items"][number]["measures"];
   amount: PhotoSheetAmount;
   usual: PhotoSheetAmount;
@@ -166,19 +173,50 @@ export interface SheetRow {
   estimated: boolean;
   /** The scan's own numbers for it, while it is as the scan started it. */
   scanned: MealPhotoAnalysis["items"][number] | null;
+  /** The person's own food: its name, grams and numbers. */
+  own: OwnFoodItem | null;
+  /** What the photo saw here, where the person changed it to another food: Undo puts it back. */
+  wasSeen: string | null;
   added: boolean;
 }
 
 const sameAmount = (a: PhotoSheetAmount, b: PhotoSheetAmount): boolean => a.measure === b.measure && Number(a.amount) === Number(b.amount);
+const GRAMS_ONLY: MealPhotoAnalysis["items"][number]["measures"] = [{ id: "g", name: "g", grams: 1 }];
 
-/** The foods on the meal now, in the order they are sent: the scan's still on it, then those added. */
+/** A food the person put on the meal, as its row reads it. */
+function pickRow(pick: PhotoSheetPick, key: string, wasSeen: string | null): SheetRow {
+  if ("own" in pick) {
+    const grams = { measure: "g", amount: formatAmount(pick.own.grams) };
+    return { key, name: pick.own.name, canonical: null, source: "own", measures: GRAMS_ONLY, amount: grams, usual: grams, estimated: false, scanned: null, own: pick.own, wasSeen, added: wasSeen === null };
+  }
+  return {
+    key,
+    name: pick.food.name,
+    canonical: pick.food.canonical,
+    source: pick.food.source,
+    measures: pick.food.measures,
+    amount: pick.amount,
+    usual: { measure: pick.food.startsAt.measure, amount: formatAmount(pick.food.startsAt.amount) },
+    estimated: false,
+    scanned: null,
+    own: null,
+    wasSeen,
+    added: wasSeen === null,
+  };
+}
+
+/** The foods on the meal now, in the order they are sent: the scan's still on it (each as the person
+ *  changed it, where they did), then those added. */
 export function sheetRows(sheet: PhotoSheet): SheetRow[] {
   const scanned = sheet.analysis.items.flatMap((item, i): SheetRow[] => {
     const amount = sheet.amounts[i];
     if (amount === null || amount === undefined) return [];
+    const key = `s${String(i)}`;
+    const replaced = sheet.replaced[i];
+    if (replaced !== null && replaced !== undefined) return [pickRow(replaced, key, item.name)];
     const untouched = sameAmount(amount, startOf(item));
     return [{
-      key: `s${String(i)}`,
+      key,
       name: item.name,
       canonical: item.canonical,
       // A scanned food's numbers are never the person's own; read as the scan's estimate if ever so.
@@ -188,35 +226,28 @@ export function sheetRows(sheet: PhotoSheet): SheetRow[] {
       usual: startOf(item),
       estimated: untouched && item.portionEstimated,
       scanned: untouched ? item : null,
+      own: null,
+      wasSeen: null,
       added: false,
     }];
   });
-  const added = sheet.extras.map((x, i): SheetRow => ({
-    key: `x${String(i)}`,
-    name: x.food.name,
-    canonical: x.food.canonical,
-    source: x.food.source,
-    measures: x.food.measures,
-    amount: x.amount,
-    usual: { measure: x.food.startsAt.measure, amount: formatAmount(x.food.startsAt.amount) },
-    estimated: false,
-    scanned: null,
-    added: true,
-  }));
-  return [...scanned, ...added];
+  return [...scanned, ...sheet.extras.map((x, i) => pickRow(x, `x${String(i)}`, null))];
 }
 
 /** What is sent for the meal, or null while a food on it has no amount, or none is left on it. */
-export function sheetItems(sheet: PhotoSheet): ChosenItem[] | null {
+export function sheetItems(sheet: PhotoSheet): MealChoice[] | null {
   const rows = sheetRows(sheet);
   if (rows.length === 0) return null;
-  const items = rows.map((r) => chosenItem(r.canonical, r.amount));
-  return items.every((i): i is ChosenItem => i !== null) ? items : null;
+  const items = rows.map((r): MealChoice | null => (r.own !== null ? r.own : r.canonical === null ? null : chosenItem(r.canonical, r.amount)));
+  return items.every((i): i is MealChoice => i !== null) ? items : null;
 }
 
 /** The meal still exactly as the scan saw it: the scan's own numbers stand until the server's come. */
 export const atScan = (sheet: PhotoSheet): boolean =>
-  sheet.extras.length === 0 && sheet.amounts.every((a) => a !== null) && sheetRows(sheet).every((r) => r.scanned !== null);
+  sheet.extras.length === 0 &&
+  sheet.amounts.every((a) => a !== null) &&
+  sheet.replaced.every((r) => r === null) &&
+  sheetRows(sheet).every((r) => r.scanned !== null);
 
 /** The meal's numbers: the server's for what it holds now, or the scan's while it is as scanned. */
 export function sheetNumbers(sheet: PhotoSheet, preview: MealPreview | null): MealPreview | null {
@@ -224,21 +255,45 @@ export function sheetNumbers(sheet: PhotoSheet, preview: MealPreview | null): Me
   return atScan(sheet) ? { items: sheet.analysis.items, totals: sheet.analysis.totals } : null;
 }
 
-/** A row's amount changed, or the row taken off (`null`). */
+const placeOf = (key: string): number => Number(key.slice(1));
+
+/** A row's amount changed, or the row taken off (`null`). Taking off a changed food takes its place
+ *  off with it. */
 export function withRowAmount(sheet: PhotoSheet, key: string, amount: PhotoSheetAmount | null): PhotoSheet {
-  const at = Number(key.slice(1));
-  if (key.startsWith("s")) return { ...sheet, amounts: sheet.amounts.map((a, i) => (i === at ? amount : a)) };
+  const at = placeOf(key);
+  if (key.startsWith("s")) {
+    const replaced = sheet.replaced[at];
+    if (amount !== null && replaced !== null && replaced !== undefined && "food" in replaced) {
+      return { ...sheet, replaced: sheet.replaced.map((r, i) => (i === at ? { ...replaced, amount } : r)) };
+    }
+    return {
+      ...sheet,
+      amounts: sheet.amounts.map((a, i) => (i === at ? amount : a)),
+      replaced: amount === null ? sheet.replaced.map((r, i) => (i === at ? null : r)) : sheet.replaced,
+    };
+  }
   if (amount === null) return { ...sheet, extras: sheet.extras.filter((_, i) => i !== at) };
-  return { ...sheet, extras: sheet.extras.map((x, i) => (i === at ? { ...x, amount } : x)) };
+  return { ...sheet, extras: sheet.extras.map((x, i) => (i === at && "food" in x ? { ...x, amount } : x)) };
 }
 
-/** A food the photo missed, added at the amount picked. */
-export const withExtra = (sheet: PhotoSheet, food: PhotoSheetFood, amount: PhotoSheetAmount): PhotoSheet => ({ ...sheet, extras: [...sheet.extras, { food, amount }] });
+/** A row's food put to another (`pick`), or a scanned one put back to what the photo saw (`null`). */
+export function withRowFood(sheet: PhotoSheet, key: string, pick: PhotoSheetPick | null): PhotoSheet {
+  const at = placeOf(key);
+  if (key.startsWith("s")) return { ...sheet, replaced: sheet.replaced.map((r, i) => (i === at ? pick : r)) };
+  if (pick === null) return sheet;
+  return { ...sheet, extras: sheet.extras.map((x, i) => (i === at ? pick : x)) };
+}
+
+/** A food the photo missed: one the search found at the amount picked, or the person's own. */
+export const withExtra = (sheet: PhotoSheet, pick: PhotoSheetPick): PhotoSheet => ({ ...sheet, extras: [...sheet.extras, pick] });
 
 /** The foods the search may not offer: each one on the meal, and each the scan put there. The server
  *  reads a food by its own name, so one sent twice would be read as the scan's row. */
 export const onSheet = (sheet: PhotoSheet): ReadonlySet<string> =>
-  new Set([...sheet.analysis.items.map((i) => i.canonical), ...sheet.extras.map((x) => x.food.canonical)]);
+  new Set([
+    ...sheet.analysis.items.map((i) => i.canonical),
+    ...[...sheet.replaced, ...sheet.extras].flatMap((x) => (x !== null && "food" in x ? [x.food.canonical] : [])),
+  ]);
 
 export const sheetFileText = (sheet: PhotoSheet): string => JSON.stringify({ version: 1, ...sheet });
 
@@ -253,9 +308,9 @@ export function readSheetFile(text: string | null, now: Date): PhotoSheet | null
   }
   const parsed = photoSheetFileSchema.safeParse(raw);
   if (!parsed.success) return null;
-  const { scannedAt, analysis, amounts, extras, mealType, photo } = parsed.data;
-  const sheet: PhotoSheet = { scannedAt, analysis, amounts, extras, mealType, ...(photo === undefined ? {} : { photo }) };
-  if (sheet.amounts.length !== sheet.analysis.items.length) return null;
+  const { scannedAt, analysis, amounts, replaced, extras, mealType, photo } = parsed.data;
+  const sheet: PhotoSheet = { scannedAt, analysis, amounts, replaced, extras, mealType, ...(photo === undefined ? {} : { photo }) };
+  if (sheet.amounts.length !== sheet.analysis.items.length || sheet.replaced.length !== sheet.analysis.items.length) return null;
   return sheetLeftMs(sheet, now) >= SHEET_LEAST_LEFT_MS ? sheet : null;
 }
 
