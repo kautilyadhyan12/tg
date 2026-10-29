@@ -413,7 +413,7 @@ function PostCard({ post, gymName, posted, photoUrl, token, onPhotoFailed, busy,
               }}
               style={[styles.photo, post.photos.length === 1 ? { width: "100%", aspectRatio: Math.max(photo.width / photo.height, 0.75) } : styles.photoHalf]}
             >
-              <SignedPhoto uri={photoUrl(photo.id)} token={token} onFailed={onPhotoFailed} fit="cover" />
+              <SignedPhoto uri={photoUrl(photo.id)} token={token} onFailed={onPhotoFailed} fit="cover" testID={`photo-${photo.id}`} />
             </Pressable>
           ))}
         </View>
@@ -466,11 +466,12 @@ function PostCard({ post, gymName, posted, photoUrl, token, onPhotoFailed, busy,
 }
 
 /** A post's photo, read from the api as the person signed in. */
-function SignedPhoto({ uri, token, onFailed, fit }: { uri: string; token: string | null; onFailed: () => void; fit: "cover" | "contain" }) {
+function SignedPhoto({ uri, token, onFailed, fit, testID }: { uri: string; token: string | null; onFailed: () => void; fit: "cover" | "contain"; testID?: string }) {
   if (token === null) return <View style={styles.fill} />;
   return (
     <Image
       key={token}
+      testID={testID}
       source={{ uri, headers: { authorization: `Bearer ${token}` } }}
       resizeMode={fit}
       style={styles.fill}
@@ -552,7 +553,7 @@ function AskSheet({ asking, gymId, gymName, onClose, onRemoved, onReported, onBl
           <Button label="Done" kind="quiet" style={styles.middle} onPress={onClose} />
         </View>
       ) : (
-        <View style={styles.ask}>
+        <View testID="ask-box" style={styles.ask}>
           {box !== null ? (
             <Txt>{box.line}</Txt>
           ) : (
@@ -660,7 +661,6 @@ function BlockedSheet({ open, gymId, feed, onClose, onUnblocked }: { open: boole
           )}
         </ScrollView>
         {failed === null ? null : <Txt colour="badText">{failed}</Txt>}
-        <Button label="Close" kind="quiet" style={styles.middle} onPress={onClose} />
       </View>
     </Sheet>
   );
@@ -688,7 +688,7 @@ function PhotoViewer({ viewing, url, token, onPhotoFailed, onIndex, onClose }: P
           <Txt colour="text" style={styles.grow}>
             {photos.length === 0 ? "" : `Photo ${String(index + 1)} of ${String(photos.length)}`}
           </Txt>
-          <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} style={styles.back}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Close photo" onPress={onClose} style={styles.back}>
             <Icon name="x" size={18} />
           </Pressable>
         </View>
