@@ -273,6 +273,11 @@ export function registerNutritionRoutes(
     return reply.send({ items: await service.searchFoods(nutritionDeps, q.q, q.limit) });
   });
 
+  /** The person's last different foods, each at the amount they last had (ROADMAP 32b-ii-a). */
+  app.get("/v1/nutrition/foods/recent", { preHandler: [app.authenticate] }, async (req, reply) => {
+    return reply.send({ items: await service.recentFoodsOf(nutritionDeps, authedUserId(req)) });
+  });
+
   /** Live preview (Kd-approved 2026-07-16): server-computed nutrition for
    *  proposed grams, nothing persisted, NO quota (no AI call — curated-table
    *  math; the §9.3 ledger meters spend, and there is none here). */

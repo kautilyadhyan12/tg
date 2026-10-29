@@ -275,8 +275,11 @@ export const patchMealRequestSchema = z.object({
   mealType: mealTypeSchema.nullable().optional(), // null clears the label
   items: mealEditItemsSchema.optional(),
   itemsVersion: itemsVersionSchema.optional(),
+  /** The phone's own id for this change (ROADMAP 32b-ii-a): the same change sent twice is made
+   *  once, and the second answer is the meal as it is now. Kept in small letters. */
+  changeId: z.string().uuid().toLowerCase().optional(),
 }).strict()
-  .refine((v) => Object.keys(v).length > 0, { message: "at least one field required" })
+  .refine((v) => Object.keys(v).some((k) => k !== "changeId"), { message: "at least one field required" })
   .refine((v) => (v.items === undefined) === (v.itemsVersion === undefined), {
     message: "items are sent with the itemsVersion they were read at, and only with items",
     path: ["itemsVersion"],
@@ -371,6 +374,24 @@ export const foodSearchItemSchema = z.object({
 });
 export type FoodSearchItem = z.infer<typeof foodSearchItemSchema>;
 export const foodSearchResponseSchema = z.object({ items: z.array(foodSearchItemSchema) }).strict();
+
+// ── Recent foods (ROADMAP Stage 5 32b-ii-a; Kd, 2026-10-28) ──
+/** The most recent foods Add to a meal opens on. */
+export const RECENT_FOODS_MOST = 10;
+/** One of the person's last different foods, at the amount they last had: what Add sends for it
+ *  (`canonical` with `add`), the food as it was last logged, the server's own numbers for that
+ *  amount, shown until the server has priced it again, and the food's measures now, so it opens in
+ *  the measure picker as a searched food does (Kd, 2026-10-29). */
+export const recentFoodSchema = z.object({
+  canonical: z.string().min(1).max(120),
+  source: z.enum(["curated", "usda", "openfoodfacts"]),
+  add: measureStartSchema,
+  item: mealItemSchema,
+  measures: z.array(foodMeasureSchema).min(1),
+}).strict();
+export type RecentFood = z.infer<typeof recentFoodSchema>;
+export const recentFoodsResponseSchema = z.object({ items: z.array(recentFoodSchema).max(RECENT_FOODS_MOST) }).strict();
+export type RecentFoodsResponse = z.infer<typeof recentFoodsResponseSchema>;
 
 /** A scanned item as the photo sheet receives it (ROADMAP 7a-iv-b; RULINGS
  *  2026-09-16, the portion redesign): its food's own measures and the one and
@@ -785,9 +806,36 @@ export const waitingMealSchema = z.object({
 }).strict().refine((m) => m.body.id === m.id, { message: "the body carries the meal's own id" });
 export type WaitingMeal = z.infer<typeof waitingMealSchema>;
 
+/** A change to a saved meal waiting to be sent (ROADMAP 32b-ii-a): what the PATCH carries, its time
+ *  read without the server's "not more than a day ahead" rule, as a waiting meal's is. */
+export const waitingChangeBodySchema = z.object({
+  mealName: z.string().trim().min(1).max(200).optional(), takenAt: z.string().datetime().optional(),
+  mealType: mealTypeSchema.nullable().optional(),
+  items: mealEditItemsSchema.optional(), itemsVersion: itemsVersionSchema.optional(),
+  changeId: z.string().uuid().toLowerCase(),
+}).strict();
+export type WaitingChangeBody = z.infer<typeof waitingChangeBodySchema>;
+
+/** A change waiting to be sent: what is sent, and what the day's list shows of it while it waits. */
+export const waitingChangeSchema = z.object({
+  /** The meal's id. */
+  id: z.string().uuid().toLowerCase(),
+  /** The meal's name when the change was made, said if the server will not take it. */
+  name: z.string().max(200),
+  body: waitingChangeBodySchema,
+  /** With a change to the foods: the server's preview of them, where one came back. */
+  items: z.array(mealItemSchema).nullable(),
+  totals: mealTotalsSchema.nullable(),
+  /** With a change to the foods: each food as it reads, `[i]` for `body.items[i]`. */
+  foods: z.array(z.object({ name: z.string().max(200), amount: z.string().max(200) }).strict()).max(30).nullable(),
+  tried: z.boolean(),
+}).strict();
+export type WaitingChange = z.infer<typeof waitingChangeSchema>;
+
 export const mealOutboxEntrySchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("save"), meal: waitingMealSchema }).strict(),
   z.object({ kind: z.literal("remove"), id: z.string().uuid().toLowerCase() }).strict(),
+  z.object({ kind: z.literal("change"), change: waitingChangeSchema }).strict(),
 ]);
 export type MealOutboxEntry = z.infer<typeof mealOutboxEntrySchema>;
 
