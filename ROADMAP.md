@@ -553,7 +553,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 16. **Classes and booking with the waitlist, and personal training; then My membership and receipts** (split 2026-10-29 in three; 18c, Pay {gym}, was dropped 2026-10-15). Risky; the two extra passes run once, after 16c.
     - 16a. [x] **Classes** — merged 2026-10-29 (PR #385).
     - 16b. [ ] **Personal training**: the trainers' free times, book and cancel a session, as the browser's.
-    - 16c. [ ] **My membership and receipts**, in sections: **Membership** (what they hold, when it renews, each payment with its receipt), **Purchases** (what they bought at the desk, each with its receipt), a refund under its payment (Kd, `rulings/2026-10-15-18m.md`); no receipt by email.
+    - 16c. [ ] **My membership and receipts**, in sections: **Membership** (what they hold, when it renews, each payment with its receipt), **Purchases** (what they bought at the desk, each with its receipt), a refund under its payment (Kd, `rulings/2026-10-15-18m.md`); **Fees**, every late cancel and no-show fee of a class or a session, Payment due or Paid, with its receipt (Kd, `rulings/2026-10-29-16b.md`); no receipt by email.
 17. [ ] **The gym's page**: Updates (post, photos, react, report, block), Events, Leaderboard, Challenges, a person's profile (spec Part 3 §15).
 18. [ ] **Inbox, Contact the gym, and phone notifications** (spec Part 3 §16.1; Part 6 §6): the class reminder, a place is free, a message. Needs Kd's Firebase project.
 19. [ ] **Settings and account**: profile, units, hide me on leaderboards, notification switches that save, change email (Stage 2's 3b-iii), what a gym can see (Stage 1's 8a), download my data, delete account and undo.
