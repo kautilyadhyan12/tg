@@ -3,7 +3,7 @@ import type { MealItem, MealPhotoAnalysis } from "@app/shared";
 import { basketName, basketNumbers, foodsWords } from "../src/screens/food/basket";
 import { sharedDish, sharedDishOfItems, sharesOf, wholeDishEdits } from "../src/screens/food/dishShares";
 import { chosenItem, dishMeasure, loggedAmount } from "../src/screens/food/measures";
-import { newSheet, sheetItems, withRowFood, withWholeDish } from "../src/screens/food/photo";
+import { newSheet, sheetItems, withRowAmount, withRowFood, withSharesAsGrams, withWholeDish } from "../src/screens/food/photo";
 
 // A meal eaten from one dish (Kd, 2026-10-30): "the person is not taking each food in individual
 // utensils … keep the dish option inside foods but as well as outside … to add as a bulk".
@@ -11,6 +11,8 @@ import { newSheet, sheetItems, withRowFood, withWholeDish } from "../src/screens
 const BOWL = "00000000-0000-4000-8000-00000000d153";
 
 describe("each food's part of one dish", () => {
+  // Each food's part of the meal's GRAMS: the server turns the parts into grams that fill the dish at
+  // each food's own density, so the proportions are kept (round one, High 2).
   it("follows what each weighs now, together the whole dish", () => {
     expect(sharesOf([150, 100])).toEqual([0.6, 0.4]);
     expect(sharesOf([200, 100, 100])).toEqual([0.5, 0.25, 0.25]);
@@ -108,5 +110,31 @@ describe("a typed meal of several foods (Kd, 2026-10-30: oats and milk)", () => 
     expect(basketNumbers([oats, milk])?.totals.kcalPoint).toBe(81 + 244);
     expect(basketNumbers([oats, { item: null }])).toBeNull();
     expect(basketNumbers([])).toBeNull();
+  });
+});
+
+describe("a photo meal's one dish, changed after it is applied (round one)", () => {
+  it("applied again with the grams it gave, sends the same parts", () => {
+    const sheet = newSheet(ANALYSIS, NOW);
+    const once = withWholeDish(sheet, BOWL, 1, [150, 100, 50]);
+    // The server keeps each food's part of the meal's grams, so the grams it answers are in the same
+    // proportions, and the same dish applied to them sends the same parts.
+    const twice = once === null ? null : withWholeDish(once, BOWL, 1, [187.5, 125, 62.5]);
+    expect(sheetItems(twice ?? sheet)).toEqual(sheetItems(once ?? sheet));
+  });
+
+  it("one food of it changed or taken off: the others go back to the grams they weigh, never refilling the dish", () => {
+    const once = withWholeDish(newSheet(ANALYSIS, NOW), BOWL, 1, [150, 100, 50]);
+    if (once === null) throw new Error("shared");
+    const loosened = withSharesAsGrams(once, [188, 125, 62]);
+    expect(sheetItems(withRowAmount(loosened ?? once, "s1", null))).toEqual([
+      { canonical: "rice", measure: "g", amount: 188 },
+      { canonical: "sabzi", measure: "g", amount: 62 },
+    ]);
+    // While a weight is not known, nothing is changed.
+    expect(withSharesAsGrams(once, [188, null, 62])).toBeNull();
+    // A meal with no part of a dish is as it was.
+    const plain = newSheet(ANALYSIS, NOW);
+    expect(withSharesAsGrams(plain, [null, null, null])).toBe(plain);
   });
 });

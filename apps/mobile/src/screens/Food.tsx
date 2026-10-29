@@ -3,6 +3,7 @@ import { AppState, Keyboard, Pressable, ScrollView, StyleSheet, View, useWindowD
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import {
+  MEAL_MOST_FOODS,
   foodSearchResponseSchema,
   mealMeasuresResponseSchema,
   mealPageSchema,
@@ -977,7 +978,9 @@ function FoodAmount({
   const dishOpened = useRef(false);
   useEffect(() => {
     const m = item?.measure;
-    if (dishOpened.current || m?.id !== "dish" || dishes.kind !== "ok") return;
+    // A part of one dish the whole meal was eaten from opens at its grams: its part means nothing
+    // without the meal's other foods (round one, High 1).
+    if (dishOpened.current || m?.id !== "dish" || m.share !== undefined || dishes.kind !== "ok") return;
     dishOpened.current = true;
     const dish = dishByName(dishes, m.name);
     const fill = FILL_CHOICES.find((c) => c.value === m.amount);
@@ -1387,7 +1390,11 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
               </Pressable>
             </View>
           ))}
-          <Button label="Add another food" icon="plus" kind="soft" wide onPress={() => { setSearching(true); }} />
+          {basket.length >= MEAL_MOST_FOODS ? (
+            <Txt kind="small">A meal holds up to {String(MEAL_MOST_FOODS)} foods.</Txt>
+          ) : (
+            <Button label="Add another food" icon="plus" kind="soft" wide onPress={() => { setSearching(true); }} />
+          )}
         </ScrollView>
         <View style={styles.foot}>
           {numbers === null ? null : (

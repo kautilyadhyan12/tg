@@ -5,6 +5,7 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { launchImageLibraryAsync } from "expo-image-picker";
 import {
+  MEAL_MOST_FOODS,
   PHOTO_SCAN_CAUTION,
   foodSearchResponseSchema,
   mealPhotoAnalysisSchema,
@@ -49,6 +50,7 @@ import {
   withRowAmount,
   withRowFood,
   withWholeDish,
+  withSharesAsGrams,
   rowNeeds,
   type PhotoSheet,
   type SheetRow,
@@ -425,6 +427,8 @@ function Review({
   const unfinished = rows.find((r) => rowNeeds(r) !== null);
   // What each food weighs now, by row, as the server last priced it.
   const rowGrams = rows.map((_, i) => numbers?.items[i]?.gramsPoint ?? null);
+  // Before one food that is a part of one dish changes, the others are put back at their grams.
+  const loosened = (): PhotoSheet => withSharesAsGrams(sheet, rowGrams) ?? sheet;
   // The row the search changes, and what it weighs now: the food picked in its place starts there.
   const changing = finding?.change == null ? null : (rows.find((r) => r.key === finding.change) ?? null);
   const changingGrams = changing === null ? null : (numbers?.items[rows.indexOf(changing)]?.gramsPoint ?? null);
@@ -493,12 +497,16 @@ function Review({
                   <Txt kind="small" style={styles.grow}>
                     {u}
                   </Txt>
-                  <Button label="Add" kind="link" say={`Add ${u}`} onPress={() => { setSaid(null); setFinding({ query: u, change: null }); }} />
+                  {rows.length >= MEAL_MOST_FOODS ? null : <Button label="Add" kind="link" say={`Add ${u}`} onPress={() => { setSaid(null); setFinding({ query: u, change: null }); }} />}
                 </View>
               ))}
             </View>
           )}
-          <Button label="Add a food it missed" icon="plus" kind="soft" small onPress={() => { setSaid(null); setFinding({ query: "", change: null }); }} />
+          {rows.length >= MEAL_MOST_FOODS ? (
+            <Txt kind="small">A meal holds up to {String(MEAL_MOST_FOODS)} foods.</Txt>
+          ) : (
+            <Button label="Add a food it missed" icon="plus" kind="soft" small onPress={() => { setSaid(null); setFinding({ query: "", change: null }); }} />
+          )}
           {rows.some((r) => r.own === null) ? (
             <WholeDish
               applied={sharedDish(rows.filter((r) => r.own === null).map((r) => r.amount))}
@@ -552,9 +560,9 @@ function Review({
             row={row}
             grams={numbers?.items[rowAt]?.gramsPoint ?? null}
             kcal={numbers?.items[rowAt]?.kcalPoint ?? null}
-            onAmount={(amount) => { keep(withRowAmount(sheet, row.key, amount)); }}
+            onAmount={(amount) => { keep(withRowAmount(loosened(), row.key, amount)); }}
             onOwn={(own) => {
-              keep(withRowFood(sheet, row.key, { own }));
+              keep(withRowFood(loosened(), row.key, { own }));
               setOpenRow(null);
               setSaid(`${own.name} updated.`);
             }}
@@ -566,14 +574,14 @@ function Review({
               row.wasSeen === null
                 ? null
                 : () => {
-                    keep(withRowFood(sheet, row.key, null));
+                    keep(withRowFood(loosened(), row.key, null));
                     setOpenRow(null);
                     setSaid(`Back to ${row.wasSeen ?? ""}.`);
                   }
             }
             onDone={() => { setOpenRow(null); }}
             onRemove={() => {
-              keep(withRowAmount(sheet, row.key, null));
+              keep(withRowAmount(loosened(), row.key, null));
               setOpenRow(null);
               setSaid(`${row.name} taken off.`);
             }}
@@ -592,7 +600,7 @@ function Review({
             keep(withExtra(sheet, pick));
             setSaid(`${name} added.`);
           } else {
-            keep(withRowFood(sheet, changing.key, pick));
+            keep(withRowFood(loosened(), changing.key, pick));
             setSaid(`${changing.name} changed to ${name}.`);
           }
           setFinding(null);

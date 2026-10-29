@@ -465,6 +465,8 @@ async function amountOf(
   userId: string,
   chosen: ChosenItem,
   measures: readonly FoodMeasure[],
+  /** Its grams as a part of one dish the whole meal was eaten from (`sharedDishGrams`). */
+  sharedGrams?: number,
 ): Promise<{ grams: number; dishwareRung: "user_dishware" | null; measure: LoggedMeasure | null }> {
   if ("grams" in chosen) return { grams: chosen.grams, dishwareRung: null, measure: null };
   const tooSmallOrLarge = (grams: number): boolean => grams < 1 || grams > MAX_ITEM_GRAMS;
@@ -472,9 +474,9 @@ async function amountOf(
     // The person's own dish, or one everybody has (a cup, a mug, a bowl).
     const dish = (await repo.getDishware(deps.sql, userId, chosen.dishwareId)) ?? standardDish(chosen.dishwareId);
     if (dish === null) throw new NutritionError(400, "unknown_dishware", "Dishware not found.");
-    // The meal eaten from one dish: the dish weighed as this food, and the food's share of it.
+    // The meal eaten from one dish: its part, worked out with the meal's other foods.
     const share = chosen.share ?? 1;
-    const grams = dishwareGrams(dish.volumeMl, chosen.fillLevel * share, gramsPerMl(measures));
+    const grams = chosen.share !== undefined && sharedGrams !== undefined ? sharedGrams : dishwareGrams(dish.volumeMl, chosen.fillLevel * share, gramsPerMl(measures));
     // Symmetric with the grams arm's bounds (chosenItemsSchema: positive, ≤10_000):
     // a round-to-0 (tiny dish × low fill) would persist a MealItem the shared
     // contract declares impossible, and more than 10_000 would pass the cap the
@@ -491,6 +493,39 @@ async function amountOf(
     throw new NutritionError(400, "portion_out_of_range", "That portion is too small or too large to log — pick a different amount.");
   }
   return { grams, dishwareRung: null, measure: { id: measure.id, name: measure.name, amount: chosen.amount } };
+}
+
+/** A meal eaten from one dish (ROADMAP Stage 5 33b-i; Kd, 2026-10-30): the foods sent with a `share` of
+ *  the same dish at the same fill are its parts, `share` each one's part of the meal's GRAMS. The dish
+ *  holds them all, so the grams G of the meal satisfy Σ G·wᵢ ÷ dᵢ = the dish's ml × how full, wᵢ each
+ *  food's part (the parts of a dish taken together as the whole) and dᵢ what a ml of it weighs. Each
+ *  food keeps its proportion of the meal whatever its density, and the same dish applied again gives
+ *  the same grams. Grams by place in `chosen`; a food not shared has none. */
+async function sharedDishGrams(
+  deps: Pick<NutritionDeps, "sql">,
+  userId: string,
+  chosen: readonly ChosenItem[],
+  measures: readonly (readonly FoodMeasure[])[],
+): Promise<Map<number, number>> {
+  const groups = new Map<string, { dishwareId: string; fillLevel: number; parts: { at: number; share: number; perMl: number }[] }>();
+  for (const [at, item] of chosen.entries()) {
+    if (!("dishwareId" in item) || item.share === undefined) continue;
+    const key = `${item.dishwareId}|${String(item.fillLevel)}`;
+    const group = groups.get(key) ?? { dishwareId: item.dishwareId, fillLevel: item.fillLevel, parts: [] };
+    group.parts.push({ at, share: item.share, perMl: gramsPerMl(measures[at] ?? []) });
+    groups.set(key, group);
+  }
+  const grams = new Map<number, number>();
+  for (const group of groups.values()) {
+    // A dish that is not the person's nor one everybody has is refused by `amountOf`.
+    const dish = (await repo.getDishware(deps.sql, userId, group.dishwareId)) ?? standardDish(group.dishwareId);
+    if (dish === null) continue;
+    const whole = group.parts.reduce((sum, p) => sum + p.share, 0);
+    const mlPerGram = group.parts.reduce((sum, p) => sum + p.share / whole / p.perMl, 0);
+    const meal = (dish.volumeMl * group.fillLevel) / mlPerGram;
+    for (const part of group.parts) grams.set(part.at, Math.round((meal * part.share) / whole));
+  }
+  return grams;
 }
 
 async function findFood(deps: NutritionDeps, query: string, search = true): Promise<FoodReference | null> {
@@ -1214,8 +1249,9 @@ async function resolveDraftItems(
     const food = foods[at];
     return food === undefined ? [] : [{ food, estimate }];
   });
-  for (const { chosen, food: { food, estimate }, measures: own } of withFoods(chosenItems, priced, measures)) {
-    const amount = await amountOf(deps, userId, chosen, own);
+  const shared = await sharedDishGrams(deps, userId, chosenItems, measures);
+  for (const [at, { chosen, food: { food, estimate }, measures: own }] of withFoods(chosenItems, priced, measures).entries()) {
+    const amount = await amountOf(deps, userId, chosen, own, shared.get(at));
     // User-chosen amount collapses the range; a dishware measure overrides the rung
     // to 'user_dishware', otherwise the estimate's rung is preserved.
     resolved.push(estimate === null
@@ -1372,8 +1408,9 @@ export async function resolveChosenItems(
   }
   const measures = await measuresForChosen(deps, chosenItems, foods);
   const items: MealItem[] = [];
-  for (const { chosen, food, measures: own } of withFoods(chosenItems, await withMore(deps, foods), measures)) {
-    const amount = await amountOf(deps, userId, chosen, own);
+  const shared = await sharedDishGrams(deps, userId, chosenItems, measures);
+  for (const [at, { chosen, food, measures: own }] of withFoods(chosenItems, await withMore(deps, foods), measures).entries()) {
+    const amount = await amountOf(deps, userId, chosen, own, shared.get(at));
     items.push(nutritionItem(food, amount.grams, [amount.grams, amount.grams], amount.dishwareRung ?? "default", amount.measure));
   }
   return items;
@@ -1524,10 +1561,11 @@ async function editedItems(
   const figured = await withMore(deps, foods);
   const measures = await measuresForChosen(deps, changed.map((c) => c.edit), foods);
   const priced = new Map<number, MealItem>();
+  const shared = await sharedDishGrams(deps, userId, changed.map((c) => c.edit), measures);
   for (const [n, { edit, prior, at }] of changed.entries()) {
     const food = figured[n];
     if (food === undefined) continue;
-    const amount = await amountOf(deps, userId, edit, measures[n] ?? []);
+    const amount = await amountOf(deps, userId, edit, measures[n] ?? [], shared.get(n));
     // T3 P2.6a finding 3: a grams edit must PRESERVE the item's existing
     // rung (same rule as confirmMeal) — only items new to the meal are
     // 'default'. 'legacy'/'anchor' rows can't re-enter the item enum; they

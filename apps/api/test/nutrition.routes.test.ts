@@ -366,7 +366,13 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
       expect(refused.statusCode,refused.body).toBe(400);
       expect(refused.json<{error:string}>().error).toBe("invalid_image");
       expect(scanner.calls).toBe(0);
-      const scan=await c("/v1/nutrition/analyze-photo",{imageBase64:jpeg,mimeType:"image/jpeg"});
+      // A poor photo's free try still runs out in ten minutes; the scan it brings is kept a day.
+      scanner.queue.push({...goodEvidence,photo_quality:"poor"});
+      const poor=await c("/v1/nutrition/analyze-photo",{imageBase64:jpeg,mimeType:"image/jpeg"});
+      expect(poor.statusCode,poor.body).toBe(422);
+      expect(kept.filter((k)=>k.key.startsWith("meal-retake:")).map((k)=>k.ttl)).toEqual([RETAKE_TTL_SECONDS]);
+      expect(RETAKE_TTL_SECONDS).toBe(10*60);
+      const scan=await c("/v1/nutrition/analyze-photo",{imageBase64:jpeg,mimeType:"image/jpeg",retakeToken:poor.json<{retakeToken:string}>().retakeToken});
       expect(scan.statusCode,scan.body).toBe(200);
       const draft=scan.json<{scanToken:string;items:{canonical:string}[]}>();
       const drafts=kept.filter((k)=>k.key.startsWith("meal-scan:"));

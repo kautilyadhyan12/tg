@@ -151,41 +151,78 @@ d("a food no list has, added with the person's own numbers (real Postgres)", () 
     expect(changed.statusCode, changed.body).toBe(200);
     expect(mealResponseSchema.parse(changed.json()).meal.items.map((i) => [i.name, i.nutritionSource, i.gramsPoint, i.kcalPoint])).toEqual([["Chicken taco", "own", 300, 466]]);
   });
-  it("a meal eaten from one dish: each food its share of the dish, together the dish's own grams (Kd, 2026-10-30)", async () => {
+  // A meal eaten from one dish (Kd, 2026-10-30): the foods keep the proportions they had, the dish
+  // holds them all, and the same dish applied again gives the same grams (round one's High 2: shares
+  // spent as volume skewed a meal toward its denser foods, and drifted on every tap).
+  describe("a meal eaten from one dish", () => {
     const bowl = STANDARD_DISHES[2].id;
-    const [rice, dal] = [CURATED_FOODS.find((f) => f.name.startsWith("Rice (white")), CURATED_FOODS.find((f) => f.name.startsWith("Dal"))];
-    if (rice === undefined || dal === undefined) throw new Error("rice and dal are on our list");
-    const alone = async (canonical: string, fillLevel = 1) => {
-      const res = await inject("POST", "/v1/nutrition/meals/preview", alice, { items: [{ canonical, dishwareId: bowl, fillLevel }] });
-      expect(res.statusCode, res.body).toBe(200);
-      return mealPreviewSchema.parse(res.json()).items[0]?.gramsPoint ?? 0;
+    const canonicalOf = (start: string): string => {
+      const food = CURATED_FOODS.find((f) => f.name.startsWith(start));
+      if (food === undefined) throw new Error(`${start} is on our list`);
+      return food.canonical;
     };
-    // Each food's full bowl, as a dish weighs it now.
-    const [riceBowl, dalBowl] = [await alone(rice.canonical), await alone(dal.canonical)];
-    const shared = await inject("POST", "/v1/nutrition/meals", alice, {
-      id: randomUUID(), mealName: "Rice and dal", takenAt: now(),
-      items: [{ canonical: rice.canonical, dishwareId: bowl, fillLevel: 1, share: 0.6 }, { canonical: dal.canonical, dishwareId: bowl, fillLevel: 1, share: 0.4 }],
+    const priced = async (items: unknown[]) => {
+      const res = await inject("POST", "/v1/nutrition/meals/preview", alice, { items });
+      expect(res.statusCode, res.body).toBe(200);
+      return mealPreviewSchema.parse(res.json()).items.map((i) => i.gramsPoint);
+    };
+    /** As the phone works out the parts: each food's grams over the meal's. */
+    const partsOf = (grams: readonly number[]) => {
+      const total = grams.reduce((a, b) => a + b, 0);
+      return grams.map((g) => Math.round((g / total) * 1000) / 1000);
+    };
+
+    // Foods of unequal density, in equal and unequal amounts; three foods; each dish fill.
+    it.each([
+      ["rice and dal, equal", ["Rice (white", "Dal"], [150, 150], 1],
+      ["salad and dal, equal", ["Salad", "Dal"], [150, 150], 1],
+      ["salad and rice, unequal", ["Salad", "Rice (white"], [60, 180], 0.75],
+      ["milk and potato chips", ["Milk", "Potato chips"], [240, 30], 0.5],
+      ["rice, dal and paneer", ["Rice (white", "Dal", "Paneer"], [200, 100, 50], 1],
+    ] as const)("%s keep their proportions, fill the dish, and come out the same applied again", async (_, names, grams, fill) => {
+      const canonicals = names.map(canonicalOf);
+      const before = await priced(canonicals.map((canonical, i) => ({ canonical, grams: grams[i] })));
+      const shared = (from: readonly number[]) =>
+        priced(canonicals.map((canonical, i) => ({ canonical, dishwareId: bowl, fillLevel: fill, share: partsOf(from)[i] })));
+      const once = await shared(before);
+      // In the proportions they had, within the rounding of a part to a thousandth and a gram.
+      for (const [i, g] of once.entries()) {
+        const want = ((before[i] ?? 0) / before.reduce((a, b) => a + b, 0)) * once.reduce((a, b) => a + b, 0);
+        expect(Math.abs(g - want), `${names[i] ?? ""}: ${String(g)} g against ${String(want)} g`).toBeLessThanOrEqual(2);
+      }
+      // Together they fill the dish: each food's grams over what a dish of it alone weighs.
+      const alone = await Promise.all(canonicals.map(async (canonical) => (await priced([{ canonical, dishwareId: bowl, fillLevel: 1 }]))[0] ?? 1));
+      const filled = once.reduce((sum, g, i) => sum + g / (alone[i] ?? 1), 0);
+      expect(Math.abs(filled - fill)).toBeLessThan(0.02);
+      // The same dish tapped again: the same grams.
+      const twice = await shared(once);
+      for (const [i, g] of twice.entries()) expect(Math.abs(g - (once[i] ?? 0))).toBeLessThanOrEqual(1);
     });
-    expect(shared.statusCode, shared.body).toBe(201);
-    const meal = mealResponseSchema.parse(shared.json()).meal;
-    expect(meal.items.map((i) => i.gramsPoint)).toEqual([Math.round(riceBowl * 0.6), Math.round(dalBowl * 0.4)]);
-    expect(meal.items.map((i) => i.measure)).toEqual([
-      { id: "dish", name: "Bowl", amount: 1, share: 0.6 },
-      { id: "dish", name: "Bowl", amount: 1, share: 0.4 },
-    ]);
-    // A share past the whole dish, or none at all, is refused.
-    for (const share of [0, 1.2]) {
-      const bad = await inject("POST", "/v1/nutrition/meals/preview", alice, { items: [{ canonical: rice.canonical, dishwareId: bowl, fillLevel: 1, share }] });
-      expect(bad.statusCode).toBe(400);
-    }
-    // The same for a meal already logged: its foods shared out of half a bowl, and its own food kept.
-    const typed = await inject("POST", "/v1/nutrition/meals", alice, { id: randomUUID(), mealName: "Plate", takenAt: now(), items: [{ canonical: rice.canonical, grams: 100 }, TACO] });
-    const plate = mealResponseSchema.parse(typed.json()).meal;
-    const changed = await inject("PATCH", `/v1/nutrition/meals/${plate.id}`, alice, {
-      items: [{ from: 0, canonical: rice.canonical, dishwareId: bowl, fillLevel: 0.5, share: 1 }, { from: 1 }], itemsVersion: plate.itemsVersion, changeId: randomUUID(),
+
+    it("is kept on the meal as each food's part, refuses a part past the whole, and works on a meal already logged", async () => {
+      const [rice, dal] = [canonicalOf("Rice (white"), canonicalOf("Dal")];
+      const saved = await inject("POST", "/v1/nutrition/meals", alice, {
+        id: randomUUID(), mealName: "Rice and dal", takenAt: now(),
+        items: [{ canonical: rice, dishwareId: bowl, fillLevel: 1, share: 0.6 }, { canonical: dal, dishwareId: bowl, fillLevel: 1, share: 0.4 }],
+      });
+      expect(saved.statusCode, saved.body).toBe(201);
+      expect(mealResponseSchema.parse(saved.json()).meal.items.map((i) => i.measure)).toEqual([
+        { id: "dish", name: "Bowl", amount: 1, share: 0.6 },
+        { id: "dish", name: "Bowl", amount: 1, share: 0.4 },
+      ]);
+      for (const share of [0, 1.2]) {
+        const bad = await inject("POST", "/v1/nutrition/meals/preview", alice, { items: [{ canonical: rice, dishwareId: bowl, fillLevel: 1, share }] });
+        expect(bad.statusCode).toBe(400);
+      }
+      // A logged meal's foods shared out of half a bowl, its own food kept: the rice alone fills it.
+      const typed = await inject("POST", "/v1/nutrition/meals", alice, { id: randomUUID(), mealName: "Plate", takenAt: now(), items: [{ canonical: rice, grams: 100 }, TACO] });
+      const plate = mealResponseSchema.parse(typed.json()).meal;
+      const changed = await inject("PATCH", `/v1/nutrition/meals/${plate.id}`, alice, {
+        items: [{ from: 0, canonical: rice, dishwareId: bowl, fillLevel: 0.5, share: 1 }, { from: 1 }], itemsVersion: plate.itemsVersion, changeId: randomUUID(),
+      });
+      expect(changed.statusCode, changed.body).toBe(200);
+      const halfBowl = (await priced([{ canonical: rice, dishwareId: bowl, fillLevel: 0.5 }]))[0];
+      expect(mealResponseSchema.parse(changed.json()).meal.items.map((i) => [i.gramsPoint, i.nutritionSource])).toEqual([[halfBowl, "curated"], [150, "own"]]);
     });
-    expect(changed.statusCode, changed.body).toBe(200);
-    const after = mealResponseSchema.parse(changed.json()).meal;
-    expect(after.items.map((i) => [i.name, i.gramsPoint])).toEqual([[rice.name, await alone(rice.canonical, 0.5)], ["Chicken taco", 150]]);
   });
 });

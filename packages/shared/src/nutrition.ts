@@ -232,7 +232,9 @@ const measureItemSchema = z
   .strict();
 export const chosenItemSchema = z.union([gramsItemSchema, dishwareItemSchema, measureItemSchema]);
 export type ChosenItem = z.infer<typeof chosenItemSchema>;
-const chosenItemsSchema = z.array(chosenItemSchema).min(1).max(30);
+/** The most foods one meal holds. */
+export const MEAL_MOST_FOODS = 30;
+const chosenItemsSchema = z.array(chosenItemSchema).min(1).max(MEAL_MOST_FOODS);
 
 // ROADMAP 7a-iv-g — changing a food already logged (RULINGS 2026-09-17).
 /** The person's own protein, carbs and fat for one food, in grams, as eaten at the
@@ -259,7 +261,7 @@ export type OwnFoodItem = z.infer<typeof ownFoodItemSchema>;
 export const mealChoiceSchema = z.union([chosenItemSchema, ownFoodItemSchema]);
 export type MealChoice = z.infer<typeof mealChoiceSchema>;
 export const isOwnFood = (choice: MealChoice): choice is OwnFoodItem => "own" in choice;
-const mealChoicesSchema = z.array(mealChoiceSchema).min(1).max(30);
+const mealChoicesSchema = z.array(mealChoiceSchema).min(1).max(MEAL_MOST_FOODS);
 
 /** The meal's id, made by the phone (ROADMAP 32a): the same id sent twice is one
  *  meal, and the second reply is the meal as it is now. Kept and answered in small

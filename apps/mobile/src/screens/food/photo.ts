@@ -293,6 +293,22 @@ export function withRowFood(sheet: PhotoSheet, key: string, pick: PhotoSheetPick
   return { ...sheet, extras: sheet.extras.map((x, i) => (i === at ? pick : x)) };
 }
 
+/** Every food that is a part of one dish put back at the grams it weighs now (`grams`, by row): one of
+ *  them changed, changed to another food or taken off must not refill the dish with the others (round
+ *  one, High 1). Null while a weight is not known; the sheet as it is where no food is a part. */
+export function withSharesAsGrams(sheet: PhotoSheet, grams: readonly (number | null)[]): PhotoSheet | null {
+  const rows = sheetRows(sheet);
+  if (!rows.some((r) => r.amount.share !== undefined)) return sheet;
+  let next = sheet;
+  for (const [i, row] of rows.entries()) {
+    if (row.amount.share === undefined) continue;
+    const g = grams[i];
+    if (g === null || g === undefined) return null;
+    next = withRowAmount(next, row.key, { measure: "g", amount: String(Math.max(1, Math.round(g))) });
+  }
+  return next;
+}
+
 /** A food the photo missed: one the search found at the amount picked, or the person's own. */
 export const withExtra = (sheet: PhotoSheet, pick: PhotoSheetPick): PhotoSheet => ({ ...sheet, extras: [...sheet.extras, pick] });
 

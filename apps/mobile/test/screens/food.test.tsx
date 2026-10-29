@@ -578,6 +578,23 @@ describe("changing a logged meal (32b-ii-a)", () => {
     expect(await screen.findByLabelText("Calories, 461 of 2,300 kcal")).toBeTruthy();
   });
 
+  it("a food that is a part of one dish opens at its grams, and saved untouched keeps them (round one, High 1)", async () => {
+    const shared = { ...item(81, 307), measure: { id: "dish", name: "Bowl", amount: 1, share: 0.5 } };
+    const two = { ...lunch(), mealName: "Shared bowl", items: [shared, { ...item(81, 307), name: "Banana", canonical: "banana", measure: { id: "dish", name: "Bowl", amount: 1, share: 0.5 } }] as Meal["items"] };
+    two.totals = sum(two.items);
+    const server = await openFood({ meals: [two] }, undefined, { "/v1/nutrition/dishware": ok({ items: [], nextCursor: null }) });
+    await fireEvent.press(await screen.findByRole("button", { name: "Shared bowl, 614 kcal" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Change Oats, rolled, Part of Bowl, full · 81 g" }));
+    // Not the whole bowl of oats: what it weighs.
+    expect(await screen.findByText("307 kcal · Meal total 614 kcal")).toBeTruthy();
+    expect(screen.getByLabelText("Amount").props.value).toBe("81");
+    await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => {
+      expect(patches(server)).toHaveLength(1);
+    });
+    expect(patches(server)[0]?.body).toMatchObject({ items: [{ from: 0, canonical: "oats_rolled", measure: "g", amount: 81 }, { from: 1 }] });
+  });
+
   it("removes one food only after asking, and offers no removal of a meal's only food", async () => {
     const two = { ...lunch(), mealName: "Lunch plate", items: [item(81, 307), { ...item(40, 152), name: "Banana", canonical: "banana" }] as Meal["items"] };
     two.totals = sum(two.items);
