@@ -244,6 +244,106 @@ describe('Payments to match', () => {
     expect(svc.match.mock.calls[0][2]).toMatchObject({ entryId: AMY.entryId, amountMinor: 1250 });
   });
 
+  describe("linking Square's customer to the person who paid (18d-iii-b-ii-c)", () => {
+    const amyOwes = bill({ entryId: AMY.entryId, name: AMY.name, membershipId: '35555555-1111-4111-8111-111111111111', leftMinor: 1500 });
+    const amyBox = (link) => ({ person: AMY, today: '2026-10-25', amountMinor: 1500, bills: [amyOwes], suggested: 0, paid: [], link });
+    const matchedAmy = (link = { result: 'none', customerName: null, personName: null }) => ({
+      matched: { entryId: AMY.entryId, name: 'Amy Lee', amountMinor: 1500, currency: 'USD', receiptNumber: 61, link },
+    });
+    // Choose who paid on Amy's row, and Amy picked: the box with whatever the server offered.
+    const pickAmy = async (link) => {
+      svc.bills.mockResolvedValue(amyBox(link));
+      open();
+      await screen.findByText('2 payments to match · $42.06');
+      const amy = row('Amy Lee');
+      fireEvent.click(within(amy).getByRole('button', { name: 'Choose who paid' }));
+      const box = within(within(amy).getByTestId('match-box'));
+      fireEvent.click(await box.findByRole('button', { name: /^Amy Lee · No\. 7/ }));
+      await box.findByText('Which bill was it for?');
+      return { amy, box };
+    };
+
+    it("where the app can tell they are the same person the tick is on, says what it does, and Match sends it; the row says it is linked", async () => {
+      const { amy, box } = await pickAmy({ offer: 'link', customerName: 'Amy L', also: false, byName: null });
+      const tick = box.getByRole('checkbox', { name: 'Link Amy L in your Square customer list to Amy Lee' });
+      expect(tick.checked).toBe(true);
+      expect(box.getByTestId('match-link-note').textContent).toBe('Their name and contact details match. Their next payments in Square Point of Sale then come to Amy Lee’s page, with their bill ticked.');
+      svc.match.mockResolvedValue(matchedAmy({ result: 'linked', customerName: 'Amy L', personName: 'Amy Lee' }));
+      fireEvent.click(box.getByRole('button', { name: 'Match $15.00 to this bill' }));
+      await within(amy).findByText("Matched: $15.00 on Amy Lee's bill. Receipt 61. Amy L in your Square customer list is now linked to Amy Lee. Their next payments come to their page.");
+      expect(svc.match.mock.calls[0][2]).toMatchObject({ entryId: AMY.entryId, linkTo: AMY.entryId });
+    });
+
+    it("where it can't tell, the tick is off and says to tick only if they are the same person; nothing is sent unless it is ticked", async () => {
+      const { amy, box } = await pickAmy({ offer: 'ask', customerName: 'Pat Smith', also: false, byName: null });
+      const tick = box.getByRole('checkbox', { name: 'Link Pat Smith in your Square customer list to Amy Lee' });
+      expect(tick.checked).toBe(false);
+      expect(box.getByTestId('match-link-note').textContent).toContain('Pat Smith has a different name or contact details from Amy Lee. Tick this only if they are the same person.');
+      svc.match.mockResolvedValue(matchedAmy());
+      fireEvent.click(box.getByRole('button', { name: 'Match $15.00 to this bill' }));
+      await within(amy).findByText("Matched: $15.00 on Amy Lee's bill. Receipt 61.");
+      expect(svc.match.mock.calls[0][2].linkTo).toBeNull();
+    });
+
+    it('ticking it by hand sends it, and unticking an offered tick sends nothing', async () => {
+      const { box } = await pickAmy({ offer: 'ask', customerName: 'Pat Smith', also: false, byName: null });
+      fireEvent.click(box.getByRole('checkbox'));
+      expect(box.getByRole('checkbox').checked).toBe(true);
+      svc.match.mockResolvedValue(matchedAmy({ result: 'linked', customerName: 'Pat Smith', personName: 'Amy Lee' }));
+      fireEvent.click(box.getByRole('button', { name: 'Match $15.00 to this bill' }));
+      await waitFor(() => expect(svc.match).toHaveBeenCalledTimes(1));
+      expect(svc.match.mock.calls[0][2].linkTo).toBe(AMY.entryId);
+    });
+
+    it('unticking the tick the app set sends nothing', async () => {
+      const { box } = await pickAmy({ offer: 'link', customerName: 'Amy Lee', also: false, byName: null });
+      fireEvent.click(box.getByRole('checkbox'));
+      expect(box.getByRole('checkbox').checked).toBe(false);
+      svc.match.mockResolvedValue(matchedAmy());
+      fireEvent.click(box.getByRole('button', { name: 'Match $15.00 to this bill' }));
+      await waitFor(() => expect(svc.match).toHaveBeenCalledTimes(1));
+      expect(svc.match.mock.calls[0][2].linkTo).toBeNull();
+    });
+
+    it("a person who already has a customer is told this one is linked to them as well", async () => {
+      const { box } = await pickAmy({ offer: 'link', customerName: 'Amy Lee', also: true, byName: null });
+      expect(box.getByTestId('match-link-note').textContent).toContain('Amy Lee already has a customer in your Square customer list. This one is linked to them as well.');
+    });
+
+    it("a customer somebody else has is said so, with no tick, and nothing is sent", async () => {
+      const { box } = await pickAmy({ offer: 'taken', customerName: 'Pat Smith', also: false, byName: 'Pat Smith' });
+      expect(box.queryByRole('checkbox')).toBeNull();
+      expect(box.getByTestId('match-link-taken').textContent).toBe('Pat Smith is already linked to Pat Smith, so it can’t be linked to Amy Lee.');
+      svc.match.mockResolvedValue(matchedAmy());
+      fireEvent.click(box.getByRole('button', { name: 'Match $15.00 to this bill' }));
+      await waitFor(() => expect(svc.match).toHaveBeenCalledTimes(1));
+      expect(svc.match.mock.calls[0][2].linkTo).toBeNull();
+    });
+
+    it('with nothing to link there is no line at all, and nothing is sent', async () => {
+      const { box } = await pickAmy(null);
+      expect(box.queryByTestId('match-link')).toBeNull();
+      expect(box.queryByTestId('match-link-taken')).toBeNull();
+      svc.match.mockResolvedValue(matchedAmy());
+      fireEvent.click(box.getByRole('button', { name: 'Match $15.00 to this bill' }));
+      await waitFor(() => expect(svc.match).toHaveBeenCalledTimes(1));
+      expect(svc.match.mock.calls[0][2].linkTo).toBeNull();
+    });
+
+    it("Change to another person starts that person's tick afresh, from what the server offered for them", async () => {
+      const { box } = await pickAmy({ offer: 'link', customerName: 'Amy Lee', also: false, byName: null });
+      expect(box.getByRole('checkbox').checked).toBe(true);
+      fireEvent.click(box.getByRole('button', { name: 'Change' }));
+      register.findPeople.mockResolvedValue([BEN]);
+      svc.bills.mockResolvedValue({ ...benBills, amountMinor: 1500, link: { offer: 'ask', customerName: 'Amy Lee', also: false, byName: null } });
+      const finder = box.getByLabelText('Find them by name, email or member number');
+      fireEvent.change(finder, { target: { value: 'Ben' } });
+      fireEvent.click(await box.findByRole('button', { name: /^Ben Ortiz · No\. 12/ }));
+      await box.findByRole('checkbox', { name: 'Link Amy Lee in your Square customer list to Ben Ortiz' });
+      expect(box.getByRole('checkbox').checked).toBe(false);
+    });
+  });
+
   it('Not for a bill asks why first, then says so in the row with Undo, which puts it back', async () => {
     open();
     await screen.findByText('2 payments to match · $42.06');

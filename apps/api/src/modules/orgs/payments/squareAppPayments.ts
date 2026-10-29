@@ -25,6 +25,7 @@ import {
   squareAppEnteredMinor,
   squareAppLinesOf,
   squareAppPaidInParts,
+  squareAppSaleWait,
   squareOrderAddsOnTop,
   taxesOnTypedAmounts,
   type SquareAppCheck,
@@ -190,6 +191,7 @@ export async function takeIn(
     refundedMinor: Math.max(0, payment.refunded_money?.amount ?? 0),
     customer: null,
     deviceName: clip(payment.device_details?.device_name, 100),
+    saleReason: null,
   };
 
   if (owner === undefined || owner.locationId === null) {
@@ -222,7 +224,7 @@ export async function takeIn(
   // A customer linked to nobody here: what Square has of them, for staff to tell who it is (never kept on a
   // shop sale, which no screen shows: `decideAndKeep`).
   const customerSeenNow = customer !== null && who === "unknown" && sale.lines !== "items" ? await customerOf(square, owner, customer) : null;
-  const kept = { ...facts, enteredMinor: sale.enteredMinor, customer: customerSeenNow };
+  const kept = { ...facts, enteredMinor: sale.enteredMinor, customer: customerSeenNow, saleReason: squareAppSaleWait(sale) };
 
   const waits = await deps.sql.begin(async (tx) => await decideAndKeep(tx, { payment, owner, facts: kept, entryId, atHome, sale, who, today, now }));
   if (waits) await tellTaken(deps, owner.gymId, entryId);

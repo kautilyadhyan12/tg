@@ -15,7 +15,11 @@ import {
   forWords,
   heldLine,
   keepDone,
+  linkLabel,
+  linkNote,
+  linkTakenLine,
   markedLine,
+  matchedLine,
   overviewLine,
   paidLine,
   paidWith,
@@ -219,6 +223,41 @@ describe('after a press', () => {
     expect(toMatchHeadline({ count: 0, totals: [] })).toBeNull();
     expect(toMatchHeadline({ count: 1, totals: [{ currency: 'USD', minor: 2500 }] })).toBe('1 payment to match · $25.00');
     expect(overviewLine({ count: 3, totals: [{ currency: 'USD', minor: 7500 }, { currency: 'CAD', minor: 1000 }] })).toEqual({ value: '3 payments from Square Point of Sale to match.', total: '$75.00 + CA$10.00 in all' });
+  });
+});
+
+describe("linking Square's customer (18d-iii-b-ii-c)", () => {
+  const matched = (link) => ({ name: 'Amy Lee', amountMinor: 2500, currency: 'USD', receiptNumber: 9, link });
+  const said = (result, customerName = 'Amy L', personName = 'Amy Lee') => matchedLine(matched({ result, customerName, personName }));
+  const base = "Matched: $25.00 on Amy Lee's bill. Receipt 9.";
+  it('says nothing more where nothing was asked, or an older answer carries no link', () => {
+    expect(said('none')).toBe(base);
+    expect(matchedLine({ name: 'Amy Lee', amountMinor: 2500, currency: 'USD', receiptNumber: 9 })).toBe(base);
+  });
+  it('every result Match can report is said in a whole sentence about the customer and the person', () => {
+    expect(said('linked')).toBe(`${base} Amy L in your Square customer list is now linked to Amy Lee. Their next payments come to their page.`);
+    expect(said('also')).toBe(said('linked'));
+    expect(said('linked', null)).toBe(`${base} Their Square customer is now linked to Amy Lee. Their next payments come to their page.`);
+    expect(said('taken')).toBe(`${base} Amy L wasn’t linked: it is already linked to someone else here.`);
+    expect(said('gone')).toBe(`${base} Amy L wasn’t linked: it is no longer in your Square customer list.`);
+    expect(said('merged')).toBe(`${base} Amy L wasn’t linked: Square has merged it into another customer.`);
+    expect(said('past')).toBe(`${base} Amy L wasn’t linked: Amy Lee is a past member.`);
+    expect(said('unchecked')).toBe(`${base} Amy L wasn’t linked: the app couldn’t check it in Square.`);
+    expect(said('taken', null)).toBe(`${base} Their Square customer wasn’t linked: it is already linked to someone else here.`);
+  });
+  it("the tick's label and note: on where they match, off where the app can't tell, none where it is somebody else's", () => {
+    expect(linkLabel({ offer: 'link', customerName: 'Amy L', also: false, byName: null }, 'Amy Lee')).toBe('Link Amy L in your Square customer list to Amy Lee');
+    expect(linkLabel({ offer: 'ask', customerName: null, also: false, byName: null }, 'Amy Lee')).toBe('Link this customer in your Square customer list to Amy Lee');
+    expect(linkNote({ offer: 'link', customerName: 'Amy L', also: false, byName: null }, 'Amy Lee')).toBe(
+      'Their name and contact details match. Their next payments in Square Point of Sale then come to Amy Lee’s page, with their bill ticked.',
+    );
+    expect(linkNote({ offer: 'ask', customerName: null, also: false, byName: null }, 'Amy Lee')).toBe(
+      'Square’s customer has a different name or contact details from Amy Lee. Tick this only if they are the same person. Their next payments in Square Point of Sale then come to Amy Lee’s page, with their bill ticked.',
+    );
+    expect(linkNote({ offer: 'link', customerName: 'Amy L', also: true, byName: null }, 'Amy Lee')).toMatch(/Amy Lee already has a customer in your Square customer list\. This one is linked to them as well\.$/);
+    expect(linkNote({ offer: 'taken', customerName: 'Pat Smith', also: false, byName: 'Pat Smith' }, 'Amy Lee')).toBeNull();
+    expect(linkTakenLine({ offer: 'taken', customerName: 'Pat Smith', also: false, byName: 'Pat Smith' }, 'Sam Smith')).toBe('Pat Smith is already linked to Pat Smith, so it can’t be linked to Sam Smith.');
+    expect(linkTakenLine({ offer: 'taken', customerName: null, also: false, byName: null }, 'Sam Smith')).toBe('This customer is already linked to someone else here, so it can’t be linked to Sam Smith.');
   });
 });
 

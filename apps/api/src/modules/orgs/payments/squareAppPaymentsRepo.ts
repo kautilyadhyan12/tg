@@ -4,7 +4,7 @@
 // Square's messages or the hourly look found it first. The bills it could be for are read under the
 // gym's lock and the records' own, after what the clock has done is written, as Record payment reads them.
 import { randomUUID } from "node:crypto";
-import { addDays, memberPayTarget, SQUARE_APP, type SquareAppCandidate, type SquareAppWaitReason, type SquarePayment } from "@app/shared";
+import { addDays, memberPayTarget, SQUARE_APP, type SquareAppCandidate, type SquareAppSaleWait, type SquareAppWaitReason, type SquarePayment } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import { billsFor, paymentsFor, squareMoneyOut } from "../memberships/billsSql.js";
 import { heldRowsOf, lockedEntry, settle } from "../memberships/heldRepo.js";
@@ -172,6 +172,8 @@ export interface TakenPayment {
   customer: CustomerSeen | null;
   /** The name the gym gave the Square device that took it. */
   deviceName: string | null;
+  /** Why it waits because of what was sold, whoever paid (18d-iii-b-ii-c): kept for when its customer is linked. */
+  saleReason: SquareAppSaleWait | null;
 }
 
 /** What Square has of the customer on a payment, as the row keeps it. */
@@ -192,11 +194,11 @@ export async function insertTaken(tx: TransactionSql, p: TakenPayment, s: TakenS
     INSERT INTO gym_square_app_payments
       (environment, account_id, square_payment_id, gym_id, location_id, customer_id, amount_minor, tip_minor, currency,
        source, brand, last4, taken_at, state, reason, entry_id, record_key, entered_minor, refunded_minor,
-       customer_name, customer_email, customer_phone, device_name, created_at, updated_at)
+       customer_name, customer_email, customer_phone, device_name, sale_reason, created_at, updated_at)
     VALUES (${p.environment}, ${p.accountId}, ${p.squarePaymentId}, ${p.gymId}, ${p.locationId}, ${p.customerId}, ${p.amountMinor}, ${p.tipMinor},
             ${p.currency}, ${tag(p.source, /^[A-Z_]{1,40}$/)}, ${tag(p.brand, /^[A-Z_]{1,40}$/)}, ${tag(p.last4, /^[0-9]{4}$/)}, ${p.takenAt},
             ${s.state}, ${s.state === "waiting" ? s.reason : null}, ${p.entryId}, ${randomUUID()}, ${p.enteredMinor}, ${p.refundedMinor},
-            ${p.customer?.name ?? null}, ${p.customer?.email ?? null}, ${p.customer?.phone ?? null}, ${p.deviceName}, ${now}, ${now})
+            ${p.customer?.name ?? null}, ${p.customer?.email ?? null}, ${p.customer?.phone ?? null}, ${p.deviceName}, ${p.saleReason}, ${now}, ${now})
     ON CONFLICT (environment, account_id, square_payment_id) DO NOTHING
     RETURNING id`;
   return rows.length === 1;

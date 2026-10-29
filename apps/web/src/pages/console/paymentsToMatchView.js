@@ -214,8 +214,59 @@ export const amountQuestion = (row) => `How much of the ${money(row.amountMinor,
 
 export const matchButton = (minor, currency) => `Match ${money(minor, currency)} to this bill`;
 
-/** Said in the row once it is matched. */
-export const matchedLine = (matched) => `Matched: ${money(matched.amountMinor, matched.currency)} on ${matched.name}'s bill. Receipt ${String(matched.receiptNumber)}.`;
+// ── Linking Square's customer (18d-iii-b-ii-c) ──
+// Under "Who paid?", for a payment whose Square customer is linked to nobody here: link them to the person, so that
+// customer's next payments come to the person's page by themselves. "Your Square customer list" is what the gym
+// already calls it; the tick is on only where the app can tell they are the same person.
+
+const LINK_FALLBACK = 'this customer';
+
+/** The tick's own label: "Link Amy L in your Square customer list to Amy Lee". */
+export const linkLabel = (link, personName) => `Link ${link.customerName ?? LINK_FALLBACK} in your Square customer list to ${personName}`;
+
+/** Under the tick: what linking does, and, where the app can't tell, to tick it only if they are the same person. */
+export function linkNote(link, personName) {
+  if (link.offer === 'taken') return null;
+  const parts = [];
+  if (link.offer === 'ask') {
+    parts.push(`${link.customerName ?? 'Square’s customer'} has a different name or contact details from ${personName}. Tick this only if they are the same person.`);
+  } else {
+    parts.push('Their name and contact details match.');
+  }
+  parts.push(`Their next payments in Square Point of Sale then come to ${personName}’s page, with their bill ticked.`);
+  if (link.also) parts.push(`${personName} already has a customer in your Square customer list. This one is linked to them as well.`);
+  return parts.join(' ');
+}
+
+/** Where the customer can't be linked because somebody else here has it. */
+export const linkTakenLine = (link, personName) =>
+  `${link.customerName ?? 'This customer'} is already linked to ${link.byName ?? 'someone else here'}, so it can’t be linked to ${personName}.`;
+
+/** What Match did about the customer, said after the press; empty where nothing was asked. */
+export function linkDoneLine(link) {
+  if (link === undefined || link.result === 'none') return '';
+  const who = link.customerName ?? 'Their Square customer';
+  const person = link.personName ?? 'them';
+  switch (link.result) {
+    case 'linked':
+    case 'also':
+      return ` ${link.customerName === null ? 'Their Square customer' : `${link.customerName} in your Square customer list`} is now linked to ${person}. Their next payments come to their page.`;
+    case 'taken':
+      return ` ${who} wasn’t linked: it is already linked to someone else here.`;
+    case 'gone':
+      return ` ${who} wasn’t linked: it is no longer in your Square customer list.`;
+    case 'merged':
+      return ` ${who} wasn’t linked: Square has merged it into another customer.`;
+    case 'past':
+      return ` ${who} wasn’t linked: ${person} is a past member.`;
+    default:
+      return ` ${who} wasn’t linked: the app couldn’t check it in Square.`;
+  }
+}
+
+/** Said in the row once it is matched, and what was done about Square's customer. */
+export const matchedLine = (matched) =>
+  `Matched: ${money(matched.amountMinor, matched.currency)} on ${matched.name}'s bill. Receipt ${String(matched.receiptNumber)}.${linkDoneLine(matched.link)}`;
 
 // ── Not for a bill ──
 
