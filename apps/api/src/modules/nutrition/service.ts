@@ -22,6 +22,7 @@ import {
   type ChosenItem,
   type FoodMeasure,
   type FoodSearchItem,
+  type RecentFood,
   type LoggedMeasure,
   type Meal,
   type MealIdeasResponse,
@@ -42,6 +43,7 @@ import { CURATED_FOODS, curatedPieceFdcId, curatedUsdaFdcId, findCurated, findCu
 import { dishwareGrams, foodMeasures, gramsPerMl, measureGrams, scanStart, startingMeasure, type UsdaPortion } from "./measures.js";
 import type { FoodReference, FoodSearchProvider } from "./openfoodfacts.adapter.js";
 import { itemsVersion, ownPer100g, savedPlaces } from "./mealEdit.js";
+import { RECENT_MEALS_READ, recentFoods } from "./recentFoods.js";
 import * as repo from "./repo.js";
 import { ESTIMATE_CANONICAL_PREFIX, checkedPrice, closeFoodsOf, estimateFood, isPlainMatch, priceScannedFood, type ScanLookups, type ScanPrice } from "./scanMatch.js";
 import type {
@@ -316,6 +318,11 @@ const asUsdaReference = (row: repo.UsdaFoodRow): FoodReference => ({
  *  leaves two places), one goes to USDA and one to a jar; and a single place is
  *  USDA's. */
 const PACKAGED_RESERVE = 3;
+
+/** The person's own recent foods (32b-ii-a): one read of their newest meals, nobody else's. */
+export async function recentFoodsOf(deps: Pick<NutritionDeps, "sql">, userId: string): Promise<RecentFood[]> {
+  return recentFoods(await repo.newestMealItems(deps.sql, userId, RECENT_MEALS_READ));
+}
 
 export async function searchFoods(deps: NutritionDeps, query: string, limit: number): Promise<FoodSearchItem[]> {
   return await withMeasures(deps, await searchFoodReferences(deps, query, limit));
@@ -1514,6 +1521,11 @@ export async function patchMeal(
   id: string,
   input: PatchMealRequest,
 ): Promise<Meal | null> {
+  // Sent again after it was made: answered with the meal, as a save sent twice is (32a).
+  if (input.changeId !== undefined) {
+    const made = await repo.mealAfterChange(deps.sql, userId, id, input.changeId);
+    if (made !== null) return asMeal(made);
+  }
   const before = await repo.getMeal(deps.sql, userId, id);
   if (before === null) return null;
   // The contract sends items only with the itemsVersion they were read at.
@@ -1527,6 +1539,7 @@ export async function patchMeal(
       ...(input.mealType === undefined ? {} : { mealType: input.mealType }),
       ...(input.mealName === undefined ? {} : { mealName: input.mealName }),
       ...(items === undefined ? {} : { items }),
+      ...(input.changeId === undefined ? {} : { changeId: input.changeId }),
     });
     if (row === null) return null;
     await keepTodaysTargets(deps, userId, row.takenAt);

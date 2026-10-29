@@ -42,6 +42,8 @@ export const mealLogs = pgTable(
     nutritionSources: text("nutrition_sources").array().notNull(), // e.g. {ifct,usda}
     calcVersion: smallint("calc_version").notNull(),
     legacyMongoId: text("legacy_mongo_id").unique(),
+    // The phone's id for the meal's last change (ROADMAP 32b-ii-a): a change sent twice is made once.
+    lastChangeId: uuid("last_change_id"),
     createdAt: createdAt(),
   },
   (t) => [

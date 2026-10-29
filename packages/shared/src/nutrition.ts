@@ -275,8 +275,11 @@ export const patchMealRequestSchema = z.object({
   mealType: mealTypeSchema.nullable().optional(), // null clears the label
   items: mealEditItemsSchema.optional(),
   itemsVersion: itemsVersionSchema.optional(),
+  /** The phone's own id for this change (ROADMAP 32b-ii-a): the same change sent twice is made
+   *  once, and the second answer is the meal as it is now. Kept in small letters. */
+  changeId: z.string().uuid().toLowerCase().optional(),
 }).strict()
-  .refine((v) => Object.keys(v).length > 0, { message: "at least one field required" })
+  .refine((v) => Object.keys(v).some((k) => k !== "changeId"), { message: "at least one field required" })
   .refine((v) => (v.items === undefined) === (v.itemsVersion === undefined), {
     message: "items are sent with the itemsVersion they were read at, and only with items",
     path: ["itemsVersion"],
@@ -371,6 +374,21 @@ export const foodSearchItemSchema = z.object({
 });
 export type FoodSearchItem = z.infer<typeof foodSearchItemSchema>;
 export const foodSearchResponseSchema = z.object({ items: z.array(foodSearchItemSchema) }).strict();
+
+// ── Recent foods (ROADMAP Stage 5 32b-ii-a; Kd, 2026-10-28) ──
+/** The most recent foods Add to a meal opens on. */
+export const RECENT_FOODS_MOST = 10;
+/** One of the person's last different foods, at the amount they last had: what Add sends for it
+ *  (`canonical` with `add`), and how it reads (`measure` and `gramsPoint`, as the logged item's). */
+export const recentFoodSchema = z.object({
+  canonical: z.string().min(1).max(120), name: z.string().min(1),
+  source: z.enum(["curated", "usda", "openfoodfacts"]),
+  add: measureStartSchema,
+  measure: loggedMeasureSchema.nullable(), gramsPoint: z.number().positive(), kcalPoint: z.number().int().nonnegative(),
+}).strict();
+export type RecentFood = z.infer<typeof recentFoodSchema>;
+export const recentFoodsResponseSchema = z.object({ items: z.array(recentFoodSchema).max(RECENT_FOODS_MOST) }).strict();
+export type RecentFoodsResponse = z.infer<typeof recentFoodsResponseSchema>;
 
 /** A scanned item as the photo sheet receives it (ROADMAP 7a-iv-b; RULINGS
  *  2026-09-16, the portion redesign): its food's own measures and the one and
