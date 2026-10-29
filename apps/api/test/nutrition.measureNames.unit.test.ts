@@ -88,7 +88,7 @@ describe("a measure's name in a shopper's words", () => {
       expect(isCountMeasure(name), name).toBe(false);
     }
     // Counts, some the rules never saw: a letter after a unit's letters makes it a word, not a unit.
-    for (const name of ["tray", "tortilla", "large", "loaf", "garlic clove", "cookie", "chapati", "katori", "litchi", "cracker", "2 biscuits", "1 taco", "dosa", "glazed donut"]) {
+    for (const name of ["tray", "tortilla", "large", "loaf", "garlic clove", "cookie", "chapati", "katori", "litchi", "cracker", "2 biscuits", "1 taco", "dosa", "glazed donut", "T-bone steak", "t-bone", "c-shaped roll", "g-pack"]) {
       expect(isCountMeasure(name), name).toBe(true);
     }
     for (const name of ["3 oz", "500g", "1/2 lb", "kg"]) expect(isWeightMeasure(name), name).toBe(true);

@@ -193,8 +193,8 @@ export function isWeightMeasure(name: string): boolean {
 }
 /** What can come before a unit: "2 ", "0.75 ", "1/2 ", "½ ", "half ", or a number glued to it ("250ml"). */
 const AMOUNT_BEFORE = String.raw`(?:\d*\.?\d+\s*|\d+\s*\/\s*\d+\s*|[½⅓⅔¼¾⅛]\s*|half\s+|quarter\s+)?`;
-/** A unit ends where no letter follows it: "l" is a litre, "large" is not. */
-const UNIT_END = String.raw`(?![a-z])`;
+/** A unit ends where no letter or hyphen follows it: "l" is a litre; "large" and "T-bone" are not. */
+const UNIT_END = String.raw`(?![a-z-])`;
 const WEIGHT = new RegExp(String.raw`^${AMOUNT_BEFORE}(?:oz|ounces?|lbs?|pounds?|g|grams?|kg)${UNIT_END}`, "i");
 /** A volume or a weight as recipes and labels write it (32b-ii-b's review, L5: "½ cup", "2 tbs",
  *  "T", "c", "dl", "250ml", "fl. oz", "cupful" too). */
