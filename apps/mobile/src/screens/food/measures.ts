@@ -3,7 +3,7 @@ import { MAX_ITEM_GRAMS, type ChosenItem, type FoodMeasure, type FoodSearchItem,
 // Adding a food by one of its own measures, as the browser does (apps/web/src/components/nutrition/
 // measures.js, RULINGS 2026-09-16). The SERVER works out every gram and calorie from its own list of
 // the food's measures: these only shape what the picker offers, what it sends, and how an item reads.
-// A saved dish as a measure comes with 32b-ii.
+// A saved dish is a measure too (32b-ii-b): its key is "dish:" and its id, its amount how full it was.
 
 /** What the picker holds: one of the food's measures and the amount as typed. */
 export interface Amount {
@@ -35,8 +35,29 @@ export function stepped(amount: Amount, direction: 1 | -1): Amount {
   return { measure: amount.measure, amount: formatAmount(Math.min(MAX_ITEM_GRAMS, Math.max(lowest, next))) };
 }
 
-/** What is sent for the food, or null while the amount is no amount. */
+/** How full a dish was, in words, never as a fraction (Kd, RULINGS 2026-09-17): nothing is picked
+ *  until the person picks it (Kd, 2026-07-18). */
+export const FILL_CHOICES = [
+  { label: "Quarter", words: "quarter full", value: 0.25 },
+  { label: "Half", words: "half full", value: 0.5 },
+  { label: "Three quarters", words: "three quarters full", value: 0.75 },
+  { label: "Full", words: "full", value: 1 },
+] as const;
+
+const DISH_KEY = "dish:";
+/** A saved dish as the picker's measure. */
+export const dishMeasure = (id: string): string => `${DISH_KEY}${id}`;
+/** The saved dish a measure names, or null for a food's own measure. */
+export const dishOf = (measure: string): string | null => (measure.startsWith(DISH_KEY) ? measure.slice(DISH_KEY.length) : null);
+
+/** What is sent for the food, or null while the amount is no amount. A dish is sent with how full it
+ *  was, and is no amount until that is picked. */
 export function chosenItem(canonical: string, amount: Amount): ChosenItem | null {
+  const dish = dishOf(amount.measure);
+  if (dish !== null) {
+    const fill = FILL_CHOICES.find((f) => String(f.value) === amount.amount);
+    return fill === undefined ? null : { canonical, dishwareId: dish, fillLevel: fill.value };
+  }
   const n = Number(amount.amount.trim().replace(",", "."));
   if (amount.amount.trim() === "" || !Number.isFinite(n) || n <= 0 || n > MAX_ITEM_GRAMS) return null;
   return { canonical, measure: amount.measure, amount: n };
@@ -53,6 +74,7 @@ export function underAGram(measure: FoodMeasure | undefined, amount: Amount): bo
 const AMOUNT_REFUSALS: Readonly<Record<string, string>> = {
   portion_out_of_range: "That amount is too small or too large. Pick another amount.",
   unknown_measure: "That measure isn't one of this food's. Pick one from the list.",
+  unknown_dishware: "That dish isn't saved any more. Pick another measure.",
 };
 export const amountRefusal = (error: string): string | null => AMOUNT_REFUSALS[error] ?? null;
 
@@ -87,7 +109,7 @@ export function loggedAmount(item: Pick<MealItem, "measure" | "gramsPoint">): st
   return `${formatAmount(m.amount)} × ${m.name} · ${grams}`;
 }
 
-const FILL_WORDS: Readonly<Record<number, string>> = { 0.25: "quarter full", 0.5: "half full", 0.75: "three quarters full", 1: "full" };
+const FILL_WORDS: Readonly<Record<number, string>> = Object.fromEntries(FILL_CHOICES.map((f) => [f.value, f.words]));
 
 /** How many measures are offered before "More measures": a few chips, never a wall of them. */
 export const FIRST_MEASURES = 4;
