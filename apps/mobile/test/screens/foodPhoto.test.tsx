@@ -510,11 +510,12 @@ describe("a food the photo got wrong, and one no list has (Kd, 2026-10-30)", () 
     const server = await openFood({ meals: [], scans: [] });
     await takePhoto();
     expect(await screen.findByText(/^340\skcal · /)).toBeTruthy();
-    await fireEvent.press(screen.getByRole("button", { name: "Eaten from one dish?" }));
-    expect(await screen.findByText("Pick the dish and how full it was.")).toBeTruthy();
-    await fireEvent.press(await screen.findByRole("radio", { name: "Bowl · 375 ml" }));
-    await fireEvent.press(screen.getByRole("radio", { name: "Full" }));
-    await fireEvent.press(screen.getByRole("button", { name: "Use Bowl, full" }));
+    // The dishes under the foods, the bowl picked for somebody who has used none; nothing changes
+    // until a filled bowl is tapped.
+    expect(screen.getByText("Eaten from one dish")).toBeTruthy();
+    expect(screen.getByRole("radio", { name: "Bowl · 375 ml" }).props.accessibilityState).toMatchObject({ selected: true });
+    expect(screen.getByRole("button", { name: "Change Toast, 2 × slice · 60 g" })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Bowl, full" }));
     expect(await screen.findByText("Shared out over Bowl, full.")).toBeTruthy();
     // Toast 60 g and eggs 120 g: a third and two thirds of the bowl.
     expect(await screen.findByRole("button", { name: "Change Toast, Part of Bowl, full · 125 g" })).toBeTruthy();
@@ -553,11 +554,27 @@ describe("a food the photo got wrong, and one no list has (Kd, 2026-10-30)", () 
     await fireEvent.changeText(screen.getByLabelText("Carbs (g)"), "20");
     await fireEvent.changeText(screen.getByLabelText("Fat (g)"), "9");
     await fireEvent.press(await screen.findByRole("button", { name: "Add Chicken taco · 233 kcal" }));
-    expect(await screen.findByText("Chicken taco added.")).toBeTruthy();
+    // On the meal's list with what else was eaten (Kd, 2026-10-30: oats and milk), then saved once.
+    expect(await screen.findByText("On this meal")).toBeTruthy();
+    await fireEvent.changeText(screen.getByLabelText("Search food"), "milk");
+    await fireEvent.press(await screen.findByRole("button", { name: "Milk, whole, 144 kcal · 240 g, USDA" }));
+    await fireEvent.press(await screen.findByRole("button", { name: /^Add Milk, whole · / }));
+    expect(await screen.findByText("Milk, whole")).toBeTruthy();
+    await fireEvent.press(await screen.findByRole("button", { name: "Take Milk, whole off" }));
+    await fireEvent.changeText(screen.getByLabelText("Search food"), "milk");
+    await fireEvent.press(await screen.findByRole("button", { name: "Milk, whole, 144 kcal · 240 g, USDA" }));
+    await fireEvent.press(await screen.findByRole("button", { name: /^Add Milk, whole · / }));
+    const keep = await screen.findByRole("button", { name: `Save 2 foods to ${section}` });
+    await fireEvent.press(keep);
+    await fireEvent.press(keep);
+    expect(await screen.findByText("Chicken taco & Milk, whole added.")).toBeTruthy();
     await waitFor(() => {
       expect(saves(server)).toHaveLength(1);
     });
-    expect(saves(server)[0]?.body).toMatchObject({ mealName: "Chicken taco", items: [{ name: "Chicken taco", grams: 150, own: { proteinG: 18, carbsG: 20, fatG: 9 } }] });
+    expect(saves(server)[0]?.body).toMatchObject({
+      mealName: "Chicken taco & Milk, whole",
+      items: [{ name: "Chicken taco", grams: 150, own: { proteinG: 18, carbsG: 20, fatG: 9 } }, { canonical: "milk_whole", measure: "g", amount: 240 }],
+    });
   });
 });
 

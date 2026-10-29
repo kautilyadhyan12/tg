@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { MealItem, MealPhotoAnalysis } from "@app/shared";
-import { sharesOf, wholeDishEdits } from "../src/screens/food/dishShares";
+import { basketName, basketNumbers, foodsWords } from "../src/screens/food/basket";
+import { sharedDish, sharedDishOfItems, sharesOf, wholeDishEdits } from "../src/screens/food/dishShares";
 import { chosenItem, dishMeasure, loggedAmount } from "../src/screens/food/measures";
 import { newSheet, sheetItems, withRowFood, withWholeDish } from "../src/screens/food/photo";
 
@@ -75,5 +76,37 @@ describe("a logged meal eaten from one dish", () => {
       { from: 2, canonical: "dal", dishwareId: BOWL, fillLevel: 1, share: 0.25 },
     ]);
     expect(wholeDishEdits([item("Taco", "own_taco", 150, "own")], BOWL, 1)).toBeNull();
+  });
+});
+
+describe("which dish a meal shows as its one dish", () => {
+  it("is the dish every food is a part of, at one fill; else none", () => {
+    const part = (fill: string, share = 0.5) => ({ measure: dishMeasure(BOWL), amount: fill, share });
+    expect(sharedDish([part("1"), part("1")])).toEqual({ id: BOWL, fill: 1 });
+    expect(sharedDish([part("1"), part("0.5")])).toBeNull();
+    expect(sharedDish([part("1"), { measure: "g", amount: "100" }])).toBeNull();
+    expect(sharedDish([{ measure: dishMeasure(BOWL), amount: "1" }])).toBeNull();
+    expect(sharedDish([])).toBeNull();
+    const dishItem = (fill: number): MealItem => ({ ...item("Rice", "rice", 100), measure: { id: "dish", name: "My bowl", amount: fill, share: 0.5 } });
+    expect(sharedDishOfItems([dishItem(0.75), dishItem(0.75), item("Taco", "own_taco", 150, "own")])).toEqual({ name: "My bowl", fill: 0.75 });
+    expect(sharedDishOfItems([dishItem(0.75), item("Dal", "dal", 50)])).toBeNull();
+  });
+});
+
+describe("a typed meal of several foods (Kd, 2026-10-30: oats and milk)", () => {
+  const oats = { name: "Oats, rolled", item: item("Oats, rolled", "oats", 81) };
+  const milk = { name: "Milk (whole)", item: item("Milk (whole)", "milk", 244) };
+  it("is named by its food, its two, or the first and how many more", () => {
+    expect(basketName([oats])).toBe("Oats, rolled");
+    expect(basketName([oats, milk])).toBe("Oats, rolled & Milk (whole)");
+    expect(basketName([oats, milk, oats])).toBe("Oats, rolled & 2 more");
+    expect(basketName([{ name: "x".repeat(300) }])).toHaveLength(200);
+    expect(foodsWords(1)).toBe("1 food");
+    expect(foodsWords(2)).toBe("2 foods");
+  });
+  it("adds up the server's numbers only where it priced every food", () => {
+    expect(basketNumbers([oats, milk])?.totals.kcalPoint).toBe(81 + 244);
+    expect(basketNumbers([oats, { item: null }])).toBeNull();
+    expect(basketNumbers([])).toBeNull();
   });
 });

@@ -53,6 +53,7 @@ import {
   type SheetRow,
 } from "./photo";
 import type { KeptSheet } from "./PhotoSheetStore";
+import { sharedDish } from "./dishShares";
 import { OwnFood } from "./OwnFood";
 import { WholeDish } from "./WholeDish";
 import { Credits, SourceLine } from "./SourceLine";
@@ -71,7 +72,7 @@ const PHOTO_TALL = 0.78;
 const UNREADABLE = "That photo couldn’t be read. Try another one.";
 
 type Stage = { kind: "camera" } | { kind: "reading"; uri: string } | { kind: "review" };
-type Ask = "none" | "newPhoto" | "wholeDish";
+type Ask = "none" | "newPhoto";
 
 interface MealPhotoProps {
   open: boolean;
@@ -494,10 +495,19 @@ function Review({
               ))}
             </View>
           )}
-          <View style={styles.actions}>
-            <Button label="Add a food it missed" icon="plus" kind="soft" small onPress={() => { setSaid(null); setFinding({ query: "", change: null }); }} />
-            <Button label="Eaten from one dish?" kind="link" onPress={() => { setSaid(null); setAsk("wholeDish"); }} />
-          </View>
+          <Button label="Add a food it missed" icon="plus" kind="soft" small onPress={() => { setSaid(null); setFinding({ query: "", change: null }); }} />
+          {rows.some((r) => r.own === null) ? (
+            <WholeDish
+              applied={sharedDish(rows.filter((r) => r.own === null).map((r) => r.amount))}
+              held={rowGrams.some((g, i) => g === null && rows[i]?.own === null) ? "The dishes show once the foods’ weights are worked out." : null}
+              onUse={({ dish, fill }) => {
+                const next = withWholeDish(sheet, dish.id, fill.value, rowGrams);
+                if (next === null) return;
+                keep(next);
+                setSaid(`Shared out over ${dish.label}, ${fill.words}.`);
+              }}
+            />
+          ) : null}
           <Credits sources={new Set(rows.map((r) => r.source))} />
         </View>
       </ScrollView>
@@ -574,20 +584,6 @@ function Review({
           setFinding(null);
         }}
       />
-      {ask === "wholeDish" ? (
-        <Sheet open title="Eaten from one dish" onClose={() => { setAsk("none"); }}>
-          <WholeDish
-            held={rowGrams.some((g, i) => g === null && rows[i]?.own === null) ? "Wait a moment: the foods’ weights are still being worked out." : null}
-            onUse={({ dish, fill }) => {
-              const next = withWholeDish(sheet, dish.id, fill.value, rowGrams);
-              if (next === null) return;
-              keep(next);
-              setAsk("none");
-              setSaid(`Shared out over ${dish.label}, ${fill.words}.`);
-            }}
-          />
-        </Sheet>
-      ) : null}
       <Sheet open={ask === "newPhoto"} title="Take a new photo?" onClose={() => { setAsk("none"); }}>
         <Txt kind="small">A new photo uses another of your scans, and this meal won’t be saved.</Txt>
         <Button label="Take new photo" wide onPress={() => { setAsk("none"); onNewPhoto(); }} />
@@ -882,7 +878,6 @@ const styles = StyleSheet.create({
   reviewFoot: { gap: 10, paddingTop: 12, paddingHorizontal: sizes.edge, borderTopWidth: 1, borderTopColor: colours.line, backgroundColor: colours.box },
   footRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   sheetFoot: { gap: 10 },
-  actions: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 8 },
   notThis: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
   findList: { maxHeight: 360 },
   found: { minHeight: 56, justifyContent: "center", gap: 2, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colours.line },

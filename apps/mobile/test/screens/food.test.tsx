@@ -221,6 +221,8 @@ async function addOats() {
   await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 307 kcal · 1 cup, USDA" }));
   const add = await screen.findByRole("button", { name: "Add Oats, rolled · 307 kcal" });
   await fireEvent.press(add);
+  // On the meal's list; then one save keeps the meal (Kd, 2026-10-30).
+  await fireEvent.press(await screen.findByRole("button", { name: "Save 1 food to Breakfast" }));
 }
 
 describe("the worst thing: a meal is never lost or counted twice, and no calorie cut is shown that the health rules hold back", () => {
@@ -467,6 +469,7 @@ describe("round one's findings, on the screen", () => {
     await fireEvent.changeText(screen.getByLabelText("Search food"), "oats");
     await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 307 kcal · 1 cup, USDA" }));
     await fireEvent.press(await screen.findByRole("button", { name: "Add Oats, rolled" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Save 1 food to Breakfast" }));
     expect(await screen.findByText("1 meal is waiting for its numbers. They come once it is sent.")).toBeTruthy();
     expect(screen.getByLabelText("Calories, not known of 2,300 kcal")).toBeTruthy();
     expect(screen.queryByText(/kcal left/)).toBeNull();
@@ -502,9 +505,10 @@ describe("the re-check's finding", () => {
     await fireEvent.press(await screen.findByRole("button", { name: "Add to Breakfast" }));
     await fireEvent.changeText(screen.getByLabelText("Search food"), "oats");
     await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 307 kcal · 1 cup, USDA" }));
-    const add = await screen.findByRole("button", { name: "Add Oats, rolled · 307 kcal" });
-    await fireEvent.press(add);
-    await fireEvent.press(add);
+    await fireEvent.press(await screen.findByRole("button", { name: "Add Oats, rolled · 307 kcal" }));
+    const keep = await screen.findByRole("button", { name: "Save 1 food to Breakfast" });
+    await fireEvent.press(keep);
+    await fireEvent.press(keep);
     written();
     expect(await screen.findByText("Oats, rolled added.")).toBeTruthy();
     await waitFor(() => {
@@ -657,6 +661,8 @@ describe("previously logged foods (32b-ii-a)", () => {
     expect(screen.getByLabelText("Amount").props.value).toBe("1.5");
     expect(posts(server)).toHaveLength(0);
     await fireEvent.press(await screen.findByRole("button", { name: "Add Oats, rolled · 307 kcal" }));
+    expect(posts(server)).toHaveLength(0);
+    await fireEvent.press(await screen.findByRole("button", { name: "Save 1 food to Lunch" }));
     expect(await screen.findByText("Oats, rolled added.")).toBeTruthy();
     await waitFor(() => {
       expect(posts(server)).toHaveLength(1);
@@ -670,6 +676,7 @@ describe("previously logged foods (32b-ii-a)", () => {
     await fireEvent.press(await screen.findByRole("button", { name: "Add to Lunch" }));
     await fireEvent.press(await screen.findByRole("button", { name: "Add Oats, rolled" }));
     await fireEvent.press(await screen.findByRole("button", { name: "Add Oats, rolled" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Save 1 food to Lunch" }));
     expect(await screen.findByRole("button", { name: "Oats, rolled, 461 kcal, waiting to send" })).toBeTruthy();
     expect(screen.getByLabelText("Calories, 461 of 2,300 kcal")).toBeTruthy();
   });
@@ -682,6 +689,7 @@ describe("previously logged foods (32b-ii-a)", () => {
     expect(screen.getByRole("radio", { name: "cup · 81 g" }).props.accessibilityState).toMatchObject({ selected: true });
     await fireEvent.press(screen.getByRole("button", { name: "More" }));
     await fireEvent.press(await screen.findByRole("button", { name: "Add Oats, rolled · 307 kcal" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Save 1 food to Lunch" }));
     expect(await screen.findByText("Oats, rolled added.")).toBeTruthy();
     await waitFor(() => {
       expect(posts(server)).toHaveLength(1);

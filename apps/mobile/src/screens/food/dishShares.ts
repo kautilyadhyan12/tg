@@ -31,3 +31,20 @@ export function wholeDishEdits(items: readonly MealItem[], dishId: string, fill:
     return at === -1 ? { from: i } : { from: i, canonical: it.canonical, dishwareId: dishId, fillLevel: fill, share: shares[at] ?? 1 };
   });
 }
+
+/** The one dish every food of the lists is a part of, as the photo's meal holds them now; null where
+ *  they are not all one dish at one fill. */
+export function sharedDish(amounts: readonly { measure: string; amount: string; share?: number | undefined }[]): { id: string; fill: number } | null {
+  const first = amounts[0];
+  if (first === undefined || !first.measure.startsWith("dish:")) return null;
+  const same = amounts.every((a) => a.share !== undefined && a.measure === first.measure && a.amount === first.amount);
+  return same ? { id: first.measure.slice("dish:".length), fill: Number(first.amount) } : null;
+}
+
+/** The same for a logged meal's foods, by the dish's name. */
+export function sharedDishOfItems(items: readonly MealItem[]): { name: string; fill: number } | null {
+  const measures = items.filter((i) => i.nutritionSource !== "own").map((i) => i.measure);
+  const first = measures[0];
+  if (first?.id !== "dish") return null;
+  return measures.every((m) => m?.share !== undefined && m.name === first.name && m.amount === first.amount) ? { name: first.name, fill: first.amount } : null;
+}

@@ -383,6 +383,7 @@ describe("saved dishes", () => {
     const previews = s.sent.filter((a) => a.path === "/v1/nutrition/meals/preview");
     expect(previews.at(-1)?.body).toEqual({ items: [{ canonical: "oats_rolled", dishwareId: BOWL.id, fillLevel: 0.5 }] });
     await fireEvent.press(add);
+    await fireEvent.press(await screen.findByRole("button", { name: /^Save 1 food to / }));
     expect(await screen.findByText("Oats, rolled added.")).toBeTruthy();
     await waitFor(() => {
       expect(state.meals).toHaveLength(1);
@@ -455,6 +456,7 @@ describe("saved dishes", () => {
     await fireEvent.press(await screen.findByRole("radio", { name: "My blue bowl · 375 ml" }));
     await fireEvent.press(screen.getByRole("radio", { name: "My blue bowl, full" }));
     await fireEvent.press(await screen.findByRole("button", { name: /^Add Oats, rolled · / }));
+    await fireEvent.press(await screen.findByRole("button", { name: /^Save 1 food to / }));
     expect(await screen.findByText("Waiting to send")).toBeTruthy();
     await pickOats();
     await fireEvent.press(await screen.findByRole("button", { name: "Edit your dishes" }));
