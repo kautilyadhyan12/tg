@@ -448,7 +448,7 @@ describe('a member’s personal training', () => {
     serve(view({ sessions: [session(S1)] }));
     render(<PersonalTraining gym={GYM} />);
     fireEvent.click(await screen.findByRole('button', { name: /^Cancel session/ }));
-    svc.cancel.mockRejectedValueOnce(refused(409, 'late_cancel', "It's too late to cancel for free.", { packCharged: true }));
+    svc.cancel.mockRejectedValueOnce(refused(409, 'late_cancel', 'Cancelling this close to the start counts as a late cancel.', { packCharged: true }));
     fireEvent.click(within(screen.getByRole('dialog', { name: 'Cancel your session?' })).getByRole('button', { name: 'Cancel session' }));
     const late = await screen.findByRole('dialog', { name: 'Cancel late?' });
     expect(late.textContent).toContain('the session stays used on your pack');

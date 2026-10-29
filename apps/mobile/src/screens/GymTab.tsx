@@ -23,13 +23,14 @@ import { useSession } from "../session/SessionProvider";
 import { InvitationList, PlaceHead, invitationsPath } from "./Invitation";
 import { usePlaces } from "./places";
 import { placesHeading } from "./placesHeading";
+import { ClassesPage, type ClassesPlace } from "./gym/Classes";
 import { DaysYouCame } from "./gym/DaysYouCame";
 import { OWN_PASS_AFTER_MS, PASS_PATH, PassSheet } from "./gym/Pass";
 import { makePhonePass, phoneDay } from "./gym/phonePass";
 import { NO_ANSWER } from "./SignIn";
 
 // The Gym tab (docs/design/phone/pages/Gym and GymNone): the places the person joined, each with
-// Show my pass and the days they came there, a place that removed them, and every invitation still open for their address. It reads again when the
+// Show my pass, its Classes and the days they came there, a place that removed them, and every invitation still open for their address. It reads again when the
 // tab is opened or the app comes back, at most every 30 seconds. With the internet it also asks for
 // this sign-in's keys for passes with no signal, today's and tomorrow's, whenever the phone lacks
 // tomorrow's; with none, Show my pass stands alone where the places could not be read, or are more
@@ -69,6 +70,8 @@ export function GymScreen() {
   // Counted up when each place's days are to be read again: with the places, and when the pass closes,
   // as a scan at the desk while it was open made a visit.
   const [visitsRead, setVisitsRead] = useState(0);
+  // The place whose Classes page is open over the tab, or null.
+  const [classesAt, setClassesAt] = useState<ClassesPlace | null>(null);
 
   const fetchPass = useCallback(() => session.signedIn({ method: "GET", path: PASS_PATH }, checkinPassResponseSchema), [session]);
   const makeOwnPass = useMemo(
@@ -204,6 +207,16 @@ export function GymScreen() {
               {org.orgType === "personal_trainer" ? "Show your pass to your trainer when you arrive." : "Show your pass at the front desk when you arrive."}
             </Txt>
             <Button label="Show my pass" icon="qr" wide onPress={() => { setPassOrgType(org.orgType); }} />
+            <Button
+              label="Classes"
+              kind="link"
+              icon="calendar"
+              style={styles.middle}
+              say={`Classes at ${org.name}`}
+              onPress={() => {
+                setClassesAt({ id: org.id, name: org.name, clockFormat: org.clockFormat });
+              }}
+            />
           </Card>
           <DaysYouCame gymId={org.id} read={visitsRead} fetchVisits={fetchVisits} />
         </Fragment>
@@ -217,6 +230,12 @@ export function GymScreen() {
         }}
         fetchPass={fetchPass}
         makeOwnPass={makeOwnPass}
+      />
+      <ClassesPage
+        place={classesAt}
+        onClose={() => {
+          setClassesAt(null);
+        }}
       />
 
       {removed.map((org) => (
@@ -290,6 +309,7 @@ const styles = StyleSheet.create({
   none: { padding: 18, gap: 10 },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },
   grow: { flex: 1 },
+  middle: { alignSelf: "center" },
   address: {
     flexDirection: "row",
     alignItems: "center",

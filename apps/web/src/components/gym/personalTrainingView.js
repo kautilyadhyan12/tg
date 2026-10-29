@@ -147,7 +147,8 @@ export function ptCancelAsk(s, timezone, gymName) {
             ? `${passed}, and the session stays used on your pack.`
             : s.usesLimit === true
               ? `${passed}, and it still counts as one of the sessions your membership includes.`
-              : `${passed}.`,
+              : // Nothing follows that costs: never "for free".
+                "Cancelling this close to the start counts as a late cancel. There's no fee.",
       ],
       yes: 'Cancel session',
       no: 'Keep it',
@@ -156,16 +157,14 @@ export function ptCancelAsk(s, timezone, gymName) {
   const until = `${gymName} lets you cancel for free until ${instantText(s.freeCancelUntil, timezone)}.`;
   return {
     title: 'Cancel your session?',
-    lines: [
-      what,
-      s.packCharged
-        ? `${until} Your pack gets the session back.`
-        : s.usesLimit === true
-          ? `${until} It then no longer counts as one of the sessions your membership includes.${lateFee > 0 ? ` After ${instantText(s.freeCancelUntil, timezone)} there is a one-time late cancel fee of ${formatMinor(lateFee, s.fees.currency)}.` : ''}`
-          : lateFee > 0
-            ? `${until} After that there is a one-time late cancel fee of ${formatMinor(lateFee, s.fees.currency)}.`
-            : until,
-    ],
+    // "Free" is said only where something follows that is not.
+    lines: s.packCharged
+      ? [what, `${until} Your pack gets the session back.`]
+      : s.usesLimit === true
+        ? [what, `${until} It then no longer counts as one of the sessions your membership includes.${lateFee > 0 ? ` After ${instantText(s.freeCancelUntil, timezone)} there is a one-time late cancel fee of ${formatMinor(lateFee, s.fees.currency)}.` : ''}`]
+        : lateFee > 0
+          ? [what, `${until} After that there is a one-time late cancel fee of ${formatMinor(lateFee, s.fees.currency)}.`]
+          : [what],
     yes: 'Cancel session',
     no: 'Keep it',
   };

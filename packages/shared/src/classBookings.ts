@@ -256,7 +256,9 @@ export const CLASS_BOOKING_WORDS = {
   payment_overdue: OVERDUE_BOOKING_WORDS,
   no_booking: "You don't have a booking for this class.",
   cancel_started: "This class has already started, so the booking can't be cancelled.",
-  late_cancel: "It's too late to cancel for free. Cancelling now counts as a late cancel.",
+  /** A late cancel with no fee and no pack. Never "for free", which says a cost follows; and not "no
+   *  fee" either, as a membership with so many bookings a week still counts it. */
+  late_cancel: "Cancelling this close to the start counts as a late cancel.",
   late_cancel_pack: "It's too late to cancel for free. Cancelling now counts as a late cancel, and the class stays used on your pack.",
   request_reused: "That didn't go through. Try again.",
   class_not_found: "That class was not found.",
