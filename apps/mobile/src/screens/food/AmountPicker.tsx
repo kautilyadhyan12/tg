@@ -12,8 +12,9 @@ import { MOST_TEXT_GROWTH } from "../../look/sizing";
 import { fonts, Txt } from "../../look/Txt";
 import type { Shape } from "../../session/calls";
 import { useSession } from "../../session/SessionProvider";
+import { count } from "../dashboard/words";
 import { newGoalId } from "../goals/words";
-import { DISH_SIZES, MOST_DISH_NAME, dishWaiting, dishWords, newDish, type DishSize } from "./dishes";
+import { DISH_SIZES, MOST_DISH_ML, MOST_DISH_NAME, dishWaiting, dishWords, newDish, type DishSize } from "./dishes";
 import { useMealOutbox } from "./MealOutbox";
 import { FILL_CHOICES, amountFor, dishMeasure, dishOf, measureWords, shownMeasures, stepped, unitWords, type Amount } from "./measures";
 
@@ -255,10 +256,19 @@ function NewDish({ onCancel, onSaved }: { onCancel: () => void; onSaved: (dish: 
   const [ml, setMl] = useState("");
   const [busy, setBusy] = useState(false);
   const [trouble, setTrouble] = useState<string | null>(null);
+  // Save pressed with something missing: what is missing is said in red, not by a grey button
+  // (Kd, 32b-ii-b: he typed a name, and Save dish stayed grey with no word why).
+  const [asked, setAsked] = useState(false);
   const body = newDish(name, size, ml);
+  const missing =
+    size === null ? "Pick how big it is: Cup, Mug, Bowl or Another size." : body === null ? `Type its size in ml, from 1 to ${count(MOST_DISH_ML)}.` : null;
 
   const save = async () => {
-    if (body === null || busy) return;
+    if (busy) return;
+    if (body === null) {
+      setAsked(true);
+      return;
+    }
     setBusy(true);
     setTrouble(null);
     const answer = await session.signedIn({ method: "POST", path: "/v1/nutrition/dishware", body: { ...body, id } }, dishwareResponseSchema);
@@ -281,12 +291,17 @@ function NewDish({ onCancel, onSaved }: { onCancel: () => void; onSaved: (dish: 
         <Chip label="Another size" on={size === "ml"} onPress={() => { setSize("ml"); }} />
       </View>
       {size === "ml" ? <Field label="Its size in ml" value={ml} onChange={setMl} keyboard="number-pad" maxLength={5} ready /> : null}
+      {missing === null ? null : (
+        <Txt kind="small" colour={asked ? "badText" : "textSoft"}>
+          {missing}
+        </Txt>
+      )}
       {trouble === null ? null : (
         <Txt kind="small" colour="badText">
           {trouble}
         </Txt>
       )}
-      <Button label="Save dish" wide disabled={body === null} busy={busy} onPress={() => { void save(); }} />
+      <Button label="Save dish" wide busy={busy} onPress={() => { void save(); }} />
       <Button label="Cancel" kind="quiet" wide onPress={onCancel} />
     </>
   );

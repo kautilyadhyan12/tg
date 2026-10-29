@@ -418,6 +418,25 @@ async function pressBack() {
 }
 
 describe("the dishes everybody has (Kd, 32b-ii-b: keep them, and a way to make your own)", () => {
+  it("says what is missing when Save dish is pressed with a name and no size, and saves once a size is picked", async () => {
+    const state: State = { targets: targets(), dishes: [], meals: [] };
+    const s = await openFood(state);
+    await pickOats();
+    await fireEvent.press(await screen.findByRole("radio", { name: "New dish" }));
+    await fireEvent.changeText(screen.getByLabelText("Name your dish"), "Steel bowl");
+    expect(screen.getByText("Pick how big it is: Cup, Mug, Bowl or Another size.")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Save dish" }));
+    expect(dishPosts(s)).toHaveLength(0);
+    expect(screen.getByText("Pick how big it is: Cup, Mug, Bowl or Another size.")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("radio", { name: "Another size" }));
+    expect(screen.getByText("Type its size in ml, from 1 to 10,000.")).toBeTruthy();
+    await fireEvent.changeText(screen.getByLabelText("Its size in ml"), "450");
+    expect(screen.queryByText(/^Type its size in ml/)).toBeNull();
+    await fireEvent.press(screen.getByRole("button", { name: "Save dish" }));
+    expect(await screen.findByRole("radio", { name: "Steel bowl · 450 ml", selected: true })).toBeTruthy();
+    expect(dishPosts(s).map((p) => p.body)).toEqual([expect.objectContaining({ label: "Steel bowl", containerClass: "custom", volumeMl: 450 })]);
+  });
+
   it("offers a mug and a bowl with no dish saved, weighs a food with one, and never offers to rename them", async () => {
     const state: State = { targets: targets(), dishes: [], meals: [] };
     const s = await openFood(state);
