@@ -7,6 +7,7 @@ import {
   memberPostAction,
   postedText,
   reactionButtons,
+  reactionSummary,
   updatesPath,
   withPage,
   withReaction,
@@ -75,6 +76,14 @@ describe("reactions", () => {
     const after = withReaction(before, tapped);
     expect(after.mine).toBe(now);
     expect(after.reactions).toEqual(counts);
+  });
+
+  it("the one button says the kinds given, how many in all, and asks for a reaction where there is none", () => {
+    const given = reactionSummary(post(1, { reactions: { like: 1, love: 0, strong: 1200, fire: 3 }, mine: "fire" }));
+    expect(given.given.map((r) => r.id)).toEqual(["like", "strong", "fire"]);
+    expect(given.total).toBe(1204);
+    expect(given.label).toBe("Reactions: Like, 1 person; Strong, 1,200 people; Fire, 3 people, including you. Choose a reaction");
+    expect(reactionSummary(post(1))).toEqual({ given: [], total: 0, label: "React to this post" });
   });
 
   it("never counts below nothing", () => {

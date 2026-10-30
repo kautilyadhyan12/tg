@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
-import { AppState, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
+import { AppState, FlatList, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   GYM_POST_WORDS,
@@ -49,6 +49,7 @@ import {
   postedText,
   pressFailed,
   reactionButtons,
+  reactionSummary,
   reactionPath,
   removeOwnPath,
   reportBox,
@@ -386,6 +387,9 @@ function PostCard({ post, gymName, posted, photoUrl, token, files, onPhotoFailed
   const tag = authorTag(post);
   const hidden = hiddenOwnNote(post, gymName);
   const action = memberPostAction(post);
+  // One button until it is tapped; then the four reactions, and picking one closes them.
+  const [picking, setPicking] = useState(false);
+  const summary = reactionSummary(post);
   return (
     <Card testID={`post-${post.id}`} style={styles.box}>
       <View style={styles.row}>
@@ -430,27 +434,72 @@ function PostCard({ post, gymName, posted, photoUrl, token, files, onPhotoFailed
         </View>
       )}
       <View style={styles.reactions}>
-        {reactionButtons(post).map((r) => (
+        {picking ? (
+          <>
+            {reactionButtons(post).map((r) => (
+              <Pressable
+                key={r.id}
+                testID={`react-${r.id}`}
+                accessibilityRole="button"
+                accessibilityLabel={r.label}
+                accessibilityState={{ selected: r.mine, disabled: busy }}
+                disabled={busy}
+                onPress={() => {
+                  setPicking(false);
+                  onReact(r.id);
+                }}
+                style={[styles.reaction, r.mine ? styles.reactionMine : null]}
+              >
+                <Icon name={REACTION_ICONS[r.id]} size={16} colour={r.mine ? "orange" : "textSoft"} />
+                {r.count > 0 ? (
+                  <Txt kind="small" colour={r.mine ? "orange" : "textSoft"} style={styles.bold}>
+                    {r.count.toLocaleString("en")}
+                  </Txt>
+                ) : null}
+              </Pressable>
+            ))}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close reactions"
+              onPress={() => {
+                setPicking(false);
+              }}
+              style={styles.reaction}
+            >
+              <Icon name="x" size={16} colour="textSoft" />
+            </Pressable>
+          </>
+        ) : (
           <Pressable
-            key={r.id}
-            testID={`react-${r.id}`}
+            testID="react-open"
             accessibilityRole="button"
-            accessibilityLabel={r.label}
-            accessibilityState={{ selected: r.mine, disabled: busy }}
+            accessibilityLabel={summary.label}
+            accessibilityState={{ selected: post.mine !== null, disabled: busy }}
             disabled={busy}
             onPress={() => {
-              onReact(r.id);
+              setPicking(true);
             }}
-            style={[styles.reaction, r.mine ? styles.reactionMine : null]}
+            style={[styles.reaction, post.mine === null ? null : styles.reactionMine]}
           >
-            <Icon name={REACTION_ICONS[r.id]} size={16} colour={r.mine ? "orange" : "textSoft"} />
-            {r.count > 0 ? (
-              <Txt kind="small" colour={r.mine ? "orange" : "textSoft"} style={styles.bold}>
-                {r.count.toLocaleString("en")}
-              </Txt>
-            ) : null}
+            {summary.given.length === 0 ? (
+              <>
+                <Icon name="smileplus" size={16} colour="textSoft" />
+                <Txt kind="small" colour="textSoft" style={styles.bold}>
+                  React
+                </Txt>
+              </>
+            ) : (
+              <>
+                {summary.given.map((r) => (
+                  <Icon key={r.id} name={REACTION_ICONS[r.id]} size={16} colour={r.mine ? "orange" : "textSoft"} />
+                ))}
+                <Txt kind="small" colour={post.mine === null ? "textSoft" : "orange"} style={styles.bold}>
+                  {summary.total.toLocaleString("en")}
+                </Txt>
+              </>
+            )}
           </Pressable>
-        ))}
+        )}
         {action === null && !canBlock(post) ? null : (
           <View style={styles.actions}>
             {action === "remove" ? (
@@ -711,30 +760,75 @@ interface PhotoViewerProps {
   onClose: () => void;
 }
 
-/** A post's photos, one at a time, the whole screen. */
+type PostPhoto = GymPost["photos"][number];
+
+/** A post's photos, one at a time, the whole screen; slid left and right (Kd's click-through, 2026-10-30), and stepped
+ *  by a screen reader's swipe up and down. */
 function PhotoViewer({ viewing, url, token, files, onPhotoFailed, onIndex, onClose }: PhotoViewerProps) {
   const insets = useSafeAreaInsets();
   const photos = viewing?.post.photos ?? [];
   const index = viewing === null ? 0 : Math.min(viewing.index, photos.length - 1);
-  const photo = photos[index];
+  // One photo is the width the viewer is given.
+  const [width, setWidth] = useState(0);
+  const list = useRef<FlatList<PostPhoto>>(null);
+  const go = (to: number) => {
+    if (to < 0 || to >= photos.length) return;
+    onIndex(to);
+    list.current?.scrollToIndex({ index: to, animated: true });
+  };
+  const counted = photos.length === 0 ? "" : `Photo ${String(index + 1)} of ${String(photos.length)}`;
   return (
     <Modal visible={viewing !== null} animationType="fade" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
       <View testID="photo-viewer" style={[styles.viewer, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 12 }]}>
         <View style={styles.viewerHead}>
           <Txt colour="text" style={styles.grow}>
-            {photos.length === 0 ? "" : `Photo ${String(index + 1)} of ${String(photos.length)}`}
+            {counted}
           </Txt>
           <Pressable accessibilityRole="button" accessibilityLabel="Close photo" onPress={onClose} style={styles.back}>
             <Icon name="x" size={18} />
           </Pressable>
         </View>
-        <View style={styles.grow}>
-          {viewing === null || photo === undefined ? null : <SignedPhoto key={photo.id} uri={url(viewing.post, photo.id)} photoId={photo.id} token={token} files={files} onFailed={onPhotoFailed} fit="contain" />}
+        <View
+          testID="photo-pages"
+          style={styles.grow}
+          onLayout={(e) => {
+            setWidth(e.nativeEvent.layout.width);
+          }}
+          accessible
+          accessibilityRole="adjustable"
+          accessibilityLabel={counted}
+          accessibilityActions={[{ name: "increment" }, { name: "decrement" }]}
+          onAccessibilityAction={(e) => {
+            go(e.nativeEvent.actionName === "increment" ? index + 1 : index - 1);
+          }}
+        >
+          {viewing === null || width === 0 ? null : (
+            <FlatList
+              key={viewing.post.id}
+              ref={list}
+              data={photos}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              keyExtractor={(p) => p.id}
+              initialScrollIndex={index}
+              getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
+              onMomentumScrollEnd={(e) => {
+                onIndex(Math.round(e.nativeEvent.contentOffset.x / width));
+              }}
+              renderItem={({ item }) => (
+                <View style={{ width, height: "100%" }}>
+                  <SignedPhoto uri={url(viewing.post, item.id)} photoId={item.id} token={token} files={files} onFailed={onPhotoFailed} fit="contain" />
+                </View>
+              )}
+            />
+          )}
         </View>
         {photos.length < 2 ? null : (
-          <View style={styles.buttons}>
-            <Button label="Previous" kind="plain" small disabled={index === 0} onPress={() => { onIndex(index - 1); }} />
-            <Button label="Next" kind="plain" small disabled={index === photos.length - 1} onPress={() => { onIndex(index + 1); }} />
+          <View style={styles.dots}>
+            {photos.map((p, i) => (
+              <View key={p.id} style={[styles.dot, i === index ? styles.dotOn : null]} />
+            ))}
           </View>
         )}
       </View>
@@ -799,4 +893,7 @@ const styles = StyleSheet.create({
   buttons: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", alignItems: "center", columnGap: 20, rowGap: 8 },
   viewer: { flex: 1, backgroundColor: colours.page, paddingHorizontal: sizes.edge, gap: 12 },
   viewerHead: { flexDirection: "row", alignItems: "center", gap: 12 },
+  dots: { flexDirection: "row", justifyContent: "center", gap: 8 },
+  dot: { width: 8, height: 8, borderRadius: sizes.round, backgroundColor: colours.textFaint },
+  dotOn: { backgroundColor: colours.orange },
 });

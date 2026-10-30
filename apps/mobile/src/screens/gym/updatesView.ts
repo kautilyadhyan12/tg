@@ -105,6 +105,15 @@ export function reactionButtons(post: GymPost): ReactionButton[] {
   });
 }
 
+/** The one reaction button the phone shows until it is tapped (Kd's click-through, 2026-10-30): the kinds given, how
+ *  many in all, and what it says to somebody who cannot see it. */
+export function reactionSummary(post: GymPost): { given: ReactionButton[]; total: number; label: string } {
+  const given = reactionButtons(post).filter((r) => r.count > 0);
+  const total = given.reduce((sum, r) => sum + r.count, 0);
+  const label = given.length === 0 ? "React to this post" : `Reactions: ${given.map((r) => r.label).join("; ")}. Choose a reaction`;
+  return { given, total, label };
+}
+
 /** The post after the reader taps a reaction: tapping their own takes it off. Shown at once, and put right by the
  *  server's answer. */
 export function withReaction(post: GymPost, tapped: GymPostReaction): GymPost {

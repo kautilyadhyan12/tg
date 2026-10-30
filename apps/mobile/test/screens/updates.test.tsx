@@ -221,6 +221,7 @@ describe("the worst thing: no other place's posts here, a blocked person's posts
     });
     await openUpdates(server.ask, IRON);
     expect(await page().findByText("Cruel words")).toBeTruthy();
+    await fireEvent.press(within(page().getByTestId(`post-${P1}`)).getByTestId("react-open"));
     await fireEvent.press(within(page().getByTestId(`post-${P1}`)).getByTestId("react-like"));
     expect(await page().findByText("This post has been removed.")).toBeTruthy();
     expect(page().queryByText("Cruel words")).toBeNull();
@@ -349,6 +350,27 @@ describe("the posts, as the browser shows them", () => {
     expect(download.mock.calls.length).toBe(asked);
   });
 
+  it("the photos are slid one to the next, and a screen reader steps them", async () => {
+    const PHOTO2 = "c2222222-2222-4222-8222-222222222222";
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [postsOf(IRON)]: ok(feed(IRON, [post(P1, { photos: [{ id: PHOTO, width: 1600, height: 1200 }, { id: PHOTO2, width: 1200, height: 1600 }] })])),
+    });
+    await openUpdates(server.ask, IRON);
+    await fireEvent.press(await page().findByLabelText("Open photo 1 of 2"));
+    expect(await screen.findByText("Photo 1 of 2")).toBeTruthy();
+    expect(screen.queryByText("Next")).toBeNull();
+    const pages = screen.getByTestId("photo-pages");
+    await fireEvent(pages, "accessibilityAction", { nativeEvent: { actionName: "increment" } });
+    expect(await screen.findByText("Photo 2 of 2")).toBeTruthy();
+    // There is no third.
+    await fireEvent(pages, "accessibilityAction", { nativeEvent: { actionName: "increment" } });
+    expect(screen.getByText("Photo 2 of 2")).toBeTruthy();
+    await fireEvent(pages, "accessibilityAction", { nativeEvent: { actionName: "decrement" } });
+    expect(await screen.findByText("Photo 1 of 2")).toBeTruthy();
+  });
+
   it("a photo refused for an old sign-in is asked again once, with the renewed one", async () => {
     let renewals = 0;
     const server = fakeServer({
@@ -399,10 +421,14 @@ describe("a press, once", () => {
     });
     await openUpdates(server.ask, IRON);
     const card = within(await page().findByTestId(`post-${P1}`));
+    await fireEvent.press(card.getByTestId("react-open"));
     await fireEvent.press(card.getByTestId("react-fire"));
-    expect(await card.findByLabelText("Fire, 5 people, including you")).toBeTruthy();
+    // Picking one closes the four, and the one button says what is given.
+    expect(card.queryByTestId("react-fire")).toBeNull();
+    expect(await card.findByLabelText("Reactions: Like, 2 people; Fire, 5 people, including you. Choose a reaction")).toBeTruthy();
+    await fireEvent.press(card.getByTestId("react-open"));
     await fireEvent.press(card.getByTestId("react-fire"));
-    expect(await card.findByLabelText("Fire, 4 people")).toBeTruthy();
+    expect(await card.findByLabelText("Reactions: Like, 2 people; Fire, 4 people. Choose a reaction")).toBeTruthy();
     expect(server.asked.filter((a) => a.path.endsWith("/reaction")).map((a) => a.body)).toEqual([{ reaction: "fire" }, { reaction: null }]);
   });
 
@@ -415,9 +441,34 @@ describe("a press, once", () => {
     });
     await openUpdates(server.ask, IRON);
     const card = within(await page().findByTestId(`post-${P1}`));
+    await fireEvent.press(card.getByTestId("react-open"));
     await fireEvent.press(card.getByTestId("react-love"));
     expect(await card.findByText("Couldn’t save your reaction. Please try again.")).toBeTruthy();
-    expect(card.getByLabelText("Love, 0 people")).toBeTruthy();
+    expect(card.getByLabelText("React to this post")).toBeTruthy();
+  });
+
+  it("the reactions are one button until it is tapped, and Close reactions puts it back", async () => {
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [postsOf(IRON)]: ok(feed(IRON, [post(P1), post(P2, { reactions: { like: 1, love: 0, strong: 0, fire: 3 } })])),
+    });
+    await openUpdates(server.ask, IRON);
+    const none = within(await page().findByTestId(`post-${P1}`));
+    expect(none.getByLabelText("React to this post")).toBeTruthy();
+    expect(none.getByText("React")).toBeTruthy();
+    expect(none.queryByTestId("react-like")).toBeNull();
+    const some = within(page().getByTestId(`post-${P2}`));
+    expect(some.getByText("4")).toBeTruthy();
+    await fireEvent.press(some.getByTestId("react-open"));
+    expect(some.getByLabelText("Like, 1 person")).toBeTruthy();
+    expect(some.getByLabelText("Love, 0 people")).toBeTruthy();
+    expect(some.getByLabelText("Strong, 0 people")).toBeTruthy();
+    expect(some.getByLabelText("Fire, 3 people")).toBeTruthy();
+    await fireEvent.press(some.getByLabelText("Close reactions"));
+    expect(some.queryByTestId("react-like")).toBeNull();
+    expect(some.getByTestId("react-open")).toBeTruthy();
+    expect(server.asked.filter((a) => a.path.endsWith("/reaction"))).toEqual([]);
   });
 
   it("Report waits for a reason, sends the reason and the words typed, says so, and the post then reads Reported", async () => {
