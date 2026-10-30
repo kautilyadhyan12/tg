@@ -13,9 +13,9 @@ import { Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
 import { fitWithin } from "../food/photo";
 import { newRequestKey } from "./classesView";
-import { POST_PHOTO_QUALITIES, draftFileText, hasWork, photoTrouble, postHint, postPhotoToSend, postedWords, readDraftFile, type DraftPost, type PostPhotoReading } from "./postDraft";
+import { POST_PHOTO_QUALITIES, draftFileText, hasWork, photoTrouble, postHint, postPhotoToSend, postedWords, readDraftFile, removedAndKept, type DraftPost, type PostPhotoReading } from "./postDraft";
 import { PhotoPages } from "./PhotoPages";
-import { draftFolder } from "./postDraftFiles";
+import { draftFolder, removeSourcePhoto } from "./postDraftFiles";
 import { PostCamera } from "./PostCamera";
 import { addOwnPath, canPost, charsLine, couldNotRead, missingThing, pressFailed } from "./updatesView";
 
@@ -54,6 +54,12 @@ export interface KeptPost {
   /** Each photo as base64, in order; null where one cannot be read. */
   readPhotos: () => Promise<string[] | null>;
   clear: () => void;
+  /** It is on its way under its key. */
+  markSent: () => void;
+  /** The server has said it keeps nothing under its key. */
+  markNotSent: () => void;
+  /** The key is spent: the post goes under a new one. */
+  newKey: () => void;
 }
 
 /** One person's unsent post at one place. Each change is written in order. */
@@ -109,11 +115,14 @@ export function useKeptPost(me: string | null, gymId: string): KeptPost {
     [inTurn],
   );
   const current = (): DraftPost => now.current ?? { postKey: newRequestKey(), body: "", photos: [] };
+  // A change after a send whose answer never came.
+  const touched = (draft: DraftPost): DraftPost => (draft.sent === true ? { ...draft, changed: true } : draft);
+  const withoutSend = (draft: DraftPost): DraftPost => ({ postKey: draft.postKey, body: draft.body, photos: draft.photos });
 
   return {
     draft,
     setBody: (body) => {
-      put({ ...current(), body });
+      put(touched({ ...current(), body }));
     },
     addPhoto: async (base64) => {
       const here = folder.current;
@@ -129,12 +138,12 @@ export function useKeptPost(me: string | null, gymId: string): KeptPost {
       }
       const had = current();
       if (had.photos.length >= GYM_POST_MAX_PHOTOS) return false;
-      put({ ...had, photos: [...had.photos, name] });
+      put(touched({ ...had, photos: [...had.photos, name] }));
       return true;
     },
     removePhoto: (name) => {
       const had = current();
-      put({ ...had, photos: had.photos.filter((p) => p !== name) });
+      put(touched({ ...had, photos: had.photos.filter((p) => p !== name) }));
       const here = folder.current;
       if (here !== null) void inTurn(() => { here.removePhoto(name); }).catch(() => undefined);
     },
@@ -148,6 +157,15 @@ export function useKeptPost(me: string | null, gymId: string): KeptPost {
       } catch {
         return null;
       }
+    },
+    markSent: () => {
+      if (now.current !== null) put({ ...now.current, sent: true });
+    },
+    markNotSent: () => {
+      if (now.current !== null) put(withoutSend(now.current));
+    },
+    newKey: () => {
+      if (now.current !== null) put({ ...withoutSend(now.current), postKey: newRequestKey() });
     },
     clear: () => {
       const here = folder.current;
@@ -184,8 +202,9 @@ export function PostBox({ open, gymId, gymName, kept, mayPost, onClose, onPosted
   const [discarding, setDiscarding] = useState(false);
   const pressed = useRef(false);
 
+  // Cleared as it closes: what happens while it is closed is still said when it opens.
   useEffect(() => {
-    if (!open) return;
+    if (open) return;
     setTrouble(null);
     setRefused(null);
     setDiscarding(false);
@@ -210,6 +229,8 @@ export function PostBox({ open, gymId, gymName, kept, mayPost, onClose, onPosted
           else unreadable += 1;
         } else if (!(await kept.addPhoto(read.base64))) {
           unreadable += 1;
+        } else {
+          removeSourcePhoto(uri);
         }
       } catch {
         unreadable += 1;
@@ -238,6 +259,7 @@ export function PostBox({ open, gymId, gymName, kept, mayPost, onClose, onPosted
     setRefused(null);
     setTrouble(null);
     const sentBody = draft.body;
+    const changed = draft.changed === true;
     const pictures = await kept.readPhotos();
     if (pictures === null) {
       pressed.current = false;
@@ -245,6 +267,7 @@ export function PostBox({ open, gymId, gymName, kept, mayPost, onClose, onPosted
       setRefused("A photo on this post couldn't be read. Take it off and try again.");
       return;
     }
+    kept.markSent();
     const answer = await session.signedIn(
       { method: "POST", path: addOwnPath(gymId), body: { postKey: draft.postKey, body: sentBody, photos: pictures }, waitMs: SEND_WAIT_MS },
       gymPostResponseSchema,
@@ -253,7 +276,7 @@ export function PostBox({ open, gymId, gymName, kept, mayPost, onClose, onPosted
     setSending(false);
     if (answer.kind === "ok") {
       kept.clear();
-      onPosted(answer.data.post, postedWords(answer.data.post, { body: sentBody, photoCount: pictures.length }));
+      onPosted(answer.data.post, postedWords(answer.data.post, { body: sentBody, photoCount: pictures.length, changed }));
       return;
     }
     if (answer.kind === "no_answer") {
@@ -261,6 +284,13 @@ export function PostBox({ open, gymId, gymName, kept, mayPost, onClose, onPosted
       return;
     }
     const missing = missingThing(answer);
+    if (missing === "post") {
+      // It went up after a lost reply and was removed since: the words and photos are still theirs to post.
+      kept.newKey();
+      setRefused(removedAndKept(answer.message));
+      return;
+    }
+    kept.markNotSent();
     setRefused(missing !== null ? couldNotRead(404, gymName) : pressFailed(answer.message));
     if (missing !== null || answer.status === 403) onRefused();
   };

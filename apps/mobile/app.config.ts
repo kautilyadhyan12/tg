@@ -62,7 +62,7 @@ export function configFor(copy: Copy): ExpoConfig {
     // microphone, which no feature uses.
     plugins: [
       "expo-secure-store",
-      ["expo-camera", { cameraPermission: "Allow $(PRODUCT_NAME) to take photos of your meals and for your gym's updates.", microphonePermission: false, recordAudioAndroid: false }],
+      ["expo-camera", { cameraPermission: "Allow $(PRODUCT_NAME) to take photos of your meals and your gym's updates.", microphonePermission: false, recordAudioAndroid: false }],
       ["expo-image-picker", { photosPermission: "Allow $(PRODUCT_NAME) to open the photos you pick.", microphonePermission: false }],
       "./plugins/shortNativeBuild.js",
     ],

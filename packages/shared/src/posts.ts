@@ -246,6 +246,10 @@ export const gymPostDraftFileSchema = z
     postKey: z.string().uuid(),
     body: z.string().max(GYM_POST_DRAFT_MOST),
     photos: z.array(z.string().regex(/^[0-9a-f-]{36}\.webp$/)).max(GYM_POST_MAX_PHOTOS),
+    /** It has been sent under this key, and the answer is not known. */
+    sent: z.boolean().optional(),
+    /** And it has been changed since: the server would answer with the post as it first was. */
+    changed: z.boolean().optional(),
   })
   .strict();
 export type GymPostDraftFile = z.infer<typeof gymPostDraftFileSchema>;

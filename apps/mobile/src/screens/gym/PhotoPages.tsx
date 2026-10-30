@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colours, sizes } from "../../look/colours";
 import { Icon } from "../../look/Icon";
 import { Txt } from "../../look/Txt";
+import { ZoomPhoto } from "./ZoomPhoto";
 
 interface PhotoPagesProps {
   /** Open while it is not null: which photo is shown, and of what. */
@@ -23,6 +24,8 @@ export function PhotoPages({ viewing, photo, onIndex, onClose }: PhotoPagesProps
   // One photo is the width the viewer is given.
   const [width, setWidth] = useState(0);
   const list = useRef<FlatList<string>>(null);
+  // A photo being zoomed holds the pages still.
+  const [held, setHeld] = useState(false);
   const go = (to: number) => {
     if (to < 0 || to >= ids.length) return;
     onIndex(to);
@@ -61,6 +64,7 @@ export function PhotoPages({ viewing, photo, onIndex, onClose }: PhotoPagesProps
               data={ids}
               horizontal
               pagingEnabled
+              scrollEnabled={!held}
               showsHorizontalScrollIndicator={false}
               keyExtractor={(id) => id}
               initialScrollIndex={index}
@@ -68,7 +72,7 @@ export function PhotoPages({ viewing, photo, onIndex, onClose }: PhotoPagesProps
               onMomentumScrollEnd={(e) => {
                 onIndex(Math.round(e.nativeEvent.contentOffset.x / width));
               }}
-              renderItem={({ item }) => <View style={{ width, height: "100%" }}>{photo(item)}</View>}
+              renderItem={({ item }) => <View style={{ width, height: "100%" }}><ZoomPhoto onHeld={setHeld}>{photo(item)}</ZoomPhoto></View>}
             />
           )}
         </View>

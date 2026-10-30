@@ -158,11 +158,11 @@ d("a person's posts on their profile, and the day's photo posts (real Postgres, 
     return JSON.parse(res.body) as StaffPersonGymPostsResponse;
   };
   /** Photos already posted in the last moments, one a post, written straight to the database. */
-  const seedPhotos = (gym: Gym, who: { userId: string }, n: number, byMember = true) =>
+  const seedPhotos = (gym: Gym, who: { userId: string }, n: number, byMember = true, at = new Date(clock)) =>
     sql`
       WITH p AS (
         INSERT INTO gym_posts (gym_id, author_user_id, post_key, body, by_member, created_at)
-        SELECT ${gym.id}, ${who.userId}, gen_random_uuid(), 'Seeded ' || i, ${byMember}, ${new Date(clock)} FROM generate_series(1, ${n}::int) i
+        SELECT ${gym.id}, ${who.userId}, gen_random_uuid(), 'Seeded ' || i, ${byMember}, ${at} FROM generate_series(1, ${n}::int) i
         RETURNING gym_id, id)
       INSERT INTO gym_post_photos (gym_id, post_id, storage_key, content_type, byte_size, width, height, position)
       SELECT gym_id, id, 'gym-post/' || gym_id || '/' || gen_random_uuid() || '.jpg', 'image/jpeg', 1000, 100, 100, 0 FROM p`;
@@ -515,6 +515,58 @@ d("a person's posts on their profile, and the day's photo posts (real Postgres, 
       // 24 hours after the last of them, none counts.
       clock += 24 * HOUR;
       expect((await send(gym, writer, "A new day", [IPHONE])).statusCode).toBe(201);
+    },
+    T,
+  );
+
+  it(
+    "a post is told the hour enough of the oldest photos have gone, for its own number of photos",
+    async () => {
+      const gym = await makeGym("Hours House");
+      const writer = await member(gym, "Wendy Writer");
+      // Ten photos: three 20 hours old, three 10 hours old, four 1 hour old.
+      await seedPhotos(gym, writer, 3, true, new Date(clock - 20 * HOUR));
+      await seedPhotos(gym, writer, 3, true, new Date(clock - 10 * HOUR));
+      await seedPhotos(gym, writer, 4, true, new Date(clock - HOUR));
+      const hoursFor = async (photos: string[]): Promise<string> => {
+        const res = await send(gym, writer, "Words", photos);
+        expect(res.statusCode).toBe(429);
+        return (JSON.parse(res.body) as { message: string }).message;
+      };
+      // One waits for the oldest, three for the third oldest: both 4 hours. Four for the fourth: 14.
+      expect(await hoursFor([IPHONE])).toMatch(/in about 4 hours\.$/);
+      expect(await hoursFor([IPHONE, IPHONE, IPHONE])).toMatch(/in about 4 hours\.$/);
+      expect(await hoursFor([IPHONE, IPHONE, IPHONE, IPHONE])).toMatch(/in about 14 hours\.$/);
+      // Staff are counted the same way.
+      await seedPhotos(gym, gym.owner, 18, false, new Date(clock - 20 * HOUR));
+      await seedPhotos(gym, gym.owner, 2, false, new Date(clock - 2 * HOUR));
+      clock += 1000;
+      const staff = await inject("POST", posts(gym.id), gym.owner.cookies, { postKey: randomUUID(), body: "Words", photos: [IPHONE, IPHONE, IPHONE] });
+      expect((JSON.parse(staff.body) as { message: string }).message).toMatch(/^The gym has posted 20 photos.*in about 4 hours\.$/);
+    },
+    T,
+  );
+
+  it(
+    "the gym's last photo sent twice at once by staff is one post, and both are answered with it",
+    async () => {
+      const gym = await makeGym("Staff Last House");
+      await seedPhotos(gym, gym.owner, GYM_STAFF_PHOTOS_A_DAY - 1, false);
+      clock += 1000;
+      const body = { postKey: randomUUID(), body: "The last", photos: [IPHONE] };
+      // Both are held at the gym's lock, past the first look for the key.
+      const lock = await sql.reserve();
+      await lock`BEGIN`;
+      await lock`SELECT 1 FROM gyms WHERE id = ${gym.id} FOR UPDATE`;
+      const both = [0, 1].map((n) => inject("POST", posts(gym.id), gym.owner.cookies, body, either(n)));
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await lock`COMMIT`;
+      lock.release();
+      const answers = await Promise.all(both);
+      expect(answers.map((r) => r.statusCode)).toEqual([201, 201]);
+      const ids = answers.map((r) => (JSON.parse(r.body) as { post: GymPost }).post.id);
+      expect(ids[0]).toBe(ids[1]);
+      expect(await filesOf(gym.id)).toHaveLength(1);
     },
     T,
   );

@@ -37,8 +37,8 @@ export function readDraftFile(text: string | null): DraftPost | null {
   }
   const parsed = gymPostDraftFileSchema.safeParse(raw);
   if (!parsed.success) return null;
-  const { postKey, body, photos } = parsed.data;
-  return { postKey, body, photos };
+  const { postKey, body, photos, sent, changed } = parsed.data;
+  return { postKey, body, photos, ...(sent === undefined ? {} : { sent }), ...(changed === undefined ? {} : { changed }) };
 }
 
 /** Under the box: who sees it. A full day is said by the server's own sentence when it happens. */
@@ -54,10 +54,13 @@ export function photoTrouble({ unreadable, tooBig, left }: { unreadable: number;
   return lines.length === 0 ? null : lines.join(" ");
 }
 
+/** What a kept post says when the post it went up as has since been removed: its key is spent, so it goes under a new one. */
+export const removedAndKept = (serverWords: string): string => `${serverWords} Press Post to post it again.`;
+
 /** Said where the button is once a post is up. A post sent again after a lost reply is answered with the one the
  *  server kept, so changes made since did not go. */
-export function postedWords(post: Pick<GymPost, "body" | "photos">, sent: { body: string; photoCount: number }): string {
-  return post.body === sent.body.trim() && post.photos.length === sent.photoCount
+export function postedWords(post: Pick<GymPost, "body" | "photos">, sent: { body: string; photoCount: number; changed: boolean }): string {
+  return !sent.changed && post.body === sent.body.trim() && post.photos.length === sent.photoCount
     ? "Your post is up."
     : "Your post went up as you first wrote it. Your later changes weren't added.";
 }

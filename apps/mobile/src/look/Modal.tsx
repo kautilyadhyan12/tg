@@ -1,9 +1,12 @@
-import { Modal as PhoneModal, useWindowDimensions, type ModalProps } from "react-native";
+import { Modal as PhoneModal, useWindowDimensions, View, type ModalProps } from "react-native";
 
-/** A page or a box over the app. Android keeps one at the size it opened at when a folding phone opens, so it is drawn
- *  afresh at the new size; a page reads its data again, and what a person is
- *  doing is kept outside it. */
-export function Modal(props: ModalProps) {
+/** A page or a box over the app. Android keeps one at the size it opened at when a folding phone opens, so what is in it
+ *  is given the window's size; nothing in it is drawn afresh, so nothing a person is doing is lost. */
+export function Modal({ children, ...props }: ModalProps) {
   const { width, height } = useWindowDimensions();
-  return <PhoneModal key={`${String(width)}x${String(height)}`} {...props} />;
+  return (
+    <PhoneModal {...props}>
+      <View style={{ width, height }}>{children}</View>
+    </PhoneModal>
+  );
 }

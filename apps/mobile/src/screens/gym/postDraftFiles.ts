@@ -16,6 +16,18 @@ export interface DraftFolder {
 
 const TEXT = "post.json";
 
+/** The picked or taken photo once its small copy is kept: the full-size one, which may say where it was taken, stays no
+ *  longer than it must. Only what is in the app's own cache: never a person's own photo. */
+export function removeSourcePhoto(uri: string): void {
+  try {
+    if (!uri.startsWith(Paths.cache.uri)) return;
+    const file = new File(uri);
+    if (file.exists) file.delete();
+  } catch {
+    // The phone clears its cache in time.
+  }
+}
+
 export function draftFolder(userId: string, gymId: string): DraftFolder {
   const here = () => new Directory(Paths.document, `post-draft-${userId}-${gymId}`);
   const made = () => {

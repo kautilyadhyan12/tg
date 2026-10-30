@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { GYM_POST_DRAFT_MOST, GYM_POST_PHONE_PHOTO_MAX_BYTES } from "@app/shared";
 import { fromBase64, toBase64 } from "../src/screens/food/photo";
+import { clampScale, clampShift, fingersApart } from "../src/screens/gym/zoom";
 import { draftFileText, hasWork, photoTrouble, postPhotoToSend, postedWords, readDraftFile } from "../src/screens/gym/postDraft";
 
 // A member's post on the phone (ROADMAP Stage 5 17b).
@@ -74,6 +75,8 @@ describe("the post kept on the phone", () => {
   it("reads back what it wrote", () => {
     const draft = { postKey: KEY, body: "Leg day 🔥", photos: [NAME] };
     expect(readDraftFile(draftFileText(draft))).toEqual(draft);
+    const sent = { ...draft, sent: true, changed: true };
+    expect(readDraftFile(draftFileText(sent))).toEqual(sent);
   });
 
   it.each([
@@ -96,6 +99,32 @@ describe("the post kept on the phone", () => {
   });
 });
 
+describe("zooming a photo", () => {
+  it.each([
+    [0.5, 1],
+    [1, 1],
+    [2, 2],
+    [4, 4],
+    [9, 4],
+  ])("a scale of %d is held at %d", (asked, held) => {
+    expect(clampScale(asked)).toBe(held);
+  });
+
+  it.each([
+    [50, 300, 1, 0],
+    [50, 300, 2, 50],
+    [500, 300, 2, 150],
+    [-500, 300, 2, -150],
+    [500, 300, 4, 450],
+  ])("a move of %d on %d at %d is held at %d", (shift, size, scale, held) => {
+    expect(clampShift(shift, size, scale) + 0).toBe(held);
+  });
+
+  it("how far apart two fingers are", () => {
+    expect(fingersApart({ pageX: 0, pageY: 0 }, { pageX: 3, pageY: 4 })).toBe(5);
+  });
+});
+
 describe("what the member reads", () => {
   it.each([
     [{ unreadable: 0, tooBig: 0, left: 0 }, null],
@@ -112,8 +141,10 @@ describe("what the member reads", () => {
   it("says when the server kept the post as it first was", () => {
     const up = "Your post is up.";
     const first = "Your post went up as you first wrote it. Your later changes weren't added.";
-    expect(postedWords({ body: "Hi", photos: [] }, { body: " Hi ", photoCount: 0 })).toBe(up);
-    expect(postedWords({ body: "Hi", photos: [] }, { body: "Hi there", photoCount: 0 })).toBe(first);
-    expect(postedWords({ body: "Hi", photos: [] }, { body: "Hi", photoCount: 1 })).toBe(first);
+    expect(postedWords({ body: "Hi", photos: [] }, { body: " Hi ", photoCount: 0, changed: false })).toBe(up);
+    expect(postedWords({ body: "Hi", photos: [] }, { body: "Hi there", photoCount: 0, changed: false })).toBe(first);
+    expect(postedWords({ body: "Hi", photos: [] }, { body: "Hi", photoCount: 1, changed: false })).toBe(first);
+    // The same words and the same number of photos, with a photo swapped.
+    expect(postedWords({ body: "Hi", photos: [] }, { body: "Hi", photoCount: 0, changed: true })).toBe(first);
   });
 });

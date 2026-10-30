@@ -286,7 +286,7 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
         onContentSizeChange={(_, all) => {
           measure({ all });
         }}
-        contentContainerStyle={[styles.list, { paddingBottom: bottom + 96 }]}
+        contentContainerStyle={[styles.list, { paddingBottom: bottom + 152 }]}
         data={feed === null || empty !== null ? [] : [...feed.pinned, ...feed.posts]}
         keyExtractor={(post) => post.id}
         initialNumToRender={NEAR_THE_SCREEN}

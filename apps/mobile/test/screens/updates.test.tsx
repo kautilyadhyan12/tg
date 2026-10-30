@@ -4,7 +4,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { AppState, Dimensions, StyleSheet, type StyleProp, type ViewStyle } from "react-native";
 import { Directory, File, Paths } from "expo-file-system";
 import { launchImageLibraryAsync } from "expo-image-picker";
-import { gymPostsResponseSchema } from "@app/shared";
+import { GYM_POST_PHONE_PHOTO_MAX_BYTES, gymPostsResponseSchema } from "@app/shared";
 import { App } from "../../src/App";
 import type { Ask } from "../../src/session/calls";
 import { RAVI, fakeServer, kept, lost, memoryStore, profile, refusal, tokens, type Reply } from "../kit";
@@ -965,7 +965,7 @@ const { picker } = jest.requireMock<{ picker: { next: unknown; opened: number } 
 const { camera } = jest.requireMock<{ camera: { permission: unknown; afterAsk: unknown; pictures: number } }>("expo-camera");
 const GRANTED = { granted: true, canAskAgain: true, status: "granted", expires: "never" };
 const REFUSED = { granted: false, canAskAgain: false, status: "denied", expires: "never" };
-const { drawing } = jest.requireMock<{ drawing: { base64: string; sizes: { width: number; height: number }[]; fails: boolean } }>("expo-image-manipulator");
+const { drawing } = jest.requireMock<{ drawing: { base64: string; queue: string[]; saves: { format?: string; compress?: number }[]; sizes: { width: number; height: number }[]; fails: boolean } }>("expo-image-manipulator");
 const SHOT = { canceled: false, assets: [{ uri: "file:///p.jpg", width: 4000, height: 3000 }] };
 const manyShots = (n: number) => ({ canceled: false, assets: Array.from({ length: n }, (_, i) => ({ uri: `file:///p${String(i)}.jpg`, width: 4000, height: 3000 })) });
 const realPhoto = (name: string) => readFileSync(join(__dirname, "..", "..", "..", "api", "test", "fixtures", "photos", name));
@@ -983,6 +983,8 @@ beforeEach(() => {
   camera.pictures = 0;
   drawing.fails = false;
   drawing.sizes = [];
+  drawing.saves = [];
+  drawing.queue = [];
   drawing.base64 = realPhoto("pixel7-meta.jpg").toString("base64");
 });
 const serverOf = (routes: Record<string, (body: unknown) => Reply | Promise<Reply>>) =>
@@ -1293,26 +1295,133 @@ describe("posting", () => {
 });
 
 describe("the phone's display size changes", () => {
-  it("an open page is drawn afresh at the new size, and a kept post is still there", async () => {
-    const server = serverOf({ [postsOf(IRON)]: on(IRON, [post(P1)]) });
-    await openUpdates(server.ask, IRON);
-    await write("Leg day");
-    await settle();
-    const reads = server.paths().filter((path) => path === postsOf(IRON)).length;
+  const resized = async (body: () => Promise<void>) => {
     const was = Dimensions.get("window");
     await act(() => {
       Dimensions.set({ window: { ...was, width: was.width + 100 }, screen: Dimensions.get("screen") });
     });
     try {
-      await waitFor(() => {
-        expect(server.paths().filter((path) => path === postsOf(IRON)).length).toBe(reads + 1);
-      });
-      expect(await page().findByRole("button", { name: "Finish your post" })).toBeTruthy();
+      await body();
     } finally {
       await act(() => {
         Dimensions.set({ window: was, screen: Dimensions.get("screen") });
       });
     }
+  };
+
+  it("a post on its way is not lost: the box stays, and the answer is said", async () => {
+    let release: (reply: Reply) => void = () => undefined;
+    const server = serverOf({
+      [postsOf(IRON)]: on(IRON),
+      [minePath(IRON)]: () =>
+        new Promise<Reply>((resolve) => {
+          release = resolve;
+        }),
+    });
+    await openUpdates(server.ask, IRON);
+    await write("Leg day");
+    await pressPost();
+    await waitFor(() => {
+      expect(sendsTo(server, IRON)).toHaveLength(1);
+    });
+    await resized(async () => {
+      expect(screen.getByTestId("post-box")).toBeTruthy();
+      expect(screen.getByDisplayValue("Leg day")).toBeTruthy();
+      await act(() => {
+        release({ status: 201, body: { post: SENT } });
+      });
+      expect(await page().findByText("Your post is up.")).toBeTruthy();
+      expect(page().getByText("Leg day")).toBeTruthy();
+      expect(page().getByRole("button", { name: "Write a post" })).toBeTruthy();
+    });
+    expect(sendsTo(server, IRON)).toHaveLength(1);
+    expect(new Directory(Paths.document, foldersUsed[0] ?? "").exists).toBe(false);
+  });
+
+  it("the page is not read again, and words in a box stay", async () => {
+    const server = serverOf({ [postsOf(IRON)]: on(IRON, [member(P1)]) });
+    await openUpdates(server.ask, IRON);
+    await fireEvent.press(await page().findByRole("button", { name: /^Report this post/ }));
+    await fireEvent.changeText(await screen.findByLabelText("Tell the staff more (you can leave this empty)"), "Rude words");
+    const reads = server.paths().filter((path) => path === postsOf(IRON)).length;
+    await resized(async () => {
+      await settle();
+      expect(screen.getByDisplayValue("Rude words")).toBeTruthy();
+      expect(server.paths().filter((path) => path === postsOf(IRON))).toHaveLength(reads);
+    });
+  });
+});
+
+describe("how a photo is drawn", () => {
+  it("as WebP, at the next quality while it is too large, and the camera's own file goes", async () => {
+    const small = drawing.base64;
+    drawing.queue = [Buffer.alloc(GYM_POST_PHONE_PHOTO_MAX_BYTES + 1, 7).toString("base64"), small];
+    drawing.saves = [];
+    const server = serverOf({ [postsOf(IRON)]: on(IRON) });
+    await openUpdates(server.ask, IRON);
+    await fireEvent.press(await page().findByRole("button", { name: "Write a post" }));
+    const taken = new File(new Directory(Paths.cache, "ImagePicker"), "taken.jpg");
+    taken.create();
+    picker.next = { canceled: false, assets: [{ uri: taken.uri, width: 4000, height: 3000 }] };
+    await fireEvent.press(await screen.findByRole("button", { name: "Add photos" }));
+    await screen.findByTestId("draft-photo-1");
+    expect(drawing.saves).toEqual([
+      { format: "webp", compress: 0.75 },
+      { format: "webp", compress: 0.6 },
+    ]);
+    expect(taken.exists).toBe(false);
+  });
+
+  it("a photo that is not the app's own copy is never deleted", async () => {
+    const server = serverOf({ [postsOf(IRON)]: on(IRON) });
+    await openUpdates(server.ask, IRON);
+    await fireEvent.press(await page().findByRole("button", { name: "Write a post" }));
+    const theirs = new File(new Directory(Paths.document, "gallery"), "theirs.jpg");
+    theirs.create();
+    picker.next = { canceled: false, assets: [{ uri: theirs.uri, width: 4000, height: 3000 }] };
+    await fireEvent.press(await screen.findByRole("button", { name: "Add photos" }));
+    await screen.findByTestId("draft-photo-1");
+    expect(theirs.exists).toBe(true);
+  });
+});
+
+describe("a post removed after a lost reply", () => {
+  it("says so, and goes again under a new key with its words", async () => {
+    let answer: () => Reply = lost;
+    const server = serverOf({ [postsOf(IRON)]: on(IRON), [minePath(IRON)]: () => answer() });
+    await openUpdates(server.ask, IRON);
+    await write("Leg day");
+    await pressPost();
+    await screen.findByText("No connection. Your post is kept. Try again.");
+    answer = () => refusal(404, "post_not_found", "This post has been removed.");
+    await pressPost();
+    expect(await screen.findByText("This post has been removed. Press Post to post it again.")).toBeTruthy();
+    expect(screen.getByDisplayValue("Leg day")).toBeTruthy();
+    answer = () => ({ status: 201, body: { post: SENT } });
+    await pressPost();
+    expect(await page().findByText("Your post is up.")).toBeTruthy();
+    const keys = sendsTo(server, IRON).map((one) => (one.body as { postKey: string }).postKey);
+    expect(keys).toHaveLength(3);
+    expect(keys[0]).toBe(keys[1]);
+    expect(keys[2]).not.toBe(keys[1]);
+  });
+
+  it("a photo swapped after a lost reply is told it did not go, though the count is the same", async () => {
+    let answer: () => Reply = lost;
+    const server = serverOf({ [postsOf(IRON)]: on(IRON), [minePath(IRON)]: () => answer() });
+    await openUpdates(server.ask, IRON);
+    await write("Leg day");
+    picker.next = SHOT;
+    await fireEvent.press(screen.getByRole("button", { name: "Add photos" }));
+    await screen.findByTestId("draft-photo-1");
+    await pressPost();
+    await screen.findByText("No connection. Your post is kept. Try again.");
+    await fireEvent.press(screen.getByLabelText("Take photo 1 off this post"));
+    await fireEvent.press(screen.getByRole("button", { name: "Add photos" }));
+    await screen.findByTestId("draft-photo-1");
+    answer = () => ({ status: 201, body: { post: { ...SENT, photos: [{ id: PHOTO, width: 100, height: 100 }] } } });
+    await pressPost();
+    expect(await page().findByText("Your post went up as you first wrote it. Your later changes weren't added.")).toBeTruthy();
   });
 });
 

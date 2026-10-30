@@ -39,7 +39,7 @@ jest.mock("expo-file-system", () => {
   const files = new Map();
   class File {
     constructor(dir, name) {
-      this.uri = `${dir.uri}/${name}`;
+      this.uri = name === undefined ? dir : `${dir.uri}/${name}`;
     }
     get exists() {
       return files.has(this.uri);
@@ -134,13 +134,17 @@ jest.mock("expo-image-picker", () => {
   };
 });
 jest.mock("expo-image-manipulator", () => {
-  // `base64`: what the drawing gives back; `sizes`: each size it was asked to draw.
-  const drawing = { base64: "", sizes: [], fails: false };
+  // `base64`: what the drawing gives back (`queue`, where set, first); `sizes`: each size it was asked to draw; `saves`: how it was asked to save.
+  const drawing = { base64: "", queue: [], sizes: [], saves: [], fails: false };
   const image = (size) => ({
     width: size.width,
     height: size.height,
-    saveAsync: (options) =>
-      drawing.fails ? Promise.reject(new Error("drawing")) : Promise.resolve({ uri: "file:///cache/small.jpg", ...size, ...(options?.base64 ? { base64: drawing.base64 } : {}) }),
+    saveAsync: (options) => {
+      drawing.saves.push({ format: options?.format, compress: options?.compress });
+      if (drawing.fails) return Promise.reject(new Error("drawing"));
+      const base64 = drawing.queue.shift() ?? drawing.base64;
+      return Promise.resolve({ uri: "file:///cache/small.jpg", ...size, ...(options?.base64 ? { base64 } : {}) });
+    },
   });
   const manipulate = (source) => {
     let size = typeof source === "string" ? { width: 3000, height: 4000 } : { width: source.width, height: source.height };
