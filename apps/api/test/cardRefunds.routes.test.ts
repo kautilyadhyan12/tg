@@ -890,9 +890,16 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
       expect((await feeOnPage(maya)).payments[0]).toMatchObject({ cardRefund: null, refundableMinor: 500 });
     });
 
-    it("its receipts, the payments download and the gym's record all say what happened", async () => {
+    it("its receipts, Reports, the payments download and the gym's record all say what happened", async () => {
       const maya = await feePaid(gym, "Fee Records");
+      const refundedInReports = async () => {
+        const res = await send("GET", `/v1/orgs/${gym.id}/reports/money`, gym.owner.cookies);
+        expect(res.statusCode, res.body).toBe(200);
+        return (JSON.parse(res.body) as { report: { thisMonth: { refundedMinor: number } } }).report.thisMonth.refundedMinor;
+      };
+      const before = await refundedInReports();
       await press(maya, 700);
+      expect(await refundedInReports()).toBe(before + 700);
       const row = (await refundsOf(maya))[0];
       const receipt = await send("GET", `/v1/orgs/${gym.id}/receipts/${String(row?.receipt_number ?? 0)}`, gym.owner.cookies);
       expect(receipt.statusCode, receipt.body).toBe(200);

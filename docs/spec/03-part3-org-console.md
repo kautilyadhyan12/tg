@@ -4336,8 +4336,16 @@ key for an hour, then left as "We don't know whether Square took the … refund.
 the refund here.", until refunds written on that payment cover it. Refused before sending: an Interac debit card (`refund_requires_card_presence`;
 18d-iv-c), a payment over 365 days old, one taken in a Square account the gym has left (each offers Note a refund), one Square has
 not finished, one that does not match Square's record. Square's refusals are said in the box in plain words, and a code nobody has
-placed reads "Square refused this refund. No money went back." Still to come: fees and Sell (18d-iv-b), Interac on the Terminal
+placed reads "Square refused this refund. No money went back." Still to come: Interac on the Terminal
 (18d-iv-c), a refund made inside Square shown here (18d-iv-d), chargebacks (18d-iv-e).
+
+*On a fee (18d-iv-b-i, as built):* a late cancel, no-show or freeze fee taken on the Terminal or from the card on file goes back the same way, from the ⋯ on its
+payment: **Refund to card**, and **Note a refund** beside it, with Void refund for one noted by mistake. All or part; the box and the note name the fee and what it
+was for, and "Leaving or cancelled" is not offered. A fee paid by hand keeps Void payment and takes no refund. All of it back reads **Refunded**, part **Part refunded**,
+on the person's page, a class's list and a personal training session (for staff and the member), and the member's own page says "<gym> refunded this fee." or
+"<gym> refunded $4.00 of this fee.". A refunded fee is not owed again, whatever staff mark afterwards: its booking opens no second fee. A fee's payment never gives a
+member's Refer a friend gift, so neither a failed refund nor a voided one gives one back. Reports, receipts and the payments download read it as they read any refund.
+Still to come: Sell (18d-iv-b-ii), a line where staff already look when a refund fails (18d-iv-b-iii).
 
 **A failed charge** (18d-iii): at most 3 tries over several days (Square: "Limit retries to 2 to
 3 attempts over several days"; never `GENERIC_DECLINE`), never again after a decline the card
