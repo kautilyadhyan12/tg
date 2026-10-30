@@ -873,7 +873,7 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
       expect((await press(maya, 1000)).statusCode).toBe(200);
     });
 
-    it("no answer from Square: the fee's page says so, and nothing else is noted meanwhile", async () => {
+    it("no answer from Square: the fee's page says so, nothing else is noted meanwhile, and asked again it is refunded once", async () => {
       const maya = await feePaid(gym, "Fee Lost");
       square.state.refundLost = true;
       await press(maya, 500);
@@ -882,6 +882,12 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
       const noted = await send("POST", `${entryUrl(gym, maya.entryId)}/memberships/${maya.membershipId}/payments/${maya.paymentId}/refunds`, gym.owner.cookies, { requestKey: randomUUID(), amountMinor: 100, method: "cash", reason: "other" });
       expect(noted.statusCode).toBe(409);
       expect((JSON.parse(noted.body) as { error: string }).error).toBe("card_refund_waiting");
+
+      clock = new Date(clock.getTime() + CARD_REFUND.idleMs + 1000);
+      await work();
+      expect(madeFor(maya)).toHaveLength(1);
+      expect((await refundsOf(maya)).map((r) => r.amount_minor)).toEqual([500]);
+      expect((await feeOnPage(maya)).payments[0]).toMatchObject({ cardRefund: null, refundableMinor: 500 });
     });
 
     it("its receipts, the payments download and the gym's record all say what happened", async () => {
