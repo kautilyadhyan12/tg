@@ -228,6 +228,22 @@ export const addGymPostRequestSchema = z
 export type AddGymPostRequest = z.infer<typeof addGymPostRequestSchema>;
 
 export const gymPostResponseSchema = z.object({ post: gymPostSchema }).strict();
+
+/** The most a post not yet sent may hold on the phone, in UTF-16 units: over the limit is said on the
+ *  screen, and the person's words are not cut. */
+export const GYM_POST_DRAFT_MOST = GYM_POST_MAX_CHARS * 4;
+
+/** A member's post not yet on the server, as the phone keeps it (ROADMAP Stage 5 17b): the key it goes
+ *  under, its words, and the name of each photo's file beside it. */
+export const gymPostDraftFileSchema = z
+  .object({
+    version: z.literal(1),
+    postKey: z.string().uuid(),
+    body: z.string().max(GYM_POST_DRAFT_MOST),
+    photos: z.array(z.string().regex(/^[0-9a-f-]{36}\.jpg$/)).max(GYM_POST_MAX_PHOTOS),
+  })
+  .strict();
+export type GymPostDraftFile = z.infer<typeof gymPostDraftFileSchema>;
 export type GymPostResponse = z.infer<typeof gymPostResponseSchema>;
 export const staffGymPostResponseSchema = z.object({ post: staffGymPostSchema }).strict();
 

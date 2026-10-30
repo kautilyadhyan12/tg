@@ -56,6 +56,9 @@ jest.mock("expo-file-system", () => {
     write(text) {
       files.set(this.uri, text);
     }
+    base64() {
+      return files.has(this.uri) ? Promise.resolve(files.get(this.uri)) : Promise.reject(new Error("no such file"));
+    }
     move(to) {
       files.set(to.uri, files.get(this.uri));
       files.delete(this.uri);
@@ -121,11 +124,16 @@ jest.mock("expo-camera", () => {
   return { CameraView, useCameraPermissions, camera };
 });
 jest.mock("expo-image-picker", () => {
-  const picker = { next: { canceled: true, assets: null }, opened: 0 };
+  const picker = { next: { canceled: true, assets: null }, opened: 0, taken: 0, cameraAllowed: { granted: true, canAskAgain: true } };
   return {
     picker,
     launchImageLibraryAsync: jest.fn(() => {
       picker.opened += 1;
+      return Promise.resolve(picker.next);
+    }),
+    requestCameraPermissionsAsync: jest.fn(() => Promise.resolve(picker.cameraAllowed)),
+    launchCameraAsync: jest.fn(() => {
+      picker.taken += 1;
       return Promise.resolve(picker.next);
     }),
   };

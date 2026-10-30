@@ -1,4 +1,5 @@
 import {
+  GYM_POST_MAX_CHARS,
   GYM_POST_REACTIONS,
   GYM_POST_REACTION_WORDS,
   GYM_POST_REPORT_NOTE_MAX,
@@ -30,6 +31,8 @@ export const blockPath = (gymId: string, postId: string) => `${postPath(gymId, p
 export const blockedPath = (gymId: string) => `${postsPath(gymId)}/blocked`;
 export const unblockPath = (gymId: string, blockId: string) => `${blockedPath(gymId)}/${encodeURIComponent(blockId)}`;
 export const removeOwnPath = (gymId: string, postId: string) => `${postsPath(gymId)}/mine/${encodeURIComponent(postId)}`;
+/** Where a member's own post is sent. */
+export const addOwnPath = (gymId: string) => `${postsPath(gymId)}/mine`;
 /** Where a post's photo is read from, signed in. */
 export const photoPath = (gymId: string, postId: string, photoId: string) => `${postPath(gymId, postId)}/photos/${encodeURIComponent(photoId)}`;
 
@@ -166,6 +169,35 @@ export interface AskBox {
   line: string;
   confirm: string;
   cancel: string;
+}
+
+/** Whether this member may post here now. */
+export function memberCanPost(feed: GymPostsResponse): boolean {
+  return feed.status === "shown" && feed.posting === "on";
+}
+
+/** What a member the staff have stopped reads in place of the button, or null. */
+export function stoppedNote(feed: GymPostsResponse): string | null {
+  if (feed.status !== "shown" || feed.posting !== "stopped") return null;
+  return GYM_POST_WORDS.posting_stopped(feed.gymName);
+}
+
+/** Under the box a post is written in: how much room is left, or how far over. Counted as the server counts it. */
+export function charsLine(body: string): { over: boolean; text: string } {
+  const left = GYM_POST_MAX_CHARS - postLength(body);
+  const chars = (n: number) => (n === 1 ? "1 character" : `${n.toLocaleString("en")} characters`);
+  if (left >= 0) return { over: false, text: `${chars(left)} left` };
+  return { over: true, text: `${chars(-left)} too many` };
+}
+
+/** Whether Post can be pressed: something to post, and not too long. */
+export function canPost(body: string, photos: readonly unknown[]): boolean {
+  return (body.trim() !== "" || photos.length > 0) && !charsLine(body).over;
+}
+
+/** The list with the member's new post at the top of the unpinned ones; never twice. */
+export function withNewPost(feed: GymPostsResponse, post: GymPost): GymPostsResponse {
+  return { ...feed, posts: [post, ...feed.posts.filter((p) => p.id !== post.id)] };
 }
 
 /** The box before a member removes their own post. */

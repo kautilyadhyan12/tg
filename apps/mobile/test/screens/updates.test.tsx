@@ -1,10 +1,12 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import { AppState } from "react-native";
 import { Directory, File, Paths } from "expo-file-system";
 import { gymPostsResponseSchema } from "@app/shared";
 import { App } from "../../src/App";
 import type { Ask } from "../../src/session/calls";
-import { fakeServer, kept, lost, memoryStore, refusal, tokens, type Reply } from "../kit";
+import { RAVI, fakeServer, kept, lost, memoryStore, profile, refusal, tokens, type Reply } from "../kit";
 
 const extra = { copyName: "Feature 1", apiUrl: "http://localhost:3000" };
 const noWait = () => Promise.resolve();
@@ -954,5 +956,330 @@ describe("reads that cross", () => {
     expect(await screen.findByText("Showing the 2 you blocked most recently. 1 more will show as you unblock these.")).toBeTruthy();
     await fireEvent.press(screen.getByLabelText("Unblock Asha W."));
     expect(await screen.findByText("Showing the 1 you blocked most recently. 1 more will show as you unblock these.")).toBeTruthy();
+  });
+});
+
+// Posting (ROADMAP Stage 5 17b).
+const { picker } = jest.requireMock<{ picker: { next: unknown; opened: number; taken: number; cameraAllowed: { granted: boolean; canAskAgain: boolean } } }>("expo-image-picker");
+const { drawing } = jest.requireMock<{ drawing: { base64: string; sizes: { width: number; height: number }[]; fails: boolean } }>("expo-image-manipulator");
+const SHOT = { canceled: false, assets: [{ uri: "file:///p.jpg", width: 4000, height: 3000 }] };
+const manyShots = (n: number) => ({ canceled: false, assets: Array.from({ length: n }, (_, i) => ({ uri: `file:///p${String(i)}.jpg`, width: 4000, height: 3000 })) });
+const realPhoto = (name: string) => readFileSync(join(__dirname, "..", "..", "..", "api", "test", "fixtures", "photos", name));
+const OTHER = { ...RAVI, id: "9d0c8a52-6f0e-4d59-9a3c-1f2e3d4c5b6a", email: "mia@example.com" };
+const minePath = (place: Place) => `${postsOf(place)}/mine`;
+const SENT = post(P4, { body: "Leg day", fromMember: true, own: true, wrote: true, authorId: RAVI.id, author: { name: "Ravi", initials: "R" } });
+const on = (place: Place, posts: Row[] = []) => ok(feed(place, posts, { posting: "on" }));
+const foldersUsed = [`post-draft-${RAVI.id}-${IRON.id}`, `post-draft-${RAVI.id}-${LOTUS.id}`, `post-draft-${OTHER.id}-${IRON.id}`];
+beforeEach(() => {
+  for (const name of foldersUsed) new Directory(Paths.document, name).delete();
+  picker.next = { canceled: true, assets: null };
+  picker.opened = 0;
+  picker.taken = 0;
+  picker.cameraAllowed = { granted: true, canAskAgain: true };
+  drawing.fails = false;
+  drawing.sizes = [];
+  drawing.base64 = realPhoto("pixel7-meta.jpg").toString("base64");
+});
+const serverOf = (routes: Record<string, (body: unknown) => Reply | Promise<Reply>>) =>
+  fakeServer({ "/v1/auth/refresh": ok({ tokens: tokens(2) }), "/v1/orgs/mine": mine(IRON, LOTUS), [postsOf(LOTUS)]: on(LOTUS), ...routes });
+const sendsTo = (server: ReturnType<typeof fakeServer>, place: Place) => server.asked.filter((a) => a.method === "POST" && a.path === minePath(place));
+const write = async (words: string) => {
+  await fireEvent.press(await page().findByRole("button", { name: /^(Write a post|Finish your post)$/ }));
+  await fireEvent.changeText(await screen.findByLabelText("Your post"), words);
+};
+const pressPost = () => fireEvent.press(screen.getByRole("button", { name: "Post" }));
+
+describe("the worst thing for posting: a photo never goes up saying where it was taken, and nobody else's post is sent", () => {
+  it("what reaches the server from a real phone photo holds none of its position", async () => {
+    const original = realPhoto("pixel7-meta.jpg");
+    expect(original.includes("Exif")).toBe(true);
+    const server = serverOf({ [postsOf(IRON)]: on(IRON), [minePath(IRON)]: () => ({ status: 201, body: { post: { ...SENT, photos: [{ id: PHOTO, width: 1600, height: 1200 }] } } }) });
+    await openUpdates(server.ask, IRON);
+    await fireEvent.press(await page().findByRole("button", { name: "Write a post" }));
+    picker.next = SHOT;
+    await fireEvent.press(await screen.findByRole("button", { name: "Add photos" }));
+    await screen.findByTestId("draft-photo-1");
+    await pressPost();
+    await waitFor(() => {
+      expect(sendsTo(server, IRON)).toHaveLength(1);
+    });
+    const body = sendsTo(server, IRON)[0]?.body as { photos: string[] };
+    expect(body.photos).toHaveLength(1);
+    const sent = Buffer.from(body.photos[0] ?? "", "base64");
+    expect(sent.subarray(0, 2).toString("hex")).toBe("ffd8");
+    expect(sent.length).toBeGreaterThan(1000);
+    // Everything before the picture's own data, where a camera's tags live.
+    const head = sent.subarray(0, sent.indexOf(Buffer.from([0xff, 0xda]))).toString("latin1");
+    expect(original.subarray(0, original.indexOf(Buffer.from([0xff, 0xda]))).toString("latin1").length).toBeGreaterThan(head.length);
+    for (const tag of ["GPS", "Google", "Pixel", "http://ns.adobe.com/xap"]) expect(head).not.toContain(tag);
+    expect(await page().findByTestId("post-done")).toBeTruthy();
+  });
+
+  it("a post kept at one place is not under another", async () => {
+    const server = serverOf({ [postsOf(IRON)]: on(IRON) });
+    await openUpdates(server.ask, IRON);
+    await write("For Iron only");
+    await fireEvent.press(screen.getByLabelText("Close"));
+    expect(await page().findByRole("button", { name: "Finish your post" })).toBeTruthy();
+    await fireEvent.press(page().getByLabelText("Back"));
+
+    await fireEvent.press(await screen.findByLabelText(`Updates at ${LOTUS.name}`));
+    expect(await page().findByRole("button", { name: "Write a post" })).toBeTruthy();
+    expect(page().queryByRole("button", { name: "Finish your post" })).toBeNull();
+  });
+
+  it("another person signed in on this phone does not get the first person's post", async () => {
+    const first = serverOf({ [postsOf(IRON)]: on(IRON) });
+    await openUpdates(first.ask, IRON);
+    await write("Ravi's own");
+    await settle();
+    await screen.unmount();
+
+    const second = serverOf({ [postsOf(IRON)]: on(IRON), "/v1/users/me": () => ({ status: 200, body: profile(true, OTHER) }) });
+    await render(<App extra={extra} ask={second.ask} store={memoryStore(kept(1, OTHER))} wait={noWait} />);
+    const tab = (await screen.findAllByRole("tab"))[3];
+    if (tab === undefined) throw new Error("no fourth tab");
+    await fireEvent.press(tab);
+    await fireEvent.press(await screen.findByLabelText(`Updates at ${IRON.name}`));
+    expect(await page().findByRole("button", { name: "Write a post" })).toBeTruthy();
+    expect(page().queryByRole("button", { name: "Finish your post" })).toBeNull();
+  });
+});
+
+describe("posting", () => {
+  it("a stopped member reads why, with no button", async () => {
+    const server = serverOf({ [postsOf(IRON)]: ok(feed(IRON, [post(P1)], { posting: "stopped" })) });
+    await openUpdates(server.ask, IRON);
+    expect(await page().findByText("The staff at Iron House have stopped you posting here. Speak to them at the front desk.")).toBeTruthy();
+    expect(page().queryByRole("button", { name: "Write a post" })).toBeNull();
+  });
+
+  it("offers no button where only staff post", async () => {
+    const server = serverOf({ [postsOf(IRON)]: ok(feed(IRON, [post(P1)], { posting: "off" })) });
+    await openUpdates(server.ask, IRON);
+    expect(await page().findByText("Pool closed on Sunday.")).toBeTruthy();
+    expect(page().queryByRole("button", { name: "Write a post" })).toBeNull();
+  });
+
+  it("an empty page where members post invites the first one", async () => {
+    const server = serverOf({ [postsOf(IRON)]: on(IRON) });
+    await openUpdates(server.ask, IRON);
+    expect(await page().findByText("No posts yet. Write the first one.")).toBeTruthy();
+  });
+
+  it("posts the words, under one key, and puts the post on the page", async () => {
+    const server = serverOf({ [postsOf(IRON)]: on(IRON, [post(P1)]), [minePath(IRON)]: () => ({ status: 201, body: { post: SENT } }) });
+    await openUpdates(server.ask, IRON);
+    await write("Leg day");
+    await pressPost();
+    expect(await page().findByText("Your post is up.")).toBeTruthy();
+    expect(page().getByText("Leg day")).toBeTruthy();
+    expect(sendsTo(server, IRON)[0]?.body).toEqual({ postKey: expect.stringMatching(/^[0-9a-f-]{36}$/) as string, body: "Leg day", photos: [] });
+    expect(page().getByRole("button", { name: "Write a post" })).toBeTruthy();
+  });
+
+  it("a lost reply keeps the post; pressed again it goes under the same key", async () => {
+    let answer: () => Reply = lost;
+    const server = serverOf({ [postsOf(IRON)]: on(IRON), [minePath(IRON)]: () => answer() });
+    await openUpdates(server.ask, IRON);
+    await write("Leg day");
+    await pressPost();
+    expect(await screen.findByText("No connection. Your post is kept. Try again.")).toBeTruthy();
+    answer = () => ({ status: 201, body: { post: SENT } });
+    await pressPost();
+    expect(await page().findByText("Your post is up.")).toBeTruthy();
+    const keys = sendsTo(server, IRON).map((a) => (a.body as { postKey: string }).postKey);
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).toBe(keys[1]);
+  });
+
+  it("says so when the server kept the post as it first was", async () => {
+    let answer: () => Reply = lost;
+    const server = serverOf({ [postsOf(IRON)]: on(IRON), [minePath(IRON)]: () => answer() });
+    await openUpdates(server.ask, IRON);
+    await write("Leg day");
+    await pressPost();
+    await screen.findByText("No connection. Your post is kept. Try again.");
+    await fireEvent.changeText(screen.getByLabelText("Your post"), "Leg day, and more");
+    answer = () => ({ status: 201, body: { post: SENT } });
+    await pressPost();
+    expect(await page().findByText("Your post went up as you first wrote it. Your later changes weren't added.")).toBeTruthy();
+  });
+
+  it("a press while one is away sends nothing more, and closing waits for its answer", async () => {
+    let release: (reply: Reply) => void = () => undefined;
+    const server = serverOf({
+      [postsOf(IRON)]: on(IRON),
+      [minePath(IRON)]: () =>
+        new Promise<Reply>((resolve) => {
+          release = resolve;
+        }),
+    });
+    await openUpdates(server.ask, IRON);
+    await write("Leg day");
+    await pressPost();
+    await waitFor(() => {
+      expect(sendsTo(server, IRON)).toHaveLength(1);
+    });
+    await fireEvent.press(screen.getByLabelText("Close"));
+    expect(screen.getByTestId("post-box")).toBeTruthy();
+    await act(() => {
+      release({ status: 201, body: { post: SENT } });
+    });
+    expect(await page().findByText("Your post is up.")).toBeTruthy();
+    expect(sendsTo(server, IRON)).toHaveLength(1);
+  });
+
+  it("survives the app being closed: words and photos come back under the same key, and nothing goes by itself", async () => {
+    let firstKey = "";
+    const first = serverOf({
+      [postsOf(IRON)]: on(IRON),
+      [minePath(IRON)]: (body) => {
+        firstKey = (body as { postKey: string }).postKey;
+        return lost();
+      },
+    });
+    await openUpdates(first.ask, IRON);
+    await write("Leg day");
+    picker.next = SHOT;
+    await fireEvent.press(screen.getByRole("button", { name: "Add photos" }));
+    await screen.findByTestId("draft-photo-1");
+    await pressPost();
+    await screen.findByText("No connection. Your post is kept. Try again.");
+    await settle();
+    await screen.unmount();
+
+    const second = serverOf({ [postsOf(IRON)]: on(IRON), [minePath(IRON)]: () => ({ status: 201, body: { post: SENT } }) });
+    await openUpdates(second.ask, IRON);
+    await fireEvent.press(await page().findByRole("button", { name: "Finish your post" }));
+    expect(screen.getByDisplayValue("Leg day")).toBeTruthy();
+    expect(screen.getByTestId("draft-photo-1")).toBeTruthy();
+    await settle();
+    expect(sendsTo(second, IRON)).toHaveLength(0);
+    await pressPost();
+    await waitFor(() => {
+      expect(sendsTo(second, IRON)).toHaveLength(1);
+    });
+    const body = sendsTo(second, IRON)[0]?.body as { postKey: string; photos: string[] };
+    expect(body.postKey).toBe(firstKey);
+    expect(body.photos).toHaveLength(1);
+  });
+
+  it("once it is posted, or discarded, it is gone from the phone", async () => {
+    const server = serverOf({ [postsOf(IRON)]: on(IRON), [minePath(IRON)]: () => ({ status: 201, body: { post: SENT } }) });
+    await openUpdates(server.ask, IRON);
+    await write("Leg day");
+    await pressPost();
+    await page().findByText("Your post is up.");
+    await settle();
+    expect(new Directory(Paths.document, foldersUsed[0] ?? "").exists).toBe(false);
+
+    await write("Second");
+    await fireEvent.press(screen.getByRole("button", { name: "Discard" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Keep it" }));
+    expect(screen.getByDisplayValue("Second")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Discard" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Discard post" }));
+    await settle();
+    expect(page().getByRole("button", { name: "Write a post" })).toBeTruthy();
+    expect(new Directory(Paths.document, foldersUsed[0] ?? "").exists).toBe(false);
+  });
+
+  it.each([
+    [400, "post_bad_words", "Your post wasn't posted because it has a word that isn't allowed here: x. Take it out and post again."],
+    [429, "posts_day_full", "You've posted 10 times in the last 24 hours, which is the most allowed. You can post again in about 2 hours."],
+    [403, "posting_off", "Members can't post here at the moment."],
+  ])("a refusal (%i %s) is said in the box, and the post is kept", async (status, code, words) => {
+    const server = serverOf({ [postsOf(IRON)]: on(IRON), [minePath(IRON)]: () => refusal(status, code, words) });
+    await openUpdates(server.ask, IRON);
+    await write("Leg day");
+    await pressPost();
+    expect(await screen.findByText(words)).toBeTruthy();
+    expect(screen.getByDisplayValue("Leg day")).toBeTruthy();
+  });
+
+  it("somebody taken off the gym's list reads that, and keeps what they wrote", async () => {
+    const server = serverOf({ [postsOf(IRON)]: on(IRON), [minePath(IRON)]: () => refusal(404, "not_a_member", "Not found") });
+    await openUpdates(server.ask, IRON);
+    await write("Leg day");
+    await pressPost();
+    expect(await screen.findByText("Iron House's updates aren't available right now.")).toBeTruthy();
+    expect(screen.getByDisplayValue("Leg day")).toBeTruthy();
+  });
+
+  it("a post kept where the gym has since stopped posts can be read and thrown away, never sent", async () => {
+    const before = serverOf({ [postsOf(IRON)]: on(IRON) });
+    await openUpdates(before.ask, IRON);
+    await write("Leg day");
+    await settle();
+    await screen.unmount();
+
+    const after = serverOf({ [postsOf(IRON)]: ok(feed(IRON, [], { posting: "off" })) });
+    await openUpdates(after.ask, IRON);
+    await fireEvent.press(await page().findByRole("button", { name: "See your unsent post" }));
+    expect(screen.getByDisplayValue("Leg day")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Post" })).toBeNull();
+    await fireEvent.press(screen.getByRole("button", { name: "Discard" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Discard post" }));
+    await waitFor(() => {
+      expect(page().queryByRole("button", { name: "See your unsent post" })).toBeNull();
+    });
+  });
+
+  it("holds at four photos, says what was left out, and a photo taken off leaves room", async () => {
+    const server = serverOf({ [postsOf(IRON)]: on(IRON) });
+    await openUpdates(server.ask, IRON);
+    await fireEvent.press(await page().findByRole("button", { name: "Write a post" }));
+    picker.next = manyShots(6);
+    await fireEvent.press(await screen.findByRole("button", { name: "Add photos" }));
+    expect(await screen.findByText("A post holds up to 4 photos, so 2 photos were not added.")).toBeTruthy();
+    expect(screen.getByTestId("draft-photo-4")).toBeTruthy();
+    expect(screen.queryByTestId("draft-photo-5")).toBeNull();
+    expect(screen.getByRole("button", { name: "Add photos" })).toBeDisabled();
+    await fireEvent.press(screen.getByLabelText("Take photo 2 off this post"));
+    expect(screen.queryByTestId("draft-photo-4")).toBeNull();
+    expect(screen.getByRole("button", { name: "Add photos" })).toBeEnabled();
+  });
+
+  it("draws a photo no longer than 1,600 px, and says when one cannot be opened", async () => {
+    const server = serverOf({ [postsOf(IRON)]: on(IRON) });
+    await openUpdates(server.ask, IRON);
+    await fireEvent.press(await page().findByRole("button", { name: "Write a post" }));
+    picker.next = SHOT;
+    await fireEvent.press(await screen.findByRole("button", { name: "Add photos" }));
+    await screen.findByTestId("draft-photo-1");
+    expect(drawing.sizes.at(-1)).toEqual({ width: 1200, height: 1600 });
+    drawing.fails = true;
+    await fireEvent.press(screen.getByRole("button", { name: "Add photos" }));
+    expect(await screen.findByText("1 photo couldn't be opened. Choose another one.")).toBeTruthy();
+    expect(screen.queryByTestId("draft-photo-2")).toBeNull();
+  });
+
+  it("the camera refused for good says so and opens settings; allowed, it adds the photo", async () => {
+    const server = serverOf({ [postsOf(IRON)]: on(IRON) });
+    await openUpdates(server.ask, IRON);
+    await fireEvent.press(await page().findByRole("button", { name: "Write a post" }));
+    picker.cameraAllowed = { granted: false, canAskAgain: false };
+    await fireEvent.press(await screen.findByRole("button", { name: "Take a photo" }));
+    expect(await screen.findByText("Allow the camera in your phone's settings to take a photo.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Open settings" })).toBeTruthy();
+    expect(picker.taken).toBe(0);
+    picker.cameraAllowed = { granted: true, canAskAgain: true };
+    picker.next = SHOT;
+    await fireEvent.press(screen.getByRole("button", { name: "Take a photo" }));
+    expect(await screen.findByTestId("draft-photo-1")).toBeTruthy();
+    expect(picker.taken).toBe(1);
+  });
+
+  it("Post waits for something to post, and for words within the limit", async () => {
+    const server = serverOf({ [postsOf(IRON)]: on(IRON) });
+    await openUpdates(server.ask, IRON);
+    await fireEvent.press(await page().findByRole("button", { name: "Write a post" }));
+    expect(await screen.findByRole("button", { name: "Post" })).toBeDisabled();
+    await fireEvent.changeText(screen.getByLabelText("Your post"), "a".repeat(2001));
+    expect(screen.getByText("1 character too many")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Post" })).toBeDisabled();
+    await fireEvent.changeText(screen.getByLabelText("Your post"), "a");
+    expect(screen.getByRole("button", { name: "Post" })).toBeEnabled();
   });
 });

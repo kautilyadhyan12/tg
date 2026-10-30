@@ -27,6 +27,8 @@ import { ASK_MOST } from "../../look/sizing";
 import { fonts, Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
 import { CopyContext } from "../ThisCopy";
+import { hasWork } from "./postDraft";
+import { PostBox, useKeptPost } from "./PostBox";
 import {
   REMOVED_OWN,
   REPORT_REASONS,
@@ -43,6 +45,7 @@ import {
   emptyLine,
   helpLine,
   hiddenOwnNote,
+  memberCanPost,
   memberPostAction,
   ownRemoveBox,
   photoPath,
@@ -56,9 +59,11 @@ import {
   reportBox,
   reportNoteLine,
   reportPath,
+  stoppedNote,
   unblockPath,
   unblockedNote,
   updatesPath,
+  withNewPost,
   withPage,
   withPost,
   withReaction,
@@ -110,8 +115,13 @@ const NEAR_THE_SCREEN = 5;
 const REACTION_ICONS: Readonly<Record<GymPostReaction, IconName>> = { like: "like", love: "heart", strong: "strong", fire: "flame" };
 
 function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose: () => void; bottom: number }) {
-  const { session } = useSession();
+  const { session, state } = useSession();
   const apiUrl = useContext(CopyContext).extra?.apiUrl ?? "";
+  const kept = useKeptPost(state.kind === "in" ? state.user.id : null, place.id);
+  const [writing, setWriting] = useState(false);
+  // What the last post came to, said where its button is.
+  const [postedNote, setPostedNote] = useState<string | null>(null);
+  const list = useRef<FlatList<GymPost>>(null);
   const [held, setHeld] = useState<Held>({ kind: "loading" });
   const [more, setMore] = useState<{ busy: boolean; error: string | null }>({ busy: false, error: null });
   // The post whose reaction is on its way, and what went wrong with a post's last one.
@@ -218,7 +228,10 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
 
   const feed = held.kind === "ok" ? held.feed : null;
   const gymName = feed?.gymName ?? place.name;
-  const empty = feed === null ? null : emptyLine(feed, false);
+  const mayPost = feed !== null && memberCanPost(feed);
+  const stopped = feed === null ? null : stoppedNote(feed);
+  const unsent = kept.draft !== null && kept.draft !== undefined && hasWork(kept.draft);
+  const empty = feed === null ? null : emptyLine(feed, mayPost);
   const blockedLabel = feed === null ? null : blockedButton(feed);
   const help = feed === null ? null : helpLine(feed);
   const now = new Date();
@@ -238,6 +251,7 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
         </View>
       </View>
       <FlatList
+        ref={list}
         style={styles.grow}
         contentContainerStyle={[styles.list, { paddingBottom: bottom + 24 }]}
         data={feed === null || empty !== null ? [] : [...feed.pinned, ...feed.posts]}
@@ -246,7 +260,39 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
         maxToRenderPerBatch={NEAR_THE_SCREEN}
         windowSize={NEAR_THE_SCREEN}
         ListHeaderComponent={
-          held.kind === "loading" ? (
+          <View style={styles.top}>
+            {stopped === null ? null : (
+              <Card testID="post-stopped" style={styles.box}>
+                <Txt>{stopped}</Txt>
+              </Card>
+            )}
+            {mayPost ? (
+              <Button
+                label={unsent ? "Finish your post" : "Write a post"}
+                icon="plus"
+                disabled={kept.draft === undefined}
+                onPress={() => {
+                  setPostedNote(null);
+                  setWriting(true);
+                }}
+              />
+            ) : feed !== null && unsent ? (
+              <Button
+                label="See your unsent post"
+                kind="plain"
+                small
+                onPress={() => {
+                  setPostedNote(null);
+                  setWriting(true);
+                }}
+              />
+            ) : null}
+            {postedNote === null ? null : (
+              <View testID="post-done">
+                <Txt colour="goodText">{postedNote}</Txt>
+              </View>
+            )}
+            {held.kind === "loading" ? (
             <Txt kind="small">Loading…</Txt>
           ) : held.kind === "failed" ? (
             <Card style={styles.box}>
@@ -265,7 +311,8 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
             <Card style={styles.box}>
               <Txt>{empty}</Txt>
             </Card>
-          ) : null
+          ) : null}
+          </View>
         }
         renderItem={({ item: post }) =>
           gone[post.id] === true ? (
@@ -328,6 +375,23 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
             </View>
           )
         }
+      />
+      <PostBox
+        open={writing}
+        gymId={place.id}
+        gymName={gymName}
+        kept={kept}
+        mayPost={mayPost}
+        onClose={() => {
+          setWriting(false);
+        }}
+        onPosted={(post, note) => {
+          change((f) => withNewPost(f, post));
+          setWriting(false);
+          setPostedNote(note);
+          list.current?.scrollToOffset({ offset: 0, animated: true });
+        }}
+        onRefused={() => void load(true)}
       />
       <AskSheet
         asking={asking}
@@ -882,6 +946,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   list: { paddingHorizontal: sizes.edge, gap: sizes.gap },
+  top: { gap: sizes.gap, marginBottom: sizes.gap },
   box: { padding: 16, gap: 10 },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },
   grow: { flex: 1 },

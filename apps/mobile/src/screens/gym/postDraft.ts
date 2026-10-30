@@ -1,0 +1,63 @@
+import { GYM_POST_MAX_PHOTOS, GYM_POST_PHOTO_MAX_BYTES, cleanPhoto, gymPostDraftFileSchema, type GymPost, type GymPostDraftFile } from "@app/shared";
+import { fromBase64, toBase64 } from "../food/photo";
+
+// A member's post on the phone (ROADMAP Stage 5 17b): its photos made small and rebuilt here, and the post kept
+// until the server has it. Pure: the screen draws the photos and holds the files.
+
+/** The qualities a photo is tried at until it fits, as the browser's. */
+export const POST_PHOTO_QUALITIES = [0.85, 0.7, 0.55] as const;
+
+export type PostPhotoReading = { ok: true; base64: string } | { ok: false; problem: "too_big" | "unreadable" };
+
+/** The photo as it goes up: the JPEG the phone drew, rebuilt by the shared cleaner from the parts that draw the
+ *  picture, so no tag of the camera's (where and when it was taken) can go with it, whatever the drawing kept. */
+export function postPhotoToSend(base64: string): PostPhotoReading {
+  const bytes = fromBase64(base64);
+  if (bytes === null) return { ok: false, problem: "unreadable" };
+  const cleaned = cleanPhoto(bytes, GYM_POST_PHOTO_MAX_BYTES);
+  if (!cleaned.ok) return { ok: false, problem: cleaned.problem === "too_big" ? "too_big" : "unreadable" };
+  return cleaned.type === "image/jpeg" ? { ok: true, base64: toBase64(cleaned.bytes) } : { ok: false, problem: "unreadable" };
+}
+
+export type DraftPost = Omit<GymPostDraftFile, "version">;
+
+/** Whether there is anything in it to keep. */
+export const hasWork = (draft: Pick<DraftPost, "body" | "photos">): boolean => draft.body !== "" || draft.photos.length > 0;
+
+export const draftFileText = (draft: DraftPost): string => JSON.stringify({ version: 1, ...draft });
+
+/** The kept post, where it can be read; anything else is nothing. */
+export function readDraftFile(text: string | null): DraftPost | null {
+  if (text === null || text === "") return null;
+  let raw: unknown = null;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  const parsed = gymPostDraftFileSchema.safeParse(raw);
+  if (!parsed.success) return null;
+  const { postKey, body, photos } = parsed.data;
+  return { postKey, body, photos };
+}
+
+/** Under the box: who sees it. A full day is said by the server's own sentence when it happens. */
+export const postHint = (gymName: string): string => `Everyone at ${gymName} in the app sees it straight away. Where a photo was taken is never kept.`;
+
+/** What the member reads about photos that could not be added. */
+export function photoTrouble({ unreadable, tooBig, left }: { unreadable: number; tooBig: number; left: number }): string | null {
+  const photos = (n: number) => (n === 1 ? "1 photo" : `${String(n)} photos`);
+  const lines: string[] = [];
+  if (unreadable > 0) lines.push(`${photos(unreadable)} couldn't be opened. Choose another one.`);
+  if (tooBig > 0) lines.push(`${photos(tooBig)} ${tooBig === 1 ? "is" : "are"} too large even made smaller. Choose a smaller one.`);
+  if (left > 0) lines.push(`A post holds up to ${String(GYM_POST_MAX_PHOTOS)} photos, so ${left === 1 ? "1 photo was" : `${String(left)} photos were`} not added.`);
+  return lines.length === 0 ? null : lines.join(" ");
+}
+
+/** Said where the button is once a post is up. A post sent again after a lost reply is answered with the one the
+ *  server kept, so changes made since did not go. */
+export function postedWords(post: Pick<GymPost, "body" | "photos">, sent: { body: string; photoCount: number }): string {
+  return post.body === sent.body.trim() && post.photos.length === sent.photoCount
+    ? "Your post is up."
+    : "Your post went up as you first wrote it. Your later changes weren't added.";
+}
