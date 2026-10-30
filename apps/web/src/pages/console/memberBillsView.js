@@ -464,8 +464,8 @@ export function refundWords(m, name, payment, live) {
     : '';
   return {
     title: `Note a refund for ${name}'s ${m.typeName}`,
-    // A card paid through Square has Refund to card (18d-iv-a); this is for money given back another way.
-    detail: `This is for the ${paid}.${some} It only writes the refund in your records: give the money back yourself.${keeps}`,
+    // A card paid through Square has Refund to card (18d-iv-a): this box may record one Square has made.
+    detail: `This is for the ${paid}.${some} It only writes the refund in your records${paidThroughSquare(payment.method) ? '.' : ': give the money back yourself.'}${keeps}`,
   };
 }
 

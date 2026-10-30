@@ -533,10 +533,6 @@ export const gymCardCharges = pgTable(
   ],
 );
 
-/** The email telling a cardholder their payment did not go through (0160; 18d-iii-ii-a): one a
- *  period of a membership (`bill_id` null; a press paying ahead has no bill yet) or one a fee (by its
- *  bill), written with its first decline. The address is kept only while it waits to go. The record
- *  link (`entry_id`, `ON DELETE SET NULL` of that column alone) is in the migration only. */
 /** One press of Refund to card (0177; ROADMAP 18d-iv-a), kept. `id` is the key Square is asked with. `asking`: Square has
  *  not answered, at most one on a payment. Once Square takes it up, `member_refund_id` is the row of `gym_member_refunds` that
  *  holds the money as given back; `look_at` is when the worker next reads Square while it is `pending`. `outcome`: `refused`
@@ -592,6 +588,10 @@ export const gymSquareRefunds = pgTable(
   ],
 );
 
+/** The email telling a cardholder their payment did not go through (0160; 18d-iii-ii-a): one a
+ *  period of a membership (`bill_id` null; a press paying ahead has no bill yet) or one a fee (by its
+ *  bill), written with its first decline. The address is kept only while it waits to go. The record
+ *  link (`entry_id`, `ON DELETE SET NULL` of that column alone) is in the migration only. */
 export const gymCardDeclineNotices = pgTable(
   "gym_card_decline_notices",
   {

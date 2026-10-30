@@ -18,7 +18,7 @@ import type { Sql, TransactionSql } from "postgres";
 import { giveMemberGift } from "../referrals/memberGiftRepo.js";
 import { insertAudit } from "../repo.js";
 import { writeRefund } from "../memberships/billsRepo.js";
-import { billsFor, paymentsFor } from "../memberships/billsSql.js";
+import { billsFor, paymentsFor, refundAskingOnBill } from "../memberships/billsSql.js";
 import { lockedEntry, lockedHeld } from "../memberships/heldRepo.js";
 import { lockGym } from "../memberList/repo.js";
 import type { SquareEnvironment } from "./square.js";
@@ -137,15 +137,6 @@ export async function readPaymentToRefund(sql: SqlOrTx, gymId: string, entryId: 
   };
 }
 
-/** A press waiting for Square on any payment of this bill. */
-export async function askingOnBill(sql: SqlOrTx, gymId: string, billId: string): Promise<boolean> {
-  const [row] = await sql<{ id: string }[]>`
-    SELECT q.id FROM gym_square_refunds q
-    JOIN gym_member_payments p ON p.gym_id = q.gym_id AND p.id = q.payment_id
-    WHERE q.gym_id = ${gymId} AND p.bill_id = ${billId} AND q.state = 'asking' LIMIT 1`;
-  return row !== undefined;
-}
-
 export interface NewPress {
   id: string;
   gymId: string;
@@ -192,7 +183,7 @@ export async function startRefund(sql: Sql, s: NewPress): Promise<StartOutcome> 
     const payment = await readPaymentToRefund(tx, s.gymId, s.entryId, s.membershipId, s.paymentId);
     if (payment === null) return { kind: "payment_not_found" };
     if (payment.provider !== "square" || payment.squarePaymentId === null) return { kind: "not_card" };
-    if (await askingOnBill(tx, s.gymId, payment.billId)) return { kind: "waiting" };
+    if (await refundAskingOnBill(tx, s.gymId, payment.billId)) return { kind: "waiting" };
 
     const bill = (await billsFor(tx, s.gymId, [s.membershipId])).find((b) => b.id === payment.billId);
     const standing = (await paymentsFor(tx, s.gymId, [s.membershipId])).find((p) => p.id === s.paymentId);
@@ -227,8 +218,8 @@ export async function pressOfKey(sql: SqlOrTx, gymId: string, requestKey: string
   return row === undefined ? null : toPress(row);
 }
 
-export async function release(sql: SqlOrTx, id: string): Promise<void> {
-  await sql`UPDATE gym_square_refunds SET checking_until = NULL WHERE id = ${id}`;
+export async function release(sql: SqlOrTx, press: RefundPress): Promise<void> {
+  await sql`UPDATE gym_square_refunds SET checking_until = NULL WHERE gym_id = ${press.gymId} AND id = ${press.id}`;
 }
 
 /** Presses Square has not answered, idle for `idleMs`, claimed until `until`. */
@@ -259,21 +250,21 @@ export async function claimLooks(sql: Sql, environment: SquareEnvironment, now: 
   return rows.map(toPress);
 }
 
-export async function lookAgain(sql: SqlOrTx, id: string, at: Date): Promise<void> {
-  await sql`UPDATE gym_square_refunds SET look_at = ${at}, looks = looks + 1, checking_until = NULL WHERE id = ${id} AND state = 'pending'`;
+export async function lookAgain(sql: SqlOrTx, press: RefundPress, at: Date): Promise<void> {
+  await sql`UPDATE gym_square_refunds SET look_at = ${at}, looks = looks + 1, checking_until = NULL WHERE gym_id = ${press.gymId} AND id = ${press.id} AND state = 'pending'`;
 }
 
 /** Square said no, or never answered: no refund is written. */
-export async function endAsking(sql: SqlOrTx, id: string, end: { outcome: "refused" | "lost"; code: string | null }, now: Date): Promise<void> {
+export async function endAsking(sql: SqlOrTx, press: RefundPress, end: { outcome: "refused" | "lost"; code: string | null }, now: Date): Promise<void> {
   await sql`
     UPDATE gym_square_refunds SET state = 'done', outcome = ${end.outcome}, code = ${end.code}, finished_at = ${now}, checking_until = NULL
-    WHERE id = ${id} AND state = 'asking'`;
+    WHERE gym_id = ${press.gymId} AND id = ${press.id} AND state = 'asking'`;
 }
 
-export async function endCompleted(sql: SqlOrTx, id: string, now: Date): Promise<void> {
+export async function endCompleted(sql: SqlOrTx, press: RefundPress, now: Date): Promise<void> {
   await sql`
     UPDATE gym_square_refunds SET state = 'done', outcome = 'completed', look_at = NULL, finished_at = ${now}, checking_until = NULL
-    WHERE id = ${id} AND state = 'pending'`;
+    WHERE gym_id = ${press.gymId} AND id = ${press.id} AND state = 'pending'`;
 }
 
 /** Square took the refund up: the money stands as given back, once. False where this press was already moved on. */
@@ -315,7 +306,7 @@ export async function recordTaken(sql: Sql, press: RefundPress, taken: { squareR
     await tx`
       UPDATE gym_square_refunds
       SET state = 'pending', member_refund_id = ${memberRefundId}, square_refund_id = ${taken.squareRefundId}, look_at = ${taken.lookAt}, checking_until = NULL
-      WHERE id = ${press.id}`;
+      WHERE gym_id = ${press.gymId} AND id = ${press.id}`;
     return true;
   });
 }
@@ -344,7 +335,7 @@ export async function recordFailed(sql: Sql, press: RefundPress, failed: { code:
     }
     await tx`
       UPDATE gym_square_refunds SET state = 'done', outcome = 'failed', code = ${failed.code}, look_at = NULL, finished_at = ${failed.now}, checking_until = NULL
-      WHERE id = ${press.id}`;
+      WHERE gym_id = ${press.gymId} AND id = ${press.id}`;
     await insertAudit(tx, {
       actorUserId: null,
       gymId: press.gymId,
@@ -364,8 +355,8 @@ export async function recordFailed(sql: Sql, press: RefundPress, failed: { code:
   });
 }
 
-/** What a person's page says of a press with no answer yet, or none ever, by payment: the newest, until a refund is written on
- *  that payment after it. Read only for the payments on the page. */
+/** What a person's page says of a press with no answer yet, or none ever, by payment: the newest, until refunds written on that
+ *  payment after it cover its amount: a smaller one leaves it open. Read only for the payments on the page. */
 export async function openPressesOf(sql: SqlOrTx, gymId: string, paymentIds: readonly string[]): Promise<Map<string, { amountMinor: number; on: string; lost: boolean }>> {
   const open = new Map<string, { amountMinor: number; on: string; lost: boolean }>();
   if (paymentIds.length === 0) return open;
@@ -374,9 +365,8 @@ export async function openPressesOf(sql: SqlOrTx, gymId: string, paymentIds: rea
     FROM gym_square_refunds q
     JOIN gyms g ON g.id = q.gym_id
     WHERE q.gym_id = ${gymId} AND q.payment_id = ANY(${[...paymentIds]}::uuid[]) AND (q.state = 'asking' OR q.outcome = 'lost')
-      AND NOT EXISTS (
-        SELECT 1 FROM gym_member_refunds r
-        WHERE r.gym_id = q.gym_id AND r.payment_id = q.payment_id AND r.created_at > q.started_at AND r.undone_at IS NULL)
+      AND (SELECT COALESCE(sum(r.amount_minor), 0) FROM gym_member_refunds r
+           WHERE r.gym_id = q.gym_id AND r.payment_id = q.payment_id AND r.created_at > q.started_at AND r.undone_at IS NULL) < q.amount_minor
     ORDER BY q.payment_id, q.started_at DESC`;
   for (const r of rows) open.set(r.payment_id, { amountMinor: r.amount_minor, on: r.on_day, lost: r.lost });
   return open;

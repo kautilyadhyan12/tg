@@ -4325,15 +4325,15 @@ the card." Staff type the amount (all or part), pick why from the refund reasons
 Who may: `billing.members`, as for a refund noted by hand. A refund moves no date and no count, as ever. A press is one row of
 `gym_square_refunds` (migration `0177`), written under the record's lock; its id is the key Square is asked with, so Square takes it
 up once however often it is asked (measured 2026-10-30: the same key gives back the same refund, another amount under it is
-refused); while Square has not answered, nothing else is refunded on that bill and the membership is not changed. Once Square
+refused); while Square has not answered, nothing else is refunded or voided on that bill and the membership is not moved to another. Once Square
 takes it up, a row of `gym_member_refunds` holds the money as given back, with the payment's own method (Card on Terminal, Card on
 file), so the bill, the receipt, Reports and the download read it as any refund; it reads **Refund pending** until Square finishes.
 The worker reads each pending refund 1, 2, 5 and 15 minutes after, then hourly and every 3 hours; the page reads again every 30
 seconds for 15 minutes while one is pending. FAILED or REJECTED after that: the app voids the refund itself (`square_failed`), the
 bill reads as it did, and the line says "Square could not refund this. No money went back." Past Square's 14 days pending, the line
 says to contact Square Support. A refund sent to the card is never voided here. No answer from Square is asked again with the same
-key for an hour, then left as "Square never answered the … refund. Check your Square Dashboard. If it went through, note the
-refund here.", until a refund is written on that payment. Refused before sending: an Interac debit card (`refund_requires_card_presence`;
+key for an hour, then left as "We don't know whether Square took the … refund. Check your Square Dashboard. If it went through, note
+the refund here.", until refunds written on that payment cover it. Refused before sending: an Interac debit card (`refund_requires_card_presence`;
 18d-iv-c), a payment over 365 days old, one taken in a Square account the gym has left (each offers Note a refund), one Square has
 not finished, one that does not match Square's record. Square's refusals are said in the box in plain words, and a code nobody has
 placed reads "Square refused this refund. No money went back." Still to come: fees and Sell (18d-iv-b), Interac on the Terminal

@@ -680,6 +680,15 @@ export async function refundAsking(tx: TransactionSql, gymId: string, membership
   return row !== undefined;
 }
 
+/** The same on one bill: what a void or a refund noted by hand waits for. */
+export async function refundAskingOnBill(sql: Sql | TransactionSql, gymId: string, billId: string): Promise<boolean> {
+  const [row] = await sql<{ id: string }[]>`
+    SELECT q.id FROM gym_square_refunds q
+    JOIN gym_member_payments p ON p.gym_id = q.gym_id AND p.id = q.payment_id
+    WHERE q.gym_id = ${gymId} AND p.bill_id = ${billId} AND q.state = 'asking' LIMIT 1`;
+  return row !== undefined;
+}
+
 /** Money on its way through Square for this membership, on the Terminal or from the card on file:
  *  nothing else is paid, voided or cancelled on it until Square has answered. */
 export async function squareMoneyOut(tx: TransactionSql, gymId: string, membershipId: string): Promise<{ kind: "terminal_waiting" } | { kind: "card_charging" } | null> {

@@ -9,7 +9,6 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import {
-  ROLE_PRIVILEGES,
   cardRefundCheckSchema,
   cardRefundResponseSchema,
   heldMembershipsResponseSchema,
@@ -195,7 +194,7 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
     return (JSON.parse(add.body) as { entry: { entryId: string } }).entry.entryId;
   };
   /** Somebody at the gym whose second week was charged to their card on file by the worker: Square holds $25.00 of theirs. */
-  const paidByCard = async (gym: Gym, fullName: string): Promise<Paid> => {
+  const paidByCard = async (gym: Gym, fullName: string, cardMinor = 2500): Promise<Paid> => {
     const entryId = await person(gym, fullName);
     const today = (await held(gym, gym.owner, entryId)).today;
     const given = await send("POST", `${entryUrl(gym, entryId)}/memberships`, gym.owner.cookies, { requestKey: randomUUID(), method: "cash", typeId: gym.typeId, startsOn: today, paid: true });
@@ -219,10 +218,14 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
     const start = await send("POST", `${entryUrl(gym, entryId)}/memberships/${membershipId}/card-charge`, gym.owner.cookies, {
       requestKey: randomUUID(),
       periodIndex: 1,
-      amountMinor: 2500,
+      amountMinor: cardMinor,
       cardRef: await cardRefOf(gym, entryId),
     });
     expect(start.statusCode, start.body).toBe(200);
+    if (cardMinor < 2500) {
+      const rest = await send("POST", `${entryUrl(gym, entryId)}/memberships/${membershipId}/payments`, gym.owner.cookies, { requestKey: randomUUID(), periodIndex: 1, amountMinor: 2500 - cardMinor, method: "cash" });
+      expect(rest.statusCode, rest.body).toBe(200);
+    }
     const [paid] = await sql<{ id: string; provider_payment_id: string }[]>`
       SELECT id, provider_payment_id FROM gym_member_payments WHERE gym_id = ${gym.id} AND bill_id = ${bill?.id ?? ""} AND method = 'company'`;
     if (paid === undefined) throw new Error("no card payment");
@@ -245,10 +248,12 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
       SELECT state, outcome, code, square_refund_id FROM gym_square_refunds WHERE gym_id = ${p.gym.id} AND payment_id = ${p.paymentId} ORDER BY started_at`;
   const madeFor = (p: Paid) => square.refundsMade.filter((f) => f.payment_id === p.squarePaymentId);
   const billStatus = async (p: Paid) => (await sql<{ status: string }[]>`SELECT status FROM gym_member_bills WHERE gym_id = ${p.gym.id} AND id = ${p.billId}`)[0]?.status;
-  const paymentOnPage = async (p: Paid) => {
+  const paymentsOnPage = async (p: Paid) => {
     const page = await held(p.gym, p.gym.owner, p.entryId);
-    const bills = page.memberships.flatMap((m) => m.billing?.bills ?? []);
-    const shown = bills.flatMap((b) => b.payments).find((x) => x.id === p.paymentId);
+    return page.memberships.flatMap((m) => m.billing?.bills ?? []).flatMap((b) => b.payments);
+  };
+  const paymentOnPage = async (p: Paid) => {
+    const shown = (await paymentsOnPage(p)).find((x) => x.id === p.paymentId);
     if (shown === undefined) throw new Error("the payment is not on the page");
     return shown;
   };
@@ -376,8 +381,8 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
     it("staff without the payments tick cannot refund, or see what Square says", async () => {
       const maya = await paidByCard(gym, "No Tick");
       const staff = await signedIn("Front Desk");
-      const role = Object.keys(ROLE_PRIVILEGES).find((r) => !(ROLE_PRIVILEGES as Record<string, readonly string[]>)[r]?.includes("billing.members") && r !== "owner");
-      await sql`INSERT INTO gym_staff (gym_id, user_id, role) VALUES (${gym.id}, ${staff.userId}, ${role ?? "coach"})`;
+      // Can open a person's page, with everything but the payments tick: the tick itself says no.
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gym.id}, ${staff.userId}, 'trainer', ${["members.read", "members.confirm"]})`;
       expect((await send("GET", refundUrl(maya), staff.cookies)).statusCode).toBe(403);
       expect((await press(maya, 100, randomUUID(), staff)).statusCode).toBe(403);
       expect(madeFor(maya)).toHaveLength(0);
@@ -485,6 +490,83 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
       const noted = await send("POST", `${entryUrl(gym, maya.entryId)}/memberships/${maya.membershipId}/payments/${maya.paymentId}/refunds`, gym.owner.cookies, { requestKey: randomUUID(), amountMinor: 1500, method: "card_at_desk", reason: "other" });
       expect(noted.statusCode, noted.body).toBe(200);
       expect((await paymentOnPage(maya)).cardRefund).toBeNull();
+    });
+
+    it("a void waits for a refund Square has not answered, and the bill stays as it is", async () => {
+      const maya = await paidByCard(gym, "Void Waits", 1500);
+      square.state.refundDown = true;
+      await press(maya, 1500);
+      square.state.refundDown = false;
+      const cash = (await paymentsOnPage(maya)).find((x) => x.method === "cash" && x.amountMinor === 1000);
+      if (cash === undefined) throw new Error("no cash payment");
+      const voided = await send("POST", `${entryUrl(gym, maya.entryId)}/memberships/${maya.membershipId}/payments/${cash.id}/void`, gym.owner.cookies, { reason: "mistake" });
+      expect(voided.statusCode, voided.body).toBe(409);
+      expect((JSON.parse(voided.body) as { error: string }).error).toBe("card_refund_waiting");
+      expect(await billStatus(maya)).toBe("paid");
+    });
+
+    it("the gym moves to another Square account while a press waits: never asked through the new one", async () => {
+      const other = await makeGym(`Moves Away ${uniq()}`, `MERCH${uniq()}`);
+      const maya = await paidByCard(other, "Moved While Waiting");
+      square.state.refundDown = true;
+      await press(maya, 500);
+      square.state.refundDown = false;
+      expect((await send("DELETE", `/v1/orgs/${other.id}/payments/square`, other.owner.cookies)).statusCode).toBe(200);
+      await connect(other, account(`MERCHMOVED${uniq()}`));
+      clock = new Date(clock.getTime() + CARD_REFUND.idleMs + 1000);
+      await work();
+      // Asked through the new account, Square would have said not found: no code means it was not asked.
+      expect((await pressesOf(maya))[0]).toMatchObject({ state: "done", outcome: "lost", code: null });
+      expect(madeFor(maya)).toHaveLength(0);
+    });
+
+    it("a smaller refund does not answer a refund Square never answered", async () => {
+      const maya = await paidByCard(gym, "Lost Then Smaller");
+      square.state.refundDown = true;
+      await press(maya, 1500);
+      clock = new Date(clock.getTime() + CARD_REFUND.resendForMs + 1000);
+      await work();
+      square.state.refundDown = false;
+      expect((await press(maya, 1000)).statusCode).toBe(200);
+      expect((await paymentOnPage(maya)).cardRefund).toMatchObject({ amountMinor: 1500, lost: true });
+    });
+
+    it("a refund on another bill of the membership does not hold a note on this one", async () => {
+      const maya = await paidByCard(gym, "Other Bill");
+      square.state.refundDown = true;
+      await press(maya, 500);
+      square.state.refundDown = false;
+      const cash = (await paymentsOnPage(maya)).find((x) => x.method === "cash");
+      if (cash === undefined) throw new Error("no cash payment");
+      const noted = await send("POST", `${entryUrl(gym, maya.entryId)}/memberships/${maya.membershipId}/payments/${cash.id}/refunds`, gym.owner.cookies, { requestKey: randomUUID(), amountMinor: 100, method: "cash", reason: "other" });
+      expect(noted.statusCode, noted.body).toBe(200);
+    });
+
+    it("looks at a pending refund 1, 2, 5 and 15 minutes on, then hourly and every 3 hours", async () => {
+      const started = clock;
+      const maya = await paidByCard(gym, "Look Times");
+      await press(maya, 500);
+      const nextLook = async () => (await sql<{ look_at: Date }[]>`SELECT look_at FROM gym_square_refunds WHERE gym_id = ${maya.gym.id} AND payment_id = ${maya.paymentId}`)[0]?.look_at ?? clock;
+      expect((await nextLook()).getTime() - clock.getTime()).toBe(60_000);
+      for (const after of [120_000, 300_000, 900_000, 3_600_000, 10_800_000, 10_800_000]) {
+        clock = new Date((await nextLook()).getTime() + 1000);
+        await work();
+        expect((await nextLook()).getTime() - clock.getTime()).toBe(after);
+      }
+      expect((await pressesOf(maya))[0]?.state).toBe("pending");
+      clock = started;
+    });
+
+    it("still pending after Square's 14 days, the page says so; on the 14th day it does not", async () => {
+      const started = clock;
+      const maya = await paidByCard(gym, "Late Refund");
+      await press(maya, 500);
+      const day = 24 * 60 * 60_000;
+      clock = new Date(started.getTime() + 14 * day);
+      expect((await paymentOnPage(maya)).refunds[0]?.square?.late).toBe(false);
+      clock = new Date(started.getTime() + 15 * day);
+      expect((await paymentOnPage(maya)).refunds[0]?.square?.late).toBe(true);
+      clock = started;
     });
 
     it("a refusal after no answer says nothing of the first ask: left to check in Square", async () => {

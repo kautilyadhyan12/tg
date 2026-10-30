@@ -16,6 +16,11 @@ export const cardRefundDraft = (check, currency, newKey) => ({ requestKey: newKe
 
 const capital = (name) => `${name.charAt(0).toUpperCase()}${name.slice(1)}`;
 
+/** What Square gave back with no note here (the app shows it by itself from 18d-iv-d). */
+export function inSquareLine(m, check) {
+  return check.refundedInSquareMinor > 0 ? `Square shows ${formatMinor(check.refundedInSquareMinor, m.currency)} of this payment was already refunded there. Note that refund here so your records match.` : null;
+}
+
 /** The box's words. `live`: the membership is in use. */
 export function cardRefundBoxWords(m, name, payment, check, live) {
   const some = check.leftMinor < payment.amountMinor ? ` ${formatMinor(check.leftMinor, m.currency)} of it can still be refunded.` : '';
@@ -23,8 +28,7 @@ export function cardRefundBoxWords(m, name, payment, check, live) {
   return {
     title: `Refund ${name}'s ${m.typeName} to the card`,
     detail: `This is for the ${formatMinor(payment.amountMinor, m.currency)} paid on ${dayWords(payment.paidOn)}.${some} ${CARD_REFUND_WORDS.fee} ${CARD_REFUND_WORDS.days}${keeps}`,
-    // Refunded inside Square with no note here (the app shows it by itself from 18d-iv-d).
-    inSquare: check.refundedInSquareMinor > 0 ? `Square shows ${formatMinor(check.refundedInSquareMinor, m.currency)} of this payment was already refunded there. Note that refund here so your records match.` : null,
+    inSquare: inSquareLine(m, check),
   };
 }
 
@@ -51,7 +55,7 @@ export function cardRefundButton(m, check, draft) {
 export function cardRefundOpenLine(open, currency) {
   const money = formatMinor(open.amountMinor, currency);
   return open.lost
-    ? `Square never answered the ${money} refund of ${dayWords(open.on)}. Check your Square Dashboard. If it went through, note the refund here.`
+    ? `We don't know whether Square took the ${money} refund of ${dayWords(open.on)}. Check your Square Dashboard. If it went through, note the refund here.`
     : `A refund of ${money} is waiting for Square's answer.`;
 }
 

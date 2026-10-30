@@ -80,10 +80,10 @@ const page = (change = {}) => ({
 const PAYMENT_ID = () => page().data.memberships[0].billing.bills.find((b) => b.payments.length > 0).payments[0].id;
 const REFUND = { id: '77777777-7777-4777-8777-000000000001', amountMinor: 2000, method: 'company', refundedOn: TODAY, reason: 'paid_twice', by: 'Sam Owner', receiptNumber: 9 };
 
-const draw = () =>
+const draw = (props = {}) =>
   render(
     <MemoryRouter>
-      <MemberMemberships gymId={GYM} entryId={TARA} name="Tara Singh" readOnly={false} checkEveryMs={5} />
+      <MemberMemberships gymId={GYM} entryId={TARA} name="Tara Singh" readOnly={false} checkEveryMs={5} {...props} />
     </MemoryRouter>,
   );
 const paymentRow = async () => within((await screen.findAllByTestId('held-bill-payment'))[0]);
@@ -133,7 +133,7 @@ describe('Refund to card: the worst thing first', () => {
     await waitFor(() => expect(orgService.refundToCard).toHaveBeenCalledTimes(1));
     const [gymId, entryId, membershipId, paymentId, body] = orgService.refundToCard.mock.calls[0];
     expect([gymId, entryId, membershipId, paymentId]).toEqual([GYM, TARA, '44444444-4444-4444-8444-000000000001', PAYMENT_ID()]);
-    expect(body).toMatchObject({ amountMinor: 2000, reason: 'paid_twice' });
+    expect(body).toEqual({ requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/), amountMinor: 2000, reason: 'paid_twice' });
     expect(await screen.findByText('$20.00 is on its way back to Visa ending 1111. It can take 7 to 10 business days to reach the card.')).toBeTruthy();
     expect(screen.queryByTestId('card-refund-box')).toBeNull();
   });
@@ -147,6 +147,28 @@ describe('Refund to card: the worst thing first', () => {
     fireEvent.click(box.getByRole('button', { name: 'Refund $49.99 to Visa ending 1111' }));
     await waitFor(() => expect(box.getByRole('alert').textContent).toContain('No money went back'));
     expect(screen.getByTestId('card-refund-box')).toBeTruthy();
+
+    // Nothing was sent, so the next press is a new one: a lower amount is never answered as "already sent".
+    orgService.refundToCard.mockResolvedValue({ data: { step: 'pending', amountMinor: 2000, currency: 'USD', card: VISA } });
+    fireEvent.change(box.getByLabelText('Amount to refund (USD)'), { target: { value: '20' } });
+    fireEvent.click(box.getByRole('button', { name: 'Refund $20.00 to Visa ending 1111' }));
+    await waitFor(() => expect(orgService.refundToCard).toHaveBeenCalledTimes(2));
+    const keys = orgService.refundToCard.mock.calls.map((call) => call[4].requestKey);
+    expect(keys[0]).not.toBe(keys[1]);
+  });
+
+  it('no answer may have reached Square, so the next press is the same one', async () => {
+    orgService.refundToCard.mockRejectedValueOnce(new Error('Network Error'));
+    orgService.refundToCard.mockResolvedValue({ data: { step: 'pending', amountMinor: 4999, currency: 'USD', card: VISA } });
+    draw();
+    const box = await openBox();
+    fireEvent.change(await box.findByLabelText('Why it is being refunded'), { target: { value: 'other' } });
+    fireEvent.click(box.getByRole('button', { name: 'Refund $49.99 to Visa ending 1111' }));
+    await waitFor(() => expect(box.getByRole('alert').textContent).toContain('may not have gone through'));
+    fireEvent.click(box.getByRole('button', { name: 'Refund $49.99 to Visa ending 1111' }));
+    await waitFor(() => expect(orgService.refundToCard).toHaveBeenCalledTimes(2));
+    const keys = orgService.refundToCard.mock.calls.map((call) => call[4].requestKey);
+    expect(keys[0]).toBe(keys[1]);
   });
 
   it('a payment by hand offers only Note a refund', async () => {
@@ -183,6 +205,33 @@ describe('What the box and the page say', () => {
     expect(box.getByRole('button', { name: 'Note a refund' })).toBeTruthy();
   });
 
+  it('refunded in full inside Square: says why nothing is left, with Note a refund beside it', async () => {
+    orgService.getCardRefund.mockResolvedValue({ data: { card: VISA, leftMinor: 0, refundedInSquareMinor: 4999, block: 'nothing_left' } });
+    draw();
+    const box = await openBox();
+    await box.findByText('There is nothing left of this payment to refund.');
+    expect(box.getByText('Square shows $49.99 of this payment was already refunded there. Note that refund here so your records match.')).toBeTruthy();
+    fireEvent.click(box.getByRole('button', { name: 'Note a refund' }));
+    expect(await screen.findByTestId('held-refund-form')).toBeTruthy();
+    expect(screen.getByText(/It only writes the refund in your records./)).toBeTruthy();
+  });
+
+  it('reads again by itself while a refund is pending, and tells the list behind it what changed', async () => {
+    const pending = page({ refundableMinor: 2999, refunds: [{ ...REFUND, square: { state: 'pending', card: VISA, late: false } }] });
+    const done = page({ refundableMinor: 2999, refunds: [{ ...REFUND, square: { state: 'completed', card: VISA, late: false } }] });
+    orgService.getHeldMemberships.mockResolvedValue(pending);
+    const onChanged = vi.fn();
+    draw({ squareEveryMs: 5, onChanged });
+    await screen.findByText('$20.00 refund pending');
+    orgService.getHeldMemberships.mockResolvedValue(done);
+    await screen.findByText('$20.00 refunded');
+    await waitFor(() => expect(onChanged).toHaveBeenCalled());
+    // Nothing waits on Square now: it stops asking.
+    const asked = orgService.getHeldMemberships.mock.calls.length;
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(orgService.getHeldMemberships.mock.calls.length).toBe(asked);
+  });
+
   it('Square not connected: says so, and who can fix it', async () => {
     orgService.getCardRefund.mockRejectedValue(Object.assign(new Error('no'), { response: { status: 409, data: { error: 'card_not_ready', message: 'x' } } }));
     draw();
@@ -217,13 +266,13 @@ describe('What the box and the page say', () => {
     expect(within(await screen.findByTestId('held-voided-refund')).getByText('Square could not refund this. No money went back.')).toBeTruthy();
   });
 
-  it('one Square has not answered is said under the payment; one it never answered says where to check', async () => {
+  it('one Square has not answered is said under the payment; one it may never have taken says where to check', async () => {
     orgService.getHeldMemberships.mockResolvedValue(page({ cardRefund: { amountMinor: 1500, on: TODAY, lost: false } }));
     draw();
     expect((await screen.findByTestId('held-card-refund-open')).textContent).toBe("A refund of $15.00 is waiting for Square's answer.");
     cleanup();
     orgService.getHeldMemberships.mockResolvedValue(page({ cardRefund: { amountMinor: 1500, on: TODAY, lost: true } }));
     draw();
-    expect((await screen.findByTestId('held-card-refund-open')).textContent).toMatch(/^Square never answered the \$15\.00 refund of .*Check your Square Dashboard\. If it went through, note the refund here\.$/);
+    expect((await screen.findByTestId('held-card-refund-open')).textContent).toMatch(/^We don't know whether Square took the \$15\.00 refund of .*Check your Square Dashboard\. If it went through, note the refund here\.$/);
   });
 });

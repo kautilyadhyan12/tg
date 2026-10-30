@@ -46,7 +46,7 @@ import {
   insertRefund,
   overdueDaysOf,
   paymentsFor,
-  refundAsking,
+  refundAskingOnBill,
   setBillDay,
   setBillStatus,
   setOverdueDays,
@@ -257,6 +257,8 @@ export async function voidPayment(
     if (payment.method === "company") return { kind: "card_payment" };
     const out = await squareMoneyOut(tx, input.gymId, row.id);
     if (out !== null) return out;
+    // No refund row yet, so the rule below cannot see it: voided now, the refund would land on a bill owed again.
+    if (await refundAskingOnBill(tx, input.gymId, payment.bill_id)) return { kind: "refund_waiting" };
 
     const bills = await billsFor(tx, input.gymId, [row.id]);
     const payments = await paymentsFor(tx, input.gymId, [row.id]);
@@ -450,7 +452,7 @@ export async function noteRefund(
 
     const payment = await paymentOf(tx, input.gymId, row.id, input.paymentId);
     if (payment === null || payment.undone) return { kind: "payment_not_found" };
-    if (await refundAsking(tx, input.gymId, row.id)) return { kind: "refund_waiting" };
+    if (await refundAskingOnBill(tx, input.gymId, payment.bill_id)) return { kind: "refund_waiting" };
     const bill = (await billsFor(tx, input.gymId, [row.id])).find((b) => b.id === payment.bill_id);
     const standing = (await paymentsFor(tx, input.gymId, [row.id])).find((p) => p.id === input.paymentId);
     if (bill === undefined || standing === undefined) return { kind: "payment_not_found" };

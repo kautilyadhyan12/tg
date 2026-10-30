@@ -30,6 +30,7 @@ import {
   type SquareRefund,
 } from "@app/shared";
 import { dayInTz } from "../../gamification/streak.js";
+import { refundAskingOnBill } from "../memberships/billsSql.js";
 import { OrgsError, requireWritablePrivilege } from "../service.js";
 import { BILLING, connectionRefused, entryNotFound, orgNotFound, readyOrThrow, unavailable, type Ready } from "./cards.js";
 import * as refunds from "./cardRefundsRepo.js";
@@ -99,7 +100,7 @@ async function checkWithSquare(deps: PaymentsDeps, ready: Ready, payment: refund
   const inSquare = square.refunded_money?.amount ?? 0;
   const leftMinor = Math.max(0, Math.min(payment.refundableMinor, total.amount - inSquare));
   const refundedInSquareMinor = Math.max(0, inSquare - payment.refundedMinor);
-  if (await refunds.askingOnBill(deps.sql, ready.row.gymId, payment.billId)) return { card, leftMinor, refundedInSquareMinor, block: "waiting" };
+  if (await refundAskingOnBill(deps.sql, ready.row.gymId, payment.billId)) return { card, leftMinor, refundedInSquareMinor, block: "waiting" };
   return { card, leftMinor, refundedInSquareMinor, block: leftMinor === 0 ? "nothing_left" : null };
 }
 
@@ -119,16 +120,16 @@ async function answered(deps: PaymentsDeps, press: refunds.RefundPress, result: 
     deps.log.warn({ event: "square.card_refund_refused", gymId: press.gymId, status: result.status, code: result.code }, "Square refused a refund");
     // Asked before with no answer: Square may have taken it up then, and a refusal now says nothing of that.
     if (press.checkedAt.getTime() > press.startedAt.getTime()) {
-      await refunds.endAsking(deps.sql, press.id, { outcome: "lost", code: codeOf(result.code) }, now);
+      await refunds.endAsking(deps.sql, press, { outcome: "lost", code: codeOf(result.code) }, now);
       return "lost";
     }
-    await refunds.endAsking(deps.sql, press.id, { outcome: "refused", code: codeOf(result.code) }, now);
+    await refunds.endAsking(deps.sql, press, { outcome: "refused", code: codeOf(result.code) }, now);
     return "refused";
   }
   const refund = result.value;
   if (refund.payment_id !== press.squarePaymentId || refund.amount_money.amount !== press.amountMinor || refund.amount_money.currency !== press.currency) {
     deps.log.error({ event: "square.card_refund_unexpected", gymId: press.gymId }, "Square answered a refund with another refund");
-    await refunds.endAsking(deps.sql, press.id, { outcome: "lost", code: "NOT_OURS" }, now);
+    await refunds.endAsking(deps.sql, press, { outcome: "lost", code: "NOT_OURS" }, now);
     return "lost";
   }
   const gym = await repo.readGym(deps.sql, press.gymId);
@@ -140,7 +141,7 @@ async function answered(deps: PaymentsDeps, press: refunds.RefundPress, result: 
 /** A refund Square has taken up, by what it says now. */
 async function afterTaken(deps: PaymentsDeps, press: refunds.RefundPress, refund: SquareRefund, today: string, now: Date): Promise<Step> {
   if (refund.status === "COMPLETED") {
-    await refunds.endCompleted(deps.sql, press.id, now);
+    await refunds.endCompleted(deps.sql, press, now);
     return "completed";
   }
   if (refund.status === "FAILED" || refund.status === "REJECTED") {
@@ -171,7 +172,7 @@ async function ask(deps: PaymentsDeps, token: string, square: SquareSettings, pr
     });
     return await answered(deps, press, result, deps.now());
   } finally {
-    await refunds.release(deps.sql, press.id);
+    await refunds.release(deps.sql, press);
   }
 }
 
@@ -272,7 +273,7 @@ export async function processCardRefunds(deps: PaymentsDeps, square: SquareSetti
     const token = await tokenFor(deps, square, press);
     if (token === null || at.getTime() - press.startedAt.getTime() > CARD_REFUND.resendForMs) {
       deps.log.warn({ event: "square.card_refund_lost", gymId: press.gymId }, "a refund Square never answered is left to check in Square");
-      await refunds.endAsking(deps.sql, press.id, { outcome: "lost", code: null }, at);
+      await refunds.endAsking(deps.sql, press, { outcome: "lost", code: null }, at);
       continue;
     }
     await ask(deps, token, square, press);
@@ -291,7 +292,7 @@ export async function processCardRefunds(deps: PaymentsDeps, square: SquareSetti
     } else {
       deps.log.warn({ event: "square.card_refund_unread", gymId: press.gymId, answer: read?.kind ?? "no_connection", status: read === null ? null : read.status }, "a refund could not be read from Square");
     }
-    await refunds.lookAgain(deps.sql, press.id, lookFrom(at, press.looks + 1));
+    await refunds.lookAgain(deps.sql, press, lookFrom(at, press.looks + 1));
   }
   return run;
 }

@@ -3,7 +3,7 @@ import { Loader2, RotateCcw } from 'lucide-react';
 import { cardName, cardRefundSentLine } from '@app/shared';
 import { errorCode, errorText, orgService } from '../../api/orgsApi';
 import PlaceLink from '../../components/console/PlaceLink';
-import { blockNotes, CARD_REFUND_REASONS, cardRefundBlockLine, cardRefundBody, cardRefundBoxWords, cardRefundButton, cardRefundDraft } from './cardRefundView';
+import { blockNotes, CARD_REFUND_REASONS, cardRefundBlockLine, cardRefundBody, cardRefundBoxWords, cardRefundButton, cardRefundDraft, inSquareLine } from './cardRefundView';
 
 // REFUND TO CARD (ROADMAP 18d-iv-a; spec Part 3 §14.8): the box under a payment taken through Square. It asks Square about
 // the payment first, so it names the real card and what is really left, then the press sends the money back. What happened
@@ -13,6 +13,8 @@ const MAIN = 'c-btn c-btn-p';
 const PLAIN = 'c-btn c-btn-s';
 const BOX = { background: 'var(--raise)' };
 const NOT_CONNECTED = ['card_not_ready', 'card_connection_refused'];
+/** Square said no and no money went: the next press is a new one. Anything else may have reached Square, and keeps its key. */
+const NOTHING_SENT = ['card_refund_refused', 'card_refund_failed', 'card_connection_refused'];
 
 const newKey = () => globalThis.crypto.randomUUID();
 
@@ -74,11 +76,17 @@ export default function CardRefundBox({ gymId, entryId, m, payment, name, live, 
   }
 
   if (check.block !== null) {
+    const inSquare = inSquareLine(m, check);
     return (
       <div className="rounded-[14px] p-3 flex flex-col gap-3" style={BOX} data-testid="card-refund-box">
         <span className="c-s14 c-t1">{cardRefundBlockLine(check.block)}</span>
+        {inSquare !== null ? (
+          <span className="c-s14 c-w5" style={{ color: 'var(--warn)' }}>
+            {inSquare}
+          </span>
+        ) : null}
         <div className="flex flex-wrap gap-2">
-          {blockNotes(check.block) ? note : null}
+          {blockNotes(check.block) || inSquare !== null ? note : null}
           {back}
         </div>
       </div>
@@ -94,7 +102,10 @@ export default function CardRefundBox({ gymId, entryId, m, payment, name, live, 
       const res = await orgService.refundToCard(gymId, entryId, m.id, payment.id, body);
       onDone(cardRefundSentLine(res.data, check.card === null ? 'the card' : cardName(check.card)));
     } catch (err) {
-      setProblem(errorText(err, "We couldn't reach Square. The refund may not have gone through: open the payment again before trying."));
+      // No answer at all says nothing of whether the press reached Square.
+      const unsure = "We couldn't reach Square. The refund may not have gone through: open the payment again before trying.";
+      setProblem(typeof errorCode(err) === 'string' ? errorText(err, unsure) : unsure);
+      if (NOTHING_SENT.includes(errorCode(err))) setDraft((d) => ({ ...d, requestKey: newKey() }));
       setBusy(false);
     }
   };

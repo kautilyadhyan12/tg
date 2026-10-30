@@ -176,6 +176,7 @@ export default function MemberMemberships({
   payNow = null,
   /** How often the Terminal's box asks the server; the box's own unless a test says. */
   checkEveryMs,
+  squareEveryMs = 30_000,
   /** The record has an email address: its memberships' agreements can be signed from an emailed link (18u-ii-b). */
   hasEmail = false,
 }) {
@@ -280,6 +281,7 @@ export default function MemberMemberships({
   // A refund to the card still with Square: the worker's answer tells no page, so this one reads again every 30 seconds, for
   // at most 15 minutes, and again whenever staff come back to it (CLAUDE.md §4, Pages stay current by themselves).
   const waitingOnSquare = waitsOnSquare(shown?.memberships);
+  const readQuietly = useRef(() => undefined);
   useEffect(() => {
     if (!waitingOnSquare) return undefined;
     const started = Date.now();
@@ -288,10 +290,10 @@ export default function MemberMemberships({
         clearInterval(timer);
         return;
       }
-      setAttempt((n) => n + 1);
-    }, 30_000);
+      readQuietly.current();
+    }, squareEveryMs);
     return () => clearInterval(timer);
-  }, [waitingOnSquare]);
+  }, [waitingOnSquare, squareEveryMs]);
   /** Why the server will not open the line: said under the heading until it opens. */
   const [liveRefused, setLiveRefused] = useState(null);
   useLiveNews(gymId, (message) => {
@@ -302,21 +304,26 @@ export default function MemberMemberships({
     if (message.what === 'ready') setLiveRefused(null);
     const readAll = message.what === 'ready' || message.what === 'cameBack';
     if (!readAll && !(message.what === 'memberships' && message.entryId === entryId)) return;
-    const asked = ++readSeq.current;
-    orgService.getHeldMemberships(gymId, entryId).then(
-      (res) => {
-        if (asked <= drawnSeq.current) return;
-        drawnSeq.current = asked;
-        const next = { entryId, ...res.data };
-        const now = JSON.stringify(next);
-        const before = lastAnswer.current;
-        lastAnswer.current = now;
-        setHeld(next);
-        const drawn = shownNow.current === null ? null : JSON.stringify(shownNow.current);
-        if (before !== null && before !== now && drawn !== now) onChanged?.();
-      },
-      () => undefined,
-    );
+    readQuietly.current();
+  });
+  useEffect(() => {
+    readQuietly.current = () => {
+      const asked = ++readSeq.current;
+      orgService.getHeldMemberships(gymId, entryId).then(
+        (res) => {
+          if (asked <= drawnSeq.current) return;
+          drawnSeq.current = asked;
+          const next = { entryId, ...res.data };
+          const now = JSON.stringify(next);
+          const before = lastAnswer.current;
+          lastAnswer.current = now;
+          setHeld(next);
+          const drawn = shownNow.current === null ? null : JSON.stringify(shownNow.current);
+          if (before !== null && before !== now && drawn !== now) onChanged?.();
+        },
+        () => undefined,
+      );
+    };
   });
   const canBillHere = shown?.canBill === true;
   useEffect(() => {

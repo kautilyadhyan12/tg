@@ -662,7 +662,7 @@ export async function changeHeldMembership(
   }
   if (outcome.kind === "change_refused") throw new OrgsError(409, `membership_change_${outcome.reason}`, MEMBERSHIP_CHANGE_WORDS[outcome.reason]);
   if (outcome.kind === "credit_changed") throw new OrgsError(409, "membership_change_credit_changed", MEMBERSHIP_CHANGE_WORDS.credit_changed);
-  if (outcome.kind === "refund_waiting") throw new OrgsError(409, "card_refund_waiting", CARD_REFUND_WORDS.waiting);
+  if (outcome.kind === "refund_waiting") throw new OrgsError(409, "card_refund_waiting", CARD_REFUND_WORDS.waiting_membership);
   throwOnFailure(outcome);
   return { kind: "ok", body: await readOr404(deps, gymId, entryId, today, true) };
 }

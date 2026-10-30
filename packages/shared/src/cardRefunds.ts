@@ -16,6 +16,7 @@ export const CARD_REFUND_WORDS = {
   /** "It might take 7–10 business days for refunds to appear, depending on the bank." */
   days: "It can take 7 to 10 business days to reach the card.",
   waiting: "A refund on this bill is waiting for Square's answer. Try again once it has finished.",
+  waiting_membership: "A refund on this membership is waiting for Square's answer. Try again once it has finished.",
   not_card: "This payment wasn't taken through Square. Use Note a refund instead.",
   other_account: "This payment was taken in a Square account you are no longer connected to. Refund it in that account, then note the refund here.",
   too_old: "Square refunds a payment for up to a year after it was taken. Give the money back another way, then note the refund here.",
