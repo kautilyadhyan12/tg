@@ -15,9 +15,11 @@ import {
   removedLine,
   squareOutcomeLine,
   squareRows,
+  RECONNECT_HINT,
+  RECONNECT_LINE,
+  RECONNECT_OTHERS,
 } from '../../pages/console/paymentsView';
 import PlaceLink from './PlaceLink';
-import SquareAppPayments from './SquareAppPayments';
 import SquareTerminals from './SquareTerminals';
 import { ConsoleFailed, ConsoleLoading, ConsoleSection } from './ConsoleStates';
 
@@ -26,8 +28,7 @@ import { ConsoleFailed, ConsoleLoading, ConsoleSection } from './ConsoleStates';
 // location and disconnects; everybody else who opens Settings reads it, with a line saying who
 // can. Connect Square opens Square's own page in this tab, and Square sends the person back to
 // `/connect/square`, which brings them here with what happened (`outcome`). Connected in the US,
-// Canada or Australia, the box lists the gym's Square Terminals (18d-ii-b-i); connected anywhere, it
-// says how to set up Square's own app for payments taken there (18d-iii-b-i).
+// Canada or Australia, the box lists the gym's Square Terminals (18d-ii-b-i).
 
 const labelStyle = { color: 'rgba(255,255,255,0.85)' };
 const hintStyle = { color: 'rgba(255,255,255,0.45)' };
@@ -292,15 +293,24 @@ export default function PaymentsPanel({ org, readOnly, startOpen = false, outcom
               connecting={busy === 'connect'}
             />
           ) : null}
-          {data.squareApp ? (
-            <SquareAppPayments
-              org={org}
-              squareApp={data.squareApp}
-              owner={owner}
-              readOnly={readOnly}
-              onConnectAgain={() => void connect()}
-              connecting={busy === 'connect'}
-            />
+          {data.needsAllow === true && data.terminals?.needsAllow !== true ? (
+            <section aria-label="Reconnect Square" className="flex flex-col gap-2" data-testid="square-reconnect">
+              {owner ? (
+                <>
+                  <p className="text-sm m-0" style={{ color: '#fff' }}>
+                    {RECONNECT_LINE}
+                  </p>
+                  <p className="text-sm m-0" style={hintStyle}>
+                    {RECONNECT_HINT}
+                  </p>
+                  {connectButton('Reconnect Square')}
+                </>
+              ) : (
+                <p className="text-sm m-0" style={hintStyle}>
+                  {RECONNECT_OTHERS}
+                </p>
+              )}
+            </section>
           ) : null}
           {disconnectArea(square)}
         </div>

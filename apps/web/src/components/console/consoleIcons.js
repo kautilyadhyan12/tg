@@ -1,4 +1,4 @@
-import { BarChart3, CalendarClock, CalendarHeart, ClipboardCheck, CreditCard, Dumbbell, LayoutDashboard, Medal, Megaphone, ReceiptText, Settings, ShoppingBag, Tags, TrendingDown, Trophy, UserSearch, Users } from 'lucide-react';
+import { BarChart3, CalendarClock, CalendarHeart, ClipboardCheck, CreditCard, Dumbbell, LayoutDashboard, Medal, Megaphone, Settings, ShoppingBag, Tags, TrendingDown, Trophy, UserSearch, Users } from 'lucide-react';
 
 /** Each console page's icon, the same in the menu, the phone's tabs and More. */
 export const PAGE_ICONS = {
@@ -7,7 +7,6 @@ export const PAGE_ICONS = {
   memberships: Tags,
   sell: ShoppingBag,
   'failed-payments': CreditCard,
-  'payments-to-match': ReceiptText,
   leads: UserSearch,
   attendance: ClipboardCheck,
   'at-risk': TrendingDown,

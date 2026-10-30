@@ -63,7 +63,31 @@ jest.mock("expo-file-system", () => {
       return Promise.resolve();
     }
   }
-  return { File, Paths: { document: { uri: "documents" } } };
+  // A download is a test's to answer (`File.downloadFileAsync.mockImplementation`); by default it lands.
+  // As on the phone: a folder that is gone refuses the file, and a download stopped before it lands writes nothing.
+  const folders = new Set();
+  File.downloadFileAsync = jest.fn((_url, to, options) => {
+    if (options?.signal?.aborted) return Promise.reject(new Error("The operation was aborted."));
+    if (!folders.has(to.uri.slice(0, to.uri.lastIndexOf("/")))) return Promise.reject(new Error("no such folder"));
+    files.set(to.uri, "photo");
+    return Promise.resolve(to);
+  });
+  class Directory {
+    constructor(dir, name) {
+      this.uri = `${dir.uri}/${name}`;
+    }
+    get exists() {
+      return folders.has(this.uri);
+    }
+    create() {
+      folders.add(this.uri);
+    }
+    delete() {
+      folders.delete(this.uri);
+      for (const uri of [...files.keys()]) if (uri.startsWith(`${this.uri}/`)) files.delete(uri);
+    }
+  }
+  return { File, Directory, Paths: { document: { uri: "documents" }, cache: { uri: "cache" } } };
 });
 // The camera, the gallery and the drawing of a photo are the phone's own (33b-i). A test says what
 // each gives back (`camera`, `picker.next`, `drawing.base64`) and reads what was asked of it.

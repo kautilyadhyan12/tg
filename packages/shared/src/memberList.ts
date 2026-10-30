@@ -2537,9 +2537,6 @@ export const memberListEntryDetailSchema = memberListEntrySchema.extend({
   waiverInUse: z.boolean().default(false),
   /** This record's signature of that waiver, made at the desk (3e-ii), or null. */
   waiverDesk: deskSignedSchema.nullable().default(null),
-  /** Their customer in the gym's Square would not take the change to their name, email or phone as it is now
-   *  (18d-iii-b-ii-b-ii-b-i): the page says so, as Members in Square does. */
-  squareCopyRefused: z.boolean().default(false),
   /** On a past member's page, what Delete permanently does about their place in the gym's Square customer list (18d-iii-b-ii-b-ii-b-ii):
    *  they are deleted from it too (`deletes`), stay in it because the app did not add them (`stays`), stay because another record also
    *  uses them (`shared`), cannot be reached because the gym is not connected (`not_reached`), or are not in it (`none`). */

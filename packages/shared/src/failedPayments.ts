@@ -37,9 +37,8 @@ export const failedPaymentRetrySchema = z.discriminatedUnion("kind", [
       /** `new_card`: the bank declined the card for good; `tried_out`: 3 tries; `no_card`: no card on
        *  file now; `square`: Square is not connected; `currency`: priced in another currency;
        *  `elsewhere`: an earlier payment of the membership is owed first, or it has changed, so it is
-       *  taken from the person's page; `square_app`: a payment of theirs from Square Point of Sale waits in
-       *  Payments to match (18d-iii-b-ii-a), and the card waits for it. */
-      why: z.enum(["new_card", "tried_out", "no_card", "square", "currency", "elsewhere", "square_app"]),
+       *  taken from the person's page. */
+      why: z.enum(["new_card", "tried_out", "no_card", "square", "currency", "elsewhere"]),
     })
     .strict(),
 ]);

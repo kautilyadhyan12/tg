@@ -23,11 +23,14 @@ interface FieldProps {
   onDone?: () => void;
   /** A person's name: each word starts with a capital. */
   name?: boolean;
+  /** Several lines of words: the box starts this many lines tall and grows with them. */
+  lines?: number;
 }
 
 /** One line to type in, as tall as a main button; its edge turns orange while it is typed in.
  *  The box is a View round the input: Android drops an input's own padding when its edge is restyled. */
-export function Field({ label, bare = false, value, onChange, placeholder, keyboard, fills, maxLength, spaced = false, ready = false, onDone, name = false }: FieldProps) {
+export function Field({ label, bare = false, value, onChange, placeholder, keyboard, fills, maxLength, spaced = false, ready = false, onDone, name = false, lines }: FieldProps) {
+  const many = lines !== undefined && lines > 1;
   const [on, setOn] = useState(false);
   return (
     <View style={styles.field}>
@@ -36,7 +39,7 @@ export function Field({ label, bare = false, value, onChange, placeholder, keybo
           {label}
         </Txt>
       )}
-      <View style={[styles.box, on ? styles.on : null]}>
+      <View style={[styles.box, many ? [styles.manyBox, { minHeight: LINE * lines + 24 }] : null, on ? styles.on : null]}>
         <TextInput
           accessibilityLabel={label}
           maxFontSizeMultiplier={MOST_TEXT_GROWTH}
@@ -46,8 +49,9 @@ export function Field({ label, bare = false, value, onChange, placeholder, keybo
           placeholderTextColor={colours.textFaint}
           keyboardType={keyboard}
           autoComplete={fills}
-          autoCapitalize={name ? "words" : "none"}
-          autoCorrect={false}
+          autoCapitalize={name ? "words" : many ? "sentences" : "none"}
+          autoCorrect={many}
+          multiline={many}
           maxLength={maxLength}
           autoFocus={ready}
           onSubmitEditing={onDone}
@@ -58,12 +62,15 @@ export function Field({ label, bare = false, value, onChange, placeholder, keybo
             setOn(false);
           }}
           selectionColor={colours.orange}
-          style={[styles.input, spaced && value !== "" ? styles.spaced : null]}
+          style={[styles.input, many ? styles.manyInput : null, spaced && value !== "" ? styles.spaced : null]}
         />
       </View>
     </View>
   );
 }
+
+/** One line of words in a box of several. */
+const LINE = 21;
 
 const styles = StyleSheet.create({
   field: { gap: 8 },
@@ -77,6 +84,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   input: { height: sizes.button - 2, padding: 0, color: colours.text, fontFamily: fonts.regular, fontSize: 15 },
+  // Several lines: the box grows with the words (minHeight, never height), the words start at its top.
+  manyBox: { height: undefined, paddingVertical: 12 },
+  manyInput: { height: undefined, lineHeight: LINE, textAlignVertical: "top" },
   on: { borderColor: colours.fieldOnLine, backgroundColor: colours.fieldOn, boxShadow: shadows.fieldOn },
   spaced: { fontSize: 18, letterSpacing: 7 },
 });

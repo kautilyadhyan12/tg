@@ -264,8 +264,6 @@ export const MEMBER_CARD_WORDS = {
   customer_gone: "Square no longer has this person in your customers. Type the card again to save it.",
   /** Square had merged the person into another customer (18d-iii-b-ii-b-ii-a, round one, High 2). */
   merged_away: "In Square, this person had been merged with another customer, so the card wasn't saved. Type the card again to save it.",
-  /** Their Square customer was unlinked from them while the card was being saved (18d-iii-b-ii-c-ii). */
-  unlinked: "Their Square customer was unlinked from them while the card was being saved, so the card wasn't saved. Type the card again to save it.",
   contact_refused: "Square didn't accept this person's email address or phone number. Check them with Edit, then try again.",
   expired: "This card has expired. Try another card.",
   not_supported: "This kind of card can't be saved here. Try another card.",

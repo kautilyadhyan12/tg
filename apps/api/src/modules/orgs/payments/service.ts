@@ -39,7 +39,6 @@ import {
   CARD_CHARGE_WORDS,
 } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
-import type { LiveNewsSender } from "../../live/news.js";
 import { insertAudit, lockOrgRow } from "../repo.js";
 import { OrgsError, requireStaff, requireWritableGym } from "../service.js";
 import * as repo from "./repo.js";
@@ -47,7 +46,6 @@ import type { SquareSettings } from "./settings.js";
 import { SQUARE_SCOPES } from "./square.js";
 import { anyWaitingIn } from "./terminalPaymentsRepo.js";
 import { anyChargingIn } from "./cardChargesRepo.js";
-import { forgetListing } from "./squareMembersRepo.js";
 import * as terminalsRepo from "./terminalsRepo.js";
 import type { TokenContext } from "./tokenBox.js";
 
@@ -63,9 +61,6 @@ export interface PaymentsDeps {
   square: SquareSettings | null;
   log: PaymentsLog;
   now: () => Date;
-  /** The worker's: tells pages open on a gym that a payment from Square Point of Sale now waits. A route
-   *  tells after its own change instead. */
-  news?: LiveNewsSender;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -96,24 +91,16 @@ export async function requireGymOwner(deps: PaymentsDeps, gymId: string, userId:
   return { org, gym };
 }
 
-/** What Square Terminals and the card on file need: every permission asked for before 18d-iii-b-i, whose
- *  Square Point of Sale asks for two of its own (what was sold, ORDERS_READ; the business's taxes,
- *  ITEMS_READ), and Members in Square one (Square's own subscriptions, SUBSCRIPTIONS_READ, 18d-iii-b-ii-b-i).
- *  A gym connected before then reconnects for Square Point of Sale alone. */
-const POINT_OF_SALE_SCOPES: readonly string[] = ["ORDERS_READ", "ITEMS_READ", "SUBSCRIPTIONS_READ"];
-const TERMINAL_SCOPES: readonly string[] = SQUARE_SCOPES.filter((scope) => !POINT_OF_SALE_SCOPES.includes(scope));
+/** What Square Terminals and the card on file need: every permission but Square's own subscriptions read
+ *  (SUBSCRIPTIONS_READ, 18d-iii-b-ii-b-i), which Delete permanently checks before it takes a customer out of Square;
+ *  a gym connected before it asked for that one is never made to reconnect for the Terminal. */
+const TERMINAL_SCOPES: readonly string[] = SQUARE_SCOPES.filter((scope) => scope !== "SUBSCRIPTIONS_READ");
 
 /** The connection allows less than Square Terminals need: the owner connects Square again. */
 export const missingScopes = (row: repo.ConnectionRow): boolean => TERMINAL_SCOPES.some((scope) => !row.scopes.includes(scope));
 
 /** The connection allows less than anything we now ask Square for: Connect Square is offered again. */
 export const allowsLess = (row: repo.ConnectionRow): boolean => SQUARE_SCOPES.some((scope) => !row.scopes.includes(scope));
-
-/** What was sold with a payment taken in Square's own app can be read (18d-iii-b-i). */
-export const readsOrders = (row: repo.ConnectionRow): boolean => row.scopes.includes("ORDERS_READ");
-
-/** The business's own taxes can be read from its item library (18d-iii-b-i). */
-export const readsItems = (row: repo.ConnectionRow): boolean => row.scopes.includes("ITEMS_READ");
 
 /** Connected, with its location, where Square saves cards on a Terminal. */
 export const terminalsOffered = (row: repo.ConnectionRow | null): row is repo.ConnectionRow & { locationId: string } =>
@@ -164,7 +151,7 @@ export async function readPayments(deps: PaymentsDeps, userId: string, gymId: st
       squareReady: deps.square !== null,
       square: connectionView(row, isOwner),
       terminals: deps.square === null ? null : await terminalsView(deps, deps.square, row, isOwner),
-      squareApp: row?.state === "connected" && row.locationId !== null ? { needsAllow: POINT_OF_SALE_SCOPES.some((scope) => !row.scopes.includes(scope)) } : null,
+      needsAllow: row?.state === "connected" && allowsLess(row),
     },
   });
 }
@@ -446,7 +433,6 @@ export async function disconnectSquare(deps: PaymentsDeps, userId: string, gymId
     if (await anyWaitingIn(tx, gymId, square.environment)) throw new OrgsError(409, "terminal_payment_waiting", TERMINAL_PAYMENT_WORDS.disconnect_waiting);
     if (await anyChargingIn(tx, gymId, square.environment)) throw new OrgsError(409, "card_charge_waiting", CARD_CHARGE_WORDS.disconnect_charging);
     await repo.deleteConnection(tx, gymId, square.environment);
-    await forgetListing(tx, gymId, square.environment);
     if (row.state !== "connected" || row.accessToken === null) return null;
     await insertAudit(tx, {
       actorUserId: userId,

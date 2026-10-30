@@ -7,9 +7,9 @@ const keys = (list) => list.map((p) => p.key);
 describe('where each page sits on a phone', () => {
   it('an owner: four tabs; Memberships, Leads, Personal training, Updates, Leaderboard and Settings under More', () => {
     const menu = consoleMenu('iron-house', ROLE_PRIVILEGES.owner, 'gym');
-    expect(keys(menu.pages)).toEqual(['overview', 'members', 'memberships', 'sell', 'failed-payments', 'payments-to-match', 'leads', 'attendance', 'at-risk', 'classes', 'training', 'updates', 'events', 'leaderboard', 'challenges', 'reports', 'settings']);
+    expect(keys(menu.pages)).toEqual(['overview', 'members', 'memberships', 'sell', 'failed-payments', 'leads', 'attendance', 'at-risk', 'classes', 'training', 'updates', 'events', 'leaderboard', 'challenges', 'reports', 'settings']);
     expect(keys(menu.tabs)).toEqual(['overview', 'members', 'attendance', 'classes']);
-    expect(keys(menu.more)).toEqual(['memberships', 'sell', 'failed-payments', 'payments-to-match', 'leads', 'at-risk', 'training', 'updates', 'events', 'leaderboard', 'challenges', 'reports', 'settings']);
+    expect(keys(menu.more)).toEqual(['memberships', 'sell', 'failed-payments', 'leads', 'at-risk', 'training', 'updates', 'events', 'leaderboard', 'challenges', 'reports', 'settings']);
   });
 
   // A manager's usual permissions hold the price list (17a-i): Memberships, a page of its
@@ -17,7 +17,7 @@ describe('where each page sits on a phone', () => {
   it('a manager: Memberships, Leads, Updates, Leaderboard and Settings under More', () => {
     const menu = consoleMenu('iron-house', ROLE_PRIVILEGES.manager, 'gym');
     expect(keys(menu.tabs)).toEqual(['overview', 'members', 'attendance', 'classes']);
-    expect(keys(menu.more)).toEqual(['memberships', 'sell', 'failed-payments', 'payments-to-match', 'leads', 'at-risk', 'training', 'updates', 'events', 'leaderboard', 'challenges', 'reports', 'settings']);
+    expect(keys(menu.more)).toEqual(['memberships', 'sell', 'failed-payments', 'leads', 'at-risk', 'training', 'updates', 'events', 'leaderboard', 'challenges', 'reports', 'settings']);
     expect(menu.more[0]).toMatchObject({ to: '/console/iron-house/memberships', label: 'Memberships' });
   });
 
@@ -32,7 +32,7 @@ describe('where each page sits on a phone', () => {
   it('the price list alone does not bring Settings: Memberships is where it is', () => {
     const menu = consoleMenu('iron-house', ROLE_PRIVILEGES.manager.filter((p) => p !== 'schedule.manage'), 'gym');
     expect(keys(menu.tabs)).toEqual(['overview', 'members', 'attendance']);
-    expect(keys(menu.more)).toEqual(['memberships', 'sell', 'failed-payments', 'payments-to-match', 'leads', 'at-risk', 'training', 'updates', 'events', 'leaderboard', 'challenges', 'reports']);
+    expect(keys(menu.more)).toEqual(['memberships', 'sell', 'failed-payments', 'leads', 'at-risk', 'training', 'updates', 'events', 'leaderboard', 'challenges', 'reports']);
   });
 
   // That Members itself is not lit there is checked on the drawn menu (memberships.render.test.jsx).
@@ -46,7 +46,7 @@ describe('where each page sits on a phone', () => {
     const none = ROLE_PRIVILEGES.manager.filter((p) => p !== 'memberships.manage' && p !== 'schedule.manage');
     const menu = consoleMenu('iron-house', none, 'gym');
     expect(keys(menu.tabs)).toEqual(['overview', 'members', 'attendance']);
-    expect(keys(menu.more)).toEqual(['sell', 'failed-payments', 'payments-to-match', 'leads', 'at-risk', 'training', 'updates', 'events', 'leaderboard', 'challenges', 'reports']);
+    expect(keys(menu.more)).toEqual(['sell', 'failed-payments', 'leads', 'at-risk', 'training', 'updates', 'events', 'leaderboard', 'challenges', 'reports']);
   });
 
   // Staff are on Members → Staff since 23c-ii: that tick alone opens nothing in Settings.
@@ -61,7 +61,7 @@ describe('where each page sits on a phone', () => {
     const timetable = ROLE_PRIVILEGES.manager.filter((p) => p !== 'memberships.manage');
     const menu = consoleMenu('iron-house', timetable, 'gym');
     expect(keys(menu.tabs)).toEqual(['overview', 'members', 'attendance', 'classes']);
-    expect(keys(menu.more)).toEqual(['sell', 'failed-payments', 'payments-to-match', 'leads', 'at-risk', 'training', 'updates', 'events', 'leaderboard', 'challenges', 'reports', 'settings']);
+    expect(keys(menu.more)).toEqual(['sell', 'failed-payments', 'leads', 'at-risk', 'training', 'updates', 'events', 'leaderboard', 'challenges', 'reports', 'settings']);
     expect(keys(menu.pages)).not.toContain('memberships');
   });
 
@@ -100,15 +100,6 @@ describe('where each page sits on a phone', () => {
     expect(keys(consoleMenu('iron-house', ['billing.members'], 'gym').pages)).not.toContain('failed-payments');
   });
 
-  it('Payments to match is under More, straight after Failed payments, for the same people', () => {
-    // Match is Record payment's own step, and their page needs keeping the list too.
-    expect(keys(consoleMenu('iron-house', [...ROLE_PRIVILEGES.trainer, 'billing.members'], 'gym').more)).not.toContain('payments-to-match');
-    const menu = consoleMenu('iron-house', [...ROLE_PRIVILEGES.trainer, 'members.confirm', 'billing.members'], 'gym');
-    expect(keys(menu.more).slice(0, 3)).toEqual(['sell', 'failed-payments', 'payments-to-match']);
-    expect(menu.more[2]).toMatchObject({ to: '/console/iron-house/payments-to-match', label: 'Payments to match' });
-    expect(keys(consoleMenu('iron-house', ['members.read'], 'gym').pages)).not.toContain('payments-to-match');
-  });
-
   it('a trainer: three tabs, and their own Personal training under More', () => {
     const menu = consoleMenu('iron-house', ROLE_PRIVILEGES.trainer, 'gym');
     expect(keys(menu.tabs)).toEqual(['overview', 'members', 'attendance']);
@@ -118,7 +109,7 @@ describe('where each page sits on a phone', () => {
 
   it('Settings for a manager given the gym details only', () => {
     const menu = consoleMenu('iron-house', [...ROLE_PRIVILEGES.manager, 'org.manage'], 'gym');
-    expect(keys(menu.more)).toEqual(['memberships', 'sell', 'failed-payments', 'payments-to-match', 'leads', 'at-risk', 'training', 'updates', 'events', 'leaderboard', 'challenges', 'reports', 'settings']);
+    expect(keys(menu.more)).toEqual(['memberships', 'sell', 'failed-payments', 'leads', 'at-risk', 'training', 'updates', 'events', 'leaderboard', 'challenges', 'reports', 'settings']);
   });
 
   it('draws only Overview and Members before the permissions arrive', () => {

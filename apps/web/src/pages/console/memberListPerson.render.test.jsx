@@ -8,7 +8,7 @@
 // save goes to the person on screen; the server answering for a different record is
 // refused; and Join removes exactly the record shown under "Remove".
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { act, render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { MEMBER_INVITE_EMAIL_REASON_WORDS, MEMBER_LIST_BY_HAND_WORDS } from '@app/shared';
 import {
@@ -20,12 +20,6 @@ import {
 } from '@app/shared';
 
 // The person's Memberships box (17a-ii) has its own tests in `memberMemberships.render.test.jsx`.
-// What the live line tells this page: the callbacks it was given, so a test can say the worker found something out.
-const liveListeners = [];
-vi.mock('./liveNews', async (importOriginal) => {
-  const actual = await importOriginal();
-  return { ...actual, useLiveNews: (_gymId, onMessage) => void (liveListeners[0] = onMessage) };
-});
 vi.mock('./MemberMemberships', () => ({ default: () => null }));
 // Their tags and staff notes (5d) have their own tests in `memberNotes.render.test.jsx`.
 const notesDrawn = vi.fn();
@@ -37,8 +31,6 @@ vi.mock('./MemberNotes', () => ({
 }));
 // Who pays (18i) has its own tests in `memberPayer.render.test.jsx`.
 vi.mock('./MemberPayer', () => ({ default: () => null }));
-// The Square customer list with Unlink (18d-iii-b-ii-c-ii) reads its own route; its own tests are memberSquareLinks.render.
-vi.mock('./MemberSquareLinks', () => ({ default: () => null }));
 vi.mock('./MemberCard', () => ({ default: () => null }));
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {
@@ -710,36 +702,6 @@ describe('a person on the list', () => {
     });
   });
 
-  it("Square would not take the change to their details: the page says so beside their contact, and says nothing when it did", async () => {
-    orgService.getMemberListEntry.mockResolvedValue(entryAnswer({ ...person(ADA, 'Eli Nunez'), squareCopyRefused: true }));
-    openBox(ADA);
-    const line = within(await dialog().findByTestId('square-copy-refused'));
-    expect(line.getByText("Square didn't accept the change to their details, so they still have their old details in Square. Check their email address and phone number.")).toBeTruthy();
-    cleanup();
-    orgService.getMemberListEntry.mockResolvedValue(entryAnswer({ ...person(ADA, 'Eli Nunez'), squareCopyRefused: false }));
-    openBox(ADA);
-    expect(await dialog().findByText('Eli Nunez')).toBeTruthy();
-    expect(dialog().queryByTestId('square-copy-refused')).toBeNull();
-  });
-
-  it("Square's refusal that comes a minute after Save appears on the open page by itself, and goes by itself", async () => {
-    orgService.getMemberListEntry.mockResolvedValue(entryAnswer({ ...person(ADA, 'Eli Nunez'), squareCopyRefused: false }));
-    openBox(ADA);
-    expect(await dialog().findByText('Eli Nunez')).toBeTruthy();
-    expect(dialog().queryByTestId('square-copy-refused')).toBeNull();
-    // The worker asked Square, which would not take the number: the line on the live line says Members in Square moved on.
-    orgService.getMemberListEntry.mockResolvedValue(entryAnswer({ ...person(ADA, 'Eli Nunez'), squareCopyRefused: true }));
-    await act(async () => liveListeners[0]?.({ what: 'squareMembers' }));
-    expect(await dialog().findByTestId('square-copy-refused')).toBeTruthy();
-    // Something else said on the line changes nothing.
-    orgService.getMemberListEntry.mockResolvedValue(entryAnswer({ ...person(ADA, 'Eli Nunez'), squareCopyRefused: false }));
-    await act(async () => liveListeners[0]?.({ what: 'people' }));
-    expect(dialog().queryByTestId('square-copy-refused')).not.toBeNull();
-    // Square took it after all: the line goes.
-    await act(async () => liveListeners[0]?.({ what: 'squareMembers' }));
-    await waitFor(() => expect(dialog().queryByTestId('square-copy-refused')).toBeNull());
-  });
-
   it("a past member still in the app is removed from it here, as from 'Using the app' (Kd, 2026-09-27: one card in both places)", async () => {
     const grace = {
       ...person(ADA, 'Grace Hall'),
@@ -852,10 +814,10 @@ describe('a person on the list', () => {
     it('a customer the app cannot reach: the owner gets the button to Connect Square, anybody else reads who can', async () => {
       const owner = await ask('not_reached', { gym: { slug: 'iron-house', orgType: 'gym', staffRole: 'owner' } });
       expect(owner.getByTestId('delete-square').textContent).toBe('The app can’t reach your Square, or needs another permission from it, so Ada Lovelace stays in your Square customer list.');
-      expect(owner.getByRole('link', { name: 'Connect Square' }).getAttribute('href')).toBe('/console/iron-house/settings#payments');
+      expect(owner.getByRole('link', { name: 'Open Square settings' }).getAttribute('href')).toBe('/console/iron-house/settings#payments');
       cleanup();
       const manager = await ask('not_reached', { gym: { slug: 'iron-house', orgType: 'gym', staffRole: 'manager', privileges: ['members.read', 'members.confirm', 'members.remove'] } });
-      expect(manager.queryByRole('link', { name: 'Connect Square' })).toBeNull();
+      expect(manager.queryByRole('link', { name: 'Open Square settings' })).toBeNull();
       expect(manager.getByTestId('delete-square-owner').textContent).toBe('Only the owner can connect Square.');
     });
   });

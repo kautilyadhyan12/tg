@@ -881,60 +881,65 @@ d("0001_init on a real database", () => {
       });
   });
 
-  /** MIGRATION `0170`'s data statement, read out of the shipped file and run on TEMPORARY copies of the two tables (never the live
-   *  ones other suites write to): a customer made or linked before copying existed is marked as agreeing with its record as the
-   *  record is now (each part as the md5 of its folded value, none for a part the record lacks); a customer being made is left
-   *  alone, and so is one already marked; a second run finds nothing to do. All of it is rolled back. */
-  it("0170 marks every customer made before copying existed as agreeing with its record as it is now", async () => {
-    const migration = await readFile(new URL("../drizzle/0170_square_copied_changes.sql", import.meta.url), "utf8");
-    const chunks = migration.split("--> statement-breakpoint").map((c) => c.trim());
-    const fills = chunks.filter((c) => c.includes('UPDATE "gym_square_customers"'));
-    const [fill] = fills;
-    if (fill === undefined || fills.length !== 1) throw new Error("0170 no longer holds exactly one data statement");
-    const onCopy = fill.replaceAll('"gym_square_customers"', '"gsc_0170"').replaceAll('"gym_member_list_entries"', '"gmle_0170"');
+  /** MIGRATION `0175`'s data statements, read out of the shipped file and run on TEMPORARY copies (never the live tables): a payment
+   *  recorded from Square Point of Sale stays, as Card at the desk, without Square's id, and passes the new checks, one voided as
+   *  Not this bill too, with its reason; a Terminal payment and a cash one are left alone; a customer Match linked goes and every
+   *  other stays. All rolled back. */
+  it("0175 turns Square Point of Sale payments into Card at the desk, and lets go of the customers Match linked", async () => {
+    const migration = await readFile(new URL("../drizzle/0175_square_point_of_sale_out.sql", import.meta.url), "utf8");
+    const chunks = migration.split("--> statement-breakpoint").map((c) => c.trim().replace(/^(?:--.*\r?\n)+/, "").trim());
+    const one = (text: string): string => {
+      const found = chunks.filter((c) => c.startsWith(text));
+      if (found.length !== 1 || found[0] === undefined) throw new Error(`0175 no longer holds exactly one: ${text}`);
+      return found[0];
+    };
+    const fill = one('UPDATE "gym_member_payments"').replaceAll('"gym_member_payments"', '"gmp_0175"');
+    const checks = chunks.filter((c) => c.startsWith('ALTER TABLE "gym_member_payments" ADD CONSTRAINT')).map((c) => c.replaceAll('"gym_member_payments"', '"gmp_0175"'));
+    const letGo = one('DELETE FROM "gym_square_customers"').replaceAll('"gym_square_customers"', '"gsc_0175"');
+    expect(checks).toHaveLength(2);
     await sql
       .begin(async (tx) => {
-        await tx`CREATE TEMP TABLE gmle_0170 (LIKE gym_member_list_entries INCLUDING DEFAULTS) ON COMMIT DROP`;
-        await tx`CREATE TEMP TABLE gsc_0170 (LIKE gym_square_customers INCLUDING DEFAULTS) ON COMMIT DROP`;
-        const gym = "00000000-0000-4000-8000-000000000170";
-        const entry = async (fullName: string, email: string | null, phone: string | null): Promise<string> => {
-          const [r] = await tx<{ id: string }[]>`
-            INSERT INTO gmle_0170 (gym_id, full_name, email, phone_e164, identity_key, source)
-            VALUES (${gym}, ${fullName}, ${email}, ${phone}, ${fullName}, 'typed') RETURNING id`;
-          if (r === undefined) throw new Error("fixture insert failed");
-          return r.id;
+        await tx`CREATE TEMP TABLE gmp_0175 (LIKE gym_member_payments INCLUDING DEFAULTS) ON COMMIT DROP`;
+        const gym = "00000000-0000-4000-8000-000000000175";
+        const bill = randomUUID();
+        let seq = 0;
+        const pay = async (method: string, provider: string | null, id: string | null, voided: string | null): Promise<string> => {
+          seq += 1;
+          const [row] = await tx<{ id: string }[]>`
+            INSERT INTO gmp_0175 (id, gym_id, bill_id, seq, amount_minor, currency, method, request_key, paid_on, receipt_number, provider, provider_payment_id, undone_at, void_reason)
+            VALUES (gen_random_uuid(), ${gym}, ${bill}, ${seq}, 4999, 'USD', ${method}, gen_random_uuid(), '2026-10-30', ${seq}, ${provider}, ${id}, ${voided === null ? null : new Date()}, ${voided})
+            RETURNING id`;
+          return row?.id ?? "";
         };
-        const customer = async (entryId: string, customerId: string | null) => {
+        const standing = await pay("square_app", "square", "SQPAY1", null);
+        const taken = await pay("square_app", "square", "SQPAY2", "not_this_bill");
+        const terminal = await pay("terminal", "square", "SQPAY3", null);
+        const cash = await pay("cash", null, null, null);
+        await tx.unsafe(fill);
+        for (const add of checks) await tx.unsafe(add);
+        const rows = await tx<{ id: string; method: string; provider: string | null; provider_payment_id: string | null; void_reason: string | null }[]>`
+          SELECT id, method, provider, provider_payment_id, void_reason FROM gmp_0175`;
+        const of = (id: string) => rows.find((r) => r.id === id);
+        expect(of(standing)).toMatchObject({ method: "card_at_desk", provider: null, provider_payment_id: null, void_reason: null });
+        expect(of(taken)).toMatchObject({ method: "card_at_desk", provider: null, void_reason: "not_this_bill" });
+        expect(of(terminal)).toMatchObject({ method: "terminal", provider: "square", provider_payment_id: "SQPAY3" });
+        expect(of(cash)).toMatchObject({ method: "cash", provider: null });
+
+        await tx`CREATE TEMP TABLE gsc_0175 (LIKE gym_square_customers INCLUDING DEFAULTS) ON COMMIT DROP`;
+        await tx`ALTER TABLE gsc_0175 ADD COLUMN matched_at timestamptz`;
+        const customer = async (customerId: string, matched: boolean) => {
           await tx`
-            INSERT INTO gsc_0170 (gym_id, entry_id, environment, account_id, customer_id, making_key)
-            VALUES (${gym}, ${entryId}, 'production', 'ACCT170', ${customerId}, ${customerId === null ? randomUUID() : null})`;
+            INSERT INTO gsc_0175 (gym_id, entry_id, environment, account_id, customer_id, matched_at)
+            VALUES (${gym}, gen_random_uuid(), 'production', 'ACCT175', ${customerId}, ${matched ? new Date() : null})`;
         };
-        const amy = await entry("Amy Lee", "Amy.Lee@Gmail.com", "+13125550142");
-        const bo = await entry("Bo", null, null);
-        const cy = await entry("Cy Young", "cy@gmail.com", null);
-        const dee = await entry("Dee Park", "dee@gmail.com", "+13125550199");
-        await customer(amy, "CAMY");
-        await customer(bo, "CBO");
-        await customer(cy, null);
-        await customer(dee, "CDEE");
-        const marked = "0123456789abcdef0123456789abcdef";
-        await tx`UPDATE gsc_0170 SET copied_name = ${marked}, copied_at = now() WHERE entry_id = ${dee}`;
-        await tx.unsafe(onCopy);
-        await tx.unsafe(onCopy);
-        const rows = await tx<{ entry_id: string; copied_name: string | null; copied_email: string | null; copied_phone: string | null; known: boolean }[]>`
-          SELECT entry_id, copied_name, copied_email, copied_phone, copied_at IS NOT NULL AS known FROM gsc_0170`;
-        const of = (id: string) => rows.find((r) => r.entry_id === id);
-        const [h] = await tx<{ name: string; email: string; phone: string; bo: string }[]>`
-          SELECT md5('Amy Lee') AS name, md5('amy.lee@gmail.com') AS email, md5('+13125550142') AS phone, md5('Bo') AS bo`;
-        expect(of(amy)).toMatchObject({ copied_name: h?.name, copied_email: h?.email, copied_phone: h?.phone, known: true });
-        expect(of(bo)).toMatchObject({ copied_name: h?.bo, copied_email: null, copied_phone: null, known: true });
-        expect(of(cy), "a customer being made is left alone").toMatchObject({ copied_name: null, known: false });
-        expect(of(dee), "a customer already marked keeps its mark").toMatchObject({ copied_name: marked, copied_email: null, known: true });
-        throw new Error("ROLLBACK-0170-FIXTURE");
+        await customer("CMATCHED", true);
+        await customer("CMADE", false);
+        await tx.unsafe(letGo);
+        expect((await tx<{ customer_id: string }[]>`SELECT customer_id FROM gsc_0175`).map((r) => r.customer_id)).toEqual(["CMADE"]);
+        throw new Error("rollback");
       })
       .catch((err: unknown) => {
-        if (err instanceof Error && err.message === "ROLLBACK-0170-FIXTURE") return;
-        throw err;
+        if (!(err instanceof Error) || err.message !== "rollback") throw err;
       });
   });
 
@@ -999,67 +1004,6 @@ d("0001_init on a real database", () => {
       })
       .catch((err: unknown) => {
         if (err instanceof Error && err.message === "ROLLBACK-0171-CHECKS") return;
-        throw err;
-      });
-  });
-
-  /** MIGRATION `0173`'s data statement, read out of the shipped file and run on a TEMPORARY copy of the table (never the live one other
-   *  suites write to): a payment that waits for want of its customer being known, whose sale was not kept and whose entered part is not
-   *  known, waits as an unread sale (staff choose the bill); one whose entered part is known, one that waits for another reason, and one
-   *  marked not for a bill are left alone; a second run finds nothing to do. Then the old customers' own check on a copy that carries
-   *  the table's checks: a customer is a merged one or a matched one, never both and never neither. All rolled back. */
-  it("0173 keeps a payment waiting for want of its customer as an unread sale, and a record's other customer as merged or matched, never both", async () => {
-    const migration = await readFile(new URL("../drizzle/0173_square_matched_customers.sql", import.meta.url), "utf8");
-    const chunks = migration.split("--> statement-breakpoint").map((c) => c.trim());
-    const fills = chunks.filter((c) => c.includes('UPDATE "gym_square_app_payments"'));
-    const [fill] = fills;
-    if (fill === undefined || fills.length !== 1) throw new Error("0173 no longer holds exactly one data statement");
-    const onCopy = fill.replaceAll('"gym_square_app_payments"', '"gsap_0173"');
-    await sql
-      .begin(async (tx) => {
-        await tx`CREATE TEMP TABLE gsap_0173 (LIKE gym_square_app_payments INCLUDING DEFAULTS) ON COMMIT DROP`;
-        const row = async (state: string, reason: string, entryId: string | null, entered: number | null, notBill: string | null = null): Promise<string> => {
-          const [r] = await tx<{ id: string }[]>`
-            INSERT INTO gsap_0173 (environment, account_id, square_payment_id, location_id, amount_minor, currency, taken_at, state, reason, entry_id, entered_minor, not_bill, created_at, updated_at)
-            VALUES ('production', 'ACCT172', ${`P${randomUUID()}`.slice(0, 40)}, 'L172', 2500, 'USD', now(), ${state}, ${reason}, ${entryId}, ${entered}, ${notBill}, now(), now())
-            RETURNING id`;
-          if (r === undefined) throw new Error("fixture insert failed");
-          return r.id;
-        };
-        const unknownUnread = await row("waiting", "not_linked", null, null);
-        const unknownTyped = await row("waiting", "not_linked", null, 2500);
-        const someonesBill = await row("waiting", "ready", randomUUID(), null);
-        const noCustomer = await row("waiting", "no_customer", null, null);
-        const marked = await row("not_bill", "not_linked", null, null, "other");
-        await tx.unsafe(onCopy);
-        await tx.unsafe(onCopy);
-        const rows = await tx<{ id: string; sale_reason: string | null }[]>`SELECT id, sale_reason FROM gsap_0173`;
-        const of = (id: string) => rows.find((r) => r.id === id)?.sale_reason;
-        expect(of(unknownUnread), "waits as an unread sale: staff choose the bill").toBe("sale_unread");
-        expect(of(unknownTyped), "its entered part is known, so it was a typed sale").toBeNull();
-        expect(of(someonesBill)).toBeNull();
-        expect(of(noCustomer)).toBeNull();
-        expect(of(marked), "marked not for a bill is left alone").toBeNull();
-        throw new Error("ROLLBACK-0173-FIXTURE");
-      })
-      .catch((err: unknown) => {
-        if (err instanceof Error && err.message === "ROLLBACK-0173-FIXTURE") return;
-        throw err;
-      });
-    await sql
-      .begin(async (tx) => {
-        await tx`CREATE TEMP TABLE gsoc_0173 (LIKE gym_square_old_customers INCLUDING CONSTRAINTS) ON COMMIT DROP`;
-        const insert = (q: typeof tx, merged: boolean, matched: boolean, customerId: string) =>
-          q`INSERT INTO gsoc_0173 (gym_id, entry_id, environment, account_id, customer_id, merged_at, matched_at)
-             VALUES (${randomUUID()}, ${randomUUID()}, 'production', 'ACCT172', ${customerId}, ${merged ? new Date() : null}, ${matched ? new Date() : null})`;
-        await insert(tx, true, false, "CMERGED");
-        await insert(tx, false, true, "CMATCHED");
-        await expect(tx.savepoint((sp) => insert(sp, true, true, "CBOTH")), "not both").rejects.toThrow(/gym_square_old_customers_how_check/);
-        await expect(tx.savepoint((sp) => insert(sp, false, false, "CNEITHER")), "not neither").rejects.toThrow(/gym_square_old_customers_how_check/);
-        throw new Error("ROLLBACK-0173-CHECKS");
-      })
-      .catch((err: unknown) => {
-        if (err instanceof Error && err.message === "ROLLBACK-0173-CHECKS") return;
         throw err;
       });
   });

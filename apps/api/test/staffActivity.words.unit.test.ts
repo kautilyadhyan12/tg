@@ -95,13 +95,6 @@ describe("Staff activity's sentences", () => {
 
   it("says money, roles, dates and statuses in the gym's words", () => {
     const cases: [string, Partial<Said>, string][] = [
-      // Match linking Square's customer to the person who paid (18d-iii-b-ii-c): no name or contact of Square's customer in the note.
-      ["org.square_customer_matched", { about: "Amy Lee", meta: { also: "no" } }, "Linked a customer in your Square customer list to Amy Lee"],
-      ["org.square_customer_matched", { about: "Amy Lee", meta: { also: "yes" } }, "Linked another customer in your Square customer list to Amy Lee"],
-      ["org.square_customer_matched", { about: null, meta: { also: "no" } }, "Linked a customer in your Square customer list to a member no longer on your list"],
-      // Unlink on their page (18d-iii-b-ii-c-ii): the same words turned round, nothing of the customer's own details.
-      ["org.square_customer_unlinked", { about: "Sam Smith", meta: { also: "no", card: "yes", moved: "1" } }, "Unlinked a customer in your Square customer list from Sam Smith"],
-      ["org.square_customer_unlinked", { about: null, meta: { also: "yes", card: "no", moved: "0" } }, "Unlinked a customer in your Square customer list from a member no longer on your list"],
       // A freeze with no fee where the gym charges one is a waiver (18z, round one Low-1); one the fee never applied to is not.
       ["org.held_membership_frozen", { about: "Amit Rao", meta: { type: "Gold", freezeFeeMinor: "0", freezeFeeOffered: "1000" } }, "Froze Amit Rao's Gold membership with no freeze fee"],
       ["org.held_membership_frozen", { about: "Amit Rao", meta: { type: "Gold", freezeFeeMinor: "1000", freezeFeeOffered: "1000" } }, "Froze Amit Rao's Gold membership"],

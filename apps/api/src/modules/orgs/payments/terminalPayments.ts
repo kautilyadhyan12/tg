@@ -48,12 +48,11 @@ import { saleRefused } from "../register/service.js";
 import { BILLING, connectionRefused, entryNotFound, notReady, orgNotFound, readyOrThrow, stateOf, type Ready } from "./cards.js";
 import * as cards from "./cardsRepo.js";
 import * as repo from "./repo.js";
-import { accessContext, missingScopes, readsOrders, terminalsOffered, type PaymentsDeps } from "./service.js";
+import { accessContext, missingScopes, terminalsOffered, type PaymentsDeps } from "./service.js";
 import type { SquareSettings } from "./settings.js";
 import type { SquareResult } from "./square.js";
 import { SQUARE_PRACTICE_DEVICES } from "./terminals.js";
 import { cardOnFileFor } from "./cardCharges.js";
-import { squareAppPick } from "./paymentsToMatchRepo.js";
 import * as pays from "./terminalPaymentsRepo.js";
 import * as terminalsRepo from "./terminalsRepo.js";
 
@@ -399,11 +398,6 @@ export async function readTerminalPayments(deps: PaymentsDeps, userId: string, g
     isOwner,
     // Record payment's Card on file (18d-iii-i): the card it would charge, while Square is ready.
     cardOnFile: stateOf(square, gym, row) === "ready" ? await cardOnFileFor(deps, gymId, entryId, row, gym.timezone) : null,
-    // Square Point of Sale as a way of paying (18d-iii-b-ii-a): whom to pick there, where that is known.
-    squareApp:
-      row !== null && accountId !== null && row.locationId !== null && readsOrders(row)
-        ? { pick: await squareAppPick(deps.sql, { gymId, entryId, environment: square.environment, accountId }) }
-        : null,
   });
 }
 

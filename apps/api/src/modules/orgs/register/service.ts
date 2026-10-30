@@ -67,7 +67,6 @@ import { refuseMethodElsewhere } from "../paymentMethods.js";
 import * as discounts from "./discountsRepo.js";
 import { friendGiftOffer } from "../referrals/friendGift.js";
 import { waitingGiftFor } from "../referrals/memberGiftRepo.js";
-import { usesSquareApp } from "../payments/paymentsToMatchRepo.js";
 import * as repo from "./repo.js";
 import * as tax from "./taxRepo.js";
 
@@ -140,13 +139,12 @@ async function read(deps: RegisterDeps, gymId: string, viewer: Viewer, asked: st
   // may record one. Staff who only change prices are sent the products and the tax.
   // One connection and one moment: a sale or payment another desk records meanwhile is in
   // every list and count here, or in none, so the rows never outnumber their count.
-  const [row, paid, offered, types, squareApp] = await deps.sql.begin("isolation level repeatable read read only", async (tx) =>
+  const [row, paid, offered, types] = await deps.sql.begin("isolation level repeatable read read only", async (tx) =>
     Promise.all([
       repo.readRegister(tx, gymId, today, day, SALES_SHOWN, viewer.canSell),
       viewer.canSell ? paymentsOn(tx, gymId, day, SALES_SHOWN) : null,
       discounts.readDiscounts(tx, gymId),
       discounts.membershipTypeNames(tx, gymId),
-      usesSquareApp(tx, gymId),
     ]),
   );
   if (row === null) throw new OrgsError(404, "org_not_found", "Organisation not found.");
@@ -177,7 +175,6 @@ async function read(deps: RegisterDeps, gymId: string, viewer: Viewer, asked: st
       link: by("link"),
       company: by("company"),
       terminal: by("terminal"),
-      square_app: by("square_app"),
       refundedMinor: (paid?.refunds ?? []).filter((r) => r.fee === fee && r.currency === currency).reduce((n, r) => n + r.totalMinor, 0),
       otherCurrency: sums.filter((s) => s.currency !== currency).reduce((n, s) => n + s.count, 0),
       notShown: sums.reduce((n, s) => n + s.count, 0) - listed,
@@ -198,7 +195,6 @@ async function read(deps: RegisterDeps, gymId: string, viewer: Viewer, asked: st
     membershipTypes: types.map((t) => ({ id: t.id, name: t.name, taxRateId: t.taxRateId, free: t.free })),
     canSell: viewer.canSell,
     canManage: viewer.canManage,
-    squareApp,
     sales: shownSales(row.sales, today, viewer.canSell),
     salesNotShown,
     payments:
@@ -229,7 +225,6 @@ async function read(deps: RegisterDeps, gymId: string, viewer: Viewer, asked: st
       link: of("link"),
       company: of("company"),
       terminal: (sold?.terminal ?? 0) + of("terminal"),
-      square_app: of("square_app"),
       refundedMinor: [...(paid?.refunds ?? []), ...row.refunds].filter((r) => r.currency === currency).reduce((n, r) => n + r.totalMinor, 0),
       discountMinor: sold?.discountMinor ?? 0,
       otherCurrency,

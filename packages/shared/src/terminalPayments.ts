@@ -62,12 +62,6 @@ export const terminalPaymentsResponseSchema = z
     isOwner: z.boolean().default(false),
     /** The card on file Record payment can charge (18d-iii-i); null where there is none to charge. */
     cardOnFile: cardOnFileSchema.nullable().default(null),
-    /** The gym can take payments in Square Point of Sale (connected, at a location, reading what was
-     *  sold): Record payment and Add membership offer it, recording nothing here (18d-iii-b-ii-a; Kd,
-     *  2026-10-25, "one press"). `pick`: whom staff pick in Square, by name, where that Square customer is
-     *  linked to them (theirs, or their payer's), so the payment comes to this page with the bill ticked;
-     *  null where it will wait in Payments to match. Null where Square Point of Sale can't be used. */
-    squareApp: z.object({ pick: z.string().nullable() }).strict().nullable().default(null),
   })
   .strict();
 export type TerminalPaymentsResponse = z.infer<typeof terminalPaymentsResponseSchema>;

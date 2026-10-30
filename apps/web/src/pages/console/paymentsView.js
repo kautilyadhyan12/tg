@@ -164,7 +164,7 @@ export function squareOutcomeLine(answer, gymName, gymCountry) {
 
 /** Square's simulated Terminals, in its sandbox only (Stripe calls its own "simulated readers"),
  *  added by a tester's tool and never from a screen. */
-/** How a Terminal paired here is used, apart from Square Point of Sale (18d-iii-b-i, Kd's click-through). The
+/** How a Terminal paired here is used (18d-iii-b-i, Kd's click-through). The
  *  checkout asks for the bill's total, which Square's API takes as including tax, with tipping off: Square's own
  *  taxes never change it. A word in [brackets] is a button's label, drawn as one (ScreenWords). */
 export const TERMINALS_HOW = 'Square\'s card machine. You start the payment here: on a member\'s bill, press [Record payment] and choose [Card on Terminal]. It charges exactly the bill\'s amount, and the bill is paid the moment they pay.';
@@ -219,4 +219,8 @@ export const NO_TERMINALS = 'No Terminals paired yet.';
 export const NEEDS_ALLOW_LINE = 'Reconnect Square to use Square Terminals.';
 export const NEEDS_ALLOW_HINT = 'Square will ask you to approve device access and in-person payments.';
 export const NEEDS_ALLOW_OTHERS = 'The owner needs to reconnect Square before Terminals can be used.';
+/** The connection allows less than the app asks for now, and it is not the Terminals' permissions (those say so themselves). */
+export const RECONNECT_LINE = 'Reconnect Square so Delete permanently can take people out of your Square customer list.';
+export const RECONNECT_HINT = "Square will ask you to approve one more thing: reading its subscriptions, so nobody Square still charges is taken out.";
+export const RECONNECT_OTHERS = 'The owner needs to reconnect Square before Delete permanently can take people out of your Square customer list.';
 export const TERMINAL_OWNER_ONLY = 'Only the owner can pair or remove Terminals.';
