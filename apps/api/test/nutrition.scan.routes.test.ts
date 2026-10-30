@@ -752,6 +752,42 @@ d("the scanner prices every food it sees (real Postgres)", () => {
       expect(mealPreviewSchema.parse(res.json()).items.map((i) => i.name)).toEqual(["Roast potatoes"]);
     }, 60_000);
 
+    it("titles a food by what the photo saw over the food its numbers are from, offers the food the words found among its close foods, and keeps the title saved and changed (33b-ii)", async () => {
+      const access = await sessionOn(target(), "scan7b-check-seen@example.com");
+      const ROASTED = seen("roasted potatoes", "potatoes", [200, 300, 5, 40, 13]);
+      answer = (foods) => Promise.resolve({
+        picks: foods.map((f) => { const at = f.entries.findIndex((e) => e.name === "Roast potatoes"); return at === -1 ? null : at; }),
+        tokensIn: 1400, tokensOut: 70,
+      });
+      const sheet = await scanOn(target(), access, plate(ROASTED, DAL));
+      const [potatoes, dal] = sheet.items;
+      // The numbers' food is the name; what the photo saw is the title above it.
+      expect([potatoes?.name, potatoes?.seenAs]).toEqual(["Roast potatoes", "Roasted potatoes"]);
+      // The baked potato the words found comes first, never the roast potatoes it is, each once, at most five.
+      const close = potatoes?.closeFoods.map((f) => f.name) ?? [];
+      expect(close[0]).toBe("Potato (baked)");
+      expect(close).not.toContain("Roast potatoes");
+      expect(new Set(close).size).toBe(close.length);
+      expect(close.length).toBeLessThanOrEqual(5);
+      // Our list's dal for "dal": titled by the word the photo saw, and still close foods to offer.
+      expect([dal?.name, dal?.seenAs]).toEqual(["Dal (lentil curry)", "Dal"]);
+      expect(dal?.closeFoods.map((f) => f.canonical)).not.toContain("dal_lentil_curry");
+
+      const saved = await injectOn(target(), "POST", "/v1/nutrition/meals", access, { scanToken: sheet.scanToken, takenAt: new Date().toISOString(), items: sheet.items.map((i) => ({ canonical: i.canonical, measure: "g", amount: i.gramsPoint })) });
+      expect(saved.statusCode, saved.body).toBe(201);
+      const meal = mealOf(saved.body);
+      expect(meal.items.map((i) => [i.name, i.seenAs])).toEqual([["Roast potatoes", "Roasted potatoes"], ["Dal (lentil curry)", "Dal"]]);
+
+      // A new amount of the same food keeps the title; another food in its place names itself.
+      const more = await injectOn(target(), "PATCH", `/v1/nutrition/meals/${meal.id}`, access, { items: [{ canonical: "roast_potatoes", grams: 250 }, { canonical: "dal_lentil_curry", grams: 150 }], itemsVersion: meal.itemsVersion });
+      expect(more.statusCode, more.body).toBe(200);
+      const after = mealOf(more.body);
+      expect(after.items.map((i) => [i.name, i.seenAs, i.gramsPoint])).toEqual([["Roast potatoes", "Roasted potatoes", 250], ["Dal (lentil curry)", "Dal", 150]]);
+      const swapped = await injectOn(target(), "PATCH", `/v1/nutrition/meals/${meal.id}`, access, { items: [{ canonical: "potato_baked", grams: 250 }, { from: 1 }], itemsVersion: after.itemsVersion });
+      expect(swapped.statusCode, swapped.body).toBe(200);
+      expect(mealOf(swapped.body).items.map((i) => [i.name, i.seenAs])).toEqual([["Potato (baked)", undefined], ["Dal (lentil curry)", "Dal"]]);
+    }, 60_000);
+
     it("prices each checked food by its own pick, in the check's order, past a plain food first on the plate", async () => {
       const access = await sessionOn(target(), "scan7b-check-order@example.com");
       asked.length = 0;

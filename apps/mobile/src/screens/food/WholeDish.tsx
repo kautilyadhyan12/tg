@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { STANDARD_DISHES, recentFoodsResponseSchema } from "@app/shared";
 import { Chip } from "../../look/Chip";
 import { colours } from "../../look/colours";
@@ -7,7 +7,8 @@ import { FillDish } from "../../look/FillDish";
 import { Sheet } from "../../look/Sheet";
 import { Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
-import { NewDish, dishByName, dishesOffered, useDishes, type PickDish } from "./AmountPicker";
+import { Button } from "../../look/Button";
+import { EditDishes, NewDish, dishByName, dishesOffered, useDishes, type PickDish } from "./AmountPicker";
 import { FILL_CHOICES } from "./measures";
 
 // The whole meal eaten from one dish (ROADMAP Stage 5 33b-i; Kd, 2026-10-30), drawn as the dishes are in
@@ -50,39 +51,75 @@ function useLastDish(dishes: ReturnType<typeof useDishes>["dishes"]): PickDish {
 }
 
 /** The dishes and the filled pictures. `held`: why it cannot be used yet, said in place of the pictures. */
-export function WholeDish({ applied, held, onUse }: { applied: DishShown | null; held: string | null; onUse: (picked: DishPicked) => void }) {
+export function WholeDish({ applied, held, onUse, onClear, onDishChanged }: { applied: DishShown | null; held: string | null; onUse: (picked: DishPicked) => void; onClear: () => boolean; onDishChanged?: () => void }) {
   const { dishes, again } = useDishes();
   // A dish of the person's own, made here as in a food's own box.
   const [making, setMaking] = useState(false);
+  // The dishes changed or removed, as in a food's own box.
+  const [editing, setEditing] = useState(false);
   const last = useLastDish(dishes);
   const offered = dishesOffered(dishes);
   const shown = applied === null ? null : (offered.find((d) => d.id === applied.id) ?? (applied.name === undefined ? null : dishByName(dishes, applied.name)));
   const [picked, setPicked] = useState<PickDish | null>(null);
-  const dish = picked ?? shown ?? last;
-  const on = (fill: number): boolean => applied !== null && shown !== null && shown.id === dish.id && applied.fill === fill;
+  // A lit dish or a lit picture tapped again is unselected (Kd's click-through, 2026-10-30).
+  const [cleared, setCleared] = useState(false);
+  const dish = cleared ? null : ((picked === null ? null : (offered.find((d) => d.id === picked.id) ?? picked)) ?? shown ?? last);
+  const on = (fill: number): boolean => applied !== null && shown !== null && shown.id === dish?.id && applied.fill === fill;
+  const tapDish = (d: PickDish) => {
+    if (dish?.id !== d.id) {
+      setCleared(false);
+      setPicked(d);
+      return;
+    }
+    // Weights not known yet: the dish stays, and the meal says why.
+    if (applied !== null && shown?.id === d.id && !onClear()) return;
+    setCleared(true);
+    setPicked(null);
+  };
   return (
     <View style={styles.box}>
       {/* A box of its own, lifted above the keyboard, as a food's own dishes are made. */}
       <Sheet open={making} title="Eaten from one dish" onClose={() => { setMaking(false); }}>
-        <NewDish
-          onCancel={() => { setMaking(false); }}
-          onSaved={(saved) => {
-            again();
-            setPicked(saved);
-            setMaking(false);
-          }}
-        />
+        <ScrollView style={styles.boxList} contentContainerStyle={styles.boxListInner} keyboardShouldPersistTaps="handled">
+          <NewDish
+            onCancel={() => { setMaking(false); }}
+            onSaved={(saved) => {
+              again();
+              setPicked(saved);
+              setMaking(false);
+            }}
+          />
+        </ScrollView>
       </Sheet>
-      <Txt kind="tiny" style={styles.label}>
-        Eaten from one dish
-      </Txt>
+      <Sheet open={editing} title="Eaten from one dish" onClose={() => { setEditing(false); }}>
+        <ScrollView style={styles.boxList} contentContainerStyle={styles.boxListInner} keyboardShouldPersistTaps="handled">
+          <EditDishes
+            list={offered}
+            onChanged={(removed) => {
+              again();
+              onDishChanged?.();
+              if (removed === null) return;
+              if (picked?.id === removed) setPicked(null);
+              // A dish taken off cannot stay the meal's dish: its foods go back to their amounts.
+              if (applied !== null && shown?.id === removed) onClear();
+            }}
+            onDone={() => { setEditing(false); }}
+          />
+        </ScrollView>
+      </Sheet>
+      <View style={styles.head}>
+        <Txt kind="tiny" style={[styles.label, styles.grow]}>
+          Eaten from one dish
+        </Txt>
+        {dishes.kind === "ok" ? <Button label="Edit" kind="link" onPress={() => { setEditing(true); }} say="Edit your dishes" /> : null}
+      </View>
       <View style={styles.chips}>
         {offered.map((d) => (
-          <Chip key={d.id} label={`${d.label} · ${String(d.volumeMl)} ml`} on={dish.id === d.id} onPress={() => { setPicked(d); }} />
+          <Chip key={d.id} label={`${d.label} · ${String(d.volumeMl)} ml`} on={dish?.id === d.id} onPress={() => { tapDish(d); }} />
         ))}
         <Chip label="New dish" icon="plus" on={false} onPress={() => { setMaking(true); }} />
       </View>
-      {held === null ? (
+      {dish === null ? null : held === null ? (
         <View style={styles.fills}>
           {FILL_CHOICES.map((f) => (
             <Pressable
@@ -90,7 +127,13 @@ export function WholeDish({ applied, held, onUse }: { applied: DishShown | null;
               accessibilityRole="button"
               accessibilityLabel={`${dish.label}, ${f.words}`}
               accessibilityState={{ selected: on(f.value) }}
-              onPress={() => { onUse({ dish, fill: f }); }}
+              onPress={() => {
+                if (!on(f.value)) {
+                  onUse({ dish, fill: f });
+                  return;
+                }
+                if (onClear()) setPicked(dish);
+              }}
               style={({ pressed }) => [styles.fill, on(f.value) ? styles.fillOn : null, pressed ? styles.pressed : null]}
             >
               <FillDish containerClass={dish.containerClass} fill={f.value} size={56} colour={on(f.value) ? "orange" : "text"} />
@@ -107,6 +150,10 @@ export function WholeDish({ applied, held, onUse }: { applied: DishShown | null;
 const styles = StyleSheet.create({
   box: { gap: 10 },
   label: { textTransform: "uppercase", letterSpacing: 0.9 },
+  head: { flexDirection: "row", alignItems: "center", gap: 8 },
+  grow: { flex: 1 },
+  boxList: { flexGrow: 0, flexShrink: 1 },
+  boxListInner: { gap: 14 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   fills: { flexDirection: "row", gap: 8 },
   fill: {

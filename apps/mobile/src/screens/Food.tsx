@@ -69,7 +69,7 @@ import { useKeptSheet } from "./food/PhotoSheetStore";
 import { holdWords } from "./food/numbers";
 import { basketName, basketNumbers, foodsWords, withBasketFood, type BasketFood, type BasketPick } from "./food/basket";
 import { OwnFood } from "./food/OwnFood";
-import { sharedDishOfItems, wholeDishEdits } from "./food/dishShares";
+import { sharedDishOfItems, wholeDishEdits, wholeDishOffEdits } from "./food/dishShares";
 import { WholeDish, type DishPicked } from "./food/WholeDish";
 import { OwnNumbers } from "./food/OwnNumbers";
 import {
@@ -88,6 +88,8 @@ import {
   amountOf,
   clockWords,
   foodLines,
+  foodNames,
+  foodTitle,
   foodsHeld,
   measuresWithoutServer,
   serverRow,
@@ -660,6 +662,10 @@ const HELD_WORDS = {
 
 /** A meal's foods, each changed by its amount or removed; its name, meal and time; and Remove meal.
  *  Each removal asks first. A change is kept on the phone and sent as a meal is (food/outbox.ts). */
+/** Each meal's foods as they were before its one dish, by meal, so undoing it puts them back after
+ *  the box has closed; while the app is open. */
+const beforeDish = new Map<string, readonly MealItem[]>();
+
 function MealSheet({
   row,
   unsaved,
@@ -733,18 +739,20 @@ function MealSheet({
   if (mode.kind === "details") {
     return (
       <Sheet open title="Edit meal" onClose={onClose} onBack={back}>
-        <MealDetails
-          row={row}
-          onSave={(fields) => {
-            void keep(
-              { body: { ...fields, changeId: newGoalId() }, items: null, totals: null, foods: null },
-              fields.mealType ?? row.section,
-              `${fields.mealName ?? row.name} updated.`,
-            );
-          }}
-          onCancel={() => { setMode({ kind: "foods" }); }}
-        />
-        {fullWords}
+        <ScrollView style={styles.boxList} contentContainerStyle={styles.sheetList} keyboardShouldPersistTaps="handled">
+          <MealDetails
+            row={row}
+            onSave={(fields) => {
+              void keep(
+                { body: { ...fields, changeId: newGoalId() }, items: null, totals: null, foods: null },
+                fields.mealType ?? row.section,
+                `${fields.mealName ?? row.name} updated.`,
+              );
+            }}
+            onCancel={() => { setMode({ kind: "foods" }); }}
+          />
+          {fullWords}
+        </ScrollView>
       </Sheet>
     );
   }
@@ -754,9 +762,9 @@ function MealSheet({
   if (saved !== null && item !== undefined && mode.kind === "removeFood") {
     const at = mode.at;
     return (
-      <Sheet open title={`Remove ${item.name}?`} onClose={onClose} onBack={back}>
+      <Sheet open title={`Remove ${foodTitle(item)}?`} onClose={onClose} onBack={back}>
         <Txt kind="small">
-          {item.name} comes off {row.name} and out of the day’s totals.
+          {foodTitle(item)} comes off {row.name} and out of the day’s totals.
         </Txt>
         <Button
           label="Remove food"
@@ -771,7 +779,7 @@ function MealSheet({
                 foods: null,
               },
               row.section,
-              `${item.name} removed from ${row.name}.`,
+              `${foodTitle(item)} removed from ${row.name}.`,
             );
           }}
         />
@@ -783,7 +791,7 @@ function MealSheet({
   if (saved !== null && item !== undefined && mode.kind === "food") {
     const at = mode.at;
     return (
-      <Sheet open title={item.name} onClose={onClose} onBack={back}>
+      <Sheet open title={foodTitle(item)} onClose={onClose} onBack={back}>
         <FoodAmount
           key={`${row.id}-${String(at)}-${measures === null ? "own" : "server"}`}
           mealId={row.id}
@@ -799,7 +807,7 @@ function MealSheet({
                 foods: edit.foods,
               },
               row.section,
-              `${item.name} updated.`,
+              `${foodTitle(item)} updated.`,
             );
           }}
           onRemove={saved.items.length > 1 ? () => { setMode({ kind: "removeFood", at }); } : null}
@@ -818,16 +826,34 @@ function MealSheet({
     if (saved === null) return;
     const items = wholeDishEdits(saved.items, dish.id, fill.value);
     if (items === null) return;
+    if (sharedDishOfItems(saved.items) === null) beforeDish.set(row.id, saved.items);
     void keep(
       {
         body: { items, itemsVersion: saved.itemsVersion, changeId: newGoalId() },
         items: null,
         totals: null,
-        foods: saved.items.map((it) => ({ name: it.name, amount: it.nutritionSource !== "own" ? `Part of ${dish.label}, ${fill.words}` : loggedAmount(it) + itemMark(it) })),
+        foods: saved.items.map((it) => ({ ...foodNames(it), amount: it.nutritionSource !== "own" ? `Part of ${dish.label}, ${fill.words}` : loggedAmount(it) + itemMark(it) })),
       },
       row.section,
       `${row.name} shared out over ${dish.label}, ${fill.words}.`,
     );
+  };
+  const clearDish = () => {
+    if (saved === null) return false;
+    const before = beforeDish.get(row.id) ?? null;
+    const items = wholeDishOffEdits(saved.items, before);
+    beforeDish.delete(row.id);
+    void keep(
+      {
+        body: { items, itemsVersion: saved.itemsVersion, changeId: newGoalId() },
+        items: null,
+        totals: null,
+        foods: saved.items.map((it, i) => ({ ...foodNames(it), amount: it.nutritionSource === "own" ? loggedAmount(it) : before?.[i]?.canonical === it.canonical ? loggedAmount(before[i]) : `${String(Math.round(it.gramsPoint))} g` })),
+      },
+      row.section,
+      `${row.name} is no longer shared out over one dish.`,
+    );
+    return true;
   };
   return (
     <Sheet open title={row.name} onClose={onClose}>
@@ -846,6 +872,7 @@ function MealSheet({
           <>
             <View style={styles.grow}>
               <Txt kind="strong">{line.name}</Txt>
+              {line.numbersFrom === null ? null : <SourceLine source={line.numbersFrom.source} before={`${line.numbersFrom.name} ·`} />}
               <Txt kind="tiny">{line.amount}</Txt>
             </View>
             <Txt kind="small" colour="text">
@@ -857,7 +884,7 @@ function MealSheet({
           <Pressable
             key={`${line.name}-${String(i)}`}
             accessibilityRole="button"
-            accessibilityLabel={`Change ${line.name}, ${line.amount}`}
+            accessibilityLabel={`Change ${line.name}, ${line.numbersFrom === null ? "" : `${line.numbersFrom.name}, `}${line.amount}`}
             onPress={() => { setMode({ kind: "food", at: i }); }}
             style={({ pressed }) => [styles.item, pressed ? styles.pressed : null]}
           >
@@ -871,7 +898,7 @@ function MealSheet({
         );
       })}
       {held === null ? null : <Txt kind="small">{HELD_WORDS[held]}</Txt>}
-      {shareable ? <WholeDish applied={sharedDishOfItems(saved.items)} held={null} onUse={useDish} /> : null}
+      {shareable ? <WholeDish applied={sharedDishOfItems(saved.items)} held={null} onUse={useDish} onClear={clearDish} /> : null}
       </ScrollView>
       {fullWords}
       {row.totals === null ? null : (
@@ -940,7 +967,7 @@ function MealDetails({ row, onSave, onCancel }: { row: Row; onSave: (fields: Det
 interface FoodEdit {
   items: MealEditItem[];
   preview: MealPreview | null;
-  foods: { name: string; amount: string }[];
+  foods: (ReturnType<typeof foodNames> & { amount: string })[];
 }
 
 /** A logged food's new amount, by one of its own measures, with the server's numbers for it; Save, and
@@ -971,11 +998,18 @@ function FoodAmount({
   const [saving, setSaving] = useState(false);
   const [panel, setPanel] = useState(false);
   const { dishes, again: dishesAgain } = useDishes();
+  // A dish changed: read the dishes again and price the amount again, as its id and fill are the same.
+  const [dishAsk, setDishAsk] = useState(0);
+  const dishesChanged = () => {
+    dishesAgain();
+    setDishAsk((n) => n + 1);
+  };
   const { height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   // Logged by a dish the person still has: it opens at that dish, as full as it was, once the dishes
   // are read (Kd, 32b-ii-b: a food logged by a dish opened at grams).
   const dishOpened = useRef(false);
+  const openedAtDish = useRef<string | null>(null);
   useEffect(() => {
     const m = item?.measure;
     // A part of one dish the whole meal was eaten from opens at its grams: its part means nothing
@@ -984,7 +1018,10 @@ function FoodAmount({
     dishOpened.current = true;
     const dish = dishByName(dishes, m.name);
     const fill = FILL_CHOICES.find((c) => c.value === m.amount);
-    if (dish !== null && fill !== undefined) setAmount({ measure: dishMeasure(dish.id), amount: String(fill.value) });
+    if (dish === null || fill === undefined) return;
+    const opened = { measure: dishMeasure(dish.id), amount: String(fill.value) };
+    openedAtDish.current = JSON.stringify(opened);
+    setAmount(opened);
   }, [dishes, item]);
   const measure = amount === null ? undefined : measures.find((m) => m.id === amount.measure);
   const chosen = item === undefined || amount === null ? null : chosenItem(item.canonical, amount);
@@ -1019,7 +1056,20 @@ function FoodAmount({
     };
     // `key` is the whole of `items`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, tooSmall, session, mealId, saved.itemsVersion]);
+  }, [key, tooSmall, session, mealId, saved.itemsVersion, dishAsk]);
+
+  // Opened at a dish since changed: the logged amount stands, so the box opens at its grams, and Save
+  // never rewrites a past meal on its own.
+  useEffect(() => {
+    if (openedAtDish.current === null || priced.kind !== "ok" || priced.for !== key) return;
+    const opened = openedAtDish.current;
+    openedAtDish.current = null;
+    const now = priced.preview.items[at]?.gramsPoint;
+    if (JSON.stringify(amount) !== opened || now === undefined || item === undefined) return;
+    if (Math.round(now) !== Math.round(item.gramsPoint)) setAmount({ measure: "g", amount: String(Math.round(item.gramsPoint)) });
+    // Only when a price comes back.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [priced]);
 
   if (item === undefined || amount === null) return null;
   const preview = priced.kind === "ok" && priced.for === key ? priced.preview : null;
@@ -1035,7 +1085,7 @@ function FoodAmount({
       items,
       preview,
       foods: saved.items.map((it, i) => ({
-        name: it.name,
+        ...foodNames(it),
         amount: i !== at ? loggedAmount(it) + itemMark(it) : now === undefined ? typedAmount(measure, typed, pickedDish(dishes, amount.measure)) : loggedAmount(now) + itemMark(now),
       })),
     });
@@ -1047,12 +1097,13 @@ function FoodAmount({
       <Txt kind="tiny">
         Logged: {loggedAmount(item) + itemMark(item)} · {kcalWords(item.kcalPoint)}
       </Txt>
+      {item.seenAs === undefined ? null : <SourceLine source={item.nutritionSource} before={`${item.name} ·`} />}
       <AmountPicker
         measures={measures}
         amount={amount}
         onAmount={setAmount}
         dishes={dishes}
-        onDishes={dishesAgain}
+        onDishes={dishesChanged}
         onPanel={setPanel}
         grams={now === undefined || preview === null ? null : now.gramsPoint}
         usual={usual}
@@ -1119,6 +1170,12 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
   const [priced, setPriced] = useState<Priced>({ kind: "none" });
   const [panel, setPanel] = useState(false);
   const { dishes, again: dishesAgain } = useDishes();
+  // A dish changed: read the dishes again and price the amount again, as its id and fill are the same.
+  const [dishAsk, setDishAsk] = useState(0);
+  const dishesChanged = () => {
+    dishesAgain();
+    setDishAsk((n) => n + 1);
+  };
   const [full, setFull] = useState(false);
   const [recent, setRecent] = useState<RecentFood[]>([]);
   // Held from the first press until the meal is kept: a second tap never logs it twice.
@@ -1240,7 +1297,7 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
     };
     // `key` is the whole of `item`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, tooSmall, session]);
+  }, [key, tooSmall, session, dishAsk]);
 
   if (type === null) return null;
   const name = mealTypeName(type);
@@ -1520,7 +1577,7 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
                 amount={amount}
                 onAmount={setAmount}
                 dishes={dishes}
-                onDishes={dishesAgain}
+                onDishes={dishesChanged}
                 onPanel={setPanel}
                 grams={preview?.items[0]?.gramsPoint ?? null}
                 usual={startingAmount(food)}
@@ -1640,6 +1697,7 @@ function MonthPick({ open, day, onClose, onPick }: { open: boolean; day: Date; o
 }
 
 const styles = StyleSheet.create({
+  boxList: { flexGrow: 0, flexShrink: 1 },
   monthHead: { flexDirection: "row", alignItems: "center", gap: 10 },
   monthName: { flex: 1, textAlign: "center" },
   week: { flexDirection: "row" },

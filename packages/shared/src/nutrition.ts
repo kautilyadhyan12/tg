@@ -137,6 +137,10 @@ export const mealItemSchema = z.object({
   /** The ten further figures for this item's grams (ROADMAP 34a). An item saved
    *  before they were kept has none: all not known. */
   more: moreNutrientsSchema.optional(),
+  /** What the photo's scanner saw, where it is not the name of the food the numbers are from: the
+   *  phone shows it as the title and `name` under it (ROADMAP Stage 5 33b-ii). `name` is always the
+   *  food the numbers are from. */
+  seenAs: z.string().min(1).max(200).optional(),
 });
 export type MealItem = z.infer<typeof mealItemSchema>;
 
@@ -383,7 +387,8 @@ export const patchDishwareSchema = dishwareInputSchema.partial().refine((v) => O
 export type DishwareInput = z.infer<typeof dishwareInputSchema>;
 /** The dishes everybody has, ready to pick without saving one (Kd, 32b-ii-b: "keep the things
  *  already built, just give an option to create one on own"): the sizes the browser's Save a dish
- *  offers. Fixed ids nobody's own dish can take; never renamed or removed. */
+ *  offers. Fixed ids nobody's own dish can take. A person may change their name and size for
+ *  themselves (Kd, 2026-10-30), and put them back; nobody removes them. */
 export const STANDARD_DISHES = [
   { id: "00000000-0000-4000-8000-00000000d151", label: "Cup", containerClass: "cup", volumeMl: 240 },
   { id: "00000000-0000-4000-8000-00000000d152", label: "Mug", containerClass: "mug", volumeMl: 325 },
@@ -483,6 +488,9 @@ export type RecentFood = z.infer<typeof recentFoodSchema>;
 export const recentFoodsResponseSchema = z.object({ items: z.array(recentFoodSchema).max(RECENT_FOODS_MOST) }).strict();
 export type RecentFoodsResponse = z.infer<typeof recentFoodsResponseSchema>;
 
+/** The most close foods a scanned food offers (ROADMAP Stage 5 33b-ii). */
+export const MEAL_CLOSE_FOODS_MOST = 5;
+
 /** A scanned item as the photo sheet receives it (ROADMAP 7a-iv-b; RULINGS
  *  2026-09-16, the portion redesign): its food's own measures and the one and
  *  amount the row starts at, as a food the search returns carries them, so the
@@ -494,6 +502,9 @@ export const mealPhotoItemSchema = mealItemSchema.extend({
   measures: z.array(foodMeasureSchema).min(1),
   startsAt: measureStartSchema,
   portionEstimated: z.boolean(),
+  /** The foods closest to what the photo saw, other than this one, offered first by "Not this?"
+   *  (ROADMAP Stage 5 33b-ii). A scan kept on a phone from before has none. */
+  closeFoods: z.array(foodSearchItemSchema).max(MEAL_CLOSE_FOODS_MOST).default([]),
 }).refine((item) => item.measures.some((m) => m.id === item.startsAt.measure), {
   message: "a scanned item starts at one of its own measures",
 });
@@ -920,7 +931,11 @@ export const waitingChangeSchema = z.object({
   items: z.array(mealItemSchema).nullable(),
   totals: mealTotalsSchema.nullable(),
   /** With a change to the foods: each food as it reads, `[i]` for `body.items[i]`. */
-  foods: z.array(z.object({ name: z.string().max(200), amount: z.string().max(200) }).strict()).max(30).nullable(),
+  foods: z.array(z.object({
+    name: z.string().max(200), amount: z.string().max(200),
+    // A food titled by what the photo saw: the food its numbers are from, shown while it waits too.
+    numbersFrom: z.object({ name: z.string().max(200), source: mealItemSourceSchema }).strict().optional(),
+  }).strict()).max(30).nullable(),
   tried: z.boolean(),
 }).strict();
 export type WaitingChange = z.infer<typeof waitingChangeSchema>;

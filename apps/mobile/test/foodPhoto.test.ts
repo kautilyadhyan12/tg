@@ -167,6 +167,7 @@ const scanned = (name: string, canonical: string, start: { measure: "g" | "servi
   measures,
   startsAt: start,
   portionEstimated: estimated,
+  closeFoods: [],
 });
 const ANALYSIS: MealPhotoAnalysis = {
   scanToken: "s".repeat(40),

@@ -560,6 +560,19 @@ describe("changing a logged meal (32b-ii-a)", () => {
     expect(JSON.parse(phone.kept.get(RAVI.id) ?? "")).toEqual({ version: 1, entries: [], refused: [] });
   });
 
+  it("a food saved from a photo keeps what the photo saw as its name, with the food its numbers are from under it (33b-ii)", async () => {
+    const fromPhoto = lunch();
+    fromPhoto.items = fromPhoto.items.map((it) => ({ ...it, seenAs: "Porridge" }));
+    await openFood({ meals: [fromPhoto] });
+    await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 307 kcal" }));
+    expect(await screen.findByText("Porridge")).toBeTruthy();
+    expect(screen.getByText("Oats, rolled ·")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Change Porridge, Oats, rolled, 1 × cup · 81 g" }));
+    expect(await screen.findByText("Logged: 1 × cup · 81 g · 307 kcal")).toBeTruthy();
+    expect(screen.getAllByText("Porridge").length).toBeGreaterThan(0);
+    expect(screen.getByText("Oats, rolled ·")).toBeTruthy();
+  });
+
   it("changes a food's amount with the server's numbers, and the day's totals follow", async () => {
     const food: Food = { meals: [lunch()] };
     const server = await openFood(food);

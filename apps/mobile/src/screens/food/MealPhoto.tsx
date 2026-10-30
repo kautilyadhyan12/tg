@@ -5,6 +5,7 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { launchImageLibraryAsync } from "expo-image-picker";
 import {
+  FOOD_ALLERGY_CAUTION,
   MEAL_MOST_FOODS,
   PHOTO_SCAN_CAUTION,
   foodSearchResponseSchema,
@@ -50,6 +51,7 @@ import {
   withRowAmount,
   withRowFood,
   withWholeDish,
+  withoutWholeDish,
   withSharesAsGrams,
   rowNeeds,
   type PhotoSheet,
@@ -69,6 +71,12 @@ import { Credits, SourceLine } from "./SourceLine";
 /** A scan takes the server up to about fifty seconds: the photo, then the check of unclear foods. */
 const SCAN_WAIT_MS = 75_000;
 const NO_CONNECTION = "No connection. Try again.";
+/** While the foods' weights cannot be fetched: asked again this often, for at most 15 minutes. */
+const PRICE_RETRY_MS = 30_000;
+const PRICE_RETRIES_MOST = 30;
+const PRICE_LOST = "Can’t reach the server. The foods’ weights will show when you’re back online.";
+const PRICE_LOST_STOPPED = "Can’t reach the server.";
+const PRICE_REFUSED = "This meal’s calories can’t be worked out. Change a food, or take a new photo.";
 const SCAN_GONE = "This photo’s scan has run out, so this meal can’t be saved. Take a new photo.";
 /** The photo's band over the review, as tall as a page's own picture is for the phone's shape. */
 const PHOTO_TALL = 0.78;
@@ -336,7 +344,7 @@ function Reading({ uri, onClose }: { uri: string; onClose: () => void }) {
   );
 }
 
-type Priced = { kind: "none" } | { kind: "ok"; preview: MealPreview; for: string } | { kind: "refused"; words: string; for: string };
+type Priced = { kind: "none" } | { kind: "lost"; for: string } | { kind: "ok"; preview: MealPreview; for: string } | { kind: "refused"; words: string; for: string };
 
 /** The scan's foods: each at its amount, changed in the amount box or taken off; a food the photo
  *  missed added; the meal it was; and Save. Every number is the server's. */
@@ -358,6 +366,8 @@ function Review({
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const [priced, setPriced] = useState<Priced>({ kind: "none" });
+  const [priceTry, setPriceTry] = useState(0);
+  const priceTriesFrom = useRef(0);
   const [openRow, setOpenRow] = useState<string | null>(null);
   const [finding, setFinding] = useState<{ query: string; change: string | null } | null>(null);
   const [ask, setAsk] = useState<Ask>("none");
@@ -378,6 +388,7 @@ function Review({
       return undefined;
     }
     let stale = false;
+    let again: ReturnType<typeof setTimeout> | undefined;
     const timer = setTimeout(() => {
       void session.signedIn({ method: "POST", path: "/v1/nutrition/meals/preview", body: { items, scanToken } }, mealPreviewSchema).then((answer) => {
         if (stale) return;
@@ -385,17 +396,28 @@ function Review({
         // The server no longer holds the scan (kept a day): it can only be taken again.
         else if (answer.kind === "refused" && answer.error === "invalid_scan") setPriced({ kind: "refused", words: SCAN_GONE, for: key });
         else if (answer.kind === "refused" && amountRefusal(answer.error) !== null) setPriced({ kind: "refused", words: amountRefusal(answer.error) ?? "", for: key });
-        else setPriced({ kind: "none" });
+        else {
+          // The server answered, and will answer the same: asking again would never help.
+          if (answer.kind === "refused" && answer.status < 500) {
+            setPriced({ kind: "refused", words: PRICE_REFUSED, for: key });
+            return;
+          }
+          // Never a wait with no end: it says so and asks again until the signal is back.
+          setPriced({ kind: "lost", for: key });
+          if (priceTry - priceTriesFrom.current < PRICE_RETRIES_MOST) again = setTimeout(() => { setPriceTry((n) => n + 1); }, PRICE_RETRY_MS);
+        }
       });
     }, 300);
     return () => {
       stale = true;
       clearTimeout(timer);
+      if (again !== undefined) clearTimeout(again);
     };
     // `key` is the whole of `items`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, scanToken, session]);
+  }, [key, scanToken, session, priceTry]);
 
+  const priceLost = priced.kind === "lost" && priced.for === key;
   const preview = priced.kind === "ok" && priced.for === key ? priced.preview : null;
   const refusedWords = priced.kind === "refused" && priced.for === key ? priced.words : null;
   const numbers = sheetNumbers(sheet, preview);
@@ -524,9 +546,11 @@ function Review({
               applied={sharedDish(rows.filter((r) => r.own === null).map((r) => r.amount))}
               held={
                 unfinished !== undefined
-                  ? `${unfinished.name} needs an amount first.`
+                  ? `${unfinished.title} needs an amount first.`
                   : rowGrams.some((g, i) => g === null && rows[i]?.own === null)
-                    ? "Working out the foods’ weights…"
+                    ? priceLost
+                      ? "The foods’ weights haven’t come yet."
+                      : "Working out the foods’ weights…"
                     : null
               }
               onUse={({ dish, fill }) => {
@@ -534,6 +558,17 @@ function Review({
                 if (next === null) return;
                 keep(next);
                 setSaid(`Shared out over ${dish.label}, ${fill.words}.`);
+              }}
+              onDishChanged={() => { setPriceTry((n) => n + 1); }}
+              onClear={() => {
+                const next = withoutWholeDish(sheet, rowGrams);
+                if (next === null) {
+                  setSaid("Wait a moment: the foods’ weights are still being worked out.");
+                  return false;
+                }
+                keep(next);
+                setSaid("Back to the amounts the photo saw.");
+                return true;
               }}
             />
           ) : null}
@@ -548,7 +583,7 @@ function Review({
         )}
         {unfinished === undefined ? null : (
           <Txt kind="small" colour="badText">
-            {unfinished.name}: {rowNeeds(unfinished) === "fill" ? "pick how full the dish was" : "pick an amount"}. Tap it to finish, then save.
+            {unfinished.title}: {rowNeeds(unfinished) === "fill" ? "pick how full the dish was" : "pick an amount"}. Tap it to finish, then save.
           </Txt>
         )}
         {refusedWords === null ? null : (
@@ -556,6 +591,21 @@ function Review({
             {refusedWords}
           </Txt>
         )}
+        {priceLost && rowGrams.some((g, i) => g === null && rows[i]?.own === null) ? (
+          <>
+            <Txt kind="small" colour="gold">
+              {priceTry - priceTriesFrom.current < PRICE_RETRIES_MOST ? PRICE_LOST : PRICE_LOST_STOPPED}
+            </Txt>
+            <Button
+              label="Try again"
+              kind="link"
+              onPress={() => {
+                priceTriesFrom.current = priceTry + 1;
+                setPriceTry((n) => n + 1);
+              }}
+            />
+          </>
+        ) : null}
         {full ? (
           <Txt kind="small" colour="badText">
             Too many meals are waiting to be sent. Go online to send them, then save this one.
@@ -567,10 +617,11 @@ function Review({
         </View>
       </View>
       {row === null ? null : (
-        <Sheet open title={row.name} onClose={() => { setOpenRow(null); }}>
+        <Sheet open title={row.title} onClose={() => { setOpenRow(null); }}>
           <RowAmount
             row={row}
             waiting={rows.some((r, i) => r.amount.share !== undefined && rowGrams[i] === null)}
+            onDishChanged={() => { setPriceTry((n) => n + 1); }}
             grams={numbers?.items[rowAt]?.gramsPoint ?? null}
             kcal={numbers?.items[rowAt]?.kcalPoint ?? null}
             onAmount={(amount) => { change((base) => withRowAmount(base, row.key, amount)); }}
@@ -596,14 +647,15 @@ function Review({
             onRemove={() => {
               if (!change((base) => withRowAmount(base, row.key, null))) return;
               setOpenRow(null);
-              setSaid(`${row.name} taken off.`);
+              setSaid(`${row.title} taken off.`);
             }}
           />
         </Sheet>
       )}
       <FindFood
         query={finding?.query ?? null}
-        changing={changing === null ? null : changing.name}
+        changing={changing === null ? null : changing.title}
+        close={changing === null ? [] : changing.closeFoods}
         grams={changingGrams}
         taken={onSheet(sheet)}
         onClose={() => { setFinding(null); }}
@@ -614,7 +666,7 @@ function Review({
             setSaid(`${name} added.`);
           } else {
             if (!change((base) => withRowFood(base, changing.key, pick))) return;
-            setSaid(`${changing.name} changed to ${name}.`);
+            setSaid(`${changing.title} changed to ${name}.`);
           }
           setFinding(null);
         }}
@@ -645,20 +697,23 @@ function FoodRow({ row, item, onPress }: { row: SheetRow; item: MealItem | null;
             ? NOT_KNOWN
             : typedAmount(measure, Number(row.amount.amount));
   // The scan's guess of how much, still untouched, a food whose numbers are the scan's own, and the
-  // person's own food.
-  const mark = row.source === "own" ? " · your numbers" : row.estimated || row.source === "estimate" ? " · estimate" : "";
+  // person's own food. On screen the line above says where the numbers come from, so the amount
+  // marks only the guess of how much.
+  const said = row.source === "own" ? " · your numbers" : row.estimated || row.source === "estimate" ? " · estimate" : "";
+  const mark = row.estimated && row.source !== "estimate" ? " · estimate" : "";
   const kcal = item?.kcalPoint ?? null;
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Change ${row.name}, ${amount}${mark}`}
+      accessibilityLabel={`Change ${row.title}, ${row.numbersFrom === null ? "" : `${row.numbersFrom}, `}${amount}${said}`}
       onPress={onPress}
       style={({ pressed }) => [styles.food, pressed ? styles.pressed : null]}
     >
       <View style={styles.grow}>
         <Txt kind="strong" numberOfLines={2}>
-          {row.name}
+          {row.title}
         </Txt>
+        <SourceLine source={row.source} before={row.numbersFrom === null ? "" : `${row.numbersFrom} ·`} />
         <Txt kind="tiny" colour={needs === null ? "textFaint" : "badText"}>
           {amount}
           {needs === null ? mark : ""}
@@ -676,6 +731,7 @@ function FoodRow({ row, item, onPress }: { row: SheetRow; item: MealItem | null;
 /** A food's amount on the photo's meal, changed as it is typed in; Done, and Take off the meal. */
 function RowAmount({
   row,
+  onDishChanged,
   grams,
   kcal,
   onAmount,
@@ -694,6 +750,7 @@ function RowAmount({
   onAmount: (amount: { measure: string; amount: string }) => void;
   onOwn: (own: OwnFoodItem) => void;
   onChange: () => void;
+  onDishChanged: () => void;
   onUndo: (() => void) | null;
   onDone: () => void;
   onRemove: () => void;
@@ -703,7 +760,7 @@ function RowAmount({
   // Not the food it is: another from the search, or the person's own. Back to what the photo saw.
   const notThis = (
     <View style={styles.notThis}>
-      <SourceLine source={row.source} />
+      <SourceLine source={row.source} before={row.numbersFrom === null ? "" : `${row.numbersFrom} ·`} />
       <View style={styles.grow} />
       <Button label="Not this? Change food" kind="link" onPress={onChange} />
       {waiting ? (
@@ -726,8 +783,11 @@ function RowAmount({
   }
   return (
     <>
+      {/* The food's numbers and Done stay in view under the list, on the smallest phone too. */}
+      <ScrollView style={styles.rowList} contentContainerStyle={styles.rowListInner} keyboardShouldPersistTaps="handled">
       {notThis}
-      <AmountPicker measures={row.measures} amount={row.amount} onAmount={onAmount} dishes={dishes} onDishes={again} onPanel={setPanel} grams={grams} usual={row.usual} />
+      <AmountPicker measures={row.measures} amount={row.amount} onAmount={onAmount} dishes={dishes} onDishes={() => { again(); onDishChanged(); }} onPanel={setPanel} grams={grams} usual={row.usual} />
+      </ScrollView>
       {panel ? null : (
         <View style={styles.sheetFoot}>
           {kcal === null ? null : (
@@ -747,11 +807,13 @@ function RowAmount({
 type Found = { kind: "idle" } | { kind: "looking" } | { kind: "ok"; items: FoodSearchItem[] } | { kind: "failed"; words: string };
 
 /** A food found by search: one the photo missed, added at its usual amount, or the one a row is
- *  changed to (`changing`, the row's name), at the grams the row weighs. Where the list has none, the
- *  person's own food. `query` null: closed. */
+ *  changed to (`changing`, the row's name), at the grams the row weighs; a row changed is offered
+ *  its close foods first, before anything is typed (33b-ii). Where the list has none, the person's
+ *  own food. `query` null: closed. */
 function FindFood({
   query,
   changing,
+  close,
   grams,
   taken,
   onClose,
@@ -759,6 +821,7 @@ function FindFood({
 }: {
   query: string | null;
   changing: string | null;
+  close: readonly FoodSearchItem[];
   grams: number | null;
   taken: ReadonlySet<string>;
   onClose: () => void;
@@ -817,10 +880,37 @@ function FindFood({
     );
   }
   const q = typed.trim();
+  // A close food in the row's place weighs what the row weighs: its calories are said at that weight.
+  const closeWords = (f: FoodSearchItem): string => {
+    if (grams === null) return startWords(f);
+    const g = Math.max(1, Math.round(grams));
+    return `${kcalWords(Math.round((f.kcal * g) / 100))} · ${String(g)} g`;
+  };
+  const closeList = q === "" ? close.filter((f) => !taken.has(f.canonical)) : [];
   return (
     <Sheet open title={title} onClose={onClose}>
       <Field label="Search food" bare value={typed} onChange={setTyped} placeholder="Search food" ready maxLength={100} />
       <ScrollView style={styles.findList} keyboardShouldPersistTaps="handled">
+        {closeList.length === 0 ? null : (
+          <Txt kind="tiny" colour="textSoft" style={styles.label}>
+            Close matches
+          </Txt>
+        )}
+        {closeList.map((f) => (
+          <Pressable
+            key={f.canonical}
+            accessibilityRole="button"
+            accessibilityLabel={`Change to ${f.name}, ${closeWords(f)}`}
+            onPress={() => { pick(f); }}
+            style={({ pressed }) => [styles.found, pressed ? styles.pressed : null]}
+          >
+            <Txt kind="strong" numberOfLines={2}>
+              {f.name}
+            </Txt>
+            <SourceLine source={f.source} before={`${closeWords(f)} ·`} />
+          </Pressable>
+        ))}
+        {closeList.length === 0 ? null : <Txt kind="tiny">{FOOD_ALLERGY_CAUTION}</Txt>}
         {found.kind === "looking" ? <Txt kind="small">Searching…</Txt> : null}
         {found.kind === "failed" ? (
           <Txt kind="small" colour="badText">
@@ -855,7 +945,7 @@ function FindFood({
             <Txt kind="tiny">Not on the list? Enter what you ate.</Txt>
           </Pressable>
         ) : null}
-        <Credits sources={new Set(list.map((f) => f.source))} />
+        <Credits sources={new Set([...closeList, ...list].map((f) => f.source))} />
       </ScrollView>
     </Sheet>
   );
@@ -928,5 +1018,7 @@ const styles = StyleSheet.create({
   full: { width: "100%" },
   notThis: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
   findList: { maxHeight: 360 },
+  rowList: { flexGrow: 0, flexShrink: 1 },
+  rowListInner: { gap: 14 },
   found: { minHeight: 56, justifyContent: "center", gap: 2, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colours.line },
 });
