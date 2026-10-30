@@ -158,6 +158,8 @@ interface Phone {
   scanGone?: boolean;
   /** The previews stop answering (no signal), from the moment this is set. */
   previewsLost?: boolean;
+  /** The person's own dishes. */
+  dishes?: unknown[];
 }
 
 function savedMeal(body: { id: string; takenAt: string; mealType?: string; items: Sent[] }): Meal {
@@ -184,7 +186,7 @@ function photoServer(phone: Phone) {
     "/v1/nutrition/targets": ok(TARGETS),
     "/v1/nutrition/foods": ok({ items: [TOAST_FOUND, MILK] }),
     "/v1/nutrition/foods/recent": ok({ items: [] }),
-    "/v1/nutrition/dishware": ok({ items: [], nextCursor: null }),
+    "/v1/nutrition/dishware": () => ({ status: 200, body: { items: phone.dishes ?? [], nextCursor: null } }),
     "/v1/nutrition/analyze-photo": (body) => (phone.scans.shift() ?? ok(SCAN))(body),
     "/v1/nutrition/meals/preview": (body) => {
       if (phone.previewsLost === true) return lost();
@@ -621,6 +623,21 @@ describe("a food the photo got wrong, and one no list has (Kd, 2026-10-30)", () 
     await screen.findByRole("button", { name: /^Change Toast, Part of Bowl, full · \d+ g/ }, { timeout: 8000 });
     expect(screen.queryByText(/^Can’t reach the server\./)).toBeNull();
   }, 15000);
+
+  it("the one dish has no Edit where the person has no dishes of their own", async () => {
+    await openFood({ meals: [], scans: [] });
+    await takePhoto();
+    await screen.findByText(/^340\skcal · /);
+    expect(screen.queryByRole("button", { name: "Edit your dishes" })).toBeNull();
+  });
+
+  it("the one dish's Edit opens the person's own dishes", async () => {
+    await openFood({ meals: [], scans: [], dishes: [{ id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", label: "Travel mug", containerClass: "mug", volumeMl: 400, foodHint: null, createdAt: "2026-10-30T00:00:00.000Z" }] });
+    await takePhoto();
+    await fireEvent.press(await screen.findByRole("button", { name: "Edit your dishes" }));
+    expect(await screen.findByRole("button", { name: "Rename Travel mug" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Remove Travel mug" })).toBeTruthy();
+  });
 
   it("a food left without how full its dish was is named, in red, and the meal waits for it", async () => {
     await openFood({ meals: [], scans: [] });

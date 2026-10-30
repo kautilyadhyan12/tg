@@ -7,7 +7,8 @@ import { FillDish } from "../../look/FillDish";
 import { Sheet } from "../../look/Sheet";
 import { Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
-import { NewDish, dishByName, dishesOffered, useDishes, type PickDish } from "./AmountPicker";
+import { Button } from "../../look/Button";
+import { EditDishes, NewDish, dishByName, dishesOffered, useDishes, type PickDish } from "./AmountPicker";
 import { FILL_CHOICES } from "./measures";
 
 // The whole meal eaten from one dish (ROADMAP Stage 5 33b-i; Kd, 2026-10-30), drawn as the dishes are in
@@ -54,6 +55,9 @@ export function WholeDish({ applied, held, onUse, onClear }: { applied: DishShow
   const { dishes, again } = useDishes();
   // A dish of the person's own, made here as in a food's own box.
   const [making, setMaking] = useState(false);
+  // The person's own dishes, renamed or removed, as in a food's own box.
+  const [editing, setEditing] = useState(false);
+  const own = dishes.kind === "ok" ? dishes.list : [];
   const last = useLastDish(dishes);
   const offered = dishesOffered(dishes);
   const shown = applied === null ? null : (offered.find((d) => d.id === applied.id) ?? (applied.name === undefined ? null : dishByName(dishes, applied.name)));
@@ -85,9 +89,25 @@ export function WholeDish({ applied, held, onUse, onClear }: { applied: DishShow
           }}
         />
       </Sheet>
-      <Txt kind="tiny" style={styles.label}>
-        Eaten from one dish
-      </Txt>
+      <Sheet open={editing} title="Your dishes" onClose={() => { setEditing(false); }}>
+        <EditDishes
+          list={own}
+          onChanged={(removed) => {
+            again();
+            if (removed === null) return;
+            if (picked?.id === removed) setPicked(null);
+            // A dish taken off cannot stay the meal's dish: its foods go back to their amounts.
+            if (applied !== null && shown?.id === removed) onClear();
+          }}
+          onDone={() => { setEditing(false); }}
+        />
+      </Sheet>
+      <View style={styles.head}>
+        <Txt kind="tiny" style={[styles.label, styles.grow]}>
+          Eaten from one dish
+        </Txt>
+        {own.length > 0 ? <Button label="Edit" kind="link" onPress={() => { setEditing(true); }} say="Edit your dishes" /> : null}
+      </View>
       <View style={styles.chips}>
         {offered.map((d) => (
           <Chip key={d.id} label={`${d.label} · ${String(d.volumeMl)} ml`} on={dish?.id === d.id} onPress={() => { tapDish(d); }} />
@@ -126,6 +146,8 @@ export function WholeDish({ applied, held, onUse, onClear }: { applied: DishShow
 const styles = StyleSheet.create({
   box: { gap: 10 },
   label: { textTransform: "uppercase", letterSpacing: 0.9 },
+  head: { flexDirection: "row", alignItems: "center", gap: 8 },
+  grow: { flex: 1 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   fills: { flexDirection: "row", gap: 8 },
   fill: {

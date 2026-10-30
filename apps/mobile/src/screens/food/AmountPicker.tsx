@@ -342,7 +342,7 @@ export function NewDish({ onCancel, onSaved }: { onCancel: () => void; onSaved: 
 type Editing = { kind: "list" } | { kind: "rename"; dish: Dishware } | { kind: "remove"; dish: Dishware };
 
 /** The person's dishes, each renamed or removed; a removal asks first. */
-function EditDishes({ list, onChanged, onDone }: { list: readonly Dishware[]; onChanged: (removed: string | null) => void; onDone: () => void }) {
+export function EditDishes({ list, onChanged, onDone }: { list: readonly Dishware[]; onChanged: (removed: string | null) => void; onDone: () => void }) {
   const { session } = useSession();
   const { view } = useMealOutbox();
   const [editing, setEditing] = useState<Editing>({ kind: "list" });
