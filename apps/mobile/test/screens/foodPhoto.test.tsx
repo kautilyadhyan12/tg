@@ -636,6 +636,7 @@ describe("a food the photo got wrong, and one no list has (Kd, 2026-10-30)", () 
     await takePhoto();
     await fireEvent.press(await screen.findByRole("button", { name: "Edit your dishes" }));
     expect(await screen.findByRole("button", { name: "Edit Travel mug" })).toBeTruthy();
+    expect(screen.getByText("Cup, Mug and Bowl stay as they are. For another size, add a new dish.")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Remove Travel mug" })).toBeTruthy();
   });
 

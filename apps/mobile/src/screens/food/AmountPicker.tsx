@@ -461,6 +461,7 @@ export function EditDishes({ list, onChanged, onDone }: { list: readonly Dishwar
           </Txt>
         </View>
       )}
+      <Txt kind="small">Cup, Mug and Bowl stay as they are. For another size, add a new dish.</Txt>
       {list.length === 0 ? <Txt kind="small">You have no dishes of your own.</Txt> : null}
       {list.map((d) => (
         <View key={d.id} style={styles.dish}>
