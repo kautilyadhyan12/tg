@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Linking } from "react-native";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import type { Meal, MealPhotoAnalysis, NutritionTargetsResponse } from "@app/shared";
 import { App } from "../../src/App";
 import { mealTypeName, sectionOf } from "../../src/screens/food/day";
@@ -628,6 +628,26 @@ describe("a food the photo got wrong, and one no list has (Kd, 2026-10-30)", () 
     await fireEvent.press(screen.getByRole("button", { name: "Try again" }));
     await screen.findByRole("button", { name: /^Change Toast, Part of Bowl, full · \d+ g/ });
     expect(screen.queryByText(/^Can’t reach the server\./)).toBeNull();
+  });
+
+  it("with no signal it asks again after 30 seconds, by itself (re-check)", async () => {
+    const phone: Phone = { meals: [], scans: [] };
+    await openFood(phone);
+    await takePhoto();
+    await screen.findByText(/^340\skcal · /);
+    phone.previewsLost = true;
+    const timers = jest.spyOn(globalThis, "setTimeout");
+    await fireEvent.press(screen.getByRole("button", { name: "Bowl, full" }));
+    await screen.findAllByText(/^Can’t reach the server\./);
+    const again = timers.mock.calls.find((c) => c[1] === 30_000)?.[0];
+    timers.mockRestore();
+    expect(typeof again).toBe("function");
+    phone.previewsLost = false;
+    await act(async () => {
+      if (typeof again === "function") again();
+      await Promise.resolve();
+    });
+    expect(await screen.findByRole("button", { name: /^Change Toast, Part of Bowl, full · \d+ g/ })).toBeTruthy();
   });
 
   it("a server that answers no is never told as no connection, and is not asked again (round one, H4)", async () => {

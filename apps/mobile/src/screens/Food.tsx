@@ -739,18 +739,20 @@ function MealSheet({
   if (mode.kind === "details") {
     return (
       <Sheet open title="Edit meal" onClose={onClose} onBack={back}>
-        <MealDetails
-          row={row}
-          onSave={(fields) => {
-            void keep(
-              { body: { ...fields, changeId: newGoalId() }, items: null, totals: null, foods: null },
-              fields.mealType ?? row.section,
-              `${fields.mealName ?? row.name} updated.`,
-            );
-          }}
-          onCancel={() => { setMode({ kind: "foods" }); }}
-        />
-        {fullWords}
+        <ScrollView style={styles.boxList} contentContainerStyle={styles.sheetList} keyboardShouldPersistTaps="handled">
+          <MealDetails
+            row={row}
+            onSave={(fields) => {
+              void keep(
+                { body: { ...fields, changeId: newGoalId() }, items: null, totals: null, foods: null },
+                fields.mealType ?? row.section,
+                `${fields.mealName ?? row.name} updated.`,
+              );
+            }}
+            onCancel={() => { setMode({ kind: "foods" }); }}
+          />
+          {fullWords}
+        </ScrollView>
       </Sheet>
     );
   }
@@ -1695,6 +1697,7 @@ function MonthPick({ open, day, onClose, onPick }: { open: boolean; day: Date; o
 }
 
 const styles = StyleSheet.create({
+  boxList: { flexGrow: 0, flexShrink: 1 },
   monthHead: { flexDirection: "row", alignItems: "center", gap: 10 },
   monthName: { flex: 1, textAlign: "center" },
   week: { flexDirection: "row" },

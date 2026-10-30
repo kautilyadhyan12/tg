@@ -631,6 +631,48 @@ describe("Kd's click-through (32b-ii-b): back goes one step, a count shows its g
     expect(await screen.findByText("= 113 g")).toBeTruthy();
   });
 
+  const loggedInBowl = (): Meal => ({
+    id: "55555555-5555-4555-8555-555555555555",
+    takenAt: new Date().toISOString(),
+    mealType: "breakfast",
+    mealName: "Oats, rolled",
+    items: [item(113, 428, { id: "dish", name: "My blue bowl", amount: 0.75 })] as Meal["items"],
+    totals: totals(428),
+    confirmed: true,
+    origin: "manual",
+    portionSource: "user_dishware",
+    nutritionSources: ["usda"],
+    calcVersion: 1,
+    itemsVersion: "v1",
+  });
+
+  it("a food logged by a dish since made bigger opens at its logged grams, so Save rewrites nothing (round one, L2)", async () => {
+    const meal = loggedInBowl();
+    await openFood({ targets: targets(), dishes: [dish(BOWL.id, BOWL.label, "cereal_bowl", 600)], meals: [meal] });
+    await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 428 kcal" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Change Oats, rolled, My blue bowl, three quarters full · 113 g" }));
+    await waitFor(() => {
+      expect(screen.getByLabelText("Amount").props.value).toBe("113");
+    });
+    expect(screen.getByRole("radio", { name: "grams", selected: true })).toBeTruthy();
+  });
+
+  it("a dish's size changed prices the amount again, in a logged food's box (re-check)", async () => {
+    const meal = loggedInBowl();
+    const s = await openFood({ targets: targets(), dishes: [BOWL], meals: [meal] });
+    await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 428 kcal" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Change Oats, rolled, My blue bowl, three quarters full · 113 g" }));
+    await screen.findByText("= 113 g");
+    await fireEvent.press(screen.getByRole("button", { name: "Edit your dishes" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Edit My blue bowl" }));
+    await fireEvent.changeText(screen.getByLabelText("Its size in ml"), "750");
+    await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+    await screen.findByText("Saved My blue bowl, 750 ml.");
+    await fireEvent.press(screen.getByRole("button", { name: "Done" }));
+    expect(await screen.findByText("= 225 g")).toBeTruthy();
+    expect(s.sent.some((a) => a.path === `/v1/nutrition/meals/${meal.id}/preview`)).toBe(true);
+  });
+
   it("un-picks a dish, a measure and how full when they are tapped again, back to the food's usual amount", async () => {
     await openFood({ targets: targets(), dishes: [BOWL], meals: [] });
     await pickOats();

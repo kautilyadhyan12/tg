@@ -4,7 +4,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { launchImageLibraryAsync } from "expo-image-picker";
-import { FOOD_ALLERGY_CAUTION,
+import {
+  FOOD_ALLERGY_CAUTION,
   MEAL_MOST_FOODS,
   PHOTO_SCAN_CAUTION,
   foodSearchResponseSchema,

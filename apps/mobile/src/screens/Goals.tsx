@@ -420,6 +420,7 @@ function GoalSheet(props: {
 
   return (
     <Sheet open title={asking ? "Remove this goal?" : goalName(goal)} onClose={onClose}>
+      <ScrollView style={styles.boxList} contentContainerStyle={styles.boxListInner} keyboardShouldPersistTaps="handled">
       {asking ? (
         <>
           <Txt kind="small">{goalLine(goal, units)}</Txt>
@@ -458,6 +459,7 @@ function GoalSheet(props: {
           </View>
         </>
       )}
+      </ScrollView>
     </Sheet>
   );
 }
