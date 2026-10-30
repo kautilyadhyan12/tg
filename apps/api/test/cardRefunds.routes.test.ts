@@ -558,15 +558,17 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
     });
 
     it("still pending after Square's 14 days, the page says so; on the 14th day it does not", async () => {
-      const started = clock;
       const maya = await paidByCard(gym, "Late Refund");
       await press(maya, 500);
-      const day = 24 * 60 * 60_000;
-      clock = new Date(started.getTime() + 14 * day);
+      const today = (await held(gym, gym.owner, maya.entryId)).today;
+      // By the gym's own days: 24-hour steps would miss a day across a clock change.
+      const startedDaysAgo = (days: number) => sql`
+        UPDATE gym_square_refunds SET started_at = ((${today}::date - ${days}::int)::timestamp + interval '12 hours') AT TIME ZONE 'America/Chicago'
+        WHERE gym_id = ${maya.gym.id} AND payment_id = ${maya.paymentId}`;
+      await startedDaysAgo(14);
       expect((await paymentOnPage(maya)).refunds[0]?.square?.late).toBe(false);
-      clock = new Date(started.getTime() + 15 * day);
+      await startedDaysAgo(15);
       expect((await paymentOnPage(maya)).refunds[0]?.square?.late).toBe(true);
-      clock = started;
     });
 
     it("a refusal after no answer says nothing of the first ask: left to check in Square", async () => {

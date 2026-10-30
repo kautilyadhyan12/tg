@@ -305,7 +305,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
        - 18d-iv-a. [ ] **Refund to card on a member's payment**, Card on Terminal and Card on file, on a person's page. Web folder 1.
        - 18d-iv-b. [ ] **Refund to card on a fee and at Sell**, and a line where staff already look when a refund to the card fails or Square never answers (18d-iv-a's review). Web folder 1.
        - 18d-iv-c. [ ] **An Interac debit card refunded on the Square Terminal**, in Canada, where Square refunds Interac only with the card present. Web folder 1.
-       - 18d-iv-d. [ ] **A refund made inside Square shown here.** Web folder 1.
+       - 18d-iv-d. [ ] **A refund made inside Square shown here**, which also closes a "We don't know whether Square took…" line once Square's own record answers it (18d-iv-a's re-check). Web folder 1.
        - 18d-iv-e. [ ] **A chargeback shown on its payment with Square's own deadline** (Square's new permission DISPUTES_READ: connected gyms press Reconnect Square once). Web folder 1.
      - 18d-vii. [ ] **Ask members to add their card** (Kd, 2026-10-30, `rulings/2026-10-30-18d-iii-b-iv-f.md`): a button that asks every member with no card on file to add it in the app, as saved cards don't move from a gym's old software. After Stage 5 item 20's saving their card. Web folder 1.
      - 18d-v. [ ] **KWAZO listed in Square's App Marketplace, at launch** (Kd, 2026-10-20): once the site is online with Square's live return address. Square's partner page: "Any developer" can list, no fee or developer-country rule named; Square's quality review first. Unproven for a developer in India until applied.
