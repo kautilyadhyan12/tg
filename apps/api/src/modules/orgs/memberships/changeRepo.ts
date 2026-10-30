@@ -25,7 +25,7 @@ import { insertAudit } from "../repo.js";
 import { giftUseUndone } from "../referrals/memberGiftRepo.js";
 import type { HasBookings } from "../classes/bookingChanges.js";
 import type { MembershipScope } from "../classes/bookingsRepo.js";
-import { billDayOf, billsFor, squareMoneyOut, voidBills, type BillRow } from "./billsSql.js";
+import { billDayOf, billsFor, refundAsking, squareMoneyOut, voidBills, type BillRow } from "./billsSql.js";
 import { giveHeldIn, liveTypes, lockedEntry, lockedHeld, settle, typeChoice, type CancelBookings, type HeldWriteOutcome } from "./heldRepo.js";
 
 export type ChangeOutcome =
@@ -34,7 +34,9 @@ export type ChangeOutcome =
   /** The rule refuses this change, or the membership was already changed for another. */
   | { kind: "change_refused"; reason: ChangeFromRefusal | ChangeToRefusal | "changed_already" }
   /** What it has paid for its days is no longer what the screen showed coming off. */
-  | { kind: "credit_changed" };
+  | { kind: "credit_changed" }
+  /** A refund to the card is waiting for Square: what was paid is not known yet (18d-iv-a). */
+  | { kind: "refund_waiting" };
 
 /** A refusal after the first write: thrown so the transaction rolls back, and answered. */
 class Undo extends Error {
@@ -108,6 +110,7 @@ export async function changeHeld(
       if (before === null) return { kind: "membership_not_found" };
       const out = await squareMoneyOut(tx, input.gymId, before.id);
       if (out !== null) return out;
+      if (await refundAsking(tx, input.gymId, before.id)) return { kind: "refund_waiting" };
       if ((await changedAlready(tx, input.gymId, input.entryId)).has(before.id)) return { kind: "change_refused", reason: "changed_already" };
 
       const bills = await billsFor(tx, input.gymId, [before.id]);

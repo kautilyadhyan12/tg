@@ -7,7 +7,8 @@
 // saves are each leased, and every write names the connection or card it was read for. Bills that
 // have fallen due are charged to the card on file (18d-iii-i, `cardCharges.ts`). Payments taken in Square's
 // own app are not taken in since Square Point of Sale was taken out (18d-iii-b-v, Kd, 2026-10-30): staff record
-// them by hand, and Square's messages about a payment are no longer kept.
+// them by hand, and Square's messages about a payment are no longer kept. Refunds to the card Square has not answered or
+// not finished are read each minute (18d-iv-a, `cardRefunds.ts`).
 import * as webhooks from "../../webhooks/repo.js";
 import { insertAudit } from "../repo.js";
 import { SQUARE_CARD_EVENTS, SQUARE_CUSTOMER_DELETED_EVENT, checkSquareCard, checkSquareCustomer, sendOwedCardDisables } from "./cards.js";
@@ -17,6 +18,7 @@ import type { SquareSettings } from "./settings.js";
 import { processTerminalSaves } from "./terminalCards.js";
 import { processTerminalPayments } from "./terminalPayments.js";
 import { processCardCharges, type CardChargeRun } from "./cardCharges.js";
+import { processCardRefunds, type CardRefundRun } from "./cardRefunds.js";
 import { sendOwedCustomerDeletes, type SquareDeletesRun } from "./squareDeletes.js";
 
 export const SQUARE_REVOKED_EVENT = "oauth.authorization.revoked";
@@ -58,6 +60,8 @@ export interface SquareWorkRun {
   terminalPayments: { asked: number; forgotten: number };
   /** Bills charged to the card on file, and charges Square had not answered (18d-iii-i). */
   cardCharges: CardChargeRun;
+  /** Refunds to the card Square was asked about, or read for where they stand (18d-iv-a). */
+  cardRefunds: CardRefundRun;
 }
 
 type Check = "works" | "removed" | "unknown";
@@ -148,6 +152,7 @@ export async function processSquareWork(deps: PaymentsDeps, eventIds: readonly s
     terminalSaves: { asked: 0, forgotten: 0 },
     terminalPayments: { asked: 0, forgotten: 0 },
     cardCharges: { asked: 0, charged: 0, paid: 0, declined: 0 },
+    cardRefunds: { asked: 0, looked: 0 },
   };
   const square = deps.square;
   if (square === null) return run;
@@ -209,6 +214,7 @@ export async function processSquareWork(deps: PaymentsDeps, eventIds: readonly s
   run.terminalSaves = await processTerminalSaves(deps, square, gymIds);
   run.terminalPayments = await processTerminalPayments(deps, square, gymIds);
   run.cardCharges = await processCardCharges(deps, square, gymIds);
+  run.cardRefunds = await processCardRefunds(deps, square, gymIds);
 
   for (const row of await repo.claimDueRefreshes(deps.sql, square.environment, deps.now(), SQUARE_WORK.leaseMs, SQUARE_WORK.refreshesPerRun, gymIds)) {
     const outcome = await renew(deps, square, row);

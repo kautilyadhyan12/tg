@@ -25,6 +25,7 @@ import {
   type HeldMembership,
   type MemberPaymentByHand,
   type MemberPaymentMethod,
+  type MemberRefundMethod,
   type PaymentVoidReason,
   type RefundReason,
   type RefundVoidReason,
@@ -45,11 +46,14 @@ import {
   insertRefund,
   overdueDaysOf,
   paymentsFor,
+  refundAskingOnBill,
   setBillDay,
   setBillStatus,
   setOverdueDays,
   squareMoneyOut,
+  type BillRow,
   type NewBill,
+  type PaymentRow,
 } from "./billsSql.js";
 import { listHeldMembership, lockedEntry, lockedHeld, settle, writeCountsAfterGap, writePaidPeriods, type CountMove, type ListHeldColumns } from "./heldRepo.js";
 
@@ -80,7 +84,11 @@ export type BillWriteOutcome =
   /** A payment taken on the Terminal: Square holds the money, so it is refunded there. */
   | { kind: "terminal_payment" }
   /** The same, charged to the card on file (18d-iii-i). */
-  | { kind: "card_payment" };
+  | { kind: "card_payment" }
+  /** A refund to the card is waiting for Square's answer on this bill (18d-iv-a). */
+  | { kind: "refund_waiting" }
+  /** A refund sent to the card: the money has gone, so it is never voided here (18d-iv-a). */
+  | { kind: "card_refund" };
 
 export interface RecordPaymentInput {
   gymId: string;
@@ -249,6 +257,8 @@ export async function voidPayment(
     if (payment.method === "company") return { kind: "card_payment" };
     const out = await squareMoneyOut(tx, input.gymId, row.id);
     if (out !== null) return out;
+    // No refund row yet, so the rule below cannot see it: voided now, the refund would land on a bill owed again.
+    if (await refundAskingOnBill(tx, input.gymId, payment.bill_id)) return { kind: "refund_waiting" };
 
     const bills = await billsFor(tx, input.gymId, [row.id]);
     const payments = await paymentsFor(tx, input.gymId, [row.id]);
@@ -442,6 +452,7 @@ export async function noteRefund(
 
     const payment = await paymentOf(tx, input.gymId, row.id, input.paymentId);
     if (payment === null || payment.undone) return { kind: "payment_not_found" };
+    if (await refundAskingOnBill(tx, input.gymId, payment.bill_id)) return { kind: "refund_waiting" };
     const bill = (await billsFor(tx, input.gymId, [row.id])).find((b) => b.id === payment.bill_id);
     const standing = (await paymentsFor(tx, input.gymId, [row.id])).find((p) => p.id === input.paymentId);
     if (bill === undefined || standing === undefined) return { kind: "payment_not_found" };
@@ -452,49 +463,98 @@ export async function noteRefund(
       return refund.reason === "not_settled" ? { kind: "refund_not_settled" } : { kind: "not_allowed" };
     }
 
-    const refundId = await insertRefund(
-      tx,
-      {
-        gymId: input.gymId,
-        paymentId: input.paymentId,
-        amountMinor: input.amountMinor,
-        currency: payment.currency,
-        method: input.method,
-        reason: input.reason,
-        requestKey: input.requestKey,
-        refundedOn: input.today,
-        recordedBy: input.actorUserId,
-      },
-      input.now,
-    );
-    if (refundId === null) throw new Error("a refund was not noted under the gym's lock");
-    if (refund.billStatus === "refunded") await setBillStatus(tx, input.gymId, bill.id, "refunded", input.now);
-    // A friend's payment refunded in full no longer stands for a member's Refer a friend gift.
-    if (standing.refundedMinor + input.amountMinor >= standing.amountMinor) {
-      await friendPaymentGone(tx, { gymId: input.gymId, by: { paymentId: input.paymentId }, why: "refunded", today: input.today, now: input.now });
-    }
-
-    await insertAudit(tx, {
-      actorUserId: input.actorUserId,
+    await writeRefund(tx, {
       gymId: input.gymId,
+      entryId: input.entryId,
+      membershipId: row.id,
+      bill,
+      standing,
+      paymentId: input.paymentId,
+      requestKey: input.requestKey,
+      amountMinor: input.amountMinor,
+      currency: payment.currency,
+      method: input.method,
+      reason: input.reason,
+      today: input.today,
+      actorUserId: input.actorUserId,
+      now: input.now,
       action: "org.member_refund_noted",
-      targetType: "gym_member_refund",
-      targetId: refundId,
-      meta: {
-        entryId: input.entryId,
-        membershipId: row.id,
-        billId: bill.id,
-        paymentId: input.paymentId,
-        period: String(bill.periodIndex),
-        amountMinor: String(input.amountMinor),
-        currency: payment.currency,
-        method: input.method,
-        reason: input.reason,
-        billRefunded: String(refund.billStatus === "refunded"),
-      },
+      card: null,
     });
     return { kind: "ok" };
   });
+}
+
+/** A refund written on a payment, with all it moves: its row and receipt number, the bill once everything paid on it has gone
+ *  back, a friend's payment for a member's gift, and the gym's record. Under the gym's lock; a refund noted by hand and one
+ *  sent to the card (18d-iv-a) are the same write. Answers the refund's id. */
+export async function writeRefund(
+  tx: TransactionSql,
+  r: {
+    gymId: string;
+    /** Null once the record was deleted for good. */
+    entryId: string | null;
+    membershipId: string;
+    bill: BillRow;
+    standing: PaymentRow;
+    paymentId: string;
+    requestKey: string;
+    amountMinor: number;
+    currency: string;
+    method: MemberRefundMethod;
+    reason: RefundReason;
+    today: string;
+    actorUserId: string | null;
+    now: Date;
+    action: "org.member_refund_noted" | "org.member_refund_sent";
+    /** The card it went back to, for the gym's record. */
+    card: { brand: string; last4: string } | null;
+  },
+): Promise<string> {
+  const refundId = await insertRefund(
+    tx,
+    {
+      gymId: r.gymId,
+      paymentId: r.paymentId,
+      amountMinor: r.amountMinor,
+      currency: r.currency,
+      method: r.method,
+      reason: r.reason,
+      requestKey: r.requestKey,
+      refundedOn: r.today,
+      recordedBy: r.actorUserId,
+    },
+    r.now,
+  );
+  if (refundId === null) throw new Error("a refund was not written under the gym's lock");
+  const refunded = r.bill.refundedMinor + r.amountMinor >= r.bill.paidMinor;
+  if (refunded) await setBillStatus(tx, r.gymId, r.bill.id, "refunded", r.now);
+  // A friend's payment refunded in full no longer stands for a member's Refer a friend gift.
+  if (r.standing.refundedMinor + r.amountMinor >= r.standing.amountMinor) {
+    await friendPaymentGone(tx, { gymId: r.gymId, by: { paymentId: r.paymentId }, why: "refunded", today: r.today, now: r.now });
+  }
+
+  await insertAudit(tx, {
+    actorUserId: r.actorUserId,
+    gymId: r.gymId,
+    action: r.action,
+    targetType: "gym_member_refund",
+    targetId: refundId,
+    meta: {
+      ...(r.entryId === null ? {} : { entryId: r.entryId }),
+      membershipId: r.membershipId,
+      billId: r.bill.id,
+      paymentId: r.paymentId,
+      period: String(r.bill.periodIndex),
+      amountMinor: String(r.amountMinor),
+      currency: r.currency,
+      method: r.method,
+      reason: r.reason,
+      billRefunded: String(refunded),
+      ...(r.card === null ? {} : { brand: r.card.brand, last4: r.card.last4 }),
+    },
+  });
+  return refundId;
 }
 
 /** Voids a refund noted by mistake (18o): its row is kept, marked with who, when and why,
@@ -511,12 +571,13 @@ export async function voidRefund(
     const payment = await paymentOf(tx, input.gymId, row.id, input.paymentId);
     if (payment === null) return { kind: "payment_not_found" };
 
-    const [refund] = await tx<{ undone: boolean; amount_minor: number; currency: string }[]>`
-      SELECT undone_at IS NOT NULL AS undone, amount_minor, currency
+    const [refund] = await tx<{ undone: boolean; amount_minor: number; currency: string; to_card: boolean }[]>`
+      SELECT undone_at IS NOT NULL AS undone, amount_minor, currency, method IN ('company','terminal') AS to_card
       FROM gym_member_refunds
       WHERE gym_id = ${input.gymId} AND id = ${input.refundId} AND payment_id = ${input.paymentId}`;
     if (refund === undefined) return { kind: "refund_not_found" };
     if (refund.undone) return { kind: "ok" };
+    if (refund.to_card) return { kind: "card_refund" };
 
     await tx`
       UPDATE gym_member_refunds SET undone_at = ${input.now}, undone_by = ${input.actorUserId}, void_reason = ${input.reason}
