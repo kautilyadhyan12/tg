@@ -666,6 +666,27 @@ describe("a photo that did not come is asked again, and says so meanwhile", () =
     expect(card.queryByText("Couldn't load this photo.")).toBeNull();
   });
 
+  it("one that came through the whole-screen photo shows on its post too, when that is closed", async () => {
+    download.mockImplementationOnce(() => Promise.reject(new Error("Unable to resolve host")));
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [postsOf(IRON)]: ok(feed(IRON, [post(P1, { photos: [photo(PHOTO)] })])),
+    });
+    await openUpdates(server.ask, IRON);
+    const card = within(await page().findByTestId(`post-${P1}`));
+    await card.findByText("Couldn't load this photo.");
+    await fireEvent.press(card.getByLabelText("Open photo 1 of 1"));
+    await fireEvent(await screen.findByTestId("photo-pages"), "layout", { nativeEvent: { layout: { width: 300, height: 600 } } });
+    await waitFor(() => {
+      expect(asksFor(PHOTO)).toBe(2);
+    });
+    await settle();
+    await fireEvent.press(screen.getByLabelText("Close photo"));
+    expect(await card.findByTestId(`photo-${PHOTO}`)).toBeTruthy();
+    expect(card.queryByText("Couldn't load this photo.")).toBeNull();
+  });
+
   it("a sign-in refused every time is renewed once and asked once more, never round and round", async () => {
     let renewals = 0;
     download.mockImplementation(() => Promise.reject(refused(401)));

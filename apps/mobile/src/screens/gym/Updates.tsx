@@ -375,6 +375,8 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
         }}
         onClose={() => {
           setViewing(null);
+          // A photo that came here shows on its post too.
+          setPhotoRound((round) => round + 1);
         }}
       />
     </>
