@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
+import { GYM_MEMBER_POSTS_A_DAY } from "@app/shared";
 import type { BlockedGymPostersResponse, GymPost, GymPostsResponse, StaffGymPostsResponse } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
