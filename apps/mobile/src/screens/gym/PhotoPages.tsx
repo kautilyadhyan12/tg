@@ -49,6 +49,7 @@ export function PhotoPages({ viewing, photo, onIndex, onClose }: PhotoPagesProps
           style={styles.grow}
           onLayout={(e) => {
             setWidth(e.nativeEvent.layout.width);
+            setHeld(false);
           }}
           accessible
           accessibilityRole="adjustable"
@@ -60,7 +61,8 @@ export function PhotoPages({ viewing, photo, onIndex, onClose }: PhotoPagesProps
         >
           {viewing === null || width === 0 ? null : (
             <FlatList
-              key={viewing.listKey}
+              // A new width (a folding phone opening) starts the row again, on the photo it was on.
+              key={`${viewing.listKey}-${String(width)}`}
               ref={list}
               testID="photo-list"
               data={ids}

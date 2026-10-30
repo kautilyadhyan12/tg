@@ -1463,6 +1463,17 @@ describe("the whole-screen photo", () => {
     expect(slides()).toBe(true);
   });
 
+  it("a new width keeps the photo it was on, and lays the row out for that width", async () => {
+    await open();
+    await fireEvent(screen.getByTestId("photo-pages"), "accessibilityAction", { nativeEvent: { actionName: "increment" } });
+    await fireEvent(screen.getByTestId("photo-pages"), "layout", { nativeEvent: { layout: { x: 0, y: 0, width: 800, height: 600 } } });
+    expect(screen.getByText("Photo 2 of 2")).toBeTruthy();
+    const list = screen.getByTestId("photo-list");
+    expect(list.props.initialScrollIndex).toBe(1);
+    const layout = list.props.getItemLayout as (data: unknown, i: number) => { length: number; offset: number };
+    expect(layout(null, 1)).toMatchObject({ length: 800, offset: 800 });
+  });
+
   it("a reader's step changes the photo", async () => {
     await open();
     await fireEvent(screen.getByTestId("photo-pages"), "accessibilityAction", { nativeEvent: { actionName: "increment" } });
