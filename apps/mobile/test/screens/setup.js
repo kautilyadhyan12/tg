@@ -110,7 +110,7 @@ jest.mock("expo-camera", () => {
     useEffect(() => {
       onCameraReady?.();
     }, [onCameraReady]);
-    return createElement(View, { testID: "camera-view" });
+    return createElement(View, { testID: "camera-view", facing: props.facing });
   });
   function useCameraPermissions() {
     const [now, setNow] = useState(camera.permission);

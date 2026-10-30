@@ -25,6 +25,8 @@ function Lens({ onPhoto, onClose }: { onPhoto: (uri: string) => void; onClose: (
   const lens = useRef<CameraView | null>(null);
   const [ready, setReady] = useState(false);
   const [taking, setTaking] = useState(false);
+  // The main camera to start with; the button beside the shutter changes to the selfie camera and back.
+  const [facing, setFacing] = useState<"back" | "front">("back");
   const [failed, setFailed] = useState<string | null>(null);
   const asked = useRef(false);
 
@@ -56,7 +58,7 @@ function Lens({ onPhoto, onClose }: { onPhoto: (uri: string) => void; onClose: (
         <CameraView
           ref={lens}
           style={StyleSheet.absoluteFill}
-          facing="back"
+          facing={facing}
           onCameraReady={() => {
             setReady(true);
           }}
@@ -96,16 +98,35 @@ function Lens({ onPhoto, onClose }: { onPhoto: (uri: string) => void; onClose: (
             </Txt>
           </View>
         )}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Take photo"
-          accessibilityState={{ disabled: !allowed || !ready || taking }}
-          disabled={!allowed || !ready || taking}
-          onPress={() => void take()}
-          style={[styles.shutter, !allowed || !ready ? styles.dim : null]}
-        >
-          <View style={styles.shutterInner} />
-        </Pressable>
+        <View style={styles.shutterRow}>
+          <View style={styles.sideEmpty} />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Take photo"
+            accessibilityState={{ disabled: !allowed || !ready || taking }}
+            disabled={!allowed || !ready || taking}
+            onPress={() => void take()}
+            style={[styles.shutter, !allowed || !ready ? styles.dim : null]}
+          >
+            <View style={styles.shutterInner} />
+          </Pressable>
+          {allowed ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={facing === "back" ? "Switch to the selfie camera" : "Switch to the main camera"}
+              disabled={taking}
+              onPress={() => {
+                setReady(false);
+                setFacing((now) => (now === "back" ? "front" : "back"));
+              }}
+              style={styles.side}
+            >
+              <Icon name="switchcamera" size={22} />
+            </Pressable>
+          ) : (
+            <View style={styles.sideEmpty} />
+          )}
+        </View>
       </View>
     </View>
   );
@@ -127,6 +148,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   foot: { position: "absolute", left: 0, right: 0, bottom: 0, paddingHorizontal: sizes.edge, gap: 18, alignItems: "center" },
+  shutterRow: { alignSelf: "stretch", flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 12 },
+  sideEmpty: { width: 52, height: 52 },
+  side: { width: 52, height: 52, borderRadius: sizes.round, backgroundColor: colours.scrim, alignItems: "center", justifyContent: "center" },
   notice: { padding: 12, borderRadius: 16, backgroundColor: colours.scrim },
   shutter: { width: 78, height: 78, borderRadius: sizes.round, borderWidth: 3, borderColor: colours.text, alignItems: "center", justifyContent: "center" },
   shutterInner: { width: 62, height: 62, borderRadius: sizes.round, backgroundColor: colours.orange, experimental_backgroundImage: orangeGradient, boxShadow: shadows.button },

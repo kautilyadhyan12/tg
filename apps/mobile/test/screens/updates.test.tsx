@@ -1312,6 +1312,21 @@ describe("posting", () => {
     expect(screen.queryByTestId("post-camera")).toBeNull();
   });
 
+  it("the camera starts on the main one, changes to the selfie camera and back, and a selfie goes on the post", async () => {
+    const server = serverOf({ [postsOf(IRON)]: on(IRON) });
+    await openUpdates(server.ask, IRON);
+    await fireEvent.press(await page().findByRole("button", { name: "Write a post" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Take a photo" }));
+    expect((await screen.findByTestId("camera-view")).props.facing).toBe("back");
+    await fireEvent.press(screen.getByRole("button", { name: "Switch to the selfie camera" }));
+    expect(screen.getByTestId("camera-view").props.facing).toBe("front");
+    await fireEvent.press(screen.getByRole("button", { name: "Switch to the main camera" }));
+    expect(screen.getByTestId("camera-view").props.facing).toBe("back");
+    await fireEvent.press(screen.getByRole("button", { name: "Switch to the selfie camera" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Take photo" }));
+    expect(await screen.findByTestId("draft-photo-1")).toBeTruthy();
+  });
+
   it("Post waits for something to post, and for words within the limit", async () => {
     const server = serverOf({ [postsOf(IRON)]: on(IRON) });
     await openUpdates(server.ask, IRON);
