@@ -23,6 +23,8 @@ import {
   REFUND_REASON_WORDS,
   REFUND_VOID_REASONS,
   REFUND_VOID_REASON_WORDS,
+  CARD_REFUND_LATE_LINE,
+  CARD_REFUND_WORDS,
   currencyDecimals,
   dayOfMonthWords,
   formatMinor,
@@ -33,6 +35,7 @@ import {
   priceToMinor,
 } from '@app/shared';
 import { dayWords } from './memberListView';
+import { cardRefundOpenLine } from './cardRefundView';
 
 /** The tick that lets a member of staff record what a member paid. */
 export function canRecordPayments(privileges) {
@@ -161,20 +164,34 @@ export function billTaxLine(bill, currency) {
  *  sale, and why. One voided before reasons were kept has none. */
 export function voidedLine(voided, reasonWords) {
   const who = voided.by === null ? '' : ` by ${voided.by}`;
+  // Square took a refund to the card up, then said it failed (18d-iv-a): nobody voided it.
+  if (voided.reason === 'square_failed') return CARD_REFUND_WORDS.failed;
   // Taken off with Not this bill (18d-iii-b-i): nothing was voided, the money is still in Square.
   if (voided.reason === 'not_this_bill') return `Taken off this bill ${dayWords(voided.on)}${who}. The money is still in Square.`;
   const why = voided.reason === null ? null : (reasonWords[voided.reason] ?? null);
   return joined([`Voided ${dayWords(voided.on)}${who}`, why]);
 }
 
-const refundLine = (r, currency) => ({
-  id: r.id,
-  receiptNumber: r.receiptNumber,
-  amount: `${formatMinor(r.amountMinor, currency)} refunded`,
-  money: formatMinor(r.amountMinor, currency),
-  detail: joined([methodWords(r.method), shortDay(r.refundedOn), REFUND_REASON_WORDS[r.reason] ?? null, byWords(r.by)]),
-  voided: null,
-});
+const refundLine = (r, currency) => {
+  // Sent to the card through Square (18d-iv-a): which card, whether Square has finished, and never voided here.
+  const square = r.square ?? null;
+  const pending = square?.state === 'pending';
+  return {
+    id: r.id,
+    receiptNumber: r.receiptNumber,
+    amount: `${formatMinor(r.amountMinor, currency)} ${pending ? 'refund pending' : 'refunded'}`,
+    money: formatMinor(r.amountMinor, currency),
+    detail: joined([
+      square?.card === null || square?.card === undefined ? methodWords(r.method) : `${methodWords(r.method)}, ${cardName(square.card)}`,
+      shortDay(r.refundedOn),
+      REFUND_REASON_WORDS[r.reason] ?? null,
+      byWords(r.by),
+    ]),
+    note: square?.late === true ? CARD_REFUND_LATE_LINE : null,
+    toCard: square !== null,
+    voided: null,
+  };
+};
 
 /** A payment's refunds, those that stand and those voided, in the order they were noted. */
 const refundLines = (p, currency) =>
@@ -219,8 +236,15 @@ export function billRow(bill, currency, today) {
     cancelled,
     ...cardLines(bill),
     payments: [
-      ...bill.payments.map((p) => ({ ...paymentLine(p, currency), refundable: p.refundableMinor > 0, voided: null })),
-      ...(bill.voidedPayments ?? []).map((p) => ({ ...paymentLine(p, currency), refundable: false, voided: voidedLine(p.voided, PAYMENT_VOID_REASON_WORDS) })),
+      ...bill.payments.map((p) => ({
+        ...paymentLine(p, currency),
+        refundable: p.refundableMinor > 0,
+        // A payment taken through Square goes back through Square (18d-iv-a).
+        toCard: p.refundableMinor > 0 && paidThroughSquare(p.method),
+        cardRefund: p.cardRefund === null || p.cardRefund === undefined ? null : cardRefundOpenLine(p.cardRefund, currency),
+        voided: null,
+      })),
+      ...(bill.voidedPayments ?? []).map((p) => ({ ...paymentLine(p, currency), refundable: false, toCard: false, cardRefund: null, voided: voidedLine(p.voided, PAYMENT_VOID_REASON_WORDS) })),
     ].sort((a, b) => a.receiptNumber - b.receiptNumber),
   };
 }
@@ -288,8 +312,8 @@ export function feeRow(fee, currency, today) {
               : `${noLongerOwed(fee)} If you gave the money back, void the payment.`
             : null,
     payments: [
-      ...fee.payments.map((p) => ({ ...paymentLine(p, currency), refundable: false, voided: null })),
-      ...fee.voidedPayments.map((p) => ({ ...paymentLine(p, currency), refundable: false, voided: voidedLine(p.voided, PAYMENT_VOID_REASON_WORDS) })),
+      ...fee.payments.map((p) => ({ ...paymentLine(p, currency), refundable: false, toCard: false, cardRefund: null, voided: null })),
+      ...fee.voidedPayments.map((p) => ({ ...paymentLine(p, currency), refundable: false, toCard: false, cardRefund: null, voided: voidedLine(p.voided, PAYMENT_VOID_REASON_WORDS) })),
     ].sort((a, b) => a.receiptNumber - b.receiptNumber),
     ...cardLines(fee),
     canPay: fee.can.pay,
@@ -392,7 +416,9 @@ export function cancelBillBody(draft) {
 
 /** What each ⋯ list offers, in a name and one line that says what it does (18o). */
 export const MENU_WORDS = {
+  cardRefund: { label: 'Refund to card', hint: 'Square sends the money back to the card that paid.' },
   refund: { label: 'Note a refund', hint: 'You gave some or all of it back.' },
+  refundElsewhere: { label: 'Note a refund', hint: 'You gave it back another way, such as cash.' },
   voidPayment: { label: 'Void payment', hint: 'It was recorded by mistake. The bill is owed again.' },
   voidRefund: { label: 'Void refund', hint: 'It was noted by mistake. It will no longer count.' },
   voidBill: { label: 'Void bill', hint: 'Nothing is owed for these days.' },
@@ -438,8 +464,8 @@ export function refundWords(m, name, payment, live) {
     : '';
   return {
     title: `Note a refund for ${name}'s ${m.typeName}`,
-    // A card paid on the Terminal (18d-vi-a) is refunded in Square, where its money is.
-    detail: `This is for the ${paid}.${some} It only writes the refund in your records: ${paidThroughSquare(payment.method) ? 'refund the card in your Square Dashboard' : 'give the money back yourself'}.${keeps}`,
+    // A card paid through Square has Refund to card (18d-iv-a); this is for money given back another way.
+    detail: `This is for the ${paid}.${some} It only writes the refund in your records: give the money back yourself.${keeps}`,
   };
 }
 

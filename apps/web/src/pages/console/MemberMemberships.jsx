@@ -24,6 +24,8 @@ import { termLine } from './membershipTypesView';
 import { changeBody, changeChoice, changeCreditLine, changeDoneWords, changeEndingWords, changeForm, changeLine, showsChange, squareSetUpLine } from './membershipChangeView';
 import { viewerPrivileges } from './consoleView';
 import { placeFor } from './consolePlaces';
+import CardRefundBox from './CardRefundBox';
+import { waitsOnSquare } from './cardRefundView';
 import MembershipAgreement from './MembershipAgreement';
 import { noteDay } from './memberListPeople';
 import {
@@ -275,6 +277,21 @@ export default function MemberMemberships({
   useEffect(() => {
     shownNow.current = shown;
   });
+  // A refund to the card still with Square: the worker's answer tells no page, so this one reads again every 30 seconds, for
+  // at most 15 minutes, and again whenever staff come back to it (CLAUDE.md §4, Pages stay current by themselves).
+  const waitingOnSquare = waitsOnSquare(shown?.memberships);
+  useEffect(() => {
+    if (!waitingOnSquare) return undefined;
+    const started = Date.now();
+    const timer = setInterval(() => {
+      if (Date.now() - started > 15 * 60_000) {
+        clearInterval(timer);
+        return;
+      }
+      setAttempt((n) => n + 1);
+    }, 30_000);
+    return () => clearInterval(timer);
+  }, [waitingOnSquare]);
   /** Why the server will not open the line: said under the heading until it opens. */
   const [liveRefused, setLiveRefused] = useState(null);
   useLiveNews(gymId, (message) => {
@@ -551,6 +568,14 @@ export default function MemberMemberships({
     setEnding(null);
     setRefundForm({ ...refundDraft(m, payment, newRequestKey), tried: false });
     setOpen({ what: 'refund', id: m.id });
+  };
+
+  /** Refund to card (18d-iv-a): its box opens under the payment, and asks Square about it. */
+  const startCardRefund = (m, paymentId) => {
+    setNotice(null);
+    setRefusal(null);
+    setEnding(null);
+    setOpen({ what: 'cardRefund', id: m.id, paymentId });
   };
 
   const askVoidRefund = (m, paymentId, refundId) => {
@@ -1318,6 +1343,29 @@ export default function MemberMemberships({
       if (here === null) return null;
       if (here.what === 'refund' && refundForm !== null && refundForm.paymentId === paymentId) return renderRefund(m);
       if (here.what === 'undo' && voidForm !== null && voidId === paymentId) return renderAsk(m);
+      if (here.what === 'cardRefund' && here.paymentId === paymentId) {
+        const payment = paymentOf(m, paymentId);
+        if (payment === null) return null;
+        return (
+          <CardRefundBox
+            gymId={gymId}
+            entryId={entryId}
+            m={m}
+            payment={payment}
+            name={name}
+            live={isLive(m)}
+            paymentsTo={paymentsTo}
+            onClose={() => setOpen(null)}
+            onNote={() => startRefund(m, paymentId)}
+            onDone={(words) => {
+              setOpen(null);
+              setNotice(words);
+              setAttempt((n) => n + 1);
+              onChanged?.();
+            }}
+          />
+        );
+      }
       return null;
     };
     const SPLIT = { borderTop: '1px solid var(--line)' };
@@ -1392,7 +1440,8 @@ export default function MemberMemberships({
                         </button>
                         {(() => {
                           const items = [];
-                          if (acts && p.voided === null && p.refundable) items.push({ ...MENU_WORDS.refund, onPick: () => startRefund(m, p.id) });
+                          if (acts && p.voided === null && p.toCard) items.push({ ...MENU_WORDS.cardRefund, onPick: () => startCardRefund(m, p.id) });
+                          if (acts && p.voided === null && p.refundable) items.push({ ...(p.toCard ? MENU_WORDS.refundElsewhere : MENU_WORDS.refund), onPick: () => startRefund(m, p.id) });
                           if (acts && p.voided === null && p.id === voidId) {
                             items.push({ ...MENU_WORDS.voidPayment, danger: true, onPick: () => ask('undo', m) });
                           }
@@ -1400,6 +1449,11 @@ export default function MemberMemberships({
                         })()}
                       </span>
                     </div>
+                    {p.cardRefund !== null ? (
+                      <span className="c-s13 c-w5" style={{ color: 'var(--warn)' }} data-testid="held-card-refund-open">
+                        {p.cardRefund}
+                      </span>
+                    ) : null}
                     {receiptFor === p.receiptNumber ? <ReceiptBox gymId={gymId} gym={gym} number={p.receiptNumber} onClose={() => setReceiptFor(null)} /> : null}
                     {boxUnderPayment(p.id)}
                     {p.refunds.map((r) => (
@@ -1414,6 +1468,7 @@ export default function MemberMemberships({
                         </span>
                         <span className="c-s13 c-t2 md:flex-1 flex flex-col">
                           <span>{r.detail}</span>
+                          {r.note === null ? null : <span style={{ color: 'var(--warn)' }}>{r.note}</span>}
                           {r.voided === null ? null : <span>{r.voided}</span>}
                         </span>
                         <span className="flex items-center gap-2 self-start md:self-auto">
@@ -1426,7 +1481,7 @@ export default function MemberMemberships({
                           >
                             {RECEIPT_BUTTON}
                           </button>
-                          {acts && r.voided === null && p.voided === null ? (
+                          {acts && r.voided === null && p.voided === null && !r.toCard ? (
                             <MoreMenu
                               label={null}
                               alignRight
@@ -1898,7 +1953,7 @@ export default function MemberMemberships({
             renderPay(m)
           ) : open.what === 'change' && changeDraft !== null ? (
             ending !== null && ending.id === m.id ? renderEnding(m) : renderChange(m)
-          ) : open.what === 'cancelBill' || open.what === 'refund' || open.what === 'voidRefund' || (open.what === 'undo' && m.billing?.undo?.kind === 'payment') ? null : (
+          ) : open.what === 'cancelBill' || open.what === 'refund' || open.what === 'cardRefund' || open.what === 'voidRefund' || (open.what === 'undo' && m.billing?.undo?.kind === 'payment') ? null : (
             // Drawn inside the bill, payment or refund they are about (`renderBills`).
             renderAsk(m)
           )

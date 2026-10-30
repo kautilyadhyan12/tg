@@ -934,7 +934,7 @@ d("a gym's notebook: a bill cancelled, a refund noted, and the list's Payment (r
       return sql`INSERT INTO gym_member_refunds ${sql(row)}`;
     };
     await expect(refund({ amount_minor: 0 })).rejects.toThrow(/gym_member_refunds_amount_check/);
-    await expect(refund({ method: "company" })).rejects.toThrow(/gym_member_refunds_method_check/);
+    await expect(refund({ method: "link" })).rejects.toThrow(/gym_member_refunds_method_check/);
     await expect(refund({ reason: "because" })).rejects.toThrow(/gym_member_refunds_reason_check/);
     await expect(refund({ payment_id: NO_SUCH })).rejects.toThrow(/gym_member_refunds_payment_fk/);
     // A refund names a payment of its own gym: next door's row cannot point at this one.

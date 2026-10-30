@@ -24,6 +24,8 @@ export const CARD_REFUND_WORDS = {
   differs: "This payment doesn't match Square's record of it. Check it in your Square Dashboard before refunding it.",
   key_reused: "That refund has already been sent. Open the payment again to see where it stands.",
   nothing_left: "There is nothing left of this payment to refund.",
+  /** Square took it up, then said it failed. */
+  failed: "Square could not refund this. No money went back.",
 } as const;
 
 /** Why Square refused a refund, in the gym's words. Any code not named here reads the last line: a code Square adds

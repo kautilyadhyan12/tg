@@ -3690,8 +3690,7 @@ list's Payment reads the bills.
   than those cannot be refunded from the page.
 - **Left as it is, and why**: a person whose record names a membership they never held here (§18.2's rule 2) keeps
   the gym's own words on the list even with an old bill open; their page shows the bill.
-  Writing off the rest of a part-paid bill, and a refund sent through a payment company
-  (18d), are not built.
+  Writing off the rest of a part-paid bill is not built. A refund sent through a payment company is §14.8, Refund to card.
 
 **As built, 18h-i (2026-10-17; `rulings/2026-10-17-18h-i.md`): a fee for a late cancel or a
 no-show, for classes.** The gym sets two amounts in Booking rules (0 is off; changing them
@@ -4315,6 +4314,30 @@ nothing else pays, voids, cancels, freezes or changes that membership, and no an
 again with the same key for a day. Staff with the payments tick charge it themselves from Record
 payment: Card on file · Visa ending 1111, the card named before the press. The retries and the
 member's notice are 18d-iii-ii-a (below); the Failed payments list is 18d-iii-ii-b.
+
+**Refund to card** (18d-iv-a, as built; `rulings/2026-10-30-18d-iv-a.md`). A payment on a period's bill taken on the Square Terminal or charged to
+the card on file goes back through Square to the card that paid, from the ⋯ on the payment: **Refund to card** ("Square sends
+the money back to the card that paid."). Note a refund stays beside it ("You gave it back another way, such as cash."). The box
+opens under the payment and asks Square about it first, so it names the real card and what is really left: the most that can
+go back is the least of what the app and Square each say is left, and what Square gave back with no note here is said, with Note a
+refund beside it. It says "Square does not give back its card fee on a refund." and "It can take 7 to 10 business days to reach
+the card." Staff type the amount (all or part), pick why from the refund reasons, and press **Refund $20.00 to Visa ending 1111**.
+Who may: `billing.members`, as for a refund noted by hand. A refund moves no date and no count, as ever. A press is one row of
+`gym_square_refunds` (migration `0177`), written under the record's lock; its id is the key Square is asked with, so Square takes it
+up once however often it is asked (measured 2026-10-30: the same key gives back the same refund, another amount under it is
+refused); while Square has not answered, nothing else is refunded on that bill and the membership is not changed. Once Square
+takes it up, a row of `gym_member_refunds` holds the money as given back, with the payment's own method (Card on Terminal, Card on
+file), so the bill, the receipt, Reports and the download read it as any refund; it reads **Refund pending** until Square finishes.
+The worker reads each pending refund 1, 2, 5 and 15 minutes after, then hourly and every 3 hours; the page reads again every 30
+seconds for 15 minutes while one is pending. FAILED or REJECTED after that: the app voids the refund itself (`square_failed`), the
+bill reads as it did, and the line says "Square could not refund this. No money went back." Past Square's 14 days pending, the line
+says to contact Square Support. A refund sent to the card is never voided here. No answer from Square is asked again with the same
+key for an hour, then left as "Square never answered the … refund. Check your Square Dashboard. If it went through, note the
+refund here.", until a refund is written on that payment. Refused before sending: an Interac debit card (`refund_requires_card_presence`;
+18d-iv-c), a payment over 365 days old, one taken in a Square account the gym has left (each offers Note a refund), one Square has
+not finished, one that does not match Square's record. Square's refusals are said in the box in plain words, and a code nobody has
+placed reads "Square refused this refund. No money went back." Still to come: fees and Sell (18d-iv-b), Interac on the Terminal
+(18d-iv-c), a refund made inside Square shown here (18d-iv-d), chargebacks (18d-iv-e).
 
 **A failed charge** (18d-iii): at most 3 tries over several days (Square: "Limit retries to 2 to
 3 attempts over several days"; never `GENERIC_DECLINE`), never again after a decline the card

@@ -46,7 +46,7 @@ export const CARD_REFUND = {
   /** Sent again with its key only this long after it was first sent. */
   resendForMs: 60 * 60_000,
   /** How long after each look a refund still pending is read again; the last for as long as it is pending. */
-  lookAfterMs: [60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000, 3 * 60 * 60_000],
+  lookAfterMs: [60_000, 2 * 60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000, 3 * 60 * 60_000],
   perRun: 50,
 } as const;
 
@@ -183,7 +183,7 @@ async function answer(deps: PaymentsDeps, gymId: string, id: string): Promise<Ca
     if (press.code === "UNAUTHORIZED") throw connectionRefused();
     throw refused("card_refund_refused", cardRefundRefusedLine(press.code));
   }
-  if (press.outcome === "failed") throw refused("card_refund_failed", "Square could not refund this. No money went back.");
+  if (press.outcome === "failed") throw refused("card_refund_failed", CARD_REFUND_WORDS.failed);
   const card = press.brand === null || press.last4 === null ? null : { brand: press.brand, last4: press.last4 };
   const step = press.outcome === "completed" ? "completed" : press.state === "pending" ? "pending" : "checking";
   return cardRefundResponseSchema.parse({ step, amountMinor: press.amountMinor, currency: press.currency, card });
@@ -288,6 +288,8 @@ export async function processCardRefunds(deps: PaymentsDeps, square: SquareSetti
       const gym = await repo.readGym(deps.sql, press.gymId);
       const step = await afterTaken(deps, press, read.value, dayInTz(at, gym?.timezone ?? "UTC"), at);
       if (step !== "taken") continue;
+    } else {
+      deps.log.warn({ event: "square.card_refund_unread", gymId: press.gymId, answer: read?.kind ?? "no_connection", status: read !== null && read.kind !== "ok" ? read.status : null }, "a refund could not be read from Square");
     }
     await refunds.lookAgain(deps.sql, press.id, lookFrom(at, press.looks + 1));
   }
