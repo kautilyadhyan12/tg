@@ -76,7 +76,7 @@ describe('the Delete permanently box', () => {
     expect(within(shared.getByTestId('delete-square-shared-names')).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Ola Berg']);
     expect(shared.getByText('Somebody else also uses them in your Square customer list, so they stay there.')).toBeTruthy();
     expect(screen.queryByTestId('delete-square-notReached')).toBeNull();
-    expect(screen.queryByText('Connect Square')).toBeNull();
+    expect(screen.queryByText('Open Square settings')).toBeNull();
   });
 
   it('a long group shows a few names, then "and N more", as the other boxes do', async () => {
@@ -104,11 +104,11 @@ describe('the Delete permanently box', () => {
     const group = within(await screen.findByTestId('delete-square-notReached'));
     expect(group.getByText('Can’t be reached in Square (3)')).toBeTruthy();
     expect(group.getByText('The app added them to your Square customer list, but it can’t reach your Square, or needs another permission from it, so they stay there.')).toBeTruthy();
-    expect(group.getByRole('link', { name: 'Connect Square' }).getAttribute('href')).toBe('/console/iron/settings#payments');
+    expect(group.getByRole('link', { name: 'Open Square settings' }).getAttribute('href')).toBe('/console/iron/settings#payments');
     cleanup();
     open(() => Promise.resolve(lost()), vi.fn(), { squareTo: null });
     await screen.findByTestId('delete-square-notReached');
-    expect(screen.queryByRole('link', { name: 'Connect Square' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Open Square settings' })).toBeNull();
     expect(screen.getByTestId('delete-square-owner').textContent).toBe('Only the owner can connect Square.');
   });
 

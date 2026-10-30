@@ -215,7 +215,6 @@ const howWords = (t, money) => {
   if (t.link > 0) how.push(`${methodWords('link')} ${money(t.link)}`);
   if (t.company > 0) how.push(`${methodWords('company')} ${money(t.company)}`);
   if (t.terminal > 0) how.push(`${methodWords('terminal')} ${money(t.terminal)}`);
-  if ((t.square_app ?? 0) > 0) how.push(`${methodWords('square_app')} ${money(t.square_app)}`);
   return how.join(' · ');
 };
 
@@ -236,7 +235,7 @@ const KIND_WORDS = {
   fees: { one: 'fee', many: 'fees', title: 'Fees', none: 'No fees taken' },
 };
 
-const NO_KIND = { count: 0, totalMinor: 0, cash: 0, upi: 0, card_at_desk: 0, bank_transfer: 0, link: 0, company: 0, terminal: 0, square_app: 0, refundedMinor: 0, otherCurrency: 0, notShown: 0 };
+const NO_KIND = { count: 0, totalMinor: 0, cash: 0, upi: 0, card_at_desk: 0, bank_transfer: 0, link: 0, company: 0, terminal: 0, refundedMinor: 0, otherCurrency: 0, notShown: 0 };
 /** One kind's share of the day, as the server added it up. */
 export const kindTotals = (page, key) => page.kinds?.[key] ?? NO_KIND;
 
@@ -271,9 +270,6 @@ export function takingsWords(page, key = 'all') {
 }
 
 /** The smaller lines under it, each only where it is true. */
-/** For a gym that takes payments in Square Point of Sale: where its shop sales there are. */
-export const SQUARE_APP_SHOP_NOTE = "Shop items sold in Square Point of Sale aren't listed here. They are in your Square Dashboard's reports.";
-
 export function takingsNotes(page, key = 'all') {
   const { currency } = page;
   const all = key === 'all';
@@ -293,8 +289,6 @@ export function takingsNotes(page, key = 'all') {
   }
   const hidden = all ? page.salesNotShown + page.paymentsNotShown : kind.notShown;
   if (hidden > 0) notes.push(`The list shows the newest. ${count(hidden, 'earlier one is', 'earlier ones are')} not listed.`);
-  // Shop items sold in Square Point of Sale stay in Square (18d-iii-b-ii-a): said where products are counted.
-  if (page.squareApp === true && (all || key === 'products')) notes.push(SQUARE_APP_SHOP_NOTE);
   return notes;
 }
 

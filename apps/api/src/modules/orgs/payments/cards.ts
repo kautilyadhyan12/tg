@@ -59,7 +59,6 @@ import * as merges from "./squareMergesRepo.js";
 import { REVOKE_MAX_TRIES, REVOKE_RETRY_MS, accessContext, missingScopes, terminalsOffered, type PaymentsDeps } from "./service.js";
 import type { SquareSettings } from "./settings.js";
 import type { SquareEnvironment, SquareResult } from "./square.js";
-import { unlinkedAt } from "./squareUnlinkRepo.js";
 import * as terminalSaves from "./terminalCardsRepo.js";
 import * as terminalsRepo from "./terminalsRepo.js";
 
@@ -382,9 +381,6 @@ export async function customerFor(deps: PaymentsDeps, ready: Ready, gymId: strin
   const key = { gymId, entryId: person.entryId, environment: ready.square.environment, accountId: ready.row.accountId };
   const claimed = await cards.claimCustomer(deps.sql, key, randomUUID());
   if ("customerId" in claimed) return claimed.customerId;
-  // What Square agrees with from now on (18d-iii-b-ii-b-ii-b-i): the record as it is, so the first change made to it is copied
-  // (a phone not sent here is not Square's, but only a change to it is ever sent).
-  const sent = { fullName: person.fullName, email: person.email, phone: person.phone, at: deps.now() };
   const { givenName, familyName } = cardNameParts(person.fullName);
   const result = await ready.square.api.createCustomer(ready.token, {
     idempotencyKey: claimed.makingKey,
@@ -396,9 +392,9 @@ export async function customerFor(deps: PaymentsDeps, ready: Ready, gymId: strin
     referenceId: person.entryId,
   });
   if (result.kind !== "ok") {
-    // The key asked with another body: Members in Square made, or is making, this customer with the person's
-    // phone as well (18d-iii-b-ii-b-i). The customer Square made carries the record's id as its reference: found
-    // by it and written; not found yet, this save is tried again (round one, High 2).
+    // The key asked with another body (a customer made before 18d-iii-b-v with the person's phone as well): the
+    // customer Square made carries the record's id as its reference, found by it and written; not found yet, this
+    // save is tried again (18d-iii-b-ii-b-i, round one, High 2).
     if (result.kind === "refused" && result.code === "IDEMPOTENCY_KEY_REUSED") {
       const found = await ready.square.api.searchCustomers(ready.token, { referenceId: person.entryId });
       const made =
@@ -406,10 +402,10 @@ export async function customerFor(deps: PaymentsDeps, ready: Ready, gymId: strin
           ? found.value.customers.filter((c) => c.reference_id === person.entryId && !squareMadeByMerge(c)).sort((x, y) => (x.id < y.id ? -1 : 1))[0]
           : undefined;
       if (made === undefined) throw unavailable();
-      if (await cards.finishCustomer(deps.sql, key, claimed.makingKey, made.id, sent)) return made.id;
+      if (await cards.finishCustomer(deps.sql, key, claimed.makingKey, made.id)) return made.id;
       const now = await cards.claimCustomer(deps.sql, key, randomUUID());
       if ("customerId" in now) return now.customerId;
-      await cards.finishCustomer(deps.sql, key, now.makingKey, made.id, sent);
+      await cards.finishCustomer(deps.sql, key, now.makingKey, made.id);
       return made.id;
     }
     if (result.kind === "refused") {
@@ -418,13 +414,13 @@ export async function customerFor(deps: PaymentsDeps, ready: Ready, gymId: strin
     }
     throw refusalError(result);
   }
-  if (await cards.finishCustomer(deps.sql, key, claimed.makingKey, result.value.id, sent)) return result.value.id;
+  if (await cards.finishCustomer(deps.sql, key, claimed.makingKey, result.value.id)) return result.value.id;
   // Another save wrote it first, asked with the same key: Square's answer is the same customer.
   // Or another save Square refused let the row go meanwhile: the customer Square made here is
   // the person's, and is written, so no row is left being made for a later save to ask again.
   const now = await cards.claimCustomer(deps.sql, key, randomUUID());
   if ("customerId" in now) return now.customerId;
-  await cards.finishCustomer(deps.sql, key, now.makingKey, result.value.id, sent);
+  await cards.finishCustomer(deps.sql, key, now.makingKey, result.value.id);
   return result.value.id;
 }
 
@@ -495,7 +491,6 @@ async function save(deps: PaymentsDeps, s: SaveFor): Promise<void> {
   if (outcome.kind === "paid_by") throw paidBy(outcome.payer, person.fullName);
   if (outcome.kind === "not_ready") throw notReady();
   if (outcome.kind === "merged_away") throw new OrgsError(409, "card_merged_away", MEMBER_CARD_WORDS.merged_away);
-  if (outcome.kind === "unlinked") throw new OrgsError(409, "card_unlinked", MEMBER_CARD_WORDS.unlinked);
 }
 
 /** A card Square saved, as it may be kept. */
@@ -579,8 +574,7 @@ export type Kept =
   | { kind: "gone"; owed: string[] }
   | { kind: "paid_by"; payer: string; owed: string[] }
   | { kind: "not_ready"; owed: string[] }
-  | { kind: "merged_away"; owed: string[] }
-  | { kind: "unlinked"; owed: string[] };
+  | { kind: "merged_away"; owed: string[] };
 
 /** The card goes on the record, under the gym's lock (the caller's), only while it is still the
  *  gym's record, paid for by nobody, and the gym still on the connection the save began with;
@@ -599,9 +593,6 @@ export async function keepCard(tx: TransactionSql, k: KeepCard): Promise<Kept> {
   // Square the card would sit on another person's profile, chargeable at the till. Let go; the next save makes the
   // person a customer of their own (round one, High 2).
   if (k.afterMerge === true && !(await cards.isLinkedTo(tx, { gymId, entryId, environment, accountId, customerId: k.customerId }))) return { kind: "merged_away", owed: await owe() };
-  // Staff unlinked that customer from the person while the card was being saved (18d-iii-b-ii-c-ii): kept there, it would sit on
-  // somebody else's Square profile. Let go; the next save makes the person a customer of their own.
-  if ((await unlinkedAt(tx, { gymId, entryId, environment, accountId, customerId: k.customerId })) !== null) return { kind: "unlinked", owed: await owe() };
   const before = await cards.readCard(tx, gymId, entryId, true);
   // The same press sent twice: Square gave back the same card, already kept.
   if (before !== null && before.environment === environment && before.accountId === accountId && before.cardId === card.cardId) return { kind: "saved", owed: [] };

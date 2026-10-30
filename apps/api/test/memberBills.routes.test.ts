@@ -7,6 +7,7 @@
 // the real routes, the real locks and the real run.
 //
 // Every refusal is checked by reading the tables, not the reply.
+import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import type { GymMembershipTypesResponse, HeldMembershipsResponse } from "@app/shared";
@@ -849,6 +850,9 @@ d("a gym's notebook: bills and payments on a person's memberships (real Postgres
       // Nor this gym's payment under another person of this gym.
       const secondId = (await rowsOf(gymId)).find((r) => r.entry_id === second)?.id ?? "";
       expect((await post(`${oneUrl(gymId, second, secondId, "payments")}/${paymentId}/void`, { reason: "mistake" }, owner.cookies)).statusCode).toBe(404);
+      // "Not this bill" went with Square Point of Sale: asked for, on a payment or a fee, it is refused and nothing changes.
+      expect((await post(`${oneUrl(gymId, person, membershipId, "payments")}/${paymentId}/void`, { reason: "not_this_bill" }, owner.cookies)).statusCode).toBe(400);
+      expect((await post(`${oneUrl(gymId, person, membershipId, `fees/${randomUUID()}/payments`)}/${paymentId}/void`, { reason: "not_this_bill" }, owner.cookies)).statusCode).toBe(400);
       expect((await paymentsOf(gymId)).map((p) => p.undone)).toEqual([false]);
       expect((await paymentsOf(rivalGym)).map((p) => p.undone)).toEqual([false]);
 

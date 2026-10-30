@@ -256,10 +256,10 @@ describe('the console routes and sign-out honour the amendment', () => {
     // 19 → 20 with At risk (20d-i); 20 → 21 with Sell (18b-i); 21 → 22 with the way back
     // from Square (18d-i), outside /console because Square's return address is one address
     // for every gym, and a console page all the same; 22 → 23 with Failed payments (18d-iii-ii-b);
-    // 23 → 24 with Payments to match (18d-iii-b-ii-a);
+    // 23 → 24 with Payments to match (18d-iii-b-ii-a), 24 → 23 when it went with Square Point of Sale (18d-iii-b-v);
     // the loop below is the guarantee, this number is only the proof that the
     // loop saw everything.
-    expect(consoleRoutes.length).toBe(24);
+    expect(consoleRoutes.length).toBe(23);
     for (const route of consoleRoutes) {
       expect(route).toContain('requireOnboarding={false}');
     }
@@ -274,7 +274,7 @@ describe('the console routes and sign-out honour the amendment', () => {
     const consoleRoutes = src.match(
       /path="\/(?:console[^"]*|connect\/square)"[\s\S]{0,120}?<ProtectedRoute([^>]*)>/g,
     ) ?? [];
-    expect(consoleRoutes.length).toBe(24);
+    expect(consoleRoutes.length).toBe(23);
     for (const route of consoleRoutes) {
       expect(route).toContain('requireSignUpNote={false}');
     }
@@ -289,7 +289,7 @@ describe('the console routes and sign-out honour the amendment', () => {
     const consoleRoutes = src.match(
       /path="\/(?:console[^"]*|connect\/square)"[\s\S]{0,120}?<ProtectedRoute([^>]*)>/g,
     ) ?? [];
-    expect(consoleRoutes.length).toBe(24);
+    expect(consoleRoutes.length).toBe(23);
     for (const route of consoleRoutes) {
       expect(route).toContain('requireInvitations={false}');
     }

@@ -42,7 +42,6 @@ const PREFIX = "sqd-cost-";
 async function cleanup(): Promise<void> {
   const gyms = sql`SELECT id FROM gyms WHERE slug LIKE ${PREFIX + "%"}`;
   await sql`DELETE FROM gym_square_customer_deletes WHERE gym_id IN (${gyms})`;
-  await sql`DELETE FROM gym_square_member_runs WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_square_customers WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_payment_connections WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${gyms})`;

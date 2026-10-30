@@ -371,8 +371,6 @@ export const saleTotalsSchema = z
     link: z.number().int().min(0),
     company: z.number().int().min(0),
     terminal: z.number().int().min(0),
-    /** Taken in Square's own app and recorded from Square's message (18d-iii-b-i). */
-    square_app: z.number().int().min(0).default(0),
     refundedMinor: z.number().int().min(0),
     /** What discounts took off the product sales that stand. */
     discountMinor: z.number().int().min(0),
@@ -396,8 +394,6 @@ export const kindTotalsSchema = z
     link: z.number().int().min(0),
     company: z.number().int().min(0),
     terminal: z.number().int().min(0),
-    /** Taken in Square's own app and recorded from Square's message (18d-iii-b-i). */
-    square_app: z.number().int().min(0).default(0),
     refundedMinor: z.number().int().min(0),
     otherCurrency: z.number().int().min(0),
     /** Earlier ones of this kind the list leaves out. */
@@ -452,9 +448,6 @@ export const sellPageResponseSchema = z
     totals: saleTotalsSchema,
     /** The same, for each kind (18q-ii). */
     kinds: z.object({ products: kindTotalsSchema, memberships: kindTotalsSchema, fees: kindTotalsSchema }).strict(),
-    /** The gym has taken payments in Square Point of Sale (18d-iii-b-ii-a): its shop sales there are in
-     *  Square's own reports, and the takings say so. */
-    squareApp: z.boolean().default(false),
   })
   .strict();
 export type SellPageResponse = z.infer<typeof sellPageResponseSchema>;

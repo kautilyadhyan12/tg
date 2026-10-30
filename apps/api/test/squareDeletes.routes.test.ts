@@ -16,16 +16,15 @@ import {
   memberListDeletedResponseSchema,
   squareConnectResponseSchema,
   squareFinishResponseSchema,
-  squareMembersResponseSchema,
   type MemberListDeletePreview,
   type MemberListDeleted,
   type SquareCustomer,
-  type SquareMembers,
 } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { squareSettings } from "../src/modules/orgs/payments/settings.js";
 import { processSquareWork } from "../src/modules/orgs/payments/work.js";
+import { putMembersInSquare } from "./squareCustomersSetup.js";
 import { account, fakeSquare, type Account } from "./fakeSquareTerminal.js";
 import { proveAddress } from "./proveAddress.js";
 
@@ -103,10 +102,8 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
   const mineSql = sql`SELECT id FROM gyms WHERE owner_user_id IN (SELECT id FROM users WHERE email LIKE 'sqd-t-%@example.com')`;
   const cleanup = async () => {
     const myUsers = sql`SELECT id FROM users WHERE email LIKE 'sqd-t-%@example.com'`;
-    await sql`DELETE FROM gym_square_customer_merges WHERE account_id LIKE 'MSQD%'`;
     await sql`DELETE FROM webhook_events WHERE provider = 'square' AND event_id LIKE 'sqd-t-%'`;
     await sql`DELETE FROM gym_square_customer_deletes WHERE gym_id IN (${mineSql})`;
-    await sql`DELETE FROM gym_square_member_runs WHERE gym_id IN (${mineSql})`;
     await sql`DELETE FROM gym_member_cards WHERE gym_id IN (${mineSql})`;
     await sql`DELETE FROM gym_card_disables WHERE gym_id IN (${mineSql})`;
     await sql`DELETE FROM gym_card_agreements WHERE gym_id IN (${mineSql})`;
@@ -176,16 +173,6 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
     return (JSON.parse(add.body) as { entry: { entryId: string } }).entry.entryId;
   };
   const entryUrl = (gym: Gym, entryId: string) => `/v1/orgs/${gym.id}/member-list/entries/${entryId}`;
-  const boxUrl = (gym: Gym) => `/v1/orgs/${gym.id}/payments/square/members`;
-  /** The owner's Add members to Square, then Add, as the box shows them. */
-  const addMembers = async (gym: Gym): Promise<SquareMembers> => {
-    const checked = await send("POST", `${boxUrl(gym)}/check`, gym.owner.cookies);
-    expect(checked.statusCode, checked.body).toBe(200);
-    const runId = squareMembersResponseSchema.parse(JSON.parse(checked.body)).members.runId;
-    const added = await send("POST", `${boxUrl(gym)}/add`, gym.owner.cookies, { runId });
-    expect(added.statusCode, added.body).toBe(200);
-    return squareMembersResponseSchema.parse(JSON.parse(added.body)).members;
-  };
   /** The record's customer in the gym's Square account, as the app keeps it. */
   const link = async (gym: Gym, entryId: string) => {
     const [row] = await sql<{ customer_id: string | null; joined_at: Date | null; made_as: string | null }[]>`
@@ -283,7 +270,7 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
       square.customer(gym.acct, { id: `CPAT${uniq()}`, given_name: "Pat", family_name: "Smith", email_address: pat, phone_number: "+13125550100" });
       const patId = square.customersOf(gym.acct)[0]?.id ?? "";
       const sam = await person(gym, "Sam Smith", { email: pat, phone: "+13125550177" });
-      expect((await addMembers(gym)).state).toBe("added");
+      await putMembersInSquare(sql, square, gym);
       const samFirst = await customerIdOf(gym, sam);
       expect(samFirst).toMatch(/^CUS/);
       // `looksLikeSams`: the worst a merge can look like, with Sam's own reference id and a source that does not say it was a
@@ -341,7 +328,7 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
       square.customer(gym.acct, { id: `CPATQ${uniq()}`, given_name: "Pat", family_name: "Smith", email_address: pat, phone_number: "+13125550103" });
       const patId = square.customersOf(gym.acct)[0]?.id ?? "";
       const sam = await person(gym, "Sam Smith", { email: pat, phone: "+13125550179" });
-      expect((await addMembers(gym)).state).toBe("added");
+      await putMembersInSquare(sql, square, gym);
       const samFirst = await customerIdOf(gym, sam);
       await deleteForGood(gym, sam);
       let merged = "";
@@ -360,7 +347,7 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
     const gym = await makeGym(name);
     const email = `who.${uniq()}@gmail.com`;
     const id = await person(gym, "Wren Ito", { email, phone: "+13125550142" });
-    expect((await addMembers(gym)).state).toBe("added");
+    await putMembersInSquare(sql, square, gym);
     const customerId = await customerIdOf(gym, id);
     const forgotten = await deleteForGood(gym, id);
     return { gym, id, customerId, email, ...forgotten };
@@ -379,7 +366,7 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
       const gym = await makeGym("Oak Hall");
       const amy = await person(gym, "Amy Lee", { email: `amy.${uniq()}@gmail.com`, phone: "+13125550142" });
       const bo = await person(gym, "Bo Park", { email: `bo.${uniq()}@gmail.com`, phone: "+13125550143" });
-      expect((await addMembers(gym)).state).toBe("added");
+      await putMembersInSquare(sql, square, gym);
       const amyId = await customerIdOf(gym, amy);
       const boId = await customerIdOf(gym, bo);
       expect(await link(gym, amy), "made by the app: it carries the record's id").toMatchObject({ joined_at: null, made_as: amy });
@@ -428,7 +415,7 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
       const ola = await person(gym, "Ola Berg", { email, phone: "+13125550160" });
       // Square made it for this record, with the record's id as its reference, and the app never heard.
       const made = square.madeWithKey(gym.acct, randomUUID(), { idempotencyKey: "lost", givenName: "Ola", familyName: "Berg", email, phone: "+13125550160", referenceId: ola });
-      expect((await addMembers(gym)).state).toBe("added");
+      await putMembersInSquare(sql, square, gym);
       expect(await link(gym, ola), "linked as the app's own, carrying the record's id").toMatchObject({ customer_id: made, joined_at: null, made_as: ola });
       const { preview, done } = await deleteForGood(gym, ola);
       expect(preview.square).toEqual({ deletes: 1, stays: 0, shared: 0, notReached: 0 });
@@ -442,7 +429,7 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
       const email = `leo.${uniq()}@gmail.com`;
       square.customer(gym.acct, { id: "CLEOTILL", given_name: "Leo", family_name: "Grant", email_address: email, phone_number: "(312) 555-0142" });
       const leo = await person(gym, "Leo Grant", { email, phone: "+13125550142" });
-      expect((await addMembers(gym)).state).toBe("added");
+      await putMembersInSquare(sql, square, gym);
       expect(await link(gym, leo)).toMatchObject({ customer_id: "CLEOTILL", joined_at: expect.any(Date) as Date });
       const { preview, done } = await deleteForGood(gym, leo);
       expect(preview.square).toEqual({ deletes: 0, stays: 1, shared: 0, notReached: 0 });
@@ -456,7 +443,7 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
       const gym = await makeGym("Followed Gym");
       const email = `amy.lee.${uniq()}@gmail.com`;
       const amy = await person(gym, "Amy Lee", { email, phone: "+13125550150" });
-      expect((await addMembers(gym)).state).toBe("added");
+      await putMembersInSquare(sql, square, gym);
       const made = await customerIdOf(gym, amy);
       // The business also typed Amy in at the till, then merged the two in its Square Dashboard; Square told the app, which followed.
       square.customer(gym.acct, { id: "CAMYTILL", given_name: "Amy", family_name: "Lee", email_address: email });
@@ -479,7 +466,7 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
       const till = await person(gym, "Till One", { email });
       const madeOne = await person(gym, "Made One", { email: `made1.${uniq()}@gmail.com` });
       const madeTwo = await person(gym, "Made Two", { email: `made2.${uniq()}@gmail.com` });
-      expect((await addMembers(gym)).state).toBe("added");
+      await putMembersInSquare(sql, square, gym);
       const noSquare = await person(gym, "No Square", { email: `none.${uniq()}@gmail.com` });
       const madeIds = [await customerIdOf(gym, madeOne), await customerIdOf(gym, madeTwo)];
       const { preview, done } = await deleteForGood(gym, till, madeOne, madeTwo, noSquare);
@@ -626,7 +613,7 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
     it("a gym whose connection cannot read Square's subscriptions cannot be asked first: the box says the app cannot reach Square, nothing is owed, and the customer stays", async () => {
       const gym = await makeGym("No Permission Gym");
       const id = await person(gym, "Dov Ash", { email: `dov.${uniq()}@gmail.com` });
-      expect((await addMembers(gym)).state).toBe("added");
+      await putMembersInSquare(sql, square, gym);
       const customerId = await customerIdOf(gym, id);
       await sql`UPDATE gym_payment_connections SET scopes = array_remove(scopes, 'SUBSCRIPTIONS_READ') WHERE gym_id = ${gym.id}`;
       const { preview, done } = await deleteForGood(gym, id);
@@ -650,7 +637,7 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
     it("a gym no longer connected to that Square account cannot reach the customer: the box says so, nothing is owed, and the customer stays", async () => {
       const gym = await makeGym("Moved Gym");
       const id = await person(gym, "Cal Ng", { email: `cal.${uniq()}@gmail.com` });
-      expect((await addMembers(gym)).state).toBe("added");
+      await putMembersInSquare(sql, square, gym);
       const customerId = await customerIdOf(gym, id);
       await sql`UPDATE gym_payment_connections SET account_id = 'MSQDOTHERACCOUNT' WHERE gym_id = ${gym.id}`;
       const { preview, done } = await deleteForGood(gym, id);
@@ -680,9 +667,9 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
       const b = await makeGym("Branch B", a.acct);
       const email = `dana.${uniq()}@gmail.com`;
       const inA = await person(a, "Dana Cole", { email, phone: "+13125550120" });
-      expect((await addMembers(a)).state).toBe("added");
+      await putMembersInSquare(sql, square, a);
       const inB = await person(b, "Dana Cole", { email, phone: "+13125550120" });
-      expect((await addMembers(b)).state).toBe("added");
+      await putMembersInSquare(sql, square, b);
       const customerId = await customerIdOf(a, inA);
       expect(await customerIdOf(b, inB), "Branch B linked the customer Branch A made").toBe(customerId);
       const { preview, done } = await deleteForGood(a, inA);
@@ -699,12 +686,12 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
       const b = await makeGym("Late Branch B", a.acct);
       const email = `eli.${uniq()}@gmail.com`;
       const inA = await person(a, "Eli Park", { email, phone: "+13125550121" });
-      expect((await addMembers(a)).state).toBe("added");
+      await putMembersInSquare(sql, square, a);
       const customerId = await customerIdOf(a, inA);
       const { done } = await deleteForGood(a, inA);
       expect(done.squareDeleting).toBe(1);
       const inB = await person(b, "Eli Park", { email, phone: "+13125550121" });
-      expect((await addMembers(b)).state).toBe("added");
+      await putMembersInSquare(sql, square, b);
       expect(await customerIdOf(b, inB)).toBe(customerId);
       await minutes(2);
       expect(asked(a)).toEqual([]);
@@ -723,21 +710,11 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
         INSERT INTO gym_member_cards (gym_id, entry_id, environment, account_id, customer_id, card_id, brand, last4, exp_month, exp_year, saved_from, agreement_id, saved_at, updated_at)
         VALUES (${gym.id}, ${entryId}, 'production', ${gym.acct.merchantId}, ${customerId}, ${`ccof:test${uniq()}`}, 'VISA', '4242', 12, 2031, 'desk', ${agreement?.id ?? ""}, now(), now())`;
     };
-    /** A check about to link another record to this customer. */
-    const planOn = async (gym: Gym, entryId: string, customerId: string): Promise<void> => {
-      const [run] = await sql<{ run_id: string }[]>`SELECT run_id FROM gym_square_member_runs WHERE gym_id = ${gym.id} AND environment = 'production'`;
-      await sql`
-        INSERT INTO gym_square_member_plan (gym_id, environment, entry_id, run_id, decision, customer_id, digest, looked_at)
-        VALUES (${gym.id}, 'production', ${entryId}, ${run?.run_id ?? ""}, 'link', ${customerId}, md5('x'), now())`;
-    };
-    for (const [how, claim] of [
-      ["a card of another record saved on it", cardOn],
-      ["a check about to link another record to it", planOn],
-    ] as const) {
+    for (const [how, claim] of [["a card of another record saved on it", cardOn]] as const) {
       it(`${how}: the box says somebody else uses it, and nothing is owed`, async () => {
         const gym = await makeGym(`Used Box Gym ${String(how.length)}`);
         const mine = await person(gym, "Hal Moss", { email: `hal.${uniq()}@gmail.com` });
-        expect((await addMembers(gym)).state).toBe("added");
+        await putMembersInSquare(sql, square, gym);
         const other = await person(gym, "Ira Moss", { email: `ira.${uniq()}@gmail.com` });
         const customerId = await customerIdOf(gym, mine);
         await claim(gym, other, customerId);
@@ -752,7 +729,7 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
       it(`${how}, after the press and before the worker: it is not deleted`, async () => {
         const gym = await makeGym(`Used Send Gym ${String(how.length)}`);
         const mine = await person(gym, "Jo Penn", { email: `jo.${uniq()}@gmail.com` });
-        expect((await addMembers(gym)).state).toBe("added");
+        await putMembersInSquare(sql, square, gym);
         const other = await person(gym, "Kai Penn", { email: `kai.${uniq()}@gmail.com` });
         const customerId = await customerIdOf(gym, mine);
         const { done } = await deleteForGood(gym, mine);
@@ -772,8 +749,8 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
       const email = `fay.${uniq()}@gmail.com`;
       const inA = await person(a, "Fay Moss", { email, phone: "+13125550122" });
       const inB = await person(b, "Fay Moss", { email, phone: "+13125550122" });
-      expect((await addMembers(a)).state).toBe("added");
-      expect((await addMembers(b)).state).toBe("added");
+      await putMembersInSquare(sql, square, a);
+      await putMembersInSquare(sql, square, b);
       const aId = await customerIdOf(a, inA);
       const bId = await customerIdOf(b, inB);
       await deleteForGood(a, inA);
@@ -835,7 +812,7 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
     it("the press deletes exactly what the box showed: if the customers changed since, nobody is deleted and the box is shown again", async () => {
       const gym = await makeGym("Digest Gym");
       const id = await person(gym, "Hana Oda", { email: `hana.${uniq()}@gmail.com` });
-      expect((await addMembers(gym)).state).toBe("added");
+      await putMembersInSquare(sql, square, gym);
       await takeOff(gym, id);
       const shown = await boxFor(gym, id);
       expect(shown.square.deletes).toBe(1);
@@ -853,7 +830,7 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
     it("the same press sent twice writes one deletion and the second says nothing was left to delete", async () => {
       const gym = await makeGym("Twice Gym");
       const id = await person(gym, "Ivo Reed", { email: `ivo.${uniq()}@gmail.com` });
-      expect((await addMembers(gym)).state).toBe("added");
+      await putMembersInSquare(sql, square, gym);
       const { preview, done } = await deleteForGood(gym, id);
       expect(done.squareDeleting).toBe(1);
       const again = await send("POST", `/v1/orgs/${gym.id}/member-list/selected/delete`, gym.owner.cookies, { selection: tick(id), digest: preview.digest });
@@ -876,7 +853,7 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
     it("someone from another gym learns nothing from the box", async () => {
       const gym = await makeGym("Private Gym");
       const id = await person(gym, "Kit Lane", { email: `kit.${uniq()}@gmail.com` });
-      expect((await addMembers(gym)).state).toBe("added");
+      await putMembersInSquare(sql, square, gym);
       await takeOff(gym, id);
       const stranger = await signedIn("Somebody Else");
       const res = await send("POST", `/v1/orgs/${gym.id}/member-list/selected/delete-preview`, stranger.cookies, { selection: tick(id) });
@@ -893,7 +870,7 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
     it("a past member's page says what Delete permanently does about their customer in Square, and deleting them from it owes the customer", async () => {
       const gym = await makeGym("Page Gym");
       const id = await person(gym, "Lou Pace", { email: `lou.${uniq()}@gmail.com` });
-      expect((await addMembers(gym)).state).toBe("added");
+      await putMembersInSquare(sql, square, gym);
       const customerId = await customerIdOf(gym, id);
       const page = async () => (JSON.parse((await send("GET", entryUrl(gym, id), gym.owner.cookies)).body) as { entry: { squareOnDelete: string } }).entry.squareOnDelete;
       expect(await page(), "a member on the list is not offered Delete permanently").toBe("none");
@@ -911,7 +888,7 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
       const email = `mo.${uniq()}@gmail.com`;
       square.customer(gym.acct, { id: "CMOTILL", given_name: "Mo", family_name: "Ray", email_address: email });
       const id = await person(gym, "Mo Ray", { email });
-      expect((await addMembers(gym)).state).toBe("added");
+      await putMembersInSquare(sql, square, gym);
       await takeOff(gym, id);
       const page = JSON.parse((await send("GET", entryUrl(gym, id), gym.owner.cookies)).body) as { entry: { squareOnDelete: string } };
       expect(page.entry.squareOnDelete).toBe("stays");
@@ -928,9 +905,9 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
       const b = await makeGym("Page Branch B", a.acct);
       const email = `gil.${uniq()}@gmail.com`;
       const inA = await person(a, "Gil Roe", { email, phone: "+13125550170" });
-      expect((await addMembers(a)).state).toBe("added");
+      await putMembersInSquare(sql, square, a);
       const inB = await person(b, "Gil Roe", { email, phone: "+13125550170" });
-      expect((await addMembers(b)).state).toBe("added");
+      await putMembersInSquare(sql, square, b);
       expect(await customerIdOf(b, inB)).toBe(await customerIdOf(a, inA));
       await takeOff(a, inA);
       const page = JSON.parse((await send("GET", entryUrl(a, inA), a.owner.cookies)).body) as { entry: { squareOnDelete: string } };
@@ -943,7 +920,7 @@ d("Delete permanently takes the customer the app added out of Square (real Postg
       const gym = await makeGym("Join Gym");
       const keep = await person(gym, "Nell Shaw", { email: `nell.${uniq()}@gmail.com`, phone: "+13125550131" });
       const gone = await person(gym, "Nell P Shaw", { email: `nell.p.${uniq()}@gmail.com`, phone: "+13125550132" });
-      expect((await addMembers(gym)).state).toBe("added");
+      await putMembersInSquare(sql, square, gym);
       const goneCustomer = await customerIdOf(gym, gone);
       const res = await send("POST", `${entryUrl(gym, gone)}/merge`, gym.owner.cookies, { keepEntryId: keep, acknowledgeLeavesList: true });
       expect(res.statusCode, res.body).toBe(200);

@@ -75,7 +75,7 @@ afterEach(() => {
 describe('connected in the US, Canada or Australia', () => {
   it('the owner pairs a Terminal: the code and the steps, waiting, then the Terminal by its serial number', async () => {
     render(<Holder start={payments(none())} />);
-    // What a Terminal is, and that the payment starts here: never confused with Square Point of Sale.
+    // What a Terminal is, and that the payment starts here.
     const how = screen.getByText(
       (_, el) => el !== null && el.hasAttribute('data-words') && el.textContent === "Square's card machine. You start the payment here: on a member's bill, press Record payment and choose Card on Terminal. It charges exactly the bill's amount, and the bill is paid the moment they pay.",
     );

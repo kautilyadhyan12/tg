@@ -175,12 +175,8 @@ function fakeSquare(clock: () => Date) {
     getPayment: () => Promise.resolve(unavailable),
     createCardPayment: () => Promise.resolve(unavailable),
     listPayments: () => Promise.resolve(unavailable),
-    retrieveOrder: () => Promise.resolve(unavailable),
-    listTaxes: () => Promise.resolve(unavailable),
-    listCustomers: () => Promise.resolve(unavailable),
     searchCustomers: () => Promise.resolve(unavailable),
     searchSubscriptions: () => Promise.resolve(unavailable),
-    updateCustomer: () => Promise.resolve(unavailable),
     deleteCustomer: () => Promise.resolve(unavailable),
   };
   const allow = (account: Account): string => {
@@ -698,18 +694,20 @@ d("A gym's Square Terminals: whose they are, pairing with Square's code, and rem
   );
 
   it(
-    "connected before Square Point of Sale's own permissions (18d-iii-b-i): Terminals work as they did; only Square Point of Sale asks to reconnect",
+    "connected before Square's subscriptions could be read (18d-iii-b-ii-b-i): Terminals work as they did",
     async () => {
       clock = new Date();
       const owner = await person("before-pos-owner");
       const gymId = await gym(owner, "Before Point of Sale Gym");
       await connect(gymId, owner, account("MLTBEFOREPOS"));
-      // As a connection made between 0147 and 18d-iii-b-i reads: everything but what was sold and the taxes.
-      const before = SQUARE_SCOPES.filter((scope) => scope !== "ORDERS_READ" && scope !== "ITEMS_READ");
+      // As a connection made before 18d-iii-b-ii-b-i reads: everything but Square's own subscriptions.
+      const before = SQUARE_SCOPES.filter((scope) => scope !== "SUBSCRIPTIONS_READ");
       await sql`UPDATE gym_payment_connections SET scopes = ${before} WHERE gym_id = ${gymId}`;
       const answer = await read(gymId, owner);
       expect(answer.terminals?.needsAllow, "the Terminals need nothing more").toBe(false);
-      expect(answer.squareApp?.needsAllow, "Square Point of Sale asks for its own").toBe(true);
+      // The box offers Reconnect Square for it, and the press is taken (round one, High 1).
+      expect(answer.needsAllow).toBe(true);
+      expect((await send("POST", `/v1/orgs/${gymId}/payments/square/connect`, owner.cookies)).statusCode).toBe(200);
       await pairTerminal(gymId, owner);
     },
     TEST_TIMEOUT_MS,

@@ -5,10 +5,8 @@
 // (`apps/api/.cost/18d-vi-a/probe-checkout.mts`). Cards on file are charged as Square's test area
 // charged them on 2026-10-23 (18d-iii-i, `apps/api/.cost/18d-iii-i/probe-charge.mts`): the same key
 // gives back the same payment, paid or failed; the same key with another body is refused; a decline
-// is a 400 with the FAILED payment. A payment taken in Square's own app (18d-iii-b-i, `appPayment`) has
-// the order Square makes with it, whose lines say what was sold; ListPayments lists a location's
-// payments by when Square made them, oldest first, 100 a page. A business's customers (18d-iii-b-ii-b-i) are
-// listed 100 a page in the order they were made, searched by an exact email (either case), phone (its
+// is a 400 with the FAILED payment. ListPayments lists a location's payments by when Square made them,
+// oldest first, 100 a page. A business's customers (18d-iii-b-ii-b-i) are searched by an exact email (either case), phone (its
 // digits) or reference id, and made once a key: the same key with the same customer gives back the same
 // one, with another is refused (IDEMPOTENCY_KEY_REUSED), as Square's idempotency does; nothing checks for
 // duplicates ("CreateCustomer ... don't check for duplicate records"). Square's own subscriptions are
@@ -22,8 +20,8 @@
 // customer alone (`state.deleteViaOldId` makes Square behave worse, to prove the app does not lean on that). A customer
 // made through the API reads `THIRD_PARTY`.
 import { randomBytes } from "node:crypto";
-import type { SquareCatalogTax, SquareCustomer, SquareCustomerFound, SquareLocation, SquareOrder, SquarePayment, SquareTerminalCheckout } from "@app/shared";
-import type { CardPaymentResult, NewCardPayment, NewSquareCustomer, NewTerminalCheckout, SquareApi, SquareCustomerChange, SquareResult } from "../src/modules/orgs/payments/square.js";
+import type { SquareCustomer, SquareCustomerFound, SquareLocation, SquarePayment, SquareTerminalCheckout } from "@app/shared";
+import type { CardPaymentResult, NewCardPayment, NewSquareCustomer, NewTerminalCheckout, SquareApi, SquareResult } from "../src/modules/orgs/payments/square.js";
 
 export interface Account {
   merchantId: string;
@@ -68,9 +66,6 @@ export function fakeSquare() {
   const checkoutKeys = new Map<string, string>();
   const listings: { locationId: string }[] = [];
   const payments = new Map<string, SquarePayment & { accountId: string }>();
-  const orders = new Map<string, SquareOrder & { accountId: string }>();
-  /** Each account's own item library of taxes (18d-iii-b-i). */
-  const taxes = new Map<string, SquareCatalogTax[]>();
   /** The customers Square has in each account, as RetrieveCustomer shows them (18d-iii-b-ii-a), in the order
    *  they were made, with their reference id (18d-iii-b-ii-b-i). */
   const customers = new Map<string, SquareCustomer & { accountId: string }>();
@@ -80,16 +75,12 @@ export function fakeSquare() {
   const customersMade: (NewSquareCustomer & { accountId: string; token: string })[] = [];
   /** Square's own subscriptions: whose, at which account, and their status. */
   const subscriptions: { accountId: string; customerId: string; status: string }[] = [];
-  /** ListCustomers' asks, each with the cursor it was given. */
-  const customerListings: (string | null)[] = [];
   /** Old ids of customers Square merged, and the customer each is now (18d-iii-b-ii-b-ii-a). */
   const mergedInto = new Map<string, string>();
   /** Customers deleted in Square: asked about, Square says not found. */
   const gone = new Set<string>();
   /** Every RetrieveCustomer asked, by the id asked about. */
   const customerReads: string[] = [];
-  /** Every UpdateCustomer asked, by the id asked about, with what was sent. */
-  const customersChanged: (SquareCustomerChange & { customerId: string; accountId: string })[] = [];
   /** Every DeleteCustomer asked, by the id asked about, with the version sent (18d-iii-b-ii-b-ii-b-ii). */
   const customersDeleteAsked: { customerId: string; version: number | null; accountId: string }[] = [];
   // `down`: no answer at all. `refuseNew`: a new checkout is refused (the Terminal is not signed in).
@@ -97,10 +88,8 @@ export function fakeSquare() {
   // refuses to show a checkout (a permission taken away).
   // `chargeOther`: a card on file's charge comes back COMPLETED for another amount than asked;
   // `answerWith`: with these fields of Square's payment changed; `unauthorized`: Square refuses the
-  // gym's token (401), as for a token that expired or was taken away. `ordersRefused`: Square refuses to
-  // show an order (a connection made before ORDERS_READ); `listDown`: ListPayments gives no answer;
-  // `listRefused`: ListPayments is refused (a permission taken away); `ordersUnanswered`: these orders
-  // give no answer. `now`: the clock Square stamps payments with.
+  // gym's token (401), as for a token that expired or was taken away. `now`: the clock Square stamps
+  // payments with.
   const state: {
     down: boolean;
     refuseNew: boolean;
@@ -109,20 +98,6 @@ export function fakeSquare() {
     chargeOther: boolean;
     answerWith: Partial<SquarePayment> | null;
     unauthorized: boolean;
-    ordersRefused: boolean;
-    listDown: boolean;
-    listRefused: boolean;
-    ordersUnanswered: Set<string>;
-    /** ListCatalog gives no answer; or answers one tax it cannot read. */
-    taxesDown: boolean;
-    taxUnreadable: boolean;
-    /** Members in Square (18d-iii-b-ii-b-i): ListCustomers gives no answer once this many pages were given
-     *  (null: always answers); refuses (`customersRefused`, its status); refuses a cursor it gave
-     *  (`cursorRefused`); CreateCustomer gives no answer to these emails, or refuses them; Square makes the
-     *  customer and the answer is lost (`loseCustomers`); SearchSubscriptions gives no answer, or refuses. */
-    customerPagesUntilDown: number | null;
-    customersRefused: number | null;
-    cursorRefused: boolean;
     createUnanswered: Set<string>;
     createRefused: Set<string>;
     loseCustomers: boolean;
@@ -130,17 +105,8 @@ export function fakeSquare() {
     subscriptionsRefused: boolean;
     /** SearchSubscriptions sends a subscription the app cannot read (re-check, Low 1). */
     subscriptionsUnread: boolean;
-    /** UpdateCustomer (18d-iii-b-ii-b-ii-b-i): gives no answer; refuses these phones or emails (a number Square does
-     *  not know); is told, for the next N changes, that the customer changed meanwhile (CONFLICT). */
-    updateDown: boolean;
     updateRefused: Set<string>;
-    conflictNext: number;
-    /** These customers give no answer to UpdateCustomer; are refused on RetrieveCustomer (403); are refused on UpdateCustomer with the status given. */
-    updateFails: Set<string>;
     readRefused: Set<string>;
-    updateStatus: Map<string, number>;
-    /** Runs once, as an UpdateCustomer arrives: Square changes something in the instant between the ask and the change. */
-    beforeUpdate: (() => void) | null;
     /** DeleteCustomer (18d-iii-b-ii-b-ii-b-ii): gives no answer; gives no answer to these customers; is refused for these customers with
      *  the status given; runs once as a delete arrives. `deleteViaOldId`: what Square does when asked to delete the old id of a merged
      *  customer: nothing (measured 2026-10-28), or delete the merged customer (the worst case, which the app must not lean on). */
@@ -149,9 +115,6 @@ export function fakeSquare() {
     deleteStatus: Map<string, number>;
     beforeDelete: (() => void) | null;
     deleteViaOldId: "nothing" | "deletes_merged";
-    /** Runs once, as RetrieveOrder arrives, before Square answers: something happens in the app between the take-in's first
-     *  look at a payment and its decision (18d-iii-b-ii-c, round one, Low 2: a Match links the customer meanwhile). */
-    beforeOrder: (() => Promise<void>) | null;
     /** DisableCard answers (18d-iii-b-ii-c-ii): the card is stopped and listed in `stopped`. Off, it gives no answer, as before. */
     disables: boolean;
     /** Runs once, as a CreateCard arrives, before Square answers: something happens in the app while a card is being saved. */
@@ -165,34 +128,19 @@ export function fakeSquare() {
     chargeOther: false,
     answerWith: null,
     unauthorized: false,
-    ordersRefused: false,
-    listDown: false,
-    listRefused: false,
-    ordersUnanswered: new Set<string>(),
-    taxesDown: false,
-    taxUnreadable: false,
-    customerPagesUntilDown: null,
-    customersRefused: null,
-    cursorRefused: false,
     createUnanswered: new Set<string>(),
     createRefused: new Set<string>(),
     loseCustomers: false,
     subscriptionsDown: false,
     subscriptionsRefused: false,
     subscriptionsUnread: false,
-    updateDown: false,
     updateRefused: new Set<string>(),
-    conflictNext: 0,
-    updateFails: new Set<string>(),
     readRefused: new Set<string>(),
-    updateStatus: new Map<string, number>(),
-    beforeUpdate: null,
     deleteDown: false,
     deleteFails: new Set<string>(),
     deleteStatus: new Map<string, number>(),
     beforeDelete: null,
     deleteViaOldId: "nothing",
-    beforeOrder: null,
     disables: false,
     beforeCard: null,
     now: () => new Date(),
@@ -288,22 +236,6 @@ export function fakeSquare() {
       if (state.loseCustomers) return Promise.resolve(unavailable);
       return Promise.resolve({ kind: "ok", value: { id } });
     },
-    listCustomers(token, cursor) {
-      customerListings.push(cursor);
-      if (state.down) return Promise.resolve(unavailable);
-      const a = tokenAccount(token);
-      if (a === undefined) return Promise.resolve(unauthorized);
-      if (state.customersRefused !== null) return Promise.resolve({ kind: "refused", status: state.customersRefused, code: "FORBIDDEN" });
-      if (state.cursorRefused && cursor !== null) return Promise.resolve({ kind: "refused", status: 400, code: "INVALID_CURSOR" });
-      if (state.customerPagesUntilDown !== null) {
-        if (state.customerPagesUntilDown <= 0) return Promise.resolve(unavailable);
-        state.customerPagesUntilDown -= 1;
-      }
-      const all = [...customers.values()].filter((c) => c.accountId === a.merchantId);
-      const from = cursor === null ? 0 : Number(cursor.slice(1));
-      const page = all.slice(from, from + 100).map(found);
-      return Promise.resolve({ kind: "ok", value: { customers: page, unread: 0, cursor: from + 100 < all.length ? `c${String(from + 100)}` : null } });
-    },
     searchCustomers(token, by) {
       if (state.down) return Promise.resolve(unavailable);
       const a = tokenAccount(token);
@@ -374,51 +306,6 @@ export function fakeSquare() {
       if (c === undefined) return Promise.resolve(gone.has(id) ? notFound : unavailable);
       if (c.accountId !== a.merchantId) return Promise.resolve(notFound);
       const out: SquareCustomer & { accountId?: string } = { ...c, version: c.version ?? 0 };
-      delete out.accountId;
-      return Promise.resolve({ kind: "ok", value: out });
-    },
-    updateCustomer(token, id, change) {
-      const a = tokenAccount(token);
-      if (a === undefined) return Promise.resolve(unauthorized);
-      customersChanged.push({ ...change, customerId: id, accountId: a.merchantId });
-      if (state.updateDown || state.down || state.updateFails.has(id)) return Promise.resolve(unavailable);
-      const refusedWith = state.updateStatus.get(id);
-      if (refusedWith !== undefined) return Promise.resolve({ kind: "refused", status: refusedWith, code: "FORBIDDEN" });
-      const hook = state.beforeUpdate;
-      state.beforeUpdate = null;
-      hook?.();
-      // An old id of a merged customer changes the merged one, as Square's test area did (2026-10-26).
-      const at = mergedInto.get(id) ?? id;
-      const c = customers.get(at);
-      if (c === undefined) return Promise.resolve(notFound);
-      if (c.accountId !== a.merchantId) return Promise.resolve(notFound);
-      if (change.givenName === undefined && change.familyName === undefined && change.email === undefined && change.phone === undefined) {
-        return Promise.resolve({ kind: "refused", status: 400, code: "BAD_REQUEST" });
-      }
-      const version = c.version ?? 0;
-      if (state.conflictNext > 0) {
-        state.conflictNext -= 1;
-        customers.set(at, { ...c, version: version + 1 });
-        return Promise.resolve({ kind: "refused", status: 409, code: "CONFLICT" });
-      }
-      if (change.version !== null && change.version !== version) return Promise.resolve({ kind: "refused", status: 409, code: "CONFLICT" });
-      if (change.phone != null && (!/^\+[1-9][0-9]{7,14}$/.test(change.phone) || state.updateRefused.has(change.phone))) {
-        return Promise.resolve({ kind: "refused", status: 400, code: "INVALID_PHONE_NUMBER" });
-      }
-      if (change.email != null && (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(change.email) || change.email.length > 254 || state.updateRefused.has(change.email.toLowerCase()))) {
-        return Promise.resolve({ kind: "refused", status: 400, code: "INVALID_EMAIL_ADDRESS" });
-      }
-      const next: SquareCustomer & { accountId: string } = {
-        ...c,
-        ...(change.givenName === undefined ? {} : { given_name: change.givenName }),
-        ...(change.familyName === undefined ? {} : { family_name: change.familyName }),
-        ...(change.email === undefined ? {} : { email_address: change.email }),
-        ...(change.phone === undefined ? {} : { phone_number: change.phone }),
-        version: version + 1,
-      };
-      if (!next.given_name && !next.family_name && !next.email_address && !next.phone_number) return Promise.resolve({ kind: "refused", status: 400, code: "BAD_REQUEST" });
-      customers.set(at, next);
-      const out: SquareCustomer & { accountId?: string } = { ...next };
       delete out.accountId;
       return Promise.resolve({ kind: "ok", value: out });
     },
@@ -570,10 +457,9 @@ export function fakeSquare() {
     },
     listPayments(token, q) {
       listings.push({ locationId: q.locationId });
-      if (state.down || state.listDown) return Promise.resolve(unavailable);
+      if (state.down) return Promise.resolve(unavailable);
       const a = tokenAccount(token);
       if (a === undefined) return Promise.resolve(unauthorized);
-      if (state.listRefused) return Promise.resolve({ kind: "refused", status: 403, code: "INSUFFICIENT_SCOPES" });
       const all: (SquarePayment & { accountId: string })[] = [...payments.values(), ...charged];
       const mine = all
         .filter((p) => p.accountId === a.merchantId && p.location_id === q.locationId && p.created_at != null)
@@ -591,32 +477,6 @@ export function fakeSquare() {
         return out;
       });
       return Promise.resolve({ kind: "ok", value: { payments: page, unread: 0, cursor: from + 100 < mine.length ? String(from + 100) : null } });
-    },
-    listTaxes(token, cursor) {
-      if (state.down || state.taxesDown) return Promise.resolve(unavailable);
-      const a = tokenAccount(token);
-      if (a === undefined) return Promise.resolve(unauthorized);
-      const all = taxes.get(a.merchantId) ?? [];
-      const from = cursor === null ? 0 : Number(cursor);
-      return Promise.resolve({
-        kind: "ok",
-        value: { taxes: all.slice(from, from + 100), unread: state.taxUnreadable ? 1 : 0, cursor: from + 100 < all.length ? String(from + 100) : null },
-      });
-    },
-    retrieveOrder(token, id) {
-      const before = state.beforeOrder;
-      if (before !== null) {
-        state.beforeOrder = null;
-        return before().then(() => api.retrieveOrder(token, id));
-      }
-      if (state.down || state.ordersUnanswered.has(id)) return Promise.resolve(unavailable);
-      const a = tokenAccount(token);
-      if (a === undefined) return Promise.resolve(unauthorized);
-      if (state.ordersRefused) return Promise.resolve({ kind: "refused", status: 403, code: "INSUFFICIENT_SCOPES" });
-      const o = orders.get(id);
-      if (o?.accountId !== a.merchantId) return Promise.resolve(notFound);
-      const order: SquareOrder = { id: o.id, location_id: o.location_id ?? null, line_items: o.line_items ?? [], taxes: o.taxes ?? [], tenders: o.tenders ?? [] };
-      return Promise.resolve({ kind: "ok", value: order });
     },
   };
   const allow = (account: Account): string => {
@@ -646,80 +506,6 @@ export function fakeSquare() {
   };
   /** Money Square took from cards on file. */
   const taken = () => charged.filter((p) => p.status === "COMPLETED");
-  /** A payment taken in Square's own app at this account's location (18d-iii-b-i): typed amounts by
-   *  default (`lines`), on the customer picked (`customerId`, none by default), completed. `refunded`:
-   *  what Square has given back on it; `referenceId`: the reference a charge of the app's own names. */
-  const appPayment = (
-    account: Account,
-    o: {
-      amount: number;
-      customerId?: string | null;
-      lines?: string[];
-      tip?: number;
-      locationId?: string;
-      status?: string;
-      at?: Date;
-      currency?: string;
-      addedTax?: number;
-      refunded?: number;
-      referenceId?: string;
-      /** The sale paid with this and another payment (Square's split tender). */
-      split?: boolean;
-      /** The name the gym gave the device that took it (Square's `device_details.device_name`). */
-      device?: string;
-    },
-  ): SquarePayment => {
-    n += 1;
-    const id = `APP${String(n)}${randomBytes(6).toString("hex")}`;
-    const orderId = `ORD${String(n)}${randomBytes(6).toString("hex")}`;
-    const locationId = o.locationId ?? account.locations[0]?.id ?? "LNONE";
-    const currency = o.currency ?? (account.country === "US" ? "USD" : "CAD");
-    orders.set(orderId, {
-      id: orderId,
-      accountId: account.merchantId,
-      location_id: locationId,
-      line_items: (o.lines ?? ["CUSTOM_AMOUNT"]).map((kind) => ({ item_type: kind })),
-      // Square's own sales tax added on top of what staff typed: inside the payment's amount.
-      taxes: o.addedTax === undefined ? [] : [{ type: "ADDITIVE", applied_money: { amount: o.addedTax, currency } }],
-      // The payments the sale was paid with: this one alone, as Square's test area showed (2026-10-25).
-      tenders: o.split === true ? [{ payment_id: id }, { payment_id: `OTHER${id}` }] : [{ payment_id: id }],
-    });
-    const payment: SquarePayment & { accountId: string } = {
-      id,
-      accountId: account.merchantId,
-      status: o.status ?? "COMPLETED",
-      amount_money: { amount: o.amount, currency },
-      tip_money: { amount: o.tip ?? 0, currency },
-      total_money: { amount: o.amount + (o.tip ?? 0), currency },
-      location_id: locationId,
-      customer_id: o.customerId ?? null,
-      order_id: orderId,
-      source_type: "CARD",
-      card_details: { card: { card_brand: "MASTERCARD", last_4: "4444" } },
-      created_at: (o.at ?? state.now()).toISOString(),
-      ...(o.refunded === undefined ? {} : { refunded_money: { amount: o.refunded, currency } }),
-      ...(o.referenceId === undefined ? {} : { reference_id: o.referenceId }),
-      ...(o.device === undefined ? {} : { device_details: { device_name: o.device } }),
-    };
-    payments.set(id, payment);
-    const out: SquarePayment & { accountId?: string } = { ...payment };
-    delete out.accountId;
-    return out;
-  };
-  /** A tax in this account's item library, as the business set it up in Square. */
-  const addTax = (account: Account, t: { name: string; percentage: string; customAmounts?: boolean; inclusive?: boolean; enabled?: boolean; absentAt?: string[] }) => {
-    n += 1;
-    const list = taxes.get(account.merchantId) ?? [];
-    list.push({
-      type: "TAX",
-      id: `TAX${String(n)}`,
-      is_deleted: false,
-      present_at_all_locations: true,
-      absent_at_location_ids: t.absentAt ?? [],
-      tax_data: { name: t.name, percentage: t.percentage, inclusion_type: t.inclusive === true ? "INCLUSIVE" : "ADDITIVE", applies_to_custom_amounts: t.customAmounts ?? true, enabled: t.enabled ?? true },
-    });
-    taxes.set(account.merchantId, list);
-  };
   /** A customer in this account's Square, as Square has them (18d-iii-b-ii-a); `reference_id` where another
    *  app or this one set it. */
   const customer = (account: Account, c: SquareCustomer) => {
@@ -781,16 +567,12 @@ export function fakeSquare() {
     devices,
     checkouts,
     payments,
-    orders,
-    taxes,
     at,
     card,
     cards,
     stopped,
     charged,
     taken,
-    appPayment,
-    addTax,
     customer,
     subscription,
     customersOf,
@@ -799,9 +581,7 @@ export function fakeSquare() {
     merge,
     madeWithKey,
     customersMade,
-    customerListings,
     customerReads,
-    customersChanged,
     customersDeleteAsked,
     refund,
     listed,

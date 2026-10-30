@@ -72,7 +72,6 @@ import { unlistedDigest, unlistedGroup, unlistedPage } from "./unlisted.js";
 import { moveGiftLinks } from "../referrals/memberGiftRepo.js";
 import { movePayerLinks } from "../payers/repo.js";
 import { moveCards } from "../payments/cardsRepo.js";
-import { copyRefusedFor } from "../payments/squareCopiesRepo.js";
 import { oweDeletes, rollUp, standingOf } from "../payments/squareDeletesRepo.js";
 
 type Sql = MemberListDeps["sql"];
@@ -92,11 +91,10 @@ async function detailOf(
   /** The caller holds `billing.members`: the row says Overdue where the bill does (17i-ii). */
   seesBills = false,
 ): Promise<MemberListEntryDetail> {
-  const [fields, reached, invitation, squareCopyRefused, squareStanding] = await Promise.all([
+  const [fields, reached, invitation, squareStanding] = await Promise.all([
     repo.listFields(sql, gymId),
     repo.membersAgainstList(sql, gymId, { email: entry.values.email, phone: entry.values.phone, entryIds: [entry.id] }),
     invitationsOf(sql, settings, gymId, [{ id: entry.id, email: entry.values.email }]),
-    copyRefusedFor(sql, gymId, entry.id),
     // Only a past member's page offers Delete permanently, so only theirs asks what it does about their customer in Square.
     entry.formerAt === null ? Promise.resolve(null) : standingOf(sql, gymId, [entry.id]).then(rollUp),
   ]);
@@ -179,7 +177,6 @@ async function detailOf(
     })),
     waiverInUse: waiver !== null,
     waiverDesk: desk === undefined ? null : { name: desk.name, signer: desk.signer, at: desk.at.toISOString(), by: desk.by },
-    squareCopyRefused,
     squareOnDelete: squareStanding ?? "none",
   };
 }

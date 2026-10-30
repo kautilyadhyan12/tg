@@ -7,9 +7,8 @@ import { billDays, shortDay } from './memberBillsView';
 // to, how it was paid and who took it.
 
 const methodWords = (method) => MEMBER_PAYMENT_METHOD_WORDS[method] ?? String(method);
-/** Inside a sentence: "Card at the desk" reads "card at the desk"; "UPI" and "Square Point of Sale" (18d-iii-b-i)
- *  keep their capitals. */
-const lower = (words) => (/^(?:[A-Z]{2,}|Square)\b/.test(words) ? words : `${words.charAt(0).toLowerCase()}${words.slice(1)}`);
+/** Inside a sentence: "Card at the desk" reads "card at the desk"; "UPI" keeps its capitals. */
+const lower = (words) => (/^[A-Z]{2,}\b/.test(words) ? words : `${words.charAt(0).toLowerCase()}${words.slice(1)}`);
 
 /** "Receipt #12", or "Refund receipt #13". */
 export function receiptTitle(receipt) {

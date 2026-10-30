@@ -19,18 +19,14 @@ export interface StandingRow {
   kind: Standing;
 }
 
-/** Another record, in any gym, that uses this Square customer: its link, a card saved on it, or a check about to link it. */
+/** Another record, in any gym, that uses this Square customer: its link or a card saved on it. */
 const usedByAnother = (sql: SqlOrTx) => sql`
   EXISTS (SELECT 1 FROM gym_square_customers o
           WHERE o.environment = c.environment AND o.account_id = c.account_id AND o.customer_id = c.customer_id
             AND NOT (o.gym_id = c.gym_id AND o.entry_id = c.entry_id))
   OR EXISTS (SELECT 1 FROM gym_member_cards k
              WHERE k.environment = c.environment AND k.account_id = c.account_id AND k.customer_id = c.customer_id
-               AND NOT (k.gym_id = c.gym_id AND k.entry_id = c.entry_id))
-  OR EXISTS (SELECT 1 FROM gym_square_member_plan p
-             JOIN gym_square_member_runs r ON r.gym_id = p.gym_id AND r.environment = p.environment
-             WHERE p.environment = c.environment AND r.account_id = c.account_id AND p.customer_id = c.customer_id
-               AND NOT (p.gym_id = c.gym_id AND p.entry_id = c.entry_id))`;
+               AND NOT (k.gym_id = c.gym_id AND k.entry_id = c.entry_id))`;
 
 /** Each of these records' customers in Square and what deleting the record does about it. */
 const kinds = (sql: SqlOrTx, gymId: string, entryIds: readonly string[]) => sql`
@@ -128,9 +124,6 @@ export async function usedNow(sql: SqlOrTx, a: { environment: SquareEnvironment;
     SELECT (
       EXISTS (SELECT 1 FROM gym_square_customers WHERE environment = ${a.environment} AND account_id = ${a.accountId} AND customer_id = ${a.customerId})
       OR EXISTS (SELECT 1 FROM gym_member_cards WHERE environment = ${a.environment} AND account_id = ${a.accountId} AND customer_id = ${a.customerId})
-      OR EXISTS (SELECT 1 FROM gym_square_member_plan p
-                 JOIN gym_square_member_runs r ON r.gym_id = p.gym_id AND r.environment = p.environment
-                 WHERE p.environment = ${a.environment} AND r.account_id = ${a.accountId} AND p.customer_id = ${a.customerId})
     ) AS used`;
   return row?.used === true;
 }

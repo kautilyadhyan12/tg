@@ -18,7 +18,9 @@ import { REVOKE_MAX_TRIES, REVOKE_RETRY_MS, accessContext, type PaymentsDeps } f
 import type { SquareSettings } from "./settings.js";
 import { decideDelete } from "./squareDeleteRule.js";
 import * as deletes from "./squareDeletesRepo.js";
-import { SQUARE_SUBSCRIPTION_CHARGES } from "./squareMembersRepo.js";
+
+/** The customers of Square's own subscriptions that still charge: ACTIVE, PENDING (starts later), PAUSED. */
+export const SQUARE_SUBSCRIPTION_CHARGES: readonly string[] = ["ACTIVE", "PENDING", "PAUSED"];
 
 export const SQUARE_DELETES = {
   /** Customers taken a minute, for every gym together. */

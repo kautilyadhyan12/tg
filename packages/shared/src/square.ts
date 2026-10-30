@@ -105,8 +105,7 @@ export type SquareCard = z.infer<typeof squareCardSchema>;
 /** CreateCard's, RetrieveCard's and DisableCard's answer. */
 export const squareCardAnswerSchema = z.object({ card: squareCardSchema });
 
-/** CreateCustomer's and RetrieveCustomer's answer: the customer's id, and what Square has of them, shown
- *  beside a payment from Square Point of Sale that is linked to nobody here (18d-iii-b-ii-a). */
+/** CreateCustomer's and RetrieveCustomer's answer: the customer's id, and what Square has of them. */
 export const squareCustomerAnswerSchema = z.object({
   customer: z.object({
     id: squareObjectIdSchema,
@@ -247,7 +246,7 @@ export const squarePaymentSchema = z.object({
       card: z.object({ card_brand: z.string().max(40).nullish(), last_4: z.string().regex(/^[0-9]{4}$/).nullish() }).nullish(),
     })
     .nullish(),
-  /** When Square made it (18d-iii-b-i): a payment older than `SQUARE_APP.keepDays` is never taken in. */
+  /** When Square made it. */
   created_at: squareTimeSchema.nullish(),
   /** The order Square made with it: Square's own app makes one with each payment ("Retrieve
    *  Payments", read 2026-10-24), naming what was sold. */
@@ -271,60 +270,6 @@ export const squarePaymentAnswerSchema = z.object({ payment: squarePaymentSchema
  *  be read never hides the rest; `cursor` while there are more ("List payments", read 2026-10-24). */
 export const squarePaymentsPageSchema = z.object({
   payments: z.array(z.unknown()).max(100).nullish(),
-  cursor: z.string().max(2048).nullish(),
-});
-
-/** An order, as far as its lines say what was sold: each line's kind, and the item in the gym's list
- *  in Square it came from. */
-export const squareOrderSchema = z.object({
-  id: squareOrderIdSchema,
-  location_id: squareObjectIdSchema.nullish(),
-  line_items: z
-    .array(z.object({ item_type: z.string().max(40).nullish(), catalog_object_id: z.string().max(192).nullish() }))
-    .max(1000)
-    .nullish(),
-  /** The taxes on the sale: ADDITIVE ones were added on top of what staff typed, INCLUSIVE ones were
-   *  inside it ("Order", OrderLineItemTax, read 2026-10-25). */
-  taxes: z.array(z.object({ type: z.string().max(40).nullish(), applied_money: squareMoneySchema.nullish() })).max(100).nullish(),
-  /** A charge Square added to the sale, such as an automatic service charge. */
-  total_service_charge_money: squareMoneySchema.nullish(),
-  /** The payments the sale was paid with (18d-iii-b-ii-a): one, naming this payment, where it paid the
-   *  whole sale (measured in Square's test area, 2026-10-25: a payment of 137 with a tip of 25 made an
-   *  order of one CUSTOM_AMOUNT line of 137, and one tender of 162 naming the payment). */
-  tenders: z
-    .array(z.object({ payment_id: squarePaymentIdSchema.nullish() }))
-    .max(100)
-    .nullish(),
-});
-export type SquareOrder = z.infer<typeof squareOrderSchema>;
-
-/** RetrieveOrder's answer. */
-export const squareOrderAnswerSchema = z.object({ order: squareOrderSchema });
-
-/** A tax in the business's own item library (18d-iii-b-i; "CatalogTax", read 2026-10-25): where it is
- *  used, and whether Square adds it to "custom amounts entered into the Square Point of Sale app". */
-export const squareCatalogTaxSchema = z.object({
-  type: z.literal("TAX"),
-  id: z.string().max(192),
-  is_deleted: z.boolean().nullish(),
-  present_at_all_locations: z.boolean().nullish(),
-  present_at_location_ids: z.array(squareObjectIdSchema).max(1000).nullish(),
-  absent_at_location_ids: z.array(squareObjectIdSchema).max(1000).nullish(),
-  tax_data: z
-    .object({
-      name: z.string().max(255).nullish(),
-      percentage: z.string().max(20).nullish(),
-      inclusion_type: z.string().max(40).nullish(),
-      applies_to_custom_amounts: z.boolean().nullish(),
-      enabled: z.boolean().nullish(),
-    })
-    .nullish(),
-});
-export type SquareCatalogTax = z.infer<typeof squareCatalogTaxSchema>;
-
-/** ListCatalog's answer, each object read on its own; `cursor` while there are more. */
-export const squareCatalogPageSchema = z.object({
-  objects: z.array(z.unknown()).max(1000).nullish(),
   cursor: z.string().max(2048).nullish(),
 });
 
