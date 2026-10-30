@@ -524,7 +524,7 @@ function Review({
               applied={sharedDish(rows.filter((r) => r.own === null).map((r) => r.amount))}
               held={
                 unfinished !== undefined
-                  ? `${unfinished.name} needs an amount first.`
+                  ? `${unfinished.title} needs an amount first.`
                   : rowGrams.some((g, i) => g === null && rows[i]?.own === null)
                     ? "Working out the foods’ weights…"
                     : null
@@ -548,7 +548,7 @@ function Review({
         )}
         {unfinished === undefined ? null : (
           <Txt kind="small" colour="badText">
-            {unfinished.name}: {rowNeeds(unfinished) === "fill" ? "pick how full the dish was" : "pick an amount"}. Tap it to finish, then save.
+            {unfinished.title}: {rowNeeds(unfinished) === "fill" ? "pick how full the dish was" : "pick an amount"}. Tap it to finish, then save.
           </Txt>
         )}
         {refusedWords === null ? null : (
@@ -567,7 +567,7 @@ function Review({
         </View>
       </View>
       {row === null ? null : (
-        <Sheet open title={row.name} onClose={() => { setOpenRow(null); }}>
+        <Sheet open title={row.title} onClose={() => { setOpenRow(null); }}>
           <RowAmount
             row={row}
             waiting={rows.some((r, i) => r.amount.share !== undefined && rowGrams[i] === null)}
@@ -596,14 +596,15 @@ function Review({
             onRemove={() => {
               if (!change((base) => withRowAmount(base, row.key, null))) return;
               setOpenRow(null);
-              setSaid(`${row.name} taken off.`);
+              setSaid(`${row.title} taken off.`);
             }}
           />
         </Sheet>
       )}
       <FindFood
         query={finding?.query ?? null}
-        changing={changing === null ? null : changing.name}
+        changing={changing === null ? null : changing.title}
+        close={changing === null ? [] : changing.closeFoods}
         grams={changingGrams}
         taken={onSheet(sheet)}
         onClose={() => { setFinding(null); }}
@@ -614,7 +615,7 @@ function Review({
             setSaid(`${name} added.`);
           } else {
             if (!change((base) => withRowFood(base, changing.key, pick))) return;
-            setSaid(`${changing.name} changed to ${name}.`);
+            setSaid(`${changing.title} changed to ${name}.`);
           }
           setFinding(null);
         }}
@@ -645,20 +646,23 @@ function FoodRow({ row, item, onPress }: { row: SheetRow; item: MealItem | null;
             ? NOT_KNOWN
             : typedAmount(measure, Number(row.amount.amount));
   // The scan's guess of how much, still untouched, a food whose numbers are the scan's own, and the
-  // person's own food.
-  const mark = row.source === "own" ? " · your numbers" : row.estimated || row.source === "estimate" ? " · estimate" : "";
+  // person's own food. On screen the line above says where the numbers come from, so the amount
+  // marks only the guess of how much.
+  const said = row.source === "own" ? " · your numbers" : row.estimated || row.source === "estimate" ? " · estimate" : "";
+  const mark = row.estimated && row.source !== "estimate" ? " · estimate" : "";
   const kcal = item?.kcalPoint ?? null;
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Change ${row.name}, ${amount}${mark}`}
+      accessibilityLabel={`Change ${row.title}, ${row.numbersFrom === null ? "" : `${row.numbersFrom}, `}${amount}${said}`}
       onPress={onPress}
       style={({ pressed }) => [styles.food, pressed ? styles.pressed : null]}
     >
       <View style={styles.grow}>
         <Txt kind="strong" numberOfLines={2}>
-          {row.name}
+          {row.title}
         </Txt>
+        <SourceLine source={row.source} before={row.numbersFrom === null ? "" : `${row.numbersFrom} ·`} />
         <Txt kind="tiny" colour={needs === null ? "textFaint" : "badText"}>
           {amount}
           {needs === null ? mark : ""}
@@ -703,7 +707,7 @@ function RowAmount({
   // Not the food it is: another from the search, or the person's own. Back to what the photo saw.
   const notThis = (
     <View style={styles.notThis}>
-      <SourceLine source={row.source} />
+      <SourceLine source={row.source} before={row.numbersFrom === null ? "" : `${row.numbersFrom} ·`} />
       <View style={styles.grow} />
       <Button label="Not this? Change food" kind="link" onPress={onChange} />
       {waiting ? (
@@ -747,11 +751,13 @@ function RowAmount({
 type Found = { kind: "idle" } | { kind: "looking" } | { kind: "ok"; items: FoodSearchItem[] } | { kind: "failed"; words: string };
 
 /** A food found by search: one the photo missed, added at its usual amount, or the one a row is
- *  changed to (`changing`, the row's name), at the grams the row weighs. Where the list has none, the
- *  person's own food. `query` null: closed. */
+ *  changed to (`changing`, the row's name), at the grams the row weighs; a row changed is offered
+ *  its close foods first, before anything is typed (33b-ii). Where the list has none, the person's
+ *  own food. `query` null: closed. */
 function FindFood({
   query,
   changing,
+  close,
   grams,
   taken,
   onClose,
@@ -759,6 +765,7 @@ function FindFood({
 }: {
   query: string | null;
   changing: string | null;
+  close: readonly FoodSearchItem[];
   grams: number | null;
   taken: ReadonlySet<string>;
   onClose: () => void;
@@ -817,10 +824,36 @@ function FindFood({
     );
   }
   const q = typed.trim();
+  // A close food in the row's place weighs what the row weighs: its calories are said at that weight.
+  const closeWords = (f: FoodSearchItem): string => {
+    if (grams === null) return startWords(f);
+    const g = Math.max(1, Math.round(grams));
+    return `${kcalWords(Math.round((f.kcal * g) / 100))} · ${String(g)} g`;
+  };
+  const closeList = q === "" ? close.filter((f) => !taken.has(f.canonical)) : [];
   return (
     <Sheet open title={title} onClose={onClose}>
       <Field label="Search food" bare value={typed} onChange={setTyped} placeholder="Search food" ready maxLength={100} />
       <ScrollView style={styles.findList} keyboardShouldPersistTaps="handled">
+        {closeList.length === 0 ? null : (
+          <Txt kind="tiny" colour="textSoft" style={styles.label}>
+            Close matches
+          </Txt>
+        )}
+        {closeList.map((f) => (
+          <Pressable
+            key={f.canonical}
+            accessibilityRole="button"
+            accessibilityLabel={`Change to ${f.name}, ${closeWords(f)}`}
+            onPress={() => { pick(f); }}
+            style={({ pressed }) => [styles.found, pressed ? styles.pressed : null]}
+          >
+            <Txt kind="strong" numberOfLines={2}>
+              {f.name}
+            </Txt>
+            <SourceLine source={f.source} before={`${closeWords(f)} ·`} />
+          </Pressable>
+        ))}
         {found.kind === "looking" ? <Txt kind="small">Searching…</Txt> : null}
         {found.kind === "failed" ? (
           <Txt kind="small" colour="badText">
@@ -855,7 +888,7 @@ function FindFood({
             <Txt kind="tiny">Not on the list? Enter what you ate.</Txt>
           </Pressable>
         ) : null}
-        <Credits sources={new Set(list.map((f) => f.source))} />
+        <Credits sources={new Set([...closeList, ...list].map((f) => f.source))} />
       </ScrollView>
     </Sheet>
   );

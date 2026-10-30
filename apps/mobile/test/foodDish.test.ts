@@ -36,7 +36,7 @@ describe("each food's part of one dish", () => {
 const measures = [{ id: "g" as const, name: "g", grams: 1 }];
 const scanned = (name: string, canonical: string, grams: number): MealPhotoAnalysis["items"][number] => ({
   name, canonical, gramsPoint: grams, gramsRange: [grams, grams], portionSource: "default", nutritionSource: "curated",
-  kcalPoint: grams, kcalLow: grams, kcalHigh: grams, proteinG: 1, carbsG: 1, fatG: 1, measures, startsAt: { measure: "g", amount: grams }, portionEstimated: false,
+  kcalPoint: grams, kcalLow: grams, kcalHigh: grams, proteinG: 1, carbsG: 1, fatG: 1, measures, startsAt: { measure: "g", amount: grams }, portionEstimated: false, closeFoods: [],
 });
 const ANALYSIS: MealPhotoAnalysis = {
   scanToken: "s".repeat(40), mealName: "Thali",

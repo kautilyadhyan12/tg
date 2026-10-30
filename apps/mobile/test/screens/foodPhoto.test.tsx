@@ -479,6 +479,59 @@ describe("a food the photo got wrong, and one no list has (Kd, 2026-10-30)", () 
     ]);
   });
 
+  it("the worst thing (33b-ii): a food titled by what the photo saw always says, under it, the food its numbers are from", async () => {
+    const seenToast = { ...scannedItems[0], seenAs: "Sourdough toast" };
+    await openFood({ meals: [], scans: [ok({ ...SCAN, items: [seenToast, scannedItems[1]] })] });
+    await takePhoto();
+    expect(await screen.findByText("Sourdough toast")).toBeTruthy();
+    expect(screen.getByText("Toast ·")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Change Sourdough toast, Toast, 2 × slice · 60 g" })).toBeTruthy();
+    // A food that reads as its food has no second name.
+    expect(screen.getByRole("button", { name: "Change Eggs (scrambled), 120 g · estimate" })).toBeTruthy();
+    expect(screen.queryByText("Eggs (scrambled) ·")).toBeNull();
+    // Its own box says the same.
+    await fireEvent.press(screen.getByRole("button", { name: "Change Sourdough toast, Toast, 2 × slice · 60 g" }));
+    expect(await screen.findAllByText("Toast ·")).toHaveLength(2);
+  });
+
+  it("\"Not this?\" offers the close foods first, at the grams the food weighed, never one already on the meal; typing searches instead (33b-ii)", async () => {
+    const SOURDOUGH = { ...MILK, canonical: "bread_sourdough", name: "Bread, sourdough", kcal: 289, source: "usda" };
+    const EGGS = { ...MILK, canonical: "eggs_scrambled", name: "Eggs (scrambled)", kcal: 149, source: "curated" };
+    const seenToast = { ...scannedItems[0], seenAs: "Sourdough toast", closeFoods: [EGGS, SOURDOUGH] };
+    const server = await openFood({ meals: [], scans: [ok({ ...SCAN, items: [seenToast, scannedItems[1]] })] });
+    await takePhoto();
+    await fireEvent.press(await screen.findByRole("button", { name: "Change Sourdough toast, Toast, 2 × slice · 60 g" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Not this? Change food" }));
+    expect(await screen.findByText("Change Sourdough toast")).toBeTruthy();
+    expect(screen.getByText("Close matches")).toBeTruthy();
+    // 289 kcal a 100 g, at the 60 g the toast weighed.
+    expect(screen.getByRole("button", { name: "Change to Bread, sourdough, 173 kcal · 60 g" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^Change to Eggs \(scrambled\)/ })).toBeNull();
+    // Typing searches: the close foods give way to what the search finds.
+    await fireEvent.changeText(screen.getByLabelText("Search food"), "milk");
+    expect(await screen.findByRole("button", { name: "Change to Milk, whole, 144 kcal · 240 g" })).toBeTruthy();
+    expect(screen.queryByText("Close matches")).toBeNull();
+    await fireEvent.changeText(screen.getByLabelText("Search food"), "");
+    await fireEvent.press(await screen.findByRole("button", { name: "Change to Bread, sourdough, 173 kcal · 60 g" }));
+    expect(await screen.findByText("Sourdough toast changed to Bread, sourdough.")).toBeTruthy();
+    expect(screen.getByText("Changed from Sourdough toast")).toBeTruthy();
+    // Back to what the photo saw, and changed again: saved in the toast's place at its 60 g.
+    await fireEvent.press(await screen.findByRole("button", { name: /^Change Bread, sourdough, 60 g/ }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Back to Sourdough toast" }));
+    expect(await screen.findByText("Back to Sourdough toast.")).toBeTruthy();
+    await fireEvent.press(await screen.findByRole("button", { name: "Change Sourdough toast, Toast, 2 × slice · 60 g" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Not this? Change food" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Change to Bread, sourdough, 173 kcal · 60 g" }));
+    await fireEvent.press(await screen.findByRole("button", { name: /^Save to / }));
+    await waitFor(() => {
+      expect(saves(server)).toHaveLength(1);
+    });
+    expect((saves(server)[0]?.body as { items: unknown }).items).toEqual([
+      { canonical: "bread_sourdough", measure: "g", amount: 60 },
+      { canonical: "eggs_scrambled", measure: "g", amount: 120 },
+    ]);
+  });
+
   it("puts the person's own food in a food's place, starting at the grams it weighed, priced by their numbers", async () => {
     const server = await openFood({ meals: [], scans: [] });
     await takePhoto();
