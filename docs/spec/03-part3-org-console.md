@@ -4276,18 +4276,10 @@ is a gym with no country. People who use the app for themselves may be anywhere.
   Subscriptions charge, which is why SUBSCRIPTIONS_READ is still asked for. ORDERS_READ and ITEMS_READ no longer are. A gym connected before
   that permission sees Reconnect Square in Settings → Payments, for its owner, with what it is for; everybody else reads who can.
   *Not built, kept as a plan (18d-iii-b-iii; Kd, 2026-10-30, the same day he took Square Point of Sale out):* memberships as
-  items in Square, offers in Square and one way at the desk, jobs 18d-iii-b-iv-a to -e. The plan and what was tried in Square's
+  items in Square, offers in Square, one way at the desk, and moving members off Square's Subscriptions, jobs 18d-iii-b-iv-a to
+  -f. A gym that uses Square Subscriptions cancels them in Square; a connected gym's Settings → Payments says so, as they would
+  pay twice. The plan and what was tried in Square's
   test area are in `handoff/2026-10-29-18d-iii-b-iii.md` and `rulings/2026-10-29-18d-iii-b-iii.md`.
-  *Planned, 18d-iii-b-iv-f:* **Move members from Square Subscriptions** (Kd, 2026-10-30: before launch). For a business whose members Square's
-  own Subscriptions bill (found by the same email or phone and the same name, `squareMembersPlan.ts`, kept for this job), the owner
-  presses **Move members from Square Subscriptions**. The box lists each member Square bills, with what they will have here ("Amy Lee · Gold Monthly · $50.00 · paid in Square until 14 Nov · billed here from
-  15 Nov"), each of Square's plans matched to a membership here by name or added, and who is left out and why (Square bills
-  them every 30 days, which memberships here cannot do; not in the member list; their subscription paused). One press gives
-  each the membership here, its first bill the day after Square's paid-until day (`charged_through_date`), and asks Square to
-  stop the subscription at the end of what was paid (CancelSubscription "sets the `canceled_date` field to the end of the
-  active billing period"; SUBSCRIPTIONS_WRITE, a new permission). The box names the members with no card here: their card
-  is added here before their first bill here. The worst thing: Amy billed by both Square and the app for one month, or by
-  nobody.
 - **Cash, bank transfer, a card on another machine, and UPI in India** (18r): recorded.
 
 Our own app for the Square Reader is ruled out (Kd, 2026-10-21): no gym app found runs the

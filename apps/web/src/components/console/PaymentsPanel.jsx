@@ -18,6 +18,7 @@ import {
   RECONNECT_HINT,
   RECONNECT_LINE,
   RECONNECT_OTHERS,
+  SQUARE_SUBSCRIPTIONS_NOTE,
 } from '../../pages/console/paymentsView';
 import PlaceLink from './PlaceLink';
 import SquareTerminals from './SquareTerminals';
@@ -293,6 +294,9 @@ export default function PaymentsPanel({ org, readOnly, startOpen = false, outcom
               connecting={busy === 'connect'}
             />
           ) : null}
+          <p className="text-sm m-0" style={hintStyle} data-testid="square-subscriptions-note">
+            {SQUARE_SUBSCRIPTIONS_NOTE}
+          </p>
           {data.needsAllow === true && data.terminals?.needsAllow !== true ? (
             <section aria-label="Reconnect Square" className="flex flex-col gap-2" data-testid="square-reconnect">
               {owner ? (

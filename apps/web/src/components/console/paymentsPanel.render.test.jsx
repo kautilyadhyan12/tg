@@ -144,6 +144,19 @@ describe('Square Point of Sale, taken out (18d-iii-b-v; Kd, 2026-10-30)', () => 
     expect(screen.queryByText(/Point of Sale/)).toBeNull();
     expect(screen.queryByText('Square needs your permission first')).toBeNull();
   });
+
+  it('a connected gym, for anybody on the staff, is told to cancel Square Subscriptions before charging cards here', async () => {
+    const WORDS = 'If Square Subscriptions bills your members, cancel those subscriptions in Square before you charge their cards here. Otherwise they pay twice.';
+    open(payments({ square: CONNECTED }));
+    expect((await screen.findByTestId('square-subscriptions-note')).textContent).toBe(WORDS);
+    cleanup();
+    open(payments({ canConnect: false, square: CONNECTED }));
+    expect((await screen.findByTestId('square-subscriptions-note')).textContent).toBe(WORDS);
+    cleanup();
+    open(payments());
+    expect(await screen.findByRole('button', { name: 'Connect Square' })).toBeTruthy();
+    expect(screen.queryByTestId('square-subscriptions-note')).toBeNull();
+  });
 });
 
 describe('connected before the app could read Square\'s subscriptions (High 1, round one)', () => {
