@@ -1425,6 +1425,63 @@ describe("a post removed after a lost reply", () => {
   });
 });
 
+describe("the whole-screen photo", () => {
+  const touch = (x: number, y: number) => ({ pageX: x, pageY: y });
+  const open = async () => {
+    const photos = [1, 2].map((n) => ({ id: PHOTO.replace("c1", `c${String(n)}`), width: 1600, height: 1200 }));
+    const server = serverOf({ [postsOf(IRON)]: ok(feed(IRON, [post(P1, { photos })])) });
+    await openUpdates(server.ask, IRON);
+    await fireEvent.press(await page().findByLabelText("Open photo 1 of 2"));
+    await fireEvent(await screen.findByTestId("photo-pages"), "layout", { nativeEvent: { layout: { x: 0, y: 0, width: 300, height: 600 } } });
+    return screen.findAllByTestId("zoom-photo");
+  };
+  const slides = () => screen.getByTestId("photo-list").props.scrollEnabled as boolean;
+  type Held = ReturnType<typeof screen.getByTestId>;
+  // Straight to the handler: the test kit's own event asks the photo's responder with no event at all.
+  const finger = (photo: Held, name: "onTouchStart" | "onTouchEnd", nativeEvent: object) =>
+    act(() => {
+      (photo.props[name] as (e: { nativeEvent: object }) => void)({ nativeEvent });
+    });
+
+  it("one finger belongs to the pages: they slide, and the photo does not take the touch", async () => {
+    const [photo] = await open();
+    if (photo === undefined) throw new Error("no photo");
+    expect(slides()).toBe(true);
+    const asks = photo.props.onStartShouldSetResponder as (e: { nativeEvent: object }) => boolean;
+    expect(asks({ nativeEvent: { touches: [touch(200, 300)] } })).toBe(false);
+    expect(asks({ nativeEvent: { touches: [touch(100, 300), touch(200, 300)] } })).toBe(true);
+    await finger(photo, "onTouchStart", { touches: [touch(200, 300)], ...touch(200, 300) });
+    expect(slides()).toBe(true);
+    await finger(photo, "onTouchEnd", { touches: [], ...touch(40, 300) });
+    expect(slides()).toBe(true);
+  });
+
+  it("two fingers hold the pages still, and letting go frees them", async () => {
+    const [photo] = await open();
+    if (photo === undefined) throw new Error("no photo");
+    await finger(photo, "onTouchStart", { touches: [touch(100, 300), touch(200, 300)], ...touch(200, 300) });
+    expect(slides()).toBe(false);
+    await finger(photo, "onTouchEnd", { touches: [], ...touch(200, 300) });
+    expect(slides()).toBe(true);
+  });
+
+  it("a double tap zooms and holds the pages still, and another goes back and frees them", async () => {
+    const [photo] = await open();
+    if (photo === undefined) throw new Error("no photo");
+    const tap = async () => {
+      await finger(photo, "onTouchStart", { touches: [touch(150, 300)], ...touch(150, 300) });
+      await finger(photo, "onTouchEnd", { touches: [], ...touch(150, 300) });
+    };
+    await tap();
+    expect(slides()).toBe(true);
+    await tap();
+    expect(slides()).toBe(false);
+    await tap();
+    await tap();
+    expect(slides()).toBe(true);
+  });
+});
+
 describe("before a post goes up", () => {
   it("the pen is at hand whatever the page holds, and a kept post says so on it", async () => {
     const server = serverOf({ [postsOf(IRON)]: on(IRON, [post(P1)]) });

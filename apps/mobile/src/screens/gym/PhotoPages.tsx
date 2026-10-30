@@ -61,6 +61,7 @@ export function PhotoPages({ viewing, photo, onIndex, onClose }: PhotoPagesProps
             <FlatList
               key={viewing.listKey}
               ref={list}
+              testID="photo-list"
               data={ids}
               horizontal
               pagingEnabled

@@ -19,8 +19,9 @@ export function ZoomPhoto({ children, onHeld }: ZoomPhotoProps) {
   const shiftY = useRef(new Animated.Value(0)).current;
   const now = useRef({ scale: 1, x: 0, y: 0 });
   const start = useRef({ scale: 1, x: 0, y: 0, apart: 0, dx: 0, dy: 0 });
+  // The touch being watched for a double tap; null once it is not a tap.
+  const tap = useRef<{ x: number; y: number } | null>(null);
   const lastTap = useRef(0);
-  const moved = useRef(false);
 
   const show = (next: { scale: number; x: number; y: number }) => {
     const fitted = {
@@ -41,23 +42,22 @@ export function ZoomPhoto({ children, onHeld }: ZoomPhotoProps) {
   };
 
   const fingers = (e: GestureResponderEvent) => e.nativeEvent.touches;
+  // Only two fingers, or a zoomed photo: one finger on a photo at its own size belongs to the pages, which slide under it.
+  const mine = (e: GestureResponderEvent) => fingers(e).length >= 2 || now.current.scale > 1;
   const responder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (e) => fingers(e).length >= 2 || now.current.scale > 1,
-      // Sliding to the next photo may take over a plain drag; never two fingers, or a zoomed photo.
-      onPanResponderTerminationRequest: (e) => fingers(e).length < 2 && now.current.scale <= 1,
+      onStartShouldSetPanResponder: mine,
+      onMoveShouldSetPanResponder: mine,
+      onMoveShouldSetPanResponderCapture: mine,
+      onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: (e) => {
-        moved.current = false;
         const [a, b] = fingers(e);
         begin(a !== undefined && b !== undefined ? fingersApart(a, b) : 0, 0, 0);
         held(fingers(e).length);
       },
       onPanResponderMove: (e, gesture) => {
-        if (Math.abs(gesture.dx) >= TAP_MOVES_LESS_THAN || Math.abs(gesture.dy) >= TAP_MOVES_LESS_THAN) moved.current = true;
         const [a, b] = fingers(e);
         if (a !== undefined && b !== undefined) {
-          moved.current = true;
           const apart = fingersApart(a, b);
           // The second finger has just come down: from here.
           if (start.current.apart === 0) begin(apart, gesture.dx, gesture.dy);
@@ -72,15 +72,6 @@ export function ZoomPhoto({ children, onHeld }: ZoomPhotoProps) {
         }
       },
       onPanResponderRelease: () => {
-        if (!moved.current) {
-          const at = Date.now();
-          if (at - lastTap.current < DOUBLE_TAP_MS) {
-            lastTap.current = 0;
-            show(now.current.scale > 1 ? { scale: 1, x: 0, y: 0 } : { scale: ZOOM_DOUBLE_TAP, x: 0, y: 0 });
-          } else {
-            lastTap.current = at;
-          }
-        }
         if (now.current.scale <= 1) show({ scale: 1, x: 0, y: 0 });
         held(0);
       },
@@ -98,7 +89,26 @@ export function ZoomPhoto({ children, onHeld }: ZoomPhotoProps) {
         setSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height });
       }}
       onTouchStart={(e) => {
-        if (e.nativeEvent.touches.length >= 2) onHeld(true);
+        const { touches, pageX, pageY } = e.nativeEvent;
+        tap.current = touches.length >= 2 ? null : { x: pageX, y: pageY };
+        if (touches.length >= 2) onHeld(true);
+      }}
+      onTouchEnd={(e) => {
+        const { touches, pageX, pageY } = e.nativeEvent;
+        if (touches.length > 0) return;
+        const from = tap.current;
+        tap.current = null;
+        if (from !== null && Math.abs(pageX - from.x) < TAP_MOVES_LESS_THAN && Math.abs(pageY - from.y) < TAP_MOVES_LESS_THAN) {
+          const at = Date.now();
+          if (at - lastTap.current < DOUBLE_TAP_MS) {
+            lastTap.current = 0;
+            show(now.current.scale > 1 ? { scale: 1, x: 0, y: 0 } : { scale: ZOOM_DOUBLE_TAP, x: 0, y: 0 });
+          } else {
+            lastTap.current = at;
+          }
+        }
+        if (now.current.scale <= 1) show({ scale: 1, x: 0, y: 0 });
+        held(0);
       }}
       {...responder.panHandlers}
     >
