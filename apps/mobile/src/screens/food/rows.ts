@@ -84,17 +84,27 @@ export function withChanges(row: Row, changes: readonly WaitingChange[] | undefi
 /** One of a meal's foods as its box reads: its name, its amount, and its calories where known. */
 export interface FoodLine {
   name: string;
+  /** Where the name is what the photo saw: the food its numbers are from, and that food's source (33b-ii). */
+  numbersFrom: { name: string; source: MealItem["nutritionSource"] } | null;
   amount: string;
   kcal: number | null;
 }
 
-const lineOf = (item: MealItem): FoodLine => ({ name: item.name, amount: loggedAmount(item) + itemMark(item), kcal: item.kcalPoint });
+/** What a logged food is called: what the photo saw, where that is not its food's name (33b-ii). */
+export const foodTitle = (item: Pick<MealItem, "name" | "seenAs">): string => item.seenAs ?? item.name;
+
+const lineOf = (item: MealItem): FoodLine => ({
+  name: foodTitle(item),
+  numbersFrom: item.seenAs === undefined ? null : { name: item.name, source: item.nutritionSource },
+  amount: loggedAmount(item) + itemMark(item),
+  kcal: item.kcalPoint,
+});
 
 export function foodLines(row: Row): FoodLine[] {
   const change = row.foodsChange;
   if (change === null) return (row.items ?? []).map(lineOf);
   if (change.items !== null) return change.items.map(lineOf);
-  return (change.foods ?? []).map((f) => ({ name: f.name, amount: f.amount, kcal: null }));
+  return (change.foods ?? []).map((f) => ({ name: f.name, numbersFrom: null, amount: f.amount, kcal: null }));
 }
 
 /** Whether the meal's foods can be changed now, and if not, why: a meal still waiting to be sent has

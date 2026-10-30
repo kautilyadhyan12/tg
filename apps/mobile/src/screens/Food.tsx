@@ -88,6 +88,7 @@ import {
   amountOf,
   clockWords,
   foodLines,
+  foodTitle,
   foodsHeld,
   measuresWithoutServer,
   serverRow,
@@ -754,9 +755,9 @@ function MealSheet({
   if (saved !== null && item !== undefined && mode.kind === "removeFood") {
     const at = mode.at;
     return (
-      <Sheet open title={`Remove ${item.name}?`} onClose={onClose} onBack={back}>
+      <Sheet open title={`Remove ${foodTitle(item)}?`} onClose={onClose} onBack={back}>
         <Txt kind="small">
-          {item.name} comes off {row.name} and out of the day’s totals.
+          {foodTitle(item)} comes off {row.name} and out of the day’s totals.
         </Txt>
         <Button
           label="Remove food"
@@ -771,7 +772,7 @@ function MealSheet({
                 foods: null,
               },
               row.section,
-              `${item.name} removed from ${row.name}.`,
+              `${foodTitle(item)} removed from ${row.name}.`,
             );
           }}
         />
@@ -783,7 +784,7 @@ function MealSheet({
   if (saved !== null && item !== undefined && mode.kind === "food") {
     const at = mode.at;
     return (
-      <Sheet open title={item.name} onClose={onClose} onBack={back}>
+      <Sheet open title={foodTitle(item)} onClose={onClose} onBack={back}>
         <FoodAmount
           key={`${row.id}-${String(at)}-${measures === null ? "own" : "server"}`}
           mealId={row.id}
@@ -799,7 +800,7 @@ function MealSheet({
                 foods: edit.foods,
               },
               row.section,
-              `${item.name} updated.`,
+              `${foodTitle(item)} updated.`,
             );
           }}
           onRemove={saved.items.length > 1 ? () => { setMode({ kind: "removeFood", at }); } : null}
@@ -823,7 +824,7 @@ function MealSheet({
         body: { items, itemsVersion: saved.itemsVersion, changeId: newGoalId() },
         items: null,
         totals: null,
-        foods: saved.items.map((it) => ({ name: it.name, amount: it.nutritionSource !== "own" ? `Part of ${dish.label}, ${fill.words}` : loggedAmount(it) + itemMark(it) })),
+        foods: saved.items.map((it) => ({ name: foodTitle(it), amount: it.nutritionSource !== "own" ? `Part of ${dish.label}, ${fill.words}` : loggedAmount(it) + itemMark(it) })),
       },
       row.section,
       `${row.name} shared out over ${dish.label}, ${fill.words}.`,
@@ -846,6 +847,7 @@ function MealSheet({
           <>
             <View style={styles.grow}>
               <Txt kind="strong">{line.name}</Txt>
+              {line.numbersFrom === null ? null : <SourceLine source={line.numbersFrom.source} before={`${line.numbersFrom.name} ·`} />}
               <Txt kind="tiny">{line.amount}</Txt>
             </View>
             <Txt kind="small" colour="text">
@@ -1035,7 +1037,7 @@ function FoodAmount({
       items,
       preview,
       foods: saved.items.map((it, i) => ({
-        name: it.name,
+        name: foodTitle(it),
         amount: i !== at ? loggedAmount(it) + itemMark(it) : now === undefined ? typedAmount(measure, typed, pickedDish(dishes, amount.measure)) : loggedAmount(now) + itemMark(now),
       })),
     });
@@ -1047,6 +1049,7 @@ function FoodAmount({
       <Txt kind="tiny">
         Logged: {loggedAmount(item) + itemMark(item)} · {kcalWords(item.kcalPoint)}
       </Txt>
+      {item.seenAs === undefined ? null : <SourceLine source={item.nutritionSource} before={`${item.name} ·`} />}
       <AmountPicker
         measures={measures}
         amount={amount}
