@@ -11,7 +11,6 @@ import { useConsoleOrg } from '../../pages/console/useConsoleOrg';
 import { useConsoleSignOut } from '../../pages/console/consoleSignOut';
 import { consoleLook, consoleMenu, moreIsCurrent } from '../../pages/console/consoleMenu';
 import { orgTypeLabel, roleLabel, viewerPrivileges } from '../../pages/console/consoleView';
-import { usePaymentsToMatchCount } from '../../pages/console/usePaymentsToMatchCount';
 import './console.css';
 
 // The console's own shell (spec Part 3 §3.1, §17): the menu on the left from 768 px; below
@@ -23,8 +22,7 @@ import './console.css';
 // keeps a shared front-desk browser honest.
 //
 // The role comes from the same kept list of gyms the screen inside reads
-// (`pages/console/consoleOrgs.js`), so the shell asks the server nothing of its own but one count: the
-// payments waiting in Payments to match, for staff who match them (18d-iii-b-ii-a).
+// (`pages/console/consoleOrgs.js`), so the shell asks the server nothing of its own.
 
 /** The gym's name at the top of the menu: tapping it opens "Your organisations". With no
  *  gym to name (still loading, or an address that is not one of the person's gyms) it
@@ -50,16 +48,6 @@ function GymSwitcher({ org, fallback, compact }) {
     </Link>
   );
 }
-
-/** How many payments wait, on Payments to match's icon; a screen reader hears it after the page's name. */
-function ToMatchCount({ count }) {
-  return (
-    <span className="c-nav-count" aria-hidden="true" data-testid="payments-to-match-count">
-      {count}
-    </span>
-  );
-}
-const toMatchWords = (count) => `, ${String(count)} ${count === 1 ? 'payment' : 'payments'} to match`;
 
 /** The glowing dot beside Members, and what it means to a screen reader. */
 function ReviewDot({ count, words }) {
@@ -87,9 +75,6 @@ export default function ConsoleLayout({ children }) {
   // them they will forget"). The server counts it only for staff who may see the list.
   const toReview = org?.membersNeedReview ?? 0;
   const reviewDot = (page) => (page.key === 'members' && toReview > 0 ? <ReviewDot count={toReview} words={words} /> : null);
-  // Every payment taken in Square Point of Sale waits for one press: the desk sees it come in from any page.
-  const toMatch = usePaymentsToMatchCount(org);
-  const toMatchCount = (page) => (page.key === 'payments-to-match' && toMatch > 0 ? <ToMatchCount count={toMatch} /> : null);
   const moreOn = menu ? moreIsCurrent(menu, pathname) : false;
   const name = user?.displayName || user?.email || '';
   const role = org ? roleLabel(org.staffRole, org.orgType, org.coOwner) : '';
@@ -106,8 +91,6 @@ export default function ConsoleLayout({ children }) {
             <nav aria-label="Console" className="c-rail-nav">
               {menu.pages.map((page) => {
                 const Icon = PAGE_ICONS[page.key];
-                // A count sits on the icon's corner, so the page's name keeps its one line.
-                const count = toMatchCount(page);
                 return (
                   <NavLink
                     key={page.key}
@@ -115,16 +98,8 @@ export default function ConsoleLayout({ children }) {
                     end={page.end}
                     className={({ isActive }) => `c-nav${isActive ? ' c-nav-on' : ''}`}
                   >
-                    {count === null ? (
-                      <Icon size={20} />
-                    ) : (
-                      <span className="c-tab-icon">
-                        <Icon size={20} />
-                        {count}
-                      </span>
-                    )}
+                    <Icon size={20} />
                     <span>{page.label}</span>
-                    {count === null ? null : <span className="sr-only">{toMatchWords(toMatch)}</span>}
                     {reviewDot(page)}
                   </NavLink>
                 );

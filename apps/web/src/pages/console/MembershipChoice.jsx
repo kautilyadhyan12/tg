@@ -3,7 +3,6 @@ import { Tick } from './MemberListUpload';
 import { termLine } from './membershipTypesView';
 import { membershipChoice, startRange } from './heldMembershipsView';
 import { NO_PAYMENTS_LINE, paymentMethodsFor } from './memberBillsView';
-import { SQUARE_APP_CHOICE, SQUARE_APP_METHOD, squareAppNext } from './squareAppChoice';
 
 // THE CHOICE OF A MEMBERSHIP TO GIVE (ROADMAP 17a-ii): a type from the gym's price list, a
 // start date, the dates it will have, and whether it is paid. Used where a membership is
@@ -11,10 +10,8 @@ import { SQUARE_APP_CHOICE, SQUARE_APP_METHOD, squareAppNext } from './squareApp
 // `value` is { typeId, startsOn, paid, method }; '' for the type means none chosen, and
 // '' for the method that how they paid is not picked yet. Saying it is paid records a
 // payment (18a-i), so the tick is offered only to staff who may record one (`canBill`).
-// `squareApp` ({ pick }, or null): the gym takes payments in Square Point of Sale, offered first as a way of
-// paying, which records nothing here and says what happens next (18d-iii-b-ii-a).
 
-export default function MembershipChoice({ types, today, value, onChange, allowNone = false, canBill = true, paidMinor = null, country = null, squareApp = null }) {
+export default function MembershipChoice({ types, today, value, onChange, allowNone = false, canBill = true, paidMinor = null, country = null }) {
   const { type, line, paidLabel, problem } = membershipChoice(types, value, today, paidMinor);
   const range = startRange(today);
   return (
@@ -66,18 +63,13 @@ export default function MembershipChoice({ types, today, value, onChange, allowN
               <span className="c-label">Payment method</span>
               <select className="c-sel" value={value.method ?? ''} onChange={(e) => onChange({ ...value, method: e.target.value })}>
                 <option value="">Choose one</option>
-                {[...(squareApp === null ? [] : [SQUARE_APP_CHOICE]), ...paymentMethodsFor(country)].map((method) => (
+                {paymentMethodsFor(country).map((method) => (
                   <option key={method.value} value={method.value}>
                     {method.label}
                   </option>
                 ))}
               </select>
             </label>
-          ) : null}
-          {value.paid && value.method === SQUARE_APP_METHOD && squareApp !== null ? (
-            <span className="c-s14 c-t1" data-testid="square-app-next">
-              {squareAppNext(squareApp.pick)}
-            </span>
           ) : null}
         </div>
       ) : null}

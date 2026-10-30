@@ -24,8 +24,6 @@ vi.mock('./MemberMemberships', () => ({ default: () => null }));
 vi.mock('./MemberNotes', () => ({ default: () => null }));
 // Who pays (18i) has its own tests in `memberPayer.render.test.jsx`.
 vi.mock('./MemberPayer', () => ({ default: () => null }));
-// The Square customer list with Unlink (18d-iii-b-ii-c-ii) reads its own route; its own tests are memberSquareLinks.render.
-vi.mock('./MemberSquareLinks', () => ({ default: () => null }));
 vi.mock('./MemberCard', () => ({ default: () => null }));
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {

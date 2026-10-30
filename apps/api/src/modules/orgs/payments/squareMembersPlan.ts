@@ -1,5 +1,7 @@
 // Who each member is in the gym's Square customer list (ROADMAP 18d-iii-b-ii-b-i): linked to a customer
-// Square already has, added as a customer of their own, or left out for the owner to sort out first.
+// Square already has, added as a customer of their own, or left out for the owner to sort out first. Members in
+// Square itself was taken out with Square Point of Sale (18d-iii-b-v, Kd, 2026-10-30); the rule stays for following
+// Square's merges (`followMerged`) and for moving members off Square's own subscriptions (18d-iii-b-iv-f).
 //
 // THE WORST THING is a member linked to somebody else's customer: a child on a parent's email linked to
 // the parent, so the parent's payments wait on the child's bill and the parent's Square profile becomes
@@ -17,8 +19,6 @@
 //   customer two members here could be (two records of one person): left out until they are joined here.
 // - Otherwise a customer of their own is added, even where Square has somebody with the same email under
 //   another name (Sam on his mum Pat's email): never linked to them.
-// - A customer staff unlinked from a member on their page (18d-iii-b-ii-c-ii) is never theirs by this rule again,
-//   whatever its name and contact say: staff know them apart.
 //
 // "The same name": the same first given name on both sides (after a comma or a slash where the family name
 // comes first, "Shah, Priya", a card's "LEE/AMY L"; a title such as Dr or Mrs before it passed over), then
@@ -66,8 +66,6 @@ export interface PlanAround {
   taken: ReadonlySet<string>;
   /** Every record id of this gym, current or past: a reference id among them is that record's customer. */
   recordIds: ReadonlySet<string>;
-  /** The customers staff unlinked from each record (18d-iii-b-ii-c-ii), by record id: never that record's here. */
-  unlinked?: ReadonlyMap<string, ReadonlySet<string>>;
 }
 
 /** Generation words: "John Smith" and "John Smith Jr" are two people, father and son. */
@@ -146,9 +144,7 @@ export function squareMembersPlan(members: readonly PlanMember[], customers: rea
   // The customers each member could be: the app's own for them first, else by contact and name.
   const could = new Map<string, PlanCustomer[]>();
   for (const m of members) {
-    const refused = around.unlinked?.get(m.entryId);
-    const theirs = (c: PlanCustomer): boolean => refused?.has(c.id) !== true;
-    const first = [...(ourFor.get(m.entryId) ?? [])].filter(theirs).sort((a, b) => (a.id < b.id ? -1 : 1))[0];
+    const first = [...(ourFor.get(m.entryId) ?? [])].sort((a, b) => (a.id < b.id ? -1 : 1))[0];
     if (first !== undefined) {
       plans.set(m.entryId, { kind: "ours", customerId: first.id });
       continue;
@@ -161,7 +157,7 @@ export function squareMembersPlan(members: readonly PlanMember[], customers: rea
       return email === null || theirs === null || theirs === email;
     });
     for (const c of [...(email === null ? [] : (byEmail.get(email) ?? [])), ...byPhoneHere]) {
-      if (!seen.has(c.id) && theirs(c) && sameNameForSquare(c, m.fullName)) seen.set(c.id, c);
+      if (!seen.has(c.id) && sameNameForSquare(c, m.fullName)) seen.set(c.id, c);
     }
     could.set(m.entryId, [...seen.values()]);
   }

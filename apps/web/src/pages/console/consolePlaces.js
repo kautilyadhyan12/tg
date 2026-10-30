@@ -7,7 +7,6 @@ import { canManageBilling } from './billingView';
 import { canReadAttendance } from './attendanceView';
 import { canOpenSell } from './sellView';
 import { canSeeFailedPayments } from './failedPaymentsAccess';
-import { canMatchPayments } from './paymentsToMatchAccess';
 
 // WHERE EACH PLACE IN THE CONSOLE IS, AND WHO MAY OPEN IT (ROADMAP 23d). A sentence that
 // sends somebody to another page carries a button that opens that exact place, with its
@@ -67,7 +66,6 @@ const PLACES = {
   membershipBills: { path: '/memberships#bills', may: canManageMemberships },
   sell: { path: '/sell', may: canOpenSell },
   failedPayments: { path: '/failed-payments', may: canSeeFailedPayments },
-  paymentsToMatch: { path: '/payments-to-match', may: canMatchPayments },
   members: { path: '/members', may: onStaff },
   // Possible duplicates (5b-iv-a): two records of one person, joined there.
   duplicates: { path: '/members/duplicates', may: onStaff },
@@ -111,12 +109,6 @@ export function calendarTo(orgSlug, day) {
   const to = placeTo(orgSlug, 'calendar');
   if (to === null) return null;
   return dayOrNull(day) === null ? to : `${to}&week=${day}`;
-}
-
-/** Payments to match with one payment's Match open (Match it, on a person's page). */
-export function paymentToMatchTo(orgSlug, privileges, paymentId) {
-  const to = placeFor(orgSlug, privileges, 'paymentsToMatch');
-  return to === null || typeof paymentId !== 'string' || paymentId === '' ? to : `${to}?payment=${encodeURIComponent(paymentId)}`;
 }
 
 /** Personal training showing one trainer's week. */

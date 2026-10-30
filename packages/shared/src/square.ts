@@ -298,9 +298,6 @@ export const squareOrderSchema = z.object({
 });
 export type SquareOrder = z.infer<typeof squareOrderSchema>;
 
-/** RetrieveOrder's answer. */
-export const squareOrderAnswerSchema = z.object({ order: squareOrderSchema });
-
 /** A tax in the business's own item library (18d-iii-b-i; "CatalogTax", read 2026-10-25): where it is
  *  used, and whether Square adds it to "custom amounts entered into the Square Point of Sale app". */
 export const squareCatalogTaxSchema = z.object({
@@ -321,12 +318,6 @@ export const squareCatalogTaxSchema = z.object({
     .nullish(),
 });
 export type SquareCatalogTax = z.infer<typeof squareCatalogTaxSchema>;
-
-/** ListCatalog's answer, each object read on its own; `cursor` while there are more. */
-export const squareCatalogPageSchema = z.object({
-  objects: z.array(z.unknown()).max(1000).nullish(),
-  cursor: z.string().max(2048).nullish(),
-});
 
 /** CreatePayment's refusal (18d-iii-i): a decline comes back as a 400 with Square's error and the
  *  FAILED payment it kept (measured in Square's test area, 2026-10-23). */

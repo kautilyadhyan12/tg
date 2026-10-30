@@ -395,7 +395,6 @@ export function cancelBillBody(draft) {
 export const MENU_WORDS = {
   refund: { label: 'Note a refund', hint: 'You gave some or all of it back.' },
   voidPayment: { label: 'Void payment', hint: 'It was recorded by mistake. The bill is owed again.' },
-  notThisBill: { label: 'Not this bill', hint: 'It went on the wrong bill. The bill will be owed again.' },
   voidRefund: { label: 'Void refund', hint: 'It was noted by mistake. It will no longer count.' },
   voidBill: { label: 'Void bill', hint: 'Nothing is owed for these days.' },
 };
@@ -410,51 +409,6 @@ export function paymentVoidedWords(after, name, billId) {
   const what = bill.covers === null ? after.typeName : billDays(bill.covers);
   const voidable = after.billing.cancel?.billId === billId ? ' If they owe nothing, void the bill.' : '';
   return `Payment voided. ${capital(name)} owes ${left} for ${what} again. If they paid, record the right amount.${voidable}`;
-}
-
-/** The box Not this bill opens on a payment taken in Square's own app (18d-iii-b-i): it comes off the
- *  bill, which is owed again, and the money stays in Square. */
-export function notThisBillWords(m, name, paymentId) {
-  const bill = billOfPayment(m, paymentId);
-  const payment = bill?.payments.find((p) => p.id === paymentId) ?? null;
-  const amount = payment === null ? 'payment' : formatMinor(payment.amountMinor, m.currency);
-  const what = bill === null || bill.covers === null ? `${m.typeName} bill` : `bill for ${billDays(bill.covers)}`;
-  return {
-    question: `Take the ${amount} paid in Square Point of Sale off ${name}'s ${what}?`,
-    detail: 'Use this when it went on the wrong bill. The bill will be owed again. No money moves: the payment stays in Square.',
-    button: 'Take it off',
-  };
-}
-
-/** Said where the payment was, once Not this bill took it off: who owes what again, and where the money
- *  goes now, so the task ends on this screen (review round one). */
-export function paymentTakenOffWords(after, name, billId) {
-  const elsewhere = 'If it was for another bill, record it there with Record payment, Card at the desk.';
-  const bill = after?.billing?.bills.find((b) => b.id === billId) ?? null;
-  if (bill === null || bill.amountMinor - bill.paidMinor <= 0) return `Taken off the bill. ${elsewhere}`;
-  const left = formatMinor(bill.amountMinor - bill.paidMinor, after.currency);
-  const what = bill.covers === null ? after.typeName : billDays(bill.covers);
-  return `Taken off the bill. ${capital(name)} owes ${left} for ${what} again. ${elsewhere}`;
-}
-
-/** The same on a fee. Where the fee no longer counts, taking the payment off takes the fee off too. */
-export function notThisFeeWords(fee, currency, name) {
-  const amount = formatMinor(fee.amountMinor, currency);
-  const stays = 'No money moves: the payment stays in Square.';
-  if (fee.stillOwed === false) {
-    return {
-      question: `Take the ${amount} paid in Square Point of Sale off ${name}'s ${feeName(fee)}?`,
-      detail: `${capital(name)} no longer owes this fee: ${whyNotOwed(fee)}. Taking the payment off takes the fee off too, so nothing is owed. ${stays}`,
-      button: 'Take it off',
-      done: `Taken off. ${capital(name)} owes nothing for this fee.`,
-    };
-  }
-  return {
-    question: `Take the ${amount} paid in Square Point of Sale off ${name}'s ${feeName(fee)}?`,
-    detail: `Use this when it went on the wrong fee. The fee will be owed again. ${stays}`,
-    button: 'Take it off',
-    done: `Taken off. ${capital(name)} owes the ${amount} ${feeName(fee)} again.`,
-  };
 }
 
 /** The bill a payment is on, by the payment's id, or null. */

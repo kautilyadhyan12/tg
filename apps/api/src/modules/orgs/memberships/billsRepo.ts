@@ -35,7 +35,6 @@ import { friendPaymentGone, giftsOntoOpenBills, giftUseUndone, giveMemberGift } 
 import { lockGym } from "../memberList/repo.js";
 import { freezeFeeOf, setFreezeFee } from "./freezeFees.js";
 import { remindersOn, setReminders } from "../payments/cardExpiryRepo.js";
-import { takenOffBill } from "../payments/squareAppPaymentsRepo.js";
 import {
   billDayOf,
   billOf,
@@ -81,11 +80,7 @@ export type BillWriteOutcome =
   /** A payment taken on the Terminal: Square holds the money, so it is refunded there. */
   | { kind: "terminal_payment" }
   /** The same, charged to the card on file (18d-iii-i). */
-  | { kind: "card_payment" }
-  /** Taken in Square's own app (18d-iii-b-i): refunded in Square, or taken off the bill ("Not this bill"). */
-  | { kind: "square_app_payment" }
-  /** "Not this bill" for a payment that was not taken in Square's own app. */
-  | { kind: "not_square_app" };
+  | { kind: "card_payment" };
 
 export interface RecordPaymentInput {
   gymId: string;
@@ -253,7 +248,6 @@ export async function voidPayment(
     // Square holds that money: voided here, the bill would be owed again with the card charged.
     if (payment.method === "terminal") return { kind: "terminal_payment" };
     if (payment.method === "company") return { kind: "card_payment" };
-    if ((payment.method === "square_app") !== (input.reason === "not_this_bill")) return payment.method === "square_app" ? { kind: "square_app_payment" } : { kind: "not_square_app" };
     const out = await squareMoneyOut(tx, input.gymId, row.id);
     if (out !== null) return out;
 
@@ -273,7 +267,6 @@ export async function voidPayment(
     if (paidPeriods !== null) await writePaidPeriods(tx, input.gymId, input.entryId, row.id, paidPeriods, input.now);
     // Where this was a friend's payment that gave a member their Refer a friend gift.
     await friendPaymentGone(tx, { gymId: input.gymId, by: { paymentId: input.paymentId }, why: "voided", today: input.today, now: input.now });
-    if (payment.method === "square_app") await takenOffBill(tx, input.gymId, input.paymentId, input.now);
 
     await insertAudit(tx, {
       actorUserId: input.actorUserId,

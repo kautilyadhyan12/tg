@@ -4,9 +4,8 @@
 // merges as Square's pages say Square does (an old id answers as the new customer; the cards go with it).
 //
 // The first block is the worst thing this job could do to a real person: a merge of two people followed, Sam
-// (added on his mum Pat's email) merged by Square into "Pat Smith" and moved onto her customer, so her payments
-// at the till land on his page. Every claim is read from the tables, or from Square's own record of what it took,
-// never from the reply alone.
+// (in Square on his mum Pat's email) merged by Square into "Pat Smith" and moved onto her customer. Every claim is
+// read from the tables, or from Square's own record of what it took, never from the reply alone.
 import { createHmac, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
@@ -15,17 +14,15 @@ import {
   heldMembershipsResponseSchema,
   squareConnectResponseSchema,
   squareFinishResponseSchema,
-  squareMembersResponseSchema,
   type GymMembershipTypesResponse,
   type HeldMembershipsResponse,
-  type SquareMembers,
 } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { openDueBills } from "../src/modules/orgs/memberships/billsRepo.js";
-import { linkedNames } from "../src/modules/orgs/payments/paymentsToMatchRepo.js";
 import { squareSettings } from "../src/modules/orgs/payments/settings.js";
 import { processSquareWork } from "../src/modules/orgs/payments/work.js";
+import { putMembersInSquare } from "./squareCustomersSetup.js";
 import { account, fakeSquare, type Account } from "./fakeSquareTerminal.js";
 import { proveAddress } from "./proveAddress.js";
 
@@ -117,11 +114,7 @@ d("Square's merges followed (real Postgres)", { timeout: T }, () => {
   const mineSql = sql`SELECT id FROM gyms WHERE owner_user_id IN (SELECT id FROM users WHERE email LIKE 'sqg-t-%@example.com')`;
   const cleanup = async () => {
     const myUsers = sql`SELECT id FROM users WHERE email LIKE 'sqg-t-%@example.com'`;
-    await sql`DELETE FROM gym_square_customer_merges WHERE account_id LIKE 'MSQG%'`;
-    await sql`DELETE FROM gym_square_app_payments WHERE gym_id IN (${mineSql}) OR account_id LIKE 'MSQG%'`;
-    await sql`DELETE FROM gym_square_payment_sweeps WHERE gym_id IN (${mineSql})`;
     await sql`DELETE FROM webhook_events WHERE provider = 'square' AND event_id LIKE 'sqg-t-%'`;
-    await sql`DELETE FROM gym_square_member_runs WHERE gym_id IN (${mineSql})`;
     await sql`DELETE FROM gym_card_charges WHERE gym_id IN (${mineSql})`;
     await sql`DELETE FROM gym_member_cards WHERE gym_id IN (${mineSql})`;
     await sql`DELETE FROM gym_card_agreements WHERE gym_id IN (${mineSql})`;
@@ -231,21 +224,6 @@ d("Square's merges followed (real Postgres)", { timeout: T }, () => {
     square.card(cardId, gym.acct.merchantId, customerId);
     return cardId;
   };
-  const boxUrl = (gym: Gym) => `/v1/orgs/${gym.id}/payments/square/members`;
-  const box = async (gym: Gym): Promise<SquareMembers> => {
-    const res = await send("GET", boxUrl(gym), gym.owner.cookies);
-    expect(res.statusCode, res.body).toBe(200);
-    return squareMembersResponseSchema.parse(JSON.parse(res.body)).members;
-  };
-  /** The owner's Add members to Square, then Add, as the box shows them. */
-  const addMembers = async (gym: Gym): Promise<SquareMembers> => {
-    const checked = await send("POST", `${boxUrl(gym)}/check`, gym.owner.cookies);
-    expect(checked.statusCode, checked.body).toBe(200);
-    const runId = squareMembersResponseSchema.parse(JSON.parse(checked.body)).members.runId;
-    const added = await send("POST", `${boxUrl(gym)}/add`, gym.owner.cookies, { runId });
-    expect(added.statusCode, added.body).toBe(200);
-    return squareMembersResponseSchema.parse(JSON.parse(added.body)).members;
-  };
   /** The record's customer in the gym's Square account, as the app keeps it. */
   const customerOf = async (gym: Gym, entryId: string) => {
     const [row] = await sql<{ customer_id: string | null; joined_at: Date | null }[]>`
@@ -275,15 +253,6 @@ d("Square's merges followed (real Postgres)", { timeout: T }, () => {
     return eventId;
   };
   const deleted = (acct: Account, customerId: string) => signed(acct, "customer.deleted", { type: "customer", id: customerId });
-  /** A payment taken in Square Point of Sale, told to the app and taken in by the worker's minute. */
-  const takenIn = async (gym: Gym, o: Parameters<typeof square.appPayment>[1]) => {
-    const paid = square.appPayment(gym.acct, { locationId: gym.locationId, ...o });
-    await work([await signed(gym.acct, "payment.created", { type: "payment", id: paid.id })]);
-    const [row] = await sql<{ state: string; reason: string | null; entry_id: string | null }[]>`
-      SELECT state, reason, entry_id FROM gym_square_app_payments WHERE square_payment_id = ${paid.id}`;
-    if (row === undefined) throw new Error("not taken in");
-    return row;
-  };
   /** What Square took from a card on file, with the customer it was charged through. */
   const takenFrom = (cardId: string) => square.taken().filter((p) => p.cardId === cardId);
   const second = async (h: Holder) => {
@@ -318,7 +287,7 @@ d("Square's merges followed (real Postgres)", { timeout: T }, () => {
   }, T);
 
   describe("THE WORST THING: a merge of two people followed", () => {
-    it("Square merges Sam's customer into his mum Pat's: Sam is not moved onto her, he is added again, his card is still charged for his bill, and her payment at the till is never his", async () => {
+    it("Square merges Sam's customer into his mum Pat's: Sam is not moved onto her, and his card is still charged for his own bill, once", async () => {
       const gym = await makeGym("Iron Barn");
       const typeId = await typeOf(gym);
       clock = new Date(`${await gymToday(gym)}T10:00:00Z`);
@@ -326,7 +295,7 @@ d("Square's merges followed (real Postgres)", { timeout: T }, () => {
       // Pat, typed in at the till long ago; Sam, her son, on her email, owes this week's Gold Weekly.
       square.customer(gym.acct, { id: "CPATSMITH", given_name: "Pat", family_name: "Smith", email_address: pat });
       const sam = await owing(gym, typeId, await person(gym, "Sam Smith", { email: pat }));
-      expect((await addMembers(gym)).state).toBe("added");
+      await putMembersInSquare(sql, square, gym);
       const samFirst = (await customerOf(gym, sam.entryId))?.customer_id ?? "";
       expect(samFirst).toMatch(/^CUS/);
       const samCard = await cardOn(gym, sam.entryId, samFirst);
@@ -335,35 +304,19 @@ d("Square's merges followed (real Postgres)", { timeout: T }, () => {
       const merged = square.merge(gym.acct, ["CPATSMITH", samFirst]);
       await work([await deleted(gym.acct, "CPATSMITH"), await deleted(gym.acct, samFirst)]);
 
-      // Sam is not Pat's customer: he was separated from it, and added again by himself, with his own name.
-      expect((await customerOf(gym, sam.entryId))?.customer_id, "Sam is never linked to Pat's merged customer").not.toBe(merged);
-      await work();
-      const samNow = (await customerOf(gym, sam.entryId))?.customer_id ?? null;
-      expect(samNow).toMatch(/^CUS/);
-      expect(samNow).not.toBe(samFirst);
-      expect(square.customersMade.filter((c) => c.referenceId === sam.entryId).map((c) => [c.givenName, c.familyName, c.email])).toEqual([
-        ["Sam", "Smith", pat],
-        ["Sam", "Smith", pat],
-      ]);
+      // Sam is not Pat's customer: he was separated from it.
+      expect(await customerOf(gym, sam.entryId), "Sam is never linked to Pat's merged customer").toBeNull();
       // His card stays where Square keeps it, on the merged customer, and no longer says that customer is his.
       expect(await cardRow(gym, sam.entryId)).toMatchObject({ customer_id: merged, merged_away_at: expect.any(Date) as Date });
-
-      // Pat pays $20.00 at the till with her merged customer picked: nobody's here, and not on Sam's page.
-      const patPays = await takenIn(gym, { amount: 2000, customerId: merged });
-      expect(patPays).toMatchObject({ state: "waiting", reason: "not_linked", entry_id: null });
-      expect((await held(gym, sam.entryId)).squareAppWaiting, "nothing of Pat's waits on Sam's page").toEqual([]);
 
       // Noon: Sam's bill is charged to his own card, through the customer Square keeps it on, once.
       clock = new Date(clock.getTime() + 7 * 60 * 60_000);
       await work();
       expect(takenFrom(samCard).map((p) => [p.amount_money.amount, p.customer_id])).toEqual([[2500, merged]]);
       expect(await second(sam)).toBe("paid");
-      // The box names nobody being added or left out: Sam is in Square, with a customer of his own.
-      const seen = await box(gym);
-      expect([seen.inSquare, seen.groups.waiting.count, seen.groups.merged_away.count]).toEqual([seen.members, 0, 0]);
     });
 
-    it("Square merges Leo's two customers into one with his name: Leo follows it, his card is charged, and his payments at the till, before and after, come to his page", async () => {
+    it("Square merges Leo's two customers into one with his name: Leo follows it, and his card is charged through it", async () => {
       const gym = await makeGym("Elm Street Gym");
       const typeId = await typeOf(gym);
       clock = new Date(`${await gymToday(gym)}T10:00:00Z`);
@@ -371,10 +324,9 @@ d("Square's merges followed (real Postgres)", { timeout: T }, () => {
       // Leo, typed in at the till by phone; the app links him and saves his card on that customer.
       square.customer(gym.acct, { id: "CLEOTILL", given_name: "LEO", family_name: "GRANT", phone_number: "(312) 555-0142" });
       const leo = await owing(gym, typeId, await person(gym, "Leo Grant", { email: leoEmail, phone: "312-555-0142" }));
-      expect((await addMembers(gym)).state).toBe("added");
+      await putMembersInSquare(sql, square, gym);
       expect((await customerOf(gym, leo.entryId))?.customer_id).toBe("CLEOTILL");
       const leoCard = await cardOn(gym, leo.entryId, "CLEOTILL");
-      const merging = clock;
       // Square makes a second Leo (an instant profile from his email at the café), then merges the two.
       square.customer(gym.acct, { id: "CLEOCAFE", given_name: "Leo", family_name: "Grant", email_address: leoEmail });
       const merged = square.merge(gym.acct, ["CLEOTILL", "CLEOCAFE"]);
@@ -388,16 +340,13 @@ d("Square's merges followed (real Postgres)", { timeout: T }, () => {
       await work();
       expect(takenFrom(leoCard).map((p) => [p.amount_money.amount, p.customer_id])).toEqual([[2500, merged]]);
       expect(await second(leo)).toBe("paid");
-      // His payments at the till come to his page: one Square took before the merge under the old id, told late, and a new one.
-      expect((await takenIn(gym, { amount: 1500, customerId: "CLEOTILL", at: merging })).entry_id).toBe(leo.entryId);
-      expect((await takenIn(gym, { amount: 1800, customerId: merged })).entry_id).toBe(leo.entryId);
     });
 
     it("a merged customer carrying Sam's own reference id, under Pat's name, is still never his", async () => {
       const gym = await makeGym("Oak Hall");
       const pat = `pat.oak.${uniq()}@gmail.com`;
       const sam = await person(gym, "Sam Smith", { email: pat });
-      expect((await addMembers(gym)).state).toBe("added");
+      await putMembersInSquare(sql, square, gym);
       const samFirst = (await customerOf(gym, sam))?.customer_id ?? "";
       square.customer(gym.acct, { id: "CPATOAK", given_name: "Pat", family_name: "Smith", email_address: pat });
       // Sam's customer is the older here, so the merged one keeps his record's id as its reference; staff keep Pat's name.
@@ -405,158 +354,40 @@ d("Square's merges followed (real Postgres)", { timeout: T }, () => {
       expect(square.customersOf(gym.acct).find((c) => c.id === merged)?.reference_id).toBe(sam);
       await work([await deleted(gym.acct, samFirst), await deleted(gym.acct, "CPATOAK")]);
       await work();
-      const now = (await customerOf(gym, sam))?.customer_id ?? null;
-      expect(now, "Sam's reference id on Pat's merged customer never makes it his").not.toBe(merged);
-      expect(now).toMatch(/^CUS/);
-      // Pat's payment at the till with the merged customer picked is nobody's.
-      expect(await takenIn(gym, { amount: 900, customerId: merged })).toMatchObject({ state: "waiting", reason: "not_linked", entry_id: null });
+      expect(await customerOf(gym, sam), "Sam's reference id on Pat's merged customer never makes it his").toBeNull();
     });
   });
 
   describe("following a merge", () => {
-    it("Pat and her son Sam both members: Square merges their customers into Pat's, and Sam's own payment from before the merge is his, never hers (round one, Critical 1)", async () => {
+    it("Pat and her son Sam both members: Square merges their customers into Pat's, and only Pat keeps it", async () => {
       const gym = await makeGym("Mother Son Gym");
       const pat = `pat.both.${uniq()}@gmail.com`;
       square.customer(gym.acct, { id: "CPATBOTH", given_name: "Pat", family_name: "Smith", email_address: pat });
       const patId = await person(gym, "Pat Smith", { email: pat });
       const samId = await person(gym, "Sam Smith", { email: pat });
-      expect((await addMembers(gym)).state).toBe("added");
+      await putMembersInSquare(sql, square, gym);
       expect((await customerOf(gym, patId))?.customer_id).toBe("CPATBOTH");
       const samOld = (await customerOf(gym, samId))?.customer_id ?? "";
       expect(samOld).toMatch(/^CUS/);
-      // At the till before the merge, Sam pays with himself picked; Square tells the app only after the merge.
-      const samBefore = square.appPayment(gym.acct, { amount: 1200, customerId: samOld, locationId: gym.locationId });
-      const patBefore = square.appPayment(gym.acct, { amount: 1300, customerId: "CPATBOTH", locationId: gym.locationId });
       const merged = square.merge(gym.acct, ["CPATBOTH", samOld]);
       await work([await deleted(gym.acct, "CPATBOTH"), await deleted(gym.acct, samOld)]);
       expect((await customerOf(gym, patId))?.customer_id).toBe(merged);
-      expect((await customerOf(gym, samId))?.customer_id ?? null).not.toBe(merged);
-      const entryOf = async (paymentId: string) => {
-        await work([await signed(gym.acct, "payment.created", { type: "payment", id: paymentId })]);
-        const [row] = await sql<{ entry_id: string | null }[]>`SELECT entry_id FROM gym_square_app_payments WHERE square_payment_id = ${paymentId}`;
-        return row?.entry_id ?? null;
-      };
-      expect(await entryOf(samBefore.id), "Sam's own payment never on Pat's page").toBe(samId);
-      expect(await entryOf(patBefore.id)).toBe(patId);
-      // Payments to match names them the same way: each old id its own person, the merged customer Pat.
-      const names = await linkedNames(sql, { gymId: gym.id, environment: "production", accountId: gym.acct.merchantId, customerIds: [samOld, "CPATBOTH", merged] });
-      expect([names.get(samOld), names.get("CPATBOTH"), names.get(merged)]).toEqual([["Sam Smith"], ["Pat Smith"], ["Pat Smith"]]);
+      expect(await customerOf(gym, samId)).toBeNull();
     });
 
-    it("an old customer two records here both were stays both's: a payment under it waits as several people's, never one by chance (re-check, Low A)", async () => {
-      const gym = await makeGym("Shared Customer Gym");
-      const ann = await person(gym, "Ann Cole", { email: `ann.cole.${uniq()}@gmail.com` });
-      const bob = await person(gym, "Bob Cole", { email: `bob.cole.${uniq()}@gmail.com` });
-      square.customer(gym.acct, { id: "CCOLEHOME", given_name: "Ann", family_name: "Cole", phone_number: "(312) 555-0122" });
-      // Ann linked to the family's customer, and Bob's card saved on it (as a join of records can leave it).
-      await sql`INSERT INTO gym_square_customers (gym_id, entry_id, environment, account_id, customer_id) VALUES (${gym.id}, ${ann}, 'production', ${gym.acct.merchantId}, 'CCOLEHOME')`;
-      await cardOn(gym, bob, "CCOLEHOME");
-      square.customer(gym.acct, { id: "CCOLETWO", given_name: "Ann", family_name: "Cole", email_address: `ann.two.${uniq()}@gmail.com` });
-      const before = square.appPayment(gym.acct, { amount: 1500, customerId: "CCOLEHOME", locationId: gym.locationId });
-      square.merge(gym.acct, ["CCOLEHOME", "CCOLETWO"]);
-      await work([await deleted(gym.acct, "CCOLEHOME")]);
-      await work([await signed(gym.acct, "payment.created", { type: "payment", id: before.id })]);
-      const [row] = await sql<{ entry_id: string | null; reason: string | null }[]>`SELECT entry_id, reason FROM gym_square_app_payments WHERE square_payment_id = ${before.id}`;
-      expect(row).toMatchObject({ entry_id: null, reason: "several_people" });
-      const names = await linkedNames(sql, { gymId: gym.id, environment: "production", accountId: gym.acct.merchantId, customerIds: ["CCOLEHOME"] });
-      expect(names.get("CCOLEHOME")).toEqual(["Ann Cole", "Bob Cole"]);
-    });
-
-    it("Payments to match names an old id by the record it was; one this gym never had is the merged customer's only where Square's merge was followed, and otherwise nobody's (round one, test gap)", async () => {
-      const gym = await makeGym("Cafe Leo Gym");
-      const leoEmail = `leo.cafe.${uniq()}@gmail.com`;
-      const leo = await person(gym, "Leo Grant", { email: leoEmail });
-      expect((await addMembers(gym)).state).toBe("added");
-      const leoOld = (await customerOf(gym, leo))?.customer_id ?? "";
-      square.customer(gym.acct, { id: "CLEOCAFEONLY", given_name: "Leo", family_name: "Grant", phone_number: "(312) 555-0133" });
-      const merged = square.merge(gym.acct, [leoOld, "CLEOCAFEONLY"]);
-      await work([await deleted(gym.acct, leoOld), await deleted(gym.acct, "CLEOCAFEONLY")]);
-      // The café's customer was nobody's here and Square was never asked about it: never guessed.
-      const names = await linkedNames(sql, { gymId: gym.id, environment: "production", accountId: gym.acct.merchantId, customerIds: ["CLEOCAFEONLY", leoOld, merged] });
-      expect([names.get("CLEOCAFEONLY"), names.get(leoOld), names.get(merged)]).toEqual([undefined, ["Leo Grant"], ["Leo Grant"]]);
-      // An old id another gym on this Square account was, whose merge was followed there: read as the merged customer's.
-      await sql`
-        INSERT INTO gym_square_customer_merges (environment, account_id, from_customer_id, to_customer_id, merged_at)
-        VALUES ('production', ${gym.acct.merchantId}, 'COTHERGYMS', ${merged}, now())`;
-      const later = await linkedNames(sql, { gymId: gym.id, environment: "production", accountId: gym.acct.merchantId, customerIds: ["COTHERGYMS"] });
-      expect(later.get("COTHERGYMS")).toEqual(["Leo Grant"]);
-      expect((await takenIn(gym, { amount: 800, customerId: "COTHERGYMS" })).entry_id).toBe(leo);
-    });
-
-    it("Square merging Sam into Pat's customer a second time within 30 days leaves him out, named in the box, until his details change", async () => {
-      const gym = await makeGym("Twice Gym");
-      const pat = `pat.twice.${uniq()}@gmail.com`;
-      square.customer(gym.acct, { id: "CPATTWICE", given_name: "Pat", family_name: "Smith", email_address: pat });
-      const sam = await person(gym, "Sam Smith", { email: pat });
-      expect((await addMembers(gym)).state).toBe("added");
-      const first = (await customerOf(gym, sam))?.customer_id ?? "";
-      const once = square.merge(gym.acct, ["CPATTWICE", first]);
-      await work([await deleted(gym.acct, "CPATTWICE"), await deleted(gym.acct, first)]);
-      await work();
-      const again = (await customerOf(gym, sam))?.customer_id ?? "";
-      expect(again).toMatch(/^CUS/);
-      // A week on, Square merges his new customer into Pat's again.
-      clock = new Date(clock.getTime() + 7 * 24 * 60 * 60_000);
-      square.merge(gym.acct, [once, again]);
-      await work([await deleted(gym.acct, once), await deleted(gym.acct, again)]);
-      await work();
-      expect(await customerOf(gym, sam), "not added for Square to merge once more").toBeNull();
-      expect(square.customersMade.filter((c) => c.referenceId === sam)).toHaveLength(2);
-      const seen = await box(gym);
-      expect(seen.groups.merged_away).toEqual({ count: 1, names: ["Sam Smith"] });
-      // Nor a day later.
-      clock = new Date(clock.getTime() + 25 * 60 * 60_000);
-      await work();
-      expect(await customerOf(gym, sam)).toBeNull();
-      // His own email on his page: he is added again.
-      const edit = await send("PATCH", entryUrl(gym, sam), gym.owner.cookies, { email: `sam.own.${uniq()}@gmail.com` });
-      expect(edit.statusCode, edit.body).toBe(200);
-      await work();
-      expect((await customerOf(gym, sam))?.customer_id).toMatch(/^CUS/);
-      expect((await box(gym)).groups.merged_away.count).toBe(0);
-    });
-
-    it("two records of one person whose customers Square merges: the one whose email the merged customer has keeps it, the other gets a customer of its own", async () => {
+    it("two records of one person whose customers Square merges: neither keeps it by the name alone, and the card on it no longer says whose it is", async () => {
       const gym = await makeGym("Two Records Gym");
-      const oneEmail = `nora.one.${uniq()}@gmail.com`;
-      const one = await person(gym, "Nora Price", { email: oneEmail });
+      const one = await person(gym, "Nora Price", { email: `nora.one.${uniq()}@gmail.com` });
       const two = await person(gym, "Nora Price", { email: `nora.two.${uniq()}@gmail.com` });
-      expect((await addMembers(gym)).state).toBe("added");
+      await putMembersInSquare(sql, square, gym);
       const a = (await customerOf(gym, one))?.customer_id ?? "";
       const b = (await customerOf(gym, two))?.customer_id ?? "";
       await cardOn(gym, one, a);
-      // Square keeps the first's details: Nora's first email.
       const merged = square.merge(gym.acct, [a, b]);
       await work([await deleted(gym.acct, a), await deleted(gym.acct, b)]);
-      await work();
-      // Neither kept it by the name alone (two records here have it); the look then linked the one whose email it has.
-      expect((await customerOf(gym, one))?.customer_id).toBe(merged);
-      // Linked again to the customer her card is on: the card says whose it is again (round one, Low 5).
-      expect(await cardRow(gym, one)).toMatchObject({ customer_id: merged, merged_away_at: null });
-      const twoNow = (await customerOf(gym, two))?.customer_id ?? null;
-      expect(twoNow).toMatch(/^CUS/);
-      expect(twoNow).not.toBe(b);
-      expect((await takenIn(gym, { amount: 700, customerId: merged })).entry_id).toBe(one);
-    });
-
-    it("a check waiting for its press that would link Ivy to a customer Square merges since does nothing for her; she is looked at again after", async () => {
-      const gym = await makeGym("Waiting Check Gym");
-      const ivyEmail = `ivy.chen.${uniq()}@gmail.com`;
-      square.customer(gym.acct, { id: "CIVY", given_name: "Ivy", family_name: "Chen", email_address: ivyEmail });
-      square.customer(gym.acct, { id: "CIVYTWO", given_name: "Ivy", family_name: "Chen", phone_number: "(312) 555-0199" });
-      const ivy = await person(gym, "Ivy Chen", { email: ivyEmail });
-      const checked = await send("POST", `${boxUrl(gym)}/check`, gym.owner.cookies);
-      const members = squareMembersResponseSchema.parse(JSON.parse(checked.body)).members;
-      expect(members.groups.link).toEqual({ count: 1, names: ["Ivy Chen"] });
-      const merged = square.merge(gym.acct, ["CIVY", "CIVYTWO"]);
-      await work([await deleted(gym.acct, "CIVY")]);
-      expect((await box(gym)).groups.link.count, "the press no longer links her").toBe(0);
-      const added = await send("POST", `${boxUrl(gym)}/add`, gym.owner.cookies, { runId: members.runId });
-      expect(added.statusCode, added.body).toBe(200);
-      expect((await customerOf(gym, ivy))?.customer_id ?? null, "never linked to the customer Square no longer has").not.toBe("CIVY");
-      // Members are now added by themselves: the next look links her to the merged customer, which has her name.
-      await work();
-      expect((await customerOf(gym, ivy))?.customer_id).toBe(merged);
+      expect(await customerOf(gym, one)).toBeNull();
+      expect(await customerOf(gym, two)).toBeNull();
+      expect(await cardRow(gym, one)).toMatchObject({ customer_id: merged, merged_away_at: expect.any(Date) as Date });
     });
 
     it("only the gyms that hold the old customer, in that Square account, are changed; a message about a customer nobody holds asks Square nothing", async () => {
@@ -570,7 +401,7 @@ d("Square's merges followed (real Postgres)", { timeout: T }, () => {
       const maxNorth = await person(north, "Max Reed", { email });
       const maxSouth = await person(south, "Max Reed", { email });
       const maxStranger = await person(stranger, "Max Reed", { email });
-      for (const g of [north, south, stranger]) expect((await addMembers(g)).state).toBe("added");
+      for (const g of [north, south, stranger]) await putMembersInSquare(sql, square, g);
       expect((await customerOf(north, maxNorth))?.customer_id).toBe("CMAX");
       expect((await customerOf(south, maxSouth))?.customer_id).toBe("CMAX");
       expect((await customerOf(stranger, maxStranger))?.customer_id).toBe("CMAXS");
@@ -581,8 +412,6 @@ d("Square's merges followed (real Postgres)", { timeout: T }, () => {
       expect((await customerOf(north, maxNorth))?.customer_id).toBe(merged);
       expect((await customerOf(south, maxSouth))?.customer_id).toBe(merged);
       expect((await customerOf(stranger, maxStranger))?.customer_id).toBe("CMAXS");
-      const [kept] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_square_customer_merges WHERE account_id = ${stranger.acct.merchantId}`;
-      expect(kept?.n).toBe(0);
       // A message about a customer no gym here holds: Square is not asked.
       const asked = square.customerReads.length;
       await work([await deleted(shared, "CNOBODY")]);
@@ -593,7 +422,7 @@ d("Square's merges followed (real Postgres)", { timeout: T }, () => {
       const gym = await makeGym("Desk Save Gym");
       square.customer(gym.acct, { id: "CMIATILL", given_name: "Mia", family_name: "Hart", phone_number: "(312) 555-0144" });
       const mia = await person(gym, "Mia Hart", { email: `mia.hart.${uniq()}@gmail.com`, phone: "312-555-0144" });
-      expect((await addMembers(gym)).state).toBe("added");
+      await putMembersInSquare(sql, square, gym);
       expect((await customerOf(gym, mia))?.customer_id).toBe("CMIATILL");
       // Square merges Mia's two customers; its message has not reached the app yet.
       square.customer(gym.acct, { id: "CMIACAFE", given_name: "Mia", family_name: "Hart", email_address: `mia.cafe.${uniq()}@gmail.com` });
@@ -619,7 +448,7 @@ d("Square's merges followed (real Postgres)", { timeout: T }, () => {
       const pat = `pat.desk.${uniq()}@gmail.com`;
       square.customer(gym.acct, { id: "CPATDESK", given_name: "Pat", family_name: "Smith", email_address: pat });
       const sam = await person(gym, "Sam Smith", { email: pat });
-      expect((await addMembers(gym)).state).toBe("added");
+      await putMembersInSquare(sql, square, gym);
       const first = (await customerOf(gym, sam))?.customer_id ?? "";
       const merged = square.merge(gym.acct, ["CPATDESK", first]);
       const save = () =>
@@ -646,13 +475,12 @@ d("Square's merges followed (real Postgres)", { timeout: T }, () => {
       expect(own).toMatch(/^CUS/);
       expect(own).not.toBe(first);
       expect(await cardRow(gym, sam)).toMatchObject({ customer_id: own, merged_away_at: null });
-      expect(await takenIn(gym, { amount: 1100, customerId: merged })).toMatchObject({ state: "waiting", reason: "not_linked", entry_id: null });
     });
 
     it("Square not answering: nothing changes, and the message is tried again until it does", async () => {
       const gym = await makeGym("Quiet Square Gym");
       const zoe = await person(gym, "Zoe Park", { email: `zoe.park.${uniq()}@gmail.com` });
-      expect((await addMembers(gym)).state).toBe("added");
+      await putMembersInSquare(sql, square, gym);
       const first = (await customerOf(gym, zoe))?.customer_id ?? "";
       square.customer(gym.acct, { id: "CZOETWO", given_name: "Zoe", family_name: "Park", phone_number: "(312) 555-0166" });
       const merged = square.merge(gym.acct, [first, "CZOETWO"]);

@@ -285,15 +285,6 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
   // A payment taken in Square's own app taken off the bill it was put on (18d-iii-b-i).
   "org.member_payment_undone": (s) =>
     text(s, "reason") === "not_this_bill" ? `Took ${pay(s)} taken in Square Point of Sale off ${whose(s, "bill")}` : `Undid ${pay(s)} from ${person(s)}`,
-  // Payments to match (18d-iii-b-ii-a): Match itself is "Recorded a payment … (Square Point of Sale)".
-  "org.square_app_payment_not_bill": (s) =>
-    `Marked ${pay(s)} taken in Square Point of Sale${s.about === null ? "" : ` from ${s.about}`} as ${text(s, "why") === "by_hand" ? "already recorded on a bill by hand" : "not a bill payment"}`,
-  "org.square_app_payment_put_back": (s) => `Put ${pay(s)} taken in Square Point of Sale${s.about === null ? "" : ` from ${s.about}`} back in Payments to match`,
-  // Match linking Square's customer to the person who paid (18d-iii-b-ii-c); the customer's own details are never kept here.
-  "org.square_customer_matched": (s) =>
-    text(s, "also") === "yes" ? `Linked another customer in your Square customer list to ${person(s)}` : `Linked a customer in your Square customer list to ${person(s)}`,
-  // Unlink on the person's page (18d-iii-b-ii-c-ii), the same words turned round; nothing of the customer's own details.
-  "org.square_customer_unlinked": (s) => `Unlinked a customer in your Square customer list from ${person(s)}`,
   "org.member_bill_cancelled": (s) => {
     const amount = money(s, "amountMinor");
     return `Cancelled ${whose(s, "bill")}${amount === null ? "" : ` of ${amount}`}`;

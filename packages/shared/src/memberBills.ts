@@ -19,11 +19,11 @@ export const memberBillStatusSchema = z.enum(MEMBER_BILL_STATUSES);
 export type MemberBillStatus = z.infer<typeof memberBillStatusSchema>;
 
 /** How a payment was made. `link` is the gym's own payment link (18c), `company` a
- *  connected payment company (18d), `terminal` a card on the gym's Square Terminal
- *  (18d-vi-a) and `square_app` a payment taken in Square's own app, recorded from Square's
- *  message (18d-iii-b-i); staff record the others by hand. `upi` is paid to the gym's own UPI
+ *  connected payment company (18d) and `terminal` a card on the gym's Square Terminal
+ *  (18d-vi-a); staff record the others by hand. A payment taken in Square's own app is recorded
+ *  by hand too, since Square Point of Sale was taken out (18d-iii-b-v). `upi` is paid to the gym's own UPI
  *  ID or QR code (18r), in India only. */
-export const MEMBER_PAYMENT_METHODS = ["cash", "upi", "card_at_desk", "bank_transfer", "link", "company", "terminal", "square_app"] as const;
+export const MEMBER_PAYMENT_METHODS = ["cash", "upi", "card_at_desk", "bank_transfer", "link", "company", "terminal"] as const;
 export const memberPaymentMethodSchema = z.enum(MEMBER_PAYMENT_METHODS);
 export type MemberPaymentMethod = z.infer<typeof memberPaymentMethodSchema>;
 
@@ -57,14 +57,12 @@ export const MEMBER_PAYMENT_METHOD_WORDS: Readonly<Record<MemberPaymentMethod, s
   link: "Payment link",
   company: "Card on file",
   terminal: "Card on Terminal",
-  square_app: "Square Point of Sale",
 };
 
-/** Taken through Square, on the Terminal, from the card on file (18d-iii-i) or in Square's own app
- *  (18d-iii-b-i): Square holds the money, so it is refunded there and never voided here. A payment
- *  from Square's own app can be taken off the bill it was put on ("Not this bill"). */
+/** Taken through Square, on the Terminal or from the card on file (18d-iii-i): Square holds the
+ *  money, so it is refunded there and never voided here. */
 export function paidThroughSquare(method: MemberPaymentMethod): boolean {
-  return method === "terminal" || method === "company" || method === "square_app";
+  return method === "terminal" || method === "company";
 }
 
 /** Why staff cancelled a bill: picked, never typed, so no sentence about a person is kept. */
@@ -92,8 +90,8 @@ export const REFUND_REASON_WORDS: Readonly<Record<RefundReason, string>> = {
 
 /** Why staff voided a payment (18o): picked, never typed. */
 export const PAYMENT_VOID_REASONS = ["mistake", "wrong_amount", "wrong_person", "other"] as const;
-/** The picked reasons, and `not_this_bill`: a payment taken in Square's own app taken off the bill
- *  it was put on (18d-iii-b-i), by its own button, never picked from the list. */
+/** The picked reasons, and `not_this_bill`: a payment taken in Square's own app taken off the bill it was put on
+ *  (18d-iii-b-i), kept on payments voided so before Square Point of Sale was taken out (18d-iii-b-v); never asked for now. */
 export const PAYMENT_VOID_REASONS_KEPT = [...PAYMENT_VOID_REASONS, "not_this_bill"] as const;
 export const paymentVoidReasonSchema = z.enum(PAYMENT_VOID_REASONS_KEPT);
 export type PaymentVoidReason = z.infer<typeof paymentVoidReasonSchema>;
@@ -380,7 +378,7 @@ export type RecordMemberFeePaymentRequest = z.infer<typeof recordMemberFeePaymen
 
 export const waiveMemberFeeRequestSchema = z.object({}).strict();
 
-export const voidMemberPaymentRequestSchema = z.object({ reason: paymentVoidReasonSchema }).strict();
+export const voidMemberPaymentRequestSchema = z.object({ reason: z.enum(PAYMENT_VOID_REASONS) }).strict();
 export type VoidMemberPaymentRequest = z.infer<typeof voidMemberPaymentRequestSchema>;
 
 export const voidMemberRefundRequestSchema = z.object({ reason: refundVoidReasonSchema }).strict();

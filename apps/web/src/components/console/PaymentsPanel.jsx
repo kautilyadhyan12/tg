@@ -17,7 +17,6 @@ import {
   squareRows,
 } from '../../pages/console/paymentsView';
 import PlaceLink from './PlaceLink';
-import SquareAppPayments from './SquareAppPayments';
 import SquareTerminals from './SquareTerminals';
 import { ConsoleFailed, ConsoleLoading, ConsoleSection } from './ConsoleStates';
 
@@ -288,16 +287,6 @@ export default function PaymentsPanel({ org, readOnly, startOpen = false, outcom
               readOnly={readOnly}
               onPayments={setData}
               onReload={() => void fetchPayments()}
-              onConnectAgain={() => void connect()}
-              connecting={busy === 'connect'}
-            />
-          ) : null}
-          {data.squareApp ? (
-            <SquareAppPayments
-              org={org}
-              squareApp={data.squareApp}
-              owner={owner}
-              readOnly={readOnly}
               onConnectAgain={() => void connect()}
               connecting={busy === 'connect'}
             />

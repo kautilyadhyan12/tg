@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useInRouterContext } from 'react-router-dom';
-import { AlertTriangle, Check, CreditCard, Loader2, Plus } from 'lucide-react';
+import { Check, CreditCard, Loader2, Plus } from 'lucide-react';
 import { MEMBER_FEE_WORDS, formatMinor, memberGiftDaysLine } from '@app/shared';
-import { orgService, errorCode, errorStatus, errorText } from '../../api/orgsApi';
-import { paymentsToMatchService } from '../../api/paymentsToMatchApi';
+import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import PlaceLink from '../../components/console/PlaceLink';
 import PtSessionsEnding from '../../components/console/PtSessionsEnding';
 import ReceiptBox from '../../components/console/ReceiptBox';
@@ -24,9 +23,7 @@ import { ENDING_NOT_TOLD, bookingsStoppedLine } from './bookingsEndView';
 import { termLine } from './membershipTypesView';
 import { changeBody, changeChoice, changeCreditLine, changeDoneWords, changeEndingWords, changeForm, changeLine, showsChange, squareSetUpLine } from './membershipChangeView';
 import { viewerPrivileges } from './consoleView';
-import { paymentToMatchTo, placeFor } from './consolePlaces';
-import { ACTION_WORDS, WAITING_HOLDS, billFor, canMatchPayments, matchedLine, pressFor, waitingLine, waitingNext, waitingNote } from './paymentsToMatchView';
-import { SQUARE_APP_CHOICE, SQUARE_APP_METHOD, squareAppNext } from './squareAppChoice';
+import { placeFor } from './consolePlaces';
 import MembershipAgreement from './MembershipAgreement';
 import { noteDay } from './memberListPeople';
 import {
@@ -79,9 +76,6 @@ import {
   paymentBody,
   paymentDraft,
   paymentOf,
-  notThisBillWords,
-  notThisFeeWords,
-  paymentTakenOffWords,
   paymentVoidedWords,
   paymentWords,
   refundBody,
@@ -148,8 +142,7 @@ const VOIDED = { color: 'var(--t3)', textDecoration: 'line-through' };
 /** Refusals that mean the page is out of date: it is read again. */
 const STALE_CODES = ['held_membership_changed', 'membership_type_not_found', 'bill_has_payment', 'refund_too_much', 'refund_not_settled', 'member_fee_changed'];
 /** A card on file that may not be charged again yet, or at all (18d-iii-ii-a): said under its button. */
-// `square_app_waiting`: a payment of theirs from Square Point of Sale waits to be matched (18d-iii-b-ii-a).
-const CARD_RETRY_REFUSALS = ['card_charge_wait', 'card_charge_stopped', 'card_charge_tried_out', 'square_app_waiting'];
+const CARD_RETRY_REFUSALS = ['card_charge_wait', 'card_charge_stopped', 'card_charge_tried_out'];
 
 // `nothingNow`: for somebody with nothing in use, what their row on the list says of the
 // one that finished last ("Gold Monthly · Cancelled 7 Oct"). The ones that are over are
@@ -195,10 +188,6 @@ export default function MemberMemberships({
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
   const [refusal, setRefusal] = useState(null);
-  /** One press of Match on a payment from Square Point of Sale waiting here: the one being matched, and
-   *  what refused one, under it. Each payment keeps its press's key until it is answered. */
-  const [matching, setMatching] = useState({ id: null, error: null });
-  const matchKeys = useRef(new Map());
   const [showPast, setShowPast] = useState(false);
   /** The membership whose agreement box is open (18u-i): { id, justGiven }, or null. */
   const [agreementFor, setAgreementFor] = useState(() => (signNow === null ? null : { id: signNow, justGiven: true }));
@@ -235,7 +224,7 @@ export default function MemberMemberships({
   /** Take payment on Terminal (18d-vi-a): the Terminals a bill can be paid on, and the payment the
    *  open box follows, { membershipId, feeBillId, payment, terminalId }, until it ends. `feeBillId`:
    *  a late cancel or no-show fee's (18d-vi-b-i), whose box is drawn under that fee. */
-  const [terminals, setTerminals] = useState({ entryId: null, list: [], square: 'not_offered', isOwner: false, cardOnFile: null, squareApp: null });
+  const [terminals, setTerminals] = useState({ entryId: null, list: [], square: 'not_offered', isOwner: false, cardOnFile: null });
   const routed = useInRouterContext();
   const paymentsTo = routed ? placeFor(gym?.slug, viewerPrivileges(gym), 'payments') : null;
   // Booking rules, where a gym stops new bookings while a payment is overdue (17i).
@@ -276,23 +265,6 @@ export default function MemberMemberships({
   }, [gymId, entryId, attempt]);
 
   const shown = held !== null && held.entryId === entryId ? held : null;
-  // Square Point of Sale picked in Record payment, then the payment taken there comes in (live): the form
-  // closes by itself, so the payment's line with Match is on screen at once (18d-iii-b-ii-a).
-  const waitingIds = (shown?.squareAppWaiting ?? []).map((w) => w.id).join(',');
-  const waitingSeen = useRef(waitingIds);
-  const pickedSquareApp = payForm?.method === SQUARE_APP_METHOD || feeForm?.method === SQUARE_APP_METHOD;
-  useEffect(() => {
-    const before = waitingSeen.current;
-    waitingSeen.current = waitingIds;
-    if (!pickedSquareApp || waitingIds === '' || waitingIds === before) return;
-    const had = new Set(before.split(','));
-    if (waitingIds.split(',').some((id) => !had.has(id))) {
-      setOpen(null);
-      setPayForm(null);
-      setFeeForm(null);
-    }
-  }, [waitingIds, pickedSquareApp]);
-
   // Live updates (ROADMAP Stage 4 item 18): when the person signs from an emailed link in another
   // window or on their phone, or another member of staff changes their memberships, the server tells
   // this page and it reads them again, quietly; and again when its line opens after being away, or
@@ -336,7 +308,7 @@ export default function MemberMemberships({
     orgService.getTerminalPayments(gymId, entryId).then(
       (res) => {
         if (!live) return;
-        setTerminals({ entryId, list: res.data.terminals, square: res.data.square, isOwner: res.data.isOwner, cardOnFile: res.data.cardOnFile ?? null, squareApp: res.data.squareApp ?? null });
+        setTerminals({ entryId, list: res.data.terminals, square: res.data.square, isOwner: res.data.isOwner, cardOnFile: res.data.cardOnFile ?? null });
         // One waiting for this person, pressed here before or on another screen: its box is open.
         const waiting = res.data.waiting[0];
         if (waiting !== undefined) {
@@ -354,23 +326,12 @@ export default function MemberMemberships({
   const terminalList = terminals.entryId === entryId ? terminals.list : [];
   // The card Record payment can charge, theirs or their payer's (18d-iii-i).
   const cardOnFile = terminals.entryId === entryId ? terminals.cardOnFile : null;
-  // Square Point of Sale as a way of paying, and whom to pick there (18d-iii-b-ii-a); null where it can't be used.
-  const squareApp = terminals.entryId === entryId ? terminals.squareApp : null;
-  /** Record payment's ways: the gym's Terminal, then the card on file, then Square Point of Sale (which
-   *  records nothing here), then the ways recorded by hand. */
+  /** Record payment's ways: the gym's Terminal, then the card on file, then the ways recorded by hand. */
   const payMethodsWithSquare = [
     ...(terminalList.length > 0 ? [{ value: TERMINAL_METHOD, label: 'Card on Terminal' }] : []),
     ...(cardOnFile !== null ? [{ value: CARD_ON_FILE_METHOD, label: cardOnFileLabel(cardOnFile), disabled: cardOnFile.stopped === true }] : []),
-    ...(squareApp !== null ? [SQUARE_APP_CHOICE] : []),
     ...payMethods,
   ];
-  /** Picked as the way of paying: what happens next, in place of a button that would record it. */
-  const renderSquareAppNext = () =>
-    squareApp === null ? null : (
-      <p className="c-s14 c-t1 m-0" data-testid="square-app-next">
-        {squareAppNext(squareApp.pick)}
-      </p>
-    );
   // Square not set up yet (18x, Kd 2026-10-22): the payment forms say so, with Connect Square for the owner.
   const squareLine = terminals.entryId === entryId ? squareSetUpLine(terminals.square, terminals.isOwner, gym?.name ?? 'this gym') : null;
   const renderSquareLine = () =>
@@ -633,13 +594,11 @@ export default function MemberMemberships({
     if (feeForm.what === 'payFee') {
       const onTerminal = feeForm.method === TERMINAL_METHOD;
       const onCard = feeForm.method === CARD_ON_FILE_METHOD && cardOnFile !== null;
-      const onSquareApp = feeForm.method === SQUARE_APP_METHOD && squareApp !== null;
       const { problem, body } = onTerminal || onCard ? { problem: null, body: { requestKey: feeForm.requestKey, amountMinor: fee.amountMinor } } : feePayBody(feeForm, fee);
       const pickedTerminal = terminalList.length === 1 ? terminalList[0] : terminalList.find((t) => t.id === feeForm.terminalId);
       const terminalProblem = onTerminal && pickedTerminal === undefined ? 'Choose a Terminal.' : null;
       const methods = payMethodsWithSquare;
       const said = chargeSaid !== null && chargeSaid.feeBillId === fee.id ? chargeSaid.line : null;
-      const saidTo = chargeSaid !== null && chargeSaid.feeBillId === fee.id ? (chargeSaid.matchTo ?? null) : null;
       const take = feeTakeWords(fee, m.currency);
       return (
         <form
@@ -649,7 +608,7 @@ export default function MemberMemberships({
           data-testid="held-fee-pay"
           onSubmit={(e) => {
             e.preventDefault();
-            if (busy || onSquareApp) return;
+            if (busy) return;
             if (body === null || terminalProblem !== null) {
               setFeeForm((f) => ({ ...f, tried: true }));
               return;
@@ -680,7 +639,6 @@ export default function MemberMemberships({
             </select>
           </label>
           {cardOnFileStoppedLine(cardOnFile) !== null ? <p className="c-s14 c-t2 m-0">{cardOnFileStoppedLine(cardOnFile)}</p> : null}
-          {onSquareApp ? renderSquareAppNext() : null}
           {onTerminal && terminalList.length > 1 ? (
             <label className="c-field">
               <span className="c-label">Terminal</span>
@@ -704,24 +662,17 @@ export default function MemberMemberships({
               {said}
             </span>
           ) : null}
-          {saidTo !== null ? (
-            <PlaceLink to={saidTo} guard>
-              Open Payments to match
-            </PlaceLink>
-          ) : null}
           <div className="flex flex-wrap gap-2">
-            {onSquareApp ? null : (
-              <button type="submit" className={MAIN} disabled={busy}>
-                {busy ? (
-                  <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" />
-                ) : onTerminal || onCard ? (
-                  <CreditCard aria-hidden="true" className="w-4 h-4" />
-                ) : null}
-                {onTerminal ? 'Take payment on Terminal' : onCard ? `Charge ${formatMinor(fee.amountMinor, m.currency)}` : 'Record payment'}
-              </button>
-            )}
+            <button type="submit" className={MAIN} disabled={busy}>
+              {busy ? (
+                <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" />
+              ) : onTerminal || onCard ? (
+                <CreditCard aria-hidden="true" className="w-4 h-4" />
+              ) : null}
+              {onTerminal ? 'Take payment on Terminal' : onCard ? `Charge ${formatMinor(fee.amountMinor, m.currency)}` : 'Record payment'}
+            </button>
             <button type="button" className={PLAIN} disabled={busy} onClick={close}>
-              {onSquareApp ? 'Close' : 'Cancel'}
+              Cancel
             </button>
           </div>
         </form>
@@ -751,13 +702,6 @@ export default function MemberMemberships({
       );
     }
     const voidPath = `${path}/payments/${encodeURIComponent(fee.can.voidPaymentId)}/void`;
-    // Taken in Square's own app (18d-iii-b-i): taken off the fee, never voided; nothing to pick.
-    if (fee.payments.find((p) => p.id === fee.can.voidPaymentId)?.method === 'square_app') {
-      const off = notThisFeeWords(fee, m.currency, name);
-      return renderConfirm(off, 'held-fee-not-this-bill', () =>
-        run('voidFeePayment', m, () => orgService.changeHeldMembership(gymId, entryId, m.id, voidPath, { reason: 'not_this_bill' }), off.done),
-      );
-    }
     const words = voidFeePaymentWords(fee, m.currency, name);
     return renderVoid(m, words, PAYMENT_VOID_CHOICES, 'held-fee-void', (body) =>
       run('voidFeePayment', m, () => orgService.changeHeldMembership(gymId, entryId, m.id, voidPath, body), words.done),
@@ -836,11 +780,7 @@ export default function MemberMemberships({
                             label={null}
                             alignRight
                             ariaLabel={`More for the payment of ${p.amount}`}
-                            items={[
-                              p.method === 'square_app'
-                                ? { label: MENU_WORDS.notThisBill.label, hint: 'It went on the wrong fee. The fee will be owed again.', danger: true, onPick: () => startFee(m, 'voidFeePayment', fee) }
-                                : { label: 'Void payment', hint: 'It was recorded by mistake. The fee is owed again.', danger: true, onPick: () => startFee(m, 'voidFeePayment', fee) },
-                            ]}
+                            items={[{ label: 'Void payment', hint: 'It was recorded by mistake. The fee is owed again.', danger: true, onPick: () => startFee(m, 'voidFeePayment', fee) }]}
                             disabled={busy}
                           />
                         ) : null}
@@ -881,22 +821,6 @@ export default function MemberMemberships({
     );
   };
 
-  /** A question with one button and Keep it: Not this bill, which asks no reason (18d-iii-b-i). */
-  const renderConfirm = (words, testId, onConfirm) => (
-    <div className="rounded-[14px] p-3 flex flex-col gap-3" style={{ background: 'var(--raise)' }} data-testid={testId}>
-      <p className="c-s15 c-w6 c-t1 m-0">{words.question}</p>
-      <p className="c-s14 c-t2 m-0">{words.detail}</p>
-      <div className="flex flex-wrap gap-2">
-        <button type="button" className={DANGER} disabled={busy} onClick={() => void onConfirm()}>
-          {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
-          {words.button}
-        </button>
-        <button type="button" className={PLAIN} disabled={busy} onClick={close}>
-          Keep it
-        </button>
-      </div>
-    </div>
-  );
 
   /** Void payment and Void refund: what is voided, what changes, and why, picked. */
   const renderVoid = (m, words, choices, testId, send) => {
@@ -1159,10 +1083,7 @@ export default function MemberMemberships({
     } catch (err) {
       // The card may not be charged again yet, or at all (18d-iii-ii-a): said under the button pressed.
       if (CARD_RETRY_REFUSALS.includes(errorCode(err))) {
-        // Held for a payment from Square Point of Sale: the button opens it in Payments to match.
-        const waiting = errorCode(err) === 'square_app_waiting' ? (held?.squareAppWaiting?.[0]?.id ?? null) : null;
-        const matchTo = waiting === null || !routed ? null : paymentToMatchTo(gym?.slug, viewerPrivileges(gym), waiting);
-        setChargeSaid({ membershipId: m.id, feeBillId: fee === null ? null : fee.id, line: errorText(err, ''), matchTo });
+        setChargeSaid({ membershipId: m.id, feeBillId: fee === null ? null : fee.id, line: errorText(err, '') });
         return;
       }
       setRefusal(errorText(err, "We couldn't get an answer. Press Charge again to see whether the card was charged: it is never charged twice."));
@@ -1172,32 +1093,6 @@ export default function MemberMemberships({
       }
     } finally {
       setBusy(false);
-    }
-  };
-
-  /** One press of Match (18d-iii-b-ii-a; Kd, 2026-10-25): the payment from Square Point of Sale goes on the
-   *  bill ticked beside it, once, and what happened is said here; their memberships are read again. */
-  const matchWaiting = async (w) => {
-    if (w.bill === null) return;
-    setNotice(null);
-    setRefusal(null);
-    const key = matchKeys.current.get(w.id) ?? globalThis.crypto.randomUUID();
-    matchKeys.current.set(w.id, key);
-    setMatching({ id: w.id, error: null });
-    try {
-      const answer = await paymentsToMatchService.match(gymId, w.id, pressFor(w.bill, key));
-      matchKeys.current.delete(w.id);
-      setMatching({ id: null, error: null });
-      setNotice(matchedLine(answer.matched));
-      setAttempt((n) => n + 1);
-      onChanged?.();
-    } catch (err) {
-      setMatching({ id: null, error: { id: w.id, text: errorText(err, "We couldn't match it. Try again.") } });
-      // Matched or marked meanwhile, or the bill has changed: what is true now is read again.
-      if (errorStatus(err) === 409 || errorStatus(err) === 404) {
-        matchKeys.current.delete(w.id);
-        setAttempt((n) => n + 1);
-      }
     }
   };
 
@@ -1305,13 +1200,11 @@ export default function MemberMemberships({
     const words = paymentWords(m, name, today);
     const onTerminal = payForm.method === TERMINAL_METHOD;
     const onCard = payForm.method === CARD_ON_FILE_METHOD && cardOnFile !== null;
-    const onSquareApp = payForm.method === SQUARE_APP_METHOD && squareApp !== null;
     const { problem, body } = paymentBody(m, payForm);
     const pickedTerminal = terminalList.length === 1 ? terminalList[0] : terminalList.find((t) => t.id === payForm.terminalId);
     const terminalProblem = onTerminal && pickedTerminal === undefined ? 'Choose a Terminal.' : null;
     const methods = payMethodsWithSquare;
     const said = chargeSaid !== null && chargeSaid.membershipId === m.id && chargeSaid.feeBillId === null ? chargeSaid.line : null;
-    const saidTo = chargeSaid !== null && chargeSaid.membershipId === m.id && chargeSaid.feeBillId === null ? (chargeSaid.matchTo ?? null) : null;
     return (
       <form
         noValidate
@@ -1320,7 +1213,7 @@ export default function MemberMemberships({
         data-testid="held-pay"
         onSubmit={(e) => {
           e.preventDefault();
-          if (busy || onSquareApp) return;
+          if (busy) return;
           if (body === null || terminalProblem !== null) {
             setPayForm((f) => ({ ...f, tried: true }));
             return;
@@ -1336,20 +1229,18 @@ export default function MemberMemberships({
           void run('pay', m, () => orgService.changeHeldMembership(gymId, entryId, m.id, 'payments', body), paidWords(m, body.amountMinor));
         }}
       >
-        <p className="c-s15 c-w6 c-t1 m-0">{onTerminal || onCard || onSquareApp ? words.takeTitle : words.title}</p>
-        <p className="c-s14 c-t2 m-0">{onTerminal ? terminalPayDetail(name, words.left) : onCard || onSquareApp ? words.left : words.detail}</p>
-        {onSquareApp ? null : (
-          <label className="c-field">
-            <span className="c-label">{`Amount paid (${m.currency})`}</span>
-            <input
-              className="c-input"
-              type="text"
-              inputMode="decimal"
-              value={payForm.amount}
-              onChange={(e) => setPayForm((f) => ({ ...f, amount: e.target.value.slice(0, 12) }))}
-            />
-          </label>
-        )}
+        <p className="c-s15 c-w6 c-t1 m-0">{onTerminal || onCard ? words.takeTitle : words.title}</p>
+        <p className="c-s14 c-t2 m-0">{onTerminal ? terminalPayDetail(name, words.left) : onCard ? words.left : words.detail}</p>
+        <label className="c-field">
+          <span className="c-label">{`Amount paid (${m.currency})`}</span>
+          <input
+            className="c-input"
+            type="text"
+            inputMode="decimal"
+            value={payForm.amount}
+            onChange={(e) => setPayForm((f) => ({ ...f, amount: e.target.value.slice(0, 12) }))}
+          />
+        </label>
         <label className="c-field">
           <span className="c-label">Payment method</span>
           <select className="c-sel" value={payForm.method} onChange={(e) => setPayForm((f) => ({ ...f, method: e.target.value }))}>
@@ -1363,7 +1254,6 @@ export default function MemberMemberships({
         </label>
         {renderSquareLine()}
         {cardOnFileStoppedLine(cardOnFile) !== null ? <p className="c-s14 c-t2 m-0">{cardOnFileStoppedLine(cardOnFile)}</p> : null}
-        {onSquareApp ? renderSquareAppNext() : null}
         {onTerminal && terminalList.length > 1 ? (
           <label className="c-field">
             <span className="c-label">Terminal</span>
@@ -1388,26 +1278,19 @@ export default function MemberMemberships({
             {said}
           </span>
         ) : null}
-        {saidTo !== null ? (
-          <PlaceLink to={saidTo} guard>
-            Open Payments to match
-          </PlaceLink>
-        ) : null}
         <div className="flex flex-wrap gap-2">
-          {onSquareApp ? null : (
-            <button type="submit" className={MAIN} disabled={busy}>
-              {busy ? (
-                <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" />
-              ) : onTerminal || onCard ? (
-                <CreditCard aria-hidden="true" className="w-4 h-4" />
-              ) : (
-                <Check aria-hidden="true" className="w-4 h-4" />
-              )}
-              {onTerminal ? 'Take payment on Terminal' : onCard ? (body === null ? 'Charge card' : `Charge ${formatMinor(body.amountMinor, m.currency)}`) : 'Record payment'}
-            </button>
-          )}
+          <button type="submit" className={MAIN} disabled={busy}>
+            {busy ? (
+              <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" />
+            ) : onTerminal || onCard ? (
+              <CreditCard aria-hidden="true" className="w-4 h-4" />
+            ) : (
+              <Check aria-hidden="true" className="w-4 h-4" />
+            )}
+            {onTerminal ? 'Take payment on Terminal' : onCard ? (body === null ? 'Charge card' : `Charge ${formatMinor(body.amountMinor, m.currency)}`) : 'Record payment'}
+          </button>
           <button type="button" className={PLAIN} disabled={busy} onClick={close}>
-            {onSquareApp ? 'Close' : 'Back'}
+            Back
           </button>
         </div>
       </form>
@@ -1511,7 +1394,7 @@ export default function MemberMemberships({
                           const items = [];
                           if (acts && p.voided === null && p.refundable) items.push({ ...MENU_WORDS.refund, onPick: () => startRefund(m, p.id) });
                           if (acts && p.voided === null && p.id === voidId) {
-                            items.push({ ...(p.method === 'square_app' ? MENU_WORDS.notThisBill : MENU_WORDS.voidPayment), danger: true, onPick: () => ask('undo', m) });
+                            items.push({ ...MENU_WORDS.voidPayment, danger: true, onPick: () => ask('undo', m) });
                           }
                           return items.length === 0 ? null : <MoreMenu label={null} alignRight ariaLabel={`More for the payment of ${p.amount}`} items={items} disabled={busy} />;
                         })()}
@@ -1855,13 +1738,6 @@ export default function MemberMemberships({
       if (voidForm === null) return null;
       const path = `payments/${encodeURIComponent(undo.paymentId)}/void`;
       const billId = billOfPayment(m, undo.paymentId)?.id ?? null;
-      // Taken in Square's own app (18d-iii-b-i): taken off the bill, never voided; nothing to pick.
-      if (paymentOf(m, undo.paymentId)?.method === 'square_app') {
-        const taken = (data) => paymentTakenOffWords(data?.memberships?.find((x) => x.id === m.id) ?? null, name, billId);
-        return renderConfirm(notThisBillWords(m, name, undo.paymentId), 'held-not-this-bill', () =>
-          run('undo', m, () => orgService.changeHeldMembership(gymId, entryId, m.id, path, { reason: 'not_this_bill' }), taken),
-        );
-      }
       const said = (data) => paymentVoidedWords(data?.memberships?.find((x) => x.id === m.id) ?? null, name, billId);
       return renderVoid(m, words, PAYMENT_VOID_CHOICES, 'held-void-payment', (body) =>
         run('undo', m, () => orgService.changeHeldMembership(gymId, entryId, m.id, path, body), said),
@@ -2112,7 +1988,6 @@ export default function MemberMemberships({
               today={today}
               value={form}
               canBill={shown.canBill}
-              squareApp={squareApp}
               paidMinor={summary === null || !summary.shows ? null : summary.totalMinor}
               onChange={(next) => setForm((f) => ({ ...f, ...next, ...(next.typeId !== undefined && next.typeId !== f.typeId ? { code: { ...f.code, note: null, appliedId: null }, joiningFee: 'auto' } : {}) }))}
             />
@@ -2203,65 +2078,6 @@ export default function MemberMemberships({
           )}
         </p>
       ) : null}
-      {shown.canBill && open === null
-        ? (shown.squareAppWaiting ?? []).map((w) => {
-            // A payment from Square Point of Sale waiting to be matched holds their card on file; where the
-            // bill it fits is ticked, one press of Match here puts it there (18d-iii-b-ii-a; Kd, 2026-10-25).
-            const matchTo = routed ? paymentToMatchTo(gym?.slug, viewerPrivileges(gym), w.id) : null;
-            const mayMatch = !readOnly && canMatchPayments(viewerPrivileges(gym));
-            const next = waitingNext(w);
-            const note = waitingNote(w);
-            const failed = matching.error !== null && matching.error.id === w.id ? matching.error.text : null;
-            return (
-              <div key={w.id} className="flex flex-col gap-1.5 rounded-[14px] p-3" style={{ background: 'var(--raise)' }} data-testid="square-app-waiting">
-                <p className="c-s14 c-w6 c-t1 m-0">{waitingLine(w, gym?.timezone, gym?.country)}</p>
-                {w.bill !== null ? (
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                    <span className="c-s14 c-t2" data-testid="square-app-waiting-bill">
-                      {billFor(w.bill, entryId, shown.today)}
-                    </span>
-                    {mayMatch ? (
-                      <button type="button" className="c-btn c-btn-p c-btn-sm" disabled={matching.id !== null} onClick={() => void matchWaiting(w)}>
-                        {matching.id === w.id ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
-                        {matching.id === w.id ? 'Matching…' : ACTION_WORDS.match}
-                      </button>
-                    ) : null}
-                    {matchTo !== null ? (
-                      <PlaceLink to={matchTo} className="c-lk c-w6 c-s14">
-                        {ACTION_WORDS.other}
-                      </PlaceLink>
-                    ) : null}
-                  </div>
-                ) : null}
-                {note !== null ? (
-                  <p className={`c-s13 m-0 ${note.tone === 'warn' ? 'c-w6 flex items-start gap-1.5' : 'c-t3'}`} style={note.tone === 'warn' ? { color: 'var(--warn)' } : undefined}>
-                    {note.tone === 'warn' ? <AlertTriangle aria-hidden="true" className="w-4 h-4 flex-none mt-0.5" /> : null}
-                    {note.text}
-                  </p>
-                ) : null}
-                {next !== null ? (
-                  <p className="c-s14 c-t2 m-0 flex flex-wrap items-center gap-x-3 gap-y-1">
-                    <span>{next}</span>
-                    {matchTo === null ? (
-                      <span className="c-t3">Staff who record payments can match it there.</span>
-                    ) : (
-                      <PlaceLink to={matchTo} className="c-lk c-w6">
-                        Match it
-                      </PlaceLink>
-                    )}
-                  </p>
-                ) : null}
-                {w.bill !== null && !mayMatch && matchTo === null ? <p className="c-s13 c-t3 m-0">Staff who record payments can match it in Payments to match.</p> : null}
-                {w.holdsCard ? <p className="c-s13 c-t3 m-0">{WAITING_HOLDS}</p> : null}
-                {failed !== null ? (
-                  <p className="c-s14 c-t1 m-0 rounded-[14px] p-3" style={{ background: 'var(--bad-bg)' }} role="alert">
-                    {failed}
-                  </p>
-                ) : null}
-              </div>
-            );
-          })
-        : null}
       {shown.past && shown.memberships.length > 0 ? (
         <p className="c-s14 c-t2 m-0" data-testid="held-past-note">
           {`${name.charAt(0).toUpperCase()}${name.slice(1)} is a past member, so these are not in use. Put them back on your list to use them again.`}

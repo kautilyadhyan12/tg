@@ -575,11 +575,11 @@ d("Take payment on Terminal: charged once, on this bill alone (real Postgres)", 
       return terminalPaymentsResponseSchema.parse(JSON.parse(res.body));
     };
     // Square not set up yet: the payment forms offer the owner Connect Square (18x).
-    expect(await listed()).toEqual({ terminals: [], waiting: [], square: "connect", isOwner: true, cardOnFile: null, squareApp: null });
+    expect(await listed()).toEqual({ terminals: [], waiting: [], square: "connect", isOwner: true, cardOnFile: null });
     await connect(gym, acct);
     const desk = await terminal(gym, acct);
-    // Square Point of Sale offered too, Ada linked to no customer there: her payment would wait in Payments to match.
-    expect(await listed()).toEqual({ terminals: [{ id: desk.id, serial: desk.deviceId, practice: null }], waiting: [], square: "ready", isOwner: true, cardOnFile: null, squareApp: { pick: null } });
+    // Connected, with a Terminal paired: it is offered, and nothing else of Square.
+    expect(await listed()).toEqual({ terminals: [{ id: desk.id, serial: desk.deviceId, practice: null }], waiting: [], square: "ready", isOwner: true, cardOnFile: null });
     const started = await pay(gym, gym.owner, person, desk.id);
     expect((await listed()).waiting.map((w) => w.id)).toEqual([started.payment.id]);
     await cancel(gym, gym.owner, person.entryId, started.payment.id);

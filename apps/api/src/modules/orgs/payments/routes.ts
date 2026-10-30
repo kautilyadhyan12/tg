@@ -2,7 +2,6 @@
 // the service, which owns the authorisation.
 //
 //   GET    /v1/orgs/:gymId/payments                    the Payments box (any staff)
-//   GET    /v1/orgs/:gymId/payments/square/app-check   whether Square adds tax to typed amounts (any staff)
 //   POST   /v1/orgs/:gymId/payments/square/connect     Connect Square: Square's page (the owner)
 //   PUT    /v1/orgs/:gymId/payments/square/location    which Square location this gym is (the owner)
 //   DELETE /v1/orgs/:gymId/payments/square             Disconnect Square (the owner)
@@ -47,35 +46,10 @@
 //   GET    /v1/orgs/:gymId/failed-payments?from=0             a page of the list
 //   GET    /v1/orgs/:gymId/failed-payments/summary            how many, and what they come to (Overview)
 //
-// Payments to match (ROADMAP 18d-iii-b-ii-a), `billing.members` and `members.confirm`, as Failed payments:
-//   GET    /v1/orgs/:gymId/payments-to-match?from=0                       a page of the list
-//   GET    /v1/orgs/:gymId/payments-to-match/summary                      how many, and what they come to (Overview)
-//   GET    /v1/orgs/:gymId/payments-to-match/:paymentId/bills?entryId=    Match's box, for one person
-//   POST   /v1/orgs/:gymId/payments-to-match/:paymentId/match             Match: on the bill picked
-//   POST   /v1/orgs/:gymId/payments-to-match/:paymentId/not-a-bill        Not a bill payment
-//   POST   /v1/orgs/:gymId/payments-to-match/:paymentId/undo              Undo of Not a bill payment
-//
-// Unlink on a person's page (ROADMAP 18d-iii-b-ii-c-ii), as Match: `billing.members` and `members.confirm`:
-//   GET    …/member-list/entries/:entryId/square-links                       the customers Match linked to them
-//   GET    …/member-list/entries/:entryId/square-links/:customerId/unlink    Unlink's box, before anything changes
-//   POST   …/member-list/entries/:entryId/square-links/:customerId/unlink    Unlink
-//
-// Members in Square (ROADMAP 18d-iii-b-ii-b-i): any staff read the box, the owner checks and adds:
-//   GET    /v1/orgs/:gymId/payments/square/members                       the box
-//   POST   /v1/orgs/:gymId/payments/square/members/check                 Add members to Square, Check again
-//   POST   /v1/orgs/:gymId/payments/square/members/add                   Add, on the check the box showed
-//   GET    /v1/orgs/:gymId/payments/square/members/names?group=&from=0   See all
 import {
   cardChargeRequestSchema,
   cardFeeChargeRequestSchema,
   failedPaymentsQuerySchema,
-  matchBillsQuerySchema,
-  matchPaymentRequestSchema,
-  notABillRequestSchema,
-  paymentToMatchParamsSchema,
-  paymentsToMatchQuerySchema,
-  squareLinkParamsSchema,
-  squareUnlinkRequestSchema,
   saveCardRequestSchema,
   squareCardIdSchema,
   terminalFeePaymentRequestSchema,
@@ -83,11 +57,8 @@ import {
   terminalSaleRequestSchema,
   terminalSaveRequestSchema,
   squareFinishRequestSchema,
-  squareMembersAddRequestSchema,
-  squareMembersNamesQuerySchema,
   squareLocationRequestSchema,
   squareObjectIdSchema,
-  squarePaymentIdSchema,
   squareWebhookBodySchema,
 } from "@app/shared";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -110,11 +81,7 @@ import { staffOnly } from "../staffLimit.js";
 import * as cardCharges from "./cardCharges.js";
 import * as cards from "./cards.js";
 import * as failedPayments from "./failedPayments.js";
-import * as paymentsToMatch from "./paymentsToMatch.js";
-import * as squareUnlink from "./squareUnlink.js";
 import * as service from "./service.js";
-import * as squareMembers from "./squareMembers.js";
-import { SQUARE_PAYMENT_EVENTS, squareAppCheck } from "./squareAppPayments.js";
 import { verifySquareSignature } from "./squareSignature.js";
 import * as terminalCards from "./terminalCards.js";
 import * as terminalPayments from "./terminalPayments.js";
@@ -160,47 +127,6 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     const params = parseOr400(orgParamsSchema, req.params, req, reply);
     if (params === null) return;
     return reply.status(200).send(await service.readPayments(paymentsDeps, callerId(req), params.gymId));
-  });
-
-  // Settings → Payments' tax check (18d-iii-b-i): the gym's own Square taxes, read, never changed.
-  app.get("/v1/orgs/:gymId/payments/square/app-check", { preHandler: [app.authenticate, readLimit] }, async (req, reply) => {
-    const params = parseOr400(orgParamsSchema, req.params, req, reply);
-    if (params === null) return;
-    return reply.status(200).send(await squareAppCheck(paymentsDeps, callerId(req), params.gymId));
-  });
-
-  // Members in Square (18d-iii-b-ii-b-i): the box is read when Settings opens and when live news says so; a
-  // check and an add are a handful of presses, each a few pages of Square's customers.
-  const membersDeps: service.PaymentsDeps = { ...paymentsDeps, news: deps.news };
-  const membersPressLimit = createDualRateLimit({ name: "square_members_press", max: 30, ipMax: 300, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
-  const membersUrl = "/v1/orgs/:gymId/payments/square/members";
-
-  app.get(membersUrl, { preHandler: [app.authenticate, readLimit] }, async (req, reply) => {
-    const params = parseOr400(orgParamsSchema, req.params, req, reply);
-    if (params === null) return;
-    return reply.status(200).send(await squareMembers.readSquareMembers(membersDeps, callerId(req), params.gymId));
-  });
-
-  app.post(`${membersUrl}/check`, { preHandler: [app.authenticate, membersPressLimit] }, async (req, reply) => {
-    const params = parseOr400(orgParamsSchema, req.params, req, reply);
-    if (params === null) return;
-    return reply.status(200).send(await squareMembers.checkSquareMembers(membersDeps, callerId(req), params.gymId));
-  });
-
-  app.post(`${membersUrl}/add`, { preHandler: [app.authenticate, membersPressLimit] }, async (req, reply) => {
-    const params = parseOr400(orgParamsSchema, req.params, req, reply);
-    if (params === null) return;
-    const body = parseOr400(squareMembersAddRequestSchema, req.body, req, reply);
-    if (body === null) return;
-    return reply.status(200).send(await squareMembers.addSquareMembers(membersDeps, callerId(req), params.gymId, body.runId));
-  });
-
-  app.get(`${membersUrl}/names`, { preHandler: [app.authenticate, readLimit] }, async (req, reply) => {
-    const params = parseOr400(orgParamsSchema, req.params, req, reply);
-    if (params === null) return;
-    const query = parseOr400(squareMembersNamesQuerySchema, req.query, req, reply);
-    if (query === null) return;
-    return reply.status(200).send(await squareMembers.readSquareMembersNames(membersDeps, callerId(req), params.gymId, query));
   });
 
   app.post("/v1/orgs/:gymId/payments/square/connect", { preHandler: [app.authenticate, connectLimit] }, async (req, reply) => {
@@ -402,95 +328,6 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     return reply.status(200).header("cache-control", "no-store").send(answer);
   });
 
-  // Payments to match: read as Failed payments is; Match asks Square once a press, as a charge does.
-  const toMatchReadLimit = createDualRateLimit({ name: "payments_to_match", max: 600, ipMax: 3000, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
-  const toMatchWriteLimit = createDualRateLimit({ name: "payments_to_match_write", max: 120, ipMax: 600, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
-  /** What a write changed: the list and Overview read again, and the people whose card or bill it was. */
-  const tellMatched = (gymId: string, entryIds: readonly string[]): void => {
-    deps.news.tell(gymId, { what: "paymentsToMatch" });
-    for (const entryId of entryIds) deps.news.tell(gymId, { what: "memberships", entryId });
-  };
-
-  app.get("/v1/orgs/:gymId/payments-to-match", { preHandler: [app.authenticate, staffOnly(deps.sql, toMatchReadLimit)] }, async (req, reply) => {
-    const params = parseOr400(orgParamsSchema, req.params, req, reply);
-    if (params === null) return;
-    const query = parseOr400(paymentsToMatchQuerySchema, req.query, req, reply);
-    if (query === null) return;
-    const answer = await paymentsToMatch.readPaymentsToMatch(paymentsDeps, callerId(req), params.gymId, query.from);
-    return reply.status(200).header("cache-control", "no-store").send(answer);
-  });
-
-  app.get("/v1/orgs/:gymId/payments-to-match/summary", { preHandler: [app.authenticate, staffOnly(deps.sql, toMatchReadLimit)] }, async (req, reply) => {
-    const params = parseOr400(orgParamsSchema, req.params, req, reply);
-    if (params === null) return;
-    const answer = await paymentsToMatch.readToMatchSummary(paymentsDeps, callerId(req), params.gymId);
-    return reply.status(200).header("cache-control", "no-store").send(answer);
-  });
-
-  app.get("/v1/orgs/:gymId/payments-to-match/:paymentId/bills", { preHandler: [app.authenticate, staffOnly(deps.sql, toMatchReadLimit)] }, async (req, reply) => {
-    const params = parseOr400(paymentToMatchParamsSchema, req.params, req, reply);
-    if (params === null) return;
-    const query = parseOr400(matchBillsQuerySchema, req.query, req, reply);
-    if (query === null) return;
-    const answer = await paymentsToMatch.readMatchBills(paymentsDeps, callerId(req), params.gymId, params.paymentId, query.entryId);
-    return reply.status(200).header("cache-control", "no-store").send(answer);
-  });
-
-  app.post("/v1/orgs/:gymId/payments-to-match/:paymentId/match", { preHandler: [app.authenticate, staffOnly(deps.sql, toMatchWriteLimit)] }, async (req, reply) => {
-    const params = parseOr400(paymentToMatchParamsSchema, req.params, req, reply);
-    if (params === null) return;
-    const body = parseOr400(matchPaymentRequestSchema, req.body, req, reply);
-    if (body === null) return;
-    const done = await paymentsToMatch.matchPayment(paymentsDeps, callerId(req), params.gymId, params.paymentId, body);
-    tellMatched(params.gymId, done.entryIds);
-    return reply.status(200).header("cache-control", "no-store").send(done.answer);
-  });
-
-  app.post("/v1/orgs/:gymId/payments-to-match/:paymentId/not-a-bill", { preHandler: [app.authenticate, staffOnly(deps.sql, toMatchWriteLimit)] }, async (req, reply) => {
-    const params = parseOr400(paymentToMatchParamsSchema, req.params, req, reply);
-    if (params === null) return;
-    const body = parseOr400(notABillRequestSchema, req.body, req, reply);
-    if (body === null) return;
-    const done = await paymentsToMatch.markNotABill(paymentsDeps, callerId(req), params.gymId, params.paymentId, body);
-    tellMatched(params.gymId, done.entryIds);
-    return reply.status(200).header("cache-control", "no-store").send(done.answer);
-  });
-
-  app.post("/v1/orgs/:gymId/payments-to-match/:paymentId/undo", { preHandler: [app.authenticate, staffOnly(deps.sql, toMatchWriteLimit)] }, async (req, reply) => {
-    const params = parseOr400(paymentToMatchParamsSchema, req.params, req, reply);
-    if (params === null) return;
-    const done = await paymentsToMatch.putBackToMatch(paymentsDeps, callerId(req), params.gymId, params.paymentId);
-    tellMatched(params.gymId, done.entryIds);
-    return reply.status(200).header("cache-control", "no-store").send(done.answer);
-  });
-
-  // Unlink on a person's page: read and pressed as Match is, by the same staff and the same limits.
-  const linksUrl = "/v1/orgs/:gymId/member-list/entries/:entryId/square-links";
-
-  app.get(linksUrl, { preHandler: [app.authenticate, staffOnly(deps.sql, toMatchReadLimit)] }, async (req, reply) => {
-    const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
-    if (params === null) return;
-    const answer = await squareUnlink.readSquareLinks(paymentsDeps, callerId(req), params.gymId, params.entryId);
-    return reply.status(200).header("cache-control", "no-store").send(answer);
-  });
-
-  app.get(`${linksUrl}/:customerId/unlink`, { preHandler: [app.authenticate, staffOnly(deps.sql, toMatchReadLimit)] }, async (req, reply) => {
-    const params = parseOr400(squareLinkParamsSchema, req.params, req, reply);
-    if (params === null) return;
-    const answer = await squareUnlink.readUnlinkBox(paymentsDeps, callerId(req), params.gymId, params.entryId, params.customerId);
-    return reply.status(200).header("cache-control", "no-store").send(answer);
-  });
-
-  app.post(`${linksUrl}/:customerId/unlink`, { preHandler: [app.authenticate, staffOnly(deps.sql, toMatchWriteLimit)] }, async (req, reply) => {
-    const params = parseOr400(squareLinkParamsSchema, req.params, req, reply);
-    if (params === null) return;
-    const body = parseOr400(squareUnlinkRequestSchema, req.body, req, reply);
-    if (body === null) return;
-    const done = await squareUnlink.unlinkSquareCustomer(paymentsDeps, callerId(req), params.gymId, params.entryId, params.customerId, body);
-    tellMatched(params.gymId, done.entryIds);
-    return reply.status(200).header("cache-control", "no-store").send(done.answer);
-  });
-
   // At Sell, the same limits: a sale is one press, asked about as a bill's is.
   const saleUrl = "/v1/orgs/:gymId/terminal-sales";
 
@@ -587,8 +424,8 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
           req.log.warn({ event: "webhook.square_unreadable" }, "a signed Square webhook body did not parse");
           return reply.status(200).send();
         }
-        // A gym taking the app off its account, a saved card changed or stopped inside Square
-        // (18d-ii), and a payment (18d-iii-b-i) are kept for the worker; the rest are acknowledged.
+        // A gym taking the app off its account, and a saved card changed or stopped inside Square
+        // (18d-ii), are kept for the worker; the rest are acknowledged.
         if (event.data.type === SQUARE_REVOKED_EVENT) {
           await webhooks.keepSquareEvent(deps.sql, {
             eventId: event.data.event_id,
@@ -617,18 +454,6 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
           await webhooks.keepSquareEvent(deps.sql, {
             eventId: event.data.event_id,
             payload: { type: event.data.type, accountId: event.data.merchant_id, cardId: cardId.data },
-          });
-        }
-        // A payment, taken in Square's own app or anywhere else in the account (18d-iii-b-i).
-        if (SQUARE_PAYMENT_EVENTS.includes(event.data.type)) {
-          const paymentId = squarePaymentIdSchema.safeParse(event.data.data?.id);
-          if (!paymentId.success) {
-            req.log.warn({ event: "webhook.square_payment_unreadable" }, "a signed Square payment message names no payment");
-            return reply.status(200).send();
-          }
-          await webhooks.keepSquareEvent(deps.sql, {
-            eventId: event.data.event_id,
-            payload: { type: event.data.type, accountId: event.data.merchant_id, paymentId: paymentId.data },
           });
         }
         return reply.status(200).send();

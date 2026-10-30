@@ -14,7 +14,6 @@ import {
   squareEmail,
   squareMembersPlan,
   squarePhone,
-  type MemberPlan,
   type PlanCustomer,
   type PlanMember,
 } from "../src/modules/orgs/payments/squareMembersPlan.js";
@@ -296,64 +295,5 @@ describe("followMerged: the one record whose name is the merged customer's keeps
     const back = followMerged([...records].reverse(), merged);
     expect(back.keep).toBe(forward.keep);
     expect([...back.separate].sort()).toEqual([...forward.separate].sort());
-  });
-});
-
-describe("squareMembersPlan: a customer staff unlinked from a member on their page (18d-iii-b-ii-c-ii)", () => {
-  const unlinked = (pairs: [string, string][]) => new Map(pairs.map(([entryId, customerId]) => [entryId, new Set([customerId])]));
-  const withUnlinked = (records: string[], pairs: [string, string][]) => ({ ...around(records), unlinked: unlinked(pairs) });
-  it.each<[string, PlanMember[], PlanCustomer[], [string, string][], Record<string, MemberPlan>]>([
-    [
-      "a son of his father's name on his father's email, the father's customer unlinked from him: added, never linked",
-      [member("son", "John Smith", "smiths@example.com")],
-      [customer("FATHER", "John", "Smith", "smiths@example.com")],
-      [["son", "FATHER"]],
-      { son: { kind: "add" } },
-    ],
-    [
-      "the same phone and the same name, unlinked: added",
-      [member("ana", "Ana Ruiz", null, "+12125550142")],
-      [customer("ANA2", "Ana", "Ruiz", null, "+12125550142")],
-      [["ana", "ANA2"]],
-      { ana: { kind: "add" } },
-    ],
-    [
-      "the customer the app made for her, unlinked: added again, never that one",
-      [member("amy", "Amy Lee", "amy@example.com")],
-      [customer("MADE", "Amy", "Lee", "amy@example.com", null, "amy")],
-      [["amy", "MADE"]],
-      { amy: { kind: "add" } },
-    ],
-    [
-      "Square's two of her, one unlinked: the other is linked",
-      [member("nora", "Nora Price", "nora@example.com")],
-      [customer("N1", "Nora", "Price", "nora@example.com"), customer("N2", "Nora", "Price", "nora@example.com")],
-      [["nora", "N1"]],
-      { nora: { kind: "link", customerId: "N2", by: "email" } },
-    ],
-    [
-      "unlinked from Sam only: Pat, a member too, of that name, is still linked to her own customer",
-      [member("sam", "Pat Smith", "pat@example.com"), member("pat", "Pat Smith", "pat@example.com", "+13125550100")],
-      [customer("PAT", "Pat", "Smith", "pat@example.com", "+13125550100")],
-      [["sam", "PAT"]],
-      { sam: { kind: "add" }, pat: { kind: "link", customerId: "PAT", by: "email" } },
-    ],
-    [
-      "unlinked from one, nothing changes for a customer never unlinked",
-      [member("leo", "Leo Grant", "leo@example.com"), member("kai", "Kai Moss", "kai@example.com")],
-      [customer("LEO", "Leo", "Grant", "leo@example.com"), customer("KAI", "Kai", "Moss", "kai@example.com")],
-      [["leo", "LEO"]],
-      { leo: { kind: "add" }, kai: { kind: "link", customerId: "KAI", by: "email" } },
-    ],
-    [
-      "nobody unlinked: the rule as before",
-      [member("leo", "Leo Grant", "leo@example.com")],
-      [customer("LEO", "Leo", "Grant", "leo@example.com")],
-      [],
-      { leo: { kind: "link", customerId: "LEO", by: "email" } },
-    ],
-  ])("%s", (_case, members, customers, pairs, want) => {
-    const plan = squareMembersPlan(members, customers, withUnlinked(members.map((m) => m.entryId), pairs));
-    expect(Object.fromEntries(members.map((m) => [m.entryId, plan.get(m.entryId)]))).toEqual(want);
   });
 });

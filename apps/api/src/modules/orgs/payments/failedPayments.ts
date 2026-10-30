@@ -68,8 +68,6 @@ export async function readFailedPayments(deps: PaymentsDeps, userId: string, gym
     charges.triesOfBills(deps.sql, gymId, page),
   ]);
   const stopped = await charges.stoppedCardsOf(deps.sql, gymId, [...new Set([...cards.values()].map((c) => c.card_id))]);
-  // The people a payment from Square Point of Sale waits for (18d-iii-b-ii-a): their card waits too.
-  const waiting = await charges.squareAppWaitingAmong(deps.sql, gymId, [...new Set(page.map((b) => b.entryId))]);
 
   /** What Try again would do now, by the rules the press itself is decided by. */
   const retryOf = (b: FailedBill): FailedPaymentRetry => {
@@ -90,7 +88,6 @@ export async function readFailedPayments(deps: PaymentsDeps, userId: string, gym
     if (amountMinor <= 0) return { kind: "no", why: "elsewhere" };
     const card = cards.get(b.entryId);
     if (card === undefined) return { kind: "no", why: "no_card" };
-    if (waiting.has(b.entryId)) return { kind: "no", why: "square_app" };
     const retry = staffCardRetry(tries.get(b.billId) ?? [], card.card_id, stopped.has(card.card_id), now);
     if (retry.kind === "wait") return { kind: "wait", from: retry.from.toISOString() };
     if (retry.kind === "no") return { kind: "no", why: retry.why };

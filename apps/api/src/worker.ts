@@ -97,8 +97,8 @@ export const ORGS_GONE_FOR_GOOD_JOB = "orgs.gone_for_good";
 
 const connection = new Redis(redisUrl, { maxRetriesPerRequest: null });
 const sql = postgres(config.DATABASE_URL, { prepare: false, max: 2 });
-// Live updates (ROADMAP Stage 4 item 18): a payment from Square Point of Sale taken in here is told to the
-// pages open on its gym, on the channel the api's servers hear (18d-iii-b-ii-a).
+// Live updates (ROADMAP Stage 4 item 18): what the worker changes (a Terminal payment, a card charged) is told
+// to the pages open on its gym, on the channel the api's servers hear.
 const news = createRedisNews(redisUrl, liveChannel(config.DATABASE_URL), log);
 
 const queue = new Queue(ROLLUPS_QUEUE, { connection });
@@ -725,9 +725,7 @@ if (square === null) {
       const terminalSaves = run.terminalSaves.asked + run.terminalSaves.forgotten;
       const terminalPayments = run.terminalPayments.asked + run.terminalPayments.forgotten;
       const cardCharges = run.cardCharges.asked + run.cardCharges.charged;
-      const sweeps = run.sweeps.payments + run.sweeps.unanswered;
-      const squareMembers = run.members.pages + run.members.looked + run.members.copied + run.members.unanswered;
-      if (run.removed + run.unchanged + run.deferred + run.givenUp + run.forgotten + revokes + cardStops + customerDeletes + terminalSaves + terminalPayments + cardCharges + sweeps + squareMembers + run.renewed + run.renewalsWaiting > 0) {
+      if (run.removed + run.unchanged + run.deferred + run.givenUp + run.forgotten + revokes + cardStops + customerDeletes + terminalSaves + terminalPayments + cardCharges + run.renewed + run.renewalsWaiting > 0) {
         log.info({ ...run, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
       }
     },

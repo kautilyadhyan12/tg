@@ -23,7 +23,7 @@
 // made through the API reads `THIRD_PARTY`.
 import { randomBytes } from "node:crypto";
 import type { SquareCatalogTax, SquareCustomer, SquareCustomerFound, SquareLocation, SquareOrder, SquarePayment, SquareTerminalCheckout } from "@app/shared";
-import type { CardPaymentResult, NewCardPayment, NewSquareCustomer, NewTerminalCheckout, SquareApi, SquareCustomerChange, SquareResult } from "../src/modules/orgs/payments/square.js";
+import type { CardPaymentResult, NewCardPayment, NewSquareCustomer, NewTerminalCheckout, SquareApi, SquareResult } from "../src/modules/orgs/payments/square.js";
 
 export interface Account {
   merchantId: string;
@@ -88,8 +88,6 @@ export function fakeSquare() {
   const gone = new Set<string>();
   /** Every RetrieveCustomer asked, by the id asked about. */
   const customerReads: string[] = [];
-  /** Every UpdateCustomer asked, by the id asked about, with what was sent. */
-  const customersChanged: (SquareCustomerChange & { customerId: string; accountId: string })[] = [];
   /** Every DeleteCustomer asked, by the id asked about, with the version sent (18d-iii-b-ii-b-ii-b-ii). */
   const customersDeleteAsked: { customerId: string; version: number | null; accountId: string }[] = [];
   // `down`: no answer at all. `refuseNew`: a new checkout is refused (the Terminal is not signed in).
@@ -288,22 +286,6 @@ export function fakeSquare() {
       if (state.loseCustomers) return Promise.resolve(unavailable);
       return Promise.resolve({ kind: "ok", value: { id } });
     },
-    listCustomers(token, cursor) {
-      customerListings.push(cursor);
-      if (state.down) return Promise.resolve(unavailable);
-      const a = tokenAccount(token);
-      if (a === undefined) return Promise.resolve(unauthorized);
-      if (state.customersRefused !== null) return Promise.resolve({ kind: "refused", status: state.customersRefused, code: "FORBIDDEN" });
-      if (state.cursorRefused && cursor !== null) return Promise.resolve({ kind: "refused", status: 400, code: "INVALID_CURSOR" });
-      if (state.customerPagesUntilDown !== null) {
-        if (state.customerPagesUntilDown <= 0) return Promise.resolve(unavailable);
-        state.customerPagesUntilDown -= 1;
-      }
-      const all = [...customers.values()].filter((c) => c.accountId === a.merchantId);
-      const from = cursor === null ? 0 : Number(cursor.slice(1));
-      const page = all.slice(from, from + 100).map(found);
-      return Promise.resolve({ kind: "ok", value: { customers: page, unread: 0, cursor: from + 100 < all.length ? `c${String(from + 100)}` : null } });
-    },
     searchCustomers(token, by) {
       if (state.down) return Promise.resolve(unavailable);
       const a = tokenAccount(token);
@@ -374,51 +356,6 @@ export function fakeSquare() {
       if (c === undefined) return Promise.resolve(gone.has(id) ? notFound : unavailable);
       if (c.accountId !== a.merchantId) return Promise.resolve(notFound);
       const out: SquareCustomer & { accountId?: string } = { ...c, version: c.version ?? 0 };
-      delete out.accountId;
-      return Promise.resolve({ kind: "ok", value: out });
-    },
-    updateCustomer(token, id, change) {
-      const a = tokenAccount(token);
-      if (a === undefined) return Promise.resolve(unauthorized);
-      customersChanged.push({ ...change, customerId: id, accountId: a.merchantId });
-      if (state.updateDown || state.down || state.updateFails.has(id)) return Promise.resolve(unavailable);
-      const refusedWith = state.updateStatus.get(id);
-      if (refusedWith !== undefined) return Promise.resolve({ kind: "refused", status: refusedWith, code: "FORBIDDEN" });
-      const hook = state.beforeUpdate;
-      state.beforeUpdate = null;
-      hook?.();
-      // An old id of a merged customer changes the merged one, as Square's test area did (2026-10-26).
-      const at = mergedInto.get(id) ?? id;
-      const c = customers.get(at);
-      if (c === undefined) return Promise.resolve(notFound);
-      if (c.accountId !== a.merchantId) return Promise.resolve(notFound);
-      if (change.givenName === undefined && change.familyName === undefined && change.email === undefined && change.phone === undefined) {
-        return Promise.resolve({ kind: "refused", status: 400, code: "BAD_REQUEST" });
-      }
-      const version = c.version ?? 0;
-      if (state.conflictNext > 0) {
-        state.conflictNext -= 1;
-        customers.set(at, { ...c, version: version + 1 });
-        return Promise.resolve({ kind: "refused", status: 409, code: "CONFLICT" });
-      }
-      if (change.version !== null && change.version !== version) return Promise.resolve({ kind: "refused", status: 409, code: "CONFLICT" });
-      if (change.phone != null && (!/^\+[1-9][0-9]{7,14}$/.test(change.phone) || state.updateRefused.has(change.phone))) {
-        return Promise.resolve({ kind: "refused", status: 400, code: "INVALID_PHONE_NUMBER" });
-      }
-      if (change.email != null && (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(change.email) || change.email.length > 254 || state.updateRefused.has(change.email.toLowerCase()))) {
-        return Promise.resolve({ kind: "refused", status: 400, code: "INVALID_EMAIL_ADDRESS" });
-      }
-      const next: SquareCustomer & { accountId: string } = {
-        ...c,
-        ...(change.givenName === undefined ? {} : { given_name: change.givenName }),
-        ...(change.familyName === undefined ? {} : { family_name: change.familyName }),
-        ...(change.email === undefined ? {} : { email_address: change.email }),
-        ...(change.phone === undefined ? {} : { phone_number: change.phone }),
-        version: version + 1,
-      };
-      if (!next.given_name && !next.family_name && !next.email_address && !next.phone_number) return Promise.resolve({ kind: "refused", status: 400, code: "BAD_REQUEST" });
-      customers.set(at, next);
-      const out: SquareCustomer & { accountId?: string } = { ...next };
       delete out.accountId;
       return Promise.resolve({ kind: "ok", value: out });
     },
@@ -591,32 +528,6 @@ export function fakeSquare() {
         return out;
       });
       return Promise.resolve({ kind: "ok", value: { payments: page, unread: 0, cursor: from + 100 < mine.length ? String(from + 100) : null } });
-    },
-    listTaxes(token, cursor) {
-      if (state.down || state.taxesDown) return Promise.resolve(unavailable);
-      const a = tokenAccount(token);
-      if (a === undefined) return Promise.resolve(unauthorized);
-      const all = taxes.get(a.merchantId) ?? [];
-      const from = cursor === null ? 0 : Number(cursor);
-      return Promise.resolve({
-        kind: "ok",
-        value: { taxes: all.slice(from, from + 100), unread: state.taxUnreadable ? 1 : 0, cursor: from + 100 < all.length ? String(from + 100) : null },
-      });
-    },
-    retrieveOrder(token, id) {
-      const before = state.beforeOrder;
-      if (before !== null) {
-        state.beforeOrder = null;
-        return before().then(() => api.retrieveOrder(token, id));
-      }
-      if (state.down || state.ordersUnanswered.has(id)) return Promise.resolve(unavailable);
-      const a = tokenAccount(token);
-      if (a === undefined) return Promise.resolve(unauthorized);
-      if (state.ordersRefused) return Promise.resolve({ kind: "refused", status: 403, code: "INSUFFICIENT_SCOPES" });
-      const o = orders.get(id);
-      if (o?.accountId !== a.merchantId) return Promise.resolve(notFound);
-      const order: SquareOrder = { id: o.id, location_id: o.location_id ?? null, line_items: o.line_items ?? [], taxes: o.taxes ?? [], tenders: o.tenders ?? [] };
-      return Promise.resolve({ kind: "ok", value: order });
     },
   };
   const allow = (account: Account): string => {
@@ -801,7 +712,6 @@ export function fakeSquare() {
     customersMade,
     customerListings,
     customerReads,
-    customersChanged,
     customersDeleteAsked,
     refund,
     listed,

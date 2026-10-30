@@ -1200,28 +1200,10 @@ d("member list: keeping it by hand (real Postgres)", () => {
       // walk-in's when the record is deleted for good (`register.routes.test.ts`).
       "gym_sales.entry_id",
       "gym_sales.gym_id",
-      // A payment taken in Square's own app (0164; 18d-iii-b-i): not moved by the join. A record joined
-      // or deleted for good lets go of it (`entry_id` alone to null); the payment it is recorded as
-      // goes with its membership (`squareAppPayments.routes.test.ts`).
-      "gym_square_app_payments.entry_id",
-      "gym_square_app_payments.gym_id",
       // The person as a customer in the gym's Square account (0144; 18d-ii): moved by the join
       // where the kept record has none in that account, and gone with a record deleted for good.
       "gym_square_customers.entry_id",
       "gym_square_customers.gym_id",
-      // What Members in Square decided for a record not yet in Square (0166; 18d-iii-b-ii-b-i): not moved
-      // by the join, and gone with a record joined away or deleted for good; the kept record is looked at
-      // again when the list moves on (`squareMembers.routes.test.ts`).
-      "gym_square_member_plan.entry_id",
-      "gym_square_member_plan.gym_id",
-      // The old customer a record was at a merge in Square (0167; 18d-iii-b-ii-b-ii-a): moved by the join to the
-      // kept record, and gone with a record deleted for good (`squareMerges.routes.test.ts`).
-      "gym_square_old_customers.entry_id",
-      "gym_square_old_customers.gym_id",
-      // Staff unlinked a Square customer from the record on its page (0174; 18d-iii-b-ii-c-ii): copied by the join to the kept
-      // record, so nothing links that customer to the person again, and gone with a record deleted for good (`squareUnlink.routes.test.ts`).
-      "gym_square_unlinked_customers.entry_id",
-      "gym_square_unlinked_customers.gym_id",
       // A card being saved on the gym's Square Terminal (0148; 18d-ii-b-ii): not moved by the join.
       // A record joined or deleted for good lets go of it (`entry_id` alone to null), and whatever
       // the Terminal then saves is stopped at Square (`terminalCards.routes.test.ts`).

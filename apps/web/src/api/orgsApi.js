@@ -86,9 +86,6 @@ import {
   myInvitationsResponseSchema,
   gymWaiverResponseSchema,
   gymPaymentsResponseSchema,
-  squareAppCheckResponseSchema,
-  squareMembersNamesResponseSchema,
-  squareMembersResponseSchema,
   squareConnectResponseSchema,
   squareFinishResponseSchema,
   squarePairResponseSchema,
@@ -119,9 +116,6 @@ import {
   memberGymTagsResponseSchema,
   memberPayersResponseSchema,
   memberCardResponseSchema,
-  squareLinksResponseSchema,
-  squareUnlinkBoxSchema,
-  squareUnlinkResponseSchema,
   terminalSaveResponseSchema,
   terminalPaymentResponseSchema,
   cardChargeResponseSchema,
@@ -690,22 +684,6 @@ export const orgService = {
   // Payments (18d-i): the gym's own Square account. Connect returns Square's page to open;
   // the return page hands Square's answer back as it came.
   getGymPayments: (gymId) => readThrough(gymPaymentsResponseSchema, 'your payments', authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/payments`)),
-  // Whether Square adds tax to amounts staff type in Square Point of Sale (18d-iii-b-i).
-  getSquareAppCheck: (gymId) =>
-    readThrough(squareAppCheckResponseSchema, 'your Square tax settings', authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/payments/square/app-check`)),
-  // Members in Square (18d-iii-b-ii-b-i): the box; the owner's check and Add; a group's names, a page at a time.
-  getSquareMembers: (gymId) =>
-    readThrough(squareMembersResponseSchema, 'your members in Square', authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/payments/square/members`)),
-  checkSquareMembers: (gymId) =>
-    readThrough(squareMembersResponseSchema, 'your members in Square', authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/payments/square/members/check`)),
-  addSquareMembers: (gymId, runId) =>
-    readThrough(squareMembersResponseSchema, 'your members in Square', authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/payments/square/members/add`, { runId })),
-  getSquareMembersNames: (gymId, group, from = 0) =>
-    readThrough(
-      squareMembersNamesResponseSchema,
-      'your members in Square',
-      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/payments/square/members/names`, { params: { group, from } }),
-    ),
   connectSquare: (gymId) =>
     readThrough(squareConnectResponseSchema, 'Square', authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/payments/square/connect`)),
   finishSquare: (answer) => readThrough(squareFinishResponseSchema, 'Square', authApi.post('/v1/payments/square/finish', answer)),
@@ -1855,14 +1833,6 @@ export const orgService = {
       'their card on file',
       authApi.delete(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/card`),
     ),
-  /** The customers in the gym's Square customer list that Match linked to a person, and Unlink (ROADMAP 18d-iii-b-ii-c-ii),
-   *  for staff who match payments. The box is read first; Unlink carries the card it named. */
-  getSquareLinks: (gymId, entryId) =>
-    readThrough(squareLinksResponseSchema, 'their Square customer list', authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/square-links`)),
-  getUnlinkBox: (gymId, entryId, customerId) =>
-    readThrough(squareUnlinkBoxSchema, 'what Unlink does', authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/square-links/${encodeURIComponent(customerId)}/unlink`)),
-  unlinkSquareCustomer: (gymId, entryId, customerId, body) =>
-    readThrough(squareUnlinkResponseSchema, 'Unlink', authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/square-links/${encodeURIComponent(customerId)}/unlink`, body)),
   /** Save card on Terminal (ROADMAP 18d-ii-b-ii): the agreement goes to the gym's Square Terminal,
    *  then the card the person gives there. Asked about every few seconds until it ends. */
   startTerminalSave: (gymId, entryId, body) =>

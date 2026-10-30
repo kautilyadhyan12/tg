@@ -333,8 +333,6 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
     const body = parseOr400(voidMemberPaymentRequestSchema, req.body, req, reply);
     if (body === null) return;
     const list = await held.voidMemberPayment(heldDeps, requireUserId(req), params.gymId, params.entryId, params.membershipId, params.paymentId, body);
-    // Not this bill puts a payment from Square Point of Sale back in Payments to match (18d-iii-b-ii-a).
-    if (body.reason === "not_this_bill") deps.news.tell(params.gymId, { what: "paymentsToMatch" });
     return reply.status(200).send(list);
   });
 
@@ -401,7 +399,6 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
     const body = parseOr400(voidMemberPaymentRequestSchema, req.body, req, reply);
     if (body === null) return;
     const list = await held.voidMemberFeePayment(heldDeps, requireUserId(req), params.gymId, params.entryId, params.membershipId, params.billId, params.paymentId, body);
-    if (body.reason === "not_this_bill") deps.news.tell(params.gymId, { what: "paymentsToMatch" });
     return reply.status(200).send(list);
   });
 

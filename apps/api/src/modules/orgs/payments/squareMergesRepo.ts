@@ -1,6 +1,5 @@
-// The database half of following Square's merges (ROADMAP 18d-iii-b-ii-b-ii-a; `squareMerges.ts`). The old id
-// and the customer it is now are a Square account's (`gym_square_customer_merges`); everything about a gym's
-// records names the gym, under its lock, the lock every card and link write takes.
+// The database half of following Square's merges (ROADMAP 18d-iii-b-ii-b-ii-a; `squareMerges.ts`). Everything about
+// a gym's records names the gym, under its lock, the lock every card and link write takes.
 import type { Sql, TransactionSql } from "postgres";
 import type { SquareEnvironment } from "./square.js";
 
@@ -11,7 +10,7 @@ interface At {
   accountId: string;
 }
 
-/** The gyms that hold this customer anywhere: a record's link or card, a check's plan or what it read. */
+/** The gyms that hold this customer: a record's link or a card. */
 export async function holdersOf(sql: SqlOrTx, a: At & { customerId: string }): Promise<string[]> {
   const rows = await sql<{ gym_id: string }[]>`
     SELECT gym_id FROM gym_square_customers
@@ -19,43 +18,8 @@ export async function holdersOf(sql: SqlOrTx, a: At & { customerId: string }): P
     UNION
     SELECT gym_id FROM gym_member_cards
     WHERE environment = ${a.environment} AND account_id = ${a.accountId} AND customer_id = ${a.customerId}
-    UNION
-    SELECT p.gym_id FROM gym_square_member_plan p
-    JOIN gym_square_member_runs r ON r.gym_id = p.gym_id AND r.environment = p.environment
-    WHERE p.environment = ${a.environment} AND r.account_id = ${a.accountId} AND p.customer_id = ${a.customerId}
-    UNION
-    SELECT c.gym_id FROM gym_square_member_candidates c
-    JOIN gym_square_member_runs r ON r.gym_id = c.gym_id AND r.environment = c.environment AND r.run_id = c.run_id
-    WHERE c.environment = ${a.environment} AND r.account_id = ${a.accountId} AND c.customer_id = ${a.customerId}
     ORDER BY gym_id`;
   return rows.map((r) => r.gym_id);
-}
-
-/** The old id is now `toId`; an older id that was `fromId` is now `toId` too, so one step reaches the newest. */
-export async function rememberMerge(sql: SqlOrTx, m: At & { fromId: string; toId: string; at: Date }): Promise<void> {
-  await sql`
-    INSERT INTO gym_square_customer_merges (environment, account_id, from_customer_id, to_customer_id, merged_at)
-    VALUES (${m.environment}, ${m.accountId}, ${m.fromId}, ${m.toId}, ${m.at})
-    ON CONFLICT (environment, account_id, from_customer_id) DO UPDATE SET to_customer_id = EXCLUDED.to_customer_id, merged_at = EXCLUDED.merged_at`;
-  await sql`
-    UPDATE gym_square_customer_merges SET to_customer_id = ${m.toId}
-    WHERE environment = ${m.environment} AND account_id = ${m.accountId} AND to_customer_id = ${m.fromId} AND from_customer_id <> ${m.toId}`;
-}
-
-/** The records of this gym the old customer was (its link, or a card saved on it that says whose it is), kept
- *  with them before anything moves: a payment under the old id is theirs, whoever keeps the merged customer
- *  (round one, Critical 1); where it was two records', it stays both's, and waits as several people's. */
-export async function rememberOldCustomer(tx: TransactionSql, m: At & { gymId: string; fromId: string; at: Date }): Promise<void> {
-  await tx`
-    INSERT INTO gym_square_old_customers (gym_id, entry_id, environment, account_id, customer_id, merged_at)
-    SELECT gym_id, entry_id, ${m.environment}, ${m.accountId}, ${m.fromId}, ${m.at} FROM (
-      SELECT gym_id, entry_id FROM gym_square_customers
-      WHERE gym_id = ${m.gymId} AND environment = ${m.environment} AND account_id = ${m.accountId} AND customer_id = ${m.fromId}
-      UNION
-      SELECT gym_id, entry_id FROM gym_member_cards
-      WHERE gym_id = ${m.gymId} AND environment = ${m.environment} AND account_id = ${m.accountId} AND customer_id = ${m.fromId}
-        AND merged_away_at IS NULL) held
-    ON CONFLICT DO NOTHING`;
 }
 
 /** Square keeps a card on the customer it was merged into: the gym's cards saved on the old customer are

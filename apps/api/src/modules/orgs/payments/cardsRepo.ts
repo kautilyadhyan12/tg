@@ -107,22 +107,10 @@ export async function claimCustomer(sql: SqlOrTx, c: CustomerKey, key: string): 
   throw new Error("a Square customer row was neither made nor being made");
 }
 
-/** Square made the customer asked for with `key`. False when another save wrote it first. `sent`: the name, email and
- *  phone the customer was made with, which Square agrees with from then on (18d-iii-b-ii-b-ii-b-i); left out where
- *  they are not known, the next look takes them from the record. */
-export async function finishCustomer(
-  sql: SqlOrTx,
-  c: CustomerKey,
-  key: string,
-  customerId: string,
-  sent: { fullName: string; email: string | null; phone: string | null; at: Date } | null = null,
-): Promise<boolean> {
+/** Square made the customer asked for with `key`. False when another save wrote it first. */
+export async function finishCustomer(sql: SqlOrTx, c: CustomerKey, key: string, customerId: string): Promise<boolean> {
   const rows = await sql<{ entry_id: string }[]>`
-    UPDATE gym_square_customers SET customer_id = ${customerId}, making_key = NULL,
-      copied_name = CASE WHEN ${sent !== null}::boolean THEN md5(${sent?.fullName ?? null}::text) END,
-      copied_email = CASE WHEN ${sent !== null}::boolean THEN md5(NULLIF(lower(btrim(${sent?.email ?? null}::text)), '')) END,
-      copied_phone = CASE WHEN ${sent !== null}::boolean THEN md5(NULLIF(${sent?.phone ?? null}::text, '')) END,
-      copied_at = CASE WHEN ${sent !== null}::boolean THEN ${sent?.at ?? null}::timestamptz END
+    UPDATE gym_square_customers SET customer_id = ${customerId}, making_key = NULL
     WHERE gym_id = ${c.gymId} AND entry_id = ${c.entryId} AND environment = ${c.environment}
       AND account_id = ${c.accountId} AND making_key = ${key}
     RETURNING entry_id`;
@@ -349,30 +337,6 @@ export async function letGoOfCards(tx: TransactionSql, gymId: string, entryId: s
  *  lock, as every card write is. */
 export async function moveCards(tx: TransactionSql, gymId: string, goneId: string, keepId: string, at: Date): Promise<void> {
   await tx`UPDATE gym_card_agreements SET entry_id = ${keepId} WHERE gym_id = ${gymId} AND entry_id = ${goneId}`;
-  // The old customers it was at a merge in Square, and the customers staff matched to it, are the kept record's
-  // (18d-iii-b-ii-b-ii-a, 18d-iii-b-ii-c); the record not kept lets go of its own with itself.
-  await tx`
-    INSERT INTO gym_square_old_customers (gym_id, entry_id, environment, account_id, customer_id, merged_at, matched_at)
-    SELECT gym_id, ${keepId}, environment, account_id, customer_id, merged_at, matched_at FROM gym_square_old_customers
-    WHERE gym_id = ${gymId} AND entry_id = ${goneId}
-    ON CONFLICT DO NOTHING`;
-  // What staff said when they unlinked a customer from the record not kept (18d-iii-b-ii-c-ii) holds for the one kept.
-  await tx`
-    INSERT INTO gym_square_unlinked_customers (gym_id, entry_id, environment, account_id, customer_id, unlinked_at, unlinked_by, request_key, moved, added, card_brand, card_last4)
-    SELECT gym_id, ${keepId}, environment, account_id, customer_id, unlinked_at, unlinked_by, request_key, moved, added, card_brand, card_last4
-    FROM gym_square_unlinked_customers WHERE gym_id = ${gymId} AND entry_id = ${goneId}
-    ON CONFLICT DO NOTHING`;
-  // A customer Match linked to the record not kept, where the kept record has its own in that account: the kept record's second
-  // customer, still offered for Unlink, so a wrong link moved by the join can be undone, with a card saved on it
-  // (18d-iii-b-ii-c-ii, round one, High 1).
-  await tx`
-    INSERT INTO gym_square_old_customers (gym_id, entry_id, environment, account_id, customer_id, matched_at)
-    SELECT g.gym_id, ${keepId}, g.environment, g.account_id, g.customer_id, g.matched_at FROM gym_square_customers g
-    WHERE g.gym_id = ${gymId} AND g.entry_id = ${goneId} AND g.matched_at IS NOT NULL AND g.customer_id IS NOT NULL
-      AND EXISTS (
-        SELECT 1 FROM gym_square_customers k
-        WHERE k.gym_id = g.gym_id AND k.entry_id = ${keepId} AND k.environment = g.environment AND k.account_id = g.account_id)
-    ON CONFLICT DO NOTHING`;
   await tx`
     UPDATE gym_square_customers g SET entry_id = ${keepId}
     WHERE g.gym_id = ${gymId} AND g.entry_id = ${goneId}

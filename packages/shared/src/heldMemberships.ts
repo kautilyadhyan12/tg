@@ -43,7 +43,6 @@ import { MEMBERSHIP_PAYMENTS, gymDiscountSchema } from "./discounts.js";
 import { friendGiftSchema } from "./friendGift.js";
 import { GIFT_DAYS_MAX, memberGiftSchema } from "./memberGift.js";
 import { memberBillingSchema, memberPaymentByHandSchema } from "./memberBills.js";
-import { matchBillSchema } from "./matchBill.js";
 
 export const HELD_MEMBERSHIP_STATUSES = ["active", "frozen", "ended", "cancelled"] as const;
 export const heldMembershipStatusSchema = z.enum(HELD_MEMBERSHIP_STATUSES);
@@ -900,33 +899,6 @@ export const listedMembershipSchema = z
   .strict();
 export type ListedMembership = z.infer<typeof listedMembershipSchema>;
 
-/** A payment from Square Point of Sale waiting in Payments to match (18d-iii-b-ii-a), on the person's
- *  page: theirs, or of whoever pays for them (`byName`). */
-export const squareAppWaitingSchema = z
-  .object({
-    id: z.string().uuid(),
-    amountMinor: z.number().int().min(0).max(999_999_999),
-    currency: z.string().regex(/^[A-Z]{3}$/),
-    /** The gym's own day it was taken. */
-    takenOn: daySchema,
-    /** Taken from whoever pays for them, by name; null for their own. */
-    byName: z.string().nullable(),
-    /** While it waits, the card on file is not charged for them. */
-    holdsCard: z.boolean(),
-    /** When Square took it, and on which of the gym's devices, as Payments to match says it. */
-    takenAt: z.string().datetime(),
-    deviceName: z.string().min(1).max(100).nullable(),
-    /** The part staff typed, where Square added tax on top and showed it. */
-    enteredMinor: z.number().int().min(1).max(999_999_999).nullable(),
-    /** The bill before the one ticked was paid less than two days before: they may have paid twice. */
-    maybeTwice: z.boolean(),
-    /** The bill it fits, ticked for one press of Match here (Kd, 2026-10-25); null where staff choose in
-     *  Payments to match. */
-    bill: matchBillSchema.nullable(),
-  })
-  .strict();
-export type SquareAppWaiting = z.infer<typeof squareAppWaitingSchema>;
-
 /** A record's memberships. `today` is the gym's own day, the one every date here was
  *  worked out on; `past` is true for a past member, whose memberships are not in use.
  *  `memberships` holds every one in use and the newest of the ones that are over;
@@ -964,9 +936,6 @@ export const heldMembershipsResponseSchema = z
     /** The business asks for any of its agreements to be signed (18u-i); each membership says
      *  whether its own is asked (`agreementAsked`). */
     agreementInUse: z.boolean().default(false),
-    /** Payments from Square Point of Sale waiting to be matched that hold this person's card on file
-     *  (18d-iii-b-ii-a), for a reader who takes payments; newest first. */
-    squareAppWaiting: z.array(squareAppWaitingSchema).max(20).default([]),
   })
   .strict();
 export type HeldMembershipsResponse = z.infer<typeof heldMembershipsResponseSchema>;

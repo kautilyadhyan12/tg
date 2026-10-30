@@ -83,8 +83,6 @@ export function nextStep(row, timezone, country) {
         return 'Square is not connected. Take payment another way.';
       case 'currency':
         return 'Priced in another currency from your Square account. Take payment another way.';
-      case 'square_app':
-        return 'A payment of theirs from Square Point of Sale is waiting to be matched. Match it first, so they aren’t charged twice.';
       default:
         return 'An earlier payment for this membership is due first. Take payment opens it.';
     }

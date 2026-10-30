@@ -15,14 +15,11 @@
 // (measured 2026-10-21). Save card on Terminal (18d-ii-b-ii) sends two Terminal actions with
 // those: CONFIRMATION, the gym's agreement, then SAVE_CARD. Take payment on Terminal (18d-vi-a)
 // sends a Terminal checkout with PAYMENTS_WRITE_IN_PERSON and reads its payment with
-// PAYMENTS_READ ("Terminal API", "Payments API", read 2026-10-22). A payment taken in Square's own
-// app (18d-iii-b-i) is read with PAYMENTS_READ, listed with it for the hourly look, and what was sold
-// is read from its order with ORDERS_READ ("Retrieve order", read 2026-10-24); the business's own taxes
-// are read from its item library with ITEMS_READ ("List catalog", read 2026-10-25), never changed. The
-// gym's members are put into its customer list (18d-iii-b-ii-b-i): its customers are listed and searched
-// with CUSTOMERS_READ ("List customers", "Search customers", read 2026-10-26) and added with
-// CUSTOMERS_WRITE; whether Square's own subscriptions already charge them is read with SUBSCRIPTIONS_READ
-// ("Search subscriptions", read 2026-10-26), never changed.
+// PAYMENTS_READ ("Terminal API", "Payments API", read 2026-10-22). Whether Square's own subscriptions
+// charge a customer is read with SUBSCRIPTIONS_READ ("Search subscriptions", read 2026-10-26), never
+// changed: Delete permanently keeps such a customer. Payments taken in Square's own app (18d-iii-b-i to
+// 18d-iii-b-ii-c) were taken out with Square Point of Sale (18d-iii-b-v, Kd, 2026-10-30), and with them
+// ORDERS_READ and ITEMS_READ.
 import {
   squareCardAnswerSchema,
   squareCustomerAnswerSchema,
@@ -31,10 +28,7 @@ import {
   squareDeviceCodeAnswerSchema,
   squareErrorSchema,
   squareLocationsSchema,
-  squareCatalogPageSchema,
-  squareCatalogTaxSchema,
   squareMerchantSchema,
-  squareOrderAnswerSchema,
   squarePaymentAnswerSchema,
   squarePaymentSchema,
   squarePaymentsPageSchema,
@@ -48,13 +42,11 @@ import {
   squareTokenSchema,
   squareTokenStatusSchema,
   type SquareCard,
-  type SquareCatalogTax,
   type SquareCustomer,
   type SquareCustomerFound,
   type SquareDeviceCode,
   type SquareLocation,
   type SquareMerchant,
-  type SquareOrder,
   type SquarePayment,
   type SquareTerminalAction,
   type SquareTerminalCheckout,
@@ -93,10 +85,6 @@ export interface SquareApi {
   /** 404 is a customer the gym deleted inside Square. What Square has of them (their name, email and
    *  phone) is shown beside a payment from Square Point of Sale linked to nobody here (18d-iii-b-ii-a). */
   retrieveCustomer(accessToken: string, customerId: string): Promise<SquareResult<SquareCustomer>>;
-  /** Change what Square holds of a customer (18d-iii-b-ii-b-ii-b-i): only the parts given, a null clearing one. Square
-   *  refuses (409 CONFLICT) a `version` that is not the customer's current one, which is how a change made in Square
-   *  since the customer was read is never written over. */
-  updateCustomer(accessToken: string, customerId: string, change: SquareCustomerChange): Promise<SquareResult<SquareCustomer>>;
   /** Delete a customer for good (18d-iii-b-ii-b-ii-b-ii). Square refuses (409 CONFLICT) a `version` that is not the customer's
    *  current one, answers 404 for one already deleted, and answers 200 for the old id of a merged customer and leaves the
    *  merged customer alone (measured in its test area, 2026-10-28). A card saved on the customer stays on, and can still be
@@ -132,14 +120,6 @@ export interface SquareApi {
   /** One page of the location's payments Square made from `beginTime` to `endTime`, oldest first
    *  (18d-iii-b-i). `unread`: how many on the page could not be read; each is skipped. */
   listPayments(accessToken: string, q: PaymentsQuery): Promise<SquareResult<{ payments: SquarePayment[]; unread: number; cursor: string | null }>>;
-  /** What was sold with a payment (18d-iii-b-i). */
-  retrieveOrder(accessToken: string, orderId: string): Promise<SquareResult<SquareOrder>>;
-  /** One page of the taxes in the business's item library (18d-iii-b-i). `unread`: how many could not
-   *  be read; each is skipped. */
-  listTaxes(accessToken: string, cursor: string | null): Promise<SquareResult<{ taxes: SquareCatalogTax[]; unread: number; cursor: string | null }>>;
-  /** One page of the business's customers, 100 at most, in Square's own order (18d-iii-b-ii-b-i). `unread`:
-   *  how many on the page could not be read; each is skipped. */
-  listCustomers(accessToken: string, cursor: string | null): Promise<SquareResult<{ customers: SquareCustomerFound[]; unread: number; cursor: string | null }>>;
   /** The business's customers with exactly this email, this phone (E.164), or this reference id (the
    *  record's, on a customer the app made), up to 100: Square folds both sides of a phone to its digits
    *  ("Search customers", read 2026-10-26). */
@@ -212,15 +192,6 @@ export interface NewSquareCustomer {
   referenceId: string;
 }
 
-/** What UpdateCustomer is asked to change: a part left out stays as it is; null clears it. `version`: the customer's
- *  current version, read just before. */
-export interface SquareCustomerChange {
-  version: number | null;
-  givenName?: string | null;
-  familyName?: string | null;
-  email?: string | null;
-  phone?: string | null;
-}
 
 /** Each customer on a page read on its own, so one that cannot be read never hides the rest. */
 function readCustomers(raw: readonly unknown[] | null | undefined): { customers: SquareCustomerFound[]; unread: number } {
@@ -264,8 +235,6 @@ export const SQUARE_SCOPES = [
   "PAYMENTS_WRITE",
   "PAYMENTS_WRITE_IN_PERSON",
   "DEVICE_CREDENTIAL_MANAGEMENT",
-  "ORDERS_READ",
-  "ITEMS_READ",
   "SUBSCRIPTIONS_READ",
 ] as const;
 export const SQUARE_VERSION = "2026-09-16";
@@ -400,13 +369,6 @@ export function createSquareApi(opts: {
       // Only the new customer's id is read back: what the gym sent is already the record's.
       return result.kind === "ok" ? { kind: "ok", value: { id: result.value.customer.id } } : result;
     },
-    async listCustomers(accessToken, cursor) {
-      const query = new URLSearchParams({ limit: "100", ...(cursor === null ? {} : { cursor }) });
-      const result = await call("GET", `/v2/customers?${query.toString()}`, squareCustomersPageSchema, bearer(accessToken));
-      if (result.kind !== "ok") return result;
-      const { customers, unread } = readCustomers(result.value.customers);
-      return { kind: "ok", value: { customers, unread, cursor: result.value.cursor ?? null } };
-    },
     async searchCustomers(accessToken, by) {
       const filter =
         "email" in by ? { email_address: { exact: by.email } } : "phone" in by ? { phone_number: { exact: by.phone } } : { reference_id: { exact: by.referenceId } };
@@ -448,21 +410,6 @@ export function createSquareApi(opts: {
     async retrieveCustomer(accessToken, customerId) {
       if (!/^[A-Za-z0-9_-]{1,64}$/.test(customerId)) throw new Error("not a Square customer id");
       const result = await call("GET", `/v2/customers/${customerId}`, squareCustomerAnswerSchema, bearer(accessToken));
-      return result.kind === "ok" ? { kind: "ok", value: result.value.customer } : result;
-    },
-    async updateCustomer(accessToken, customerId, c) {
-      if (!/^[A-Za-z0-9_-]{1,64}$/.test(customerId)) throw new Error("not a Square customer id");
-      const body = {
-        ...(c.version === null ? {} : { version: c.version }),
-        ...(c.givenName === undefined ? {} : { given_name: c.givenName }),
-        ...(c.familyName === undefined ? {} : { family_name: c.familyName }),
-        ...(c.email === undefined ? {} : { email_address: c.email }),
-        ...(c.phone === undefined ? {} : { phone_number: c.phone }),
-      };
-      // "Clear a field: null, with the header X-Clear-Null" (Customers API, read 2026-10-28); a null cleared it in
-      // Square's test area without the header too (2026-10-28).
-      const clears = Object.values(body).includes(null);
-      const result = await call("PUT", `/v2/customers/${customerId}`, squareCustomerAnswerSchema, bearer(accessToken), body, clears ? { "X-Clear-Null": "true" } : {});
       return result.kind === "ok" ? { kind: "ok", value: result.value.customer } : result;
     },
     async deleteCustomer(accessToken, customerId, version) {
@@ -554,24 +501,6 @@ export function createSquareApi(opts: {
         else unread += 1;
       }
       return { kind: "ok", value: { payments, unread, cursor: result.value.cursor ?? null } };
-    },
-    async listTaxes(accessToken, cursor) {
-      const query = new URLSearchParams({ types: "TAX", ...(cursor === null ? {} : { cursor }) });
-      const result = await call("GET", `/v2/catalog/list?${query.toString()}`, squareCatalogPageSchema, bearer(accessToken));
-      if (result.kind !== "ok") return result;
-      const taxes: SquareCatalogTax[] = [];
-      let unread = 0;
-      for (const raw of result.value.objects ?? []) {
-        const one = squareCatalogTaxSchema.safeParse(raw);
-        if (one.success) taxes.push(one.data);
-        else unread += 1;
-      }
-      return { kind: "ok", value: { taxes, unread, cursor: result.value.cursor ?? null } };
-    },
-    async retrieveOrder(accessToken, orderId) {
-      if (!/^[A-Za-z0-9_-]{1,192}$/.test(orderId)) throw new Error("not a Square order id");
-      const result = await call("GET", `/v2/orders/${orderId}`, squareOrderAnswerSchema, bearer(accessToken));
-      return result.kind === "ok" ? { kind: "ok", value: result.value.order } : result;
     },
     async createCardPayment(accessToken, p) {
       const sent = await send("POST", "/v2/payments", bearer(accessToken), {

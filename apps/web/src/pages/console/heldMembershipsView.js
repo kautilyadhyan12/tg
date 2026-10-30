@@ -24,7 +24,6 @@ import {
 import { dayHeading } from './classesView';
 import { clockLabel } from './hoursView';
 import { dayWords } from './memberListView';
-import { SQUARE_APP_METHOD } from './squareAppChoice';
 
 const TONES = { upcoming: 'plain', active: 'green', frozen: 'orange', ended: 'plain', cancelled: 'plain' };
 
@@ -392,8 +391,7 @@ export const METHOD_NEEDED = 'Choose a payment method.';
 /** What the server is sent for a choice. `requestKey` is made once a form. A paid one
  *  says how it was paid: the server records the payment with the membership. */
 export function giveBody(requestKey, type, value, discount = null, summary = null, memberGift = null, joiningFeeMinor = 0) {
-  // Taken in Square Point of Sale: nothing is recorded here, so the payment is never on the bill twice (18d-iii-b-ii-a).
-  const paid = type.priceMinor === 0 || value.method === SQUARE_APP_METHOD ? false : value.paid;
+  const paid = type.priceMinor === 0 ? false : value.paid;
   const body = { requestKey, typeId: type.id, startsOn: value.startsOn, paid, ...(paid ? { method: value.method } : {}) };
   // The screen says the price, the joining fee it charges (18t) and what the first bill
   // comes to, tax in (18b-iii): the server gives nothing where any is no longer so.

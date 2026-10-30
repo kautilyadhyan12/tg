@@ -31,23 +31,19 @@ import MemberMemberships from './MemberMemberships';
 import MemberPurchases from './MemberPurchases';
 import MemberPayer from './MemberPayer';
 import MemberCard from './MemberCard';
-import MemberSquareLinks from './MemberSquareLinks';
 import MemberNotes from './MemberNotes';
 import MembershipChoice from './MembershipChoice';
 import { METHOD_NEEDED, firstBillPart, giveBody, joiningFeeFor, membershipChoice, newRequestKey, typeWithTax } from './heldMembershipsView';
 import { discountsForType, membershipSummary } from './sellDiscountsView';
 import { FriendGiftNote } from './FriendGift';
 import { JoiningFeeTick, MembershipTotal } from './MembershipDiscount';
-import { SQUARE_MEMBERS_WORDS, leadMatchLine } from '@app/shared';
+import { leadMatchLine } from '@app/shared';
 import { canRecordPayments } from './memberBillsView';
-import { canMatchPayments } from './paymentsToMatchAccess';
-import { paymentsToMatchService } from '../../api/paymentsToMatchApi';
 import { canManageMemberships } from './membershipTypesView';
 import { viewerPrivileges } from './consoleView';
 import { canOpenPlace, placeFor } from './consolePlaces';
 import { SQUARE_OWNER_ONLY, deleteSquareLineOne, deletedOneSquareLine } from './memberListDeleteView';
 import { useCameBack } from './useCameBack';
-import { useLiveNews } from './liveNews';
 import PlaceLink from '../../components/console/PlaceLink';
 import MoreMenu from '../../components/console/MoreMenu';
 import SentencePlace from '../../components/console/SentencePlace';
@@ -471,8 +467,6 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   const [deleted, setDeleted] = useState(null);
   /** Customers in the gym's Square now being deleted with the person just deleted (18d-iii-b-ii-b-ii-b-ii). */
   const [deletedSquare, setDeletedSquare] = useState(0);
-  /** Unlink pressed on this page (18d-iii-b-ii-c-ii): Card on file reads the card again, as a card saved on that customer went. */
-  const [squareUnlinks, setSquareUnlinks] = useState(0);
   // Join: the search, the record picked, and which of the two is kept.
   const [joinQuery, setJoinQuery] = useState('');
   const [joinResults, setJoinResults] = useState(null);
@@ -574,42 +568,9 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       live = false;
     };
   }, [gymId, adding, priceAsk]);
-  // Square Point of Sale as a way of paying the first bill (18d-iii-b-ii-a): offered where the gym can take
-  // payments there, for staff who match them. Somebody new is linked to no Square customer, so the payment
-  // waits in Payments to match.
-  const [pointOfSale, setPointOfSale] = useState(false);
-  const asksPointOfSale = adding && canRecordPayments(viewerPrivileges(gym)) && canMatchPayments(viewerPrivileges(gym));
-  useEffect(() => {
-    if (!asksPointOfSale) return undefined;
-    let live = true;
-    paymentsToMatchService.summary(gymId).then(
-      (s) => {
-        if (live) setPointOfSale(s.pointOfSale);
-      },
-      () => undefined,
-    );
-    return () => {
-      live = false;
-    };
-  }, [gymId, asksPointOfSale]);
   // Somebody who set memberships up in another tab finds them here on coming back: a form
   // with nothing to pick from reads the price list again.
   useCameBack(adding && !sells, () => setPriceAsk((n) => n + 1));
-  // Square's answer to a changed phone or email comes a minute after Save, from the worker: when the line says it has
-  // moved on, the page reads whether Square took the change again, and changes that line alone (18d-iii-b-ii-b-ii-b-i).
-  useLiveNews(gymId, (message) => {
-    const asked = wanted.current;
-    if (message.what !== 'squareMembers' || asked === null) return;
-    orgService
-      .getMemberListEntry(gymId, asked)
-      .then((res) => {
-        if (wanted.current !== asked) return;
-        const refused = res.data.entry.squareCopyRefused === true;
-        setEntry((e) => (e !== null && e.entryId === asked && e.squareCopyRefused !== refused ? { ...e, squareCopyRefused: refused } : e));
-      })
-      .catch(() => undefined);
-  });
-
   useEffect(() => {
     const before = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -1305,7 +1266,6 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
             value={giving}
             paidMinor={total === null || !total.shows ? null : total.totalMinor}
             canBill={canRecordPayments(viewerPrivileges(gym))}
-            squareApp={pointOfSale ? { pick: null } : null}
             onChange={(next) => {
               setRefusal(null);
               setGiving(next.typeId !== giving.typeId ? { ...next, joiningFee: 'auto' } : next);
@@ -1509,13 +1469,6 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
             ) : null}
           </div>
         ) : null}
-        {p.squareCopyRefused === true ? (
-          // Square would not take the change to their details (18d-iii-b-ii-b-ii-b-i); Members in Square names them too.
-          <div className="c-callout items-center flex-wrap" data-testid="square-copy-refused">
-            <AlertTriangle aria-hidden="true" className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--warn)' }} />
-            <span className="c-s14 flex-1 min-w-[180px]">{SQUARE_MEMBERS_WORDS.personNotCopied}</span>
-          </div>
-        ) : null}
         {(p.review ?? []).length > 0 ? <ReviewBox lines={p.review} busy={busy} readOnly={readOnly} onCorrect={(line) => void markCorrect(line)} /> : null}
         {renderButtons(p, action)}
         <Section title="Contact">
@@ -1544,18 +1497,8 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
         <MemberPayer key={`payer-${p.entryId}`} gymId={gymId} gym={gym} entryId={p.entryId} name={p.fullName} readOnly={readOnly} onChanged={onChanged} />
         {/* The card on file is for staff holding the payments tick alone (18d-ii). */}
         {canRecordPayments(viewerPrivileges(gym)) ? (
-          <MemberCard key={`card-${p.entryId}-${String(squareUnlinks)}`} gymId={gymId} gym={gym} entryId={p.entryId} name={p.fullName} readOnly={readOnly} />
+          <MemberCard key={`card-${p.entryId}`} gymId={gymId} gym={gym} entryId={p.entryId} name={p.fullName} readOnly={readOnly} />
         ) : null}
-        {/* The customers Match linked to them, with Unlink, for staff who match payments (18d-iii-b-ii-c-ii). */}
-        <MemberSquareLinks
-          key={`square-links-${p.entryId}`}
-          gymId={gymId}
-          gym={gym}
-          entryId={p.entryId}
-          name={p.fullName}
-          readOnly={readOnly}
-          onUnlinked={() => setSquareUnlinks((n) => n + 1)}
-        />
         <MemberPurchases key={`purchases-${p.entryId}`} gymId={gymId} gym={gym} entryId={p.entryId} name={p.fullName} past={p.formerAt !== null} />
         <MemberNotes key={`notes-${p.entryId}`} gymId={gymId} entryId={p.entryId} name={p.fullName} readOnly={readOnly} timeZone={gym?.timezone ?? null} />
         {membership.length > 0 ? (

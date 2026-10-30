@@ -38,7 +38,6 @@ import {
   cardName,
   formatMinor,
   MEMBER_FEE_WORDS,
-  PAYMENTS_TO_MATCH_WORDS,
   memberFeeKindSchema,
   type CardCharge,
   type CardChargeRequest,
@@ -356,8 +355,6 @@ async function chargeByStaff(
       throw new OrgsError(409, "terminal_payment_waiting", "A payment for this membership is waiting on the Terminal. Wait for it to finish, or cancel it first.");
     case "card_charging":
       throw new OrgsError(409, "card_charge_waiting", CARD_CHARGE_WORDS.charging);
-    case "square_app_waiting":
-      throw new OrgsError(409, "square_app_waiting", PAYMENTS_TO_MATCH_WORDS.card_held);
     case "fee_not_found":
       throw new OrgsError(404, "member_fee_not_found", "That fee was not found.");
     case "fee_changed":
@@ -402,13 +399,11 @@ export interface CardChargeRun {
 
 /** The worker's minute: charges Square has not answered are asked again, then the bills that have
  *  fallen due are charged. `gymIds`: only these gyms, for a test sharing its database; production
- *  passes null. `beforeGym`: run once for each gym before its first bill here is charged (the look at its
- *  Square payments, 18d-iii-b-ii-a); the charge's own write still checks what it found. */
+ *  passes null. */
 export async function processCardCharges(
   deps: PaymentsDeps,
   square: SquareSettings,
   gymIds: readonly string[] | null = null,
-  beforeGym: ((gymId: string) => Promise<void>) | null = null,
 ): Promise<CardChargeRun> {
   const run: CardChargeRun = { asked: 0, charged: 0, paid: 0, declined: 0 };
   while (run.asked < CARD_CHARGE.perRun) {
@@ -421,7 +416,6 @@ export async function processCardCharges(
 
   // Tries again first: they are fewer, and each has waited days already.
   let looked = 0;
-  const gymsLooked = new Set<string>();
   const looks: { find: typeof charges.dueBills; again: boolean }[] = [
     { find: charges.retryBills, again: true },
     { find: charges.dueBills, again: false },
@@ -435,10 +429,6 @@ export async function processCardCharges(
         looked += 1;
         after = { gymId: bill.gymId, billId: bill.billId };
         if (run.charged >= CARD_CHARGE.perRun) break;
-        if (beforeGym !== null && !gymsLooked.has(bill.gymId)) {
-          gymsLooked.add(bill.gymId);
-          await beforeGym(bill.gymId);
-        }
         const step = await chargeDueBill(deps, square, bill, again);
         if (step === undefined) continue;
         run.charged += 1;
@@ -477,9 +467,6 @@ async function chargeDueBill(deps: PaymentsDeps, square: SquareSettings, bill: c
     checkingUntil: leaseFrom(now),
   });
   if (written.kind !== "new") {
-    // Held while a payment from Square Point of Sale waits (18d-iii-b-ii-a): charged once it is matched or
-    // marked, while its day lasts; a try again keeps its day.
-    if (written.kind === "square_app_waiting") return undefined;
     if (written.kind !== "not_allowed" && written.kind !== "no_card") deps.log.warn({ event: "square.card_charge_skipped", gymId: bill.gymId, why: written.kind }, "a bill due was not charged");
     // A try again the write's own checks refuse is staff's from now: the bill stops showing its day.
     if (again && (written.kind === "not_allowed" || written.kind === "no_card" || written.kind === "currency")) await charges.clearRetry(deps.sql, bill.gymId, bill.billId);
