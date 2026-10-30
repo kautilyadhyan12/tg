@@ -137,6 +137,10 @@ export const mealItemSchema = z.object({
   /** The ten further figures for this item's grams (ROADMAP 34a). An item saved
    *  before they were kept has none: all not known. */
   more: moreNutrientsSchema.optional(),
+  /** What the photo's scanner saw, where it is not the name of the food the numbers are from: the
+   *  phone shows it as the title and `name` under it (ROADMAP Stage 5 33b-ii). `name` is always the
+   *  food the numbers are from. */
+  seenAs: z.string().min(1).max(200).optional(),
 });
 export type MealItem = z.infer<typeof mealItemSchema>;
 
@@ -483,6 +487,9 @@ export type RecentFood = z.infer<typeof recentFoodSchema>;
 export const recentFoodsResponseSchema = z.object({ items: z.array(recentFoodSchema).max(RECENT_FOODS_MOST) }).strict();
 export type RecentFoodsResponse = z.infer<typeof recentFoodsResponseSchema>;
 
+/** The most close foods a scanned food offers (ROADMAP Stage 5 33b-ii). */
+export const MEAL_CLOSE_FOODS_MOST = 5;
+
 /** A scanned item as the photo sheet receives it (ROADMAP 7a-iv-b; RULINGS
  *  2026-09-16, the portion redesign): its food's own measures and the one and
  *  amount the row starts at, as a food the search returns carries them, so the
@@ -494,6 +501,9 @@ export const mealPhotoItemSchema = mealItemSchema.extend({
   measures: z.array(foodMeasureSchema).min(1),
   startsAt: measureStartSchema,
   portionEstimated: z.boolean(),
+  /** The foods closest to what the photo saw, other than this one, offered first by "Not this?"
+   *  (ROADMAP Stage 5 33b-ii). A scan kept on a phone from before has none. */
+  closeFoods: z.array(foodSearchItemSchema).max(MEAL_CLOSE_FOODS_MOST).default([]),
 }).refine((item) => item.measures.some((m) => m.id === item.startsAt.measure), {
   message: "a scanned item starts at one of its own measures",
 });

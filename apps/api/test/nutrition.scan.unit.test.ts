@@ -650,7 +650,7 @@ describe("where each priced food's row starts on the photo sheet (ROADMAP 7a-iv-
       name: "Pumpkin, cooked", nutritionSource: "usda", gramsPoint: 60, gramsRange: [60, 60], portionSource: "default", kcalPoint: 31,
       measures: [CUP, PIECE, GRAMS, OUNCES], startsAt: { measure: "usda-2", amount: 2 }, portionEstimated: false,
     });
-    expect(sheet.draftItems).toEqual([{ canonical: "usda_fndds_2709692", gramsPoint: 60, gramsRange: [60, 60], portionSource: "default" }]);
+    expect(sheet.draftItems).toEqual([{ canonical: "usda_fndds_2709692", gramsPoint: 60, gramsRange: [60, 60], portionSource: "default", seenAs: "Pumpkin" }]);
     // Every row crosses the contract the web reads.
     for (const row of sheet.items) expect(mealPhotoItemSchema.safeParse(row).success).toBe(true);
   });
