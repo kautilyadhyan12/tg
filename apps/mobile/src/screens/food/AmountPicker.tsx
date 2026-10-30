@@ -339,18 +339,19 @@ export function NewDish({ onCancel, onSaved }: { onCancel: () => void; onSaved: 
   );
 }
 
-type Editing = { kind: "list" } | { kind: "rename"; dish: Dishware } | { kind: "remove"; dish: Dishware };
+type Editing = { kind: "list" } | { kind: "edit"; dish: Dishware } | { kind: "remove"; dish: Dishware };
 
-/** The person's dishes, each renamed or removed; a removal asks first. */
+/** The person's dishes, each with its name and size changed, or removed; a removal asks first. */
 export function EditDishes({ list, onChanged, onDone }: { list: readonly Dishware[]; onChanged: (removed: string | null) => void; onDone: () => void }) {
   const { session } = useSession();
   const { view } = useMealOutbox();
   const [editing, setEditing] = useState<Editing>({ kind: "list" });
   const [name, setName] = useState("");
+  const [ml, setMl] = useState("");
   const [busy, setBusy] = useState(false);
   const [trouble, setTrouble] = useState<string | null>(null);
   const [said, setSaid] = useState<string | null>(null);
-  // The phone's back button: from renaming or removing a dish, back to your dishes.
+  // The phone's back button: from changing or removing a dish, back to your dishes.
   useSheetBack(3, () => {
     if (editing.kind === "list") return false;
     setEditing({ kind: "list" });
@@ -365,40 +366,51 @@ export function EditDishes({ list, onChanged, onDone }: { list: readonly Dishwar
     } else setTrouble(answer.kind === "no_answer" || answer.status >= 500 ? NO_CONNECTION : "That couldn’t be saved. Try again.");
   };
 
-  if (editing.kind === "rename") {
+  if (editing.kind === "edit") {
     const dish = editing.dish;
     const trimmed = name.trim();
-    const rename = async () => {
-      if (trimmed === "" || busy) return;
-      if (trimmed === dish.label) {
+    const size = Number(ml.trim());
+    const sizeOk = /^\d+$/.test(ml.trim()) && size >= 1 && size <= MOST_DISH_ML;
+    const saveDish = async () => {
+      if (trimmed === "" || !sizeOk || busy) return;
+      const body = { ...(trimmed === dish.label ? {} : { label: trimmed }), ...(size === dish.volumeMl ? {} : { volumeMl: size }) };
+      if (Object.keys(body).length === 0) {
         setEditing({ kind: "list" });
         return;
       }
       setBusy(true);
       setTrouble(null);
-      const answer = await session.signedIn({ method: "PATCH", path: `/v1/nutrition/dishware/${dish.id}`, body: { label: trimmed } }, dishwareResponseSchema);
+      const answer = await session.signedIn({ method: "PATCH", path: `/v1/nutrition/dishware/${dish.id}`, body }, dishwareResponseSchema);
       setBusy(false);
       if (answer.kind === "ok") {
         onChanged(null);
         setEditing({ kind: "list" });
-        setSaid(`Renamed to ${answer.data.dishware.label}.`);
+        setSaid(`Saved ${answer.data.dishware.label}, ${String(answer.data.dishware.volumeMl)} ml.`);
       } else failed(answer, `${dish.label} was already removed.`);
     };
     return (
       <>
-        <Txt kind="h3">Rename {dish.label}</Txt>
+        <Txt kind="h3">Edit {dish.label}</Txt>
         <Field label="Name" value={name} onChange={setName} maxLength={MOST_DISH_NAME} ready />
         {trimmed === "" ? (
           <Txt kind="small" colour="badText">
             Enter a name for this dish.
           </Txt>
         ) : null}
+        <Field label="Its size in ml" value={ml} onChange={setMl} keyboard="number-pad" maxLength={5} />
+        {sizeOk ? (
+          <Txt kind="small">Meals you logged with it keep their amounts.</Txt>
+        ) : (
+          <Txt kind="small" colour="badText">
+            Type its size in ml, from 1 to {count(MOST_DISH_ML)}.
+          </Txt>
+        )}
         {trouble === null ? null : (
           <Txt kind="small" colour="badText">
             {trouble}
           </Txt>
         )}
-        <Button label="Save" wide disabled={trimmed === ""} busy={busy} onPress={() => { void rename(); }} />
+        <Button label="Save" wide disabled={trimmed === "" || !sizeOk} busy={busy} onPress={() => { void saveDish(); }} />
         <Button label="Cancel" kind="quiet" wide onPress={() => { setEditing({ kind: "list" }); }} />
       </>
     );
@@ -459,14 +471,15 @@ export function EditDishes({ list, onChanged, onDone }: { list: readonly Dishwar
             <Txt kind="tiny">{String(d.volumeMl)} ml</Txt>
           </View>
           <Button
-            label="Rename"
+            label="Edit"
             kind="link"
-            say={`Rename ${d.label}`}
+            say={`Edit ${d.label}`}
             onPress={() => {
               setSaid(null);
               setTrouble(null);
               setName(d.label);
-              setEditing({ kind: "rename", dish: d });
+              setMl(String(d.volumeMl));
+              setEditing({ kind: "edit", dish: d });
             }}
           />
           <Pressable

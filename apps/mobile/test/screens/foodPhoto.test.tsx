@@ -635,7 +635,7 @@ describe("a food the photo got wrong, and one no list has (Kd, 2026-10-30)", () 
     await openFood({ meals: [], scans: [], dishes: [{ id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", label: "Travel mug", containerClass: "mug", volumeMl: 400, foodHint: null, createdAt: "2026-10-30T00:00:00.000Z" }] });
     await takePhoto();
     await fireEvent.press(await screen.findByRole("button", { name: "Edit your dishes" }));
-    expect(await screen.findByRole("button", { name: "Rename Travel mug" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Edit Travel mug" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Remove Travel mug" })).toBeTruthy();
   });
 

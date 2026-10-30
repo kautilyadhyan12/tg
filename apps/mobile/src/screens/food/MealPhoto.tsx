@@ -550,6 +550,7 @@ function Review({
                 keep(next);
                 setSaid(`Shared out over ${dish.label}, ${fill.words}.`);
               }}
+              onDishChanged={() => { setPriceTry((n) => n + 1); }}
               onClear={() => {
                 const next = withoutWholeDish(sheet, rowGrams);
                 if (next === null) return;
@@ -597,6 +598,7 @@ function Review({
           <RowAmount
             row={row}
             waiting={rows.some((r, i) => r.amount.share !== undefined && rowGrams[i] === null)}
+            onDishChanged={() => { setPriceTry((n) => n + 1); }}
             grams={numbers?.items[rowAt]?.gramsPoint ?? null}
             kcal={numbers?.items[rowAt]?.kcalPoint ?? null}
             onAmount={(amount) => { change((base) => withRowAmount(base, row.key, amount)); }}
@@ -706,6 +708,7 @@ function FoodRow({ row, item, onPress }: { row: SheetRow; item: MealItem | null;
 /** A food's amount on the photo's meal, changed as it is typed in; Done, and Take off the meal. */
 function RowAmount({
   row,
+  onDishChanged,
   grams,
   kcal,
   onAmount,
@@ -724,6 +727,7 @@ function RowAmount({
   onAmount: (amount: { measure: string; amount: string }) => void;
   onOwn: (own: OwnFoodItem) => void;
   onChange: () => void;
+  onDishChanged: () => void;
   onUndo: (() => void) | null;
   onDone: () => void;
   onRemove: () => void;
@@ -759,7 +763,7 @@ function RowAmount({
       {/* The food's numbers and Done stay in view under the list, on the smallest phone too. */}
       <ScrollView style={styles.rowList} contentContainerStyle={styles.rowListInner} keyboardShouldPersistTaps="handled">
       {notThis}
-      <AmountPicker measures={row.measures} amount={row.amount} onAmount={onAmount} dishes={dishes} onDishes={again} onPanel={setPanel} grams={grams} usual={row.usual} />
+      <AmountPicker measures={row.measures} amount={row.amount} onAmount={onAmount} dishes={dishes} onDishes={() => { again(); onDishChanged(); }} onPanel={setPanel} grams={grams} usual={row.usual} />
       </ScrollView>
       {panel ? null : (
         <View style={styles.sheetFoot}>

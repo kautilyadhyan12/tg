@@ -51,7 +51,7 @@ function useLastDish(dishes: ReturnType<typeof useDishes>["dishes"]): PickDish {
 }
 
 /** The dishes and the filled pictures. `held`: why it cannot be used yet, said in place of the pictures. */
-export function WholeDish({ applied, held, onUse, onClear }: { applied: DishShown | null; held: string | null; onUse: (picked: DishPicked) => void; onClear: () => void }) {
+export function WholeDish({ applied, held, onUse, onClear, onDishChanged }: { applied: DishShown | null; held: string | null; onUse: (picked: DishPicked) => void; onClear: () => void; onDishChanged?: () => void }) {
   const { dishes, again } = useDishes();
   // A dish of the person's own, made here as in a food's own box.
   const [making, setMaking] = useState(false);
@@ -94,6 +94,7 @@ export function WholeDish({ applied, held, onUse, onClear }: { applied: DishShow
           list={own}
           onChanged={(removed) => {
             again();
+            onDishChanged?.();
             if (removed === null) return;
             if (picked?.id === removed) setPicked(null);
             // A dish taken off cannot stay the meal's dish: its foods go back to their amounts.

@@ -151,7 +151,7 @@ function server(state: State) {
       }
       const renamed = {
         ...had,
-        label: String(body?.label),
+        label: typeof body?.label === "string" ? body.label : had.label,
         ...(body?.volumeMl === undefined ? {} : { volumeMl: Number(body.volumeMl) }),
         ...(typeof body?.containerClass === "string" ? { containerClass: body.containerClass } : {}),
       };
@@ -429,11 +429,22 @@ describe("saved dishes", () => {
     const s = await openFood(state);
     await pickOats();
     await fireEvent.press(await screen.findByRole("button", { name: "Edit your dishes" }));
-    await fireEvent.press(screen.getByRole("button", { name: "Rename My blue bowl" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Edit My blue bowl" }));
     await fireEvent.changeText(screen.getByLabelText("Name"), "Soup bowl");
     await fireEvent.press(screen.getByRole("button", { name: "Save" }));
-    expect(await screen.findByText("Renamed to Soup bowl.")).toBeTruthy();
+    expect(await screen.findByText("Saved Soup bowl, 375 ml.")).toBeTruthy();
     expect(s.sent.find((a) => a.method === "PATCH")?.body).toEqual({ label: "Soup bowl" });
+
+    // Its size, alone (Kd's click-through, 2026-10-30): a size that is no size holds Save.
+    await fireEvent.press(await screen.findByRole("button", { name: "Edit Soup bowl" }));
+    await fireEvent.changeText(screen.getByLabelText("Its size in ml"), "0");
+    expect(screen.getByText("Type its size in ml, from 1 to 10,000.")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+    expect(s.sent.filter((a) => a.method === "PATCH")).toHaveLength(1);
+    await fireEvent.changeText(screen.getByLabelText("Its size in ml"), "450");
+    await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Saved Soup bowl, 450 ml.")).toBeTruthy();
+    expect(s.sent.filter((a) => a.method === "PATCH")[1]?.body).toEqual({ volumeMl: 450 });
 
     await fireEvent.press(await screen.findByRole("button", { name: "Remove Travel mug" }));
     expect(screen.getByText("Travel mug comes off your dishes. Meals you logged with it keep their amounts.")).toBeTruthy();
@@ -445,7 +456,7 @@ describe("saved dishes", () => {
     expect(s.sent.filter((a) => a.method === "DELETE").map((a) => a.path)).toEqual([`/v1/nutrition/dishware/${SMALL.id}`]);
     expect(state.dishes.map((d) => d.label)).toEqual(["Soup bowl"]);
     await fireEvent.press(screen.getByRole("button", { name: "Done" }));
-    expect(await screen.findByRole("radio", { name: "Soup bowl · 375 ml" })).toBeTruthy();
+    expect(await screen.findByRole("radio", { name: "Soup bowl · 450 ml" })).toBeTruthy();
     expect(screen.queryByRole("radio", { name: "Travel mug · 400 ml" })).toBeNull();
   });
 
@@ -517,11 +528,11 @@ describe("Kd's click-through (32b-ii-b): back goes one step, a count shows its g
     await openFood({ targets: targets(), dishes: [BOWL], meals: [] });
     await pickOats();
     await fireEvent.press(await screen.findByRole("button", { name: "Edit your dishes" }));
-    await fireEvent.press(screen.getByRole("button", { name: "Rename My blue bowl" }));
-    expect(screen.getByText("Rename My blue bowl")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Edit My blue bowl" }));
+    expect(screen.getByText("Edit My blue bowl")).toBeTruthy();
     await pressBack();
     expect(await screen.findByText("Your dishes")).toBeTruthy();
-    expect(screen.queryByText("Rename My blue bowl")).toBeNull();
+    expect(screen.queryByText("Edit My blue bowl")).toBeNull();
     await pressBack();
     expect(await screen.findByRole("radio", { name: "My blue bowl · 375 ml" })).toBeTruthy();
     expect(screen.getByLabelText("Amount")).toBeTruthy();
