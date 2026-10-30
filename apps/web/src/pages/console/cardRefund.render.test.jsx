@@ -88,7 +88,7 @@ const draw = (props = {}) =>
   );
 const paymentRow = async () => within((await screen.findAllByTestId('held-bill-payment'))[0]);
 const menuItems = async (row) => {
-  fireEvent.click(row.getByRole('button', { name: /^More for the payment/ }));
+  fireEvent.click(row.getByRole('button', { name: /^(More for|Refund) the payment/ }));
   return row.findAllByRole('menuitem');
 };
 const openBox = async () => {
@@ -147,6 +147,8 @@ describe('Refund to card on a fee', () => {
     orgService.refundToCard.mockResolvedValue({ data: { step: 'pending', amountMinor: 1000, currency: 'USD', card: VISA } });
     draw();
     const row = await feePayment();
+    // The word is on the button: nobody has to guess a refund is behind a ⋯.
+    expect(row.getByRole('button', { name: 'Refund the payment of $10.00' }).textContent).toBe('Refund');
     const items = await menuItems(row);
     expect(items.map((i) => i.textContent)).toEqual(['Refund to cardSquare sends the money back to the card that paid.', 'Note a refundYou gave it back another way, such as cash.']);
     fireEvent.click(items[0]);
@@ -169,7 +171,10 @@ describe('Refund to card on a fee', () => {
     const [gymId, entryId, membershipId, paymentId, body] = orgService.refundToCard.mock.calls[0];
     expect([gymId, entryId, membershipId, paymentId]).toEqual([GYM, TARA, '44444444-4444-4444-8444-000000000001', FEE_PAYMENT]);
     expect(body).toEqual({ requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/), amountMinor: 1000, reason: 'other' });
-    expect(await screen.findByText('$10.00 is on its way back to Visa ending 1111. It can take 7 to 10 business days to reach the card.')).toBeTruthy();
+    // Said under the payment it was pressed on, not at the top of the membership, off the screen.
+    const said = await within(screen.getByTestId('held-fee-payment')).findByTestId('held-payment-said');
+    expect(said.textContent).toBe('$10.00 is on its way back to Visa ending 1111. It can take 7 to 10 business days to reach the card.');
+    expect(screen.getAllByText(/is on its way back to Visa/)).toHaveLength(1);
   });
 
   it('a fee paid by hand offers only Void payment', async () => {
@@ -194,6 +199,8 @@ describe('Refund to card on a fee', () => {
     fireEvent.click(form.getByRole('button', { name: 'Note refund' }));
     await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledTimes(1));
     expect(orgService.changeHeldMembership.mock.calls[0][3]).toBe(`payments/${FEE_PAYMENT}/refunds`);
+    const said = await within(screen.getByTestId('held-fee-payment')).findByTestId('held-payment-said');
+    expect(said.textContent).toBe('$10.00 noted as refunded.');
   });
 
   it('reads Refunded in full and Part refunded in part, with its refund under the payment', async () => {
@@ -209,7 +216,7 @@ describe('Refund to card on a fee', () => {
     draw();
     const whole = within(await screen.findByTestId('held-fee'));
     expect(whole.getByText('Refunded')).toBeTruthy();
-    expect(whole.queryByRole('button', { name: /^More for the payment/ })).toBeNull();
+    expect(whole.queryByRole('button', { name: /^(More for|Refund) the payment/ })).toBeNull();
     expect(whole.queryByText(/To give the money back/)).toBeNull();
   });
 
@@ -253,7 +260,8 @@ describe('Refund to card: the worst thing first', () => {
     const [gymId, entryId, membershipId, paymentId, body] = orgService.refundToCard.mock.calls[0];
     expect([gymId, entryId, membershipId, paymentId]).toEqual([GYM, TARA, '44444444-4444-4444-8444-000000000001', PAYMENT_ID()]);
     expect(body).toEqual({ requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/), amountMinor: 2000, reason: 'paid_twice' });
-    expect(await screen.findByText('$20.00 is on its way back to Visa ending 1111. It can take 7 to 10 business days to reach the card.')).toBeTruthy();
+    const said = await within(screen.getAllByTestId('held-bill-payment')[0]).findByTestId('held-payment-said');
+    expect(said.textContent).toBe('$20.00 is on its way back to Visa ending 1111. It can take 7 to 10 business days to reach the card.');
     expect(screen.queryByTestId('card-refund-box')).toBeNull();
   });
 

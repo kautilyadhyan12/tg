@@ -314,7 +314,7 @@ export function feeRow(fee, currency, today) {
             ? // Paid on the Terminal or from the card on file: it goes back through Square, and Void payment
               // is not offered (18d-vi-b-i, 18d-iii-i, 18d-iv-b-i).
               fee.payments.some((p) => paidThroughSquare(p.method))
-              ? `${noLongerOwed(fee)} To give ${partRefunded ? 'the rest' : 'the money'} back, press ⋯ on the payment, then Refund to card.`
+              ? `${noLongerOwed(fee)} To give ${partRefunded ? 'the rest' : 'the money'} back, press Refund on the payment.`
               : `${noLongerOwed(fee)} If you gave the money back, void the payment.`
             : null,
     payments: paymentLines(fee.payments, fee.voidedPayments, currency),

@@ -194,6 +194,8 @@ export default function MemberMemberships({
   const [form, setForm] = useState(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
+  /** Where `notice` belongs when it is about one payment: { paymentId, line }, said under that payment, where it was pressed. */
+  const [saidAt, setSaidAt] = useState(null);
   const [refusal, setRefusal] = useState(null);
   const [showPast, setShowPast] = useState(false);
   /** The membership whose agreement box is open (18u-i): { id, justGiven }, or null. */
@@ -752,6 +754,29 @@ export default function MemberMemberships({
     return items;
   };
 
+  /** A payment's button: a payment taken through Square says Refund, in the word Square's own dashboard uses, so nobody has
+   *  to guess it is there; a payment by hand keeps the ⋯. */
+  const paymentMenu = (p, items) =>
+    items.length === 0 ? null : (
+      <MoreMenu
+        label={p.toCard ? 'Refund' : null}
+        compact
+        alignRight
+        ariaLabel={p.toCard ? `Refund the payment of ${p.amount}` : `More for the payment of ${p.amount}`}
+        items={items}
+        disabled={busy}
+      />
+    );
+
+  /** What a refund did, said under the payment it was pressed on: the page may be far from the top of the membership. */
+  const saidUnder = (paymentId) =>
+    notice !== null && saidAt?.paymentId === paymentId && saidAt.line === notice ? (
+      <p className="c-s14 c-w5 m-0 flex items-center gap-2" style={{ color: 'var(--good)' }} role="status" data-testid="held-payment-said">
+        <Check aria-hidden="true" className="w-4 h-4 flex-shrink-0" />
+        {notice}
+      </p>
+    ) : null;
+
   /** Note a refund and Refund to card, drawn under the payment they are about. */
   const refundBoxUnder = (m, paymentId) => {
     const here = open !== null && open.id === m.id ? open : null;
@@ -775,6 +800,7 @@ export default function MemberMemberships({
           onNote={() => startRefund(m, paymentId)}
           onDone={(words) => {
             setOpen(null);
+            setSaidAt({ paymentId, line: words });
             setNotice(words);
             setAttempt((n) => n + 1);
             onChanged?.();
@@ -906,7 +932,7 @@ export default function MemberMemberships({
                           if (acts && p.voided === null && p.id === row.voidPaymentId) {
                             items.push({ label: 'Void payment', hint: 'It was recorded by mistake. The fee is owed again.', danger: true, onPick: () => startFee(m, 'voidFeePayment', fee) });
                           }
-                          return items.length === 0 ? null : <MoreMenu label={null} alignRight ariaLabel={`More for the payment of ${p.amount}`} items={items} disabled={busy} />;
+                          return paymentMenu(p, items);
                         })()}
                       </span>
                     </div>
@@ -916,6 +942,7 @@ export default function MemberMemberships({
                       </span>
                     ) : null}
                     {receiptFor === p.receiptNumber ? <ReceiptBox gymId={gymId} gym={gym} number={p.receiptNumber} onClose={() => setReceiptFor(null)} /> : null}
+                    {saidUnder(p.id)}
                     {refundBoxUnder(m, p.id)}
                     {renderRefundLines(m, p, acts)}
                   </div>
@@ -1075,6 +1102,7 @@ export default function MemberMemberships({
             setRefundForm((f) => ({ ...f, tried: true }));
             return;
           }
+          setSaidAt({ paymentId: payment.id, line: refundedWords(m, body.amountMinor) });
           void run(
             'refund',
             m,
@@ -1519,7 +1547,7 @@ export default function MemberMemberships({
                           if (acts && p.voided === null && p.id === voidId) {
                             items.push({ ...MENU_WORDS.voidPayment, danger: true, onPick: () => ask('undo', m) });
                           }
-                          return items.length === 0 ? null : <MoreMenu label={null} alignRight ariaLabel={`More for the payment of ${p.amount}`} items={items} disabled={busy} />;
+                          return paymentMenu(p, items);
                         })()}
                       </span>
                     </div>
@@ -1529,6 +1557,7 @@ export default function MemberMemberships({
                       </span>
                     ) : null}
                     {receiptFor === p.receiptNumber ? <ReceiptBox gymId={gymId} gym={gym} number={p.receiptNumber} onClose={() => setReceiptFor(null)} /> : null}
+                    {saidUnder(p.id)}
                     {boxUnderPayment(p.id)}
                     {renderRefundLines(m, p, acts)}
                   </div>
@@ -2174,7 +2203,7 @@ export default function MemberMemberships({
           {`${name.charAt(0).toUpperCase()}${name.slice(1)} is a past member, so these are not in use. Put them back on your list to use them again.`}
         </p>
       ) : null}
-      {notice !== null ? (
+      {notice !== null && saidAt?.line !== notice ? (
         <p className="c-s14 c-w5 m-0 flex items-center gap-2" style={{ color: 'var(--good)' }} role="status">
           <Check aria-hidden="true" className="w-4 h-4" />
           {notice}

@@ -4316,7 +4316,7 @@ payment: Card on file · Visa ending 1111, the card named before the press. The 
 member's notice are 18d-iii-ii-a (below); the Failed payments list is 18d-iii-ii-b.
 
 **Refund to card** (18d-iv-a, as built; `rulings/2026-10-30-18d-iv-a.md`). A payment on a period's bill taken on the Square Terminal or charged to
-the card on file goes back through Square to the card that paid, from the ⋯ on the payment: **Refund to card** ("Square sends
+the card on file goes back through Square to the card that paid, from the **Refund** button on the payment (a payment by hand keeps its ⋯): **Refund to card** ("Square sends
 the money back to the card that paid."). Note a refund stays beside it ("You gave it back another way, such as cash."). The box
 opens under the payment and asks Square about it first, so it names the real card and what is really left: the most that can
 go back is the least of what the app and Square each say is left, and what Square gave back with no note here is said, with Note a
@@ -4339,13 +4339,13 @@ not finished, one that does not match Square's record. Square's refusals are sai
 placed reads "Square refused this refund. No money went back." Still to come: Interac on the Terminal
 (18d-iv-c), a refund made inside Square shown here (18d-iv-d), chargebacks (18d-iv-e).
 
-*On a fee (18d-iv-b-i, as built):* a late cancel, no-show or freeze fee taken on the Terminal or from the card on file goes back the same way, from the ⋯ on its
+*On a fee (18d-iv-b-i, as built):* a late cancel, no-show or freeze fee taken on the Terminal or from the card on file goes back the same way, from the Refund button on its
 payment: **Refund to card**, and **Note a refund** beside it, with Void refund for one noted by mistake. All or part; the box and the note name the fee and what it
 was for, and "Leaving or cancelled" is not offered. A fee paid by hand keeps Void payment and takes no refund. All of it back reads **Refunded**, part **Part refunded**,
 on the person's page, a class's list and a personal training session (for staff and the member), and the member's own page says "<gym> refunded this fee." or
 "<gym> refunded $4.00 of this fee.". A refunded fee is not owed again, whatever staff mark afterwards: its booking opens no second fee. A fee's payment never gives a
 member's Refer a friend gift, so neither a failed refund nor a voided one gives one back. Reports, receipts and the payments download read it as they read any refund.
-Still to come: Sell (18d-iv-b-ii), a line where staff already look when a refund fails (18d-iv-b-iii).
+Still to come: Sell (18d-iv-b-ii), and Overview's list of fees to refund and refunds that failed or that Square never answered (18d-iv-b-iii).
 
 **A failed charge** (18d-iii): at most 3 tries over several days (Square: "Limit retries to 2 to
 3 attempts over several days"; never `GENERIC_DECLINE`), never again after a decline the card
