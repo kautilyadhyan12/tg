@@ -75,6 +75,7 @@ import { goneWords, gymToday } from './memberListPeople';
 import SentencePlace from '../../components/console/SentencePlace';
 import PlaceLink from '../../components/console/PlaceLink';
 import { afterImportSteps } from './membershipWordsView';
+import { billingElsewhereLine } from './paymentsView';
 import { canOpenPlace, membershipBoxTo } from './consolePlaces';
 import { viewerPrivileges } from './consoleView';
 import MemberListImportLeavers from './MemberListImportLeavers';
@@ -1461,6 +1462,9 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
         </h3>
         {said.detail ? <p className="c-s15 c-t2 mt-1">{said.detail}</p> : null}
         {!done.alreadyConfirmed ? <p className="c-s14 c-t2 mt-1">Nobody has been emailed yet.</p> : null}
+        <p className="c-s14 c-t2 mt-1" data-testid="billing-elsewhere-note">
+          {billingElsewhereLine(words.people)}
+        </p>
         {steps.length > 0 ? (
           <div className="flex flex-col gap-3 mt-6 text-left" data-testid="member-import-next">
             <p className="c-th m-0">Still to do</p>

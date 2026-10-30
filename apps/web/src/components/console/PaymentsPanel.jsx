@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useState } from 'react';
+import { orgWords } from '@app/shared';
 import { Loader2 } from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
 import { readOnlyNote } from '../../pages/console/billingView';
@@ -18,6 +19,7 @@ import {
   RECONNECT_HINT,
   RECONNECT_LINE,
   RECONNECT_OTHERS,
+  billingElsewhereLine,
 } from '../../pages/console/paymentsView';
 import PlaceLink from './PlaceLink';
 import SquareTerminals from './SquareTerminals';
@@ -293,6 +295,9 @@ export default function PaymentsPanel({ org, readOnly, startOpen = false, outcom
               connecting={busy === 'connect'}
             />
           ) : null}
+          <p className="text-sm m-0" style={hintStyle} data-testid="billing-elsewhere-note">
+            {billingElsewhereLine(orgWords(org.orgType).people)}
+          </p>
           {data.needsAllow === true && data.terminals?.needsAllow !== true ? (
             <section aria-label="Reconnect Square" className="flex flex-col gap-2" data-testid="square-reconnect">
               {owner ? (
