@@ -299,7 +299,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
            - 18d-iii-b-ii-c-i. [x] **Match links Square's customer to the person who paid** — merged 2026-10-29 (PR #386).
            - 18d-iii-b-ii-c-ii. [x] **Unlink on their page** — merged 2026-10-29 (PR #391).
        - 18d-iii-b-iii. [x] **Memberships as Square items: a planning job** — merged 2026-10-30 (PR #396).
-       - 18d-iii-b-v. [ ] **Square Point of Sale taken out** (Kd, 2026-10-30, `rulings/2026-10-30-18d-iii-b-v.md`): the Terminal and the saved card stay; money taken in Square's own app is recorded by hand. Web folder 1.
+       - 18d-iii-b-v. [x] **Square Point of Sale taken out** — merged 2026-10-30 (PR #399).
        - 18d-iii-b-iv. **Memberships as items in Square**: -a to -e not built (Kd, 2026-10-30); the plan is in `rulings/2026-10-29-18d-iii-b-iii.md`, on no list. What is left:
          - 18d-iii-b-iv-f. [ ] **Move members from Square Subscriptions**: each member Square bills gets the same membership here, the first bill the day after Square's paid-until day, and Square's subscription stops then (Kd, 2026-10-30: before launch). Web folder 1.
      - 18d-iv. [ ] **Refund a card payment through Square** (`rulings/2026-10-15-18o.md`); a chargeback shown on its payment with Square's 7-day deadline (Kd, 2026-10-22). Web folder 1.

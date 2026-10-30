@@ -4259,7 +4259,7 @@ is a gym with no country. People who use the app for themselves may be anywhere.
   it waits nothing of that membership is paid by hand, and the fee is not waived; a fee taken off
   meanwhile (marked Came) leaves Square's money "not recorded", told to Staff activity.
 - **Square's own app (Square Point of Sale): not connected** (Kd, 2026-10-30; `rulings/2026-10-30-18d-iii-b-v.md`; taken out in
-  18d-iii-b-v, PR to be named in its handoff; what was built is in git before that job). A gym takes a card at the desk on the
+  18d-iii-b-v, PR #399; what was built is in git before that job). A gym takes a card at the desk on the
   Square Terminal, started here, or bills the card on file. Money taken in Square's own app is the gym's to record by hand:
   Record payment → **Card at the desk**. The app does not read those payments, and nothing here holds a card on file for one,
   so a member who pays in Square's own app and is not recorded by hand can be charged on their bill's date. Gymdesk: "The
