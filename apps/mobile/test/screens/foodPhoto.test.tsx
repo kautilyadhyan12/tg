@@ -636,15 +636,24 @@ describe("a food the photo got wrong, and one no list has (Kd, 2026-10-30)", () 
     await takePhoto();
     await screen.findByText(/^340\skcal · /);
     phone.previewsLost = true;
-    const timers = jest.spyOn(globalThis, "setTimeout");
-    await fireEvent.press(screen.getByRole("button", { name: "Bowl, full" }));
-    await screen.findAllByText(/^Can’t reach the server\./);
-    const again = timers.mock.calls.find((c) => c[1] === 30_000)?.[0];
-    timers.mockRestore();
+    // Not a jest mock: one turns the tool's wait into its fake-timer wait, which stops after about 250 ms, before the app's 300 ms is up.
+    const realTimeout = globalThis.setTimeout;
+    const waits: { run: () => void; ms: number | undefined }[] = [];
+    globalThis.setTimeout = Object.assign((run: () => void, ms?: number) => {
+      waits.push({ run, ms });
+      return realTimeout(run, ms);
+    }, realTimeout);
+    try {
+      await fireEvent.press(screen.getByRole("button", { name: "Bowl, full" }));
+      await screen.findAllByText(/^Can’t reach the server\./);
+    } finally {
+      globalThis.setTimeout = realTimeout;
+    }
+    const again = waits.find((w) => w.ms === 30_000)?.run;
     expect(typeof again).toBe("function");
     phone.previewsLost = false;
     await act(async () => {
-      if (typeof again === "function") again();
+      again?.();
       await Promise.resolve();
     });
     expect(await screen.findByRole("button", { name: /^Change Toast, Part of Bowl, full · \d+ g/ })).toBeTruthy();
