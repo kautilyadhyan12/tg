@@ -490,7 +490,7 @@ export interface StaffBookingRow {
   packCharged: boolean;
   heldMembershipId: string | null;
   /** Its late cancel or no-show fee that stands, or one waived (18h-i). */
-  fee: { amountMinor: number; state: "owed" | "paid" | "waived" } | null;
+  fee: { amountMinor: number; state: "owed" | "paid" | "refunded" | "waived" } | null;
   at: Date;
 }
 
@@ -552,7 +552,7 @@ export async function staffList(
     fee:
       r.fee_minor === null || r.fee_status === null
         ? null
-        : { amountMinor: r.fee_minor, state: r.fee_waived === true ? "waived" : r.fee_status === "open" ? "owed" : "paid" },
+        : { amountMinor: r.fee_minor, state: r.fee_waived === true ? "waived" : r.fee_status === "open" ? "owed" : r.fee_status === "refunded" ? "refunded" : "paid" },
     at: r.at,
   }));
 }

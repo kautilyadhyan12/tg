@@ -37,7 +37,7 @@ export const myPaymentSchema = z
   .strict();
 export type MyPayment = z.infer<typeof myPaymentSchema>;
 
-/** A late cancel or no-show fee (18h): owed, paid or waived. A fee taken off is not sent. */
+/** A late cancel or no-show fee (18h): owed, paid, refunded or waived. A fee taken off is not sent. */
 export const myFeeSchema = z
   .object({
     fee: memberFeeKindSchema,
@@ -45,7 +45,9 @@ export const myFeeSchema = z
     on: daySchema,
     amountMinor: minorSchema,
     dueOn: daySchema,
-    state: z.enum(["due", "overdue", "paid", "waived"]),
+    state: z.enum(["due", "overdue", "paid", "refunded", "waived"]),
+    /** What was given back of it (18d-iv-b-i). */
+    refundedMinor: minorSchema.default(0),
     /** The receipt of the payment that paid it; null while it is owed or waived. */
     receiptNumber: receiptNumberSchema.nullable(),
   })

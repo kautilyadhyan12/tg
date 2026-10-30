@@ -5,6 +5,9 @@ import { dayWords } from './memberListView';
 
 export const CARD_REFUND_REASONS = REFUND_REASONS.map((value) => ({ value, label: REFUND_REASON_WORDS[value] }));
 
+/** Why a refund goes back. Nobody leaves over a fee (18d-iv-b-i). */
+export const refundReasonsFor = (fee, reasons = CARD_REFUND_REASONS) => (fee === null ? reasons : reasons.filter((r) => r.value !== 'leaving'));
+
 /** What stops a refund, said in the box. */
 export const cardRefundBlockLine = (block) => CARD_REFUND_WORDS[block] ?? CARD_REFUND_WORDS.differs;
 
@@ -21,13 +24,14 @@ export function inSquareLine(m, check) {
   return check.refundedInSquareMinor > 0 ? `Square shows ${formatMinor(check.refundedInSquareMinor, m.currency)} of this payment was already refunded there. Note that refund here so your records match.` : null;
 }
 
-/** The box's words. `live`: the membership is in use. */
-export function cardRefundBoxWords(m, name, payment, check, live) {
+/** The box's words. `live`: the membership is in use. `fee`: the fee it paid (`feeRefundWords`), or null for a period. */
+export function cardRefundBoxWords(m, name, payment, check, live, fee = null) {
   const some = check.leftMinor < payment.amountMinor ? ` ${formatMinor(check.leftMinor, m.currency)} of it can still be refunded.` : '';
-  const keeps = live ? ` ${capital(name)} keeps the membership and its dates: to end it, use Cancel membership.` : '';
+  const keeps = live && fee === null ? ` ${capital(name)} keeps the membership and its dates: to end it, use Cancel membership.` : '';
+  const forWhat = fee === null ? '' : ` for ${fee.about}`;
   return {
-    title: `Refund ${name}'s ${m.typeName} to the card`,
-    detail: `This is for the ${formatMinor(payment.amountMinor, m.currency)} paid on ${dayWords(payment.paidOn)}.${some} ${CARD_REFUND_WORDS.fee} ${CARD_REFUND_WORDS.days}${keeps}`,
+    title: `Refund ${name}'s ${fee === null ? m.typeName : fee.name} to the card`,
+    detail: `This is for the ${formatMinor(payment.amountMinor, m.currency)} paid on ${dayWords(payment.paidOn)}${forWhat}.${some} ${CARD_REFUND_WORDS.fee} ${CARD_REFUND_WORDS.days}${keeps}`,
     inSquare: inSquareLine(m, check),
   };
 }
@@ -62,6 +66,6 @@ export function cardRefundOpenLine(open, currency) {
 /** Whether anything on this person's page is waiting on Square: a refund it has not answered or not finished. */
 export function waitsOnSquare(memberships) {
   return (memberships ?? []).some((m) =>
-    (m.billing?.bills ?? []).some((b) => b.payments.some((p) => (p.cardRefund !== null && p.cardRefund !== undefined && !p.cardRefund.lost) || p.refunds.some((r) => r.square?.state === 'pending'))),
+    [...(m.billing?.bills ?? []), ...(m.billing?.fees ?? [])].some((b) => b.payments.some((p) => (p.cardRefund !== null && p.cardRefund !== undefined && !p.cardRefund.lost) || p.refunds.some((r) => r.square?.state === 'pending'))),
   );
 }

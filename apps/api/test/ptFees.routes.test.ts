@@ -463,6 +463,10 @@ d("a fee for a late cancel or a no-show, for personal training (real Postgres)",
     // Round one, H1 and H2: the session they came to still names its fee as the no-show fee it
     // is, and nobody is told that changing back to No-show adds one, since it adds none.
     expect((await memberView(gym, k)).history.find((s) => s.id === ks)?.fee).toEqual({ kind: "no_show", amountMinor: NO_SHOW, state: "paid", currency: "GBP" });
+    // Refunded (18d-iv-b-i): the session says so, not "Paid".
+    await sql`UPDATE gym_member_bills SET status = 'refunded' WHERE id = ${fee.id}`;
+    expect((await memberView(gym, k)).history.find((s) => s.id === ks)?.fee).toEqual({ kind: "no_show", amountMinor: NO_SHOW, state: "refunded", currency: "GBP" });
+    await sql`UPDATE gym_member_bills SET status = 'paid' WHERE id = ${fee.id}`;
     for (const by of [gym.owner, gym.trainer]) expect((await weekOf(gym, by)).find((a) => a.id === ks)?.fees).toBeNull();
     expect((await mark(gym, ks, "no_show")).statusCode).toBe(200);
     expect((await feesOf(k)).map((x) => x.status)).toEqual(["paid"]);

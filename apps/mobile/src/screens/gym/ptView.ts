@@ -300,7 +300,7 @@ export function ptBookAsk(view: MemberPtResponse, time: BookTime, pay: Pay | nul
   return { title: "Book this session?", lines: fees === null ? lines : [...lines, ...noShowLine(fees, gym)], yes: "Book session", no: "Not now" };
 }
 
-const FEE_STATE_WORDS = { owed: "Payment due", paid: "Paid", waived: "Waived" } as const;
+const FEE_STATE_WORDS = { owed: "Payment due", paid: "Paid", refunded: "Refunded", waived: "Waived" } as const;
 
 /** A session's own fee, under it in the list: "One-time late cancel fee ₹500.00 · Payment due"; null for none. */
 export function ptFeeText(s: MemberPtSession): string | null {

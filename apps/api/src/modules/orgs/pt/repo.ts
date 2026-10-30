@@ -227,7 +227,7 @@ const rawFee = {
 
 function feeState(r: { fee_kind: "late_cancel" | "no_show" | null; fee_minor: number | null; fee_status: string | null; fee_waived: boolean | null }): PtFeeState | null {
   if (r.fee_kind === null || r.fee_minor === null || r.fee_status === null) return null;
-  return { kind: r.fee_kind, amountMinor: r.fee_minor, state: r.fee_waived === true ? "waived" : r.fee_status === "open" ? "owed" : "paid" };
+  return { kind: r.fee_kind, amountMinor: r.fee_minor, state: r.fee_waived === true ? "waived" : r.fee_status === "open" ? "owed" : r.fee_status === "refunded" ? "refunded" : "paid" };
 }
 
 /** The newest fee of the session `a` that stands, or one staff waived (18h-ii), as `f`. */

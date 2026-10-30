@@ -340,7 +340,7 @@ function noShowFee(appointment, currency) {
   return minor > 0 && typeof currency === 'string' ? formatMinor(minor, currency) : null;
 }
 
-const FEE_STATE_WORDS = { owed: 'Payment due', paid: 'Paid', waived: 'Waived' };
+const FEE_STATE_WORDS = { owed: 'Payment due', paid: 'Paid', refunded: 'Refunded', waived: 'Waived' };
 
 /** A no-show's fee, said under its mark: owed, paid or waived, for staff who may open the
  *  person's page. A trainer who may not is told nothing of it: what a fee did is the

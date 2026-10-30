@@ -80,7 +80,7 @@ function membershipOf(m: HeldMembershipItem): MyMembership {
     fees: billing.fees.flatMap((f) =>
       f.state === "removed"
         ? []
-        : [{ fee: f.fee, forName: f.forName, on: f.on, amountMinor: f.amountMinor, dueOn: f.dueOn, state: f.state, receiptNumber: f.state === "paid" ? (f.payments[0]?.receiptNumber ?? null) : null }],
+        : [{ fee: f.fee, forName: f.forName, on: f.on, amountMinor: f.amountMinor, dueOn: f.dueOn, state: f.state, refundedMinor: f.refundedMinor, receiptNumber: f.state === "paid" || f.state === "refunded" ? (f.payments[0]?.receiptNumber ?? null) : null }],
     ),
   };
 }

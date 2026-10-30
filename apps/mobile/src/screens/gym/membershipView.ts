@@ -135,6 +135,7 @@ const FEE_TAGS: Readonly<Record<MyFee["state"], Tag>> = {
   due: { label: "Payment due", tone: "orange" },
   overdue: { label: "Overdue", tone: "bad" },
   paid: { label: "Paid", tone: "good" },
+  refunded: { label: "Refunded", tone: "plain" },
   waived: { label: "Waived", tone: "plain" },
 };
 
@@ -149,13 +150,17 @@ export function feeText(item: FeeItem, gymName: string): { title: string; tag: T
         ? `Overdue since ${dayText(f.dueOn)}.`
         : f.state === "waived"
           ? `${gymName} waived this fee.`
-          : null;
+          : f.state === "refunded"
+            ? `${gymName} refunded this fee.`
+            : f.refundedMinor > 0
+              ? `${gymName} refunded ${formatMinor(f.refundedMinor, item.currency)} of this fee.`
+              : null;
   return {
     title: `${MEMBER_FEE_WORDS[f.fee]} · ${f.forName}`,
     tag: FEE_TAGS[f.state],
     line: `${formatMinor(f.amountMinor, item.currency)} · ${dayText(f.on)} · ${item.membership}`,
     note,
-    receipt: f.state === "paid" ? f.receiptNumber : null,
+    receipt: f.state === "paid" || f.state === "refunded" ? f.receiptNumber : null,
   };
 }
 

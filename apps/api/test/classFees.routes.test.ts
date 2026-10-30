@@ -10,6 +10,7 @@ import postgres from "postgres";
 import {
   CLASS_LATE_CANCEL_ERROR,
   type ClassBookingSettingsResponse,
+  type ClassSessionBookingsResponse,
   type ClassBookingView,
   type GymMembershipTypesResponse,
   type HeldMembershipsResponse,
@@ -603,6 +604,12 @@ d("a fee for a late cancel or a no-show, for classes (real Postgres)", { timeout
     expect((await mark(gym, past, booking, "attended")).statusCode).toBe(200);
     const [after] = await feesOnPage(gym, ivy);
     expect(after).toMatchObject({ state: "paid", stillOwed: false });
+    // Refunded (18d-iv-b-i): the class's list says so, not "paid".
+    const listed = async () => (JSON.parse((await inject("GET", `/v1/orgs/${gym.id}/class-sessions/${past}/bookings`, gym.owner.cookies)).body) as ClassSessionBookingsResponse).booked[0]?.fee;
+    expect(await listed()).toMatchObject({ amountMinor: NO_SHOW, state: "paid" });
+    await sql`UPDATE gym_member_bills SET status = 'refunded' WHERE id = ${fee.id}`;
+    expect(await listed()).toMatchObject({ amountMinor: NO_SHOW, state: "refunded" });
+    await sql`UPDATE gym_member_bills SET status = 'paid' WHERE id = ${fee.id}`;
     // Its payment voided: nothing is owed, then or after another Came.
     const voided = await inject("POST", `${feeUrl(gym, ivy, fee.id)}/payments/${after?.can.voidPaymentId ?? ""}/void`, gym.owner.cookies, { reason: "mistake" });
     expect(voided.statusCode, voided.body).toBe(200);

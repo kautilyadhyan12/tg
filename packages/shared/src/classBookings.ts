@@ -406,9 +406,9 @@ const staffBookingSchema = z
      *  (`members.confirm`); null for anybody else, and where they are not on the list. */
     entryId: z.string().uuid().nullable(),
     at: z.string().datetime(),
-    /** Its late cancel or no-show fee (18h-i), owed, paid or waived, in the list's
+    /** Its late cancel or no-show fee (18h-i), owed, paid, refunded or waived, in the list's
      *  `currency`; null for none, and for a coach reading their own class's list. */
-    fee: z.object({ amountMinor: z.number().int().min(1), state: z.enum(["owed", "paid", "waived"]) }).strict().nullable().default(null),
+    fee: z.object({ amountMinor: z.number().int().min(1), state: z.enum(["owed", "paid", "refunded", "waived"]) }).strict().nullable().default(null),
     /** What marking them No-show would add (`classFeeFor`); null for nothing, and for a coach,
      *  who is sent the list's `noShowFeeMayMinor` instead. */
     noShowFeeMinor: z.number().int().min(1).nullable().default(null),

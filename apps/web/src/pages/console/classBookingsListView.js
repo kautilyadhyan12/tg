@@ -26,7 +26,7 @@ export function lateHeading(list) {
   return total > shown ? `Cancelled late · ${count(total)} (the first ${count(shown)} are listed)` : `Cancelled late · ${count(total)}`;
 }
 
-const FEE_STATE_WORDS = { owed: 'on their bills', paid: 'paid', waived: 'waived' };
+const FEE_STATE_WORDS = { owed: 'on their bills', paid: 'paid', refunded: 'refunded', waived: 'waived' };
 
 /** A booking's late cancel or no-show fee (18h-i): "No-show fee £8.00 · on their bills";
  *  null for none. */
