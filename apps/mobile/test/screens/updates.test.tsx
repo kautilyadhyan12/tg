@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
-import { AppState, Dimensions } from "react-native";
+import { AppState, Dimensions, StyleSheet, type StyleProp, type ViewStyle } from "react-native";
 import { Directory, File, Paths } from "expo-file-system";
 import { launchImageLibraryAsync } from "expo-image-picker";
 import { gymPostsResponseSchema } from "@app/shared";
@@ -1351,6 +1351,26 @@ describe("before a post goes up", () => {
   });
 });
 
+describe("going along the list", () => {
+  const moved = (y: number) => ({ nativeEvent: { contentOffset: { x: 0, y }, layoutMeasurement: { width: 300, height: 700 }, contentSize: { width: 300, height: 3000 } } });
+  it("at the top offers the bottom, in the middle both, at the end of what is read the top and Show older posts", async () => {
+    const server = serverOf({ [postsOf(IRON)]: on(IRON, [post(P1)]) });
+    await openUpdates(server.ask, IRON);
+    const list = await page().findByTestId("updates-list");
+    expect(page().queryByLabelText("Go to the top")).toBeNull();
+    expect(page().queryByLabelText("Go to the bottom")).toBeNull();
+    await fireEvent.scroll(list, moved(0));
+    expect(page().queryByLabelText("Go to the top")).toBeNull();
+    expect(page().getByLabelText("Go to the bottom")).toBeTruthy();
+    await fireEvent.scroll(list, moved(1200));
+    expect(page().getByLabelText("Go to the top")).toBeTruthy();
+    expect(page().getByLabelText("Go to the bottom")).toBeTruthy();
+    await fireEvent.scroll(list, moved(2300));
+    expect(page().getByLabelText("Go to the top")).toBeTruthy();
+    expect(page().queryByLabelText("Go to the bottom")).toBeNull();
+  });
+});
+
 describe("a post's photos", () => {
   const photo = (n: number) => ({ id: PHOTO.replace("c1", `c${String(n)}`), width: 1600, height: 1200 });
   it("slide one at a time with dots, the dot follows, and pressing one opens that one", async () => {
@@ -1365,6 +1385,22 @@ describe("a post's photos", () => {
     expect(dots.children[2]).toBe(within(dots).getByTestId("photo-dot-on"));
     await fireEvent.press(page().getByLabelText("Open photo 2 of 3"));
     expect(await screen.findByText("Photo 2 of 3")).toBeTruthy();
+  });
+
+  it.each([
+    ["a tall photo at the height limit", { width: 486, height: 1080 }, 900, 420],
+    ["a tall photo below it", { width: 486, height: 1080 }, 300, 400],
+    ["a very wide photo", { width: 3000, height: 1000 }, 382, 200],
+  ])("%s fills the card's width: the box keeps its full width whatever its height", async (_, shape, wide, tall) => {
+    const server = serverOf({ [postsOf(IRON)]: ok(feed(IRON, [post(P1, { photos: [{ ...photo(1), ...shape }] })])) });
+    await openUpdates(server.ask, IRON);
+    const box = await page().findByTestId(`photos-box-${P1}`);
+    await fireEvent(box, "layout", { nativeEvent: { layout: { x: 0, y: 0, width: wide, height: 100 } } });
+    const style = StyleSheet.flatten(page().getByTestId(`photos-box-${P1}`).props.style as StyleProp<ViewStyle>);
+    expect(style.width).toBe("100%");
+    expect(style.aspectRatio).toBeUndefined();
+    expect(style.maxHeight).toBeUndefined();
+    expect(Math.round(Number(style.height))).toBe(tall);
   });
 
   it("one photo has no dots", async () => {

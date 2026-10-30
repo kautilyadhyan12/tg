@@ -114,6 +114,9 @@ type Blocked = { kind: "loading" } | { kind: "failed"; text: string } | { kind: 
 // How many posts are drawn at a time, and how many screens' worth stay drawn: a photo is fetched when its post is.
 const NEAR_THE_SCREEN = 5;
 
+// How far from either end of the list its button to that end shows.
+const NEAR_AN_END = 240;
+
 const REACTION_ICONS: Readonly<Record<GymPostReaction, IconName>> = { like: "like", love: "heart", strong: "strong", fire: "flame" };
 
 function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose: () => void; bottom: number }) {
@@ -124,6 +127,16 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
   // What the last post came to, said where its button is.
   const [postedNote, setPostedNote] = useState<string | null>(null);
   const list = useRef<FlatList<GymPost>>(null);
+  // Where the list stands, for the two buttons that jump along it: the end is the end of the posts read so far.
+  const [ends, setEnds] = useState({ top: true, end: true });
+  const measured = useRef({ y: 0, shown: 0, all: 0 });
+  const measure = (next: Partial<typeof measured.current>) => {
+    measured.current = { ...measured.current, ...next };
+    const { y, shown, all } = measured.current;
+    const top = y < NEAR_AN_END;
+    const end = y + shown > all - NEAR_AN_END;
+    setEnds((was) => (was.top === top && was.end === end ? was : { top, end }));
+  };
   const [held, setHeld] = useState<Held>({ kind: "loading" });
   const [more, setMore] = useState<{ busy: boolean; error: string | null }>({ busy: false, error: null });
   // The post whose reaction is on its way, and what went wrong with a post's last one.
@@ -254,7 +267,25 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
       </View>
       <FlatList
         ref={list}
+        testID="updates-list"
         style={styles.grow}
+        scrollEventThrottle={100}
+        onScroll={(e) => {
+          measure({ y: e.nativeEvent.contentOffset.y, shown: e.nativeEvent.layoutMeasurement.height, all: e.nativeEvent.contentSize.height });
+        }}
+        // A scroll's last moment can fall between its reports.
+        onMomentumScrollEnd={(e) => {
+          measure({ y: e.nativeEvent.contentOffset.y });
+        }}
+        onScrollEndDrag={(e) => {
+          measure({ y: e.nativeEvent.contentOffset.y });
+        }}
+        onLayout={(e) => {
+          measure({ shown: e.nativeEvent.layout.height });
+        }}
+        onContentSizeChange={(_, all) => {
+          measure({ all });
+        }}
         contentContainerStyle={[styles.list, { paddingBottom: bottom + 96 }]}
         data={feed === null || empty !== null ? [] : [...feed.pinned, ...feed.posts]}
         keyExtractor={(post) => post.id}
@@ -368,6 +399,36 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
           )
         }
       />
+      {ends.top && ends.end ? null : (
+        <View style={[styles.jumps, { bottom: bottom + (mayPost ? 92 : 20) }]}>
+          {ends.top ? null : (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Go to the top"
+              hitSlop={4}
+              onPress={() => {
+                list.current?.scrollToOffset({ offset: 0, animated: true });
+              }}
+              style={styles.jump}
+            >
+              <Icon name="up" size={20} />
+            </Pressable>
+          )}
+          {ends.end ? null : (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Go to the bottom"
+              hitSlop={4}
+              onPress={() => {
+                list.current?.scrollToEnd({ animated: true });
+              }}
+              style={styles.jump}
+            >
+              <Icon name="down" size={20} />
+            </Pressable>
+          )}
+        </View>
+      )}
       {mayPost ? (
         <Pressable
           testID="write-post"
@@ -600,6 +661,11 @@ function PostCard({ post, gymName, posted, photoUrl, files, photoRound, busy, re
   );
 }
 
+// A post's photos are cut to the first one's shape, within these; pressing one shows it whole.
+const PHOTO_SHAPE_NARROWEST = 0.75;
+const PHOTO_SHAPE_WIDEST = 1.91;
+const PHOTOS_TALLEST = 420;
+
 // By how many photos the post has, one to four: the row of them, and one of them in it.
 const ALL_PHOTOS_WIDE = ["100%", "200%", "300%", "400%"] as const;
 const ONE_PHOTO_WIDE = ["100%", "50%", "33.3333%", "25%"] as const;
@@ -610,12 +676,20 @@ function PostPhotos({ post, photoUrl, files, photoRound, onPhoto }: Pick<PostCar
   const [at, setAt] = useState(0);
   const { photos } = post;
   const first = photos[0];
-  const shape = first === undefined ? 1 : Math.max(first.width / first.height, 0.75);
+  const shape = first === undefined ? 1 : Math.min(Math.max(first.width / first.height, PHOTO_SHAPE_NARROWEST), PHOTO_SHAPE_WIDEST);
+  // The card's own width, once it is known: a height limit on a shaped box would narrow the box too.
+  const [wide, setWide] = useState(0);
   const allWide = ALL_PHOTOS_WIDE[photos.length - 1] ?? "100%";
   const oneWide = ONE_PHOTO_WIDE[photos.length - 1] ?? "100%";
   return (
     <View style={styles.photosBox}>
-      <View style={[styles.slides, { aspectRatio: shape }]}>
+      <View
+        testID={`photos-box-${post.id}`}
+        onLayout={(e) => {
+          setWide(e.nativeEvent.layout.width);
+        }}
+        style={[styles.slides, wide === 0 ? { aspectRatio: shape } : { height: Math.min(wide / shape, PHOTOS_TALLEST) }]}
+      >
         <ScrollView
           testID={`photos-${post.id}`}
           horizontal
@@ -951,6 +1025,18 @@ const styles = StyleSheet.create({
     boxShadow: shadows.button,
   },
   penWords: { paddingHorizontal: 20 },
+  // Over the photos as well as the page, so they are solid.
+  jumps: { position: "absolute", right: sizes.edge + 8, gap: 10 },
+  jump: {
+    width: sizes.press,
+    height: sizes.press,
+    borderRadius: sizes.round,
+    borderWidth: 1,
+    borderColor: colours.lineStrong,
+    backgroundColor: colours.box,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   penPressed: { opacity: 0.85, transform: [{ scale: 0.96 }] },
   penLabel: { fontFamily: fonts.semibold, fontSize: 15, lineHeight: 20 },
   box: { padding: 16, gap: 10 },
@@ -968,7 +1054,7 @@ const styles = StyleSheet.create({
   },
   note: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
   photosBox: { gap: 8 },
-  slides: { width: "100%", maxHeight: 420, borderRadius: 12, overflow: "hidden", backgroundColor: colours.fill },
+  slides: { width: "100%", borderRadius: 12, overflow: "hidden", backgroundColor: colours.fill },
   fill: { width: "100%", height: "100%" },
   noPhoto: { alignItems: "center", justifyContent: "center", padding: 8 },
   foot: { gap: sizes.gap },
