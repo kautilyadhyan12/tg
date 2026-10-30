@@ -91,7 +91,7 @@ export function WholeDish({ applied, held, onUse, onClear, onDishChanged }: { ap
           />
         </ScrollView>
       </Sheet>
-      <Sheet open={editing} title="Your dishes" onClose={() => { setEditing(false); }}>
+      <Sheet open={editing} title="Eaten from one dish" onClose={() => { setEditing(false); }}>
         <ScrollView style={styles.boxList} contentContainerStyle={styles.boxListInner} keyboardShouldPersistTaps="handled">
           <EditDishes
             list={offered}
