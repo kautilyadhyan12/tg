@@ -63,5 +63,26 @@ jest.mock("expo-file-system", () => {
       return Promise.resolve();
     }
   }
-  return { File, Paths: { document: { uri: "documents" } } };
+  // A download is a test's to answer (`File.downloadFileAsync.mockImplementation`); by default it lands.
+  File.downloadFileAsync = jest.fn((_url, to) => {
+    files.set(to.uri, "photo");
+    return Promise.resolve(to);
+  });
+  const folders = new Set();
+  class Directory {
+    constructor(dir, name) {
+      this.uri = `${dir.uri}/${name}`;
+    }
+    get exists() {
+      return folders.has(this.uri);
+    }
+    create() {
+      folders.add(this.uri);
+    }
+    delete() {
+      folders.delete(this.uri);
+      for (const uri of [...files.keys()]) if (uri.startsWith(`${this.uri}/`)) files.delete(uri);
+    }
+  }
+  return { File, Directory, Paths: { document: { uri: "documents" }, cache: { uri: "cache" } } };
 });

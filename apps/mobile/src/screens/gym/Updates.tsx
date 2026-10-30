@@ -63,6 +63,7 @@ import {
   withoutAuthor,
   withoutPost,
 } from "./updatesView";
+import { photoFiles, type PhotoFiles } from "./photoFiles";
 
 // A place's Updates for its member (spec Part 3 §15.2, §15.3; ROADMAP Stage 5 item 17a): the gym's posts, pinned ones
 // first, 20 a page, each with its photos and the four reactions; Remove on the member's own post, Report and Block on
@@ -119,6 +120,13 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
   // The photos are read signed in: the token they were asked with, and whether it has been renewed for them.
   const [token, setToken] = useState(() => session.accessToken());
   const renewed = useRef(false);
+  const [files] = useState(photoFiles);
+  useEffect(
+    () => () => {
+      files.clear();
+    },
+    [files],
+  );
   // Reads are numbered as they start: an answer stands only if no later read has started.
   const started = useRef(0);
   const live = useRef(true);
@@ -260,6 +268,7 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
                     posted={postedText(post.createdAt, now, zone, place.clockFormat)}
                     photoUrl={(photoId) => `${apiUrl}${photoPath(place.id, post.id, photoId)}`}
                     token={token}
+                    files={files}
                     onPhotoFailed={photoFailed}
                     busy={reacting === post.id}
                     reactError={reactError?.postId === post.id ? reactError.text : null}
@@ -345,6 +354,7 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
         viewing={viewing}
         url={(post, photoId) => `${apiUrl}${photoPath(place.id, post.id, photoId)}`}
         token={token}
+        files={files}
         onPhotoFailed={photoFailed}
         onIndex={(index) => {
           setViewing((v) => (v === null ? v : { ...v, index }));
@@ -363,6 +373,7 @@ interface PostCardProps {
   posted: string;
   photoUrl: (photoId: string) => string;
   token: string | null;
+  files: PhotoFiles;
   onPhotoFailed: () => void;
   busy: boolean;
   reactError: string | null;
@@ -371,7 +382,7 @@ interface PostCardProps {
   onPhoto: (index: number) => void;
 }
 
-function PostCard({ post, gymName, posted, photoUrl, token, onPhotoFailed, busy, reactError, onReact, onAsk, onPhoto }: PostCardProps) {
+function PostCard({ post, gymName, posted, photoUrl, token, files, onPhotoFailed, busy, reactError, onReact, onAsk, onPhoto }: PostCardProps) {
   const tag = authorTag(post);
   const hidden = hiddenOwnNote(post, gymName);
   const action = memberPostAction(post);
@@ -379,7 +390,7 @@ function PostCard({ post, gymName, posted, photoUrl, token, onPhotoFailed, busy,
     <Card testID={`post-${post.id}`} style={styles.box}>
       <View style={styles.row}>
         <View style={styles.initials}>
-          <Txt kind="small" colour="orange" style={styles.bold}>
+          <Txt kind="small" colour="orange" style={styles.bold} numberOfLines={1}>
             {authorInitials(post, gymName)}
           </Txt>
         </View>
@@ -413,7 +424,7 @@ function PostCard({ post, gymName, posted, photoUrl, token, onPhotoFailed, busy,
               }}
               style={[styles.photo, post.photos.length === 1 ? { width: "100%", aspectRatio: Math.max(photo.width / photo.height, 0.75) } : styles.photoHalf]}
             >
-              <SignedPhoto uri={photoUrl(photo.id)} token={token} onFailed={onPhotoFailed} fit="cover" testID={`photo-${photo.id}`} />
+              <SignedPhoto uri={photoUrl(photo.id)} photoId={photo.id} token={token} files={files} onFailed={onPhotoFailed} fit="cover" testID={`photo-${photo.id}`} />
             </Pressable>
           ))}
         </View>
@@ -440,43 +451,67 @@ function PostCard({ post, gymName, posted, photoUrl, token, onPhotoFailed, busy,
             ) : null}
           </Pressable>
         ))}
+        {action === null && !canBlock(post) ? null : (
+          <View style={styles.actions}>
+            {action === "remove" ? (
+              <Button label="Remove" kind="quiet" icon="trash" say="Remove your post" onPress={() => { onAsk("remove"); }} />
+            ) : action === "report" ? (
+              <Button label="Report" kind="quiet" icon="flag" say={`Report this post by ${authorName(post, gymName)}`} onPress={() => { onAsk("report"); }} />
+            ) : action === "reported" ? (
+              <View style={styles.reported}>
+                <Icon name="flag" size={14} colour="textFaint" />
+                <Txt kind="small" colour="textFaint">
+                  Reported
+                </Txt>
+              </View>
+            ) : null}
+            {canBlock(post) ? (
+              <Button label="Block" kind="quiet" icon="ban" say={`Block ${authorName(post, gymName)}`} onPress={() => { onAsk("block"); }} />
+            ) : null}
+          </View>
+        )}
       </View>
       {reactError === null ? null : <Txt colour="badText">{reactError}</Txt>}
-      {action === null && !canBlock(post) ? null : (
-        <View style={styles.actions}>
-          {action === "remove" ? (
-            <Button label="Remove" kind="quiet" icon="trash" say="Remove your post" onPress={() => { onAsk("remove"); }} />
-          ) : action === "report" ? (
-            <Button label="Report" kind="quiet" icon="flag" say={`Report this post by ${authorName(post, gymName)}`} onPress={() => { onAsk("report"); }} />
-          ) : action === "reported" ? (
-            <View style={styles.reported}>
-              <Icon name="flag" size={14} colour="textFaint" />
-              <Txt kind="small" colour="textFaint">
-                Reported
-              </Txt>
-            </View>
-          ) : null}
-          {canBlock(post) ? (
-            <Button label="Block" kind="quiet" icon="ban" say={`Block ${authorName(post, gymName)}`} onPress={() => { onAsk("block"); }} />
-          ) : null}
-        </View>
-      )}
     </Card>
   );
 }
 
-/** A post's photo, read from the api as the person signed in. */
-function SignedPhoto({ uri, token, onFailed, fit, testID }: { uri: string; token: string | null; onFailed: () => void; fit: "cover" | "contain"; testID?: string }) {
-  if (token === null) return <View style={styles.fill} />;
+interface SignedPhotoProps {
+  uri: string;
+  photoId: string;
+  token: string | null;
+  files: PhotoFiles;
+  onFailed: () => void;
+  fit: "cover" | "contain";
+  testID?: string;
+}
+
+/** A post's photo, read from the api as the person signed in, and shown from the phone's copy. */
+function SignedPhoto({ uri, photoId, token, files, onFailed, fit, testID }: SignedPhotoProps) {
+  const [shown, setShown] = useState<string | null>(null);
+  useEffect(() => {
+    if (token === null) return;
+    let live = true;
+    files.get(uri, photoId, token).then(
+      (file) => {
+        if (live) setShown(file);
+      },
+      () => {
+        if (live) onFailed();
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [uri, photoId, token, files, onFailed]);
+  if (shown === null) return <View style={styles.fill} />;
   return (
     <Image
-      key={token}
       testID={testID}
-      source={{ uri, headers: { authorization: `Bearer ${token}` } }}
+      source={{ uri: shown }}
       resizeMode={fit}
       style={styles.fill}
       accessible={false}
-      onError={onFailed}
     />
   );
 }
@@ -670,13 +705,14 @@ interface PhotoViewerProps {
   viewing: { post: GymPost; index: number } | null;
   url: (post: GymPost, photoId: string) => string;
   token: string | null;
+  files: PhotoFiles;
   onPhotoFailed: () => void;
   onIndex: (index: number) => void;
   onClose: () => void;
 }
 
 /** A post's photos, one at a time, the whole screen. */
-function PhotoViewer({ viewing, url, token, onPhotoFailed, onIndex, onClose }: PhotoViewerProps) {
+function PhotoViewer({ viewing, url, token, files, onPhotoFailed, onIndex, onClose }: PhotoViewerProps) {
   const insets = useSafeAreaInsets();
   const photos = viewing?.post.photos ?? [];
   const index = viewing === null ? 0 : Math.min(viewing.index, photos.length - 1);
@@ -693,7 +729,7 @@ function PhotoViewer({ viewing, url, token, onPhotoFailed, onIndex, onClose }: P
           </Pressable>
         </View>
         <View style={styles.grow}>
-          {viewing === null || photo === undefined ? null : <SignedPhoto uri={url(viewing.post, photo.id)} token={token} onFailed={onPhotoFailed} fit="contain" />}
+          {viewing === null || photo === undefined ? null : <SignedPhoto key={photo.id} uri={url(viewing.post, photo.id)} photoId={photo.id} token={token} files={files} onFailed={onPhotoFailed} fit="contain" />}
         </View>
         {photos.length < 2 ? null : (
           <View style={styles.buttons}>
@@ -725,8 +761,9 @@ const styles = StyleSheet.create({
   grow: { flex: 1 },
   bold: { fontFamily: fonts.bold },
   initials: {
-    width: 36,
-    height: 36,
+    minWidth: 36,
+    minHeight: 36,
+    paddingHorizontal: 4,
     borderRadius: sizes.round,
     backgroundColor: colours.orangeFill,
     alignItems: "center",
@@ -752,7 +789,8 @@ const styles = StyleSheet.create({
     borderColor: colours.line,
   },
   reactionMine: { backgroundColor: colours.orangeFill, borderColor: colours.orangeLine },
-  actions: { flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-end", columnGap: 20 },
+  // Beside the reactions, at the card's right; on a narrow phone, on the next line, still at the right.
+  actions: { flexDirection: "row", marginLeft: "auto", columnGap: 12 },
   reported: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: sizes.press },
   middle: { alignSelf: "center", alignItems: "center", gap: 8 },
   help: { textAlign: "center" },

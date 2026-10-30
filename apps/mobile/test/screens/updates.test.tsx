@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import { AppState } from "react-native";
+import { Directory, File, Paths } from "expo-file-system";
 import { gymPostsResponseSchema } from "@app/shared";
 import { App } from "../../src/App";
 import type { Ask } from "../../src/session/calls";
@@ -78,6 +79,10 @@ async function openUpdates(ask: Ask, place: Place) {
   await fireEvent.press(await screen.findByLabelText(`Updates at ${place.name}`));
 }
 const page = () => within(screen.getByTestId("updates-page"));
+const download = jest.mocked(File.downloadFileAsync);
+afterEach(() => {
+  download.mockClear();
+});
 /** Lets a test bring the app back from the background. */
 function listenForComeBack(): () => Promise<void> {
   const listeners: ((state: string) => void)[] = [];
@@ -320,7 +325,9 @@ describe("the posts, as the browser shows them", () => {
     expect(page().queryByLabelText("Show older posts")).toBeNull();
   });
 
-  it("each photo is read from this place's post, signed in as this person, and opens the whole screen", async () => {
+  // React Native's own picture sends no headers on Android: the server saw none and refused every photo. Each photo
+  // is downloaded signed in, and shown from the phone's copy.
+  it("each photo is downloaded from this place's post, signed in as this person, and opens the whole screen", async () => {
     const server = fakeServer({
       "/v1/auth/refresh": ok({ tokens: tokens(2) }),
       "/v1/orgs/mine": mine(IRON),
@@ -328,11 +335,54 @@ describe("the posts, as the browser shows them", () => {
     });
     await openUpdates(server.ask, IRON);
     const open = await page().findByLabelText("Open photo 1 of 1");
-    const source = within(page().getByTestId(`post-${P1}`)).getByTestId(`photo-${PHOTO}`).props.source as { uri?: string; headers?: Record<string, string> };
-    expect(source.uri).toBe(`http://localhost:3000${postOf(IRON, P1)}/photos/${PHOTO}`);
-    expect(source.headers?.authorization).toBe("Bearer access-2");
+    const photo = await within(page().getByTestId(`post-${P1}`)).findByTestId(`photo-${PHOTO}`);
+    expect((photo.props.source as { uri?: string; headers?: unknown }).uri).toBe(`cache/updates/${PHOTO}`);
+    expect(download.mock.calls.length).toBeGreaterThan(0);
+    for (const [url, , options] of download.mock.calls) {
+      expect(url).toBe(`http://localhost:3000${postOf(IRON, P1)}/photos/${PHOTO}`);
+      expect(options?.headers?.authorization).toBe("Bearer access-2");
+    }
+    const asked = download.mock.calls.length;
     await fireEvent.press(open);
     expect(await screen.findByText("Photo 1 of 1")).toBeTruthy();
+    // The whole-screen photo is the one already on the phone.
+    expect(download.mock.calls.length).toBe(asked);
+  });
+
+  it("a photo refused for an old sign-in is asked again once, with the renewed one", async () => {
+    let renewals = 0;
+    const server = fakeServer({
+      "/v1/auth/refresh": () => {
+        renewals += 1;
+        return { status: 200, body: { tokens: tokens(renewals + 1) } };
+      },
+      "/v1/orgs/mine": mine(IRON),
+      [postsOf(IRON)]: ok(feed(IRON, [post(P1, { photos: [{ id: PHOTO, width: 1600, height: 1200 }] })])),
+    });
+    download.mockImplementationOnce(() => Promise.reject(new Error("response has status: 401")));
+    await openUpdates(server.ask, IRON);
+    const photo = await within(page().getByTestId(`post-${P1}`)).findByTestId(`photo-${PHOTO}`);
+    expect((photo.props.source as { uri?: string }).uri).toBe(`cache/updates/${PHOTO}`);
+    const sent = download.mock.calls.map(([, , options]) => options?.headers?.authorization);
+    expect(sent.at(-1)).toBe(`Bearer access-${String(renewals + 1)}`);
+    expect(sent.at(-1)).not.toBe(sent[0]);
+  });
+
+  it("closing Updates deletes the photos it downloaded", async () => {
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [postsOf(IRON)]: ok(feed(IRON, [post(P1, { photos: [{ id: PHOTO, width: 1600, height: 1200 }] })])),
+    });
+    await openUpdates(server.ask, IRON);
+    await within(page().getByTestId(`post-${P1}`)).findByTestId(`photo-${PHOTO}`);
+    const folder = new Directory(Paths.cache, "updates");
+    expect(new File(folder, PHOTO).exists).toBe(true);
+    await fireEvent.press(page().getByLabelText("Back"));
+    await waitFor(() => {
+      expect(new File(folder, PHOTO).exists).toBe(false);
+    });
+    expect(folder.exists).toBe(false);
   });
 });
 
