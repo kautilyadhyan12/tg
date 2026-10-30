@@ -171,15 +171,17 @@ export async function forgetOldRazorpayEvents(sql: SqlOrTx, before: Date, limit:
 
 /** What is kept of a Square event (ROADMAP 18d-i): its type and the Square account it is
  *  about, and for a card's message which card, for a customer's which customer (18d-ii). The
- *  worker asks Square itself before acting. A payment's message kept before 18d-iii-b-v reads the
- *  same, its payment left out. */
+ *  worker asks Square itself before acting. `paymentId`: only on a payment's message kept before
+ *  18d-iii-b-v, which the worker finishes with nothing to do. */
 export const storedSquareEventSchema = z
   .object({
     type: z.string().min(1).max(100),
     accountId: squareObjectIdSchema,
     cardId: squareCardIdSchema.optional(),
     customerId: squareObjectIdSchema.optional(),
-  });
+    paymentId: z.string().max(192).optional(),
+  })
+  .strict();
 export type StoredSquareEvent = z.infer<typeof storedSquareEventSchema>;
 
 export async function keepSquareEvent(sql: SqlOrTx, event: { eventId: string; payload: StoredSquareEvent }): Promise<void> {

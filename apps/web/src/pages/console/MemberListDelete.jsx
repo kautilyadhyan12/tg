@@ -131,7 +131,7 @@ export default function MemberListDelete({ words, load, press, onSelectionChange
             {group.key === 'notReached' ? (
               squareTo !== null ? (
                 <PlaceLink to={squareTo} data-testid="delete-square-connect">
-                  Connect Square
+                  Open Square settings
                 </PlaceLink>
               ) : (
                 <p className="c-s14 c-t2" data-testid="delete-square-owner">

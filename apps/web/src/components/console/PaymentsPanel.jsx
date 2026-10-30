@@ -28,8 +28,7 @@ import { ConsoleFailed, ConsoleLoading, ConsoleSection } from './ConsoleStates';
 // location and disconnects; everybody else who opens Settings reads it, with a line saying who
 // can. Connect Square opens Square's own page in this tab, and Square sends the person back to
 // `/connect/square`, which brings them here with what happened (`outcome`). Connected in the US,
-// Canada or Australia, the box lists the gym's Square Terminals (18d-ii-b-i); connected anywhere, it
-// says how to set up Square's own app for payments taken there (18d-iii-b-i).
+// Canada or Australia, the box lists the gym's Square Terminals (18d-ii-b-i).
 
 const labelStyle = { color: 'rgba(255,255,255,0.85)' };
 const hintStyle = { color: 'rgba(255,255,255,0.45)' };

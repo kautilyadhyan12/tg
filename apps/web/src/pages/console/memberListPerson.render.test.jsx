@@ -814,10 +814,10 @@ describe('a person on the list', () => {
     it('a customer the app cannot reach: the owner gets the button to Connect Square, anybody else reads who can', async () => {
       const owner = await ask('not_reached', { gym: { slug: 'iron-house', orgType: 'gym', staffRole: 'owner' } });
       expect(owner.getByTestId('delete-square').textContent).toBe('The app can’t reach your Square, or needs another permission from it, so Ada Lovelace stays in your Square customer list.');
-      expect(owner.getByRole('link', { name: 'Connect Square' }).getAttribute('href')).toBe('/console/iron-house/settings#payments');
+      expect(owner.getByRole('link', { name: 'Open Square settings' }).getAttribute('href')).toBe('/console/iron-house/settings#payments');
       cleanup();
       const manager = await ask('not_reached', { gym: { slug: 'iron-house', orgType: 'gym', staffRole: 'manager', privileges: ['members.read', 'members.confirm', 'members.remove'] } });
-      expect(manager.queryByRole('link', { name: 'Connect Square' })).toBeNull();
+      expect(manager.queryByRole('link', { name: 'Open Square settings' })).toBeNull();
       expect(manager.getByTestId('delete-square-owner').textContent).toBe('Only the owner can connect Square.');
     });
   });
