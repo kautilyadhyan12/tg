@@ -70,6 +70,10 @@ import { Credits, SourceLine } from "./SourceLine";
 /** A scan takes the server up to about fifty seconds: the photo, then the check of unclear foods. */
 const SCAN_WAIT_MS = 75_000;
 const NO_CONNECTION = "No connection. Try again.";
+/** While the foods' weights cannot be fetched: asked again this often, for at most 15 minutes. */
+const PRICE_RETRY_MS = 5000;
+const PRICE_RETRIES_MOST = 180;
+const PRICE_LOST = "Can’t reach the server. The foods’ weights will show when you’re back online.";
 const SCAN_GONE = "This photo’s scan has run out, so this meal can’t be saved. Take a new photo.";
 /** The photo's band over the review, as tall as a page's own picture is for the phone's shape. */
 const PHOTO_TALL = 0.78;
@@ -337,7 +341,7 @@ function Reading({ uri, onClose }: { uri: string; onClose: () => void }) {
   );
 }
 
-type Priced = { kind: "none" } | { kind: "ok"; preview: MealPreview; for: string } | { kind: "refused"; words: string; for: string };
+type Priced = { kind: "none" } | { kind: "lost"; for: string } | { kind: "ok"; preview: MealPreview; for: string } | { kind: "refused"; words: string; for: string };
 
 /** The scan's foods: each at its amount, changed in the amount box or taken off; a food the photo
  *  missed added; the meal it was; and Save. Every number is the server's. */
@@ -359,6 +363,7 @@ function Review({
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const [priced, setPriced] = useState<Priced>({ kind: "none" });
+  const [priceTry, setPriceTry] = useState(0);
   const [openRow, setOpenRow] = useState<string | null>(null);
   const [finding, setFinding] = useState<{ query: string; change: string | null } | null>(null);
   const [ask, setAsk] = useState<Ask>("none");
@@ -379,6 +384,7 @@ function Review({
       return undefined;
     }
     let stale = false;
+    let again: ReturnType<typeof setTimeout> | undefined;
     const timer = setTimeout(() => {
       void session.signedIn({ method: "POST", path: "/v1/nutrition/meals/preview", body: { items, scanToken } }, mealPreviewSchema).then((answer) => {
         if (stale) return;
@@ -386,17 +392,23 @@ function Review({
         // The server no longer holds the scan (kept a day): it can only be taken again.
         else if (answer.kind === "refused" && answer.error === "invalid_scan") setPriced({ kind: "refused", words: SCAN_GONE, for: key });
         else if (answer.kind === "refused" && amountRefusal(answer.error) !== null) setPriced({ kind: "refused", words: amountRefusal(answer.error) ?? "", for: key });
-        else setPriced({ kind: "none" });
+        else {
+          // Never a wait with no end: it says so and asks again until the signal is back.
+          setPriced({ kind: "lost", for: key });
+          if (priceTry < PRICE_RETRIES_MOST) again = setTimeout(() => { setPriceTry((n) => n + 1); }, PRICE_RETRY_MS);
+        }
       });
     }, 300);
     return () => {
       stale = true;
       clearTimeout(timer);
+      if (again !== undefined) clearTimeout(again);
     };
     // `key` is the whole of `items`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, scanToken, session]);
+  }, [key, scanToken, session, priceTry]);
 
+  const priceLost = priced.kind === "lost" && priced.for === key;
   const preview = priced.kind === "ok" && priced.for === key ? priced.preview : null;
   const refusedWords = priced.kind === "refused" && priced.for === key ? priced.words : null;
   const numbers = sheetNumbers(sheet, preview);
@@ -527,7 +539,9 @@ function Review({
                 unfinished !== undefined
                   ? `${unfinished.title} needs an amount first.`
                   : rowGrams.some((g, i) => g === null && rows[i]?.own === null)
-                    ? "Working out the foods’ weights…"
+                    ? priceLost
+                      ? PRICE_LOST
+                      : "Working out the foods’ weights…"
                     : null
               }
               onUse={({ dish, fill }) => {
@@ -563,6 +577,11 @@ function Review({
             {refusedWords}
           </Txt>
         )}
+        {priceLost ? (
+          <Txt kind="small" colour="gold">
+            {PRICE_LOST}
+          </Txt>
+        ) : null}
         {full ? (
           <Txt kind="small" colour="badText">
             Too many meals are waiting to be sent. Go online to send them, then save this one.

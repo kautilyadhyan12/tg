@@ -608,6 +608,20 @@ describe("a food the photo got wrong, and one no list has (Kd, 2026-10-30)", () 
     expect(screen.getByRole("button", { name: "Bowl, full" })).toBeTruthy();
   });
 
+  it("with no signal the foods' weights say so, never an endless wait, and come by themselves when it is back (Kd's click-through, 2026-10-30)", async () => {
+    const phone: Phone = { meals: [], scans: [] };
+    await openFood(phone);
+    await takePhoto();
+    await screen.findByText(/^340\skcal · /);
+    phone.previewsLost = true;
+    await fireEvent.press(screen.getByRole("button", { name: "Bowl, full" }));
+    expect(await screen.findAllByText(/^Can’t reach the server\./)).not.toHaveLength(0);
+    expect(screen.queryByText("Working out the foods’ weights…")).toBeNull();
+    phone.previewsLost = false;
+    await screen.findByRole("button", { name: /^Change Toast, Part of Bowl, full · \d+ g/ }, { timeout: 8000 });
+    expect(screen.queryByText(/^Can’t reach the server\./)).toBeNull();
+  }, 15000);
+
   it("a food left without how full its dish was is named, in red, and the meal waits for it", async () => {
     await openFood({ meals: [], scans: [] });
     await takePhoto();
