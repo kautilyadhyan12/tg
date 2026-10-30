@@ -1,5 +1,6 @@
 import { useRef, useState, type ReactNode } from "react";
-import { FlatList, Modal, Pressable, StyleSheet, View } from "react-native";
+import { FlatList, Pressable, StyleSheet, View } from "react-native";
+import { Modal } from "../../look/Modal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colours, sizes } from "../../look/colours";
 import { Icon } from "../../look/Icon";

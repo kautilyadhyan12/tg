@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
+import { ActivityIndicator, Image, Linking, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
+import { Modal } from "../../look/Modal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";

@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, type ReactNode } from "react";
-import { KeyboardAvoidingView, Modal, Pressable, StyleSheet, View } from "react-native";
+import { KeyboardAvoidingView, Pressable, StyleSheet, View } from "react-native";
+import { Modal } from "./Modal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colours, shadows, sizes } from "./colours";
 import { Icon } from "./Icon";

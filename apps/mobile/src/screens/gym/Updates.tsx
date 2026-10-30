@@ -1,5 +1,6 @@
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
-import { AppState, FlatList, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
+import { AppState, FlatList, Image, Linking, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
+import { Modal } from "../../look/Modal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   GYM_POST_WORDS,

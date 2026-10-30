@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
-import { AppState } from "react-native";
+import { AppState, Dimensions } from "react-native";
 import { Directory, File, Paths } from "expo-file-system";
 import { launchImageLibraryAsync } from "expo-image-picker";
 import { gymPostsResponseSchema } from "@app/shared";
@@ -1289,6 +1289,30 @@ describe("posting", () => {
     expect(screen.getByRole("button", { name: "Post" })).toBeDisabled();
     await fireEvent.changeText(screen.getByLabelText("Your post"), "a");
     expect(screen.getByRole("button", { name: "Post" })).toBeEnabled();
+  });
+});
+
+describe("the phone's display size changes", () => {
+  it("an open page is drawn afresh at the new size, and a kept post is still there", async () => {
+    const server = serverOf({ [postsOf(IRON)]: on(IRON, [post(P1)]) });
+    await openUpdates(server.ask, IRON);
+    await write("Leg day");
+    await settle();
+    const reads = server.paths().filter((path) => path === postsOf(IRON)).length;
+    const was = Dimensions.get("window");
+    await act(() => {
+      Dimensions.set({ window: { ...was, width: was.width + 100 }, screen: Dimensions.get("screen") });
+    });
+    try {
+      await waitFor(() => {
+        expect(server.paths().filter((path) => path === postsOf(IRON)).length).toBe(reads + 1);
+      });
+      expect(await page().findByRole("button", { name: "Finish your post" })).toBeTruthy();
+    } finally {
+      await act(() => {
+        Dimensions.set({ window: was, screen: Dimensions.get("screen") });
+      });
+    }
   });
 });
 

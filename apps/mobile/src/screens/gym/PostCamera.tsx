@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Linking, Modal, Pressable, StyleSheet, View } from "react-native";
+import { Linking, Pressable, StyleSheet, View } from "react-native";
+import { Modal } from "../../look/Modal";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Button } from "../../look/Button";

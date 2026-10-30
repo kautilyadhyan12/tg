@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { phoneAppExtraSchema } from "@app/shared";
 import { COPY_KEYS, configFor, copyFor } from "../app.config";
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const keepActivity = require("../plugins/keepActivity.js") as { withBoth: (manifest: unknown) => unknown };
 
 describe("a folder's copy of the app", () => {
   it("each folder has its own name, application id, api and bundler port", () => {
@@ -36,15 +34,5 @@ describe("a folder's copy of the app", () => {
     expect(() => copyFor(written)).toThrow(
       /must hold one of: feature1, feature2, exercise1, exercise2/,
     );
-  });
-});
-
-describe("the screen is not rebuilt", () => {
-  it("handles a change of display size and text size itself, each once, and keeps what it had", () => {
-    const manifest = { manifest: { application: [{ activity: [{ $: { "android:name": ".MainActivity", "android:configChanges": "orientation|density" } }, { $: { "android:name": ".Other" } }] }] } };
-    keepActivity.withBoth(manifest);
-    const [main, other] = manifest.manifest.application[0]?.activity ?? [];
-    expect(main?.$["android:configChanges"]).toBe("orientation|density|fontScale");
-    expect(other?.$["android:configChanges"]).toBeUndefined();
   });
 });

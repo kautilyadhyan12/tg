@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, Modal, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
+import { AppState, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
+import { Modal } from "../../look/Modal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { formatMinor, myMembershipResponseSchema, receiptSchema, type MyMembership, type MyMembershipResponse, type Receipt } from "@app/shared";
 import { Button } from "../../look/Button";

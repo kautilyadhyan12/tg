@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { AppState, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Modal } from "../../look/Modal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   MEMBER_PT_WEEKS,
