@@ -22,7 +22,7 @@ export const SOURCE_WORDS: Readonly<Record<FoodSource, string>> = {
 export function SourceLine({ source, before = "" }: { source: FoodSource; before?: string }) {
   return (
     <View style={styles.source}>
-      <Txt kind="tiny">{before}</Txt>
+      {before === "" ? null : <Txt kind="tiny">{before}</Txt>}
       {source === "curated" ? <Icon name="check" size={12} colour="goodText" /> : null}
       <Txt kind="tiny" colour={source === "curated" ? "goodText" : "textFaint"}>
         {SOURCE_WORDS[source]}

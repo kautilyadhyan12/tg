@@ -163,7 +163,14 @@ export type RowSource = PhotoSheetFood["source"] | "own";
 /** One food on the photo's meal, as its row reads it. */
 export interface SheetRow {
   key: string;
+  /** The food its numbers are from. */
   name: string;
+  /** What the row is called: what the photo saw, where that is not `name` (33b-ii), else `name`. */
+  title: string;
+  /** The food the numbers are from, said under the title where the title is what the photo saw. */
+  numbersFrom: string | null;
+  /** The foods closest to what the photo saw, offered first by "Not this?" (33b-ii). */
+  closeFoods: MealPhotoAnalysis["items"][number]["closeFoods"];
   /** The list's food, or null for the person's own food (`own`). */
   canonical: string | null;
   source: RowSource;
@@ -185,14 +192,17 @@ const sameAmount = (a: PhotoSheetAmount, b: PhotoSheetAmount): boolean => a.meas
 const GRAMS_ONLY: MealPhotoAnalysis["items"][number]["measures"] = [{ id: "g", name: "g", grams: 1 }];
 
 /** A food the person put on the meal, as its row reads it. */
-function pickRow(pick: PhotoSheetPick, key: string, wasSeen: string | null): SheetRow {
+function pickRow(pick: PhotoSheetPick, key: string, wasSeen: string | null, closeFoods: SheetRow["closeFoods"] = []): SheetRow {
   if ("own" in pick) {
     const grams = { measure: "g", amount: formatAmount(pick.own.grams) };
-    return { key, name: pick.own.name, canonical: null, source: "own", measures: GRAMS_ONLY, amount: grams, usual: grams, estimated: false, scanned: null, own: pick.own, wasSeen, added: wasSeen === null };
+    return { key, name: pick.own.name, title: pick.own.name, numbersFrom: null, closeFoods, canonical: null, source: "own", measures: GRAMS_ONLY, amount: grams, usual: grams, estimated: false, scanned: null, own: pick.own, wasSeen, added: wasSeen === null };
   }
   return {
     key,
     name: pick.food.name,
+    title: pick.food.name,
+    numbersFrom: null,
+    closeFoods,
     canonical: pick.food.canonical,
     source: pick.food.source,
     measures: pick.food.measures,
@@ -214,11 +224,14 @@ export function sheetRows(sheet: PhotoSheet): SheetRow[] {
     if (amount === null || amount === undefined) return [];
     const key = `s${String(i)}`;
     const replaced = sheet.replaced[i];
-    if (replaced !== null && replaced !== undefined) return [pickRow(replaced, key, item.name)];
+    if (replaced !== null && replaced !== undefined) return [pickRow(replaced, key, item.seenAs ?? item.name, item.closeFoods)];
     const untouched = sameAmount(amount, startOf(item));
     return [{
       key,
       name: item.name,
+      title: item.seenAs ?? item.name,
+      numbersFrom: item.seenAs === undefined ? null : item.name,
+      closeFoods: item.closeFoods,
       canonical: item.canonical,
       // A scanned food's numbers are never the person's own; read as the scan's estimate if ever so.
       source: item.nutritionSource === "own" ? "estimate" : item.nutritionSource,
@@ -307,6 +320,21 @@ export function withSharesAsGrams(sheet: PhotoSheet, grams: readonly (number | n
     next = withRowAmount(next, row.key, { measure: "g", amount: String(Math.max(1, Math.round(g))) });
   }
   return next;
+}
+
+/** The one dish undone: each food the photo saw back at the amount it started at, and a food put in
+ *  its place at the grams it weighs now. Null while a weight is not known. */
+export function withoutWholeDish(sheet: PhotoSheet, grams: readonly (number | null)[]): PhotoSheet | null {
+  const next = withSharesAsGrams(sheet, grams);
+  if (next === null) return null;
+  return {
+    ...next,
+    amounts: next.amounts.map((a, i) => {
+      const item = sheet.analysis.items[i];
+      const seen = sheet.amounts[i]?.share !== undefined && (sheet.replaced[i] ?? null) === null;
+      return seen && item !== undefined ? startOf(item) : a;
+    }),
+  };
 }
 
 /** A food the photo missed: one the search found at the amount picked, or the person's own. */

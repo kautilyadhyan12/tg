@@ -1226,6 +1226,13 @@
       "when": 1790726400175,
       "tag": "0175_square_point_of_sale_out",
       "breakpoints": true
+    },
+    {
+      "idx": 175,
+      "version": "7",
+      "when": 1790726400176,
+      "tag": "0176_user_standard_dishes",
+      "breakpoints": true
     }
   ]
 }

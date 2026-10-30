@@ -466,10 +466,10 @@ export async function listDishware(
   cursor: { at: Date; id: string } | null,
 ): Promise<DishwareRow[]> {
   const rows = await sql<DishwareDbRow[]>`
-    SELECT id, label, container_class, volume_ml, food_hint, created_at FROM user_dishware
+    SELECT coalesce(standard_id, id) AS id, label, container_class, volume_ml, food_hint, created_at FROM user_dishware
     WHERE user_id = ${userId}
-      AND (${cursor === null} OR (created_at, id) < (${cursor?.at ?? null}, ${cursor?.id ?? null}))
-    ORDER BY created_at DESC, id DESC
+      AND (${cursor === null} OR (created_at, coalesce(standard_id, id)) < (${cursor?.at ?? null}, ${cursor?.id ?? null}))
+    ORDER BY created_at DESC, coalesce(standard_id, id) DESC
     LIMIT ${limit + 1}`;
   return rows.map(toDishware);
 }
@@ -478,8 +478,8 @@ export async function listDishware(
  *  returns null → the caller 400s; never leaks another user's dish. */
 export async function getDishware(sql: Sql, userId: string, id: string): Promise<DishwareRow | null> {
   const rows = await sql<DishwareDbRow[]>`
-    SELECT id, label, container_class, volume_ml, food_hint, created_at FROM user_dishware
-    WHERE id = ${id} AND user_id = ${userId}`;
+    SELECT coalesce(standard_id, id) AS id, label, container_class, volume_ml, food_hint, created_at FROM user_dishware
+    WHERE (id = ${id} OR standard_id = ${id}) AND user_id = ${userId}`;
   const r = rows[0];
   return r === undefined ? null : toDishware(r);
 }
@@ -496,7 +496,7 @@ export async function createDishware(
     INSERT INTO user_dishware (id, user_id, label, container_class, volume_ml, food_hint)
     VALUES (coalesce(${id ?? null}::uuid, gen_random_uuid()), ${userId}, ${v.label}, ${v.containerClass}, ${v.volumeMl}, ${v.foodHint ?? null})
     ON CONFLICT (id) DO NOTHING
-    RETURNING id, label, container_class, volume_ml, food_hint, created_at`;
+    RETURNING coalesce(standard_id, id) AS id, label, container_class, volume_ml, food_hint, created_at`;
   const r = rows[0];
   if (r !== undefined) return { dish: toDishware(r), created: true };
   if (id === undefined) throw new Error("dishware insert returned no row");
@@ -517,14 +517,36 @@ export async function updateDishware(
       volume_ml = coalesce(${v.volumeMl ?? null}, volume_ml),
       food_hint = CASE WHEN ${v.foodHint !== undefined} THEN ${v.foodHint ?? null} ELSE food_hint END
     WHERE id = ${id} AND user_id = ${userId}
-    RETURNING id, label, container_class, volume_ml, food_hint, created_at`;
+    RETURNING coalesce(standard_id, id) AS id, label, container_class, volume_ml, food_hint, created_at`;
   const r = rows[0];
   return r === undefined ? null : toDishware(r);
 }
 
+/** A person's own version of a dish everybody has: changed from what it is now, for them alone. */
+export async function changeStandardDish(
+  sql: Sql,
+  userId: string,
+  dish: { id: string; label: string; containerClass: string; volumeMl: number },
+  v: PatchDishware,
+): Promise<DishwareRow> {
+  const rows = await sql<DishwareDbRow[]>`
+    INSERT INTO user_dishware (user_id, standard_id, label, container_class, volume_ml, food_hint)
+    VALUES (${userId}, ${dish.id}, ${v.label ?? dish.label}, ${v.containerClass ?? dish.containerClass}, ${v.volumeMl ?? dish.volumeMl}, ${v.foodHint ?? null})
+    ON CONFLICT (user_id, standard_id) DO UPDATE SET
+      label = coalesce(${v.label ?? null}, user_dishware.label),
+      container_class = coalesce(${v.containerClass ?? null}, user_dishware.container_class),
+      volume_ml = coalesce(${v.volumeMl ?? null}, user_dishware.volume_ml),
+      food_hint = CASE WHEN ${v.foodHint !== undefined} THEN ${v.foodHint ?? null} ELSE user_dishware.food_hint END
+    RETURNING coalesce(standard_id, id) AS id, label, container_class, volume_ml, food_hint, created_at`;
+  const r = rows[0];
+  if (r === undefined) throw new Error("dishware upsert returned no row");
+  return toDishware(r);
+}
+
+/** A dish taken off; for a dish everybody has, the person's own version, so it is as it was. */
 export async function deleteDishware(sql: Sql, userId: string, id: string): Promise<boolean> {
   const rows = await sql<{ id: string }[]>`
-    DELETE FROM user_dishware WHERE id = ${id} AND user_id = ${userId} RETURNING id`;
+    DELETE FROM user_dishware WHERE (id = ${id} OR standard_id = ${id}) AND user_id = ${userId} RETURNING id`;
   return rows.length > 0;
 }
 
