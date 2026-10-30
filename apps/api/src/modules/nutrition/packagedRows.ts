@@ -168,8 +168,9 @@ export function offProductOfDaily(line: OffDailyLine): OffProduct {
       }
     }
   }
-  // A real day's 153 products have no plain name and one in a language: English, else the first there is.
-  const inLanguage = Object.entries(line).filter((entry): entry is [string, string] => /^product_name_[a-z]{2}$/.test(entry[0]) && typeof entry[1] === "string" && entry[1].trim() !== "");
+  // A real day's 153 products have no plain name and one in a language: English, else the first there
+  // is. One or two Latin letters ("x", "m", both real) name nothing; 牛奶 does.
+  const inLanguage = Object.entries(line).filter((entry): entry is [string, string] => /^product_name_[a-z]{2}$/.test(entry[0]) && typeof entry[1] === "string" && entry[1].trim() !== "" && !/^\p{Script=Latin}{1,2}$/u.test(entry[1].trim()));
   const namedInLanguage = inLanguage.find(([key]) => key === "product_name_en")?.[1] ?? inLanguage[0]?.[1];
   const plainName = clean(first(line.product_name ?? undefined)) || clean(first(line.generic_name ?? undefined));
   return offProductSchema.parse({

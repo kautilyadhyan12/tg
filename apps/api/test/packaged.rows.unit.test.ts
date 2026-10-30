@@ -167,6 +167,10 @@ describe("names and text a database refuses", () => {
     expect(line({ product_name_fr: "Boules" })).toMatchObject({ row: { name: "Boules" } });
     expect(line({ product_name: "Plain", product_name_en: "Other" })).toMatchObject({ row: { name: "Plain" } });
     expect(line({})).toMatchObject({ refused: "no_name", code: "3800020492932" });
+    // Real lines: product_name_ar "x" and product_name_de "m".
+    expect(line({ product_name_ar: "x" })).toMatchObject({ refused: "no_name" });
+    expect(line({ product_name_de: "m" })).toMatchObject({ refused: "no_name" });
+    expect(line({ product_name_zh: "牛奶" })).toMatchObject({ row: { name: "牛奶" } });
   });
 });
 
