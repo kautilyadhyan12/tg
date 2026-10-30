@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import { AppState } from "react-native";
 import { Directory, File, Paths } from "expo-file-system";
+import { launchImageLibraryAsync } from "expo-image-picker";
 import { gymPostsResponseSchema } from "@app/shared";
 import { App } from "../../src/App";
 import type { Ask } from "../../src/session/calls";
@@ -1288,6 +1289,41 @@ describe("posting", () => {
     expect(screen.getByRole("button", { name: "Post" })).toBeDisabled();
     await fireEvent.changeText(screen.getByLabelText("Your post"), "a");
     expect(screen.getByRole("button", { name: "Post" })).toBeEnabled();
+  });
+});
+
+describe("before a post goes up", () => {
+  it("the pen is at hand whatever the page holds, and a kept post says so on it", async () => {
+    const server = serverOf({ [postsOf(IRON)]: on(IRON, [post(P1)]) });
+    await openUpdates(server.ask, IRON);
+    expect(await page().findByRole("button", { name: "Write a post" })).toBeTruthy();
+    await write("Leg day");
+    await fireEvent.press(screen.getByLabelText("Close"));
+    expect(within(page().getByTestId("write-post")).getByText("Finish your post")).toBeTruthy();
+  });
+
+  it("a photo on the post opens whole when pressed, on that photo, and the post is still there after", async () => {
+    const server = serverOf({ [postsOf(IRON)]: on(IRON) });
+    await openUpdates(server.ask, IRON);
+    await fireEvent.press(await page().findByRole("button", { name: "Write a post" }));
+    picker.next = manyShots(2);
+    await fireEvent.press(await screen.findByRole("button", { name: "Add photos" }));
+    await screen.findByTestId("draft-photo-2");
+    await fireEvent.press(screen.getByLabelText("Look at photo 2 of 2"));
+    expect(await screen.findByText("Photo 2 of 2")).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText("Close photo"));
+    expect(screen.queryByText("Photo 2 of 2")).toBeNull();
+    expect(screen.getByTestId("draft-photo-2")).toBeTruthy();
+  });
+
+  it("a picker that will not open says what to do, and the post is kept", async () => {
+    const server = serverOf({ [postsOf(IRON)]: on(IRON) });
+    await openUpdates(server.ask, IRON);
+    await write("Leg day");
+    jest.mocked(launchImageLibraryAsync).mockRejectedValueOnce(new Error("unregistered"));
+    await fireEvent.press(screen.getByRole("button", { name: "Add photos" }));
+    expect(await screen.findByText("Couldn't open your photos. Close the app, open it again, and try once more. Your post is kept.")).toBeTruthy();
+    expect(screen.getByDisplayValue("Leg day")).toBeTruthy();
   });
 });
 

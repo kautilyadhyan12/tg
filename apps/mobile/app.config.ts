@@ -65,6 +65,7 @@ export function configFor(copy: Copy): ExpoConfig {
       ["expo-camera", { cameraPermission: "Allow $(PRODUCT_NAME) to take photos of your meals and for your gym's updates.", microphonePermission: false, recordAudioAndroid: false }],
       ["expo-image-picker", { photosPermission: "Allow $(PRODUCT_NAME) to open the photos you pick.", microphonePermission: false }],
       "./plugins/shortNativeBuild.js",
+      "./plugins/keepActivity.js",
     ],
     extra,
   };

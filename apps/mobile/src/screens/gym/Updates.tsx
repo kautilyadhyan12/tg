@@ -19,7 +19,7 @@ import {
 import { Button } from "../../look/Button";
 import { Card, Pill } from "../../look/Card";
 import { Options } from "../../look/Choice";
-import { colours, sizes } from "../../look/colours";
+import { colours, orangeGradient, shadows, sizes } from "../../look/colours";
 import { Field } from "../../look/Field";
 import { Icon, type IconName } from "../../look/Icon";
 import { Sheet } from "../../look/Sheet";
@@ -27,6 +27,7 @@ import { ASK_MOST } from "../../look/sizing";
 import { fonts, Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
 import { CopyContext } from "../ThisCopy";
+import { PhotoPages } from "./PhotoPages";
 import { hasWork } from "./postDraft";
 import { PostBox, useKeptPost } from "./PostBox";
 import {
@@ -253,7 +254,7 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
       <FlatList
         ref={list}
         style={styles.grow}
-        contentContainerStyle={[styles.list, { paddingBottom: bottom + 24 }]}
+        contentContainerStyle={[styles.list, { paddingBottom: bottom + 96 }]}
         data={feed === null || empty !== null ? [] : [...feed.pinned, ...feed.posts]}
         keyExtractor={(post) => post.id}
         initialNumToRender={NEAR_THE_SCREEN}
@@ -266,17 +267,7 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
                 <Txt>{stopped}</Txt>
               </Card>
             )}
-            {mayPost ? (
-              <Button
-                label={unsent ? "Finish your post" : "Write a post"}
-                icon="plus"
-                disabled={kept.draft === undefined}
-                onPress={() => {
-                  setPostedNote(null);
-                  setWriting(true);
-                }}
-              />
-            ) : feed !== null && unsent ? (
+            {!mayPost && feed !== null && unsent ? (
               <Button
                 label="See your unsent post"
                 kind="plain"
@@ -376,6 +367,27 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
           )
         }
       />
+      {mayPost ? (
+        <Pressable
+          testID="write-post"
+          accessibilityRole="button"
+          accessibilityLabel={unsent ? "Finish your post" : "Write a post"}
+          accessibilityState={{ disabled: kept.draft === undefined }}
+          disabled={kept.draft === undefined}
+          onPress={() => {
+            setPostedNote(null);
+            setWriting(true);
+          }}
+          style={({ pressed }) => [styles.pen, unsent ? styles.penWords : null, { bottom: bottom + 20 }, pressed ? styles.penPressed : null]}
+        >
+          <Icon name="pen" size={22} colour="onOrange" />
+          {unsent ? (
+            <Txt colour="onOrange" style={styles.penLabel}>
+              Finish your post
+            </Txt>
+          ) : null}
+        </Pressable>
+      ) : null}
       <PostBox
         open={writing}
         gymId={place.id}
@@ -894,79 +906,16 @@ interface PhotoViewerProps {
   onClose: () => void;
 }
 
-type PostPhoto = GymPost["photos"][number];
-
-/** A post's photos, one at a time, the whole screen; slid left and right (Kd's click-through, 2026-10-30), and stepped
- *  by a screen reader's swipe up and down. */
+/** A post's photos, the whole screen. */
 function PhotoViewer({ viewing, url, files, photoRound, onIndex, onClose }: PhotoViewerProps) {
-  const insets = useSafeAreaInsets();
-  const photos = viewing?.post.photos ?? [];
-  const index = viewing === null ? 0 : Math.min(viewing.index, photos.length - 1);
-  // One photo is the width the viewer is given.
-  const [width, setWidth] = useState(0);
-  const list = useRef<FlatList<PostPhoto>>(null);
-  const go = (to: number) => {
-    if (to < 0 || to >= photos.length) return;
-    onIndex(to);
-    list.current?.scrollToIndex({ index: to, animated: true });
-  };
-  const counted = photos.length === 0 ? "" : `Photo ${String(index + 1)} of ${String(photos.length)}`;
+  const post = viewing?.post ?? null;
   return (
-    <Modal visible={viewing !== null} animationType="fade" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
-      <View testID="photo-viewer" style={[styles.viewer, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 12 }]}>
-        <View style={styles.viewerHead}>
-          <Txt colour="text" style={styles.grow}>
-            {counted}
-          </Txt>
-          <Pressable accessibilityRole="button" accessibilityLabel="Close photo" onPress={onClose} style={styles.back}>
-            <Icon name="x" size={18} />
-          </Pressable>
-        </View>
-        <View
-          testID="photo-pages"
-          style={styles.grow}
-          onLayout={(e) => {
-            setWidth(e.nativeEvent.layout.width);
-          }}
-          accessible
-          accessibilityRole="adjustable"
-          accessibilityLabel={counted}
-          accessibilityActions={[{ name: "increment" }, { name: "decrement" }]}
-          onAccessibilityAction={(e) => {
-            go(e.nativeEvent.actionName === "increment" ? index + 1 : index - 1);
-          }}
-        >
-          {viewing === null || width === 0 ? null : (
-            <FlatList
-              key={viewing.post.id}
-              ref={list}
-              data={photos}
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              keyExtractor={(p) => p.id}
-              initialScrollIndex={index}
-              getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
-              onMomentumScrollEnd={(e) => {
-                onIndex(Math.round(e.nativeEvent.contentOffset.x / width));
-              }}
-              renderItem={({ item }) => (
-                <View style={{ width, height: "100%" }}>
-                  <SignedPhoto uri={url(viewing.post, item.id)} photoId={item.id} files={files} round={photoRound} fit="contain" />
-                </View>
-              )}
-            />
-          )}
-        </View>
-        {photos.length < 2 ? null : (
-          <View style={styles.dots}>
-            {photos.map((p, i) => (
-              <View key={p.id} style={[styles.dot, i === index ? styles.dotOn : null]} />
-            ))}
-          </View>
-        )}
-      </View>
-    </Modal>
+    <PhotoPages
+      viewing={post === null || viewing === null ? null : { listKey: post.id, ids: post.photos.map((p) => p.id), index: viewing.index }}
+      photo={(id) => (post === null ? null : <SignedPhoto uri={url(post, id)} photoId={id} files={files} round={photoRound} fit="contain" />)}
+      onIndex={onIndex}
+      onClose={onClose}
+    />
   );
 }
 
@@ -985,6 +934,24 @@ const styles = StyleSheet.create({
   },
   list: { paddingHorizontal: sizes.edge, gap: sizes.gap },
   top: { gap: sizes.gap, marginTop: 8, marginBottom: sizes.gap },
+  // The way to write, always at hand: at the bottom right, over the list.
+  pen: {
+    position: "absolute",
+    right: sizes.edge,
+    minWidth: 60,
+    minHeight: 60,
+    borderRadius: sizes.round,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: colours.orange,
+    experimental_backgroundImage: orangeGradient,
+    boxShadow: shadows.button,
+  },
+  penWords: { paddingHorizontal: 20 },
+  penPressed: { opacity: 0.85, transform: [{ scale: 0.96 }] },
+  penLabel: { fontFamily: fonts.semibold, fontSize: 15, lineHeight: 20 },
   box: { padding: 16, gap: 10 },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },
   grow: { flex: 1 },
@@ -1027,8 +994,6 @@ const styles = StyleSheet.create({
   ask: { gap: 12 },
   people: { gap: 10 },
   buttons: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", alignItems: "center", columnGap: 20, rowGap: 8 },
-  viewer: { flex: 1, backgroundColor: colours.page, paddingHorizontal: sizes.edge, gap: 12 },
-  viewerHead: { flexDirection: "row", alignItems: "center", gap: 12 },
   dots: { flexDirection: "row", justifyContent: "center", gap: 8 },
   dot: { width: 8, height: 8, borderRadius: sizes.round, backgroundColor: colours.textFaint },
   dotOn: { backgroundColor: colours.orange },

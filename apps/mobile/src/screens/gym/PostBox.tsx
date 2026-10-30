@@ -14,6 +14,7 @@ import { useSession } from "../../session/SessionProvider";
 import { fitWithin } from "../food/photo";
 import { newRequestKey } from "./classesView";
 import { POST_PHOTO_QUALITIES, draftFileText, hasWork, photoTrouble, postHint, postPhotoToSend, postedWords, readDraftFile, type DraftPost, type PostPhotoReading } from "./postDraft";
+import { PhotoPages } from "./PhotoPages";
 import { draftFolder } from "./postDraftFiles";
 import { PostCamera } from "./PostCamera";
 import { addOwnPath, canPost, charsLine, couldNotRead, missingThing, pressFailed } from "./updatesView";
@@ -177,6 +178,8 @@ export function PostBox({ open, gymId, gymName, kept, mayPost, onClose, onPosted
   const [sending, setSending] = useState(false);
   const [trouble, setTrouble] = useState<string | null>(null);
   const [camera, setCamera] = useState(false);
+  // The photo looked at before the post goes up.
+  const [viewing, setViewing] = useState<number | null>(null);
   const [refused, setRefused] = useState<string | null>(null);
   const [discarding, setDiscarding] = useState(false);
   const pressed = useRef(false);
@@ -224,7 +227,7 @@ export function PostBox({ open, gymId, gymName, kept, mayPost, onClose, onPosted
       if (!picked.canceled) await takeIn(picked.assets.map((asset) => asset.uri));
     } catch {
       setAdding(false);
-      setTrouble("Couldn't open your photos. Try again.");
+      setTrouble("Couldn't open your photos. Close the app, open it again, and try once more. Your post is kept.");
     }
   };
 
@@ -290,7 +293,16 @@ export function PostBox({ open, gymId, gymName, kept, mayPost, onClose, onPosted
             <View style={styles.photos} accessibilityLabel="Photos on this post">
               {photos.map((name, i) => (
                 <View key={name} style={styles.photo}>
-                  <Image testID={`draft-photo-${String(i + 1)}`} source={{ uri: kept.photoUri(name) }} resizeMode="cover" style={styles.fill} accessibilityLabel={`Photo ${String(i + 1)} of ${String(photos.length)}`} />
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Look at photo ${String(i + 1)} of ${String(photos.length)}`}
+                    onPress={() => {
+                      setViewing(i);
+                    }}
+                    style={styles.fill}
+                  >
+                    <Image testID={`draft-photo-${String(i + 1)}`} source={{ uri: kept.photoUri(name) }} resizeMode="cover" style={styles.fill} accessible={false} />
+                  </Pressable>
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={`Take photo ${String(i + 1)} off this post`}
@@ -360,6 +372,14 @@ export function PostBox({ open, gymId, gymName, kept, mayPost, onClose, onPosted
           ) : null}
         </View>
       )}
+      <PhotoPages
+        viewing={viewing === null || photos.length === 0 ? null : { listKey: "draft", ids: photos, index: viewing }}
+        photo={(name) => <Image source={{ uri: kept.photoUri(name) }} resizeMode="contain" style={styles.fill} accessible={false} />}
+        onIndex={setViewing}
+        onClose={() => {
+          setViewing(null);
+        }}
+      />
       <PostCamera
         open={camera}
         onPhoto={(uri) => {
