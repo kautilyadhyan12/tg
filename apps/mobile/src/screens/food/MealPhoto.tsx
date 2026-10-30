@@ -730,8 +730,11 @@ function RowAmount({
   }
   return (
     <>
+      {/* The food's numbers and Done stay in view under the list, on the smallest phone too. */}
+      <ScrollView style={styles.rowList} contentContainerStyle={styles.rowListInner} keyboardShouldPersistTaps="handled">
       {notThis}
       <AmountPicker measures={row.measures} amount={row.amount} onAmount={onAmount} dishes={dishes} onDishes={again} onPanel={setPanel} grams={grams} usual={row.usual} />
+      </ScrollView>
       {panel ? null : (
         <View style={styles.sheetFoot}>
           {kcal === null ? null : (
@@ -961,5 +964,7 @@ const styles = StyleSheet.create({
   full: { width: "100%" },
   notThis: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
   findList: { maxHeight: 360 },
+  rowList: { flexGrow: 0, flexShrink: 1 },
+  rowListInner: { gap: 14 },
   found: { minHeight: 56, justifyContent: "center", gap: 2, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colours.line },
 });
