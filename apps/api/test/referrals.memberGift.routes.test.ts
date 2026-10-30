@@ -6,7 +6,9 @@
 // gift given twice. Every claim is checked against the database, never against a reply alone.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
+import { randomUUID } from "node:crypto";
 import { buildApp } from "../src/app.js";
+import { readPress, recordFailed } from "../src/modules/orgs/payments/cardRefundsRepo.js";
 import { loadConfig } from "../src/config.js";
 import type { RobotCheck } from "../src/modules/orgs/gymPage/robotCheck.js";
 import { openDueBills } from "../src/modules/orgs/memberships/billsRepo.js";
@@ -699,6 +701,36 @@ d("Refer a friend: the member's gift (real Postgres)", () => {
   });
 
   describe("where the gift comes off", () => {
+    it(
+      "a refund to the card that fails gives the member's gift back (18d-iv-a)",
+      async () => {
+        const ava = await memberWithBill("ava", "Ava Stone", true);
+        const friend = await friendJoins(ava.code, "Ben Hart", "ben.hart@example.com", true);
+        const [paid] = await sql<{ id: string; membership_id: string; amount_minor: number; currency: string }[]>`
+          SELECT p.id, b.held_membership_id AS membership_id, p.amount_minor, p.currency
+          FROM gym_member_payments p
+          JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
+          JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
+          WHERE p.gym_id = ${gymA.org.id} AND h.entry_id = ${friend.entryId}`;
+        if (paid === undefined) throw new Error("no payment");
+        const noted = await post(`/v1/orgs/${gymA.org.id}/member-list/entries/${friend.entryId}/memberships/${paid.membership_id}/payments/${paid.id}/refunds`, { requestKey: nextForm(), amountMinor: paid.amount_minor, method: "cash", reason: "other" }, owner.cookies);
+        expect(noted.statusCode, noted.body).toBe(200);
+        expect((await giftsOf(gymA.org.id)).filter((g) => g.friend_entry_id === friend.entryId)).toMatchObject([{ taken_back_why: "refunded" }]);
+        // That refund as Refund to card holds it, and Square then says it failed.
+        const [refund] = await sql<{ id: string }[]>`SELECT id FROM gym_member_refunds WHERE gym_id = ${gymA.org.id} AND payment_id = ${paid.id}`;
+        const id = randomUUID();
+        const now = new Date();
+        await sql`
+          INSERT INTO gym_square_refunds (id, gym_id, payment_id, member_refund_id, environment, account_id, square_payment_id, square_refund_id, amount_minor, currency, reason, request_key, state, started_at, checked_at)
+          VALUES (${id}, ${gymA.org.id}, ${paid.id}, ${refund?.id ?? ""}, 'sandbox', 'ACCOUNT', 'PAYMENT', 'REFUND', ${paid.amount_minor}, ${paid.currency}, 'other', ${randomUUID()}, 'pending', ${now}, ${now})`;
+        const press = await readPress(sql, gymA.org.id, id);
+        if (press === null) throw new Error("no press");
+        expect(await recordFailed(sql, press, { code: "FAILED", today: now.toISOString().slice(0, 10), now })).toBe(true);
+        expect((await giftsOf(gymA.org.id)).filter((g) => g.friend_entry_id === friend.entryId)).toMatchObject([{ taken_back_why: "refunded" }, { taken_back_why: null }]);
+      },
+      TIMEOUT_MS,
+    );
+
     it(
       "with no open bill it waits, then comes off the next bill the hourly run opens",
       async () => {

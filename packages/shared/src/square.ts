@@ -244,6 +244,9 @@ export const squarePaymentSchema = z.object({
   card_details: z
     .object({
       card: z.object({ card_brand: z.string().max(40).nullish(), last_4: z.string().regex(/^[0-9]{4}$/).nullish() }).nullish(),
+      /** True for an Interac debit card in Canada: "any refunds occur in-person and on a Square Terminal" ("Refund
+       *  Interac Payments", read 2026-10-30). */
+      refund_requires_card_presence: z.boolean().nullish(),
     })
     .nullish(),
   /** When Square made it. */
@@ -265,6 +268,20 @@ export type SquarePayment = z.infer<typeof squarePaymentSchema>;
 
 /** GetPayment's answer. */
 export const squarePaymentAnswerSchema = z.object({ payment: squarePaymentSchema });
+
+/** A refund (18d-iv-a). `status`: PENDING, COMPLETED, FAILED or REJECTED ("Refund Payments", read 2026-10-30). Its id
+ *  is the payment's and its own joined by an underscore, 73 characters in Square's test area (measured 2026-10-30). */
+export const squareRefundIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,255}$/);
+export const squareRefundSchema = z.object({
+  id: squareRefundIdSchema,
+  status: z.string().max(40),
+  amount_money: squareMoneySchema,
+  payment_id: squarePaymentIdSchema,
+});
+export type SquareRefund = z.infer<typeof squareRefundSchema>;
+
+/** RefundPayment's and GetPaymentRefund's answer. */
+export const squareRefundAnswerSchema = z.object({ refund: squareRefundSchema });
 
 /** ListPayments' answer (18d-iii-b-i): at most 100 a page, each read on its own, so one Square cannot
  *  be read never hides the rest; `cursor` while there are more ("List payments", read 2026-10-24). */

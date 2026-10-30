@@ -293,6 +293,14 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
     const amount = money(s, "amountMinor");
     return `Recorded a refund${amount === null ? "" : ` of ${amount}`} to ${person(s)}${methodWords(s)}`;
   },
+  "org.member_refund_sent": (s) => {
+    const amount = money(s, "amountMinor");
+    return `Refunded${amount === null ? "" : ` ${amount}`} to ${cardOf(s, "brand", "last4") ?? "the card"} for ${person(s)}`;
+  },
+  "org.member_refund_failed": (s) => {
+    const amount = money(s, "amountMinor");
+    return `Square could not refund${amount === null ? "" : ` ${amount}`} to ${person(s)}. No money went back`;
+  },
   "org.member_refund_undone": (s) => {
     const amount = money(s, "amountMinor");
     return `Undid a refund${amount === null ? "" : ` of ${amount}`} to ${person(s)}`;

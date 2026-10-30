@@ -18,9 +18,12 @@
 // (`.cost/18d-iii-b-ii-b-ii-b-ii/probe-delete.mts`): a version that is not the current one is refused (409 CONFLICT), a
 // customer already deleted or never there is 404, and the old id of a merged customer answers 200 and leaves the merged
 // customer alone (`state.deleteViaOldId` makes Square behave worse, to prove the app does not lean on that). A customer
-// made through the API reads `THIRD_PARTY`.
+// made through the API reads `THIRD_PARTY`. A refund (18d-iv-a) answers as Square's test area did on 2026-10-30
+// (`.cost/18d-iv-a/probe-refund.mts`): PENDING first; the same key gives back the same refund, another amount under it is
+// refused (CONFLICTING_PARAMETERS), more than is left is refused (REFUND_AMOUNT_INVALID), and the payment's `refunded_money`
+// grows.
 import { randomBytes } from "node:crypto";
-import type { SquareCustomer, SquareCustomerFound, SquareLocation, SquarePayment, SquareTerminalCheckout } from "@app/shared";
+import type { SquareCustomer, SquareCustomerFound, SquareLocation, SquarePayment, SquareRefund, SquareTerminalCheckout } from "@app/shared";
 import type { CardPaymentResult, NewCardPayment, NewSquareCustomer, NewTerminalCheckout, SquareApi, SquareResult } from "../src/modules/orgs/payments/square.js";
 
 export interface Account {
@@ -65,6 +68,8 @@ export function fakeSquare() {
   const checkouts = new Map<string, FakeCheckout>();
   const checkoutKeys = new Map<string, string>();
   const listings: { locationId: string }[] = [];
+  /** Every refund Square made, as it stands: its key, whose it is, and what was asked. */
+  const refundsMade: (SquareRefund & { accountId: string; key: string; reason: string })[] = [];
   const payments = new Map<string, SquarePayment & { accountId: string }>();
   /** The customers Square has in each account, as RetrieveCustomer shows them (18d-iii-b-ii-a), in the order
    *  they were made, with their reference id (18d-iii-b-ii-b-i). */
@@ -119,6 +124,14 @@ export function fakeSquare() {
     disables: boolean;
     /** Runs once, as a CreateCard arrives, before Square answers: something happens in the app while a card is being saved. */
     beforeCard: (() => Promise<void>) | null;
+    /** RefundPayment (18d-iv-a): gives no answer and makes nothing; makes the refund and loses the answer; is refused with
+     *  this code; and answers with this status first (PENDING, as Square's test area did). */
+    refundDown: boolean;
+    refundLost: boolean;
+    refundRefused: string | null;
+    refundStatus: string;
+    /** Runs once, as a RefundPayment arrives. */
+    beforeRefund: (() => Promise<void>) | null;
     now: () => Date;
   } = {
     down: false,
@@ -143,6 +156,11 @@ export function fakeSquare() {
     deleteViaOldId: "nothing",
     disables: false,
     beforeCard: null,
+    refundDown: false,
+    refundLost: false,
+    refundRefused: null,
+    refundStatus: "PENDING",
+    beforeRefund: null,
     now: () => new Date(),
   };
   let n = 0;
@@ -186,6 +204,9 @@ export function fakeSquare() {
     else take(c);
   };
   const tokenAccount = (token: string): Account | undefined => tokens.get(token);
+  /** A payment, taken on a Terminal or charged to a card on file. */
+  const paymentById = (id: string): (SquarePayment & { accountId: string }) | undefined => payments.get(id) ?? charged.find((p) => p.id === id);
+  const shownRefund = (f: SquareRefund): SquareRefund => ({ id: f.id, status: f.status, amount_money: f.amount_money, payment_id: f.payment_id });
   const api: SquareApi = {
     authorizeUrl: (s) => `https://connect.squareup.com/oauth2/authorize?state=${s}`,
     exchangeCode(code) {
@@ -449,11 +470,53 @@ export function fakeSquare() {
       if (state.down) return Promise.resolve(unavailable);
       const a = tokenAccount(token);
       if (a === undefined) return Promise.resolve(unauthorized);
-      const p = payments.get(id);
+      const p = paymentById(id);
       if (p?.accountId !== a.merchantId) return Promise.resolve(notFound);
       const payment: SquarePayment = { ...p };
       delete (payment as { accountId?: string }).accountId;
       return Promise.resolve({ kind: "ok", value: payment });
+    },
+    async refundPayment(token, r) {
+      if (state.beforeRefund !== null) {
+        const run = state.beforeRefund;
+        state.beforeRefund = null;
+        await run();
+      }
+      if (state.down || state.refundDown) return unavailable;
+      if (state.unauthorized) return unauthorized;
+      const a = tokenAccount(token);
+      if (a === undefined) return unauthorized;
+      const known = refundsMade.find((f) => f.accountId === a.merchantId && f.key === r.idempotencyKey);
+      if (known !== undefined) {
+        return known.amount_money.amount === r.amountMinor ? { kind: "ok", value: shownRefund(known) } : { kind: "refused", status: 400, code: "CONFLICTING_PARAMETERS" };
+      }
+      if (state.refundRefused !== null) return { kind: "refused", status: 400, code: state.refundRefused };
+      const p = paymentById(r.paymentId);
+      if (p?.accountId !== a.merchantId) return notFound;
+      const total = p.total_money ?? p.amount_money;
+      const out = p.refunded_money?.amount ?? 0;
+      if (r.amountMinor > total.amount - out) return { kind: "refused", status: 400, code: "REFUND_AMOUNT_INVALID" };
+      n += 1;
+      p.refunded_money = { amount: out + r.amountMinor, currency: total.currency };
+      const made = {
+        id: `${p.id}_${String(n)}${randomBytes(6).toString("hex")}`,
+        status: state.refundStatus,
+        amount_money: { amount: r.amountMinor, currency: r.currency },
+        payment_id: p.id,
+        accountId: a.merchantId,
+        key: r.idempotencyKey,
+        reason: r.reason,
+      };
+      refundsMade.push(made);
+      return state.refundLost ? unavailable : { kind: "ok", value: shownRefund(made) };
+    },
+    getRefund(token, id) {
+      if (state.down) return Promise.resolve(unavailable);
+      const a = tokenAccount(token);
+      if (a === undefined) return Promise.resolve(unauthorized);
+      const made = refundsMade.find((f) => f.id === id);
+      if (made?.accountId !== a.merchantId) return Promise.resolve(notFound);
+      return Promise.resolve({ kind: "ok", value: shownRefund(made) });
     },
     listPayments(token, q) {
       listings.push({ locationId: q.locationId });
@@ -558,6 +621,16 @@ export function fakeSquare() {
     if (p === undefined) throw new Error("no such payment");
     p.refunded_money = { amount, currency: p.amount_money.currency };
   };
+  /** Square finishes a refund, or says it failed. */
+  const refundEnds = (id: string, status: string) => {
+    const made = refundsMade.find((f) => f.id === id);
+    if (made === undefined) throw new Error("no such refund");
+    made.status = status;
+    if (status === "FAILED" || status === "REJECTED") {
+      const p = paymentById(made.payment_id);
+      if (p?.refunded_money != null) p.refunded_money = { ...p.refunded_money, amount: p.refunded_money.amount - made.amount_money.amount };
+    }
+  };
   /** Every ListPayments asked, oldest first: the hourly look and the look before charging. */
   const listed = () => [...listings];
   return {
@@ -584,6 +657,9 @@ export function fakeSquare() {
     customerReads,
     customersDeleteAsked,
     refund,
+    refundsMade,
+    refundEnds,
+    paymentById,
     listed,
   };
 }

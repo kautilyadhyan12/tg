@@ -486,14 +486,14 @@ export const gymMemberRefunds = pgTable(
   (t) => [
     check(
       "gym_member_refunds_void_reason_check",
-      sql`${t.voidReason} IS NULL OR (${t.undoneAt} IS NOT NULL AND ${t.voidReason} IN ('mistake','wrong_amount','other'))`,
+      sql`${t.voidReason} IS NULL OR (${t.undoneAt} IS NOT NULL AND ${t.voidReason} IN ('mistake','wrong_amount','other','square_failed'))`,
     ),
     unique("gym_member_refunds_receipt_uq").on(t.gymId, t.receiptNumber),
     check("gym_member_refunds_receipt_check", sql`${t.receiptNumber} >= 1`),
     unique("gym_member_refunds_request_uq").on(t.gymId, t.requestKey),
     check("gym_member_refunds_amount_check", sql`${t.amountMinor} BETWEEN 1 AND 99999999`),
     check("gym_member_refunds_currency_check", sql`${t.currency} ~ '^[A-Z]{3}$'`),
-    check("gym_member_refunds_method_check", sql`${t.method} IN ('cash','upi','card_at_desk','bank_transfer')`),
+    check("gym_member_refunds_method_check", sql`${t.method} IN ('cash','upi','card_at_desk','bank_transfer','company','terminal')`),
     check("gym_member_refunds_reason_check", sql`${t.reason} IN ('paid_twice','charged_too_much','leaving','other')`),
     foreignKey({
       name: "gym_member_refunds_payment_fk",

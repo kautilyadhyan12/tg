@@ -1,5 +1,5 @@
 // ROADMAP Stage 5 33b-iii-a — our own copy of the packaged-food lists. Mirrors migration
-// `0177_packaged_products.sql` 1:1.
+// `0178_packaged_products.sql` 1:1.
 //
 // PUBLIC DATA, NO OWNER, NO TENANCY, as `usda_foods` is. The two lists stay in two tables: Open Food
 // Facts' licence (ODbL 1.0, section 4.5) asks nothing of independent databases kept beside it, and
