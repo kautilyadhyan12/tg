@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { StatusBar, StyleSheet, View } from "react-native";
 import {
   Inter_400Regular,
@@ -32,6 +32,7 @@ import { SessionProvider, useSession } from "./session/SessionProvider";
 import { TimeZoneSync } from "./session/TimeZoneSync";
 import { DashboardScreen } from "./screens/Dashboard";
 import { GymScreen } from "./screens/GymTab";
+import { emptyPhotoFolder } from "./screens/gym/photoFiles";
 import { PlacesProvider, usePlaces } from "./screens/places";
 import { tabWord } from "./screens/placesHeading";
 import { FoodScreen } from "./screens/Food";
@@ -85,6 +86,10 @@ interface AppProps {
  *  the five tabs. */
 function SignedInOrOut({ mealStore }: { mealStore: (userId: string) => TextStore }) {
   const { state } = useSession();
+  // With nobody signed in, nothing of the last person's stays: an app killed with Updates open left its photos.
+  useEffect(() => {
+    if (state.kind === "out") emptyPhotoFolder();
+  }, [state.kind]);
   if (state.kind === "starting") return <View style={styles.page} />;
   if (state.kind === "out") return <SignInScreen note={state.note} />;
   return (
