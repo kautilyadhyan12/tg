@@ -137,10 +137,12 @@ describe("what the member reads", () => {
   it("says when the server kept the post as it first was", () => {
     const up = "Your post is up.";
     const first = "Your post went up as you first wrote it. Your later changes weren't added.";
-    expect(postedWords({ body: "Hi", photos: [] }, { body: " Hi ", photoCount: 0, changed: false })).toBe(up);
-    expect(postedWords({ body: "Hi", photos: [] }, { body: "Hi there", photoCount: 0, changed: false })).toBe(first);
-    expect(postedWords({ body: "Hi", photos: [] }, { body: "Hi", photoCount: 1, changed: false })).toBe(first);
-    // The same words and the same number of photos, with a photo swapped.
-    expect(postedWords({ body: "Hi", photos: [] }, { body: "Hi", photoCount: 0, changed: true })).toBe(first);
+    // This send made the post: whatever was changed went.
+    expect(postedWords({ firstKept: true, changed: false })).toBe(up);
+    expect(postedWords({ firstKept: true, changed: true })).toBe(up);
+    // An earlier send made it: nothing was changed, so it is what they meant.
+    expect(postedWords({ firstKept: false, changed: false })).toBe(up);
+    // An earlier send made it, and they changed it since.
+    expect(postedWords({ firstKept: false, changed: true })).toBe(first);
   });
 });

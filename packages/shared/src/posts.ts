@@ -234,6 +234,9 @@ export type AddGymPostRequest = z.infer<typeof addGymPostRequestSchema>;
 
 export const gymPostResponseSchema = z.object({ post: gymPostSchema }).strict();
 
+/** A member's post sent: `firstKept` is false when the answer is a post kept earlier under the same key, as it first was. */
+export const addedGymPostResponseSchema = z.object({ post: gymPostSchema, firstKept: z.boolean() }).strict();
+
 /** The most a post not yet sent may hold on the phone, in UTF-16 units: over the limit is said on the
  *  screen, and the person's words are not cut. */
 export const GYM_POST_DRAFT_MOST = GYM_POST_MAX_CHARS * 4;

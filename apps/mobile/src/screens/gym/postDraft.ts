@@ -1,4 +1,4 @@
-import { GYM_POST_MAX_PHOTOS, GYM_POST_PHONE_PHOTO_MAX_BYTES, cleanPhoto, gymPostDraftFileSchema, type GymPost, type GymPostDraftFile } from "@app/shared";
+import { GYM_POST_MAX_PHOTOS, GYM_POST_PHONE_PHOTO_MAX_BYTES, cleanPhoto, gymPostDraftFileSchema, type GymPostDraftFile } from "@app/shared";
 import { fromBase64, toBase64 } from "../food/photo";
 
 // A member's post on the phone (ROADMAP Stage 5 17b): its photos made small and rebuilt here, and the post kept
@@ -57,10 +57,10 @@ export function photoTrouble({ unreadable, tooBig, left }: { unreadable: number;
 /** What a kept post says when the post it went up as has since been removed: its key is spent, so it goes under a new one. */
 export const removedAndKept = (serverWords: string): string => `${serverWords} Press Post to post it again.`;
 
-/** Said where the button is once a post is up. A post sent again after a lost reply is answered with the one the
- *  server kept, so changes made since did not go. */
-export function postedWords(post: Pick<GymPost, "body" | "photos">, sent: { body: string; photoCount: number; changed: boolean }): string {
-  return !sent.changed && post.body === sent.body.trim() && post.photos.length === sent.photoCount
+/** Said where the button is once a post is up. Only the server knows whether a send whose answer was lost reached it:
+ *  it says whether this send made the post. If not, changes made since did not go. */
+export function postedWords(sent: { firstKept: boolean; changed: boolean }): string {
+  return sent.firstKept || !sent.changed
     ? "Your post is up."
     : "Your post went up as you first wrote it. Your later changes weren't added.";
 }

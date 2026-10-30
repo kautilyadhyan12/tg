@@ -500,6 +500,9 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
       const again = await send(gym, writer, `Burst ${String(landed)}`, [], keys[landed]);
       expect(again.statusCode, again.body).toBe(201);
       expect((JSON.parse(again.body) as { post: GymPost }).post.id).toBe((JSON.parse(burst[landed]?.body ?? "{}") as { post: GymPost }).post.id);
+      // The reply says which send made the post.
+      expect((JSON.parse(burst[landed]?.body ?? "{}") as { firstKept: boolean }).firstKept).toBe(true);
+      expect((JSON.parse(again.body) as { firstKept: boolean }).firstKept).toBe(false);
       expect(burst.filter((r) => r.statusCode === 429).map(errorOf)).toEqual(["posts_day_full", "posts_day_full", "posts_day_full"]);
       expect(await count("posts", gym.id)).toBe(GYM_MEMBER_POSTS_A_DAY);
 

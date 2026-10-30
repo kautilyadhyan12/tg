@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { FlatList, GestureHandlerRootView } from "react-native-gesture-handler";
 import { Modal } from "../../look/Modal";
@@ -27,6 +27,11 @@ export function PhotoPages({ viewing, photo, onIndex, onClose }: PhotoPagesProps
   const list = useRef<FlatList<string>>(null);
   // A photo being zoomed holds the pages still.
   const [held, setHeld] = useState(false);
+  // A zoom goes with the page when it closes.
+  const open = viewing !== null;
+  useEffect(() => {
+    if (!open) setHeld(false);
+  }, [open]);
   const go = (to: number) => {
     if (to < 0 || to >= ids.length) return;
     onIndex(to);
@@ -48,8 +53,10 @@ export function PhotoPages({ viewing, photo, onIndex, onClose }: PhotoPagesProps
           testID="photo-pages"
           style={styles.grow}
           onLayout={(e) => {
-            setWidth(e.nativeEvent.layout.width);
-            setHeld(false);
+            const next = e.nativeEvent.layout.width;
+            // A new width starts the row again, and any zoom with it.
+            if (next !== width) setHeld(false);
+            setWidth(next);
           }}
           accessible
           accessibilityRole="adjustable"

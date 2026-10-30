@@ -526,12 +526,12 @@ async function ownByKey(deps: Pick<PostsDeps, "sql" | "now">, gymId: string, use
 /** A new post by a member, where the gym lets its members post. A limit of posts and one of
  *  photos in any 24 hours, counted with the person's membership held so two sent at once are
  *  counted in turn. */
-export async function addMemberPost(deps: PostsDeps, userId: string, gymId: string, body: AddGymPostRequest): Promise<GymPost> {
+export async function addMemberPost(deps: PostsDeps, userId: string, gymId: string, body: AddGymPostRequest): Promise<{ post: GymPost; firstKept: boolean }> {
   const gymName = await requireMemberPoster(deps, userId, gymId);
   // A post sent again under its key (a reply lost on the way back) is answered with the
   // post kept, the day's last one too.
   const kept = await ownByKey(deps, gymId, userId, body.postKey);
-  if (kept !== null) return kept;
+  if (kept !== null) return { post: kept, firstKept: false };
   // The app checks a member's words itself and says which it will not take: nothing is
   // kept, no photo is cleaned, and the day's count is not touched. Staff's posts are not checked.
   const words = badWordsIn(body.body);
@@ -548,10 +548,10 @@ export async function addMemberPost(deps: PostsDeps, userId: string, gymId: stri
     if ((await repo.postByKey(tx, gymId, body.postKey)) !== null) return;
     await refuseFullDay(tx, gymId, userId, at, shape);
   });
-  if (post.made) return await memberPost(deps, gymId, post.id, userId);
+  if (post.made) return { post: await memberPost(deps, gymId, post.id, userId), firstKept: true };
   const first = await ownByKey(deps, gymId, userId, body.postKey);
   if (first === null) throw postNotFound();
-  return first;
+  return { post: first, firstKept: false };
 }
 
 /** Pin a post to the top, or unpin it. At most three are pinned, counted under the gym's lock. */

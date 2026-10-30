@@ -1002,7 +1002,7 @@ describe("the worst thing for posting: a photo never goes up saying where it was
   it("what reaches the server from a real phone photo holds none of its position", async () => {
     const original = realPhoto("pixel7-meta.jpg");
     expect(original.includes("Exif")).toBe(true);
-    const server = serverOf({ [postsOf(IRON)]: on(IRON), [minePath(IRON)]: () => ({ status: 201, body: { post: { ...SENT, photos: [{ id: PHOTO, width: 1600, height: 1200 }] } } }) });
+    const server = serverOf({ [postsOf(IRON)]: on(IRON), [minePath(IRON)]: () => ({ status: 201, body: { post: { ...SENT, photos: [{ id: PHOTO, width: 1600, height: 1200 }] }, firstKept: true } }) });
     await openUpdates(server.ask, IRON);
     await fireEvent.press(await page().findByRole("button", { name: "Write a post" }));
     picker.next = SHOT;
@@ -1077,7 +1077,7 @@ describe("posting", () => {
   });
 
   it("posts the words, under one key, and puts the post on the page", async () => {
-    const server = serverOf({ [postsOf(IRON)]: on(IRON, [post(P1)]), [minePath(IRON)]: () => ({ status: 201, body: { post: SENT } }) });
+    const server = serverOf({ [postsOf(IRON)]: on(IRON, [post(P1)]), [minePath(IRON)]: () => ({ status: 201, body: { post: SENT, firstKept: true } }) });
     await openUpdates(server.ask, IRON);
     await write("Leg day");
     await pressPost();
@@ -1094,7 +1094,7 @@ describe("posting", () => {
     await write("Leg day");
     await pressPost();
     expect(await screen.findByText("No connection. Your post is kept. Try again.")).toBeTruthy();
-    answer = () => ({ status: 201, body: { post: SENT } });
+    answer = () => ({ status: 201, body: { post: SENT, firstKept: false } });
     await pressPost();
     expect(await page().findByText("Your post is up.")).toBeTruthy();
     const keys = sendsTo(server, IRON).map((a) => (a.body as { postKey: string }).postKey);
@@ -1110,9 +1110,38 @@ describe("posting", () => {
     await pressPost();
     await screen.findByText("No connection. Your post is kept. Try again.");
     await fireEvent.changeText(screen.getByLabelText("Your post"), "Leg day, and more");
-    answer = () => ({ status: 201, body: { post: SENT } });
+    answer = () => ({ status: 201, body: { post: SENT, firstKept: false } });
     await pressPost();
     expect(await page().findByText("Your post went up as you first wrote it. Your later changes weren't added.")).toBeTruthy();
+  });
+
+  it("a correction that did go up, the first send never having reached the server, says it is up", async () => {
+    let answer: () => Reply = lost;
+    const server = serverOf({ [postsOf(IRON)]: on(IRON), [minePath(IRON)]: () => answer() });
+    await openUpdates(server.ask, IRON);
+    await write("Leg dya");
+    await pressPost();
+    await screen.findByText("No connection. Your post is kept. Try again.");
+    await fireEvent.changeText(screen.getByLabelText("Your post"), "Leg day");
+    answer = () => ({ status: 201, body: { post: SENT, firstKept: true } });
+    await pressPost();
+    expect(await page().findByText("Your post is up.")).toBeTruthy();
+    expect(page().queryByText("Your post went up as you first wrote it. Your later changes weren't added.")).toBeNull();
+  });
+
+  it("a photo added that did go up says it is up", async () => {
+    let answer: () => Reply = lost;
+    const server = serverOf({ [postsOf(IRON)]: on(IRON), [minePath(IRON)]: () => answer() });
+    await openUpdates(server.ask, IRON);
+    await write("Leg day");
+    await pressPost();
+    await screen.findByText("No connection. Your post is kept. Try again.");
+    picker.next = SHOT;
+    await fireEvent.press(screen.getByRole("button", { name: "Add photos" }));
+    await screen.findByTestId("draft-photo-1");
+    answer = () => ({ status: 201, body: { post: { ...SENT, photos: [{ id: PHOTO, width: 100, height: 100 }] }, firstKept: true } });
+    await pressPost();
+    expect(await page().findByText("Your post is up.")).toBeTruthy();
   });
 
   it("a press while one is away sends nothing more, and closing waits for its answer", async () => {
@@ -1133,7 +1162,7 @@ describe("posting", () => {
     await fireEvent.press(screen.getByLabelText("Close"));
     expect(screen.getByTestId("post-box")).toBeTruthy();
     await act(() => {
-      release({ status: 201, body: { post: SENT } });
+      release({ status: 201, body: { post: SENT, firstKept: true } });
     });
     expect(await page().findByText("Your post is up.")).toBeTruthy();
     expect(sendsTo(server, IRON)).toHaveLength(1);
@@ -1158,7 +1187,7 @@ describe("posting", () => {
     await settle();
     await screen.unmount();
 
-    const second = serverOf({ [postsOf(IRON)]: on(IRON), [minePath(IRON)]: () => ({ status: 201, body: { post: SENT } }) });
+    const second = serverOf({ [postsOf(IRON)]: on(IRON), [minePath(IRON)]: () => ({ status: 201, body: { post: SENT, firstKept: true } }) });
     await openUpdates(second.ask, IRON);
     await fireEvent.press(await page().findByRole("button", { name: "Finish your post" }));
     expect(screen.getByDisplayValue("Leg day")).toBeTruthy();
@@ -1175,7 +1204,7 @@ describe("posting", () => {
   });
 
   it("once it is posted, or discarded, it is gone from the phone", async () => {
-    const server = serverOf({ [postsOf(IRON)]: on(IRON), [minePath(IRON)]: () => ({ status: 201, body: { post: SENT } }) });
+    const server = serverOf({ [postsOf(IRON)]: on(IRON), [minePath(IRON)]: () => ({ status: 201, body: { post: SENT, firstKept: true } }) });
     await openUpdates(server.ask, IRON);
     await write("Leg day");
     await pressPost();
@@ -1330,7 +1359,7 @@ describe("the phone's display size changes", () => {
       expect(screen.getByTestId("post-box")).toBeTruthy();
       expect(screen.getByDisplayValue("Leg day")).toBeTruthy();
       await act(() => {
-        release({ status: 201, body: { post: SENT } });
+        release({ status: 201, body: { post: SENT, firstKept: true } });
       });
       expect(await page().findByText("Your post is up.")).toBeTruthy();
       expect(page().getByText("Leg day")).toBeTruthy();
@@ -1399,7 +1428,7 @@ describe("a post removed after a lost reply", () => {
     await pressPost();
     expect(await screen.findByText("This post has been removed. Press Post to post it again.")).toBeTruthy();
     expect(screen.getByDisplayValue("Leg day")).toBeTruthy();
-    answer = () => ({ status: 201, body: { post: SENT } });
+    answer = () => ({ status: 201, body: { post: SENT, firstKept: true } });
     await pressPost();
     expect(await page().findByText("Your post is up.")).toBeTruthy();
     const keys = sendsTo(server, IRON).map((one) => (one.body as { postKey: string }).postKey);
@@ -1421,7 +1450,7 @@ describe("a post removed after a lost reply", () => {
     await fireEvent.press(screen.getByLabelText("Take photo 1 off this post"));
     await fireEvent.press(screen.getByRole("button", { name: "Add photos" }));
     await screen.findByTestId("draft-photo-1");
-    answer = () => ({ status: 201, body: { post: { ...SENT, photos: [{ id: PHOTO, width: 100, height: 100 }] } } });
+    answer = () => ({ status: 201, body: { post: { ...SENT, photos: [{ id: PHOTO, width: 100, height: 100 }] }, firstKept: false } });
     await pressPost();
     expect(await page().findByText("Your post went up as you first wrote it. Your later changes weren't added.")).toBeTruthy();
   });
@@ -1472,6 +1501,18 @@ describe("the whole-screen photo", () => {
     expect(list.props.initialScrollIndex).toBe(1);
     const layout = list.props.getItemLayout as (data: unknown, i: number) => { length: number; offset: number };
     expect(layout(null, 1)).toMatchObject({ length: 800, offset: 800 });
+  });
+
+  it("a new height alone leaves a zoomed photo holding the pages, and a closing frees them for the next opening", async () => {
+    await open();
+    await pinchTo(2);
+    expect(slides()).toBe(false);
+    await fireEvent(screen.getByTestId("photo-pages"), "layout", { nativeEvent: { layout: { x: 0, y: 0, width: 300, height: 500 } } });
+    expect(slides()).toBe(false);
+    await fireEvent.press(screen.getByLabelText("Close photo"));
+    await fireEvent.press(await page().findByLabelText("Open photo 1 of 2"));
+    await fireEvent(await screen.findByTestId("photo-pages"), "layout", { nativeEvent: { layout: { x: 0, y: 0, width: 300, height: 500 } } });
+    expect(slides()).toBe(true);
   });
 
   it("a reader's step changes the photo", async () => {

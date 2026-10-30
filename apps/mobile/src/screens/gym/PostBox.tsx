@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { launchImageLibraryAsync } from "expo-image-picker";
-import { GYM_POST_DRAFT_MOST, GYM_POST_MAX_PHOTOS, GYM_POST_PHONE_PHOTO_SIDE, gymPostResponseSchema, type GymPost } from "@app/shared";
+import { GYM_POST_DRAFT_MOST, GYM_POST_MAX_PHOTOS, GYM_POST_PHONE_PHOTO_SIDE, addedGymPostResponseSchema, type GymPost } from "@app/shared";
 import { Button } from "../../look/Button";
 import { colours, sizes } from "../../look/colours";
 import { Field } from "../../look/Field";
@@ -270,13 +270,13 @@ export function PostBox({ open, gymId, gymName, kept, mayPost, onClose, onPosted
     kept.markSent();
     const answer = await session.signedIn(
       { method: "POST", path: addOwnPath(gymId), body: { postKey: draft.postKey, body: sentBody, photos: pictures }, waitMs: SEND_WAIT_MS },
-      gymPostResponseSchema,
+      addedGymPostResponseSchema,
     );
     pressed.current = false;
     setSending(false);
     if (answer.kind === "ok") {
       kept.clear();
-      onPosted(answer.data.post, postedWords(answer.data.post, { body: sentBody, photoCount: pictures.length, changed }));
+      onPosted(answer.data.post, postedWords({ firstKept: answer.data.firstKept, changed }));
       return;
     }
     if (answer.kind === "no_answer") {
