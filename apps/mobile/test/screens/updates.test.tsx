@@ -1290,3 +1290,27 @@ describe("posting", () => {
     expect(screen.getByRole("button", { name: "Post" })).toBeEnabled();
   });
 });
+
+describe("a post's photos", () => {
+  const photo = (n: number) => ({ id: PHOTO.replace("c1", `c${String(n)}`), width: 1600, height: 1200 });
+  it("slide one at a time with dots, the dot follows, and pressing one opens that one", async () => {
+    const server = serverOf({ [postsOf(IRON)]: ok(feed(IRON, [post(P1, { photos: [photo(1), photo(2), photo(3)] })])) });
+    await openUpdates(server.ask, IRON);
+    const slides = await page().findByTestId(`photos-${P1}`);
+    expect(slides.props.horizontal).toBe(true);
+    expect(slides.props.pagingEnabled).toBe(true);
+    expect(within(page().getByTestId(`photo-dots-${P1}`)).getAllByTestId("photo-dot-on")).toHaveLength(1);
+    await fireEvent(slides, "momentumScrollEnd", { nativeEvent: { contentOffset: { x: 600 }, layoutMeasurement: { width: 300 } } });
+    const dots = page().getByTestId(`photo-dots-${P1}`);
+    expect(dots.children[2]).toBe(within(dots).getByTestId("photo-dot-on"));
+    await fireEvent.press(page().getByLabelText("Open photo 2 of 3"));
+    expect(await screen.findByText("Photo 2 of 3")).toBeTruthy();
+  });
+
+  it("one photo has no dots", async () => {
+    const server = serverOf({ [postsOf(IRON)]: ok(feed(IRON, [post(P1, { photos: [photo(1)] })])) });
+    await openUpdates(server.ask, IRON);
+    await page().findByTestId(`photos-${P1}`);
+    expect(page().queryByTestId(`photo-dots-${P1}`)).toBeNull();
+  });
+});

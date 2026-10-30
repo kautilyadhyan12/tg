@@ -494,23 +494,7 @@ function PostCard({ post, gymName, posted, photoUrl, files, photoRound, busy, re
         </View>
       )}
       {post.body === "" ? null : <Txt colour="text">{post.body}</Txt>}
-      {post.photos.length === 0 ? null : (
-        <View style={styles.photos}>
-          {post.photos.map((photo, i) => (
-            <Pressable
-              key={photo.id}
-              accessibilityRole="button"
-              accessibilityLabel={`Open photo ${String(i + 1)} of ${String(post.photos.length)}`}
-              onPress={() => {
-                onPhoto(i);
-              }}
-              style={[styles.photo, post.photos.length === 1 ? { width: "100%", aspectRatio: Math.max(photo.width / photo.height, 0.75) } : styles.photoHalf]}
-            >
-              <SignedPhoto uri={photoUrl(photo.id)} photoId={photo.id} files={files} round={photoRound} fit="cover" testID={`photo-${photo.id}`} />
-            </Pressable>
-          ))}
-        </View>
-      )}
+      {post.photos.length === 0 ? null : <PostPhotos post={post} photoUrl={photoUrl} files={files} photoRound={photoRound} onPhoto={onPhoto} />}
       <View style={styles.reactions}>
         {picking ? (
           <>
@@ -600,6 +584,60 @@ function PostCard({ post, gymName, posted, photoUrl, files, photoRound, busy, re
       </View>
       {reactError === null ? null : <Txt colour="badText">{reactError}</Txt>}
     </Card>
+  );
+}
+
+// By how many photos the post has, one to four: the row of them, and one of them in it.
+const ALL_PHOTOS_WIDE = ["100%", "200%", "300%", "400%"] as const;
+const ONE_PHOTO_WIDE = ["100%", "50%", "33.3333%", "25%"] as const;
+
+/** A post's photos, one at a time, slid left and right with dots under them (Kd's click-through, 2026-10-30); pressing
+ *  one opens it whole. As tall as the first photo's shape, within limits, so the page does not jump as they slide. */
+function PostPhotos({ post, photoUrl, files, photoRound, onPhoto }: Pick<PostCardProps, "post" | "photoUrl" | "files" | "photoRound" | "onPhoto">) {
+  const [at, setAt] = useState(0);
+  const { photos } = post;
+  const first = photos[0];
+  const shape = first === undefined ? 1 : Math.max(first.width / first.height, 0.75);
+  const allWide = ALL_PHOTOS_WIDE[photos.length - 1] ?? "100%";
+  const oneWide = ONE_PHOTO_WIDE[photos.length - 1] ?? "100%";
+  return (
+    <View style={styles.photosBox}>
+      <View style={[styles.slides, { aspectRatio: shape }]}>
+        <ScrollView
+          testID={`photos-${post.id}`}
+          horizontal
+          pagingEnabled
+          nestedScrollEnabled
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ width: allWide }}
+          onMomentumScrollEnd={(e) => {
+            const { contentOffset, layoutMeasurement } = e.nativeEvent;
+            if (layoutMeasurement.width > 0) setAt(Math.round(contentOffset.x / layoutMeasurement.width));
+          }}
+        >
+          {photos.map((photo, i) => (
+            <Pressable
+              key={photo.id}
+              accessibilityRole="button"
+              accessibilityLabel={`Open photo ${String(i + 1)} of ${String(photos.length)}`}
+              onPress={() => {
+                onPhoto(i);
+              }}
+              style={{ width: oneWide, height: "100%" }}
+            >
+              <SignedPhoto uri={photoUrl(photo.id)} photoId={photo.id} files={files} round={photoRound} fit="cover" testID={`photo-${photo.id}`} />
+            </Pressable>
+          ))}
+        </ScrollView>
+      </View>
+      {photos.length < 2 ? null : (
+        <View testID={`photo-dots-${post.id}`} style={styles.dots}>
+          {photos.map((p, i) => (
+            <View key={p.id} testID={i === at ? "photo-dot-on" : undefined} style={[styles.dot, i === at ? styles.dotOn : null]} />
+          ))}
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -961,9 +999,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   note: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
-  photos: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  photo: { borderRadius: 12, overflow: "hidden", backgroundColor: colours.fill, maxHeight: 420 },
-  photoHalf: { width: "48.5%", aspectRatio: 1 },
+  photosBox: { gap: 8 },
+  slides: { width: "100%", maxHeight: 420, borderRadius: 12, overflow: "hidden", backgroundColor: colours.fill },
   fill: { width: "100%", height: "100%" },
   noPhoto: { alignItems: "center", justifyContent: "center", padding: 8 },
   foot: { gap: sizes.gap },
