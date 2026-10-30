@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Animated, Pressable, StyleSheet, View } from "react-native";
+import { useRef, useState, type ReactNode } from "react";
+import { Pressable, StyleSheet, View } from "react-native";
+import { FlatList, GestureHandlerRootView } from "react-native-gesture-handler";
 import { Modal } from "../../look/Modal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colours, sizes } from "../../look/colours";
 import { Icon } from "../../look/Icon";
 import { Txt } from "../../look/Txt";
-import { slideDrag, slideTo } from "./zoom";
 import { ZoomPhoto } from "./ZoomPhoto";
 
 interface PhotoPagesProps {
@@ -24,32 +24,18 @@ export function PhotoPages({ viewing, photo, onIndex, onClose }: PhotoPagesProps
   const index = viewing === null ? 0 : Math.min(viewing.index, ids.length - 1);
   // One photo is the width the viewer is given.
   const [width, setWidth] = useState(0);
-  const at = useRef(new Animated.Value(0)).current;
-  const opened = viewing !== null;
-  const settle = (to: number) => {
-    Animated.timing(at, { toValue: -to * width, duration: 200, useNativeDriver: true }).start();
-  };
-  // Where the row of photos stands: at once on opening or a new width, and sliding when the photo changes.
-  const shownAt = useRef({ index: -1, width: 0 });
-  useEffect(() => {
-    if (!opened) {
-      shownAt.current = { index: -1, width: 0 };
-      return;
-    }
-    if (shownAt.current.index === -1 || shownAt.current.width !== width) at.setValue(-index * width);
-    else settle(index);
-    shownAt.current = { index, width };
-    // settle reads this render's width.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [opened, index, width, at]);
+  const list = useRef<FlatList<string>>(null);
+  // A photo being zoomed holds the pages still.
+  const [held, setHeld] = useState(false);
   const go = (to: number) => {
     if (to < 0 || to >= ids.length) return;
     onIndex(to);
+    list.current?.scrollToIndex({ index: to, animated: true });
   };
   const counted = ids.length === 0 ? "" : `Photo ${String(index + 1)} of ${String(ids.length)}`;
   return (
     <Modal visible={viewing !== null} animationType="fade" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
-      <View testID="photo-viewer" style={[styles.viewer, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 12 }]}>
+      <GestureHandlerRootView testID="photo-viewer" style={[styles.viewer, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 12 }]}>
         <View style={styles.head}>
           <Txt colour="text" style={styles.grow}>
             {counted}
@@ -73,25 +59,27 @@ export function PhotoPages({ viewing, photo, onIndex, onClose }: PhotoPagesProps
           }}
         >
           {viewing === null || width === 0 ? null : (
-            <Animated.View key={viewing.listKey} style={[styles.row, { width: width * ids.length, transform: [{ translateX: at }] }]}>
-              {ids.map((id) => (
-                <View key={id} style={{ width, height: "100%" }}>
-                  <ZoomPhoto
-                    onSlide={(dx) => {
-                      at.setValue(-index * width + slideDrag(dx, index, ids.length));
-                    }}
-                    onSlideEnd={(dx, vx) => {
-                      const to = slideTo(index, dx, vx, ids.length, width);
-                      // The same photo: it goes back to its place.
-                      if (to === index) settle(index);
-                      else onIndex(to);
-                    }}
-                  >
-                    {photo(id)}
-                  </ZoomPhoto>
+            <FlatList
+              key={viewing.listKey}
+              ref={list}
+              testID="photo-list"
+              data={ids}
+              horizontal
+              pagingEnabled
+              scrollEnabled={!held}
+              showsHorizontalScrollIndicator={false}
+              keyExtractor={(id) => id}
+              initialScrollIndex={index}
+              getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
+              onMomentumScrollEnd={(e) => {
+                onIndex(Math.round(e.nativeEvent.contentOffset.x / width));
+              }}
+              renderItem={({ item }) => (
+                <View style={{ width, height: "100%" }}>
+                  <ZoomPhoto onHeld={setHeld}>{photo(item)}</ZoomPhoto>
                 </View>
-              ))}
-            </Animated.View>
+              )}
+            />
           )}
         </View>
         {ids.length < 2 ? null : (
@@ -101,7 +89,7 @@ export function PhotoPages({ viewing, photo, onIndex, onClose }: PhotoPagesProps
             ))}
           </View>
         )}
-      </View>
+      </GestureHandlerRootView>
     </Modal>
   );
 }
@@ -109,8 +97,7 @@ export function PhotoPages({ viewing, photo, onIndex, onClose }: PhotoPagesProps
 const styles = StyleSheet.create({
   viewer: { flex: 1, backgroundColor: colours.page, paddingHorizontal: sizes.edge, gap: 12 },
   head: { flexDirection: "row", alignItems: "center", gap: 12 },
-  grow: { flex: 1, overflow: "hidden" },
-  row: { flexDirection: "row", height: "100%" },
+  grow: { flex: 1 },
   close: {
     width: sizes.press,
     height: sizes.press,

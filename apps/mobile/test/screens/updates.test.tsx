@@ -4,6 +4,8 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { AppState, Dimensions, StyleSheet, type StyleProp, type ViewStyle } from "react-native";
 import { Directory, File, Paths } from "expo-file-system";
 import { launchImageLibraryAsync } from "expo-image-picker";
+import { Gesture, State } from "react-native-gesture-handler";
+import { fireGestureHandler, getByGestureTestId } from "react-native-gesture-handler/jest-utils";
 import { GYM_POST_PHONE_PHOTO_MAX_BYTES, gymPostsResponseSchema } from "@app/shared";
 import { App } from "../../src/App";
 import type { Ask } from "../../src/session/calls";
@@ -1426,16 +1428,43 @@ describe("a post removed after a lost reply", () => {
 });
 
 describe("the whole-screen photo", () => {
-  it("every photo of the post is there, each taking its touches itself, and a reader's step changes the photo", async () => {
+  const open = async () => {
     const photos = [1, 2].map((n) => ({ id: PHOTO.replace("c1", `c${String(n)}`), width: 1600, height: 1200 }));
     const server = serverOf({ [postsOf(IRON)]: ok(feed(IRON, [post(P1, { photos })])) });
     await openUpdates(server.ask, IRON);
     await fireEvent.press(await page().findByLabelText("Open photo 1 of 2"));
     await fireEvent(await screen.findByTestId("photo-pages"), "layout", { nativeEvent: { layout: { x: 0, y: 0, width: 300, height: 600 } } });
-    const each = await screen.findAllByTestId("zoom-photo");
-    expect(each).toHaveLength(2);
-    const asks = each[0]?.props.onStartShouldSetResponder as (e: { nativeEvent: object }) => boolean;
-    expect(asks({ nativeEvent: { touches: [{ pageX: 1, pageY: 1 }] } })).toBe(true);
+    await screen.findAllByTestId("zoom-photo");
+  };
+  const slides = () => screen.getByTestId("photo-list").props.scrollEnabled as boolean;
+  const gesture = (id: string) => getByGestureTestId(id);
+  const pinchTo = (scale: number, ends = true) =>
+    act(() => {
+      fireGestureHandler<ReturnType<typeof Gesture.Pinch>>(gesture("photo-pinch"), [
+        { state: State.BEGAN },
+        { state: State.ACTIVE, scale: 1 },
+        { state: State.ACTIVE, scale },
+        ...(ends ? [{ state: State.END, scale }] : []),
+      ]);
+    });
+
+  it("one finger slides the pages, until a pinch: then they hold still", async () => {
+    await open();
+    expect(slides()).toBe(true);
+    await pinchTo(2, false);
+    expect(slides()).toBe(false);
+  });
+
+  it("a zoomed photo holds the pages, and pinched back to its size frees them", async () => {
+    await open();
+    await pinchTo(2);
+    expect(slides()).toBe(false);
+    await pinchTo(0.2);
+    expect(slides()).toBe(true);
+  });
+
+  it("a reader's step changes the photo", async () => {
+    await open();
     await fireEvent(screen.getByTestId("photo-pages"), "accessibilityAction", { nativeEvent: { actionName: "increment" } });
     expect(screen.getByText("Photo 2 of 2")).toBeTruthy();
   });
