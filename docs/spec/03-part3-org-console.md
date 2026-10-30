@@ -4258,252 +4258,35 @@ is a gym with no country. People who use the app for themselves may be anywhere.
   fee):* the fee's own Record payment → Card on Terminal, all of it, the box under the fee; while
   it waits nothing of that membership is paid by hand, and the fee is not waived; a fee taken off
   meanwhile (marked Came) leaves Square's money "not recorded", told to Staff activity.
-- **The Square Reader, in Square's own app** (18d-iii-b): Square's payment message, matched by
-  the Square customer KWAZO made for the member, records it; a payment with no member on it
-  waits for staff to match, never guessed. Staff type the bill's total, so the gym keeps
-  Square's "Apply tax to custom amounts" off and "Add a customer before checkout" on;
-  Settings → Payments shows both. KWAZO never charges a card Square's own app saved.
-  *As built, 18d-iii-b-i (Kd, 2026-10-24: match once, then automatic, never a copy of the member
-  list in Square; `rulings/2026-10-25-18d-iii-b-i.md`):* Square's `payment.created` and
-  `payment.updated` messages are kept and the worker reads the payment and its order from Square
-  (ORDERS_READ; a gym connected before it reconnects once, said in Settings → Payments); every hour
-  it also lists each gym's location's payments since its last look. A completed payment that is not
-  the app's own (a Terminal checkout's, a card on file's charge) is taken in once
-  (`gym_square_app_payments`), never one made before the gym was first watched or more than 30 days
-  ago. It goes to the gym whose record Square's customer is (the customer the app made when a card
-  was saved), at that gym's own location; and is recorded as **Square Point of Sale** (`square_app`; Square's own name for its app) only where
-  every line was a typed amount, the customer is one record's, and exactly one bill of that record or
-  of somebody it pays for is exactly the amount (without a tip), due within 7 days, and not a second
-  payment straight after the bill before it (`squareAppDecision`). Items from the gym's Square list
-  are a shop sale, never a bill's; everything else waits for staff with its reason (the list is
-  18d-iii-b-ii). **Not this bill** on the person's page takes it off a bill or fee, which is owed
-  again; the money stays in Square and the payment waits again. A card on file charge unanswered for
-  more than an hour is looked up among the location's payments, never sent again.
-  Settings → Payments shows it as a checklist (Kd's click-through, 2026-10-25): whether Square adds a
-  tax of its own to typed amounts, read from the gym's own Square taxes each time it opens
-  (ITEMS_READ), with what that does to a $45.00 bill and, at once, the two steps: Square's own, its
-  labels drawn as labels, to turn off "Apply tax to custom amounts" (never Disable tax, which takes the
-  tax off items too), then the same tax on memberships here; whether any membership has tax set here,
-  with Set tax on memberships; and picking the member on each sale, which staff can skip. A payment Square
-  charged more than staff typed waits ("square_tax"). A Terminal checkout asks for the bill's total,
-  which Square takes as including tax, so Square's own taxes never change it.
-  *Since 18d-iii-b-ii-a (Kd, 2026-10-25, "one press"): nothing taken in Square Point of Sale is recorded by
-  itself any more. Where the rule above would have recorded it, it waits `ready`, that bill ticked for one press
-  of Match (below); a sale of shop items for somebody owing at least that much this week waits too.*
-  *As built, 18d-iii-b-ii-a (Kd, 2026-10-25: "GO", then "ONE PRESS"; `rulings/2026-10-25-18d-iii-b-ii-a.md`):*
-  **Nothing taken in Square Point of Sale goes on a bill by itself**: Square's customer says who paid, never what
-  for, so every such payment waits for one press. **Payments to match**, a page in the menu beside Failed
-  payments for staff who keep the list and record payments, with its count beside the menu line (live), lists
-  every payment that waits, newest first, one line each, as a bank feed's list to review: when; who paid (the
-  record, Square's own name marked "Name from Square", or Unknown) with the name the gym gave the Square device
-  that took it and how it was paid; how much; and what it is for. Where one bill of exactly one person fits, it is
-  ticked ("Gold Weekly · due today") and **Match** puts the payment there in one press, as Square Point of Sale;
-  **Other bill** opens Match's box. Otherwise the line says in a few words why staff choose, and the button says
-  what: **Choose who paid** or **Choose the bill**, opening the box: who paid (filled in where the app can tell:
-  the record Square's customer is, or the one current record with the same email, or the same phone with its
-  country code; never by name), which bill (theirs, or of anybody they pay for), and how much where Square didn't
-  say (items in the sale, a sale paid in parts). A note is added only where something needs checking (they may
-  have paid twice, in amber) or the amount needs saying (Square's tax on top: the part staff entered goes on the
-  bill). Square is asked about the payment first: one it has refunded since, or no longer shows as taken, never
-  goes on a bill. It is recorded by Record payment's own step, once (the press's key; the gym's lock; never while
-  the membership has money out on the Terminal or the card on file). **Not for a bill** (a shop sale or anything
-  else, or already recorded on a bill by hand) takes it off the list, with Undo. The person's page shows the same
-  payment the moment Square tells the app, with the same bill ticked and Match. **No member is charged twice:**
-  while a payment of a person's waits (or of whoever pays for them), their card on file is charged by nobody, the
-  app or staff; a sale of shop items for somebody owing at least that much this week waits too; and a gym's
-  Square payments are looked at right before its cards on file are charged. Failed payments' Try again sends
-  there. Overview has the count; Sell's Today's takings says shop items sold in Square Point of Sale are in
-  Square's own reports. Add member, Add membership and Record payment offer **Square Point of Sale** as a way of
-  paying where the gym can take payments there: it records nothing and says whom to pick in Square (the payment
-  then comes to their page, bill ticked) or that it waits in Payments to match. A payment with no customer at a
-  Square location two gyms here use is kept for neither;
-  each is told how many while the location is shared, and how to give a gym its own location.
-  *As built, 18d-iii-b-ii-b-i (Kd, 2026-10-26: "go"; `rulings/2026-10-26-18d-iii-b-ii-b-i.md`):* **Members in
-  Square**, a line of Settings → Payments' Square Point of Sale checklist. The gym's own owner presses **Add members
-  to Square**; the press checks Square first, following Square's own rule ("Before creating a new customer, check to
-  see whether a customer already exists with that email address or phone number", Customer API Best Practices): it
-  lists the business's customers a page at a time (ListCustomers), keeps only those sharing an email or a phone
-  with a current record here or naming one of its records as their reference, and decides for each current record
-  not yet in this Square account: **linked** to a customer Square has where the email or the phone is the same and
-  the name is the same (the words of the shorter each one of the longer's, at least two, no Jr or Sr on one side
-  only), exactly one such customer and nobody else here it could be; **added** as a customer of its own (name,
-  email, phone, the record's id as Square's reference id) otherwise, even where Square has somebody with that email
-  under another name (a child on a parent's email); **left out** where Square has two or more customers who could be
-  them (merge them in Square, help article 8401, then Check again) or one customer could be two records here (join
-  them on Possible duplicates). A name alone links nobody; a customer with no name is nobody's; Square's phone is
-  read with the gym's country as the list reads its own. Square's own Subscriptions are read for the customers it
-  would link (SUBSCRIPTIONS_READ, asked for since: a gym connected before presses Reconnect Square once), ACTIVE,
-  PENDING or PAUSED named as "Square already charges … they pay twice". The box names each group (three names, "and
-  N more", See all) and waits an hour for **Add 3 and link 1**, which does what it said and nothing for anybody it
-  did not name; a record changed since is looked at again by itself. A check with nobody to add or link needs no
-  press. Customers are made two at a time, a press doing its first 20 calls itself and the worker the rest, 150
-  calls a minute for every gym together (Square's test area made 150 in 40 seconds two at a time and turned 163 of
-  400 away four at a time). Then each new member is added by itself: looked up by email and phone (SearchCustomers)
-  when the list moves on, by the same rule, and anybody left out or refused looked at again a day later. Staff read
-  the counts; the names are the owner's. Disconnect, or the app taken off in Square, lets go of the customers a
-  check was holding.
-  *As built, 18d-iii-b-ii-b-ii-a (Kd, 2026-10-26: "go"; `rulings/2026-10-26-18d-iii-b-ii-b-ii-a.md`):* **Square's
-  merges followed.** Square merges customers into a new one with a new id, the business in its Dashboard or Square
-  by itself, and deletes the old ones; its message that an old one was deleted makes the app ask Square for it, and
-  Square answers an old id with the merged customer ("If you call RetrieveCustomer using the ID of customer A or B,
-  the Customers API returns customer C"). Then, at each gym that holds the old customer: a card saved on it is
-  charged through the merged customer, where Square keeps it; the one record whose name is the merged customer's
-  (the same rule as linking) keeps it, as one Square made, never one the app made; any other record that was linked
-  to it is separated (a merge of two people, Sam merged into his mum "Pat Smith", is never followed) and added to
-  Square again by itself, or, separated twice within 30 days, left out and named in the box ("Left out, as Square
-  merged them into another customer with a different name, twice") until their email or phone changes; a card left
-  on another person's merged customer is still charged but never says whose that customer is; what a check planned
-  or read about the old customer is dropped. Each old id is kept with the customer it is now (Square: "detect
-  customer merges and store the merged IDs"), so a payment taken before the merge still finds its member. A merged
-  customer's reference id is one of the old customers' and never makes it a record's. The box, once members are
-  added, says: "In Square, Duplicate Suggestion lists customers who share an email or phone, such as a child on a
-  parent's email. Merge them only if they are the same person." (Square alerts the business only to customers who
-  share an email or phone, help article 8401.)
-  *As built, 18d-iii-b-ii-b-ii-b-i (Kd, 2026-10-28: "go"; `rulings/2026-10-28-18d-iii-b-ii-b-ii-b-i.md`):* **A
-  changed name, email or phone copied to Square.** Once the owner has added the gym's members to Square, the
-  worker's minute copies a change to a member's name, email or phone to their customer there, to one the app
-  added and to one it only linked alike, and only the part that changed. Each customer keeps the three parts
-  of the record as hashes, as Square last agreed with them (made, linked or copied; migration `0170`); a part
-  that differs is a change, and a part Square already holds is not sent (an email in its folded form, a phone in E.164; a name exactly as
-  the app sent it, for a customer the app made, and by its folded words, case, punctuation and Latin accents off,
-  for one the business typed, every other script keeping its marks), so what the business typed in Square
-  stays. A part taken off the record is cleared in Square. The app asks Square for the customer first and
-  sends the changed parts with the version it read (UpdateCustomer; Square refuses any other version with 409
-  CONFLICT, measured in its test area on 2026-10-28, and the change is asked again the next minute). Square
-  answering with another customer than the one asked for means it merged them, possibly into somebody else's,
-  and nothing is sent: the merge is followed as above. A customer Square deleted is let go as when Square
-  tells the app. A customer is marked as agreeing with its record when a card save or Members in Square makes it, and by
-  the migration for every one made before, so the first change made to a member is copied; a row no path marked
-  is taken to hold the record as it is at the next look, and nothing is sent on that guess. A past member's change waits until they are put back. A
-  change Square refuses (a phone number it does not accept, such as +1 555 555 0100: INVALID_PHONE_NUMBER) is
-  left, named under Members in Square ("Square didn't accept the change to their details") and on the member's
-  own page, and asked again a day later or when their details change. The box says, under the check and once
-  members are added, that a change is copied and only the part that changed. The calls are the box's (150 a
-  minute for every gym together, two members at a time, two calls each); a gym whose owner never pressed Add
-  members to Square has nothing copied.
-  *As built, 18d-iii-b-ii-c-i (Kd, 2026-10-29: "go"; `rulings/2026-10-29-18d-iii-b-ii-c-i.md`):* **Match links
-  Square's customer to the person who paid** ("match once, then automatic"). In Match's box, for a payment whose
-  Square customer is linked to nobody, a line under "Who paid?" offers to link that customer to the person
-  picked, so the customer's next payments come to the person's page with the bill ticked: "Link this
-  Square customer to Amy Lee". The tick is on only where the app can tell they are the same person, by
-  Members in Square's rule (the same email or phone AND the same name); where it cannot (Pat Smith, who is not on
-  the list, paying for her son Sam on his email), it is off, says why, and nothing is linked unless the press
-  sends it (`linkTo`, which nothing but the tick sends). A customer somebody else here, or at another gym of the
-  Square account, already has is never linked (the box names who); nor one whose reference id is another record
-  of this gym's, nor a past member's. Before the payment goes on its bill Square is asked about the customer
-  too: one it has deleted, merged since, or will not show is never linked by an old number (the press says so in
-  its done line, and Square not answering changes nothing). The link is made in the step that puts the payment on
-  its bill, under the gym's lock, so a press sent twice or by two staff links once: the person's customer if they
-  have none in that Square account (a card saved later is saved on it; copied changes reach it as for any
-  linked customer), else a second customer of theirs (Square makes one from a card payment), kept in
-  `gym_square_old_customers` with `matched_at` where a merge's old customers have `merged_at`. Every other
-  payment of that customer still waiting becomes the person's (their page, their card held), waiting for what
-  was sold if that was why (`sale_reason`, kept at the take-in) or else for its bill, worked out again from
-  today's bills; a payment taken in afterwards is theirs at once. Staff activity says "Linked a customer in your
-  Square customer list to Amy Lee", with nothing of the customer's own details; the payment keeps what Match
-  did (`link_result`) so the same press answered again is answered the same. Unlinking is the second half (below).
-  *As built, 18d-iii-b-ii-c-ii (Kd, 2026-10-29: "go"; `rulings/2026-10-29-18d-iii-b-ii-c-ii.md`):* **Unlink on their page.** A
-  person's page has a box, **Linked Square customer**, for staff who match payments, wherever Match linked a customer to them
-  (`gym_square_customers.matched_at`, migration `0174`, for their customer; `gym_square_old_customers.matched_at` for a second
-  one), naming the customer as Square names them (asked when the box is read, never kept): "Pat Smith in Square is linked to
-  Sam Smith. Square payments made under Pat Smith show on this page." and "Linked on 29 Oct.", with **Unlink** (Kd's
-  click-through: short sentences that name who). A link Members in Square, a card or a merge made is not
-  offered. Unlink opens a box under the button that says, before anything changes, who the customer is in Square (asked of
-  Square then, never kept), how many of their payments waiting on the page go back to Payments to match, the person's card on
-  file saved on that customer, which is removed and stopped in Square (a card cannot move to another customer in Square, so
-  staff save it again, which makes the person a customer of their own), how many of the customer's payments already on bills
-  stay (Not this bill takes one off), that the app won't link the customer to them again by itself, and, where Members in
-  Square adds members by itself, that the person is added as a customer of their own ("Unlink Pat Smith from Sam Smith?",
-  "The $7.00 payment from Pat Smith moves to Payments to match.", "Sam Smith's card (Visa ending 1111) is removed, because
-  it was saved under Pat Smith in Square. Add the card again.", "Payments already recorded stay as they are.", "Pat Smith's
-  future Square payments won't show here."); Cancel changes nothing. The press
-  carries the card the box named (a card saved since: the box is read again) and its own key (the same press twice is
-  answered the same); it waits while a payment is being taken on that card or a card is being saved on the Terminal. In one
-  step under the gym's lock: the link goes, with the old ids it stood for; the card is deleted and its stop owed and sent;
-  the customer's payments still waiting or marked as the person's are nobody's again (`not_linked`, the sale's own reason
-  kept; a refund or another location kept as it was; a sale of shop items a shop sale), with Square's name, email and phone
-  of the customer read just before, or "Unknown" where Square did not answer; and staff's word is kept
-  (`gym_square_unlinked_customers`, Square's ids only, carried by a join of two records, gone with a record deleted for
-  good). Every way of linking reads it: Members in Square's rule (the check and its own look) never makes that customer the
-  person's, its link step refuses it, a typed card saved at the same instant is let go ("Their Square customer was unlinked
-  from them while the card was being saved…"), and Match's tick for them is off, saying
-  "You unlinked Pat Smith from Sam Smith on 29 Oct. Tick this only if they are the same person."; staff ticking
-  it link them again and the word goes. After the press the box says "Unlinked. Pat Smith's Square payments no longer show
-  on this page. The payment is in Payments to match. Add Sam Smith's card again." with Open Payments to match; Card on file reads again; Staff activity says "Unlinked a customer in your Square customer list from Sam Smith".
-  *Planned, 18d-iii-b-iii (Kd, 2026-10-30: "go"; `rulings/2026-10-29-18d-iii-b-iii.md`; tried in Square's US test area with
-  `.cost/18d-iii-b-iii/try-items.mts` and `try-offers.mts`, the test account's own key standing in for Square Point of Sale, which
-  does not open test accounts):* **Memberships as items in Square**, six jobs, 18d-iii-b-iv-a to -f. Memberships only: shop items
-  stay in Square's own reports (Kd, 2026-10-29). Membership tax stays this app's, as on the Terminal and for typed amounts.
-  - **(a) Add memberships to Square.** Square's ITEMS_WRITE is asked for as one of Square Point of Sale's permissions (a gym
-    connected before presses Reconnect Square once; a Terminal gym is never made to). In Settings → Payments' Square Point of
-    Sale checklist the gym's owner presses **Add memberships to Square**. As Members in Square does, the press reads Square's
-    item list first, and the box says before anything changes which membership becomes a new item, which item Square already
-    has with the same name at the gym's location is used instead and what will change in it, and which are left out and why (a
-    free membership; an item of that name that is not plainly one membership, such as one with sizes, stock or options); one
-    press does what it said and nothing else. Each paid membership on the price list is one item, at the gym's own location
-    only, `REGULAR` (Square's own "Membership" type, `LEGACY_SQUARE_ONLINE_MEMBERSHIP`, "cannot be created using the API"), with
-    two prices: the membership's name at the bill's price with the tax set here (Gold Monthly $50.00 with 8.25% here: $54.13),
-    and **Other amount** (`VARIABLE_PRICING`: Square asks for the amount at the sale, as Square's own community moderators
-    advise for a price that changes). Square adds no tax to it: it is made not taxable and any tax Square puts on it is taken
-    off (`UpdateItemTaxes`). Measured 2026-10-30: Square put the account's all-items tax on a new item by itself; marked not
-    taxable, the item was charged no tax in an order with Square's own taxes applied, while a $2.00 bottle in the same sale was
-    charged $2.18 (9%). The app keeps which item and which price is each membership's, and changes only items it made or the
-    owner chose to use. The worst thing: an item the business sells (its own Gold T-shirt) changed or taken over in Square, or
-    a second Gold Monthly made.
-  - **(b) A membership sale records itself** (Kd, 2026-10-29: "no need to select anything"; it amends "one press",
-    `rulings/2026-10-25-18d-iii-b-ii-a.md`, for membership items only). The take-in reads each line's item: an order line
-    names the exact price picked (`catalog_object_id`: the membership's own price or Other amount) with its own total after a
-    discount at the till (measured: $50.00 less a $5.00 till discount, $45.00). A payment goes on the bill by itself, as
-    Square Point of Sale, once, under the gym's lock, where: one line of the sale is one of the gym's membership items,
-    quantity 1; the payment paid the whole sale; Square added nothing to that line; Square's customer is linked to exactly one
-    record here; that record, or exactly one person it pays for, holds exactly one current membership of that kind with a bill
-    due within the week or overdue, not being taken on the Terminal or the card on file; the line's total is exactly what is
-    left on that bill; and it is not a second payment straight after the bill before (`SQUARE_APP.twiceDays`). The next bill
-    date moves on; a shop item in the same sale stays in Square's reports (measured: a $50.00 membership and a $2.00 bottle in
-    one sale, the membership's line $50.00 untaxed). Anything else waits in Payments to match with the membership named and
-    why in the desk's words ("Paid $54.13 for Gold Monthly. Amy Lee's bill is $45.00."), Match's box filled in; a sale with a
-    typed amount and a membership item waits (mixed), as does two of one membership. A sale of shop items for somebody owing
-    at least that much this week stops waiting at a gym whose memberships are all items in Square (a membership has its own
-    item there, so any other item is a shop item); it still waits at a gym that has not added them. Add member, Add membership
-    and Record payment say what to tap: "In Square Point of Sale, pick Amy Lee, then Gold Monthly.", or "…then Gold Monthly ›
-    Other amount, and enter $45.00." Typed amounts still wait for one press. The worst thing: Amy charged twice for one month
-    (at the desk and on her card on file), a $54.13 shirt paying her $54.13 bill, or her item paying somebody else's bill.
-  - **(c) Kept up to date.** A new membership, or a changed name, price or tax rate here, changes its item in Square by
-    itself; an item stays while anybody here still pays for that membership. Square has no partial update ("Sparse updates
-    are not supported by the Catalog API. You must provide the full existing object in any update requests", "Update catalog
-    objects"), so the app reads the item, changes only its own part and writes the whole item back with the version it read,
-    with the same Square-Version as the read. Measured 2026-10-30: a write that left parts out wiped them (a description and the
-    Other amount price gone); the owner's change in Square and the app's change to another part, written from an older read,
-    were both kept (Square merges them); both changing the price, Square refused the app's (`VERSION_MISMATCH`) and the
-    owner's stood. A price or tax someone changes in Square, or an item deleted there, is shown in the box with a button to
-    set it back or add it again, and is never changed back without the owner's press.
-  - **(d) Offers in Square** (Kd, 2026-10-30). An offer here for memberships (Discounts) becomes Square's own customer-group
-    discount on those memberships' own price, never on Other amount: Square's help 6603, such discounts "automatically apply
-    to buyers in your Customer Groups once they are added to the sale", on all Point of Sale devices. Square's discount is the
-    exact difference between the item's price and the bill with the offer (a $10.00 offer on Gold Monthly at $50.00 with
-    8.25%: $10.83, so $43.30), with its product set, its pricing rule and a customer group; a member given the offer here is
-    put in the group, and taken out once a first-payment offer is used or the membership ends. Measured 2026-10-30 with
-    Square's own price calculation on orders: Amy in the group, $43.30, the offer taken off by Square; Ben, or nobody picked,
-    $54.13; Amy on Other amount at $43.30, not taken off twice; Amy out of the group, $54.13; Square kept the rule as
-    `application_mode: AUTOMATIC`. Staff pick the member before the item, as the checklist says. A bill different for any
-    other reason (an older price, the joining fee, a part month, a freeze fee) is Other amount. No new permission.
-  - **(e) One way at the desk** (Kd, 2026-10-29). Settings → Payments: card payments at the desk on the **Square Terminal** or
-    in **Square Point of Sale**; each screen that takes a card at the desk (Add member, Add membership, Record payment, a fee's,
-    Sell) offers only the one chosen, and Square Point of Sale's checklist shows for a gym that chose it. A gym that has
-    paired a Terminal starts on the Terminal, any other on Square Point of Sale. A card for automatic billing is added here
-    (Add card on the person's page, or the member in the app), never at Square's till. A payment still taken the other way
-    waits in Payments to match, as now.
-  - **(f) Move members from Square Subscriptions** (Kd, 2026-10-30: before launch). For a business whose members Square's
-    own Subscriptions bill (Members in Square names them today: "Cancel those subscriptions in Square first."), the owner
-    presses **Move members from Square Subscriptions**. The box lists each member Square bills, as linked by Members in
-    Square, with what they will have here ("Amy Lee · Gold Monthly · $50.00 · paid in Square until 14 Nov · billed here from
-    15 Nov"), each of Square's plans matched to a membership here by name or added, and who is left out and why (Square bills
-    them every 30 days, which memberships here cannot do; not in the member list; their subscription paused). One press gives
-    each the membership here, its first bill the day after Square's paid-until day (`charged_through_date`), and asks Square to
-    stop the subscription at the end of what was paid (CancelSubscription "sets the `canceled_date` field to the end of the
-    active billing period"; SUBSCRIPTIONS_WRITE, a new permission). The box names the members with no card here: their card
-    is added here before their first bill here. The worst thing: Amy billed by both Square and the app for one month, or by
-    nobody.
+- **Square's own app (Square Point of Sale): not connected** (Kd, 2026-10-30; `rulings/2026-10-30-18d-iii-b-v.md`; taken out in
+  18d-iii-b-v, PR to be named in its handoff; what was built is in git before that job). A gym takes a card at the desk on the
+  Square Terminal, started here, or bills the card on file. Money taken in Square's own app is the gym's to record by hand:
+  Record payment → **Card at the desk**. The app does not read those payments, and nothing here holds a card on file for one,
+  so a member who pays in Square's own app and is not recorded by hand can be charged on their bill's date. Gymdesk: "The
+  Square Terminal is a specific device and the only one compatible with this integration" (its payment processing help, read
+  2026-10-30). KWAZO never charges a card Square's own app saved.
+  *What stayed, for the card on file:* each person's customer in Square, made the first time a card is saved for them.
+  **Square's merges followed:** Square merges customers into a new one with a new id, the business in its Dashboard or Square
+  by itself, and deletes the old ones; its message that an old one was deleted makes the app ask Square for it, and Square
+  answers an old id with the merged customer. At each gym that holds the old customer, a card saved on it is charged through
+  the merged customer, where Square keeps it; the one record whose name is the merged customer's keeps it, as one Square made,
+  never one the app made; any other record is separated (a merge of two people, Sam merged into his mum "Pat Smith", is never
+  followed), and a card left on another person's merged customer is still charged but no longer says whose that customer is.
+  Delete permanently takes a customer the app made out of Square (18d-iii-b-ii-b-ii-b-ii), and keeps one Square's own
+  Subscriptions charge, which is why SUBSCRIPTIONS_READ is still asked for. ORDERS_READ and ITEMS_READ no longer are.
+  *Not built, kept as a plan (18d-iii-b-iii; Kd, 2026-10-30, the same day he took Square Point of Sale out):* memberships as
+  items in Square, offers in Square and one way at the desk, jobs 18d-iii-b-iv-a to -e. The plan and what was tried in Square's
+  test area are in `handoff/2026-10-29-18d-iii-b-iii.md` and `rulings/2026-10-29-18d-iii-b-iii.md`.
+  *Planned, 18d-iii-b-iv-f:* **Move members from Square Subscriptions** (Kd, 2026-10-30: before launch). For a business whose members Square's
+  own Subscriptions bill (found by the same email or phone and the same name, `squareMembersPlan.ts`, kept for this job), the owner
+  presses **Move members from Square Subscriptions**. The box lists each member Square bills, with what they will have here ("Amy Lee · Gold Monthly · $50.00 · paid in Square until 14 Nov · billed here from
+  15 Nov"), each of Square's plans matched to a membership here by name or added, and who is left out and why (Square bills
+  them every 30 days, which memberships here cannot do; not in the member list; their subscription paused). One press gives
+  each the membership here, its first bill the day after Square's paid-until day (`charged_through_date`), and asks Square to
+  stop the subscription at the end of what was paid (CancelSubscription "sets the `canceled_date` field to the end of the
+  active billing period"; SUBSCRIPTIONS_WRITE, a new permission). The box names the members with no card here: their card
+  is added here before their first bill here. The worst thing: Amy billed by both Square and the app for one month, or by
+  nobody.
 - **Cash, bank transfer, a card on another machine, and UPI in India** (18r): recorded.
 
 Our own app for the Square Reader is ruled out (Kd, 2026-10-21): no gym app found runs the
