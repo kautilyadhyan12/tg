@@ -589,7 +589,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 33a. [x] **The meal scan on GPT-6 Luna, thinking off** — merged 2026-10-28 (PR #380).
     - 33a-ii. [x] **Luna checks the scan's unclear food matches** — merged 2026-10-28 (PR #382).
     - 33b. **A meal photo with the phone's camera, and barcode scan** (split 2026-10-29 in three: the photo first).
-      - 33b-i. [ ] **A meal photo on the phone**: the live camera at once, the gallery in its corner; the photo made small and rebuilt on the phone and again on the server, so no tag reaches OpenAI (33a's review); review, change, take off and add foods; saved once, kept on the phone until the server has it (an unsaved scan now kept a day).
+      - 33b-i. [x] **A meal photo on the phone** — merged 2026-10-30 (PR #395).
       - 33b-ii. [ ] **"Not this?" and the names Luna saw**: on every scanned food, its other close foods and a search; each food's title what Luna saw, with where its numbers come from under it (Kd, 2026-10-28).
       - 33b-iii. [ ] **Barcode scan** (Stage 4 item 8): the same camera; a product's own page at Open Food Facts, which sends the minerals, vitamin D and the serving size its search leaves out (34a's review).
 34. **More food** (split 2026-10-13: the parts on the server need no phone).
