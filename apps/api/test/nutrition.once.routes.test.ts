@@ -7,6 +7,7 @@ import { loadConfig } from "../src/config.js";
 import { createIoRedis, createMemoryRedis, type RedisLike } from "../src/redis.js";
 import type { VisionProvider, VisionResult } from "../src/modules/nutrition/vision.adapter.js";
 import type { FoodSearchProvider } from "../src/modules/nutrition/openfoodfacts.adapter.js";
+import { MEAL_PHOTO } from "./fixtures/mealPhoto.js";
 
 // A meal saved under the phone's own id (ROADMAP 32a): the same meal sent twice is
 // kept once, and an id that is somebody else's meal reads and changes nothing.
@@ -29,7 +30,7 @@ const evidence: VisionEvidence = {
 };
 const vision: VisionProvider = { analyze: () => Promise.resolve({ evidence, tokensIn: 100, tokensOut: 200 } satisfies VisionResult) };
 const noExternal: FoodSearchProvider = { search: () => Promise.resolve([]) };
-const jpeg = (() => { const bytes = Buffer.alloc(1200, 1); bytes[0] = 0xff; bytes[1] = 0xd8; bytes[2] = 0xff; return bytes.toString("base64"); })();
+const jpeg = MEAL_PHOTO;
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 interface MealBody { meal: { id: string; mealName: string; origin: string; totals: { kcalPoint: number }; items: { canonical: string; gramsPoint: number }[] } }

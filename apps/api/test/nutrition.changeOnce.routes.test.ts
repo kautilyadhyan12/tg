@@ -5,7 +5,7 @@
 // The worst thing (the plan's line): a change made with no signal is lost, or it writes over a
 // newer one, and the day's totals are wrong; or somebody else's foods are in Recent.
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import postgres from "postgres";
 import { z } from "zod";
 import { mealSchema, recentFoodsResponseSchema, type Meal } from "@app/shared";
@@ -14,6 +14,22 @@ import { loadConfig } from "../src/config.js";
 import { createMemoryRedis } from "../src/redis.js";
 import { CURATED_FOODS } from "../src/modules/nutrition/foods.js";
 import type { FoodSearchProvider } from "../src/modules/nutrition/openfoodfacts.adapter.js";
+import type * as Repo from "../src/modules/nutrition/repo.js";
+
+/** Two sends of one change at the same moment, in the order that is rare to hit by timing: the second asks
+ *  whether the change was made just before the first one saves it. */
+const race = vi.hoisted(() => ({ next: false }));
+vi.mock("../src/modules/nutrition/repo.js", async (importOriginal) => {
+  const real = await importOriginal<typeof Repo>();
+  return {
+    ...real,
+    mealAfterChange: (...args: Parameters<typeof real.mealAfterChange>) => {
+      if (!race.next) return real.mealAfterChange(...args);
+      race.next = false;
+      return Promise.resolve(null);
+    },
+  };
+});
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -136,6 +152,18 @@ d("a meal's change sent twice, and recent foods (real Postgres)", () => {
       expect(await corrections(meal.id)).toEqual(["items"]);
     }
   }, 60_000);
+
+  it("a send that asked whether its change was made just before the other send saved it is answered with the meal", async () => {
+    const meal = await log(alice, [{ canonical: ROTI.canonical, grams: 40 }, { canonical: PANEER.canonical, grams: 100 }], 20);
+    const change = { mealType: "dinner", items: [{ canonical: ROTI.canonical, grams: 80, from: 0 }], itemsVersion: meal.itemsVersion, changeId: randomUUID() };
+    const first = await inject("PATCH", `/v1/nutrition/meals/${meal.id}`, alice, change);
+    expect(first.statusCode, first.body).toBe(200);
+    race.next = true;
+    const again = await inject("PATCH", `/v1/nutrition/meals/${meal.id}`, alice, change);
+    expect(again.statusCode, again.body).toBe(200);
+    expect(mealOf(again.body)).toEqual(mealOf(first.body));
+    expect(await corrections(meal.id)).toEqual(["items"]);
+  });
 
   it("still refuses a different change made from an older state of the foods", async () => {
     const meal = await log(alice, [{ canonical: ROTI.canonical, grams: 40 }], 10);

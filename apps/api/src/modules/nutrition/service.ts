@@ -10,6 +10,7 @@ import {
   DIET_LABEL_CAUTION,
   FOOD_ALLERGY_CAUTION,
   MAX_ITEM_GRAMS,
+  MEAL_SCAN_SAVE_SECONDS,
   MEAL_SCAN_TTL_SECONDS,
   MORE_NOT_KNOWN,
   isNoValueWord,
@@ -27,10 +28,13 @@ import {
   type LoggedMeasure,
   type Meal,
   type MealIdeasResponse,
+  type MealChoice,
   type MealItem,
+  type OwnFoodItem,
   type MealPhotoItem,
   type Per100g,
   type VisionEvidence,
+  isOwnFood,
 } from "@app/shared";
 import type { RedisLike } from "../../redis.js";
 import { onMealLogged } from "../gamification/service.js";
@@ -40,7 +44,7 @@ import { getUserFoodAnswers, getUserPlanAndCutRules, getUserSyncContext } from "
 import { LEAST_MEAL_KCAL, suggestAfterWorkout, suggestMeals, type AfterWorkoutIdea, type DayNumbers } from "./suggest.js";
 import { ownTargetsHeld, targetsFromPlan } from "./targets.js";
 import { foodWeek, spanDays } from "./foodWeek.js";
-import { CURATED_FOODS, curatedPieceFdcId, curatedUsdaFdcId, findCurated, findCuratedVersions, holdsEveryWord, searchCurated } from "./foods.js";
+import { CURATED_FOODS, curatedPieceFdcId, curatedUsdaFdcId, findCurated, findCuratedVersions, holdsEveryWord, searchCurated, slug } from "./foods.js";
 import { GRAM, dishwareGrams, foodMeasures, gramsPerMl, measureGrams, scanStart, startingMeasure, type UsdaPortion } from "./measures.js";
 import type { FoodReference, FoodSearchProvider } from "./openfoodfacts.adapter.js";
 import { itemsVersion, ownPer100g, savedPlaces } from "./mealEdit.js";
@@ -64,7 +68,9 @@ import {
 } from "./vision.adapter.js";
 
 export const RETAKE_TTL_SECONDS = MEAL_SCAN_TTL_SECONDS;
-const SCAN_TTL_SECONDS = MEAL_SCAN_TTL_SECONDS;
+/** A scan's draft, kept until it is saved, which takes it, or a day has passed: a phone that logged
+ *  the meal with no signal sends it later (ROADMAP Stage 5 33b-i). */
+const SCAN_TTL_SECONDS = MEAL_SCAN_SAVE_SECONDS;
 const FOOD_CACHE_TTL_SECONDS = 24 * 60 * 60;
 const CALC_VERSION = 1;
 
@@ -459,6 +465,8 @@ async function amountOf(
   userId: string,
   chosen: ChosenItem,
   measures: readonly FoodMeasure[],
+  /** Its grams as a part of one dish the whole meal was eaten from (`sharedDishGrams`). */
+  sharedGrams?: number,
 ): Promise<{ grams: number; dishwareRung: "user_dishware" | null; measure: LoggedMeasure | null }> {
   if ("grams" in chosen) return { grams: chosen.grams, dishwareRung: null, measure: null };
   const tooSmallOrLarge = (grams: number): boolean => grams < 1 || grams > MAX_ITEM_GRAMS;
@@ -466,7 +474,9 @@ async function amountOf(
     // The person's own dish, or one everybody has (a cup, a mug, a bowl).
     const dish = (await repo.getDishware(deps.sql, userId, chosen.dishwareId)) ?? standardDish(chosen.dishwareId);
     if (dish === null) throw new NutritionError(400, "unknown_dishware", "Dishware not found.");
-    const grams = dishwareGrams(dish.volumeMl, chosen.fillLevel, gramsPerMl(measures));
+    // The meal eaten from one dish: its part, worked out with the meal's other foods.
+    const share = chosen.share ?? 1;
+    const grams = chosen.share !== undefined && sharedGrams !== undefined ? sharedGrams : dishwareGrams(dish.volumeMl, chosen.fillLevel * share, gramsPerMl(measures));
     // Symmetric with the grams arm's bounds (chosenItemsSchema: positive, ≤10_000):
     // a round-to-0 (tiny dish × low fill) would persist a MealItem the shared
     // contract declares impossible, and more than 10_000 would pass the cap the
@@ -474,7 +484,7 @@ async function amountOf(
     if (tooSmallOrLarge(grams)) {
       throw new NutritionError(400, "portion_out_of_range", "That portion is too small or too large to log — pick a different fill or enter grams.");
     }
-    return { grams, dishwareRung: "user_dishware", measure: { id: "dish", name: dish.label, amount: chosen.fillLevel } };
+    return { grams, dishwareRung: "user_dishware", measure: { id: "dish", name: dish.label, amount: chosen.fillLevel, ...(chosen.share === undefined ? {} : { share }) } };
   }
   const measure = measures.find((m) => m.id === chosen.measure);
   if (measure === undefined) throw new NutritionError(400, "unknown_measure", "That measure is not one of this food's.");
@@ -485,11 +495,46 @@ async function amountOf(
   return { grams, dishwareRung: null, measure: { id: measure.id, name: measure.name, amount: chosen.amount } };
 }
 
+/** A meal eaten from one dish (ROADMAP Stage 5 33b-i; Kd, 2026-10-30): the foods sent with a `share` of
+ *  the same dish at the same fill are its parts, `share` each one's part of the meal's GRAMS. The dish
+ *  holds them all, so the grams G of the meal satisfy Σ G·wᵢ ÷ dᵢ = the dish's ml × how full, wᵢ each
+ *  food's part (the parts of a dish taken together as the whole) and dᵢ what a ml of it weighs. Each
+ *  food keeps its proportion of the meal whatever its density, and the same dish applied again gives
+ *  the same grams. Grams by place in `chosen`; a food not shared has none. */
+async function sharedDishGrams(
+  deps: Pick<NutritionDeps, "sql">,
+  userId: string,
+  chosen: readonly ChosenItem[],
+  measures: readonly (readonly FoodMeasure[])[],
+): Promise<Map<number, number>> {
+  const groups = new Map<string, { dishwareId: string; fillLevel: number; parts: { at: number; share: number; perMl: number }[] }>();
+  for (const [at, item] of chosen.entries()) {
+    if (!("dishwareId" in item) || item.share === undefined) continue;
+    const key = `${item.dishwareId}|${String(item.fillLevel)}`;
+    const group = groups.get(key) ?? { dishwareId: item.dishwareId, fillLevel: item.fillLevel, parts: [] };
+    group.parts.push({ at, share: item.share, perMl: gramsPerMl(measures[at] ?? []) });
+    groups.set(key, group);
+  }
+  const grams = new Map<number, number>();
+  for (const group of groups.values()) {
+    // A dish that is not the person's nor one everybody has is refused by `amountOf`.
+    const dish = (await repo.getDishware(deps.sql, userId, group.dishwareId)) ?? standardDish(group.dishwareId);
+    if (dish === null) continue;
+    const whole = group.parts.reduce((sum, p) => sum + p.share, 0);
+    const mlPerGram = group.parts.reduce((sum, p) => sum + p.share / whole / p.perMl, 0);
+    const meal = (dish.volumeMl * group.fillLevel) / mlPerGram;
+    for (const part of group.parts) grams.set(part.at, Math.round((meal * part.share) / whole));
+  }
+  return grams;
+}
+
 async function findFood(deps: NutritionDeps, query: string, search = true): Promise<FoodReference | null> {
   // An est_* canonical is a scan's own estimate, and lives only in that scan's
   // draft and the meal saved from it: nothing may look one up by name, or a
   // request could price a food at figures no table and no scan gave it.
   if (query.startsWith(ESTIMATE_CANONICAL_PREFIX)) return null;
+  // An own_* canonical is a person's own food (33b-i), priced by their numbers on the meal alone.
+  if (query.startsWith(OWN_CANONICAL_PREFIX)) return null;
   // A usda_* canonical is one row of our own table and nothing else: it must
   // not reach findCurated's fuzzy match, and one the table does not hold must
   // not be handed to OpenFoodFacts as if it were a food's NAME (searching their
@@ -1140,6 +1185,45 @@ async function peekDraft(deps: NutritionDeps, userId: string, value: string): Pr
  *  so it is EXCLUDED from the Stage-5 correction pair entirely — an addition is
  *  not an estimate error; DECISIONS 2026-07-17). ONE implementation for confirm
  *  and preview so live math cannot diverge from what is saved (T3). */
+/** A person's own food (ROADMAP Stage 5 33b-i) goes under a name of this kind, which no list answers
+ *  to (`findFood`), so it is only ever priced by the numbers the meal keeps for it. */
+const OWN_CANONICAL_PREFIX = "own_";
+
+/** A person's own food as a meal keeps it: its name, the grams eaten, priced by their own protein,
+ *  carbs and fat (`ownPer100g`), under a canonical of its own in the meal. */
+function ownFoodItem(choice: OwnFoodItem, taken: Set<string>): MealItem {
+  const figures = ownPer100g(choice.own, choice.grams);
+  if (figures === null) throw ownNumbersTooHeavy(choice.grams);
+  const base = `${OWN_CANONICAL_PREFIX}${slug(choice.name).slice(0, 100) || "food"}`;
+  let canonical = base;
+  for (let k = 2; taken.has(canonical); k++) canonical = `${base}_${String(k)}`;
+  taken.add(canonical);
+  const food: FoodReference = {
+    canonical, name: choice.name, ...figures, fiberG: null, serving: choice.grams, unit: "g", source: "estimate", more: MORE_NOT_KNOWN,
+  };
+  return { ...nutritionItem(food, choice.grams, [choice.grams, choice.grams], "default"), nutritionSource: "own", per100g: figures };
+}
+
+/** A new meal's foods priced in their order: a person's own by their numbers, the rest by
+ *  `priceTable` (the lists, or the scan's draft), as `asPriced` gives an own food's item back. */
+async function withOwnFoods<T>(
+  choices: readonly MealChoice[],
+  priceTable: (table: ChosenItem[]) => Promise<T[]>,
+  asPriced: (item: MealItem) => T,
+): Promise<T[]> {
+  const table = choices.filter((c): c is ChosenItem => !isOwnFood(c));
+  const priced = table.length === 0 ? [] : await priceTable(table);
+  const taken = new Set(table.map((c) => c.canonical));
+  let next = 0;
+  return choices.map((choice) => {
+    if (isOwnFood(choice)) return asPriced(ownFoodItem(choice, taken));
+    const item = priced[next];
+    next += 1;
+    if (item === undefined) throw new Error("a food of the lists was not priced");
+    return item;
+  });
+}
+
 async function resolveDraftItems(
   deps: NutritionDeps,
   userId: string,
@@ -1165,8 +1249,9 @@ async function resolveDraftItems(
     const food = foods[at];
     return food === undefined ? [] : [{ food, estimate }];
   });
-  for (const { chosen, food: { food, estimate }, measures: own } of withFoods(chosenItems, priced, measures)) {
-    const amount = await amountOf(deps, userId, chosen, own);
+  const shared = await sharedDishGrams(deps, userId, chosenItems, measures);
+  for (const [at, { chosen, food: { food, estimate }, measures: own }] of withFoods(chosenItems, priced, measures).entries()) {
+    const amount = await amountOf(deps, userId, chosen, own, shared.get(at));
     // User-chosen amount collapses the range; a dishware measure overrides the rung
     // to 'user_dishware', otherwise the estimate's rung is preserved.
     resolved.push(estimate === null
@@ -1191,7 +1276,8 @@ async function buildConfirmItems(
   const items: MealItem[] = [];
   const originalItems: MealItem[] = [];
   const correctedItems: MealItem[] = [];
-  for (const { item, original } of await resolveDraftItems(deps, userId, draft, input.items)) {
+  const resolved = await withOwnFoods(input.items, (table) => resolveDraftItems(deps, userId, draft, table), (item) => ({ item, original: null }));
+  for (const { item, original } of resolved) {
     items.push(item);
     // Only ESTIMATED items form the Stage-5 correction pair. An added item was
     // never estimated, so it belongs to the meal but not to the estimate-error
@@ -1322,8 +1408,9 @@ export async function resolveChosenItems(
   }
   const measures = await measuresForChosen(deps, chosenItems, foods);
   const items: MealItem[] = [];
-  for (const { chosen, food, measures: own } of withFoods(chosenItems, await withMore(deps, foods), measures)) {
-    const amount = await amountOf(deps, userId, chosen, own);
+  const shared = await sharedDishGrams(deps, userId, chosenItems, measures);
+  for (const [at, { chosen, food, measures: own }] of withFoods(chosenItems, await withMore(deps, foods), measures).entries()) {
+    const amount = await amountOf(deps, userId, chosen, own, shared.get(at));
     items.push(nutritionItem(food, amount.grams, [amount.grams, amount.grams], amount.dishwareRung ?? "default", amount.measure));
   }
   return items;
@@ -1334,7 +1421,7 @@ export async function resolveChosenItems(
 export async function createManualMeal(deps: NutritionDeps, userId: string, input: ManualMealRequest): Promise<SavedMeal> {
   const kept = await alreadySaved(deps, userId, input.id);
   if (kept !== null) return kept;
-  const items = await resolveChosenItems(deps, userId, input.items);
+  const items = await withOwnFoods(input.items, (table) => resolveChosenItems(deps, userId, table), (item) => item);
   return await writeMeal(deps, userId, input.id, {
     takenAt: new Date(input.takenAt),
     mealType: input.mealType ?? null,
@@ -1357,12 +1444,12 @@ export async function previewMeal(
   input: PreviewMealRequest,
 ): Promise<MealPreview> {
   if (input.scanToken === undefined) {
-    const items = await resolveChosenItems(deps, userId, input.items);
+    const items = await withOwnFoods(input.items, (table) => resolveChosenItems(deps, userId, table), (item) => item);
     return { items, totals: totals(items) };
   }
   const draft = await peekDraft(deps, userId, input.scanToken);
   // Same resolution as confirmMeal (extras + dishware included) so preview == save.
-  const items = (await resolveDraftItems(deps, userId, draft, input.items)).map(({ item }) => item);
+  const items = await withOwnFoods(input.items, async (table) => (await resolveDraftItems(deps, userId, draft, table)).map(({ item }) => item), (item) => item);
   return { items, totals: totals(items) };
 }
 
@@ -1422,14 +1509,16 @@ function ownFigures(edit: FoodEdit, prior: MealItem | undefined, grams: number):
   if (edit.own === null) return null;
   if (edit.own === undefined) return prior?.nutritionSource === "own" ? (prior.per100g ?? null) : null;
   const figures = ownPer100g(edit.own, grams);
-  if (figures === null) {
-    throw new NutritionError(
-      400,
-      "own_numbers_too_heavy",
-      `Protein, carbs and fat together can't weigh more than the food itself (${gramsFigure.format(grams)} g).`,
-    );
-  }
+  if (figures === null) throw ownNumbersTooHeavy(grams);
   return figures;
+}
+
+function ownNumbersTooHeavy(grams: number): NutritionError {
+  return new NutritionError(
+    400,
+    "own_numbers_too_heavy",
+    `Protein, carbs and fat together can't weigh more than the food itself (${gramsFigure.format(grams)} g).`,
+  );
 }
 
 /** Grams in a refusal: up to one decimal, en-US, as the screen writes them. */
@@ -1472,10 +1561,11 @@ async function editedItems(
   const figured = await withMore(deps, foods);
   const measures = await measuresForChosen(deps, changed.map((c) => c.edit), foods);
   const priced = new Map<number, MealItem>();
+  const shared = await sharedDishGrams(deps, userId, changed.map((c) => c.edit), measures);
   for (const [n, { edit, prior, at }] of changed.entries()) {
     const food = figured[n];
     if (food === undefined) continue;
-    const amount = await amountOf(deps, userId, edit, measures[n] ?? []);
+    const amount = await amountOf(deps, userId, edit, measures[n] ?? [], shared.get(n));
     // T3 P2.6a finding 3: a grams edit must PRESERVE the item's existing
     // rung (same rule as confirmMeal) — only items new to the meal are
     // 'default'. 'legacy'/'anchor' rows can't re-enter the item enum; they
@@ -1553,11 +1643,11 @@ export async function patchMeal(
   }
   const before = await repo.getMeal(deps.sql, userId, id);
   if (before === null) return null;
-  // The contract sends items only with the itemsVersion they were read at.
-  const items = input.items === undefined || input.itemsVersion === undefined
-    ? undefined
-    : { items: await editedItems(deps, userId, before.items, input.items, input.itemsVersion), readAt: input.itemsVersion };
   try {
+    // The contract sends items only with the itemsVersion they were read at.
+    const items = input.items === undefined || input.itemsVersion === undefined
+      ? undefined
+      : { items: await editedItems(deps, userId, before.items, input.items, input.itemsVersion), readAt: input.itemsVersion };
     const row = await repo.updateMeal(deps.sql, userId, id, {
       ...(input.takenAt === undefined ? {} : { takenAt: new Date(input.takenAt) }),
       // undefined = keep; explicit null = clear the label.
@@ -1572,8 +1662,15 @@ export async function patchMeal(
     if (input.takenAt !== undefined) await awardMealBadges(deps, userId);
     return asMeal(row);
   } catch (err) {
-    if (err instanceof repo.MealChangedError) throw mealChanged();
-    throw err;
+    const changed = err instanceof repo.MealChangedError || (err instanceof NutritionError && err.code === "meal_changed");
+    if (!changed) throw err;
+    // Sent twice at once, the other send can make this very change between this one's check above and its read:
+    // answered with the meal, never "changed since it was opened".
+    if (input.changeId !== undefined) {
+      const made = await repo.mealAfterChange(deps.sql, userId, id, input.changeId);
+      if (made !== null) return asMeal(made);
+    }
+    throw mealChanged();
   }
 }
 

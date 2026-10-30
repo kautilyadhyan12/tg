@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import postgres from "postgres";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { bodyMeasurementListResponseSchema, bodyMeasurementSchema, mealPhotoAnalysisSchema, nutritionTargetsResponseSchema, type VisionEvidence, type VisionItem } from "@app/shared";
+import { MEAL_SCAN_SAVE_SECONDS, bodyMeasurementListResponseSchema, bodyMeasurementSchema, mealPhotoAnalysisSchema, nutritionTargetsResponseSchema, type VisionEvidence, type VisionItem } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createMemoryRedis, type RedisLike } from "../src/redis.js";
@@ -9,6 +10,7 @@ import { quotaKey } from "../src/modules/quotas/service.js";
 import { RETAKE_TTL_SECONDS, SCANNER_PAUSE_SECONDS } from "../src/modules/nutrition/service.js";
 import { VisionProviderError, type VisionProvider, type VisionResult } from "../src/modules/nutrition/vision.adapter.js";
 import { createOpenFoodFactsProvider, type FoodSearchProvider } from "../src/modules/nutrition/openfoodfacts.adapter.js";
+import { MEAL_PHOTO, MEAL_PHOTO_BYTES } from "./fixtures/mealPhoto.js";
 
 // Sentry is only ever called, never reached: a test that sets SENTRY_DSN reads what the app
 // handed it. What the real SDK would send is test/sentry.test.ts's.
@@ -26,7 +28,7 @@ const wire=(e:VisionEvidence)=>({meal_name:e.meal_name,items:e.items.map((i)=>[i
 const goodEvidence:VisionEvidence={meal_name:"Dal and roti",items:[seen({name:"Dal",canonical_hint:"dal"}),seen({name:"Roti",canonical_hint:"roti",count:2})],unknown_items:[],photo_quality:"good"};
 function fakeVision():VisionProvider&{queue:VisionEvidence[];calls:number}{const queue:VisionEvidence[]=[];return{queue,calls:0,analyze(){this.calls++;const evidence=queue.shift()??goodEvidence;return Promise.resolve({evidence,tokensIn:100,tokensOut:200} satisfies VisionResult);}};}
 const noExternal:FoodSearchProvider={search:()=>Promise.resolve([])};
-const jpeg=(()=>{const bytes=Buffer.alloc(1200,1);bytes[0]=0xff;bytes[1]=0xd8;bytes[2]=0xff;return bytes.toString("base64");})();
+const jpeg=MEAL_PHOTO;
 
 d("nutrition + body routes (real Postgres, fake providers)",()=>{
   const sql=postgres(url??"",{prepare:false,max:5});const redis=createMemoryRedis();const vision=fakeVision();let app:App|undefined;let ringApp:App|undefined;let cookieA="",cookieB="",userA="";
@@ -341,6 +343,45 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
       // The blind get would have 400'd on the old code; the recovered take saves it.
       expect(confirmed.statusCode,confirmed.body).toBe(201);
     }finally{await app6.close();}
+  },30_000);
+  it("an unsaved scan can still be saved a day later, a saved one is gone at once, and bytes that are no picture are refused unscanned (33b-i)",async()=>{
+    const base=createMemoryRedis();const kept:{key:string;ttl:number}[]=[];const scanner=fakeVision();
+    const recording:RedisLike={
+      incrWithTtl:(k,t)=>base.incrWithTtl(k,t),
+      decrIfPositive:(k)=>base.decrIfPositive(k),
+      get:(k)=>base.get(k),
+      setex:(k,t,v)=>{kept.push({key:k,ttl:t});return base.setex(k,t,v);},
+      take:(k)=>base.take(k),
+      del:(k)=>base.del(k),
+      close:()=>base.close(),
+    };
+    const app7=await buildApp(loadConfig(env),{redis:recording,nutrition:{visionProvider:scanner,foodSearchProvider:noExternal}});
+    try{
+      await app7.inject({method:"POST",url:"/v1/auth/register",headers:{"content-type":"application/json"},payload:JSON.stringify({email:"p26a-dayold@example.com",password:PASSWORD,displayName:"P26a Day"})});
+      const l=await app7.inject({method:"POST",url:"/v1/auth/login",headers:{"content-type":"application/json"},payload:JSON.stringify({email:"p26a-dayold@example.com",password:PASSWORD})});
+      const access=l.cookies.find((c)=>c.name==="accessToken")?.value??"";
+      const c=(url:string,body:unknown)=>app7.inject({method:"POST",url,headers:{"content-type":"application/json"},cookies:{accessToken:access},payload:JSON.stringify(body)});
+      const madeUp=(()=>{const bytes=Buffer.alloc(1200,1);bytes[0]=0xff;bytes[1]=0xd8;bytes[2]=0xff;return bytes.toString("base64");})();
+      const refused=await c("/v1/nutrition/analyze-photo",{imageBase64:madeUp,mimeType:"image/jpeg"});
+      expect(refused.statusCode,refused.body).toBe(400);
+      expect(refused.json<{error:string}>().error).toBe("invalid_image");
+      expect(scanner.calls).toBe(0);
+      // A poor photo's free try still runs out in ten minutes; the scan it brings is kept a day.
+      scanner.queue.push({...goodEvidence,photo_quality:"poor"});
+      const poor=await c("/v1/nutrition/analyze-photo",{imageBase64:jpeg,mimeType:"image/jpeg"});
+      expect(poor.statusCode,poor.body).toBe(422);
+      expect(kept.filter((k)=>k.key.startsWith("meal-retake:")).map((k)=>k.ttl)).toEqual([RETAKE_TTL_SECONDS]);
+      expect(RETAKE_TTL_SECONDS).toBe(10*60);
+      const scan=await c("/v1/nutrition/analyze-photo",{imageBase64:jpeg,mimeType:"image/jpeg",retakeToken:poor.json<{retakeToken:string}>().retakeToken});
+      expect(scan.statusCode,scan.body).toBe(200);
+      const draft=scan.json<{scanToken:string;items:{canonical:string}[]}>();
+      const drafts=kept.filter((k)=>k.key.startsWith("meal-scan:"));
+      expect(drafts.map((k)=>k.ttl)).toEqual([MEAL_SCAN_SAVE_SECONDS]);
+      expect(MEAL_SCAN_SAVE_SECONDS).toBe(24*60*60);
+      const saved=await c("/v1/nutrition/meals",{id:randomUUID(),scanToken:draft.scanToken,takenAt:new Date().toISOString(),items:draft.items.map((i)=>({canonical:i.canonical,grams:100}))});
+      expect(saved.statusCode,saved.body).toBe(201);
+      expect(await base.get(drafts[0]?.key??"")).toBeNull();
+    }finally{await app7.close();}
   },30_000);
 
   // The other half of T3 finding 2: when the user BOTH corrects the estimate
@@ -1085,6 +1126,13 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
       // The worst thing (33a), through the real route: the person's id, email and name never leave with the photo.
       const sent=JSON.stringify(calls[0]?.body);
       for(const who of [on.userId,"p26a-realkey@example.com","P26a Scan"])expect(sent).not.toContain(who);
+      // The worst thing (33b-i): the photo goes on rebuilt, with none of the phone's tags (the place and time it
+      // was taken) that the photo sent here carries. Read off the bytes OpenAI got, not off the cleaner.
+      const sentPhoto=Buffer.from(/data:image\/jpeg;base64,([A-Za-z0-9+/=]+)/.exec(sent)?.[1]??"","base64");
+      expect(MEAL_PHOTO_BYTES.includes("Exif\0\0")).toBe(true);
+      expect(sentPhoto.length).toBeGreaterThan(1000);
+      expect(sentPhoto.subarray(0,3)).toEqual(Buffer.from([0xff,0xd8,0xff]));
+      for(const tag of ["Exif\0\0","http://ns.adobe.com/xap"])expect(sentPhoto.includes(tag),tag).toBe(false);
       expect(calls[0]?.body).toMatchObject({model:"gpt-6-luna",store:false});
       expect(Object.keys(calls[0]?.body??{}).sort()).toEqual(["max_completion_tokens","messages","model","reasoning_effort","response_format","store"]);
       expect(await on.scansUsed()).toBe("1");
@@ -1110,7 +1158,7 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     try{
       const res=await on.scan();
       expect(res.statusCode,res.body).toBe(200);
-      expect(res.json<{items:{name:string;nutritionSource:string}[]}>().items.map((i)=>[i.name,i.nutritionSource])).toEqual([["roasted potatoes","estimate"]]);
+      expect(res.json<{items:{name:string;nutritionSource:string}[]}>().items.map((i)=>[i.name,i.nutritionSource])).toEqual([["Roasted potatoes","estimate"]]);
       expect(calls).toHaveLength(2);
       const check=calls[1]?.body;
       expect(Object.keys(check??{}).sort()).toEqual(["max_completion_tokens","messages","model","reasoning_effort","response_format","store"]);

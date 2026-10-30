@@ -265,7 +265,7 @@ export function AmountPicker({
 }
 
 /** A new dish: a name, and one of the sizes or a size in ml. */
-function NewDish({ onCancel, onSaved }: { onCancel: () => void; onSaved: (dish: Dishware) => void }) {
+export function NewDish({ onCancel, onSaved }: { onCancel: () => void; onSaved: (dish: Dishware) => void }) {
   const { session } = useSession();
   // Kept until the server answers, so a save sent again is the same dish.
   const [id] = useState(newGoalId);

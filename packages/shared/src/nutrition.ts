@@ -21,6 +21,19 @@ export const mealOriginSchema = z.enum(["photo", "manual"]);
  *  interim): the section is a USER-CHOSEN label stored on the meal —
  *  takenAt stays the exact real time and never encodes it. */
 export const mealTypeSchema = z.enum(["breakfast", "lunch", "dinner", "snack"]);
+
+/** The meal an hour of the day (0–23, the person's own clock) is, for a meal with none of its own:
+ *  breakfast from 4 am, lunch from 11, a snack from 4 pm, dinner from 7 pm until midnight, and a
+ *  late-night snack after it (Kd, 2026-10-30: dinner at 10 or 11 pm is usual in India). One rule for
+ *  the phone and the browser.
+ */
+export function mealTypeAtHour(hour: number): z.infer<typeof mealTypeSchema> {
+  if (hour < 4) return "snack";
+  if (hour < 11) return "breakfast";
+  if (hour < 16) return "lunch";
+  if (hour < 19) return "snack";
+  return "dinner";
+}
 export type MealType = z.infer<typeof mealTypeSchema>;
 
 const gramRangeSchema = z.tuple([z.number().positive(), z.number().positive()]);
@@ -102,6 +115,8 @@ export function sumMoreNutrients(items: readonly { more?: MoreNutrients | undefi
  *  measures existed, has none. */
 export const loggedMeasureSchema = z.object({
   id: z.string().min(1).max(40), name: z.string().min(1).max(100), amount: z.number().positive(),
+  /** A dish the whole meal was eaten from: this food's part of it (ROADMAP Stage 5 33b-i). */
+  share: z.number().positive().max(1).optional(),
 }).strict();
 export type LoggedMeasure = z.infer<typeof loggedMeasureSchema>;
 
@@ -140,6 +155,12 @@ export type AnalyzeMealPhotoRequest = z.infer<typeof analyzeMealPhotoRequestSche
  *  the server keeps the scan's draft this long, and the web brings an unsaved
  *  sheet back when Photo Log is opened again within it (RULINGS 2026-09-16). */
 export const MEAL_SCAN_TTL_SECONDS = 10 * 60;
+/** How long a scan the person has not saved can still BE saved: a meal logged from a photo on a
+ *  phone with no signal is kept there and sent when it is back (ROADMAP Stage 5 33b-i). A saved scan
+ *  is gone at once, so only a scan left unsaved stays this long. */
+export const MEAL_SCAN_SAVE_SECONDS = 24 * 60 * 60;
+/** The largest meal photo a scan takes, in bytes. */
+export const MEAL_PHOTO_MAX_BYTES = 10 * 1024 * 1024;
 
 /** GAP-3 ruling: client-supplied, bounded to ≤24 h in the future (offline
  *  backfill of past meals is legitimate; future meals are not). */
@@ -163,8 +184,10 @@ export const MAX_ITEM_GRAMS = 10_000;
 const gramsItemSchema = z
   .object({ canonical: z.string().min(1).max(120), grams: z.number().positive().max(MAX_ITEM_GRAMS) })
   .strict();
+/** `share`: the meal was eaten from one dish, and this food is that part of it (Kd, 2026-10-30): the
+ *  server weighs the dish as `fillLevel` full and gives the food its share. */
 const dishwareItemSchema = z
-  .object({ canonical: z.string().min(1).max(120), dishwareId: z.string().uuid(), fillLevel: z.number().positive().max(1) })
+  .object({ canonical: z.string().min(1).max(120), dishwareId: z.string().uuid(), fillLevel: z.number().positive().max(1), share: z.number().positive().max(1).optional() })
   .strict();
 
 // ROADMAP 7a-iv-a — a food logged by one of its own measures (RULINGS 2026-09-16,
@@ -209,7 +232,36 @@ const measureItemSchema = z
   .strict();
 export const chosenItemSchema = z.union([gramsItemSchema, dishwareItemSchema, measureItemSchema]);
 export type ChosenItem = z.infer<typeof chosenItemSchema>;
-const chosenItemsSchema = z.array(chosenItemSchema).min(1).max(30);
+/** The most foods one meal holds. */
+export const MEAL_MOST_FOODS = 30;
+const chosenItemsSchema = z.array(chosenItemSchema).min(1).max(MEAL_MOST_FOODS);
+
+// ROADMAP 7a-iv-g — changing a food already logged (RULINGS 2026-09-17).
+/** The person's own protein, carbs and fat for one food, in grams, as eaten at the
+ *  amount sent beside them. The server works out its calories from them — 4, 4 and
+ *  9 kcal a gram — so the four always agree, and refuses them where together they
+ *  weigh more than the food. */
+export const ownNumbersSchema = z.object({
+  proteinG: z.number().nonnegative().max(MAX_ITEM_GRAMS),
+  carbsG: z.number().nonnegative().max(MAX_ITEM_GRAMS),
+  fatG: z.number().nonnegative().max(MAX_ITEM_GRAMS),
+}).strict();
+export type OwnNumbers = z.infer<typeof ownNumbersSchema>;
+
+/** A food no list has, added by the person (ROADMAP Stage 5 33b-i; Kd, 2026-10-30): its name, the
+ *  grams eaten, and its protein, carbs and fat for those grams, which price it as `ownNumbersSchema`
+ *  says. The server gives it a name of its own no list can answer to. */
+export const ownFoodItemSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  grams: z.number().positive().max(MAX_ITEM_GRAMS),
+  own: ownNumbersSchema,
+}).strict();
+export type OwnFoodItem = z.infer<typeof ownFoodItemSchema>;
+/** One food of a new meal: a food of the server's lists, or the person's own. */
+export const mealChoiceSchema = z.union([chosenItemSchema, ownFoodItemSchema]);
+export type MealChoice = z.infer<typeof mealChoiceSchema>;
+export const isOwnFood = (choice: MealChoice): choice is OwnFoodItem => "own" in choice;
+const mealChoicesSchema = z.array(mealChoiceSchema).min(1).max(MEAL_MOST_FOODS);
 
 /** The meal's id, made by the phone (ROADMAP 32a): the same id sent twice is one
  *  meal, and the second reply is the meal as it is now. Kept and answered in small
@@ -220,7 +272,7 @@ export const confirmMealRequestSchema = z.object({
   id: ownMealIdSchema,
   scanToken: z.string().min(32).max(256), takenAt: takenAtSchema,
   mealType: mealTypeSchema.optional(),
-  items: chosenItemsSchema,
+  items: mealChoicesSchema,
 }).strict();
 export type ConfirmMealRequest = z.infer<typeof confirmMealRequestSchema>;
 
@@ -230,7 +282,7 @@ export const manualMealRequestSchema = z.object({
   id: ownMealIdSchema,
   mealName: z.string().trim().min(1).max(200), takenAt: takenAtSchema,
   mealType: mealTypeSchema.optional(),
-  items: chosenItemsSchema,
+  items: mealChoicesSchema,
 }).strict();
 export type ManualMealRequest = z.infer<typeof manualMealRequestSchema>;
 
@@ -244,7 +296,7 @@ export type CreateMealRequest = z.infer<typeof createMealRequestSchema>;
  *  confirm will use — preview must equal saved values (T3 finding); without
  *  it (manual flow) foods resolve via search like createManualMeal. */
 export const previewMealRequestSchema = z.object({
-  items: chosenItemsSchema,
+  items: mealChoicesSchema,
   scanToken: z.string().min(32).max(256).optional(),
 }).strict();
 export type PreviewMealRequest = z.infer<typeof previewMealRequestSchema>;
@@ -252,16 +304,6 @@ export const mealPreviewSchema = z.object({ items: z.array(mealItemSchema), tota
 export type MealPreview = z.infer<typeof mealPreviewSchema>;
 
 // ROADMAP 7a-iv-g — changing a food already logged (RULINGS 2026-09-17).
-/** The person's own protein, carbs and fat for one food of a saved meal, in grams,
- *  as eaten at the amount sent beside them. The server works out its calories from
- *  them — 4, 4 and 9 kcal a gram — so the four always agree, and refuses them where
- *  together they weigh more than the food. */
-export const ownNumbersSchema = z.object({
-  proteinG: z.number().nonnegative().max(MAX_ITEM_GRAMS),
-  carbsG: z.number().nonnegative().max(MAX_ITEM_GRAMS),
-  fatG: z.number().nonnegative().max(MAX_ITEM_GRAMS),
-}).strict();
-export type OwnNumbers = z.infer<typeof ownNumbersSchema>;
 /** An item's place in a saved meal, as the meal was read (a meal holds at most 30). */
 const savedPlaceSchema = z.number().int().min(0).max(29);
 /** What an edit may say beside a food's amount. `from` is which of the saved meal's
@@ -851,6 +893,9 @@ export const waitingMealSchema = z.object({
   totals: mealTotalsSchema.nullable(),
   /** Sent at least once: its save may have reached the server, so a removal is sent after it. */
   tried: z.boolean(),
+  /** A meal logged from a photo (33b-i): sent as the scan's save, `body` without its name, which
+   *  the server keeps from the scan. */
+  scanToken: z.string().min(32).max(256).optional(),
 }).strict().refine((m) => m.body.id === m.id, { message: "the body carries the meal's own id" });
 export type WaitingMeal = z.infer<typeof waitingMealSchema>;
 
@@ -902,3 +947,47 @@ export const mealOutboxFileSchema = z.object({
   refused: z.array(mealOutboxRefusedSchema).max(MEAL_OUTBOX_MOST).optional(),
 }).strict();
 export type MealOutboxFile = z.infer<typeof mealOutboxFileSchema>;
+
+// ── A meal photo not yet saved, kept on the phone (ROADMAP Stage 5 33b-i) ──
+// The scan has already used one of the person's scans, so leaving the review keeps it: the phone
+// writes it to a file of the person's own and opens it again while the server can still save it.
+
+/** The most of a kept photo, in base64 letters: a photo drawn no larger than 768 px is about 100 KB. */
+export const MEAL_PHOTO_KEPT_MOST = 2_000_000;
+/** An amount as the phone's picker holds it: a measure of the food (or a saved dish) and how many. */
+export const photoSheetAmountSchema = z.object({
+  measure: z.string().max(80), amount: z.string().max(20),
+  /** A dish the whole meal was eaten from: this food's part of it, as sent (`dishwareItemSchema`). */
+  share: z.number().positive().max(1).optional(),
+}).strict();
+export type PhotoSheetAmount = z.infer<typeof photoSheetAmountSchema>;
+/** A food added to the photo's meal by search, as the search sent it. */
+export const photoSheetFoodSchema = z.object({
+  canonical: z.string().min(1).max(120), name: z.string().min(1).max(200), source: nutritionSourceSchema,
+  measures: z.array(foodMeasureSchema).min(1), startsAt: measureStartSchema,
+}).strict();
+export type PhotoSheetFood = z.infer<typeof photoSheetFoodSchema>;
+/** A food put on the photo's meal by the person: one the search found, at an amount of it, or their
+ *  own food (`ownFoodItemSchema`, Kd 2026-10-30). */
+export const photoSheetPickSchema = z.union([
+  z.object({ food: photoSheetFoodSchema, amount: photoSheetAmountSchema }).strict(),
+  z.object({ own: ownFoodItemSchema }).strict(),
+]);
+export type PhotoSheetPick = z.infer<typeof photoSheetPickSchema>;
+export const photoSheetFileSchema = z.object({
+  version: z.literal(1),
+  /** When the scan came back: it can be saved until `MEAL_SCAN_SAVE_SECONDS` after. */
+  scannedAt: z.string().datetime(),
+  analysis: mealPhotoAnalysisSchema,
+  /** Each scanned food's amount, in the scan's order; null where the person took it off the meal. */
+  amounts: z.array(photoSheetAmountSchema.nullable()).max(30),
+  /** What the person put in place of each scanned food the photo got wrong ("Change food"), in the
+   *  scan's order; null where the scan's own food stands. */
+  replaced: z.array(photoSheetPickSchema.nullable()).max(30),
+  /** Foods the photo missed. */
+  extras: z.array(photoSheetPickSchema).max(30),
+  mealType: mealTypeSchema,
+  /** The photo as it was sent (made small and cleaned), shown over the meal again when it is reopened. */
+  photo: z.string().max(MEAL_PHOTO_KEPT_MOST).regex(/^[A-Za-z0-9+/]*={0,2}$/).optional(),
+}).strict();
+export type PhotoSheetFile = z.infer<typeof photoSheetFileSchema>;
