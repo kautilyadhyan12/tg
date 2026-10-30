@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Pressable, StyleSheet, TextInput, View } from "react-native";
-import { STANDARD_DISHES, dishwarePageSchema, dishwareResponseSchema, type Dishware, type FoodMeasure } from "@app/shared";
+import { STANDARD_DISHES, standardDish, dishwarePageSchema, dishwareResponseSchema, type Dishware, type FoodMeasure } from "@app/shared";
 import { Button } from "../../look/Button";
 import { Chip } from "../../look/Chip";
 import { colours, sizes } from "../../look/colours";
@@ -57,7 +57,11 @@ export type PickDish = Pick<Dishware, "id" | "label" | "containerClass" | "volum
 
 /** The dishes offered: a cup, a mug and a bowl everybody has, then the person's own (Kd, 32b-ii-b:
  *  "keep the things already built, just give an option to create one on own"). */
-export const dishesOffered = (dishes: Dishes): PickDish[] => [...STANDARD_DISHES, ...(dishes.kind === "ok" ? dishes.list : [])];
+export const dishesOffered = (dishes: Dishes): PickDish[] => {
+  const list = dishes.kind === "ok" ? dishes.list : [];
+  // A cup, mug or bowl the person has changed comes back under its own id, in its place.
+  return [...STANDARD_DISHES.map((s) => list.find((d) => d.id === s.id) ?? s), ...list.filter((d) => standardDish(d.id) === null)];
+};
 
 /** The dish a logged amount names, by its name: the person's own where exactly one of theirs has it,
  *  else the one everybody has of that name; none where two of theirs share it (review, L3). */
@@ -118,8 +122,8 @@ export function AmountPicker({
   const dishId = dishOf(amount.measure);
   const dish = pickedDish(dishes, amount.measure);
   const shown = shownMeasures(measures, amount.measure, all);
-  // The person's own dishes, which they may rename and remove.
-  const list = dishes.kind === "ok" ? dishes.list : [];
+  // Every dish offered may be changed; the person's own may also be removed.
+  const list = dishesOffered(dishes);
 
   if (panel === "new") {
     return (
@@ -206,7 +210,7 @@ export function AmountPicker({
         <Txt kind="tiny" style={[styles.label, styles.grow]}>
           Dishes
         </Txt>
-        {list.length > 0 ? <Button label="Edit" kind="link" onPress={() => { setPanel("edit"); }} say="Edit your dishes" /> : null}
+        {dishes.kind === "ok" ? <Button label="Edit" kind="link" onPress={() => { setPanel("edit"); }} say="Edit your dishes" /> : null}
       </View>
       <View style={styles.chips}>
         {dishesOffered(dishes)
@@ -339,10 +343,10 @@ export function NewDish({ onCancel, onSaved }: { onCancel: () => void; onSaved: 
   );
 }
 
-type Editing = { kind: "list" } | { kind: "edit"; dish: Dishware } | { kind: "remove"; dish: Dishware };
+type Editing = { kind: "list" } | { kind: "edit"; dish: PickDish } | { kind: "remove"; dish: PickDish };
 
 /** The person's dishes, each with its name and size changed, or removed; a removal asks first. */
-export function EditDishes({ list, onChanged, onDone }: { list: readonly Dishware[]; onChanged: (removed: string | null) => void; onDone: () => void }) {
+export function EditDishes({ list, onChanged, onDone }: { list: readonly PickDish[]; onChanged: (removed: string | null) => void; onDone: () => void }) {
   const { session } = useSession();
   const { view } = useMealOutbox();
   const [editing, setEditing] = useState<Editing>({ kind: "list" });
@@ -363,6 +367,20 @@ export function EditDishes({ list, onChanged, onDone }: { list: readonly Dishwar
       onChanged(null);
       setEditing({ kind: "list" });
       setSaid(gone);
+    } else setTrouble(answer.kind === "no_answer" || answer.status >= 500 ? NO_CONNECTION : "That couldn’t be saved. Try again.");
+  };
+
+  // A cup, mug or bowl the person changed, as everybody has it again.
+  const reset = async (dish: PickDish, standard: PickDish) => {
+    if (busy) return;
+    setBusy(true);
+    setSaid(null);
+    setTrouble(null);
+    const answer = await session.signedIn({ method: "DELETE", path: `/v1/nutrition/dishware/${dish.id}` }, nothing);
+    setBusy(false);
+    if (answer.kind === "ok" || (answer.kind === "refused" && answer.status === 404)) {
+      onChanged(null);
+      setSaid(`${standard.label} is back to ${String(standard.volumeMl)} ml.`);
     } else setTrouble(answer.kind === "no_answer" || answer.status >= 500 ? NO_CONNECTION : "That couldn’t be saved. Try again.");
   };
 
@@ -461,9 +479,14 @@ export function EditDishes({ list, onChanged, onDone }: { list: readonly Dishwar
           </Txt>
         </View>
       )}
-      <Txt kind="small">Cup, Mug and Bowl stay as they are. For another size, add a new dish.</Txt>
-      {list.length === 0 ? <Txt kind="small">You have no dishes of your own.</Txt> : null}
-      {list.map((d) => (
+      {trouble === null ? null : (
+        <Txt kind="small" colour="badText">
+          {trouble}
+        </Txt>
+      )}
+      {list.map((d) => {
+        const standard = standardDish(d.id);
+        return (
         <View key={d.id} style={styles.dish}>
           <View style={styles.grow}>
             <Txt kind="strong" numberOfLines={2}>
@@ -483,20 +506,25 @@ export function EditDishes({ list, onChanged, onDone }: { list: readonly Dishwar
               setEditing({ kind: "edit", dish: d });
             }}
           />
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Remove ${d.label}`}
-            onPress={() => {
-              setSaid(null);
-              setTrouble(null);
-              setEditing({ kind: "remove", dish: d });
-            }}
-            style={({ pressed }) => [styles.bin, pressed ? styles.pressed : null]}
-          >
-            <Icon name="trash" size={18} colour="badText" />
-          </Pressable>
+          {standard === null ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Remove ${d.label}`}
+              onPress={() => {
+                setSaid(null);
+                setTrouble(null);
+                setEditing({ kind: "remove", dish: d });
+              }}
+              style={({ pressed }) => [styles.bin, pressed ? styles.pressed : null]}
+            >
+              <Icon name="trash" size={18} colour="badText" />
+            </Pressable>
+          ) : standard.label === d.label && standard.volumeMl === d.volumeMl ? null : (
+            <Button label="Reset" kind="link" say={`Reset ${d.label}`} onPress={() => { void reset(d, standard); }} />
+          )}
         </View>
-      ))}
+        );
+      })}
       <Button label="Done" wide onPress={onDone} />
     </>
   );

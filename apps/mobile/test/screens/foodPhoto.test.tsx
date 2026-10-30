@@ -624,11 +624,14 @@ describe("a food the photo got wrong, and one no list has (Kd, 2026-10-30)", () 
     expect(screen.queryByText(/^Can’t reach the server\./)).toBeNull();
   }, 15000);
 
-  it("the one dish has no Edit where the person has no dishes of their own", async () => {
+  it("the one dish's Edit offers the dishes everybody has too (Kd's click-through, 2026-10-30)", async () => {
     await openFood({ meals: [], scans: [] });
     await takePhoto();
     await screen.findByText(/^340\skcal · /);
-    expect(screen.queryByRole("button", { name: "Edit your dishes" })).toBeNull();
+    await fireEvent.press(screen.getByRole("button", { name: "Edit your dishes" }));
+    for (const name of ["Edit Cup", "Edit Mug", "Edit Bowl"]) expect(await screen.findByRole("button", { name })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Remove Bowl" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Reset Bowl" })).toBeNull();
   });
 
   it("the one dish's Edit opens the person's own dishes", async () => {
@@ -636,7 +639,6 @@ describe("a food the photo got wrong, and one no list has (Kd, 2026-10-30)", () 
     await takePhoto();
     await fireEvent.press(await screen.findByRole("button", { name: "Edit your dishes" }));
     expect(await screen.findByRole("button", { name: "Edit Travel mug" })).toBeTruthy();
-    expect(screen.getByText("Cup, Mug and Bowl stay as they are. For another size, add a new dish.")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Remove Travel mug" })).toBeTruthy();
   });
 

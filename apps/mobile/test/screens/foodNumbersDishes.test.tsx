@@ -69,6 +69,7 @@ const dish = (id: string, label: string, containerClass = "cereal_bowl", volumeM
   createdAt: "2026-10-29T08:00:00.000Z",
 });
 const BOWL = dish("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "My blue bowl");
+const STANDARD_BOWL_ID = "00000000-0000-4000-8000-00000000d153";
 
 interface State {
   recent?: RecentFood[];
@@ -142,6 +143,8 @@ function server(state: State) {
       return answer({ status: 201, body: { dishware: made } });
     }
     if (dishId !== undefined) {
+      const everybody = STANDARD_DISHES.find((d) => d.id === dishId);
+      if (method === "PATCH" && everybody !== undefined && !state.dishes.some((d) => d.id === dishId)) state.dishes = [...state.dishes, dish(everybody.id, everybody.label, everybody.containerClass, everybody.volumeMl)];
       const at = state.dishes.findIndex((d) => d.id === dishId);
       const had = state.dishes[at];
       if (had === undefined) return answer(refusal(404, "not_found", "Not found"));
@@ -505,7 +508,7 @@ describe("the dishes everybody has (Kd, 32b-ii-b: keep them, and a way to make y
     expect(dishPosts(s).map((p) => p.body)).toEqual([expect.objectContaining({ label: "Steel bowl", containerClass: "custom", volumeMl: 450 })]);
   });
 
-  it("offers a mug and a bowl with no dish saved, weighs a food with one, and never offers to rename them", async () => {
+  it("offers a mug and a bowl with no dish saved, weighs a food with one, and lets the person change one for themselves (Kd's click-through, 2026-10-30)", async () => {
     const state: State = { targets: targets(), dishes: [], meals: [] };
     const s = await openFood(state);
     await pickOats();
@@ -513,8 +516,19 @@ describe("the dishes everybody has (Kd, 32b-ii-b: keep them, and a way to make y
     // Oats have a cup of their own: the cup everybody has is not offered a second time.
     expect(screen.getByRole("radio", { name: "cup · 81 g" })).toBeTruthy();
     expect(screen.queryByRole("radio", { name: "Cup · 240 ml" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Edit your dishes" })).toBeNull();
-    await fireEvent.press(screen.getByRole("radio", { name: "Bowl · 375 ml" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Edit your dishes" }));
+    expect(screen.queryByRole("button", { name: "Remove Bowl" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Reset Bowl" })).toBeNull();
+    await fireEvent.press(screen.getByRole("button", { name: "Edit Bowl" }));
+    await fireEvent.changeText(screen.getByLabelText("Its size in ml"), "500");
+    await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Saved Bowl, 500 ml.")).toBeTruthy();
+    expect(s.sent.find((a) => a.method === "PATCH")?.path).toBe(`/v1/nutrition/dishware/${STANDARD_BOWL_ID}`);
+    await fireEvent.press(screen.getByRole("button", { name: "Reset Bowl" }));
+    expect(await screen.findByText("Bowl is back to 375 ml.")).toBeTruthy();
+    expect(s.sent.filter((a) => a.method === "DELETE").map((a) => a.path)).toEqual([`/v1/nutrition/dishware/${STANDARD_BOWL_ID}`]);
+    await fireEvent.press(screen.getByRole("button", { name: "Done" }));
+    await fireEvent.press(await screen.findByRole("radio", { name: "Bowl · 375 ml" }));
     await fireEvent.press(screen.getByRole("radio", { name: "Bowl, half full" }));
     await waitFor(() => {
       expect(s.sent.filter((a) => a.path === "/v1/nutrition/meals/preview").at(-1)?.body).toEqual({ items: [{ canonical: "oats_rolled", dishwareId: STANDARD_DISHES[2].id, fillLevel: 0.5 }] });

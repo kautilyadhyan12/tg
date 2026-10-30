@@ -387,7 +387,8 @@ export const patchDishwareSchema = dishwareInputSchema.partial().refine((v) => O
 export type DishwareInput = z.infer<typeof dishwareInputSchema>;
 /** The dishes everybody has, ready to pick without saving one (Kd, 32b-ii-b: "keep the things
  *  already built, just give an option to create one on own"): the sizes the browser's Save a dish
- *  offers. Fixed ids nobody's own dish can take; never renamed or removed. */
+ *  offers. Fixed ids nobody's own dish can take. A person may change their name and size for
+ *  themselves (Kd, 2026-10-30), and put them back; nobody removes them. */
 export const STANDARD_DISHES = [
   { id: "00000000-0000-4000-8000-00000000d151", label: "Cup", containerClass: "cup", volumeMl: 240 },
   { id: "00000000-0000-4000-8000-00000000d152", label: "Mug", containerClass: "mug", volumeMl: 325 },

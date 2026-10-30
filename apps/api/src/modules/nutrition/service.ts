@@ -1739,6 +1739,8 @@ export async function updateDishware(
   id: string,
   v: Parameters<typeof repo.updateDishware>[3],
 ): Promise<repo.DishwareRow | null> {
+  const standard = standardDish(id);
+  if (standard !== null) return await repo.changeStandardDish(deps.sql, userId, standard, v);
   return await repo.updateDishware(deps.sql, userId, id, v);
 }
 export async function deleteDishware(deps: ReadDeps, userId: string, id: string): Promise<boolean> {

@@ -67,6 +67,35 @@ d("a dish sent twice from the phone, and a person's own dishes (real Postgres)",
     await sql.end({ timeout: 5 });
   });
 
+  it("the worst thing: one person's Cup changed changes nobody else's, and each is priced by their own (Kd, 2026-10-30)", async () => {
+    const cup = STANDARD_DISHES[0];
+    const canonical = RICE?.canonical ?? "";
+    const grams = async (access: string) => {
+      const res = await inject("POST", "/v1/nutrition/meals/preview", access, { items: [{ canonical, dishwareId: cup.id, fillLevel: 1 }] });
+      expect(res.statusCode, res.body).toBe(200);
+      return mealPreviewSchema.parse(res.json()).items[0]?.gramsPoint ?? 0;
+    };
+    const everybody = await grams(bob);
+
+    const changed = await inject("PATCH", `/v1/nutrition/dishware/${cup.id}`, alice, { volumeMl: 480 });
+    expect(changed.statusCode, changed.body).toBe(200);
+    expect(dishwareResponseSchema.parse(changed.json()).dishware).toMatchObject({ id: cup.id, label: "Cup", volumeMl: 480 });
+    const again = await inject("PATCH", `/v1/nutrition/dishware/${cup.id}`, alice, { label: "Big cup" });
+    expect(dishwareResponseSchema.parse(again.json()).dishware).toMatchObject({ id: cup.id, label: "Big cup", volumeMl: 480 });
+
+    expect((await dishes(alice)).filter((x) => x.id === cup.id)).toHaveLength(1);
+    expect((await dishes(bob)).filter((x) => x.id === cup.id)).toHaveLength(0);
+    expect(await grams(alice)).toBe(everybody * 2);
+    expect(await grams(bob)).toBe(everybody);
+
+    // Bob's reset finds nothing of his, and hers stays; hers puts it back, once.
+    expect((await inject("DELETE", `/v1/nutrition/dishware/${cup.id}`, bob)).statusCode).toBe(404);
+    expect((await dishes(alice)).find((x) => x.id === cup.id)?.volumeMl).toBe(480);
+    expect((await inject("DELETE", `/v1/nutrition/dishware/${cup.id}`, alice)).statusCode).toBe(204);
+    expect((await inject("DELETE", `/v1/nutrition/dishware/${cup.id}`, alice)).statusCode).toBe(404);
+    expect(await grams(alice)).toBe(everybody);
+  });
+
   it("the worst thing: somebody else's dish id saves, reads and changes nothing", async () => {
     const id = randomUUID();
     const saved = await inject("POST", "/v1/nutrition/dishware", alice, { ...BOWL, id });
@@ -146,9 +175,8 @@ d("a dish sent twice from the phone, and a person's own dishes (real Postgres)",
     const taken = await inject("POST", "/v1/nutrition/dishware", alice, { label: "Mine now", containerClass: "bowl", volumeMl: 2000, id: bowl.id });
     expect(taken.statusCode, taken.body).toBe(400);
     expect(await rowsUnder(bowl.id)).toHaveLength(0);
-    // Not a dish of the person's own: it is never listed, renamed or removed.
+    // Unchanged, it is not listed as the person's, and there is nothing of theirs to remove.
     expect((await dishes(alice)).some((d) => d.id === bowl.id)).toBe(false);
-    expect((await inject("PATCH", `/v1/nutrition/dishware/${bowl.id}`, alice, { label: "Renamed" })).statusCode).toBe(404);
     expect((await inject("DELETE", `/v1/nutrition/dishware/${bowl.id}`, alice)).statusCode).toBe(404);
   });
 

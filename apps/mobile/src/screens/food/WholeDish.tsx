@@ -55,9 +55,8 @@ export function WholeDish({ applied, held, onUse, onClear, onDishChanged }: { ap
   const { dishes, again } = useDishes();
   // A dish of the person's own, made here as in a food's own box.
   const [making, setMaking] = useState(false);
-  // The person's own dishes, renamed or removed, as in a food's own box.
+  // The dishes changed or removed, as in a food's own box.
   const [editing, setEditing] = useState(false);
-  const own = dishes.kind === "ok" ? dishes.list : [];
   const last = useLastDish(dishes);
   const offered = dishesOffered(dishes);
   const shown = applied === null ? null : (offered.find((d) => d.id === applied.id) ?? (applied.name === undefined ? null : dishByName(dishes, applied.name)));
@@ -91,7 +90,7 @@ export function WholeDish({ applied, held, onUse, onClear, onDishChanged }: { ap
       </Sheet>
       <Sheet open={editing} title="Your dishes" onClose={() => { setEditing(false); }}>
         <EditDishes
-          list={own}
+          list={offered}
           onChanged={(removed) => {
             again();
             onDishChanged?.();
@@ -107,7 +106,7 @@ export function WholeDish({ applied, held, onUse, onClear, onDishChanged }: { ap
         <Txt kind="tiny" style={[styles.label, styles.grow]}>
           Eaten from one dish
         </Txt>
-        {own.length > 0 ? <Button label="Edit" kind="link" onPress={() => { setEditing(true); }} say="Edit your dishes" /> : null}
+        {dishes.kind === "ok" ? <Button label="Edit" kind="link" onPress={() => { setEditing(true); }} say="Edit your dishes" /> : null}
       </View>
       <View style={styles.chips}>
         {offered.map((d) => (
