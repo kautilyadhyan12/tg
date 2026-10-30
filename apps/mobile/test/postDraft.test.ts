@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { GYM_POST_DRAFT_MOST, GYM_POST_PHONE_PHOTO_MAX_BYTES } from "@app/shared";
 import { fromBase64, toBase64 } from "../src/screens/food/photo";
-import { clampScale, clampShift, fingersApart } from "../src/screens/gym/zoom";
+import { clampScale, clampShift, fingersApart, slideDrag, slideTo } from "../src/screens/gym/zoom";
 import { draftFileText, hasWork, photoTrouble, postPhotoToSend, postedWords, readDraftFile } from "../src/screens/gym/postDraft";
 
 // A member's post on the phone (ROADMAP Stage 5 17b).
@@ -118,6 +118,28 @@ describe("zooming a photo", () => {
     [500, 300, 4, 450],
   ])("a move of %d on %d at %d is held at %d", (shift, size, scale, held) => {
     expect(clampShift(shift, size, scale) + 0).toBe(held);
+  });
+
+  it.each([
+    // index, dx, vx, count, width: lands on
+    [0, -40, 0, 3, 300, 0],
+    [0, -100, 0, 3, 300, 1],
+    [1, 100, 0, 3, 300, 0],
+    [0, -40, -1, 3, 300, 1],
+    [1, 40, 1, 3, 300, 0],
+    [0, 200, 1, 3, 300, 0],
+    [2, -200, -1, 3, 300, 2],
+    [0, 0, 0, 3, 300, 0],
+    [0, 0, -2, 3, 300, 0],
+  ])("a slide from photo %d by %d at speed %d of %d, %d wide, lands on %d", (index, dx, vx, count, width, lands) => {
+    expect(slideTo(index, dx, vx, count, width)).toBe(lands);
+  });
+
+  it("a drag past either end moves only a little", () => {
+    expect(slideDrag(90, 0, 3)).toBe(30);
+    expect(slideDrag(-90, 2, 3)).toBe(-30);
+    expect(slideDrag(-90, 0, 3)).toBe(-90);
+    expect(slideDrag(90, 1, 3)).toBe(90);
   });
 
   it("how far apart two fingers are", () => {

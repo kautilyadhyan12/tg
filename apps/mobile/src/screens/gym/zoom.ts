@@ -16,3 +16,13 @@ export function clampShift(shift: number, size: number, scale: number): number {
 }
 
 export const fingersApart = (a: { pageX: number; pageY: number }, b: { pageX: number; pageY: number }): number => Math.hypot(a.pageX - b.pageX, a.pageY - b.pageY);
+
+/** A drag past the first or last photo moves only a little: there is nothing there. */
+export const slideDrag = (dx: number, index: number, count: number): number => ((index === 0 && dx > 0) || (index === count - 1 && dx < 0) ? dx / 3 : dx);
+
+/** Which photo a slide lands on: the next one if it went a quarter of the way, or was flicked. */
+export function slideTo(index: number, dx: number, vx: number, count: number, width: number): number {
+  const far = Math.abs(dx) > width / 4 || Math.abs(vx) > 0.5;
+  if (!far || dx === 0) return index;
+  return Math.min(count - 1, Math.max(0, index + (dx < 0 ? 1 : -1)));
+}
