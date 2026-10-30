@@ -31,3 +31,24 @@ export function mealFile(userId: string): TextStore {
     },
   };
 }
+
+/** A person's photo meal not yet saved (ROADMAP Stage 5 33b-i): one file a person, written whole,
+ *  and removed once the meal is saved or thrown away (an empty write). */
+export function photoSheetFile(userId: string): TextStore {
+  const name = `photo-meal-${userId}.json`;
+  return {
+    read: async () => {
+      const file = new File(Paths.document, name);
+      return file.exists ? await file.text() : null;
+    },
+    write: (text) => {
+      const file = new File(Paths.document, name);
+      if (file.exists) file.delete();
+      if (text !== "") {
+        file.create();
+        file.write(text);
+      }
+      return Promise.resolve();
+    },
+  };
+}

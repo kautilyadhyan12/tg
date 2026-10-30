@@ -65,3 +65,67 @@ jest.mock("expo-file-system", () => {
   }
   return { File, Paths: { document: { uri: "documents" } } };
 });
+// The camera, the gallery and the drawing of a photo are the phone's own (33b-i). A test says what
+// each gives back (`camera`, `picker.next`, `drawing.base64`) and reads what was asked of it.
+jest.mock("expo-camera", () => {
+  const { createElement, forwardRef, useEffect, useImperativeHandle, useState } = require("react");
+  const { View } = require("react-native");
+  const granted = { granted: true, canAskAgain: true, status: "granted", expires: "never" };
+  const camera = { permission: granted, afterAsk: granted, asked: 0, pictures: 0, fails: false };
+  const CameraView = forwardRef(function CameraView(props, ref) {
+    useImperativeHandle(ref, () => ({
+      takePictureAsync: () => {
+        camera.pictures += 1;
+        return camera.fails ? Promise.reject(new Error("camera")) : Promise.resolve({ uri: "file:///camera/photo.jpg", width: 4000, height: 3000 });
+      },
+    }));
+    const { onCameraReady } = props;
+    useEffect(() => {
+      onCameraReady?.();
+    }, [onCameraReady]);
+    return createElement(View, { testID: "camera-view" });
+  });
+  function useCameraPermissions() {
+    const [now, setNow] = useState(camera.permission);
+    const ask = () => {
+      camera.asked += 1;
+      setNow(camera.afterAsk);
+      return Promise.resolve(camera.afterAsk);
+    };
+    return [now, ask, ask];
+  }
+  return { CameraView, useCameraPermissions, camera };
+});
+jest.mock("expo-image-picker", () => {
+  const picker = { next: { canceled: true, assets: null }, opened: 0 };
+  return {
+    picker,
+    launchImageLibraryAsync: jest.fn(() => {
+      picker.opened += 1;
+      return Promise.resolve(picker.next);
+    }),
+  };
+});
+jest.mock("expo-image-manipulator", () => {
+  // `base64`: what the drawing gives back; `sizes`: each size it was asked to draw.
+  const drawing = { base64: "", sizes: [], fails: false };
+  const image = (size) => ({
+    width: size.width,
+    height: size.height,
+    saveAsync: (options) =>
+      drawing.fails ? Promise.reject(new Error("drawing")) : Promise.resolve({ uri: "file:///cache/small.jpg", ...size, ...(options?.base64 ? { base64: drawing.base64 } : {}) }),
+  });
+  const manipulate = (source) => {
+    let size = typeof source === "string" ? { width: 3000, height: 4000 } : { width: source.width, height: source.height };
+    const context = {
+      resize: (to) => {
+        size = { width: to.width ?? size.width, height: to.height ?? size.height };
+        drawing.sizes.push(size);
+        return context;
+      },
+      renderAsync: () => Promise.resolve(image(size)),
+    };
+    return context;
+  };
+  return { drawing, ImageManipulator: { manipulate }, SaveFormat: { JPEG: "jpeg", PNG: "png", WEBP: "webp" } };
+});

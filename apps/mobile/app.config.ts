@@ -58,7 +58,14 @@ export function configFor(copy: Copy): ExpoConfig {
     android: { package: copy.applicationId },
     // Keeps the key store's sign-in out of Android's backups, so it never lands on another phone.
     // shortNativeBuild: C++ build folders kept under Windows' path limit (its own file says why).
-    plugins: ["expo-secure-store", "./plugins/shortNativeBuild.js"],
+    // The meal photo (ROADMAP Stage 5 33b-i): the camera and the photos the person picks, and never the
+    // microphone, which no feature uses.
+    plugins: [
+      "expo-secure-store",
+      ["expo-camera", { cameraPermission: "Allow $(PRODUCT_NAME) to take photos of your meals.", microphonePermission: false, recordAudioAndroid: false }],
+      ["expo-image-picker", { photosPermission: "Allow $(PRODUCT_NAME) to open the meal photos you pick.", microphonePermission: false }],
+      "./plugins/shortNativeBuild.js",
+    ],
     extra,
   };
 }

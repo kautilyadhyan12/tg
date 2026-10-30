@@ -37,6 +37,14 @@ export interface Sender {
 }
 
 
+/** What a waiting meal's save sends: a photo's meal as the scan's save, whose name the server keeps
+ *  from the scan (33b-i); any other as typed. */
+export function saveBody(meal: WaitingMeal): unknown {
+  if (meal.scanToken === undefined) return meal.body;
+  const { id, takenAt, mealType, items } = meal.body;
+  return { id, takenAt, ...(mealType === undefined ? {} : { mealType }), items, scanToken: meal.scanToken };
+}
+
 /** A meal the server would not take, said on the Food screen until the person presses OK. */
 export type Refused = MealOutboxRefused;
 

@@ -10,6 +10,8 @@ import { MAX_ITEM_GRAMS, isCountMeasure, isWeightMeasure, type ChosenItem, type 
 export interface Amount {
   measure: string;
   amount: string;
+  /** The meal was eaten from one dish: this food's part of it (33b-i). */
+  share?: number | undefined;
 }
 
 /** The starting measure the server named, at its amount. */
@@ -60,7 +62,8 @@ export function chosenItem(canonical: string, amount: Amount): ChosenItem | null
   const dish = dishOf(amount.measure);
   if (dish !== null) {
     const fill = FILL_CHOICES.find((f) => String(f.value) === amount.amount);
-    return fill === undefined ? null : { canonical, dishwareId: dish, fillLevel: fill.value };
+    if (fill === undefined) return null;
+    return { canonical, dishwareId: dish, fillLevel: fill.value, ...(amount.share === undefined ? {} : { share: amount.share }) };
   }
   const n = Number(amount.amount.trim().replace(",", "."));
   if (amount.amount.trim() === "" || !Number.isFinite(n) || n <= 0 || n > MAX_ITEM_GRAMS) return null;
@@ -107,6 +110,8 @@ export function loggedAmount(item: Pick<MealItem, "measure" | "gramsPoint">): st
   if (m === undefined || m.id === "g") return grams;
   if (m.id === "dish") {
     const fill = FILL_WORDS[m.amount];
+    // Its part of a dish the whole meal was eaten from.
+    if (m.share !== undefined) return `Part of ${m.name}${fill === undefined ? "" : `, ${fill}`} · ${grams}`;
     return fill === undefined ? `${formatAmount(m.amount)} × ${m.name} · ${grams}` : `${m.name}, ${fill} · ${grams}`;
   }
   if (m.id === "oz") return `${formatAmount(m.amount)} oz · ${grams}`;

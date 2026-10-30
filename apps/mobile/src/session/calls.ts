@@ -55,6 +55,8 @@ export interface Request {
   body?: unknown;
   /** A signed-in request's access token. */
   token?: string;
+  /** How long its reply is waited for, where that is longer than usual (a meal photo's scan). */
+  waitMs?: number;
 }
 
 /** One request, its reply read through its shape. A reply that comes after `waitMs` is dropped. */
@@ -65,7 +67,7 @@ export async function call<T>(server: Server, request: Request, shape: Shape<T>,
     timer = setTimeout(() => {
       stop.abort();
       resolve(LATE);
-    }, waitMs);
+    }, request.waitMs ?? waitMs);
   });
   try {
     const reply = await Promise.race([

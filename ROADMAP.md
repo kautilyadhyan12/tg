@@ -588,7 +588,10 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 33. **The meal scan** (Kd, 2026-10-28: the scanner moves to GPT-6 Luna first).
     - 33a. [x] **The meal scan on GPT-6 Luna, thinking off** — merged 2026-10-28 (PR #380).
     - 33a-ii. [x] **Luna checks the scan's unclear food matches** — merged 2026-10-28 (PR #382).
-    - 33b. [ ] **A meal photo with the phone's camera, and barcode scan** (item 5; Stage 4 item 8). A scanned barcode reads the product's own page at Open Food Facts, which sends the minerals, vitamin D and the serving size that its search leaves out (34a's review). The photo is redrawn on the phone before it is sent, as the web's is, so no location tag reaches OpenAI (33a's review). "Not this?" on every scanned food opens its other close foods and a search; each food's title is what Luna saw, with where its numbers come from under it (Kd, 2026-10-28).
+    - 33b. **A meal photo with the phone's camera, and barcode scan** (split 2026-10-29 in three: the photo first).
+      - 33b-i. [x] **A meal photo on the phone** — merged 2026-10-30 (PR #395).
+      - 33b-ii. [ ] **"Not this?" and the names Luna saw**: on every scanned food, its other close foods and a search; each food's title what Luna saw, with where its numbers come from under it (Kd, 2026-10-28).
+      - 33b-iii. [ ] **Barcode scan** (Stage 4 item 8): the same camera; a product's own page at Open Food Facts, which sends the minerals, vitamin D and the serving size its search leaves out (34a's review).
 34. **More food** (split 2026-10-13: the parts on the server need no phone).
     - 34a. [x] **Ten more figures kept with every food in a meal** — merged 2026-10-13 (PR #245).
     - 34b. [ ] **The ten figures on the Food screen** (7a-v, the rest): on a saved meal, the photo sheet's rows and under the rings, each beside a published daily reference whose source its plan names; "about, N items not known"; a product's figures said to be from its label. Waits for 32b.

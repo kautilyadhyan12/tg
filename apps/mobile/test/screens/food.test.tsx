@@ -221,6 +221,8 @@ async function addOats() {
   await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 307 kcal · 1 cup, USDA" }));
   const add = await screen.findByRole("button", { name: "Add Oats, rolled · 307 kcal" });
   await fireEvent.press(add);
+  // On the meal's list; then one save keeps the meal (Kd, 2026-10-30).
+  await fireEvent.press(await screen.findByRole("button", { name: "Save meal to Breakfast" }));
 }
 
 describe("the worst thing: a meal is never lost or counted twice, and no calorie cut is shown that the health rules hold back", () => {
@@ -467,6 +469,7 @@ describe("round one's findings, on the screen", () => {
     await fireEvent.changeText(screen.getByLabelText("Search food"), "oats");
     await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 307 kcal · 1 cup, USDA" }));
     await fireEvent.press(await screen.findByRole("button", { name: "Add Oats, rolled" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Save meal to Breakfast" }));
     expect(await screen.findByText("1 meal is waiting for its numbers. They come once it is sent.")).toBeTruthy();
     expect(screen.getByLabelText("Calories, not known of 2,300 kcal")).toBeTruthy();
     expect(screen.queryByText(/kcal left/)).toBeNull();
@@ -502,9 +505,10 @@ describe("the re-check's finding", () => {
     await fireEvent.press(await screen.findByRole("button", { name: "Add to Breakfast" }));
     await fireEvent.changeText(screen.getByLabelText("Search food"), "oats");
     await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 307 kcal · 1 cup, USDA" }));
-    const add = await screen.findByRole("button", { name: "Add Oats, rolled · 307 kcal" });
-    await fireEvent.press(add);
-    await fireEvent.press(add);
+    await fireEvent.press(await screen.findByRole("button", { name: "Add Oats, rolled · 307 kcal" }));
+    const keep = await screen.findByRole("button", { name: "Save meal to Breakfast" });
+    await fireEvent.press(keep);
+    await fireEvent.press(keep);
     written();
     expect(await screen.findByText("Oats, rolled added.")).toBeTruthy();
     await waitFor(() => {
@@ -572,6 +576,23 @@ describe("changing a logged meal (32b-ii-a)", () => {
     });
     expect(patches(server)[0]?.body).toMatchObject({ items: [{ from: 0, canonical: "oats_rolled", measure: "usda-1", amount: 1.5 }], itemsVersion: "v1" });
     expect(await screen.findByLabelText("Calories, 461 of 2,300 kcal")).toBeTruthy();
+  });
+
+  it("a food that is a part of one dish opens at its grams, and saved untouched keeps them (round one, High 1)", async () => {
+    const shared = { ...item(81, 307), measure: { id: "dish", name: "Bowl", amount: 1, share: 0.5 } };
+    const two = { ...lunch(), mealName: "Shared bowl", items: [shared, { ...item(81, 307), name: "Banana", canonical: "banana", measure: { id: "dish", name: "Bowl", amount: 1, share: 0.5 } }] as Meal["items"] };
+    two.totals = sum(two.items);
+    const server = await openFood({ meals: [two] }, undefined, { "/v1/nutrition/dishware": ok({ items: [], nextCursor: null }) });
+    await fireEvent.press(await screen.findByRole("button", { name: "Shared bowl, 614 kcal" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Change Oats, rolled, Part of Bowl, full · 81 g" }));
+    // Not the whole bowl of oats: what it weighs.
+    expect(await screen.findByText("307 kcal · Meal total 614 kcal")).toBeTruthy();
+    expect(screen.getByLabelText("Amount").props.value).toBe("81");
+    await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => {
+      expect(patches(server)).toHaveLength(1);
+    });
+    expect(patches(server)[0]?.body).toMatchObject({ items: [{ from: 0, canonical: "oats_rolled", measure: "g", amount: 81 }, { from: 1 }] });
   });
 
   it("removes one food only after asking, and offers no removal of a meal's only food", async () => {
@@ -657,6 +678,8 @@ describe("previously logged foods (32b-ii-a)", () => {
     expect(screen.getByLabelText("Amount").props.value).toBe("1.5");
     expect(posts(server)).toHaveLength(0);
     await fireEvent.press(await screen.findByRole("button", { name: "Add Oats, rolled · 307 kcal" }));
+    expect(posts(server)).toHaveLength(0);
+    await fireEvent.press(await screen.findByRole("button", { name: "Save meal to Lunch" }));
     expect(await screen.findByText("Oats, rolled added.")).toBeTruthy();
     await waitFor(() => {
       expect(posts(server)).toHaveLength(1);
@@ -670,6 +693,7 @@ describe("previously logged foods (32b-ii-a)", () => {
     await fireEvent.press(await screen.findByRole("button", { name: "Add to Lunch" }));
     await fireEvent.press(await screen.findByRole("button", { name: "Add Oats, rolled" }));
     await fireEvent.press(await screen.findByRole("button", { name: "Add Oats, rolled" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Save meal to Lunch" }));
     expect(await screen.findByRole("button", { name: "Oats, rolled, 461 kcal, waiting to send" })).toBeTruthy();
     expect(screen.getByLabelText("Calories, 461 of 2,300 kcal")).toBeTruthy();
   });
@@ -682,6 +706,7 @@ describe("previously logged foods (32b-ii-a)", () => {
     expect(screen.getByRole("radio", { name: "cup · 81 g" }).props.accessibilityState).toMatchObject({ selected: true });
     await fireEvent.press(screen.getByRole("button", { name: "More" }));
     await fireEvent.press(await screen.findByRole("button", { name: "Add Oats, rolled · 307 kcal" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Save meal to Lunch" }));
     expect(await screen.findByText("Oats, rolled added.")).toBeTruthy();
     await waitFor(() => {
       expect(posts(server)).toHaveLength(1);

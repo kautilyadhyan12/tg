@@ -35,8 +35,9 @@ import { GymScreen } from "./screens/GymTab";
 import { PlacesProvider, usePlaces } from "./screens/places";
 import { tabWord } from "./screens/placesHeading";
 import { FoodScreen } from "./screens/Food";
-import { mealFile } from "./screens/food/fileStore";
+import { mealFile, photoSheetFile } from "./screens/food/fileStore";
 import { MealOutboxProvider } from "./screens/food/MealOutbox";
+import { PhotoSheetStoreProvider } from "./screens/food/PhotoSheetStore";
 import type { TextStore } from "./screens/food/outbox";
 import { MeScreen, WorkoutScreen } from "./screens/tabs";
 
@@ -75,6 +76,8 @@ interface AppProps {
   wait?: (ms: number) => Promise<void>;
   /** Where a person's waiting meals are kept: the phone's own file, or a test's. */
   mealStore?: (userId: string) => TextStore;
+  /** Where a person's photo meal not yet saved is kept (33b-i). */
+  photoStore?: (userId: string) => TextStore;
 }
 
 /** Signed out, the sign-in screen and nothing of anybody's; signed in, "Before you start" until
@@ -122,7 +125,7 @@ function TabsOfPlaces() {
   );
 }
 
-export function App({ extra, ask = fetch, store = phoneKeyStore, google = askGoogle, wait, mealStore = mealFile }: AppProps) {
+export function App({ extra, ask = fetch, store = phoneKeyStore, google = askGoogle, wait, mealStore = mealFile, photoStore = photoSheetFile }: AppProps) {
   // A font that cannot be read must not leave a blank page: the phone's own font shows instead.
   const [fontsReady, fontsFailed] = useFonts({
     Inter_400Regular,
@@ -148,7 +151,9 @@ export function App({ extra, ask = fetch, store = phoneKeyStore, google = askGoo
             </Page>
           ) : (
             <SessionProvider server={server} store={store} google={google} wait={wait}>
-              <SignedInOrOut mealStore={mealStore} />
+              <PhotoSheetStoreProvider store={photoStore}>
+                <SignedInOrOut mealStore={mealStore} />
+              </PhotoSheetStoreProvider>
             </SessionProvider>
           )}
         </CopyContext.Provider>
