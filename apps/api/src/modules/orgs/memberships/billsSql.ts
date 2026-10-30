@@ -17,18 +17,18 @@ import {
   feeItemName,
   memberFeeKindSchema,
   memberBillStatusSchema,
-  memberPaymentByHandSchema,
+  memberRefundMethodSchema,
   memberPaymentMethodSchema,
   paymentVoidReasonSchema,
   refundReasonSchema,
-  refundVoidReasonSchema,
+  refundVoidKeptSchema,
   type BillCancelReason,
   type MemberBillStatus,
-  type MemberPaymentByHand,
+  type MemberRefundMethod,
   type MemberPaymentMethod,
   type PaymentVoidReason,
   type RefundReason,
-  type RefundVoidReason,
+  type RefundVoidKept,
   type TaxApplied,
 } from "@app/shared";
 
@@ -200,25 +200,54 @@ export interface RefundRow {
   paymentId: string;
   membershipId: string;
   amountMinor: number;
-  method: MemberPaymentByHand;
+  method: MemberRefundMethod;
   refundedOn: string;
   reason: RefundReason;
   by: string | null;
   receiptNumber: number;
+  /** Sent to the card through Square (18d-iv-a): null for one noted by hand. */
+  square: { state: "pending" | "completed"; card: { brand: string; last4: string } | null; startedOn: string } | null;
 }
+
+/** What a refund row reads of its press at Square (18d-iv-a). */
+const squareOfRefund = (r: { q_state: string | null; q_brand: string | null; q_last4: string | null; q_started: string | null }): RefundRow["square"] =>
+  r.q_state === null || r.q_started === null
+    ? null
+    : {
+        state: r.q_state === "pending" ? "pending" : "completed",
+        card: r.q_brand === null || r.q_last4 === null ? null : { brand: r.q_brand, last4: r.q_last4 },
+        startedOn: r.q_started,
+      };
 
 /** The refunds that stand against the standing payments of the memberships named, in the
  *  order they were noted. */
 export async function refundsFor(sql: Sql | TransactionSql, gymId: string, membershipIds: readonly string[]): Promise<RefundRow[]> {
   if (membershipIds.length === 0) return [];
   const rows = await sql<
-    { id: string; payment_id: string; held_membership_id: string; amount_minor: number; method: string; refunded_on: string; reason: string; by: string | null; receipt_number: number }[]
+    {
+      id: string;
+      payment_id: string;
+      held_membership_id: string;
+      amount_minor: number;
+      method: string;
+      refunded_on: string;
+      reason: string;
+      by: string | null;
+      receipt_number: number;
+      q_state: string | null;
+      q_brand: string | null;
+      q_last4: string | null;
+      q_started: string | null;
+    }[]
   >`
     SELECT r.id, r.payment_id, b.held_membership_id, r.amount_minor, r.method, r.refunded_on::text AS refunded_on, r.reason,
-           u.display_name AS by, r.receipt_number
+           u.display_name AS by, r.receipt_number, q.state AS q_state, q.brand AS q_brand, q.last4 AS q_last4,
+           (q.started_at AT TIME ZONE g.timezone)::date::text AS q_started
     FROM gym_member_refunds r
     JOIN gym_member_payments p ON p.gym_id = r.gym_id AND p.id = r.payment_id
     JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
+    JOIN gyms g ON g.id = r.gym_id
+    LEFT JOIN gym_square_refunds q ON q.gym_id = r.gym_id AND q.member_refund_id = r.id
     LEFT JOIN users u ON u.id = r.recorded_by
     WHERE r.gym_id = ${gymId} AND b.held_membership_id = ANY(${[...membershipIds]}::uuid[])
       AND r.undone_at IS NULL AND p.undone_at IS NULL AND b.period_index IS NOT NULL
@@ -228,11 +257,12 @@ export async function refundsFor(sql: Sql | TransactionSql, gymId: string, membe
     paymentId: r.payment_id,
     membershipId: r.held_membership_id,
     amountMinor: r.amount_minor,
-    method: memberPaymentByHandSchema.parse(r.method),
+    method: memberRefundMethodSchema.parse(r.method),
     refundedOn: r.refunded_on,
     reason: refundReasonSchema.parse(r.reason),
     by: r.by,
     receiptNumber: r.receipt_number,
+    square: squareOfRefund(r),
   }));
 }
 
@@ -244,7 +274,7 @@ export interface Voided<R> {
 }
 
 export type VoidedPaymentRow = Omit<PaymentRow, "refundedMinor"> & { voided: Voided<PaymentVoidReason> };
-export type VoidedRefundRow = RefundRow & { voided: Voided<RefundVoidReason> };
+export type VoidedRefundRow = RefundRow & { voided: Voided<RefundVoidKept> };
 
 /** The payments staff voided on the memberships named (18o), in the order they were
  *  recorded: for the person's page alone, which shows them struck through. Nothing that
@@ -329,12 +359,13 @@ export async function voidedRefundsFor(sql: Sql | TransactionSql, gymId: string,
     paymentId: r.payment_id,
     membershipId: r.held_membership_id,
     amountMinor: r.amount_minor,
-    method: memberPaymentByHandSchema.parse(r.method),
+    method: memberRefundMethodSchema.parse(r.method),
     refundedOn: r.refunded_on,
     reason: refundReasonSchema.parse(r.reason),
     by: r.by,
     receiptNumber: r.receipt_number,
-    voided: { reason: r.void_reason === null ? null : refundVoidReasonSchema.parse(r.void_reason), on: r.voided_on, by: r.voided_by },
+    square: null,
+    voided: { reason: r.void_reason === null ? null : refundVoidKeptSchema.parse(r.void_reason), on: r.voided_on, by: r.voided_by },
   }));
 }
 
@@ -474,12 +505,12 @@ export interface NewRefund {
   paymentId: string;
   amountMinor: number;
   currency: string;
-  method: MemberPaymentByHand;
+  method: MemberRefundMethod;
   reason: RefundReason;
   requestKey: string;
   /** The gym's own day. */
   refundedOn: string;
-  recordedBy: string;
+  recordedBy: string | null;
 }
 
 /** Notes a refund, with the gym's next receipt number (18g-i). Null where this request is
@@ -636,6 +667,16 @@ export async function terminalWaiting(tx: TransactionSql, gymId: string, members
 export async function cardCharging(tx: TransactionSql, gymId: string, membershipId: string): Promise<boolean> {
   const [row] = await tx<{ id: string }[]>`
     SELECT id FROM gym_card_charges WHERE gym_id = ${gymId} AND held_membership_id = ${membershipId} AND state = 'charging'`;
+  return row !== undefined;
+}
+
+/** Whether a refund to the card is waiting for Square's answer on this membership (18d-iv-a). */
+export async function refundAsking(tx: TransactionSql, gymId: string, membershipId: string): Promise<boolean> {
+  const [row] = await tx<{ id: string }[]>`
+    SELECT q.id FROM gym_square_refunds q
+    JOIN gym_member_payments p ON p.gym_id = q.gym_id AND p.id = q.payment_id
+    JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
+    WHERE q.gym_id = ${gymId} AND b.held_membership_id = ${membershipId} AND q.state = 'asking' LIMIT 1`;
   return row !== undefined;
 }
 

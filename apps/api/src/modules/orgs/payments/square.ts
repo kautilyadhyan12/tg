@@ -19,7 +19,8 @@
 // charge a customer is read with SUBSCRIPTIONS_READ ("Search subscriptions", read 2026-10-26), never
 // changed: Delete permanently keeps such a customer. Payments taken in Square's own app (18d-iii-b-i to
 // 18d-iii-b-ii-c) were taken out with Square Point of Sale (18d-iii-b-v, Kd, 2026-10-30), and with them
-// ORDERS_READ and ITEMS_READ.
+// ORDERS_READ and ITEMS_READ. Refund to card (18d-iv-a) uses PAYMENTS_WRITE and reads with PAYMENTS_READ
+// ("Refund Payments", Square's API definition, read 2026-10-30): no new permission.
 import {
   squareCardAnswerSchema,
   squareCustomerAnswerSchema,
@@ -33,6 +34,7 @@ import {
   squarePaymentSchema,
   squarePaymentsPageSchema,
   squarePaymentRefusalSchema,
+  squareRefundAnswerSchema,
   squareEmptyAnswerSchema,
   squareRevokeSchema,
   squareSubscriptionSchema,
@@ -48,6 +50,7 @@ import {
   type SquareLocation,
   type SquareMerchant,
   type SquarePayment,
+  type SquareRefund,
   type SquareTerminalAction,
   type SquareTerminalCheckout,
   type SquareToken,
@@ -131,6 +134,19 @@ export interface SquareApi {
   /** Charge a card on file (18d-iii-i). `idempotencyKey`: asked again, Square gives back the same
    *  payment, paid or failed, and never takes the money twice (measured 2026-10-23). */
   createCardPayment(accessToken: string, payment: NewCardPayment): Promise<CardPaymentResult>;
+  /** Give money back to the card that paid (18d-iv-a). `idempotencyKey`: asked again, Square gives back the same refund;
+   *  the same key with another amount is refused (CONFLICTING_PARAMETERS) (measured 2026-10-30). */
+  refundPayment(accessToken: string, refund: NewCardRefund): Promise<SquareResult<SquareRefund>>;
+  getRefund(accessToken: string, refundId: string): Promise<SquareResult<SquareRefund>>;
+}
+
+/** `reason`: what Square's Dashboard lists the refund as: a word from the gym's list, never a person. */
+export interface NewCardRefund {
+  idempotencyKey: string;
+  paymentId: string;
+  amountMinor: number;
+  currency: string;
+  reason: string;
 }
 
 /** ListPayments' question: one location, by when Square made the payment, oldest first. */
@@ -224,6 +240,12 @@ const checkoutPath = (checkoutId: string): string => {
 const paymentPath = (paymentId: string): string => {
   if (!/^[A-Za-z0-9_-]{1,192}$/.test(paymentId)) throw new Error("not a Square payment id");
   return `/v2/payments/${paymentId}`;
+};
+
+/** The same for a refund's id (`squareRefundIdSchema`). */
+const refundPath = (refundId: string): string => {
+  if (!/^[A-Za-z0-9_-]{1,255}$/.test(refundId)) throw new Error("not a Square refund id");
+  return `/v2/refunds/${refundId}`;
 };
 
 export const SQUARE_SCOPES = [
@@ -526,6 +548,19 @@ export function createSquareApi(opts: {
       // The card's bank said no: Square names it a payment method error and keeps the FAILED payment.
       if (first?.category === "PAYMENT_METHOD_ERROR" || payment?.status === "FAILED") return { kind: "declined", status: sent.status, code, payment };
       return { kind: "refused", status: sent.status, code };
+    },
+    async refundPayment(accessToken, r) {
+      const result = await call("POST", "/v2/refunds", squareRefundAnswerSchema, bearer(accessToken), {
+        idempotency_key: r.idempotencyKey,
+        payment_id: r.paymentId,
+        amount_money: { amount: r.amountMinor, currency: r.currency },
+        reason: r.reason,
+      });
+      return result.kind === "ok" ? { kind: "ok", value: result.value.refund } : result;
+    },
+    async getRefund(accessToken, refundId) {
+      const result = await call("GET", refundPath(refundId), squareRefundAnswerSchema, bearer(accessToken));
+      return result.kind === "ok" ? { kind: "ok", value: result.value.refund } : result;
     },
     async revokeAccount(accountId) {
       const result = await call("POST", "/oauth2/revoke", squareRevokeSchema, `Client ${opts.applicationSecret}`, {

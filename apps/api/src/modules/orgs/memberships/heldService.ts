@@ -39,6 +39,9 @@ import {
   memberPayTarget,
   memberUndoTarget,
   paymentRefundableMinor,
+  daysBetween,
+  CARD_REFUND_LIMITS,
+  CARD_REFUND_WORDS,
   type BillSettings,
   type BillSettingsResponse,
   type CancelMemberBillRequest,
@@ -76,6 +79,7 @@ import * as agreementRepo from "../agreement/repo.js";
 import { recordStopped } from "../classes/bookingStops.js";
 import { freezeFeeOf } from "./freezeFees.js";
 import { chargesOfBills } from "../payments/cardChargesRepo.js";
+import { openPressesOf } from "../payments/cardRefundsRepo.js";
 import { blockedOf, expiringCards, remindersOn, type ExpiringCard } from "../payments/cardExpiryRepo.js";
 import { emailHmac } from "../invites/address.js";
 import { type FeePaymentRow, type FeeRow } from "./feesRepo.js";
@@ -106,7 +110,14 @@ function billingOf(
   refunds: readonly RefundRow[],
   voided: { payments: readonly VoidedPaymentRow[]; refunds: readonly VoidedRefundRow[] },
   fees: { fees: readonly FeeRow[]; payments: readonly FeePaymentRow[] },
-  ctx: { today: string; past: boolean; overdueAfterDays: number; gifts: ReadonlyMap<string, { offMinor: number; currency: string; friendName: string | null }>; charges: Charges },
+  ctx: {
+    today: string;
+    past: boolean;
+    overdueAfterDays: number;
+    gifts: ReadonlyMap<string, { offMinor: number; currency: string; friendName: string | null }>;
+    charges: Charges;
+    presses: Awaited<ReturnType<typeof openPressesOf>>;
+  },
 ): Omit<MemberBilling, "change"> {
   const view = heldMembershipView(row.membership, ctx.today);
   const pay = memberPayTarget(row.membership, row.nextBillMinor, ctx.today, bills, ctx.past);
@@ -125,7 +136,16 @@ function billingOf(
   const owedBill = pay === null ? undefined : bills.find((b) => b.periodIndex === pay.periodIndex);
   const sent = owedBill === undefined || newest.includes(owedBill) ? newest : [...newest, owedBill];
   const mark = !ctx.past && newestBack === null && view.can.undoPaid !== null && !settledAt(view.can.undoPaid.paidPeriods) ? view.can.undoPaid : null;
-  const refundOf = (r: RefundRow) => ({ id: r.id, amountMinor: r.amountMinor, method: r.method, refundedOn: r.refundedOn, reason: r.reason, by: r.by, receiptNumber: r.receiptNumber });
+  const refundOf = (r: RefundRow) => ({
+    id: r.id,
+    amountMinor: r.amountMinor,
+    method: r.method,
+    refundedOn: r.refundedOn,
+    reason: r.reason,
+    by: r.by,
+    receiptNumber: r.receiptNumber,
+    square: r.square === null ? null : { state: r.square.state, card: r.square.card, late: r.square.state === "pending" && daysBetween(r.square.startedOn, ctx.today) > CARD_REFUND_LIMITS.pendingDays },
+  });
   const voidedRefundsOf = (paymentId: string) => voided.refunds.filter((r) => r.paymentId === paymentId).map((r) => ({ ...refundOf(r), voided: r.voided }));
   return {
     bills: sent.map((b) => ({
@@ -155,6 +175,7 @@ function billingOf(
           refunds: refunds.filter((r) => r.paymentId === p.id).map(refundOf),
           voidedRefunds: voidedRefundsOf(p.id),
           refundableMinor: paymentRefundableMinor(b, p),
+          cardRefund: ctx.presses.get(p.id) ?? null,
           receiptNumber: p.receiptNumber,
           card: ctx.charges.cardOfPayment.get(p.id) ?? null,
         })),
@@ -233,7 +254,7 @@ function feeOf(f: FeeRow, payments: readonly FeePaymentRow[], ctx: { today: stri
             : "paid",
     waived: f.waived,
     stillOwed: f.stillOwed,
-    payments: standing.map((p) => ({ ...paymentOf(p), refunds: [], voidedRefunds: [], refundableMinor: 0 })),
+    payments: standing.map((p) => ({ ...paymentOf(p), refunds: [], voidedRefunds: [], refundableMinor: 0, cardRefund: null })),
     voidedPayments: mine.flatMap((p) => (p.voided === null ? [] : [{ ...paymentOf(p), voidedRefunds: [], voided: p.voided }])),
     cardDeclined: owed ? (ctx.charges.declined.get(f.id) ?? null) : null,
     cardUnchecked: owed ? (ctx.charges.unchecked.get(f.id) ?? null) : null,
@@ -304,7 +325,8 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
   const charges: Charges = canBill
     ? await chargesOfBills(deps.sql, gymId, [...list.bills.map((b) => b.id), ...list.fees.map((f) => f.id)], [...list.payments.map((p) => p.id), ...list.feePayments.map((p) => p.id)], deps.now())
     : NO_CHARGES;
-  const ctx = { today, past: list.past, overdueAfterDays: list.overdueAfterDays, gifts, charges };
+  const presses = canBill ? await openPressesOf(deps.sql, gymId, list.payments.map((p) => p.id)) : new Map<string, { amountMinor: number; on: string; lost: boolean }>();
+  const ctx = { today, past: list.past, overdueAfterDays: list.overdueAfterDays, gifts, charges, presses };
   // The page reads a membership as the next write will find it: with its count moved
   // over the periods nobody was asked for (`countAfterGap`), which `settle` then writes.
   const asOfToday = (row: repo.HeldRow): repo.HeldRow => {
@@ -640,6 +662,7 @@ export async function changeHeldMembership(
   }
   if (outcome.kind === "change_refused") throw new OrgsError(409, `membership_change_${outcome.reason}`, MEMBERSHIP_CHANGE_WORDS[outcome.reason]);
   if (outcome.kind === "credit_changed") throw new OrgsError(409, "membership_change_credit_changed", MEMBERSHIP_CHANGE_WORDS.credit_changed);
+  if (outcome.kind === "refund_waiting") throw new OrgsError(409, "card_refund_waiting", CARD_REFUND_WORDS.waiting);
   throwOnFailure(outcome);
   return { kind: "ok", body: await readOr404(deps, gymId, entryId, today, true) };
 }
@@ -720,6 +743,10 @@ function throwOnBillFailure(outcome: billsRepo.BillWriteOutcome): void {
       throw new OrgsError(409, "terminal_payment_void", TERMINAL_PAYMENT_WORDS.void_terminal);
     case "card_payment":
       throw new OrgsError(409, "card_payment_void", CARD_CHARGE_WORDS.void_card);
+    case "refund_waiting":
+      throw new OrgsError(409, "card_refund_waiting", CARD_REFUND_WORDS.waiting);
+    case "card_refund":
+      throw new OrgsError(409, "card_refund_void", "This refund went to the card through Square, so it can't be voided.");
     default: {
       const never: never = outcome;
       throw new Error(`unhandled bill outcome: ${JSON.stringify(never)}`);

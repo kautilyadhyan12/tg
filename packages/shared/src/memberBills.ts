@@ -109,11 +109,24 @@ export const REFUND_VOID_REASONS = ["mistake", "wrong_amount", "other"] as const
 export const refundVoidReasonSchema = z.enum(REFUND_VOID_REASONS);
 export type RefundVoidReason = z.infer<typeof refundVoidReasonSchema>;
 
-export const REFUND_VOID_REASON_WORDS: Readonly<Record<RefundVoidReason, string>> = {
+/** The picked reasons, and `square_failed`: Square took a refund to the card up, then said it failed (18d-iv-a). The
+ *  app writes it; nobody picks it. */
+export const REFUND_VOID_REASONS_KEPT = [...REFUND_VOID_REASONS, "square_failed"] as const;
+export const refundVoidKeptSchema = z.enum(REFUND_VOID_REASONS_KEPT);
+export type RefundVoidKept = z.infer<typeof refundVoidKeptSchema>;
+
+export const REFUND_VOID_REASON_WORDS: Readonly<Record<RefundVoidKept, string>> = {
   mistake: "Noted by mistake",
   wrong_amount: "Wrong amount",
   other: "Something else",
+  square_failed: "Square could not refund it",
 };
+
+/** How money went back: by hand, or to the card that paid, through Square (18d-iv-a), which reads as that payment's own
+ *  way ("Card on Terminal", "Card on file"). */
+export const MEMBER_REFUND_METHODS = [...MEMBER_PAYMENT_BY_HAND, "company", "terminal"] as const;
+export const memberRefundMethodSchema = z.enum(MEMBER_REFUND_METHODS);
+export type MemberRefundMethod = z.infer<typeof memberRefundMethodSchema>;
 
 /** A fee for a late cancel or a no-show (18h-i): a bill of the membership the booking
  *  used, of no period. It is the amount the gym set, its tax in, and it moves no date. A
@@ -158,13 +171,20 @@ export const memberRefundSchema = z
     id: z.string().uuid(),
     amountMinor: minorSchema,
     /** How the gym gave it back. */
-    method: memberPaymentByHandSchema,
+    method: memberRefundMethodSchema,
     /** The gym's own day it was noted on. */
     refundedOn: daySchema,
     reason: refundReasonSchema,
     by: z.string().nullable(),
     /** Its receipt's number, the gym's own (18g-i). */
     receiptNumber: receiptNumberSchema,
+    /** Sent to the card through Square (18d-iv-a): where it stands there, and the card, where Square named it. `late`:
+     *  still pending after Square's 14 days. Null for one noted by hand. */
+    square: z
+      .object({ state: z.enum(["pending", "completed"]), card: cardSeenSchema.nullable(), late: z.boolean() })
+      .strict()
+      .nullable()
+      .default(null),
   })
   .strict();
 export type MemberRefund = z.infer<typeof memberRefundSchema>;
@@ -174,7 +194,7 @@ export type MemberRefund = z.infer<typeof memberRefundSchema>;
 const voidedBy = <T extends z.ZodTypeAny>(reason: T) => z.object({ reason: reason.nullable(), on: daySchema, by: z.string().nullable() }).strict();
 
 /** A refund staff voided (18o): kept on the page, struck through, and counted in nothing. */
-export const voidedMemberRefundSchema = memberRefundSchema.extend({ voided: voidedBy(refundVoidReasonSchema) }).strict();
+export const voidedMemberRefundSchema = memberRefundSchema.extend({ voided: voidedBy(refundVoidKeptSchema) }).strict();
 export type VoidedMemberRefund = z.infer<typeof voidedMemberRefundSchema>;
 
 export const memberPaymentSchema = z
@@ -196,6 +216,8 @@ export const memberPaymentSchema = z
     receiptNumber: receiptNumberSchema,
     /** The card on file it was charged to (18d-iii-i); null for every other way. */
     card: cardSeenSchema.nullable().default(null),
+    /** A refund to the card Square has not answered (18d-iv-a): `lost`, never answered, so it is checked in Square. */
+    cardRefund: z.object({ amountMinor: minorSchema, on: daySchema, lost: z.boolean() }).strict().nullable().default(null),
   })
   .strict();
 export type MemberPayment = z.infer<typeof memberPaymentSchema>;
@@ -203,7 +225,7 @@ export type MemberPayment = z.infer<typeof memberPaymentSchema>;
 /** A payment staff voided (18o): kept on the page, struck through, and counted in nothing.
  *  A payment is voided only once no refund stands on it, so it carries voided ones alone. */
 export const voidedMemberPaymentSchema = memberPaymentSchema
-  .omit({ refunds: true, refundableMinor: true })
+  .omit({ refunds: true, refundableMinor: true, cardRefund: true })
   .extend({ voided: voidedBy(paymentVoidReasonSchema) })
   .strict();
 export type VoidedMemberPayment = z.infer<typeof voidedMemberPaymentSchema>;

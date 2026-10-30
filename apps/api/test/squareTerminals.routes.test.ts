@@ -178,6 +178,10 @@ function fakeSquare(clock: () => Date) {
     searchCustomers: () => Promise.resolve(unavailable),
     searchSubscriptions: () => Promise.resolve(unavailable),
     deleteCustomer: () => Promise.resolve(unavailable),
+
+    refundPayment: () => Promise.resolve({ kind: "unavailable", status: null }),
+
+    getRefund: () => Promise.resolve({ kind: "unavailable", status: null }),
   };
   const allow = (account: Account): string => {
     const code = `sq0cgb-${randomBytes(8).toString("hex")}`;

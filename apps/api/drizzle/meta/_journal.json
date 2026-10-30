@@ -1233,6 +1233,13 @@
       "when": 1790726400176,
       "tag": "0176_user_standard_dishes",
       "breakpoints": true
+    },
+    {
+      "idx": 176,
+      "version": "7",
+      "when": 1790726400177,
+      "tag": "0177_square_refunds",
+      "breakpoints": true
     }
   ]
 }
