@@ -289,7 +289,7 @@ export async function processCardRefunds(deps: PaymentsDeps, square: SquareSetti
       const step = await afterTaken(deps, press, read.value, dayInTz(at, gym?.timezone ?? "UTC"), at);
       if (step !== "taken") continue;
     } else {
-      deps.log.warn({ event: "square.card_refund_unread", gymId: press.gymId, answer: read?.kind ?? "no_connection", status: read !== null && read.kind !== "ok" ? read.status : null }, "a refund could not be read from Square");
+      deps.log.warn({ event: "square.card_refund_unread", gymId: press.gymId, answer: read?.kind ?? "no_connection", status: read === null ? null : read.status }, "a refund could not be read from Square");
     }
     await refunds.lookAgain(deps.sql, press.id, lookFrom(at, press.looks + 1));
   }
