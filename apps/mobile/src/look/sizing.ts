@@ -32,3 +32,7 @@ export function passSide(width: number, screenHeight: number, edge: number): num
 /** The most of the screen's height a receipt in the middle box takes before it scrolls, so its title and Done stay
  *  on screen. */
 export const RECEIPT_MOST = 0.6;
+
+/** The most of the screen's height a question in the middle box takes before it scrolls (Report's reasons and its
+ *  note), so its title and buttons stay on screen. */
+export const ASK_MOST = 0.6;
