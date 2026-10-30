@@ -283,7 +283,7 @@ Paneer, Idli — expand per §7), USDA FoodData Central (already integrated),
 an **IFCT 2017 pack** for Indian foods (the Indian Food Composition Tables
 — the authoritative source for exactly the cuisine your first users eat),
 and OpenFoodFacts for packaged goods (free, global; barcode path arrives
-with mobile). Every item's result carries its source. Same photo + same
+with mobile). *(AMENDED 2026-10-30, ROADMAP 33b-iii, Kd's "go": packaged goods are read from our own copy of Open Food Facts' list and USDA's Branded Foods, updated nightly, never asked live; a barcode is looked up there; a product neither holds is read from a photo of its label, which the person checks. An empty allergen list says nothing about a food and never reads as safe.)* Every item's result carries its source. Same photo + same
 confirmed portions now produce the same numbers every single time, and
 every number has a citation. *(AMENDED 2026-09-17, RULINGS, ROADMAP 7a-iv-i: a
 scanned name is looked up whole on the curated table, then as USDA's food of that

@@ -49,10 +49,10 @@ const BISCUITS_C = `usda_fndds_${String(FIRST_ID + 2)}`;
 // "campbell cream of mushroom soup" on 2026-10-13, as it came: every figure in
 // grams per 100 g, and of the ten only fibre, sugars, saturated fat and sodium.
 const SOUP = {
-  code: "0051000129680", product_name: "Campbell's soup cream of mushroom",
+  code: "1400000010006", product_name: "Campbell's soup cream of mushroom",
   nutriments: { "energy-kcal_100g": 83, proteins_100g: 1.67, sugars_100g: 0.83, fat_100g: 5.83, salt_100g: 1.8125, sodium_100g: 0.725, fiber_100g: 0, "saturated-fat_100g": 0.83, carbohydrates_100g: 6.67 },
 };
-const SOUP_C = "off_0051000129680";
+const SOUP_C = "off_1400000010006";
 // The same figures under a name no food table has, so a photo of it is priced by
 // its label on a machine with the USDA files loaded and on one without.
 const BROTH = { code: "90001090", product_name: "Zqxlabel broth", nutriments: SOUP.nutriments };
