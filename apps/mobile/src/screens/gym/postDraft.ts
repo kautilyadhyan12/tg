@@ -58,9 +58,9 @@ export function photoTrouble({ unreadable, tooBig, left }: { unreadable: number;
 export const removedAndKept = (serverWords: string): string => `${serverWords} Press Post to post it again.`;
 
 /** Said where the button is once a post is up. Only the server knows whether a send whose answer was lost reached it:
- *  it says whether this send made the post. If not, changes made since did not go. */
+ *  it says whether this send made the post. If not, changes made since may not have gone: any of several sends may have made it. */
 export function postedWords(sent: { firstKept: boolean; changed: boolean }): string {
   return sent.firstKept || !sent.changed
     ? "Your post is up."
-    : "Your post went up as you first wrote it. Your later changes weren't added.";
+    : "Your post is up. Your latest changes may not be on it.";
 }

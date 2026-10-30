@@ -57,6 +57,8 @@ function Lens({ onPhoto, onClose }: { onPhoto: (uri: string) => void; onClose: (
       {allowed ? (
         <CameraView
           ref={lens}
+          // A new view for each lens: an iPhone says a view is ready only once.
+          key={facing}
           style={StyleSheet.absoluteFill}
           facing={facing}
           onCameraReady={() => {

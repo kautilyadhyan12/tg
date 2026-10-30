@@ -136,7 +136,7 @@ describe("what the member reads", () => {
 
   it("says when the server kept the post as it first was", () => {
     const up = "Your post is up.";
-    const first = "Your post went up as you first wrote it. Your later changes weren't added.";
+    const first = "Your post is up. Your latest changes may not be on it.";
     // This send made the post: whatever was changed went.
     expect(postedWords({ firstKept: true, changed: false })).toBe(up);
     expect(postedWords({ firstKept: true, changed: true })).toBe(up);

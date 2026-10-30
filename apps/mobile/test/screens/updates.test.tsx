@@ -1112,7 +1112,7 @@ describe("posting", () => {
     await fireEvent.changeText(screen.getByLabelText("Your post"), "Leg day, and more");
     answer = () => ({ status: 201, body: { post: SENT, firstKept: false } });
     await pressPost();
-    expect(await page().findByText("Your post went up as you first wrote it. Your later changes weren't added.")).toBeTruthy();
+    expect(await page().findByText("Your post is up. Your latest changes may not be on it.")).toBeTruthy();
   });
 
   it("a correction that did go up, the first send never having reached the server, says it is up", async () => {
@@ -1126,7 +1126,7 @@ describe("posting", () => {
     answer = () => ({ status: 201, body: { post: SENT, firstKept: true } });
     await pressPost();
     expect(await page().findByText("Your post is up.")).toBeTruthy();
-    expect(page().queryByText("Your post went up as you first wrote it. Your later changes weren't added.")).toBeNull();
+    expect(page().queryByText("Your post is up. Your latest changes may not be on it.")).toBeNull();
   });
 
   it("a photo added that did go up says it is up", async () => {
@@ -1384,6 +1384,29 @@ describe("the phone's display size changes", () => {
     expect(new Directory(Paths.document, foldersUsed[0] ?? "").exists).toBe(false);
   });
 
+  it("in split screen a page is the window's height, and with only the bars left out, the screen's", async () => {
+    const server = serverOf({ [postsOf(IRON)]: on(IRON) });
+    await openUpdates(server.ask, IRON);
+    await page().findByRole("button", { name: "Write a post" });
+    const window = Dimensions.get("window");
+    const whole = Dimensions.get("screen");
+    const bodyHeight = () => (StyleSheet.flatten(screen.getByTestId("modal-body").props.style as StyleProp<ViewStyle>).height);
+    await act(() => {
+      Dimensions.set({ window: { ...window, height: 500 }, screen: { ...whole, height: 1000 } });
+    });
+    try {
+      expect(bodyHeight()).toBe(500);
+      await act(() => {
+        Dimensions.set({ window: { ...window, height: 1000 }, screen: { ...whole, height: 1000 } });
+      });
+      expect(bodyHeight()).toBe(1000);
+    } finally {
+      await act(() => {
+        Dimensions.set({ window, screen: whole });
+      });
+    }
+  });
+
   it("the page is not read again, and words in a box stay", async () => {
     const server = serverOf({ [postsOf(IRON)]: on(IRON, [member(P1)]) });
     await openUpdates(server.ask, IRON);
@@ -1467,7 +1490,7 @@ describe("a post removed after a lost reply", () => {
     await screen.findByTestId("draft-photo-1");
     answer = () => ({ status: 201, body: { post: { ...SENT, photos: [{ id: PHOTO, width: 100, height: 100 }] }, firstKept: false } });
     await pressPost();
-    expect(await page().findByText("Your post went up as you first wrote it. Your later changes weren't added.")).toBeTruthy();
+    expect(await page().findByText("Your post is up. Your latest changes may not be on it.")).toBeTruthy();
   });
 });
 

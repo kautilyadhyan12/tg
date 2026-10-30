@@ -906,6 +906,8 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
       expect(answers.map((r) => r.statusCode)).toEqual([201, 201]);
       const ids = answers.map((r) => (JSON.parse(r.body) as { post: GymPost }).post.id);
       expect(ids[0]).toBe(ids[1]);
+      // One send made it, and the other, which lost the race, is told so.
+      expect(answers.map((r) => (JSON.parse(r.body) as { firstKept: boolean }).firstKept).sort()).toEqual([false, true]);
       expect(await count("posts", gym.id)).toBe(GYM_MEMBER_POSTS_A_DAY);
       // One set of photos, and nothing left to remove.
       expect(await filesOf(gym.id)).toHaveLength(1);
