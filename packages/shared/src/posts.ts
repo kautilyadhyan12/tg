@@ -17,14 +17,19 @@ export const GYM_POST_MAX_CHARS = 2000;
 export const GYM_POST_MAX_PHOTOS = 4;
 /** Longest side the browser shrinks a post's photo to before it is sent (ROADMAP 19b-iv). */
 export const GYM_POST_PHOTO_SEND_SIDE = 1600;
+/** The same on the phone, which sends WebP (Kd, 2026-10-30): 30 % of the browser's size on five photos measured. */
+export const GYM_POST_PHONE_PHOTO_SIDE = 1080;
+export const GYM_POST_PHONE_PHOTO_MAX_BYTES = 300 * 1024;
 /** Posts kept at the top of the page at once. */
 export const GYM_POST_MAX_PINNED = 3;
 /** Posts a page of the list carries; the pinned ones ride on the first page beside them. */
 export const GYM_POSTS_PAGE = 20;
-/** Posts one member may make at one gym in any 24 hours. */
-export const GYM_MEMBER_POSTS_A_DAY = 10;
-/** Of those, the posts that may carry photos (RULINGS 2026-10-05). */
-export const GYM_MEMBER_PHOTO_POSTS_A_DAY = 3;
+/** Posts one member may make at one gym in any 24 hours (Kd, 2026-10-30, `rulings/2026-10-30-17b.md`). */
+export const GYM_MEMBER_POSTS_A_DAY = 100;
+/** Photos one member may post at one gym in any 24 hours, however many posts they are on. */
+export const GYM_MEMBER_PHOTOS_A_DAY = 10;
+/** Photos a gym's staff may post, all of them together, in any 24 hours. */
+export const GYM_STAFF_PHOTOS_A_DAY = 20;
 /** Reported posts the staff list carries, longest waiting first. */
 export const GYM_POST_REPORTS_SHOWN = 50;
 /** The words a person may type beside their reason for a report, by `postLength`. */
@@ -240,7 +245,7 @@ export const gymPostDraftFileSchema = z
     version: z.literal(1),
     postKey: z.string().uuid(),
     body: z.string().max(GYM_POST_DRAFT_MOST),
-    photos: z.array(z.string().regex(/^[0-9a-f-]{36}\.jpg$/)).max(GYM_POST_MAX_PHOTOS),
+    photos: z.array(z.string().regex(/^[0-9a-f-]{36}\.webp$/)).max(GYM_POST_MAX_PHOTOS),
   })
   .strict();
 export type GymPostDraftFile = z.infer<typeof gymPostDraftFileSchema>;
@@ -423,11 +428,13 @@ export const GYM_POST_WORDS = {
   /** `hours`: whole hours until the oldest of the counted posts is 24 hours old. */
   day_full: (hours: number): string =>
     `You've posted ${String(GYM_MEMBER_POSTS_A_DAY)} times in the last 24 hours, which is the most allowed. You can post again ${againIn(hours)}.`,
-  /** `hasWords`: the post has words that could go without its photos. */
-  photo_day_full: (hours: number, hasWords: boolean): string =>
-    hasWords
-      ? `You've posted photos ${String(GYM_MEMBER_PHOTO_POSTS_A_DAY)} times in the last 24 hours, which is the most allowed. Take the photos off to post the words now, or post photos again ${againIn(hours)}.`
-      : `You've posted photos ${String(GYM_MEMBER_PHOTO_POSTS_A_DAY)} times in the last 24 hours, which is the most allowed. You can post photos again ${againIn(hours)}.`,
+  /** A post whose photos do not fit: `used` already posted of the `most` allowed; `hasWords`: it has words that could go without its photos. */
+  photo_day_full: (who: "You've" | "The gym has", used: number, most: number, hours: number, hasWords: boolean): string =>
+    used < most
+      ? `${who} posted ${String(used)} of the ${String(most)} photos allowed in 24 hours. Take some off to post now, or post all of them ${againIn(hours)}.`
+      : hasWords
+        ? `${who} posted ${String(most)} photos in the last 24 hours, which is the most allowed. Take the photos off to post the words now, or post photos again ${againIn(hours)}.`
+        : `${who} posted ${String(most)} photos in the last 24 hours, which is the most allowed. You can post photos again ${againIn(hours)}.`,
   own_report: "This is your own post. You can remove it instead.",
   person_not_found: "This person isn't one of your members.",
   own_block: "This is your own post.",

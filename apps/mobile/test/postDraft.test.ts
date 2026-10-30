@@ -1,14 +1,14 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { GYM_POST_DRAFT_MOST, GYM_POST_PHOTO_MAX_BYTES } from "@app/shared";
+import { GYM_POST_DRAFT_MOST, GYM_POST_PHONE_PHOTO_MAX_BYTES } from "@app/shared";
 import { fromBase64, toBase64 } from "../src/screens/food/photo";
 import { draftFileText, hasWork, photoTrouble, postPhotoToSend, postedWords, readDraftFile } from "../src/screens/gym/postDraft";
 
 // A member's post on the phone (ROADMAP Stage 5 17b).
 
 /** Real phones' photos, each carrying the GPS position it was taken at (apps/api/test/fixtures/photos/README.md). */
-const PHOTOS = ["iphone16.jpg", "samsung-a56-meta.jpg", "pixel7-meta.jpg", "progressive-exif-between-scans.jpg"] as const;
+const PHOTOS = ["samsung-a56-meta.jpg", "pixel7-meta.jpg", "progressive-exif-between-scans.jpg"] as const;
 const photo = (name: string): Uint8Array => new Uint8Array(readFileSync(join(__dirname, "..", "..", "api", "test", "fixtures", "photos", name)));
 const latin = (b: Uint8Array): string => Buffer.from(b).toString("latin1");
 
@@ -42,8 +42,20 @@ describe("the worst thing: a post's photo never goes up saying where it was take
     expect(headersOf(original).length).toBeGreaterThan(header.length);
   });
 
+  it("a WebP, as the phone draws it, goes with none of the camera's tags", () => {
+    const original = photo("iphone16-exif.webp");
+    expect(latin(original)).toContain("EXIF");
+    expect(latin(original)).toContain("XMP ");
+    const read = postPhotoToSend(toBase64(original));
+    if (!read.ok) throw new Error(read.problem);
+    const sent = latin(fromBase64(read.base64) ?? new Uint8Array());
+    expect(sent.startsWith("RIFF")).toBe(true);
+    expect(sent).not.toContain("EXIF");
+    expect(sent).not.toContain("XMP ");
+  });
+
   it("sends nothing over the limit, so the next quality is tried", () => {
-    const large = new Uint8Array(GYM_POST_PHOTO_MAX_BYTES + 1);
+    const large = new Uint8Array(GYM_POST_PHONE_PHOTO_MAX_BYTES + 1);
     large.set(photo("samsung-a56-meta.jpg"));
     expect(postPhotoToSend(toBase64(large))).toEqual({ ok: false, problem: "too_big" });
   });
@@ -56,7 +68,7 @@ describe("the worst thing: a post's photo never goes up saying where it was take
 });
 
 const KEY = "a1111111-1111-4111-8111-111111111111";
-const NAME = "b1111111-1111-4111-8111-111111111111.jpg";
+const NAME = "b1111111-1111-4111-8111-111111111111.webp";
 
 describe("the post kept on the phone", () => {
   it("reads back what it wrote", () => {
@@ -71,7 +83,7 @@ describe("the post kept on the phone", () => {
     ["no key", JSON.stringify({ version: 1, body: "x", photos: [] })],
     ["another version", JSON.stringify({ version: 2, postKey: KEY, body: "x", photos: [] })],
     ["too many photos", JSON.stringify({ version: 1, postKey: KEY, body: "", photos: [NAME, NAME, NAME, NAME, NAME] })],
-    ["a photo's name that climbs out of its folder", JSON.stringify({ version: 1, postKey: KEY, body: "", photos: ["../../secrets.jpg"] })],
+    ["a photo's name that climbs out of its folder", JSON.stringify({ version: 1, postKey: KEY, body: "", photos: ["../../secrets.webp"] })],
     ["words past the most", JSON.stringify({ version: 1, postKey: KEY, body: "a".repeat(GYM_POST_DRAFT_MOST + 1), photos: [] })],
   ])("reads %s as no post", (_, text) => {
     expect(readDraftFile(text)).toBeNull();

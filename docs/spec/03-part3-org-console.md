@@ -4603,8 +4603,7 @@ for them and the safety tools of §15.3 are 19b-ii; video is 19b-iii.
 **As built in 19b-ii-a (2026-10-04): members post.** The Updates page carries a switch,
 **Members can post** (`gyms.members_can_post`, off to start, the tick's to change). While
 it is on, a live app member writes a post on their gym's Updates tab: the same words and
-photos as staff (`POST …/posts/mine`, one key a post), **10 in any 24 hours, 3 of them
-with photos** (Kd, RULINGS 2026-10-05; 429 `posts_photo_day_full`, "take the photos off to
+photos as staff (`POST …/posts/mine`, one key a post), **100 posts and 10 photos in any 24 hours; a gym's staff, all together, 20 photos and no daily limit on words** (Kd, 2026-10-30, `rulings/2026-10-30-17b.md`, replacing 10 posts, 3 with photos, of 2026-10-05; the counting below still reads "ten" and "photo post" for those; 429 `posts_photo_day_full`, "take the photos off to
 post the words now"; both refusals say the 24 hours and in about how many hours the next
 may be made, since a post from yesterday evening still counts this morning) counted in the database with the person's membership held (a removed
 post gives none of the ten back; a removed photo post, its files deleted, gives its photo

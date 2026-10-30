@@ -1,22 +1,22 @@
-import { GYM_POST_MAX_PHOTOS, GYM_POST_PHOTO_MAX_BYTES, cleanPhoto, gymPostDraftFileSchema, type GymPost, type GymPostDraftFile } from "@app/shared";
+import { GYM_POST_MAX_PHOTOS, GYM_POST_PHONE_PHOTO_MAX_BYTES, cleanPhoto, gymPostDraftFileSchema, type GymPost, type GymPostDraftFile } from "@app/shared";
 import { fromBase64, toBase64 } from "../food/photo";
 
 // A member's post on the phone (ROADMAP Stage 5 17b): its photos made small and rebuilt here, and the post kept
 // until the server has it. Pure: the screen draws the photos and holds the files.
 
-/** The qualities a photo is tried at until it fits, as the browser's. */
-export const POST_PHOTO_QUALITIES = [0.85, 0.7, 0.55] as const;
+/** The qualities a photo is tried at until it fits. */
+export const POST_PHOTO_QUALITIES = [0.75, 0.6, 0.45] as const;
 
 export type PostPhotoReading = { ok: true; base64: string } | { ok: false; problem: "too_big" | "unreadable" };
 
-/** The photo as it goes up: the JPEG the phone drew, rebuilt by the shared cleaner from the parts that draw the
+/** The photo as it goes up: the picture the phone drew, rebuilt by the shared cleaner from the parts that draw the
  *  picture, so no tag of the camera's (where and when it was taken) can go with it, whatever the drawing kept. */
 export function postPhotoToSend(base64: string): PostPhotoReading {
   const bytes = fromBase64(base64);
   if (bytes === null) return { ok: false, problem: "unreadable" };
-  const cleaned = cleanPhoto(bytes, GYM_POST_PHOTO_MAX_BYTES);
+  const cleaned = cleanPhoto(bytes, GYM_POST_PHONE_PHOTO_MAX_BYTES);
   if (!cleaned.ok) return { ok: false, problem: cleaned.problem === "too_big" ? "too_big" : "unreadable" };
-  return cleaned.type === "image/jpeg" ? { ok: true, base64: toBase64(cleaned.bytes) } : { ok: false, problem: "unreadable" };
+  return { ok: true, base64: toBase64(cleaned.bytes) };
 }
 
 export type DraftPost = Omit<GymPostDraftFile, "version">;

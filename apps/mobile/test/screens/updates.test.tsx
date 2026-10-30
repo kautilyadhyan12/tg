@@ -1245,14 +1245,14 @@ describe("posting", () => {
     expect(screen.getByRole("button", { name: "Add photos" })).toBeEnabled();
   });
 
-  it("draws a photo no longer than 1,600 px, and says when one cannot be opened", async () => {
+  it("draws a photo no longer than 1,080 px, and says when one cannot be opened", async () => {
     const server = serverOf({ [postsOf(IRON)]: on(IRON) });
     await openUpdates(server.ask, IRON);
     await fireEvent.press(await page().findByRole("button", { name: "Write a post" }));
     picker.next = SHOT;
     await fireEvent.press(await screen.findByRole("button", { name: "Add photos" }));
     await screen.findByTestId("draft-photo-1");
-    expect(drawing.sizes.at(-1)).toEqual({ width: 1200, height: 1600 });
+    expect(drawing.sizes.at(-1)).toEqual({ width: 810, height: 1080 });
     drawing.fails = true;
     await fireEvent.press(screen.getByRole("button", { name: "Add photos" }));
     expect(await screen.findByText("1 photo couldn't be opened. Choose another one.")).toBeTruthy();

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { launchImageLibraryAsync } from "expo-image-picker";
-import { GYM_POST_DRAFT_MOST, GYM_POST_MAX_PHOTOS, GYM_POST_PHOTO_SEND_SIDE, gymPostResponseSchema, type GymPost } from "@app/shared";
+import { GYM_POST_DRAFT_MOST, GYM_POST_MAX_PHOTOS, GYM_POST_PHONE_PHOTO_SIDE, gymPostResponseSchema, type GymPost } from "@app/shared";
 import { Button } from "../../look/Button";
 import { colours, sizes } from "../../look/colours";
 import { Field } from "../../look/Field";
@@ -11,7 +11,7 @@ import { Sheet } from "../../look/Sheet";
 import { ASK_MOST } from "../../look/sizing";
 import { Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
-import { JPEG_QUALITY, fitWithin } from "../food/photo";
+import { fitWithin } from "../food/photo";
 import { newRequestKey } from "./classesView";
 import { POST_PHOTO_QUALITIES, draftFileText, hasWork, photoTrouble, postHint, postPhotoToSend, postedWords, readDraftFile, type DraftPost, type PostPhotoReading } from "./postDraft";
 import { draftFolder } from "./postDraftFiles";
@@ -25,17 +25,17 @@ import { addOwnPath, canPost, charsLine, couldNotRead, missingThing, pressFailed
 /** A post of four photos on a slow connection is given this long. */
 const SEND_WAIT_MS = 120_000;
 
-/** A photo drawn no longer than 1,600 px on its longest side as a JPEG, at the first quality that fits, and rebuilt
+/** A photo drawn no longer than 1,080 px on its longest side as a WebP, at the first quality that fits, and rebuilt
  *  by the cleaner. The first drawing turns it the way up the camera said. */
 async function drawnForPost(uri: string): Promise<PostPhotoReading> {
   const upright = await ImageManipulator.manipulate(uri).renderAsync();
-  const size = fitWithin(upright.width, upright.height, GYM_POST_PHOTO_SEND_SIDE);
+  const size = fitWithin(upright.width, upright.height, GYM_POST_PHONE_PHOTO_SIDE);
   let last: PostPhotoReading = { ok: false, problem: "unreadable" };
   for (const quality of POST_PHOTO_QUALITIES) {
     const context = ImageManipulator.manipulate(upright);
     if (size.width !== upright.width || size.height !== upright.height) context.resize(size);
     const small = await context.renderAsync();
-    const saved = await small.saveAsync({ format: SaveFormat.JPEG, compress: Math.min(quality, JPEG_QUALITY), base64: true });
+    const saved = await small.saveAsync({ format: SaveFormat.WEBP, compress: quality, base64: true });
     last = postPhotoToSend(saved.base64 ?? "");
     if (last.ok || last.problem !== "too_big") return last;
   }
@@ -117,7 +117,7 @@ export function useKeptPost(me: string | null, gymId: string): KeptPost {
     addPhoto: async (base64) => {
       const here = folder.current;
       if (here === null) return false;
-      const name = `${newRequestKey()}.jpg`;
+      const name = `${newRequestKey()}.webp`;
       if (current().photos.length >= GYM_POST_MAX_PHOTOS) return false;
       try {
         await inTurn(() => {

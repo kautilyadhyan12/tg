@@ -405,15 +405,26 @@ export async function countMemberPostsSince(sql: SqlOrTx, gymId: string, userId:
   return rows[0] ?? { n: 0, oldest: null };
 }
 
-/** Of those, the posts that carry photos now. A removed post's photos are deleted with it,
- *  whoever removed it, so it is not counted here: the day's ten above are what stop
+/** When each of a member's photos still here was posted, oldest first. A removed post's photos are
+ *  deleted with it, whoever removed it, so they are not counted: the day's posts above are what stop
  *  post-and-remove, and staff stop a person whose photos they keep taking down. */
-export async function countMemberPhotoPostsSince(sql: SqlOrTx, gymId: string, userId: string, since: Date): Promise<Counted> {
-  const rows = await sql<Counted[]>`
-    SELECT count(*)::int AS n, min(p.created_at) AS oldest FROM gym_posts p
+export async function memberPhotoTimesSince(sql: SqlOrTx, gymId: string, userId: string, since: Date): Promise<Date[]> {
+  const rows = await sql<{ createdAt: Date }[]>`
+    SELECT p.created_at AS "createdAt" FROM gym_posts p
+    JOIN gym_post_photos ph ON ph.gym_id = p.gym_id AND ph.post_id = p.id
     WHERE p.author_user_id = ${userId} AND p.gym_id = ${gymId} AND p.by_member AND p.created_at > ${since}
-      AND EXISTS (SELECT 1 FROM gym_post_photos ph WHERE ph.gym_id = p.gym_id AND ph.post_id = p.id)`;
-  return rows[0] ?? { n: 0, oldest: null };
+    ORDER BY p.created_at`;
+  return rows.map((r) => r.createdAt);
+}
+
+/** The same for the photos a gym's staff have posted, all of them together. */
+export async function staffPhotoTimesSince(sql: SqlOrTx, gymId: string, since: Date): Promise<Date[]> {
+  const rows = await sql<{ createdAt: Date }[]>`
+    SELECT p.created_at AS "createdAt" FROM gym_posts p
+    JOIN gym_post_photos ph ON ph.gym_id = p.gym_id AND ph.post_id = p.id
+    WHERE p.gym_id = ${gymId} AND NOT p.by_member AND p.removed_at IS NULL AND p.created_at > ${since}
+    ORDER BY p.created_at`;
+  return rows.map((r) => r.createdAt);
 }
 
 /** Marks a member's own post removed; false when it is not theirs, or was removed already. */
