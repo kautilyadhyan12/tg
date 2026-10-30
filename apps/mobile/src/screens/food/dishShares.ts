@@ -32,6 +32,14 @@ export function wholeDishEdits(items: readonly MealItem[], dishId: string, fill:
   });
 }
 
+/** A logged meal's one dish undone: each food of the lists at the grams it had before (`before`, by
+ *  place, where this box still knows them), else at the grams it weighs now. */
+export function wholeDishOffEdits(items: readonly MealItem[], before: readonly number[] | null): MealEditItem[] {
+  return items.map((it, i): MealEditItem =>
+    it.nutritionSource === "own" ? { from: i } : { from: i, canonical: it.canonical, grams: Math.max(1, Math.round(before?.[i] ?? it.gramsPoint)) },
+  );
+}
+
 /** The one dish every food of the lists is a part of, as the photo's meal holds them now; null where
  *  they are not all one dish at one fill. */
 export function sharedDish(amounts: readonly { measure: string; amount: string; share?: number | undefined }[]): { id: string; fill: number } | null {

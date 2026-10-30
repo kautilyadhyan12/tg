@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { MealItem, MealPhotoAnalysis } from "@app/shared";
 import { basketName, basketNumbers, foodsWords } from "../src/screens/food/basket";
-import { sharedDish, sharedDishOfItems, sharesOf, wholeDishEdits } from "../src/screens/food/dishShares";
+import { sharedDish, sharedDishOfItems, sharesOf, wholeDishEdits, wholeDishOffEdits } from "../src/screens/food/dishShares";
 import { chosenItem, dishMeasure, loggedAmount } from "../src/screens/food/measures";
 import { newSheet, sheetItems, withRowAmount, withRowFood, withSharesAsGrams, withWholeDish } from "../src/screens/food/photo";
 
@@ -78,6 +78,12 @@ describe("a logged meal eaten from one dish", () => {
       { from: 2, canonical: "dal", dishwareId: BOWL, fillLevel: 1, share: 0.25 },
     ]);
     expect(wholeDishEdits([item("Taco", "own_taco", 150, "own")], BOWL, 1)).toBeNull();
+  });
+
+  it("undone, each food goes back to the grams it had, or stays where it is if they are not known; the own food is kept", () => {
+    const items = [item("Rice", "rice", 150), item("Taco", "own_taco", 150, "own"), item("Dal", "dal", 50)];
+    expect(wholeDishOffEdits(items, [300, 150, 80])).toEqual([{ from: 0, canonical: "rice", grams: 300 }, { from: 1 }, { from: 2, canonical: "dal", grams: 80 }]);
+    expect(wholeDishOffEdits(items, null)).toEqual([{ from: 0, canonical: "rice", grams: 150 }, { from: 1 }, { from: 2, canonical: "dal", grams: 50 }]);
   });
 });
 

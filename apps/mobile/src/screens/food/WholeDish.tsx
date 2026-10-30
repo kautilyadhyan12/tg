@@ -50,7 +50,7 @@ function useLastDish(dishes: ReturnType<typeof useDishes>["dishes"]): PickDish {
 }
 
 /** The dishes and the filled pictures. `held`: why it cannot be used yet, said in place of the pictures. */
-export function WholeDish({ applied, held, onUse }: { applied: DishShown | null; held: string | null; onUse: (picked: DishPicked) => void }) {
+export function WholeDish({ applied, held, onUse, onClear }: { applied: DishShown | null; held: string | null; onUse: (picked: DishPicked) => void; onClear: () => void }) {
   const { dishes, again } = useDishes();
   // A dish of the person's own, made here as in a food's own box.
   const [making, setMaking] = useState(false);
@@ -58,8 +58,20 @@ export function WholeDish({ applied, held, onUse }: { applied: DishShown | null;
   const offered = dishesOffered(dishes);
   const shown = applied === null ? null : (offered.find((d) => d.id === applied.id) ?? (applied.name === undefined ? null : dishByName(dishes, applied.name)));
   const [picked, setPicked] = useState<PickDish | null>(null);
-  const dish = picked ?? shown ?? last;
-  const on = (fill: number): boolean => applied !== null && shown !== null && shown.id === dish.id && applied.fill === fill;
+  // A lit dish or a lit picture tapped again is unselected (Kd's click-through, 2026-10-30).
+  const [cleared, setCleared] = useState(false);
+  const dish = cleared ? null : (picked ?? shown ?? last);
+  const on = (fill: number): boolean => applied !== null && shown !== null && shown.id === dish?.id && applied.fill === fill;
+  const tapDish = (d: PickDish) => {
+    if (dish?.id !== d.id) {
+      setCleared(false);
+      setPicked(d);
+      return;
+    }
+    setCleared(true);
+    setPicked(null);
+    if (applied !== null && shown?.id === d.id) onClear();
+  };
   return (
     <View style={styles.box}>
       {/* A box of its own, lifted above the keyboard, as a food's own dishes are made. */}
@@ -78,11 +90,11 @@ export function WholeDish({ applied, held, onUse }: { applied: DishShown | null;
       </Txt>
       <View style={styles.chips}>
         {offered.map((d) => (
-          <Chip key={d.id} label={`${d.label} · ${String(d.volumeMl)} ml`} on={dish.id === d.id} onPress={() => { setPicked(d); }} />
+          <Chip key={d.id} label={`${d.label} · ${String(d.volumeMl)} ml`} on={dish?.id === d.id} onPress={() => { tapDish(d); }} />
         ))}
         <Chip label="New dish" icon="plus" on={false} onPress={() => { setMaking(true); }} />
       </View>
-      {held === null ? (
+      {dish === null ? null : held === null ? (
         <View style={styles.fills}>
           {FILL_CHOICES.map((f) => (
             <Pressable
@@ -90,7 +102,14 @@ export function WholeDish({ applied, held, onUse }: { applied: DishShown | null;
               accessibilityRole="button"
               accessibilityLabel={`${dish.label}, ${f.words}`}
               accessibilityState={{ selected: on(f.value) }}
-              onPress={() => { onUse({ dish, fill: f }); }}
+              onPress={() => {
+                if (!on(f.value)) {
+                  onUse({ dish, fill: f });
+                  return;
+                }
+                setPicked(dish);
+                onClear();
+              }}
               style={({ pressed }) => [styles.fill, on(f.value) ? styles.fillOn : null, pressed ? styles.pressed : null]}
             >
               <FillDish containerClass={dish.containerClass} fill={f.value} size={56} colour={on(f.value) ? "orange" : "text"} />

@@ -69,7 +69,7 @@ import { useKeptSheet } from "./food/PhotoSheetStore";
 import { holdWords } from "./food/numbers";
 import { basketName, basketNumbers, foodsWords, withBasketFood, type BasketFood, type BasketPick } from "./food/basket";
 import { OwnFood } from "./food/OwnFood";
-import { sharedDishOfItems, wholeDishEdits } from "./food/dishShares";
+import { sharedDishOfItems, wholeDishEdits, wholeDishOffEdits } from "./food/dishShares";
 import { WholeDish, type DishPicked } from "./food/WholeDish";
 import { OwnNumbers } from "./food/OwnNumbers";
 import {
@@ -677,6 +677,8 @@ function MealSheet({
   const { session } = useSession();
   const { outbox } = useMealOutbox();
   const [mode, setMode] = useState<Mode>({ kind: "foods" });
+  // What each food weighed before the one dish, so a second tap can put it back.
+  const gramsBeforeDish = useRef<number[] | null>(null);
   const [measures, setMeasures] = useState<FoodMeasure[][] | null>(null);
   const [full, setFull] = useState(false);
   const { height } = useWindowDimensions();
@@ -819,6 +821,7 @@ function MealSheet({
     if (saved === null) return;
     const items = wholeDishEdits(saved.items, dish.id, fill.value);
     if (items === null) return;
+    if (sharedDishOfItems(saved.items) === null) gramsBeforeDish.current = saved.items.map((it) => it.gramsPoint);
     void keep(
       {
         body: { items, itemsVersion: saved.itemsVersion, changeId: newGoalId() },
@@ -828,6 +831,22 @@ function MealSheet({
       },
       row.section,
       `${row.name} shared out over ${dish.label}, ${fill.words}.`,
+    );
+  };
+  const clearDish = () => {
+    if (saved === null) return;
+    const before = gramsBeforeDish.current?.length === saved.items.length ? gramsBeforeDish.current : null;
+    const items = wholeDishOffEdits(saved.items, before);
+    gramsBeforeDish.current = null;
+    void keep(
+      {
+        body: { items, itemsVersion: saved.itemsVersion, changeId: newGoalId() },
+        items: null,
+        totals: null,
+        foods: saved.items.map((it, i) => ({ name: foodTitle(it), amount: it.nutritionSource !== "own" ? `${String(Math.round(before?.[i] ?? it.gramsPoint))} g` : loggedAmount(it) })),
+      },
+      row.section,
+      `${row.name} is no longer shared out over one dish.`,
     );
   };
   return (
@@ -873,7 +892,7 @@ function MealSheet({
         );
       })}
       {held === null ? null : <Txt kind="small">{HELD_WORDS[held]}</Txt>}
-      {shareable ? <WholeDish applied={sharedDishOfItems(saved.items)} held={null} onUse={useDish} /> : null}
+      {shareable ? <WholeDish applied={sharedDishOfItems(saved.items)} held={null} onUse={useDish} onClear={clearDish} /> : null}
       </ScrollView>
       {fullWords}
       {row.totals === null ? null : (

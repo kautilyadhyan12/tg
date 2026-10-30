@@ -586,6 +586,28 @@ describe("a food the photo got wrong, and one no list has (Kd, 2026-10-30)", () 
     ]);
   });
 
+  it("a lit filled dish or a lit dish tapped again is unselected, and the foods go back to what the photo saw (Kd's click-through, 2026-10-30)", async () => {
+    await openFood({ meals: [], scans: [] });
+    await takePhoto();
+    await screen.findByText(/^340\skcal · /);
+    await fireEvent.press(screen.getByRole("button", { name: "Bowl, full" }));
+    await screen.findByRole("button", { name: "Change Toast, Part of Bowl, full · 125 g" });
+    expect(screen.getByRole("button", { name: "Bowl, full" }).props.accessibilityState).toMatchObject({ selected: true });
+    await fireEvent.press(screen.getByRole("button", { name: "Bowl, full" }));
+    expect(await screen.findByText("Back to the amounts the photo saw.")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Change Toast, 2 × slice · 60 g" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Bowl, full" }).props.accessibilityState).toMatchObject({ selected: false });
+    // The dish itself: lit, then none, its pictures gone; tapped again, back.
+    await fireEvent.press(screen.getByRole("button", { name: "Bowl, half full" }));
+    await screen.findByRole("button", { name: /^Change Toast, Part of Bowl/ });
+    await fireEvent.press(screen.getByRole("radio", { name: "Bowl · 375 ml" }));
+    expect(await screen.findByRole("button", { name: "Change Toast, 2 × slice · 60 g" })).toBeTruthy();
+    expect(screen.getByRole("radio", { name: "Bowl · 375 ml" }).props.accessibilityState).toMatchObject({ selected: false });
+    expect(screen.queryByRole("button", { name: "Bowl, full" })).toBeNull();
+    await fireEvent.press(screen.getByRole("radio", { name: "Bowl · 375 ml" }));
+    expect(screen.getByRole("button", { name: "Bowl, full" })).toBeTruthy();
+  });
+
   it("a food left without how full its dish was is named, in red, and the meal waits for it", async () => {
     await openFood({ meals: [], scans: [] });
     await takePhoto();

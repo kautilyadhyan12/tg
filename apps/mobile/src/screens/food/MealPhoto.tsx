@@ -50,6 +50,7 @@ import {
   withRowAmount,
   withRowFood,
   withWholeDish,
+  withoutWholeDish,
   withSharesAsGrams,
   rowNeeds,
   type PhotoSheet,
@@ -534,6 +535,12 @@ function Review({
                 if (next === null) return;
                 keep(next);
                 setSaid(`Shared out over ${dish.label}, ${fill.words}.`);
+              }}
+              onClear={() => {
+                const next = withoutWholeDish(sheet, rowGrams);
+                if (next === null) return;
+                keep(next);
+                setSaid("Back to the amounts the photo saw.");
               }}
             />
           ) : null}

@@ -322,6 +322,21 @@ export function withSharesAsGrams(sheet: PhotoSheet, grams: readonly (number | n
   return next;
 }
 
+/** The one dish undone: each food the photo saw back at the amount it started at, and a food put in
+ *  its place at the grams it weighs now. Null while a weight is not known. */
+export function withoutWholeDish(sheet: PhotoSheet, grams: readonly (number | null)[]): PhotoSheet | null {
+  const next = withSharesAsGrams(sheet, grams);
+  if (next === null) return null;
+  return {
+    ...next,
+    amounts: next.amounts.map((a, i) => {
+      const item = sheet.analysis.items[i];
+      const seen = sheet.amounts[i]?.share !== undefined && (sheet.replaced[i] ?? null) === null;
+      return seen && item !== undefined ? startOf(item) : a;
+    }),
+  };
+}
+
 /** A food the photo missed: one the search found at the amount picked, or the person's own. */
 export const withExtra = (sheet: PhotoSheet, pick: PhotoSheetPick): PhotoSheet => ({ ...sheet, extras: [...sheet.extras, pick] });
 
