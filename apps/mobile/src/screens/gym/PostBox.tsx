@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Image, Linking, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
+import { Image, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
-import { launchCameraAsync, launchImageLibraryAsync, requestCameraPermissionsAsync, type ImagePickerResult } from "expo-image-picker";
+import { launchImageLibraryAsync } from "expo-image-picker";
 import { GYM_POST_DRAFT_MOST, GYM_POST_MAX_PHOTOS, GYM_POST_PHOTO_SEND_SIDE, gymPostResponseSchema, type GymPost } from "@app/shared";
 import { Button } from "../../look/Button";
 import { colours, sizes } from "../../look/colours";
@@ -15,6 +15,7 @@ import { JPEG_QUALITY, fitWithin } from "../food/photo";
 import { newRequestKey } from "./classesView";
 import { POST_PHOTO_QUALITIES, draftFileText, hasWork, photoTrouble, postHint, postPhotoToSend, postedWords, readDraftFile, type DraftPost, type PostPhotoReading } from "./postDraft";
 import { draftFolder } from "./postDraftFiles";
+import { PostCamera } from "./PostCamera";
 import { addOwnPath, canPost, charsLine, couldNotRead, missingThing, pressFailed } from "./updatesView";
 
 // A member writes a post on Updates (spec Part 3 §15.2; ROADMAP Stage 5 17b): words and up to four photos, in a box from
@@ -174,7 +175,8 @@ export function PostBox({ open, gymId, gymName, kept, mayPost, onClose, onPosted
   const { height } = useWindowDimensions();
   const [adding, setAdding] = useState(false);
   const [sending, setSending] = useState(false);
-  const [trouble, setTrouble] = useState<{ words: string; settings?: boolean } | null>(null);
+  const [trouble, setTrouble] = useState<string | null>(null);
+  const [camera, setCamera] = useState(false);
   const [refused, setRefused] = useState<string | null>(null);
   const [discarding, setDiscarding] = useState(false);
   const pressed = useRef(false);
@@ -192,15 +194,14 @@ export function PostBox({ open, gymId, gymName, kept, mayPost, onClose, onPosted
   const chars = charsLine(body);
   const room = GYM_POST_MAX_PHOTOS - photos.length;
 
-  const takeIn = async (picked: ImagePickerResult) => {
-    if (picked.canceled) return;
+  const takeIn = async (uris: readonly string[]) => {
     setAdding(true);
-    const fresh = picked.assets.slice(0, room);
+    const fresh = uris.slice(0, room);
     let unreadable = 0;
     let tooBig = 0;
-    for (const asset of fresh) {
+    for (const uri of fresh) {
       try {
-        const read = await drawnForPost(asset.uri);
+        const read = await drawnForPost(uri);
         if (!read.ok) {
           if (read.problem === "too_big") tooBig += 1;
           else unreadable += 1;
@@ -212,34 +213,18 @@ export function PostBox({ open, gymId, gymName, kept, mayPost, onClose, onPosted
       }
     }
     setAdding(false);
-    const words = photoTrouble({ unreadable, tooBig, left: picked.assets.length - fresh.length });
-    setTrouble(words === null ? null : { words });
+    setTrouble(photoTrouble({ unreadable, tooBig, left: uris.length - fresh.length }));
   };
 
   const fromGallery = async () => {
     setTrouble(null);
     setRefused(null);
     try {
-      await takeIn(await launchImageLibraryAsync({ mediaTypes: ["images"], quality: 1, exif: false, allowsMultipleSelection: room > 1, selectionLimit: room }));
+      const picked = await launchImageLibraryAsync({ mediaTypes: ["images"], quality: 1, exif: false, allowsMultipleSelection: room > 1, selectionLimit: room });
+      if (!picked.canceled) await takeIn(picked.assets.map((asset) => asset.uri));
     } catch {
       setAdding(false);
-      setTrouble({ words: "Couldn't open your photos. Try again." });
-    }
-  };
-
-  const fromCamera = async () => {
-    setTrouble(null);
-    setRefused(null);
-    try {
-      const allowed = await requestCameraPermissionsAsync();
-      if (!allowed.granted) {
-        setTrouble({ words: "Allow the camera in your phone's settings to take a photo.", settings: !allowed.canAskAgain });
-        return;
-      }
-      await takeIn(await launchCameraAsync({ mediaTypes: ["images"], quality: 1, exif: false }));
-    } catch {
-      setAdding(false);
-      setTrouble({ words: "Couldn't open the camera. Try again." });
+      setTrouble("Couldn't open your photos. Try again.");
     }
   };
 
@@ -326,15 +311,14 @@ export function PostBox({ open, gymId, gymName, kept, mayPost, onClose, onPosted
           {mayPost ? (
             <View style={styles.adds}>
               <Button label={adding ? "Adding…" : "Add photos"} kind="quiet" icon="image" disabled={adding || sending || room <= 0} onPress={() => void fromGallery()} />
-              <Button label="Take a photo" kind="quiet" icon="camera" disabled={adding || sending || room <= 0} onPress={() => void fromCamera()} />
+              <Button label="Take a photo" kind="quiet" icon="camera" disabled={adding || sending || room <= 0} onPress={() => {
+                  setTrouble(null);
+                  setRefused(null);
+                  setCamera(true);
+                }} />
             </View>
           ) : null}
-          {trouble === null ? null : (
-            <View style={styles.box}>
-              <Txt colour="text">{trouble.words}</Txt>
-              {trouble.settings === true ? <Button label="Open settings" kind="soft" small onPress={() => void Linking.openSettings()} /> : null}
-            </View>
-          )}
+          {trouble === null ? null : <Txt colour="text">{trouble}</Txt>}
           {refused === null ? null : <Txt colour="badText">{refused}</Txt>}
           {mayPost ? <Txt kind="small">{postHint(gymName)}</Txt> : null}
         </View>
@@ -376,6 +360,16 @@ export function PostBox({ open, gymId, gymName, kept, mayPost, onClose, onPosted
           ) : null}
         </View>
       )}
+      <PostCamera
+        open={camera}
+        onPhoto={(uri) => {
+          setCamera(false);
+          void takeIn([uri]);
+        }}
+        onClose={() => {
+          setCamera(false);
+        }}
+      />
     </Sheet>
   );
 }

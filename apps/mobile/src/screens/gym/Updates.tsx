@@ -946,7 +946,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   list: { paddingHorizontal: sizes.edge, gap: sizes.gap },
-  top: { gap: sizes.gap, marginBottom: sizes.gap },
+  top: { gap: sizes.gap, marginTop: 8, marginBottom: sizes.gap },
   box: { padding: 16, gap: 10 },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },
   grow: { flex: 1 },

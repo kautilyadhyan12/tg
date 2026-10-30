@@ -960,7 +960,10 @@ describe("reads that cross", () => {
 });
 
 // Posting (ROADMAP Stage 5 17b).
-const { picker } = jest.requireMock<{ picker: { next: unknown; opened: number; taken: number; cameraAllowed: { granted: boolean; canAskAgain: boolean } } }>("expo-image-picker");
+const { picker } = jest.requireMock<{ picker: { next: unknown; opened: number } }>("expo-image-picker");
+const { camera } = jest.requireMock<{ camera: { permission: unknown; afterAsk: unknown; pictures: number } }>("expo-camera");
+const GRANTED = { granted: true, canAskAgain: true, status: "granted", expires: "never" };
+const REFUSED = { granted: false, canAskAgain: false, status: "denied", expires: "never" };
 const { drawing } = jest.requireMock<{ drawing: { base64: string; sizes: { width: number; height: number }[]; fails: boolean } }>("expo-image-manipulator");
 const SHOT = { canceled: false, assets: [{ uri: "file:///p.jpg", width: 4000, height: 3000 }] };
 const manyShots = (n: number) => ({ canceled: false, assets: Array.from({ length: n }, (_, i) => ({ uri: `file:///p${String(i)}.jpg`, width: 4000, height: 3000 })) });
@@ -974,8 +977,9 @@ beforeEach(() => {
   for (const name of foldersUsed) new Directory(Paths.document, name).delete();
   picker.next = { canceled: true, assets: null };
   picker.opened = 0;
-  picker.taken = 0;
-  picker.cameraAllowed = { granted: true, canAskAgain: true };
+  camera.permission = GRANTED;
+  camera.afterAsk = GRANTED;
+  camera.pictures = 0;
   drawing.fails = false;
   drawing.sizes = [];
   drawing.base64 = realPhoto("pixel7-meta.jpg").toString("base64");
@@ -1255,20 +1259,23 @@ describe("posting", () => {
     expect(screen.queryByTestId("draft-photo-2")).toBeNull();
   });
 
-  it("the camera refused for good says so and opens settings; allowed, it adds the photo", async () => {
+  it("the camera refused for good offers settings; allowed, a photo taken in the app goes on the post", async () => {
     const server = serverOf({ [postsOf(IRON)]: on(IRON) });
     await openUpdates(server.ask, IRON);
     await fireEvent.press(await page().findByRole("button", { name: "Write a post" }));
-    picker.cameraAllowed = { granted: false, canAskAgain: false };
+    camera.permission = REFUSED;
     await fireEvent.press(await screen.findByRole("button", { name: "Take a photo" }));
-    expect(await screen.findByText("Allow the camera in your phone's settings to take a photo.")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Open settings" })).toBeTruthy();
-    expect(picker.taken).toBe(0);
-    picker.cameraAllowed = { granted: true, canAskAgain: true };
-    picker.next = SHOT;
+    expect(await screen.findByRole("button", { name: "Open settings" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Take photo" })).toBeDisabled();
+    await fireEvent.press(screen.getByLabelText("Close camera"));
+    expect(screen.queryByTestId("post-camera")).toBeNull();
+
+    camera.permission = GRANTED;
     await fireEvent.press(screen.getByRole("button", { name: "Take a photo" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Take photo" }));
     expect(await screen.findByTestId("draft-photo-1")).toBeTruthy();
-    expect(picker.taken).toBe(1);
+    expect(camera.pictures).toBe(1);
+    expect(screen.queryByTestId("post-camera")).toBeNull();
   });
 
   it("Post waits for something to post, and for words within the limit", async () => {
