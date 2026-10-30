@@ -16,31 +16,46 @@ export interface PackagedRow {
   numbersFit: boolean;
 }
 export interface OffRow extends PackagedRow {
+  /** Words of Open Food Facts' own list of allergens. Empty says nothing about the food. */
   allergens: string[];
   traces: string[];
+  /** Anything else in those two fields: what somebody typed, in their words. "gluten free" and
+   *  "de:Weizeneiweiß" alike, so it is shown as typed, never under Contains, and never dropped. */
+  listedAsTyped: string[];
 }
 export type RowRefusal = "bad_code" | "store_only" | "not_a_food" | "no_name" | "no_calories" | "out_of_bounds";
 export type RowResult = { row: OffRow } | { refused: RowRefusal; code: string | null };
 
 /** What the file's text may hold and a database or a screen may not: control characters (one real row
  *  has a NUL in the middle of its ingredients) and the line separators. */
-const clean = (text: string): string => text.replace(/[\p{Cc}\p{Zl}\p{Zp}]+/gu, " ").replace(/\s+/g, " ").trim();
+const clean = (text: string): string => text.replace(/[\p{Cc}\p{Cs}\p{Zl}\p{Zp}]+/gu, " ").replace(/\s+/g, " ").trim();
 const first = (value: string | string[] | undefined): string => (Array.isArray(value) ? (value[0] ?? "") : (value ?? ""));
 const round = (value: number, places: number): number => Number(value.toFixed(places));
 const figure = (figures: Record<string, number>, name: string): number | null => figures[name] ?? null;
 
-/** A tag or a word of Open Food Facts' list in plain words: "en:milk" and "milk" are "milk", and a word
- *  no list has heard of is kept, not dropped. "none" is no allergen: the list is simply empty. */
-export function allergenWords(tags: readonly string[]): string[] {
-  const words = tags.map((tag) =>
-    clean(tag.replace(/^[a-z]{2}:/i, ""))
-      .replace(/[^\p{L}\p{N} -]+/gu, "")
-      .replaceAll("-", " ")
-      .toLowerCase()
-      .trim()
-      .slice(0, 40),
-  );
-  return [...new Set(words)].filter((word) => word !== "" && word !== "none").slice(0, 30);
+/** Open Food Facts' own closed list of allergens (data/taxonomies/allergens.json, read 2026-10-30), the
+ *  rule that needs no word list of ours: a word on it is an allergen; "gluten free", "non", "sin gluten"
+ *  and every other thing somebody typed is not, however it reads. */
+const THEIR_ALLERGENS: ReadonlySet<string> = new Set(["apple", "banana", "beef", "celery", "chicken", "crustaceans", "eggs", "fish", "gelatin", "gluten", "kiwi", "lupin", "matsutake", "milk", "molluscs", "mustard", "nuts", "orange", "peach", "peanuts", "pork", "red caviar", "sesame seeds", "soybeans", "sulphur dioxide and sulphites", "yamaimo"]);
+
+/** A tag or a word in plain words: "en:milk" and "milk" are "milk". Marks are the vowels of Indian and
+ *  Thai words: without them दूध (milk) reads दध. Nothing a database's array or COPY needs escaped is left. */
+const plainWord = (tag: string): string =>
+  clean(tag.replace(/^[a-z]{2}:/i, "").replace(/&[a-z]+;/gi, " "))
+    .replace(/[^\p{L}\p{M}\p{N} -]+/gu, " ")
+    .replaceAll("-", " ")
+    .replace(/\s+/g, " ")
+    .toLowerCase()
+    .trim();
+
+/** One field's words, sorted by whose list they are on. "none" is on neither: the list is simply empty.
+ *  A word somebody typed may be a sentence, so it is given more room, and never cut mid-letter. */
+export function allergenLists(tags: readonly string[]): { listed: string[]; typed: string[] } {
+  const words = [...new Set(tags.map(plainWord))].filter((word) => word !== "" && word !== "none");
+  return {
+    listed: words.filter((word) => THEIR_ALLERGENS.has(word)),
+    typed: words.filter((word) => !THEIR_ALLERGENS.has(word)).slice(0, 30).map((word) => clean(word.slice(0, 120))),
+  };
 }
 
 /** How far a label's calories may be from what its protein, carbs, fat and alcohol come to (4, 4, 9
@@ -76,12 +91,15 @@ export function offRowOf(product: OffProduct): RowResult {
   const fiber = figure(f, "fiber_100g");
   // Physical bounds: pure fat is 884 kcal per 100 g, and nothing holds more than 100 g of anything in 100 g.
   if (kcal < 0 || kcal > 1000 || [protein, carbs, fat, fiber].some((v) => v !== null && (v < 0 || v > 100))) return { refused: "out_of_bounds", code };
-  const quantity = clean(product.quantity ?? "").slice(0, 40);
-  const serving = clean(product.servingSize ?? "").slice(0, 60);
+  // Cleaned again after each cut: a cut can leave half an emoji, which Postgres' JSON refuses.
+  const quantity = clean(clean(product.quantity ?? "").slice(0, 40));
+  const serving = clean(clean(product.servingSize ?? "").slice(0, 60));
+  const allergens = allergenLists(product.allergens);
+  const traces = allergenLists(product.traces);
   return {
     row: {
       code,
-      name: withBrand(rawName, clean(first(product.brands))),
+      name: clean(withBrand(rawName, clean(first(product.brands)))),
       kcal,
       proteinG: protein === null ? null : round(protein, 3),
       carbsG: carbs === null ? null : round(carbs, 3),
@@ -90,11 +108,15 @@ export function offRowOf(product: OffProduct): RowResult {
       servingSize: serving === "" ? null : serving,
       quantity: quantity === "" ? null : quantity,
       numbersFit: numbersFit(kcal, protein, carbs, fat, figure(f, "alcohol_100g")),
-      allergens: allergenWords(product.allergens),
-      traces: allergenWords(product.traces),
+      allergens: allergens.listed,
+      traces: traces.listed,
+      listedAsTyped: [...new Set([...allergens.typed, ...traces.typed])],
     },
   };
 }
+
+/** The files give alcohol in % by volume (756 of 756 figures on a real day), and alcohol weighs 0.789 g a ml. */
+const GRAMS_PER_VOL = 0.789;
 
 /** The CSV's columns the importer reads. A file without them has changed its shape, and is refused.
  *  The CSV mixes their estimates in with the labels' figures and cannot tell them apart (49 of a real
@@ -109,7 +131,7 @@ export function offProductOfCsv(index: ReadonlyMap<string, number>, cells: reado
   for (const name of CSV_FIGURES) {
     const text = cell(name).trim();
     const value = text === "" ? Number.NaN : Number(text);
-    if (Number.isFinite(value)) figures[name] = value;
+    if (Number.isFinite(value)) figures[name] = name === "alcohol_100g" ? value * GRAMS_PER_VOL : value;
   }
   return offProductSchema.parse({
     code: cell("code").trim(),
@@ -139,16 +161,20 @@ export function offProductOfDaily(line: OffDailyLine): OffProduct {
       if (one.source === "estimate" || one.value === undefined) continue;
       if (name === "energy-kcal") figures["energy-kcal_100g"] = one.value;
       else if (name === "energy-kj") figures["energy_100g"] = one.value;
+      else if (name === "alcohol") figures["alcohol_100g"] = one.value * (one.unit === "g" ? 1 : GRAMS_PER_VOL);
       else {
         const toGrams = GRAMS_PER[one.unit ?? ""];
         if (toGrams !== undefined) figures[`${name}_100g`] = one.value * toGrams;
       }
     }
   }
+  // A real day's 153 products have no plain name and one in a language: English, else the first there is.
+  const inLanguage = Object.entries(line).filter((entry): entry is [string, string] => /^product_name_[a-z]{2}$/.test(entry[0]) && typeof entry[1] === "string" && entry[1].trim() !== "");
+  const namedInLanguage = inLanguage.find(([key]) => key === "product_name_en")?.[1] ?? inLanguage[0]?.[1];
+  const plainName = clean(first(line.product_name ?? undefined)) || clean(first(line.generic_name ?? undefined));
   return offProductSchema.parse({
     code: String(line.code).trim(),
-    name: line.product_name ?? undefined,
-    genericName: line.generic_name ?? undefined,
+    name: plainName === "" ? namedInLanguage : plainName,
     brands: line.brands ?? undefined,
     servingSize: line.serving_size ?? undefined,
     quantity: line.quantity ?? undefined,
@@ -206,6 +232,9 @@ export interface PackagedFood {
   food: FoodReference;
   allergens: string[];
   mayContain: string[];
+  listedAsTyped: string[];
+  /** Open Food Facts' licence asks for its notice where its words show, whoever gave the numbers. */
+  allergensFrom: "openfoodfacts" | null;
   check: PackagedCheck;
 }
 
@@ -222,7 +251,9 @@ export function packagedFoodOf(off: OffRow | null, usda: PackagedRow | null): Pa
   const numbers: PackagedRow = off === null || usda === null ? only : apart || (!off.numbersFit && usda.numbersFit) ? usda : off;
   const source: NutritionSource = numbers === off ? "openfoodfacts" : "usda";
   const serving = servingOf(numbers.servingSize ?? undefined);
-  const missing = numbers.kcal > 0 && (numbers.proteinG === null || numbers.carbsG === null || numbers.fatG === null);
+  // At 0 kcal too: a blank panel is how a chicken fillet reads as 0. Water is told to check the pack,
+  // which does no harm.
+  const missing = numbers.proteinG === null || numbers.carbsG === null || numbers.fatG === null;
   return {
     food: {
       canonical: `pack_${numbers.code}`,
@@ -239,6 +270,8 @@ export function packagedFoodOf(off: OffRow | null, usda: PackagedRow | null): Pa
     },
     allergens: off?.allergens ?? [],
     mayContain: off?.traces ?? [],
+    listedAsTyped: off?.listedAsTyped ?? [],
+    allergensFrom: off === null ? null : "openfoodfacts",
     check: apart ? "lists_differ" : !numbers.numbersFit ? "doesnt_add_up" : missing ? "part_missing" : "fine",
   };
 }

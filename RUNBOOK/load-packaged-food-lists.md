@@ -37,8 +37,10 @@ checked against the CSV on 2026-10-30 (`handoff/2026-10-30-33b-iii-a.md`). Check
 **Then switch on the nightly update.** On the worker, `PACKAGED_FOOD_UPDATES=on` and
 `OPEN_FOOD_FACTS_CONTACT=<the app's address>`: their page asks for "AppName/Version (ContactEmail)".
 It runs at 04:37. A file it refuses (mostly unusable, or not their shape) changes nothing and reaches
-Sentry as a failed job; the next night tries again. Their list of files keeps two weeks: the log line
-`packaged.update_gap` means days were missed, and this page's import puts them right.
+Sentry as a failed job; the next night tries again. A refused file holds back the days after it, so a
+second night of the same refusal means reading it, and this page's import. Their list of files keeps two
+weeks: the log line `packaged.update_gap` means days were missed, and the import puts them right. The
+import forgets the days after two days before it, so the update applies those again.
 
 **Licence.** ODbL 1.0 for Open Food Facts: the notice under the foods stays (section 4.3), and because
 our copy is filtered, a free public file must give the method of making it (section 4.6). That is owed

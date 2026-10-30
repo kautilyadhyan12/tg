@@ -37,6 +37,7 @@ import {
   isOwnFood,
   classifyBarcode,
   type BarcodeReply,
+  type MoreNutrients,
 } from "@app/shared";
 import type { RedisLike } from "../../redis.js";
 import { onMealLogged } from "../gamification/service.js";
@@ -49,7 +50,7 @@ import { foodWeek, spanDays } from "./foodWeek.js";
 import { CURATED_FOODS, curatedPieceFdcId, curatedUsdaFdcId, findCurated, findCuratedVersions, holdsEveryWord, searchCurated, slug } from "./foods.js";
 import { GRAM, dishwareGrams, foodMeasures, gramsPerMl, measureGrams, scanStart, startingMeasure, type UsdaPortion } from "./measures.js";
 import type { FoodReference, FoodSearchProvider } from "./openfoodfacts.adapter.js";
-import { packagedRowsFor } from "./packagedRepo.js";
+import { packagedRowsFor, packagedRowsForCodes } from "./packagedRepo.js";
 import { isPackagedCanonical, packagedCode, packagedFoodOf, type PackagedFood } from "./packagedRows.js";
 import { itemsVersion, ownPer100g, savedPlaces } from "./mealEdit.js";
 import { RECENT_MEALS_READ, recentFoods, type RecentPick } from "./recentFoods.js";
@@ -263,7 +264,29 @@ async function canonicalCached(deps: NutritionDeps, canonical: string): Promise<
   }
 }
 
+/** What their live search found, each product our own copy holds as the copy has it, so a pick is
+ *  priced as it was shown (a real case: Amy's quinoa read 106 kcal live and 18 on the list). One read of
+ *  each list for the page. Until 33b-iii-d, when nothing is asked live. */
+async function asListed(deps: NutritionDeps, foods: FoodReference[]): Promise<FoodReference[]> {
+  const codes = foods.flatMap((food) => {
+    const code = packagedCode(food.canonical);
+    const kind = code === null ? null : classifyBarcode(code);
+    return kind?.kind === "product" ? [{ canonical: food.canonical, code: kind.code }] : [];
+  });
+  if (codes.length === 0) return foods;
+  const rows = await packagedRowsForCodes(deps.sql, codes.map((c) => c.code));
+  return foods.map((food) => {
+    const code = codes.find((c) => c.canonical === food.canonical)?.code;
+    const held = code === undefined ? null : packagedFoodOf(rows.off.get(code) ?? null, rows.usda.get(code) ?? null);
+    return held === null ? food : { ...held.food, canonical: food.canonical };
+  });
+}
+
 async function cachedExternal(deps: NutritionDeps, query: string, limit: number): Promise<FoodReference[]> {
+  return await asListed(deps, await liveSearch(deps, query, limit));
+}
+
+async function liveSearch(deps: NutritionDeps, query: string, limit: number): Promise<FoodReference[]> {
   const key = `food:off:${digest(`${query.toLowerCase()}:${String(limit)}`)}`;
   const cached = await deps.redis.get(key);
   if (cached !== null) {
@@ -342,7 +365,8 @@ export async function recentFoodsOf(deps: NutritionDeps, userId: string): Promis
   for (const pick of recentFoods(await repo.newestMealItems(deps.sql, userId, RECENT_MEALS_READ))) {
     // Found by its own name in our tables or the cache only: never searched for outside, where a
     // product of a similar name would be listed as the person's food.
-    const food = await foodOfItem(deps, pick.item, pick.canonical, false);
+    // A packaged product no list holds any more is not offered again: nothing would price it.
+    const food = isPackagedCanonical(pick.canonical) ? await findFood(deps, pick.canonical, false) : await foodOfItem(deps, pick.item, pick.canonical, false);
     if (food !== null) found.push({ pick, food });
   }
   const measures = await measuresOf(deps, found.map((f) => f.food));
@@ -379,7 +403,7 @@ async function searchFoodReferences(deps: NutritionDeps, query: string, limit: n
  *  of the USDA table's; the entry it cites, for one of our list's; none for a
  *  packaged product or a scan's estimate. */
 const measuresEntry = (food: FoodReference): number | null =>
-  food.source === "usda" && !isPackagedCanonical(food.canonical) ? repo.usdaFdcId(food.canonical) : food.source === "curated" ? curatedUsdaFdcId(food.canonical) : null;
+  food.source === "usda" ? repo.usdaFdcId(food.canonical) : food.source === "curated" ? curatedUsdaFdcId(food.canonical) : null;
 
 /** The USDA entry a food of our list borrows its pieces from (`PIECE_ENTRIES`), or null. */
 const piecesEntry = (food: FoodReference): number | null => (food.source === "curated" ? curatedPieceFdcId(food.canonical) : null);
@@ -549,7 +573,7 @@ export async function barcodeLookup(deps: NutritionDeps, raw: string): Promise<B
   if (found === null) return { status: "not_found", code: kind.code };
   const [food] = await withMeasures(deps, [found.food]);
   if (food === undefined) throw new Error("withMeasures returns one food for each it is given");
-  return { status: "found", code: kind.code, food, allergens: found.allergens, mayContain: found.mayContain, check: found.check };
+  return { status: "found", code: kind.code, food, allergens: found.allergens, mayContain: found.mayContain, listedAsTyped: found.listedAsTyped, allergensFrom: found.allergensFrom, check: found.check };
 }
 
 async function findFood(deps: NutritionDeps, query: string, search = true): Promise<FoodReference | null> {
@@ -646,7 +670,9 @@ function nutritionItem(
     fatG: round1(food.fatG * scale),
     // An estimate has no table to be priced again from, so its item carries its
     // figures, and the saved meal can change its grams later (patchMeal).
-    ...(food.source === "estimate" ? { per100g: { kcal: food.kcal, proteinG: food.proteinG, carbsG: food.carbsG, fatG: food.fatG } } : {}),
+    // So does a packaged product: its list changes nightly, and a later change of amount must not
+    // re-price what was eaten, or fail if the product has left the list.
+    ...(food.source === "estimate" || isPackagedCanonical(food.canonical) ? { per100g: { kcal: food.kcal, proteinG: food.proteinG, carbsG: food.carbsG, fatG: food.fatG } } : {}),
     ...(measure === null ? {} : { measure }),
     more: moreForGrams(food.more ?? MORE_NOT_KNOWN, gramsPoint),
   };
@@ -1544,6 +1570,13 @@ const scanFiguresOf = (item: MealItem): Per100g | null =>
     : item.nutritionSource === "own" ? (item.scanEstimate ?? null)
       : null;
 
+/** A saved item's ten further figures back to per 100 g. */
+function morePer100g(item: MealItem): MoreNutrients {
+  const saved = item.more;
+  if (saved === undefined || item.gramsPoint <= 0) return MORE_NOT_KNOWN;
+  return moreNutrientsSchema.parse(Object.fromEntries(Object.entries(saved).map(([key, value]) => [key, value === null ? null : (value * 100) / item.gramsPoint])));
+}
+
 /** A saved item's food by figures it carries — never by anything a request sends:
  *  weighed by grams and ounces alone, as a scan's estimate is. With no figures it
  *  prices nothing, and only an item priced by the person's own numbers stands on it
@@ -1559,7 +1592,15 @@ const savedFood = (item: MealItem, figures: Per100g | null): FoodReference => ({
  *  its table's entry, as when it was saved; null where no table has it now. */
 async function foodOfItem(deps: NutritionDeps, item: MealItem | undefined, canonical: string, search = true): Promise<FoodReference | null> {
   const scanned = item === undefined ? null : scanFiguresOf(item);
-  return item !== undefined && scanned !== null ? savedFood(item, scanned) : await findFood(deps, canonical, search);
+  if (item !== undefined && scanned !== null) return savedFood(item, scanned);
+  const now = await findFood(deps, canonical, search);
+  const source = item?.canonical === canonical && isPackagedCanonical(canonical) ? item.nutritionSource : null;
+  const figures = item?.per100g;
+  if (item === undefined || figures === undefined || (source !== "openfoodfacts" && source !== "usda")) return now;
+  // The same packaged product at a new amount: the figures it was saved at, by today's measures where
+  // the list still has it, and its ten further figures grown from the saved ones.
+  const base = now ?? savedFood(item, figures);
+  return { ...base, canonical, name: item.name, ...figures, source, more: morePer100g(item) };
 }
 
 /** The person's own numbers an edited food is priced by, per 100 g, or null for its

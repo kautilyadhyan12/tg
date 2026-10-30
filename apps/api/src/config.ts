@@ -190,6 +190,10 @@ export type AppConfig = Readonly<z.infer<typeof envSchema>>;
 
 export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
   const parsed = envSchema
+    .refine((c) => !c.PACKAGED_FOOD_UPDATES || c.OPEN_FOOD_FACTS_CONTACT !== undefined, {
+      path: ["OPEN_FOOD_FACTS_CONTACT"],
+      message: "OPEN_FOOD_FACTS_CONTACT is required when PACKAGED_FOOD_UPDATES is on (their page asks every app for a contact)",
+    })
     .refine((c) => c.NODE_ENV !== "production" || c.REDIS_URL !== undefined, {
       path: ["REDIS_URL"],
       message: "REDIS_URL is required in production (quotas/entitlement cache)",

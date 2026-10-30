@@ -4,6 +4,7 @@ import { createReadStream, readdirSync } from "node:fs";
 import { basename, join } from "node:path";
 import { createGunzip } from "node:zlib";
 import { linesOf, rowOfJsonLine } from "../src/modules/nutrition/packagedSync.js";
+import { classifyBarcode } from "@app/shared";
 import { OFF_CSV_COLUMNS, offProductOfCsv, offRowOf, usdaRowOf, type RowRefusal, type RowResult } from "../src/modules/nutrition/packagedRows.js";
 
 export type Refusals = Record<RowRefusal, number>;
@@ -114,8 +115,11 @@ export async function* usdaRowsOfDir(dir: string): AsyncGenerator<RowResult> {
       continue;
     }
     const at = (name: string): string => r[head?.get(name) ?? -1] ?? "";
-    const code = at("gtin_upc").trim();
-    if (code === "") continue;
+    const raw = at("gtin_upc").trim();
+    if (raw === "") continue;
+    // One product under one key, however USDA wrote it: 23,128 products are written two ways.
+    const kind = classifyBarcode(raw);
+    const code = kind.kind === "product" ? kind.code : raw;
     const date = at("modified_date") || at("available_date");
     const held = newest.get(code);
     if (held !== undefined && date < held.date) continue;

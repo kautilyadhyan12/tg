@@ -41,10 +41,13 @@ export const offProducts = pgTable(
   "off_products",
   {
     ...productColumns,
-    /** The allergens and "may contain" Open Food Facts lists, in plain words. Empty says nothing
+    /** The allergens and "may contain" of Open Food Facts' own list of allergens. Empty says nothing
      *  about the food: most products have neither. */
     allergens: text("allergens").array().notNull(),
     traces: text("traces").array().notNull(),
+    /** Anything else in those fields, as somebody typed it: "gluten free", "weizeneiweiß". Shown as
+     *  typed, never as an allergen. */
+    listedAsTyped: text("listed_as_typed").array().notNull(),
   },
   (t) => [check("off_products_kcal_check", sql`${t.kcal} >= 0 AND ${t.kcal} <= 1000`)],
 );

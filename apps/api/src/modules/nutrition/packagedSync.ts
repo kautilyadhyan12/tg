@@ -1,33 +1,49 @@
 // The nightly update of our copy of Open Food Facts (ROADMAP Stage 5 33b-iii-a), run by the worker. It
 // reads their daily change files, oldest first. No member's request ever waits on this or reaches them.
 //
-// A bad file must never empty the list: a file that reads as mostly unusable, or as not their shape, is
-// refused whole, yesterday's rows stay, and Sentry hears. Each file is one transaction; a second run
-// finds its name recorded and changes nothing.
+// A bad file must never empty the list: a file that reads as mostly unusable, that would remove more
+// than any day does, or that is not their shape is refused whole, yesterday's rows stay, and Sentry
+// hears. Each file is one transaction; a second run finds its name recorded and changes nothing.
 import { createGunzip } from "node:zlib";
-import { Readable } from "node:stream";
+import { Readable, Transform, pipeline } from "node:stream";
 import type { Sql } from "postgres";
 import { OFF_DAILY_FILE, offDailyLineSchema } from "@app/shared";
 import { applyDailyFile, appliedDailyFiles, offListLoaded } from "./packagedRepo.js";
 import { offProductOfDaily, offRowOf, type OffRow, type RowResult } from "./packagedRows.js";
 
 export const OFF_DAILY_BASE = "https://static.openfoodfacts.org/data/delta/";
-const FETCH_TIMEOUT_MS = 10 * 60 * 1000;
-/** Well past what they send: 22 to 32 MB packed and 144 MB unpacked a day, measured 2026-10-30. */
-const MOST_PACKED_BYTES = 256 * 1024 * 1024;
-const MOST_UNPACKED_BYTES = 2 * 1024 * 1024 * 1024;
-const MOST_LINE_BYTES = 8 * 1024 * 1024;
-/** A file is refused below this share of usable products (a real day: 6,010 products, most usable),
- *  or above this share of lines that are not their shape. Too few products to judge: read as it is. */
+
+/** Well past a real day: 22 to 32 MB packed, 144 MB unpacked and 6,010 lines, measured 2026-10-30. A
+ *  file within the packed limit can still unpack to anything, and its rows are held in memory until it
+ *  is judged, so the lines and the unpacked bytes are limited too. The time limit is for each file: the
+ *  worker's other jobs wait behind this one. */
+export const DAILY_LIMITS = {
+  fetchMs: 3 * 60 * 1000,
+  indexBytes: 64 * 1024,
+  packedBytes: 128 * 1024 * 1024,
+  unpackedBytes: 512 * 1024 * 1024,
+  lineBytes: 8 * 1024 * 1024,
+  lines: 200_000,
+};
+export type DailyLimits = typeof DAILY_LIMITS;
+
+/** A file is refused below this share of usable products, or above this share of lines that are not
+ *  their shape. Too few products to judge a share: read as it is. Whatever its shares, it is refused
+ *  past this many removals: a real day removes at most 1,311 (950 no calories, 352 no name, 9 out of
+ *  bounds), and 26% usable would otherwise pass while it emptied the list. */
 const LEAST_USABLE_SHARE = 0.25;
 const MOST_BAD_SHARE = 0.01;
 const FEWEST_TO_JUDGE = 200;
+const MOST_REMOVALS = 20_000;
+/** Their file names say when they run to. One past tomorrow is no real file, and must never become the
+ *  point every later file is measured from. */
+const MOST_AHEAD_SECONDS = 24 * 3600;
 
 export class PackagedFileRefused extends Error {}
 
 /** Lines split on the newline byte alone. Node's `readline` also splits on U+2028, which real rows of
  *  this list hold, and would cut a product in two. */
-export async function* linesOf(stream: AsyncIterable<Buffer | string>, mostLineBytes = MOST_LINE_BYTES): AsyncGenerator<Buffer> {
+export async function* linesOf(stream: AsyncIterable<Buffer | string>, mostLineBytes = DAILY_LIMITS.lineBytes): AsyncGenerator<Buffer> {
   let rest: Buffer = Buffer.alloc(0);
   for await (const piece of stream) {
     const chunk = typeof piece === "string" ? Buffer.from(piece) : piece;
@@ -58,7 +74,7 @@ export function rowOfJsonLine(line: Buffer): RowResult | null {
 }
 
 /** What one daily file says: the rows it changed, the codes that no longer have numbers. */
-export async function readDailyFile(lines: AsyncIterable<Buffer>): Promise<{ products: number; bad: number; rows: OffRow[]; removeCodes: string[] }> {
+export async function readDailyFile(lines: AsyncIterable<Buffer>, mostLines = DAILY_LIMITS.lines): Promise<{ products: number; bad: number; rows: OffRow[]; removeCodes: string[] }> {
   const rows = new Map<string, OffRow>();
   const removeCodes = new Set<string>();
   let products = 0;
@@ -66,6 +82,7 @@ export async function readDailyFile(lines: AsyncIterable<Buffer>): Promise<{ pro
   for await (const line of lines) {
     if (line.length === 0) continue;
     products++;
+    if (products > mostLines) throw new PackagedFileRefused(`more than ${String(mostLines)} products in one file`);
     const result = rowOfJsonLine(line);
     if (result === null) {
       bad++;
@@ -83,7 +100,8 @@ export async function readDailyFile(lines: AsyncIterable<Buffer>): Promise<{ pro
 }
 
 /** Raises when a file cannot be what they mean to send. */
-export function judgeDailyFile(file: { products: number; bad: number; rows: readonly OffRow[] }): void {
+export function judgeDailyFile(file: { products: number; bad: number; rows: readonly OffRow[]; removeCodes: readonly string[] }): void {
+  if (file.removeCodes.length > MOST_REMOVALS) throw new PackagedFileRefused(`it would remove ${String(file.removeCodes.length)} products`);
   if (file.products < FEWEST_TO_JUDGE) return;
   if (file.bad / file.products > MOST_BAD_SHARE) throw new PackagedFileRefused(`${String(file.bad)} of ${String(file.products)} lines are not their shape`);
   if (file.rows.length / file.products < LEAST_USABLE_SHARE) throw new PackagedFileRefused(`only ${String(file.rows.length)} of ${String(file.products)} products have numbers`);
@@ -94,7 +112,9 @@ export interface PackagedSyncDeps {
   fetch: typeof fetch;
   /** Their page asks for `AppName/Version (ContactEmail)`. */
   userAgent: string;
+  now: () => Date;
   log: { info: (data: object, message: string) => void; warn: (data: object, message: string) => void };
+  limits?: Partial<DailyLimits>;
 }
 
 export interface PackagedSyncReport {
@@ -107,19 +127,76 @@ export interface PackagedSyncReport {
   gap: boolean;
 }
 
+/** A body read whole, up to a limit: a list of file names has no reason to be large. */
+async function textOf(answer: Response, mostBytes: number): Promise<string> {
+  if (answer.body === null) return "";
+  const reader = answer.body.getReader();
+  try {
+    const parts: Uint8Array[] = [];
+    let total = 0;
+    for (let part = await reader.read(); !part.done; part = await reader.read()) {
+      const chunk: unknown = part.value;
+      if (!(chunk instanceof Uint8Array)) throw new PackagedFileRefused("the file list is not bytes");
+      total += chunk.length;
+      if (total > mostBytes) throw new PackagedFileRefused("the file list is larger than any real one");
+      parts.push(chunk);
+    }
+    return Buffer.concat(parts).toString("utf8");
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
+}
+
+/** One day's file off the connection. `pipeline` carries a cut or a stall into the reader as an error;
+ *  with `.pipe()` it would have nowhere to go and would end the worker, and every gym's jobs with it. On
+ *  the way out, however it ends, the download is closed. */
+async function readDownload(answer: Response, limits: DailyLimits): Promise<Awaited<ReturnType<typeof readDailyFile>>> {
+  if (answer.body === null) throw new PackagedFileRefused("the file has no body");
+  const source = Readable.fromWeb(answer.body);
+  const unpack = createGunzip();
+  let packed = 0;
+  const counted = new Transform({
+    transform(chunk: Buffer, _encoding, done) {
+      packed += chunk.length;
+      if (packed > limits.packedBytes) done(new PackagedFileRefused("the file is larger than any day's"));
+      else done(null, chunk);
+    },
+  });
+  pipeline(source, counted, unpack, () => undefined);
+  try {
+    return await readDailyFile(linesOf(capped(unpack, limits.unpackedBytes), limits.lineBytes), limits.lines);
+  } finally {
+    unpack.destroy();
+    source.destroy();
+  }
+}
+
+/** Stops a file that unpacks to far more than any day's. */
+async function* capped(stream: AsyncIterable<Buffer>, mostBytes: number): AsyncGenerator<Buffer> {
+  let total = 0;
+  for await (const chunk of stream) {
+    total += chunk.length;
+    if (total > mostBytes) throw new PackagedFileRefused("the file unpacks to more than any day's");
+    yield chunk;
+  }
+}
+
 export async function updatePackagedFoods(deps: PackagedSyncDeps): Promise<PackagedSyncReport> {
+  const limits: DailyLimits = { ...DAILY_LIMITS, ...deps.limits };
   const empty: PackagedSyncReport = { outcome: "up_to_date", files: 0, written: 0, removed: 0, gap: false };
   if (!(await offListLoaded(deps.sql))) return { ...empty, outcome: "not_loaded" };
 
-  const asked = { headers: { "user-agent": deps.userAgent }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) };
-  const index = await deps.fetch(`${OFF_DAILY_BASE}index.txt`, asked);
+  const asked = (): RequestInit => ({ headers: { "user-agent": deps.userAgent }, signal: AbortSignal.timeout(limits.fetchMs) });
+  const index = await deps.fetch(`${OFF_DAILY_BASE}index.txt`, asked());
   if (!index.ok) throw new PackagedFileRefused(`the file list answered ${String(index.status)}`);
-  const listed = (await index.text())
+  const nowSecond = Math.floor(deps.now().getTime() / 1000);
+  const named = (await textOf(index, limits.indexBytes))
     .split("\n")
     .map((name) => ({ name: name.trim(), match: OFF_DAILY_FILE.exec(name.trim()) }))
-    .flatMap(({ name, match }) => (match === null ? [] : [{ name, from: Number(match[1]), to: Number(match[2]) }]))
-    .sort((a, b) => a.to - b.to);
-  if (listed.length === 0) throw new PackagedFileRefused("the file list holds no files");
+    .flatMap(({ name, match }) => (match === null ? [] : [{ name, from: Number(match[1]), to: Number(match[2]) }]));
+  if (named.length === 0) throw new PackagedFileRefused("the file list holds no files");
+  const listed = named.filter((file) => file.from < file.to && file.to <= nowSecond + MOST_AHEAD_SECONDS).sort((a, b) => a.to - b.to);
+  if (listed.length < named.length) deps.log.warn({ event: "packaged.wrong_file_name", names: named.filter((f) => !listed.includes(f)).map((f) => f.name).slice(0, 5) }, "their list names a file that cannot be real: passed over");
 
   const applied = await appliedDailyFiles(deps.sql);
   const last = applied.lastToSecond;
@@ -130,11 +207,9 @@ export async function updatePackagedFoods(deps: PackagedSyncDeps): Promise<Packa
 
   const report: PackagedSyncReport = { ...empty, gap };
   for (const file of waiting) {
-    const answer = await deps.fetch(`${OFF_DAILY_BASE}${file.name}`, asked);
-    if (!answer.ok || answer.body === null) throw new PackagedFileRefused(`${file.name} answered ${String(answer.status)}`);
-    const packed = Number(answer.headers.get("content-length") ?? 0);
-    if (packed > MOST_PACKED_BYTES) throw new PackagedFileRefused(`${file.name} is ${String(packed)} bytes`);
-    const read = await readDailyFile(linesOf(capped(Readable.fromWeb(answer.body).pipe(createGunzip()))));
+    const answer = await deps.fetch(`${OFF_DAILY_BASE}${file.name}`, asked());
+    if (!answer.ok) throw new PackagedFileRefused(`${file.name} answered ${String(answer.status)}`);
+    const read = await readDownload(answer, limits);
     judgeDailyFile(read);
     const done = await applyDailyFile(deps.sql, { name: file.name, toSecond: file.to, products: read.products }, read.rows, read.removeCodes);
     if (done !== null) {
@@ -146,14 +221,4 @@ export async function updatePackagedFoods(deps: PackagedSyncDeps): Promise<Packa
     }
   }
   return report;
-}
-
-/** Stops a file that unpacks to far more than any day's. */
-async function* capped(stream: AsyncIterable<Buffer>): AsyncGenerator<Buffer> {
-  let total = 0;
-  for await (const chunk of stream) {
-    total += chunk.length;
-    if (total > MOST_UNPACKED_BYTES) throw new PackagedFileRefused("the file unpacks to more than any day's");
-    yield chunk;
-  }
 }

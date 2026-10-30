@@ -595,7 +595,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 33b-ii. [x] **"Not this?" and the names Luna saw** — merged 2026-10-30 (PR #397).
       - 33b-iii. **Barcode scan** (split 2026-10-30 in four, Kd's "go", `rulings/2026-10-30-33b-iii-a.md`: our own copy of the lists, no live calls). Risky; the two extra passes run once, after 33b-iii-c, over item 33.
         - 33b-iii-a. [ ] **Our own copy of the food lists, and the barcode lookup on the server.**
-        - 33b-iii-b. [ ] **Scan a barcode on the phone**: Meal, Barcode and Label in one camera, free for everyone; the product, its allergens with "Check the pack", the whole pack as an amount; not found says what to do next; type the number; the torch.
+        - 33b-iii-b. [ ] **Scan a barcode on the phone**: Meal, Barcode and Label in one camera, free for everyone; the phone writes a UPC-E out first (`upcEToUpcA`); the product, its allergens with "Check the pack", what somebody typed shown as typed, a "0 kcal" not called certain; the whole pack as an amount; not found says what to do next; type the number; the torch.
         - 33b-iii-c. [ ] **Read a label with Luna**: a product not found is read from a photo of its label, the person checks it, and it is remembered for them by barcode. About 20 real labels tried first, for under a cent. Uses one of their scans.
         - 33b-iii-d. [ ] **The food search and the meal scan read our copy**, so nothing asks Open Food Facts live; every feature kept; a common word answers quickly.
 34. **More food** (split 2026-10-13: the parts on the server need no phone).

@@ -307,6 +307,9 @@ if (config.PACKAGED_FOOD_UPDATES) {
     log.fatal({ err }, "failed to register the packaged-food update schedule");
     process.exit(1);
   }
+} else {
+  // Switched off after being on: the schedule stays in Redis until it is taken out.
+  await queue.removeJobScheduler(NUTRITION_PACKAGED_UPDATE_JOB).catch(() => false);
 }
 
 // THE GYM'S DAY GETS WRITTEN DOWN (Part 3 §3.2; Kd rulings :26469 and :29961).
@@ -875,6 +878,7 @@ const worker = new Worker(
       const report = await updatePackagedFoods({
         sql,
         fetch,
+        now: () => new Date(),
         userAgent: contact === undefined ? "AIHomeGym/1.0" : `AIHomeGym/1.0 (${contact})`,
         log,
       });

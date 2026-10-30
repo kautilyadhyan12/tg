@@ -1,10 +1,13 @@
 // ROADMAP Stage 5 33b-iii-a — the rows of the packaged-food lists, read from real rows of the real
 // files (`test/fixtures/packaged`, cut from the downloads of 2026-10-30, contributors' names blanked).
-import { createReadStream, readFileSync } from "node:fs";
+import { createReadStream, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { MORE_NOT_KNOWN, type MoreNutrients } from "@app/shared";
-import { allergenWords, numbersFit, packagedFoodOf, usdaServing, type OffRow, type PackagedRow, type RowResult } from "../src/modules/nutrition/packagedRows.js";
+import { offDailyLineSchema } from "@app/shared";
+import { loadConfig } from "../src/config.js";
+import { allergenLists, numbersFit, offProductOfDaily, offRowOf, packagedFoodOf, usdaServing, type OffRow, type PackagedRow, type RowResult } from "../src/modules/nutrition/packagedRows.js";
 import { judgeDailyFile, linesOf, PackagedFileRefused, readDailyFile } from "../src/modules/nutrition/packagedSync.js";
 import { offRowsOfFile, usdaRowsOfDir } from "../tools/packaged-files.js";
 
@@ -117,23 +120,75 @@ describe("numbersFit, a table over every class", () => {
   });
 });
 
-describe("allergenWords, from outside the code", () => {
-  it.each<[string, string[], string[]]>([
-    ["the download's words", ["milk", "nuts", "soybeans"], ["milk", "nuts", "soybeans"]],
-    ["the daily file's tags", ["en:milk", "en:soybeans"], ["milk", "soybeans"]],
-    ["a tag in another language, kept and never dropped", ["fr:arachide", "de:sellerie"], ["arachide", "sellerie"]],
-    ["a word no list has heard of", ["en:lupin-flour"], ["lupin flour"]],
-    ["none is no allergen", ["en:none"], []],
-    ["the same twice", ["en:milk", "milk"], ["milk"]],
-    ["empty pieces of a split", ["", " "], []],
-    ["characters that would break the database's array", ['mi"lk', "wh\\ey", "soy{a}"], ["milk", "whey", "soya"]],
-  ])("%s", (_name, tags, words) => {
-    expect(allergenWords(tags)).toEqual(words);
+describe("allergenLists: their own 26 allergens are a list, anything else is words somebody typed", () => {
+  // Real tags and words: the daily file of 2026-10-29 and the list loaded from the CSV.
+  it.each<[string, string[], string[], string[]]>([
+    ["the download's words", ["milk", "nuts", "soybeans"], ["milk", "nuts", "soybeans"], []],
+    ["the daily file's tags", ["en:milk", "en:sesame-seeds", "en:sulphur-dioxide-and-sulphites"], ["milk", "sesame seeds", "sulphur dioxide and sulphites"], []],
+    ["the worst thing: 'gluten free' is never an allergen, and never dropped", ["gluten free", "wheat free"], [], ["gluten free", "wheat free"]],
+    ["negatives in other languages", ["non", "sans gluten", "senza glutine", "sin gluten", "keine deklarationspflichtigen allergene"], [], ["non", "sans gluten", "senza glutine", "sin gluten", "keine deklarationspflichtigen allergene"]],
+    ["a real warning in another language is kept as typed", ["de:Weizeneiweiß", "fr:arachide", "en:Глютен"], [], ["weizeneiweiß", "arachide", "глютен"]],
+    ["a sentence somebody typed", ["en:ALLERGEN INFORMATION: COntains Wheat"], [], ["allergen information contains wheat"]],
+    ["a typed word the list has never heard of", ["en:lupin-flour"], [], ["lupin flour"]],
+    ["none is neither", ["en:none"], [], []],
+    ["the same twice", ["en:milk", "milk"], ["milk"], []],
+    ["empty pieces of a split", ["", " "], [], []],
+    ["characters that would break the database's array", ['mi"lk', "wh\\ey", "soy{a}"], [], ["mi lk", "wh ey", "soy a"]],
+    ["markup left in a tag", ["en:[{&quot;value&quot;:&quot;milk&quot;}]"], [], ["value milk"]],
+    ["the vowels of Indian and Thai words are kept", ["hi:दूध", "ta:நெய்", "th:กุ้ง", "th:ถั่วเหลือง"], [], ["दूध", "நெய்", "กุ้ง", "ถั่วเหลือง"]],
+  ])("%s", (_name, tags, listed, typed) => {
+    expect(allergenLists(tags)).toEqual({ listed, typed });
+  });
+
+  it("a real row: 'Gluten free' on turkey reads as typed, and Contains stays empty", () => {
+    const result = offRowOf({ code: "3017620422003", name: "Turkey Breast", allergens: ["gluten free"], traces: ["sans gluten"], figures: { "energy-kcal_100g": 100, proteins_100g: 20, carbohydrates_100g: 1, fat_100g: 2 } });
+    if (!("row" in result)) throw new Error("not kept");
+    expect(result.row).toMatchObject({ allergens: [], traces: [], listedAsTyped: ["gluten free", "sans gluten"] });
+    expect(packagedFoodOf(result.row, null)).toMatchObject({ allergens: [], mayContain: [], listedAsTyped: ["gluten free", "sans gluten"], allergensFrom: "openfoodfacts" });
+  });
+});
+
+describe("names and text a database refuses", () => {
+  const LONG = "a".repeat(79);
+  const half = String.fromCharCode(0xd83d);
+  it.each([
+    ["an emoji across the name's limit", `${LONG}😀`],
+    ["half an emoji from their file", `Biscuits ${half}`],
+  ])("%s leaves text the database takes", (_name, name) => {
+    const result = offRowOf({ code: "3017620422003", name, quantity: `${"b".repeat(39)}😀`, servingSize: `${"c".repeat(59)}😀`, allergens: [`en:${half}`], traces: [], figures: { "energy-kcal_100g": 100 } });
+    if (!("row" in result)) throw new Error("not kept");
+    const text = JSON.stringify(result.row);
+    expect(/\\ud[89ab]/i.test(text)).toBe(false);
+  });
+
+  it("falls back to a name in the product's own language, English first", () => {
+    const line = (over: Record<string, unknown>) => offRowOf(offProductOfDaily(offDailyLineSchema.parse({ code: "3800020492932", nutrition: { aggregated_set: { per: "100g", nutrients: { "energy-kcal": { value: 500, unit: "kcal", source: "packaging" } } } }, ...over })));
+    expect(line({ product_name: "", product_name_fr: "Boules", product_name_en: "Kitkat balls milk" })).toMatchObject({ row: { name: "Kitkat balls milk" } });
+    expect(line({ product_name_fr: "Boules" })).toMatchObject({ row: { name: "Boules" } });
+    expect(line({ product_name: "Plain", product_name_en: "Other" })).toMatchObject({ row: { name: "Plain" } });
+    expect(line({})).toMatchObject({ refused: "no_name", code: "3800020492932" });
+  });
+});
+
+describe("alcohol, which the files give in % vol", () => {
+  it("a real beer adds up from the daily file: Heineken, 42 kcal, 5% vol", () => {
+    const result = offRowOf(offProductOfDaily(offDailyLineSchema.parse({ code: "3017620422003", product_name: "Heineken", nutrition: { aggregated_set: { per: "100ml", nutrients: { "energy-kcal": { value: 42, unit: "kcal", source: "packaging" }, proteins: { value: 0.4, unit: "g", source: "packaging" }, carbohydrates: { value: 3.2, unit: "g", source: "packaging" }, fat: { value: 0, unit: "g", source: "packaging" }, alcohol: { value: 5, unit: "% vol", source: "packaging" } } } } })));
+    if (!("row" in result)) throw new Error("not kept");
+    expect(result.row.numbersFit).toBe(true);
+  });
+});
+
+describe("the nightly update has to say who it is", () => {
+  it("refuses to start switched on with no address to give", () => {
+    const env = { NODE_ENV: "test", DATABASE_URL: "postgres://x", WEB_ORIGIN: "http://localhost:5173", JWT_SECRET: "packaged-config-secret-0123456789abcdef" };
+    expect(() => loadConfig({ ...env, PACKAGED_FOOD_UPDATES: "on" })).toThrow(/OPEN_FOOD_FACTS_CONTACT/);
+    expect(loadConfig({ ...env, PACKAGED_FOOD_UPDATES: "on", OPEN_FOOD_FACTS_CONTACT: "hello@example.com" }).PACKAGED_FOOD_UPDATES).toBe(true);
+    expect(loadConfig(env).PACKAGED_FOOD_UPDATES).toBe(false);
   });
 });
 
 const plain = (over: Partial<PackagedRow>): PackagedRow => ({ code: "3017620422003", name: "A", kcal: 500, proteinG: 10, carbsG: 50, fatG: 30, more: MORE_NOT_KNOWN, servingSize: null, quantity: null, numbersFit: true, ...over });
-const withLists = (over: Partial<OffRow>): OffRow => ({ ...plain(over), allergens: over.allergens ?? ["milk"], traces: over.traces ?? ["nuts"] });
+const withLists = (over: Partial<OffRow>): OffRow => ({ ...plain(over), allergens: over.allergens ?? ["milk"], traces: over.traces ?? ["nuts"], listedAsTyped: over.listedAsTyped ?? [] });
 
 describe("packagedFoodOf: which list's numbers a person sees, every class", () => {
   it.each<[string, Partial<OffRow> | null, Partial<PackagedRow> | null, "openfoodfacts" | "usda", number, string, boolean]>([
@@ -147,7 +202,7 @@ describe("packagedFoodOf: which list's numbers a person sees, every class", () =
     ["apart, one at zero", { kcal: 0 }, { kcal: 120 }, "usda", 120, "lists_differ", true],
     ["both zero: no difference", { kcal: 0 }, { kcal: 0 }, "openfoodfacts", 0, "fine", true],
     ["a macro missing: said", { proteinG: null }, null, "openfoodfacts", 500, "part_missing", true],
-    ["a macro missing at 0 kcal: water needs none", { kcal: 0, proteinG: null, carbsG: null, fatG: null }, null, "openfoodfacts", 0, "fine", true],
+    ["a blank panel at 0 kcal: chicken fillet and eggs read so, so it is said", { kcal: 0, proteinG: null, carbsG: null, fatG: null }, null, "openfoodfacts", 0, "part_missing", true],
   ])("%s", (_name, offOver, usdaOver, source, kcal, check, hasAllergens) => {
     const got = packagedFoodOf(offOver === null ? null : withLists(offOver), usdaOver === null ? null : plain(usdaOver));
     expect(got?.food.source).toBe(source);
@@ -197,15 +252,31 @@ describe("the daily file, real lines", () => {
   });
 
   it("refuses a whole file that cannot be what they mean to send, and judges a small one as it is", () => {
-    const file = (products: number, rows: number, bad = 0) => ({ products, bad, rows: Array.from({ length: rows }, () => withLists({})) });
+    const file = (products: number, rows: number, bad = 0, removes = 0) => ({ products, bad, rows: Array.from({ length: rows }, () => withLists({})), removeCodes: Array.from({ length: removes }, () => "1") });
     expect(() => { judgeDailyFile(file(6010, 4500)); }).not.toThrow();
     expect(() => { judgeDailyFile(file(6010, 100)); }).toThrow(PackagedFileRefused);
     expect(() => { judgeDailyFile(file(6010, 4500, 100)); }).toThrow(PackagedFileRefused);
     expect(() => { judgeDailyFile(file(50, 0)); }).not.toThrow();
+    // A real day removes at most 1,311. A file can never empty the list, whatever else it holds.
+    expect(() => { judgeDailyFile(file(134_000, 34_000, 0, 100_000)); }).toThrow(PackagedFileRefused);
+    expect(() => { judgeDailyFile(file(6010, 4500, 0, 1311)); }).not.toThrow();
   });
 });
 
 describe("USDA's list, real rows", () => {
+  it("one product written two ways: the newest row wins, whichever way it was written", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "usda-two-ways-"));
+    const head = '"fdc_id","brand_owner","brand_name","subbrand_name","gtin_upc","ingredients","not_a_significant_source_of","serving_size","serving_size_unit","household_serving_fulltext","branded_food_category","data_source","package_weight","modified_date","available_date","market_country","discontinued_date","preparation_state_code","trade_channel","short_description","material_code"';
+    const row = (fdc: string, code: string, date: string) => `"${fdc}","","","","${code}","","","30","g","","","","","${date}","","","","","","",""`;
+    writeFileSync(join(dir, "branded_food.csv"), [head, row("1", "014500012692", "2026-08-07"), row("2", "00014500012692", "2023-05-17")].join(String.fromCharCode(10)));
+    writeFileSync(join(dir, "food.csv"), ['"fdc_id","data_type","description"', '"1","branded_food","Newest"', '"2","branded_food","Oldest"'].join(String.fromCharCode(10)));
+    writeFileSync(join(dir, "food_nutrient.csv"), ['"id","fdc_id","nutrient_id","amount","data_points"', '"1","1","1008","100.0",""', '"2","2","1008","900.0",""'].join(String.fromCharCode(10)));
+    const rows = [...kept(await all(usdaRowsOfDir(dir))).values()];
+    rmSync(dir, { recursive: true });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ code: "0014500012692", name: "Newest", kcal: 100 });
+  });
+
   it("takes each code's newest row, and keeps its own numbers", async () => {
     const rows = kept(await all(usdaRowsOfDir(FIXTURES)));
     const swanson = rows.get("0051000198808");

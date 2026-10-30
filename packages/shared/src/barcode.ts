@@ -66,8 +66,8 @@ export const barcodeParamSchema = z.object({ code: z.string().regex(/^\d{8,14}$/
 export const packagedCheckSchema = z.enum(["fine", "doesnt_add_up", "part_missing", "lists_differ"]);
 export type PackagedCheck = z.infer<typeof packagedCheckSchema>;
 
-/** The reply. `allergens` and `mayContain` are what the list holds: most products have neither, so an
- *  empty list says nothing about the food and must never read as safe. */
+/** The reply. `allergens` and `mayContain` are words of Open Food Facts' own list of allergens: most
+ *  products have neither, so an empty list says nothing about the food and must never read as safe. */
 export const barcodeReplySchema = z.discriminatedUnion("status", [
   z.object({
     status: z.literal("found"),
@@ -75,6 +75,11 @@ export const barcodeReplySchema = z.discriminatedUnion("status", [
     food: foodSearchItemSchema,
     allergens: z.array(z.string()),
     mayContain: z.array(z.string()),
+    /** Other words in those fields, as somebody typed them ("gluten free", "weizeneiweiß"): shown as
+     *  typed, never under Contains. */
+    listedAsTyped: z.array(z.string()),
+    /** Whose words the three lists are, for the credit: USDA keeps none. */
+    allergensFrom: z.literal("openfoodfacts").nullable(),
     check: packagedCheckSchema,
   }).strict(),
   z.object({ status: z.literal("not_found"), code: z.string() }).strict(),
@@ -124,7 +129,7 @@ export const offDailyLineSchema = z.object({
       nutrients: z.record(z.string(), dailyFigureSchema).optional(),
     }).optional(),
   }).nullish(),
-});
+}).catchall(z.unknown());
 export type OffDailyLine = z.infer<typeof offDailyLineSchema>;
 
 /** A daily file's name, which says the seconds it runs from and to. */

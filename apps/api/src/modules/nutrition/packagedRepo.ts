@@ -49,15 +49,29 @@ const productOf = (r: ProductRecord): PackagedRow => ({
   numbersFit: r.numbers_fit,
 });
 
+type OffRecord = ProductRecord & { allergens: string[]; traces: string[]; listed_as_typed: string[] };
+const offOf = (r: OffRecord): OffRow => ({ ...productOf(r), allergens: r.allergens, traces: r.traces, listedAsTyped: r.listed_as_typed });
+
 /** What each list holds for one code. Exact on the primary key: one row or none. */
 export async function packagedRowsFor(sql: Sql, code: string): Promise<{ off: OffRow | null; usda: PackagedRow | null }> {
   const [offRows, usdaRows] = await Promise.all([
-    sql<(ProductRecord & { allergens: string[]; traces: string[] })[]>`SELECT * FROM off_products WHERE code = ${code}`,
+    sql<OffRecord[]>`SELECT * FROM off_products WHERE code = ${code}`,
     sql<ProductRecord[]>`SELECT * FROM usda_branded_products WHERE code = ${code}`,
   ]);
   const off = offRows[0];
   const usda = usdaRows[0];
-  return { off: off === undefined ? null : { ...productOf(off), allergens: off.allergens, traces: off.traces }, usda: usda === undefined ? null : productOf(usda) };
+  return { off: off === undefined ? null : offOf(off), usda: usda === undefined ? null : productOf(usda) };
+}
+
+/** What each list holds for these codes, in one read of each: for a search's page of products. */
+export async function packagedRowsForCodes(sql: Sql, codes: readonly string[]): Promise<{ off: Map<string, OffRow>; usda: Map<string, PackagedRow> }> {
+  if (codes.length === 0) return { off: new Map(), usda: new Map() };
+  const list = sql.array([...codes]);
+  const [offRows, usdaRows] = await Promise.all([
+    sql<OffRecord[]>`SELECT * FROM off_products WHERE code = ANY(${list})`,
+    sql<ProductRecord[]>`SELECT * FROM usda_branded_products WHERE code = ANY(${list})`,
+  ]);
+  return { off: new Map(offRows.map((r) => [r.code, offOf(r)])), usda: new Map(usdaRows.map((r) => [r.code, productOf(r)])) };
 }
 
 /** Whether the list has been loaded: until it has, the nightly update has nothing to change. */
@@ -76,7 +90,7 @@ const recordOf = (row: OffRow): Record<string, unknown> => ({
   fiber_g: row.more.fiberG, sugars_g: row.more.sugarsG, sat_fat_g: row.more.satFatG, unsat_fat_g: row.more.unsatFatG,
   sodium_mg: row.more.sodiumMg, potassium_mg: row.more.potassiumMg, calcium_mg: row.more.calciumMg, iron_mg: row.more.ironMg,
   magnesium_mg: row.more.magnesiumMg, vitamin_d_ug: row.more.vitaminDUg, serving_size: row.servingSize, quantity: row.quantity,
-  numbers_fit: row.numbersFit, allergens: row.allergens, traces: row.traces,
+  numbers_fit: row.numbersFit, allergens: row.allergens, traces: row.traces, listed_as_typed: row.listedAsTyped,
 });
 
 /** One daily file, in one transaction, or nothing: the rows it changed written, the codes it took the
@@ -102,7 +116,7 @@ export async function applyDailyFile(
         fiber_g = EXCLUDED.fiber_g, sugars_g = EXCLUDED.sugars_g, sat_fat_g = EXCLUDED.sat_fat_g, unsat_fat_g = EXCLUDED.unsat_fat_g,
         sodium_mg = EXCLUDED.sodium_mg, potassium_mg = EXCLUDED.potassium_mg, calcium_mg = EXCLUDED.calcium_mg, iron_mg = EXCLUDED.iron_mg,
         magnesium_mg = EXCLUDED.magnesium_mg, vitamin_d_ug = EXCLUDED.vitamin_d_ug, serving_size = EXCLUDED.serving_size, quantity = EXCLUDED.quantity,
-        numbers_fit = EXCLUDED.numbers_fit, allergens = EXCLUDED.allergens, traces = EXCLUDED.traces
+        numbers_fit = EXCLUDED.numbers_fit, allergens = EXCLUDED.allergens, traces = EXCLUDED.traces, listed_as_typed = EXCLUDED.listed_as_typed
       RETURNING code`;
     const removed = removeCodes.length === 0 ? [] : await tx`DELETE FROM off_products WHERE code = ANY(${tx.array([...removeCodes])}) RETURNING code`;
     await tx`UPDATE off_daily_files SET written = ${written.length}, removed = ${removed.length} WHERE name = ${file.name}`;

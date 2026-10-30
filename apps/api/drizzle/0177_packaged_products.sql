@@ -25,6 +25,7 @@ CREATE TABLE "off_products" (
 	"numbers_fit" boolean NOT NULL,
 	"allergens" text[] NOT NULL,
 	"traces" text[] NOT NULL,
+	"listed_as_typed" text[] NOT NULL,
 	CONSTRAINT "off_products_kcal_check" CHECK ("kcal" >= 0 AND "kcal" <= 1000)
 );
 CREATE TABLE "usda_branded_products" (

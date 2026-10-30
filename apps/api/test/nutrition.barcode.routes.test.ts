@@ -1,6 +1,6 @@
 // ROADMAP Stage 5 33b-iii-a — a pack's barcode through the route a person uses, on real Postgres. Real
-// rows' numbers under test-only codes (GS1 has not given out the prefix 140), so this file finds its own
-// rows whether or not the machine has the whole list loaded, and removes only them.
+// rows' numbers under test-only codes no list holds, so this file finds its own rows whether or not the
+// machine has the whole list loaded, and removes those codes and no others.
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import postgres from "postgres";
 import { barcodeReplySchema, recentFoodSchema } from "@app/shared";
@@ -8,7 +8,7 @@ import { z } from "zod";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createMemoryRedis } from "../src/redis.js";
-import type { FoodSearchProvider } from "../src/modules/nutrition/openfoodfacts.adapter.js";
+import type { FoodReference, FoodSearchProvider } from "../src/modules/nutrition/openfoodfacts.adapter.js";
 
 const sentry = vi.hoisted(() => ({ init: vi.fn(), captureException: vi.fn(), httpIntegration: vi.fn() }));
 vi.mock("@sentry/node", () => sentry);
@@ -23,9 +23,9 @@ const checkDigit = (body: string): string => {
   for (const [at, digit] of Array.from(body).reverse().entries()) sum += Number(digit) * (at % 2 === 0 ? 3 : 1);
   return String((10 - (sum % 10)) % 10);
 };
-/** A valid 13-digit code under the unused prefix 140. */
+/** A valid 13-digit code in a range neither list holds (counted 2026-10-30). */
 const codeOf = (n: number): string => {
-  const body = `140${String(n).padStart(9, "0")}`;
+  const body = `14099999${String(n).padStart(4, "0")}`;
   return `${body}${checkDigit(body)}`;
 };
 const NUTELLA = codeOf(1);
@@ -36,17 +36,25 @@ const APART = codeOf(5);
 const USDA_ONLY = codeOf(6);
 const NOT_LISTED = codeOf(7);
 const LAST = codeOf(8);
+const GONE = codeOf(10);
+const MOVES = codeOf(11);
 /** A 12-digit code as a US pack prints it, under the same unused range: kept with a leading zero. */
 const twelveDigits = (): string => {
-  const body = "14000000009";
+  const body = "14099999009";
   return `${body}${checkDigit(body)}`;
 };
+
+/** Every code this file writes, and so the only ones it removes. The store's and the book's stay on
+ *  no real list: the list never keeps such a code. */
+const MINE = [NUTELLA, PRINCE, ZERO, NO_LIST, APART, USDA_ONLY, NOT_LISTED, LAST, GONE, MOVES, `0${twelveDigits()}`, "00002523", "0200024010652", "12345678", "9780141026626"];
 
 d("a pack's barcode (real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 4 });
   const redis = createMemoryRedis();
   const asked: string[] = [];
-  const foods: FoodSearchProvider = { search(query) { asked.push(query); return Promise.resolve([]); } };
+  /** What their live search answers, until 33b-iii-d. */
+  const live: FoodReference[] = [];
+  const foods: FoodSearchProvider = { search(query) { asked.push(query); return Promise.resolve(live); } };
   let app: Awaited<ReturnType<typeof buildApp>> | undefined;
   let alice = "";
   let bob = "";
@@ -74,18 +82,18 @@ d("a pack's barcode (real Postgres)", () => {
     if (reply.status !== "found") throw new Error(`${code}: ${reply.status}`);
     return reply;
   };
-  const addOff = async (code: string, row: { name: string; kcal: number; protein: number | null; carbs: number | null; fat: number | null; serving?: string; allergens?: string[]; traces?: string[]; fit?: boolean }) => {
-    const record = { code, name: row.name, kcal: row.kcal, protein_g: row.protein, carbs_g: row.carbs, fat_g: row.fat, potassium_mg: 120, serving_size: row.serving ?? null, numbers_fit: row.fit ?? true, allergens: row.allergens ?? [], traces: row.traces ?? [] };
+  const addOff = async (code: string, row: { name: string; kcal: number; protein: number | null; carbs: number | null; fat: number | null; serving?: string; allergens?: string[]; traces?: string[]; typed?: string[]; fit?: boolean }) => {
+    const record = { code, name: row.name, kcal: row.kcal, protein_g: row.protein, carbs_g: row.carbs, fat_g: row.fat, potassium_mg: 120, serving_size: row.serving ?? null, numbers_fit: row.fit ?? true, allergens: row.allergens ?? [], traces: row.traces ?? [], listed_as_typed: row.typed ?? [] };
     await sql`INSERT INTO off_products SELECT * FROM jsonb_populate_recordset(NULL::off_products, ${JSON.stringify([record])}::text::jsonb) ON CONFLICT (code) DO NOTHING`;
   };
   const addUsda = async (code: string, name: string, kcal: number) => {
-    await sql`INSERT INTO usda_branded_products (code, name, kcal, protein_g, carbs_g, fat_g, numbers_fit) VALUES (${code}, ${name}, ${kcal}, 1, 1, 1, true) ON CONFLICT (code) DO NOTHING`;
+    await sql`INSERT INTO usda_branded_products (code, name, kcal, protein_g, carbs_g, fat_g, potassium_mg, serving_size, numbers_fit) VALUES (${code}, ${name}, ${kcal}, 1, 1, 1, 40, '1 CUP (240 mL)', true) ON CONFLICT (code) DO NOTHING`;
   };
   const clean = async (): Promise<void> => {
     await sql`DELETE FROM meal_logs WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'barcode33-%@example.com')`;
     await sql`DELETE FROM users WHERE email LIKE 'barcode33-%@example.com'`;
-    await sql`DELETE FROM off_products WHERE code LIKE '140%' OR code LIKE '0140%' OR code IN ('00002523', '0200024010652', '12345678', '9780141026626')`;
-    await sql`DELETE FROM usda_branded_products WHERE code LIKE '140%'`;
+    await sql`DELETE FROM off_products WHERE code = ANY(${sql.array(MINE)})`;
+    await sql`DELETE FROM usda_branded_products WHERE code = ANY(${sql.array(MINE)})`;
   };
 
   beforeAll(async () => {
@@ -93,7 +101,9 @@ d("a pack's barcode (real Postgres)", () => {
     await addOff(NUTELLA, { name: "Nutella", kcal: 539, protein: 6.3, carbs: 57.5, fat: 30.9, allergens: ["milk", "nuts", "soybeans"] });
     await addOff(PRINCE, { name: "Prince · Mondelez Schweiz GmbH", kcal: 467, protein: 6.3, carbs: 69, fat: 17, serving: "20g", allergens: ["eggs", "gluten"], traces: ["eggs"] });
     await addOff(ZERO, { name: "Coca-Cola Zero Sugar", kcal: 0, protein: 0, carbs: 0, fat: 0, serving: "1 portion (20 fl oz)" });
-    await addOff(NO_LIST, { name: "Takis chips", kcal: 524, protein: 6.8, carbs: 52, fat: 32 });
+    await addOff(NO_LIST, { name: "Takis chips", kcal: 524, protein: 6.8, carbs: 52, fat: 32, typed: ["gluten free"] });
+    await addOff(GONE, { name: "Leaves the list", kcal: 300, protein: 5, carbs: 50, fat: 8 });
+    await addOff(MOVES, { name: "Changes on the list", kcal: 300, protein: 5, carbs: 50, fat: 8 });
     await addOff(APART, { name: "Beef broth", kcal: 90, protein: 2, carbs: 16, fat: 2, allergens: ["celery"] });
     await addUsda(APART, "Swanson Broth Beef", 8);
     await addUsda(USDA_ONLY, "Welch's Orange Juice", 46);
@@ -135,7 +145,37 @@ d("a pack's barcode (real Postgres)", () => {
     const reply = await found(NO_LIST);
     expect(reply.allergens).toEqual([]);
     expect(reply.mayContain).toEqual([]);
-    expect(JSON.stringify(reply)).not.toMatch(/safe|free|none/i);
+    // "gluten free" is words somebody typed: it can be read, and never under Contains.
+    expect(reply.listedAsTyped).toEqual(["gluten free"]);
+    expect(JSON.stringify({ allergens: reply.allergens, mayContain: reply.mayContain, check: reply.check })).not.toMatch(/safe|free|none/i);
+  });
+
+  it("says where the allergens are from, when USDA gave the numbers: Open Food Facts' notice stays owed", async () => {
+    expect((await found(APART)).allergensFrom).toBe("openfoodfacts");
+    expect((await found(USDA_ONLY)).allergensFrom).toBeNull();
+  });
+
+  it("the lookup, the preview and the save give one price where the lists disagree", async () => {
+    const reply = await found(APART);
+    const item = { canonical: reply.food.canonical, grams: 200 };
+    const preview = await inject("POST", "/v1/nutrition/meals/preview", alice, { items: [item] });
+    expect(preview.statusCode, preview.body).toBe(200);
+    const saved = await inject("POST", "/v1/nutrition/meals", alice, { mealName: "Broth", takenAt: new Date().toISOString(), items: [item] });
+    expect(saved.statusCode, saved.body).toBe(201);
+    const previewed = z.object({ items: z.array(z.object({ kcalPoint: z.number(), name: z.string(), nutritionSource: z.string() })) }).parse(preview.json()).items[0];
+    expect(previewed).toMatchObject({ kcalPoint: 16, name: "Swanson Broth Beef", nutritionSource: "usda" });
+    expect(z.object({ meal: z.object({ items: z.array(z.object({ kcalPoint: z.number() })) }) }).parse(saved.json()).meal.items[0]?.kcalPoint).toBe(16);
+  });
+
+  it("the search box shows the list's numbers, not another's, for a product the list holds", async () => {
+    // A real case: Amy's quinoa read 106 kcal live and 18 on the list.
+    live.length = 0;
+    live.push({ canonical: `off_${APART}`, name: "Live search's name", kcal: 106, proteinG: 1, carbsG: 1, fatG: 1, fiberG: null, serving: 100, unit: "g", source: "openfoodfacts" });
+    const res = await inject("GET", "/v1/nutrition/foods?q=zqxlistedword&limit=10", alice);
+    live.length = 0;
+    expect(res.statusCode, res.body).toBe(200);
+    const shown = z.object({ items: z.array(z.object({ canonical: z.string(), name: z.string(), kcal: z.number(), source: z.string() })) }).parse(res.json()).items;
+    expect(shown[0]).toMatchObject({ canonical: `off_${APART}`, name: "Swanson Broth Beef", kcal: 8, source: "usda" });
   });
 
   it("two lists apart: the maker's numbers, the volunteers' allergens, and told to check the pack", async () => {
@@ -147,8 +187,10 @@ d("a pack's barcode (real Postgres)", () => {
 
   it("a product only USDA holds is found, starts at its grams and credits USDA", async () => {
     const reply = await found(USDA_ONLY);
-    expect(reply.food).toMatchObject({ source: "usda", kcal: 46 });
-    expect(reply.food.measures.length).toBeGreaterThan(0);
+    expect(reply.food).toMatchObject({ source: "usda", kcal: 46, serving: 240, unit: "cup" });
+    // Its label's own serving is a measure, as a packaged product's is.
+    expect(reply.food.measures.map((m) => m.id)).toContain("serving");
+    expect(reply.food.startsAt.measure).toBe("serving");
     expect(reply.allergens).toEqual([]);
   });
 
@@ -225,7 +267,34 @@ d("a pack's barcode (real Postgres)", () => {
     it("a USDA-only product is priced from its own row, never read as a row of the USDA table", async () => {
       const saved = await inject("POST", "/v1/nutrition/meals", alice, { mealName: "Juice", takenAt: new Date().toISOString(), items: [{ canonical: `pack_${USDA_ONLY}`, grams: 200 }] });
       expect(saved.statusCode, saved.body).toBe(201);
-      expect(logged.parse(saved.json()).meal.items[0]).toMatchObject({ kcalPoint: 92, nutritionSource: "usda" });
+      const item = z.object({ meal: z.object({ items: z.array(z.object({ kcalPoint: z.number(), nutritionSource: z.string(), more: z.object({ potassiumMg: z.number().nullable() }) })) }) }).parse(saved.json()).meal.items[0];
+      expect(item).toMatchObject({ kcalPoint: 92, nutritionSource: "usda" });
+      // Its ten further figures are its own row's, never "not known" as a table food with no entry.
+      expect(item?.more.potassiumMg).toBe(80);
+    });
+
+    it("changing an amount keeps the price it was saved at, though the list has since changed", async () => {
+      const saved = await inject("POST", "/v1/nutrition/meals", alice, { mealName: "Then", takenAt: new Date().toISOString(), items: [{ canonical: `pack_${MOVES}`, grams: 100 }] });
+      expect(saved.statusCode, saved.body).toBe(201);
+      const meal = logged.parse(saved.json()).meal;
+      expect(meal.items[0]?.kcalPoint).toBe(300);
+      await sql`UPDATE off_products SET kcal = 600 WHERE code = ${MOVES}`;
+      const changed = await inject("PATCH", `/v1/nutrition/meals/${meal.id}`, alice, { items: [{ canonical: `pack_${MOVES}`, grams: 200, from: 0 }], itemsVersion: meal.itemsVersion });
+      expect(changed.statusCode, changed.body).toBe(200);
+      expect(logged.parse(changed.json()).meal.items[0]).toMatchObject({ kcalPoint: 600, gramsPoint: 200 });
+    });
+
+    it("a product that has left the list can still have its amount changed, and is not offered again", async () => {
+      const saved = await inject("POST", "/v1/nutrition/meals", alice, { mealName: "Then", takenAt: new Date().toISOString(), items: [{ canonical: `pack_${GONE}`, grams: 100 }] });
+      expect(saved.statusCode, saved.body).toBe(201);
+      const meal = logged.parse(saved.json()).meal;
+      await sql`DELETE FROM off_products WHERE code = ${GONE}`;
+      const changed = await inject("PATCH", `/v1/nutrition/meals/${meal.id}`, alice, { items: [{ canonical: `pack_${GONE}`, grams: 50, from: 0 }], itemsVersion: meal.itemsVersion });
+      expect(changed.statusCode, changed.body).toBe(200);
+      expect(logged.parse(changed.json()).meal.items[0]).toMatchObject({ kcalPoint: 150, gramsPoint: 50, nutritionSource: "openfoodfacts" });
+      const recent = await inject("GET", "/v1/nutrition/foods/recent", alice);
+      const items = z.object({ items: z.array(recentFoodSchema) }).parse(recent.json()).items;
+      expect(items.map((f) => f.canonical)).not.toContain(`pack_${GONE}`);
     });
 
     it("a code neither list holds is refused on a save, never priced by a guess", async () => {

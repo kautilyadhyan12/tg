@@ -1,5 +1,7 @@
 // ROADMAP Stage 5 33b-iii-a — filling the lists and the nightly update, on real Postgres in a schema of
 // its own: this file empties and refills its tables, and a machine's loaded list must not notice.
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
@@ -17,6 +19,13 @@ const DAILY = readFileSync(join(FIXTURES, "off-daily.jsonl"));
 const SCHEMA = `packaged_test_${String(process.pid)}`;
 const NEWLINE = String.fromCharCode(10);
 
+/** A valid 13-digit code for the update's own test rows, in this schema alone. */
+const codeOf = (n: number): string => {
+  const body = `590${String(n).padStart(9, "0")}`;
+  let sum = 0;
+  for (const [at, digit] of Array.from(body).reverse().entries()) sum += Number(digit) * (at % 2 === 0 ? 3 : 1);
+  return `${body}${String((10 - (sum % 10)) % 10)}`;
+};
 const dailyName = (from: number, to: number): string => `openfoodfacts_products_${String(from)}_${String(to)}.json.gz`;
 
 /** Their server, from a table of paths: what each path answers, and which were asked. */
@@ -43,6 +52,7 @@ d("filling the lists and the nightly update (real Postgres)", () => {
     sql,
     fetch: fakeFetch({}).fetch,
     userAgent: "AIHomeGym/1.0 (test)",
+    now: () => new Date(1793500000 * 1000),
     log: { info: () => undefined, warn: (data) => { warned.push(data); } },
     ...over,
   });
@@ -57,16 +67,16 @@ d("filling the lists and the nightly update (real Postgres)", () => {
     for (const table of ["off_products", "usda_branded_products", "off_daily_files"]) {
       await owner.unsafe(`CREATE TABLE "${SCHEMA}"."${table}" (LIKE public."${table}" INCLUDING ALL)`);
     }
-  });
+  }, 60_000);
   beforeEach(async () => {
     warned.length = 0;
     await sql`TRUNCATE off_products, usda_branded_products, off_daily_files`;
-  });
+  }, 60_000);
   afterAll(async () => {
     await sql.end({ timeout: 5 });
     await owner.unsafe(`DROP SCHEMA "${SCHEMA}" CASCADE`);
     await owner.end({ timeout: 5 });
-  });
+  }, 60_000);
 
   describe("the full import", () => {
     it("loads the real file, a NUL byte and all, and the row reads back whole", async () => {
@@ -91,7 +101,7 @@ d("filling the lists and the nightly update (real Postgres)", () => {
     it("a product the file no longer holds is removed, a changed one is written", async () => {
       await load();
       await sql`UPDATE off_products SET kcal = 1 WHERE code = '3017620422003'`;
-      await sql`INSERT INTO off_products SELECT * FROM jsonb_populate_recordset(NULL::off_products, ${JSON.stringify([{ code: "5901234123457", name: "Gone", kcal: 1, numbers_fit: true, allergens: [], traces: [] }])}::text::jsonb)`;
+      await sql`INSERT INTO off_products SELECT * FROM jsonb_populate_recordset(NULL::off_products, ${JSON.stringify([{ code: "5901234123457", name: "Gone", kcal: 1, numbers_fit: true, allergens: [], traces: [], listed_as_typed: [] }])}::text::jsonb)`;
       const report = await load();
       expect(report.written).toBe(1);
       expect(report.removed).toBe(1);
@@ -144,7 +154,7 @@ d("filling the lists and the nightly update (real Postgres)", () => {
 
     it("applies the real file, oldest first, says who it is, and takes off what lost its numbers", async () => {
       await load();
-      await sql`INSERT INTO off_products SELECT * FROM jsonb_populate_recordset(NULL::off_products, ${JSON.stringify([{ code: "0194346516261", name: "Had numbers", kcal: 76, numbers_fit: true, allergens: [], traces: [] }])}::text::jsonb)`;
+      await sql`INSERT INTO off_products SELECT * FROM jsonb_populate_recordset(NULL::off_products, ${JSON.stringify([{ code: "0194346516261", name: "Had numbers", kcal: 76, numbers_fit: true, allergens: [], traces: [], listed_as_typed: [] }])}::text::jsonb)`;
       const server = fakeFetch({ "index.txt": index, [A]: gzipSync(DAILY), [B]: gzipSync(Buffer.alloc(0)) });
       const report = await updatePackagedFoods(deps({ fetch: server.fetch }));
       expect(report).toMatchObject({ outcome: "updated", files: 2 });
@@ -187,6 +197,135 @@ d("filling the lists and the nightly update (real Postgres)", () => {
       await expect(updatePackagedFoods(deps({ fetch: fakeFetch({ "index.txt": 503 }).fetch }))).rejects.toBeInstanceOf(PackagedFileRefused);
       await expect(updatePackagedFoods(deps({ fetch: fakeFetch({ "index.txt": "<html>nothing here</html>" }).fetch }))).rejects.toBeInstanceOf(PackagedFileRefused);
       expect(await count("off_products")).toBe(before);
+    });
+
+    it("a list of 100,000 is never emptied by one file: the file is refused and nothing changes", async () => {
+      await load();
+      await sql`INSERT INTO off_products (code, name, kcal, numbers_fit, allergens, traces, listed_as_typed)
+        SELECT '7' || lpad(n::text, 12, '0'), 'Held', 100, true, '{}', '{}', '{}' FROM generate_series(1, 25000) n`;
+      const before = await count("off_products");
+      const wipe = Array.from({ length: 25_000 }, (_, at) => JSON.stringify({ code: codeOf(at), product_name: "No numbers" }));
+      const keep = Array.from({ length: 10_000 }, (_, at) => JSON.stringify({ code: codeOf(50_000 + at), product_name: "Kept", nutrition: { aggregated_set: { per: "100g", nutrients: { "energy-kcal": { value: 100, unit: "kcal", source: "packaging" } } } } }));
+      const server = fakeFetch({ "index.txt": A, [A]: gzipSync(Buffer.from([...wipe, ...keep].join(NEWLINE))) });
+      await expect(updatePackagedFoods(deps({ fetch: server.fetch }))).rejects.toBeInstanceOf(PackagedFileRefused);
+      expect(await count("off_products")).toBe(before);
+    }, 60_000);
+
+    it("a wrong name in their list cannot stop the update for good: it is passed over and said", async () => {
+      await load();
+      const future = dailyName(1793086400, 2147483647);
+      const tooBig = dailyName(1793086400, 99999999999);
+      const backwards = dailyName(1793172800, 1793086400);
+      const server = fakeFetch({ "index.txt": [future, tooBig, backwards, A].join(NEWLINE), [A]: gzipSync(DAILY) });
+      expect(await updatePackagedFoods(deps({ fetch: server.fetch }))).toMatchObject({ outcome: "updated", files: 1 });
+      expect(server.asked).toEqual(["index.txt", A]);
+      expect(warned.length).toBeGreaterThan(0);
+      const next = fakeFetch({ "index.txt": B, [B]: gzipSync(DAILY) });
+      expect(await updatePackagedFoods(deps({ fetch: next.fetch }))).toMatchObject({ outcome: "updated", files: 1 });
+    });
+
+    it("an emoji across a limit, or half of one, does not block the file or the ones after it", async () => {
+      await load();
+      const half = String.fromCharCode(0x5c) + "ud83d";
+      const line = (code: string, name: string) => `{"code":"${code}","product_name":"${name}","nutrition":{"aggregated_set":{"per":"100g","nutrients":{"energy-kcal":{"value":100,"unit":"kcal","source":"packaging"}}}}}`;
+      const body = [line(codeOf(1), `${"a".repeat(79)}😀`), line(codeOf(2), `Biscuits ${half}`)].join(NEWLINE);
+      const server = fakeFetch({ "index.txt": A, [A]: gzipSync(Buffer.from(body)) });
+      expect(await updatePackagedFoods(deps({ fetch: server.fetch }))).toMatchObject({ outcome: "updated", files: 1, written: 2 });
+      expect((await packagedRowsFor(sql, codeOf(2))).off?.name).toBe("Biscuits");
+    });
+
+    it("a repeat full import does not undo a night: the days after it are applied again", async () => {
+      await load();
+      const code = "8718452980437";
+      const night1 = fakeFetch({ "index.txt": A, [A]: gzipSync(DAILY) });
+      await updatePackagedFoods(deps({ fetch: night1.fetch }));
+      expect((await packagedRowsFor(sql, code)).off?.kcal).toBe(113);
+      // An older download, then the import: the row goes back, and the import's mark is before that night.
+      await sql`UPDATE off_products SET kcal = 1 WHERE code = ${code}`;
+      await recordFullLoad(sql, new Date((1793086400 + 3600) * 1000));
+      const night2 = fakeFetch({ "index.txt": A, [A]: gzipSync(DAILY) });
+      expect(await updatePackagedFoods(deps({ fetch: night2.fetch }))).toMatchObject({ outcome: "updated", files: 1 });
+      expect((await packagedRowsFor(sql, code)).off?.kcal).toBe(113);
+    });
+
+    describe("a real download over a real connection", () => {
+      const started: Server[] = [];
+      const serve = async (answer: (path: string, res: import("node:http").ServerResponse) => void): Promise<typeof fetch> => {
+        const server = createServer((req, res) => { answer(req.url ?? "", res); });
+        await new Promise<void>((resolve) => { server.listen(0, "127.0.0.1", resolve); });
+        started.push(server);
+        const { port } = server.address() as AddressInfo;
+        return ((input: URL | string, init?: RequestInit) => fetch(input.toString().replace(/^https:[/][/][^/]+/, `http://127.0.0.1:${String(port)}`), init)) as typeof fetch;
+      };
+      afterAll(() => { for (const server of started) server.closeAllConnections(); });
+      const gzipped = gzipSync(DAILY);
+      const quick = { fetchMs: 300 };
+      const settle = () => new Promise((resolve) => setTimeout(resolve, 600));
+
+      it("a connection cut midway fails the night and leaves the worker running", async () => {
+        await load();
+        const f = await serve((path, res) => {
+          if (path.endsWith("index.txt")) { res.end(A); return; }
+          res.writeHead(200, { "content-length": String(gzipped.length) });
+          res.write(gzipped.subarray(0, 1000));
+          setTimeout(() => { res.destroy(); }, 20);
+        });
+        await expect(updatePackagedFoods(deps({ fetch: f, limits: quick }))).rejects.toThrow();
+        await settle();
+        expect(await sql`SELECT 1 FROM off_daily_files WHERE name = ${A}`).toHaveLength(0);
+      });
+
+      it("a server that stalls fails the night at its time limit and leaves the worker running", async () => {
+        await load();
+        const f = await serve((path, res) => {
+          if (path.endsWith("index.txt")) { res.end(A); return; }
+          res.writeHead(200);
+          res.write(gzipped.subarray(0, 1000));
+        });
+        await expect(updatePackagedFoods(deps({ fetch: f, limits: quick }))).rejects.toThrow();
+        await settle();
+      });
+
+      it("an endless line is refused, and the download it left is closed", async () => {
+        await load();
+        const f = await serve((path, res) => {
+          if (path.endsWith("index.txt")) { res.end(A); return; }
+          res.writeHead(200);
+          res.end(gzipSync(Buffer.alloc(2_000_000, 97)));
+        });
+        await expect(updatePackagedFoods(deps({ fetch: f, limits: { ...quick, lineBytes: 1000 } }))).rejects.toBeInstanceOf(PackagedFileRefused);
+        await settle();
+      });
+
+      it.each<[string, Record<string, number>]>([
+        ["more packed bytes than any day, whatever its header says", { packedBytes: 100 }],
+        ["more unpacked bytes than any day", { unpackedBytes: 1000 }],
+        ["more lines than any day", { lines: 2 }],
+      ])("%s is refused", async (_name, limits) => {
+        await load();
+        const f = await serve((path, res) => {
+          if (path.endsWith("index.txt")) { res.end(A); return; }
+          res.writeHead(200);
+          res.end(gzipped);
+        });
+        await expect(updatePackagedFoods(deps({ fetch: f, limits }))).rejects.toBeInstanceOf(PackagedFileRefused);
+      });
+
+      it("a list of files past any real size is refused", async () => {
+        await load();
+        const f = await serve((_path, res) => { res.writeHead(200); res.end(Buffer.alloc(100_000, 97)); });
+        await expect(updatePackagedFoods(deps({ fetch: f, limits: { indexBytes: 1000 } }))).rejects.toBeInstanceOf(PackagedFileRefused);
+      });
+
+      it("a real day through a real connection is applied", async () => {
+        await load();
+        const f = await serve((path, res) => {
+          if (path.endsWith("index.txt")) { res.end(A); return; }
+          res.writeHead(200);
+          res.end(gzipped);
+        });
+        expect(await updatePackagedFoods(deps({ fetch: f }))).toMatchObject({ outcome: "updated", files: 1 });
+      });
     });
 
     it("skips days the full import already holds", async () => {

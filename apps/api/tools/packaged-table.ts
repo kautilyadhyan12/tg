@@ -8,7 +8,7 @@ import type { OffRow, RowResult } from "../src/modules/nutrition/packagedRows.js
 import { noRefusals, type Refusals } from "./packaged-files.js";
 
 const SHARED = ["code", "name", "kcal", "protein_g", "carbs_g", "fat_g", "fiber_g", "sugars_g", "sat_fat_g", "unsat_fat_g", "sodium_mg", "potassium_mg", "calcium_mg", "iron_mg", "magnesium_mg", "vitamin_d_ug", "serving_size", "quantity", "numbers_fit"] as const;
-const OFF_ONLY = ["allergens", "traces"] as const;
+const OFF_ONLY = ["allergens", "traces", "listed_as_typed"] as const;
 
 /** A list smaller than this share of what is there is a bad file, not a smaller world. */
 const LEAST_SHARE_OF_CURRENT = 0.5;
@@ -22,12 +22,12 @@ const cell = (value: string | number | boolean | null): string => {
   if (typeof value === "number") return String(value);
   return value.replaceAll("\\", "\\\\").replaceAll("\t", " ").replaceAll("\n", " ").replaceAll("\r", " ");
 };
-/** `allergenWords` leaves letters, digits, spaces and hyphens only, so no word needs escaping. */
+/** `allergenLists` leaves letters, marks, digits and spaces only, so no word needs escaping. */
 const textArray = (words: readonly string[]): string => `{${words.map((word) => `"${word}"`).join(",")}}`;
 
 const lineOf = (row: OffRow, withAllergens: boolean): string => {
   const shared = [row.code, row.name, row.kcal, row.proteinG, row.carbsG, row.fatG, row.more.fiberG, row.more.sugarsG, row.more.satFatG, row.more.unsatFatG, row.more.sodiumMg, row.more.potassiumMg, row.more.calciumMg, row.more.ironMg, row.more.magnesiumMg, row.more.vitaminDUg, row.servingSize, row.quantity, row.numbersFit].map(cell);
-  return `${[...shared, ...(withAllergens ? [textArray(row.allergens), textArray(row.traces)] : [])].join("\t")}\n`;
+  return `${[...shared, ...(withAllergens ? [textArray(row.allergens), textArray(row.traces), textArray(row.listedAsTyped)] : [])].join("\t")}\n`;
 };
 
 export interface ListReport {
@@ -84,11 +84,16 @@ export async function fillPackagedList(sql: Sql, table: "off_products" | "usda_b
   }
 }
 
-/** Marks the list as loaded up to two days before now, so the nightly update re-applies the days the
- *  download might not hold yet. Applying a day twice leaves the same rows. */
+/** Marks the list as loaded up to two days before now, and forgets the days after that, so the nightly
+ *  update applies again the days the download might not hold: left marked as done, an older download
+ *  would stay as it is. It also undoes a wrong far-off date from their list. Applying a day twice leaves
+ *  the same rows. */
 export async function recordFullLoad(sql: Sql, now: Date): Promise<void> {
   const seconds = Math.floor(now.getTime() / 1000) - 2 * 24 * 3600;
-  await sql`
-    INSERT INTO off_daily_files (name, to_second, products, written, removed)
-    VALUES (${`full_${now.toISOString()}`}, ${seconds}, 0, 0, 0)`;
+  await sql.begin(async (tx) => {
+    await tx`DELETE FROM off_daily_files WHERE to_second > ${seconds}`;
+    await tx`
+      INSERT INTO off_daily_files (name, to_second, products, written, removed)
+      VALUES (${`full_${now.toISOString()}`}, ${seconds}, 0, 0, 0)`;
+  });
 }
