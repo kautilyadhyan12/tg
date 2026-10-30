@@ -4273,7 +4273,8 @@ is a gym with no country. People who use the app for themselves may be anywhere.
   never one the app made; any other record is separated (a merge of two people, Sam merged into his mum "Pat Smith", is never
   followed), and a card left on another person's merged customer is still charged but no longer says whose that customer is.
   Delete permanently takes a customer the app made out of Square (18d-iii-b-ii-b-ii-b-ii), and keeps one Square's own
-  Subscriptions charge, which is why SUBSCRIPTIONS_READ is still asked for. ORDERS_READ and ITEMS_READ no longer are.
+  Subscriptions charge, which is why SUBSCRIPTIONS_READ is still asked for. ORDERS_READ and ITEMS_READ no longer are. A gym connected before
+  that permission sees Reconnect Square in Settings → Payments, for its owner, with what it is for; everybody else reads who can.
   *Not built, kept as a plan (18d-iii-b-iii; Kd, 2026-10-30, the same day he took Square Point of Sale out):* memberships as
   items in Square, offers in Square and one way at the desk, jobs 18d-iii-b-iv-a to -e. The plan and what was tried in Square's
   test area are in `handoff/2026-10-29-18d-iii-b-iii.md` and `rulings/2026-10-29-18d-iii-b-iii.md`.

@@ -1,6 +1,6 @@
 // `webhook_events`: every provider event kept once by its own id (Part 4 §3.3), so a
 // webhook answers at once and the worker acts on each event, however often it arrives.
-import { paddleSubscriptionIdSchema, razorpaySubscriptionIdSchema, resendEmailEventTypeSchema, squareCardIdSchema, squareObjectIdSchema, squarePaymentIdSchema } from "@app/shared";
+import { paddleSubscriptionIdSchema, razorpaySubscriptionIdSchema, resendEmailEventTypeSchema, squareCardIdSchema, squareObjectIdSchema } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import { z } from "zod";
 
@@ -170,17 +170,16 @@ export async function forgetOldRazorpayEvents(sql: SqlOrTx, before: Date, limit:
 }
 
 /** What is kept of a Square event (ROADMAP 18d-i): its type and the Square account it is
- *  about, and for a card's message which card, for a customer's which customer (18d-ii), for a
- *  payment's which payment (18d-iii-b-i). The worker asks Square itself before acting. */
+ *  about, and for a card's message which card, for a customer's which customer (18d-ii). The
+ *  worker asks Square itself before acting. A payment's message kept before 18d-iii-b-v reads the
+ *  same, its payment left out. */
 export const storedSquareEventSchema = z
   .object({
     type: z.string().min(1).max(100),
     accountId: squareObjectIdSchema,
     cardId: squareCardIdSchema.optional(),
     customerId: squareObjectIdSchema.optional(),
-    paymentId: squarePaymentIdSchema.optional(),
-  })
-  .strict();
+  });
 export type StoredSquareEvent = z.infer<typeof storedSquareEventSchema>;
 
 export async function keepSquareEvent(sql: SqlOrTx, event: { eventId: string; payload: StoredSquareEvent }): Promise<void> {

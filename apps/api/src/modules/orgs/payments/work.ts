@@ -158,6 +158,12 @@ export async function processSquareWork(deps: PaymentsDeps, eventIds: readonly s
     const payload = event.payload;
     const isCard = payload !== null && SQUARE_CARD_EVENTS.includes(payload.type) && payload.cardId !== undefined;
     const isCustomer = payload !== null && payload.type === SQUARE_CUSTOMER_DELETED_EVENT && payload.customerId !== undefined;
+    // Square's message about a payment, kept before Square Point of Sale was taken out (18d-iii-b-v): nothing to do.
+    if (payload?.type.startsWith("payment.") === true) {
+      await webhooks.finishEvent(deps.sql, event, "done", deps.now());
+      run.unchanged += 1;
+      continue;
+    }
     if (payload === null || (payload.type !== SQUARE_REVOKED_EVENT && !isCard && !isCustomer)) {
       await webhooks.finishEvent(deps.sql, event, "failed", deps.now());
       deps.log.warn({ event: "square.event_unreadable", webhookEventId: event.id }, "a kept Square event no longer parses");

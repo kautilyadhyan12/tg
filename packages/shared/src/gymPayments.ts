@@ -98,6 +98,8 @@ export const gymPaymentsSchema = z
     square: squareConnectionSchema.nullable(),
     /** Null unless connected, with a location, in one of SQUARE_TERMINAL_COUNTRIES. */
     terminals: squareTerminalsSchema.nullable(),
+    /** Connected before the app asked for everything it asks for now: the owner connects Square again. */
+    needsAllow: z.boolean().default(false),
   })
   .strict();
 export type GymPayments = z.infer<typeof gymPaymentsSchema>;

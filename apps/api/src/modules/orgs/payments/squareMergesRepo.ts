@@ -35,14 +35,13 @@ export async function moveCards(tx: TransactionSql, m: At & { gymId: string; fro
 export interface LinkedRecord {
   entryId: string;
   fullName: string;
-  current: boolean;
 }
 
 /** The gym's records any of these customers is, current or past: the customer the app keeps for them, or the
  *  one their card on file is saved on, where that card still says whose it is. */
 export async function linkedTo(tx: TransactionSql, m: At & { gymId: string; customerIds: readonly string[] }): Promise<LinkedRecord[]> {
-  const rows = await tx<{ id: string; full_name: string; current: boolean }[]>`
-    SELECT e.id, e.full_name, e.former_at IS NULL AS current
+  const rows = await tx<{ id: string; full_name: string }[]>`
+    SELECT e.id, e.full_name
     FROM gym_member_list_entries e
     WHERE e.gym_id = ${m.gymId}
       AND e.id IN (
@@ -53,7 +52,7 @@ export async function linkedTo(tx: TransactionSql, m: At & { gymId: string; cust
         WHERE gym_id = ${m.gymId} AND environment = ${m.environment} AND account_id = ${m.accountId} AND customer_id = ANY(${[...m.customerIds]}::text[])
           AND merged_away_at IS NULL)
     ORDER BY e.id`;
-  return rows.map((r) => ({ entryId: r.id, fullName: r.full_name, current: r.current }));
+  return rows.map((r) => ({ entryId: r.id, fullName: r.full_name }));
 }
 
 /** The record keeps the merged customer: Square made it, not the app, so it counts as one Square had

@@ -219,4 +219,8 @@ export const NO_TERMINALS = 'No Terminals paired yet.';
 export const NEEDS_ALLOW_LINE = 'Reconnect Square to use Square Terminals.';
 export const NEEDS_ALLOW_HINT = 'Square will ask you to approve device access and in-person payments.';
 export const NEEDS_ALLOW_OTHERS = 'The owner needs to reconnect Square before Terminals can be used.';
+/** The connection allows less than the app asks for now, and it is not the Terminals' permissions (those say so themselves). */
+export const RECONNECT_LINE = 'Reconnect Square so Delete permanently can take people out of your Square customer list.';
+export const RECONNECT_HINT = "Square will ask you to approve one more thing: reading its subscriptions, so nobody Square still charges is taken out.";
+export const RECONNECT_OTHERS = 'The owner needs to reconnect Square before Delete permanently can take people out of your Square customer list.';
 export const TERMINAL_OWNER_ONLY = 'Only the owner can pair or remove Terminals.';

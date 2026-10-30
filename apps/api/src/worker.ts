@@ -56,7 +56,6 @@ import { paddleSettings, razorpaySettings } from "./modules/billing/settings.js"
 import { sendPlanEndReminders } from "./modules/billing/service.js";
 import { squareSettings } from "./modules/orgs/payments/settings.js";
 import { processSquareWork } from "./modules/orgs/payments/work.js";
-import { createRedisNews, liveChannel } from "./modules/live/news.js";
 import { sendDueCardExpiryNotices } from "./modules/orgs/payments/cardExpiry.js";
 import { sendDueCardNotices } from "./modules/orgs/payments/cardNotices.js";
 // The worker busts no entitlement cache: a gym's members pick a change up within the cache's 60 s.
@@ -97,9 +96,6 @@ export const ORGS_GONE_FOR_GOOD_JOB = "orgs.gone_for_good";
 
 const connection = new Redis(redisUrl, { maxRetriesPerRequest: null });
 const sql = postgres(config.DATABASE_URL, { prepare: false, max: 2 });
-// Live updates (ROADMAP Stage 4 item 18): what the worker changes (a Terminal payment, a card charged) is told
-// to the pages open on its gym, on the channel the api's servers hear.
-const news = createRedisNews(redisUrl, liveChannel(config.DATABASE_URL), log);
 
 const queue = new Queue(ROLLUPS_QUEUE, { connection });
 
@@ -718,7 +714,7 @@ if (square === null) {
     async (job) => {
       if (job.name !== PAYMENTS_SQUARE_JOB) throw new Error(`unknown job on ${PAYMENTS_QUEUE}: ${job.name}`);
       const startedAt = Date.now();
-      const run = await processSquareWork({ sql, square, log, now: () => new Date(), news });
+      const run = await processSquareWork({ sql, square, log, now: () => new Date() });
       const revokes = run.revokes.sent + run.revokes.deferred + run.revokes.givenUp;
       const cardStops = run.cardStops.sent + run.cardStops.deferred + run.cardStops.givenUp;
       const customerDeletes = run.customerDeletes.deleted + run.customerDeletes.kept + run.customerDeletes.deferred + run.customerDeletes.givenUp;
@@ -971,7 +967,6 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
       await billingQueue?.close();
       await paymentsQueue?.close();
       await connection.quit();
-      await news.close();
       await sql.end();
       // T3 round 3 minor: an exception captured moments before SIGTERM would
       // be dropped without a flush. Bounded so shutdown cannot hang on it.

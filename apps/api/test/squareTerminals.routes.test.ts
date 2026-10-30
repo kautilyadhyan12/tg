@@ -705,6 +705,9 @@ d("A gym's Square Terminals: whose they are, pairing with Square's code, and rem
       await sql`UPDATE gym_payment_connections SET scopes = ${before} WHERE gym_id = ${gymId}`;
       const answer = await read(gymId, owner);
       expect(answer.terminals?.needsAllow, "the Terminals need nothing more").toBe(false);
+      // The box offers Reconnect Square for it, and the press is taken (round one, High 1).
+      expect(answer.needsAllow).toBe(true);
+      expect((await send("POST", `/v1/orgs/${gymId}/payments/square/connect`, owner.cookies)).statusCode).toBe(200);
       await pairTerminal(gymId, owner);
     },
     TEST_TIMEOUT_MS,

@@ -146,6 +146,36 @@ describe('Square Point of Sale, taken out (18d-iii-b-v; Kd, 2026-10-30)', () => 
   });
 });
 
+describe('connected before the app could read Square\'s subscriptions (High 1, round one)', () => {
+  it('the owner is told what for and gets Reconnect Square, which opens Square\'s own page', async () => {
+    orgService.connectSquare.mockResolvedValue({ data: { url: 'https://square.example/allow' } });
+    open(payments({ square: CONNECTED, needsAllow: true, terminals: { needsAllow: false, list: [], pairing: null } }));
+    const box = within(await screen.findByTestId('square-reconnect'));
+    expect(box.getByText('Reconnect Square so Delete permanently can take people out of your Square customer list.')).toBeTruthy();
+    fireEvent.click(box.getByRole('button', { name: 'Reconnect Square' }));
+    await vi.waitFor(() => expect(orgService.connectSquare).toHaveBeenCalledWith(ORG.id));
+  });
+
+  it('anybody else is told who can, with no button', async () => {
+    open(payments({ canConnect: false, square: CONNECTED, needsAllow: true }));
+    const box = within(await screen.findByTestId('square-reconnect'));
+    expect(box.getByText('The owner needs to reconnect Square before Delete permanently can take people out of your Square customer list.')).toBeTruthy();
+    expect(box.queryByRole('button')).toBeNull();
+  });
+
+  it('where the Terminals ask already, it is said once, there', async () => {
+    open(payments({ square: CONNECTED, needsAllow: true, terminals: { needsAllow: true, list: [], pairing: null } }));
+    expect(await screen.findByRole('button', { name: 'Reconnect Square' })).toBeTruthy();
+    expect(screen.queryByTestId('square-reconnect')).toBeNull();
+  });
+
+  it('a gym that allows everything is asked nothing', async () => {
+    open(payments({ square: CONNECTED, needsAllow: false }));
+    expect(await screen.findByRole('button', { name: 'Disconnect Square' })).toBeTruthy();
+    expect(screen.queryByTestId('square-reconnect')).toBeNull();
+  });
+});
+
 describe('a Square account with several locations', () => {
   const choosing = { ...CONNECTED, state: 'choose_location', locationName: null, locations: [{ id: 'LLEEDS', name: 'Leeds' }, { id: 'LYORK', name: 'York' }] };
 

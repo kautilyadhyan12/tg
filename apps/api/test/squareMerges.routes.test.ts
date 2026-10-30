@@ -20,6 +20,7 @@ import {
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { openDueBills } from "../src/modules/orgs/memberships/billsRepo.js";
+import { claimCustomer } from "../src/modules/orgs/payments/cardsRepo.js";
 import { squareSettings } from "../src/modules/orgs/payments/settings.js";
 import { processSquareWork } from "../src/modules/orgs/payments/work.js";
 import { putMembersInSquare } from "./squareCustomersSetup.js";
@@ -475,6 +476,45 @@ d("Square's merges followed (real Postgres)", { timeout: T }, () => {
       expect(own).toMatch(/^CUS/);
       expect(own).not.toBe(first);
       expect(await cardRow(gym, sam)).toMatchObject({ customer_id: own, merged_away_at: null });
+    });
+
+    it("a customer asked for with the record's key whose answer was lost: the card goes on that customer, never on a merged one that carries the same reference id", async () => {
+      const gym = await makeGym("Lost Answer Gym");
+      const lena = await person(gym, "Lena Fox", { email: `lena.${uniq()}@gmail.com`, phone: "312-555-0123" });
+      // Square made her customer with another body (the phone as well) and its answer was lost.
+      const key = { gymId: gym.id, entryId: lena, environment: "production" as const, accountId: gym.acct.merchantId };
+      const claimed = await claimCustomer(sql, key, randomUUID());
+      if (!("makingKey" in claimed)) throw new Error("not being made");
+      const made = square.madeWithKey(gym.acct, claimed.makingKey, { idempotencyKey: claimed.makingKey, givenName: "Lena", familyName: "Fox", email: "lena@x.example", phone: "+13125550123", referenceId: lena });
+      // A customer Square made by merging others keeps one of their reference ids: first by id, and never hers by it.
+      square.customer(gym.acct, { id: "CAAAMERGED", given_name: "Pat", family_name: "Smith", reference_id: lena, creation_source: "MERGE" });
+      const res = await send("POST", `${entryUrl(gym, lena)}/card`, gym.owner.cookies, {
+        sourceId: `cnon:ok-VISA-4242-${uniq()}`,
+        agreed: true,
+        agreement: cardAgreementWords(gym.name),
+        requestKey: randomUUID(),
+      });
+      expect(res.statusCode, res.body).toBe(200);
+      expect((await customerOf(gym, lena))?.customer_id).toBe(made);
+      expect(await cardRow(gym, lena)).toMatchObject({ customer_id: made, merged_away_at: null });
+    });
+
+    it("Square's message about a payment is answered and kept nowhere: the app no longer takes payments in", async () => {
+      const gym = await makeGym("Payment Message Gym");
+      const eventId = await signed(gym.acct, "payment.created", { type: "payment", id: "PAYNOTOURS" });
+      const kept = await sql`SELECT id FROM webhook_events WHERE provider = 'square' AND event_id = ${eventId}`;
+      expect(kept).toEqual([]);
+    });
+
+    it("a message about a payment kept before Square Point of Sale was taken out is finished quietly, not given up on", async () => {
+      const gym = await makeGym("Old Payment Message Gym");
+      const eventId = `sqg-t-${uniq()}`;
+      await sql`
+        INSERT INTO webhook_events (provider, event_id, payload, not_before)
+        VALUES ('square', ${eventId}, ${sql.json({ type: "payment.updated", accountId: gym.acct.merchantId, paymentId: "PAYOLD" })}, ${clock})`;
+      await work([eventId]);
+      const [row] = await sql<{ status: string | null; processed: boolean }[]>`SELECT status, processed_at IS NOT NULL AS processed FROM webhook_events WHERE provider = 'square' AND event_id = ${eventId}`;
+      expect(row).toMatchObject({ processed: true, status: "done" });
     });
 
     it("Square not answering: nothing changes, and the message is tried again until it does", async () => {

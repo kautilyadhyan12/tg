@@ -128,7 +128,7 @@ export async function recordPaymentIn(tx: TransactionSql, input: RecordPaymentIn
     return same ? { kind: "recorded", paymentId: byKey.id } : { kind: "request_reused" };
   }
   if (input.provider !== undefined) {
-    // One taken back ("Not this bill", 18d-iii-b-i) no longer holds the company's payment.
+    // One voided no longer holds the company's payment.
     const [byCompany] = await tx<{ id: string }[]>`
       SELECT id FROM gym_member_payments
       WHERE gym_id = ${input.gymId} AND provider = ${input.provider.name} AND provider_payment_id = ${input.provider.paymentId} AND undone_at IS NULL`;
@@ -224,8 +224,7 @@ export async function recordPaymentIn(tx: TransactionSql, input: RecordPaymentIn
 
 /** Voids the newest payment on a membership (18o): recorded by mistake. Its row is kept,
  *  marked with who, when and why; the bill is owed again, and where it had settled the
- *  newest paid period the count of paid periods goes back by one. A payment taken in Square's
- *  own app is taken off this way only as "Not this bill" (18d-iii-b-i), and waits again. */
+ *  newest paid period the count of paid periods goes back by one. */
 export async function voidPayment(
   sql: Sql,
   input: { gymId: string; entryId: string; membershipId: string; paymentId: string; reason: PaymentVoidReason; today: string; actorUserId: string; now: Date },

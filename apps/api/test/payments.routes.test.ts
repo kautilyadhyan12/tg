@@ -434,8 +434,8 @@ d("A gym's own Square account: who connects it, to which gym, and letting it go 
       await sql`UPDATE gyms SET country = NULL WHERE id = ${nowhere}`;
       await staff(gb, manager, "manager");
 
-      expect(await read(gb, owner)).toEqual({ availability: "square", country: "GB", canConnect: true, squareReady: true, square: null, terminals: null });
-      expect(await read(gb, manager)).toEqual({ availability: "square", country: "GB", canConnect: false, squareReady: true, square: null, terminals: null });
+      expect(await read(gb, owner)).toEqual({ availability: "square", country: "GB", canConnect: true, squareReady: true, square: null, terminals: null, needsAllow: false });
+      expect(await read(gb, manager)).toEqual({ availability: "square", country: "GB", canConnect: false, squareReady: true, square: null, terminals: null, needsAllow: false });
       expect((await send("GET", `/v1/orgs/${gb}/payments`, stranger.cookies)).statusCode).toBe(404);
       expect((await send("GET", `/v1/orgs/${gb}/payments`, {})).statusCode).toBe(401);
       expect((await read(india, owner)).availability).toBe("india_soon");

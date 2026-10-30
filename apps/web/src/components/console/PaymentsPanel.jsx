@@ -15,6 +15,9 @@ import {
   removedLine,
   squareOutcomeLine,
   squareRows,
+  RECONNECT_HINT,
+  RECONNECT_LINE,
+  RECONNECT_OTHERS,
 } from '../../pages/console/paymentsView';
 import PlaceLink from './PlaceLink';
 import SquareTerminals from './SquareTerminals';
@@ -290,6 +293,25 @@ export default function PaymentsPanel({ org, readOnly, startOpen = false, outcom
               onConnectAgain={() => void connect()}
               connecting={busy === 'connect'}
             />
+          ) : null}
+          {data.needsAllow === true && data.terminals?.needsAllow !== true ? (
+            <section aria-label="Reconnect Square" className="flex flex-col gap-2" data-testid="square-reconnect">
+              {owner ? (
+                <>
+                  <p className="text-sm m-0" style={{ color: '#fff' }}>
+                    {RECONNECT_LINE}
+                  </p>
+                  <p className="text-sm m-0" style={hintStyle}>
+                    {RECONNECT_HINT}
+                  </p>
+                  {connectButton('Reconnect Square')}
+                </>
+              ) : (
+                <p className="text-sm m-0" style={hintStyle}>
+                  {RECONNECT_OTHERS}
+                </p>
+              )}
+            </section>
           ) : null}
           {disconnectArea(square)}
         </div>

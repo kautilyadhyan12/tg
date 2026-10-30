@@ -881,6 +881,68 @@ d("0001_init on a real database", () => {
       });
   });
 
+  /** MIGRATION `0175`'s data statements, read out of the shipped file and run on TEMPORARY copies (never the live tables): a payment
+   *  recorded from Square Point of Sale stays, as Card at the desk, without Square's id, and passes the new checks, one voided as
+   *  Not this bill too, with its reason; a Terminal payment and a cash one are left alone; a customer Match linked goes and every
+   *  other stays. All rolled back. */
+  it("0175 turns Square Point of Sale payments into Card at the desk, and lets go of the customers Match linked", async () => {
+    const migration = await readFile(new URL("../drizzle/0175_square_point_of_sale_out.sql", import.meta.url), "utf8");
+    const chunks = migration.split("--> statement-breakpoint").map((c) => c.trim().replace(/^(?:--.*\r?\n)+/, "").trim());
+    const one = (text: string): string => {
+      const found = chunks.filter((c) => c.startsWith(text));
+      if (found.length !== 1 || found[0] === undefined) throw new Error(`0175 no longer holds exactly one: ${text}`);
+      return found[0];
+    };
+    const fill = one('UPDATE "gym_member_payments"').replaceAll('"gym_member_payments"', '"gmp_0175"');
+    const checks = chunks.filter((c) => c.startsWith('ALTER TABLE "gym_member_payments" ADD CONSTRAINT')).map((c) => c.replaceAll('"gym_member_payments"', '"gmp_0175"'));
+    const letGo = one('DELETE FROM "gym_square_customers"').replaceAll('"gym_square_customers"', '"gsc_0175"');
+    expect(checks).toHaveLength(2);
+    await sql
+      .begin(async (tx) => {
+        await tx`CREATE TEMP TABLE gmp_0175 (LIKE gym_member_payments INCLUDING DEFAULTS) ON COMMIT DROP`;
+        const gym = "00000000-0000-4000-8000-000000000175";
+        const bill = randomUUID();
+        let seq = 0;
+        const pay = async (method: string, provider: string | null, id: string | null, voided: string | null): Promise<string> => {
+          seq += 1;
+          const [row] = await tx<{ id: string }[]>`
+            INSERT INTO gmp_0175 (id, gym_id, bill_id, seq, amount_minor, currency, method, request_key, paid_on, receipt_number, provider, provider_payment_id, undone_at, void_reason)
+            VALUES (gen_random_uuid(), ${gym}, ${bill}, ${seq}, 4999, 'USD', ${method}, gen_random_uuid(), '2026-10-30', ${seq}, ${provider}, ${id}, ${voided === null ? null : new Date()}, ${voided})
+            RETURNING id`;
+          return row?.id ?? "";
+        };
+        const standing = await pay("square_app", "square", "SQPAY1", null);
+        const taken = await pay("square_app", "square", "SQPAY2", "not_this_bill");
+        const terminal = await pay("terminal", "square", "SQPAY3", null);
+        const cash = await pay("cash", null, null, null);
+        await tx.unsafe(fill);
+        for (const add of checks) await tx.unsafe(add);
+        const rows = await tx<{ id: string; method: string; provider: string | null; provider_payment_id: string | null; void_reason: string | null }[]>`
+          SELECT id, method, provider, provider_payment_id, void_reason FROM gmp_0175`;
+        const of = (id: string) => rows.find((r) => r.id === id);
+        expect(of(standing)).toMatchObject({ method: "card_at_desk", provider: null, provider_payment_id: null, void_reason: null });
+        expect(of(taken)).toMatchObject({ method: "card_at_desk", provider: null, void_reason: "not_this_bill" });
+        expect(of(terminal)).toMatchObject({ method: "terminal", provider: "square", provider_payment_id: "SQPAY3" });
+        expect(of(cash)).toMatchObject({ method: "cash", provider: null });
+
+        await tx`CREATE TEMP TABLE gsc_0175 (LIKE gym_square_customers INCLUDING DEFAULTS) ON COMMIT DROP`;
+        await tx`ALTER TABLE gsc_0175 ADD COLUMN matched_at timestamptz`;
+        const customer = async (customerId: string, matched: boolean) => {
+          await tx`
+            INSERT INTO gsc_0175 (gym_id, entry_id, environment, account_id, customer_id, matched_at)
+            VALUES (${gym}, gen_random_uuid(), 'production', 'ACCT175', ${customerId}, ${matched ? new Date() : null})`;
+        };
+        await customer("CMATCHED", true);
+        await customer("CMADE", false);
+        await tx.unsafe(letGo);
+        expect((await tx<{ customer_id: string }[]>`SELECT customer_id FROM gsc_0175`).map((r) => r.customer_id)).toEqual(["CMADE"]);
+        throw new Error("rollback");
+      })
+      .catch((err: unknown) => {
+        if (!(err instanceof Error) || err.message !== "rollback") throw err;
+      });
+  });
+
   /** MIGRATION `0171`'s data statement, read out of the shipped file and run on a TEMPORARY copy of the table (never the live one other
    *  suites write to): a customer the app made before the reference id was kept carries its record's id, which is what it was made
    *  with; a customer Square already had (linked) carries none; one already marked keeps its mark; a second run finds nothing to do.

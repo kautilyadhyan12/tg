@@ -452,7 +452,7 @@ export const gymMemberPayments = pgTable(
       columns: [t.gymId, t.billId],
       foreignColumns: [gymMemberBills.gymId, gymMemberBills.id],
     }).onDelete("cascade"),
-    // A payment taken back (`not_this_bill`, 0164) no longer holds its company's id.
+    // A voided payment no longer holds its company's id.
     uniqueIndex("gym_member_payments_provider_uq").on(t.gymId, t.provider, t.providerPaymentId).where(sql`${t.provider} IS NOT NULL AND ${t.undoneAt} IS NULL`),
     index("gym_member_payments_bill_idx").on(t.gymId, t.billId),
   ],

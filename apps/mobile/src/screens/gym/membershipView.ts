@@ -40,8 +40,8 @@ export function daysText(covers: { from: string; to: string }): string {
 }
 
 const methodWords = (method: MemberPaymentMethod): string => MEMBER_PAYMENT_METHOD_WORDS[method];
-/** Inside a sentence: "Card at the desk" reads "card at the desk"; "UPI" and "Square Point of Sale" keep their capitals. */
-const lower = (words: string) => (/^(?:[A-Z]{2,}|Square)\b/.test(words) ? words : `${words.charAt(0).toLowerCase()}${words.slice(1)}`);
+/** Inside a sentence: "Card at the desk" reads "card at the desk"; "UPI" keeps its capitals. */
+const lower = (words: string) => (/^[A-Z]{2,}\b/.test(words) ? words : `${words.charAt(0).toLowerCase()}${words.slice(1)}`);
 
 export type Tone = "good" | "orange" | "bad" | "plain";
 export interface Tag {

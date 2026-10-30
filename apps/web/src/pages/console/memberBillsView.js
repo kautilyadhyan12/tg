@@ -227,7 +227,6 @@ export function billRow(bill, currency, today) {
 
 const paymentLine = (p, currency) => ({
   id: p.id,
-  // A payment taken in Square's own app (18d-iii-b-i) is taken off with Not this bill, never voided.
   method: p.method,
   amount: formatMinor(p.amountMinor, currency),
   // Charged to the card on file (18d-iii-i): which card.

@@ -82,8 +82,7 @@ export interface SquareApi {
    *  the same press sent twice gives back the same card. */
   createCard(accessToken: string, card: { idempotencyKey: string; sourceId: string; customerId: string; cardholderName: string | null }): Promise<SquareResult<SquareCard>>;
   retrieveCard(accessToken: string, cardId: string): Promise<SquareResult<SquareCard>>;
-  /** 404 is a customer the gym deleted inside Square. What Square has of them (their name, email and
-   *  phone) is shown beside a payment from Square Point of Sale linked to nobody here (18d-iii-b-ii-a). */
+  /** 404 is a customer the gym deleted inside Square. An old id of a merged customer answers the merged one. */
   retrieveCustomer(accessToken: string, customerId: string): Promise<SquareResult<SquareCustomer>>;
   /** Delete a customer for good (18d-iii-b-ii-b-ii-b-ii). Square refuses (409 CONFLICT) a `version` that is not the customer's
    *  current one, answers 404 for one already deleted, and answers 200 for the old id of a merged customer and leaves the
@@ -388,8 +387,8 @@ export function createSquareApi(opts: {
       let unread = 0;
       for (const raw of result.value.subscriptions ?? []) {
         const one = squareSubscriptionSchema.safeParse(raw);
-        // One that cannot be read says nothing about anybody: Members in Square counts it as a subscription of none of these
-        // customers rather than guessing; `unread` says how many, for a reader that must not guess (Delete permanently).
+        // One that cannot be read says nothing about anybody: `unread` says how many, for a reader that must not guess
+        // (Delete permanently).
         if (one.success) subscriptions.push({ customerId: one.data.customer_id ?? null, status: one.data.status ?? null });
         else unread += 1;
       }
