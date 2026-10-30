@@ -4277,8 +4277,11 @@ is a gym with no country. People who use the app for themselves may be anywhere.
   that permission sees Reconnect Square in Settings → Payments, for its owner, with what it is for; everybody else reads who can.
   *Not built, kept as a plan (18d-iii-b-iii; Kd, 2026-10-30, the same day he took Square Point of Sale out):* memberships as
   items in Square, offers in Square, one way at the desk, and moving members off Square's Subscriptions, jobs 18d-iii-b-iv-a to
-  -f. A gym that uses Square Subscriptions cancels them in Square; a connected gym's Settings → Payments says so, as they would
-  pay twice. The plan and what was tried in Square's
+  -f. A gym that uses Square Subscriptions cancels them in Square.
+  *A gym moving from other software (Kd, 2026-10-30):* saved cards don't come with an import: they stay with the payment company, and
+  members add them again. A connected gym's Settings → Payments and the end of every import say to stop billing in the old software or
+  Square Subscriptions first, as the app cannot see that billing and members would pay twice. *Planned, 18d-vii:* a button that asks every
+  member with no card on file to add it in the app, after Stage 5 item 20's saving their card. The plan and what was tried in Square's
   test area are in `handoff/2026-10-29-18d-iii-b-iii.md` and `rulings/2026-10-29-18d-iii-b-iii.md`.
 - **Cash, bank transfer, a card on another machine, and UPI in India** (18r): recorded.
 

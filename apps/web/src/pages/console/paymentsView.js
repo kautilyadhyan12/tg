@@ -219,8 +219,10 @@ export const NO_TERMINALS = 'No Terminals paired yet.';
 export const NEEDS_ALLOW_LINE = 'Reconnect Square to use Square Terminals.';
 export const NEEDS_ALLOW_HINT = 'Square will ask you to approve device access and in-person payments.';
 export const NEEDS_ALLOW_OTHERS = 'The owner needs to reconnect Square before Terminals can be used.';
-/** The app does not read Square's own subscriptions for who pays them: a member billed there and charged here pays twice. */
-export const SQUARE_SUBSCRIPTIONS_NOTE = 'If Square Subscriptions bills your members, cancel those subscriptions in Square before you charge their cards here. Otherwise they pay twice.';
+/** The app cannot see billing that runs elsewhere (Kd, 2026-10-30): a person billed by a gym's old software or by Square Subscriptions and
+ *  charged here pays twice. Said where a gym that is moving passes: Settings → Payments and the end of an import. `people`: the gym's
+ *  own word, "members". */
+export const billingElsewhereLine = (people) => `If your old software or Square Subscriptions still bills your ${people}, stop that billing before you charge their cards here. Otherwise they pay twice.`;
 
 /** The connection allows less than the app asks for now, and it is not the Terminals' permissions (those say so themselves). */
 export const RECONNECT_LINE = 'Reconnect Square so Delete permanently can take people out of your Square customer list.';

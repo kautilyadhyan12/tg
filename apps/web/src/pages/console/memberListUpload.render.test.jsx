@@ -223,6 +223,8 @@ describe('the worst thing: nobody leaves who was not answered for', () => {
     orgService.confirmMemberList.mockResolvedValueOnce({ data: { confirmed: confirmedAnswer() } });
     fireEvent.click(go);
     await screen.findByTestId('member-import-done');
+    // A gym moving from other software is told, at the end of the import, that its old billing must stop (Kd, 2026-10-30).
+    expect(screen.getByTestId('billing-elsewhere-note').textContent).toBe('If your old software or Square Subscriptions still bills your members, stop that billing before you charge their cards here. Otherwise they pay twice.');
     expect(orgService.confirmMemberList).toHaveBeenCalledWith(GYM, UPLOAD, {
       permissionConfirmed: true,
       acknowledgeLargeChange: true,
