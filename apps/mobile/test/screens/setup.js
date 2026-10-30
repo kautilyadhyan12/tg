@@ -106,10 +106,12 @@ jest.mock("expo-camera", () => {
         return camera.fails ? Promise.reject(new Error("camera")) : Promise.resolve({ uri: "file:///camera/photo.jpg", width: 4000, height: 3000 });
       },
     }));
+    // Once a view, as an iPhone does.
     const { onCameraReady } = props;
     useEffect(() => {
       onCameraReady?.();
-    }, [onCameraReady]);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
     return createElement(View, { testID: "camera-view", facing: props.facing });
   });
   function useCameraPermissions() {

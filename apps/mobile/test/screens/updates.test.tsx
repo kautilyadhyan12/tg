@@ -4,6 +4,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { AppState, Dimensions, StyleSheet, type StyleProp, type ViewStyle } from "react-native";
 import { Directory, File, Paths } from "expo-file-system";
 import { launchImageLibraryAsync } from "expo-image-picker";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Gesture, State } from "react-native-gesture-handler";
 import { fireGestureHandler, getByGestureTestId } from "react-native-gesture-handler/jest-utils";
 import { GYM_POST_PHONE_PHOTO_MAX_BYTES, gymPostsResponseSchema } from "@app/shared";
@@ -1396,10 +1397,18 @@ describe("the phone's display size changes", () => {
     });
     try {
       expect(bodyHeight()).toBe(500);
-      await act(() => {
-        Dimensions.set({ window: { ...window, height: 1000 }, screen: { ...whole, height: 1000 } });
-      });
-      expect(bodyHeight()).toBe(1000);
+      // Older Android: the window leaves out only the phone's bars.
+      const insets = jest.mocked(useSafeAreaInsets);
+      const was = insets.getMockImplementation();
+      insets.mockImplementation(() => ({ top: 40, bottom: 40, left: 0, right: 0 }));
+      try {
+        await act(() => {
+          Dimensions.set({ window: { ...window, height: 920 }, screen: { ...whole, height: 1000 } });
+        });
+        expect(bodyHeight()).toBe(1000);
+      } finally {
+        insets.mockImplementation(was);
+      }
     } finally {
       await act(() => {
         Dimensions.set({ window, screen: whole });
