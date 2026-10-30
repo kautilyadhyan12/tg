@@ -35,6 +35,8 @@ import {
   type Per100g,
   type VisionEvidence,
   isOwnFood,
+  classifyBarcode,
+  type BarcodeReply,
 } from "@app/shared";
 import type { RedisLike } from "../../redis.js";
 import { onMealLogged } from "../gamification/service.js";
@@ -47,6 +49,8 @@ import { foodWeek, spanDays } from "./foodWeek.js";
 import { CURATED_FOODS, curatedPieceFdcId, curatedUsdaFdcId, findCurated, findCuratedVersions, holdsEveryWord, searchCurated, slug } from "./foods.js";
 import { GRAM, dishwareGrams, foodMeasures, gramsPerMl, measureGrams, scanStart, startingMeasure, type UsdaPortion } from "./measures.js";
 import type { FoodReference, FoodSearchProvider } from "./openfoodfacts.adapter.js";
+import { packagedRowsFor } from "./packagedRepo.js";
+import { isPackagedCanonical, packagedCode, packagedFoodOf, type PackagedFood } from "./packagedRows.js";
 import { itemsVersion, ownPer100g, savedPlaces } from "./mealEdit.js";
 import { RECENT_MEALS_READ, recentFoods, type RecentPick } from "./recentFoods.js";
 import * as repo from "./repo.js";
@@ -375,7 +379,7 @@ async function searchFoodReferences(deps: NutritionDeps, query: string, limit: n
  *  of the USDA table's; the entry it cites, for one of our list's; none for a
  *  packaged product or a scan's estimate. */
 const measuresEntry = (food: FoodReference): number | null =>
-  food.source === "usda" ? repo.usdaFdcId(food.canonical) : food.source === "curated" ? curatedUsdaFdcId(food.canonical) : null;
+  food.source === "usda" && !isPackagedCanonical(food.canonical) ? repo.usdaFdcId(food.canonical) : food.source === "curated" ? curatedUsdaFdcId(food.canonical) : null;
 
 /** The USDA entry a food of our list borrows its pieces from (`PIECE_ENTRIES`), or null. */
 const piecesEntry = (food: FoodReference): number | null => (food.source === "curated" ? curatedPieceFdcId(food.canonical) : null);
@@ -397,7 +401,7 @@ async function measuresOf(deps: Pick<NutritionDeps, "sql">, foods: readonly Food
  *  its own USDA measures, and a scan's estimate is served by the grams the photo
  *  saw, which no measure names — neither is a measure of its own (`MeasureSource`). */
 const servingOfFood = (food: FoodReference): { serving: number; unit: string; ownServing: boolean } =>
-  ({ serving: food.serving, unit: food.unit, ownServing: food.source !== "usda" && food.source !== "estimate" });
+  ({ serving: food.serving, unit: food.unit, ownServing: (food.source !== "usda" || isPackagedCanonical(food.canonical)) && food.source !== "estimate" });
 
 /** The search box's foods, each with its measures and the one it starts at. */
 async function withMeasures(deps: NutritionDeps, foods: readonly FoodReference[]): Promise<FoodSearchItem[]> {
@@ -426,7 +430,7 @@ async function withMore<T extends FoodReference>(deps: Pick<NutritionDeps, "sql"
   const entries = foods.map(measuresEntry);
   const rows = await repo.usdaMoreFor(deps.sql, entries.filter((id): id is number => id !== null));
   return foods.map((food, at) => {
-    if (food.source === "openfoodfacts") return food;
+    if (food.source === "openfoodfacts" || isPackagedCanonical(food.canonical)) return food;
     if (food.source === "estimate") return { ...food, more: MORE_NOT_KNOWN };
     const entry = entries[at] ?? null;
     const row = (entry === null ? undefined : rows.get(entry)) ?? MORE_NOT_KNOWN;
@@ -529,6 +533,25 @@ async function sharedDishGrams(
   return grams;
 }
 
+/** What the lists hold for a code already known to be one product worldwide (`classifyBarcode`). */
+async function packagedFood(deps: Pick<NutritionDeps, "sql">, code: string): Promise<PackagedFood | null> {
+  const rows = await packagedRowsFor(deps.sql, code);
+  return packagedFoodOf(rows.off, rows.usda);
+}
+
+/** A code from a pack (ROADMAP 33b-iii-a). A store's own code, a book's and a misread one never reach
+ *  a query. Nothing leaves the server: the lists are our own copy. */
+export async function barcodeLookup(deps: NutritionDeps, raw: string): Promise<BarcodeReply> {
+  const kind = classifyBarcode(raw);
+  if (kind.kind === "bad") return { status: "bad_code" };
+  if (kind.kind === "store_only" || kind.kind === "not_a_food") return { status: kind.kind };
+  const found = await packagedFood(deps, kind.code);
+  if (found === null) return { status: "not_found", code: kind.code };
+  const [food] = await withMeasures(deps, [found.food]);
+  if (food === undefined) throw new Error("withMeasures returns one food for each it is given");
+  return { status: "found", code: kind.code, food, allergens: found.allergens, mayContain: found.mayContain, check: found.check };
+}
+
 async function findFood(deps: NutritionDeps, query: string, search = true): Promise<FoodReference | null> {
   // An est_* canonical is a scan's own estimate, and lives only in that scan's
   // draft and the meal saved from it: nothing may look one up by name, or a
@@ -551,7 +574,15 @@ async function findFood(deps: NutritionDeps, query: string, search = true): Prom
   // returned, kept for a day (rememberFoods), and searching Open Food Facts for
   // the slug itself can find nothing but another product (the review of PR #83,
   // L1) — so one past its day is not found, as a usda_* canonical is.
-  if (query.startsWith("off_")) return await canonicalCached(deps, query);
+  // Our own copy of the lists first (33b-iii-a): a product stays found after its day, and the price is
+  // the same however it was reached. Under the name it was asked by, which a saved meal keeps.
+  if (isPackagedCanonical(query)) {
+    const code = packagedCode(query);
+    const kind = code === null ? null : classifyBarcode(code);
+    const held = kind?.kind === "product" ? await packagedFood(deps, kind.code) : null;
+    if (held !== null) return { ...held.food, canonical: query };
+    return query.startsWith("off_") ? await canonicalCached(deps, query) : null;
+  }
   const local = findCurated(query);
   if (local !== null) return local;
   // Canonical-keyed cache (foods a search already returned — the manual-log

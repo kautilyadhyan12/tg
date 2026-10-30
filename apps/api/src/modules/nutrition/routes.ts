@@ -6,9 +6,10 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import type { z } from "zod";
-import { MEAL_PHOTO_MAX_BYTES, cleanPhoto } from "@app/shared";
+import { MEAL_PHOTO_MAX_BYTES, barcodeParamSchema, cleanPhoto } from "@app/shared";
 import type { AppConfig } from "../../config.js";
 import type { RedisLike } from "../../redis.js";
+import { createDualRateLimit } from "../auth/rateLimit.js";
 import { requireQuota } from "../quotas/service.js";
 import { createOpenFoodFactsProvider, type FoodSearchProvider } from "./openfoodfacts.adapter.js";
 import {
@@ -277,6 +278,23 @@ export function registerNutritionRoutes(
     const q = parse(foodSearchQuerySchema, req.query, req, reply);
     if (q === null) return;
     return reply.send({ items: await service.searchFoods(nutritionDeps, q.q, q.limit) });
+  });
+
+  // A pack's barcode (ROADMAP 33b-iii-a). It uses none of a person's scans: no AI runs, and it is one
+  // read of our own copy. The limit only stops a script: no one scans 120 packs a minute. A gym's wi-fi
+  // is one address for all its members, so the address is not counted.
+  const barcodeLimit = createDualRateLimit({
+    name: "nutrition_barcode",
+    max: 120,
+    ipMax: null,
+    windowMs: 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
+  app.get("/v1/nutrition/barcode/:code", { preHandler: [app.authenticate, barcodeLimit] }, async (req, reply) => {
+    const p = parse(barcodeParamSchema, req.params, req, reply);
+    if (p === null) return;
+    return reply.send(await service.barcodeLookup(nutritionDeps, p.code));
   });
 
   /** The person's last different foods, each at the amount they last had (ROADMAP 32b-ii-a). */
