@@ -5,6 +5,7 @@ import {
   couldNotRead,
   emptyLine,
   memberPostAction,
+  missingThing,
   postedText,
   reactionButtons,
   reactionSummary,
@@ -134,11 +135,27 @@ describe("the lists", () => {
   });
 
   it("a place that no longer shows its posts says so; no answer says it could not load", () => {
-    expect(couldNotRead(404, "Iron House")).toBe("Iron House’s updates aren’t available right now.");
-    expect(couldNotRead(null, "Iron House")).toBe("Couldn’t load the updates.");
+    expect(couldNotRead(404, "Iron House")).toBe("Iron House's updates aren't available right now.");
+    expect(couldNotRead(null, "Iron House")).toBe("Couldn't load the updates.");
   });
 
   it("the next page is asked by the server's own mark, made safe for an address", () => {
     expect(updatesPath(GYM, "2026-10-28T09:05:00.000Z_x")).toBe(`/v1/orgs/${GYM}/posts?before=2026-10-28T09%3A05%3A00.000Z_x`);
+  });
+});
+
+describe("what a press's refusal says is missing", () => {
+  it.each([
+    [404, "post_not_found", "post"],
+    [404, "block_not_found", "block"],
+    // Taken off the gym's list, or a gym no longer live: says nothing about the post.
+    [404, "org_not_found", "place"],
+    [404, "photo_not_found", "place"],
+    [404, "anything_new", "place"],
+    [403, "post_not_found", null],
+    [429, "too_many", null],
+    [500, "server_error", null],
+  ] as const)("%i %s is %s", (status, error, thing) => {
+    expect(missingThing({ status, error })).toBe(thing);
   });
 });

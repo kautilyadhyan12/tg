@@ -80,9 +80,12 @@ async function openUpdates(ask: Ask, place: Place) {
 }
 const page = () => within(screen.getByTestId("updates-page"));
 const download = jest.mocked(File.downloadFileAsync);
+const lands = download.getMockImplementation();
 afterEach(() => {
   download.mockClear();
+  download.mockImplementation(lands);
 });
+const settle = () => act(() => new Promise<void>((resolve) => setTimeout(resolve, 30)));
 /** Lets a test bring the app back from the background. */
 function listenForComeBack(): () => Promise<void> {
   const listeners: ((state: string) => void)[] = [];
@@ -124,7 +127,7 @@ describe("the worst thing: no other place's posts here, a blocked person's posts
       [postsOf(IRON)]: ok(feed(LOTUS, [post(P2, { body: "Lotus news" })])),
     });
     await openUpdates(server.ask, IRON);
-    expect(await page().findByText("Couldn’t load the updates.")).toBeTruthy();
+    expect(await page().findByText("Couldn't load the updates.")).toBeTruthy();
     expect(page().queryByText("Lotus news")).toBeNull();
   });
 
@@ -443,7 +446,7 @@ describe("a press, once", () => {
     const card = within(await page().findByTestId(`post-${P1}`));
     await fireEvent.press(card.getByTestId("react-open"));
     await fireEvent.press(card.getByTestId("react-love"));
-    expect(await card.findByText("Couldn’t save your reaction. Please try again.")).toBeTruthy();
+    expect(await card.findByText("Couldn't save your reaction. Please try again.")).toBeTruthy();
     expect(card.getByLabelText("React to this post")).toBeTruthy();
   });
 
@@ -530,5 +533,405 @@ describe("a press, once", () => {
     expect(server.asked.filter((a) => a.path.endsWith(`/blocked/${blockId}`)).map((a) => a.method)).toEqual(["DELETE"]);
     await fireEvent.press(screen.getByLabelText("Close"));
     expect(await page().findByText("Back again")).toBeTruthy();
+  });
+});
+
+const PHOTO_B = "c2222222-2222-4222-8222-222222222222";
+const PHOTO_C = "c3333333-3333-4333-8333-333333333333";
+const photo = (id: string) => ({ id, width: 1600, height: 1200 });
+const refused = (status: number) => new Error(`response has status: ${String(status)}`);
+/** How often each photo was asked for, by the end of its address. */
+const asksFor = (id: string) => download.mock.calls.filter(([url]) => url.endsWith(id)).length;
+const NOT_LISTED = () => refusal(404, "org_not_found", "Organisation not found.");
+
+describe("nothing of a person's stays on the phone", () => {
+  const folder = () => new Directory(Paths.cache, "updates");
+  const leftBehind = () => {
+    folder().create();
+    const file = new File(folder(), "left-by-a-killed-app");
+    file.create();
+    return file;
+  };
+
+  it("photos left by an app killed with Updates open are gone when Updates next opens", async () => {
+    const left = leftBehind();
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [postsOf(IRON)]: ok(feed(IRON, [post(P1, { photos: [photo(PHOTO)] })])),
+    });
+    await openUpdates(server.ask, IRON);
+    await within(await page().findByTestId(`post-${P1}`)).findByTestId(`photo-${PHOTO}`);
+    expect(left.exists).toBe(false);
+  });
+
+  it("they are gone when the app starts with nobody signed in", async () => {
+    const left = leftBehind();
+    await render(<App extra={extra} ask={fakeServer({}).ask} store={memoryStore()} wait={noWait} />);
+    await screen.findByText("Get started.");
+    expect(left.exists).toBe(false);
+  });
+
+  it("they are gone when the server ends the sign-in", async () => {
+    const left = leftBehind();
+    const server = fakeServer({ "/v1/auth/refresh": () => refusal(401, "unauthorized", "authentication required") });
+    await render(<App extra={extra} ask={server.ask} store={memoryStore(kept(1))} wait={noWait} />);
+    await screen.findByText("Get started.");
+    expect(left.exists).toBe(false);
+  });
+
+  it("a folder that cannot be deleted never takes the app down", async () => {
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [postsOf(IRON)]: ok(feed(IRON, [post(P1, { photos: [photo(PHOTO)] })])),
+    });
+    await openUpdates(server.ask, IRON);
+    await within(await page().findByTestId(`post-${P1}`)).findByTestId(`photo-${PHOTO}`);
+    const stuck = jest.spyOn(Directory.prototype, "delete").mockImplementationOnce(() => {
+      throw new Error("failed to delete");
+    });
+    await fireEvent.press(page().getByLabelText("Back"));
+    expect(stuck).toHaveBeenCalled();
+    stuck.mockRestore();
+    expect(await screen.findByLabelText(`Updates at ${IRON.name}`)).toBeTruthy();
+    expect(await screen.findAllByRole("tab")).toHaveLength(5);
+  });
+
+  it("a download still away when Updates closes is stopped", async () => {
+    download.mockImplementation(() => new Promise(() => undefined));
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [postsOf(IRON)]: ok(feed(IRON, [post(P1, { photos: [photo(PHOTO)] })])),
+    });
+    await openUpdates(server.ask, IRON);
+    await waitFor(() => {
+      expect(download).toHaveBeenCalled();
+    });
+    const signal = download.mock.calls[0]?.[2]?.signal;
+    expect(signal?.aborted).toBe(false);
+    await fireEvent.press(page().getByLabelText("Back"));
+    expect(signal?.aborted).toBe(true);
+  });
+});
+
+describe("a photo that did not come is asked again, and says so meanwhile", () => {
+  it("every time the sign-in has run out while Updates stays open, not only the first", async () => {
+    const comeBack = listenForComeBack();
+    let posts = [post(P1, { photos: [photo(PHOTO)] })];
+    let renewals = 0;
+    const refuseOnce = new Set([PHOTO_B, PHOTO_C]);
+    download.mockImplementation((url, to, options) => {
+      const id = [...refuseOnce].find((one) => url.endsWith(one));
+      if (id !== undefined) {
+        refuseOnce.delete(id);
+        return Promise.reject(refused(401));
+      }
+      return lands?.(url, to, options) ?? Promise.reject(new Error("no default"));
+    });
+    const server = fakeServer({
+      "/v1/auth/refresh": () => {
+        renewals += 1;
+        return { status: 200, body: { tokens: tokens(renewals + 1) } };
+      },
+      "/v1/orgs/mine": mine(IRON),
+      [postsOf(IRON)]: () => ({ status: 200, body: feed(IRON, posts) }),
+    });
+    await openUpdates(server.ask, IRON);
+    await within(await page().findByTestId(`post-${P1}`)).findByTestId(`photo-${PHOTO}`);
+    posts = [post(P2, { photos: [photo(PHOTO_B)] }), ...posts];
+    await comeBack();
+    await within(await page().findByTestId(`post-${P2}`)).findByTestId(`photo-${PHOTO_B}`);
+    posts = [post(P3, { photos: [photo(PHOTO_C)] }), ...posts];
+    await comeBack();
+    await within(await page().findByTestId(`post-${P3}`)).findByTestId(`photo-${PHOTO_C}`);
+    // A photo already on the phone is not fetched again when the sign-in is renewed.
+    expect(asksFor(PHOTO)).toBe(1);
+  });
+
+  it("one lost with no signal says so, and comes when the app next reads the page", async () => {
+    const comeBack = listenForComeBack();
+    download.mockImplementationOnce(() => Promise.reject(new Error("Unable to resolve host")));
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [postsOf(IRON)]: ok(feed(IRON, [post(P1, { photos: [photo(PHOTO)] })])),
+    });
+    await openUpdates(server.ask, IRON);
+    const card = within(await page().findByTestId(`post-${P1}`));
+    expect(await card.findByText("Couldn't load this photo.")).toBeTruthy();
+    await comeBack();
+    expect(await card.findByTestId(`photo-${PHOTO}`)).toBeTruthy();
+    expect(card.queryByText("Couldn't load this photo.")).toBeNull();
+  });
+
+  it("a sign-in refused every time is renewed once and asked once more, never round and round", async () => {
+    let renewals = 0;
+    download.mockImplementation(() => Promise.reject(refused(401)));
+    const server = fakeServer({
+      "/v1/auth/refresh": () => {
+        renewals += 1;
+        return { status: 200, body: { tokens: tokens(renewals + 1) } };
+      },
+      "/v1/orgs/mine": mine(IRON),
+      [postsOf(IRON)]: ok(feed(IRON, [post(P1, { photos: [photo(PHOTO)] })])),
+    });
+    await openUpdates(server.ask, IRON);
+    await settle();
+    const before = renewals;
+    expect(await within(await page().findByTestId(`post-${P1}`)).findByText("Couldn't load this photo.")).toBeTruthy();
+    await settle();
+    expect(asksFor(PHOTO)).toBe(2);
+    expect(renewals).toBe(before);
+  });
+
+  it("a photo that is gone does not renew anybody's sign-in", async () => {
+    let renewals = 0;
+    download.mockImplementation(() => Promise.reject(refused(404)));
+    const server = fakeServer({
+      "/v1/auth/refresh": () => {
+        renewals += 1;
+        return { status: 200, body: { tokens: tokens(renewals + 1) } };
+      },
+      "/v1/orgs/mine": mine(IRON),
+      [postsOf(IRON)]: ok(feed(IRON, [post(P1, { photos: [photo(PHOTO)] })])),
+    });
+    await openUpdates(server.ask, IRON);
+    expect(await within(await page().findByTestId(`post-${P1}`)).findByText("Couldn't load this photo.")).toBeTruthy();
+    const after = renewals;
+    await settle();
+    expect(asksFor(PHOTO)).toBe(1);
+    expect(renewals).toBe(after);
+  });
+
+  it("only the photos near the screen are fetched, not the whole page's", async () => {
+    const many = Array.from({ length: 20 }, (_, i) => {
+      const n = String(i).padStart(2, "0");
+      return post(`a00000${n}-1111-4111-8111-111111111111`, { photos: [photo(`c00000${n}-1111-4111-8111-111111111111`)] });
+    });
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [postsOf(IRON)]: ok(feed(IRON, many)),
+    });
+    await openUpdates(server.ask, IRON);
+    await waitFor(() => {
+      expect(download).toHaveBeenCalled();
+    });
+    await settle();
+    expect(download.mock.calls.length).toBeLessThan(many.length);
+  });
+});
+
+describe("a 404 is believed only for what it names", () => {
+  const LISTED_OFF = "Iron House's updates aren't available right now.";
+  const server = (extra2: Record<string, () => unknown>) =>
+    fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      ...(extra2 as Record<string, never>),
+    });
+
+  it("a reaction refused because the gym took them off its list never says the post was removed", async () => {
+    let off = false;
+    const s = server({
+      [postsOf(IRON)]: () => (off ? NOT_LISTED() : { status: 200, body: feed(IRON, [post(P1, { body: "Still up" })]) }),
+      [`${postOf(IRON, P1)}/reaction`]: () => {
+        off = true;
+        return NOT_LISTED();
+      },
+    });
+    await openUpdates(s.ask, IRON);
+    const card = within(await page().findByTestId(`post-${P1}`));
+    await fireEvent.press(card.getByTestId("react-open"));
+    await fireEvent.press(card.getByTestId("react-like"));
+    expect(await page().findByText(LISTED_OFF)).toBeTruthy();
+    expect(page().queryByText("This post has been removed.")).toBeNull();
+  });
+
+  it("Remove refused that way never says their post was removed, and leaves it on the list", async () => {
+    const s = server({
+      [postsOf(IRON)]: () => ({ status: 200, body: feed(IRON, [member(P1, { body: "My words", own: true, wrote: true })]) }),
+      [`${postsOf(IRON)}/mine/${P1}`]: NOT_LISTED,
+    });
+    await openUpdates(s.ask, IRON);
+    await fireEvent.press(within(await page().findByTestId(`post-${P1}`)).getByLabelText("Remove your post"));
+    await fireEvent.press(await screen.findByLabelText("Remove post"));
+    expect(await screen.findByText(LISTED_OFF)).toBeTruthy();
+    expect(screen.queryByText("Your post has been removed.")).toBeNull();
+    expect(page().getByText("My words")).toBeTruthy();
+  });
+
+  it("Block refused that way does not mark the post removed, and the box says why", async () => {
+    const s = server({
+      [postsOf(IRON)]: () => ({ status: 200, body: feed(IRON, [member(P1, { body: "Leg day done!" })]) }),
+      [`${postOf(IRON, P1)}/block`]: NOT_LISTED,
+    });
+    await openUpdates(s.ask, IRON);
+    await fireEvent.press(within(await page().findByTestId(`post-${P1}`)).getByLabelText("Block Asha W."));
+    await fireEvent.press(within(await screen.findByTestId("ask-box")).getByLabelText("Block Asha W."));
+    expect(await screen.findByText(LISTED_OFF)).toBeTruthy();
+    expect(screen.queryByText("Organisation not found.")).toBeNull();
+    expect(page().queryByText("This post has been removed.")).toBeNull();
+    expect(page().getByText("Leg day done!")).toBeTruthy();
+  });
+
+  it("Report refused because the post is gone still says so in the post's place", async () => {
+    const s = server({
+      [postsOf(IRON)]: () => ({ status: 200, body: feed(IRON, [member(P1, { body: "Cruel words" })]) }),
+      [`${postOf(IRON, P1)}/report`]: () => refusal(404, "post_not_found", "This post has been removed."),
+    });
+    await openUpdates(s.ask, IRON);
+    await fireEvent.press(within(await page().findByTestId(`post-${P1}`)).getByLabelText("Report this post by Asha W."));
+    await fireEvent.press(await screen.findByText("Spam or selling"));
+    await fireEvent.press(screen.getByLabelText("Send report"));
+    expect(await page().findByTestId(`post-gone-${P1}`)).toBeTruthy();
+  });
+
+  it("Unblock refused that way never says Unblocked; sent again after a lost reply it does", async () => {
+    const blockId = "d1111111-1111-4111-8111-111111111111";
+    const secondId = "d2222222-2222-4222-8222-222222222222";
+    const s = server({
+      [postsOf(IRON)]: () => ({ status: 200, body: feed(IRON, [post(P2)], { blockedCount: 2 }) }),
+      [`${postsOf(IRON)}/blocked`]: () => ({
+        status: 200,
+        body: {
+          people: [
+            { id: blockId, name: "Asha W.", initials: "AW", blockedAt: "2026-10-27T10:00:00.000Z" },
+            { id: secondId, name: "Ravi M.", initials: "RM", blockedAt: "2026-10-26T10:00:00.000Z" },
+          ],
+        },
+      }),
+      [`${postsOf(IRON)}/blocked/${blockId}`]: NOT_LISTED,
+      [`${postsOf(IRON)}/blocked/${secondId}`]: () => refusal(404, "block_not_found", "That block has gone."),
+    });
+    await openUpdates(s.ask, IRON);
+    await fireEvent.press(await page().findByText("People you've blocked (2)"));
+    await fireEvent.press(await screen.findByLabelText("Unblock Asha W."));
+    expect(await screen.findByText(LISTED_OFF)).toBeTruthy();
+    expect(screen.queryByText("Unblocked. You'll see Asha W.'s posts and reactions again.")).toBeNull();
+    await fireEvent.press(screen.getByLabelText("Unblock Ravi M."));
+    expect(await screen.findByText("Unblocked. You'll see Ravi M.'s posts and reactions again.")).toBeTruthy();
+  });
+});
+
+describe("reads that cross", () => {
+  it("an old read answering after a Block never puts that member's posts back", async () => {
+    const comeBack = listenForComeBack();
+    let reads = 0;
+    let release: (reply: Reply) => void = () => undefined;
+    const before = () => ({ status: 200, body: feed(IRON, [member(P1, { body: "Leg day done!" }), post(P2, { body: "Staff news" })]) });
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [postsOf(IRON)]: () => {
+        reads += 1;
+        if (reads === 1) return before();
+        if (reads === 2)
+          return new Promise<Reply>((resolve) => {
+            release = resolve;
+          });
+        return { status: 200, body: feed(IRON, [post(P2, { body: "Staff news" })], { blockedCount: 1 }) };
+      },
+      [`${postOf(IRON, P1)}/block`]: ok({ blocked: true }),
+    });
+    await openUpdates(server.ask, IRON);
+    const card = await page().findByTestId(`post-${P1}`);
+    await comeBack();
+    await waitFor(() => {
+      expect(reads).toBe(2);
+    });
+    await fireEvent.press(within(card).getByLabelText("Block Asha W."));
+    await fireEvent.press(within(await screen.findByTestId("ask-box")).getByLabelText("Block Asha W."));
+    await screen.findByTestId("ask-done");
+    await waitFor(() => {
+      expect(reads).toBe(3);
+    });
+    await settle();
+    expect(page().queryByText("Leg day done!")).toBeNull();
+    release(before());
+    await settle();
+    expect(page().queryByText("Leg day done!")).toBeNull();
+    expect(page().getByText("Staff news")).toBeTruthy();
+  });
+
+  it("a page of older posts about another place is never shown under this one", async () => {
+    let reads = 0;
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON, LOTUS),
+      [postsOf(IRON)]: () => {
+        reads += 1;
+        return reads === 1
+          ? { status: 200, body: feed(IRON, [post(P1, { body: "Iron news" })], { next: `2026-10-28T09:05:00.000Z_${P1}` }) }
+          : { status: 200, body: feed(LOTUS, [post(P2, { body: "Lotus news" })]) };
+      },
+    });
+    await openUpdates(server.ask, IRON);
+    await page().findByText("Iron news");
+    await fireEvent.press(page().getByLabelText("Show older posts"));
+    expect(await page().findByText("Couldn't load more.")).toBeTruthy();
+    expect(page().queryByText("Lotus news")).toBeNull();
+  });
+
+  it("Show older posts is not left busy when another read overtakes it and fails", async () => {
+    const comeBack = listenForComeBack();
+    let reads = 0;
+    let release: (reply: Reply) => void = () => undefined;
+    const first = () => ({ status: 200, body: feed(IRON, [post(P1, { body: "Newest" })], { next: `2026-10-28T09:05:00.000Z_${P1}` }) });
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [postsOf(IRON)]: () => {
+        reads += 1;
+        if (reads === 1) return first();
+        if (reads === 2)
+          return new Promise<Reply>((resolve) => {
+            release = resolve;
+          });
+        throw new TypeError("Network request failed");
+      },
+    });
+    await openUpdates(server.ask, IRON);
+    await page().findByText("Newest");
+    await fireEvent.press(page().getByLabelText("Show older posts"));
+    await waitFor(() => {
+      expect(reads).toBe(2);
+    });
+    await comeBack();
+    await waitFor(() => {
+      expect(reads).toBe(3);
+    });
+    await settle();
+    release(first());
+    await settle();
+    expect(page().getByRole("button", { name: "Show older posts" }).props.accessibilityState).toMatchObject({ busy: false, disabled: false });
+  });
+
+  it("the blocked list's count of how many more does not count those just unblocked", async () => {
+    const blockId = "d1111111-1111-4111-8111-111111111111";
+    const secondId = "d2222222-2222-4222-8222-222222222222";
+    let count = 3;
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [postsOf(IRON)]: () => ({ status: 200, body: feed(IRON, [post(P2)], { blockedCount: count }) }),
+      [`${postsOf(IRON)}/blocked`]: ok({
+        people: [
+          { id: blockId, name: "Asha W.", initials: "AW", blockedAt: "2026-10-27T10:00:00.000Z" },
+          { id: secondId, name: "Ravi M.", initials: "RM", blockedAt: "2026-10-26T10:00:00.000Z" },
+        ],
+      }),
+      [`${postsOf(IRON)}/blocked/${blockId}`]: () => {
+        count = 2;
+        return { status: 200, body: { blocked: false } };
+      },
+    });
+    await openUpdates(server.ask, IRON);
+    await fireEvent.press(await page().findByText("People you've blocked (3)"));
+    expect(await screen.findByText("Showing the 2 you blocked most recently. 1 more will show as you unblock these.")).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText("Unblock Asha W."));
+    expect(await screen.findByText("Showing the 1 you blocked most recently. 1 more will show as you unblock these.")).toBeTruthy();
   });
 });

@@ -48,6 +48,7 @@ import {
   photoPath,
   postedText,
   pressFailed,
+  missingThing,
   reactionButtons,
   reactionSummary,
   reactionPath,
@@ -103,6 +104,9 @@ type Held = { kind: "loading" } | { kind: "failed"; status: number | null } | { 
 type Asking = { kind: "remove" | "block" | "report"; post: GymPost };
 type Blocked = { kind: "loading" } | { kind: "failed"; text: string } | { kind: "ok"; people: BlockedGymPostersResponse["people"] };
 
+// How many posts are drawn at a time, and how many screens' worth stay drawn: a photo is fetched when its post is.
+const NEAR_THE_SCREEN = 5;
+
 const REACTION_ICONS: Readonly<Record<GymPostReaction, IconName>> = { like: "like", love: "heart", strong: "strong", fire: "flame" };
 
 function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose: () => void; bottom: number }) {
@@ -118,10 +122,9 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
   const [asking, setAsking] = useState<Asking | null>(null);
   const [viewing, setViewing] = useState<{ post: GymPost; index: number } | null>(null);
   const [blockedOpen, setBlockedOpen] = useState(false);
-  // The photos are read signed in: the token they were asked with, and whether it has been renewed for them.
-  const [token, setToken] = useState(() => session.accessToken());
-  const renewed = useRef(false);
-  const [files] = useState(photoFiles);
+  // The photos, read signed in; each read of the page asks again for any that did not come.
+  const [files] = useState(() => photoFiles(session));
+  const [photoRound, setPhotoRound] = useState(0);
   useEffect(
     () => () => {
       files.clear();
@@ -143,6 +146,7 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
         setHeld({ kind: "ok", feed: answer.data });
         setGone({});
         setMore({ busy: false, error: null });
+        setPhotoRound((round) => round + 1);
       } else if (!quiet || (answer.kind === "refused" && answer.status === 404) || answer.kind === "ok") {
         // A read made by itself never takes the posts away over a lost connection; a place that no longer shows them does.
         setHeld({ kind: "failed", status: answer.kind === "refused" ? answer.status : null });
@@ -154,9 +158,6 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
   useEffect(() => {
     live.current = true;
     void load(false);
-    void session.refreshIfDue().then(() => {
-      if (live.current) setToken(session.accessToken());
-    });
     const back = AppState.addEventListener("change", (state) => {
       if (state === "active") void load(true);
     });
@@ -170,26 +171,21 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
     setHeld((h) => (h.kind === "ok" ? { kind: "ok", feed: fn(h.feed) } : h));
   };
 
-  // A photo refused for an old token: renewed once, and every photo asks again with the new one.
-  const photoFailed = useCallback(() => {
-    if (renewed.current) return;
-    renewed.current = true;
-    void session.refresh().then(() => {
-      if (live.current) setToken(session.accessToken());
-    });
-  }, [session]);
-
   const showMore = async (next: string) => {
     setMore({ busy: true, error: null });
     const number = started.current;
     const answer = await session.signedIn({ method: "GET", path: updatesPath(place.id, next) }, gymPostsResponseSchema);
-    // A new first page read since makes this page's place in the list unknown.
-    if (!live.current || number !== started.current) return;
+    if (!live.current) return;
+    // A new first page read since makes this page's place in the list unknown; the button is there to press again.
+    if (number !== started.current) {
+      setMore({ busy: false, error: null });
+      return;
+    }
     if (answer.kind === "ok" && answer.data.gymId === place.id) {
       change((feed) => withPage(feed, answer.data));
       setMore({ busy: false, error: null });
     } else {
-      setMore({ busy: false, error: "Couldn’t load more." });
+      setMore({ busy: false, error: "Couldn't load more." });
     }
   };
 
@@ -203,12 +199,20 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
     setReacting(null);
     if (answer.kind === "ok") {
       change((feed) => withPost(feed, { ...next, reactions: answer.data.reactions, mine: answer.data.mine }));
-    } else if (answer.kind === "refused" && answer.status === 404) {
+      return;
+    }
+    const missing = answer.kind === "refused" ? missingThing(answer) : null;
+    if (missing === "post") {
       setGone((g) => ({ ...g, [post.id]: true }));
+      return;
+    }
+    // Put back as it was: the tap did not reach the gym's page.
+    change((feed) => withPost(feed, post));
+    if (missing !== null) {
+      setReactError({ postId: post.id, text: couldNotRead(404, place.name) });
+      void load(true);
     } else {
-      // Put back as it was: the tap did not reach the gym's page.
-      change((feed) => withPost(feed, post));
-      setReactError({ postId: post.id, text: answer.kind === "refused" ? answer.message : "Couldn’t save your reaction. Please try again." });
+      setReactError({ postId: post.id, text: answer.kind === "refused" ? answer.message : "Couldn't save your reaction. Please try again." });
     }
   };
 
@@ -233,90 +237,98 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
           </Txt>
         </View>
       </View>
-      <ScrollView style={styles.grow} contentContainerStyle={[styles.list, { paddingBottom: bottom + 24 }]}>
-        {held.kind === "loading" ? (
-          <Txt kind="small">Loading…</Txt>
-        ) : held.kind === "failed" ? (
-          <Card style={styles.box}>
-            <Txt colour="badText">{couldNotRead(held.status, place.name)}</Txt>
-            <Button
-              label="Try again"
-              kind="soft"
-              small
-              onPress={() => {
-                setHeld({ kind: "loading" });
-                void load(false);
-              }}
-            />
-          </Card>
-        ) : (
-          <>
-            {empty !== null ? (
-              <Card style={styles.box}>
-                <Txt>{empty}</Txt>
-              </Card>
-            ) : (
-              [...held.feed.pinned, ...held.feed.posts].map((post) =>
-                gone[post.id] === true ? (
-                  <Card key={post.id} testID={`post-gone-${post.id}`} style={styles.box}>
-                    <Txt>{GYM_POST_WORDS.not_found}</Txt>
-                  </Card>
-                ) : (
-                  <PostCard
-                    key={post.id}
-                    post={post}
-                    gymName={gymName}
-                    posted={postedText(post.createdAt, now, zone, place.clockFormat)}
-                    photoUrl={(photoId) => `${apiUrl}${photoPath(place.id, post.id, photoId)}`}
-                    token={token}
-                    files={files}
-                    onPhotoFailed={photoFailed}
-                    busy={reacting === post.id}
-                    reactError={reactError?.postId === post.id ? reactError.text : null}
-                    onReact={(r) => void onReact(post, r)}
-                    onAsk={(kind) => {
-                      setAsking({ kind, post });
-                    }}
-                    onPhoto={(index) => {
-                      setViewing({ post, index });
-                    }}
-                  />
-                ),
-              )
-            )}
-            {held.feed.next === null ? null : (
-              <View style={styles.middle}>
-                <Button label="Show older posts" kind="plain" small busy={more.busy} onPress={() => void showMore(held.feed.next ?? "")} />
-                {more.error === null ? null : <Txt colour="badText">{more.error}</Txt>}
-              </View>
-            )}
-            {blockedLabel === null ? null : (
+      <FlatList
+        style={styles.grow}
+        contentContainerStyle={[styles.list, { paddingBottom: bottom + 24 }]}
+        data={feed === null || empty !== null ? [] : [...feed.pinned, ...feed.posts]}
+        keyExtractor={(post) => post.id}
+        initialNumToRender={NEAR_THE_SCREEN}
+        maxToRenderPerBatch={NEAR_THE_SCREEN}
+        windowSize={NEAR_THE_SCREEN}
+        ListHeaderComponent={
+          held.kind === "loading" ? (
+            <Txt kind="small">Loading…</Txt>
+          ) : held.kind === "failed" ? (
+            <Card style={styles.box}>
+              <Txt colour="badText">{couldNotRead(held.status, place.name)}</Txt>
               <Button
-                label={blockedLabel}
-                kind="quiet"
-                style={styles.middle}
+                label="Try again"
+                kind="soft"
+                small
                 onPress={() => {
-                  setBlockedOpen(true);
+                  setHeld({ kind: "loading" });
+                  void load(false);
                 }}
               />
-            )}
-            {help === null ? null : (
-              <Txt kind="small" style={styles.help}>
-                {help.text}{" "}
-                <Txt
-                  kind="small"
-                  colour="orange"
+            </Card>
+          ) : empty !== null ? (
+            <Card style={styles.box}>
+              <Txt>{empty}</Txt>
+            </Card>
+          ) : null
+        }
+        renderItem={({ item: post }) =>
+          gone[post.id] === true ? (
+            <Card testID={`post-gone-${post.id}`} style={styles.box}>
+              <Txt>{GYM_POST_WORDS.not_found}</Txt>
+            </Card>
+          ) : (
+            <PostCard
+              post={post}
+              gymName={gymName}
+              posted={postedText(post.createdAt, now, zone, place.clockFormat)}
+              photoUrl={(photoId) => `${apiUrl}${photoPath(place.id, post.id, photoId)}`}
+              files={files}
+              photoRound={photoRound}
+              busy={reacting === post.id}
+              reactError={reactError?.postId === post.id ? reactError.text : null}
+              onReact={(r) => void onReact(post, r)}
+              onAsk={(kind) => {
+                setAsking({ kind, post });
+              }}
+              onPhoto={(index) => {
+                setViewing({ post, index });
+              }}
+            />
+          )
+        }
+        ListFooterComponent={
+          feed === null ? null : (
+            <View style={styles.foot}>
+              {feed.next === null ? null : (
+                <View style={styles.middle}>
+                  <Button label="Show older posts" kind="plain" small busy={more.busy} onPress={() => void showMore(feed.next ?? "")} />
+                  {more.error === null ? null : <Txt colour="badText">{more.error}</Txt>}
+                </View>
+              )}
+              {blockedLabel === null ? null : (
+                <Button
+                  label={blockedLabel}
+                  kind="quiet"
+                  style={styles.middle}
                   onPress={() => {
-                    void Linking.openURL(`mailto:${help.email}`);
+                    setBlockedOpen(true);
                   }}
-                >
-                  {help.email}
+                />
+              )}
+              {help === null ? null : (
+                <Txt kind="small" style={styles.help}>
+                  {help.text}{" "}
+                  <Txt
+                    kind="small"
+                    colour="orange"
+                    onPress={() => {
+                      void Linking.openURL(`mailto:${help.email}`);
+                    }}
+                  >
+                    {help.email}
+                  </Txt>
                 </Txt>
-              </Txt>
-            )}
-          </>
-        )}
-      </ScrollView>
+              )}
+            </View>
+          )
+        }
+      />
       <AskSheet
         asking={asking}
         gymId={place.id}
@@ -341,10 +353,12 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
         onGone={(post) => {
           setGone((g) => ({ ...g, [post.id]: true }));
         }}
+        onPlaceGone={() => void load(true)}
       />
       <BlockedSheet
         open={blockedOpen}
         gymId={place.id}
+        gymName={gymName}
         feed={feed}
         onClose={() => {
           setBlockedOpen(false);
@@ -354,9 +368,8 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
       <PhotoViewer
         viewing={viewing}
         url={(post, photoId) => `${apiUrl}${photoPath(place.id, post.id, photoId)}`}
-        token={token}
         files={files}
-        onPhotoFailed={photoFailed}
+        photoRound={photoRound}
         onIndex={(index) => {
           setViewing((v) => (v === null ? v : { ...v, index }));
         }}
@@ -373,9 +386,8 @@ interface PostCardProps {
   gymName: string;
   posted: string;
   photoUrl: (photoId: string) => string;
-  token: string | null;
   files: PhotoFiles;
-  onPhotoFailed: () => void;
+  photoRound: number;
   busy: boolean;
   reactError: string | null;
   onReact: (reaction: GymPostReaction) => void;
@@ -383,7 +395,7 @@ interface PostCardProps {
   onPhoto: (index: number) => void;
 }
 
-function PostCard({ post, gymName, posted, photoUrl, token, files, onPhotoFailed, busy, reactError, onReact, onAsk, onPhoto }: PostCardProps) {
+function PostCard({ post, gymName, posted, photoUrl, files, photoRound, busy, reactError, onReact, onAsk, onPhoto }: PostCardProps) {
   const tag = authorTag(post);
   const hidden = hiddenOwnNote(post, gymName);
   const action = memberPostAction(post);
@@ -428,7 +440,7 @@ function PostCard({ post, gymName, posted, photoUrl, token, files, onPhotoFailed
               }}
               style={[styles.photo, post.photos.length === 1 ? { width: "100%", aspectRatio: Math.max(photo.width / photo.height, 0.75) } : styles.photoHalf]}
             >
-              <SignedPhoto uri={photoUrl(photo.id)} photoId={photo.id} token={token} files={files} onFailed={onPhotoFailed} fit="cover" testID={`photo-${photo.id}`} />
+              <SignedPhoto uri={photoUrl(photo.id)} photoId={photo.id} files={files} round={photoRound} fit="cover" testID={`photo-${photo.id}`} />
             </Pressable>
           ))}
         </View>
@@ -528,32 +540,43 @@ function PostCard({ post, gymName, posted, photoUrl, token, files, onPhotoFailed
 interface SignedPhotoProps {
   uri: string;
   photoId: string;
-  token: string | null;
   files: PhotoFiles;
-  onFailed: () => void;
+  /** A new round asks again for a photo that did not come. */
+  round: number;
   fit: "cover" | "contain";
   testID?: string;
 }
 
 /** A post's photo, read from the api as the person signed in, and shown from the phone's copy. */
-function SignedPhoto({ uri, photoId, token, files, onFailed, fit, testID }: SignedPhotoProps) {
+function SignedPhoto({ uri, photoId, files, round, fit, testID }: SignedPhotoProps) {
   const [shown, setShown] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
   useEffect(() => {
-    if (token === null) return;
     let live = true;
-    files.get(uri, photoId, token).then(
+    files.get(uri, photoId).then(
       (file) => {
-        if (live) setShown(file);
+        if (!live) return;
+        setShown(file);
+        setFailed(false);
       },
       () => {
-        if (live) onFailed();
+        if (live) setFailed(true);
       },
     );
     return () => {
       live = false;
     };
-  }, [uri, photoId, token, files, onFailed]);
-  if (shown === null) return <View style={styles.fill} />;
+  }, [uri, photoId, files, round]);
+  if (shown === null) {
+    if (!failed) return <View style={styles.fill} />;
+    return (
+      <View style={[styles.fill, styles.noPhoto]}>
+        <Txt kind="small" style={styles.help}>
+          Couldn't load this photo.
+        </Txt>
+      </View>
+    );
+  }
   return (
     <Image
       testID={testID}
@@ -576,10 +599,11 @@ interface AskSheetProps {
   onReported: (post: GymPost) => void;
   onBlocked: (post: GymPost) => void;
   onGone: (post: GymPost) => void;
+  onPlaceGone: () => void;
 }
 
 /** Remove, Report and Block, each asked in the middle box, which then says what happened. */
-function AskSheet({ asking, gymId, gymName, onClose, onRemoved, onReported, onBlocked, onGone }: AskSheetProps) {
+function AskSheet({ asking, gymId, gymName, onClose, onRemoved, onReported, onBlocked, onGone, onPlaceGone }: AskSheetProps) {
   const { session } = useSession();
   const { height } = useWindowDimensions();
   const [step, setStep] = useState<Step>({ kind: "ask" });
@@ -616,8 +640,8 @@ function AskSheet({ asking, gymId, gymName, onClose, onRemoved, onReported, onBl
             );
     // The box was closed or moved to another post while this was away: the list still hears it.
     const here = open.current === mine;
-    const missing = answer.kind === "refused" && answer.status === 404;
-    if (answer.kind === "ok" || (missing && mine.kind === "remove")) {
+    const missing = answer.kind === "refused" ? missingThing(answer) : null;
+    if (answer.kind === "ok" || (missing === "post" && mine.kind === "remove")) {
       // A removal sent again after a lost reply finds its post already gone: it was removed.
       if (mine.kind === "remove") onRemoved(post);
       else if (mine.kind === "block") onBlocked(post);
@@ -625,8 +649,10 @@ function AskSheet({ asking, gymId, gymName, onClose, onRemoved, onReported, onBl
       if (here) setStep({ kind: "done", text: mine.kind === "remove" ? REMOVED_OWN : mine.kind === "block" ? blockBox(post, gymName).done : report.done });
       return;
     }
-    if (missing) onGone(post);
-    if (here) setStep({ kind: "failed", text: pressFailed(answer.kind === "refused" ? answer.message : null) });
+    if (missing === "post") onGone(post);
+    else if (missing !== null) onPlaceGone();
+    const said = missing !== null && missing !== "post" ? couldNotRead(404, gymName) : pressFailed(answer.kind === "refused" ? answer.message : null);
+    if (here) setStep({ kind: "failed", text: said });
   };
 
   return (
@@ -669,7 +695,7 @@ function AskSheet({ asking, gymId, gymName, onClose, onRemoved, onReported, onBl
 }
 
 /** The people the member has blocked here, each with Unblock, in the middle box. */
-function BlockedSheet({ open, gymId, feed, onClose, onUnblocked }: { open: boolean; gymId: string; feed: GymPostsResponse | null; onClose: () => void; onUnblocked: () => void }) {
+function BlockedSheet({ open, gymId, gymName, feed, onClose, onUnblocked }: { open: boolean; gymId: string; gymName: string; feed: GymPostsResponse | null; onClose: () => void; onUnblocked: () => void }) {
   const { session } = useSession();
   const { height } = useWindowDimensions();
   const [list, setList] = useState<Blocked>({ kind: "loading" });
@@ -681,7 +707,7 @@ function BlockedSheet({ open, gymId, feed, onClose, onUnblocked }: { open: boole
   const read = useCallback(async () => {
     setList({ kind: "loading" });
     const answer = await session.signedIn({ method: "GET", path: blockedPath(gymId) }, blockedGymPostersResponseSchema);
-    setList(answer.kind === "ok" ? { kind: "ok", people: answer.data.people } : { kind: "failed", text: "Couldn’t load who you’ve blocked." });
+    setList(answer.kind === "ok" ? { kind: "ok", people: answer.data.people } : { kind: "failed", text: "Couldn't load who you've blocked." });
   }, [session, gymId]);
 
   useEffect(() => {
@@ -696,9 +722,13 @@ function BlockedSheet({ open, gymId, feed, onClose, onUnblocked }: { open: boole
     setFailed(null);
     const answer = await session.signedIn({ method: "DELETE", path: unblockPath(gymId, id) }, blockedGymPosterResponseSchema);
     setUnblocking(null);
+    const missing = answer.kind === "refused" ? missingThing(answer) : null;
     // Sent again after a lost reply, the block is already gone: that is the answer too.
-    if (answer.kind === "ok" || (answer.kind === "refused" && answer.status === 404)) {
+    if (answer.kind === "ok" || missing === "block") {
       setDone((d) => ({ ...d, [id]: true }));
+      onUnblocked();
+    } else if (missing !== null) {
+      setFailed(couldNotRead(404, gymName));
       onUnblocked();
     } else {
       setFailed(pressFailed(answer.kind === "refused" ? answer.message : null));
@@ -706,11 +736,12 @@ function BlockedSheet({ open, gymId, feed, onClose, onUnblocked }: { open: boole
   };
 
   const people = list.kind === "ok" ? list.people : [];
-  const shownMore = feed === null ? null : blockedMore(feed, people.length);
+  // Those unblocked keep their row until the box closes, but no longer count as shown.
+  const shownMore = feed === null ? null : blockedMore(feed, people.length - people.filter((person) => done[person.id] === true).length);
   return (
-    <Sheet open={open} title="People you’ve blocked" place="middle" onClose={onClose}>
+    <Sheet open={open} title="People you've blocked" place="middle" onClose={onClose}>
       <View style={styles.ask}>
-        <Txt kind="small">You don’t see their posts or reactions here. They aren’t told.</Txt>
+        <Txt kind="small">You don't see their posts or reactions here. They aren't told.</Txt>
         {list.kind === "loading" ? <Txt kind="small">Loading…</Txt> : null}
         {list.kind === "failed" ? (
           <>
@@ -718,7 +749,7 @@ function BlockedSheet({ open, gymId, feed, onClose, onUnblocked }: { open: boole
             <Button label="Try again" kind="soft" small onPress={() => void read()} />
           </>
         ) : null}
-        {list.kind === "ok" && people.length === 0 ? <Txt kind="small">You haven’t blocked anyone here.</Txt> : null}
+        {list.kind === "ok" && people.length === 0 ? <Txt kind="small">You haven't blocked anyone here.</Txt> : null}
         {shownMore === null ? null : <Txt kind="small">{shownMore}</Txt>}
         <ScrollView style={{ maxHeight: height * ASK_MOST }} contentContainerStyle={styles.people}>
           {people.map((person) =>
@@ -753,9 +784,8 @@ function BlockedSheet({ open, gymId, feed, onClose, onUnblocked }: { open: boole
 interface PhotoViewerProps {
   viewing: { post: GymPost; index: number } | null;
   url: (post: GymPost, photoId: string) => string;
-  token: string | null;
   files: PhotoFiles;
-  onPhotoFailed: () => void;
+  photoRound: number;
   onIndex: (index: number) => void;
   onClose: () => void;
 }
@@ -764,7 +794,7 @@ type PostPhoto = GymPost["photos"][number];
 
 /** A post's photos, one at a time, the whole screen; slid left and right (Kd's click-through, 2026-10-30), and stepped
  *  by a screen reader's swipe up and down. */
-function PhotoViewer({ viewing, url, token, files, onPhotoFailed, onIndex, onClose }: PhotoViewerProps) {
+function PhotoViewer({ viewing, url, files, photoRound, onIndex, onClose }: PhotoViewerProps) {
   const insets = useSafeAreaInsets();
   const photos = viewing?.post.photos ?? [];
   const index = viewing === null ? 0 : Math.min(viewing.index, photos.length - 1);
@@ -818,7 +848,7 @@ function PhotoViewer({ viewing, url, token, files, onPhotoFailed, onIndex, onClo
               }}
               renderItem={({ item }) => (
                 <View style={{ width, height: "100%" }}>
-                  <SignedPhoto uri={url(viewing.post, item.id)} photoId={item.id} token={token} files={files} onFailed={onPhotoFailed} fit="contain" />
+                  <SignedPhoto uri={url(viewing.post, item.id)} photoId={item.id} files={files} round={photoRound} fit="contain" />
                 </View>
               )}
             />
@@ -868,6 +898,8 @@ const styles = StyleSheet.create({
   photo: { borderRadius: 12, overflow: "hidden", backgroundColor: colours.fill, maxHeight: 420 },
   photoHalf: { width: "48.5%", aspectRatio: 1 },
   fill: { width: "100%", height: "100%" },
+  noPhoto: { alignItems: "center", justifyContent: "center", padding: 8 },
+  foot: { gap: sizes.gap },
   reactions: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   reaction: {
     minHeight: sizes.press,

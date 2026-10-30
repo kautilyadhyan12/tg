@@ -105,6 +105,15 @@ export function reactionButtons(post: GymPost): ReactionButton[] {
   });
 }
 
+/** What a press's 404 says is missing. The post and the block each have their own word; any other (a gym that has
+ *  taken this person off its list, or stopped being live) says nothing about the post, which may well still be up. */
+export function missingThing(refusal: { status: number; error: string }): "post" | "block" | "place" | null {
+  if (refusal.status !== 404) return null;
+  if (refusal.error === "post_not_found") return "post";
+  if (refusal.error === "block_not_found") return "block";
+  return "place";
+}
+
 /** The one reaction button the phone shows until it is tapped (Kd's click-through, 2026-10-30): the kinds given, how
  *  many in all, and what it says to somebody who cannot see it. */
 export function reactionSummary(post: GymPost): { given: ReactionButton[]; total: number; label: string } {
@@ -237,12 +246,12 @@ export const REMOVED_OWN = "Your post has been removed.";
 
 /** Why the posts could not be shown: a place that no longer shows them to this person, or no answer. */
 export function couldNotRead(status: number | null, gymName: string): string {
-  return status === 404 ? `${gymName}’s updates aren’t available right now.` : "Couldn’t load the updates.";
+  return status === 404 ? `${gymName}'s updates aren't available right now.` : "Couldn't load the updates.";
 }
 
 /** Why a press did not work: the server's own sentence, or no answer. */
 export function pressFailed(refusal: string | null): string {
-  return refusal ?? "That didn’t work. Check your connection and try again.";
+  return refusal ?? "That didn't work. Check your connection and try again.";
 }
 
 // The lists, changed in place as the browser's are.

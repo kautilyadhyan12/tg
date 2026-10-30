@@ -1,37 +1,77 @@
 import { Directory, File, Paths } from "expo-file-system";
 
 /** A post's photos, read signed in. React Native's own picture sends no headers on Android, so each photo is
- *  downloaded with the person's token into the app's cache and shown from there. Updates empties the folder when it
- *  closes: the server answers a photo afresh each time it is shown, and a removed post's photo is not kept. */
+ *  downloaded with the person's token into the app's cache and shown from there, for as long as Updates is open. */
+
+const folder = () => new Directory(Paths.cache, "updates");
+
+/** Empties the folder: when Updates opens and closes, and whenever nobody is signed in, since an app killed with
+ *  Updates open never reached its closing. One that cannot be emptied now is tried again at the next of those. */
+export function emptyPhotoFolder(): void {
+  try {
+    const here = folder();
+    if (here.exists) here.delete();
+  } catch {
+    // Never a reason to take the app down.
+  }
+}
+
+/** The sign-in a photo is asked with. */
+export interface PhotoSignIn {
+  accessToken: () => string | null;
+  refresh: () => Promise<void>;
+  refreshIfDue: () => Promise<void>;
+}
+
 export interface PhotoFiles {
-  /** The photo's file on this phone; refused when the server refuses it. One download a photo and token. */
-  get: (url: string, photoId: string, token: string) => Promise<string>;
+  /** The photo's file on this phone, one download a photo; refused when it did not come, and asked again next time. */
+  get: (url: string, photoId: string) => Promise<string>;
   clear: () => void;
 }
 
-export function photoFiles(): PhotoFiles {
-  const folder = new Directory(Paths.cache, "updates");
+const refusedSignIn = (failure: unknown) => failure instanceof Error && /\b401\b/.test(failure.message);
+
+export function photoFiles(signIn: PhotoSignIn): PhotoFiles {
+  emptyPhotoFolder();
   const asked = new Map<string, Promise<string>>();
+  const stop = new AbortController();
+  const fetchAs = async (url: string, photoId: string, token: string) => {
+    if (stop.signal.aborted) throw new Error("Updates has closed.");
+    const here = folder();
+    here.create({ intermediates: true, idempotent: true });
+    const file = await File.downloadFileAsync(url, new File(here, photoId), { headers: { authorization: `Bearer ${token}` }, idempotent: true, signal: stop.signal });
+    return file.uri;
+  };
+  const read = async (url: string, photoId: string) => {
+    await signIn.refreshIfDue();
+    const token = signIn.accessToken();
+    if (token === null) throw new Error("Nobody is signed in.");
+    try {
+      return await fetchAs(url, photoId, token);
+    } catch (failure) {
+      if (!refusedSignIn(failure)) throw failure;
+      // A token the server no longer takes: renewed unless another photo has done so, and asked once more.
+      if (signIn.accessToken() === token) await signIn.refresh();
+      const renewed = signIn.accessToken();
+      if (renewed === null || renewed === token) throw failure;
+      return await fetchAs(url, photoId, renewed);
+    }
+  };
   return {
-    get: (url, photoId, token) => {
-      const key = `${photoId} ${token}`;
-      const had = asked.get(key);
+    get: (url, photoId) => {
+      const had = asked.get(photoId);
       if (had !== undefined) return had;
-      const next = (async () => {
-        folder.create({ intermediates: true, idempotent: true });
-        const file = await File.downloadFileAsync(url, new File(folder, photoId), { headers: { authorization: `Bearer ${token}` }, idempotent: true });
-        return file.uri;
-      })();
-      asked.set(key, next);
-      // A refused photo is asked again by the next one to show it.
+      const next = read(url, photoId);
+      asked.set(photoId, next);
       next.catch(() => {
-        asked.delete(key);
+        asked.delete(photoId);
       });
       return next;
     },
     clear: () => {
+      stop.abort();
       asked.clear();
-      if (folder.exists) folder.delete();
+      emptyPhotoFolder();
     },
   };
 }

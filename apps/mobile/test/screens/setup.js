@@ -64,11 +64,14 @@ jest.mock("expo-file-system", () => {
     }
   }
   // A download is a test's to answer (`File.downloadFileAsync.mockImplementation`); by default it lands.
-  File.downloadFileAsync = jest.fn((_url, to) => {
+  // As on the phone: a folder that is gone refuses the file, and a download stopped before it lands writes nothing.
+  const folders = new Set();
+  File.downloadFileAsync = jest.fn((_url, to, options) => {
+    if (options?.signal?.aborted) return Promise.reject(new Error("The operation was aborted."));
+    if (!folders.has(to.uri.slice(0, to.uri.lastIndexOf("/")))) return Promise.reject(new Error("no such folder"));
     files.set(to.uri, "photo");
     return Promise.resolve(to);
   });
-  const folders = new Set();
   class Directory {
     constructor(dir, name) {
       this.uri = `${dir.uri}/${name}`;
