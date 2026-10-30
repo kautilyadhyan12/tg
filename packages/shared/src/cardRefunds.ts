@@ -17,7 +17,7 @@ export const CARD_REFUND_WORDS = {
   days: "It can take 7 to 10 business days to reach the card.",
   waiting: "A refund on this bill is waiting for Square's answer. Try again once it has finished.",
   not_card: "This payment wasn't taken through Square. Use Note a refund instead.",
-  other_account: "This payment was taken in a Square account this gym is no longer connected to. Refund it in that account, then note the refund here.",
+  other_account: "This payment was taken in a Square account you are no longer connected to. Refund it in that account, then note the refund here.",
   too_old: "Square refunds a payment for up to a year after it was taken. Give the money back another way, then note the refund here.",
   card_present: "An Interac debit card can only be refunded with the card on your Square device. Refund it there, then note the refund here.",
   not_finished: "Square hasn't finished this payment yet, so it can't be refunded. Try again later.",
