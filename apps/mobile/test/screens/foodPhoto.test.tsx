@@ -60,6 +60,7 @@ type Dish = { canonical: string; dishwareId: string; fillLevel: number; share?: 
 type Sent = { canonical: string; measure: string; amount: number } | Own | Dish;
 /** The bowl everybody has holds 375 ml; these foods weigh a gram a millilitre. */
 const BOWL_ML = 375;
+const BOWL_ML_NOW = { ml: BOWL_ML };
 /** As the server prices them: a food of the lists by its own figures, the person's own food by its
  *  protein, carbs and fat at 4, 4 and 9 kcal a gram. */
 function priced(sent: Sent) {
@@ -80,7 +81,7 @@ function priced(sent: Sent) {
   }
   const food = PER_GRAM[sent.canonical] ?? { name: sent.canonical, kcal: 1, source: "usda" };
   if ("dishwareId" in sent) {
-    const grams = Math.round(BOWL_ML * sent.fillLevel * (sent.share ?? 1));
+    const grams = Math.round(BOWL_ML_NOW.ml * sent.fillLevel * (sent.share ?? 1));
     const kcal = Math.round(grams * food.kcal);
     return {
       name: food.name, canonical: sent.canonical, gramsPoint: grams, gramsRange: [grams, grams], portionSource: "user_dishware", nutritionSource: food.source,
@@ -160,6 +161,8 @@ interface Phone {
   previewsLost?: boolean;
   /** The person's own dishes. */
   dishes?: unknown[];
+  /** The server answers the previews no, from the moment this is set. */
+  previewsRefused?: boolean;
 }
 
 function savedMeal(body: { id: string; takenAt: string; mealType?: string; items: Sent[] }): Meal {
@@ -187,9 +190,11 @@ function photoServer(phone: Phone) {
     "/v1/nutrition/foods": ok({ items: [TOAST_FOUND, MILK] }),
     "/v1/nutrition/foods/recent": ok({ items: [] }),
     "/v1/nutrition/dishware": () => ({ status: 200, body: { items: phone.dishes ?? [], nextCursor: null } }),
+    "/v1/nutrition/dishware/00000000-0000-4000-8000-00000000d153": () => ({ status: 200, body: { dishware: { id: "00000000-0000-4000-8000-00000000d153", label: "Bowl", containerClass: "cereal_bowl", volumeMl: BOWL_ML_NOW.ml, foodHint: null, createdAt: "2026-10-30T00:00:00.000Z" } } }),
     "/v1/nutrition/analyze-photo": (body) => (phone.scans.shift() ?? ok(SCAN))(body),
     "/v1/nutrition/meals/preview": (body) => {
       if (phone.previewsLost === true) return lost();
+      if (phone.previewsRefused === true) return refusal(400, "unknown_food", "Food not found.");
       if (phone.scanGone === true && (body as { scanToken?: string }).scanToken !== undefined) return refusal(400, "invalid_scan", "Invalid or expired scan token.");
       const items = (body as { items: Sent[] }).items.map(priced);
       return { status: 200, body: { items, totals: sum(items) } };
@@ -620,9 +625,40 @@ describe("a food the photo got wrong, and one no list has (Kd, 2026-10-30)", () 
     expect(await screen.findAllByText(/^Can’t reach the server\./)).not.toHaveLength(0);
     expect(screen.queryByText("Working out the foods’ weights…")).toBeNull();
     phone.previewsLost = false;
-    await screen.findByRole("button", { name: /^Change Toast, Part of Bowl, full · \d+ g/ }, { timeout: 8000 });
+    await fireEvent.press(screen.getByRole("button", { name: "Try again" }));
+    await screen.findByRole("button", { name: /^Change Toast, Part of Bowl, full · \d+ g/ });
     expect(screen.queryByText(/^Can’t reach the server\./)).toBeNull();
-  }, 15000);
+  });
+
+  it("a server that answers no is never told as no connection, and is not asked again (round one, H4)", async () => {
+    const phone: Phone = { meals: [], scans: [] };
+    await openFood(phone);
+    await takePhoto();
+    await screen.findByText(/^340\skcal · /);
+    phone.previewsRefused = true;
+    await fireEvent.press(screen.getByRole("button", { name: "Bowl, full" }));
+    expect(await screen.findByText("This meal’s calories can’t be worked out. Change a food, or take a new photo.")).toBeTruthy();
+    expect(screen.queryByText(/^Can’t reach the server/)).toBeNull();
+    expect(screen.getByRole("button", { name: /^Save to / }).props.accessibilityState).toMatchObject({ disabled: true });
+  });
+
+  it("a dish's size changed while the meal uses it prices the meal again (round one)", async () => {
+    const phone: Phone = { meals: [], scans: [] };
+    await openFood(phone);
+    await takePhoto();
+    await screen.findByText(/^340\skcal · /);
+    await fireEvent.press(screen.getByRole("button", { name: "Bowl, full" }));
+    await screen.findByRole("button", { name: "Change Toast, Part of Bowl, full · 125 g" });
+    BOWL_ML_NOW.ml = 750;
+    await fireEvent.press(screen.getByRole("button", { name: "Edit your dishes" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Edit Bowl" }));
+    await fireEvent.changeText(screen.getByLabelText("Its size in ml"), "750");
+    await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+    await screen.findByText("Saved Bowl, 750 ml.");
+    await fireEvent.press(screen.getByRole("button", { name: "Done" }));
+    expect(await screen.findByRole("button", { name: "Change Toast, Part of Bowl, full · 250 g" })).toBeTruthy();
+    BOWL_ML_NOW.ml = BOWL_ML;
+  });
 
   it("the one dish's Edit offers the dishes everybody has too (Kd's click-through, 2026-10-30)", async () => {
     await openFood({ meals: [], scans: [] });

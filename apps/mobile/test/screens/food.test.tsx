@@ -567,7 +567,7 @@ describe("changing a logged meal (32b-ii-a)", () => {
     await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 307 kcal" }));
     expect(await screen.findByText("Porridge")).toBeTruthy();
     expect(screen.getByText("Oats, rolled ·")).toBeTruthy();
-    await fireEvent.press(screen.getByRole("button", { name: "Change Porridge, 1 × cup · 81 g" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Change Porridge, Oats, rolled, 1 × cup · 81 g" }));
     expect(await screen.findByText("Logged: 1 × cup · 81 g · 307 kcal")).toBeTruthy();
     expect(screen.getAllByText("Porridge").length).toBeGreaterThan(0);
     expect(screen.getByText("Oats, rolled ·")).toBeTruthy();

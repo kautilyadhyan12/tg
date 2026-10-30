@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { STANDARD_DISHES, recentFoodsResponseSchema } from "@app/shared";
 import { Chip } from "../../look/Chip";
 import { colours } from "../../look/colours";
@@ -51,7 +51,7 @@ function useLastDish(dishes: ReturnType<typeof useDishes>["dishes"]): PickDish {
 }
 
 /** The dishes and the filled pictures. `held`: why it cannot be used yet, said in place of the pictures. */
-export function WholeDish({ applied, held, onUse, onClear, onDishChanged }: { applied: DishShown | null; held: string | null; onUse: (picked: DishPicked) => void; onClear: () => void; onDishChanged?: () => void }) {
+export function WholeDish({ applied, held, onUse, onClear, onDishChanged }: { applied: DishShown | null; held: string | null; onUse: (picked: DishPicked) => void; onClear: () => boolean; onDishChanged?: () => void }) {
   const { dishes, again } = useDishes();
   // A dish of the person's own, made here as in a food's own box.
   const [making, setMaking] = useState(false);
@@ -63,7 +63,7 @@ export function WholeDish({ applied, held, onUse, onClear, onDishChanged }: { ap
   const [picked, setPicked] = useState<PickDish | null>(null);
   // A lit dish or a lit picture tapped again is unselected (Kd's click-through, 2026-10-30).
   const [cleared, setCleared] = useState(false);
-  const dish = cleared ? null : (picked ?? shown ?? last);
+  const dish = cleared ? null : ((picked === null ? null : (offered.find((d) => d.id === picked.id) ?? picked)) ?? shown ?? last);
   const on = (fill: number): boolean => applied !== null && shown !== null && shown.id === dish?.id && applied.fill === fill;
   const tapDish = (d: PickDish) => {
     if (dish?.id !== d.id) {
@@ -71,36 +71,41 @@ export function WholeDish({ applied, held, onUse, onClear, onDishChanged }: { ap
       setPicked(d);
       return;
     }
+    // Weights not known yet: the dish stays, and the meal says why.
+    if (applied !== null && shown?.id === d.id && !onClear()) return;
     setCleared(true);
     setPicked(null);
-    if (applied !== null && shown?.id === d.id) onClear();
   };
   return (
     <View style={styles.box}>
       {/* A box of its own, lifted above the keyboard, as a food's own dishes are made. */}
       <Sheet open={making} title="Eaten from one dish" onClose={() => { setMaking(false); }}>
-        <NewDish
-          onCancel={() => { setMaking(false); }}
-          onSaved={(saved) => {
-            again();
-            setPicked(saved);
-            setMaking(false);
-          }}
-        />
+        <ScrollView style={styles.boxList} contentContainerStyle={styles.boxListInner} keyboardShouldPersistTaps="handled">
+          <NewDish
+            onCancel={() => { setMaking(false); }}
+            onSaved={(saved) => {
+              again();
+              setPicked(saved);
+              setMaking(false);
+            }}
+          />
+        </ScrollView>
       </Sheet>
       <Sheet open={editing} title="Your dishes" onClose={() => { setEditing(false); }}>
-        <EditDishes
-          list={offered}
-          onChanged={(removed) => {
-            again();
-            onDishChanged?.();
-            if (removed === null) return;
-            if (picked?.id === removed) setPicked(null);
-            // A dish taken off cannot stay the meal's dish: its foods go back to their amounts.
-            if (applied !== null && shown?.id === removed) onClear();
-          }}
-          onDone={() => { setEditing(false); }}
-        />
+        <ScrollView style={styles.boxList} contentContainerStyle={styles.boxListInner} keyboardShouldPersistTaps="handled">
+          <EditDishes
+            list={offered}
+            onChanged={(removed) => {
+              again();
+              onDishChanged?.();
+              if (removed === null) return;
+              if (picked?.id === removed) setPicked(null);
+              // A dish taken off cannot stay the meal's dish: its foods go back to their amounts.
+              if (applied !== null && shown?.id === removed) onClear();
+            }}
+            onDone={() => { setEditing(false); }}
+          />
+        </ScrollView>
       </Sheet>
       <View style={styles.head}>
         <Txt kind="tiny" style={[styles.label, styles.grow]}>
@@ -127,8 +132,7 @@ export function WholeDish({ applied, held, onUse, onClear, onDishChanged }: { ap
                   onUse({ dish, fill: f });
                   return;
                 }
-                setPicked(dish);
-                onClear();
+                if (onClear()) setPicked(dish);
               }}
               style={({ pressed }) => [styles.fill, on(f.value) ? styles.fillOn : null, pressed ? styles.pressed : null]}
             >
@@ -148,6 +152,8 @@ const styles = StyleSheet.create({
   label: { textTransform: "uppercase", letterSpacing: 0.9 },
   head: { flexDirection: "row", alignItems: "center", gap: 8 },
   grow: { flex: 1 },
+  boxList: { flexGrow: 0, flexShrink: 1 },
+  boxListInner: { gap: 14 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   fills: { flexDirection: "row", gap: 8 },
   fill: {

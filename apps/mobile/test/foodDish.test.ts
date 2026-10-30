@@ -82,7 +82,10 @@ describe("a logged meal eaten from one dish", () => {
 
   it("undone, each food goes back to the grams it had, or stays where it is if they are not known; the own food is kept", () => {
     const items = [item("Rice", "rice", 150), item("Taco", "own_taco", 150, "own"), item("Dal", "dal", 50)];
-    expect(wholeDishOffEdits(items, [300, 150, 80])).toEqual([{ from: 0, canonical: "rice", grams: 300 }, { from: 1 }, { from: 2, canonical: "dal", grams: 80 }]);
+    const had = [item("Rice", "rice", 300), item("Taco", "own_taco", 150, "own"), item("Dal", "dal", 80)];
+    expect(wholeDishOffEdits(items, had)).toEqual([{ from: 0, canonical: "rice", measure: "g", amount: 300 }, { from: 1 }, { from: 2, canonical: "dal", measure: "g", amount: 80 }]);
+    // A food changed since is not put back as the food it was.
+    expect(wholeDishOffEdits(items, [item("Bread", "bread", 90), had[1] ?? had[0] ?? item("x", "x", 1), had[2] ?? item("x", "x", 1)])[0]).toEqual({ from: 0, canonical: "rice", grams: 150 });
     expect(wholeDishOffEdits(items, null)).toEqual([{ from: 0, canonical: "rice", grams: 150 }, { from: 1 }, { from: 2, canonical: "dal", grams: 50 }]);
   });
 });

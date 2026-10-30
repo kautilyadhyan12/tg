@@ -87,6 +87,13 @@ d("a dish sent twice from the phone, and a person's own dishes (real Postgres)",
     expect((await dishes(bob)).filter((x) => x.id === cup.id)).toHaveLength(0);
     expect(await grams(alice)).toBe(everybody * 2);
     expect(await grams(bob)).toBe(everybody);
+    // The whole meal eaten from it too.
+    const shared = async (access: string) => {
+      const res = await inject("POST", "/v1/nutrition/meals/preview", access, { items: [{ canonical, dishwareId: cup.id, fillLevel: 1, share: 1 }] });
+      expect(res.statusCode, res.body).toBe(200);
+      return mealPreviewSchema.parse(res.json()).items[0]?.gramsPoint ?? 0;
+    };
+    expect(await shared(alice)).toBe(2 * (await shared(bob)));
 
     // Bob's reset finds nothing of his, and hers stays; hers puts it back, once.
     expect((await inject("DELETE", `/v1/nutrition/dishware/${cup.id}`, bob)).statusCode).toBe(404);

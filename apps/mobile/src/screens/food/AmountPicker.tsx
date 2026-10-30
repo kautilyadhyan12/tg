@@ -68,7 +68,8 @@ export const dishesOffered = (dishes: Dishes): PickDish[] => {
 export function dishByName(dishes: Dishes, name: string): PickDish | null {
   const own = (dishes.kind === "ok" ? dishes.list : []).filter((d) => d.label === name);
   if (own.length > 0) return own.length === 1 ? (own[0] ?? null) : null;
-  return STANDARD_DISHES.find((d) => d.label === name) ?? null;
+  const everybody = STANDARD_DISHES.find((d) => d.label === name);
+  return everybody === undefined ? null : (dishesOffered(dishes).find((d) => d.id === everybody.id) ?? everybody);
 }
 
 /** The dish a measure names, where it is still one of them. */
@@ -215,7 +216,7 @@ export function AmountPicker({
       <View style={styles.chips}>
         {dishesOffered(dishes)
           // The cup everybody has is the food's own cup where it has one: offered once.
-          .filter((d) => d.id === dishId || !STANDARD_DISHES.some((s) => s.id === d.id && measures.some((m) => m.name.toLowerCase() === s.label.toLowerCase())))
+          .filter((d) => d.id === dishId || !STANDARD_DISHES.some((s) => s.id === d.id && s.label === d.label && s.volumeMl === d.volumeMl && measures.some((m) => m.name.toLowerCase() === s.label.toLowerCase())))
           .map((d) => (
           <Chip
             key={d.id}
@@ -281,7 +282,14 @@ export function NewDish({ onCancel, onSaved }: { onCancel: () => void; onSaved: 
   // Save pressed with something missing: what is missing is said in red, not by a grey button
   // (Kd, 32b-ii-b: he typed a name, and Save dish stayed grey with no word why).
   const [asked, setAsked] = useState(false);
-  const body = newDish(name, size, ml);
+  // The sizes as this person has them: their Cup, where they changed it.
+  const { dishes } = useDishes();
+  const sizes = DISH_SIZES.map((s) => {
+    const everybody = STANDARD_DISHES.find((d) => d.label === s.label);
+    return { ...s, volumeMl: dishesOffered(dishes).find((d) => d.id === everybody?.id)?.volumeMl ?? s.volumeMl };
+  });
+  const made = newDish(name, size, ml);
+  const body = made === null || size === "ml" ? made : { ...made, volumeMl: sizes.find((s) => s.label === size)?.volumeMl ?? made.volumeMl };
   const missing =
     size === null ? "Pick how big it is: Cup, Mug, Bowl or Another size." : body === null ? `Type its size in ml, from 1 to ${count(MOST_DISH_ML)}.` : null;
 
@@ -321,7 +329,7 @@ export function NewDish({ onCancel, onSaved }: { onCancel: () => void; onSaved: 
         How big is it?
       </Txt>
       <View style={styles.chips}>
-        {DISH_SIZES.map((s) => (
+        {sizes.map((s) => (
           <Chip key={s.label} label={`${s.label} · ${String(s.volumeMl)} ml`} on={size === s.label} onPress={() => { setSize(s.label); }} />
         ))}
         <Chip label="Another size" on={size === "ml"} onPress={() => { setSize("ml"); }} />

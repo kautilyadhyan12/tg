@@ -57,17 +57,17 @@ export const mealLogs = pgTable(
 export const userDishware = pgTable(
   "user_dishware",
   {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: uuid("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  label: text("label").notNull(),
-  containerClass: text("container_class").notNull(),
-  volumeMl: integer("volume_ml").notNull(),
-  foodHint: text("food_hint"),
-  // The cup, mug or bowl everybody has that this row is this person's own version of.
-  standardId: uuid("standard_id"),
-  createdAt: createdAt(),
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    label: text("label").notNull(),
+    containerClass: text("container_class").notNull(),
+    volumeMl: integer("volume_ml").notNull(),
+    foodHint: text("food_hint"),
+    // The cup, mug or bowl everybody has that this row is this person's own version of.
+    standardId: uuid("standard_id"),
+    createdAt: createdAt(),
   },
   (t) => [uniqueIndex("user_dishware_user_standard_uniq").on(t.userId, t.standardId)],
 );

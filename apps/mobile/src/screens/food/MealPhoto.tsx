@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { launchImageLibraryAsync } from "expo-image-picker";
-import {
+import { FOOD_ALLERGY_CAUTION,
   MEAL_MOST_FOODS,
   PHOTO_SCAN_CAUTION,
   foodSearchResponseSchema,
@@ -71,9 +71,11 @@ import { Credits, SourceLine } from "./SourceLine";
 const SCAN_WAIT_MS = 75_000;
 const NO_CONNECTION = "No connection. Try again.";
 /** While the foods' weights cannot be fetched: asked again this often, for at most 15 minutes. */
-const PRICE_RETRY_MS = 5000;
-const PRICE_RETRIES_MOST = 180;
+const PRICE_RETRY_MS = 30_000;
+const PRICE_RETRIES_MOST = 30;
 const PRICE_LOST = "Can’t reach the server. The foods’ weights will show when you’re back online.";
+const PRICE_LOST_STOPPED = "Can’t reach the server.";
+const PRICE_REFUSED = "This meal’s calories can’t be worked out. Change a food, or take a new photo.";
 const SCAN_GONE = "This photo’s scan has run out, so this meal can’t be saved. Take a new photo.";
 /** The photo's band over the review, as tall as a page's own picture is for the phone's shape. */
 const PHOTO_TALL = 0.78;
@@ -364,6 +366,7 @@ function Review({
   const { width, height } = useWindowDimensions();
   const [priced, setPriced] = useState<Priced>({ kind: "none" });
   const [priceTry, setPriceTry] = useState(0);
+  const priceTriesFrom = useRef(0);
   const [openRow, setOpenRow] = useState<string | null>(null);
   const [finding, setFinding] = useState<{ query: string; change: string | null } | null>(null);
   const [ask, setAsk] = useState<Ask>("none");
@@ -393,9 +396,14 @@ function Review({
         else if (answer.kind === "refused" && answer.error === "invalid_scan") setPriced({ kind: "refused", words: SCAN_GONE, for: key });
         else if (answer.kind === "refused" && amountRefusal(answer.error) !== null) setPriced({ kind: "refused", words: amountRefusal(answer.error) ?? "", for: key });
         else {
+          // The server answered, and will answer the same: asking again would never help.
+          if (answer.kind === "refused" && answer.status < 500) {
+            setPriced({ kind: "refused", words: PRICE_REFUSED, for: key });
+            return;
+          }
           // Never a wait with no end: it says so and asks again until the signal is back.
           setPriced({ kind: "lost", for: key });
-          if (priceTry < PRICE_RETRIES_MOST) again = setTimeout(() => { setPriceTry((n) => n + 1); }, PRICE_RETRY_MS);
+          if (priceTry - priceTriesFrom.current < PRICE_RETRIES_MOST) again = setTimeout(() => { setPriceTry((n) => n + 1); }, PRICE_RETRY_MS);
         }
       });
     }, 300);
@@ -540,7 +548,7 @@ function Review({
                   ? `${unfinished.title} needs an amount first.`
                   : rowGrams.some((g, i) => g === null && rows[i]?.own === null)
                     ? priceLost
-                      ? PRICE_LOST
+                      ? "The foods’ weights haven’t come yet."
                       : "Working out the foods’ weights…"
                     : null
               }
@@ -553,9 +561,13 @@ function Review({
               onDishChanged={() => { setPriceTry((n) => n + 1); }}
               onClear={() => {
                 const next = withoutWholeDish(sheet, rowGrams);
-                if (next === null) return;
+                if (next === null) {
+                  setSaid("Wait a moment: the foods’ weights are still being worked out.");
+                  return false;
+                }
                 keep(next);
                 setSaid("Back to the amounts the photo saw.");
+                return true;
               }}
             />
           ) : null}
@@ -578,10 +590,20 @@ function Review({
             {refusedWords}
           </Txt>
         )}
-        {priceLost ? (
-          <Txt kind="small" colour="gold">
-            {PRICE_LOST}
-          </Txt>
+        {priceLost && rowGrams.some((g, i) => g === null && rows[i]?.own === null) ? (
+          <>
+            <Txt kind="small" colour="gold">
+              {priceTry - priceTriesFrom.current < PRICE_RETRIES_MOST ? PRICE_LOST : PRICE_LOST_STOPPED}
+            </Txt>
+            <Button
+              label="Try again"
+              kind="link"
+              onPress={() => {
+                priceTriesFrom.current = priceTry + 1;
+                setPriceTry((n) => n + 1);
+              }}
+            />
+          </>
         ) : null}
         {full ? (
           <Txt kind="small" colour="badText">
@@ -887,6 +909,7 @@ function FindFood({
             <SourceLine source={f.source} before={`${closeWords(f)} ·`} />
           </Pressable>
         ))}
+        {closeList.length === 0 ? null : <Txt kind="tiny">{FOOD_ALLERGY_CAUTION}</Txt>}
         {found.kind === "looking" ? <Txt kind="small">Searching…</Txt> : null}
         {found.kind === "failed" ? (
           <Txt kind="small" colour="badText">

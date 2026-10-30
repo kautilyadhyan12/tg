@@ -1,4 +1,6 @@
 import type { MealEditItem, MealItem } from "@app/shared";
+import { chosenItem } from "./measures";
+import { amountOf } from "./rows";
 
 // A meal eaten from one dish (ROADMAP Stage 5 33b-i; Kd, 2026-10-30): a person eats rice, dal and sabzi
 // from one bowl, not three. Each food is given its part of the dish in the proportions it has now, and
@@ -32,12 +34,15 @@ export function wholeDishEdits(items: readonly MealItem[], dishId: string, fill:
   });
 }
 
-/** A logged meal's one dish undone: each food of the lists at the grams it had before (`before`, by
- *  place, where this box still knows them), else at the grams it weighs now. */
-export function wholeDishOffEdits(items: readonly MealItem[], before: readonly number[] | null): MealEditItem[] {
-  return items.map((it, i): MealEditItem =>
-    it.nutritionSource === "own" ? { from: i } : { from: i, canonical: it.canonical, grams: Math.max(1, Math.round(before?.[i] ?? it.gramsPoint)) },
-  );
+/** A logged meal's one dish undone: each food of the lists at the amount it had before (`before`, by
+ *  place, where the same food is still there), else at the grams it weighs now. */
+export function wholeDishOffEdits(items: readonly MealItem[], before: readonly MealItem[] | null): MealEditItem[] {
+  return items.map((it, i): MealEditItem => {
+    if (it.nutritionSource === "own") return { from: i };
+    const had = before?.[i];
+    const chosen = had?.canonical === it.canonical ? chosenItem(it.canonical, amountOf(had)) : null;
+    return chosen !== null && "measure" in chosen ? { from: i, ...chosen } : { from: i, canonical: it.canonical, grams: Math.max(1, Math.round(it.gramsPoint)) };
+  });
 }
 
 /** The one dish every food of the lists is a part of, as the photo's meal holds them now; null where

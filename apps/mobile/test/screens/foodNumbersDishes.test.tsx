@@ -426,6 +426,27 @@ describe("saved dishes", () => {
     expect(s.sent.find((a) => a.method === "PATCH")?.body).toMatchObject({ items: [{ from: 0, canonical: "oats_rolled", dishwareId: BOWL.id, fillLevel: 0.75 }] });
   });
 
+  it("a dish's size changed prices the amount again, in Add to a meal (round one, H1)", async () => {
+    const state: State = { targets: targets(), dishes: [], meals: [] };
+    const s = await openFood(state);
+    await pickOats();
+    await fireEvent.press(await screen.findByRole("radio", { name: "Bowl · 375 ml" }));
+    await fireEvent.press(await screen.findByRole("radio", { name: "Bowl, half full" }));
+    const previews = () => s.sent.filter((a) => a.path === "/v1/nutrition/meals/preview").length;
+    await waitFor(() => {
+      expect(previews()).toBeGreaterThan(0);
+    });
+    const before = previews();
+    await fireEvent.press(screen.getByRole("button", { name: "Edit your dishes" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Edit Bowl" }));
+    await fireEvent.changeText(screen.getByLabelText("Its size in ml"), "500");
+    await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+    await screen.findByText("Saved Bowl, 500 ml.");
+    await waitFor(() => {
+      expect(previews()).toBeGreaterThan(before);
+    });
+  });
+
   it("renames a dish, and removes one only after asking", async () => {
     const SMALL = dish("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "Travel mug", "mug", 400);
     const state: State = { targets: targets(), dishes: [BOWL, SMALL], meals: [] };

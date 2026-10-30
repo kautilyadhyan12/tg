@@ -46,6 +46,8 @@ describe("the worst thing: a food titled by what the photo saw, with another foo
         const item = mealPhotoItemSchema.parse(sheet.items[row++]);
         expect(item.name, plate.photo).toBe(price.food.name);
         expect(item.canonical, plate.photo).toBe(price.food.canonical);
+        // The numbers are that food's, at the grams shown, whatever the title says.
+        expect(Math.abs(item.kcalPoint - (price.food.kcal * item.gramsPoint) / 100), plate.photo).toBeLessThanOrEqual(1);
         if (item.seenAs !== undefined) {
           titled += 1;
           expect(item.seenAs.toLowerCase(), plate.photo).not.toBe(item.name.toLowerCase());

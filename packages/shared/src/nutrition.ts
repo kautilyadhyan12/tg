@@ -931,7 +931,11 @@ export const waitingChangeSchema = z.object({
   items: z.array(mealItemSchema).nullable(),
   totals: mealTotalsSchema.nullable(),
   /** With a change to the foods: each food as it reads, `[i]` for `body.items[i]`. */
-  foods: z.array(z.object({ name: z.string().max(200), amount: z.string().max(200) }).strict()).max(30).nullable(),
+  foods: z.array(z.object({
+    name: z.string().max(200), amount: z.string().max(200),
+    // A food titled by what the photo saw: the food its numbers are from, shown while it waits too.
+    numbersFrom: z.object({ name: z.string().max(200), source: mealItemSourceSchema }).strict().optional(),
+  }).strict()).max(30).nullable(),
   tried: z.boolean(),
 }).strict();
 export type WaitingChange = z.infer<typeof waitingChangeSchema>;

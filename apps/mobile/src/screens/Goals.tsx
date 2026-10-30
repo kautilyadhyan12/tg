@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Image, Pressable, StyleSheet, View } from "react-native";
+import { ScrollView, Image, Pressable, StyleSheet, View } from "react-native";
 import {
   GOAL_KIND_RULES,
   catalogPageSchema,
@@ -560,6 +560,7 @@ function AddSheet(props: { open: boolean; goals: readonly Goal[]; onClose: () =>
 
   return (
     <Sheet open={open} title={kind === null ? "Add a goal" : KIND_NAMES[kind]} onClose={onClose}>
+      <ScrollView style={styles.boxList} contentContainerStyle={styles.boxListInner} keyboardShouldPersistTaps="handled">
       {kind === null ? (
         <View style={styles.kinds}>
           {kinds.map((k) => (
@@ -628,11 +629,14 @@ function AddSheet(props: { open: boolean; goals: readonly Goal[]; onClose: () =>
           </View>
         </>
       )}
+      </ScrollView>
     </Sheet>
   );
 }
 
 const styles = StyleSheet.create({
+  boxList: { flexGrow: 0, flexShrink: 1 },
+  boxListInner: { gap: 14 },
   grow: { flex: 1 },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },
   between: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
