@@ -4,6 +4,7 @@ import type { PendingQuery, Row, Sql, TransactionSql } from "postgres";
 import {
   billAmounts,
   memberPaymentByHandSchema,
+  memberRefundMethodSchema,
   membershipKindSchema,
   membershipTermUnitSchema,
   salePaymentMethodSchema,
@@ -327,7 +328,7 @@ async function refundReceipt(sql: Sql, gymId: string, number: number): Promise<R
     forReceipt: r.for_receipt,
     item: { name: r.type_name, covers: coversOf(r) },
     refundedMinor: r.amount_minor,
-    method: memberPaymentByHandSchema.parse(r.method),
+    method: memberRefundMethodSchema.parse(r.method),
   };
 }
 

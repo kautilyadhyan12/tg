@@ -7,7 +7,7 @@
 // receipt says Cancelled. This file is the wire and the sums a receipt prints; the server
 // writes nothing here.
 import { z } from "zod";
-import { memberPaymentByHandSchema, memberPaymentMethodSchema, receiptNumberSchema, salePaymentMethodSchema } from "./memberBills.js";
+import { memberRefundMethodSchema, memberPaymentMethodSchema, receiptNumberSchema, salePaymentMethodSchema } from "./memberBills.js";
 import { MEMBERSHIP_PRICE_MINOR_MAX } from "./memberships.js";
 import { SALE_LINES_MAX, SALE_QUANTITY_MAX } from "./register.js";
 
@@ -118,7 +118,7 @@ export const refundReceiptSchema = z
     forReceipt: receiptNumberSchema,
     item: z.object({ name: z.string(), covers: z.object({ from: daySchema, to: daySchema }).strict().nullable() }).strict(),
     refundedMinor: minorSchema,
-    method: memberPaymentByHandSchema,
+    method: memberRefundMethodSchema,
   })
   .strict();
 

@@ -59,7 +59,7 @@ const canonicalize = (v: string): string => v.toLowerCase().replaceAll(/[^a-z0-9
 /** A product's name with its brand, so two brands' jars never read alike
  *  ("Peanut butter · Happy Shopper"; RULINGS 2026-09-14). The first brand of a
  *  list is used, and a brand the name already holds is not repeated. */
-function withBrand(name: string, brands: string | string[] | undefined): string {
+export function withBrand(name: string, brands: string | string[] | undefined): string {
   const plain = name.trim();
   const brand = (first(brands).split(",")[0] ?? "").trim().slice(0, 30);
   if (brand === "" || plain.toLowerCase().includes(brand.toLowerCase())) return plain.slice(0, 80);

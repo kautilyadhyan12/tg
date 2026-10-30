@@ -3,6 +3,7 @@ import { boolean, check, date, foreignKey, index, integer, jsonb, pgTable, prima
 import { citext, createdAt } from "./common.js";
 import { users } from "./identity.js";
 import { gymMemberListEntries } from "./memberList.js";
+import { gymMemberPayments } from "./memberships.js";
 import { gyms } from "./tenancy.js";
 
 /** A gym's own payment company (0142; ROADMAP 18d-i): Square today, one row a gym and
@@ -529,6 +530,61 @@ export const gymCardCharges = pgTable(
     index("gym_card_charges_open_idx").on(t.checkedAt).where(sql`${t.state} = 'charging'`),
     index("gym_card_charges_card_idx").on(t.gymId, t.cardId).where(sql`${t.outcome} = 'declined'`),
     index("gym_card_charges_retry_idx").on(t.nextTryOn).where(sql`${t.nextTryOn} IS NOT NULL`),
+  ],
+);
+
+/** One press of Refund to card (0177; ROADMAP 18d-iv-a), kept. `id` is the key Square is asked with. `asking`: Square has
+ *  not answered, at most one on a payment. Once Square takes it up, `member_refund_id` is the row of `gym_member_refunds` that
+ *  holds the money as given back; `look_at` is when the worker next reads Square while it is `pending`. `outcome`: `refused`
+ *  (Square said no: no money went), `failed` (Square took it up, then said it failed), `lost` (never answered: checked in
+ *  Square). */
+export const gymSquareRefunds = pgTable(
+  "gym_square_refunds",
+  {
+    id: uuid("id").primaryKey(),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    paymentId: uuid("payment_id").notNull(),
+    memberRefundId: uuid("member_refund_id"),
+    environment: text("environment").notNull(),
+    accountId: text("account_id").notNull(),
+    squarePaymentId: text("square_payment_id").notNull(),
+    squareRefundId: text("square_refund_id"),
+    amountMinor: integer("amount_minor").notNull(),
+    currency: text("currency").notNull(),
+    reason: text("reason").notNull(),
+    brand: text("brand"),
+    last4: text("last4"),
+    requestKey: uuid("request_key").notNull(),
+    state: text("state").notNull(),
+    outcome: text("outcome"),
+    code: text("code"),
+    looks: integer("looks").notNull().default(0),
+    lookAt: timestamp("look_at", { withTimezone: true }),
+    startedBy: uuid("started_by").references(() => users.id, { onDelete: "set null" }),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+    checkedAt: timestamp("checked_at", { withTimezone: true }).notNull(),
+    checkingUntil: timestamp("checking_until", { withTimezone: true }),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (t) => [
+    unique("gym_square_refunds_request_uq").on(t.gymId, t.requestKey),
+    check("gym_square_refunds_environment_check", sql`${t.environment} IN ('sandbox','production')`),
+    check("gym_square_refunds_amount_check", sql`${t.amountMinor} BETWEEN 1 AND 99999999 AND ${t.currency} ~ '^[A-Z]{3}$'`),
+    check("gym_square_refunds_reason_check", sql`${t.reason} IN ('paid_twice','charged_too_much','leaving','other')`),
+    check("gym_square_refunds_card_check", sql`(${t.brand} IS NULL OR ${t.brand} ~ '^[A-Z_]{1,40}$') AND (${t.last4} IS NULL OR ${t.last4} ~ '^[0-9]{4}$') AND (${t.brand} IS NULL) = (${t.last4} IS NULL)`),
+    check("gym_square_refunds_ids_check", sql`${t.squarePaymentId} ~ '^[A-Za-z0-9_-]{1,192}$' AND (${t.squareRefundId} IS NULL OR ${t.squareRefundId} ~ '^[A-Za-z0-9_-]{1,255}$')`),
+    check("gym_square_refunds_state_check", sql`${t.state} IN ('asking','pending','done')`),
+    check("gym_square_refunds_outcome_check", sql`(${t.state} = 'done') = (${t.outcome} IS NOT NULL) AND (${t.outcome} IS NULL OR ${t.outcome} IN ('completed','failed','refused','lost'))`),
+    check("gym_square_refunds_taken_up_check", sql`(${t.state} = 'pending' OR COALESCE(${t.outcome} IN ('completed','failed'), false)) = (${t.squareRefundId} IS NOT NULL)`),
+    check("gym_square_refunds_code_check", sql`${t.code} IS NULL OR ${t.code} ~ '^[A-Z0-9_]{1,60}$'`),
+    foreignKey({ name: "gym_square_refunds_payment_fk", columns: [t.gymId, t.paymentId], foreignColumns: [gymMemberPayments.gymId, gymMemberPayments.id] }).onDelete("cascade"),
+    uniqueIndex("gym_square_refunds_asking_uq").on(t.gymId, t.paymentId).where(sql`${t.state} = 'asking'`),
+    uniqueIndex("gym_square_refunds_refund_uq").on(t.environment, t.squareRefundId).where(sql`${t.squareRefundId} IS NOT NULL`),
+    index("gym_square_refunds_payment_idx").on(t.gymId, t.paymentId),
+    index("gym_square_refunds_member_refund_idx").on(t.gymId, t.memberRefundId).where(sql`${t.memberRefundId} IS NOT NULL`),
+    index("gym_square_refunds_open_idx").on(t.environment, t.state, t.lookAt).where(sql`${t.state} <> 'done'`),
   ],
 );
 

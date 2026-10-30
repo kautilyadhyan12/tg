@@ -6,7 +6,7 @@
 //
 // The table lookups are handed in, so the order below is tested on its own; the
 // service gives it our list, the USDA table and packaged products.
-import { DIET_LADDER, MAX_MATCH_ENTRIES, isNoValueWord, type Diet, type Per100g, type VisionItem } from "@app/shared";
+import { DIET_LADDER, MAX_MATCH_ENTRIES, MEAL_CLOSE_FOODS_MOST, isNoValueWord, shownFoodName, type Diet, type Per100g, type VisionItem } from "@app/shared";
 import { NOISE_WORDS, slug } from "./foods.js";
 import type { FoodReference } from "./openfoodfacts.adapter.js";
 
@@ -324,6 +324,33 @@ export function estimateFood(name: string, per100g: Per100g, grams: number, take
 /** A food's name as a list shows it: the model writes some in small letters ("toast", "iced coffee"),
  *  beside our list's "Avocado" (33b-i's walk on the phone). */
 export const capitalFirst = (name: string): string => name.charAt(0).toLocaleUpperCase("en") + name.slice(1);
+
+/** Two names that read alike: the same words in any order, whatever their case and punctuation
+ *  ("scrambled eggs" is "Eggs (scrambled)"). */
+const sameWords = (a: string, b: string): boolean => {
+  const words = (v: string): string => [...new Set(slug(v).split("_"))].sort().join(" ");
+  return words(a) === words(b);
+};
+
+/** What a scanned food is titled by, where it is not the name of the food its numbers are from
+ *  (ROADMAP Stage 5 33b-ii): what the model saw ("Roasted potatoes" over "Roast potatoes"). An
+ *  estimate is already named by it, and a name that reads as the food's is not said twice. */
+export function seenNameOf(item: Pick<VisionItem, "name" | "canonical_hint">, food: Pick<FoodReference, "name" | "source">): string | undefined {
+  if (food.source === "estimate") return undefined;
+  const seen = shownFoodName(item).replaceAll(/\s+/g, " ").trim();
+  return seen === "" || sameWords(seen, food.name) ? undefined : capitalFirst(seen).slice(0, 200);
+}
+
+/** The foods offered first when a scanned food is not what the photo shows (ROADMAP Stage 5
+ *  33b-ii): the food the words found, where the check put another in its place, then the close
+ *  foods in their order; never the food it is now, each once, at most `MEAL_CLOSE_FOODS_MOST`. */
+export function offeredFoodsOf(now: string, wordsFound: FoodReference | null, around: readonly FoodReference[]): FoodReference[] {
+  const offered: FoodReference[] = [];
+  for (const food of [...(wordsFound === null ? [] : [wordsFound]), ...around]) {
+    if (offered.length < MEAL_CLOSE_FOODS_MOST && food.canonical !== now && !offered.some((o) => o.canonical === food.canonical)) offered.push(food);
+  }
+  return offered;
+}
 
 // ── The match check (ROADMAP 33a-ii) ─────────────────────────────────────────
 

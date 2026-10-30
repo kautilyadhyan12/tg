@@ -42,6 +42,10 @@
 //   GET    /v1/orgs/:gymId/terminal-sales/:paymentId          where it stands (every few seconds)
 //   POST   /v1/orgs/:gymId/terminal-sales/:paymentId/cancel   Cancel
 //
+// Refund to card (ROADMAP 18d-iv-a), `billing.members`:
+//   GET    …/member-list/entries/:entryId/memberships/:membershipId/payments/:paymentId/card-refund  what Square says of it
+//   POST   …/member-list/entries/:entryId/memberships/:membershipId/payments/:paymentId/card-refund  the money goes back
+//
 // Failed payments (ROADMAP 18d-iii-ii-b), `billing.members`; Try again is Charge card on file above:
 //   GET    /v1/orgs/:gymId/failed-payments?from=0             a page of the list
 //   GET    /v1/orgs/:gymId/failed-payments/summary            how many, and what they come to (Overview)
@@ -49,6 +53,7 @@
 import {
   cardChargeRequestSchema,
   cardFeeChargeRequestSchema,
+  cardRefundRequestSchema,
   failedPaymentsQuerySchema,
   saveCardRequestSchema,
   squareCardIdSchema,
@@ -71,6 +76,7 @@ import {
   heldMembershipParamsSchema,
   memberBillParamsSchema,
   memberListEntryParamsSchema,
+  memberPaymentParamsSchema,
   orgParamsSchema,
   squareTerminalParamsSchema,
   terminalPaymentParamsSchema,
@@ -79,6 +85,7 @@ import {
 } from "../schemas.js";
 import { staffOnly } from "../staffLimit.js";
 import * as cardCharges from "./cardCharges.js";
+import * as cardRefunds from "./cardRefunds.js";
 import * as cards from "./cards.js";
 import * as failedPayments from "./failedPayments.js";
 import * as service from "./service.js";
@@ -306,6 +313,28 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     const params = parseOr400(terminalPaymentParamsSchema, req.params, req, reply);
     if (params === null) return;
     const answer = await terminalPayments.cancelTerminalPayment(paymentsDeps, callerId(req), params.gymId, params.entryId, params.paymentId);
+    return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  // Refund to card: the box asks Square once each time it opens; a press is a trip to Square that moves money. Few in an
+  // hour, and staff at one desk share an address.
+  const refundReadLimit = createDualRateLimit({ name: "card_refund_read", max: 600, ipMax: 3000, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
+  const refundLimit = createDualRateLimit({ name: "card_refund", max: 60, ipMax: 300, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
+  const refundUrl = `${entryUrl}/memberships/:membershipId/payments/:paymentId/card-refund`;
+
+  app.get(refundUrl, { preHandler: [app.authenticate, staffOnly(deps.sql, refundReadLimit)] }, async (req, reply) => {
+    const params = parseOr400(memberPaymentParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const answer = await cardRefunds.readCardRefund(paymentsDeps, callerId(req), params.gymId, params.entryId, params.membershipId, params.paymentId);
+    return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  app.post(refundUrl, { preHandler: [app.authenticate, staffOnly(deps.sql, refundLimit)], onSend: tellMemberships }, async (req, reply) => {
+    const params = parseOr400(memberPaymentParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(cardRefundRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const answer = await cardRefunds.refundToCard(paymentsDeps, callerId(req), params.gymId, params.entryId, params.membershipId, params.paymentId, body);
     return reply.status(200).header("cache-control", "no-store").send(answer);
   });
 

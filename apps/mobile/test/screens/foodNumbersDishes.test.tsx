@@ -69,6 +69,7 @@ const dish = (id: string, label: string, containerClass = "cereal_bowl", volumeM
   createdAt: "2026-10-29T08:00:00.000Z",
 });
 const BOWL = dish("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "My blue bowl");
+const STANDARD_BOWL_ID = "00000000-0000-4000-8000-00000000d153";
 
 interface State {
   recent?: RecentFood[];
@@ -142,6 +143,8 @@ function server(state: State) {
       return answer({ status: 201, body: { dishware: made } });
     }
     if (dishId !== undefined) {
+      const everybody = STANDARD_DISHES.find((d) => d.id === dishId);
+      if (method === "PATCH" && everybody !== undefined && !state.dishes.some((d) => d.id === dishId)) state.dishes = [...state.dishes, dish(everybody.id, everybody.label, everybody.containerClass, everybody.volumeMl)];
       const at = state.dishes.findIndex((d) => d.id === dishId);
       const had = state.dishes[at];
       if (had === undefined) return answer(refusal(404, "not_found", "Not found"));
@@ -151,7 +154,7 @@ function server(state: State) {
       }
       const renamed = {
         ...had,
-        label: String(body?.label),
+        label: typeof body?.label === "string" ? body.label : had.label,
         ...(body?.volumeMl === undefined ? {} : { volumeMl: Number(body.volumeMl) }),
         ...(typeof body?.containerClass === "string" ? { containerClass: body.containerClass } : {}),
       };
@@ -423,17 +426,49 @@ describe("saved dishes", () => {
     expect(s.sent.find((a) => a.method === "PATCH")?.body).toMatchObject({ items: [{ from: 0, canonical: "oats_rolled", dishwareId: BOWL.id, fillLevel: 0.75 }] });
   });
 
+  it("a dish's size changed prices the amount again, in Add to a meal (round one, H1)", async () => {
+    const state: State = { targets: targets(), dishes: [], meals: [] };
+    const s = await openFood(state);
+    await pickOats();
+    await fireEvent.press(await screen.findByRole("radio", { name: "Bowl · 375 ml" }));
+    await fireEvent.press(await screen.findByRole("radio", { name: "Bowl, half full" }));
+    const previews = () => s.sent.filter((a) => a.path === "/v1/nutrition/meals/preview").length;
+    await waitFor(() => {
+      expect(previews()).toBeGreaterThan(0);
+    });
+    const before = previews();
+    await fireEvent.press(screen.getByRole("button", { name: "Edit your dishes" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Edit Bowl" }));
+    await fireEvent.changeText(screen.getByLabelText("Its size in ml"), "500");
+    await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+    await screen.findByText("Saved Bowl, 500 ml.");
+    await waitFor(() => {
+      expect(previews()).toBeGreaterThan(before);
+    });
+  });
+
   it("renames a dish, and removes one only after asking", async () => {
     const SMALL = dish("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "Travel mug", "mug", 400);
     const state: State = { targets: targets(), dishes: [BOWL, SMALL], meals: [] };
     const s = await openFood(state);
     await pickOats();
     await fireEvent.press(await screen.findByRole("button", { name: "Edit your dishes" }));
-    await fireEvent.press(screen.getByRole("button", { name: "Rename My blue bowl" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Edit My blue bowl" }));
     await fireEvent.changeText(screen.getByLabelText("Name"), "Soup bowl");
     await fireEvent.press(screen.getByRole("button", { name: "Save" }));
-    expect(await screen.findByText("Renamed to Soup bowl.")).toBeTruthy();
+    expect(await screen.findByText("Saved Soup bowl, 375 ml.")).toBeTruthy();
     expect(s.sent.find((a) => a.method === "PATCH")?.body).toEqual({ label: "Soup bowl" });
+
+    // Its size, alone (Kd's click-through, 2026-10-30): a size that is no size holds Save.
+    await fireEvent.press(await screen.findByRole("button", { name: "Edit Soup bowl" }));
+    await fireEvent.changeText(screen.getByLabelText("Its size in ml"), "0");
+    expect(screen.getByText("Type its size in ml, from 1 to 10,000.")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+    expect(s.sent.filter((a) => a.method === "PATCH")).toHaveLength(1);
+    await fireEvent.changeText(screen.getByLabelText("Its size in ml"), "450");
+    await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Saved Soup bowl, 450 ml.")).toBeTruthy();
+    expect(s.sent.filter((a) => a.method === "PATCH")[1]?.body).toEqual({ volumeMl: 450 });
 
     await fireEvent.press(await screen.findByRole("button", { name: "Remove Travel mug" }));
     expect(screen.getByText("Travel mug comes off your dishes. Meals you logged with it keep their amounts.")).toBeTruthy();
@@ -445,7 +480,7 @@ describe("saved dishes", () => {
     expect(s.sent.filter((a) => a.method === "DELETE").map((a) => a.path)).toEqual([`/v1/nutrition/dishware/${SMALL.id}`]);
     expect(state.dishes.map((d) => d.label)).toEqual(["Soup bowl"]);
     await fireEvent.press(screen.getByRole("button", { name: "Done" }));
-    expect(await screen.findByRole("radio", { name: "Soup bowl · 375 ml" })).toBeTruthy();
+    expect(await screen.findByRole("radio", { name: "Soup bowl · 450 ml" })).toBeTruthy();
     expect(screen.queryByRole("radio", { name: "Travel mug · 400 ml" })).toBeNull();
   });
 
@@ -494,7 +529,7 @@ describe("the dishes everybody has (Kd, 32b-ii-b: keep them, and a way to make y
     expect(dishPosts(s).map((p) => p.body)).toEqual([expect.objectContaining({ label: "Steel bowl", containerClass: "custom", volumeMl: 450 })]);
   });
 
-  it("offers a mug and a bowl with no dish saved, weighs a food with one, and never offers to rename them", async () => {
+  it("offers a mug and a bowl with no dish saved, weighs a food with one, and lets the person change one for themselves (Kd's click-through, 2026-10-30)", async () => {
     const state: State = { targets: targets(), dishes: [], meals: [] };
     const s = await openFood(state);
     await pickOats();
@@ -502,8 +537,19 @@ describe("the dishes everybody has (Kd, 32b-ii-b: keep them, and a way to make y
     // Oats have a cup of their own: the cup everybody has is not offered a second time.
     expect(screen.getByRole("radio", { name: "cup · 81 g" })).toBeTruthy();
     expect(screen.queryByRole("radio", { name: "Cup · 240 ml" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Edit your dishes" })).toBeNull();
-    await fireEvent.press(screen.getByRole("radio", { name: "Bowl · 375 ml" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Edit your dishes" }));
+    expect(screen.queryByRole("button", { name: "Remove Bowl" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Reset Bowl" })).toBeNull();
+    await fireEvent.press(screen.getByRole("button", { name: "Edit Bowl" }));
+    await fireEvent.changeText(screen.getByLabelText("Its size in ml"), "500");
+    await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Saved Bowl, 500 ml.")).toBeTruthy();
+    expect(s.sent.find((a) => a.method === "PATCH")?.path).toBe(`/v1/nutrition/dishware/${STANDARD_BOWL_ID}`);
+    await fireEvent.press(screen.getByRole("button", { name: "Reset Bowl" }));
+    expect(await screen.findByText("Bowl is back to 375 ml.")).toBeTruthy();
+    expect(s.sent.filter((a) => a.method === "DELETE").map((a) => a.path)).toEqual([`/v1/nutrition/dishware/${STANDARD_BOWL_ID}`]);
+    await fireEvent.press(screen.getByRole("button", { name: "Done" }));
+    await fireEvent.press(await screen.findByRole("radio", { name: "Bowl · 375 ml" }));
     await fireEvent.press(screen.getByRole("radio", { name: "Bowl, half full" }));
     await waitFor(() => {
       expect(s.sent.filter((a) => a.path === "/v1/nutrition/meals/preview").at(-1)?.body).toEqual({ items: [{ canonical: "oats_rolled", dishwareId: STANDARD_DISHES[2].id, fillLevel: 0.5 }] });
@@ -517,11 +563,11 @@ describe("Kd's click-through (32b-ii-b): back goes one step, a count shows its g
     await openFood({ targets: targets(), dishes: [BOWL], meals: [] });
     await pickOats();
     await fireEvent.press(await screen.findByRole("button", { name: "Edit your dishes" }));
-    await fireEvent.press(screen.getByRole("button", { name: "Rename My blue bowl" }));
-    expect(screen.getByText("Rename My blue bowl")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Edit My blue bowl" }));
+    expect(screen.getByText("Edit My blue bowl")).toBeTruthy();
     await pressBack();
     expect(await screen.findByText("Your dishes")).toBeTruthy();
-    expect(screen.queryByText("Rename My blue bowl")).toBeNull();
+    expect(screen.queryByText("Edit My blue bowl")).toBeNull();
     await pressBack();
     expect(await screen.findByRole("radio", { name: "My blue bowl · 375 ml" })).toBeTruthy();
     expect(screen.getByLabelText("Amount")).toBeTruthy();
@@ -583,6 +629,48 @@ describe("Kd's click-through (32b-ii-b): back goes one step, a count shows its g
     await fireEvent.press(await screen.findByRole("button", { name: "Change Oats, rolled, My blue bowl, three quarters full · 113 g" }));
     expect(await screen.findByRole("radio", { name: "My blue bowl, three quarters full", selected: true })).toBeTruthy();
     expect(await screen.findByText("= 113 g")).toBeTruthy();
+  });
+
+  const loggedInBowl = (): Meal => ({
+    id: "55555555-5555-4555-8555-555555555555",
+    takenAt: new Date().toISOString(),
+    mealType: "breakfast",
+    mealName: "Oats, rolled",
+    items: [item(113, 428, { id: "dish", name: "My blue bowl", amount: 0.75 })] as Meal["items"],
+    totals: totals(428),
+    confirmed: true,
+    origin: "manual",
+    portionSource: "user_dishware",
+    nutritionSources: ["usda"],
+    calcVersion: 1,
+    itemsVersion: "v1",
+  });
+
+  it("a food logged by a dish since made bigger opens at its logged grams, so Save rewrites nothing (round one, L2)", async () => {
+    const meal = loggedInBowl();
+    await openFood({ targets: targets(), dishes: [dish(BOWL.id, BOWL.label, "cereal_bowl", 600)], meals: [meal] });
+    await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 428 kcal" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Change Oats, rolled, My blue bowl, three quarters full · 113 g" }));
+    await waitFor(() => {
+      expect(screen.getByLabelText("Amount").props.value).toBe("113");
+    });
+    expect(screen.getByRole("radio", { name: "grams", selected: true })).toBeTruthy();
+  });
+
+  it("a dish's size changed prices the amount again, in a logged food's box (re-check)", async () => {
+    const meal = loggedInBowl();
+    const s = await openFood({ targets: targets(), dishes: [BOWL], meals: [meal] });
+    await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 428 kcal" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Change Oats, rolled, My blue bowl, three quarters full · 113 g" }));
+    await screen.findByText("= 113 g");
+    await fireEvent.press(screen.getByRole("button", { name: "Edit your dishes" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Edit My blue bowl" }));
+    await fireEvent.changeText(screen.getByLabelText("Its size in ml"), "750");
+    await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+    await screen.findByText("Saved My blue bowl, 750 ml.");
+    await fireEvent.press(screen.getByRole("button", { name: "Done" }));
+    expect(await screen.findByText("= 225 g")).toBeTruthy();
+    expect(s.sent.some((a) => a.path === `/v1/nutrition/meals/${meal.id}/preview`)).toBe(true);
   });
 
   it("un-picks a dish, a measure and how full when they are tapped again, back to the food's usual amount", async () => {

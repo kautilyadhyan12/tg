@@ -4,6 +4,7 @@ import {
   amountOf,
   clockWords,
   foodLines,
+  foodNames,
   foodsHeld,
   measuresWithoutServer,
   serverRow,
@@ -69,6 +70,19 @@ describe("a meal with changes waiting", () => {
     const foods = change({ items: [{ from: 1 }], itemsVersion: "v1" }, { items: [BANANA], totals: totalsOf([BANANA]) });
     const row = withChanges(serverRow(meal), [foods, change({ mealName: "Just a banana" })]);
     expect([row.name, row.totals?.kcalPoint, row.foodsChange]).toEqual(["Just a banana", 105, foods]);
+  });
+});
+
+describe("a food titled by what the photo saw, while a change waits", () => {
+  it("still says the food its numbers are from (33b-ii's worst thing, round one)", () => {
+    const seen: MealItem = { ...BANANA, seenAs: "Ripe plantain" };
+    const offline = withChanges(serverRow(meal), [
+      change({ items: [{ from: 0 }], itemsVersion: "v1" }, { foods: [{ ...foodNames(seen), amount: "Part of Bowl, full" }] }),
+    ]);
+    expect(foodLines(offline)[0]).toEqual({ name: "Ripe plantain", numbersFrom: { name: BANANA.name, source: BANANA.nutritionSource }, amount: "Part of Bowl, full", kcal: null });
+    expect(foodNames(BANANA)).toEqual({ name: BANANA.name });
+    // A change kept before this job has no such line, and still reads.
+    expect(foodLines(withChanges(serverRow(meal), [change({ items: [{ from: 0 }], itemsVersion: "v1" }, { foods: [{ name: "Oats", amount: "1 cup" }] })]))[0]?.numbersFrom).toBeNull();
   });
 });
 

@@ -17,7 +17,7 @@ import { lockGym } from "../memberList/repo.js";
 import type { PaymentsDeps } from "./service.js";
 import type { SquareSettings } from "./settings.js";
 import * as merges from "./squareMergesRepo.js";
-import { followMerged } from "./squareMembersPlan.js";
+import { followMerged } from "./squareSameName.js";
 
 export interface MergeFollowed {
   gymId: string;

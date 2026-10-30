@@ -3690,8 +3690,7 @@ list's Payment reads the bills.
   than those cannot be refunded from the page.
 - **Left as it is, and why**: a person whose record names a membership they never held here (§18.2's rule 2) keeps
   the gym's own words on the list even with an old bill open; their page shows the bill.
-  Writing off the rest of a part-paid bill, and a refund sent through a payment company
-  (18d), are not built.
+  Writing off the rest of a part-paid bill is not built. A refund sent through a payment company is §14.8, Refund to card.
 
 **As built, 18h-i (2026-10-17; `rulings/2026-10-17-18h-i.md`): a fee for a late cancel or a
 no-show, for classes.** The gym sets two amounts in Booking rules (0 is off; changing them
@@ -4276,18 +4275,13 @@ is a gym with no country. People who use the app for themselves may be anywhere.
   Subscriptions charge, which is why SUBSCRIPTIONS_READ is still asked for. ORDERS_READ and ITEMS_READ no longer are. A gym connected before
   that permission sees Reconnect Square in Settings → Payments, for its owner, with what it is for; everybody else reads who can.
   *Not built, kept as a plan (18d-iii-b-iii; Kd, 2026-10-30, the same day he took Square Point of Sale out):* memberships as
-  items in Square, offers in Square and one way at the desk, jobs 18d-iii-b-iv-a to -e. The plan and what was tried in Square's
+  items in Square, offers in Square, one way at the desk, and moving members off Square's Subscriptions, jobs 18d-iii-b-iv-a to
+  -f. A gym that uses Square Subscriptions cancels them in Square.
+  *A gym moving from other software (Kd, 2026-10-30):* saved cards don't come with an import: they stay with the payment company, and
+  members add them again. A connected gym's Settings → Payments and the end of every import say to stop billing in the old software or
+  Square Subscriptions first, as the app cannot see that billing and members would pay twice. *Planned, 18d-vii:* a button that asks every
+  member with no card on file to add it in the app, after Stage 5 item 20's saving their card. The plan and what was tried in Square's
   test area are in `handoff/2026-10-29-18d-iii-b-iii.md` and `rulings/2026-10-29-18d-iii-b-iii.md`.
-  *Planned, 18d-iii-b-iv-f:* **Move members from Square Subscriptions** (Kd, 2026-10-30: before launch). For a business whose members Square's
-  own Subscriptions bill (found by the same email or phone and the same name, `squareMembersPlan.ts`, kept for this job), the owner
-  presses **Move members from Square Subscriptions**. The box lists each member Square bills, with what they will have here ("Amy Lee · Gold Monthly · $50.00 · paid in Square until 14 Nov · billed here from
-  15 Nov"), each of Square's plans matched to a membership here by name or added, and who is left out and why (Square bills
-  them every 30 days, which memberships here cannot do; not in the member list; their subscription paused). One press gives
-  each the membership here, its first bill the day after Square's paid-until day (`charged_through_date`), and asks Square to
-  stop the subscription at the end of what was paid (CancelSubscription "sets the `canceled_date` field to the end of the
-  active billing period"; SUBSCRIPTIONS_WRITE, a new permission). The box names the members with no card here: their card
-  is added here before their first bill here. The worst thing: Amy billed by both Square and the app for one month, or by
-  nobody.
 - **Cash, bank transfer, a card on another machine, and UPI in India** (18r): recorded.
 
 Our own app for the Square Reader is ruled out (Kd, 2026-10-21): no gym app found runs the
@@ -4320,6 +4314,30 @@ nothing else pays, voids, cancels, freezes or changes that membership, and no an
 again with the same key for a day. Staff with the payments tick charge it themselves from Record
 payment: Card on file · Visa ending 1111, the card named before the press. The retries and the
 member's notice are 18d-iii-ii-a (below); the Failed payments list is 18d-iii-ii-b.
+
+**Refund to card** (18d-iv-a, as built; `rulings/2026-10-30-18d-iv-a.md`). A payment on a period's bill taken on the Square Terminal or charged to
+the card on file goes back through Square to the card that paid, from the ⋯ on the payment: **Refund to card** ("Square sends
+the money back to the card that paid."). Note a refund stays beside it ("You gave it back another way, such as cash."). The box
+opens under the payment and asks Square about it first, so it names the real card and what is really left: the most that can
+go back is the least of what the app and Square each say is left, and what Square gave back with no note here is said, with Note a
+refund beside it. It says "Square does not give back its card fee on a refund." and "It can take 7 to 10 business days to reach
+the card." Staff type the amount (all or part), pick why from the refund reasons, and press **Refund $20.00 to Visa ending 1111**.
+Who may: `billing.members`, as for a refund noted by hand. A refund moves no date and no count, as ever. A press is one row of
+`gym_square_refunds` (migration `0177`), written under the record's lock; its id is the key Square is asked with, so Square takes it
+up once however often it is asked (measured 2026-10-30: the same key gives back the same refund, another amount under it is
+refused); while Square has not answered, nothing else is refunded or voided on that bill and the membership is not moved to another. Once Square
+takes it up, a row of `gym_member_refunds` holds the money as given back, with the payment's own method (Card on Terminal, Card on
+file), so the bill, the receipt, Reports and the download read it as any refund; it reads **Refund pending** until Square finishes.
+The worker reads each pending refund 1, 2, 5 and 15 minutes after, then hourly and every 3 hours; the page reads again every 30
+seconds for 15 minutes while one is pending. FAILED or REJECTED after that: the app voids the refund itself (`square_failed`), the
+bill reads as it did, and the line says "Square could not refund this. No money went back." Past Square's 14 days pending, the line
+says to contact Square Support. A refund sent to the card is never voided here. No answer from Square is asked again with the same
+key for an hour, then left as "We don't know whether Square took the … refund. Check your Square Dashboard. If it went through, note
+the refund here.", until refunds written on that payment cover it. Refused before sending: an Interac debit card (`refund_requires_card_presence`;
+18d-iv-c), a payment over 365 days old, one taken in a Square account the gym has left (each offers Note a refund), one Square has
+not finished, one that does not match Square's record. Square's refusals are said in the box in plain words, and a code nobody has
+placed reads "Square refused this refund. No money went back." Still to come: fees and Sell (18d-iv-b), Interac on the Terminal
+(18d-iv-c), a refund made inside Square shown here (18d-iv-d), chargebacks (18d-iv-e).
 
 **A failed charge** (18d-iii): at most 3 tries over several days (Square: "Limit retries to 2 to
 3 attempts over several days"; never `GENERIC_DECLINE`), never again after a decline the card

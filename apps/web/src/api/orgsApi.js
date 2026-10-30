@@ -119,6 +119,8 @@ import {
   terminalSaveResponseSchema,
   terminalPaymentResponseSchema,
   cardChargeResponseSchema,
+  cardRefundCheckSchema,
+  cardRefundResponseSchema,
   terminalPaymentsResponseSchema,
   terminalSalesResponseSchema,
   memberNotesAndTagsSchema,
@@ -1867,6 +1869,24 @@ export const orgService = {
       "this person's payments",
       authApi.post(
         `/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/memberships/${encodeURIComponent(membershipId)}/terminal-payment`,
+        body,
+      ),
+    ),
+  /** Refund to card (ROADMAP 18d-iv-a): what Square says of the payment, then the press. */
+  getCardRefund: (gymId, entryId, membershipId, paymentId) =>
+    readThrough(
+      cardRefundCheckSchema,
+      "this person's payments",
+      authApi.get(
+        `/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/memberships/${encodeURIComponent(membershipId)}/payments/${encodeURIComponent(paymentId)}/card-refund`,
+      ),
+    ),
+  refundToCard: (gymId, entryId, membershipId, paymentId, body) =>
+    readThrough(
+      cardRefundResponseSchema,
+      "this person's payments",
+      authApi.post(
+        `/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/memberships/${encodeURIComponent(membershipId)}/payments/${encodeURIComponent(paymentId)}/card-refund`,
         body,
       ),
     ),

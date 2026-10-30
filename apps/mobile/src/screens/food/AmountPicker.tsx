@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Pressable, StyleSheet, TextInput, View } from "react-native";
-import { STANDARD_DISHES, dishwarePageSchema, dishwareResponseSchema, type Dishware, type FoodMeasure } from "@app/shared";
+import { STANDARD_DISHES, standardDish, dishwarePageSchema, dishwareResponseSchema, type Dishware, type FoodMeasure } from "@app/shared";
 import { Button } from "../../look/Button";
 import { Chip } from "../../look/Chip";
 import { colours, sizes } from "../../look/colours";
@@ -57,14 +57,19 @@ export type PickDish = Pick<Dishware, "id" | "label" | "containerClass" | "volum
 
 /** The dishes offered: a cup, a mug and a bowl everybody has, then the person's own (Kd, 32b-ii-b:
  *  "keep the things already built, just give an option to create one on own"). */
-export const dishesOffered = (dishes: Dishes): PickDish[] => [...STANDARD_DISHES, ...(dishes.kind === "ok" ? dishes.list : [])];
+export const dishesOffered = (dishes: Dishes): PickDish[] => {
+  const list = dishes.kind === "ok" ? dishes.list : [];
+  // A cup, mug or bowl the person has changed comes back under its own id, in its place.
+  return [...STANDARD_DISHES.map((s) => list.find((d) => d.id === s.id) ?? s), ...list.filter((d) => standardDish(d.id) === null)];
+};
 
 /** The dish a logged amount names, by its name: the person's own where exactly one of theirs has it,
  *  else the one everybody has of that name; none where two of theirs share it (review, L3). */
 export function dishByName(dishes: Dishes, name: string): PickDish | null {
   const own = (dishes.kind === "ok" ? dishes.list : []).filter((d) => d.label === name);
   if (own.length > 0) return own.length === 1 ? (own[0] ?? null) : null;
-  return STANDARD_DISHES.find((d) => d.label === name) ?? null;
+  const everybody = STANDARD_DISHES.find((d) => d.label === name);
+  return everybody === undefined ? null : (dishesOffered(dishes).find((d) => d.id === everybody.id) ?? everybody);
 }
 
 /** The dish a measure names, where it is still one of them. */
@@ -118,8 +123,8 @@ export function AmountPicker({
   const dishId = dishOf(amount.measure);
   const dish = pickedDish(dishes, amount.measure);
   const shown = shownMeasures(measures, amount.measure, all);
-  // The person's own dishes, which they may rename and remove.
-  const list = dishes.kind === "ok" ? dishes.list : [];
+  // Every dish offered may be changed; the person's own may also be removed.
+  const list = dishesOffered(dishes);
 
   if (panel === "new") {
     return (
@@ -206,12 +211,12 @@ export function AmountPicker({
         <Txt kind="tiny" style={[styles.label, styles.grow]}>
           Dishes
         </Txt>
-        {list.length > 0 ? <Button label="Edit" kind="link" onPress={() => { setPanel("edit"); }} say="Edit your dishes" /> : null}
+        {dishes.kind === "ok" ? <Button label="Edit" kind="link" onPress={() => { setPanel("edit"); }} say="Edit your dishes" /> : null}
       </View>
       <View style={styles.chips}>
         {dishesOffered(dishes)
           // The cup everybody has is the food's own cup where it has one: offered once.
-          .filter((d) => d.id === dishId || !STANDARD_DISHES.some((s) => s.id === d.id && measures.some((m) => m.name.toLowerCase() === s.label.toLowerCase())))
+          .filter((d) => d.id === dishId || !STANDARD_DISHES.some((s) => s.id === d.id && s.label === d.label && s.volumeMl === d.volumeMl && measures.some((m) => m.name.toLowerCase() === s.label.toLowerCase())))
           .map((d) => (
           <Chip
             key={d.id}
@@ -277,7 +282,14 @@ export function NewDish({ onCancel, onSaved }: { onCancel: () => void; onSaved: 
   // Save pressed with something missing: what is missing is said in red, not by a grey button
   // (Kd, 32b-ii-b: he typed a name, and Save dish stayed grey with no word why).
   const [asked, setAsked] = useState(false);
-  const body = newDish(name, size, ml);
+  // The sizes as this person has them: their Cup, where they changed it.
+  const { dishes } = useDishes();
+  const sizes = DISH_SIZES.map((s) => {
+    const everybody = STANDARD_DISHES.find((d) => d.label === s.label);
+    return { ...s, volumeMl: dishesOffered(dishes).find((d) => d.id === everybody?.id)?.volumeMl ?? s.volumeMl };
+  });
+  const made = newDish(name, size, ml);
+  const body = made === null || size === "ml" ? made : { ...made, volumeMl: sizes.find((s) => s.label === size)?.volumeMl ?? made.volumeMl };
   const missing =
     size === null ? "Pick how big it is: Cup, Mug, Bowl or Another size." : body === null ? `Type its size in ml, from 1 to ${count(MOST_DISH_ML)}.` : null;
 
@@ -317,7 +329,7 @@ export function NewDish({ onCancel, onSaved }: { onCancel: () => void; onSaved: 
         How big is it?
       </Txt>
       <View style={styles.chips}>
-        {DISH_SIZES.map((s) => (
+        {sizes.map((s) => (
           <Chip key={s.label} label={`${s.label} · ${String(s.volumeMl)} ml`} on={size === s.label} onPress={() => { setSize(s.label); }} />
         ))}
         <Chip label="Another size" on={size === "ml"} onPress={() => { setSize("ml"); }} />
@@ -339,18 +351,19 @@ export function NewDish({ onCancel, onSaved }: { onCancel: () => void; onSaved: 
   );
 }
 
-type Editing = { kind: "list" } | { kind: "rename"; dish: Dishware } | { kind: "remove"; dish: Dishware };
+type Editing = { kind: "list" } | { kind: "edit"; dish: PickDish } | { kind: "remove"; dish: PickDish };
 
-/** The person's dishes, each renamed or removed; a removal asks first. */
-function EditDishes({ list, onChanged, onDone }: { list: readonly Dishware[]; onChanged: (removed: string | null) => void; onDone: () => void }) {
+/** The person's dishes, each with its name and size changed, or removed; a removal asks first. */
+export function EditDishes({ list, onChanged, onDone }: { list: readonly PickDish[]; onChanged: (removed: string | null) => void; onDone: () => void }) {
   const { session } = useSession();
   const { view } = useMealOutbox();
   const [editing, setEditing] = useState<Editing>({ kind: "list" });
   const [name, setName] = useState("");
+  const [ml, setMl] = useState("");
   const [busy, setBusy] = useState(false);
   const [trouble, setTrouble] = useState<string | null>(null);
   const [said, setSaid] = useState<string | null>(null);
-  // The phone's back button: from renaming or removing a dish, back to your dishes.
+  // The phone's back button: from changing or removing a dish, back to your dishes.
   useSheetBack(3, () => {
     if (editing.kind === "list") return false;
     setEditing({ kind: "list" });
@@ -365,40 +378,65 @@ function EditDishes({ list, onChanged, onDone }: { list: readonly Dishware[]; on
     } else setTrouble(answer.kind === "no_answer" || answer.status >= 500 ? NO_CONNECTION : "That couldn’t be saved. Try again.");
   };
 
-  if (editing.kind === "rename") {
+  // A cup, mug or bowl the person changed, as everybody has it again.
+  const reset = async (dish: PickDish, standard: PickDish) => {
+    if (busy) return;
+    setBusy(true);
+    setSaid(null);
+    setTrouble(null);
+    const answer = await session.signedIn({ method: "DELETE", path: `/v1/nutrition/dishware/${dish.id}` }, nothing);
+    setBusy(false);
+    if (answer.kind === "ok" || (answer.kind === "refused" && answer.status === 404)) {
+      onChanged(null);
+      setSaid(`${standard.label} is back to ${String(standard.volumeMl)} ml.`);
+    } else setTrouble(answer.kind === "no_answer" || answer.status >= 500 ? NO_CONNECTION : "That couldn’t be saved. Try again.");
+  };
+
+  if (editing.kind === "edit") {
     const dish = editing.dish;
     const trimmed = name.trim();
-    const rename = async () => {
-      if (trimmed === "" || busy) return;
-      if (trimmed === dish.label) {
+    const size = Number(ml.trim());
+    const sizeOk = /^\d+$/.test(ml.trim()) && size >= 1 && size <= MOST_DISH_ML;
+    const saveDish = async () => {
+      if (trimmed === "" || !sizeOk || busy) return;
+      const body = { ...(trimmed === dish.label ? {} : { label: trimmed }), ...(size === dish.volumeMl ? {} : { volumeMl: size }) };
+      if (Object.keys(body).length === 0) {
         setEditing({ kind: "list" });
         return;
       }
       setBusy(true);
       setTrouble(null);
-      const answer = await session.signedIn({ method: "PATCH", path: `/v1/nutrition/dishware/${dish.id}`, body: { label: trimmed } }, dishwareResponseSchema);
+      const answer = await session.signedIn({ method: "PATCH", path: `/v1/nutrition/dishware/${dish.id}`, body }, dishwareResponseSchema);
       setBusy(false);
       if (answer.kind === "ok") {
         onChanged(null);
         setEditing({ kind: "list" });
-        setSaid(`Renamed to ${answer.data.dishware.label}.`);
+        setSaid(`Saved ${answer.data.dishware.label}, ${String(answer.data.dishware.volumeMl)} ml.`);
       } else failed(answer, `${dish.label} was already removed.`);
     };
     return (
       <>
-        <Txt kind="h3">Rename {dish.label}</Txt>
+        <Txt kind="h3">Edit {dish.label}</Txt>
         <Field label="Name" value={name} onChange={setName} maxLength={MOST_DISH_NAME} ready />
         {trimmed === "" ? (
           <Txt kind="small" colour="badText">
             Enter a name for this dish.
           </Txt>
         ) : null}
+        <Field label="Its size in ml" value={ml} onChange={setMl} keyboard="number-pad" maxLength={5} />
+        {sizeOk ? (
+          <Txt kind="small">Meals you logged with it keep their amounts.</Txt>
+        ) : (
+          <Txt kind="small" colour="badText">
+            Type its size in ml, from 1 to {count(MOST_DISH_ML)}.
+          </Txt>
+        )}
         {trouble === null ? null : (
           <Txt kind="small" colour="badText">
             {trouble}
           </Txt>
         )}
-        <Button label="Save" wide disabled={trimmed === ""} busy={busy} onPress={() => { void rename(); }} />
+        <Button label="Save" wide disabled={trimmed === "" || !sizeOk} busy={busy} onPress={() => { void saveDish(); }} />
         <Button label="Cancel" kind="quiet" wide onPress={() => { setEditing({ kind: "list" }); }} />
       </>
     );
@@ -449,8 +487,14 @@ function EditDishes({ list, onChanged, onDone }: { list: readonly Dishware[]; on
           </Txt>
         </View>
       )}
-      {list.length === 0 ? <Txt kind="small">You have no dishes of your own.</Txt> : null}
-      {list.map((d) => (
+      {trouble === null ? null : (
+        <Txt kind="small" colour="badText">
+          {trouble}
+        </Txt>
+      )}
+      {list.map((d) => {
+        const standard = standardDish(d.id);
+        return (
         <View key={d.id} style={styles.dish}>
           <View style={styles.grow}>
             <Txt kind="strong" numberOfLines={2}>
@@ -459,30 +503,36 @@ function EditDishes({ list, onChanged, onDone }: { list: readonly Dishware[]; on
             <Txt kind="tiny">{String(d.volumeMl)} ml</Txt>
           </View>
           <Button
-            label="Rename"
+            label="Edit"
             kind="link"
-            say={`Rename ${d.label}`}
+            say={`Edit ${d.label}`}
             onPress={() => {
               setSaid(null);
               setTrouble(null);
               setName(d.label);
-              setEditing({ kind: "rename", dish: d });
+              setMl(String(d.volumeMl));
+              setEditing({ kind: "edit", dish: d });
             }}
           />
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Remove ${d.label}`}
-            onPress={() => {
-              setSaid(null);
-              setTrouble(null);
-              setEditing({ kind: "remove", dish: d });
-            }}
-            style={({ pressed }) => [styles.bin, pressed ? styles.pressed : null]}
-          >
-            <Icon name="trash" size={18} colour="badText" />
-          </Pressable>
+          {standard === null ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Remove ${d.label}`}
+              onPress={() => {
+                setSaid(null);
+                setTrouble(null);
+                setEditing({ kind: "remove", dish: d });
+              }}
+              style={({ pressed }) => [styles.bin, pressed ? styles.pressed : null]}
+            >
+              <Icon name="trash" size={18} colour="badText" />
+            </Pressable>
+          ) : standard.label === d.label && standard.volumeMl === d.volumeMl ? null : (
+            <Button label="Reset" kind="link" say={`Reset ${d.label}`} onPress={() => { void reset(d, standard); }} />
+          )}
         </View>
-      ))}
+        );
+      })}
       <Button label="Done" wide onPress={onDone} />
     </>
   );

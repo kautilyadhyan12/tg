@@ -68,7 +68,7 @@ export function Sheet({ open, title, onClose, children, place = "bottom", onBack
     >
       <Pressable accessible={false} onPress={onClose} style={styles.scrim} />
       {/* Lifted over the keyboard, so a box being typed in is never under it. */}
-      <KeyboardAvoidingView behavior="padding" pointerEvents="box-none" style={[styles.lift, middle ? styles.liftMiddle : null]}>
+      <KeyboardAvoidingView behavior="padding" pointerEvents="box-none" style={[styles.lift, { paddingTop: insets.top + SHEET_TOP_GAP }, middle ? styles.liftMiddle : null]}>
         <View
           accessibilityViewIsModal
           style={[styles.sheet, middle ? styles.sheetMiddle : { paddingBottom: insets.bottom + 24 }]}
@@ -89,10 +89,14 @@ export function Sheet({ open, title, onClose, children, place = "bottom", onBack
   );
 }
 
+/** A tall box stops this far under the clock; its list scrolls (`flexShrink` on the box). */
+const SHEET_TOP_GAP = 8;
+
 const styles = StyleSheet.create({
   scrim: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, backgroundColor: colours.scrim },
   lift: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, justifyContent: "flex-end" },
   sheet: {
+    flexShrink: 1,
     gap: 14,
     paddingTop: 10,
     paddingHorizontal: sizes.edge,
