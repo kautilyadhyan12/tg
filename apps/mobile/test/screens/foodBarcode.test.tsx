@@ -127,7 +127,7 @@ describe("the worst thing: an allergic person is never told a pack is clear", ()
       if (node === null || typeof node !== "object") return [];
       return ((node as { children?: unknown[] }).children ?? []).flatMap(texts);
     };
-    expect(texts(box.toJSON?.() ?? null)).toEqual(["No allergens listed. Check the pack."]);
+    expect(texts(box.toJSON())).toEqual(["No allergens listed. Check the pack."]);
   });
 
   it("shows what it contains, what it may contain and what somebody typed, each under its own name", async () => {
@@ -185,7 +185,7 @@ describe("the camera", () => {
     let answer: ((r: Reply) => void) | null = null;
     const slow = new Promise<Reply>((resolve) => { answer = resolve; });
     await openScan({
-      [`/v1/nutrition/barcode/${NUTELLA_CODE}`]: () => slow as unknown as Reply,
+      [`/v1/nutrition/barcode/${NUTELLA_CODE}`]: () => slow,
       ...route("5449000000996", found({ code: "5449000000996" }, { name: "Coca-Cola" })),
     });
     await read("ean13", NUTELLA_CODE);
