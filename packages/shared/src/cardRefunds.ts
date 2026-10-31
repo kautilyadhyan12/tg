@@ -13,9 +13,12 @@ export const CARD_REFUND_LIMITS = { daysToRefund: 365, pendingDays: 14 } as cons
 export const CARD_REFUND_WORDS = {
   /** "When you refund a payment, the processing fees for the payment aren't refunded back to you." */
   fee: "Square does not give back its card fee on a refund.",
-  /** "It might take 7–10 business days for refunds to appear, depending on the bank." */
-  days: "It can take 7 to 10 business days to reach the card.",
-  waiting: "A refund on this bill is waiting for Square's answer. Try again once it has finished.",
+  /** The whole way, from the press: "In total, it can take up to 4–14 business days for your customer to receive their refund."
+   *  (Square's "Manage customer refunds", read 2026-10-31.) */
+  days: "It can take up to 14 business days to reach the card, depending on the bank.",
+  /** Once Square has finished: "It might take 7–10 business days for refunds to appear, depending on the bank." ("Refund a payment".) */
+  days_left: "It can take up to 10 business days to reach the card, depending on the bank.",
+  waiting: "A refund here is waiting for Square's answer. Try again once it has finished.",
   waiting_membership: "A refund on this membership is waiting for Square's answer. Try again once it has finished.",
   not_card: "This payment wasn't taken through Square. Use Note a refund instead.",
   other_account: "This payment was taken in a Square account you are no longer connected to. Refund it in that account, then note the refund here.",
@@ -80,7 +83,7 @@ export type CardRefundRequest = z.infer<typeof cardRefundRequestSchema>;
 /** Where the press ended: `pending` and `completed` are Square's own words; `checking`: Square has not answered yet, and
  *  the worker asks it again. */
 export const cardRefundResponseSchema = z
-  .object({ step: z.enum(["pending", "completed", "checking"]), amountMinor: minorSchema, currency: z.string().regex(/^[A-Z]{3}$/), card: cardSeenSchema.nullable() })
+  .object({ step: z.enum(["pending", "completed", "checking"]), amountMinor: minorSchema, currency: z.string().regex(/^[A-Z]{3}$/), card: cardSeenSchema.nullable(), pressId: z.string().uuid() })
   .strict();
 export type CardRefundResponse = z.infer<typeof cardRefundResponseSchema>;
 
@@ -88,5 +91,6 @@ export type CardRefundResponse = z.infer<typeof cardRefundResponseSchema>;
 export function cardRefundSentLine(r: CardRefundResponse, cardWords: string): string {
   const money = formatMinor(r.amountMinor, r.currency);
   if (r.step === "checking") return `Square hasn't answered yet, so ${money} is not refunded yet. Don't refund it again: this page will say when Square answers.`;
-  return `${money} is on its way back to ${cardWords}. ${CARD_REFUND_WORDS.days}`;
+  if (r.step === "completed") return `${money} was refunded to ${cardWords}. ${CARD_REFUND_WORDS.days_left}`;
+  return `Square is processing this ${money} refund to ${cardWords}. ${CARD_REFUND_WORDS.days}`;
 }

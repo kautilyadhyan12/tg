@@ -133,7 +133,8 @@ export function paymentLine(m, today) {
     // Everything paid for the newest month was given back (18a-ii): the days are kept,
     // and the line says what happened to the money.
     if (m.refundedInFull === true) {
-      return { text: p.until === null || m.view.renewsOn === null ? 'Refunded' : `Refunded · next payment due ${dayWords(p.until)}`, due: false };
+      const word = m.refundPending === true ? 'Refund pending' : 'Refunded';
+      return { text: p.until === null || m.view.renewsOn === null ? word : `${word} · next payment due ${dayWords(p.until)}`, due: false };
     }
     if (p.until === null) return { text: 'Paid', due: false };
     return { text: m.view.renewsOn === null ? 'Paid to the end' : `Paid · next payment due ${dayWords(p.until)}`, due: false };

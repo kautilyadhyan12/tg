@@ -4316,18 +4316,18 @@ payment: Card on file · Visa ending 1111, the card named before the press. The 
 member's notice are 18d-iii-ii-a (below); the Failed payments list is 18d-iii-ii-b.
 
 **Refund to card** (18d-iv-a, as built; `rulings/2026-10-30-18d-iv-a.md`). A payment on a period's bill taken on the Square Terminal or charged to
-the card on file goes back through Square to the card that paid, from the ⋯ on the payment: **Refund to card** ("Square sends
+the card on file goes back through Square to the card that paid, from the **Refund** button on the payment (a payment by hand keeps its ⋯): **Refund to card** ("Square sends
 the money back to the card that paid."). Note a refund stays beside it ("You gave it back another way, such as cash."). The box
 opens under the payment and asks Square about it first, so it names the real card and what is really left: the most that can
 go back is the least of what the app and Square each say is left, and what Square gave back with no note here is said, with Note a
-refund beside it. It says "Square does not give back its card fee on a refund." and "It can take 7 to 10 business days to reach
-the card." Staff type the amount (all or part), pick why from the refund reasons, and press **Refund $20.00 to Visa ending 1111**.
+refund beside it. It says "Square does not give back its card fee on a refund." and "It can take up to 14 business days to reach
+the card, depending on the bank." (Square: "In total, it can take up to 4–14 business days"; read 2026-10-31.) Staff type the amount (all or part), pick why from the refund reasons, and press **Refund $20.00 to Visa ending 1111**.
 Who may: `billing.members`, as for a refund noted by hand. A refund moves no date and no count, as ever. A press is one row of
 `gym_square_refunds` (migration `0177`), written under the record's lock; its id is the key Square is asked with, so Square takes it
 up once however often it is asked (measured 2026-10-30: the same key gives back the same refund, another amount under it is
 refused); while Square has not answered, nothing else is refunded or voided on that bill and the membership is not moved to another. Once Square
 takes it up, a row of `gym_member_refunds` holds the money as given back, with the payment's own method (Card on Terminal, Card on
-file), so the bill, the receipt, Reports and the download read it as any refund; it reads **Refund pending** until Square finishes.
+file), so the bill, the receipt, Reports and the download read it as any refund; the bill or fee and its line read **Refund pending** until Square finishes, and the sentence under the payment follows ("Square is processing this $10.00 refund to Visa ending 1111.", then "$10.00 was refunded to Visa ending 1111. It can take up to 10 business days to reach the card, depending on the bank.").
 The worker reads each pending refund 1, 2, 5 and 15 minutes after, then hourly and every 3 hours; the page reads again every 30
 seconds for 15 minutes while one is pending. FAILED or REJECTED after that: the app voids the refund itself (`square_failed`), the
 bill reads as it did, and the line says "Square could not refund this. No money went back." Past Square's 14 days pending, the line
@@ -4336,8 +4336,16 @@ key for an hour, then left as "We don't know whether Square took the … refund.
 the refund here.", until refunds written on that payment cover it. Refused before sending: an Interac debit card (`refund_requires_card_presence`;
 18d-iv-c), a payment over 365 days old, one taken in a Square account the gym has left (each offers Note a refund), one Square has
 not finished, one that does not match Square's record. Square's refusals are said in the box in plain words, and a code nobody has
-placed reads "Square refused this refund. No money went back." Still to come: fees and Sell (18d-iv-b), Interac on the Terminal
+placed reads "Square refused this refund. No money went back." Still to come: Interac on the Terminal
 (18d-iv-c), a refund made inside Square shown here (18d-iv-d), chargebacks (18d-iv-e).
+
+*On a fee (18d-iv-b-i, as built):* a late cancel, no-show or freeze fee taken on the Terminal or from the card on file goes back the same way, from the Refund button on its
+payment: **Refund to card**, and **Note a refund** beside it, with Void refund for one noted by mistake. All or part; the box and the note name the fee and what it
+was for, and "Leaving or cancelled" is not offered. A fee paid by hand keeps Void payment and takes no refund. All of it back reads **Refunded**, part **Part refunded**, and **Refund pending** while Square has not finished,
+on the person's page, a class's list and a personal training session (for staff and the member), and the member's own page says "<gym> is refunding this fee.", then "<gym> refunded this fee." or
+"<gym> refunded $4.00 of this fee.". The line at the top of a membership and a member's payment lines wait for Square the same way. A refunded fee is not owed again, whatever staff mark afterwards: its booking opens no second fee. A fee's payment never gives a
+member's Refer a friend gift, so neither a failed refund nor a voided one gives one back. Reports, receipts and the payments download read it as they read any refund.
+Still to come: Sell (18d-iv-b-ii), and Overview's list of fees to refund and refunds that failed or that Square never answered (18d-iv-b-iii).
 
 **A failed charge** (18d-iii): at most 3 tries over several days (Square: "Limit retries to 2 to
 3 attempts over several days"; never `GENERIC_DECLINE`), never again after a decline the card

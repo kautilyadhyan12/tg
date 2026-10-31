@@ -47,13 +47,13 @@ import {
   overdueDaysOf,
   paymentsFor,
   refundAskingOnBill,
+  refundTargetOf,
   setBillDay,
   setBillStatus,
   setOverdueDays,
   squareMoneyOut,
-  type BillRow,
   type NewBill,
-  type PaymentRow,
+  type RefundTarget,
 } from "./billsSql.js";
 import { listHeldMembership, lockedEntry, lockedHeld, settle, writeCountsAfterGap, writePaidPeriods, type CountMove, type ListHeldColumns } from "./heldRepo.js";
 
@@ -391,19 +391,19 @@ export async function cancelMemberBill(
   });
 }
 
-/** One payment of one period of one membership, with its bill, under the gym's lock; null
- *  where it is not that membership's. A fee's payment is `feesRepo.ts`'s. */
+/** One payment of one membership, a period's or a fee's, with its bill, under the gym's lock; null
+ *  where it is not that membership's. */
 async function paymentOf(
   tx: TransactionSql,
   gymId: string,
   membershipId: string,
   paymentId: string,
-): Promise<{ undone: boolean; bill_id: string; amount_minor: number; currency: string; period_index: number } | null> {
-  const [payment] = await tx<{ undone: boolean; bill_id: string; amount_minor: number; currency: string; period_index: number }[]>`
+): Promise<{ undone: boolean; bill_id: string; amount_minor: number; currency: string; period_index: number | null } | null> {
+  const [payment] = await tx<{ undone: boolean; bill_id: string; amount_minor: number; currency: string; period_index: number | null }[]>`
     SELECT p.undone_at IS NOT NULL AS undone, p.bill_id, p.amount_minor, p.currency, b.period_index
     FROM gym_member_payments p
     JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
-    WHERE p.gym_id = ${gymId} AND p.id = ${paymentId} AND b.held_membership_id = ${membershipId} AND b.period_index IS NOT NULL`;
+    WHERE p.gym_id = ${gymId} AND p.id = ${paymentId} AND b.held_membership_id = ${membershipId}`;
   return payment ?? null;
 }
 
@@ -453,9 +453,11 @@ export async function noteRefund(
     const payment = await paymentOf(tx, input.gymId, row.id, input.paymentId);
     if (payment === null || payment.undone) return { kind: "payment_not_found" };
     if (await refundAskingOnBill(tx, input.gymId, payment.bill_id)) return { kind: "refund_waiting" };
-    const bill = (await billsFor(tx, input.gymId, [row.id])).find((b) => b.id === payment.bill_id);
-    const standing = (await paymentsFor(tx, input.gymId, [row.id])).find((p) => p.id === input.paymentId);
-    if (bill === undefined || standing === undefined) return { kind: "payment_not_found" };
+    const target = await refundTargetOf(tx, input.gymId, row.id, input.paymentId);
+    if (target === null) return { kind: "payment_not_found" };
+    const { bill, payment: standing } = target;
+    // A fee paid by hand is voided, not refunded: its payment takes no refund to stand behind.
+    if (bill.fee !== null && !paidThroughSquare(standing.method)) return { kind: "not_allowed" };
 
     const refund = refundMemberPayment(bill, standing, input.amountMinor);
     if (!refund.ok) {
@@ -495,8 +497,8 @@ export async function writeRefund(
     /** Null once the record was deleted for good. */
     entryId: string | null;
     membershipId: string;
-    bill: BillRow;
-    standing: PaymentRow;
+    bill: RefundTarget["bill"];
+    standing: RefundTarget["payment"];
     paymentId: string;
     requestKey: string;
     amountMinor: number;
@@ -545,7 +547,7 @@ export async function writeRefund(
       membershipId: r.membershipId,
       billId: r.bill.id,
       paymentId: r.paymentId,
-      period: String(r.bill.periodIndex),
+      ...(r.bill.fee === null ? { period: String(r.bill.periodIndex) } : { fee: r.bill.fee }),
       amountMinor: String(r.amountMinor),
       currency: r.currency,
       method: r.method,
@@ -586,8 +588,8 @@ export async function voidRefund(
     await tx`
       UPDATE gym_member_bills SET status = 'paid', updated_at = ${input.now}
       WHERE gym_id = ${input.gymId} AND id = ${payment.bill_id} AND status = 'refunded'`;
-    // The payment stands again: a friend's payment gives the member's gift where none stands.
-    if (!payment.undone) await giveMemberGift(tx, { gymId: input.gymId, friendEntryId: input.entryId, by: { paymentId: input.paymentId }, today: input.today, now: input.now });
+    // The payment stands again: a friend's payment gives the member's gift where none stands. A fee's never does.
+    if (!payment.undone && payment.period_index !== null) await giveMemberGift(tx, { gymId: input.gymId, friendEntryId: input.entryId, by: { paymentId: input.paymentId }, today: input.today, now: input.now });
 
     await insertAudit(tx, {
       actorUserId: input.actorUserId,

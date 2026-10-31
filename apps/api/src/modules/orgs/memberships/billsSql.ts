@@ -24,6 +24,7 @@ import {
   refundVoidKeptSchema,
   type BillCancelReason,
   type MemberBillStatus,
+  type MemberFeeKind,
   type MemberRefundMethod,
   type MemberPaymentMethod,
   type PaymentVoidReason,
@@ -195,6 +196,43 @@ export async function paymentsFor(sql: Sql | TransactionSql, gymId: string, memb
   }));
 }
 
+/** A payment that stands and the bill it is on, of a period or a fee (18d-iv-b-i), as the refund rule reads them. */
+export interface RefundTarget {
+  bill: { id: string; status: MemberBillStatus; paidMinor: number; refundedMinor: number; movedMinor: number; periodIndex: number | null; fee: MemberFeeKind | null };
+  payment: { id: string; amountMinor: number; refundedMinor: number; method: MemberPaymentMethod };
+}
+
+/** That payment of that membership; null where it does not stand on it. */
+export async function refundTargetOf(sql: Sql | TransactionSql, gymId: string, membershipId: string, paymentId: string): Promise<RefundTarget | null> {
+  const [row] = await sql<
+    { bill_id: string; status: string; period_index: number | null; fee: string | null; moved_minor: number; amount_minor: number; method: string; paid_minor: number; bill_refunded_minor: number; refunded_minor: number }[]
+  >`
+    SELECT b.id AS bill_id, b.status, b.period_index, b.fee, b.moved_minor, p.amount_minor, p.method,
+           COALESCE((SELECT sum(q.amount_minor) FROM gym_member_payments q
+                     WHERE q.gym_id = b.gym_id AND q.bill_id = b.id AND q.undone_at IS NULL), 0)::int AS paid_minor,
+           COALESCE((SELECT sum(r.amount_minor) FROM gym_member_refunds r
+                     JOIN gym_member_payments q ON q.gym_id = r.gym_id AND q.id = r.payment_id
+                     WHERE r.gym_id = b.gym_id AND q.bill_id = b.id AND q.undone_at IS NULL AND r.undone_at IS NULL), 0)::int AS bill_refunded_minor,
+           COALESCE((SELECT sum(r.amount_minor) FROM gym_member_refunds r
+                     WHERE r.gym_id = p.gym_id AND r.payment_id = p.id AND r.undone_at IS NULL), 0)::int AS refunded_minor
+    FROM gym_member_payments p
+    JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
+    WHERE p.gym_id = ${gymId} AND p.id = ${paymentId} AND b.held_membership_id = ${membershipId} AND p.undone_at IS NULL`;
+  if (row === undefined) return null;
+  return {
+    bill: {
+      id: row.bill_id,
+      status: memberBillStatusSchema.parse(row.status),
+      paidMinor: row.paid_minor,
+      refundedMinor: row.bill_refunded_minor,
+      movedMinor: row.moved_minor,
+      periodIndex: row.period_index,
+      fee: row.fee === null ? null : memberFeeKindSchema.parse(row.fee),
+    },
+    payment: { id: paymentId, amountMinor: row.amount_minor, refundedMinor: row.refunded_minor, method: memberPaymentMethodSchema.parse(row.method) },
+  };
+}
+
 export interface RefundRow {
   id: string;
   paymentId: string;
@@ -206,20 +244,21 @@ export interface RefundRow {
   by: string | null;
   receiptNumber: number;
   /** Sent to the card through Square (18d-iv-a): null for one noted by hand. */
-  square: { state: "pending" | "completed"; card: { brand: string; last4: string } | null; startedOn: string } | null;
+  square: { state: "pending" | "completed"; card: { brand: string; last4: string } | null; startedOn: string; pressId: string } | null;
 }
 
 /** What a refund row reads of its press at Square (18d-iv-a). */
-const squareOfRefund = (r: { q_state: string | null; q_brand: string | null; q_last4: string | null; q_started: string | null }): RefundRow["square"] =>
-  r.q_state === null || r.q_started === null
+const squareOfRefund = (r: { q_id: string | null; q_state: string | null; q_brand: string | null; q_last4: string | null; q_started: string | null }): RefundRow["square"] =>
+  r.q_id === null || r.q_state === null || r.q_started === null
     ? null
     : {
         state: r.q_state === "pending" ? "pending" : "completed",
         card: r.q_brand === null || r.q_last4 === null ? null : { brand: r.q_brand, last4: r.q_last4 },
         startedOn: r.q_started,
+        pressId: r.q_id,
       };
 
-/** The refunds that stand against the standing payments of the memberships named, in the
+/** The refunds that stand against the standing payments of the memberships named, a fee's too (18d-iv-b-i), in the
  *  order they were noted. */
 export async function refundsFor(sql: Sql | TransactionSql, gymId: string, membershipIds: readonly string[]): Promise<RefundRow[]> {
   if (membershipIds.length === 0) return [];
@@ -234,6 +273,7 @@ export async function refundsFor(sql: Sql | TransactionSql, gymId: string, membe
       reason: string;
       by: string | null;
       receipt_number: number;
+      q_id: string | null;
       q_state: string | null;
       q_brand: string | null;
       q_last4: string | null;
@@ -241,7 +281,7 @@ export async function refundsFor(sql: Sql | TransactionSql, gymId: string, membe
     }[]
   >`
     SELECT r.id, r.payment_id, b.held_membership_id, r.amount_minor, r.method, r.refunded_on::text AS refunded_on, r.reason,
-           u.display_name AS by, r.receipt_number, q.state AS q_state, q.brand AS q_brand, q.last4 AS q_last4,
+           u.display_name AS by, r.receipt_number, q.id AS q_id, q.state AS q_state, q.brand AS q_brand, q.last4 AS q_last4,
            (q.started_at AT TIME ZONE g.timezone)::date::text AS q_started
     FROM gym_member_refunds r
     JOIN gym_member_payments p ON p.gym_id = r.gym_id AND p.id = r.payment_id
@@ -250,7 +290,7 @@ export async function refundsFor(sql: Sql | TransactionSql, gymId: string, membe
     LEFT JOIN gym_square_refunds q ON q.gym_id = r.gym_id AND q.member_refund_id = r.id
     LEFT JOIN users u ON u.id = r.recorded_by
     WHERE r.gym_id = ${gymId} AND b.held_membership_id = ANY(${[...membershipIds]}::uuid[])
-      AND r.undone_at IS NULL AND p.undone_at IS NULL AND b.period_index IS NOT NULL
+      AND r.undone_at IS NULL AND p.undone_at IS NULL
     ORDER BY r.created_at, r.id`;
   return rows.map((r) => ({
     id: r.id,
@@ -341,18 +381,26 @@ export async function voidedRefundsFor(sql: Sql | TransactionSql, gymId: string,
       void_reason: string | null;
       voided_on: string;
       voided_by: string | null;
+      q_id: string | null;
+      q_state: string | null;
+      q_brand: string | null;
+      q_last4: string | null;
+      q_started: string | null;
     }[]
   >`
     SELECT r.id, r.payment_id, b.held_membership_id, r.amount_minor, r.method, r.refunded_on::text AS refunded_on, r.reason,
            u.display_name AS by, r.receipt_number, r.void_reason,
-           (r.undone_at AT TIME ZONE g.timezone)::date::text AS voided_on, v.display_name AS voided_by
+           (r.undone_at AT TIME ZONE g.timezone)::date::text AS voided_on, v.display_name AS voided_by,
+           q.id AS q_id, q.state AS q_state, q.brand AS q_brand, q.last4 AS q_last4,
+           (q.started_at AT TIME ZONE g.timezone)::date::text AS q_started
     FROM gym_member_refunds r
     JOIN gym_member_payments p ON p.gym_id = r.gym_id AND p.id = r.payment_id
     JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
     JOIN gyms g ON g.id = r.gym_id
+    LEFT JOIN gym_square_refunds q ON q.gym_id = r.gym_id AND q.member_refund_id = r.id
     LEFT JOIN users u ON u.id = r.recorded_by
     LEFT JOIN users v ON v.id = r.undone_by
-    WHERE r.gym_id = ${gymId} AND b.held_membership_id = ANY(${[...membershipIds]}::uuid[]) AND r.undone_at IS NOT NULL AND b.period_index IS NOT NULL
+    WHERE r.gym_id = ${gymId} AND b.held_membership_id = ANY(${[...membershipIds]}::uuid[]) AND r.undone_at IS NOT NULL
     ORDER BY r.created_at, r.id`;
   return rows.map((r) => ({
     id: r.id,
@@ -364,7 +412,7 @@ export async function voidedRefundsFor(sql: Sql | TransactionSql, gymId: string,
     reason: refundReasonSchema.parse(r.reason),
     by: r.by,
     receiptNumber: r.receipt_number,
-    square: null,
+    square: squareOfRefund(r),
     voided: { reason: r.void_reason === null ? null : refundVoidKeptSchema.parse(r.void_reason), on: r.voided_on, by: r.voided_by },
   }));
 }

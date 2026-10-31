@@ -55,6 +55,7 @@ import {
   type HeldMembershipsResponse,
   type MemberBilling,
   type MemberFee,
+  type MemberPayment,
   type MemberPaymentByHand,
   type RecordMemberFeePaymentRequest,
   type NoteMemberRefundRequest,
@@ -144,8 +145,12 @@ function billingOf(
     reason: r.reason,
     by: r.by,
     receiptNumber: r.receiptNumber,
-    square: r.square === null ? null : { state: r.square.state, card: r.square.card, late: r.square.state === "pending" && daysBetween(r.square.startedOn, ctx.today) > CARD_REFUND_LIMITS.pendingDays },
+    square:
+      r.square === null
+        ? null
+        : { state: r.square.state, card: r.square.card, late: r.square.state === "pending" && daysBetween(r.square.startedOn, ctx.today) > CARD_REFUND_LIMITS.pendingDays, pressId: r.square.pressId },
   });
+  const refundsOf = (paymentId: string) => refunds.filter((r) => r.paymentId === paymentId).map(refundOf);
   const voidedRefundsOf = (paymentId: string) => voided.refunds.filter((r) => r.paymentId === paymentId).map((r) => ({ ...refundOf(r), voided: r.voided }));
   return {
     bills: sent.map((b) => ({
@@ -172,7 +177,7 @@ function billingOf(
           method: p.method,
           paidOn: p.paidOn,
           by: p.by,
-          refunds: refunds.filter((r) => r.paymentId === p.id).map(refundOf),
+          refunds: refundsOf(p.id),
           voidedRefunds: voidedRefundsOf(p.id),
           refundableMinor: paymentRefundableMinor(b, p),
           cardRefund: ctx.presses.get(p.id) ?? null,
@@ -210,7 +215,7 @@ function billingOf(
           },
     cancel: cancelBill === undefined ? null : { billId: cancelBill.id },
     undo: back !== null ? { kind: "payment", paymentId: back.paymentId } : mark !== null ? { kind: "mark", paidPeriods: mark.paidPeriods } : null,
-    fees: fees.fees.map((f) => feeOf(f, fees.payments, ctx)),
+    fees: fees.fees.map((f) => feeOf(f, fees.payments, ctx, { refunds: refundsOf, voided: voidedRefundsOf })),
   };
 }
 
@@ -227,10 +232,18 @@ function freezeFeeFirstOn(row: { id: string; membership: HeldMembership }, gymFe
 
 /** One fee as a person's page draws it (18h-i): paid all at once or waived while it is owed,
  *  and its payment voided while it stands. */
-function feeOf(f: FeeRow, payments: readonly FeePaymentRow[], ctx: { today: string; overdueAfterDays: number; charges: Charges }): MemberFee {
+function feeOf(
+  f: FeeRow,
+  payments: readonly FeePaymentRow[],
+  ctx: { today: string; overdueAfterDays: number; charges: Charges; presses: Awaited<ReturnType<typeof openPressesOf>> },
+  back: { refunds: (paymentId: string) => MemberPayment["refunds"]; voided: (paymentId: string) => MemberPayment["voidedRefunds"] },
+): MemberFee {
   const mine = payments.filter((p) => p.billId === f.id);
   const standing = mine.filter((p) => p.voided === null);
   const owed = f.status === "open";
+  const refundedOf = (paymentId: string): number => back.refunds(paymentId).reduce((n, r) => n + r.amountMinor, 0);
+  const refundedMinor = standing.reduce((n, p) => n + refundedOf(p.id), 0);
+  const whole = { status: f.status, paidMinor: standing.reduce((n, p) => n + p.amountMinor, 0), refundedMinor };
   const paymentOf = (p: FeePaymentRow) => ({ id: p.id, amountMinor: p.amountMinor, method: p.method, paidOn: p.paidOn, by: p.by, receiptNumber: p.receiptNumber, card: ctx.charges.cardOfPayment.get(p.id) ?? null });
   return {
     id: f.id,
@@ -251,10 +264,20 @@ function feeOf(f: FeeRow, payments: readonly FeePaymentRow[], ctx: { today: stri
             ? memberBillState({ status: "open", dueOn: f.dueOn }, ctx.today, ctx.overdueAfterDays) === "overdue"
               ? "overdue"
               : "due"
-            : "paid",
+            : f.status === "refunded"
+              ? "refunded"
+              : "paid",
     waived: f.waived,
     stillOwed: f.stillOwed,
-    payments: standing.map((p) => ({ ...paymentOf(p), refunds: [], voidedRefunds: [], refundableMinor: 0, cardRefund: null })),
+    refundedMinor,
+    // Only a payment taken through Square is refunded: one by hand is voided, as it always was.
+    payments: standing.map((p) => ({
+      ...paymentOf(p),
+      refunds: back.refunds(p.id),
+      voidedRefunds: back.voided(p.id),
+      refundableMinor: paidThroughSquare(p.method) ? paymentRefundableMinor(whole, { amountMinor: p.amountMinor, refundedMinor: refundedOf(p.id) }) : 0,
+      cardRefund: ctx.presses.get(p.id) ?? null,
+    })),
     voidedPayments: mine.flatMap((p) => (p.voided === null ? [] : [{ ...paymentOf(p), voidedRefunds: [], voided: p.voided }])),
     cardDeclined: owed ? (ctx.charges.declined.get(f.id) ?? null) : null,
     cardUnchecked: owed ? (ctx.charges.unchecked.get(f.id) ?? null) : null,
@@ -325,7 +348,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
   const charges: Charges = canBill
     ? await chargesOfBills(deps.sql, gymId, [...list.bills.map((b) => b.id), ...list.fees.map((f) => f.id)], [...list.payments.map((p) => p.id), ...list.feePayments.map((p) => p.id)], deps.now())
     : NO_CHARGES;
-  const presses = canBill ? await openPressesOf(deps.sql, gymId, list.payments.map((p) => p.id)) : new Map<string, { amountMinor: number; on: string; lost: boolean }>();
+  const presses = canBill ? await openPressesOf(deps.sql, gymId, [...list.payments, ...list.feePayments.filter((p) => p.voided === null)].map((p) => p.id)) : new Map<string, { amountMinor: number; on: string; lost: boolean }>();
   const ctx = { today, past: list.past, overdueAfterDays: list.overdueAfterDays, gifts, charges, presses };
   // The page reads a membership as the next write will find it: with its count moved
   // over the periods nobody was asked for (`countAfterGap`), which `settle` then writes.
@@ -389,6 +412,13 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
       fromList: row.fromList,
       notCharged: list.bills.some((b) => b.membershipId === row.id && b.cancelled !== null && b.periodIndex === row.membership.paidPeriods - 1),
       refundedInFull: list.bills.some((b) => b.membershipId === row.id && b.status === "refunded" && b.periodIndex === row.membership.paidPeriods - 1),
+      refundPending: list.bills.some(
+        (b) =>
+          b.membershipId === row.id &&
+          b.status === "refunded" &&
+          b.periodIndex === row.membership.paidPeriods - 1 &&
+          list.refunds.some((r) => r.square?.state === "pending" && list.payments.some((p) => p.id === r.paymentId && p.billId === b.id)),
+      ),
       discount: row.discount,
       freeDays: freeDays.get(row.id) ?? [],
       tax: row.tax,

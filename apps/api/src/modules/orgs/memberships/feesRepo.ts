@@ -59,6 +59,28 @@ const stillOwedSql = (sql: Sql | TransactionSql) => sql`
               WHERE a.gym_id = b.gym_id AND a.id = b.pt_appointment_id
                 AND a.status = CASE b.fee WHEN 'late_cancel' THEN 'late_cancelled' ELSE 'no_show' END))`;
 
+/** In a statement that names a fee's bill `f`, with its `id`, `gym_id` and `status`: how its refunds stand: 'pending' while Square
+ *  has not finished one, 'part' where some of it went back and it still reads paid, else null (18d-iv-b-i). */
+export const feeRefundSql = (sql: Sql | TransactionSql) => sql`
+  CASE WHEN EXISTS (SELECT 1 FROM gym_member_payments p
+                    JOIN gym_square_refunds q ON q.gym_id = p.gym_id AND q.payment_id = p.id
+                    WHERE p.gym_id = f.gym_id AND p.bill_id = f.id AND q.state = 'pending') THEN 'pending'
+       WHEN f.status = 'paid' AND EXISTS (SELECT 1 FROM gym_member_payments p
+                                          JOIN gym_member_refunds r ON r.gym_id = p.gym_id AND r.payment_id = p.id
+                                          WHERE p.gym_id = f.gym_id AND p.bill_id = f.id AND p.undone_at IS NULL AND r.undone_at IS NULL) THEN 'part'
+  END`;
+
+export type FeeListState = "owed" | "paid" | "part_refunded" | "refund_pending" | "refunded" | "waived";
+
+/** One answer about a fee on a class's list and a personal training session, as its bills read on the person's page. */
+export function feeListState(r: { fee_waived: boolean | null; fee_status: string | null; fee_refund: string | null }): FeeListState {
+  if (r.fee_waived === true) return "waived";
+  if (r.fee_status === "open") return "owed";
+  if (r.fee_refund === "pending") return "refund_pending";
+  if (r.fee_status === "refunded") return "refunded";
+  return r.fee_refund === "part" ? "part_refunded" : "paid";
+}
+
 /** A fee is set in the gym's members' money, so it goes only on a membership sold in that
  *  money: none where the gym has no country it sells in (18s), nor on a membership from
  *  before it moved to another money. */

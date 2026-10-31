@@ -19,7 +19,7 @@ const currencySchema = z.string().regex(/^[A-Z]{3}$/);
 
 /** A refund that stands, under the payment or sale it gives back for. */
 export const myRefundSchema = z
-  .object({ amountMinor: minorSchema, method: memberPaymentMethodSchema, refundedOn: daySchema, receiptNumber: receiptNumberSchema })
+  .object({ amountMinor: minorSchema, method: memberPaymentMethodSchema, refundedOn: daySchema, receiptNumber: receiptNumberSchema, pending: z.boolean().default(false) })
   .strict();
 export type MyRefund = z.infer<typeof myRefundSchema>;
 
@@ -37,7 +37,7 @@ export const myPaymentSchema = z
   .strict();
 export type MyPayment = z.infer<typeof myPaymentSchema>;
 
-/** A late cancel or no-show fee (18h): owed, paid or waived. A fee taken off is not sent. */
+/** A late cancel or no-show fee (18h): owed, paid, refunded or waived. A fee taken off is not sent. */
 export const myFeeSchema = z
   .object({
     fee: memberFeeKindSchema,
@@ -45,7 +45,11 @@ export const myFeeSchema = z
     on: daySchema,
     amountMinor: minorSchema,
     dueOn: daySchema,
-    state: z.enum(["due", "overdue", "paid", "waived"]),
+    state: z.enum(["due", "overdue", "paid", "refunded", "waived"]),
+    /** What was given back of it (18d-iv-b-i). */
+    refundedMinor: minorSchema.default(0),
+    /** A refund of it is still with Square: it does not read Refunded until Square has finished. */
+    refundPending: z.boolean().default(false),
     /** The receipt of the payment that paid it; null while it is owed or waived. */
     receiptNumber: receiptNumberSchema.nullable(),
   })

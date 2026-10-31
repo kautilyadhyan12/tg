@@ -144,7 +144,7 @@ export async function openFreezeFee(tx: TransactionSql, gymId: string, membershi
     FROM gym_held_memberships h
     WHERE h.gym_id = ${gymId} AND h.id = ${membershipId} AND h.status = 'frozen'
       AND b.gym_id = h.gym_id AND b.held_membership_id = h.id AND b.fee = 'freeze' AND b.freeze_stopped
-      AND b.status = 'paid' AND b.covers_from = h.frozen_on`;
+      AND b.status IN ('paid','refunded') AND b.covers_from = h.frozen_on`;
   const work = owedFees(await frozen(tx, [gymId], [membershipId]), now).get(gymId) ?? [];
   return await insertFreezeFees(tx, gymId, work, now);
 }
@@ -158,7 +158,7 @@ export async function removeFreezeFees(tx: TransactionSql, gymId: string, member
     UPDATE gym_member_bills b SET status = CASE WHEN b.status = 'open' THEN 'void' ELSE b.status END, freeze_stopped = true, updated_at = ${now}
     FROM gym_member_bills old
     WHERE old.id = b.id AND b.gym_id = ${gymId} AND b.held_membership_id = ${membershipId} AND b.fee = 'freeze'
-      AND b.status IN ('open','paid') AND NOT b.freeze_stopped AND b.covers_from >= ${fromDay}::date
+      AND b.status IN ('open','paid','refunded') AND NOT b.freeze_stopped AND b.covers_from >= ${fromDay}::date
     RETURNING b.id, old.status AS was`;
   const removed = rows.filter((r) => r.was === "open");
   if (removed.length > 0) {

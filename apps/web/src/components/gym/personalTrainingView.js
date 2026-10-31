@@ -170,7 +170,7 @@ export function ptCancelAsk(s, timezone, gymName) {
   };
 }
 
-const FEE_STATE_WORDS = { owed: 'Payment due', paid: 'Paid', waived: 'Waived' };
+const FEE_STATE_WORDS = { owed: 'Payment due', paid: 'Paid', part_refunded: 'Part refunded', refund_pending: 'Refund pending', refunded: 'Refunded', waived: 'Waived' };
 
 /** A session's own fee, under it in the list (18h-ii): "One-time late cancel fee £5.00 ·
  *  Payment due"; null for none. */
