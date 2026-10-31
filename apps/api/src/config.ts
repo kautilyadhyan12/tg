@@ -37,6 +37,15 @@ const envSchema = z.object({
   // 503s cleanly, the rest of the app runs.
   OPENAI_API_KEY: z.string().min(1).optional(),
   MEAL_VISION_MODEL: z.enum(["gpt-6-luna"]).default("gpt-6-luna"),
+  // The nightly update of our copy of Open Food Facts (ROADMAP 33b-iii-a). Off outside a real server,
+  // so no folder's worker downloads their files by itself.
+  PACKAGED_FOOD_UPDATES: z
+    .enum(["on", "off"])
+    .default("off")
+    .transform((value) => value === "on"),
+  // Open Food Facts asks every app to say who it is: "AppName/Version (ContactEmail)". Set on a real
+  // server, to the app's own address.
+  OPEN_FOOD_FACTS_CONTACT: z.string().trim().email().max(254).optional(),
   // P2.6b: geo route generation via ORS (v1 §6.1). Unset = route generation
   // 503s cleanly (fail-closed, OPENAI_API_KEY precedent); the browse/read side
   // (saved_routes, runs) works without it.
@@ -181,6 +190,10 @@ export type AppConfig = Readonly<z.infer<typeof envSchema>>;
 
 export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
   const parsed = envSchema
+    .refine((c) => !c.PACKAGED_FOOD_UPDATES || c.OPEN_FOOD_FACTS_CONTACT !== undefined, {
+      path: ["OPEN_FOOD_FACTS_CONTACT"],
+      message: "OPEN_FOOD_FACTS_CONTACT is required when PACKAGED_FOOD_UPDATES is on (their page asks every app for a contact)",
+    })
     .refine((c) => c.NODE_ENV !== "production" || c.REDIS_URL !== undefined, {
       path: ["REDIS_URL"],
       message: "REDIS_URL is required in production (quotas/entitlement cache)",

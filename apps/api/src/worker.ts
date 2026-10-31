@@ -49,6 +49,7 @@ import { rollUpGymDays } from "./modules/orgs/rollup.js";
 import { ORGS_SWEEP_JOB, runJoinSweep, scheduleJoinSweep } from "./modules/orgs/joinSweepSchedule.js";
 import { expireLapsedGymTrials } from "./modules/orgs/trialSweep.js";
 import { sweepGoneForGood } from "./modules/orgs/goneForGood/sweep.js";
+import { updatePackagedFoods } from "./modules/nutrition/packagedSync.js";
 import { purgeDueUsers, purgeShortfall } from "./modules/privacy/purge.js";
 import { createDiskPhotoStore } from "./modules/orgs/gymPage/photoStore.js";
 import { processPaddleEvents, processRazorpayEvents } from "./modules/billing/events.js";
@@ -93,6 +94,7 @@ export const ORGS_CLASS_FILL_JOB = "orgs.class_fill";
 export const ORGS_CLASS_NO_SHOWS_JOB = "orgs.class_no_shows";
 export const ORGS_MEMBER_LIST_ANALYSE_JOB = "orgs.member_list_analyse";
 export const ORGS_GONE_FOR_GOOD_JOB = "orgs.gone_for_good";
+export const NUTRITION_PACKAGED_UPDATE_JOB = "nutrition.packaged_update";
 
 const connection = new Redis(redisUrl, { maxRetriesPerRequest: null });
 const sql = postgres(config.DATABASE_URL, { prepare: false, max: 2 });
@@ -286,6 +288,28 @@ try {
 } catch (err) {
   log.fatal({ err }, "failed to register the member-list statistics schedule");
   process.exit(1);
+}
+
+// OUR COPY OF OPEN FOOD FACTS (ROADMAP 33b-iii-a), once a night where it is switched on. Each daily
+// file is one transaction and a second run changes nothing, so a failed night is simply tried the
+// next night; a file it refuses reaches Sentry through the failed handler below.
+if (config.PACKAGED_FOOD_UPDATES) {
+  try {
+    await queue.upsertJobScheduler(
+      NUTRITION_PACKAGED_UPDATE_JOB,
+      { pattern: "37 4 * * *" },
+      {
+        name: NUTRITION_PACKAGED_UPDATE_JOB,
+        opts: { attempts: 1, removeOnComplete: { count: 50 }, removeOnFail: { count: 200 } },
+      },
+    );
+  } catch (err) {
+    log.fatal({ err }, "failed to register the packaged-food update schedule");
+    process.exit(1);
+  }
+} else {
+  // Switched off after being on: the schedule stays in Redis until it is taken out.
+  await queue.removeJobScheduler(NUTRITION_PACKAGED_UPDATE_JOB).catch(() => false);
 }
 
 // THE GYM'S DAY GETS WRITTEN DOWN (Part 3 §3.2; Kd rulings :26469 and :29961).
@@ -762,7 +786,8 @@ const worker = new Worker(
       job.name !== ORGS_MEMBER_MESSAGES_JOB &&
       job.name !== ORGS_MEMBER_BILLS_JOB &&
       job.name !== ORGS_MEMBER_LIST_ANALYSE_JOB &&
-      job.name !== ORGS_GONE_FOR_GOOD_JOB
+      job.name !== ORGS_GONE_FOR_GOOD_JOB &&
+      job.name !== NUTRITION_PACKAGED_UPDATE_JOB
     ) {
       throw new Error(`unknown job on ${ROLLUPS_QUEUE}: ${job.name}`);
     }
@@ -849,6 +874,18 @@ const worker = new Worker(
     // Returns here for the same reason as its five siblings: one statement, so
     // the run either applied or raised, and a raise is already an unhandled
     // rejection that lands the job on the failed set.
+    if (job.name === NUTRITION_PACKAGED_UPDATE_JOB) {
+      const contact = config.OPEN_FOOD_FACTS_CONTACT;
+      const report = await updatePackagedFoods({
+        sql,
+        fetch,
+        now: () => new Date(),
+        userAgent: contact === undefined ? "AIHomeGym/1.0" : `AIHomeGym/1.0 (${contact})`,
+        log,
+      });
+      log.info({ ...report, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
+      return;
+    }
     if (job.name === ORGS_MEMBER_LIST_ANALYSE_JOB) {
       const analysed = await analyseEntriesIfMoved(sql);
       log.info(

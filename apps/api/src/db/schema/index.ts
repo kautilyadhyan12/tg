@@ -11,6 +11,7 @@ export * from "./metering.js";
 export * from "./orgAnalytics.js";
 export * from "./ops.js";
 export * from "./usda.js";
+export * from "./packaged.js";
 export * from "./memberList.js";
 export * from "./classes.js";
 export * from "./memberships.js";
