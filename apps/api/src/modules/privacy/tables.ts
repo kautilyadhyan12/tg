@@ -562,7 +562,7 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // and last four, and the amount, no card number; a record deleted for good lets go of
   // `entry_id` and `payer_entry_id`.
   "gym_card_charges",
-  // gym_square_refunds.started_by — which member of staff pressed Refund to card (`0177`; 18d-iv-a), on
+  // gym_square_refunds.started_by and no_refund_by — which member of staff pressed Refund to card (`0177`; 18d-iv-a) or said no refund was needed (`0181`), on
   // gym_member_payments' footing: the gym's record of money sent back; `ON DELETE set null`. It holds Square's
   // ids, the amount, a reason from a fixed list and the card's brand and last four, no card number.
   "gym_square_refunds",

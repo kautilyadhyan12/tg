@@ -11,6 +11,7 @@ import postgres from "postgres";
 import {
   ROLE_PRIVILEGES,
   cardRefundCheckSchema,
+  refundsToReviewResponseSchema,
   cardRefundResponseSchema,
   sellPageResponseSchema,
   squareConnectResponseSchema,
@@ -803,6 +804,68 @@ d("Refund to card at Sell (real Postgres)", { timeout: T }, () => {
       const [audit] = await sql<{ action: string; meta: Record<string, string> }[]>`
         SELECT action, meta FROM audit_log WHERE gym_id = ${gym.id} AND target_id = ${row?.id ?? ""}`;
       expect(audit).toMatchObject({ action: "org.sale_refund_sent", meta: { product: "Water", amountMinor: "300", brand: "VISA", last4: "1111", method: "terminal", restocked: "1" } });
+    });
+  });
+
+  describe("Refunds to review", () => {
+    const list = async (g: Gym, by: Person = g.owner) => {
+      const res = await send("GET", `/v1/orgs/${g.id}/refunds-to-review`, by.cookies);
+      expect(res.statusCode, res.body).toBe(200);
+      return refundsToReviewResponseSchema.parse(JSON.parse(res.body));
+    };
+    const noRefund = (g: Gym, pressId: string) => send("POST", `/v1/orgs/${g.id}/refunds-to-review/presses/${pressId}/no-refund`, g.owner.cookies);
+    const allUrl = (gym: Gym, saleId: string) => `${refundUrl(gym, saleId)}-all`;
+    const pressAll = (b: Basket, amountMinor: number) => send("POST", allUrl(b.gym, b.water), b.gym.owner.cookies, { requestKey: randomUUID(), amountMinor, reason: "returned", shelf: [] });
+    const rowOf = async (b: Basket) => (await list(b.gym)).rows.find((r) => r.sale?.saleId === b.water || r.sale?.saleId === b.towel);
+
+    // A gym of its own: a page of the list holds ten rows.
+    beforeAll(async () => {
+      gym = await makeGym(`Review Gym ${uniq()}`, `MERCH${uniq()}`);
+    }, T);
+
+    it("all of a sale that failed is one row naming its products; a refund since takes it off", async () => {
+      const basket = await sold(gym);
+      square.state.refundStatus = "REJECTED";
+      await pressAll(basket, 1900);
+      square.state.refundStatus = "PENDING";
+      const row = await rowOf(basket);
+      expect(row).toMatchObject({ kind: "failed", amountMinor: 1900, name: null, personDeleted: false, member: null, sale: { item: "Water", more: 1 } });
+      expect(row?.sale?.day).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      clock = new Date(clock.getTime() + 1000);
+      const noted = await send("POST", `/v1/orgs/${gym.id}/register/sales/${basket.water}/refunds-all`, gym.owner.cookies, { requestKey: randomUUID(), totalMinor: 1900, method: "cash", reason: "returned", shelf: [] });
+      expect(noted.statusCode, noted.body).toBe(201);
+      expect(await rowOf(basket)).toBeUndefined();
+    });
+
+    it("two products of one basket that failed are one row, and No refund needed closes both; Sell says who decided", async () => {
+      const basket = await sold(gym);
+      square.state.refundStatus = "REJECTED";
+      await press(basket, basket.water, 400);
+      await press(basket, basket.towel, 1500);
+      square.state.refundStatus = "PENDING";
+      expect((await list(gym)).rows.filter((r) => r.sale?.saleId === basket.water || r.sale?.saleId === basket.towel)).toHaveLength(1);
+      const row = await rowOf(basket);
+      const res = await noRefund(gym, row?.id ?? "");
+      expect(res.statusCode, res.body).toBe(204);
+      expect(await rowOf(basket)).toBeUndefined();
+      expect((await line(basket, basket.towel)).cardRefund).toMatchObject({ lost: true, decided: { by: expect.stringContaining("Owner") as string } });
+      expect((await line(basket, basket.water)).cardRefund?.decided).not.toBeNull();
+    });
+
+    it("staff with the payments tick alone see a sale's row and can decide it; next door cannot", async () => {
+      const basket = await sold(gym);
+      square.state.refundStatus = "REJECTED";
+      await pressAll(basket, 1900);
+      square.state.refundStatus = "PENDING";
+      const desk = await signedIn("Review Desk Sale");
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gym.id}, ${desk.userId}, 'trainer', ${["billing.members"]})`;
+      const row = (await list(gym, desk)).rows.find((r) => r.sale?.saleId === basket.water);
+      expect(row?.kind).toBe("failed");
+      const stranger = await send("POST", `/v1/orgs/${gym.id}/refunds-to-review/presses/${row?.id ?? ""}/no-refund`, nextDoor.owner.cookies);
+      expect([403, 404]).toContain(stranger.statusCode);
+      expect((await noRefund(nextDoor, row?.id ?? "")).statusCode).toBe(404);
+      const allowed = await send("POST", `/v1/orgs/${gym.id}/refunds-to-review/presses/${row?.id ?? ""}/no-refund`, desk.cookies);
+      expect(allowed.statusCode, allowed.body).toBe(204);
     });
   });
 });

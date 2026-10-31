@@ -780,9 +780,10 @@ function MembershipFinder({ gymId, words, locked, addMemberTo, onOpen }) {
 
 /** The day's product sales and membership payments, newest first, with the day's total: today,
  *  or an earlier day picked to find a sale to refund (18p). */
-function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage, onReload, squareEveryMs }) {
+function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage, onReload, squareEveryMs, refundSale = null }) {
   /** The day picked; null is today. Another day's list is read here, apart from the page. */
-  const [pick, setPick] = useState(null);
+  // Opened from Overview's Refunds to review: that sale's day first.
+  const [pick, setPick] = useState(refundSale !== null && refundSale.day !== page.today ? refundSale.day : null);
   const [other, setOther] = useState({ day: null, page: null, error: null });
   const onToday = pick === null || pick === page.today;
   const shownPage = onToday ? page : other.day === pick ? other.page : null;
@@ -860,6 +861,19 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
   const rows = shownPage === null ? [] : rowsOfKind(takingsRows(shownPage, org.timezone, org.clockFormat), tab);
   const paymentsNote = takingsPaymentsNote(rows);
   const shown = all ? rows : rows.slice(0, TAKINGS_FOLDED);
+  // Refunds to review: the sale's Refund to card box, as its own button opens it, or the sale alone where it opens nothing.
+  const [refundRow, setRefundRow] = useState(null);
+  if (refundSale !== null && refundRow === null && shownPage !== null) {
+    const row = rows.find((r) => (r.basket?.lines ?? []).some((line) => line.id === refundSale.saleId));
+    if (row !== undefined) {
+      setRefundRow(row.key);
+      setAll(true);
+      if (refundSale.open) setRefunding({ saleId: row.key, toCard: true });
+    }
+  }
+  useEffect(() => {
+    if (refundRow !== null) document.querySelector(`[data-sale-row="${refundRow}"]`)?.scrollIntoView?.({ block: 'center' });
+  }, [refundRow]);
 
   return (
     <section className="c-card" aria-label={onToday ? "Today's takings" : 'Takings on another day'}>
@@ -925,7 +939,7 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
             if (row.canUndo) items.push({ ...SALE_MENU_WORDS.voidSale, danger: true, onPick: () => askVoid(row.key) });
             const said = state.done !== null && state.done.key === row.key ? saleSaidNow(state.done, row.basket, state.done.read !== shownPage) : null;
             return (
-              <li key={row.key} className="flex flex-col gap-2 p-4" style={LINE} data-testid="takings-row">
+              <li key={row.key} className="flex flex-col gap-2 p-4" style={LINE} data-testid="takings-row" data-sale-row={row.key}>
                 <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                   <div className="flex flex-col min-w-0">
                     <p className="c-s15 c-w6 c-t1 m-0">
@@ -1173,7 +1187,7 @@ export default function Sell() {
 
           {page.canSell && sellsMemberships ? <MembershipFinder gymId={gymId} words={words} locked={readOnly} addMemberTo={placeFor(orgSlug, privileges, 'addMember')} onOpen={(entryId) => openPerson(entryId, true)} /> : null}
 
-          {page.canSell ? <Takings gymId={gymId} org={org} page={page} locked={readOnly} canOpenPeople={sellsMemberships} onOpenPerson={openPerson} onPage={setPage} onReload={load} /> : null}
+          {page.canSell ? <Takings gymId={gymId} org={org} page={page} locked={readOnly} canOpenPeople={sellsMemberships} onOpenPerson={openPerson} onPage={setPage} onReload={load} refundSale={location.state?.refundSale ?? null} /> : null}
 
           <div ref={productsRef}>
             <SellProducts key={`products-${gymId}`} gymId={gymId} page={page} locked={readOnly} lockedNote={readOnlyNote(org.orgType)} countryTo={placeFor(orgSlug, privileges, 'country')} addAsk={addAsk} onPage={setPage} />

@@ -861,6 +861,16 @@ describe('refund a sale (18p)', () => {
     expect(await given({ ...ORG, country: 'US' })).toEqual(['Choose one', 'Cash', 'Card at the desk', 'Bank transfer']);
   });
 
+  it('opened from Refunds to review: that sale has its Refund to card box open, and nothing is sent (18d-iv-b-iii)', async () => {
+    const onTerminal = sold({ method: 'terminal', toCard: true });
+    svc.get.mockResolvedValue(withSale(onTerminal));
+    svc.getCardRefund.mockResolvedValue({ card: { brand: 'VISA', last4: '1111' }, leftMinor: 431, refundedInSquareMinor: 0, block: null });
+    open(ORG, { refundSale: { saleId: onTerminal.id, day: '2026-10-12', open: true } });
+    const row = (await within(await screen.findByRole('region', { name: "Today's takings" })).findAllByTestId('takings-row'))[0];
+    await within(row).findByTestId('card-refund-box');
+    expect(svc.refundToCard).not.toHaveBeenCalled();
+  });
+
   it('a sale paid on the Terminal says Refund: the money goes to the card, Sell reads again, and the row reads Refund pending (18d-iv-b-ii)', async () => {
     const onTerminal = sold({ method: 'terminal', toCard: true });
     const card = { brand: 'VISA', last4: '1111' };

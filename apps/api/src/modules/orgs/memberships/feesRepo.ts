@@ -49,7 +49,7 @@ type BookingFeeKind = Exclude<MemberFeeKind, "freeze">;
  *  is (18h-ii). False once staff marked them came, the class was cancelled or removed, or
  *  the booking or session is gone. A freeze fee (18z) is owed while its month began before the
  *  freeze ended (`freeze_stopped`, set by an unfreeze or a cancel). */
-const stillOwedSql = (sql: Sql | TransactionSql) => sql`
+export const stillOwedSql = (sql: Sql | TransactionSql) => sql`
   ((b.fee = 'freeze' AND NOT b.freeze_stopped)
    OR EXISTS (SELECT 1 FROM gym_class_bookings k
            JOIN gym_class_sessions s ON s.gym_id = k.gym_id AND s.id = k.session_id
@@ -347,6 +347,8 @@ export interface FeeRow {
   waived: { on: string; by: string | null } | null;
   /** Its booking still counts as the late cancel or no-show it was opened for. */
   stillOwed: boolean;
+  /** Staff kept it rather than refund it (18d-iv-b-iii). */
+  kept: { on: string; by: string | null } | null;
 }
 
 export interface FeePaymentRow {
@@ -392,22 +394,27 @@ export async function feesFor(sql: Sql | TransactionSql, gymId: string, membersh
       voided_by_name: string | null;
       still_owed: boolean;
       of_pt: boolean;
+      kept_on: string | null;
+      kept_by: string | null;
     }[]
   >`
     SELECT x.id, x.held_membership_id, x.fee, x.fee_for, x.of_pt, x.covers_from, x.covers_to, x.amount_minor, x.tax_minor, x.tax_bp,
-           x.tax_name, x.tax_included, x.currency, x.due_on, x.status, x.void_reason, x.voided_on, v.display_name AS voided_by_name, x.still_owed
+           x.tax_name, x.tax_included, x.currency, x.due_on, x.status, x.void_reason, x.voided_on, v.display_name AS voided_by_name, x.still_owed,
+           (x.fee_kept_at AT TIME ZONE g.timezone)::date::text AS kept_on, k.display_name AS kept_by
     FROM (
       SELECT b.id, b.held_membership_id, b.fee, b.fee_for, b.covers_from::text AS covers_from,
              CASE WHEN b.fee = 'freeze' THEN b.covers_to::text END AS covers_to, b.amount_minor, b.tax_minor, b.tax_bp,
              b.tax_name, b.tax_included, b.currency, b.due_on::text AS due_on, b.status, b.void_reason, b.voided_on::text AS voided_on,
-             b.voided_by, b.created_at, ${stillOwedSql(sql)} AS still_owed, b.pt_appointment_id IS NOT NULL AS of_pt,
+             b.voided_by, b.created_at, b.gym_id, b.fee_kept_at, b.fee_kept_by, ${stillOwedSql(sql)} AS still_owed, b.pt_appointment_id IS NOT NULL AS of_pt,
              row_number() OVER (PARTITION BY b.held_membership_id, b.status = 'open' ORDER BY b.created_at DESC, b.id) AS n
       FROM gym_member_bills b
       WHERE b.gym_id = ${gymId} AND b.held_membership_id = ANY(${ids}::uuid[]) AND b.fee IS NOT NULL
         AND (b.status <> 'void' OR b.void_reason = 'waived'
              OR EXISTS (SELECT 1 FROM gym_member_payments q WHERE q.gym_id = b.gym_id AND q.bill_id = b.id))
     ) x
+    JOIN gyms g ON g.id = x.gym_id
     LEFT JOIN users v ON v.id = x.voided_by
+    LEFT JOIN users k ON k.id = x.fee_kept_by
     WHERE x.status = 'open' OR x.n <= ${SETTLED_FEES_SHOWN}
     ORDER BY x.created_at DESC, x.id`;
   const billIds = fees.map((r) => r.id);
@@ -454,6 +461,7 @@ export async function feesFor(sql: Sql | TransactionSql, gymId: string, membersh
       status: memberBillStatusSchema.parse(r.status),
       waived: r.void_reason === "waived" && r.voided_on !== null ? { on: r.voided_on, by: r.voided_by_name } : null,
       stillOwed: r.still_owed,
+      kept: r.kept_on === null ? null : { on: r.kept_on, by: r.kept_by },
     })),
     payments: payments.map((r) => ({
       id: r.id,

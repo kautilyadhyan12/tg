@@ -178,6 +178,7 @@ export default function MemberMemberships({
   /** Opened by Take payment on Failed payments (18d-iii-ii-b): { membershipId, feeBillId }, the
    *  bill whose Record payment is open already, once, when their memberships have loaded. */
   payNow = null,
+  refundNow = null,
   /** How often the Terminal's box asks the server; the box's own unless a test says. */
   checkEveryMs,
   squareEveryMs = 30_000,
@@ -412,12 +413,27 @@ export default function MemberMemberships({
       setOpen({ what: 'pay', id: m.id });
     }
   }
+  // Opened by Refund on Overview's Refunds to review: the box of that payment, as its own button opens it, or Void payment for a
+  // fee paid by hand.
+  const [refundedNow, setRefundedNow] = useState(false);
+  if (refundNow !== null && !readOnly && shown !== null && !refundedNow) {
+    setRefundedNow(true);
+    const m = shown.memberships.find((x) => x.id === refundNow.membershipId);
+    const fee = m?.billing && refundNow.voidFeeId !== null ? (m.billing.fees ?? []).find((x) => x.id === refundNow.voidFeeId && x.can.voidPaymentId !== null) : undefined;
+    if (fee !== undefined) {
+      setFeeForm({ what: 'voidFeePayment', ...feePayDraft(fee, newRequestKey), tried: false });
+      setVoidForm({ reason: '', tried: false });
+      setOpen({ what: 'voidFeePayment', id: m.id });
+    } else if (m?.billing && refundNow.voidFeeId === null && paymentOf(m, refundNow.paymentId) !== null) {
+      setOpen({ what: 'cardRefund', id: m.id, paymentId: refundNow.paymentId });
+    }
+  }
   const scrolledNow = useRef(false);
-  const payOpenNow = paidNow && (open?.what === 'pay' || open?.what === 'payFee');
+  const payOpenNow = (paidNow && (open?.what === 'pay' || open?.what === 'payFee')) || (refundedNow && (open?.what === 'cardRefund' || open?.what === 'voidFeePayment'));
   useEffect(() => {
     if (!payOpenNow || scrolledNow.current) return;
     scrolledNow.current = true;
-    document.querySelector('[data-testid="held-pay"], [data-testid="held-fee-pay"]')?.scrollIntoView?.({ block: 'center' });
+    document.querySelector('[data-testid="held-pay"], [data-testid="held-fee-pay"], [data-testid="card-refund-box"], [data-testid="held-fee-void"]')?.scrollIntoView?.({ block: 'center' });
   }, [payOpenNow]);
   // What their list says their membership is, where they do not hold it here.
   const listed = shown === null ? null : listedRow(shown.listed, name, managesTypes);

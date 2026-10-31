@@ -12,6 +12,8 @@ import {
   cardRefundCheckSchema,
   cardRefundResponseSchema,
   heldMembershipsResponseSchema,
+  refundsToReviewResponseSchema,
+  ROLE_PRIVILEGES,
   squareConnectResponseSchema,
   squareFinishResponseSchema,
   terminalPaymentsResponseSchema,
@@ -252,6 +254,11 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
       SELECT id, provider_payment_id FROM gym_member_payments WHERE gym_id = ${gym.id} AND bill_id = ${billId}`;
     if (paid === undefined) throw new Error("no fee payment");
     return { gym, entryId, membershipId, paymentId: paid.id, squarePaymentId: paid.provider_payment_id, billId };
+  };
+  const feeOwedPaidByHand = async (g: Gym, fullName: string): Promise<void> => {
+    const { entryId, membershipId, billId } = await feeOwed(g, fullName, 300);
+    const paid = await send("POST", `${entryUrl(g, entryId)}/memberships/${membershipId}/fees/${billId}/payments`, g.owner.cookies, { requestKey: randomUUID(), amountMinor: 300, method: "cash" });
+    expect(paid.statusCode, paid.body).toBeLessThan(300);
   };
   const saveCard = async (gym: Gym, entryId: string): Promise<void> => {
     const cardId = `ccof:${randomUUID()}`;
@@ -966,6 +973,193 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
         SELECT action, meta FROM audit_log WHERE gym_id = ${gym.id} AND target_id = ${row?.id ?? ""}`;
       expect(audit).toMatchObject({ action: "org.member_refund_sent", meta: { fee: "no_show", amountMinor: "700", brand: "VISA", last4: "1111" } });
       expect(audit?.meta).not.toHaveProperty("period");
+    });
+  });
+
+  describe("Refunds to review", () => {
+    // A gym of its own: a list holds everything its gym left open.
+    let mine: Gym;
+    const list = async (g: Gym, by: Person = g.owner, from = 0) => {
+      const res = await send("GET", `/v1/orgs/${g.id}/refunds-to-review?from=${String(from)}`, by.cookies);
+      expect(res.statusCode, res.body).toBe(200);
+      return refundsToReviewResponseSchema.parse(JSON.parse(res.body));
+    };
+    const rowOf = async (g: Gym, paymentId: string) => (await list(g)).rows.find((r) => r.member?.paymentId === paymentId);
+    const keep = (g: Gym, billId: string, by: Person = g.owner) => send("POST", `/v1/orgs/${g.id}/refunds-to-review/fees/${billId}/keep`, by.cookies);
+    const noRefund = (g: Gym, pressId: string, by: Person = g.owner) => send("POST", `/v1/orgs/${g.id}/refunds-to-review/presses/${pressId}/no-refund`, by.cookies);
+    const auditsOf = async (g: Gym, action: string) => (await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM audit_log WHERE gym_id = ${g.id} AND action = ${action}`)[0]?.n;
+    /** Square took it up and the answer never came back: the app ends it as one to check. */
+    const takenWithNoAnswer = async (p: Paid, minor: number) => {
+      square.state.refundLost = true;
+      await press(p, minor);
+      square.state.refundLost = false;
+      await sql`UPDATE gym_square_refunds SET state = 'done', outcome = 'lost', checking_until = NULL WHERE gym_id = ${p.gym.id} AND payment_id = ${p.paymentId}`;
+    };
+    const failedAtOnce = async (p: Paid, minor: number) => {
+      square.state.refundStatus = "REJECTED";
+      await press(p, minor);
+      square.state.refundStatus = "PENDING";
+    };
+
+    beforeAll(async () => {
+      mine = await makeGym(`Review Gym ${uniq()}`, `MERCH${uniq()}`);
+    }, T);
+
+    it("the worst thing: a refund Square took with no answer cannot be sent a second time from its row", async () => {
+      const maya = await paidByCard(mine, "Review Twice");
+      await takenWithNoAnswer(maya, 2500);
+      expect(madeFor(maya)).toHaveLength(1);
+      const row = await rowOf(mine, maya.paymentId);
+      expect(row).toMatchObject({ kind: "lost", amountMinor: 2500, name: "Review Twice" });
+
+      const box = cardRefundCheckSchema.parse(JSON.parse((await send("GET", refundUrl(maya), mine.owner.cookies)).body));
+      expect(box).toMatchObject({ leftMinor: 0, refundedInSquareMinor: 2500, block: "nothing_left" });
+      const again = await press(maya, 2500);
+      expect(again.statusCode).toBe(409);
+      expect(madeFor(maya)).toHaveLength(1);
+    });
+
+    it("the worst thing: nobody sees another gym's rows, or decides on them", async () => {
+      const ours = await feePaid(mine, "Review Ours");
+      const theirs = await feePaid(nextDoor, "Review Theirs");
+      expect((await list(mine)).rows.map((r) => r.name)).not.toContain("Review Theirs");
+      expect((await list(nextDoor)).rows.map((r) => r.name)).not.toContain("Review Ours");
+
+      const peek = await send("GET", `/v1/orgs/${mine.id}/refunds-to-review`, nextDoor.owner.cookies);
+      expect([403, 404]).toContain(peek.statusCode);
+      expect([403, 404]).toContain((await keep(mine, ours.billId, nextDoor.owner)).statusCode);
+      // Next door's fee through our own address.
+      expect((await keep(mine, theirs.billId)).statusCode).toBe(404);
+      const failed = await paidByCard(nextDoor, "Review Failed Next Door");
+      await failedAtOnce(failed, 500);
+      const [row] = await sql<{ id: string }[]>`SELECT id FROM gym_square_refunds WHERE gym_id = ${nextDoor.id} AND payment_id = ${failed.paymentId}`;
+      expect((await noRefund(mine, row?.id ?? "")).statusCode).toBe(404);
+      expect((await sql`SELECT 1 FROM gym_member_bills WHERE id = ${theirs.billId} AND fee_kept_at IS NOT NULL`).length).toBe(0);
+      expect((await sql`SELECT 1 FROM gym_square_refunds WHERE id = ${row?.id ?? ""} AND no_refund_at IS NOT NULL`).length).toBe(0);
+    });
+
+    it("a fee is listed only while it is no longer owed and something of it is left", async () => {
+      const noLonger = await feePaid(mine, "Review No Longer");
+      expect(await rowOf(mine, noLonger.paymentId)).toMatchObject({
+        kind: "fee",
+        amountMinor: 1000,
+        paidMinor: 1000,
+        member: { entryId: noLonger.entryId, membershipId: noLonger.membershipId, byHand: false, fee: { kind: "no_show", of: "class", forName: "Yoga" } },
+      });
+
+      const owed = await feePaid(mine, "Review Still Owed");
+      await sql`UPDATE gym_member_bills SET fee = 'freeze' WHERE id = ${owed.billId}`;
+      expect(await rowOf(mine, owed.paymentId)).toBeUndefined();
+      expect((await keep(mine, owed.billId)).statusCode).toBe(409);
+
+      const part = await feePaid(mine, "Review Part");
+      expect((await press(part, 400)).statusCode).toBe(200);
+      expect(await rowOf(mine, part.paymentId)).toMatchObject({ amountMinor: 600, paidMinor: 1000 });
+
+      const whole = await feePaid(mine, "Review Whole");
+      expect((await press(whole, 1000)).statusCode).toBe(200);
+      expect(await rowOf(mine, whole.paymentId)).toBeUndefined();
+    });
+
+    it("a fee paid by hand is listed to be voided", async () => {
+      const { entryId, membershipId, billId } = await feeOwed(mine, "Review By Hand", 800);
+      const paid = await send("POST", `${entryUrl(mine, entryId)}/memberships/${membershipId}/fees/${billId}/payments`, mine.owner.cookies, { requestKey: randomUUID(), amountMinor: 800, method: "cash" });
+      expect(paid.statusCode, paid.body).toBeLessThan(300);
+      const row = (await list(mine)).rows.find((r) => r.id === billId);
+      expect(row).toMatchObject({ kind: "fee", amountMinor: 800, member: { byHand: true } });
+    });
+
+    it("Keep the fee takes it off, once, says who and when on their page, and Refund stays", async () => {
+      const maya = await feePaid(mine, "Review Keep");
+      const [one, two] = await Promise.all([keep(mine, maya.billId), keep(mine, maya.billId)]);
+      expect(one.statusCode, one.body).toBe(204);
+      expect(two.statusCode, two.body).toBe(204);
+      expect(await rowOf(mine, maya.paymentId)).toBeUndefined();
+      const shown = await feeOnPage(maya);
+      expect(shown.kept).toMatchObject({ by: expect.stringContaining("Owner") as string });
+      expect(shown.payments[0]?.refundableMinor).toBe(1000);
+      expect(madeFor(maya)).toHaveLength(0);
+      expect((await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM audit_log WHERE target_id = ${maya.billId} AND action = 'org.member_fee_kept'`)[0]?.n).toBe(1);
+      expect((await press(maya, 1000)).statusCode).toBe(200);
+      expect(madeFor(maya)).toHaveLength(1);
+    });
+
+    it("a refund that failed is listed; one sent since takes it off, and a smaller one leaves it", async () => {
+      const maya = await paidByCard(mine, "Review Failed");
+      await failedAtOnce(maya, 1000);
+      clock = new Date(clock.getTime() + 1000);
+      expect(await rowOf(mine, maya.paymentId)).toMatchObject({ kind: "failed", amountMinor: 1000 });
+      expect((await press(maya, 400)).statusCode).toBe(200);
+      expect(await rowOf(mine, maya.paymentId)).toMatchObject({ kind: "failed" });
+      expect((await press(maya, 600)).statusCode).toBe(200);
+      expect(await rowOf(mine, maya.paymentId)).toBeUndefined();
+    });
+
+    it("a fee whose refund failed is one row, and No refund needed keeps the fee too", async () => {
+      const maya = await feePaid(mine, "Review Fee Failed");
+      await failedAtOnce(maya, 1000);
+      await failedAtOnce(maya, 1000);
+      const shown = (await list(mine)).rows.filter((r) => r.member?.paymentId === maya.paymentId);
+      expect(shown.map((r) => r.kind)).toEqual(["failed"]);
+
+      const res = await noRefund(mine, shown[0]?.id ?? "");
+      expect(res.statusCode, res.body).toBe(204);
+      expect(await rowOf(mine, maya.paymentId)).toBeUndefined();
+      const fee = await feeOnPage(maya);
+      expect(fee.kept).not.toBeNull();
+      expect((await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_square_refunds WHERE payment_id = ${maya.paymentId} AND no_refund_at IS NULL`)[0]?.n).toBe(0);
+      expect((await noRefund(mine, shown[0]?.id ?? "")).statusCode).toBe(204);
+      expect(fee.payments[0]?.cardRefund).toMatchObject({ lost: true, decided: { by: expect.stringContaining("Owner") as string } });
+    });
+
+    it("No refund needed on one Square never answered: their page stops asking, and says who decided", async () => {
+      const maya = await paidByCard(mine, "Review Lost");
+      square.state.refundDown = true;
+      await press(maya, 1500);
+      square.state.refundDown = false;
+      await sql`UPDATE gym_square_refunds SET state = 'done', outcome = 'lost', checking_until = NULL WHERE payment_id = ${maya.paymentId}`;
+      const row = await rowOf(mine, maya.paymentId);
+      expect(row?.kind).toBe("lost");
+      expect((await paymentOnPage(maya)).cardRefund).toMatchObject({ lost: true, decided: null });
+      expect((await noRefund(mine, row?.id ?? "")).statusCode).toBe(204);
+      expect(await rowOf(mine, maya.paymentId)).toBeUndefined();
+      expect((await paymentOnPage(maya)).cardRefund?.decided).toMatchObject({ by: expect.stringContaining("Owner") as string });
+      expect(await auditsOf(mine, "org.refund_not_needed")).toBeGreaterThanOrEqual(1);
+    });
+
+    it("a refund still pending past Square's 14 days is listed, and cannot be marked as needing none", async () => {
+      const maya = await paidByCard(mine, "Review Late");
+      expect((await press(maya, 700)).statusCode).toBe(200);
+      expect(await rowOf(mine, maya.paymentId)).toBeUndefined();
+      await sql`UPDATE gym_square_refunds SET started_at = started_at - interval '15 days' WHERE payment_id = ${maya.paymentId}`;
+      const row = await rowOf(mine, maya.paymentId);
+      expect(row).toMatchObject({ kind: "late", amountMinor: 700 });
+      expect((await noRefund(mine, row?.id ?? "")).statusCode).toBe(409);
+    });
+
+    it("staff with the payments tick alone see no person's row and cannot decide one; a trainer sees nothing", async () => {
+      const maya = await feePaid(mine, "Review Ticks");
+      const desk = await signedIn("Review Desk");
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${mine.id}, ${desk.userId}, 'trainer', ${["billing.members"]})`;
+      expect((await list(mine, desk)).rows.filter((r) => r.member !== null)).toEqual([]);
+      expect((await keep(mine, maya.billId, desk)).statusCode).toBe(403);
+      const trainer = await signedIn("Review Trainer");
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${mine.id}, ${trainer.userId}, 'trainer', ${[...ROLE_PRIVILEGES.trainer]})`;
+      expect((await send("GET", `/v1/orgs/${mine.id}/refunds-to-review`, trainer.cookies)).statusCode).toBe(403);
+    });
+
+    it("a page holds ten rows and says where the next starts, with refunds that went wrong first", async () => {
+      const g = await makeGym(`Review Pages ${uniq()}`, `MERCH${uniq()}`);
+      for (let i = 0; i < 11; i += 1) await feeOwedPaidByHand(g, `Review Page ${String(i)}`);
+      const failed = await paidByCard(g, "Review First");
+      await failedAtOnce(failed, 100);
+      const first = await list(g);
+      expect(first).toMatchObject({ count: 12, next: 10 });
+      expect(first.rows).toHaveLength(10);
+      expect(first.rows[0]?.name).toBe("Review First");
+      const second = await list(g, g.owner, 10);
+      expect(second).toMatchObject({ count: 12, next: null });
+      expect(second.rows).toHaveLength(2);
     });
   });
 });

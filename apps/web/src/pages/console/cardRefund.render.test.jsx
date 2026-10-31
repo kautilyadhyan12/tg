@@ -143,6 +143,17 @@ const feePage = (pay, over) => {
 const feePayment = async () => within(await screen.findByTestId('held-fee-payment'));
 
 describe('Refund to card on a fee', () => {
+  it('opened from Refunds to review: its box is open under the payment, and asks Square first (18d-iv-b-iii)', async () => {
+    orgService.getHeldMemberships.mockResolvedValue(feePage());
+    orgService.getCardRefund.mockResolvedValue({ data: { card: VISA, leftMinor: 1000, refundedInSquareMinor: 0, block: null } });
+    const membershipId = feePage().data.memberships[0].id;
+    draw({ refundNow: { membershipId, paymentId: FEE_PAYMENT, voidFeeId: null } });
+    const row = await feePayment();
+    await row.findByTestId('card-refund-box');
+    expect(orgService.getCardRefund).toHaveBeenCalledTimes(1);
+    expect(orgService.refundToCard).not.toHaveBeenCalled();
+  });
+
   it('sends nothing until a reason is picked, then exactly the fee on screen, and has no leaving reason', async () => {
     orgService.getHeldMemberships.mockResolvedValue(feePage());
     orgService.getCardRefund.mockResolvedValue({ data: { card: VISA, leftMinor: 1000, refundedInSquareMinor: 0, block: null } });

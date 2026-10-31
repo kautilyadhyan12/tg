@@ -53,6 +53,9 @@
 // Failed payments (ROADMAP 18d-iii-ii-b), `billing.members`; Try again is Charge card on file above:
 //   GET    /v1/orgs/:gymId/failed-payments?from=0             a page of the list
 //   GET    /v1/orgs/:gymId/failed-payments/summary            how many, and what they come to (Overview)
+//   GET    /v1/orgs/:gymId/refunds-to-review?from=0           Overview's list of refunds to review
+//   POST   /v1/orgs/:gymId/refunds-to-review/fees/:billId/keep            Keep the fee
+//   POST   /v1/orgs/:gymId/refunds-to-review/presses/:pressId/no-refund   No refund needed
 //
 import {
   cardChargeRequestSchema,
@@ -61,6 +64,9 @@ import {
   saleCardRefundRequestSchema,
   saleWholeCardRefundRequestSchema,
   failedPaymentsQuerySchema,
+  refundReviewFeeParamsSchema,
+  refundReviewPressParamsSchema,
+  refundsToReviewQuerySchema,
   saveCardRequestSchema,
   squareCardIdSchema,
   terminalFeePaymentRequestSchema,
@@ -94,6 +100,7 @@ import * as cardCharges from "./cardCharges.js";
 import * as cardRefunds from "./cardRefunds.js";
 import * as cards from "./cards.js";
 import * as failedPayments from "./failedPayments.js";
+import * as refundsToReview from "./refundsToReview.js";
 import * as service from "./service.js";
 import { verifySquareSignature } from "./squareSignature.js";
 import * as terminalCards from "./terminalCards.js";
@@ -396,6 +403,33 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     if (params === null) return;
     const answer = await failedPayments.readFailedSummary(paymentsDeps, callerId(req), params.gymId);
     return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  // Refunds to review: Overview reads it each time it opens; a decision is one press on one row.
+  const reviewReadLimit = createDualRateLimit({ name: "refunds_to_review", max: 600, ipMax: 3000, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
+  const reviewPressLimit = createDualRateLimit({ name: "refunds_to_review_press", max: 120, ipMax: 1200, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
+
+  app.get("/v1/orgs/:gymId/refunds-to-review", { preHandler: [app.authenticate, staffOnly(deps.sql, reviewReadLimit)] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const query = parseOr400(refundsToReviewQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    const answer = await refundsToReview.readRefundsToReview(paymentsDeps, callerId(req), params.gymId, query.from);
+    return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  app.post("/v1/orgs/:gymId/refunds-to-review/fees/:billId/keep", { preHandler: [app.authenticate, staffOnly(deps.sql, reviewPressLimit)] }, async (req, reply) => {
+    const params = parseOr400(refundReviewFeeParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    await refundsToReview.keepFee(paymentsDeps, callerId(req), params.gymId, params.billId);
+    return reply.status(204).send();
+  });
+
+  app.post("/v1/orgs/:gymId/refunds-to-review/presses/:pressId/no-refund", { preHandler: [app.authenticate, staffOnly(deps.sql, reviewPressLimit)] }, async (req, reply) => {
+    const params = parseOr400(refundReviewPressParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    await refundsToReview.noRefundNeeded(paymentsDeps, callerId(req), params.gymId, params.pressId);
+    return reply.status(204).send();
   });
 
   // At Sell, the same limits: a sale is one press, asked about as a bill's is.
