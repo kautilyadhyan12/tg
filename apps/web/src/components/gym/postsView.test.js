@@ -66,6 +66,7 @@ const post = (over = {}) => ({
   wrote: false,
   reported: false,
   hidden: false,
+  commentCount: 0,
   challengeResult: null,
   ...over,
 });

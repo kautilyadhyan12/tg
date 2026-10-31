@@ -12,6 +12,7 @@ import {
   reportedGymPostResponseSchema,
   type BlockedGymPostersResponse,
   type GymClockFormat,
+  type GymMemberPosting,
   type GymPost,
   type GymPostReaction,
   type GymPostReportReason,
@@ -22,13 +23,16 @@ import { Card, Pill } from "../../look/Card";
 import { Options } from "../../look/Choice";
 import { colours, orangeGradient, shadows, sizes } from "../../look/colours";
 import { Field } from "../../look/Field";
-import { Icon, type IconName } from "../../look/Icon";
+import { Icon } from "../../look/Icon";
 import { Sheet } from "../../look/Sheet";
 import { ASK_MOST } from "../../look/sizing";
 import { fonts, Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
 import { CopyContext } from "../ThisCopy";
+import { CommentsBox, useKeptComments } from "./Comments";
+import { commentButton, hasKeptWords, offersComments } from "./commentsView";
 import { PhotoPages } from "./PhotoPages";
+import { Reactions } from "./Reactions";
 import { hasWork } from "./postDraft";
 import { PostBox, useKeptPost } from "./PostBox";
 import {
@@ -54,8 +58,6 @@ import {
   postedText,
   pressFailed,
   missingThing,
-  reactionButtons,
-  reactionSummary,
   reactionPath,
   removeOwnPath,
   reportBox,
@@ -117,12 +119,13 @@ const NEAR_THE_SCREEN = 5;
 // How far from either end of the list its button to that end shows.
 const NEAR_AN_END = 240;
 
-const REACTION_ICONS: Readonly<Record<GymPostReaction, IconName>> = { like: "like", love: "heart", strong: "strong", fire: "flame" };
-
 function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose: () => void; bottom: number }) {
   const { session, state } = useSession();
   const apiUrl = useContext(CopyContext).extra?.apiUrl ?? "";
   const kept = useKeptPost(state.kind === "in" ? state.user.id : null, place.id);
+  const keptComments = useKeptComments(state.kind === "in" ? state.user.id : null, place.id);
+  // The post whose comments are open, by id, so it is the one the list holds now.
+  const [commentsOn, setCommentsOn] = useState<string | null>(null);
   const [writing, setWriting] = useState(false);
   // What the last post came to, said where its button is.
   const [postedNote, setPostedNote] = useState<string | null>(null);
@@ -242,6 +245,32 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
   };
 
   const feed = held.kind === "ok" ? held.feed : null;
+  const commentsPost = commentsOn === null || feed === null ? null : ([...feed.pinned, ...feed.posts].find((p) => p.id === commentsOn) ?? null);
+  const onCommentCount = useCallback((postId: string, by: number) => {
+    setHeld((h) => {
+      if (h.kind !== "ok") return h;
+      const post = [...h.feed.pinned, ...h.feed.posts].find((p) => p.id === postId);
+      return post === undefined ? h : { kind: "ok", feed: withPost(h.feed, { ...post, commentCount: Math.max(0, post.commentCount + by) }) };
+    });
+  }, []);
+  const onCommenting = useCallback((commenting: GymMemberPosting) => {
+    setHeld((h) => (h.kind === "ok" && h.feed.commenting !== commenting ? { kind: "ok", feed: { ...h.feed, commenting } } : h));
+  }, []);
+  const onCommentPostGone = useCallback((postId: string) => {
+    setGone((g) => ({ ...g, [postId]: true }));
+  }, []);
+  const onCommentBlocked = useCallback(
+    (authorId: string) => {
+      void load(true);
+      // The open post stays open unless its own writer is who was blocked.
+      setHeld((h) => {
+        if (h.kind !== "ok") return h;
+        const next = withoutAuthor(h.feed, authorId);
+        return { kind: "ok", feed: next };
+      });
+    },
+    [load],
+  );
   const gymName = feed?.gymName ?? place.name;
   const mayPost = feed !== null && memberCanPost(feed);
   const stopped = feed === null ? null : stoppedNote(feed);
@@ -353,6 +382,11 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
               busy={reacting === post.id}
               reactError={reactError?.postId === post.id ? reactError.text : null}
               onReact={(r) => void onReact(post, r)}
+              commenting={feed?.commenting ?? "off"}
+              keptComment={hasKeptWords(keptComments.drafts?.[post.id])}
+              onComments={() => {
+                setCommentsOn(post.id);
+              }}
               onAsk={(kind) => {
                 setAsking({ kind, post });
               }}
@@ -467,6 +501,20 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
         }}
         onRefused={() => void load(true)}
       />
+      <CommentsBox
+        post={commentsPost}
+        place={place}
+        gymName={gymName}
+        kept={keptComments}
+        zone={zone}
+        onClose={() => {
+          setCommentsOn(null);
+        }}
+        onCount={onCommentCount}
+        onCommenting={onCommenting}
+        onBlocked={onCommentBlocked}
+        onPostGone={onCommentPostGone}
+      />
       <AskSheet
         asking={asking}
         gymId={place.id}
@@ -531,17 +579,19 @@ interface PostCardProps {
   busy: boolean;
   reactError: string | null;
   onReact: (reaction: GymPostReaction) => void;
+  commenting: GymMemberPosting;
+  keptComment: boolean;
+  onComments: () => void;
   onAsk: (kind: Asking["kind"]) => void;
   onPhoto: (index: number) => void;
 }
 
-function PostCard({ post, gymName, posted, photoUrl, files, photoRound, busy, reactError, onReact, onAsk, onPhoto }: PostCardProps) {
+function PostCard({ post, gymName, posted, photoUrl, files, photoRound, busy, reactError, onReact, commenting, keptComment, onComments, onAsk, onPhoto }: PostCardProps) {
   const tag = authorTag(post);
   const hidden = hiddenOwnNote(post, gymName);
   const action = memberPostAction(post);
-  // One button until it is tapped; then the four reactions, and picking one closes them.
   const [picking, setPicking] = useState(false);
-  const summary = reactionSummary(post);
+  const comments = commentButton(post.commentCount, keptComment);
   return (
     <Card testID={`post-${post.id}`} style={styles.box}>
       <View style={styles.row}>
@@ -570,70 +620,13 @@ function PostCard({ post, gymName, posted, photoUrl, files, photoRound, busy, re
       {post.body === "" ? null : <Txt colour="text">{post.body}</Txt>}
       {post.photos.length === 0 ? null : <PostPhotos post={post} photoUrl={photoUrl} files={files} photoRound={photoRound} onPhoto={onPhoto} />}
       <View style={styles.reactions}>
-        {picking ? (
-          <>
-            {reactionButtons(post).map((r) => (
-              <Pressable
-                key={r.id}
-                testID={`react-${r.id}`}
-                accessibilityRole="button"
-                accessibilityLabel={r.label}
-                accessibilityState={{ selected: r.mine, disabled: busy }}
-                disabled={busy}
-                onPress={() => {
-                  setPicking(false);
-                  onReact(r.id);
-                }}
-                style={[styles.reaction, r.mine ? styles.reactionMine : null]}
-              >
-                <Icon name={REACTION_ICONS[r.id]} size={16} colour={r.mine ? "orange" : "textSoft"} />
-                {r.count > 0 ? (
-                  <Txt kind="small" colour={r.mine ? "orange" : "textSoft"} style={styles.bold}>
-                    {r.count.toLocaleString("en")}
-                  </Txt>
-                ) : null}
-              </Pressable>
-            ))}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Close reactions"
-              onPress={() => {
-                setPicking(false);
-              }}
-              style={styles.reaction}
-            >
-              <Icon name="x" size={16} colour="textSoft" />
-            </Pressable>
-          </>
-        ) : (
-          <Pressable
-            testID="react-open"
-            accessibilityRole="button"
-            accessibilityLabel={summary.label}
-            accessibilityState={{ selected: post.mine !== null, disabled: busy }}
-            disabled={busy}
-            onPress={() => {
-              setPicking(true);
-            }}
-            style={[styles.reaction, post.mine === null ? null : styles.reactionMine]}
-          >
-            {summary.given.length === 0 ? (
-              <>
-                <Icon name="smileplus" size={16} colour="textSoft" />
-                <Txt kind="small" colour="textSoft" style={styles.bold}>
-                  React
-                </Txt>
-              </>
-            ) : (
-              <>
-                {summary.given.map((r) => (
-                  <Icon key={r.id} name={REACTION_ICONS[r.id]} size={16} colour={r.mine ? "orange" : "textSoft"} />
-                ))}
-                <Txt kind="small" colour={post.mine === null ? "textSoft" : "orange"} style={styles.bold}>
-                  {summary.total.toLocaleString("en")}
-                </Txt>
-              </>
-            )}
+        <Reactions item={post} what="post" busy={busy} onReact={onReact} onPicking={setPicking} />
+        {picking || !offersComments(commenting, post.commentCount, keptComment) ? null : (
+          <Pressable testID="comments-open" accessibilityRole="button" accessibilityLabel={comments.say} onPress={onComments} style={[styles.reaction, keptComment ? styles.reactionMine : null]}>
+            <Icon name="message" size={16} colour={keptComment ? "orange" : "textSoft"} />
+            <Txt kind="small" colour={keptComment ? "orange" : "textSoft"} style={styles.bold}>
+              {comments.label}
+            </Txt>
           </Pressable>
         )}
         {action === null && !canBlock(post) ? null : (

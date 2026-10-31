@@ -293,10 +293,10 @@ export function blockBox(post, gymName) {
   return {
     title: `Block ${who}?`,
     // Posts the same person writes for the gym as staff are the gym's and still show: said here.
-    line: `You won't see the posts ${who} writes as a member, or their reactions, at ${gymName} any more. Any reaction you gave those posts is taken off. Posts they write for ${gymName} as staff still show. They aren't told, and nothing changes for anyone else. You can unblock them at the bottom of Updates.`,
+    line: `You won't see the posts and comments ${who} writes as a member, or their reactions, at ${gymName} any more. Any reaction you gave those posts is taken off. Posts they write for ${gymName} as staff still show. They aren't told, and nothing changes for anyone else. You can unblock them at the bottom of Updates.`,
     confirm: `Block ${who}`,
     cancel: 'Cancel',
-    done: `Blocked. You won't see the posts ${who} writes as a member, or their reactions, any more.`,
+    done: `Blocked. You won't see the posts and comments ${who} writes as a member, or their reactions, any more.`,
   };
 }
 
@@ -314,7 +314,7 @@ export function blockedMore(feed, shown) {
 
 /** What a member reads after Unblock. */
 export function unblockedNote(name) {
-  return name === null ? "Unblocked. You'll see their posts and reactions again." : `Unblocked. You'll see ${name}'s posts and reactions again.`;
+  return name === null ? "Unblocked. You'll see their posts, comments and reactions again." : `Unblocked. You'll see ${name}'s posts, comments and reactions again.`;
 }
 
 /** The help line under a member's Updates: null until an address is set. */

@@ -62,7 +62,7 @@ describe('Block', () => {
     const box = within(within(posts()[0]).getByRole('group', { name: 'Block Barry B.?' }));
     expect(
       box.getByText(
-        "You won't see the posts Barry B. writes as a member, or their reactions, at Iron House any more. Any reaction you gave those posts is taken off. Posts they write for Iron House as staff still show. They aren't told, and nothing changes for anyone else. You can unblock them at the bottom of Updates.",
+        "You won't see the posts and comments Barry B. writes as a member, or their reactions, at Iron House any more. Any reaction you gave those posts is taken off. Posts they write for Iron House as staff still show. They aren't told, and nothing changes for anyone else. You can unblock them at the bottom of Updates.",
       ),
     ).toBeTruthy();
     fireEvent.click(box.getByRole('button', { name: 'Cancel' }));
@@ -74,7 +74,7 @@ describe('Block', () => {
     expect(svc.block.mock.calls).toEqual([['g1', 'theirs']]);
     expect(svc.list).toHaveBeenCalledTimes(2);
     expect(screen.queryByText('Look who skipped leg day')).toBeNull();
-    expect(screen.getByRole('status').textContent).toBe("Blocked. You won't see the posts Barry B. writes as a member, or their reactions, any more.");
+    expect(screen.getByRole('status').textContent).toBe("Blocked. You won't see the posts and comments Barry B. writes as a member, or their reactions, any more.");
     expect(screen.getByRole('button', { name: "People you've blocked (1)" })).toBeTruthy();
   });
 
@@ -107,7 +107,7 @@ describe('Block', () => {
     await waitFor(() => expect(list.getAllByRole('listitem')).toHaveLength(1));
     expect(svc.unblock.mock.calls).toEqual([['g1', 'b1']]);
     await waitFor(() => expect(posts()).toHaveLength(1));
-    expect(screen.getByRole('status').textContent).toBe("Unblocked. You'll see Barry B.'s posts and reactions again.");
+    expect(screen.getByRole('status').textContent).toBe("Unblocked. You'll see Barry B.'s posts, comments and reactions again.");
   });
 });
 

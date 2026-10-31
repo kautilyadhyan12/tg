@@ -36,20 +36,24 @@ export const addOwnPath = (gymId: string) => `${postsPath(gymId)}/mine`;
 /** Where a post's photo is read from, signed in. */
 export const photoPath = (gymId: string, postId: string, photoId: string) => `${postPath(gymId, postId)}/photos/${encodeURIComponent(photoId)}`;
 
+/** What a post and a comment have in common, for the words and buttons they share. */
+type Writing = Pick<GymPost, "author" | "fromMember">;
+export type Reactable = Pick<GymPost, "reactions" | "mine">;
+
 /** Who posted: the person's name. With none, a member's post says "A member" and a staff post the gym's own name. */
-export function authorName(post: GymPost, gymName: string): string {
+export function authorName(post: Writing, gymName: string): string {
   return post.author.name ?? (post.fromMember ? "A member" : gymName);
 }
 
 /** The letters in the round mark beside the name. */
-export function authorInitials(post: GymPost, gymName: string): string {
+export function authorInitials(post: Writing, gymName: string): string {
   if (post.author.name !== null && post.author.initials !== "") return post.author.initials;
   if (post.fromMember) return "M";
   return Array.from(gymName.trim())[0]?.toUpperCase() ?? "";
 }
 
 /** The small word beside the name: staff posts are marked, so a member's post is never taken for the gym's word. */
-export function authorTag(post: GymPost): string | null {
+export function authorTag(post: Writing): string | null {
   return !post.fromMember && post.author.name !== null ? "Staff" : null;
 }
 
@@ -100,7 +104,7 @@ export interface ReactionButton {
 const people = (n: number) => (n === 1 ? "1 person" : `${n.toLocaleString("en")} people`);
 
 /** The reaction buttons of one post, in drawing order. */
-export function reactionButtons(post: GymPost): ReactionButton[] {
+export function reactionButtons(post: Reactable): ReactionButton[] {
   return GYM_POST_REACTIONS.map((id) => {
     const count = post.reactions[id];
     const word = GYM_POST_REACTION_WORDS[id];
@@ -119,16 +123,16 @@ export function missingThing(refusal: { status: number; error: string }): "post"
 
 /** The one reaction button the phone shows until it is tapped (Kd's click-through, 2026-10-30): the kinds given, how
  *  many in all, and what it says to somebody who cannot see it. */
-export function reactionSummary(post: GymPost): { given: ReactionButton[]; total: number; label: string } {
+export function reactionSummary(post: Reactable, what = "post"): { given: ReactionButton[]; total: number; label: string } {
   const given = reactionButtons(post).filter((r) => r.count > 0);
   const total = given.reduce((sum, r) => sum + r.count, 0);
-  const label = given.length === 0 ? "React to this post" : `Reactions: ${given.map((r) => r.label).join("; ")}. Choose a reaction`;
+  const label = given.length === 0 ? `React to this ${what}` : `Reactions: ${given.map((r) => r.label).join("; ")}. Choose a reaction`;
   return { given, total, label };
 }
 
 /** The post after the reader taps a reaction: tapping their own takes it off. Shown at once, and put right by the
  *  server's answer. */
-export function withReaction(post: GymPost, tapped: GymPostReaction): GymPost {
+export function withReaction<T extends Reactable>(post: T, tapped: GymPostReaction): T {
   const next = post.mine === tapped ? null : tapped;
   const reactions = { ...post.reactions };
   if (post.mine !== null) reactions[post.mine] = Math.max(0, reactions[post.mine] - 1);
@@ -147,7 +151,7 @@ export function emptyLine(feed: GymPostsResponse, canWrite: boolean): string | n
 
 /** What a member may press on a post: Remove on their own member post, Report on a post somebody else wrote and they
  *  have not reported, "Reported" on one they have. A post they wrote for the gym as staff offers none of these. */
-export function memberPostAction(post: GymPost): "remove" | "reported" | "report" | null {
+export function memberPostAction(post: Pick<GymPost, "own" | "wrote" | "reported">): "remove" | "reported" | "report" | null {
   if (post.own) return "remove";
   if (post.wrote) return null;
   return post.reported ? "reported" : "report";
@@ -155,12 +159,12 @@ export function memberPostAction(post: GymPost): "remove" | "reported" | "report
 
 /** Whether a member is offered Block on a post: another member's post. One the gym's staff wrote cannot be blocked,
  *  and nobody blocks themselves. */
-export function canBlock(post: GymPost): boolean {
+export function canBlock(post: Pick<GymPost, "fromMember" | "wrote">): boolean {
   return post.fromMember && !post.wrote;
 }
 
 /** What the member who wrote a hidden post reads on it, or null. Nobody else is sent one. */
-export function hiddenOwnNote(post: GymPost, gymName: string): string | null {
+export function hiddenOwnNote(post: Pick<GymPost, "hidden">, gymName: string): string | null {
   return post.hidden ? GYM_POST_WORDS.hidden_own(gymName) : null;
 }
 
@@ -239,15 +243,15 @@ export function reportBox(gymName: string) {
 }
 
 /** The box before a member blocks whoever wrote a post: who changes, and who does not. */
-export function blockBox(post: GymPost, gymName: string) {
+export function blockBox(post: Pick<GymPost, "author">, gymName: string) {
   const who = post.author.name ?? "this member";
   return {
     title: `Block ${who}?`,
     // Posts the same person writes for the gym as staff are the gym's and still show: said here.
-    line: `You won't see the posts ${who} writes as a member, or their reactions, at ${gymName} any more. Any reaction you gave those posts is taken off. Posts they write for ${gymName} as staff still show. They aren't told, and nothing changes for anyone else. You can unblock them at the bottom of Updates.`,
+    line: `You won't see the posts and comments ${who} writes as a member, or their reactions, at ${gymName} any more. Any reaction you gave those posts is taken off. Posts they write for ${gymName} as staff still show. They aren't told, and nothing changes for anyone else. You can unblock them at the bottom of Updates.`,
     confirm: `Block ${who}`,
     cancel: "Cancel",
-    done: `Blocked. You won't see the posts ${who} writes as a member, or their reactions, any more.`,
+    done: `Blocked. You won't see the posts and comments ${who} writes as a member, or their reactions, any more.`,
   };
 }
 
@@ -265,7 +269,7 @@ export function blockedMore(feed: GymPostsResponse, shown: number): string | nul
 
 /** What a member reads after Unblock. */
 export function unblockedNote(name: string | null): string {
-  return name === null ? "Unblocked. You'll see their posts and reactions again." : `Unblocked. You'll see ${name}'s posts and reactions again.`;
+  return name === null ? "Unblocked. You'll see their posts, comments and reactions again." : `Unblocked. You'll see ${name}'s posts, comments and reactions again.`;
 }
 
 /** The help line under Updates: null until an address is set. */
