@@ -179,6 +179,9 @@ function fakeSquare() {
     refundPayment: () => Promise.resolve({ kind: "unavailable", status: null }),
 
     getRefund: () => Promise.resolve({ kind: "unavailable", status: null }),
+    createTerminalRefund: () => Promise.resolve({ kind: "unavailable", status: null }),
+    getTerminalRefund: () => Promise.resolve({ kind: "unavailable", status: null }),
+    cancelTerminalRefund: () => Promise.resolve({ kind: "unavailable", status: null }),
   };
   /** The gym signs in at Square as this account and presses Allow: Square hands back a code. */
   const allow = (account: Account): string => {

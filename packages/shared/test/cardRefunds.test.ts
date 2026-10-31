@@ -38,10 +38,13 @@ describe("the wire", () => {
 });
 
 describe("what a press says", () => {
-  const sent = { amountMinor: 2000, currency: "USD", card: null, pressId: "88888888-8888-4888-8888-000000000001" } as const;
+  const sent = { amountMinor: 2000, currency: "USD", card: null, pressId: "88888888-8888-4888-8888-000000000001", onTerminal: null } as const;
   it("pending and completed both say it is on its way", () => {
     expect(cardRefundSentLine({ ...sent, step: "pending" }, "Visa ending 1111")).toBe("Square is processing this $20.00 refund to Visa ending 1111. It can take up to 14 business days to reach the card, depending on the bank.");
     expect(cardRefundSentLine({ ...sent, step: "completed" }, "the card")).toBe("$20.00 was refunded to the card. It can take up to 10 business days to reach the card, depending on the bank.");
+  });
+  it("left to check says so, and never that the page will say more", () => {
+    expect(cardRefundSentLine({ ...sent, step: "lost" }, "the card")).toBe("We don't know whether Square took this $20.00 refund. Check your Square Dashboard. If it went through, note the refund here.");
   });
   it("no answer never says it went", () => {
     expect(cardRefundSentLine({ ...sent, step: "checking" }, "the card")).toBe("Square hasn't answered yet, so $20.00 is not refunded yet. Don't refund it again: this page will say when Square answers.");

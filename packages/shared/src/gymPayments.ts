@@ -61,7 +61,7 @@ export const SQUARE_TERMINALS_MAX = 20;
  *  2026-10-21), which pairs no real one: it saves the card, the member declines, the member
  *  cancels, Square times out, the Terminal is offline. Added by `tools/square-simulated-terminal.ts`,
  *  never from a screen (Kd, 2026-10-21: what a tester sees is what a business sees). */
-export const squarePracticeTerminalSchema = z.enum(["saves", "declines", "cancels", "times_out", "offline"]);
+export const squarePracticeTerminalSchema = z.enum(["saves", "declines", "cancels", "times_out", "offline", "interac"]);
 export type SquarePracticeTerminal = z.infer<typeof squarePracticeTerminalSchema>;
 
 export const squareTerminalSchema = z

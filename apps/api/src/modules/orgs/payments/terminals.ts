@@ -46,6 +46,7 @@ export const SQUARE_PRACTICE_DEVICES: Record<SquarePracticeTerminal, string> = {
   cancels: "aafea9fa-350c-4ab2-b033-b2fbb672e712",
   times_out: "e371fb66-29a2-45a6-a928-f8de0e864242",
   offline: "7647344e-aea2-4cff-ac53-513644de434d",
+  interac: "388b5a08-a77c-48ef-ad2a-4a790e6f2789",
 };
 
 /** Square's code read again this long after its time: a Terminal that signed in at the last

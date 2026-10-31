@@ -308,7 +308,7 @@ export const gymSquareTerminals = pgTable(
     check("gym_square_terminals_paired_check", sql`(${t.state} = 'paired') = (${t.deviceId} IS NOT NULL AND ${t.pairedAt} IS NOT NULL AND ${t.pairBy} IS NULL)`),
     check(
       "gym_square_terminals_practice_check",
-      sql`${t.practice} IS NULL OR (${t.practice} IN ('saves','declines','cancels','times_out','offline') AND ${t.environment} = 'sandbox' AND ${t.state} = 'paired' AND ${t.deviceCodeId} IS NULL)`,
+      sql`${t.practice} IS NULL OR (${t.practice} IN ('saves','declines','cancels','times_out','offline','interac') AND ${t.environment} = 'sandbox' AND ${t.state} = 'paired' AND ${t.deviceCodeId} IS NULL)`,
     ),
     uniqueIndex("gym_square_terminals_device_uq").on(t.environment, t.accountId, t.deviceId).where(sql`${t.deviceId} IS NOT NULL`),
     uniqueIndex("gym_square_terminals_pairing_uq").on(t.gymId, t.environment).where(sql`${t.state} = 'pairing'`),
@@ -576,6 +576,13 @@ export const gymSquareRefunds = pgTable(
     /** A refund that failed or that Square never answered, which staff said needs none (0181; 18d-iv-b-iii): when and who. */
     noRefundAt: timestamp("no_refund_at", { withTimezone: true }),
     noRefundBy: uuid("no_refund_by").references(() => users.id, { onDelete: "set null" }),
+    /** A refund on the Terminal (0182; 18d-iv-c), where Square needs the card present: the Terminal, Square's own id for the
+     *  request, and how it stands there. */
+    deviceId: text("device_id"),
+    terminalRefundId: text("terminal_refund_id"),
+    pickedUp: boolean("picked_up").notNull().default(false),
+    cancelWantedAt: timestamp("cancel_wanted_at", { withTimezone: true }),
+    cancelTooLate: boolean("cancel_too_late").notNull().default(false),
   },
   (t) => [
     unique("gym_square_refunds_request_uq").on(t.gymId, t.requestKey),
@@ -587,7 +594,7 @@ export const gymSquareRefunds = pgTable(
     check("gym_square_refunds_card_check", sql`(${t.brand} IS NULL OR ${t.brand} ~ '^[A-Z_]{1,40}$') AND (${t.last4} IS NULL OR ${t.last4} ~ '^[0-9]{4}$') AND (${t.brand} IS NULL) = (${t.last4} IS NULL)`),
     check("gym_square_refunds_ids_check", sql`${t.squarePaymentId} ~ '^[A-Za-z0-9_-]{1,192}$' AND (${t.squareRefundId} IS NULL OR ${t.squareRefundId} ~ '^[A-Za-z0-9_-]{1,255}$')`),
     check("gym_square_refunds_state_check", sql`${t.state} IN ('asking','pending','done')`),
-    check("gym_square_refunds_outcome_check", sql`(${t.state} = 'done') = (${t.outcome} IS NOT NULL) AND (${t.outcome} IS NULL OR ${t.outcome} IN ('completed','failed','refused','lost'))`),
+    check("gym_square_refunds_outcome_check", sql`(${t.state} = 'done') = (${t.outcome} IS NOT NULL) AND (${t.outcome} IS NULL OR ${t.outcome} IN ('completed','failed','refused','lost','cancelled'))`),
     check("gym_square_refunds_taken_up_check", sql`(${t.state} = 'pending' OR COALESCE(${t.outcome} IN ('completed','failed'), false)) = (${t.squareRefundId} IS NOT NULL)`),
     check("gym_square_refunds_code_check", sql`${t.code} IS NULL OR ${t.code} ~ '^[A-Z0-9_]{1,60}$'`),
     foreignKey({ name: "gym_square_refunds_payment_fk", columns: [t.gymId, t.paymentId], foreignColumns: [gymMemberPayments.gymId, gymMemberPayments.id] }).onDelete("cascade"),
@@ -597,6 +604,8 @@ export const gymSquareRefunds = pgTable(
     index("gym_square_refunds_sale_idx").on(t.gymId, t.saleId).where(sql`${t.saleId} IS NOT NULL`),
     uniqueIndex("gym_square_refunds_refund_uq").on(t.environment, t.squareRefundId).where(sql`${t.squareRefundId} IS NOT NULL`),
     index("gym_square_refunds_payment_idx").on(t.gymId, t.paymentId),
+    check("gym_square_refunds_terminal_check", sql`(${t.deviceId} IS NOT NULL OR (${t.terminalRefundId} IS NULL AND ${t.outcome} IS DISTINCT FROM 'cancelled')) AND (${t.terminalRefundId} IS NULL OR ${t.terminalRefundId} ~ '^[A-Za-z0-9:_-]{1,255}$')`),
+    index("gym_square_refunds_terminal_idx").on(t.environment, t.accountId, t.deviceId).where(sql`${t.state} = 'asking' AND ${t.deviceId} IS NOT NULL`),
     check("gym_square_refunds_no_refund_check", sql`${t.noRefundAt} IS NULL OR ${t.outcome} IN ('failed','lost')`),
     index("gym_square_refunds_review_idx").on(t.gymId, t.startedAt).where(sql`${t.noRefundAt} IS NULL AND (${t.state} = 'pending' OR ${t.outcome} IN ('failed','lost'))`),
     index("gym_square_refunds_member_refund_idx").on(t.gymId, t.memberRefundId).where(sql`${t.memberRefundId} IS NOT NULL`),

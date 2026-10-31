@@ -35,6 +35,7 @@ import {
   squarePaymentsPageSchema,
   squarePaymentRefusalSchema,
   squareRefundAnswerSchema,
+  squareTerminalRefundAnswerSchema,
   squareEmptyAnswerSchema,
   squareRevokeSchema,
   squareSubscriptionSchema,
@@ -53,6 +54,7 @@ import {
   type SquareRefund,
   type SquareTerminalAction,
   type SquareTerminalCheckout,
+  type SquareTerminalRefund,
   type SquareToken,
   type SquareTokenStatus,
 } from "@app/shared";
@@ -138,6 +140,23 @@ export interface SquareApi {
    *  the same key with another amount is refused (CONFLICTING_PARAMETERS) (measured 2026-10-30). */
   refundPayment(accessToken: string, refund: NewCardRefund): Promise<SquareResult<SquareRefund>>;
   getRefund(accessToken: string, refundId: string): Promise<SquareResult<SquareRefund>>;
+  /** Give money back on the Terminal, for a payment Square marks as needing the card present (18d-iv-c). `idempotencyKey`:
+   *  asked again, Square gives back the same request. */
+  createTerminalRefund(accessToken: string, refund: NewTerminalRefund): Promise<SquareResult<SquareTerminalRefund>>;
+  getTerminalRefund(accessToken: string, terminalRefundId: string): Promise<SquareResult<SquareTerminalRefund>>;
+  /** Square cancels only while the Terminal has not started it ("as long as the status of the request is `PENDING`"). */
+  cancelTerminalRefund(accessToken: string, terminalRefundId: string): Promise<SquareResult<SquareTerminalRefund>>;
+}
+
+/** `deadline`: at most five minutes, Square's own limit. `reason` as a card refund's. */
+export interface NewTerminalRefund {
+  idempotencyKey: string;
+  deviceId: string;
+  paymentId: string;
+  amountMinor: number;
+  currency: string;
+  reason: string;
+  deadline: string;
 }
 
 /** `reason`: what Square's Dashboard lists the refund as: a word from the gym's list, never a person. */
@@ -236,6 +255,10 @@ const actionPath = (actionId: string): string => {
 const checkoutPath = (checkoutId: string): string => {
   if (!/^[A-Za-z0-9:_-]{1,255}$/.test(checkoutId)) throw new Error("not a Square Terminal checkout id");
   return `/v2/terminals/checkouts/${checkoutId}`;
+};
+const terminalRefundPath = (terminalRefundId: string): string => {
+  if (!/^[A-Za-z0-9:_-]{1,255}$/.test(terminalRefundId)) throw new Error("not a Square Terminal refund id");
+  return `/v2/terminals/refunds/${terminalRefundId}`;
 };
 const paymentPath = (paymentId: string): string => {
   if (!/^[A-Za-z0-9_-]{1,192}$/.test(paymentId)) throw new Error("not a Square payment id");
@@ -560,6 +583,27 @@ export function createSquareApi(opts: {
     },
     async getRefund(accessToken, refundId) {
       const result = await call("GET", refundPath(refundId), squareRefundAnswerSchema, bearer(accessToken));
+      return result.kind === "ok" ? { kind: "ok", value: result.value.refund } : result;
+    },
+    async createTerminalRefund(accessToken, r) {
+      const result = await call("POST", "/v2/terminals/refunds", squareTerminalRefundAnswerSchema, bearer(accessToken), {
+        idempotency_key: r.idempotencyKey,
+        refund: {
+          payment_id: r.paymentId,
+          amount_money: { amount: r.amountMinor, currency: r.currency },
+          device_id: r.deviceId,
+          reason: r.reason,
+          deadline_duration: r.deadline,
+        },
+      });
+      return result.kind === "ok" ? { kind: "ok", value: result.value.refund } : result;
+    },
+    async getTerminalRefund(accessToken, terminalRefundId) {
+      const result = await call("GET", terminalRefundPath(terminalRefundId), squareTerminalRefundAnswerSchema, bearer(accessToken));
+      return result.kind === "ok" ? { kind: "ok", value: result.value.refund } : result;
+    },
+    async cancelTerminalRefund(accessToken, terminalRefundId) {
+      const result = await call("POST", `${terminalRefundPath(terminalRefundId)}/cancel`, squareTerminalRefundAnswerSchema, bearer(accessToken), {});
       return result.kind === "ok" ? { kind: "ok", value: result.value.refund } : result;
     },
     async revokeAccount(accountId) {

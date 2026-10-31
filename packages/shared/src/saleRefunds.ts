@@ -86,6 +86,8 @@ export const saleCardRefundRequestSchema = z
     amountMinor: z.number().int().min(1).max(99_999_999),
     reason: saleRefundReasonSchema,
     restock: z.number().int().min(0).max(99),
+    /** The Terminal, where Square needs the card present. */
+    terminalId: z.string().uuid().optional(),
   })
   .strict();
 export type SaleCardRefundRequest = z.infer<typeof saleCardRefundRequestSchema>;
@@ -106,7 +108,7 @@ export type RefundWholeSaleResponse = z.infer<typeof refundWholeSaleResponseSche
 
 /** Refund to card on all of a sale: one refund at Square. `amountMinor` is what the box showed as left. */
 export const saleWholeCardRefundRequestSchema = z
-  .object({ requestKey: z.string().uuid(), amountMinor: z.number().int().min(1).max(99_999_999), reason: saleRefundReasonSchema, shelf: saleShelfSchema })
+  .object({ requestKey: z.string().uuid(), amountMinor: z.number().int().min(1).max(99_999_999), reason: saleRefundReasonSchema, shelf: saleShelfSchema, terminalId: z.string().uuid().optional() })
   .strict();
 export type SaleWholeCardRefundRequest = z.infer<typeof saleWholeCardRefundRequestSchema>;
 

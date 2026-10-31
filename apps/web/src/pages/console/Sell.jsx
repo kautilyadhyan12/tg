@@ -990,6 +990,10 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
                     toCard={refunding.toCard}
                     paymentsTo={placeFor(org.slug, viewerPrivileges(org), 'payments')}
                     onDone={doneHere(row.key)}
+                    onStopped={() => {
+                      void onReload();
+                      if (!onToday) void loadOther(pick);
+                    }}
                     onClose={() => setRefunding(null)}
                   />
                 ) : null}

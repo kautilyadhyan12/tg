@@ -5,7 +5,7 @@
 //
 //   cd apps/api
 //   $env:DATABASE_URL='postgres://aihg:aihg@localhost:5433/aihg_web1'
-//   corepack pnpm exec node --env-file=.env.square.local --import tsx tools/square-simulated-terminal.ts <gymId> <saves|declines|cancels|times_out|offline>
+//   corepack pnpm exec node --env-file=.env.square.local --import tsx tools/square-simulated-terminal.ts <gymId> <saves|declines|cancels|times_out|offline|interac>
 import postgres from "postgres";
 import { z } from "zod";
 import { squarePracticeTerminalSchema } from "@app/shared";
@@ -27,7 +27,7 @@ if (!env.success) {
 }
 const args = z.tuple([z.string().uuid(), squarePracticeTerminalSchema]).safeParse(process.argv.slice(2));
 if (!args.success) {
-  console.error("Usage: square-simulated-terminal.ts <gymId> <saves|declines|cancels|times_out|offline>");
+  console.error("Usage: square-simulated-terminal.ts <gymId> <saves|declines|cancels|times_out|offline|interac>");
   process.exit(2);
 }
 const [gymId, kind] = args.data;
