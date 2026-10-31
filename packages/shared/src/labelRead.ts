@@ -114,7 +114,6 @@ export function panelOfLabel(evidence: Pick<LabelEvidence, "columns">): LabelPan
 
 const labelAmount = z.number().nonnegative().max(10_000);
 /** No control character: the database cannot hold some, and no pack prints one. */
-// eslint-disable-next-line no-control-regex
 const plainWords = /^[^\u0000-\u001f\u007f]*$/;
 const allergenWords = z.array(z.string().trim().min(1).max(ALLERGEN_WORD_MOST).regex(plainWords)).max(ALLERGENS_MOST);
 
