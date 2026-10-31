@@ -30,12 +30,11 @@ const realReply = (photo: string): unknown => {
 
 /** Dal the tables have, with the figures a plate of it carries. */
 const DAL = ["dal", "dal", null, 150, 170, 9, 25, 4];
-/** What each real reply puts on the sheet: name, where its numbers are from, kcal. */
+/** What each real reply puts on the sheet: name, and where its numbers are from. A table food's calories follow the measure its row starts at, which USDA's table changes where it is loaded, so only an estimate's are pinned, by the test of its own below. The first row of the second plate is USDA's where that table is loaded and the model's estimate where it is not, as on GitHub. */
 const REAL_ROWS: Record<string, unknown[]> = {
-  "dish_1561574783.png": [["Leafy green salad", "estimate", 35]],
-  // The first row's table is USDA's where it is loaded, as here, and the model's estimate where it is not, as on GitHub.
-  "dish_1559157919.png": [[expect.stringMatching(/^Mixed (salad )?greens/), expect.stringMatching(/^(usda|estimate)$/), expect.any(Number)], ["Spinach (raw)", "curated", 7], ["Blueberries", "curated", 5], ["Walnuts", "curated", 33]],
-  "dish_1564689168.png": [["Salad (green, no dressing)", "curated", 21], ["Chickpeas (cooked)", "curated", 123], ["Paneer (Indian cottage cheese)", "curated", 213], ["Cucumber", "curated", 5], ["Red onion", "estimate", 6], ["Tomato", "curated", 4]],
+  "dish_1561574783.png": [["Leafy green salad", "estimate"]],
+  "dish_1559157919.png": [[expect.stringMatching(/^Mixed (salad )?greens/), expect.stringMatching(/^(usda|estimate)$/)], ["Spinach (raw)", "curated"], ["Blueberries", "curated"], ["Walnuts", "curated"]],
+  "dish_1564689168.png": [["Salad (green, no dressing)", "curated"], ["Chickpeas (cooked)", "curated"], ["Paneer (Indian cottage cheese)", "curated"], ["Cucumber", "curated"], ["Red onion", "estimate"], ["Tomato", "curated"]],
 };
 const reply = (items: unknown[], unknown_items: unknown[] = []) => ({ meal_name: "Plate", items, unknown_items, photo_quality: "good" });
 
@@ -168,7 +167,7 @@ d("a badly formed scanner reply (real route, real adapter, real Postgres)", () =
 
   it("three real replies whose foods had no canonical_hint are read, every food on the sheet", { timeout: 30_000 }, async () => {
     const seen: Record<string, unknown[]> = {};
-    for (const photo of Object.keys(REAL_ROWS)) seen[photo] = rows(await sheet(realReply(photo)));
+    for (const photo of Object.keys(REAL_ROWS)) seen[photo] = (await sheet(realReply(photo))).items.map((item) => [item.name, item.nutritionSource]);
     expect(seen).toEqual(REAL_ROWS);
   });
 
