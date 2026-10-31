@@ -144,6 +144,7 @@ const foodSchema = z.object({
   unit: z.string(),
   source: z.enum(["curated", "openfoodfacts", "usda", "estimate"]),
   more: moreNutrientsSchema.optional(),
+  pack: z.object({ grams: z.number().positive().max(MAX_ITEM_GRAMS), volume: z.boolean() }).optional(),
 });
 
 const draftSchema = z
@@ -417,7 +418,7 @@ async function measuresOf(deps: Pick<NutritionDeps, "sql">, foods: readonly Food
   const of = (entry: number | null): readonly UsdaPortion[] => (entry === null ? [] : (portions.get(entry) ?? []));
   return foods.map((food, at) => {
     const pieces = of(borrowed[at] ?? null);
-    return foodMeasures({ ...servingOfFood(food), portions: of(entries[at] ?? null), ...(pieces.length === 0 ? {} : { pieces }) });
+    return foodMeasures({ ...servingOfFood(food), portions: of(entries[at] ?? null), ...(pieces.length === 0 ? {} : { pieces }), pack: food.pack });
   });
 }
 
@@ -431,7 +432,7 @@ const servingOfFood = (food: FoodReference): { serving: number; unit: string; ow
 async function withMeasures(deps: NutritionDeps, foods: readonly FoodReference[]): Promise<FoodSearchItem[]> {
   const measures = await measuresOf(deps, foods);
   return foods.map((food, at) => {
-    const own = measures[at] ?? foodMeasures({ ...servingOfFood(food), portions: [] });
+    const own = measures[at] ?? foodMeasures({ ...servingOfFood(food), portions: [], pack: food.pack });
     const startsAt = startingMeasure(servingOfFood(food), own);
     const start = own.find((m) => m.id === startsAt.measure) ?? GRAM;
     return {
@@ -1008,7 +1009,7 @@ async function scanMeasures(deps: NutritionDeps, prices: readonly ScanPrice[]): 
   const tableFoods = prices.flatMap((price) => (price.kind === "table" ? [price.food] : []));
   const measures = await measuresOf(deps, tableFoods);
   const byCanonical = new Map(tableFoods.map((food, at) => [food.canonical, measures[at] ?? []]));
-  return (food) => byCanonical.get(food.canonical) ?? foodMeasures({ ...servingOfFood(food), portions: [] });
+  return (food) => byCanonical.get(food.canonical) ?? foodMeasures({ ...servingOfFood(food), portions: [], pack: food.pack });
 }
 
 export interface ScanDraftResponse {

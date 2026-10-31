@@ -201,7 +201,7 @@ const dishwareItemSchema = z
 /** Grams, ounces, the food's own serving, a USDA household measure by its
  *  `seq_num` in the USDA entry the food is, or cites, and one by its `seq_num` in
  *  the entry a food of our list borrows its pieces from ("piece-3"). */
-export const measureIdSchema = z.string().regex(/^(?:g|oz|serving|(?:usda|piece)-\d{1,4})$/);
+export const measureIdSchema = z.string().regex(/^(?:g|oz|serving|pack|(?:usda|piece)-\d{1,4})$/);
 /** One measure of a food, as the food search sends it: its id, its name, and the
  *  grams ONE of it weighs. */
 export const foodMeasureSchema = z.object({

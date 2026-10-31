@@ -2,7 +2,8 @@
 // per line (JSONL). Pure string↔object transforms only: no fs, no zod (I1 —
 // deep validation with @app/shared schemas happens in the Node-side test
 // shell, not inside the engine package's runtime code).
-import type { PoseFrame } from "@app/shared";
+import type { CameraFrame } from "@app/shared";
+import { isUsableAspect } from "../pipeline/trueProportions.js";
 
 export interface TraceExpected {
   reps: number;
@@ -41,6 +42,9 @@ export interface TraceHeader {
   device: string;
   platform: string;
   fps: number;
+  /** The picture's width / height. Every frame has this shape unless its own
+   *  line says otherwise. */
+  aspect: number;
   view: string;
   label: string;
   expected: TraceExpected;
@@ -49,7 +53,7 @@ export interface TraceHeader {
 
 export interface Trace {
   header: TraceHeader;
-  frames: PoseFrame[];
+  frames: CameraFrame[];
 }
 
 export class TraceParseError extends Error {
@@ -75,6 +79,9 @@ function assertHeader(v: unknown): TraceHeader {
     if (typeof v[key] !== "string") throw new TraceParseError(`missing string field '${key}'`, 1);
   }
   if (typeof v["fps"] !== "number") throw new TraceParseError("missing number field 'fps'", 1);
+  if (!isUsableAspect(v["aspect"])) {
+    throw new TraceParseError("missing or impossible 'aspect' (picture width / height)", 1);
+  }
   const expected = v["expected"];
   if (!isRecord(expected)) throw new TraceParseError("missing 'expected' block", 1);
   if (typeof expected["reps"] !== "number") throw new TraceParseError("expected.reps missing", 1);
@@ -85,14 +92,14 @@ function assertHeader(v: unknown): TraceHeader {
   return v as unknown as TraceHeader;
 }
 
-function assertFrame(v: unknown, line: number): PoseFrame {
+function assertFrame(v: unknown, line: number, aspect: number): CameraFrame {
   if (!isRecord(v) || typeof v["t"] !== "number" || !Array.isArray(v["kp"])) {
     throw new TraceParseError("frame must be {t, kp}", line);
   }
   if (v["kp"].length !== 33) {
     throw new TraceParseError(`frame has ${String(v["kp"].length)} keypoints, expected 33`, line);
   }
-  return v as unknown as PoseFrame;
+  return { aspect, ...v } as unknown as CameraFrame;
 }
 
 export function parseTrace(content: string): Trace {
@@ -105,7 +112,7 @@ export function parseTrace(content: string): Trace {
     throw new TraceParseError("header is not valid JSON", 1);
   }
   const header = assertHeader(headerRaw);
-  const frames: PoseFrame[] = [];
+  const frames: CameraFrame[] = [];
   for (let i = 1; i < lines.length; i++) {
     let raw: unknown;
     try {
@@ -113,7 +120,7 @@ export function parseTrace(content: string): Trace {
     } catch {
       throw new TraceParseError("frame is not valid JSON", i + 1);
     }
-    frames.push(assertFrame(raw, i + 1));
+    frames.push(assertFrame(raw, i + 1, header.aspect));
   }
   if (frames.length === 0) throw new TraceParseError("trace has no frames", 2);
   return { header, frames };
@@ -121,6 +128,8 @@ export function parseTrace(content: string): Trace {
 
 export function serializeTrace(trace: Trace): string {
   const lines = [JSON.stringify(trace.header)];
-  for (const f of trace.frames) lines.push(JSON.stringify(f));
+  for (const f of trace.frames) {
+    lines.push(JSON.stringify(f.aspect === trace.header.aspect ? { t: f.t, kp: f.kp } : f));
+  }
   return lines.join("\n") + "\n";
 }

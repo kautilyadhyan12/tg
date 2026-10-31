@@ -5,12 +5,13 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it, expect } from "vitest";
-import { parseTrace } from "@app/engine";
+import { ENGINE_VERSION, parseTrace } from "@app/engine";
 import squatDef from "@app/engine/definitions/squat.json";
 import {
   EngineUnsupportedError,
   engineSupports,
   getDefinition,
+  pictureAspect,
   hasCameraAnalysis,
   landmarksToFrame,
   startSet,
@@ -40,9 +41,19 @@ describe("landmarksToFrame (§2.2 — un-mirrored provider coords)", () => {
   });
 });
 
+describe("pictureAspect", () => {
+  it("is width over height", () => {
+    expect(pictureAspect({ videoWidth: 1280, videoHeight: 720 })).toBeCloseTo(16 / 9);
+    expect(pictureAspect({ videoWidth: 720, videoHeight: 1280 })).toBeCloseTo(9 / 16);
+  });
+  it("gives the engine nothing usable before the video has a size", () => {
+    expect(Number.isNaN(pictureAspect({ videoWidth: 0, videoHeight: 0 }))).toBe(true);
+  });
+});
+
 describe("engineSupports (I4 minEngineVersion client gate)", () => {
   it("runs a definition the engine is new enough for", () => {
-    // squat.json declares minEngineVersion "1.0.0"; ENGINE_VERSION is 1.0.0.
+    // squat.json declares the same minEngineVersion as ENGINE_VERSION.
     expect(engineSupports(squatDef)).toBe(true);
   });
 
@@ -103,14 +114,14 @@ describe("startSet lifecycle — replay a recorded golden", () => {
     // -> landmarksToFrame -> processFrame, using the trace's own timestamps.
     for (const frame of trace.frames) {
       const landmarks = frame.kp.map(([x, y, z, visibility]) => ({ x, y, z, visibility }));
-      set.feed(landmarks, frame.t);
+      set.feed(landmarks, frame.t, frame.aspect);
     }
     const summary = set.end();
 
     expect(summary.reps).toBe(trace.header.expected.reps); // exact rep count (I2)
     expect(reps).toHaveLength(trace.header.expected.reps);
     expect(summary.exercise).toBe("squat");
-    expect(summary.engineVersion).toBe("1.0.0");
+    expect(summary.engineVersion).toBe(ENGINE_VERSION);
     expect(summary.definitionVersion).toBe(squatDef.version);
     // avgFormScore lands in the trace's declared score range (§7.4).
     const [lo, hi] = trace.header.expected.scoreRange;
@@ -121,7 +132,7 @@ describe("startSet lifecycle — replay a recorded golden", () => {
   it("end() is idempotent (§3.9)", () => {
     const def = getDefinition("squat");
     const set = startSet(def, 1);
-    set.feed([], 0);
+    set.feed([], 0, 1);
     expect(set.end()).toBe(set.end());
   });
 });

@@ -606,7 +606,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 33b-ii. [x] **"Not this?" and the names Luna saw** — merged 2026-10-30 (PR #397).
       - 33b-iii. **Barcode scan** (split 2026-10-30 in four, Kd's "go", `rulings/2026-10-30-33b-iii-a.md`: our own copy of the lists, no live calls). Risky; the two extra passes run once, after 33b-iii-c, over item 33.
         - 33b-iii-a. [x] **Our own copy of the food lists, and the barcode lookup on the server** — merged 2026-10-31 (PR #403).
-        - 33b-iii-b. [ ] **Scan a barcode on the phone**: Meal, Barcode and Label in one camera, free for everyone; the phone writes a UPC-E out first (`upcEToUpcA`); the product, its allergens with "Check the pack", what somebody typed shown as typed, a "0 kcal" not called certain; the whole pack as an amount; not found says what to do next; type the number; the torch.
+        - 33b-iii-b. [x] **Scan a barcode on the phone** — merged 2026-10-31 (PR #414).
         - 33b-iii-c. [ ] **Read a label with Luna**: a product not found is read from a photo of its label, the person checks it, and it is remembered for them by barcode. About 20 real labels tried first, for under a cent. Uses one of their scans.
         - 33b-iii-d. [ ] **The food search and the meal scan read our copy**, so nothing asks Open Food Facts live; every feature kept; a common word answers quickly.
 34. **More food** (split 2026-10-13: the parts on the server need no phone).
@@ -637,9 +637,12 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 
 **Exercise folder 1 — `D:\Projects\ai-home-gym-ex1`: the camera and the form rules** (spec Part 2 §11).
 
-50. [ ] **The measuring line on the laptop**: one tool for every exercise: a video to body points, measured by the app's own engine, still pictures a terminal can look at, and each exercise's rules run on every other exercise's video. It needs no phone, so it is this folder's first job.
+50. **The measuring line on the laptop** (split 2026-10-31: true proportions first). It needs no phone.
+    - 50a. [x] **True proportions** — merged 2026-10-31 (PR #413).
+    - 50b. [ ] **A video to body points**: one tool for every exercise, measured by the app's own engine, with still pictures a terminal can look at.
+    - 50c. [ ] **The cross-check**: each exercise's rules run on every other exercise's video.
 51. [ ] **The camera test on Kd's phone** (item 1's two days; after item 10): which model and library, the speed, heat and battery, and the same numbers as the laptop.
-52. [ ] **The engine's missing parts**: holds, one side at a time, fast rhythm moves, timed only, the jump check, the floor reference, a leaning phone, steadier points, one person locked on; and Stage 4 item 6's faults, each with its test.
+52. [ ] **The engine's missing parts**: a rep whose stand-up is cut off by the set's end, the other angle numbers measured again in true degrees and pinned by tests, with `shallow_depth` and the lean rule, holds, one side at a time, fast rhythm moves, timed only, the jump check, the floor reference, a leaning phone, steadier points, one person locked on; and Stage 4 item 6's faults, each with its test.
 53. [ ] **The camera screen**: its look as pictures first, then the set-up check, the live skeleton, the count, voice, "Count this set myself" and Follow-along.
 54. [ ] **The first seven through the line**: squat, chair squat, jump squat, bicep curl, bicycle crunch, barbell bench press, dumbbell bench press.
 55. [ ] **Exercises, family by family** (spec Part 2 §11.4): the rest of the 58, then the ones Kd names.
