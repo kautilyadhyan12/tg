@@ -1110,6 +1110,10 @@ function labelFoodReference(row: labelRepo.LabelFoodRow): FoodReference {
 async function labelReply(deps: NutritionDeps, row: labelRepo.LabelFoodRow, code: string | null): Promise<Extract<BarcodeReply, { status: "found" }>> {
   const [food] = await withMeasures(deps, [labelFoodReference(row)]);
   if (food === undefined) throw new Error("withMeasures returns one food for each it is given");
+  return labelReplyOf(row, food, code);
+}
+
+function labelReplyOf(row: labelRepo.LabelFoodRow, food: FoodSearchItem, code: string | null): Extract<BarcodeReply, { status: "found" }> {
   return {
     status: "found", code: code ?? "", food, allergens: row.contains, mayContain: row.may_contain, listedAsTyped: [], allergensFrom: null,
     check: numbersFit(row.kcal, row.protein_g, row.carbs_g, row.fat_g, null) ? "fine" : "doesnt_add_up", labelId: row.id,
@@ -1134,7 +1138,7 @@ export async function readLabel(deps: NutritionDeps, userId: string, imageBase64
       throw await askAgain();
     }
     await ledger(deps, userId, result);
-    // A poor photo is asked for again, as a meal's is: what it gave may be misread (Part 2B \u00a73.5).
+    // A poor photo is asked for again, as a meal's is: what it gave may be misread (Part 2B §3.5).
     const panel = result.evidence.is_nutrition_label && result.evidence.photo_quality === "good" ? panelOfLabel(result.evidence) : null;
     if (panel === null) throw await askAgain();
     const { proteinG, carbsG, fatG } = panel;
@@ -1159,7 +1163,7 @@ export async function readLabel(deps: NutritionDeps, userId: string, imageBase64
  *  from a misread or a mistyped serving, and would come back on every scan. */
 export async function saveLabelFood(deps: NutritionDeps, userId: string, id: string, body: LabelFoodSave): Promise<Extract<BarcodeReply, { status: "found" }> | null> {
   const kind = body.code === null ? null : classifyBarcode(body.code);
-  if (kind !== null && kind.kind !== "product") throw new NutritionError(400, "bad_code", "That barcode isn\u2019t right.");
+  if (kind !== null && kind.kind !== "product") throw new NutritionError(400, "bad_code", "That barcode isn’t right.");
   const scale = 100 / body.amount;
   const [kcal, proteinG, carbsG, fatG] = [body.kcal * scale, body.proteinG * scale, body.carbsG * scale, body.fatG * scale];
   if (kcal > 1000 || proteinG + carbsG + fatG > LABEL_MOST_GRAMS_PER_100) {
@@ -1171,13 +1175,18 @@ export async function saveLabelFood(deps: NutritionDeps, userId: string, id: str
     servingAmount: body.servingAmount, contains: body.contains, mayContain: body.mayContain,
   });
   if (saved === "taken") return null;
-  if (saved === "full") throw new NutritionError(409, "label_foods_full", "You\u2019ve saved as many labels as you can. Remove one to add another.");
+  if (saved === "full") throw new NutritionError(409, "label_foods_full", "You’ve saved as many labels as you can. Remove one to add another.");
   return await labelReply(deps, saved, saved.code);
 }
 
 export async function labelFoodsOf(deps: NutritionDeps, userId: string): Promise<{ items: Extract<BarcodeReply, { status: "found" }>[] }> {
   const rows = await labelRepo.labelFoodsOf(deps.sql, userId);
-  return { items: await Promise.all(rows.map((row) => labelReply(deps, row, row.code))) };
+  // One read of the measures for the whole list, whatever its length.
+  const foods = await withMeasures(deps, rows.map(labelFoodReference));
+  return { items: rows.flatMap((row, at) => {
+    const food = foods[at];
+    return food === undefined ? [] : [labelReplyOf(row, food, row.code)];
+  }) };
 }
 
 export const removeLabelFood = async (deps: NutritionDeps, userId: string, id: string): Promise<boolean> => await labelRepo.removeLabelFood(deps.sql, userId, id);

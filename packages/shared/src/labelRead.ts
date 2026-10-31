@@ -34,7 +34,14 @@ export function allergensFrom(value: unknown): string[] {
     let now = "";
     for (const part of word.split(/\s+/)) {
       if (now !== "" && now.length + part.length + 1 > ALLERGEN_WORD_MOST) { pieces.push(now); now = ""; }
-      now = now === "" ? part.slice(0, ALLERGEN_WORD_MOST) : `${now} ${part}`;
+      // One unbroken word longer than the most is carried over in pieces, never cut off.
+      let rest = part;
+      while (rest.length > ALLERGEN_WORD_MOST) {
+        if (now !== "") { pieces.push(now); now = ""; }
+        pieces.push(rest.slice(0, ALLERGEN_WORD_MOST));
+        rest = rest.slice(ALLERGEN_WORD_MOST);
+      }
+      now = now === "" ? rest : `${now} ${rest}`;
     }
     return now === "" ? pieces : [...pieces, now];
   }))].slice(0, ALLERGENS_MOST);
@@ -156,7 +163,7 @@ export type LabelFoodSave = z.infer<typeof labelFoodSaveSchema>;
 
 export const labelFoodParamSchema = z.object({ id: z.string().uuid() }).strict();
 
-/** The photo line the spec asks for in the scan screen (Part 2B \u00a77, amended 2026-10-28). */
+/** The photo line the spec asks for in the scan screen (Part 2B §7, amended 2026-10-28). */
 export const PHOTO_PRIVACY_LINE = "Photos are analyzed and never kept by the app. The scanning service keeps a copy for up to 30 days to check for abuse.";
 
 /** How many photo scans a person has left. `left` is null where the count cannot be read: nothing is said then. */

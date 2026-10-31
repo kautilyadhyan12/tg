@@ -2,8 +2,9 @@
 // holds the owner in its WHERE: a label is never anybody else's.
 import type { Sql } from "postgres";
 
-/** The most foods one person keeps this way: nobody has this many packs, and a script stops here. */
-export const LABEL_FOODS_MOST = 1000;
+/** The most foods one person keeps this way, all of them listed so each can be changed or removed:
+ *  nobody has this many packs, and a script stops here. */
+export const LABEL_FOODS_MOST = 200;
 
 export interface LabelFoodRow {
   id: string;
@@ -39,11 +40,8 @@ export async function labelFoodByCode(sql: Sql, userId: string, code: string): P
   return row ?? null;
 }
 
-/** The most saved labels listed at once. */
-export const LABEL_FOODS_LISTED = 100;
-
 export async function labelFoodsOf(sql: Sql, userId: string): Promise<LabelFoodRow[]> {
-  return await sql<LabelFoodRow[]>`SELECT ${sql.unsafe(COLUMNS)} FROM member_label_foods WHERE user_id = ${userId} ORDER BY updated_at DESC, id LIMIT ${LABEL_FOODS_LISTED}`;
+  return await sql<LabelFoodRow[]>`SELECT ${sql.unsafe(COLUMNS)} FROM member_label_foods WHERE user_id = ${userId} ORDER BY updated_at DESC, id LIMIT ${LABEL_FOODS_MOST}`;
 }
 
 export async function labelFoodById(sql: Sql, userId: string, id: string): Promise<LabelFoodRow | null> {

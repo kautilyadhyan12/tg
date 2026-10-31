@@ -99,7 +99,10 @@ type Stage =
   | { kind: "camera" }
   | { kind: "reading"; uri: string; what: "meal" | "label" }
   | { kind: "review" }
-  | { kind: "label"; draft: LabelDraft; code: string | null };
+  /** A label read and not yet saved: kept if the scanner is closed, as it has used a scan. */
+  | { kind: "label"; draft: LabelDraft; code: string | null }
+  /** A label saved: never kept, as a read that reopened could be saved over its barcode. */
+  | { kind: "labelSaved"; product: FoundProduct };
 type Ask = "none" | "newPhoto";
 
 interface MealPhotoProps {
@@ -140,11 +143,27 @@ export function MealPhoto({ open, barcode, kept, onClose, onSaved, onSearch }: M
   useEffect(() => {
     if (!open) return;
     setNotice(null);
-    setCameraStart(null);
-    setStage((now) => (now.kind === "reading" || now.kind === "label" ? now : !barcode && kept.sheet !== null && kept.sheet !== undefined ? { kind: "review" } : { kind: "camera" }));
+    setStage((now) => {
+      if (now.kind === "reading" || now.kind === "label") return now;
+      setCameraStart(null);
+      return !barcode && kept.sheet !== null && kept.sheet !== undefined ? { kind: "review" } : { kind: "camera" };
+    });
     // Judged as it stood when it was opened.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  // Somebody else signed in: nothing of another person's label stays.
+  useEffect(() => {
+    setStage((now) => (now.kind === "label" || now.kind === "labelSaved" ? { kind: "camera" } : now));
+    setCameraStart(null);
+  }, [me]);
+
+  /** The one way out of a label, however it is left: the camera holds no barcode after it, so the next
+   *  photo, which may be any pack's, can never be saved over this one. */
+  const endLabel = () => {
+    setCameraStart({ mode: "label", code: null });
+    setStage({ kind: "camera" });
+  };
 
   const scan = useCallback(
     async (uri: string) => {
@@ -261,15 +280,25 @@ export function MealPhoto({ open, barcode, kept, onClose, onSaved, onSearch }: M
         ) : stage.kind === "reading" ? (
           <Reading uri={stage.uri} what={stage.what} onClose={onClose} />
         ) : stage.kind === "label" ? (
-          <LabelStage
-            draft={stage.draft}
+          <LabelCheck
+            start={typedFromDraft(stage.draft)}
             code={stage.code}
-            onClose={() => {
-              // That barcode's label is done: the next photo is another pack's, which must not take it.
-              setCameraStart({ mode: "label", code: null });
-              setStage({ kind: "camera" });
+            id={null}
+            check={stage.draft.check}
+            fromKj={stage.draft.kcalFromKj}
+            onClose={endLabel}
+            onSaved={(product) => {
+              setStage({ kind: "labelSaved", product });
             }}
-            onSaved={onSaved}
+          />
+        ) : stage.kind === "labelSaved" ? (
+          <BarcodeProduct
+            product={stage.product}
+            onClose={endLabel}
+            onSaved={(type, name) => {
+              endLabel();
+              onSaved(type, name);
+            }}
           />
         ) : sheet === null ? null : (
           <Review
@@ -289,16 +318,6 @@ export function MealPhoto({ open, barcode, kept, onClose, onSaved, onSearch }: M
         )}
       </View>
     </Modal>
-  );
-}
-
-/** A label just read: checked first, then the amount and the meal as any pack. */
-function LabelStage({ draft, code, onClose, onSaved }: { draft: LabelDraft; code: string | null; onClose: () => void; onSaved: (type: MealType, name: string) => void }) {
-  const [product, setProduct] = useState<FoundProduct | null>(null);
-  return product === null ? (
-    <LabelCheck start={typedFromDraft(draft)} code={code} id={null} check={draft.check} fromKj={draft.kcalFromKj} onClose={onClose} onSaved={setProduct} />
-  ) : (
-    <BarcodeProduct product={product} onClose={onClose} onSaved={onSaved} />
   );
 }
 
@@ -347,7 +366,7 @@ function Camera({
   // The barcode a label photo is for: the pack just found not to be on our list.
   const [labelCode, setLabelCode] = useState<string | null>(startCode);
   const [scans, setScans] = useState<PhotoScansLeft | null>(null);
-  const [saved, setSaved] = useState<{ items: FoundProduct[] | null } | null>(null);
+  const [saved, setSaved] = useState<{ items: FoundProduct[] | null; failed: boolean } | null>(null);
   const [torch, setTorch] = useState(false);
   const [look, setLook] = useState<Look>({ kind: "idle" });
   const [typing, setTyping] = useState(false);
@@ -384,9 +403,9 @@ function Camera({
   }, [session]);
 
   const openSaved = async () => {
-    setSaved({ items: null });
+    setSaved({ items: null, failed: false });
     const answer = await session.signedIn({ method: "GET", path: "/v1/nutrition/labels" }, labelFoodsSchema);
-    setSaved({ items: answer.kind === "ok" ? answer.data.items.flatMap((p) => (p.status === "found" ? [p] : [])) : [] });
+    setSaved(answer.kind === "ok" ? { items: answer.data.items.flatMap((p) => (p.status === "found" ? [p] : [])), failed: false } : { items: [], failed: true });
   };
 
   const lookUp = async (code: string) => {
@@ -581,7 +600,14 @@ function Camera({
       {saved === null ? null : (
         <Sheet open title="Your saved labels" onClose={() => { setSaved(null); }}>
           {saved.items === null ? <ActivityIndicator color={colours.orange} /> : null}
-          {saved.items?.length === 0 ? (
+          {saved.failed ? (
+            <>
+              <Txt kind="small" colour="badText">
+                {NO_CONNECTION}
+              </Txt>
+              <Button label="Try again" kind="link" onPress={() => { void openSaved(); }} />
+            </>
+          ) : saved.items?.length === 0 ? (
             <Txt kind="small" colour="text">
               No saved labels yet.
             </Txt>
@@ -590,7 +616,7 @@ function Camera({
             {(saved.items ?? []).map((product) => (
               <Button
                 key={product.labelId}
-                label={product.food.name}
+                label={`${product.food.name} · ${kcalWords(product.food.startsKcal)}`}
                 kind="link"
                 onPress={() => {
                   setSaved(null);

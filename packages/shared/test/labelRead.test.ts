@@ -39,6 +39,14 @@ describe("allergens: the worst thing, one read and then lost", () => {
     ["not words", 7, []],
   ])("%s", (_name, given, read) => { expect(allergensFrom(given)).toEqual(read); });
 
+  it("one unbroken word past the longest is carried over in pieces, so nothing is lost", () => {
+    const long = "x".repeat(300);
+    const read = allergensFrom([`milk ${long} soy`]);
+    expect(read.join("")).toContain(long);
+    expect(read.join(" ")).toContain("soy");
+    expect(read.every((w) => w.length <= 120)).toBe(true);
+  });
+
   it("a word past the longest is split, whole, so nothing is lost", () => {
     const long = Array.from({ length: 40 }, (_, i) => `ingredient${String(i)}`).join(" ");
     const read = allergensFrom([long]);

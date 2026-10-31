@@ -186,7 +186,7 @@ d("a pack's label (real Postgres)", () => {
   it("full: past the most one person may keep, a new label is refused and says so", async () => {
     const person = await session("label33-full@example.com");
     const [row] = await sql<{ id: string }[]>`SELECT id FROM users WHERE email = 'label33-full@example.com'`;
-    await sql`INSERT INTO member_label_foods (id, user_id, name, unit, kcal, protein_g, carbs_g, fat_g) SELECT gen_random_uuid(), ${row?.id ?? ""}, 'x', 'g', 1, 0, 0, 0 FROM generate_series(1, 1000)`;
+    await sql`INSERT INTO member_label_foods (id, user_id, name, unit, kcal, protein_g, carbs_g, fat_g) SELECT gen_random_uuid(), ${row?.id ?? ""}, 'x', 'g', 1, 0, 0, 0 FROM generate_series(1, 200)`;
     const res = await save(randomUUID(), null, person);
     expect(res.statusCode).toBe(409);
     expect(res.json()).toMatchObject({ error: "label_foods_full" });

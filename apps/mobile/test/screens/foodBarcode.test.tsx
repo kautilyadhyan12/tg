@@ -483,6 +483,64 @@ describe("a pack's label (33b-iii-c)", () => {
     expect(fake.asked.filter((a) => a.method === "PUT").map((a) => (a.body as { name: string; code: string | null }))).toMatchObject([{ name: "Pack A", code: NUTELLA_CODE }, { name: "Pack B", code: null }]);
   });
 
+  it("the worst thing, again: saved and added to a meal, Scan food opens the camera, never the old label", async () => {
+    const fake = await openScan(labelRoutes({ "/v1/nutrition/labels/saved": ok(saved) }));
+    await toLabel();
+    await fireEvent.changeText(await screen.findByLabelText("Food name"), "Pack A");
+    await fireEvent.changeText(screen.getByLabelText("Protein (g)"), "1");
+    await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+    await screen.findByText("From your label");
+    const now = mealTypeName(sectionOf({ mealType: null, takenAt: new Date().toISOString() }));
+    // The box's own button, on top of the Food page's for that meal.
+    const adds = await screen.findAllByRole("button", { name: `Add to ${now}` });
+    const add = adds[adds.length - 1];
+    if (add === undefined) throw new Error("no Add button");
+    await fireEvent.press(add);
+    await fireEvent.press(await screen.findByRole("button", { name: "Scan food" }));
+    expect(await screen.findByRole("button", { name: "Take photo" })).toBeTruthy();
+    expect(screen.queryByText("Check the label")).toBeNull();
+    expect(screen.queryByText(`For barcode ${NUTELLA_CODE}`)).toBeNull();
+    await fireEvent.press(screen.getByRole("radio", { name: "Label" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Take photo" }));
+    await fireEvent.changeText(await screen.findByLabelText("Food name"), "Pack B");
+    await fireEvent.changeText(screen.getByLabelText("Protein (g)"), "1");
+    await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+    await screen.findByText("From your label");
+    expect(fake.asked.filter((a) => a.method === "PUT").map((a) => a.body as { name: string; code: string | null })).toMatchObject([{ name: "Pack A", code: NUTELLA_CODE }, { name: "Pack B", code: null }]);
+  });
+
+  it("Leave: the barcode goes with the read, so the next photo takes no barcode", async () => {
+    const fake = await openScan(labelRoutes({ "/v1/nutrition/labels/saved": ok(saved) }));
+    await toLabel();
+    await screen.findByText("Check the label");
+    await fireEvent.press(screen.getByRole("button", { name: "Close" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Leave" }));
+    expect(await screen.findByRole("radio", { name: "Label" })).toBeTruthy();
+    expect(screen.queryByText(`For barcode ${NUTELLA_CODE}`)).toBeNull();
+    await fireEvent.press(screen.getByRole("button", { name: "Take photo" }));
+    await fireEvent.changeText(await screen.findByLabelText("Food name"), "Other");
+    await fireEvent.changeText(screen.getByLabelText("Protein (g)"), "1");
+    await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+    await screen.findByText("From your label");
+    expect(fake.asked.find((a) => a.method === "PUT")?.body).toMatchObject({ name: "Other", code: null });
+  });
+
+  it("the saved list, with no connection, says so and asks again, never that there are none", async () => {
+    let tries = 0;
+    await openScan(labelRoutes({
+      "/v1/nutrition/labels": () => {
+        tries += 1;
+        return tries === 1 ? lost() : { status: 200, body: { items: [saved] } };
+      },
+    }));
+    await fireEvent.press(await screen.findByRole("radio", { name: "Label" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Your saved labels" }));
+    expect(await screen.findByText("No connection. Try again.")).toBeTruthy();
+    expect(screen.queryByText("No saved labels yet.")).toBeNull();
+    await fireEvent.press(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByRole("button", { name: /^Toffee/ })).toBeTruthy();
+  });
+
   it("the camera says which barcode a label photo is for, and the privacy line is there", async () => {
     await openScan(labelRoutes());
     await read("ean13", NUTELLA_CODE);
@@ -495,7 +553,7 @@ describe("a pack's label (33b-iii-c)", () => {
     await openScan(labelRoutes({ "/v1/nutrition/labels": ok({ items: [saved] }) }));
     await fireEvent.press(await screen.findByRole("radio", { name: "Label" }));
     await fireEvent.press(await screen.findByRole("button", { name: "Your saved labels" }));
-    await fireEvent.press(await screen.findByRole("button", { name: "Toffee" }));
+    await fireEvent.press(await screen.findByRole("button", { name: /^Toffee/ }));
     expect(await screen.findByRole("button", { name: "Change" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Remove" })).toBeTruthy();
   });

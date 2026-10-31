@@ -6,7 +6,7 @@ import {
   Sparkles, Check, Tag, Pencil, ChevronDown,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { MEAL_SCAN_SAVE_SECONDS, PHOTO_SCAN_CAUTION, mealTypeAtHour } from '@app/shared';
+import { MEAL_SCAN_SAVE_SECONDS, PHOTO_PRIVACY_LINE, PHOTO_SCAN_CAUTION, mealTypeAtHour } from '@app/shared';
 import { nutritionService, composeAddIngredient, missingAnswers, toDisplayTargets, toRingChoice } from '../api/nutritionApi';
 import LoggedFoodSheet from '../components/nutrition/LoggedFoodSheet';
 import MacroRings from '../components/nutrition/MacroRings';
@@ -948,7 +948,7 @@ function PhotoModal({ open, onClose, onSave }) {
         setRetakeMsg({ title: 'Try again', text: 'That free retry has run out. Pick the photo again.' });
         setPreview(null);
       } else if (err.response?.status === 429) {
-        toast.error('You\u2019ve used all your photo scans.');
+        toast.error('You’ve used all your photo scans.');
         setPreview(null);
       } else {
         toast.error(err.message || 'Photo analysis failed');
@@ -1363,6 +1363,9 @@ function PhotoModal({ open, onClose, onSave }) {
                             and cannot detect allergens. Never softened or removed. */}
                         <p className="text-xs" style={amber}>
                           {PHOTO_SCAN_CAUTION}
+                        </p>
+                        <p className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                          {PHOTO_PRIVACY_LINE}
                         </p>
                       </div>
                     )}
