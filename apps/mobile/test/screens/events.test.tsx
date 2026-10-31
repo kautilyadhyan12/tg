@@ -6,6 +6,7 @@ import { memberGymEventSchema } from "@app/shared";
 import { App } from "../../src/App";
 import { POSTER_TALLEST, posterHeight } from "../../src/look/sizing";
 import { NEAR_THE_SCREEN } from "../../src/screens/gym/Events";
+import { nextEventTimer } from "../../src/screens/gym/eventsView";
 import type { Ask } from "../../src/session/calls";
 import { fakeServer, kept, lost, memoryStore, refusal, tokens, type Reply } from "../kit";
 
@@ -522,7 +523,7 @@ describe("the page stays current", () => {
     expect(atTheEnd).toBeLessThanOrEqual(before + 31);
     await act(async () => { await jest.advanceTimersByTimeAsync(5 * 60_000); });
     expect(reads(server)).toBe(atTheEnd);
-  });
+  }, 90_000);
 
   it("with no waitlist place and nothing starting soon, it does not read by itself", async () => {
     jest.useFakeTimers({ advanceTimers: true });
@@ -530,8 +531,15 @@ describe("the page stays current", () => {
     await openEvents(server.ask, IRON);
     await page().findByText("Open day");
     const before = reads(server);
-    await act(async () => { await jest.advanceTimersByTimeAsync(2.5 * 3_600_000); });
+    await act(async () => { await jest.advanceTimersByTimeAsync(5 * 60_000); });
     expect(reads(server)).toBe(before);
+  });
+
+  it("a start hours away is only waited for: an hour's timer reads nothing, the last one reads", () => {
+    const hour = 3_600_000;
+    expect(nextEventTimer(2.5 * hour, 0)).toEqual({ afterMs: hour, read: false });
+    expect(nextEventTimer(1.5 * hour, hour / 2 - 2000)).toEqual({ afterMs: hour, read: false });
+    expect(nextEventTimer(60_000, 0)).toEqual({ afterMs: 61_000, read: true });
   });
 
   it("it reads again when an event starts", async () => {

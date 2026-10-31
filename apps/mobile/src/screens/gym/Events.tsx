@@ -29,6 +29,7 @@ import {
   givingUpAsks,
   givingUpLine,
   nextEventChangeAt,
+  nextEventTimer,
   waitlistNote,
   type EventAct,
 } from "./eventsView";
@@ -55,8 +56,6 @@ const READ_AGAIN_AFTER_MISSED_MS = 20_000;
 /** While the member is on a waitlist the page is told to be checked: every 30 seconds, for at most 15 minutes. */
 const WAITLIST_READ_MS = 30_000;
 const WAITING_FOR_AT_MOST_MS = 15 * 60_000;
-/** The longest a timer for the next start or end is set for. */
-const LONGEST_TIMER_MS = 60 * 60_000;
 
 const phoneZone = () => {
   try {
@@ -229,9 +228,8 @@ function EventsBody({ place, onClose, bottom }: { place: EventsPlace; onClose: (
     if (at === null) return undefined;
     let timer: ReturnType<typeof setTimeout>;
     const wait = () => {
-      const left = at - Date.now() + 1000;
-      // Only the start or end itself is worth a read; a long wait is only cut into pieces.
-      timer = left > LONGEST_TIMER_MS ? setTimeout(wait, LONGEST_TIMER_MS) : setTimeout(() => void load(true), left);
+      const next = nextEventTimer(at, Date.now());
+      timer = setTimeout(next.read ? () => void load(true) : wait, next.afterMs);
     };
     wait();
     return () => {

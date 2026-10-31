@@ -105,6 +105,15 @@ export function nextEventChangeAt(events: readonly MemberGymEvent[], now: number
   return later.length === 0 ? null : Math.min(...later);
 }
 
+/** The longest a timer for the next start or end is set for. */
+const LONGEST_TIMER_MS = 60 * 60_000;
+
+/** The next timer on the way to `at`: only the start or end itself is worth a read; a long wait is only cut into pieces. */
+export function nextEventTimer(at: number, now: number): { afterMs: number; read: boolean } {
+  const left = at - now + 1000;
+  return left > LONGEST_TIMER_MS ? { afterMs: LONGEST_TIMER_MS, read: false } : { afterMs: left, read: true };
+}
+
 export const NO_EVENTS = "No upcoming events.";
 export const EVENTS_NOT_SHOWN = "Events aren’t available right now.";
 export const EVENTS_NOT_READ = "Couldn’t load events.";
