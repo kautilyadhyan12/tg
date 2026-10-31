@@ -117,17 +117,17 @@ export function scanTrouble(answer: Refusal | { kind: "no_answer" }, now: Date):
     return { words: token === null ? "Couldn’t read that photo. Try another one." : `Couldn’t read that photo. Try again in better light.${free}`, retake: token === null ? "keep" : { token }, search: false };
   }
   if (answer.status === 503) {
-    if (answer.error === "scanner_unavailable") return { words: `Meal scanning is busy. Try again in a minute.${free}`, retake: token === null ? "keep" : { token }, search: false };
-    return { words: "Meal scanning isn’t available right now. Try again later.", retake: token === null ? "keep" : { token }, search: true };
+    if (answer.error === "scanner_unavailable") return { words: `Photo scanning is busy. Try again in a minute.${free}`, retake: token === null ? "keep" : { token }, search: false };
+    return { words: "Photo scanning isn’t available right now. Try again later.", retake: token === null ? "keep" : { token }, search: true };
   }
   if (answer.status === 429 && answer.error === "quota_exceeded") {
     const again = againWords(field(answer.body, "resetsAt"), now);
-    return { words: again === null ? "You’ve used all your meal scans for now." : `You’ve used all your meal scans. More ${again}.`, retake: "keep", search: true };
+    return { words: again === null ? "You’ve used all your photo scans for now." : `You’ve used all your photo scans. More ${again}.`, retake: "keep", search: true };
   }
   if (answer.status === 429) return { words: "Too many tries. Wait a minute, then try again.", retake: "keep", search: false };
   if (answer.error === "invalid_retake") return { words: "That free try ran out. Take the photo again.", retake: "clear", search: false };
   if (answer.error === "invalid_image" || answer.error === "validation_error") return { words: "That photo couldn’t be read. Try another one.", retake: "keep", search: false };
-  return { words: "Meal scanning didn’t work. Try again.", retake: "keep", search: false };
+  return { words: "Photo scanning didn’t work. Try again.", retake: "keep", search: false };
 }
 
 /** A photo's meal while it is reviewed, as it is kept on the phone (`PhotoSheetFile`). */

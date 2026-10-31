@@ -385,7 +385,7 @@ describe("a scan that did not read the photo", () => {
     const later = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
     await openFood({ meals: [], scans: [() => refusal(429, "quota_exceeded", "You've used all 3 meal_scan uses for this month.", { resetsAt: later.toISOString() })] });
     await takePhoto();
-    expect(await screen.findByText(`You’ve used all your meal scans. More on ${String(later.getDate())} ${MONTH_NAMES[later.getMonth()] ?? ""}.`)).toBeTruthy();
+    expect(await screen.findByText(`You’ve used all your photo scans. More on ${String(later.getDate())} ${MONTH_NAMES[later.getMonth()] ?? ""}.`)).toBeTruthy();
     expect(screen.queryByText(/meal_scan/)).toBeNull();
     await fireEvent.press(screen.getByRole("button", { name: "Search food instead" }));
     const section = mealTypeName(sectionOf({ mealType: null, takenAt: new Date().toISOString() }));

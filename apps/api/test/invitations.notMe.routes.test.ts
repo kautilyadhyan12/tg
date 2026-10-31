@@ -49,7 +49,7 @@ const DOMAIN = "inotme-t.example.com";
 const addr = (local: string) => `inotme-t-${local}@${DOMAIN}`;
 
 /** What a gym member gets and what a person's own plan gets, as the seed's are shaped
- *  (`db/seed.ts`): the one difference is the meal scans. */
+ *  (`db/seed.ts`): the one difference is the photo scans. */
 const MEMBER_DOC = {
   exercises: { mode: "all" },
   meal_scan: { window: "day", limit: 7 },
@@ -59,7 +59,7 @@ const MEMBER_DOC = {
   global_leaderboards: true,
   share_watermark: false,
 };
-const OWN_DOC = { ...MEMBER_DOC, meal_scan: { window: "day", limit: 20 } };
+const OWN_DOC = { ...MEMBER_DOC, meal_scan: { window: "day", limit: 15 } };
 
 interface User {
   userId: string;
@@ -598,7 +598,7 @@ d("not me, and the edges (real Postgres)", () => {
 
       const leaSees = (await invitationsOf(lea)).invitations[0];
       expect(leaSees?.yourPlan).toEqual({
-        extras: [{ feature: "meal_scan", own: { window: "day", limit: 20 }, gym: { window: "day", limit: 7 } }],
+        extras: [{ feature: "meal_scan", own: { window: "day", limit: 15 }, gym: { window: "day", limit: 7 } }],
         cancelAt: "app_store",
       });
       expect((await invitationsOf(max)).invitations[0]?.yourPlan).toBeNull();

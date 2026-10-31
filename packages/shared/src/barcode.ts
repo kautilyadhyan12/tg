@@ -81,6 +81,8 @@ export const barcodeReplySchema = z.discriminatedUnion("status", [
     /** Whose words the three lists are, for the credit: USDA keeps none. */
     allergensFrom: z.literal("openfoodfacts").nullable(),
     check: packagedCheckSchema,
+    /** Set where this is the person's own saved label, not a list's product. */
+    labelId: z.string().uuid().optional(),
   }).strict(),
   z.object({ status: z.literal("not_found"), code: z.string() }).strict(),
   z.object({ status: z.literal("store_only") }).strict(),

@@ -5999,7 +5999,7 @@ d("orgs routes (real Postgres)", () => {
     const before = await get("/v1/entitlements/me", { cookies: owner.cookies });
     expect(before.statusCode).toBe(200);
     expect((JSON.parse(before.body) as { entitlements: { meal_scan: { limit: number } } })
-      .entitlements.meal_scan.limit).toBe(1);
+      .entitlements.meal_scan.limit).toBe(3);
 
     await confirmOwnerOf(sql, org.org.id);
     expect(
