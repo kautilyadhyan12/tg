@@ -1897,7 +1897,7 @@ describe('Refund on Refunds to review (18d-iv-b-iii)', () => {
     const gold = held(1, GOLD, '2026-10-04', true);
     orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
     render(draw(ADA, 'Ada Lovelace', { refundNow: { membershipId: gold.id, paymentId: '99999999-9999-4999-8999-999999999999', voidFeeId: null } }));
-    await screen.findByText('This payment is too old to be shown on this page. Check it in your Square Dashboard.');
+    await screen.findByText("This payment isn't on this page. It may be too old, or it may have changed. Check it in your Square Dashboard.");
     expect(screen.queryByTestId('card-refund-box')).toBeNull();
   });
 });

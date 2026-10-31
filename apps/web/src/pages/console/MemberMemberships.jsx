@@ -128,7 +128,7 @@ const TAG_TONES = { green: 'c-tag-good', orange: 'c-tag-warn', red: 'c-tag-bad',
 const TONE_COLOURS = { green: 'var(--good)', orange: 'var(--warn)', red: 'var(--bad)', soft: 'var(--soft-t)', plain: 'var(--raise-line)' };
 const MAIN = 'c-btn c-btn-p';
 const PLAIN = 'c-btn c-btn-s';
-const REFUND_NOT_SHOWN = 'This payment is too old to be shown on this page. Check it in your Square Dashboard.';
+const REFUND_NOT_SHOWN = "This payment isn't on this page. It may be too old, or it may have changed.";
 const SMALL = 'c-btn c-btn-s c-btn-sm';
 
 /** A gym with no memberships set up yet: what a person's page says, and for staff who cannot set
@@ -430,7 +430,7 @@ export default function MemberMemberships({
     } else if (m?.billing && refundNow.voidFeeId === null && paymentOf(m, refundNow.paymentId) !== null) {
       setOpen({ what: 'cardRefund', id: m.id, paymentId: refundNow.paymentId });
     } else {
-      setNotice(REFUND_NOT_SHOWN);
+      setNotice(refundNow.voidFeeId === null ? `${REFUND_NOT_SHOWN} Check it in your Square Dashboard.` : REFUND_NOT_SHOWN);
     }
   }
   const scrolledNow = useRef(false);

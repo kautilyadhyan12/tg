@@ -60,7 +60,7 @@ export async function refundsToReview(sql: Sql, gymId: string, members: boolean,
       SELECT DISTINCT ON (q.square_payment_id)
              q.id, q.payment_id, q.sale_id, q.parts, q.state, q.outcome, q.currency, q.started_at, q.amount_minor AS asked_minor,
              CASE WHEN q.state = 'pending' THEN q.amount_minor ELSE q.amount_minor - c.since END AS amount_minor,
-             count(*) OVER (PARTITION BY q.square_payment_id)::int - 1 AS others,
+             (count(*) FILTER (WHERE q.state <> 'pending') OVER (PARTITION BY q.square_payment_id))::int - CASE WHEN q.state <> 'pending' THEN 1 ELSE 0 END AS others,
              (q.started_at AT TIME ZONE g.timezone)::date::text AS on_day
       FROM gym_square_refunds q
       JOIN gyms g ON g.id = q.gym_id

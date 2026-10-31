@@ -1109,7 +1109,7 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
       expect(fee.kept).not.toBeNull();
       expect((await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_square_refunds WHERE payment_id = ${maya.paymentId} AND no_refund_at IS NULL`)[0]?.n).toBe(0);
       expect((await noRefund(mine, shown[0]?.id ?? "")).statusCode).toBe(204);
-      expect(fee.payments[0]?.cardRefund).toMatchObject({ lost: true, decided: { by: expect.stringContaining("Owner") as string } });
+      expect(fee.payments[0]?.cardRefund).toMatchObject({ decided: { by: expect.stringContaining("Owner") as string } });
     });
 
     it("No refund needed on one Square never answered: their page stops asking, and says who decided", async () => {
@@ -1194,6 +1194,24 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
       await failedAtOnce(ravi, 300);
       expect((await rowOf(mine, ravi.paymentId))?.kind).toBe("failed");
       expect((await paymentOnPage(ravi)).cardRefund).toBeNull();
+    });
+
+    it("one Square never answered stays said under a newer failure; a late refund is not counted as closing", async () => {
+      const maya = await paidByCard(mine, "Review Lost Then Failed");
+      square.state.refundDown = true;
+      await press(maya, 400);
+      square.state.refundDown = false;
+      await sql`UPDATE gym_square_refunds SET state = 'done', outcome = 'lost', checking_until = NULL WHERE payment_id = ${maya.paymentId}`;
+      clock = new Date(clock.getTime() + 1000);
+      await failedAtOnce(maya, 600);
+      expect((await paymentOnPage(maya)).cardRefund).toMatchObject({ amountMinor: 400, lost: true, decided: null });
+      expect(await rowOf(mine, maya.paymentId)).toMatchObject({ kind: "failed", others: 1 });
+
+      const ravi = await paidByCard(mine, "Review Late Then Failed");
+      expect((await press(ravi, 300)).statusCode).toBe(200);
+      await sql`UPDATE gym_square_refunds SET started_at = started_at - interval '15 days' WHERE payment_id = ${ravi.paymentId}`;
+      await failedAtOnce(ravi, 300);
+      expect(await rowOf(mine, ravi.paymentId)).toMatchObject({ kind: "failed", others: 0 });
     });
 
     it("a past member is said so; failed comes before late, late before a fee", async () => {

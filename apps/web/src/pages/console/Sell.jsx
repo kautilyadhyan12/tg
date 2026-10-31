@@ -872,7 +872,7 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
       if (refundSale.open) setRefunding({ saleId: row.key, toCard: true });
     }
   }
-  const refundNote = refundRow === null || refundSale === null ? null : refundRow === 'none' ? REFUND_SALE_NOT_SHOWN : refundSale.open ? null : CARD_REFUND_LATE_LINE;
+  const refundNote = refundRow === null || refundSale === null || (pick ?? page.today) !== refundSale.day ? null : refundRow === 'none' ? REFUND_SALE_NOT_SHOWN : refundSale.open ? null : CARD_REFUND_LATE_LINE;
   useEffect(() => {
     if (refundRow !== null) document.querySelector(`[data-sale-row="${refundRow}"]`)?.scrollIntoView?.({ block: 'center' });
   }, [refundRow]);

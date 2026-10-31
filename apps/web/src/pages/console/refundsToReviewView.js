@@ -41,6 +41,7 @@ export function reviewWhy(row) {
       if (row.amountMinor < row.paidMinor) return `Square could not refund ${formatMinor(row.paidMinor, row.currency)}. ${reviewAmount(row)} of it has not been refunded another way.`;
       return CARD_REFUND_WORDS.failed;
     case 'lost':
+      if (row.amountMinor < row.paidMinor) return `We don't know whether Square took the ${formatMinor(row.paidMinor, row.currency)} refund of ${dayWords(row.on)}. ${reviewAmount(row)} of it has not been refunded another way. Check your Square Dashboard. If it went through, press Refund and note it there.`;
       return `We don't know whether Square took this refund of ${dayWords(row.on)}. Check your Square Dashboard. If it went through, press Refund and note it there.`;
     default:
       return CARD_REFUND_LATE_LINE;

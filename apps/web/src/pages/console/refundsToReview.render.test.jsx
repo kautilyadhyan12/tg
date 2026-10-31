@@ -86,6 +86,7 @@ describe('the words of a row', () => {
     const pt = { ...base, member: member({ fee: { ...noShow, of: 'pt' } }) };
     expect(reviewWhy(pt)).toBe('No longer owed: they were marked Came.');
     expect(reviewWhy({ ...failed, amountMinor: 600, paidMinor: 1000 })).toBe('Square could not refund $10.00. $6.00 of it has not been refunded another way.');
+    expect(reviewWhy({ ...saleRow, amountMinor: 600, paidMinor: 1000 })).toBe("We don't know whether Square took the $10.00 refund of 30 October 2026. $6.00 of it has not been refunded another way. Check your Square Dashboard. If it went through, press Refund and note it there.");
     const past = { ...base, past: true, member: member({ fee: noShow, byHand: true }) };
     expect(reviewWhy(past)).toBe('No longer owed: they were marked Came, or the class was cancelled. Put them back on your list to void the payment.');
     expect(reviewButtons(past).open).toBe('Open their page');
