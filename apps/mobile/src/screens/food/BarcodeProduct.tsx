@@ -9,8 +9,10 @@ import { Sheet } from "../../look/Sheet";
 import { Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
 import { newGoalId } from "../goals/words";
-import { AmountPicker, useDishes } from "./AmountPicker";
+import { AmountPicker, nothing, useDishes } from "./AmountPicker";
 import { allergenWords, checkWords, codeFromTyped, type FoundProduct } from "./barcode";
+import { LabelCheck } from "./LabelCheck";
+import { typedFromProduct } from "./labelRead";
 import { MEAL_TYPES, kcalWords, mealTypeName, sectionOf } from "./day";
 import { useMealOutbox } from "./MealOutbox";
 import { amountRefusal, chosenItem, loggedAmount, startingAmount, underAGram, type Amount } from "./measures";
@@ -29,8 +31,11 @@ const PRICE_RETRY_MS = 30_000;
 const PRICE_RETRIES_MOST = 30;
 const PRICE_REFUSED = "This food’s calories can’t be worked out. Pick another amount.";
 
-export function BarcodeProduct({ product, onClose, onSaved }: { product: FoundProduct; onClose: () => void; onSaved: (type: MealType, name: string) => void }) {
+export function BarcodeProduct({ product: first, onClose, onSaved }: { product: FoundProduct; onClose: () => void; onSaved: (type: MealType, name: string) => void }) {
   const { session } = useSession();
+  const [product, setProduct] = useState(first);
+  const [changing, setChanging] = useState(false);
+  const [removing, setRemoving] = useState<"ask" | "busy" | "done" | "failed" | null>(null);
   const { outbox } = useMealOutbox();
   const { dishes, again } = useDishes();
   const food = product.food;
@@ -103,6 +108,48 @@ export function BarcodeProduct({ product, onClose, onSaved }: { product: FoundPr
     else setFull(true);
   };
 
+  const labelId = product.labelId ?? null;
+  const remove = async () => {
+    if (labelId === null) return;
+    setRemoving("busy");
+    const answer = await session.signedIn({ method: "DELETE", path: `/v1/nutrition/labels/${labelId}` }, nothing);
+    // Already gone is what was asked for.
+    setRemoving(answer.kind === "ok" || (answer.kind === "refused" && answer.status === 404) ? "done" : "failed");
+  };
+  if (changing && labelId !== null) {
+    return (
+      <LabelCheck
+        start={typedFromProduct(product)}
+        code={product.code === "" ? null : product.code}
+        id={labelId}
+        check={product.check === "doesnt_add_up" ? "doesnt_add_up" : "fine"}
+        onClose={() => { setChanging(false); }}
+        onSaved={(saved) => {
+          setProduct(saved);
+          setChanging(false);
+          // The same amount, on the numbers just saved.
+          setDishAsk((n) => n + 1);
+        }}
+      />
+    );
+  }
+  if (removing !== null && labelId !== null) {
+    return (
+      <Sheet open title={`Remove ${food.name}?`} onClose={removing === "done" ? onClose : () => { setRemoving(null); }}>
+        <Txt kind="small" colour="text">
+          {removing === "done" ? `${food.name} removed.` : removing === "failed" ? "Couldn’t remove it. Try again." : "Meals you logged keep their numbers."}
+        </Txt>
+        {removing === "done" ? (
+          <Button label="Done" wide onPress={onClose} />
+        ) : (
+          <>
+            <Button label={removing === "busy" ? "Removing…" : "Remove"} wide disabled={removing === "busy"} onPress={() => { void remove(); }} />
+            <Button label="Keep it" kind="link" onPress={() => { setRemoving(null); }} />
+          </>
+        )}
+      </Sheet>
+    );
+  }
   const check = checkWords(product);
   const words = allergenWords(product);
   const credits = new Set<string>([food.source, ...(product.allergensFrom === null ? [] : [product.allergensFrom])]);
@@ -110,6 +157,12 @@ export function BarcodeProduct({ product, onClose, onSaved }: { product: FoundPr
     <Sheet open title={food.name} onClose={onClose}>
       <ScrollView style={styles.list} contentContainerStyle={styles.listInner} keyboardShouldPersistTaps="handled">
         <SourceLine source={food.source} />
+        {labelId === null ? null : (
+          <View style={styles.labelActions}>
+            <Button label="Change" kind="link" onPress={() => { setChanging(true); }} />
+            <Button label="Remove" kind="link" onPress={() => { setRemoving("ask"); }} />
+          </View>
+        )}
         {check === null ? null : (
           <Txt kind="small" colour="gold">
             {check}
@@ -260,6 +313,7 @@ const styles = StyleSheet.create({
   list: { flexGrow: 0, flexShrink: 1 },
   listInner: { gap: 14 },
   allergens: { gap: 4 },
+  labelActions: { flexDirection: "row", gap: 16 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   foot: { gap: sizes.gap / 2 },
 });

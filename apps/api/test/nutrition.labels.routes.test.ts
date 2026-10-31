@@ -170,7 +170,7 @@ d("a pack's label (real Postgres)", () => {
       next = says({ ...NOODLES, is_nutrition_label: false, columns: [] });
       const first = await read(dan);
       expect(first.statusCode).toBe(422);
-      const token = (first.json() as { retakeToken: string }).retakeToken;
+      const token = (first.json()).retakeToken;
       expect(typeof token).toBe("string");
       expect((await left(dan)).left).toBe(2);
       next = says(NOODLES);

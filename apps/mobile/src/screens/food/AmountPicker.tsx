@@ -26,7 +26,7 @@ import { FILL_CHOICES, NO_MEASURE, amountFor, dishMeasure, dishOf, measureWords,
 
 const NO_CONNECTION = "No connection. Try again.";
 /** DELETE answers 204 with no body. */
-const nothing: Shape<null> = { safeParse: (raw) => (raw === null ? { success: true, data: null } : { success: false }) };
+export const nothing: Shape<null> = { safeParse: (raw) => (raw === null ? { success: true, data: null } : { success: false }) };
 
 export type Dishes = { kind: "loading" } | { kind: "ok"; list: Dishware[] } | { kind: "failed" };
 

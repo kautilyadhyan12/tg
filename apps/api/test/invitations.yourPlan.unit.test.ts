@@ -14,8 +14,8 @@ const GYM: Entitlements = entitlementsSchema.parse({
   global_leaderboards: true,
   share_watermark: false,
 });
-/** The seed's $10 block: the gym's but 20 scans. */
-const PRO: Entitlements = { ...GYM, meal_scan: { window: "day", limit: 20 } };
+/** The seed's $10 block: the gym's but 15 scans. */
+const PRO: Entitlements = { ...GYM, meal_scan: { window: "day", limit: 15 } };
 /** The seed's free block. */
 const FREE: Entitlements = entitlementsSchema.parse({
   exercises: { mode: "tier", tier: "T1" },
@@ -28,8 +28,8 @@ const FREE: Entitlements = entitlementsSchema.parse({
 });
 
 describe("ownPlanExtras", () => {
-  it("the seed's two plans: the $10 plan adds 13 meal scans a day and nothing else", () => {
-    expect(ownPlanExtras(PRO, GYM)).toEqual([{ feature: "meal_scan", own: { window: "day", limit: 20 }, gym: { window: "day", limit: 7 } }]);
+  it("the seed's two plans: the $10 plan adds 13 photo scans a day and nothing else", () => {
+    expect(ownPlanExtras(PRO, GYM)).toEqual([{ feature: "meal_scan", own: { window: "day", limit: 15 }, gym: { window: "day", limit: 7 } }]);
   });
 
   it("a plan equal to the gym's, or worse in every way, adds nothing", () => {
@@ -70,22 +70,22 @@ describe("ownPlanExtras", () => {
 
 describe("the words", () => {
   it("an extra reads as the person counts it", () => {
-    expect(ownPlanExtraWords({ feature: "meal_scan", own: { window: "day", limit: 20 }, gym: { window: "day", limit: 7 } })).toBe(
-      "20 meal scans a day instead of 7",
+    expect(ownPlanExtraWords({ feature: "meal_scan", own: { window: "day", limit: 15 }, gym: { window: "day", limit: 7 } })).toBe(
+      "15 photo scans a day instead of 7",
     );
     expect(ownPlanExtraWords({ feature: "meal_scan", own: { window: "day", limit: 1 }, gym: { window: "month", limit: 30 } })).toBe(
-      "1 meal scan a day instead of 30 a month",
+      "1 photo scan a day instead of 30 a month",
     );
     expect(ownPlanExtraWords({ feature: "history", ownDays: null, gymDays: 90 })).toBe("all of your history instead of the last 90 days");
   });
 
   it("the Join screen never says the gym covers it when the person's own plan still adds something", () => {
     const told = yourPlanWords("Iron House", {
-      extras: [{ feature: "meal_scan", own: { window: "day", limit: 20 }, gym: { window: "day", limit: 7 } }],
+      extras: [{ feature: "meal_scan", own: { window: "day", limit: 15 }, gym: { window: "day", limit: 7 } }],
       cancelAt: "app_store",
     });
     expect(told.lead).toBe(
-      "You pay for your own plan. Once you join, Iron House gives you the app's features, and your own plan still adds 20 meal scans a day instead of 7.",
+      "You pay for your own plan. Once you join, Iron House gives you the app's features, and your own plan still adds 15 photo scans a day instead of 7.",
     );
     expect(told.lead).not.toMatch(/everything/);
     expect(told.cancel).toBe("If you don't need that, only you can cancel it, in your phone's App Store or Google Play subscriptions.");

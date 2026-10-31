@@ -9,6 +9,10 @@ import {
   FOOD_ALLERGY_CAUTION,
   MEAL_MOST_FOODS,
   barcodeReplySchema,
+  labelDraftSchema,
+  photoScansLeftSchema,
+  type LabelDraft,
+  type PhotoScansLeft,
   PHOTO_SCAN_CAUTION,
   foodSearchResponseSchema,
   mealPhotoAnalysisSchema,
@@ -65,6 +69,8 @@ import { OwnFood } from "./OwnFood";
 import { WholeDish } from "./WholeDish";
 import { BarcodeOwnFood, BarcodeProduct, TypeBarcode } from "./BarcodeProduct";
 import { NO_READS, PACK_CODES, afterRead, codeFromCamera, troubleWords, type FoundProduct } from "./barcode";
+import { LabelCheck } from "./LabelCheck";
+import { canReadLabel, labelCostWords, scansLeftWords, typedFromDraft } from "./labelRead";
 import { Credits, SourceLine } from "./SourceLine";
 
 // Log a meal from a photo (ROADMAP Stage 5 33b-i). The live camera opens at once, as food apps open
@@ -86,7 +92,12 @@ const SCAN_GONE = "This photo’s scan has run out, so this meal can’t be save
 const PHOTO_TALL = 0.78;
 const UNREADABLE = "That photo couldn’t be read. Try another one.";
 
-type Stage = { kind: "camera" } | { kind: "reading"; uri: string } | { kind: "review" };
+type CameraMode = "meal" | "barcode" | "label";
+type Stage =
+  | { kind: "camera" }
+  | { kind: "reading"; uri: string; what: "meal" | "label" }
+  | { kind: "review" }
+  | { kind: "label"; draft: LabelDraft; code: string | null };
 type Ask = "none" | "newPhoto";
 
 interface MealPhotoProps {
@@ -120,11 +131,14 @@ export function MealPhoto({ open, barcode, kept, onClose, onSaved, onSearch }: M
   // A free try the server gave for a photo it could not read, or for a scan its scanner failed.
   const retake = useRef<string | null>(null);
   const sheet = kept.sheet ?? null;
+  // What the camera comes back to after a label photo, and the barcode that photo is for.
+  const [cameraStart, setCameraStart] = useState<{ mode: CameraMode; code: string | null } | null>(null);
 
   // Opened with a photo meal kept: its review; else the camera.
   useEffect(() => {
     if (!open) return;
     setNotice(null);
+    setCameraStart(null);
     setStage((now) => (now.kind === "reading" ? now : !barcode && kept.sheet !== null && kept.sheet !== undefined ? { kind: "review" } : { kind: "camera" }));
     // Judged as it stood when it was opened.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -133,7 +147,7 @@ export function MealPhoto({ open, barcode, kept, onClose, onSaved, onSearch }: M
   const scan = useCallback(
     async (uri: string) => {
       setNotice(null);
-      setStage({ kind: "reading", uri });
+      setStage({ kind: "reading", uri, what: "meal" });
       let drawn: string | null = null;
       try {
         drawn = await drawnSmall(uri);
@@ -174,15 +188,64 @@ export function MealPhoto({ open, barcode, kept, onClose, onSaved, onSearch }: M
     [session, me, kept],
   );
 
+  const scanLabel = useCallback(
+    async (uri: string, code: string | null) => {
+      setNotice(null);
+      setCameraStart({ mode: "label", code });
+      setStage({ kind: "reading", uri, what: "label" });
+      let drawn: string | null = null;
+      try {
+        drawn = await drawnSmall(uri);
+      } catch {
+        drawn = null;
+      }
+      const sending = drawn === null ? null : photoToSend(drawn);
+      if (sending === null) {
+        setNotice({ words: UNREADABLE, search: false });
+        setStage({ kind: "camera" });
+        return;
+      }
+      const token = retake.current;
+      const answer = await session.signedIn(
+        {
+          method: "POST",
+          path: "/v1/nutrition/labels/read",
+          body: { imageBase64: sending, mimeType: "image/jpeg", ...(token === null ? {} : { retakeToken: token }) },
+          waitMs: SCAN_WAIT_MS,
+        },
+        labelDraftSchema,
+      );
+      // Somebody else signed in while it was read: nothing of it is kept for them.
+      const now = session.state();
+      if (now.kind !== "in" || now.user.id !== me) return;
+      if (answer.kind === "ok") {
+        retake.current = null;
+        setStage({ kind: "label", draft: answer.data, code });
+        return;
+      }
+      const trouble = scanTrouble(answer, new Date());
+      if (trouble.retake === "clear") retake.current = null;
+      else if (trouble.retake !== "keep") retake.current = trouble.retake.token;
+      setNotice({ words: trouble.words, search: trouble.search });
+      setStage({ kind: "camera" });
+    },
+    [session, me],
+  );
+
   if (!open) return null;
   return (
     <Modal visible animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
       <View style={styles.page} testID="meal-photo">
         {stage.kind === "camera" ? (
           <Camera
-            startBarcode={barcode}
+            startMode={cameraStart?.mode ?? (barcode ? "barcode" : "meal")}
+            startCode={cameraStart?.code ?? null}
+            onLabelPhoto={(uri, code) => {
+              void scanLabel(uri, code);
+            }}
             onMealMode={() => {
               // A photo meal already kept is what Meal means: it is never thrown away for a new photo.
+              setCameraStart(null);
               if (sheet !== null) setStage({ kind: "review" });
             }}
             onSaved={onSaved}
@@ -194,7 +257,16 @@ export function MealPhoto({ open, barcode, kept, onClose, onSaved, onSearch }: M
             onSearch={onSearch}
           />
         ) : stage.kind === "reading" ? (
-          <Reading uri={stage.uri} onClose={onClose} />
+          <Reading uri={stage.uri} what={stage.what} onClose={onClose} />
+        ) : stage.kind === "label" ? (
+          <LabelStage
+            draft={stage.draft}
+            code={stage.code}
+            onClose={() => {
+              setStage({ kind: "camera" });
+            }}
+            onSaved={onSaved}
+          />
         ) : sheet === null ? null : (
           <Review
             sheet={sheet}
@@ -216,6 +288,16 @@ export function MealPhoto({ open, barcode, kept, onClose, onSaved, onSearch }: M
   );
 }
 
+/** A label just read: checked first, then the amount and the meal as any pack. */
+function LabelStage({ draft, code, onClose, onSaved }: { draft: LabelDraft; code: string | null; onClose: () => void; onSaved: (type: MealType, name: string) => void }) {
+  const [product, setProduct] = useState<FoundProduct | null>(null);
+  return product === null ? (
+    <LabelCheck start={typedFromDraft(draft)} code={code} id={null} check={draft.check} onClose={onClose} onSaved={setProduct} />
+  ) : (
+    <BarcodeProduct product={product} onClose={onClose} onSaved={onSaved} />
+  );
+}
+
 /** A round button over the camera or the photo: close, the gallery. */
 function Round({ icon, say, onPress, big = false, on = false }: { icon: "x" | "image" | "zap"; say: string; onPress: () => void; big?: boolean; on?: boolean }) {
   return (
@@ -230,12 +312,14 @@ function Round({ icon, say, onPress, big = false, on = false }: { icon: "x" | "i
   );
 }
 
-type Look = { kind: "idle" } | { kind: "looking" } | { kind: "found"; product: FoundProduct } | { kind: "trouble"; words: string; notListed: boolean; lost: string | null };
+type Look = { kind: "idle" } | { kind: "looking" } | { kind: "found"; product: FoundProduct } | { kind: "trouble"; words: string; notListed: boolean; lost: string | null; code: string | null };
 
 /** The live camera, filling the screen. Meal: the shutter in the middle at the foot, the gallery beside
  *  it. Barcode (33b-iii-b): a pack in view opens by itself; free, and uses none of a person's scans. */
 function Camera({
-  startBarcode,
+  startMode,
+  startCode,
+  onLabelPhoto,
   onMealMode,
   onSaved,
   notice,
@@ -243,7 +327,9 @@ function Camera({
   onClose,
   onSearch,
 }: {
-  startBarcode: boolean;
+  startMode: CameraMode;
+  startCode: string | null;
+  onLabelPhoto: (uri: string, code: string | null) => void;
   onMealMode: () => void;
   onSaved: (type: MealType, name: string) => void;
   notice: { words: string; search: boolean } | null;
@@ -253,7 +339,10 @@ function Camera({
 }) {
   const { session, state } = useSession();
   const me = state.kind === "in" ? state.user.id : null;
-  const [mode, setMode] = useState<"meal" | "barcode">(startBarcode ? "barcode" : "meal");
+  const [mode, setMode] = useState<CameraMode>(startMode);
+  // The barcode a label photo is for: the pack just found not to be on our list.
+  const [labelCode, setLabelCode] = useState<string | null>(startCode);
+  const [scans, setScans] = useState<PhotoScansLeft | null>(null);
   const [torch, setTorch] = useState(false);
   const [look, setLook] = useState<Look>({ kind: "idle" });
   const [typing, setTyping] = useState(false);
@@ -278,6 +367,17 @@ function Camera({
     void ask();
   }, [permission, ask]);
 
+  // How many photo scans are left, each time the camera opens; never a reason to hold anything up.
+  useEffect(() => {
+    let gone = false;
+    void session.signedIn({ method: "GET", path: "/v1/nutrition/photo-scans" }, photoScansLeftSchema).then((answer) => {
+      if (!gone && answer.kind === "ok") setScans(answer.data);
+    });
+    return () => {
+      gone = true;
+    };
+  }, [session]);
+
   const lookUp = async (code: string) => {
     newest.current += 1;
     const mine = newest.current;
@@ -288,7 +388,7 @@ function Camera({
     const now = session.state();
     if (now.kind !== "in" || now.user.id !== me) return;
     if (answer.kind !== "ok") {
-      setLook({ kind: "trouble", words: answer.kind === "refused" ? answer.message : NO_CONNECTION, notListed: false, lost: answer.kind === "refused" ? null : code });
+      setLook({ kind: "trouble", words: answer.kind === "refused" ? answer.message : NO_CONNECTION, notListed: false, lost: answer.kind === "refused" ? null : code, code: null });
       return;
     }
     const reply = answer.data;
@@ -299,7 +399,7 @@ function Camera({
     }
     const notListed = reply.status === "not_found";
     if (notListed) setTyping(false);
-    setLook({ kind: "trouble", words: troubleWords(reply), notListed, lost: null });
+    setLook({ kind: "trouble", words: troubleWords(reply), notListed, lost: null, code: reply.status === "not_found" ? reply.code : null });
   };
   const scanned = ({ type, data }: { type: string; data: string }) => {
     const code = codeFromCamera(type, data);
@@ -308,8 +408,9 @@ function Camera({
     reads.current = next.memory;
     if (next.look) void lookUp(code);
   };
-  const toMode = (next: "meal" | "barcode") => {
+  const toMode = (next: CameraMode, code: string | null = null) => {
     newest.current += 1;
+    setLabelCode(code);
     setMode(next);
     setFailed(null);
     setLook({ kind: "idle" });
@@ -324,7 +425,8 @@ function Camera({
     setFailed(null);
     try {
       const picture = await lens.takePictureAsync({ quality: 0.9, exif: false });
-      onPhoto(picture.uri);
+      if (mode === "label") onLabelPhoto(picture.uri, labelCode);
+      else onPhoto(picture.uri);
     } catch {
       setFailed("Couldn’t take the photo. Try again.");
     } finally {
@@ -336,7 +438,8 @@ function Camera({
     try {
       const picked = await launchImageLibraryAsync({ mediaTypes: ["images"], quality: 1, exif: false });
       const first = picked.canceled ? undefined : picked.assets[0];
-      if (first !== undefined) onPhoto(first.uri);
+      if (first !== undefined && mode === "label") onLabelPhoto(first.uri, labelCode);
+      else if (first !== undefined) onPhoto(first.uri);
     } catch {
       setFailed("Couldn’t open your photos. Try again.");
     }
@@ -345,6 +448,7 @@ function Camera({
   const scanning = mode === "barcode";
   const trouble = scanning && look.kind === "trouble" ? look : null;
   const words = failed ?? (scanning ? (typing ? null : (trouble?.words ?? null)) : (notice?.words ?? null));
+  const left = scanning ? null : scansLeftWords(scans);
   const allowed = permission?.granted === true;
   return (
     <View style={styles.page}>
@@ -367,7 +471,7 @@ function Camera({
             Allow the camera
           </Txt>
           <Txt kind="small" style={styles.centre}>
-            {scanning ? "To scan your food’s barcode." : "To take a photo of your meal."}
+            {scanning ? "To scan your food’s barcode." : mode === "label" ? "To take a photo of your food’s label." : "To take a photo of your meal."}
           </Txt>
           {permission === null ? null : (
             <Button
@@ -405,15 +509,33 @@ function Camera({
             {trouble?.lost != null ? <Button label="Try again" kind="link" onPress={() => { void lookUp(trouble.lost ?? ""); }} style={styles.centreSelf} /> : null}
             {trouble?.notListed === true ? (
               <>
+                {canReadLabel(scans) ? (
+                  <>
+                    <Button label="Photo of the label" onPress={() => { toMode("label", trouble.code); }} style={styles.centreSelf} />
+                    <Txt kind="tiny" style={styles.centre}>
+                      {labelCostWords(scans)}
+                    </Txt>
+                  </>
+                ) : (
+                  <Txt kind="small" colour="gold" style={styles.centre}>
+                    {scansLeftWords(scans)}
+                  </Txt>
+                )}
                 <Button label="Search food" kind="link" onPress={onSearch} style={styles.centreSelf} />
                 <Button label="Add your own numbers" kind="link" onPress={() => { setOwn(true); }} style={styles.centreSelf} />
               </>
             ) : null}
           </View>
         )}
+        {left === null ? null : (
+          <Txt kind="tiny" colour="text" style={styles.centre}>
+            {left}
+          </Txt>
+        )}
         <View style={styles.modes} accessibilityRole="radiogroup">
-          <Chip label="Meal" on={!scanning} onPress={() => { toMode("meal"); }} />
+          <Chip label="Meal" on={mode === "meal"} onPress={() => { toMode("meal"); }} />
           <Chip label="Barcode" on={scanning} onPress={() => { toMode("barcode"); }} />
+          <Chip label="Label" on={mode === "label"} onPress={() => { toMode("label"); }} />
         </View>
         {scanning ? (
           <Button label="Type the number" kind="link" onPress={() => { newest.current += 1; setLook({ kind: "idle" }); setTyping(true); }} style={styles.centreSelf} />
@@ -454,7 +576,7 @@ function Camera({
 }
 
 /** The photo, while the server reads it. */
-function Reading({ uri, onClose }: { uri: string; onClose: () => void }) {
+function Reading({ uri, what, onClose }: { uri: string; what: "meal" | "label"; onClose: () => void }) {
   const insets = useSafeAreaInsets();
   return (
     <View style={styles.page}>
@@ -462,7 +584,7 @@ function Reading({ uri, onClose }: { uri: string; onClose: () => void }) {
       <View style={[StyleSheet.absoluteFill, styles.veil]} />
       <View style={styles.readingWords}>
         <ActivityIndicator size="large" color={colours.orange} />
-        <Txt kind="h3">Reading your meal…</Txt>
+        <Txt kind="h3">{what === "label" ? "Reading the label…" : "Reading your meal…"}</Txt>
       </View>
       <View style={[styles.topBar, { top: insets.top + 12 }]}>
         <Round icon="x" say="Close" onPress={onClose} />
