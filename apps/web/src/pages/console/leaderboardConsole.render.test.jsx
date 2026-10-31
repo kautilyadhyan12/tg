@@ -41,7 +41,7 @@ const tell = (message) =>
     for (const listener of live.listeners) listener.fn(message);
   });
 vi.mock('../../api/leaderboardApi', () => ({ staffLeaderboardService: svc }));
-vi.mock('../../api/postsApi', () => ({ staffPostsService: postsSvc, postPhotoUrl: () => 'http://api.test/photo' }));
+vi.mock('../../api/postsApi', () => ({ staffPostsService: postsSvc, staffCommentsService: { reported: () => Promise.resolve({ items: [], total: 0 }) }, postPhotoUrl: () => 'http://api.test/photo' }));
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
   return { ...actual, orgService: orgApi };
@@ -784,6 +784,7 @@ describe('a person’s posts on their panel', () => {
     hidden: false,
     authorId: 'u-chen',
     authorStopped: false,
+    commentCount: 0,
   };
 
   it('staff who hold “Post updates” read the person’s posts under their boards', async () => {

@@ -340,8 +340,8 @@ d("comments in the console (real Postgres)", () => {
       expect((await staffRead(gym, gym.owner, post.id)).comments.map((c) => c.body)).toEqual(["Stays"]);
       expect((await inject("GET", `${one(gym.id, under.id)}/replies/staff`, gym.owner.cookies)).statusCode).toBe(404);
       expect((await reportedList(gym)).total).toBe(0);
-      const closed = await sql`SELECT outcome FROM gym_post_comment_reports WHERE gym_id = ${gym.id} AND comment_id = ${said.id}`;
-      expect(closed.map((r) => r["outcome"])).toEqual(["removed"]);
+      const closed = await sql<{ outcome: string }[]>`SELECT outcome FROM gym_post_comment_reports WHERE gym_id = ${gym.id} AND comment_id = ${said.id}`;
+      expect(closed.map((r) => r.outcome)).toEqual(["removed"]);
       const row = await sql`SELECT removed_by_user_id FROM gym_post_comments WHERE id = ${said.id}`;
       expect(row[0]?.["removed_by_user_id"]).toBe(gym.owner.userId);
       // Removing it again, or at the same instant, is one removal.

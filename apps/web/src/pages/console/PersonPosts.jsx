@@ -4,6 +4,7 @@ import { postPhotoUrl, staffPostsService } from '../../api/postsApi';
 import { errorStatus, errorText } from '../../api/orgsApi';
 import PhotoViewer from '../../components/common/PhotoViewer';
 import { staffPersonPosts, stopBox, withPage, withStopped, withoutPost } from '../../components/gym/postsView';
+import { withCommentCount } from '../../components/gym/commentsConsoleView';
 import PostCard from './UpdatesPostCard';
 
 // ONE PERSON'S POSTS, FOR STAFF (spec Part 3 §15.2, §15.5; ROADMAP 19b-ii-c): what they
@@ -103,6 +104,12 @@ export default function PersonPosts({ gymId, gymName, person, words, readOnly, h
                 )
               }
               onOpen={(p, index) => setViewing({ post: p, index })}
+              onCommentCount={(id, change) => setState((s) => (s.feed === null ? s : { ...s, feed: withCommentCount(s.feed, id, change) }))}
+              onCommentsChanged={() => onChanged?.()}
+              onStopped={(userId, stopped) => {
+                setState((s) => (s.feed === null ? s : { ...s, feed: withStopped(s.feed, userId, stopped) }));
+                onChanged?.();
+              }}
             />
           ))}
         </ul>

@@ -24,6 +24,7 @@ const orgApi = { getMine: vi.fn() };
 const prepare = vi.fn();
 vi.mock('../../api/postsApi', () => ({
   staffPostsService: svc,
+  staffCommentsService: { reported: () => Promise.resolve({ items: [], total: 0 }) },
   postPhotoUrl: ({ gymId, postId, photoId }) => `http://api.test/v1/orgs/${gymId}/posts/${postId}/photos/${photoId}`,
 }));
 vi.mock('../../api/orgsApi', async (importOriginal) => {
@@ -59,11 +60,12 @@ const post = (id, body, over = {}) => ({
   wrote: false,
   reported: false,
   hidden: false,
+  commentCount: 0,
   authorId: null,
   authorStopped: false,
   ...over,
 });
-const feed = (over = {}) => ({ gymId: 'g1', gymName: 'Iron House', membersCanPost: false, reportedCount: 0, pinned: [], posts: [], next: null, ...over });
+const feed = (over = {}) => ({ gymId: 'g1', gymName: 'Iron House', membersCanPost: false, membersCanComment: true, reportedCount: 0, pinned: [], posts: [], next: null, ...over });
 const reportedList = (items = []) => ({ gymId: 'g1', gymName: 'Iron House', items, total: items.length });
 const NO_REASONS = { unkind: 0, photo_of_someone: 0, nudity: 0, spam: 0, other: 0 };
 
@@ -527,7 +529,7 @@ describe('reported posts', () => {
     expect(within(reportedCards()[1]).getByText('Reported by 1 person: Spam or selling')).toBeTruthy();
     expect(within(reportedCards()[0]).getByText('Look at the state of him')).toBeTruthy();
     // The writer's name, then Keep, Remove and Stop; a reported post is not pinned from here.
-    expect(within(reportedCards()[0]).getAllByRole('button').map((b) => b.getAttribute('aria-label') ?? b.textContent.trim())).toEqual(['See what Wendy Writer has posted', 'Keep post', 'Remove post', 'Stop them posting']);
+    expect(within(reportedCards()[0]).getAllByRole('button').map((b) => b.getAttribute('aria-label') ?? b.textContent.trim())).toEqual(['See what Wendy Writer has posted', 'Comments', 'Keep post', 'Remove post', 'Stop them posting']);
   });
 
   it('shows what reporters typed, under the post it was typed about, and nothing where nobody typed', async () => {
@@ -665,8 +667,8 @@ describe('reported posts', () => {
     svc.reported.mockResolvedValue(two());
     open({ ...ORG, subscription: null, consoleReadOnly: true });
     await waitFor(() => expect(reportedCards()).toHaveLength(2));
-    // Only the writer's name, which opens their posts to read: nothing that changes anything.
-    expect(within(reportedCards()[0]).queryAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['See what Wendy Writer has posted']);
+    // The writer's name, which opens their posts to read, and the comments to read: nothing that changes anything.
+    expect(within(reportedCards()[0]).queryAllByRole('button').map((b) => b.getAttribute('aria-label') ?? b.textContent.trim())).toEqual(['See what Wendy Writer has posted', 'Comments']);
   });
 });
 
@@ -691,7 +693,7 @@ describe('a person’s posts, opened from a name', () => {
     expect(screen.getByRole('dialog', { name: "Wendy Writer's posts" })).toBeTruthy();
     expect(box.getAllByRole('heading').map((h) => h.textContent)).toEqual(["Wendy Writer's posts"]);
     // A person's own list: Remove and Stop, never Pin, and no name to press again.
-    expect(within(box.getAllByTestId('post')[0]).getAllByRole('button').map((b) => b.textContent.trim())).toEqual(['Remove post', 'Stop them posting']);
+    expect(within(box.getAllByTestId('post')[0]).getAllByRole('button').map((b) => b.textContent.trim())).toEqual(['Comments', 'Remove post', 'Stop them posting']);
     fireEvent.click(box.getAllByRole('button', { name: 'Close' })[0]);
     await waitFor(() => expect(screen.queryByTestId('person-posts-box')).toBeNull());
   });
@@ -747,6 +749,6 @@ describe('a person’s posts, opened from a name', () => {
     open({ ...ORG, subscription: null, consoleReadOnly: true });
     const box = await openWendy();
     await waitFor(() => expect(box.getAllByTestId('post')).toHaveLength(1));
-    expect(within(box.getAllByTestId('post')[0]).queryAllByRole('button')).toEqual([]);
+    expect(within(box.getAllByTestId('post')[0]).queryAllByRole('button').map((b) => b.textContent.trim())).toEqual(['Comments']);
   });
 });
