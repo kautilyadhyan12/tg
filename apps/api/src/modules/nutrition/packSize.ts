@@ -29,16 +29,15 @@ export function packGrams(quantity: string | null | undefined): number | null {
   if (quantity === null || quantity === undefined) return null;
   const text = quantity.toLowerCase().slice(0, 60);
   const totals: number[] = [];
-  let understood = true;
   const left = text.replace(WEIGHT, (whole: string, times: string | undefined, amount: string, unit: string) => {
     const per = GRAMS_PER_UNIT[unit.replace(/\./g, "").replace(/\s+/g, " ")];
     const value = numberOf(amount);
     if (per === undefined) return whole;
-    if (value === null || times === "0") understood = false;
-    else totals.push(value * per * Number(times ?? "1"));
+    // A number not understood leaves the pack not understood.
+    totals.push(value === null ? Number.NaN : value * per * Number(times ?? "1"));
     return " ";
   });
-  if (!understood) return null;
+  if (totals.some(Number.isNaN)) return null;
   const first = totals[0];
   if (first === undefined) return null;
   const words = left.split(/[^\p{L}\p{N}℮]+/u).filter((w) => w !== "");
