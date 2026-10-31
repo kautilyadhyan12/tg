@@ -90,6 +90,26 @@ export const saleCardRefundRequestSchema = z
   .strict();
 export type SaleCardRefundRequest = z.infer<typeof saleCardRefundRequestSchema>;
 
+/** How many of each product of a sale went back on the shelf, when all of it is refunded at once: a product left out, none. */
+export const saleShelfSchema = z
+  .array(z.object({ saleId: z.string().uuid(), count: z.number().int().min(0).max(99) }).strict())
+  .max(20);
+
+/** Note a refund on all of a sale. `totalMinor` is what staff saw left: a sale that changed meanwhile is not noted. */
+export const refundWholeSaleRequestSchema = z
+  .object({ requestKey: z.string().uuid(), totalMinor: z.number().int().min(1).max(99_999_999), method: memberPaymentByHandSchema, reason: saleRefundReasonSchema, shelf: saleShelfSchema })
+  .strict();
+export type RefundWholeSaleRequest = z.infer<typeof refundWholeSaleRequestSchema>;
+
+export const refundWholeSaleResponseSchema = z.object({ receiptNumbers: z.array(receiptNumberSchema).min(1) }).strict();
+export type RefundWholeSaleResponse = z.infer<typeof refundWholeSaleResponseSchema>;
+
+/** Refund to card on all of a sale: one refund at Square. `amountMinor` is what the box showed as left. */
+export const saleWholeCardRefundRequestSchema = z
+  .object({ requestKey: z.string().uuid(), amountMinor: z.number().int().min(1).max(99_999_999), reason: saleRefundReasonSchema, shelf: saleShelfSchema })
+  .strict();
+export type SaleWholeCardRefundRequest = z.infer<typeof saleWholeCardRefundRequestSchema>;
+
 export const refundSaleResponseSchema = z.object({ receiptNumber: receiptNumberSchema }).strict();
 export type RefundSaleResponse = z.infer<typeof refundSaleResponseSchema>;
 
@@ -138,6 +158,7 @@ export const SALE_REFUND_WORDS = {
   day_ahead: "That day hasn't come yet. Pick today or an earlier day.",
   not_counted: "This product's stock isn't counted, so nothing goes back on the shelf. Nothing was noted.",
   card_refund: "This refund went to the card through Square, so it can't be voided.",
+  changed: "Part of this sale was refunded meanwhile. Nothing was sent: open the refund again.",
   /** While a refund to the card has no answer from Square. */
   waiting: "A refund on this sale is waiting for Square's answer. Try again once it has finished.",
 } as const;

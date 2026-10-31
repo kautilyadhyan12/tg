@@ -548,10 +548,11 @@ export const gymSquareRefunds = pgTable(
       .references(() => gyms.id, { onDelete: "cascade" }),
     paymentId: uuid("payment_id"),
     memberRefundId: uuid("member_refund_id"),
-    /** One product of a sale (0179; 18d-iv-b-ii), in place of a member's payment. */
+    /** A sale (0179; 18d-iv-b-ii), in place of a member's payment: one product, with how many go back on the shelf; or all
+     *  of the sale, with `parts`, what each product takes, and `saleId` its first. */
     saleId: uuid("sale_id"),
-    saleRefundId: uuid("sale_refund_id"),
     restock: integer("restock").notNull().default(0),
+    parts: jsonb("parts"),
     environment: text("environment").notNull(),
     accountId: text("account_id").notNull(),
     squarePaymentId: text("square_payment_id").notNull(),
@@ -578,7 +579,7 @@ export const gymSquareRefunds = pgTable(
     check("gym_square_refunds_environment_check", sql`${t.environment} IN ('sandbox','production')`),
     check("gym_square_refunds_amount_check", sql`${t.amountMinor} BETWEEN 1 AND 99999999 AND ${t.currency} ~ '^[A-Z]{3}$'`),
     check("gym_square_refunds_reason_check", sql`${t.reason} IN ('paid_twice','charged_too_much','leaving','other','returned','faulty')`),
-    check("gym_square_refunds_for_check", sql`num_nonnulls(${t.paymentId}, ${t.saleId}) = 1 AND (${t.saleId} IS NOT NULL OR (${t.restock} = 0 AND ${t.saleRefundId} IS NULL)) AND (${t.paymentId} IS NOT NULL OR ${t.memberRefundId} IS NULL)`),
+    check("gym_square_refunds_for_check", sql`num_nonnulls(${t.paymentId}, ${t.saleId}) = 1 AND (${t.saleId} IS NOT NULL OR (${t.restock} = 0 AND ${t.parts} IS NULL)) AND (${t.paymentId} IS NOT NULL OR ${t.memberRefundId} IS NULL)`),
     check("gym_square_refunds_restock_check", sql`${t.restock} BETWEEN 0 AND 99`),
     check("gym_square_refunds_card_check", sql`(${t.brand} IS NULL OR ${t.brand} ~ '^[A-Z_]{1,40}$') AND (${t.last4} IS NULL OR ${t.last4} ~ '^[0-9]{4}$') AND (${t.brand} IS NULL) = (${t.last4} IS NULL)`),
     check("gym_square_refunds_ids_check", sql`${t.squarePaymentId} ~ '^[A-Za-z0-9_-]{1,192}$' AND (${t.squareRefundId} IS NULL OR ${t.squareRefundId} ~ '^[A-Za-z0-9_-]{1,255}$')`),
@@ -591,7 +592,6 @@ export const gymSquareRefunds = pgTable(
     foreignKey({ name: "gym_square_refunds_sale_fk", columns: [t.gymId, t.saleId], foreignColumns: [gymSales.gymId, gymSales.id] }).onDelete("cascade"),
     uniqueIndex("gym_square_refunds_sale_asking_uq").on(t.gymId, t.squarePaymentId).where(sql`${t.state} = 'asking' AND ${t.saleId} IS NOT NULL`),
     index("gym_square_refunds_sale_idx").on(t.gymId, t.saleId).where(sql`${t.saleId} IS NOT NULL`),
-    index("gym_square_refunds_sale_refund_idx").on(t.gymId, t.saleRefundId).where(sql`${t.saleRefundId} IS NOT NULL`),
     uniqueIndex("gym_square_refunds_refund_uq").on(t.environment, t.squareRefundId).where(sql`${t.squareRefundId} IS NOT NULL`),
     index("gym_square_refunds_payment_idx").on(t.gymId, t.paymentId),
     index("gym_square_refunds_member_refund_idx").on(t.gymId, t.memberRefundId).where(sql`${t.memberRefundId} IS NOT NULL`),

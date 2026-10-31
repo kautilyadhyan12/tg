@@ -18,7 +18,14 @@ import {
   saleRefundLines,
   saleRefundWords,
   saleRefundedWords,
+  shelfBody,
   voidSaleRefundWords,
+  wholeCardRefundWords,
+  wholeNoteBody,
+  wholeNoteWords,
+  wholeNotedWords,
+  wholeRefundOption,
+  wholeShelves,
 } from './saleRefundView';
 import MoreMenu from '../../components/console/MoreMenu';
 import ReceiptBox from '../../components/console/ReceiptBox';
@@ -38,6 +45,8 @@ const VOIDED = { color: 'var(--t3)', textDecoration: 'line-through' };
 const BOX = { background: 'var(--raise)' };
 
 const newKey = () => globalThis.crypto.randomUUID();
+/** The list's choice for all of a sale. */
+const ALL = 'all';
 
 /** The Refund sale box. `who` is the buyer's name, or null for a walk-in. */
 export function SaleRefundBox({ gymId, country = null, sale, who, onDone, onClose }) {
@@ -145,16 +154,132 @@ function SaleCardRefundBox({ gymId, sale, who, paymentsTo, onDone, onNote, onClo
     <RefundToCardBox
       readKey={`${gymId}/${sale.id}`}
       read={() => registerService.getCardRefund(gymId, sale.id)}
-      press={(body) => registerService.refundToCard(gymId, sale.id, { restock: 0, ...body })}
+      press={(body, shelf) => registerService.refundToCard(gymId, sale.id, { ...body, restock: Number(shelf[sale.id] ?? '0') })}
       currency={sale.currency}
       words={(check) => saleCardRefundWords(sale, who, check)}
       reasons={SALE_REFUND_CHOICES}
-      shelf={asksRestock(sale) ? restockChoices(sale) : null}
+      shelves={asksRestock(sale) ? [{ key: sale.id, label: 'How many went back on the shelf', choices: restockChoices(sale) }] : []}
       paymentsTo={paymentsTo}
-      onDone={(words, sent) => onDone(words, { ...sent, saleId: sale.id })}
+      onDone={onDone}
       onNote={onNote}
       onClose={onClose}
     />
+  );
+}
+
+/** Refund to card on all of a sale: one refund at Square for all that is left, so no amount is asked. */
+function WholeCardRefundBox({ gymId, basket, lines, who, paymentsTo, onDone, onNote, onClose }) {
+  const saleId = lines[0]?.id ?? '';
+  return (
+    <RefundToCardBox
+      readKey={`${gymId}/${saleId}/all`}
+      read={() => registerService.getWholeCardRefund(gymId, saleId)}
+      press={(body, shelf) => registerService.refundWholeToCard(gymId, saleId, { ...body, shelf: shelfBody(lines, shelf) })}
+      currency={basket.first.currency}
+      words={(check) => wholeCardRefundWords(basket, lines, who, check)}
+      reasons={SALE_REFUND_CHOICES}
+      shelves={wholeShelves(lines)}
+      allLeft
+      paymentsTo={paymentsTo}
+      onDone={onDone}
+      onNote={onNote}
+      onClose={onClose}
+    />
+  );
+}
+
+/** Note a refund on all of a sale: a refund noted on each product with something left, in one press. */
+function WholeNoteBox({ gymId, country, basket, lines, who, onDone, onClose }) {
+  const [draft, setDraft] = useState(() => ({ requestKey: newKey(), method: basket.first.method === 'terminal' ? '' : basket.first.method, reason: '', shelf: {}, tried: false }));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const words = wholeNoteWords(basket, lines, who);
+  const { problem, body } = wholeNoteBody(lines, draft);
+
+  const send = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const answer = await registerService.refundWholeSale(gymId, lines[0].id, body);
+      onDone(wholeNotedWords(lines, answer.receiptNumbers));
+    } catch (err) {
+      setError(errorText(err, "We couldn't note that refund. Try again."));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form
+      noValidate
+      className="rounded-[14px] p-3 flex flex-col gap-3"
+      style={BOX}
+      data-testid="sale-refund-all-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (busy) return;
+        if (body === null) {
+          setDraft((d) => ({ ...d, tried: true }));
+          return;
+        }
+        void send();
+      }}
+    >
+      <p className="c-s15 c-w6 c-t1 m-0">{words.title}</p>
+      <p className="c-s14 c-t2 m-0">{words.detail}</p>
+      <label className="c-field">
+        <span className="c-label">How you gave it back</span>
+        <select className="c-sel" value={draft.method} onChange={(e) => setDraft((d) => ({ ...d, method: e.target.value }))}>
+          <option value="">Choose one</option>
+          {paymentMethodsFor(country).map((method) => (
+            <option key={method.value} value={method.value}>
+              {method.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="c-field">
+        <span className="c-label">Why it was refunded</span>
+        <select className="c-sel" value={draft.reason} onChange={(e) => setDraft((d) => ({ ...d, reason: e.target.value }))}>
+          <option value="">Choose one</option>
+          {SALE_REFUND_CHOICES.map((reason) => (
+            <option key={reason.value} value={reason.value}>
+              {reason.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      {wholeShelves(lines).map((shelf) => (
+        <label key={shelf.key} className="c-field">
+          <span className="c-label">{shelf.label}</span>
+          <select className="c-sel" value={draft.shelf[shelf.key] ?? '0'} onChange={(e) => setDraft((d) => ({ ...d, shelf: { ...d.shelf, [shelf.key]: e.target.value } }))}>
+            {shelf.choices.map((choice) => (
+              <option key={choice.value} value={choice.value}>
+                {choice.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      ))}
+      {draft.tried && problem !== null ? (
+        <span className="c-s14" style={{ color: 'var(--bad)' }} role="alert">
+          {problem}
+        </span>
+      ) : null}
+      {error !== null ? (
+        <span className="c-s14" style={{ color: 'var(--bad)' }} role="alert">
+          {error}
+        </span>
+      ) : null}
+      <div className="flex flex-wrap gap-2">
+        <button type="submit" className={MAIN} disabled={busy}>
+          {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <Check aria-hidden="true" className="w-4 h-4" />}
+          Note refund
+        </button>
+        <button type="button" className={PLAIN} disabled={busy} onClick={onClose}>
+          Back
+        </button>
+      </div>
+    </form>
   );
 }
 
@@ -167,6 +292,13 @@ export function BasketRefundBox({ gymId, country = null, basket, who, toCard = f
   /** Refund to card said to note it instead: the box stays on the same product. */
   const [noting, setNoting] = useState(false);
   const line = open.find((l) => l.id === lineId) ?? null;
+  const whole = lineId === ALL && open.length > 1;
+  const wholeBox = () =>
+    toCard && !noting ? (
+      <WholeCardRefundBox key={ALL} gymId={gymId} basket={basket} lines={open} who={who} paymentsTo={paymentsTo} onDone={onDone} onNote={() => setNoting(true)} onClose={onClose} />
+    ) : (
+      <WholeNoteBox key={ALL} gymId={gymId} country={country} basket={basket} lines={open} who={who} onDone={onDone} onClose={onClose} />
+    );
   const box = (sale) =>
     toCard && !noting ? (
       <SaleCardRefundBox key={sale.id} gymId={gymId} sale={sale} who={who} paymentsTo={paymentsTo} onDone={onDone} onNote={() => setNoting(true)} onClose={onClose} />
@@ -181,6 +313,7 @@ export function BasketRefundBox({ gymId, country = null, basket, who, toCard = f
           <span className="c-label">Which product was it for?</span>
           <select className="c-sel" value={lineId} onChange={(e) => setLineId(e.target.value)}>
             <option value="">Choose one</option>
+            {open.length > 1 ? <option value={ALL}>{wholeRefundOption(open)}</option> : null}
             {open.map((l) => (
               <option key={l.id} value={l.id}>
                 {refundLineOption(l)}
@@ -188,7 +321,7 @@ export function BasketRefundBox({ gymId, country = null, basket, who, toCard = f
             ))}
           </select>
         </label>
-        {line === null ? (
+        {line === null && !whole ? (
           <div className="flex flex-wrap gap-2">
             <button type="button" className={PLAIN} onClick={onClose}>
               Back
@@ -197,6 +330,7 @@ export function BasketRefundBox({ gymId, country = null, basket, who, toCard = f
         ) : null}
       </div>
       {line !== null ? box(line) : null}
+      {whole ? wholeBox() : null}
     </div>
   );
 }

@@ -17,6 +17,7 @@ import {
   type RefundReason,
 } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
+import { z } from "zod";
 import { giveMemberGift } from "../referrals/memberGiftRepo.js";
 import { insertAudit } from "../repo.js";
 import { writeRefund } from "../memberships/billsRepo.js";
@@ -27,16 +28,21 @@ import type { SquareEnvironment } from "./square.js";
 
 type SqlOrTx = Sql | TransactionSql;
 
+/** What each product takes of a press on all of a sale (18d-iv-b-ii): our own column, parsed. */
+export const salePartsSchema = z.array(z.object({ saleId: z.string().uuid(), amountMinor: z.number().int().min(1), restock: z.number().int().min(0).max(99) }).strict()).min(1);
+export type SalePart = z.infer<typeof salePartsSchema>[number];
+
 export interface RefundPress {
   id: string;
   gymId: string;
-  /** A member's payment, or one product of a sale (18d-iv-b-ii): one or the other. */
+  /** A member's payment, or a sale (18d-iv-b-ii): one or the other. */
   paymentId: string | null;
   memberRefundId: string | null;
   saleId: string | null;
-  saleRefundId: string | null;
-  /** How many go back on the shelf once Square takes it up; a sale's alone. */
+  /** How many go back on the shelf once Square takes it up: one product of a sale's alone. */
   restock: number;
+  /** All of a sale: what each product takes. Null for one product. */
+  parts: SalePart[] | null;
   environment: SquareEnvironment;
   accountId: string;
   squarePaymentId: string;
@@ -63,8 +69,8 @@ export interface RawPress {
   payment_id: string | null;
   member_refund_id: string | null;
   sale_id: string | null;
-  sale_refund_id: string | null;
   restock: number;
+  parts: unknown;
   environment: SquareEnvironment;
   account_id: string;
   square_payment_id: string;
@@ -90,8 +96,8 @@ export const toPress = (r: RawPress): RefundPress => ({
   paymentId: r.payment_id,
   memberRefundId: r.member_refund_id,
   saleId: r.sale_id,
-  saleRefundId: r.sale_refund_id,
   restock: r.restock,
+  parts: r.parts === null ? null : salePartsSchema.parse(r.parts),
   environment: r.environment,
   accountId: r.account_id,
   squarePaymentId: r.square_payment_id,

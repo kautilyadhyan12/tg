@@ -77,6 +77,52 @@ export function saleRefundWords(sale, who) {
   };
 }
 
+/** What is left of a sale of several products, to refund at once. */
+export const wholeLeftMinor = (lines) => lines.reduce((n, line) => n + refundableMinor(line), 0);
+
+/** The list's first choice on a sale of several products (18d-iv-b-ii). */
+export const wholeRefundOption = (lines) => `All products · ${formatMinor(wholeLeftMinor(lines), lines[0]?.currency ?? 'USD')} can be refunded`;
+
+/** What all of a sale asks about the shelf: a question for each product whose stock is counted. */
+export const wholeShelves = (lines) => lines.filter(asksRestock).map((line) => ({ key: line.id, label: `${line.itemName}: how many went back on the shelf`, choices: restockChoices(line) }));
+
+/** The box's choices, as the server takes them. */
+export const shelfBody = (lines, shelf) => lines.map((line) => ({ saleId: line.id, count: Number(shelf?.[line.id] ?? '0') })).filter((s) => s.count > 0);
+
+const wholeDetail = (basket, lines, who) => {
+  const first = basket.first;
+  const to = who === null ? 'to a walk-in' : `to ${who}`;
+  const left = wholeLeftMinor(lines);
+  const some = left < basket.totalMinor ? ` ${formatMinor(left, first.currency)} of it can still be refunded.` : '';
+  return `Sold on ${shortDay(first.soldOn)} ${to} for ${formatMinor(basket.totalMinor, first.currency)}.${some}`;
+};
+
+/** What the Refund to card box says on all of a sale, from what Square said. */
+export function wholeCardRefundWords(basket, lines, who, check) {
+  return {
+    title: 'Refund all of this sale to the card',
+    detail: `${wholeDetail(basket, lines, who)} ${CARD_REFUND_WORDS.fee} ${CARD_REFUND_WORDS.days}`,
+    inSquare: check.refundedInSquareMinor > 0 ? `Square shows ${formatMinor(check.refundedInSquareMinor, basket.first.currency)} of this sale was already refunded there. Note that refund here so your records match.` : null,
+  };
+}
+
+/** What the Note a refund box says on all of a sale. */
+export const wholeNoteWords = (basket, lines, who) => ({ title: 'Refund all of this sale', detail: `${wholeDetail(basket, lines, who)} This only writes the refund in your records: give the money back yourself.` });
+
+/** Why that box cannot be sent as it stands, or null; and the body it sends. */
+export function wholeNoteBody(lines, draft) {
+  if (draft.method === '') return { problem: 'Pick how you gave it back.', body: null };
+  if (draft.reason === '') return { problem: 'Pick why it was refunded.', body: null };
+  return { problem: null, body: { requestKey: draft.requestKey, totalMinor: wholeLeftMinor(lines), method: draft.method, reason: draft.reason, shelf: shelfBody(lines, draft.shelf) } };
+}
+
+/** Said in the sale's own place once all of it is noted. */
+export function wholeNotedWords(lines, receiptNumbers) {
+  const numbers = receiptNumbers.map((n) => `#${String(n)}`);
+  const receipts = numbers.length === 1 ? `Its receipt is ${numbers[0]}` : `Its receipts are ${numbers.slice(0, -1).join(', ')} and ${numbers[numbers.length - 1]}`;
+  return `Refund noted: ${formatMinor(wholeLeftMinor(lines), lines[0]?.currency ?? 'USD')} back on all of this sale. ${receipts}.`;
+}
+
 /** What the Refund to card box says above its fields (18d-iv-b-ii), from what Square said. */
 export function saleCardRefundWords(sale, who, check) {
   const to = who === null ? 'to a walk-in' : `to ${who}`;
@@ -149,9 +195,10 @@ export function salesWaitOnSquare(sales) {
 export function saleSaidNow(done, basket, readSince) {
   const sent = done.sent ?? null;
   if (sent === null) return done.words;
-  const line = (basket?.lines ?? []).find((l) => l.id === sent.saleId) ?? null;
-  const refunds = line?.refunds ?? [];
-  const payment = line === null ? null : { refunds: refunds.filter((r) => r.voided === null), voidedRefunds: refunds.filter((r) => r.voided !== null), cardRefund: line.cardRefund };
+  // Its lines share one Square payment, and one press can be on all of them.
+  const lines = basket?.lines ?? [];
+  const refunds = lines.flatMap((l) => l.refunds ?? []);
+  const payment = { refunds: refunds.filter((r) => r.voided === null), voidedRefunds: refunds.filter((r) => r.voided !== null), cardRefund: lines.find((l) => (l.cardRefund ?? null) !== null)?.cardRefund ?? null };
   return cardRefundSaidNow(sent, payment, done.words, readSince);
 }
 

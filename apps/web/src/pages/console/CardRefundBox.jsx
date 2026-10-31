@@ -37,9 +37,10 @@ export default function CardRefundBox({ gymId, entryId, m, payment, fee = null, 
   );
 }
 
-/** The box itself, for a member's payment or a product of a sale. `read`: what Square says now. `press`: the money goes back.
- *  `words`: its sentences, from what Square said. `shelf`: the choices for how many went back on the shelf; null for none. */
-export function RefundToCardBox({ readKey, read, press, currency, words: wordsFor, reasons, shelf = null, paymentsTo, onDone, onNote, onClose }) {
+/** The box itself, for a member's payment, a product of a sale or all of a sale. `read`: what Square says now. `press`: the money
+ *  goes back, told the body and how many went back on each shelf. `words`: its sentences, from what Square said. `shelves`: what it
+ *  asks about the shelf, each `{ key, label, choices }`. `allLeft`: all that is left goes back, so no amount is asked. */
+export function RefundToCardBox({ readKey, read, press, currency, words: wordsFor, reasons, shelves = [], allLeft = false, paymentsTo, onDone, onNote, onClose }) {
   const [check, setCheck] = useState(null);
   const [draft, setDraft] = useState(null);
   const [problem, setProblem] = useState(null);
@@ -122,7 +123,7 @@ export function RefundToCardBox({ readKey, read, press, currency, words: wordsFo
     setBusy(true);
     setProblem(null);
     try {
-      const sent = await press(shelf === null ? body : { ...body, restock: Number(draft.restock ?? '0') });
+      const sent = await press(body, draft.shelf ?? {});
       const cardWords = check.card === null ? 'the card' : cardName(check.card);
       onDone(cardRefundSentLine(sent, cardWords), { ...sent, cardWords });
     } catch (err) {
@@ -160,10 +161,12 @@ export function RefundToCardBox({ readKey, read, press, currency, words: wordsFo
           {note}
         </div>
       ) : null}
-      <label className="c-field">
-        <span className="c-label">{`Amount to refund (${currency})`}</span>
-        <input className="c-input" type="text" inputMode="decimal" value={draft.amount} onChange={(e) => setDraft((d) => ({ ...d, amount: e.target.value.slice(0, 12) }))} />
-      </label>
+      {allLeft ? null : (
+        <label className="c-field">
+          <span className="c-label">{`Amount to refund (${currency})`}</span>
+          <input className="c-input" type="text" inputMode="decimal" value={draft.amount} onChange={(e) => setDraft((d) => ({ ...d, amount: e.target.value.slice(0, 12) }))} />
+        </label>
+      )}
       <label className="c-field">
         <span className="c-label">Why it is being refunded</span>
         <select className="c-sel" value={draft.reason} onChange={(e) => setDraft((d) => ({ ...d, reason: e.target.value }))}>
@@ -175,18 +178,18 @@ export function RefundToCardBox({ readKey, read, press, currency, words: wordsFo
           ))}
         </select>
       </label>
-      {shelf !== null ? (
-        <label className="c-field">
-          <span className="c-label">How many went back on the shelf</span>
-          <select className="c-sel" value={draft.restock ?? '0'} onChange={(e) => setDraft((d) => ({ ...d, restock: e.target.value }))}>
-            {shelf.map((choice) => (
+      {shelves.map((shelf) => (
+        <label key={shelf.key} className="c-field">
+          <span className="c-label">{shelf.label}</span>
+          <select className="c-sel" value={draft.shelf?.[shelf.key] ?? '0'} onChange={(e) => setDraft((d) => ({ ...d, shelf: { ...d.shelf, [shelf.key]: e.target.value } }))}>
+            {shelf.choices.map((choice) => (
               <option key={choice.value} value={choice.value}>
                 {choice.label}
               </option>
             ))}
           </select>
         </label>
-      ) : null}
+      ))}
       {draft.tried && wrong !== null ? (
         <span className="c-s14" style={{ color: 'var(--bad)' }} role="alert">
           {wrong}

@@ -438,8 +438,9 @@ d("my membership: a member's own memberships, payments and receipts (real Postgr
     const [standing] = await sql<{ id: string }[]>`SELECT id FROM gym_sale_refunds WHERE sale_id = ${bought.id} AND undone_at IS NULL`;
     const pressId = randomUUID();
     await sql`
-      INSERT INTO gym_square_refunds (id, gym_id, sale_id, sale_refund_id, environment, account_id, square_payment_id, square_refund_id, amount_minor, currency, reason, request_key, state, started_at, checked_at)
-      VALUES (${pressId}, ${gym.id}, ${bought.id}, ${standing?.id ?? ""}, 'sandbox', 'ACCOUNT', 'PAYMENT', ${`REFUND${randomUUID()}`}, 250, 'INR', 'returned', ${randomUUID()}, 'pending', now(), now())`;
+      INSERT INTO gym_square_refunds (id, gym_id, sale_id, environment, account_id, square_payment_id, square_refund_id, amount_minor, currency, reason, request_key, state, started_at, checked_at)
+      VALUES (${pressId}, ${gym.id}, ${bought.id}, 'sandbox', 'ACCOUNT', 'PAYMENT', ${`REFUND${randomUUID()}`}, 250, 'INR', 'returned', ${randomUUID()}, 'pending', now(), now())`;
+    await sql`UPDATE gym_sale_refunds SET press_id = ${pressId} WHERE id = ${standing?.id ?? ""}`;
     expect((await mine(gym, maya)).purchases[0]?.refunds[0]).toMatchObject({ amountMinor: 250, pending: true });
     await sql`DELETE FROM gym_square_refunds WHERE id = ${pressId}`;
     // No staff member's name and no voided row is in it.

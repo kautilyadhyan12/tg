@@ -19,11 +19,14 @@ import {
   daysBetween,
   formatMinor,
   refundSaleResponseSchema,
+  refundWholeSaleResponseSchema,
   saleRefundTooMuchWords,
   saleRestockTooManyWords,
   voidSaleRefundResponseSchema,
   type RefundSaleRequest,
   type RefundSaleResponse,
+  type RefundWholeSaleRequest,
+  type RefundWholeSaleResponse,
   type VoidSaleRefundRequest,
   type VoidSaleRefundResponse,
   MEMBER_GIFT_WORDS,
@@ -559,6 +562,46 @@ export async function refundSale(deps: RegisterDeps, userId: string, gymId: stri
     default: {
       const never: never = outcome;
       throw new Error(`unhandled sale refund outcome: ${JSON.stringify(never)}`);
+    }
+  }
+}
+
+/** Note a refund on all of a sale at once (18d-iv-b-ii): on any day, for whoever may sell. */
+export async function refundWholeSale(deps: RegisterDeps, userId: string, gymId: string, viewer: Viewer, saleId: string, req: RefundWholeSaleRequest): Promise<RefundWholeSaleResponse> {
+  refuseMethodElsewhere(viewer.country, req.method);
+  const now = deps.now();
+  const outcome = await repo.refundWholeSale(deps.sql, {
+    gymId,
+    saleId,
+    requestKey: req.requestKey,
+    totalMinor: req.totalMinor,
+    method: req.method,
+    reason: req.reason,
+    shelf: req.shelf,
+    today: dayInTz(now, viewer.timezone),
+    actorUserId: userId,
+    now,
+  });
+  switch (outcome.kind) {
+    case "ok":
+      return refundWholeSaleResponseSchema.parse({ receiptNumbers: outcome.receiptNumbers });
+    case "sale_not_found":
+      throw new OrgsError(404, "sale_not_found", REGISTER_WORDS.sale_not_found);
+    case "voided":
+      throw new OrgsError(409, "sale_voided", SALE_REFUND_WORDS.voided);
+    case "request_reused":
+      throw new OrgsError(409, "request_reused", SALE_REFUND_WORDS.request_reused);
+    case "waiting":
+      throw new OrgsError(409, "card_refund_waiting", SALE_REFUND_WORDS.waiting);
+    case "changed":
+      throw new OrgsError(409, "sale_refund_changed", SALE_REFUND_WORDS.changed);
+    case "too_many_back":
+      throw new OrgsError(409, "restock_too_many", saleRestockTooManyWords(outcome.leftCount));
+    case "not_counted":
+      throw new OrgsError(409, "restock_not_counted", SALE_REFUND_WORDS.not_counted);
+    default: {
+      const never: never = outcome;
+      throw new Error(`unhandled whole sale refund outcome: ${JSON.stringify(never)}`);
     }
   }
 }

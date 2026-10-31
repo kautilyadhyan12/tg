@@ -224,8 +224,8 @@ d("Refund to card at Sell (real Postgres)", { timeout: T }, () => {
       SELECT id, amount_minor, method, restocked, undone_at IS NOT NULL AS undone, void_reason, receipt_number
       FROM gym_sale_refunds WHERE gym_id = ${gym.id} AND sale_id = ${saleId} ORDER BY created_at, id`;
   const pressesOf = (gym: Gym, saleId: string) =>
-    sql<{ state: string; outcome: string | null; code: string | null; square_refund_id: string | null; sale_refund_id: string | null }[]>`
-      SELECT state, outcome, code, square_refund_id, sale_refund_id FROM gym_square_refunds WHERE gym_id = ${gym.id} AND sale_id = ${saleId} ORDER BY started_at`;
+    sql<{ state: string; outcome: string | null; code: string | null; square_refund_id: string | null }[]>`
+      SELECT state, outcome, code, square_refund_id FROM gym_square_refunds WHERE gym_id = ${gym.id} AND sale_id = ${saleId} ORDER BY started_at`;
   const madeFor = (b: Basket) => square.refundsMade.filter((f) => f.payment_id === b.squarePaymentId);
   const stockOf = async (gym: Gym): Promise<number | null> => (await sql<{ stock: number | null }[]>`SELECT stock FROM gym_products WHERE id = ${gym.water}`)[0]?.stock ?? null;
 
@@ -384,6 +384,161 @@ d("Refund to card at Sell (real Postgres)", { timeout: T }, () => {
       const allowed = await press(basket, basket.towel, 100, { by: desk });
       expect(allowed.statusCode, allowed.body).toBe(200);
       expect(madeFor(basket)).toHaveLength(1);
+    });
+  });
+
+  describe("all of a sale at once", () => {
+    const allUrl = (gym: Gym, saleId: string) => `${refundUrl(gym, saleId)}-all`;
+    const pressAll = (b: Basket, amountMinor: number, over: Partial<{ requestKey: string; shelf: unknown[]; saleId: string; by: Person }> = {}) =>
+      send("POST", allUrl(b.gym, over.saleId ?? b.water), (over.by ?? b.gym.owner).cookies, { requestKey: over.requestKey ?? randomUUID(), amountMinor, reason: "returned", shelf: over.shelf ?? [] });
+    const noteAll = (b: Basket, totalMinor: number, over: Partial<{ requestKey: string; method: string }> = {}) =>
+      send("POST", `/v1/orgs/${b.gym.id}/register/sales/${b.water}/refunds-all`, b.gym.owner.cookies, { requestKey: over.requestKey ?? randomUUID(), totalMinor, method: over.method ?? "cash", reason: "returned", shelf: [] });
+
+    it("the worst thing: one refund at Square for all of it, written on each product, sent once, and nobody else's moves", async () => {
+      const basket = await sold(gym);
+      const other = await sold(gym);
+      const theirs = await sold(nextDoor);
+      const shelf = await stockOf(gym);
+      const box = await send("GET", allUrl(gym, basket.water), gym.owner.cookies);
+      expect(box.statusCode, box.body).toBe(200);
+      expect(cardRefundCheckSchema.parse(JSON.parse(box.body))).toEqual({ card: { brand: "VISA", last4: "1111" }, leftMinor: 1900, refundedInSquareMinor: 0, block: null });
+
+      const key = randomUUID();
+      const body = { requestKey: key, shelf: [{ saleId: basket.water, count: 2 }] };
+      const [first, again] = await Promise.all([pressAll(basket, 1900, body), pressAll(basket, 1900, body)]);
+      expect(first.statusCode, first.body).toBe(200);
+      expect(again.statusCode, again.body).toBe(200);
+      expect(madeFor(basket)).toHaveLength(1);
+      expect(madeFor(basket)[0]).toMatchObject({ amount_money: { amount: 1900, currency: "USD" }, reason: "Brought back", accountId: gym.acct.merchantId });
+      const water = await refundsOf(gym, basket.water);
+      const towel = await refundsOf(gym, basket.towel);
+      expect(water.map((r) => [r.amount_minor, r.method, r.restocked, r.undone])).toEqual([[400, "terminal", 2, false]]);
+      expect(towel.map((r) => [r.amount_minor, r.method, r.restocked, r.undone])).toEqual([[1500, "terminal", 0, false]]);
+      expect(water[0]?.receipt_number).not.toBe(towel[0]?.receipt_number);
+      expect(await stockOf(gym)).toBe((shelf ?? 0) + 2);
+      expect((await line(basket, basket.water)).toCard).toBe(false);
+      expect((await line(basket, basket.towel)).refunds[0]?.square?.state).toBe("pending");
+
+      // Nothing left: a second box finds so; asked by another key nothing more goes.
+      const nothing = await pressAll(basket, 1900);
+      expect(errorOf(nothing)).toBe("card_refund_nothing_left");
+      expect(madeFor(basket)).toHaveLength(1);
+
+      // Next door's through our gym, and next door's owner on ours, from one address.
+      const ourAddress = nextIp();
+      const stolen = await send("POST", allUrl(gym, theirs.water), gym.owner.cookies, { requestKey: randomUUID(), amountMinor: 1900, reason: "other", shelf: [] }, ourAddress);
+      expect([403, 404], stolen.body).toContain(stolen.statusCode);
+      const stranger = await send("POST", allUrl(gym, other.water), nextDoor.owner.cookies, { requestKey: randomUUID(), amountMinor: 1900, reason: "other", shelf: [] }, ourAddress);
+      expect([403, 404], stranger.body).toContain(stranger.statusCode);
+      const strangerNote = await send("POST", `/v1/orgs/${gym.id}/register/sales/${other.water}/refunds-all`, nextDoor.owner.cookies, { requestKey: randomUUID(), totalMinor: 1900, method: "cash", reason: "other", shelf: [] }, ourAddress);
+      expect([403, 404], strangerNote.body).toContain(strangerNote.statusCode);
+      expect(madeFor(other)).toHaveLength(0);
+      expect(madeFor(theirs)).toHaveLength(0);
+      expect(await refundsOf(gym, other.towel)).toHaveLength(0);
+    });
+
+    it("what is left goes, not what was sold: a product already refunded takes nothing, and a sale that changed under the box sends nothing", async () => {
+      const basket = await sold(gym);
+      expect((await press(basket, basket.water, 400)).statusCode).toBe(200);
+      const stale = await pressAll(basket, 1900);
+      expect(errorOf(stale)).toBe("sale_refund_changed");
+      expect(madeFor(basket)).toHaveLength(1);
+      // Pressed from the product that has nothing left, it still reaches the rest.
+      expect((await pressAll(basket, 1500)).statusCode).toBe(200);
+      expect(madeFor(basket).map((f) => f.amount_money.amount)).toEqual([400, 1500]);
+      expect((await refundsOf(gym, basket.water)).map((r) => r.amount_minor)).toEqual([400]);
+      expect((await refundsOf(gym, basket.towel)).map((r) => r.amount_minor)).toEqual([1500]);
+    });
+
+    it("four staff at one instant send it once", async () => {
+      const basket = await sold(gym);
+      const answers = await Promise.all([pressAll(basket, 1900), pressAll(basket, 1900), pressAll(basket, 1900), pressAll(basket, 1900)]);
+      expect(answers.filter((a) => a.statusCode === 200)).toHaveLength(1);
+      expect(madeFor(basket)).toHaveLength(1);
+      expect((await refundsOf(gym, basket.water))).toHaveLength(1);
+    });
+
+    it("where Square shows less left than the app, nothing goes at once and the box says what to do", async () => {
+      const basket = await sold(gym);
+      square.refund(basket.squarePaymentId, 300);
+      const box = await send("GET", allUrl(gym, basket.water), gym.owner.cookies);
+      expect(cardRefundCheckSchema.parse(JSON.parse(box.body))).toMatchObject({ leftMinor: 1600, refundedInSquareMinor: 300, block: "less_in_square" });
+      expect(errorOf(await pressAll(basket, 1900))).toBe("card_refund_less_in_square");
+      expect(errorOf(await pressAll(basket, 1600))).toBe("card_refund_less_in_square");
+      expect(madeFor(basket)).toHaveLength(0);
+    });
+
+    it("the shelf: more than was sold, a product that isn't counted, and another sale's product are each refused", async () => {
+      const basket = await sold(gym);
+      const other = await sold(gym);
+      expect(errorOf(await pressAll(basket, 1900, { shelf: [{ saleId: basket.water, count: 3 }] }))).toBe("restock_too_many");
+      expect(errorOf(await pressAll(basket, 1900, { shelf: [{ saleId: basket.towel, count: 1 }] }))).toBe("restock_not_counted");
+      expect(errorOf(await pressAll(basket, 1900, { shelf: [{ saleId: other.water, count: 1 }] }))).toBe("restock_too_many");
+      expect(madeFor(basket)).toHaveLength(0);
+    });
+
+    it("Square fails it: every product's refund is voided, the shelf count comes off, and it can be sent again", async () => {
+      const basket = await sold(gym);
+      const before = await stockOf(gym);
+      await pressAll(basket, 1900, { shelf: [{ saleId: basket.water, count: 2 }] });
+      expect(await stockOf(gym)).toBe((before ?? 0) + 2);
+      square.refundEnds(madeFor(basket)[0]?.id ?? "", "FAILED");
+      clock = new Date(clock.getTime() + CARD_REFUND.lookAfterMs[0] + 1000);
+      await work();
+      expect(await stockOf(gym)).toBe(before);
+      for (const id of [basket.water, basket.towel]) expect((await refundsOf(gym, id)).map((r) => [r.undone, r.void_reason])).toEqual([[true, "square_failed"]]);
+      expect((await line(basket, basket.towel))).toMatchObject({ refundedMinor: 0, toCard: true });
+      const audits = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.sale_refund_failed' AND meta->>'saleId' = ANY(${[basket.water, basket.towel]})`;
+      expect(audits[0]?.n).toBe(2);
+      expect((await pressAll(basket, 1900)).statusCode).toBe(200);
+    });
+
+    it("no answer: nothing else moves, asked again it is one refund; never answered, it is said until a refund covers all of it", async () => {
+      const basket = await sold(gym);
+      square.state.refundLost = true;
+      const res = cardRefundResponseSchema.parse(JSON.parse((await pressAll(basket, 1900)).body));
+      square.state.refundLost = false;
+      expect(res.step).toBe("checking");
+      expect(errorOf(await press(basket, basket.towel, 100))).toBe("card_refund_waiting");
+      expect(errorOf(await noteAll(basket, 1900))).toBe("card_refund_waiting");
+      clock = new Date(clock.getTime() + CARD_REFUND.idleMs + 1000);
+      await work();
+      expect(madeFor(basket)).toHaveLength(1);
+      expect((await refundsOf(gym, basket.towel)).map((r) => r.amount_minor)).toEqual([1500]);
+
+      const lost = await sold(gym);
+      square.state.refundDown = true;
+      await pressAll(lost, 1900);
+      clock = new Date(clock.getTime() + CARD_REFUND.resendForMs + 1000);
+      await work();
+      square.state.refundDown = false;
+      expect((await line(lost, lost.water)).cardRefund).toMatchObject({ amountMinor: 1900, lost: true });
+      expect((await note(lost, lost.water, 400)).statusCode).toBe(201);
+      expect((await line(lost, lost.water)).cardRefund).toMatchObject({ amountMinor: 1900, lost: true });
+      expect((await note(lost, lost.towel, 1500)).statusCode).toBe(201);
+      expect((await line(lost, lost.water)).cardRefund).toBeNull();
+    });
+
+    it("Note a refund on all of it: a row and a receipt for each product, once, and a stale box notes nothing", async () => {
+      const basket = await sold(gym);
+      expect(errorOf(await noteAll(basket, 1800))).toBe("sale_refund_changed");
+      const key = randomUUID();
+      const [first, again] = await Promise.all([noteAll(basket, 1900, { requestKey: key }), noteAll(basket, 1900, { requestKey: key })]);
+      expect(first.statusCode, first.body).toBe(201);
+      expect(again.statusCode, again.body).toBe(201);
+      const numbers = (JSON.parse(first.body) as { receiptNumbers: number[] }).receiptNumbers;
+      expect(numbers).toHaveLength(2);
+      expect((await refundsOf(gym, basket.water)).map((r) => [r.amount_minor, r.method])).toEqual([[400, "cash"]]);
+      expect((await refundsOf(gym, basket.towel)).map((r) => [r.amount_minor, r.method])).toEqual([[1500, "cash"]]);
+      expect(errorOf(await noteAll(basket, 1900, { requestKey: key, method: "bank_transfer" }))).toBe("request_reused");
+      expect(madeFor(basket)).toHaveLength(0);
+    });
+
+    it("a bad body is refused before anything is read", async () => {
+      const basket = await sold(gym);
+      const bad = await send("POST", allUrl(gym, basket.water), gym.owner.cookies, { requestKey: "nope", amountMinor: 0, reason: "stolen", shelf: [{ saleId: "x", count: -1 }] });
+      expect(bad.statusCode).toBe(400);
+      expect(madeFor(basket)).toHaveLength(0);
     });
   });
 

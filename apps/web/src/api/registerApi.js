@@ -5,6 +5,7 @@ import {
   memberPurchasesResponseSchema,
   receiptSchema,
   refundSaleResponseSchema,
+  refundWholeSaleResponseSchema,
   salePeopleResponseSchema,
   sellPageResponseSchema,
   sellProductResponseSchema,
@@ -43,6 +44,14 @@ export const registerService = {
   /** Refund sale, any day: `body` is `{ requestKey, amountMinor, method, reason, restock }`. */
   refundSale: async (gymId, saleId, body) =>
     read(refundSaleResponseSchema, 'that refund', await authApi.post(`${gymPath(gymId)}/register/sales/${encodeURIComponent(saleId)}/refunds`, body)),
+  /** Note a refund on all of a sale: `body` is `{ requestKey, totalMinor, method, reason, shelf }`. */
+  refundWholeSale: async (gymId, saleId, body) =>
+    read(refundWholeSaleResponseSchema, 'that refund', await authApi.post(`${gymPath(gymId)}/register/sales/${encodeURIComponent(saleId)}/refunds-all`, body)),
+  /** Refund to card on all of a sale: what Square says of it, then one refund for all that is left. */
+  getWholeCardRefund: async (gymId, saleId) =>
+    read(cardRefundCheckSchema, 'that payment', await authApi.get(`${gymPath(gymId)}/register/sales/${encodeURIComponent(saleId)}/card-refund-all`)),
+  refundWholeToCard: async (gymId, saleId, body) =>
+    read(cardRefundResponseSchema, 'that refund', await authApi.post(`${gymPath(gymId)}/register/sales/${encodeURIComponent(saleId)}/card-refund-all`, body)),
   /** Refund to card (18d-iv-b-ii): what Square says of one product of a sale paid on the Terminal. */
   getCardRefund: async (gymId, saleId) =>
     read(cardRefundCheckSchema, 'that payment', await authApi.get(`${gymPath(gymId)}/register/sales/${encodeURIComponent(saleId)}/card-refund`)),

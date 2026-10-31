@@ -305,11 +305,14 @@ export const gymSaleRefunds = pgTable(
     undoneBy: uuid("undone_by").references(() => users.id, { onDelete: "set null" }),
     voidReason: text("void_reason"),
     receiptNumber: integer("receipt_number").notNull(),
+    /** The refund to the card it came from (0179; 18d-iv-b-ii); null for one noted by hand. */
+    pressId: uuid("press_id"),
     createdAt: createdAt(),
   },
   (t) => [
     unique("gym_sale_refunds_receipt_uq").on(t.gymId, t.receiptNumber),
-    unique("gym_sale_refunds_request_uq").on(t.gymId, t.requestKey),
+    unique("gym_sale_refunds_request_uq").on(t.gymId, t.requestKey, t.saleId),
+    index("gym_sale_refunds_press_idx").on(t.pressId).where(sql`${t.pressId} IS NOT NULL`),
     check("gym_sale_refunds_receipt_check", sql`${t.receiptNumber} >= 1`),
     check("gym_sale_refunds_amount_check", sql`${t.amountMinor} BETWEEN 1 AND 99999999`),
     check("gym_sale_refunds_currency_check", sql`${t.currency} ~ '^[A-Z]{3}$'`),

@@ -718,8 +718,9 @@ d("Refer a friend: the member's gift (real Postgres)", () => {
         const id = randomUUID();
         const now = new Date();
         await sql`
-          INSERT INTO gym_square_refunds (id, gym_id, sale_id, sale_refund_id, environment, account_id, square_payment_id, square_refund_id, amount_minor, currency, reason, request_key, state, started_at, checked_at)
-          VALUES (${id}, ${gymA.org.id}, ${saleId}, ${refund?.id ?? ""}, 'sandbox', 'ACCOUNT', 'PAYMENT', ${`REFUND${randomUUID()}`}, 2500, 'USD', 'returned', ${randomUUID()}, 'pending', ${now}, ${now})`;
+          INSERT INTO gym_square_refunds (id, gym_id, sale_id, environment, account_id, square_payment_id, square_refund_id, amount_minor, currency, reason, request_key, state, started_at, checked_at)
+          VALUES (${id}, ${gymA.org.id}, ${saleId}, 'sandbox', 'ACCOUNT', 'PAYMENT', ${`REFUND${randomUUID()}`}, 2500, 'USD', 'returned', ${randomUUID()}, 'pending', ${now}, ${now})`;
+        await sql`UPDATE gym_sale_refunds SET press_id = ${id} WHERE id = ${refund?.id ?? ""}`;
         const press = await readPress(sql, gymA.org.id, id);
         if (press === null) throw new Error("no press");
         expect(await recordSaleFailed(sql, press, { code: "FAILED", today: now.toISOString().slice(0, 10), now })).toBe(true);

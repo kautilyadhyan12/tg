@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
-const svc = { purchases: vi.fn(), refundSale: vi.fn(), voidSaleRefund: vi.fn(), getCardRefund: vi.fn(), refundToCard: vi.fn() };
+const svc = { purchases: vi.fn(), refundSale: vi.fn(), refundWholeSale: vi.fn(), voidSaleRefund: vi.fn(), getCardRefund: vi.fn(), refundToCard: vi.fn(), getWholeCardRefund: vi.fn(), refundWholeToCard: vi.fn() };
 vi.mock('../../api/registerApi', () => ({ registerService: svc }));
 
 const MemberPurchases = (await import('./MemberPurchases')).default;
@@ -143,6 +143,67 @@ describe('a sale paid on the Terminal', () => {
     const box = await boxOpen();
     expect(svc.getCardRefund).toHaveBeenCalledWith('g1', 's2');
     expect(box.getByText('Refund 1 × Towel to the card')).toBeTruthy();
+  });
+
+  it('All products comes first on a sale of several: no amount is asked, each counted product asks about its shelf, and one press goes', async () => {
+    svc.getWholeCardRefund.mockResolvedValue({ card: VISA, leftMinor: 1900, refundedInSquareMinor: 0, block: null });
+    svc.refundWholeToCard.mockResolvedValue({ step: 'pending', amountMinor: 1900, currency: 'USD', card: VISA, pressId: PRESS });
+    draw([sale(), towel()]);
+    await pressRefund('Refund to card');
+    const list = await screen.findByLabelText('Which product was it for?');
+    expect(Array.from(list.options).map((o) => o.textContent)).toEqual(['Choose one', 'All products · $19.00 can be refunded', '2 × Water · $4.00 can be refunded', '1 × Towel · $15.00 can be refunded']);
+    fireEvent.change(list, { target: { value: 'all' } });
+    const box = await boxOpen();
+    expect(svc.getWholeCardRefund).toHaveBeenCalledWith('g1', 's1');
+    expect(box.getByText('Refund all of this sale to the card')).toBeTruthy();
+    expect(box.queryByLabelText(/Amount to refund/)).toBeNull();
+    expect(box.queryByLabelText('Towel: how many went back on the shelf')).toBeNull();
+    fireEvent.change(box.getByLabelText('Why it is being refunded'), { target: { value: 'returned' } });
+    fireEvent.change(box.getByLabelText('Water: how many went back on the shelf'), { target: { value: '2' } });
+    fireEvent.click(box.getByRole('button', { name: 'Refund $19.00 to Visa ending 1111' }));
+    await waitFor(() => expect(svc.refundWholeToCard).toHaveBeenCalledTimes(1));
+    expect(svc.refundWholeToCard.mock.calls[0].slice(0, 2)).toEqual(['g1', 's1']);
+    expect(svc.refundWholeToCard.mock.calls[0][2]).toMatchObject({ amountMinor: 1900, reason: 'returned', shelf: [{ saleId: 's1', count: 2 }] });
+    expect((await screen.findByRole('status')).textContent).toMatch(/^Square is processing this \$19\.00 refund to Visa ending 1111\./);
+  });
+
+  it('with one product left, it asks no product and names it; All products is for two or more', async () => {
+    svc.getCardRefund.mockResolvedValue({ card: VISA, leftMinor: 1500, refundedInSquareMinor: 0, block: null });
+    draw([sale({ canRefund: false, toCard: false, refundedMinor: 400 }), towel()]);
+    await pressRefund('Refund to card');
+    const list = await screen.findByLabelText('Which product was it for?');
+    expect(Array.from(list.options).map((o) => o.textContent)).toEqual(['Choose one', '1 × Towel · $15.00 can be refunded']);
+  });
+
+  it('Note a refund on All products: how and why, no amount, and its receipts said under the sale', async () => {
+    svc.refundWholeSale.mockResolvedValue({ receiptNumbers: [12, 13] });
+    draw([sale(), towel()]);
+    await pressRefund('Note a refund');
+    fireEvent.change(await screen.findByLabelText('Which product was it for?'), { target: { value: 'all' } });
+    const form = within(await screen.findByTestId('sale-refund-all-form'));
+    expect(form.getByText('Refund all of this sale')).toBeTruthy();
+    expect(form.getByText('Sold on 12 Oct 2026 to Maya Patel for $19.00. This only writes the refund in your records: give the money back yourself.')).toBeTruthy();
+    fireEvent.click(form.getByRole('button', { name: 'Note refund' }));
+    expect((await form.findByRole('alert')).textContent).toBe('Pick how you gave it back.');
+    expect(svc.refundWholeSale).not.toHaveBeenCalled();
+    fireEvent.change(form.getByLabelText('How you gave it back'), { target: { value: 'cash' } });
+    fireEvent.change(form.getByLabelText('Why it was refunded'), { target: { value: 'faulty' } });
+    fireEvent.change(form.getByLabelText('Water: how many went back on the shelf'), { target: { value: '1' } });
+    fireEvent.click(form.getByRole('button', { name: 'Note refund' }));
+    await waitFor(() => expect(svc.refundWholeSale).toHaveBeenCalledTimes(1));
+    expect(svc.refundWholeSale.mock.calls[0][2]).toMatchObject({ totalMinor: 1900, method: 'cash', reason: 'faulty', shelf: [{ saleId: 's1', count: 1 }] });
+    expect((await screen.findByRole('status')).textContent).toBe('Refund noted: $19.00 back on all of this sale. Its receipts are #12 and #13.');
+  });
+
+  it('where Square shows less left, All products says what to do and Note a refund stays on all of the sale', async () => {
+    svc.getWholeCardRefund.mockResolvedValue({ card: VISA, leftMinor: 1600, refundedInSquareMinor: 300, block: 'less_in_square' });
+    draw([sale(), towel()]);
+    await pressRefund('Refund to card');
+    fireEvent.change(await screen.findByLabelText('Which product was it for?'), { target: { value: 'all' } });
+    const box = await boxOpen();
+    expect(box.getByText(/refund one product at a time/)).toBeTruthy();
+    fireEvent.click(box.getByRole('button', { name: 'Note a refund' }));
+    expect(await screen.findByTestId('sale-refund-all-form')).toBeTruthy();
   });
 
   it('where Square cannot refund it, the box says so and Note a refund opens on the same product', async () => {

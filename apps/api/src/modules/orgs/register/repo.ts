@@ -223,8 +223,83 @@ interface RawSaleRefund {
   q_started: string | null;
 }
 
-/** What a sale's lines say of a press with no answer yet, or none ever, by line: the newest, until refunds written on that line
- *  after it cover its amount. Read only for a list's sales paid on the Terminal. */
+/** One product of a sale, as a refund reads it, with what all of its one payment holds. */
+export interface SaleToRefund {
+  saleId: string;
+  productId: string;
+  itemName: string;
+  quantity: number;
+  entryId: string | null;
+  stockCounted: boolean;
+  currency: string;
+  undone: boolean;
+  /** Square's payment, on a sale paid on the Terminal alone. */
+  squarePaymentId: string | null;
+  lineMinor: number;
+  lineRefundedMinor: number;
+  lineRestocked: number;
+  /** What can still go back on this product. */
+  refundableMinor: number;
+  /** What was paid for the whole sale, and what stands refunded on all of it, by any way. */
+  amountMinor: number;
+  refundedMinor: number;
+}
+
+/** Every product of the sale this one belongs to, in its order, through the gym; empty where it is not the gym's. */
+export async function saleLinesToRefund(sql: Sql | TransactionSql, gymId: string, saleId: string): Promise<SaleToRefund[]> {
+  const rows = await sql<
+    {
+      id: string;
+      product_id: string;
+      item_name: string;
+      quantity: number;
+      entry_id: string | null;
+      stock_counted: boolean;
+      currency: string;
+      undone: boolean;
+      square_payment_id: string | null;
+      total_minor: number;
+      line_refunded: number;
+      line_restocked: number;
+    }[]
+  >`
+    SELECT s.id, s.product_id, s.item_name, s.quantity, s.entry_id, s.stock_counted, s.currency, s.undone_at IS NOT NULL AS undone, s.square_payment_id, s.total_minor,
+           COALESCE((SELECT sum(f.amount_minor) FROM gym_sale_refunds f WHERE f.gym_id = s.gym_id AND f.sale_id = s.id AND f.undone_at IS NULL), 0)::int AS line_refunded,
+           COALESCE((SELECT sum(f.restocked) FROM gym_sale_refunds f WHERE f.gym_id = s.gym_id AND f.sale_id = s.id AND f.undone_at IS NULL), 0)::int AS line_restocked
+    FROM gym_sales s
+    WHERE s.gym_id = ${gymId}
+      AND s.receipt_number = (SELECT o.receipt_number FROM gym_sales o WHERE o.gym_id = ${gymId} AND o.id = ${saleId})
+    ORDER BY s.line_no`;
+  const amountMinor = rows.reduce((n, r) => n + r.total_minor, 0);
+  const refundedMinor = rows.reduce((n, r) => n + r.line_refunded, 0);
+  return rows.map((r) => ({
+    saleId: r.id,
+    productId: r.product_id,
+    itemName: r.item_name,
+    quantity: r.quantity,
+    entryId: r.entry_id,
+    stockCounted: r.stock_counted,
+    currency: r.currency,
+    undone: r.undone,
+    squarePaymentId: r.square_payment_id,
+    lineMinor: r.total_minor,
+    lineRefundedMinor: r.line_refunded,
+    lineRestocked: r.line_restocked,
+    refundableMinor: Math.max(0, r.total_minor - r.line_refunded),
+    amountMinor,
+    refundedMinor,
+  }));
+}
+
+/** The rule a refund noted by hand uses, for this product. */
+export const saleLineRule = (line: SaleToRefund, ask: { amountMinor: number; restock: number }) =>
+  refundSaleCheck(
+    { totalMinor: line.lineMinor, quantity: line.quantity, voided: line.undone, refundedMinor: line.lineRefundedMinor, restocked: line.lineRestocked, stockCounted: line.stockCounted },
+    ask,
+  );
+
+/** What a sale's lines say of a press with no answer yet, or none ever, by line: the newest, until refunds written after it cover
+ *  its amount, on that line, or on any line of the sale for a press on all of it. Read only for a list's sales paid on the Terminal. */
 async function openPressesOfSales(sql: Sql | TransactionSql, gymId: string, saleIds: readonly string[]): Promise<Map<string, OpenSalePress>> {
   const open = new Map<string, OpenSalePress>();
   if (saleIds.length === 0) return open;
@@ -234,7 +309,10 @@ async function openPressesOfSales(sql: Sql | TransactionSql, gymId: string, sale
     JOIN gyms g ON g.id = q.gym_id
     WHERE q.gym_id = ${gymId} AND q.sale_id = ANY(${[...saleIds]}::uuid[]) AND (q.state = 'asking' OR q.outcome = 'lost')
       AND (SELECT COALESCE(sum(r.amount_minor), 0) FROM gym_sale_refunds r
-           WHERE r.gym_id = q.gym_id AND r.sale_id = q.sale_id AND r.created_at > q.started_at AND r.undone_at IS NULL) < q.amount_minor
+           JOIN gym_sales l ON l.gym_id = r.gym_id AND l.id = r.sale_id
+           JOIN gym_sales o ON o.gym_id = q.gym_id AND o.id = q.sale_id
+           WHERE r.gym_id = q.gym_id AND r.created_at > q.started_at AND r.undone_at IS NULL
+             AND (l.id = o.id OR (q.parts IS NOT NULL AND l.receipt_number = o.receipt_number))) < q.amount_minor
     ORDER BY q.sale_id, q.started_at DESC`;
   for (const r of rows) open.set(r.sale_id, { amountMinor: r.amount_minor, on: r.on_day, lost: r.lost });
   return open;
@@ -263,7 +341,7 @@ async function refundsOf(sql: Sql | TransactionSql, gymId: string, sales: SaleRo
              (q.started_at AT TIME ZONE g.timezone)::date::text AS q_started
       FROM gym_sale_refunds r
       JOIN gyms g ON g.id = r.gym_id
-      LEFT JOIN gym_square_refunds q ON q.gym_id = r.gym_id AND q.sale_refund_id = r.id
+      LEFT JOIN gym_square_refunds q ON q.gym_id = r.gym_id AND q.id = r.press_id
       LEFT JOIN users u ON u.id = r.recorded_by
       LEFT JOIN users v ON v.id = r.undone_by
       WHERE r.gym_id = ${gymId} AND r.sale_id = ANY(${sales.map((s) => s.id)}::uuid[])
@@ -1030,7 +1108,7 @@ export async function refundSale(sql: Sql, input: RefundSaleInput): Promise<Refu
     // request: it is refused, never answered as noted.
     const [again] = await tx<{ sale_id: string; amount_minor: number; method: string; reason: string; restocked: number; undone: boolean; receipt_number: number }[]>`
       SELECT sale_id, amount_minor, method, reason, restocked, undone_at IS NOT NULL AS undone, receipt_number
-      FROM gym_sale_refunds WHERE gym_id = ${input.gymId} AND request_key = ${input.requestKey}`;
+      FROM gym_sale_refunds WHERE gym_id = ${input.gymId} AND request_key = ${input.requestKey} ORDER BY receipt_number LIMIT 1`;
     if (again !== undefined) {
       const same =
         again.sale_id === input.saleId &&
@@ -1081,8 +1159,88 @@ export async function refundSale(sql: Sql, input: RefundSaleInput): Promise<Refu
       now: input.now,
       action: "org.sale_refund_noted",
       card: null,
+      pressId: null,
     });
     return { kind: "ok", receiptNumber: written.receiptNumber };
+  });
+}
+
+export type RefundWholeSaleOutcome =
+  | { kind: "ok"; receiptNumbers: number[] }
+  | { kind: "sale_not_found" | "voided" | "request_reused" | "waiting" | "changed" | "not_counted" }
+  | { kind: "too_many_back"; leftCount: number };
+
+/** What each product of a sale takes when all that is left goes back, in one refund: nothing for a product with nothing left. */
+export function wholeSaleParts(
+  lines: readonly SaleToRefund[],
+  shelf: readonly { saleId: string; count: number }[],
+): { kind: "ok"; parts: { saleId: string; amountMinor: number; restock: number }[] } | { kind: "not_counted" } | { kind: "too_many_back"; leftCount: number } {
+  const parts = [];
+  const open = lines.filter((l) => l.refundableMinor > 0);
+  // A count for anything not being refunded is a mistake of the form's: it is refused, never dropped.
+  for (const s of shelf) if (s.count > 0 && !open.some((l) => l.saleId === s.saleId)) return { kind: "too_many_back", leftCount: 0 };
+  for (const line of open) {
+    const restock = shelf.find((s) => s.saleId === line.saleId)?.count ?? 0;
+    const rule = saleLineRule(line, { amountMinor: line.refundableMinor, restock });
+    if (!rule.ok) {
+      if (rule.reason === "too_many_back") return { kind: "too_many_back", leftCount: rule.leftCount };
+      return { kind: "not_counted" };
+    }
+    parts.push({ saleId: line.saleId, amountMinor: line.refundableMinor, restock });
+  }
+  return { kind: "ok", parts };
+}
+
+/** ALL OF A SALE, NOTED AT ONCE (18d-iv-b-ii): a row for each product with something left, together or not at all, under the gym's
+ *  lock. `totalMinor` is what staff saw left: a sale that changed meanwhile is refused. The same request twice is one refund. */
+export async function refundWholeSale(
+  sql: Sql,
+  input: Omit<RefundSaleInput, "amountMinor" | "restock"> & { totalMinor: number; shelf: readonly { saleId: string; count: number }[] },
+): Promise<RefundWholeSaleOutcome> {
+  return await sql.begin(async (tx): Promise<RefundWholeSaleOutcome> => {
+    await lockOrgRow(tx, input.gymId);
+    const again = await tx<{ method: string; reason: string; undone: boolean; receipt_number: number }[]>`
+      SELECT method, reason, undone_at IS NOT NULL AS undone, receipt_number FROM gym_sale_refunds
+      WHERE gym_id = ${input.gymId} AND request_key = ${input.requestKey} ORDER BY receipt_number`;
+    if (again.length > 0) {
+      const same = again.every((r) => r.method === input.method && r.reason === input.reason && !r.undone);
+      return same ? { kind: "ok", receiptNumbers: again.map((r) => r.receipt_number) } : { kind: "request_reused" };
+    }
+    const lines = await saleLinesToRefund(tx, input.gymId, input.saleId);
+    const first = lines[0];
+    if (first === undefined) return { kind: "sale_not_found" };
+    if (first.undone) return { kind: "voided" };
+    if (await saleRefundAsking(tx, input.gymId, input.saleId)) return { kind: "waiting" };
+    if (lines.reduce((n, l) => n + l.refundableMinor, 0) !== input.totalMinor) return { kind: "changed" };
+    const split = wholeSaleParts(lines, input.shelf);
+    if (split.kind !== "ok") return split;
+    const receiptNumbers: number[] = [];
+    for (const part of split.parts) {
+      const line = lines.find((l) => l.saleId === part.saleId);
+      if (line === undefined) throw new Error("a part of a sale that is not on it");
+      const written = await writeSaleRefund(tx, {
+        gymId: input.gymId,
+        saleId: part.saleId,
+        productId: line.productId,
+        itemName: line.itemName,
+        stockCounted: line.stockCounted,
+        currency: line.currency,
+        requestKey: input.requestKey,
+        amountMinor: part.amountMinor,
+        method: input.method,
+        reason: input.reason,
+        restock: part.restock,
+        refundedInFull: true,
+        today: input.today,
+        actorUserId: input.actorUserId,
+        now: input.now,
+        action: "org.sale_refund_noted",
+        card: null,
+        pressId: null,
+      });
+      receiptNumbers.push(written.receiptNumber);
+    }
+    return { kind: "ok", receiptNumbers };
   });
 }
 
@@ -1108,15 +1266,17 @@ export async function writeSaleRefund(
     now: Date;
     action: "org.sale_refund_noted" | "org.sale_refund_sent";
     card: { brand: string; last4: string } | null;
+    /** The refund to the card it came from. */
+    pressId: string | null;
   },
 ): Promise<{ id: string; receiptNumber: number }> {
   // The refund takes the gym's next receipt number in the statement that writes it (18g-i).
   const [created] = await tx<{ id: string; receipt_number: number }[]>`
     WITH n AS (${nextReceipt(tx, input.gymId)})
     INSERT INTO gym_sale_refunds
-      (gym_id, sale_id, amount_minor, currency, method, reason, restocked, request_key, refunded_on, recorded_by, receipt_number, created_at)
+      (gym_id, sale_id, amount_minor, currency, method, reason, restocked, request_key, refunded_on, recorded_by, receipt_number, press_id, created_at)
     SELECT ${input.gymId}, ${input.saleId}, ${input.amountMinor}, ${input.currency}, ${input.method}, ${input.reason}, ${input.restock},
-           ${input.requestKey}, ${input.today}::date, ${input.actorUserId}, n.number, ${input.now}
+           ${input.requestKey}, ${input.today}::date, ${input.actorUserId}, n.number, ${input.pressId}, ${input.now}
     FROM n
     RETURNING id, receipt_number`;
   if (created === undefined) throw new Error("sale refund insert returned no row");

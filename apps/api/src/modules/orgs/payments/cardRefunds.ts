@@ -31,11 +31,12 @@ import {
   type CardRefundRequest,
   type CardRefundResponse,
   type SaleCardRefundRequest,
+  type SaleWholeCardRefundRequest,
   type SquareRefund,
 } from "@app/shared";
 import { dayInTz } from "../../gamification/streak.js";
 import { refundAskingOnBill } from "../memberships/billsSql.js";
-import { saleRefundAsking } from "../register/repo.js";
+import { saleLinesToRefund, saleRefundAsking, type SaleToRefund } from "../register/repo.js";
 import { OrgsError, requireWritablePrivilege } from "../service.js";
 import { BILLING, connectionRefused, entryNotFound, orgNotFound, readyOrThrow, unavailable, type Ready } from "./cards.js";
 import * as refunds from "./cardRefundsRepo.js";
@@ -284,17 +285,32 @@ async function allowedAtSell(deps: PaymentsDeps, userId: string, gymId: string):
 
 const saleGone = (): OrgsError => new OrgsError(404, "sale_not_found", REGISTER_WORDS.sale_not_found);
 
-/** One product of a sale, read through the gym, with what all of its one Square payment holds. */
-async function theirSale(deps: PaymentsDeps, gymId: string, saleId: string): Promise<sales.SaleToRefund> {
-  const sale = await sales.readSaleToRefund(deps.sql, gymId, saleId);
-  if (sale === null) throw saleGone();
-  if (sale.squarePaymentId === null) throw refused("card_refund_not_card", CARD_REFUND_WORDS.not_card);
-  if (sale.undone) throw refused("sale_voided", SALE_REFUND_WORDS.voided);
-  return sale;
+/** Every product of a sale paid on the Terminal, read through the gym, with what all of its one Square payment holds. */
+async function theirSaleLines(deps: PaymentsDeps, gymId: string, saleId: string): Promise<[SaleToRefund, ...SaleToRefund[]]> {
+  const lines = await saleLinesToRefund(deps.sql, gymId, saleId);
+  const [first, ...rest] = lines;
+  if (first === undefined) throw saleGone();
+  if (first.squarePaymentId === null) throw refused("card_refund_not_card", CARD_REFUND_WORDS.not_card);
+  if (first.undone) throw refused("sale_voided", SALE_REFUND_WORDS.voided);
+  return [first, ...rest];
 }
 
-const checkOfSale = (deps: PaymentsDeps, ready: Ready, sale: sales.SaleToRefund): Promise<CardRefundCheck> =>
+const theirSale = async (deps: PaymentsDeps, gymId: string, saleId: string): Promise<SaleToRefund> => {
+  const line = (await theirSaleLines(deps, gymId, saleId)).find((l) => l.saleId === saleId);
+  if (line === undefined) throw saleGone();
+  return line;
+};
+
+const checkOfSale = (deps: PaymentsDeps, ready: Ready, sale: SaleToRefund): Promise<CardRefundCheck> =>
   checkWithSquare(deps, ready, sale, sale.squarePaymentId ?? "", () => saleRefundAsking(deps.sql, ready.row.gymId, sale.saleId));
+
+/** What Square says of all that is left of a sale: nothing goes back at once where Square shows less left than the app does. */
+async function checkOfWholeSale(deps: PaymentsDeps, ready: Ready, lines: readonly [SaleToRefund, ...SaleToRefund[]]): Promise<CardRefundCheck> {
+  const [first] = lines;
+  const refundableMinor = lines.reduce((n, l) => n + l.refundableMinor, 0);
+  const check = await checkOfSale(deps, ready, { ...first, refundableMinor });
+  return check.block === null && check.leftMinor < refundableMinor ? { ...check, block: "less_in_square" } : check;
+}
 
 /** The box opens on one product of a sale paid on the Terminal (18d-iv-b-ii): what Square says of its payment now. */
 export async function readSaleCardRefund(deps: PaymentsDeps, userId: string, gymId: string, saleId: string): Promise<CardRefundCheck> {
@@ -351,6 +367,65 @@ export async function refundSaleToCard(deps: PaymentsDeps, userId: string, gymId
       throw refused("card_refund_waiting", SALE_REFUND_WORDS.waiting);
     case "too_much":
       throw refused("card_refund_too_much", `That is more than can be refunded. ${formatMinor(written.leftMinor, written.currency)} is the most.`);
+    case "too_many_back":
+      throw refused("restock_too_many", saleRestockTooManyWords(written.leftCount));
+    case "not_counted":
+      throw refused("restock_not_counted", SALE_REFUND_WORDS.not_counted);
+  }
+}
+
+/** The box opens on all of a sale paid on the Terminal. */
+export async function readWholeSaleCardRefund(deps: PaymentsDeps, userId: string, gymId: string, saleId: string): Promise<CardRefundCheck> {
+  const ready = await allowedAtSell(deps, userId, gymId);
+  return cardRefundCheckSchema.parse(await checkOfWholeSale(deps, ready, await theirSaleLines(deps, gymId, saleId)));
+}
+
+/** A press on all of a sale: one refund at Square, for all that is left, written against each product. */
+export async function refundWholeSaleToCard(deps: PaymentsDeps, userId: string, gymId: string, saleId: string, body: SaleWholeCardRefundRequest): Promise<CardRefundResponse> {
+  const ready = await allowedAtSell(deps, userId, gymId);
+  const before = await refunds.pressOfKey(deps.sql, gymId, body.requestKey);
+  if (before !== null) {
+    if (!sales.sameWholePress(before, body)) throw refused("card_refund_key_reused", CARD_REFUND_WORDS.key_reused);
+    return await answer(deps, gymId, before.id);
+  }
+  const lines = await theirSaleLines(deps, gymId, saleId);
+  const check = await checkOfWholeSale(deps, ready, lines);
+  if (check.block !== null) throw refused(`card_refund_${check.block}`, CARD_REFUND_WORDS[check.block]);
+  const now = deps.now();
+  const written = await sales.startWholeSaleRefund(deps.sql, {
+    id: randomUUID(),
+    gymId,
+    saleId,
+    requestKey: body.requestKey,
+    amountMinor: body.amountMinor,
+    reason: body.reason,
+    shelf: body.shelf,
+    squareLeftMinor: check.leftMinor,
+    card: check.card,
+    environment: ready.square.environment,
+    accountId: ready.row.accountId,
+    startedBy: userId,
+    now,
+    checkingUntil: leaseFrom(now),
+  });
+  switch (written.kind) {
+    case "new":
+      await ask(deps, ready.token, ready.square, written.press);
+      return await answer(deps, gymId, written.press.id);
+    case "same_press":
+      return await answer(deps, gymId, written.press.id);
+    case "key_reused":
+      throw refused("card_refund_key_reused", CARD_REFUND_WORDS.key_reused);
+    case "sale_not_found":
+      throw saleGone();
+    case "not_card":
+      throw refused("card_refund_not_card", CARD_REFUND_WORDS.not_card);
+    case "voided":
+      throw refused("sale_voided", SALE_REFUND_WORDS.voided);
+    case "waiting":
+      throw refused("card_refund_waiting", SALE_REFUND_WORDS.waiting);
+    case "changed":
+      throw refused("sale_refund_changed", SALE_REFUND_WORDS.changed);
     case "too_many_back":
       throw refused("restock_too_many", saleRestockTooManyWords(written.leftCount));
     case "not_counted":
