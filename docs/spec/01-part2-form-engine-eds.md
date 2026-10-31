@@ -134,7 +134,7 @@ already applies when the angle is `None`.
 
 ### 2.1 `PoseFrame` — the engine's only input during a set
 
-**Since 2026-10-31 (§11.8):** a session takes a `CameraFrame`, a `PoseFrame` plus the picture's `aspect`. A trace header's example below also has `aspect`; rep numbers in §4 and §8.1 are the old ones, and the definition files hold today's.
+**Since 2026-10-31 (§11.8):** a session takes a `CameraFrame`, a `PoseFrame` plus the picture's `aspect`. A trace header also carries `aspect`, though the example in §7.1 does not show it; rep numbers in §4 and §8.1 are the old ones, and the definition files hold today's.
 
 One frame from the pose provider:
 
@@ -954,6 +954,8 @@ FSM-sensitive traces. A failing assertion names the first divergent frame
 — debugging is "open frame 412", not archaeology.
 
 ### 7.5 The parity protocol (Python → TypeScript port gate)
+
+**Since 2026-10-31 (§11.8):** the Python outputs stay in the `.responses.jsonl` files and check the formulas; a trace's `expected` no longer holds them.
 
 Before `pose_ws.py` is decommissioned: (1) run the *current* system in a
 capture mode that logs, per frame, both the incoming keypoints and the

@@ -31,22 +31,27 @@ function body(kneeDeg: number, t: number, aspect: number): CameraFrame {
   return { t, aspect, kp };
 }
 
-function squats(defName: string, bottomDeg: number, aspect: number) {
+function run(defName: string, angles: readonly number[], aspect: number) {
   const raw: unknown = JSON.parse(
     readFileSync(join(import.meta.dirname, `../src/definitions/${defName}.json`), "utf8"),
   );
   const session = createSession(compileDefinition(exerciseDefinitionSchema.parse(raw), 1));
-  const angles: number[] = Array.from({ length: 20 }, () => 175);
-  for (let rep = 0; rep < 3; rep++) {
-    for (let i = 1; i <= 15; i++) angles.push(175 + ((bottomDeg - 175) * i) / 15);
-    for (let i = 0; i < 12; i++) angles.push(bottomDeg);
-    for (let i = 1; i <= 15; i++) angles.push(bottomDeg + ((175 - bottomDeg) * i) / 15);
-    for (let i = 0; i < 15; i++) angles.push(175);
-  }
   const scores: number[] = [];
   session.onRep?.((e) => scores.push(e.score));
   angles.forEach((a, i) => session.processFrame(body(a, i * FRAME_MS, aspect)));
   return { reps: session.end().reps, scores };
+}
+
+/** From one knee angle to another, then held there. */
+function move(from: number, to: number): number[] {
+  const ramp = Array.from({ length: 15 }, (_, i) => from + ((to - from) * (i + 1)) / 15);
+  return [...ramp, ...Array.from({ length: 12 }, () => to)];
+}
+
+function squats(defName: string, bottomDeg: number, aspect: number) {
+  const angles: number[] = Array.from({ length: 20 }, () => 175);
+  for (let rep = 0; rep < 3; rep++) angles.push(...move(175, bottomDeg), ...move(bottomDeg, 175));
+  return run(defName, angles, aspect);
 }
 
 describe("how deep counts, in true degrees, on any picture", () => {
@@ -71,6 +76,14 @@ describe("how deep counts, in true degrees, on any picture", () => {
       });
     }
   }
+
+  it("rising only to 150° between bottoms is one rep, finished by standing", () => {
+    const angles: number[] = Array.from({ length: 20 }, () => 175);
+    angles.push(...move(175, 100));
+    for (let rep = 0; rep < 2; rep++) angles.push(...move(100, 150), ...move(150, 100));
+    angles.push(...move(100, 175));
+    expect(run("squat", angles, 9 / 16).reps).toBe(1);
+  });
 
   it("squat's depth score: full from 110°, less at 120°", () => {
     expect(squats("squat", 105, 9 / 16).scores).toEqual([100, 100, 100]);
