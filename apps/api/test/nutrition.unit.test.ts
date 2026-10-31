@@ -303,6 +303,50 @@ describe("P2.6a nutrition pure pipeline", () => {
     expect((await real.analyze("AA==", "image/jpeg")).evidence.meal_name).toBe("Unknown dish");
   });
 
+  it("asks for a name for every food and grams judged from this photo, with thinking off (rulings/2026-10-31-33a-iii.md)", async () => {
+    expect(MEAL_VISION_PROMPT).toContain("Name every food you can see in items with your best common name, even where you are not fully sure; use unknown_items only where you cannot tell what kind of food it is, and always write unknown_items as a list, empty if there are none.");
+    expect(MEAL_VISION_PROMPT).toContain("Never list a food you cannot see on the plate.");
+    expect(MEAL_VISION_PROMPT).toContain("Judge each food's grams on its own from its real size in this photo, against the plate, bowl, cutlery or hand beside it: a dinner plate is about 26 cm across. Estimate only what is on this plate, not a usual serving, and many portions are smaller than they first look.");
+    let sent: unknown = null;
+    const answer = wrap({ meal_name: "x", items: [], unknown_items: [], photo_quality: "good" });
+    await createOpenAiVisionProvider("dummy-key", "m", (input, init) => { // gitleaks:allow
+      sent = typeof init?.body === "string" ? JSON.parse(init.body) : null;
+      return answer(input, init);
+    }).analyze("AA==", "image/jpeg");
+    expect(sent).toMatchObject({ reasoning_effort: "none", max_completion_tokens: VISION_MAX_OUTPUT_TOKENS });
+  });
+
+  it("reads a food's missing canonical_hint as its name, and a list in unknown_items as the name in it, and nothing more", async () => {
+    const read = async (items: unknown[], unknown_items: unknown[] = []) =>
+      (await createOpenAiVisionProvider("dummy-key", "m", wrap({ meal_name: "x", items, unknown_items, photo_quality: "good" })).analyze("AA==", "image/jpeg")).evidence; // gitleaks:allow
+    const hints: [unknown, string, string][] = [
+      [null, "salad greens", "salad greens"],
+      ["", "salad greens", "salad greens"],
+      ["greens", "salad greens", "greens"],
+      // A word that says there is none is still that word: no table is asked by it (`priceScannedFood`).
+      ["unknown", "salad greens", "unknown"],
+      [null, "unknown", "unknown"],
+      [null, "  ", "  "],
+    ];
+    for (const [hint, name, expected] of hints) {
+      const [item] = (await read([[name, hint, 1, 90, 20, 2, 4, 0]])).items;
+      expect([item?.name, item?.canonical_hint, item?.grams, item?.kcal], JSON.stringify([hint, name])).toEqual([name, expected, 90, 20]);
+    }
+    const lists: [string, unknown, string][] = [
+      ["a plain name", "mystery sauce", "mystery sauce"],
+      ["a whole item list", ["brown pieces", null, 6, 180, 350, 12, 55, 12], "brown pieces"],
+      ["a list of one name", ["brown pieces"], "brown pieces"],
+      ["a name that says none, a hint", ["unknown", "brown pieces", 1, 35, 50, 1, 12, 0], "brown pieces"],
+      ["a name that is no text, a hint", [7, "brown pieces"], "brown pieces"],
+      ["figures only, with its name left null", [null, null, 1, 35, 50, 1, 12, 0], ""],
+      ["an empty list", [], ""],
+      ["a list of figures", [1, 35, 50], ""],
+      ["a list in a list", [["brown pieces"]], ""],
+      ["the word unknown with no hint", ["unknown", null, 1, 35, 50, 1, 12, 0], ""],
+    ];
+    for (const [label, entry, name] of lists) expect((await read([], [entry])).unknown_items, label).toEqual([name]);
+  });
+
   it("strictly rejects a reply whose food is not one list of eight slots with a name, or that adds a field, and retains usage for the ledger", async () => {
     const chat = (evidence: unknown): typeof fetch => () => Promise.resolve(new Response(JSON.stringify({
       choices: [{ message: { content: JSON.stringify(evidence) } }],
@@ -318,6 +362,11 @@ describe("P2.6a nutrition pure pipeline", () => {
       ["seven slots", { meal_name: "Dal", items: [["Dal", "dal", null, 100, 100, 0, 25]], photo_quality: "good" }],
       ["nine slots", { meal_name: "Dal", items: [["Dal", "dal", null, 100, 100, 0, 25, 0, 1]], photo_quality: "good" }],
       ["no name", { meal_name: "Dal", items: [["", "dal", null, 100, 100, 0, 25, 0]], photo_quality: "good" }],
+      ["a name left null", { meal_name: "Dal", items: [[null, "dal", null, 100, 100, 0, 25, 0]], photo_quality: "good" }],
+      ["no name and no canonical_hint", { meal_name: "Dal", items: [[null, null, null, 100, 100, 0, 25, 0]], photo_quality: "good" }],
+      ["a number in unknown_items", { meal_name: "Dal", items: [], unknown_items: [7], photo_quality: "good" }],
+      ["an object in unknown_items", { meal_name: "Dal", items: [], unknown_items: [{ name: "x" }], photo_quality: "good" }],
+      ["null in unknown_items", { meal_name: "Dal", items: [], unknown_items: [null], photo_quality: "good" }],
       ["a canonical_hint that is not text", { meal_name: "Dal", items: [["Dal", 7, null, 100, 100, 0, 25, 0]], photo_quality: "good" }],
       ["a field the contract does not have", { meal_name: "Dal", items: [], photo_quality: "good", total_kcal: 500 }],
       // One object in a list is that object (below); anything else in a list is no reply.

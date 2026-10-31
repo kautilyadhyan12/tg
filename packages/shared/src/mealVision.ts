@@ -68,8 +68,9 @@ const MAX_ESTIMATE = 90_000;
  *  positions carry what the field names used to, in fewer tokens. The vessel, how
  *  full it looked and a size word are no longer asked for: nothing read them once a
  *  row started by its count and grams (ROADMAP 7a-iv-d). A list of any other length,
- *  or an item with no name or no canonical_hint, breaks the contract; any other slot
- *  holding no usable value is unknown:
+ *  an item with no name, or a canonical_hint that is not text breaks the contract. A
+ *  canonical_hint left null or empty is the item's name: Luna wrote null on 3 of 127
+ *  real plates, and it fails no scan. Any other slot holding no usable value is unknown:
  *  - a count that is no whole number from 1 to MAX_PHOTO_COUNT (0, 2.5, 31, "3"),
  *    as the prompt's "Count only reliably countable items" asks — the item stays on
  *    the sheet, started at the photo's own grams, as an item with no count is;
@@ -77,15 +78,15 @@ const MAX_ESTIMATE = 90_000;
  *    below zero. */
 const mealVisionItemSchema = z.tuple([
   z.string().min(1),
-  z.string().min(1),
+  z.string().nullable(),
   orUnknown(z.number().int().min(1).max(MAX_PHOTO_COUNT)),
   orUnknown(z.number().positive().max(MAX_ITEM_GRAMS)),
   orUnknown(z.number().min(0).max(MAX_ESTIMATE)),
   orUnknown(z.number().min(0).max(MAX_ESTIMATE)),
   orUnknown(z.number().min(0).max(MAX_ESTIMATE)),
   orUnknown(z.number().min(0).max(MAX_ESTIMATE)),
-]).transform(([name, canonical_hint, count, grams, kcal, protein_g, carbs_g, fat_g]) => ({
-  name, canonical_hint, count, grams, kcal, protein_g, carbs_g, fat_g,
+]).transform(([name, hint, count, grams, kcal, protein_g, carbs_g, fat_g]) => ({
+  name, canonical_hint: hint === null || hint === "" ? name : hint, count, grams, kcal, protein_g, carbs_g, fat_g,
 }));
 /** A scanned item as the api reads it, by name. */
 export type VisionItem = z.infer<typeof mealVisionItemSchema>;
@@ -94,6 +95,15 @@ export type VisionItem = z.infer<typeof mealVisionItemSchema>;
  *  name says there is none ("N/A"). */
 export const shownFoodName = (item: Pick<VisionItem, "name" | "canonical_hint">): string =>
   isNoValueWord(item.name) ? item.canonical_hint : item.name;
+
+/** Luna sometimes writes a food in unknown_items as a whole item list, figures and
+ *  all (2 of 127 real plates). Only its name is read, so its figures reach no total;
+ *  by its hint where its name says there is none. A list that names nothing reads as
+ *  "", which the sheet never shows, as it never shows "unknown". */
+const nameInList = ([name, hint]: unknown[]): string => {
+  if (typeof name === "string" && !isNoValueWord(name)) return name;
+  return typeof hint === "string" ? hint : "";
+};
 
 /** A reply wrapped in a list of one, `[{…}]`, is what the list holds: the first
  *  scan of ROADMAP 7a-iv-d's prompt came back so, every food in it well formed,
@@ -107,7 +117,7 @@ export const mealVisionEvidenceSchema = z.preprocess((v) => dropFields(RETIRED_E
   // "none", "N/A" and "null" are no name.
   meal_name: optionalNameSchema.default(null),
   items: z.array(mealVisionItemSchema).max(MAX_REPLY_FOODS).default([]),
-  unknown_items: z.array(z.string()).default([]),
+  unknown_items: z.array(z.union([z.string(), z.array(z.unknown()).transform(nameInList)])).default([]),
   photo_quality: z.preprocess((v) => (typeof v === "string" ? v.toLowerCase() : v), z.enum(["good", "poor"])),
 }).strict().transform((evidence) => (evidence.items.length <= MAX_SCAN_FOODS ? evidence : {
   ...evidence,

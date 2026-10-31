@@ -1,0 +1,193 @@
+[
+ {
+  "photo": "dish_1559233445.png",
+  "arm": "better",
+  "why": "shape: Expected string, received array",
+  "reply": {
+   "meal_name": "Small plate of yellow food",
+   "items": [],
+   "unknown_items": [
+    [
+     "unknown",
+     null,
+     1,
+     35,
+     50,
+     1,
+     12,
+     0
+    ]
+   ],
+   "photo_quality": "good"
+  }
+ },
+ {
+  "photo": "dish_1561574783.png",
+  "arm": "better",
+  "why": "shape: Expected string, received null",
+  "reply": {
+   "meal_name": "Greens",
+   "items": [
+    [
+     "leafy green salad",
+     null,
+     1,
+     75,
+     35,
+     2,
+     5,
+     1
+    ]
+   ],
+   "unknown_items": [],
+   "photo_quality": "good"
+  }
+ },
+ {
+  "photo": "dish_1558373008.png",
+  "arm": "today",
+  "why": "shape: Expected string, received array",
+  "reply": {
+   "meal_name": "Plate of brown food pieces",
+   "items": [],
+   "unknown_items": [
+    [
+     "unidentified brown cooked food pieces",
+     null,
+     6,
+     180,
+     350,
+     12,
+     55,
+     12
+    ]
+   ],
+   "photo_quality": "poor"
+  }
+ },
+ {
+  "photo": "dish_1559157919.png",
+  "arm": "better",
+  "why": "shape: Expected string, received null",
+  "reply": {
+   "meal_name": "Salad",
+   "items": [
+    [
+     "mixed greens",
+     null,
+     1,
+     25,
+     6,
+     0.6,
+     1.1,
+     0.1
+    ],
+    [
+     "spinach",
+     null,
+     1,
+     35,
+     8,
+     1,
+     1.3,
+     0.1
+    ],
+    [
+     "blueberries",
+     null,
+     4,
+     8,
+     5,
+     0.1,
+     1.2,
+     0
+    ],
+    [
+     "walnuts",
+     null,
+     2,
+     5,
+     33,
+     0.8,
+     0.7,
+     3.3
+    ]
+   ],
+   "unknown_items": [],
+   "photo_quality": "good"
+  }
+ },
+ {
+  "photo": "dish_1564689168.png",
+  "arm": "today",
+  "why": "shape: Expected string, received null",
+  "cutAfterLastWholeFood": true,
+  "reply": {
+   "meal_name": "chickpea and paneer salad",
+   "items": [
+    [
+     "salad greens",
+     null,
+     1,
+     90,
+     20,
+     2,
+     4,
+     0
+    ],
+    [
+     "chickpeas",
+     "chickpeas",
+     1,
+     75,
+     123,
+     7,
+     21,
+     2
+    ],
+    [
+     "paneer",
+     "paneer",
+     1,
+     65,
+     190,
+     12,
+     2,
+     15
+    ],
+    [
+     "cucumber",
+     "cucumber",
+     1,
+     35,
+     5,
+     0,
+     1,
+     0
+    ],
+    [
+     "red onion",
+     "red onion",
+     1,
+     15,
+     6,
+     0,
+     1,
+     0
+    ],
+    [
+     "tomato",
+     "tomato",
+     1,
+     20,
+     4,
+     0,
+     1,
+     0
+    ]
+   ],
+   "unknown_items": [],
+   "photo_quality": "good"
+  }
+ }
+]
