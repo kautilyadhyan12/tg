@@ -158,7 +158,9 @@ export const SALE_REFUND_WORDS = {
   day_ahead: "That day hasn't come yet. Pick today or an earlier day.",
   not_counted: "This product's stock isn't counted, so nothing goes back on the shelf. Nothing was noted.",
   card_refund: "This refund went to the card through Square, so it can't be voided.",
-  changed: "Part of this sale was refunded meanwhile. Nothing was sent: open the refund again.",
+  changed: "Part of this sale was refunded meanwhile. Nothing was sent: close this and open it again.",
+  changed_note: "Part of this sale was refunded meanwhile. Nothing was noted: close this and open it again.",
+  key_reused: "That refund has already been sent. Open the sale again to see where it stands.",
   /** While a refund to the card has no answer from Square. */
   waiting: "A refund on this sale is waiting for Square's answer. Try again once it has finished.",
 } as const;

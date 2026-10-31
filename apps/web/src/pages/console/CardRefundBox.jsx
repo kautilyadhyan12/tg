@@ -39,8 +39,9 @@ export default function CardRefundBox({ gymId, entryId, m, payment, fee = null, 
 
 /** The box itself, for a member's payment, a product of a sale or all of a sale. `read`: what Square says now. `press`: the money
  *  goes back, told the body and how many went back on each shelf. `words`: its sentences, from what Square said. `shelves`: what it
- *  asks about the shelf, each `{ key, label, choices }`. `allLeft`: all that is left goes back, so no amount is asked. */
-export function RefundToCardBox({ readKey, read, press, currency, words: wordsFor, reasons, shelves = [], allLeft = false, paymentsTo, onDone, onNote, onClose }) {
+ *  asks about the shelf, each `{ key, label, choices }`. `allLeft`: all that is left goes back, so no amount is asked. `onNote`: told
+ *  what stopped the refund, if anything. `thing`: what staff open again to see where a refund stands. */
+export function RefundToCardBox({ readKey, read, press, currency, words: wordsFor, reasons, shelves = [], allLeft = false, thing = 'payment', paymentsTo, onDone, onNote, onClose }) {
   const [check, setCheck] = useState(null);
   const [draft, setDraft] = useState(null);
   const [problem, setProblem] = useState(null);
@@ -74,7 +75,7 @@ export function RefundToCardBox({ readKey, read, press, currency, words: wordsFo
     </button>
   );
   const note = (
-    <button type="button" className={PLAIN} disabled={busy} onClick={onNote}>
+    <button type="button" className={PLAIN} disabled={busy} onClick={() => onNote(check?.block ?? null)}>
       Note a refund
     </button>
   );
@@ -128,7 +129,7 @@ export function RefundToCardBox({ readKey, read, press, currency, words: wordsFo
       onDone(cardRefundSentLine(sent, cardWords), { ...sent, cardWords });
     } catch (err) {
       // No answer at all says nothing of whether the press reached Square.
-      const unsure = "We couldn't reach Square. The refund may not have gone through: open the payment again before trying.";
+      const unsure = `We couldn't reach Square. The refund may not have gone through: open the ${thing} again before trying.`;
       setProblem(typeof errorCode(err) === 'string' ? errorText(err, unsure) : unsure);
       if (NOTHING_SENT.includes(errorCode(err))) setDraft((d) => ({ ...d, requestKey: newKey() }));
       setBusy(false);

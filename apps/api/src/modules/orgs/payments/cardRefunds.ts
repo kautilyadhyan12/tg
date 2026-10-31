@@ -323,7 +323,7 @@ export async function refundSaleToCard(deps: PaymentsDeps, userId: string, gymId
   const ready = await allowedAtSell(deps, userId, gymId);
   const before = await refunds.pressOfKey(deps.sql, gymId, body.requestKey);
   if (before !== null) {
-    if (!sales.samePress(before, saleId, body)) throw refused("card_refund_key_reused", CARD_REFUND_WORDS.key_reused);
+    if (!sales.samePress(before, saleId, body)) throw refused("card_refund_key_reused", SALE_REFUND_WORDS.key_reused);
     return await answer(deps, gymId, before.id);
   }
   const sale = await theirSale(deps, gymId, saleId);
@@ -356,7 +356,7 @@ export async function refundSaleToCard(deps: PaymentsDeps, userId: string, gymId
     case "same_press":
       return await answer(deps, gymId, written.press.id);
     case "key_reused":
-      throw refused("card_refund_key_reused", CARD_REFUND_WORDS.key_reused);
+      throw refused("card_refund_key_reused", SALE_REFUND_WORDS.key_reused);
     case "sale_not_found":
       throw saleGone();
     case "not_card":
@@ -385,7 +385,7 @@ export async function refundWholeSaleToCard(deps: PaymentsDeps, userId: string, 
   const ready = await allowedAtSell(deps, userId, gymId);
   const before = await refunds.pressOfKey(deps.sql, gymId, body.requestKey);
   if (before !== null) {
-    if (!sales.sameWholePress(before, body)) throw refused("card_refund_key_reused", CARD_REFUND_WORDS.key_reused);
+    if (!sales.sameWholePress(before, await saleLinesToRefund(deps.sql, gymId, saleId), body)) throw refused("card_refund_key_reused", SALE_REFUND_WORDS.key_reused);
     return await answer(deps, gymId, before.id);
   }
   const lines = await theirSaleLines(deps, gymId, saleId);
@@ -415,7 +415,7 @@ export async function refundWholeSaleToCard(deps: PaymentsDeps, userId: string, 
     case "same_press":
       return await answer(deps, gymId, written.press.id);
     case "key_reused":
-      throw refused("card_refund_key_reused", CARD_REFUND_WORDS.key_reused);
+      throw refused("card_refund_key_reused", SALE_REFUND_WORDS.key_reused);
     case "sale_not_found":
       throw saleGone();
     case "not_card":

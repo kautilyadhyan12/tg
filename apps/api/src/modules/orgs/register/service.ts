@@ -594,7 +594,7 @@ export async function refundWholeSale(deps: RegisterDeps, userId: string, gymId:
     case "waiting":
       throw new OrgsError(409, "card_refund_waiting", SALE_REFUND_WORDS.waiting);
     case "changed":
-      throw new OrgsError(409, "sale_refund_changed", SALE_REFUND_WORDS.changed);
+      throw new OrgsError(409, "sale_refund_changed", SALE_REFUND_WORDS.changed_note);
     case "too_many_back":
       throw new OrgsError(409, "restock_too_many", saleRestockTooManyWords(outcome.leftCount));
     case "not_counted":

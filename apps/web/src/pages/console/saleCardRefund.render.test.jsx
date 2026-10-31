@@ -182,7 +182,7 @@ describe('a sale paid on the Terminal', () => {
     fireEvent.change(await screen.findByLabelText('Which product was it for?'), { target: { value: 'all' } });
     const form = within(await screen.findByTestId('sale-refund-all-form'));
     expect(form.getByText('Refund all of this sale')).toBeTruthy();
-    expect(form.getByText('Sold on 12 Oct 2026 to Maya Patel for $19.00. This only writes the refund in your records: give the money back yourself.')).toBeTruthy();
+    expect(form.getByText('Sold on 12 Oct 2026 to Maya Patel for $19.00. $19.00 will be noted as refunded. This only writes the refund in your records: give the money back yourself.')).toBeTruthy();
     fireEvent.click(form.getByRole('button', { name: 'Note refund' }));
     expect((await form.findByRole('alert')).textContent).toBe('Pick how you gave it back.');
     expect(svc.refundWholeSale).not.toHaveBeenCalled();
@@ -195,7 +195,7 @@ describe('a sale paid on the Terminal', () => {
     expect((await screen.findByRole('status')).textContent).toBe('Refund noted: $19.00 back on all of this sale. Its receipts are #12 and #13.');
   });
 
-  it('where Square shows less left, All products says what to do and Note a refund stays on all of the sale', async () => {
+  it('where Square shows less left, Note a refund goes back to the products, with no All products, and the note has an amount to type', async () => {
     svc.getWholeCardRefund.mockResolvedValue({ card: VISA, leftMinor: 1600, refundedInSquareMinor: 300, block: 'less_in_square' });
     draw([sale(), towel()]);
     await pressRefund('Refund to card');
@@ -203,7 +203,64 @@ describe('a sale paid on the Terminal', () => {
     const box = await boxOpen();
     expect(box.getByText(/refund one product at a time/)).toBeTruthy();
     fireEvent.click(box.getByRole('button', { name: 'Note a refund' }));
-    expect(await screen.findByTestId('sale-refund-all-form')).toBeTruthy();
+    await screen.findByText('Pick the product, then type what Square gave back.');
+    const list = screen.getByLabelText('Which product was it for?');
+    expect(list.value).toBe('');
+    expect(Array.from(list.options).map((o) => o.textContent)).toEqual(['Choose one', '2 × Water · $4.00 can be refunded', '1 × Towel · $15.00 can be refunded']);
+    expect(screen.queryByTestId('sale-refund-all-form')).toBeNull();
+    expect(screen.queryByTestId('card-refund-box')).toBeNull();
+    fireEvent.change(list, { target: { value: 's2' } });
+    const form = within(await screen.findByTestId('sale-refund-form'));
+    expect(form.getByLabelText('Amount given back (USD)')).toBeTruthy();
+  });
+
+  it('where Square can refund nothing, Note a refund stays on all of the sale, saying the amount', async () => {
+    svc.getWholeCardRefund.mockResolvedValue({ card: VISA, leftMinor: 0, refundedInSquareMinor: 0, block: 'too_old' });
+    draw([sale(), towel()]);
+    await pressRefund('Refund to card');
+    fireEvent.change(await screen.findByLabelText('Which product was it for?'), { target: { value: 'all' } });
+    const box = await boxOpen();
+    fireEvent.click(box.getByRole('button', { name: 'Note a refund' }));
+    expect(within(await screen.findByTestId('sale-refund-all-form')).getByText(/\$19\.00 will be noted as refunded/)).toBeTruthy();
+  });
+
+  it('a note on one product does not carry over: another product picked is Refund to card again', async () => {
+    svc.getCardRefund.mockImplementation((_, saleId) => Promise.resolve(saleId === 's1' ? { card: VISA, leftMinor: 0, refundedInSquareMinor: 0, block: 'too_old' } : { card: VISA, leftMinor: 1500, refundedInSquareMinor: 0, block: null }));
+    draw([sale(), towel()]);
+    await pressRefund('Refund to card');
+    fireEvent.change(await screen.findByLabelText('Which product was it for?'), { target: { value: 's1' } });
+    const box = await boxOpen();
+    fireEvent.click(box.getByRole('button', { name: 'Note a refund' }));
+    await screen.findByTestId('sale-refund-form');
+    fireEvent.change(screen.getByLabelText('Which product was it for?'), { target: { value: 's2' } });
+    const next = await boxOpen();
+    expect(next.getByText('Refund 1 × Towel to the card')).toBeTruthy();
+  });
+
+  it('Square refuses the press: the box says so, and the next press is a new one', async () => {
+    svc.getCardRefund.mockResolvedValue({ card: VISA, leftMinor: 400, refundedInSquareMinor: 0, block: null });
+    svc.refundToCard.mockRejectedValueOnce({ response: { status: 409, data: { error: 'card_refund_refused', message: 'Square refused this refund. No money went back.' } } });
+    svc.refundToCard.mockResolvedValueOnce({ step: 'pending', amountMinor: 400, currency: 'USD', card: VISA, pressId: PRESS });
+    draw([sale()]);
+    await pressRefund('Refund to card');
+    const box = await boxOpen();
+    fireEvent.change(box.getByLabelText('Why it is being refunded'), { target: { value: 'returned' } });
+    fireEvent.click(box.getByRole('button', { name: 'Refund $4.00 to Visa ending 1111' }));
+    expect((await box.findByRole('alert')).textContent).toBe('Square refused this refund. No money went back.');
+    fireEvent.click(box.getByRole('button', { name: 'Refund $4.00 to Visa ending 1111' }));
+    await waitFor(() => expect(svc.refundToCard).toHaveBeenCalledTimes(2));
+    expect(svc.refundToCard.mock.calls[1][2].requestKey).not.toBe(svc.refundToCard.mock.calls[0][2].requestKey);
+  });
+
+  it('no answer from Square on a sale says to open the sale again', async () => {
+    svc.getCardRefund.mockResolvedValue({ card: VISA, leftMinor: 400, refundedInSquareMinor: 0, block: null });
+    svc.refundToCard.mockRejectedValue(new Error('network'));
+    draw([sale()]);
+    await pressRefund('Refund to card');
+    const box = await boxOpen();
+    fireEvent.change(box.getByLabelText('Why it is being refunded'), { target: { value: 'returned' } });
+    fireEvent.click(box.getByRole('button', { name: 'Refund $4.00 to Visa ending 1111' }));
+    expect((await box.findByRole('alert')).textContent).toBe("We couldn't reach Square. The refund may not have gone through: open the sale again before trying.");
   });
 
   it('where Square cannot refund it, the box says so and Note a refund opens on the same product', async () => {

@@ -23,6 +23,7 @@ import {
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { CARD_REFUND } from "../src/modules/orgs/payments/cardRefunds.js";
+import { startSaleRefund, startWholeSaleRefund } from "../src/modules/orgs/payments/saleCardRefundsRepo.js";
 import { linesPage, totals } from "../src/modules/orgs/paymentsDownload/repo.js";
 import { squareSettings } from "../src/modules/orgs/payments/settings.js";
 import { processSquareWork } from "../src/modules/orgs/payments/work.js";
@@ -471,6 +472,7 @@ d("Refund to card at Sell (real Postgres)", { timeout: T }, () => {
       const basket = await sold(gym);
       const answers = await Promise.all([pressAll(basket, 1900), pressAll(basket, 1900), pressAll(basket, 1900), pressAll(basket, 1900)]);
       expect(answers.filter((a) => a.statusCode === 200)).toHaveLength(1);
+      expect(answers.filter((a) => a.statusCode >= 500)).toHaveLength(0);
       expect(madeFor(basket)).toHaveLength(1);
       expect((await refundsOf(gym, basket.water))).toHaveLength(1);
     });
@@ -551,6 +553,48 @@ d("Refund to card at Sell (real Postgres)", { timeout: T }, () => {
       expect(madeFor(basket)).toHaveLength(0);
     });
 
+    it("a key is its own sale's: on another sale it is refused, never answered as done", async () => {
+      const one = await sold(gym);
+      const two = await sold(gym);
+      const key = randomUUID();
+      expect((await pressAll(one, 1900, { requestKey: key })).statusCode).toBe(200);
+      const elsewhere = await pressAll(two, 1900, { requestKey: key });
+      expect(elsewhere.statusCode).toBe(409);
+      expect(errorOf(elsewhere)).toBe("card_refund_key_reused");
+      expect(madeFor(two)).toHaveLength(0);
+      expect(await refundsOf(gym, two.water)).toHaveLength(0);
+      // From the same sale's other product it is the same press.
+      expect((await pressAll(one, 1900, { requestKey: key, saleId: one.towel })).statusCode).toBe(200);
+      expect(madeFor(one)).toHaveLength(1);
+
+      const noted = await sold(gym);
+      const notNoted = await sold(gym);
+      const noteKey = randomUUID();
+      expect((await noteAll(noted, 1900, { requestKey: noteKey })).statusCode).toBe(201);
+      const other = await noteAll(notNoted, 1900, { requestKey: noteKey });
+      expect(other.statusCode).toBe(409);
+      expect(errorOf(other)).toBe("request_reused");
+      expect(await refundsOf(gym, notNoted.water)).toHaveLength(0);
+    });
+
+    it("under the gym's lock Square's own figure still stops a press, on one product and on all of a sale", async () => {
+      const basket = await sold(gym);
+      const start = { id: randomUUID(), gymId: gym.id, saleId: basket.towel, requestKey: randomUUID(), amountMinor: 500, reason: "returned" as const, squareLeftMinor: 100, card: null, environment: "production" as const, accountId: gym.acct.merchantId, startedBy: gym.owner.userId, now: clock, checkingUntil: clock };
+      expect(await startSaleRefund(sql, { ...start, restock: 0 })).toEqual({ kind: "too_much", leftMinor: 100, currency: "USD" });
+      expect(await startWholeSaleRefund(sql, { ...start, amountMinor: 1900, shelf: [] })).toEqual({ kind: "changed" });
+      expect(await pressesOf(gym, basket.towel)).toHaveLength(0);
+    });
+
+    it("the database itself holds one press waiting on a sale's Square payment, whatever the code in front of it does", async () => {
+      const basket = await sold(gym);
+      const row = (saleId: string) => sql`
+        INSERT INTO gym_square_refunds (id, gym_id, sale_id, environment, account_id, square_payment_id, amount_minor, currency, reason, request_key, state, started_at, checked_at)
+        VALUES (${randomUUID()}, ${gym.id}, ${saleId}, 'production', ${gym.acct.merchantId}, ${basket.squarePaymentId}, 100, 'USD', 'returned', ${randomUUID()}, 'asking', now(), now())`;
+      await row(basket.water);
+      await expect(row(basket.towel)).rejects.toThrow(/gym_square_refunds_sale_asking_uq/);
+      await sql`DELETE FROM gym_square_refunds WHERE gym_id = ${gym.id} AND sale_id = ${basket.water}`;
+    });
+
     it("a bad body is refused before anything is read", async () => {
       const basket = await sold(gym);
       const bad = await send("POST", allUrl(gym, basket.water), gym.owner.cookies, { requestKey: "nope", amountMinor: 0, reason: "stolen", shelf: [{ saleId: "x", count: -1 }] });
@@ -590,7 +634,7 @@ d("Refund to card at Sell (real Postgres)", { timeout: T }, () => {
       expect((await press(basket, basket.water, 400)).statusCode).toBe(200);
     });
 
-    it("Square refuses it: nothing written, nothing on the shelf, and the box's key is new", async () => {
+    it("Square refuses it: nothing written, nothing on the shelf", async () => {
       const basket = await sold(gym);
       const before = await stockOf(gym);
       square.state.refundRefused = "INSUFFICIENT_FUNDS";

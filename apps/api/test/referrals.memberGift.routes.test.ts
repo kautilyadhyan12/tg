@@ -9,7 +9,7 @@ import postgres from "postgres";
 import { randomUUID } from "node:crypto";
 import { buildApp } from "../src/app.js";
 import { readPress, recordFailed } from "../src/modules/orgs/payments/cardRefundsRepo.js";
-import { recordSaleFailed } from "../src/modules/orgs/payments/saleCardRefundsRepo.js";
+import { recordSaleFailed, recordSaleTaken } from "../src/modules/orgs/payments/saleCardRefundsRepo.js";
 import { loadConfig } from "../src/config.js";
 import type { RobotCheck } from "../src/modules/orgs/gymPage/robotCheck.js";
 import { openDueBills } from "../src/modules/orgs/memberships/billsRepo.js";
@@ -702,6 +702,33 @@ d("Refer a friend: the member's gift (real Postgres)", () => {
   });
 
   describe("where the gift comes off", () => {
+    it.each([
+      ["one product", false],
+      ["all of the sale", true],
+    ])(
+      "a friend's sale refunded to the card in full no longer stands for the member's gift: %s (18d-iv-b-ii)",
+      async (_, whole) => {
+        const stamp = randomUUID().slice(0, 8);
+        const ava = await memberWithBill(`ava-${stamp}`, `Ava ${stamp}`, true);
+        const friend = await friendJoins(ava.code, `Cara Card ${stamp}`, `cara.${stamp}@example.com`, false);
+        const sold = await post(`/v1/orgs/${gymA.org.id}/register/sales`, { requestKey: nextForm(), productId: barA, quantity: 1, entryId: friend.entryId, method: "cash", totalMinor: 2500 }, owner.cookies);
+        expect(sold.statusCode, sold.body).toBe(201);
+        const saleId = (JSON.parse(sold.body) as { saleId: string }).saleId;
+        expect((await giftsOf(gymA.org.id)).filter((g) => g.friend_entry_id === friend.entryId)).toMatchObject([{ taken_back_why: null }]);
+        const id = randomUUID();
+        const now = new Date();
+        const parts = whole ? [{ saleId, amountMinor: 2500, restock: 0 }] : null;
+        await sql`
+          INSERT INTO gym_square_refunds (id, gym_id, sale_id, parts, environment, account_id, square_payment_id, amount_minor, currency, reason, request_key, state, started_at, checked_at)
+          VALUES (${id}, ${gymA.org.id}, ${saleId}, ${parts === null ? null : sql.json(parts)}, 'sandbox', 'ACCOUNT', ${`PAY${randomUUID()}`}, 2500, 'USD', 'returned', ${randomUUID()}, 'asking', ${now}, ${now})`;
+        const press = await readPress(sql, gymA.org.id, id);
+        if (press === null) throw new Error("no press");
+        expect(await recordSaleTaken(sql, press, { squareRefundId: `REFUND${randomUUID()}`, today: now.toISOString().slice(0, 10), now, lookAt: now })).toBe(true);
+        expect((await giftsOf(gymA.org.id)).filter((g) => g.friend_entry_id === friend.entryId)).toMatchObject([{ taken_back_why: "refunded" }]);
+      },
+      TIMEOUT_MS,
+    );
+
     it(
       "a sale refunded to the card that fails gives the member's gift back (18d-iv-b-ii)",
       async () => {

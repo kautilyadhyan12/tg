@@ -159,6 +159,7 @@ function SaleCardRefundBox({ gymId, sale, who, paymentsTo, onDone, onNote, onClo
       words={(check) => saleCardRefundWords(sale, who, check)}
       reasons={SALE_REFUND_CHOICES}
       shelves={asksRestock(sale) ? [{ key: sale.id, label: 'How many went back on the shelf', choices: restockChoices(sale) }] : []}
+      thing="sale"
       paymentsTo={paymentsTo}
       onDone={onDone}
       onNote={onNote}
@@ -176,10 +177,11 @@ function WholeCardRefundBox({ gymId, basket, lines, who, paymentsTo, onDone, onN
       read={() => registerService.getWholeCardRefund(gymId, saleId)}
       press={(body, shelf) => registerService.refundWholeToCard(gymId, saleId, { ...body, shelf: shelfBody(lines, shelf) })}
       currency={basket.first.currency}
-      words={(check) => wholeCardRefundWords(basket, lines, who, check)}
+      words={() => wholeCardRefundWords(basket, lines, who)}
       reasons={SALE_REFUND_CHOICES}
       shelves={wholeShelves(lines)}
       allLeft
+      thing="sale"
       paymentsTo={paymentsTo}
       onDone={onDone}
       onNote={onNote}
@@ -291,11 +293,20 @@ export function BasketRefundBox({ gymId, country = null, basket, who, toCard = f
   const [lineId, setLineId] = useState(open.length === 1 ? (open[0]?.id ?? '') : '');
   /** Refund to card said to note it instead: the box stays on the same product. */
   const [noting, setNoting] = useState(false);
+  /** Square gave back part of the sale with no note here: staff pick the product and type what it gave back, never all of it. */
+  const [pickToNote, setPickToNote] = useState(false);
   const line = open.find((l) => l.id === lineId) ?? null;
   const whole = lineId === ALL && open.length > 1;
+  const noteFromWhole = (block) => {
+    if (block === 'less_in_square') {
+      setLineId('');
+      setPickToNote(true);
+    }
+    setNoting(true);
+  };
   const wholeBox = () =>
     toCard && !noting ? (
-      <WholeCardRefundBox key={ALL} gymId={gymId} basket={basket} lines={open} who={who} paymentsTo={paymentsTo} onDone={onDone} onNote={() => setNoting(true)} onClose={onClose} />
+      <WholeCardRefundBox key={ALL} gymId={gymId} basket={basket} lines={open} who={who} paymentsTo={paymentsTo} onDone={onDone} onNote={noteFromWhole} onClose={onClose} />
     ) : (
       <WholeNoteBox key={ALL} gymId={gymId} country={country} basket={basket} lines={open} who={who} onDone={onDone} onClose={onClose} />
     );
@@ -311,9 +322,16 @@ export function BasketRefundBox({ gymId, country = null, basket, who, toCard = f
       <div className="rounded-[14px] p-3 flex flex-col gap-3" style={BOX}>
         <label className="c-field">
           <span className="c-label">Which product was it for?</span>
-          <select className="c-sel" value={lineId} onChange={(e) => setLineId(e.target.value)}>
+          <select
+            className="c-sel"
+            value={lineId}
+            onChange={(e) => {
+              setLineId(e.target.value);
+              setNoting(pickToNote);
+            }}
+          >
             <option value="">Choose one</option>
-            {open.length > 1 ? <option value={ALL}>{wholeRefundOption(open)}</option> : null}
+            {open.length > 1 && !pickToNote ? <option value={ALL}>{wholeRefundOption(open)}</option> : null}
             {open.map((l) => (
               <option key={l.id} value={l.id}>
                 {refundLineOption(l)}
@@ -321,6 +339,7 @@ export function BasketRefundBox({ gymId, country = null, basket, who, toCard = f
             ))}
           </select>
         </label>
+        {pickToNote ? <p className="c-s14 c-t2 m-0">Pick the product, then type what Square gave back.</p> : null}
         {line === null && !whole ? (
           <div className="flex flex-wrap gap-2">
             <button type="button" className={PLAIN} onClick={onClose}>

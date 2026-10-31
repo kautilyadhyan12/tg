@@ -16,9 +16,9 @@ export function samePress(press: RefundPress, saleId: string, body: Pick<SaleCar
   return press.parts === null && press.saleId === saleId && press.amountMinor === body.amountMinor && press.reason === body.reason && press.restock === body.restock;
 }
 
-/** The same press on all of a sale sent again. Its shelf counts were fixed by the first: the same amount and reason are the same press. */
-export function sameWholePress(press: RefundPress, body: Pick<SaleWholeCardRefundRequest, "amountMinor" | "reason">): boolean {
-  return press.parts !== null && press.amountMinor === body.amountMinor && press.reason === body.reason;
+/** The same press on all of a sale sent again: the same sale, amount and reason. Its shelf counts were fixed by the first. */
+export function sameWholePress(press: RefundPress, lines: readonly SaleToRefund[], body: Pick<SaleWholeCardRefundRequest, "amountMinor" | "reason">): boolean {
+  return press.parts !== null && lines.some((l) => l.saleId === press.saleId) && press.amountMinor === body.amountMinor && press.reason === body.reason;
 }
 
 interface PressBase {
@@ -103,15 +103,15 @@ export type StartWholeSaleOutcome =
 export async function startWholeSaleRefund(sql: Sql, s: NewWholeSalePress): Promise<StartWholeSaleOutcome> {
   return await sql.begin(async (tx): Promise<StartWholeSaleOutcome> => {
     await lockGym(tx, s.gymId);
+    const lines = await saleLinesToRefund(tx, s.gymId, s.saleId);
     const [again] = await tx<RawPress[]>`SELECT * FROM gym_square_refunds WHERE gym_id = ${s.gymId} AND request_key = ${s.requestKey}`;
     if (again !== undefined) {
       const press = toPress(again);
-      return sameWholePress(press, s) ? { kind: "same_press", press } : { kind: "key_reused" };
+      return sameWholePress(press, lines, s) ? { kind: "same_press", press } : { kind: "key_reused" };
     }
     const [noted] = await tx<{ id: string }[]>`SELECT id FROM gym_sale_refunds WHERE gym_id = ${s.gymId} AND request_key = ${s.requestKey} LIMIT 1`;
     if (noted !== undefined) return { kind: "key_reused" };
 
-    const lines = await saleLinesToRefund(tx, s.gymId, s.saleId);
     const first = lines[0];
     if (first === undefined) return { kind: "sale_not_found" };
     if (first.squarePaymentId === null) return { kind: "not_card" };

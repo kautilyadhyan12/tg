@@ -89,25 +89,23 @@ export const wholeShelves = (lines) => lines.filter(asksRestock).map((line) => (
 /** The box's choices, as the server takes them. */
 export const shelfBody = (lines, shelf) => lines.map((line) => ({ saleId: line.id, count: Number(shelf?.[line.id] ?? '0') })).filter((s) => s.count > 0);
 
-const wholeDetail = (basket, lines, who) => {
+const wholeSold = (basket, who) => {
   const first = basket.first;
-  const to = who === null ? 'to a walk-in' : `to ${who}`;
-  const left = wholeLeftMinor(lines);
-  const some = left < basket.totalMinor ? ` ${formatMinor(left, first.currency)} of it can still be refunded.` : '';
-  return `Sold on ${shortDay(first.soldOn)} ${to} for ${formatMinor(basket.totalMinor, first.currency)}.${some}`;
+  return `Sold on ${shortDay(first.soldOn)} ${who === null ? 'to a walk-in' : `to ${who}`} for ${formatMinor(basket.totalMinor, first.currency)}.`;
 };
 
-/** What the Refund to card box says on all of a sale, from what Square said. */
-export function wholeCardRefundWords(basket, lines, who, check) {
-  return {
-    title: 'Refund all of this sale to the card',
-    detail: `${wholeDetail(basket, lines, who)} ${CARD_REFUND_WORDS.fee} ${CARD_REFUND_WORDS.days}`,
-    inSquare: check.refundedInSquareMinor > 0 ? `Square shows ${formatMinor(check.refundedInSquareMinor, basket.first.currency)} of this sale was already refunded there. Note that refund here so your records match.` : null,
-  };
+/** What the Refund to card box says on all of a sale. Money refunded inside Square never reaches it: the server stops that first. */
+export function wholeCardRefundWords(basket, lines, who) {
+  const left = wholeLeftMinor(lines);
+  const some = left < basket.totalMinor ? ` ${formatMinor(left, basket.first.currency)} of it can still be refunded.` : '';
+  return { title: 'Refund all of this sale to the card', detail: `${wholeSold(basket, who)}${some} ${CARD_REFUND_WORDS.fee} ${CARD_REFUND_WORDS.days}`, inSquare: null };
 }
 
-/** What the Note a refund box says on all of a sale. */
-export const wholeNoteWords = (basket, lines, who) => ({ title: 'Refund all of this sale', detail: `${wholeDetail(basket, lines, who)} This only writes the refund in your records: give the money back yourself.` });
+/** What the Note a refund box says on all of a sale: it has no amount to type, so it says the amount. */
+export const wholeNoteWords = (basket, lines, who) => ({
+  title: 'Refund all of this sale',
+  detail: `${wholeSold(basket, who)} ${formatMinor(wholeLeftMinor(lines), basket.first.currency)} will be noted as refunded. This only writes the refund in your records: give the money back yourself.`,
+});
 
 /** Why that box cannot be sent as it stands, or null; and the body it sends. */
 export function wholeNoteBody(lines, draft) {

@@ -1199,15 +1199,15 @@ export async function refundWholeSale(
 ): Promise<RefundWholeSaleOutcome> {
   return await sql.begin(async (tx): Promise<RefundWholeSaleOutcome> => {
     await lockOrgRow(tx, input.gymId);
-    const again = await tx<{ method: string; reason: string; undone: boolean; receipt_number: number }[]>`
-      SELECT method, reason, undone_at IS NOT NULL AS undone, receipt_number FROM gym_sale_refunds
-      WHERE gym_id = ${input.gymId} AND request_key = ${input.requestKey} ORDER BY receipt_number`;
-    if (again.length > 0) {
-      const same = again.every((r) => r.method === input.method && r.reason === input.reason && !r.undone);
-      return same ? { kind: "ok", receiptNumbers: again.map((r) => r.receipt_number) } : { kind: "request_reused" };
-    }
     const lines = await saleLinesToRefund(tx, input.gymId, input.saleId);
     const first = lines[0];
+    const again = await tx<{ sale_id: string; method: string; reason: string; undone: boolean; receipt_number: number }[]>`
+      SELECT sale_id, method, reason, undone_at IS NOT NULL AS undone, receipt_number FROM gym_sale_refunds
+      WHERE gym_id = ${input.gymId} AND request_key = ${input.requestKey} ORDER BY receipt_number`;
+    if (again.length > 0) {
+      const same = again.every((r) => lines.some((l) => l.saleId === r.sale_id) && r.method === input.method && r.reason === input.reason && !r.undone);
+      return same ? { kind: "ok", receiptNumbers: again.map((r) => r.receipt_number) } : { kind: "request_reused" };
+    }
     if (first === undefined) return { kind: "sale_not_found" };
     if (first.undone) return { kind: "voided" };
     if (await saleRefundAsking(tx, input.gymId, input.saleId)) return { kind: "waiting" };
