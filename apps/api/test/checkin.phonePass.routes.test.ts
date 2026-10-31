@@ -19,7 +19,7 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createIoRedis, createMemoryRedis, type RedisLike } from "../src/redis.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
-import { WINDOWS_A_DAY, makePass, makePhonePass, passDay, passWindow } from "../src/modules/orgs/checkin/pass.js";
+import { WINDOWS_A_DAY, makePass, makePhonePass, passDay, passWindow, windowEndsAt } from "../src/modules/orgs/checkin/pass.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -318,6 +318,9 @@ d("a pass the phone makes with no signal (real Postgres)", () => {
       for (let round = 0; round < 3; round++) {
         const dev = await member(`dev${String(round)}`, "Dev Rao", [gymB]);
         const keys = await phoneKeysOf(dev.phone);
+        // The desk's clock at the very start of a window: a slow machine crossing into the next
+        // would make the pass of the window before too old, and neither desk would let anyone in.
+        ahead = windowEndsAt(now()).getTime() - Date.now();
         const w = now();
         const pass = makePhonePass(keyFor(keys, w), dev.phone.userId, w);
         const same = await Promise.all([scan(desk, pass), scan(deskB, pass)]);
@@ -330,6 +333,7 @@ d("a pass the phone makes with no signal (real Postgres)", () => {
         ]);
         expect(both.map((one) => one.result).sort()).toEqual(["checked_in", "fresh_pass_needed"]);
       }
+      ahead = 0;
     },
     TIMEOUT_MS,
   );
