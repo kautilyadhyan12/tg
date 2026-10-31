@@ -166,6 +166,17 @@ describe("the camera", () => {
     expect((screen.getByTestId("camera-view").props as { enableTorch: boolean }).enableTorch).toBe(false);
   });
 
+  it("the torch is on the meal camera too, and stays on across the switch", async () => {
+    await openScan({});
+    await fireEvent.press(screen.getByRole("radio", { name: "Meal" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Turn torch on" }));
+    expect((screen.getByTestId("camera-view").props as { enableTorch: boolean }).enableTorch).toBe(true);
+    await fireEvent.press(screen.getByRole("radio", { name: "Barcode" }));
+    expect((screen.getByTestId("camera-view").props as { enableTorch: boolean }).enableTorch).toBe(true);
+    await fireEvent.press(screen.getByRole("button", { name: "Turn torch off" }));
+    expect((screen.getByTestId("camera-view").props as { enableTorch: boolean }).enableTorch).toBe(false);
+  });
+
   it("Meal leaves the barcode camera for the shutter, and the barcode reader stops", async () => {
     await openScan({});
     await fireEvent.press(screen.getByRole("radio", { name: "Meal" }));

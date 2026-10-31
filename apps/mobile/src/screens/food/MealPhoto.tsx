@@ -310,10 +310,7 @@ function Camera({
     setFailed(null);
     setLook({ kind: "idle" });
     reads.current = NO_READS;
-    if (next === "meal") {
-      setTorch(false);
-      onMealMode();
-    }
+    if (next === "meal") onMealMode();
   };
 
   const take = async () => {
@@ -383,16 +380,16 @@ function Camera({
       <View style={[styles.topBar, { top: insets.top + 12 }]}>
         <Round icon="x" say="Close" onPress={onClose} />
       </View>
+      {allowed ? (
+        <View style={[styles.torchBar, { top: insets.top + 12 }]}>
+          <Round icon="zap" say={torch ? "Turn torch off" : "Turn torch on"} on={torch} onPress={() => { setTorch((t) => !t); }} />
+        </View>
+      ) : null}
       {scanning && allowed ? (
-        <>
-          <View style={[styles.torchBar, { top: insets.top + 12 }]}>
-            <Round icon="zap" say={torch ? "Turn torch off" : "Turn torch on"} on={torch} onPress={() => { setTorch((t) => !t); }} />
-          </View>
-          <View style={styles.guideWrap} pointerEvents="none">
-            <View style={styles.guide} />
-            {look.kind === "looking" ? <ActivityIndicator size="large" color={colours.orange} /> : null}
-          </View>
-        </>
+        <View style={styles.guideWrap} pointerEvents="none">
+          <View style={styles.guide} />
+          {look.kind === "looking" ? <ActivityIndicator size="large" color={colours.orange} /> : null}
+        </View>
       ) : null}
       <View style={[styles.footBar, { paddingBottom: insets.bottom + 28 }]}>
         {words === null ? null : (
