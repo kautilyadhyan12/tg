@@ -8,6 +8,7 @@ import { launchImageLibraryAsync } from "expo-image-picker";
 import {
   FOOD_ALLERGY_CAUTION,
   MEAL_MOST_FOODS,
+  barcodeReplySchema,
   PHOTO_SCAN_CAUTION,
   foodSearchResponseSchema,
   mealPhotoAnalysisSchema,
@@ -62,6 +63,8 @@ import type { KeptSheet } from "./PhotoSheetStore";
 import { sharedDish } from "./dishShares";
 import { OwnFood } from "./OwnFood";
 import { WholeDish } from "./WholeDish";
+import { BarcodeOwnFood, BarcodeProduct, TypeBarcode } from "./BarcodeProduct";
+import { NO_READS, PACK_CODES, afterRead, codeFromCamera, troubleWords, type FoundProduct } from "./barcode";
 import { Credits, SourceLine } from "./SourceLine";
 
 // Log a meal from a photo (ROADMAP Stage 5 33b-i). The live camera opens at once, as food apps open
@@ -88,6 +91,8 @@ type Ask = "none" | "newPhoto";
 
 interface MealPhotoProps {
   open: boolean;
+  /** Opened at the barcode scan, whatever photo meal is kept. */
+  barcode: boolean;
   kept: KeptSheet;
   onClose: () => void;
   onSaved: (type: MealType, name: string) => void;
@@ -107,7 +112,7 @@ async function drawnSmall(uri: string): Promise<string | null> {
   return saved.base64 ?? null;
 }
 
-export function MealPhoto({ open, kept, onClose, onSaved, onSearch }: MealPhotoProps) {
+export function MealPhoto({ open, barcode, kept, onClose, onSaved, onSearch }: MealPhotoProps) {
   const { session, state } = useSession();
   const me = state.kind === "in" ? state.user.id : null;
   const [stage, setStage] = useState<Stage>({ kind: "camera" });
@@ -120,7 +125,7 @@ export function MealPhoto({ open, kept, onClose, onSaved, onSearch }: MealPhotoP
   useEffect(() => {
     if (!open) return;
     setNotice(null);
-    setStage((now) => (now.kind === "reading" ? now : kept.sheet !== null && kept.sheet !== undefined ? { kind: "review" } : { kind: "camera" }));
+    setStage((now) => (now.kind === "reading" ? now : !barcode && kept.sheet !== null && kept.sheet !== undefined ? { kind: "review" } : { kind: "camera" }));
     // Judged as it stood when it was opened.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -175,6 +180,12 @@ export function MealPhoto({ open, kept, onClose, onSaved, onSearch }: MealPhotoP
       <View style={styles.page} testID="meal-photo">
         {stage.kind === "camera" ? (
           <Camera
+            startBarcode={barcode}
+            onMealMode={() => {
+              // A photo meal already kept is what Meal means: it is never thrown away for a new photo.
+              if (sheet !== null) setStage({ kind: "review" });
+            }}
+            onSaved={onSaved}
             notice={notice}
             onPhoto={(uri) => {
               void scan(uri);
@@ -206,7 +217,7 @@ export function MealPhoto({ open, kept, onClose, onSaved, onSearch }: MealPhotoP
 }
 
 /** A round button over the camera or the photo: close, the gallery. */
-function Round({ icon, say, onPress, big = false }: { icon: "x" | "image"; say: string; onPress: () => void; big?: boolean }) {
+function Round({ icon, say, onPress, big = false, on = false }: { icon: "x" | "image" | "zap"; say: string; onPress: () => void; big?: boolean; on?: boolean }) {
   return (
     <Pressable
       accessibilityRole="button"
@@ -214,13 +225,44 @@ function Round({ icon, say, onPress, big = false }: { icon: "x" | "image"; say: 
       onPress={onPress}
       style={({ pressed }) => [styles.round, big ? styles.roundBig : null, pressed ? styles.pressed : null]}
     >
-      <Icon name={icon} size={big ? 22 : 20} />
+      <Icon name={icon} size={big ? 22 : 20} colour={on ? "orange" : "text"} />
     </Pressable>
   );
 }
 
-/** The live camera, filling the screen: the shutter in the middle at the foot, the gallery beside it. */
-function Camera({ notice, onPhoto, onClose, onSearch }: { notice: { words: string; search: boolean } | null; onPhoto: (uri: string) => void; onClose: () => void; onSearch: () => void }) {
+type Look = { kind: "idle" } | { kind: "looking" } | { kind: "found"; product: FoundProduct } | { kind: "trouble"; words: string; notListed: boolean; lost: string | null };
+
+/** The live camera, filling the screen. Meal: the shutter in the middle at the foot, the gallery beside
+ *  it. Barcode (33b-iii-b): a pack in view opens by itself; free, and uses none of a person's scans. */
+function Camera({
+  startBarcode,
+  onMealMode,
+  onSaved,
+  notice,
+  onPhoto,
+  onClose,
+  onSearch,
+}: {
+  startBarcode: boolean;
+  onMealMode: () => void;
+  onSaved: (type: MealType, name: string) => void;
+  notice: { words: string; search: boolean } | null;
+  onPhoto: (uri: string) => void;
+  onClose: () => void;
+  onSearch: () => void;
+}) {
+  const { session, state } = useSession();
+  const me = state.kind === "in" ? state.user.id : null;
+  const [mode, setMode] = useState<"meal" | "barcode">(startBarcode ? "barcode" : "meal");
+  const [torch, setTorch] = useState(false);
+  const [look, setLook] = useState<Look>({ kind: "idle" });
+  const [typing, setTyping] = useState(false);
+  const [own, setOwn] = useState(false);
+  const reads = useRef(NO_READS);
+  // The newest lookup: an answer to any earlier one was left behind, and is dropped.
+  const newest = useRef(0);
+  // A box closed with the pack still in view does not open again by itself.
+  const packStillInView = () => { reads.current = { ...reads.current, lookedSeen: Date.now() }; };
   const insets = useSafeAreaInsets();
   const [permission, ask] = useCameraPermissions();
   const camera = useRef<CameraView | null>(null);
@@ -235,6 +277,45 @@ function Camera({ notice, onPhoto, onClose, onSearch }: { notice: { words: strin
     asked.current = true;
     void ask();
   }, [permission, ask]);
+
+  const lookUp = async (code: string) => {
+    newest.current += 1;
+    const mine = newest.current;
+    setLook({ kind: "looking" });
+    const answer = await session.signedIn({ method: "GET", path: `/v1/nutrition/barcode/${code}` }, barcodeReplySchema);
+    if (mine !== newest.current) return;
+    // Somebody else signed in while it was asked: nothing of it is shown to them.
+    const now = session.state();
+    if (now.kind !== "in" || now.user.id !== me) return;
+    if (answer.kind !== "ok") {
+      setLook({ kind: "trouble", words: answer.kind === "refused" ? answer.message : NO_CONNECTION, notListed: false, lost: answer.kind === "refused" ? null : code });
+      return;
+    }
+    const reply = answer.data;
+    if (reply.status === "found") {
+      setTyping(false);
+      setLook({ kind: "found", product: reply });
+      return;
+    }
+    const notListed = reply.status === "not_found";
+    if (notListed) setTyping(false);
+    setLook({ kind: "trouble", words: troubleWords(reply), notListed, lost: null });
+  };
+  const scanned = ({ type, data }: { type: string; data: string }) => {
+    const code = codeFromCamera(type, data);
+    if (code === null || typing || own || look.kind === "looking" || look.kind === "found") return;
+    const next = afterRead(reads.current, code, Date.now());
+    reads.current = next.memory;
+    if (next.look) void lookUp(code);
+  };
+  const toMode = (next: "meal" | "barcode") => {
+    newest.current += 1;
+    setMode(next);
+    setFailed(null);
+    setLook({ kind: "idle" });
+    reads.current = NO_READS;
+    if (next === "meal") onMealMode();
+  };
 
   const take = async () => {
     const lens = camera.current;
@@ -261,7 +342,9 @@ function Camera({ notice, onPhoto, onClose, onSearch }: { notice: { words: strin
     }
   };
 
-  const words = failed ?? notice?.words ?? null;
+  const scanning = mode === "barcode";
+  const trouble = scanning && look.kind === "trouble" ? look : null;
+  const words = failed ?? (scanning ? (typing ? null : (trouble?.words ?? null)) : (notice?.words ?? null));
   const allowed = permission?.granted === true;
   return (
     <View style={styles.page}>
@@ -270,6 +353,8 @@ function Camera({ notice, onPhoto, onClose, onSearch }: { notice: { words: strin
           ref={camera}
           style={StyleSheet.absoluteFill}
           facing="back"
+          enableTorch={torch}
+          {...(scanning ? { barcodeScannerSettings: { barcodeTypes: [...PACK_CODES] }, onBarcodeScanned: scanned } : {})}
           onCameraReady={() => { setReady(true); }}
           onMountError={() => { setFailed("The camera couldn’t start. Choose a photo instead."); }}
         />
@@ -282,7 +367,7 @@ function Camera({ notice, onPhoto, onClose, onSearch }: { notice: { words: strin
             Allow the camera
           </Txt>
           <Txt kind="small" style={styles.centre}>
-            To take a photo of your meal.
+            {scanning ? "To scan your food’s barcode." : "To take a photo of your meal."}
           </Txt>
           {permission === null ? null : (
             <Button
@@ -299,15 +384,40 @@ function Camera({ notice, onPhoto, onClose, onSearch }: { notice: { words: strin
       <View style={[styles.topBar, { top: insets.top + 12 }]}>
         <Round icon="x" say="Close" onPress={onClose} />
       </View>
+      {allowed ? (
+        <View style={[styles.torchBar, { top: insets.top + 12 }]}>
+          <Round icon="zap" say={torch ? "Turn torch off" : "Turn torch on"} on={torch} onPress={() => { setTorch((t) => !t); }} />
+        </View>
+      ) : null}
+      {scanning && allowed ? (
+        <View style={styles.guideWrap} pointerEvents="none">
+          <View style={styles.guide} />
+          {look.kind === "looking" ? <ActivityIndicator size="large" color={colours.orange} /> : null}
+        </View>
+      ) : null}
       <View style={[styles.footBar, { paddingBottom: insets.bottom + 28 }]}>
         {words === null ? null : (
           <View style={styles.notice} accessibilityLiveRegion="polite">
             <Txt kind="small" colour="text" style={styles.centre}>
               {words}
             </Txt>
-            {notice?.search === true && failed === null ? <Button label="Search food instead" kind="link" onPress={onSearch} style={styles.centreSelf} /> : null}
+            {!scanning && notice?.search === true && failed === null ? <Button label="Search food instead" kind="link" onPress={onSearch} style={styles.centreSelf} /> : null}
+            {trouble?.lost != null ? <Button label="Try again" kind="link" onPress={() => { void lookUp(trouble.lost ?? ""); }} style={styles.centreSelf} /> : null}
+            {trouble?.notListed === true ? (
+              <>
+                <Button label="Search food" kind="link" onPress={onSearch} style={styles.centreSelf} />
+                <Button label="Add your own numbers" kind="link" onPress={() => { setOwn(true); }} style={styles.centreSelf} />
+              </>
+            ) : null}
           </View>
         )}
+        <View style={styles.modes} accessibilityRole="radiogroup">
+          <Chip label="Meal" on={!scanning} onPress={() => { toMode("meal"); }} />
+          <Chip label="Barcode" on={scanning} onPress={() => { toMode("barcode"); }} />
+        </View>
+        {scanning ? (
+          <Button label="Type the number" kind="link" onPress={() => { newest.current += 1; setLook({ kind: "idle" }); setTyping(true); }} style={styles.centreSelf} />
+        ) : (
         <View style={styles.shutterRow}>
           <Round icon="image" say="Choose from gallery" onPress={() => { void gallery(); }} big />
           <Pressable
@@ -322,7 +432,23 @@ function Camera({ notice, onPhoto, onClose, onSearch }: { notice: { words: strin
           </Pressable>
           <View style={styles.roundBig} />
         </View>
+        )}
       </View>
+      {look.kind === "found" ? <BarcodeProduct product={look.product} onClose={() => { packStillInView(); setLook({ kind: "idle" }); }} onSaved={onSaved} /> : null}
+      {own ? <BarcodeOwnFood onClose={() => { packStillInView(); setOwn(false); }} onSaved={onSaved} /> : null}
+      {typing ? (
+        <TypeBarcode
+          busy={look.kind === "looking"}
+          said={trouble?.words ?? null}
+          onLook={(code) => { void lookUp(code); }}
+          onClose={() => {
+            newest.current += 1;
+            packStillInView();
+            setTyping(false);
+            setLook({ kind: "idle" });
+          }}
+        />
+      ) : null}
     </View>
   );
 }
@@ -974,6 +1100,10 @@ const styles = StyleSheet.create({
   roundBig: { width: 56, height: 56, borderRadius: sizes.round },
   footBar: { position: "absolute", left: 0, right: 0, bottom: 0, paddingHorizontal: sizes.edge, gap: 18 },
   notice: { alignSelf: "center", maxWidth: 360, gap: 4, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 16, backgroundColor: colours.overWords },
+  torchBar: { position: "absolute", right: sizes.edge },
+  guideWrap: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, alignItems: "center", justifyContent: "center", gap: 16 },
+  guide: { width: "78%", aspectRatio: 1.8, borderRadius: 20, borderWidth: 3, borderColor: colours.orange },
+  modes: { flexDirection: "row", justifyContent: "center", gap: 8 },
   shutterRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 12 },
   shutter: {
     width: 80,
