@@ -14,6 +14,8 @@ const svc = {
   voidSale: vi.fn(),
   refundSale: vi.fn(),
   voidSaleRefund: vi.fn(),
+  getCardRefund: vi.fn(),
+  refundToCard: vi.fn(),
   saveTaxMode: vi.fn(),
   addTaxRate: vi.fn(),
   changeTaxRate: vi.fn(),
@@ -859,6 +861,34 @@ describe('refund a sale (18p)', () => {
     expect(await given({ ...ORG, country: 'US' })).toEqual(['Choose one', 'Cash', 'Card at the desk', 'Bank transfer']);
   });
 
+  it('a sale paid on the Terminal says Refund: the money goes to the card, Sell reads again, and the row reads Refund pending (18d-iv-b-ii)', async () => {
+    const onTerminal = sold({ method: 'terminal', toCard: true });
+    const card = { brand: 'VISA', last4: '1111' };
+    const press = '00000000-0000-4000-8000-000000000001';
+    svc.get.mockResolvedValue(withSale(onTerminal));
+    svc.getCardRefund.mockResolvedValue({ card, leftMinor: 431, refundedInSquareMinor: 0, block: null });
+    svc.refundToCard.mockResolvedValue({ step: 'pending', amountMinor: 431, currency: 'USD', card, pressId: press });
+    open();
+    const row = (await within(await screen.findByRole('region', { name: "Today's takings" })).findAllByTestId('takings-row'))[0];
+    expect(within(row).queryByRole('button', { name: 'More for the sale of 2 × Water' })).toBeNull();
+    fireEvent.click(within(row).getByRole('button', { name: 'Refund the sale of 2 × Water' }));
+    expect(within(row).getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['Refund to cardSquare sends the money back to the card that paid.', 'Note a refundYou gave it back another way, such as cash.']);
+    fireEvent.click(within(row).getByRole('menuitem', { name: /^Refund to card/ }));
+    await within(row).findByText('Refund 2 × Water to the card');
+    const box = within(within(row).getByTestId('card-refund-box'));
+    fireEvent.change(box.getByLabelText('Why it is being refunded'), { target: { value: 'returned' } });
+    fireEvent.change(box.getByLabelText('How many went back on the shelf'), { target: { value: '2' } });
+    const pending = { id: 'rf1', amountMinor: 431, method: 'terminal', reason: 'returned', restocked: 2, refundedOn: '2026-10-12', by: 'Sam Owner', receiptNumber: 8, voided: null, square: { state: 'pending', card, late: false, pressId: press } };
+    svc.get.mockResolvedValue(withSale({ ...onTerminal, canRefund: false, toCard: false, refundedMinor: 431, refunds: [pending] }));
+    fireEvent.click(box.getByRole('button', { name: 'Refund $4.31 to Visa ending 1111' }));
+    await waitFor(() => expect(svc.refundToCard).toHaveBeenCalledTimes(1));
+    expect(svc.refundToCard.mock.calls[0][2]).toMatchObject({ amountMinor: 431, reason: 'returned', restock: 2 });
+    await within(row).findByText('Refund pending');
+    expect(within(row).getByRole('status').textContent).toMatch(/^Square is processing this \$4\.31 refund to Visa ending 1111\./);
+    expect(within(row).getByText('$4.31 refund pending')).toBeTruthy();
+    expect(within(row).queryByRole('button', { name: /^Refund the sale/ })).toBeNull();
+  });
+
   it('opens inside the sale, filled with all that is left and how it was paid, sends nothing until a reason is picked, and says what it did under the sale', async () => {
     svc.get.mockResolvedValue(withSale(sold()));
     svc.refundSale.mockResolvedValue({ receiptNumber: 42 });
@@ -1136,7 +1166,7 @@ describe('Take payment on Terminal at Sell', () => {
     orgApi.checkTerminalSale.mockReturnValue(answered({ step: 'done', outcome: 'paid', pickedUp: true, receiptNumber: 41 }));
     const done = await within(newSale()).findByTestId('sale-done', {}, { timeout: 8000 });
     expect(done.textContent).toBe(
-      "Sale recordedSold: 2 × Water to a walk-in. $4.31, card on the Terminal.It is in today's list below. To give the money back, refund it in your Square Dashboard, then press ⋯ on its row and Refund sale.New saleView receipt",
+      "Sale recordedSold: 2 × Water to a walk-in. $4.31, card on the Terminal.It is in today's list below. To give the money back, press Refund on its row.New saleView receipt",
     );
     expect(svc.sell).not.toHaveBeenCalled();
     expect(orgApi.startTerminalSale).toHaveBeenCalledTimes(1);

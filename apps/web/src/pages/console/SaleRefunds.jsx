@@ -11,6 +11,8 @@ import {
   asksRestock,
   refundLineOption,
   restockChoices,
+  saleCardRefundWords,
+  saleOpenLine,
   saleRefundBody,
   saleRefundDraft,
   saleRefundLines,
@@ -20,10 +22,12 @@ import {
 } from './saleRefundView';
 import MoreMenu from '../../components/console/MoreMenu';
 import ReceiptBox from '../../components/console/ReceiptBox';
+import { RefundToCardBox } from './CardRefundBox';
 
 // REFUND A SALE AT THE DESK (spec Part 3 §14.3; ROADMAP 18p), drawn the same on Sell's list and
 // on a person's "Bought at the desk": the Refund sale box, opened inside the sale it is for, and
-// the sale's refunds under it, each with View receipt and a ⋯ holding Void refund. What happened
+// the sale's refunds under it, each with View receipt and, for one noted by hand, a ⋯ holding
+// Void refund. A sale paid on the Terminal also has Refund to card (18d-iv-b-ii). What happened
 // is said in the sale's own place (`onDone`), and the list is read again.
 
 const MAIN = 'c-btn c-btn-p';
@@ -135,13 +139,41 @@ export function SaleRefundBox({ gymId, country = null, sale, who, onDone, onClos
   );
 }
 
+/** Refund to card on one product of a sale paid on the Terminal (18d-iv-b-ii): the money goes back through Square. */
+function SaleCardRefundBox({ gymId, sale, who, paymentsTo, onDone, onNote, onClose }) {
+  return (
+    <RefundToCardBox
+      readKey={`${gymId}/${sale.id}`}
+      read={() => registerService.getCardRefund(gymId, sale.id)}
+      press={(body) => registerService.refundToCard(gymId, sale.id, { restock: 0, ...body })}
+      currency={sale.currency}
+      words={(check) => saleCardRefundWords(sale, who, check)}
+      reasons={SALE_REFUND_CHOICES}
+      shelf={asksRestock(sale) ? restockChoices(sale) : null}
+      paymentsTo={paymentsTo}
+      onDone={(words, sent) => onDone(words, { ...sent, saleId: sale.id })}
+      onNote={onNote}
+      onClose={onClose}
+    />
+  );
+}
+
 /** Refund sale on a sale (18q): on a sale of several products, which one the money went back
- *  for is picked first, from those with something left to refund; then that product's box. */
-export function BasketRefundBox({ gymId, country = null, basket, who, onDone, onClose }) {
+ *  for is picked first, from those with something left to refund; then that product's box.
+ *  `toCard`: Refund to card was pressed, on a sale paid on the Terminal; else Note a refund. */
+export function BasketRefundBox({ gymId, country = null, basket, who, toCard = false, paymentsTo = null, onDone, onClose }) {
   const open = basket.lines.filter((line) => line.canRefund === true);
   const [lineId, setLineId] = useState(open.length === 1 ? (open[0]?.id ?? '') : '');
+  /** Refund to card said to note it instead: the box stays on the same product. */
+  const [noting, setNoting] = useState(false);
   const line = open.find((l) => l.id === lineId) ?? null;
-  if (basket.lines.length === 1) return <SaleRefundBox gymId={gymId} country={country} sale={basket.first} who={who} onDone={onDone} onClose={onClose} />;
+  const box = (sale) =>
+    toCard && !noting ? (
+      <SaleCardRefundBox key={sale.id} gymId={gymId} sale={sale} who={who} paymentsTo={paymentsTo} onDone={onDone} onNote={() => setNoting(true)} onClose={onClose} />
+    ) : (
+      <SaleRefundBox key={sale.id} gymId={gymId} country={country} sale={sale} who={who} onDone={onDone} onClose={onClose} />
+    );
+  if (basket.lines.length === 1) return box(basket.first);
   return (
     <div className="flex flex-col gap-3" data-testid="basket-refund">
       <div className="rounded-[14px] p-3 flex flex-col gap-3" style={BOX}>
@@ -164,7 +196,7 @@ export function BasketRefundBox({ gymId, country = null, basket, who, onDone, on
           </div>
         ) : null}
       </div>
-      {line !== null ? <SaleRefundBox key={line.id} gymId={gymId} country={country} sale={line} who={who} onDone={onDone} onClose={onClose} /> : null}
+      {line !== null ? box(line) : null}
     </div>
   );
 }
@@ -178,7 +210,8 @@ export function SaleRefundLines({ gymId, gym, sale, canAct, onDone, named = fals
   const [form, setForm] = useState({ reason: '', tried: false });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-  if (lines.length === 0) return null;
+  const waiting = saleOpenLine(sale);
+  if (lines.length === 0 && waiting === null) return null;
 
   const send = async (refundId, words) => {
     if (form.reason === '') {
@@ -199,6 +232,11 @@ export function SaleRefundLines({ gymId, gym, sale, canAct, onDone, named = fals
 
   return (
     <div className="flex flex-col gap-2">
+      {waiting !== null ? (
+        <p className="c-s14 c-w5 m-0" style={{ color: 'var(--warn)' }} data-testid="sale-card-refund-open">
+          {waiting}
+        </p>
+      ) : null}
       {lines.map((r) => {
         const words = voidSaleRefundWords(sale, r.id);
         return (
@@ -214,6 +252,7 @@ export function SaleRefundLines({ gymId, gym, sale, canAct, onDone, named = fals
               <span className="c-s13 c-t2 md:flex-1 flex flex-col">
                 <span>{r.detail}</span>
                 {r.voided === null ? null : <span>{r.voided}</span>}
+                {r.note === null ? null : <span>{r.note}</span>}
               </span>
               <span className="flex items-center gap-2 self-start md:self-auto">
                 <button
@@ -225,7 +264,7 @@ export function SaleRefundLines({ gymId, gym, sale, canAct, onDone, named = fals
                 >
                   {RECEIPT_BUTTON}
                 </button>
-                {canAct && r.voided === null && !sale.undone ? (
+                {canAct && r.voided === null && !sale.undone && !r.toCard ? (
                   <MoreMenu
                     label={null}
                     alignRight

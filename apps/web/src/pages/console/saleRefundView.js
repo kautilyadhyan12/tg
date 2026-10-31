@@ -1,15 +1,19 @@
 import {
+  CARD_REFUND_LATE_LINE,
+  CARD_REFUND_WORDS,
   MEMBER_PAYMENT_METHOD_WORDS,
   REFUND_VOID_REASONS,
   REFUND_VOID_REASON_WORDS,
   SALE_REFUND_REASONS,
   SALE_REFUND_REASON_WORDS,
+  cardName,
   currencyDecimals,
   formatMinor,
   minorToPriceText,
   priceToMinor,
 } from '@app/shared';
-import { shortDay, voidedLine } from './memberBillsView';
+import { cardRefundOpenLine, cardRefundSaidNow } from './cardRefundView';
+import { MENU_WORDS, shortDay, voidedLine } from './memberBillsView';
 
 // REFUND A SALE AT THE DESK (spec Part 3 §14.3; ROADMAP 18p): every sentence the Refund sale
 // box, a sale's refund lines and Void refund say, made from what the server sent. The server
@@ -25,6 +29,8 @@ export const SALE_REFUND_VOID_CHOICES = REFUND_VOID_REASONS.map((value) => ({ va
 /** The ⋯ list's items for a sale, each with the one line that says what it does. */
 export const SALE_MENU_WORDS = {
   refund: { label: 'Refund sale', hint: 'You gave some or all of the money back.' },
+  cardRefund: MENU_WORDS.cardRefund,
+  noteRefund: MENU_WORDS.refundElsewhere,
   voidSale: { label: 'Void sale', hint: 'It was recorded by mistake. It will no longer count.' },
   voidRefund: { label: 'Void refund', hint: 'It was noted by mistake. It will no longer count.' },
 };
@@ -47,7 +53,7 @@ export function saleRefundTag(sale) {
 
 /** A fresh Refund sale box: all that is left, given back the way it was paid. */
 export function saleRefundDraft(sale, newKey) {
-  // A sale paid on the Terminal (18d-vi-b-ii) went back through Square: staff pick how, as on a membership.
+  // Noted on a sale paid on the Terminal: the money went back another way, and staff pick how.
   return { requestKey: newKey(), amount: minorToPriceText(refundableMinor(sale), sale.currency), method: sale.method === 'terminal' ? '' : sale.method, reason: '', restock: '0', tried: false };
 }
 
@@ -67,8 +73,18 @@ export function saleRefundWords(sale, who) {
   const some = left < sale.totalMinor ? ` ${formatMinor(left, sale.currency)} of it can still be refunded.` : '';
   return {
     title: `Refund sale: ${String(sale.quantity)} × ${sale.itemName}`,
-    // A sale paid on the Terminal (18d-vi-b-ii) is refunded in Square, where its money is.
-    detail: `Sold on ${shortDay(sale.soldOn)} ${to} for ${formatMinor(sale.totalMinor, sale.currency)}.${some} This only writes the refund in your records: ${sale.method === 'terminal' ? 'refund the card in your Square Dashboard' : 'give the money back yourself'}.`,
+    detail: `Sold on ${shortDay(sale.soldOn)} ${to} for ${formatMinor(sale.totalMinor, sale.currency)}.${some} This only writes the refund in your records: give the money back yourself.`,
+  };
+}
+
+/** What the Refund to card box says above its fields (18d-iv-b-ii), from what Square said. */
+export function saleCardRefundWords(sale, who, check) {
+  const to = who === null ? 'to a walk-in' : `to ${who}`;
+  const some = check.leftMinor < sale.totalMinor ? ` ${formatMinor(check.leftMinor, sale.currency)} of it can still be refunded.` : '';
+  return {
+    title: `Refund ${String(sale.quantity)} × ${sale.itemName} to the card`,
+    detail: `Sold on ${shortDay(sale.soldOn)} ${to} for ${formatMinor(sale.totalMinor, sale.currency)}.${some} ${CARD_REFUND_WORDS.fee} ${CARD_REFUND_WORDS.days}`,
+    inSquare: check.refundedInSquareMinor > 0 ? `Square shows ${formatMinor(check.refundedInSquareMinor, sale.currency)} of this sale was already refunded there. Note that refund here so your records match.` : null,
   };
 }
 
@@ -104,11 +120,14 @@ export function saleRefundLines(sale, named = false) {
   return (sale.refunds ?? []).map((r) => ({
     id: r.id,
     receiptNumber: r.receiptNumber,
-    amount: `${formatMinor(r.amountMinor, sale.currency)} refunded`,
+    amount: `${formatMinor(r.amountMinor, sale.currency)} ${r.square?.state === 'pending' && r.voided === null ? 'refund pending' : 'refunded'}`,
     money: formatMinor(r.amountMinor, sale.currency),
+    // Sent to the card through Square: never voided here.
+    toCard: r.method === 'terminal',
+    note: r.square?.late === true ? CARD_REFUND_LATE_LINE : null,
     detail: joined([
       named ? sale.itemName : null,
-      methodWords(r.method),
+      r.square?.card === null || r.square?.card === undefined ? methodWords(r.method) : `${methodWords(r.method)}, ${cardName(r.square.card)}`,
       shortDay(r.refundedOn),
       SALE_REFUND_REASON_WORDS[r.reason] ?? null,
       r.restocked > 0 ? `${String(r.restocked)} back on the shelf` : null,
@@ -116,6 +135,24 @@ export function saleRefundLines(sale, named = false) {
     ]),
     voided: r.voided === null ? null : voidedLine(r.voided, REFUND_VOID_REASON_WORDS),
   }));
+}
+
+/** Said under a sale while a refund to its card has no answer, or never had one. */
+export const saleOpenLine = (sale) => (sale.cardRefund === null || sale.cardRefund === undefined ? null : cardRefundOpenLine(sale.cardRefund, sale.currency));
+
+/** Whether anything on this list is waiting on Square: a refund it has not answered or not finished. */
+export function salesWaitOnSquare(sales) {
+  return (sales ?? []).some((s) => (s.cardRefund !== null && s.cardRefund !== undefined && !s.cardRefund.lost) || (s.refunds ?? []).some((r) => r.voided === null && r.square?.state === 'pending'));
+}
+
+/** What the sentence under a sale says now: it follows the refund it is about, by that press, as Square moves it on. */
+export function saleSaidNow(done, basket, readSince) {
+  const sent = done.sent ?? null;
+  if (sent === null) return done.words;
+  const line = (basket?.lines ?? []).find((l) => l.id === sent.saleId) ?? null;
+  const refunds = line?.refunds ?? [];
+  const payment = line === null ? null : { refunds: refunds.filter((r) => r.voided === null), voidedRefunds: refunds.filter((r) => r.voided !== null), cardRefund: line.cardRefund };
+  return cardRefundSaidNow(sent, payment, done.words, readSince);
 }
 
 /** The Void refund box: what is voided, what changes, and its done line. */

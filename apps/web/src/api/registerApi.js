@@ -1,4 +1,6 @@
 import {
+  cardRefundCheckSchema,
+  cardRefundResponseSchema,
   friendGiftResponseSchema,
   memberPurchasesResponseSchema,
   receiptSchema,
@@ -41,6 +43,12 @@ export const registerService = {
   /** Refund sale, any day: `body` is `{ requestKey, amountMinor, method, reason, restock }`. */
   refundSale: async (gymId, saleId, body) =>
     read(refundSaleResponseSchema, 'that refund', await authApi.post(`${gymPath(gymId)}/register/sales/${encodeURIComponent(saleId)}/refunds`, body)),
+  /** Refund to card (18d-iv-b-ii): what Square says of one product of a sale paid on the Terminal. */
+  getCardRefund: async (gymId, saleId) =>
+    read(cardRefundCheckSchema, 'that payment', await authApi.get(`${gymPath(gymId)}/register/sales/${encodeURIComponent(saleId)}/card-refund`)),
+  /** The money goes back to the card: `body` is `{ requestKey, amountMinor, reason, restock }`. */
+  refundToCard: async (gymId, saleId, body) =>
+    read(cardRefundResponseSchema, 'that refund', await authApi.post(`${gymPath(gymId)}/register/sales/${encodeURIComponent(saleId)}/card-refund`, body)),
   /** Void refund on a sale's refund noted by mistake: `body` is `{ reason }`. */
   voidSaleRefund: async (gymId, saleId, refundId, body) =>
     read(

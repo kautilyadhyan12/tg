@@ -164,6 +164,13 @@ export const receiptNumberSchema = z.number().int().min(1).max(2_147_483_647);
 const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const minorSchema = z.number().int().min(0).max(99_999_999);
 
+/** A refund sent to the card through Square (18d-iv-a): where it stands there, and the card, where Square named it. `late`:
+ *  still pending after Square's 14 days. `pressId`: the press it came from (`cardRefundResponseSchema`). */
+export const squareRefundSeenSchema = z
+  .object({ state: z.enum(["pending", "completed"]), card: cardSeenSchema.nullable(), late: z.boolean(), pressId: z.string().uuid().nullable().default(null) })
+  .strict();
+export type SquareRefundSeen = z.infer<typeof squareRefundSeenSchema>;
+
 /** A refund staff noted against a payment: the gym gave the money back itself, and this
  *  is its note of that. The app moves no money. */
 export const memberRefundSchema = z
@@ -178,14 +185,8 @@ export const memberRefundSchema = z
     by: z.string().nullable(),
     /** Its receipt's number, the gym's own (18g-i). */
     receiptNumber: receiptNumberSchema,
-    /** Sent to the card through Square (18d-iv-a): where it stands there, and the card, where Square named it. `late`:
-     *  still pending after Square's 14 days. `pressId`: the press it came from (`cardRefundResponseSchema`). Null for one
-     *  noted by hand. */
-    square: z
-      .object({ state: z.enum(["pending", "completed"]), card: cardSeenSchema.nullable(), late: z.boolean(), pressId: z.string().uuid().nullable().default(null) })
-      .strict()
-      .nullable()
-      .default(null),
+    /** Sent to the card through Square; null for one noted by hand. */
+    square: squareRefundSeenSchema.nullable().default(null),
   })
   .strict();
 export type MemberRefund = z.infer<typeof memberRefundSchema>;

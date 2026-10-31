@@ -15,6 +15,8 @@ import {
   DISCOUNT_WORDS,
   FRIEND_GIFT_WORDS,
   SALE_REFUND_WORDS,
+  CARD_REFUND_LIMITS,
+  daysBetween,
   formatMinor,
   refundSaleResponseSchema,
   saleRefundTooMuchWords,
@@ -121,13 +123,25 @@ const isoDiscount = (d: discounts.DiscountRow) => ({ ...d, archivedAt: d.archive
  *  for any day while some of a line is left to give back (18p). */
 const shownSales = (sales: readonly repo.SaleRow[], today: string, canSell: boolean) => {
   const refunded = new Set(sales.filter((s) => s.refunds.some((r) => r.voided === null)).map((s) => s.receiptNumber));
-  return sales.map((s) => ({
-    ...s,
-    soldAt: s.soldAt.toISOString(),
-    // A sale paid on the Terminal is refunded in Square, never voided here (18d-vi-b-ii).
-    canUndo: canSell && !s.undone && s.soldOn === today && !refunded.has(s.receiptNumber) && s.method !== "terminal",
-    canRefund: canSell && !s.undone && s.refundedMinor < s.totalMinor,
-  }));
+  return sales.map((s) => {
+    const canRefund = canSell && !s.undone && s.refundedMinor < s.totalMinor;
+    return {
+      ...s,
+      soldAt: s.soldAt.toISOString(),
+      // A sale paid on the Terminal is refunded through Square, never voided here (18d-vi-b-ii).
+      canUndo: canSell && !s.undone && s.soldOn === today && !refunded.has(s.receiptNumber) && s.method !== "terminal",
+      canRefund,
+      toCard: canRefund && s.method === "terminal",
+      cardRefund: canSell ? s.cardRefund : null,
+      refunds: s.refunds.map((r) => ({
+        ...r,
+        square:
+          r.square === null
+            ? null
+            : { state: r.square.state, card: r.square.card, late: r.square.state === "pending" && daysBetween(r.square.startedOn, today) > CARD_REFUND_LIMITS.pendingDays, pressId: r.square.pressId },
+      })),
+    };
+  });
 };
 
 async function read(deps: RegisterDeps, gymId: string, viewer: Viewer, asked: string | null = null): Promise<SellPageResponse> {
@@ -534,6 +548,8 @@ export async function refundSale(deps: RegisterDeps, userId: string, gymId: stri
       throw new OrgsError(409, "sale_voided", SALE_REFUND_WORDS.voided);
     case "request_reused":
       throw new OrgsError(409, "request_reused", SALE_REFUND_WORDS.request_reused);
+    case "waiting":
+      throw new OrgsError(409, "card_refund_waiting", SALE_REFUND_WORDS.waiting);
     case "too_much":
       throw new OrgsError(409, "refund_too_much", saleRefundTooMuchWords(formatMinor(outcome.leftMinor, outcome.currency), outcome.leftMinor === 0));
     case "too_many_back":
@@ -560,6 +576,8 @@ export async function voidSaleRefund(
   const now = deps.now();
   const outcome = await repo.voidSaleRefund(deps.sql, { gymId, saleId, refundId, reason: req.reason, today: dayInTz(now, viewer.timezone), actorUserId: userId, now });
   if (outcome.kind === "refund_not_found") throw new OrgsError(404, "refund_not_found", SALE_REFUND_WORDS.refund_not_found);
+  if (outcome.kind === "card_refund") throw new OrgsError(409, "card_refund_void", SALE_REFUND_WORDS.card_refund);
+  if (outcome.kind === "waiting") throw new OrgsError(409, "card_refund_waiting", SALE_REFUND_WORDS.waiting);
   return voidSaleRefundResponseSchema.parse({ voided: true });
 }
 

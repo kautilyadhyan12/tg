@@ -302,6 +302,8 @@ export function takingsPerson(person, deleted) {
 /** "Refunded" once all of a sale went back, "Part refunded" while some did; null for none. */
 export function basketRefundTag(sale) {
   const basket = asBasket(sale);
+  // Square has not finished: the money is not back yet, whatever part of the sale it is.
+  if (basket.lines.some((line) => (line.refunds ?? []).some((r) => r.voided === null && r.square?.state === 'pending'))) return 'Refund pending';
   // Each line's refunds, as the server counts them; a line read without them has none.
   const refundedMinor = basket.lines.reduce((n, line) => n + (line.refundedMinor ?? 0), 0);
   return saleRefundTag({ ...basket.first, totalMinor: basket.totalMinor, refundedMinor });
@@ -328,6 +330,7 @@ export function takingsRows(page, timeZone, clockFormat) {
       refundTag: basketRefundTag(basket),
       canUndo: sale.canUndo,
       canRefund: basket.lines.some((line) => line.canRefund === true),
+      toCard: basket.lines.some((line) => line.toCard === true),
       receiptNumber: basket.receiptNumber,
       sale,
       basket,
@@ -348,6 +351,7 @@ export function takingsRows(page, timeZone, clockFormat) {
     refundTag: null,
     canUndo: false,
     canRefund: false,
+    toCard: false,
     receiptNumber: payment.receiptNumber,
     sale: null,
     basket: null,

@@ -18,7 +18,9 @@ import ReceiptBox from '../../components/console/ReceiptBox';
 import DatePick from '../../components/console/DatePick';
 import MoreMenu from '../../components/console/MoreMenu';
 import { BasketRefundBox, SaleRefundLines } from './SaleRefunds';
-import { SALE_MENU_WORDS } from './saleRefundView';
+import { saleBasketMenu, saleRefundPick } from './saleRefundMenu';
+import { SALE_MENU_WORDS, saleSaidNow, salesWaitOnSquare } from './saleRefundView';
+import { useReadWhileSquareWaits } from './useReadWhileSquareWaits';
 import { RECEIPT_BUTTON, receiptButtonLabel } from './receiptView';
 import { discountOption, offeredDiscounts, oldMoneySaleLine } from './sellDiscountsView';
 import { addToBasket, applyBasketCode, basketBody, basketCodeNote, basketView, withFriendGift, withLineDiscount, withoutDiscount } from './sellBasketView';
@@ -423,7 +425,7 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
         words={state.done}
         note={
           state.onTerminal === true
-            ? "It is in today's list below. To give the money back, refund it in your Square Dashboard, then press ⋯ on its row and Refund sale."
+            ? "It is in today's list below. To give the money back, press Refund on its row."
             : "It is in today's list below. If it was a mistake, press ⋯ on its row, then Void sale."
         }
         onNew={() => setState({ busy: false, error: null, done: null })}
@@ -778,7 +780,7 @@ function MembershipFinder({ gymId, words, locked, addMemberTo, onOpen }) {
 
 /** The day's product sales and membership payments, newest first, with the day's total: today,
  *  or an earlier day picked to find a sale to refund (18p). */
-function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage, onReload }) {
+function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage, onReload, squareEveryMs }) {
   /** The day picked; null is today. Another day's list is read here, apart from the page. */
   const [pick, setPick] = useState(null);
   const [other, setOther] = useState({ day: null, page: null, error: null });
@@ -787,7 +789,7 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
   const [asking, setAsking] = useState(null);
   /** The Void sale box's reason, and whether Void sale was pressed with none picked. */
   const [voidReason, setVoidReason] = useState({ reason: '', tried: false });
-  /** The sale whose Refund sale box is open, by its row's key. */
+  /** The sale whose refund box is open, by its row's key, and whether it sends the money to the card. */
   const [refunding, setRefunding] = useState(null);
   /** The row whose receipt is open under it, by its key. */
   const [receiptFor, setReceiptFor] = useState(null);
@@ -816,10 +818,19 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
     setAll(false);
     setState({ busy: false, error: null, done: null });
   };
+  // A refund to the card still with Square: the worker tells no page, so this one reads again by itself for a while.
+  useReadWhileSquareWaits(
+    salesWaitOnSquare(shownPage?.sales),
+    () => {
+      void onReload();
+      if (!onToday) void loadOther(pick);
+    },
+    squareEveryMs,
+  );
   /** What a refund or a void of a refund did, said where it was done; the list is read again. */
-  const doneHere = (key) => (words) => {
+  const doneHere = (key) => (words, sent) => {
     setRefunding(null);
-    setState({ busy: false, error: null, done: { key, words } });
+    setState({ busy: false, error: null, done: { key, words, sent: sent ?? null, read: shownPage } });
     // Today's list says the refunds noted today, whichever day's sale they were for.
     void onReload();
     if (!onToday) void loadOther(pick);
@@ -906,17 +917,13 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
       {rows.length > 0 ? (
         <ul className="list-none m-0 p-0">
           {shown.map((row) => {
-            const items = [];
-            if (row.canRefund) {
-              items.push({
-                ...SALE_MENU_WORDS.refund,
-                onPick: () => {
-                  setAsking(null);
-                  setRefunding(row.key);
-                },
-              });
-            }
+            const menu = saleBasketMenu(row.basket, row.title, (toCard) => {
+              setAsking(null);
+              setRefunding({ saleId: row.key, toCard });
+            });
+            const items = [...menu.items];
             if (row.canUndo) items.push({ ...SALE_MENU_WORDS.voidSale, danger: true, onPick: () => askVoid(row.key) });
+            const said = state.done !== null && state.done.key === row.key ? saleSaidNow(state.done, row.basket, state.done.read !== shownPage) : null;
             return (
               <li key={row.key} className="flex flex-col gap-2 p-4" style={LINE} data-testid="takings-row">
                 <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -944,17 +951,26 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
                     >
                       {RECEIPT_BUTTON}
                     </button>
-                    {items.length > 0 && !locked ? <MoreMenu label={null} alignRight ariaLabel={`More for the sale of ${row.title}`} items={items} disabled={state.busy} /> : null}
+                    {items.length > 0 && !locked ? <MoreMenu label={menu.label} compact={menu.label !== null} alignRight ariaLabel={menu.ariaLabel} items={items} disabled={state.busy} /> : null}
                   </div>
                 </div>
-                {state.done !== null && state.done.key === row.key ? (
+                {said !== null ? (
                   <p className="c-s14 c-t1 c-w6 m-0" role="status">
-                    {state.done.words}
+                    {said}
                   </p>
                 ) : null}
                 {receiptFor === row.key ? <ReceiptBox gymId={gymId} gym={org} number={row.receiptNumber} onClose={() => setReceiptFor(null)} /> : null}
-                {refunding === row.key && row.basket !== null ? (
-                  <BasketRefundBox gymId={gymId} country={org.country} basket={row.basket} who={row.sale.person?.name ?? null} onDone={doneHere(row.key)} onClose={() => setRefunding(null)} />
+                {saleRefundPick(refunding, row.key) !== null && row.basket !== null ? (
+                  <BasketRefundBox
+                    gymId={gymId}
+                    country={org.country}
+                    basket={row.basket}
+                    who={row.sale.person?.name ?? null}
+                    toCard={refunding.toCard}
+                    paymentsTo={placeFor(org.slug, viewerPrivileges(org), 'payments')}
+                    onDone={doneHere(row.key)}
+                    onClose={() => setRefunding(null)}
+                  />
                 ) : null}
                 {asking === row.key && row.sale !== null ? (
                   <form

@@ -45,6 +45,8 @@
 // Refund to card (ROADMAP 18d-iv-a), `billing.members`:
 //   GET    …/member-list/entries/:entryId/memberships/:membershipId/payments/:paymentId/card-refund  what Square says of it
 //   POST   …/member-list/entries/:entryId/memberships/:membershipId/payments/:paymentId/card-refund  the money goes back
+//   GET    /v1/orgs/:gymId/register/sales/:saleId/card-refund   what Square says of a sale paid on the Terminal (18d-iv-b-ii)
+//   POST   /v1/orgs/:gymId/register/sales/:saleId/card-refund   the money goes back
 //
 // Failed payments (ROADMAP 18d-iii-ii-b), `billing.members`; Try again is Charge card on file above:
 //   GET    /v1/orgs/:gymId/failed-payments?from=0             a page of the list
@@ -54,6 +56,7 @@ import {
   cardChargeRequestSchema,
   cardFeeChargeRequestSchema,
   cardRefundRequestSchema,
+  saleCardRefundRequestSchema,
   failedPaymentsQuerySchema,
   saveCardRequestSchema,
   squareCardIdSchema,
@@ -67,7 +70,7 @@ import {
   squareWebhookBodySchema,
 } from "@app/shared";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import type { z } from "zod";
+import { z } from "zod";
 import { tellMembershipsAfter, type LiveNewsSender } from "../../live/news.js";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
@@ -335,6 +338,25 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     const body = parseOr400(cardRefundRequestSchema, req.body, req, reply);
     if (body === null) return;
     const answer = await cardRefunds.refundToCard(paymentsDeps, callerId(req), params.gymId, params.entryId, params.membershipId, params.paymentId, body);
+    return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  const saleRefundUrl = "/v1/orgs/:gymId/register/sales/:saleId/card-refund";
+  const saleParamsSchema = z.object({ gymId: z.string().uuid(), saleId: z.string().uuid() }).strict();
+
+  app.get(saleRefundUrl, { preHandler: [app.authenticate, staffOnly(deps.sql, refundReadLimit)] }, async (req, reply) => {
+    const params = parseOr400(saleParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const answer = await cardRefunds.readSaleCardRefund(paymentsDeps, callerId(req), params.gymId, params.saleId);
+    return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  app.post(saleRefundUrl, { preHandler: [app.authenticate, staffOnly(deps.sql, refundLimit)] }, async (req, reply) => {
+    const params = parseOr400(saleParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(saleCardRefundRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const answer = await cardRefunds.refundSaleToCard(paymentsDeps, callerId(req), params.gymId, params.saleId, body);
     return reply.status(200).header("cache-control", "no-store").send(answer);
   });
 

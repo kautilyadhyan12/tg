@@ -21,20 +21,26 @@ import {
   cardRefundRefusedLine,
   cardRefundResponseSchema,
   cardSeenSchema,
+  CARD_REFUND_REASON_WORDS,
   formatMinor,
-  REFUND_REASON_WORDS,
+  REGISTER_WORDS,
+  SALE_REFUND_WORDS,
+  saleRestockTooManyWords,
   type CardRefundBlock,
   type CardRefundCheck,
   type CardRefundRequest,
   type CardRefundResponse,
+  type SaleCardRefundRequest,
   type SquareRefund,
 } from "@app/shared";
 import { dayInTz } from "../../gamification/streak.js";
 import { refundAskingOnBill } from "../memberships/billsSql.js";
+import { saleRefundAsking } from "../register/repo.js";
 import { OrgsError, requireWritablePrivilege } from "../service.js";
 import { BILLING, connectionRefused, entryNotFound, orgNotFound, readyOrThrow, unavailable, type Ready } from "./cards.js";
 import * as refunds from "./cardRefundsRepo.js";
 import * as repo from "./repo.js";
+import * as sales from "./saleCardRefundsRepo.js";
 import { accessContext, type PaymentsDeps } from "./service.js";
 import type { SquareSettings } from "./settings.js";
 import type { SquareResult } from "./square.js";
@@ -78,8 +84,16 @@ async function theirPayment(deps: PaymentsDeps, gymId: string, entryId: string, 
   return payment;
 }
 
-/** What Square says of the payment, on the app's own figures: the card, what is left, and what stops a refund. */
-async function checkWithSquare(deps: PaymentsDeps, ready: Ready, payment: refunds.PaymentToRefund, squarePaymentId: string): Promise<CardRefundCheck> {
+/** What Square says of the payment, on the app's own figures: the card, what is left, and what stops a refund. `payment`:
+ *  what Square was paid, what the app says can still go back, and what stands refunded on all of that payment. `waiting`:
+ *  whether a press has no answer yet on what shares this payment. */
+async function checkWithSquare(
+  deps: PaymentsDeps,
+  ready: Ready,
+  payment: { amountMinor: number; currency: string; refundableMinor: number; refundedMinor: number },
+  squarePaymentId: string,
+  waiting: () => Promise<boolean>,
+): Promise<CardRefundCheck> {
   const stopped = (block: CardRefundBlock, card: CardRefundCheck["card"] = null): CardRefundCheck => ({ card, leftMinor: 0, refundedInSquareMinor: 0, block });
   const read = await ready.square.api.getPayment(ready.token, squarePaymentId);
   if (read.kind === "unavailable") throw unavailable();
@@ -100,7 +114,7 @@ async function checkWithSquare(deps: PaymentsDeps, ready: Ready, payment: refund
   const inSquare = square.refunded_money?.amount ?? 0;
   const leftMinor = Math.max(0, Math.min(payment.refundableMinor, total.amount - inSquare));
   const refundedInSquareMinor = Math.max(0, inSquare - payment.refundedMinor);
-  if (await refundAskingOnBill(deps.sql, ready.row.gymId, payment.billId)) return { card, leftMinor, refundedInSquareMinor, block: "waiting" };
+  if (await waiting()) return { card, leftMinor, refundedInSquareMinor, block: "waiting" };
   return { card, leftMinor, refundedInSquareMinor, block: leftMinor === 0 ? "nothing_left" : null };
 }
 
@@ -108,8 +122,11 @@ async function checkWithSquare(deps: PaymentsDeps, ready: Ready, payment: refund
 export async function readCardRefund(deps: PaymentsDeps, userId: string, gymId: string, entryId: string, membershipId: string, paymentId: string): Promise<CardRefundCheck> {
   const { ready } = await allowed(deps, userId, gymId);
   const payment = await theirPayment(deps, gymId, entryId, membershipId, paymentId);
-  return cardRefundCheckSchema.parse(await checkWithSquare(deps, ready, payment, payment.squarePaymentId ?? ""));
+  return cardRefundCheckSchema.parse(await checkOfPayment(deps, ready, payment));
 }
+
+const checkOfPayment = (deps: PaymentsDeps, ready: Ready, payment: refunds.PaymentToRefund): Promise<CardRefundCheck> =>
+  checkWithSquare(deps, ready, payment, payment.squarePaymentId ?? "", () => refundAskingOnBill(deps.sql, ready.row.gymId, payment.billId));
 
 type Step = "taken" | "completed" | "refused" | "failed" | "lost" | null;
 
@@ -134,7 +151,8 @@ async function answered(deps: PaymentsDeps, press: refunds.RefundPress, result: 
   }
   const gym = await repo.readGym(deps.sql, press.gymId);
   const today = dayInTz(now, gym?.timezone ?? "UTC");
-  await refunds.recordTaken(deps.sql, press, { squareRefundId: refund.id, today, now, lookAt: lookFrom(now, 0) });
+  const taken = { squareRefundId: refund.id, today, now, lookAt: lookFrom(now, 0) };
+  await (press.saleId === null ? refunds.recordTaken(deps.sql, press, taken) : sales.recordSaleTaken(deps.sql, press, taken));
   return await afterTaken(deps, press, refund, today, now);
 }
 
@@ -146,7 +164,8 @@ async function afterTaken(deps: PaymentsDeps, press: refunds.RefundPress, refund
   }
   if (refund.status === "FAILED" || refund.status === "REJECTED") {
     deps.log.warn({ event: "square.card_refund_failed", gymId: press.gymId, status: refund.status }, "Square could not refund a card");
-    await refunds.recordFailed(deps.sql, press, { code: codeOf(refund.status), today, now });
+    const failed = { code: codeOf(refund.status), today, now };
+    await (press.saleId === null ? refunds.recordFailed(deps.sql, press, failed) : sales.recordSaleFailed(deps.sql, press, failed));
     return "failed";
   }
   return "taken";
@@ -168,7 +187,7 @@ async function ask(deps: PaymentsDeps, token: string, square: SquareSettings, pr
       amountMinor: press.amountMinor,
       currency: press.currency,
       // What the gym's Square Dashboard lists it as: the word picked, never the person.
-      reason: REFUND_REASON_WORDS[press.reason],
+      reason: CARD_REFUND_REASON_WORDS[press.reason],
     });
     return await answered(deps, press, result, deps.now());
   } finally {
@@ -207,7 +226,7 @@ export async function refundToCard(
     return await answer(deps, gymId, before.id);
   }
   const payment = await theirPayment(deps, gymId, entryId, membershipId, paymentId);
-  const check = await checkWithSquare(deps, ready, payment, payment.squarePaymentId ?? "");
+  const check = await checkOfPayment(deps, ready, payment);
   if (check.block !== null) throw refused(`card_refund_${check.block}`, CARD_REFUND_WORDS[check.block]);
   if (body.amountMinor > check.leftMinor) {
     throw refused("card_refund_too_much", `That is more than can be refunded. ${formatMinor(check.leftMinor, payment.currency)} is the most.`);
@@ -252,6 +271,90 @@ export async function refundToCard(
       throw refused("refund_not_settled", "This bill isn't fully paid, so there is nothing to refund yet.");
     case "too_much":
       throw refused("card_refund_too_much", `That is more than can be refunded. ${formatMinor(written.leftMinor, written.currency)} is the most.`);
+  }
+}
+
+/** Who may send a sale's money back: whoever may take it at Sell (Kd, 2026-10-31), at a gym that can be changed. */
+async function allowedAtSell(deps: PaymentsDeps, userId: string, gymId: string): Promise<Ready> {
+  await requireWritablePrivilege(deps, gymId, userId, BILLING);
+  const gym = await repo.readGym(deps.sql, gymId);
+  if (gym === null) throw orgNotFound();
+  return await readyOrThrow(deps, gymId, gym);
+}
+
+const saleGone = (): OrgsError => new OrgsError(404, "sale_not_found", REGISTER_WORDS.sale_not_found);
+
+/** One product of a sale, read through the gym, with what all of its one Square payment holds. */
+async function theirSale(deps: PaymentsDeps, gymId: string, saleId: string): Promise<sales.SaleToRefund> {
+  const sale = await sales.readSaleToRefund(deps.sql, gymId, saleId);
+  if (sale === null) throw saleGone();
+  if (sale.squarePaymentId === null) throw refused("card_refund_not_card", CARD_REFUND_WORDS.not_card);
+  if (sale.undone) throw refused("sale_voided", SALE_REFUND_WORDS.voided);
+  return sale;
+}
+
+const checkOfSale = (deps: PaymentsDeps, ready: Ready, sale: sales.SaleToRefund): Promise<CardRefundCheck> =>
+  checkWithSquare(deps, ready, sale, sale.squarePaymentId ?? "", () => saleRefundAsking(deps.sql, ready.row.gymId, sale.saleId));
+
+/** The box opens on one product of a sale paid on the Terminal (18d-iv-b-ii): what Square says of its payment now. */
+export async function readSaleCardRefund(deps: PaymentsDeps, userId: string, gymId: string, saleId: string): Promise<CardRefundCheck> {
+  const ready = await allowedAtSell(deps, userId, gymId);
+  return cardRefundCheckSchema.parse(await checkOfSale(deps, ready, await theirSale(deps, gymId, saleId)));
+}
+
+/** A press on one product of a sale: the money goes back now. The same press sent twice is one refund. */
+export async function refundSaleToCard(deps: PaymentsDeps, userId: string, gymId: string, saleId: string, body: SaleCardRefundRequest): Promise<CardRefundResponse> {
+  const ready = await allowedAtSell(deps, userId, gymId);
+  const before = await refunds.pressOfKey(deps.sql, gymId, body.requestKey);
+  if (before !== null) {
+    if (!sales.samePress(before, saleId, body)) throw refused("card_refund_key_reused", CARD_REFUND_WORDS.key_reused);
+    return await answer(deps, gymId, before.id);
+  }
+  const sale = await theirSale(deps, gymId, saleId);
+  const check = await checkOfSale(deps, ready, sale);
+  if (check.block !== null) throw refused(`card_refund_${check.block}`, CARD_REFUND_WORDS[check.block]);
+  if (body.amountMinor > check.leftMinor) {
+    throw refused("card_refund_too_much", `That is more than can be refunded. ${formatMinor(check.leftMinor, sale.currency)} is the most.`);
+  }
+  const now = deps.now();
+  const written = await sales.startSaleRefund(deps.sql, {
+    id: randomUUID(),
+    gymId,
+    saleId,
+    requestKey: body.requestKey,
+    amountMinor: body.amountMinor,
+    reason: body.reason,
+    restock: body.restock,
+    squareLeftMinor: check.leftMinor,
+    card: check.card,
+    environment: ready.square.environment,
+    accountId: ready.row.accountId,
+    startedBy: userId,
+    now,
+    checkingUntil: leaseFrom(now),
+  });
+  switch (written.kind) {
+    case "new":
+      await ask(deps, ready.token, ready.square, written.press);
+      return await answer(deps, gymId, written.press.id);
+    case "same_press":
+      return await answer(deps, gymId, written.press.id);
+    case "key_reused":
+      throw refused("card_refund_key_reused", CARD_REFUND_WORDS.key_reused);
+    case "sale_not_found":
+      throw saleGone();
+    case "not_card":
+      throw refused("card_refund_not_card", CARD_REFUND_WORDS.not_card);
+    case "voided":
+      throw refused("sale_voided", SALE_REFUND_WORDS.voided);
+    case "waiting":
+      throw refused("card_refund_waiting", SALE_REFUND_WORDS.waiting);
+    case "too_much":
+      throw refused("card_refund_too_much", `That is more than can be refunded. ${formatMinor(written.leftMinor, written.currency)} is the most.`);
+    case "too_many_back":
+      throw refused("restock_too_many", saleRestockTooManyWords(written.leftCount));
+    case "not_counted":
+      throw refused("restock_not_counted", SALE_REFUND_WORDS.not_counted);
   }
 }
 
