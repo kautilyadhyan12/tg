@@ -5,7 +5,7 @@ import { MAX_ITEM_GRAMS, type MoreNutrients, type NutritionSource } from "@app/s
 /** `fiberG` is null where a food's table or label has no figure. `more` is the
  *  ten further figures per 100 g (ROADMAP 34a): a packaged product carries what
  *  Open Food Facts sent of its label; a table food's are read when it is priced (`withMore`, service.ts). */
-export interface FoodReference { canonical: string; name: string; kcal: number; proteinG: number; carbsG: number; fatG: number; fiberG: number | null; serving: number; unit: string; source: NutritionSource; more?: MoreNutrients | undefined; }
+export interface FoodReference { canonical: string; name: string; kcal: number; proteinG: number; carbsG: number; fatG: number; fiberG: number | null; serving: number; unit: string; source: NutritionSource; more?: MoreNutrients | undefined; pack?: { grams: number; volume: boolean } | undefined; }
 export interface FoodSearchProvider { search(query: string, limit: number): Promise<FoodReference[]>; }
 const productSchema = z.object({ code: z.union([z.string(), z.number()]).optional(), product_name: z.union([z.string(), z.array(z.string())]).optional(), generic_name: z.union([z.string(), z.array(z.string())]).optional(), brands: z.union([z.string(), z.array(z.string())]).optional(), serving_size: z.string().optional(), nutriments: z.record(z.unknown()).optional() }).passthrough();
 const searchSchema = z.object({ hits: z.array(productSchema).optional(), products: z.array(productSchema).optional() }).passthrough();
@@ -70,7 +70,7 @@ const FLUID_OUNCES = /(\d+(?:[.,]\d+)?)\s*fl\.?\s*oz(?!\p{L})/u;
 const OUNCES = /(\d+(?:[.,]\d+)?)\s*oz(?!\p{L})/u;
 const NAMED = /^(\d+(?:\.\d+)?|\d+\/\d+|½|one|an?) (\p{L}+(?: \p{L}+)*)$/u;
 const GRAMS_PER = { g: 1, ml: 1, cl: 10, "fl oz": 29.5735, oz: 28.3495 } as const;
-const NO_LABEL = { grams: 100, unit: "g" } as const;
+export const NO_LABEL = { grams: 100, unit: "g" } as const;
 
 /** A packaged product's serving, from its label: the grams or millilitres it
  *  gives (a drink's millilitres weigh as grams; centilitres and ounces are

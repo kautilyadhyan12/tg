@@ -275,6 +275,10 @@ export const gymSaleSchema = z
     stockCounted: z.boolean().default(false),
     /** Whether money can still be given back for it: it stands, and not all of it went back. */
     canRefund: z.boolean().default(false),
+    /** It can go back to the card through Square (18d-iv-b-ii): `canRefund`, on a sale paid on the Terminal. */
+    toCard: z.boolean().default(false),
+    /** A refund to the card Square has not answered: `lost`, never answered, so it is checked in Square. */
+    cardRefund: z.object({ amountMinor: minorSchema, on: daySchema, lost: z.boolean() }).strict().nullable().default(null),
     /** Its receipt's number, the gym's own (18g-i): every line of one sale has the same. */
     receiptNumber: receiptNumberSchema,
     /** Its place in its sale, from 1 (18q). Who bought it, how it was paid, its day and

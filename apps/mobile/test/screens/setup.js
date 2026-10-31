@@ -112,7 +112,7 @@ jest.mock("expo-camera", () => {
       onCameraReady?.();
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
-    return createElement(View, { testID: "camera-view", facing: props.facing });
+    return createElement(View, { testID: "camera-view", facing: props.facing, enableTorch: props.enableTorch, barcodeScannerSettings: props.barcodeScannerSettings, onBarcodeScanned: props.onBarcodeScanned });
   });
   function useCameraPermissions() {
     const [now, setNow] = useState(camera.permission);

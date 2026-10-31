@@ -194,6 +194,49 @@ describe("the nightly update has to say who it is", () => {
 const plain = (over: Partial<PackagedRow>): PackagedRow => ({ code: "3017620422003", name: "A", kcal: 500, proteinG: 10, carbsG: 50, fatG: 30, more: MORE_NOT_KNOWN, servingSize: null, quantity: null, numbersFit: true, ...over });
 const withLists = (over: Partial<OffRow>): OffRow => ({ ...plain(over), allergens: over.allergens ?? ["milk"], traces: over.traces ?? ["nuts"], listedAsTyped: over.listedAsTyped ?? [] });
 
+describe("the worst thing: a whole pack is the pack, not a serving copied into the size", () => {
+  // Each row's figures, size and servings are as they stand on the two real lists.
+  const both = (quantity: string, offServing: string | null, usdaServing_: string | null, kcal = 300) =>
+    packagedFoodOf(withLists({ kcal, quantity, servingSize: offServing }), plain({ kcal, servingSize: usdaServing_ }))?.food.pack ?? null;
+  it.each<[string, string, string | null, string | null]>([
+    ["Pizza · Pep's 0038708950075", "160 g", "0.167 pizza (140 g)", "160 g"],
+    ["Fettuccini 0041000022517", "63 g", "0.5 package (62.4 g)", "63 g"],
+    ["Angus Beef Meatballs 0036669061786", "85 g", "2 meatball (31.751 g)", "85 g"],
+    ["Sliced Loaf Cake 0038361403062", "90 g", "1 slice (45 g)", "90 g"],
+    ["Andes Crunch Thins 0041186153609", "38 g", "2 pieces (10 g)", "38 g"],
+    ["a serving's own words say it is a sixth of more than this", "160 g", "0.167 pizza (140 g)", null],
+    ["half a package that is bigger than the size", "63 g", "1/2 package (62.4 g)", null],
+    ["a sixth of a pack, 4088600217895", "130 g", "1/6th of pack/60g", null],
+  ])("%s", (_, quantity, offServing, usdaServing_) => {
+    expect(both(quantity, offServing, usdaServing_)).toBeNull();
+  });
+  it("a size USDA's serving does not contradict stays a whole pack", () => {
+    expect(both("400 g", "1 slice (45 g)", "45 g")).toEqual({ grams: 400, volume: false });
+    expect(both("840 g", "0.167 pizza (140 g)", null)).toEqual({ grams: 840, volume: false });
+  });
+  it("half a cup says nothing about the pack: a 175 g yoghurt, 0056800521085", () => {
+    expect(both("175 g", "0.5 cup (115 g)", null)).toEqual({ grams: 175, volume: false });
+  });
+  it("the list that gave the numbers prints no serving, the other does: Kit Kat snack mix, 0034000211036", () => {
+    const food = packagedFoodOf(withLists({ kcal: 482, quantity: "2 oz", servingSize: null }), plain({ kcal: 482, servingSize: "56 g" }))?.food;
+    expect(food?.serving).toBe(56);
+    expect(food?.pack).toBeUndefined();
+  });
+  it("a pack under 100 g with no printed serving is a whole pack: Reese's 42 g", () => {
+    expect(packagedFoodOf(withLists({ kcal: 550, quantity: "42 g", servingSize: null }), null)?.food.pack).toEqual({ grams: 42, volume: false });
+  });
+  it("a pack smaller than a serving really printed is not", () => {
+    expect(packagedFoodOf(withLists({ quantity: "30 g", servingSize: "100 g" }), null)?.food.pack).toBeUndefined();
+  });
+  it("the lists over a fifth apart: no pack from a row just doubted", () => {
+    expect(packagedFoodOf(withLists({ kcal: 90, quantity: "400 g" }), plain({ kcal: 8 }))?.food.pack).toBeUndefined();
+  });
+  it("an oil sold by the litre, its millilitres not grams: no whole pack; a juice keeps one", () => {
+    expect(packagedFoodOf(withLists({ kcal: 884, fatG: 100, proteinG: 0, carbsG: 0, quantity: "3 L" }), null)?.food.pack).toBeUndefined();
+    expect(packagedFoodOf(withLists({ kcal: 46, quantity: "1 L" }), null)?.food.pack).toEqual({ grams: 1000, volume: true });
+  });
+});
+
 describe("packagedFoodOf: which list's numbers a person sees, every class", () => {
   it.each<[string, Partial<OffRow> | null, Partial<PackagedRow> | null, "openfoodfacts" | "usda", number, string, boolean]>([
     ["only Open Food Facts", {}, null, "openfoodfacts", 500, "fine", true],

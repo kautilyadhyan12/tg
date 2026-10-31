@@ -104,7 +104,7 @@ function purchasesFrom(lines: readonly SaleRow[]): MyPurchase[] {
         totalMinor: rows.reduce((n, r) => n + r.totalMinor, 0),
         lines: rows.map((r) => ({ name: r.itemName, quantity: r.quantity, totalMinor: r.totalMinor })),
         refunds: rows.flatMap((r) =>
-          r.refunds.filter((f) => f.voided === null).map((f) => ({ amountMinor: f.amountMinor, method: f.method, refundedOn: f.refundedOn, receiptNumber: f.receiptNumber, pending: false })),
+          r.refunds.filter((f) => f.voided === null).map((f) => ({ amountMinor: f.amountMinor, method: f.method, refundedOn: f.refundedOn, receiptNumber: f.receiptNumber, pending: f.square?.state === "pending" })),
         ),
       },
     ];

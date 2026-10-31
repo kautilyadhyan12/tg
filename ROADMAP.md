@@ -305,7 +305,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
        - 18d-iv-a. [x] **Refund to card on a member's payment** — merged 2026-10-31 (PR #402).
        - 18d-iv-b. **Refund to card on a fee and at Sell**, in three parts since 2026-10-31:
          - 18d-iv-b-i. [x] **On a fee** — merged 2026-10-31 (PR #404).
-         - 18d-iv-b-ii. [ ] **At Sell**, and on a person's "Bought at the desk". Web folder 1.
+         - 18d-iv-b-ii. [x] **At Sell** — merged 2026-10-31 (PR #412).
          - 18d-iv-b-iii. [ ] **Overview's list of refunds to deal with** (Kd, 2026-10-31): fees the app knows are no longer owed, each with Refund or Keep the fee, and refunds to the card that failed or that Square never answered, for all three kinds (18d-iv-a's review). Web folder 1.
        - 18d-iv-c. [ ] **An Interac debit card refunded on the Square Terminal**, in Canada, where Square refunds Interac only with the card present. Web folder 1.
        - 18d-iv-d. [ ] **A refund made inside Square shown here**, which also closes a "We don't know whether Square took…" line once Square's own record answers it (18d-iv-a's re-check). Web folder 1.
@@ -606,7 +606,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 33b-ii. [x] **"Not this?" and the names Luna saw** — merged 2026-10-30 (PR #397).
       - 33b-iii. **Barcode scan** (split 2026-10-30 in four, Kd's "go", `rulings/2026-10-30-33b-iii-a.md`: our own copy of the lists, no live calls). Risky; the two extra passes run once, after 33b-iii-c, over item 33.
         - 33b-iii-a. [x] **Our own copy of the food lists, and the barcode lookup on the server** — merged 2026-10-31 (PR #403).
-        - 33b-iii-b. [ ] **Scan a barcode on the phone**: Meal, Barcode and Label in one camera, free for everyone; the phone writes a UPC-E out first (`upcEToUpcA`); the product, its allergens with "Check the pack", what somebody typed shown as typed, a "0 kcal" not called certain; the whole pack as an amount; not found says what to do next; type the number; the torch.
+        - 33b-iii-b. [x] **Scan a barcode on the phone** — merged 2026-10-31 (PR #414).
         - 33b-iii-c. [ ] **Read a label with Luna**: a product not found is read from a photo of its label, the person checks it, and it is remembered for them by barcode. About 20 real labels tried first, for under a cent. Uses one of their scans.
         - 33b-iii-d. [ ] **The food search and the meal scan read our copy**, so nothing asks Open Food Facts live; every feature kept; a common word answers quickly.
 34. **More food** (split 2026-10-13: the parts on the server need no phone).

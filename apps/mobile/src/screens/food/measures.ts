@@ -100,6 +100,8 @@ export function unitWords(measure: FoodMeasure | undefined): string {
 export function measureWords(measure: FoodMeasure): string {
   if (measure.id === "g") return "grams";
   if (measure.id === "oz") return "ounces";
+  // A pack sold by volume says its own size: a litre of oil is not 1000 g.
+  if (measure.id === "pack" && measure.name.endsWith(" ml)")) return measure.name;
   return `${measure.name} · ${formatAmount(measure.grams)} g`;
 }
 

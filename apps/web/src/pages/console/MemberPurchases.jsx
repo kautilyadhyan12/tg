@@ -11,14 +11,17 @@ import ReceiptBox from '../../components/console/ReceiptBox';
 import MoreMenu from '../../components/console/MoreMenu';
 import { consoleIsReadOnly } from './billingView';
 import { BasketRefundBox, SaleRefundLines } from './SaleRefunds';
-import { SALE_MENU_WORDS } from './saleRefundView';
+import { saleBasketMenu, saleRefundPick } from './saleRefundMenu';
+import { saleSaidNow, salesWaitOnSquare } from './saleRefundView';
+import { useReadWhileSquareWaits } from './useReadWhileSquareWaits';
 
 // WHAT ONE PERSON BOUGHT AT THE DESK, on their page (spec Part 3 §14.3; ROADMAP 18b-i),
 // for staff who may record a sale. A sale made on the Sell page for this person is read
 // from the same rows here, and the button opens Sell with them already picked. A sale is
-// refunded here as on Sell (18p): its ⋯ holds Refund sale, and its refunds are under it.
+// refunded here as on Sell (18p): its ⋯, or its Refund button if it was paid on the Terminal, and
+// its refunds are under it.
 
-export default function MemberPurchases({ gymId, gym, entryId, name, past }) {
+export default function MemberPurchases({ gymId, gym, entryId, name, past, squareEveryMs }) {
   const privileges = viewerPrivileges(gym);
   const may = canSell(privileges);
   const [state, setState] = useState({ entryId: null, found: null, error: null });
@@ -43,15 +46,17 @@ export default function MemberPurchases({ gymId, gym, entryId, name, past }) {
       live = false;
     };
   }, [gymId, entryId, may, reads]);
-  /** A refund noted or voided: said under its sale, and the list read again. */
-  const doneHere = (saleId) => (words) => {
+  useReadWhileSquareWaits(salesWaitOnSquare(state.found?.sales), () => setReads((n) => n + 1), squareEveryMs);
+  /** A refund noted, sent or voided: said under its sale, and the list read again. */
+  const doneHere = (saleId) => (words, sent) => {
     setRefunding(null);
-    setDone({ saleId, words });
+    setDone({ saleId, words, sent: sent ?? null, read: state.found });
     setReads((n) => n + 1);
   };
 
   if (!may || state.entryId !== entryId) return null;
   const sellTo = placeFor(gym?.slug, privileges, 'sell');
+  const paymentsTo = routed ? placeFor(gym?.slug, privileges, 'payments') : null;
   const who = name && name.trim() !== '' ? name : 'this person';
 
   return (
@@ -68,6 +73,8 @@ export default function MemberPurchases({ gymId, gym, entryId, name, past }) {
           {saleBaskets(state.found.sales).map((basket) => {
             const sale = basket.first;
             const line = purchaseLine(basket);
+            const said = done !== null && done.saleId === sale.id ? saleSaidNow(done, basket, done.read !== state.found) : null;
+            const menu = saleBasketMenu(basket, line.title, (toCard) => setRefunding({ saleId: sale.id, toCard }));
             return (
               <li key={sale.id} className="py-2 flex flex-col gap-2" data-testid="purchase-row">
                 <div className="flex justify-between gap-3">
@@ -93,19 +100,19 @@ export default function MemberPurchases({ gymId, gym, entryId, name, past }) {
                       >
                         {RECEIPT_BUTTON}
                       </button>
-                      {acts && basket.lines.some((l) => l.canRefund === true) ? (
-                        <MoreMenu label={null} alignRight ariaLabel={`More for the sale of ${line.title}`} items={[{ ...SALE_MENU_WORDS.refund, onPick: () => setRefunding(sale.id) }]} />
-                      ) : null}
+                      {acts && menu.items.length > 0 ? <MoreMenu label={menu.label} compact={menu.label !== null} alignRight ariaLabel={menu.ariaLabel} items={menu.items} /> : null}
                     </span>
                   </span>
                 </div>
-                {done !== null && done.saleId === sale.id ? (
+                {said !== null ? (
                   <p className="c-s14 c-t1 c-w6 m-0" role="status">
-                    {done.words}
+                    {said}
                   </p>
                 ) : null}
                 {receiptFor === sale.id ? <ReceiptBox gymId={gymId} gym={gym} number={line.receiptNumber} onClose={() => setReceiptFor(null)} /> : null}
-                {refunding === sale.id ? <BasketRefundBox gymId={gymId} country={gym?.country} basket={basket} who={who} onDone={doneHere(sale.id)} onClose={() => setRefunding(null)} /> : null}
+                {saleRefundPick(refunding, sale.id) !== null ? (
+                  <BasketRefundBox gymId={gymId} country={gym?.country} basket={basket} who={who} toCard={refunding.toCard} paymentsTo={paymentsTo} onDone={doneHere(sale.id)} onClose={() => setRefunding(null)} />
+                ) : null}
                 {basket.lines.map((l) => (
                   <SaleRefundLines key={l.id} gymId={gymId} gym={gym} sale={l} named={basket.lines.length > 1} canAct={acts} onDone={doneHere(sale.id)} />
                 ))}
