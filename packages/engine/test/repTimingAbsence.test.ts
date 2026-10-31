@@ -30,7 +30,7 @@ import { describe, expect, it } from "vitest";
 import {
   exerciseDefinitionSchema,
   type ExerciseDefinition,
-  type PoseFrame,
+  type CameraFrame,
   type RepEvent,
 } from "@app/shared";
 import { compileDefinition, createSession, parseTrace } from "../src/index.js";
@@ -47,7 +47,7 @@ const FRAME_MS = 67;
  *  this long, and it is the sweep length the defect was measured at (:7222). */
 const ABSENCE_MS = 120_000;
 
-function squatFrames(): readonly PoseFrame[] {
+function squatFrames(): readonly CameraFrame[] {
   return parseTrace(readFileSync(TRACE, "utf8")).frames;
 }
 
@@ -77,7 +77,7 @@ interface Run {
   readonly events: readonly RepEvent[];
 }
 
-function run(frames: readonly PoseFrame[]): Run {
+function run(frames: readonly CameraFrame[]): Run {
   const session = squatSession();
   const events: RepEvent[] = [];
   session.onRep?.((e) => events.push(e));
@@ -109,16 +109,16 @@ function run(frames: readonly PoseFrame[]): Run {
  * took is the defect and not the clip.
  */
 function withAbsence(
-  frames: readonly PoseFrame[],
+  frames: readonly CameraFrame[],
   atIndex: number,
   gapMs: number,
-): readonly PoseFrame[] {
+): readonly CameraFrame[] {
   const head = frames.slice(0, atIndex);
   const lastSeen = head[head.length - 1];
   const from = lastSeen === undefined ? 0 : lastSeen.t;
-  const blanks: PoseFrame[] = [];
-  for (let t = from + FRAME_MS; t <= from + gapMs; t += FRAME_MS) blanks.push({ t, kp: [] });
-  const tail = frames.slice(atIndex).map((f) => ({ t: f.t + gapMs, kp: f.kp }));
+  const blanks: CameraFrame[] = [];
+  for (let t = from + FRAME_MS; t <= from + gapMs; t += FRAME_MS) blanks.push({ t, aspect: 1, kp: [] });
+  const tail = frames.slice(atIndex).map((f) => ({ t: f.t + gapMs, aspect: f.aspect, kp: f.kp }));
   return [...head, ...blanks, ...tail];
 }
 
@@ -201,30 +201,30 @@ const OCCLUDED_TRACE = join(
  *  measurable. The engine must treat them identically — it watched neither. */
 type Lost = "blank" | "occluded";
 
-function lostFrames(kind: Lost): readonly PoseFrame[] {
+function lostFrames(kind: Lost): readonly CameraFrame[] {
   return kind === "blank" ? [] : parseTrace(readFileSync(OCCLUDED_TRACE, "utf8")).frames;
 }
 
 /** `withAbsence` for either kind. The MOVEMENT is untouched: same frames, same
  *  order, same spacing, timestamps after the gap moved by exactly the gap. */
 function withLostSight(
-  frames: readonly PoseFrame[],
+  frames: readonly CameraFrame[],
   atIndex: number,
   gapMs: number,
   kind: Lost,
-): readonly PoseFrame[] {
+): readonly CameraFrame[] {
   if (kind === "blank") return withAbsence(frames, atIndex, gapMs);
   const filler = lostFrames(kind);
   const head = frames.slice(0, atIndex);
   const lastSeen = head[head.length - 1];
   const from = lastSeen === undefined ? 0 : lastSeen.t;
-  const blind: PoseFrame[] = [];
+  const blind: CameraFrame[] = [];
   let i = 0;
   for (let t = from + FRAME_MS; t <= from + gapMs; t += FRAME_MS) {
     const pose = filler[i++ % filler.length];
-    if (pose !== undefined) blind.push({ t, kp: pose.kp });
+    if (pose !== undefined) blind.push({ t, aspect: pose.aspect, kp: pose.kp });
   }
-  const tail = frames.slice(atIndex).map((f) => ({ t: f.t + gapMs, kp: f.kp }));
+  const tail = frames.slice(atIndex).map((f) => ({ t: f.t + gapMs, aspect: f.aspect, kp: f.kp }));
   return [...head, ...blind, ...tail];
 }
 
@@ -393,7 +393,7 @@ describe("what the fix must NOT change", () => {
 /** The frame index at which each rep completes on the clean clip. DERIVED, never
  *  pinned: a hard-coded index quietly stops meaning "rep N" the moment the clip
  *  or the definition changes, and the fixture would go vacuous without saying so. */
-function repCompletionIndices(frames: readonly PoseFrame[]): readonly number[] {
+function repCompletionIndices(frames: readonly CameraFrame[]): readonly number[] {
   const session = squatSession();
   const at: number[] = [];
   let seen = 0;
@@ -411,7 +411,7 @@ function repCompletionIndices(frames: readonly PoseFrame[]): readonly number[] {
 
 /** The same recording truncated the moment rep 1 completes — a ONE-rep set, so
  *  losing sight once is enough to leave no rep watched end to end. */
-function oneRepFrames(): readonly PoseFrame[] {
+function oneRepFrames(): readonly CameraFrame[] {
   const frames = squatFrames();
   const at = repCompletionIndices(frames)[0];
   return frames.slice(0, (at ?? 0) + 1);
@@ -420,12 +420,12 @@ function oneRepFrames(): readonly PoseFrame[] {
 /** Two absences in one clip. The later is spliced FIRST so the earlier index
  *  still addresses the frame it named. */
 function withTwoLostSights(
-  frames: readonly PoseFrame[],
+  frames: readonly CameraFrame[],
   firstAt: number,
   secondAt: number,
   gapMs: number,
   kind: Lost,
-): readonly PoseFrame[] {
+): readonly CameraFrame[] {
   return withLostSight(withLostSight(frames, secondAt, gapMs, kind), firstAt, gapMs, kind);
 }
 
@@ -576,7 +576,7 @@ describe("a rep the camera never watched is not a measurement", () => {
  *  @param told whether the caller says so. `false` reproduces the measured
  *  defect; `true` is the fix. */
 function runWithPause(
-  frames: readonly PoseFrame[],
+  frames: readonly CameraFrame[],
   at: number,
   gapMs: number,
   told: boolean,
@@ -586,7 +586,7 @@ function runWithPause(
   session.onRep?.((e) => events.push(e));
   const shifted = [
     ...frames.slice(0, at),
-    ...frames.slice(at).map((f) => ({ t: f.t + gapMs, kp: f.kp })),
+    ...frames.slice(at).map((f) => ({ t: f.t + gapMs, aspect: f.aspect, kp: f.kp })),
   ];
   shifted.forEach((f, i) => {
     if (i === at && told) session.loseSight();
@@ -683,7 +683,7 @@ describe("the set reports how long the camera watched", () => {
    *  It is the slack the lower bound below needs: watched time is credited
    *  between frames, so the frame straddling a splice can cost at most one
    *  ordinary frame interval. */
-  function maxFrameGapMs(frames: readonly PoseFrame[]): number {
+  function maxFrameGapMs(frames: readonly CameraFrame[]): number {
     let max = 0;
     for (let i = 1; i < frames.length; i++) {
       const prev = frames[i - 1];

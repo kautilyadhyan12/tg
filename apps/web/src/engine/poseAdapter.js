@@ -74,7 +74,7 @@ export function engineSupports(def) {
  *
  *  `resolve` is injected for the same reason the library reader injects
  *  `hasDefinition`: the three bundled definitions all declare minEngineVersion
- *  "1.0.0" and ENGINE_VERSION is "1.0.0", so with the real map the gate's FALSE
+ *  the same version as ENGINE_VERSION, so with the real map the gate's FALSE
  *  arm is unreachable — a test could not distinguish a live gate from a deleted
  *  one. The default is the real resolver; the page never passes a second
  *  argument. */
@@ -83,13 +83,19 @@ export function hasCameraAnalysis(slug, resolve = getDefinition) {
   return def !== null && engineSupports(def);
 }
 
+/** The picture's shape, width over height. A video with no size yet gives NaN,
+ *  which the engine treats as a frame that decides nothing. */
+export function pictureAspect(video) {
+  return video.videoWidth / video.videoHeight;
+}
+
 /** Map one pose-provider result to a PoseFrame (§2.4 input). UN-MIRRORED: x/y/z
  *  pass through untouched (§2.2). Missing/empty landmarks → an empty `kp`, which
  *  the engine's ingest treats as an invalid frame (§3.1 fail-soft: hold state,
  *  count nothing, raise the visibility hint) — we never fabricate points. */
-export function landmarksToFrame(landmarks, tMs) {
+export function landmarksToFrame(landmarks, tMs, aspect) {
   const kp = (landmarks ?? []).map((lm) => [lm.x, lm.y, lm.z, lm.visibility ?? 1.0]);
-  return { t: tMs, kp };
+  return { t: tMs, kp, aspect };
 }
 
 /** Start one set. Throws EngineUnsupportedError if the engine can't run `def`
@@ -108,8 +114,8 @@ export function startSet(def, setIndex) {
      *  in FrameResult.signals, the joints the exercise is measured by are not
      *  usable this frame — the caller surfaces the §3.1 "step back" cue. */
     metricSignals: [config.metric, ...(config.metricFallback ? [config.metricFallback] : [])],
-    feed(landmarks, tMs) {
-      return session.processFrame(landmarksToFrame(landmarks, tMs));
+    feed(landmarks, tMs, aspect) {
+      return session.processFrame(landmarksToFrame(landmarks, tMs, aspect));
     },
     /** Tell the engine the app has stopped feeding frames (pause, hidden tab).
      *  It cannot deduce that — no frames arriving is indistinguishable from a

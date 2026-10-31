@@ -6,7 +6,7 @@
 import { performance } from "node:perf_hooks";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { exerciseDefinitionSchema, type PoseFrame } from "@app/shared";
+import { exerciseDefinitionSchema, type CameraFrame } from "@app/shared";
 import { compileDefinition, createSession, parseTrace, type ReplayableEngine } from "../src/index.js";
 
 const FRAMES = 10 * 60 * 15; // 9000
@@ -19,11 +19,11 @@ const src = parseTrace(
   readFileSync(join(import.meta.dirname, "../test/traces/parity/sqauta_sideview1goodform.jsonl"), "utf8"),
 ).frames;
 
-const frames: PoseFrame[] = [];
+const frames: CameraFrame[] = [];
 for (let i = 0; i < FRAMES; i++) {
   const s = src[i % src.length];
   if (s === undefined) continue;
-  frames.push({ t: i * FPS_MS, kp: s.kp.map((k) => [...k] as [number, number, number, number]) });
+  frames.push({ t: i * FPS_MS, aspect: s.aspect, kp: s.kp.map((k) => [...k] as [number, number, number, number]) });
 }
 
 function buildEngine(): ReplayableEngine {

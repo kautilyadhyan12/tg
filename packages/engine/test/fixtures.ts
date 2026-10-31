@@ -1,7 +1,7 @@
 // Shared test fixtures: synthetic traces + a scripted fake engine.
 // The fake engine emits pre-programmed behavior so every §7.4 assertion can be
 // exercised in both passing and failing directions before a real engine exists.
-import type { FrameResult, PoseFrame, RepEvent, SetSummary } from "@app/shared";
+import type { CameraFrame, FrameResult, RepEvent, SetSummary } from "@app/shared";
 import type { ReplayableEngine, Trace, TraceHeader } from "../src/index.js";
 import { ENGINE_VERSION } from "../src/index.js";
 
@@ -11,9 +11,10 @@ export function must<T>(v: T | undefined): T {
   return v;
 }
 
-export function makeFrames(count: number, fpsMs = 66.7): PoseFrame[] {
+export function makeFrames(count: number, fpsMs = 66.7): CameraFrame[] {
   return Array.from({ length: count }, (_, i) => ({
     t: i * fpsMs,
+    aspect: 1,
     kp: Array.from({ length: 33 }, () => [0.5, 0.5, 0, 0.9] as [number, number, number, number]),
   }));
 }
@@ -26,6 +27,7 @@ export function makeHeader(overrides: Partial<TraceHeader> = {}): TraceHeader {
     device: "test-rig",
     platform: "web",
     fps: 15,
+    aspect: 1,
     view: "side",
     label: "synthetic",
     expected: { reps: 2, faultsExact: {}, scoreRange: [80, 95], formCorrectAll: true },

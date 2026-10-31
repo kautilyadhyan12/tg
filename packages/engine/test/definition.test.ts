@@ -134,7 +134,7 @@ describe("compile (§4 → EngineConfig) + parity equivalence", () => {
     //     the COMPILE MACHINERY reproduces legacy counts; whether the shipped
     //     squat definition uses knee_avg or knee_L is P1.8b's call.
     const parityDef = exerciseDefinitionSchema.parse(
-      defWith({ rep: { ...squatDef.rep, minRepMs: undefined, metric: "knee_L" } }),
+      defWith({ rep: { ...squatDef.rep, minRepMs: undefined, metric: "knee_L", upAt: 160, downAt: 130 } }),
     );
     const dir = join(import.meta.dirname, "traces/parity");
     const squatTraces = readdirSync(dir).filter((f) => /^squ?a[ut]/.test(f) && f.endsWith(".jsonl") && !f.includes("responses"));

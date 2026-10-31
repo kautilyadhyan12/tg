@@ -1,8 +1,8 @@
 {
   "key": "squat",
   "aliases": ["squats"],
-  "version": 6,
-  "minEngineVersion": "1.0.0",
+  "version": 7,
+  "minEngineVersion": "1.1.0",
   "family": "squat_pattern",
   "tracking": "pose",
   "views": ["front", "side"],
@@ -14,7 +14,7 @@
     "mode": "alternating_threshold",
     "metric": "knee_L",
     "upAt": 160,
-    "downAt": 100,
+    "downAt": 130,
     "countOn": "up",
     "bilateralGate": 150
   },
@@ -51,7 +51,7 @@
       {
         "component": "depth",
         "input": "knee_avg_min",
-        "curve": [[100, 100], [130, 30], [155, 0]],
+        "curve": [[110, 100], [130, 30], [155, 0]],
         "inactiveAbove": 155
       },
       {

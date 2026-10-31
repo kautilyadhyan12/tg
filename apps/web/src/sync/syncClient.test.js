@@ -76,7 +76,7 @@ describe('buildSyncPayload', () => {
       JSON.stringify(built.payload),
     );
     expect(built.payload.platform).toBe('web');
-    expect(built.payload.engineVersion).toBe('1.0.0');
+    expect(built.payload.engineVersion).toBe(ENGINE_VERSION);
     expect(built.payload.defsVersion).toBe(STATIC_DEFS_BUNDLE_VERSION);
     expect(built.payload.traceSample).toBeNull();
   });

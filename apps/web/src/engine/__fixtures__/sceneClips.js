@@ -133,6 +133,7 @@ export function shakenSquat(amount, seed = 3) {
   const rnd = mulberry32(seed);
   return goldenSquat().frames.map((f) => ({
     t: f.t,
+    aspect: f.aspect,
     kp: f.kp.map(([x, y, z, v]) => [x + (rnd() - 0.5) * amount, y + (rnd() - 0.5) * amount, z, v]),
   }));
 }
@@ -171,6 +172,7 @@ export function burstShakenSquat(amount = 0.05, from = 50, to = 62, seed = 3) {
     i >= from && i < to
       ? {
           t: f.t,
+          aspect: f.aspect,
           kp: f.kp.map(([x, y, z, v]) => [
             x + (rnd() - 0.5) * amount,
             y + (rnd() - 0.5) * amount,

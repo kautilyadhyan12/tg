@@ -40,7 +40,7 @@
 // validate-trace.ts), so fs/console are fine here and banned in src/.
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { exerciseDefinitionSchema, type ExerciseDefinition, type PoseFrame } from "@app/shared";
+import { exerciseDefinitionSchema, type ExerciseDefinition, type CameraFrame } from "@app/shared";
 import { compileDefinition, createSession, lintDefinition, parseTrace, replay } from "../src/index.js";
 import {
   cutoffAtCatchRate,
@@ -215,7 +215,7 @@ interface ClipResult {
   /** Kept so section 6 can replay the clip again with a gate in front of the
    *  engine. Section 5's cut-offs are only known once every clip has been read,
    *  so the frames cannot be discarded when the clip is first measured. */
-  readonly frames: readonly PoseFrame[];
+  readonly frames: readonly CameraFrame[];
   readonly definition: ExerciseDefinition;
   /** Reps the engine counted with NO gate — section 3's headline, carried so
    *  section 6 compares against a measured number rather than re-deriving one. */
@@ -521,7 +521,7 @@ function gatedReplay(
       blocked++;
       run++;
       if (run > longestRun) longestRun = run;
-      const empty: PoseFrame = { t: frame.t, kp: [] };
+      const empty: CameraFrame = { t: frame.t, aspect: frame.aspect, kp: [] };
       session.processFrame(empty);
       continue;
     }

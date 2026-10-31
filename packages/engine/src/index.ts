@@ -7,6 +7,7 @@ export * from "./harness/replay.js";
 export * from "./harness/assert.js";
 export * from "./pipeline/types.js";
 export * from "./pipeline/ingest.js";
+export * from "./pipeline/trueProportions.js";
 export * from "./pipeline/conditioning.js";
 export * from "./pipeline/view.js";
 export * from "./pipeline/geometry.js";
