@@ -2,7 +2,7 @@
 // and write names the gym.
 import type { Sql, TransactionSql } from "postgres";
 import { GYM_POST_COMMENT_REPORTS_TO_HIDE, type GymMemberPosting, type GymPostCommentReportReason, type GymPostReaction } from "@app/shared";
-import type { Reader } from "./repo.js";
+import { posts, type Reader, type ReactorRow } from "./repo.js";
 
 type SqlOrTx = Sql | TransactionSql;
 
@@ -147,8 +147,16 @@ export async function replyCounts(sql: SqlOrTx, gymId: string, parentIds: readon
   return new Map(rows.map((r) => [r.parent_id, r.n]));
 }
 
-/** The reactions counted for these comments: a reaction counts while its giver is a live app member
- *  of the gym, and a member reading is not sent those of anybody they blocked, as on a post. */
+/** A reaction counts while its giver is a live app member of the gym who has not blocked the comment's writer. */
+const countedReaction = (sql: SqlOrTx) => sql`
+  JOIN gym_members m ON m.gym_id = r.gym_id AND m.user_id = r.user_id AND m.removed_at IS NULL
+  JOIN users u ON u.id = r.user_id AND u.status = 'active'
+  JOIN gym_post_comments rc ON rc.gym_id = r.gym_id AND rc.id = r.comment_id
+    AND NOT (rc.by_member AND EXISTS (
+      SELECT 1 FROM gym_post_blocks rb
+      WHERE rb.gym_id = r.gym_id AND rb.user_id = r.user_id AND rb.blocked_user_id = rc.author_user_id))`;
+
+/** The reactions counted for these comments; a member reading is not sent those of anybody they blocked, as on a post. */
 export async function reactionCounts(sql: SqlOrTx, gymId: string, commentIds: readonly string[], viewerId: string | null): Promise<{ commentId: string; reaction: string; count: number }[]> {
   if (commentIds.length === 0) return [];
   const unblocked =
@@ -160,12 +168,7 @@ export async function reactionCounts(sql: SqlOrTx, gymId: string, commentIds: re
   const rows = await sql<{ comment_id: string; reaction: string; n: number }[]>`
     SELECT r.comment_id, r.reaction, count(*)::int AS n
     FROM gym_post_comment_reactions r
-    JOIN gym_members m ON m.gym_id = r.gym_id AND m.user_id = r.user_id AND m.removed_at IS NULL
-    JOIN users u ON u.id = r.user_id AND u.status = 'active'
-    JOIN gym_post_comments rc ON rc.gym_id = r.gym_id AND rc.id = r.comment_id
-      AND NOT (rc.by_member AND EXISTS (
-        SELECT 1 FROM gym_post_blocks rb
-        WHERE rb.gym_id = r.gym_id AND rb.user_id = r.user_id AND rb.blocked_user_id = rc.author_user_id))
+    ${countedReaction(sql)}
     WHERE r.gym_id = ${gymId} AND r.comment_id = ANY (${[...commentIds]}::uuid[]) ${unblocked}
     GROUP BY r.comment_id, r.reaction`;
   return rows.map((r) => ({ commentId: r.comment_id, reaction: r.reaction, count: r.n }));
@@ -265,6 +268,22 @@ export async function removeOwn(tx: TransactionSql, gymId: string, commentId: st
   return true;
 }
 
+/** Staff remove anybody's comment or reply, and a comment's replies go with it. False when it was
+ *  removed already. */
+export async function removeByStaff(tx: TransactionSql, gymId: string, commentId: string, staffId: string, at: Date): Promise<boolean> {
+  const rows = await tx<{ id: string }[]>`
+    UPDATE gym_post_comments SET removed_at = ${at}, removed_by_user_id = ${staffId}
+    WHERE gym_id = ${gymId} AND id = ${commentId} AND removed_at IS NULL
+    RETURNING id`;
+  if (rows.length === 0) return false;
+  const replies = await tx<{ id: string }[]>`
+    UPDATE gym_post_comments SET removed_at = ${at}, removed_by_user_id = ${staffId}
+    WHERE gym_id = ${gymId} AND parent_id = ${commentId} AND removed_at IS NULL
+    RETURNING id`;
+  await clearRemoved(tx, gymId, [commentId, ...replies.map((r) => r.id)], at);
+  return true;
+}
+
 /** Everything on a post that has just been removed. */
 export async function removeAllOnPost(tx: TransactionSql, gymId: string, postId: string, at: Date): Promise<void> {
   const rows = await tx<{ id: string }[]>`
@@ -335,4 +354,133 @@ export async function deleteReactionsToMember(tx: TransactionSql, gymId: string,
       AND ((c.by_member AND c.author_user_id = ${authorId}) OR EXISTS (
         SELECT 1 FROM gym_post_comments pc
         WHERE pc.gym_id = c.gym_id AND pc.id = c.parent_id AND pc.by_member AND pc.author_user_id = ${authorId}))`;
+}
+
+// ── FOR STAFF (17e-ii) ──
+
+/** Who gave this reaction to this comment, newest first: exactly those the counts count. */
+export async function reactorsOf(sql: SqlOrTx, gymId: string, commentId: string, reaction: GymPostReaction, limit: number): Promise<ReactorRow[]> {
+  const rows = await sql<{ display_name: string; email: string | null; record_name: string | null }[]>`
+    SELECT u.display_name, u.email::text AS email, nullif(btrim(e.full_name), '') AS record_name
+    FROM gym_post_comment_reactions r
+    ${countedReaction(sql)}
+    LEFT JOIN gym_member_list_entries e ON e.gym_id = m.gym_id AND e.id = m.entry_id
+    WHERE r.gym_id = ${gymId} AND r.comment_id = ${commentId} AND r.reaction = ${reaction}
+    ORDER BY r.created_at DESC, r.user_id
+    LIMIT ${limit}`;
+  return rows.map((r) => ({ displayName: r.display_name, email: r.email, recordName: r.record_name }));
+}
+
+export async function membersCanComment(sql: SqlOrTx, gymId: string): Promise<boolean> {
+  const rows = await sql<{ members_can_comment: boolean }[]>`SELECT members_can_comment FROM gyms WHERE id = ${gymId}`;
+  return rows[0]?.members_can_comment ?? true;
+}
+
+/** The gym's switch; false when it was already so. */
+export async function setMembersCanComment(tx: TransactionSql, gymId: string, on: boolean): Promise<boolean> {
+  const rows = await tx<{ id: string }[]>`
+    UPDATE gyms SET members_can_comment = ${on} WHERE id = ${gymId} AND members_can_comment <> ${on} RETURNING id`;
+  return rows.length === 1;
+}
+
+export interface ReportedCommentRow {
+  comment: CommentRow;
+  post: { id: string; body: string; byMember: boolean; authorName: string | null; authorEmail: string | null; authorRecordName: string | null };
+  reports: number;
+  allReports: number;
+  reportsMark: string;
+  firstAt: Date;
+  lastAt: Date;
+  total: number;
+}
+
+/** One value for exactly these reports of a comment: another report, or one fewer, changes it. */
+const reportsMark = (sql: SqlOrTx) => sql`md5(coalesce(string_agg(a.id::text, ',' ORDER BY a.id), ''))`;
+
+/** The comments and replies with a report nobody has answered, that staff can still read, on a post
+ *  they can still read; longest waiting first. Never who reported. */
+export async function reportedComments(sql: SqlOrTx, gymId: string, limit: number): Promise<ReportedCommentRow[]> {
+  const rows = await sql<(RawComment & {
+    post_body: string; post_by_member: boolean; post_author_name: string | null; post_author_email: string | null; post_author_record_name: string | null;
+    reports: number; all_reports: number; reports_mark: string; first_at: Date; last_at: Date; total: number;
+  })[]>`
+    SELECT x.*, p.body AS post_body, p.by_member AS post_by_member, p.author_name AS post_author_name, p.author_email AS post_author_email, p.author_record_name AS post_author_record_name,
+           r.reports, r.first_at, r.last_at, count(*) OVER ()::int AS total,
+           (SELECT count(*)::int FROM gym_post_comment_reports a WHERE a.gym_id = ${gymId} AND a.comment_id = x.id) AS all_reports,
+           (SELECT ${reportsMark(sql)} FROM gym_post_comment_reports a WHERE a.gym_id = ${gymId} AND a.comment_id = x.id) AS reports_mark
+    FROM (
+      SELECT comment_id, count(*)::int AS reports, min(created_at) AS first_at, max(created_at) AS last_at
+      FROM gym_post_comment_reports WHERE gym_id = ${gymId} AND closed_at IS NULL
+      GROUP BY comment_id
+    ) r
+    JOIN LATERAL (${shown(sql)} WHERE c.gym_id = ${gymId} AND c.id = r.comment_id AND ${seenBy(sql, "staff")}) x ON true
+    JOIN (${posts(sql, gymId)}) p ON p.id = x.post_id AND p.visible
+    ORDER BY r.first_at, x.id
+    LIMIT ${limit}`;
+  return rows.map((r) => ({
+    comment: toComment(r),
+    post: { id: r.post_id, body: r.post_body, byMember: r.post_by_member, authorName: r.post_author_name, authorEmail: r.post_author_email, authorRecordName: r.post_author_record_name },
+    reports: r.reports,
+    allReports: r.all_reports,
+    reportsMark: r.reports_mark,
+    firstAt: r.first_at,
+    lastAt: r.last_at,
+    total: r.total,
+  }));
+}
+
+/** Why these comments' open reports were made, by reason. */
+export async function openReportReasons(sql: SqlOrTx, gymId: string, commentIds: readonly string[]): Promise<{ commentId: string; reason: string; count: number }[]> {
+  if (commentIds.length === 0) return [];
+  const rows = await sql<{ comment_id: string; reason: string; n: number }[]>`
+    SELECT comment_id, reason, count(*)::int AS n FROM gym_post_comment_reports
+    WHERE gym_id = ${gymId} AND closed_at IS NULL AND comment_id = ANY (${[...commentIds]}::uuid[])
+    GROUP BY comment_id, reason`;
+  return rows.map((r) => ({ commentId: r.comment_id, reason: r.reason, count: r.n }));
+}
+
+/** What the people who reported these comments typed, on reports still open: each one's oldest first. */
+export async function openReportNotes(sql: SqlOrTx, gymId: string, commentIds: readonly string[], limit: number): Promise<{ commentId: string; note: string }[]> {
+  if (commentIds.length === 0) return [];
+  const rows = await sql<{ comment_id: string; note: string }[]>`
+    SELECT comment_id, note FROM (
+      SELECT comment_id, note, created_at, id, row_number() OVER (PARTITION BY comment_id ORDER BY created_at, id) AS rn
+      FROM gym_post_comment_reports
+      WHERE gym_id = ${gymId} AND closed_at IS NULL AND note IS NOT NULL AND comment_id = ANY (${[...commentIds]}::uuid[])
+    ) r
+    WHERE rn <= ${limit}
+    ORDER BY comment_id, created_at, id`;
+  return rows.map((r) => ({ commentId: r.comment_id, note: r.note }));
+}
+
+/** Holds a comment against reports landing while staff answer them. */
+export async function holdComment(tx: TransactionSql, gymId: string, commentId: string): Promise<void> {
+  await tx`SELECT 1 FROM gym_post_comments WHERE gym_id = ${gymId} AND id = ${commentId} FOR UPDATE`;
+}
+
+/** Closes a comment's open reports as kept, only while its reports, answered or not, are exactly the
+ *  ones staff were shown. One statement, as for a post. How many it closed. */
+export async function keepReports(tx: TransactionSql, gymId: string, commentId: string, at: Date, shownMark: string): Promise<number> {
+  const rows = await tx<{ id: string }[]>`
+    UPDATE gym_post_comment_reports SET closed_at = ${at}, outcome = 'kept'
+    WHERE gym_id = ${gymId} AND comment_id = ${commentId} AND closed_at IS NULL
+      AND (SELECT ${reportsMark(tx)} FROM gym_post_comment_reports a WHERE a.gym_id = ${gymId} AND a.comment_id = ${commentId}) = ${shownMark}
+    RETURNING id`;
+  return rows.length;
+}
+
+/** A comment's reports: every one it has had, and those nobody has answered. */
+export async function countReports(tx: TransactionSql, gymId: string, commentId: string): Promise<{ all: number; open: number }> {
+  const rows = await tx<{ all: number; open: number }[]>`
+    SELECT count(*)::int AS all, (count(*) FILTER (WHERE closed_at IS NULL))::int AS open
+    FROM gym_post_comment_reports WHERE gym_id = ${gymId} AND comment_id = ${commentId}`;
+  return rows[0] ?? { all: 0, open: 0 };
+}
+
+/** Shows a kept comment to members again. Not while five reports are waiting once more. */
+export async function showAgain(tx: TransactionSql, gymId: string, commentId: string): Promise<void> {
+  await tx`
+    UPDATE gym_post_comments SET hidden_at = NULL
+    WHERE gym_id = ${gymId} AND id = ${commentId} AND hidden_at IS NOT NULL
+      AND (SELECT count(*) FROM gym_post_comment_reports r WHERE r.gym_id = ${gymId} AND r.comment_id = ${commentId} AND r.closed_at IS NULL) < ${GYM_POST_COMMENT_REPORTS_TO_HIDE}`;
 }
