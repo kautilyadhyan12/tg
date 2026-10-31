@@ -239,7 +239,7 @@ d("refund a sale at the desk (real Postgres)", () => {
       const shown = after.sales.find((s) => s.id === mayaSale);
       expect(shown).toMatchObject({ undone: false, totalMinor: 8000, refundedMinor: 4000, canRefund: true, canUndo: false, stockCounted: false });
       expect(shown?.refunds).toEqual([
-        { id: expect.any(String) as string, amountMinor: 4000, method: "cash", reason: "returned", restocked: 0, refundedOn: "2026-10-16", by: "Priya Desk", receiptNumber, voided: null },
+        { id: expect.any(String) as string, amountMinor: 4000, method: "cash", reason: "returned", restocked: 0, refundedOn: "2026-10-16", by: "Priya Desk", receiptNumber, voided: null, square: null },
       ]);
       expect(after.sales.find((s) => s.id === raviSale)).toMatchObject({ refundedMinor: 0, refunds: [] });
       // Yesterday's takings stay what was taken; the refund is said on the day it went back.

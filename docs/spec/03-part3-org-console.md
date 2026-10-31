@@ -4328,7 +4328,7 @@ up once however often it is asked (measured 2026-10-30: the same key gives back 
 refused); while Square has not answered, nothing else is refunded or voided on that bill and the membership is not moved to another. Once Square
 takes it up, a row of `gym_member_refunds` holds the money as given back, with the payment's own method (Card on Terminal, Card on
 file), so the bill, the receipt, Reports and the download read it as any refund; the bill or fee and its line read **Refund pending** until Square finishes, and the sentence under the payment follows ("Square is processing this $10.00 refund to Visa ending 1111.", then "$10.00 was refunded to Visa ending 1111. It can take up to 10 business days to reach the card, depending on the bank.").
-The worker reads each pending refund 1, 2, 5 and 15 minutes after, then hourly and every 3 hours; the page reads again every 30
+The worker reads each pending refund about 1, 3, 8 and 23 minutes after the press (gaps of 1, 2, 5 and 15 minutes), then an hour on, then every 3 hours; the page reads again every 30
 seconds for 15 minutes while one is pending. FAILED or REJECTED after that: the app voids the refund itself (`square_failed`), the
 bill reads as it did, and the line says "Square could not refund this. No money went back." Past Square's 14 days pending, the line
 says to contact Square Support. A refund sent to the card is never voided here. No answer from Square is asked again with the same
