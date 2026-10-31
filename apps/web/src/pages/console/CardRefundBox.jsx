@@ -22,7 +22,7 @@ const newKey = () => globalThis.crypto.randomUUID();
 
 /** The box under a member's payment. `paymentsTo`: the place to connect Square, for whoever may; null for everybody else.
  *  `onNote`: opens Note a refund. `fee`: the fee this payment paid (`feeRefundWords`); null for a period's. */
-export default function CardRefundBox({ gymId, entryId, m, payment, fee = null, name, live, paymentsTo, onDone, onNote, onClose }) {
+export default function CardRefundBox({ gymId, entryId, m, payment, fee = null, name, live, paymentsTo, onDone, onNote, onStopped, onClose }) {
   return (
     <RefundToCardBox
       gymId={gymId}
@@ -35,6 +35,7 @@ export default function CardRefundBox({ gymId, entryId, m, payment, fee = null, 
       paymentsTo={paymentsTo}
       onDone={onDone}
       onNote={onNote}
+      onStopped={onStopped}
       onClose={onClose}
     />
   );
@@ -44,8 +45,8 @@ export default function CardRefundBox({ gymId, entryId, m, payment, fee = null, 
  *  goes back, told the body and how many went back on each shelf. `words`: its sentences, from what Square said. `shelves`: what it
  *  asks about the shelf, each `{ key, label, choices }`. `allLeft`: all that is left goes back, so no amount is asked. `onNote`: told
  *  what stopped the refund, if anything. `thing`: what staff open again to see where a refund stands. Where Square needs the card
- *  present (18d-iv-c) the box asks which Terminal, and waits there. */
-export function RefundToCardBox({ gymId, readKey, read, press, currency, words: wordsFor, reasons, shelves = [], allLeft = false, thing = 'payment', paymentsTo, onDone, onNote, onClose }) {
+ *  present (18d-iv-c) the box asks which Terminal, and waits there; `onStopped`: it stopped with no money sent, so the page reads again. */
+export function RefundToCardBox({ gymId, readKey, read, press, currency, words: wordsFor, reasons, shelves = [], allLeft = false, thing = 'payment', paymentsTo, onDone, onNote, onStopped, onClose }) {
   const [check, setCheck] = useState(null);
   const [draft, setDraft] = useState(null);
   const [problem, setProblem] = useState(null);
@@ -112,6 +113,7 @@ export function RefundToCardBox({ gymId, readKey, read, press, currency, words: 
     setWaiting(null);
     setBusy(false);
     if (seen.step === 'ended') {
+      onStopped?.();
       setProblem(cardRefundEndedLine(seen.onTerminal.ended));
       setDraft((d) => ({ ...d, requestKey: newKey() }));
       if (check.block === 'waiting') setCheck({ ...check, block: null, waitingPress: null });
@@ -130,6 +132,7 @@ export function RefundToCardBox({ gymId, readKey, read, press, currency, words: 
         onRefused={(line, code) => {
           setWaiting(null);
           setBusy(false);
+          onStopped?.();
           setProblem(line);
           if (NOTHING_SENT.includes(code)) setDraft((d) => ({ ...d, requestKey: newKey() }));
           if (check.block === 'waiting') setCheck({ ...check, block: null, waitingPress: null });

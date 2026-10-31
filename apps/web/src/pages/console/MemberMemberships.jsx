@@ -824,6 +824,7 @@ export default function MemberMemberships({
           paymentsTo={paymentsTo}
           onClose={() => setOpen(null)}
           onNote={() => startRefund(m, paymentId)}
+          onStopped={() => readQuietly.current()}
           onDone={(words, sent) => {
             setOpen(null);
             setSaidAt({ paymentId, line: words, sent, read: shown });

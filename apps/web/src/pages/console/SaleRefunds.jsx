@@ -150,7 +150,7 @@ export function SaleRefundBox({ gymId, country = null, sale, who, typeAmount = f
 }
 
 /** Refund to card on one product of a sale paid on the Terminal (18d-iv-b-ii): the money goes back through Square. */
-function SaleCardRefundBox({ gymId, sale, who, paymentsTo, onDone, onNote, onClose }) {
+function SaleCardRefundBox({ gymId, sale, who, paymentsTo, onDone, onNote, onStopped, onClose }) {
   return (
     <RefundToCardBox
       gymId={gymId}
@@ -165,13 +165,14 @@ function SaleCardRefundBox({ gymId, sale, who, paymentsTo, onDone, onNote, onClo
       paymentsTo={paymentsTo}
       onDone={onDone}
       onNote={onNote}
+      onStopped={onStopped}
       onClose={onClose}
     />
   );
 }
 
 /** Refund to card on all of a sale: one refund at Square for all that is left, so no amount is asked. */
-function WholeCardRefundBox({ gymId, basket, lines, who, paymentsTo, onDone, onNote, onClose }) {
+function WholeCardRefundBox({ gymId, basket, lines, who, paymentsTo, onDone, onNote, onStopped, onClose }) {
   const saleId = lines[0]?.id ?? '';
   return (
     <RefundToCardBox
@@ -188,6 +189,7 @@ function WholeCardRefundBox({ gymId, basket, lines, who, paymentsTo, onDone, onN
       paymentsTo={paymentsTo}
       onDone={onDone}
       onNote={onNote}
+      onStopped={onStopped}
       onClose={onClose}
     />
   );
@@ -291,7 +293,7 @@ function WholeNoteBox({ gymId, country, basket, lines, who, onDone, onClose }) {
 /** Refund sale on a sale (18q): on a sale of several products, which one the money went back
  *  for is picked first, from those with something left to refund; then that product's box.
  *  `toCard`: Refund to card was pressed, on a sale paid on the Terminal; else Note a refund. */
-export function BasketRefundBox({ gymId, country = null, basket, who, toCard = false, paymentsTo = null, onDone, onClose }) {
+export function BasketRefundBox({ gymId, country = null, basket, who, toCard = false, paymentsTo = null, onDone, onStopped, onClose }) {
   const open = basket.lines.filter((line) => line.canRefund === true);
   const [lineId, setLineId] = useState(open.length === 1 ? (open[0]?.id ?? '') : '');
   /** Refund to card said to note it instead: the box stays on the same product. */
@@ -309,13 +311,13 @@ export function BasketRefundBox({ gymId, country = null, basket, who, toCard = f
   };
   const wholeBox = () =>
     toCard && !noting ? (
-      <WholeCardRefundBox key={ALL} gymId={gymId} basket={basket} lines={open} who={who} paymentsTo={paymentsTo} onDone={onDone} onNote={noteFromWhole} onClose={onClose} />
+      <WholeCardRefundBox key={ALL} gymId={gymId} basket={basket} lines={open} who={who} paymentsTo={paymentsTo} onDone={onDone} onNote={noteFromWhole} onStopped={onStopped} onClose={onClose} />
     ) : (
       <WholeNoteBox key={ALL} gymId={gymId} country={country} basket={basket} lines={open} who={who} onDone={onDone} onClose={onClose} />
     );
   const box = (sale) =>
     toCard && !noting ? (
-      <SaleCardRefundBox key={sale.id} gymId={gymId} sale={sale} who={who} paymentsTo={paymentsTo} onDone={onDone} onNote={() => setNoting(true)} onClose={onClose} />
+      <SaleCardRefundBox key={sale.id} gymId={gymId} sale={sale} who={who} paymentsTo={paymentsTo} onDone={onDone} onNote={() => setNoting(true)} onStopped={onStopped} onClose={onClose} />
     ) : (
       <SaleRefundBox key={sale.id} gymId={gymId} country={country} sale={sale} who={who} typeAmount={pickToNote} onDone={onDone} onClose={onClose} />
     );

@@ -464,9 +464,12 @@ describe('What the box and the page say', () => {
     const items = await menuItems(await paymentRow());
     fireEvent.click(items.find((i) => i.textContent.startsWith('Refund to card')));
     const wait = within(await screen.findByTestId('terminal-refund-wait'));
+    const readsBefore = orgService.getHeldMemberships.mock.calls.length;
     fireEvent.click(wait.getByRole('button', { name: 'Cancel' }));
     const box = within(await screen.findByTestId('card-refund-box'));
     await box.findByText('The refund was cancelled. No money went back.');
+    // The page reads again, so its "waiting on the Terminal" line goes.
+    await waitFor(() => expect(orgService.getHeldMemberships.mock.calls.length).toBeGreaterThan(readsBefore));
     expect(box.getByRole('button', { name: 'Refund $49.99 on the Terminal' })).toBeTruthy();
   });
 
