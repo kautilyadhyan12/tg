@@ -286,7 +286,10 @@ export function feeForWords(fee) {
 }
 
 /** A fee paid, or taken off, after its booking stopped counting (18h-i, round one). */
-const noLongerOwed = (fee) => `No longer owed: ${whyNotOwed(fee)}.`;
+export const noLongerOwed = (fee) => `No longer owed: ${whyNotOwed(fee)}.`;
+
+/** Kept on Overview's Refunds to review (18d-iv-b-iii): who decided and when. */
+const keptWords = (fee) => (fee.kept === null || fee.kept === undefined ? '' : ` Kept${fee.kept.by === null ? '' : ` by ${fee.kept.by}`} on ${dayWords(fee.kept.on)}.`);
 
 /** One fee as a box: what it is and what it was for, its amount and tag, when it is due,
  *  who waived it, and its payment, a voided one struck through. */
@@ -318,8 +321,8 @@ export function feeRow(fee, currency, today) {
             ? // Paid on the Terminal or from the card on file: it goes back through Square, and Void payment
               // is not offered (18d-vi-b-i, 18d-iii-i, 18d-iv-b-i).
               fee.payments.some((p) => paidThroughSquare(p.method))
-              ? `${noLongerOwed(fee)} To give ${partRefunded ? 'the rest' : 'the money'} back, press Refund on the payment.`
-              : `${noLongerOwed(fee)} If you gave the money back, void the payment.`
+              ? `${noLongerOwed(fee)}${keptWords(fee)} To give ${partRefunded ? 'the rest' : 'the money'} back, press Refund on the payment.`
+              : `${noLongerOwed(fee)}${keptWords(fee)} If you gave the money back, void the payment.`
             : null,
     payments: paymentLines(fee.payments, fee.voidedPayments, currency),
     ...cardLines(fee),

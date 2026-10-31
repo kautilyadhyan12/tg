@@ -128,6 +128,7 @@ const TAG_TONES = { green: 'c-tag-good', orange: 'c-tag-warn', red: 'c-tag-bad',
 const TONE_COLOURS = { green: 'var(--good)', orange: 'var(--warn)', red: 'var(--bad)', soft: 'var(--soft-t)', plain: 'var(--raise-line)' };
 const MAIN = 'c-btn c-btn-p';
 const PLAIN = 'c-btn c-btn-s';
+const REFUND_NOT_SHOWN = "This payment isn't on this page. It may be too old, or it may have changed.";
 const SMALL = 'c-btn c-btn-s c-btn-sm';
 
 /** A gym with no memberships set up yet: what a person's page says, and for staff who cannot set
@@ -178,6 +179,7 @@ export default function MemberMemberships({
   /** Opened by Take payment on Failed payments (18d-iii-ii-b): { membershipId, feeBillId }, the
    *  bill whose Record payment is open already, once, when their memberships have loaded. */
   payNow = null,
+  refundNow = null,
   /** How often the Terminal's box asks the server; the box's own unless a test says. */
   checkEveryMs,
   squareEveryMs = 30_000,
@@ -412,12 +414,31 @@ export default function MemberMemberships({
       setOpen({ what: 'pay', id: m.id });
     }
   }
+  // Opened by Refund on Overview's Refunds to review: the box of that payment, as its own button opens it, or Void payment for a
+  // fee paid by hand.
+  const [refundedNow, setRefundedNow] = useState(false);
+  if (refundNow !== null && !readOnly && shown !== null && !refundedNow) {
+    setRefundedNow(true);
+    // A membership with a refund to give back has often ended, and sits in the earlier ones.
+    setShowPast(true);
+    const m = shown.memberships.find((x) => x.id === refundNow.membershipId);
+    const fee = m?.billing && refundNow.voidFeeId !== null ? (m.billing.fees ?? []).find((x) => x.id === refundNow.voidFeeId && x.can.voidPaymentId !== null) : undefined;
+    if (fee !== undefined) {
+      setFeeForm({ what: 'voidFeePayment', ...feePayDraft(fee, newRequestKey), tried: false });
+      setVoidForm({ reason: '', tried: false });
+      setOpen({ what: 'voidFeePayment', id: m.id });
+    } else if (m?.billing && refundNow.voidFeeId === null && paymentOf(m, refundNow.paymentId) !== null) {
+      setOpen({ what: 'cardRefund', id: m.id, paymentId: refundNow.paymentId });
+    } else {
+      setNotice(refundNow.voidFeeId === null ? `${REFUND_NOT_SHOWN} Check it in your Square Dashboard.` : REFUND_NOT_SHOWN);
+    }
+  }
   const scrolledNow = useRef(false);
-  const payOpenNow = paidNow && (open?.what === 'pay' || open?.what === 'payFee');
+  const payOpenNow = (paidNow && (open?.what === 'pay' || open?.what === 'payFee')) || (refundedNow && (open?.what === 'cardRefund' || open?.what === 'voidFeePayment'));
   useEffect(() => {
     if (!payOpenNow || scrolledNow.current) return;
     scrolledNow.current = true;
-    document.querySelector('[data-testid="held-pay"], [data-testid="held-fee-pay"]')?.scrollIntoView?.({ block: 'center' });
+    document.querySelector('[data-testid="held-pay"], [data-testid="held-fee-pay"], [data-testid="card-refund-box"], [data-testid="held-fee-void"]')?.scrollIntoView?.({ block: 'center' });
   }, [payOpenNow]);
   // What their list says their membership is, where they do not hold it here.
   const listed = shown === null ? null : listedRow(shown.listed, name, managesTypes);

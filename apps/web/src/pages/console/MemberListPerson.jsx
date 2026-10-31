@@ -403,7 +403,7 @@ function WaiverLine({ member, desk, timeZone }) {
   );
 }
 
-export default function MemberListPerson({ gymId, gym, entryId, list, words, readOnly, canRemove = false, pair = null, addMembership = false, payNow = null, onClose, onChanged }) {
+export default function MemberListPerson({ gymId, gym, entryId, list, words, readOnly, canRemove = false, pair = null, addMembership = false, payNow = null, refundNow = null, onClose, onChanged }) {
   const titleId = useId();
   const dialogRef = useRef(null);
   const fields = list?.fields ?? [];
@@ -1491,6 +1491,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           membershipsTo={placeFor(gym?.slug, viewerPrivileges(gym), 'memberships')}
           addNow={addMembership}
           payNow={payNow}
+          refundNow={refundNow}
           signNow={signNow !== null && signNow.entryId === p.entryId ? signNow.membershipId : null}
           hasEmail={typeof p.email === 'string' && p.email !== ''}
         />

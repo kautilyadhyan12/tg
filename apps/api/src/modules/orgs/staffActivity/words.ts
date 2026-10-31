@@ -321,6 +321,15 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
     const amount = money(s, "amountMinor");
     return `Waived ${whose(s, feeOf(s))}${amount === null ? "" : ` of ${amount}`}`;
   },
+  "org.member_fee_kept": (s) => {
+    const amount = money(s, "amountMinor");
+    return `Kept ${whose(s, feeOf(s))}${amount === null ? "" : ` of ${amount}`}, no longer owed`;
+  },
+  "org.refund_not_needed": (s) => {
+    const amount = money(s, "amountMinor");
+    const what = text(s, "product");
+    return `Marked no refund needed${amount === null ? "" : ` on ${amount}`} for ${what ?? person(s)}`;
+  },
   "org.member_fee_payment_voided": (s) =>
     text(s, "reason") === "not_this_bill" ? `Took ${pay(s)} taken in Square Point of Sale off ${whose(s, feeOf(s))}` : `Voided ${pay(s)} from ${person(s)} for a ${feeOf(s)}`,
   "org.member_payer_set": (s) => `Set ${payerOf(s)} to pay for ${person(s)}`,

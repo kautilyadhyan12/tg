@@ -199,6 +199,12 @@ const voidedBy = <T extends z.ZodTypeAny>(reason: T) => z.object({ reason: reaso
 export const voidedMemberRefundSchema = memberRefundSchema.extend({ voided: voidedBy(refundVoidKeptSchema) }).strict();
 export type VoidedMemberRefund = z.infer<typeof voidedMemberRefundSchema>;
 
+/** A refund to the card with no answer, or none ever (`lost`), said under its payment. `decided`: staff said no refund is needed. */
+export const cardRefundOpenSchema = z
+  .object({ amountMinor: minorSchema, on: daySchema, lost: z.boolean(), decided: z.object({ on: daySchema, by: z.string().nullable() }).strict().nullable().default(null) })
+  .strict();
+export type CardRefundOpen = z.infer<typeof cardRefundOpenSchema>;
+
 export const memberPaymentSchema = z
   .object({
     id: z.string().uuid(),
@@ -219,7 +225,7 @@ export const memberPaymentSchema = z
     /** The card on file it was charged to (18d-iii-i); null for every other way. */
     card: cardSeenSchema.nullable().default(null),
     /** A refund to the card Square has not answered (18d-iv-a): `lost`, never answered, so it is checked in Square. */
-    cardRefund: z.object({ amountMinor: minorSchema, on: daySchema, lost: z.boolean() }).strict().nullable().default(null),
+    cardRefund: cardRefundOpenSchema.nullable().default(null),
   })
   .strict();
 export type MemberPayment = z.infer<typeof memberPaymentSchema>;
@@ -315,6 +321,8 @@ export const memberFeeSchema = z
      *  staff marked them came, the class was cancelled, or the session is gone: a fee paid before that stays paid,
      *  and voiding its payment takes the fee off instead of making it owed again. */
     stillOwed: z.boolean().default(true),
+    /** Staff kept it, no longer owed, rather than refund it (18d-iv-b-iii). */
+    kept: z.object({ on: daySchema, by: z.string().nullable() }).strict().nullable().default(null),
     /** The refunds that stand against its payment (18d-iv-b-i). */
     refundedMinor: minorSchema.default(0),
     payments: z.array(memberPaymentSchema),
