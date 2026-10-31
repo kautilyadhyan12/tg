@@ -211,7 +211,12 @@ describe('a sale paid on the Terminal', () => {
     expect(screen.queryByTestId('card-refund-box')).toBeNull();
     fireEvent.change(list, { target: { value: 's2' } });
     const form = within(await screen.findByTestId('sale-refund-form'));
-    expect(form.getByLabelText('Amount given back (USD)')).toBeTruthy();
+    expect(form.getByLabelText('Amount given back (USD)').value).toBe('');
+    fireEvent.change(form.getByLabelText('How you gave it back'), { target: { value: 'card_at_desk' } });
+    fireEvent.change(form.getByLabelText('Why it was refunded'), { target: { value: 'returned' } });
+    fireEvent.click(form.getByRole('button', { name: 'Note refund' }));
+    expect((await form.findByRole('alert')).textContent).toBe('Type the amount you gave back, like 20 or 20.50.');
+    expect(svc.refundSale).not.toHaveBeenCalled();
   });
 
   it('where Square can refund nothing, Note a refund stays on all of the sale, saying the amount', async () => {

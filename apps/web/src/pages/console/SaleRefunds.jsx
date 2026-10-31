@@ -48,9 +48,10 @@ const newKey = () => globalThis.crypto.randomUUID();
 /** The list's choice for all of a sale. */
 const ALL = 'all';
 
-/** The Refund sale box. `who` is the buyer's name, or null for a walk-in. */
-export function SaleRefundBox({ gymId, country = null, sale, who, onDone, onClose }) {
-  const [draft, setDraft] = useState(() => saleRefundDraft(sale, newKey));
+/** The Refund sale box. `who` is the buyer's name, or null for a walk-in. `typeAmount`: the amount is only what staff type, as
+ *  where Square gave back part of the sale with no note here. */
+export function SaleRefundBox({ gymId, country = null, sale, who, typeAmount = false, onDone, onClose }) {
+  const [draft, setDraft] = useState(() => ({ ...saleRefundDraft(sale, newKey), ...(typeAmount ? { amount: '' } : {}) }));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const words = saleRefundWords(sale, who);
@@ -314,7 +315,7 @@ export function BasketRefundBox({ gymId, country = null, basket, who, toCard = f
     toCard && !noting ? (
       <SaleCardRefundBox key={sale.id} gymId={gymId} sale={sale} who={who} paymentsTo={paymentsTo} onDone={onDone} onNote={() => setNoting(true)} onClose={onClose} />
     ) : (
-      <SaleRefundBox key={sale.id} gymId={gymId} country={country} sale={sale} who={who} onDone={onDone} onClose={onClose} />
+      <SaleRefundBox key={sale.id} gymId={gymId} country={country} sale={sale} who={who} typeAmount={pickToNote} onDone={onDone} onClose={onClose} />
     );
   if (basket.lines.length === 1) return box(basket.first);
   return (
