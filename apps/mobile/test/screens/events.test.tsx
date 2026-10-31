@@ -5,6 +5,7 @@ import { eventBookingSettings, eventGoing } from "@app/shared";
 import { memberGymEventSchema } from "@app/shared";
 import { App } from "../../src/App";
 import { POSTER_TALLEST, posterHeight } from "../../src/look/sizing";
+import { NEAR_THE_SCREEN } from "../../src/screens/gym/Events";
 import type { Ask } from "../../src/session/calls";
 import { fakeServer, kept, lost, memoryStore, refusal, tokens, type Reply } from "../kit";
 
@@ -529,7 +530,7 @@ describe("the page stays current", () => {
     await openEvents(server.ask, IRON);
     await page().findByText("Open day");
     const before = reads(server);
-    await act(async () => { await jest.advanceTimersByTimeAsync(5 * 60_000); });
+    await act(async () => { await jest.advanceTimersByTimeAsync(2.5 * 3_600_000); });
     expect(reads(server)).toBe(before);
   });
 
@@ -588,6 +589,6 @@ describe("posters", () => {
     await openEvents(server.ask, IRON);
     await page().findByText("Event 10");
     await settle();
-    expect(download.mock.calls.length).toBeLessThanOrEqual(10);
+    expect(download.mock.calls.length).toBe(NEAR_THE_SCREEN);
   });
 });

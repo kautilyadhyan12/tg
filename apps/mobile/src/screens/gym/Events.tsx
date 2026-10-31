@@ -50,7 +50,7 @@ const comingPath = (gymId: string, eventId: string) => `${eventsPath(gymId)}/${e
 const posterPath = (gymId: string, eventId: string, posterId: string) => `${eventsPath(gymId)}/${encodeURIComponent(eventId)}/poster/${encodeURIComponent(posterId)}`;
 
 /** Posters are read only for events near the screen: a gym may list 100, at most 1 MB each. */
-const NEAR_THE_SCREEN = 5;
+export const NEAR_THE_SCREEN = 5;
 const READ_AGAIN_AFTER_MISSED_MS = 20_000;
 /** While the member is on a waitlist the page is told to be checked: every 30 seconds, for at most 15 minutes. */
 const WAITLIST_READ_MS = 30_000;
@@ -227,7 +227,13 @@ function EventsBody({ place, onClose, bottom }: { place: EventsPlace; onClose: (
     const nowMs = Date.now();
     const at = nextEventChangeAt(list.events, nowMs);
     if (at === null) return undefined;
-    const timer = setTimeout(() => void load(true), Math.min(at - nowMs + 1000, LONGEST_TIMER_MS));
+    let timer: ReturnType<typeof setTimeout>;
+    const wait = () => {
+      const left = at - Date.now() + 1000;
+      // Only the start or end itself is worth a read; a long wait is only cut into pieces.
+      timer = left > LONGEST_TIMER_MS ? setTimeout(wait, LONGEST_TIMER_MS) : setTimeout(() => void load(true), left);
+    };
+    wait();
     return () => {
       clearTimeout(timer);
     };

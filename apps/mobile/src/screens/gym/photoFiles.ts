@@ -5,8 +5,8 @@ import { Directory, File, Paths } from "expo-file-system";
 
 const folder = () => new Directory(Paths.cache, "updates");
 
-/** Empties the folder: when Updates opens and closes, and whenever nobody is signed in, since an app killed with
- *  Updates open never reached its closing. One that cannot be emptied now is tried again at the next of those. */
+/** Empties the folder: when Updates or Events opens and closes, and whenever nobody is signed in, since an app killed
+ *  with either open never reached its closing. One that cannot be emptied now is tried again at the next of those. */
 export function emptyPhotoFolder(): void {
   try {
     const here = folder();
