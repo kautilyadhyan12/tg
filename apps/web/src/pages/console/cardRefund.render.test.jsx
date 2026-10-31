@@ -145,7 +145,8 @@ const feePayment = async () => within(await screen.findByTestId('held-fee-paymen
 describe('Refund to card on a fee', () => {
   it('opened from Refunds to review on a cancelled membership: the earlier memberships open, with the box (18d-iv-b-iii)', async () => {
     const cancelled = feePage();
-    cancelled.data.memberships[0] = { ...cancelled.data.memberships[0], status: 'cancelled', view: { ...cancelled.data.memberships[0].view, state: 'cancelled' } };
+    const [gone] = cancelled.data.memberships;
+    cancelled.data.memberships[0] = { ...gone, view: { ...gone.view, status: 'cancelled' }, billing: { ...gone.billing, pay: null } };
     orgService.getHeldMemberships.mockResolvedValue(cancelled);
     orgService.getCardRefund.mockResolvedValue({ data: { card: VISA, leftMinor: 1000, refundedInSquareMinor: 0, block: null } });
     draw({ refundNow: { membershipId: cancelled.data.memberships[0].id, paymentId: FEE_PAYMENT, voidFeeId: null } });
