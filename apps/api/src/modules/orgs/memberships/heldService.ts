@@ -145,7 +145,10 @@ function billingOf(
     reason: r.reason,
     by: r.by,
     receiptNumber: r.receiptNumber,
-    square: r.square === null ? null : { state: r.square.state, card: r.square.card, late: r.square.state === "pending" && daysBetween(r.square.startedOn, ctx.today) > CARD_REFUND_LIMITS.pendingDays },
+    square:
+      r.square === null
+        ? null
+        : { state: r.square.state, card: r.square.card, late: r.square.state === "pending" && daysBetween(r.square.startedOn, ctx.today) > CARD_REFUND_LIMITS.pendingDays, pressId: r.square.pressId },
   });
   const refundsOf = (paymentId: string) => refunds.filter((r) => r.paymentId === paymentId).map(refundOf);
   const voidedRefundsOf = (paymentId: string) => voided.refunds.filter((r) => r.paymentId === paymentId).map((r) => ({ ...refundOf(r), voided: r.voided }));
@@ -409,6 +412,13 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
       fromList: row.fromList,
       notCharged: list.bills.some((b) => b.membershipId === row.id && b.cancelled !== null && b.periodIndex === row.membership.paidPeriods - 1),
       refundedInFull: list.bills.some((b) => b.membershipId === row.id && b.status === "refunded" && b.periodIndex === row.membership.paidPeriods - 1),
+      refundPending: list.bills.some(
+        (b) =>
+          b.membershipId === row.id &&
+          b.status === "refunded" &&
+          b.periodIndex === row.membership.paidPeriods - 1 &&
+          list.refunds.some((r) => r.square?.state === "pending" && list.payments.some((p) => p.id === r.paymentId && p.billId === b.id)),
+      ),
       discount: row.discount,
       freeDays: freeDays.get(row.id) ?? [],
       tax: row.tax,

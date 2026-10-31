@@ -24,6 +24,7 @@ import {
   type HeldCover,
 } from "@app/shared";
 import { heldForBooking, heldForClasses } from "../memberships/heldRepo.js";
+import { feeListState, feeRefundSql, type FeeListState } from "../memberships/feesRepo.js";
 
 type SqlOrTx = Sql | TransactionSql;
 
@@ -490,7 +491,7 @@ export interface StaffBookingRow {
   packCharged: boolean;
   heldMembershipId: string | null;
   /** Its late cancel or no-show fee that stands, or one waived (18h-i). */
-  fee: { amountMinor: number; state: "owed" | "paid" | "refunded" | "waived" } | null;
+  fee: { amountMinor: number; state: FeeListState } | null;
   at: Date;
 }
 
@@ -516,12 +517,13 @@ export async function staffList(
       held_membership_id: string | null;
       fee_minor: number | null;
       fee_status: string | null;
+      fee_refund: string | null;
       fee_waived: boolean | null;
       at: Date;
     }[]
   >`
     SELECT b.id, b.status, b.pack_charged, b.held_membership_id, COALESCE(b.cancelled_at, b.booked_at, b.created_at) AS at, e.id AS entry_id,
-           f.amount_minor AS fee_minor, f.status AS fee_status, (f.void_reason = 'waived') AS fee_waived,
+           f.amount_minor AS fee_minor, f.status AS fee_status, (f.void_reason = 'waived') AS fee_waived, ${feeRefundSql(sql)} AS fee_refund,
            CASE WHEN u.status = 'active' THEN u.display_name END AS display_name,
            CASE WHEN u.status = 'active' THEN u.email::text END AS email,
            nullif(btrim(e.full_name), '') AS record_name,
@@ -532,7 +534,7 @@ export async function staffList(
     LEFT JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
     LEFT JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
     LEFT JOIN LATERAL (
-      SELECT x.amount_minor, x.status, x.void_reason FROM gym_member_bills x
+      SELECT x.id, x.gym_id, x.amount_minor, x.status, x.void_reason FROM gym_member_bills x
       WHERE x.gym_id = b.gym_id AND x.class_booking_id = b.id AND (x.status <> 'void' OR x.void_reason = 'waived')
       ORDER BY x.created_at DESC LIMIT 1
     ) f ON true
@@ -552,7 +554,7 @@ export async function staffList(
     fee:
       r.fee_minor === null || r.fee_status === null
         ? null
-        : { amountMinor: r.fee_minor, state: r.fee_waived === true ? "waived" : r.fee_status === "open" ? "owed" : r.fee_status === "refunded" ? "refunded" : "paid" },
+        : { amountMinor: r.fee_minor, state: feeListState(r) },
     at: r.at,
   }));
 }

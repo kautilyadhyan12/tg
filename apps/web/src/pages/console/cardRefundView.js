@@ -63,16 +63,18 @@ export function cardRefundOpenLine(open, currency) {
     : `A refund of ${money} is waiting for Square's answer.`;
 }
 
-/** What the sentence under a payment says now: a refund Square was still processing says it has finished once it has, so the
- *  sentence never disagrees with the line under it, and says nothing once it failed: the crossed-out line says that. `sent`:
- *  Square's answer to the press and the card's words, or null for a sentence about anything else. */
+/** What the sentence under a payment says now, by its own press, never another refund of the same amount: it follows the
+ *  refund as Square moves it on, so it never disagrees with the line under it, and says nothing once there is nothing true to
+ *  say: the crossed-out line says a failure, and "We don't know whether…" a press Square never answered. `sent`: Square's answer
+ *  to the press and the card's words; none for a sentence about anything else. */
 export function cardRefundSaidNow(sent, payment, line) {
-  if (sent === null || sent === undefined || sent.step !== 'pending') return line;
-  const refund = (payment?.refunds ?? []).find((r) => r.amountMinor === sent.amountMinor && r.square !== null && r.square !== undefined);
-  if (refund === undefined) {
-    return (payment?.voidedRefunds ?? []).some((r) => r.amountMinor === sent.amountMinor && r.voided?.reason === 'square_failed') ? null : line;
-  }
-  return cardRefundSentLine(refund.square.state === 'pending' ? sent : { ...sent, step: 'completed' }, sent.cardWords);
+  if (sent === null || sent === undefined || sent.step === 'completed') return line;
+  const refund = (payment?.refunds ?? []).find((r) => r.square?.pressId === sent.pressId);
+  if (refund !== undefined) return cardRefundSentLine({ ...sent, step: refund.square.state }, sent.cardWords);
+  if ((payment?.voidedRefunds ?? []).some((r) => r.square?.pressId === sent.pressId)) return null;
+  if (sent.step === 'pending') return line;
+  // Square has not answered: said while the press waits, and no longer once it has ended with nothing written.
+  return payment?.cardRefund !== null && payment?.cardRefund !== undefined && !payment.cardRefund.lost ? line : null;
 }
 
 /** Whether anything on this person's page is waiting on Square: a refund it has not answered or not finished. */

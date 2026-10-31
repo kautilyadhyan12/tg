@@ -27,6 +27,7 @@ import {
   type ClassFees,
   type PtFeeState,
 } from "@app/shared";
+import { feeListState, feeRefundSql } from "../memberships/feesRepo.js";
 
 type SqlOrTx = Sql | TransactionSql;
 
@@ -223,22 +224,23 @@ const rawFee = {
   fee_minor: z.number().int().nullable(),
   fee_status: z.string().nullable(),
   fee_waived: z.boolean().nullable(),
+  fee_refund: z.string().nullable(),
 };
 
-function feeState(r: { fee_kind: "late_cancel" | "no_show" | null; fee_minor: number | null; fee_status: string | null; fee_waived: boolean | null }): PtFeeState | null {
+function feeState(r: { fee_kind: "late_cancel" | "no_show" | null; fee_minor: number | null; fee_status: string | null; fee_waived: boolean | null; fee_refund: string | null }): PtFeeState | null {
   if (r.fee_kind === null || r.fee_minor === null || r.fee_status === null) return null;
-  return { kind: r.fee_kind, amountMinor: r.fee_minor, state: r.fee_waived === true ? "waived" : r.fee_status === "open" ? "owed" : r.fee_status === "refunded" ? "refunded" : "paid" };
+  return { kind: r.fee_kind, amountMinor: r.fee_minor, state: feeListState(r) };
 }
 
 /** The newest fee of the session `a` that stands, or one staff waived (18h-ii), as `f`. */
 const FEE_OF = (sql: SqlOrTx) => sql`
   LEFT JOIN LATERAL (
-    SELECT x.fee, x.amount_minor, x.status, x.void_reason FROM gym_member_bills x
+    SELECT x.id, x.gym_id, x.fee, x.amount_minor, x.status, x.void_reason FROM gym_member_bills x
     WHERE x.gym_id = a.gym_id AND x.pt_appointment_id = a.id AND (x.status <> 'void' OR x.void_reason = 'waived')
     ORDER BY x.created_at DESC LIMIT 1
   ) f ON true`;
 
-const FEE_COLUMNS = (sql: SqlOrTx) => sql`f.fee AS fee_kind, f.amount_minor AS fee_minor, f.status AS fee_status, (f.void_reason = 'waived') AS fee_waived`;
+const FEE_COLUMNS = (sql: SqlOrTx) => sql`f.fee AS fee_kind, f.amount_minor AS fee_minor, f.status AS fee_status, (f.void_reason = 'waived') AS fee_waived, ${feeRefundSql(sql)} AS fee_refund`;
 
 const rawAppointment = z.object({
   id: z.string(),

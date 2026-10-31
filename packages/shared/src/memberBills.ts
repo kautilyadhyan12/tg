@@ -179,9 +179,10 @@ export const memberRefundSchema = z
     /** Its receipt's number, the gym's own (18g-i). */
     receiptNumber: receiptNumberSchema,
     /** Sent to the card through Square (18d-iv-a): where it stands there, and the card, where Square named it. `late`:
-     *  still pending after Square's 14 days. Null for one noted by hand. */
+     *  still pending after Square's 14 days. `pressId`: the press it came from (`cardRefundResponseSchema`). Null for one
+     *  noted by hand. */
     square: z
-      .object({ state: z.enum(["pending", "completed"]), card: cardSeenSchema.nullable(), late: z.boolean() })
+      .object({ state: z.enum(["pending", "completed"]), card: cardSeenSchema.nullable(), late: z.boolean(), pressId: z.string().uuid().nullable().default(null) })
       .strict()
       .nullable()
       .default(null),

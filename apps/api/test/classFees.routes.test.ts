@@ -607,8 +607,26 @@ d("a fee for a late cancel or a no-show, for classes (real Postgres)", { timeout
     // Refunded (18d-iv-b-i): the class's list says so, not "paid".
     const listed = async () => (JSON.parse((await inject("GET", `/v1/orgs/${gym.id}/class-sessions/${past}/bookings`, gym.owner.cookies)).body) as ClassSessionBookingsResponse).booked[0]?.fee;
     expect(await listed()).toMatchObject({ amountMinor: NO_SHOW, state: "paid" });
+    const payId = after?.payments[0]?.id ?? "";
+    // Part of it back: it says so.
+    await sql`
+      INSERT INTO gym_member_refunds (gym_id, payment_id, amount_minor, currency, method, reason, request_key, refunded_on, receipt_number)
+      SELECT gym_id, id, 100, currency, 'cash', 'other', ${randomUUID()}, paid_on, 999001 FROM gym_member_payments WHERE id = ${payId}`;
+    expect(await listed()).toMatchObject({ state: "part_refunded" });
+    await sql`DELETE FROM gym_member_refunds WHERE payment_id = ${payId}`;
+    // Still with Square: it does not say refunded yet.
     await sql`UPDATE gym_member_bills SET status = 'refunded' WHERE id = ${fee.id}`;
+    await sql`
+      INSERT INTO gym_square_refunds (id, gym_id, payment_id, environment, account_id, square_payment_id, square_refund_id, amount_minor, currency, reason, request_key, state, started_at, checked_at)
+      SELECT ${randomUUID()}, gym_id, id, 'sandbox', 'ACCOUNT', 'PAYMENT', ${`REFUND${randomUUID()}`}, amount_minor, currency, 'other', ${randomUUID()}, 'pending', now(), now()
+      FROM gym_member_payments WHERE id = ${payId}`;
+    expect(await listed()).toMatchObject({ state: "refund_pending" });
+    await sql`DELETE FROM gym_square_refunds WHERE payment_id = ${payId}`;
     expect(await listed()).toMatchObject({ amountMinor: NO_SHOW, state: "refunded" });
+    // A refunded fee is not opened a second time, whatever staff mark next.
+    expect((await mark(gym, past, booking, "no_show")).statusCode).toBe(200);
+    expect((await feesOf(ivy)).filter((f) => f.status !== "void").map((f) => f.status)).toEqual(["refunded"]);
+    expect((await mark(gym, past, booking, "attended")).statusCode).toBe(200);
     await sql`UPDATE gym_member_bills SET status = 'paid' WHERE id = ${fee.id}`;
     // Its payment voided: nothing is owed, then or after another Came.
     const voided = await inject("POST", `${feeUrl(gym, ivy, fee.id)}/payments/${after?.can.voidPaymentId ?? ""}/void`, gym.owner.cookies, { reason: "mistake" });

@@ -109,8 +109,8 @@ export function paymentText(p: MyMembership["payments"][number], currency: strin
 }
 
 /** A refund's two lines, under the payment or purchase it gives back for. */
-export function refundText(r: { amountMinor: number; method: MemberPaymentMethod; refundedOn: string }, currency: string): { title: string; line: string } {
-  return { title: `${formatMinor(r.amountMinor, currency)} given back · ${methodWords(r.method)}`, line: dayText(r.refundedOn) };
+export function refundText(r: { amountMinor: number; method: MemberPaymentMethod; refundedOn: string; pending?: boolean }, currency: string): { title: string; line: string } {
+  return { title: `${formatMinor(r.amountMinor, currency)} ${r.pending === true ? "refund pending" : "given back"} · ${methodWords(r.method)}`, line: dayText(r.refundedOn) };
 }
 
 /** Said under a membership given in the app with a price and nothing paid on it yet. One from the place's own list
@@ -150,14 +150,16 @@ export function feeText(item: FeeItem, gymName: string): { title: string; tag: T
         ? `Overdue since ${dayText(f.dueOn)}.`
         : f.state === "waived"
           ? `${gymName} waived this fee.`
-          : f.state === "refunded"
-            ? `${gymName} refunded this fee.`
-            : f.refundedMinor > 0
-              ? `${gymName} refunded ${formatMinor(f.refundedMinor, item.currency)} of this fee.`
-              : null;
+          : f.refundPending
+            ? `${gymName} is refunding this fee.`
+            : f.state === "refunded"
+              ? `${gymName} refunded this fee.`
+              : f.refundedMinor > 0
+                ? `${gymName} refunded ${formatMinor(f.refundedMinor, item.currency)} of this fee.`
+                : null;
   return {
     title: `${MEMBER_FEE_WORDS[f.fee]} · ${f.forName}`,
-    tag: FEE_TAGS[f.state],
+    tag: f.refundPending ? { label: "Refund pending", tone: "plain" } : FEE_TAGS[f.state],
     line: `${formatMinor(f.amountMinor, item.currency)} · ${dayText(f.on)} · ${item.membership}`,
     note,
     receipt: f.state === "paid" || f.state === "refunded" ? f.receiptNumber : null,

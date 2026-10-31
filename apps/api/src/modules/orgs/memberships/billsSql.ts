@@ -244,17 +244,18 @@ export interface RefundRow {
   by: string | null;
   receiptNumber: number;
   /** Sent to the card through Square (18d-iv-a): null for one noted by hand. */
-  square: { state: "pending" | "completed"; card: { brand: string; last4: string } | null; startedOn: string } | null;
+  square: { state: "pending" | "completed"; card: { brand: string; last4: string } | null; startedOn: string; pressId: string } | null;
 }
 
 /** What a refund row reads of its press at Square (18d-iv-a). */
-const squareOfRefund = (r: { q_state: string | null; q_brand: string | null; q_last4: string | null; q_started: string | null }): RefundRow["square"] =>
-  r.q_state === null || r.q_started === null
+const squareOfRefund = (r: { q_id: string | null; q_state: string | null; q_brand: string | null; q_last4: string | null; q_started: string | null }): RefundRow["square"] =>
+  r.q_id === null || r.q_state === null || r.q_started === null
     ? null
     : {
         state: r.q_state === "pending" ? "pending" : "completed",
         card: r.q_brand === null || r.q_last4 === null ? null : { brand: r.q_brand, last4: r.q_last4 },
         startedOn: r.q_started,
+        pressId: r.q_id,
       };
 
 /** The refunds that stand against the standing payments of the memberships named, a fee's too (18d-iv-b-i), in the
@@ -272,6 +273,7 @@ export async function refundsFor(sql: Sql | TransactionSql, gymId: string, membe
       reason: string;
       by: string | null;
       receipt_number: number;
+      q_id: string | null;
       q_state: string | null;
       q_brand: string | null;
       q_last4: string | null;
@@ -279,7 +281,7 @@ export async function refundsFor(sql: Sql | TransactionSql, gymId: string, membe
     }[]
   >`
     SELECT r.id, r.payment_id, b.held_membership_id, r.amount_minor, r.method, r.refunded_on::text AS refunded_on, r.reason,
-           u.display_name AS by, r.receipt_number, q.state AS q_state, q.brand AS q_brand, q.last4 AS q_last4,
+           u.display_name AS by, r.receipt_number, q.id AS q_id, q.state AS q_state, q.brand AS q_brand, q.last4 AS q_last4,
            (q.started_at AT TIME ZONE g.timezone)::date::text AS q_started
     FROM gym_member_refunds r
     JOIN gym_member_payments p ON p.gym_id = r.gym_id AND p.id = r.payment_id
@@ -379,15 +381,23 @@ export async function voidedRefundsFor(sql: Sql | TransactionSql, gymId: string,
       void_reason: string | null;
       voided_on: string;
       voided_by: string | null;
+      q_id: string | null;
+      q_state: string | null;
+      q_brand: string | null;
+      q_last4: string | null;
+      q_started: string | null;
     }[]
   >`
     SELECT r.id, r.payment_id, b.held_membership_id, r.amount_minor, r.method, r.refunded_on::text AS refunded_on, r.reason,
            u.display_name AS by, r.receipt_number, r.void_reason,
-           (r.undone_at AT TIME ZONE g.timezone)::date::text AS voided_on, v.display_name AS voided_by
+           (r.undone_at AT TIME ZONE g.timezone)::date::text AS voided_on, v.display_name AS voided_by,
+           q.id AS q_id, q.state AS q_state, q.brand AS q_brand, q.last4 AS q_last4,
+           (q.started_at AT TIME ZONE g.timezone)::date::text AS q_started
     FROM gym_member_refunds r
     JOIN gym_member_payments p ON p.gym_id = r.gym_id AND p.id = r.payment_id
     JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
     JOIN gyms g ON g.id = r.gym_id
+    LEFT JOIN gym_square_refunds q ON q.gym_id = r.gym_id AND q.member_refund_id = r.id
     LEFT JOIN users u ON u.id = r.recorded_by
     LEFT JOIN users v ON v.id = r.undone_by
     WHERE r.gym_id = ${gymId} AND b.held_membership_id = ANY(${[...membershipIds]}::uuid[]) AND r.undone_at IS NOT NULL
@@ -402,7 +412,7 @@ export async function voidedRefundsFor(sql: Sql | TransactionSql, gymId: string,
     reason: refundReasonSchema.parse(r.reason),
     by: r.by,
     receiptNumber: r.receipt_number,
-    square: null,
+    square: squareOfRefund(r),
     voided: { reason: r.void_reason === null ? null : refundVoidKeptSchema.parse(r.void_reason), on: r.voided_on, by: r.voided_by },
   }));
 }

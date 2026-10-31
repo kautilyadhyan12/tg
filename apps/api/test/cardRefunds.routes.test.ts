@@ -21,6 +21,7 @@ import {
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { openDueBills } from "../src/modules/orgs/memberships/billsRepo.js";
+import { removeFreezeFees } from "../src/modules/orgs/memberships/freezeFees.js";
 import { CARD_REFUND } from "../src/modules/orgs/payments/cardRefunds.js";
 import { linesPage, totals } from "../src/modules/orgs/paymentsDownload/repo.js";
 import { squareSettings } from "../src/modules/orgs/payments/settings.js";
@@ -682,6 +683,17 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
   });
 
   describe("with everything else on the page", () => {
+    it("the line at the top of the membership waits for Square too", async () => {
+      const maya = await paidByCard(gym, "Top Line");
+      const top = async () => (await held(gym, gym.owner, maya.entryId)).memberships.find((m) => m.id === maya.membershipId);
+      await press(maya, 2500);
+      expect(await top()).toMatchObject({ refundedInFull: true, refundPending: true });
+      square.refundEnds(madeFor(maya)[0]?.id ?? "", "COMPLETED");
+      clock = new Date(clock.getTime() + CARD_REFUND.lookAfterMs[0] + 1000);
+      await work();
+      expect(await top()).toMatchObject({ refundedInFull: true, refundPending: false });
+    });
+
     it("a refund to the card cannot be voided, and one noted by hand still can", async () => {
       const maya = await paidByCard(gym, "Void Rules");
       await press(maya, 500);
@@ -740,6 +752,11 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
   // 18d-iv-b-i. The worst thing here is the same one, on a fee: refunded twice, refunded more than was paid, or the wrong
   // person's. A failed fee refund handing out a member's gift is in `referrals.memberGift.routes.test.ts`.
   describe("a fee", () => {
+    // A gym of its own: the same owner is held to the sixty presses an hour the routes allow.
+    beforeAll(async () => {
+      gym = await makeGym(`Fee Gym ${uniq()}`, `MERCH${uniq()}`);
+    }, T);
+
     it("Maya's $10.00 no-show fee goes back to the card once, and nobody else's moves", async () => {
       const maya = await feePaid(gym, "Maya Fee");
       const ravi = await feePaid(gym, "Ravi Fee");
@@ -848,14 +865,48 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
       expect(back.payments[0]).toMatchObject({ refundableMinor: 1000, voidedRefunds: [{ amountMinor: 1000, voided: { reason: "mistake" } }] });
     });
 
-    it("pending, then finished by the worker's look", async () => {
+    it("pending, then finished by the worker's look; the press names itself, so a sentence follows its own refund", async () => {
       const maya = await feePaid(gym, "Fee Pending");
-      expect(cardRefundResponseSchema.parse(JSON.parse((await press(maya, 1000)).body)).step).toBe("pending");
+      const sent = cardRefundResponseSchema.parse(JSON.parse((await press(maya, 1000)).body));
+      expect(sent.step).toBe("pending");
+      expect((await feeOnPage(maya)).payments[0]?.refunds[0]?.square?.pressId).toBe(sent.pressId);
       square.refundEnds(madeFor(maya)[0]?.id ?? "", "COMPLETED");
       clock = new Date(clock.getTime() + CARD_REFUND.lookAfterMs[0] + 1000);
       await work();
       expect((await pressesOf(maya))[0]).toMatchObject({ state: "done", outcome: "completed" });
-      expect((await feeOnPage(maya)).payments[0]?.refunds[0]?.square?.state).toBe("completed");
+      expect((await feeOnPage(maya)).payments[0]?.refunds[0]?.square).toMatchObject({ state: "completed", pressId: sent.pressId });
+    });
+
+    it("a change of membership waits for a fee's refund Square has not answered", async () => {
+      const maya = await feePaid(gym, "Fee Change Waits");
+      square.state.refundLost = true;
+      await press(maya, 500);
+      square.state.refundLost = false;
+      const today = (await held(gym, gym.owner, maya.entryId)).today;
+      const change = await send("POST", `${entryUrl(gym, maya.entryId)}/memberships/${maya.membershipId}/change`, gym.owner.cookies, {
+        requestKey: randomUUID(),
+        typeId: gym.typeId,
+        when: "today",
+        startsOn: today,
+        priceMinor: 2500,
+        creditMinor: 0,
+        totalMinor: 2500,
+        paid: false,
+      });
+      expect(change.statusCode, change.body).toBe(409);
+      expect((JSON.parse(change.body) as { error: string }).error).toBe("card_refund_waiting");
+    });
+
+    it("a freeze fee refunded, then unfrozen, stays no longer owed if Square fails the refund", async () => {
+      const maya = await feePaid(gym, "Fee Freeze");
+      await sql`UPDATE gym_member_bills SET fee = 'freeze', fee_for = 'Gold Weekly' WHERE gym_id = ${gym.id} AND id = ${maya.billId}`;
+      expect((await press(maya, 1000)).statusCode).toBe(200);
+      const [bill] = await sql<{ covers_from: string }[]>`SELECT covers_from::text AS covers_from FROM gym_member_bills WHERE id = ${maya.billId}`;
+      await sql.begin((tx) => removeFreezeFees(tx, gym.id, maya.membershipId, bill?.covers_from ?? "", clock));
+      square.refundEnds(madeFor(maya)[0]?.id ?? "", "FAILED");
+      clock = new Date(clock.getTime() + CARD_REFUND.lookAfterMs[0] + 1000);
+      await work();
+      expect(await feeOnPage(maya)).toMatchObject({ state: "paid", stillOwed: false });
     });
 
     it("Square fails it after taking it up: no money went, the fee reads Paid, and it can be sent again", async () => {

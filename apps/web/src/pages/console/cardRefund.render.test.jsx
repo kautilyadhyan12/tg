@@ -111,6 +111,8 @@ afterEach(cleanup);
 
 // 18d-iv-b-i: a late cancel, no-show or freeze fee.
 const FEE_PAYMENT = '77777777-7777-4777-8777-000000000099';
+const PRESS = '88888888-8888-4888-8888-000000000001';
+const OTHER = '88888888-8888-4888-8888-000000000002';
 const fee = (pay = {}, over = {}) => ({
   id: '66666666-6666-4666-8666-000000000001',
   fee: 'no_show',
@@ -221,9 +223,9 @@ describe('Refund to card on a fee', () => {
   });
 
   it('the tag and the sentence follow the refund: Refund pending, then Refunded, and nothing says it went back once it failed', async () => {
-    const waiting = { ...REFUND, amountMinor: 1000, square: { state: 'pending', card: VISA, late: false } };
+    const waiting = { ...REFUND, amountMinor: 1000, square: { state: 'pending', card: VISA, late: false, pressId: PRESS } };
     orgService.getCardRefund.mockResolvedValue({ data: { card: VISA, leftMinor: 1000, refundedInSquareMinor: 0, block: null } });
-    orgService.refundToCard.mockResolvedValue({ data: { step: 'pending', amountMinor: 1000, currency: 'USD', card: VISA } });
+    orgService.refundToCard.mockResolvedValue({ data: { step: 'pending', amountMinor: 1000, currency: 'USD', card: VISA, pressId: PRESS } });
     orgService.getHeldMemberships.mockResolvedValue(feePage());
     draw({ squareEveryMs: 5 });
     const items = await menuItems(await feePayment());
@@ -242,11 +244,26 @@ describe('Refund to card on a fee', () => {
     await waitFor(() => expect(screen.getByTestId('held-payment-said').textContent).toBe('$10.00 was refunded to Visa ending 1111. It can take up to 10 business days to reach the card, depending on the bank.'));
   });
 
-  it('a refund that failed takes the sentence away', async () => {
+  it.each([
+    ['still with Square', 'pending', { refunds: [{ amountMinor: 400, square: { state: 'pending', pressId: PRESS } }] }, /^Square is processing this \$4\.00 refund/],
+    ['finished', 'pending', { refunds: [{ amountMinor: 400, square: { state: 'completed', pressId: PRESS } }] }, /^\$4\.00 was refunded to Visa ending 1111\./],
+    ['no answer at the press, since finished', 'checking', { refunds: [{ amountMinor: 400, square: { state: 'completed', pressId: PRESS } }] }, /^\$4\.00 was refunded to Visa ending 1111\./],
+    ['no answer at the press, since taken up', 'checking', { refunds: [{ amountMinor: 400, square: { state: 'pending', pressId: PRESS } }] }, /^Square is processing this \$4\.00 refund/],
+    ['no answer yet', 'checking', { refunds: [], cardRefund: { amountMinor: 400, lost: false } }, /^said$/],
+    ['another refund of the same amount finished, this one still with Square', 'pending', { refunds: [{ amountMinor: 400, square: { state: 'completed', pressId: OTHER } }, { amountMinor: 400, square: { state: 'pending', pressId: PRESS } }] }, /^Square is processing/],
+    ['this one failed, another of the same amount finished', 'pending', { refunds: [{ amountMinor: 400, square: { state: 'completed', pressId: OTHER } }], voidedRefunds: [{ amountMinor: 400, square: { state: 'completed', pressId: PRESS } }] }, null],
+    ['Square never answered', 'checking', { refunds: [], cardRefund: { amountMinor: 400, lost: true } }, null],
+    ['the press ended with nothing written', 'checking', { refunds: [], cardRefund: null }, null],
+    ['the page has not read it again yet', 'pending', { refunds: [] }, /^said$/],
+  ])('the sentence under a payment: %s', async (_case, step, payment, says) => {
     const { cardRefundSaidNow } = await import('./cardRefundView');
-    const sent = { step: 'pending', amountMinor: 1000, currency: 'USD', cardWords: 'Visa ending 1111' };
-    expect(cardRefundSaidNow(sent, { refunds: [], voidedRefunds: [{ amountMinor: 1000, voided: { reason: 'square_failed' } }] }, 'said')).toBeNull();
-    expect(cardRefundSaidNow(sent, { refunds: [], voidedRefunds: [] }, 'said')).toBe('said');
+    const line = cardRefundSaidNow({ step, amountMinor: 400, currency: 'USD', cardWords: 'Visa ending 1111', pressId: PRESS }, payment, 'said');
+    if (says === null) expect(line).toBeNull();
+    else expect(line).toMatch(says);
+  });
+
+  it('a sentence about anything else stands as it is', async () => {
+    const { cardRefundSaidNow } = await import('./cardRefundView');
     expect(cardRefundSaidNow(undefined, null, 'said')).toBe('said');
   });
 

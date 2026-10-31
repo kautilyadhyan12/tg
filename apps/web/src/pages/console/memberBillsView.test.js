@@ -240,6 +240,8 @@ describe('a cancelled bill and a refunded one say what happened, in their own wo
     expect(paymentLine(back({ state: 'paid', until: '2026-11-04' }, '2026-11-04'), TODAY)).toEqual({ text: 'Refunded · next payment due 4 November 2026', due: false });
     expect(paymentLine(back({ state: 'paid', until: '2026-11-04' }, null), TODAY).text).toBe('Refunded');
     expect(paymentLine(back({ state: 'paid', until: null }, null), TODAY).text).toBe('Refunded');
+    // Still with Square: the line waits for it, as the bill does.
+    expect(paymentLine({ ...back({ state: 'paid', until: '2026-11-04' }, '2026-11-04'), refundPending: true }, TODAY).text).toBe('Refund pending · next payment due 4 November 2026');
     expect(paymentLine(back({ state: 'due', since: '2026-10-04' }, '2026-11-04'), TODAY).text).toBe('Payment due since 4 October 2026');
     // Owing again the month after: owing is said, whatever became of the month before.
     expect(paymentLine(m({ state: 'due', since: '2026-10-04' }, '2026-11-04', true), TODAY).text).toBe('Payment due since 4 October 2026');

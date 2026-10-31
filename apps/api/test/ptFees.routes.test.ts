@@ -466,6 +466,18 @@ d("a fee for a late cancel or a no-show, for personal training (real Postgres)",
     // Refunded (18d-iv-b-i): the session says so, not "Paid".
     await sql`UPDATE gym_member_bills SET status = 'refunded' WHERE id = ${fee.id}`;
     expect((await memberView(gym, k)).history.find((s) => s.id === ks)?.fee).toEqual({ kind: "no_show", amountMinor: NO_SHOW, state: "refunded", currency: "GBP" });
+    // Still with Square: it does not say refunded yet.
+    const payId = payment.id;
+    await sql`
+      INSERT INTO gym_square_refunds (id, gym_id, payment_id, environment, account_id, square_payment_id, square_refund_id, amount_minor, currency, reason, request_key, state, started_at, checked_at)
+      SELECT ${randomUUID()}, gym_id, id, 'sandbox', 'ACCOUNT', 'PAYMENT', ${`REFUND${randomUUID()}`}, amount_minor, currency, 'other', ${randomUUID()}, 'pending', now(), now()
+      FROM gym_member_payments WHERE id = ${payId}`;
+    expect((await memberView(gym, k)).history.find((s) => s.id === ks)?.fee).toMatchObject({ state: "refund_pending" });
+    await sql`DELETE FROM gym_square_refunds WHERE payment_id = ${payId}`;
+    // A refunded fee is not opened a second time, whatever staff mark next.
+    expect((await mark(gym, ks, "no_show")).statusCode).toBe(200);
+    expect((await feesOf(k)).map((x) => x.status)).toEqual(["refunded"]);
+    expect((await mark(gym, ks, "attended")).statusCode).toBe(200);
     await sql`UPDATE gym_member_bills SET status = 'paid' WHERE id = ${fee.id}`;
     for (const by of [gym.owner, gym.trainer]) expect((await weekOf(gym, by)).find((a) => a.id === ks)?.fees).toBeNull();
     expect((await mark(gym, ks, "no_show")).statusCode).toBe(200);

@@ -159,6 +159,7 @@ describe("fees", () => {
     dueOn: "2026-10-21",
     state,
     refundedMinor: 0,
+    refundPending: false,
     receiptNumber: state === "paid" || state === "refunded" ? 31 : null,
     ...over,
   });
@@ -177,6 +178,7 @@ describe("fees", () => {
     expect(feeText(item(fee("waived")), "Iron House")).toMatchObject({ tag: { label: "Waived", tone: "plain" }, note: "Iron House waived this fee.", receipt: null });
     expect(feeText(item(fee("refunded", { refundedMinor: 20_000 })), "Iron House")).toMatchObject({ tag: { label: "Refunded", tone: "plain" }, note: "Iron House refunded this fee.", receipt: 31 });
     expect(feeText(item(fee("paid", { refundedMinor: 5_000 })), "Iron House")).toMatchObject({ tag: { label: "Paid", tone: "good" }, note: "Iron House refunded ₹50.00 of this fee.", receipt: 31 });
+    expect(feeText(item(fee("refunded", { refundedMinor: 20_000, refundPending: true })), "Iron House")).toMatchObject({ tag: { label: "Refund pending", tone: "plain" }, note: "Iron House is refunding this fee.", receipt: 31 });
   });
 
   it("a no-show and a freeze fee are named as the gym's list names them", () => {

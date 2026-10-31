@@ -4341,9 +4341,9 @@ placed reads "Square refused this refund. No money went back." Still to come: In
 
 *On a fee (18d-iv-b-i, as built):* a late cancel, no-show or freeze fee taken on the Terminal or from the card on file goes back the same way, from the Refund button on its
 payment: **Refund to card**, and **Note a refund** beside it, with Void refund for one noted by mistake. All or part; the box and the note name the fee and what it
-was for, and "Leaving or cancelled" is not offered. A fee paid by hand keeps Void payment and takes no refund. All of it back reads **Refunded**, part **Part refunded**,
-on the person's page, a class's list and a personal training session (for staff and the member), and the member's own page says "<gym> refunded this fee." or
-"<gym> refunded $4.00 of this fee.". A refunded fee is not owed again, whatever staff mark afterwards: its booking opens no second fee. A fee's payment never gives a
+was for, and "Leaving or cancelled" is not offered. A fee paid by hand keeps Void payment and takes no refund. All of it back reads **Refunded**, part **Part refunded**, and **Refund pending** while Square has not finished,
+on the person's page, a class's list and a personal training session (for staff and the member), and the member's own page says "<gym> is refunding this fee.", then "<gym> refunded this fee." or
+"<gym> refunded $4.00 of this fee.". The line at the top of a membership and a member's payment lines wait for Square the same way. A refunded fee is not owed again, whatever staff mark afterwards: its booking opens no second fee. A fee's payment never gives a
 member's Refer a friend gift, so neither a failed refund nor a voided one gives one back. Reports, receipts and the payments download read it as they read any refund.
 Still to come: Sell (18d-iv-b-ii), and Overview's list of fees to refund and refunds that failed or that Square never answered (18d-iv-b-iii).
 
