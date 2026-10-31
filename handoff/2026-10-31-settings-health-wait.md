@@ -6,4 +6,5 @@ Not a ROADMAP job: `master`'s run of PR #404's merge (41183166822) went red, whi
 - **Cause:** a person's Settings is a heavy page, and the test's look for the Try again button stops after the testing tool's one second. On GitHub's busy machine the test took 1.5 s and its neighbours up to 2.4 s. Shown on demand: a wait of 20 ms gives the same error, on this laptop. The app did not change.
 - **Built:** the file waits up to 5 seconds, and each test may take 20.
 - **Verified:** the file 9 of 9 here; lint 0.
+- **Merged** 2026-10-31 on Kd's "merge" (PR #410).
 - **Next in this folder:** 18d-iv-b-ii.
