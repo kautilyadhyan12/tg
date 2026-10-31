@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, Linking, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { AppState, Linking, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Modal } from "../../look/Modal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   CLASS_LATE_CANCEL_ERROR,

@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
+import { GYM_MEMBER_POSTS_A_DAY } from "@app/shared";
 import type { BlockedGymPostersResponse, GymPost, GymPostsResponse, StaffGymPostsResponse } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
@@ -397,13 +398,13 @@ d("block, the bad-words check and the support address (real Postgres, real disk)
   );
 
   it(
-    "a refused post uses none of the day's ten, and the gym's own posts are not checked",
+    "a refused post uses none of the day's posts, and the gym's own posts are not checked",
     async () => {
       const gym = await makeGym("Count House");
       const writer = await member(gym, "Wendy Writer");
       const reader = await member(gym, "Rita Reader");
       for (let i = 0; i < 12; i++) expect((await send(gym, writer, `try ${String(i)} you tosser`)).statusCode).toBe(400);
-      for (let i = 1; i <= 10; i++) await add(gym, writer, `Post ${String(i)}`);
+      await sql`INSERT INTO gym_posts (gym_id, author_user_id, post_key, body, by_member, created_at) SELECT ${gym.id}, ${writer.userId}, gen_random_uuid(), 'Post ' || i, true, ${new Date(clock)} FROM generate_series(1, ${GYM_MEMBER_POSTS_A_DAY}::int) i`;
       // The day is full now. The words are answered first; a clean post is told the day is full.
       const full = await send(gym, writer, "one more, tosser");
       expect({ status: full.statusCode, error: errorOf(full) }).toEqual({ status: 400, error: "post_bad_words" });

@@ -13,6 +13,12 @@ export function pictureTopHeight(width: number, screenHeight: number, tall: numb
   return Math.round(Math.min(width * tall, screenHeight * PICTURE_TOP_MOST));
 }
 
+/** How tall a page or box over the app is. It is drawn behind the phone's bars, so where the window leaves only them out
+ *  (older Android) it takes the screen's height; where the app has a share of the screen (split screen), the window's. */
+export function modalHeight(screen: number, window: number, bars: number): number {
+  return screen - window <= bars ? screen : window;
+}
+
 /** How far the phone's own text-size setting may grow the app's words: the boxes are drawn to a size,
  *  and words past this would spill out of them. */
 export const MOST_TEXT_GROWTH = 1.3;
