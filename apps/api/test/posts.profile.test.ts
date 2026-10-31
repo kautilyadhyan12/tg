@@ -542,7 +542,7 @@ d("a person's posts on their profile, and the day's photo posts (real Postgres, 
       await seedPhotos(gym, gym.owner, 2, false, new Date(clock - 2 * HOUR));
       clock += 1000;
       const staff = await inject("POST", posts(gym.id), gym.owner.cookies, { postKey: randomUUID(), body: "Words", photos: [IPHONE, IPHONE, IPHONE] });
-      expect((JSON.parse(staff.body) as { message: string }).message).toMatch(/^The gym has posted 20 photos.*in about 4 hours\.$/);
+      expect((JSON.parse(staff.body) as { message: string }).message).toMatch(/^Your team has posted 20 photos.*in about 4 hours\.$/);
     },
     T,
   );
@@ -596,7 +596,7 @@ d("a person's posts on their profile, and the day's photo posts (real Postgres, 
       const full = await staffSend("With a photo", ["AAAA"]);
       expect({ status: full.statusCode, error: errorOf(full) }).toEqual({ status: 429, error: "posts_photo_day_full" });
       expect((JSON.parse(full.body) as { message: string }).message).toBe(
-        "The gym has posted 20 photos in the last 24 hours, which is the most allowed. Take the photos off to post the words now, or post photos again in about 24 hours.",
+        "Your team has posted 20 photos in the last 24 hours, which is the most allowed. Take the photos off to post the words now, or post photos again in about 24 hours.",
       );
       // Words go on, past any member's number; a member's photos are their own count.
       for (let i = 0; i < 3; i++) expect((await staffSend(`Words ${String(i)}`, [])).statusCode).toBe(201);

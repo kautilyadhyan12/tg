@@ -404,7 +404,7 @@ async function refuseFullDay(sql: Sql | TransactionSql, gymId: string, userId: s
   const wait = photoWait(times, post.photos, GYM_MEMBER_PHOTOS_A_DAY, at);
   // Both full: this post waits for the later of the two, so that is the hour it is told.
   if (full) throw new OrgsError(429, "posts_day_full", GYM_POST_WORDS.day_full(Math.max(hoursAll, wait ?? 0)));
-  if (wait !== null) throw new OrgsError(429, "posts_photo_day_full", GYM_POST_WORDS.photo_day_full("You've", times.length, GYM_MEMBER_PHOTOS_A_DAY, wait, post.words));
+  if (wait !== null) throw new OrgsError(429, "posts_photo_day_full", GYM_POST_WORDS.photo_day_full("You've", wait, times.length, post.words));
 }
 
 /** Refuses a post whose photos do not fit in the day's for the gym's staff, all of them together. Words are not limited. */
@@ -412,7 +412,7 @@ async function refuseStaffPhotos(sql: Sql | TransactionSql, gymId: string, at: D
   if (post.photos === 0) return;
   const times = await repo.staffPhotoTimesSince(sql, gymId, new Date(at.getTime() - DAY_MS));
   const wait = photoWait(times, post.photos, GYM_STAFF_PHOTOS_A_DAY, at);
-  if (wait !== null) throw new OrgsError(429, "posts_photo_day_full", GYM_POST_WORDS.photo_day_full("The gym has", times.length, GYM_STAFF_PHOTOS_A_DAY, wait, post.words));
+  if (wait !== null) throw new OrgsError(429, "posts_photo_day_full", GYM_POST_WORDS.photo_day_full("Your team has", wait, times.length, post.words));
 }
 
 /** A member who may post: the gym's switch is on and staff have not stopped them. The

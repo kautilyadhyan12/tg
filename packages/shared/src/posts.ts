@@ -435,13 +435,15 @@ export const GYM_POST_WORDS = {
   /** `hours`: whole hours until the oldest of the counted posts is 24 hours old. */
   day_full: (hours: number): string =>
     `You've posted ${String(GYM_MEMBER_POSTS_A_DAY)} times in the last 24 hours, which is the most allowed. You can post again ${againIn(hours)}.`,
-  /** A post whose photos do not fit: `used` already posted of the `most` allowed; `hasWords`: it has words that could go without its photos. */
-  photo_day_full: (who: "You've" | "The gym has", used: number, most: number, hours: number, hasWords: boolean): string =>
-    used < most
-      ? `${who} posted ${String(used)} of the ${String(most)} photos allowed in 24 hours. Take some off to post now, or post all of them ${againIn(hours)}.`
-      : hasWords
-        ? `${who} posted ${String(most)} photos in the last 24 hours, which is the most allowed. Take the photos off to post the words now, or post photos again ${againIn(hours)}.`
-        : `${who} posted ${String(most)} photos in the last 24 hours, which is the most allowed. You can post photos again ${againIn(hours)}.`,
+  /** A post whose photos do not fit: `used` already posted by a member, or by the business's staff together, of what
+   *  they may in 24 hours; `hasWords`: it has words that could go without its photos. */
+  photo_day_full: (who: "You've" | "Your team has", hours: number, used: number, hasWords: boolean): string => {
+    const most = who === "You've" ? GYM_MEMBER_PHOTOS_A_DAY : GYM_STAFF_PHOTOS_A_DAY;
+    if (used < most) return `${who} posted ${String(used)} of the ${String(most)} photos allowed in 24 hours. Take some off to post now, or post all of them ${againIn(hours)}.`;
+    return hasWords
+      ? `${who} posted ${String(most)} photos in the last 24 hours, which is the most allowed. Take the photos off to post the words now, or post photos again ${againIn(hours)}.`
+      : `${who} posted ${String(most)} photos in the last 24 hours, which is the most allowed. You can post photos again ${againIn(hours)}.`;
+  },
   own_report: "This is your own post. You can remove it instead.",
   person_not_found: "This person isn't one of your members.",
   own_block: "This is your own post.",
