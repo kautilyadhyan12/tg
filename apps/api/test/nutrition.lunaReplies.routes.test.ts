@@ -10,6 +10,7 @@ import postgres from "postgres";
 import { z } from "zod";
 import { mealPhotoAnalysisSchema, type MealPhotoAnalysis } from "@app/shared";
 import { buildApp } from "../src/app.js";
+import type { FoodReference } from "../src/modules/nutrition/openfoodfacts.adapter.js";
 import { loadConfig } from "../src/config.js";
 import { createMemoryRedis } from "../src/redis.js";
 import { createOpenAiVisionProvider } from "../src/modules/nutrition/vision.adapter.js";
@@ -41,6 +42,8 @@ const reply = (items: unknown[], unknown_items: unknown[] = []) => ({ meal_name:
 d("a badly formed scanner reply (real route, real adapter, real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 2 });
   let next: unknown = null;
+  /** What the food search finds. */
+  let listed: FoodReference[] = [];
   const openAi: typeof fetch = () => Promise.resolve(new Response(JSON.stringify({
     choices: [{ message: { content: JSON.stringify(next) } }],
     usage: { prompt_tokens: 981, completion_tokens: 136 },
@@ -72,7 +75,7 @@ d("a badly formed scanner reply (real route, real adapter, real Postgres)", () =
     await sql`DELETE FROM users WHERE email=${EMAIL}`;
     app = await buildApp(loadConfig(env), {
       redis: createMemoryRedis(() => redisNow),
-      nutrition: { visionProvider: createOpenAiVisionProvider("dummy-key", "gpt-6-luna", openAi), foodSearchProvider: { search: () => Promise.resolve([]) } }, // gitleaks:allow
+      nutrition: { visionProvider: createOpenAiVisionProvider("dummy-key", "gpt-6-luna", openAi), foodSearchProvider: { search: () => Promise.resolve(listed) } }, // gitleaks:allow
     });
     const post = (path: string, body: unknown) => {
       if (app === undefined) throw new Error("no app");
@@ -87,6 +90,33 @@ d("a badly formed scanner reply (real route, real adapter, real Postgres)", () =
   afterAll(async () => {
     if (app !== undefined) await app.close();
     await sql.end({ timeout: 5 });
+  });
+
+  it("a packaged food on a photo's sheet: its whole pack is priced as offered, and a photo never starts a row there", { timeout: 30_000 }, async () => {
+    const body = "140999990200";
+    let sum = 0;
+    for (const [at, digit] of Array.from(body).reverse().entries()) sum += Number(digit) * (at % 2 === 0 ? 3 : 1);
+    const code = `${body}${String((10 - (sum % 10)) % 10)}`;
+    await sql`INSERT INTO off_products (code, name, kcal, protein_g, carbs_g, fat_g, serving_size, quantity, numbers_fit, allergens, traces, listed_as_typed) VALUES (${code}, 'Scanned yoghurt', 100, 4, 15, 3, '30 g', '50 g', true, '{}', '{}', '{}') ON CONFLICT (code) DO NOTHING`;
+    try {
+      const canonical = `off_${code}`;
+      listed = [{ canonical, name: "Scanned yoghurt", kcal: 100, proteinG: 4, carbsG: 15, fatG: 3, fiberG: null, serving: 30, unit: "g", source: "openfoodfacts", pack: { grams: 50, volume: false } }];
+      const read = await sheet(reply([["Scanned yoghurt", "scanned yoghurt", 1, 50, 50, 2, 8, 2]]));
+      const row = read.items[0];
+      expect(row?.canonical).toBe(canonical);
+      expect(row?.measures.map((m) => m.id)).toContain("pack");
+      expect(row?.startsAt.measure).not.toBe("pack");
+      if (app === undefined) throw new Error("no app");
+      const priced = await app.inject({
+        method: "POST", url: "/v1/nutrition/meals/preview", cookies: { accessToken: access }, headers: { "content-type": "application/json" },
+        payload: JSON.stringify({ scanToken: read.scanToken, items: [{ canonical, measure: "pack", amount: 1 }] }),
+      });
+      expect(priced.statusCode, priced.body).toBe(200);
+      expect(priced.json<{ items: { gramsPoint: number; kcalPoint: number }[] }>().items[0]).toMatchObject({ gramsPoint: 50, kcalPoint: 50 });
+    } finally {
+      listed = [];
+      await sql`DELETE FROM off_products WHERE code = ${code}`;
+    }
   });
 
   it("a food the model could not name stays out of the total: its figures in unknown_items are never a row", { timeout: 30_000 }, async () => {

@@ -237,7 +237,7 @@ const saves = (server: ReturnType<typeof photoServer>) => server.asked.filter((a
 
 /** From the Food tab: the camera at once, the shutter, the review. */
 async function takePhoto() {
-  await fireEvent.press(await screen.findByRole("button", { name: "Log meal from photo" }));
+  await fireEvent.press(await screen.findByRole("button", { name: "Scan food" }));
   await fireEvent.press(await screen.findByRole("button", { name: "Take photo" }));
 }
 
@@ -293,7 +293,7 @@ describe("a meal from a photo", () => {
     const phone: Phone = { meals: [], scans: [] };
     const photos = files();
     const server = await openFood(phone, { meals: files(), photos });
-    await fireEvent.press(await screen.findByRole("button", { name: "Log meal from photo" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Scan food" }));
     expect(await screen.findByTestId("camera-view")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Choose from gallery" })).toBeTruthy();
     await fireEvent.press(screen.getByRole("button", { name: "Take photo" }));
@@ -328,7 +328,7 @@ describe("a meal from a photo", () => {
     });
     // Saved: the photo meal is no longer kept, and the Food tab offers a new one.
     expect(photos.kept.get(RAVI.id)).toBe("");
-    expect(screen.getByRole("button", { name: "Log meal from photo" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Scan food" })).toBeTruthy();
     expect(screen.queryByText("Your photo meal isn’t saved yet.")).toBeNull();
   });
 
@@ -806,7 +806,7 @@ describe("the camera not allowed", () => {
     picker.next = { canceled: false, assets: [{ uri: "file:///gallery/lunch.jpg", width: 3000, height: 4000 }] };
     const settings = jest.spyOn(Linking, "openSettings").mockResolvedValue();
     const server = await openFood({ meals: [], scans: [] });
-    await fireEvent.press(await screen.findByRole("button", { name: "Log meal from photo" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Scan food" }));
     expect(await screen.findByText("Allow the camera")).toBeTruthy();
     expect(camera.asked).toBe(1);
     expect(screen.queryByTestId("camera-view")).toBeNull();
