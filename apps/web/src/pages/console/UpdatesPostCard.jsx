@@ -1,8 +1,7 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BicepsFlexed, Check, EyeOff, Flag, Flame, Heart, Pin, PinOff, ThumbsUp, Trash2, Trophy, UserCheck, UserX } from 'lucide-react';
+import { Check, EyeOff, Flag, MessageCircle, Pin, PinOff, Trash2, Trophy, UserCheck, UserX } from 'lucide-react';
 import { postPhotoUrl, staffPostsService } from '../../api/postsApi';
-import { errorText } from '../../api/orgsApi';
 import { ConfirmInline } from '../../components/console/ConsoleStates';
 import {
   authorInitials,
@@ -12,106 +11,18 @@ import {
   personLink,
   pinNote,
   postedText,
-  reactionButtons,
-  reactorsMore,
-  reactorsTitle,
   removeBox,
   reportNotesTitle,
   reportedLine,
   stopBox,
 } from '../../components/gym/postsView';
 import { resultPost } from '../../components/gym/challengesView';
+import { commentsButton } from '../../components/gym/commentsConsoleView';
+import PostReactions from './PostReactions';
+import { CommentsPanel } from './UpdatesComments';
 
 // ONE POST, AS STAFF READ IT (spec Part 3 §15.2, §15.3): on the console's Updates page, its
 // reported list, and a person's own list.
-
-const REACTION_ICONS = { like: ThumbsUp, love: Heart, strong: BicepsFlexed, fire: Flame };
-
-/** A post's reactions as members see them, each one's icon and how many. A press on one
- *  shows staff who gave it; members are never shown that. */
-function Reactions({ gymId, post }) {
-  const reactions = reactionButtons(post).filter((r) => r.count > 0);
-  const [open, setOpen] = useState(null);
-  const [state, setState] = useState({ loading: false, error: null, who: null });
-  const asked = useRef(null);
-
-  const show = (id) => {
-    if (open === id) {
-      setOpen(null);
-      return;
-    }
-    setOpen(id);
-    asked.current = id;
-    setState({ loading: true, error: null, who: null });
-    staffPostsService.reactors(gymId, post.id, id).then(
-      (who) => asked.current === id && setState({ loading: false, error: null, who }),
-      (err) => asked.current === id && setState({ loading: false, error: errorText(err, "We couldn't load who reacted."), who: null }),
-    );
-  };
-
-  if (reactions.length === 0) {
-    return (
-      <p className="c-s13 c-t2" data-testid="reactions">
-        No reactions yet
-      </p>
-    );
-  }
-  const shown = reactions.find((r) => r.id === open) ?? null;
-  const more = state.who === null ? null : reactorsMore(state.who);
-  return (
-    <div className="flex flex-col gap-3" data-testid="reactions">
-      <div className="flex flex-wrap items-center gap-2">
-        {reactions.map((r) => {
-          const Icon = REACTION_ICONS[r.id];
-          return (
-            <button
-              key={r.id}
-              type="button"
-              aria-expanded={open === r.id}
-              aria-label={`${r.label}. See who`}
-              title={`${r.word}: see who`}
-              onClick={() => show(r.id)}
-              className={open === r.id ? 'c-chip c-chip-on' : 'c-chip'}
-            >
-              <Icon aria-hidden="true" className="w-[18px] h-[18px]" style={{ color: 'var(--accent)', fill: 'var(--accent)' }} />
-              <span className="c-num c-w6">{r.count.toLocaleString('en')}</span>
-            </button>
-          );
-        })}
-      </div>
-      {shown !== null ? (
-        <div role="region" aria-label={`Who reacted ${shown.word}`} className="rounded-[14px] p-4 flex flex-col gap-2" style={{ background: 'var(--raise)' }}>
-          <div className="flex items-center gap-3">
-            {/* Once the names have arrived the number is theirs, so the two always agree. */}
-            <p className="c-s14 c-w6 c-t1 flex-grow">{reactorsTitle({ word: shown.word, count: state.who?.total ?? shown.count })}</p>
-            <button type="button" onClick={() => setOpen(null)} className="c-btn c-btn-quiet c-s14">
-              Close
-            </button>
-          </div>
-          {state.loading ? <p className="c-s14 c-t2">Loading…</p> : null}
-          {state.error !== null ? (
-            <p className="c-s14" role="alert" style={{ color: 'var(--bad)' }}>
-              {state.error}
-            </p>
-          ) : null}
-          {state.who !== null ? (
-            <>
-              <ul className="flex flex-col gap-1.5">
-                {state.who.people.map((person, i) => (
-                  // A list that is read once and never reordered: its position is its key.
-                  <li key={i} className={person.name === null ? 'c-s14 c-t2' : 'c-s14 c-t1'}>
-                    {person.name ?? 'No name yet'}
-                  </li>
-                ))}
-              </ul>
-              {more !== null ? <p className="c-s13 c-t2">{more}</p> : null}
-            </>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 /** A challenge's result under its post, as the gym's members read it. `link`: the
  *  challenge's own page, for staff who run challenges; null for staff who do not. */
@@ -155,9 +66,10 @@ function ChallengeResult({ result, link, words }) {
 /** One post. `report`: its entry on the reported list, where it is drawn with why it was
  *  reported and Keep in place of Pin. With `onPin` null (a person's own list) there is no
  *  Pin; with `onPerson` a member's name opens that person's posts. */
-export default function PostCard({ gymId, gymName, post, pinnedCount = 0, words, readOnly, busy, report = null, reportedRead = false, onPin = null, onRemove, onKeep, onStop, onOpen, onPerson = null, challengeLink = null }) {
+export default function PostCard({ gymId, gymName, post, pinnedCount = 0, words, readOnly, busy, report = null, reportedRead = false, onPin = null, onRemove, onKeep, onStop, onOpen, onPerson = null, challengeLink = null, commentsWhere = 'elsewhere', onCommentsLeave, commentsRefresh = 0, onCommentCount = () => {}, onCommentsChanged = () => {}, onStopped = () => {} }) {
   /** Which box is open: null, 'remove' or 'stop'. */
   const [asking, setAsking] = useState(null);
+  const [commentsOpen, setCommentsOpen] = useState(false);
   const box = removeBox(post, words);
   const stop = stopBox(post.author.name);
   const full = report === null && onPin !== null ? pinNote(post, pinnedCount) : null;
@@ -205,7 +117,7 @@ export default function PostCard({ gymId, gymName, post, pinnedCount = 0, words,
           </span>
         </Who>
         {post.fromMember ? <span className="c-tag c-tag-plain">{words.personCap}</span> : null}
-        {post.authorStopped ? <span className="c-tag c-tag-warn">Stopped from posting</span> : null}
+        {post.authorStopped ? <span className="c-tag c-tag-warn">Stopped from posting and commenting</span> : null}
         {post.pinned ? (
           <span className="c-tag c-tag-soft">
             <Pin aria-hidden="true" className="w-3.5 h-3.5" /> Pinned
@@ -236,7 +148,26 @@ export default function PostCard({ gymId, gymName, post, pinnedCount = 0, words,
           ))}
         </ul>
       ) : null}
-      <Reactions key={post.id} gymId={gymId} post={post} />
+      <PostReactions key={post.id} thing={post} readWho={(reaction) => staffPostsService.reactors(gymId, post.id, reaction)} />
+      <button type="button" aria-expanded={commentsOpen} onClick={() => setCommentsOpen((o) => !o)} className="c-btn c-btn-s c-btn-sm self-start">
+        <MessageCircle aria-hidden="true" className="w-4 h-4" />
+        {commentsButton(post.commentCount)}
+      </button>
+      {commentsOpen ? (
+        <CommentsPanel
+          gymId={gymId}
+          gymName={gymName}
+          post={post}
+          words={words}
+          readOnly={readOnly}
+          where={commentsWhere}
+          onLeave={onCommentsLeave}
+          refresh={commentsRefresh}
+          onCount={(change) => onCommentCount(post.id, change)}
+          onChanged={onCommentsChanged}
+          onStopped={onStopped}
+        />
+      ) : null}
       {readOnly ? null : asking === 'remove' ? (
         <div role="group" aria-label={box.title} className="flex flex-col gap-2 pt-3 border-t" style={{ borderColor: 'var(--line)' }}>
           <p className="c-s15 c-w6 c-t1">{box.title}</p>
@@ -285,13 +216,13 @@ export default function PostCard({ gymId, gymName, post, pinnedCount = 0, words,
           {canStop && !post.authorStopped ? (
             <button type="button" disabled={busy} onClick={() => setAsking('stop')} className="c-btn c-btn-s c-btn-sm">
               <UserX aria-hidden="true" className="w-4 h-4" />
-              Stop them posting
+              Stop posting and commenting
             </button>
           ) : null}
           {canStop && post.authorStopped ? (
             <button type="button" disabled={busy} onClick={() => onStop(post, false)} className="c-btn c-btn-s c-btn-sm">
               <UserCheck aria-hidden="true" className="w-4 h-4" />
-              Let them post again
+              Let them post and comment again
             </button>
           ) : null}
           {full !== null ? <span className="c-s13 c-t2">{full}</span> : null}

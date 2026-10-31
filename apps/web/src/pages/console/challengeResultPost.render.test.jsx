@@ -11,6 +11,7 @@ const svc = { list: vi.fn(), add: vi.fn(), setPinned: vi.fn(), remove: vi.fn(), 
 const orgApi = { getMine: vi.fn() };
 vi.mock('../../api/postsApi', () => ({
   staffPostsService: svc,
+  staffCommentsService: { reported: () => Promise.resolve({ items: [], total: 0 }) },
   postPhotoUrl: ({ gymId, postId, photoId }) => `http://api.test/v1/orgs/${gymId}/posts/${postId}/photos/${photoId}`,
 }));
 vi.mock('../../api/orgsApi', async (importOriginal) => {
@@ -103,10 +104,11 @@ describe('the result post on the console’s Updates', () => {
     hidden: false,
     authorId: null,
     authorStopped: false,
+    commentCount: 0,
     challengeResult: { today: '2026-10-08', canOpen: true, challenge: ended },
     ...over,
   });
-  const feed = (posts) => ({ gymId: 'g1', gymName: 'Iron House', membersCanPost: false, reportedCount: 0, pinned: [], posts, next: null });
+  const feed = (posts) => ({ gymId: 'g1', gymName: 'Iron House', membersCanPost: false, membersCanComment: true, reportedCount: 0, pinned: [], posts, next: null });
   const open = (org = ORG) => {
     orgApi.getMine.mockResolvedValue({ data: { orgs: [org], formerOrgs: [] } });
     render(

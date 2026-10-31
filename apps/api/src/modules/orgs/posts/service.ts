@@ -250,12 +250,13 @@ export async function getStaffPosts(
 ): Promise<StaffGymPostsResponse | null> {
   const { org } = await requirePrivilege(deps, gymId, staffId, TICK);
   if (!(await limit())) return null;
-  const [feed, membersCanPost, reportedCount] = await Promise.all([
+  const [feed, membersCanPost, membersCanComment, reportedCount] = await Promise.all([
     page(deps, gymId, before, "staff", (rows) => staffShaped(deps, gymId, rows, staffId)),
     repo.membersCanPost(deps.sql, gymId),
+    commentsRepo.membersCanComment(deps.sql, gymId),
     repo.countReported(deps.sql, gymId),
   ]);
-  return staffGymPostsResponseSchema.parse({ gymId, gymName: org.name, membersCanPost, reportedCount, ...feed });
+  return staffGymPostsResponseSchema.parse({ gymId, gymName: org.name, membersCanPost, membersCanComment, reportedCount, ...feed });
 }
 
 // ── ONE PERSON'S POSTS, ON THEIR PROFILE (19b-ii-c) ──

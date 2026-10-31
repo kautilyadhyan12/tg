@@ -24,6 +24,7 @@ const orgApi = { getMine: vi.fn() };
 const prepare = vi.fn();
 vi.mock('../../api/postsApi', () => ({
   staffPostsService: svc,
+  staffCommentsService: { reported: () => Promise.resolve({ items: [], total: 0 }) },
   postPhotoUrl: ({ gymId, postId, photoId }) => `http://api.test/v1/orgs/${gymId}/posts/${postId}/photos/${photoId}`,
 }));
 vi.mock('../../api/orgsApi', async (importOriginal) => {
@@ -59,11 +60,12 @@ const post = (id, body, over = {}) => ({
   wrote: false,
   reported: false,
   hidden: false,
+  commentCount: 0,
   authorId: null,
   authorStopped: false,
   ...over,
 });
-const feed = (over = {}) => ({ gymId: 'g1', gymName: 'Iron House', membersCanPost: false, reportedCount: 0, pinned: [], posts: [], next: null, ...over });
+const feed = (over = {}) => ({ gymId: 'g1', gymName: 'Iron House', membersCanPost: false, membersCanComment: true, reportedCount: 0, pinned: [], posts: [], next: null, ...over });
 const reportedList = (items = []) => ({ gymId: 'g1', gymName: 'Iron House', items, total: items.length });
 const NO_REASONS = { unkind: 0, photo_of_someone: 0, nudity: 0, spam: 0, other: 0 };
 
@@ -432,14 +434,14 @@ describe('members’ posts', () => {
     await waitFor(() => expect(theSwitch().disabled).toBe(true));
   });
 
-  it('a member’s post is marked, and only it offers "Stop them posting"', async () => {
+  it('a member’s post is marked, and only it offers "Stop posting and commenting"', async () => {
     svc.list.mockResolvedValue(feed({ posts: [memberPost('m', 'From a member'), post('s', 'From the gym')] }));
     open();
     await waitFor(() => expect(cards()).toHaveLength(2));
     expect(within(cards()[0]).getByText('Member')).toBeTruthy();
-    expect(within(cards()[0]).getByRole('button', { name: 'Stop them posting' })).toBeTruthy();
+    expect(within(cards()[0]).getByRole('button', { name: 'Stop posting and commenting' })).toBeTruthy();
     expect(within(cards()[1]).queryByText('Member')).toBeNull();
-    expect(within(cards()[1]).queryByRole('button', { name: 'Stop them posting' })).toBeNull();
+    expect(within(cards()[1]).queryByRole('button', { name: 'Stop posting and commenting' })).toBeNull();
   });
 
   it('stopping a person asks first in a box that names them, stops the writer of the post pressed, and marks their posts', async () => {
@@ -449,29 +451,29 @@ describe('members’ posts', () => {
     svc.setStopped.mockResolvedValue({ stopped: true });
     open();
     await waitFor(() => expect(cards()).toHaveLength(3));
-    fireEvent.click(within(cards()[2]).getByRole('button', { name: 'Stop them posting' }));
-    const box = within(within(cards()[2]).getByRole('group', { name: 'Stop Wendy Writer posting?' }));
+    fireEvent.click(within(cards()[2]).getByRole('button', { name: 'Stop posting and commenting' }));
+    const box = within(within(cards()[2]).getByRole('group', { name: 'Stop Wendy Writer posting and commenting?' }));
     expect(
       box.getByText(
-        "Wendy Writer won't be able to post or comment on Updates until you let them again. They can still read and react. Their posts stay until you remove them. They aren't emailed, and nobody else changes.",
+        "Wendy Writer won't be able to post or comment on Updates until you let them again. They can still read and react. Their posts and comments stay until you remove them. They aren't emailed, and nobody else changes.",
       ),
     ).toBeTruthy();
     fireEvent.click(box.getByRole('button', { name: 'Cancel' }));
     expect(svc.setStopped).not.toHaveBeenCalled();
 
-    fireEvent.click(within(cards()[2]).getByRole('button', { name: 'Stop them posting' }));
-    fireEvent.click(within(cards()[2]).getByRole('button', { name: 'Stop Wendy Writer posting' }));
+    fireEvent.click(within(cards()[2]).getByRole('button', { name: 'Stop posting and commenting' }));
+    fireEvent.click(within(cards()[2]).getByRole('button', { name: 'Stop Wendy Writer posting and commenting' }));
     await waitFor(() => expect(svc.setStopped.mock.calls).toEqual([['g1', 'u-wendy', true]]));
     expect((await screen.findByRole('status')).textContent).toBe('Wendy Writer can no longer post or comment.');
     // Both of Wendy's posts say so and offer the way back; Omar's is untouched.
-    await waitFor(() => expect(within(cards()[0]).getByText('Stopped from posting')).toBeTruthy());
-    expect(within(cards()[2]).getByRole('button', { name: 'Let them post again' })).toBeTruthy();
-    expect(within(cards()[1]).queryByText('Stopped from posting')).toBeNull();
-    expect(within(cards()[1]).getByRole('button', { name: 'Stop them posting' })).toBeTruthy();
+    await waitFor(() => expect(within(cards()[0]).getByText('Stopped from posting and commenting')).toBeTruthy());
+    expect(within(cards()[2]).getByRole('button', { name: 'Let them post and comment again' })).toBeTruthy();
+    expect(within(cards()[1]).queryByText('Stopped from posting and commenting')).toBeNull();
+    expect(within(cards()[1]).getByRole('button', { name: 'Stop posting and commenting' })).toBeTruthy();
     expect(cards()).toHaveLength(3);
   });
 
-  it('the people stopped are listed by name, and "Let them post again" lets that one back', async () => {
+  it('the people stopped are listed by name, and "Let them post and comment again" lets that one back', async () => {
     svc.list.mockResolvedValue(feed({ posts: [memberPost('a', 'Wendy one', { authorStopped: true })] }));
     svc.stopped.mockResolvedValueOnce({
       people: [
@@ -484,11 +486,11 @@ describe('members’ posts', () => {
     const list = within(await screen.findByTestId('stopped'));
     expect(list.getByText('Wendy Writer')).toBeTruthy();
     expect(list.getByText('No name yet')).toBeTruthy();
-    fireEvent.click(list.getAllByRole('button', { name: 'Let them post again' })[0]);
+    fireEvent.click(list.getAllByRole('button', { name: 'Let them post and comment again' })[0]);
     await waitFor(() => expect(svc.setStopped.mock.calls).toEqual([['g1', 'u-wendy', false]]));
     expect((await screen.findByRole('status')).textContent).toBe('Wendy Writer can post and comment again.');
     await waitFor(() => expect(screen.queryByTestId('stopped')).toBeNull());
-    expect(within(cards()[0]).queryByText('Stopped from posting')).toBeNull();
+    expect(within(cards()[0]).queryByText('Stopped from posting and commenting')).toBeNull();
   });
 });
 
@@ -527,7 +529,7 @@ describe('reported posts', () => {
     expect(within(reportedCards()[1]).getByText('Reported by 1 person: Spam or selling')).toBeTruthy();
     expect(within(reportedCards()[0]).getByText('Look at the state of him')).toBeTruthy();
     // The writer's name, then Keep, Remove and Stop; a reported post is not pinned from here.
-    expect(within(reportedCards()[0]).getAllByRole('button').map((b) => b.getAttribute('aria-label') ?? b.textContent.trim())).toEqual(['See what Wendy Writer has posted', 'Keep post', 'Remove post', 'Stop them posting']);
+    expect(within(reportedCards()[0]).getAllByRole('button').map((b) => b.getAttribute('aria-label') ?? b.textContent.trim())).toEqual(['See what Wendy Writer has posted', 'Comments', 'Keep post', 'Remove post', 'Stop posting and commenting']);
   });
 
   it('shows what reporters typed, under the post it was typed about, and nothing where nobody typed', async () => {
@@ -665,8 +667,8 @@ describe('reported posts', () => {
     svc.reported.mockResolvedValue(two());
     open({ ...ORG, subscription: null, consoleReadOnly: true });
     await waitFor(() => expect(reportedCards()).toHaveLength(2));
-    // Only the writer's name, which opens their posts to read: nothing that changes anything.
-    expect(within(reportedCards()[0]).queryAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['See what Wendy Writer has posted']);
+    // The writer's name, which opens their posts to read, and the comments to read: nothing that changes anything.
+    expect(within(reportedCards()[0]).queryAllByRole('button').map((b) => b.getAttribute('aria-label') ?? b.textContent.trim())).toEqual(['See what Wendy Writer has posted', 'Comments']);
   });
 });
 
@@ -691,7 +693,7 @@ describe('a person’s posts, opened from a name', () => {
     expect(screen.getByRole('dialog', { name: "Wendy Writer's posts" })).toBeTruthy();
     expect(box.getAllByRole('heading').map((h) => h.textContent)).toEqual(["Wendy Writer's posts"]);
     // A person's own list: Remove and Stop, never Pin, and no name to press again.
-    expect(within(box.getAllByTestId('post')[0]).getAllByRole('button').map((b) => b.textContent.trim())).toEqual(['Remove post', 'Stop them posting']);
+    expect(within(box.getAllByTestId('post')[0]).getAllByRole('button').map((b) => b.textContent.trim())).toEqual(['Comments', 'Remove post', 'Stop posting and commenting']);
     fireEvent.click(box.getAllByRole('button', { name: 'Close' })[0]);
     await waitFor(() => expect(screen.queryByTestId('person-posts-box')).toBeNull());
   });
@@ -713,18 +715,18 @@ describe('a person’s posts, opened from a name', () => {
     await waitFor(() => expect(svc.list).toHaveBeenCalledTimes(2));
   });
 
-  it('Stop them posting in the box asks first, stops THAT person, and every post of theirs says so', async () => {
+  it('Stop posting and commenting in the box asks first, stops THAT person, and every post of theirs says so', async () => {
     svc.list.mockResolvedValue(feed({ posts: [theirs('a', 'First 5k done')] }));
     svc.person.mockResolvedValue({ posts: [theirs('a', 'First 5k done'), theirs('c', 'Leg day')], next: null, total: 2 });
     svc.setStopped.mockResolvedValue({ stopped: true });
     open();
     const box = await openWendy();
     await waitFor(() => expect(box.getAllByTestId('post')).toHaveLength(2));
-    fireEvent.click(within(box.getAllByTestId('post')[1]).getByRole('button', { name: 'Stop them posting' }));
+    fireEvent.click(within(box.getAllByTestId('post')[1]).getByRole('button', { name: 'Stop posting and commenting' }));
     expect(svc.setStopped).not.toHaveBeenCalled();
-    fireEvent.click(within(box.getAllByTestId('post')[1]).getByRole('button', { name: 'Stop Wendy Writer posting' }));
+    fireEvent.click(within(box.getAllByTestId('post')[1]).getByRole('button', { name: 'Stop Wendy Writer posting and commenting' }));
     await waitFor(() => expect(svc.setStopped).toHaveBeenCalledWith('g1', 'u-wendy', true));
-    await waitFor(() => expect(box.getAllByText('Stopped from posting')).toHaveLength(2));
+    await waitFor(() => expect(box.getAllByText('Stopped from posting and commenting')).toHaveLength(2));
     expect(box.getByText('Wendy Writer can no longer post or comment.')).toBeTruthy();
   });
 
@@ -747,6 +749,6 @@ describe('a person’s posts, opened from a name', () => {
     open({ ...ORG, subscription: null, consoleReadOnly: true });
     const box = await openWendy();
     await waitFor(() => expect(box.getAllByTestId('post')).toHaveLength(1));
-    expect(within(box.getAllByTestId('post')[0]).queryAllByRole('button')).toEqual([]);
+    expect(within(box.getAllByTestId('post')[0]).queryAllByRole('button').map((b) => b.textContent.trim())).toEqual(['Comments']);
   });
 });

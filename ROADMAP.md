@@ -574,7 +574,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 17b. [x] **Post an update** — merged 2026-10-31 (PR #405).
     - 17e. **Comments, replies and their reactions** (split 2026-10-31: members on the phone first).
       - 17e-i. [x] **Comments on the phone** — merged 2026-10-31 (PR #409).
-      - 17e-ii. [ ] **Comments in the console**: staff read, write (no daily limit) and remove them, who reacted, the reported list with Keep and Remove, the Members can comment switch; the phone shows who is staff already. Ends with item 17's order: 17c, 17d, then the two extra passes.
+      - 17e-ii. [x] **Comments in the console** — merged 2026-10-31 (PR #411).
     - 17c. [ ] **Events, the Leaderboard and a person's profile** (a name on Updates opens it from here).
     - 17d. [ ] **Challenges**, and who won under a challenge's ended post on Updates, with See the challenge.
 18. [ ] **Inbox, Contact the gym, and phone notifications** (spec Part 3 §16.1; Part 6 §6): the class reminder, a place is free, a message, somebody commented on your post or replied to you. Needs Kd's Firebase project.
