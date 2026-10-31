@@ -18,7 +18,7 @@ import type { Sql, TransactionSql } from "postgres";
 import { giveMemberGift } from "../referrals/memberGiftRepo.js";
 import { insertAudit } from "../repo.js";
 import { writeRefund } from "../memberships/billsRepo.js";
-import { billsFor, paymentsFor, refundAskingOnBill } from "../memberships/billsSql.js";
+import { refundAskingOnBill, refundTargetOf, type RefundTarget } from "../memberships/billsSql.js";
 import { lockedEntry, lockedHeld } from "../memberships/heldRepo.js";
 import { lockGym } from "../memberList/repo.js";
 import type { SquareEnvironment } from "./square.js";
@@ -109,9 +109,10 @@ export interface PaymentToRefund {
   /** What the app says can still go back, and what stands refunded, by any way. */
   refundableMinor: number;
   refundedMinor: number;
+  target: RefundTarget;
 }
 
-/** One payment of a period of this record's membership, or null. Fees are 18d-iv-b. */
+/** One payment of this record's membership, a period's or a fee's (18d-iv-b-i), or null. */
 export async function readPaymentToRefund(sql: SqlOrTx, gymId: string, entryId: string, membershipId: string, paymentId: string): Promise<PaymentToRefund | null> {
   const [row] = await sql<{ id: string; bill_id: string; provider: string | null; provider_payment_id: string | null; currency: string }[]>`
     SELECT p.id, p.bill_id, p.provider, p.provider_payment_id, p.currency
@@ -119,21 +120,21 @@ export async function readPaymentToRefund(sql: SqlOrTx, gymId: string, entryId: 
     JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
     JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
     WHERE p.gym_id = ${gymId} AND p.id = ${paymentId} AND b.held_membership_id = ${membershipId} AND h.entry_id = ${entryId}
-      AND b.period_index IS NOT NULL AND p.undone_at IS NULL`;
+      AND p.undone_at IS NULL`;
   if (row === undefined) return null;
-  const bill = (await billsFor(sql, gymId, [membershipId])).find((b) => b.id === row.bill_id);
-  const standing = (await paymentsFor(sql, gymId, [membershipId])).find((p) => p.id === paymentId);
-  if (bill === undefined || standing === undefined) return null;
+  const target = await refundTargetOf(sql, gymId, membershipId, paymentId);
+  if (target === null) return null;
   return {
     id: row.id,
     billId: row.bill_id,
-    method: standing.method,
+    method: target.payment.method,
     provider: row.provider,
     squarePaymentId: row.provider_payment_id,
-    amountMinor: standing.amountMinor,
+    amountMinor: target.payment.amountMinor,
     currency: row.currency,
-    refundableMinor: paymentRefundableMinor(bill, standing),
-    refundedMinor: standing.refundedMinor,
+    refundableMinor: paymentRefundableMinor(target.bill, target.payment),
+    refundedMinor: target.payment.refundedMinor,
+    target,
   };
 }
 
@@ -185,10 +186,7 @@ export async function startRefund(sql: Sql, s: NewPress): Promise<StartOutcome> 
     if (payment.provider !== "square" || payment.squarePaymentId === null) return { kind: "not_card" };
     if (await refundAskingOnBill(tx, s.gymId, payment.billId)) return { kind: "waiting" };
 
-    const bill = (await billsFor(tx, s.gymId, [s.membershipId])).find((b) => b.id === payment.billId);
-    const standing = (await paymentsFor(tx, s.gymId, [s.membershipId])).find((p) => p.id === s.paymentId);
-    if (bill === undefined || standing === undefined) return { kind: "payment_not_found" };
-    const rule = refundMemberPayment(bill, standing, s.amountMinor);
+    const rule = refundMemberPayment(payment.target.bill, payment.target.payment, s.amountMinor);
     if (!rule.ok) {
       if (rule.reason === "too_much") return { kind: "too_much", leftMinor: rule.leftMinor, currency: payment.currency };
       return { kind: "not_settled" };
@@ -273,16 +271,16 @@ export async function recordTaken(sql: Sql, press: RefundPress, taken: { squareR
     await lockGym(tx, press.gymId);
     const [row] = await tx<{ state: string }[]>`SELECT state FROM gym_square_refunds WHERE gym_id = ${press.gymId} AND id = ${press.id} FOR UPDATE`;
     if (row?.state !== "asking") return false;
-    const [where] = await tx<{ membership_id: string; entry_id: string | null; bill_id: string }[]>`
-      SELECT b.held_membership_id AS membership_id, h.entry_id, b.id AS bill_id
+    const [where] = await tx<{ membership_id: string; entry_id: string | null }[]>`
+      SELECT b.held_membership_id AS membership_id, h.entry_id
       FROM gym_member_payments p
       JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
       JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
       WHERE p.gym_id = ${press.gymId} AND p.id = ${press.paymentId}`;
     if (where === undefined) throw new Error("the payment of a refund press is gone");
-    const bill = (await billsFor(tx, press.gymId, [where.membership_id])).find((b) => b.id === where.bill_id);
-    const standing = (await paymentsFor(tx, press.gymId, [where.membership_id])).find((p) => p.id === press.paymentId);
-    if (bill === undefined || standing === undefined) throw new Error("the payment of a refund press no longer stands");
+    const target = await refundTargetOf(tx, press.gymId, where.membership_id, press.paymentId);
+    if (target === null) throw new Error("the payment of a refund press no longer stands");
+    const { bill, payment: standing } = target;
     // Square has the money on its way: what is written is what Square did.
     const memberRefundId = await writeRefund(tx, {
       gymId: press.gymId,
@@ -322,15 +320,16 @@ export async function recordFailed(sql: Sql, press: RefundPress, failed: { code:
     await tx`
       UPDATE gym_member_refunds SET undone_at = ${failed.now}, void_reason = 'square_failed'
       WHERE gym_id = ${press.gymId} AND id = ${row.member_refund_id} AND undone_at IS NULL`;
-    const [where] = await tx<{ bill_id: string; entry_id: string | null; membership_id: string }[]>`
-      SELECT b.id AS bill_id, h.entry_id, b.held_membership_id AS membership_id
+    const [where] = await tx<{ bill_id: string; entry_id: string | null; membership_id: string; period_index: number | null }[]>`
+      SELECT b.id AS bill_id, h.entry_id, b.held_membership_id AS membership_id, b.period_index
       FROM gym_member_payments p
       JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
       JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
       WHERE p.gym_id = ${press.gymId} AND p.id = ${press.paymentId}`;
     if (where === undefined) throw new Error("the payment of a refund press is gone");
     await tx`UPDATE gym_member_bills SET status = 'paid', updated_at = ${failed.now} WHERE gym_id = ${press.gymId} AND id = ${where.bill_id} AND status = 'refunded'`;
-    if (where.entry_id !== null) {
+    // A fee's payment never gives a member's gift.
+    if (where.entry_id !== null && where.period_index !== null) {
       await giveMemberGift(tx, { gymId: press.gymId, friendEntryId: where.entry_id, by: { paymentId: press.paymentId }, today: failed.today, now: failed.now });
     }
     await tx`

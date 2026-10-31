@@ -73,14 +73,14 @@ function membershipOf(m: HeldMembershipItem): MyMembership {
         paidOn: p.paidOn,
         covers: b.covers,
         receiptNumber: p.receiptNumber,
-        refunds: p.refunds.map((r) => ({ amountMinor: r.amountMinor, method: r.method, refundedOn: r.refundedOn, receiptNumber: r.receiptNumber })),
+        refunds: p.refunds.map((r) => ({ amountMinor: r.amountMinor, method: r.method, refundedOn: r.refundedOn, receiptNumber: r.receiptNumber, pending: r.square?.state === "pending" })),
       })),
     ),
     olderPeriodsNotShown: billing.billsNotShown,
     fees: billing.fees.flatMap((f) =>
       f.state === "removed"
         ? []
-        : [{ fee: f.fee, forName: f.forName, on: f.on, amountMinor: f.amountMinor, dueOn: f.dueOn, state: f.state, receiptNumber: f.state === "paid" ? (f.payments[0]?.receiptNumber ?? null) : null }],
+        : [{ fee: f.fee, forName: f.forName, on: f.on, amountMinor: f.amountMinor, dueOn: f.dueOn, state: f.state, refundedMinor: f.refundedMinor, refundPending: f.payments.some((p) => p.refunds.some((r) => r.square?.state === "pending")), receiptNumber: f.state === "paid" || f.state === "refunded" ? (f.payments[0]?.receiptNumber ?? null) : null }],
     ),
   };
 }
@@ -104,7 +104,7 @@ function purchasesFrom(lines: readonly SaleRow[]): MyPurchase[] {
         totalMinor: rows.reduce((n, r) => n + r.totalMinor, 0),
         lines: rows.map((r) => ({ name: r.itemName, quantity: r.quantity, totalMinor: r.totalMinor })),
         refunds: rows.flatMap((r) =>
-          r.refunds.filter((f) => f.voided === null).map((f) => ({ amountMinor: f.amountMinor, method: f.method, refundedOn: f.refundedOn, receiptNumber: f.receiptNumber })),
+          r.refunds.filter((f) => f.voided === null).map((f) => ({ amountMinor: f.amountMinor, method: f.method, refundedOn: f.refundedOn, receiptNumber: f.receiptNumber, pending: false })),
         ),
       },
     ];

@@ -151,14 +151,16 @@ describe("a membership", () => {
 });
 
 describe("fees", () => {
-  const fee = (state: "due" | "overdue" | "paid" | "waived", over: object = {}) => ({
+  const fee = (state: "due" | "overdue" | "paid" | "refunded" | "waived", over: object = {}) => ({
     fee: "late_cancel" as const,
     forName: "Spin at 6",
     on: "2026-10-20",
     amountMinor: 20_000,
     dueOn: "2026-10-21",
     state,
-    receiptNumber: state === "paid" ? 31 : null,
+    refundedMinor: 0,
+    refundPending: false,
+    receiptNumber: state === "paid" || state === "refunded" ? 31 : null,
     ...over,
   });
   const item = (f: ReturnType<typeof fee>) => ({ fee: f, currency: "INR", membership: "Gold Monthly" });
@@ -174,6 +176,9 @@ describe("fees", () => {
     expect(feeText(item(fee("overdue")), "Iron House")).toMatchObject({ tag: { label: "Overdue", tone: "bad" }, note: "Overdue since 21 Oct 2026.", receipt: null });
     expect(feeText(item(fee("paid")), "Iron House")).toMatchObject({ tag: { label: "Paid", tone: "good" }, note: null, receipt: 31 });
     expect(feeText(item(fee("waived")), "Iron House")).toMatchObject({ tag: { label: "Waived", tone: "plain" }, note: "Iron House waived this fee.", receipt: null });
+    expect(feeText(item(fee("refunded", { refundedMinor: 20_000 })), "Iron House")).toMatchObject({ tag: { label: "Refunded", tone: "plain" }, note: "Iron House refunded this fee.", receipt: 31 });
+    expect(feeText(item(fee("paid", { refundedMinor: 5_000 })), "Iron House")).toMatchObject({ tag: { label: "Paid", tone: "good" }, note: "Iron House refunded ₹50.00 of this fee.", receipt: 31 });
+    expect(feeText(item(fee("refunded", { refundedMinor: 20_000, refundPending: true })), "Iron House")).toMatchObject({ tag: { label: "Refund pending", tone: "plain" }, note: "Iron House is refunding this fee.", receipt: 31 });
   });
 
   it("a no-show and a freeze fee are named as the gym's list names them", () => {

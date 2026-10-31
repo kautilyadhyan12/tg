@@ -7,8 +7,9 @@ const SMALL = 'c-btn c-btn-s c-btn-sm';
 /** "More ⋯": the rarer actions of a thing, as gym software keeps them out of the way. Each
  *  item says what it does in one line under its name, runs once and closes the menu.
  *  `label` null draws the ⋯ alone, small, for the end of a line; it then needs `ariaLabel`,
- *  which names the thing it is for. `alignRight` opens the list from the button's right edge. */
-export default function MoreMenu({ items, disabled = false, label = 'More', ariaLabel, alignRight = false }) {
+ *  which names the thing it is for. `alignRight` opens the list from the button's right edge.
+ *  `compact`: a word on a button as small as the ⋯, for the end of a line. */
+export default function MoreMenu({ items, disabled = false, label = 'More', ariaLabel, alignRight = false, compact = false }) {
   const [open, setOpen] = useState(false);
   const wrap = useRef(null);
   useEffect(() => {
@@ -29,7 +30,7 @@ export default function MoreMenu({ items, disabled = false, label = 'More', aria
         aria-label={ariaLabel}
         onClick={() => setOpen((o) => !o)}
         disabled={disabled}
-        className={label === null ? SMALL : PLAIN}
+        className={label === null || compact ? SMALL : PLAIN}
       >
         {label}
         <MoreHorizontal aria-hidden="true" className="w-4 h-4" />
