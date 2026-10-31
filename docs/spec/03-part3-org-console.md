@@ -4346,7 +4346,7 @@ on the person's page, a class's list and a personal training session (for staff 
 "<gym> refunded $4.00 of this fee.". The line at the top of a membership and a member's payment lines wait for Square the same way. A refunded fee is not owed again, whatever staff mark afterwards: its booking opens no second fee. A fee's payment never gives a
 member's Refer a friend gift, so neither a failed refund nor a voided one gives one back. Reports, receipts and the payments download read it as they read any refund.
 
-*At Sell (18d-iv-b-ii, as built; `rulings/2026-10-31-18d-iv-b-ii.md`):* a sale paid on the Square Terminal goes back the same way, from the **Refund** button on its row on Sell and on a person's "Bought at the desk": **Refund to card**, and **Note a refund** beside it, with Void refund for one noted by mistake. A sale paid by hand keeps its ⋯ and Refund sale. Who may: whoever may sell (`billing.members`, Kd, 2026-10-31). A sale of several products asks which product first, or **All products** (Kd's click-through, 2026-10-31), for Refund to card and Note a refund alike. One product is a refund of its own, as Refund sale is. All products gives back all that is left, so no amount is asked: it is one refund at Square, written as a refund line and a receipt for each product with something left, with a shelf question for each product whose stock is counted; the box's amount must still be what is left, so a sale that changed meanwhile sends nothing ("Part of this sale was refunded meanwhile…"), and where Square shows less left than the app it says to note that first or refund one product at a time. All of a sale's products share one Square payment, so the most that can go back is the least of what is left of that product and of the whole payment, at most one press waits on that payment, and while it waits nothing else is refunded, noted or voided on that sale. The box says the reasons a sale has (Brought back · Charged too much · Faulty or damaged · Something else) and, where the stock is counted, asks how many went back on the shelf. A press is a row of `gym_square_refunds` holding `sale_id` and `restock`, or `parts` for all of a sale (migration `0179`); once Square takes it up a row of `gym_sale_refunds` for each product, with the method `terminal` and the press's id (`press_id`), holds the money, and what went back goes on the shelf then. If Square then fails it the app voids them (`square_failed`), takes the shelf count off again and gives a friend's Refer a friend gift back. The sale reads **Refund pending** while any refund on it has not finished, then Part refunded or Refunded, and its refund line says so; the member's own page says "refund pending" on that purchase. A refund sent to the card is never voided here. Square's refusals, its 14 days and "We don't know whether Square took…" are as for a payment. Sell and "Bought at the desk" read again every 30 seconds for 15 minutes while a refund waits on Square. Receipts, Reports, the day's list and the payments download read it as any refund of a sale.
+*At Sell (18d-iv-b-ii, as built; `rulings/2026-10-31-18d-iv-b-ii.md`):* a sale paid on the Square Terminal goes back the same way, from the **Refund** button on its row on Sell and on a person's "Bought at the desk": **Refund to card**, and **Note a refund** beside it, with Void refund for one noted by mistake. A sale paid by hand keeps its ⋯ and Refund sale. Who may: whoever may sell (`billing.members`, Kd, 2026-10-31). A sale of several products asks which product first, or **All products** (Kd's click-through, 2026-10-31), for Refund to card and Note a refund alike. One product is a refund of its own, as Refund sale is. All products gives back all that is left, so no amount is asked: it is one refund at Square, written as a refund line and a receipt for each product with something left, with a shelf question for each product whose stock is counted; the box's amount must still be what is left, so a sale that changed meanwhile sends nothing ("Part of this sale was refunded meanwhile…"), and where Square shows less left than the app it says to note that first or refund one product at a time. All of a sale's products share one Square payment, so the most that can go back is the least of what is left of that product and of the whole payment, at most one press waits on that payment, and while it waits nothing else is refunded, noted or voided on that sale. The box says the reasons a sale has (Brought back · Charged too much · Faulty or damaged · Something else) and, where the stock is counted, asks how many went back on the shelf. A press is a row of `gym_square_refunds` holding `sale_id` and `restock`, or `parts` for all of a sale (migration `0180`); once Square takes it up a row of `gym_sale_refunds` for each product, with the method `terminal` and the press's id (`press_id`), holds the money, and what went back goes on the shelf then. If Square then fails it the app voids them (`square_failed`), takes the shelf count off again and gives a friend's Refer a friend gift back. The sale reads **Refund pending** while any refund on it has not finished, then Part refunded or Refunded, and its refund line says so; the member's own page says "refund pending" on that purchase. A refund sent to the card is never voided here. Square's refusals, its 14 days and "We don't know whether Square took…" are as for a payment. Sell and "Bought at the desk" read again every 30 seconds for 15 minutes while a refund waits on Square. Receipts, Reports, the day's list and the payments download read it as any refund of a sale.
 Still to come: Overview's list of fees to refund and refunds that failed or that Square never answered (18d-iv-b-iii).
 
 **A failed charge** (18d-iii): at most 3 tries over several days (Square: "Limit retries to 2 to
@@ -4592,8 +4592,9 @@ browser. A former member, a removed one and a stranger get a 404.
 
 `gym_posts`: who, words (2,000 characters), up to 4 photos or 1 video, pinned or not,
 when, removed at and by whom. Staff always post; **a gym setting decides whether
-members may** (off to start). **Reactions — one tap from a small fixed set — and NO
-comments, and no private chat** (RULINGS 2026-08-25, kept 2026-09-22). Photos: checked
+members may** (off to start). **Reactions — one tap from a small fixed set — comments and
+replies (below; Kd, 2026-10-30, replacing "no comments" of 2026-08-25), and no private
+chat** (RULINGS 2026-09-22). Photos: checked
 by their first bytes, size-capped, stripped of location tags, stored on R2 under keys
 the server makes, served by signed URLs (CLAUDE.md §4, Uploads). Videos: up to one
 minute, 20 a gym (RULINGS 2026-08-24), uploaded straight to Cloudflare Stream by a
@@ -4651,6 +4652,27 @@ are shown only while its writer is a live app member of the gym with an active a
 are back), it is deleted with its photo files at the account's Day 14, and it is in the
 person's export. Switching the switch off leaves the posts already made.
 
+**As built in Stage 5 17e-i (2026-10-31): comments and replies, on the phone.** Under any
+post a member may read, words only, 500 characters by the same count as a post: a **comment**,
+and a **reply** one level under a comment; a reply to a reply goes in the same list and names
+who it answers, read each time, so a name is never kept inside somebody else's words
+(`gym_post_comments`, migration 0179). Oldest first, 20 a page (`GET …/posts/:postId/comments`,
+`GET …/post-comments/:commentId/replies`); `POST …/posts/:postId/comments`, one key a comment.
+**100 in any 24 hours** a member a gym, comments and replies together, removed ones counted,
+counted with the membership held. On for every gym (`gyms.members_can_comment`); off, those
+written stay and none can be added; the stop of §15.3 stops comments too. Each has the post's
+four reactions, one a person, counts only (`PUT …/post-comments/:id/reaction`); **Report**, four
+reasons, the post's less the one about a photo, one a person, five waiting hide it and its replies
+from everyone but its writer (`gym_post_comment_reports`, `hidden_at`); **Block** is the one
+block of §15.3, so it hides that person's posts and comments alike; **Remove** on one's own, a
+comment taking its replies. One rule decides every read and every press (`commentsRepo.seenBy`):
+removed, a writer who has left, hidden unless theirs, blocked; a reply also needs the comment it
+sits under to be seen; a post the reader may not read has none. A removed post takes everything
+on it in its own step. A member's are the person's: deleted at Day 14 with what is under them,
+and in their export; staff's are the gym's. The bad-words check refuses and names the word, as for
+a post. Nobody is told of a new comment until phone notifications (Stage 5 item 18). Staff reading,
+writing and removing them, the reported list and the switch are 17e-ii.
+
 ### 15.3 Keeping it safe — what Apple (guideline 1.2) and Google ask of any app where people post
 
 **Report** on every post, with a reason; reports land in a staff queue
@@ -4683,7 +4705,7 @@ staff saw but not the same ones (a reporter's account purged), the answer is 409
 feature's passes, 2026-10-05): a report's time is read before the report is stored, so one
 can land after staff read the list carrying an earlier time than the newest they saw. A kept post stays, and only a NEW person's report brings it back. **Stop them posting** on a member's
 post (`PUT` · `DELETE …/posts/stopped/:userId`, `gym_post_stops`): that person cannot post
-at this gym until staff let them again, still reads and reacts, their posts stay, and the
+or comment at this gym until staff let them again, still reads and reacts, their posts stay, and the
 page lists who is stopped. A gym whose plan has lapsed reads the list and answers nothing.
 Every Updates route asks who is reading or writing before the rate limit, so a stranger's
 404 is never a 429 and never counts against the address a gym's members share; nothing a

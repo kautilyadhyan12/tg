@@ -64,6 +64,7 @@ import { fullName, shownName } from "../leaderboard/rank.js";
 import { lockGym } from "../memberList/repo.js";
 import { badWordsIn } from "./badWords.js";
 import { removeListed } from "./photoFiles.js";
+import * as commentsRepo from "./commentsRepo.js";
 import * as repo from "./repo.js";
 
 export interface PostsDeps {
@@ -104,12 +105,13 @@ const challengesOf = (rows: readonly repo.PostRow[]): string[] => rows.flatMap((
  *  beside the counts, and whether the post is theirs or one they reported. */
 async function shaped(deps: Pick<PostsDeps, "sql" | "now">, gymId: string, rows: readonly repo.PostRow[], viewerId: string): Promise<GymPost[]> {
   const ids = rows.map((r) => r.id);
-  const [photos, counts, mine, reported, results] = await Promise.all([
+  const [photos, counts, mine, reported, results, comments] = await Promise.all([
     repo.photosOf(deps.sql, gymId, ids),
     repo.reactionCounts(deps.sql, gymId, ids, viewerId),
     repo.reactionsOf(deps.sql, gymId, ids, viewerId),
     repo.reportedBy(deps.sql, gymId, ids, viewerId),
     resultsForPosts(deps, gymId, challengesOf(rows), viewerId),
+    commentsRepo.commentCounts(deps.sql, gymId, ids, { member: viewerId }),
   ]);
   return rows.map((r) => {
     // An automatic app name (the email's first part) is never shown: the gym's record of
@@ -130,6 +132,7 @@ async function shaped(deps: Pick<PostsDeps, "sql" | "now">, gymId: string, rows:
       wrote: r.authorId === viewerId,
       reported: reported.has(r.id),
       hidden: r.hidden,
+      commentCount: comments.get(r.id) ?? 0,
       challengeResult: r.challengeId === null ? null : (results.get(r.challengeId) ?? null),
     });
   });
@@ -140,12 +143,13 @@ async function shaped(deps: Pick<PostsDeps, "sql" | "now">, gymId: string, rows:
 async function staffShaped(deps: Pick<PostsDeps, "sql" | "now">, gymId: string, rows: readonly repo.PostRow[], staffId: string): Promise<StaffGymPost[]> {
   const ids = rows.map((r) => r.id);
   const members = rows.flatMap((r) => (r.byMember && r.authorId !== null ? [r.authorId] : []));
-  const [photos, counts, mine, stopped, results] = await Promise.all([
+  const [photos, counts, mine, stopped, results, comments] = await Promise.all([
     repo.photosOf(deps.sql, gymId, ids),
     repo.reactionCounts(deps.sql, gymId, ids, null),
     repo.reactionsOf(deps.sql, gymId, ids, staffId),
     repo.stoppedAmong(deps.sql, gymId, members),
     resultsForPosts(deps, gymId, challengesOf(rows), null),
+    commentsRepo.commentCounts(deps.sql, gymId, ids, "staff"),
   ]);
   return rows.map((r) => {
     const named = fullName({ displayName: r.authorName ?? "", email: r.authorEmail, recordName: r.authorRecordName });
@@ -164,6 +168,7 @@ async function staffShaped(deps: Pick<PostsDeps, "sql" | "now">, gymId: string, 
       wrote: false,
       reported: false,
       hidden: r.hidden,
+      commentCount: comments.get(r.id) ?? 0,
       challengeResult: r.challengeId === null ? null : (results.get(r.challengeId) ?? null),
       authorId,
       authorStopped: authorId !== null && stopped.has(authorId),
@@ -224,14 +229,15 @@ export async function getPosts(
   if (!(await limit())) return null;
   const supportEmail = deps.supportEmail;
   if (!(await gymIsLive(deps.sql, gymId, org.status))) {
-    return gymPostsResponseSchema.parse({ gymId, gymName: org.name, status: "paused", posting: "off", blockedCount: await repo.countBlocked(deps.sql, gymId, userId), supportEmail, pinned: [], posts: [], next: null });
+    return gymPostsResponseSchema.parse({ gymId, gymName: org.name, status: "paused", posting: "off", commenting: "off", blockedCount: await repo.countBlocked(deps.sql, gymId, userId), supportEmail, pinned: [], posts: [], next: null });
   }
-  const [feed, posting, blockedCount] = await Promise.all([
+  const [feed, posting, commenting, blockedCount] = await Promise.all([
     page(deps, gymId, before, { member: userId }, (rows) => shaped(deps, gymId, rows, userId)),
     postingOf(deps.sql, gymId, userId),
+    commentsRepo.commentingOf(deps.sql, gymId, userId),
     repo.countBlocked(deps.sql, gymId, userId),
   ]);
-  return gymPostsResponseSchema.parse({ gymId, gymName: org.name, status: "shown", posting, blockedCount, supportEmail, ...feed });
+  return gymPostsResponseSchema.parse({ gymId, gymName: org.name, status: "shown", posting, commenting, blockedCount, supportEmail, ...feed });
 }
 
 /** The gym's posts for its staff holding the tick. */
@@ -582,6 +588,7 @@ async function removeRest(tx: TransactionSql, gymId: string, postId: string, at:
   await repo.queueFiles(tx, files);
   await repo.deleteReactions(tx, gymId, postId);
   await repo.closeReports(tx, gymId, postId, "removed", at);
+  await commentsRepo.removeAllOnPost(tx, gymId, postId, at);
   return files;
 }
 
@@ -801,6 +808,7 @@ export async function block(deps: Pick<PostsDeps, "sql" | "now">, userId: string
     // A reaction the blocker gave that person's posts could never be taken off again, and
     // would go on being counted and named for staff: it goes with the block.
     await repo.deleteReactionsToMember(tx, gymId, userId, blockedId);
+    await commentsRepo.deleteReactionsToMember(tx, gymId, userId, blockedId);
   });
   return true;
 }

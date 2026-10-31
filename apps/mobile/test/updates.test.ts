@@ -34,11 +34,12 @@ const post = (n: number, over: Partial<GymPost> = {}): GymPost => ({
   wrote: false,
   reported: false,
   hidden: false,
+  commentCount: 0,
   challengeResult: null,
   ...over,
 });
 const feed = (posts: GymPost[], over: Partial<GymPostsResponse> = {}): GymPostsResponse =>
-  gymPostsResponseSchema.parse({ gymId: GYM, gymName: "Iron House", pinned: [], posts, next: null, status: "shown", posting: "off", blockedCount: 0, supportEmail: null, ...over });
+  gymPostsResponseSchema.parse({ gymId: GYM, gymName: "Iron House", pinned: [], posts, next: null, status: "shown", posting: "off", commenting: "on", blockedCount: 0, supportEmail: null, ...over });
 
 describe("when a post was made, in the phone's own zone, on the gym's clock", () => {
   const now = new Date("2026-10-29T12:00:00.000Z");

@@ -1,6 +1,6 @@
 -- Refund to card at Sell (ROADMAP Stage 2 item 18d-iv-b-ii; spec Part 3 §14.8): a sale paid on the Square Terminal goes back
 -- through Square to the card that paid. Forward-only. Hand-written, as `0016` onwards are; its journal entry is part of this
--- commit.
+-- commit. Renumbered from 0179 when 17e-i's `0179_post_comments` merged first.
 --
 -- A press is on a member's payment or on a sale, never both. A basket's products share one Square payment, so at most one press
 -- waits on that payment at a time. A press on one product holds `sale_id` and `restock`, how many go back on the shelf. A press

@@ -305,7 +305,7 @@ export const gymSaleRefunds = pgTable(
     undoneBy: uuid("undone_by").references(() => users.id, { onDelete: "set null" }),
     voidReason: text("void_reason"),
     receiptNumber: integer("receipt_number").notNull(),
-    /** The refund to the card it came from (0179; 18d-iv-b-ii); null for one noted by hand. */
+    /** The refund to the card it came from (0180; 18d-iv-b-ii); null for one noted by hand. */
     pressId: uuid("press_id"),
     createdAt: createdAt(),
   },

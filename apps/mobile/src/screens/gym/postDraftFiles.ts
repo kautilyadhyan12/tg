@@ -28,8 +28,8 @@ export function removeSourcePhoto(uri: string): void {
   }
 }
 
-export function draftFolder(userId: string, gymId: string): DraftFolder {
-  const here = () => new Directory(Paths.document, `post-draft-${userId}-${gymId}`);
+export function draftFolder(userId: string, gymId: string, kind: "post-draft" | "comment-draft" = "post-draft"): DraftFolder {
+  const here = () => new Directory(Paths.document, `${kind}-${userId}-${gymId}`);
   const made = () => {
     const folder = here();
     if (!folder.exists) folder.create({ intermediates: true, idempotent: true });

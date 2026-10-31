@@ -548,7 +548,7 @@ export const gymSquareRefunds = pgTable(
       .references(() => gyms.id, { onDelete: "cascade" }),
     paymentId: uuid("payment_id"),
     memberRefundId: uuid("member_refund_id"),
-    /** A sale (0179; 18d-iv-b-ii), in place of a member's payment: one product, with how many go back on the shelf; or all
+    /** A sale (0180; 18d-iv-b-ii), in place of a member's payment: one product, with how many go back on the shelf; or all
      *  of the sale, with `parts`, what each product takes, and `saleId` its first. */
     saleId: uuid("sale_id"),
     restock: integer("restock").notNull().default(0),

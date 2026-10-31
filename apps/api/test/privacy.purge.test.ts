@@ -170,6 +170,11 @@ d("DPDP Day-14 purge (real Postgres)", () => {
     // A report of a post and a gym's stop on their posting (19b-ii-a): about the person.
     await sql`INSERT INTO gym_post_reports (gym_id, post_id, user_id, reason) VALUES (${postGymId}, ${postId}, ${userId}, 'spam')`;
     await sql`INSERT INTO gym_post_stops (gym_id, user_id) VALUES (${postGymId}, ${userId})`;
+    const onComment = await sql<{ id: string }[]>`
+      INSERT INTO gym_post_comments (gym_id, post_id, author_user_id, by_member, comment_key, body)
+      VALUES (${postGymId}, ${postId}, ${postOwnerId}, false, gen_random_uuid(), 'fixture comment') RETURNING id`;
+    await sql`INSERT INTO gym_post_comment_reactions (gym_id, comment_id, user_id, reaction) VALUES (${postGymId}, ${onComment[0]?.id ?? ""}, ${userId}, 'fire')`;
+    await sql`INSERT INTO gym_post_comment_reports (gym_id, comment_id, user_id, reason) VALUES (${postGymId}, ${onComment[0]?.id ?? ""}, ${userId}, 'spam')`;
     // Who they blocked on a gym's Updates (19b-ii-b), and somebody's block of them.
     await sql`INSERT INTO gym_post_blocks (gym_id, user_id, blocked_user_id) SELECT ${postGymId}, ${userId}, owner_user_id FROM gyms WHERE id = ${postGymId}`;
     await sql`INSERT INTO gym_post_blocks (gym_id, user_id, blocked_user_id) SELECT ${postGymId}, owner_user_id, ${userId} FROM gyms WHERE id = ${postGymId}`;
@@ -735,6 +740,45 @@ d("DPDP Day-14 purge (real Postgres)", () => {
     expect(reactions[0]?.n).toBe(0);
     // The purged person's own files, and nobody else's.
     expect(removed).toEqual([mine.key]);
+  });
+
+  it("deletes the comments a person wrote as a MEMBER with the replies under them, and keeps the gym's own", { timeout: 60_000 }, async () => {
+    const u = await makeUser(uniqEmail("dpdp-comments"), 20);
+    const bystander = await makeUser(uniqEmail("dpdp-comments-bystander"), 1);
+    const write = async (userId: string, byMember: boolean, parentId: string | null): Promise<string> => {
+      const rows = await sql<{ id: string }[]>`
+        INSERT INTO gym_post_comments (gym_id, post_id, parent_id, author_user_id, by_member, comment_key, body)
+        VALUES (${postGymId}, ${postId}, ${parentId}, ${userId}, ${byMember}, gen_random_uuid(), 'words') RETURNING id`;
+      return rows[0]?.id ?? "";
+    };
+    const mine = await write(u.userId, true, null);
+    const underMine = await write(bystander.userId, true, mine);
+    const theirs = await write(bystander.userId, true, null);
+    const myReply = await write(u.userId, true, theirs);
+    const asStaff = await write(u.userId, false, null);
+    // Hidden by reports with the person's own the only one still waiting: it comes back.
+    await sql`UPDATE gym_post_comments SET hidden_at = now() WHERE id = ${theirs}`;
+    await sql`INSERT INTO gym_post_comment_reports (gym_id, comment_id, user_id, reason) VALUES (${postGymId}, ${theirs}, ${u.userId}, 'spam')`;
+
+    await purgeDueUsers({ sql, log: testLogger(), photos: noPhotos }, {});
+
+    const left = await sql<{ id: string; hidden_at: Date | null; author_user_id: string | null }[]>`
+      SELECT id, hidden_at, author_user_id FROM gym_post_comments WHERE id = ANY(${[mine, underMine, theirs, myReply, asStaff]})`;
+    expect(left.map((r) => r.id).sort()).toEqual([theirs, asStaff].sort());
+    expect(left.find((r) => r.id === theirs)?.hidden_at).toBeNull();
+  });
+
+  it("a comment others are still waiting on stays hidden when one of its reporters is purged", { timeout: 60_000 }, async () => {
+    const u = await makeUser(uniqEmail("dpdp-comments-hide"), 20);
+    const other = await makeUser(uniqEmail("dpdp-comments-hide-other"), 1);
+    const rows = await sql<{ id: string }[]>`
+      INSERT INTO gym_post_comments (gym_id, post_id, author_user_id, by_member, comment_key, body, hidden_at)
+      VALUES (${postGymId}, ${postId}, ${postOwnerId}, false, gen_random_uuid(), 'words', now()) RETURNING id`;
+    const id = rows[0]?.id ?? "";
+    await sql`INSERT INTO gym_post_comment_reports (gym_id, comment_id, user_id, reason) VALUES (${postGymId}, ${id}, ${u.userId}, 'spam'), (${postGymId}, ${id}, ${other.userId}, 'spam')`;
+    await purgeDueUsers({ sql, log: testLogger(), photos: noPhotos }, {});
+    const left = await sql<{ hidden_at: Date | null }[]>`SELECT hidden_at FROM gym_post_comments WHERE id = ${id}`;
+    expect(left[0]?.hidden_at).not.toBeNull();
   });
 
   /** Which of these keys are still written down as files to remove. */

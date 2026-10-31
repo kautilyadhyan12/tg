@@ -51,6 +51,7 @@ const post = {
   wrote: false,
   reported: false,
   hidden: false,
+  commentCount: 0,
   challengeResult: { today: "2026-10-08", canOpen: true, challenge },
 };
 
