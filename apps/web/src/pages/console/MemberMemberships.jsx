@@ -772,7 +772,7 @@ export default function MemberMemberships({
   /** What a refund did, said under the payment it was pressed on: the page may be far from the top of the membership. */
   const saidUnder = (m, paymentId) => {
     if (notice === null || saidAt?.paymentId !== paymentId || saidAt.line !== notice) return null;
-    const line = cardRefundSaidNow(saidAt.sent, paymentOf(m, paymentId), notice);
+    const line = cardRefundSaidNow(saidAt.sent, paymentOf(m, paymentId), notice, saidAt.read !== shown);
     if (line === null) return null;
     return (
       <p className="c-s14 c-w5 m-0 flex items-center gap-2" style={{ color: 'var(--good)' }} role="status" data-testid="held-payment-said">
@@ -805,7 +805,7 @@ export default function MemberMemberships({
           onNote={() => startRefund(m, paymentId)}
           onDone={(words, sent) => {
             setOpen(null);
-            setSaidAt({ paymentId, line: words, sent });
+            setSaidAt({ paymentId, line: words, sent, read: shown });
             setNotice(words);
             setAttempt((n) => n + 1);
             onChanged?.();

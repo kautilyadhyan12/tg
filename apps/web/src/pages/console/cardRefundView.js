@@ -66,13 +66,14 @@ export function cardRefundOpenLine(open, currency) {
 /** What the sentence under a payment says now, by its own press, never another refund of the same amount: it follows the
  *  refund as Square moves it on, so it never disagrees with the line under it, and says nothing once there is nothing true to
  *  say: the crossed-out line says a failure, and "We don't know whether…" a press Square never answered. `sent`: Square's answer
- *  to the press and the card's words; none for a sentence about anything else. */
-export function cardRefundSaidNow(sent, payment, line) {
+ *  to the press and the card's words; none for a sentence about anything else. `readSince`: the page has read again since the
+ *  press, so what it holds of a press Square has not answered is up to date. */
+export function cardRefundSaidNow(sent, payment, line, readSince = true) {
   if (sent === null || sent === undefined || sent.step === 'completed') return line;
   const refund = (payment?.refunds ?? []).find((r) => r.square?.pressId === sent.pressId);
   if (refund !== undefined) return cardRefundSentLine({ ...sent, step: refund.square.state }, sent.cardWords);
   if ((payment?.voidedRefunds ?? []).some((r) => r.square?.pressId === sent.pressId)) return null;
-  if (sent.step === 'pending') return line;
+  if (sent.step === 'pending' || !readSince) return line;
   // Square has not answered: said while the press waits, and no longer once it has ended with nothing written.
   return payment?.cardRefund !== null && payment?.cardRefund !== undefined && !payment.cardRefund.lost ? line : null;
 }

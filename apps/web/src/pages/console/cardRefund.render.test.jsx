@@ -262,6 +262,13 @@ describe('Refund to card on a fee', () => {
     else expect(line).toMatch(says);
   });
 
+  it('no answer from Square: the sentence stands until the page has read again', async () => {
+    const { cardRefundSaidNow } = await import('./cardRefundView');
+    const sent = { step: 'checking', amountMinor: 400, currency: 'USD', cardWords: 'Visa ending 1111', pressId: PRESS };
+    expect(cardRefundSaidNow(sent, { refunds: [], cardRefund: null }, 'said', false)).toBe('said');
+    expect(cardRefundSaidNow(sent, { refunds: [], cardRefund: null }, 'said', true)).toBeNull();
+  });
+
   it('a sentence about anything else stands as it is', async () => {
     const { cardRefundSaidNow } = await import('./cardRefundView');
     expect(cardRefundSaidNow(undefined, null, 'said')).toBe('said');
