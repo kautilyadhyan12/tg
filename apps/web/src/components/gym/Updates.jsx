@@ -32,7 +32,7 @@ import {
 
 // THE GYM'S UPDATES, FOR A MEMBER (spec Part 3 §15.2, §15.3; ROADMAP 19b-i, 19b-ii-a).
 // Posts by the gym's staff and, where the gym lets them, by its members, pinned ones
-// first; one reaction a post and no comments. A member removes their own post and can
+// first; one reaction a post. Comments are on the phone alone. A member removes their own post and can
 // report anybody else's. The server sends posts only to a live member of this gym.
 
 const ORANGE = '#FF8A1F';
@@ -400,7 +400,7 @@ export default function Updates({ gym, onChallenge = null }) {
                 </button>
               </div>
               <p className="text-xs" style={{ color: MUTED }}>
-                You don&apos;t see their posts or reactions here. They aren&apos;t told.
+                You don&apos;t see their posts, comments or reactions here. They aren&apos;t told.
               </p>
               {blocked.loading && (
                 <p className="text-sm" style={{ color: MUTED }}>

@@ -134,6 +134,97 @@ export const gymPostReports = pgTable(
   ],
 );
 
+/** A comment on a post, or a reply one level under a comment (`0179_post_comments.sql`, which is
+ *  the record). Staff's are the gym's (`ON DELETE set null`, on `USER_LINKED_NOT_PURGED_TABLES`);
+ *  a member's is theirs, deleted with their account by a statement of its own (`privacy/repo.ts`). */
+export const gymPostComments = pgTable(
+  "gym_post_comments",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    postId: uuid("post_id").notNull(),
+    parentId: uuid("parent_id"),
+    replyToId: uuid("reply_to_id"),
+    authorUserId: uuid("author_user_id").references(() => users.id, { onDelete: "set null" }),
+    byMember: boolean("by_member").notNull(),
+    commentKey: uuid("comment_key").notNull(),
+    body: text("body").notNull(),
+    createdAt: createdAt(),
+    removedAt: timestamp("removed_at", { withTimezone: true }),
+    removedByUserId: uuid("removed_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    hiddenAt: timestamp("hidden_at", { withTimezone: true }),
+  },
+  (t) => [
+    unique("gym_post_comments_key_uq").on(t.gymId, t.commentKey),
+    unique("gym_post_comments_gym_id_uq").on(t.gymId, t.id),
+    unique("gym_post_comments_post_id_uq").on(t.gymId, t.postId, t.id),
+    foreignKey({ name: "gym_post_comments_post_fk", columns: [t.gymId, t.postId], foreignColumns: [gymPosts.gymId, gymPosts.id] }).onDelete("cascade"),
+    check("gym_post_comments_body_check", sql`char_length(${t.body}) BETWEEN 1 AND 1000`),
+    check("gym_post_comments_reply_to_check", sql`${t.replyToId} IS NULL OR ${t.parentId} IS NOT NULL`),
+    index("gym_post_comments_list_idx").on(t.gymId, t.postId, t.createdAt, t.id).where(sql`${t.parentId} IS NULL AND ${t.removedAt} IS NULL`),
+    index("gym_post_comments_replies_idx").on(t.gymId, t.parentId, t.createdAt, t.id).where(sql`${t.parentId} IS NOT NULL AND ${t.removedAt} IS NULL`),
+    index("gym_post_comments_parent_key_idx").on(t.gymId, t.postId, t.parentId).where(sql`${t.parentId} IS NOT NULL`),
+    index("gym_post_comments_count_idx").on(t.gymId, t.postId).where(sql`${t.removedAt} IS NULL`),
+    index("gym_post_comments_member_author_idx").on(t.authorUserId, t.gymId, t.createdAt).where(sql`${t.byMember}`),
+    index("gym_post_comments_removed_by_idx").on(t.removedByUserId).where(sql`${t.removedByUserId} IS NOT NULL`),
+    index("gym_post_comments_reply_to_idx").on(t.gymId, t.replyToId).where(sql`${t.replyToId} IS NOT NULL`),
+  ],
+);
+
+/** One reaction a person a comment or reply. */
+export const gymPostCommentReactions = pgTable(
+  "gym_post_comment_reactions",
+  {
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    commentId: uuid("comment_id").notNull(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    reaction: text("reaction").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    primaryKey({ name: "gym_post_comment_reactions_pk", columns: [t.commentId, t.userId] }),
+    foreignKey({ name: "gym_post_comment_reactions_comment_fk", columns: [t.gymId, t.commentId], foreignColumns: [gymPostComments.gymId, gymPostComments.id] }).onDelete("cascade"),
+    check("gym_post_comment_reactions_reaction_check", sql`${t.reaction} IN ('like','love','strong','fire')`),
+    index("gym_post_comment_reactions_user_idx").on(t.userId),
+  ],
+);
+
+/** One report a person a comment or reply: open until staff remove it or keep it. */
+export const gymPostCommentReports = pgTable(
+  "gym_post_comment_reports",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    commentId: uuid("comment_id").notNull(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    reason: text("reason").notNull(),
+    note: text("note"),
+    createdAt: createdAt(),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    outcome: text("outcome"),
+  },
+  (t) => [
+    foreignKey({ name: "gym_post_comment_reports_comment_fk", columns: [t.gymId, t.commentId], foreignColumns: [gymPostComments.gymId, gymPostComments.id] }).onDelete("cascade"),
+    unique("gym_post_comment_reports_one_each_uq").on(t.commentId, t.userId),
+    check("gym_post_comment_reports_reason_check", sql`${t.reason} IN ('unkind','nudity','spam','other')`),
+    check("gym_post_comment_reports_note_check", sql`char_length(${t.note}) BETWEEN 1 AND 300`),
+    check("gym_post_comment_reports_outcome_check", sql`${t.outcome} IN ('removed','kept')`),
+    check("gym_post_comment_reports_closed_check", sql`(${t.closedAt} IS NULL) = (${t.outcome} IS NULL)`),
+    index("gym_post_comment_reports_open_idx").on(t.gymId, t.commentId).where(sql`${t.closedAt} IS NULL`),
+    index("gym_post_comment_reports_user_idx").on(t.userId),
+  ],
+);
+
 /** A person the gym has stopped posting. */
 export const gymPostStops = pgTable(
   "gym_post_stops",

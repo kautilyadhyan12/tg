@@ -453,7 +453,7 @@ describe('members’ posts', () => {
     const box = within(within(cards()[2]).getByRole('group', { name: 'Stop Wendy Writer posting?' }));
     expect(
       box.getByText(
-        "Wendy Writer won't be able to post on Updates until you let them again. They can still read and react. Their posts stay until you remove them. They aren't emailed, and nobody else changes.",
+        "Wendy Writer won't be able to post or comment on Updates until you let them again. They can still read and react. Their posts stay until you remove them. They aren't emailed, and nobody else changes.",
       ),
     ).toBeTruthy();
     fireEvent.click(box.getByRole('button', { name: 'Cancel' }));
@@ -462,7 +462,7 @@ describe('members’ posts', () => {
     fireEvent.click(within(cards()[2]).getByRole('button', { name: 'Stop them posting' }));
     fireEvent.click(within(cards()[2]).getByRole('button', { name: 'Stop Wendy Writer posting' }));
     await waitFor(() => expect(svc.setStopped.mock.calls).toEqual([['g1', 'u-wendy', true]]));
-    expect((await screen.findByRole('status')).textContent).toBe('Wendy Writer can no longer post.');
+    expect((await screen.findByRole('status')).textContent).toBe('Wendy Writer can no longer post or comment.');
     // Both of Wendy's posts say so and offer the way back; Omar's is untouched.
     await waitFor(() => expect(within(cards()[0]).getByText('Stopped from posting')).toBeTruthy());
     expect(within(cards()[2]).getByRole('button', { name: 'Let them post again' })).toBeTruthy();
@@ -486,7 +486,7 @@ describe('members’ posts', () => {
     expect(list.getByText('No name yet')).toBeTruthy();
     fireEvent.click(list.getAllByRole('button', { name: 'Let them post again' })[0]);
     await waitFor(() => expect(svc.setStopped.mock.calls).toEqual([['g1', 'u-wendy', false]]));
-    expect((await screen.findByRole('status')).textContent).toBe('Wendy Writer can post again.');
+    expect((await screen.findByRole('status')).textContent).toBe('Wendy Writer can post and comment again.');
     await waitFor(() => expect(screen.queryByTestId('stopped')).toBeNull());
     expect(within(cards()[0]).queryByText('Stopped from posting')).toBeNull();
   });
@@ -725,7 +725,7 @@ describe('a person’s posts, opened from a name', () => {
     fireEvent.click(within(box.getAllByTestId('post')[1]).getByRole('button', { name: 'Stop Wendy Writer posting' }));
     await waitFor(() => expect(svc.setStopped).toHaveBeenCalledWith('g1', 'u-wendy', true));
     await waitFor(() => expect(box.getAllByText('Stopped from posting')).toHaveLength(2));
-    expect(box.getByText('Wendy Writer can no longer post.')).toBeTruthy();
+    expect(box.getByText('Wendy Writer can no longer post or comment.')).toBeTruthy();
   });
 
   it('says so when they have posted nothing, and when the posts cannot be read', async () => {

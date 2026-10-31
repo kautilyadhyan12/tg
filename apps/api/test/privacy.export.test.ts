@@ -123,6 +123,11 @@ d("DPDP data export (real Postgres)", () => {
     // A report of a post and a gym's stop on their posting (19b-ii-a): about the person.
     await sql`INSERT INTO gym_post_reports (gym_id, post_id, user_id, reason) VALUES (${postGymId}, ${postId}, ${userId}, 'spam')`;
     await sql`INSERT INTO gym_post_stops (gym_id, user_id) VALUES (${postGymId}, ${userId})`;
+    const onComment = await sql<{ id: string }[]>`
+      INSERT INTO gym_post_comments (gym_id, post_id, author_user_id, by_member, comment_key, body)
+      VALUES (${postGymId}, ${postId}, ${postOwnerId}, false, gen_random_uuid(), 'fixture comment') RETURNING id`;
+    await sql`INSERT INTO gym_post_comment_reactions (gym_id, comment_id, user_id, reaction) VALUES (${postGymId}, ${onComment[0]?.id ?? ""}, ${userId}, 'fire')`;
+    await sql`INSERT INTO gym_post_comment_reports (gym_id, comment_id, user_id, reason) VALUES (${postGymId}, ${onComment[0]?.id ?? ""}, ${userId}, 'spam')`;
     // Who they blocked on a gym's Updates (19b-ii-b), and somebody's block of them.
     await sql`INSERT INTO gym_post_blocks (gym_id, user_id, blocked_user_id) SELECT ${postGymId}, ${userId}, owner_user_id FROM gyms WHERE id = ${postGymId}`;
     await sql`INSERT INTO gym_post_blocks (gym_id, user_id, blocked_user_id) SELECT ${postGymId}, owner_user_id, ${userId} FROM gyms WHERE id = ${postGymId}`;
@@ -161,6 +166,8 @@ d("DPDP data export (real Postgres)", () => {
     // A post made as a MEMBER is the person's own and exported; one made as staff is the gym's.
     await sql`INSERT INTO gym_posts (gym_id, author_user_id, post_key, body, by_member) VALUES (${postGymId}, ${userId}, gen_random_uuid(), ${`member-post-${label}`}, true)`;
     await sql`INSERT INTO gym_posts (gym_id, author_user_id, post_key, body, by_member) VALUES (${postGymId}, ${userId}, gen_random_uuid(), ${`staff-post-${label}`}, false)`;
+    await sql`INSERT INTO gym_post_comments (gym_id, post_id, author_user_id, by_member, comment_key, body) VALUES (${postGymId}, ${postId}, ${userId}, true, gen_random_uuid(), ${`member-comment-${label}`})`;
+    await sql`INSERT INTO gym_post_comments (gym_id, post_id, author_user_id, by_member, comment_key, body) VALUES (${postGymId}, ${postId}, ${userId}, false, gen_random_uuid(), ${`staff-comment-${label}`})`;
     await sql`INSERT INTO consent_log (user_id, purpose, wording_version, wording, app_version)
               VALUES (${userId}, 'health_step', 'v1', ${`wording-${label}`}, 'test')`;
     const wId = randomUUID();
@@ -222,6 +229,9 @@ d("DPDP data export (real Postgres)", () => {
     // Their own posts as a member, and not the gym's post they wrote as staff.
     expect(out.data["gym_posts"]?.map((row) => [row["body"], row["photos"]])).toEqual([["member-post-all", 0]]);
     expect(Object.keys(out.data["gym_posts"]?.[0] ?? {}).sort()).toEqual(["body", "created_at", "gym_id", "id", "photos", "removed_at"]);
+    // Their own comments as a member, not one they wrote as staff, and nobody else's id.
+    expect(out.data["gym_post_comments"]?.map((row) => row["body"])).toEqual(["member-comment-all"]);
+    expect(Object.keys(out.data["gym_post_comments"]?.[0] ?? {}).sort()).toEqual(["body", "created_at", "gym_id", "id", "parent_id", "post_id", "removed_at"]);
     // Who they blocked: their own block alone (never somebody's block OF them), and without
     // the other person's id.
     expect(out.data["gym_post_blocks"]?.map((row) => row["user_id"])).toEqual([u.userId]);

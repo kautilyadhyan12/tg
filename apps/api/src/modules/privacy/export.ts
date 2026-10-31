@@ -9,7 +9,8 @@
 import type { Sql } from "postgres";
 import { DPDP_EXPORT_SCHEMA_VERSION, type DpdpExport } from "@app/shared";
 import { EXPORTED_TABLES, type ExportedTable } from "./tables.js";
-import { EXPORT_READERS, selectExportConsents, selectExportMemberPosts, selectExportUser, selectExportWaiverSignatures } from "./exportRepo.js";
+import { EXPORT_READERS, selectExportConsents, selectExportMemberComments,
+  selectExportMemberPosts, selectExportUser, selectExportWaiverSignatures } from "./exportRepo.js";
 
 /** Columns stripped from EVERY exported row, whatever table it came from.
  *
@@ -137,6 +138,13 @@ export async function buildUserExport(deps: ExportDeps, userId: string): Promise
   data["gym_posts"] = posts.rows;
   if (posts.total > posts.rows.length) {
     truncated["gym_posts"] = { returned: posts.rows.length, total: posts.total };
+  }
+
+  // The same for the comments and replies they wrote as a member.
+  const comments = await selectExportMemberComments(deps.sql, userId);
+  data["gym_post_comments"] = comments.rows;
+  if (comments.total > comments.rows.length) {
+    truncated["gym_post_comments"] = { returned: comments.rows.length, total: comments.total };
   }
 
   return {

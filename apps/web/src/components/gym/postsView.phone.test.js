@@ -24,12 +24,13 @@ const post = (n, over = {}) => ({
   wrote: false,
   reported: false,
   hidden: false,
+  commentCount: 0,
   challengeResult: null,
   ...over,
 });
 const photos = (n) => Array.from({ length: n }, (_, i) => ({ id: PHOTO.replace('c1', `c${i + 1}`), width: 1600, height: 1200 }));
 const feed = (posts, over = {}) =>
-  gymPostsResponseSchema.parse({ gymId: GYM, gymName: 'Iron House', pinned: [], posts, next: null, status: 'shown', posting: 'off', blockedCount: 0, supportEmail: null, ...over });
+  gymPostsResponseSchema.parse({ gymId: GYM, gymName: 'Iron House', pinned: [], posts, next: null, status: 'shown', posting: 'off', commenting: 'on', blockedCount: 0, supportEmail: null, ...over });
 
 const posts = feed([
   post(1),

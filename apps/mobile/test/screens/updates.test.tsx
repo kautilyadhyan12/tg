@@ -55,6 +55,7 @@ const post = (id: string, over: Row = {}): Row => ({
   wrote: false,
   reported: false,
   hidden: false,
+  commentCount: 0,
   challengeResult: null,
   ...over,
 });
@@ -69,6 +70,7 @@ const feed = (place: Place, posts: Row[], over: Row = {}) =>
     next: null,
     status: "shown",
     posting: "off",
+    commenting: "on",
     blockedCount: 0,
     supportEmail: null,
     ...over,
@@ -180,9 +182,9 @@ describe("the worst thing: no other place's posts here, a blocked person's posts
     await openUpdates(server.ask, IRON);
     expect(await page().findByText("New PR")).toBeTruthy();
     await fireEvent.press(within(page().getByTestId(`post-${P1}`)).getByLabelText("Block Asha W."));
-    expect(await screen.findByText(/You won't see the posts Asha W\. writes as a member/)).toBeTruthy();
+    expect(await screen.findByText(/You won't see the posts and comments Asha W\. writes as a member/)).toBeTruthy();
     await fireEvent.press(within(screen.getByTestId("ask-box")).getByLabelText("Block Asha W."));
-    expect(await screen.findByText("Blocked. You won't see the posts Asha W. writes as a member, or their reactions, any more.")).toBeTruthy();
+    expect(await screen.findByText("Blocked. You won't see the posts and comments Asha W. writes as a member, or their reactions, any more.")).toBeTruthy();
     expect(server.asked.filter((a) => a.path.endsWith("/block")).map((a) => a.method)).toEqual(["PUT"]);
     await fireEvent.press(screen.getByLabelText("Done"));
     await waitFor(() => {
@@ -535,7 +537,7 @@ describe("a press, once", () => {
     await openUpdates(server.ask, IRON);
     await fireEvent.press(await page().findByText("People you've blocked (1)"));
     await fireEvent.press(await screen.findByLabelText("Unblock Asha W."));
-    expect(await screen.findByText("Unblocked. You'll see Asha W.'s posts and reactions again.")).toBeTruthy();
+    expect(await screen.findByText("Unblocked. You'll see Asha W.'s posts, comments and reactions again.")).toBeTruthy();
     expect(server.asked.filter((a) => a.path.endsWith(`/blocked/${blockId}`)).map((a) => a.method)).toEqual(["DELETE"]);
     await fireEvent.press(screen.getByLabelText("Close"));
     expect(await page().findByText("Back again")).toBeTruthy();
@@ -837,9 +839,9 @@ describe("a 404 is believed only for what it names", () => {
     await fireEvent.press(await page().findByText("People you've blocked (2)"));
     await fireEvent.press(await screen.findByLabelText("Unblock Asha W."));
     expect(await screen.findByText(LISTED_OFF)).toBeTruthy();
-    expect(screen.queryByText("Unblocked. You'll see Asha W.'s posts and reactions again.")).toBeNull();
+    expect(screen.queryByText("Unblocked. You'll see Asha W.'s posts, comments and reactions again.")).toBeNull();
     await fireEvent.press(screen.getByLabelText("Unblock Ravi M."));
-    expect(await screen.findByText("Unblocked. You'll see Ravi M.'s posts and reactions again.")).toBeTruthy();
+    expect(await screen.findByText("Unblocked. You'll see Ravi M.'s posts, comments and reactions again.")).toBeTruthy();
   });
 });
 

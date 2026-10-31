@@ -18,15 +18,15 @@ describe('Block', () => {
   it('the box names who changes, who is not told, and where to undo it', () => {
     expect(blockBox(post(), 'Iron House')).toEqual({
       title: 'Block Barry B.?',
-      line: "You won't see the posts Barry B. writes as a member, or their reactions, at Iron House any more. Any reaction you gave those posts is taken off. Posts they write for Iron House as staff still show. They aren't told, and nothing changes for anyone else. You can unblock them at the bottom of Updates.",
+      line: "You won't see the posts and comments Barry B. writes as a member, or their reactions, at Iron House any more. Any reaction you gave them is taken off. Posts they write for Iron House as staff still show. They aren't told, and nothing changes for anyone else. You can unblock them at the bottom of Updates.",
       confirm: 'Block Barry B.',
       cancel: 'Cancel',
-      done: "Blocked. You won't see the posts Barry B. writes as a member, or their reactions, any more.",
+      done: "Blocked. You won't see the posts and comments Barry B. writes as a member, or their reactions, any more.",
     });
     const nameless = blockBox(post({ author: { name: null, initials: '' } }), 'Iron House');
     expect(nameless.title).toBe('Block this member?');
     expect(nameless.confirm).toBe('Block this member');
-    expect(nameless.line).toContain('the posts this member writes as a member, or their reactions,');
+    expect(nameless.line).toContain('the posts and comments this member writes as a member, or their reactions,');
   });
 
   it('the list button says how many, and is not there with nobody blocked', () => {
@@ -42,8 +42,8 @@ describe('Block', () => {
   });
 
   it('says what Unblock did', () => {
-    expect(unblockedNote('Barry B.')).toBe("Unblocked. You'll see Barry B.'s posts and reactions again.");
-    expect(unblockedNote(null)).toBe("Unblocked. You'll see their posts and reactions again.");
+    expect(unblockedNote('Barry B.')).toBe("Unblocked. You'll see Barry B.'s posts, comments and reactions again.");
+    expect(unblockedNote(null)).toBe("Unblocked. You'll see their posts, comments and reactions again.");
   });
 });
 

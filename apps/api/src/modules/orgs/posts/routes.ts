@@ -23,7 +23,7 @@ import { createDualRateLimit } from "../../auth/rateLimit.js";
 import { orgParamsSchema } from "../schemas.js";
 import * as service from "./service.js";
 
-function parseOr400<S extends z.ZodTypeAny>(
+export function parseOr400<S extends z.ZodTypeAny>(
   schema: S,
   value: unknown,
   req: FastifyRequest,
@@ -45,7 +45,7 @@ function parseOr400<S extends z.ZodTypeAny>(
 
 const ISSUES_SAID = 10;
 
-function requireUserId(req: FastifyRequest): string {
+export function requireUserId(req: FastifyRequest): string {
   const userId = req.authUser?.id;
   if (userId === undefined) throw new Error("authenticate preHandler did not run");
   return userId;

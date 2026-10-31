@@ -1,0 +1,106 @@
+// COMMENTS ON A GYM'S UPDATES: THE ROUTES (ROADMAP Stage 5 17e; spec Part 3 §15.2). Who is asking is
+// settled before the limit, so a stranger's 404 is never a 429 and never counts against the address
+// a gym's members share. Registered from `registerOrgRoutes`.
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import {
+  addGymPostCommentRequestSchema,
+  gymPostCommentParamsSchema,
+  gymPostCommentsQuerySchema,
+  gymPostParamsSchema,
+  reactToGymPostRequestSchema,
+  reportGymPostCommentRequestSchema,
+} from "@app/shared";
+import type { RedisLike } from "../../../redis.js";
+import { createDualRateLimit } from "../../auth/rateLimit.js";
+import * as service from "./commentsService.js";
+import { parseOr400, requireUserId } from "./routes.js";
+
+const COMMENT_BODY_LIMIT = 16 * 1024;
+
+export function registerPostCommentRoutes(app: FastifyInstance, deps: service.CommentsDeps & { redis: RedisLike }): void {
+  const commentDeps: service.CommentsDeps = { sql: deps.sql, now: deps.now };
+  const limiter = (name: string, max: number, ipMax: number) =>
+    createDualRateLimit({ name, max, ipMax, windowMs: 60 * 60 * 1000, identifier: (req) => req.authUser?.id ?? null, redis: deps.redis });
+  // A whole gym's members share one address on its wi-fi, hence each explicit `ipMax`.
+  const readLimit = limiter("orgs_comments_read", 900, 9000);
+  // The day's hundred are counted in the database; this only stops a flood of tries.
+  const addLimit = limiter("orgs_comments_add", 150, 3000);
+  const reactLimit = limiter("orgs_comments_react", 300, 6000);
+  const writeLimit = limiter("orgs_comments_write", 60, 3000);
+
+  const gate =
+    (limit: (req: FastifyRequest, reply: FastifyReply) => Promise<void>) =>
+    (req: FastifyRequest, reply: FastifyReply) =>
+    async (): Promise<boolean> => {
+      await limit(req, reply);
+      return !reply.sent;
+    };
+
+  app.get("/v1/orgs/:gymId/posts/:postId/comments", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(gymPostParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const query = parseOr400(gymPostCommentsQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    const page = await service.getComments(commentDeps, requireUserId(req), params.gymId, params.postId, query.after, gate(readLimit)(req, reply));
+    if (page === null) return;
+    return reply.status(200).send(page);
+  });
+
+  app.post("/v1/orgs/:gymId/posts/:postId/comments", { bodyLimit: COMMENT_BODY_LIMIT, preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(gymPostParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(addGymPostCommentRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const userId = requireUserId(req);
+    await service.requireCommenter(commentDeps, userId, params.gymId);
+    await addLimit(req, reply);
+    if (reply.sent) return;
+    return reply.status(201).send(await service.addComment(commentDeps, userId, params.gymId, params.postId, body));
+  });
+
+  app.get("/v1/orgs/:gymId/post-comments/:commentId/replies", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(gymPostCommentParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const query = parseOr400(gymPostCommentsQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    const page = await service.getReplies(commentDeps, requireUserId(req), params.gymId, params.commentId, query.after, gate(readLimit)(req, reply));
+    if (page === null) return;
+    return reply.status(200).send(page);
+  });
+
+  app.delete("/v1/orgs/:gymId/post-comments/:commentId", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(gymPostCommentParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const done = await service.removeOwnComment(commentDeps, requireUserId(req), params.gymId, params.commentId, gate(writeLimit)(req, reply));
+    if (done === null) return;
+    return reply.status(200).send({ removed: true });
+  });
+
+  app.put("/v1/orgs/:gymId/post-comments/:commentId/reaction", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(gymPostCommentParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(reactToGymPostRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const done = await service.reactToComment(commentDeps, requireUserId(req), params.gymId, params.commentId, body.reaction, gate(reactLimit)(req, reply));
+    if (done === null) return;
+    return reply.status(200).send(done);
+  });
+
+  app.post("/v1/orgs/:gymId/post-comments/:commentId/report", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(gymPostCommentParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(reportGymPostCommentRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const done = await service.reportComment(commentDeps, requireUserId(req), params.gymId, params.commentId, body.reason, body.note, gate(writeLimit)(req, reply));
+    if (done === null) return;
+    return reply.status(200).send({ reported: true });
+  });
+
+  app.put("/v1/orgs/:gymId/post-comments/:commentId/block", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(gymPostCommentParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const done = await service.blockCommenter(commentDeps, requireUserId(req), params.gymId, params.commentId, gate(writeLimit)(req, reply));
+    if (done === null) return;
+    return reply.status(200).send({ blocked: true });
+  });
+}

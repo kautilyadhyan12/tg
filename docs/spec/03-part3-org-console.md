@@ -4590,8 +4590,9 @@ browser. A former member, a removed one and a stranger get a 404.
 
 `gym_posts`: who, words (2,000 characters), up to 4 photos or 1 video, pinned or not,
 when, removed at and by whom. Staff always post; **a gym setting decides whether
-members may** (off to start). **Reactions — one tap from a small fixed set — and NO
-comments, and no private chat** (RULINGS 2026-08-25, kept 2026-09-22). Photos: checked
+members may** (off to start). **Reactions — one tap from a small fixed set — comments and
+replies (below; Kd, 2026-10-30, replacing "no comments" of 2026-08-25), and no private
+chat** (RULINGS 2026-09-22). Photos: checked
 by their first bytes, size-capped, stripped of location tags, stored on R2 under keys
 the server makes, served by signed URLs (CLAUDE.md §4, Uploads). Videos: up to one
 minute, 20 a gym (RULINGS 2026-08-24), uploaded straight to Cloudflare Stream by a
@@ -4649,6 +4650,27 @@ are shown only while its writer is a live app member of the gym with an active a
 are back), it is deleted with its photo files at the account's Day 14, and it is in the
 person's export. Switching the switch off leaves the posts already made.
 
+**As built in Stage 5 17e-i (2026-10-31): comments and replies, on the phone.** Under any
+post a member may read, words only, 500 characters by the same count as a post: a **comment**,
+and a **reply** one level under a comment; a reply to a reply goes in the same list and names
+who it answers, read each time, so a name is never kept inside somebody else's words
+(`gym_post_comments`, migration 0179). Oldest first, 20 a page (`GET …/posts/:postId/comments`,
+`GET …/post-comments/:commentId/replies`); `POST …/posts/:postId/comments`, one key a comment.
+**100 in any 24 hours** a member a gym, comments and replies together, removed ones counted,
+counted with the membership held. On for every gym (`gyms.members_can_comment`); off, those
+written stay and none can be added; the stop of §15.3 stops comments too. Each has the post's
+four reactions, one a person, counts only (`PUT …/post-comments/:id/reaction`); **Report**, four
+reasons, the post's less the one about a photo, one a person, five waiting hide it and its replies
+from everyone but its writer (`gym_post_comment_reports`, `hidden_at`); **Block** is the one
+block of §15.3, so it hides that person's posts and comments alike; **Remove** on one's own, a
+comment taking its replies. One rule decides every read and every press (`commentsRepo.seenBy`):
+removed, a writer who has left, hidden unless theirs, blocked; a reply also needs the comment it
+sits under to be seen; a post the reader may not read has none. A removed post takes everything
+on it in its own step. A member's are the person's: deleted at Day 14 with what is under them,
+and in their export; staff's are the gym's. The bad-words check refuses and names the word, as for
+a post. Nobody is told of a new comment until phone notifications (Stage 5 item 18). Staff reading,
+writing and removing them, the reported list and the switch are 17e-ii.
+
 ### 15.3 Keeping it safe — what Apple (guideline 1.2) and Google ask of any app where people post
 
 **Report** on every post, with a reason; reports land in a staff queue
@@ -4681,7 +4703,7 @@ staff saw but not the same ones (a reporter's account purged), the answer is 409
 feature's passes, 2026-10-05): a report's time is read before the report is stored, so one
 can land after staff read the list carrying an earlier time than the newest they saw. A kept post stays, and only a NEW person's report brings it back. **Stop them posting** on a member's
 post (`PUT` · `DELETE …/posts/stopped/:userId`, `gym_post_stops`): that person cannot post
-at this gym until staff let them again, still reads and reacts, their posts stay, and the
+or comment at this gym until staff let them again, still reads and reacts, their posts stay, and the
 page lists who is stopped. A gym whose plan has lapsed reads the list and answers nothing.
 Every Updates route asks who is reading or writing before the rate limit, so a stranger's
 404 is never a 429 and never counts against the address a gym's members share; nothing a

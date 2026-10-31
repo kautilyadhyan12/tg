@@ -61,6 +61,7 @@ export * from "./waiver.js";
 export * from "./membershipAgreement.js";
 export * from "./leaderboard.js";
 export * from "./posts.js";
+export * from "./postComments.js";
 export * from "./gymEvents.js";
 export * from "./challengeSubjects.js";
 export * from "./gymChallenges.js";
