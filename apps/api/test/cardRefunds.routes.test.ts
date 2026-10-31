@@ -776,6 +776,37 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
         expect(onlyAsked(maya).status).toBe("CANCELED");
       });
 
+      it("that request cannot be stopped because the person has started: the press holds the payment and the Terminal for the day", async () => {
+        const maya = await interacPaid(gym, "Maya Stray Started");
+        const terminal = await desk(gym);
+        const first = read(await pressOn(maya, terminal.id, 1000));
+        square.terminalRefundShown(onlyAsked(maya).id);
+        onlyAsked(maya).amount_money = { amount: 1100, currency: "USD" };
+        expect(read(await look(maya, first.pressId)).step).toBe("terminal");
+        const second = await pressOn(maya, await desk(gym).then((d) => d.id), 1000);
+        expect(second.statusCode).toBe(409);
+        expect(asked(maya)).toHaveLength(1);
+        const started = clock;
+        clock = new Date(started.getTime() + TERMINAL_REFUND.giveUpMs + 60_000);
+        const past = read(await look(maya, first.pressId)).step;
+        clock = started;
+        expect(past).toBe("lost");
+      });
+
+      it("Square answers a read with another request's id: Cancel goes to the press's own request", async () => {
+        const maya = await interacPaid(gym, "Maya Other Id");
+        const terminal = await desk(gym);
+        const first = read(await pressOn(maya, terminal.id, 1000));
+        const real = square.api.getTerminalRefund.bind(square.api);
+        square.api.getTerminalRefund = async (token, id) => {
+          const got = await real(token, id);
+          return got.kind === "ok" ? { kind: "ok", value: { ...got.value, id: "someotherrequest" } } : got;
+        };
+        expect(read(await look(maya, first.pressId)).step).toBe("lost");
+        square.api.getTerminalRefund = real;
+        expect(onlyAsked(maya).status).toBe("CANCELED");
+      });
+
       it("Square writes the Terminal's id another way: it is the same request, and it goes back once", async () => {
         const maya = await interacPaid(gym, "Maya Device");
         const terminal = await desk(gym);

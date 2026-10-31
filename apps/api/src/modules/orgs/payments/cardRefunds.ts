@@ -288,8 +288,10 @@ async function terminalStep(deps: PaymentsDeps, token: string, square: SquareSet
   if (!isOurRefund(press, refund) || (press.terminalRefundId !== null && refund.id !== press.terminalRefundId)) {
     deps.log.error({ event: "square.terminal_refund_unexpected", gymId: press.gymId }, "Square answered a refund on the Terminal with another");
     // Never left live on the Terminal: ending the press frees the payment for a second refund.
-    const stopped = await square.api.cancelTerminalRefund(token, refund.id);
-    if (stopped.kind === "unavailable" && now.getTime() <= press.startedAt.getTime() + TERMINAL_REFUND.deadlineMs + TERMINAL_REFUND.graceMs) return;
+    if (refund.status !== "COMPLETED" && refund.status !== "CANCELED") {
+      const stopped = await square.api.cancelTerminalRefund(token, press.terminalRefundId ?? refund.id);
+      if (!(stopped.kind === "ok" && stopped.value.status === "CANCELED") && now.getTime() <= press.startedAt.getTime() + TERMINAL_REFUND.giveUpMs) return;
+    }
     await refunds.endAsking(deps.sql, press, { outcome: "lost", code: "NOT_OURS" }, now);
     return;
   }
