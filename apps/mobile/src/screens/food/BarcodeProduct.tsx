@@ -152,7 +152,7 @@ export function BarcodeProduct({ product, onClose, onSaved }: { product: FoundPr
         <View style={styles.foot}>
           {numbers === null ? null : (
             <Txt kind="small" colour="text">
-              {kcalWords(numbers.kcalPoint)} · {loggedAmount(numbers)} · {`P ${String(Math.round(numbers.proteinG))} g · C ${String(Math.round(numbers.carbsG))} g · F ${String(Math.round(numbers.fatG))} g`}
+              {kcalWords(numbers.kcalPoint)} · {loggedAmount(numbers)} · {`Protein ${String(Math.round(numbers.proteinG))} g · Carbs ${String(Math.round(numbers.carbsG))} g · Fat ${String(Math.round(numbers.fatG))} g`}
             </Txt>
           )}
           {refused === null ? null : (
