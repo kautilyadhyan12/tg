@@ -103,7 +103,7 @@ export function startRecording(exercise) {
  *  kind (the clip), `frames` from the first frame with a pose (the trace), so
  *  the §7.1 trace this still emits is unchanged in shape and timing from before
  *  — leading empty frames do not shift its `t` axis or its measured fps. */
-export function recordFrame(keypoints, nowMs) {
+export function recordFrame(keypoints, nowMs, aspect) {
   if (!state.recording) return;
   const n = Array.isArray(keypoints) ? keypoints.length : 0;
 
@@ -112,6 +112,7 @@ export function recordFrame(keypoints, nowMs) {
 
   if (n !== 33) return;
   if (state.frameT0 === null) state.frameT0 = nowMs;
+  state.aspect = aspect;
   state.frames.push({ t: +(nowMs - state.frameT0).toFixed(1), kp: keypoints });
 }
 
@@ -168,6 +169,7 @@ export function stopRecording(meta) {
     device: meta.device || 'unknown',
     platform: 'web',
     fps,
+    aspect: state.aspect,
     view: meta.view || 'unknown',
     label: meta.label || 'unlabeled',
     // WHICH SETTINGS PRODUCED THIS CLIP. Card 3 records the same two scenes

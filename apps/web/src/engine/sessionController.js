@@ -95,7 +95,7 @@ export class SessionController {
 
   /** Feed one provider result + its timestamp; returns the display object the
    *  UI renders. In log-only mode there is no engine call. */
-  feed(landmarks, tMs, keypointsPresent) {
+  feed(landmarks, tMs, keypointsPresent, aspect) {
     if (this._session == null) return logOnlyDisplay(keypointsPresent);
     this._framesFed += 1;
 
@@ -110,7 +110,7 @@ export class SessionController {
     // treats as "invalid — hold state, count nothing" (§3.1 fail-soft). The
     // engine is not told why, and does not need to be: it is handed 33 numbers
     // and cannot know where they came from (the 2026-08-07 ruling).
-    const fr = this._session.feed(scene.blocked ? [] : landmarks, tMs);
+    const fr = this._session.feed(scene.blocked ? [] : landmarks, tMs, aspect);
     const display = { ...frameToDisplay(fr), form_score: this._lastRepScore };
 
     if (scene.blocked) {

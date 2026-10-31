@@ -1,8 +1,8 @@
 {
   "key": "chair_squat",
   "aliases": ["chair_squats"],
-  "version": 1,
-  "minEngineVersion": "1.0.0",
+  "version": 2,
+  "minEngineVersion": "1.1.0",
   "family": "squat_pattern",
   "tracking": "pose",
   "views": ["front", "side"],
@@ -17,7 +17,7 @@
     "mode": "alternating_threshold",
     "metric": "knee_L",
     "upAt": 155,
-    "downAt": 110,
+    "downAt": 130,
     "countOn": "up",
     "bilateralGate": 150
   },

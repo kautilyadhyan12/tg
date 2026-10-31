@@ -637,7 +637,10 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 
 **Exercise folder 1 — `D:\Projects\ai-home-gym-ex1`: the camera and the form rules** (spec Part 2 §11).
 
-50. [ ] **The measuring line on the laptop**: one tool for every exercise: a video to body points, measured by the app's own engine, still pictures a terminal can look at, and each exercise's rules run on every other exercise's video. It needs no phone, so it is this folder's first job.
+50. **The measuring line on the laptop** (split 2026-10-31: true proportions first). It needs no phone.
+    - 50a. [ ] **True proportions**: the same body gives the same numbers on any picture shape.
+    - 50b. [ ] **A video to body points**: one tool for every exercise, measured by the app's own engine, with still pictures a terminal can look at.
+    - 50c. [ ] **The cross-check**: each exercise's rules run on every other exercise's video.
 51. [ ] **The camera test on Kd's phone** (item 1's two days; after item 10): which model and library, the speed, heat and battery, and the same numbers as the laptop.
 52. [ ] **The engine's missing parts**: holds, one side at a time, fast rhythm moves, timed only, the jump check, the floor reference, a leaning phone, steadier points, one person locked on; and Stage 4 item 6's faults, each with its test.
 53. [ ] **The camera screen**: its look as pictures first, then the set-up check, the live skeleton, the count, voice, "Count this set myself" and Follow-along.

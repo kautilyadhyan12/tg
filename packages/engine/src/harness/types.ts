@@ -3,11 +3,11 @@
 // those task cards, visibly — never ad hoc.
 // TYPE-ONLY imports from @app/shared: erased at compile, so the engine keeps
 // zero runtime dependencies (I1 / Part IV #10).
-import type { FrameResult, HoldEvent, HoldTick, PoseFrame, RepEvent, SetSummary } from "@app/shared";
+import type { CameraFrame, FrameResult, HoldEvent, HoldTick, RepEvent, SetSummary } from "@app/shared";
 
 export interface EngineSession {
   /** Feed one frame; returns the per-frame result for overlay/UI. */
-  processFrame(frame: PoseFrame): FrameResult;
+  processFrame(frame: CameraFrame): FrameResult;
   /** THE CALLER HAS STOPPED FEEDING FRAMES — a pause, a hidden tab, a camera
    *  torn down. The engine cannot deduce this: no frames arriving looks exactly
    *  like a slow camera from in here, and the timestamps inside the frames that

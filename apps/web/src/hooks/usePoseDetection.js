@@ -413,10 +413,12 @@ export default function usePoseDetection({
       // machine feeding the engine 8, which is the reading the ladder must not
       // be given.
       throughputRef.current.push(now);
-      const display = controllerRef.current.feed(landmarks, now, landmarks.length > 0);
+      // The picture's own shape: the engine decides nothing without it.
+      const aspect = videoElement.videoWidth / videoElement.videoHeight;
+      const display = controllerRef.current.feed(landmarks, now, landmarks.length > 0, aspect);
       setPoseData(display);
       if (TRACE_RECORD_ENABLED) {
-        recordFrame(landmarks.map((lm) => [lm.x, lm.y, lm.z, lm.visibility ?? 1.0]), now);
+        recordFrame(landmarks.map((lm) => [lm.x, lm.y, lm.z, lm.visibility ?? 1.0]), now, aspect);
       }
       // DEV-ONLY, and the only way the meter is READABLE by a person. An
       // instrument nobody can read is one whose numbers cannot be reproduced by

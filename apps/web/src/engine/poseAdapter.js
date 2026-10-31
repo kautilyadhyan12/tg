@@ -87,9 +87,9 @@ export function hasCameraAnalysis(slug, resolve = getDefinition) {
  *  pass through untouched (§2.2). Missing/empty landmarks → an empty `kp`, which
  *  the engine's ingest treats as an invalid frame (§3.1 fail-soft: hold state,
  *  count nothing, raise the visibility hint) — we never fabricate points. */
-export function landmarksToFrame(landmarks, tMs) {
+export function landmarksToFrame(landmarks, tMs, aspect) {
   const kp = (landmarks ?? []).map((lm) => [lm.x, lm.y, lm.z, lm.visibility ?? 1.0]);
-  return { t: tMs, kp };
+  return { t: tMs, kp, aspect };
 }
 
 /** Start one set. Throws EngineUnsupportedError if the engine can't run `def`
@@ -108,8 +108,8 @@ export function startSet(def, setIndex) {
      *  in FrameResult.signals, the joints the exercise is measured by are not
      *  usable this frame — the caller surfaces the §3.1 "step back" cue. */
     metricSignals: [config.metric, ...(config.metricFallback ? [config.metricFallback] : [])],
-    feed(landmarks, tMs) {
-      return session.processFrame(landmarksToFrame(landmarks, tMs));
+    feed(landmarks, tMs, aspect) {
+      return session.processFrame(landmarksToFrame(landmarks, tMs, aspect));
     },
     /** Tell the engine the app has stopped feeding frames (pause, hidden tab).
      *  It cannot deduce that — no frames arriving is indistinguishable from a

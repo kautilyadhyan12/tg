@@ -17,7 +17,7 @@ function replay(controller, trace) {
   const displays = [];
   for (const frame of trace.frames) {
     const landmarks = frame.kp.map(([x, y, z, visibility]) => ({ x, y, z, visibility }));
-    displays.push(controller.feed(landmarks, frame.t, landmarks.length > 0));
+    displays.push(controller.feed(landmarks, frame.t, landmarks.length > 0, 0.5625));
   }
   return displays;
 }
@@ -59,7 +59,7 @@ describe("SessionController — occluded legs (sitting-at-desk bug)", () => {
     const c = new SessionController();
     c.startSet("squat", 1);
     let d;
-    for (let i = 0; i < 5; i++) d = c.feed(legsHiddenLandmarks(), i * 67, true);
+    for (let i = 0; i < 5; i++) d = c.feed(legsHiddenLandmarks(), i * 67, true, 0.5625);
     expect(d.form_correct).toBeNull(); // no verdict — nothing is measured
     expect(d.corrections[0]).toMatch(/step back/i);
     expect(d.rep_count).toBe(0); // and nothing ever counts
@@ -82,14 +82,14 @@ describe("SessionController — the person check (card 4 step 3)", () => {
   function bridge(frames) {
     const c = new SessionController();
     c.startSet("squat", 1);
-    const displays = frames.map((f) => c.feed(toLandmarks(f.kp), f.t, true));
+    const displays = frames.map((f) => c.feed(toLandmarks(f.kp), f.t, true, 0.5625));
     return { controller: c, displays, summary: c.endSet() };
   }
 
   /** The same clip straight into the engine, with no check in front of it. */
   function ungated(frames) {
     const s = adapterStartSet(getDefinition("squat"), 1);
-    for (const f of frames) s.feed(toLandmarks(f.kp), f.t);
+    for (const f of frames) s.feed(toLandmarks(f.kp), f.t, f.aspect);
     return s.end();
   }
 
@@ -296,13 +296,13 @@ describe("SessionController — the person check (card 4 step 3)", () => {
     const c = new SessionController();
     c.startSet("squat", 1);
     let d;
-    for (const f of shakenSquat(0.05).slice(0, 40)) d = c.feed(toLandmarks(f.kp), f.t, true);
+    for (const f of shakenSquat(0.05).slice(0, 40)) d = c.feed(toLandmarks(f.kp), f.t, true, 0.5625);
     expect(SCENE_CUE.test(d.corrections[0] ?? "")).toBe(true);
 
     c.framesResumed();
     // A frame of the real recording, a long way later in wall time — which is
     // what coming back from a pause looks like.
-    d = c.feed(toLandmarks(goldenSquat().frames[0].kp), 100000, true);
+    d = c.feed(toLandmarks(goldenSquat().frames[0].kp), 100000, true, 0.5625);
     expect(SCENE_CUE.test(d.corrections[0] ?? "")).toBe(false);
     expect(d.form_correct).not.toBeNull();
   });
@@ -320,7 +320,7 @@ describe("SessionController — the person check (card 4 step 3)", () => {
     }));
     const c = new SessionController();
     c.startSet("squat", 1);
-    const cueAt = (t) => ENGINE_CUE.test(c.feed(legsHidden, t, true).corrections[0] ?? "");
+    const cueAt = (t) => ENGINE_CUE.test(c.feed(legsHidden, t, true, 0.5625).corrections[0] ?? "");
     cueAt(0);
     expect(cueAt(67)).toBe(false); // two is not yet three
 
@@ -350,7 +350,7 @@ describe("SessionController — the person check (card 4 step 3)", () => {
       frames.forEach((f, i) => {
         const t = i < at ? f.t : f.t + PAUSE;
         if (i === at && told) c.framesResumed();
-        c.feed(toLandmarks(f.kp), t, true);
+        c.feed(toLandmarks(f.kp), t, true, 0.5625);
       });
       return c.endSet().watchedMs;
     };
@@ -371,7 +371,7 @@ describe("SessionController — the person check (card 4 step 3)", () => {
     const c = new SessionController();
     c.startSet("bench_press", 1);
     expect(() => c.framesResumed()).not.toThrow();
-    const d = c.feed(toLandmarks(shakenSquat(0.05)[0].kp), 0, true);
+    const d = c.feed(toLandmarks(shakenSquat(0.05)[0].kp), 0, true, 0.5625);
     expect(d.logOnly).toBe(true);
     expect(d.corrections).toEqual([]);
   });
@@ -383,7 +383,7 @@ describe("SessionController — log-only mode (Part 6 §3.6, no def)", () => {
     c.startSet("bench_press", 1); // no definition bundled
     expect(c.analysisAvailable).toBe(false);
 
-    const d = c.feed([{ x: 0.1, y: 0.2, z: 0, visibility: 0.9 }], 0, true);
+    const d = c.feed([{ x: 0.1, y: 0.2, z: 0, visibility: 0.9 }], 0, true, 0.5625);
     expect(d.logOnly).toBe(true);
     expect(d.rep_count).toBeNull(); // manual counting owns it
     expect(d.form_correct).toBeNull(); // no grading

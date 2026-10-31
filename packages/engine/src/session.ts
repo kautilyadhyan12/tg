@@ -3,9 +3,10 @@
 // faults → scoring → SetSummary. startSet = construct; feedFrame =
 // processFrame; endSet = end() (idempotent). snapshot() returns plain JSON
 // for the client shell's crash resilience (§3.9).
-import type { FrameResult, PoseFrame, RepEvent, SetSummary } from "@app/shared";
+import type { CameraFrame, FrameResult, RepEvent, SetSummary } from "@app/shared";
 import type { ReplayableEngine } from "./harness/types.js";
 import { IngestStage } from "./pipeline/ingest.js";
+import { toTrueProportions } from "./pipeline/trueProportions.js";
 import { VisibilityGate } from "./pipeline/conditioning.js";
 import { ViewTracker, classifyView } from "./pipeline/view.js";
 import { SignalEngine, type SignalName } from "./pipeline/signals.js";
@@ -24,7 +25,7 @@ import {
 } from "./pipeline/faults.js";
 import { scoreRep, type ScoringComponent } from "./pipeline/scoring.js";
 
-export const ENGINE_VERSION = "1.0.0"; // I4: semver of the package, stamped on every emitted session (P1 = engine v1, Part 2 §10)
+export const ENGINE_VERSION = "1.1.0"; // I4: semver of the package, stamped on every emitted session (P1 = engine v1, Part 2 §10)
 
 /** Internal engine configuration — P1.7 compiles §4 definition documents into
  *  this shape; parity tests hand-build it from the §8.1 constants. */
@@ -197,7 +198,8 @@ export function createSession(
     return frameValue(input);
   }
 
-  function processFrame(frame: PoseFrame): FrameResult {
+  function processFrame(cameraFrame: CameraFrame): FrameResult {
+    const frame = toTrueProportions(cameraFrame);
     const accepted = ingest.accept(frame);
     lastT = frame.t;
     firstT ??= frame.t;

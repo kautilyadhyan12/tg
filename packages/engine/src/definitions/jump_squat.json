@@ -1,8 +1,8 @@
 {
   "key": "jump_squat",
   "aliases": ["jump_squats"],
-  "version": 1,
-  "minEngineVersion": "1.0.0",
+  "version": 2,
+  "minEngineVersion": "1.1.0",
   "family": "squat_pattern",
   "tracking": "pose",
   "views": ["front", "side"],
@@ -13,7 +13,7 @@
   "rep": {
     "mode": "alternating_threshold",
     "metric": "knee_L",
-    "upAt": 160,
+    "upAt": 145,
     "downAt": 130,
     "countOn": "up",
     "bilateralGate": 150
