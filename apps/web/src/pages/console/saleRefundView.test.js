@@ -38,7 +38,7 @@ describe('the Refund sale box', () => {
   it('a sale paid on the Terminal: refunded in Square, so the box says so and staff pick how it went back', () => {
     const paid = sale({ method: 'terminal' });
     expect(saleRefundDraft(paid, () => 'k1').method).toBe('');
-    expect(saleRefundWords(paid, null).detail).toBe('Sold on 15 Oct 2026 to a walk-in for $7.50. This only writes the refund in your records: refund the card in your Square Dashboard.');
+    expect(saleRefundWords(paid, null).detail).toBe('Sold on 15 Oct 2026 to a walk-in for $7.50. This only writes the refund in your records: give the money back yourself.');
   });
 
   it('asks about the shelf only where the sale took from a count and some are not back', () => {
@@ -82,8 +82,8 @@ describe('a sale’s refunds', () => {
   it('each with how, when, why, the shelf and who; a voided one says who voided it and why', () => {
     const voided = refund({ id: 'rf2', receiptNumber: 45, restocked: 0, reason: 'charged_too_much', by: null, voided: { reason: 'wrong_amount', on: '2026-10-16', by: 'Sam Owner' } });
     expect(saleRefundLines(sale({ refunds: [refund(), voided] }))).toEqual([
-      { id: 'rf1', receiptNumber: 44, amount: '$2.50 refunded', money: '$2.50', detail: 'Cash · 16 Oct 2026 · Brought back · 1 back on the shelf · by Priya Desk', voided: null },
-      { id: 'rf2', receiptNumber: 45, amount: '$2.50 refunded', money: '$2.50', detail: 'Cash · 16 Oct 2026 · Charged too much', voided: 'Voided 16 October 2026 by Sam Owner · Wrong amount' },
+      { id: 'rf1', receiptNumber: 44, amount: '$2.50 refunded', money: '$2.50', toCard: false, note: null, detail: 'Cash · 16 Oct 2026 · Brought back · 1 back on the shelf · by Priya Desk', voided: null },
+      { id: 'rf2', receiptNumber: 45, amount: '$2.50 refunded', money: '$2.50', toCard: false, note: null, detail: 'Cash · 16 Oct 2026 · Charged too much', voided: 'Voided 16 October 2026 by Sam Owner · Wrong amount' },
     ]);
   });
 

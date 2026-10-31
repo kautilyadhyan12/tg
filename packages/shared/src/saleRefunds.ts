@@ -3,10 +3,20 @@
 // Money given back for a product sale at the desk, on its own day or any later one, as Square
 // and Mindbody do: all of it or part, how it went back, why, and how many of what was sold went
 // back on the shelf. The sale stays; each refund is a row of its own with its own receipt
-// number. The app moves no money: the gym gives it back itself and this is its note. A refund
-// noted by mistake is voided, as a membership's is (18o).
+// number. By hand the gym gives it back itself and this is its note; a sale paid on the Terminal
+// can go back to the card through Square (18d-iv-b-ii). A refund noted by mistake is voided, as a
+// membership's is (18o).
 import { z } from "zod";
-import { memberPaymentByHandSchema, receiptNumberSchema, refundVoidReasonSchema } from "./memberBills.js";
+import {
+  MEMBER_PAYMENT_BY_HAND,
+  REFUND_REASON_WORDS,
+  memberPaymentByHandSchema,
+  receiptNumberSchema,
+  refundReasonSchema,
+  refundVoidKeptSchema,
+  refundVoidReasonSchema,
+  squareRefundSeenSchema,
+} from "./memberBills.js";
 
 /** Why money was given back for a sale: picked, never typed. */
 export const SALE_REFUND_REASONS = ["returned", "charged_too_much", "faulty", "other"] as const;
@@ -20,6 +30,16 @@ export const SALE_REFUND_REASON_WORDS: Readonly<Record<SaleRefundReason, string>
   other: "Something else",
 };
 
+/** Any reason a refund to the card can carry: a member's payment's, or a sale's. */
+export const cardRefundReasonSchema = z.union([refundReasonSchema, saleRefundReasonSchema]);
+export type CardRefundReason = z.infer<typeof cardRefundReasonSchema>;
+export const CARD_REFUND_REASON_WORDS: Readonly<Record<CardRefundReason, string>> = { ...REFUND_REASON_WORDS, ...SALE_REFUND_REASON_WORDS };
+
+/** How a sale's money went back: by hand, or to the card that paid, through Square, which reads as the sale's own way. */
+export const SALE_REFUND_METHODS = [...MEMBER_PAYMENT_BY_HAND, "terminal"] as const;
+export const saleRefundMethodSchema = z.enum(SALE_REFUND_METHODS);
+export type SaleRefundMethod = z.infer<typeof saleRefundMethodSchema>;
+
 const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const minorSchema = z.number().int().min(0).max(99_999_999);
 
@@ -28,8 +48,8 @@ export const saleRefundSchema = z
   .object({
     id: z.string().uuid(),
     amountMinor: minorSchema,
-    /** How the gym gave it back. */
-    method: memberPaymentByHandSchema,
+    /** How the money went back. */
+    method: saleRefundMethodSchema,
     reason: saleRefundReasonSchema,
     /** How many of what was sold went back on the shelf with it. */
     restocked: z.number().int().min(0).max(99),
@@ -39,7 +59,9 @@ export const saleRefundSchema = z
     by: z.string().nullable(),
     receiptNumber: receiptNumberSchema,
     /** Who voided it, on the gym's own day, and why; null while it stands. */
-    voided: z.object({ reason: refundVoidReasonSchema, on: daySchema, by: z.string().nullable() }).strict().nullable(),
+    voided: z.object({ reason: refundVoidKeptSchema, on: daySchema, by: z.string().nullable() }).strict().nullable(),
+    /** Sent to the card through Square (18d-iv-b-ii); null for one noted by hand. */
+    square: squareRefundSeenSchema.nullable().default(null),
   })
   .strict();
 export type SaleRefund = z.infer<typeof saleRefundSchema>;
@@ -56,6 +78,37 @@ export const refundSaleRequestSchema = z
   })
   .strict();
 export type RefundSaleRequest = z.infer<typeof refundSaleRequestSchema>;
+
+/** Refund to card on one product of a sale paid on the Terminal (18d-iv-b-ii). The same key twice is one refund. */
+export const saleCardRefundRequestSchema = z
+  .object({
+    requestKey: z.string().uuid(),
+    amountMinor: z.number().int().min(1).max(99_999_999),
+    reason: saleRefundReasonSchema,
+    restock: z.number().int().min(0).max(99),
+  })
+  .strict();
+export type SaleCardRefundRequest = z.infer<typeof saleCardRefundRequestSchema>;
+
+/** How many of each product of a sale went back on the shelf, when all of it is refunded at once: a product left out, none. */
+export const saleShelfSchema = z
+  .array(z.object({ saleId: z.string().uuid(), count: z.number().int().min(0).max(99) }).strict())
+  .max(20);
+
+/** Note a refund on all of a sale. `totalMinor` is what staff saw left: a sale that changed meanwhile is not noted. */
+export const refundWholeSaleRequestSchema = z
+  .object({ requestKey: z.string().uuid(), totalMinor: z.number().int().min(1).max(99_999_999), method: memberPaymentByHandSchema, reason: saleRefundReasonSchema, shelf: saleShelfSchema })
+  .strict();
+export type RefundWholeSaleRequest = z.infer<typeof refundWholeSaleRequestSchema>;
+
+export const refundWholeSaleResponseSchema = z.object({ receiptNumbers: z.array(receiptNumberSchema).min(1) }).strict();
+export type RefundWholeSaleResponse = z.infer<typeof refundWholeSaleResponseSchema>;
+
+/** Refund to card on all of a sale: one refund at Square. `amountMinor` is what the box showed as left. */
+export const saleWholeCardRefundRequestSchema = z
+  .object({ requestKey: z.string().uuid(), amountMinor: z.number().int().min(1).max(99_999_999), reason: saleRefundReasonSchema, shelf: saleShelfSchema })
+  .strict();
+export type SaleWholeCardRefundRequest = z.infer<typeof saleWholeCardRefundRequestSchema>;
 
 export const refundSaleResponseSchema = z.object({ receiptNumber: receiptNumberSchema }).strict();
 export type RefundSaleResponse = z.infer<typeof refundSaleResponseSchema>;
@@ -104,6 +157,12 @@ export const SALE_REFUND_WORDS = {
   has_refund: "Money was given back for this sale. Void that refund first, then void the sale.",
   day_ahead: "That day hasn't come yet. Pick today or an earlier day.",
   not_counted: "This product's stock isn't counted, so nothing goes back on the shelf. Nothing was noted.",
+  card_refund: "This refund went to the card through Square, so it can't be voided.",
+  changed: "Part of this sale was refunded meanwhile. Nothing was sent: close this and open it again.",
+  changed_note: "Part of this sale was refunded meanwhile. Nothing was noted: close this and open it again.",
+  key_reused: "That refund has already been sent. Open the sale again to see where it stands.",
+  /** While a refund to the card has no answer from Square. */
+  waiting: "A refund on this sale is waiting for Square's answer. Try again once it has finished.",
 } as const;
 
 /** More than is left of the sale: what is left, in its own money's words, made by the caller. */

@@ -6,15 +6,18 @@
 // moves this row on, so it is written once. Every read for a screen names the gym; the worker's reads across gyms name the
 // environment and hand each row back with its gym.
 import {
+  cardRefundReasonSchema,
   memberRefundMethodSchema,
   paymentRefundableMinor,
   refundMemberPayment,
   refundReasonSchema,
   type CardRefundCheck,
+  type CardRefundReason,
   type MemberPaymentMethod,
   type RefundReason,
 } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
+import { z } from "zod";
 import { giveMemberGift } from "../referrals/memberGiftRepo.js";
 import { insertAudit } from "../repo.js";
 import { writeRefund } from "../memberships/billsRepo.js";
@@ -25,18 +28,28 @@ import type { SquareEnvironment } from "./square.js";
 
 type SqlOrTx = Sql | TransactionSql;
 
+/** What each product takes of a press on all of a sale (18d-iv-b-ii): our own column, parsed. */
+export const salePartsSchema = z.array(z.object({ saleId: z.string().uuid(), amountMinor: z.number().int().min(1), restock: z.number().int().min(0).max(99) }).strict()).min(1);
+export type SalePart = z.infer<typeof salePartsSchema>[number];
+
 export interface RefundPress {
   id: string;
   gymId: string;
-  paymentId: string;
+  /** A member's payment, or a sale (18d-iv-b-ii): one or the other. */
+  paymentId: string | null;
   memberRefundId: string | null;
+  saleId: string | null;
+  /** How many go back on the shelf once Square takes it up: one product of a sale's alone. */
+  restock: number;
+  /** All of a sale: what each product takes. Null for one product. */
+  parts: SalePart[] | null;
   environment: SquareEnvironment;
   accountId: string;
   squarePaymentId: string;
   squareRefundId: string | null;
   amountMinor: number;
   currency: string;
-  reason: RefundReason;
+  reason: CardRefundReason;
   brand: string | null;
   last4: string | null;
   requestKey: string;
@@ -50,11 +63,14 @@ export interface RefundPress {
   checkedAt: Date;
 }
 
-interface RawPress {
+export interface RawPress {
   id: string;
   gym_id: string;
-  payment_id: string;
+  payment_id: string | null;
   member_refund_id: string | null;
+  sale_id: string | null;
+  restock: number;
+  parts: unknown;
   environment: SquareEnvironment;
   account_id: string;
   square_payment_id: string;
@@ -74,18 +90,21 @@ interface RawPress {
   checked_at: Date;
 }
 
-const toPress = (r: RawPress): RefundPress => ({
+export const toPress = (r: RawPress): RefundPress => ({
   id: r.id,
   gymId: r.gym_id,
   paymentId: r.payment_id,
   memberRefundId: r.member_refund_id,
+  saleId: r.sale_id,
+  restock: r.restock,
+  parts: r.parts === null ? null : salePartsSchema.parse(r.parts),
   environment: r.environment,
   accountId: r.account_id,
   squarePaymentId: r.square_payment_id,
   squareRefundId: r.square_refund_id,
   amountMinor: r.amount_minor,
   currency: r.currency,
-  reason: refundReasonSchema.parse(r.reason),
+  reason: cardRefundReasonSchema.parse(r.reason),
   brand: r.brand,
   last4: r.last4,
   requestKey: r.request_key,
@@ -265,20 +284,26 @@ export async function endCompleted(sql: SqlOrTx, press: RefundPress, now: Date):
     WHERE gym_id = ${press.gymId} AND id = ${press.id} AND state = 'pending'`;
 }
 
+const paymentOf = (press: RefundPress): string => {
+  if (press.paymentId === null) throw new Error("a sale's refund press read as a member's payment's");
+  return press.paymentId;
+};
+
 /** Square took the refund up: the money stands as given back, once. False where this press was already moved on. */
 export async function recordTaken(sql: Sql, press: RefundPress, taken: { squareRefundId: string; today: string; now: Date; lookAt: Date }): Promise<boolean> {
   return await sql.begin(async (tx) => {
     await lockGym(tx, press.gymId);
     const [row] = await tx<{ state: string }[]>`SELECT state FROM gym_square_refunds WHERE gym_id = ${press.gymId} AND id = ${press.id} FOR UPDATE`;
     if (row?.state !== "asking") return false;
+    const paymentId = paymentOf(press);
     const [where] = await tx<{ membership_id: string; entry_id: string | null }[]>`
       SELECT b.held_membership_id AS membership_id, h.entry_id
       FROM gym_member_payments p
       JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
       JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
-      WHERE p.gym_id = ${press.gymId} AND p.id = ${press.paymentId}`;
+      WHERE p.gym_id = ${press.gymId} AND p.id = ${paymentId}`;
     if (where === undefined) throw new Error("the payment of a refund press is gone");
-    const target = await refundTargetOf(tx, press.gymId, where.membership_id, press.paymentId);
+    const target = await refundTargetOf(tx, press.gymId, where.membership_id, paymentId);
     if (target === null) throw new Error("the payment of a refund press no longer stands");
     const { bill, payment: standing } = target;
     // Square has the money on its way: what is written is what Square did.
@@ -288,13 +313,13 @@ export async function recordTaken(sql: Sql, press: RefundPress, taken: { squareR
       membershipId: where.membership_id,
       bill,
       standing,
-      paymentId: press.paymentId,
+      paymentId,
       requestKey: press.requestKey,
       amountMinor: press.amountMinor,
       currency: press.currency,
       // A refund to the card reads as the payment's own way, on the Terminal or from the card on file.
       method: memberRefundMethodSchema.parse(standing.method),
-      reason: press.reason,
+      reason: refundReasonSchema.parse(press.reason),
       today: taken.today,
       actorUserId: press.startedBy,
       now: taken.now,
@@ -317,6 +342,7 @@ export async function recordFailed(sql: Sql, press: RefundPress, failed: { code:
     const [row] = await tx<{ state: string; member_refund_id: string | null }[]>`
       SELECT state, member_refund_id FROM gym_square_refunds WHERE gym_id = ${press.gymId} AND id = ${press.id} FOR UPDATE`;
     if (row?.state !== "pending" || row.member_refund_id === null) return false;
+    const paymentId = paymentOf(press);
     await tx`
       UPDATE gym_member_refunds SET undone_at = ${failed.now}, void_reason = 'square_failed'
       WHERE gym_id = ${press.gymId} AND id = ${row.member_refund_id} AND undone_at IS NULL`;
@@ -325,12 +351,12 @@ export async function recordFailed(sql: Sql, press: RefundPress, failed: { code:
       FROM gym_member_payments p
       JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
       JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
-      WHERE p.gym_id = ${press.gymId} AND p.id = ${press.paymentId}`;
+      WHERE p.gym_id = ${press.gymId} AND p.id = ${paymentId}`;
     if (where === undefined) throw new Error("the payment of a refund press is gone");
     await tx`UPDATE gym_member_bills SET status = 'paid', updated_at = ${failed.now} WHERE gym_id = ${press.gymId} AND id = ${where.bill_id} AND status = 'refunded'`;
     // A fee's payment never gives a member's gift.
     if (where.entry_id !== null && where.period_index !== null) {
-      await giveMemberGift(tx, { gymId: press.gymId, friendEntryId: where.entry_id, by: { paymentId: press.paymentId }, today: failed.today, now: failed.now });
+      await giveMemberGift(tx, { gymId: press.gymId, friendEntryId: where.entry_id, by: { paymentId }, today: failed.today, now: failed.now });
     }
     await tx`
       UPDATE gym_square_refunds SET state = 'done', outcome = 'failed', code = ${failed.code}, look_at = NULL, finished_at = ${failed.now}, checking_until = NULL
@@ -345,7 +371,7 @@ export async function recordFailed(sql: Sql, press: RefundPress, failed: { code:
         ...(where.entry_id === null ? {} : { entryId: where.entry_id }),
         membershipId: where.membership_id,
         billId: where.bill_id,
-        paymentId: press.paymentId,
+        paymentId,
         amountMinor: String(press.amountMinor),
         currency: press.currency,
       },

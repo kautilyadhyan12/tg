@@ -434,6 +434,15 @@ d("my membership: a member's own memberships, payments and receipts (real Postgr
       { receiptNumber: bought.receipt, soldOn: today, method: "cash", currency: "INR", totalMinor: 500, lines: [{ name: "Water", quantity: 2, totalMinor: 500 }], refunds: [{ amountMinor: 250, method: "cash", refundedOn: today, receiptNumber: waterRefund?.receipt_number, pending: false }] },
     ]);
     expect(answer.purchasesNotShown).toBe(0);
+    // That refund still with Square: the member reads it as pending, not done (18d-iv-b-ii).
+    const [standing] = await sql<{ id: string }[]>`SELECT id FROM gym_sale_refunds WHERE sale_id = ${bought.id} AND undone_at IS NULL`;
+    const pressId = randomUUID();
+    await sql`
+      INSERT INTO gym_square_refunds (id, gym_id, sale_id, environment, account_id, square_payment_id, square_refund_id, amount_minor, currency, reason, request_key, state, started_at, checked_at)
+      VALUES (${pressId}, ${gym.id}, ${bought.id}, 'sandbox', 'ACCOUNT', 'PAYMENT', ${`REFUND${randomUUID()}`}, 250, 'INR', 'returned', ${randomUUID()}, 'pending', now(), now())`;
+    await sql`UPDATE gym_sale_refunds SET press_id = ${pressId} WHERE id = ${standing?.id ?? ""}`;
+    expect((await mine(gym, maya)).purchases[0]?.refunds[0]).toMatchObject({ amountMinor: 250, pending: true });
+    await sql`DELETE FROM gym_square_refunds WHERE id = ${pressId}`;
     // No staff member's name and no voided row is in it.
     expect(JSON.stringify(answer)).not.toContain("Owner");
     expect(numbersIn(answer)).not.toContain(first.receipt);

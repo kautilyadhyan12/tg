@@ -3,7 +3,7 @@
 import type { PendingQuery, Row, Sql, TransactionSql } from "postgres";
 import {
   billAmounts,
-  memberPaymentByHandSchema,
+  saleRefundMethodSchema,
   memberRefundMethodSchema,
   membershipKindSchema,
   membershipTermUnitSchema,
@@ -152,7 +152,7 @@ async function saleRefundReceipt(sql: Sql, gymId: string, number: number): Promi
     forReceipt: r.for_receipt,
     item: { name: r.item_name, covers: null },
     refundedMinor: r.amount_minor,
-    method: memberPaymentByHandSchema.parse(r.method),
+    method: saleRefundMethodSchema.parse(r.method),
   };
 }
 
