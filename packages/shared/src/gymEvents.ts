@@ -333,8 +333,8 @@ export const GYM_EVENT_COMING_WORDS = {
   event_started: "This event has already started.",
   event_full: "This event is full.",
   waitlist_full: "This event and its waitlist are full.",
-  not_coming: "You're not down for this event.",
-  cancel_started: "This event has already started, so this can't be changed.",
+  not_coming: "You don't have a booking for this event.",
+  cancel_started: "This event has already started, so the booking can't be cancelled.",
   request_reused: "That didn't go through. Try again.",
   person_not_found: "This person isn't down for this event any more.",
   places_below_coming: (coming: number): string =>

@@ -732,7 +732,7 @@ interface SignedPhotoProps {
 }
 
 /** A post's photo, read from the api as the person signed in, and shown from the phone's copy. */
-function SignedPhoto({ uri, photoId, files, round, fit, testID }: SignedPhotoProps) {
+export function SignedPhoto({ uri, photoId, files, round, fit, testID }: SignedPhotoProps) {
   const [shown, setShown] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
