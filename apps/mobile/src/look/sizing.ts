@@ -13,6 +13,16 @@ export function pictureTopHeight(width: number, screenHeight: number, tall: numb
   return Math.round(Math.min(width * tall, screenHeight * PICTURE_TOP_MOST));
 }
 
+/** The tallest an event's poster is drawn, before the share of the screen it may take. */
+export const POSTER_TALLEST = 420;
+
+/** How tall an event's poster box is in a card this wide: its own shape, but never past the tallest or a page
+ *  picture's share of the screen. With the width not known yet, the most it could be. */
+export function posterHeight(cardWidth: number | null, poster: { width: number; height: number }, screenHeight: number): number {
+  const most = Math.min(POSTER_TALLEST, screenHeight * PICTURE_TOP_MOST);
+  return Math.round(cardWidth === null ? most : Math.min(most, (cardWidth * poster.height) / poster.width));
+}
+
 /** How tall a page or box over the app is. It is drawn behind the phone's bars, so where the window leaves only them out
  *  (older Android) it takes the screen's height; where the app has a share of the screen (split screen), the window's. */
 export function modalHeight(screen: number, window: number, bars: number): number {
