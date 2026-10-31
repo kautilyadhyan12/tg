@@ -46,7 +46,8 @@ const PASSWORD = "a-Perfectly-fine-pw-1"; // dummy fixture, gitleaks:allow
 
 type App = Awaited<ReturnType<typeof buildApp>>;
 const TEST_TIMEOUT_MS = 180_000;
-const HOOK_TIMEOUT_MS = 60_000;
+// Its tidy-up deletes users, 28 s alone on a laptop (114 foreign-key checks each), beside other test files on GitHub.
+const HOOK_TIMEOUT_MS = 180_000;
 
 /** This suite's own plan: the suites share one database. */
 const LIVE_PLAN = "zz_member_import_leavers";
