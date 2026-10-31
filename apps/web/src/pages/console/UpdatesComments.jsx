@@ -248,7 +248,7 @@ export function CommentsPanel({ gymId, gymName, post, words, readOnly, where = '
           return { ...all, [parentId]: { ...was, loading: false, items, next: merged.next, pages: after === undefined ? was.pages : was.pages + 1 } };
         });
       } catch (err) {
-        setReplies((all) => ({ ...all, [parentId]: { ...(all[parentId] ?? noReplies), loading: false, error: errorText(err, "We couldn't load the replies.") } }));
+        setReplies((all) => ({ ...all, [parentId]: { ...(all[parentId] ?? noReplies), loading: false, error: errorText(err, "We couldn't load the replies."), items: sent === undefined ? (all[parentId] ?? noReplies).items : mergedComments((all[parentId] ?? noReplies).items, [sent]) } }));
       }
     },
     [gymId],

@@ -286,6 +286,21 @@ describe('a hidden comment away from the reported list', () => {
   });
 });
 
+describe('a reply when the others cannot be read', () => {
+  it('still shows the reply just sent, and says the rest could not be loaded', async () => {
+    svc.add.mockResolvedValue({ comment: comment('r-new', 'Just sent', { parentId: 'c1', fromMember: false, authorId: null }), firstKept: true });
+    svc.replies.mockRejectedValue(refusal(500, 'Nope'));
+    await open();
+    const panel = await openComments();
+    const row = within((await panel.findAllByTestId('comment'))[0]);
+    fireEvent.click(row.getByRole('button', { name: 'Reply' }));
+    fireEvent.change(row.getByRole('textbox', { name: /Reply to Wendy Writer/ }), { target: { value: 'Just sent' } });
+    fireEvent.click(row.getByRole('button', { name: 'Send reply' }));
+    expect(await row.findByText('Just sent')).toBeTruthy();
+    expect(row.getByRole('alert')).toBeTruthy();
+  });
+});
+
 describe('long lists of replies', () => {
   const twenty = Array.from({ length: 20 }, (_, i) => comment(`r${i}`, `Reply ${i}`, { parentId: 'c1', createdAt: `2026-10-07T08:${String(i).padStart(2, '0')}:00.000Z` }));
   it('a reply sent on a comment of more than 20 still shows, and the rest can be reached, in order', async () => {
