@@ -1,7 +1,9 @@
 import {
   addedGymPostResponseSchema,
+  addedStaffGymPostCommentResponseSchema,
   blockedGymPosterResponseSchema,
   blockedGymPostersResponseSchema,
+  gymPostCommentSettingsSchema,
   gymPostReactionResponseSchema,
   gymPostReactorsResponseSchema,
   gymPostSettingsSchema,
@@ -9,9 +11,12 @@ import {
   gymPostsResponseSchema,
   keptGymPostResponseSchema,
   personGymPostsResponseSchema,
+  removedGymPostCommentResponseSchema,
   removedGymPostResponseSchema,
+  reportedGymPostCommentsResponseSchema,
   reportedGymPostResponseSchema,
   reportedGymPostsResponseSchema,
+  staffGymPostCommentsResponseSchema,
   staffGymPostResponseSchema,
   staffGymPostsResponseSchema,
   staffPersonGymPostsResponseSchema,
@@ -104,4 +109,26 @@ export const staffPostsService = {
       'the change',
       stopped ? authApi.put(`${gymPath(gymId)}/stopped/${encodeURIComponent(userId)}`) : authApi.delete(`${gymPath(gymId)}/stopped/${encodeURIComponent(userId)}`),
     ),
+};
+
+// A POST'S COMMENTS IN THE CONSOLE (ROADMAP Stage 5 17e-ii), for staff holding `posts.manage`.
+const commentsPath = (gymId) => `/v1/orgs/${encodeURIComponent(gymId)}/post-comments`;
+const commentPath = (gymId, commentId) => `${commentsPath(gymId)}/${encodeURIComponent(commentId)}`;
+const after = (cursor) => (cursor === undefined || cursor === null ? {} : { params: { after: cursor } });
+
+export const staffCommentsService = {
+  list: (gymId, postId, cursor) => readThrough(staffGymPostCommentsResponseSchema, 'the comments', authApi.get(`${postPath(gymId, postId)}/comments/staff`, after(cursor))),
+  replies: (gymId, commentId, cursor) => readThrough(staffGymPostCommentsResponseSchema, 'the replies', authApi.get(`${commentPath(gymId, commentId)}/replies/staff`, after(cursor))),
+  /** A comment or reply from staff; one key is one comment. */
+  add: (gymId, postId, commentKey, body, replyTo) =>
+    readThrough(addedStaffGymPostCommentResponseSchema, 'your comment', authApi.post(`${postPath(gymId, postId)}/comments/staff`, { commentKey, body, ...(replyTo === undefined ? {} : { replyTo }) })),
+  remove: (gymId, commentId) => readThrough(removedGymPostCommentResponseSchema, 'the change', authApi.delete(`${commentPath(gymId, commentId)}/staff`)),
+  /** Who gave one reaction to a comment, by name. */
+  reactors: (gymId, commentId, reaction) => readThrough(gymPostReactorsResponseSchema, 'who reacted', authApi.get(`${commentPath(gymId, commentId)}/reactions`, { params: { reaction } })),
+  /** The reported comments nobody has answered yet, longest waiting first. */
+  reported: (gymId) => readThrough(reportedGymPostCommentsResponseSchema, 'the reported comments', authApi.get(`${commentsPath(gymId)}/reported`)),
+  /** Keeps a reported comment, while its reports are exactly the ones the list item counted. */
+  keep: (gymId, commentId, { allReports, reportsMark }) => readThrough(keptGymPostResponseSchema, 'the change', authApi.post(`${commentPath(gymId, commentId)}/keep`, { allReports, reportsMark })),
+  /** The gym's switch: whether its members may comment. */
+  setMembersCanComment: (gymId, membersCanComment) => readThrough(gymPostCommentSettingsSchema, 'the change', authApi.put(`${commentsPath(gymId)}/settings`, { membersCanComment })),
 };
