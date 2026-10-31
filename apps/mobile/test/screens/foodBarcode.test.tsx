@@ -409,9 +409,9 @@ describe("a pack's label (33b-iii-c)", () => {
     expect(screen.getByRole("radio", { name: "Label" }).props.accessibilityState).toMatchObject({ selected: true });
   });
 
-  it("a barcode is free: no count on the barcode camera", async () => {
+  it("a barcode is free, says so, and shows no count", async () => {
     await openScan(labelRoutes());
-    await waitFor(() => { expect(screen.getByRole("radio", { name: "Barcode" })).toBeTruthy(); });
+    expect(await screen.findByText("Barcode scans are free.")).toBeTruthy();
     expect(screen.queryByText("5 of 7 photo scans left today.")).toBeNull();
   });
 

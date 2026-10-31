@@ -448,7 +448,7 @@ function Camera({
   const scanning = mode === "barcode";
   const trouble = scanning && look.kind === "trouble" ? look : null;
   const words = failed ?? (scanning ? (typing ? null : (trouble?.words ?? null)) : (notice?.words ?? null));
-  const left = scanning ? null : scansLeftWords(scans);
+  const left = scanning ? "Barcode scans are free." : scansLeftWords(scans);
   const allowed = permission?.granted === true;
   return (
     <View style={styles.page}>
