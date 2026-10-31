@@ -11,8 +11,12 @@
 // 0029). That the notes are really gone from the database is proved on the
 // server, by the 0029 test in apps/api/test/db.migration.test.ts.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, configure, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { CHECK_FIRST_OPTIONS, HEALTH_QUESTION, HEALTH_QUESTION_NOTE } from '@app/shared';
+
+// A person's Settings is a heavy page: on GitHub's busy machine one look for a button can outlast the tool's one second.
+configure({ asyncUtilTimeout: 5000 });
+vi.setConfig({ testTimeout: 20_000 });
 
 const auth = { user: { displayName: 'Kd' }, updateUser: vi.fn(), logout: vi.fn() };
 vi.mock('../context/AuthContext', () => ({ useAuth: () => auth }));
