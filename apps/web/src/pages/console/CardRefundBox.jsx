@@ -45,7 +45,7 @@ export default function CardRefundBox({ gymId, entryId, m, payment, fee = null, 
  *  goes back, told the body and how many went back on each shelf. `words`: its sentences, from what Square said. `shelves`: what it
  *  asks about the shelf, each `{ key, label, choices }`. `allLeft`: all that is left goes back, so no amount is asked. `onNote`: told
  *  what stopped the refund, if anything. `thing`: what staff open again to see where a refund stands. Where Square needs the card
- *  present (18d-iv-c) the box asks which Terminal, and waits there; `onStopped`: it stopped with no money sent, so the page reads again. */
+ *  present (18d-iv-c) the box asks which Terminal, and waits there; `onStopped`: it stopped with no money sent, or staff left it waiting, so the page reads again and says so. */
 export function RefundToCardBox({ gymId, readKey, read, press, currency, words: wordsFor, reasons, shelves = [], allLeft = false, thing = 'payment', paymentsTo, onDone, onNote, onStopped, onClose }) {
   const [check, setCheck] = useState(null);
   const [draft, setDraft] = useState(null);
@@ -137,7 +137,10 @@ export function RefundToCardBox({ gymId, readKey, read, press, currency, words: 
           if (NOTHING_SENT.includes(code)) setDraft((d) => ({ ...d, requestKey: newKey() }));
           if (check.block === 'waiting') setCheck({ ...check, block: null, waitingPress: null });
         }}
-        onClose={onClose}
+        onClose={() => {
+          onStopped?.();
+          onClose();
+        }}
       />
     );
   }
@@ -186,6 +189,16 @@ export function RefundToCardBox({ gymId, readKey, read, press, currency, words: 
       // No answer at all says nothing of whether the press reached Square.
       const unsure = `We couldn't reach Square. The refund may not have gone through: open the ${thing} again before trying.`;
       setProblem(typeof errorCode(err) === 'string' ? errorText(err, unsure) : unsure);
+      // The Terminal went while the box was open: what it offers is read again.
+      if (errorCode(err) === 'terminal_gone') {
+        read().then(
+          (seen) => {
+            setCheck(seen);
+            setDraft((d) => ({ ...d, terminalId: seen.terminals.length === 1 ? seen.terminals[0].id : '' }));
+          },
+          () => undefined,
+        );
+      }
       if (NOTHING_SENT.includes(errorCode(err))) setDraft((d) => ({ ...d, requestKey: newKey() }));
       setBusy(false);
     }

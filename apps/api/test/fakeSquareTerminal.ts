@@ -131,6 +131,8 @@ export function fakeSquare() {
     refundDown: boolean;
     /** GetRefund gives no answer. */
     refundUnread: boolean;
+    /** The status CancelTerminalRefund refuses with once the request is past PENDING: Square names none. */
+    terminalCancelRefusal: number;
     refundLost: boolean;
     refundRefused: string | null;
     refundStatus: string;
@@ -162,6 +164,7 @@ export function fakeSquare() {
     beforeCard: null,
     refundDown: false,
     refundUnread: false,
+    terminalCancelRefusal: 400,
     refundLost: false,
     refundRefused: null,
     refundStatus: "PENDING",
@@ -598,7 +601,7 @@ export function fakeSquare() {
       if (a === undefined) return Promise.resolve(unauthorized);
       const made = terminalRefunds.find((f) => f.id === id);
       if (made?.accountId !== a.merchantId) return Promise.resolve(notFound);
-      if (made.status !== "PENDING") return Promise.resolve({ kind: "refused", status: 400, code: "BAD_REQUEST" });
+      if (made.status !== "PENDING") return Promise.resolve({ kind: "refused", status: state.terminalCancelRefusal, code: "BAD_REQUEST" });
       made.status = "CANCELED";
       made.cancel_reason = "SELLER_CANCELED";
       return Promise.resolve({ kind: "ok", value: shownTerminalRefund(made) });

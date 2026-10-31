@@ -93,7 +93,7 @@ const PRACTICE_REFUND_DEVICES: Readonly<Record<string, string>> = {
   [SQUARE_PRACTICE_DEVICES.declines]: SQUARE_PRACTICE_DEVICES.cancels,
 };
 
-const refundDevice = (press: refunds.RefundPress, deviceId: string): string =>
+export const refundDevice = (press: Pick<refunds.RefundPress, "environment">, deviceId: string): string =>
   press.environment === "sandbox" ? (PRACTICE_REFUND_DEVICES[deviceId] ?? deviceId) : deviceId;
 
 const NO_BILLING = "Recording payments isn't part of your role. Ask the owner to turn on \"Record members' payments\" for you.";
@@ -132,6 +132,7 @@ async function checkWithSquare(
   payment: { amountMinor: number; currency: string; refundableMinor: number; refundedMinor: number },
   squarePaymentId: string,
   waiting: () => Promise<boolean>,
+  waitingPress: () => Promise<refunds.RefundPress | null>,
 ): Promise<CardRefundCheck> {
   const stopped = (block: CardRefundBlock, card: CardRefundCheck["card"] = null): CardRefundCheck => ({ card, leftMinor: 0, refundedInSquareMinor: 0, block, onTerminal: false, terminals: [], waitingPress: null });
   const read = await ready.square.api.getPayment(ready.token, squarePaymentId);
@@ -157,7 +158,7 @@ async function checkWithSquare(
   const terminals = onTerminal && terminalsOffered(ready.row) ? (await pairedTerminals(deps, ready.row.gymId, ready.square.environment, ready.row.accountId)).map((t) => ({ id: t.id, serial: t.serial, practice: t.practice })) : [];
   const base = { card, leftMinor, refundedInSquareMinor, onTerminal, terminals };
   if (await waiting()) {
-    const press = await refunds.waitingOnTerminal(deps.sql, ready.row.gymId, squarePaymentId);
+    const press = await waitingPress();
     return { ...base, block: "waiting", waitingPress: press === null ? null : await viewOfPress(deps, press) };
   }
   return { ...base, block: leftMinor === 0 ? "nothing_left" : null, waitingPress: null };
@@ -167,6 +168,7 @@ async function checkWithSquare(
  *  need the card present. */
 async function deviceFor(deps: PaymentsDeps, ready: Ready, check: CardRefundCheck, terminalId: string | undefined): Promise<string | null> {
   if (!check.onTerminal) return null;
+  if (!terminalsOffered(ready.row)) throw refused("terminals_not_offered", CARD_REFUND_TERMINAL_WORDS.not_offered);
   if (terminalId === undefined) throw refused("card_refund_pick_terminal", CARD_REFUND_TERMINAL_WORDS.pick);
   const terminal = await terminalsRepo.readTerminal(deps.sql, ready.row.gymId, ready.square.environment, terminalId);
   if (terminal?.state !== "paired" || terminal.deviceId === null || terminal.accountId !== ready.row.accountId) {
@@ -183,7 +185,7 @@ export async function readCardRefund(deps: PaymentsDeps, userId: string, gymId: 
 }
 
 const checkOfPayment = (deps: PaymentsDeps, ready: Ready, payment: refunds.PaymentToRefund): Promise<CardRefundCheck> =>
-  checkWithSquare(deps, ready, payment, payment.squarePaymentId ?? "", () => refundAskingOnBill(deps.sql, ready.row.gymId, payment.billId));
+  checkWithSquare(deps, ready, payment, payment.squarePaymentId ?? "", () => refundAskingOnBill(deps.sql, ready.row.gymId, payment.billId), () => refunds.waitingOnTerminalOfBill(deps.sql, ready.row.gymId, payment.billId));
 
 type Step = "taken" | "completed" | "refused" | "failed" | "lost" | null;
 
@@ -235,18 +237,16 @@ async function tokenFor(deps: PaymentsDeps, square: SquareSettings, press: refun
   return square.tokens.open(row.accessToken, accessContext(press.gymId));
 }
 
-/** Square's request is the one this press made. */
-const isOurRefund = (press: refunds.RefundPress, device: string, refund: SquareTerminalRefund): boolean =>
-  refund.payment_id === press.squarePaymentId &&
-  refund.amount_money.amount === press.amountMinor &&
-  refund.amount_money.currency === press.currency &&
-  (refund.device_id == null || refund.device_id === device);
+/** Square's request is the one this press made. The press's own key ties them; how Square writes a Terminal's id is not read. */
+const isOurRefund = (press: refunds.RefundPress, refund: SquareTerminalRefund): boolean =>
+  refund.payment_id === press.squarePaymentId && refund.amount_money.amount === press.amountMinor && refund.amount_money.currency === press.currency;
 
 /** No clear answer from Square. A press it never answered is asked again with its key for an hour; a request it made is read
  *  for a day, as the money may go meanwhile, or until Square's own time is past where Square refuses to show it. Then it is
  *  left to check in Square. */
-async function terminalNotYet(deps: PaymentsDeps, press: refunds.RefundPress, now: Date, why: "refused" | "unavailable"): Promise<void> {
-  const limit = why === "refused" ? TERMINAL_REFUND.deadlineMs + TERMINAL_REFUND.graceMs : press.terminalRefundId === null ? CARD_REFUND.resendForMs : TERMINAL_REFUND.giveUpMs;
+async function terminalNotYet(deps: PaymentsDeps, press: refunds.RefundPress, now: Date, why: "refused" | "unavailable" | "completed"): Promise<void> {
+  // Square said it finished: the money has gone, so its refund is read for a day.
+  const limit = why === "completed" ? TERMINAL_REFUND.giveUpMs : why === "refused" ? TERMINAL_REFUND.deadlineMs + TERMINAL_REFUND.graceMs : press.terminalRefundId === null ? CARD_REFUND.resendForMs : TERMINAL_REFUND.giveUpMs;
   if (now.getTime() <= press.startedAt.getTime() + limit) return;
   deps.log.error({ event: "square.terminal_refund_unchecked", gymId: press.gymId, why }, "a refund on the Terminal could not be read from Square past its time");
   await refunds.endAsking(deps.sql, press, { outcome: "lost", code: null }, now);
@@ -263,12 +263,11 @@ function stopFor(press: refunds.RefundPress, refund: SquareTerminalRefund, now: 
 /** One look at Square for a press on the Terminal. The money stands as given back only on Square's own COMPLETED, for this
  *  payment and amount, with the refund it names read and agreeing; it ends with none only on Square's own CANCELED. */
 async function terminalStep(deps: PaymentsDeps, token: string, square: SquareSettings, press: refunds.RefundPress, deviceId: string, now: Date): Promise<void> {
-  const device = refundDevice(press, deviceId);
   const got =
     press.terminalRefundId === null
       ? await square.api.createTerminalRefund(token, {
           idempotencyKey: press.id,
-          deviceId: device,
+          deviceId: refundDevice(press, deviceId),
           paymentId: press.squarePaymentId,
           amountMinor: press.amountMinor,
           currency: press.currency,
@@ -286,8 +285,11 @@ async function terminalStep(deps: PaymentsDeps, token: string, square: SquareSet
     return;
   }
   const refund = got.value;
-  if (!isOurRefund(press, device, refund) || (press.terminalRefundId !== null && refund.id !== press.terminalRefundId)) {
+  if (!isOurRefund(press, refund) || (press.terminalRefundId !== null && refund.id !== press.terminalRefundId)) {
     deps.log.error({ event: "square.terminal_refund_unexpected", gymId: press.gymId }, "Square answered a refund on the Terminal with another");
+    // Never left live on the Terminal: ending the press frees the payment for a second refund.
+    const stopped = await square.api.cancelTerminalRefund(token, refund.id);
+    if (stopped.kind === "unavailable" && now.getTime() <= press.startedAt.getTime() + TERMINAL_REFUND.deadlineMs + TERMINAL_REFUND.graceMs) return;
     await refunds.endAsking(deps.sql, press, { outcome: "lost", code: "NOT_OURS" }, now);
     return;
   }
@@ -306,16 +308,24 @@ async function terminalStep(deps: PaymentsDeps, token: string, square: SquareSet
 async function terminalFollow(deps: PaymentsDeps, token: string, square: SquareSettings, press: refunds.RefundPress, refund: SquareTerminalRefund, now: Date): Promise<void> {
   if (refund.status === "COMPLETED") {
     if (refund.refund_id == null) {
-      await terminalNotYet(deps, press, now, "refused");
+      await terminalNotYet(deps, press, now, "completed");
       return;
     }
     const read = await square.api.getRefund(token, refund.refund_id);
     if (read.kind === "ok") await answered(deps, press, read, now);
-    else await terminalNotYet(deps, press, now, read.kind === "unavailable" ? "unavailable" : "refused");
+    else await terminalNotYet(deps, press, now, "completed");
     return;
   }
   if (refund.status === "CANCELED") {
     await refunds.endAsking(deps.sql, press, { outcome: "cancelled", code: codeOf(refund.cancel_reason ?? "CANCELED") }, now);
+    return;
+  }
+  // Square promises an end only for a request still PENDING. Any other that never ends, a status it adds later among them, is
+  // left to check in Square, so it holds neither the Terminal nor the bill for good.
+  if (now.getTime() > press.startedAt.getTime() + TERMINAL_REFUND.giveUpMs) {
+    deps.log.error({ event: "square.terminal_refund_no_end", gymId: press.gymId, status: refund.status }, "a refund on the Terminal had no end from Square past its time");
+    await square.api.cancelTerminalRefund(token, refund.id);
+    await refunds.endAsking(deps.sql, press, { outcome: "lost", code: "NO_END" }, now);
     return;
   }
   const why = stopFor(press, refund, now);
@@ -325,8 +335,8 @@ async function terminalFollow(deps: PaymentsDeps, token: string, square: SquareS
     await refunds.endAsking(deps.sql, press, { outcome: "cancelled", code: why }, now);
     return;
   }
-  // Too late: the person has started, and it finishes there. Anything else: the next look decides.
-  if (cancel.kind === "refused" && cancel.status === 400 && press.cancelWantedAt !== null) await refunds.cancelRefusedTooLate(deps.sql, press);
+  // Too late: Square refused it and the person has started, so it finishes there. Square names no code for this. Anything else: the next look decides.
+  if (cancel.kind === "refused" && cancel.status !== 401 && refund.status === "IN_PROGRESS" && press.cancelWantedAt !== null) await refunds.cancelRefusedTooLate(deps.sql, press);
 }
 
 /** Ask Square about a press on the Terminal that this request holds, then let it go. */
@@ -378,7 +388,7 @@ function endOf(press: refunds.RefundPress): CardRefundTerminalEnd | null {
 async function viewOfPress(deps: PaymentsDeps, press: refunds.RefundPress): Promise<CardRefundResponse> {
   const card = press.brand === null || press.last4 === null ? null : { brand: press.brand, last4: press.last4 };
   const asking = press.state === "asking" && press.deviceId !== null;
-  const step = press.outcome === "completed" ? "completed" : press.outcome === "cancelled" ? "ended" : press.state === "pending" ? "pending" : asking ? "terminal" : "checking";
+  const step = press.outcome === "completed" ? "completed" : press.outcome === "cancelled" ? "ended" : press.outcome === "lost" ? "lost" : press.state === "pending" ? "pending" : asking ? "terminal" : "checking";
   const paired = press.deviceId === null ? [] : await pairedTerminals(deps, press.gymId, press.environment, press.accountId);
   const terminal = paired.find((t) => t.deviceId === press.deviceId);
   const onTerminal =
@@ -541,7 +551,7 @@ const theirSale = async (deps: PaymentsDeps, gymId: string, saleId: string): Pro
 };
 
 const checkOfSale = (deps: PaymentsDeps, ready: Ready, sale: SaleToRefund): Promise<CardRefundCheck> =>
-  checkWithSquare(deps, ready, sale, sale.squarePaymentId ?? "", () => saleRefundAsking(deps.sql, ready.row.gymId, sale.saleId));
+  checkWithSquare(deps, ready, sale, sale.squarePaymentId ?? "", () => saleRefundAsking(deps.sql, ready.row.gymId, sale.saleId), () => refunds.waitingOnTerminal(deps.sql, ready.row.gymId, sale.squarePaymentId ?? ""));
 
 /** What Square says of all that is left of a sale: nothing goes back at once where Square shows less left than the app does. */
 async function checkOfWholeSale(deps: PaymentsDeps, ready: Ready, lines: readonly [SaleToRefund, ...SaleToRefund[]]): Promise<CardRefundCheck> {

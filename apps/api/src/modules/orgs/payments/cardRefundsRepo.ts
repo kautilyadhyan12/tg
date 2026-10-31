@@ -303,6 +303,15 @@ export async function waitingOnTerminal(sql: SqlOrTx, gymId: string, squarePayme
   return row === undefined ? null : toPress(row);
 }
 
+/** The press waiting on a Terminal for any payment of this bill, if any: while it waits, nothing else is refunded on the bill. */
+export async function waitingOnTerminalOfBill(sql: SqlOrTx, gymId: string, billId: string): Promise<RefundPress | null> {
+  const [row] = await sql<RawPress[]>`
+    SELECT q.* FROM gym_square_refunds q
+    JOIN gym_member_payments p ON p.gym_id = q.gym_id AND p.id = q.payment_id
+    WHERE q.gym_id = ${gymId} AND p.bill_id = ${billId} AND q.state = 'asking' AND q.device_id IS NOT NULL LIMIT 1`;
+  return row === undefined ? null : toPress(row);
+}
+
 /** One press waiting on a Terminal, held for this request; null while another asks, or once it has ended. */
 export async function claimPress(sql: SqlOrTx, gymId: string, id: string, now: Date, until: Date): Promise<RefundPress | null> {
   const [row] = await sql<RawPress[]>`

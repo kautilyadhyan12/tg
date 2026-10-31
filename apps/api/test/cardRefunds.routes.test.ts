@@ -24,7 +24,8 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { openDueBills } from "../src/modules/orgs/memberships/billsRepo.js";
 import { removeFreezeFees } from "../src/modules/orgs/memberships/freezeFees.js";
-import { CARD_REFUND, TERMINAL_REFUND } from "../src/modules/orgs/payments/cardRefunds.js";
+import { CARD_REFUND, refundDevice, TERMINAL_REFUND } from "../src/modules/orgs/payments/cardRefunds.js";
+import { waitingOnTerminalOfBill } from "../src/modules/orgs/payments/cardRefundsRepo.js";
 import { linesPage, totals } from "../src/modules/orgs/paymentsDownload/repo.js";
 import { squareSettings } from "../src/modules/orgs/payments/settings.js";
 import { processSquareWork } from "../src/modules/orgs/payments/work.js";
@@ -650,6 +651,8 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
     });
     const desk = async (g: Gym, behaviour: Behaviour = "person"): Promise<{ id: string; deviceId: string }> => {
       const deviceId = `DESK${uniq()}`;
+      // A gym holds at most 20, and this block's tests share one: the oldest make room.
+      await sql`DELETE FROM gym_square_terminals WHERE gym_id = ${g.id} AND id NOT IN (SELECT id FROM gym_square_terminals WHERE gym_id = ${g.id} ORDER BY created_at DESC, id LIMIT 8)`;
       const [row] = await sql<{ id: string }[]>`
         INSERT INTO gym_square_terminals (gym_id, environment, account_id, state, device_id, paired_at, created_by)
         VALUES (${g.id}, 'production', ${g.acct.merchantId}, 'paired', ${deviceId}, ${clock}, ${g.owner.userId}) RETURNING id`;
@@ -744,18 +747,61 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
         const first = read(await pressOn(maya, terminal.id, 1000));
         onlyAsked(maya).amount_money = { amount: 1100, currency: "USD" };
         square.terminalRefundUsed(onlyAsked(maya).id);
-        expect(read(await look(maya, first.pressId)).step).toBe("checking");
+        expect(read(await look(maya, first.pressId)).step).toBe("lost");
         expect(await pressesOf(maya)).toMatchObject([{ state: "done", outcome: "lost", code: "NOT_OURS" }]);
         expect(await refundsOf(maya)).toHaveLength(0);
       });
 
-      it("Square's request names another payment or amount while it waits: it is left to check, never followed", async () => {
+      it("Square's request names another payment or amount while it waits: it is stopped at Square, so a second press cannot send the money twice", async () => {
         const maya = await interacPaid(gym, "Maya Stray");
         const terminal = await desk(gym);
         const first = read(await pressOn(maya, terminal.id, 1000));
         onlyAsked(maya).amount_money = { amount: 1100, currency: "USD" };
-        expect(read(await look(maya, first.pressId)).step).toBe("checking");
+        expect(read(await look(maya, first.pressId)).step).toBe("lost");
         expect(await pressesOf(maya)).toMatchObject([{ state: "done", outcome: "lost", code: "NOT_OURS" }]);
+        expect(onlyAsked(maya).status).toBe("CANCELED");
+        expect(await refundsOf(maya)).toHaveLength(0);
+      });
+
+      it("that request cannot be stopped because Square gives no answer: the press holds on, and is not freed", async () => {
+        const maya = await interacPaid(gym, "Maya Stray Down");
+        const terminal = await desk(gym);
+        const first = read(await pressOn(maya, terminal.id, 1000));
+        const real = square.api.cancelTerminalRefund.bind(square.api);
+        square.api.cancelTerminalRefund = () => Promise.resolve({ kind: "unavailable", status: null });
+        onlyAsked(maya).amount_money = { amount: 1100, currency: "USD" };
+        expect(read(await look(maya, first.pressId)).step).toBe("terminal");
+        square.api.cancelTerminalRefund = real;
+        expect(read(await look(maya, first.pressId)).step).toBe("lost");
+        expect(onlyAsked(maya).status).toBe("CANCELED");
+      });
+
+      it("Square writes the Terminal's id another way: it is the same request, and it goes back once", async () => {
+        const maya = await interacPaid(gym, "Maya Device");
+        const terminal = await desk(gym);
+        const first = read(await pressOn(maya, terminal.id, 1000));
+        onlyAsked(maya).device_id = `device:${terminal.deviceId}`;
+        square.terminalRefundUsed(onlyAsked(maya).id);
+        expect(read(await look(maya, first.pressId)).step).toBe("pending");
+        expect(asked(maya)).toHaveLength(1);
+        expect(await refundsOf(maya)).toHaveLength(1);
+      });
+
+      it("Square says COMPLETED and its refund stays unread: read for a day, then left to check, and nothing is written", async () => {
+        const maya = await interacPaid(gym, "Maya Day");
+        const terminal = await desk(gym);
+        const first = read(await pressOn(maya, terminal.id));
+        square.terminalRefundUsed(onlyAsked(maya).id);
+        square.state.refundUnread = true;
+        const started = clock;
+        clock = new Date(started.getTime() + TERMINAL_REFUND.deadlineMs + TERMINAL_REFUND.graceMs + 60_000);
+        const later = read(await look(maya, first.pressId)).step;
+        clock = new Date(started.getTime() + TERMINAL_REFUND.giveUpMs + 60_000);
+        const lastly = read(await look(maya, first.pressId)).step;
+        clock = started;
+        square.state.refundUnread = false;
+        expect(later).toBe("terminal");
+        expect(lastly).toBe("lost");
         expect(await refundsOf(maya)).toHaveLength(0);
       });
 
@@ -823,6 +869,119 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
       const seen = read(await look(maya, first.pressId));
       clock = started;
       expect(seen.onTerminal?.ended).toBe("timed_out");
+    });
+
+    it.each(["IN_PROGRESS", "CANCEL_REQUESTED", "A_STATUS_SQUARE_ADDS_LATER"])("%s for good: after a day it is left to check, on Refunds to review, and frees the Terminal", async (status) => {
+      const g = await makeGym(`Terminal No End ${uniq()}`, `MERCH${uniq()}`);
+      const maya = await interacPaid(g, "Maya Stuck");
+      const leo = await interacPaid(g, "Leo Next");
+      const terminal = await desk(g);
+      const first = read(await pressOn(maya, terminal.id));
+      onlyAsked(maya).status = status;
+      const started = clock;
+      clock = new Date(started.getTime() + TERMINAL_REFUND.giveUpMs - 60_000);
+      const before = read(await look(maya, first.pressId)).step;
+      clock = new Date(started.getTime() + TERMINAL_REFUND.giveUpMs + 60_000);
+      const after = read(await look(maya, first.pressId)).step;
+      clock = started;
+      expect(before).toBe("terminal");
+      expect(after).toBe("lost");
+      expect(await pressesOf(maya)).toMatchObject([{ state: "done", outcome: "lost", code: "NO_END" }]);
+      expect(await refundsOf(maya)).toHaveLength(0);
+      const list = await send("GET", `/v1/orgs/${g.id}/refunds-to-review?from=0`, g.owner.cookies);
+      expect(list.statusCode, list.body).toBe(200);
+      expect(list.body).toContain(maya.paymentId);
+      read(await pressOn(leo, terminal.id, 500));
+    });
+
+    it("Square gives no answer: a press it never answered is left to check after an hour, a request it made after a day", async () => {
+      const maya = await interacPaid(gym, "Maya Silent");
+      const leo = await interacPaid(gym, "Leo Silent");
+      const a = await desk(gym);
+      const b = await desk(gym);
+      square.state.refundLost = true;
+      const never = read(await pressOn(maya, a.id));
+      square.state.refundLost = false;
+      square.state.refundDown = true;
+      const started = clock;
+      clock = new Date(started.getTime() + CARD_REFUND.resendForMs + 60_000);
+      const silent = read(await look(maya, never.pressId)).step;
+      clock = started;
+      square.state.refundDown = false;
+      expect(silent).toBe("lost");
+      const made = read(await pressOn(leo, b.id));
+      square.state.down = true;
+      clock = new Date(started.getTime() + CARD_REFUND.resendForMs + 60_000);
+      const within = read(await look(leo, made.pressId)).step;
+      clock = new Date(started.getTime() + TERMINAL_REFUND.giveUpMs + 60_000);
+      const past = read(await look(leo, made.pressId)).step;
+      clock = started;
+      square.state.down = false;
+      expect(within).toBe("terminal");
+      expect(past).toBe("lost");
+    });
+
+    it("Square refuses Cancel with any code once the person has started: the box says so and never says it is stopping", async () => {
+      const maya = await interacPaid(gym, "Maya Refused");
+      const terminal = await desk(gym);
+      const first = read(await pressOn(maya, terminal.id));
+      square.terminalRefundShown(onlyAsked(maya).id);
+      square.state.terminalCancelRefusal = 409;
+      const seen = read(await stop(maya, first.pressId));
+      square.state.terminalCancelRefusal = 400;
+      expect(seen.onTerminal).toMatchObject({ tooLate: true, stopping: false });
+    });
+
+    it("a box opened on another payment of the same bill finds what waits", async () => {
+      const maya = await interacPaid(gym, "Maya Two Payments");
+      const terminal = await desk(gym);
+      const first = read(await pressOn(maya, terminal.id, 1000));
+      const open = await checkOf(maya);
+      expect(open.waitingPress?.pressId).toBe(first.pressId);
+      const [other] = await sql<{ id: string }[]>`SELECT id FROM gym_member_payments WHERE gym_id = ${gym.id} AND bill_id = ${maya.billId} AND id <> ${maya.paymentId}`;
+      expect(other).toBeUndefined();
+      const found = await waitingOnTerminalOfBill(sql, gym.id, maya.billId);
+      expect(found?.id).toBe(first.pressId);
+      expect(await waitingOnTerminalOfBill(sql, nextDoor.id, maya.billId)).toBeNull();
+    });
+
+    it("a card save waits for a refund on that Terminal", async () => {
+      const maya = await interacPaid(gym, "Maya Save");
+      const terminal = await desk(gym);
+      read(await pressOn(maya, terminal.id));
+      const entryId = await person(gym, "Saver Busy");
+      const save = await send("POST", `${entryUrl(gym, entryId)}/card/terminal`, gym.owner.cookies, { terminalId: terminal.id, requestKey: randomUUID() });
+      expect(save.statusCode, save.body).toBe(409);
+      expect(errorOf(save)).toBe("terminal_busy");
+    });
+
+    it("who may: staff without the ticks are refused, and a gym with no live plan cannot press or cancel, though it can read", async () => {
+      const g = await makeGym(`Terminal Ticks ${uniq()}`, `MERCH${uniq()}`);
+      const maya = await interacPaid(g, "Maya Ticks");
+      const terminal = await desk(g);
+      const first = read(await pressOn(maya, terminal.id));
+      const desker = await signedIn("Desk Only");
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${g.id}, ${desker.userId}, 'trainer', ${["billing.members"]})`;
+      const trainer = await signedIn("Trainer Only");
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${g.id}, ${trainer.userId}, 'trainer', ${["members.read"]})`;
+      for (const by of [desker, trainer]) {
+        expect((await look(maya, first.pressId, by)).statusCode).toBe(403);
+        expect((await stop(maya, first.pressId, by)).statusCode).toBe(403);
+      }
+      expect(onlyAsked(maya).status).toBe("PENDING");
+      await sql`UPDATE subscriptions SET status = 'canceled' WHERE owner_type = 'gym' AND owner_id = ${g.id}`;
+      expect((await look(maya, first.pressId)).statusCode).toBe(200);
+      const refused = await stop(maya, first.pressId);
+      expect(refused.statusCode).toBe(409);
+      expect(errorOf(refused)).toBe("gym_not_on_plan");
+      expect(onlyAsked(maya).status).toBe("PENDING");
+    });
+
+    it("Square's test area plays each Terminal's part; a real Terminal is sent as it is", () => {
+      const interac = "388b5a08-a77c-48ef-ad2a-4a790e6f2789";
+      expect(refundDevice({ environment: "sandbox" }, interac)).toBe("f72dfb8e-4d65-4e56-aade-ec3fb8d33291");
+      expect(refundDevice({ environment: "sandbox" }, "7647344e-aea2-4cff-ac53-513644de434d")).toBe("7647344e-aea2-4cff-ac53-513644de434d");
+      expect(refundDevice({ environment: "production" }, interac)).toBe(interac);
     });
 
     it("Cancel stops it until the person starts; after that it says so and finishes there", async () => {

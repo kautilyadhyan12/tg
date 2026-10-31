@@ -450,7 +450,7 @@ describe('What the box and the page say', () => {
     orgService.getCardRefund.mockResolvedValue(interacCheck({ terminals: [] }));
     draw();
     const box = await openBox();
-    await box.findByText(/none is paired/);
+    await box.findByText(/none is set up here/);
     expect(box.queryByRole('button', { name: /on the Terminal/ })).toBeNull();
     fireEvent.click(box.getByRole('button', { name: 'Note a refund' }));
     expect(await screen.findByTestId('held-refund-form')).toBeTruthy();
@@ -471,6 +471,39 @@ describe('What the box and the page say', () => {
     // The page reads again, so its "waiting on the Terminal" line goes.
     await waitFor(() => expect(orgService.getHeldMemberships.mock.calls.length).toBeGreaterThan(readsBefore));
     expect(box.getByRole('button', { name: 'Refund $49.99 on the Terminal' })).toBeTruthy();
+  });
+
+  it('Back leaves it waiting, and the page reads again so it says so', async () => {
+    orgService.getCardRefund.mockResolvedValue(interacCheck());
+    orgService.refundToCard.mockResolvedValue({ data: onTerminal() });
+    orgService.checkCardRefund.mockResolvedValue({ data: onTerminal() });
+    draw();
+    const box = await openBox();
+    pickReason(box);
+    fireEvent.click(box.getByRole('button', { name: 'Refund $49.99 on the Terminal' }));
+    const wait = within(await screen.findByTestId('terminal-refund-wait'));
+    const readsBefore = orgService.getHeldMemberships.mock.calls.length;
+    fireEvent.click(wait.getByRole('button', { name: 'Back' }));
+    await waitFor(() => expect(orgService.getHeldMemberships.mock.calls.length).toBeGreaterThan(readsBefore));
+    expect(screen.queryByTestId('terminal-refund-wait')).toBeNull();
+    expect(orgService.cancelCardRefund).not.toHaveBeenCalled();
+  });
+
+  it('a Terminal removed while the box was open: nothing claimed, and the box offers what is left', async () => {
+    orgService.getCardRefund.mockResolvedValueOnce(interacCheck({ terminals: [DESK, FRONT] })).mockResolvedValue(interacCheck({ terminals: [FRONT] }));
+    orgService.refundToCard.mockRejectedValue({ response: { status: 404, data: { error: 'terminal_gone', message: 'This Terminal is no longer paired, so nothing was sent. Press again to use another Terminal.' } } });
+    draw();
+    const box = await openBox();
+    pickReason(box);
+    fireEvent.change(box.getByLabelText('Which Terminal'), { target: { value: DESK.id } });
+    fireEvent.click(box.getByRole('button', { name: 'Refund $49.99 on the Terminal' }));
+    await box.findByText(/no longer paired, so nothing was sent/);
+    await waitFor(() => expect(box.queryByLabelText('Which Terminal')).toBeNull());
+    orgService.refundToCard.mockResolvedValue({ data: onTerminal() });
+    orgService.checkCardRefund.mockResolvedValue({ data: onTerminal() });
+    fireEvent.click(box.getByRole('button', { name: 'Refund $49.99 on the Terminal' }));
+    await screen.findByTestId('terminal-refund-wait');
+    expect(orgService.refundToCard.mock.calls[1]?.[4]).toMatchObject({ terminalId: FRONT.id });
   });
 
   it('the page says a refund waits on the Terminal', async () => {

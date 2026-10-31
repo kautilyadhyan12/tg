@@ -94,6 +94,22 @@ describe('a sale paid on the Terminal', () => {
     expect((await screen.findAllByRole('menuitem')).map((i) => i.textContent)).toEqual(['Refund saleYou gave some or all of the money back.']);
   });
 
+  it('Back from a refund waiting on the Terminal reads the sale again, so the page says it waits', async () => {
+    const DESK = { id: 'dddddddd-dddd-4ddd-8ddd-000000000001', serial: 'R5WNWB5BKNG9R', practice: null };
+    const wait = { step: 'terminal', amountMinor: 400, currency: 'USD', card: VISA, pressId: PRESS, onTerminal: { terminal: DESK, pickedUp: false, stopping: false, tooLate: false, ended: null } };
+    svc.getCardRefund.mockResolvedValue({ card: VISA, leftMinor: 400, refundedInSquareMinor: 0, block: null, onTerminal: true, terminals: [DESK], waitingPress: null });
+    svc.refundToCard.mockResolvedValue(wait);
+    draw([sale()]);
+    await pressRefund('Refund to card');
+    const box = await boxOpen();
+    fireEvent.change(box.getByLabelText('Why it is being refunded'), { target: { value: 'returned' } });
+    fireEvent.click(box.getByRole('button', { name: 'Refund $4.00 on the Terminal' }));
+    const waiting = within(await screen.findByTestId('terminal-refund-wait'));
+    svc.purchases.mockResolvedValue({ sales: [sale({ cardRefund: { amountMinor: 400, on: '2026-10-12', lost: false, onTerminal: true, decided: null } })], notShown: 0 });
+    fireEvent.click(waiting.getByRole('button', { name: 'Back' }));
+    await screen.findByText('A refund of $4.00 is waiting on the Terminal.');
+  });
+
   it('nothing to offer once all of it went back', async () => {
     draw([sale({ canRefund: false, toCard: false, refundedMinor: 400, refunds: [refund({ square: { state: 'completed', card: VISA, late: false, pressId: PRESS } })] })]);
     await screen.findByText('Refunded');

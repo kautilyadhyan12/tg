@@ -82,10 +82,11 @@ export const cardRefundTerminalViewSchema = z
   .strict();
 
 /** Where the press ended: `pending` and `completed` are Square's own words; `checking`: Square has not answered yet, and
- *  the worker asks it again; `terminal`: it waits for the person on the Terminal; `ended`: it stopped there, no money sent. */
+ *  the worker asks it again; `terminal`: it waits for the person on the Terminal; `ended`: it stopped there, no money sent; `lost`: nothing more will
+ *  be asked of Square, so it is left to check there. */
 export const cardRefundResponseSchema = z
   .object({
-    step: z.enum(["terminal", "pending", "completed", "checking", "ended"]),
+    step: z.enum(["terminal", "pending", "completed", "checking", "ended", "lost"]),
     amountMinor: minorSchema,
     currency: z.string().regex(/^[A-Z]{3}$/),
     card: cardSeenSchema.nullable(),
@@ -118,15 +119,16 @@ export const cardRefundPressParamsSchema = z.object({ gymId: z.string().uuid(), 
 export const CARD_REFUND_TERMINAL_WORDS = {
   /** "Interac card payments in Canada can only be refunded when the payment card is present" ("Refund Interac Payments"). */
   present: "This card can only be refunded on the Terminal. The person who paid must be here with it. If they can't come in, give the money back another way, then use Note a refund.",
-  no_terminal: "This card can only be refunded on a Square Terminal, and none is paired. Pair one, or give the money back another way, then use Note a refund.",
-  no_terminal_staff: "This card can only be refunded on a Square Terminal, and none is paired. Ask the owner to pair one, or give the money back another way, then use Note a refund.",
+  no_terminal: "This card can only be refunded on a Square Terminal, and none is set up here. Pair one, or give the money back another way, then use Note a refund.",
+  no_terminal_staff: "This card can only be refunded on a Square Terminal, and none is set up here. Ask the owner to pair one, or give the money back another way, then use Note a refund.",
   pick: "Choose the Terminal.",
   terminal_label: "Which Terminal",
   shown: "Sending it to the Terminal",
   card: "Ask them to use the card they paid with on the Terminal",
   not_shown: "Not on the Terminal yet? Check that it is on and online.",
   too_late: "They have started on the Terminal, so it can't be cancelled. It will finish there.",
-  terminal_gone: "This Terminal is no longer paired. Choose another.",
+  terminal_gone: "This Terminal is no longer paired, so nothing was sent. Press again to use another Terminal.",
+  not_offered: "This card can only be refunded on a Square Terminal, and none can be used here. Give the money back another way, then use Note a refund.",
   terminal_busy: "This Terminal is busy. Try again in a minute, or choose another Terminal.",
 } as const;
 
@@ -147,6 +149,7 @@ export function cardRefundEndedLine(ended: CardRefundTerminalEnd): string {
 /** What Refund to card says when it is done, in the place it was pressed. `cardWords`: "Visa ending 1111". */
 export function cardRefundSentLine(r: CardRefundResponse, cardWords: string): string {
   const money = formatMinor(r.amountMinor, r.currency);
+  if (r.step === "lost") return `We don't know whether Square took this ${money} refund. Check your Square Dashboard. If it went through, note the refund here.`;
   if (r.step === "checking") return `Square hasn't answered yet, so ${money} is not refunded yet. Don't refund it again: this page will say when Square answers.`;
   if (r.step === "completed") return `${money} was refunded to ${cardWords}. ${CARD_REFUND_WORDS.days_left}`;
   return `Square is processing this ${money} refund to ${cardWords}. ${CARD_REFUND_WORDS.days}`;
