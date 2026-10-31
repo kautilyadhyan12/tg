@@ -307,7 +307,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
          - 18d-iv-b-i. [x] **On a fee** — merged 2026-10-31 (PR #404).
          - 18d-iv-b-ii. [x] **At Sell** — merged 2026-10-31 (PR #412).
          - 18d-iv-b-iii. [x] **Refunds to review on Overview** — merged 2026-10-31 (PR #417).
-       - 18d-iv-c. [ ] **An Interac debit card refunded on the Square Terminal**, in Canada, where Square refunds Interac only with the card present. Web folder 1.
+       - 18d-iv-c. [x] **An Interac debit card refunded on the Square Terminal** — merged 2026-11-01 (PR #419).
        - 18d-iv-d. [ ] **A refund made inside Square shown here**, which also closes a "We don't know whether Square took…" line once Square's own record answers it (18d-iv-a's re-check). Web folder 1.
        - 18d-iv-e. [ ] **A chargeback shown on its payment with Square's own deadline** (Square's new permission DISPUTES_READ: connected gyms press Reconnect Square once). Web folder 1.
      - 18d-vii. [ ] **Ask members to add their card** (Kd, 2026-10-30, `rulings/2026-10-30-18d-iii-b-iv-f.md`): a button that asks every member with no card on file to add it in the app, as saved cards don't move from a gym's old software. After Stage 5 item 20's saving their card. Web folder 1.
