@@ -1306,6 +1306,9 @@ function PhotoModal({ open, onClose, onSave }) {
                      style={{ color: retakeMsg ? 'rgba(251,191,36,0.85)' : 'rgba(255,255,255,0.50)' }}>
                     {retakeMsg ? retakeMsg.text : 'AI estimates the portions — you confirm them'}
                   </p>
+                  <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                    {PHOTO_PRIVACY_LINE}
+                  </p>
                 </div>
                 <input
                   ref={fileRef}
@@ -1363,9 +1366,6 @@ function PhotoModal({ open, onClose, onSave }) {
                             and cannot detect allergens. Never softened or removed. */}
                         <p className="text-xs" style={amber}>
                           {PHOTO_SCAN_CAUTION}
-                        </p>
-                        <p className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                          {PHOTO_PRIVACY_LINE}
                         </p>
                       </div>
                     )}

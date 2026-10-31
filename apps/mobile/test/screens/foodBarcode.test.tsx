@@ -498,6 +498,8 @@ describe("a pack's label (33b-iii-c)", () => {
     await fireEvent.press(add);
     await fireEvent.press(await screen.findByRole("button", { name: "Scan food" }));
     expect(await screen.findByRole("button", { name: "Take photo" })).toBeTruthy();
+    // The next photo is a meal's, as usual: not a label's, which would use a scan on it.
+    expect(screen.getByRole("radio", { name: "Meal" }).props.accessibilityState).toMatchObject({ selected: true });
     expect(screen.queryByText("Check the label")).toBeNull();
     expect(screen.queryByText(`For barcode ${NUTELLA_CODE}`)).toBeNull();
     await fireEvent.press(screen.getByRole("radio", { name: "Label" }));
@@ -507,6 +509,54 @@ describe("a pack's label (33b-iii-c)", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Save" }));
     await screen.findByText("From your label");
     expect(fake.asked.filter((a) => a.method === "PUT").map((a) => a.body as { name: string; code: string | null })).toMatchObject([{ name: "Pack A", code: NUTELLA_CODE }, { name: "Pack B", code: null }]);
+  });
+
+  it.each([
+    ["refused", () => refusal(422, "retake_required", "Please retake.", { retakeToken: "free-try" })],
+    ["no connection", () => lost()],
+  ])("the worst thing, a third way: a read %s, then the scanner closed: on opening, no barcode is held", async (_name, first) => {
+    let tries = 0;
+    const fake = await openScan(labelRoutes({
+      "/v1/nutrition/labels/saved": ok(saved),
+      "/v1/nutrition/labels/read": () => {
+        tries += 1;
+        return tries === 1 ? first() : { status: 200, body: draft };
+      },
+    }));
+    await toLabel();
+    // The same pack, tried again in this same opening, still says whose it is.
+    expect(await screen.findByText(`For barcode ${NUTELLA_CODE}`)).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Close" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Scan food" }));
+    await screen.findByRole("button", { name: "Take photo" });
+    expect(screen.queryByText(`For barcode ${NUTELLA_CODE}`)).toBeNull();
+    expect(screen.getByRole("radio", { name: "Meal" }).props.accessibilityState).toMatchObject({ selected: true });
+    await fireEvent.press(screen.getByRole("radio", { name: "Label" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Take photo" }));
+    await fireEvent.changeText(await screen.findByLabelText("Food name"), "Another pack");
+    await fireEvent.changeText(screen.getByLabelText("Protein (g)"), "1");
+    await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+    await screen.findByText("From your label");
+    expect(fake.asked.find((a) => a.method === "PUT")?.body).toMatchObject({ name: "Another pack", code: null });
+  });
+
+  it("a read that fails, tried again without closing, keeps its barcode: the same pack is remembered", async () => {
+    let tries = 0;
+    const fake = await openScan(labelRoutes({
+      "/v1/nutrition/labels/saved": ok(saved),
+      "/v1/nutrition/labels/read": () => {
+        tries += 1;
+        return tries === 1 ? refusal(422, "retake_required", "Please retake.", { retakeToken: "free-try" }) : { status: 200, body: draft };
+      },
+    }));
+    await toLabel();
+    await screen.findByText(`For barcode ${NUTELLA_CODE}`);
+    await fireEvent.press(screen.getByRole("button", { name: "Take photo" }));
+    await fireEvent.changeText(await screen.findByLabelText("Food name"), "Same pack");
+    await fireEvent.changeText(screen.getByLabelText("Protein (g)"), "1");
+    await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+    await screen.findByText("From your label");
+    expect(fake.asked.find((a) => a.method === "PUT")?.body).toMatchObject({ name: "Same pack", code: NUTELLA_CODE });
   });
 
   it("Leave: the barcode goes with the read, so the next photo takes no barcode", async () => {

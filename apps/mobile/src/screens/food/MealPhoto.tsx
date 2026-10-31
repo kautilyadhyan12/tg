@@ -139,18 +139,20 @@ export function MealPhoto({ open, barcode, kept, onClose, onSaved, onSearch }: M
   // What the camera comes back to after a label photo, and the barcode that photo is for.
   const [cameraStart, setCameraStart] = useState<{ mode: CameraMode; code: string | null } | null>(null);
 
-  // Opened with a photo meal kept: its review; else the camera.
-  useEffect(() => {
-    if (!open) return;
-    setNotice(null);
-    setStage((now) => {
-      if (now.kind === "reading" || now.kind === "label") return now;
-      setCameraStart(null);
-      return !barcode && kept.sheet !== null && kept.sheet !== undefined ? { kind: "review" } : { kind: "camera" };
-    });
-    // Judged as it stood when it was opened.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  // Each opening starts clean, decided while drawing, before the camera takes its start: with a photo
+  // meal kept, its review; else the camera on Meal, or on Barcode where that was asked for, holding no
+  // barcode. Only a read under way, or a read that has used a scan and is not yet saved, is kept.
+  const [wasOpen, setWasOpen] = useState(false);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) {
+      setNotice(null);
+      if (stage.kind !== "reading" && stage.kind !== "label") {
+        setCameraStart(null);
+        setStage(!barcode && kept.sheet !== null && kept.sheet !== undefined ? { kind: "review" } : { kind: "camera" });
+      }
+    }
+  }
 
   // Somebody else signed in: nothing of another person's label stays.
   useEffect(() => {
