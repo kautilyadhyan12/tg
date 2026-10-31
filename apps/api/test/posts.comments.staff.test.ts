@@ -611,13 +611,14 @@ d("comments in the console (real Postgres)", () => {
           RETURNING id)
         INSERT INTO gym_post_comment_reports (gym_id, comment_id, user_id, reason) SELECT ${gym.id}, id, ${reporter.userId}, 'spam' FROM made`;
       const noted = await memberComment(gym, writer, post.id, "Much reported");
-      const many = await Promise.all(Array.from({ length: 3 }, (_, i) => member(gym, `Note ${String(i)}`)));
+      const many = await Promise.all(Array.from({ length: 21 }, (_, i) => member(gym, `Note ${String(i)}`)));
       await sql`INSERT INTO gym_post_comment_reports (gym_id, comment_id, user_id, reason, note, created_at)
         SELECT ${gym.id}, ${noted.id}, u, 'other', 'Note', now() - interval '1 year' FROM unnest(${many.map((p) => p.userId)}::uuid[]) u`;
       const list = await reportedList(gym);
       expect([list.items.length, list.total]).toEqual([50, 54]);
       expect(list.items[0]?.comment.id).toBe(noted.id);
-      expect(list.items[0]?.notes).toEqual(["Note", "Note", "Note"]);
+      expect(list.items[0]?.reports).toBe(21);
+      expect(list.items[0]?.notes.length).toBe(20);
       expect(JSON.stringify(list)).not.toMatch(/ReportedAt/);
     },
     T,

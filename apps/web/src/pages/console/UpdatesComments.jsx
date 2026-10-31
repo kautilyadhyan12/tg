@@ -18,8 +18,9 @@ import {
   reportedCommentsHelp,
   reportedCommentsMore,
   reportedCommentsTitle,
+  mergedComments,
   sentNote,
-  withFirstPage,
+  withPagesRead,
 } from '../../components/gym/commentsConsoleView';
 import PostReactions from './PostReactions';
 
@@ -201,8 +202,20 @@ function CommentRow({ gymId, gymName, post, comment, words, readOnly, busy, wher
   );
 }
 
-const noReplies = { open: false, loading: false, error: null, items: [], next: null };
-const mergeById = (older, newer) => [...older, ...newer.filter((c) => !older.some((o) => o.id === c.id))];
+const noReplies = { open: false, loading: false, error: null, items: [], next: null, pages: 1 };
+
+/** Reads as many pages as are already opened, so a row gone from any of them goes from the screen. */
+async function readOpened(read, pages) {
+  const comments = [];
+  let next;
+  for (let i = 0; i < pages; i += 1) {
+    const page = await read(next);
+    comments.push(...page.comments);
+    next = page.next;
+    if (next === null) break;
+  }
+  return { comments, next };
+}
 
 /**
  * A post's comments, opened under it. `onCount(change)`: how many comments the post has changed by;
@@ -211,7 +224,7 @@ const mergeById = (older, newer) => [...older, ...newer.filter((c) => !older.som
  * its way to Updates.
  */
 export function CommentsPanel({ gymId, gymName, post, words, readOnly, where = 'elsewhere', onLeave, refresh = 0, onCount, onChanged, onStopped }) {
-  const [state, setState] = useState({ loading: true, error: null, comments: [], next: null });
+  const [state, setState] = useState({ loading: true, error: null, comments: [], next: null, pages: 1 });
   const [replies, setReplies] = useState({});
   const [more, setMore] = useState({ loading: false, error: null });
   const [busy, setBusy] = useState(null);
@@ -219,16 +232,20 @@ export function CommentsPanel({ gymId, gymName, post, words, readOnly, where = '
   const [actionError, setActionError] = useState(null);
   const repliesNow = useRef(replies);
   repliesNow.current = replies;
+  const stateNow = useRef(state);
+  stateNow.current = state;
 
   const readReplies = useCallback(
-    async (parentId, after) => {
+    /** `after`: the next page; without it, the pages opened read again. `sent`: a reply just sent. */
+    async (parentId, after, sent) => {
       setReplies((all) => ({ ...all, [parentId]: { ...(all[parentId] ?? noReplies), open: true, loading: true, error: null } }));
       try {
-        const page = await staffCommentsService.replies(gymId, parentId, after);
+        const page = after === undefined ? await readOpened((cursor) => staffCommentsService.replies(gymId, parentId, cursor), repliesNow.current[parentId]?.pages ?? 1) : await staffCommentsService.replies(gymId, parentId, after);
         setReplies((all) => {
           const was = all[parentId] ?? noReplies;
-          const merged = after === undefined ? withFirstPage(was, page) : { items: mergeById(was.items, page.comments), next: page.next };
-          return { ...all, [parentId]: { ...was, loading: false, ...merged } };
+          const merged = after === undefined ? withPagesRead(was, page) : { items: mergedComments(was.items, page.comments), next: page.next };
+          const items = sent === undefined ? merged.items : mergedComments(merged.items, [sent]);
+          return { ...all, [parentId]: { ...was, loading: false, items, next: merged.next, pages: after === undefined ? was.pages : was.pages + 1 } };
         });
       } catch (err) {
         setReplies((all) => ({ ...all, [parentId]: { ...(all[parentId] ?? noReplies), loading: false, error: errorText(err, "We couldn't load the replies.") } }));
@@ -239,10 +256,10 @@ export function CommentsPanel({ gymId, gymName, post, words, readOnly, where = '
 
   const load = useCallback(async () => {
     try {
-      const page = await staffCommentsService.list(gymId, post.id);
+      const page = await readOpened((cursor) => staffCommentsService.list(gymId, post.id, cursor), stateNow.current.pages);
       setState((s) => {
-        const merged = withFirstPage({ items: s.comments, next: s.next }, page);
-        return { loading: false, error: null, comments: merged.items, next: merged.next };
+        const merged = withPagesRead({ items: s.comments }, page);
+        return { ...s, loading: false, error: null, comments: merged.items, next: merged.next };
       });
       for (const [parentId, list] of Object.entries(repliesNow.current)) {
         if (list.open && page.comments.some((c) => c.id === parentId)) readReplies(parentId);
@@ -260,7 +277,7 @@ export function CommentsPanel({ gymId, gymName, post, words, readOnly, where = '
     setMore({ loading: true, error: null });
     try {
       const page = await staffCommentsService.list(gymId, post.id, state.next);
-      setState((s) => ({ ...s, comments: mergeById(s.comments, page.comments), next: page.next }));
+      setState((s) => ({ ...s, comments: mergedComments(s.comments, page.comments), next: page.next, pages: s.pages + 1 }));
       setMore({ loading: false, error: null });
     } catch (err) {
       setMore({ loading: false, error: errorText(err, "We couldn't load more.") });
@@ -280,17 +297,35 @@ export function CommentsPanel({ gymId, gymName, post, words, readOnly, where = '
     setActionError(null);
     setNotice(sentNote(made, post, words));
     if (made.parentId === null) {
-      setState((s) => ({ ...s, comments: mergeById(s.comments, [made]) }));
+      setState((s) => ({ ...s, comments: mergedComments(s.comments, [made]) }));
     } else {
       if (firstKept) changeReplyCount(made.parentId, 1);
-      setReplies((all) => {
-        const was = all[made.parentId] ?? noReplies;
-        return { ...all, [made.parentId]: { ...was, open: true, items: mergeById(was.items, [made]) } };
-      });
-      // Opened for the first time by this reply: the ones already there are read too.
-      if (!replies[made.parentId]?.open) readReplies(made.parentId);
+      if (replies[made.parentId]?.open) {
+        setReplies((all) => {
+          const was = all[made.parentId] ?? noReplies;
+          return { ...all, [made.parentId]: { ...was, items: mergedComments(was.items, [made]) } };
+        });
+      } else {
+        // Opened by this reply: the ones already there are read, and this one sits among them.
+        readReplies(made.parentId, undefined, made);
+      }
     }
     if (firstKept) onCount(1);
+  };
+
+  /** A comment or reply gone, by staff's press or already. */
+  const dropRow = (comment) => {
+    if (comment.parentId === null) {
+      setState((s) => ({ ...s, comments: s.comments.filter((c) => c.id !== comment.id) }));
+      onCount(-(1 + comment.replyCount));
+    } else {
+      setReplies((all) => {
+        const was = all[comment.parentId] ?? noReplies;
+        return { ...all, [comment.parentId]: { ...was, items: was.items.filter((c) => c.id !== comment.id) } };
+      });
+      changeReplyCount(comment.parentId, -1);
+      onCount(-1);
+    }
   };
 
   const remove = async (comment, box) => {
@@ -299,22 +334,13 @@ export function CommentsPanel({ gymId, gymName, post, words, readOnly, where = '
     setActionError(null);
     try {
       await staffCommentsService.remove(gymId, comment.id);
-      if (comment.parentId === null) {
-        setState((s) => ({ ...s, comments: s.comments.filter((c) => c.id !== comment.id) }));
-        onCount(-(1 + comment.replyCount));
-      } else {
-        setReplies((all) => {
-          const was = all[comment.parentId] ?? noReplies;
-          return { ...all, [comment.parentId]: { ...was, items: was.items.filter((c) => c.id !== comment.id) } };
-        });
-        changeReplyCount(comment.parentId, -1);
-        onCount(-1);
-      }
+      dropRow(comment);
       setNotice(box.done);
       onChanged();
     } catch (err) {
       setActionError(errorText(err, "We couldn't remove that. Please try again."));
       if (errorStatus(err) === 404) {
+        dropRow(comment);
         await load();
         onChanged();
       }

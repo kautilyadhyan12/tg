@@ -74,20 +74,26 @@ export function sentNote(made, post, words) {
   return post.hidden ? `${what} sent. Your ${words.people} can't see it until you keep the post.` : `${what} sent. Your ${words.people} can see it now.`;
 }
 
-/** A first page read again into what is already loaded: inside that page the server's answer is the
- *  truth, and rows past it stay, as do the pages already opened. */
-export function withFirstPage(was, page) {
-  const last = page.comments[page.comments.length - 1];
-  if (page.next === null || last === undefined) return { items: page.comments, next: page.next };
-  const past = (c) => c.createdAt > last.createdAt || (c.createdAt === last.createdAt && c.id > last.id);
-  const later = was.items.filter(past);
-  return { items: [...page.comments, ...later], next: later.length > 0 ? was.next : page.next };
+const inOrder = (a, b) => (a.createdAt === b.createdAt ? (a.id < b.id ? -1 : a.id > b.id ? 1 : 0) : a.createdAt < b.createdAt ? -1 : 1);
+
+/** Two lists as one, oldest first as the server sends them; a row in both is the newer list's. */
+export function mergedComments(older, newer) {
+  return [...older.filter((o) => !newer.some((c) => c.id === o.id)), ...newer].sort(inOrder);
+}
+
+/** The pages already opened, read again, into what is loaded. What was read is the truth. The only
+ *  rows kept past it are ones staff just sent that lie beyond the pages opened, and `next` is always
+ *  where the reading stopped, so nothing further along becomes unreachable. */
+export function withPagesRead(was, read) {
+  const last = read.comments[read.comments.length - 1];
+  if (read.next === null || last === undefined) return { items: read.comments, next: read.next };
+  return { items: [...read.comments, ...was.items.filter((c) => inOrder(c, last) > 0)], next: read.next };
 }
 
 /** The list of posts with the first page's switches and the counts of posts already listed: older pages stay. */
 export function withFreshFeed(feed, page) {
-  const fresh = new Map([...page.pinned, ...page.posts].map((p) => [p.id, p.commentCount]));
-  const mark = (p) => (fresh.has(p.id) ? { ...p, commentCount: fresh.get(p.id) } : p);
+  const fresh = new Map([...page.pinned, ...page.posts].map((p) => [p.id, p]));
+  const mark = (p) => (fresh.has(p.id) ? { ...p, commentCount: fresh.get(p.id).commentCount, hidden: fresh.get(p.id).hidden } : p);
   return { ...feed, membersCanPost: page.membersCanPost, membersCanComment: page.membersCanComment, reportedCount: page.reportedCount, pinned: feed.pinned.map(mark), posts: feed.posts.map(mark) };
 }
 

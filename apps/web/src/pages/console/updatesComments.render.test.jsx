@@ -286,6 +286,28 @@ describe('a hidden comment away from the reported list', () => {
   });
 });
 
+describe('long lists of replies', () => {
+  const twenty = Array.from({ length: 20 }, (_, i) => comment(`r${i}`, `Reply ${i}`, { parentId: 'c1', createdAt: `2026-10-07T08:${String(i).padStart(2, '0')}:00.000Z` }));
+  it('a reply sent on a comment of more than 20 still shows, and the rest can be reached, in order', async () => {
+    const sent = comment('r-new', 'Just sent', { parentId: 'c1', createdAt: '2026-10-07T10:00:00.000Z', fromMember: false, authorId: null });
+    svc.add.mockResolvedValue({ comment: sent, firstKept: true });
+    svc.replies.mockResolvedValueOnce(page(twenty, 'cur')).mockResolvedValueOnce(page([comment('r20', 'Reply twenty', { parentId: 'c1', createdAt: '2026-10-07T09:00:00.000Z' })]));
+    await open();
+    const panel = await openComments();
+    const row = within((await panel.findAllByTestId('comment'))[0]);
+    fireEvent.click(row.getByRole('button', { name: 'Reply' }));
+    fireEvent.change(row.getByRole('textbox', { name: /Reply to Wendy Writer/ }), { target: { value: 'Just sent' } });
+    fireEvent.click(row.getByRole('button', { name: 'Send reply' }));
+    await row.findByText('Reply 0');
+    expect(row.getByText('Just sent')).toBeTruthy();
+    fireEvent.click(await row.findByRole('button', { name: 'Show more replies' }));
+    await row.findByText('Reply twenty');
+    const words = row.getAllByTestId('comment-reply').map((li) => li.querySelector('p').textContent);
+    expect(words.slice(-2)).toEqual(['Reply twenty', 'Just sent']);
+    expect(row.queryByRole('button', { name: 'Show more replies' })).toBeNull();
+  });
+});
+
 describe('removing', () => {
   it('asks first, naming whose and how many replies go; Remove acts on that comment and no other', async () => {
     svc.remove.mockResolvedValue({ removed: true });
@@ -319,6 +341,23 @@ describe('removing', () => {
     fireEvent.click(within(within(rows[0]).getByRole('group', { name: 'Remove this comment?' })).getByRole('button', { name: 'Remove comment' }));
     expect((await panel.findByRole('alert')).textContent).toBe('This comment has been removed.');
     await waitFor(() => expect(panel.queryByText('First one')).toBeNull());
+  });
+
+  it('one on a second page that was removed elsewhere leaves the screen too', async () => {
+    const at = (minute) => ({ createdAt: `2026-10-07T07:${minute}:00.000Z` });
+    svc.list.mockResolvedValueOnce(page([comment('c1', 'On page one', at(10))], 'cur')).mockResolvedValueOnce(page([comment('c2', 'On page two', at(20))]));
+    svc.remove.mockRejectedValue(refusal(404, 'This comment has been removed.'));
+    await open();
+    const panel = await openComments();
+    fireEvent.click(await panel.findByRole('button', { name: 'Show more comments' }));
+    await panel.findByText('On page two');
+    svc.list.mockResolvedValueOnce(page([comment('c1', 'On page one', at(10))], 'cur')).mockResolvedValueOnce(page([]));
+    const rows = panel.getAllByTestId('comment');
+    fireEvent.click(within(rows[1]).getByRole('button', { name: 'Remove comment' }));
+    fireEvent.click(within(within(rows[1]).getByRole('group', { name: 'Remove this comment?' })).getByRole('button', { name: 'Remove comment' }));
+    await panel.findByRole('alert');
+    await waitFor(() => expect(panel.queryByText('On page two')).toBeNull());
+    expect(panel.getByText('On page one')).toBeTruthy();
   });
 });
 
@@ -404,15 +443,27 @@ describe('the reported comments', () => {
   });
 
   it('coming back keeps a second page already opened, and drops one the first page no longer holds', async () => {
-    svc.list.mockResolvedValueOnce(page([comment('c1', 'Gone soon', { createdAt: '2026-10-07T07:00:00.000Z' }), comment('c2', 'Stays', { createdAt: '2026-10-07T07:10:00.000Z' })], 'cur')).mockResolvedValueOnce(page([comment('c3', 'On page two', { createdAt: '2026-10-07T07:20:00.000Z' })]));
+    const at = (minute) => ({ createdAt: `2026-10-07T07:${minute}:00.000Z` });
+    svc.list.mockResolvedValueOnce(page([comment('c1', 'Gone soon', at(10)), comment('c2', 'Stays', at(20))], 'cur')).mockResolvedValueOnce(page([comment('c3', 'On page two', at(30)), comment('c4', 'Gone from page two', at(40))]));
     await open();
     const panel = await openComments();
     fireEvent.click(await panel.findByRole('button', { name: 'Show more comments' }));
     await panel.findByText('On page two');
-    svc.list.mockResolvedValueOnce(page([comment('c2', 'Stays', { createdAt: '2026-10-07T07:10:00.000Z' })], 'cur2'));
+    svc.list.mockResolvedValueOnce(page([comment('c2', 'Stays', at(20))], 'cur2')).mockResolvedValueOnce(page([comment('c3', 'On page two', at(30))]));
     fireEvent(document, new Event('visibilitychange'));
     await waitFor(() => expect(panel.queryByText('Gone soon')).toBeNull());
+    await waitFor(() => expect(panel.queryByText('Gone from page two')).toBeNull());
     expect(panel.getByText('On page two')).toBeTruthy();
+    expect(svc.list).toHaveBeenLastCalledWith('g1', 'p1', 'cur2');
+  });
+
+  it('a post hidden while staff were away says so in its comment box when they come back', async () => {
+    await open();
+    const panel = await openComments();
+    await panel.findByText(/Your members see this as from Staff\./);
+    posts.list.mockResolvedValue(feed({ posts: [post('p1', { commentCount: 3, hidden: true })] }));
+    fireEvent(document, new Event('visibilitychange'));
+    expect(await panel.findByText(/Your members can't see this post until you keep it\./)).toBeTruthy();
   });
 
   it('a gym that can change nothing is not told to press Keep', async () => {

@@ -4677,7 +4677,7 @@ ones marked, replies on a press, who gave a reaction by name (exactly those the 
 write a comment or reply (`POST …/posts/:postId/comments/staff`, one key a comment): no daily limit,
 no bad-words check, the switch does not bind them, as for a post. A reply to a hidden comment, or under one, is refused (409 `comment_hidden`) and not offered; on a hidden post a comment is taken and the screen says members can't see it until the post is kept.
 **Remove** any comment or reply after a box naming whose and how many replies go
-(`DELETE …/post-comments/:id/staff`). **Stop them posting** on a member's comment is §15.3's one stop.
+(`DELETE …/post-comments/:id/staff`). **Stop posting and commenting** on a member's comment is §15.3's one stop.
 **Reported comments** sit under the reported posts, longest waiting first, 50 at most
 (`GET …/post-comments/reported`): how many and why, what was typed, the post it is on; never who, in no
 answer and no audit line, and no report's time. Away from Updates a hidden comment's note has a button to this list. **Keep comment** (`POST …/post-comments/:id/keep`) works as Keep post, with
@@ -4716,7 +4716,7 @@ list, and the page says so and reads the list again; when the post has no more r
 staff saw but not the same ones (a reporter's account purged), the answer is 409
 `reports_changed` and the list is read again. It is the reports themselves and not a time (the
 feature's passes, 2026-10-05): a report's time is read before the report is stored, so one
-can land after staff read the list carrying an earlier time than the newest they saw. A kept post stays, and only a NEW person's report brings it back. **Stop them posting** on a member's
+can land after staff read the list carrying an earlier time than the newest they saw. A kept post stays, and only a NEW person's report brings it back. **Stop posting and commenting** on a member's
 post (`PUT` · `DELETE …/posts/stopped/:userId`, `gym_post_stops`): that person cannot post
 or comment at this gym until staff let them again, still reads and reacts, their posts stay, and the
 page lists who is stopped. A gym whose plan has lapsed reads the list and answers nothing.
@@ -4772,7 +4772,7 @@ profile. An id that is nobody's reads exactly as a member who has not posted; a 
 a former member and a lapsed gym's member get the usual 404. Each post carries
 `authorId` for a member's post (null for a staff post), which is what the name asks by.
 Staff holding `posts.manage` read the same list (`GET …/posts/staff/people/:userId`)
-with Remove post and Stop them posting: in a box opened from a member's name on the
+with Remove post and Stop posting and commenting: in a box opened from a member's name on the
 console's Updates page (the reported list too), and under the boards on a person's panel
 on the Leaderboard page for staff who hold both ticks. The member's read asks who is
 reading before its rate limit. A photo opened anywhere is drawn on the page's body
