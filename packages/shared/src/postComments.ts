@@ -5,7 +5,7 @@
 // work as on a post. A member writes up to 100 a day (Kd, 2026-10-30, `rulings/2026-10-30-17b.md`).
 import { z } from "zod";
 import { postLength } from "./postBasics.js";
-import { gymMemberPostingSchema, gymPostReactionSchema, postsCursor, reactionCountsSchema, reportNote } from "./posts.js";
+import { GYM_POST_REPORTS_SHOWN, GYM_POST_REPORT_NOTES_SHOWN, gymMemberPostingSchema, gymPostReactionSchema, postsCursor, reactionCountsSchema, reportNote } from "./posts.js";
 
 /** The words of one comment or reply, by `postLength`. */
 export const GYM_POST_COMMENT_MAX_CHARS = 500;
@@ -101,6 +101,70 @@ export const reportedGymPostCommentResponseSchema = z.object({ reported: z.liter
 export const blockedGymPostCommenterResponseSchema = z.object({ blocked: z.literal(true) }).strict();
 export const removedGymPostCommentResponseSchema = z.object({ removed: z.literal(true) }).strict();
 
+// ── FOR STAFF HOLDING `posts.manage`, IN THE CONSOLE (ROADMAP Stage 5 17e-ii; spec §15.2) ──
+
+/** A comment or reply as staff read it: the whole name, and whether its member writer is stopped. */
+export const staffGymPostCommentSchema = z
+  .object({
+    id: z.string().uuid(),
+    postId: z.string().uuid(),
+    parentId: z.string().uuid().nullable(),
+    replyingTo: z.string().nullable(),
+    author: z.object({ name: z.string().nullable(), initials: z.string() }).strict(),
+    body: z.string(),
+    createdAt: z.string().datetime({ offset: true }),
+    reactions: reactionCountsSchema,
+    fromMember: z.boolean(),
+    authorId: z.string().uuid().nullable(),
+    authorStopped: z.boolean(),
+    hidden: z.boolean(),
+    replyCount: z.number().int().nonnegative(),
+  })
+  .strict();
+export type StaffGymPostComment = z.infer<typeof staffGymPostCommentSchema>;
+
+export const staffGymPostCommentsResponseSchema = z
+  .object({ comments: z.array(staffGymPostCommentSchema).max(GYM_POST_COMMENTS_PAGE), next: z.string().nullable() })
+  .strict();
+export type StaffGymPostCommentsResponse = z.infer<typeof staffGymPostCommentsResponseSchema>;
+
+export const addedStaffGymPostCommentResponseSchema = z.object({ comment: staffGymPostCommentSchema, firstKept: z.boolean() }).strict();
+
+const commentReasonCountsSchema = z
+  .object({ unkind: z.number().int().nonnegative(), nudity: z.number().int().nonnegative(), spam: z.number().int().nonnegative(), other: z.number().int().nonnegative() })
+  .strict();
+export type GymPostCommentReasonCounts = z.infer<typeof commentReasonCountsSchema>;
+
+/** The reported comments staff have not answered, longest waiting first. Who reported is never
+ *  sent: only how many, and why. */
+export const reportedGymPostCommentsResponseSchema = z
+  .object({
+    items: z
+      .array(
+        z
+          .object({
+            comment: staffGymPostCommentSchema,
+            /** The post it is on, so staff can read it in its place. */
+            post: z.object({ id: z.string().uuid(), body: z.string(), fromMember: z.boolean(), hidden: z.boolean(), author: z.object({ name: z.string().nullable(), initials: z.string() }).strict() }).strict(),
+            reports: z.number().int().positive(),
+            reasons: commentReasonCountsSchema,
+            /** What reporters typed, oldest first; never who typed it. */
+            notes: z.array(z.string()).max(GYM_POST_REPORT_NOTES_SHOWN),
+            /** Sent back with Keep, as for a post: see `keepGymPostRequestSchema`. */
+            allReports: z.number().int().positive(),
+            reportsMark: z.string().regex(/^[0-9a-f]{32}$/),
+          })
+          .strict(),
+      )
+      .max(GYM_POST_REPORTS_SHOWN),
+    /** Every reported comment waiting, listed or not. */
+    total: z.number().int().nonnegative(),
+  })
+  .strict();
+export type ReportedGymPostCommentsResponse = z.infer<typeof reportedGymPostCommentsResponseSchema>;
+
+export const gymPostCommentSettingsSchema = z.object({ membersCanComment: z.boolean() }).strict();
+
 /** The most comments the phone keeps unsent for one person at one place, one a post. */
 export const GYM_POST_COMMENT_DRAFTS_MOST = 50;
 
@@ -129,6 +193,8 @@ export type GymPostCommentDraftsFile = z.infer<typeof gymPostCommentDraftsFileSc
 /** What a person reads when a comment cannot be made, changed or found. */
 export const GYM_POST_COMMENT_WORDS = {
   not_found: "This comment has been removed.",
+  reports_changed: "The reports on this comment have changed. Look at the list again, then choose.",
+  hidden_reply: "This comment is hidden from your members, so a reply would not reach them. Choose Keep or Remove first.",
   commenting_off: "Comments are turned off here.",
   commenting_stopped: (gymName: string): string => `The staff at ${gymName} have stopped you commenting here. Speak to them at the front desk.`,
   /** `hours`: whole hours until the oldest of the counted comments is 24 hours old. */
