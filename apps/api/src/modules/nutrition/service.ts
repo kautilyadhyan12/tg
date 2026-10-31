@@ -144,6 +144,7 @@ const foodSchema = z.object({
   unit: z.string(),
   source: z.enum(["curated", "openfoodfacts", "usda", "estimate"]),
   more: moreNutrientsSchema.optional(),
+  pack: z.object({ grams: z.number().positive().max(MAX_ITEM_GRAMS), volume: z.boolean() }).optional(),
 });
 
 const draftSchema = z

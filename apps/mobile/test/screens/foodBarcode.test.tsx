@@ -3,7 +3,7 @@ import type { NutritionTargetsResponse } from "@app/shared";
 import { App } from "../../src/App";
 import { mealTypeName, sectionOf } from "../../src/screens/food/day";
 import type { TextStore } from "../../src/screens/food/outbox";
-import { fakeServer, kept, lost, memoryStore, refusal, tokens, type Reply } from "../kit";
+import { fakeServer, kept, lost, memoryStore, refusal, tokens, type Reply, type Route } from "../kit";
 
 // Scanning a barcode on the phone (ROADMAP Stage 5 33b-iii-b): the camera, the product box and what it
 // says about allergens, the whole pack, and every code that has no product.
@@ -52,25 +52,26 @@ const found = (over: object = {}, foodOver: object = {}) => ({
 });
 
 const GRAMS: Record<string, number> = { serving: 15, pack: 400, g: 1, oz: 28.35 };
-function server(replies: Record<string, () => Reply>, save: () => Reply = lost) {
+const PREVIEW: Route = (body) => {
+  const items = (body as { items: { canonical: string; measure: string; amount: number }[] }).items.map((i) => {
+    const grams = (GRAMS[i.measure] ?? 1) * i.amount;
+    const kcal = Math.round((grams * 539) / 100);
+    return {
+      name: "Nutella", canonical: i.canonical, gramsPoint: grams, gramsRange: [grams, grams], portionSource: "default", nutritionSource: "openfoodfacts",
+      kcalPoint: kcal, kcalLow: kcal, kcalHigh: kcal, proteinG: 6, carbsG: 58, fatG: 31,
+      measure: { id: i.measure, name: i.measure === "pack" ? "whole pack" : i.measure, amount: i.amount },
+    };
+  });
+  const kcal = items.reduce((n, i) => n + i.kcalPoint, 0);
+  return { status: 200, body: { items, totals: { kcalPoint: kcal, kcalLow: kcal, kcalHigh: kcal, proteinG: 6, carbsG: 58, fatG: 31 } } };
+};
+function server(replies: Record<string, Route>, save: () => Reply = lost) {
   return fakeServer({
     "/v1/auth/refresh": ok({ tokens: tokens(2) }),
     "/v1/nutrition/targets": ok(TARGETS),
     "/v1/nutrition/foods/recent": ok({ items: [] }),
     "/v1/nutrition/dishware": ok({ items: [], nextCursor: null }),
-    "/v1/nutrition/meals/preview": (body) => {
-      const items = (body as { items: { canonical: string; measure: string; amount: number }[] }).items.map((i) => {
-        const grams = (GRAMS[i.measure] ?? 1) * i.amount;
-        const kcal = Math.round((grams * 539) / 100);
-        return {
-          name: "Nutella", canonical: i.canonical, gramsPoint: grams, gramsRange: [grams, grams], portionSource: "default", nutritionSource: "openfoodfacts",
-          kcalPoint: kcal, kcalLow: kcal, kcalHigh: kcal, proteinG: 6, carbsG: 58, fatG: 31,
-          measure: { id: i.measure, name: i.measure === "pack" ? "whole pack" : i.measure, amount: i.amount },
-        };
-      });
-      const kcal = items.reduce((n, i) => n + i.kcalPoint, 0);
-      return { status: 200, body: { items, totals: { kcalPoint: kcal, kcalLow: kcal, kcalHigh: kcal, proteinG: 6, carbsG: 58, fatG: 31 } } };
-    },
+    "/v1/nutrition/meals/preview": PREVIEW,
     "/v1/nutrition/meals": (body) => (body === undefined ? { status: 200, body: { items: [], nextCursor: null } } : save()),
     ...replies,
   });
@@ -87,7 +88,7 @@ function memoryFiles() {
   });
 }
 
-async function openScan(replies: Record<string, () => Reply>) {
+async function openScan(replies: Record<string, Route>) {
   const fake = server(replies);
   await render(<App extra={extra} ask={fake.ask} store={memoryStore(kept(1))} wait={noWait} mealStore={memoryFiles()} photoStore={memoryFiles()} />);
   await fireEvent.press(await screen.findByRole("tab", { name: "Food" }));
@@ -107,7 +108,7 @@ async function read(type: string, data: string, times = 2) {
   }
 }
 const lookups = (fake: ReturnType<typeof server>) => fake.asked.filter((a) => a.path.startsWith("/v1/nutrition/barcode/"));
-const route = (code: string, body: unknown) => ({ [`/v1/nutrition/barcode/${code}`]: ok(body) });
+const route = (code: string, body: unknown): Record<string, Route> => ({ [`/v1/nutrition/barcode/${code}`]: ok(body) });
 
 beforeEach(() => {
   camera.permission = { granted: true, canAskAgain: true, status: "granted", expires: "never" };
@@ -120,7 +121,13 @@ describe("the worst thing: an allergic person is never told a pack is clear", ()
     await read("ean13", NUTELLA_CODE);
     const box = await screen.findByTestId("pack-allergens");
     expect(within(box).getByText("No allergens listed. Check the pack.")).toBeTruthy();
-    expect(within(box).queryByText(/Contains/)).toBeNull();
+    // Every line of the box, so nothing else in it can read as safe.
+    const texts = (node: unknown): string[] => {
+      if (typeof node === "string") return [node];
+      if (node === null || typeof node !== "object") return [];
+      return ((node as { children?: unknown[] }).children ?? []).flatMap(texts);
+    };
+    expect(texts(box.toJSON?.() ?? null)).toEqual(["No allergens listed. Check the pack."]);
   });
 
   it("shows what it contains, what it may contain and what somebody typed, each under its own name", async () => {
@@ -149,6 +156,49 @@ describe("the camera", () => {
     await read("ean13", NUTELLA_CODE, 1);
     await screen.findByText("Nutella");
     expect(lookups(fake)).toHaveLength(1);
+  });
+
+  it("Close closes: a pack still in view, however long the box was open, does not reopen it", async () => {
+    const fake = await openScan(route(NUTELLA_CODE, found()));
+    await read("ean13", NUTELLA_CODE);
+    await screen.findByText("Nutella");
+    const real = Date.now();
+    const later = jest.spyOn(Date, "now").mockReturnValue(real + 10_000);
+    try {
+      const closes = screen.getAllByRole("button", { name: "Close" });
+      const close = closes[closes.length - 1];
+      if (close === undefined) throw new Error("no Close");
+      await fireEvent.press(close);
+      await read("ean13", NUTELLA_CODE);
+      expect(lookups(fake)).toHaveLength(1);
+      expect(screen.queryByText("Nutella")).toBeNull();
+      // Moved away and pointed at it again: asked for again.
+      later.mockReturnValue(real + 30_000);
+      await read("ean13", NUTELLA_CODE);
+      expect(lookups(fake)).toHaveLength(2);
+    } finally {
+      later.mockRestore();
+    }
+  });
+
+  it("a lookup left behind is dropped: Type the number opens what was typed, not what the camera read", async () => {
+    let answer: ((r: Reply) => void) | null = null;
+    const slow = new Promise<Reply>((resolve) => { answer = resolve; });
+    await openScan({
+      [`/v1/nutrition/barcode/${NUTELLA_CODE}`]: () => slow as unknown as Reply,
+      ...route("5449000000996", found({ code: "5449000000996" }, { name: "Coca-Cola" })),
+    });
+    await read("ean13", NUTELLA_CODE);
+    await fireEvent.press(screen.getByRole("button", { name: "Type the number" }));
+    await fireEvent.changeText(await screen.findByLabelText("Barcode number"), "5449000000996");
+    await fireEvent.press(screen.getByRole("button", { name: "Look up" }));
+    expect(await screen.findByText("Coca-Cola")).toBeTruthy();
+    await act(async () => {
+      answer?.({ status: 200, body: found() });
+      await Promise.resolve();
+    });
+    expect(screen.getByText("Coca-Cola")).toBeTruthy();
+    expect(screen.queryByText("Nutella")).toBeNull();
   });
 
   it("a UPC-E is asked for written out", async () => {
@@ -252,6 +302,30 @@ describe("type the number", () => {
   });
 });
 
+describe("calories that can't be fetched", () => {
+  it("no signal: says so, Add stays on, and Try again asks again", async () => {
+    let tries = 0;
+    await openScan({
+      ...route(NUTELLA_CODE, found()),
+      "/v1/nutrition/meals/preview": (body) => {
+        tries += 1;
+        if (tries === 1) return lost();
+        return PREVIEW(body);
+      },
+    });
+    await read("ean13", NUTELLA_CODE);
+    expect(await screen.findByText("Can’t reach the server. The calories will show when you’re back online.")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText(/81 kcal/)).toBeTruthy();
+  });
+
+  it("the server refuses: says so, and Add waits", async () => {
+    await openScan({ ...route(NUTELLA_CODE, found()), "/v1/nutrition/meals/preview": () => refusal(400, "unknown_food", "Food not found.") });
+    await read("ean13", NUTELLA_CODE);
+    expect(await screen.findByText("This food’s calories can’t be worked out. Pick another amount, or search for the food.")).toBeTruthy();
+  });
+});
+
 describe("adding it", () => {
   it("the whole pack is priced by the server, and is what is sent; kept on the phone with no signal", async () => {
     const fake = await openScan(route(NUTELLA_CODE, found()));
@@ -268,5 +342,31 @@ describe("adding it", () => {
       const sent = fake.asked.find((a) => a.method === "POST" && a.path === "/v1/nutrition/meals");
       expect(sent?.body).toMatchObject({ mealName: "Nutella", items: [{ canonical: `pack_${NUTELLA_CODE}`, measure: "pack", amount: 1 }] });
     });
+  });
+
+  it("the worst thing for a meal: with no signal it stays on the phone, and is sent again under the same id", async () => {
+    const fake = server(route(NUTELLA_CODE, found()));
+    const meals = memoryFiles();
+    const photos = memoryFiles();
+    const open = () => render(<App extra={extra} ask={fake.ask} store={memoryStore(kept(1))} wait={noWait} mealStore={meals} photoStore={photos} />);
+    const view = await open();
+    await fireEvent.press(await screen.findByRole("tab", { name: "Food" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Scan food" }));
+    await fireEvent.press(await screen.findByRole("radio", { name: "Barcode" }));
+    await read("ean13", NUTELLA_CODE);
+    await screen.findByText(/81 kcal/);
+    const name = mealTypeName(sectionOf({ mealType: null, takenAt: new Date().toISOString() }));
+    const adds = screen.getAllByRole("button", { name: `Add to ${name}` });
+    const add = adds[adds.length - 1];
+    if (add === undefined) throw new Error("no Add button");
+    await fireEvent.press(add);
+    const posts = () => fake.asked.filter((a) => a.method === "POST" && a.path === "/v1/nutrition/meals").map((a) => (a.body as { id: string }).id);
+    await waitFor(() => { expect(posts().length).toBeGreaterThan(0); });
+    const first = posts()[0];
+    await view.unmount();
+    const before = posts().length;
+    await open();
+    await waitFor(() => { expect(posts().length).toBeGreaterThan(before); });
+    expect(new Set(posts())).toEqual(new Set([first]));
   });
 });

@@ -42,6 +42,9 @@ const MULTIPACK = codeOf(12);
 const UNREADABLE_SIZE = codeOf(13);
 const SMALLER_THAN_SERVING = codeOf(14);
 const SINGLE_SERVE = codeOf(15);
+const SMALL_BAR = codeOf(16);
+const WRITTEN_TWO_WAYS = codeOf(17);
+const LITRE = codeOf(18);
 /** A 12-digit code as a US pack prints it, under the same unused range: kept with a leading zero. */
 const twelveDigits = (): string => {
   const body = "14099999009";
@@ -50,7 +53,7 @@ const twelveDigits = (): string => {
 
 /** Every code this file writes, and so the only ones it removes. The store's and the book's stay on
  *  no real list: the list never keeps such a code. */
-const MINE = [NUTELLA, PRINCE, ZERO, NO_LIST, APART, USDA_ONLY, NOT_LISTED, LAST, GONE, MOVES, MULTIPACK, UNREADABLE_SIZE, SMALLER_THAN_SERVING, SINGLE_SERVE, `0${twelveDigits()}`, "00002523", "0200024010652", "12345678", "9780141026626"];
+const MINE = [NUTELLA, PRINCE, ZERO, NO_LIST, APART, USDA_ONLY, NOT_LISTED, LAST, GONE, MOVES, MULTIPACK, UNREADABLE_SIZE, SMALLER_THAN_SERVING, SINGLE_SERVE, SMALL_BAR, WRITTEN_TWO_WAYS, LITRE, `0${twelveDigits()}`, "00002523", "0200024010652", "12345678", "9780141026626"];
 
 d("a pack's barcode (real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 4 });
@@ -116,6 +119,9 @@ d("a pack's barcode (real Postgres)", () => {
     await addOff(UNREADABLE_SIZE, { name: "Sweets", kcal: 400, protein: 1, carbs: 90, fat: 1, serving: "20 g", quantity: "200 unidades" });
     await addOff(SMALLER_THAN_SERVING, { name: "Crisps", kcal: 500, protein: 6, carbs: 50, fat: 30, serving: "100 g", quantity: "30 g" });
     await addOff(SINGLE_SERVE, { name: "Cola can", kcal: 42, protein: 0, carbs: 11, fat: 0, serving: "330 ml", quantity: "330 ml" });
+    await addOff(SMALL_BAR, { name: "Peanut butter cups", kcal: 550, protein: 10.6, carbs: 53.8, fat: 32.5, quantity: "42 g" });
+    await addOff(WRITTEN_TWO_WAYS, { name: "Peanut butter cups, a package", kcal: 524, protein: 11.9, carbs: 54.8, fat: 31, serving: "1 package (42 g)", quantity: "1.5 oz" });
+    await addOff(LITRE, { name: "Orange juice", kcal: 46, protein: 0.7, carbs: 10, fat: 0.2, quantity: "1 L" });
     app = await buildApp(loadConfig(env), { redis, nutrition: { foodSearchProvider: foods } });
     alice = await session("barcode33-alice@example.com");
     bob = await session("barcode33-bob@example.com");
@@ -143,7 +149,7 @@ d("a pack's barcode (real Postgres)", () => {
     const reply = await found(MULTIPACK);
     const pack = reply.food.measures.find((m) => m.id === "pack");
     expect(pack).toEqual({ id: "pack", name: "whole pack", grams: 500 });
-    // One serving is what it starts at: a whole pack is only ever somebody's own choice.
+    // One serving is what it starts at, where a serving is printed.
     expect(reply.food.startsAt).toEqual({ measure: "serving", amount: 1 });
     const item = { canonical: reply.food.canonical, measure: "pack", amount: 1 };
     const preview = await inject("POST", "/v1/nutrition/meals/preview", alice, { items: [item] });
@@ -162,6 +168,21 @@ d("a pack's barcode (real Postgres)", () => {
       const refused = await inject("POST", "/v1/nutrition/meals/preview", alice, { items: [{ canonical: reply.food.canonical, measure: "pack", amount: 1 }] });
       expect(refused.statusCode, refused.body).toBe(400);
     }
+  });
+
+  it("a 42 g bar with no serving printed opens at its whole pack, never at 100 g", async () => {
+    const reply = await found(SMALL_BAR);
+    expect(reply.food.measures.find((m) => m.id === "pack")?.grams).toBe(42);
+    expect(reply.food.startsAt).toEqual({ measure: "pack", amount: 1 });
+    expect(reply.food.startsKcal).toBe(231);
+  });
+
+  it("a pack and its serving written two ways are one choice", async () => {
+    expect((await found(WRITTEN_TWO_WAYS)).food.measures.filter((m) => m.id === "serving" || m.id === "pack").map((m) => m.id)).toEqual(["serving"]);
+  });
+
+  it("a pack sold by volume says its size in millilitres", async () => {
+    expect((await found(LITRE)).food.measures.find((m) => m.id === "pack")).toEqual({ id: "pack", name: "whole pack (1000 ml)", grams: 1000 });
   });
 
   it("a single-serve can is one choice, not a serving and a whole pack of one weight", async () => {

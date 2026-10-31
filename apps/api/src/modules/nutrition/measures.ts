@@ -175,7 +175,7 @@ export interface MeasureSource {
    *  its pieces (`PIECE_ENTRIES`, foods.ts). */
   pieces?: readonly UsdaPortion[];
   /** What a packaged product's whole pack holds, where its size is understood (`packSize.ts`). */
-  pack?: number | undefined;
+  pack?: { grams: number; volume: boolean } | undefined;
 }
 
 const sameName = (a: string, b: string): boolean => a.trim().toLowerCase() === b.trim().toLowerCase();
@@ -248,8 +248,9 @@ export function foodMeasures(source: MeasureSource): FoodMeasure[] {
   add(source.portions, "usda");
   add(source.pieces ?? [], "piece");
   const own = servingMeasure(source, usda);
-  // A single-serve pack is its serving: one choice, not two of one weight.
-  const pack = source.pack === undefined || (own !== null && sameWeight(own.grams, source.pack)) ? [] : [{ id: "pack", name: "whole pack", grams: source.pack }];
+  // A single-serve pack is its serving, the two written two ways: one choice, not two of one weight.
+  const size = source.pack;
+  const pack = size === undefined || (own !== null && Math.abs(own.grams - size.grams) <= size.grams * 0.02) ? [] : [{ id: "pack", name: size.volume ? `whole pack (${String(size.grams)} ml)` : "whole pack", grams: size.grams }];
   return [...(own === null ? [] : [own]), ...pack, ...usda, GRAM, OUNCE];
 }
 
@@ -268,6 +269,10 @@ export function foodMeasures(source: MeasureSource): FoodMeasure[] {
  *  near its serving (a cup of rice); a USDA food's first measure; or the grams. */
 export function startingMeasure(source: Pick<MeasureSource, "serving" | "unit" | "ownServing">, measures: readonly FoodMeasure[]): { measure: string; amount: number } {
   const { serving, unit } = source;
+  // No serving printed, and the pack smaller than the 100 g that stands in for one: a 42 g bar is not
+  // started at 100 g.
+  const smallPack = serving === 100 && sameName(unit, GRAM.name) ? measures.find((m) => m.id === "pack" && m.grams < 100) : undefined;
+  if (smallPack !== undefined) return { measure: smallPack.id, amount: 1 };
   const usda = measures.filter((m) => m.id.startsWith("usda-"));
   const own = servingOf(source, measures);
   // Our list's own serving is the measure it is eaten by; a USDA food's serving is only the first
@@ -384,6 +389,8 @@ export function scanStart(
   let best = serving === undefined ? null : near(serving);
   if (best === null) {
     for (const measure of measures) {
+      // How much of a pack a plate holds is never read off a photo.
+      if (measure.id === "pack") continue;
       const at = near(measure);
       if (at !== null && (best === null || at.off < best.off)) best = at;
     }

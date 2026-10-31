@@ -1,8 +1,8 @@
 // What one row of the packaged-food lists becomes (ROADMAP Stage 5 33b-iii-a), and what a person is
 // told about a code both lists may hold. Pure: the importer, the nightly update and the lookup share it.
 import { classifyBarcode, offProductSchema, type MoreNutrients, type NutritionSource, type OffDailyLine, type OffProduct, type PackagedCheck } from "@app/shared";
-import { labelMore, servingOf, withBrand, type FoodReference } from "./openfoodfacts.adapter.js";
-import { packGrams } from "./packSize.js";
+import { NO_LABEL, labelMore, servingOf, withBrand, type FoodReference } from "./openfoodfacts.adapter.js";
+import { packSize, type PackSize } from "./packSize.js";
 
 export interface PackagedRow {
   code: string;
@@ -246,6 +246,39 @@ export interface PackagedFood {
  *  - they disagree: USDA's, which comes from the maker's own label (Open Food Facts' is typed by
  *    volunteers), and the person is told to check the pack;
  *  - allergens are Open Food Facts' whichever list gave the numbers. USDA keeps none. */
+/** The share of a whole that a serving's own words say it is: "0.167 pizza", "half package". */
+function shareOfWhole(unit: string): number | null {
+  if (/^half\b/.test(unit)) return 0.5;
+  if (/^quarter\b/.test(unit)) return 0.25;
+  const share = /^(\d*\.\d+)\s/.exec(unit)?.[1];
+  const value = share === undefined ? 1 : Number(share);
+  return value > 0 && value < 1 ? value : null;
+}
+/** Two figures of one pack, as two lists round them. */
+const SAME_WITHIN = 0.02;
+/** Over this per 100, a food is an oil or a fat, whose millilitre weighs a tenth less than a gram. */
+const OIL_KCAL = 880;
+
+/** The whole pack, or null where the list's size can't be taken for it. Open Food Facts' size is often
+ *  USDA's serving copied in ("Pizza · Pep's": 160 g, and a serving is 0.167 pizza), so it is checked
+ *  against what else is known. A product on one list has nothing to check it by: the grams on the
+ *  choice let the person compare it with the pack in their hand. */
+function wholePack(off: OffRow | null, usda: PackagedRow | null, numbers: PackagedRow, apart: boolean): PackSize | null {
+  const size = packSize(off?.quantity);
+  if (size === null || apart) return null;
+  if (size.volume && numbers.kcal >= OIL_KCAL) return null;
+  if (usda?.servingSize != null && servingOf(usda.servingSize) !== NO_LABEL && Math.abs(servingOf(usda.servingSize).grams - size.grams) <= size.grams * SAME_WITHIN) return null;
+  for (const printed of [off?.servingSize, usda?.servingSize]) {
+    const serving = servingOf(printed ?? undefined);
+    if (serving === NO_LABEL) continue;
+    const share = shareOfWhole(serving.unit);
+    if (share !== null && size.grams < (serving.grams / share) * 0.9) return null;
+    // A whole pack lighter than one serving of it: one of the two is wrong.
+    if (size.grams < serving.grams) return null;
+  }
+  return size;
+}
+
 export function packagedFoodOf(off: OffRow | null, usda: PackagedRow | null): PackagedFood | null {
   const only = off ?? usda;
   if (only === null) return null;
@@ -253,10 +286,9 @@ export function packagedFoodOf(off: OffRow | null, usda: PackagedRow | null): Pa
   const numbers: PackagedRow = off === null || usda === null ? only : apart || (!off.numbersFit && usda.numbersFit) ? usda : off;
   const source: NutritionSource = numbers === off ? "openfoodfacts" : "usda";
   const serving = servingOf(numbers.servingSize ?? undefined);
+  const pack = wholePack(off, usda, numbers, apart);
   // At 0 kcal too: a blank panel is how a chicken fillet reads as 0. Water is told to check the pack,
   // which does no harm.
-  // USDA keeps no pack size. A whole pack lighter than one serving of it means one of the two is wrong.
-  const pack = packGrams(off?.quantity);
   const missing = numbers.proteinG === null || numbers.carbsG === null || numbers.fatG === null;
   return {
     food: {
@@ -271,7 +303,7 @@ export function packagedFoodOf(off: OffRow | null, usda: PackagedRow | null): Pa
       unit: serving.unit,
       source,
       more: numbers.more,
-      ...(pack !== null && pack >= serving.grams ? { pack } : {}),
+      ...(pack === null ? {} : { pack }),
     },
     allergens: off?.allergens ?? [],
     mayContain: off?.traces ?? [],

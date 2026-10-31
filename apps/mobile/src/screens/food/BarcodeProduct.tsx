@@ -23,7 +23,11 @@ import { Credits, SourceLine } from "./SourceLine";
 
 const nowSection = (): MealType => sectionOf({ mealType: null, takenAt: new Date().toISOString() });
 
-type Priced = { kind: "none" } | { kind: "ok"; item: MealItem; for: string } | { kind: "refused"; words: string; for: string };
+type Priced = { kind: "none" } | { kind: "lost"; for: string } | { kind: "ok"; item: MealItem; for: string } | { kind: "refused"; words: string; for: string };
+/** While the calories cannot be fetched: asked again this often, for at most 15 minutes. */
+const PRICE_RETRY_MS = 30_000;
+const PRICE_RETRIES_MOST = 30;
+const PRICE_REFUSED = "This food’s calories can’t be worked out. Pick another amount, or search for the food.";
 
 export function BarcodeProduct({ product, onClose, onSaved }: { product: FoundProduct; onClose: () => void; onSaved: (type: MealType, name: string) => void }) {
   const { session } = useSession();
@@ -34,6 +38,8 @@ export function BarcodeProduct({ product, onClose, onSaved }: { product: FoundPr
   const [mealType, setMealType] = useState<MealType>(nowSection);
   const [priced, setPriced] = useState<Priced>({ kind: "none" });
   const [dishAsk, setDishAsk] = useState(0);
+  const [priceTry, setPriceTry] = useState(0);
+  const triesFrom = useRef(0);
   const [panel, setPanel] = useState(false);
   const [full, setFull] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -50,25 +56,33 @@ export function BarcodeProduct({ product, onClose, onSaved }: { product: FoundPr
       return undefined;
     }
     let stale = false;
+    let again: ReturnType<typeof setTimeout> | undefined;
     const timer = setTimeout(() => {
       void session.signedIn({ method: "POST", path: "/v1/nutrition/meals/preview", body: { items: [item] } }, mealPreviewSchema).then((answer) => {
         if (stale) return;
         const first = answer.kind === "ok" ? answer.data.items[0] : undefined;
         if (first !== undefined) setPriced({ kind: "ok", item: first, for: key });
         else if (answer.kind === "refused" && amountRefusal(answer.error) !== null) setPriced({ kind: "refused", words: amountRefusal(answer.error) ?? "", for: key });
-        else setPriced({ kind: "none" });
+        // The server answered, and will answer the same: asking again would never help.
+        else if (answer.kind === "refused" && answer.status < 500) setPriced({ kind: "refused", words: PRICE_REFUSED, for: key });
+        else {
+          setPriced({ kind: "lost", for: key });
+          if (priceTry - triesFrom.current < PRICE_RETRIES_MOST) again = setTimeout(() => { setPriceTry((n) => n + 1); }, PRICE_RETRY_MS);
+        }
       });
     }, 300);
     return () => {
       stale = true;
       clearTimeout(timer);
+      if (again !== undefined) clearTimeout(again);
     };
     // `key` is the whole of `item`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, tooSmall, session, dishAsk]);
+  }, [key, tooSmall, session, dishAsk, priceTry]);
 
   const numbers = priced.kind === "ok" && priced.for === key ? priced.item : null;
   const refused = priced.kind === "refused" && priced.for === key ? priced.words : null;
+  const lost = priced.kind === "lost" && priced.for === key;
   const held = item === null || tooSmall || refused !== null || outbox === null || adding;
 
   const add = async () => {
@@ -160,6 +174,21 @@ export function BarcodeProduct({ product, onClose, onSaved }: { product: FoundPr
               {refused}
             </Txt>
           )}
+          {lost ? (
+            <>
+              <Txt kind="small" colour="gold">
+                Can’t reach the server. The calories will show when you’re back online.
+              </Txt>
+              <Button
+                label="Try again"
+                kind="link"
+                onPress={() => {
+                  triesFrom.current = priceTry + 1;
+                  setPriceTry((n) => n + 1);
+                }}
+              />
+            </>
+          ) : null}
           {full ? (
             <Txt kind="small" colour="badText">
               Too many meals are waiting to be sent. Go online to send them, then add this one.

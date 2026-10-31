@@ -1,7 +1,9 @@
 // The whole pack's weight, from sizes as they stand on Open Food Facts' list (read from the 987,960
 // sizes loaded in this folder's database), including words the rule has never heard of.
 import { describe, expect, it } from "vitest";
-import { packGrams } from "../src/modules/nutrition/packSize.js";
+import { packSize } from "../src/modules/nutrition/packSize.js";
+
+const packGrams = (size: string | null | undefined): number | null => packSize(size)?.grams ?? null;
 
 describe("the whole pack, from a real size", () => {
   it.each<[string, number]>([
@@ -12,7 +14,7 @@ describe("the whole pack, from a real size", () => {
     ["4 x 125g", 500], ["3 X 100 g", 300], ["2x2L", 4000], ["50 * 10 g", 500], ["6 x 33 cl", 1980],
     ["450 g (15 x 30 g)", 450], ["400 g (4 * 100 g)", 400], ["640 ml (8 x 80 ml)", 640], ["250 g(2X125 g)", 250], ["1,2 kg (8 * 150 g)", 1200],
     // Two ways of writing one weight.
-    ["8 oz / 227 g", 226.8], ["14.4 oz (408 g)", 408.2], ["454 g / 16 Oz", 454], ["3.11 fl. oz 92mL", 92], ["40 cl 400g", 400],
+    ["8 oz / 227 g", 227], ["14.4 oz (408 g)", 408], ["454 g / 16 Oz", 454], ["3.11 fl. oz 92mL", 92], ["40 cl 400g", 400], ["12 oz (355 ml)", 355],
   ])("%s holds %d g", (size, grams) => {
     expect(packGrams(size)).toBe(grams);
   });
@@ -28,6 +30,13 @@ describe("the whole pack, from a real size", () => {
     ["0.5mg"], ["1,000 kg"], ["0.125 kg"], ["1.500 g"], ["12 x 1.5 l"], ["20 kg"], ["0 g"], [""],
   ])("%s offers no whole pack", (size) => {
     expect(packGrams(size)).toBeNull();
+  });
+
+  it("a size printed only as a volume says so, and one with a weight beside it does not", () => {
+    expect(packSize("3 L")).toEqual({ grams: 3000, volume: true });
+    expect(packSize("12 fl oz")?.volume).toBe(true);
+    expect(packSize("500 g")?.volume).toBe(false);
+    expect(packSize("40 cl 400g")?.volume).toBe(false);
   });
 
   it("no size at all offers no whole pack", () => {

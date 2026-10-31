@@ -259,7 +259,10 @@ function Camera({
   const [typing, setTyping] = useState(false);
   const [own, setOwn] = useState(false);
   const reads = useRef(NO_READS);
-  const asking = useRef(false);
+  // The newest lookup: an answer to any earlier one was left behind, and is dropped.
+  const newest = useRef(0);
+  // A box closed with the pack still in view does not open again by itself.
+  const packStillInView = () => { reads.current = { ...reads.current, lookedSeen: Date.now() }; };
   const insets = useSafeAreaInsets();
   const [permission, ask] = useCameraPermissions();
   const camera = useRef<CameraView | null>(null);
@@ -275,12 +278,12 @@ function Camera({
     void ask();
   }, [permission, ask]);
 
-  const lookUp = async (code: string, typed: boolean) => {
-    if (asking.current) return;
-    asking.current = true;
+  const lookUp = async (code: string) => {
+    newest.current += 1;
+    const mine = newest.current;
     setLook({ kind: "looking" });
     const answer = await session.signedIn({ method: "GET", path: `/v1/nutrition/barcode/${code}` }, barcodeReplySchema);
-    asking.current = false;
+    if (mine !== newest.current) return;
     // Somebody else signed in while it was asked: nothing of it is shown to them.
     const now = session.state();
     if (now.kind !== "in" || now.user.id !== me) return;
@@ -295,7 +298,7 @@ function Camera({
       return;
     }
     const notListed = reply.status === "not_found";
-    if (notListed || !typed) setTyping(false);
+    if (notListed) setTyping(false);
     setLook({ kind: "trouble", words: troubleWords(reply), notListed, lost: null });
   };
   const scanned = ({ type, data }: { type: string; data: string }) => {
@@ -303,9 +306,10 @@ function Camera({
     if (code === null || typing || own || look.kind === "looking" || look.kind === "found") return;
     const next = afterRead(reads.current, code, Date.now());
     reads.current = next.memory;
-    if (next.look) void lookUp(code, false);
+    if (next.look) void lookUp(code);
   };
   const toMode = (next: "meal" | "barcode") => {
+    newest.current += 1;
     setMode(next);
     setFailed(null);
     setLook({ kind: "idle" });
@@ -398,7 +402,7 @@ function Camera({
               {words}
             </Txt>
             {!scanning && notice?.search === true && failed === null ? <Button label="Search food instead" kind="link" onPress={onSearch} style={styles.centreSelf} /> : null}
-            {trouble?.lost != null ? <Button label="Try again" kind="link" onPress={() => { void lookUp(trouble.lost ?? "", false); }} style={styles.centreSelf} /> : null}
+            {trouble?.lost != null ? <Button label="Try again" kind="link" onPress={() => { void lookUp(trouble.lost ?? ""); }} style={styles.centreSelf} /> : null}
             {trouble?.notListed === true ? (
               <>
                 <Button label="Search food" kind="link" onPress={onSearch} style={styles.centreSelf} />
@@ -412,7 +416,7 @@ function Camera({
           <Chip label="Barcode" on={scanning} onPress={() => { toMode("barcode"); }} />
         </View>
         {scanning ? (
-          <Button label="Type the number" kind="link" onPress={() => { setLook({ kind: "idle" }); setTyping(true); }} style={styles.centreSelf} />
+          <Button label="Type the number" kind="link" onPress={() => { newest.current += 1; setLook({ kind: "idle" }); setTyping(true); }} style={styles.centreSelf} />
         ) : (
         <View style={styles.shutterRow}>
           <Round icon="image" say="Choose from gallery" onPress={() => { void gallery(); }} big />
@@ -430,14 +434,16 @@ function Camera({
         </View>
         )}
       </View>
-      {look.kind === "found" ? <BarcodeProduct product={look.product} onClose={() => { setLook({ kind: "idle" }); }} onSaved={onSaved} /> : null}
-      {own ? <BarcodeOwnFood onClose={() => { setOwn(false); }} onSaved={onSaved} /> : null}
+      {look.kind === "found" ? <BarcodeProduct product={look.product} onClose={() => { packStillInView(); setLook({ kind: "idle" }); }} onSaved={onSaved} /> : null}
+      {own ? <BarcodeOwnFood onClose={() => { packStillInView(); setOwn(false); }} onSaved={onSaved} /> : null}
       {typing ? (
         <TypeBarcode
           busy={look.kind === "looking"}
           said={trouble?.words ?? null}
-          onLook={(code) => { void lookUp(code, true); }}
+          onLook={(code) => { void lookUp(code); }}
           onClose={() => {
+            newest.current += 1;
+            packStillInView();
             setTyping(false);
             setLook({ kind: "idle" });
           }}
