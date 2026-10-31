@@ -453,6 +453,19 @@ describe("a pack's label (33b-iii-c)", () => {
     expect(screen.getByRole("button", { name: "Keep it" })).toBeTruthy();
   });
 
+  it("leaving a label just read is asked first: it used a scan, and what was typed is still there", async () => {
+    await openScan(labelRoutes());
+    await toLabel();
+    await fireEvent.changeText(await screen.findByLabelText("Food name"), "Toffee");
+    await fireEvent.press(screen.getByRole("button", { name: "Close" }));
+    expect(await screen.findByText("It won’t be saved. Reading it again uses another photo scan.")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Keep checking" }));
+    expect((await screen.findByLabelText("Food name")).props.value).toBe("Toffee");
+    await fireEvent.press(screen.getByRole("button", { name: "Close" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Leave" }));
+    expect(await screen.findByRole("radio", { name: "Label" })).toBeTruthy();
+  });
+
   it("not a label: the camera again, and the next try is free", async () => {
     let tries = 0;
     const fake = await openScan(labelRoutes({

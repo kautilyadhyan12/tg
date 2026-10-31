@@ -135,7 +135,7 @@ export function BarcodeProduct({ product: first, onClose, onSaved }: { product: 
   }
   if (removing !== null && labelId !== null) {
     return (
-      <Sheet open title={`Remove ${food.name}?`} onClose={removing === "done" ? onClose : () => { setRemoving(null); }}>
+      <Sheet open title={removing === "done" ? "Removed" : `Remove ${food.name}?`} onClose={removing === "done" ? onClose : () => { setRemoving(null); }}>
         <Txt kind="small" colour="text">
           {removing === "done" ? `${food.name} removed.` : removing === "failed" ? "Couldn’t remove it. Try again." : "Meals you logged keep their numbers."}
         </Txt>

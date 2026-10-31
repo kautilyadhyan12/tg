@@ -37,6 +37,8 @@ export function LabelCheck({
   const [typed, setTyped] = useState(start);
   const [saying, setSaying] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // A label just read has used a scan: leaving it is asked first, as it can't be got back.
+  const [leaving, setLeaving] = useState(false);
   // The same id if it is sent again, so a save that was lost and tried again is one food.
   const saveId = useRef(id ?? newGoalId());
   const set = (field: keyof TypedLabel) => (value: string) => {
@@ -57,8 +59,19 @@ export function LabelCheck({
     else setSaying("No connection. Try again.");
   };
   const noAllergens = typed.contains.trim() === "" && typed.mayContain.trim() === "";
+  if (leaving) {
+    return (
+      <Sheet open title="Leave this label?" onClose={() => { setLeaving(false); }}>
+        <Txt kind="small" colour="text">
+          It won’t be saved. Reading it again uses another photo scan.
+        </Txt>
+        <Button label="Keep checking" wide onPress={() => { setLeaving(false); }} />
+        <Button label="Leave" kind="link" onPress={onClose} />
+      </Sheet>
+    );
+  }
   return (
-    <Sheet open title="Check the label" onClose={onClose}>
+    <Sheet open title="Check the label" onClose={() => { if (id === null) setLeaving(true); else onClose(); }}>
       <ScrollView style={styles.list} contentContainerStyle={styles.inner} keyboardShouldPersistTaps="handled">
         <Txt kind="small" colour={check === "fine" ? "text" : "gold"}>
           {check === "fine" ? "Check these against the pack." : CHECK_WORDS[check]}
