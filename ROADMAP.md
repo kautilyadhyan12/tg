@@ -568,7 +568,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 16c. [x] **My membership and receipts** — merged 2026-10-29 (PR #390).
 17. **The gym's page**: Updates (post, photos, react, report, block), Events, Leaderboard, Challenges, a person's profile (spec Part 3 §15). Split 2026-10-29 in four (the browser's four pages are more than one terminal); comments added 2026-10-30. Risky; the two extra passes run once, after the last of them.
     - 17a. [x] **Updates: read, react, report, block** — merged 2026-10-30 (PR #398).
-    - 17b. [ ] **Post an update**: words and up to four photos from the phone, shrunk and with no location kept, where the gym lets members post; the stopped line. Needs a photo-picking package (Kd's yes in its plan).
+    - 17b. [x] **Post an update** — merged 2026-10-31 (PR #405).
     - 17e. [ ] **Comments** (Kd, 2026-10-30, `rulings/2026-10-29-17a.md`): members reply to a post in words; on for every gym, staff can turn them off; Report, Block, staff removing and the bad-words filter work on a reply as on a post. Built after 17b; server, phone and the console's switch; a migration.
     - 17c. [ ] **Events, the Leaderboard and a person's profile** (a name on Updates opens it from here).
     - 17d. [ ] **Challenges**, and who won under a challenge's ended post on Updates, with See the challenge.

@@ -168,6 +168,10 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
     expect(res.statusCode, res.body).toBe(201);
     return (JSON.parse(res.body) as { post: GymPost }).post;
   };
+  /** Posts already made in the last moments, written straight to the database: a hundred through the route would meet the hourly limit. */
+  const seedPosts = (gym: Gym, who: Person, n: number) =>
+    sql`INSERT INTO gym_posts (gym_id, author_user_id, post_key, body, by_member, created_at)
+      SELECT ${gym.id}, ${who.userId}, gen_random_uuid(), 'Seeded ' || i, true, ${new Date(clock)} FROM generate_series(1, ${n}::int) i`;
   const feed = async (gym: Gym, who: Person): Promise<GymPostsResponse> => {
     const res = await inject("GET", posts(gym.id), who.cookies);
     expect(res.statusCode, res.body).toBe(200);
@@ -485,7 +489,7 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
       const writer = await member(gym, "Wendy Writer");
       const quiet = await member(gym, "Quinn Quiet");
       const first = await add(gym, writer, "Post 1");
-      for (let i = 2; i < GYM_MEMBER_POSTS_A_DAY; i++) await add(gym, writer, `Post ${String(i)}`);
+      await seedPosts(gym, writer, GYM_MEMBER_POSTS_A_DAY - 2);
       // One left, and four sent at the same moment across two servers: one lands.
       const keys = [0, 1, 2, 3].map(() => randomUUID());
       const burst = await Promise.all([0, 1, 2, 3].map((n) => send(gym, writer, `Burst ${String(n)}`, [], keys[n], nextIp(), either(n))));
@@ -496,6 +500,9 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
       const again = await send(gym, writer, `Burst ${String(landed)}`, [], keys[landed]);
       expect(again.statusCode, again.body).toBe(201);
       expect((JSON.parse(again.body) as { post: GymPost }).post.id).toBe((JSON.parse(burst[landed]?.body ?? "{}") as { post: GymPost }).post.id);
+      // The reply says which send made the post.
+      expect((JSON.parse(burst[landed]?.body ?? "{}") as { firstKept: boolean }).firstKept).toBe(true);
+      expect((JSON.parse(again.body) as { firstKept: boolean }).firstKept).toBe(false);
       expect(burst.filter((r) => r.statusCode === 429).map(errorOf)).toEqual(["posts_day_full", "posts_day_full", "posts_day_full"]);
       expect(await count("posts", gym.id)).toBe(GYM_MEMBER_POSTS_A_DAY);
 
@@ -884,9 +891,9 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
     async () => {
       const gym = await makeGym("Last House");
       const writer = await member(gym, "Wendy Writer");
-      for (let n = 1; n < GYM_MEMBER_POSTS_A_DAY; n++) await add(gym, writer, `Post ${String(n)}`);
+      await seedPosts(gym, writer, GYM_MEMBER_POSTS_A_DAY - 1);
       clock += 1000;
-      const body = { postKey: randomUUID(), body: "The tenth", photos: [IPHONE] };
+      const body = { postKey: randomUUID(), body: "The last", photos: [IPHONE] };
       // Both are held at the person's membership, past the first look for the key.
       const release = await hold((tx) => tx`SELECT 1 FROM gym_members WHERE gym_id = ${gym.id} AND user_id = ${writer.userId} FOR UPDATE`);
       const both = [0, 1].map((n) => inject("POST", `${posts(gym.id)}/mine`, writer.cookies, body, nextIp(), either(n)));
@@ -899,6 +906,8 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
       expect(answers.map((r) => r.statusCode)).toEqual([201, 201]);
       const ids = answers.map((r) => (JSON.parse(r.body) as { post: GymPost }).post.id);
       expect(ids[0]).toBe(ids[1]);
+      // One send made it, and the other, which lost the race, is told so.
+      expect(answers.map((r) => (JSON.parse(r.body) as { firstKept: boolean }).firstKept).sort()).toEqual([false, true]);
       expect(await count("posts", gym.id)).toBe(GYM_MEMBER_POSTS_A_DAY);
       // One set of photos, and nothing left to remove.
       expect(await filesOf(gym.id)).toHaveLength(1);

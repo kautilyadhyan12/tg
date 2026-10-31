@@ -62,7 +62,7 @@ export function Field({ label, bare = false, value, onChange, placeholder, keybo
             setOn(false);
           }}
           selectionColor={colours.orange}
-          style={[styles.input, many ? styles.manyInput : null, spaced && value !== "" ? styles.spaced : null]}
+          style={[styles.input, many ? [styles.manyInput, { minHeight: LINE * lines }] : null, spaced && value !== "" ? styles.spaced : null]}
         />
       </View>
     </View>

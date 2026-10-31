@@ -212,7 +212,7 @@ describe('a member posts', () => {
     await screen.findByText('No posts yet. Write the first one.');
     const send = composer().getByRole('button', { name: 'Post' });
     expect(send.disabled).toBe(true);
-    expect(composer().getByText(/You can post 10 times in any 24 hours, 3 of them with photos/)).toBeTruthy();
+    expect(composer().getByText(/You can post 100 times in any 24 hours, with up to 10 photos/)).toBeTruthy();
 
     fireEvent.change(composer().getByRole('textbox', { name: /Write a post/ }), { target: { value: 'First time on the rower' } });
     fireEvent.change(composer().getByLabelText('Choose photos'), { target: { files: [new File(['x'], 'rower.jpg', { type: 'image/jpeg' })] } });

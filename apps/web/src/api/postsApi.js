@@ -1,9 +1,9 @@
 import {
+  addedGymPostResponseSchema,
   blockedGymPosterResponseSchema,
   blockedGymPostersResponseSchema,
   gymPostReactionResponseSchema,
   gymPostReactorsResponseSchema,
-  gymPostResponseSchema,
   gymPostSettingsSchema,
   gymPosterStoppedResponseSchema,
   gymPostsResponseSchema,
@@ -54,7 +54,7 @@ export const postsService = {
   react: (gymId, postId, reaction) =>
     readThrough(gymPostReactionResponseSchema, 'your reaction', authApi.put(`${postPath(gymId, postId)}/reaction`, { reaction })),
   /** The member's own post, where the gym lets its members post; one key is one post. */
-  add: (gymId, postKey, body, photos) => readThrough(gymPostResponseSchema, 'your post', authApi.post(`${gymPath(gymId)}/mine`, { postKey, body, photos })),
+  add: (gymId, postKey, body, photos) => readThrough(addedGymPostResponseSchema, 'your post', authApi.post(`${gymPath(gymId)}/mine`, { postKey, body, photos })),
   /** Removes the member's own post. */
   removeOwn: (gymId, postId) => readThrough(removedGymPostResponseSchema, 'the change', authApi.delete(`${gymPath(gymId)}/mine/${encodeURIComponent(postId)}`)),
   /** Reports a post to the gym's staff, with why and anything the member typed. */

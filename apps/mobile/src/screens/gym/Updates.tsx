@@ -1,5 +1,6 @@
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
-import { AppState, FlatList, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
+import { AppState, FlatList, Image, Linking, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
+import { Modal } from "../../look/Modal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   GYM_POST_WORDS,
@@ -19,7 +20,7 @@ import {
 import { Button } from "../../look/Button";
 import { Card, Pill } from "../../look/Card";
 import { Options } from "../../look/Choice";
-import { colours, sizes } from "../../look/colours";
+import { colours, orangeGradient, shadows, sizes } from "../../look/colours";
 import { Field } from "../../look/Field";
 import { Icon, type IconName } from "../../look/Icon";
 import { Sheet } from "../../look/Sheet";
@@ -27,6 +28,9 @@ import { ASK_MOST } from "../../look/sizing";
 import { fonts, Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
 import { CopyContext } from "../ThisCopy";
+import { PhotoPages } from "./PhotoPages";
+import { hasWork } from "./postDraft";
+import { PostBox, useKeptPost } from "./PostBox";
 import {
   REMOVED_OWN,
   REPORT_REASONS,
@@ -43,6 +47,7 @@ import {
   emptyLine,
   helpLine,
   hiddenOwnNote,
+  memberCanPost,
   memberPostAction,
   ownRemoveBox,
   photoPath,
@@ -56,9 +61,11 @@ import {
   reportBox,
   reportNoteLine,
   reportPath,
+  stoppedNote,
   unblockPath,
   unblockedNote,
   updatesPath,
+  withNewPost,
   withPage,
   withPost,
   withReaction,
@@ -107,11 +114,29 @@ type Blocked = { kind: "loading" } | { kind: "failed"; text: string } | { kind: 
 // How many posts are drawn at a time, and how many screens' worth stay drawn: a photo is fetched when its post is.
 const NEAR_THE_SCREEN = 5;
 
+// How far from either end of the list its button to that end shows.
+const NEAR_AN_END = 240;
+
 const REACTION_ICONS: Readonly<Record<GymPostReaction, IconName>> = { like: "like", love: "heart", strong: "strong", fire: "flame" };
 
 function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose: () => void; bottom: number }) {
-  const { session } = useSession();
+  const { session, state } = useSession();
   const apiUrl = useContext(CopyContext).extra?.apiUrl ?? "";
+  const kept = useKeptPost(state.kind === "in" ? state.user.id : null, place.id);
+  const [writing, setWriting] = useState(false);
+  // What the last post came to, said where its button is.
+  const [postedNote, setPostedNote] = useState<string | null>(null);
+  const list = useRef<FlatList<GymPost>>(null);
+  // Where the list stands, for the two buttons that jump along it: the end is the end of the posts read so far.
+  const [ends, setEnds] = useState({ top: true, end: true });
+  const measured = useRef({ y: 0, shown: 0, all: 0 });
+  const measure = (next: Partial<typeof measured.current>) => {
+    measured.current = { ...measured.current, ...next };
+    const { y, shown, all } = measured.current;
+    const top = y < NEAR_AN_END;
+    const end = y + shown > all - NEAR_AN_END;
+    setEnds((was) => (was.top === top && was.end === end ? was : { top, end }));
+  };
   const [held, setHeld] = useState<Held>({ kind: "loading" });
   const [more, setMore] = useState<{ busy: boolean; error: string | null }>({ busy: false, error: null });
   // The post whose reaction is on its way, and what went wrong with a post's last one.
@@ -218,7 +243,10 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
 
   const feed = held.kind === "ok" ? held.feed : null;
   const gymName = feed?.gymName ?? place.name;
-  const empty = feed === null ? null : emptyLine(feed, false);
+  const mayPost = feed !== null && memberCanPost(feed);
+  const stopped = feed === null ? null : stoppedNote(feed);
+  const unsent = kept.draft !== null && kept.draft !== undefined && hasWork(kept.draft);
+  const empty = feed === null ? null : emptyLine(feed, mayPost);
   const blockedLabel = feed === null ? null : blockedButton(feed);
   const help = feed === null ? null : helpLine(feed);
   const now = new Date();
@@ -238,15 +266,56 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
         </View>
       </View>
       <FlatList
+        ref={list}
+        testID="updates-list"
         style={styles.grow}
-        contentContainerStyle={[styles.list, { paddingBottom: bottom + 24 }]}
+        scrollEventThrottle={100}
+        onScroll={(e) => {
+          measure({ y: e.nativeEvent.contentOffset.y, shown: e.nativeEvent.layoutMeasurement.height, all: e.nativeEvent.contentSize.height });
+        }}
+        // A scroll's last moment can fall between its reports.
+        onMomentumScrollEnd={(e) => {
+          measure({ y: e.nativeEvent.contentOffset.y });
+        }}
+        onScrollEndDrag={(e) => {
+          measure({ y: e.nativeEvent.contentOffset.y });
+        }}
+        onLayout={(e) => {
+          measure({ shown: e.nativeEvent.layout.height });
+        }}
+        onContentSizeChange={(_, all) => {
+          measure({ all });
+        }}
+        contentContainerStyle={[styles.list, { paddingBottom: bottom + 152 }]}
         data={feed === null || empty !== null ? [] : [...feed.pinned, ...feed.posts]}
         keyExtractor={(post) => post.id}
         initialNumToRender={NEAR_THE_SCREEN}
         maxToRenderPerBatch={NEAR_THE_SCREEN}
         windowSize={NEAR_THE_SCREEN}
         ListHeaderComponent={
-          held.kind === "loading" ? (
+          <View style={styles.top}>
+            {stopped === null ? null : (
+              <Card testID="post-stopped" style={styles.box}>
+                <Txt>{stopped}</Txt>
+              </Card>
+            )}
+            {!mayPost && feed !== null && unsent ? (
+              <Button
+                label="See your unsent post"
+                kind="plain"
+                small
+                onPress={() => {
+                  setPostedNote(null);
+                  setWriting(true);
+                }}
+              />
+            ) : null}
+            {postedNote === null ? null : (
+              <View testID="post-done">
+                <Txt colour="goodText">{postedNote}</Txt>
+              </View>
+            )}
+            {held.kind === "loading" ? (
             <Txt kind="small">Loading…</Txt>
           ) : held.kind === "failed" ? (
             <Card style={styles.box}>
@@ -265,7 +334,8 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
             <Card style={styles.box}>
               <Txt>{empty}</Txt>
             </Card>
-          ) : null
+          ) : null}
+          </View>
         }
         renderItem={({ item: post }) =>
           gone[post.id] === true ? (
@@ -328,6 +398,74 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
             </View>
           )
         }
+      />
+      {ends.top && ends.end ? null : (
+        <View style={[styles.jumps, { bottom: bottom + (mayPost ? 92 : 20) }]}>
+          {ends.top ? null : (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Go to the top"
+              hitSlop={4}
+              onPress={() => {
+                list.current?.scrollToOffset({ offset: 0, animated: true });
+              }}
+              style={styles.jump}
+            >
+              <Icon name="up" size={20} />
+            </Pressable>
+          )}
+          {ends.end ? null : (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Go to the bottom"
+              hitSlop={4}
+              onPress={() => {
+                list.current?.scrollToEnd({ animated: true });
+              }}
+              style={styles.jump}
+            >
+              <Icon name="down" size={20} />
+            </Pressable>
+          )}
+        </View>
+      )}
+      {mayPost ? (
+        <Pressable
+          testID="write-post"
+          accessibilityRole="button"
+          accessibilityLabel={unsent ? "Finish your post" : "Write a post"}
+          accessibilityState={{ disabled: kept.draft === undefined }}
+          disabled={kept.draft === undefined}
+          onPress={() => {
+            setPostedNote(null);
+            setWriting(true);
+          }}
+          style={({ pressed }) => [styles.pen, unsent ? styles.penWords : null, { bottom: bottom + 20 }, pressed ? styles.penPressed : null]}
+        >
+          <Icon name="pen" size={22} colour="onOrange" />
+          {unsent ? (
+            <Txt colour="onOrange" style={styles.penLabel}>
+              Finish your post
+            </Txt>
+          ) : null}
+        </Pressable>
+      ) : null}
+      <PostBox
+        open={writing}
+        gymId={place.id}
+        gymName={gymName}
+        kept={kept}
+        mayPost={mayPost}
+        onClose={() => {
+          setWriting(false);
+        }}
+        onPosted={(post, note) => {
+          change((f) => withNewPost(f, post));
+          setWriting(false);
+          setPostedNote(note);
+          list.current?.scrollToOffset({ offset: 0, animated: true });
+        }}
+        onRefused={() => void load(true)}
       />
       <AskSheet
         asking={asking}
@@ -430,23 +568,7 @@ function PostCard({ post, gymName, posted, photoUrl, files, photoRound, busy, re
         </View>
       )}
       {post.body === "" ? null : <Txt colour="text">{post.body}</Txt>}
-      {post.photos.length === 0 ? null : (
-        <View style={styles.photos}>
-          {post.photos.map((photo, i) => (
-            <Pressable
-              key={photo.id}
-              accessibilityRole="button"
-              accessibilityLabel={`Open photo ${String(i + 1)} of ${String(post.photos.length)}`}
-              onPress={() => {
-                onPhoto(i);
-              }}
-              style={[styles.photo, post.photos.length === 1 ? { width: "100%", aspectRatio: Math.max(photo.width / photo.height, 0.75) } : styles.photoHalf]}
-            >
-              <SignedPhoto uri={photoUrl(photo.id)} photoId={photo.id} files={files} round={photoRound} fit="cover" testID={`photo-${photo.id}`} />
-            </Pressable>
-          ))}
-        </View>
-      )}
+      {post.photos.length === 0 ? null : <PostPhotos post={post} photoUrl={photoUrl} files={files} photoRound={photoRound} onPhoto={onPhoto} />}
       <View style={styles.reactions}>
         {picking ? (
           <>
@@ -536,6 +658,73 @@ function PostCard({ post, gymName, posted, photoUrl, files, photoRound, busy, re
       </View>
       {reactError === null ? null : <Txt colour="badText">{reactError}</Txt>}
     </Card>
+  );
+}
+
+// A post's photos are cut to the first one's shape, within these; pressing one shows it whole.
+const PHOTO_SHAPE_NARROWEST = 0.75;
+const PHOTO_SHAPE_WIDEST = 1.91;
+const PHOTOS_TALLEST = 420;
+
+// By how many photos the post has, one to four: the row of them, and one of them in it.
+const ALL_PHOTOS_WIDE = ["100%", "200%", "300%", "400%"] as const;
+const ONE_PHOTO_WIDE = ["100%", "50%", "33.3333%", "25%"] as const;
+
+/** A post's photos, one at a time, slid left and right with dots under them (Kd's click-through, 2026-10-30); pressing
+ *  one opens it whole. As tall as the first photo's shape, within limits, so the page does not jump as they slide. */
+function PostPhotos({ post, photoUrl, files, photoRound, onPhoto }: Pick<PostCardProps, "post" | "photoUrl" | "files" | "photoRound" | "onPhoto">) {
+  const [at, setAt] = useState(0);
+  const { photos } = post;
+  const first = photos[0];
+  const shape = first === undefined ? 1 : Math.min(Math.max(first.width / first.height, PHOTO_SHAPE_NARROWEST), PHOTO_SHAPE_WIDEST);
+  // The card's own width, once it is known: a height limit on a shaped box would narrow the box too.
+  const [wide, setWide] = useState(0);
+  const allWide = ALL_PHOTOS_WIDE[photos.length - 1] ?? "100%";
+  const oneWide = ONE_PHOTO_WIDE[photos.length - 1] ?? "100%";
+  return (
+    <View style={styles.photosBox}>
+      <View
+        testID={`photos-box-${post.id}`}
+        onLayout={(e) => {
+          setWide(e.nativeEvent.layout.width);
+        }}
+        style={[styles.slides, wide === 0 ? { aspectRatio: shape } : { height: Math.min(wide / shape, PHOTOS_TALLEST) }]}
+      >
+        <ScrollView
+          testID={`photos-${post.id}`}
+          horizontal
+          pagingEnabled
+          nestedScrollEnabled
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ width: allWide }}
+          onMomentumScrollEnd={(e) => {
+            const { contentOffset, layoutMeasurement } = e.nativeEvent;
+            if (layoutMeasurement.width > 0) setAt(Math.round(contentOffset.x / layoutMeasurement.width));
+          }}
+        >
+          {photos.map((photo, i) => (
+            <Pressable
+              key={photo.id}
+              accessibilityRole="button"
+              accessibilityLabel={`Open photo ${String(i + 1)} of ${String(photos.length)}`}
+              onPress={() => {
+                onPhoto(i);
+              }}
+              style={{ width: oneWide, height: "100%" }}
+            >
+              <SignedPhoto uri={photoUrl(photo.id)} photoId={photo.id} files={files} round={photoRound} fit="cover" testID={`photo-${photo.id}`} />
+            </Pressable>
+          ))}
+        </ScrollView>
+      </View>
+      {photos.length < 2 ? null : (
+        <View testID={`photo-dots-${post.id}`} style={styles.dots}>
+          {photos.map((p, i) => (
+            <View key={p.id} testID={i === at ? "photo-dot-on" : undefined} style={[styles.dot, i === at ? styles.dotOn : null]} />
+          ))}
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -792,79 +981,16 @@ interface PhotoViewerProps {
   onClose: () => void;
 }
 
-type PostPhoto = GymPost["photos"][number];
-
-/** A post's photos, one at a time, the whole screen; slid left and right (Kd's click-through, 2026-10-30), and stepped
- *  by a screen reader's swipe up and down. */
+/** A post's photos, the whole screen. */
 function PhotoViewer({ viewing, url, files, photoRound, onIndex, onClose }: PhotoViewerProps) {
-  const insets = useSafeAreaInsets();
-  const photos = viewing?.post.photos ?? [];
-  const index = viewing === null ? 0 : Math.min(viewing.index, photos.length - 1);
-  // One photo is the width the viewer is given.
-  const [width, setWidth] = useState(0);
-  const list = useRef<FlatList<PostPhoto>>(null);
-  const go = (to: number) => {
-    if (to < 0 || to >= photos.length) return;
-    onIndex(to);
-    list.current?.scrollToIndex({ index: to, animated: true });
-  };
-  const counted = photos.length === 0 ? "" : `Photo ${String(index + 1)} of ${String(photos.length)}`;
+  const post = viewing?.post ?? null;
   return (
-    <Modal visible={viewing !== null} animationType="fade" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
-      <View testID="photo-viewer" style={[styles.viewer, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 12 }]}>
-        <View style={styles.viewerHead}>
-          <Txt colour="text" style={styles.grow}>
-            {counted}
-          </Txt>
-          <Pressable accessibilityRole="button" accessibilityLabel="Close photo" onPress={onClose} style={styles.back}>
-            <Icon name="x" size={18} />
-          </Pressable>
-        </View>
-        <View
-          testID="photo-pages"
-          style={styles.grow}
-          onLayout={(e) => {
-            setWidth(e.nativeEvent.layout.width);
-          }}
-          accessible
-          accessibilityRole="adjustable"
-          accessibilityLabel={counted}
-          accessibilityActions={[{ name: "increment" }, { name: "decrement" }]}
-          onAccessibilityAction={(e) => {
-            go(e.nativeEvent.actionName === "increment" ? index + 1 : index - 1);
-          }}
-        >
-          {viewing === null || width === 0 ? null : (
-            <FlatList
-              key={viewing.post.id}
-              ref={list}
-              data={photos}
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              keyExtractor={(p) => p.id}
-              initialScrollIndex={index}
-              getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
-              onMomentumScrollEnd={(e) => {
-                onIndex(Math.round(e.nativeEvent.contentOffset.x / width));
-              }}
-              renderItem={({ item }) => (
-                <View style={{ width, height: "100%" }}>
-                  <SignedPhoto uri={url(viewing.post, item.id)} photoId={item.id} files={files} round={photoRound} fit="contain" />
-                </View>
-              )}
-            />
-          )}
-        </View>
-        {photos.length < 2 ? null : (
-          <View style={styles.dots}>
-            {photos.map((p, i) => (
-              <View key={p.id} style={[styles.dot, i === index ? styles.dotOn : null]} />
-            ))}
-          </View>
-        )}
-      </View>
-    </Modal>
+    <PhotoPages
+      viewing={post === null || viewing === null ? null : { listKey: post.id, ids: post.photos.map((p) => p.id), index: viewing.index }}
+      photo={(id) => (post === null ? null : <SignedPhoto uri={url(post, id)} photoId={id} files={files} round={photoRound} fit="contain" />)}
+      onIndex={onIndex}
+      onClose={onClose}
+    />
   );
 }
 
@@ -882,6 +1008,37 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   list: { paddingHorizontal: sizes.edge, gap: sizes.gap },
+  top: { gap: sizes.gap, marginTop: 8, marginBottom: sizes.gap },
+  // The way to write, always at hand: at the bottom right, over the list.
+  pen: {
+    position: "absolute",
+    right: sizes.edge,
+    minWidth: 60,
+    minHeight: 60,
+    borderRadius: sizes.round,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: colours.orange,
+    experimental_backgroundImage: orangeGradient,
+    boxShadow: shadows.button,
+  },
+  penWords: { paddingHorizontal: 20 },
+  // Over the photos as well as the page, so they are solid.
+  jumps: { position: "absolute", right: sizes.edge + 8, gap: 10 },
+  jump: {
+    width: sizes.press,
+    height: sizes.press,
+    borderRadius: sizes.round,
+    borderWidth: 1,
+    borderColor: colours.lineStrong,
+    backgroundColor: colours.box,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  penPressed: { opacity: 0.85, transform: [{ scale: 0.96 }] },
+  penLabel: { fontFamily: fonts.semibold, fontSize: 15, lineHeight: 20 },
   box: { padding: 16, gap: 10 },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },
   grow: { flex: 1 },
@@ -896,9 +1053,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   note: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
-  photos: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  photo: { borderRadius: 12, overflow: "hidden", backgroundColor: colours.fill, maxHeight: 420 },
-  photoHalf: { width: "48.5%", aspectRatio: 1 },
+  photosBox: { gap: 8 },
+  slides: { width: "100%", borderRadius: 12, overflow: "hidden", backgroundColor: colours.fill },
   fill: { width: "100%", height: "100%" },
   noPhoto: { alignItems: "center", justifyContent: "center", padding: 8 },
   foot: { gap: sizes.gap },
@@ -925,8 +1081,6 @@ const styles = StyleSheet.create({
   ask: { gap: 12 },
   people: { gap: 10 },
   buttons: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", alignItems: "center", columnGap: 20, rowGap: 8 },
-  viewer: { flex: 1, backgroundColor: colours.page, paddingHorizontal: sizes.edge, gap: 12 },
-  viewerHead: { flexDirection: "row", alignItems: "center", gap: 12 },
   dots: { flexDirection: "row", justifyContent: "center", gap: 8 },
   dot: { width: 8, height: 8, borderRadius: sizes.round, backgroundColor: colours.textFaint },
   dotOn: { backgroundColor: colours.orange },

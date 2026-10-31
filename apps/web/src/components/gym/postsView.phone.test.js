@@ -54,6 +54,22 @@ describe("the phone's Updates says what the browser's says", () => {
     for (const tapped of ['like', 'love', 'strong', 'fire']) expect(phone.withReaction(p, tapped)).toEqual(browser.withReaction(p, tapped));
   });
 
+  it("posting: who may, the room left, what can be pressed and where the new post goes", () => {
+    for (const over of [{ posting: 'on' }, { posting: 'off' }, { posting: 'stopped' }, { posting: 'on', status: 'paused' }, { posting: 'stopped', status: 'paused' }]) {
+      const f = feed(posts.slice(0, 2), over);
+      expect(phone.memberCanPost(f)).toEqual(browser.memberCanPost(f));
+      expect(phone.stoppedNote(f)).toEqual(browser.stoppedNote(f));
+      expect(phone.emptyLine(feed([], over), true)).toEqual(browser.emptyLine(feed([], over), true));
+    }
+    for (const body of ['', '  ', 'x', 'a'.repeat(2000), 'a'.repeat(2001), '🔥'.repeat(2000), '🔥'.repeat(2001)]) {
+      expect(phone.charsLine(body)).toEqual(browser.charsLine(body));
+      for (const photos of [[], [{}]]) expect(phone.canPost(body, photos)).toEqual(browser.canPost(body, photos));
+    }
+    const f = feed(posts.slice(0, 3));
+    expect(phone.withNewPost(f, posts[1])).toEqual(browser.withNewPost(f, posts[1]));
+    expect(phone.withNewPost(f, posts[4])).toEqual(browser.withNewPost(f, posts[4]));
+  });
+
   it('the boxes, the blocked list and the help line', () => {
     expect(phone.reportBox('Iron House')).toEqual(browser.reportBox('Iron House'));
     expect(phone.REPORT_REASONS).toEqual(browser.REPORT_REASONS);

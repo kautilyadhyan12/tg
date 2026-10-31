@@ -145,7 +145,7 @@ export function registerPostRoutes(app: FastifyInstance, deps: Omit<service.Post
     if (params === null) return;
     const body = parseOr400(addGymPostRequestSchema, req.body, req, reply);
     if (body === null) return;
-    return reply.status(201).send({ post: await service.addMemberPost(postsDeps, requireUserId(req), params.gymId, body) });
+    return reply.status(201).send(await service.addMemberPost(postsDeps, requireUserId(req), params.gymId, body));
   });
 
   app.delete("/v1/orgs/:gymId/posts/mine/:postId", { preHandler: app.authenticate }, async (req, reply) => {

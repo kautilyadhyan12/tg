@@ -2,7 +2,7 @@
 // every sentence is tested without a browser. Shared by the member's Updates tab and the
 // console's page.
 import {
-  GYM_MEMBER_PHOTO_POSTS_A_DAY,
+  GYM_MEMBER_PHOTOS_A_DAY,
   GYM_MEMBER_POSTS_A_DAY,
   GYM_POST_MAX_CHARS,
   GYM_POST_MAX_PHOTOS,
@@ -119,7 +119,7 @@ export function stoppedNote(feed) {
 
 /** Under the member's box: who sees a post, and the day's limit. */
 export function memberPostHint(gymName) {
-  return `Everyone at ${gymName} in the app sees it straight away. You can post ${GYM_MEMBER_POSTS_A_DAY} times in any 24 hours, ${GYM_MEMBER_PHOTO_POSTS_A_DAY} of them with photos. Where a photo was taken is never kept.`;
+  return `Everyone at ${gymName} in the app sees it straight away. You can post ${GYM_MEMBER_POSTS_A_DAY} times in any 24 hours, with up to ${GYM_MEMBER_PHOTOS_A_DAY} photos. Where a photo was taken is never kept.`;
 }
 
 /** The list with the member's new post at the top of the unpinned ones; never twice. */

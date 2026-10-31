@@ -285,7 +285,7 @@ for (let i = 0; i < RUNS + 1; i++) {
   const body = addGymPostRequestSchema.parse({ postKey: randomUUID(), body: "Four photos at full size", photos: [photo, photo, photo, photo] });
   const added = await time(() => addMemberPost(deps, viewer, gymId, body));
   memberAdds.push(added);
-  ownRemoves.push(await time(() => removeOwnPost(deps, viewer, gymId, added.value.id, allowed)));
+  ownRemoves.push(await time(() => removeOwnPost(deps, viewer, gymId, added.value.post.id, allowed)));
 }
 report("member post, 4 photos kept", memberAdds.slice(1));
 report("member removes their own post", ownRemoves.slice(1));
