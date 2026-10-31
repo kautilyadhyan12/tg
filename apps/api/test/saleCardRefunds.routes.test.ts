@@ -271,7 +271,7 @@ d("Refund to card at Sell (real Postgres)", { timeout: T }, () => {
       // The box first: this product's share, and the card that paid.
       const box = await send("GET", refundUrl(gym, basket.water), gym.owner.cookies);
       expect(box.statusCode, box.body).toBe(200);
-      expect(cardRefundCheckSchema.parse(JSON.parse(box.body))).toEqual({ card: { brand: "VISA", last4: "1111" }, leftMinor: 400, refundedInSquareMinor: 0, block: null });
+      expect(cardRefundCheckSchema.parse(JSON.parse(box.body))).toMatchObject({ card: { brand: "VISA", last4: "1111" }, leftMinor: 400, refundedInSquareMinor: 0, block: null });
 
       // Two presses of one box: one refund, and one lot back on the shelf.
       const key = randomUUID();
@@ -403,7 +403,7 @@ d("Refund to card at Sell (real Postgres)", { timeout: T }, () => {
       const shelf = await stockOf(gym);
       const box = await send("GET", allUrl(gym, basket.water), gym.owner.cookies);
       expect(box.statusCode, box.body).toBe(200);
-      expect(cardRefundCheckSchema.parse(JSON.parse(box.body))).toEqual({ card: { brand: "VISA", last4: "1111" }, leftMinor: 1900, refundedInSquareMinor: 0, block: null });
+      expect(cardRefundCheckSchema.parse(JSON.parse(box.body))).toMatchObject({ card: { brand: "VISA", last4: "1111" }, leftMinor: 1900, refundedInSquareMinor: 0, block: null });
 
       const key = randomUUID();
       const body = { requestKey: key, shelf: [{ saleId: basket.water, count: 2 }] };
@@ -580,7 +580,7 @@ d("Refund to card at Sell (real Postgres)", { timeout: T }, () => {
 
     it("under the gym's lock Square's own figure still stops a press, on one product and on all of a sale", async () => {
       const basket = await sold(gym);
-      const start = { id: randomUUID(), gymId: gym.id, saleId: basket.towel, requestKey: randomUUID(), amountMinor: 500, reason: "returned" as const, squareLeftMinor: 100, card: null, environment: "production" as const, accountId: gym.acct.merchantId, startedBy: gym.owner.userId, now: clock, checkingUntil: clock };
+      const start = { id: randomUUID(), gymId: gym.id, saleId: basket.towel, requestKey: randomUUID(), amountMinor: 500, reason: "returned" as const, squareLeftMinor: 100, card: null, environment: "production" as const, accountId: gym.acct.merchantId, deviceId: null, startedBy: gym.owner.userId, now: clock, checkingUntil: clock };
       expect(await startSaleRefund(sql, { ...start, restock: 0 })).toEqual({ kind: "too_much", leftMinor: 100, currency: "USD" });
       expect(await startWholeSaleRefund(sql, { ...start, amountMinor: 1900, shelf: [] })).toEqual({ kind: "changed" });
       expect(await pressesOf(gym, basket.towel)).toHaveLength(0);
@@ -708,6 +708,55 @@ d("Refund to card at Sell (real Postgres)", { timeout: T }, () => {
     });
   });
 
+  describe("a refund on the Terminal", () => {
+    const interac = async (): Promise<Basket> => {
+      const basket = await sold(gym);
+      const paid = square.paymentById(basket.squarePaymentId);
+      if (paid === undefined) throw new Error("no payment");
+      paid.card_details = { card: { card_brand: "INTERAC", last_4: "4242" }, refund_requires_card_presence: true };
+      return basket;
+    };
+    const waitOn = (b: Basket, url: string, payload: object) => send("POST", url, b.gym.owner.cookies, { requestKey: randomUUID(), reason: "returned", terminalId: b.gym.desk, ...payload });
+    const pressIdOf = (res: { statusCode: number; body: string }) => {
+      expect(res.statusCode, res.body).toBe(200);
+      const answer = cardRefundResponseSchema.parse(JSON.parse(res.body));
+      expect(answer.step).toBe("terminal");
+      return answer.pressId;
+    };
+    const look = (b: Basket, pressId: string) => send("GET", `/v1/orgs/${b.gym.id}/card-refunds/${pressId}`, b.gym.owner.cookies);
+
+    it("one product: nothing stands as given back, and nothing goes on the shelf, until Square says the person finished", async () => {
+      const basket = await interac();
+      const before = await stockOf(gym);
+      const pressId = pressIdOf(await waitOn(basket, refundUrl(gym, basket.water), { amountMinor: 200, restock: 1 }));
+      expect(await refundsOf(gym, basket.water)).toHaveLength(0);
+      expect(await stockOf(gym)).toBe(before);
+      expect(errorOf(await note(basket, basket.water, 200))).toBe("card_refund_waiting");
+      const seen = await look(basket, pressId);
+      expect(seen.statusCode, seen.body).toBe(200);
+      expect(await refundsOf(gym, basket.water)).toMatchObject([{ amount_minor: 200, method: "terminal", restocked: 1, undone: false }]);
+      expect(await stockOf(gym)).toBe((before ?? 0) + 1);
+      expect(madeFor(basket)).toHaveLength(1);
+    });
+
+    it("all of a sale: one request for all that is left, written on each product once", async () => {
+      const basket = await interac();
+      const pressId = pressIdOf(await waitOn(basket, `${refundUrl(gym, basket.water)}-all`, { amountMinor: 1900, shelf: [] }));
+      await look(basket, pressId);
+      await look(basket, pressId);
+      expect(square.terminalRefunds.filter((f) => f.payment_id === basket.squarePaymentId)).toHaveLength(1);
+      expect(await refundsOf(gym, basket.water)).toHaveLength(1);
+      expect(await refundsOf(gym, basket.towel)).toHaveLength(1);
+    });
+
+    it("a stranger's press reads nothing", async () => {
+      const basket = await interac();
+      const pressId = pressIdOf(await waitOn(basket, refundUrl(gym, basket.towel), { amountMinor: 100, restock: 0 }));
+      expect((await send("GET", `/v1/orgs/${nextDoor.id}/card-refunds/${pressId}`, nextDoor.owner.cookies)).statusCode).toBe(404);
+      await look(basket, pressId);
+    });
+  });
+
   describe("what stops a refund before it is sent", () => {
     it("an Interac debit card, a payment over a year old, one in another account, and a sale whose total differs", async () => {
       const blockOf = async (b: Basket) => cardRefundCheckSchema.parse(JSON.parse((await send("GET", refundUrl(b.gym, b.towel), b.gym.owner.cookies)).body)).block;
@@ -716,8 +765,8 @@ d("Refund to card at Sell (real Postgres)", { timeout: T }, () => {
       const paid = square.paymentById(interac.squarePaymentId);
       if (paid === undefined) throw new Error("no payment");
       paid.card_details = { card: { card_brand: "INTERAC", last_4: "4242" }, refund_requires_card_presence: true };
-      expect(await blockOf(interac)).toBe("card_present");
-      expect(errorOf(await press(interac, interac.towel, 100))).toBe("card_refund_card_present");
+      expect(await blockOf(interac)).toBeNull();
+      expect(errorOf(await press(interac, interac.towel, 100))).toBe("card_refund_pick_terminal");
 
       const old = await sold(gym);
       const oldPaid = square.paymentById(old.squarePaymentId);

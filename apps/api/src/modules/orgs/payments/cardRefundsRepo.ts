@@ -26,6 +26,7 @@ import { refundAskingOnBill, refundTargetOf, type RefundTarget } from "../member
 import { lockedEntry, lockedHeld } from "../memberships/heldRepo.js";
 import { lockGym } from "../memberList/repo.js";
 import type { SquareEnvironment } from "./square.js";
+import { lockFreeTerminal } from "./terminalPaymentsRepo.js";
 
 type SqlOrTx = Sql | TransactionSql;
 
@@ -55,13 +56,19 @@ export interface RefundPress {
   last4: string | null;
   requestKey: string;
   state: "asking" | "pending" | "done";
-  outcome: "completed" | "failed" | "refused" | "lost" | null;
+  outcome: "completed" | "failed" | "refused" | "lost" | "cancelled" | null;
   code: string | null;
   looks: number;
   startedBy: string | null;
   startedAt: Date;
   /** When Square was last asked: past `startedAt`, Square was asked before, and may have taken it up then. */
   checkedAt: Date;
+  /** The Terminal, where Square needs the card present (18d-iv-c); null for a refund sent to the card. */
+  deviceId: string | null;
+  terminalRefundId: string | null;
+  pickedUp: boolean;
+  cancelWantedAt: Date | null;
+  cancelTooLate: boolean;
 }
 
 export interface RawPress {
@@ -89,6 +96,11 @@ export interface RawPress {
   started_by: string | null;
   started_at: Date;
   checked_at: Date;
+  device_id: string | null;
+  terminal_refund_id: string | null;
+  picked_up: boolean;
+  cancel_wanted_at: Date | null;
+  cancel_too_late: boolean;
 }
 
 export const toPress = (r: RawPress): RefundPress => ({
@@ -116,6 +128,11 @@ export const toPress = (r: RawPress): RefundPress => ({
   startedBy: r.started_by,
   startedAt: r.started_at,
   checkedAt: r.checked_at,
+  deviceId: r.device_id,
+  terminalRefundId: r.terminal_refund_id,
+  pickedUp: r.picked_up,
+  cancelWantedAt: r.cancel_wanted_at,
+  cancelTooLate: r.cancel_too_late,
 });
 
 export interface PaymentToRefund {
@@ -172,15 +189,21 @@ export interface NewPress {
   card: CardRefundCheck["card"];
   environment: SquareEnvironment;
   accountId: string;
+  /** The Terminal, where Square needs the card present. */
+  deviceId: string | null;
   startedBy: string;
   now: Date;
   /** Held by the request that writes it, which asks Square straight after. */
   checkingUntil: Date;
 }
 
+/** The Terminal, locked, when this press may wait on it: a press with none needs nothing. */
+export const terminalFree = async (tx: TransactionSql, s: { environment: SquareEnvironment; accountId: string; deviceId: string | null }): Promise<boolean> =>
+  s.deviceId === null || (await lockFreeTerminal(tx, { environment: s.environment, accountId: s.accountId, deviceId: s.deviceId }));
+
 export type StartOutcome =
   | { kind: "new" | "same_press"; press: RefundPress }
-  | { kind: "key_reused" | "entry_not_found" | "membership_not_found" | "payment_not_found" | "not_card" | "waiting" | "not_settled" }
+  | { kind: "key_reused" | "entry_not_found" | "membership_not_found" | "payment_not_found" | "not_card" | "waiting" | "not_settled" | "terminal_busy" }
   | { kind: "too_much"; leftMinor: number; currency: string };
 
 /** The press, written under the gym's lock and the record's. Two staff at one instant are taken one after the other, and the
@@ -212,14 +235,15 @@ export async function startRefund(sql: Sql, s: NewPress): Promise<StartOutcome> 
       return { kind: "not_settled" };
     }
     if (s.amountMinor > s.squareLeftMinor) return { kind: "too_much", leftMinor: s.squareLeftMinor, currency: payment.currency };
+    if (!(await terminalFree(tx, s))) return { kind: "terminal_busy" };
 
     const [row] = await tx<RawPress[]>`
       INSERT INTO gym_square_refunds
         (id, gym_id, payment_id, environment, account_id, square_payment_id, amount_minor, currency, reason, brand, last4,
-         request_key, state, started_by, started_at, checked_at, checking_until)
+         request_key, state, device_id, started_by, started_at, checked_at, checking_until)
       VALUES (${s.id}, ${s.gymId}, ${s.paymentId}, ${s.environment}, ${s.accountId}, ${payment.squarePaymentId}, ${s.amountMinor},
               ${payment.currency}, ${s.reason}, ${s.card?.brand ?? null}, ${s.card?.last4 ?? null}, ${s.requestKey}, 'asking',
-              ${s.startedBy}, ${s.now}, ${s.now}, ${s.checkingUntil})
+              ${s.deviceId}, ${s.startedBy}, ${s.now}, ${s.now}, ${s.checkingUntil})
       RETURNING *`;
     if (row === undefined) throw new Error("a refund press was not written under the gym's lock");
     return { kind: "new", press: toPress(row) };
@@ -272,8 +296,46 @@ export async function lookAgain(sql: SqlOrTx, press: RefundPress, at: Date): Pro
   await sql`UPDATE gym_square_refunds SET look_at = ${at}, looks = looks + 1, checking_until = NULL WHERE gym_id = ${press.gymId} AND id = ${press.id} AND state = 'pending'`;
 }
 
-/** Square said no, or never answered: no refund is written. */
-export async function endAsking(sql: SqlOrTx, press: RefundPress, end: { outcome: "refused" | "lost"; code: string | null }, now: Date): Promise<void> {
+/** The press waiting on a Terminal for this Square payment, if any. */
+export async function waitingOnTerminal(sql: SqlOrTx, gymId: string, squarePaymentId: string): Promise<RefundPress | null> {
+  const [row] = await sql<RawPress[]>`
+    SELECT * FROM gym_square_refunds WHERE gym_id = ${gymId} AND square_payment_id = ${squarePaymentId} AND state = 'asking' AND device_id IS NOT NULL LIMIT 1`;
+  return row === undefined ? null : toPress(row);
+}
+
+/** One press waiting on a Terminal, held for this request; null while another asks, or once it has ended. */
+export async function claimPress(sql: SqlOrTx, gymId: string, id: string, now: Date, until: Date): Promise<RefundPress | null> {
+  const [row] = await sql<RawPress[]>`
+    UPDATE gym_square_refunds SET checking_until = ${until}, checked_at = ${now}
+    WHERE gym_id = ${gymId} AND id = ${id} AND state = 'asking' AND device_id IS NOT NULL AND (checking_until IS NULL OR checking_until < ${now})
+    RETURNING *`;
+  return row === undefined ? null : toPress(row);
+}
+
+export async function setTerminalRefund(sql: SqlOrTx, press: RefundPress, terminalRefundId: string): Promise<void> {
+  await sql`UPDATE gym_square_refunds SET terminal_refund_id = ${terminalRefundId} WHERE gym_id = ${press.gymId} AND id = ${press.id} AND state = 'asking'`;
+}
+
+export async function setPickedUp(sql: SqlOrTx, press: RefundPress): Promise<void> {
+  await sql`UPDATE gym_square_refunds SET picked_up = true WHERE gym_id = ${press.gymId} AND id = ${press.id} AND state = 'asking'`;
+}
+
+/** Staff pressed Cancel: kept on the press, so whichever request asks Square next stops the Terminal first. False once it has ended. */
+export async function wantCancel(sql: SqlOrTx, gymId: string, id: string, now: Date): Promise<boolean> {
+  const rows = await sql<{ id: string }[]>`
+    UPDATE gym_square_refunds SET cancel_wanted_at = COALESCE(cancel_wanted_at, ${now})
+    WHERE gym_id = ${gymId} AND id = ${id} AND state = 'asking' AND device_id IS NOT NULL
+    RETURNING id`;
+  return rows.length === 1;
+}
+
+/** Square refused Cancel: the person has started, so it finishes there. */
+export async function cancelRefusedTooLate(sql: SqlOrTx, press: RefundPress): Promise<void> {
+  await sql`UPDATE gym_square_refunds SET cancel_wanted_at = NULL, cancel_too_late = true WHERE gym_id = ${press.gymId} AND id = ${press.id} AND state = 'asking'`;
+}
+
+/** Square said no, it stopped on the Terminal, or Square never answered: no refund is written. */
+export async function endAsking(sql: SqlOrTx, press: RefundPress, end: { outcome: "refused" | "lost" | "cancelled"; code: string | null }, now: Date): Promise<void> {
   await sql`
     UPDATE gym_square_refunds SET state = 'done', outcome = ${end.outcome}, code = ${end.code}, finished_at = ${now}, checking_until = NULL
     WHERE gym_id = ${press.gymId} AND id = ${press.id} AND state = 'asking'`;
@@ -386,8 +448,9 @@ export async function recordFailed(sql: Sql, press: RefundPress, failed: { code:
 export async function openPressesOf(sql: SqlOrTx, gymId: string, paymentIds: readonly string[]): Promise<Map<string, CardRefundOpen>> {
   const open = new Map<string, CardRefundOpen>();
   if (paymentIds.length === 0) return open;
-  const rows = await sql<{ payment_id: string; amount_minor: number; on_day: string; lost: boolean; failed: boolean; decided_on: string | null; decided_by: string | null }[]>`
+  const rows = await sql<{ payment_id: string; amount_minor: number; on_day: string; lost: boolean; failed: boolean; on_terminal: boolean; decided_on: string | null; decided_by: string | null }[]>`
     SELECT DISTINCT ON (q.payment_id) q.payment_id, q.amount_minor, (q.started_at AT TIME ZONE g.timezone)::date::text AS on_day, q.state = 'done' AS lost, q.outcome = 'failed' AS failed,
+           q.state = 'asking' AND q.device_id IS NOT NULL AS on_terminal,
            (q.no_refund_at AT TIME ZONE g.timezone)::date::text AS decided_on, u.display_name AS decided_by
     FROM gym_square_refunds q
     JOIN gyms g ON g.id = q.gym_id
@@ -397,6 +460,6 @@ export async function openPressesOf(sql: SqlOrTx, gymId: string, paymentIds: rea
            WHERE r.gym_id = q.gym_id AND r.payment_id = q.payment_id AND r.created_at > q.started_at AND r.undone_at IS NULL) < q.amount_minor
     ORDER BY q.payment_id, q.state = 'asking' DESC, COALESCE(q.outcome = 'lost' AND q.no_refund_at IS NULL, false) DESC, q.started_at DESC`;
   // A failed press says itself on the crossed-out line, unless staff decided on it; it is read so an older decision does not stand over it.
-  for (const r of rows) if (!r.failed || r.decided_on !== null) open.set(r.payment_id, { amountMinor: r.amount_minor, on: r.on_day, lost: r.lost, decided: r.decided_on === null ? null : { on: r.decided_on, by: r.decided_by } });
+  for (const r of rows) if (!r.failed || r.decided_on !== null) open.set(r.payment_id, { amountMinor: r.amount_minor, on: r.on_day, lost: r.lost, onTerminal: r.on_terminal, decided: r.decided_on === null ? null : { on: r.decided_on, by: r.decided_by } });
   return open;
 }

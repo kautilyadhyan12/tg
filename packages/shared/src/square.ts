@@ -228,6 +228,26 @@ export type SquareTerminalCheckout = z.infer<typeof squareTerminalCheckoutSchema
 /** CreateTerminalCheckout's, GetTerminalCheckout's and CancelTerminalCheckout's answer. */
 export const squareTerminalCheckoutAnswerSchema = z.object({ checkout: squareTerminalCheckoutSchema });
 
+// Refund on the Terminal (ROADMAP 18d-iv-c; "Refund Interac Payments", read 2026-10-31). Square's answers call it `refund`.
+
+/** A Terminal refund's id at Square. */
+export const squareTerminalRefundIdSchema = z.string().regex(/^[A-Za-z0-9:_-]{1,255}$/);
+
+/** `status`: PENDING, IN_PROGRESS, CANCEL_REQUESTED, CANCELED or COMPLETED. Once COMPLETED, `refund_id` names the refund. */
+export const squareTerminalRefundSchema = z.object({
+  id: squareTerminalRefundIdSchema,
+  refund_id: z.string().regex(/^[A-Za-z0-9_-]{1,255}$/).nullish(),
+  payment_id: squarePaymentIdSchema,
+  amount_money: squareMoneySchema,
+  device_id: squareDeviceIdSchema.nullish(),
+  status: z.string().max(40),
+  cancel_reason: z.string().max(40).nullish(),
+});
+export type SquareTerminalRefund = z.infer<typeof squareTerminalRefundSchema>;
+
+/** CreateTerminalRefund's, GetTerminalRefund's and CancelTerminalRefund's answer. */
+export const squareTerminalRefundAnswerSchema = z.object({ refund: squareTerminalRefundSchema });
+
 /** A payment. `status` COMPLETED is money taken; APPROVED and PENDING are not yet; FAILED and
  *  CANCELED never will be. */
 export const squarePaymentSchema = z.object({

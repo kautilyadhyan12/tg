@@ -153,6 +153,7 @@ export function SaleRefundBox({ gymId, country = null, sale, who, typeAmount = f
 function SaleCardRefundBox({ gymId, sale, who, paymentsTo, onDone, onNote, onClose }) {
   return (
     <RefundToCardBox
+      gymId={gymId}
       readKey={`${gymId}/${sale.id}`}
       read={() => registerService.getCardRefund(gymId, sale.id)}
       press={(body, shelf) => registerService.refundToCard(gymId, sale.id, { ...body, restock: Number(shelf[sale.id] ?? '0') })}
@@ -174,6 +175,7 @@ function WholeCardRefundBox({ gymId, basket, lines, who, paymentsTo, onDone, onN
   const saleId = lines[0]?.id ?? '';
   return (
     <RefundToCardBox
+      gymId={gymId}
       readKey={`${gymId}/${saleId}/all`}
       read={() => registerService.getWholeCardRefund(gymId, saleId)}
       press={(body, shelf) => registerService.refundWholeToCard(gymId, saleId, { ...body, shelf: shelfBody(lines, shelf) })}

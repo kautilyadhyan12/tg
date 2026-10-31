@@ -53,6 +53,8 @@
 // Failed payments (ROADMAP 18d-iii-ii-b), `billing.members`; Try again is Charge card on file above:
 //   GET    /v1/orgs/:gymId/failed-payments?from=0             a page of the list
 //   GET    /v1/orgs/:gymId/failed-payments/summary            how many, and what they come to (Overview)
+//   GET    /v1/orgs/:gymId/card-refunds/:pressId              where a refund on the Terminal stands (18d-iv-c)
+//   POST   /v1/orgs/:gymId/card-refunds/:pressId/cancel       stops it, until the person starts
 //   GET    /v1/orgs/:gymId/refunds-to-review?from=0           Overview's list of refunds to review
 //   POST   /v1/orgs/:gymId/refunds-to-review/fees/:billId/keep            Keep the fee
 //   POST   /v1/orgs/:gymId/refunds-to-review/presses/:pressId/no-refund   No refund needed
@@ -60,6 +62,7 @@
 import {
   cardChargeRequestSchema,
   cardFeeChargeRequestSchema,
+  cardRefundPressParamsSchema,
   cardRefundRequestSchema,
   saleCardRefundRequestSchema,
   saleWholeCardRefundRequestSchema,
@@ -403,6 +406,21 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     if (params === null) return;
     const answer = await failedPayments.readFailedSummary(paymentsDeps, callerId(req), params.gymId);
     return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  // A refund on the Terminal: the box asks every few seconds while the person is at the Terminal.
+  app.get("/v1/orgs/:gymId/card-refunds/:pressId", { preHandler: [app.authenticate, staffOnly(deps.sql, payCheckLimit)] }, async (req, reply) => {
+    const params = parseOr400(cardRefundPressParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const answer = await cardRefunds.checkCardRefund(paymentsDeps, callerId(req), params.gymId, params.pressId);
+    return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  app.post("/v1/orgs/:gymId/card-refunds/:pressId/cancel", { preHandler: [app.authenticate, staffOnly(deps.sql, refundLimit)] }, async (req, reply) => {
+    const params = parseOr400(cardRefundPressParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const answer = await cardRefunds.cancelCardRefund(paymentsDeps, callerId(req), params.gymId, params.pressId);
+    return reply.status(200).send(answer);
   });
 
   // Refunds to review: Overview reads it each time it opens; a decision is one press on one row.

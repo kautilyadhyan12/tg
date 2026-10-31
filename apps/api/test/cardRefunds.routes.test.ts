@@ -24,11 +24,11 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { openDueBills } from "../src/modules/orgs/memberships/billsRepo.js";
 import { removeFreezeFees } from "../src/modules/orgs/memberships/freezeFees.js";
-import { CARD_REFUND } from "../src/modules/orgs/payments/cardRefunds.js";
+import { CARD_REFUND, TERMINAL_REFUND } from "../src/modules/orgs/payments/cardRefunds.js";
 import { linesPage, totals } from "../src/modules/orgs/paymentsDownload/repo.js";
 import { squareSettings } from "../src/modules/orgs/payments/settings.js";
 import { processSquareWork } from "../src/modules/orgs/payments/work.js";
-import { account, fakeSquare, type Account } from "./fakeSquareTerminal.js";
+import { account, fakeSquare, type Account, type Behaviour } from "./fakeSquareTerminal.js";
 import { recordingHub } from "./liveNewsRecorder.js";
 import { proveAddress } from "./proveAddress.js";
 
@@ -121,6 +121,8 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
   const cleanup = async () => {
     const myUsers = sql`SELECT id FROM users WHERE email LIKE 'crfd-t-%@example.com'`;
     await sql`DELETE FROM gym_square_refunds WHERE gym_id IN (${mineSql})`;
+    await sql`DELETE FROM gym_terminal_payments WHERE gym_id IN (${mineSql})`;
+    await sql`DELETE FROM gym_square_terminals WHERE gym_id IN (${mineSql})`;
     await sql`DELETE FROM gym_card_charges WHERE gym_id IN (${mineSql})`;
     await sql`DELETE FROM gym_member_cards WHERE gym_id IN (${mineSql})`;
     await sql`DELETE FROM gym_card_agreements WHERE gym_id IN (${mineSql})`;
@@ -255,6 +257,15 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
     if (paid === undefined) throw new Error("no fee payment");
     return { gym, entryId, membershipId, paymentId: paid.id, squarePaymentId: paid.provider_payment_id, billId };
   };
+  const errorOf = (res: { body: string }) => (JSON.parse(res.body) as { error: string }).error;
+  /** Somebody who paid by Interac debit: Square marks the payment as needing the card present. */
+  const interacPaid = async (g: Gym, fullName: string): Promise<Paid> => {
+    const paid = await paidByCard(g, fullName);
+    const p = square.paymentById(paid.squarePaymentId);
+    if (p === undefined) throw new Error("no payment");
+    p.card_details = { card: { card_brand: "INTERAC", last_4: "4242" }, refund_requires_card_presence: true };
+    return paid;
+  };
   const feeOwedPaidByHand = async (g: Gym, fullName: string): Promise<void> => {
     const { entryId, membershipId, billId } = await feeOwed(g, fullName, 300);
     const paid = await send("POST", `${entryUrl(g, entryId)}/memberships/${membershipId}/fees/${billId}/payments`, g.owner.cookies, { requestKey: randomUUID(), amountMinor: 300, method: "cash" });
@@ -345,7 +356,7 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
       // The box first: what Square says of the payment.
       const box = await send("GET", refundUrl(maya), gym.owner.cookies);
       expect(box.statusCode, box.body).toBe(200);
-      expect(cardRefundCheckSchema.parse(JSON.parse(box.body))).toEqual({ card: { brand: "VISA", last4: "1111" }, leftMinor: 2500, refundedInSquareMinor: 0, block: null });
+      expect(cardRefundCheckSchema.parse(JSON.parse(box.body))).toMatchObject({ card: { brand: "VISA", last4: "1111" }, leftMinor: 2500, refundedInSquareMinor: 0, block: null });
 
       // Two presses of one box: one refund.
       const key = randomUUID();
@@ -631,17 +642,268 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
     });
   });
 
+  describe("a refund on the Terminal", () => {
+    const desk = async (g: Gym, behaviour: Behaviour = "person"): Promise<{ id: string; deviceId: string }> => {
+      const deviceId = `DESK${uniq()}`;
+      const [row] = await sql<{ id: string }[]>`
+        INSERT INTO gym_square_terminals (gym_id, environment, account_id, state, device_id, paired_at, created_by)
+        VALUES (${g.id}, 'production', ${g.acct.merchantId}, 'paired', ${deviceId}, ${clock}, ${g.owner.userId}) RETURNING id`;
+      square.devices.set(deviceId, { accountId: g.acct.merchantId, behaviour });
+      return { id: row?.id ?? "", deviceId };
+    };
+    const pressOn = (p: Paid, terminalId: string, amountMinor = 2500, requestKey: string = randomUUID(), by: Person = p.gym.owner) =>
+      send("POST", refundUrl(p), by.cookies, { requestKey, amountMinor, reason: "paid_twice", terminalId });
+    const read = (res: { statusCode: number; body: string }) => {
+      expect(res.statusCode, res.body).toBe(200);
+      return cardRefundResponseSchema.parse(JSON.parse(res.body));
+    };
+    const look = (p: Paid, pressId: string, by: Person = p.gym.owner) => send("GET", `/v1/orgs/${p.gym.id}/card-refunds/${pressId}`, by.cookies);
+    const stop = (p: Paid, pressId: string, by: Person = p.gym.owner) => send("POST", `/v1/orgs/${p.gym.id}/card-refunds/${pressId}/cancel`, by.cookies);
+    const asked = (p: Paid) => square.terminalRefunds.filter((f) => f.payment_id === p.squarePaymentId);
+    const onlyAsked = (p: Paid) => {
+      const [made] = asked(p);
+      if (made === undefined) throw new Error("the Terminal was not asked");
+      return made;
+    };
+    const checkOf = async (p: Paid) => cardRefundCheckSchema.parse(JSON.parse((await send("GET", refundUrl(p), p.gym.owner.cookies)).body));
+
+    describe("the worst thing: refunded twice, or shown refunded when no money went back", () => {
+      it("nothing stands as given back until Square says the person finished, and it goes back once however often it is pressed", async () => {
+        const maya = await interacPaid(gym, "Maya Terminal");
+        const terminal = await desk(gym);
+        const key = randomUUID();
+        const first = read(await pressOn(maya, terminal.id, 2500, key));
+        expect(first.step).toBe("terminal");
+        expect(first.onTerminal).toMatchObject({ pickedUp: false, stopping: false, ended: null });
+        // Sent to the Terminal, never to the card.
+        expect(madeFor(maya)).toHaveLength(0);
+        expect(onlyAsked(maya)).toMatchObject({ device_id: terminal.deviceId, key: first.pressId, deadline: "PT5M" });
+        expect(await refundsOf(maya)).toHaveLength(0);
+        expect(await billStatus(maya)).toBe("paid");
+
+        // While it waits: the same press is the one press, and nothing else goes back on that payment.
+        expect(read(await pressOn(maya, terminal.id, 2500, key)).pressId).toBe(first.pressId);
+        const other = await desk(gym);
+        const second = await pressOn(maya, other.id);
+        expect(second.statusCode).toBe(409);
+        expect(errorOf(second)).toBe("card_refund_waiting");
+        const noted = await send("POST", `${entryUrl(gym, maya.entryId)}/memberships/${maya.membershipId}/payments/${maya.paymentId}/refunds`, gym.owner.cookies, { requestKey: randomUUID(), amountMinor: 2500, method: "cash", reason: "paid_twice" });
+        expect(noted.statusCode, noted.body).toBe(409);
+        expect(asked(maya)).toHaveLength(1);
+        expect(await refundsOf(maya)).toHaveLength(0);
+
+        // On the Terminal's screen, still nothing given back.
+        square.terminalRefundShown(onlyAsked(maya).id);
+        expect(read(await look(maya, first.pressId)).onTerminal?.pickedUp).toBe(true);
+        expect(await refundsOf(maya)).toHaveLength(0);
+
+        square.terminalRefundUsed(onlyAsked(maya).id);
+        expect(read(await look(maya, first.pressId)).step).toBe("pending");
+        expect(await refundsOf(maya)).toMatchObject([{ amount_minor: 2500, method: "company", undone: false }]);
+        expect(madeFor(maya)).toHaveLength(1);
+
+        // Looked at again and pressed again: still one refund.
+        await look(maya, first.pressId);
+        await work();
+        expect(read(await pressOn(maya, terminal.id, 2500, key)).pressId).toBe(first.pressId);
+        const again = await pressOn(maya, terminal.id);
+        expect(again.statusCode).toBe(409);
+        expect(asked(maya)).toHaveLength(1);
+        expect(await refundsOf(maya)).toHaveLength(1);
+      });
+
+      it("the person cancels on the Terminal: no money stands as given back, and it can be tried again", async () => {
+        const maya = await interacPaid(gym, "Maya Cancels");
+        const terminal = await desk(gym, "cancels");
+        const first = read(await pressOn(maya, terminal.id));
+        const seen = read(await look(maya, first.pressId));
+        expect(seen.step).toBe("ended");
+        expect(seen.onTerminal?.ended).toBe("cancelled_on_terminal");
+        expect(await pressesOf(maya)).toMatchObject([{ state: "done", outcome: "cancelled", code: "BUYER_CANCELED", square_refund_id: null }]);
+        expect(await refundsOf(maya)).toHaveLength(0);
+        expect(await billStatus(maya)).toBe("paid");
+        // A cancel is no failure: nothing to review, and nothing said under the payment.
+        expect((await paymentOnPage(maya)).cardRefund).toBeNull();
+
+        square.devices.set(terminal.deviceId, { accountId: gym.acct.merchantId, behaviour: "person" });
+        const next = read(await pressOn(maya, terminal.id));
+        expect(next.pressId).not.toBe(first.pressId);
+        square.terminalRefundUsed(asked(maya)[1]?.id ?? "");
+        await look(maya, next.pressId);
+        expect(await refundsOf(maya)).toHaveLength(1);
+      });
+
+      it("Square says COMPLETED for another amount or payment: nothing is written, and it is left to check", async () => {
+        const maya = await interacPaid(gym, "Maya Other");
+        const terminal = await desk(gym);
+        const first = read(await pressOn(maya, terminal.id, 1000));
+        onlyAsked(maya).amount_money = { amount: 1100, currency: "USD" };
+        square.terminalRefundUsed(onlyAsked(maya).id);
+        expect(read(await look(maya, first.pressId)).step).toBe("checking");
+        expect(await pressesOf(maya)).toMatchObject([{ state: "done", outcome: "lost", code: "NOT_OURS" }]);
+        expect(await refundsOf(maya)).toHaveLength(0);
+      });
+
+      it("Square says COMPLETED but its refund cannot be read yet: nothing is written until it can", async () => {
+        const maya = await interacPaid(gym, "Maya Unread");
+        const terminal = await desk(gym);
+        const first = read(await pressOn(maya, terminal.id));
+        square.terminalRefundUsed(onlyAsked(maya).id);
+        square.state.refundDown = true;
+        const real = square.api.getRefund;
+        square.api.getRefund = () => Promise.resolve({ kind: "unavailable", status: null });
+        expect(read(await look(maya, first.pressId)).step).toBe("terminal");
+        expect(await refundsOf(maya)).toHaveLength(0);
+        square.api.getRefund = real;
+        square.state.refundDown = false;
+        expect(read(await look(maya, first.pressId)).step).toBe("pending");
+        expect(await refundsOf(maya)).toHaveLength(1);
+      });
+
+      it("Square's answer to the press is lost: the same request is read back, never a second", async () => {
+        const maya = await interacPaid(gym, "Maya Lost");
+        const terminal = await desk(gym);
+        square.state.refundLost = true;
+        const first = read(await pressOn(maya, terminal.id));
+        square.state.refundLost = false;
+        expect(first.step).toBe("terminal");
+        expect(asked(maya)).toHaveLength(1);
+        read(await look(maya, first.pressId));
+        expect(asked(maya)).toHaveLength(1);
+        expect((await sql<{ id: string | null }[]>`SELECT terminal_refund_id AS id FROM gym_square_refunds WHERE id = ${first.pressId}`)[0]?.id).toBe(onlyAsked(maya).id);
+      });
+    });
+
+    it("a page closed while it waits: the worker finishes it", async () => {
+      const maya = await interacPaid(gym, "Maya Worker");
+      const terminal = await desk(gym);
+      read(await pressOn(maya, terminal.id));
+      square.terminalRefundUsed(onlyAsked(maya).id);
+      const started = clock;
+      clock = new Date(clock.getTime() + CARD_REFUND.idleMs + 1000);
+      await work();
+      clock = started;
+      expect(await refundsOf(maya)).toHaveLength(1);
+    });
+
+    it("the Terminal never shows it: it is cancelled after a minute, and the box says why", async () => {
+      const maya = await interacPaid(gym, "Maya Offline");
+      const terminal = await desk(gym, "offline");
+      const first = read(await pressOn(maya, terminal.id));
+      expect(read(await look(maya, first.pressId)).step).toBe("terminal");
+      const started = clock;
+      clock = new Date(clock.getTime() + TERMINAL_REFUND.notShownMs + 1000);
+      const seen = read(await look(maya, first.pressId));
+      clock = started;
+      expect(seen.onTerminal?.ended).toBe("no_answer");
+      expect(onlyAsked(maya).status).toBe("CANCELED");
+    });
+
+    it("past Square's own time with no end from it: Square is asked to cancel", async () => {
+      const maya = await interacPaid(gym, "Maya Late");
+      const terminal = await desk(gym);
+      const first = read(await pressOn(maya, terminal.id));
+      const started = clock;
+      square.terminalRefundShown(onlyAsked(maya).id);
+      read(await look(maya, first.pressId));
+      onlyAsked(maya).status = "PENDING";
+      clock = new Date(clock.getTime() + TERMINAL_REFUND.deadlineMs + TERMINAL_REFUND.graceMs + 1000);
+      const seen = read(await look(maya, first.pressId));
+      clock = started;
+      expect(seen.onTerminal?.ended).toBe("timed_out");
+    });
+
+    it("Cancel stops it until the person starts; after that it says so and finishes there", async () => {
+      const maya = await interacPaid(gym, "Maya Stop");
+      const terminal = await desk(gym);
+      const first = read(await pressOn(maya, terminal.id));
+      const seen = read(await stop(maya, first.pressId));
+      expect(seen.step).toBe("ended");
+      expect(seen.onTerminal?.ended).toBe("cancelled");
+      expect(await refundsOf(maya)).toHaveLength(0);
+
+      const next = read(await pressOn(maya, terminal.id));
+      const latest = asked(maya)[1];
+      square.terminalRefundShown(latest?.id ?? "");
+      const tooLate = read(await stop(maya, next.pressId));
+      expect(tooLate.step).toBe("terminal");
+      expect(tooLate.onTerminal).toMatchObject({ tooLate: true, stopping: false });
+      square.terminalRefundUsed(latest?.id ?? "");
+      await look(maya, next.pressId);
+      expect(await refundsOf(maya)).toHaveLength(1);
+    });
+
+    it("one Terminal does one thing: a refund waits for a free Terminal, and a payment for a refund's", async () => {
+      const maya = await interacPaid(gym, "Maya Busy");
+      const leo = await interacPaid(gym, "Leo Busy");
+      const terminal = await desk(gym);
+      read(await pressOn(maya, terminal.id));
+      const busy = await pressOn(leo, terminal.id);
+      expect(busy.statusCode).toBe(409);
+      expect(errorOf(busy)).toBe("terminal_busy");
+      expect(await pressesOf(leo)).toHaveLength(0);
+
+      const entryId = await person(gym, "Payer Busy");
+      const today = (await held(gym, gym.owner, entryId)).today;
+      const given = await send("POST", `${entryUrl(gym, entryId)}/memberships`, gym.owner.cookies, { requestKey: randomUUID(), method: "cash", typeId: gym.typeId, startsOn: today, paid: false });
+      expect(given.statusCode, given.body).toBe(201);
+      const membershipId = heldMembershipsResponseSchema.parse(JSON.parse(given.body)).memberships[0]?.id ?? "";
+      const pay = await send("POST", `${entryUrl(gym, entryId)}/memberships/${membershipId}/terminal-payment`, gym.owner.cookies, { terminalId: terminal.id, requestKey: randomUUID(), periodIndex: 0, amountMinor: 2500 });
+      expect(pay.statusCode).toBe(409);
+      expect(errorOf(pay)).toBe("terminal_busy");
+    });
+
+    it("a stranger: another gym's Terminal is refused, and another gym's press cannot be read or stopped", async () => {
+      const maya = await interacPaid(gym, "Maya Stranger");
+      const theirs = await desk(nextDoor);
+      const refused = await pressOn(maya, theirs.id);
+      expect(refused.statusCode).toBe(404);
+      expect(errorOf(refused)).toBe("terminal_gone");
+      expect(asked(maya)).toHaveLength(0);
+
+      const terminal = await desk(gym);
+      const first = read(await pressOn(maya, terminal.id));
+      expect((await send("GET", `/v1/orgs/${nextDoor.id}/card-refunds/${first.pressId}`, nextDoor.owner.cookies)).statusCode).toBe(404);
+      expect((await send("POST", `/v1/orgs/${nextDoor.id}/card-refunds/${first.pressId}/cancel`, nextDoor.owner.cookies)).statusCode).toBe(404);
+      expect([403, 404]).toContain((await look(maya, first.pressId, nextDoor.owner)).statusCode);
+      expect([403, 404]).toContain((await stop(maya, first.pressId, nextDoor.owner)).statusCode);
+      expect(onlyAsked(maya).status).toBe("PENDING");
+      read(await stop(maya, first.pressId));
+    });
+
+    it("a card Square does not mark goes to the card, whatever Terminal is named", async () => {
+      const maya = await paidByCard(gym, "Visa Named");
+      const terminal = await desk(gym);
+      read(await pressOn(maya, terminal.id, 500));
+      expect(madeFor(maya)).toHaveLength(1);
+      expect(asked(maya)).toHaveLength(0);
+    });
+
+    it("the box names the Terminals and an opened box finds what waits; the page says it waits on the Terminal", async () => {
+      const g = await makeGym(`Terminal Box ${uniq()}`, `MERCH${uniq()}`);
+      const maya = await interacPaid(g, "Maya Box");
+      expect(await checkOf(maya)).toMatchObject({ onTerminal: true, terminals: [], card: { brand: "INTERAC", last4: "4242" } });
+      const terminal = await desk(g);
+      expect((await checkOf(maya)).terminals).toEqual([{ id: terminal.id, serial: terminal.deviceId, practice: null }]);
+      const first = read(await pressOn(maya, terminal.id, 1000));
+      const open = await checkOf(maya);
+      expect(open.block).toBe("waiting");
+      expect(open.waitingPress?.pressId).toBe(first.pressId);
+      expect((await paymentOnPage(maya)).cardRefund).toMatchObject({ amountMinor: 1000, onTerminal: true, lost: false });
+    });
+  });
+
   describe("what stops a refund before it is sent", () => {
     const blockOf = async (p: Paid) => cardRefundCheckSchema.parse(JSON.parse((await send("GET", refundUrl(p), gym.owner.cookies)).body));
 
-    it("an Interac debit card, which Square refunds only with the card present", async () => {
-      const maya = await paidByCard(gym, "Interac Debit");
-      const p = square.paymentById(maya.squarePaymentId);
-      if (p === undefined) throw new Error("no payment");
-      p.card_details = { card: { card_brand: "INTERAC", last_4: "4242" }, refund_requires_card_presence: true };
-      expect((await blockOf(maya)).block).toBe("card_present");
-      expect((await press(maya, 100)).statusCode).toBe(409);
+    it("an Interac debit card with no Terminal named: nothing is sent to the card or a Terminal", async () => {
+      const maya = await interacPaid(gym, "Interac Debit");
+      expect(await blockOf(maya)).toMatchObject({ block: null, onTerminal: true });
+      const res = await press(maya, 100);
+      expect(res.statusCode).toBe(409);
+      expect(errorOf(res)).toBe("card_refund_pick_terminal");
       expect(madeFor(maya)).toHaveLength(0);
+      expect(square.terminalRefunds.filter((f) => f.payment_id === maya.squarePaymentId)).toHaveLength(0);
     });
 
     it("a payment over a year old", async () => {
@@ -771,7 +1033,7 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
 
       const box = await send("GET", refundUrl(maya), gym.owner.cookies);
       expect(box.statusCode, box.body).toBe(200);
-      expect(cardRefundCheckSchema.parse(JSON.parse(box.body))).toEqual({ card: { brand: "VISA", last4: "1111" }, leftMinor: 1000, refundedInSquareMinor: 0, block: null });
+      expect(cardRefundCheckSchema.parse(JSON.parse(box.body))).toMatchObject({ card: { brand: "VISA", last4: "1111" }, leftMinor: 1000, refundedInSquareMinor: 0, block: null });
 
       const key = randomUUID();
       const [first, again] = await Promise.all([press(maya, 1000, key), press(maya, 1000, key)]);

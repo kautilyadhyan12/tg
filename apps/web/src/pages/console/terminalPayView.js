@@ -13,6 +13,7 @@ const PRACTICE_PAYMENT_WORDS = {
   cancels: 'Member cancels',
   times_out: 'Times out',
   offline: 'Offline',
+  interac: 'Member pays by Interac',
 };
 
 /** A Terminal in the payment box: Square's name, and the serial number printed on it. */

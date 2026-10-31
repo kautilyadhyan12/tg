@@ -137,16 +137,20 @@ export async function lockTerminal(tx: TransactionSql, environment: SquareEnviro
   await tx`SELECT pg_advisory_xact_lock(hashtextextended(${`square_terminal:${environment}:${accountId}:${deviceId}`}, 0))`;
 }
 
-/** Whether a payment waits on this Terminal, for a card save asking under `lockTerminal`. */
+/** Whether a payment or a refund (18d-iv-c) waits on this Terminal, for a card save asking under `lockTerminal`. */
 export async function paymentWaitingOn(tx: TransactionSql, environment: SquareEnvironment, accountId: string, deviceId: string): Promise<boolean> {
   const [row] = await tx<{ id: string }[]>`
     SELECT id FROM gym_terminal_payments
-    WHERE environment = ${environment} AND account_id = ${accountId} AND device_id = ${deviceId} AND state = 'waiting'`;
+    WHERE environment = ${environment} AND account_id = ${accountId} AND device_id = ${deviceId} AND state = 'waiting'
+    UNION ALL
+    SELECT id FROM gym_square_refunds
+    WHERE environment = ${environment} AND account_id = ${accountId} AND device_id = ${deviceId} AND state = 'asking'
+    LIMIT 1`;
   return row !== undefined;
 }
 
-/** The Terminal, locked, when nothing waits on it: no payment, and no card save. */
-async function lockFreeTerminal(tx: TransactionSql, s: { environment: SquareEnvironment; accountId: string; deviceId: string }): Promise<boolean> {
+/** The Terminal, locked, when nothing waits on it: no payment, no card save and no refund. */
+export async function lockFreeTerminal(tx: TransactionSql, s: { environment: SquareEnvironment; accountId: string; deviceId: string }): Promise<boolean> {
   await lockTerminal(tx, s.environment, s.accountId, s.deviceId);
   const [busy] = await tx<{ id: string }[]>`
     SELECT id FROM gym_terminal_payments
@@ -154,6 +158,9 @@ async function lockFreeTerminal(tx: TransactionSql, s: { environment: SquareEnvi
     UNION ALL
     SELECT id FROM gym_terminal_card_saves
     WHERE environment = ${s.environment} AND account_id = ${s.accountId} AND device_id = ${s.deviceId} AND state IN ('agreeing','saving')
+    UNION ALL
+    SELECT id FROM gym_square_refunds
+    WHERE environment = ${s.environment} AND account_id = ${s.accountId} AND device_id = ${s.deviceId} AND state = 'asking'
     LIMIT 1`;
   return busy === undefined;
 }

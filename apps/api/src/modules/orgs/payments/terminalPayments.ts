@@ -92,6 +92,7 @@ const PRACTICE_CHECKOUT_DEVICES: Readonly<Record<string, string>> = {
   [SQUARE_PRACTICE_DEVICES.cancels]: "841100b9-ee60-4537-9bcf-e30b2ba5e215",
   [SQUARE_PRACTICE_DEVICES.times_out]: "0a956d49-619a-4530-8e5e-8eac603ffc5e",
   [SQUARE_PRACTICE_DEVICES.offline]: "da40d603-c2ea-4a65-8cfd-f42e36dab0c7",
+  [SQUARE_PRACTICE_DEVICES.interac]: SQUARE_PRACTICE_DEVICES.interac,
 };
 
 /** The device a checkout is sent to: the Terminal itself, or in Square's sandbox the simulated
@@ -338,7 +339,7 @@ async function advance(deps: PaymentsDeps, square: SquareSettings, pay: pays.Pay
 const leaseFrom = (at: Date): Date => new Date(at.getTime() + TERMINAL_PAYMENT.leaseMs);
 
 /** The gym's paired Terminals in an account, as Card on file names them, with their device ids. */
-async function pairedTerminals(deps: PaymentsDeps, gymId: string, environment: pays.PayRow["environment"], accountId: string): Promise<(CardTerminal & { deviceId: string })[]> {
+export async function pairedTerminals(deps: Pick<PaymentsDeps, "sql">, gymId: string, environment: pays.PayRow["environment"], accountId: string): Promise<(CardTerminal & { deviceId: string })[]> {
   return (await terminalsRepo.readTerminals(deps.sql, gymId, environment, accountId)).flatMap((t) =>
     t.state === "paired" && t.deviceId !== null ? [{ id: t.id, serial: t.practice === null ? t.deviceId : null, practice: t.practice, deviceId: t.deviceId }] : [],
   );

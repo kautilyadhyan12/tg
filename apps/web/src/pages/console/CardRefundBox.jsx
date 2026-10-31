@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Loader2, RotateCcw } from 'lucide-react';
-import { cardName, cardRefundSentLine } from '@app/shared';
+import { CARD_REFUND_TERMINAL_WORDS, cardName, cardRefundEndedLine, cardRefundSentLine } from '@app/shared';
 import { errorCode, errorText, orgService } from '../../api/orgsApi';
 import PlaceLink from '../../components/console/PlaceLink';
+import TerminalRefundWait from './TerminalRefundWait';
+import { payTerminalName } from './terminalPayView';
 import { blockNotes, cardRefundBlockLine, cardRefundBody, cardRefundBoxWords, cardRefundButton, cardRefundDraft, inSquareLine, refundReasonsFor } from './cardRefundView';
 
 // REFUND TO CARD (ROADMAP 18d-iv-a; spec Part 3 §14.8): the box under a payment taken through Square. It asks Square about
@@ -23,6 +25,7 @@ const newKey = () => globalThis.crypto.randomUUID();
 export default function CardRefundBox({ gymId, entryId, m, payment, fee = null, name, live, paymentsTo, onDone, onNote, onClose }) {
   return (
     <RefundToCardBox
+      gymId={gymId}
       readKey={`${gymId}/${entryId}/${m.id}/${payment.id}`}
       read={() => orgService.getCardRefund(gymId, entryId, m.id, payment.id).then((res) => res.data)}
       press={(body) => orgService.refundToCard(gymId, entryId, m.id, payment.id, body).then((res) => res.data)}
@@ -40,13 +43,15 @@ export default function CardRefundBox({ gymId, entryId, m, payment, fee = null, 
 /** The box itself, for a member's payment, a product of a sale or all of a sale. `read`: what Square says now. `press`: the money
  *  goes back, told the body and how many went back on each shelf. `words`: its sentences, from what Square said. `shelves`: what it
  *  asks about the shelf, each `{ key, label, choices }`. `allLeft`: all that is left goes back, so no amount is asked. `onNote`: told
- *  what stopped the refund, if anything. `thing`: what staff open again to see where a refund stands. */
-export function RefundToCardBox({ readKey, read, press, currency, words: wordsFor, reasons, shelves = [], allLeft = false, thing = 'payment', paymentsTo, onDone, onNote, onClose }) {
+ *  what stopped the refund, if anything. `thing`: what staff open again to see where a refund stands. Where Square needs the card
+ *  present (18d-iv-c) the box asks which Terminal, and waits there. */
+export function RefundToCardBox({ gymId, readKey, read, press, currency, words: wordsFor, reasons, shelves = [], allLeft = false, thing = 'payment', paymentsTo, onDone, onNote, onClose }) {
   const [check, setCheck] = useState(null);
   const [draft, setDraft] = useState(null);
   const [problem, setProblem] = useState(null);
   const [connect, setConnect] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [waiting, setWaiting] = useState(null);
 
   useEffect(() => {
     let live2 = true;
@@ -55,6 +60,7 @@ export function RefundToCardBox({ readKey, read, press, currency, words: wordsFo
         if (!live2) return;
         setCheck(seen);
         setDraft(cardRefundDraft(seen, currency, newKey));
+        setWaiting(seen.waitingPress ?? null);
       },
       (err) => {
         if (!live2) return;
@@ -100,6 +106,52 @@ export function RefundToCardBox({ readKey, read, press, currency, words: wordsFo
   }
 
   const money = { currency };
+  const cardWords = check.card === null ? 'the card' : cardName(check.card);
+  // Every end of a wait lands here: what happened is said in this same place.
+  const ended = (seen) => {
+    setWaiting(null);
+    setBusy(false);
+    if (seen.step === 'ended') {
+      setProblem(cardRefundEndedLine(seen.onTerminal.ended));
+      setDraft((d) => ({ ...d, requestKey: newKey() }));
+      if (check.block === 'waiting') setCheck({ ...check, block: null, waitingPress: null });
+      return;
+    }
+    onDone(cardRefundSentLine(seen, cardWords), { ...seen, cardWords });
+  };
+
+  if (waiting !== null) {
+    return (
+      <TerminalRefundWait
+        gymId={gymId}
+        press={waiting}
+        showName={check.terminals.length > 1}
+        onAnswer={(seen) => (seen.step === 'terminal' ? setWaiting(seen) : ended(seen))}
+        onRefused={(line, code) => {
+          setWaiting(null);
+          setBusy(false);
+          setProblem(line);
+          if (NOTHING_SENT.includes(code)) setDraft((d) => ({ ...d, requestKey: newKey() }));
+          if (check.block === 'waiting') setCheck({ ...check, block: null, waitingPress: null });
+        }}
+        onClose={onClose}
+      />
+    );
+  }
+
+  if (check.block === null && check.onTerminal === true && check.terminals.length === 0) {
+    return (
+      <div className="rounded-[14px] p-3 flex flex-col gap-3" style={BOX} data-testid="card-refund-box">
+        <span className="c-s14 c-t1">{paymentsTo !== null ? CARD_REFUND_TERMINAL_WORDS.no_terminal : CARD_REFUND_TERMINAL_WORDS.no_terminal_staff}</span>
+        {paymentsTo !== null ? <PlaceLink to={paymentsTo}>Open Square settings</PlaceLink> : null}
+        <div className="flex flex-wrap gap-2">
+          {note}
+          {back}
+        </div>
+      </div>
+    );
+  }
+
   if (check.block !== null) {
     const inSquare = inSquareLine(money, check);
     return (
@@ -125,8 +177,8 @@ export function RefundToCardBox({ readKey, read, press, currency, words: wordsFo
     setProblem(null);
     try {
       const sent = await press(body, draft.shelf ?? {});
-      const cardWords = check.card === null ? 'the card' : cardName(check.card);
-      onDone(cardRefundSentLine(sent, cardWords), { ...sent, cardWords });
+      if (sent.step === 'terminal') setWaiting(sent);
+      else ended(sent);
     } catch (err) {
       // No answer at all says nothing of whether the press reached Square.
       const unsure = `We couldn't reach Square. The refund may not have gone through: open the ${thing} again before trying.`;
@@ -154,6 +206,7 @@ export function RefundToCardBox({ readKey, read, press, currency, words: wordsFo
     >
       <p className="c-s15 c-w6 c-t1 m-0">{words.title}</p>
       <p className="c-s14 c-t2 m-0">{words.detail}</p>
+      {check.onTerminal === true ? <p className="c-s14 c-t1 m-0">{CARD_REFUND_TERMINAL_WORDS.present}</p> : null}
       {words.inSquare !== null ? (
         <div className="flex flex-col gap-2 items-start">
           <p className="c-s14 c-w5 m-0" style={{ color: 'var(--warn)' }}>
@@ -191,6 +244,19 @@ export function RefundToCardBox({ readKey, read, press, currency, words: wordsFo
           </select>
         </label>
       ))}
+      {check.onTerminal === true && check.terminals.length > 1 ? (
+        <label className="c-field">
+          <span className="c-label">{CARD_REFUND_TERMINAL_WORDS.terminal_label}</span>
+          <select className="c-sel" value={draft.terminalId} onChange={(e) => setDraft((d) => ({ ...d, terminalId: e.target.value }))}>
+            <option value="">Choose one</option>
+            {check.terminals.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.serial === null ? payTerminalName(t) : `${payTerminalName(t)} · ${t.serial}`}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
       {draft.tried && wrong !== null ? (
         <span className="c-s14" style={{ color: 'var(--bad)' }} role="alert">
           {wrong}
@@ -206,6 +272,7 @@ export function RefundToCardBox({ readKey, read, press, currency, words: wordsFo
           {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <RotateCcw aria-hidden="true" className="w-4 h-4" />}
           {cardRefundButton(money, check, draft)}
         </button>
+        {check.onTerminal === true ? note : null}
         {back}
       </div>
     </form>

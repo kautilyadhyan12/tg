@@ -23,7 +23,7 @@
 // refused (CONFLICTING_PARAMETERS), more than is left is refused (REFUND_AMOUNT_INVALID), and the payment's `refunded_money`
 // grows.
 import { randomBytes } from "node:crypto";
-import type { SquareCustomer, SquareCustomerFound, SquareLocation, SquarePayment, SquareRefund, SquareTerminalCheckout } from "@app/shared";
+import type { SquareCustomer, SquareCustomerFound, SquareLocation, SquarePayment, SquareRefund, SquareTerminalCheckout, SquareTerminalRefund } from "@app/shared";
 import type { CardPaymentResult, NewCardPayment, NewSquareCustomer, NewTerminalCheckout, SquareApi, SquareResult } from "../src/modules/orgs/payments/square.js";
 
 export interface Account {
@@ -70,6 +70,8 @@ export function fakeSquare() {
   const listings: { locationId: string }[] = [];
   /** Every refund Square made, as it stands: its key, whose it is, and what was asked. */
   const refundsMade: (SquareRefund & { accountId: string; key: string; reason: string })[] = [];
+  /** Refunds asked of a Terminal (18d-iv-c). A simulated Terminal plays its part on the first read; a person's waits for `terminalRefundUsed`. */
+  const terminalRefunds: (SquareTerminalRefund & { accountId: string; key: string; reason: string; deadline: string })[] = [];
   const payments = new Map<string, SquarePayment & { accountId: string }>();
   /** The customers Square has in each account, as RetrieveCustomer shows them (18d-iii-b-ii-a), in the order
    *  they were made, with their reference id (18d-iii-b-ii-b-i). */
@@ -204,6 +206,45 @@ export function fakeSquare() {
     else take(c);
   };
   const tokenAccount = (token: string): Account | undefined => tokens.get(token);
+  const shownTerminalRefund = (f: SquareTerminalRefund): SquareTerminalRefund => ({
+    id: f.id,
+    payment_id: f.payment_id,
+    amount_money: f.amount_money,
+    device_id: f.device_id ?? null,
+    status: f.status,
+    ...(f.refund_id == null ? {} : { refund_id: f.refund_id }),
+    ...(f.cancel_reason == null ? {} : { cancel_reason: f.cancel_reason }),
+  });
+  /** The person used their card: Square makes the refund, as a press to the card would. */
+  const refundOnTerminal = (f: (typeof terminalRefunds)[number]) => {
+    const p = paymentById(f.payment_id);
+    if (p === undefined) throw new Error("no such payment");
+    n += 1;
+    const total = p.total_money ?? p.amount_money;
+    p.refunded_money = { amount: (p.refunded_money?.amount ?? 0) + f.amount_money.amount, currency: total.currency };
+    const id = `${p.id}_${String(n)}${randomBytes(6).toString("hex")}`;
+    refundsMade.push({ id, status: state.refundStatus, amount_money: f.amount_money, payment_id: p.id, accountId: f.accountId, key: f.key, reason: f.reason });
+    Object.assign(f, { status: "COMPLETED", refund_id: id });
+  };
+  const playRefund = (f: (typeof terminalRefunds)[number]) => {
+    const behaviour = devices.get(f.device_id ?? "")?.behaviour ?? "person";
+    if (f.status !== "PENDING" || behaviour === "person" || behaviour === "offline") return;
+    if (behaviour === "cancels") Object.assign(f, { status: "CANCELED", cancel_reason: "BUYER_CANCELED" });
+    else if (behaviour === "times_out") Object.assign(f, { status: "CANCELED", cancel_reason: "TIMED_OUT" });
+    else refundOnTerminal(f);
+  };
+  /** The refund reaches the Terminal's screen. */
+  const terminalRefundShown = (id: string) => {
+    const made = terminalRefunds.find((f) => f.id === id);
+    if (made === undefined) throw new Error("no such Terminal refund");
+    made.status = "IN_PROGRESS";
+  };
+  /** The person uses their card on it. */
+  const terminalRefundUsed = (id: string) => {
+    const made = terminalRefunds.find((f) => f.id === id);
+    if (made === undefined) throw new Error("no such Terminal refund");
+    refundOnTerminal(made);
+  };
   /** A payment, taken on a Terminal or charged to a card on file. */
   const paymentById = (id: string): (SquarePayment & { accountId: string }) | undefined => payments.get(id) ?? charged.find((p) => p.id === id);
   const shownRefund = (f: SquareRefund): SquareRefund => ({ id: f.id, status: f.status, amount_money: f.amount_money, payment_id: f.payment_id });
@@ -510,6 +551,55 @@ export function fakeSquare() {
       refundsMade.push(made);
       return state.refundLost ? unavailable : { kind: "ok", value: shownRefund(made) };
     },
+    createTerminalRefund(token, r) {
+      if (state.down || state.refundDown) return Promise.resolve(unavailable);
+      const a = tokenAccount(token);
+      if (a === undefined) return Promise.resolve(unauthorized);
+      const known = terminalRefunds.find((f) => f.accountId === a.merchantId && f.key === r.idempotencyKey);
+      if (known !== undefined) {
+        return Promise.resolve(known.amount_money.amount === r.amountMinor ? { kind: "ok", value: shownTerminalRefund(known) } : { kind: "refused", status: 400, code: "CONFLICTING_PARAMETERS" });
+      }
+      if (state.refundRefused !== null) return Promise.resolve({ kind: "refused", status: 400, code: state.refundRefused });
+      const p = paymentById(r.paymentId);
+      if (p?.accountId !== a.merchantId) return Promise.resolve(notFound);
+      if (p.card_details?.refund_requires_card_presence !== true) return Promise.resolve({ kind: "refused", status: 400, code: "BAD_REQUEST" });
+      const total = p.total_money ?? p.amount_money;
+      if (r.amountMinor > total.amount - (p.refunded_money?.amount ?? 0)) return Promise.resolve({ kind: "refused", status: 400, code: "REFUND_AMOUNT_INVALID" });
+      n += 1;
+      const made = {
+        id: `termrefund${String(n)}${randomBytes(4).toString("hex")}`,
+        payment_id: p.id,
+        amount_money: { amount: r.amountMinor, currency: r.currency },
+        device_id: r.deviceId,
+        status: "PENDING",
+        accountId: a.merchantId,
+        key: r.idempotencyKey,
+        reason: r.reason,
+        deadline: r.deadline,
+      };
+      terminalRefunds.push(made);
+      return Promise.resolve(state.refundLost ? unavailable : { kind: "ok", value: shownTerminalRefund(made) });
+    },
+    getTerminalRefund(token, id) {
+      if (state.down) return Promise.resolve(unavailable);
+      const a = tokenAccount(token);
+      if (a === undefined) return Promise.resolve(unauthorized);
+      const made = terminalRefunds.find((f) => f.id === id);
+      if (made?.accountId !== a.merchantId) return Promise.resolve(notFound);
+      playRefund(made);
+      return Promise.resolve({ kind: "ok", value: shownTerminalRefund(made) });
+    },
+    cancelTerminalRefund(token, id) {
+      if (state.down) return Promise.resolve(unavailable);
+      const a = tokenAccount(token);
+      if (a === undefined) return Promise.resolve(unauthorized);
+      const made = terminalRefunds.find((f) => f.id === id);
+      if (made?.accountId !== a.merchantId) return Promise.resolve(notFound);
+      if (made.status !== "PENDING") return Promise.resolve({ kind: "refused", status: 400, code: "BAD_REQUEST" });
+      made.status = "CANCELED";
+      made.cancel_reason = "SELLER_CANCELED";
+      return Promise.resolve({ kind: "ok", value: shownTerminalRefund(made) });
+    },
     getRefund(token, id) {
       if (state.down) return Promise.resolve(unavailable);
       const a = tokenAccount(token);
@@ -659,6 +749,9 @@ export function fakeSquare() {
     refund,
     refundsMade,
     refundEnds,
+    terminalRefunds,
+    terminalRefundShown,
+    terminalRefundUsed,
     paymentById,
     listed,
   };

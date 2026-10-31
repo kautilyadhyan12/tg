@@ -8,7 +8,7 @@ import type { Sql } from "postgres";
 import { lockGym } from "../memberList/repo.js";
 import { saleLineRule, saleLinesToRefund, saleRefundAsking, undoSaleRefund, wholeSaleParts, writeSaleRefund, type SaleToRefund } from "../register/repo.js";
 import { insertAudit } from "../repo.js";
-import { toPress, type RawPress, type RefundPress, type SalePart } from "./cardRefundsRepo.js";
+import { terminalFree, toPress, type RawPress, type RefundPress, type SalePart } from "./cardRefundsRepo.js";
 import type { SquareEnvironment } from "./square.js";
 
 /** The same press sent again: the same product, amount, reason and shelf count. */
@@ -33,6 +33,8 @@ interface PressBase {
   card: CardRefundCheck["card"];
   environment: SquareEnvironment;
   accountId: string;
+  /** The Terminal, where Square needs the card present. */
+  deviceId: string | null;
   startedBy: string;
   now: Date;
   /** Held by the request that writes it, which asks Square straight after. */
@@ -45,7 +47,7 @@ export interface NewSalePress extends PressBase {
 
 export type StartSaleOutcome =
   | { kind: "new" | "same_press"; press: RefundPress }
-  | { kind: "key_reused" | "sale_not_found" | "not_card" | "voided" | "waiting" | "not_counted" }
+  | { kind: "key_reused" | "sale_not_found" | "not_card" | "voided" | "waiting" | "not_counted" | "terminal_busy" }
   | { kind: "too_much"; leftMinor: number; currency: string }
   | { kind: "too_many_back"; leftCount: number };
 
@@ -75,14 +77,15 @@ export async function startSaleRefund(sql: Sql, s: NewSalePress): Promise<StartS
       return { kind: "voided" };
     }
     if (s.amountMinor > s.squareLeftMinor) return { kind: "too_much", leftMinor: s.squareLeftMinor, currency: sale.currency };
+    if (!(await terminalFree(tx, s))) return { kind: "terminal_busy" };
 
     const [row] = await tx<RawPress[]>`
       INSERT INTO gym_square_refunds
         (id, gym_id, sale_id, restock, environment, account_id, square_payment_id, amount_minor, currency, reason, brand, last4,
-         request_key, state, started_by, started_at, checked_at, checking_until)
+         request_key, state, device_id, started_by, started_at, checked_at, checking_until)
       VALUES (${s.id}, ${s.gymId}, ${s.saleId}, ${s.restock}, ${s.environment}, ${s.accountId}, ${sale.squarePaymentId}, ${s.amountMinor},
               ${sale.currency}, ${s.reason}, ${s.card?.brand ?? null}, ${s.card?.last4 ?? null}, ${s.requestKey}, 'asking',
-              ${s.startedBy}, ${s.now}, ${s.now}, ${s.checkingUntil})
+              ${s.deviceId}, ${s.startedBy}, ${s.now}, ${s.now}, ${s.checkingUntil})
       RETURNING *`;
     if (row === undefined) throw new Error("a sale's refund press was not written under the gym's lock");
     return { kind: "new", press: toPress(row) };
@@ -95,7 +98,7 @@ export interface NewWholeSalePress extends PressBase {
 
 export type StartWholeSaleOutcome =
   | { kind: "new" | "same_press"; press: RefundPress }
-  | { kind: "key_reused" | "sale_not_found" | "not_card" | "voided" | "waiting" | "changed" | "not_counted" }
+  | { kind: "key_reused" | "sale_not_found" | "not_card" | "voided" | "waiting" | "changed" | "not_counted" | "terminal_busy" }
   | { kind: "too_many_back"; leftCount: number };
 
 /** The press on all of a sale: what each product takes is fixed here, under the gym's lock, and the amount is what staff saw left,
@@ -123,14 +126,15 @@ export async function startWholeSaleRefund(sql: Sql, s: NewWholeSalePress): Prom
     if (split.kind !== "ok") return split;
     const [firstPart] = split.parts;
     if (firstPart === undefined) return { kind: "changed" };
+    if (!(await terminalFree(tx, s))) return { kind: "terminal_busy" };
 
     const [row] = await tx<RawPress[]>`
       INSERT INTO gym_square_refunds
         (id, gym_id, sale_id, parts, environment, account_id, square_payment_id, amount_minor, currency, reason, brand, last4,
-         request_key, state, started_by, started_at, checked_at, checking_until)
+         request_key, state, device_id, started_by, started_at, checked_at, checking_until)
       VALUES (${s.id}, ${s.gymId}, ${firstPart.saleId}, ${tx.json(split.parts)}, ${s.environment}, ${s.accountId}, ${first.squarePaymentId}, ${s.amountMinor},
               ${first.currency}, ${s.reason}, ${s.card?.brand ?? null}, ${s.card?.last4 ?? null}, ${s.requestKey}, 'asking',
-              ${s.startedBy}, ${s.now}, ${s.now}, ${s.checkingUntil})
+              ${s.deviceId}, ${s.startedBy}, ${s.now}, ${s.now}, ${s.checkingUntil})
       RETURNING *`;
     if (row === undefined) throw new Error("a sale's refund press was not written under the gym's lock");
     return { kind: "new", press: toPress(row) };

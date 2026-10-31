@@ -1,6 +1,6 @@
 // REFUND TO CARD (ROADMAP 18d-iv-a; spec Part 3 §14.8): what the box under a payment says and sends. The money goes
 // back through Square to the card that paid; the server decides again whether it can.
-import { CARD_REFUND_WORDS, REFUND_REASONS, REFUND_REASON_WORDS, cardName, cardRefundSentLine, currencyDecimals, formatMinor, minorToPriceText, priceToMinor } from '@app/shared';
+import { CARD_REFUND_TERMINAL_WORDS, CARD_REFUND_WORDS, REFUND_REASONS, REFUND_REASON_WORDS, cardName, cardRefundSentLine, currencyDecimals, formatMinor, minorToPriceText, priceToMinor } from '@app/shared';
 import { dayWords } from './memberListView';
 
 export const CARD_REFUND_REASONS = REFUND_REASONS.map((value) => ({ value, label: REFUND_REASON_WORDS[value] }));
@@ -12,10 +12,16 @@ export const refundReasonsFor = (fee, reasons = CARD_REFUND_REASONS) => (fee ===
 export const cardRefundBlockLine = (block) => CARD_REFUND_WORDS[block] ?? CARD_REFUND_WORDS.differs;
 
 /** Where the money has to be given back another way, so the box offers Note a refund. */
-export const blockNotes = (block) => block === 'too_old' || block === 'card_present' || block === 'other_account';
+export const blockNotes = (block) => block === 'too_old' || block === 'other_account';
 
 /** The box's first state: all that can go back, and no reason picked. */
-export const cardRefundDraft = (check, currency, newKey) => ({ requestKey: newKey(), amount: minorToPriceText(check.leftMinor, currency), reason: '', tried: false });
+export const cardRefundDraft = (check, currency, newKey) => ({
+  requestKey: newKey(),
+  amount: minorToPriceText(check.leftMinor, currency),
+  reason: '',
+  tried: false,
+  terminalId: check.terminals?.length === 1 ? check.terminals[0].id : '',
+});
 
 const capital = (name) => `${name.charAt(0).toUpperCase()}${name.slice(1)}`;
 
@@ -45,13 +51,17 @@ export function cardRefundBody(m, check, draft) {
   }
   if (amountMinor > check.leftMinor) return { problem: `That is more than can be refunded. ${formatMinor(check.leftMinor, m.currency)} is the most.`, body: null };
   if (draft.reason === '') return { problem: 'Pick why it is being refunded.', body: null };
-  return { problem: null, body: { requestKey: draft.requestKey, amountMinor, reason: draft.reason } };
+  const base = { requestKey: draft.requestKey, amountMinor, reason: draft.reason };
+  if (check.onTerminal !== true) return { problem: null, body: base };
+  if (draft.terminalId === '') return { problem: CARD_REFUND_TERMINAL_WORDS.pick, body: null };
+  return { problem: null, body: { ...base, terminalId: draft.terminalId } };
 }
 
 /** The button says what it does and to which card. */
 export function cardRefundButton(m, check, draft) {
   const to = check.card === null ? 'the card' : cardName(check.card);
   const amountMinor = priceToMinor(draft.amount, m.currency);
+  if (check.onTerminal === true) return amountMinor === null || amountMinor <= 0 ? 'Refund on the Terminal' : `Refund ${formatMinor(amountMinor, m.currency)} on the Terminal`;
   return amountMinor === null || amountMinor <= 0 ? `Refund to ${to}` : `Refund ${formatMinor(amountMinor, m.currency)} to ${to}`;
 }
 
@@ -63,7 +73,9 @@ export function cardRefundOpenLine(open, currency) {
   }
   return open.lost
     ? `We don't know whether Square took the ${money} refund of ${dayWords(open.on)}. Check your Square Dashboard. If it went through, note the refund here.`
-    : `A refund of ${money} is waiting for Square's answer.`;
+    : open.onTerminal === true
+      ? `A refund of ${money} is waiting on the Terminal.`
+      : `A refund of ${money} is waiting for Square's answer.`;
 }
 
 /** What the sentence under a payment says now, by its own press, never another refund of the same amount: it follows the

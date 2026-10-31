@@ -38,7 +38,7 @@ describe("the wire", () => {
 });
 
 describe("what a press says", () => {
-  const sent = { amountMinor: 2000, currency: "USD", card: null, pressId: "88888888-8888-4888-8888-000000000001" } as const;
+  const sent = { amountMinor: 2000, currency: "USD", card: null, pressId: "88888888-8888-4888-8888-000000000001", onTerminal: null } as const;
   it("pending and completed both say it is on its way", () => {
     expect(cardRefundSentLine({ ...sent, step: "pending" }, "Visa ending 1111")).toBe("Square is processing this $20.00 refund to Visa ending 1111. It can take up to 14 business days to reach the card, depending on the bank.");
     expect(cardRefundSentLine({ ...sent, step: "completed" }, "the card")).toBe("$20.00 was refunded to the card. It can take up to 10 business days to reach the card, depending on the bank.");
