@@ -24,7 +24,7 @@ const WITH_ALLERGENS = replyFor("0008077102146");
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
 const PASSWORD = "label33-safe-test-password-1"; // gitleaks:allow
-const env = { NODE_ENV: "test", DATABASE_URL: url ?? "", WEB_ORIGIN: "http://localhost:5173", JWT_SECRET: "label33-test-secret-0123456789abcdefgh", LOG_LEVEL: "error" };
+const env = { NODE_ENV: "test", DATABASE_URL: url ?? "", WEB_ORIGIN: "http://localhost:5173", JWT_SECRET: "label33-test-secret-0123456789abcdefgh", LOG_LEVEL: "error" }; // gitleaks:allow
 /** A valid 13-digit code in a range neither list holds (33b-iii-a counted it). */
 const CODE = "1409999800018";
 const CODE_2 = "1409999800025";
@@ -170,7 +170,7 @@ d("a pack's label (real Postgres)", () => {
       next = says({ ...NOODLES, is_nutrition_label: false, columns: [] });
       const first = await read(dan);
       expect(first.statusCode).toBe(422);
-      const token = (first.json()).retakeToken;
+      const token = first.json<{ retakeToken: string }>().retakeToken;
       expect(typeof token).toBe("string");
       expect((await left(dan)).left).toBe(2);
       next = says(NOODLES);
