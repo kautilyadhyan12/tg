@@ -21,7 +21,7 @@ planning document).** Where this Part differs, RULINGS wins: ONE gym price list 
 every country, a month — up to 200 members $79 · up to 500 $129 · up to 1,000 $199 ·
 up to 1,500 $279 · up to 2,100 $379 · above that, contact us — and the INR book and
 the ₹449 individual price are gone; an individual pays $10 everywhere and has NO
-trial: a free app with limits and ONE meal scan a day; a gym's trial is 15 days, no
+trial: a free app with limits and THREE photo scans a month (15 a day on the $10 plan, Kd 2026-10-31); a gym's trial is 15 days, no
 card, capped at 200 members; a gym member scans 7 times a day; Paddle sells for us
 (5 % + 50¢ a payment, its page that day), gyms in the browser only; an individual
 buying inside the phone app pays through Apple or Google. Money between a member and

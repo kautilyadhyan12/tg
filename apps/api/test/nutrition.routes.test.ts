@@ -36,7 +36,7 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
   const inject=(method:"GET"|"POST"|"PUT"|"PATCH"|"DELETE",path:string,access:string,body?:unknown)=>api().inject({method,url:path,cookies:access===""?{}:{accessToken:access},headers:body===undefined?{}:{"content-type":"application/json"},...(body===undefined?{}:{payload:JSON.stringify(body)})});
   async function session(email:string){const reg=await inject("POST","/v1/auth/register","",{email,password:PASSWORD,displayName:"P26a Fixture"});if(reg.statusCode!==201)throw new Error(reg.body);const userId=reg.json<{userId:string}>().userId;const login=await inject("POST","/v1/auth/login","",{email,password:PASSWORD});return{userId,access:login.cookies.find((c)=>c.name==="accessToken")?.value??""};}
   beforeAll(async()=>{await sql`DELETE FROM subscriptions WHERE owner_type='user' AND owner_id IN (SELECT id FROM users WHERE email LIKE 'p26a-%@example.com')`;await sql`DELETE FROM meal_logs WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'p26a-%@example.com')`;await sql`DELETE FROM body_measurements WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'p26a-%@example.com')`;await sql`DELETE FROM user_dishware WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'p26a-%@example.com')`;await sql`DELETE FROM api_cost_events WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'p26a-%@example.com')`;await sql`DELETE FROM users WHERE email LIKE 'p26a-%@example.com'`;app=await buildApp(loadConfig(env),{redis,nutrition:{visionProvider:vision,foodSearchProvider:noExternal}});const a=await session("p26a-alice@example.com");userA=a.userId;cookieA=a.access;const b=await session("p26a-bob@example.com");cookieB=b.access;
-    // A free account scans once a day (RULINGS 2026-09-22) and these two scan all through the file, so both are on the $10 plan; the free limit has its own test below.
+    // A free account scans three times a month (rulings/2026-10-31-33b-iii-c.md) and these two scan all through the file, so both are on the $10 plan; the free limit has its own test below.
     for(const id of [a.userId,b.userId])await sql`INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider) SELECT 'user', ${id}, id, 'active', 'pilot' FROM plans WHERE code='pro_us_m'`;},60_000);
   afterAll(async()=>{if(app!==undefined)await app.close();if(ringApp!==undefined)await ringApp.close();await sql.end({timeout:5});});
 
@@ -842,7 +842,8 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
       return{
         userId,
         scan:(retakeToken?:string)=>post("/v1/nutrition/analyze-photo",{imageBase64:jpeg,mimeType:"image/jpeg",...(retakeToken===undefined?{}:{retakeToken})},access),
-        scansUsed:()=>scanRedis.get(quotaKey("meal_scan",userId,"day",new Date())),
+        scansUsed:()=>scanRedis.get(quotaKey("meal_scan",userId,"month",new Date())),
+        useScans:async(n:number)=>{for(let i=0;i<n;i++)await scanRedis.incrWithTtl(quotaKey("meal_scan",userId,"month",new Date()),3600);},
         costRows:async()=>(await sql<{provider:string;units:string|number;cost_micro:string|number}[]>`SELECT provider, units, cost_micro FROM api_cost_events WHERE user_id=${userId} AND feature='meal_scan' ORDER BY at`).map((r)=>({provider:r.provider,units:Number(r.units),costMicro:String(r.cost_micro)})),
       };
     };
@@ -939,7 +940,7 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     }finally{await s.app.close();}
   },30_000);
 
-  it("a try refused over the day's limit takes no scan, so the day's last scan given back after an outage can still be used",async()=>{
+  it("a try refused over the limit takes no scan, so the last scan given back after an outage can still be used",async()=>{
     // A free person has 1 scan a day. It waits at the scanner while they try again, then fails.
     const hung={fail:(err:Error):void=>{throw err;}};
     let reached=():void=>undefined;
@@ -952,18 +953,19 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     const s=await scanApp("p26a-over-limit@example.com",{vision:scanner});
     try{
       vi.spyOn(s.app.log,"error").mockImplementation(()=>undefined);
+      await s.useScans(2);
       const last=s.scan();
       await atScanner;
       const refused=await s.scan();
       expect(refused.statusCode,refused.body).toBe(429);
-      expect(await s.scansUsed()).toBe("1");
+      expect(await s.scansUsed()).toBe("3");
       hung.fail(new VisionProviderError("vision network failure","unavailable"));
       expect(bodyOf(await last)).toEqual({error:"scanner_unavailable",message:BUSY});
-      expect(await s.scansUsed()).toBe("0");
+      expect(await s.scansUsed()).toBe("2");
       const again=await s.scan();
       expect(again.statusCode,again.body).toBe(200);
-      expect([answers.length,await s.scansUsed()]).toEqual([0,"1"]);
-      // One a day: the next try is refused.
+      expect([answers.length,await s.scansUsed()]).toEqual([0,"3"]);
+      // Three a month: the next try is refused.
       const over=await s.scan();
       expect(over.statusCode,over.body).toBe(429);
     }finally{await s.app.close();}
