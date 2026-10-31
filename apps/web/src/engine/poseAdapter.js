@@ -74,13 +74,19 @@ export function engineSupports(def) {
  *
  *  `resolve` is injected for the same reason the library reader injects
  *  `hasDefinition`: the three bundled definitions all declare minEngineVersion
- *  "1.0.0" and ENGINE_VERSION is "1.0.0", so with the real map the gate's FALSE
+ *  the same version as ENGINE_VERSION, so with the real map the gate's FALSE
  *  arm is unreachable — a test could not distinguish a live gate from a deleted
  *  one. The default is the real resolver; the page never passes a second
  *  argument. */
 export function hasCameraAnalysis(slug, resolve = getDefinition) {
   const def = resolve(slug);
   return def !== null && engineSupports(def);
+}
+
+/** The picture's shape, width over height. A video with no size yet gives NaN,
+ *  which the engine treats as a frame that decides nothing. */
+export function pictureAspect(video) {
+  return video.videoWidth / video.videoHeight;
 }
 
 /** Map one pose-provider result to a PoseFrame (§2.4 input). UN-MIRRORED: x/y/z

@@ -134,6 +134,8 @@ already applies when the angle is `None`.
 
 ### 2.1 `PoseFrame` — the engine's only input during a set
 
+**Since 2026-10-31 (§11.8):** a session takes a `CameraFrame`, a `PoseFrame` plus the picture's `aspect`. A trace header's example below also has `aspect`; rep numbers in §4 and §8.1 are the old ones, and the definition files hold today's.
+
 One frame from the pose provider:
 
 ```jsonc
@@ -1356,7 +1358,7 @@ better, and the number is shown to Kd)
   9:16 one, and a true 160° reads 169° and 145°; the view classifier's width ratios move
   the same way. The frame carries the picture's shape, angles are taken in true
   proportions, the three web definitions are measured again so the web's tests stay green
-  (§11.7), and every number after it is measured that way. **As built (50a, 2026-10-31):** `CameraFrame` is a `PoseFrame` plus `aspect` (width / height); a session rescales x once; a frame without a usable shape decides nothing; a trace's header says its shape.
+  (§11.7), and every number after it is measured that way. **As built (50a, 2026-10-31):** `CameraFrame` is a `PoseFrame` plus `aspect` (width / height); a session rescales x once; a frame without a usable shape decides nothing; a trace's header says its shape. Measured again so far: each rep's up and down lines and squat's depth curve; the other angle numbers are measured with item 52.
 - **One person locked on (item 52).** More than one pose is asked for. The set's person is
   the one standing where the reference picture shows, nearest the phone (the largest);
   when two stand there, the screen asks one to raise a hand (Microsoft's own Xbox study,

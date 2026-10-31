@@ -18,6 +18,7 @@
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { SessionController } from '../engine/sessionController.js';
+import { pictureAspect } from '../engine/poseAdapter.js';
 import { PoseThroughput } from '../engine/poseThroughput.js';
 // DEV-ONLY (P1.3): raw-frame recorder tee. No-op unless VITE_TRACE_RECORD=1.
 import { TRACE_RECORD_ENABLED, recordFrame } from '../dev/traceRecorder';
@@ -414,7 +415,7 @@ export default function usePoseDetection({
       // be given.
       throughputRef.current.push(now);
       // The picture's own shape: the engine decides nothing without it.
-      const aspect = videoElement.videoWidth / videoElement.videoHeight;
+      const aspect = pictureAspect(videoElement);
       const display = controllerRef.current.feed(landmarks, now, landmarks.length > 0, aspect);
       setPoseData(display);
       if (TRACE_RECORD_ENABLED) {

@@ -642,7 +642,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 50b. [ ] **A video to body points**: one tool for every exercise, measured by the app's own engine, with still pictures a terminal can look at.
     - 50c. [ ] **The cross-check**: each exercise's rules run on every other exercise's video.
 51. [ ] **The camera test on Kd's phone** (item 1's two days; after item 10): which model and library, the speed, heat and battery, and the same numbers as the laptop.
-52. [ ] **The engine's missing parts**: holds, one side at a time, fast rhythm moves, timed only, the jump check, the floor reference, a leaning phone, steadier points, one person locked on; and Stage 4 item 6's faults, each with its test.
+52. [ ] **The engine's missing parts**: a rep whose stand-up is cut off by the set's end, the other angle numbers measured again in true degrees, holds, one side at a time, fast rhythm moves, timed only, the jump check, the floor reference, a leaning phone, steadier points, one person locked on; and Stage 4 item 6's faults, each with its test.
 53. [ ] **The camera screen**: its look as pictures first, then the set-up check, the live skeleton, the count, voice, "Count this set myself" and Follow-along.
 54. [ ] **The first seven through the line**: squat, chair squat, jump squat, bicep curl, bicycle crunch, barbell bench press, dumbbell bench press.
 55. [ ] **Exercises, family by family** (spec Part 2 §11.4): the rest of the 58, then the ones Kd names.

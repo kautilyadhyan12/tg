@@ -63,7 +63,11 @@ describe("the same body on any picture shape", () => {
       for (const aspect of [9 / 16, 3 / 4, 1, 4 / 3, 16 / 9]) {
         const other = run(redrawn(trace, aspect));
         expect(other.summary.reps).toBe(original.summary.reps);
-        expect(other.repEvents.map((e) => e.score)).toEqual(original.repEvents.map((e) => e.score));
+        expect(other.repEvents).toEqual(original.repEvents);
+        expect(other.summary).toEqual(original.summary);
+        expect(other.frameResults.map((r) => r.view)).toEqual(
+          original.frameResults.map((r) => r.view),
+        );
       }
     });
   }
@@ -82,7 +86,8 @@ describe("the same body on any picture shape", () => {
         0,
         1,
       ]);
-      const out = toTrueProportions({ t: 0, aspect, kp }).kp;
+      const padded = [...kp, ...Array.from({ length: 30 }, () => must(kp[0]))];
+      const out = toTrueProportions({ t: 0, aspect, kp: padded }).kp;
       expect(calculateAngle(must(out[0]), must(out[1]), must(out[2]))).toBeCloseTo(115, 1);
     }
   });
@@ -97,6 +102,29 @@ describe("a frame of unknown shape decides nothing", () => {
       const result = run({ header: trace.header, frames });
       expect(result.summary.reps).toBe(0);
       expect(must(result.frameResults.at(-1)).visibilityOk).toBe(false);
+    });
+  }
+
+  const broken: [string, (kp: unknown[]) => unknown][] = [
+    ["no points", () => undefined],
+    ["null points", () => null],
+    ["words for points", () => "points"],
+    ["a null point", (kp) => [null, ...kp.slice(1)]],
+    ["a number for a point", (kp) => [5, ...kp.slice(1)]],
+    ["a null x", (kp) => [[null, 0.5, 0, 0.9], ...kp.slice(1)]],
+    ["a word for x", (kp) => [["0.5", 0.5, 0, 0.9], ...kp.slice(1)]],
+    ["true for x", (kp) => [[true, 0.5, 0, 0.9], ...kp.slice(1)]],
+  ];
+  for (const [what, damage] of broken) {
+    it(`${what} counts no reps and does not throw`, () => {
+      const trace = load("sqauta_sideview1goodform.jsonl");
+      const frames = trace.frames.map((f) => ({
+        ...f,
+        kp: damage(f.kp),
+      })) as unknown as Trace["frames"];
+      const result = run({ header: trace.header, frames });
+      expect(result.summary.reps).toBe(0);
+      expect(must(result.frameResults.at(-1)).signals).toEqual({});
     });
   }
 

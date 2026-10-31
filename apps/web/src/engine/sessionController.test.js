@@ -13,6 +13,28 @@ import { getDefinition, startSet as adapterStartSet } from "./poseAdapter.js";
 import { PERSON_GATE, SceneGate } from "./sceneGate.js";
 import { SessionController } from "./sessionController.js";
 
+describe("the picture's shape reaches the engine", () => {
+  const trace = () =>
+    parseTrace(
+      readFileSync(join(import.meta.dirname, "__fixtures__/squat_goodform.jsonl"), "utf8"),
+    );
+  function count(aspect) {
+    const c = new SessionController();
+    c.startSet("squat", 1);
+    let d;
+    for (const f of trace().frames) {
+      const landmarks = f.kp.map(([x, y, z, visibility]) => ({ x, y, z, visibility }));
+      d = c.feed(landmarks, f.t, true, aspect);
+    }
+    return d.rep_count;
+  }
+  it("counts with the shape, and counts nothing without it", () => {
+    expect(count(trace().header.aspect)).toBe(trace().header.expected.reps);
+    expect(count(undefined)).toBe(0);
+    expect(count(Number.NaN)).toBe(0);
+  });
+});
+
 function replay(controller, trace) {
   const displays = [];
   for (const frame of trace.frames) {

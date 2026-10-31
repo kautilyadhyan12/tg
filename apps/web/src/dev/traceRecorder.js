@@ -51,6 +51,7 @@ const state = {
   recording: false,
   exercise: null,
   t0: null,         // CLIP origin — the first frame offered, of any kind
+  aspect: null,     // the first pose frame's picture width / height
   frameT0: null,    // TRACE origin — the first frame carrying a pose
   frames: [],       // { t, kp }   — 33-landmark frames only (§7.1 format)
   detections: [],   // { t, n }    — EVERY frame offered, including n = 0
@@ -85,6 +86,7 @@ export function startRecording(exercise) {
   state.tuning = readPoseTuning();
   state.t0 = null;
   state.frameT0 = null;
+  state.aspect = null;
   state.frames = [];
   state.detections = [];
   state.responses = [];
@@ -112,8 +114,10 @@ export function recordFrame(keypoints, nowMs, aspect) {
 
   if (n !== 33) return;
   if (state.frameT0 === null) state.frameT0 = nowMs;
-  state.aspect = aspect;
-  state.frames.push({ t: +(nowMs - state.frameT0).toFixed(1), kp: keypoints });
+  if (state.aspect === null) state.aspect = aspect;
+  const t = +(nowMs - state.frameT0).toFixed(1);
+  // The header holds the first frame's shape; a picture that turns says so per frame.
+  state.frames.push(aspect === state.aspect ? { t, kp: keypoints } : { t, aspect, kp: keypoints });
 }
 
 /** Called with every non-keepalive server message (the Python analyzer output). */

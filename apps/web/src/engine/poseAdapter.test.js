@@ -11,6 +11,7 @@ import {
   EngineUnsupportedError,
   engineSupports,
   getDefinition,
+  pictureAspect,
   hasCameraAnalysis,
   landmarksToFrame,
   startSet,
@@ -40,9 +41,19 @@ describe("landmarksToFrame (§2.2 — un-mirrored provider coords)", () => {
   });
 });
 
+describe("pictureAspect", () => {
+  it("is width over height", () => {
+    expect(pictureAspect({ videoWidth: 1280, videoHeight: 720 })).toBeCloseTo(16 / 9);
+    expect(pictureAspect({ videoWidth: 720, videoHeight: 1280 })).toBeCloseTo(9 / 16);
+  });
+  it("gives the engine nothing usable before the video has a size", () => {
+    expect(Number.isNaN(pictureAspect({ videoWidth: 0, videoHeight: 0 }))).toBe(true);
+  });
+});
+
 describe("engineSupports (I4 minEngineVersion client gate)", () => {
   it("runs a definition the engine is new enough for", () => {
-    // squat.json declares minEngineVersion "1.0.0"; ENGINE_VERSION is 1.0.0.
+    // squat.json declares the same minEngineVersion as ENGINE_VERSION.
     expect(engineSupports(squatDef)).toBe(true);
   });
 
