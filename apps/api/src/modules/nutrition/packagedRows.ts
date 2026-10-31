@@ -1,6 +1,6 @@
 // What one row of the packaged-food lists becomes (ROADMAP Stage 5 33b-iii-a), and what a person is
 // told about a code both lists may hold. Pure: the importer, the nightly update and the lookup share it.
-import { classifyBarcode, offProductSchema, type MoreNutrients, type NutritionSource, type OffDailyLine, type OffProduct, type PackagedCheck } from "@app/shared";
+import { classifyBarcode, isCountMeasure, offProductSchema, type MoreNutrients, type NutritionSource, type OffDailyLine, type OffProduct, type PackagedCheck } from "@app/shared";
 import { NO_LABEL, labelMore, servingOf, withBrand, type FoodReference } from "./openfoodfacts.adapter.js";
 import { packSize, type PackSize } from "./packSize.js";
 
@@ -240,18 +240,15 @@ export interface PackagedFood {
   check: PackagedCheck;
 }
 
-/** What a person is told about a code the lists hold. The rule is structural, never a list of words:
- *  - the lists agree: Open Food Facts' row, which has the allergens, unless its numbers do not add up
- *    and USDA's do;
- *  - they disagree: USDA's, which comes from the maker's own label (Open Food Facts' is typed by
- *    volunteers), and the person is told to check the pack;
- *  - allergens are Open Food Facts' whichever list gave the numbers. USDA keeps none. */
-/** The share of a whole that a serving's own words say it is: "0.167 pizza", "half package". */
-function shareOfWhole(unit: string): number | null {
-  if (/^half\b/.test(unit)) return 0.5;
-  if (/^quarter\b/.test(unit)) return 0.25;
-  const share = /^(\d*\.\d+)\s/.exec(unit)?.[1];
-  const value = share === undefined ? 1 : Number(share);
+/** The share of a whole pack that a serving's printed words say it is ("0.167 pizza", "half package",
+ *  "1/6th of pack/60g"), or null. A share of a cup or a spoon says nothing about the pack. */
+function shareOfWhole(printed: string): number | null {
+  const read = /^(half|quarter|\d*\.\d+|\d+\/\d+)(?:th|rd|nd|st)?\s+(?:of\s+)?(\p{L}+)/u.exec(printed.trim().toLowerCase());
+  const amount = read?.[1];
+  const word = read?.[2];
+  if (amount === undefined || word === undefined || !isCountMeasure(word)) return null;
+  const [top, bottom] = amount.split("/");
+  const value = amount === "half" ? 0.5 : amount === "quarter" ? 0.25 : bottom === undefined ? Number(top) : Number(top) / Number(bottom);
   return value > 0 && value < 1 ? value : null;
 }
 /** Two figures of one pack, as two lists round them. */
@@ -271,7 +268,7 @@ function wholePack(off: OffRow | null, usda: PackagedRow | null, numbers: Packag
   for (const printed of [off?.servingSize, usda?.servingSize]) {
     const serving = servingOf(printed ?? undefined);
     if (serving === NO_LABEL) continue;
-    const share = shareOfWhole(serving.unit);
+    const share = shareOfWhole(printed ?? "");
     if (share !== null && size.grams < (serving.grams / share) * 0.9) return null;
     // A whole pack lighter than one serving of it: one of the two is wrong.
     if (size.grams < serving.grams) return null;
@@ -279,13 +276,21 @@ function wholePack(off: OffRow | null, usda: PackagedRow | null, numbers: Packag
   return size;
 }
 
+/** What a person is told about a code the lists hold. The rule is structural, never a list of words:
+ *  - the lists agree: Open Food Facts' row, which has the allergens, unless its numbers do not add up
+ *    and USDA's do;
+ *  - they disagree: USDA's, which comes from the maker's own label (Open Food Facts' is typed by
+ *    volunteers), and the person is told to check the pack;
+ *  - allergens are Open Food Facts' whichever list gave the numbers. USDA keeps none. */
 export function packagedFoodOf(off: OffRow | null, usda: PackagedRow | null): PackagedFood | null {
   const only = off ?? usda;
   if (only === null) return null;
   const apart = off !== null && usda !== null && Math.abs(off.kcal - usda.kcal) > LISTS_APART * Math.max(off.kcal, usda.kcal);
   const numbers: PackagedRow = off === null || usda === null ? only : apart || (!off.numbersFit && usda.numbersFit) ? usda : off;
   const source: NutritionSource = numbers === off ? "openfoodfacts" : "usda";
-  const serving = servingOf(numbers.servingSize ?? undefined);
+  // The list that gave the numbers may print no serving where the other does.
+  const ownServing = servingOf(numbers.servingSize ?? undefined);
+  const serving = ownServing === NO_LABEL ? servingOf((numbers === off ? usda : off)?.servingSize ?? undefined) : ownServing;
   const pack = wholePack(off, usda, numbers, apart);
   // At 0 kcal too: a blank panel is how a chicken fillet reads as 0. Water is told to check the pack,
   // which does no harm.

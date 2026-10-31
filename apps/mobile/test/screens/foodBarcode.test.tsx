@@ -322,7 +322,7 @@ describe("calories that can't be fetched", () => {
   it("the server refuses: says so, and Add waits", async () => {
     await openScan({ ...route(NUTELLA_CODE, found()), "/v1/nutrition/meals/preview": () => refusal(400, "unknown_food", "Food not found.") });
     await read("ean13", NUTELLA_CODE);
-    expect(await screen.findByText("This food’s calories can’t be worked out. Pick another amount, or search for the food.")).toBeTruthy();
+    expect(await screen.findByText("This food’s calories can’t be worked out. Pick another amount.")).toBeTruthy();
   });
 });
 

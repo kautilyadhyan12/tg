@@ -27,7 +27,7 @@ type Priced = { kind: "none" } | { kind: "lost"; for: string } | { kind: "ok"; i
 /** While the calories cannot be fetched: asked again this often, for at most 15 minutes. */
 const PRICE_RETRY_MS = 30_000;
 const PRICE_RETRIES_MOST = 30;
-const PRICE_REFUSED = "This food’s calories can’t be worked out. Pick another amount, or search for the food.";
+const PRICE_REFUSED = "This food’s calories can’t be worked out. Pick another amount.";
 
 export function BarcodeProduct({ product, onClose, onSaved }: { product: FoundProduct; onClose: () => void; onSaved: (type: MealType, name: string) => void }) {
   const { session } = useSession();

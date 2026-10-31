@@ -206,12 +206,21 @@ describe("the worst thing: a whole pack is the pack, not a serving copied into t
     ["Andes Crunch Thins 0041186153609", "38 g", "2 pieces (10 g)", "38 g"],
     ["a serving's own words say it is a sixth of more than this", "160 g", "0.167 pizza (140 g)", null],
     ["half a package that is bigger than the size", "63 g", "1/2 package (62.4 g)", null],
+    ["a sixth of a pack, 4088600217895", "130 g", "1/6th of pack/60g", null],
   ])("%s", (_, quantity, offServing, usdaServing_) => {
     expect(both(quantity, offServing, usdaServing_)).toBeNull();
   });
   it("a size USDA's serving does not contradict stays a whole pack", () => {
     expect(both("400 g", "1 slice (45 g)", "45 g")).toEqual({ grams: 400, volume: false });
     expect(both("840 g", "0.167 pizza (140 g)", null)).toEqual({ grams: 840, volume: false });
+  });
+  it("half a cup says nothing about the pack: a 175 g yoghurt, 0056800521085", () => {
+    expect(both("175 g", "0.5 cup (115 g)", null)).toEqual({ grams: 175, volume: false });
+  });
+  it("the list that gave the numbers prints no serving, the other does: Kit Kat snack mix, 0034000211036", () => {
+    const food = packagedFoodOf(withLists({ kcal: 482, quantity: "2 oz", servingSize: null }), plain({ kcal: 482, servingSize: "56 g" }))?.food;
+    expect(food?.serving).toBe(56);
+    expect(food?.pack).toBeUndefined();
   });
   it("a pack under 100 g with no printed serving is a whole pack: Reese's 42 g", () => {
     expect(packagedFoodOf(withLists({ kcal: 550, quantity: "42 g", servingSize: null }), null)?.food.pack).toEqual({ grams: 42, volume: false });
