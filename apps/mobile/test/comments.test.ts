@@ -76,7 +76,8 @@ describe("words", () => {
   it("Send needs words, within the limit", () => {
     expect(canSendComment("")).toBe(false);
     expect(canSendComment("   ")).toBe(false);
-    expect(canSendComment("\u200B\uFEFF")).toBe(false);
+    for (const blank of ["\u200B\uFEFF", "\u3164", "\u2800", "\uFE0F", "\u{E0001}\u{E0020}"]) expect(canSendComment(blank)).toBe(false);
+    expect(canSendComment("😀")).toBe(true);
     expect(canSendComment("Hi")).toBe(true);
     expect(canSendComment("a".repeat(501))).toBe(false);
   });

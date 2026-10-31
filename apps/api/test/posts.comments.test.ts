@@ -323,7 +323,7 @@ d("comments and replies on Updates (real Postgres)", () => {
       expect((await send(gym, asha, post.id, "a".repeat(GYM_POST_COMMENT_MAX_CHARS + 1))).statusCode).toBe(400);
       expect((await send(gym, asha, post.id, "   ")).statusCode).toBe(400);
       // Nothing that draws: it would show as a blank comment.
-      expect((await send(gym, asha, post.id, "\u200B\u200B")).statusCode).toBe(400);
+      for (const blank of ["\u200B\u200B", "\u3164", "\u2800", "\uFE0F", "\u{E0001}\u{E0020}"]) expect((await send(gym, asha, post.id, blank)).statusCode).toBe(400);
       // Room the screen counts after trimming, and the words kept trimmed.
       expect((await send(gym, asha, post.id, `${"😀".repeat(GYM_POST_COMMENT_MAX_CHARS)}\n`)).statusCode).toBe(201);
       expect((await send(gym, asha, post.id, `${"a".repeat(GYM_POST_COMMENT_MAX_CHARS)}${" ".repeat(600)}`)).statusCode).toBe(201);
@@ -679,7 +679,7 @@ d("comments and replies on Updates (real Postgres)", () => {
   );
 
   it(
-    "a reaction given to a reply stays the giver's to take off after blocking who it sits under",
+    "a reaction given to a reply goes when the giver blocks whoever it sits under, as it could not be taken off again",
     async () => {
       const gym = await makeGym("Stuck Reaction");
       const asha = await member(gym, "Asha Rao");
@@ -690,10 +690,11 @@ d("comments and replies on Updates (real Postgres)", () => {
       const reply = await comment(gym, dev, post.id, "By Dev", byBen.id);
       expect((await reactTo(gym, asha, reply.id, "love")).statusCode).toBe(200);
       expect((await block(gym, asha, byBen.id)).statusCode).toBe(200);
-      expect((await reactTo(gym, asha, reply.id, "love")).statusCode).toBe(404);
-      expect((await reactTo(gym, asha, reply.id, null)).statusCode).toBe(200);
       expect((await replies(gym, dev, byBen.id)).comments[0]?.reactions["love"]).toBe(0);
-      expect((await reactTo(gym, asha, reply.id, null)).statusCode).toBe(404);
+      // A press on what they can no longer see sends no counts.
+      const refused = await reactTo(gym, asha, reply.id, null);
+      expect(refused.statusCode).toBe(404);
+      expect(refused.body).not.toContain("reactions");
     },
     T,
   );

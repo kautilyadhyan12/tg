@@ -228,12 +228,9 @@ export async function removeOwnComment(deps: CommentsDeps, userId: string, gymId
 export async function reactToComment(deps: CommentsDeps, userId: string, gymId: string, commentId: string, reaction: GymPostReaction | null, limit: Limit): Promise<{ reactions: GymPostReactionCounts; mine: GymPostReaction | null } | null> {
   await requireMember(deps, gymId, userId);
   if (!(await limit())) return null;
-  const seen = (await seenComment(deps, gymId, commentId, userId)) !== null;
+  if ((await seenComment(deps, gymId, commentId, userId)) === null) throw commentNotFound();
   if (reaction === null) {
-    // Their own reaction is theirs to take off, whatever has since hidden what it is on.
-    if (!(await repo.clearReaction(deps.sql, gymId, commentId, userId)) && !seen) throw commentNotFound();
-  } else if (!seen) {
-    throw commentNotFound();
+    await repo.clearReaction(deps.sql, gymId, commentId, userId);
   } else if (!(await repo.setReaction(deps.sql, gymId, commentId, userId, reaction, deps.now()))) throw commentNotFound();
   const counts = await repo.reactionCounts(deps.sql, gymId, [commentId], userId);
   return reactToGymPostCommentResponseSchema.parse({ reactions: countsOf(counts, commentId), mine: reaction });

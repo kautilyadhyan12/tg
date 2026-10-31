@@ -542,7 +542,7 @@ function Body({
           onBlocked(authorId);
           void load(true);
           // What stays may name them or count their reaction: each open list is read as the server says it now.
-          for (const [id, u] of Object.entries(under)) if (u?.open === true && id !== comment.id) void readRepliesAgain(id);
+          for (const [id, u] of Object.entries(under)) if (u !== undefined && u.comments.length > 0 && id !== comment.id) void readRepliesAgain(id);
         }}
         onGone={foundGone}
       />

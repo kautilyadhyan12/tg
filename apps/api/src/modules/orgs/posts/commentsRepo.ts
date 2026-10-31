@@ -287,10 +287,8 @@ export async function setReaction(sql: SqlOrTx, gymId: string, commentId: string
   return rows.length === 1;
 }
 
-/** False when the person had none there. */
-export async function clearReaction(sql: SqlOrTx, gymId: string, commentId: string, userId: string): Promise<boolean> {
-  const rows = await sql`DELETE FROM gym_post_comment_reactions WHERE gym_id = ${gymId} AND comment_id = ${commentId} AND user_id = ${userId} RETURNING comment_id`;
-  return rows.length > 0;
+export async function clearReaction(sql: SqlOrTx, gymId: string, commentId: string, userId: string): Promise<void> {
+  await sql`DELETE FROM gym_post_comment_reactions WHERE gym_id = ${gymId} AND comment_id = ${commentId} AND user_id = ${userId}`;
 }
 
 /** One report a person; again, nothing changes. The comment is held so reports count one at a time,
@@ -327,10 +325,14 @@ export async function hiddenByOwnBlock(sql: SqlOrTx, gymId: string, commentId: s
   return rows.length > 0;
 }
 
-/** Deletes the reactions one person gave another's member comments at this gym. */
+/** Deletes the reactions one person gave another's member comments at this gym, and the replies under those comments,
+ *  which leave the blocker's screen with them and could not be taken off again. */
 export async function deleteReactionsToMember(tx: TransactionSql, gymId: string, userId: string, authorId: string): Promise<void> {
   await tx`
     DELETE FROM gym_post_comment_reactions r USING gym_post_comments c
     WHERE r.gym_id = ${gymId} AND r.user_id = ${userId}
-      AND c.gym_id = r.gym_id AND c.id = r.comment_id AND c.by_member AND c.author_user_id = ${authorId}`;
+      AND c.gym_id = r.gym_id AND c.id = r.comment_id
+      AND ((c.by_member AND c.author_user_id = ${authorId}) OR EXISTS (
+        SELECT 1 FROM gym_post_comments pc
+        WHERE pc.gym_id = c.gym_id AND pc.id = c.parent_id AND pc.by_member AND pc.author_user_id = ${authorId}))`;
 }
