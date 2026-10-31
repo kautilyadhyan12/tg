@@ -573,6 +573,9 @@ export const gymSquareRefunds = pgTable(
     checkedAt: timestamp("checked_at", { withTimezone: true }).notNull(),
     checkingUntil: timestamp("checking_until", { withTimezone: true }),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
+    /** A refund that failed or that Square never answered, which staff said needs none (0181; 18d-iv-b-iii): when and who. */
+    noRefundAt: timestamp("no_refund_at", { withTimezone: true }),
+    noRefundBy: uuid("no_refund_by").references(() => users.id, { onDelete: "set null" }),
   },
   (t) => [
     unique("gym_square_refunds_request_uq").on(t.gymId, t.requestKey),
@@ -594,6 +597,8 @@ export const gymSquareRefunds = pgTable(
     index("gym_square_refunds_sale_idx").on(t.gymId, t.saleId).where(sql`${t.saleId} IS NOT NULL`),
     uniqueIndex("gym_square_refunds_refund_uq").on(t.environment, t.squareRefundId).where(sql`${t.squareRefundId} IS NOT NULL`),
     index("gym_square_refunds_payment_idx").on(t.gymId, t.paymentId),
+    check("gym_square_refunds_no_refund_check", sql`${t.noRefundAt} IS NULL OR ${t.outcome} IN ('failed','lost')`),
+    index("gym_square_refunds_review_idx").on(t.gymId, t.startedAt).where(sql`${t.noRefundAt} IS NULL AND (${t.state} = 'pending' OR ${t.outcome} IN ('failed','lost'))`),
     index("gym_square_refunds_member_refund_idx").on(t.gymId, t.memberRefundId).where(sql`${t.memberRefundId} IS NOT NULL`),
     index("gym_square_refunds_open_idx").on(t.environment, t.state, t.lookAt).where(sql`${t.state} <> 'done'`),
   ],

@@ -58,6 +58,9 @@ export function cardRefundButton(m, check, draft) {
 /** Said under a payment while a refund to its card has no answer, or never had one. */
 export function cardRefundOpenLine(open, currency) {
   const money = formatMinor(open.amountMinor, currency);
+  if (open.decided !== null && open.decided !== undefined) {
+    return `No refund needed on the ${money} refund of ${dayWords(open.on)}${open.decided.by === null ? ', decided' : `, decided by ${open.decided.by}`} on ${dayWords(open.decided.on)}.`;
+  }
   return open.lost
     ? `We don't know whether Square took the ${money} refund of ${dayWords(open.on)}. Check your Square Dashboard. If it went through, note the refund here.`
     : `A refund of ${money} is waiting for Square's answer.`;

@@ -8,6 +8,7 @@ import OverviewNumbers from '../../components/console/OverviewNumbers';
 import StartHereCard from '../../components/console/StartHereCard';
 import LastSevenDays from '../../components/console/LastSevenDays';
 import FailedPaymentsCard from '../../components/console/FailedPaymentsCard';
+import RefundsToReviewCard from '../../components/console/RefundsToReviewCard';
 import TrialCard from '../../components/console/TrialCard';
 import CoOwnerRequest from '../../components/console/CoOwnerRequest';
 import { refreshConsoleOrgsAfterChange } from './consoleOrgs';
@@ -487,6 +488,9 @@ export default function Overview() {
       {/* FAILED PAYMENTS (18d-iii-ii-b): how many card payments were declined and are still owed,
           with a button to the list. Drawn only where there are some, for staff who take payments. */}
       <FailedPaymentsCard gymId={org.id} orgSlug={orgSlug} privileges={viewerPrivileges(org)} />
+
+      {/* REFUNDS TO REVIEW (18d-iv-b-iii): fees no longer owed and refunds that went wrong. Drawn only where there are some. */}
+      <RefundsToReviewCard org={org} orgSlug={orgSlug} privileges={viewerPrivileges(org)} readOnly={readOnly} />
 
       {/* ── The join code pane, on its own outcome ─────────────────────── */}
       {codes.loading ? <ConsoleLoading label="Loading…" /> : null}

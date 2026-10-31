@@ -335,6 +335,9 @@ export const gymMemberBills = pgTable(
     /** A freeze fee whose month began on or after the day its freeze ended (0156; 18z): never owed,
      *  paid or not. False on every other bill. */
     freezeStopped: boolean("freeze_stopped").notNull().default(false),
+    /** A fee no longer owed that staff kept rather than refund (0181; 18d-iv-b-iii): when and who. */
+    feeKeptAt: timestamp("fee_kept_at", { withTimezone: true }),
+    feeKeptBy: uuid("fee_kept_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -344,6 +347,8 @@ export const gymMemberBills = pgTable(
       sql`${t.joiningFeeMinor} >= 0 AND ${t.joiningFeeMinor} <= ${t.amountMinor} AND (${t.joiningFeeMinor} = 0 OR ${t.periodIndex} IS NOT NULL)`,
     ),
     check("gym_member_bills_freeze_stopped_check", sql`NOT ${t.freezeStopped} OR ${t.fee} = 'freeze'`),
+    check("gym_member_bills_fee_kept_check", sql`${t.feeKeptAt} IS NULL OR ${t.fee} IS NOT NULL`),
+    index("gym_member_bills_fee_review_idx").on(t.gymId).where(sql`${t.fee} IS NOT NULL AND ${t.status} = 'paid' AND ${t.feeKeptAt} IS NULL`),
     check("gym_member_bills_moved_check", sql`${t.movedMinor} BETWEEN 0 AND ${t.amountMinor}`),
     check(
       "gym_member_bills_change_credit_check",

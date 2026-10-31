@@ -8,6 +8,7 @@
 // Every date is worked out on the gym's own day: the server's clock read in the
 // gym's time zone, never the caller's.
 import type { Sql } from "postgres";
+import type { CardRefundOpen } from "@app/shared";
 import {
   CARD_CHARGE_WORDS,
   paidThroughSquare,
@@ -269,6 +270,7 @@ function feeOf(
               : "paid",
     waived: f.waived,
     stillOwed: f.stillOwed,
+    kept: f.kept,
     refundedMinor,
     // Only a payment taken through Square is refunded: one by hand is voided, as it always was.
     payments: standing.map((p) => ({
@@ -348,7 +350,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
   const charges: Charges = canBill
     ? await chargesOfBills(deps.sql, gymId, [...list.bills.map((b) => b.id), ...list.fees.map((f) => f.id)], [...list.payments.map((p) => p.id), ...list.feePayments.map((p) => p.id)], deps.now())
     : NO_CHARGES;
-  const presses = canBill ? await openPressesOf(deps.sql, gymId, [...list.payments, ...list.feePayments.filter((p) => p.voided === null)].map((p) => p.id)) : new Map<string, { amountMinor: number; on: string; lost: boolean }>();
+  const presses = canBill ? await openPressesOf(deps.sql, gymId, [...list.payments, ...list.feePayments.filter((p) => p.voided === null)].map((p) => p.id)) : new Map<string, CardRefundOpen>();
   const ctx = { today, past: list.past, overdueAfterDays: list.overdueAfterDays, gifts, charges, presses };
   // The page reads a membership as the next write will find it: with its count moved
   // over the periods nobody was asked for (`countAfterGap`), which `settle` then writes.
