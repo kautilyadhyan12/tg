@@ -29,6 +29,8 @@ import {
   givingUpAsks,
   givingUpTitle,
   noEvents,
+  posterHeight,
+  POSTER_TALLEST,
   waitlistNote,
   type EventAct,
 } from "./eventsView";
@@ -52,7 +54,6 @@ const posterPath = (gymId: string, eventId: string, posterId: string) => `${even
 /** Posters are read only for events near the screen: a gym may list 100, at most 1 MB each. */
 const NEAR_THE_SCREEN = 5;
 const READ_AGAIN_AFTER_MISSED_MS = 20_000;
-const POSTER_TALLEST = 420;
 
 const phoneZone = () => {
   try {
@@ -316,6 +317,8 @@ function EventBox({ event, today, readAt, clock, posterUrl, files, photoRound, b
   const whyNot = eventWhyNot(event);
   const waitNote = waitlistNote(event);
   const { poster } = event;
+  // The card's own width: a poster fills it, and a tall one sits in the middle of its box.
+  const [cardWidth, setCardWidth] = useState<number | null>(null);
   return (
     <Card testID={`event-${event.id}`} style={styles.card}>
       {poster === null ? null : (
@@ -323,7 +326,10 @@ function EventBox({ event, today, readAt, clock, posterUrl, files, photoRound, b
           accessible
           accessibilityRole="image"
           accessibilityLabel={`Poster for ${event.name}`}
-          style={[styles.poster, { aspectRatio: poster.width / poster.height }, event.cancelled ? styles.faded : null]}
+          onLayout={(layout) => {
+            setCardWidth(layout.nativeEvent.layout.width);
+          }}
+          style={[styles.poster, { height: cardWidth === null ? POSTER_TALLEST : posterHeight(cardWidth, poster) }, event.cancelled ? styles.faded : null]}
         >
           <SignedPhoto uri={posterUrl(poster.id)} photoId={poster.id} files={files} round={photoRound} fit="contain" testID={`poster-${poster.id}`} />
         </View>
@@ -387,7 +393,7 @@ const styles = StyleSheet.create({
   },
   list: { paddingHorizontal: sizes.edge, gap: sizes.gap },
   card: { padding: 0 },
-  poster: { width: "100%", maxHeight: POSTER_TALLEST, backgroundColor: colours.fill },
+  poster: { width: "100%", backgroundColor: colours.fill },
   faded: { opacity: 0.5 },
   box: { padding: 16, gap: 10 },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },

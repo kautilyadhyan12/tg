@@ -106,6 +106,14 @@ export function eventsZoneNote(events: readonly MemberGymEvent[], gymName: strin
   return `Times are ${gymName} time (${gymZone.replaceAll("_", " ")}), not this phone’s.`;
 }
 
+/** The tallest a poster's box is drawn. */
+export const POSTER_TALLEST = 420;
+
+/** How tall a poster's box is in a card this wide: its own shape, but never past the tallest. */
+export function posterHeight(cardWidth: number, poster: { width: number; height: number }): number {
+  return Math.min(POSTER_TALLEST, Math.round((cardWidth * poster.height) / poster.width));
+}
+
 export const noEvents = (gymName: string) => `${gymName} has no events coming up.`;
 export const eventsNotShown = (gymName: string) => `${gymName}’s events aren’t available right now.`;
 export const EVENTS_NOT_READ = "Couldn’t load the events.";

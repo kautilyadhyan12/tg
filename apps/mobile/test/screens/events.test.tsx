@@ -3,6 +3,7 @@ import { AppState } from "react-native";
 import { File } from "expo-file-system";
 import { memberGymEventSchema } from "@app/shared";
 import { App } from "../../src/App";
+import { POSTER_TALLEST, posterHeight } from "../../src/screens/gym/eventsView";
 import type { Ask } from "../../src/session/calls";
 import { fakeServer, kept, lost, memoryStore, refusal, tokens, type Reply } from "../kit";
 
@@ -409,6 +410,12 @@ describe("giving up a place", () => {
 
 describe("posters", () => {
   const withPoster = event(E1, "Open day", { poster: { id: POSTER, width: 800, height: 1200 } });
+
+  it("a poster's box keeps the card's width: its own shape, a tall one stopped at the tallest", () => {
+    expect(posterHeight(360, { width: 1200, height: 600 })).toBe(180);
+    expect(posterHeight(360, { width: 800, height: 1200 })).toBe(POSTER_TALLEST);
+    expect(posterHeight(1000, { width: 1200, height: 600 })).toBe(POSTER_TALLEST);
+  });
 
   it("a poster is read signed in, from this gym's own address", async () => {
     const server = fakeServer({ "/v1/auth/refresh": ok({ tokens: tokens(2) }), "/v1/orgs/mine": mine(IRON), [eventsOf(IRON)]: ok(listOf(IRON, [withPoster])) });
