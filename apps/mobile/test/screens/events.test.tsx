@@ -129,11 +129,11 @@ describe("the worst thing: You're coming only when the server holds a place, and
       },
     });
     await openEvents(server.ask, IRON);
-    await fireEvent.press(await screen.findByLabelText("I’m coming: Open day"));
+    await fireEvent.press(await screen.findByLabelText("Book: Open day"));
     expect(await box(E1).findByText("Can’t connect. Check your internet and try again.")).toBeTruthy();
-    expect(box(E1).queryByText("You’re coming")).toBeNull();
-    await fireEvent.press(screen.getByLabelText("I’m coming: Open day"));
-    expect(await box(E1).findByText("You’re coming")).toBeTruthy();
+    expect(box(E1).queryByText("You’re booked")).toBeNull();
+    await fireEvent.press(screen.getByLabelText("Book: Open day"));
+    expect(await box(E1).findByText("You’re booked")).toBeTruthy();
     const sent = presses(server);
     expect(sent.length).toBe(2);
     const [one, two] = sent;
@@ -154,10 +154,10 @@ describe("the worst thing: You're coming only when the server holds a place, and
       [comingOf(IRON, E1)]: () => refusal(409, "event_full", "This event is full."),
     });
     await openEvents(server.ask, IRON);
-    await fireEvent.press(await screen.findByLabelText("I’m coming: Open day"));
-    expect(await box(E1).findByLabelText("Join the waitlist: Open day")).toBeTruthy();
+    await fireEvent.press(await screen.findByLabelText("Book: Open day"));
+    expect(await box(E1).findByLabelText("Join waitlist: Open day")).toBeTruthy();
     expect(box(E1).getByText("This event is full.")).toBeTruthy();
-    expect(box(E1).queryByText("You’re coming")).toBeNull();
+    expect(box(E1).queryByText("You’re booked")).toBeNull();
   });
 
   it("a kept key answered with no place says so, never You're coming, and the next press has a new key", async () => {
@@ -174,13 +174,13 @@ describe("the worst thing: You're coming only when the server holds a place, and
       },
     });
     await openEvents(server.ask, IRON);
-    await fireEvent.press(await screen.findByLabelText("I’m coming: Open day"));
+    await fireEvent.press(await screen.findByLabelText("Book: Open day"));
     await box(E1).findByText("Can’t connect. Check your internet and try again.");
-    await fireEvent.press(screen.getByLabelText("I’m coming: Open day"));
-    expect(await box(E1).findByText("Your earlier place was given up. Press again to come.")).toBeTruthy();
-    expect(box(E1).queryByText("You’re coming")).toBeNull();
-    await fireEvent.press(screen.getByLabelText("I’m coming: Open day"));
-    expect(await box(E1).findByText("You’re coming")).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText("Book: Open day"));
+    expect(await box(E1).findByText("Your earlier booking was cancelled. Press Book to book again.")).toBeTruthy();
+    expect(box(E1).queryByText("You’re booked")).toBeNull();
+    await fireEvent.press(screen.getByLabelText("Book: Open day"));
+    expect(await box(E1).findByText("You’re booked")).toBeTruthy();
     const [one, two, three] = presses(server);
     if (one === undefined || two === undefined || three === undefined) throw new Error("three presses");
     expect(keyOf(two)).toBe(keyOf(one));
@@ -202,18 +202,18 @@ describe("the worst thing: You're coming only when the server holds a place, and
       [comingOf(IRON, E1)]: ok({ event: youreComing(E1, "Open day") }),
     });
     await openEvents(server.ask, IRON);
-    await screen.findByLabelText("I’m coming: Open day");
+    await screen.findByLabelText("Book: Open day");
     await comeBack();
     await waitFor(() => {
       expect(answers.length).toBeGreaterThan(0);
     });
-    await fireEvent.press(screen.getByLabelText("I’m coming: Open day"));
-    expect(await box(E1).findByText("You’re coming")).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText("Book: Open day"));
+    expect(await box(E1).findByText("You’re booked")).toBeTruthy();
     await act(() => {
       for (const answer of answers) answer({ status: 200, body: listOf(IRON, [event(E1, "Open day")]) });
     });
     await settle();
-    expect(box(E1).getByText("You’re coming")).toBeTruthy();
+    expect(box(E1).getByText("You’re booked")).toBeTruthy();
   });
 
   it("an answer naming another gym is never shown under this one", async () => {
@@ -223,7 +223,7 @@ describe("the worst thing: You're coming only when the server holds a place, and
       [eventsOf(IRON)]: ok(listOf(LOTUS, [event(E2, "Lotus retreat")])),
     });
     await openEvents(server.ask, IRON);
-    expect(await page().findByText("Couldn’t load the events.")).toBeTruthy();
+    expect(await page().findByText("Couldn’t load events.")).toBeTruthy();
     expect(page().queryByText("Lotus retreat")).toBeNull();
   });
 
@@ -273,7 +273,6 @@ describe("what an event says", () => {
     await show([event(E1, "Open day", { cancelled: true, going: going({ can: can({ why: "event_cancelled" }) }) })]);
     await screen.findByText("Open day");
     expect(box(E1).getByText("Cancelled")).toBeTruthy();
-    expect(box(E1).getByText("This event has been cancelled.")).toBeTruthy();
     expect(box(E1).queryByRole("button")).toBeNull();
   });
 
@@ -281,42 +280,43 @@ describe("what an event says", () => {
     await show([event(E1, "Open day", { startsAt: "2020-01-01T00:00:00.000Z", endsAt: "2099-01-01T00:00:00.000Z", going: going({ can: can({ why: "event_started" }) }) })]);
     await screen.findByText("Open day");
     expect(box(E1).getByText("On now")).toBeTruthy();
-    expect(box(E1).getByText("This event has started, so it’s too late to say you’re coming.")).toBeTruthy();
+    expect(box(E1).getByText("Booking has closed.")).toBeTruthy();
   });
 
   it("a waitlist place says the line and tells them to check back", async () => {
     await show([event(E1, "Open day", { places: 1, going: going({ coming: 1, waiting: 3, mine: { status: "waitlisted", waitlistPlace: 2 }, can: can({ cancel: true }) }) })]);
     await screen.findByText("Open day");
-    expect(box(E1).getByText("You’re 2nd on the waitlist")).toBeTruthy();
-    expect(box(E1).getByText("If a place comes free it can go to you. Check back here.")).toBeTruthy();
+    expect(box(E1).getByText("On the waitlist")).toBeTruthy();
+    expect(box(E1).getByText("Not booked yet · 2nd in line")).toBeTruthy();
+    expect(box(E1).getByText("Check back here if a place opens.")).toBeTruthy();
     expect(box(E1).getByText("Full · 3 on the waitlist")).toBeTruthy();
-    expect(box(E1).getByLabelText("Leave the waitlist: Open day")).toBeTruthy();
+    expect(box(E1).getByLabelText("Leave waitlist: Open day")).toBeTruthy();
   });
 
   it("a free place for them offers Take the place, and Leave the waitlist beside it", async () => {
     await show([event(E1, "Open day", { going: going({ coming: 29, waiting: 1, mine: { status: "waitlisted", waitlistPlace: 1 }, can: can({ claim: true, cancel: true }) }) })]);
     await screen.findByText("Open day");
-    expect(box(E1).getByText("A place is free for you. Take it before somebody else does.")).toBeTruthy();
-    expect(box(E1).getByLabelText("Take the place: Open day")).toBeTruthy();
-    expect(box(E1).getByLabelText("Leave the waitlist: Open day")).toBeTruthy();
+    expect(box(E1).getByText("A place is free. Claim it before someone else does.")).toBeTruthy();
+    expect(box(E1).getByLabelText("Claim place: Open day")).toBeTruthy();
+    expect(box(E1).getByLabelText("Leave waitlist: Open day")).toBeTruthy();
   });
 
   it("an event and waitlist that are full say so, with no button", async () => {
     await show([event(E1, "Open day", { going: going({ coming: 30, waiting: 5, can: can({ why: "waitlist_full" }) }) })]);
     await screen.findByText("Open day");
-    expect(box(E1).getByText("This event and its waitlist are full.")).toBeTruthy();
+    expect(box(E1).getByText("The waitlist is full.")).toBeTruthy();
     expect(box(E1).queryByRole("button")).toBeNull();
   });
 
   it("a gym on pause says so", async () => {
     const server = fakeServer({ "/v1/auth/refresh": ok({ tokens: tokens(2) }), "/v1/orgs/mine": mine(IRON), [eventsOf(IRON)]: ok(listOf(IRON, [], { status: "paused" })) });
     await openEvents(server.ask, IRON);
-    expect(await page().findByText("Iron House’s events aren’t available right now.")).toBeTruthy();
+    expect(await page().findByText("Events aren’t available right now.")).toBeTruthy();
   });
 
   it("a gym with nothing coming says so", async () => {
     await show([]);
-    expect(await page().findByText("Iron House has no events coming up.")).toBeTruthy();
+    expect(await page().findByText("No upcoming events.")).toBeTruthy();
   });
 
   it("a lost read offers Try again and reads again", async () => {
@@ -331,7 +331,7 @@ describe("what an event says", () => {
       },
     });
     await openEvents(server.ask, IRON);
-    expect(await page().findByText("Couldn’t load the events.")).toBeTruthy();
+    expect(await page().findByText("Couldn’t load events.")).toBeTruthy();
     await fireEvent.press(page().getByText("Try again"));
     expect(await page().findByText("Open day")).toBeTruthy();
   });
@@ -352,7 +352,7 @@ describe("what an event says", () => {
     expect(page().getByText("Open day")).toBeTruthy();
     reply = () => refusal(404, "not_found", "Not found.");
     await comeBack();
-    expect(await page().findByText("Iron House’s events aren’t available right now.")).toBeTruthy();
+    expect(await page().findByText("Events aren’t available right now.")).toBeTruthy();
     expect(page().queryByText("Open day")).toBeNull();
   });
 });
@@ -367,9 +367,9 @@ describe("giving up a place", () => {
       [comingOf(IRON, E1)]: () => gym.keep(event(E1, "Open day")),
     });
     await openEvents(server.ask, IRON);
-    await fireEvent.press(await screen.findByLabelText("Can’t come: Open day"));
-    expect(await screen.findByLabelText("I’m coming: Open day")).toBeTruthy();
-    expect(box(E1).queryByText("You’re coming")).toBeNull();
+    await fireEvent.press(await screen.findByLabelText("Cancel booking: Open day"));
+    expect(await screen.findByLabelText("Book: Open day")).toBeTruthy();
+    expect(box(E1).queryByText("You’re booked")).toBeNull();
     expect(server.asked.filter((one) => one.method === "DELETE").length).toBe(1);
   });
 
@@ -383,14 +383,15 @@ describe("giving up a place", () => {
       [comingOf(IRON, E1)]: () => gym.keep(event(E1, "Open day", { places: 1, going: going({ coming: 1, can: can({ why: "event_full" }) }) })),
     });
     await openEvents(server.ask, IRON);
-    await fireEvent.press(await screen.findByLabelText("Can’t come: Open day"));
-    expect(await screen.findByText("Give up your place at Open day?")).toBeTruthy();
-    expect(screen.getByText("This event is full, so somebody else can take your place straight away.")).toBeTruthy();
-    await fireEvent.press(screen.getByText("Keep my place"));
+    await fireEvent.press(await screen.findByLabelText("Cancel booking: Open day"));
+    expect(await screen.findByText("Cancel your booking?")).toBeTruthy();
+    expect(screen.getByText("This event is full, so your place may go to someone else.")).toBeTruthy();
+    await fireEvent.press(screen.getByText("Keep it"));
     expect(server.asked.filter((one) => one.method === "DELETE").length).toBe(0);
-    await fireEvent.press(screen.getByLabelText("Can’t come: Open day"));
-    await fireEvent.press(await screen.findByText("Give up my place"));
-    expect(await screen.findByText("This event is full.")).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText("Cancel booking: Open day"));
+    await fireEvent.press((await screen.findAllByText("Cancel booking")).at(-1) as never);
+    expect(await screen.findByText("Full")).toBeTruthy();
+    expect(screen.queryByText("You’re booked")).toBeNull();
     expect(server.asked.filter((one) => one.method === "DELETE").length).toBe(1);
   });
 
@@ -402,9 +403,9 @@ describe("giving up a place", () => {
       [comingOf(IRON, E1)]: () => lost(),
     });
     await openEvents(server.ask, IRON);
-    await fireEvent.press(await screen.findByLabelText("Can’t come: Open day"));
+    await fireEvent.press(await screen.findByLabelText("Cancel booking: Open day"));
     expect(await box(E1).findByText("Can’t connect. Check your internet and try again.")).toBeTruthy();
-    expect(box(E1).getByText("You’re coming")).toBeTruthy();
+    expect(box(E1).getByText("You’re booked")).toBeTruthy();
   });
 });
 
@@ -434,7 +435,7 @@ describe("posters", () => {
     await openEvents(server.ask, IRON);
     expect(await screen.findByText("Couldn't load this photo.")).toBeTruthy();
     expect(box(E1).getByText("Open day")).toBeTruthy();
-    expect(box(E1).getByLabelText("I’m coming: Open day")).toBeTruthy();
+    expect(box(E1).getByLabelText("Book: Open day")).toBeTruthy();
     await comeBack();
     expect(await screen.findByTestId(`poster-${POSTER}`)).toBeTruthy();
   });

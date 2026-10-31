@@ -12,23 +12,20 @@ import { Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
 import { NO_ANSWER } from "../SignIn";
 import { CopyContext } from "../ThisCopy";
-import { newRequestKey } from "./classesView";
+import { EARLIER_CANCELLED, newRequestKey } from "./classesView";
 import {
-  EARLIER_PLACE_GONE,
   EVENTS_NOT_READ,
-  EVENT_CANCELLED_LINE,
+  EVENTS_NOT_SHOWN,
   GIVING_UP_LINE,
+  NO_EVENTS,
   eventActions,
   eventIsOn,
   eventMine,
   eventPlacesLeft,
   eventWhen,
   eventWhyNot,
-  eventsNotShown,
   eventsZoneNote,
   givingUpAsks,
-  givingUpTitle,
-  noEvents,
   posterHeight,
   POSTER_TALLEST,
   waitlistNote,
@@ -38,8 +35,8 @@ import { photoFiles, type PhotoFiles } from "./photoFiles";
 import { SignedPhoto } from "./Updates";
 
 // A place's events for its member (spec Part 3 §15.4; ROADMAP Stage 5 item 17c-i): every event that has not ended,
-// soonest first, with its poster, I'm coming and the waitlist. A page over the Gym tab, read when it opens and when the
-// app comes back. The server decides every place; "You're coming" is only ever what its last answer said.
+// soonest first, with its poster, booking and the waitlist. A page over the Gym tab, read when it opens and when the
+// app comes back. The server decides every place; "You're booked" is only ever what its last answer said.
 
 export interface EventsPlace {
   id: string;
@@ -176,7 +173,7 @@ function EventsBody({ place, onClose, bottom }: { place: EventsPlace; onClose: (
     if (answer.kind === "ok") {
       const now = answer.data.event;
       // A key from a press whose place was given up since is answered with no place.
-      if (key !== null && now.going.mine === null) say(event.id, EARLIER_PLACE_GONE);
+      if (key !== null && now.going.mine === null) say(event.id, EARLIER_CANCELLED);
       started.current += 1;
       setHeld((h) => (h.kind !== "ok" ? h : { ...h, list: { ...h.list, events: h.list.events.map((e) => (e.id === now.id ? now : e)) } }));
       return;
@@ -194,7 +191,7 @@ function EventsBody({ place, onClose, bottom }: { place: EventsPlace; onClose: (
       <Txt kind="small">Loading…</Txt>
     ) : held.kind === "failed" ? (
       <Card style={styles.box}>
-        <Txt colour="badText">{held.status === 404 ? eventsNotShown(place.name) : EVENTS_NOT_READ}</Txt>
+        <Txt colour="badText">{held.status === 404 ? EVENTS_NOT_SHOWN : EVENTS_NOT_READ}</Txt>
         <Button
           label="Try again"
           kind="soft"
@@ -206,7 +203,7 @@ function EventsBody({ place, onClose, bottom }: { place: EventsPlace; onClose: (
         />
       </Card>
     ) : (
-      <Txt>{list?.status === "paused" ? eventsNotShown(place.name) : noEvents(place.name)}</Txt>
+      <Txt>{list?.status === "paused" ? EVENTS_NOT_SHOWN : NO_EVENTS}</Txt>
     );
 
   return (
@@ -260,17 +257,18 @@ function EventsBody({ place, onClose, bottom }: { place: EventsPlace; onClose: (
       <Sheet
         open={asking !== null}
         place="middle"
-        title={asking === null ? "" : givingUpTitle(asking.name)}
+        title="Cancel your booking?"
         onClose={() => {
           setAsking(null);
         }}
       >
         {asking === null ? null : (
           <View style={styles.ask}>
+            <Txt colour="text">{asking.name}</Txt>
             <Txt colour="text">{GIVING_UP_LINE}</Txt>
-            <Button label="Give up my place" kind="danger" wide onPress={() => void press(asking, "cancel")} />
+            <Button label="Cancel booking" kind="danger" wide onPress={() => void press(asking, "cancel")} />
             <Button
-              label="Keep my place"
+              label="Keep it"
               kind="quiet"
               style={styles.middle}
               onPress={() => {
@@ -345,12 +343,10 @@ function EventBox({ event, today, readAt, clock, posterUrl, files, photoRound, b
         {event.place === "" ? null : <Fact icon="pin" words={event.place} />}
         {places === null || event.cancelled ? null : <Fact icon="users" words={places} />}
         {event.details === "" ? null : <Txt kind="small">{event.details}</Txt>}
-        {event.cancelled ? <Txt kind="small">{EVENT_CANCELLED_LINE}</Txt> : null}
-        {mine === null ? null : (
-          <Txt colour={mine.good ? "goodText" : "orange"} style={styles.mine}>
-            {mine.text}
-          </Txt>
+        {mine === null || event.cancelled ? null : (
+          <View style={styles.mine}>{mine.good ? <Pill label={mine.pill} tone="good" icon="check" /> : <Pill label={mine.pill} tone="gold" />}</View>
         )}
+        {mine?.line == null || event.cancelled ? null : <Txt kind="small">{mine.line}</Txt>}
         {waitNote === null ? null : <Txt kind="small">{waitNote}</Txt>}
         {whyNot === null ? null : <Txt kind="small">{whyNot}</Txt>}
         {said === undefined ? null : (
@@ -398,7 +394,7 @@ const styles = StyleSheet.create({
   box: { padding: 16, gap: 10 },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },
   fact: { flexDirection: "row", alignItems: "center", gap: 8 },
-  mine: { fontWeight: "600" },
+  mine: { flexDirection: "row" },
   grow: { flex: 1 },
   struck: { textDecorationLine: "line-through", opacity: 0.6 },
   ask: { gap: 12 },

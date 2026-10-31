@@ -1,8 +1,8 @@
-// A place's events, in words: the browser's rules (apps/web/src/components/gym/eventsView.js), on the gym's own
-// clock. Pure, so tested alone. An event's days and clock times arrive as the gym's own and are printed as they
+// A place's events, in words: the browser's rules (apps/web/src/components/gym/eventsView.js) in the phone's Classes
+// words (Book, You're booked, Cancel booking), on the gym's own clock. Pure, so tested alone. An event's days and clock times arrive as the gym's own and are printed as they
 // are, never moved to the phone's zone. What the screen says about a person's place comes only from `going`.
 import { reminderClock, type GymClockFormat, type MemberGymEvent } from "@app/shared";
-import { shortDay } from "./classesView";
+import { ordinal, shortDay } from "./classesView";
 
 const count = (n: number) => n.toLocaleString("en-GB");
 
@@ -19,29 +19,23 @@ export function eventWhen(event: MemberGymEvent, today: string, clock: GymClockF
   return `${eventDay(event.startsOn, today)}, ${from} – ${eventDay(event.endsOn, today)}, ${to}`;
 }
 
-const ordinal = (n: number) => {
-  const tens = n % 100;
-  if (tens >= 11 && tens <= 13) return `${String(n)}th`;
-  return `${String(n)}${["th", "st", "nd", "rd"][n % 10] ?? "th"}`;
-};
-
-/** "12 of 30 places left", "Full", "Full · 3 on the waitlist", and with no limit "12 coming". Null with no limit and
+/** "12 of 30 places left", "1 place left", "Full", "Full · 3 on the waitlist", and with no limit "12 going". Null with no limit and
  *  nobody down for it yet. */
 export function eventPlacesLeft(event: MemberGymEvent): string | null {
   const { coming, waiting } = event.going;
-  if (event.places === null) return coming === 0 ? null : `${count(coming)} coming`;
+  if (event.places === null) return coming === 0 ? null : `${count(coming)} going`;
   const left = Math.max(0, event.places - coming);
   if (left === 0) return waiting === 0 ? "Full" : `Full · ${count(waiting)} on the waitlist`;
-  return `${count(left)} of ${count(event.places)} ${event.places === 1 ? "place" : "places"} left`;
+  return left === 1 ? "1 place left" : `${count(left)} of ${count(event.places)} places left`;
 }
 
-/** The member's own line: null when they are not down for it. */
-export function eventMine(event: MemberGymEvent): { text: string; good: boolean } | null {
+/** What the member holds, as its pill and the line under it: null when they hold nothing. Waiting never reads as booked. */
+export function eventMine(event: MemberGymEvent): { pill: string; good: boolean; line: string | null } | null {
   const { mine, can } = event.going;
   if (mine === null) return null;
-  if (mine.status === "coming") return { text: "You’re coming", good: true };
-  if (can.claim) return { text: "A place is free for you. Take it before somebody else does.", good: true };
-  return { text: mine.waitlistPlace === null ? "You’re on the waitlist" : `You’re ${ordinal(mine.waitlistPlace)} on the waitlist`, good: false };
+  if (mine.status === "coming") return { pill: "You’re booked", good: true, line: null };
+  if (can.claim) return { pill: "On the waitlist", good: false, line: "A place is free. Claim it before someone else does." };
+  return { pill: "On the waitlist", good: false, line: mine.waitlistPlace === null ? "Not booked yet" : `Not booked yet · ${ordinal(mine.waitlistPlace)} in line` };
 }
 
 export type EventAct = "come" | "wait" | "cancel";
@@ -55,21 +49,18 @@ export interface EventAction {
 export function eventActions(event: MemberGymEvent): EventAction[] {
   const { mine, can } = event.going;
   const actions: EventAction[] = [];
-  if (can.come) actions.push({ kind: "come", label: "I’m coming", main: true });
-  if (can.claim) actions.push({ kind: "come", label: "Take the place", main: true });
-  if (can.joinWaitlist) actions.push({ kind: "wait", label: "Join the waitlist", main: true });
-  if (can.cancel) actions.push({ kind: "cancel", label: mine?.status === "waitlisted" ? "Leave the waitlist" : "Can’t come", main: false });
+  if (can.come) actions.push({ kind: "come", label: "Book", main: true });
+  if (can.claim) actions.push({ kind: "come", label: "Claim place", main: true });
+  if (can.joinWaitlist) actions.push({ kind: "wait", label: "Join waitlist", main: true });
+  if (can.cancel) actions.push({ kind: "cancel", label: mine?.status === "waitlisted" ? "Leave waitlist" : "Cancel booking", main: false });
   return actions;
 }
 
-/** Why there is no button, where the card does not already say (a cancelled event does). */
+/** Why there is no button, where the card does not already say: Full and Cancelled say so themselves. */
 export function eventWhyNot(event: MemberGymEvent): string | null {
   const { mine, can } = event.going;
-  if (can.why === "waitlist_full") return "This event and its waitlist are full.";
-  if (can.why === "event_full") return "This event is full.";
-  if (can.why === "event_started" && mine === null) return "This event has started, so it’s too late to say you’re coming.";
-  if (can.why === "event_started" && mine?.status === "waitlisted") return "This event has started, so the waitlist is closed.";
-  if (mine?.status === "coming" && !can.cancel && !event.cancelled) return "This event has started, so this can’t be changed.";
+  if (can.why === "waitlist_full") return "The waitlist is full.";
+  if (can.why === "event_started" && mine?.status !== "coming") return "Booking has closed.";
   return null;
 }
 
@@ -77,10 +68,10 @@ export function eventWhyNot(event: MemberGymEvent): string | null {
 export function waitlistNote(event: MemberGymEvent): string | null {
   const { mine, can } = event.going;
   if (mine?.status !== "waitlisted" || can.claim || can.why !== null || event.cancelled) return null;
-  return "If a place comes free it can go to you. Check back here.";
+  return "Check back here if a place opens.";
 }
 
-/** Whether "Can't come" asks first: somebody else would take the place at once. */
+/** Whether Cancel booking asks first: somebody else would take the place at once. */
 export function givingUpAsks(event: MemberGymEvent): boolean {
   const { mine, coming, waiting } = event.going;
   return mine?.status === "coming" && event.places !== null && (coming >= event.places || waiting > 0);
@@ -114,10 +105,7 @@ export function posterHeight(cardWidth: number, poster: { width: number; height:
   return Math.min(POSTER_TALLEST, Math.round((cardWidth * poster.height) / poster.width));
 }
 
-export const noEvents = (gymName: string) => `${gymName} has no events coming up.`;
-export const eventsNotShown = (gymName: string) => `${gymName}’s events aren’t available right now.`;
-export const EVENTS_NOT_READ = "Couldn’t load the events.";
-export const EVENT_CANCELLED_LINE = "This event has been cancelled.";
-export const EARLIER_PLACE_GONE = "Your earlier place was given up. Press again to come.";
-export const givingUpTitle = (name: string) => `Give up your place at ${name}?`;
-export const GIVING_UP_LINE = "This event is full, so somebody else can take your place straight away.";
+export const NO_EVENTS = "No upcoming events.";
+export const EVENTS_NOT_SHOWN = "Events aren’t available right now.";
+export const EVENTS_NOT_READ = "Couldn’t load events.";
+export const GIVING_UP_LINE = "This event is full, so your place may go to someone else.";

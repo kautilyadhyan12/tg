@@ -3,10 +3,9 @@ import { memberGymEventSchema } from '@app/shared';
 import * as browser from './eventsView';
 import * as phone from '../../../../mobile/src/screens/gym/eventsView.ts';
 
-// The phone's Events says an event with its own copy of these sentences (Stage 5 item 17c-i). The two never differ,
-// but for the phone's curly apostrophe, its upper-case AM and PM, and its waitlist line with no "doesn't tell you yet".
+// The phone's Events has its own words, the phone's Classes' (Kd, 2026-10-31); the browser keeps its own. What each
+// offers and asks must still agree (Stage 5 item 17c-i): the same buttons, the same box, the same day and time.
 
-const straight = (text) => (typeof text === 'string' ? text.replaceAll('’', "'") : text);
 const can = (over = {}) => ({ come: false, joinWaitlist: false, claim: false, cancel: false, why: null, ...over });
 const event = (over = {}, going = {}) =>
   memberGymEventSchema.parse({
@@ -48,23 +47,14 @@ const every = [
   event({ startsOn: '2027-01-02', endsOn: '2027-01-02' }),
 ];
 
-describe('an event reads the same on the phone and in the browser', () => {
+describe('an event offers the same on the phone and in the browser', () => {
   it.each(every.map((e, i) => [i, e]))('case %i', (_, e) => {
-    expect(straight(phone.eventPlacesLeft(e))).toBe(browser.eventPlacesLeft(e));
-    const mine = phone.eventMine(e);
-    expect(mine === null ? null : { ...mine, text: straight(mine.text) }).toEqual(browser.eventMine(e));
-    expect(phone.eventActions(e).map((a) => ({ ...a, label: straight(a.label) }))).toEqual(browser.eventActions(e));
-    expect(straight(phone.eventWhyNot(e))).toBe(browser.eventWhyNot(e));
+    expect(phone.eventPlacesLeft(e) === null).toBe(browser.eventPlacesLeft(e) === null);
+    expect(phone.eventMine(e) === null).toBe(browser.eventMine(e) === null);
+    expect(phone.eventActions(e).map((a) => [a.kind, a.main])).toEqual(browser.eventActions(e).map((a) => [a.kind, a.main]));
     expect(phone.givingUpAsks(e)).toBe(browser.givingUpAsks(e));
     expect(phone.eventWhen(e, '2026-10-31', '12h').toLowerCase()).toBe(browser.eventWhen(e, '2026-10-31').toLowerCase());
     expect(phone.waitlistNote(e) === null).toBe(browser.waitlistNote(e) === null);
   });
 
-  it('the fixed sentences', () => {
-    expect(straight(phone.noEvents('Iron House'))).toBe(browser.noEvents('Iron House'));
-    const e = event();
-    expect(straight(phone.eventsZoneNote([e], 'Iron House', 'Asia/Kolkata', 'America/New_York'))).toBe(
-      browser.eventsZoneNote([e], 'Iron House', 'Asia/Kolkata', 'America/New_York').replace("this device's", "this phone's"),
-    );
-  });
 });
