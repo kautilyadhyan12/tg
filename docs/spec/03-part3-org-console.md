@@ -4582,8 +4582,9 @@ browser. A former member, a removed one and a stranger get a 404.
 
 `gym_posts`: who, words (2,000 characters), up to 4 photos or 1 video, pinned or not,
 when, removed at and by whom. Staff always post; **a gym setting decides whether
-members may** (off to start). **Reactions — one tap from a small fixed set — and NO
-comments, and no private chat** (RULINGS 2026-08-25, kept 2026-09-22). Photos: checked
+members may** (off to start). **Reactions — one tap from a small fixed set — comments and
+replies (below; Kd, 2026-10-30, replacing "no comments" of 2026-08-25), and no private
+chat** (RULINGS 2026-09-22). Photos: checked
 by their first bytes, size-capped, stripped of location tags, stored on R2 under keys
 the server makes, served by signed URLs (CLAUDE.md §4, Uploads). Videos: up to one
 minute, 20 a gym (RULINGS 2026-08-24), uploaded straight to Cloudflare Stream by a
@@ -4640,6 +4641,27 @@ are shown only while its writer is a live app member of the gym with an active a
 (leave, be removed or delete the account and they are gone for everyone; rejoin and they
 are back), it is deleted with its photo files at the account's Day 14, and it is in the
 person's export. Switching the switch off leaves the posts already made.
+
+**As built in Stage 5 17e-i (2026-10-31): comments and replies, on the phone.** Under any
+post a member may read, words only, 500 characters by the same count as a post: a **comment**,
+and a **reply** one level under a comment; a reply to a reply goes in the same list and names
+who it answers, read each time, so a name is never kept inside somebody else's words
+(`gym_post_comments`, migration 0179). Oldest first, 20 a page (`GET …/posts/:postId/comments`,
+`GET …/post-comments/:commentId/replies`); `POST …/posts/:postId/comments`, one key a comment.
+**100 in any 24 hours** a member a gym, comments and replies together, removed ones counted,
+counted with the membership held. On for every gym (`gyms.members_can_comment`); off, those
+written stay and none can be added; the stop of §15.3 stops comments too. Each has the post's
+four reactions, one a person, counts only (`PUT …/post-comments/:id/reaction`); **Report**, four
+reasons, the post's less the one about a photo, one a person, five waiting hide it and its replies
+from everyone but its writer (`gym_post_comment_reports`, `hidden_at`); **Block** is the one
+block of §15.3, so it hides that person's posts and comments alike; **Remove** on one's own, a
+comment taking its replies. One rule decides every read and every press (`commentsRepo.seenBy`):
+removed, a writer who has left, hidden unless theirs, blocked; a reply also needs the comment it
+sits under to be seen; a post the reader may not read has none. A removed post takes everything
+on it in its own step. A member's are the person's: deleted at Day 14 with what is under them,
+and in their export; staff's are the gym's. The bad-words check refuses and names the word, as for
+a post. Nobody is told of a new comment until phone notifications (Stage 5 item 18). Staff reading,
+writing and removing them, the reported list and the switch are 17e-ii.
 
 ### 15.3 Keeping it safe — what Apple (guideline 1.2) and Google ask of any app where people post
 
