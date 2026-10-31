@@ -18,3 +18,4 @@ CREATE TABLE "member_label_foods" (
   CONSTRAINT "member_label_foods_macros_check" CHECK ("protein_g" BETWEEN 0 AND 100 AND "carbs_g" BETWEEN 0 AND 100 AND "fat_g" BETWEEN 0 AND 100)
 );
 CREATE UNIQUE INDEX "member_label_foods_user_code_idx" ON "member_label_foods" ("user_id", "code") WHERE "code" IS NOT NULL;
+CREATE INDEX "member_label_foods_user_idx" ON "member_label_foods" ("user_id");
