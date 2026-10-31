@@ -208,6 +208,8 @@ export const staffGymPostsResponseSchema = z
     ...feedShape(staffGymPostSchema),
     /** The gym's switch: whether its members may post. */
     membersCanPost: z.boolean(),
+    /** The gym's switch: whether its members may comment. */
+    membersCanComment: z.boolean(),
     /** Posts with a report nobody has answered yet. */
     reportedCount: z.number().int().nonnegative(),
   })

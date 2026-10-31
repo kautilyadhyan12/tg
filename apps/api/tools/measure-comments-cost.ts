@@ -14,7 +14,8 @@ import { cpus } from "node:os";
 import { performance } from "node:perf_hooks";
 import postgres from "postgres";
 import { addComment, getComments, getReplies, reactToComment } from "../src/modules/orgs/posts/commentsService.js";
-import { getPosts, removePost } from "../src/modules/orgs/posts/service.js";
+import * as staff from "../src/modules/orgs/posts/commentsStaffService.js";
+import { getPosts, getStaffPosts, removePost } from "../src/modules/orgs/posts/service.js";
 
 const url = process.env["DATABASE_URL"] ?? "";
 if (!/localhost|127\.0\.0\.1/.test(url)) {
@@ -125,6 +126,20 @@ try {
     ["a reaction on a comment", () => reactToComment(deps, viewer, gymId, busyComment, "love", open)],
     ["a comment written", () => addComment(deps, viewer, gymId, firstPost, { commentKey: randomUUID(), body: "A new comment" })],
   ];
+  // The reported list at its worst: every comment it could carry waiting, each with six reports and their notes.
+  await sql`
+    INSERT INTO gym_post_comment_reports (gym_id, comment_id, user_id, reason, note, created_at)
+    SELECT ${gymId}, c.id, m.user_id, 'unkind', 'Reported in the cost run', now()
+    FROM (SELECT id FROM gym_post_comments WHERE gym_id = ${gymId} AND parent_id IS NULL ORDER BY id LIMIT 500) c
+    CROSS JOIN (SELECT user_id FROM gym_members WHERE gym_id = ${gymId} AND user_id <> ${viewer} ORDER BY user_id LIMIT 6) m`;
+  reads.push(
+    ["staff: Updates, one page", () => getStaffPosts(deps, owner, gymId, undefined, open)],
+    ["staff: one post's comments, first page", () => staff.getComments(deps, owner, gymId, firstPost, undefined, open)],
+    ["staff: one comment's replies, first page", () => staff.getReplies(deps, owner, gymId, busyComment, undefined, open)],
+    ["staff: who reacted to a comment", () => staff.getReactors(deps, owner, gymId, busyComment, "love", open)],
+    ["staff: reported comments (500 waiting)", () => staff.getReported(deps, owner, gymId, open)],
+    ["staff: a comment written", () => staff.addComment(deps, owner, gymId, firstPost, { commentKey: randomUUID(), body: "From the desk" }, open)],
+  );
   for (const [name, fn] of reads) {
     const runs: { wall: number; js: number }[] = [];
     await fn();
@@ -132,6 +147,8 @@ try {
     line(name, runs);
   }
   const photos = { put: () => Promise.resolve(), get: () => Promise.resolve(null), remove: () => Promise.resolve(true) };
+  const repliesGone = await time(() => staff.removeComment(deps, owner, gymId, busyComment, open));
+  line(`staff: a comment of ${String(REPLIES)} replies removed`, [repliesGone]);
   const removal = await time(() => removePost({ ...deps, photos, log }, owner, gymId, lastPost, open));
   line(`a post of ${String(PER_POST)} comments removed`, [removal]);
   // The Day-14 purge really deletes a member's post, in its own transaction.

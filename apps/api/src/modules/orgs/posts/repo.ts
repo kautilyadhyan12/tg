@@ -60,7 +60,7 @@ const toPost = (r: RawPost): PostRow => ({
  *  live app member of the gym with an active account. A member who leaves, is removed or
  *  deletes their account takes their posts and photos off the page with them. `hidden`:
  *  five people reported it (`hideIfReported`) and staff have not kept it since. */
-function posts(sql: SqlOrTx, gymId: string) {
+export function posts(sql: SqlOrTx, gymId: string) {
   return sql`
     SELECT p.id, p.body, p.pinned_at, p.created_at, p.post_key, p.removed_at IS NOT NULL AS removed,
            p.author_user_id AS author_id, p.by_member,

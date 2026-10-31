@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ImagePlus, UserCheck, X } from 'lucide-react';
-import { postPhotoUrl, staffPostsService } from '../../api/postsApi';
+import { postPhotoUrl, staffCommentsService, staffPostsService } from '../../api/postsApi';
 import { errorStatus, errorText } from '../../api/orgsApi';
 import PhotoViewer from '../../components/common/PhotoViewer';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
@@ -25,9 +25,11 @@ import {
   withStopped,
   withoutPost,
 } from '../../components/gym/postsView';
+import { memberCommentsSwitch, withCommentCount, withFreshFeed } from '../../components/gym/commentsConsoleView';
 import { preparePostPhoto } from './gymPagePhotos';
 import { PersonPostsBox } from './PersonPosts';
 import PostCard from './UpdatesPostCard';
+import { ReportedComments } from './UpdatesComments';
 import { useConsoleOrg } from './useConsoleOrg';
 import { orgWords, viewerPrivileges } from './consoleView';
 import { canManageChallenges } from './challengesView';
@@ -192,8 +194,10 @@ export default function Updates() {
   const readOnly = consoleIsReadOnly(org);
 
   const [state, setState] = useState({ loading: true, error: null, refused: false, feed: null });
-  /** The reported posts and the people stopped from posting; null until read. */
-  const [side, setSide] = useState({ reported: null, stopped: null });
+  /** The reported posts and comments and the people stopped from posting; null until read. */
+  const [side, setSide] = useState({ reported: null, reportedComments: null, stopped: null });
+  /** Goes up when any comments open on the page should be read again. */
+  const [commentsRefresh, setCommentsRefresh] = useState(0);
   const [switching, setSwitching] = useState(false);
   const [more, setMore] = useState({ loading: false, error: null });
   /** The post a pin or a removal is on its way for. */
@@ -207,9 +211,10 @@ export default function Updates() {
   const loadSide = useCallback(() => {
     if (gymId === null) return Promise.resolve();
     // Read beside the posts: one that fails leaves its part of the page as it was.
-    return Promise.allSettled([staffPostsService.reported(gymId), staffPostsService.stopped(gymId)]).then(([reported, stopped]) =>
+    return Promise.allSettled([staffPostsService.reported(gymId), staffPostsService.stopped(gymId), staffCommentsService.reported(gymId)]).then(([reported, stopped, reportedComments]) =>
       setSide((was) => ({
         reported: reported.status === 'fulfilled' ? reported.value : was.reported,
+        reportedComments: reportedComments.status === 'fulfilled' ? reportedComments.value : was.reportedComments,
         stopped: stopped.status === 'fulfilled' ? stopped.value : was.stopped,
       })),
     );
@@ -233,6 +238,40 @@ export default function Updates() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Read again when the tab or window is shown again: members may have reported or commented meanwhile.
+  useEffect(() => {
+    const shown = () => {
+      if (document.visibilityState !== 'visible') return;
+      loadSide();
+      setCommentsRefresh((n) => n + 1);
+      // The switches and the numbers; older posts already loaded stay.
+      if (gymId !== null) {
+        staffPostsService.list(gymId).then(
+          (page) => setState((s) => (s.feed === null ? s : { ...s, feed: withFreshFeed(s.feed, page) })),
+          () => {},
+        );
+      }
+    };
+    document.addEventListener('visibilitychange', shown);
+    return () => document.removeEventListener('visibilitychange', shown);
+  }, [loadSide, gymId]);
+
+  const onCommentCount = (postId, change) => {
+    setState((s) => (s.feed === null ? s : { ...s, feed: withCommentCount(s.feed, postId, change) }));
+    setSide((was) => (was.reported === null ? was : { ...was, reported: { ...was.reported, items: was.reported.items.map((item) => (item.post.id === postId ? { ...item, post: { ...item.post, commentCount: Math.max(0, item.post.commentCount + change) } } : item)) } }));
+  };
+
+  const onStopped = (userId, stopped) => {
+    setState((s) => (s.feed === null ? s : { ...s, feed: withStopped(s.feed, userId, stopped) }));
+    loadSide();
+    setCommentsRefresh((n) => n + 1);
+  };
+
+  const onCommentAnswered = async () => {
+    await loadSide();
+    setCommentsRefresh((n) => n + 1);
+  };
 
   const showMore = async () => {
     setMore({ loading: true, error: null });
@@ -281,10 +320,31 @@ export default function Updates() {
     }
   };
 
+  const onCommentSwitch = async (on) => {
+    const lines = memberCommentsSwitch(on, words);
+    setSwitching(true);
+    setNotice(null);
+    setActionError(null);
+    try {
+      const saved = await staffCommentsService.setMembersCanComment(gymId, on);
+      setState((s) => (s.feed === null ? s : { ...s, feed: { ...s.feed, membersCanComment: saved.membersCanComment } }));
+      setNotice(on ? lines.on : lines.off);
+    } catch (err) {
+      setActionError(errorText(err, "We couldn't change that. Please try again."));
+    } finally {
+      setSwitching(false);
+    }
+  };
+
   // A result post leads to its challenge, for staff who run challenges.
   const challengeLink = canManageChallenges(viewerPrivileges(org)) ? (id) => `/console/${orgSlug}/challenges?challenge=${id}` : null;
   const cardActions = {
     challengeLink,
+    commentsWhere: 'above',
+    commentsRefresh,
+    onCommentCount,
+    onCommentsChanged: loadSide,
+    onStopped,
     onPin: (p, pinned) =>
       act(
         p,
@@ -351,6 +411,7 @@ export default function Updates() {
   const none = feed !== null && feed.pinned.length + feed.posts.length === 0;
   const stoppedPeople = side.stopped?.people ?? [];
   const switchLines = feed === null ? null : memberPostsSwitch(feed.membersCanPost, words);
+  const commentSwitchLines = feed === null ? null : memberCommentsSwitch(feed.membersCanComment, words);
   const waiting = reported === null ? null : reportedMore(reported);
   return (
     <div className="c-page">
@@ -385,7 +446,7 @@ export default function Updates() {
           ) : null}
 
           {switchLines !== null ? (
-            <section className="c-card" aria-label={switchLines.label}>
+            <section className="c-card" aria-label={`What your ${words.people} can do`}>
               <div className="c-row" data-testid="members-can-post">
                 <div className="flex flex-col gap-0.5 min-w-0 flex-grow">
                   <span className="c-s15 c-w6 c-t1">{switchLines.label}</span>
@@ -399,6 +460,21 @@ export default function Updates() {
                   disabled={readOnly || switching}
                   onClick={() => onSwitch(!feed.membersCanPost)}
                   className={feed.membersCanPost ? 'c-switch c-switch-on' : 'c-switch'}
+                />
+              </div>
+              <div className="c-row" data-testid="members-can-comment">
+                <div className="flex flex-col gap-0.5 min-w-0 flex-grow">
+                  <span className="c-s15 c-w6 c-t1">{commentSwitchLines.label}</span>
+                  <span className="c-s13 c-t2">{commentSwitchLines.line}</span>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={feed.membersCanComment}
+                  aria-label={commentSwitchLines.label}
+                  disabled={readOnly || switching}
+                  onClick={() => onCommentSwitch(!feed.membersCanComment)}
+                  className={feed.membersCanComment ? 'c-switch c-switch-on' : 'c-switch'}
                 />
               </div>
             </section>
@@ -441,11 +517,25 @@ export default function Updates() {
             </section>
           ) : null}
 
+          {side.reportedComments !== null ? (
+            <ReportedComments
+              gymId={gymId}
+              gymName={org.name}
+              reported={side.reportedComments}
+              words={words}
+              readOnly={readOnly}
+              refresh={commentsRefresh}
+              onAnswered={onCommentAnswered}
+              onCount={onCommentCount}
+              onStopped={onStopped}
+            />
+          ) : null}
+
           {stoppedPeople.length > 0 ? (
-            <section className="c-card" aria-label="Stopped from posting" data-testid="stopped">
+            <section className="c-card" aria-label="Stopped from posting and commenting" data-testid="stopped">
               <div className="px-4 md:px-5 pt-4 flex flex-col gap-1">
-                <h2 className="c-s15 c-w6 c-t1">Stopped from posting</h2>
-                <p className="c-s13 c-t2">They can read and react, but not post, until you let them again.</p>
+                <h2 className="c-s15 c-w6 c-t1">Stopped from posting and commenting</h2>
+                <p className="c-s13 c-t2">They can read and react, but not post or comment, until you let them again.</p>
               </div>
               {stoppedPeople.map((person) => (
                 <div key={person.userId} className="c-row">
@@ -464,7 +554,7 @@ export default function Updates() {
                     className="c-btn c-btn-s c-btn-sm"
                   >
                     <UserCheck aria-hidden="true" className="w-4 h-4" />
-                    Let them post again
+                    Let them post and comment again
                   </button>
                 </div>
               ))}
