@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
-import { AppState, FlatList, Pressable, StyleSheet, View } from "react-native";
+import { AppState, FlatList, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 import { Modal } from "../../look/Modal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { gymEventsResponseSchema, memberGymEventResponseSchema, type GymClockFormat, type GymEventsResponse, type MemberGymEvent } from "@app/shared";
@@ -7,16 +7,17 @@ import { Button } from "../../look/Button";
 import { Card, Pill } from "../../look/Card";
 import { colours, sizes } from "../../look/colours";
 import { Icon } from "../../look/Icon";
+import { posterHeight } from "../../look/sizing";
 import { Sheet } from "../../look/Sheet";
 import { Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
 import { NO_ANSWER } from "../SignIn";
 import { CopyContext } from "../ThisCopy";
-import { EARLIER_CANCELLED, newRequestKey } from "./classesView";
+import { newRequestKey } from "./classesView";
 import {
+  EARLIER_BOOKING_GONE,
   EVENTS_NOT_READ,
   EVENTS_NOT_SHOWN,
-  GIVING_UP_LINE,
   NO_EVENTS,
   eventActions,
   eventIsOn,
@@ -26,8 +27,8 @@ import {
   eventWhyNot,
   eventsZoneNote,
   givingUpAsks,
-  posterHeight,
-  POSTER_TALLEST,
+  givingUpLine,
+  nextEventChangeAt,
   waitlistNote,
   type EventAct,
 } from "./eventsView";
@@ -51,6 +52,11 @@ const posterPath = (gymId: string, eventId: string, posterId: string) => `${even
 /** Posters are read only for events near the screen: a gym may list 100, at most 1 MB each. */
 const NEAR_THE_SCREEN = 5;
 const READ_AGAIN_AFTER_MISSED_MS = 20_000;
+/** While the member is on a waitlist the page is told to be checked: every 30 seconds, for at most 15 minutes. */
+const WAITLIST_READ_MS = 30_000;
+const WAITING_FOR_AT_MOST_MS = 15 * 60_000;
+/** The longest a timer for the next start or end is set for. */
+const LONGEST_TIMER_MS = 60 * 60_000;
 
 const phoneZone = () => {
   try {
@@ -79,6 +85,7 @@ function EventsBody({ place, onClose, bottom }: { place: EventsPlace; onClose: (
   const apiUrl = useContext(CopyContext).extra?.apiUrl ?? "";
   const [held, setHeld] = useState<Held>({ kind: "loading" });
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [busyKind, setBusyKind] = useState<EventAct | null>(null);
   // What the server last refused or could not answer, by event, until the next press on it.
   const [said, setSaid] = useState<Record<string, string | undefined>>({});
   const [asking, setAsking] = useState<MemberGymEvent | null>(null);
@@ -88,6 +95,8 @@ function EventsBody({ place, onClose, bottom }: { place: EventsPlace; onClose: (
   const started = useRef(0);
   const live = useRef(true);
   const [missedAt, setMissedAt] = useState<number | null>(null);
+  // When reads made by themselves began to fail: they stop trying after 15 minutes, until the app comes back.
+  const firstMissed = useRef<number | null>(null);
   const [files] = useState<PhotoFiles>(() => photoFiles(session));
   const [photoRound, setPhotoRound] = useState(0);
   useEffect(
@@ -102,17 +111,25 @@ function EventsBody({ place, onClose, bottom }: { place: EventsPlace; onClose: (
       started.current += 1;
       const number = started.current;
       const answer = await session.signedIn({ method: "GET", path: eventsPath(place.id) }, gymEventsResponseSchema);
-      if (!live.current || number !== started.current) return;
+      if (!live.current) return;
+      if (number !== started.current) {
+        // A press took this read's place: a retry that was due goes on being due.
+        setMissedAt((was) => (was === null ? null : Date.now()));
+        return;
+      }
       setPhotoRound((round) => round + 1);
       // Another place's events are never shown under this one.
       if (answer.kind === "ok" && answer.data.gymId === place.id) {
         // An event with a place of theirs needs no kept key: its press has plainly been answered.
         for (const e of answer.data.events) if (e.going.mine !== null) keys.current.delete(e.id);
+        firstMissed.current = null;
         setMissedAt(null);
         setHeld({ kind: "ok", list: answer.data, readAt: Date.now() });
       } else if (quiet && !(answer.kind === "refused" && answer.status === 404)) {
         // A read made by itself never takes the events away over a lost connection; a 404 does.
-        setMissedAt(Date.now());
+        const nowMs = Date.now();
+        firstMissed.current ??= nowMs;
+        setMissedAt(nowMs - firstMissed.current < WAITING_FOR_AT_MOST_MS ? nowMs : null);
       } else {
         setHeld({ kind: "failed", status: answer.kind === "refused" ? answer.status : null });
       }
@@ -124,7 +141,9 @@ function EventsBody({ place, onClose, bottom }: { place: EventsPlace; onClose: (
     live.current = true;
     void load(false);
     const back = AppState.addEventListener("change", (state) => {
-      if (state === "active") void load(true);
+      if (state !== "active") return;
+      firstMissed.current = null;
+      void load(true);
     });
     return () => {
       live.current = false;
@@ -147,6 +166,7 @@ function EventsBody({ place, onClose, bottom }: { place: EventsPlace; onClose: (
   const press = async (event: MemberGymEvent, kind: EventAct) => {
     if (busyId !== null) return;
     setBusyId(event.id);
+    setBusyKind(kind);
     setAsking(null);
     say(event.id, undefined);
     // A read that started before this press no longer stands: it may not hold what the press does.
@@ -164,6 +184,7 @@ function EventsBody({ place, onClose, bottom }: { place: EventsPlace; onClose: (
     );
     if (!live.current) return;
     setBusyId(null);
+    setBusyKind(null);
     if (answer.kind === "no_answer") {
       // No answer keeps its key: pressed again, the server takes one place.
       say(event.id, NO_ANSWER);
@@ -173,7 +194,7 @@ function EventsBody({ place, onClose, bottom }: { place: EventsPlace; onClose: (
     if (answer.kind === "ok") {
       const now = answer.data.event;
       // A key from a press whose place was given up since is answered with no place.
-      if (key !== null && now.going.mine === null) say(event.id, EARLIER_CANCELLED);
+      if (key !== null && now.going.mine === null) say(event.id, EARLIER_BOOKING_GONE);
       started.current += 1;
       setHeld((h) => (h.kind !== "ok" ? h : { ...h, list: { ...h.list, events: h.list.events.map((e) => (e.id === now.id ? now : e)) } }));
       return;
@@ -185,6 +206,32 @@ function EventsBody({ place, onClose, bottom }: { place: EventsPlace; onClose: (
 
   const list = held.kind === "ok" ? held.list : null;
   const note = list === null ? null : eventsZoneNote(list.events, place.name, list.timezone, phoneZone());
+  const onWaitlist = list?.events.some((e) => e.going.mine?.status === "waitlisted" && !e.cancelled) ?? false;
+
+  // Told to check back, they need not leave and return: read on while waiting on a place.
+  useEffect(() => {
+    if (!onWaitlist) return undefined;
+    const since = Date.now();
+    const timer = setInterval(() => {
+      if (Date.now() - since >= WAITING_FOR_AT_MOST_MS) clearInterval(timer);
+      else void load(true);
+    }, WAITLIST_READ_MS);
+    return () => {
+      clearInterval(timer);
+    };
+  }, [onWaitlist, load]);
+
+  // On now, Booking has closed and the list itself change when an event starts or ends.
+  useEffect(() => {
+    if (list === null) return undefined;
+    const nowMs = Date.now();
+    const at = nextEventChangeAt(list.events, nowMs);
+    if (at === null) return undefined;
+    const timer = setTimeout(() => void load(true), Math.min(at - nowMs + 1000, LONGEST_TIMER_MS));
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [list, load]);
 
   const empty =
     held.kind === "loading" ? (
@@ -244,7 +291,7 @@ function EventsBody({ place, onClose, bottom }: { place: EventsPlace; onClose: (
             posterUrl={(posterId) => `${apiUrl}${posterPath(place.id, item.id, posterId)}`}
             files={files}
             photoRound={photoRound}
-            busy={busyId === item.id}
+            busyKind={busyId === item.id ? busyKind : null}
             blocked={busyId !== null && busyId !== item.id}
             said={said[item.id]}
             onPress={(kind) => {
@@ -265,7 +312,7 @@ function EventsBody({ place, onClose, bottom }: { place: EventsPlace; onClose: (
         {asking === null ? null : (
           <View style={styles.ask}>
             <Txt colour="text">{asking.name}</Txt>
-            <Txt colour="text">{GIVING_UP_LINE}</Txt>
+            <Txt colour="text">{givingUpLine(asking)}</Txt>
             <Button label="Cancel booking" kind="danger" wide onPress={() => void press(asking, "cancel")} />
             <Button
               label="Keep it"
@@ -290,7 +337,8 @@ interface EventBoxProps {
   posterUrl: (posterId: string) => string;
   files: PhotoFiles;
   photoRound: number;
-  busy: boolean;
+  /** What is on its way for this event; null with nothing. */
+  busyKind: EventAct | null;
   /** Another event's press is on its way: this one's buttons wait for it. */
   blocked: boolean;
   said: string | undefined;
@@ -308,7 +356,8 @@ function Fact({ icon, words }: { icon: "calendar" | "pin" | "users"; words: stri
   );
 }
 
-function EventBox({ event, today, readAt, clock, posterUrl, files, photoRound, busy, blocked, said, onPress }: EventBoxProps) {
+function EventBox({ event, today, readAt, clock, posterUrl, files, photoRound, busyKind, blocked, said, onPress }: EventBoxProps) {
+  const { height } = useWindowDimensions();
   const places = eventPlacesLeft(event);
   const on = !event.cancelled && eventIsOn(event, readAt);
   const mine = eventMine(event);
@@ -327,7 +376,7 @@ function EventBox({ event, today, readAt, clock, posterUrl, files, photoRound, b
           onLayout={(layout) => {
             setCardWidth(layout.nativeEvent.layout.width);
           }}
-          style={[styles.poster, { height: cardWidth === null ? POSTER_TALLEST : posterHeight(cardWidth, poster) }, event.cancelled ? styles.faded : null]}
+          style={[styles.poster, { height: posterHeight(cardWidth, poster, height) }, event.cancelled ? styles.faded : null]}
         >
           <SignedPhoto uri={posterUrl(poster.id)} photoId={poster.id} files={files} round={photoRound} fit="contain" testID={`poster-${poster.id}`} />
         </View>
@@ -361,8 +410,8 @@ function EventBox({ event, today, readAt, clock, posterUrl, files, photoRound, b
             kind={action.main ? "main" : "plain"}
             small
             wide
-            busy={busy && action.main}
-            disabled={blocked || (busy && !action.main)}
+            busy={busyKind === action.kind}
+            disabled={blocked || busyKind !== null}
             say={`${action.label}: ${event.name}`}
             onPress={() => {
               onPress(action.kind);

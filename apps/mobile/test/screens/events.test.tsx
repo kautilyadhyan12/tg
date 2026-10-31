@@ -1,9 +1,10 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import { AppState } from "react-native";
 import { File } from "expo-file-system";
+import { eventBookingSettings, eventGoing } from "@app/shared";
 import { memberGymEventSchema } from "@app/shared";
 import { App } from "../../src/App";
-import { POSTER_TALLEST, posterHeight } from "../../src/screens/gym/eventsView";
+import { POSTER_TALLEST, posterHeight } from "../../src/look/sizing";
 import type { Ask } from "../../src/session/calls";
 import { fakeServer, kept, lost, memoryStore, refusal, tokens, type Reply } from "../kit";
 
@@ -63,6 +64,19 @@ const listOf = (place: Place, events: Over[], over: Over = {}) => ({
 });
 const eventsOf = (place: Place) => `/v1/orgs/${place.id}/events`;
 const comingOf = (place: Place, id: string) => `/v1/orgs/${place.id}/events/${id}/coming`;
+/** `going` as the server's own rule works it out, so no state appears here that it never sends. */
+const realGoing = (o: { mine?: "coming" | "waitlisted" | null; coming?: number; waiting?: number; places?: number | null; cancelled?: boolean; waitlistPlace?: number | null; startsInMs?: number }) =>
+  eventGoing({
+    nowMs: 0,
+    startsAtMs: o.startsInMs ?? 30 * 86_400_000,
+    cancelled: o.cancelled ?? false,
+    places: o.places === undefined ? 30 : o.places,
+    coming: o.coming ?? 0,
+    waitlisted: o.waiting ?? 0,
+    settings: eventBookingSettings({ handoverMinutes: 1440, waitlistMax: 20 }),
+    mine: o.mine ?? null,
+    waitlistPlace: o.waitlistPlace ?? null,
+  });
 const youreComing = (id: string, name: string, over: Over = {}) =>
   event(id, name, { going: going({ coming: 1, mine: { status: "coming", waitlistPlace: null }, can: can({ cancel: true }) }), ...over });
 
@@ -112,8 +126,8 @@ type Asked = { method?: string; path: string; body?: unknown };
 const presses = (server: { asked: Asked[] }) => server.asked.filter((one) => one.method === "POST" && one.path.endsWith("/coming"));
 const keyOf = (one: Asked) => (one.body as { requestKey: string }).requestKey;
 
-describe("the worst thing: You're coming only when the server holds a place, and one gym's events are its own", () => {
-  it("I'm coming with no answer never says You're coming; the same key goes again, and only the server's answer says it", async () => {
+describe("the worst thing: You're booked only when the server holds a place, and one gym's events are its own", () => {
+  it("Book with no answer never says You're booked; the same key goes again, and only the server's answer says it", async () => {
     let first = true;
     const gym = held(IRON, [event(E1, "Open day")]);
     const server = fakeServer({
@@ -141,7 +155,7 @@ describe("the worst thing: You're coming only when the server holds a place, and
     expect(keyOf(two)).toBe(keyOf(one));
   });
 
-  it("a press answered with a refusal says the server's words, reads again, and never says You're coming", async () => {
+  it("a press answered with a refusal says the server's words, reads again, and never says You're booked", async () => {
     let reads = 0;
     const full = event(E1, "Open day", { places: 30, going: going({ coming: 30, can: can({ joinWaitlist: true }) }) });
     const server = fakeServer({
@@ -160,7 +174,7 @@ describe("the worst thing: You're coming only when the server holds a place, and
     expect(box(E1).queryByText("You’re booked")).toBeNull();
   });
 
-  it("a kept key answered with no place says so, never You're coming, and the next press has a new key", async () => {
+  it("a kept key answered with no place says so, never You're booked, and the next press has a new key", async () => {
     let round = 0;
     const server = fakeServer({
       "/v1/auth/refresh": ok({ tokens: tokens(2) }),
@@ -177,7 +191,7 @@ describe("the worst thing: You're coming only when the server holds a place, and
     await fireEvent.press(await screen.findByLabelText("Book: Open day"));
     await box(E1).findByText("Can’t connect. Check your internet and try again.");
     await fireEvent.press(screen.getByLabelText("Book: Open day"));
-    expect(await box(E1).findByText("Your earlier booking was cancelled. Press Book to book again.")).toBeTruthy();
+    expect(await box(E1).findByText("Your earlier booking was cancelled.")).toBeTruthy();
     expect(box(E1).queryByText("You’re booked")).toBeNull();
     await fireEvent.press(screen.getByLabelText("Book: Open day"));
     expect(await box(E1).findByText("You’re booked")).toBeTruthy();
@@ -269,11 +283,16 @@ describe("what an event says", () => {
     expect(box(E2).getByText("Mon 2 Nov · 10:00 – 13:00")).toBeTruthy();
   });
 
-  it("a cancelled event stays, marked, with no button", async () => {
-    await show([event(E1, "Open day", { cancelled: true, going: going({ can: can({ why: "event_cancelled" }) }) })]);
+  it.each([
+    ["nobody", null],
+    ["somebody booked", "coming"],
+    ["somebody waiting", "waitlisted"],
+  ] as const)("a cancelled event stays, marked, with no button, for %s: their place is kept in case it comes back", async (_, held2) => {
+    const server = await show([event(E1, "Open day", { cancelled: true, going: realGoing({ cancelled: true, mine: held2, coming: 30, waiting: 1, waitlistPlace: 1 }) })]);
     await screen.findByText("Open day");
     expect(box(E1).getByText("Cancelled")).toBeTruthy();
     expect(box(E1).queryByRole("button")).toBeNull();
+    expect(server.asked.some((one) => one.method === "DELETE")).toBe(false);
   });
 
   it("On now while it runs", async () => {
@@ -293,7 +312,7 @@ describe("what an event says", () => {
     expect(box(E1).getByLabelText("Leave waitlist: Open day")).toBeTruthy();
   });
 
-  it("a free place for them offers Take the place, and Leave the waitlist beside it", async () => {
+  it("a free place for them offers Claim place, and Leave waitlist beside it", async () => {
     await show([event(E1, "Open day", { going: going({ coming: 29, waiting: 1, mine: { status: "waitlisted", waitlistPlace: 1 }, can: can({ claim: true, cancel: true }) }) })]);
     await screen.findByText("Open day");
     expect(box(E1).getByText("A place is free. Claim it before someone else does.")).toBeTruthy();
@@ -358,7 +377,7 @@ describe("what an event says", () => {
 });
 
 describe("giving up a place", () => {
-  it("with room left, Can't come goes at once, and the card says the server's answer", async () => {
+  it("with room left, Cancel booking goes at once, and the card says the server's answer", async () => {
     const gym = held(IRON, [youreComing(E1, "Open day")]);
     const server = fakeServer({
       "/v1/auth/refresh": ok({ tokens: tokens(2) }),
@@ -373,7 +392,7 @@ describe("giving up a place", () => {
     expect(server.asked.filter((one) => one.method === "DELETE").length).toBe(1);
   });
 
-  it("when somebody would take it at once, the box asks; Keep my place sends nothing", async () => {
+  it("when somebody would take it at once, the box asks; Keep it sends nothing", async () => {
     const taken = event(E1, "Open day", { places: 1, going: going({ coming: 1, waiting: 1, mine: { status: "coming", waitlistPlace: null }, can: can({ cancel: true }) }) });
     const gym = held(IRON, [taken]);
     const server = fakeServer({
@@ -395,7 +414,7 @@ describe("giving up a place", () => {
     expect(server.asked.filter((one) => one.method === "DELETE").length).toBe(1);
   });
 
-  it("Can't come with no answer keeps You're coming and says it couldn't connect", async () => {
+  it("Cancel booking with no answer keeps You're booked and says it couldn't connect", async () => {
     const server = fakeServer({
       "/v1/auth/refresh": ok({ tokens: tokens(2) }),
       "/v1/orgs/mine": mine(IRON),
@@ -409,13 +428,133 @@ describe("giving up a place", () => {
   });
 });
 
+describe("the box before giving up a place, and the card, say the same", () => {
+  it.each([
+    ["full", { coming: 2, waiting: 0, places: 2 }, "Full", "This event is full, so your place may go to someone else."],
+    ["full with people waiting", { coming: 2, waiting: 1, places: 2 }, "Full · 1 on the waitlist", "This event is full, so your place may go to someone else."],
+    ["a place free and people waiting", { coming: 1, waiting: 1, places: 2 }, "1 place left", "People are waiting for a place, so yours may go to someone else."],
+  ])("%s", async (_, numbers, card, line) => {
+    const going2 = realGoing({ ...numbers, mine: "coming" });
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [eventsOf(IRON)]: ok(listOf(IRON, [event(E1, "Open day", { places: numbers.places, going: going2 })])),
+    });
+    await openEvents(server.ask, IRON);
+    await fireEvent.press(await screen.findByLabelText("Cancel booking: Open day"));
+    expect(await screen.findByText(line)).toBeTruthy();
+    expect(box(E1).getByText(card)).toBeTruthy();
+  });
+});
+
+describe("every press sends what it says", () => {
+  const pressed = async (over: Over, label: string, answer: Over) => {
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [eventsOf(IRON)]: ok(listOf(IRON, [event(E1, "Open day", over)])),
+      [comingOf(IRON, E1)]: ok({ event: answer }),
+    });
+    await openEvents(server.ask, IRON);
+    await fireEvent.press(await screen.findByLabelText(`${label}: Open day`));
+    return server;
+  };
+
+  it("Join waitlist asks for the waitlist, and the card then says On the waitlist, not booked", async () => {
+    const answer = event(E1, "Open day", { going: realGoing({ coming: 30, waiting: 1, mine: "waitlisted", waitlistPlace: 1 }) });
+    const server = await pressed({ going: realGoing({ coming: 30 }) }, "Join waitlist", answer);
+    expect(await box(E1).findByText("On the waitlist")).toBeTruthy();
+    expect(box(E1).queryByText("You’re booked")).toBeNull();
+    expect((presses(server)[0]?.body as { joinWaitlist: boolean }).joinWaitlist).toBe(true);
+  });
+
+  it("Claim place asks for a place, not the waitlist, and the card then says You're booked", async () => {
+    const over = { going: going({ coming: 29, waiting: 1, mine: { status: "waitlisted", waitlistPlace: 1 }, can: can({ claim: true, cancel: true }) }) };
+    const server = await pressed(over, "Claim place", youreComing(E1, "Open day"));
+    expect(await box(E1).findByText("You’re booked")).toBeTruthy();
+    expect((presses(server)[0]?.body as { joinWaitlist: boolean }).joinWaitlist).toBe(false);
+  });
+
+  it("Leave waitlist sends the leaving, and the card then holds nothing of theirs", async () => {
+    const over = { going: going({ coming: 30, waiting: 1, mine: { status: "waitlisted", waitlistPlace: 1 }, can: can({ cancel: true }) }) };
+    const server = await pressed(over, "Leave waitlist", event(E1, "Open day", { going: realGoing({ coming: 30 }) }));
+    expect(await box(E1).findByLabelText("Join waitlist: Open day")).toBeTruthy();
+    expect(box(E1).queryByText("On the waitlist")).toBeNull();
+    expect(server.asked.filter((one) => one.method === "DELETE").length).toBe(1);
+    expect(presses(server).length).toBe(0);
+  });
+});
+
+describe("whose clock", () => {
+  const zoneOf = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
+  it("a gym in another zone from the phone says whose time it is", async () => {
+    const other = zoneOf() === "America/New_York" ? "Asia/Kolkata" : "America/New_York";
+    const server = fakeServer({ "/v1/auth/refresh": ok({ tokens: tokens(2) }), "/v1/orgs/mine": mine(IRON), [eventsOf(IRON)]: ok(listOf(IRON, [event(E1, "Open day")], { timezone: other })) });
+    await openEvents(server.ask, IRON);
+    expect(await page().findByText(`Times are Iron House time (${other.replaceAll("_", " ")}), not this phone’s.`)).toBeTruthy();
+  });
+  it("a gym on the phone's own zone says nothing about it", async () => {
+    const server = fakeServer({ "/v1/auth/refresh": ok({ tokens: tokens(2) }), "/v1/orgs/mine": mine(IRON), [eventsOf(IRON)]: ok(listOf(IRON, [event(E1, "Open day")], { timezone: zoneOf() })) });
+    await openEvents(server.ask, IRON);
+    await page().findByText("Open day");
+    expect(page().queryByText(/Times are/)).toBeNull();
+  });
+});
+
+describe("the page stays current", () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+  const reads = (server: { asked: Asked[] }) => server.asked.filter((one) => one.path === eventsOf(IRON)).length;
+  const onWait = () => event(E1, "Open day", { going: realGoing({ coming: 30, waiting: 1, mine: "waitlisted", waitlistPlace: 1 }) });
+
+  it("on a waitlist it reads every 30 seconds, and stops after 15 minutes", async () => {
+    jest.useFakeTimers({ advanceTimers: true });
+    const server = fakeServer({ "/v1/auth/refresh": ok({ tokens: tokens(2) }), "/v1/orgs/mine": mine(IRON), [eventsOf(IRON)]: ok(listOf(IRON, [onWait()])) });
+    await openEvents(server.ask, IRON);
+    await page().findByText("On the waitlist");
+    const before = reads(server);
+    await act(async () => { await jest.advanceTimersByTimeAsync(31_000); });
+    expect(reads(server)).toBe(before + 1);
+    await act(async () => { await jest.advanceTimersByTimeAsync(16 * 60_000); });
+    const atTheEnd = reads(server);
+    expect(atTheEnd).toBeLessThanOrEqual(before + 31);
+    await act(async () => { await jest.advanceTimersByTimeAsync(5 * 60_000); });
+    expect(reads(server)).toBe(atTheEnd);
+  });
+
+  it("with no waitlist place and nothing starting soon, it does not read by itself", async () => {
+    jest.useFakeTimers({ advanceTimers: true });
+    const server = fakeServer({ "/v1/auth/refresh": ok({ tokens: tokens(2) }), "/v1/orgs/mine": mine(IRON), [eventsOf(IRON)]: ok(listOf(IRON, [event(E1, "Open day")])) });
+    await openEvents(server.ask, IRON);
+    await page().findByText("Open day");
+    const before = reads(server);
+    await act(async () => { await jest.advanceTimersByTimeAsync(5 * 60_000); });
+    expect(reads(server)).toBe(before);
+  });
+
+  it("it reads again when an event starts", async () => {
+    jest.useFakeTimers({ advanceTimers: true });
+    const soon = new Date(Date.now() + 60_000).toISOString();
+    const later = new Date(Date.now() + 3 * 3_600_000).toISOString();
+    const server = fakeServer({ "/v1/auth/refresh": ok({ tokens: tokens(2) }), "/v1/orgs/mine": mine(IRON), [eventsOf(IRON)]: ok(listOf(IRON, [event(E1, "Open day", { startsAt: soon, endsAt: later })])) });
+    await openEvents(server.ask, IRON);
+    await page().findByText("Open day");
+    const before = reads(server);
+    await act(async () => { await jest.advanceTimersByTimeAsync(70_000); });
+    expect(reads(server)).toBeGreaterThan(before);
+  });
+});
+
 describe("posters", () => {
   const withPoster = event(E1, "Open day", { poster: { id: POSTER, width: 800, height: 1200 } });
 
-  it("a poster's box keeps the card's width: its own shape, a tall one stopped at the tallest", () => {
-    expect(posterHeight(360, { width: 1200, height: 600 })).toBe(180);
-    expect(posterHeight(360, { width: 800, height: 1200 })).toBe(POSTER_TALLEST);
-    expect(posterHeight(1000, { width: 1200, height: 600 })).toBe(POSTER_TALLEST);
+  it("a poster's box keeps the card's width: its own shape, stopped at the tallest and at its share of the screen", () => {
+    expect(posterHeight(360, { width: 1200, height: 600 }, 800)).toBe(180);
+    expect(posterHeight(360, { width: 800, height: 1200 }, 1000)).toBe(POSTER_TALLEST);
+    expect(posterHeight(1000, { width: 1200, height: 600 }, 2000)).toBe(POSTER_TALLEST);
+    expect(posterHeight(360, { width: 800, height: 1200 }, 400)).toBe(220);
+    expect(posterHeight(null, { width: 800, height: 1200 }, 400)).toBe(220);
   });
 
   it("a poster is read signed in, from this gym's own address", async () => {
@@ -449,6 +588,6 @@ describe("posters", () => {
     await openEvents(server.ask, IRON);
     await page().findByText("Event 10");
     await settle();
-    expect(download.mock.calls.length).toBeLessThan(40);
+    expect(download.mock.calls.length).toBeLessThanOrEqual(10);
   });
 });

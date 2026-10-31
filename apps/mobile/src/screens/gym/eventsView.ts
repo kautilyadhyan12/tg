@@ -45,8 +45,10 @@ export interface EventAction {
   main: boolean;
 }
 
-/** The buttons an event offers this member, in order. */
+/** The buttons an event offers this member, in order. None on a cancelled event: it keeps everybody's place in case it
+ *  comes back, and the server would let a place go that could not then be had again. */
 export function eventActions(event: MemberGymEvent): EventAction[] {
+  if (event.cancelled) return [];
   const { mine, can } = event.going;
   const actions: EventAction[] = [];
   if (can.come) actions.push({ kind: "come", label: "Book", main: true });
@@ -74,7 +76,7 @@ export function waitlistNote(event: MemberGymEvent): string | null {
 /** Whether Cancel booking asks first: somebody else would take the place at once. */
 export function givingUpAsks(event: MemberGymEvent): boolean {
   const { mine, coming, waiting } = event.going;
-  return mine?.status === "coming" && event.places !== null && (coming >= event.places || waiting > 0);
+  return !event.cancelled && mine?.status === "coming" && event.places !== null && (coming >= event.places || waiting > 0);
 }
 
 /** Whether it has started and not ended, at `now`. */
@@ -97,15 +99,20 @@ export function eventsZoneNote(events: readonly MemberGymEvent[], gymName: strin
   return `Times are ${gymName} time (${gymZone.replaceAll("_", " ")}), not this phone’s.`;
 }
 
-/** The tallest a poster's box is drawn. */
-export const POSTER_TALLEST = 420;
-
-/** How tall a poster's box is in a card this wide: its own shape, but never past the tallest. */
-export function posterHeight(cardWidth: number, poster: { width: number; height: number }): number {
-  return Math.min(POSTER_TALLEST, Math.round((cardWidth * poster.height) / poster.width));
+/** The next moment a listed event starts or ends, after `now`: what the page says changes then. */
+export function nextEventChangeAt(events: readonly MemberGymEvent[], now: number): number | null {
+  const later = events.flatMap((e) => [Date.parse(e.startsAt), Date.parse(e.endsAt)]).filter((at) => at > now);
+  return later.length === 0 ? null : Math.min(...later);
 }
 
 export const NO_EVENTS = "No upcoming events.";
 export const EVENTS_NOT_SHOWN = "Events aren’t available right now.";
 export const EVENTS_NOT_READ = "Couldn’t load events.";
-export const GIVING_UP_LINE = "This event is full, so your place may go to someone else.";
+export const EARLIER_BOOKING_GONE = "Your earlier booking was cancelled.";
+
+/** The box's line, true to what the card says: full only when no place is free. */
+export function givingUpLine(event: MemberGymEvent): string {
+  return event.places !== null && event.going.coming >= event.places
+    ? "This event is full, so your place may go to someone else."
+    : "People are waiting for a place, so yours may go to someone else.";
+}
