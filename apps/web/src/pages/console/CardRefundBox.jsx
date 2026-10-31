@@ -18,9 +18,30 @@ const NOTHING_SENT = ['card_refund_refused', 'card_refund_failed', 'card_connect
 
 const newKey = () => globalThis.crypto.randomUUID();
 
-/** `paymentsTo`: the place to connect Square, for whoever may; null for everybody else. `onNote`: opens Note a refund.
- *  `fee`: the fee this payment paid (`feeRefundWords`); null for a period's. */
+/** The box under a member's payment. `paymentsTo`: the place to connect Square, for whoever may; null for everybody else.
+ *  `onNote`: opens Note a refund. `fee`: the fee this payment paid (`feeRefundWords`); null for a period's. */
 export default function CardRefundBox({ gymId, entryId, m, payment, fee = null, name, live, paymentsTo, onDone, onNote, onClose }) {
+  return (
+    <RefundToCardBox
+      readKey={`${gymId}/${entryId}/${m.id}/${payment.id}`}
+      read={() => orgService.getCardRefund(gymId, entryId, m.id, payment.id).then((res) => res.data)}
+      press={(body) => orgService.refundToCard(gymId, entryId, m.id, payment.id, body).then((res) => res.data)}
+      currency={m.currency}
+      words={(check) => cardRefundBoxWords(m, name, payment, check, live, fee)}
+      reasons={refundReasonsFor(fee)}
+      paymentsTo={paymentsTo}
+      onDone={onDone}
+      onNote={onNote}
+      onClose={onClose}
+    />
+  );
+}
+
+/** The box itself, for a member's payment, a product of a sale or all of a sale. `read`: what Square says now. `press`: the money
+ *  goes back, told the body and how many went back on each shelf. `words`: its sentences, from what Square said. `shelves`: what it
+ *  asks about the shelf, each `{ key, label, choices }`. `allLeft`: all that is left goes back, so no amount is asked. `onNote`: told
+ *  what stopped the refund, if anything. `thing`: what staff open again to see where a refund stands. */
+export function RefundToCardBox({ readKey, read, press, currency, words: wordsFor, reasons, shelves = [], allLeft = false, thing = 'payment', paymentsTo, onDone, onNote, onClose }) {
   const [check, setCheck] = useState(null);
   const [draft, setDraft] = useState(null);
   const [problem, setProblem] = useState(null);
@@ -29,11 +50,11 @@ export default function CardRefundBox({ gymId, entryId, m, payment, fee = null, 
 
   useEffect(() => {
     let live2 = true;
-    orgService.getCardRefund(gymId, entryId, m.id, payment.id).then(
-      (res) => {
+    read().then(
+      (seen) => {
         if (!live2) return;
-        setCheck(res.data);
-        setDraft(cardRefundDraft(res.data, m.currency, newKey));
+        setCheck(seen);
+        setDraft(cardRefundDraft(seen, currency, newKey));
       },
       (err) => {
         if (!live2) return;
@@ -44,7 +65,9 @@ export default function CardRefundBox({ gymId, entryId, m, payment, fee = null, 
     return () => {
       live2 = false;
     };
-  }, [gymId, entryId, m.id, m.currency, payment.id]);
+    // `readKey` names what `read` reads: a box is read once for it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readKey, currency]);
 
   const back = (
     <button type="button" className={PLAIN} disabled={busy} onClick={onClose}>
@@ -52,7 +75,7 @@ export default function CardRefundBox({ gymId, entryId, m, payment, fee = null, 
     </button>
   );
   const note = (
-    <button type="button" className={PLAIN} disabled={busy} onClick={onNote}>
+    <button type="button" className={PLAIN} disabled={busy} onClick={() => onNote(check?.block ?? null)}>
       Note a refund
     </button>
   );
@@ -76,8 +99,9 @@ export default function CardRefundBox({ gymId, entryId, m, payment, fee = null, 
     );
   }
 
+  const money = { currency };
   if (check.block !== null) {
-    const inSquare = inSquareLine(m, check);
+    const inSquare = inSquareLine(money, check);
     return (
       <div className="rounded-[14px] p-3 flex flex-col gap-3" style={BOX} data-testid="card-refund-box">
         <span className="c-s14 c-t1">{cardRefundBlockLine(check.block)}</span>
@@ -94,18 +118,18 @@ export default function CardRefundBox({ gymId, entryId, m, payment, fee = null, 
     );
   }
 
-  const words = cardRefundBoxWords(m, name, payment, check, live, fee);
-  const { problem: wrong, body } = cardRefundBody(m, check, draft);
+  const words = wordsFor(check);
+  const { problem: wrong, body } = cardRefundBody(money, check, draft);
   const send = async () => {
     setBusy(true);
     setProblem(null);
     try {
-      const res = await orgService.refundToCard(gymId, entryId, m.id, payment.id, body);
+      const sent = await press(body, draft.shelf ?? {});
       const cardWords = check.card === null ? 'the card' : cardName(check.card);
-      onDone(cardRefundSentLine(res.data, cardWords), { ...res.data, cardWords });
+      onDone(cardRefundSentLine(sent, cardWords), { ...sent, cardWords });
     } catch (err) {
       // No answer at all says nothing of whether the press reached Square.
-      const unsure = "We couldn't reach Square. The refund may not have gone through: open the payment again before trying.";
+      const unsure = `We couldn't reach Square. The refund may not have gone through: open the ${thing} again before trying.`;
       setProblem(typeof errorCode(err) === 'string' ? errorText(err, unsure) : unsure);
       if (NOTHING_SENT.includes(errorCode(err))) setDraft((d) => ({ ...d, requestKey: newKey() }));
       setBusy(false);
@@ -138,21 +162,35 @@ export default function CardRefundBox({ gymId, entryId, m, payment, fee = null, 
           {note}
         </div>
       ) : null}
-      <label className="c-field">
-        <span className="c-label">{`Amount to refund (${m.currency})`}</span>
-        <input className="c-input" type="text" inputMode="decimal" value={draft.amount} onChange={(e) => setDraft((d) => ({ ...d, amount: e.target.value.slice(0, 12) }))} />
-      </label>
+      {allLeft ? null : (
+        <label className="c-field">
+          <span className="c-label">{`Amount to refund (${currency})`}</span>
+          <input className="c-input" type="text" inputMode="decimal" value={draft.amount} onChange={(e) => setDraft((d) => ({ ...d, amount: e.target.value.slice(0, 12) }))} />
+        </label>
+      )}
       <label className="c-field">
         <span className="c-label">Why it is being refunded</span>
         <select className="c-sel" value={draft.reason} onChange={(e) => setDraft((d) => ({ ...d, reason: e.target.value }))}>
           <option value="">Choose one</option>
-          {refundReasonsFor(fee).map((reason) => (
+          {reasons.map((reason) => (
             <option key={reason.value} value={reason.value}>
               {reason.label}
             </option>
           ))}
         </select>
       </label>
+      {shelves.map((shelf) => (
+        <label key={shelf.key} className="c-field">
+          <span className="c-label">{shelf.label}</span>
+          <select className="c-sel" value={draft.shelf?.[shelf.key] ?? '0'} onChange={(e) => setDraft((d) => ({ ...d, shelf: { ...d.shelf, [shelf.key]: e.target.value } }))}>
+            {shelf.choices.map((choice) => (
+              <option key={choice.value} value={choice.value}>
+                {choice.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      ))}
       {draft.tried && wrong !== null ? (
         <span className="c-s14" style={{ color: 'var(--bad)' }} role="alert">
           {wrong}
@@ -166,7 +204,7 @@ export default function CardRefundBox({ gymId, entryId, m, payment, fee = null, 
       <div className="flex flex-wrap gap-2">
         <button type="submit" className={MAIN} style={{ whiteSpace: 'normal', maxWidth: '100%', height: 'auto' }} disabled={busy}>
           {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <RotateCcw aria-hidden="true" className="w-4 h-4" />}
-          {cardRefundButton(m, check, draft)}
+          {cardRefundButton(money, check, draft)}
         </button>
         {back}
       </div>

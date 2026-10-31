@@ -9,6 +9,7 @@
 //   POST   /v1/orgs/:gymId/register/sales                   one sale (`billing.members`)
 //   POST   /v1/orgs/:gymId/register/sales/:saleId/void      void it, the same day
 //   POST   /v1/orgs/:gymId/register/sales/:saleId/refunds   give some or all of it back, any day (18p)
+//   POST   /v1/orgs/:gymId/register/sales/:saleId/refunds-all   note all that is left of it as given back (18d-iv-b-ii)
 //   POST   /v1/orgs/:gymId/register/sales/:saleId/refunds/:refundId/void   void a refund noted by mistake
 //   PUT    /v1/orgs/:gymId/register/tax                     whether prices hold the tax (`memberships.manage`)
 //   POST   /v1/orgs/:gymId/register/tax-rates               add a tax rate (`memberships.manage`)
@@ -32,6 +33,7 @@ import type { Sql } from "postgres";
 import { z } from "zod";
 import {
   refundSaleRequestSchema,
+  refundWholeSaleRequestSchema,
   salePeopleQuerySchema,
   sellPageQuerySchema,
   voidSaleRefundRequestSchema,
@@ -157,6 +159,17 @@ export function registerRegisterRoutes(app: FastifyInstance, deps: { sql: Sql; r
     const viewer = await service.requireSeller(registerDeps, userId, params.data.gymId);
     if (!(await within(sellLimit, req, reply))) return reply;
     return reply.status(201).send(await service.refundSale(registerDeps, userId, params.data.gymId, viewer, params.data.saleId, body.data));
+  });
+
+  app.post("/v1/orgs/:gymId/register/sales/:saleId/refunds-all", pre, async (req, reply) => {
+    const params = saleParamsSchema.safeParse(req.params);
+    if (!params.success) return reply.status(400).send(refused(params.error.issues, req.id));
+    const body = refundWholeSaleRequestSchema.safeParse(req.body);
+    if (!body.success) return reply.status(400).send(refused(body.error.issues, req.id));
+    const userId = userOf(req);
+    const viewer = await service.requireSeller(registerDeps, userId, params.data.gymId);
+    if (!(await within(sellLimit, req, reply))) return reply;
+    return reply.status(201).send(await service.refundWholeSale(registerDeps, userId, params.data.gymId, viewer, params.data.saleId, body.data));
   });
 
   app.post("/v1/orgs/:gymId/register/sales/:saleId/refunds/:refundId/void", pre, async (req, reply) => {

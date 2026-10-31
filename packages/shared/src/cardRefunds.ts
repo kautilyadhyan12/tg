@@ -28,6 +28,8 @@ export const CARD_REFUND_WORDS = {
   differs: "This payment doesn't match Square's record of it. Check it in your Square Dashboard before refunding it.",
   key_reused: "That refund has already been sent. Open the payment again to see where it stands.",
   nothing_left: "There is nothing left of this payment to refund.",
+  /** All of a sale, where Square shows less left than the app does. */
+  less_in_square: "Square shows less of this sale left to refund than your records do. Note what was refunded in Square, or refund one product at a time.",
   /** Square took it up, then said it failed. */
   failed: "Square could not refund this. No money went back.",
 } as const;
@@ -56,7 +58,7 @@ export function cardRefundRefusedLine(code: string | null): string {
 export const CARD_REFUND_LATE_LINE = "This refund has been pending for over 14 days. Contact Square Support.";
 
 /** What stops Refund to card on this payment, as the box says it; null where it can be sent. */
-export const CARD_REFUND_BLOCKS = ["other_account", "too_old", "card_present", "not_finished", "differs", "waiting", "nothing_left"] as const;
+export const CARD_REFUND_BLOCKS = ["other_account", "too_old", "card_present", "not_finished", "differs", "waiting", "nothing_left", "less_in_square"] as const;
 export const cardRefundBlockSchema = z.enum(CARD_REFUND_BLOCKS);
 export type CardRefundBlock = z.infer<typeof cardRefundBlockSchema>;
 
