@@ -25,6 +25,7 @@ import { usePlaces } from "./places";
 import { placesHeading } from "./placesHeading";
 import { ClassesPage, type ClassesPlace } from "./gym/Classes";
 import { DaysYouCame } from "./gym/DaysYouCame";
+import { EventsPage, type EventsPlace } from "./gym/Events";
 import { MembershipPage, type MembershipPlace } from "./gym/Membership";
 import { PersonalTrainingPage, type PtPlace } from "./gym/PersonalTraining";
 import { OWN_PASS_AFTER_MS, PASS_PATH, PassSheet } from "./gym/Pass";
@@ -33,7 +34,7 @@ import { makePhonePass, phoneDay } from "./gym/phonePass";
 import { NO_ANSWER } from "./SignIn";
 
 // The Gym tab (docs/design/phone/pages/Gym and GymNone): the places the person joined, each with
-// Show my pass, its Updates, its Classes, its Personal training, My membership and the days they came there, a place that removed them, and every invitation still open for their address. It reads again when the
+// Show my pass, its Updates, its Classes, its Events, its Personal training, My membership and the days they came there, a place that removed them, and every invitation still open for their address. It reads again when the
 // tab is opened or the app comes back, at most every 30 seconds. With the internet it also asks for
 // this sign-in's keys for passes with no signal, today's and tomorrow's, whenever the phone lacks
 // tomorrow's; with none, Show my pass stands alone where the places could not be read, or are more
@@ -75,6 +76,8 @@ export function GymScreen() {
   const [visitsRead, setVisitsRead] = useState(0);
   // The place whose Classes page is open over the tab, or null.
   const [classesAt, setClassesAt] = useState<ClassesPlace | null>(null);
+  // The place whose Events page is open over the tab, or null.
+  const [eventsAt, setEventsAt] = useState<EventsPlace | null>(null);
   // The place whose Personal training page is open over the tab, or null.
   const [ptAt, setPtAt] = useState<PtPlace | null>(null);
   const [membershipAt, setMembershipAt] = useState<MembershipPlace | null>(null);
@@ -235,6 +238,15 @@ export function GymScreen() {
                 }}
               />
               <Button
+                label="Events"
+                kind="link"
+                icon="star"
+                say={`Events at ${org.name}`}
+                onPress={() => {
+                  setEventsAt({ id: org.id, name: org.name, clockFormat: org.clockFormat });
+                }}
+              />
+              <Button
                 label="Personal training"
                 kind="link"
                 icon="dumbbell"
@@ -266,6 +278,12 @@ export function GymScreen() {
         }}
         fetchPass={fetchPass}
         makeOwnPass={makeOwnPass}
+      />
+      <EventsPage
+        place={eventsAt}
+        onClose={() => {
+          setEventsAt(null);
+        }}
       />
       <ClassesPage
         place={classesAt}
@@ -363,7 +381,7 @@ const styles = StyleSheet.create({
   none: { padding: 18, gap: 10 },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },
   grow: { flex: 1 },
-  // Updates, Classes, Personal training and My membership side by side, one under the other where they do not fit.
+  // Updates, Classes, Events, Personal training and My membership side by side, one under the other where they do not fit.
   links: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", columnGap: 24 },
   address: {
     flexDirection: "row",
