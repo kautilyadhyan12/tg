@@ -75,14 +75,12 @@ const feed = (over = {}) => ({ gymId: 'g1', gymName: 'Iron House', membersCanPos
 const page = (comments, next = null) => ({ comments, next });
 const reportedItem = (over = {}) => ({
   comment: comment('c1', 'Something unkind', { hidden: true }),
-  post: { id: 'p1', body: 'Leg day done', fromMember: true, author: { name: 'Maya Okafor', initials: 'MO' } },
+  post: { id: 'p1', body: 'Leg day done', fromMember: true, hidden: false, author: { name: 'Maya Okafor', initials: 'MO' } },
   reports: 5,
   reasons: { unkind: 4, nudity: 0, spam: 1, other: 0 },
   notes: ['This upset me'],
   allReports: 5,
   reportsMark: 'a'.repeat(32),
-  firstReportedAt: '2026-10-07T08:00:00.000Z',
-  lastReportedAt: '2026-10-07T09:00:00.000Z',
   ...over,
 });
 const refusal = (status, message) => Object.assign(new Error(message), { response: { status, data: { error: 'x', message } } });
@@ -187,6 +185,47 @@ describe('writing', () => {
     expect(panel.getByRole('status').textContent).toBe('Comment sent. Your members can see it now.');
   });
 
+  it('words changed after a failed send go under a new key, so the corrected words are what is kept', async () => {
+    const made = comment('c3', 'Corrected', { fromMember: false, authorId: null });
+    svc.add.mockRejectedValueOnce(refusal(500, 'Lost')).mockResolvedValueOnce({ comment: made, firstKept: true });
+    await open();
+    const panel = await openComments();
+    const box = await panel.findByRole('textbox', { name: /Write a comment/ });
+    fireEvent.change(box, { target: { value: 'Mistake' } });
+    fireEvent.click(panel.getByRole('button', { name: 'Send comment' }));
+    await panel.findByRole('alert');
+    fireEvent.change(box, { target: { value: 'Corrected' } });
+    fireEvent.click(panel.getByRole('button', { name: 'Send comment' }));
+    await panel.findByText('Corrected', { selector: 'p' });
+    expect(svc.add.mock.calls[1][2]).not.toBe(svc.add.mock.calls[0][2]);
+    expect(svc.add.mock.calls[1][3]).toBe('Corrected');
+  });
+
+  it('on a post hidden after reports, the box and the answer say members cannot see it', async () => {
+    posts.list.mockResolvedValue(feed({ posts: [post('p1', { commentCount: 3, hidden: true })] }));
+    svc.add.mockResolvedValue({ comment: comment('c3', 'Sent', { fromMember: false, authorId: null }), firstKept: true });
+    await open();
+    const panel = await openComments();
+    const box = await panel.findByRole('textbox', { name: /Write a comment/ });
+    expect(panel.getByText(/Your members can't see this post until you keep it\./)).toBeTruthy();
+    fireEvent.change(box, { target: { value: 'Sent' } });
+    fireEvent.click(panel.getByRole('button', { name: 'Send comment' }));
+    expect((await panel.findByRole('status')).textContent).toBe("Comment sent. Your members can't see it until you keep the post.");
+  });
+
+  it('a hidden comment and the replies under it offer no Reply', async () => {
+    svc.list.mockResolvedValue(page([comment('c1', 'Hidden one', { hidden: true, replyCount: 1 })]));
+    svc.replies.mockResolvedValue(page([comment('r1', 'Under it', { parentId: 'c1' })]));
+    await open();
+    const panel = await openComments();
+    const row = within(await panel.findByTestId('comment'));
+    expect(row.queryByRole('button', { name: 'Reply' })).toBeNull();
+    fireEvent.click(row.getByRole('button', { name: 'Show 1 reply' }));
+    await row.findByText('Under it');
+    expect(row.queryByRole('button', { name: 'Reply' })).toBeNull();
+    expect(row.getByRole('button', { name: 'Remove reply' })).toBeTruthy();
+  });
+
   it('over 500 characters says how far over and cannot be sent; only spaces cannot be sent', async () => {
     await open();
     const panel = await openComments();
@@ -219,7 +258,31 @@ describe('writing', () => {
     const panel = await openComments();
     await panel.findByText('First one');
     expect(panel.queryByRole('textbox')).toBeNull();
-    for (const name of ['Reply', 'Remove comment', 'Stop them posting']) expect(panel.queryByRole('button', { name })).toBeNull();
+    for (const name of ['Reply', 'Remove comment', 'Stop posting and commenting']) expect(panel.queryByRole('button', { name })).toBeNull();
+  });
+});
+
+describe('a hidden comment away from the reported list', () => {
+  it('on a person’s posts it names Updates and has a button there, and closes the box on the way', async () => {
+    posts.person = vi.fn().mockResolvedValue({ posts: [post('p1', { commentCount: 1 })], next: null, total: 1 });
+    svc.list.mockResolvedValue(page([comment('c1', 'Hidden one', { hidden: true })]));
+    await open();
+    fireEvent.click(await screen.findByRole('button', { name: 'See what Maya Okafor has posted' }));
+    const box = within(await screen.findByTestId('person-posts-box'));
+    fireEvent.click(await box.findByRole('button', { name: 'Comments (1)' }));
+    expect((await box.findByTestId('comment-hidden-note')).textContent).toBe('Hidden from your members: 5 or more people reported it. Choose Keep or Remove under Reported comments on Updates.');
+    const link = box.getByRole('link', { name: 'Open Reported comments' });
+    expect(link.getAttribute('href')).toBe('/console/iron-house/updates#reported-comments');
+    fireEvent.click(link);
+    await waitFor(() => expect(screen.queryByTestId('person-posts-box')).toBeNull());
+  });
+
+  it('lower on Updates it points up the page, with no button', async () => {
+    svc.list.mockResolvedValue(page([comment('c1', 'Hidden one', { hidden: true })]));
+    await open();
+    const panel = await openComments();
+    expect((await panel.findByTestId('comment-hidden-note')).textContent).toContain('at the top of this page');
+    expect(panel.queryByRole('link', { name: 'Open Reported comments' })).toBeNull();
   });
 });
 
@@ -325,16 +388,39 @@ describe('the reported comments', () => {
     expect(card.queryByTestId('comment-report-notes')).toBeNull();
     expect(card.getByRole('button', { name: 'Remove reply' })).toBeTruthy();
     posts.setStopped.mockResolvedValue({ stopped: true });
-    fireEvent.click(card.getByRole('button', { name: 'Stop them posting' }));
-    fireEvent.click(within(card.getByRole('group', { name: 'Stop Wendy Writer posting?' })).getByRole('button', { name: 'Stop Wendy Writer posting' }));
+    fireEvent.click(card.getByRole('button', { name: 'Stop posting and commenting' }));
+    fireEvent.click(within(card.getByRole('group', { name: 'Stop Wendy Writer posting and commenting?' })).getByRole('button', { name: 'Stop Wendy Writer posting and commenting' }));
     await waitFor(() => expect(posts.setStopped).toHaveBeenCalledWith('g1', 'u-wendy', true));
   });
 
-  it('coming back to the window reads the list again', async () => {
+  it('coming back to the window reads the list, the switches and the numbers again', async () => {
     await open();
     expect(svc.reported).toHaveBeenCalledTimes(1);
+    posts.list.mockResolvedValue(feed({ membersCanComment: false, posts: [post('p1', { commentCount: 9 })] }));
     fireEvent(document, new Event('visibilitychange'));
     await waitFor(() => expect(svc.reported).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getByRole('switch', { name: 'Members can comment' }).getAttribute('aria-checked')).toBe('false'));
+    expect(screen.getByRole('button', { name: 'Comments (9)' })).toBeTruthy();
+  });
+
+  it('coming back keeps a second page already opened, and drops one the first page no longer holds', async () => {
+    svc.list.mockResolvedValueOnce(page([comment('c1', 'Gone soon', { createdAt: '2026-10-07T07:00:00.000Z' }), comment('c2', 'Stays', { createdAt: '2026-10-07T07:10:00.000Z' })], 'cur')).mockResolvedValueOnce(page([comment('c3', 'On page two', { createdAt: '2026-10-07T07:20:00.000Z' })]));
+    await open();
+    const panel = await openComments();
+    fireEvent.click(await panel.findByRole('button', { name: 'Show more comments' }));
+    await panel.findByText('On page two');
+    svc.list.mockResolvedValueOnce(page([comment('c2', 'Stays', { createdAt: '2026-10-07T07:10:00.000Z' })], 'cur2'));
+    fireEvent(document, new Event('visibilitychange'));
+    await waitFor(() => expect(panel.queryByText('Gone soon')).toBeNull());
+    expect(panel.getByText('On page two')).toBeTruthy();
+  });
+
+  it('a gym that can change nothing is not told to press Keep', async () => {
+    svc.reported.mockResolvedValue({ items: [reportedItem()], total: 1 });
+    await open({ ...ORG, subscription: null, consoleReadOnly: true });
+    const card = within(await screen.findByTestId('reported-comment'));
+    expect(card.getByTestId('comment-hidden-note').textContent).toBe('Hidden from your members: 5 or more people reported it.');
+    expect(card.queryByRole('button', { name: 'Keep comment' })).toBeNull();
   });
 });
 
@@ -344,7 +430,7 @@ describe('the switch', () => {
     await open();
     const theSwitch = screen.getByRole('switch', { name: 'Members can comment' });
     expect(theSwitch.getAttribute('aria-checked')).toBe('true');
-    expect(screen.getByText('Your members can comment on posts and reply to each other. You can remove any comment, and stop a person commenting.')).toBeTruthy();
+    expect(screen.getByText('Your members can comment on posts and reply to each other. You can remove any comment, and stop a person posting and commenting.')).toBeTruthy();
     fireEvent.click(theSwitch);
     expect((await screen.findByRole('status')).textContent).toBe('Members can no longer comment. The comments they already made stay until you remove them.');
     expect(svc.setMembersCanComment).toHaveBeenCalledWith('g1', false);

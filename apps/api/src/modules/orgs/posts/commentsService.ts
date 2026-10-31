@@ -90,7 +90,7 @@ async function shaped(deps: CommentsDeps, gymId: string, rows: readonly repo.Com
   ]);
   const nameOf = (r: Pick<repo.CommentRow, "authorName" | "authorEmail" | "authorRecordName">) =>
     shownName({ displayName: r.authorName ?? "", email: r.authorEmail, recordName: r.authorRecordName });
-  const targetNames = new Map(targets.map((t) => [t.id, nameOf(t)?.name ?? "A member"] as const));
+  const targetNames = new Map(targets.map((t) => [t.id, nameOf(t)?.name ?? (t.byMember ? "A member" : "Staff")] as const));
   return rows.map((r) => {
     const named = nameOf(r);
     return gymPostCommentSchema.parse({

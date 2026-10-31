@@ -25,7 +25,7 @@ import {
   withStopped,
   withoutPost,
 } from '../../components/gym/postsView';
-import { memberCommentsSwitch, withCommentCount } from '../../components/gym/commentsConsoleView';
+import { memberCommentsSwitch, withCommentCount, withFreshFeed } from '../../components/gym/commentsConsoleView';
 import { preparePostPhoto } from './gymPagePhotos';
 import { PersonPostsBox } from './PersonPosts';
 import PostCard from './UpdatesPostCard';
@@ -245,10 +245,17 @@ export default function Updates() {
       if (document.visibilityState !== 'visible') return;
       loadSide();
       setCommentsRefresh((n) => n + 1);
+      // The switches and the numbers; older posts already loaded stay.
+      if (gymId !== null) {
+        staffPostsService.list(gymId).then(
+          (page) => setState((s) => (s.feed === null ? s : { ...s, feed: withFreshFeed(s.feed, page) })),
+          () => {},
+        );
+      }
     };
     document.addEventListener('visibilitychange', shown);
     return () => document.removeEventListener('visibilitychange', shown);
-  }, [loadSide]);
+  }, [loadSide, gymId]);
 
   const onCommentCount = (postId, change) => {
     setState((s) => (s.feed === null ? s : { ...s, feed: withCommentCount(s.feed, postId, change) }));
@@ -333,6 +340,7 @@ export default function Updates() {
   const challengeLink = canManageChallenges(viewerPrivileges(org)) ? (id) => `/console/${orgSlug}/challenges?challenge=${id}` : null;
   const cardActions = {
     challengeLink,
+    commentsWhere: 'above',
     commentsRefresh,
     onCommentCount,
     onCommentsChanged: loadSide,
@@ -524,9 +532,9 @@ export default function Updates() {
           ) : null}
 
           {stoppedPeople.length > 0 ? (
-            <section className="c-card" aria-label="Stopped from posting" data-testid="stopped">
+            <section className="c-card" aria-label="Stopped from posting and commenting" data-testid="stopped">
               <div className="px-4 md:px-5 pt-4 flex flex-col gap-1">
-                <h2 className="c-s15 c-w6 c-t1">Stopped from posting</h2>
+                <h2 className="c-s15 c-w6 c-t1">Stopped from posting and commenting</h2>
                 <p className="c-s13 c-t2">They can read and react, but not post or comment, until you let them again.</p>
               </div>
               {stoppedPeople.map((person) => (
@@ -546,7 +554,7 @@ export default function Updates() {
                     className="c-btn c-btn-s c-btn-sm"
                   >
                     <UserCheck aria-hidden="true" className="w-4 h-4" />
-                    Let them post again
+                    Let them post and comment again
                   </button>
                 </div>
               ))}

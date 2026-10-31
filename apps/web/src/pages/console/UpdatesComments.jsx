@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { Check, EyeOff, Flag, MessageCircle, Reply, Trash2, UserCheck, UserX } from 'lucide-react';
 import { staffCommentsService, staffPostsService } from '../../api/postsApi';
 import { errorStatus, errorText } from '../../api/orgsApi';
@@ -7,6 +8,7 @@ import { authorInitials, authorName, postedText, reportNotesTitle, reportedLine,
 import {
   canSendComment,
   commentCharsLine,
+  composerReach,
   commentTag,
   hiddenCommentNote,
   keepCommentNote,
@@ -16,6 +18,8 @@ import {
   reportedCommentsHelp,
   reportedCommentsMore,
   reportedCommentsTitle,
+  sentNote,
+  withFirstPage,
 } from '../../components/gym/commentsConsoleView';
 import PostReactions from './PostReactions';
 
@@ -32,12 +36,14 @@ function Problem({ text }) {
   );
 }
 
-function Composer({ gymId, postId, replyTo, words, onSent, onCancel = null }) {
+function Composer({ gymId, post, replyTo, words, onSent, onCancel = null }) {
   const [body, setBody] = useState('');
   // One key a comment: pressed again after a lost reply, the server answers with the one it kept.
   const [commentKey, setCommentKey] = useState(newKey);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
+  // After a failed send, changed words are a new comment: the old key would answer with the old words.
+  const failed = useRef(false);
   const chars = commentCharsLine(body);
   const label = replyTo === null ? 'Write a comment' : `Reply to ${replyTo.name}`;
 
@@ -45,11 +51,13 @@ function Composer({ gymId, postId, replyTo, words, onSent, onCancel = null }) {
     setSending(true);
     setError(null);
     try {
-      const done = await staffCommentsService.add(gymId, postId, commentKey, body, replyTo?.id);
+      const done = await staffCommentsService.add(gymId, post.id, commentKey, body, replyTo?.id);
+      failed.current = false;
       setBody('');
       setCommentKey(newKey());
       onSent(done.comment, done.firstKept);
     } catch (err) {
+      failed.current = true;
       setError(errorText(err, "We couldn't send that. Please try again."));
     } finally {
       setSending(false);
@@ -67,10 +75,14 @@ function Composer({ gymId, postId, replyTo, words, onSent, onCancel = null }) {
           onChange={(e) => {
             setBody(e.target.value);
             setError(null);
+            if (failed.current) {
+              failed.current = false;
+              setCommentKey(newKey());
+            }
           }}
         />
         <span className="c-hint" style={chars.over ? { color: 'var(--bad)' } : undefined}>
-          {`${chars.text}. Your ${words.people} see this as from Staff.`}
+          {`${chars.text}. ${composerReach(post, words)}`}
         </span>
       </label>
       <Problem text={error} />
@@ -89,12 +101,13 @@ function Composer({ gymId, postId, replyTo, words, onSent, onCancel = null }) {
 }
 
 /** One comment or reply, and under it whatever was pressed. */
-function CommentRow({ gymId, gymName, comment, words, readOnly, busy, onList, open, onToggleReplies, onRemove, onStop, onReplySent, children }) {
+function CommentRow({ gymId, gymName, post, comment, words, readOnly, busy, where, onLeave, parentHidden = false, open, onToggleReplies, onRemove, onStop, onReplySent, children }) {
+  const { orgSlug } = useParams();
   /** Which box is open: null, 'remove', 'stop' or 'reply'. */
   const [asking, setAsking] = useState(null);
   const box = removeCommentBox(comment, words);
   const stop = stopBox(comment.author.name);
-  const hidden = hiddenCommentNote(comment, words, onList);
+  const hidden = hiddenCommentNote(comment, words, where, readOnly);
   const canStop = comment.fromMember && comment.authorId !== null;
   const name = authorName(comment, gymName);
   return (
@@ -105,6 +118,11 @@ function CommentRow({ gymId, gymName, comment, words, readOnly, busy, onList, op
           <span>{hidden}</span>
         </p>
       ) : null}
+      {hidden !== null && where === 'elsewhere' && !readOnly ? (
+        <Link to={`/console/${orgSlug}/updates#reported-comments`} onClick={onLeave} className="c-btn c-btn-s c-btn-sm self-start">
+          Open Reported comments
+        </Link>
+      ) : null}
       <div className="flex items-center gap-2 flex-wrap">
         <span className="c-avatar" style={{ width: 32, height: 32, fontSize: 12 }} aria-hidden="true">
           {authorInitials(comment, gymName)}
@@ -114,7 +132,7 @@ function CommentRow({ gymId, gymName, comment, words, readOnly, busy, onList, op
           <span className="c-s13 c-t2 block">{postedText(comment.createdAt)}</span>
         </span>
         <span className="c-tag c-tag-plain">{commentTag(comment, words)}</span>
-        {comment.authorStopped ? <span className="c-tag c-tag-warn">Stopped from posting</span> : null}
+        {comment.authorStopped ? <span className="c-tag c-tag-warn">Stopped from posting and commenting</span> : null}
       </div>
       <p className="c-s15 c-t1 whitespace-pre-wrap break-words">
         {comment.replyingTo !== null ? <span className="c-w6" style={{ color: 'var(--accent)' }}>{`${comment.replyingTo} `}</span> : null}
@@ -134,7 +152,7 @@ function CommentRow({ gymId, gymName, comment, words, readOnly, busy, onList, op
       ) : asking === 'reply' ? (
         <Composer
           gymId={gymId}
-          postId={comment.postId}
+          post={post}
           replyTo={{ id: comment.id, name }}
           words={words}
           onCancel={() => setAsking(null)}
@@ -152,7 +170,7 @@ function CommentRow({ gymId, gymName, comment, words, readOnly, busy, onList, op
           ) : null}
           {readOnly ? null : (
             <>
-              {!comment.hidden ? (
+              {!comment.hidden && !parentHidden ? (
                 <button type="button" disabled={busy} onClick={() => setAsking('reply')} className="c-btn c-btn-s c-btn-sm">
                   <Reply aria-hidden="true" className="w-4 h-4" />
                   Reply
@@ -165,13 +183,13 @@ function CommentRow({ gymId, gymName, comment, words, readOnly, busy, onList, op
               {canStop && !comment.authorStopped ? (
                 <button type="button" disabled={busy} onClick={() => setAsking('stop')} className="c-btn c-btn-s c-btn-sm">
                   <UserX aria-hidden="true" className="w-4 h-4" />
-                  Stop them posting
+                  Stop posting and commenting
                 </button>
               ) : null}
               {canStop && comment.authorStopped ? (
                 <button type="button" disabled={busy} onClick={() => onStop(comment, false)} className="c-btn c-btn-s c-btn-sm">
                   <UserCheck aria-hidden="true" className="w-4 h-4" />
-                  Let them post again
+                  Let them post and comment again
                 </button>
               ) : null}
             </>
@@ -189,9 +207,10 @@ const mergeById = (older, newer) => [...older, ...newer.filter((c) => !older.som
 /**
  * A post's comments, opened under it. `onCount(change)`: how many comments the post has changed by;
  * `onChanged`: somebody's comment or a stop changed, so the page reads its lists again; `refresh`:
- * changes when the page wants this read again.
+ * changes when the page wants this read again; `where`: as `hiddenCommentNote`; `onLeave`: pressed on
+ * its way to Updates.
  */
-export function CommentsPanel({ gymId, gymName, post, words, readOnly, refresh = 0, onCount, onChanged, onStopped }) {
+export function CommentsPanel({ gymId, gymName, post, words, readOnly, where = 'elsewhere', onLeave, refresh = 0, onCount, onChanged, onStopped }) {
   const [state, setState] = useState({ loading: true, error: null, comments: [], next: null });
   const [replies, setReplies] = useState({});
   const [more, setMore] = useState({ loading: false, error: null });
@@ -208,7 +227,8 @@ export function CommentsPanel({ gymId, gymName, post, words, readOnly, refresh =
         const page = await staffCommentsService.replies(gymId, parentId, after);
         setReplies((all) => {
           const was = all[parentId] ?? noReplies;
-          return { ...all, [parentId]: { ...was, loading: false, items: after === undefined ? page.comments : mergeById(was.items, page.comments), next: page.next } };
+          const merged = after === undefined ? withFirstPage(was, page) : { items: mergeById(was.items, page.comments), next: page.next };
+          return { ...all, [parentId]: { ...was, loading: false, ...merged } };
         });
       } catch (err) {
         setReplies((all) => ({ ...all, [parentId]: { ...(all[parentId] ?? noReplies), loading: false, error: errorText(err, "We couldn't load the replies.") } }));
@@ -220,7 +240,10 @@ export function CommentsPanel({ gymId, gymName, post, words, readOnly, refresh =
   const load = useCallback(async () => {
     try {
       const page = await staffCommentsService.list(gymId, post.id);
-      setState({ loading: false, error: null, comments: page.comments, next: page.next });
+      setState((s) => {
+        const merged = withFirstPage({ items: s.comments, next: s.next }, page);
+        return { loading: false, error: null, comments: merged.items, next: merged.next };
+      });
       for (const [parentId, list] of Object.entries(repliesNow.current)) {
         if (list.open && page.comments.some((c) => c.id === parentId)) readReplies(parentId);
       }
@@ -255,7 +278,7 @@ export function CommentsPanel({ gymId, gymName, post, words, readOnly, refresh =
 
   const added = (made, firstKept) => {
     setActionError(null);
-    setNotice(made.parentId === null ? `Comment sent. Your ${words.people} can see it now.` : `Reply sent. Your ${words.people} can see it now.`);
+    setNotice(sentNote(made, post, words));
     if (made.parentId === null) {
       setState((s) => ({ ...s, comments: mergeById(s.comments, [made]) }));
     } else {
@@ -319,7 +342,7 @@ export function CommentsPanel({ gymId, gymName, post, words, readOnly, refresh =
     }
   };
 
-  const row = { gymId, gymName, words, readOnly, onRemove: remove, onStop: stopThem, onReplySent: added };
+  const row = { gymId, gymName, post, words, readOnly, where, onLeave, onRemove: remove, onStop: stopThem, onReplySent: added };
   return (
     <section className="flex flex-col gap-3 pt-3 border-t" style={{ borderColor: 'var(--line)' }} aria-label="Comments on this post" data-testid="comments">
       {state.loading ? <p className="c-s14 c-t2">Loading…</p> : null}
@@ -338,7 +361,7 @@ export function CommentsPanel({ gymId, gymName, post, words, readOnly, refresh =
                     {list.items.length > 0 ? (
                       <ul className="flex flex-col gap-2">
                         {list.items.map((reply) => (
-                          <CommentRow key={reply.id} {...row} comment={reply} busy={busy === reply.id} open={false} onToggleReplies={() => {}} />
+                          <CommentRow key={reply.id} {...row} comment={reply} parentHidden={comment.hidden} busy={busy === reply.id} open={false} onToggleReplies={() => {}} />
                         ))}
                       </ul>
                     ) : null}
@@ -368,7 +391,7 @@ export function CommentsPanel({ gymId, gymName, post, words, readOnly, refresh =
         </p>
       ) : null}
       <Problem text={actionError} />
-      {!readOnly ? <Composer gymId={gymId} postId={post.id} replyTo={null} words={words} onSent={added} /> : null}
+      {!readOnly ? <Composer gymId={gymId} post={post} replyTo={null} words={words} onSent={added} /> : null}
     </section>
   );
 }
@@ -380,7 +403,7 @@ function ReportedComment({ gymId, gymName, item, words, readOnly, busy, onKeep, 
   const { comment } = item;
   const box = removeCommentBox(comment, words);
   const stop = stopBox(comment.author.name);
-  const hidden = hiddenCommentNote(comment, words, true);
+  const hidden = hiddenCommentNote(comment, words, 'list', readOnly);
   const place = reportedCommentPlace(item, gymName);
   const canStop = comment.fromMember && comment.authorId !== null;
   const noteTitle = reportNotesTitle(item);
@@ -418,7 +441,7 @@ function ReportedComment({ gymId, gymName, item, words, readOnly, busy, onKeep, 
           <span className="c-s13 c-t2 block">{postedText(comment.createdAt)}</span>
         </span>
         <span className="c-tag c-tag-plain">{commentTag(comment, words)}</span>
-        {comment.authorStopped ? <span className="c-tag c-tag-warn">Stopped from posting</span> : null}
+        {comment.authorStopped ? <span className="c-tag c-tag-warn">Stopped from posting and commenting</span> : null}
       </div>
       <p className="c-s15 c-t1 whitespace-pre-wrap break-words">{comment.body}</p>
       <div className="flex flex-col gap-0.5">
@@ -448,13 +471,13 @@ function ReportedComment({ gymId, gymName, item, words, readOnly, busy, onKeep, 
           {canStop && !comment.authorStopped ? (
             <button type="button" disabled={busy} onClick={() => setAsking('stop')} className="c-btn c-btn-s c-btn-sm">
               <UserX aria-hidden="true" className="w-4 h-4" />
-              Stop them posting
+              Stop posting and commenting
             </button>
           ) : null}
           {canStop && comment.authorStopped ? (
             <button type="button" disabled={busy} onClick={() => onStop(comment, false)} className="c-btn c-btn-s c-btn-sm">
               <UserCheck aria-hidden="true" className="w-4 h-4" />
-              Let them post again
+              Let them post and comment again
             </button>
           ) : null}
         </div>
@@ -463,7 +486,7 @@ function ReportedComment({ gymId, gymName, item, words, readOnly, busy, onKeep, 
         <MessageCircle aria-hidden="true" className="w-4 h-4" />
         {opened ? "Hide this post's comments" : "See this post's comments"}
       </button>
-      {opened ? <CommentsPanel gymId={gymId} gymName={gymName} post={item.post} words={words} readOnly={readOnly} refresh={refresh} onCount={onCount} onChanged={onChanged} onStopped={onStopped} /> : null}
+      {opened ? <CommentsPanel gymId={gymId} gymName={gymName} post={item.post} words={words} readOnly={readOnly} where="above" refresh={refresh} onCount={onCount} onChanged={onChanged} onStopped={onStopped} /> : null}
     </li>
   );
 }
@@ -476,6 +499,13 @@ export function ReportedComments({ gymId, gymName, reported, words, readOnly, re
   const [busy, setBusy] = useState(null);
   const [notice, setNotice] = useState(null);
   const [actionError, setActionError] = useState(null);
+  const { hash } = useLocation();
+  const place = useRef(null);
+  const shown = reported.items.length > 0;
+  // Opened from a hidden comment on another page.
+  useEffect(() => {
+    if (hash === '#reported-comments' && shown) place.current?.scrollIntoView?.();
+  }, [hash, shown]);
 
   const act = async (id, request, done) => {
     setBusy(id);
@@ -516,10 +546,9 @@ export function ReportedComments({ gymId, gymName, reported, words, readOnly, re
   };
 
   const waiting = reportedCommentsMore(reported);
-  const shown = reported.items.length > 0;
   if (!shown && notice === null && actionError === null) return null;
   return (
-    <section className="flex flex-col gap-3" aria-label="Reported comments" data-testid="reported-comments">
+    <section ref={place} className="flex flex-col gap-3" aria-label="Reported comments" data-testid="reported-comments">
       {shown ? (
         <div className="flex flex-col gap-1">
           <h2 className="c-s15 c-w6 c-t1">{reportedCommentsTitle(reported.total)}</h2>

@@ -132,7 +132,7 @@ export async function addComment(deps: CommentsDeps, staffId: string, gymId: str
   const keptAnswer = async () => {
     const kept = await repo.commentByKey(deps.sql, gymId, body.commentKey);
     if (kept === null) return null;
-    if (kept.byMember || kept.authorId !== staffId) throw new OrgsError(409, "comment_key_taken", "Please try sending your comment again.");
+    if (kept.byMember || kept.authorId !== staffId || kept.postId !== postId) throw new OrgsError(409, "comment_key_taken", "Please try sending your comment again.");
     if (kept.removed) throw commentNotFound();
     return await answer(kept.id, false);
   };
@@ -143,6 +143,9 @@ export async function addComment(deps: CommentsDeps, staffId: string, gymId: str
   if (body.replyTo !== undefined) {
     const target = await repo.commentById(deps.sql, gymId, body.replyTo, "staff");
     if (target === null || target.postId !== postId) throw commentNotFound();
+    // Under a hidden comment a reply reaches no member, and Keep is staff's answer there.
+    const under = target.parentId === null ? null : await repo.commentById(deps.sql, gymId, target.parentId, "staff");
+    if (target.hidden || under?.hidden === true) throw new OrgsError(409, "comment_hidden", GYM_POST_COMMENT_WORDS.hidden_reply);
     place = target.parentId === null ? { parentId: target.id, replyToId: null } : { parentId: target.parentId, replyToId: target.id };
   }
   const id = randomUUID();
@@ -213,14 +216,12 @@ export async function getReported(deps: CommentsDeps, staffId: string, gymId: st
       return [
         {
           comment,
-          post: { id: row.post.id, body: row.post.body, fromMember: row.post.byMember, author: { name: postName.name, initials: postName.name === null ? "" : postName.initials } },
+          post: { id: row.post.id, body: row.post.body, fromMember: row.post.byMember, hidden: row.post.hidden, author: { name: postName.name, initials: postName.name === null ? "" : postName.initials } },
           reports: row.reports,
           allReports: row.allReports,
           reportsMark: row.reportsMark,
           reasons: counts,
           notes: notes.filter((n) => n.commentId === row.comment.id).map((n) => n.note),
-          firstReportedAt: row.firstAt.toISOString(),
-          lastReportedAt: row.lastAt.toISOString(),
         },
       ];
     }),
@@ -234,7 +235,8 @@ export async function keepReported(deps: CommentsDeps, staffId: string, gymId: s
   if (!(await limit())) return null;
   return await deps.sql.begin(async (tx) => {
     await repo.holdComment(tx, gymId, commentId);
-    if ((await repo.commentById(tx, gymId, commentId, "staff")) === null) throw commentNotFound();
+    const row = await repo.commentById(tx, gymId, commentId, "staff");
+    if (row === null || (await postsRepo.postById(tx, gymId, row.postId, "staff")) === null) throw commentNotFound();
     const closed = await repo.keepReports(tx, gymId, commentId, deps.now(), shown.reportsMark);
     const now = await repo.countReports(tx, gymId, commentId);
     if (closed > 0) {

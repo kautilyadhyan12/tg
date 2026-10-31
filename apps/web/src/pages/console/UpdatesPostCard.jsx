@@ -66,7 +66,7 @@ function ChallengeResult({ result, link, words }) {
 /** One post. `report`: its entry on the reported list, where it is drawn with why it was
  *  reported and Keep in place of Pin. With `onPin` null (a person's own list) there is no
  *  Pin; with `onPerson` a member's name opens that person's posts. */
-export default function PostCard({ gymId, gymName, post, pinnedCount = 0, words, readOnly, busy, report = null, reportedRead = false, onPin = null, onRemove, onKeep, onStop, onOpen, onPerson = null, challengeLink = null, commentsRefresh = 0, onCommentCount = () => {}, onCommentsChanged = () => {}, onStopped = () => {} }) {
+export default function PostCard({ gymId, gymName, post, pinnedCount = 0, words, readOnly, busy, report = null, reportedRead = false, onPin = null, onRemove, onKeep, onStop, onOpen, onPerson = null, challengeLink = null, commentsWhere = 'elsewhere', onCommentsLeave, commentsRefresh = 0, onCommentCount = () => {}, onCommentsChanged = () => {}, onStopped = () => {} }) {
   /** Which box is open: null, 'remove' or 'stop'. */
   const [asking, setAsking] = useState(null);
   const [commentsOpen, setCommentsOpen] = useState(false);
@@ -117,7 +117,7 @@ export default function PostCard({ gymId, gymName, post, pinnedCount = 0, words,
           </span>
         </Who>
         {post.fromMember ? <span className="c-tag c-tag-plain">{words.personCap}</span> : null}
-        {post.authorStopped ? <span className="c-tag c-tag-warn">Stopped from posting</span> : null}
+        {post.authorStopped ? <span className="c-tag c-tag-warn">Stopped from posting and commenting</span> : null}
         {post.pinned ? (
           <span className="c-tag c-tag-soft">
             <Pin aria-hidden="true" className="w-3.5 h-3.5" /> Pinned
@@ -160,6 +160,8 @@ export default function PostCard({ gymId, gymName, post, pinnedCount = 0, words,
           post={post}
           words={words}
           readOnly={readOnly}
+          where={commentsWhere}
+          onLeave={onCommentsLeave}
           refresh={commentsRefresh}
           onCount={(change) => onCommentCount(post.id, change)}
           onChanged={onCommentsChanged}
@@ -214,13 +216,13 @@ export default function PostCard({ gymId, gymName, post, pinnedCount = 0, words,
           {canStop && !post.authorStopped ? (
             <button type="button" disabled={busy} onClick={() => setAsking('stop')} className="c-btn c-btn-s c-btn-sm">
               <UserX aria-hidden="true" className="w-4 h-4" />
-              Stop them posting
+              Stop posting and commenting
             </button>
           ) : null}
           {canStop && post.authorStopped ? (
             <button type="button" disabled={busy} onClick={() => onStop(post, false)} className="c-btn c-btn-s c-btn-sm">
               <UserCheck aria-hidden="true" className="w-4 h-4" />
-              Let them post again
+              Let them post and comment again
             </button>
           ) : null}
           {full !== null ? <span className="c-s13 c-t2">{full}</span> : null}

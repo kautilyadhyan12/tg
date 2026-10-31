@@ -8,11 +8,11 @@ import { withCommentCount } from '../../components/gym/commentsConsoleView';
 import PostCard from './UpdatesPostCard';
 
 // ONE PERSON'S POSTS, FOR STAFF (spec Part 3 §15.2, §15.5; ROADMAP 19b-ii-c): what they
-// posted as a member, newest first, each with Remove post and Stop them posting. On a
+// posted as a member, newest first, each with Remove post and Stop posting and commenting. On a
 // person's panel on the Leaderboard page and in a box opened from a name on Updates.
 // `posts.manage`'s; the server refuses anyone else whatever this screen shows.
 
-export default function PersonPosts({ gymId, gymName, person, words, readOnly, heading = true, onChanged = null }) {
+export default function PersonPosts({ gymId, gymName, person, words, readOnly, heading = true, onChanged = null, onLeave }) {
   const [state, setState] = useState({ loading: true, error: null, feed: null });
   const [more, setMore] = useState({ loading: false, error: null });
   const [busy, setBusy] = useState(null);
@@ -106,6 +106,7 @@ export default function PersonPosts({ gymId, gymName, person, words, readOnly, h
               onOpen={(p, index) => setViewing({ post: p, index })}
               onCommentCount={(id, change) => setState((s) => (s.feed === null ? s : { ...s, feed: withCommentCount(s.feed, id, change) }))}
               onCommentsChanged={() => onChanged?.()}
+              onCommentsLeave={onLeave}
               onStopped={(userId, stopped) => {
                 setState((s) => (s.feed === null ? s : { ...s, feed: withStopped(s.feed, userId, stopped) }));
                 onChanged?.();
@@ -173,7 +174,7 @@ export function PersonPostsBox({ gymId, gymName, person, words, readOnly, onClos
           </button>
         </div>
         <div className="px-4 pt-2 pb-4 md:px-7 md:pt-3 md:pb-6 overflow-y-auto overscroll-contain flex-grow min-h-0">
-          <PersonPosts gymId={gymId} gymName={gymName} person={person} words={words} readOnly={readOnly} heading={false} onChanged={onChanged} />
+          <PersonPosts gymId={gymId} gymName={gymName} person={person} words={words} readOnly={readOnly} heading={false} onChanged={onChanged} onLeave={onClose} />
         </div>
         <div className="flex px-4 pt-3 pb-5 md:px-7 md:py-4 border-t md:justify-end" style={{ borderColor: 'var(--line)', background: 'var(--card)' }}>
           <button type="button" onClick={onClose} className="c-btn c-btn-s c-btn-lg">

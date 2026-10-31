@@ -204,6 +204,18 @@ d("comments in the console (real Postgres)", () => {
       const fresh = (await reportedList(gym)).items[0];
       if (fresh === undefined) throw new Error("no item");
       const keepBody = { allReports: fresh.allReports, reportsMark: fresh.reportsMark };
+      // A reply and a reaction are there, so those two answers have something to leak with.
+      const under = await memberComment(gym, writer, post.id, "A reply", said.id);
+      expect((await inject("PUT", `${one(gym.id, said.id)}/reaction`, writer.cookies, { reaction: "like" })).statusCode).toBe(200);
+      for (const path of [`${one(gym.id, said.id)}/replies/staff`, `${one(gym.id, said.id)}/reactions?reaction=like`]) {
+        const res = await inject("GET", path, gym.owner.cookies);
+        expect(res.statusCode, res.body).toBe(200);
+        for (const secret of [reporter.userId, reporter.email, "Rosalind", "Reporter"]) expect(res.body).not.toContain(secret);
+      }
+      expect(under.parentId).toBe(said.id);
+      // Staff of this gym without the tick, whatever their role.
+      const trainer = await signedIn("Tara Trainer");
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gym.id}, ${trainer.userId}, 'trainer', ${["members.read", "attendance.read"]})`;
       const addresses: [Method, string, unknown?][] = [
         ["GET", `${onPost(gym.id, post.id)}/staff`],
         ["POST", `${onPost(gym.id, post.id)}/staff`, { commentKey: randomUUID(), body: "Hello" }],
@@ -215,7 +227,7 @@ d("comments in the console (real Postgres)", () => {
         ["PUT", `/v1/orgs/${gym.id}/post-comments/settings`, { membersCanComment: false }],
       ];
       for (const [method, path, body] of addresses) {
-        for (const stranger of [other.owner, writer]) {
+        for (const stranger of [other.owner, writer, trainer]) {
           const res = await inject(method, path, stranger.cookies, body);
           expect([403, 404], `${method} ${path}: ${res.body}`).toContain(res.statusCode);
           expect(res.body).not.toContain("Something unkind");
@@ -289,7 +301,16 @@ d("comments in the console (real Postgres)", () => {
       expect(both.map((r) => r.statusCode)).toEqual([201, 201]);
       expect((await staffRead(gym, gym.owner, post.id)).comments.filter((c) => c.body === "Same").length).toBe(1);
 
-      // Somebody else's key is not read back.
+      // Somebody else's key is not read back, and neither is a key from another post.
+      const elsewhere = await addPost(gym, writer, "Elsewhere");
+      const reused = await staffSend(gym, gym.owner, elsewhere.id, "Well done", { commentKey });
+      expect([reused.statusCode, errorOf(reused)]).toEqual([409, "comment_key_taken"]);
+      const manager = await signedIn("Mo Manager");
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gym.id}, ${manager.userId}, 'manager', ${["posts.manage"]})`;
+      const theirs = await staffSend(gym, manager, post.id, "Taken", { commentKey });
+      expect([theirs.statusCode, errorOf(theirs)]).toEqual([409, "comment_key_taken"]);
+      expect(theirs.body).not.toContain("Well done");
+      expect((await sql`SELECT 1 FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.comment_added'`).length).toBeGreaterThan(0);
       const hers = await memberRead(gym, writer, post.id);
       expect(hers.commenting).toBe("off");
       const shown = hers.comments[0];
@@ -299,6 +320,11 @@ d("comments in the console (real Postgres)", () => {
       // A reply from staff, to a member's reply, names who it answers.
       expect((await inject("PUT", `/v1/orgs/${gym.id}/post-comments/settings`, gym.owner.cookies, { membersCanComment: true })).statusCode).toBe(200);
       const said = await memberComment(gym, writer, post.id, "Thanks");
+      const memberKey = randomUUID();
+      expect((await inject("POST", onPost(gym.id, post.id), writer.cookies, { commentKey: memberKey, body: "Her words" })).statusCode).toBe(201);
+      const hersKey = await staffSend(gym, gym.owner, post.id, "Mine", { commentKey: memberKey });
+      expect([hersKey.statusCode, errorOf(hersKey)]).toEqual([409, "comment_key_taken"]);
+      expect(hersKey.body).not.toContain("Her words");
       const reply = await memberComment(gym, writer, post.id, "Really", said.id);
       const answered = await staffSend(gym, gym.owner, post.id, "You earned it", { replyTo: reply.id });
       expect(answered.statusCode).toBe(201);
@@ -331,10 +357,22 @@ d("comments in the console (real Postgres)", () => {
       const under = await memberComment(gym, other, post.id, "Under it", said.id);
       const stays = await memberComment(gym, other, post.id, "Stays");
       await report(gym, other, said.id);
+      await report(gym, writer, under.id);
       expect((await inject("PUT", `${one(gym.id, stays.id)}/reaction`, writer.cookies, { reaction: "like" })).statusCode).toBe(200);
+      expect((await inject("PUT", `${one(gym.id, said.id)}/reaction`, other.cookies, { reaction: "love" })).statusCode).toBe(200);
+      expect((await inject("PUT", `${one(gym.id, under.id)}/reaction`, writer.cookies, { reaction: "love" })).statusCode).toBe(200);
 
-      const res = await inject("DELETE", `${one(gym.id, said.id)}/staff`, gym.owner.cookies);
-      expect(res.statusCode, res.body).toBe(200);
+      // Pressed twice at one instant: one removal, one audit line.
+      const both = await Promise.all([inject("DELETE", `${one(gym.id, said.id)}/staff`, gym.owner.cookies), inject("DELETE", `${one(gym.id, said.id)}/staff`, gym.owner.cookies)]);
+      expect(both.map((r) => r.statusCode).sort()).toEqual([200, 404]);
+      expect((await sql`SELECT 1 FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.comment_removed' AND target_id = ${said.id}`).length).toBe(1);
+      // The reply really went with it, its reactions and reports answered; the other comment's reaction stays.
+      const underRow = await sql<{ removed_at: Date | null }[]>`SELECT removed_at FROM gym_post_comments WHERE id = ${under.id}`;
+      expect(underRow[0]?.removed_at).not.toBeNull();
+      const underReports = await sql<{ outcome: string }[]>`SELECT outcome FROM gym_post_comment_reports WHERE comment_id = ${under.id}`;
+      expect(underReports.map((r) => r.outcome)).toEqual(["removed"]);
+      const reactions = await sql<{ comment_id: string }[]>`SELECT comment_id FROM gym_post_comment_reactions WHERE gym_id = ${gym.id}`;
+      expect(reactions.map((r) => r.comment_id)).toEqual([stays.id]);
       expect((await memberRead(gym, other, post.id)).comments.map((c) => c.body)).toEqual(["Stays"]);
       expect((await memberRead(gym, writer, post.id)).comments.map((c) => c.body)).toEqual(["Stays"]);
       expect((await staffRead(gym, gym.owner, post.id)).comments.map((c) => c.body)).toEqual(["Stays"]);
@@ -413,6 +451,8 @@ d("comments in the console (real Postgres)", () => {
       expect((await reportedList(gym)).total).toBe(0);
       expect(reply.parentId).toBe(said.id);
 
+      // Kept, it can be answered again.
+      expect((await staffSend(gym, gym.owner, post.id, "Allowed now", { replyTo: said.id })).statusCode).toBe(201);
       // Pressed twice: answered already, says so. And a report from somebody new brings it back to the list.
       expect(JSON.parse((await inject("POST", `${one(gym.id, said.id)}/keep`, gym.owner.cookies, { allReports: now.allReports, reportsMark: now.reportsMark })).body)).toEqual({ kept: true, waiting: 0 });
       await report(gym, await member(gym, "Rep New"), said.id);
@@ -504,6 +544,81 @@ d("comments in the console (real Postgres)", () => {
         expect([res.statusCode, errorOf(res)], `${method} ${path}`).toEqual([409, "gym_not_on_plan"]);
       }
       expect((await staffRead(gym, gym.owner, post.id)).comments.map((c) => c.body)).toEqual(["Before it lapsed"]);
+    },
+    T,
+  );
+
+  it(
+    "a reply is refused to a hidden comment and to a reply under one; on a hidden post a comment is taken and the post says it is hidden",
+    async () => {
+      const gym = await makeGym("Hidden Replies");
+      const writer = await member(gym, "Wendy Writer");
+      const post = await addPost(gym, writer);
+      const said = await memberComment(gym, writer, post.id, "Hidden soon");
+      const reply = await memberComment(gym, writer, post.id, "Under it", said.id);
+      for (const n of ["A", "B", "C", "D", "E"]) await report(gym, await member(gym, `Rep ${n}`), said.id);
+      for (const replyTo of [said.id, reply.id]) {
+        const res = await staffSend(gym, gym.owner, post.id, "No", { replyTo });
+        expect([res.statusCode, errorOf(res)]).toEqual([409, "comment_hidden"]);
+      }
+      await sql`UPDATE gym_posts SET hidden_at = now() WHERE id = ${post.id}`;
+      expect((await staffSend(gym, gym.owner, post.id, "Taken")).statusCode).toBe(201);
+      expect((await reportedList(gym)).items[0]?.post.hidden).toBe(true);
+    },
+    T,
+  );
+
+  it(
+    "a staff writer whose account has gone is Staff, never A member, on a member's reply; Keep refuses a comment on a post nobody can read",
+    async () => {
+      const gym = await makeGym("Gone Staff");
+      const writer = await member(gym, "Wendy Writer");
+      const leaver = await member(gym, "Liam Leaver");
+      const post = await addPost(gym, writer);
+      const manager = await signedIn("Mo Manager");
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gym.id}, ${manager.userId}, 'manager', ${["posts.manage"]})`;
+      const top = await memberComment(gym, writer, post.id, "Top");
+      const fromStaff = JSON.parse((await staffSend(gym, manager, post.id, "From the desk", { replyTo: top.id })).body) as { comment: StaffGymPostComment };
+      const answering = await memberComment(gym, writer, post.id, "Thanks", fromStaff.comment.id);
+      await sql`UPDATE users SET status = 'deleted' WHERE id = ${manager.userId}`;
+      const res = await inject("GET", `${one(gym.id, top.id)}/replies`, writer.cookies);
+      const seen = (JSON.parse(res.body) as GymPostCommentsResponse).comments.find((c) => c.id === answering.id);
+      expect(seen?.replyingTo).toBe("Staff");
+
+      const theirPost = await addPost(gym, leaver, "Leaving soon");
+      const on = await memberComment(gym, writer, theirPost.id, "On it");
+      await report(gym, await member(gym, "Rep Orter"), on.id);
+      const shown = (await reportedList(gym)).items.find((i) => i.comment.id === on.id);
+      if (shown === undefined) throw new Error("no item");
+      await sql`UPDATE gym_members SET removed_at = now() WHERE gym_id = ${gym.id} AND user_id = ${leaver.userId}`;
+      const kept = await inject("POST", `${one(gym.id, on.id)}/keep`, gym.owner.cookies, { allReports: shown.allReports, reportsMark: shown.reportsMark });
+      expect(kept.statusCode).toBe(404);
+    },
+    T,
+  );
+
+  it(
+    "the list carries 50 with the true total, 20 notes a comment, and no time of any report",
+    async () => {
+      const gym = await makeGym("Long List");
+      const writer = await member(gym, "Wendy Writer");
+      const reporter = await member(gym, "Rita Reporter");
+      const post = await addPost(gym, writer);
+      await sql`
+        WITH made AS (
+          INSERT INTO gym_post_comments (gym_id, post_id, author_user_id, by_member, comment_key, body, created_at)
+          SELECT ${gym.id}, ${post.id}, ${writer.userId}, true, gen_random_uuid(), 'Comment ' || n, now() FROM generate_series(1, 53) n
+          RETURNING id)
+        INSERT INTO gym_post_comment_reports (gym_id, comment_id, user_id, reason) SELECT ${gym.id}, id, ${reporter.userId}, 'spam' FROM made`;
+      const noted = await memberComment(gym, writer, post.id, "Much reported");
+      const many = await Promise.all(Array.from({ length: 3 }, (_, i) => member(gym, `Note ${String(i)}`)));
+      await sql`INSERT INTO gym_post_comment_reports (gym_id, comment_id, user_id, reason, note, created_at)
+        SELECT ${gym.id}, ${noted.id}, u, 'other', 'Note', now() - interval '1 year' FROM unnest(${many.map((p) => p.userId)}::uuid[]) u`;
+      const list = await reportedList(gym);
+      expect([list.items.length, list.total]).toEqual([50, 54]);
+      expect(list.items[0]?.comment.id).toBe(noted.id);
+      expect(list.items[0]?.notes).toEqual(["Note", "Note", "Note"]);
+      expect(JSON.stringify(list)).not.toMatch(/ReportedAt/);
     },
     T,
   );

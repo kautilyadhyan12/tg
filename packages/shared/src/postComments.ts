@@ -145,7 +145,7 @@ export const reportedGymPostCommentsResponseSchema = z
           .object({
             comment: staffGymPostCommentSchema,
             /** The post it is on, so staff can read it in its place. */
-            post: z.object({ id: z.string().uuid(), body: z.string(), fromMember: z.boolean(), author: z.object({ name: z.string().nullable(), initials: z.string() }).strict() }).strict(),
+            post: z.object({ id: z.string().uuid(), body: z.string(), fromMember: z.boolean(), hidden: z.boolean(), author: z.object({ name: z.string().nullable(), initials: z.string() }).strict() }).strict(),
             reports: z.number().int().positive(),
             reasons: commentReasonCountsSchema,
             /** What reporters typed, oldest first; never who typed it. */
@@ -153,8 +153,6 @@ export const reportedGymPostCommentsResponseSchema = z
             /** Sent back with Keep, as for a post: see `keepGymPostRequestSchema`. */
             allReports: z.number().int().positive(),
             reportsMark: z.string().regex(/^[0-9a-f]{32}$/),
-            firstReportedAt: z.string().datetime({ offset: true }),
-            lastReportedAt: z.string().datetime({ offset: true }),
           })
           .strict(),
       )
@@ -196,6 +194,7 @@ export type GymPostCommentDraftsFile = z.infer<typeof gymPostCommentDraftsFileSc
 export const GYM_POST_COMMENT_WORDS = {
   not_found: "This comment has been removed.",
   reports_changed: "The reports on this comment have changed. Look at the list again, then choose.",
+  hidden_reply: "This comment is hidden from your members, so a reply would not reach them. Choose Keep or Remove first.",
   commenting_off: "Comments are turned off here.",
   commenting_stopped: (gymName: string): string => `The staff at ${gymName} have stopped you commenting here. Speak to them at the front desk.`,
   /** `hours`: whole hours until the oldest of the counted comments is 24 hours old. */

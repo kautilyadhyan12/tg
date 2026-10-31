@@ -4675,16 +4675,16 @@ on the console's Updates page; a lapsed gym's staff read and change nothing. **C
 post, a person's posts and the reported list opens them under it: whole names, Member or Staff, hidden
 ones marked, replies on a press, who gave a reaction by name (exactly those the count counts). Staff
 write a comment or reply (`POST …/posts/:postId/comments/staff`, one key a comment): no daily limit,
-no bad-words check, the switch does not bind them, as for a post; a hidden comment offers no Reply.
+no bad-words check, the switch does not bind them, as for a post. A reply to a hidden comment, or under one, is refused (409 `comment_hidden`) and not offered; on a hidden post a comment is taken and the screen says members can't see it until the post is kept.
 **Remove** any comment or reply after a box naming whose and how many replies go
 (`DELETE …/post-comments/:id/staff`). **Stop them posting** on a member's comment is §15.3's one stop.
 **Reported comments** sit under the reported posts, longest waiting first, 50 at most
 (`GET …/post-comments/reported`): how many and why, what was typed, the post it is on; never who, in no
-answer and no audit line. **Keep comment** (`POST …/post-comments/:id/keep`) works as Keep post, with
+answer and no audit line, and no report's time. Away from Updates a hidden comment's note has a button to this list. **Keep comment** (`POST …/post-comments/:id/keep`) works as Keep post, with
 `allReports` and `reportsMark`: a report staff were not shown answers nothing. A comment five people
 reported can gain no sixth report, since members can no longer see it. **Members can comment** is the
 second switch beside Members can post (`PUT …/post-comments/settings`). The list and any open comments
-are read again when staff come back to the window (the 2026-10-24 rule).
+are read again when staff come back to the window (the 2026-10-24 rule), with both switches and the counts of posts listed; pages already opened stay. The one stop is named **Stop posting and commenting** on every screen.
 
 ### 15.3 Keeping it safe — what Apple (guideline 1.2) and Google ask of any app where people post
 

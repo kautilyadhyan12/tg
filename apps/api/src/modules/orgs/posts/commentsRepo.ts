@@ -202,11 +202,11 @@ export async function commentingOf(sql: SqlOrTx, gymId: string, userId: string):
 }
 
 /** The comment this gym keeps under the phone's key, removed or not. */
-export async function commentByKey(sql: SqlOrTx, gymId: string, commentKey: string): Promise<{ id: string; authorId: string | null; byMember: boolean; removed: boolean } | null> {
-  const rows = await sql<{ id: string; author_user_id: string | null; by_member: boolean; removed: boolean }[]>`
-    SELECT id, author_user_id, by_member, removed_at IS NOT NULL AS removed FROM gym_post_comments WHERE gym_id = ${gymId} AND comment_key = ${commentKey}`;
+export async function commentByKey(sql: SqlOrTx, gymId: string, commentKey: string): Promise<{ id: string; postId: string; authorId: string | null; byMember: boolean; removed: boolean } | null> {
+  const rows = await sql<{ id: string; post_id: string; author_user_id: string | null; by_member: boolean; removed: boolean }[]>`
+    SELECT id, post_id, author_user_id, by_member, removed_at IS NOT NULL AS removed FROM gym_post_comments WHERE gym_id = ${gymId} AND comment_key = ${commentKey}`;
   const r = rows[0];
-  return r === undefined ? null : { id: r.id, authorId: r.author_user_id, byMember: r.by_member, removed: r.removed };
+  return r === undefined ? null : { id: r.id, postId: r.post_id, authorId: r.author_user_id, byMember: r.by_member, removed: r.removed };
 }
 
 /** The comments and replies this member has written here since `since`, removed ones too. */
@@ -385,12 +385,10 @@ export async function setMembersCanComment(tx: TransactionSql, gymId: string, on
 
 export interface ReportedCommentRow {
   comment: CommentRow;
-  post: { id: string; body: string; byMember: boolean; authorName: string | null; authorEmail: string | null; authorRecordName: string | null };
+  post: { id: string; body: string; byMember: boolean; hidden: boolean; authorName: string | null; authorEmail: string | null; authorRecordName: string | null };
   reports: number;
   allReports: number;
   reportsMark: string;
-  firstAt: Date;
-  lastAt: Date;
   total: number;
 }
 
@@ -401,15 +399,15 @@ const reportsMark = (sql: SqlOrTx) => sql`md5(coalesce(string_agg(a.id::text, ',
  *  they can still read; longest waiting first. Never who reported. */
 export async function reportedComments(sql: SqlOrTx, gymId: string, limit: number): Promise<ReportedCommentRow[]> {
   const rows = await sql<(RawComment & {
-    post_body: string; post_by_member: boolean; post_author_name: string | null; post_author_email: string | null; post_author_record_name: string | null;
-    reports: number; all_reports: number; reports_mark: string; first_at: Date; last_at: Date; total: number;
+    post_body: string; post_by_member: boolean; post_hidden: boolean; post_author_name: string | null; post_author_email: string | null; post_author_record_name: string | null;
+    reports: number; all_reports: number; reports_mark: string; total: number;
   })[]>`
-    SELECT x.*, p.body AS post_body, p.by_member AS post_by_member, p.author_name AS post_author_name, p.author_email AS post_author_email, p.author_record_name AS post_author_record_name,
-           r.reports, r.first_at, r.last_at, count(*) OVER ()::int AS total,
+    SELECT x.*, p.body AS post_body, p.by_member AS post_by_member, p.hidden AS post_hidden, p.author_name AS post_author_name, p.author_email AS post_author_email, p.author_record_name AS post_author_record_name,
+           r.reports, count(*) OVER ()::int AS total,
            (SELECT count(*)::int FROM gym_post_comment_reports a WHERE a.gym_id = ${gymId} AND a.comment_id = x.id) AS all_reports,
            (SELECT ${reportsMark(sql)} FROM gym_post_comment_reports a WHERE a.gym_id = ${gymId} AND a.comment_id = x.id) AS reports_mark
     FROM (
-      SELECT comment_id, count(*)::int AS reports, min(created_at) AS first_at, max(created_at) AS last_at
+      SELECT comment_id, count(*)::int AS reports, min(created_at) AS first_at
       FROM gym_post_comment_reports WHERE gym_id = ${gymId} AND closed_at IS NULL
       GROUP BY comment_id
     ) r
@@ -419,12 +417,10 @@ export async function reportedComments(sql: SqlOrTx, gymId: string, limit: numbe
     LIMIT ${limit}`;
   return rows.map((r) => ({
     comment: toComment(r),
-    post: { id: r.post_id, body: r.post_body, byMember: r.post_by_member, authorName: r.post_author_name, authorEmail: r.post_author_email, authorRecordName: r.post_author_record_name },
+    post: { id: r.post_id, body: r.post_body, byMember: r.post_by_member, hidden: r.post_hidden, authorName: r.post_author_name, authorEmail: r.post_author_email, authorRecordName: r.post_author_record_name },
     reports: r.reports,
     allReports: r.all_reports,
     reportsMark: r.reports_mark,
-    firstAt: r.first_at,
-    lastAt: r.last_at,
     total: r.total,
   }));
 }

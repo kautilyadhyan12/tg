@@ -52,11 +52,43 @@ export function removeCommentBox(comment, words) {
   };
 }
 
-/** What staff read on a hidden comment, or null. `onList`: it is on the reported list, where Keep is. */
-export function hiddenCommentNote(comment, words, onList) {
+/** What staff read on a hidden comment, or null. `where`: 'list' on the reported list, where Keep is;
+ *  'above' lower on Updates; 'elsewhere' on another page, beside a button to Updates. A gym that can
+ *  change nothing is told only why. */
+export function hiddenCommentNote(comment, words, where, readOnly = false) {
   if (!comment.hidden) return null;
   const why = `Hidden from your ${words.people}: ${GYM_POST_COMMENT_REPORTS_TO_HIDE} or more people reported it.`;
-  return onList ? `${why} Keep comment shows it to them again.` : `${why} Choose Keep or Remove under Reported comments, at the top of this page.`;
+  if (readOnly) return why;
+  if (where === 'list') return `${why} Keep comment shows it to them again.`;
+  return where === 'above' ? `${why} Choose Keep or Remove under Reported comments, at the top of this page.` : `${why} Choose Keep or Remove under Reported comments on Updates.`;
+}
+
+/** What staff are told about who will read what they write on a post. */
+export function composerReach(post, words) {
+  return post.hidden ? `Your ${words.people} can't see this post until you keep it.` : `Your ${words.people} see this as from Staff.`;
+}
+
+/** What is said once a comment or reply is sent. */
+export function sentNote(made, post, words) {
+  const what = made.parentId === null ? 'Comment' : 'Reply';
+  return post.hidden ? `${what} sent. Your ${words.people} can't see it until you keep the post.` : `${what} sent. Your ${words.people} can see it now.`;
+}
+
+/** A first page read again into what is already loaded: inside that page the server's answer is the
+ *  truth, and rows past it stay, as do the pages already opened. */
+export function withFirstPage(was, page) {
+  const last = page.comments[page.comments.length - 1];
+  if (page.next === null || last === undefined) return { items: page.comments, next: page.next };
+  const past = (c) => c.createdAt > last.createdAt || (c.createdAt === last.createdAt && c.id > last.id);
+  const later = was.items.filter(past);
+  return { items: [...page.comments, ...later], next: later.length > 0 ? was.next : page.next };
+}
+
+/** The list of posts with the first page's switches and the counts of posts already listed: older pages stay. */
+export function withFreshFeed(feed, page) {
+  const fresh = new Map([...page.pinned, ...page.posts].map((p) => [p.id, p.commentCount]));
+  const mark = (p) => (fresh.has(p.id) ? { ...p, commentCount: fresh.get(p.id) } : p);
+  return { ...feed, membersCanPost: page.membersCanPost, membersCanComment: page.membersCanComment, reportedCount: page.reportedCount, pinned: feed.pinned.map(mark), posts: feed.posts.map(mark) };
 }
 
 /** The switch that lets members comment: its name and the line under it. */
@@ -64,7 +96,7 @@ export function memberCommentsSwitch(on, words) {
   return {
     label: `${words.peopleCap} can comment`,
     line: on
-      ? `Your ${words.people} can comment on posts and reply to each other. You can remove any comment, and stop a person commenting.`
+      ? `Your ${words.people} can comment on posts and reply to each other. You can remove any comment, and stop a person posting and commenting.`
       : `Only your staff can comment. Switch this on to let your ${words.people} comment too.`,
     off: `${words.peopleCap} can no longer comment. The comments they already made stay until you remove them.`,
     on: `Your ${words.people} can comment now.`,
