@@ -50,7 +50,7 @@
 // FREE app rather than being locked out. `entitlements/repo.ts:23-25` joins
 // `subscriptions` on `status IN ('trialing','active','past_due')`, so the moment
 // the row leaves that set the gym contributes no candidate and the member
-// resolves to `free` — 5 meal scans a day back to 2, keeping every workout they
+// resolves to `free` — 7 photo scans a day back to 3 a month, keeping every workout they
 // ever did. Nothing is deleted and nobody is signed out.
 //
 // **NO ENTITLEMENT CACHE BUST, STATED SO NOBODY READS IT AS AN OVERSIGHT.**

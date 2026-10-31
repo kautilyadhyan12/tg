@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { LabelDraft } from "@app/shared";
 import { canReadLabel, labelCostWords, labelToSave, scansLeftWords, typedFromDraft, typedFromProduct } from "../src/screens/food/labelRead";
 
-const draft: LabelDraft = { name: "Noodles", per: "serving", unit: "g", amount: 39, kcal: 170, proteinG: null, carbsG: 27, fatG: 6, servingAmount: 39, contains: ["Wheat", "Milk"], mayContain: [], check: "part_missing" };
+const draft: LabelDraft = { name: "Noodles", per: "serving", unit: "g", amount: 39, kcal: 170, proteinG: null, carbsG: 27, fatG: 6, servingAmount: 39, contains: ["Wheat", "Milk"], mayContain: [], kcalFromKj: false, check: "part_missing" };
 
 describe("what a read gives the person (the worst thing: a number made up, an allergen lost)", () => {
   it("a number not read is an empty box, never 0, and blocks the save until typed", () => {

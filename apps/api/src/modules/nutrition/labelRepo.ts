@@ -39,6 +39,13 @@ export async function labelFoodByCode(sql: Sql, userId: string, code: string): P
   return row ?? null;
 }
 
+/** The most saved labels listed at once. */
+export const LABEL_FOODS_LISTED = 100;
+
+export async function labelFoodsOf(sql: Sql, userId: string): Promise<LabelFoodRow[]> {
+  return await sql<LabelFoodRow[]>`SELECT ${sql.unsafe(COLUMNS)} FROM member_label_foods WHERE user_id = ${userId} ORDER BY updated_at DESC, id LIMIT ${LABEL_FOODS_LISTED}`;
+}
+
 export async function labelFoodById(sql: Sql, userId: string, id: string): Promise<LabelFoodRow | null> {
   const [row] = await sql<LabelFoodRow[]>`SELECT ${sql.unsafe(COLUMNS)} FROM member_label_foods WHERE user_id = ${userId} AND id = ${id}`;
   return row ?? null;
@@ -65,7 +72,10 @@ export async function saveLabelFood(sql: Sql, userId: string, id: string, v: Lab
       RETURNING ${sql.unsafe(COLUMNS)}`;
     return made ?? "full";
   } catch (err) {
-    if (typeof err === "object" && err !== null && "code" in err && err.code === "23505") return "taken";
+    if (typeof err === "object" && err !== null && "code" in err && err.code === "23505") {
+      // The same save at the same moment holds this id for this person: that row is the answer.
+      return (await labelFoodById(sql, userId, id)) ?? "taken";
+    }
     throw err;
   }
 }

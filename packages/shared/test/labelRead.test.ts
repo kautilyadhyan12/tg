@@ -1,25 +1,49 @@
 // ROADMAP Stage 5 33b-iii-c. The worst thing: a misread number (kJ as kcal, a serving as 100 g, a %
 // Daily Value as grams) saved and shown again on every scan. Cases are what real labels print.
 import { describe, expect, it } from "vitest";
-import { labelEvidenceSchema, panelOfLabel, printedAmount, type LabelColumn } from "../src/index.js";
+import { allergensFrom, labelEvidenceSchema, panelOfLabel, printedAmount, type LabelColumn } from "../src/index.js";
 
 const column = (over: Partial<LabelColumn>): LabelColumn => ({ per: "100g", serving_amount: null, serving_unit: null, prepared: false, kcal: null, kj: null, protein_g: null, carbs_g: null, fat_g: null, ...over });
 
 describe("a number as a label prints it", () => {
   it.each([
-    [493, 493], ["493", 493], ["493kcal", 493], ["5g", 5], ["5 g", 5], ["3,5 g", 3.5], ["3.5g", 3.5], ["1,533 kJ", 1533], ["<1 g", 1], ["< 0.5g", 0.5], ["less than 1g", 1], [0, 0], ["0g", 0],
-  ])("%s reads as %s", (printed, read) => { expect(printedAmount(printed)).toBe(read); });
+    [493, "kcal", 493], ["493", "kcal", 493], ["493kcal", "kcal", 493], ["1,200 kcal", "kcal", 1200], ["1533 kJ", "kj", 1533], ["1,533 kJ", "kj", 1533], ["1.533 kJ", "kj", 1533],
+    ["5g", "g", 5], ["5 g", "g", 5], ["3,5 g", "g", 3.5], ["3.5g", "g", 3.5], ["0,500 g", "g", 0.5], ["12,500", "g", 12.5], ["<1 g", "g", 1], ["< 0.5g", "g", 0.5], ["less than 1g", "g", 1], [0, "g", 0], ["0g", "g", 0],
+    ["15 ml", "amount", 15], ["39 g", "amount", 39],
+  ] as const)("%s as %s reads as %s", (text, kind, read) => { expect(printedAmount(text, kind)).toBe(read); });
 
   it.each([
-    ["16%"], ["9 %"], ["trace"], ["N/A"], [""], [null], [undefined], [-3], [Number.NaN], ["105 mg"], ["about 5"], [true], [[5]], ["12 oz"],
-  ])("%s is not printed, never 0", (printed) => { expect(printedAmount(printed)).toBeNull(); });
+    ["16%", "g"], ["9 %", "g"], ["trace", "g"], ["N/A", "g"], ["", "g"], [null, "g"], [undefined, "g"], [-3, "g"], [Number.NaN, "g"], ["105 mg", "g"], ["about 5", "g"], [true, "g"], [[5], "g"], ["12 oz", "g"],
+    ["1533 kJ", "kcal"], ["5 kcal", "g"], ["120 ml", "g"], ["2 tbsp", "amount"], ["359 kcal", "kj"],
+  ] as const)("%s in the slot for %s is not printed, never 0", (text, kind) => { expect(printedAmount(text, kind)).toBeNull(); });
 
-  it("a slot the model filled badly does not lose the label", () => {
-    const parsed = labelEvidenceSchema.parse({ is_nutrition_label: true, name: "", columns: [{ per: "per pack", kcal: "16%", protein_g: "5g" }], contains: "milk", may_contain: [3, "nuts"], photo_quality: "GOOD" });
+  it("a slot the model filled badly does not lose the label, and Luna's text numbers are read", () => {
+    // Her real reply on a real label, 2026-10-31: numbers as text.
+    const real = labelEvidenceSchema.parse({ is_nutrition_label: true, name: null, columns: [{ per: "100g", serving_amount: null, serving_unit: null, prepared: false, kcal: "493", kj: null, protein_g: "5g", carbs_g: "71g", fat_g: "21g" }], contains: [], may_contain: [], photo_quality: "good" });
+    expect(panelOfLabel(real)).toMatchObject({ kcal: 493, proteinG: 5, carbsG: 71, fatG: 21 });
+    const parsed = labelEvidenceSchema.parse({ is_nutrition_label: true, name: "", columns: [{ per: "per pack", kcal: "16%", protein_g: "5g" }], contains: 3, may_contain: [3, "nuts"], photo_quality: "GOOD" });
     expect(parsed.name).toBeNull();
     expect(parsed.columns[0]).toMatchObject({ per: "other", kcal: null, protein_g: 5 });
     expect(parsed.contains).toEqual([]);
     expect(parsed.may_contain).toEqual(["nuts"]);
+  });
+});
+
+describe("allergens: the worst thing, one read and then lost", () => {
+  it.each([
+    ["a line for a list", "Milk, Soy, Peanuts", ["Milk", "Soy", "Peanuts"]],
+    ["one long item", ["Contains: wheat flour, soy lecithin, whey (milk), almonds, cashews, walnuts, pistachios, peanuts"], ["wheat flour", "soy lecithin", "whey (milk)", "almonds", "cashews", "walnuts", "pistachios", "peanuts"]],
+    ["semicolons", ["Milk; Egg"], ["Milk", "Egg"]],
+    ["the same twice", ["Milk", "Milk"], ["Milk"]],
+    ["nothing", [], []],
+    ["not words", 7, []],
+  ])("%s", (_name, given, read) => { expect(allergensFrom(given)).toEqual(read); });
+
+  it("a word past the longest is split, whole, so nothing is lost", () => {
+    const long = Array.from({ length: 40 }, (_, i) => `ingredient${String(i)}`).join(" ");
+    const read = allergensFrom([long]);
+    expect(read.join(" ")).toBe(long);
+    expect(read.every((w) => w.length <= 120)).toBe(true);
   });
 });
 

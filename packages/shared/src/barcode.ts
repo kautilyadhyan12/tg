@@ -91,6 +91,9 @@ export const barcodeReplySchema = z.discriminatedUnion("status", [
 ]);
 export type BarcodeReply = z.infer<typeof barcodeReplySchema>;
 
+/** A person's saved labels, newest first: the way back to one with no barcode. */
+export const labelFoodsSchema = z.object({ items: z.array(barcodeReplySchema) }).strict();
+
 // ── Open Food Facts' files ───────────────────────────────────────────────────
 
 const words = z.union([z.string(), z.array(z.string())]);

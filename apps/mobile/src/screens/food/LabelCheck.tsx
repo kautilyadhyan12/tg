@@ -23,6 +23,7 @@ export function LabelCheck({
   code,
   id,
   check,
+  fromKj = false,
   onClose,
   onSaved,
 }: {
@@ -30,6 +31,7 @@ export function LabelCheck({
   code: string | null;
   id: string | null;
   check: "fine" | "part_missing" | "doesnt_add_up";
+  fromKj?: boolean;
   onClose: () => void;
   onSaved: (product: FoundProduct) => void;
 }) {
@@ -76,6 +78,11 @@ export function LabelCheck({
         <Txt kind="small" colour={check === "fine" ? "text" : "gold"}>
           {check === "fine" ? "Check these against the pack." : CHECK_WORDS[check]}
         </Txt>
+        {fromKj ? (
+          <Txt kind="small" colour="gold">
+            Calories worked out from the kJ on the pack.
+          </Txt>
+        ) : null}
         <Field label="Food name" value={typed.name} onChange={set("name")} maxLength={80} />
         <Field label={`Numbers are for (${typed.unit})`} value={typed.amount} onChange={set("amount")} keyboard="decimal-pad" maxLength={8} />
         <View style={styles.row}>
@@ -94,8 +101,8 @@ export function LabelCheck({
             <Field label="Fat (g)" value={typed.fatG} onChange={set("fatG")} keyboard="decimal-pad" maxLength={8} />
           </View>
         </View>
-        <Field label="Contains" value={typed.contains} onChange={set("contains")} maxLength={400} />
-        <Field label="May contain" value={typed.mayContain} onChange={set("mayContain")} maxLength={400} />
+        <Field label="Contains" value={typed.contains} onChange={set("contains")} maxLength={2000} />
+        <Field label="May contain" value={typed.mayContain} onChange={set("mayContain")} maxLength={2000} />
         {noAllergens ? (
           <Txt kind="small" colour="gold">
             No allergens listed. Check the pack.

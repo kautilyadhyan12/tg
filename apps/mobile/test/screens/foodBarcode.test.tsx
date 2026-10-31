@@ -381,7 +381,7 @@ describe("adding it", () => {
 
 describe("a pack's label (33b-iii-c)", () => {
   const LABEL_ID = "11111111-1111-4111-8111-111111111111";
-  const draft = { name: null, per: "serving", unit: "g", amount: 39, kcal: 170, proteinG: null, carbsG: 27, fatG: 6, servingAmount: 39, contains: [], mayContain: [], check: "part_missing" };
+  const draft = { name: null, per: "serving", unit: "g", amount: 39, kcal: 170, proteinG: null, carbsG: 27, fatG: 6, servingAmount: 39, contains: [], mayContain: [], kcalFromKj: false, check: "part_missing" };
   const saved = found({ labelId: LABEL_ID, allergens: ["Peanuts"], allergensFrom: null }, { canonical: `label_${LABEL_ID}`, name: "Toffee", source: "label" });
   const SCANS = { window: "day", limit: 7, left: 5 };
   const labelRoutes = (over: Record<string, Route> = {}): Record<string, Route> => ({
@@ -464,6 +464,46 @@ describe("a pack's label (33b-iii-c)", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Close" }));
     await fireEvent.press(await screen.findByRole("button", { name: "Leave" }));
     expect(await screen.findByRole("radio", { name: "Label" })).toBeTruthy();
+  });
+
+  it("the worst thing: the next pack's label never lands on the barcode just saved", async () => {
+    const fake = await openScan(labelRoutes({ "/v1/nutrition/labels/saved": ok(saved) }));
+    await toLabel();
+    expect(fake.asked.some((a) => a.path === "/v1/nutrition/labels/read")).toBe(true);
+    await fireEvent.changeText(await screen.findByLabelText("Food name"), "Pack A");
+    await fireEvent.changeText(screen.getByLabelText("Protein (g)"), "1");
+    await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+    await screen.findByText("From your label");
+    await fireEvent.press(screen.getByRole("button", { name: "Close" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Take photo" }));
+    await fireEvent.changeText(await screen.findByLabelText("Food name"), "Pack B");
+    await fireEvent.changeText(screen.getByLabelText("Protein (g)"), "1");
+    await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+    await screen.findByText("From your label");
+    expect(fake.asked.filter((a) => a.method === "PUT").map((a) => (a.body as { name: string; code: string | null }))).toMatchObject([{ name: "Pack A", code: NUTELLA_CODE }, { name: "Pack B", code: null }]);
+  });
+
+  it("the camera says which barcode a label photo is for, and the privacy line is there", async () => {
+    await openScan(labelRoutes());
+    await read("ean13", NUTELLA_CODE);
+    await fireEvent.press(await screen.findByRole("button", { name: "Photo of the label" }));
+    expect(await screen.findByText(`For barcode ${NUTELLA_CODE}`)).toBeTruthy();
+    expect(screen.getByText("Photos are analyzed and never kept by the app. The scanning service keeps a copy for up to 30 days to check for abuse.")).toBeTruthy();
+  });
+
+  it("a saved label with no barcode is found again from the Label camera, with Change and Remove", async () => {
+    await openScan(labelRoutes({ "/v1/nutrition/labels": ok({ items: [saved] }) }));
+    await fireEvent.press(await screen.findByRole("radio", { name: "Label" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Your saved labels" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Toffee" }));
+    expect(await screen.findByRole("button", { name: "Change" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Remove" })).toBeTruthy();
+  });
+
+  it("calories worked out from kJ are said", async () => {
+    await openScan(labelRoutes({ "/v1/nutrition/labels/read": ok({ ...draft, kcalFromKj: true }) }));
+    await toLabel();
+    expect(await screen.findByText("Calories worked out from the kJ on the pack.")).toBeTruthy();
   });
 
   it("not a label: the camera again, and the next try is free", async () => {

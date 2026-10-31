@@ -8,8 +8,10 @@ import { launchImageLibraryAsync } from "expo-image-picker";
 import {
   FOOD_ALLERGY_CAUTION,
   MEAL_MOST_FOODS,
+  PHOTO_PRIVACY_LINE,
   barcodeReplySchema,
   labelDraftSchema,
+  labelFoodsSchema,
   photoScansLeftSchema,
   type LabelDraft,
   type PhotoScansLeft,
@@ -139,7 +141,7 @@ export function MealPhoto({ open, barcode, kept, onClose, onSaved, onSearch }: M
     if (!open) return;
     setNotice(null);
     setCameraStart(null);
-    setStage((now) => (now.kind === "reading" ? now : !barcode && kept.sheet !== null && kept.sheet !== undefined ? { kind: "review" } : { kind: "camera" }));
+    setStage((now) => (now.kind === "reading" || now.kind === "label" ? now : !barcode && kept.sheet !== null && kept.sheet !== undefined ? { kind: "review" } : { kind: "camera" }));
     // Judged as it stood when it was opened.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -263,6 +265,8 @@ export function MealPhoto({ open, barcode, kept, onClose, onSaved, onSearch }: M
             draft={stage.draft}
             code={stage.code}
             onClose={() => {
+              // That barcode's label is done: the next photo is another pack's, which must not take it.
+              setCameraStart({ mode: "label", code: null });
               setStage({ kind: "camera" });
             }}
             onSaved={onSaved}
@@ -292,7 +296,7 @@ export function MealPhoto({ open, barcode, kept, onClose, onSaved, onSearch }: M
 function LabelStage({ draft, code, onClose, onSaved }: { draft: LabelDraft; code: string | null; onClose: () => void; onSaved: (type: MealType, name: string) => void }) {
   const [product, setProduct] = useState<FoundProduct | null>(null);
   return product === null ? (
-    <LabelCheck start={typedFromDraft(draft)} code={code} id={null} check={draft.check} onClose={onClose} onSaved={setProduct} />
+    <LabelCheck start={typedFromDraft(draft)} code={code} id={null} check={draft.check} fromKj={draft.kcalFromKj} onClose={onClose} onSaved={setProduct} />
   ) : (
     <BarcodeProduct product={product} onClose={onClose} onSaved={onSaved} />
   );
@@ -343,6 +347,7 @@ function Camera({
   // The barcode a label photo is for: the pack just found not to be on our list.
   const [labelCode, setLabelCode] = useState<string | null>(startCode);
   const [scans, setScans] = useState<PhotoScansLeft | null>(null);
+  const [saved, setSaved] = useState<{ items: FoundProduct[] | null } | null>(null);
   const [torch, setTorch] = useState(false);
   const [look, setLook] = useState<Look>({ kind: "idle" });
   const [typing, setTyping] = useState(false);
@@ -377,6 +382,12 @@ function Camera({
       gone = true;
     };
   }, [session]);
+
+  const openSaved = async () => {
+    setSaved({ items: null });
+    const answer = await session.signedIn({ method: "GET", path: "/v1/nutrition/labels" }, labelFoodsSchema);
+    setSaved({ items: answer.kind === "ok" ? answer.data.items.flatMap((p) => (p.status === "found" ? [p] : [])) : [] });
+  };
 
   const lookUp = async (code: string) => {
     newest.current += 1;
@@ -527,6 +538,11 @@ function Camera({
             ) : null}
           </View>
         )}
+        {mode === "label" && labelCode !== null ? (
+          <Txt kind="tiny" colour="text" style={styles.centre}>
+            For barcode {labelCode}
+          </Txt>
+        ) : null}
         {left === null ? null : (
           <Txt kind="tiny" colour="text" style={styles.centre}>
             {left}
@@ -537,6 +553,12 @@ function Camera({
           <Chip label="Barcode" on={scanning} onPress={() => { toMode("barcode"); }} />
           <Chip label="Label" on={mode === "label"} onPress={() => { toMode("label"); }} />
         </View>
+        {mode === "label" ? <Button label="Your saved labels" kind="link" onPress={() => { void openSaved(); }} style={styles.centreSelf} /> : null}
+        {scanning ? null : (
+          <Txt kind="tiny" style={styles.centre}>
+            {PHOTO_PRIVACY_LINE}
+          </Txt>
+        )}
         {scanning ? (
           <Button label="Type the number" kind="link" onPress={() => { newest.current += 1; setLook({ kind: "idle" }); setTyping(true); }} style={styles.centreSelf} />
         ) : (
@@ -556,6 +578,29 @@ function Camera({
         </View>
         )}
       </View>
+      {saved === null ? null : (
+        <Sheet open title="Your saved labels" onClose={() => { setSaved(null); }}>
+          {saved.items === null ? <ActivityIndicator color={colours.orange} /> : null}
+          {saved.items?.length === 0 ? (
+            <Txt kind="small" colour="text">
+              No saved labels yet.
+            </Txt>
+          ) : null}
+          <ScrollView style={styles.savedList} keyboardShouldPersistTaps="handled">
+            {(saved.items ?? []).map((product) => (
+              <Button
+                key={product.labelId}
+                label={product.food.name}
+                kind="link"
+                onPress={() => {
+                  setSaved(null);
+                  setLook({ kind: "found", product });
+                }}
+              />
+            ))}
+          </ScrollView>
+        </Sheet>
+      )}
       {look.kind === "found" ? <BarcodeProduct product={look.product} onClose={() => { packStillInView(); setLook({ kind: "idle" }); }} onSaved={onSaved} /> : null}
       {own ? <BarcodeOwnFood onClose={() => { packStillInView(); setOwn(false); }} onSaved={onSaved} /> : null}
       {typing ? (
@@ -1220,6 +1265,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   roundBig: { width: 56, height: 56, borderRadius: sizes.round },
+  savedList: { flexGrow: 0, flexShrink: 1 },
   footBar: { position: "absolute", left: 0, right: 0, bottom: 0, paddingHorizontal: sizes.edge, gap: 18 },
   notice: { alignSelf: "center", maxWidth: 360, gap: 4, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 16, backgroundColor: colours.overWords },
   torchBar: { position: "absolute", right: sizes.edge },

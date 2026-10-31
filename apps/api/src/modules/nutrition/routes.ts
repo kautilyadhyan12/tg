@@ -341,6 +341,9 @@ export function registerNutritionRoutes(
     identifier: (req) => req.authUser?.id ?? null,
     redis: deps.redis,
   });
+  app.get("/v1/nutrition/labels", { preHandler: [app.authenticate, labelLimit] }, async (req, reply) =>
+    reply.send(await service.labelFoodsOf(nutritionDeps, authedUserId(req))),
+  );
   app.put("/v1/nutrition/labels/:id", { preHandler: [app.authenticate, labelLimit] }, async (req, reply) => {
     const p = parse(labelFoodParamSchema, req.params, req, reply);
     if (p === null) return;

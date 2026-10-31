@@ -948,7 +948,7 @@ function PhotoModal({ open, onClose, onSave }) {
         setRetakeMsg({ title: 'Try again', text: 'That free retry has run out. Pick the photo again.' });
         setPreview(null);
       } else if (err.response?.status === 429) {
-        toast.error('Daily photo-scan limit reached.');
+        toast.error('You\u2019ve used all your photo scans.');
         setPreview(null);
       } else {
         toast.error(err.message || 'Photo analysis failed');

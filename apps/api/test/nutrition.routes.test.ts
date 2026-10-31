@@ -941,7 +941,7 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
   },30_000);
 
   it("a try refused over the limit takes no scan, so the last scan given back after an outage can still be used",async()=>{
-    // A free person has 1 scan a day. It waits at the scanner while they try again, then fails.
+    // A free person has 3 scans a month, 2 of them used here. It waits at the scanner while they try again, then fails.
     const hung={fail:(err:Error):void=>{throw err;}};
     let reached=():void=>undefined;
     const atScanner=new Promise<void>((resolve)=>{reached=resolve;});

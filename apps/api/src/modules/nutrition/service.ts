@@ -1134,7 +1134,8 @@ export async function readLabel(deps: NutritionDeps, userId: string, imageBase64
       throw await askAgain();
     }
     await ledger(deps, userId, result);
-    const panel = result.evidence.is_nutrition_label ? panelOfLabel(result.evidence) : null;
+    // A poor photo is asked for again, as a meal's is: what it gave may be misread (Part 2B \u00a73.5).
+    const panel = result.evidence.is_nutrition_label && result.evidence.photo_quality === "good" ? panelOfLabel(result.evidence) : null;
     if (panel === null) throw await askAgain();
     const { proteinG, carbsG, fatG } = panel;
     const scale = 100 / panel.amount;
@@ -1145,7 +1146,7 @@ export async function readLabel(deps: NutritionDeps, userId: string, imageBase64
     return {
       name: result.evidence.name, per: panel.per, unit: panel.unit, amount: panel.amount, kcal: panel.kcal, proteinG, carbsG, fatG,
       servingAmount: panel.servingAmount === null || panel.servingAmount <= 0 ? null : panel.servingAmount,
-      contains: result.evidence.contains, mayContain: result.evidence.may_contain,
+      contains: result.evidence.contains, mayContain: result.evidence.may_contain, kcalFromKj: panel.kcalFromKj,
       check: missing ? "part_missing" : fits ? "fine" : "doesnt_add_up",
     };
   } catch (err) {
@@ -1172,6 +1173,11 @@ export async function saveLabelFood(deps: NutritionDeps, userId: string, id: str
   if (saved === "taken") return null;
   if (saved === "full") throw new NutritionError(409, "label_foods_full", "You\u2019ve saved as many labels as you can. Remove one to add another.");
   return await labelReply(deps, saved, saved.code);
+}
+
+export async function labelFoodsOf(deps: NutritionDeps, userId: string): Promise<{ items: Extract<BarcodeReply, { status: "found" }>[] }> {
+  const rows = await labelRepo.labelFoodsOf(deps.sql, userId);
+  return { items: await Promise.all(rows.map((row) => labelReply(deps, row, row.code))) };
 }
 
 export const removeLabelFood = async (deps: NutritionDeps, userId: string, id: string): Promise<boolean> => await labelRepo.removeLabelFood(deps.sql, userId, id);

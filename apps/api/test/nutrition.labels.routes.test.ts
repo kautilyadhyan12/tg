@@ -1,11 +1,11 @@
 // ROADMAP Stage 5 33b-iii-c — a pack's label through the routes a person uses, on real Postgres.
 // The worst thing, first: a missed allergen, a misread number kept for good, or one person's label
-// shown to another. Replies are Luna's own on 20 real labels (`fixtures/label-replies.json`).
+// shown to another. Replies are Luna's on 20 real labels, as parsed (`fixtures/label-replies.json`).
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
-import { barcodeReplySchema, labelDraftSchema, labelEvidenceSchema, mealPreviewSchema, photoScansLeftSchema, type LabelEvidence } from "@app/shared";
+import { barcodeReplySchema, labelDraftSchema, labelEvidenceSchema, labelFoodsSchema, mealPreviewSchema, panelOfLabel, photoScansLeftSchema, type LabelEvidence } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createMemoryRedis, type RedisLike } from "../src/redis.js";
@@ -143,8 +143,68 @@ d("a pack's label (real Postgres)", () => {
     });
   });
 
-  it("every one of Luna's 20 real replies reads as a label or asks for the photo again; none throws", () => {
-    for (const { evidence } of real) expect(labelEvidenceSchema.safeParse(evidence).success).toBe(true);
+  it("Luna's 20 real replies: all parse, each good photo gives its column, the one she called poor does not", () => {
+    const parsed = real.map(({ evidence }) => labelEvidenceSchema.parse(evidence));
+    expect(parsed.filter((e) => e.photo_quality === "poor")).toHaveLength(1);
+    for (const evidence of parsed.filter((e) => e.photo_quality === "good")) expect(panelOfLabel(evidence)?.kcal).toBeGreaterThan(0);
+  });
+
+  it("a photo Luna calls poor is a free retake, never numbers shown as fine", async () => {
+    const person = await session("label33-poor@example.com");
+    next = says({ ...NOODLES, photo_quality: "poor" });
+    const res = await read(person);
+    expect(res.statusCode).toBe(422);
+    expect(typeof res.json<{ retakeToken: string }>().retakeToken).toBe("string");
+    expect((await left(person)).left).toBe(2);
+    next = says(NOODLES);
+  });
+
+  it("allergens on one line come back each whole, and calories from kJ are marked", async () => {
+    const person = await session("label33-line@example.com");
+    next = says(labelEvidenceSchema.parse({ ...NOODLES, contains: "Contains: wheat flour, whey (milk), almonds, cashews, walnuts, pistachios, peanuts", columns: [{ per: "100g", kj: 1533, protein_g: 10, carbs_g: 63, fat_g: 8 }] }));
+    const draft = labelDraftSchema.parse((await read(person)).json());
+    expect(draft.contains).toEqual(["wheat flour", "whey (milk)", "almonds", "cashews", "walnuts", "pistachios", "peanuts"]);
+    expect(draft).toMatchObject({ kcal: 366, kcalFromKj: true });
+    next = says(NOODLES);
+  });
+
+  it("a saved label with no barcode is listed for its owner alone, and can be changed and removed from there", async () => {
+    const person = await session("label33-list@example.com");
+    const other = await session("label33-list2@example.com");
+    const id = randomUUID();
+    await save(id, null, person);
+    const items = () => inject("GET", "/v1/nutrition/labels", person).then((r) => labelFoodsSchema.parse(r.json()).items);
+    expect(await items()).toMatchObject([{ status: "found", labelId: id, food: { kcal: 365 } }]);
+    expect(labelFoodsSchema.parse((await inject("GET", "/v1/nutrition/labels", other)).json()).items).toEqual([]);
+    expect((await inject("GET", "/v1/nutrition/labels", "")).statusCode).toBe(401);
+    expect((await save(id, null, person, { kcal: 300 })).statusCode).toBe(200);
+    expect(await items()).toMatchObject([{ food: { kcal: 300 } }]);
+    expect((await inject("DELETE", `/v1/nutrition/labels/${id}`, person)).statusCode).toBe(204);
+    expect(await items()).toEqual([]);
+  });
+
+  it("full: past the most one person may keep, a new label is refused and says so", async () => {
+    const person = await session("label33-full@example.com");
+    const [row] = await sql<{ id: string }[]>`SELECT id FROM users WHERE email = 'label33-full@example.com'`;
+    await sql`INSERT INTO member_label_foods (id, user_id, name, unit, kcal, protein_g, carbs_g, fat_g) SELECT gen_random_uuid(), ${row?.id ?? ""}, 'x', 'g', 1, 0, 0, 0 FROM generate_series(1, 1000)`;
+    const res = await save(randomUUID(), null, person);
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toMatchObject({ error: "label_foods_full" });
+  });
+
+  it("the same save at the same moment, with no barcode, is one food and answers each", async () => {
+    const person = await session("label33-race@example.com");
+    const id = randomUUID();
+    const answers = await Promise.all([save(id, null, person), save(id, null, person), save(id, null, person)]);
+    expect(answers.map((a) => a.statusCode)).toEqual([200, 200, 200]);
+  });
+
+  it.each([
+    ["a NUL in the name", { name: "a\u0000b" }],
+    ["a NUL in an allergen", { contains: ["a\u0000b"] }],
+    ["an amount too small to divide by", { amount: 5e-324, kcal: 0, proteinG: 0, carbsG: 0, fatG: 0 }],
+  ])("%s is refused, not a fault", async (_name, over) => {
+    expect((await save(randomUUID(), null, alice, over)).statusCode).toBe(400);
   });
 
   describe("the count of photo scans", () => {
@@ -254,7 +314,7 @@ d("a pack's label (real Postgres)", () => {
 
     it("the body is parsed: words too long, a bad id", async () => {
       expect((await save(randomUUID(), CODE, alice, { name: "x".repeat(81) })).statusCode).toBe(400);
-      expect((await save(randomUUID(), CODE, alice, { contains: ["x".repeat(61)] })).statusCode).toBe(400);
+      expect((await save(randomUUID(), CODE, alice, { contains: ["x".repeat(121)] })).statusCode).toBe(400);
       expect((await inject("PUT", "/v1/nutrition/labels/not-an-id", alice, { ...body, code: CODE })).statusCode).toBe(400);
     });
   });
