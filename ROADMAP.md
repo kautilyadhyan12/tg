@@ -595,6 +595,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 33. **The meal scan** (Kd, 2026-10-28: the scanner moves to GPT-6 Luna first).
     - 33a. [x] **The meal scan on GPT-6 Luna, thinking off** — merged 2026-10-28 (PR #380).
     - 33a-ii. [x] **Luna checks the scan's unclear food matches** — merged 2026-10-28 (PR #382).
+    - 33a-iii. [ ] **The better Luna scan prompt, no thinking**: portions judged from the photo, every food named; a reply with no `canonical_hint` or with lists in `unknown_items` no longer fails a whole scan.
     - 33b. **A meal photo with the phone's camera, and barcode scan** (split 2026-10-29 in three: the photo first).
       - 33b-i. [x] **A meal photo on the phone** — merged 2026-10-30 (PR #395).
       - 33b-ii. [x] **"Not this?" and the names Luna saw** — merged 2026-10-30 (PR #397).

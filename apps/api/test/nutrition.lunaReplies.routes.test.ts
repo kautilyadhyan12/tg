@@ -105,6 +105,8 @@ d("a badly formed scanner reply (real route, real adapter, real Postgres)", () =
 
   it("a food with no canonical_hint no table knows is shown as the estimate it is, never as a table's food", { timeout: 30_000 }, async () => {
     expect(rows(await sheet(reply([["zqx leaf", null, 1, 75, 35, 2, 5, 1]])))).toEqual([["Zqx leaf", "estimate", 35]]);
+    // With dal's own energy too, so only the name can keep it off dal's row.
+    expect(rows(await sheet(reply([["zqx stew", null, 1, 150, 170, 9, 25, 4]])))).toEqual([["Zqx stew", "estimate", 170]]);
   });
 
   it("with no canonical_hint, the energy check still stands: a name a table has, with another food's energy, is not that table's food", { timeout: 30_000 }, async () => {
