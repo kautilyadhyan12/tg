@@ -129,6 +129,8 @@ export const gyms = pgTable(
     leaderboardBoardsOff: text("leaderboard_boards_off").array().notNull().default(sql`'{}'::text[]`),
     /** Whether the gym's members may post on its Updates (0072; spec Part 3 §15.2). */
     membersCanPost: boolean("members_can_post").notNull().default(false),
+    /** Whether the gym's members may comment on its Updates (0179; on until staff turn it off). */
+    membersCanComment: boolean("members_can_comment").notNull().default(true),
     /** The gym's booking settings (0075; spec Part 3 §13.4), under
      *  `gyms_booking_settings_check`; `CLASS_BOOKING_DEFAULTS` in `@app/shared`. */
     bookingOpensDays: integer("booking_opens_days").notNull().default(7),

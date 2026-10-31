@@ -131,6 +131,12 @@ export const EXPORT_READERS: Record<ExportedTable, (sql: Sql, userId: string) =>
   gym_post_reports: (sql, u) =>
     sql<Row[]>`SELECT * FROM gym_post_reports WHERE user_id = ${u} ORDER BY created_at, id`,
 
+  gym_post_comment_reactions: (sql, u) =>
+    sql<Row[]>`SELECT * FROM gym_post_comment_reactions WHERE user_id = ${u} ORDER BY created_at, comment_id`,
+
+  gym_post_comment_reports: (sql, u) =>
+    sql<Row[]>`SELECT * FROM gym_post_comment_reports WHERE user_id = ${u} ORDER BY created_at, id`,
+
   gym_post_stops: (sql, u) =>
     sql<Row[]>`SELECT * FROM gym_post_stops WHERE user_id = ${u} ORDER BY created_at, gym_id`,
 
@@ -172,6 +178,21 @@ export async function selectExportMemberPosts(sql: Sql, userId: string): Promise
     FROM gym_posts p
     WHERE p.author_user_id = ${userId} AND p.by_member
     ORDER BY p.created_at DESC, p.id DESC
+    LIMIT ${MEMBER_POSTS_EXPORT_LIMIT}`;
+  const total = rows[0]?.total ?? 0;
+  for (const row of rows) delete row["total"];
+  return { rows, total };
+}
+
+/** The comments and replies the person wrote as a MEMBER, newest first. Explicit columns:
+ *  `removed_by_user_id` names somebody else. */
+export async function selectExportMemberComments(sql: Sql, userId: string): Promise<{ rows: Row[]; total: number }> {
+  const rows = await sql<(Row & { total?: number })[]>`
+    SELECT c.id, c.gym_id, c.post_id, c.parent_id, c.body, c.created_at, c.removed_at,
+           count(*) OVER ()::int AS total
+    FROM gym_post_comments c
+    WHERE c.author_user_id = ${userId} AND c.by_member
+    ORDER BY c.created_at DESC, c.id DESC
     LIMIT ${MEMBER_POSTS_EXPORT_LIMIT}`;
   const total = rows[0]?.total ?? 0;
   for (const row of rows) delete row["total"];

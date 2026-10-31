@@ -2,7 +2,7 @@
 //
 // Posts by the gym's staff and, where the gym has switched it on, by its members, with up
 // to four photos, read by its live app members and by staff holding `posts.manage`. One
-// reaction a person a post, and no comments (RULINGS 2026-08-25, kept 2026-09-22). A post
+// reaction a person a post; comments are `postComments.ts`. A post
 // stays until it is removed: by staff, or a member's own by the member (RULINGS 2026-10-04).
 // Any member can report a post; staff see the reported ones in a list of their own.
 import { z } from "zod";
@@ -73,7 +73,7 @@ const NUL = String.fromCharCode(0);
 export const gymPostPhotoSchema = gymPagePhotoSchema;
 export type GymPostPhoto = z.infer<typeof gymPostPhotoSchema>;
 
-const reactionCountsSchema = z
+export const reactionCountsSchema = z
   .object({
     like: z.number().int().nonnegative(),
     strong: z.number().int().nonnegative(),
@@ -134,6 +134,8 @@ export const gymPostSchema = z
     /** Hidden from members while staff decide (`GYM_POST_REPORTS_TO_HIDE`). A member is
      *  sent such a post only when they wrote it. */
     hidden: z.boolean(),
+    /** Comments and replies on it that this reader is sent. */
+    commentCount: z.number().int().nonnegative(),
     /** The result of the challenge this post announces; null for every other post. A post
      *  whose challenge is not an ended one (its gym moved its clock back) is in no list of
      *  Updates until it is one again, so its words never say "has ended" too soon. */
@@ -150,7 +152,7 @@ export type StaffGymPost = z.infer<typeof staffGymPostSchema>;
 /** Where the next page starts, as a list's `next` gave it: the last post's instant, "_",
  *  its id. Read into the two, each checked as what it is, so nothing the database cannot
  *  read as an instant or an id is ever handed to it. */
-const postsCursor = z
+export const postsCursor = z
   .string()
   .max(80)
   .transform((text, ctx) => {
@@ -190,6 +192,8 @@ export const gymPostsResponseSchema = z
     ...feedShape(gymPostSchema),
     status: z.enum(["shown", "paused"]),
     posting: gymMemberPostingSchema,
+    /** The same for comments: the gym's own switch, and the same stop on the person. */
+    commenting: gymMemberPostingSchema,
     /** People the reader has blocked at this gym. */
     blockedCount: z.number().int().nonnegative(),
     /** Where to write for help with the app; null until one is set. */
@@ -289,7 +293,7 @@ export const gymPostPhotoParamsSchema = gymPostParamsSchema.extend({ photoId: z.
 // ── MEMBERS POST, REPORT, AND THE STAFF LIST (19b-ii-a; spec §15.3) ──
 
 /** What a person typed beside their reason: trimmed, and nothing at all is no note. */
-const reportNote = z
+export const reportNote = z
   .string()
   .max(GYM_POST_REPORT_NOTE_MAX * 2)
   .refine((text) => !text.includes(NUL), { message: "a character that cannot be kept" })
