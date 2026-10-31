@@ -1893,11 +1893,11 @@ describe('the membership agreement (18u-i)', () => {
 });
 
 describe('Refund on Refunds to review (18d-iv-b-iii)', () => {
-  it('opens no box where the payment is not on the page', async () => {
+  it('says so where the payment is not on the page', async () => {
     const gold = held(1, GOLD, '2026-10-04', true);
     orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
     render(draw(ADA, 'Ada Lovelace', { refundNow: { membershipId: gold.id, paymentId: '99999999-9999-4999-8999-999999999999', voidFeeId: null } }));
-    await screen.findAllByTestId('held-membership');
+    await screen.findByText('This payment is too old to be shown on this page. Check it in your Square Dashboard.');
     expect(screen.queryByTestId('card-refund-box')).toBeNull();
   });
 });

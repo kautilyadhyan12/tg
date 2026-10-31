@@ -31,7 +31,7 @@ const org = { id: '77777777-7777-4777-8777-777777777777', orgType: 'gym', slug: 
 
 const member = (over = {}) => ({ entryId: ENTRY, membershipId: HELD, paymentId: PAY, typeName: 'Gold Monthly', byHand: false, fee: null, ...over });
 const noShow = { kind: 'no_show', of: 'class', forName: 'Spin', on: '2026-10-28', to: null };
-const base = { id: FEE, kind: 'fee', amountMinor: 1000, paidMinor: 1000, currency: 'USD', name: 'Maya Patel', past: false, personDeleted: false, on: null, member: member({ fee: noShow }), sale: null };
+const base = { id: FEE, kind: 'fee', amountMinor: 1000, paidMinor: 1000, others: 0, currency: 'USD', name: 'Maya Patel', past: false, personDeleted: false, on: null, member: member({ fee: noShow }), sale: null };
 const failed = { ...base, id: PRESS, kind: 'failed', name: 'Ravi Shah', amountMinor: 2500, paidMinor: 2500, on: '2026-10-30', member: member() };
 const saleRow = { ...base, id: PRESS, kind: 'lost', name: null, amountMinor: 1200, paidMinor: 1200, on: '2026-10-30', member: null, sale: { saleId: SALE, day: '2026-10-30', item: 'Water bottle', more: 2 } };
 const late = { ...failed, kind: 'late' };
@@ -78,6 +78,24 @@ describe('the words of a row', () => {
     expect(reviewWhy(late)).toBe('This refund has been pending for over 14 days. Contact Square Support.');
     expect(reviewButtons(late)).toEqual({ open: 'Open their page', decide: null });
     expect(reviewButtons({ ...saleRow, kind: 'late' })).toEqual({ open: 'Open Sell', decide: null });
+  });
+
+  it('a freeze fee, a personal training fee, what is left after a smaller refund, and a past member paid by hand', () => {
+    const freeze = { ...base, member: member({ fee: { kind: 'freeze', of: 'membership', forName: 'Gold Monthly', on: '2026-10-01', to: '2026-10-31' } }) };
+    expect(reviewWhy(freeze)).toBe('No longer owed: the membership was unfrozen or cancelled by the day this month began.');
+    const pt = { ...base, member: member({ fee: { ...noShow, of: 'pt' } }) };
+    expect(reviewWhy(pt)).toBe('No longer owed: they were marked Came.');
+    expect(reviewWhy({ ...failed, amountMinor: 600, paidMinor: 1000 })).toBe('Square could not refund $10.00. $6.00 of it has not been refunded another way.');
+    const past = { ...base, past: true, member: member({ fee: noShow, byHand: true }) };
+    expect(reviewWhy(past)).toBe('No longer owed: they were marked Came, or the class was cancelled. Put them back on your list to void the payment.');
+    expect(reviewButtons(past).open).toBe('Open their page');
+  });
+
+  it('the box names all it changes, and what can still be done', () => {
+    expect(reviewAsk({ ...base, member: member({ fee: noShow, byHand: true }) }).detail).toContain('You can still void the payment from there.');
+    expect(reviewAsk({ ...failed, member: member({ fee: noShow }) }).detail).toContain('The fee stays paid.');
+    expect(reviewAsk({ ...saleRow, others: 1 }).detail).toContain('1 other refund that went wrong on this payment also comes off.');
+    expect(reviewDone(saleRow)).toBe('No refund needed. This sale is off the list.');
   });
 
   it('the box says it comes off the list, where the decision is kept, and that a refund can still go', () => {
@@ -173,7 +191,7 @@ describe('the card on Overview', () => {
     draw();
     fireEvent.click(await within(await screen.findByTestId('refund-review-row')).findByRole('button', { name: 'No refund needed' }));
     fireEvent.click(within(screen.getByTestId('refund-review-ask')).getByRole('button', { name: 'No refund needed' }));
-    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('This has changed'));
+    await waitFor(() => expect(screen.getByTestId('refunds-to-review-said').textContent).toContain('This has changed'));
     expect(svc.noRefund).toHaveBeenCalledWith(org.id, PRESS);
     await waitFor(() => expect(svc.list).toHaveBeenCalledTimes(2));
   });

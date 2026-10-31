@@ -871,6 +871,17 @@ describe('refund a sale (18p)', () => {
     expect(svc.refundToCard).not.toHaveBeenCalled();
   });
 
+  it('opened from Refunds to review on an earlier day: that day is read, and past 14 days or not listed it says so (18d-iv-b-iii)', async () => {
+    const onTerminal = sold({ method: 'terminal', toCard: true });
+    svc.get.mockResolvedValue(withSale(onTerminal));
+    open(ORG, { refundSale: { saleId: onTerminal.id, day: '2026-10-01', open: false } });
+    await waitFor(() => expect(svc.get).toHaveBeenCalledWith(expect.anything(), '2026-10-01'));
+    expect((await screen.findByTestId('sale-review-note')).textContent).toBe('This refund has been pending for over 14 days. Contact Square Support.');
+    cleanup();
+    open(ORG, { refundSale: { saleId: '00000000-0000-4000-8000-000000000009', day: '2026-10-12', open: true } });
+    expect((await screen.findByTestId('sale-review-note')).textContent).toBe('This sale is too far down that day to be shown here. Check it in your Square Dashboard.');
+  });
+
   it('a sale paid on the Terminal says Refund: the money goes to the card, Sell reads again, and the row reads Refund pending (18d-iv-b-ii)', async () => {
     const onTerminal = sold({ method: 'terminal', toCard: true });
     const card = { brand: 'VISA', last4: '1111' };

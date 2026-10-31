@@ -147,21 +147,28 @@ export default function RefundsToReviewCard({ org, orgSlug, privileges, readOnly
       if (to !== null) navigate(to, { state: { refundSale: { saleId: row.sale.saleId, day: row.sale.day, open: row.kind !== 'late' } } });
       return;
     }
-    openPerson(row.member.entryId, row.kind === 'late' ? null : { membershipId: row.member.membershipId, paymentId: row.member.paymentId, voidFeeId: row.kind === 'fee' && row.member.byHand ? row.id : null });
+    openPerson(row.member.entryId, row.kind === 'late' || reviewButtons(row).open === 'Open their page' ? null : { membershipId: row.member.membershipId, paymentId: row.member.paymentId, voidFeeId: row.kind === 'fee' && row.member.byHand ? row.id : null });
   };
 
   const decide = async (row) => {
     setPress({ busy: true, error: null });
     try {
       await (row.kind === 'fee' ? refundsToReviewService.keepFee(gymId, row.id) : refundsToReviewService.noRefund(gymId, row.id));
-      setSaid(reviewDone(row));
+      setSaid({ line: reviewDone(row), bad: false });
       setAsking(null);
       setPress({ busy: false, error: null });
       await load();
     } catch (err) {
-      setPress({ busy: false, error: errorText(err, "We couldn't save that. Try again.") });
-      // The row has changed since it was read: the list says what is true now.
-      if (errorStatus(err) === 409) void load();
+      const line = errorText(err, "We couldn't save that. Try again.");
+      // The row has changed since it was read: the list says what is true now, and the card says so, as the row may go.
+      if (errorStatus(err) === 409) {
+        setSaid({ line, bad: true });
+        setAsking(null);
+        setPress({ busy: false, error: null });
+        void load();
+      } else {
+        setPress({ busy: false, error: line });
+      }
     }
   };
 
@@ -198,8 +205,8 @@ export default function RefundsToReviewCard({ org, orgSlug, privileges, readOnly
           </>
         ) : null}
         {said !== null ? (
-          <p className="text-sm font-semibold m-0 mb-2" style={{ color: '#4ade80' }} role="status" data-testid="refunds-to-review-said">
-            {said}
+          <p className="text-sm font-semibold m-0 mb-2" style={{ color: said.bad ? '#ef4444' : '#4ade80' }} role="status" data-testid="refunds-to-review-said">
+            {said.line}
           </p>
         ) : null}
         {list !== null && list.rows.length > 0 ? (

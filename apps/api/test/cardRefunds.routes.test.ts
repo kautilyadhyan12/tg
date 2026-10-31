@@ -1148,6 +1148,83 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
       expect((await send("GET", `/v1/orgs/${mine.id}/refunds-to-review`, trainer.cookies)).statusCode).toBe(403);
     });
 
+    it("a press still waiting on Square: the fee is not listed, and neither decision goes through", async () => {
+      const maya = await feePaid(mine, "Review Asking");
+      const key = randomUUID();
+      await sql`INSERT INTO gym_square_refunds (id, gym_id, payment_id, environment, account_id, square_payment_id, amount_minor, currency, reason, request_key, state, started_at, checked_at)
+                VALUES (${randomUUID()}, ${mine.id}, ${maya.paymentId}, 'production', ${mine.acct.merchantId}, ${maya.squarePaymentId}, 1000, 'USD', 'other', ${key}, 'asking', ${clock}, ${clock})`;
+      expect(await rowOf(mine, maya.paymentId)).toBeUndefined();
+      const res = await keep(mine, maya.billId);
+      expect(res.statusCode).toBe(409);
+      expect((JSON.parse(res.body) as { error: string }).error).toBe("card_refund_waiting");
+
+      const ravi = await paidByCard(mine, "Review Asking Failed");
+      await failedAtOnce(ravi, 500);
+      const row = await rowOf(mine, ravi.paymentId);
+      await sql`INSERT INTO gym_square_refunds (id, gym_id, payment_id, environment, account_id, square_payment_id, amount_minor, currency, reason, request_key, state, started_at, checked_at)
+                VALUES (${randomUUID()}, ${mine.id}, ${ravi.paymentId}, 'production', ${mine.acct.merchantId}, ${ravi.squarePaymentId}, 500, 'USD', 'other', ${randomUUID()}, 'asking', ${clock}, ${clock})`;
+      const waiting = await noRefund(mine, row?.id ?? "");
+      expect(waiting.statusCode).toBe(409);
+      expect((JSON.parse(waiting.body) as { error: string }).error).toBe("card_refund_waiting");
+      await sql`UPDATE gym_square_refunds SET state = 'done', outcome = 'lost' WHERE gym_id = ${mine.id} AND state = 'asking'`;
+    });
+
+    it("No refund needed on a fee still owed does not mark it kept", async () => {
+      const maya = await feePaid(mine, "Review Owed Failed");
+      await sql`UPDATE gym_member_bills SET fee = 'freeze' WHERE id = ${maya.billId}`;
+      await failedAtOnce(maya, 300);
+      const row = await rowOf(mine, maya.paymentId);
+      expect((await noRefund(mine, row?.id ?? "")).statusCode).toBe(204);
+      expect((await sql`SELECT 1 FROM gym_member_bills WHERE id = ${maya.billId} AND fee_kept_at IS NOT NULL`).length).toBe(0);
+    });
+
+    it("a smaller refund since: the row says what is left; a newer failure stands over an older decision", async () => {
+      const maya = await paidByCard(mine, "Review Left");
+      await failedAtOnce(maya, 1000);
+      clock = new Date(clock.getTime() + 1000);
+      expect((await press(maya, 400)).statusCode).toBe(200);
+      expect(await rowOf(mine, maya.paymentId)).toMatchObject({ kind: "failed", amountMinor: 600, paidMinor: 1000, others: 0 });
+
+      const ravi = await paidByCard(mine, "Review Newer");
+      await failedAtOnce(ravi, 300);
+      const first = await rowOf(mine, ravi.paymentId);
+      expect((await noRefund(mine, first?.id ?? "")).statusCode).toBe(204);
+      expect((await paymentOnPage(ravi)).cardRefund?.decided).not.toBeNull();
+      clock = new Date(clock.getTime() + 1000);
+      await failedAtOnce(ravi, 300);
+      expect((await rowOf(mine, ravi.paymentId))?.kind).toBe("failed");
+      expect((await paymentOnPage(ravi)).cardRefund).toBeNull();
+    });
+
+    it("a past member is said so; failed comes before late, late before a fee", async () => {
+      const g = await makeGym(`Review Order ${uniq()}`, `MERCH${uniq()}`);
+      const fee = await feePaid(g, "Order Fee");
+      await sql`UPDATE gym_member_list_entries SET former_at = now() WHERE id = ${fee.entryId}`;
+      const late = await paidByCard(g, "Order Late");
+      expect((await press(late, 700)).statusCode).toBe(200);
+      await sql`UPDATE gym_square_refunds SET started_at = now() - interval '15 days' WHERE payment_id = ${late.paymentId}`;
+      const failed = await paidByCard(g, "Order Failed");
+      await failedAtOnce(failed, 100);
+      await sql`UPDATE gym_square_refunds SET started_at = now() - interval '20 days' WHERE payment_id = ${failed.paymentId}`;
+      const rows = (await list(g)).rows;
+      expect(rows.map((r) => r.kind)).toEqual(["failed", "late", "fee"]);
+      expect(rows[2]).toMatchObject({ past: true, name: "Order Fee" });
+    });
+
+    it("a gym that can only read refuses both; a bad id or a bad page is a 400", async () => {
+      const g = await makeGym(`Review Lapsed ${uniq()}`, `MERCH${uniq()}`);
+      const maya = await feePaid(g, "Lapsed Fee");
+      expect((await send("GET", `/v1/orgs/${g.id}/refunds-to-review?from=-1`, g.owner.cookies)).statusCode).toBe(400);
+      expect((await keep(g, "not-a-uuid")).statusCode).toBe(400);
+      expect((await noRefund(g, "not-a-uuid")).statusCode).toBe(400);
+      await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${g.id}`;
+      const lapsed = await keep(g, maya.billId);
+      expect(lapsed.statusCode).toBe(409);
+      expect((JSON.parse(lapsed.body) as { error: string }).error).toBe("gym_not_on_plan");
+      expect((await noRefund(g, randomUUID())).statusCode).toBe(409);
+      expect((await list(g)).count).toBe(1);
+    });
+
     it("a page holds ten rows and says where the next starts, with refunds that went wrong first", async () => {
       const g = await makeGym(`Review Pages ${uniq()}`, `MERCH${uniq()}`);
       for (let i = 0; i < 11; i += 1) await feeOwedPaidByHand(g, `Review Page ${String(i)}`);

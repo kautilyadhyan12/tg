@@ -33,11 +33,12 @@ export function reviewWhy(row) {
   switch (row.kind) {
     case 'fee': {
       const owed = noLongerOwed(row.member.fee);
-      if (row.member.byHand) return `${owed} If you gave the money back, void the payment.`;
+      if (row.member.byHand) return row.past ? `${owed} Put them back on your list to void the payment.` : `${owed} If you gave the money back, void the payment.`;
       if (row.amountMinor < row.paidMinor) return `${owed} ${reviewAmount(row)} of ${formatMinor(row.paidMinor, row.currency)} is left to refund.`;
       return owed;
     }
     case 'failed':
+      if (row.amountMinor < row.paidMinor) return `Square could not refund ${formatMinor(row.paidMinor, row.currency)}. ${reviewAmount(row)} of it has not been refunded another way.`;
       return CARD_REFUND_WORDS.failed;
     case 'lost':
       return `We don't know whether Square took this refund of ${dayWords(row.on)}. Check your Square Dashboard. If it went through, press Refund and note it there.`;
@@ -50,7 +51,7 @@ export function reviewWhy(row) {
 export function reviewButtons(row) {
   const open = row.sale !== null ? 'Open Sell' : 'Open their page';
   if (row.kind === 'late') return { open, decide: null };
-  if (row.kind === 'fee') return { open: row.member.byHand ? 'Void payment' : 'Refund', decide: 'Keep the fee' };
+  if (row.kind === 'fee') return { open: row.member.byHand ? (row.past ? open : 'Void payment') : 'Refund', decide: 'Keep the fee' };
   return { open: 'Refund', decide: 'No refund needed' };
 }
 
@@ -58,7 +59,10 @@ export function reviewButtons(row) {
 export function reviewAsk(row) {
   const who = reviewWho(row);
   const where = row.sale !== null ? 'Sell' : `${who}'s page`;
-  const detail = `It comes off this list. ${where} will say who decided and when. You can still refund it from there.`;
+  const still = row.member?.byHand === true ? 'You can still void the payment from there.' : 'You can still refund it from there.';
+  const closes = row.others === 0 ? '' : ` ${row.others === 1 ? '1 other refund' : `${String(row.others)} other refunds`} that went wrong on this payment also ${row.others === 1 ? 'comes' : 'come'} off.`;
+  const stays = row.kind !== 'fee' && row.member?.fee ? ' The fee stays paid.' : '';
+  const detail = `It comes off this list.${stays}${closes} ${where} will say who decided and when. ${still}`;
   if (row.kind === 'fee') return { question: `Keep ${who}'s ${reviewAmount(row)} ${MEMBER_FEE_WORDS[row.member.fee.kind].toLowerCase()}?`, detail, button: 'Keep the fee' };
   const about = row.sale !== null ? `this ${reviewAmount(row)} sale` : `${who}'s ${reviewAmount(row)}`;
   return { question: `No refund needed for ${about}?`, detail, button: 'No refund needed' };
@@ -66,6 +70,7 @@ export function reviewAsk(row) {
 
 /** Said once it is done. */
 export function reviewDone(row) {
+  if (row.sale !== null) return 'No refund needed. This sale is off the list.';
   const who = reviewWho(row);
   return row.kind === 'fee' ? `Fee kept. ${who} is off this list.` : `No refund needed. ${who} is off this list.`;
 }

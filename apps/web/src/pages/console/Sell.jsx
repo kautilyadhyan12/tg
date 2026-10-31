@@ -28,7 +28,7 @@ import { FriendGiftNote, MemberGiftNote } from './FriendGift';
 import TerminalPayBox from './TerminalPayBox';
 import { cardTerminalSerial } from './memberCardView';
 import { TERMINAL_METHOD, TERMINAL_SALE_HINT, TERMINAL_SALE_LOST, mayHavePaid, payTerminalName, terminalPayOutcomeLine, tillSetupView } from './terminalPayView';
-import { SALE_LINES_MAX, formatMinor, saleBaskets } from '@app/shared';
+import { CARD_REFUND_LATE_LINE, SALE_LINES_MAX, formatMinor, saleBaskets } from '@app/shared';
 import {
   NO_SELLING_LINE,
   payChoicesFor,
@@ -63,6 +63,7 @@ const LINE = { borderTop: '1px solid var(--line)' };
 const newKey = () => globalThis.crypto.randomUUID();
 /** How many of today's rows are drawn before "Show all". The total above counts every one. */
 const TAKINGS_FOLDED = 10;
+const REFUND_SALE_NOT_SHOWN = 'This sale is too far down that day to be shown here. Check it in your Square Dashboard.';
 
 /** Who is buying: a walk-in, or a member found by name. `mustPick`: a membership has to be
  *  somebody's. */
@@ -865,12 +866,13 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
   const [refundRow, setRefundRow] = useState(null);
   if (refundSale !== null && refundRow === null && shownPage !== null) {
     const row = rows.find((r) => (r.basket?.lines ?? []).some((line) => line.id === refundSale.saleId));
+    setRefundRow(row?.key ?? 'none');
     if (row !== undefined) {
-      setRefundRow(row.key);
       setAll(true);
       if (refundSale.open) setRefunding({ saleId: row.key, toCard: true });
     }
   }
+  const refundNote = refundRow === null || refundSale === null ? null : refundRow === 'none' ? REFUND_SALE_NOT_SHOWN : refundSale.open ? null : CARD_REFUND_LATE_LINE;
   useEffect(() => {
     if (refundRow !== null) document.querySelector(`[data-sale-row="${refundRow}"]`)?.scrollIntoView?.({ block: 'center' });
   }, [refundRow]);
@@ -927,6 +929,11 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
           </>
         )}
         {state.error !== null ? <Refusal>{state.error}</Refusal> : null}
+        {refundNote !== null ? (
+          <p className="c-s14 c-w5 m-0" style={{ color: 'var(--warn)' }} role="status" data-testid="sale-review-note">
+            {refundNote}
+          </p>
+        ) : null}
       </div>
       {rows.length > 0 ? (
         <ul className="list-none m-0 p-0">

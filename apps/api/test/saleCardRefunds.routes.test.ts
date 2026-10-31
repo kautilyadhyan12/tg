@@ -845,11 +845,27 @@ d("Refund to card at Sell (real Postgres)", { timeout: T }, () => {
       square.state.refundStatus = "PENDING";
       expect((await list(gym)).rows.filter((r) => r.sale?.saleId === basket.water || r.sale?.saleId === basket.towel)).toHaveLength(1);
       const row = await rowOf(basket);
+      expect(row?.others).toBe(1);
       const res = await noRefund(gym, row?.id ?? "");
       expect(res.statusCode, res.body).toBe(204);
       expect(await rowOf(basket)).toBeUndefined();
       expect((await line(basket, basket.towel)).cardRefund).toMatchObject({ lost: true, decided: { by: expect.stringContaining("Owner") as string } });
       expect((await line(basket, basket.water)).cardRefund?.decided).not.toBeNull();
+    });
+
+    it("a sale Square never answered, one past 14 days, and a buyer deleted for good each read as they are", async () => {
+      const lost = await sold(gym);
+      square.state.refundDown = true;
+      await pressAll(lost, 1900);
+      square.state.refundDown = false;
+      await sql`UPDATE gym_square_refunds SET state = 'done', outcome = 'lost', checking_until = NULL WHERE gym_id = ${gym.id} AND square_payment_id = ${lost.squarePaymentId}`;
+      await sql`UPDATE gym_sales SET for_member = true WHERE gym_id = ${gym.id} AND receipt_number = ${lost.receipt}`;
+      expect(await rowOf(lost)).toMatchObject({ kind: "lost", name: null, personDeleted: true });
+
+      const late = await sold(gym);
+      expect((await pressAll(late, 1900)).statusCode).toBe(200);
+      await sql`UPDATE gym_square_refunds SET started_at = started_at - interval '15 days' WHERE gym_id = ${gym.id} AND square_payment_id = ${late.squarePaymentId}`;
+      expect(await rowOf(late)).toMatchObject({ kind: "late", amountMinor: 1900 });
     });
 
     it("staff with the payments tick alone see a sale's row and can decide it; next door cannot", async () => {

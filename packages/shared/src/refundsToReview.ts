@@ -17,10 +17,12 @@ export const refundToReviewSchema = z
     /** The fee's bill for a fee; the refund press for the rest. */
     id: z.string().uuid(),
     kind: z.enum(REFUND_REVIEW_KINDS),
-    /** What is left to give back on a fee; what was asked for on a refund. */
+    /** What is left to give back: of a fee, or of a refund after any refund since. */
     amountMinor: minorSchema,
-    /** What was paid, on a fee. */
+    /** What was paid, on a fee; what was asked for, on a refund. */
     paidMinor: minorSchema,
+    /** Other refunds that went wrong on the same Square payment, which No refund needed also closes. */
+    others: z.number().int().min(0),
     currency: z.string().regex(/^[A-Z]{3}$/),
     /** The person's name; null for a walk-in, or a buyer deleted for good. */
     name: z.string().nullable(),

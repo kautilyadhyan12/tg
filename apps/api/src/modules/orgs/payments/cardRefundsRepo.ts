@@ -386,16 +386,17 @@ export async function recordFailed(sql: Sql, press: RefundPress, failed: { code:
 export async function openPressesOf(sql: SqlOrTx, gymId: string, paymentIds: readonly string[]): Promise<Map<string, CardRefundOpen>> {
   const open = new Map<string, CardRefundOpen>();
   if (paymentIds.length === 0) return open;
-  const rows = await sql<{ payment_id: string; amount_minor: number; on_day: string; lost: boolean; decided_on: string | null; decided_by: string | null }[]>`
-    SELECT DISTINCT ON (q.payment_id) q.payment_id, q.amount_minor, (q.started_at AT TIME ZONE g.timezone)::date::text AS on_day, q.state = 'done' AS lost,
+  const rows = await sql<{ payment_id: string; amount_minor: number; on_day: string; lost: boolean; failed: boolean; decided_on: string | null; decided_by: string | null }[]>`
+    SELECT DISTINCT ON (q.payment_id) q.payment_id, q.amount_minor, (q.started_at AT TIME ZONE g.timezone)::date::text AS on_day, q.state = 'done' AS lost, q.outcome = 'failed' AS failed,
            (q.no_refund_at AT TIME ZONE g.timezone)::date::text AS decided_on, u.display_name AS decided_by
     FROM gym_square_refunds q
     JOIN gyms g ON g.id = q.gym_id
     LEFT JOIN users u ON u.id = q.no_refund_by
-    WHERE q.gym_id = ${gymId} AND q.payment_id = ANY(${[...paymentIds]}::uuid[]) AND (q.state = 'asking' OR q.outcome = 'lost' OR q.no_refund_at IS NOT NULL)
+    WHERE q.gym_id = ${gymId} AND q.payment_id = ANY(${[...paymentIds]}::uuid[]) AND (q.state = 'asking' OR q.outcome IN ('lost','failed'))
       AND (SELECT COALESCE(sum(r.amount_minor), 0) FROM gym_member_refunds r
            WHERE r.gym_id = q.gym_id AND r.payment_id = q.payment_id AND r.created_at > q.started_at AND r.undone_at IS NULL) < q.amount_minor
     ORDER BY q.payment_id, q.started_at DESC`;
-  for (const r of rows) open.set(r.payment_id, { amountMinor: r.amount_minor, on: r.on_day, lost: r.lost, decided: r.decided_on === null ? null : { on: r.decided_on, by: r.decided_by } });
+  // A failed press says itself on the crossed-out line, unless staff decided on it; it is read so an older decision does not stand over it.
+  for (const r of rows) if (!r.failed || r.decided_on !== null) open.set(r.payment_id, { amountMinor: r.amount_minor, on: r.on_day, lost: r.lost, decided: r.decided_on === null ? null : { on: r.decided_on, by: r.decided_by } });
   return open;
 }

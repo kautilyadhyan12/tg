@@ -128,6 +128,7 @@ const TAG_TONES = { green: 'c-tag-good', orange: 'c-tag-warn', red: 'c-tag-bad',
 const TONE_COLOURS = { green: 'var(--good)', orange: 'var(--warn)', red: 'var(--bad)', soft: 'var(--soft-t)', plain: 'var(--raise-line)' };
 const MAIN = 'c-btn c-btn-p';
 const PLAIN = 'c-btn c-btn-s';
+const REFUND_NOT_SHOWN = 'This payment is too old to be shown on this page. Check it in your Square Dashboard.';
 const SMALL = 'c-btn c-btn-s c-btn-sm';
 
 /** A gym with no memberships set up yet: what a person's page says, and for staff who cannot set
@@ -418,6 +419,8 @@ export default function MemberMemberships({
   const [refundedNow, setRefundedNow] = useState(false);
   if (refundNow !== null && !readOnly && shown !== null && !refundedNow) {
     setRefundedNow(true);
+    // A membership with a refund to give back has often ended, and sits in the earlier ones.
+    setShowPast(true);
     const m = shown.memberships.find((x) => x.id === refundNow.membershipId);
     const fee = m?.billing && refundNow.voidFeeId !== null ? (m.billing.fees ?? []).find((x) => x.id === refundNow.voidFeeId && x.can.voidPaymentId !== null) : undefined;
     if (fee !== undefined) {
@@ -426,6 +429,8 @@ export default function MemberMemberships({
       setOpen({ what: 'voidFeePayment', id: m.id });
     } else if (m?.billing && refundNow.voidFeeId === null && paymentOf(m, refundNow.paymentId) !== null) {
       setOpen({ what: 'cardRefund', id: m.id, paymentId: refundNow.paymentId });
+    } else {
+      setNotice(REFUND_NOT_SHOWN);
     }
   }
   const scrolledNow = useRef(false);

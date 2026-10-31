@@ -32,6 +32,7 @@ interface RawRow {
   sold_on: string | null;
   item_name: string | null;
   more: number;
+  others: number;
   total: number;
 }
 
@@ -57,30 +58,35 @@ export async function refundsToReview(sql: Sql, gymId: string, members: boolean,
   const rows = await sql<RawRow[]>`
     WITH open_press AS (
       SELECT DISTINCT ON (q.square_payment_id)
-             q.id, q.payment_id, q.sale_id, q.parts, q.state, q.outcome, q.amount_minor, q.currency, q.started_at,
+             q.id, q.payment_id, q.sale_id, q.parts, q.state, q.outcome, q.currency, q.started_at, q.amount_minor AS asked_minor,
+             CASE WHEN q.state = 'pending' THEN q.amount_minor ELSE q.amount_minor - c.since END AS amount_minor,
+             count(*) OVER (PARTITION BY q.square_payment_id)::int - 1 AS others,
              (q.started_at AT TIME ZONE g.timezone)::date::text AS on_day
       FROM gym_square_refunds q
       JOIN gyms g ON g.id = q.gym_id
+      CROSS JOIN LATERAL (
+        SELECT CASE WHEN q.payment_id IS NOT NULL
+          THEN (SELECT COALESCE(sum(r.amount_minor), 0)::int FROM gym_member_refunds r
+                WHERE r.gym_id = q.gym_id AND r.payment_id = q.payment_id AND r.created_at > q.started_at AND r.undone_at IS NULL)
+          ELSE (SELECT COALESCE(sum(r.amount_minor), 0)::int FROM gym_sale_refunds r
+                JOIN gym_sales l ON l.gym_id = r.gym_id AND l.id = r.sale_id
+                JOIN gym_sales o ON o.gym_id = q.gym_id AND o.id = q.sale_id
+                WHERE r.gym_id = q.gym_id AND r.created_at > q.started_at AND r.undone_at IS NULL
+                  AND (l.id = o.id OR (q.parts IS NOT NULL AND l.receipt_number = o.receipt_number)))
+          END AS since
+      ) c
       WHERE q.gym_id = ${gymId} AND q.no_refund_at IS NULL
         AND (q.outcome IN ('failed','lost') OR (q.state = 'pending' AND q.started_at <= ${lateBefore}))
         AND (${members}::boolean OR q.sale_id IS NOT NULL)
-        AND (q.state = 'pending' OR q.payment_id IS NULL
-             OR (SELECT COALESCE(sum(r.amount_minor), 0) FROM gym_member_refunds r
-                 WHERE r.gym_id = q.gym_id AND r.payment_id = q.payment_id AND r.created_at > q.started_at AND r.undone_at IS NULL) < q.amount_minor)
-        AND (q.state = 'pending' OR q.sale_id IS NULL
-             OR (SELECT COALESCE(sum(r.amount_minor), 0) FROM gym_sale_refunds r
-                 JOIN gym_sales l ON l.gym_id = r.gym_id AND l.id = r.sale_id
-                 JOIN gym_sales o ON o.gym_id = q.gym_id AND o.id = q.sale_id
-                 WHERE r.gym_id = q.gym_id AND r.created_at > q.started_at AND r.undone_at IS NULL
-                   AND (l.id = o.id OR (q.parts IS NOT NULL AND l.receipt_number = o.receipt_number))) < q.amount_minor)
+        AND (q.state = 'pending' OR c.since < q.amount_minor)
       ORDER BY q.square_payment_id, q.started_at DESC
     ),
     listed AS (
-      SELECT q.id, CASE WHEN q.state = 'pending' THEN 'late' ELSE q.outcome END AS kind, 0 AS rank, q.started_at AS at, q.amount_minor,
-             0 AS paid_minor, q.currency, e.full_name, e.former_at IS NOT NULL AS past, false AS person_deleted, q.on_day,
+      SELECT q.id, CASE WHEN q.state = 'pending' THEN 'late' ELSE q.outcome END AS kind, CASE WHEN q.state = 'pending' THEN 1 ELSE 0 END AS rank, q.started_at AS at, q.amount_minor,
+             q.asked_minor AS paid_minor, q.currency, e.full_name, e.former_at IS NOT NULL AS past, false AS person_deleted, q.on_day,
              e.id AS entry_id, h.id AS membership_id, p.id AS payment_id, t.name AS type_name, p.method, b.fee, b.fee_for,
              b.pt_appointment_id IS NOT NULL AS of_pt, b.covers_from::text AS covers_from, b.covers_to::text AS covers_to,
-             NULL::uuid AS sale_id, NULL::text AS sold_on, NULL::text AS item_name, 0 AS more
+             NULL::uuid AS sale_id, NULL::text AS sold_on, NULL::text AS item_name, 0 AS more, q.others
       FROM open_press q
       JOIN gym_member_payments p ON p.gym_id = ${gymId} AND p.id = q.payment_id AND p.undone_at IS NULL
       JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
@@ -88,20 +94,20 @@ export async function refundsToReview(sql: Sql, gymId: string, members: boolean,
       JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
       JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id
       UNION ALL
-      SELECT q.id, CASE WHEN q.state = 'pending' THEN 'late' ELSE q.outcome END, 0, q.started_at, q.amount_minor,
-             0, q.currency, e.full_name, COALESCE(e.former_at IS NOT NULL, false), s.entry_id IS NULL AND s.for_member, q.on_day,
+      SELECT q.id, CASE WHEN q.state = 'pending' THEN 'late' ELSE q.outcome END, CASE WHEN q.state = 'pending' THEN 1 ELSE 0 END, q.started_at, q.amount_minor,
+             q.asked_minor, q.currency, e.full_name, COALESCE(e.former_at IS NOT NULL, false), s.entry_id IS NULL AND s.for_member, q.on_day,
              NULL, NULL, NULL, NULL, NULL, NULL, NULL,
              false, NULL, NULL,
-             s.id, s.sold_on::text, s.item_name, GREATEST(COALESCE(jsonb_array_length(q.parts), 1) - 1, 0)
+             s.id, s.sold_on::text, s.item_name, GREATEST(COALESCE(jsonb_array_length(q.parts), 1) - 1, 0), q.others
       FROM open_press q
       JOIN gym_sales s ON s.gym_id = ${gymId} AND s.id = q.sale_id AND s.undone_at IS NULL
       LEFT JOIN gym_member_list_entries e ON e.gym_id = s.gym_id AND e.id = s.entry_id
       UNION ALL
-      SELECT b.id, 'fee', 1, p.created_at, GREATEST(p.amount_minor - x.back, 0),
+      SELECT b.id, 'fee', 2, p.created_at, GREATEST(p.amount_minor - x.back, 0),
              p.amount_minor, b.currency, e.full_name, e.former_at IS NOT NULL, false, NULL,
              e.id, h.id, p.id, t.name, p.method, b.fee, b.fee_for,
              b.pt_appointment_id IS NOT NULL, b.covers_from::text, b.covers_to::text,
-             NULL, NULL, NULL, 0
+             NULL, NULL, NULL, 0, 0
       FROM gym_member_bills b
       JOIN gym_member_payments p ON p.gym_id = b.gym_id AND p.bill_id = b.id AND p.undone_at IS NULL
       JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
@@ -124,12 +130,12 @@ export async function refundsToReview(sql: Sql, gymId: string, members: boolean,
   return {
     count,
     rows: rows.map((r) => {
-      const fee = r.kind === "fee";
       return {
         id: r.id,
         kind: r.kind,
         amountMinor: r.amount_minor,
-        paidMinor: fee ? r.paid_minor : r.amount_minor,
+        paidMinor: r.paid_minor,
+        others: r.others,
         currency: r.currency,
         name: r.full_name,
         past: r.past,
@@ -202,6 +208,8 @@ export async function noRefundNeeded(sql: Sql, gymId: string, pressId: string, u
     if (press === undefined) return "not_found";
     if (press.decided) return "done";
     if (press.outcome !== "failed" && press.outcome !== "lost") return "changed";
+    const [asking] = await tx<{ id: string }[]>`SELECT id FROM gym_square_refunds WHERE gym_id = ${gymId} AND square_payment_id = ${press.square_payment_id} AND state = 'asking' LIMIT 1`;
+    if (asking !== undefined) return "waiting";
     await tx`
       UPDATE gym_square_refunds SET no_refund_at = ${now}, no_refund_by = ${userId}
       WHERE gym_id = ${gymId} AND square_payment_id = ${press.square_payment_id} AND outcome IN ('failed','lost') AND no_refund_at IS NULL`;

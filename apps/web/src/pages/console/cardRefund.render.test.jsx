@@ -143,6 +143,24 @@ const feePage = (pay, over) => {
 const feePayment = async () => within(await screen.findByTestId('held-fee-payment'));
 
 describe('Refund to card on a fee', () => {
+  it('opened from Refunds to review on a cancelled membership: the earlier memberships open, with the box (18d-iv-b-iii)', async () => {
+    const cancelled = feePage();
+    cancelled.data.memberships[0] = { ...cancelled.data.memberships[0], status: 'cancelled', view: { ...cancelled.data.memberships[0].view, state: 'cancelled' } };
+    orgService.getHeldMemberships.mockResolvedValue(cancelled);
+    orgService.getCardRefund.mockResolvedValue({ data: { card: VISA, leftMinor: 1000, refundedInSquareMinor: 0, block: null } });
+    draw({ refundNow: { membershipId: cancelled.data.memberships[0].id, paymentId: FEE_PAYMENT, voidFeeId: null } });
+    await screen.findByTestId('card-refund-box');
+  });
+
+  it('opened from Refunds to review on a fee paid by hand: its void box is open (18d-iv-b-iii)', async () => {
+    const byHand = feePage({ method: 'cash', refundableMinor: 0 }, { can: { pay: false, waive: false, voidPaymentId: FEE_PAYMENT } });
+    orgService.getHeldMemberships.mockResolvedValue(byHand);
+    const fee0 = byHand.data.memberships[0].billing.fees[0];
+    draw({ refundNow: { membershipId: byHand.data.memberships[0].id, paymentId: FEE_PAYMENT, voidFeeId: fee0.id } });
+    await screen.findByTestId('held-fee-void');
+    expect(orgService.getCardRefund).not.toHaveBeenCalled();
+  });
+
   it('opened from Refunds to review: its box is open under the payment, and asks Square first (18d-iv-b-iii)', async () => {
     orgService.getHeldMemberships.mockResolvedValue(feePage());
     orgService.getCardRefund.mockResolvedValue({ data: { card: VISA, leftMinor: 1000, refundedInSquareMinor: 0, block: null } });
