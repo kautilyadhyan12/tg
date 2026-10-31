@@ -25,7 +25,7 @@ import { changeBody, changeChoice, changeCreditLine, changeDoneWords, changeEndi
 import { viewerPrivileges } from './consoleView';
 import { placeFor } from './consolePlaces';
 import CardRefundBox from './CardRefundBox';
-import { refundReasonsFor, waitsOnSquare } from './cardRefundView';
+import { cardRefundSaidNow, refundReasonsFor, waitsOnSquare } from './cardRefundView';
 import MembershipAgreement from './MembershipAgreement';
 import { noteDay } from './memberListPeople';
 import {
@@ -194,7 +194,8 @@ export default function MemberMemberships({
   const [form, setForm] = useState(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
-  /** Where `notice` belongs when it is about one payment: { paymentId, line }, said under that payment, where it was pressed. */
+  /** Where `notice` belongs when it is about one payment: { paymentId, line, sent }, said under that payment, where it was pressed.
+   *  `sent`: Square's answer to a Refund to card, so the sentence follows the refund. */
   const [saidAt, setSaidAt] = useState(null);
   const [refusal, setRefusal] = useState(null);
   const [showPast, setShowPast] = useState(false);
@@ -769,13 +770,17 @@ export default function MemberMemberships({
     );
 
   /** What a refund did, said under the payment it was pressed on: the page may be far from the top of the membership. */
-  const saidUnder = (paymentId) =>
-    notice !== null && saidAt?.paymentId === paymentId && saidAt.line === notice ? (
+  const saidUnder = (m, paymentId) => {
+    if (notice === null || saidAt?.paymentId !== paymentId || saidAt.line !== notice) return null;
+    const line = cardRefundSaidNow(saidAt.sent, paymentOf(m, paymentId), notice);
+    if (line === null) return null;
+    return (
       <p className="c-s14 c-w5 m-0 flex items-center gap-2" style={{ color: 'var(--good)' }} role="status" data-testid="held-payment-said">
         <Check aria-hidden="true" className="w-4 h-4 flex-shrink-0" />
-        {notice}
+        {line}
       </p>
-    ) : null;
+    );
+  };
 
   /** Note a refund and Refund to card, drawn under the payment they are about. */
   const refundBoxUnder = (m, paymentId) => {
@@ -798,9 +803,9 @@ export default function MemberMemberships({
           paymentsTo={paymentsTo}
           onClose={() => setOpen(null)}
           onNote={() => startRefund(m, paymentId)}
-          onDone={(words) => {
+          onDone={(words, sent) => {
             setOpen(null);
-            setSaidAt({ paymentId, line: words });
+            setSaidAt({ paymentId, line: words, sent });
             setNotice(words);
             setAttempt((n) => n + 1);
             onChanged?.();
@@ -942,7 +947,7 @@ export default function MemberMemberships({
                       </span>
                     ) : null}
                     {receiptFor === p.receiptNumber ? <ReceiptBox gymId={gymId} gym={gym} number={p.receiptNumber} onClose={() => setReceiptFor(null)} /> : null}
-                    {saidUnder(p.id)}
+                    {saidUnder(m, p.id)}
                     {refundBoxUnder(m, p.id)}
                     {renderRefundLines(m, p, acts)}
                   </div>
@@ -1557,7 +1562,7 @@ export default function MemberMemberships({
                       </span>
                     ) : null}
                     {receiptFor === p.receiptNumber ? <ReceiptBox gymId={gymId} gym={gym} number={p.receiptNumber} onClose={() => setReceiptFor(null)} /> : null}
-                    {saidUnder(p.id)}
+                    {saidUnder(m, p.id)}
                     {boxUnderPayment(p.id)}
                     {renderRefundLines(m, p, acts)}
                   </div>

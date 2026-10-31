@@ -40,8 +40,8 @@ describe("the wire", () => {
 describe("what a press says", () => {
   const sent = { amountMinor: 2000, currency: "USD", card: null } as const;
   it("pending and completed both say it is on its way", () => {
-    expect(cardRefundSentLine({ ...sent, step: "pending" }, "Visa ending 1111")).toBe("$20.00 is on its way back to Visa ending 1111. It can take 7 to 10 business days to reach the card.");
-    expect(cardRefundSentLine({ ...sent, step: "completed" }, "the card")).toContain("on its way back to the card");
+    expect(cardRefundSentLine({ ...sent, step: "pending" }, "Visa ending 1111")).toBe("Square is processing this $20.00 refund to Visa ending 1111. It can take up to 14 business days to reach the card, depending on the bank.");
+    expect(cardRefundSentLine({ ...sent, step: "completed" }, "the card")).toBe("$20.00 was refunded to the card. It can take up to 10 business days to reach the card, depending on the bank.");
   });
   it("no answer never says it went", () => {
     expect(cardRefundSentLine({ ...sent, step: "checking" }, "the card")).toBe("Square hasn't answered yet, so $20.00 is not refunded yet. Don't refund it again: this page will say when Square answers.");

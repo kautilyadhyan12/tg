@@ -1,6 +1,6 @@
 // REFUND TO CARD (ROADMAP 18d-iv-a; spec Part 3 §14.8): what the box under a payment says and sends. The money goes
 // back through Square to the card that paid; the server decides again whether it can.
-import { CARD_REFUND_WORDS, REFUND_REASONS, REFUND_REASON_WORDS, cardName, currencyDecimals, formatMinor, minorToPriceText, priceToMinor } from '@app/shared';
+import { CARD_REFUND_WORDS, REFUND_REASONS, REFUND_REASON_WORDS, cardName, cardRefundSentLine, currencyDecimals, formatMinor, minorToPriceText, priceToMinor } from '@app/shared';
 import { dayWords } from './memberListView';
 
 export const CARD_REFUND_REASONS = REFUND_REASONS.map((value) => ({ value, label: REFUND_REASON_WORDS[value] }));
@@ -61,6 +61,18 @@ export function cardRefundOpenLine(open, currency) {
   return open.lost
     ? `We don't know whether Square took the ${money} refund of ${dayWords(open.on)}. Check your Square Dashboard. If it went through, note the refund here.`
     : `A refund of ${money} is waiting for Square's answer.`;
+}
+
+/** What the sentence under a payment says now: a refund Square was still processing says it has finished once it has, so the
+ *  sentence never disagrees with the line under it, and says nothing once it failed: the crossed-out line says that. `sent`:
+ *  Square's answer to the press and the card's words, or null for a sentence about anything else. */
+export function cardRefundSaidNow(sent, payment, line) {
+  if (sent === null || sent === undefined || sent.step !== 'pending') return line;
+  const refund = (payment?.refunds ?? []).find((r) => r.amountMinor === sent.amountMinor && r.square !== null && r.square !== undefined);
+  if (refund === undefined) {
+    return (payment?.voidedRefunds ?? []).some((r) => r.amountMinor === sent.amountMinor && r.voided?.reason === 'square_failed') ? null : line;
+  }
+  return cardRefundSentLine(refund.square.state === 'pending' ? sent : { ...sent, step: 'completed' }, sent.cardWords);
 }
 
 /** Whether anything on this person's page is waiting on Square: a refund it has not answered or not finished. */

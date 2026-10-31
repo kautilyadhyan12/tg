@@ -173,8 +173,8 @@ describe('Refund to card on a fee', () => {
     expect(body).toEqual({ requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/), amountMinor: 1000, reason: 'other' });
     // Said under the payment it was pressed on, not at the top of the membership, off the screen.
     const said = await within(screen.getByTestId('held-fee-payment')).findByTestId('held-payment-said');
-    expect(said.textContent).toBe('$10.00 is on its way back to Visa ending 1111. It can take 7 to 10 business days to reach the card.');
-    expect(screen.getAllByText(/is on its way back to Visa/)).toHaveLength(1);
+    expect(said.textContent).toBe('Square is processing this $10.00 refund to Visa ending 1111. It can take up to 14 business days to reach the card, depending on the bank.');
+    expect(screen.getAllByText(/Square is processing this/)).toHaveLength(1);
   });
 
   it('a fee paid by hand offers only Void payment', async () => {
@@ -220,6 +220,36 @@ describe('Refund to card on a fee', () => {
     expect(whole.queryByText(/To give the money back/)).toBeNull();
   });
 
+  it('the tag and the sentence follow the refund: Refund pending, then Refunded, and nothing says it went back once it failed', async () => {
+    const waiting = { ...REFUND, amountMinor: 1000, square: { state: 'pending', card: VISA, late: false } };
+    orgService.getCardRefund.mockResolvedValue({ data: { card: VISA, leftMinor: 1000, refundedInSquareMinor: 0, block: null } });
+    orgService.refundToCard.mockResolvedValue({ data: { step: 'pending', amountMinor: 1000, currency: 'USD', card: VISA } });
+    orgService.getHeldMemberships.mockResolvedValue(feePage());
+    draw({ squareEveryMs: 5 });
+    const items = await menuItems(await feePayment());
+    fireEvent.click(items[0]);
+    await screen.findByTestId('card-refund-box');
+    await waitFor(() => expect(screen.queryByText('Checking this payment with Square.')).toBeNull());
+    const box = within(screen.getByTestId('card-refund-box'));
+    fireEvent.change(box.getByLabelText('Why it is being refunded'), { target: { value: 'other' } });
+    orgService.getHeldMemberships.mockResolvedValue(feePage({ refundableMinor: 0, refunds: [waiting] }, { state: 'refunded', refundedMinor: 1000 }));
+    fireEvent.click(box.getByRole('button', { name: 'Refund $10.00 to Visa ending 1111' }));
+    await within(await screen.findByTestId('held-fee')).findByText('Refund pending');
+    expect((await screen.findByTestId('held-payment-said')).textContent).toMatch(/^Square is processing this \$10\.00 refund to Visa ending 1111\./);
+
+    orgService.getHeldMemberships.mockResolvedValue(feePage({ refundableMinor: 0, refunds: [{ ...waiting, square: { ...waiting.square, state: 'completed' } }] }, { state: 'refunded', refundedMinor: 1000 }));
+    await within(screen.getByTestId('held-fee')).findByText('Refunded');
+    await waitFor(() => expect(screen.getByTestId('held-payment-said').textContent).toBe('$10.00 was refunded to Visa ending 1111. It can take up to 10 business days to reach the card, depending on the bank.'));
+  });
+
+  it('a refund that failed takes the sentence away', async () => {
+    const { cardRefundSaidNow } = await import('./cardRefundView');
+    const sent = { step: 'pending', amountMinor: 1000, currency: 'USD', cardWords: 'Visa ending 1111' };
+    expect(cardRefundSaidNow(sent, { refunds: [], voidedRefunds: [{ amountMinor: 1000, voided: { reason: 'square_failed' } }] }, 'said')).toBeNull();
+    expect(cardRefundSaidNow(sent, { refunds: [], voidedRefunds: [] }, 'said')).toBe('said');
+    expect(cardRefundSaidNow(undefined, null, 'said')).toBe('said');
+  });
+
   it('says a refund Square has not answered under the fee, and reads again by itself while one is pending', async () => {
     orgService.getHeldMemberships.mockResolvedValue(feePage({ cardRefund: { amountMinor: 1000, on: TODAY, lost: false } }));
     draw();
@@ -241,7 +271,7 @@ describe('Refund to card: the worst thing first', () => {
     draw();
     const box = await openBox();
     await box.findByText("Refund Tara Singh's Gold Monthly to the card");
-    expect(box.getByText(/Square does not give back its card fee on a refund\. It can take 7 to 10 business days to reach the card\./)).toBeTruthy();
+    expect(box.getByText(/Square does not give back its card fee on a refund\. It can take up to 14 business days to reach the card, depending on the bank\./)).toBeTruthy();
     expect(box.getByRole('button', { name: 'Refund $49.99 to Visa ending 1111' })).toBeTruthy();
 
     fireEvent.click(box.getByRole('button', { name: 'Refund $49.99 to Visa ending 1111' }));
@@ -261,7 +291,7 @@ describe('Refund to card: the worst thing first', () => {
     expect([gymId, entryId, membershipId, paymentId]).toEqual([GYM, TARA, '44444444-4444-4444-8444-000000000001', PAYMENT_ID()]);
     expect(body).toEqual({ requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/), amountMinor: 2000, reason: 'paid_twice' });
     const said = await within(screen.getAllByTestId('held-bill-payment')[0]).findByTestId('held-payment-said');
-    expect(said.textContent).toBe('$20.00 is on its way back to Visa ending 1111. It can take 7 to 10 business days to reach the card.');
+    expect(said.textContent).toBe('Square is processing this $20.00 refund to Visa ending 1111. It can take up to 14 business days to reach the card, depending on the bank.');
     expect(screen.queryByTestId('card-refund-box')).toBeNull();
   });
 

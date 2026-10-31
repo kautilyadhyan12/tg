@@ -101,7 +101,8 @@ export default function CardRefundBox({ gymId, entryId, m, payment, fee = null, 
     setProblem(null);
     try {
       const res = await orgService.refundToCard(gymId, entryId, m.id, payment.id, body);
-      onDone(cardRefundSentLine(res.data, check.card === null ? 'the card' : cardName(check.card)));
+      const cardWords = check.card === null ? 'the card' : cardName(check.card);
+      onDone(cardRefundSentLine(res.data, cardWords), { ...res.data, cardWords });
     } catch (err) {
       // No answer at all says nothing of whether the press reached Square.
       const unsure = "We couldn't reach Square. The refund may not have gone through: open the payment again before trying.";

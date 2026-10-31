@@ -200,6 +200,10 @@ const refundLines = (p, currency) =>
     ...(p.voidedRefunds ?? []).map((r) => ({ ...refundLine(r, currency), voided: voidedLine(r.voided, REFUND_VOID_REASON_WORDS) })),
   ].sort((a, b) => a.receiptNumber - b.receiptNumber);
 
+/** Square has not finished a refund to the card: the bill or fee does not say Refunded until it has. */
+const REFUND_PENDING_TAG = { tag: 'Refund pending', tone: 'soft' };
+const refundPending = (billOrFee) => billOrFee.payments.some((p) => (p.refunds ?? []).some((r) => r.square?.state === 'pending'));
+
 /** One bill as a box: the days it is for, its amount and tag, its tax, when it is or was
  *  due, who cancelled it, and each payment in columns with the refunds noted against it.
  *  A payment or refund staff voided stays in its place, struck through, saying who and why. */
@@ -207,7 +211,7 @@ export function billRow(bill, currency, today) {
   const amount = formatMinor(bill.amountMinor, currency);
   // Some of what was paid has been given back, and not all: still paid, and said so.
   const partRefunded = bill.state === 'paid' && bill.refundedMinor > 0;
-  const state = partRefunded ? { tag: 'Part refunded', tone: 'soft' } : (STATE_TAGS[bill.state] ?? STATE_TAGS.due);
+  const state = refundPending(bill) ? REFUND_PENDING_TAG : partRefunded ? { tag: 'Part refunded', tone: 'soft' } : (STATE_TAGS[bill.state] ?? STATE_TAGS.due);
   let cancelled = null;
   if (bill.state === 'void') {
     cancelled = bill.cancelled === null ? 'Voided when the membership was cancelled' : voidedLine(bill.cancelled, BILL_CANCEL_REASON_WORDS);
@@ -289,7 +293,7 @@ const noLongerOwed = (fee) => `No longer owed: ${whyNotOwed(fee)}.`;
 export function feeRow(fee, currency, today) {
   // Some of it has been given back, and not all: still paid, and said so, as on a bill.
   const partRefunded = fee.state === 'paid' && (fee.refundedMinor ?? 0) > 0;
-  const state = partRefunded ? { tag: 'Part refunded', tone: 'soft' } : (FEE_TAGS[fee.state] ?? STATE_TAGS.due);
+  const state = refundPending(fee) ? REFUND_PENDING_TAG : partRefunded ? { tag: 'Part refunded', tone: 'soft' } : (FEE_TAGS[fee.state] ?? STATE_TAGS.due);
   let when = null;
   if (fee.state === 'overdue') when = `Was due ${dayWords(fee.dueOn)}`;
   else if (fee.state === 'due') when = fee.dueOn === today ? 'Due today' : `Due ${dayWords(fee.dueOn)}`;

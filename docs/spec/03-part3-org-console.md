@@ -4320,14 +4320,14 @@ the card on file goes back through Square to the card that paid, from the **Refu
 the money back to the card that paid."). Note a refund stays beside it ("You gave it back another way, such as cash."). The box
 opens under the payment and asks Square about it first, so it names the real card and what is really left: the most that can
 go back is the least of what the app and Square each say is left, and what Square gave back with no note here is said, with Note a
-refund beside it. It says "Square does not give back its card fee on a refund." and "It can take 7 to 10 business days to reach
-the card." Staff type the amount (all or part), pick why from the refund reasons, and press **Refund $20.00 to Visa ending 1111**.
+refund beside it. It says "Square does not give back its card fee on a refund." and "It can take up to 14 business days to reach
+the card, depending on the bank." (Square: "In total, it can take up to 4–14 business days"; read 2026-10-31.) Staff type the amount (all or part), pick why from the refund reasons, and press **Refund $20.00 to Visa ending 1111**.
 Who may: `billing.members`, as for a refund noted by hand. A refund moves no date and no count, as ever. A press is one row of
 `gym_square_refunds` (migration `0177`), written under the record's lock; its id is the key Square is asked with, so Square takes it
 up once however often it is asked (measured 2026-10-30: the same key gives back the same refund, another amount under it is
 refused); while Square has not answered, nothing else is refunded or voided on that bill and the membership is not moved to another. Once Square
 takes it up, a row of `gym_member_refunds` holds the money as given back, with the payment's own method (Card on Terminal, Card on
-file), so the bill, the receipt, Reports and the download read it as any refund; it reads **Refund pending** until Square finishes.
+file), so the bill, the receipt, Reports and the download read it as any refund; the bill or fee and its line read **Refund pending** until Square finishes, and the sentence under the payment follows ("Square is processing this $10.00 refund to Visa ending 1111.", then "$10.00 was refunded to Visa ending 1111. It can take up to 10 business days to reach the card, depending on the bank.").
 The worker reads each pending refund 1, 2, 5 and 15 minutes after, then hourly and every 3 hours; the page reads again every 30
 seconds for 15 minutes while one is pending. FAILED or REJECTED after that: the app voids the refund itself (`square_failed`), the
 bill reads as it did, and the line says "Square could not refund this. No money went back." Past Square's 14 days pending, the line
