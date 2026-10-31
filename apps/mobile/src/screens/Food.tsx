@@ -199,6 +199,8 @@ export function FoodScreen() {
   // A meal from a photo (33b-i): the camera, and the photo meal kept until it is saved.
   const kept = useKeptSheet();
   const [photoOpen, setPhotoOpen] = useState(false);
+  // Opened from "Scan a barcode" beside a photo meal kept: the camera, with that meal left as it is.
+  const [barcodeFirst, setBarcodeFirst] = useState(false);
   const [discarding, setDiscarding] = useState(false);
   const photoKept = kept.sheet !== null && kept.sheet !== undefined;
   const today = sameDay(day, new Date());
@@ -243,7 +245,7 @@ export function FoodScreen() {
           tall={0.62}
           eyebrow="Nutrition"
           title="Fuel Your Training"
-          foot={<Button label={photoKept ? "Finish photo meal" : "Log meal from photo"} icon="camera" onPress={() => { setSaid(null); setPhotoOpen(true); }} />}
+          foot={<Button label={photoKept ? "Finish photo meal" : "Scan food"} icon="camera" onPress={() => { setSaid(null); setBarcodeFirst(false); setPhotoOpen(true); }} />}
         />
       }
     >
@@ -254,6 +256,7 @@ export function FoodScreen() {
           <Txt kind="small" colour="text" style={styles.grow}>
             Your photo meal isn’t saved yet.
           </Txt>
+          <Button label="Scan a barcode" kind="link" onPress={() => { setSaid(null); setBarcodeFirst(true); setPhotoOpen(true); }} />
           <Button label="Discard" kind="quiet" onPress={() => { setDiscarding(true); }} />
         </Card>
       ) : null}
@@ -347,6 +350,7 @@ export function FoodScreen() {
       )}
       <MealPhoto
         open={photoOpen}
+        barcode={barcodeFirst}
         kept={kept}
         onClose={() => { setPhotoOpen(false); }}
         onSaved={(type, name) => {

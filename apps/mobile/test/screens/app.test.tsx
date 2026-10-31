@@ -75,7 +75,7 @@ describe("the five tabs", () => {
       // What is not built yet says so in two words: the tab's own row, and on Me its two pictures.
       // Gym, for somebody in no gym yet, has nothing to come: it says how an invitation reaches them.
       // Food has nothing to come since its photo log was built (33b-i).
-      const first = tab.name === "Gym" ? "Check for an invitation" : tab.name === "Food" ? "Log meal from photo" : "Coming soon";
+      const first = tab.name === "Gym" ? "Check for an invitation" : tab.name === "Food" ? "Scan food" : "Coming soon";
       expect(await screen.findAllByText(first)).toBeTruthy();
       expect(screen.queryAllByText("Coming soon")).toHaveLength(tab.name === "Me" ? 3 : tab.name === "Gym" || tab.name === "Food" ? 0 : 1);
       // The Dashboard's calendar shows this week's dates and its clock the phone's time; its numbers did

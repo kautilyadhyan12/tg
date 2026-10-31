@@ -2,6 +2,7 @@
 // told about a code both lists may hold. Pure: the importer, the nightly update and the lookup share it.
 import { classifyBarcode, offProductSchema, type MoreNutrients, type NutritionSource, type OffDailyLine, type OffProduct, type PackagedCheck } from "@app/shared";
 import { labelMore, servingOf, withBrand, type FoodReference } from "./openfoodfacts.adapter.js";
+import { packGrams } from "./packSize.js";
 
 export interface PackagedRow {
   code: string;
@@ -254,6 +255,8 @@ export function packagedFoodOf(off: OffRow | null, usda: PackagedRow | null): Pa
   const serving = servingOf(numbers.servingSize ?? undefined);
   // At 0 kcal too: a blank panel is how a chicken fillet reads as 0. Water is told to check the pack,
   // which does no harm.
+  // USDA keeps no pack size. A whole pack lighter than one serving of it means one of the two is wrong.
+  const pack = packGrams(off?.quantity);
   const missing = numbers.proteinG === null || numbers.carbsG === null || numbers.fatG === null;
   return {
     food: {
@@ -268,6 +271,7 @@ export function packagedFoodOf(off: OffRow | null, usda: PackagedRow | null): Pa
       unit: serving.unit,
       source,
       more: numbers.more,
+      ...(pack !== null && pack >= serving.grams ? { pack } : {}),
     },
     allergens: off?.allergens ?? [],
     mayContain: off?.traces ?? [],

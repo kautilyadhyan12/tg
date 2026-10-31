@@ -38,6 +38,10 @@ const NOT_LISTED = codeOf(7);
 const LAST = codeOf(8);
 const GONE = codeOf(10);
 const MOVES = codeOf(11);
+const MULTIPACK = codeOf(12);
+const UNREADABLE_SIZE = codeOf(13);
+const SMALLER_THAN_SERVING = codeOf(14);
+const SINGLE_SERVE = codeOf(15);
 /** A 12-digit code as a US pack prints it, under the same unused range: kept with a leading zero. */
 const twelveDigits = (): string => {
   const body = "14099999009";
@@ -46,7 +50,7 @@ const twelveDigits = (): string => {
 
 /** Every code this file writes, and so the only ones it removes. The store's and the book's stay on
  *  no real list: the list never keeps such a code. */
-const MINE = [NUTELLA, PRINCE, ZERO, NO_LIST, APART, USDA_ONLY, NOT_LISTED, LAST, GONE, MOVES, `0${twelveDigits()}`, "00002523", "0200024010652", "12345678", "9780141026626"];
+const MINE = [NUTELLA, PRINCE, ZERO, NO_LIST, APART, USDA_ONLY, NOT_LISTED, LAST, GONE, MOVES, MULTIPACK, UNREADABLE_SIZE, SMALLER_THAN_SERVING, SINGLE_SERVE, `0${twelveDigits()}`, "00002523", "0200024010652", "12345678", "9780141026626"];
 
 d("a pack's barcode (real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 4 });
@@ -82,8 +86,8 @@ d("a pack's barcode (real Postgres)", () => {
     if (reply.status !== "found") throw new Error(`${code}: ${reply.status}`);
     return reply;
   };
-  const addOff = async (code: string, row: { name: string; kcal: number; protein: number | null; carbs: number | null; fat: number | null; serving?: string; allergens?: string[]; traces?: string[]; typed?: string[]; fit?: boolean }) => {
-    const record = { code, name: row.name, kcal: row.kcal, protein_g: row.protein, carbs_g: row.carbs, fat_g: row.fat, potassium_mg: 120, serving_size: row.serving ?? null, numbers_fit: row.fit ?? true, allergens: row.allergens ?? [], traces: row.traces ?? [], listed_as_typed: row.typed ?? [] };
+  const addOff = async (code: string, row: { name: string; kcal: number; protein: number | null; carbs: number | null; fat: number | null; serving?: string; quantity?: string; allergens?: string[]; traces?: string[]; typed?: string[]; fit?: boolean }) => {
+    const record = { code, name: row.name, kcal: row.kcal, protein_g: row.protein, carbs_g: row.carbs, fat_g: row.fat, potassium_mg: 120, serving_size: row.serving ?? null, quantity: row.quantity ?? null, numbers_fit: row.fit ?? true, allergens: row.allergens ?? [], traces: row.traces ?? [], listed_as_typed: row.typed ?? [] };
     await sql`INSERT INTO off_products SELECT * FROM jsonb_populate_recordset(NULL::off_products, ${JSON.stringify([record])}::text::jsonb) ON CONFLICT (code) DO NOTHING`;
   };
   const addUsda = async (code: string, name: string, kcal: number) => {
@@ -108,6 +112,10 @@ d("a pack's barcode (real Postgres)", () => {
     await addUsda(APART, "Swanson Broth Beef", 8);
     await addUsda(USDA_ONLY, "Welch's Orange Juice", 46);
     await addOff(LAST, { name: "Yesterday's biscuit", kcal: 450, protein: 6, carbs: 70, fat: 16, serving: "30 g" });
+    await addOff(MULTIPACK, { name: "Yoghurt", kcal: 100, protein: 4, carbs: 15, fat: 3, serving: "125 g", quantity: "500 g (4 x 125 g)" });
+    await addOff(UNREADABLE_SIZE, { name: "Sweets", kcal: 400, protein: 1, carbs: 90, fat: 1, serving: "20 g", quantity: "200 unidades" });
+    await addOff(SMALLER_THAN_SERVING, { name: "Crisps", kcal: 500, protein: 6, carbs: 50, fat: 30, serving: "100 g", quantity: "30 g" });
+    await addOff(SINGLE_SERVE, { name: "Cola can", kcal: 42, protein: 0, carbs: 11, fat: 0, serving: "330 ml", quantity: "330 ml" });
     app = await buildApp(loadConfig(env), { redis, nutrition: { foodSearchProvider: foods } });
     alice = await session("barcode33-alice@example.com");
     bob = await session("barcode33-bob@example.com");
@@ -129,6 +137,35 @@ d("a pack's barcode (real Postgres)", () => {
     expect(b.food).toMatchObject({ canonical: `pack_${PRINCE}`, kcal: 467 });
     expect(b.allergens).toEqual(["eggs", "gluten"]);
     expect(b.mayContain).toEqual(["eggs"]);
+  });
+
+  it("the worst thing: the whole pack is that pack's weight, the same on the lookup, the preview and the save", async () => {
+    const reply = await found(MULTIPACK);
+    const pack = reply.food.measures.find((m) => m.id === "pack");
+    expect(pack).toEqual({ id: "pack", name: "whole pack", grams: 500 });
+    // One serving is what it starts at: a whole pack is only ever somebody's own choice.
+    expect(reply.food.startsAt).toEqual({ measure: "serving", amount: 1 });
+    const item = { canonical: reply.food.canonical, measure: "pack", amount: 1 };
+    const preview = await inject("POST", "/v1/nutrition/meals/preview", alice, { items: [item] });
+    expect(preview.statusCode, preview.body).toBe(200);
+    const line = z.object({ items: z.array(z.object({ gramsPoint: z.number(), kcalPoint: z.number() })) }).parse(preview.json()).items[0];
+    expect(line).toEqual(expect.objectContaining({ gramsPoint: 500, kcalPoint: 500 }));
+    const saved = await inject("POST", "/v1/nutrition/meals", alice, { mealName: "Yoghurt", takenAt: new Date().toISOString(), items: [item] });
+    expect(saved.statusCode, saved.body).toBe(201);
+    expect(z.object({ meal: z.object({ items: z.array(z.object({ gramsPoint: z.number(), kcalPoint: z.number(), measure: z.object({ id: z.string(), name: z.string() }) })) }) }).parse(saved.json()).meal.items[0]).toMatchObject({ gramsPoint: 500, kcalPoint: 500, measure: { id: "pack", name: "whole pack" } });
+  });
+
+  it("the worst thing: no whole pack is offered from a size that isn't understood or can't be right", async () => {
+    for (const code of [UNREADABLE_SIZE, SMALLER_THAN_SERVING, NUTELLA]) {
+      const reply = await found(code);
+      expect(reply.food.measures.map((m) => m.id)).not.toContain("pack");
+      const refused = await inject("POST", "/v1/nutrition/meals/preview", alice, { items: [{ canonical: reply.food.canonical, measure: "pack", amount: 1 }] });
+      expect(refused.statusCode, refused.body).toBe(400);
+    }
+  });
+
+  it("a single-serve can is one choice, not a serving and a whole pack of one weight", async () => {
+    expect((await found(SINGLE_SERVE)).food.measures.filter((m) => m.id === "serving" || m.id === "pack").map((m) => m.id)).toEqual(["serving"]);
   });
 
   it("the worst thing: a row under a store's own, a misread or a book's code is never read", async () => {

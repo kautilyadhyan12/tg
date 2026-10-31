@@ -5,7 +5,7 @@ import { MAX_ITEM_GRAMS, type MoreNutrients, type NutritionSource } from "@app/s
 /** `fiberG` is null where a food's table or label has no figure. `more` is the
  *  ten further figures per 100 g (ROADMAP 34a): a packaged product carries what
  *  Open Food Facts sent of its label; a table food's are read when it is priced (`withMore`, service.ts). */
-export interface FoodReference { canonical: string; name: string; kcal: number; proteinG: number; carbsG: number; fatG: number; fiberG: number | null; serving: number; unit: string; source: NutritionSource; more?: MoreNutrients | undefined; }
+export interface FoodReference { canonical: string; name: string; kcal: number; proteinG: number; carbsG: number; fatG: number; fiberG: number | null; serving: number; unit: string; source: NutritionSource; more?: MoreNutrients | undefined; pack?: number | undefined; }
 export interface FoodSearchProvider { search(query: string, limit: number): Promise<FoodReference[]>; }
 const productSchema = z.object({ code: z.union([z.string(), z.number()]).optional(), product_name: z.union([z.string(), z.array(z.string())]).optional(), generic_name: z.union([z.string(), z.array(z.string())]).optional(), brands: z.union([z.string(), z.array(z.string())]).optional(), serving_size: z.string().optional(), nutriments: z.record(z.unknown()).optional() }).passthrough();
 const searchSchema = z.object({ hits: z.array(productSchema).optional(), products: z.array(productSchema).optional() }).passthrough();

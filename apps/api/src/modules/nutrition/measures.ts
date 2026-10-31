@@ -174,6 +174,8 @@ export interface MeasureSource {
   /** The household measures of another USDA entry of the same food, borrowed for
    *  its pieces (`PIECE_ENTRIES`, foods.ts). */
   pieces?: readonly UsdaPortion[];
+  /** What a packaged product's whole pack holds, where its size is understood (`packSize.ts`). */
+  pack?: number | undefined;
 }
 
 const sameName = (a: string, b: string): boolean => a.trim().toLowerCase() === b.trim().toLowerCase();
@@ -246,7 +248,9 @@ export function foodMeasures(source: MeasureSource): FoodMeasure[] {
   add(source.portions, "usda");
   add(source.pieces ?? [], "piece");
   const own = servingMeasure(source, usda);
-  return [...(own === null ? [] : [own]), ...usda, GRAM, OUNCE];
+  // A single-serve pack is its serving: one choice, not two of one weight.
+  const pack = source.pack === undefined || (own !== null && sameWeight(own.grams, source.pack)) ? [] : [{ id: "pack", name: "whole pack", grams: source.pack }];
+  return [...(own === null ? [] : [own]), ...pack, ...usda, GRAM, OUNCE];
 }
 
 /** The measure and amount a food starts at when it is picked — its serving, by
