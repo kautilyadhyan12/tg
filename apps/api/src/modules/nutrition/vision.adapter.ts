@@ -82,7 +82,8 @@ const httpFailure = (status: number): VisionProviderError =>
 // The instructions on reading the plate are Kd's (RULINGS 2026-08-24), word for
 // word: what to identify, a name and a canonical_hint on every item, the local
 // name before a generic one, counting only what is reliably countable, and
-// unknown instead of a guess. What changed is what the model writes back:
+// unknown instead of a guess, where the newer words at the end now ask for a best
+// name first (rulings/2026-10-31-33a-iii.md). What changed is what the model writes back:
 // - trimmed to what the app reads (RULINGS 2026-09-15): no cuisine guess, no
 //   scale anchors, no confidence word;
 // - ONE LIST PER FOOD (RULINGS 2026-09-16), with a null in a slot it cannot

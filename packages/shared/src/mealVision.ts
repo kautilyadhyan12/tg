@@ -17,6 +17,20 @@ import { MAX_ITEM_GRAMS } from "./nutrition.js";
 export const NO_VALUE_WORDS: readonly string[] = ["none", "n/a", "null", "unknown", ""];
 /** Whether a name the model wrote is one of NO_VALUE_WORDS, in any case and spacing. */
 export const isNoValueWord = (name: string): boolean => NO_VALUE_WORDS.includes(name.trim().toLowerCase());
+/** Words that say the model could not tell what a food is. Matched inside a name, as
+ *  whole words, because that is how Luna writes it ("unidentified brown cooked food
+ *  pieces"). "food" and "item" are here as the structure of such a name: they stand
+ *  where the kind of food would go ("diced orange food", "fried item"). */
+const NOT_IDENTIFIED = /\b(?:unknown|unidentified|unidentifiable|unrecogni[sz]ed|unrecogni[sz]able|unsure|uncertain|undetermined|indeterminate|unclear|not sure|cannot tell|can't tell|cannot be identified|cannot identify|can't identify|could not identify|mystery|something|possibly|maybe|perhaps|foods?|items?)\b/;
+const VAGUE_NAME = /^(?:others?|things?|stuff|dish|meal)$/;
+/** Whether a name says the model could not tell what the food is. Such a food has no
+ *  row and no figures on the sheet: it is named under "Not in the total" (Part 2B
+ *  §3.5: honestly incomplete rather than confidently wrong). A name no word here
+ *  catches stays the model's estimate, shown as one. */
+export const saysNotIdentified = (name: string): boolean => {
+  const said = name.replaceAll("_", " ").replaceAll(/\s+/g, " ").trim().toLowerCase();
+  return NOT_IDENTIFIED.test(said) || VAGUE_NAME.test(said);
+};
 const optionalNameSchema = z.preprocess(
   (v) => (typeof v === "string" && isNoValueWord(v) ? null : v),
   z.string().nullable(),

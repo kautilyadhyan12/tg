@@ -6,7 +6,7 @@
 //
 // The table lookups are handed in, so the order below is tested on its own; the
 // service gives it our list, the USDA table and packaged products.
-import { DIET_LADDER, MAX_MATCH_ENTRIES, MEAL_CLOSE_FOODS_MOST, isNoValueWord, shownFoodName, type Diet, type Per100g, type VisionItem } from "@app/shared";
+import { DIET_LADDER, MAX_MATCH_ENTRIES, MEAL_CLOSE_FOODS_MOST, isNoValueWord, saysNotIdentified, shownFoodName, type Diet, type Per100g, type VisionItem } from "@app/shared";
 import { NOISE_WORDS, slug } from "./foods.js";
 import type { FoodReference } from "./openfoodfacts.adapter.js";
 
@@ -295,11 +295,12 @@ async function tableFood(item: VisionItem, estimate: Per100g | null, lookups: Sc
  *  ("unknown", "N/A") would find whatever a table happens to call by that word, so
  *  no table is asked: the model's own figures price the food, shown by its name.
  *  An item with no name either is no food anyone can be shown, and nothing prices
- *  it — the prompt puts a food the model cannot name in unknown_items. */
+ *  it, nor one whose name says the model could not tell what it is
+ *  (`saysNotIdentified`): those are named under "Not in the total". */
 export async function priceScannedFood(item: VisionItem, lookups: ScanLookups): Promise<ScanPrice> {
   const estimate = estimatePer100g(item);
-  const hinted = !isNoValueWord(item.canonical_hint);
-  if (!hinted && isNoValueWord(item.name)) return { kind: "none" };
+  const hinted = !isNoValueWord(item.canonical_hint) && !saysNotIdentified(item.canonical_hint);
+  if (saysNotIdentified(shownFoodName(item)) || (!hinted && isNoValueWord(item.name))) return { kind: "none" };
   const { food, overruled } = hinted ? await tableFood(item, estimate, lookups) : { food: null, overruled: null };
   if (food !== null) return { kind: "table", food };
   if (estimate !== null && item.grams !== null) return { kind: "estimate", per100g: estimate, grams: item.grams, overruled };

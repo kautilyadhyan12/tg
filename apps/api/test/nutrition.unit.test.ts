@@ -15,7 +15,7 @@ import { servingOf } from "../src/modules/nutrition/openfoodfacts.adapter.js";
 import type { ScanPrice } from "../src/modules/nutrition/scanMatch.js";
 import { scanSheet } from "../src/modules/nutrition/service.js";
 import { loadConfig, type AppConfig } from "../src/config.js";
-import { MAX_ITEM_GRAMS, MAX_PHOTO_COUNT, MAX_SCAN_FOODS, NO_VALUE_WORDS, RETIRED_EVIDENCE_FIELDS, isNoValueWord, nutritionTargetsResponseSchema, type NoDeficitReason, type OwnTargetsHeld, type PlanAnswers, type PlanNumbers } from "@app/shared";
+import { MAX_ITEM_GRAMS, MAX_PHOTO_COUNT, MAX_SCAN_FOODS, NO_VALUE_WORDS, RETIRED_EVIDENCE_FIELDS, isNoValueWord, saysNotIdentified, nutritionTargetsResponseSchema, type NoDeficitReason, type OwnTargetsHeld, type PlanAnswers, type PlanNumbers } from "@app/shared";
 import { ownTargetsHeld, targetsFromPlan } from "../src/modules/nutrition/targets.js";
 import { CALORIE_FLOOR_KCAL, resolvePlan } from "../src/modules/plan/maths.js";
 
@@ -345,6 +345,21 @@ describe("P2.6a nutrition pure pipeline", () => {
       ["the word unknown with no hint", ["unknown", null, 1, 35, 50, 1, 12, 0], ""],
     ];
     for (const [label, entry, name] of lists) expect((await read([], [entry])).unknown_items, label).toEqual([name]);
+  });
+
+  it("tells a name that says the model could not tell from a food's name, on real replies' names", () => {
+    // Real names from saved replies, written while the reply's figures still counted as a food.
+    for (const name of [
+      "unknown yellow food", "yellow food, possibly a cut piece of fruit or another soft food", "unidentified browned fruit pieces", "diced orange food",
+      "brown and orange cubed food", "fried item", "white curd-like food", "brown cooked food pieces", "unidentifiable food in a small bowl",
+      "a grey-speckled food on the right cannot be identified", "small brown bits, possibly nuts or dried fruit", "brown cubed item near sweet potato",
+      "unknown_food", "UNIDENTIFIED", "Other", "Not sure", "Mystery meat",
+    ]) expect(saysNotIdentified(name), name).toBe(true);
+    // Real foods, some holding those letters inside a longer word, or a colour and "pieces".
+    for (const name of [
+      "seafood", "seafood pasta", "foodstuff", "other half", "mother's chicken", "orange pieces", "walnut pieces", "brown rice", "fried chicken pieces",
+      "white chocolate", "dried fruit pieces", "chimichurri sauce", "thick toast with spread",
+    ]) expect(saysNotIdentified(name), name).toBe(false);
   });
 
   it("strictly rejects a reply whose food is not one list of eight slots with a name, or that adds a field, and retains usage for the ledger", async () => {

@@ -30,6 +30,12 @@ const realReply = (photo: string): unknown => {
 
 /** Dal the tables have, with the figures a plate of it carries. */
 const DAL = ["dal", "dal", null, 150, 170, 9, 25, 4];
+/** What each real reply puts on the sheet: name, where its numbers are from, kcal. */
+const REAL_ROWS: Record<string, unknown[]> = {
+  "dish_1561574783.png": [["Leafy green salad", "estimate", 35]],
+  "dish_1559157919.png": [["Mixed salad greens, raw", "usda", 5], ["Spinach (raw)", "curated", 7], ["Blueberries", "curated", 5], ["Walnuts", "curated", 33]],
+  "dish_1564689168.png": [["Salad (green, no dressing)", "curated", 21], ["Chickpeas (cooked)", "curated", 123], ["Paneer (Indian cottage cheese)", "curated", 213], ["Cucumber", "curated", 5], ["Red onion", "estimate", 6], ["Tomato", "curated", 4]],
+};
 const reply = (items: unknown[], unknown_items: unknown[] = []) => ({ meal_name: "Plate", items, unknown_items, photo_quality: "good" });
 
 d("a badly formed scanner reply (real route, real adapter, real Postgres)", () => {
@@ -41,9 +47,12 @@ d("a badly formed scanner reply (real route, real adapter, real Postgres)", () =
   }), { status: 200, headers: { "content-type": "application/json" } }));
   let app: Awaited<ReturnType<typeof buildApp>> | undefined;
   let access = "";
+  // Each scan is two days after the last, so no scan meets this file's own daily limit or pause.
+  let redisNow = Date.now();
   const scan = async (evidence: unknown): Promise<{ status: number; body: string }> => {
     if (app === undefined) throw new Error("beforeAll did not run");
     next = evidence;
+    redisNow += 2 * 24 * 60 * 60 * 1000;
     const res = await app.inject({
       method: "POST", url: "/v1/nutrition/analyze-photo", cookies: { accessToken: access },
       headers: { "content-type": "application/json" }, payload: JSON.stringify({ imageBase64: MEAL_PHOTO, mimeType: "image/jpeg" }),
@@ -62,7 +71,7 @@ d("a badly formed scanner reply (real route, real adapter, real Postgres)", () =
     await sql`DELETE FROM api_cost_events WHERE user_id IN (SELECT id FROM users WHERE email=${EMAIL})`;
     await sql`DELETE FROM users WHERE email=${EMAIL}`;
     app = await buildApp(loadConfig(env), {
-      redis: createMemoryRedis(),
+      redis: createMemoryRedis(() => redisNow),
       nutrition: { visionProvider: createOpenAiVisionProvider("dummy-key", "gpt-6-luna", openAi), foodSearchProvider: { search: () => Promise.resolve([]) } }, // gitleaks:allow
     });
     const post = (path: string, body: unknown) => {
@@ -89,7 +98,54 @@ d("a badly formed scanner reply (real route, real adapter, real Postgres)", () =
     expect(read.totals.kcalPoint).toBe(read.items[0]?.kcalPoint);
   });
 
-  it("two real replies with no food on the sheet ask for the photo again, and show none", { timeout: 30_000 }, async () => {
+  it("a food Luna says she cannot identify, in her real words, stays out of the total, and is named under Not in the total", { timeout: 60_000 }, async () => {
+    // From saved real replies, then the wordings a reviewer tried.
+    const said = [
+      "unidentified brown cooked food pieces", "unknown yellow food", "unidentified browned fruit pieces", "unidentifiable food in a small bowl",
+      "a grey-speckled food on the right cannot be identified", "brown cooked food pieces", "diced orange food", "white curd-like food",
+      "fried item", "yellow food, possibly a cut piece of fruit or another soft food",
+      "Unknown meat", "Mystery meat", "Not sure", "Cannot tell", "Unsure", "Other", "No food", "Food",
+    ];
+    for (const name of said) {
+      const read = await sheet(reply([DAL, [name, null, 1, 180, 900, 12, 55, 90]]));
+      expect(read.items.map((item) => item.name), name).toEqual(["Dal (lentil curry)"]);
+      expect(read.unknownItems, name).toEqual([name]);
+      expect(read.totals.kcalPoint, name).toBe(read.items[0]?.kcalPoint);
+    }
+  });
+
+  it("a name this rule has never heard of stays what it is: the model's estimate, never a table's food", { timeout: 30_000 }, async () => {
+    expect(rows(await sheet(reply([["pale lump", null, 1, 100, 200, 5, 20, 8]])))).toEqual([["Pale lump", "estimate", 200]]);
+  });
+
+  it("a name that says it cannot be identified never asks a table, even with a hint", { timeout: 30_000 }, async () => {
+    expect((await sheet(reply([DAL, ["Unidentified pieces", "dal", 1, 150, 170, 9, 25, 4]]))).unknownItems).toEqual(["Unidentified pieces"]);
+    // A hint that says so is no name to ask by: the food's own name and figures stand.
+    expect(rows(await sheet(reply([["zqx pieces", "unidentified food", 1, 100, 200, 5, 20, 8]])))).toEqual([["Zqx pieces", "estimate", 200]]);
+  });
+
+  it("a reply with no food that can go on the sheet asks for the photo again, free, never an empty sheet", { timeout: 60_000 }, async () => {
+    const onlyThese: [string, unknown][] = [
+      ["the word unknown", reply([["unknown", null, 1, 35, 50, 1, 12, 0]])],
+      ["N/A, and an unknown list", reply([["N/A", null, 1, 35, 50, 1, 12, 0]], [["unknown", null, 1, 35, 50, 1, 12, 0]])],
+      ["a name with no figures", reply([["zqx leaf", null, null, null, null, null, null, null]])],
+      ["a food she says she cannot identify", reply([["unidentified brown cooked food pieces", null, 6, 180, 350, 12, 55, 12]])],
+    ];
+    for (const [label, evidence] of onlyThese) {
+      const res = await scan(evidence);
+      expect(res.status, label).toBe(422);
+      const body = z.object({ error: z.string(), message: z.string(), retakeToken: z.string() }).parse(JSON.parse(res.body));
+      expect([body.error, body.message], label).toEqual(["retake_required", "Please retake the photo in better light with the full plate visible."]);
+      expect(res.body, label).not.toContain("scanToken");
+    }
+  });
+
+  it("a very long name from the model is cut to what a row can hold", { timeout: 30_000 }, async () => {
+    const read = await sheet(reply([DAL], [["z".repeat(600), null, 1, 35, 50, 1, 12, 0], "y".repeat(600)]));
+    expect(read.unknownItems).toEqual(["z".repeat(200), "y".repeat(200)]);
+  });
+
+  it("two replies from the old prompt with no food on the sheet ask for the photo again, and show none", { timeout: 30_000 }, async () => {
     for (const photo of ["dish_1558373008.png", "dish_1559233445.png"]) {
       const res = await scan(realReply(photo));
       expect(res.status, photo).toBe(422);
@@ -99,8 +155,10 @@ d("a badly formed scanner reply (real route, real adapter, real Postgres)", () =
   });
 
   it("three real replies whose foods had no canonical_hint are read, every food on the sheet", { timeout: 30_000 }, async () => {
-    const counts = [["dish_1561574783.png", 1], ["dish_1559157919.png", 4], ["dish_1564689168.png", 6]] as const;
-    for (const [photo, foods] of counts) expect((await sheet(realReply(photo))).items.length, photo).toBe(foods);
+    const seen: Record<string, unknown[]> = {};
+    for (const photo of Object.keys(REAL_ROWS)) seen[photo] = rows(await sheet(realReply(photo)));
+    if (process.env["PRINT_ROWS"] === "1") console.log(JSON.stringify(seen));
+    expect(seen).toEqual(REAL_ROWS);
   });
 
   it("a food with no canonical_hint no table knows is shown as the estimate it is, never as a table's food", { timeout: 30_000 }, async () => {
