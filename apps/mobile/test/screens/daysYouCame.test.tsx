@@ -28,8 +28,9 @@ const org = (gym: Place) => ({
 });
 const mine = (...gyms: Place[]) => ok({ orgs: gyms.map(org), formerOrgs: [] });
 
-// The gym's month now: the tests follow the calendar, so none of them expires.
-const thisMonth = (dayIn("Asia/Kolkata", new Date()) ?? "").slice(0, 7);
+// A clock of their own, mid-month: on the 1st a visit on the 2nd would be a day still to come, and these tests would turn red.
+const MID_MONTH = Date.parse("2026-10-15T12:00:00.000Z");
+const thisMonth = (dayIn("Asia/Kolkata", new Date(MID_MONTH)) ?? "").slice(0, 7);
 const lastMonth = shiftMonth(thisMonth, -1);
 const nameOf = (key: string) => (monthName(key, null).split(" ")[0] ?? "");
 
@@ -44,7 +45,7 @@ const history = (visits: unknown[], nextCursor: string | null = null, timezone =
 
 /** What a day in this month is called, with "today" on the gym's today. */
 const dayName = (month: string, day: number, checkedIn: boolean) => {
-  const today = dayIn("Asia/Kolkata", new Date()) === `${month}-${String(day).padStart(2, "0")}`;
+  const today = dayIn("Asia/Kolkata", new Date(MID_MONTH)) === `${month}-${String(day).padStart(2, "0")}`;
   return `${String(day)} ${nameOf(month)}${today ? ", today" : ""}${checkedIn ? ", checked in" : ""}`;
 };
 
@@ -76,7 +77,12 @@ const gymTab = async () => {
 const box = (place: Place) => within(screen.getByTestId(`days-${place.id}`));
 const cameDays = (place: Place) => box(place).queryAllByLabelText(/, checked in$/).map((day) => String(day.props.accessibilityLabel));
 
+afterEach(() => {
+  jest.useRealTimers();
+});
+
 beforeEach(() => {
+  jest.useFakeTimers({ now: MID_MONTH, doNotFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "setImmediate", "clearImmediate", "nextTick", "queueMicrotask"] });
   jest.clearAllMocks();
 });
 
