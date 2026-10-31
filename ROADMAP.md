@@ -306,7 +306,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
        - 18d-iv-b. **Refund to card on a fee and at Sell**, in three parts since 2026-10-31:
          - 18d-iv-b-i. [x] **On a fee** — merged 2026-10-31 (PR #404).
          - 18d-iv-b-ii. [x] **At Sell** — merged 2026-10-31 (PR #412).
-         - 18d-iv-b-iii. [ ] **Overview's list of refunds to deal with** (Kd, 2026-10-31): fees the app knows are no longer owed, each with Refund or Keep the fee, and refunds to the card that failed or that Square never answered, for all three kinds (18d-iv-a's review). Web folder 1.
+         - 18d-iv-b-iii. [x] **Refunds to review on Overview** — merged 2026-10-31 (PR #417).
        - 18d-iv-c. [ ] **An Interac debit card refunded on the Square Terminal**, in Canada, where Square refunds Interac only with the card present. Web folder 1.
        - 18d-iv-d. [ ] **A refund made inside Square shown here**, which also closes a "We don't know whether Square took…" line once Square's own record answers it (18d-iv-a's re-check). Web folder 1.
        - 18d-iv-e. [ ] **A chargeback shown on its payment with Square's own deadline** (Square's new permission DISPUTES_READ: connected gyms press Reconnect Square once). Web folder 1.

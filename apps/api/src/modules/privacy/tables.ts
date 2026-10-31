@@ -510,8 +510,8 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // the gym's record; `ON DELETE set null`. The person who paid is a record on the gym's
   // list, not an account; a record deleted for good leaves its payments with no name (0116).
   "gym_member_payments",
-  // gym_member_bills.voided_by, and gym_member_refunds.recorded_by and undone_by — which
-  // member of staff cancelled a bill, noted a refund or took one back (`0094`), on the
+  // gym_member_bills.voided_by and fee_kept_by, and gym_member_refunds.recorded_by and undone_by — which
+  // member of staff cancelled a bill, kept a fee (`0181`), noted a refund or took one back (`0094`), on the
   // same footing. Neither holds a typed word: a reason is one of a fixed list.
   "gym_member_bills",
   "gym_member_refunds",
@@ -562,7 +562,7 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // and last four, and the amount, no card number; a record deleted for good lets go of
   // `entry_id` and `payer_entry_id`.
   "gym_card_charges",
-  // gym_square_refunds.started_by — which member of staff pressed Refund to card (`0177`; 18d-iv-a), on
+  // gym_square_refunds.started_by and no_refund_by — which member of staff pressed Refund to card (`0177`; 18d-iv-a) or said no refund was needed (`0181`), on
   // gym_member_payments' footing: the gym's record of money sent back; `ON DELETE set null`. It holds Square's
   // ids, the amount, a reason from a fixed list and the card's brand and last four, no card number.
   "gym_square_refunds",
