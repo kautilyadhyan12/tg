@@ -62,7 +62,7 @@ describe('Block', () => {
     const box = within(within(posts()[0]).getByRole('group', { name: 'Block Barry B.?' }));
     expect(
       box.getByText(
-        "You won't see the posts and comments Barry B. writes as a member, or their reactions, at Iron House any more. Any reaction you gave those posts is taken off. Posts they write for Iron House as staff still show. They aren't told, and nothing changes for anyone else. You can unblock them at the bottom of Updates.",
+        "You won't see the posts and comments Barry B. writes as a member, or their reactions, at Iron House any more. Any reaction you gave them is taken off. Posts they write for Iron House as staff still show. They aren't told, and nothing changes for anyone else. You can unblock them at the bottom of Updates.",
       ),
     ).toBeTruthy();
     fireEvent.click(box.getByRole('button', { name: 'Cancel' }));

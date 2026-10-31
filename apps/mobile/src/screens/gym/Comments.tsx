@@ -743,6 +743,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", gap: 10 },
   words: { flex: 1, gap: 6 },
   initials: {
+    flexShrink: 0,
     width: 32,
     height: 32,
     borderRadius: sizes.round,
