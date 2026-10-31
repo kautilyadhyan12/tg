@@ -10,7 +10,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { exerciseDefinitionSchema, type ExerciseDefinition, type PoseFrame } from "@app/shared";
+import { exerciseDefinitionSchema, type ExerciseDefinition, type CameraFrame } from "@app/shared";
 import { compileDefinition, createSession, parseTrace } from "../src/index.js";
 import { must } from "./fixtures.js";
 
@@ -23,15 +23,15 @@ type KP = [number, number, number, number];
 function loadDef(ex: string): ExerciseDefinition {
   return exerciseDefinitionSchema.parse(JSON.parse(readFileSync(join(DEFS, `${ex}.json`), "utf8")));
 }
-function loadFrames(name: string): PoseFrame[] {
+function loadFrames(name: string): CameraFrame[] {
   return clone(parseTrace(readFileSync(join(PARITY, `${name}.jsonl`), "utf8")).frames);
 }
-function clone(frames: readonly PoseFrame[]): PoseFrame[] {
-  return frames.map((f) => ({ t: f.t, kp: f.kp.map((k) => [...k] as KP) }));
+function clone(frames: readonly CameraFrame[]): CameraFrame[] {
+  return frames.map((f) => ({ t: f.t, aspect: f.aspect, kp: f.kp.map((k) => [...k] as KP) }));
 }
 /** Feed frames straight through a fresh session; returns the final rep count.
  *  Throwing here IS the failure (I6). */
-function runReps(def: ExerciseDefinition, frames: readonly PoseFrame[]): number {
+function runReps(def: ExerciseDefinition, frames: readonly CameraFrame[]): number {
   const s = createSession(compileDefinition(def, 1));
   for (const f of frames) s.processFrame(f);
   return s.end().reps;
@@ -48,14 +48,14 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-function injectNaN(frames: PoseFrame[], rnd: () => number, p: number): PoseFrame[] {
+function injectNaN(frames: CameraFrame[], rnd: () => number, p: number): CameraFrame[] {
   return frames.map((f) => {
     if (rnd() >= p) return f;
     const j = Math.floor(rnd() * f.kp.length);
-    return { t: f.t, kp: f.kp.map((k, idx) => (idx === j ? ([NaN, NaN, k[2], k[3]] as KP) : ([...k] as KP))) };
+    return { t: f.t, aspect: f.aspect, kp: f.kp.map((k, idx) => (idx === j ? ([NaN, NaN, k[2], k[3]] as KP) : ([...k] as KP))) };
   });
 }
-function dropoutBurst(frames: PoseFrame[], rnd: () => number): PoseFrame[] {
+function dropoutBurst(frames: CameraFrame[], rnd: () => number): CameraFrame[] {
   const out = clone(frames);
   const bursts = 1 + Math.floor(rnd() * 3);
   for (let b = 0; b < bursts; b++) {
@@ -68,11 +68,11 @@ function dropoutBurst(frames: PoseFrame[], rnd: () => number): PoseFrame[] {
   }
   return out;
 }
-function fpsJitter(frames: PoseFrame[], rnd: () => number): PoseFrame[] {
+function fpsJitter(frames: CameraFrame[], rnd: () => number): CameraFrame[] {
   let t = 0;
   return frames.map((f) => {
     t += 25 + rnd() * 100; // per-frame gap 25–125 ms ⇒ 8–40 fps, monotonic
-    return { t, kp: f.kp.map((k) => [...k] as KP) };
+    return { t, aspect: f.aspect, kp: f.kp.map((k) => [...k] as KP) };
   });
 }
 
@@ -92,7 +92,7 @@ describe("fuzz pass (§7.6 / I6)", () => {
     it(`${defKey}: NaN/dropout/jitter never throw and never INCREASE reps (clean baseline=${String(baseline)})`, () => {
       for (let seed = 1; seed <= SEEDS; seed++) {
         const rnd = mulberry32(seed);
-        const variants: PoseFrame[][] = [
+        const variants: CameraFrame[][] = [
           injectNaN(clone(clean), rnd, 0.15),
           dropoutBurst(clone(clean), rnd),
           fpsJitter(clone(clean), rnd),
@@ -117,8 +117,8 @@ describe("fuzz pass (§7.6 / I6)", () => {
     const clean = loadFrames("sqauta_sideview1goodform");
     // A fully-occluded copy (contributes 0 reps) followed by the clean clip;
     // re-timestamped monotonic. Recovery = the clean tail still counts.
-    const blanked = clean.map((f) => ({ t: f.t, kp: f.kp.map((k) => [k[0], k[1], k[2], 0] as KP) }));
-    const seq = [...blanked, ...clean].map((f, i) => ({ t: i * FPS_MS, kp: f.kp }));
+    const blanked = clean.map((f) => ({ t: f.t, aspect: f.aspect, kp: f.kp.map((k) => [k[0], k[1], k[2], 0] as KP) }));
+    const seq = [...blanked, ...clean].map((f, i) => ({ t: i * FPS_MS, aspect: f.aspect, kp: f.kp }));
     expect(
       runReps(def, seq),
       "engine did not recover — no reps counted in the clean tail after a full dropout",

@@ -9,7 +9,7 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { exerciseDefinitionSchema, poseFrameSchema, type ExerciseDefinition } from "@app/shared";
+import { exerciseDefinitionSchema, cameraFrameSchema, type ExerciseDefinition } from "@app/shared";
 import {
   IngestStage,
   ViewTracker,
@@ -119,7 +119,7 @@ describe("golden traces (§7.6) — compiled definitions", () => {
   for (const file of files.filter(hasSidecar)) {
     it(`stages 1–3 on ${file.split(/[\\/]/).pop() ?? file}`, () => {
       const trace = parseTrace(readFileSync(file, "utf8"));
-      for (const frame of trace.frames) poseFrameSchema.parse(frame); // deep check (Node shell)
+      for (const frame of trace.frames) cameraFrameSchema.parse(frame); // deep check (Node shell)
 
       // Parity sidecar: the legacy analyzer's full per-frame responses.
       const sidecarPath = file.replace(/\.jsonl$/, ".responses.jsonl");

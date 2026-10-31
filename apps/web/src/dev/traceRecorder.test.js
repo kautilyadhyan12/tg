@@ -81,6 +81,22 @@ function linesOf(text) {
 }
 
 describe('traceRecorder', () => {
+  it('writes a file the engine can read back, with the picture shape', async () => {
+    const { parseTrace } = await import('@app/engine');
+    const rec = await loadRecorder();
+    rec.startRecording('squat');
+    rec.recordFrame(KP33(), 1000, 0.5625);
+    rec.recordFrame(KP33(), 1067, 0.5625);
+    rec.recordFrame(KP33(), 1134, 16 / 9);
+    rec.stopRecording({ label: 'shape', view: 'side', device: 'laptop' });
+    const file = downloads.find(
+      (d) => d.name.endsWith('.jsonl') && !/responses|detect/.test(d.name),
+    );
+    const trace = parseTrace(file.text);
+    expect(trace.header.aspect).toBe(0.5625);
+    expect(trace.frames.map((f) => f.aspect)).toEqual([0.5625, 0.5625, 16 / 9]);
+  });
+
   it('records a clip in which the model NEVER finds a pose', async () => {
     const rec = await loadRecorder();
     rec.startRecording('squat');

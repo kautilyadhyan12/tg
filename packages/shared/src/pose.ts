@@ -66,5 +66,16 @@ export const poseFrameSchema = z
   })
   .strict();
 
+// The picture's width divided by its height, sent with each frame by whoever owns
+// the camera. Outside these bounds it cannot be a real camera picture.
+export const MIN_ASPECT = 0.2;
+export const MAX_ASPECT = 5;
+
+// What the camera side hands a session: a PoseFrame plus its picture's shape.
+export const cameraFrameSchema = poseFrameSchema
+  .extend({ aspect: z.number().min(MIN_ASPECT).max(MAX_ASPECT) })
+  .strict();
+
+export type CameraFrame = z.infer<typeof cameraFrameSchema>;
 export type Keypoint = z.infer<typeof keypointSchema>;
 export type PoseFrame = z.infer<typeof poseFrameSchema>;

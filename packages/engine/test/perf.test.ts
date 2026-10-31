@@ -13,7 +13,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
 import { describe, expect, it } from "vitest";
-import { exerciseDefinitionSchema, type ExerciseDefinition, type PoseFrame } from "@app/shared";
+import { exerciseDefinitionSchema, type ExerciseDefinition, type CameraFrame } from "@app/shared";
 import { compileDefinition, createSession, parseTrace } from "../src/index.js";
 import { must } from "./fixtures.js";
 
@@ -25,16 +25,17 @@ const P95_CEILING_MS = 3; // §7.6 CI tripwire; device ≤3ms (I5) verified at P
 const HEAP_STRICT_MB = 5; // with forced GC (--expose-gc)
 const HEAP_LOOSE_MB = 40; // natural GC: catches a real leak, tolerates GC noise
 
-function build(): { def: ExerciseDefinition; frames: PoseFrame[] } {
+function build(): { def: ExerciseDefinition; frames: CameraFrame[] } {
   const def = exerciseDefinitionSchema.parse(
     JSON.parse(readFileSync(join(DEFS, "squat.json"), "utf8")),
   );
   const src = parseTrace(readFileSync(join(PARITY, "sqauta_sideview1goodform.jsonl"), "utf8")).frames;
-  const frames: PoseFrame[] = [];
+  const frames: CameraFrame[] = [];
   for (let i = 0; i < FRAMES; i++) {
     const s = must(src[i % src.length]);
     frames.push({
       t: i * FPS_MS,
+      aspect: s.aspect,
       kp: s.kp.map((k) => [...k] as [number, number, number, number]),
     });
   }

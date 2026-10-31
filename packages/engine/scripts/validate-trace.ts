@@ -1,10 +1,10 @@
 // Trace validator (P1.3): run on every recorded .jsonl BEFORE committing it.
 //   pnpm --filter @app/engine exec tsx scripts/validate-trace.ts <file...>
-// Checks: §7.1 structure (parseTrace), deep PoseFrame validation (@app/shared
+// Checks: §7.1 structure (parseTrace), deep CameraFrame validation (@app/shared
 // zod), monotonic t, fps within the §2.1 8–40 contract. Node shell — outside
 // the engine's pure runtime boundary.
 import { readFileSync } from "node:fs";
-import { poseFrameSchema } from "@app/shared";
+import { cameraFrameSchema } from "@app/shared";
 import { parseTrace } from "../src/index.js";
 
 const files = process.argv.slice(2);
@@ -20,7 +20,7 @@ for (const file of files) {
     let prevT = -1;
     for (let i = 0; i < trace.frames.length; i++) {
       const frame = trace.frames[i];
-      poseFrameSchema.parse(frame);
+      cameraFrameSchema.parse(frame);
       if (frame !== undefined && frame.t <= prevT) {
         throw new Error(`frame ${String(i + 1)}: t=${String(frame.t)} not strictly increasing`);
       }
