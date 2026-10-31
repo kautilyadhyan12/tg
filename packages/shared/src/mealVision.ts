@@ -18,17 +18,19 @@ export const NO_VALUE_WORDS: readonly string[] = ["none", "n/a", "null", "unknow
 /** Whether a name the model wrote is one of NO_VALUE_WORDS, in any case and spacing. */
 export const isNoValueWord = (name: string): boolean => NO_VALUE_WORDS.includes(name.trim().toLowerCase());
 /** Words that say the model could not tell what a food is. Matched inside a name, as
- *  whole words, because that is how Luna writes it ("unidentified brown cooked food
- *  pieces"). "food" and "item" are here as the structure of such a name: they stand
- *  where the kind of food would go ("diced orange food", "fried item"). */
-const NOT_IDENTIFIED = /\b(?:unknown|unidentified|unidentifiable|unrecogni[sz]ed|unrecogni[sz]able|unsure|uncertain|undetermined|indeterminate|unclear|not sure|cannot tell|can't tell|cannot be identified|cannot identify|can't identify|could not identify|mystery|something|possibly|maybe|perhaps|foods?|items?)\b/;
-const VAGUE_NAME = /^(?:others?|things?|stuff|dish|meal)$/;
+ *  whole words, because that is how Luna writes it ("unidentified brown cooked food"). */
+const NOT_IDENTIFIED = /\b(?:unknown|unidentified|unidentifiable|unrecogni[sz]ed|unrecogni[sz]able|unsure|uncertain|undetermined|indeterminate|unclear|not sure|cannot tell|can't tell|cannot be identified|cannot identify|can't identify|could not identify|mystery|something)\b/;
+/** A name with no kind of food in it: "food" or "item" where the kind would go, at the
+ *  end of the name or its first part ("diced orange food", "fried item (possibly onion)",
+ *  "brown cooked food pieces"), never inside one ("angel food cake"), or a bare word. */
+const VAGUE_NAME = /\b(?:foods?|items?)\b(?:\s*$|\s*[,;:(]|\s+(?:pieces?|bits?|in|on|near|with)\b)|^(?:others?|things?|stuff|dish|meal)$/;
+const asWritten = (name: string): string => name.replaceAll("_", " ").replaceAll(/\s+/g, " ").trim().toLowerCase();
 /** Whether a name says the model could not tell what the food is. Such a food has no
  *  row and no figures on the sheet: it is named under "Not in the total" (Part 2B
  *  §3.5: honestly incomplete rather than confidently wrong). A name no word here
  *  catches stays the model's estimate, shown as one. */
 export const saysNotIdentified = (name: string): boolean => {
-  const said = name.replaceAll("_", " ").replaceAll(/\s+/g, " ").trim().toLowerCase();
+  const said = asWritten(name);
   return NOT_IDENTIFIED.test(said) || VAGUE_NAME.test(said);
 };
 const optionalNameSchema = z.preprocess(
@@ -106,9 +108,13 @@ const mealVisionItemSchema = z.tuple([
 export type VisionItem = z.infer<typeof mealVisionItemSchema>;
 
 /** The name a scanned food is shown by: its own, or its canonical_hint where its
- *  name says there is none ("N/A"). */
-export const shownFoodName = (item: Pick<VisionItem, "name" | "canonical_hint">): string =>
-  isNoValueWord(item.name) ? item.canonical_hint : item.name;
+ *  name says there is none ("N/A") or names no kind of food ("fried item") and the
+ *  hint does. */
+export const shownFoodName = (item: Pick<VisionItem, "name" | "canonical_hint">): string => {
+  if (isNoValueWord(item.name)) return item.canonical_hint;
+  const hintNames = !isNoValueWord(item.canonical_hint) && !saysNotIdentified(item.canonical_hint);
+  return hintNames && VAGUE_NAME.test(asWritten(item.name)) ? item.canonical_hint : item.name;
+};
 
 /** Luna sometimes writes a food in unknown_items as a whole item list, figures and
  *  all (2 of 127 real plates). Only its name is read, so its figures reach no total;

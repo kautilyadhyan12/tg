@@ -33,7 +33,8 @@ const DAL = ["dal", "dal", null, 150, 170, 9, 25, 4];
 /** What each real reply puts on the sheet: name, where its numbers are from, kcal. */
 const REAL_ROWS: Record<string, unknown[]> = {
   "dish_1561574783.png": [["Leafy green salad", "estimate", 35]],
-  "dish_1559157919.png": [["Mixed salad greens, raw", "usda", 5], ["Spinach (raw)", "curated", 7], ["Blueberries", "curated", 5], ["Walnuts", "curated", 33]],
+  // The first row's table is USDA's where it is loaded, as here, and the model's estimate where it is not, as on GitHub.
+  "dish_1559157919.png": [[expect.stringMatching(/^Mixed (salad )?greens/), expect.stringMatching(/^(usda|estimate)$/), expect.any(Number)], ["Spinach (raw)", "curated", 7], ["Blueberries", "curated", 5], ["Walnuts", "curated", 33]],
   "dish_1564689168.png": [["Salad (green, no dressing)", "curated", 21], ["Chickpeas (cooked)", "curated", 123], ["Paneer (Indian cottage cheese)", "curated", 213], ["Cucumber", "curated", 5], ["Red onion", "estimate", 6], ["Tomato", "curated", 4]],
 };
 const reply = (items: unknown[], unknown_items: unknown[] = []) => ({ meal_name: "Plate", items, unknown_items, photo_quality: "good" });
@@ -114,6 +115,17 @@ d("a badly formed scanner reply (real route, real adapter, real Postgres)", () =
     }
   });
 
+  it("a real food with those words inside its name, or a hedge beside it, stays on the sheet as what it is", { timeout: 30_000 }, async () => {
+    expect(rows(await sheet(reply([["zqx food cake", null, 1, 100, 300, 5, 50, 8]])))).toEqual([["Zqx food cake", "estimate", 300]]);
+    expect(rows(await sheet(reply([["zqxchicken, possibly thigh", null, 1, 100, 200, 25, 0, 10]])))).toEqual([["Zqxchicken, possibly thigh", "estimate", 200]]);
+  });
+
+  it("a name with no kind of food in it, with a hint that has one, is that hint's food", { timeout: 30_000 }, async () => {
+    const read = await sheet(reply([["fried item", "zqxsamosa", 1, 100, 260, 5, 30, 12]]));
+    expect(rows(read)).toEqual([["Zqxsamosa", "estimate", 260]]);
+    expect(read.unknownItems).toEqual([]);
+  });
+
   it("a name this rule has never heard of stays what it is: the model's estimate, never a table's food", { timeout: 30_000 }, async () => {
     expect(rows(await sheet(reply([["pale lump", null, 1, 100, 200, 5, 20, 8]])))).toEqual([["Pale lump", "estimate", 200]]);
   });
@@ -157,7 +169,6 @@ d("a badly formed scanner reply (real route, real adapter, real Postgres)", () =
   it("three real replies whose foods had no canonical_hint are read, every food on the sheet", { timeout: 30_000 }, async () => {
     const seen: Record<string, unknown[]> = {};
     for (const photo of Object.keys(REAL_ROWS)) seen[photo] = rows(await sheet(realReply(photo)));
-    if (process.env["PRINT_ROWS"] === "1") console.log(JSON.stringify(seen));
     expect(seen).toEqual(REAL_ROWS);
   });
 

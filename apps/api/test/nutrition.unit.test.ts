@@ -352,13 +352,15 @@ describe("P2.6a nutrition pure pipeline", () => {
     for (const name of [
       "unknown yellow food", "yellow food, possibly a cut piece of fruit or another soft food", "unidentified browned fruit pieces", "diced orange food",
       "brown and orange cubed food", "fried item", "white curd-like food", "brown cooked food pieces", "unidentifiable food in a small bowl",
-      "a grey-speckled food on the right cannot be identified", "small brown bits, possibly nuts or dried fruit", "brown cubed item near sweet potato",
+      "a grey-speckled food on the right cannot be identified", "brown cubed item near sweet potato", "white curled item (possibly fried onion or seafood)",
       "unknown_food", "UNIDENTIFIED", "Other", "Not sure", "Mystery meat",
     ]) expect(saysNotIdentified(name), name).toBe(true);
     // Real foods, some holding those letters inside a longer word, or a colour and "pieces".
     for (const name of [
       "seafood", "seafood pasta", "foodstuff", "other half", "mother's chicken", "orange pieces", "walnut pieces", "brown rice", "fried chicken pieces",
       "white chocolate", "dried fruit pieces", "chimichurri sauce", "thick toast with spread",
+      // From outside this rule: real foods with its words inside the name, and a best name with a hedge.
+      "angel food cake", "devil's food cake", "fast food burger", "chicken, possibly thigh", "rice possibly basmati", "fish maybe cod", "small brown bits, possibly nuts or dried fruit",
     ]) expect(saysNotIdentified(name), name).toBe(false);
   });
 
