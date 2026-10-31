@@ -36,6 +36,8 @@ export const DIRECT_DELETE_TABLES = [
   // save from the phone cannot bring a removed meal back. Their own record, deleted and exported.
   "meal_removed_ids",
   "user_dishware", // §5.2 "dishware"
+  // Foods the person kept from a pack's label (ROADMAP Stage 5 33b-iii-c): their own record, deleted and exported.
+  "member_label_foods",
   // §5.2's "coach threads/messages": those tables were dropped with the coach (ROADMAP 9b).
   "runs", // §5.2 "runs/saved_routes/schedules"
   "saved_routes",

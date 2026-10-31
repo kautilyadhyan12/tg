@@ -16,6 +16,7 @@ export * from "./gamification.js";
 export * from "./entitlements.js";
 export * from "./nutrition.js";
 export * from "./barcode.js";
+export * from "./labelRead.js";
 export * from "./mealVision.js";
 export * from "./geo.js";
 export * from "./privacy.js";

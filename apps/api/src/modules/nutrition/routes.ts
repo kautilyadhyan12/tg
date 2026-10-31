@@ -6,11 +6,11 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import type { z } from "zod";
-import { MEAL_PHOTO_MAX_BYTES, barcodeParamSchema, cleanPhoto } from "@app/shared";
+import { MEAL_PHOTO_MAX_BYTES, barcodeParamSchema, cleanPhoto, labelFoodParamSchema, labelFoodSaveSchema } from "@app/shared";
 import type { AppConfig } from "../../config.js";
 import type { RedisLike } from "../../redis.js";
 import { createDualRateLimit } from "../auth/rateLimit.js";
-import { requireQuota } from "../quotas/service.js";
+import { quotaLeft, requireQuota } from "../quotas/service.js";
 import { createOpenFoodFactsProvider, type FoodSearchProvider } from "./openfoodfacts.adapter.js";
 import {
   analyzeMealPhotoRequestSchema,
@@ -33,7 +33,7 @@ import {
 } from "./schemas.js";
 import * as dietPlan from "./dietPlanService.js";
 import * as service from "./service.js";
-import { createMealMatchChecker, createMealVisionProvider, type MatchChecker, type VisionProvider } from "./vision.adapter.js";
+import { createLabelReader, createMealMatchChecker, createMealVisionProvider, type LabelReader, type MatchChecker, type VisionProvider } from "./vision.adapter.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -50,6 +50,7 @@ export interface NutritionRouteOverrides {
   /** null switches the match check off: the foods are priced by the tables alone. */
   matchChecker?: MatchChecker | null;
   foodSearchProvider?: FoodSearchProvider;
+  labelReader?: LabelReader;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -118,6 +119,7 @@ export function registerNutritionRoutes(
     redis: deps.redis,
     vision: overrides.visionProvider ?? createMealVisionProvider(deps.config),
     matchChecker: overrides.matchChecker === undefined ? createMealMatchChecker(deps.config) : overrides.matchChecker,
+    labels: overrides.labelReader ?? createLabelReader(deps.config),
     visionModel: deps.config.MEAL_VISION_MODEL,
     foods: overrides.foodSearchProvider ?? createOpenFoodFactsProvider(),
     log: app.log,
@@ -207,6 +209,38 @@ export function registerNutritionRoutes(
     },
   );
 
+  // A pack's label (ROADMAP 33b-iii-c): the same checks and meter as a meal photo, and one scan counted.
+  app.post(
+    "/v1/nutrition/labels/read",
+    { bodyLimit: 14 * 1024 * 1024 + 1024, preHandler: [app.authenticate, validateScan, meter] },
+    async (req, reply) => {
+      const input = req.nutritionScanInput;
+      if (input === undefined) throw new Error("scan validation did not run");
+      const quotaKey = req.nutritionScanQuotaKey;
+      const paidWith: service.ScanPaidWith | null =
+        req.nutritionUsedRetake === true ? { retake: true } : quotaKey === undefined ? null : { quotaKey };
+      if (paidWith === null) throw new Error("the scan meter did not run");
+      try {
+        return await reply.status(200).send(await service.readLabel(nutritionDeps, authedUserId(req), input.imageBase64, input.mimeType, paidWith, req.id));
+      } catch (err) {
+        if (err instanceof service.ScanFailedError) {
+          return await reply.status(err.statusCode).send({
+            error: err.code,
+            message: err.message,
+            ...(err.retakeToken === null ? {} : { retakeToken: err.retakeToken }),
+            requestId: req.id,
+          });
+        }
+        throw err;
+      }
+    },
+  );
+
+  /** How many photo scans the person has left: their own, from their own session. */
+  app.get("/v1/nutrition/photo-scans", { preHandler: [app.authenticate] }, async (req, reply) =>
+    reply.send(await quotaLeft("meal_scan", { sql: deps.sql, redis: deps.redis }, authedUserId(req))),
+  );
+
   /** The macro rings' daily calories and macros: the person's own plan, from
    *  their stored onboarding answers (R3.1; ROADMAP 4a-iii) — the same number
    *  the onboarding screens show. No input to parse — the identity is the
@@ -294,10 +328,33 @@ export function registerNutritionRoutes(
   app.get("/v1/nutrition/barcode/:code", { preHandler: [app.authenticate, barcodeLimit] }, async (req, reply) => {
     const p = parse(barcodeParamSchema, req.params, req, reply);
     if (p === null) return;
-    return reply.send(await service.barcodeLookup(nutritionDeps, p.code));
+    return reply.send(await service.barcodeLookup(nutritionDeps, authedUserId(req), p.code));
   });
 
   /** The person's last different foods, each at the amount they last had (ROADMAP 32b-ii-a). */
+  // What a person checked against a pack. Only stops a script: saving costs no scan.
+  const labelLimit = createDualRateLimit({
+    name: "nutrition_label_save",
+    max: 60,
+    ipMax: null,
+    windowMs: 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
+  app.put("/v1/nutrition/labels/:id", { preHandler: [app.authenticate, labelLimit] }, async (req, reply) => {
+    const p = parse(labelFoodParamSchema, req.params, req, reply);
+    if (p === null) return;
+    const body = parse(labelFoodSaveSchema, req.body, req, reply);
+    if (body === null) return;
+    const saved = await service.saveLabelFood(nutritionDeps, authedUserId(req), p.id, body);
+    return saved === null ? notFound(req, reply) : reply.send(saved);
+  });
+  app.delete("/v1/nutrition/labels/:id", { preHandler: [app.authenticate, labelLimit] }, async (req, reply) => {
+    const p = parse(labelFoodParamSchema, req.params, req, reply);
+    if (p === null) return;
+    return (await service.removeLabelFood(nutritionDeps, authedUserId(req), p.id)) ? reply.status(204).send() : notFound(req, reply);
+  });
+
   app.get("/v1/nutrition/foods/recent", { preHandler: [app.authenticate] }, async (req, reply) => {
     return reply.send({ items: await service.recentFoodsOf(nutritionDeps, authedUserId(req)) });
   });
