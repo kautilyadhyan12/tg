@@ -643,6 +643,11 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
   });
 
   describe("a refund on the Terminal", () => {
+    // A gym of its own: its owner's presses stay under the hourly limit the rest of the file's owner shares.
+    let gym: Gym;
+    beforeAll(async () => {
+      gym = await makeGym(`Terminal Gym ${uniq()}`, `MERCH${uniq()}`);
+    });
     const desk = async (g: Gym, behaviour: Behaviour = "person"): Promise<{ id: string; deviceId: string }> => {
       const deviceId = `DESK${uniq()}`;
       const [row] = await sql<{ id: string }[]>`
@@ -744,18 +749,25 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
         expect(await refundsOf(maya)).toHaveLength(0);
       });
 
+      it("Square's request names another payment or amount while it waits: it is left to check, never followed", async () => {
+        const maya = await interacPaid(gym, "Maya Stray");
+        const terminal = await desk(gym);
+        const first = read(await pressOn(maya, terminal.id, 1000));
+        onlyAsked(maya).amount_money = { amount: 1100, currency: "USD" };
+        expect(read(await look(maya, first.pressId)).step).toBe("checking");
+        expect(await pressesOf(maya)).toMatchObject([{ state: "done", outcome: "lost", code: "NOT_OURS" }]);
+        expect(await refundsOf(maya)).toHaveLength(0);
+      });
+
       it("Square says COMPLETED but its refund cannot be read yet: nothing is written until it can", async () => {
         const maya = await interacPaid(gym, "Maya Unread");
         const terminal = await desk(gym);
         const first = read(await pressOn(maya, terminal.id));
         square.terminalRefundUsed(onlyAsked(maya).id);
-        square.state.refundDown = true;
-        const real = square.api.getRefund;
-        square.api.getRefund = () => Promise.resolve({ kind: "unavailable", status: null });
+        square.state.refundUnread = true;
         expect(read(await look(maya, first.pressId)).step).toBe("terminal");
         expect(await refundsOf(maya)).toHaveLength(0);
-        square.api.getRefund = real;
-        square.state.refundDown = false;
+        square.state.refundUnread = false;
         expect(read(await look(maya, first.pressId)).step).toBe("pending");
         expect(await refundsOf(maya)).toHaveLength(1);
       });

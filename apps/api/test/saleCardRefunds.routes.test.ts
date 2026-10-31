@@ -709,6 +709,11 @@ d("Refund to card at Sell (real Postgres)", { timeout: T }, () => {
   });
 
   describe("a refund on the Terminal", () => {
+    // A gym of its own: its owner's presses stay under the hourly limit the rest of the file's owner shares.
+    let gym: Gym;
+    beforeAll(async () => {
+      gym = await makeGym(`Terminal Sale Gym ${uniq()}`, `MERCH${uniq()}`);
+    });
     const interac = async (): Promise<Basket> => {
       const basket = await sold(gym);
       const paid = square.paymentById(basket.squarePaymentId);

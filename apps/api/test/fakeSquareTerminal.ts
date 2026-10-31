@@ -129,6 +129,8 @@ export function fakeSquare() {
     /** RefundPayment (18d-iv-a): gives no answer and makes nothing; makes the refund and loses the answer; is refused with
      *  this code; and answers with this status first (PENDING, as Square's test area did). */
     refundDown: boolean;
+    /** GetRefund gives no answer. */
+    refundUnread: boolean;
     refundLost: boolean;
     refundRefused: string | null;
     refundStatus: string;
@@ -159,6 +161,7 @@ export function fakeSquare() {
     disables: false,
     beforeCard: null,
     refundDown: false,
+    refundUnread: false,
     refundLost: false,
     refundRefused: null,
     refundStatus: "PENDING",
@@ -601,7 +604,7 @@ export function fakeSquare() {
       return Promise.resolve({ kind: "ok", value: shownTerminalRefund(made) });
     },
     getRefund(token, id) {
-      if (state.down) return Promise.resolve(unavailable);
+      if (state.down || state.refundUnread) return Promise.resolve(unavailable);
       const a = tokenAccount(token);
       if (a === undefined) return Promise.resolve(unauthorized);
       const made = refundsMade.find((f) => f.id === id);

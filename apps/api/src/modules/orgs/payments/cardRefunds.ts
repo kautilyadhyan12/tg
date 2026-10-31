@@ -276,13 +276,14 @@ async function terminalStep(deps: PaymentsDeps, token: string, square: SquareSet
           deadline: TERMINAL_REFUND.deadline,
         })
       : await square.api.getTerminalRefund(token, press.terminalRefundId);
-  if (got.kind === "unavailable") return await terminalNotYet(deps, press, now, "unavailable");
+  if (got.kind === "unavailable") {
+    await terminalNotYet(deps, press, now, "unavailable");
+    return;
+  }
   if (got.kind === "refused") {
-    if (press.terminalRefundId === null) {
-      await answered(deps, press, got, now);
-      return;
-    }
-    return await terminalNotYet(deps, press, now, "refused");
+    if (press.terminalRefundId === null) await answered(deps, press, got, now);
+    else await terminalNotYet(deps, press, now, "refused");
+    return;
   }
   const refund = got.value;
   if (!isOurRefund(press, device, refund) || (press.terminalRefundId !== null && refund.id !== press.terminalRefundId)) {
@@ -304,7 +305,10 @@ async function terminalStep(deps: PaymentsDeps, token: string, square: SquareSet
 /** What Square's answer about the request means for the press. */
 async function terminalFollow(deps: PaymentsDeps, token: string, square: SquareSettings, press: refunds.RefundPress, refund: SquareTerminalRefund, now: Date): Promise<void> {
   if (refund.status === "COMPLETED") {
-    if (refund.refund_id == null) return await terminalNotYet(deps, press, now, "refused");
+    if (refund.refund_id == null) {
+      await terminalNotYet(deps, press, now, "refused");
+      return;
+    }
     const read = await square.api.getRefund(token, refund.refund_id);
     if (read.kind === "ok") await answered(deps, press, read, now);
     else await terminalNotYet(deps, press, now, read.kind === "unavailable" ? "unavailable" : "refused");
