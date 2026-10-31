@@ -576,7 +576,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 17e-i. [x] **Comments on the phone** — merged 2026-10-31 (PR #409).
       - 17e-ii. [x] **Comments in the console** — merged 2026-10-31 (PR #411).
     - 17c. **Events, the Leaderboard and a person's profile** (split 2026-10-31: Events first).
-      - 17c-i. [ ] **Events on the phone**.
+      - 17c-i. [x] **Events on the phone** — merged 2026-10-31 (PR #415).
       - 17c-ii. [ ] **The Leaderboard, Hide me and a person's profile** (a name on Updates opens it; Your Rank on the Dashboard stops saying Coming soon).
     - 17d. [ ] **Challenges**, and who won under a challenge's ended post on Updates, with See the challenge.
 18. [ ] **Inbox, Contact the gym, and phone notifications** (spec Part 3 §16.1; Part 6 §6): the class reminder, a place is free, a message, somebody commented on your post or replied to you. Needs Kd's Firebase project.

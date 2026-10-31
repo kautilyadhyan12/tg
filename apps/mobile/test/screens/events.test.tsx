@@ -504,35 +504,59 @@ describe("whose clock", () => {
 });
 
 describe("the page stays current", () => {
-  afterEach(() => {
-    jest.useRealTimers();
-  });
+  // The page's own timers are caught and fired by hand: a faked clock runs every timer in the app, the tabs' too.
   const reads = (server: { asked: Asked[] }) => server.asked.filter((one) => one.path === eventsOf(IRON)).length;
   const onWait = () => event(E1, "Open day", { going: realGoing({ coming: 30, waiting: 1, mine: "waitlisted", waitlistPlace: 1 }) });
+  const fire = async (run: () => void) => {
+    await act(async () => {
+      run();
+      await new Promise<void>((resolve) => setTimeout(resolve, 30));
+    });
+  };
+  const caught = () => {
+    const intervals = jest.spyOn(global, "setInterval");
+    const timeouts = jest.spyOn(global, "setTimeout");
+    return {
+      interval: (ms: number) => intervals.mock.calls.filter((call) => call[1] === ms).map((call) => call[0]),
+      timeout: (test: (ms: number) => boolean) => timeouts.mock.calls.filter((call) => test(call[1] ?? 0)).map((call) => call[0]),
+      /** A timer fired by hand sets its next one: that must not keep the test run open for an hour. */
+      clearLong: () => {
+        timeouts.mock.calls.forEach((call, at) => {
+          const made = timeouts.mock.results[at];
+          if ((call[1] ?? 0) >= 50_000 && made?.type === "return") clearTimeout(made.value);
+        });
+      },
+    };
+  };
 
   it("on a waitlist it reads every 30 seconds, and stops after 15 minutes", async () => {
-    jest.useFakeTimers({ advanceTimers: true });
+    const timers = caught();
     const server = fakeServer({ "/v1/auth/refresh": ok({ tokens: tokens(2) }), "/v1/orgs/mine": mine(IRON), [eventsOf(IRON)]: ok(listOf(IRON, [onWait()])) });
     await openEvents(server.ask, IRON);
     await page().findByText("On the waitlist");
+    const tick = timers.interval(30_000).at(-1);
+    if (tick === undefined) throw new Error("no 30-second read");
     const before = reads(server);
-    await act(async () => { await jest.advanceTimersByTimeAsync(31_000); });
+    await fire(tick);
     expect(reads(server)).toBe(before + 1);
-    await act(async () => { await jest.advanceTimersByTimeAsync(16 * 60_000); });
-    const atTheEnd = reads(server);
-    expect(atTheEnd).toBeLessThanOrEqual(before + 31);
-    await act(async () => { await jest.advanceTimersByTimeAsync(5 * 60_000); });
-    expect(reads(server)).toBe(atTheEnd);
-  }, 90_000);
+    const start = Date.now();
+    jest.spyOn(Date, "now").mockReturnValue(start + 15 * 60_000 + 1000);
+    await fire(tick);
+    expect(reads(server)).toBe(before + 1);
+  });
 
-  it("with no waitlist place and nothing starting soon, it does not read by itself", async () => {
-    jest.useFakeTimers({ advanceTimers: true });
+  it("with no waitlist place it sets no 30-second read, and a start hours away reads nothing when its hour's timer fires", async () => {
+    const timers = caught();
     const server = fakeServer({ "/v1/auth/refresh": ok({ tokens: tokens(2) }), "/v1/orgs/mine": mine(IRON), [eventsOf(IRON)]: ok(listOf(IRON, [event(E1, "Open day")])) });
     await openEvents(server.ask, IRON);
     await page().findByText("Open day");
+    expect(timers.interval(30_000).length).toBe(0);
+    const hour = timers.timeout((ms) => ms === 3_600_000).at(-1);
+    if (hour === undefined) throw new Error("no hour's timer");
     const before = reads(server);
-    await act(async () => { await jest.advanceTimersByTimeAsync(5 * 60_000); });
+    await fire(hour);
     expect(reads(server)).toBe(before);
+    timers.clearLong();
   });
 
   it("a start hours away is only waited for: an hour's timer reads nothing, the last one reads", () => {
@@ -543,15 +567,18 @@ describe("the page stays current", () => {
   });
 
   it("it reads again when an event starts", async () => {
-    jest.useFakeTimers({ advanceTimers: true });
+    const timers = caught();
     const soon = new Date(Date.now() + 60_000).toISOString();
     const later = new Date(Date.now() + 3 * 3_600_000).toISOString();
     const server = fakeServer({ "/v1/auth/refresh": ok({ tokens: tokens(2) }), "/v1/orgs/mine": mine(IRON), [eventsOf(IRON)]: ok(listOf(IRON, [event(E1, "Open day", { startsAt: soon, endsAt: later })])) });
     await openEvents(server.ask, IRON);
     await page().findByText("Open day");
+    const due = timers.timeout((ms) => ms > 50_000 && ms <= 61_000).at(-1);
+    if (due === undefined) throw new Error("no timer for the start");
     const before = reads(server);
-    await act(async () => { await jest.advanceTimersByTimeAsync(70_000); });
-    expect(reads(server)).toBeGreaterThan(before);
+    await fire(due);
+    expect(reads(server)).toBe(before + 1);
+    timers.clearLong();
   });
 });
 
