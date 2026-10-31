@@ -1064,6 +1064,7 @@ describe('a basket (18q)', () => {
     const ask = within(row).getByTestId('basket-refund');
     expect(within(within(ask).getByLabelText('Which product was it for?')).getAllByRole('option').map((o) => o.textContent)).toEqual([
       'Choose one',
+      'All products · $9.72 can be refunded',
       '2 × Water · $4.31 can be refunded',
       '1 × Towel · $5.41 can be refunded',
     ]);
