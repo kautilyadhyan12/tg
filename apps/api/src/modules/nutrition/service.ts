@@ -967,7 +967,7 @@ export function scanSheet(
   const items: MealPhotoItem[] = [];
   const unknownItems: string[] = [];
   const nameUnknown = (label: string): void => {
-    const shown = label.replaceAll(/[_\s]+/g, " ").trim();
+    const shown = label.replaceAll(/[_\s]+/g, " ").trim().slice(0, 200);
     if (!isNoValueWord(shown) && !unknownItems.some((u) => u.toLowerCase() === shown.toLowerCase())) unknownItems.push(shown);
   };
   for (const label of evidence.unknown_items) nameUnknown(label);
@@ -1170,10 +1170,9 @@ async function readMealPhoto(
   await ledger(deps, userId, result);
   // A reply that identifies no food is a poor photo, whatever it calls itself:
   // a free retake, never a charged draft with nothing on it.
-  if (result.evidence.photo_quality === "poor" || result.evidence.items.length === 0) {
-    const rt = usedRetake ? null : await issueRetake(deps, userId);
-    throw new ScanFailedError(rt, "Please retake the photo in better light with the full plate visible.");
-  }
+  const askAgain = async (): Promise<ScanFailedError> =>
+    new ScanFailedError(usedRetake ? null : await issueRetake(deps, userId), "Please retake the photo in better light with the full plate visible.");
+  if (result.evidence.photo_quality === "poor" || result.evidence.items.length === 0) throw await askAgain();
 
   // Stage 2: price each identified food, then start its row at one of its own
   // measures. Each food is priced on its own, so they are asked together: a plate
@@ -1200,6 +1199,8 @@ async function readMealPhoto(
     return item === undefined ? [] : [item];
   });
   const { foods, draftItems, items, unknownItems } = scanSheet(result.evidence, prices, await scanMeasures(deps, prices), closeFor);
+  // Foods the model listed that none could be priced: as empty as a reply with none.
+  if (items.length === 0) throw await askAgain();
 
   const scanToken = token();
   // A good photo the model did not name is "Meal", as a renamed-to-nothing
