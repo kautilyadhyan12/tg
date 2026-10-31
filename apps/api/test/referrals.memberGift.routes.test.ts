@@ -732,6 +732,59 @@ d("Refer a friend: the member's gift (real Postgres)", () => {
     );
 
     it(
+      "a refund on a fee gives no member's gift back, when it fails or when it is voided (18d-iv-b-i)",
+      async () => {
+        const ava = await memberWithBill("feeava", "Fee Ava", true);
+        const friend = await friendJoins(ava.code, "Fee Ben", "fee.ben@example.com", true);
+        const [paid] = await sql<{ id: string; membership_id: string; amount_minor: number }[]>`
+          SELECT p.id, b.held_membership_id AS membership_id, p.amount_minor
+          FROM gym_member_payments p
+          JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
+          JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
+          WHERE p.gym_id = ${gymA.org.id} AND h.entry_id = ${friend.entryId}`;
+        if (paid === undefined) throw new Error("no payment");
+        const at = `/v1/orgs/${gymA.org.id}/member-list/entries/${friend.entryId}/memberships/${paid.membership_id}`;
+        // The friend's only membership payment goes back in full: the gift is taken back, and nothing of theirs stands for it.
+        expect((await post(`${at}/payments/${paid.id}/refunds`, { requestKey: nextForm(), amountMinor: paid.amount_minor, method: "cash", reason: "other" }, owner.cookies)).statusCode).toBe(200);
+        const gifts = async () => (await giftsOf(gymA.org.id)).filter((g) => g.friend_entry_id === friend.entryId);
+        expect(await gifts()).toMatchObject([{ taken_back_why: "refunded" }]);
+
+        /** A no-show fee of theirs, taken through Square, with a refund noted on all of it. */
+        const feeRefunded = async (): Promise<{ paymentId: string; refundId: string }> => {
+          const [bill] = await sql<{ id: string; currency: string }[]>`
+            INSERT INTO gym_member_bills (gym_id, held_membership_id, amount_minor, currency, due_on, covers_from, covers_to, fee, fee_for)
+            SELECT gym_id, id, 700, currency, ${today}, ${today}, ${today}, 'no_show', 'Yoga' FROM gym_held_memberships WHERE id = ${paid.membership_id}
+            RETURNING id, currency`;
+          if (bill === undefined) throw new Error("no fee");
+          expect((await post(`${at}/fees/${bill.id}/payments`, { requestKey: nextForm(), amountMinor: 700, method: "cash" }, owner.cookies)).statusCode).toBe(200);
+          const [fee] = await sql<{ id: string }[]>`
+            UPDATE gym_member_payments SET method = 'terminal', provider = 'square', provider_payment_id = ${`PAY${randomUUID()}`} WHERE gym_id = ${gymA.org.id} AND bill_id = ${bill.id} RETURNING id`;
+          expect((await post(`${at}/payments/${fee?.id ?? ""}/refunds`, { requestKey: nextForm(), amountMinor: 700, method: "cash", reason: "other" }, owner.cookies)).statusCode).toBe(200);
+          const [refund] = await sql<{ id: string }[]>`SELECT id FROM gym_member_refunds WHERE gym_id = ${gymA.org.id} AND payment_id = ${fee?.id ?? ""}`;
+          return { paymentId: fee?.id ?? "", refundId: refund?.id ?? "" };
+        };
+
+        // Voided by staff: the fee's payment stands again, and gives nothing.
+        const voided = await feeRefunded();
+        expect((await post(`${at}/payments/${voided.paymentId}/refunds/${voided.refundId}/void`, { reason: "mistake" }, owner.cookies)).statusCode).toBe(200);
+        expect(await gifts()).toHaveLength(1);
+
+        // Failed at Square: the same.
+        const failed = await feeRefunded();
+        const id = randomUUID();
+        const now = new Date();
+        await sql`
+          INSERT INTO gym_square_refunds (id, gym_id, payment_id, member_refund_id, environment, account_id, square_payment_id, square_refund_id, amount_minor, currency, reason, request_key, state, started_at, checked_at)
+          VALUES (${id}, ${gymA.org.id}, ${failed.paymentId}, ${failed.refundId}, 'sandbox', 'ACCOUNT', 'PAYMENT', ${`REFUND${id}`}, 700, 'GBP', 'other', ${randomUUID()}, 'pending', ${now}, ${now})`;
+        const press = await readPress(sql, gymA.org.id, id);
+        if (press === null) throw new Error("no press");
+        expect(await recordFailed(sql, press, { code: "FAILED", today: now.toISOString().slice(0, 10), now })).toBe(true);
+        expect(await gifts()).toHaveLength(1);
+      },
+      TIMEOUT_MS,
+    );
+
+    it(
       "with no open bill it waits, then comes off the next bill the hourly run opens",
       async () => {
         const lea = await memberWithBill("lea", "Lea Novak", true);

@@ -187,7 +187,7 @@ async function answer(deps: PaymentsDeps, gymId: string, id: string): Promise<Ca
   if (press.outcome === "failed") throw refused("card_refund_failed", CARD_REFUND_WORDS.failed);
   const card = press.brand === null || press.last4 === null ? null : { brand: press.brand, last4: press.last4 };
   const step = press.outcome === "completed" ? "completed" : press.state === "pending" ? "pending" : "checking";
-  return cardRefundResponseSchema.parse({ step, amountMinor: press.amountMinor, currency: press.currency, card });
+  return cardRefundResponseSchema.parse({ step, amountMinor: press.amountMinor, currency: press.currency, card, pressId: press.id });
 }
 
 /** A press: the money goes back now, and the answer says where it stands. The same press sent twice is one refund. */

@@ -200,6 +200,10 @@ const refundLines = (p, currency) =>
     ...(p.voidedRefunds ?? []).map((r) => ({ ...refundLine(r, currency), voided: voidedLine(r.voided, REFUND_VOID_REASON_WORDS) })),
   ].sort((a, b) => a.receiptNumber - b.receiptNumber);
 
+/** Square has not finished a refund to the card: the bill or fee does not say Refunded until it has. */
+const REFUND_PENDING_TAG = { tag: 'Refund pending', tone: 'soft' };
+const refundPending = (billOrFee) => billOrFee.payments.some((p) => (p.refunds ?? []).some((r) => r.square?.state === 'pending'));
+
 /** One bill as a box: the days it is for, its amount and tag, its tax, when it is or was
  *  due, who cancelled it, and each payment in columns with the refunds noted against it.
  *  A payment or refund staff voided stays in its place, struck through, saying who and why. */
@@ -207,7 +211,7 @@ export function billRow(bill, currency, today) {
   const amount = formatMinor(bill.amountMinor, currency);
   // Some of what was paid has been given back, and not all: still paid, and said so.
   const partRefunded = bill.state === 'paid' && bill.refundedMinor > 0;
-  const state = partRefunded ? { tag: 'Part refunded', tone: 'soft' } : (STATE_TAGS[bill.state] ?? STATE_TAGS.due);
+  const state = refundPending(bill) ? REFUND_PENDING_TAG : partRefunded ? { tag: 'Part refunded', tone: 'soft' } : (STATE_TAGS[bill.state] ?? STATE_TAGS.due);
   let cancelled = null;
   if (bill.state === 'void') {
     cancelled = bill.cancelled === null ? 'Voided when the membership was cancelled' : voidedLine(bill.cancelled, BILL_CANCEL_REASON_WORDS);
@@ -235,19 +239,23 @@ export function billRow(bill, currency, today) {
     left: open && bill.paidMinor > 0 ? `${formatMinor(bill.paidMinor, currency)} paid · ${formatMinor(left, currency)} left` : null,
     cancelled,
     ...cardLines(bill),
-    payments: [
-      ...bill.payments.map((p) => ({
-        ...paymentLine(p, currency),
-        refundable: p.refundableMinor > 0,
-        // A payment taken through Square goes back through Square (18d-iv-a).
-        toCard: p.refundableMinor > 0 && paidThroughSquare(p.method),
-        cardRefund: p.cardRefund === null || p.cardRefund === undefined ? null : cardRefundOpenLine(p.cardRefund, currency),
-        voided: null,
-      })),
-      ...(bill.voidedPayments ?? []).map((p) => ({ ...paymentLine(p, currency), refundable: false, toCard: false, cardRefund: null, voided: voidedLine(p.voided, PAYMENT_VOID_REASON_WORDS) })),
-    ].sort((a, b) => a.receiptNumber - b.receiptNumber),
+    payments: paymentLines(bill.payments, bill.voidedPayments ?? [], currency),
   };
 }
+
+/** The payments of a bill or a fee, those that stand and those voided, in the order they were taken. */
+const paymentLines = (payments, voided, currency) =>
+  [
+    ...payments.map((p) => ({
+      ...paymentLine(p, currency),
+      refundable: p.refundableMinor > 0,
+      // A payment taken through Square goes back through Square (18d-iv-a).
+      toCard: p.refundableMinor > 0 && paidThroughSquare(p.method),
+      cardRefund: p.cardRefund === null || p.cardRefund === undefined ? null : cardRefundOpenLine(p.cardRefund, currency),
+      voided: null,
+    })),
+    ...voided.map((p) => ({ ...paymentLine(p, currency), refundable: false, toCard: false, cardRefund: null, voided: voidedLine(p.voided, PAYMENT_VOID_REASON_WORDS) })),
+  ].sort((a, b) => a.receiptNumber - b.receiptNumber);
 
 const paymentLine = (p, currency) => ({
   id: p.id,
@@ -283,7 +291,9 @@ const noLongerOwed = (fee) => `No longer owed: ${whyNotOwed(fee)}.`;
 /** One fee as a box: what it is and what it was for, its amount and tag, when it is due,
  *  who waived it, and its payment, a voided one struck through. */
 export function feeRow(fee, currency, today) {
-  const state = FEE_TAGS[fee.state] ?? STATE_TAGS.due;
+  // Some of it has been given back, and not all: still paid, and said so, as on a bill.
+  const partRefunded = fee.state === 'paid' && (fee.refundedMinor ?? 0) > 0;
+  const state = refundPending(fee) ? REFUND_PENDING_TAG : partRefunded ? { tag: 'Part refunded', tone: 'soft' } : (FEE_TAGS[fee.state] ?? STATE_TAGS.due);
   let when = null;
   if (fee.state === 'overdue') when = `Was due ${dayWords(fee.dueOn)}`;
   else if (fee.state === 'due') when = fee.dueOn === today ? 'Due today' : `Due ${dayWords(fee.dueOn)}`;
@@ -305,16 +315,13 @@ export function feeRow(fee, currency, today) {
         : fee.state === 'removed'
           ? noLongerOwed(fee)
           : fee.state === 'paid' && fee.stillOwed === false
-            ? // Paid on the Terminal or from the card on file: Square holds the money, and Void payment is
-              // not offered (18d-vi-b-i, 18d-iii-i).
+            ? // Paid on the Terminal or from the card on file: it goes back through Square, and Void payment
+              // is not offered (18d-vi-b-i, 18d-iii-i, 18d-iv-b-i).
               fee.payments.some((p) => paidThroughSquare(p.method))
-              ? `${noLongerOwed(fee)} To give the money back, refund it in your Square Dashboard.`
+              ? `${noLongerOwed(fee)} To give ${partRefunded ? 'the rest' : 'the money'} back, press Refund on the payment.`
               : `${noLongerOwed(fee)} If you gave the money back, void the payment.`
             : null,
-    payments: [
-      ...fee.payments.map((p) => ({ ...paymentLine(p, currency), refundable: false, toCard: false, cardRefund: null, voided: null })),
-      ...fee.voidedPayments.map((p) => ({ ...paymentLine(p, currency), refundable: false, toCard: false, cardRefund: null, voided: voidedLine(p.voided, PAYMENT_VOID_REASON_WORDS) })),
-    ].sort((a, b) => a.receiptNumber - b.receiptNumber),
+    payments: paymentLines(fee.payments, fee.voidedPayments, currency),
     ...cardLines(fee),
     canPay: fee.can.pay,
     canWaive: fee.can.waive,
@@ -340,6 +347,9 @@ export function feePayBody(draft, fee) {
 }
 
 const feeName = (fee) => (MEMBER_FEE_WORDS[fee.fee] ?? 'fee').toLowerCase();
+
+/** A fee as a refund's box names it: "no-show fee", and what it was for. */
+export const feeRefundWords = (fee) => ({ name: feeName(fee), about: feeForWords(fee) });
 
 /** A fee's Record payment box when the Terminal takes the money (18d-vi-b-i): its title, and
  *  what the fee is for. */
@@ -441,9 +451,14 @@ export function billOfPayment(m, paymentId) {
   return m.billing?.bills.find((b) => b.payments.some((p) => p.id === paymentId)) ?? null;
 }
 
-/** One payment of a membership by its id, or null. */
+/** One payment of a membership by its id, a period's or a fee's, or null. */
 export function paymentOf(m, paymentId) {
-  return m.billing?.bills.flatMap((b) => b.payments).find((p) => p.id === paymentId) ?? null;
+  return [...(m.billing?.bills ?? []), ...(m.billing?.fees ?? [])].flatMap((b) => b.payments).find((p) => p.id === paymentId) ?? null;
+}
+
+/** The fee a payment paid, by the payment's id, or null. */
+export function feeOfPayment(m, paymentId) {
+  return (m.billing?.fees ?? []).find((f) => f.payments.some((p) => p.id === paymentId)) ?? null;
 }
 
 /** The form "Note a refund" opens: the amount starts at what can still be refunded. */
@@ -453,17 +468,18 @@ export function refundDraft(m, payment, newKey) {
 
 /** What the form says above its fields. `live`: the membership is in use. */
 export function refundWords(m, name, payment, live) {
-  const paid = `${formatMinor(payment.amountMinor, m.currency)} paid on ${dayWords(payment.paidOn)}`;
+  const fee = feeOfPayment(m, payment.id);
+  const paid = `${formatMinor(payment.amountMinor, m.currency)} paid on ${dayWords(payment.paidOn)}${fee === null ? '' : ` for ${feeForWords(fee)}`}`;
   const left = formatMinor(payment.refundableMinor, m.currency);
   // Money a change of membership moved to the new one (18x) paid for that one: never refunded here.
   const bill = (m.billing?.bills ?? []).find((b) => b.payments.some((p) => p.id === payment.id));
   const moved = bill !== undefined && bill.movedMinor > 0 ? ` ${formatMinor(bill.movedMinor, m.currency)} of this bill paid for ${m.changedTo?.typeName ?? 'the new membership'} when the membership was changed.` : '';
   const some = payment.refundableMinor < payment.amountMinor ? ` ${left} of it can still be refunded.${moved}` : '';
-  const keeps = live
+  const keeps = live && fee === null
     ? ` ${capital(name)} keeps the membership and its dates: to end it, use Cancel membership.`
     : '';
   return {
-    title: `Note a refund for ${name}'s ${m.typeName}`,
+    title: `Note a refund for ${name}'s ${fee === null ? m.typeName : feeName(fee)}`,
     // A card paid through Square has Refund to card (18d-iv-a): this box may record one Square has made.
     detail: `This is for the ${paid}.${some} It only writes the refund in your records${paidThroughSquare(payment.method) ? '.' : ': give the money back yourself.'}${keeps}`,
   };
@@ -500,8 +516,9 @@ export function voidRefundWords(m, name, paymentId, refundId) {
     others === 0
       ? 'The payment counts in full again.'
       : `It no longer counts. The other ${others === 1 ? 'refund' : `${String(others)} refunds`} on this payment still ${others === 1 ? 'counts' : 'count'}.`;
+  const fee = feeOfPayment(m, paymentId);
   return {
-    question: `Void ${what} for ${name}'s ${m.typeName}?`,
+    question: `Void ${what} for ${name}'s ${fee === null ? m.typeName : feeName(fee)}?`,
     detail: `Use this when a refund was noted by mistake. ${after} The refund stays on this page, crossed out, with who voided it and why.`,
     label: 'Why are you voiding it?',
     button: 'Void refund',

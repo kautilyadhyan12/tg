@@ -163,7 +163,7 @@ export const CARD_CHARGE_WORDS = {
   currency: "This membership is priced in another currency from your Square account, so the card on file can't be charged for it.",
   charge_gone: "This charge is no longer here.",
   disconnect_charging: "A card on file is being charged. Wait a minute for Square's answer, then disconnect.",
-  void_card: "This was charged to the card on file. To give the money back, refund it in your Square Dashboard, then note the refund here.",
+  void_card: "This was charged to the card on file. To give the money back, press Refund on the payment.",
   stopped: "The bank declined this card permanently, so it cannot be charged again. Save another card, or collect payment using another method.",
   tried_out: "This card has been tried 3 times for this payment and cannot be charged for it again. Ask the cardholder for another card, or collect payment using another method.",
 } as const;

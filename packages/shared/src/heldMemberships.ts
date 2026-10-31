@@ -825,6 +825,8 @@ export const heldMembershipSchema = z
     /** Everything paid for the newest period counted as paid was given back (18a-ii): the
      *  page says "Refunded" for it, never "Paid". The days are kept (RULINGS 2026-10-10). */
     refundedInFull: z.boolean(),
+    /** That money is still with Square: the line says Refund pending until it has finished (18d-iv-b-i). */
+    refundPending: z.boolean().default(false),
     /** The discount it was given with (18b-ii-b), as it was then: what came off each
      *  discounted payment and which those are. With "every", `priceMinor` is already the
      *  price after it; with "first", `priceMinor` is the full price of every later period. */

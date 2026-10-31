@@ -95,6 +95,9 @@ describe('a late cancel or no-show fee on the list (18h-i)', () => {
     );
     expect(feeLine({ status: 'late_cancelled', fee: { amountMinor: 500, state: 'paid' } }, 'GBP')).toBe('Late cancel fee £5.00 · paid');
     expect(feeLine({ status: 'no_show', fee: { amountMinor: 800, state: 'waived' } }, 'GBP')).toBe('No-show fee £8.00 · waived');
+    expect(feeLine({ status: 'attended', fee: { amountMinor: 800, state: 'refunded' } }, 'GBP')).toBe('No-show fee £8.00 · refunded');
+    expect(feeLine({ status: 'attended', fee: { amountMinor: 800, state: 'refund_pending' } }, 'GBP')).toBe('No-show fee £8.00 · refund pending');
+    expect(feeLine({ status: 'attended', fee: { amountMinor: 800, state: 'part_refunded' } }, 'GBP')).toBe('No-show fee £8.00 · part refunded');
     expect(feeLine({ status: 'no_show', fee: null }, 'GBP')).toBeNull();
     // Paid, then changed to came: still paid, and said so.
     expect(feeLine({ status: 'attended', fee: { amountMinor: 800, state: 'paid' } }, 'GBP')).toBe('No-show fee £8.00 · paid before they were marked Came');

@@ -117,6 +117,6 @@ export const TERMINAL_PAYMENT_WORDS = {
   waiting: "A payment for this membership is waiting on the Terminal. Wait for it to finish, or cancel it first.",
   payment_gone: "This payment is no longer active.",
   disconnect_waiting: "A payment is waiting on a Square Terminal. Let it finish, or cancel it, then disconnect.",
-  void_terminal: "This was paid by card on the Terminal. To give the money back, refund it in your Square Dashboard, then note the refund here.",
+  void_terminal: "This was paid by card on the Terminal. To give the money back, press Refund on the payment.",
   void_terminal_sale: "This sale was paid by card on the Terminal, so it can't be voided. Refund it in your Square Dashboard, then press Refund sale to note it here.",
 } as const;

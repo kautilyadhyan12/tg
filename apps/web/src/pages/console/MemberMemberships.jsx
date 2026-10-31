@@ -25,7 +25,7 @@ import { changeBody, changeChoice, changeCreditLine, changeDoneWords, changeEndi
 import { viewerPrivileges } from './consoleView';
 import { placeFor } from './consolePlaces';
 import CardRefundBox from './CardRefundBox';
-import { waitsOnSquare } from './cardRefundView';
+import { cardRefundSaidNow, refundReasonsFor, waitsOnSquare } from './cardRefundView';
 import MembershipAgreement from './MembershipAgreement';
 import { noteDay } from './memberListPeople';
 import {
@@ -71,6 +71,8 @@ import {
   feePayBody,
   feePayDraft,
   feeTakeWords,
+  feeOfPayment,
+  feeRefundWords,
   feeRow,
   feesOwed,
   paidWords,
@@ -141,6 +143,8 @@ const PAY = 'c-btn c-btn-p c-btn-sm';
 const STOP = 'c-btn c-btn-danger c-btn-sm';
 /** A payment or refund staff voided: crossed out, in the page's quiet colour. */
 const VOIDED = { color: 'var(--t3)', textDecoration: 'line-through' };
+// A payment or a refund: columns with its button at the end; on a phone, one under another.
+const LINE = 'flex flex-col gap-1.5 md:flex-row md:items-center md:gap-x-3';
 /** Refusals that mean the page is out of date: it is read again. */
 const STALE_CODES = ['held_membership_changed', 'membership_type_not_found', 'bill_has_payment', 'refund_too_much', 'refund_not_settled', 'member_fee_changed'];
 /** A card on file that may not be charged again yet, or at all (18d-iii-ii-a): said under its button. */
@@ -190,6 +194,9 @@ export default function MemberMemberships({
   const [form, setForm] = useState(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
+  /** Where `notice` belongs when it is about one payment: { paymentId, line, sent }, said under that payment, where it was pressed.
+   *  `sent`: Square's answer to a Refund to card, so the sentence follows the refund. */
+  const [saidAt, setSaidAt] = useState(null);
   const [refusal, setRefusal] = useState(null);
   const [showPast, setShowPast] = useState(false);
   /** The membership whose agreement box is open (18u-i): { id, justGiven }, or null. */
@@ -740,9 +747,127 @@ export default function MemberMemberships({
     );
   };
 
+  /** What a payment's ⋯ offers for giving its money back, on a period's bill or a fee (18d-iv-b-i). */
+  const refundMenu = (m, p, acts) => {
+    const items = [];
+    if (acts && p.voided === null && p.toCard) items.push({ ...MENU_WORDS.cardRefund, onPick: () => startCardRefund(m, p.id) });
+    if (acts && p.voided === null && p.refundable) items.push({ ...(p.toCard ? MENU_WORDS.refundElsewhere : MENU_WORDS.refund), onPick: () => startRefund(m, p.id) });
+    return items;
+  };
+
+  /** A payment's button: a payment taken through Square says Refund, in the word Square's own dashboard uses, so nobody has
+   *  to guess it is there; a payment by hand keeps the ⋯. */
+  const paymentMenu = (p, items) =>
+    items.length === 0 ? null : (
+      <MoreMenu
+        label={p.toCard ? 'Refund' : null}
+        compact
+        alignRight
+        ariaLabel={p.toCard ? `Refund the payment of ${p.amount}` : `More for the payment of ${p.amount}`}
+        items={items}
+        disabled={busy}
+      />
+    );
+
+  /** What a refund did, said under the payment it was pressed on: the page may be far from the top of the membership. */
+  const saidUnder = (m, paymentId) => {
+    if (notice === null || saidAt?.paymentId !== paymentId || saidAt.line !== notice) return null;
+    const line = cardRefundSaidNow(saidAt.sent, paymentOf(m, paymentId), notice, saidAt.read !== shown);
+    if (line === null) return null;
+    return (
+      <p className="c-s14 c-w5 m-0 flex items-center gap-2" style={{ color: 'var(--good)' }} role="status" data-testid="held-payment-said">
+        <Check aria-hidden="true" className="w-4 h-4 flex-shrink-0" />
+        {line}
+      </p>
+    );
+  };
+
+  /** Note a refund and Refund to card, drawn under the payment they are about. */
+  const refundBoxUnder = (m, paymentId) => {
+    const here = open !== null && open.id === m.id ? open : null;
+    if (here === null) return null;
+    if (here.what === 'refund' && refundForm !== null && refundForm.paymentId === paymentId) return renderRefund(m);
+    if (here.what === 'cardRefund' && here.paymentId === paymentId) {
+      const payment = paymentOf(m, paymentId);
+      if (payment === null) return null;
+      const fee = feeOfPayment(m, paymentId);
+      return (
+        <CardRefundBox
+          gymId={gymId}
+          entryId={entryId}
+          m={m}
+          payment={payment}
+          fee={fee === null ? null : feeRefundWords(fee)}
+          name={name}
+          live={isLive(m)}
+          paymentsTo={paymentsTo}
+          onClose={() => setOpen(null)}
+          onNote={() => startRefund(m, paymentId)}
+          onDone={(words, sent) => {
+            setOpen(null);
+            setSaidAt({ paymentId, line: words, sent, read: shown });
+            setNotice(words);
+            setAttempt((n) => n + 1);
+            onChanged?.();
+          }}
+        />
+      );
+    }
+    return null;
+  };
+
+  /** The refunds under a payment, each with its receipt and, for one noted by hand, Void refund. */
+  const renderRefundLines = (m, p, acts) => {
+    const here = open !== null && open.id === m.id ? open : null;
+    return (
+      <>
+        {p.refunds.map((r) => (
+          <div
+            key={r.id}
+            className={`${LINE} pl-3`}
+            style={{ borderLeft: `2px solid ${r.voided === null ? 'var(--bad)' : 'var(--raise-line)'}` }}
+            data-testid={r.voided === null ? 'held-refund' : 'held-voided-refund'}
+          >
+            <span className="c-s13 c-w6 whitespace-nowrap" style={r.voided === null ? { color: 'var(--bad)' } : VOIDED}>
+              {r.amount}
+            </span>
+            <span className="c-s13 c-t2 md:flex-1 flex flex-col">
+              <span>{r.detail}</span>
+              {r.note === null ? null : <span style={{ color: 'var(--warn)' }}>{r.note}</span>}
+              {r.voided === null ? null : <span>{r.voided}</span>}
+            </span>
+            <span className="flex items-center gap-2 self-start md:self-auto">
+              <button
+                type="button"
+                className={SMALL}
+                aria-expanded={receiptFor === r.receiptNumber}
+                aria-label={receiptButtonLabel(r.receiptNumber, `the refund of ${r.amount}`)}
+                onClick={() => toggleReceipt(r.receiptNumber)}
+              >
+                {RECEIPT_BUTTON}
+              </button>
+              {acts && r.voided === null && p.voided === null && !r.toCard ? (
+                <MoreMenu
+                  label={null}
+                  alignRight
+                  ariaLabel={`More for the refund of ${r.money}, receipt #${String(r.receiptNumber)}`}
+                  items={[{ ...MENU_WORDS.voidRefund, danger: true, onPick: () => askVoidRefund(m, p.id, r.id) }]}
+                  disabled={busy}
+                />
+              ) : null}
+            </span>
+          </div>
+        ))}
+        {p.refunds.some((r) => r.receiptNumber === receiptFor) ? <ReceiptBox gymId={gymId} gym={gym} number={receiptFor} onClose={() => setReceiptFor(null)} /> : null}
+        {here !== null && here.what === 'voidRefund' && voidForm !== null && here.paymentId === p.id ? renderVoidRefund(m) : null}
+      </>
+    );
+  };
+
   /** A membership's late cancel and no-show fees (18h-i), each a box of its own under its
    *  bills: what it was for, Record payment and Waive fee while it is owed, and its payment
-   *  with its receipt and Void payment. */
+   *  with its receipt, Refund to card and Note a refund where Square took it (18d-iv-b-i), or
+   *  Void payment where it was taken by hand. */
   const renderFees = (m) => {
     const fees = m.billing?.fees ?? [];
     if (fees.length === 0) return null;
@@ -807,18 +932,24 @@ export default function MemberMemberships({
                         >
                           {RECEIPT_BUTTON}
                         </button>
-                        {acts && p.voided === null && p.id === row.voidPaymentId ? (
-                          <MoreMenu
-                            label={null}
-                            alignRight
-                            ariaLabel={`More for the payment of ${p.amount}`}
-                            items={[{ label: 'Void payment', hint: 'It was recorded by mistake. The fee is owed again.', danger: true, onPick: () => startFee(m, 'voidFeePayment', fee) }]}
-                            disabled={busy}
-                          />
-                        ) : null}
+                        {(() => {
+                          const items = refundMenu(m, p, acts);
+                          if (acts && p.voided === null && p.id === row.voidPaymentId) {
+                            items.push({ label: 'Void payment', hint: 'It was recorded by mistake. The fee is owed again.', danger: true, onPick: () => startFee(m, 'voidFeePayment', fee) });
+                          }
+                          return paymentMenu(p, items);
+                        })()}
                       </span>
                     </div>
+                    {p.cardRefund !== null ? (
+                      <span className="c-s13 c-w5" style={{ color: 'var(--warn)' }} data-testid="held-card-refund-open">
+                        {p.cardRefund}
+                      </span>
+                    ) : null}
                     {receiptFor === p.receiptNumber ? <ReceiptBox gymId={gymId} gym={gym} number={p.receiptNumber} onClose={() => setReceiptFor(null)} /> : null}
+                    {saidUnder(m, p.id)}
+                    {refundBoxUnder(m, p.id)}
+                    {renderRefundLines(m, p, acts)}
                   </div>
                 ))}
                 {acts && (row.canPay || row.canWaive) ? (
@@ -976,6 +1107,7 @@ export default function MemberMemberships({
             setRefundForm((f) => ({ ...f, tried: true }));
             return;
           }
+          setSaidAt({ paymentId: payment.id, line: refundedWords(m, body.amountMinor) });
           void run(
             'refund',
             m,
@@ -1011,7 +1143,7 @@ export default function MemberMemberships({
           <span className="c-label">Why it was refunded</span>
           <select className="c-sel" value={refundForm.reason} onChange={(e) => setRefundForm((f) => ({ ...f, reason: e.target.value }))}>
             <option value="">Choose one</option>
-            {REFUND_REASON_CHOICES.map((reason) => (
+            {refundReasonsFor(feeOfPayment(m, refundForm.paymentId), REFUND_REASON_CHOICES).map((reason) => (
               <option key={reason.value} value={reason.value}>
                 {reason.label}
               </option>
@@ -1346,38 +1478,8 @@ export default function MemberMemberships({
     const voidId = canAct && billing.undo?.kind === 'payment' ? billing.undo.paymentId : null;
     // A box a ⋯ opened is drawn inside the line it is about, never under the whole membership.
     const here = open !== null && open.id === m.id ? open : null;
-    const boxUnderPayment = (paymentId) => {
-      if (here === null) return null;
-      if (here.what === 'refund' && refundForm !== null && refundForm.paymentId === paymentId) return renderRefund(m);
-      if (here.what === 'undo' && voidForm !== null && voidId === paymentId) return renderAsk(m);
-      if (here.what === 'cardRefund' && here.paymentId === paymentId) {
-        const payment = paymentOf(m, paymentId);
-        if (payment === null) return null;
-        return (
-          <CardRefundBox
-            gymId={gymId}
-            entryId={entryId}
-            m={m}
-            payment={payment}
-            name={name}
-            live={isLive(m)}
-            paymentsTo={paymentsTo}
-            onClose={() => setOpen(null)}
-            onNote={() => startRefund(m, paymentId)}
-            onDone={(words) => {
-              setOpen(null);
-              setNotice(words);
-              setAttempt((n) => n + 1);
-              onChanged?.();
-            }}
-          />
-        );
-      }
-      return null;
-    };
+    const boxUnderPayment = (paymentId) => (here !== null && here.what === 'undo' && voidForm !== null && voidId === paymentId ? renderAsk(m) : refundBoxUnder(m, paymentId));
     const SPLIT = { borderTop: '1px solid var(--line)' };
-    // A payment or a refund: columns with its button at the end; on a phone, one under another.
-    const LINE = 'flex flex-col gap-1.5 md:flex-row md:items-center md:gap-x-3';
     return (
       <div className="flex flex-col gap-2 pt-2" data-testid="held-bills">
         <span className="c-s13 c-w6 c-t2 uppercase" style={{ letterSpacing: '0.04em' }}>
@@ -1446,13 +1548,11 @@ export default function MemberMemberships({
                           {RECEIPT_BUTTON}
                         </button>
                         {(() => {
-                          const items = [];
-                          if (acts && p.voided === null && p.toCard) items.push({ ...MENU_WORDS.cardRefund, onPick: () => startCardRefund(m, p.id) });
-                          if (acts && p.voided === null && p.refundable) items.push({ ...(p.toCard ? MENU_WORDS.refundElsewhere : MENU_WORDS.refund), onPick: () => startRefund(m, p.id) });
+                          const items = refundMenu(m, p, acts);
                           if (acts && p.voided === null && p.id === voidId) {
                             items.push({ ...MENU_WORDS.voidPayment, danger: true, onPick: () => ask('undo', m) });
                           }
-                          return items.length === 0 ? null : <MoreMenu label={null} alignRight ariaLabel={`More for the payment of ${p.amount}`} items={items} disabled={busy} />;
+                          return paymentMenu(p, items);
                         })()}
                       </span>
                     </div>
@@ -1462,46 +1562,9 @@ export default function MemberMemberships({
                       </span>
                     ) : null}
                     {receiptFor === p.receiptNumber ? <ReceiptBox gymId={gymId} gym={gym} number={p.receiptNumber} onClose={() => setReceiptFor(null)} /> : null}
+                    {saidUnder(m, p.id)}
                     {boxUnderPayment(p.id)}
-                    {p.refunds.map((r) => (
-                      <div
-                        key={r.id}
-                        className={`${LINE} pl-3`}
-                        style={{ borderLeft: `2px solid ${r.voided === null ? 'var(--bad)' : 'var(--raise-line)'}` }}
-                        data-testid={r.voided === null ? 'held-refund' : 'held-voided-refund'}
-                      >
-                        <span className="c-s13 c-w6 whitespace-nowrap" style={r.voided === null ? { color: 'var(--bad)' } : VOIDED}>
-                          {r.amount}
-                        </span>
-                        <span className="c-s13 c-t2 md:flex-1 flex flex-col">
-                          <span>{r.detail}</span>
-                          {r.note === null ? null : <span style={{ color: 'var(--warn)' }}>{r.note}</span>}
-                          {r.voided === null ? null : <span>{r.voided}</span>}
-                        </span>
-                        <span className="flex items-center gap-2 self-start md:self-auto">
-                          <button
-                            type="button"
-                            className={SMALL}
-                            aria-expanded={receiptFor === r.receiptNumber}
-                            aria-label={receiptButtonLabel(r.receiptNumber, `the refund of ${r.amount}`)}
-                            onClick={() => toggleReceipt(r.receiptNumber)}
-                          >
-                            {RECEIPT_BUTTON}
-                          </button>
-                          {acts && r.voided === null && p.voided === null && !r.toCard ? (
-                            <MoreMenu
-                              label={null}
-                              alignRight
-                              ariaLabel={`More for the refund of ${r.money}, receipt #${String(r.receiptNumber)}`}
-                              items={[{ ...MENU_WORDS.voidRefund, danger: true, onPick: () => askVoidRefund(m, p.id, r.id) }]}
-                              disabled={busy}
-                            />
-                          ) : null}
-                        </span>
-                      </div>
-                    ))}
-                    {p.refunds.some((r) => r.receiptNumber === receiptFor) ? <ReceiptBox gymId={gymId} gym={gym} number={receiptFor} onClose={() => setReceiptFor(null)} /> : null}
-                    {here !== null && here.what === 'voidRefund' && voidForm !== null && here.paymentId === p.id ? renderVoidRefund(m) : null}
+                    {renderRefundLines(m, p, acts)}
                   </div>
                 ))}
                 {pays ? (
@@ -2145,7 +2208,7 @@ export default function MemberMemberships({
           {`${name.charAt(0).toUpperCase()}${name.slice(1)} is a past member, so these are not in use. Put them back on your list to use them again.`}
         </p>
       ) : null}
-      {notice !== null ? (
+      {notice !== null && saidAt?.line !== notice ? (
         <p className="c-s14 c-w5 m-0 flex items-center gap-2" style={{ color: 'var(--good)' }} role="status">
           <Check aria-hidden="true" className="w-4 h-4" />
           {notice}

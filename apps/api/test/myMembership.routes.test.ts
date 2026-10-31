@@ -428,10 +428,10 @@ d("my membership: a member's own memberships, payments and receipts (real Postgr
     const m = answer.memberships[0];
     expect(m?.owed).toBeNull();
     expect(m?.payments).toEqual([
-      { amountMinor: 3000, method: "cash", paidOn: today, covers: null, receiptNumber: second.receipt, refunds: [{ amountMinor: 500, method: "cash", refundedOn: today, receiptNumber: back }] },
+      { amountMinor: 3000, method: "cash", paidOn: today, covers: null, receiptNumber: second.receipt, refunds: [{ amountMinor: 500, method: "cash", refundedOn: today, receiptNumber: back, pending: false }] },
     ]);
     expect(answer.purchases).toEqual([
-      { receiptNumber: bought.receipt, soldOn: today, method: "cash", currency: "INR", totalMinor: 500, lines: [{ name: "Water", quantity: 2, totalMinor: 500 }], refunds: [{ amountMinor: 250, method: "cash", refundedOn: today, receiptNumber: waterRefund?.receipt_number }] },
+      { receiptNumber: bought.receipt, soldOn: today, method: "cash", currency: "INR", totalMinor: 500, lines: [{ name: "Water", quantity: 2, totalMinor: 500 }], refunds: [{ amountMinor: 250, method: "cash", refundedOn: today, receiptNumber: waterRefund?.receipt_number, pending: false }] },
     ]);
     expect(answer.purchasesNotShown).toBe(0);
     // No staff member's name and no voided row is in it.
@@ -486,6 +486,24 @@ d("my membership: a member's own memberships, payments and receipts (real Postgr
     expect(after.find((f) => f.forName === "Morning yoga")).toMatchObject({ fee: "late_cancel", amountMinor: 200, state: "paid", receiptNumber: feeReceipt?.receipt_number });
     expect(after.find((f) => f.forName === "Spin")).toMatchObject({ state: "waived", receiptNumber: null });
     expect((await myReceipt(gym, maya, feeReceipt?.receipt_number ?? 0)).statusCode).toBe(200);
+
+    // The fee goes back through Square (18d-iv-b-i): part, then all. The member reads it, and the page still answers.
+    const [feePayment] = await sql<{ id: string }[]>`UPDATE gym_member_payments SET method = 'terminal', provider = 'square', provider_payment_id = ${`PAY${randomUUID()}`} WHERE bill_id = ${yoga} RETURNING id`;
+    const refund = (amountMinor: number) =>
+      inject("POST", `${heldUrl(gym, maya.entryId)}/${held}/payments/${feePayment?.id ?? ""}/refunds`, gym.owner.cookies, { requestKey: randomUUID(), amountMinor, method: "cash", reason: "other" });
+    expect((await refund(50)).statusCode).toBe(200);
+    const part = (await mine(gym, maya)).memberships[0]?.fees ?? [];
+    expect(part.find((f) => f.forName === "Morning yoga")).toMatchObject({ state: "paid", refundedMinor: 50, receiptNumber: feeReceipt?.receipt_number });
+    expect((await refund(150)).statusCode).toBe(200);
+    const whole = (await mine(gym, maya)).memberships[0]?.fees ?? [];
+    expect(whole.find((f) => f.forName === "Morning yoga")).toMatchObject({ state: "refunded", refundPending: false, refundedMinor: 200, receiptNumber: feeReceipt?.receipt_number });
+    // That refund still with Square: the member reads it as pending, not done.
+    const [noted] = await sql<{ id: string }[]>`SELECT id FROM gym_member_refunds WHERE payment_id = ${feePayment?.id ?? ""} ORDER BY created_at DESC LIMIT 1`;
+    await sql`
+      INSERT INTO gym_square_refunds (id, gym_id, payment_id, member_refund_id, environment, account_id, square_payment_id, square_refund_id, amount_minor, currency, reason, request_key, state, started_at, checked_at)
+      VALUES (${randomUUID()}, ${gym.id}, ${feePayment?.id ?? ""}, ${noted?.id ?? ""}, 'sandbox', 'ACCOUNT', 'PAYMENT', ${`REFUND${randomUUID()}`}, 150, 'INR', 'other', ${randomUUID()}, 'pending', now(), now())`;
+    const waiting = (await mine(gym, maya)).memberships[0]?.fees ?? [];
+    expect(waiting.find((f) => f.forName === "Morning yoga")).toMatchObject({ state: "refunded", refundPending: true });
   });
 
   it("an archived gym answers nobody, and a member past their limit is told to wait — a stranger still 404", async () => {

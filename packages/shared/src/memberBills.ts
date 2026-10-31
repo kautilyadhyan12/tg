@@ -179,9 +179,10 @@ export const memberRefundSchema = z
     /** Its receipt's number, the gym's own (18g-i). */
     receiptNumber: receiptNumberSchema,
     /** Sent to the card through Square (18d-iv-a): where it stands there, and the card, where Square named it. `late`:
-     *  still pending after Square's 14 days. Null for one noted by hand. */
+     *  still pending after Square's 14 days. `pressId`: the press it came from (`cardRefundResponseSchema`). Null for one
+     *  noted by hand. */
     square: z
-      .object({ state: z.enum(["pending", "completed"]), card: cardSeenSchema.nullable(), late: z.boolean() })
+      .object({ state: z.enum(["pending", "completed"]), card: cardSeenSchema.nullable(), late: z.boolean(), pressId: z.string().uuid().nullable().default(null) })
       .strict()
       .nullable()
       .default(null),
@@ -281,10 +282,10 @@ export const memberBillSchema = z
   .strict();
 export type MemberBill = z.infer<typeof memberBillSchema>;
 
-/** Where a fee stands: owed (due or overdue), paid, waived by staff, or taken off once its
- *  payment was voided after the booking stopped counting (marked came, or the class did not
- *  run). An unpaid fee taken off by itself, with no payment ever, is not sent. */
-export const MEMBER_FEE_STATES = ["due", "overdue", "paid", "waived", "removed"] as const;
+/** Where a fee stands: owed (due or overdue), paid, refunded in full (18d-iv-b-i), waived by staff,
+ *  or taken off once its payment was voided after the booking stopped counting (marked came, or the
+ *  class did not run). An unpaid fee taken off by itself, with no payment ever, is not sent. */
+export const MEMBER_FEE_STATES = ["due", "overdue", "paid", "refunded", "waived", "removed"] as const;
 export type MemberFeeState = (typeof MEMBER_FEE_STATES)[number];
 
 /** One fee of a membership, and what staff can do about it now. */
@@ -313,6 +314,8 @@ export const memberFeeSchema = z
      *  staff marked them came, the class was cancelled, or the session is gone: a fee paid before that stays paid,
      *  and voiding its payment takes the fee off instead of making it owed again. */
     stillOwed: z.boolean().default(true),
+    /** The refunds that stand against its payment (18d-iv-b-i). */
+    refundedMinor: minorSchema.default(0),
     payments: z.array(memberPaymentSchema),
     voidedPayments: z.array(voidedMemberPaymentSchema),
     /** As a bill's (18d-iii-i). */

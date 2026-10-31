@@ -21,7 +21,9 @@ import {
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { openDueBills } from "../src/modules/orgs/memberships/billsRepo.js";
+import { removeFreezeFees } from "../src/modules/orgs/memberships/freezeFees.js";
 import { CARD_REFUND } from "../src/modules/orgs/payments/cardRefunds.js";
+import { linesPage, totals } from "../src/modules/orgs/paymentsDownload/repo.js";
 import { squareSettings } from "../src/modules/orgs/payments/settings.js";
 import { processSquareWork } from "../src/modules/orgs/payments/work.js";
 import { account, fakeSquare, type Account } from "./fakeSquareTerminal.js";
@@ -203,16 +205,7 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
     await sql`UPDATE gym_held_memberships SET starts_on = starts_on - 7 WHERE gym_id = ${gym.id} AND id = ${membershipId}`;
     await sql`UPDATE gym_member_bills SET due_on = due_on - 7, covers_from = covers_from - 7, covers_to = covers_to - 7 WHERE gym_id = ${gym.id} AND held_membership_id = ${membershipId}`;
     await openDueBills({ sql, log: quiet }, { now: clock, gymIds: [gym.id] });
-    const cardId = `ccof:${randomUUID()}`;
-    const customerId = `CUST${uniq()}`;
-    const [agreed] = await sql<{ id: string }[]>`
-      INSERT INTO gym_card_agreements (gym_id, entry_id, words, screen, screen_user_id, brand, last4, agreed_at)
-      VALUES (${gym.id}, ${entryId}, 'I agree that this gym may save this card and charge it for my membership.', 'desk', ${gym.owner.userId}, 'VISA', '1111', now())
-      RETURNING id`;
-    await sql`
-      INSERT INTO gym_member_cards (gym_id, entry_id, environment, account_id, customer_id, card_id, brand, last4, exp_month, exp_year, saved_from, saved_by, agreement_id, saved_at, updated_at)
-      VALUES (${gym.id}, ${entryId}, 'production', ${gym.acct.merchantId}, ${customerId}, ${cardId}, 'VISA', '1111', 12, 2031, 'desk', ${gym.owner.userId}, ${agreed?.id ?? null}, now(), now())`;
-    square.card(cardId, gym.acct.merchantId, customerId, "pays");
+    await saveCard(gym, entryId);
     const [bill] = await sql<{ id: string }[]>`
       SELECT id FROM gym_member_bills WHERE gym_id = ${gym.id} AND held_membership_id = ${membershipId} AND status = 'open' ORDER BY period_index LIMIT 1`;
     const start = await send("POST", `${entryUrl(gym, entryId)}/memberships/${membershipId}/card-charge`, gym.owner.cookies, {
@@ -230,6 +223,47 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
       SELECT id, provider_payment_id FROM gym_member_payments WHERE gym_id = ${gym.id} AND bill_id = ${bill?.id ?? ""} AND method = 'company'`;
     if (paid === undefined) throw new Error("no card payment");
     return { gym, entryId, membershipId, paymentId: paid.id, squarePaymentId: paid.provider_payment_id, billId: bill?.id ?? "" };
+  };
+  /** Somebody's no-show fee, owed on a membership already paid for in cash: the bill alone, nothing paid yet. */
+  const feeOwed = async (gym: Gym, fullName: string, feeMinor = 1000): Promise<{ entryId: string; membershipId: string; billId: string }> => {
+    const entryId = await person(gym, fullName);
+    const today = (await held(gym, gym.owner, entryId)).today;
+    const given = await send("POST", `${entryUrl(gym, entryId)}/memberships`, gym.owner.cookies, { requestKey: randomUUID(), method: "cash", typeId: gym.typeId, startsOn: today, paid: true });
+    expect(given.statusCode, given.body).toBe(201);
+    const membershipId = heldMembershipsResponseSchema.parse(JSON.parse(given.body)).memberships[0]?.id ?? "";
+    const [bill] = await sql<{ id: string }[]>`
+      INSERT INTO gym_member_bills (gym_id, held_membership_id, amount_minor, currency, due_on, covers_from, covers_to, fee, fee_for)
+      SELECT gym_id, id, ${feeMinor}, currency, ${today}, ${today}, ${today}, 'no_show', 'Yoga' FROM gym_held_memberships WHERE id = ${membershipId}
+      RETURNING id`;
+    if (bill === undefined) throw new Error("no fee");
+    return { entryId, membershipId, billId: bill.id };
+  };
+  /** Somebody whose $10.00 no-show fee was charged to their card on file: Square holds it. */
+  const feePaid = async (gym: Gym, fullName: string, feeMinor = 1000): Promise<Paid> => {
+    const { entryId, membershipId, billId } = await feeOwed(gym, fullName, feeMinor);
+    await saveCard(gym, entryId);
+    const start = await send("POST", `${entryUrl(gym, entryId)}/memberships/${membershipId}/fees/${billId}/card-charge`, gym.owner.cookies, {
+      requestKey: randomUUID(),
+      amountMinor: feeMinor,
+      cardRef: await cardRefOf(gym, entryId),
+    });
+    expect(start.statusCode, start.body).toBe(200);
+    const [paid] = await sql<{ id: string; provider_payment_id: string }[]>`
+      SELECT id, provider_payment_id FROM gym_member_payments WHERE gym_id = ${gym.id} AND bill_id = ${billId}`;
+    if (paid === undefined) throw new Error("no fee payment");
+    return { gym, entryId, membershipId, paymentId: paid.id, squarePaymentId: paid.provider_payment_id, billId };
+  };
+  const saveCard = async (gym: Gym, entryId: string): Promise<void> => {
+    const cardId = `ccof:${randomUUID()}`;
+    const customerId = `CUST${uniq()}`;
+    const [agreed] = await sql<{ id: string }[]>`
+      INSERT INTO gym_card_agreements (gym_id, entry_id, words, screen, screen_user_id, brand, last4, agreed_at)
+      VALUES (${gym.id}, ${entryId}, 'I agree that this gym may save this card and charge it for my membership.', 'desk', ${gym.owner.userId}, 'VISA', '1111', now())
+      RETURNING id`;
+    await sql`
+      INSERT INTO gym_member_cards (gym_id, entry_id, environment, account_id, customer_id, card_id, brand, last4, exp_month, exp_year, saved_from, saved_by, agreement_id, saved_at, updated_at)
+      VALUES (${gym.id}, ${entryId}, 'production', ${gym.acct.merchantId}, ${customerId}, ${cardId}, 'VISA', '1111', 12, 2031, 'desk', ${gym.owner.userId}, ${agreed?.id ?? null}, now(), now())`;
+    square.card(cardId, gym.acct.merchantId, customerId, "pays");
   };
   const cardRefOf = async (gym: Gym, entryId: string): Promise<string> => {
     const res = await send("GET", `${entryUrl(gym, entryId)}/terminal-payments`, gym.owner.cookies);
@@ -251,6 +285,12 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
   const paymentsOnPage = async (p: Paid) => {
     const page = await held(p.gym, p.gym.owner, p.entryId);
     return page.memberships.flatMap((m) => m.billing?.bills ?? []).flatMap((b) => b.payments);
+  };
+  const feeOnPage = async (p: Paid) => {
+    const page = await held(p.gym, p.gym.owner, p.entryId);
+    const fee = page.memberships.flatMap((m) => m.billing?.fees ?? []).find((x) => x.id === p.billId);
+    if (fee === undefined) throw new Error("the fee is not on the page");
+    return fee;
   };
   const paymentOnPage = async (p: Paid) => {
     const shown = (await paymentsOnPage(p)).find((x) => x.id === p.paymentId);
@@ -643,6 +683,17 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
   });
 
   describe("with everything else on the page", () => {
+    it("the line at the top of the membership waits for Square too", async () => {
+      const maya = await paidByCard(gym, "Top Line");
+      const top = async () => (await held(gym, gym.owner, maya.entryId)).memberships.find((m) => m.id === maya.membershipId);
+      await press(maya, 2500);
+      expect(await top()).toMatchObject({ refundedInFull: true, refundPending: true });
+      square.refundEnds(madeFor(maya)[0]?.id ?? "", "COMPLETED");
+      clock = new Date(clock.getTime() + CARD_REFUND.lookAfterMs[0] + 1000);
+      await work();
+      expect(await top()).toMatchObject({ refundedInFull: true, refundPending: false });
+    });
+
     it("a refund to the card cannot be voided, and one noted by hand still can", async () => {
       const maya = await paidByCard(gym, "Void Rules");
       await press(maya, 500);
@@ -695,6 +746,226 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
       const before = await hub.toldAbout(gym.id, maya.entryId);
       await press(maya, 300);
       expect(await hub.toldAbout(gym.id, maya.entryId, before + 1)).toBeGreaterThan(before);
+    });
+  });
+
+  // 18d-iv-b-i. The worst thing here is the same one, on a fee: refunded twice, refunded more than was paid, or the wrong
+  // person's. A failed fee refund handing out a member's gift is in `referrals.memberGift.routes.test.ts`.
+  describe("a fee", () => {
+    // A gym of its own: the same owner is held to the sixty presses an hour the routes allow.
+    beforeAll(async () => {
+      gym = await makeGym(`Fee Gym ${uniq()}`, `MERCH${uniq()}`);
+    }, T);
+
+    it("Maya's $10.00 no-show fee goes back to the card once, and nobody else's moves", async () => {
+      const maya = await feePaid(gym, "Maya Fee");
+      const ravi = await feePaid(gym, "Ravi Fee");
+      const nina = await feePaid(nextDoor, "Nina Fee");
+
+      const box = await send("GET", refundUrl(maya), gym.owner.cookies);
+      expect(box.statusCode, box.body).toBe(200);
+      expect(cardRefundCheckSchema.parse(JSON.parse(box.body))).toEqual({ card: { brand: "VISA", last4: "1111" }, leftMinor: 1000, refundedInSquareMinor: 0, block: null });
+
+      const key = randomUUID();
+      const [first, again] = await Promise.all([press(maya, 1000, key), press(maya, 1000, key)]);
+      expect(first.statusCode, first.body).toBe(200);
+      expect(again.statusCode, again.body).toBe(200);
+      expect(madeFor(maya)).toHaveLength(1);
+      expect(madeFor(maya)[0]).toMatchObject({ amount_money: { amount: 1000, currency: "USD" }, accountId: gym.acct.merchantId });
+      expect((await refundsOf(maya)).map((r) => [r.amount_minor, r.method, r.undone])).toEqual([[1000, "company", false]]);
+      expect(await billStatus(maya)).toBe("refunded");
+
+      const shown = await feeOnPage(maya);
+      expect(shown).toMatchObject({ state: "refunded", refundedMinor: 1000, can: { pay: false, waive: false, voidPaymentId: null } });
+      expect(shown.payments[0]).toMatchObject({ refundableMinor: 0, cardRefund: null, refunds: [{ amountMinor: 1000, method: "company", square: { state: "pending" } }] });
+
+      const second = await press(maya, 1);
+      expect(second.statusCode).toBe(409);
+      expect((JSON.parse(second.body) as { error: string }).error).toBe("card_refund_nothing_left");
+      expect(madeFor(maya)).toHaveLength(1);
+
+      // Ravi's fee through Maya's door, next door's through ours, and next door's owner at our address.
+      const wrongDoor = await send("POST", refundUrl(maya, maya.entryId, maya.membershipId, ravi.paymentId), gym.owner.cookies, { requestKey: randomUUID(), amountMinor: 100, reason: "other" });
+      expect(wrongDoor.statusCode).toBe(404);
+      const wrongRecord = await send("GET", refundUrl(ravi, maya.entryId, ravi.membershipId, ravi.paymentId), gym.owner.cookies);
+      expect(wrongRecord.statusCode).toBe(404);
+      const ours = await send("POST", refundUrl(maya, maya.entryId, maya.membershipId, nina.paymentId), gym.owner.cookies, { requestKey: randomUUID(), amountMinor: 100, reason: "other" });
+      expect(ours.statusCode).toBe(404);
+      const stranger = await send("POST", refundUrl(ravi), nextDoor.owner.cookies, { requestKey: randomUUID(), amountMinor: 100, reason: "other" });
+      expect([403, 404]).toContain(stranger.statusCode);
+      const noted = await send("POST", `${entryUrl(gym, maya.entryId)}/memberships/${maya.membershipId}/payments/${ravi.paymentId}/refunds`, gym.owner.cookies, { requestKey: randomUUID(), amountMinor: 100, method: "cash", reason: "other" });
+      expect(noted.statusCode).toBe(404);
+      expect(madeFor(ravi)).toHaveLength(0);
+      expect(madeFor(nina)).toHaveLength(0);
+      expect(await refundsOf(ravi)).toHaveLength(0);
+      expect(await refundsOf(nina)).toHaveLength(0);
+      expect(await billStatus(ravi)).toBe("paid");
+    });
+
+    it("two members of staff at one instant never send more than was paid", async () => {
+      const maya = await feePaid(gym, "Fee Two Staff");
+      const answers = await Promise.all([press(maya, 800), press(maya, 800), press(maya, 800), press(maya, 800)]);
+      expect(answers.filter((a) => a.statusCode === 200)).toHaveLength(1);
+      expect(madeFor(maya)).toHaveLength(1);
+      expect((await refundsOf(maya)).map((r) => r.amount_minor)).toEqual([800]);
+    });
+
+    it("part of a fee: it stays Paid, says what is left, and never goes over", async () => {
+      const maya = await feePaid(gym, "Fee Part");
+      expect((await press(maya, 400)).statusCode).toBe(200);
+      const part = await feeOnPage(maya);
+      expect(part).toMatchObject({ state: "paid", refundedMinor: 400 });
+      expect(part.payments[0]?.refundableMinor).toBe(600);
+      const over = await press(maya, 601);
+      expect(over.statusCode).toBe(409);
+      expect((JSON.parse(over.body) as { message: string }).message).toBe("That is more than can be refunded. $6.00 is the most.");
+      expect((await press(maya, 600)).statusCode).toBe(200);
+      expect(await billStatus(maya)).toBe("refunded");
+      expect(madeFor(maya).map((r) => r.amount_money.amount)).toEqual([400, 600]);
+    });
+
+    it("a fee paid on the Terminal goes back the same way, and reads as the Terminal's", async () => {
+      const maya = await feePaid(gym, "Fee Terminal");
+      await sql`UPDATE gym_member_payments SET method = 'terminal' WHERE gym_id = ${gym.id} AND id = ${maya.paymentId}`;
+      expect((await press(maya, 1000)).statusCode).toBe(200);
+      expect((await refundsOf(maya)).map((r) => r.method)).toEqual(["terminal"]);
+    });
+
+    it("a fee paid by hand is never sent to Square, takes no refund, and is voided as it always was", async () => {
+      const { entryId, membershipId, billId } = await feeOwed(gym, "Fee Cash");
+      const at = `${entryUrl(gym, entryId)}/memberships/${membershipId}`;
+      const paid = await send("POST", `${at}/fees/${billId}/payments`, gym.owner.cookies, { requestKey: randomUUID(), amountMinor: 1000, method: "cash" });
+      expect(paid.statusCode, paid.body).toBe(200);
+      const p: Paid = { gym, entryId, membershipId, billId, paymentId: "", squarePaymentId: "" };
+      const fee = await feeOnPage(p);
+      const paymentId = fee.payments[0]?.id ?? "";
+      expect(fee.payments[0]?.refundableMinor).toBe(0);
+      expect(fee.can.voidPaymentId).toBe(paymentId);
+      const toCard = await send("POST", refundUrl({ ...p, paymentId }), gym.owner.cookies, { requestKey: randomUUID(), amountMinor: 1000, reason: "other" });
+      expect(toCard.statusCode).toBe(409);
+      expect((JSON.parse(toCard.body) as { error: string }).error).toBe("card_refund_not_card");
+      const noted = await send("POST", `${at}/payments/${paymentId}/refunds`, gym.owner.cookies, { requestKey: randomUUID(), amountMinor: 1000, method: "cash", reason: "other" });
+      expect(noted.statusCode).toBe(409);
+      expect(await refundsOf({ ...p, paymentId })).toHaveLength(0);
+    });
+
+    it("Note a refund on a fee taken through Square: it counts, and Void refund takes it back", async () => {
+      const maya = await feePaid(gym, "Fee Noted");
+      const at = `${entryUrl(gym, maya.entryId)}/memberships/${maya.membershipId}/payments/${maya.paymentId}/refunds`;
+      const noted = await send("POST", at, gym.owner.cookies, { requestKey: randomUUID(), amountMinor: 1000, method: "cash", reason: "other" });
+      expect(noted.statusCode, noted.body).toBe(200);
+      expect(await billStatus(maya)).toBe("refunded");
+      expect((await feeOnPage(maya)).state).toBe("refunded");
+      expect(madeFor(maya)).toHaveLength(0);
+      const refund = (await refundsOf(maya))[0];
+      const voided = await send("POST", `${at}/${refund?.id ?? ""}/void`, gym.owner.cookies, { reason: "mistake" });
+      expect(voided.statusCode, voided.body).toBe(200);
+      const back = await feeOnPage(maya);
+      expect(back).toMatchObject({ state: "paid", refundedMinor: 0 });
+      expect(back.payments[0]).toMatchObject({ refundableMinor: 1000, voidedRefunds: [{ amountMinor: 1000, voided: { reason: "mistake" } }] });
+    });
+
+    it("pending, then finished by the worker's look; the press names itself, so a sentence follows its own refund", async () => {
+      const maya = await feePaid(gym, "Fee Pending");
+      const sent = cardRefundResponseSchema.parse(JSON.parse((await press(maya, 1000)).body));
+      expect(sent.step).toBe("pending");
+      expect((await feeOnPage(maya)).payments[0]?.refunds[0]?.square?.pressId).toBe(sent.pressId);
+      square.refundEnds(madeFor(maya)[0]?.id ?? "", "COMPLETED");
+      clock = new Date(clock.getTime() + CARD_REFUND.lookAfterMs[0] + 1000);
+      await work();
+      expect((await pressesOf(maya))[0]).toMatchObject({ state: "done", outcome: "completed" });
+      expect((await feeOnPage(maya)).payments[0]?.refunds[0]?.square).toMatchObject({ state: "completed", pressId: sent.pressId });
+    });
+
+    it("a change of membership waits for a fee's refund Square has not answered", async () => {
+      const maya = await feePaid(gym, "Fee Change Waits");
+      square.state.refundLost = true;
+      await press(maya, 500);
+      square.state.refundLost = false;
+      const today = (await held(gym, gym.owner, maya.entryId)).today;
+      const change = await send("POST", `${entryUrl(gym, maya.entryId)}/memberships/${maya.membershipId}/change`, gym.owner.cookies, {
+        requestKey: randomUUID(),
+        typeId: gym.typeId,
+        when: "today",
+        startsOn: today,
+        priceMinor: 2500,
+        creditMinor: 0,
+        totalMinor: 2500,
+        paid: false,
+      });
+      expect(change.statusCode, change.body).toBe(409);
+      expect((JSON.parse(change.body) as { error: string }).error).toBe("card_refund_waiting");
+    });
+
+    it("a freeze fee refunded, then unfrozen, stays no longer owed if Square fails the refund", async () => {
+      const maya = await feePaid(gym, "Fee Freeze");
+      await sql`UPDATE gym_member_bills SET fee = 'freeze', fee_for = 'Gold Weekly' WHERE gym_id = ${gym.id} AND id = ${maya.billId}`;
+      expect((await press(maya, 1000)).statusCode).toBe(200);
+      const [bill] = await sql<{ covers_from: string }[]>`SELECT covers_from::text AS covers_from FROM gym_member_bills WHERE id = ${maya.billId}`;
+      await sql.begin((tx) => removeFreezeFees(tx, gym.id, maya.membershipId, bill?.covers_from ?? "", clock));
+      square.refundEnds(madeFor(maya)[0]?.id ?? "", "FAILED");
+      clock = new Date(clock.getTime() + CARD_REFUND.lookAfterMs[0] + 1000);
+      await work();
+      expect(await feeOnPage(maya)).toMatchObject({ state: "paid", stillOwed: false });
+    });
+
+    it("Square fails it after taking it up: no money went, the fee reads Paid, and it can be sent again", async () => {
+      const maya = await feePaid(gym, "Fee Failed");
+      expect((await press(maya, 1000)).statusCode).toBe(200);
+      expect(await billStatus(maya)).toBe("refunded");
+      square.refundEnds(madeFor(maya)[0]?.id ?? "", "FAILED");
+      clock = new Date(clock.getTime() + CARD_REFUND.lookAfterMs[0] + 1000);
+      await work();
+      expect(await billStatus(maya)).toBe("paid");
+      expect(await refundsOf(maya)).toMatchObject([{ undone: true, void_reason: "square_failed" }]);
+      const shown = await feeOnPage(maya);
+      expect(shown).toMatchObject({ state: "paid", refundedMinor: 0 });
+      expect(shown.payments[0]).toMatchObject({ refunds: [], refundableMinor: 1000, voidedRefunds: [{ voided: { reason: "square_failed", by: null } }] });
+      expect((await press(maya, 1000)).statusCode).toBe(200);
+    });
+
+    it("no answer from Square: the fee's page says so, nothing else is noted meanwhile, and asked again it is refunded once", async () => {
+      const maya = await feePaid(gym, "Fee Lost");
+      square.state.refundLost = true;
+      await press(maya, 500);
+      square.state.refundLost = false;
+      expect((await feeOnPage(maya)).payments[0]?.cardRefund).toMatchObject({ amountMinor: 500, lost: false });
+      const noted = await send("POST", `${entryUrl(gym, maya.entryId)}/memberships/${maya.membershipId}/payments/${maya.paymentId}/refunds`, gym.owner.cookies, { requestKey: randomUUID(), amountMinor: 100, method: "cash", reason: "other" });
+      expect(noted.statusCode).toBe(409);
+      expect((JSON.parse(noted.body) as { error: string }).error).toBe("card_refund_waiting");
+
+      clock = new Date(clock.getTime() + CARD_REFUND.idleMs + 1000);
+      await work();
+      expect(madeFor(maya)).toHaveLength(1);
+      expect((await refundsOf(maya)).map((r) => r.amount_minor)).toEqual([500]);
+      expect((await feeOnPage(maya)).payments[0]).toMatchObject({ cardRefund: null, refundableMinor: 500 });
+    });
+
+    it("its receipts, Reports, the payments download and the gym's record all say what happened", async () => {
+      const maya = await feePaid(gym, "Fee Records");
+      const refundedInReports = async () => {
+        const res = await send("GET", `/v1/orgs/${gym.id}/reports/money`, gym.owner.cookies);
+        expect(res.statusCode, res.body).toBe(200);
+        return (JSON.parse(res.body) as { report: { thisMonth: { refundedMinor: number } } }).report.thisMonth.refundedMinor;
+      };
+      const before = await refundedInReports();
+      await press(maya, 700);
+      expect(await refundedInReports()).toBe(before + 700);
+      const row = (await refundsOf(maya))[0];
+      const receipt = await send("GET", `/v1/orgs/${gym.id}/receipts/${String(row?.receipt_number ?? 0)}`, gym.owner.cookies);
+      expect(receipt.statusCode, receipt.body).toBe(200);
+      expect(JSON.parse(receipt.body)).toMatchObject({ kind: "refund", method: "company", refundedMinor: 700 });
+      const [paid] = await sql<{ receipt_number: number; paid_on: string }[]>`SELECT receipt_number, paid_on::text AS paid_on FROM gym_member_payments WHERE gym_id = ${gym.id} AND id = ${maya.paymentId}`;
+      const paidReceipt = await send("GET", `/v1/orgs/${gym.id}/receipts/${String(paid?.receipt_number ?? 0)}`, gym.owner.cookies);
+      expect(JSON.parse(paidReceipt.body)).toMatchObject({ kind: "payment", refunds: [{ amountMinor: 700 }] });
+      const day = paid?.paid_on ?? "";
+      const { lastReceipt } = await totals(sql, gym.id, day, "2099-12-31");
+      const lines = await linesPage(sql, gym.id, day, "2099-12-31", lastReceipt, null);
+      expect(lines.filter((l) => l.receipt === row?.receipt_number).map((l) => [l.kind, l.item, l.amountMinor])).toEqual([["refund", "No-show fee · Yoga", 700]]);
+      const [audit] = await sql<{ action: string; meta: Record<string, string> }[]>`
+        SELECT action, meta FROM audit_log WHERE gym_id = ${gym.id} AND target_id = ${row?.id ?? ""}`;
+      expect(audit).toMatchObject({ action: "org.member_refund_sent", meta: { fee: "no_show", amountMinor: "700", brand: "VISA", last4: "1111" } });
+      expect(audit?.meta).not.toHaveProperty("period");
     });
   });
 });

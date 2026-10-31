@@ -515,7 +515,7 @@ describe('Note a refund', () => {
     // The bill says part went back, with the refund on its own line; the membership's dates and "Paid" line stay.
     const [now] = await rowsSoon();
     expect(billsOf(now)).toEqual([
-      '4 Oct – 3 Nov 2026£49.99Part refunded£49.99Cash · 4 Oct 2026 · by Sam OwnerView receipt£20.00 refundedCash · 4 Oct 2026 · Charged too much · by Sam OwnerView receipt',
+      '4 Oct – 3 Nov 2026£49.99Part refunded£49.99Cash · 4 Oct 2026 · by Sam OwnerView receipt£20.00 noted as refunded.£20.00 refundedCash · 4 Oct 2026 · Charged too much · by Sam OwnerView receipt',
     ]);
     expect(within(now).getByTestId('held-payment').textContent).toBe('Paid · next payment due 4 November 2026');
     // A payment with a refund on it is not offered to be voided: its ⋯ offers the rest of the refund only.
