@@ -9,6 +9,8 @@ import { gymMemberPostingSchema, gymPostReactionSchema, postsCursor, reactionCou
 
 /** The words of one comment or reply, by `postLength`. */
 export const GYM_POST_COMMENT_MAX_CHARS = 500;
+/** The most a comment not yet sent may hold on the phone: over the limit is said, and the words are not cut. */
+export const GYM_POST_COMMENT_DRAFT_MOST = GYM_POST_COMMENT_MAX_CHARS * 4;
 /** Comments and replies one member may write at one gym in any 24 hours. */
 export const GYM_MEMBER_COMMENTS_A_DAY = 100;
 /** Comments, or replies under one comment, on a page. */
@@ -64,11 +66,18 @@ export const gymPostCommentsResponseSchema = z
   .strict();
 export type GymPostCommentsResponse = z.infer<typeof gymPostCommentsResponseSchema>;
 
+/** Characters that draw nothing: space aside, these alone would show as a blank comment. Named one by one, since the
+ *  phone's engine shares this file. */
+const DRAWS_NOTHING = /[\u00AD\u0600-\u0605\u061C\u06DD\u070F\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u206F\uFEFF]/g;
+
+/** Whether anything would show. */
+export const hasCommentWords = (text: string): boolean => text.replace(DRAWS_NOTHING, "").trim() !== "";
+
 const commentWords = z
   .string()
-  .max(GYM_POST_COMMENT_MAX_CHARS * 2)
+  .max(GYM_POST_COMMENT_DRAFT_MOST)
   .refine((text) => !text.includes(NUL), { message: "a character that cannot be kept" })
-  .refine((text) => text.trim() !== "", { message: "nothing to post" })
+  .refine(hasCommentWords, { message: "nothing to post" })
   .refine((text) => postLength(text.trim()) <= GYM_POST_COMMENT_MAX_CHARS, { message: "too many characters" });
 
 export const addGymPostCommentRequestSchema = z
@@ -94,8 +103,6 @@ export const removedGymPostCommentResponseSchema = z.object({ removed: z.literal
 
 /** The most comments the phone keeps unsent for one person at one place, one a post. */
 export const GYM_POST_COMMENT_DRAFTS_MOST = 50;
-/** The most a comment not yet sent may hold on the phone: over the limit is said, and the words are not cut. */
-export const GYM_POST_COMMENT_DRAFT_MOST = GYM_POST_COMMENT_MAX_CHARS * 4;
 
 /** Comments not yet on the server, as the phone keeps them, by post (ROADMAP Stage 5 17e). */
 export const gymPostCommentDraftsFileSchema = z

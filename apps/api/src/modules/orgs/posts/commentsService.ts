@@ -86,11 +86,11 @@ async function shaped(deps: CommentsDeps, gymId: string, rows: readonly repo.Com
     repo.reactionsOf(deps.sql, gymId, ids, viewerId),
     repo.reportedBy(deps.sql, gymId, ids, viewerId),
     repo.replyCounts(deps.sql, gymId, rows.flatMap((r) => (r.parentId === null ? [r.id] : [])), { member: viewerId }),
-    Promise.all(answered.map((id) => repo.commentById(deps.sql, gymId, id, { member: viewerId }))),
+    repo.commentsByIds(deps.sql, gymId, answered, { member: viewerId }),
   ]);
   const nameOf = (r: Pick<repo.CommentRow, "authorName" | "authorEmail" | "authorRecordName">) =>
     shownName({ displayName: r.authorName ?? "", email: r.authorEmail, recordName: r.authorRecordName });
-  const targetNames = new Map(targets.flatMap((t) => (t === null ? [] : [[t.id, nameOf(t)?.name ?? "A member"] as const])));
+  const targetNames = new Map(targets.map((t) => [t.id, nameOf(t)?.name ?? "A member"] as const));
   return rows.map((r) => {
     const named = nameOf(r);
     return gymPostCommentSchema.parse({
@@ -228,9 +228,13 @@ export async function removeOwnComment(deps: CommentsDeps, userId: string, gymId
 export async function reactToComment(deps: CommentsDeps, userId: string, gymId: string, commentId: string, reaction: GymPostReaction | null, limit: Limit): Promise<{ reactions: GymPostReactionCounts; mine: GymPostReaction | null } | null> {
   await requireMember(deps, gymId, userId);
   if (!(await limit())) return null;
-  if ((await seenComment(deps, gymId, commentId, userId)) === null) throw commentNotFound();
-  if (reaction === null) await repo.clearReaction(deps.sql, gymId, commentId, userId);
-  else if (!(await repo.setReaction(deps.sql, gymId, commentId, userId, reaction, deps.now()))) throw commentNotFound();
+  const seen = (await seenComment(deps, gymId, commentId, userId)) !== null;
+  if (reaction === null) {
+    // Their own reaction is theirs to take off, whatever has since hidden what it is on.
+    if (!(await repo.clearReaction(deps.sql, gymId, commentId, userId)) && !seen) throw commentNotFound();
+  } else if (!seen) {
+    throw commentNotFound();
+  } else if (!(await repo.setReaction(deps.sql, gymId, commentId, userId, reaction, deps.now()))) throw commentNotFound();
   const counts = await repo.reactionCounts(deps.sql, gymId, [commentId], userId);
   return reactToGymPostCommentResponseSchema.parse({ reactions: countsOf(counts, commentId), mine: reaction });
 }

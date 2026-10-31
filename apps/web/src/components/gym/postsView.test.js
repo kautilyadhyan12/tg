@@ -468,13 +468,13 @@ describe('the console’s tools for members’ posts', () => {
   it('the box before stopping a person names them, what changes, and that nobody else does', () => {
     expect(stopBox('Wendy Writer')).toEqual({
       title: 'Stop Wendy Writer posting?',
-      line: "Wendy Writer won't be able to post on Updates until you let them again. They can still read and react. Their posts stay until you remove them. They aren't emailed, and nobody else changes.",
+      line: "Wendy Writer won't be able to post or comment on Updates until you let them again. They can still read and react. Their posts stay until you remove them. They aren't emailed, and nobody else changes.",
       confirm: 'Stop Wendy Writer posting',
       cancel: 'Cancel',
-      done: 'Wendy Writer can no longer post.',
-      undone: 'Wendy Writer can post again.',
+      done: 'Wendy Writer can no longer post or comment.',
+      undone: 'Wendy Writer can post and comment again.',
     });
-    expect(stopBox(null)).toMatchObject({ title: 'Stop this person posting?', confirm: 'Stop them posting', done: 'They can no longer post.' });
+    expect(stopBox(null)).toMatchObject({ title: 'Stop this person posting?', confirm: 'Stop them posting', done: 'They can no longer post or comment.' });
   });
 
   it('stopping a person marks every post of theirs and nobody else’s', () => {

@@ -4695,7 +4695,7 @@ staff saw but not the same ones (a reporter's account purged), the answer is 409
 feature's passes, 2026-10-05): a report's time is read before the report is stored, so one
 can land after staff read the list carrying an earlier time than the newest they saw. A kept post stays, and only a NEW person's report brings it back. **Stop them posting** on a member's
 post (`PUT` · `DELETE …/posts/stopped/:userId`, `gym_post_stops`): that person cannot post
-at this gym until staff let them again, still reads and reacts, their posts stay, and the
+or comment at this gym until staff let them again, still reads and reacts, their posts stay, and the
 page lists who is stopped. A gym whose plan has lapsed reads the list and answers nothing.
 Every Updates route asks who is reading or writing before the rate limit, so a stranger's
 404 is never a 429 and never counts against the address a gym's members share; nothing a

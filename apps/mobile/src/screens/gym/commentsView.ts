@@ -5,6 +5,7 @@ import {
   GYM_POST_COMMENT_WORDS,
   GYM_POST_REPORT_REASON_WORDS,
   gymPostCommentDraftsFileSchema,
+  hasCommentWords,
   postLength,
   type GymMemberPosting,
   type GymPostComment,
@@ -56,7 +57,7 @@ export function commentRoom(body: string): { over: boolean; text: string | null 
   return { over: false, text: left <= 50 ? `${chars(left)} left` : null };
 }
 
-export const canSendComment = (body: string): boolean => body.trim() !== "" && !commentRoom(body).over;
+export const canSendComment = (body: string): boolean => hasCommentWords(body) && !commentRoom(body).over;
 
 export const COMMENT_REPORT_REASONS: readonly { id: GymPostCommentReportReason; word: string }[] = GYM_POST_COMMENT_REPORT_REASONS.map((id) => ({
   id,
@@ -104,7 +105,7 @@ export function withFirstPage(had: { comments: readonly GymPostComment[]; next: 
   const last = page.comments[page.comments.length - 1];
   if (page.next === null || last === undefined) return { comments: [...page.comments], next: null };
   const beyond = had.comments.filter((c) => inOrder(c, last) > 0);
-  return { comments: [...page.comments, ...beyond], next: beyond.length > 0 ? had.next : page.next };
+  return { comments: [...page.comments, ...beyond], next: beyond.length > 0 && had.next !== null ? had.next : page.next };
 }
 
 export const withComment = (list: readonly GymPostComment[], comment: GymPostComment): GymPostComment[] => list.map((c) => (c.id === comment.id ? comment : c));

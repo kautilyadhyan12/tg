@@ -165,6 +165,7 @@ export const gymPostComments = pgTable(
     check("gym_post_comments_reply_to_check", sql`${t.replyToId} IS NULL OR ${t.parentId} IS NOT NULL`),
     index("gym_post_comments_list_idx").on(t.gymId, t.postId, t.createdAt, t.id).where(sql`${t.parentId} IS NULL AND ${t.removedAt} IS NULL`),
     index("gym_post_comments_replies_idx").on(t.gymId, t.parentId, t.createdAt, t.id).where(sql`${t.parentId} IS NOT NULL AND ${t.removedAt} IS NULL`),
+    index("gym_post_comments_parent_key_idx").on(t.gymId, t.postId, t.parentId).where(sql`${t.parentId} IS NOT NULL`),
     index("gym_post_comments_count_idx").on(t.gymId, t.postId).where(sql`${t.removedAt} IS NULL`),
     index("gym_post_comments_member_author_idx").on(t.authorUserId, t.gymId, t.createdAt).where(sql`${t.byMember}`),
     index("gym_post_comments_removed_by_idx").on(t.removedByUserId).where(sql`${t.removedByUserId} IS NOT NULL`),

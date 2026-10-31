@@ -264,11 +264,11 @@ export function stopBox(name) {
   const who = personName(name);
   return {
     title: `Stop ${who} posting?`,
-    line: `${name ?? 'They'} won't be able to post on Updates until you let them again. They can still read and react. Their posts stay until you remove them. They aren't emailed, and nobody else changes.`,
+    line: `${name ?? 'They'} won't be able to post or comment on Updates until you let them again. They can still read and react. Their posts stay until you remove them. They aren't emailed, and nobody else changes.`,
     confirm: name === null ? 'Stop them posting' : `Stop ${name} posting`,
     cancel: 'Cancel',
-    done: `${name ?? 'They'} can no longer post.`,
-    undone: `${name ?? 'They'} can post again.`,
+    done: `${name ?? 'They'} can no longer post or comment.`,
+    undone: `${name ?? 'They'} can post and comment again.`,
   };
 }
 

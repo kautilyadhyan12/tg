@@ -263,6 +263,13 @@ function Body({
     } else changeUnder(parentId, (u) => ({ ...u, busy: false, failed: true }));
   };
 
+  const readRepliesAgain = async (parentId: string) => {
+    const answer = await session.signedIn({ method: "GET", path: repliesPath(gymId, parentId) }, gymPostCommentsResponseSchema);
+    if (!live.current) return;
+    if (answer.kind === "ok") changeUnder(parentId, (u) => ({ ...u, comments: answer.data.comments, next: answer.data.next }));
+    else if (answer.kind === "refused" && answer.status === 404) changeUnder(parentId, (u) => ({ ...u, comments: [], next: null, open: false }));
+  };
+
   /** A press found the comment gone: it leaves the screen, and the page's count is put right by its next read. */
   const foundGone = (comment: GymPostComment) => {
     dropOne(comment);
@@ -308,7 +315,7 @@ function Body({
     const changed = mine.changed === true;
     kept.put(postId, { ...mine, sent: true });
     const answer = await session.signedIn(
-      { method: "POST", path: commentsPath(gymId, postId), body: { commentKey: mine.commentKey, body: mine.body, ...(mine.replyTo === null ? {} : { replyTo: mine.replyTo.id }) } },
+      { method: "POST", path: commentsPath(gymId, postId), body: { commentKey: mine.commentKey, body: mine.body.trim(), ...(mine.replyTo === null ? {} : { replyTo: mine.replyTo.id }) } },
       addedGymPostCommentResponseSchema,
     );
     pressed.current = false;
@@ -526,10 +533,16 @@ function Body({
           const authorId = comment.authorId;
           if (authorId === null) return;
           const keep = (c: GymPostComment) => !(c.fromMember && c.authorId === authorId);
+          // A kept reply to that person answers nobody now.
+          const answering = kept.of(postId)?.replyTo?.id;
+          const shownNow = [...(held.kind === "ok" ? held.comments : []), ...Object.values(under).flatMap((u) => u?.comments ?? [])];
+          if (answering !== undefined && shownNow.some((c) => c.id === answering && !keep(c))) setDraft({ replyTo: null });
           changeTop((all) => all.filter(keep));
-          setUnder((all) => Object.fromEntries(Object.entries(all).map(([id, u]) => [id, u === undefined ? u : { ...u, comments: u.comments.filter(keep) }])));
+          setUnder((all) => Object.fromEntries(Object.entries(all).map(([id, u]) => [id, u === undefined ? u : { ...u, comments: u.comments.filter(keep).map((c) => (c.replyingTo === comment.author.name ? { ...c, replyingTo: null } : c)) }])));
           onBlocked(authorId);
           void load(true);
+          // What stays may name them or count their reaction: each open list is read as the server says it now.
+          for (const [id, u] of Object.entries(under)) if (u?.open === true && id !== comment.id) void readRepliesAgain(id);
         }}
         onGone={foundGone}
       />

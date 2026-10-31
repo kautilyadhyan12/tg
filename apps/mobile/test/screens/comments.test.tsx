@@ -144,6 +144,39 @@ describe("the worst thing: a blocked person's words are gone from the screen, at
     expect(screen.getByText("Asha's comment")).toBeTruthy();
   });
 
+  it("after a block nothing left on the screen names them, and a kept reply to them answers nobody", async () => {
+    const barry = comment(1, 2, { author: { name: "Barry B.", initials: "BB" }, authorId: BEN, body: "Barry's comment" });
+    const fine = comment(2, 2, { body: "Asha's comment", replyCount: 2 });
+    const barrysReply = comment(3, 2, { parentId: fine.id, author: { name: "Barry B.", initials: "BB" }, authorId: BEN, body: "Barry's reply" });
+    const third = comment(4, 2, { parentId: fine.id, replyingTo: "Barry B.", body: "Answering him", reactions: { like: 0, love: 0, strong: 0, fire: 2 } });
+    let blocked = false;
+    const server = serverOf({
+      [posts]: ok(feed([post(2, { commentCount: 4 })])),
+      [onPost(2)]: () => ok(page(blocked ? [fine] : [barry, fine]))(),
+      [`${one(fine.id)}/replies`]: () => ok(page(blocked ? [{ ...third, replyingTo: null, reactions: { like: 0, love: 0, strong: 0, fire: 1 } }] : [barrysReply, third]))(),
+      [`${one(barry.id)}/block`]: () => {
+        blocked = true;
+        return ok({ blocked: true })();
+      },
+    });
+    await openComments(server.ask);
+    await fireEvent.press(await screen.findByRole("button", { name: "See 2 replies" }));
+    await screen.findByText("Barry's reply");
+    expect(screen.getByText(/Barry B\. Answering him/)).toBeTruthy();
+    await fireEvent.press(screen.getAllByRole("button", { name: "Reply to Barry B." })[0] as never);
+    expect(screen.getByText("Replying to Barry B.")).toBeTruthy();
+    await fireEvent.press(screen.getAllByLabelText("More about this comment by Barry B.")[0] as never);
+    await fireEvent.press(within(await screen.findByTestId("comment-menu")).getByRole("button", { name: "Block Barry B." }));
+    await fireEvent.press(within(screen.getByTestId("comment-ask")).getByRole("button", { name: "Block Barry B." }));
+    await screen.findByText(/^Blocked\./);
+    await waitFor(() => {
+      expect(screen.queryByText(/Barry B\. Answering him/)).toBeNull();
+    });
+    expect(screen.getByText("Answering him")).toBeTruthy();
+    expect(screen.queryByText("Replying to Barry B.")).toBeNull();
+    expect(screen.getByRole("button", { name: /Fire, 1 person/ })).toBeTruthy();
+  });
+
   it("the server's next read decides: a comment it no longer sends leaves the screen", async () => {
     const comeBack = listenForComeBack();
     let shown = [comment(1, 3, { body: "Going soon" }), comment(2, 3, { body: "Staying" })];

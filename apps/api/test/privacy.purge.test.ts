@@ -768,6 +768,19 @@ d("DPDP Day-14 purge (real Postgres)", () => {
     expect(left.find((r) => r.id === theirs)?.hidden_at).toBeNull();
   });
 
+  it("a comment others are still waiting on stays hidden when one of its reporters is purged", { timeout: 60_000 }, async () => {
+    const u = await makeUser(uniqEmail("dpdp-comments-hide"), 20);
+    const other = await makeUser(uniqEmail("dpdp-comments-hide-other"), 1);
+    const rows = await sql<{ id: string }[]>`
+      INSERT INTO gym_post_comments (gym_id, post_id, author_user_id, by_member, comment_key, body, hidden_at)
+      VALUES (${postGymId}, ${postId}, ${postOwnerId}, false, gen_random_uuid(), 'words', now()) RETURNING id`;
+    const id = rows[0]?.id ?? "";
+    await sql`INSERT INTO gym_post_comment_reports (gym_id, comment_id, user_id, reason) VALUES (${postGymId}, ${id}, ${u.userId}, 'spam'), (${postGymId}, ${id}, ${other.userId}, 'spam')`;
+    await purgeDueUsers({ sql, log: testLogger(), photos: noPhotos }, {});
+    const left = await sql<{ hidden_at: Date | null }[]>`SELECT hidden_at FROM gym_post_comments WHERE id = ${id}`;
+    expect(left[0]?.hidden_at).not.toBeNull();
+  });
+
   /** Which of these keys are still written down as files to remove. */
   const listed = async (keys: string[]): Promise<string[]> =>
     (await sql<{ storage_key: string }[]>`SELECT storage_key FROM photo_files_to_remove WHERE storage_key = ANY(${keys}) ORDER BY storage_key`).map((r) => r.storage_key);

@@ -925,7 +925,7 @@ function BlockedSheet({ open, gymId, gymName, feed, onClose, onUnblocked }: { op
   return (
     <Sheet open={open} title="People you've blocked" place="middle" onClose={onClose}>
       <View style={styles.ask}>
-        <Txt kind="small">You don't see their posts or reactions here. They aren't told.</Txt>
+        <Txt kind="small">You don't see their posts, comments or reactions here. They aren't told.</Txt>
         {list.kind === "loading" ? <Txt kind="small">Loading…</Txt> : null}
         {list.kind === "failed" ? (
           <>

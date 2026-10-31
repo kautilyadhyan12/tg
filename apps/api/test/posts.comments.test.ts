@@ -322,13 +322,18 @@ d("comments and replies on Updates (real Postgres)", () => {
       expect((await send(gym, asha, post.id, "😀".repeat(GYM_POST_COMMENT_MAX_CHARS))).statusCode).toBe(201);
       expect((await send(gym, asha, post.id, "a".repeat(GYM_POST_COMMENT_MAX_CHARS + 1))).statusCode).toBe(400);
       expect((await send(gym, asha, post.id, "   ")).statusCode).toBe(400);
+      // Nothing that draws: it would show as a blank comment.
+      expect((await send(gym, asha, post.id, "\u200B\u200B")).statusCode).toBe(400);
+      // Room the screen counts after trimming, and the words kept trimmed.
+      expect((await send(gym, asha, post.id, `${"😀".repeat(GYM_POST_COMMENT_MAX_CHARS)}\n`)).statusCode).toBe(201);
+      expect((await send(gym, asha, post.id, `${"a".repeat(GYM_POST_COMMENT_MAX_CHARS)}${" ".repeat(600)}`)).statusCode).toBe(201);
       const res = await send(gym, asha, post.id, "you are a bastard");
       expect(res.statusCode).toBe(400);
       expect(errorOf(res)).toBe("comment_bad_words");
       expect(res.body).toContain("bastard");
       // Staff's filter words do not count against the day either: nothing was kept.
       const rows = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_post_comments WHERE post_id = ${post.id}`;
-      expect(rows[0]?.n).toBe(1);
+      expect(rows[0]?.n).toBe(3);
       const saved = await comment(gym, asha, post.id, "  spaced out  ");
       expect(saved.body).toBe("spaced out");
     },
@@ -634,7 +639,100 @@ d("comments and replies on Updates (real Postgres)", () => {
   );
 
   it(
-    "a post the reader may not read has no comments for them: a post hidden after reports, or by somebody they blocked",
+    "a post hidden after reports has no comments for anybody but its writer",
+    async () => {
+      const gym = await makeGym("Hidden By Reports");
+      const asha = await member(gym, "Asha Rao");
+      const ben = await member(gym, "Ben Stone");
+      const post = await addPost(gym, asha);
+      const c = await comment(gym, ben, post.id, "Under a post");
+      await sql`UPDATE gym_posts SET hidden_at = now() WHERE id = ${post.id}`;
+      expect((await inject("GET", onPost(gym.id, post.id), ben.cookies)).statusCode).toBe(404);
+      expect((await inject("GET", `${one(gym.id, c.id)}/replies`, ben.cookies)).statusCode).toBe(404);
+      expect((await reactTo(gym, ben, c.id, "like")).statusCode).toBe(404);
+      expect(words(await read(gym, asha, post.id))).toEqual(["Under a post"]);
+    },
+    T,
+  );
+
+  it(
+    "a blocked person's reaction isn't counted for the one who blocked them, and is for everybody else; one given to somebody the giver blocked counts for nobody",
+    async () => {
+      const gym = await makeGym("Reaction Block");
+      const bully = await member(gym, "Barry Bully");
+      const blocker = await member(gym, "Bea Blocker");
+      const dev = await member(gym, "Dev Patel");
+      const post = await addPost(gym, dev);
+      const byDev = await comment(gym, dev, post.id, "By Dev");
+      const byBully = await comment(gym, bully, post.id, "By Barry");
+      expect((await reactTo(gym, bully, byDev.id, "fire")).statusCode).toBe(200);
+      expect((await reactTo(gym, blocker, byDev.id, "fire")).statusCode).toBe(200);
+      expect((await block(gym, blocker, byBully.id)).statusCode).toBe(200);
+      const firesFor = async (who: Person) => (await read(gym, who, post.id)).comments.find((c) => c.id === byDev.id)?.reactions["fire"];
+      expect(await firesFor(blocker)).toBe(1);
+      expect(await firesFor(dev)).toBe(2);
+      // One that landed just after the giver blocked the writer, past the block's own delete.
+      await sql`INSERT INTO gym_post_comment_reactions (gym_id, comment_id, user_id, reaction) VALUES (${gym.id}, ${byBully.id}, ${blocker.userId}, 'love')`;
+      expect((await read(gym, dev, post.id)).comments.find((c) => c.id === byBully.id)?.reactions["love"]).toBe(0);
+    },
+    T,
+  );
+
+  it(
+    "a reaction given to a reply stays the giver's to take off after blocking who it sits under",
+    async () => {
+      const gym = await makeGym("Stuck Reaction");
+      const asha = await member(gym, "Asha Rao");
+      const ben = await member(gym, "Ben Stone");
+      const dev = await member(gym, "Dev Patel");
+      const post = await addPost(gym, dev);
+      const byBen = await comment(gym, ben, post.id, "By Ben");
+      const reply = await comment(gym, dev, post.id, "By Dev", byBen.id);
+      expect((await reactTo(gym, asha, reply.id, "love")).statusCode).toBe(200);
+      expect((await block(gym, asha, byBen.id)).statusCode).toBe(200);
+      expect((await reactTo(gym, asha, reply.id, "love")).statusCode).toBe(404);
+      expect((await reactTo(gym, asha, reply.id, null)).statusCode).toBe(200);
+      expect((await replies(gym, dev, byBen.id)).comments[0]?.reactions["love"]).toBe(0);
+      expect((await reactTo(gym, asha, reply.id, null)).statusCode).toBe(404);
+    },
+    T,
+  );
+
+  it(
+    "a comment racing its post's removal: the removal held open, the comment waits and keeps nothing; a post removed answers its reactions and reports",
+    async () => {
+      const gym = await makeGym("Held Removal");
+      const asha = await member(gym, "Asha Rao");
+      const ben = await member(gym, "Ben Stone");
+      const post = await addPost(gym, ben);
+      const c = await comment(gym, asha, post.id, "Marked");
+      expect((await reactTo(gym, ben, c.id, "like")).statusCode).toBe(200);
+      expect((await report(gym, ben, c.id)).statusCode).toBe(200);
+      expect((await inject("DELETE", `${posts(gym.id)}/${post.id}`, gym.owner.cookies)).statusCode).toBe(200);
+      expect((await sql`SELECT 1 FROM gym_post_comment_reactions WHERE comment_id = ${c.id}`).length).toBe(0);
+      const answered = await sql<{ outcome: string }[]>`SELECT outcome FROM gym_post_comment_reports WHERE comment_id = ${c.id}`;
+      expect(answered[0]?.outcome).toBe("removed");
+
+      const held = await addPost(gym, ben, "Held");
+      let sent: Awaited<ReturnType<typeof send>> | undefined;
+      await sql.begin(async (tx) => {
+        await tx`UPDATE gym_posts SET removed_at = now() WHERE id = ${held.id}`;
+        const away = send(gym, asha, held.id, "On its way").then((res) => {
+          sent = res;
+          return res;
+        });
+        void away;
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        expect(sent).toBeUndefined();
+      });
+      await expect.poll(() => sent?.statusCode, { timeout: 10_000 }).toBe(404);
+      expect((await sql`SELECT 1 FROM gym_post_comments WHERE post_id = ${held.id}`).length).toBe(0);
+    },
+    T,
+  );
+
+  it(
+    "a post the reader may not read has no comments for them: by somebody they blocked",
     async () => {
       const gym = await makeGym("Hidden Post");
       const asha = await member(gym, "Asha Rao");

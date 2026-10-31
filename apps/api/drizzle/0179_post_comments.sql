@@ -28,6 +28,8 @@ CREATE TABLE "gym_post_comments" (
 );--> statement-breakpoint
 CREATE INDEX "gym_post_comments_list_idx" ON "gym_post_comments" ("gym_id", "post_id", "created_at", "id") WHERE "parent_id" IS NULL AND "removed_at" IS NULL;--> statement-breakpoint
 CREATE INDEX "gym_post_comments_replies_idx" ON "gym_post_comments" ("gym_id", "parent_id", "created_at", "id") WHERE "parent_id" IS NOT NULL AND "removed_at" IS NULL;--> statement-breakpoint
+-- The parent key's own: a post really deleted (a purge) finds what hangs off each comment through it.
+CREATE INDEX "gym_post_comments_parent_key_idx" ON "gym_post_comments" ("gym_id", "post_id", "parent_id") WHERE "parent_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX "gym_post_comments_count_idx" ON "gym_post_comments" ("gym_id", "post_id") WHERE "removed_at" IS NULL;--> statement-breakpoint
 CREATE INDEX "gym_post_comments_member_author_idx" ON "gym_post_comments" ("author_user_id", "gym_id", "created_at") WHERE "by_member";--> statement-breakpoint
 CREATE INDEX "gym_post_comments_removed_by_idx" ON "gym_post_comments" ("removed_by_user_id") WHERE "removed_by_user_id" IS NOT NULL;--> statement-breakpoint

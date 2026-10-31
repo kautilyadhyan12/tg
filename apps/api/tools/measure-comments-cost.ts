@@ -78,6 +78,11 @@ async function seed(): Promise<{ gymId: string; owner: string; viewer: string; f
     INSERT INTO gym_post_comments (gym_id, post_id, parent_id, author_user_id, by_member, comment_key, body)
     SELECT ${gymId}, ${firstPost}, ${busyComment}, (${ids}::uuid[])[1 + (random() * ${MEMBERS - 1})::int], true, gen_random_uuid(), repeat('w', 100)
     FROM generate_series(1, ${REPLIES})`;
+  // Each reply answers the one before it, the page whose names are read most.
+  await sql`
+    UPDATE gym_post_comments c SET reply_to_id = p.prev
+    FROM (SELECT id, lag(id) OVER (ORDER BY created_at, id) AS prev FROM gym_post_comments WHERE parent_id = ${busyComment}) p
+    WHERE c.id = p.id AND p.prev IS NOT NULL`;
   await sql`
     INSERT INTO gym_post_comment_reactions (gym_id, comment_id, user_id, reaction)
     SELECT ${gymId}, ${busyComment}, u, 'fire' FROM unnest(${ids}::uuid[]) u`;
@@ -129,6 +134,9 @@ try {
   const photos = { put: () => Promise.resolve(), get: () => Promise.resolve(null), remove: () => Promise.resolve(true) };
   const removal = await time(() => removePost({ ...deps, photos, log }, owner, gymId, lastPost, open));
   line(`a post of ${String(PER_POST)} comments removed`, [removal]);
+  // The Day-14 purge really deletes a member's post, in its own transaction.
+  const purged = await time(() => sql`DELETE FROM gym_posts WHERE gym_id = ${gymId} AND id = ${firstPost}`);
+  line(`a post of ${String(PER_POST)} comments deleted`, [purged]);
 } finally {
   await cleanup();
   await sql.end({ timeout: 5 });

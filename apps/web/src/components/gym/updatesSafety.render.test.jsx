@@ -101,7 +101,7 @@ describe('Block', () => {
     const list = within(await screen.findByTestId('blocked'));
     await waitFor(() => expect(list.getAllByRole('listitem')).toHaveLength(2));
     expect(list.getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Barry B.Unblock', 'A memberUnblock']);
-    expect(list.getByText("You don't see their posts or reactions here. They aren't told.")).toBeTruthy();
+    expect(list.getByText("You don't see their posts, comments or reactions here. They aren't told.")).toBeTruthy();
 
     fireEvent.click(within(list.getAllByRole('listitem')[0]).getByRole('button', { name: 'Unblock' }));
     await waitFor(() => expect(list.getAllByRole('listitem')).toHaveLength(1));

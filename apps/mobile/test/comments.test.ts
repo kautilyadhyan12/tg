@@ -76,6 +76,7 @@ describe("words", () => {
   it("Send needs words, within the limit", () => {
     expect(canSendComment("")).toBe(false);
     expect(canSendComment("   ")).toBe(false);
+    expect(canSendComment("\u200B\uFEFF")).toBe(false);
     expect(canSendComment("Hi")).toBe(true);
     expect(canSendComment("a".repeat(501))).toBe(false);
   });
@@ -113,6 +114,8 @@ describe("the lists", () => {
     expect(withFirstPage({ comments: [comment(1)], next: "first" }, { comments: [comment(1)], next: "p2" }).next).toBe("p2");
     expect(withFirstPage(had, { comments: [comment(2)], next: null })).toEqual({ comments: [comment(2)], next: null });
     expect(withFirstPage(had, { comments: [], next: null })).toEqual({ comments: [], next: null });
+    // Their own 21st added with no more to read, and somebody's 22nd since: it can still be reached.
+    expect(withFirstPage({ comments: [comment(1), comment(3)], next: null }, { comments: [comment(1)], next: "p2" })).toEqual({ comments: [comment(1), comment(3)], next: "p2" });
   });
 });
 

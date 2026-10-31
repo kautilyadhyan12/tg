@@ -120,6 +120,13 @@ export async function commentById(sql: SqlOrTx, gymId: string, commentId: string
   return r === undefined ? null : toComment(r);
 }
 
+/** Those of these comments and replies this reader is sent. */
+export async function commentsByIds(sql: SqlOrTx, gymId: string, ids: readonly string[], reader: Reader): Promise<CommentRow[]> {
+  if (ids.length === 0) return [];
+  const rows = await sql<RawComment[]>`${shown(sql)} WHERE c.gym_id = ${gymId} AND c.id = ANY (${[...ids]}::uuid[]) AND ${seenBy(sql, reader)}`;
+  return rows.map(toComment);
+}
+
 /** How many comments and replies this reader is sent, by post. */
 export async function commentCounts(sql: SqlOrTx, gymId: string, postIds: readonly string[], reader: Reader): Promise<Map<string, number>> {
   if (postIds.length === 0) return new Map();
@@ -280,8 +287,10 @@ export async function setReaction(sql: SqlOrTx, gymId: string, commentId: string
   return rows.length === 1;
 }
 
-export async function clearReaction(sql: SqlOrTx, gymId: string, commentId: string, userId: string): Promise<void> {
-  await sql`DELETE FROM gym_post_comment_reactions WHERE gym_id = ${gymId} AND comment_id = ${commentId} AND user_id = ${userId}`;
+/** False when the person had none there. */
+export async function clearReaction(sql: SqlOrTx, gymId: string, commentId: string, userId: string): Promise<boolean> {
+  const rows = await sql`DELETE FROM gym_post_comment_reactions WHERE gym_id = ${gymId} AND comment_id = ${commentId} AND user_id = ${userId} RETURNING comment_id`;
+  return rows.length > 0;
 }
 
 /** One report a person; again, nothing changes. The comment is held so reports count one at a time,
