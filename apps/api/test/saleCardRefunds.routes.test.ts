@@ -450,6 +450,23 @@ d("Refund to card at Sell (real Postgres)", { timeout: T }, () => {
       expect((await refundsOf(gym, basket.towel)).map((r) => r.amount_minor)).toEqual([1500]);
     });
 
+    it("a product part refunded gives back only its own rest, on the card and by hand", async () => {
+      const basket = await sold(gym);
+      expect((await press(basket, basket.water, 100)).statusCode).toBe(200);
+      expect((await pressAll(basket, 1800)).statusCode).toBe(200);
+      expect(madeFor(basket).map((f) => f.amount_money.amount)).toEqual([100, 1800]);
+      expect((await refundsOf(gym, basket.water)).map((r) => r.amount_minor).sort((a, b) => a - b)).toEqual([100, 300]);
+      expect((await refundsOf(gym, basket.towel)).map((r) => r.amount_minor)).toEqual([1500]);
+      expect((await line(basket, basket.water)).refundedMinor).toBe(400);
+
+      const noted = await sold(gym);
+      expect((await note(noted, noted.water, 100)).statusCode).toBe(201);
+      const all = await noteAll(noted, 1800);
+      expect(all.statusCode, all.body).toBe(201);
+      expect((await refundsOf(gym, noted.water)).map((r) => r.amount_minor).sort((a, b) => a - b)).toEqual([100, 300]);
+      expect((await line(noted, noted.water)).refundedMinor).toBe(400);
+    });
+
     it("four staff at one instant send it once", async () => {
       const basket = await sold(gym);
       const answers = await Promise.all([pressAll(basket, 1900), pressAll(basket, 1900), pressAll(basket, 1900), pressAll(basket, 1900)]);
