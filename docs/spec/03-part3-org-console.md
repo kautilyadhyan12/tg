@@ -4668,8 +4668,23 @@ removed, a writer who has left, hidden unless theirs, blocked; a reply also need
 sits under to be seen; a post the reader may not read has none. A removed post takes everything
 on it in its own step. A member's are the person's: deleted at Day 14 with what is under them,
 and in their export; staff's are the gym's. The bad-words check refuses and names the word, as for
-a post. Nobody is told of a new comment until phone notifications (Stage 5 item 18). Staff reading,
-writing and removing them, the reported list and the switch are 17e-ii.
+a post. Nobody is told of a new comment until phone notifications (Stage 5 item 18).
+
+**As built in Stage 5 17e-ii (2026-10-31): comments in the console.** For staff holding `posts.manage`
+on the console's Updates page; a lapsed gym's staff read and change nothing. **Comments (n)** on every
+post, a person's posts and the reported list opens them under it: whole names, Member or Staff, hidden
+ones marked, replies on a press, who gave a reaction by name (exactly those the count counts). Staff
+write a comment or reply (`POST …/posts/:postId/comments/staff`, one key a comment): no daily limit,
+no bad-words check, the switch does not bind them, as for a post; a hidden comment offers no Reply.
+**Remove** any comment or reply after a box naming whose and how many replies go
+(`DELETE …/post-comments/:id/staff`). **Stop them posting** on a member's comment is §15.3's one stop.
+**Reported comments** sit under the reported posts, longest waiting first, 50 at most
+(`GET …/post-comments/reported`): how many and why, what was typed, the post it is on; never who, in no
+answer and no audit line. **Keep comment** (`POST …/post-comments/:id/keep`) works as Keep post, with
+`allReports` and `reportsMark`: a report staff were not shown answers nothing. A comment five people
+reported can gain no sixth report, since members can no longer see it. **Members can comment** is the
+second switch beside Members can post (`PUT …/post-comments/settings`). The list and any open comments
+are read again when staff come back to the window (the 2026-10-24 rule).
 
 ### 15.3 Keeping it safe — what Apple (guideline 1.2) and Google ask of any app where people post
 
