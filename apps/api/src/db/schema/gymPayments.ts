@@ -587,6 +587,10 @@ export const gymSquareRefunds = pgTable(
     cancelTooLate: boolean("cancel_too_late").notNull().default(false),
     /** Square's own record of a refund made inside Square, which no press made (0184; 18d-iv-d-i). */
     fromSquare: boolean("from_square").notNull().default(false),
+    /** Square refunded part of a basket and names no product (0186; 18d-iv-d-ii): no refund row holds the money until staff say which. */
+    toPlace: boolean("to_place").notNull().default(false),
+    /** Staff said which product, and so answered the shelf question. */
+    chosen: boolean("chosen").notNull().default(false),
   },
   (t) => [
     unique("gym_square_refunds_request_uq").on(t.gymId, t.requestKey),
@@ -614,6 +618,8 @@ export const gymSquareRefunds = pgTable(
     check("gym_square_refunds_no_refund_check", sql`${t.noRefundAt} IS NULL OR ${t.outcome} IN ('failed','lost')`),
     index("gym_square_refunds_review_idx").on(t.gymId, t.startedAt).where(sql`${t.noRefundAt} IS NULL AND (${t.state} = 'pending' OR ${t.outcome} IN ('failed','lost'))`),
     index("gym_square_refunds_member_refund_idx").on(t.gymId, t.memberRefundId).where(sql`${t.memberRefundId} IS NOT NULL`),
+    check("gym_square_refunds_to_place_check", sql`NOT ${t.toPlace} OR (${t.saleId} IS NOT NULL AND ${t.fromSquare} AND ${t.parts} IS NULL)`),
+    index("gym_square_refunds_to_place_idx").on(t.gymId, t.saleId).where(sql`${t.toPlace}`),
     index("gym_square_refunds_open_idx").on(t.environment, t.state, t.lookAt).where(sql`${t.state} <> 'done'`),
   ],
 );

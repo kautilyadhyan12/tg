@@ -279,6 +279,10 @@ export const gymSaleSchema = z
     toCard: z.boolean().default(false),
     /** A refund to the card Square has not answered: `lost`, never answered, so it is checked in Square. */
     cardRefund: cardRefundOpenSchema.nullable().default(null),
+    /** Refunded in Square with no product said (18d-iv-d-ii), on the sale's first line: staff choose, and the money counts from then. */
+    toPlace: z.array(z.object({ pressId: z.string().uuid(), amountMinor: minorSchema, on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), room: z.array(z.object({ saleId: z.string().uuid(), minor: minorSchema }).strict()) }).strict()).default([]),
+    /** Its product, to open from the sale. */
+    productId: z.string().uuid().nullable().default(null),
     /** Its receipt's number, the gym's own (18g-i): every line of one sale has the same. */
     receiptNumber: receiptNumberSchema,
     /** Its place in its sale, from 1 (18q). Who bought it, how it was paid, its day and

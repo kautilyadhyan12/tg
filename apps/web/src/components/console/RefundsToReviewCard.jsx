@@ -144,7 +144,7 @@ export default function RefundsToReviewCard({ org, orgSlug, privileges, readOnly
     setSaid(null);
     if (row.sale !== null) {
       const to = placeFor(orgSlug, privileges, 'sell');
-      if (to !== null) navigate(to, { state: { refundSale: { saleId: row.sale.saleId, day: row.sale.day, open: row.kind !== 'late' } } });
+      if (to !== null) navigate(to, { state: { refundSale: { saleId: row.sale.saleId, day: row.sale.day, open: row.kind !== 'late' && row.kind !== 'place', place: row.kind === 'place' ? row.id : null } } });
       return;
     }
     openPerson(row.member.entryId, row.kind === 'late' || reviewButtons(row).open === 'Open their page' ? null : { membershipId: row.member.membershipId, paymentId: row.member.paymentId, voidFeeId: row.kind === 'fee' && row.member.byHand ? row.id : null });

@@ -297,6 +297,22 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
     const amount = money(s, "amountMinor");
     return `Refunded${amount === null ? "" : ` ${amount}`} to ${cardOf(s, "brand", "last4") ?? "the card"} for ${person(s)}`;
   },
+  "org.sale_refund_in_square": (s) => {
+    const amount = money(s, "amountMinor");
+    return `${amount ?? "A refund"} of a sale of ${text(s, "product") ?? "a product"} was refunded in Square to ${cardOf(s, "brand", "last4") ?? "the card"}`;
+  },
+  "org.sale_refund_placed": (s) => {
+    const amount = money(s, "amountMinor");
+    return `Said that ${amount ?? "a refund"} refunded in Square was for ${text(s, "product") ?? "a product"}`;
+  },
+  "org.sale_refund_to_place": (s) => {
+    const amount = money(s, "amountMinor");
+    return `${amount ?? "A refund"} of a sale was refunded in Square, and its product is still to be chosen`;
+  },
+  "org.sale_refund_replaced": (s) => {
+    const amount = money(s, "amountMinor");
+    return `A noted refund${amount === null ? "" : ` of ${amount}`} on a sale of ${text(s, "product") ?? "a product"} was replaced by Square's own record`;
+  },
   "org.member_refund_in_square": (s) => {
     const amount = money(s, "amountMinor");
     return `${amount ?? "A refund"} was refunded in Square to ${cardOf(s, "brand", "last4") ?? "the card"} for ${person(s)}`;

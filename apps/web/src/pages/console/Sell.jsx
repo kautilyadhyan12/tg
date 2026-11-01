@@ -17,7 +17,7 @@ import TaxRates from './TaxRates';
 import ReceiptBox from '../../components/console/ReceiptBox';
 import DatePick from '../../components/console/DatePick';
 import MoreMenu from '../../components/console/MoreMenu';
-import { BasketRefundBox, SaleRefundLines } from './SaleRefunds';
+import { BasketRefundBox, SaleRefundLines, SquareRefundsToPlace } from './SaleRefunds';
 import { saleBasketMenu, saleRefundPick } from './saleRefundMenu';
 import { SALE_MENU_WORDS, saleSaidNow, salesWaitOnSquare } from './saleRefundView';
 import { useReadWhileSquareWaits } from './useReadWhileSquareWaits';
@@ -779,9 +779,17 @@ function MembershipFinder({ gymId, words, locked, addMemberTo, onOpen }) {
   );
 }
 
+/** Change stock count on a person's page opens Sell at its products. */
+function ScrollHere({ target }) {
+  useEffect(() => {
+    target.current?.scrollIntoView?.({ block: 'start' });
+  }, [target]);
+  return null;
+}
+
 /** The day's product sales and membership payments, newest first, with the day's total: today,
  *  or an earlier day picked to find a sale to refund (18p). */
-function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage, onReload, squareEveryMs, refundSale = null }) {
+function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage, onReload, squareEveryMs, refundSale = null, onStock }) {
   /** The day picked; null is today. Another day's list is read here, apart from the page. */
   // Opened from Overview's Refunds to review: that sale's day first.
   const [pick, setPick] = useState(refundSale !== null && refundSale.day !== page.today ? refundSale.day : null);
@@ -872,7 +880,7 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
       if (refundSale.open) setRefunding({ saleId: row.key, toCard: true });
     }
   }
-  const refundNote = refundRow === null || refundSale === null || (pick ?? page.today) !== refundSale.day ? null : refundRow === 'none' ? REFUND_SALE_NOT_SHOWN : refundSale.open ? null : CARD_REFUND_LATE_LINE;
+  const refundNote = refundRow === null || refundSale === null || (pick ?? page.today) !== refundSale.day ? null : refundRow === 'none' ? REFUND_SALE_NOT_SHOWN : refundSale.open || (refundSale.place ?? null) !== null ? null : CARD_REFUND_LATE_LINE;
   useEffect(() => {
     if (refundRow !== null) document.querySelector(`[data-sale-row="${refundRow}"]`)?.scrollIntoView?.({ block: 'center' });
   }, [refundRow]);
@@ -1034,9 +1042,10 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
                     </div>
                   </form>
                 ) : null}
+                {row.basket !== null ? <SquareRefundsToPlace key={`${row.key}-${refundSale?.place ?? ''}`} gymId={gymId} basket={row.basket} canAct={!locked && page.canSell} opened={refundSale?.place ?? null} onDone={doneHere(row.key)} /> : null}
                 {row.basket !== null
                   ? row.basket.lines.map((line) => (
-                      <SaleRefundLines key={line.id} gymId={gymId} gym={org} sale={line} named={row.basket.lines.length > 1} canAct={!locked && page.canSell} onDone={doneHere(row.key)} />
+                      <SaleRefundLines key={line.id} gymId={gymId} gym={org} sale={line} named={row.basket.lines.length > 1} canAct={!locked && page.canSell} onDone={doneHere(row.key)} onStock={onStock} />
                     ))
                   : null}
               </li>
@@ -1074,6 +1083,8 @@ export default function Sell() {
   const [personAdds, setPersonAdds] = useState(false);
   const [columns, setColumns] = useState(null);
   const productsRef = useRef(null);
+  // Change stock count: that product's Change, opened from a sale or a person's page.
+  const [changeAsk, setChangeAsk] = useState({ productId: location.state?.productId ?? null, n: location.state?.productId ? 1 : 0 });
   // A person's page can lead here with them already picked.
   const sent = location.state?.sellTo;
   const firstPerson = sent && typeof sent.entryId === 'string' && typeof sent.name === 'string' ? { entryId: sent.entryId, name: sent.name, email: null, memberNumber: null, past: sent.past === true } : null;
@@ -1198,10 +1209,14 @@ export default function Sell() {
 
           {page.canSell && sellsMemberships ? <MembershipFinder gymId={gymId} words={words} locked={readOnly} addMemberTo={placeFor(orgSlug, privileges, 'addMember')} onOpen={(entryId) => openPerson(entryId, true)} /> : null}
 
-          {page.canSell ? <Takings gymId={gymId} org={org} page={page} locked={readOnly} canOpenPeople={sellsMemberships} onOpenPerson={openPerson} onPage={setPage} onReload={load} refundSale={location.state?.refundSale ?? null} /> : null}
+          {page.canSell ? <Takings gymId={gymId} org={org} page={page} locked={readOnly} canOpenPeople={sellsMemberships} onOpenPerson={openPerson} onPage={setPage} onReload={load} refundSale={location.state?.refundSale ?? null} onStock={page.canManage && !readOnly ? (productId) => {
+                setChangeAsk((was) => ({ productId, n: was.n + 1 }));
+                productsRef.current?.scrollIntoView?.({ block: 'start' });
+              } : null} /> : null}
 
           <div ref={productsRef}>
-            <SellProducts key={`products-${gymId}`} gymId={gymId} page={page} locked={readOnly} lockedNote={readOnlyNote(org.orgType)} countryTo={placeFor(orgSlug, privileges, 'country')} addAsk={addAsk} onPage={setPage} />
+            {location.state?.showProducts === true ? <ScrollHere target={productsRef} /> : null}
+            <SellProducts key={`products-${gymId}`} gymId={gymId} page={page} locked={readOnly} lockedNote={readOnlyNote(org.orgType)} countryTo={placeFor(orgSlug, privileges, 'country')} addAsk={addAsk} changeAsk={changeAsk} onPage={setPage} />
           </div>
           <TaxRates key={`tax-${gymId}`} gymId={gymId} page={page} locked={readOnly} lockedNote={readOnlyNote(org.orgType)} onPage={setPage} />
           <SellDiscounts

@@ -78,7 +78,7 @@ export async function refundsToReview(sql: Sql, gymId: string, members: boolean,
       ) c
       WHERE q.gym_id = ${gymId} AND q.no_refund_at IS NULL
         AND (q.outcome IN ('failed','lost') OR (q.state = 'pending' AND q.started_at <= ${lateBefore}))
-        AND (q.code IS NULL OR q.code NOT IN (${NOT_IN_SQUARE}, ${FAILED_IN_SQUARE})) AND NOT (q.from_square AND q.outcome = 'failed')
+        AND (q.code IS NULL OR q.code NOT IN (${NOT_IN_SQUARE}, ${FAILED_IN_SQUARE})) AND NOT (q.from_square AND q.outcome = 'failed') AND NOT q.to_place
         AND (${members}::boolean OR q.sale_id IS NOT NULL)
         AND (q.state = 'pending' OR c.since < q.amount_minor)
       ORDER BY q.square_payment_id, q.started_at DESC
@@ -104,6 +104,17 @@ export async function refundsToReview(sql: Sql, gymId: string, members: boolean,
       FROM open_press q
       JOIN gym_sales s ON s.gym_id = ${gymId} AND s.id = q.sale_id AND s.undone_at IS NULL
       LEFT JOIN gym_member_list_entries e ON e.gym_id = s.gym_id AND e.id = s.entry_id
+      UNION ALL
+      SELECT q.id, 'place', 0, q.started_at, q.amount_minor,
+             q.amount_minor, q.currency, e.full_name, COALESCE(e.former_at IS NOT NULL, false), s.entry_id IS NULL AND s.for_member, (q.started_at AT TIME ZONE g.timezone)::date::text,
+             NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+             false, NULL, NULL,
+             s.id, s.sold_on::text, s.item_name, (SELECT count(*)::int - 1 FROM gym_sales o WHERE o.gym_id = s.gym_id AND o.receipt_number = s.receipt_number), 0
+      FROM gym_square_refunds q
+      JOIN gyms g ON g.id = q.gym_id
+      JOIN gym_sales s ON s.gym_id = q.gym_id AND s.id = q.sale_id AND s.undone_at IS NULL
+      LEFT JOIN gym_member_list_entries e ON e.gym_id = s.gym_id AND e.id = s.entry_id
+      WHERE q.gym_id = ${gymId} AND q.to_place AND q.outcome IS DISTINCT FROM 'failed'
       UNION ALL
       SELECT b.id, 'fee', 2, p.created_at, GREATEST(p.amount_minor - x.back, 0),
              p.amount_minor, b.currency, e.full_name, e.former_at IS NOT NULL, false, NULL,

@@ -37,6 +37,8 @@ export function reviewWhy(row) {
       if (row.amountMinor < row.paidMinor) return `${owed} ${reviewAmount(row)} of ${formatMinor(row.paidMinor, row.currency)} is left to refund.`;
       return owed;
     }
+    case 'place':
+      return `Square refunded ${reviewAmount(row)} of this sale. Which product was it for? It counts in your reports once you choose.`;
     case 'failed':
       if (row.amountMinor < row.paidMinor) return `Square could not refund ${formatMinor(row.paidMinor, row.currency)}. ${reviewAmount(row)} of it has not been refunded another way.`;
       return CARD_REFUND_WORDS.failed;
@@ -52,6 +54,7 @@ export function reviewWhy(row) {
 export function reviewButtons(row) {
   const open = row.sale !== null ? 'Open Sell' : 'Open their page';
   if (row.kind === 'late') return { open, decide: null };
+  if (row.kind === 'place') return { open: 'Choose product', decide: null };
   if (row.kind === 'fee') return { open: row.member.byHand ? (row.past ? open : 'Void payment') : 'Refund', decide: 'Keep the fee' };
   return { open: 'Refund', decide: 'No refund needed' };
 }

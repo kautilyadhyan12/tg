@@ -38,6 +38,9 @@ import {
   type CardRefundRequest,
   type CardRefundResponse,
   type CardRefundTerminalEnd,
+  PLACE_SQUARE_REFUND_WORDS,
+  placeSquareRefundResponseSchema,
+  type PlaceSquareRefundRequest,
   type SaleCardRefundRequest,
   type SaleWholeCardRefundRequest,
   type SquareRefund,
@@ -552,8 +555,14 @@ const theirSale = async (deps: PaymentsDeps, gymId: string, saleId: string): Pro
   return line;
 };
 
-const checkOfSale = (deps: PaymentsDeps, ready: Ready, sale: SaleToRefund): Promise<CardRefundCheck> =>
-  checkWithSquare(deps, ready, sale, sale.squarePaymentId ?? "", () => saleRefundAsking(deps.sql, ready.row.gymId, sale.saleId), () => refunds.waitingOnTerminal(deps.sql, ready.row.gymId, sale.squarePaymentId ?? ""));
+/** A refund made in Square waiting on its product stops this box: staff say which first, so nothing is sent or noted against the wrong one. */
+const checkOfSale = async (deps: PaymentsDeps, ready: Ready, sale: SaleToRefund): Promise<CardRefundCheck> => {
+  const paymentId = sale.squarePaymentId ?? "";
+  const check = await checkWithSquare(deps, ready, sale, paymentId, () => saleRefundAsking(deps.sql, ready.row.gymId, sale.saleId), () => refunds.waitingOnTerminal(deps.sql, ready.row.gymId, paymentId));
+  const toPlace = await sales.toPlaceOn(deps.sql, ready.row.gymId, paymentId);
+  if (toPlace === 0) return check;
+  return { ...check, refundedInSquareMinor: Math.max(0, check.refundedInSquareMinor - toPlace), block: check.block === "waiting" ? "waiting" : "to_place" };
+};
 
 /** What Square says of all that is left of a sale: nothing goes back at once where Square shows less left than the app does. */
 async function checkOfWholeSale(deps: PaymentsDeps, ready: Ready, lines: readonly [SaleToRefund, ...SaleToRefund[]]): Promise<CardRefundCheck> {
@@ -736,4 +745,27 @@ export async function processCardRefunds(deps: PaymentsDeps, square: SquareSetti
     await refunds.lookAgain(deps.sql, press, lookFrom(at, press.looks + 1));
   }
   return run;
+}
+
+/** Staff say which product a refund made in Square was for (18d-iv-d-ii). Whoever may sell, with Square connected or not: the money has gone. */
+export async function placeSquareRefund(deps: PaymentsDeps, userId: string, gymId: string, saleId: string, pressId: string, body: PlaceSquareRefundRequest): Promise<{ receiptNumbers: number[] }> {
+  await requireWritablePrivilege(deps, gymId, userId, BILLING);
+  const placed = await sales.placeSaleRefund(deps.sql, { gymId, saleId, pressId, parts: body.parts, actorUserId: userId, now: deps.now() });
+  switch (placed.kind) {
+    case "ok":
+      return placeSquareRefundResponseSchema.parse({ receiptNumbers: placed.receiptNumbers });
+    case "not_found":
+    case "not_on_sale":
+      throw saleGone();
+    case "waiting":
+      throw refused("card_refund_waiting", SALE_REFUND_WORDS.waiting);
+    case "changed":
+      throw refused("place_refund_changed", PLACE_SQUARE_REFUND_WORDS.changed);
+    case "wrong_total":
+      throw refused("place_refund_wrong_total", PLACE_SQUARE_REFUND_WORDS.wrong_total);
+    case "too_much":
+      throw refused("place_refund_too_much", PLACE_SQUARE_REFUND_WORDS.too_much);
+    case "too_many_back":
+      throw refused("restock_too_many", PLACE_SQUARE_REFUND_WORDS.too_many_back);
+  }
 }

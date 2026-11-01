@@ -366,7 +366,7 @@ describe('the sentences of a sale refunded to the card', () => {
   it('the box says what Square gave back with no note here, and what is left', () => {
     const words = saleCardRefundWords(towel(), null, { card: VISA, leftMinor: 100, refundedInSquareMinor: 1800, block: null });
     expect(words.detail).toContain('to a walk-in for $15.00. $1.00 of it can still be refunded.');
-    expect(words.inSquare).toBe('Square shows $18.00 of this sale was already refunded there. Note that refund here so your records match.');
+    expect(words.inSquare).toBe('Square shows $18.00 of this sale was already refunded there. It will appear here by itself within the hour.');
   });
 
   it('what waits on Square', () => {

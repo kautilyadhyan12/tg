@@ -178,3 +178,23 @@ export function saleRestockTooManyWords(leftCount: number): string {
     ? "Everything sold has already gone back on the shelf. Choose none, then note the refund."
     : `Only ${String(leftCount)} can go back on the shelf for this sale. Nothing was noted.`;
 }
+
+export const placeSquareRefundParamsSchema = z.object({ gymId: z.string().uuid(), saleId: z.string().uuid(), pressId: z.string().uuid() }).strict();
+
+/** Which product a refund made in Square was for (18d-iv-d-ii): the amounts add up to what Square gave back; `restock` is how many went back on the shelf. */
+export const placeSquareRefundRequestSchema = z
+  .object({ parts: z.array(z.object({ saleId: z.string().uuid(), amountMinor: z.number().int().min(1).max(99_999_999), restock: z.number().int().min(0).max(99) }).strict()).min(1).max(20) })
+  .strict();
+export type PlaceSquareRefundRequest = z.infer<typeof placeSquareRefundRequestSchema>;
+
+export const placeSquareRefundResponseSchema = z.object({ receiptNumbers: z.array(receiptNumberSchema).min(1) }).strict();
+
+export const PLACE_SQUARE_REFUND_WORDS = {
+  changed: "This refund has changed since the page was read. The page now shows what is left to do.",
+  wrong_total: "The amounts must add up to what Square refunded.",
+  too_much: "That is more than that product can take.",
+  too_many_back: "That is more than can go back on the shelf for that product. Choose fewer.",
+} as const;
+
+/** A refund noted by card over one Square already shows here. */
+export const saleRefundInSquareWords = (money: string): string => `${money} of this sale was refunded through Square and is already shown here, so it does not need noting. If you gave more back another way, pick how you gave it.`;
