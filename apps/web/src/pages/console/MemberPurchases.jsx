@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useInRouterContext } from 'react-router-dom';
+import { Link, useInRouterContext, useNavigate } from 'react-router-dom';
 import { registerService } from '../../api/registerApi';
 import { errorText } from '../../api/orgsApi';
 import { viewerPrivileges } from './consoleView';
@@ -10,7 +10,7 @@ import { RECEIPT_BUTTON, receiptButtonLabel } from './receiptView';
 import ReceiptBox from '../../components/console/ReceiptBox';
 import MoreMenu from '../../components/console/MoreMenu';
 import { consoleIsReadOnly } from './billingView';
-import { BasketRefundBox, SaleRefundLines } from './SaleRefunds';
+import { BasketRefundBox, SaleRefundLines, SquareRefundsToPlace } from './SaleRefunds';
 import { saleBasketMenu, saleRefundPick } from './saleRefundMenu';
 import { saleSaidNow, salesWaitOnSquare } from './saleRefundView';
 import { useReadWhileSquareWaits } from './useReadWhileSquareWaits';
@@ -20,6 +20,12 @@ import { useReadWhileSquareWaits } from './useReadWhileSquareWaits';
 // from the same rows here, and the button opens Sell with them already picked. A sale is
 // refunded here as on Sell (18p): its ⋯, or its Refund button if it was paid on the Terminal, and
 // its refunds are under it.
+
+/** A sale's refunds where the page can open Sell, for Change stock count. */
+function StockLines({ sellTo, ...props }) {
+  const navigate = useNavigate();
+  return <SaleRefundLines {...props} onStock={() => navigate(sellTo, { state: { showProducts: true } })} />;
+}
 
 export default function MemberPurchases({ gymId, gym, entryId, name, past, squareEveryMs }) {
   const privileges = viewerPrivileges(gym);
@@ -113,8 +119,9 @@ export default function MemberPurchases({ gymId, gym, entryId, name, past, squar
                 {saleRefundPick(refunding, sale.id) !== null ? (
                   <BasketRefundBox gymId={gymId} country={gym?.country} basket={basket} who={who} toCard={refunding.toCard} paymentsTo={paymentsTo} onDone={doneHere(sale.id)} onStopped={() => setReads((n) => n + 1)} onClose={() => setRefunding(null)} />
                 ) : null}
+                <SquareRefundsToPlace gymId={gymId} basket={basket} canAct={acts} onDone={doneHere(sale.id)} />
                 {basket.lines.map((l) => (
-                  <SaleRefundLines key={l.id} gymId={gymId} gym={gym} sale={l} named={basket.lines.length > 1} canAct={acts} onDone={doneHere(sale.id)} />
+                  routed && sellTo !== null ? <StockLines key={l.id} sellTo={sellTo} gymId={gymId} gym={gym} sale={l} named={basket.lines.length > 1} canAct={acts} onDone={doneHere(sale.id)} /> : <SaleRefundLines key={l.id} gymId={gymId} gym={gym} sale={l} named={basket.lines.length > 1} canAct={acts} onDone={doneHere(sale.id)} />
                 ))}
               </li>
             );

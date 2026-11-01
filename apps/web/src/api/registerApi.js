@@ -4,6 +4,7 @@ import {
   friendGiftResponseSchema,
   memberPurchasesResponseSchema,
   receiptSchema,
+  placeSquareRefundResponseSchema,
   refundSaleResponseSchema,
   refundWholeSaleResponseSchema,
   salePeopleResponseSchema,
@@ -47,6 +48,9 @@ export const registerService = {
   /** Note a refund on all of a sale: `body` is `{ requestKey, totalMinor, method, reason, shelf }`. */
   refundWholeSale: async (gymId, saleId, body) =>
     read(refundWholeSaleResponseSchema, 'that refund', await authApi.post(`${gymPath(gymId)}/register/sales/${encodeURIComponent(saleId)}/refunds-all`, body)),
+  /** Which product a refund made in Square was for: `body` is `{ parts: [{ saleId, amountMinor, restock }] }`. */
+  placeSquareRefund: async (gymId, saleId, pressId, body) =>
+    read(placeSquareRefundResponseSchema, 'that refund', await authApi.post(`${gymPath(gymId)}/register/sales/${encodeURIComponent(saleId)}/square-refunds/${encodeURIComponent(pressId)}/place`, body)),
   /** Refund to card on all of a sale: what Square says of it, then one refund for all that is left. */
   getWholeCardRefund: async (gymId, saleId) =>
     read(cardRefundCheckSchema, 'that payment', await authApi.get(`${gymPath(gymId)}/register/sales/${encodeURIComponent(saleId)}/card-refund-all`)),

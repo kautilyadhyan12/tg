@@ -55,6 +55,7 @@
 //   GET    /v1/orgs/:gymId/failed-payments/summary            how many, and what they come to (Overview)
 //   GET    /v1/orgs/:gymId/card-refunds/:pressId              where a refund on the Terminal stands (18d-iv-c)
 //   POST   /v1/orgs/:gymId/card-refunds/:pressId/cancel       stops it, until the person starts
+//   POST   /v1/orgs/:gymId/register/sales/:saleId/square-refunds/:pressId/place   which product a refund made in Square was for (18d-iv-d-ii)
 //   GET    /v1/orgs/:gymId/refunds-to-review?from=0           Overview's list of refunds to review
 //   POST   /v1/orgs/:gymId/refunds-to-review/fees/:billId/keep            Keep the fee
 //   POST   /v1/orgs/:gymId/refunds-to-review/presses/:pressId/no-refund   No refund needed
@@ -69,6 +70,7 @@ import {
   failedPaymentsQuerySchema,
   refundReviewFeeParamsSchema,
   refundReviewPressParamsSchema,
+  placeSquareRefundRequestSchema,
   refundsToReviewQuerySchema,
   saveCardRequestSchema,
   squareCardIdSchema,
@@ -372,6 +374,15 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     const body = parseOr400(saleCardRefundRequestSchema, req.body, req, reply);
     if (body === null) return;
     const answer = await cardRefunds.refundSaleToCard(paymentsDeps, callerId(req), params.gymId, params.saleId, body);
+    return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  app.post("/v1/orgs/:gymId/register/sales/:saleId/square-refunds/:pressId/place", { preHandler: [app.authenticate, staffOnly(deps.sql, refundLimit)] }, async (req, reply) => {
+    const params = parseOr400(z.object({ gymId: z.string().uuid(), saleId: z.string().uuid(), pressId: z.string().uuid() }).strict(), req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(placeSquareRefundRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const answer = await cardRefunds.placeSquareRefund(paymentsDeps, callerId(req), params.gymId, params.saleId, params.pressId, body);
     return reply.status(200).header("cache-control", "no-store").send(answer);
   });
 

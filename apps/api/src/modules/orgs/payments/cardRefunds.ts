@@ -38,6 +38,9 @@ import {
   type CardRefundRequest,
   type CardRefundResponse,
   type CardRefundTerminalEnd,
+  PLACE_SQUARE_REFUND_WORDS,
+  placeSquareRefundResponseSchema,
+  type PlaceSquareRefundRequest,
   type SaleCardRefundRequest,
   type SaleWholeCardRefundRequest,
   type SquareRefund,
@@ -736,4 +739,27 @@ export async function processCardRefunds(deps: PaymentsDeps, square: SquareSetti
     await refunds.lookAgain(deps.sql, press, lookFrom(at, press.looks + 1));
   }
   return run;
+}
+
+/** Staff say which product a refund made in Square was for (18d-iv-d-ii). Whoever may sell, with Square connected or not: the money has gone. */
+export async function placeSquareRefund(deps: PaymentsDeps, userId: string, gymId: string, saleId: string, pressId: string, body: PlaceSquareRefundRequest): Promise<{ receiptNumbers: number[] }> {
+  await requireWritablePrivilege(deps, gymId, userId, BILLING);
+  const placed = await sales.placeSaleRefund(deps.sql, { gymId, saleId, pressId, parts: body.parts, actorUserId: userId, now: deps.now() });
+  switch (placed.kind) {
+    case "ok":
+      return placeSquareRefundResponseSchema.parse({ receiptNumbers: placed.receiptNumbers });
+    case "not_found":
+    case "not_on_sale":
+      throw saleGone();
+    case "waiting":
+      throw refused("card_refund_waiting", SALE_REFUND_WORDS.waiting);
+    case "changed":
+      throw refused("place_refund_changed", PLACE_SQUARE_REFUND_WORDS.changed);
+    case "wrong_total":
+      throw refused("place_refund_wrong_total", PLACE_SQUARE_REFUND_WORDS.wrong_total);
+    case "too_much":
+      throw refused("place_refund_too_much", PLACE_SQUARE_REFUND_WORDS.too_much);
+    case "too_many_back":
+      throw refused("restock_too_many", saleRestockTooManyWords(0));
+  }
 }

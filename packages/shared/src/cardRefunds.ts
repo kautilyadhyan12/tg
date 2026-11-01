@@ -29,7 +29,7 @@ export const CARD_REFUND_WORDS = {
   key_reused: "That refund has already been sent. Open the payment again to see where it stands.",
   nothing_left: "There is nothing left of this payment to refund.",
   /** All of a sale, where Square shows less left than the app does. */
-  less_in_square: "Square shows less of this sale left to refund than your records do. Note what was refunded in Square, or refund one product at a time.",
+  less_in_square: "Square shows less of this sale left to refund than your records do, as part was refunded there. It will appear here by itself within the hour, or you can refund one product at a time.",
   /** Square took it up, then said it failed. */
   failed: "Square could not refund this. No money went back.",
 } as const;

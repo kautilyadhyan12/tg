@@ -112,6 +112,8 @@ export interface SaleRow {
   lineNo: number;
   /** A refund to the card Square has not answered, or never did (18d-iv-b-ii). */
   cardRefund: OpenSalePress | null;
+  /** Refunded in Square with no product said: on the sale's first line. */
+  toPlace: { pressId: string; amountMinor: number; on: string }[];
 }
 
 export interface SaleRefundRow {
@@ -125,7 +127,7 @@ export interface SaleRefundRow {
   receiptNumber: number;
   voided: { reason: RefundVoidKept; on: string; by: string | null } | null;
   /** Sent to the card through Square: where it stands, and the gym's day it was pressed. */
-  square: { state: "pending" | "completed"; card: { brand: string; last4: string } | null; startedOn: string; pressId: string } | null;
+  square: { state: "pending" | "completed"; card: { brand: string; last4: string } | null; startedOn: string; pressId: string; inSquare: boolean } | null;
 }
 
 export type OpenSalePress = CardRefundOpen;
@@ -195,6 +197,7 @@ const sale = (r: RawSale): SaleRow => ({
   receiptNumber: r.receipt_number,
   refunds: [],
   cardRefund: null,
+  toPlace: [],
   refundedMinor: r.refunded_minor,
   stockCounted: r.stock_counted,
   lineNo: r.line_no,
@@ -217,6 +220,7 @@ interface RawSaleRefund {
   q_state: string | null;
   q_brand: string | null;
   q_last4: string | null;
+  q_from_square: boolean | null;
   q_started: string | null;
 }
 
@@ -300,14 +304,15 @@ export const saleLineRule = (line: SaleToRefund, ask: { amountMinor: number; res
 async function openPressesOfSales(sql: Sql | TransactionSql, gymId: string, saleIds: readonly string[]): Promise<Map<string, OpenSalePress>> {
   const open = new Map<string, OpenSalePress>();
   if (saleIds.length === 0) return open;
-  const rows = await sql<{ sale_id: string; amount_minor: number; on_day: string; lost: boolean; failed: boolean; on_terminal: boolean; decided_on: string | null; decided_by: string | null }[]>`
+  const rows = await sql<{ sale_id: string; amount_minor: number; on_day: string; lost: boolean; failed: boolean; no_record: boolean; failed_in_square: boolean; on_terminal: boolean; decided_on: string | null; decided_by: string | null }[]>`
     SELECT DISTINCT ON (q.sale_id) q.sale_id, q.amount_minor, (q.started_at AT TIME ZONE g.timezone)::date::text AS on_day, q.state = 'done' AS lost, q.outcome = 'failed' AS failed,
+           COALESCE(q.code = 'NOT_IN_SQUARE', false) AS no_record, COALESCE(q.code = 'FAILED_IN_SQUARE', false) AS failed_in_square,
            q.state = 'asking' AND q.device_id IS NOT NULL AS on_terminal,
            (q.no_refund_at AT TIME ZONE g.timezone)::date::text AS decided_on, u.display_name AS decided_by
     FROM gym_square_refunds q
     JOIN gyms g ON g.id = q.gym_id
     LEFT JOIN users u ON u.id = q.no_refund_by
-    WHERE q.gym_id = ${gymId} AND q.sale_id = ANY(${[...saleIds]}::uuid[]) AND (q.state = 'asking' OR q.outcome IN ('lost','failed'))
+    WHERE q.gym_id = ${gymId} AND q.sale_id = ANY(${[...saleIds]}::uuid[]) AND (q.state = 'asking' OR q.outcome IN ('lost','failed')) AND NOT q.from_square
       AND (SELECT COALESCE(sum(r.amount_minor), 0) FROM gym_sale_refunds r
            JOIN gym_sales l ON l.gym_id = r.gym_id AND l.id = r.sale_id
            JOIN gym_sales o ON o.gym_id = q.gym_id AND o.id = q.sale_id
@@ -315,8 +320,23 @@ async function openPressesOfSales(sql: Sql | TransactionSql, gymId: string, sale
              AND (l.id = o.id OR (q.parts IS NOT NULL AND l.receipt_number = o.receipt_number))) < q.amount_minor
     ORDER BY q.sale_id, q.state = 'asking' DESC, COALESCE(q.outcome = 'lost' AND q.no_refund_at IS NULL, false) DESC, q.started_at DESC`;
   // A failed press says itself on the crossed-out line, unless staff decided on it; it is read so an older decision does not stand over it.
-  for (const r of rows) if (!r.failed || r.decided_on !== null) open.set(r.sale_id, { amountMinor: r.amount_minor, on: r.on_day, lost: r.lost, noRecord: false, failedInSquare: false, onTerminal: r.on_terminal, decided: r.decided_on === null ? null : { on: r.decided_on, by: r.decided_by } });
+  for (const r of rows) if (!r.failed || r.decided_on !== null) open.set(r.sale_id, { amountMinor: r.amount_minor, on: r.on_day, lost: r.lost, noRecord: r.no_record, failedInSquare: r.failed_in_square, onTerminal: r.on_terminal, decided: r.decided_on === null ? null : { on: r.decided_on, by: r.decided_by } });
   return open;
+}
+
+/** A card refund noted over one Square already showed here would count that money twice: more than Square gave back is another refund, and
+ *  what the app crossed out, noted again up to that amount, is staff saying it is another refund. Square's total where it is refused, else null. */
+export async function cardNoteRefused(sql: Sql | TransactionSql, gymId: string, lines: readonly SaleToRefund[], amountMinor: number): Promise<number | null> {
+  const paymentId = lines[0]?.squarePaymentId ?? null;
+  if (paymentId === null) return null;
+  const ids = lines.map((l) => l.saleId);
+  const [row] = await sql<{ total: number; crossed: number }[]>`
+    SELECT (SELECT COALESCE(sum(q.amount_minor), 0)::int FROM gym_square_refunds q
+            WHERE q.gym_id = ${gymId} AND q.square_payment_id = ${paymentId} AND q.sale_id IS NOT NULL AND q.square_refund_id IS NOT NULL AND q.outcome IS DISTINCT FROM 'failed') AS total,
+           (SELECT (COALESCE(sum(amount_minor) FILTER (WHERE void_reason = 'in_square'), 0) - COALESCE(sum(amount_minor) FILTER (WHERE undone_at IS NULL AND method = 'card_at_desk'), 0))::int
+            FROM gym_sale_refunds WHERE gym_id = ${gymId} AND sale_id = ANY(${ids}::uuid[])) AS crossed`;
+  const total = row?.total ?? 0;
+  return amountMinor > (row?.crossed ?? 0) && amountMinor <= total ? total : null;
 }
 
 /** Whether a refund to the card is waiting for Square's answer on any line of this sale: its lines share one Square payment. */
@@ -332,13 +352,14 @@ export async function saleRefundAsking(sql: Sql | TransactionSql, gymId: string,
 /** The refunds of these sales, voided ones too, oldest first: one read for a list of sales. */
 async function refundsOf(sql: Sql | TransactionSql, gymId: string, sales: SaleRow[]): Promise<SaleRow[]> {
   if (sales.length === 0) return sales;
-  const [rows, open] = await Promise.all([
+  const onTerminal = sales.filter((s) => s.method === "terminal").map((s) => s.id);
+  const [rows, open, toPlace] = await Promise.all([
     sql<RawSaleRefund[]>`
       SELECT r.id, r.sale_id, r.amount_minor, r.method, r.reason, r.restocked, r.refunded_on::text AS refunded_on,
              u.display_name AS by, r.receipt_number, r.void_reason,
              CASE WHEN r.undone_at IS NOT NULL THEN (r.undone_at AT TIME ZONE g.timezone)::date::text END AS voided_on,
              v.display_name AS voided_by,
-             q.id AS q_id, q.state AS q_state, q.brand AS q_brand, q.last4 AS q_last4,
+             q.id AS q_id, q.state AS q_state, q.brand AS q_brand, q.last4 AS q_last4, q.from_square AS q_from_square,
              (q.started_at AT TIME ZONE g.timezone)::date::text AS q_started
       FROM gym_sale_refunds r
       JOIN gyms g ON g.id = r.gym_id
@@ -347,7 +368,13 @@ async function refundsOf(sql: Sql | TransactionSql, gymId: string, sales: SaleRo
       LEFT JOIN users v ON v.id = r.undone_by
       WHERE r.gym_id = ${gymId} AND r.sale_id = ANY(${sales.map((s) => s.id)}::uuid[])
       ORDER BY r.receipt_number`,
-    openPressesOfSales(sql, gymId, sales.filter((s) => s.method === "terminal").map((s) => s.id)),
+    openPressesOfSales(sql, gymId, onTerminal),
+    // Part of a basket refunded in Square, its product not yet said.
+    sql<{ id: string; sale_id: string; amount_minor: number; on_day: string }[]>`
+      SELECT q.id, q.sale_id, q.amount_minor, (q.started_at AT TIME ZONE g.timezone)::date::text AS on_day
+      FROM gym_square_refunds q JOIN gyms g ON g.id = q.gym_id
+      WHERE q.gym_id = ${gymId} AND q.to_place AND q.sale_id = ANY(${onTerminal}::uuid[])
+      ORDER BY q.started_at, q.id`,
   ]);
   const bySale = new Map<string, SaleRefundRow[]>();
   for (const r of rows) {
@@ -371,11 +398,12 @@ async function refundsOf(sql: Sql | TransactionSql, gymId: string, sales: SaleRo
               card: r.q_brand === null || r.q_last4 === null ? null : { brand: r.q_brand, last4: r.q_last4 },
               startedOn: r.q_started,
               pressId: r.q_id,
+              inSquare: r.q_from_square === true,
             },
     });
     bySale.set(r.sale_id, list);
   }
-  return sales.map((s) => ({ ...s, refunds: bySale.get(s.id) ?? [], cardRefund: open.get(s.id) ?? null }));
+  return sales.map((s) => ({ ...s, refunds: bySale.get(s.id) ?? [], cardRefund: open.get(s.id) ?? null, toPlace: toPlace.filter((p) => p.sale_id === s.id).map((p) => ({ pressId: p.id, amountMinor: p.amount_minor, on: p.on_day })) }));
 }
 
 /** The columns every read of a sale takes, from `gym_sales s` with its two joins. Who
@@ -1073,6 +1101,7 @@ export async function voidSale(
 }
 
 export type RefundSaleOutcome =
+  | { kind: "refund_in_square"; amountMinor: number; currency: string }
   | { kind: "ok"; receiptNumber: number }
   | { kind: "sale_not_found" }
   | { kind: "voided" }
@@ -1142,6 +1171,11 @@ export async function refundSale(sql: Sql, input: RefundSaleInput): Promise<Refu
       return { kind: "voided" };
     }
 
+    if (input.method === "card_at_desk") {
+      const total = await cardNoteRefused(tx, input.gymId, await saleLinesToRefund(tx, input.gymId, input.saleId), input.amountMinor);
+      if (total !== null) return { kind: "refund_in_square", amountMinor: total, currency: row.currency };
+    }
+
     const written = await writeSaleRefund(tx, {
       gymId: input.gymId,
       saleId: input.saleId,
@@ -1169,7 +1203,8 @@ export async function refundSale(sql: Sql, input: RefundSaleInput): Promise<Refu
 export type RefundWholeSaleOutcome =
   | { kind: "ok"; receiptNumbers: number[] }
   | { kind: "sale_not_found" | "voided" | "request_reused" | "waiting" | "changed" | "not_counted" }
-  | { kind: "too_many_back"; leftCount: number };
+  | { kind: "too_many_back"; leftCount: number }
+  | { kind: "refund_in_square"; amountMinor: number; currency: string };
 
 /** What each product of a sale takes when all that is left goes back, in one refund: nothing for a product with nothing left. */
 export function wholeSaleParts(
@@ -1213,6 +1248,10 @@ export async function refundWholeSale(
     if (first.undone) return { kind: "voided" };
     if (await saleRefundAsking(tx, input.gymId, input.saleId)) return { kind: "waiting" };
     if (lines.reduce((n, l) => n + l.refundableMinor, 0) !== input.totalMinor) return { kind: "changed" };
+    if (input.method === "card_at_desk") {
+      const total = await cardNoteRefused(tx, input.gymId, lines, input.totalMinor);
+      if (total !== null) return { kind: "refund_in_square", amountMinor: total, currency: first.currency };
+    }
     const split = wholeSaleParts(lines, input.shelf);
     if (split.kind !== "ok") return split;
     const receiptNumbers: number[] = [];
@@ -1265,7 +1304,7 @@ export async function writeSaleRefund(
     today: string;
     actorUserId: string | null;
     now: Date;
-    action: "org.sale_refund_noted" | "org.sale_refund_sent";
+    action: "org.sale_refund_noted" | "org.sale_refund_sent" | "org.sale_refund_in_square";
     card: { brand: string; last4: string } | null;
     /** The refund to the card it came from. */
     pressId: string | null;

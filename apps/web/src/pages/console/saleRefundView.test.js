@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  IN_SQUARE_STOCK_LINE,
+  SEVERAL,
   asksRestock,
+  placeBody,
+  placeChoices,
+  placeLine,
+  placedWords,
   refundableMinor,
   restockChoices,
   restockLeft,
@@ -92,5 +98,41 @@ describe('a sale’s refunds', () => {
       question: 'Void the $2.50 refund noted on 16 Oct 2026? It will no longer count, and the sale counts that much again. 1 will come off the shelf count again. It stays in the list crossed out.',
       done: 'Refund voided. The sale counts $2.50 again.',
     });
+  });
+});
+
+describe('a refund made in Square', () => {
+  const water = { id: 'w', itemName: 'Water', quantity: 2, totalMinor: 400, refundedMinor: 0, currency: 'USD', stockCounted: true, refunds: [] };
+  const towel = { id: 't', itemName: 'Towel', quantity: 1, totalMinor: 1500, refundedMinor: 0, currency: 'USD', stockCounted: false, refunds: [] };
+  const inSquare = { id: 'r', amountMinor: 300, method: 'terminal', reason: 'other', restocked: 0, refundedOn: '2026-11-01', by: 'Sam', receiptNumber: 9, voided: null, square: { state: 'completed', card: { brand: 'VISA', last4: '1111' }, late: false, pressId: null, inSquare: true } };
+
+  it('says where it was refunded, with no reason and nobody named, and that the stock count did not move', () => {
+    const [line] = saleRefundLines({ ...water, refunds: [inSquare] }, true);
+    expect(line.detail).not.toContain('Sam');
+    expect(line.detail).not.toContain('Something else');
+    expect(line.detail).toContain('Water');
+    expect(line.detail).toContain('Refunded in Square to Visa ending 1111');
+    expect(line.stockNote).toBe(IN_SQUARE_STOCK_LINE);
+    expect(saleRefundLines({ ...towel, refunds: [inSquare] })[0].stockNote).toBeNull();
+    expect(saleRefundLines({ ...water, refunds: [{ ...inSquare, restocked: 1 }] })[0].stockNote).toBeNull();
+    expect(saleRefundLines({ ...water, refunds: [{ ...inSquare, square: { ...inSquare.square, inSquare: false } }] })[0].stockNote).toBeNull();
+  });
+
+  it('offers only the products that can take all of it', () => {
+    expect(placeChoices([water, towel], 500).map((l) => l.id)).toEqual(['t']);
+    expect(placeChoices([water, towel], 300).map((l) => l.id)).toEqual(['w', 't']);
+    expect(placeChoices([water, { ...towel, totalMinor: 400 }], 600)).toEqual([]);
+  });
+
+  it('sends one product, or a split only where it adds up', () => {
+    expect(placeBody([water, towel], 300, 'USD', { pick: '', amounts: {}, shelf: {} }).problem).toBe('Pick the product.');
+    expect(placeBody([water, towel], 300, 'USD', { pick: 'w', amounts: {}, shelf: { w: '1' } }).body).toEqual({ parts: [{ saleId: 'w', amountMinor: 300, restock: 1 }] });
+    expect(placeBody([water, towel], 500, 'USD', { pick: SEVERAL, amounts: { w: '1', t: '2' }, shelf: {} }).problem).toBe('The amounts must add up to $5.00. They add up to $3.00.');
+    expect(placeBody([water, towel], 500, 'USD', { pick: SEVERAL, amounts: { w: '2', t: '3' }, shelf: {} }).body).toEqual({ parts: [{ saleId: 'w', amountMinor: 200, restock: 0 }, { saleId: 't', amountMinor: 300, restock: 0 }] });
+  });
+
+  it('says what happened in plain words', () => {
+    expect(placedWords([water, towel], { parts: [{ saleId: 't', amountMinor: 300, restock: 0 }] }, 'USD', [12])).toBe('The $3.00 refund is now on Towel. Its receipt is #12.');
+    expect(placeLine(500, 'USD')).toBe('Square refunded $5.00 of this sale. Which product was it for? It counts in your reports once you choose.');
   });
 });

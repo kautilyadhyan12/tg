@@ -5,6 +5,13 @@ import { errorText } from '../../api/orgsApi';
 import { paymentMethodsFor } from './memberBillsView';
 import { RECEIPT_BUTTON, receiptButtonLabel } from './receiptView';
 import {
+  SEVERAL,
+  placeBody,
+  placeChoices,
+  placeLine,
+  placeLines,
+  placedWords,
+  refundableMinor,
   SALE_MENU_WORDS,
   SALE_REFUND_CHOICES,
   SALE_REFUND_VOID_CHOICES,
@@ -359,9 +366,136 @@ export function BasketRefundBox({ gymId, country = null, basket, who, toCard = f
   );
 }
 
+/** Choose product: which product a refund made in Square was for (18d-iv-d-ii). */
+function PlaceRefundBox({ gymId, lines, press, currency, onDone, onClose }) {
+  const open = lines.filter((line) => refundableMinor(line) > 0);
+  const choices = placeChoices(lines, press.amountMinor);
+  const [draft, setDraft] = useState({ pick: choices.length === 0 ? SEVERAL : '', amounts: {}, shelf: {}, tried: false });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const { problem, body } = placeBody(lines, press.amountMinor, currency, draft);
+  const picked = draft.pick === SEVERAL ? open.filter((line) => (draft.amounts[line.id] ?? '').trim() !== '') : lines.filter((line) => line.id === draft.pick);
+
+  const send = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const answer = await registerService.placeSquareRefund(gymId, lines[0].id, press.pressId, body);
+      onDone(placedWords(lines, body, currency, answer.receiptNumbers));
+    } catch (err) {
+      setError(errorText(err, "We couldn't save that. Try again."));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form
+      noValidate
+      className="rounded-[14px] p-3 flex flex-col gap-3"
+      style={BOX}
+      data-testid="place-refund-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (busy) return;
+        if (body === null) {
+          setDraft((d) => ({ ...d, tried: true }));
+          return;
+        }
+        void send();
+      }}
+    >
+      {choices.length > 0 ? (
+        <label className="c-field">
+          <span className="c-label">Which product was it for?</span>
+          <select className="c-sel" value={draft.pick} onChange={(e) => setDraft((d) => ({ ...d, pick: e.target.value }))}>
+            <option value="">Choose one</option>
+            {choices.map((line) => (
+              <option key={line.id} value={line.id}>
+                {refundLineOption(line)}
+              </option>
+            ))}
+            {open.length > 1 ? <option value={SEVERAL}>Several products</option> : null}
+          </select>
+        </label>
+      ) : null}
+      {draft.pick === SEVERAL
+        ? open.map((line) => (
+            <label key={line.id} className="c-field">
+              <span className="c-label">{`${refundLineOption(line)}: amount (${currency})`}</span>
+              <input className="c-input" type="text" inputMode="decimal" value={draft.amounts[line.id] ?? ''} onChange={(e) => setDraft((d) => ({ ...d, amounts: { ...d.amounts, [line.id]: e.target.value.slice(0, 12) } }))} />
+            </label>
+          ))
+        : null}
+      {picked.filter(asksRestock).map((line) => (
+        <label key={line.id} className="c-field">
+          <span className="c-label">{`${line.itemName}: how many went back on the shelf`}</span>
+          <select className="c-sel" value={draft.shelf[line.id] ?? '0'} onChange={(e) => setDraft((d) => ({ ...d, shelf: { ...d.shelf, [line.id]: e.target.value } }))}>
+            {restockChoices(line).map((choice) => (
+              <option key={choice.value} value={choice.value}>
+                {choice.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      ))}
+      {draft.tried && problem !== null ? (
+        <span className="c-s14" style={{ color: 'var(--bad)' }} role="alert">
+          {problem}
+        </span>
+      ) : null}
+      {error !== null ? (
+        <span className="c-s14" style={{ color: 'var(--bad)' }} role="alert">
+          {error}
+        </span>
+      ) : null}
+      <div className="flex flex-wrap gap-2">
+        <button type="submit" className={MAIN} disabled={busy}>
+          {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <Check aria-hidden="true" className="w-4 h-4" />}
+          Save
+        </button>
+        <button type="button" className={PLAIN} disabled={busy} onClick={onClose}>
+          Back
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/** Refunds made in Square on this sale whose product is not yet said, each with its box. `opened`: the one Overview opened. */
+export function SquareRefundsToPlace({ gymId, basket, canAct, opened = null, onDone }) {
+  const [open, setOpen] = useState(opened);
+  const lines = basket?.lines ?? [];
+  const currency = lines[0]?.currency ?? 'USD';
+  return placeLines(basket).map((press) => (
+    <div key={press.pressId} className="flex flex-col gap-2" data-testid="sale-refund-to-place">
+      <p className="c-s14 c-w5 m-0" style={{ color: 'var(--warn)' }}>
+        {placeLine(press.amountMinor, currency)}
+      </p>
+      {canAct && open !== press.pressId ? (
+        <button type="button" className={`${SMALL} self-start`} onClick={() => setOpen(press.pressId)}>
+          Choose product
+        </button>
+      ) : null}
+      {canAct && open === press.pressId ? (
+        <PlaceRefundBox
+          gymId={gymId}
+          lines={lines}
+          press={press}
+          currency={currency}
+          onDone={(words) => {
+            setOpen(null);
+            onDone(words);
+          }}
+          onClose={() => setOpen(null)}
+        />
+      ) : null}
+    </div>
+  ));
+}
+
 /** A sale's refunds under it. `canAct`: the viewer may sell, at a gym that can be changed.
  *  `named`: the line is one product of a sale of several, so each refund names it. */
-export function SaleRefundLines({ gymId, gym, sale, canAct, onDone, named = false }) {
+export function SaleRefundLines({ gymId, gym, sale, canAct, onDone, named = false, onStock = null }) {
   const lines = saleRefundLines(sale, named);
   const [receiptFor, setReceiptFor] = useState(null);
   const [voiding, setVoiding] = useState(null);
@@ -411,8 +545,14 @@ export function SaleRefundLines({ gymId, gym, sale, canAct, onDone, named = fals
                 <span>{r.detail}</span>
                 {r.voided === null ? null : <span>{r.voided}</span>}
                 {r.note === null ? null : <span>{r.note}</span>}
+                {r.stockNote === null ? null : <span>{r.stockNote}</span>}
               </span>
               <span className="flex items-center gap-2 self-start md:self-auto">
+                {r.stockNote !== null && canAct && onStock !== null ? (
+                  <button type="button" className={SMALL} onClick={onStock}>
+                    Change stock count
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className={SMALL}

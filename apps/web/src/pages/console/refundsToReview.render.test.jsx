@@ -69,6 +69,12 @@ describe('the words of a row', () => {
     expect(reviewButtons(byHand).open).toBe('Void payment');
   });
 
+  it('a refund made in Square with no product said asks which, and only opens the box', () => {
+    const row = { ...saleRow, kind: 'place', amountMinor: 500, paidMinor: 500 };
+    expect(reviewWhy(row)).toBe('Square refunded $5.00 of this sale. Which product was it for? It counts in your reports once you choose.');
+    expect(reviewButtons(row)).toEqual({ open: 'Choose product', decide: null });
+  });
+
   it('failed, never answered and past 14 days', () => {
     expect(reviewWhat(failed)).toBe('Gold Monthly');
     expect(reviewWhy(failed)).toBe('Square could not refund this. No money went back.');

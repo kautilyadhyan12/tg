@@ -21,6 +21,7 @@ import {
   refundSaleResponseSchema,
   refundWholeSaleResponseSchema,
   saleRefundTooMuchWords,
+  saleRefundInSquareWords,
   saleRestockTooManyWords,
   voidSaleRefundResponseSchema,
   type RefundSaleRequest,
@@ -136,12 +137,13 @@ const shownSales = (sales: readonly repo.SaleRow[], today: string, canSell: bool
       canRefund,
       toCard: canRefund && s.method === "terminal",
       cardRefund: canSell ? s.cardRefund : null,
+      toPlace: canSell ? s.toPlace : [],
       refunds: s.refunds.map((r) => ({
         ...r,
         square:
           r.square === null
             ? null
-            : { state: r.square.state, card: r.square.card, late: r.square.state === "pending" && daysBetween(r.square.startedOn, today) > CARD_REFUND_LIMITS.pendingDays, pressId: r.square.pressId },
+            : { state: r.square.state, card: r.square.card, late: r.square.state === "pending" && daysBetween(r.square.startedOn, today) > CARD_REFUND_LIMITS.pendingDays, pressId: r.square.pressId, inSquare: r.square.inSquare },
       })),
     };
   });
@@ -551,6 +553,8 @@ export async function refundSale(deps: RegisterDeps, userId: string, gymId: stri
       throw new OrgsError(409, "sale_voided", SALE_REFUND_WORDS.voided);
     case "request_reused":
       throw new OrgsError(409, "request_reused", SALE_REFUND_WORDS.request_reused);
+    case "refund_in_square":
+      throw new OrgsError(409, "refund_in_square", saleRefundInSquareWords(formatMinor(outcome.amountMinor, outcome.currency)));
     case "waiting":
       throw new OrgsError(409, "card_refund_waiting", SALE_REFUND_WORDS.waiting);
     case "too_much":
@@ -591,6 +595,8 @@ export async function refundWholeSale(deps: RegisterDeps, userId: string, gymId:
       throw new OrgsError(409, "sale_voided", SALE_REFUND_WORDS.voided);
     case "request_reused":
       throw new OrgsError(409, "request_reused", SALE_REFUND_WORDS.request_reused);
+    case "refund_in_square":
+      throw new OrgsError(409, "refund_in_square", saleRefundInSquareWords(formatMinor(outcome.amountMinor, outcome.currency)));
     case "waiting":
       throw new OrgsError(409, "card_refund_waiting", SALE_REFUND_WORDS.waiting);
     case "changed":
