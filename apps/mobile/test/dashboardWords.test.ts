@@ -145,20 +145,20 @@ const meal = (more: Partial<Meal>): Meal => ({
 
 describe("Recent Activity: everything done lately, whatever kind", () => {
   it("each kind's row, named by its day", () => {
-    expect(workoutRow(workout({}))).toMatchObject({ day: "Mon 26 Oct", detail: "Workout · 38 min · 86 form", value: "312 kcal" });
-    expect(runRow(run({}))).toMatchObject({ day: "Tue 27 Oct", detail: "Evening run · 31 min", value: "5.2 km" });
-    expect(mealRow(meal({}))).toMatchObject({ day: "Tue 27 Oct", detail: "Lunch · Meal scan", value: "540 kcal" });
-    expect(mealRow(meal({ mealName: "Dal and rice", origin: "manual" })).detail).toBe("Dal and rice · Logged");
-    expect(mealRow(meal({ mealType: null })).detail).toBe("Meal · Meal scan");
-    expect(runRow(run({ routeName: null })).detail).toBe("Run · 31 min");
+    expect(workoutRow(workout({}))).toMatchObject({ name: "Workout", facts: "Mon 26 Oct · 38 min · 86 form", value: "312 kcal" });
+    expect(runRow(run({}))).toMatchObject({ name: "Evening run", facts: "Tue 27 Oct · 31 min", value: "5.2 km" });
+    expect(mealRow(meal({}))).toMatchObject({ name: "Lunch", facts: "Tue 27 Oct · Meal scan", value: "540 kcal" });
+    expect(mealRow(meal({ mealName: "Dal and rice", origin: "manual" }))).toMatchObject({ name: "Dal and rice", facts: "Tue 27 Oct · Logged" });
+    expect(mealRow(meal({ mealType: null })).name).toBe("Meal");
+    expect(runRow(run({ routeName: null })).name).toBe("Run");
   });
 
   it("what the server does not have is left out, never shown as 0", () => {
-    expect(workoutRow(workout({ durationMs: null, kcalPoint: null, avgFormScore: null }))).toMatchObject({ detail: "Workout", value: null });
+    expect(workoutRow(workout({ durationMs: null, kcalPoint: null, avgFormScore: null }))).toMatchObject({ name: "Workout", facts: "Mon 26 Oct", value: null });
     // Under half a minute is still a workout that happened: never "0 min".
-    expect(workoutRow(workout({ durationMs: 10_000, avgFormScore: null })).detail).toBe("Workout · 1 min");
+    expect(workoutRow(workout({ durationMs: 10_000, avgFormScore: null })).facts).toBe("Mon 26 Oct · 1 min");
     // A date the phone cannot read still names the row.
-    expect(workoutRow(workout({ startedAt: "not a date" })).day).toBe("Workout");
+    expect(workoutRow(workout({ startedAt: "not a date" })).name).toBe("Workout");
     expect(dayWords("not a date")).toBeNull();
   });
 

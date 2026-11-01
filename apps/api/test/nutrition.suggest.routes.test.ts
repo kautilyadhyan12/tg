@@ -10,6 +10,8 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
 import { CURATED_FOODS } from "../src/modules/nutrition/foods.js";
+import { ideasSeed } from "../src/modules/nutrition/service.js";
+import { suggestMeals } from "../src/modules/nutrition/suggest.js";
 import type { FoodSearchProvider } from "../src/modules/nutrition/openfoodfacts.adapter.js";
 
 const url = process.env["DATABASE_URL"];
@@ -159,6 +161,13 @@ d("meal ideas route (real Postgres)", () => {
     const after = await ok(cookies);
     expect(after.kcalLeft).toBe(1817 - saved);
     expect(after.meals.length).toBe(2);
+    // A meal logged draws other ideas: the reply is the rule's for the person's id AND the meals logged.
+    const rows = await sql<{ id: string }[]>`SELECT id FROM users WHERE email = 'ideas-log@example.com'`;
+    const id = rows[0]?.id;
+    if (id === undefined) throw new Error("no such person");
+    const numbers = { day: after.day, diet: "vegetarian_eggs", mealsPerDay: 3, kcalTarget: 1817, kcalEaten: saved, mealsLogged: 1 } as const;
+    expect(after.meals).toEqual(suggestMeals({ ...numbers, seed: ideasSeed(id, 1) }).meals);
+    expect(after.meals).not.toEqual(suggestMeals({ ...numbers, seed: id }).meals);
   });
 
   it("a meal of another day is not counted, and nothing is suggested once the day is eaten", { timeout: 60_000 }, async () => {

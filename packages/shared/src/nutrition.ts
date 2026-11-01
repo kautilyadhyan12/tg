@@ -719,6 +719,24 @@ export const suggestedFoodSchema = z.object({
   kcal: z.number().int().nonnegative(), proteinG: z.number().nonnegative(), carbsG: z.number().nonnegative(), fatG: z.number().nonnegative(),
 }).strict();
 export type SuggestedFood = z.infer<typeof suggestedFoodSchema>;
+/** A count in halves, as a menu writes it: "½", "1", "1½". */
+function halves(n: number): string {
+  const whole = Math.floor(n + 1e-9);
+  const half = n - whole > 0.25;
+  return whole === 0 ? (half ? "½" : "0") : `${String(whole)}${half ? "½" : ""}`;
+}
+
+/** A food's amount in its own unit: "150 g", "1½ cups", "1 oz", "4 tbsp", "2 slices", "1 banana". */
+export function amountWords(item: Pick<SuggestedFood, "grams" | "servings" | "unit">): string {
+  if (item.unit === "g") return `${String(Math.round(item.grams))} g`;
+  const tbsp = /^(\d+) tbsp$/.exec(item.unit);
+  if (tbsp !== null) return `${halves(item.servings * Number(tbsp[1]))} tbsp`;
+  if (item.unit === "oz") return `${halves(item.servings)} oz`;
+  const many = item.servings > 1;
+  const plural = /(ch|sh|s|x|o)$/.test(item.unit) ? `${item.unit}es` : `${item.unit}s`;
+  return `${halves(item.servings)} ${many ? plural : item.unit}`;
+}
+
 /** A plate is a protein food, a starch and a vegetable; a dish is one cooked
  *  dish with something beside it; light is a bowl, toast, or fruit with nuts. */
 export const mealIdeaKindSchema = z.enum(["plate", "dish", "light"]);

@@ -50,6 +50,8 @@ import {
 } from "./dashboard/words";
 import { Clock } from "./dashboard/Clock";
 import { useRead, type Read } from "./dashboard/useRead";
+import { IDEAS_READ, MealIdeas } from "./food/MealIdeas";
+import { useMealOutbox } from "./food/MealOutbox";
 import { GOALS_READ, GoalsBox, GoalsPage, type GoalsOpen } from "./Goals";
 import { LeaderboardPage, type LeaderboardPlace } from "./gym/Leaderboard";
 import { rankWords } from "./gym/leaderboardView";
@@ -70,6 +72,7 @@ export const DASHBOARD_READS = {
   runs: "/v1/geo/runs?limit=3",
   meals: "/v1/nutrition/meals?limit=3",
   goals: GOALS_READ,
+  ideas: IDEAS_READ,
 } as const;
 /** Your Rank's: which gym. The Gym tab reads the same. */
 const PLACES_READ = "/v1/orgs/mine";
@@ -85,7 +88,9 @@ export function DashboardScreen() {
   const challenges = useRead(DASHBOARD_READS.challenges, weeklyChallengesSchema);
   const recent = useRead(DASHBOARD_READS.recent, workoutPageSchema);
   const runs = useRead(DASHBOARD_READS.runs, runPageSchema);
-  const meals = useRead(DASHBOARD_READS.meals, mealPageSchema);
+  // A meal logged from the Recommended box shows in Recent Activity once the server has it.
+  const { view: mealsSent } = useMealOutbox();
+  const meals = useRead(DASHBOARD_READS.meals, mealPageSchema, mealsSent.sent);
   // A goal's days are the person's own: read again once the zone is saved.
   const goals = useRead(DASHBOARD_READS.goals, goalsResponseSchema, zoneSaved);
   const [goalsOpen, setGoalsOpen] = useState<GoalsOpen | null>(null);
@@ -181,6 +186,11 @@ export function DashboardScreen() {
         )}
         <Badges me={me.read} onPress={toMe} />
       </Swipe>
+      <MealIdeas
+        onMore={() => {
+          go.navigate("Food", { today: Date.now() });
+        }}
+      />
       <Recent workouts={recent.read} runs={runs.read} meals={meals.read} />
       <Ready onPress={toWorkout} />
       <GoalsPage
@@ -529,6 +539,11 @@ function Badges({ me, onPress }: { me: Read<GamificationMe>; onPress: () => void
 }
 
 const ACTIVITY_ICONS: Record<ActivityKind, IconName> = { workout: "dumbbell", run: "pin", meal: "utensils" };
+const ACTIVITY_LOOK = {
+  workout: { ink: "orange", fill: "orangeFill", line: "orangeLine" },
+  run: { ink: "goodText", fill: "goodFill", line: "goodLine" },
+  meal: { ink: "gold", fill: "goldFill", line: "goldLine" },
+} as const;
 
 /** Everything done lately, of any kind. Shown only when all three lists are read: a list missing
  *  would leave out what may be the newest thing. */
@@ -538,33 +553,48 @@ function Recent({ workouts, runs, meals }: { workouts: Read<WorkoutPage>; runs: 
       ? recentActivity({ workouts: workouts.data.items, runs: runs.data.items, meals: meals.data.items })
       : null;
   return (
-    <Card style={styles.recent}>
-      <Image source={pictures.recentworkout} resizeMode="contain" style={styles.recentArt} accessible={false} />
-      <View style={[StyleSheet.absoluteFill, styles.statShade]} />
-      <Txt kind="h3" style={styles.boxTitle}>
-        Recent Activity
-      </Txt>
+    <Card style={styles.recent} testID="recent-activity">
+      <View style={styles.recentArt}>
+        <Image source={pictures.recentworkout} resizeMode="contain" style={styles.recentArtFill} accessible={false} />
+      </View>
+      <View style={styles.titleRow}>
+        <Icon name="clock" size={16} colour="orange" />
+        <Txt kind="h3" style={styles.boxTitle}>
+          Recent Activity
+        </Txt>
+      </View>
       {rows === null || workouts.kind !== "ok" ? (
         <Txt kind="small">{NOT_KNOWN}</Txt>
       ) : rows.length === 0 ? (
         <Txt kind="small">{noActivityWords(workouts.data.hasAnyWorkouts, workouts.data.limitedToDays)}</Txt>
       ) : (
-        rows.map((row) => (
-          <View key={row.key} style={[styles.row, styles.workout]}>
-            <Badge icon={ACTIVITY_ICONS[row.kind]} />
-            <View style={styles.grow}>
-              <Txt kind="body" style={styles.semibold}>
-                {row.day}
-              </Txt>
-              {row.detail === "" ? null : <Txt kind="tiny">{row.detail}</Txt>}
+        <View style={styles.timeline}>
+          {rows.length > 1 ? <View style={styles.rail} /> : null}
+          {rows.map((row) => (
+            <View key={row.key} style={styles.moment}>
+              <View style={[styles.dotIcon, { backgroundColor: colours[ACTIVITY_LOOK[row.kind].fill], borderColor: colours[ACTIVITY_LOOK[row.kind].line] }]}>
+                <Icon name={ACTIVITY_ICONS[row.kind]} size={13} colour={ACTIVITY_LOOK[row.kind].ink} />
+              </View>
+              <View style={styles.grow}>
+                <Txt kind="tiny" colour="text" numberOfLines={1} style={styles.semibold}>
+                  {row.name}
+                </Txt>
+                <View style={styles.momentFacts}>
+                  {row.value === null ? null : (
+                    <Txt kind="tiny" colour={ACTIVITY_LOOK[row.kind].ink} style={styles.semibold}>
+                      {row.value}
+                    </Txt>
+                  )}
+                  {row.facts === "" ? null : (
+                    <Txt kind="tiny" colour="textFaint">
+                      {row.facts}
+                    </Txt>
+                  )}
+                </View>
+              </View>
             </View>
-            {row.value === null ? null : (
-              <Txt kind="small" colour="orange" style={styles.semibold}>
-                {row.value}
-              </Txt>
-            )}
-          </View>
-        ))
+          ))}
+        </View>
       )}
     </Card>
   );
@@ -641,9 +671,16 @@ const styles = StyleSheet.create({
   rank: { width: 140, minHeight: 210, justifyContent: "flex-end" },
   rankNumber: { flexDirection: "row", alignItems: "flex-end", flexWrap: "wrap", gap: 6 },
   badges: { width: 230, minHeight: 210 },
-  recent: { gap: 4 },
-  recentArt: { position: "absolute", top: 0, right: -10, width: "75%", height: "100%", opacity: 0.6 },
-  workout: { minHeight: 56, borderTopWidth: 1, borderTopColor: colours.line, paddingTop: 8 },
+  recent: { gap: 12 },
+  // Beside the rows and never under them, as on Weekly Challenges.
+  recentArt: { position: "absolute", top: 14, bottom: 14, right: 8, width: "30%" },
+  recentArtFill: { width: "100%", height: "100%" },
+  timeline: { width: "70%", gap: 14 },
+  momentFacts: { flexDirection: "row", flexWrap: "wrap", columnGap: 6 },
+  // Through the middle of the icons, behind them.
+  rail: { position: "absolute", left: 13, top: 14, bottom: 14, width: 1, backgroundColor: colours.line },
+  moment: { flexDirection: "row", gap: 10 },
+  dotIcon: { width: 27, height: 27, borderRadius: 14, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   ready: { height: 210, borderRadius: 22, justifyContent: "center" },
   readyWords: { padding: 18, gap: 14, alignItems: "flex-start", maxWidth: "62%" },
 });

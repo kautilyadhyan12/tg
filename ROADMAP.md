@@ -631,7 +631,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 34d. **Meal suggestions** (7a; split 2026-10-13 in three: the first needs no phone).
       - 34d-i. [x] **The server makes the day's meal ideas** — merged 2026-10-14 (PR #257).
       - 34d-ii. [x] **The meal ideas after a workout come from the same place** — merged 2026-10-14 (PR #258).
-      - 34d-iii. [ ] **The ideas on the Food screen**, each logged with one tap, and the Food option of Today's Recommended box (7a-ii). Waits for 32b.
+      - 34d-iii. [x] **The ideas on the Food screen, and Recommended For You on the Dashboard** — merged 2026-11-02 (PR #433).
     - 34e. **Your own diet plan** (7c; split 2026-10-14: the server part needs no phone).
       - 34e-i. [x] **The diet plan on the server** — merged 2026-10-14 (PR #264).
       - 34e-ii. [ ] **The diet plan on the Food screen**, each meal logged with one tap; a meal outside the diet says so with Swap. Waits for 32b.
