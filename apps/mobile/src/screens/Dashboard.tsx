@@ -539,8 +539,11 @@ function Badges({ me, onPress }: { me: Read<GamificationMe>; onPress: () => void
 }
 
 const ACTIVITY_ICONS: Record<ActivityKind, IconName> = { workout: "dumbbell", run: "pin", meal: "utensils" };
-const ACTIVITY_TONES = { workout: "orange", run: "good", meal: "gold" } as const;
-const ACTIVITY_INK = { workout: "orange", run: "goodText", meal: "gold" } as const;
+const ACTIVITY_LOOK = {
+  workout: { ink: "orange", fill: "orangeFill", line: "orangeLine" },
+  run: { ink: "goodText", fill: "goodFill", line: "goodLine" },
+  meal: { ink: "gold", fill: "goldFill", line: "goldLine" },
+} as const;
 
 /** Everything done lately, of any kind. Shown only when all three lists are read: a list missing
  *  would leave out what may be the newest thing. */
@@ -551,8 +554,10 @@ function Recent({ workouts, runs, meals }: { workouts: Read<WorkoutPage>; runs: 
       : null;
   return (
     <Card style={styles.recent} testID="recent-activity">
-      <Image source={pictures.recentworkout} resizeMode="contain" style={styles.recentArt} accessible={false} />
-      <View style={[styles.titleRow, styles.recentHead]}>
+      <View style={styles.recentArt}>
+        <Image source={pictures.recentworkout} resizeMode="contain" style={styles.recentArtFill} accessible={false} />
+      </View>
+      <View style={styles.titleRow}>
         <Icon name="clock" size={16} colour="orange" />
         <Txt kind="h3" style={styles.boxTitle}>
           Recent Activity
@@ -563,22 +568,33 @@ function Recent({ workouts, runs, meals }: { workouts: Read<WorkoutPage>; runs: 
       ) : rows.length === 0 ? (
         <Txt kind="small">{noActivityWords(workouts.data.hasAnyWorkouts, workouts.data.limitedToDays)}</Txt>
       ) : (
-        rows.map((row) => (
-          <View key={row.key} style={[styles.row, styles.workout]}>
-            <Badge icon={ACTIVITY_ICONS[row.kind]} tone={ACTIVITY_TONES[row.kind]} />
-            <View style={styles.grow}>
-              <Txt kind="body" numberOfLines={1} style={styles.semibold}>
-                {row.name}
-              </Txt>
-              {row.facts === "" ? null : <Txt kind="tiny">{row.facts}</Txt>}
+        <View style={styles.timeline}>
+          {rows.length > 1 ? <View style={styles.rail} /> : null}
+          {rows.map((row) => (
+            <View key={row.key} style={styles.moment}>
+              <View style={[styles.dotIcon, { backgroundColor: colours[ACTIVITY_LOOK[row.kind].fill], borderColor: colours[ACTIVITY_LOOK[row.kind].line] }]}>
+                <Icon name={ACTIVITY_ICONS[row.kind]} size={13} colour={ACTIVITY_LOOK[row.kind].ink} />
+              </View>
+              <View style={styles.grow}>
+                <Txt kind="tiny" colour="text" numberOfLines={1} style={styles.semibold}>
+                  {row.name}
+                </Txt>
+                <View style={styles.momentFacts}>
+                  {row.value === null ? null : (
+                    <Txt kind="tiny" colour={ACTIVITY_LOOK[row.kind].ink} style={styles.semibold}>
+                      {row.value}
+                    </Txt>
+                  )}
+                  {row.facts === "" ? null : (
+                    <Txt kind="tiny" colour="textFaint">
+                      {row.facts}
+                    </Txt>
+                  )}
+                </View>
+              </View>
             </View>
-            {row.value === null ? null : (
-              <Txt kind="strong" colour={ACTIVITY_INK[row.kind]}>
-                {row.value}
-              </Txt>
-            )}
-          </View>
-        ))
+          ))}
+        </View>
       )}
     </Card>
   );
@@ -655,11 +671,16 @@ const styles = StyleSheet.create({
   rank: { width: 140, minHeight: 210, justifyContent: "flex-end" },
   rankNumber: { flexDirection: "row", alignItems: "flex-end", flexWrap: "wrap", gap: 6 },
   badges: { width: 230, minHeight: 210 },
-  recent: { gap: 8 },
-  // The picture stands at the top right, above the rows and never behind their words.
-  recentHead: { minHeight: 70, alignItems: "flex-start" },
-  recentArt: { position: "absolute", top: 6, right: 8, width: 118, height: 82 },
-  workout: { minHeight: 60, paddingHorizontal: 12, paddingVertical: 10, borderRadius: sizes.boxRadius, backgroundColor: colours.fill },
+  recent: { gap: 12 },
+  // Beside the rows and never under them, as on Weekly Challenges.
+  recentArt: { position: "absolute", top: 14, bottom: 14, right: 8, width: "30%" },
+  recentArtFill: { width: "100%", height: "100%" },
+  timeline: { width: "70%", gap: 14 },
+  momentFacts: { flexDirection: "row", flexWrap: "wrap", columnGap: 6 },
+  // Through the middle of the icons, behind them.
+  rail: { position: "absolute", left: 13, top: 14, bottom: 14, width: 1, backgroundColor: colours.line },
+  moment: { flexDirection: "row", gap: 10 },
+  dotIcon: { width: 27, height: 27, borderRadius: 14, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   ready: { height: 210, borderRadius: 22, justifyContent: "center" },
   readyWords: { padding: 18, gap: 14, alignItems: "flex-start", maxWidth: "62%" },
 });

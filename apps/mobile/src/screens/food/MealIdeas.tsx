@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { Image, StyleSheet, View } from "react-native";
+import { Image, Pressable, StyleSheet, View } from "react-native";
 import { useIsFocused } from "@react-navigation/native";
 import { mealIdeasResponseSchema, missingText, type MealIdea, type SetupScreenId } from "@app/shared";
 import { Button } from "../../look/Button";
 import { Card } from "../../look/Card";
-import { Chip } from "../../look/Chip";
-import { colours, pictureShade, sizes } from "../../look/colours";
+import { colours, sizes } from "../../look/colours";
 import { Icon } from "../../look/Icon";
 import { pictures } from "../../look/pictures";
 import { Sheet } from "../../look/Sheet";
@@ -208,17 +207,25 @@ export function MealIdeas({ onMore, onAnswered }: MealIdeasProps) {
   return (
     <>
       {onDashboard ? (
-        <View style={styles.box} testID="recommended-box">
-          <View style={styles.banner}>
-            <Image source={pictures.food} resizeMode="cover" style={styles.fill} accessible={false} />
-            <View style={[StyleSheet.absoluteFill, styles.shade]} />
-            {/* The Exercise and Running options join with their own plans (ROADMAP 36, 37). */}
-            <View style={styles.options}>
-              <Chip label="Food" on onPress={() => undefined} />
-            </View>
-            <Txt kind="h2">Recommended For You</Txt>
+        <Card style={styles.card} testID="recommended-box">
+          <View style={styles.art}>
+            <Image source={pictures.foodbowl} resizeMode="contain" style={styles.artFill} accessible={false} />
           </View>
-          <View style={styles.body}>
+          <View style={styles.titleRow}>
+            <Icon name="target" size={16} colour="orange" />
+            <Txt kind="h3" style={styles.boxTitle}>
+              Recommended For You
+            </Txt>
+          </View>
+          {/* The Exercise and Running options join with their own plans (ROADMAP 36, 37). */}
+          <View style={styles.options}>
+            <Pressable accessibilityRole="radio" accessibilityLabel="Food" accessibilityState={{ selected: true }} hitSlop={OPTION_SLOP} style={styles.option}>
+              <Txt kind="tiny" colour="orange" style={styles.optionWord}>
+                Food
+              </Txt>
+            </Pressable>
+          </View>
+          <View style={styles.leftWords}>
             {view.refused.map((r) => (
               <View key={r.id} style={styles.row}>
                 <Icon name="warn" size={16} colour="badText" />
@@ -236,9 +243,9 @@ export function MealIdeas({ onMore, onAnswered }: MealIdeasProps) {
             ))}
             {saidLine}
             {body}
-            {foot}
           </View>
-        </View>
+          {foot}
+        </Card>
       ) : (
         <Card style={styles.card} testID="meal-ideas-box">
           <View style={styles.titleRow}>
@@ -271,44 +278,37 @@ export function MealIdeas({ onMore, onAnswered }: MealIdeasProps) {
 
 /** The Dashboard's one idea: its numbers large, its foods as a short table, and the one thing to do. */
 function BestIdea({ idea, held, onLog, onMore }: { idea: MealIdea; held: boolean; onLog: (idea: MealIdea) => void; onMore: () => void }) {
-  const figures = [
-    { value: count(idea.totals.kcal), label: "kcal" },
-    { value: count(Math.round(idea.totals.proteinG)), label: "g protein" },
-    { value: count(Math.round(idea.totals.carbsG)), label: "g carbs" },
-  ];
   return (
     <>
-      <View style={styles.figures}>
-        {figures.map((f) => (
-          <View key={f.label} style={styles.figure} accessible accessibilityLabel={`${f.value} ${f.label}`}>
-            <Txt kind="big" colour="orange">
-              {f.value}
-            </Txt>
-            <Txt kind="tiny">{f.label}</Txt>
-          </View>
-        ))}
+      <View>
+        <Txt colour="orange" style={styles.kcal}>
+          {count(idea.totals.kcal)} kcal
+        </Txt>
+        <Txt kind="tiny">
+          {count(Math.round(idea.totals.proteinG))} g protein · {count(Math.round(idea.totals.carbsG))} g carbs
+        </Txt>
       </View>
       <View style={styles.foods}>
         {idea.items.map((food) => (
-          <View key={food.canonical} style={styles.food}>
-            <Txt kind="small" colour="text" style={styles.grow}>
-              {food.name}
+          <Txt key={food.canonical} kind="tiny" colour="text">
+            {food.name}{" "}
+            <Txt kind="tiny" colour="textFaint">
+              {ideaAmountWords(food).replace(/ /g, KEEP_TOGETHER)}
             </Txt>
-            <Txt kind="small">{ideaAmountWords(food)}</Txt>
-          </View>
+          </Txt>
         ))}
       </View>
       <View style={styles.actions}>
         <Button
           label="Log meal"
-          small
+          compact
           disabled={held}
           say={`Log ${ideaName(idea)}`}
           onPress={() => {
             onLog(idea);
           }}
         />
-        <Button label="More ideas" kind="link" onPress={onMore} />
+        <Button label="More ideas" kind="link" compact onPress={onMore} />
       </View>
     </>
   );
@@ -332,22 +332,26 @@ function IdeaRow({ idea, held, onLog }: { idea: MealIdea; held: boolean; onLog: 
   );
 }
 
+/** A space a line never breaks at: an amount is never split from its unit. */
+const KEEP_TOGETHER = "\u00A0";
+const OPTION_SLOP = { top: 12, bottom: 12, left: 8, right: 8 };
+
 const styles = StyleSheet.create({
   card: { gap: 10 },
   grow: { flex: 1 },
   row: { flexDirection: "row", alignItems: "center", gap: 10 },
   titleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  box: { backgroundColor: colours.box, borderWidth: 1, borderColor: colours.line, borderRadius: sizes.boxRadius, overflow: "hidden" },
-  banner: { minHeight: 170, padding: 14, justifyContent: "space-between", gap: 24 },
-  fill: { position: "absolute", width: "100%", height: "100%" },
-  shade: { experimental_backgroundImage: pictureShade },
-  options: { flexDirection: "row", gap: 8 },
-  body: { paddingHorizontal: 14, paddingBottom: 14, paddingTop: 4, gap: 14 },
-  figures: { flexDirection: "row", gap: 6 },
-  figure: { flex: 1, alignItems: "center" },
-  foods: { gap: 8, padding: 12, borderRadius: sizes.boxRadius, backgroundColor: colours.fill },
-  food: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
-  actions: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 },
+  boxTitle: { fontSize: 14, lineHeight: 18, color: colours.textSoft },
+  // Beside the words and never under them, as on Weekly Challenges.
+  art: { position: "absolute", top: 10, right: 10, bottom: 44, width: "36%" },
+  artFill: { width: "100%", height: "100%" },
+  leftWords: { width: "62%", gap: 10 },
+  options: { flexDirection: "row", gap: 14 },
+  option: { alignSelf: "flex-start", paddingBottom: 3, borderBottomWidth: 2, borderBottomColor: colours.orange },
+  optionWord: { fontFamily: fonts.semibold },
+  kcal: { fontFamily: fonts.bold, fontSize: 15, lineHeight: 20 },
+  foods: { gap: 3 },
+  actions: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 4 },
   start: { alignSelf: "flex-start" },
   idea: { flexDirection: "row", alignItems: "center", gap: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: colours.line },
   numbers: { fontFamily: fonts.semibold, marginTop: 2 },

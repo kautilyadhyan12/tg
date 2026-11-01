@@ -17,6 +17,7 @@ import exhero from "../../assets/pictures/exhero.webp";
 import experiencepoints from "../../assets/pictures/experiencepoints.webp";
 import food from "../../assets/pictures/food.webp";
 import foodbg from "../../assets/pictures/foodbg.webp";
+import foodbowl from "../../assets/pictures/foodbowl.webp";
 import getstarted from "../../assets/pictures/getstarted.webp";
 import goals from "../../assets/pictures/goals.webp";
 import goalsbox from "../../assets/pictures/goalsbox.webp";
@@ -56,6 +57,7 @@ export const pictures = {
   experiencepoints,
   food,
   foodbg,
+  foodbowl,
   getstarted,
   goals,
   goalsbox,
