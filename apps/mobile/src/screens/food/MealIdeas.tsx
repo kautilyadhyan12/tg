@@ -5,7 +5,7 @@ import { mealIdeasResponseSchema, missingText, type MealIdea, type SetupScreenId
 import { Button } from "../../look/Button";
 import { Card } from "../../look/Card";
 import { Chip } from "../../look/Chip";
-import { boxShade, colours, sizes } from "../../look/colours";
+import { colours, sizes } from "../../look/colours";
 import { Icon } from "../../look/Icon";
 import { pictures } from "../../look/pictures";
 import { Sheet } from "../../look/Sheet";
@@ -177,7 +177,7 @@ export function MealIdeas({ onMore, onAnswered }: MealIdeasProps) {
         >
           {rest.map((meal, at) => (
             <View key={String(at)} style={styles.later}>
-              <Txt kind="strong">About {count(meal.kcalTarget)} kcal</Txt>
+              <Txt kind="strong">Meal {String(at + 2)} · about {count(meal.kcalTarget)} kcal</Txt>
               {meal.ideas.map(row)}
             </View>
           ))}
@@ -192,10 +192,7 @@ export function MealIdeas({ onMore, onAnswered }: MealIdeasProps) {
     <>
       <Card style={styles.card} testID={onDashboard ? "recommended-box" : "meal-ideas-box"}>
         {onDashboard ? (
-          <>
-            <Image source={pictures.recommended} resizeMode="cover" style={styles.picture} accessible={false} />
-            <View style={[StyleSheet.absoluteFill, styles.shade]} />
-          </>
+          <Image source={pictures.recommended} resizeMode="contain" style={styles.picture} accessible={false} />
         ) : null}
         <View style={styles.titleRow}>
           <Icon name={onDashboard ? "target" : "apple"} size={16} colour="orange" />
@@ -279,6 +276,6 @@ const styles = StyleSheet.create({
   idea: { flexDirection: "row", alignItems: "center", gap: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: colours.line },
   numbers: { fontFamily: fonts.semibold, marginTop: 2 },
   later: { gap: 8, marginBottom: sizes.edge },
-  picture: { position: "absolute", top: 0, left: 0, width: "120%", height: "100%", opacity: 0.6 },
-  shade: { experimental_backgroundImage: boxShade },
+  // Whole, in the corner beside the title and the option row.
+  picture: { position: "absolute", top: 8, right: 10, width: 84, height: 92 },
 });
