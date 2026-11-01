@@ -215,6 +215,8 @@ export async function chargebacksToAnswer(sql: Sql, gymId: string, members: bool
       const fee = memberFeeKindSchema.safeParse(r.fee);
       return {
         ...seen(r),
+        // A sale holds no membership, so its chargeback stops no charge.
+        stops: r.sale_id === null && r.stops,
         name: r.name,
         past: r.past,
         personDeleted: r.person_deleted,

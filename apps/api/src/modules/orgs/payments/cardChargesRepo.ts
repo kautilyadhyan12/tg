@@ -657,8 +657,9 @@ export async function chargeStopsOfBills(sql: SqlOrTx, gymId: string, billIds: r
   const rows = await sql<{ id: string; stopped: boolean; stood: boolean; ended: boolean; waited: boolean; old: boolean; held_by: { entryId: string; name: string } | null }[]>`
     WITH ${gymDay(sql, { environment: null, now, gymIds: [gymId] })}
     SELECT b.id, EXISTS (${chargebackStops(sql)}) AS stopped, EXISTS (${chargebackStoodThrough(sql)}) AS stood, EXISTS (${chargebackEnded(sql)}) AS ended,
-           EXISTS (SELECT 1 FROM gym_member_bills o JOIN gym_member_payments op ON op.gym_id = o.gym_id AND op.bill_id = o.id AND op.undone_at IS NULL
-                   WHERE o.gym_id = b.gym_id AND o.held_membership_id = b.held_membership_id AND o.fee IS NULL AND b.fee IS NULL AND o.period_index = b.period_index - 1 AND op.paid_on > b.due_on + 2) AS waited, b.due_on < d.today - 2 AND NOT EXISTS (SELECT 1 FROM gym_card_charges x WHERE x.gym_id = b.gym_id AND x.bill_id = b.id AND x.by_schedule) AS old, (${chargebackHolder(sql)}) AS held_by
+           EXISTS (SELECT 1 FROM gym_member_bills o LEFT JOIN gym_member_payments op ON op.gym_id = o.gym_id AND op.bill_id = o.id AND op.undone_at IS NULL
+                   WHERE o.gym_id = b.gym_id AND o.held_membership_id = b.held_membership_id AND o.fee IS NULL AND b.fee IS NULL AND o.period_index = b.period_index - 1
+                     AND (op.paid_on > b.due_on + 2 OR (o.status = 'void' AND (o.updated_at AT TIME ZONE d.timezone)::date > b.due_on + 2))) AS waited, b.due_on < d.today - 2 AND NOT EXISTS (SELECT 1 FROM gym_card_charges x WHERE x.gym_id = b.gym_id AND x.bill_id = b.id AND x.by_schedule) AS old, (${chargebackHolder(sql)}) AS held_by
     FROM gym_day d
     JOIN gym_member_bills b ON b.gym_id = d.gym_id
     JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
