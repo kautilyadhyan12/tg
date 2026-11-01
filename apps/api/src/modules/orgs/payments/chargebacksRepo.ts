@@ -5,7 +5,6 @@ import {
   chargebackStateSchema,
   memberFeeKindSchema,
   memberRefundMethodSchema,
-  paymentRefundableMinor,
   type ChargebackReason,
   type ChargebackSeen,
   type ChargebackStartPreview,
@@ -17,6 +16,7 @@ import type { Sql, TransactionSql } from "postgres";
 import { writeRefund } from "../memberships/billsRepo.js";
 import { refundTargetOf } from "../memberships/billsSql.js";
 import { lockGym } from "../memberList/repo.js";
+import { crossOutCardNotes } from "./cardRefundsRepo.js";
 import { insertAudit } from "../repo.js";
 import type { SquareEnvironment } from "./square.js";
 
@@ -47,11 +47,14 @@ const seenOf = (r: RawSeen, now: { reason: ChargebackReason | null; state: Charg
   card: r.brand === null || r.last4 === null ? null : { brand: r.brand, last4: r.last4 },
   stops: r.stops,
   chargesStartedOn: r.started_on,
+  stillPaused: false,
 });
 const seen = (r: RawSeen): ChargebackSeen => {
   const reason = chargebackReasonSchema.safeParse(r.reason);
   return seenOf(r, { state: chargebackStateSchema.parse(r.state), reason: reason.success ? reason.data : null });
 };
+
+const lostOrAccepted = (state: string): boolean => state === "LOST" || state === "ACCEPTED";
 
 /** It stops charges: not won or closed, and staff have not started them again after a lost one. */
 const stands = (sql: SqlOrTx) => sql`(q.state NOT IN ('WON','INQUIRY_CLOSED') AND q.charges_restarted_at IS NULL)`;
@@ -165,12 +168,16 @@ export async function writeDispute(
   });
 }
 
-/** A lost or accepted chargeback on a member's payment: the money is written as gone back, once, on the day Square says, and never more
- *  than is left of the payment, as staff may have refunded some of it. Under the gym's lock, keyed by the chargeback's own id. Not yet
- *  where the app cannot write it (a refund waiting on Square, a bill still part paid): the next hourly read asks again. A sale's waits
- *  for 18d-iv-e-ii-b. */
-export async function settleLostChargeback(sql: Sql, d: { gymId: string; environment: SquareEnvironment; squareDisputeId: string; now: Date }): Promise<void> {
-  await sql.begin(async (tx) => {
+/** A lost or accepted chargeback on a member's payment: the money is written as gone back, once, on the day Square says. As with a refund
+ *  made in Square (18d-iv-d-i) it is written beside money the gym gave back in cash, UPI or by bank transfer, as that money did go too; a
+ *  note by card may be this same money, so it is crossed out; only what already went back through Square lowers it. Under the gym's lock,
+ *  keyed by the chargeback's own id. Not yet where the app cannot write it true (a refund Square has not finished, a bill still part
+ *  paid): the next hourly read asks again. `cannot`: it never will, without somebody looking. A sale's waits for 18d-iv-e-ii-b. */
+export async function settleLostChargeback(sql: Sql, d: { gymId: string; environment: SquareEnvironment; squareDisputeId: string; now: Date }): Promise<"done" | "cannot"> {
+  const [first] = await sql<{ state: string; lost_written_at: Date | null }[]>`
+    SELECT state, lost_written_at FROM gym_square_disputes WHERE gym_id = ${d.gymId} AND environment = ${d.environment} AND square_dispute_id = ${d.squareDisputeId}`;
+  if (first === undefined || first.lost_written_at !== null || !lostOrAccepted(first.state)) return "done";
+  return await sql.begin(async (tx): Promise<"done" | "cannot"> => {
     await lockGym(tx, d.gymId);
     const [row] = await tx<{ id: string; state: string; amount_minor: number; currency: string; square_payment_id: string; lost_written_at: Date | null; brand: string | null; last4: string | null; on_day: string }[]>`
       SELECT q.id, q.state, q.amount_minor, q.currency, q.square_payment_id, q.lost_written_at, q.brand, q.last4,
@@ -178,21 +185,28 @@ export async function settleLostChargeback(sql: Sql, d: { gymId: string; environ
       FROM gym_square_disputes q JOIN gyms g ON g.id = q.gym_id
       WHERE q.gym_id = ${d.gymId} AND q.environment = ${d.environment} AND q.square_dispute_id = ${d.squareDisputeId}
       FOR UPDATE OF q`;
-    if (row === undefined || row.lost_written_at !== null || (row.state !== "LOST" && row.state !== "ACCEPTED")) return;
-    const [where] = await tx<{ id: string; membership_id: string; bill_id: string; entry_id: string | null; currency: string }[]>`
-      SELECT p.id, b.held_membership_id AS membership_id, b.id AS bill_id, h.entry_id, p.currency
+    if (row === undefined || row.lost_written_at !== null || !lostOrAccepted(row.state)) return "done";
+    const [where] = await tx<{ id: string; membership_id: string; bill_id: string; entry_id: string | null; period_index: number | null; currency: string }[]>`
+      SELECT p.id, b.held_membership_id AS membership_id, b.id AS bill_id, h.entry_id, b.period_index, p.currency
       FROM gym_member_payments p
       JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
       JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
       WHERE p.gym_id = ${d.gymId} AND p.provider = 'square' AND p.provider_payment_id = ${row.square_payment_id} AND p.undone_at IS NULL`;
-    if (where === undefined || where.currency !== row.currency) return;
-    const [asking] = await tx<{ id: string }[]>`SELECT id FROM gym_square_refunds WHERE gym_id = ${d.gymId} AND square_payment_id = ${row.square_payment_id} AND state = 'asking' LIMIT 1`;
-    if (asking !== undefined) return;
+    if (where === undefined) return "done";
+    if (where.currency !== row.currency) return "cannot";
+    const [waiting] = await tx<{ id: string }[]>`SELECT id FROM gym_square_refunds WHERE gym_id = ${d.gymId} AND square_payment_id = ${row.square_payment_id} AND state IN ('asking','pending') LIMIT 1`;
+    if (waiting !== undefined) return "done";
+    const before = await refundTargetOf(tx, d.gymId, where.membership_id, where.id);
+    if (before === null || before.bill.status === "open") return "done";
+    const method = memberRefundMethodSchema.safeParse(before.payment.method);
+    if (!method.success) return "cannot";
+    await crossOutCardNotes(tx, { gymId: d.gymId, paymentId: where.id, billId: where.bill_id, membershipId: where.membership_id, entryId: where.entry_id, periodIndex: where.period_index, currency: row.currency, amountMinor: row.amount_minor, today: row.on_day, now: d.now });
     const target = await refundTargetOf(tx, d.gymId, where.membership_id, where.id);
-    if (target === null || target.bill.status === "open") return;
-    const method = memberRefundMethodSchema.safeParse(target.payment.method);
-    if (!method.success) return;
-    const amountMinor = Math.min(row.amount_minor, paymentRefundableMinor(target.bill, target.payment));
+    if (target === null) throw new Error("a payment stopped standing under the gym's lock");
+    const [through] = await tx<{ minor: number }[]>`
+      SELECT COALESCE(sum(amount_minor), 0)::int AS minor FROM gym_member_refunds
+      WHERE gym_id = ${d.gymId} AND payment_id = ${where.id} AND undone_at IS NULL AND method IN ('company','terminal')`;
+    const amountMinor = Math.min(row.amount_minor, target.payment.amountMinor - (through?.minor ?? 0));
     if (amountMinor > 0) {
       await writeRefund(tx, {
         gymId: d.gymId,
@@ -214,6 +228,7 @@ export async function settleLostChargeback(sql: Sql, d: { gymId: string; environ
       });
     }
     await tx`UPDATE gym_square_disputes SET lost_written_at = ${d.now} WHERE gym_id = ${d.gymId} AND id = ${row.id}`;
+    return "done";
   });
 }
 
@@ -239,8 +254,6 @@ async function chargebackToStart(sql: SqlOrTx, gymId: string, id: string): Promi
   return row === undefined ? null : { state: row.state, stops: row.stops, membershipId: row.membership_id, payerId: row.payer_id, environment: row.environment, accountId: row.account_id };
 }
 
-const lostOrAccepted = (state: string): boolean => state === "LOST" || state === "ACCEPTED";
-
 /** Who Start automatic charges again changes: the renewing memberships of whoever pays. Null where there is no such chargeback here. */
 export async function chargebackStartPreview(sql: SqlOrTx, gymId: string, id: string): Promise<ChargebackStartPreview | null> {
   const row = await chargebackToStart(sql, gymId, id);
@@ -263,15 +276,17 @@ export async function chargebackStartPreview(sql: SqlOrTx, gymId: string, id: st
           SELECT brand, last4 FROM gym_member_cards WHERE gym_id = ${gymId} AND environment = ${row.environment} AND account_id = ${row.accountId} AND entry_id = ${row.payerId}`;
   const [other] = await sql<{ id: string }[]>`
     SELECT h.id FROM gym_held_memberships h
-    WHERE h.gym_id = ${gymId} AND h.id = ${row.membershipId} AND EXISTS (${chargebackStops(sql)} AND q.id <> ${id})`;
+    WHERE h.gym_id = ${gymId} AND h.id = ${row.membershipId} AND EXISTS (${chargebackStops(sql)} AND q.state NOT IN ('LOST','ACCEPTED'))`;
   return { people: people.map((p) => ({ name: p.name, what: p.what ?? "" })), card: card ?? null, otherStops: other !== undefined };
 }
 
 export type StartChargesOutcome = "done" | "not_found" | "not_lost";
 
-/** Start automatic charges again, on a lost or accepted chargeback alone. The same press twice is one. */
+/** Resume automatic payments, on a lost or accepted chargeback alone: it frees every lost one of whoever pays, as a stolen card loses
+ *  several and only the gym's one decision is left. One still open goes on stopping them. The same press twice is one. */
 export async function startChargesAgain(sql: Sql, gymId: string, id: string, userId: string, now: Date): Promise<StartChargesOutcome> {
   return await sql.begin(async (tx): Promise<StartChargesOutcome> => {
+    await lockGym(tx, gymId);
     const [locked] = await tx<{ id: string; started: boolean; amount_minor: number; currency: string }[]>`
       SELECT id, charges_restarted_at IS NOT NULL AS started, amount_minor, currency FROM gym_square_disputes WHERE gym_id = ${gymId} AND id = ${id} FOR UPDATE`;
     if (locked === undefined) return "not_found";
@@ -279,7 +294,14 @@ export async function startChargesAgain(sql: Sql, gymId: string, id: string, use
     if (row === null) return "not_found";
     if (locked.started) return "done";
     if (!lostOrAccepted(row.state) || !row.stops) return "not_lost";
-    await tx`UPDATE gym_square_disputes SET charges_restarted_at = ${now}, charges_restarted_by = ${userId} WHERE gym_id = ${gymId} AND id = ${id}`;
+    await tx`
+      UPDATE gym_square_disputes SET charges_restarted_at = ${now}, charges_restarted_by = ${userId}
+      WHERE gym_id = ${gymId} AND charges_restarted_at IS NULL AND state IN ('LOST','ACCEPTED') AND id IN (
+        SELECT q.id FROM gym_square_disputes q
+        JOIN gym_member_payments pay ON pay.gym_id = q.gym_id AND pay.provider = 'square' AND pay.provider_payment_id = q.square_payment_id
+        JOIN gym_member_bills paid ON paid.gym_id = pay.gym_id AND paid.id = pay.bill_id
+        JOIN gym_held_memberships held ON held.gym_id = paid.gym_id AND held.id = paid.held_membership_id
+        WHERE q.gym_id = ${gymId} AND (q.id = ${id} OR COALESCE((SELECT x.payer_entry_id FROM gym_member_payers x WHERE x.gym_id = held.gym_id AND x.entry_id = held.entry_id), held.entry_id) = ${row.payerId}))`;
     const [held] = await tx<{ entry_id: string | null }[]>`SELECT entry_id FROM gym_held_memberships WHERE gym_id = ${gymId} AND id = ${row.membershipId}`;
     const entryId = held?.entry_id ?? null;
     await insertAudit(tx, {
@@ -298,14 +320,16 @@ export async function startChargesAgain(sql: Sql, gymId: string, id: string, use
 export async function chargebacksOfPayments(sql: SqlOrTx, gymId: string, paymentIds: readonly string[], now: Date): Promise<Map<string, ChargebackSeen[]>> {
   const out = new Map<string, ChargebackSeen[]>();
   if (paymentIds.length === 0) return out;
-  const rows = await sql<(RawSeen & { payment_id: string })[]>`
-    SELECT p.id AS payment_id, ${seenColumns(sql, now)}
+  const rows = await sql<(RawSeen & { payment_id: string; payer_paused: boolean })[]>`
+    SELECT p.id AS payment_id, ${seenColumns(sql, now)}, EXISTS (${chargebackStops(sql)}) AS payer_paused
     FROM gym_square_disputes q
     JOIN gyms g ON g.id = q.gym_id
     JOIN gym_member_payments p ON p.gym_id = q.gym_id AND p.provider = 'square' AND p.provider_payment_id = q.square_payment_id
+    JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
+    JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
     WHERE q.gym_id = ${gymId} AND p.id = ANY(${[...paymentIds]}::uuid[])
     ORDER BY q.created_at, q.id`;
-  for (const r of rows) out.set(r.payment_id, [...(out.get(r.payment_id) ?? []), seen(r)]);
+  for (const r of rows) out.set(r.payment_id, [...(out.get(r.payment_id) ?? []), { ...seen(r), stillPaused: r.started_on !== null && r.payer_paused }]);
   return out;
 }
 

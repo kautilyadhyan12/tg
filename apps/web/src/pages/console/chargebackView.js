@@ -55,6 +55,7 @@ function stateWords(c) {
 
 /** Whether the app charges this card by itself. */
 function chargesWords(c) {
+  if (c.stillPaused === true) return 'Automatic payments are paused because of another chargeback.';
   if (c.chargesStartedOn !== null && c.chargesStartedOn !== undefined) return `Automatic payments resumed on ${dayWords(c.chargesStartedOn)}.`;
   if (!c.stops) return null;
   return LOST.includes(c.state) ? STOPPED_LOST : STOPPED;
@@ -132,7 +133,7 @@ export function chargebacksHeadline(count, lost = 0) {
 }
 
 export const CHARGEBACKS_INTRO = "A cardholder asked their bank to reverse a payment. Respond in Square by the date shown. If you don't, Square challenges it for you.";
-export const CHARGEBACKS_LOST_INTRO = 'The bank decided for the cardholder. Open their page to resume automatic payments. If they have left, cancel their membership.';
+export const CHARGEBACKS_LOST_INTRO = 'The money went back to the cardholder. Open their page to resume automatic payments. If they have left, cancel their membership.';
 export const CHARGEBACKS_RECONNECT = 'Reconnect Square so chargebacks show here, with the date to respond to each one.';
 export const CHARGEBACKS_RECONNECT_OTHERS = 'The owner needs to reconnect Square before chargebacks can show here.';
 

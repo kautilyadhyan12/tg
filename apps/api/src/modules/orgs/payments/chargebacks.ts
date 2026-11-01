@@ -69,7 +69,9 @@ export async function takeInDispute(deps: PaymentsDeps, square: SquareSettings, 
     squareUpdatedAt: dispute.updated_at == null ? null : new Date(dispute.updated_at),
     now: deps.now(),
   });
-  await repo.settleLostChargeback(deps.sql, { gymId: conn.gymId, environment: square.environment, squareDisputeId: dispute.id, now: deps.now() });
+  if ((await repo.settleLostChargeback(deps.sql, { gymId: conn.gymId, environment: square.environment, squareDisputeId: dispute.id, now: deps.now() })) === "cannot") {
+    deps.log.warn({ event: "square.dispute_lost_unwritten", gymId: conn.gymId }, "a lost chargeback could not be written as money gone back");
+  }
   return "done";
 }
 

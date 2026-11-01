@@ -52,8 +52,8 @@ function StartCharges({ gymId, id, onStarted }) {
     <div className="flex flex-col gap-2 rounded-lg p-3" style={{ border: '1px solid var(--line)' }} data-testid="chargeback-start-box">
       <span className="c-s13 c-w6 c-t1">{box.title}</span>
       <span className="c-s13 c-t2">{box.lead}</span>
-      {shown.map((person) => (
-        <span key={person} className="c-s13 c-t1">
+      {shown.map((person, at) => (
+        <span key={`${String(at)} ${person}`} className="c-s13 c-t1">
           {person}
         </span>
       ))}

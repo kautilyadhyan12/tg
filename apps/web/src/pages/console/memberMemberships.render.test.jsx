@@ -16,6 +16,8 @@ import {
 } from '@app/shared';
 
 // Their tags and staff notes (5d) have their own tests in `memberNotes.render.test.jsx`.
+const cb = vi.hoisted(() => ({ startPreview: vi.fn(), start: vi.fn() }));
+vi.mock('../../api/chargebacksApi', () => ({ chargebacksService: cb }));
 vi.mock('./MemberNotes', () => ({ default: () => null }));
 // Who pays (18i) has its own tests in `memberPayer.render.test.jsx`.
 vi.mock('./MemberPayer', () => ({ default: () => null }));
@@ -920,6 +922,30 @@ describe('changing a membership', () => {
     const paymentId = gold.billing.bills[0].payments[0].id;
     await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, `payments/${paymentId}/void`, { reason: 'mistake' }));
     expect(await (await boxSoon()).findByText('Payment voided.')).toBeTruthy();
+  });
+
+  it('a lost chargeback: Resume reaches the page, says what happened there and reads again; a read-only gym has no button (18d-iv-e-ii-a)', async () => {
+    const gold = held(1, GOLD, '2026-10-04', true);
+    const bill = gold.billing.bills[0];
+    const lost = { id: '77777777-7777-4777-8777-000000000002', amountMinor: 4999, currency: 'GBP', state: 'LOST', reason: 'DUPLICATE', dueOn: null, duePassed: false, card: null, stops: true };
+    const pay = { id: '77777777-7777-4777-8777-000000000001', amountMinor: 4999, method: 'company', paidOn: '2026-10-04', by: null, refunds: [], voidedRefunds: [], refundableMinor: 0, cardRefund: null, receiptNumber: 9, card: null, chargebacks: [lost] };
+    const shown = { ...gold, billing: { ...gold.billing, bills: [{ ...bill, state: 'paid', payments: [pay] }] } };
+    orgService.getHeldMemberships.mockResolvedValue(answer([shown]));
+    const first = render(draw(ADA, 'Ada Lovelace', { gym: { slug: 'demo', privileges: ['members.read'] }, readOnly: true }));
+    await (await boxSoon()).findByTestId('chargeback');
+    expect(box().queryByRole('button', { name: 'Resume automatic payments' })).toBeNull();
+    first.unmount();
+    cb.startPreview.mockResolvedValue({ people: [{ name: 'Ada Lovelace', what: 'Gold' }], card: null, otherStops: false });
+    cb.start.mockResolvedValue(undefined);
+    render(draw(ADA, 'Ada Lovelace', { gym: { slug: 'demo', privileges: ['members.read'] } }));
+    await (await boxSoon()).findByTestId('chargeback');
+    const asks = orgService.getHeldMemberships.mock.calls.length;
+    fireEvent.click(box().getByRole('button', { name: 'Resume automatic payments' }));
+    const opened = await box().findByTestId('chargeback-start-box');
+    fireEvent.click(within(opened).getByRole('button', { name: 'Resume' }));
+    expect((await box().findByTestId('chargeback-started')).textContent).toBe('Automatic payments resumed. Nothing will be charged until a card is on file.');
+    await waitFor(() => expect(orgService.getHeldMemberships.mock.calls.length).toBeGreaterThan(asks));
+    cleanup();
   });
 
   it('a chargeback shows under its payment, and a bill says why it was not charged (18d-iv-e-i)', async () => {

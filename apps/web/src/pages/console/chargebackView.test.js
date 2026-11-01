@@ -33,6 +33,11 @@ describe('a lost chargeback (18d-iv-e-ii-a)', () => {
     expect(chargebackStartedWords({ people: [], card, otherStops: false })).toContain('no renewing membership');
   });
 
+  it('never says resumed while another chargeback still holds them', () => {
+    expect(chargebackLine({ ...lost, stops: false, chargesStartedOn: '2026-11-02', stillPaused: true }, true).detail).toContain('Automatic payments are paused because of another chargeback.');
+    expect(chargebackLine({ ...lost, stops: false, chargesStartedOn: '2026-11-02', stillPaused: true }, true).detail).not.toContain('resumed');
+  });
+
   it('the box names who, and says so where nothing will be charged', () => {
     const people = [{ name: 'Maya Patel', what: 'Gold Weekly' }];
     const card = { brand: 'VISA', last4: '1111' };

@@ -29,6 +29,8 @@ export const chargebackSeenSchema = z
     stops: z.boolean(),
     /** Staff started automatic charges again after a lost one, on the gym's calendar. */
     chargesStartedOn: daySchema.nullable().default(null),
+    /** Started again, and another chargeback of whoever pays still stops them. */
+    stillPaused: z.boolean().default(false),
   })
   .strict();
 export type ChargebackSeen = z.infer<typeof chargebackSeenSchema>;
