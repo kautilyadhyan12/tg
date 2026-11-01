@@ -4,7 +4,7 @@ import { gymChallengesResponseSchema, gymPostsResponseSchema, memberGymChallenge
 import { App } from "../../src/App";
 import { NO_ANSWER } from "../../src/screens/SignIn";
 import type { Ask } from "../../src/session/calls";
-import { fakeServer, kept, lost, memoryStore, refusal, tokens, type Reply } from "../kit";
+import { fakeServer, kept, lost, memoryStore, profile, refusal, tokens, type Reply } from "../kit";
 
 const extra = { copyName: "Feature 1", apiUrl: "http://localhost:3000" };
 const noWait = () => Promise.resolve();
@@ -315,6 +315,17 @@ describe("the list", () => {
     expect(within(second).getByText("Not joined yet")).toBeTruthy();
   });
 
+  it.each([
+    ["a place that checks nobody in", challenge(C1, "Row", { me: me({ value: 0, place: null }) }), false, "Not being counted yet"],
+    ["staff who have added no number", challenge(C1, "Row", { countedBy: "staff", words: { ...WORDS, how: "staff", perDay: false }, me: me({ value: 0, place: null }) }), true, "No number yet"],
+    ["a hidden member: their number, no place", challenge(C1, "Row", { me: me({ hidden: "hide_me", place: 2 }) }), true, "4 visits"],
+    ["an ended challenge: who won", challenge(C1, "Row", { state: "ended", startsOn: "2099-11-01", endsOn: "2099-11-09" }), true, "Winner: Priya S., with 9 visits."],
+  ])("a row says the right line for %s", async (_name, one, checkingIn, line) => {
+    const server = fakeServer(routes(IRON, listOf(IRON, [one], { checkingIn })));
+    await openChallenges(server.ask, IRON);
+    expect(within(await screen.findByTestId(`challenge-${C1}`)).getByText(line)).toBeTruthy();
+  });
+
   it("no challenges, and a place on no plan, each say so", async () => {
     const none = fakeServer(routes(IRON, listOf(IRON, [])));
     await openChallenges(none.ask, IRON);
@@ -402,7 +413,11 @@ describe("one challenge", () => {
     await openChallenges(server.ask, IRON);
     await openOne("Twelve");
     expect(await screen.findByText("0 to go")).toBeTruthy();
-    expect(screen.queryByText(/Done\./)).toBeNull();
+    expect(onePage().queryByText(/Done\./)).toBeNull();
+    await fireEvent.press(onePage().getByLabelText("Back"));
+    await openOne("Done One");
+    expect(await onePage().findByText("Done. You reached 12 visits.")).toBeTruthy();
+    expect(onePage().getByText("Done")).toBeTruthy();
   });
 
   it("scrolled past its picture, the page's name sits in a bar, so nothing lies under Back", async () => {
@@ -416,7 +431,7 @@ describe("one challenge", () => {
   });
 
   it("a cancelled challenge says so and offers nothing", async () => {
-    const server = fakeServer(routes(IRON, listOf(IRON, [challenge(C1, "October Six", joinable({ cancelled: true, can: { join: false, leave: false, pick: false } }))])));
+    const server = fakeServer(routes(IRON, listOf(IRON, [challenge(C1, "October Six", joinable({ cancelled: true }))])));
     await openChallenges(server.ask, IRON);
     await openOne("October Six");
     expect(await screen.findByText("Iron House cancelled this challenge.")).toBeTruthy();
@@ -429,6 +444,13 @@ describe("one challenge", () => {
     await openChallenges(server.ask, IRON);
     await openOne("October Six");
     expect(await screen.findByText(/hasn’t checked anyone in at the front desk/)).toBeTruthy();
+  });
+
+  it("the flames say what one flame is", async () => {
+    const server = fakeServer(routes(IRON, listOf(IRON, [challenge(C1, "October Six")])));
+    await openChallenges(server.ask, IRON);
+    await openOne("October Six");
+    expect(await onePage().findByText("a visit")).toBeTruthy();
   });
 
   it("gone from the list while open: says so, and Back still works", async () => {
@@ -569,7 +591,7 @@ describe("the post that says a challenge has ended", () => {
     expect(await onePage().findByText("Most visits wins")).toBeTruthy();
   });
 
-  it("a challenge the reader's list no longer holds has no See the challenge; somebody hidden since is named by nobody", async () => {
+  it("a challenge the reader's list no longer holds has no See the challenge, and a result with too few people names nobody", async () => {
     const server = fakeServer({
       ...routes(IRON, listOf(IRON, [])),
       [postsOf(IRON)]: ok(feed({ today: "2099-11-10", canOpen: false, challenge: endedOne({ board: board({ status: "too_few", ranked: 0, top: [], leaders: 0 }) }) })),
@@ -583,6 +605,30 @@ describe("the post that says a challenge has ended", () => {
 });
 
 describe("Hide me and a missing name, from the challenge", () => {
+  it("a name the server still will not show keeps the box open and says why; a full name closes it", async () => {
+    const noName = listOf(IRON, [challenge(C1, "October Six", { me: me({ hidden: "no_name" }) })]);
+    let held = noName;
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [pathOf(IRON)]: () => ({ status: 200, body: held }),
+      "/v1/users/me": () => ({ status: 200, body: profile(true) }),
+    });
+    await openChallenges(server.ask, IRON);
+    await openOne("October Six");
+    await fireEvent.press(await onePage().findByLabelText("Add your name"));
+    await fireEvent.changeText(await screen.findByPlaceholderText("First and last name"), "Asha");
+    await fireEvent.press(screen.getByLabelText("Save"));
+    expect(await screen.findByText("Add your first and last name.")).toBeTruthy();
+    held = listOf(IRON, [challenge(C1, "October Six")]);
+    await fireEvent.changeText(screen.getByPlaceholderText("First and last name"), "Asha Walk");
+    await fireEvent.press(screen.getByLabelText("Save"));
+    await waitFor(() => {
+      expect(screen.queryByPlaceholderText("First and last name")).toBeNull();
+    });
+  });
+
+
   it("a hidden member gets a button to where Hide me is", async () => {
     const server = fakeServer(routes(IRON, listOf(IRON, [challenge(C1, "October Six", { me: me({ hidden: "hide_me" }) })])));
     await openChallenges(server.ask, IRON);

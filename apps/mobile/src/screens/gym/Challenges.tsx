@@ -124,20 +124,21 @@ function Body({ place, firstOpen, onClose, onChanged, top, bottom }: BodyProps) 
   const live = useRef(true);
 
   const load = useCallback(
-    async (quiet: boolean) => {
+    async (quiet: boolean): Promise<GymChallengesResponse | null> => {
       started.current += 1;
       const number = started.current;
       const answer = await session.signedIn({ method: "GET", path: challengesPath(place.id) }, gymChallengesResponseSchema);
-      if (!live.current || number !== started.current) return;
+      if (!live.current || number !== started.current) return null;
       // Another place's challenges are never shown under this one.
       if (answer.kind === "ok" && answer.data.gymId === place.id) {
         setHeld({ kind: "ok", list: answer.data });
-        return;
+        return answer.data;
       }
       // A read made by itself never takes the page away over a lost connection; a 404 does.
       const failed: Held = { kind: "failed", status: answer.kind === "refused" ? answer.status : null };
       if (!quiet || failed.status === 404) setHeld(failed);
       else setHeld((was) => (was.kind === "ok" ? was : failed));
+      return null;
     },
     [session, place.id],
   );
@@ -214,6 +215,7 @@ function Body({ place, firstOpen, onClose, onChanged, top, bottom }: BodyProps) 
               challenge={item}
               today={list.today}
               gymName={place.name}
+              checkingIn={list.checkingIn}
               onOpen={() => {
                 setOpenId(item.id);
               }}
@@ -242,7 +244,7 @@ function Body({ place, firstOpen, onClose, onChanged, top, bottom }: BodyProps) 
             bottom={bottom}
             onPress={(challenge, doing) => void press(challenge, doing)}
             onAgain={again}
-            onReadAgain={() => void load(true)}
+            onReadAgain={() => load(true)}
             onClose={() => {
               setOpenId(null);
             }}
@@ -262,9 +264,9 @@ function BackButton({ top, onPress }: { top: number; onPress: () => void }) {
   );
 }
 
-function ChallengeRow({ challenge, today, gymName, onOpen }: { challenge: MemberGymChallenge; today: string; gymName: string; onOpen: () => void }) {
+function ChallengeRow({ challenge, today, gymName, checkingIn, onOpen }: { challenge: MemberGymChallenge; today: string; gymName: string; checkingIn: boolean; onOpen: () => void }) {
   const chip = challengeChip(challenge, today);
-  const line = rowLine(challenge, today, gymName);
+  const line = rowLine(challenge, today, gymName, checkingIn);
   const mine = challenge.state === "running" && !challenge.cancelled ? progress(challenge) : null;
   const win = howToWin(challenge);
   return (
@@ -311,7 +313,7 @@ interface OneProps {
   bottom: number;
   onPress: (challenge: MemberGymChallenge, doing: Doing) => void;
   onAgain: () => void;
-  onReadAgain: () => void;
+  onReadAgain: () => Promise<GymChallengesResponse | null>;
   onClose: () => void;
   onChanged?: () => void;
 }
@@ -355,7 +357,7 @@ interface LoadedProps {
   top: number;
   bottom: number;
   onPress: (challenge: MemberGymChallenge, doing: Doing) => void;
-  onReadAgain: () => void;
+  onReadAgain: () => Promise<GymChallengesResponse | null>;
   onChanged?: () => void;
 }
 
@@ -594,7 +596,7 @@ function Loaded({ place, list, challenge, busy, said, top, bottom, onPress, onRe
         onClose={() => {
           setBoardOpen(false);
           // Places move while the board is open: this page says the same as it.
-          onReadAgain();
+          void onReadAgain();
         }}
         {...(onChanged === undefined ? {} : { onChanged })}
       />
@@ -603,7 +605,7 @@ function Loaded({ place, list, challenge, busy, said, top, bottom, onPress, onRe
 }
 
 /** The member's number: how far, what is left, their place, and each counted day as a flame. */
-function Mine({ challenge, today, place, onReadAgain }: { challenge: MemberGymChallenge; today: string; place: ChallengesPlace; onReadAgain: () => void }) {
+function Mine({ challenge, today, place, onReadAgain }: { challenge: MemberGymChallenge; today: string; place: ChallengesPlace; onReadAgain: () => Promise<GymChallengesResponse | null> }) {
   const [box, setBox] = useState<"board" | "name" | null>(null);
   const mine = progress(challenge);
   if (mine === null || challenge.me === null || challenge.state === "coming") return null;
@@ -658,7 +660,7 @@ function Mine({ challenge, today, place, onReadAgain }: { challenge: MemberGymCh
         place={box === "board" ? place : null}
         onClose={() => {
           setBox(null);
-          onReadAgain();
+          void onReadAgain();
         }}
       />
       <Sheet
@@ -670,10 +672,12 @@ function Mine({ challenge, today, place, onReadAgain }: { challenge: MemberGymCh
       >
         {box === "name" ? (
           <NameBox
-            onSaved={() => {
+            onSaved={async () => {
+              // The server does not show a name that is only the email's first part: it says so where it was typed.
+              const now = await onReadAgain();
+              if (now?.challenges.find((c) => c.id === challenge.id)?.me?.hidden === "no_name") return false;
               setBox(null);
-              onReadAgain();
-              return Promise.resolve(true);
+              return true;
             }}
           />
         ) : null}
@@ -707,6 +711,10 @@ function Flames({ challenge, today }: { challenge: MemberGymChallenge; today: st
           )}
         </View>
       ))}
+      <View style={styles.legend}>
+        <Icon name="flame" size={12} colour="orange" filled />
+        <Txt kind="tiny">{`a ${challenge.words.one}`}</Txt>
+      </View>
       {marks.whole ? null : <Txt kind="tiny">This week. Your number counts every day of the challenge.</Txt>}
     </View>
   );
@@ -1057,6 +1065,7 @@ const styles = StyleSheet.create({
   mineDone: { backgroundColor: colours.orangeFill, borderColor: colours.orangeLine },
   flames: { gap: 4, marginTop: 4 },
   week: { flexDirection: "row" },
+  legend: { flexDirection: "row", alignItems: "center", gap: 4 },
   flameCell: { flex: 1, alignItems: "center", minHeight: 20 },
   lit: { filter: [{ dropShadow: { offsetX: 0, offsetY: 0, standardDeviation: 3, color: colours.orange } }] },
   open: { opacity: 0.55 },

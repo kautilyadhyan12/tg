@@ -362,11 +362,13 @@ export function pickBox(c: Challenge, teamName: string) {
 
 /** The line a challenge's row in the list says about the member: their number and place, how it finished, or that they
  *  are not in it. Null with nothing of theirs to say. */
-export function rowLine(c: Challenge, today: string, gymName: string): string | null {
+export function rowLine(c: Challenge, today: string, gymName: string, checkingIn: boolean): string | null {
   if (c.cancelled) return null;
   if (c.state === "ended") return resultOf(c, today, gymName)?.headline ?? null;
   if (c.me === null) return c.can.join || c.can.pick ? "Not joined yet" : null;
   if (c.state === "coming") return c.who === "joined" ? "You’re in." : null;
+  if (notCountingNote(c, checkingIn, gymName) !== null) return "Not being counted yet";
+  if (staffCount(c) && c.me.value === 0) return "No number yet";
   const mine = progress(c);
   if (mine === null) return null;
   const number = mine.of === null ? countText(mine.big, c.words) : `${printed(mine.big, c.words)} of ${countText(mine.of, c.words)}`;
