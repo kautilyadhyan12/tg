@@ -366,7 +366,7 @@ export async function recentFoodsOf(deps: NutritionDeps, userId: string): Promis
     if (own.length === 0) return [];
     const byDish = pick.item.measure?.id === "dish";
     const add = !byDish && own.some((m) => m.id === pick.add.measure) ? pick.add : startingMeasure(servingOfFood(food), own);
-    return [{ ...pick, add, measures: own }];
+    return [{ ...pick, add, measures: own, ...(food.packaged === undefined ? {} : { kcal: food.kcal, packaged: food.packaged }) }];
   });
 }
 
@@ -606,7 +606,7 @@ async function findFood(deps: NutritionDeps, query: string, search = true, owner
     const code = packagedCode(query);
     const kind = code === null ? null : classifyBarcode(code);
     const held = kind?.kind === "product" ? await packagedFood(deps, kind.code) : null;
-    if (held !== null) return { ...held.food, canonical: query };
+    if (held !== null) return { ...held.food, canonical: query, packaged: { check: held.check, allergens: held.allergens, mayContain: held.mayContain, listedAsTyped: held.listedAsTyped, allergensFrom: held.allergensFrom } };
     return query.startsWith("off_") ? await canonicalCached(deps, query) : null;
   }
   const local = findCurated(query);
@@ -616,8 +616,19 @@ async function findFood(deps: NutritionDeps, query: string, search = true, owner
   const remembered = await canonicalCached(deps, query);
   if (remembered !== null) return remembered;
   if (!search) return null;
-  const [product] = await cachedExternal(deps, query, 1);
-  return product === undefined ? null : takenByName(product, query);
+  return await soundProduct(deps, query);
+}
+
+/** How many of a search's products a name alone may look through: a blank row must not hide a sound one. */
+const SOUND_PRODUCT_LOOKS = 5;
+
+/** The first of a name's products that may be taken with nobody choosing it. */
+async function soundProduct(deps: NutritionDeps, name: string): Promise<FoodReference | null> {
+  for (const product of await cachedExternal(deps, name, SOUND_PRODUCT_LOOKS)) {
+    const taken = takenByName(product, name);
+    if (taken !== null) return taken;
+  }
+  return null;
 }
 
 /** A packaged product taken with nobody choosing it, by a name alone: only where its name holds every word
@@ -640,10 +651,7 @@ const scanLookups = (deps: NutritionDeps): ScanLookups => ({
     const found = await repo.usdaFoodForScan(deps.sql, hint, seen);
     return found === null ? null : { food: asUsdaReference(found.food), byEveryWord: found.match === "words" };
   },
-  packaged: async (hint) => {
-    const [product] = await cachedExternal(deps, hint, 1);
-    return product === undefined ? null : takenByName(product, hint);
-  },
+  packaged: async (hint) => await soundProduct(deps, hint),
 });
 
 // ── Stage-3 arithmetic + §3.3 display standard ───────────────────────────────

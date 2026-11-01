@@ -2,6 +2,7 @@
 // the routes a person uses, on real Postgres and the real search (no fake list). Names are real ones,
 // from the download of 2026-10-29, each with a word no food has, so this file finds its own rows
 // whether or not the machine has the whole list loaded. It removes those codes and no others.
+import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import postgres from "postgres";
 import { z } from "zod";
@@ -244,7 +245,26 @@ d("the food search reads our own copy", () => {
   it("a name sent as a food takes no product whose numbers want checking", async () => {
     await addOff({ name: "Zqxfourteen biscuit", kcal: 144, protein: 8, carbs: 57, fat: 20, scans: 40, fit: false });
     const res = await app.inject({ method: "POST", url: "/v1/nutrition/meals/preview", cookies: { accessToken: cookie }, headers: { "content-type": "application/json" }, payload: JSON.stringify({ items: [{ canonical: "Zqxfourteen biscuit", grams: 50 }] }) });
-    expect(res.statusCode, res.body).not.toBe(200);
+    expect(res.statusCode, res.body).toBe(400);
+  });
+
+  it("a blank row does not hide a sound product of the same name from a scan", { timeout: 60_000 }, async () => {
+    await addOff({ name: "Zqxsixteen zero", kcal: 1, protein: null, carbs: null, fat: null, scans: 900 });
+    const sound = await addOff({ name: "Zqxsixteen zero can", kcal: 1, protein: 0, carbs: 0, fat: 0, scans: 5 });
+    evidence.now = { meal_name: "Plate", items: [{ name: "Zqxsixteen zero", canonical_hint: "zqxsixteen zero", count: null, grams: 330, kcal: null, protein_g: null, carbs_g: null, fat_g: null }], unknown_items: [], photo_quality: "good" };
+    const scan = await app.inject({ method: "POST", url: "/v1/nutrition/analyze-photo", cookies: { accessToken: cookie }, headers: { "content-type": "application/json" }, payload: JSON.stringify({ imageBase64: MEAL_PHOTO, mimeType: "image/jpeg" }) });
+    expect(scan.statusCode, scan.body).toBe(200);
+    expect(z.object({ items: z.array(z.object({ canonical: z.string() })) }).parse(scan.json()).items[0]?.canonical).toBe(`off_${sound}`);
+  });
+
+  it("a product logged and offered again in Recent says what its barcode says", async () => {
+    const code = await addOff({ name: "Zqxseventeen bar", kcal: 500, protein: 5, carbs: 60, fat: null, scans: 5, allergens: ["milk"] });
+    const saved = await app.inject({ method: "POST", url: "/v1/nutrition/meals", cookies: { accessToken: cookie }, headers: { "content-type": "application/json" }, payload: JSON.stringify({ id: randomUUID(), mealName: "Snack", takenAt: new Date().toISOString(), mealType: "snack", items: [{ canonical: `off_${code}`, grams: 40 }] }) });
+    expect(saved.statusCode, saved.body).toBe(201);
+    const recent = await app.inject({ method: "GET", url: "/v1/nutrition/foods/recent", cookies: { accessToken: cookie } });
+    expect(recent.statusCode, recent.body).toBe(200);
+    const row = z.object({ items: z.array(z.object({ canonical: z.string(), kcal: z.number().optional(), packaged: z.object({ check: z.string(), allergens: z.array(z.string()) }).optional() })) }).parse(recent.json()).items.find((i) => i.canonical === `off_${code}`);
+    expect(row).toMatchObject({ kcal: 500, packaged: { check: "part_missing", allergens: ["milk"] } });
   });
 
   it("punctuation does not ask the same search again", async () => {

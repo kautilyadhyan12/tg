@@ -59,11 +59,6 @@ export function classifyBarcode(raw: string): BarcodeKind {
 /** The lookup's address. Digits only, so nothing else reaches a query. */
 export const barcodeParamSchema = z.object({ code: z.string().regex(/^\d{8,14}$/) }).strict();
 
-/** Why a product's numbers should be checked against its pack, or `fine`:
- *  `doesnt_add_up`, its calories are far from what its protein, carbs and fat come to;
- *  `part_missing`, its protein, carbs or fat are not known;
- *  `lists_differ`, the two lists are over a fifth apart on its calories. */
-
 /** The reply. `allergens` and `mayContain` are words of Open Food Facts' own list of allergens: most
  *  products have neither, so an empty list says nothing about the food and must never read as safe. */
 export const barcodeReplySchema = z.discriminatedUnion("status", [

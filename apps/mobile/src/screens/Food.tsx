@@ -1156,7 +1156,7 @@ const SHEET_LIST_LEAST = 120;
 
 
 /** Whose words a search's food shows: USDA's numbers can sit beside Open Food Facts' allergens. */
-const sourcesOf = (f: FoodSearchItem): string[] => [f.source, ...(f.packaged?.allergensFrom == null ? [] : [f.packaged.allergensFrom])];
+const sourcesOf = (f: Pick<FoodSearchItem, "source" | "packaged">): string[] => [f.source, ...(f.packaged?.allergensFrom == null ? [] : [f.packaged.allergensFrom])];
 
 type Found = { kind: "idle" } | { kind: "looking" } | { kind: "ok"; items: FoodSearchItem[] } | { kind: "failed"; words: string };
 /** A food in the picker: one found by the search, or one the person logged before, with the food as
@@ -1356,7 +1356,7 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
     toList({ name: food.name, chosen: item, amount: words, item: priced, ...(amount === null ? {} : { again: { food, amount } }) });
   };
   const open = (f: RecentFood) => {
-    setFood({ canonical: f.canonical, name: f.item.name, source: f.source, measures: f.measures, startsAt: f.add, last: f });
+    setFood({ canonical: f.canonical, name: f.item.name, source: f.source, measures: f.measures, startsAt: f.add, last: f, ...(f.packaged === undefined || f.kcal === undefined ? {} : { kcal: f.kcal, packaged: f.packaged }) });
     // Last had by a saved dish the person still has: that dish, as full as it was then. A dish that is
     // gone starts it where the server says, a count of it where it has one.
     const m = f.item.measure;
@@ -1606,7 +1606,7 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
         )}
         <Credits
           sources={
-            new Set(food === null ? [...(found.kind === "ok" ? found.items.flatMap(sourcesOf) : []), ...(showRecent ? recent.map((f) => f.source) : [])] : [food.source])
+            new Set(food === null ? [...(found.kind === "ok" ? found.items.flatMap(sourcesOf) : []), ...(showRecent ? recent.flatMap(sourcesOf) : [])] : sourcesOf(food))
           }
         />
       </ScrollView>

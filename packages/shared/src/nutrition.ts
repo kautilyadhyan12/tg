@@ -451,10 +451,10 @@ export type BodyMeasurement = z.infer<typeof bodyMeasurementSchema>;
 export const nutritionListQuerySchema = z.object({ limit: z.coerce.number().int().min(1).max(100).default(20), cursor: z.string().optional() }).strict();
 export const foodSearchQuerySchema = z.object({ q: z.string().trim().min(1).max(100), limit: z.coerce.number().int().min(1).max(50).default(10) }).strict();
 
-/** One food the search box offers: its figures per 100 g, its serving, where it
- *  comes from, the measures it can be logged by (ROADMAP 7a-iv-a) and the one and
- *  amount it starts at. */
-/** What a person is told about a packaged product's numbers: the same on a barcode and in a search. */
+/** Why a product's numbers should be checked against its pack, or `fine`:
+ *  `doesnt_add_up`, its calories are far from what its protein, carbs and fat come to;
+ *  `part_missing`, its protein, carbs or fat are not known;
+ *  `lists_differ`, the two lists are over a fifth apart on its calories. */
 export const packagedCheckSchema = z.enum(["fine", "doesnt_add_up", "part_missing", "lists_differ"]);
 export type PackagedCheck = z.infer<typeof packagedCheckSchema>;
 
@@ -467,6 +467,9 @@ export const packagedFactsSchema = z.object({
 }).strict();
 export type PackagedFacts = z.infer<typeof packagedFactsSchema>;
 
+/** One food the search box offers: its figures per 100 g, its serving, where it
+ *  comes from, the measures it can be logged by (ROADMAP 7a-iv-a) and the one and
+ *  amount it starts at. */
 export const foodSearchItemSchema = z.object({
   canonical: z.string().min(1), name: z.string().min(1),
   kcal: z.number().nonnegative(), proteinG: z.number().nonnegative(), carbsG: z.number().nonnegative(), fatG: z.number().nonnegative(),
@@ -498,6 +501,9 @@ export const recentFoodSchema = z.object({
   add: measureStartSchema,
   item: mealItemSchema,
   measures: z.array(foodMeasureSchema).min(1),
+  /** A packaged product's calories per 100 g and what its barcode would say about it. */
+  kcal: z.number().nonnegative().optional(),
+  packaged: packagedFactsSchema.optional(),
 }).strict();
 export type RecentFood = z.infer<typeof recentFoodSchema>;
 export const recentFoodsResponseSchema = z.object({ items: z.array(recentFoodSchema).max(RECENT_FOODS_MOST) }).strict();
