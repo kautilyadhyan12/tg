@@ -4,11 +4,13 @@
 // life is `cardRefundsRepo.ts`'s; what differs here is what the money is written against: a row of `gym_sale_refunds` for each
 // product, under the gym's lock, in the statement group that moves the press on.
 import { saleRefundReasonSchema, type CardRefundCheck, type SaleCardRefundRequest, type SaleRefundReason, type SaleWholeCardRefundRequest } from "@app/shared";
-import type { Sql } from "postgres";
+import { randomUUID } from "node:crypto";
+import type { Sql, TransactionSql } from "postgres";
 import { lockGym } from "../memberList/repo.js";
+import { checkPlaceAnswer, notesCrossedOut, placeSquareRefund, type PlaceNote, type PlacedPart } from "./saleSquarePlace.js";
 import { saleLineRule, saleLinesToRefund, saleRefundAsking, undoSaleRefund, wholeSaleParts, writeSaleRefund, type SaleToRefund } from "../register/repo.js";
 import { insertAudit } from "../repo.js";
-import { terminalFree, toPress, type RawPress, type RefundPress, type SalePart } from "./cardRefundsRepo.js";
+import { CLOCKS_APART_MS, terminalFree, toPress, type MadeInSquareOutcome, type RawPress, type RefundPress, type SalePart } from "./cardRefundsRepo.js";
 import type { SquareEnvironment } from "./square.js";
 
 /** The same press sent again: the same product, amount, reason and shelf count. */
@@ -226,8 +228,186 @@ export async function recordSaleFailed(sql: Sql, press: RefundPress, failed: { c
       });
     }
     await tx`
-      UPDATE gym_square_refunds SET state = 'done', outcome = 'failed', code = ${failed.code}, look_at = NULL, finished_at = ${failed.now}, checking_until = NULL
+      UPDATE gym_square_refunds SET state = 'done', outcome = 'failed', code = ${failed.code}, look_at = NULL, finished_at = ${failed.now}, checking_until = NULL, to_place = false
       WHERE gym_id = ${press.gymId} AND id = ${press.id}`;
     return true;
+  });
+}
+
+/** The refunds noted by card on a sale up to `upTo`, oldest first. A note made after one was crossed out is staff saying it is another
+ *  refund, so it stands; so does one made after Square's refund was taken in, which Square's refund was already on the sale's page beside. */
+async function cardNotes(tx: TransactionSql, gymId: string, lines: readonly SaleToRefund[], upTo: Date): Promise<PlaceNote[]> {
+  const ids = lines.map((l) => l.saleId);
+  const rows = await tx<{ id: string; sale_id: string; amount_minor: number; restocked: number }[]>`
+    SELECT n.id, n.sale_id, n.amount_minor, n.restocked FROM gym_sale_refunds n
+    WHERE n.gym_id = ${gymId} AND n.sale_id = ANY(${ids}::uuid[]) AND n.undone_at IS NULL AND n.method = 'card_at_desk' AND n.created_at <= ${upTo}
+      AND NOT EXISTS (SELECT 1 FROM gym_sale_refunds v WHERE v.gym_id = n.gym_id AND v.sale_id = ANY(${ids}::uuid[]) AND v.void_reason = 'in_square' AND v.undone_at <= n.created_at)
+    ORDER BY n.created_at, n.id FOR UPDATE OF n`;
+  return rows.map((r) => ({ id: r.id, saleId: r.sale_id, amountMinor: r.amount_minor, restocked: r.restocked }));
+}
+
+/** Notes Square's record replaces: crossed out, what they did undone, with the reason said. */
+async function crossOutNotes(tx: TransactionSql, gymId: string, lines: readonly SaleToRefund[], notes: readonly PlaceNote[], currency: string, today: string, now: Date): Promise<void> {
+  for (const note of notes) {
+    const sale = lines.find((l) => l.saleId === note.saleId);
+    if (sale === undefined) throw new Error("a noted refund is not on its sale");
+    await tx`UPDATE gym_sale_refunds SET undone_at = ${now}, void_reason = 'in_square' WHERE gym_id = ${gymId} AND id = ${note.id}`;
+    await undoSaleRefund(tx, { gymId, saleId: sale.saleId, productId: sale.productId, restocked: note.restocked, stockCounted: sale.stockCounted, entryId: sale.entryId, saleUndone: sale.undone, today, now });
+    await insertAudit(tx, {
+      actorUserId: null,
+      gymId,
+      action: "org.sale_refund_replaced",
+      targetType: "gym_sale_refund",
+      targetId: note.id,
+      meta: { saleId: sale.saleId, product: sale.itemName, amountMinor: String(note.amountMinor), currency, reason: "in_square" },
+    });
+  }
+}
+
+/** The money of a refund through Square, written on its products, after any notes it replaces are gone. */
+async function writeParts(
+  tx: TransactionSql,
+  w: { gymId: string; lines: readonly SaleToRefund[]; crossed: readonly PlaceNote[]; parts: readonly PlacedPart[]; currency: string; requestKey: string; reason: SaleRefundReason; today: string; actorUserId: string | null; now: Date; action: "org.sale_refund_sent" | "org.sale_refund_in_square"; card: { brand: string; last4: string } | null; pressId: string },
+): Promise<number[]> {
+  const receipts: number[] = [];
+  for (const part of w.parts) {
+    const sale = w.lines.find((l) => l.saleId === part.saleId);
+    if (sale === undefined) throw new Error("a part of a refund is not on its sale");
+    const before = sale.lineRefundedMinor - w.crossed.filter((n) => n.saleId === part.saleId).reduce((total, n) => total + n.amountMinor, 0);
+    const written = await writeSaleRefund(tx, {
+      gymId: w.gymId,
+      saleId: sale.saleId,
+      productId: sale.productId,
+      itemName: sale.itemName,
+      stockCounted: sale.stockCounted,
+      currency: w.currency,
+      requestKey: w.requestKey,
+      amountMinor: part.amountMinor,
+      method: "terminal",
+      reason: w.reason,
+      restock: sale.stockCounted ? part.restock : 0,
+      refundedInFull: before + part.amountMinor >= sale.lineMinor,
+      today: w.today,
+      actorUserId: w.actorUserId,
+      now: w.now,
+      action: w.action,
+      card: w.card,
+      pressId: w.pressId,
+    });
+    receipts.push(written.receiptNumber);
+  }
+  return receipts;
+}
+
+/** A refund Square made on a sale and no row here holds: written once and in full, under the gym's lock. A press left "We don't know" for
+ *  this amount is this refund and takes its own products. Otherwise `placeSquareRefund` says which products, or that staff must. */
+export async function recordSaleMadeInSquare(
+  sql: Sql,
+  r: { gymId: string; environment: SquareEnvironment; accountId: string; squareRefundId: string; squarePaymentId: string; amountMinor: number; currency: string; card: { brand: string; last4: string } | null; madeAt: Date; today: string; now: Date; lookAt: Date },
+): Promise<MadeInSquareOutcome> {
+  return await sql.begin(async (tx): Promise<MadeInSquareOutcome> => {
+    await lockGym(tx, r.gymId);
+    const [known] = await tx<{ id: string }[]>`SELECT id FROM gym_square_refunds WHERE environment = ${r.environment} AND square_refund_id = ${r.squareRefundId}`;
+    if (known !== undefined) return { kind: "already" };
+    const [asking] = await tx<{ id: string }[]>`SELECT id FROM gym_square_refunds WHERE gym_id = ${r.gymId} AND square_payment_id = ${r.squarePaymentId} AND state = 'asking' LIMIT 1`;
+    if (asking !== undefined) return { kind: "waiting" };
+    const [line] = await tx<{ id: string }[]>`SELECT id FROM gym_sales WHERE gym_id = ${r.gymId} AND square_payment_id = ${r.squarePaymentId} LIMIT 1`;
+    const lines = line === undefined ? [] : await saleLinesToRefund(tx, r.gymId, line.id);
+    const first = lines[0];
+    if (first === undefined || first.undone || first.currency !== r.currency) return { kind: "no_payment" };
+    const notes = await cardNotes(tx, r.gymId, lines, r.now);
+
+    const [lost] = await tx<RawPress[]>`
+      SELECT * FROM gym_square_refunds
+      WHERE gym_id = ${r.gymId} AND square_payment_id = ${r.squarePaymentId} AND sale_id IS NOT NULL AND outcome = 'lost' AND no_refund_at IS NULL AND amount_minor = ${r.amountMinor}
+        AND started_at <= ${new Date(r.madeAt.getTime() + CLOCKS_APART_MS)} AND finished_at >= ${new Date(r.madeAt.getTime() - CLOCKS_APART_MS)}
+      ORDER BY started_at DESC LIMIT 1 FOR UPDATE`;
+    if (lost !== undefined) {
+      const press = toPress(lost);
+      const parts = partsOf(press);
+      // Staff noted it as told, "if it went through": the press holds the same money and its own shelf count.
+      const crossed = notesCrossedOut(notes, r.amountMinor);
+      await crossOutNotes(tx, r.gymId, lines, crossed, r.currency, r.today, r.now);
+      await writeParts(tx, { gymId: r.gymId, lines, crossed, parts, currency: r.currency, requestKey: press.requestKey, reason: saleRefundReasonSchema.parse(press.reason), today: r.today, actorUserId: press.startedBy, now: r.now, action: "org.sale_refund_sent", card: press.brand === null || press.last4 === null ? r.card : { brand: press.brand, last4: press.last4 }, pressId: press.id });
+      const [row] = await tx<RawPress[]>`
+        UPDATE gym_square_refunds SET state = 'pending', outcome = NULL, code = NULL, finished_at = NULL, square_refund_id = ${r.squareRefundId}, look_at = ${r.lookAt}, checking_until = NULL
+        WHERE gym_id = ${r.gymId} AND id = ${press.id} RETURNING *`;
+      if (row === undefined) throw new Error("a sale's press was not moved on under the gym's lock");
+      return { kind: "written", press: toPress(row) };
+    }
+
+    const placed = placeSquareRefund(lines.map((l) => ({ saleId: l.saleId, lineMinor: l.lineMinor, refundedMinor: l.lineRefundedMinor })), notes, r.amountMinor);
+    const id = randomUUID();
+    const requestKey = randomUUID();
+    const onSale = placed.kind === "place" ? (placed.parts[0]?.saleId ?? first.saleId) : first.saleId;
+    const [row] = await tx<RawPress[]>`
+      INSERT INTO gym_square_refunds
+        (id, gym_id, sale_id, parts, to_place, environment, account_id, square_payment_id, square_refund_id, amount_minor, currency, reason, brand, last4,
+         request_key, state, look_at, from_square, started_at, checked_at)
+      VALUES (${id}, ${r.gymId}, ${onSale}, ${placed.kind === "place" ? tx.json(placed.parts.map((p) => ({ ...p }))) : null}, ${placed.kind === "ask"}, ${r.environment}, ${r.accountId}, ${r.squarePaymentId}, ${r.squareRefundId}, ${r.amountMinor}, ${r.currency}, 'other',
+              ${r.card?.brand ?? null}, ${r.card?.last4 ?? null}, ${requestKey}, 'pending', ${r.lookAt}, true, ${r.madeAt}, ${r.now})
+      RETURNING *`;
+    if (row === undefined) throw new Error("a refund made in Square was not written under the gym's lock");
+    if (placed.kind === "place") {
+      await crossOutNotes(tx, r.gymId, lines, placed.crossed, r.currency, r.today, r.now);
+      await writeParts(tx, { gymId: r.gymId, lines, crossed: placed.crossed, parts: placed.parts, currency: r.currency, requestKey, reason: "other", today: r.today, actorUserId: null, now: r.now, action: "org.sale_refund_in_square", card: r.card, pressId: id });
+    } else {
+      await insertAudit(tx, {
+        actorUserId: null,
+        gymId: r.gymId,
+        action: "org.sale_refund_to_place",
+        targetType: "gym_square_refund",
+        targetId: id,
+        meta: { saleId: first.saleId, product: first.itemName, amountMinor: String(r.amountMinor), currency: r.currency, ...(r.card === null ? {} : { brand: r.card.brand, last4: r.card.last4 }) },
+      });
+    }
+    return { kind: "written", press: toPress(row) };
+  });
+}
+
+export type PlaceOutcome = { kind: "ok"; receiptNumbers: number[]; parts: PlacedPart[] } | { kind: "not_found" | "changed" | "waiting" | "not_on_sale" | "wrong_total" | "too_much" | "too_many_back" };
+
+/** What Square refunded on this payment with no product said yet. */
+export async function toPlaceOn(sql: Sql, gymId: string, squarePaymentId: string): Promise<number> {
+  const [row] = await sql<{ n: number }[]>`SELECT COALESCE(sum(amount_minor), 0)::int AS n FROM gym_square_refunds WHERE gym_id = ${gymId} AND square_payment_id = ${squarePaymentId} AND to_place`;
+  return row?.n ?? 0;
+}
+
+/** Staff say which product a refund made in Square was for: its money is written then, on the day Square made it. The same answer twice is one. */
+export async function placeSaleRefund(sql: Sql, a: { gymId: string; saleId: string; pressId: string; parts: readonly PlacedPart[]; actorUserId: string; now: Date }): Promise<PlaceOutcome> {
+  return await sql.begin(async (tx): Promise<PlaceOutcome> => {
+    await lockGym(tx, a.gymId);
+    const [row] = await tx<(RawPress & { made_on: string; today: string })[]>`
+      SELECT q.*, (q.started_at AT TIME ZONE g.timezone)::date::text AS made_on, (${a.now}::timestamptz AT TIME ZONE g.timezone)::date::text AS today
+      FROM gym_square_refunds q JOIN gyms g ON g.id = q.gym_id
+      WHERE q.gym_id = ${a.gymId} AND q.id = ${a.pressId} AND q.from_square FOR UPDATE OF q`;
+    if (row === undefined || row.sale_id === null) return { kind: "not_found" };
+    const press = toPress(row);
+    const lines = await saleLinesToRefund(tx, a.gymId, row.sale_id);
+    if (!lines.some((l) => l.saleId === a.saleId)) return { kind: "not_found" };
+    if (!press.toPlace) {
+      const same = press.parts !== null && press.outcome !== "failed" && press.parts.length === a.parts.length && a.parts.every((p) => press.parts?.some((q) => q.saleId === p.saleId && q.amountMinor === p.amountMinor));
+      if (!same) return { kind: "changed" };
+      const receipts = await tx<{ receipt_number: number }[]>`SELECT receipt_number FROM gym_sale_refunds WHERE gym_id = ${a.gymId} AND press_id = ${press.id} ORDER BY receipt_number`;
+      return { kind: "ok", receiptNumbers: receipts.map((r) => r.receipt_number), parts: press.parts ?? [] };
+    }
+    if (lines[0]?.undone === true) return { kind: "changed" };
+    if (await saleRefundAsking(tx, a.gymId, row.sale_id)) return { kind: "waiting" };
+    const notes = await cardNotes(tx, a.gymId, lines, press.checkedAt);
+    const check = checkPlaceAnswer(lines.map((l) => ({ saleId: l.saleId, lineMinor: l.lineMinor, refundedMinor: l.lineRefundedMinor, quantity: l.quantity, restocked: l.lineRestocked, stockCounted: l.stockCounted })), notes, press.amountMinor, a.parts);
+    if (!check.ok) return { kind: check.reason };
+    await crossOutNotes(tx, a.gymId, lines, check.crossed, press.currency, row.today, a.now);
+    const receiptNumbers = await writeParts(tx, { gymId: a.gymId, lines, crossed: check.crossed, parts: check.parts, currency: press.currency, requestKey: press.requestKey, reason: "other", today: row.made_on, actorUserId: null, now: a.now, action: "org.sale_refund_in_square", card: press.brand === null || press.last4 === null ? null : { brand: press.brand, last4: press.last4 }, pressId: press.id });
+    await tx`UPDATE gym_square_refunds SET to_place = false, chosen = true, parts = ${tx.json(check.parts.map((p) => ({ ...p })))} WHERE gym_id = ${a.gymId} AND id = ${press.id}`;
+    // Square made the refund and names nobody: this says only who chose the product.
+    await insertAudit(tx, {
+      actorUserId: a.actorUserId,
+      gymId: a.gymId,
+      action: "org.sale_refund_placed",
+      targetType: "gym_square_refund",
+      targetId: press.id,
+      meta: { saleId: row.sale_id, product: check.parts.map((p) => lines.find((l) => l.saleId === p.saleId)?.itemName ?? "").join(", "), amountMinor: String(press.amountMinor), currency: press.currency },
+    });
+    return { kind: "ok", receiptNumbers, parts: check.parts };
   });
 }

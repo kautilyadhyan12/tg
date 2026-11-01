@@ -15,6 +15,7 @@ import { dayInTz } from "../../gamification/streak.js";
 import { afterTaken, lookFrom, tokenFor } from "./cardRefunds.js";
 import * as refunds from "./cardRefundsRepo.js";
 import * as repo from "./repo.js";
+import * as sales from "./saleCardRefundsRepo.js";
 import { accessContext, type PaymentsDeps } from "./service.js";
 import type { SquareSettings } from "./settings.js";
 
@@ -46,14 +47,16 @@ export async function takeInRefund(deps: PaymentsDeps, square: SquareSettings, c
     if (refund.status !== "FAILED" && refund.status !== "REJECTED") deps.log.warn({ event: "square.refund_status_unknown", gymId: conn.gymId, status: refund.status }, "a refund in Square has a status not placed");
     return "done";
   }
-  if (!(await refunds.paymentHeldHere(deps.sql, conn.gymId, refund.payment_id))) return "done";
+  const held = await refunds.paymentHeldHere(deps.sql, conn.gymId, refund.payment_id);
+  if (held === null) return "done";
   // A refund's answer names no card: the card comes from the payment.
   const paid = await square.api.getPayment(token, refund.payment_id);
   if (paid.kind !== "ok") return "wait";
   const brand = paid.value.card_details?.card?.card_brand ?? null;
   const last4 = paid.value.card_details?.card?.last_4 ?? null;
   const madeAt = refund.created_at == null ? now : new Date(refund.created_at);
-  const written = await refunds.recordMadeInSquare(deps.sql, {
+  const write = held === "sale" ? sales.recordSaleMadeInSquare : refunds.recordMadeInSquare;
+  const written = await write(deps.sql, {
     gymId: conn.gymId,
     environment: square.environment,
     accountId: conn.accountId,
@@ -133,7 +136,7 @@ async function lookAtLost(deps: PaymentsDeps, square: SquareSettings, press: ref
     return;
   }
   if (paid.kind === "refused") return;
-  if (!(await refunds.paymentHeldHere(deps.sql, press.gymId, press.squarePaymentId))) return;
+  if ((await refunds.paymentHeldHere(deps.sql, press.gymId, press.squarePaymentId)) === null) return;
   let unsure = false;
   let failed = false;
   for (const id of paid.value.refund_ids ?? []) {

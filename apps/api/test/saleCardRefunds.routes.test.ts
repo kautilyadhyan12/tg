@@ -28,6 +28,7 @@ import { startSaleRefund, startWholeSaleRefund } from "../src/modules/orgs/payme
 import { linesPage, totals } from "../src/modules/orgs/paymentsDownload/repo.js";
 import { squareSettings } from "../src/modules/orgs/payments/settings.js";
 import { processSquareWork } from "../src/modules/orgs/payments/work.js";
+import { recordSaleMadeInSquare } from "../src/modules/orgs/payments/saleCardRefundsRepo.js";
 import { keepSquareEvent } from "../src/modules/webhooks/repo.js";
 import { account, fakeSquare, type Account } from "./fakeSquareTerminal.js";
 import { proveAddress } from "./proveAddress.js";
@@ -880,6 +881,328 @@ d("Refund to card at Sell (real Postgres)", { timeout: T }, () => {
       const [audit] = await sql<{ action: string; meta: Record<string, string> }[]>`
         SELECT action, meta FROM audit_log WHERE gym_id = ${gym.id} AND target_id = ${row?.id ?? ""}`;
       expect(audit).toMatchObject({ action: "org.sale_refund_sent", meta: { product: "Water", amountMinor: "300", brand: "VISA", last4: "1111", method: "terminal", restocked: "1" } });
+    });
+  });
+
+  describe("a refund made inside Square (18d-iv-d-ii)", () => {
+    let shop: Gym;
+    beforeAll(async () => {
+      shop = await makeGym(`In Square Gym ${uniq()}`, `MERCH${uniq()}`);
+    }, T);
+    const message = async (merchantId: string, refundId: string) => {
+      const eventId = randomUUID();
+      await keepSquareEvent(sql, { eventId, payload: { type: "refund.created", accountId: merchantId, refundId } });
+      await sql`UPDATE webhook_events SET not_before = ${clock} WHERE event_id = ${eventId}`;
+      return await processSquareWork(workDeps(), [eventId], gyms.map((g) => g.id));
+    };
+    const made = (b: Basket, amount: number, status?: "PENDING" | "FAILED") => message(b.gym.acct.merchantId, square.refundInSquare(b.squarePaymentId, amount, status).id);
+    const toPlace = async (b: Basket) => (await line(b, b.water)).toPlace;
+    const place = (b: Basket, pressId: string, parts: unknown, by: Person = b.gym.owner) => send("POST", `/v1/orgs/${b.gym.id}/register/sales/${b.water}/square-refunds/${pressId}/place`, by.cookies, { parts });
+    const review = async (g: Gym) => refundsToReviewResponseSchema.parse(JSON.parse((await send("GET", `/v1/orgs/${g.id}/refunds-to-review`, g.owner.cookies)).body)).rows;
+    const dayRefunded = async (g: Gym) => (await sql<{ n: number }[]>`SELECT COALESCE(sum(amount_minor), 0)::int AS n FROM gym_sale_refunds WHERE gym_id = ${g.id} AND undone_at IS NULL`)[0]?.n ?? 0;
+
+    it("the worst thing: part of a basket is written on no product until staff say, once, and nobody else's sale moves", async () => {
+      const ours = await sold(shop);
+      const same = await sold(shop);
+      const theirs = await sold(nextDoor);
+      const before = await dayRefunded(shop);
+
+      const refund = square.refundInSquare(ours.squarePaymentId, 300);
+      await message(shop.acct.merchantId, refund.id);
+      // No product is named, so no money is shown as given back on either.
+      expect(await refundsOf(shop, ours.water)).toHaveLength(0);
+      expect(await refundsOf(shop, ours.towel)).toHaveLength(0);
+      expect(await dayRefunded(shop)).toBe(before);
+      const [waiting] = await toPlace(ours);
+      expect(waiting?.amountMinor).toBe(300);
+      expect((await review(shop)).filter((r) => r.kind === "place")).toMatchObject([{ id: waiting?.pressId, amountMinor: 300, sale: { saleId: ours.water, more: 1 } }]);
+
+      // The same refund again, by a message and by the hourly read: still one.
+      await message(shop.acct.merchantId, refund.id);
+      clock = new Date(clock.getTime() + 2 * 60 * 60_000);
+      await work();
+      expect(await toPlace(ours)).toHaveLength(1);
+      expect(await toPlace(same)).toHaveLength(0);
+      expect(await refundsOf(nextDoor, theirs.water)).toHaveLength(0);
+      expect((await review(nextDoor)).filter((r) => r.kind === "place")).toHaveLength(0);
+
+      // Next door's owner, our address: nothing. A part on another sale: nothing.
+      const pressId = waiting?.pressId ?? "";
+      expect((await send("POST", `/v1/orgs/${shop.id}/register/sales/${ours.water}/square-refunds/${pressId}/place`, nextDoor.owner.cookies, { parts: [{ saleId: ours.towel, amountMinor: 300, restock: 0 }] })).statusCode).toBe(404);
+      expect((await send("POST", `/v1/orgs/${nextDoor.id}/register/sales/${theirs.water}/square-refunds/${pressId}/place`, nextDoor.owner.cookies, { parts: [{ saleId: theirs.towel, amountMinor: 300, restock: 0 }] })).statusCode).toBe(404);
+      expect((await place(ours, pressId, [{ saleId: same.towel, amountMinor: 300, restock: 0 }])).statusCode).toBe(404);
+      expect((await send("POST", `/v1/orgs/${shop.id}/register/sales/${same.water}/square-refunds/${pressId}/place`, shop.owner.cookies, { parts: [{ saleId: same.towel, amountMinor: 300, restock: 0 }] })).statusCode).toBe(404);
+      expect(errorOf(await place(ours, pressId, [{ saleId: ours.towel, amountMinor: 200, restock: 0 }]))).toBe("place_refund_wrong_total");
+      expect(await refundsOf(shop, ours.towel)).toHaveLength(0);
+
+      // Staff choose, twice at once: one refund.
+      const parts = [{ saleId: ours.towel, amountMinor: 300, restock: 0 }];
+      const both = await Promise.all([place(ours, pressId, parts), place(ours, pressId, parts)]);
+      expect(both.map((r) => r.statusCode)).toEqual([200, 200]);
+      expect((await refundsOf(shop, ours.towel)).map((r) => [r.amount_minor, r.method, r.undone])).toEqual([[300, "terminal", false]]);
+      expect(await refundsOf(shop, ours.water)).toHaveLength(0);
+      expect(await dayRefunded(shop)).toBe(before + 300);
+      expect(await toPlace(ours)).toHaveLength(0);
+      expect((await review(shop)).filter((r) => r.kind === "place")).toHaveLength(0);
+      expect(errorOf(await place(ours, pressId, [{ saleId: ours.water, amountMinor: 300, restock: 0 }]))).toBe("place_refund_changed");
+      expect((await line(ours, ours.towel)).refunds[0]?.square).toMatchObject({ inSquare: true, card: { brand: "VISA", last4: "1111" } });
+    });
+
+    it("two workers with one refund at the same instant write it once", async () => {
+      const b = await sold(shop);
+      const r = { gymId: shop.id, environment: "production" as const, accountId: shop.acct.merchantId, squareRefundId: `race${uniq()}`, squarePaymentId: b.squarePaymentId, amountMinor: 1900, currency: "USD", card: null, madeAt: clock, today: "2026-01-01", now: clock, lookAt: clock };
+      const both = await Promise.all([recordSaleMadeInSquare(sql, r), recordSaleMadeInSquare(sql, r)]);
+      expect(both.map((x) => x.kind).sort()).toEqual(["already", "written"]);
+      expect((await refundsOf(shop, b.towel)).map((x) => x.amount_minor)).toEqual([1500]);
+    });
+
+    it("all of a basket is written by itself, on each product", async () => {
+      const b = await sold(shop);
+      await made(b, 1900);
+      expect((await refundsOf(shop, b.water)).map((r) => r.amount_minor)).toEqual([400]);
+      expect((await refundsOf(shop, b.towel)).map((r) => r.amount_minor)).toEqual([1500]);
+      expect(await toPlace(b)).toHaveLength(0);
+    });
+
+    it("the shelf count moves only when staff say so", async () => {
+      const b = await sold(shop);
+      const stock = await stockOf(shop);
+      await made(b, 1900);
+      expect(await stockOf(shop)).toBe(stock);
+      const c = await sold(shop);
+      await made(c, 100);
+      const [waiting] = await toPlace(c);
+      const counted = await stockOf(shop);
+      const res = await place(c, waiting?.pressId ?? "", [{ saleId: c.water, amountMinor: 100, restock: 1 }]);
+      expect(res.statusCode, res.body).toBe(200);
+      expect(await stockOf(shop)).toBe((counted ?? 0) + 1);
+    });
+
+    it("a card note names the product and is crossed out; a cash note stands", async () => {
+      const b = await sold(shop);
+      const noted = await send("POST", `/v1/orgs/${shop.id}/register/sales/${b.water}/refunds`, shop.owner.cookies, { requestKey: randomUUID(), amountMinor: 200, method: "card_at_desk", reason: "returned", restock: 1 });
+      expect(noted.statusCode, noted.body).toBe(201);
+      const stock = await stockOf(shop);
+      await made(b, 200);
+      expect((await refundsOf(shop, b.water)).map((r) => [r.amount_minor, r.method, r.undone, r.void_reason, r.restocked]).sort((x, y) => String(x[1]).localeCompare(String(y[1])))).toEqual([
+        [200, "card_at_desk", true, "in_square", 1],
+        [200, "terminal", false, null, 1],
+      ]);
+      expect(await stockOf(shop)).toBe(stock);
+      expect(await toPlace(b)).toHaveLength(0);
+
+      const c = await sold(shop);
+      expect((await note(c, c.water, 400)).statusCode).toBe(201);
+      await made(c, 1500);
+      expect((await refundsOf(shop, c.water)).map((r) => [r.method, r.undone])).toEqual([["cash", false]]);
+      expect((await refundsOf(shop, c.towel)).map((r) => r.amount_minor)).toEqual([1500]);
+    });
+
+    it("a new note by card over Square's refund is refused, as it would count the money twice", async () => {
+      const b = await sold(shop);
+      await made(b, 1900);
+      const res = await send("POST", `/v1/orgs/${shop.id}/register/sales/${b.towel}/refunds`, shop.owner.cookies, { requestKey: randomUUID(), amountMinor: 500, method: "card_at_desk", reason: "returned", restock: 0 });
+      // Nothing is left of the line either way: the money stays counted once.
+      expect(res.statusCode).toBe(409);
+      expect(await refundsOf(shop, b.towel)).toHaveLength(1);
+      const c = await sold(shop);
+      await made(c, 400);
+      const [waiting] = await toPlace(c);
+      expect((await place(c, waiting?.pressId ?? "", [{ saleId: c.water, amountMinor: 400, restock: 0 }])).statusCode).toBe(200);
+      const again = await send("POST", `/v1/orgs/${shop.id}/register/sales/${c.towel}/refunds`, shop.owner.cookies, { requestKey: randomUUID(), amountMinor: 400, method: "card_at_desk", reason: "returned", restock: 0 });
+      expect(errorOf(again)).toBe("refund_in_square");
+    });
+
+    it("one Square failed writes nothing, and one that fails later is taken off, chosen or not", async () => {
+      const b = await sold(shop);
+      await made(b, 300, "FAILED");
+      expect(await toPlace(b)).toHaveLength(0);
+      const pending = square.refundInSquare(b.squarePaymentId, 300, "PENDING");
+      await message(shop.acct.merchantId, pending.id);
+      expect(await toPlace(b)).toHaveLength(1);
+      square.refundEnds(pending.id, "FAILED");
+      await message(shop.acct.merchantId, pending.id);
+      expect(await toPlace(b)).toHaveLength(0);
+      expect((await review(shop)).filter((r) => r.sale?.saleId === b.water)).toHaveLength(0);
+    });
+
+    it("We don't know on a sale: Square's record answers it, on the product pressed", async () => {
+      const b = await sold(shop);
+      const lostPress = async (amount: number) => {
+        const id = randomUUID();
+        await sql`
+          INSERT INTO gym_square_refunds (id, gym_id, sale_id, environment, account_id, square_payment_id, amount_minor, currency, reason, request_key, state, outcome, started_by, started_at, checked_at, finished_at, look_at)
+          VALUES (${id}, ${shop.id}, ${b.towel}, 'production', ${shop.acct.merchantId}, ${b.squarePaymentId}, ${amount}, 'USD', 'returned', ${randomUUID()}, 'done', 'lost', ${shop.owner.userId}, ${clock}, ${clock}, ${clock}, ${clock})`;
+        return id;
+      };
+      await lostPress(500);
+      await work();
+      expect((await line(b, b.towel)).cardRefund).toMatchObject({ lost: true, noRecord: true });
+      expect((await review(shop)).filter((r) => r.sale?.saleId === b.towel)).toHaveLength(0);
+
+      await lostPress(700);
+      await made(b, 700);
+      expect((await refundsOf(shop, b.towel)).map((r) => r.amount_minor)).toEqual([700]);
+      expect(await refundsOf(shop, b.water)).toHaveLength(0);
+      expect(await toPlace(b)).toHaveLength(0);
+    });
+
+    const cardNote = (saleId: string, amountMinor: number, restock = 0) =>
+      send("POST", `/v1/orgs/${shop.id}/register/sales/${saleId}/refunds`, shop.owner.cookies, { requestKey: randomUUID(), amountMinor, method: "card_at_desk", reason: "returned", restock });
+    const tick = () => {
+      clock = new Date(clock.getTime() + 1000);
+    };
+
+    it("notes in cash made since leave too little: it can still be chosen, and is written in full", async () => {
+      const b = await sold(shop);
+      await made(b, 300);
+      tick();
+      expect((await note(b, b.water, 400)).statusCode).toBe(201);
+      expect((await note(b, b.towel, 1500)).statusCode).toBe(201);
+      const [waiting] = await toPlace(b);
+      expect(waiting?.room).toEqual([{ saleId: b.water, minor: 300 }, { saleId: b.towel, minor: 300 }]);
+      const res = await place(b, waiting?.pressId ?? "", [{ saleId: b.towel, amountMinor: 300, restock: 0 }]);
+      expect(res.statusCode, res.body).toBe(200);
+      expect(await toPlace(b)).toHaveLength(0);
+    });
+
+    it("a note made after Square's refund stands when staff choose", async () => {
+      const b = await sold(shop);
+      await made(b, 300);
+      tick();
+      expect((await cardNote(b.water, 350)).statusCode).toBe(201);
+      const [waiting] = await toPlace(b);
+      expect((await place(b, waiting?.pressId ?? "", [{ saleId: b.towel, amountMinor: 300, restock: 0 }])).statusCode).toBe(200);
+      expect((await refundsOf(shop, b.water)).map((r) => [r.amount_minor, r.undone])).toEqual([[350, false]]);
+    });
+
+    it("a note made after Square's refund stands when staff choose, however many times the worker looks at a pending refund", async () => {
+      const b = await sold(shop);
+      await made(b, 300, "PENDING");
+      tick();
+      expect((await cardNote(b.water, 350)).statusCode).toBe(201);
+      clock = new Date(clock.getTime() + 2 * 60 * 60_000);
+      await work();
+      const [waiting] = await toPlace(b);
+      expect(waiting?.room).toContainEqual({ saleId: b.water, minor: 50 });
+      expect(errorOf(await place(b, waiting?.pressId ?? "", [{ saleId: b.water, amountMinor: 300, restock: 0 }]))).toBe("place_refund_too_much");
+      expect((await refundsOf(shop, b.water)).map((r) => [r.amount_minor, r.undone])).toEqual([[350, false]]);
+    });
+
+    it("a note from before, on a product not chosen, stands with its shelf count; on one chosen it is replaced and the box offers it", async () => {
+      const b = await sold(shop);
+      expect((await cardNote(b.water, 200, 1)).statusCode).toBe(201);
+      const stock = await stockOf(shop);
+      tick();
+      await made(b, 300);
+      const [waiting] = await toPlace(b);
+      expect(waiting?.room).toEqual([{ saleId: b.water, minor: 400 }, { saleId: b.towel, minor: 1500 }]);
+      expect((await place(b, waiting?.pressId ?? "", [{ saleId: b.towel, amountMinor: 300, restock: 0 }])).statusCode).toBe(200);
+      expect((await refundsOf(shop, b.water)).map((r) => [r.amount_minor, r.undone])).toEqual([[200, false]]);
+      expect(await stockOf(shop)).toBe(stock);
+
+      const c = await sold(shop);
+      expect((await cardNote(c.water, 300)).statusCode).toBe(201);
+      tick();
+      await made(c, 400);
+      const [asks] = await toPlace(c);
+      expect((await place(c, asks?.pressId ?? "", [{ saleId: c.water, amountMinor: 400, restock: 0 }])).statusCode).toBe(200);
+      expect((await refundsOf(shop, c.water)).map((r) => [r.amount_minor, r.method, r.undone]).sort((x, y) => String(x[1]).localeCompare(String(y[1])))).toEqual([[300, "card_at_desk", true], [400, "terminal", false]]);
+    });
+
+    it("the refund box stops while one waits on its product, and says why", async () => {
+      const b = await sold(shop);
+      await made(b, 300);
+      const one = await send("GET", refundUrl(shop, b.towel), shop.owner.cookies);
+      expect(JSON.parse(one.body)).toMatchObject({ block: "to_place", refundedInSquareMinor: 0 });
+      const all = await send("GET", `${refundUrl(shop, b.towel)}-all`, shop.owner.cookies);
+      expect(JSON.parse(all.body)).toMatchObject({ block: "to_place" });
+      expect(errorOf(await press(b, b.towel, 100))).toBe("card_refund_to_place");
+    });
+
+    it("whoever chooses is not named as giving the money back; Staff activity's line says who chose", async () => {
+      const b = await sold(shop);
+      await made(b, 300);
+      const [waiting] = await toPlace(b);
+      await place(b, waiting?.pressId ?? "", [{ saleId: b.towel, amountMinor: 300, restock: 0 }]);
+      const [row] = await sql<{ recorded_by: string | null }[]>`SELECT recorded_by FROM gym_sale_refunds WHERE gym_id = ${shop.id} AND sale_id = ${b.towel}`;
+      expect(row?.recorded_by).toBeNull();
+      const audit = await sql<{ action: string; actor_user_id: string | null }[]>`SELECT action, actor_user_id FROM audit_log WHERE gym_id = ${shop.id} AND target_id = ${waiting?.pressId ?? ""} AND action = 'org.sale_refund_placed'`;
+      expect(audit).toEqual([{ action: "org.sale_refund_placed", actor_user_id: shop.owner.userId }]);
+      expect((await line(b, b.towel)).refunds[0]?.square).toMatchObject({ shelfAsked: true });
+    });
+
+    it("chosen, then Square fails it: voided, and the shelf count comes off; written by itself, the same", async () => {
+      const b = await sold(shop);
+      const pending = square.refundInSquare(b.squarePaymentId, 100, "PENDING");
+      await message(shop.acct.merchantId, pending.id);
+      const [waiting] = await toPlace(b);
+      const stock = await stockOf(shop);
+      await place(b, waiting?.pressId ?? "", [{ saleId: b.water, amountMinor: 100, restock: 1 }]);
+      expect(await stockOf(shop)).toBe((stock ?? 0) + 1);
+      square.refundEnds(pending.id, "FAILED");
+      await message(shop.acct.merchantId, pending.id);
+      expect((await refundsOf(shop, b.water)).map((r) => [r.undone, r.void_reason])).toEqual([[true, "square_failed"]]);
+      expect(await stockOf(shop)).toBe(stock);
+
+      const c = await sold(shop);
+      const whole = square.refundInSquare(c.squarePaymentId, 1900, "PENDING");
+      await message(shop.acct.merchantId, whole.id);
+      expect((await refundsOf(shop, c.towel)).map((r) => r.undone)).toEqual([false]);
+      square.refundEnds(whole.id, "FAILED");
+      await message(shop.acct.merchantId, whole.id);
+      expect((await refundsOf(shop, c.towel)).map((r) => r.void_reason)).toEqual(["square_failed"]);
+    });
+
+    it("a card note on all of a sale over Square's refund is refused", async () => {
+      const b = await sold(shop);
+      await made(b, 400);
+      const [waiting] = await toPlace(b);
+      await place(b, waiting?.pressId ?? "", [{ saleId: b.water, amountMinor: 400, restock: 0 }]);
+      const res = await send("POST", `/v1/orgs/${shop.id}/register/sales/${b.towel}/refunds-all`, shop.owner.cookies, { requestKey: randomUUID(), totalMinor: 1500, method: "card_at_desk", reason: "returned", shelf: [] });
+      expect(res.statusCode).toBe(201);
+      const c = await sold(shop);
+      await made(c, 1800);
+      const [more] = await toPlace(c);
+      await place(c, more?.pressId ?? "", [{ saleId: c.water, amountMinor: 300, restock: 0 }, { saleId: c.towel, amountMinor: 1500, restock: 0 }]);
+      const refused = await send("POST", `/v1/orgs/${shop.id}/register/sales/${c.water}/refunds-all`, shop.owner.cookies, { requestKey: randomUUID(), totalMinor: 100, method: "card_at_desk", reason: "returned", shelf: [] });
+      expect(errorOf(refused)).toBe("refund_in_square");
+    });
+
+    it("a note made after one was crossed out stands beside Square's next refund", async () => {
+      const b = await sold(shop);
+      expect((await cardNote(b.towel, 500)).statusCode).toBe(201);
+      tick();
+      await made(b, 500);
+      tick();
+      expect((await cardNote(b.towel, 500)).statusCode).toBe(201);
+      tick();
+      await made(b, 500);
+      const standing = (await refundsOf(shop, b.towel)).filter((r) => !r.undone).map((r) => [r.method, r.amount_minor]).sort((x, y) => String(x[0]).localeCompare(String(y[0])));
+      expect(standing).toContainEqual(["card_at_desk", 500]);
+    });
+
+    it("We don't know on all of a sale: both products, and a note staff made is replaced", async () => {
+      const b = await sold(shop);
+      expect((await cardNote(b.towel, 1900 - 400)).statusCode).toBe(201);
+      tick();
+      const id = randomUUID();
+      await sql`
+        INSERT INTO gym_square_refunds (id, gym_id, sale_id, parts, environment, account_id, square_payment_id, amount_minor, currency, reason, request_key, state, outcome, started_by, started_at, checked_at, finished_at)
+        VALUES (${id}, ${shop.id}, ${b.water}, ${sql.json([{ saleId: b.water, amountMinor: 400, restock: 0 }, { saleId: b.towel, amountMinor: 1500, restock: 0 }])}, 'production', ${shop.acct.merchantId}, ${b.squarePaymentId}, 1900, 'USD', 'returned', ${randomUUID()}, 'done', 'lost', ${shop.owner.userId}, ${clock}, ${clock}, ${clock})`;
+      await made(b, 1900);
+      expect((await refundsOf(shop, b.water)).map((r) => [r.amount_minor, r.method])).toEqual([[400, "terminal"]]);
+      expect((await refundsOf(shop, b.towel)).filter((r) => !r.undone).map((r) => [r.amount_minor, r.method])).toEqual([[1500, "terminal"]]);
+    });
+
+    it("staff who may not sell cannot choose", async () => {
+      const b = await sold(shop);
+      await made(b, 300);
+      const [waiting] = await toPlace(b);
+      const staff = await signedIn("No Selling");
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${shop.id}, ${staff.userId}, 'trainer', ${["members.read"]})`;
+      expect((await place(b, waiting?.pressId ?? "", [{ saleId: b.towel, amountMinor: 300, restock: 0 }], staff)).statusCode).toBe(403);
+      expect(await refundsOf(shop, b.towel)).toHaveLength(0);
     });
   });
 

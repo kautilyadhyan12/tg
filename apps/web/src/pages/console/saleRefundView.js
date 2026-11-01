@@ -128,7 +128,7 @@ export function saleCardRefundWords(sale, who, check) {
   return {
     title: `Refund ${String(sale.quantity)} × ${sale.itemName} to the card`,
     detail: `Sold on ${shortDay(sale.soldOn)} ${to} for ${formatMinor(sale.totalMinor, sale.currency)}.${some} ${CARD_REFUND_WORDS.fee} ${CARD_REFUND_WORDS.days}`,
-    inSquare: check.refundedInSquareMinor > 0 ? `Square shows ${formatMinor(check.refundedInSquareMinor, sale.currency)} of this sale was already refunded there. Note that refund here so your records match.` : null,
+    inSquare: check.refundedInSquareMinor > 0 ? `Square shows ${formatMinor(check.refundedInSquareMinor, sale.currency)} of this sale was already refunded there. It will appear here by itself within the hour.` : null,
   };
 }
 
@@ -158,6 +158,64 @@ export function refundLineOption(sale) {
   return `${String(sale.quantity)} × ${sale.itemName} · ${formatMinor(refundableMinor(sale), sale.currency)} can be refunded`;
 }
 
+export const IN_SQUARE_STOCK_LINE = 'Square does not say whether this product came back. If it did, change its stock count.';
+export const IN_SQUARE_STOCK_ASK_LINE = 'Square does not say whether this product came back. If it did, ask the owner to change its stock count.';
+
+/** What is waiting on staff on a sale: refunds made in Square with no product said. */
+export const placeLines = (basket) => (basket?.lines ?? []).flatMap((line) => line.toPlace ?? []);
+
+/** Said on the sale, and on Overview: the money has gone, and which product is the one thing the app cannot know. */
+export const placeLine = (amountMinor, currency) => `Square refunded ${formatMinor(amountMinor, currency)} of this sale. Which product was it for? It counts in your reports once you choose.`;
+
+const roomOn = (press, line) => press.room.find((r) => r.saleId === line.id)?.minor ?? 0;
+
+/** The products that can take all of it on their own, by what the server says each can take. */
+export const placeChoices = (lines, press) => lines.filter((line) => roomOn(press, line) >= press.amountMinor);
+
+/** The products that can take some of it. */
+export const placeOpen = (lines, press) => lines.filter((line) => roomOn(press, line) > 0);
+
+/** A product as the box offers it. */
+export const placeOption = (line, press, lines) => {
+  const name = `${String(line.quantity)} × ${line.itemName}`;
+  return placeOverLine(lines, press) !== null ? name : `${name} · ${formatMinor(Math.min(roomOn(press, line), line.totalMinor), line.currency)} can be refunded`;
+};
+
+/** Said above the choices when Square refunded more than the sale can take: which product is all the box asks, so it says no amounts. The server gives every product Square's whole amount only then. */
+export const placeOverLine = (lines, press) => (lines.reduce((n, line) => n + refundableMinor(line), 0) < press.amountMinor && press.room.every((r) => r.minor === press.amountMinor) ? 'Square refunded more than is left on this sale. Choose the product it was for.' : null);
+
+export const SEVERAL = 'several';
+
+/** Why the Choose product box cannot be sent as it stands, or null; and the body it sends. */
+export function placeBody(lines, amountMinor, currency, draft) {
+  const shelf = (id) => Number(draft.shelf[id] ?? '0');
+  if (draft.pick !== SEVERAL) {
+    if (draft.pick === '') return { problem: 'Pick the product.', body: null };
+    return { problem: null, body: { parts: [{ saleId: draft.pick, amountMinor, restock: shelf(draft.pick) }] } };
+  }
+  const parts = [];
+  for (const line of lines) {
+    const typed = (draft.amounts[line.id] ?? '').trim();
+    if (typed === '') continue;
+    const minor = priceToMinor(typed, currency);
+    if (minor === null || minor < 0) return { problem: `Type the amount for ${line.itemName}, like 20 or 20.50.`, body: null };
+    if (minor > 0) parts.push({ saleId: line.id, amountMinor: minor, restock: shelf(line.id) });
+  }
+  const total = parts.reduce((n, p) => n + p.amountMinor, 0);
+  if (total !== amountMinor) return { problem: `The amounts must add up to ${formatMinor(amountMinor, currency)}. They add up to ${formatMinor(total, currency)}.`, body: null };
+  return { problem: null, body: { parts } };
+}
+
+/** Said in the sale's own place once it is chosen. */
+export function placedWords(lines, body, currency, receiptNumbers) {
+  const money = formatMinor(body.parts.reduce((n, p) => n + p.amountMinor, 0), currency);
+  const numbers = receiptNumbers.map((n) => `#${String(n)}`);
+  const receipts = numbers.length === 1 ? `Its receipt is ${numbers[0]}` : `Its receipts are ${numbers.join(', ')}`;
+  const [only] = body.parts;
+  const name = body.parts.length === 1 ? (lines.find((l) => l.id === only.saleId)?.itemName ?? 'that product') : `${String(body.parts.length)} products`;
+  return `The ${money} refund is now on ${name}. ${receipts}.`;
+}
+
 /** A sale's refunds, those that stand and those voided, in the order they were noted. `named`:
  *  the sale has several products, so each refund says which it was for (18q). */
 export function saleRefundLines(sale, named = false) {
@@ -169,7 +227,15 @@ export function saleRefundLines(sale, named = false) {
     // Sent to the card through Square: never voided here.
     toCard: r.method === 'terminal',
     note: r.square?.late === true ? CARD_REFUND_LATE_LINE : null,
-    detail: joined([
+    // Square cannot say whether the product came back.
+    stockNote: r.square?.inSquare === true && r.voided === null && sale.stockCounted === true && r.square.shelfAsked !== true && r.restocked === 0 && restockLeft(sale) > 0 ? IN_SQUARE_STOCK_LINE : null,
+    // Made inside Square: Square says neither why nor who.
+    detail: r.square?.inSquare === true ? joined([
+      named ? sale.itemName : null,
+      r.square.card === null ? 'Refunded in Square' : `Refunded in Square to ${cardName(r.square.card)}`,
+      shortDay(r.refundedOn),
+      r.restocked > 0 ? `${String(r.restocked)} back on the shelf` : null,
+    ]) : joined([
       named ? sale.itemName : null,
       r.square?.card === null || r.square?.card === undefined ? methodWords(r.method) : `${methodWords(r.method)}, ${cardName(r.square.card)}`,
       shortDay(r.refundedOn),
