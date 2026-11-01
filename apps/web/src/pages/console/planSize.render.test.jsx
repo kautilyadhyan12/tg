@@ -8,6 +8,10 @@ import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-li
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { attendanceDay, overview } from './__fixtures__/overview';
 
+// Dates that follow the calendar, so none of these tests expires.
+const NEXT_PAYMENT = new Date(Date.now() + 10 * 86_400_000).toISOString();
+const DECIDE_BY = new Date(Date.now() + 9 * 86_400_000).toISOString();
+
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
   return {
@@ -78,7 +82,7 @@ const TRAINER = { ...OWNER, staffRole: 'trainer', privileges: ['members.read', '
 
 const freeTrial = { status: 'trialing', trialEndsAt: TRIAL_END, seatCap: 100, planSeatCap: 100, priceLabel: null, currentPeriodEnd: null, cancelAtPeriodEnd: false, subscribed: false };
 const paidTrial = { status: 'trialing', trialEndsAt: TRIAL_END, seatCap: 200, priceLabel: '$79', currentPeriodEnd: TRIAL_END, cancelAtPeriodEnd: false, subscribed: true };
-const paying = { status: 'active', trialEndsAt: null, seatCap: 200, priceLabel: '$79', currentPeriodEnd: '2026-11-01T00:00:00.000Z', cancelAtPeriodEnd: false, subscribed: true };
+const paying = { status: 'active', trialEndsAt: null, seatCap: 200, priceLabel: '$79', currentPeriodEnd: NEXT_PAYMENT, cancelAtPeriodEnd: false, subscribed: true };
 const PLANS = [
   { code: 'org_b1_us_m', priceLabel: '$79', currency: 'USD', interval: 'month', seatCap: 200, fits: true },
   { code: 'org_b2_us_m', priceLabel: '$129', currency: 'USD', interval: 'month', seatCap: 500, fits: true },
@@ -206,15 +210,15 @@ describe('paying during the free trial', () => {
 });
 
 describe('Change size', () => {
-  const NEXT = trialEndDateLabel('2026-11-01T00:00:00.000Z');
+  const NEXT = trialEndDateLabel(NEXT_PAYMENT);
   const on1000 = { ...paying, seatCap: 1000, priceLabel: '$199' };
-  const waiting = { ...on1000, pendingSize: { seatCap: 500, priceLabel: '$129', from: '2026-11-01T00:00:00.000Z', decideAt: '2026-10-31T21:00:00.000Z', ifTooMany: null } };
+  const waiting = { ...on1000, pendingSize: { seatCap: 500, priceLabel: '$129', from: NEXT_PAYMENT, decideAt: DECIDE_BY, ifTooMany: null } };
   const rowOf = (list, text) => within(list).getByText(text).closest('li');
 
   it('heads the card with the size and price, lists every size with the gym’s own marked, and a bigger one changes once on Confirm', async () => {
     orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: paying }));
     orgService.previewSizeChange.mockResolvedValue({
-      data: { planCode: 'org_b2_us_m', seatCap: 500, priceLabel: '$129', dueNow: { totalLabel: '$53.52', subtotalLabel: '$49.15', taxLabel: '$4.37' }, nextPaymentAt: '2026-11-01T00:00:00.000Z' },
+      data: { planCode: 'org_b2_us_m', seatCap: 500, priceLabel: '$129', dueNow: { totalLabel: '$53.52', subtotalLabel: '$49.15', taxLabel: '$4.37' }, nextPaymentAt: NEXT_PAYMENT },
     });
     let answer;
     orgService.changeSize.mockImplementation(
@@ -292,7 +296,7 @@ describe('Change size', () => {
   it('a smaller size starts with the next payment, nothing charged, and the gym keeps its whole size until then', async () => {
     orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: on1000 }));
     orgService.previewSizeChange.mockResolvedValue({
-      data: { planCode: 'org_b2_us_m', seatCap: 500, priceLabel: '$129', dueNow: null, nextPaymentAt: '2026-11-01T00:00:00.000Z' },
+      data: { planCode: 'org_b2_us_m', seatCap: 500, priceLabel: '$129', dueNow: null, nextPaymentAt: NEXT_PAYMENT },
     });
     orgService.changeSize.mockResolvedValue({ data: { subscription: waiting } });
     renderOverview();
@@ -317,7 +321,7 @@ describe('Change size', () => {
   it('a smaller size the members do not fit may be chosen, and says how many to remove and by when, before and after Confirm', async () => {
     orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, seatsUsed: 620, subscription: on1000 }));
     orgService.previewSizeChange.mockResolvedValue({
-      data: { planCode: 'org_b2_us_m', seatCap: 500, priceLabel: '$129', dueNow: null, nextPaymentAt: '2026-11-01T00:00:00.000Z' },
+      data: { planCode: 'org_b2_us_m', seatCap: 500, priceLabel: '$129', dueNow: null, nextPaymentAt: NEXT_PAYMENT },
     });
     orgService.changeSize.mockResolvedValue({ data: { subscription: waiting } });
     renderOverview();
@@ -518,7 +522,7 @@ describe('Change size through Razorpay (1d-iii-a)', () => {
     { code: 'org_b1_in_m', priceLabel: '₹7,500', currency: 'INR', interval: 'month', seatCap: 200, fits: true },
     { code: 'org_b2_in_m', priceLabel: '₹12,500', currency: 'INR', interval: 'month', seatCap: 500, fits: true },
   ];
-  const NEXT = trialEndDateLabel('2026-11-01T00:00:00.000Z');
+  const NEXT = trialEndDateLabel(NEXT_PAYMENT);
   const WINDOW = {
     checkoutId: '44444444-4444-4444-4444-444444444444',
     provider: 'razorpay',
@@ -538,7 +542,7 @@ describe('Change size through Razorpay (1d-iii-a)', () => {
         seatCap: 500,
         priceLabel: '₹12,500',
         dueNow: { totalLabel: '₹2,500', subtotalLabel: '₹2,500', taxLabel: null },
-        nextPaymentAt: '2026-11-01T00:00:00.000Z',
+        nextPaymentAt: NEXT_PAYMENT,
       },
     });
     renderOverview();
@@ -615,10 +619,10 @@ describe('Change size through Razorpay (1d-iii-a)', () => {
     orgService.getMine.mockResolvedValue(mineIs({ ...INDIA, subscription: on500 }));
     orgService.getPlans.mockResolvedValue({ data: { plans: RUPEE_PLANS, payOnline: 'available' } });
     orgService.previewSizeChange.mockResolvedValue({
-      data: { planCode: 'org_b1_in_m', seatCap: 200, priceLabel: '₹7,500', dueNow: null, nextPaymentAt: '2026-11-01T00:00:00.000Z' },
+      data: { planCode: 'org_b1_in_m', seatCap: 200, priceLabel: '₹7,500', dueNow: null, nextPaymentAt: NEXT_PAYMENT },
     });
     orgService.startRazorpaySizeChange.mockResolvedValue({ data: { ...WINDOW, description: 'Monthly, up to 200 members' } });
-    const waiting = { ...on500, pendingSize: { seatCap: 200, priceLabel: '₹7,500', from: '2026-11-01T00:00:00.000Z', decideAt: '2026-10-31T21:00:00.000Z', ifTooMany: null } };
+    const waiting = { ...on500, pendingSize: { seatCap: 200, priceLabel: '₹7,500', from: NEXT_PAYMENT, decideAt: DECIDE_BY, ifTooMany: null } };
     orgService.syncCheckout.mockResolvedValueOnce({ data: { state: 'waiting' } }).mockResolvedValue({ data: { state: 'paid', subscription: waiting } });
     renderOverview();
     fireEvent.click(await screen.findByRole('button', { name: 'Change size' }));

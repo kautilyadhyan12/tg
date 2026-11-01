@@ -574,10 +574,12 @@ describe("a pack's label (33b-iii-c)", () => {
     await waitFor(() => { expect(screen.queryByText("Reading the label\u2026")).toBeNull(); });
     expect(screen.queryByText("Check the label")).toBeNull();
     // The scanner's own Modal, up from its page.
-    let scanner: { props: { onShow?: () => void }; parent: unknown } | null = screen.getByTestId("meal-photo") as unknown as { props: { onShow?: () => void }; parent: unknown };
-    while (scanner !== null && scanner.props.onShow === undefined) scanner = scanner.parent as typeof scanner;
+    type Node = { props: { onShow?: () => void }; parent: Node | null };
+    let scanner: Node | null = screen.getByTestId("meal-photo");
+    while (scanner !== null && scanner.props.onShow === undefined) scanner = scanner.parent;
+    const shown = scanner?.props.onShow;
     await act(async () => {
-      scanner?.props.onShow?.();
+      shown?.();
       await Promise.resolve();
     });
     expect(await screen.findByText("Check the label")).toBeTruthy();
