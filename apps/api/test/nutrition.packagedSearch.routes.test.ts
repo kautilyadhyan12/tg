@@ -185,15 +185,16 @@ d("the food search reads our own copy", () => {
     }
   });
 
-  it("a meal scan does not take numbers that do not add up, or that the lists disagree on: it keeps the photo's estimate", { timeout: 60_000 }, async () => {
+  it("a meal scan does not take numbers that do not add up, or that the lists disagree on: it is left for the person to name", { timeout: 60_000 }, async () => {
     const wrong = await addOff({ name: "Zqxten biscuit", kcal: 3.4, protein: 7, carbs: 77, fat: 12, scans: 40, fit: false });
     const apart = await addOff({ name: "Zqxeleven soup", kcal: 106, protein: 1, carbs: 1, fat: 1, scans: 40 });
     await sql`INSERT INTO usda_branded_products (code, name, kcal, protein_g, carbs_g, fat_g, numbers_fit, search_text) VALUES (${apart}, 'Zqxeleven soup', 18, 1, 1, 1, true, 'zqxeleven soup')`;
     evidence.now = {
       meal_name: "Plate",
       items: [
-        { name: "Zqxten biscuit", canonical_hint: "zqxten biscuit", count: null, grams: 50, kcal: 220, protein_g: 3, carbs_g: 35, fat_g: 7 },
-        { name: "Zqxeleven soup", canonical_hint: "zqxeleven soup", count: null, grams: 200, kcal: 120, protein_g: 5, carbs_g: 10, fat_g: 5 },
+        { name: "Banana", canonical_hint: "banana", count: 1, grams: null, kcal: null, protein_g: null, carbs_g: null, fat_g: null },
+        { name: "Zqxten biscuit", canonical_hint: "zqxten biscuit", count: null, grams: 50, kcal: null, protein_g: null, carbs_g: null, fat_g: null },
+        { name: "Zqxeleven soup", canonical_hint: "zqxeleven soup", count: null, grams: 200, kcal: null, protein_g: null, carbs_g: null, fat_g: null },
       ],
       unknown_items: [],
       photo_quality: "good",

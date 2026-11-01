@@ -134,7 +134,7 @@ describe("P2.6a nutrition pure pipeline", () => {
     await expect(reply(31).analyze("AA==", "image/jpeg")).rejects.toMatchObject({ message: "vision malformed evidence shape" });
   });
 
-  it("reads a label's serving as the grams it gives, by the pack or measure it names", async () => {
+  it("reads a label's serving as the grams it gives, by the pack or measure it names", () => {
     const labels: [string | undefined, number, string][] = [
       // The pack a label names is its unit, and the grams or millilitres beside it the serving.
       ["1 bottle (65 ml)", 65, "bottle"], ["1 can (250 ml)", 250, "can"], ["1 bar (68 g)", 68, "bar"],
