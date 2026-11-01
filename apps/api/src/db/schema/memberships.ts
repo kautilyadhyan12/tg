@@ -499,7 +499,7 @@ export const gymMemberRefunds = pgTable(
     check("gym_member_refunds_amount_check", sql`${t.amountMinor} BETWEEN 1 AND 99999999`),
     check("gym_member_refunds_currency_check", sql`${t.currency} ~ '^[A-Z]{3}$'`),
     check("gym_member_refunds_method_check", sql`${t.method} IN ('cash','upi','card_at_desk','bank_transfer','company','terminal')`),
-    check("gym_member_refunds_reason_check", sql`${t.reason} IN ('paid_twice','charged_too_much','leaving','other')`),
+    check("gym_member_refunds_reason_check", sql`${t.reason} IN ('paid_twice','charged_too_much','leaving','other','chargeback')`),
     foreignKey({
       name: "gym_member_refunds_payment_fk",
       columns: [t.gymId, t.paymentId],

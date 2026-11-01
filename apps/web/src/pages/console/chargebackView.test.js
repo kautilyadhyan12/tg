@@ -1,9 +1,42 @@
 // A chargeback's words (ROADMAP 18d-iv-e-i): every state and reason Square has, and those it has not told us about yet.
 import { describe, expect, it } from 'vitest';
 import { CHARGEBACK_REASONS, CHARGEBACK_STATES } from '@app/shared';
-import { CHARGEBACK_REASON_WORDS, chargebackLine, chargebackRowDetail, chargebacksHeadline } from './chargebackView';
+import { CHARGEBACK_REASON_WORDS, chargebackLine, chargebackRowDetail, chargebackStartBox, chargebacksHeadline } from './chargebackView';
 
 const c = (over = {}) => ({ id: 'x', amountMinor: 2000, currency: 'USD', state: 'EVIDENCE_REQUIRED', reason: 'NO_KNOWLEDGE', dueOn: '2026-11-14', duePassed: false, card: { brand: 'VISA', last4: '1111' }, stops: true, ...over });
+
+describe('a lost chargeback (18d-iv-e-ii-a)', () => {
+  const lost = { id: 'x', amountMinor: 2500, currency: 'USD', state: 'LOST', reason: 'DUPLICATE', dueOn: null, duePassed: false, card: { brand: 'VISA', last4: '1111' }, stops: true, chargesStartedOn: null };
+
+  it('stays stopped until staff start it, and offers that only on a member payment that is stopped', () => {
+    const line = chargebackLine(lost, true);
+    expect(line.detail).toBe('The cardholder says they were charged twice. Lost. The money went back to the card. Automatic charges stay stopped until you start them again.');
+    expect(line.canStart).toBe(true);
+    expect(chargebackLine({ ...lost, state: 'ACCEPTED' }, true).canStart).toBe(true);
+    expect(chargebackLine(lost, false).canStart).toBe(false);
+    expect(chargebackLine({ ...lost, state: 'EVIDENCE_REQUIRED' }, true).canStart).toBe(false);
+    expect(chargebackLine({ ...lost, state: 'WON', stops: false }, true).canStart).toBe(false);
+  });
+
+  it('says when they were started again, and no longer offers it', () => {
+    const line = chargebackLine({ ...lost, stops: false, chargesStartedOn: '2026-11-02' }, true);
+    expect(line.detail).toContain('Automatic charges started again on 2 November 2026.');
+    expect(line.canStart).toBe(false);
+  });
+
+  it('the box names who, and says so where nothing will be charged', () => {
+    const people = [{ name: 'Maya Patel', what: 'Gold Weekly' }];
+    const card = { brand: 'VISA', last4: '1111' };
+    const yes = chargebackStartBox({ people, card, otherStops: false });
+    expect(yes.lead).toBe('The app will charge Visa ending 1111 by itself again for:');
+    expect(yes.people).toEqual(['Maya Patel · Gold Weekly']);
+    expect(yes.note).toContain('A bill due in the last two days may be charged today.');
+    expect(chargebackStartBox({ people, card, otherStops: true }).lead).toContain('Another chargeback is still open');
+    expect(chargebackStartBox({ people, card, otherStops: true }).note).toBeNull();
+    expect(chargebackStartBox({ people, card: null, otherStops: false }).lead).toContain('No card is saved');
+    expect(chargebackStartBox({ people: [], card, otherStops: false }).lead).toContain('nothing will be charged');
+  });
+});
 
 describe('chargebackLine', () => {
   it('reads as gym staff should read it, with Square\'s date', () => {
@@ -13,6 +46,7 @@ describe('chargebackLine', () => {
       detail: 'The cardholder says they did not make this payment. Square may hold this money until the bank decides. Respond in Square by 14 November 2026.',
       button: 'Respond in Square',
       over: false,
+      canStart: false,
     });
   });
 
@@ -52,7 +86,7 @@ describe('chargebackLine', () => {
   it("says the card is not charged only where that is true", () => {
     const words = "The app won't charge this card by itself.";
     expect(chargebackLine(c(), true).detail).toContain(words);
-    expect(chargebackLine(c({ state: 'LOST' }), true).detail).toContain(words);
+    expect(chargebackLine(c({ state: 'LOST' }), true).detail).toContain('Automatic charges stay stopped until you start them again.');
     expect(chargebackLine(c()).detail).not.toContain(words);
     expect(chargebackLine(c({ state: 'WON', stops: false }), true).detail).not.toContain(words);
     expect(chargebackLine(c({ state: 'INQUIRY_CLOSED', stops: false }), true).detail).not.toContain(words);

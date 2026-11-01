@@ -20,7 +20,7 @@ import {
   memberRefundMethodSchema,
   memberPaymentMethodSchema,
   paymentVoidReasonSchema,
-  refundReasonSchema,
+  refundReasonKeptSchema,
   refundVoidKeptSchema,
   type BillCancelReason,
   type MemberBillStatus,
@@ -28,7 +28,7 @@ import {
   type MemberRefundMethod,
   type MemberPaymentMethod,
   type PaymentVoidReason,
-  type RefundReason,
+  type RefundReasonKept,
   type RefundVoidKept,
   type TaxApplied,
 } from "@app/shared";
@@ -240,7 +240,7 @@ export interface RefundRow {
   amountMinor: number;
   method: MemberRefundMethod;
   refundedOn: string;
-  reason: RefundReason;
+  reason: RefundReasonKept;
   by: string | null;
   receiptNumber: number;
   /** Sent to the card through Square (18d-iv-a): null for one noted by hand. */
@@ -301,7 +301,7 @@ export async function refundsFor(sql: Sql | TransactionSql, gymId: string, membe
     amountMinor: r.amount_minor,
     method: memberRefundMethodSchema.parse(r.method),
     refundedOn: r.refunded_on,
-    reason: refundReasonSchema.parse(r.reason),
+    reason: refundReasonKeptSchema.parse(r.reason),
     by: r.by,
     receiptNumber: r.receipt_number,
     square: squareOfRefund(r),
@@ -412,7 +412,7 @@ export async function voidedRefundsFor(sql: Sql | TransactionSql, gymId: string,
     amountMinor: r.amount_minor,
     method: memberRefundMethodSchema.parse(r.method),
     refundedOn: r.refunded_on,
-    reason: refundReasonSchema.parse(r.reason),
+    reason: refundReasonKeptSchema.parse(r.reason),
     by: r.by,
     receiptNumber: r.receipt_number,
     square: squareOfRefund(r),
@@ -557,7 +557,7 @@ export interface NewRefund {
   amountMinor: number;
   currency: string;
   method: MemberRefundMethod;
-  reason: RefundReason;
+  reason: RefundReasonKept;
   requestKey: string;
   /** The gym's own day. */
   refundedOn: string;

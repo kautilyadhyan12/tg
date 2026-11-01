@@ -24,6 +24,7 @@ import { openDueBills } from "../src/modules/orgs/memberships/billsRepo.js";
 import { pendingRetries, startCharge } from "../src/modules/orgs/payments/cardChargesRepo.js";
 import { chargesStoppedOf, writeDispute } from "../src/modules/orgs/payments/chargebacksRepo.js";
 import { squareSettings } from "../src/modules/orgs/payments/settings.js";
+import { readCollected } from "../src/modules/orgs/reports/repo.js";
 import { STAFF_LINES } from "../src/modules/orgs/staffActivity/words.js";
 import { processSquareWork } from "../src/modules/orgs/payments/work.js";
 import { keepSquareEvent } from "../src/modules/webhooks/repo.js";
@@ -659,6 +660,207 @@ d("A chargeback (real Postgres)", { timeout: T }, () => {
       });
       expect(start.statusCode, start.body).toBe(200);
       expect((await sql<{ status: string }[]>`SELECT status FROM gym_member_bills WHERE id = ${billId}`)[0]?.status).toBe("paid");
+    });
+  });
+
+  describe("a lost one (18d-iv-e-ii-a)", () => {
+    const lose = async (p: Paid, state = "LOST", over = {}) => {
+      const made = square.disputeInSquare(p.squarePaymentId, over);
+      await message(p.gym.acct.merchantId, made.id);
+      square.disputeMoves(made.id, state);
+      await message(p.gym.acct.merchantId, made.id, "dispute.state.updated");
+      return made;
+    };
+    const refundsOf = (paymentId: string) =>
+      sql<{ amount_minor: number; method: string; reason: string; recorded_by: string | null; undone_at: Date | null }[]>`
+        SELECT amount_minor, method, reason, recorded_by, undone_at FROM gym_member_refunds WHERE payment_id = ${paymentId}`;
+    const chargebackIdOf = async (squarePaymentId: string) => (await sql<{ id: string }[]>`SELECT id FROM gym_square_disputes WHERE square_payment_id = ${squarePaymentId}`)[0]?.id ?? "";
+    const startUrl = (g: Gym, id: string) => `/v1/orgs/${g.id}/chargebacks/${id}/start-charges`;
+    const billOf = async (p: Paid) => (await sql<{ status: string }[]>`SELECT status FROM gym_member_bills WHERE id = ${p.billId}`)[0]?.status;
+
+    it("THE WORST THING: the money goes off Maya's payment alone, once, however often Square says so, and she owes nothing", async () => {
+      const maya = await paidByCard(gym, "Lost Maya");
+      const ravi = await paidByCard(gym, "Lost Ravi");
+      const nina = await paidByCard(nextDoor, "Lost Nina");
+      const made = await lose(maya);
+      await message(gym.acct.merchantId, made.id, "dispute.state.updated");
+      await Promise.all([message(gym.acct.merchantId, made.id, "dispute.state.updated"), message(gym.acct.merchantId, made.id, "dispute.state.updated")]);
+      clock = new Date(clock.getTime() + 2 * 60 * 60_000);
+      await work();
+
+      expect(await refundsOf(maya.paymentId)).toEqual([{ amount_minor: 2500, method: "company", reason: "chargeback", recorded_by: null, undone_at: null }]);
+      expect(await refundsOf(ravi.paymentId)).toEqual([]);
+      expect(await refundsOf(nina.paymentId)).toEqual([]);
+      expect(await billOf(maya)).toBe("refunded");
+      expect(await billOf(ravi)).toBe("paid");
+
+      const shown = await paymentOnPage(maya);
+      expect(shown.refundableMinor).toBe(0);
+      expect(shown.refunds.map((r) => r.reason)).toEqual(["chargeback"]);
+      const notes = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.member_refund_chargeback' AND meta->>'entryId' = ${maya.entryId}`;
+      expect(notes[0]?.n).toBe(1);
+    });
+
+    it("THE WORST THING: losing never starts charges; only the press does, on that person alone, and the card is charged once", async () => {
+      const tara = await paidByCard(gym, "Lost Tara");
+      const other = await paidByCard(gym, "Lost Other");
+      const otherLost = await lose(other);
+      await lose(tara);
+      const billId = await nextWeekOpens(tara);
+      const otherBill = await nextWeekOpens(other);
+      await work();
+      expect(await chargesByTheApp(billId)).toEqual([]);
+
+      const id = await chargebackIdOf(tara.squarePaymentId);
+      const press = await send("POST", startUrl(gym, id), gym.owner.cookies);
+      expect(press.statusCode, press.body).toBe(204);
+      expect((await send("POST", startUrl(gym, id), gym.owner.cookies)).statusCode).toBe(204);
+      await Promise.all([work(), work()]);
+      await work();
+      expect(await chargesByTheApp(billId)).toHaveLength(1);
+      expect(await chargesByTheApp(otherBill), otherLost.id).toEqual([]);
+      const seen = (await paymentOnPage(tara)).chargebacks[0];
+      expect(seen?.stops).toBe(false);
+      expect(seen?.chargesStartedOn).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      const notes = await sql<{ actor_user_id: string | null }[]>`SELECT actor_user_id FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.chargeback_charges_started' AND meta->>'entryId' = ${tara.entryId}`;
+      expect(notes).toEqual([{ actor_user_id: gym.owner.userId }]);
+    });
+
+    it("started again weeks after a bill fell due: that old bill is never charged by itself, and says so", async () => {
+      const uma = await paidByCard(gym, "Lost Uma");
+      await lose(uma);
+      const billId = await nextWeekOpens(uma);
+      clock = new Date(clock.getTime() + 10 * 24 * 60 * 60_000);
+      expect((await send("POST", startUrl(gym, await chargebackIdOf(uma.squarePaymentId)), gym.owner.cookies)).statusCode).toBe(204);
+      await work();
+      expect(await chargesByTheApp(billId)).toEqual([]);
+      const page = await held(gym, gym.owner, uma.entryId);
+      expect(page.memberships.flatMap((m) => m.billing?.bills ?? []).find((b) => b.id === billId)?.chargeStop).toEqual({ kind: "missed", heldBy: null });
+    });
+
+    it("what staff already gave back is not counted twice", async () => {
+      const lee = await paidByCard(gym, "Lost Lee");
+      const noted = await send("POST", `${entryUrl(gym, lee.entryId)}/memberships/${lee.membershipId}/payments/${lee.paymentId}/refunds`, gym.owner.cookies, { requestKey: randomUUID(), amountMinor: 1000, method: "cash", reason: "other" });
+      expect(noted.statusCode, noted.body).toBe(200);
+      await lose(lee);
+      expect((await refundsOf(lee.paymentId)).map((r) => [r.amount_minor, r.reason]).sort()).toEqual([[1000, "other"], [1500, "chargeback"]]);
+      expect(await billOf(lee)).toBe("refunded");
+
+      const all = await paidByCard(gym, "Lost All");
+      const back = await send("POST", `${entryUrl(gym, all.entryId)}/memberships/${all.membershipId}/payments/${all.paymentId}/refunds`, gym.owner.cookies, { requestKey: randomUUID(), amountMinor: 2500, method: "cash", reason: "other" });
+      expect(back.statusCode, back.body).toBe(200);
+      await lose(all);
+      expect((await refundsOf(all.paymentId)).map((r) => r.reason)).toEqual(["other"]);
+      expect((await sql<{ at: Date | null }[]>`SELECT lost_written_at AS at FROM gym_square_disputes WHERE square_payment_id = ${all.squarePaymentId}`)[0]?.at).not.toBeNull();
+    });
+
+    it("part of a payment: only the amount the bank gave back, and the bill stays Paid", async () => {
+      const pam = await paidByCard(gym, "Lost Pam");
+      const made = square.disputeInSquare(pam.squarePaymentId);
+      made.amount_money = { amount: 700, currency: "USD" };
+      await message(gym.acct.merchantId, made.id);
+      square.disputeMoves(made.id, "ACCEPTED");
+      await message(gym.acct.merchantId, made.id, "dispute.state.updated");
+      expect((await refundsOf(pam.paymentId)).map((r) => r.amount_minor)).toEqual([700]);
+      expect(await billOf(pam)).toBe("paid");
+    });
+
+    it("it comes off Reports' Collected, on the gym's day", async () => {
+      const rae = await paidByCard(nextDoor, "Lost Rae");
+      const span = { from: "2000-01-01", to: "2100-01-01" };
+      const before = await readCollected(sql, nextDoor.id, "USD", span);
+      await lose(rae);
+      const after = await readCollected(sql, nextDoor.id, "USD", span);
+      expect(after.refundedMinor - before.refundedMinor).toBe(2500);
+      expect(after.paidMinor).toBe(before.paidMinor);
+    });
+
+    it("a fee: the same, and reads as a fee refunded", async () => {
+      const fay = await feePaid(gym, "Lost Fay");
+      await lose(fay);
+      expect((await refundsOf(fay.paymentId)).map((r) => [r.amount_minor, r.reason])).toEqual([[1000, "chargeback"]]);
+      expect((await feeOnPage(fay)).state).toBe("refunded");
+    });
+
+    it("a bill still part paid waits, and the next read writes it once it is settled", async () => {
+      const ned = await paidByCard(gym, "Lost Ned");
+      await sql`UPDATE gym_member_bills SET status = 'open' WHERE id = ${ned.billId}`;
+      const made = await lose(ned);
+      expect(await refundsOf(ned.paymentId)).toEqual([]);
+      await sql`UPDATE gym_member_bills SET status = 'paid' WHERE id = ${ned.billId}`;
+      await message(gym.acct.merchantId, made.id, "dispute.state.updated");
+      expect((await refundsOf(ned.paymentId)).map((r) => r.amount_minor)).toEqual([2500]);
+    });
+
+    it("staff cannot void it, and cannot note it again", async () => {
+      const vic = await paidByCard(gym, "Lost Vic");
+      await lose(vic);
+      const id = (await paymentOnPage(vic)).refunds[0]?.id ?? "";
+      const base = `${entryUrl(gym, vic.entryId)}/memberships/${vic.membershipId}/payments/${vic.paymentId}/refunds`;
+      expect((await send("POST", `${base}/${id}/void`, gym.owner.cookies, { reason: "mistake" })).statusCode).toBe(409);
+      expect((await send("POST", base, gym.owner.cookies, { requestKey: randomUUID(), amountMinor: 100, method: "cash", reason: "other" })).statusCode).toBe(409);
+      // Nobody can pick the reason.
+      const fake = await paidByCard(gym, "Lost Fake");
+      const picked = await send("POST", `${entryUrl(gym, fake.entryId)}/memberships/${fake.membershipId}/payments/${fake.paymentId}/refunds`, gym.owner.cookies, { requestKey: randomUUID(), amountMinor: 100, method: "cash", reason: "chargeback" });
+      expect(picked.statusCode).toBe(400);
+    });
+
+    it("the box names who will be charged, who pays, and another one still open; the press is refused on one not lost", async () => {
+      const kay = await paidByCard(gym, "Lost Kay");
+      const kid = await person(gym, "Lost Kid");
+      const today = (await held(gym, gym.owner, kid)).today;
+      const given = await send("POST", `${entryUrl(gym, kid)}/memberships`, gym.owner.cookies, { requestKey: randomUUID(), method: "cash", typeId: gym.typeId, startsOn: today, paid: true });
+      expect(given.statusCode, given.body).toBe(201);
+      await sql`INSERT INTO gym_member_payers (gym_id, entry_id, payer_entry_id) VALUES (${gym.id}, ${kid}, ${kay.entryId})`;
+      await lose(kay);
+      const id = await chargebackIdOf(kay.squarePaymentId);
+      const box = await send("GET", startUrl(gym, id), gym.owner.cookies);
+      expect(box.statusCode, box.body).toBe(200);
+      expect(JSON.parse(box.body)).toEqual({ people: [{ name: "Lost Kay", what: "Gold Weekly" }, { name: "Lost Kid", what: "Gold Weekly" }], card: { brand: "VISA", last4: "1111" }, otherStops: false });
+
+      const second = await paidByCard(gym, "Lost Second");
+      const open = square.disputeInSquare(second.squarePaymentId);
+      await message(gym.acct.merchantId, open.id);
+      const openId = await chargebackIdOf(second.squarePaymentId);
+      const refused = await send("POST", startUrl(gym, openId), gym.owner.cookies);
+      expect(refused.statusCode).toBe(409);
+      expect(JSON.parse(refused.body)).toMatchObject({ error: "chargeback_not_lost" });
+      expect((await sql<{ at: Date | null }[]>`SELECT charges_restarted_at AS at FROM gym_square_disputes WHERE id = ${openId}`)[0]?.at).toBeNull();
+
+      // Another one still open on the same payment.
+      await sql`UPDATE gym_square_disputes SET square_payment_id = ${second.squarePaymentId}, state = 'LOST' WHERE id = ${id}`;
+      const both = JSON.parse((await send("GET", startUrl(gym, id), gym.owner.cookies)).body) as { otherStops: boolean };
+      expect(both.otherStops).toBe(true);
+    });
+
+    it("a stranger, another gym and staff without the ticks are refused; a bad id is a 400", async () => {
+      const zed = await paidByCard(gym, "Lost Zed");
+      await lose(zed);
+      const id = await chargebackIdOf(zed.squarePaymentId);
+      const stranger = await signedIn("Lost Stranger");
+      for (const method of ["GET", "POST"] as const) {
+        expect((await send(method, startUrl(gym, id), {})).statusCode).toBe(401);
+        expect((await send(method, startUrl(gym, id), stranger.cookies)).statusCode).toBe(404);
+        expect((await send(method, startUrl(gym, id), nextDoor.owner.cookies)).statusCode).toBe(404);
+        // Its own gym's address with another gym's chargeback.
+        expect((await send(method, startUrl(nextDoor, id), nextDoor.owner.cookies)).statusCode).toBe(404);
+      }
+      const desk = await signedIn("Lost Desk");
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gym.id}, ${desk.userId}, 'trainer', ${["billing.members"]})`;
+      const trainer = await signedIn("Lost Trainer");
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gym.id}, ${trainer.userId}, 'trainer', ${["members.read", "members.confirm"]})`;
+      for (const who of [desk, trainer]) {
+        expect((await send("GET", startUrl(gym, id), who.cookies)).statusCode).toBe(403);
+        expect((await send("POST", startUrl(gym, id), who.cookies)).statusCode).toBe(403);
+      }
+      expect((await sql<{ at: Date | null }[]>`SELECT charges_restarted_at AS at FROM gym_square_disputes WHERE id = ${id}`)[0]?.at).toBeNull();
+      expect((await send("POST", `/v1/orgs/${gym.id}/chargebacks/nope/start-charges`, gym.owner.cookies)).statusCode).toBe(400);
+    });
+
+    it("Staff activity's words", () => {
+      const ctx = { about: "Maya", words: orgWords("gym"), currency: "USD" };
+      expect(STAFF_LINES["org.member_refund_chargeback"]?.({ ...ctx, meta: { amountMinor: "2500", currency: "USD", entryId: "x", brand: "VISA", last4: "1111" } })).toBe("$25.00 went back to Visa ending 1111 for Maya because a chargeback was lost");
+      expect(STAFF_LINES["org.chargeback_charges_started"]?.({ ...ctx, meta: { entryId: "x" } })).toBe("Automatic charges were started again for Maya after a lost chargeback");
     });
   });
 

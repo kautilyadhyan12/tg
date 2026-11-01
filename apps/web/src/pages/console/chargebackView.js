@@ -20,8 +20,10 @@ export const CHARGEBACK_REASON_WORDS = {
 
 const HOLD = 'Square may hold this money until the bank decides.';
 const STOPPED = "The app won't charge this card by itself.";
+const STOPPED_LOST = 'Automatic charges stay stopped until you start them again.';
 const OVER_IN_YOUR_FAVOUR = ['WON', 'INQUIRY_CLOSED'];
 const ASKING = ['EVIDENCE_REQUIRED', 'INQUIRY_EVIDENCE_REQUIRED'];
+const LOST = ['LOST', 'ACCEPTED'];
 
 const reasonOf = (c) => (c.reason === null || CHARGEBACK_REASON_WORDS[c.reason] === undefined ? null : `${CHARGEBACK_REASON_WORDS[c.reason]}.`);
 
@@ -51,6 +53,13 @@ function stateWords(c) {
   }
 }
 
+/** Whether the app charges this card by itself. */
+function chargesWords(c) {
+  if (c.chargesStartedOn !== null && c.chargesStartedOn !== undefined) return `Automatic charges started again on ${dayWords(c.chargesStartedOn)}.`;
+  if (!c.stops) return null;
+  return LOST.includes(c.state) ? STOPPED_LOST : STOPPED;
+}
+
 /** What a payment says of one chargeback. `member`: a member's payment, where the server says whether this stops the card being charged by itself. */
 export function chargebackLine(c, member = false) {
   const inquiry = c.state.startsWith('INQUIRY');
@@ -58,9 +67,10 @@ export function chargebackLine(c, member = false) {
   return {
     id: c.id,
     title: [inquiry ? 'Bank inquiry' : 'Chargeback', money, c.card === null ? null : cardName(c.card)].filter((part) => part !== null).join(' · '),
-    detail: [reasonOf(c), stateWords(c), member && c.stops ? STOPPED : null].filter((part) => part !== null).join(' '),
+    detail: [reasonOf(c), stateWords(c), member ? chargesWords(c) : null].filter((part) => part !== null).join(' '),
     button: ASKING.includes(c.state) && !c.duePassed ? 'Respond in Square' : 'Open in Square',
     over: OVER_IN_YOUR_FAVOUR.includes(c.state),
+    canStart: member && c.stops && LOST.includes(c.state),
   };
 }
 
@@ -73,6 +83,29 @@ export function chargeStopLine(stop) {
   if (stop.kind === 'behind') return 'Not charged automatically because the bill before it was paid late. Charge the card here, oldest first. Automatic charges carry on once the older bills are paid.';
   const whose = stop.heldBy === null ? 'a chargeback' : `a chargeback on ${stop.heldBy.name}'s payment`;
   return `Not charged automatically because of ${whose}. You can still charge the card here.`;
+}
+
+// The box before automatic charges start again.
+
+/** How many names the box shows before "and N more". */
+export const START_NAMES_SHOWN = 5;
+
+/** What the box says, from the server's preview: who will be charged, and who won't be and why. */
+export function chargebackStartBox(preview) {
+  const card = preview.card === null ? null : cardName(preview.card);
+  const people = preview.people.map((p) => (p.what === '' ? p.name : `${p.name} · ${p.what}`));
+  let lead;
+  if (people.length === 0) lead = 'Nobody has a renewing membership on this payer right now, so nothing will be charged.';
+  else if (preview.otherStops) lead = 'Another chargeback is still open for this person, so these stay stopped until it ends:';
+  else if (card === null) lead = 'No card is saved for the person who pays, so nothing is charged until one is saved. These would be charged:';
+  else lead = `The app will charge ${card} by itself again for:`;
+  return {
+    title: 'Start automatic charges again?',
+    lead,
+    people,
+    note: people.length === 0 || preview.otherStops || card === null ? null : 'A bill due in the last two days may be charged today. Older bills are not charged by themselves: charge them by hand, oldest first.',
+    button: 'Start automatic charges',
+  };
 }
 
 // Overview.

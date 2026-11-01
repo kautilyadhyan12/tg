@@ -9,8 +9,8 @@
 //
 // Square sends `dispute.created` and `dispute.state.updated`, and does not resend what it skipped, so each connection's chargebacks are
 // also read once an hour. A connection from before DISPUTES_READ cannot read them: the owner is told to reconnect.
-import { CHARGEBACKS_PAGE, MEMBER_FEE_WORDS, chargebackReasonSchema, chargebackStateSchema, chargebacksResponseSchema, type ChargebacksResponse, type SquareDispute } from "@app/shared";
-import { OrgsError, requirePrivilege } from "../service.js";
+import { CHARGEBACKS_PAGE, MEMBER_FEE_WORDS, chargebackReasonSchema, chargebackStartPreviewSchema, chargebackStateSchema, chargebacksResponseSchema, type ChargebackStartPreview, type ChargebacksResponse, type SquareDispute } from "@app/shared";
+import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import { BILLING } from "./cards.js";
 import { paymentHeldHere } from "./cardRefundsRepo.js";
 import * as repo from "./chargebacksRepo.js";
@@ -69,6 +69,7 @@ export async function takeInDispute(deps: PaymentsDeps, square: SquareSettings, 
     squareUpdatedAt: dispute.updated_at == null ? null : new Date(dispute.updated_at),
     now: deps.now(),
   });
+  await repo.settleLostChargeback(deps.sql, { gymId: conn.gymId, environment: square.environment, squareDisputeId: dispute.id, now: deps.now() });
   return "done";
 }
 
@@ -137,4 +138,24 @@ export async function readChargebacks(deps: PaymentsDeps, userId: string, gymId:
     needsReconnect: row?.state === "connected" && !row.scopes.includes(READ_SCOPE),
     canReconnect: gym.ownerUserId === userId,
   });
+}
+
+const NO_MEMBERS = "Starting automatic charges needs \"Keep the member list and invite\". Ask the owner to turn it on for you.";
+
+/** Who Start automatic charges again changes. It names people, so it needs the member-list tick too. */
+export async function readChargebackStart(deps: PaymentsDeps, userId: string, gymId: string, id: string): Promise<ChargebackStartPreview> {
+  const { privileges } = await requirePrivilege(deps, gymId, userId, BILLING);
+  if (!privileges.includes(MEMBERS)) throw new OrgsError(403, "forbidden", NO_MEMBERS);
+  const preview = await repo.chargebackStartPreview(deps.sql, gymId, id);
+  if (preview === null) throw new OrgsError(404, "chargeback_not_found", "That chargeback was not found.");
+  return chargebackStartPreviewSchema.parse(preview);
+}
+
+/** Start automatic charges again after a lost chargeback. */
+export async function startCharges(deps: PaymentsDeps, userId: string, gymId: string, id: string): Promise<void> {
+  const { privileges } = await requireWritablePrivilege(deps, gymId, userId, BILLING);
+  if (!privileges.includes(MEMBERS)) throw new OrgsError(403, "forbidden", NO_MEMBERS);
+  const outcome = await repo.startChargesAgain(deps.sql, gymId, id, userId, deps.now());
+  if (outcome === "not_found") throw new OrgsError(404, "chargeback_not_found", "That chargeback was not found.");
+  if (outcome === "not_lost") throw new OrgsError(409, "chargeback_not_lost", "Automatic charges can only be started here after a lost chargeback.");
 }

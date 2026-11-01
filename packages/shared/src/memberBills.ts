@@ -82,11 +82,17 @@ export const REFUND_REASONS = ["paid_twice", "charged_too_much", "leaving", "oth
 export const refundReasonSchema = z.enum(REFUND_REASONS);
 export type RefundReason = z.infer<typeof refundReasonSchema>;
 
-export const REFUND_REASON_WORDS: Readonly<Record<RefundReason, string>> = {
+/** The picked reasons, and `chargeback`: the bank gave the money back and the gym lost (18d-iv-e-ii-a). The app writes it; nobody picks it. */
+export const REFUND_REASONS_KEPT = [...REFUND_REASONS, "chargeback"] as const;
+export const refundReasonKeptSchema = z.enum(REFUND_REASONS_KEPT);
+export type RefundReasonKept = z.infer<typeof refundReasonKeptSchema>;
+
+export const REFUND_REASON_WORDS: Readonly<Record<RefundReasonKept, string>> = {
   paid_twice: "Paid twice",
   charged_too_much: "Charged too much",
   leaving: "Leaving or cancelled",
   other: "Something else",
+  chargeback: "Chargeback lost",
 };
 
 /** Why staff voided a payment (18o): picked, never typed. */
@@ -183,7 +189,7 @@ export const memberRefundSchema = z
     method: memberRefundMethodSchema,
     /** The gym's own day it was noted on. */
     refundedOn: daySchema,
-    reason: refundReasonSchema,
+    reason: refundReasonKeptSchema,
     by: z.string().nullable(),
     /** Its receipt's number, the gym's own (18g-i). */
     receiptNumber: receiptNumberSchema,

@@ -28,6 +28,7 @@ import {
   type MemberRefundMethod,
   type PaymentVoidReason,
   type RefundReason,
+  type RefundReasonKept,
   type RefundVoidReason,
 } from "@app/shared";
 import { dayInTz } from "../../gamification/streak.js";
@@ -519,11 +520,11 @@ export async function writeRefund(
     amountMinor: number;
     currency: string;
     method: MemberRefundMethod;
-    reason: RefundReason;
+    reason: RefundReasonKept;
     today: string;
     actorUserId: string | null;
     now: Date;
-    action: "org.member_refund_noted" | "org.member_refund_sent" | "org.member_refund_in_square";
+    action: "org.member_refund_noted" | "org.member_refund_sent" | "org.member_refund_in_square" | "org.member_refund_chargeback";
     /** The card it went back to, for the gym's record. */
     card: { brand: string; last4: string } | null;
   },
