@@ -21,6 +21,7 @@ import { useSession } from "../../session/SessionProvider";
 import { CopyContext } from "../ThisCopy";
 import { CommentsBox, useKeptComments } from "./Comments";
 import { hasKeptWords } from "./commentsView";
+import { ChallengesPage } from "./Challenges";
 import { PersonProfile, type ProfilePerson } from "./PersonProfile";
 import { AskSheet, BlockedSheet, PhotoViewer, PostCard, phoneZone, type Asking } from "./PostCard";
 import { hasWork } from "./postDraft";
@@ -113,6 +114,8 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
   const [viewing, setViewing] = useState<{ post: GymPost; index: number } | null>(null);
   const [blockedOpen, setBlockedOpen] = useState(false);
   const [person, setPerson] = useState<ProfilePerson | null>(null);
+  // The challenge opened from a result's post, over this page.
+  const [challengeId, setChallengeId] = useState<string | null>(null);
   // The photos, read signed in; each read of the page asks again for any that did not come.
   const [files] = useState(() => photoFiles(session));
   const [photoRound, setPhotoRound] = useState(0);
@@ -356,6 +359,7 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
               onPhoto={(index) => {
                 setViewing({ post, index });
               }}
+              onChallenge={setChallengeId}
               {...(canOpenPerson(post)
                 ? {
                     onPerson: () => {
@@ -520,6 +524,16 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
           setBlockedOpen(false);
         }}
         onUnblocked={() => void load(true)}
+      />
+      <ChallengesPage
+        place={challengeId === null ? null : place}
+        openId={challengeId}
+        onClose={() => {
+          setChallengeId(null);
+          // A hide or a name changed there changes who a result names here.
+          void load(true);
+        }}
+        onChanged={() => void load(true)}
       />
       <PersonProfile
         place={place}
