@@ -1310,6 +1310,13 @@
       "when": 1790726400187,
       "tag": "0187_chargebacks",
       "breakpoints": true
+    },
+    {
+      "idx": 187,
+      "version": "7",
+      "when": 1790726400188,
+      "tag": "0188_post_photo_count",
+      "breakpoints": true
     }
   ]
 }

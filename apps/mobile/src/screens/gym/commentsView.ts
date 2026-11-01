@@ -1,4 +1,5 @@
 import {
+  GYM_POST_COMMENT_COUNT_MOST,
   GYM_POST_COMMENT_DRAFTS_MOST,
   GYM_POST_COMMENT_MAX_CHARS,
   GYM_POST_COMMENT_REPORT_REASONS,
@@ -30,6 +31,7 @@ export const commentRemovePath = onePath;
 export function commentButton(count: number, kept: boolean): { label: string; say: string } {
   if (kept) return { label: "Finish your comment", say: "Finish your comment" };
   if (count === 0) return { label: "Comment", say: "Comment on this post" };
+  if (count >= GYM_POST_COMMENT_COUNT_MOST) return { label: `${String(GYM_POST_COMMENT_COUNT_MOST - 1)}+`, say: `More than ${String(GYM_POST_COMMENT_COUNT_MOST - 1)} comments. Read or write a comment` };
   return { label: count.toLocaleString("en"), say: count === 1 ? "1 comment. Read or write a comment" : `${count.toLocaleString("en")} comments. Read or write a comment` };
 }
 
@@ -122,6 +124,8 @@ export interface KeptComment {
   replyTo: { id: string; name: string } | null;
   sent?: boolean;
   changed?: boolean;
+  /** The post it is on has gone. */
+  postGone?: boolean;
 }
 export type KeptComments = Readonly<Record<string, KeptComment | undefined>>;
 
@@ -140,24 +144,35 @@ export function readCommentDrafts(text: string | null): KeptComments {
   if (!parsed.success) return {};
   const kept: Record<string, KeptComment> = {};
   for (const [postId, d] of Object.entries(parsed.data.drafts)) {
-    kept[postId] = { commentKey: d.commentKey, body: d.body, replyTo: d.replyTo, ...(d.sent === undefined ? {} : { sent: d.sent }), ...(d.changed === undefined ? {} : { changed: d.changed }) };
+    kept[postId] = { commentKey: d.commentKey, body: d.body, replyTo: d.replyTo, ...(d.sent === undefined ? {} : { sent: d.sent }), ...(d.changed === undefined ? {} : { changed: d.changed }), ...(d.postGone === undefined ? {} : { postGone: d.postGone }) };
   }
   return kept;
 }
 
-/** The kept comments with one changed: one with no words and nobody to answer is not kept. The newest stay when there are too many. */
+/** The kept comments with one changed: one with no words and nobody to answer is not kept. When there are too many, those
+ *  on posts that have gone leave first, then the oldest. */
 export function withKept(drafts: KeptComments, postId: string, next: KeptComment | null): KeptComments {
   const rest = Object.entries(drafts).filter(([id, d]) => id !== postId && d !== undefined);
   if (next === null || (next.body === "" && next.replyTo === null)) return Object.fromEntries(rest);
-  return Object.fromEntries([...rest.slice(-(GYM_POST_COMMENT_DRAFTS_MOST - 1)), [postId, next]]);
+  const over = rest.length - (GYM_POST_COMMENT_DRAFTS_MOST - 1);
+  const goneFirst = [...rest.filter(([, d]) => d?.postGone === true), ...rest.filter(([, d]) => d?.postGone !== true)];
+  const leaving = new Set(goneFirst.slice(0, Math.max(0, over)).map(([id]) => id));
+  return Object.fromEntries([...rest.filter(([id]) => !leaving.has(id)), [postId, next]]);
 }
+
+/** Whether a new kept comment on this post pushes out one that could still be sent. */
+export function dropsAKeptComment(drafts: KeptComments, postId: string): boolean {
+  const rest = Object.entries(drafts).filter(([id, d]) => id !== postId && d !== undefined);
+  return rest.length >= GYM_POST_COMMENT_DRAFTS_MOST && !rest.some(([, d]) => d?.postGone === true);
+}
+
+export const KEPT_COMMENTS_FULL = `The phone keeps ${String(GYM_POST_COMMENT_DRAFTS_MOST)} unsent comments, so your oldest one was dropped.`;
 
 /** Whether a post has words waiting to be sent. Pressing Reply and typing nothing is not one. */
 export const hasKeptWords = (draft: KeptComment | undefined): boolean => draft !== undefined && draft.body !== "";
 
-/** Said once a comment is up. Only the server knows whether a send whose answer was lost reached it. */
-export const commentedWords = ({ firstKept, changed }: { firstKept: boolean; changed: boolean }): string | null =>
-  !firstKept && changed ? "Your comment is up. Your latest changes may not be on it." : null;
+/** Said when a send whose answer was lost turns out to have made the comment, and they have changed it since: those words are still theirs. */
+export const FIRST_COMMENT_UP = "Your first version is up. Press Send to post this one as well.";
 
 /** What a comment reads when what it answered has gone: its key is spent only if it was kept, so it gets a new one. */
 export const REPLY_TARGET_GONE = "The comment you were replying to has been removed. Your words are kept: press Send to post them as a new comment.";

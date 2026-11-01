@@ -159,6 +159,10 @@ export type {
 export const orgParamsSchema = z.object({ gymId: z.string().uuid() }).strict();
 export type OrgParams = z.infer<typeof orgParamsSchema>;
 
+const gymInPathSchema = z.object({ gymId: z.string().uuid() });
+/** The gym named in a route's address, whatever else the address names: for a limit counted a gym at a time. */
+export const gymInPath = (req: { params: unknown }): string | null => gymInPathSchema.safeParse(req.params).data?.gymId ?? null;
+
 /** A gym and one of its uploads, together. BOTH ids are always read together
  *  and handed on together (§9.9: "Every id is fetched with its gym in the
  *  `WHERE`"), which is why there is no shape here that carries an upload id

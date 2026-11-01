@@ -1,9 +1,10 @@
-import { GYM_POST_COMMENT_MAX_CHARS, GYM_POST_COMMENT_REPORTS_TO_HIDE, hasCommentWords, postLength } from '@app/shared';
+import { GYM_POST_COMMENT_COUNT_MOST, GYM_POST_COMMENT_MAX_CHARS, GYM_POST_COMMENT_REPORTS_TO_HIDE, hasCommentWords, postLength } from '@app/shared';
 
 // COMMENTS IN THE CONSOLE, IN WORDS (ROADMAP Stage 5 17e-ii; spec Part 3 §15.2).
 
 /** The button on a post that opens its comments. */
 export function commentsButton(count) {
+  if (count >= GYM_POST_COMMENT_COUNT_MOST) return `Comments (${GYM_POST_COMMENT_COUNT_MOST - 1}+)`;
   return count === 0 ? 'Comments' : `Comments (${count.toLocaleString('en')})`;
 }
 

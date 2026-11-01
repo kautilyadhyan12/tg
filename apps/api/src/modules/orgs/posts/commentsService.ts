@@ -9,7 +9,9 @@ import type { Sql, TransactionSql } from "postgres";
 import {
   GYM_MEMBER_COMMENTS_A_DAY,
   GYM_POST_COMMENTS_PAGE,
+  DISGUISED_WORDS,
   GYM_POST_COMMENT_WORDS,
+  hasDisguisedWords,
   GYM_POST_REACTIONS,
   GYM_POST_WORDS,
   gymPostCommentSchema,
@@ -157,13 +159,13 @@ async function refuseFullDay(sql: Sql | TransactionSql, gymId: string, userId: s
 
 const keyTaken = (): OrgsError => new OrgsError(409, "comment_key_taken", "Please try sending your comment again.");
 
-/** The comment this member already made under this key, or null. Somebody else's key is not
- *  theirs to read back, and one removed since says so. */
-async function ownByKey(deps: CommentsDeps, gymId: string, userId: string, commentKey: string): Promise<GymPostComment | null> {
+/** The comment this member already made under this key on this post, or null. Somebody else's key, or
+ *  one spent on another post, is not theirs to read back, and one removed since says so. */
+async function ownByKey(deps: CommentsDeps, gymId: string, userId: string, postId: string, commentKey: string): Promise<GymPostComment | null> {
   const kept = await repo.commentByKey(deps.sql, gymId, commentKey);
   if (kept === null) return null;
-  if (!kept.byMember || kept.authorId !== userId) throw keyTaken();
-  const row = kept.removed ? null : await repo.commentById(deps.sql, gymId, kept.id, { member: userId });
+  if (!kept.byMember || kept.authorId !== userId || kept.postId !== postId) throw keyTaken();
+  const row = kept.removed ? null : await repo.ownComment(deps.sql, gymId, kept.id, userId);
   if (row === null) throw commentNotFound();
   const [comment] = await shaped(deps, gymId, [row], userId);
   if (comment === undefined) throw commentNotFound();
@@ -184,9 +186,10 @@ async function placeOf(deps: CommentsDeps, gymId: string, postId: string, userId
  *  hours, counted with the person's membership held so two sent at once are counted in turn. */
 export async function addComment(deps: CommentsDeps, userId: string, gymId: string, postId: string, body: AddGymPostCommentRequest): Promise<{ comment: GymPostComment; firstKept: boolean }> {
   const gymName = await requireMember(deps, gymId, userId);
-  const kept = await ownByKey(deps, gymId, userId, body.commentKey);
+  const kept = await ownByKey(deps, gymId, userId, postId, body.commentKey);
   if (kept !== null) return { comment: kept, firstKept: false };
   refuseCommenting(await repo.commentingOf(deps.sql, gymId, userId), gymName);
+  if (hasDisguisedWords(body.body)) throw new OrgsError(400, "comment_disguised", DISGUISED_WORDS);
   const words = badWordsIn(body.body);
   if (words.length > 0) throw new OrgsError(400, "comment_bad_words", GYM_POST_COMMENT_WORDS.bad_words(words));
   const at = deps.now();
@@ -202,11 +205,11 @@ export async function addComment(deps: CommentsDeps, userId: string, gymId: stri
   });
   if (made === "gone") throw place.parentId === null ? postNotFound() : commentNotFound();
   if (made === "taken") {
-    const first = await ownByKey(deps, gymId, userId, body.commentKey);
+    const first = await ownByKey(deps, gymId, userId, postId, body.commentKey);
     if (first === null) throw commentNotFound();
     return { comment: first, firstKept: false };
   }
-  const row = await repo.commentById(deps.sql, gymId, id, { member: userId });
+  const row = await repo.ownComment(deps.sql, gymId, id, userId);
   if (row === null) throw commentNotFound();
   const [comment] = await shaped(deps, gymId, [row], userId);
   if (comment === undefined) throw commentNotFound();
@@ -232,8 +235,9 @@ export async function reactToComment(deps: CommentsDeps, userId: string, gymId: 
   if (reaction === null) {
     await repo.clearReaction(deps.sql, gymId, commentId, userId);
   } else if (!(await repo.setReaction(deps.sql, gymId, commentId, userId, reaction, deps.now()))) throw commentNotFound();
-  const counts = await repo.reactionCounts(deps.sql, gymId, [commentId], userId);
-  return reactToGymPostCommentResponseSchema.parse({ reactions: countsOf(counts, commentId), mine: reaction });
+  // Both from one moment: with several changes at once, what was asked may not be what the server holds.
+  const [counts, mine] = await deps.sql.begin("isolation level repeatable read read only", async (tx) => [await repo.reactionCounts(tx, gymId, [commentId], userId), await repo.reactionsOf(tx, gymId, [commentId], userId)] as const);
+  return reactToGymPostCommentResponseSchema.parse({ reactions: countsOf(counts, commentId), mine: mine.get(commentId) ?? null });
 }
 
 /** A member reports a comment, once. Nothing is written about who reported except the report itself. */

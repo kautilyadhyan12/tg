@@ -4,7 +4,7 @@
 // list and names who it answers. Words only. One reaction a person each, Report, Block and Remove
 // work as on a post. A member writes up to 100 a day (Kd, 2026-10-30, `rulings/2026-10-30-17b.md`).
 import { z } from "zod";
-import { postLength } from "./postBasics.js";
+import { DISGUISED_WORDS, hasCommentWords, hasDisguisedWords, postLength } from "./postBasics.js";
 import { GYM_POST_REPORTS_SHOWN, GYM_POST_REPORT_NOTES_SHOWN, gymMemberPostingSchema, gymPostReactionSchema, postsCursor, reactionCountsSchema, reportNote } from "./posts.js";
 
 /** The words of one comment or reply, by `postLength`. */
@@ -66,12 +66,7 @@ export const gymPostCommentsResponseSchema = z
   .strict();
 export type GymPostCommentsResponse = z.infer<typeof gymPostCommentsResponseSchema>;
 
-/** Characters that draw nothing: space aside, these alone would show as a blank comment. Named one by one, since the
- *  phone's engine shares this file. */
-const DRAWS_NOTHING = /[\u00AD\u0600-\u0605\u061C\u06DD\u070F\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u206F\u2800\u3164\uFE00-\uFE0F\uFEFF\uFFA0\u{E0000}-\u{E007F}]/gu;
-
-/** Whether anything would show. */
-export const hasCommentWords = (text: string): boolean => text.replace(DRAWS_NOTHING, "").trim() !== "";
+export { DISGUISED_WORDS, hasCommentWords, hasDisguisedWords };
 
 const commentWords = z
   .string()
@@ -168,6 +163,10 @@ export const gymPostCommentSettingsSchema = z.object({ membersCanComment: z.bool
 /** The most comments the phone keeps unsent for one person at one place, one a post. */
 export const GYM_POST_COMMENT_DRAFTS_MOST = 50;
 
+/** A post's count of comments stops here on a page of posts: past it the screen says "99+", and each read stays cheap
+ *  however crowded a post is. */
+export const GYM_POST_COMMENT_COUNT_MOST = 100;
+
 /** Comments not yet on the server, as the phone keeps them, by post (ROADMAP Stage 5 17e). */
 export const gymPostCommentDraftsFileSchema = z
   .object({
@@ -183,6 +182,8 @@ export const gymPostCommentDraftsFileSchema = z
           sent: z.boolean().optional(),
           /** And it has been changed since. */
           changed: z.boolean().optional(),
+          /** The post it is on has gone. */
+          postGone: z.boolean().optional(),
         })
         .strict(),
     ),

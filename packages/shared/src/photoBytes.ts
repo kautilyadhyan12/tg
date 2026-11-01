@@ -287,6 +287,13 @@ const WEBP_KEPT = new Set(["VP8 ", "VP8L", "VP8X", "ALPH", "ICCP", "ANIM", "ANMF
 const VP8X_EXIF = 0x08;
 const VP8X_XMP = 0x04;
 
+/** An animation's frame must lie inside the picture its file says it is. */
+function refuseFrameOutside(data: Uint8Array, canvas: { width: number; height: number }): void {
+  const x = u24le(data, 0) * 2;
+  const y = u24le(data, 3) * 2;
+  if (x + u24le(data, 6) + 1 > canvas.width || y + u24le(data, 9) + 1 > canvas.height) throw new Damaged();
+}
+
 function webpSize(type: string, data: Uint8Array): { width: number; height: number } {
   if (type === "VP8X") return { width: u24le(data, 4) + 1, height: u24le(data, 7) + 1 };
   if (type === "VP8L") {
@@ -301,13 +308,14 @@ function webpSize(type: string, data: Uint8Array): { width: number; height: numb
   throw new Damaged();
 }
 
-function cleanWebp(b: Uint8Array): { width: number; height: number; bytes: Uint8Array } {
+function cleanWebp(b: Uint8Array): { width: number; height: number; bytes: Uint8Array; moving: boolean } {
   const riffEnd = 8 + u32le(b, 4);
   if (riffEnd > b.length) throw new Damaged();
   const chunks: Uint8Array[] = [];
   let at = 12;
   let size: { width: number; height: number } | null = null;
   let hasPicture = false;
+  let moving = false;
   let blocks = 0;
   while (at < riffEnd) {
     blocks += 1;
@@ -320,6 +328,15 @@ function cleanWebp(b: Uint8Array): { width: number; height: number; bytes: Uint8
     if (size === null) {
       if (type !== "VP8X" && type !== "VP8L" && type !== "VP8 ") throw new Damaged();
       size = webpSize(type, chunk.subarray(8));
+    }
+    // The size every reader is told is the one the picture has: the first block's word is not taken for it.
+    if (type === "VP8 " || type === "VP8L") {
+      const frame = webpSize(type, chunk.subarray(8));
+      if (frame.width !== size.width || frame.height !== size.height) throw new Damaged();
+    }
+    if (type === "ANMF") {
+      refuseFrameOutside(chunk.subarray(8), size);
+      moving = true;
     }
     if (!WEBP_KEPT.has(type)) continue;
     // A colour profile has the profile's own mark; a block that only has its name goes.
@@ -340,7 +357,7 @@ function cleanWebp(b: Uint8Array): { width: number; height: number; bytes: Uint8
   const riffSize = 4 + body.length;
   header.set([riffSize & 0xff, (riffSize >>> 8) & 0xff, (riffSize >>> 16) & 0xff, (riffSize >>> 24) & 0xff], 4);
   header.set([0x57, 0x45, 0x42, 0x50], 8); // "WEBP"
-  return { ...size, bytes: join([header, body]) };
+  return { ...size, bytes: join([header, body]), moving };
 }
 
 // ── THE ONE ENTRY ───────────────────────────────────────────────────────────
@@ -352,21 +369,30 @@ function typeOf(b: Uint8Array): GymPagePhotoType | null {
   return null;
 }
 
-/** The photo as it will be kept and shown, or why it cannot be. `maxBytes` is the gym
- *  page's unless said; a post's photo has a smaller one. */
-export function cleanPhoto(input: Uint8Array, maxBytes: number = GYM_PAGE_PHOTO_MAX_BYTES): PhotoReading {
+/** What a post's photo may be beyond the gym page's: the side the browser sends, and it stays still. */
+export interface PhotoLimits {
+  maxBytes?: number;
+  maxSide?: number;
+  still?: boolean;
+}
+
+/** The photo as it will be kept and shown, or why it cannot be. The limits are the gym
+ *  page's unless said; a post's photo has smaller ones. */
+export function cleanPhoto(input: Uint8Array, limits: PhotoLimits = {}): PhotoReading {
+  const { maxBytes = GYM_PAGE_PHOTO_MAX_BYTES, maxSide = GYM_PAGE_PHOTO_MAX_SIDE, still = false } = limits;
   if (input.length > maxBytes) return { ok: false, problem: "too_big" };
   const type = typeOf(input);
   if (type === null) return { ok: false, problem: "not_a_photo" };
-  let cleaned: { width: number; height: number; bytes: Uint8Array };
+  let cleaned: { width: number; height: number; bytes: Uint8Array; moving?: boolean };
   try {
     cleaned = type === "image/jpeg" ? cleanJpeg(input) : type === "image/png" ? cleanPng(input) : cleanWebp(input);
   } catch (err) {
     if (err instanceof Damaged || err instanceof RangeError) return { ok: false, problem: "damaged" };
     throw err;
   }
+  if (still && cleaned.moving === true) return { ok: false, problem: "damaged" };
   const { width, height } = cleaned;
-  if (width > GYM_PAGE_PHOTO_MAX_SIDE || height > GYM_PAGE_PHOTO_MAX_SIDE || width * height > GYM_PAGE_PHOTO_MAX_PIXELS) {
+  if (width > maxSide || height > maxSide || width * height > GYM_PAGE_PHOTO_MAX_PIXELS) {
     return { ok: false, problem: "too_many_pixels" };
   }
   return { ok: true, type, width, height, bytes: cleaned.bytes };

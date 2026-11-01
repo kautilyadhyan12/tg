@@ -134,18 +134,10 @@ export async function buildUserExport(deps: ExportDeps, userId: string): Promise
 
   // The posts the person made as a member of a gym: theirs, though the table also holds
   // the gym's own posts and so is not on the delete list as a whole (tables.ts).
-  const posts = await selectExportMemberPosts(deps.sql, userId);
-  data["gym_posts"] = posts.rows;
-  if (posts.total > posts.rows.length) {
-    truncated["gym_posts"] = { returned: posts.rows.length, total: posts.total };
-  }
+  data["gym_posts"] = await selectExportMemberPosts(deps.sql, userId);
 
   // The same for the comments and replies they wrote as a member.
-  const comments = await selectExportMemberComments(deps.sql, userId);
-  data["gym_post_comments"] = comments.rows;
-  if (comments.total > comments.rows.length) {
-    truncated["gym_post_comments"] = { returned: comments.rows.length, total: comments.total };
-  }
+  data["gym_post_comments"] = await selectExportMemberComments(deps.sql, userId);
 
   return {
     exportedAt: (deps.now?.() ?? new Date()).toISOString(),

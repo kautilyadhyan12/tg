@@ -424,12 +424,12 @@ d("a gym's Updates (real Postgres, real disk)", () => {
     expect(await rowsOf("gym_posts", gym.id)).toBe(0);
     expect(await filesOf(gym.id)).toEqual([]);
     // The reader itself refuses it for a post and still takes it for a gym page.
-    expect(cleanPhoto(new Uint8Array(over), MB)).toEqual({ ok: false, problem: "too_big" });
+    expect(cleanPhoto(new Uint8Array(over), { maxBytes: MB })).toEqual({ ok: false, problem: "too_big" });
     expect(cleanPhoto(new Uint8Array(over)).ok).toBe(true);
     // The phone photos kept as fixtures come out of a post's reader as they do the gym page's: taken, the same bytes, the same turn.
     for (const name of ["iphone16.jpg", "samsung-a56-meta.jpg", "pixel7-meta.jpg"]) {
       const bytes = new Uint8Array(readFileSync(new URL(`./fixtures/photos/${name}`, import.meta.url)));
-      const read = cleanPhoto(bytes, MB);
+      const read = cleanPhoto(bytes, { maxBytes: MB });
       expect(read.ok, name).toBe(true);
       expect(read, name).toEqual(cleanPhoto(bytes));
     }

@@ -172,7 +172,7 @@ export function registerNutritionRoutes(
     const bytes = Buffer.from(input.imageBase64, "base64");
     // Rebuilt from the parts that draw the picture before the scanner sees it: whatever a client
     // sent, no place or time it was taken goes on to OpenAI (ROADMAP Stage 5 33b-i).
-    const cleaned = bytes.length < 1000 || !validMagic(bytes, input.mimeType) ? null : cleanPhoto(bytes, MEAL_PHOTO_MAX_BYTES);
+    const cleaned = bytes.length < 1000 || !validMagic(bytes, input.mimeType) ? null : cleanPhoto(bytes, { maxBytes: MEAL_PHOTO_MAX_BYTES });
     if (cleaned === null || !cleaned.ok) {
       // A photo too large is told its limit; one that cannot be read, or is too many pixels, says so.
       const tooBig = cleaned === null || cleaned.problem === "too_big" || cleaned.problem === "not_a_photo";

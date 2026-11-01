@@ -544,19 +544,25 @@ export async function setJoined(
   const read = await forMember(deps, gymId, userId);
   if (!(await limit())) return null;
   if (read.paused) throw challengeNotFound();
-  const row = await repo.memberChallenge(deps.sql, gymId, challengeId, read.gym.today, read.now);
-  if (row === null) throw challengeNotFound();
-  if (row.who !== "joined") throw new OrgsError(409, "challenge_everyone", GYM_CHALLENGE_WORDS.join_everyone);
-  if (row.cancelled) throw new OrgsError(409, "challenge_cancelled", GYM_CHALLENGE_WORDS.cancelled);
-  if (challengeState(row, read.gym.today) === "ended") throw new OrgsError(409, "challenge_ended", GYM_CHALLENGE_WORDS.join_ended);
-  // Where members pick, picking a team is how a person joins: Join alone would leave them
-  // in the challenge and in no team. Somebody who has a team (they left, or staff put them
-  // in one) joins as anywhere.
-  if (joined && row.teams === "members" && !((await repo.teamPeopleOf(deps.sql, gymId, [challengeId])).get(challengeId)?.has(userId) ?? false)) {
-    throw new OrgsError(409, "challenge_pick_team", GYM_CHALLENGE_WORDS.pick_to_join);
-  }
-  if (joined) await repo.join(deps.sql, gymId, challengeId, userId, read.now);
-  else await repo.leave(deps.sql, gymId, challengeId, userId);
+  // Whether a member is sent this challenge at all, by the list's own rule.
+  if ((await repo.memberChallenge(deps.sql, gymId, challengeId, read.gym.today, read.now)) === null) throw challengeNotFound();
+  const row = await deps.sql.begin(async (tx) => {
+    // Held against staff cancelling it or changing its dates while this is decided.
+    const held = await repo.shareChallenge(tx, gymId, challengeId);
+    if (held === null) throw challengeNotFound();
+    if (held.who !== "joined") throw new OrgsError(409, "challenge_everyone", GYM_CHALLENGE_WORDS.join_everyone);
+    if (held.cancelled) throw new OrgsError(409, "challenge_cancelled", GYM_CHALLENGE_WORDS.cancelled);
+    if (challengeState(held, read.gym.today) === "ended") throw new OrgsError(409, "challenge_ended", GYM_CHALLENGE_WORDS.join_ended);
+    // Where members pick, picking a team is how a person joins: Join alone would leave them
+    // in the challenge and in no team. Somebody who has a team (they left, or staff put them
+    // in one) joins as anywhere.
+    if (joined && held.teams === "members" && !((await repo.teamPeopleOf(tx, gymId, [challengeId])).get(challengeId)?.has(userId) ?? false)) {
+      throw new OrgsError(409, "challenge_pick_team", GYM_CHALLENGE_WORDS.pick_to_join);
+    }
+    if (joined) await repo.join(tx, gymId, challengeId, userId, read.now);
+    else await repo.leave(tx, gymId, challengeId, userId);
+    return held;
+  });
   const view = memberView(row, read.gym.today, await countFor(deps, read, [row], userId), userId, GYM_CHALLENGE_PODIUM);
   return memberGymChallengeSchema.parse(view.challenge);
 }

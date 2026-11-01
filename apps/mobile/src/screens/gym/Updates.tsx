@@ -26,6 +26,7 @@ import { PersonProfile, type ProfilePerson } from "./PersonProfile";
 import { AskSheet, BlockedSheet, PhotoViewer, PostCard, phoneZone, type Asking } from "./PostCard";
 import { hasWork } from "./postDraft";
 import { PostBox, useKeptPost } from "./PostBox";
+import { useBusyIds } from "./Reactions";
 import {
   blockedButton,
   canOpenPerson,
@@ -105,8 +106,8 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
   };
   const [held, setHeld] = useState<Held>({ kind: "loading" });
   const [more, setMore] = useState<{ busy: boolean; error: string | null }>({ busy: false, error: null });
-  // The post whose reaction is on its way, and what went wrong with a post's last one.
-  const [reacting, setReacting] = useState<string | null>(null);
+  // The posts whose reaction is on its way, and what went wrong with a post's last one.
+  const reacting = useBusyIds();
   const [reactError, setReactError] = useState<{ postId: string; text: string } | null>(null);
   // Posts that turned out to be removed when pressed: said in their own place until the next read.
   const [gone, setGone] = useState<Record<string, true | undefined>>({});
@@ -186,11 +187,14 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
   const onReact = async (post: GymPost, tapped: GymPostReaction) => {
     const next = withReaction(post, tapped);
     setReactError(null);
-    setReacting(post.id);
+    reacting.add(post.id);
+    // A read that started before this press may not hold it.
+    started.current += 1;
     change((feed) => withPost(feed, next));
     const answer = await session.signedIn({ method: "PUT", path: reactionPath(place.id, post.id), body: { reaction: next.mine } }, gymPostReactionResponseSchema);
     if (!live.current) return;
-    setReacting(null);
+    reacting.remove(post.id);
+    started.current += 1;
     if (answer.kind === "ok") {
       change((feed) => withPost(feed, { ...next, reactions: answer.data.reactions, mine: answer.data.mine }));
       return;
@@ -207,12 +211,15 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
       void load(true);
     } else {
       setReactError({ postId: post.id, text: answer.kind === "refused" ? answer.message : "Couldn't save your reaction. Please try again." });
+      // The press may have reached the server with only its answer lost: the server says what it holds.
+      if (answer.kind === "no_answer") void load(true);
     }
   };
 
   const feed = held.kind === "ok" ? held.feed : null;
   const commentsPost = commentsOn === null || feed === null ? null : ([...feed.pinned, ...feed.posts].find((p) => p.id === commentsOn) ?? null);
   const onCommentCount = useCallback((postId: string, by: number) => {
+    started.current += 1;
     setHeld((h) => {
       if (h.kind !== "ok") return h;
       const post = [...h.feed.pinned, ...h.feed.posts].find((p) => p.id === postId);
@@ -223,6 +230,7 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
     setHeld((h) => (h.kind === "ok" && h.feed.commenting !== commenting ? { kind: "ok", feed: { ...h.feed, commenting } } : h));
   }, []);
   const onCommentPostGone = useCallback((postId: string) => {
+    started.current += 1;
     setGone((g) => ({ ...g, [postId]: true }));
   }, []);
   const onCommentBlocked = useCallback(
@@ -345,7 +353,7 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
               photoUrl={(photoId) => `${apiUrl}${photoPath(place.id, post.id, photoId)}`}
               files={files}
               photoRound={photoRound}
-              busy={reacting === post.id}
+              busy={reacting.has(post.id)}
               reactError={reactError?.postId === post.id ? reactError.text : null}
               onReact={(r) => void onReact(post, r)}
               commenting={feed?.commenting ?? "off"}
@@ -468,7 +476,10 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
           setWriting(false);
         }}
         onPosted={(post, note) => {
+          started.current += 1;
           change((f) => withNewPost(f, post));
+          // The box stays open: it holds words that are not on that post, to post or discard.
+          if (note === null) return;
           setWriting(false);
           setPostedNote(note);
           list.current?.scrollToOffset({ offset: 0, animated: true });
@@ -497,9 +508,11 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
           setAsking(null);
         }}
         onRemoved={(post) => {
+          started.current += 1;
           change((f) => withoutPost(f, post.id));
         }}
         onReported={(post) => {
+          started.current += 1;
           change((f) => withPost(f, { ...post, reported: true }));
         }}
         onBlocked={(post) => {
@@ -511,6 +524,7 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
           void load(true);
         }}
         onGone={(post) => {
+          started.current += 1;
           setGone((g) => ({ ...g, [post.id]: true }));
         }}
         onPlaceGone={() => void load(true)}

@@ -148,7 +148,7 @@ async function removeFiles(deps: Pick<EventsDeps, "sql" | "photos" | "log">, key
 
 /** The poster as it will be kept, its bytes beside it; a picture that cannot be kept is refused. */
 function readPoster(gymId: string, base64: string): repo.EventPoster & { bytes: Uint8Array } {
-  const read = cleanPhoto(new Uint8Array(Buffer.from(base64, "base64")), GYM_EVENT_POSTER_MAX_BYTES);
+  const read = cleanPhoto(new Uint8Array(Buffer.from(base64, "base64")), { maxBytes: GYM_EVENT_POSTER_MAX_BYTES });
   if (!read.ok) {
     const problem = PHOTO_PROBLEM_STATUS[read.problem];
     throw new OrgsError(400, problem.code, GYM_EVENT_WORDS.poster(read.problem === "too_big" ? GYM_EVENT_WORDS.poster_too_big : problem.message));

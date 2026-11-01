@@ -6,7 +6,6 @@ import {
   commentDraftsText,
   commentRemoveBox,
   commentRoom,
-  commentedWords,
   goneWith,
   hasKeptWords,
   merged,
@@ -46,7 +45,9 @@ describe("the button on a post, and whether there is one", () => {
   it.each([
     [0, false, "Comment", "Comment on this post"],
     [1, false, "1", "1 comment. Read or write a comment"],
-    [1200, false, "1,200", "1,200 comments. Read or write a comment"],
+    [99, false, "99", "99 comments. Read or write a comment"],
+    [100, false, "99+", "More than 99 comments. Read or write a comment"],
+    [1200, false, "99+", "More than 99 comments. Read or write a comment"],
     [3, true, "Finish your comment", "Finish your comment"],
   ])("%i comments, kept %s", (count, isKept, label, say) => {
     expect(commentButton(count, isKept)).toEqual({ label, say });
@@ -90,12 +91,6 @@ describe("words", () => {
     expect(commentRemoveBox({ parentId: null, replyCount: 1 }).line).toBe("Your comment and the reply under it will disappear for everyone. This can't be undone.");
     expect(commentRemoveBox({ parentId: id(1), replyCount: 0 }).title).toBe("Remove your reply?");
     expect(goneWith({ replyCount: 3 })).toBe(4);
-  });
-
-  it("only a kept comment changed after a lost reply says the changes may not be on it", () => {
-    expect(commentedWords({ firstKept: true, changed: true })).toBeNull();
-    expect(commentedWords({ firstKept: false, changed: false })).toBeNull();
-    expect(commentedWords({ firstKept: false, changed: true })).toBe("Your comment is up. Your latest changes may not be on it.");
   });
 
   it("the replies' address carries its place in the list", () => {
