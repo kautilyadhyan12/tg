@@ -36,6 +36,7 @@ import {
 } from '@app/shared';
 import { dayWords } from './memberListView';
 import { cardRefundOpenLine } from './cardRefundView';
+import { chargeStopLine, chargebackLines } from './chargebackView';
 
 /** The tick that lets a member of staff record what a member paid. */
 export function canRecordPayments(privileges) {
@@ -102,11 +103,13 @@ export const CARD_CHARGING_LINE = "Charging the card on file: waiting for Square
 /** Its decline, and its charge on its way, for a bill's or a fee's box. */
 const cardLines = (b) => ({
   declined:
-    b.cardDeclined !== null && b.cardDeclined !== undefined
-      ? cardDeclinedLine(b.cardDeclined)
-      : b.cardUnchecked !== null && b.cardUnchecked !== undefined
-        ? cardUncheckedLine(b.cardUnchecked)
-        : null,
+    [
+      b.cardDeclined !== null && b.cardDeclined !== undefined ? cardDeclinedLine(b.cardDeclined) : b.cardUnchecked !== null && b.cardUnchecked !== undefined ? cardUncheckedLine(b.cardUnchecked) : null,
+      chargeStopLine(b.chargeStop),
+    ]
+      .filter((line) => line !== null)
+      .join(' ') || null,
+  stopHolder: b.chargeStop?.heldBy ?? null,
   charging: b.charging === true ? CARD_CHARGING_LINE : null,
 });
 const byWords = (by) => (by === null ? null : `by ${by}`);
@@ -255,9 +258,10 @@ const paymentLines = (payments, voided, currency) =>
       // A payment taken through Square goes back through Square (18d-iv-a).
       toCard: p.refundableMinor > 0 && paidThroughSquare(p.method),
       cardRefund: p.cardRefund === null || p.cardRefund === undefined ? null : cardRefundOpenLine(p.cardRefund, currency),
+      chargebacks: chargebackLines(p.chargebacks, true),
       voided: null,
     })),
-    ...voided.map((p) => ({ ...paymentLine(p, currency), refundable: false, toCard: false, cardRefund: null, voided: voidedLine(p.voided, PAYMENT_VOID_REASON_WORDS) })),
+    ...voided.map((p) => ({ ...paymentLine(p, currency), refundable: false, toCard: false, cardRefund: null, chargebacks: [], voided: voidedLine(p.voided, PAYMENT_VOID_REASON_WORDS) })),
   ].sort((a, b) => a.receiptNumber - b.receiptNumber);
 
 const paymentLine = (p, currency) => ({

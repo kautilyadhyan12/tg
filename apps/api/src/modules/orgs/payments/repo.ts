@@ -184,7 +184,7 @@ export async function writeConnection(tx: TransactionSql, c: NewConnection): Pro
       location_choices = EXCLUDED.location_choices, access_token = EXCLUDED.access_token,
       refresh_token = EXCLUDED.refresh_token, access_expires_at = EXCLUDED.access_expires_at,
       refresh_due_at = EXCLUDED.refresh_due_at, connected_by = EXCLUDED.connected_by,
-      connected_at = EXCLUDED.connected_at, removed_at = NULL, scopes = EXCLUDED.scopes, refunds_read_at = NULL`;
+      connected_at = EXCLUDED.connected_at, removed_at = NULL, scopes = EXCLUDED.scopes, refunds_read_at = NULL, disputes_read_at = NULL`;
   // Back on an account it left: what happened there meanwhile is read again, and any press left "We don't know" there.
   await tx`
     UPDATE gym_square_refunds SET look_at = ${c.connectedAt}
@@ -284,6 +284,31 @@ export async function claimRefundReads(
     WHERE c.gym_id = due.gym_id AND c.provider = due.provider AND c.environment = ${environment}
     RETURNING c.*, due.read_before`;
   return rows.map((r) => ({ row: toRow(r), readBefore: r.read_before }));
+}
+
+/** Connections whose chargebacks are due to be read (18d-iv-e-i): only those that allowed it. */
+export async function claimDisputeReads(sql: Sql, environment: SquareEnvironment, now: Date, dueBefore: Date, limit: number, gymIds: readonly string[] | null): Promise<{ row: ConnectionRow; readBefore: Date | null }[]> {
+  const rows = await sql<(RawConnection & { read_before: Date | null })[]>`
+    WITH due AS (
+      SELECT gym_id, provider, disputes_read_at AS read_before FROM gym_payment_connections
+      WHERE provider = 'square' AND environment = ${environment} AND state = 'connected' AND 'DISPUTES_READ' = ANY(scopes)
+        AND (disputes_read_at IS NULL OR disputes_read_at <= ${dueBefore})
+        AND (${gymIds === null}::boolean OR gym_id = ANY(${[...(gymIds ?? [])]}::uuid[]))
+      ORDER BY disputes_read_at NULLS FIRST
+      LIMIT ${limit}
+      FOR UPDATE SKIP LOCKED
+    )
+    UPDATE gym_payment_connections c
+    SET disputes_read_at = ${now}
+    FROM due
+    WHERE c.gym_id = due.gym_id AND c.provider = due.provider AND c.environment = ${environment}
+    RETURNING c.*, due.read_before`;
+  return rows.map((r) => ({ row: toRow(r), readBefore: r.read_before }));
+}
+
+/** Square could not be read: this connection's chargebacks are read again as they were due. */
+export async function setDisputesRead(sql: SqlOrTx, gymId: string, environment: SquareEnvironment, at: Date | null): Promise<void> {
+  await sql`UPDATE gym_payment_connections SET disputes_read_at = ${at} WHERE gym_id = ${gymId} AND provider = 'square' AND environment = ${environment}`;
 }
 
 /** Square could not be read: the same stretch is read again by the next run. */

@@ -10,6 +10,7 @@
 // the gym's own discount; the sale's day is the gym's own, never the caller's.
 //
 // Discounts (18b-ii-a) are changed by whoever changes prices, and used by whoever sells.
+import { chargebacksOfSales } from "../payments/chargebacksRepo.js";
 import type { Sql } from "postgres";
 import {
   DISCOUNT_WORDS,
@@ -122,6 +123,13 @@ const iso = (p: repo.ProductRow) => ({ ...p, archivedAt: p.archivedAt === null ?
 
 const isoDiscount = (d: discounts.DiscountRow) => ({ ...d, archivedAt: d.archivedAt === null ? null : d.archivedAt.toISOString(), updatedAt: d.updatedAt.toISOString() });
 
+/** A chargeback on a sale's payment (18d-iv-e-i), on its first line, read for staff who may sell. */
+async function withChargebacks(deps: { sql: Sql; now: () => Date }, gymId: string, sales: repo.SaleRow[], canSell: boolean): Promise<repo.SaleRow[]> {
+  if (!canSell) return sales;
+  const found = await chargebacksOfSales(deps.sql, gymId, sales.filter((s) => s.lineNo === 1).map((s) => s.id), deps.now());
+  return sales.map((s) => ({ ...s, chargebacks: found.get(s.id) ?? [] }));
+}
+
 /** Each line of a sale as a screen reads it, from every line of each sale. Void sale is for
  *  the sale's own day and only while no refund stands on any of its lines (18q); Refund sale
  *  for any day while some of a line is left to give back (18p). */
@@ -137,6 +145,7 @@ const shownSales = (sales: readonly repo.SaleRow[], today: string, canSell: bool
       canRefund,
       toCard: canRefund && s.method === "terminal",
       cardRefund: canSell ? s.cardRefund : null,
+      chargebacks: canSell ? s.chargebacks : [],
       toPlace: canSell ? s.toPlace : [],
       refunds: s.refunds.map((r) => ({
         ...r,
@@ -214,7 +223,7 @@ async function read(deps: RegisterDeps, gymId: string, viewer: Viewer, asked: st
     membershipTypes: types.map((t) => ({ id: t.id, name: t.name, taxRateId: t.taxRateId, free: t.free })),
     canSell: viewer.canSell,
     canManage: viewer.canManage,
-    sales: shownSales(row.sales, today, viewer.canSell),
+    sales: shownSales(await withChargebacks(deps, gymId, row.sales, viewer.canSell), today, viewer.canSell),
     salesNotShown,
     payments:
       paid === null
@@ -655,5 +664,5 @@ export async function getPurchases(deps: RegisterDeps, gymId: string, viewer: Vi
   const found = await repo.purchasesOf(deps.sql, gymId, entryId, PURCHASES_SHOWN);
   if (found === null) throw new OrgsError(404, "entry_not_found", MEMBER_LIST_BY_HAND_WORDS.entry_not_found);
   const today = dayInTz(deps.now(), viewer.timezone);
-  return memberPurchasesResponseSchema.parse({ sales: shownSales(found.sales, today, viewer.canSell), notShown: found.total - new Set(found.sales.map((s) => s.receiptNumber)).size });
+  return memberPurchasesResponseSchema.parse({ sales: shownSales(await withChargebacks(deps, gymId, found.sales, viewer.canSell), today, viewer.canSell), notShown: found.total - new Set(found.sales.map((s) => s.receiptNumber)).size });
 }

@@ -37,6 +37,8 @@ export const gymPaymentConnections = pgTable(
     refreshDueAt: timestamp("refresh_due_at", { withTimezone: true }),
     /** When the worker last read this connection's refunds (0184; 18d-iv-d-i). */
     refundsReadAt: timestamp("refunds_read_at", { withTimezone: true }),
+    /** When the worker last read this connection's chargebacks (0187; 18d-iv-e-i). */
+    disputesReadAt: timestamp("disputes_read_at", { withTimezone: true }),
     connectedBy: uuid("connected_by").references(() => users.id, { onDelete: "set null" }),
     connectedAt: timestamp("connected_at", { withTimezone: true }).notNull(),
     removedAt: timestamp("removed_at", { withTimezone: true }),
@@ -533,6 +535,38 @@ export const gymCardCharges = pgTable(
     index("gym_card_charges_open_idx").on(t.checkedAt).where(sql`${t.state} = 'charging'`),
     index("gym_card_charges_card_idx").on(t.gymId, t.cardId).where(sql`${t.outcome} = 'declined'`),
     index("gym_card_charges_retry_idx").on(t.nextTryOn).where(sql`${t.nextTryOn} IS NOT NULL`),
+  ],
+);
+
+/** A chargeback on a payment this gym holds (0187; 18d-iv-e-i): Square's own record, one row a dispute at a gym. */
+export const gymSquareDisputes = pgTable(
+  "gym_square_disputes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    environment: text("environment").notNull(),
+    accountId: text("account_id").notNull(),
+    squareDisputeId: text("square_dispute_id").notNull(),
+    squarePaymentId: text("square_payment_id").notNull(),
+    amountMinor: integer("amount_minor").notNull(),
+    currency: text("currency").notNull(),
+    state: text("state").notNull(),
+    reason: text("reason"),
+    dueAt: timestamp("due_at", { withTimezone: true }),
+    brand: text("brand"),
+    last4: text("last4"),
+    squareUpdatedAt: timestamp("square_updated_at", { withTimezone: true }),
+    createdAt: createdAt(),
+    changedAt: timestamp("changed_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    uniqueIndex("gym_square_disputes_one_idx").on(t.gymId, t.environment, t.squareDisputeId),
+    index("gym_square_disputes_payment_idx").on(t.gymId, t.squarePaymentId),
+    index("gym_square_disputes_stops_idx").on(t.gymId, t.squarePaymentId).where(sql`${t.state} NOT IN ('WON','INQUIRY_CLOSED')`),
+    check("gym_square_disputes_state_check", sql`${t.state} IN ('INQUIRY_EVIDENCE_REQUIRED','INQUIRY_PROCESSING','INQUIRY_CLOSED','EVIDENCE_REQUIRED','PROCESSING','WON','LOST','ACCEPTED','UNKNOWN')`),
+    check("gym_square_disputes_amount_check", sql`${t.amountMinor} >= 0`),
   ],
 );
 

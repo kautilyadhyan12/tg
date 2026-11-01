@@ -25,6 +25,7 @@ import { changeBody, changeChoice, changeCreditLine, changeDoneWords, changeEndi
 import { viewerPrivileges } from './consoleView';
 import { placeFor } from './consolePlaces';
 import CardRefundBox from './CardRefundBox';
+import ChargebackLines, { ChargeStopHolder } from './ChargebackLines';
 import { cardRefundSaidNow, refundReasonsFor, waitsOnSquare } from './cardRefundView';
 import MembershipAgreement from './MembershipAgreement';
 import { noteDay } from './memberListPeople';
@@ -932,6 +933,7 @@ export default function MemberMemberships({
                       {row.declined}
                     </span>
                   ) : null}
+                  <ChargeStopHolder holder={row.stopHolder} gym={gym} />
                   {row.charging !== null ? <span className="c-s13 c-t2">{row.charging}</span> : null}
                 </div>
                 {row.payments.map((p) => (
@@ -968,6 +970,7 @@ export default function MemberMemberships({
                         {p.cardRefund}
                       </span>
                     ) : null}
+                    <ChargebackLines lines={p.chargebacks ?? []} />
                     {receiptFor === p.receiptNumber ? <ReceiptBox gymId={gymId} gym={gym} number={p.receiptNumber} onClose={() => setReceiptFor(null)} /> : null}
                     {saidUnder(m, p.id)}
                     {refundBoxUnder(m, p.id)}
@@ -1540,6 +1543,7 @@ export default function MemberMemberships({
                         {row.declined}
                       </span>
                     ) : null}
+                    <ChargeStopHolder holder={row.stopHolder} gym={gym} />
                     {row.charging !== null ? <span className="c-s13 c-t2">{row.charging}</span> : null}
                     {row.left !== null ? (
                       <span className="c-s13 c-w5" style={{ color: 'var(--warn)' }}>
@@ -1583,6 +1587,7 @@ export default function MemberMemberships({
                         {p.cardRefund}
                       </span>
                     ) : null}
+                    <ChargebackLines lines={p.chargebacks ?? []} />
                     {receiptFor === p.receiptNumber ? <ReceiptBox gymId={gymId} gym={gym} number={p.receiptNumber} onClose={() => setReceiptFor(null)} /> : null}
                     {saidUnder(m, p.id)}
                     {boxUnderPayment(p.id)}

@@ -7,6 +7,7 @@
 // sale's id included. Every write takes the gym's row lock first, so the stock count, the
 // name check and the same request arriving twice are decided against rows nobody else is
 // changing.
+import type { ChargebackSeen } from "@app/shared";
 import { placeRoom } from "../payments/saleSquarePlace.js";
 import type { Sql, TransactionSql } from "postgres";
 import type { CardRefundOpen } from "@app/shared";
@@ -114,6 +115,8 @@ export interface SaleRow {
   lineNo: number;
   /** A refund to the card Square has not answered, or never did (18d-iv-b-ii). */
   cardRefund: OpenSalePress | null;
+  /** The chargebacks on its payment (18d-iv-e-i): on the sale's first line. */
+  chargebacks: ChargebackSeen[];
   /** Refunded in Square with no product said: on the sale's first line. */
   toPlace: { pressId: string; amountMinor: number; on: string }[];
 }
@@ -201,6 +204,7 @@ const sale = (r: RawSale): SaleRow => ({
   receiptNumber: r.receipt_number,
   refunds: [],
   cardRefund: null,
+  chargebacks: [],
   toPlace: [],
   refundedMinor: r.refunded_minor,
   stockCounted: r.stock_counted,

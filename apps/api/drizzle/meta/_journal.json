@@ -1303,6 +1303,13 @@
       "when": 1790726400186,
       "tag": "0186_refund_in_square_on_a_sale",
       "breakpoints": true
+    },
+    {
+      "idx": 186,
+      "version": "7",
+      "when": 1790726400187,
+      "tag": "0187_chargebacks",
+      "breakpoints": true
     }
   ]
 }

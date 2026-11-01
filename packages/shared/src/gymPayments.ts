@@ -100,6 +100,8 @@ export const gymPaymentsSchema = z
     terminals: squareTerminalsSchema.nullable(),
     /** Connected before the app asked for everything it asks for now: the owner connects Square again. */
     needsAllow: z.boolean().default(false),
+    /** What connecting again would add (18d-iv-e-i), so Settings says why. */
+    allowFor: z.array(z.enum(["subscriptions", "chargebacks"])).default([]),
   })
   .strict();
 export type GymPayments = z.infer<typeof gymPaymentsSchema>;
