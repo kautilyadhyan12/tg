@@ -882,7 +882,7 @@ d("A chargeback (real Postgres)", { timeout: T }, () => {
     it("Staff activity's words", () => {
       const ctx = { about: "Maya", words: orgWords("gym"), currency: "USD" };
       expect(STAFF_LINES["org.member_refund_chargeback"]?.({ ...ctx, meta: { amountMinor: "2500", currency: "USD", entryId: "x", brand: "VISA", last4: "1111" } })).toBe("$25.00 went back to Visa ending 1111 for Maya because a chargeback was lost");
-      expect(STAFF_LINES["org.chargeback_charges_started"]?.({ ...ctx, meta: { entryId: "x" } })).toBe("Automatic charges were started again for Maya after a lost chargeback");
+      expect(STAFF_LINES["org.chargeback_charges_started"]?.({ ...ctx, meta: { entryId: "x" } })).toBe("Automatic payments were resumed for Maya after a lost chargeback");
     });
   });
 

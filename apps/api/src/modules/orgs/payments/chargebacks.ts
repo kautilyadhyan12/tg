@@ -141,7 +141,7 @@ export async function readChargebacks(deps: PaymentsDeps, userId: string, gymId:
   });
 }
 
-const NO_MEMBERS = "Starting automatic charges needs \"Keep the member list and invite\". Ask the owner to turn it on for you.";
+const NO_MEMBERS = "Resuming automatic payments needs \"Keep the member list and invite\". Ask the owner to turn it on for you.";
 
 /** Who Start automatic charges again changes. It names people, so it needs the member-list tick too. */
 export async function readChargebackStart(deps: PaymentsDeps, userId: string, gymId: string, id: string): Promise<ChargebackStartPreview> {
@@ -158,5 +158,5 @@ export async function startCharges(deps: PaymentsDeps, userId: string, gymId: st
   if (!privileges.includes(MEMBERS)) throw new OrgsError(403, "forbidden", NO_MEMBERS);
   const outcome = await repo.startChargesAgain(deps.sql, gymId, id, userId, deps.now());
   if (outcome === "not_found") throw new OrgsError(404, "chargeback_not_found", "That chargeback was not found.");
-  if (outcome === "not_lost") throw new OrgsError(409, "chargeback_not_lost", "Automatic charges can only be started here after a lost chargeback.");
+  if (outcome === "not_lost") throw new OrgsError(409, "chargeback_not_lost", "Automatic payments can only be resumed here after a lost chargeback.");
 }

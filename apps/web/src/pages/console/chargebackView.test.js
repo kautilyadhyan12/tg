@@ -10,7 +10,7 @@ describe('a lost chargeback (18d-iv-e-ii-a)', () => {
 
   it('stays stopped until staff start it, and offers that only on a member payment that is stopped', () => {
     const line = chargebackLine(lost, true);
-    expect(line.detail).toBe("The cardholder says they were charged twice. You lost this chargeback. The money went back to the cardholder's card. Automatic charges stay stopped until you start them again.");
+    expect(line.detail).toBe("The cardholder says they were charged twice. You lost this chargeback. The money was returned to the cardholder. Automatic payments are paused until you resume them.");
     expect(line.canStart).toBe(true);
     expect(chargebackLine({ ...lost, state: 'ACCEPTED' }, true).canStart).toBe(true);
     expect(chargebackLine(lost, false).canStart).toBe(false);
@@ -20,29 +20,29 @@ describe('a lost chargeback (18d-iv-e-ii-a)', () => {
 
   it('says when they were started again, and no longer offers it', () => {
     const line = chargebackLine({ ...lost, stops: false, chargesStartedOn: '2026-11-02' }, true);
-    expect(line.detail).toContain('Automatic charges started again on 2 November 2026.');
+    expect(line.detail).toContain('Automatic payments resumed on 2 November 2026.');
     expect(line.canStart).toBe(false);
   });
 
   it('after the press it says what is true', () => {
     const people = [{ name: 'Maya', what: 'Gold' }];
     const card = { brand: 'VISA', last4: '1111' };
-    expect(chargebackStartedWords({ people, card, otherStops: false })).toBe('Automatic charges are back on. The app will charge Visa ending 1111 when bills are due.');
-    expect(chargebackStartedWords({ people, card: null, otherStops: false })).toContain('until a card is saved');
-    expect(chargebackStartedWords({ people, card, otherStops: true })).toContain('stay stopped');
-    expect(chargebackStartedWords({ people: [], card, otherStops: false })).toContain('no membership renews');
+    expect(chargebackStartedWords({ people, card, otherStops: false })).toBe('Automatic payments resumed. Visa ending 1111 will be charged when bills are due.');
+    expect(chargebackStartedWords({ people, card: null, otherStops: false })).toContain('until a card is on file');
+    expect(chargebackStartedWords({ people, card, otherStops: true })).toContain('stay paused');
+    expect(chargebackStartedWords({ people: [], card, otherStops: false })).toContain('no renewing membership');
   });
 
   it('the box names who, and says so where nothing will be charged', () => {
     const people = [{ name: 'Maya Patel', what: 'Gold Weekly' }];
     const card = { brand: 'VISA', last4: '1111' };
     const yes = chargebackStartBox({ people, card, otherStops: false });
-    expect(yes.lead).toBe('The app will charge Visa ending 1111 by itself again for:');
+    expect(yes.lead).toBe('Visa ending 1111 will be charged automatically for:');
     expect(yes.people).toEqual(['Maya Patel · Gold Weekly']);
     expect(yes.note).toContain('A bill due in the last two days may be charged today.');
     expect(chargebackStartBox({ people, card, otherStops: true }).lead).toContain('Another chargeback is still open');
     expect(chargebackStartBox({ people, card, otherStops: true }).note).toBeNull();
-    expect(chargebackStartBox({ people, card: null, otherStops: false }).lead).toContain('No card is saved');
+    expect(chargebackStartBox({ people, card: null, otherStops: false }).lead).toContain('No card is on file');
     expect(chargebackStartBox({ people: [], card, otherStops: false }).lead).toContain('nothing will be charged');
   });
 });
@@ -95,7 +95,7 @@ describe('chargebackLine', () => {
   it("says the card is not charged only where that is true", () => {
     const words = "The app won't charge this card by itself.";
     expect(chargebackLine(c(), true).detail).toContain(words);
-    expect(chargebackLine(c({ state: 'LOST' }), true).detail).toContain('Automatic charges stay stopped until you start them again.');
+    expect(chargebackLine(c({ state: 'LOST' }), true).detail).toContain('Automatic payments are paused until you resume them.');
     expect(chargebackLine(c()).detail).not.toContain(words);
     expect(chargebackLine(c({ state: 'WON', stops: false }), true).detail).not.toContain(words);
     expect(chargebackLine(c({ state: 'INQUIRY_CLOSED', stops: false }), true).detail).not.toContain(words);

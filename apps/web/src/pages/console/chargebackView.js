@@ -20,7 +20,7 @@ export const CHARGEBACK_REASON_WORDS = {
 
 const HOLD = 'Square may hold this money until the bank decides.';
 const STOPPED = "The app won't charge this card by itself.";
-const STOPPED_LOST = 'Automatic charges stay stopped until you start them again.';
+const STOPPED_LOST = 'Automatic payments are paused until you resume them.';
 const OVER_IN_YOUR_FAVOUR = ['WON', 'INQUIRY_CLOSED'];
 const ASKING = ['EVIDENCE_REQUIRED', 'INQUIRY_EVIDENCE_REQUIRED'];
 const LOST = ['LOST', 'ACCEPTED'];
@@ -45,9 +45,9 @@ function stateWords(c) {
     case 'INQUIRY_CLOSED':
       return 'The bank closed its inquiry.';
     case 'LOST':
-      return "You lost this chargeback. The money went back to the cardholder's card.";
+      return "You lost this chargeback. The money was returned to the cardholder.";
     case 'ACCEPTED':
-      return "You accepted this chargeback. The money went back to the cardholder's card.";
+      return "You accepted this chargeback. The money was returned to the cardholder.";
     default:
       return 'Check it in Square.';
   }
@@ -55,7 +55,7 @@ function stateWords(c) {
 
 /** Whether the app charges this card by itself. */
 function chargesWords(c) {
-  if (c.chargesStartedOn !== null && c.chargesStartedOn !== undefined) return `Automatic charges started again on ${dayWords(c.chargesStartedOn)}.`;
+  if (c.chargesStartedOn !== null && c.chargesStartedOn !== undefined) return `Automatic payments resumed on ${dayWords(c.chargesStartedOn)}.`;
   if (!c.stops) return null;
   return LOST.includes(c.state) ? STOPPED_LOST : STOPPED;
 }
@@ -95,25 +95,25 @@ export function chargebackStartBox(preview) {
   const card = preview.card === null ? null : cardName(preview.card);
   const people = preview.people.map((p) => (p.what === '' ? p.name : `${p.name} · ${p.what}`));
   let lead;
-  if (people.length === 0) lead = 'Nobody has a renewing membership on this payer right now, so nothing will be charged.';
-  else if (preview.otherStops) lead = 'Another chargeback is still open for this person, so these stay stopped until it ends:';
-  else if (card === null) lead = 'No card is saved for the person who pays, so nothing is charged until one is saved. These would be charged:';
-  else lead = `The app will charge ${card} by itself again for:`;
+  if (people.length === 0) lead = 'This person has no renewing membership, so nothing will be charged.';
+  else if (preview.otherStops) lead = 'Another chargeback is still open, so automatic payments stay paused until it is closed. This applies to:';
+  else if (card === null) lead = 'No card is on file, so nothing will be charged until one is added. This applies to:';
+  else lead = `${card} will be charged automatically for:`;
   return {
-    title: 'Start automatic charges again?',
+    title: 'Resume automatic payments?',
     lead,
     people,
-    note: people.length === 0 || preview.otherStops || card === null ? null : 'A bill due in the last two days may be charged today. Older bills are not charged by themselves: charge them by hand, oldest first.',
-    button: 'Start automatic charges',
+    note: people.length === 0 || preview.otherStops || card === null ? null : 'A bill due in the last two days may be charged today. Charge older bills by hand, oldest first.',
+    button: 'Resume',
   };
 }
 
 /** What is said in that place once it is done. */
 export function chargebackStartedWords(preview) {
-  if (preview.otherStops) return 'Done. Automatic charges stay stopped until the other chargeback ends.';
-  if (preview.people.length === 0) return 'Automatic charges are back on. Nothing is charged now, as no membership renews.';
-  if (preview.card === null) return 'Automatic charges are back on. Nothing is charged until a card is saved.';
-  return `Automatic charges are back on. The app will charge ${cardName(preview.card)} when bills are due.`;
+  if (preview.otherStops) return 'Automatic payments stay paused until the other chargeback is closed.';
+  if (preview.people.length === 0) return 'Automatic payments resumed. This person has no renewing membership, so nothing will be charged.';
+  if (preview.card === null) return 'Automatic payments resumed. Nothing will be charged until a card is on file.';
+  return `Automatic payments resumed. ${cardName(preview.card)} will be charged when bills are due.`;
 }
 
 // Overview.
@@ -126,13 +126,13 @@ export function chargebacksHeadline(count, lost = 0) {
   if (count <= 0) return null;
   if (lost > 0) {
     if (lost < count) return `${String(count)} chargebacks need attention`;
-    return lost === 1 ? '1 lost chargeback has automatic charges stopped' : `${String(lost)} lost chargebacks have automatic charges stopped`;
+    return lost === 1 ? '1 lost chargeback has automatic payments paused' : `${String(lost)} lost chargebacks have automatic payments paused`;
   }
   return count === 1 ? '1 chargeback needs a response' : `${String(count)} chargebacks need a response`;
 }
 
 export const CHARGEBACKS_INTRO = "A cardholder asked their bank to reverse a payment. Respond in Square by the date shown. If you don't, Square challenges it for you.";
-export const CHARGEBACKS_LOST_INTRO = 'The bank decided for the cardholder. Open their page to start automatic charges again. If they have left, cancel their membership.';
+export const CHARGEBACKS_LOST_INTRO = 'The bank decided for the cardholder. Open their page to resume automatic payments. If they have left, cancel their membership.';
 export const CHARGEBACKS_RECONNECT = 'Reconnect Square so chargebacks show here, with the date to respond to each one.';
 export const CHARGEBACKS_RECONNECT_OTHERS = 'The owner needs to reconnect Square before chargebacks can show here.';
 

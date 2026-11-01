@@ -31,7 +31,7 @@ function StartCharges({ gymId, id, onStarted }) {
       await chargebacksService.start(gymId, id);
       await onStarted({ id, line: chargebackStartedWords(preview) });
     } catch (err) {
-      setError(errorText(err, 'Automatic charges were not started. Try again.'));
+      setError(errorText(err, 'Automatic payments were not resumed. Try again.'));
       setBusy(false);
     }
   };
@@ -39,7 +39,7 @@ function StartCharges({ gymId, id, onStarted }) {
     return (
       <div className="flex flex-col gap-1.5">
         <button type="button" className="c-btn c-btn-s c-btn-sm self-start" disabled={opening} onClick={open}>
-          Start automatic charges again
+          Resume automatic payments
         </button>
         {error !== null ? <span className="c-s13" style={{ color: 'var(--warn)' }} role="alert">{error}</span> : null}
       </div>
@@ -69,7 +69,7 @@ function StartCharges({ gymId, id, onStarted }) {
           {box.button}
         </button>
         <button type="button" className="c-btn c-btn-s c-btn-sm" disabled={busy} onClick={() => setPreview(null)}>
-          Go back
+          Cancel
         </button>
       </div>
     </div>
