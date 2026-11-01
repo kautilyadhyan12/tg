@@ -506,6 +506,12 @@ describe('What the box and the page say', () => {
     expect(orgService.refundToCard.mock.calls[1]?.[4]).toMatchObject({ terminalId: FRONT.id });
   });
 
+  it('the page says when Square has no record of a refund (18d-iv-d-i)', async () => {
+    const { cardRefundOpenLine } = await import('./cardRefundView');
+    expect(cardRefundOpenLine({ amountMinor: 4999, on: '2026-10-30', lost: true, noRecord: true, onTerminal: false, decided: null }, 'USD')).toBe('Square has no record of the $49.99 refund of 30 October 2026. No money went back.');
+    expect(cardRefundOpenLine({ amountMinor: 4999, on: '2026-10-30', lost: true, noRecord: false, onTerminal: false, decided: null }, 'USD')).toContain("We don't know whether Square took");
+  });
+
   it('the page says a refund waits on the Terminal', async () => {
     const { cardRefundOpenLine } = await import('./cardRefundView');
     expect(cardRefundOpenLine({ amountMinor: 4999, on: TODAY, lost: false, onTerminal: true, decided: null }, 'USD')).toBe('A refund of $49.99 is waiting on the Terminal.');

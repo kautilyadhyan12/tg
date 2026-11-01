@@ -795,6 +795,26 @@ d("A gym's own Square account: who connects it, to which gym, and letting it go 
   );
 
   it(
+    "a signed message about a refund is kept with its refund; one naming no refund is answered and dropped; an unsigned one is refused",
+    async () => {
+      const send = (event: object, sign = true) => {
+        const payload = JSON.stringify(event);
+        const signature = createHmac("sha256", WEBHOOK_KEY).update(WEBHOOK_URL + payload).digest("base64");
+        return api().inject({ method: "POST", url: "/v1/webhooks/square", remoteAddress: nextIp(), headers: { "content-type": "application/json", "x-square-hmacsha256-signature": sign ? signature : "nope" }, payload });
+      };
+      const at = new Date().toISOString();
+      const base = { merchant_id: "MLREFUND", created_at: at };
+      expect((await send({ ...base, type: "refund.created", event_id: "pay-t-refund-1", data: { type: "refund", id: "PAY_refund1" } })).statusCode).toBe(200);
+      expect((await send({ ...base, type: "refund.updated", event_id: "pay-t-refund-2", data: { type: "refund" } })).statusCode).toBe(200);
+      expect((await send({ ...base, type: "refund.created", event_id: "pay-t-refund-3", data: { type: "refund", id: "PAY_refund3" } }, false)).statusCode).toBe(401);
+      const kept = await sql<{ event_id: string; payload: unknown }[]>`SELECT event_id, payload FROM webhook_events WHERE provider = 'square' AND event_id LIKE 'pay-t-refund-%'`;
+      expect(kept).toEqual([{ event_id: "pay-t-refund-1", payload: { type: "refund.created", accountId: "MLREFUND", refundId: "PAY_refund1" } }]);
+      await sql`DELETE FROM webhook_events WHERE provider = 'square' AND event_id LIKE 'pay-t-refund-%'`;
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "H3: a gym's country waits for Disconnect while Square is connected",
     async () => {
       clock = new Date();
