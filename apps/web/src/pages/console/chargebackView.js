@@ -41,13 +41,13 @@ function stateWords(c) {
     case 'INQUIRY_PROCESSING':
       return `Under review by the bank. ${HOLD}`;
     case 'WON':
-      return 'Won. Square releases the money back to you.';
+      return 'You won this chargeback. Square releases the money back to you.';
     case 'INQUIRY_CLOSED':
       return 'The bank closed its inquiry.';
     case 'LOST':
-      return 'Lost. The money went back to the card.';
+      return "You lost this chargeback. The money went back to the cardholder's card.";
     case 'ACCEPTED':
-      return 'Accepted. The money went back to the card.';
+      return "You accepted this chargeback. The money went back to the cardholder's card.";
     default:
       return 'Check it in Square.';
   }
@@ -106,6 +106,14 @@ export function chargebackStartBox(preview) {
     note: people.length === 0 || preview.otherStops || card === null ? null : 'A bill due in the last two days may be charged today. Older bills are not charged by themselves: charge them by hand, oldest first.',
     button: 'Start automatic charges',
   };
+}
+
+/** What is said in that place once it is done. */
+export function chargebackStartedWords(preview) {
+  if (preview.otherStops) return 'Done. Automatic charges stay stopped until the other chargeback ends.';
+  if (preview.people.length === 0) return 'Automatic charges are back on. Nothing is charged now, as no membership renews.';
+  if (preview.card === null) return 'Automatic charges are back on. Nothing is charged until a card is saved.';
+  return `Automatic charges are back on. The app will charge ${cardName(preview.card)} when bills are due.`;
 }
 
 // Overview.

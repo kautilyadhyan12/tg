@@ -41,7 +41,7 @@ describe('ChargebacksCard', () => {
     show(BOTH);
     const row = await screen.findByTestId('chargeback-row');
     expect(screen.getByTestId('chargebacks-headline').textContent).toBe('1 lost chargeback has automatic charges stopped');
-    expect(row.textContent).toContain('Lost. The money went back to the card. Automatic charges stay stopped until you start them again.');
+    expect(row.textContent).toContain("You lost this chargeback. The money went back to the cardholder's card. Automatic charges stay stopped until you start them again.");
     expect(within(row).queryByRole('link', { name: 'Respond in Square' })).toBeNull();
     fireEvent.click(within(row).getByRole('button', { name: 'Open their page' }));
     await screen.findByRole('dialog', { name: `person ${ENTRY}` });
@@ -98,12 +98,12 @@ describe('the lines', () => {
     expect(box.textContent).toContain('The app will charge Visa ending 1111 by itself again for:');
     expect(box.textContent).toContain('Sam Kapoor · Silver');
     expect(svc.start).not.toHaveBeenCalled();
-    fireEvent.click(within(box).getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(within(box).getByRole('button', { name: 'Keep charges stopped' }));
     expect(screen.queryByTestId('chargeback-start-box')).toBeNull();
     expect(svc.start).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Start automatic charges again' }));
     fireEvent.click(within(await screen.findByTestId('chargeback-start-box')).getByRole('button', { name: 'Start automatic charges' }));
-    await waitFor(() => expect(onStarted).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(onStarted).toHaveBeenCalledWith({ id: seen.id, line: 'Automatic charges are back on. The app will charge Visa ending 1111 when bills are due.' }));
     expect(svc.start).toHaveBeenCalledWith(org.id, seen.id);
   });
 

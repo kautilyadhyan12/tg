@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useInRouterContext } from 'react-router-dom';
 import { chargebacksService } from '../../api/chargebacksApi';
 import { errorText } from '../../api/orgsApi';
-import { START_NAMES_SHOWN, SQUARE_DISPUTES_URL, chargebackStartBox } from './chargebackView';
+import { START_NAMES_SHOWN, SQUARE_DISPUTES_URL, chargebackStartBox, chargebackStartedWords } from './chargebackView';
 import { placeFor } from './consolePlaces';
 import { viewerPrivileges } from './consoleView';
 
@@ -29,7 +29,7 @@ function StartCharges({ gymId, id, onStarted }) {
     setError(null);
     try {
       await chargebacksService.start(gymId, id);
-      await onStarted();
+      await onStarted({ id, line: chargebackStartedWords(preview) });
     } catch (err) {
       setError(errorText(err, 'Automatic charges were not started. Try again.'));
       setBusy(false);
@@ -69,7 +69,7 @@ function StartCharges({ gymId, id, onStarted }) {
           {box.button}
         </button>
         <button type="button" className="c-btn c-btn-s c-btn-sm" disabled={busy} onClick={() => setPreview(null)}>
-          Cancel
+          Keep charges stopped
         </button>
       </div>
     </div>
@@ -78,7 +78,7 @@ function StartCharges({ gymId, id, onStarted }) {
 
 // A chargeback under its payment or sale (ROADMAP 18d-iv-e-i). The gym answers in Square, so its button opens Square's own page.
 // `gymId` and `onStarted`: staff who may charge cards can start automatic charges again after a lost one.
-export default function ChargebackLines({ lines, gymId = null, onStarted = null }) {
+export default function ChargebackLines({ lines, gymId = null, onStarted = null, said = null }) {
   if (lines.length === 0) return null;
   return (
     <div className="flex flex-col gap-2">
@@ -92,6 +92,11 @@ export default function ChargebackLines({ lines, gymId = null, onStarted = null 
             {line.button}
           </a>
           {line.canStart && gymId !== null && onStarted !== null ? <StartCharges gymId={gymId} id={line.id} onStarted={onStarted} /> : null}
+          {said?.id === line.id ? (
+            <span className="c-s14 c-w5" style={{ color: 'var(--good)' }} role="status" data-testid="chargeback-started">
+              {said.line}
+            </span>
+          ) : null}
         </div>
       ))}
     </div>

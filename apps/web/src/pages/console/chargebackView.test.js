@@ -1,7 +1,7 @@
 // A chargeback's words (ROADMAP 18d-iv-e-i): every state and reason Square has, and those it has not told us about yet.
 import { describe, expect, it } from 'vitest';
 import { CHARGEBACK_REASONS, CHARGEBACK_STATES } from '@app/shared';
-import { CHARGEBACK_REASON_WORDS, chargebackLine, chargebackRowDetail, chargebackStartBox, chargebacksHeadline } from './chargebackView';
+import { CHARGEBACK_REASON_WORDS, chargebackLine, chargebackRowDetail, chargebackStartBox, chargebackStartedWords, chargebacksHeadline } from './chargebackView';
 
 const c = (over = {}) => ({ id: 'x', amountMinor: 2000, currency: 'USD', state: 'EVIDENCE_REQUIRED', reason: 'NO_KNOWLEDGE', dueOn: '2026-11-14', duePassed: false, card: { brand: 'VISA', last4: '1111' }, stops: true, ...over });
 
@@ -10,7 +10,7 @@ describe('a lost chargeback (18d-iv-e-ii-a)', () => {
 
   it('stays stopped until staff start it, and offers that only on a member payment that is stopped', () => {
     const line = chargebackLine(lost, true);
-    expect(line.detail).toBe('The cardholder says they were charged twice. Lost. The money went back to the card. Automatic charges stay stopped until you start them again.');
+    expect(line.detail).toBe("The cardholder says they were charged twice. You lost this chargeback. The money went back to the cardholder's card. Automatic charges stay stopped until you start them again.");
     expect(line.canStart).toBe(true);
     expect(chargebackLine({ ...lost, state: 'ACCEPTED' }, true).canStart).toBe(true);
     expect(chargebackLine(lost, false).canStart).toBe(false);
@@ -22,6 +22,15 @@ describe('a lost chargeback (18d-iv-e-ii-a)', () => {
     const line = chargebackLine({ ...lost, stops: false, chargesStartedOn: '2026-11-02' }, true);
     expect(line.detail).toContain('Automatic charges started again on 2 November 2026.');
     expect(line.canStart).toBe(false);
+  });
+
+  it('after the press it says what is true', () => {
+    const people = [{ name: 'Maya', what: 'Gold' }];
+    const card = { brand: 'VISA', last4: '1111' };
+    expect(chargebackStartedWords({ people, card, otherStops: false })).toBe('Automatic charges are back on. The app will charge Visa ending 1111 when bills are due.');
+    expect(chargebackStartedWords({ people, card: null, otherStops: false })).toContain('until a card is saved');
+    expect(chargebackStartedWords({ people, card, otherStops: true })).toContain('stay stopped');
+    expect(chargebackStartedWords({ people: [], card, otherStops: false })).toContain('no membership renews');
   });
 
   it('the box names who, and says so where nothing will be charged', () => {
@@ -52,9 +61,9 @@ describe('chargebackLine', () => {
 
   it.each([
     ['PROCESSING', 'Under review by the bank.'],
-    ['WON', 'Won.'],
-    ['LOST', 'The money went back to the card.'],
-    ['ACCEPTED', 'The money went back to the card.'],
+    ['WON', 'You won this chargeback.'],
+    ['LOST', 'You lost this chargeback.'],
+    ['ACCEPTED', 'You accepted this chargeback.'],
     ['INQUIRY_EVIDENCE_REQUIRED', 'The bank is asking about this payment.'],
     ['INQUIRY_PROCESSING', 'Under review by the bank.'],
     ['INQUIRY_CLOSED', 'The bank closed its inquiry.'],
