@@ -39,7 +39,7 @@ const LIVE_PLAN = "zz_posts_live";
 const NOON = new Date("2026-10-07T06:30:00Z");
 
 const photo = (name: string): string => readFileSync(new URL(`./fixtures/photos/${name}`, import.meta.url)).toString("base64");
-const IPHONE = photo("iphone16.jpg");
+const PHONE_PHOTO = photo("pixel7-meta.jpg");
 const PNG = photo("iphone16-exif.png");
 /** One emoji: one character on the screen, two units in a JavaScript string. */
 const FLEX = String.fromCodePoint(0x1f4aa);
@@ -236,7 +236,7 @@ d("a gym's Updates (real Postgres, real disk)", () => {
     "nobody outside the gym reads a post, a name or a photo, or changes anything",
     async () => {
       const gym = await makeGym("Private House");
-      const post = await add(gym, gym.owner, "Closed on Friday for the floor to be laid", [IPHONE]);
+      const post = await add(gym, gym.owner, "Closed on Friday for the floor to be laid", [PHONE_PHOTO]);
       const photoId = post.photos[0]?.id ?? "";
       const inside = await member(gym, "Vera Viewer");
       const other = await makeGym("Other House");
@@ -326,10 +326,10 @@ d("a gym's Updates (real Postgres, real disk)", () => {
   it(
     "a phone's photo is kept and sent without the place it was taken",
     async () => {
-      expect(hasGps(Buffer.from(IPHONE, "base64")), "the fixture carries a position").toBe(true);
+      expect(hasGps(Buffer.from(PHONE_PHOTO, "base64")), "the fixture carries a position").toBe(true);
       const gym = await makeGym("Photo House");
       const viewer = await member(gym, "Vera Viewer");
-      const post = await add(gym, gym.owner, "", [IPHONE, PNG]);
+      const post = await add(gym, gym.owner, "", [PHONE_PHOTO, PNG]);
       expect(post.photos).toHaveLength(2);
       const files = await filesOf(gym.id);
       expect(files).toHaveLength(2);
@@ -406,7 +406,7 @@ d("a gym's Updates (real Postgres, real disk)", () => {
   it("a post takes four photos of 1 MB each, and a photo one byte heavier is refused with nothing kept", async () => {
     const gym = await makeGym("Weigh House");
     // A real phone photo with its picture data made longer, so it weighs what is asked.
-    const real = readFileSync(new URL("./fixtures/photos/iphone16.jpg", import.meta.url));
+    const real = readFileSync(new URL("./fixtures/photos/pixel7-meta.jpg", import.meta.url));
     const end = real.lastIndexOf(Buffer.from([0xff, 0xd9]));
     const weighing = (bytes: number): Buffer => Buffer.concat([real.subarray(0, end), Buffer.alloc(bytes - real.length, 0x55), real.subarray(end)]);
     // Written out, not read from the code: 1 MB is the rule.
@@ -715,7 +715,7 @@ d("a gym's Updates (real Postgres, real disk)", () => {
       const gym = await makeGym("Remove House");
       const viewer = await member(gym, "Vera Viewer");
       const keep = await add(gym, gym.owner, "This one stays", [PNG]);
-      const post = await add(gym, gym.owner, "This one goes", [IPHONE, PNG]);
+      const post = await add(gym, gym.owner, "This one goes", [PHONE_PHOTO, PNG]);
       expect((await inject("PUT", `${posts(gym.id)}/${post.id}/pin`, gym.owner.cookies, { pinned: true })).statusCode).toBe(200);
       expect((await react(gym, viewer, post.id, "strong")).statusCode).toBe(200);
       expect((await react(gym, viewer, keep.id, "like")).statusCode).toBe(200);
@@ -929,7 +929,7 @@ d("a gym's Updates (real Postgres, real disk)", () => {
         expect((await row.ask(second, shared)).statusCode, `${row.name}: somebody else at the same address`).toBe(row.ok);
         // An address at its ceiling: refused there, whoever asks, and not anywhere else.
         const full = desk();
-        await fill(`rl:${row.name}:ip:${full}`, row.ipMax);
+        await fill(`rl:${row.name}:ip:${gym.id}:${full}`, row.ipMax);
         expect((await row.ask(third, full)).statusCode, `${row.name}: an address past ${String(row.ipMax)}`).toBe(429);
         expect((await row.ask(third, desk())).statusCode, `${row.name}: the same person elsewhere`).toBe(row.ok);
       }
@@ -946,7 +946,7 @@ d("a gym's Updates (real Postgres, real disk)", () => {
       ];
       for (const [n, door] of doors.entries()) {
         const wifi = desk();
-        await fill(`rl:${door.name}:ip:${wifi}`, door.ipMax - 1);
+        await fill(`rl:${door.name}:ip:${gym.id}:${wifi}`, door.ipMax - 1);
         for (let i = 0; i < 3; i++) expect((await door.ask(stranger, wifi)).statusCode, `door ${String(n)}: a stranger`).toBe(404);
         expect((await door.ask(fresh, wifi)).statusCode, `door ${String(n)}: a member after the strangers`).toBe(200);
         // And the address does have its ceiling: the member's next one is over it.
