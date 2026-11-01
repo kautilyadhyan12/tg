@@ -116,6 +116,30 @@ async function openApp(routes: Record<string, Route>, ask?: Ask) {
 
 const label = (name: string) => screen.queryAllByLabelText(new RegExp(`^${name}`));
 
+describe("Your Rank's read", () => {
+  it("a board that could not be read stops being said once the person has no gym", async () => {
+    const gym = { id: "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f", name: "Iron House", city: null, orgType: "gym", clockFormat: "12h", slug: "iron-house", timezone: "Asia/Kolkata", locale: "en", currencyDisplay: "INR", status: "active", staffRole: null, isMember: true, joinedAt: "2026-10-01T00:00:00.000Z" };
+    let member = true;
+    await openApp({
+      ...trained,
+      "/v1/orgs/mine": () => ({ status: 200, body: { orgs: member ? [gym] : [], formerOrgs: [] } }),
+      [`/v1/orgs/${gym.id}/leaderboard`]: () => {
+        throw new TypeError("Network request failed");
+      },
+    });
+    expect(await screen.findByText("Some of your numbers couldn’t load.")).toBeTruthy();
+    member = false;
+    const [first, , second] = await screen.findAllByRole("tab");
+    if (first === undefined || second === undefined) throw new Error("no tabs");
+    await fireEvent.press(second);
+    await fireEvent.press(first);
+    await waitFor(() => {
+      expect(screen.queryByText("Some of your numbers couldn’t load.")).toBeNull();
+    });
+    expect(screen.getByText("Coming soon")).toBeTruthy();
+  });
+});
+
 describe("the worst thing: nobody else's numbers on this person's Dashboard", () => {
   it("a reply to the person who signed out never lands on the next person's Dashboard", async () => {
     const ASHA = { ...RAVI, id: "2c9e7d41-5a3b-4f6e-8d2c-1b0a9f8e7d6c", email: "asha@example.com", displayName: "Asha" };
@@ -223,6 +247,7 @@ describe("the Dashboard, with the person's own numbers", () => {
     expect(screen.getByText("7-Day Streak")).toBeTruthy();
     expect(screen.getByText("First Workout")).toBeTruthy();
     expect(screen.getByText("Your Rank")).toBeTruthy();
+    // Somebody with no gym: Your Rank waits for their own board.
     expect(screen.getAllByText("Coming soon")).toHaveLength(1);
     // Recent Activity: the workout, the meal and the run, newest first, each named by its day.
     expect(screen.getByText("Recent Activity")).toBeTruthy();

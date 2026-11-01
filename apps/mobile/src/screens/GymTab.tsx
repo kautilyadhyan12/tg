@@ -26,6 +26,7 @@ import { placesHeading } from "./placesHeading";
 import { ClassesPage, type ClassesPlace } from "./gym/Classes";
 import { DaysYouCame } from "./gym/DaysYouCame";
 import { EventsPage, type EventsPlace } from "./gym/Events";
+import { LeaderboardPage, type LeaderboardPlace } from "./gym/Leaderboard";
 import { MembershipPage, type MembershipPlace } from "./gym/Membership";
 import { PersonalTrainingPage, type PtPlace } from "./gym/PersonalTraining";
 import { OWN_PASS_AFTER_MS, PASS_PATH, PassSheet } from "./gym/Pass";
@@ -78,6 +79,8 @@ export function GymScreen() {
   const [classesAt, setClassesAt] = useState<ClassesPlace | null>(null);
   // The place whose Events page is open over the tab, or null.
   const [eventsAt, setEventsAt] = useState<EventsPlace | null>(null);
+  // The place whose Leaderboard page is open over the tab, or null.
+  const [boardAt, setBoardAt] = useState<LeaderboardPlace | null>(null);
   // The place whose Personal training page is open over the tab, or null.
   const [ptAt, setPtAt] = useState<PtPlace | null>(null);
   const [membershipAt, setMembershipAt] = useState<MembershipPlace | null>(null);
@@ -247,6 +250,15 @@ export function GymScreen() {
                 }}
               />
               <Button
+                label="Leaderboard"
+                kind="link"
+                icon="trophy"
+                say={`Leaderboard at ${org.name}`}
+                onPress={() => {
+                  setBoardAt({ id: org.id, name: org.name, clockFormat: org.clockFormat });
+                }}
+              />
+              <Button
                 label="Personal training"
                 kind="link"
                 icon="dumbbell"
@@ -283,6 +295,12 @@ export function GymScreen() {
         place={eventsAt}
         onClose={() => {
           setEventsAt(null);
+        }}
+      />
+      <LeaderboardPage
+        place={boardAt}
+        onClose={() => {
+          setBoardAt(null);
         }}
       />
       <ClassesPage
@@ -381,7 +399,7 @@ const styles = StyleSheet.create({
   none: { padding: 18, gap: 10 },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },
   grow: { flex: 1 },
-  // Updates, Classes, Events, Personal training and My membership side by side, one under the other where they do not fit.
+  // Updates, Classes, Events, Leaderboard, Personal training and My membership side by side, one under the other where they do not fit.
   links: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", columnGap: 24 },
   address: {
     flexDirection: "row",
