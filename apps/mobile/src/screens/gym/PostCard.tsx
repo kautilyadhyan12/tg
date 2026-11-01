@@ -112,7 +112,7 @@ export function PostCard({ post, gymName, posted, photoUrl, files, photoRound, b
     <Card testID={`post-${post.id}`} style={styles.box}>
       <View style={styles.row}>
         {onPerson !== undefined && canOpenPerson(post) ? (
-          <Pressable testID={`post-person-${post.id}`} accessibilityRole="button" accessibilityLabel={personLink(post)} onPress={onPerson} style={[styles.row, styles.grow]}>
+          <Pressable testID={`person-open-${post.id}`} accessibilityRole="button" accessibilityLabel={personLink(post)} onPress={onPerson} style={[styles.row, styles.grow]}>
             {who}
           </Pressable>
         ) : (

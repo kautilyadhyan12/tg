@@ -138,6 +138,38 @@ describe("the worst thing: somebody is shown what they chose to keep, or what is
     });
   });
 
+  it("an older slow answer never brings back the places of somebody a newer answer hid", async () => {
+    const come = listenForComeBack();
+    const replies: ((reply: Reply) => void)[] = [];
+    const { ask } = fakeServer({
+      ...ROUTES,
+      [POSTS_OF()]: ok(theirPosts([post(P1)])),
+      [PLACES_OF()]: () =>
+        new Promise<Reply>((resolve) => {
+          replies.push(resolve);
+        }),
+    });
+    await openTom(ask);
+    await waitFor(() => {
+      expect(replies).toHaveLength(1);
+    });
+    await come();
+    await waitFor(() => {
+      expect(replies).toHaveLength(2);
+    });
+    await act(async () => {
+      replies[1]?.(noPlaces());
+      await Promise.resolve();
+    });
+    await settle();
+    await act(async () => {
+      replies[0]?.({ status: 200, body: places() });
+      await Promise.resolve();
+    });
+    await settle();
+    expect(profilePage().queryByTestId("stat-gym_days")).toBeNull();
+  });
+
   it("an answer naming somebody else is never drawn under this person", async () => {
     const { ask } = fakeServer({ ...ROUTES, [POSTS_OF()]: ok(theirPosts([])), [PLACES_OF()]: ok(places(PRIYA, "Priya S.")) });
     await openTom(ask);
@@ -268,7 +300,7 @@ describe("the page", () => {
     await openUpdates(ask);
     await screen.findByLabelText("See Tom B.'s profile");
     expect(screen.queryByLabelText("See Sam Coach's profile")).toBeNull();
-    expect(screen.queryByTestId(`post-person-${STAFF_POST}`)).toBeNull();
+    expect(screen.queryByTestId(`person-open-${STAFF_POST}`)).toBeNull();
   });
 
   it("shows the name, the gym and the numbers, as the board has them", async () => {
