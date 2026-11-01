@@ -28,6 +28,7 @@ import { startSaleRefund, startWholeSaleRefund } from "../src/modules/orgs/payme
 import { linesPage, totals } from "../src/modules/orgs/paymentsDownload/repo.js";
 import { squareSettings } from "../src/modules/orgs/payments/settings.js";
 import { processSquareWork } from "../src/modules/orgs/payments/work.js";
+import { recordSaleMadeInSquare } from "../src/modules/orgs/payments/saleCardRefundsRepo.js";
 import { keepSquareEvent } from "../src/modules/webhooks/repo.js";
 import { account, fakeSquare, type Account } from "./fakeSquareTerminal.js";
 import { proveAddress } from "./proveAddress.js";
@@ -945,6 +946,14 @@ d("Refund to card at Sell (real Postgres)", { timeout: T }, () => {
       expect((await review(shop)).filter((r) => r.kind === "place")).toHaveLength(0);
       expect(errorOf(await place(ours, pressId, [{ saleId: ours.water, amountMinor: 300, restock: 0 }]))).toBe("place_refund_changed");
       expect((await line(ours, ours.towel)).refunds[0]?.square).toMatchObject({ inSquare: true, card: { brand: "VISA", last4: "1111" } });
+    });
+
+    it("two workers with one refund at the same instant write it once", async () => {
+      const b = await sold(shop);
+      const r = { gymId: shop.id, environment: "production" as const, accountId: shop.acct.merchantId, squareRefundId: `race${uniq()}`, squarePaymentId: b.squarePaymentId, amountMinor: 1900, currency: "USD", card: null, madeAt: clock, today: "2026-01-01", now: clock, lookAt: clock };
+      const both = await Promise.all([recordSaleMadeInSquare(sql, r), recordSaleMadeInSquare(sql, r)]);
+      expect(both.map((x) => x.kind).sort()).toEqual(["already", "written"]);
+      expect((await refundsOf(shop, b.towel)).map((x) => x.amount_minor)).toEqual([1500]);
     });
 
     it("all of a basket is written by itself, on each product", async () => {
