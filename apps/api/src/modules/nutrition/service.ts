@@ -757,6 +757,9 @@ export async function getTargets(deps: Pick<NutritionDeps, "sql">, userId: strin
   return targetsFromPlan(planResult, pick, noCutReasons);
 }
 
+/** A meal logged draws other ideas: "what to eat next" should not offer what was just eaten. */
+export const ideasSeed = (userId: string, mealsLogged: number): string => `${userId}:${String(mealsLogged)}`;
+
 /** Meal ideas for what is left of the person's day (ROADMAP 34d-i), from their
  *  own diet, meals a day, the rings' calories and what they have logged today.
  *  The calories are the rings' own, so the rules that hold a cut hold here. */
@@ -778,7 +781,7 @@ export async function getMealIdeas(deps: Pick<NutritionDeps, "sql">, userId: str
   const day = dayInTz(now, timeZone);
   const eaten = await repo.dayEaten(deps.sql, userId, timeZone, day, LEAST_MEAL_KCAL);
   const { kcalLeft, meals } = suggestMeals({
-    seed: userId, day, diet, mealsPerDay, kcalTarget: targets.kcal, kcalEaten: eaten.kcal, mealsLogged: eaten.meals,
+    seed: ideasSeed(userId, eaten.meals), day, diet, mealsPerDay, kcalTarget: targets.kcal, kcalEaten: eaten.kcal, mealsLogged: eaten.meals,
   });
   return mealIdeasResponseSchema.parse({
     status: "ok", day, kcalLeft, meals, caution: FOOD_ALLERGY_CAUTION,
