@@ -139,6 +139,7 @@ const sampleBill = {
   gift: null,
   payments: [],
   voidedPayments: [],
+  chargesStopped: false,
   cardDeclined: null,
   cardUnchecked: null,
   charging: false,

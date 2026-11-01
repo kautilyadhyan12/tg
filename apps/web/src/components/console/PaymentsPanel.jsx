@@ -16,9 +16,7 @@ import {
   removedLine,
   squareOutcomeLine,
   squareRows,
-  RECONNECT_HINT,
-  RECONNECT_LINE,
-  RECONNECT_OTHERS,
+  reconnectWords,
   billingElsewhereLine,
 } from '../../pages/console/paymentsView';
 import PlaceLink from './PlaceLink';
@@ -303,16 +301,16 @@ export default function PaymentsPanel({ org, readOnly, startOpen = false, outcom
               {owner ? (
                 <>
                   <p className="text-sm m-0" style={{ color: '#fff' }}>
-                    {RECONNECT_LINE}
+                    {reconnectWords(data.allowFor).line}
                   </p>
                   <p className="text-sm m-0" style={hintStyle}>
-                    {RECONNECT_HINT}
+                    {reconnectWords(data.allowFor).hint}
                   </p>
                   {connectButton('Reconnect Square')}
                 </>
               ) : (
                 <p className="text-sm m-0" style={hintStyle}>
-                  {RECONNECT_OTHERS}
+                  {reconnectWords(data.allowFor).others}
                 </p>
               )}
             </section>

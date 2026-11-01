@@ -317,6 +317,25 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
     const amount = money(s, "amountMinor");
     return `${amount ?? "A refund"} was refunded in Square to ${cardOf(s, "brand", "last4") ?? "the card"} for ${person(s)}`;
   },
+  "org.chargeback": (s) => {
+    const amount = money(s, "amountMinor");
+    const what = amount === null ? "A chargeback" : `A chargeback of ${amount}`;
+    const on = text(s, "entryId") === null ? "" : ` for ${person(s)}`;
+    switch (text(s, "state")) {
+      case "WON":
+      case "INQUIRY_CLOSED":
+        return `${what}${on} was won`;
+      case "LOST":
+        return `${what}${on} was lost`;
+      case "ACCEPTED":
+        return `${what}${on} was accepted in Square`;
+      case "PROCESSING":
+      case "INQUIRY_PROCESSING":
+        return `${what}${on} is being reviewed by the bank`;
+      default:
+        return `${what}${on} came in from Square`;
+    }
+  },
   "org.member_refund_replaced": (s) => {
     const amount = money(s, "amountMinor");
     return `A noted refund${amount === null ? "" : ` of ${amount}`} for ${person(s)} was replaced by Square's own record`;

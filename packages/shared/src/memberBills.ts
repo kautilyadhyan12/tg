@@ -13,6 +13,7 @@
 // before bills were kept.
 import { z } from "zod";
 import { cardDeclinedSchema, cardSeenSchema, cardUncheckedSchema } from "./cardCharges.js";
+import { chargebackSeenSchema } from "./chargebacks.js";
 
 export const MEMBER_BILL_STATUSES = ["open", "paid", "void", "refunded"] as const;
 export const memberBillStatusSchema = z.enum(MEMBER_BILL_STATUSES);
@@ -227,6 +228,8 @@ export const memberPaymentSchema = z
     card: cardSeenSchema.nullable().default(null),
     /** A refund to the card Square has not answered (18d-iv-a): `lost`, never answered, so it is checked in Square. */
     cardRefund: cardRefundOpenSchema.nullable().default(null),
+    /** The chargebacks on it, oldest first (18d-iv-e-i), for staff who may bill. */
+    chargebacks: z.array(chargebackSeenSchema).default([]),
   })
   .strict();
 export type MemberPayment = z.infer<typeof memberPaymentSchema>;
@@ -234,7 +237,7 @@ export type MemberPayment = z.infer<typeof memberPaymentSchema>;
 /** A payment staff voided (18o): kept on the page, struck through, and counted in nothing.
  *  A payment is voided only once no refund stands on it, so it carries voided ones alone. */
 export const voidedMemberPaymentSchema = memberPaymentSchema
-  .omit({ refunds: true, refundableMinor: true, cardRefund: true })
+  .omit({ refunds: true, refundableMinor: true, cardRefund: true, chargebacks: true })
   .extend({ voided: voidedBy(paymentVoidReasonSchema) })
   .strict();
 export type VoidedMemberPayment = z.infer<typeof voidedMemberPaymentSchema>;
@@ -281,6 +284,8 @@ export const memberBillSchema = z
     /** The payments on it that staff voided, in the order they were recorded. */
     voidedPayments: z.array(voidedMemberPaymentSchema),
     /** Its newest charge to a card on file was declined, and it is still owed (18d-iii-i). */
+    /** A chargeback stopped the app charging this by itself (18d-iv-e-i). */
+    chargesStopped: z.boolean().default(false),
     cardDeclined: cardDeclinedSchema.nullable().default(null),
     /** Its newest charge to a card on file Square never answered, and it is still owed. */
     cardUnchecked: cardUncheckedSchema.nullable().default(null),
@@ -329,6 +334,8 @@ export const memberFeeSchema = z
     payments: z.array(memberPaymentSchema),
     voidedPayments: z.array(voidedMemberPaymentSchema),
     /** As a bill's (18d-iii-i). */
+    /** A chargeback stopped the app charging this by itself (18d-iv-e-i). */
+    chargesStopped: z.boolean().default(false),
     cardDeclined: cardDeclinedSchema.nullable().default(null),
     cardUnchecked: cardUncheckedSchema.nullable().default(null),
     charging: z.boolean().default(false),

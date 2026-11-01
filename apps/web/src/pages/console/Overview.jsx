@@ -8,6 +8,7 @@ import OverviewNumbers from '../../components/console/OverviewNumbers';
 import StartHereCard from '../../components/console/StartHereCard';
 import LastSevenDays from '../../components/console/LastSevenDays';
 import FailedPaymentsCard from '../../components/console/FailedPaymentsCard';
+import ChargebacksCard from '../../components/console/ChargebacksCard';
 import RefundsToReviewCard from '../../components/console/RefundsToReviewCard';
 import TrialCard from '../../components/console/TrialCard';
 import CoOwnerRequest from '../../components/console/CoOwnerRequest';
@@ -491,6 +492,9 @@ export default function Overview() {
 
       {/* REFUNDS TO REVIEW (18d-iv-b-iii): fees no longer owed and refunds that went wrong. Drawn only where there are some. */}
       <RefundsToReviewCard org={org} orgSlug={orgSlug} privileges={viewerPrivileges(org)} readOnly={readOnly} />
+
+      {/* CHARGEBACKS (18d-iv-e-i): those still to answer in Square, the soonest date first. Drawn only where there are some. */}
+      <ChargebacksCard org={org} orgSlug={orgSlug} privileges={viewerPrivileges(org)} readOnly={readOnly} />
 
       {/* ── The join code pane, on its own outcome ─────────────────────── */}
       {codes.loading ? <ConsoleLoading label="Loading…" /> : null}

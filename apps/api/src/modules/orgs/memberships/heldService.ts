@@ -7,6 +7,7 @@
 //
 // Every date is worked out on the gym's own day: the server's clock read in the
 // gym's time zone, never the caller's.
+import type { ChargebackSeen } from "@app/shared";
 import type { Sql } from "postgres";
 import type { CardRefundOpen } from "@app/shared";
 import {
@@ -82,6 +83,7 @@ import { recordStopped } from "../classes/bookingStops.js";
 import { freezeFeeOf } from "./freezeFees.js";
 import { chargesOfBills } from "../payments/cardChargesRepo.js";
 import { openPressesOf } from "../payments/cardRefundsRepo.js";
+import { chargebacksOfPayments, chargesStoppedOf } from "../payments/chargebacksRepo.js";
 import { blockedOf, expiringCards, remindersOn, type ExpiringCard } from "../payments/cardExpiryRepo.js";
 import { emailHmac } from "../invites/address.js";
 import { type FeePaymentRow, type FeeRow } from "./feesRepo.js";
@@ -119,6 +121,8 @@ function billingOf(
     gifts: ReadonlyMap<string, { offMinor: number; currency: string; friendName: string | null }>;
     charges: Charges;
     presses: Awaited<ReturnType<typeof openPressesOf>>;
+    chargebacks: Map<string, ChargebackSeen[]>;
+    chargesStopped: Set<string>;
   },
 ): Omit<MemberBilling, "change"> {
   const view = heldMembershipView(row.membership, ctx.today);
@@ -182,6 +186,7 @@ function billingOf(
           voidedRefunds: voidedRefundsOf(p.id),
           refundableMinor: paymentRefundableMinor(b, p),
           cardRefund: ctx.presses.get(p.id) ?? null,
+          chargebacks: ctx.chargebacks.get(p.id) ?? [],
           receiptNumber: p.receiptNumber,
           card: ctx.charges.cardOfPayment.get(p.id) ?? null,
         })),
@@ -199,6 +204,7 @@ function billingOf(
           voided: p.voided,
         })),
       // A decline is said while the bill is still owed (18d-iii-i).
+      chargesStopped: b.status === "open" && ctx.chargesStopped.has(row.id),
       cardDeclined: b.status === "open" ? (ctx.charges.declined.get(b.id) ?? null) : null,
       cardUnchecked: b.status === "open" ? (ctx.charges.unchecked.get(b.id) ?? null) : null,
       charging: ctx.charges.charging.has(b.id),
@@ -236,7 +242,7 @@ function freezeFeeFirstOn(row: { id: string; membership: HeldMembership }, gymFe
 function feeOf(
   f: FeeRow,
   payments: readonly FeePaymentRow[],
-  ctx: { today: string; overdueAfterDays: number; charges: Charges; presses: Awaited<ReturnType<typeof openPressesOf>> },
+  ctx: { today: string; overdueAfterDays: number; charges: Charges; presses: Awaited<ReturnType<typeof openPressesOf>>; chargebacks: Map<string, ChargebackSeen[]>; chargesStopped: Set<string> },
   back: { refunds: (paymentId: string) => MemberPayment["refunds"]; voided: (paymentId: string) => MemberPayment["voidedRefunds"] },
 ): MemberFee {
   const mine = payments.filter((p) => p.billId === f.id);
@@ -279,8 +285,10 @@ function feeOf(
       voidedRefunds: back.voided(p.id),
       refundableMinor: paidThroughSquare(p.method) ? paymentRefundableMinor(whole, { amountMinor: p.amountMinor, refundedMinor: refundedOf(p.id) }) : 0,
       cardRefund: ctx.presses.get(p.id) ?? null,
+      chargebacks: ctx.chargebacks.get(p.id) ?? [],
     })),
     voidedPayments: mine.flatMap((p) => (p.voided === null ? [] : [{ ...paymentOf(p), voidedRefunds: [], voided: p.voided }])),
+    chargesStopped: owed && ctx.chargesStopped.has(f.membershipId),
     cardDeclined: owed ? (ctx.charges.declined.get(f.id) ?? null) : null,
     cardUnchecked: owed ? (ctx.charges.unchecked.get(f.id) ?? null) : null,
     charging: ctx.charges.charging.has(f.id),
@@ -351,7 +359,9 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
     ? await chargesOfBills(deps.sql, gymId, [...list.bills.map((b) => b.id), ...list.fees.map((f) => f.id)], [...list.payments.map((p) => p.id), ...list.feePayments.map((p) => p.id)], deps.now())
     : NO_CHARGES;
   const presses = canBill ? await openPressesOf(deps.sql, gymId, [...list.payments, ...list.feePayments.filter((p) => p.voided === null)].map((p) => p.id)) : new Map<string, CardRefundOpen>();
-  const ctx = { today, past: list.past, overdueAfterDays: list.overdueAfterDays, gifts, charges, presses };
+  const chargebacks = canBill ? await chargebacksOfPayments(deps.sql, gymId, [...list.payments, ...list.feePayments.filter((p) => p.voided === null)].map((p) => p.id), deps.now()) : new Map<string, ChargebackSeen[]>();
+  const chargesStopped = canBill ? await chargesStoppedOf(deps.sql, gymId, [...list.inUse, ...list.over].map((r) => r.id)) : new Set<string>();
+  const ctx = { today, past: list.past, overdueAfterDays: list.overdueAfterDays, gifts, charges, presses, chargebacks, chargesStopped };
   // The page reads a membership as the next write will find it: with its count moved
   // over the periods nobody was asked for (`countAfterGap`), which `settle` then writes.
   const asOfToday = (row: repo.HeldRow): repo.HeldRow => {

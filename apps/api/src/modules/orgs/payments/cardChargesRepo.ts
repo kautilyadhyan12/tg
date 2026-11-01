@@ -23,6 +23,7 @@ import {
 } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import { insertAudit } from "../repo.js";
+import { chargebackStops, chargesStoppedOf } from "./chargebacksRepo.js";
 import { recordPaymentIn } from "../memberships/billsRepo.js";
 import { recordFeePaymentIn } from "../memberships/feesRepo.js";
 import { billsFor, squareMoneyOut } from "../memberships/billsSql.js";
@@ -255,6 +256,8 @@ export async function startCharge(sql: Sql, s: NewCharge): Promise<StartChargeOu
     // period's bill only while it is in use, a freeze fee only while it is frozen (review round one).
     const status = heldMembershipView(row.membership, s.today).status;
     if (s.bySchedule && status !== (s.target.kind === "period" ? "active" : "frozen")) return { kind: "not_allowed" };
+    // Whoever pays told their bank a charge was wrong (18d-iv-e-i): the app does not charge them again by itself. Staff still may.
+    if (s.bySchedule && (await chargesStoppedOf(tx, s.gymId, [row.id])).size > 0) return { kind: "not_allowed" };
 
     let billId: string | null;
     let amountMinor: number;
@@ -527,6 +530,7 @@ export interface DueBill {
 const appCharges = (sql: SqlOrTx) => sql`
       b.status = 'open'
       AND h.kind = 'recurring' AND h.renews AND b.currency = d.currency AND h.entry_id IS NOT NULL
+      AND NOT EXISTS (${chargebackStops(sql)})
       -- A current member: looked up by the record's key, row by row, so the plan does not lean on the
       -- list's statistics (a join here took 17 s with 6,000 due just after they were added).
       AND NOT EXISTS (SELECT 1 FROM gym_member_list_entries e WHERE e.gym_id = h.gym_id AND e.id = h.entry_id AND e.former_at IS NOT NULL)

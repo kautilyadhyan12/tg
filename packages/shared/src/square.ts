@@ -75,7 +75,7 @@ export const squareWebhookBodySchema = z.object({
   merchant_id: squareObjectIdSchema,
   type: z.string().min(1).max(100),
   event_id: z.string().regex(/^[\x21-\x7e]{1,100}$/),
-  data: z.object({ type: z.string().max(60).optional(), id: z.string().max(200).optional() }).optional(),
+  data: z.object({ type: z.string().max(60).optional(), id: z.string().max(200).optional(), object: z.object({ dispute: z.object({ id: z.string().max(255).optional() }).optional() }).optional() }).optional(),
 });
 
 // A member's card saved on Square's own form (ROADMAP 18d-ii; developer.squareup.com, read
@@ -306,6 +306,30 @@ export type SquareRefund = z.infer<typeof squareRefundSchema>;
 
 /** RefundPayment's and GetPaymentRefund's answer. */
 export const squareRefundAnswerSchema = z.object({ refund: squareRefundSchema });
+
+/** A chargeback (18d-iv-e-i; "Process Disputes", read 2026-11-01; seen in Square's test area, 2026-11-01). `due_at` is Square's own
+ *  date for that dispute. A state or reason nobody has placed still reads, so a new word never hides a chargeback. */
+export const squareDisputeIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,255}$/);
+export const squareDisputeSchema = z.object({
+  id: squareDisputeIdSchema,
+  state: z.string().max(60),
+  reason: z.string().max(60).nullish(),
+  amount_money: squareMoneySchema,
+  due_at: squareTimeSchema.nullish(),
+  card_brand: z.string().max(40).nullish(),
+  disputed_payment: z.object({ payment_id: squarePaymentIdSchema }),
+  updated_at: squareTimeSchema.nullish(),
+});
+export type SquareDispute = z.infer<typeof squareDisputeSchema>;
+
+/** RetrieveDispute's answer. */
+export const squareDisputeAnswerSchema = z.object({ dispute: squareDisputeSchema });
+
+/** ListDisputes' answer: each read on its own, so one Square cannot be read never hides the rest. */
+export const squareDisputesPageSchema = z.object({
+  disputes: z.array(z.unknown()).max(1000).nullish(),
+  cursor: z.string().max(2048).nullish(),
+});
 
 /** ListPaymentRefunds' answer (18d-iv-d-i): each read on its own, so one Square cannot be read never hides the rest. */
 export const squareRefundsPageSchema = z.object({

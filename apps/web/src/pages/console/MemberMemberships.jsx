@@ -25,6 +25,7 @@ import { changeBody, changeChoice, changeCreditLine, changeDoneWords, changeEndi
 import { viewerPrivileges } from './consoleView';
 import { placeFor } from './consolePlaces';
 import CardRefundBox from './CardRefundBox';
+import ChargebackLines from './ChargebackLines';
 import { cardRefundSaidNow, refundReasonsFor, waitsOnSquare } from './cardRefundView';
 import MembershipAgreement from './MembershipAgreement';
 import { noteDay } from './memberListPeople';
@@ -968,6 +969,7 @@ export default function MemberMemberships({
                         {p.cardRefund}
                       </span>
                     ) : null}
+                    <ChargebackLines lines={p.chargebacks ?? []} />
                     {receiptFor === p.receiptNumber ? <ReceiptBox gymId={gymId} gym={gym} number={p.receiptNumber} onClose={() => setReceiptFor(null)} /> : null}
                     {saidUnder(m, p.id)}
                     {refundBoxUnder(m, p.id)}
@@ -1583,6 +1585,7 @@ export default function MemberMemberships({
                         {p.cardRefund}
                       </span>
                     ) : null}
+                    <ChargebackLines lines={p.chargebacks ?? []} />
                     {receiptFor === p.receiptNumber ? <ReceiptBox gymId={gymId} gym={gym} number={p.receiptNumber} onClose={() => setReceiptFor(null)} /> : null}
                     {saidUnder(m, p.id)}
                     {boxUnderPayment(p.id)}

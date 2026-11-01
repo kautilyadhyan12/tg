@@ -20,6 +20,7 @@ import { processTerminalPayments } from "./terminalPayments.js";
 import { processCardCharges, type CardChargeRun } from "./cardCharges.js";
 import { processCardRefunds, type CardRefundRun } from "./cardRefunds.js";
 import { sendOwedCustomerDeletes, type SquareDeletesRun } from "./squareDeletes.js";
+import { SQUARE_DISPUTE_EVENTS, checkSquareDispute, processChargebacks } from "./chargebacks.js";
 import { SQUARE_REFUND_EVENTS, checkSquareRefund, processMadeInSquare, type MadeInSquareRun } from "./squareMadeRefunds.js";
 
 export const SQUARE_REVOKED_EVENT = "oauth.authorization.revoked";
@@ -65,6 +66,7 @@ export interface SquareWorkRun {
   cardRefunds: CardRefundRun;
   /** Refunds made inside Square, read each hour, and presses left "We don't know" read against Square's record (18d-iv-d-i). */
   madeInSquare: MadeInSquareRun;
+  chargebacks: { reads: number };
 }
 
 type Check = "works" | "removed" | "unknown";
@@ -157,6 +159,7 @@ export async function processSquareWork(deps: PaymentsDeps, eventIds: readonly s
     cardCharges: { asked: 0, charged: 0, paid: 0, declined: 0 },
     cardRefunds: { asked: 0, looked: 0 },
     madeInSquare: { reads: 0, lostLooks: 0 },
+    chargebacks: { reads: 0 },
   };
   const square = deps.square;
   if (square === null) return run;
@@ -168,20 +171,23 @@ export async function processSquareWork(deps: PaymentsDeps, eventIds: readonly s
     const isCard = payload !== null && SQUARE_CARD_EVENTS.includes(payload.type) && payload.cardId !== undefined;
     const isCustomer = payload !== null && payload.type === SQUARE_CUSTOMER_DELETED_EVENT && payload.customerId !== undefined;
     const isRefund = payload !== null && SQUARE_REFUND_EVENTS.includes(payload.type) && payload.refundId !== undefined;
+    const isDispute = payload !== null && SQUARE_DISPUTE_EVENTS.includes(payload.type) && payload.disputeId !== undefined;
     // Square's message about a payment, kept before Square Point of Sale was taken out (18d-iii-b-v): nothing to do.
     if (payload?.type.startsWith("payment.") === true) {
       await webhooks.finishEvent(deps.sql, event, "done", deps.now());
       run.unchanged += 1;
       continue;
     }
-    if (payload === null || (payload.type !== SQUARE_REVOKED_EVENT && !isCard && !isCustomer && !isRefund)) {
+    if (payload === null || (payload.type !== SQUARE_REVOKED_EVENT && !isCard && !isCustomer && !isRefund && !isDispute)) {
       await webhooks.finishEvent(deps.sql, event, "failed", deps.now());
       deps.log.warn({ event: "square.event_unreadable", webhookEventId: event.id }, "a kept Square event no longer parses");
       run.givenUp += 1;
       continue;
     }
     let unknown = false;
-    if (isRefund && payload.refundId !== undefined) {
+    if (isDispute && payload.disputeId !== undefined) {
+      unknown = (await checkSquareDispute(deps, square, payload.accountId, payload.disputeId)) === "unknown";
+    } else if (isRefund && payload.refundId !== undefined) {
       unknown = (await checkSquareRefund(deps, square, payload.accountId, payload.refundId)) === "unknown";
     } else if (isCard && payload.cardId !== undefined) {
       unknown = (await checkSquareCard(deps, square, payload.accountId, payload.cardId)) === "unknown";
@@ -223,6 +229,7 @@ export async function processSquareWork(deps: PaymentsDeps, eventIds: readonly s
   run.cardCharges = await processCardCharges(deps, square, gymIds);
   run.cardRefunds = await processCardRefunds(deps, square, gymIds);
   run.madeInSquare = await processMadeInSquare(deps, square, gymIds);
+  run.chargebacks = await processChargebacks(deps, square, gymIds);
 
   for (const row of await repo.claimDueRefreshes(deps.sql, square.environment, deps.now(), SQUARE_WORK.leaseMs, SQUARE_WORK.refreshesPerRun, gymIds)) {
     const outcome = await renew(deps, square, row);

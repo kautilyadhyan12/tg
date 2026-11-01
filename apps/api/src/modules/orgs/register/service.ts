@@ -137,6 +137,7 @@ const shownSales = (sales: readonly repo.SaleRow[], today: string, canSell: bool
       canRefund,
       toCard: canRefund && s.method === "terminal",
       cardRefund: canSell ? s.cardRefund : null,
+      chargebacks: canSell ? s.chargebacks : [],
       toPlace: canSell ? s.toPlace : [],
       refunds: s.refunds.map((r) => ({
         ...r,

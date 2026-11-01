@@ -229,4 +229,24 @@ export const billingElsewhereLine = (people) => `If your old software or Square 
 export const RECONNECT_LINE = 'Reconnect Square so Delete permanently can take people out of your Square customer list.';
 export const RECONNECT_HINT = "Square will ask you to approve one more thing: reading its subscriptions, so nobody Square still charges is taken out.";
 export const RECONNECT_OTHERS = 'The owner needs to reconnect Square before Delete permanently can take people out of your Square customer list.';
+/** The same, saying what connecting again adds (18d-iv-e-i), for each thing it would add. */
+export function reconnectWords(allowFor) {
+  const list = allowFor ?? [];
+  const chargebacks = list.includes('chargebacks');
+  if (chargebacks && list.includes('subscriptions')) {
+    return {
+      line: 'Reconnect Square so chargebacks show here and Delete permanently can take people out of your Square customer list.',
+      hint: 'Square will ask you to approve two more things: reading your chargebacks and its subscriptions.',
+      others: 'The owner needs to reconnect Square before chargebacks can show here and Delete permanently can take people out of your Square customer list.',
+    };
+  }
+  if (chargebacks) {
+    return {
+      line: 'Reconnect Square so chargebacks show here, with the date to answer each one.',
+      hint: 'Square will ask you to approve one more thing: reading your chargebacks.',
+      others: 'The owner needs to reconnect Square before chargebacks can show here.',
+    };
+  }
+  return { line: RECONNECT_LINE, hint: RECONNECT_HINT, others: RECONNECT_OTHERS };
+}
 export const TERMINAL_OWNER_ONLY = 'Only the owner can pair or remove Terminals.';
