@@ -145,7 +145,7 @@ d("A chargeback (real Postgres)", { timeout: T }, () => {
     await sql`DELETE FROM plans WHERE code = ${LIVE_PLAN}`;
   };
 
-  const send = (method: "GET" | "POST" | "DELETE", path: string, cookies: Cookies, payload?: unknown) =>
+  const send = (method: "GET" | "POST" | "PUT" | "DELETE", path: string, cookies: Cookies, payload?: unknown) =>
     api().inject({
       method,
       url: path,
