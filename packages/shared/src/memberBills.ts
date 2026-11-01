@@ -13,7 +13,7 @@
 // before bills were kept.
 import { z } from "zod";
 import { cardDeclinedSchema, cardSeenSchema, cardUncheckedSchema } from "./cardCharges.js";
-import { chargebackSeenSchema } from "./chargebacks.js";
+import { chargeStopSchema, chargebackSeenSchema } from "./chargebacks.js";
 
 export const MEMBER_BILL_STATUSES = ["open", "paid", "void", "refunded"] as const;
 export const memberBillStatusSchema = z.enum(MEMBER_BILL_STATUSES);
@@ -283,9 +283,9 @@ export const memberBillSchema = z
     payments: z.array(memberPaymentSchema),
     /** The payments on it that staff voided, in the order they were recorded. */
     voidedPayments: z.array(voidedMemberPaymentSchema),
+    /** A chargeback stopped the app charging this by itself, or one since ended left it past the days the app charges (18d-iv-e-i). */
+    chargeStop: chargeStopSchema.nullable().default(null),
     /** Its newest charge to a card on file was declined, and it is still owed (18d-iii-i). */
-    /** A chargeback stopped the app charging this by itself (18d-iv-e-i). */
-    chargesStopped: z.boolean().default(false),
     cardDeclined: cardDeclinedSchema.nullable().default(null),
     /** Its newest charge to a card on file Square never answered, and it is still owed. */
     cardUnchecked: cardUncheckedSchema.nullable().default(null),
@@ -333,9 +333,9 @@ export const memberFeeSchema = z
     refundedMinor: minorSchema.default(0),
     payments: z.array(memberPaymentSchema),
     voidedPayments: z.array(voidedMemberPaymentSchema),
+    /** A chargeback stopped the app charging this by itself, or one since ended left it past the days the app charges (18d-iv-e-i). */
+    chargeStop: chargeStopSchema.nullable().default(null),
     /** As a bill's (18d-iii-i). */
-    /** A chargeback stopped the app charging this by itself (18d-iv-e-i). */
-    chargesStopped: z.boolean().default(false),
     cardDeclined: cardDeclinedSchema.nullable().default(null),
     cardUnchecked: cardUncheckedSchema.nullable().default(null),
     charging: z.boolean().default(false),

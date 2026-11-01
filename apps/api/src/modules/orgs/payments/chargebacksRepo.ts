@@ -34,21 +34,37 @@ const seen = (r: RawSeen): ChargebackSeen => {
   return seenOf(r, { state: chargebackStateSchema.parse(r.state), reason: reason.success ? reason.data : null });
 };
 
+/** The gym is still connected to the Square account that holds it: only then can the app follow it. */
+const stillReadable = (sql: SqlOrTx) => sql`EXISTS (SELECT 1 FROM gym_payment_connections pc WHERE pc.gym_id = q.gym_id AND pc.provider = 'square' AND pc.account_id = q.account_id AND pc.environment = q.environment)`;
+
 const seenColumns = (sql: SqlOrTx, now: Date) => sql`
-  q.id, q.amount_minor, q.currency, q.state, q.reason, q.brand, q.last4,
+  q.id, q.amount_minor, q.currency, q.reason, q.brand, q.last4,
+  -- In a Square account the gym has left, an open one can no longer be followed: only the gym can check.
+  CASE WHEN q.state IN ('WON','LOST','ACCEPTED','INQUIRY_CLOSED') OR ${stillReadable(sql)} THEN q.state ELSE 'UNKNOWN' END AS state,
   (q.due_at AT TIME ZONE g.timezone)::date::text AS due_on, COALESCE(q.due_at <= ${now}, false) AS due_passed`;
 
-/** The chargebacks that stop the app charging whoever pays for membership `h` by itself, for a NOT EXISTS: one on a payment of that
- *  membership, or of any membership the same person pays for, unless the gym won it or the bank closed its question. */
-export const chargebackStops = (sql: SqlOrTx) => sql`
-      SELECT 1 FROM gym_square_disputes q
+const disputesOfPayer = (sql: SqlOrTx) => sql`
+      FROM gym_square_disputes q
       JOIN gym_member_payments pay ON pay.gym_id = q.gym_id AND pay.provider = 'square' AND pay.provider_payment_id = q.square_payment_id
       JOIN gym_member_bills paid ON paid.gym_id = pay.gym_id AND paid.id = pay.bill_id
       JOIN gym_held_memberships held ON held.gym_id = paid.gym_id AND held.id = paid.held_membership_id
-      WHERE q.gym_id = h.gym_id AND q.state NOT IN ('WON','INQUIRY_CLOSED')
+      WHERE q.gym_id = h.gym_id AND ${stillReadable(sql)}
         AND (held.id = h.id
              OR COALESCE((SELECT x.payer_entry_id FROM gym_member_payers x WHERE x.gym_id = held.gym_id AND x.entry_id = held.entry_id), held.entry_id)
               = COALESCE((SELECT x.payer_entry_id FROM gym_member_payers x WHERE x.gym_id = h.gym_id AND x.entry_id = h.entry_id), h.entry_id))`;
+
+/** The chargebacks that stop the app charging whoever pays for membership `h` by itself, for a NOT EXISTS: one on a payment of that
+ *  membership, or of any membership the same person pays for, unless the gym won it or the bank closed its question. */
+export const chargebackStops = (sql: SqlOrTx) => sql`SELECT 1 ${disputesOfPayer(sql)} AND q.state NOT IN ('WON','INQUIRY_CLOSED')`;
+
+/** The same for one that has ended in the gym's favour. */
+export const chargebackEnded = (sql: SqlOrTx) => sql`SELECT 1 ${disputesOfPayer(sql)} AND q.state IN ('WON','INQUIRY_CLOSED')`;
+
+/** The name of somebody else whose chargeback stops membership `h`. */
+export const chargebackHolder = (sql: SqlOrTx) => sql`
+      SELECT (SELECT e.full_name FROM gym_member_list_entries e WHERE e.gym_id = held.gym_id AND e.id = held.entry_id) ${disputesOfPayer(sql)}
+        AND q.state NOT IN ('WON','INQUIRY_CLOSED') AND held.entry_id IS DISTINCT FROM h.entry_id
+      LIMIT 1`;
 
 /** Which of these memberships the app no longer charges by itself. */
 export async function chargesStoppedOf(sql: SqlOrTx, gymId: string, membershipIds: readonly string[]): Promise<Set<string>> {
@@ -59,9 +75,10 @@ export async function chargesStoppedOf(sql: SqlOrTx, gymId: string, membershipId
   return new Set(rows.map((r) => r.id));
 }
 
-export async function disputeKnown(sql: SqlOrTx, gymId: string, environment: SquareEnvironment, squareDisputeId: string): Promise<boolean> {
-  const [row] = await sql<{ id: string }[]>`SELECT id FROM gym_square_disputes WHERE gym_id = ${gymId} AND environment = ${environment} AND square_dispute_id = ${squareDisputeId}`;
-  return row !== undefined;
+/** Its card is already kept: a refused read of the payment is asked again next time. */
+export async function cardKnown(sql: SqlOrTx, gymId: string, environment: SquareEnvironment, squareDisputeId: string): Promise<boolean> {
+  const [row] = await sql<{ brand: string | null }[]>`SELECT brand FROM gym_square_disputes WHERE gym_id = ${gymId} AND environment = ${environment} AND square_dispute_id = ${squareDisputeId}`;
+  return row !== undefined && row.brand !== null;
 }
 
 /** Square's record, written once and kept current, and told to Staff activity when it first comes and each time its state moves. */
@@ -86,17 +103,18 @@ export async function writeDispute(
   await sql.begin(async (tx) => {
     const [was] = await tx<{ id: string; state: string }[]>`
       SELECT id, state FROM gym_square_disputes WHERE gym_id = ${d.gymId} AND environment = ${d.environment} AND square_dispute_id = ${d.squareDisputeId} FOR UPDATE`;
-    const [row] = await tx<{ id: string; state: string }[]>`
+    const [row] = await tx<{ id: string; state: string; inserted: boolean }[]>`
       INSERT INTO gym_square_disputes (gym_id, environment, account_id, square_dispute_id, square_payment_id, amount_minor, currency, state, reason, due_at, brand, last4, square_updated_at, changed_at)
       VALUES (${d.gymId}, ${d.environment}, ${d.accountId}, ${d.squareDisputeId}, ${d.squarePaymentId}, ${d.amountMinor}, ${d.currency}, ${d.state}, ${d.reason}, ${d.dueAt},
               ${d.card?.brand ?? null}, ${d.card?.last4 ?? null}, ${d.squareUpdatedAt}, ${d.now})
       ON CONFLICT (gym_id, environment, square_dispute_id) DO UPDATE
       SET state = EXCLUDED.state, reason = EXCLUDED.reason, due_at = EXCLUDED.due_at, amount_minor = EXCLUDED.amount_minor, currency = EXCLUDED.currency,
+          brand = COALESCE(EXCLUDED.brand, gym_square_disputes.brand), last4 = COALESCE(EXCLUDED.last4, gym_square_disputes.last4),
           square_updated_at = EXCLUDED.square_updated_at, changed_at = EXCLUDED.changed_at
       WHERE gym_square_disputes.square_updated_at IS NULL OR EXCLUDED.square_updated_at IS NULL OR EXCLUDED.square_updated_at >= gym_square_disputes.square_updated_at
-      RETURNING id, state`;
-    // An older answer changed nothing; two workers at one instant wait on the row or on the unique index, and only the first says so.
-    if (row === undefined || was?.state === row.state) return;
+      RETURNING id, state, (xmax = 0) AS inserted`;
+    // An older answer changed nothing. Two workers at one instant: the second read no row, waited on the unique index and updated, so it says nothing.
+    if (row === undefined || was?.state === row.state || (was === undefined && !row.inserted)) return;
     const [person] = await tx<{ entry_id: string | null }[]>`
       SELECT h.entry_id FROM gym_member_payments p
       JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
@@ -147,7 +165,7 @@ export async function chargebacksOfSales(sql: SqlOrTx, gymId: string, saleIds: r
   return out;
 }
 
-export type ChargebackRow = Omit<ChargebackToAnswer, "member"> & { member: { entryId: string; typeName: string; fee: MemberFeeKind | null } | null };
+export type ChargebackRow = Omit<ChargebackToAnswer, "member"> & { member: { entryId: string | null; typeName: string; fee: MemberFeeKind | null } | null };
 
 /** Those still to answer, the soonest date first: Square still waits on the gym, and its date has not passed. */
 export async function chargebacksToAnswer(sql: Sql, gymId: string, members: boolean, now: Date, from: number, limit: number): Promise<{ count: number; rows: ChargebackRow[] }> {
@@ -158,17 +176,18 @@ export async function chargebacksToAnswer(sql: Sql, gymId: string, members: bool
       SELECT ${seenColumns(sql, now)}, q.due_at AS at, q.square_payment_id, q.gym_id
       FROM gym_square_disputes q
       JOIN gyms g ON g.id = q.gym_id
-      WHERE q.gym_id = ${gymId} AND q.state IN ('EVIDENCE_REQUIRED','INQUIRY_EVIDENCE_REQUIRED','UNKNOWN') AND (q.due_at IS NULL OR q.due_at > ${now})
+      WHERE q.gym_id = ${gymId} AND q.state IN ('EVIDENCE_REQUIRED','INQUIRY_EVIDENCE_REQUIRED','UNKNOWN') AND (q.due_at IS NULL OR q.due_at > ${now}) AND ${stillReadable(sql)}
     ),
     listed AS (
-      SELECT o.*, e.full_name AS name, e.former_at IS NOT NULL AS past, false AS person_deleted, e.id AS entry_id, t.name AS type_name, b.fee,
+      SELECT o.*, e.full_name AS name, COALESCE(e.former_at IS NOT NULL, false) AS past, h.entry_id IS NULL AS person_deleted, e.id AS entry_id, t.name AS type_name, b.fee,
              NULL::uuid AS sale_id, NULL::text AS sold_on, NULL::text AS item_name, 0 AS more
       FROM open o
       JOIN gym_member_payments p ON p.gym_id = o.gym_id AND p.provider = 'square' AND p.provider_payment_id = o.square_payment_id AND p.undone_at IS NULL
       JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
       JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
-      JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
-      JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id
+      LEFT JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
+      -- Delete permanently keeps a paid membership with no record: the date still runs, so the row stays, as "A deleted member".
+      LEFT JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id
       WHERE ${members}::boolean
       UNION ALL
       SELECT o.*, e.full_name, COALESCE(e.former_at IS NOT NULL, false), s.entry_id IS NULL AND s.for_member, NULL, NULL, NULL,
@@ -191,7 +210,7 @@ export async function chargebacksToAnswer(sql: Sql, gymId: string, members: bool
         name: r.name,
         past: r.past,
         personDeleted: r.person_deleted,
-        member: r.entry_id === null ? null : { entryId: r.entry_id, typeName: r.type_name ?? "", fee: fee.success ? fee.data : null },
+        member: r.sale_id !== null ? null : { entryId: r.entry_id, typeName: r.type_name ?? "", fee: fee.success ? fee.data : null },
         sale: r.sale_id === null || r.sold_on === null ? null : { saleId: r.sale_id, day: r.sold_on, item: r.item_name ?? "", more: r.more },
       };
     }),

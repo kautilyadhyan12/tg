@@ -908,6 +908,8 @@ d("Refund to card at Sell (real Postgres)", { timeout: T }, () => {
       expect(rows).toHaveLength(1);
       expect(rows[0]?.sale).toMatchObject({ more: 1 });
       expect(rows[0]?.member).toBeNull();
+      // A sale holds no membership, so the automatic charge is untouched by it.
+      expect(await sql`SELECT 1 FROM gym_square_disputes q JOIN gym_member_payments p ON p.provider_payment_id = q.square_payment_id WHERE q.square_payment_id = ${paid?.square_payment_id ?? ""}`).toHaveLength(0);
     });
   });
 

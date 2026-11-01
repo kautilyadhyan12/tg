@@ -45,7 +45,7 @@ export async function takeInDispute(deps: PaymentsDeps, square: SquareSettings, 
 
   // A chargeback's answer names no card number: the card comes from the payment, once.
   let card: { brand: string; last4: string } | null = null;
-  if (!(await repo.disputeKnown(deps.sql, conn.gymId, square.environment, dispute.id))) {
+  if (!(await repo.cardKnown(deps.sql, conn.gymId, square.environment, dispute.id))) {
     const paid = await square.api.getPayment(token, paymentId);
     if (paid.kind === "unavailable") return "wait";
     if (paid.kind === "ok") {
@@ -87,10 +87,10 @@ export async function checkSquareDispute(deps: PaymentsDeps, square: SquareSetti
   return again ? "unknown" : "done";
 }
 
-/** The hourly read of one connection. False: read it again next run. */
+/** The hourly read of one connection. False: read it again next run, as Square did not answer. A refusal waits for the next hour. */
 async function readConnection(deps: PaymentsDeps, square: SquareSettings, row: connections.ConnectionRow): Promise<boolean> {
   const token = row.accessToken === null ? null : square.tokens.open(row.accessToken, accessContext(row.gymId));
-  if (token === null) return false;
+  if (token === null) return true;
   let cursor: string | null = null;
   let whole = true;
   for (let page = 0; page < READS.pagesPerRead; page++) {
@@ -98,7 +98,7 @@ async function readConnection(deps: PaymentsDeps, square: SquareSettings, row: c
     if (listed.kind === "unavailable") return false;
     if (listed.kind === "refused") {
       deps.log.warn({ event: "square.dispute_list_refused", gymId: row.gymId, status: listed.status, code: listed.code }, "Square refused to list chargebacks");
-      return false;
+      return true;
     }
     if (listed.value.unread > 0) deps.log.warn({ event: "square.dispute_unreadable", gymId: row.gymId, unread: listed.value.unread }, "a chargeback Square listed could not be read");
     for (const dispute of listed.value.disputes) {

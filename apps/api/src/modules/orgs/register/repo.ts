@@ -8,7 +8,6 @@
 // name check and the same request arriving twice are decided against rows nobody else is
 // changing.
 import type { ChargebackSeen } from "@app/shared";
-import { chargebacksOfSales } from "../payments/chargebacksRepo.js";
 import { placeRoom } from "../payments/saleSquarePlace.js";
 import type { Sql, TransactionSql } from "postgres";
 import type { CardRefundOpen } from "@app/shared";
@@ -427,8 +426,7 @@ async function refundsOf(sql: Sql | TransactionSql, gymId: string, sales: SaleRo
     const lines = basket.map((l) => ({ saleId: l.id, lineMinor: l.totalMinor, refundedMinor: rows.filter((r) => r.sale_id === l.id && r.voided_on === null).reduce((n, r) => n + r.amount_minor, 0) }));
     return placeRoom(lines, notes, p.amount_minor);
   };
-  const chargebacks = await chargebacksOfSales(sql, gymId, sales.filter((s) => s.lineNo === 1).map((s) => s.id), new Date());
-  return sales.map((s) => ({ ...s, refunds: bySale.get(s.id) ?? [], cardRefund: open.get(s.id) ?? null, chargebacks: chargebacks.get(s.id) ?? [], toPlace: toPlace.filter((p) => p.sale_id === s.id).map((p) => ({ pressId: p.id, amountMinor: p.amount_minor, on: p.on_day, room: roomOf(s, p) })) }));
+  return sales.map((s) => ({ ...s, refunds: bySale.get(s.id) ?? [], cardRefund: open.get(s.id) ?? null, toPlace: toPlace.filter((p) => p.sale_id === s.id).map((p) => ({ pressId: p.id, amountMinor: p.amount_minor, on: p.on_day, room: roomOf(s, p) })) }));
 }
 
 /** The columns every read of a sale takes, from `gym_sales s` with its two joins. Who

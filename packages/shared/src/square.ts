@@ -75,7 +75,7 @@ export const squareWebhookBodySchema = z.object({
   merchant_id: squareObjectIdSchema,
   type: z.string().min(1).max(100),
   event_id: z.string().regex(/^[\x21-\x7e]{1,100}$/),
-  data: z.object({ type: z.string().max(60).optional(), id: z.string().max(200).optional(), object: z.object({ dispute: z.object({ id: z.string().max(255).optional() }).optional() }).optional() }).optional(),
+  data: z.object({ type: z.string().max(60).optional(), id: z.string().max(200).optional(), object: z.object({ dispute: z.object({ id: z.string().max(255).optional() }).nullish() }).nullish() }).optional(),
 });
 
 // A member's card saved on Square's own form (ROADMAP 18d-ii; developer.squareup.com, read

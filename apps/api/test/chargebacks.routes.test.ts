@@ -10,6 +10,7 @@ import postgres from "postgres";
 import {
   chargebacksResponseSchema,
   gymPaymentsResponseSchema,
+  orgWords,
   heldMembershipsResponseSchema,
   squareConnectResponseSchema,
   squareFinishResponseSchema,
@@ -20,7 +21,10 @@ import {
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { openDueBills } from "../src/modules/orgs/memberships/billsRepo.js";
+import { pendingRetries, startCharge } from "../src/modules/orgs/payments/cardChargesRepo.js";
+import { chargesStoppedOf, writeDispute } from "../src/modules/orgs/payments/chargebacksRepo.js";
 import { squareSettings } from "../src/modules/orgs/payments/settings.js";
+import { STAFF_LINES } from "../src/modules/orgs/staffActivity/words.js";
 import { processSquareWork } from "../src/modules/orgs/payments/work.js";
 import { keepSquareEvent } from "../src/modules/webhooks/repo.js";
 import { account, fakeSquare, type Account } from "./fakeSquareTerminal.js";
@@ -319,6 +323,8 @@ d("A chargeback (real Postgres)", { timeout: T }, () => {
   }, T);
 
   const message = async (merchantId: string, disputeId: string, type = "dispute.created") => {
+    // A kept message falls due on the real clock: the test clock never runs behind it.
+    clock = new Date(Math.max(clock.getTime(), Date.now() + 5000));
     const eventId = randomUUID();
     await keepSquareEvent(sql, { eventId, payload: { type, accountId: merchantId, disputeId } });
     return await processSquareWork(workDeps(), [eventId], gyms.map((g) => g.id));
@@ -409,7 +415,7 @@ d("A chargeback (real Postgres)", { timeout: T }, () => {
       await work();
       expect(await chargesByTheApp(billId)).toEqual([]);
       const page = await held(gym, gym.owner, tara.entryId);
-      expect(page.memberships.flatMap((m) => m.billing?.bills ?? []).find((b) => b.id === billId)?.chargesStopped).toBe(true);
+      expect(page.memberships.flatMap((m) => m.billing?.bills ?? []).find((b) => b.id === billId)?.chargeStop).toEqual({ kind: "stopped", heldBy: null });
 
       for (const moved of ["PROCESSING", "LOST", "ACCEPTED", "INQUIRY_EVIDENCE_REQUIRED", "A_STATE_NOBODY_PLACED"]) {
         square.disputeMoves(made.id, moved);
@@ -424,7 +430,7 @@ d("A chargeback (real Postgres)", { timeout: T }, () => {
       await work();
       expect(await chargesByTheApp(billId)).toHaveLength(1);
       const after = await held(gym, gym.owner, tara.entryId);
-      expect(after.memberships.flatMap((m) => m.billing?.bills ?? []).find((b) => b.id === billId)?.chargesStopped).toBe(false);
+      expect(after.memberships.flatMap((m) => m.billing?.bills ?? []).find((b) => b.id === billId)?.chargeStop ?? null).toBeNull();
     });
 
     it("whoever pays for others: a chargeback on one stops the card for the other too", async () => {
@@ -436,6 +442,131 @@ d("A chargeback (real Postgres)", { timeout: T }, () => {
       const billId = await nextWeekOpens(son);
       await work();
       expect(await chargesByTheApp(billId)).toEqual([]);
+      // Son has no card of his own: the card is his mum's, and the bill says whose chargeback it is.
+      const page = await held(gym, gym.owner, son.entryId);
+      expect(page.memberships.flatMap((m) => m.billing?.bills ?? []).find((b) => b.id === billId)?.chargeStop).toEqual({ kind: "stopped", heldBy: "Dispute Mum" });
+    });
+
+    it("the write's own check refuses it too, if the list ever let one through", async () => {
+      const gus = await paidByCard(gym, "Dispute Gus");
+      await message(gym.acct.merchantId, square.disputeInSquare(gus.squarePaymentId).id);
+      const billId = await nextWeekOpens(gus);
+      const [conn] = await sql<{ account_id: string; location_id: string; currency: string }[]>`SELECT account_id, location_id, currency FROM gym_payment_connections WHERE gym_id = ${gym.id}`;
+      const today = (await held(gym, gym.owner, gus.entryId)).today;
+      const out = await startCharge(sql, {
+        gymId: gym.id,
+        entryId: gus.entryId,
+        membershipId: gus.membershipId,
+        target: { kind: "period", periodIndex: 2 },
+        amountMinor: null,
+        cardRef: null,
+        environment: "production",
+        accountId: conn?.account_id ?? "",
+        locationId: conn?.location_id ?? "",
+        accountCurrency: conn?.currency ?? "",
+        bySchedule: true,
+        requestKey: randomUUID(),
+        id: randomUUID(),
+        startedBy: null,
+        today,
+        now: clock,
+        checkingUntil: new Date(clock.getTime() + 60_000),
+      });
+      expect(out.kind).toBe("not_allowed");
+      expect(await chargesByTheApp(billId)).toEqual([]);
+    });
+
+    it("a card declined before the chargeback: the bill no longer promises a try again, and none is made", async () => {
+      const vic = await paidByCard(gym, "Dispute Vic");
+      const billId = await nextWeekOpens(vic);
+      const [card] = await sql<{ card_id: string; customer_id: string }[]>`SELECT card_id, customer_id FROM gym_member_cards WHERE gym_id = ${gym.id} AND entry_id = ${vic.entryId}`;
+      square.card(card?.card_id ?? "", gym.acct.merchantId, card?.customer_id ?? "", "insufficient");
+      await work();
+      const shown = async () => (await held(gym, gym.owner, vic.entryId)).memberships.flatMap((m) => m.billing?.bills ?? []).find((b) => b.id === billId);
+      expect((await shown())?.cardDeclined).not.toBeNull();
+      expect((await sql<{ next_try_on: string | null }[]>`SELECT next_try_on::text AS next_try_on FROM gym_card_charges WHERE bill_id = ${billId}`)[0]?.next_try_on).not.toBeNull();
+      await message(gym.acct.merchantId, square.disputeInSquare(vic.squarePaymentId).id);
+      expect(await pendingRetries(sql, gym.id, [billId], clock)).toEqual(new Map());
+      expect((await shown())?.chargeStop).toMatchObject({ kind: "stopped" });
+      clock = new Date(clock.getTime() + 4 * 24 * 60 * 60_000);
+      await work();
+      expect(await chargesByTheApp(billId)).toHaveLength(1);
+    });
+
+    it("won weeks later: the missed bill is staff's, it says so, and nothing old is charged by itself", async () => {
+      const wes = await paidByCard(gym, "Dispute Wes");
+      const made = square.disputeInSquare(wes.squarePaymentId);
+      await message(gym.acct.merchantId, made.id);
+      const billId = await nextWeekOpens(wes);
+      clock = new Date(clock.getTime() + 21 * 24 * 60 * 60_000);
+      await openDueBills({ sql, log: quiet }, { now: clock, gymIds: [gym.id] });
+      square.disputeMoves(made.id, "WON");
+      await message(gym.acct.merchantId, made.id, "dispute.state.updated");
+      await work();
+      const bills = async () => (await held(gym, gym.owner, wes.entryId)).memberships.flatMap((m) => m.billing?.bills ?? []);
+      expect((await bills()).find((b) => b.id === billId)?.chargeStop).toEqual({ kind: "missed", heldBy: null });
+      const byApp = await sql<{ id: string }[]>`SELECT id FROM gym_card_charges WHERE held_membership_id = ${wes.membershipId} AND by_schedule`;
+      expect(byApp).toEqual([]);
+    });
+
+    it("the line is only on a bill the app would have charged: not a no-show fee, not with no card, and a freeze fee stops too", async () => {
+      const nia = await paidByCard(gym, "Dispute Nia");
+      await message(gym.acct.merchantId, square.disputeInSquare(nia.squarePaymentId).id);
+      const billId = await nextWeekOpens(nia);
+      const [fee] = await sql<{ id: string }[]>`
+        INSERT INTO gym_member_bills (gym_id, held_membership_id, amount_minor, currency, due_on, covers_from, covers_to, fee, fee_for)
+        SELECT gym_id, id, 700, currency, current_date, current_date, current_date, 'no_show', 'Yoga' FROM gym_held_memberships WHERE id = ${nia.membershipId} RETURNING id`;
+      const page = await held(gym, gym.owner, nia.entryId);
+      const m = page.memberships.find((x) => x.id === nia.membershipId);
+      expect(m?.billing?.fees.find((f) => f.id === fee?.id)?.chargeStop ?? null).toBeNull();
+      expect(m?.billing?.bills.find((b) => b.id === billId)?.chargeStop?.kind).toBe("stopped");
+      await sql`DELETE FROM gym_member_cards WHERE gym_id = ${gym.id} AND entry_id = ${nia.entryId}`;
+      const none = await held(gym, gym.owner, nia.entryId);
+      expect(none.memberships.flatMap((x) => x.billing?.bills ?? []).find((b) => b.id === billId)?.chargeStop ?? null).toBeNull();
+
+      const fred = await paidByCard(gym, "Dispute Fred");
+      await message(gym.acct.merchantId, square.disputeInSquare(fred.squarePaymentId).id);
+      const set = await send("PUT", `/v1/orgs/${gym.id}/bill-settings`, gym.owner.cookies, { overdueAfterDays: 0, freezeFeeMinor: 500 });
+      expect(set.statusCode, set.body).toBe(200);
+      const froze = await send("POST", `${entryUrl(gym, fred.entryId)}/memberships/${fred.membershipId}/freeze`, gym.owner.cookies, { feeMinor: 500 });
+      expect(froze.statusCode, froze.body).toBe(200);
+      await openDueBills({ sql, log: quiet }, { now: clock, gymIds: [gym.id] });
+      await work();
+      const frozenCharges = await sql<{ id: string }[]>`SELECT id FROM gym_card_charges WHERE held_membership_id = ${fred.membershipId} AND by_schedule`;
+      expect(frozenCharges).toEqual([]);
+    });
+
+    it("two workers at one instant: one row, and one line on Staff activity", async () => {
+      const zoe = await paidByCard(gym, "Dispute Zoe");
+      const made = square.disputeInSquare(zoe.squarePaymentId);
+      for (let i = 0; i < 4; i++) {
+        const id = `${made.id}T${String(i)}`;
+        const one = { gymId: gym.id, environment: "production" as const, accountId: gym.acct.merchantId, squareDisputeId: id, squarePaymentId: zoe.squarePaymentId, amountMinor: 2500, currency: "USD", state: "EVIDENCE_REQUIRED" as const, reason: null, dueAt: null, card: null, squareUpdatedAt: clock, now: clock };
+        await Promise.all([writeDispute(sql, one), writeDispute(sql, one)]);
+      }
+      const notes = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.chargeback' AND meta->>'entryId' = ${zoe.entryId}`;
+      expect(notes[0]?.n).toBe(4);
+      await sql`DELETE FROM gym_square_disputes WHERE square_payment_id = ${zoe.squarePaymentId}`;
+    });
+
+    it("Delete permanently: the chargeback stays on Overview, as a deleted member", async () => {
+      const del = await paidByCard(gym, "Dispute Del");
+      await message(gym.acct.merchantId, square.disputeInSquare(del.squarePaymentId).id);
+      await sql`UPDATE gym_held_memberships SET entry_id = NULL, record_deleted_at = now(), status = 'ended' WHERE gym_id = ${gym.id} AND id = ${del.membershipId}`;
+      const row = (await onOverview(gym)).rows.find((r) => r.amountMinor === 2500 && r.personDeleted);
+      expect(row).toMatchObject({ name: null, personDeleted: true, sale: null, member: { entryId: null, what: weekly.name } });
+      await sql`DELETE FROM gym_square_disputes WHERE square_payment_id = ${del.squarePaymentId}`;
+    });
+
+    it("a gym that moved to another Square account: its old one reads Check it in Square, and stops nothing", async () => {
+      const moved = await makeGym(`Moved ${uniq()}`, `MERCH${uniq()}`);
+      const ann = await paidByCard(moved, "Dispute Ann");
+      await message(moved.acct.merchantId, square.disputeInSquare(ann.squarePaymentId).id);
+      expect((await paymentOnPage(ann)).chargebacks[0]?.state).toBe("EVIDENCE_REQUIRED");
+      await sql`UPDATE gym_square_disputes SET account_id = 'ANOTHER' WHERE gym_id = ${moved.id}`;
+      expect((await paymentOnPage(ann)).chargebacks[0]?.state).toBe("UNKNOWN");
+      expect((await onOverview(moved)).rows).toEqual([]);
+      expect(await chargesStoppedOf(sql, moved.id, [ann.membershipId])).toEqual(new Set());
     });
 
     it("staff can still charge by hand while it is stopped", async () => {
@@ -532,7 +663,56 @@ d("A chargeback (real Postgres)", { timeout: T }, () => {
     });
   });
 
+  describe("what Square refuses", () => {
+    it("a refused list waits an hour; a card Square would not name is asked for again", async () => {
+      const own = await makeGym(`Refused ${uniq()}`, `MERCH${uniq()}`);
+      const ida = await paidByCard(own, "Dispute Ida");
+      const made = square.disputeInSquare(ida.squarePaymentId);
+      const real = square.api.listDisputes.bind(square.api);
+      let asked = 0;
+      square.api.listDisputes = () => {
+        asked += 1;
+        return Promise.resolve({ kind: "refused", status: 403, code: "FORBIDDEN" });
+      };
+      await sql`UPDATE gym_payment_connections SET disputes_read_at = NULL WHERE gym_id = ${own.id}`;
+      const only = () => processSquareWork(workDeps(), [], [own.id]);
+      await only();
+      await only();
+      expect(asked).toBe(1);
+      square.api.listDisputes = real;
+
+      const getPayment = square.api.getPayment.bind(square.api);
+      square.api.getPayment = () => Promise.resolve({ kind: "refused", status: 403, code: "FORBIDDEN" });
+      await message(own.acct.merchantId, made.id);
+      expect((await rowsOf(ida.squarePaymentId))[0]?.last4).toBeNull();
+      square.api.getPayment = getPayment;
+      await message(own.acct.merchantId, made.id);
+      expect((await rowsOf(ida.squarePaymentId))[0]?.last4).toBe("1111");
+    });
+  });
+
   describe("who sees it", () => {
+    it("staff without the ticks: no member rows, no chargeback on a page, and 403 with no billing tick", async () => {
+      const yan = await paidByCard(gym, "Dispute Yan");
+      await message(gym.acct.merchantId, square.disputeInSquare(yan.squarePaymentId).id);
+      const desk = await signedIn("Desk");
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gym.id}, ${desk.userId}, 'trainer', ${["billing.members"]})`;
+      expect((await onOverview(gym, desk)).rows.some((r) => r.member !== null)).toBe(false);
+      const trainer = await signedIn("Trainer");
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gym.id}, ${trainer.userId}, 'trainer', ${["members.read", "members.confirm"]})`;
+      expect((await send("GET", `/v1/orgs/${gym.id}/chargebacks`, trainer.cookies)).statusCode).toBe(403);
+      const page = await held(gym, trainer, yan.entryId);
+      expect(JSON.stringify(page)).not.toContain("EVIDENCE_REQUIRED");
+    });
+
+    it("Staff activity's words, each state", () => {
+      const said = (state: string) => STAFF_LINES["org.chargeback"]?.({ meta: { state, amountMinor: "2500", currency: "USD", entryId: "x" }, about: "Maya", words: orgWords("gym"), currency: "USD" });
+      expect(said("EVIDENCE_REQUIRED")).toBe("A chargeback of $25.00 for Maya came in from Square");
+      expect(said("WON")).toBe("A chargeback of $25.00 for Maya was won");
+      expect(said("LOST")).toBe("A chargeback of $25.00 for Maya was lost");
+      expect(said("INQUIRY_CLOSED")).toBe("A bank inquiry of $25.00 for Maya was closed by the bank");
+    });
+
     it("a stranger gets 404, and the shape of the route refuses a bad page", async () => {
       const maya = await paidByCard(gym, "Dispute Stranger Test");
       await message(gym.acct.merchantId, square.disputeInSquare(maya.squarePaymentId).id);

@@ -71,7 +71,7 @@ export default function ChargebacksCard({ org, orgSlug, privileges, readOnly }) 
       if (to !== null) navigate(to, { state: { refundSale: { saleId: row.sale.saleId, day: row.sale.day, open: false, place: null } } });
       return;
     }
-    if (row.member === null) return;
+    if (row.member?.entryId == null) return;
     setPerson(row.member.entryId);
     if (columns === null) {
       orgService.getMemberList(gymId).then(
@@ -163,6 +163,7 @@ export default function ChargebacksCard({ org, orgSlug, privileges, readOnly }) 
                     </button>
                   ) : null}
                 </div>
+
               </li>
             ))}
           </ul>

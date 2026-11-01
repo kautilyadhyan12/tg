@@ -538,11 +538,6 @@ export const gymCardCharges = pgTable(
   ],
 );
 
-/** One press of Refund to card (0177; ROADMAP 18d-iv-a), kept. `id` is the key Square is asked with. `asking`: Square has
- *  not answered, at most one on a payment. Once Square takes it up, `member_refund_id` is the row of `gym_member_refunds` that
- *  holds the money as given back; `look_at` is when the worker next reads Square while it is `pending`. `outcome`: `refused`
- *  (Square said no: no money went), `failed` (Square took it up, then said it failed), `lost` (never answered: checked in
- *  Square). */
 /** A chargeback on a payment this gym holds (0187; 18d-iv-e-i): Square's own record, one row a dispute at a gym. */
 export const gymSquareDisputes = pgTable(
   "gym_square_disputes",
@@ -575,6 +570,11 @@ export const gymSquareDisputes = pgTable(
   ],
 );
 
+/** One press of Refund to card (0177; ROADMAP 18d-iv-a), kept. `id` is the key Square is asked with. `asking`: Square has
+ *  not answered, at most one on a payment. Once Square takes it up, `member_refund_id` is the row of `gym_member_refunds` that
+ *  holds the money as given back; `look_at` is when the worker next reads Square while it is `pending`. `outcome`: `refused`
+ *  (Square said no: no money went), `failed` (Square took it up, then said it failed), `lost` (never answered: checked in
+ *  Square). */
 export const gymSquareRefunds = pgTable(
   "gym_square_refunds",
   {

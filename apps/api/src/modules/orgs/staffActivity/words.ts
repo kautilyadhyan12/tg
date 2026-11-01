@@ -319,11 +319,14 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
   },
   "org.chargeback": (s) => {
     const amount = money(s, "amountMinor");
-    const what = amount === null ? "A chargeback" : `A chargeback of ${amount}`;
+    const state = text(s, "state");
+    const noun = state?.startsWith("INQUIRY") === true ? "A bank inquiry" : "A chargeback";
+    const what = amount === null ? noun : `${noun} of ${amount}`;
     const on = text(s, "entryId") === null ? "" : ` for ${person(s)}`;
-    switch (text(s, "state")) {
-      case "WON":
+    switch (state) {
       case "INQUIRY_CLOSED":
+        return `${what}${on} was closed by the bank`;
+      case "WON":
         return `${what}${on} was won`;
       case "LOST":
         return `${what}${on} was lost`;

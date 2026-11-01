@@ -67,7 +67,12 @@ export function chargebackLine(c, stops = false) {
 export const chargebackLines = (list, stops = false) => (list ?? []).map((c) => chargebackLine(c, stops));
 
 /** An owed bill or fee the app would have charged by itself. */
-export const CHARGES_STOPPED_LINE = 'Not charged automatically because of a chargeback. You can still charge the card here.';
+export function chargeStopLine(stop) {
+  if (stop === null || stop === undefined) return null;
+  if (stop.kind === 'missed') return 'Not charged automatically while a chargeback was open. Charge the card here, and automatic charges carry on.';
+  const whose = stop.heldBy === null ? 'a chargeback' : `a chargeback on ${stop.heldBy}'s payment`;
+  return `Not charged automatically because of ${whose}. You can still charge the card here.`;
+}
 
 // Overview.
 
@@ -91,6 +96,7 @@ export function chargebackWhat(row) {
 }
 
 /** The row's own sentence, on Overview. */
-export const chargebackRowDetail = (row) => [reasonOf(row), row.dueOn === null ? 'Check it in Square.' : `Respond in Square by ${dayWords(row.dueOn)}.`].filter((part) => part !== null).join(' ');
+export const chargebackRowDetail = (row) => [reasonOf(row), row.dueOn === null || row.state === 'UNKNOWN' ? 'Check it in Square.' : `Respond in Square by ${dayWords(row.dueOn)}.`].filter((part) => part !== null).join(' ');
 
-export const chargebackOpenWords = (row) => (row.sale !== null ? 'Open the sale' : row.member !== null ? 'Open their page' : null);
+/** The second button: the sale, or the person's page while they have one. */
+export const chargebackOpenWords = (row) => (row.sale !== null ? 'Open the sale' : row.member?.entryId != null ? 'Open their page' : null);

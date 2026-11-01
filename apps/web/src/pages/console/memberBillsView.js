@@ -36,7 +36,7 @@ import {
 } from '@app/shared';
 import { dayWords } from './memberListView';
 import { cardRefundOpenLine } from './cardRefundView';
-import { CHARGES_STOPPED_LINE, chargebackLines } from './chargebackView';
+import { chargeStopLine, chargebackLines } from './chargebackView';
 
 /** The tick that lets a member of staff record what a member paid. */
 export function canRecordPayments(privileges) {
@@ -105,7 +105,7 @@ const cardLines = (b) => ({
   declined:
     [
       b.cardDeclined !== null && b.cardDeclined !== undefined ? cardDeclinedLine(b.cardDeclined) : b.cardUnchecked !== null && b.cardUnchecked !== undefined ? cardUncheckedLine(b.cardUnchecked) : null,
-      b.chargesStopped === true ? CHARGES_STOPPED_LINE : null,
+      chargeStopLine(b.chargeStop),
     ]
       .filter((line) => line !== null)
       .join(' ') || null,
