@@ -27,7 +27,8 @@ const LIVE_PLAN = "zz_memberlist_leak";
 const TEST_TIMEOUT_MS = 60_000;
 
 /** Made at run time, so no source line the logger might print can hold them. */
-const NAME = `Marian ${randomUUID()}`;
+// No digits: a run of them can pass as a card number, and the import removes those.
+const NAME = `Marian ${randomUUID().replace(/d/g, (d) => "ghijklmnop".charAt(Number(d)))}`;
 const ADDRESS = `${randomUUID()}@realgym.example`;
 const PHONE = "+447911223344";
 const MEMBER_NUMBER = `MBR-${randomUUID()}`;

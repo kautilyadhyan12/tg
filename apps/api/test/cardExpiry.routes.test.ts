@@ -317,7 +317,7 @@ d("A reminder before a card expires (real Postgres)", { timeout: T }, () => {
     for (const address of [await emailOf(kim), await emailOf(lars), await emailOf(bea)]) expect(mailTo(address)).toHaveLength(0);
     const monthName = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "long", year: "numeric" }).format(new Date(Date.UTC(now.year, now.month - 1, 15)));
     expect(ginaMail[0]?.text).toContain(`Your Visa ending in 4242 expires at the end of ${monthName}. It pays for your membership at ${on.name}.`);
-    expect(ginaMail[0]?.text).not.toContain("5555");
+    expect(ginaMail[0]?.text).not.toContain("ending in 5555"); // the gym's name holds the clock, which can hold 5555
     expect(tomMail[0]?.text).toContain(`Your Visa ending in 5555 expires at the end of ${monthName}. It pays for Kim Child's membership at ${on.name}.`);
     expect(tomMail[0]?.text).not.toContain("6666");
     expect(tomMail[0]?.subject).toBe(`Your card on file with ${on.name} expires this month`);
