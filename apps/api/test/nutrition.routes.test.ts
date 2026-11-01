@@ -9,7 +9,7 @@ import { createMemoryRedis, type RedisLike } from "../src/redis.js";
 import { quotaKey } from "../src/modules/quotas/service.js";
 import { RETAKE_TTL_SECONDS, SCANNER_PAUSE_SECONDS } from "../src/modules/nutrition/service.js";
 import { VisionProviderError, type VisionProvider, type VisionResult } from "../src/modules/nutrition/vision.adapter.js";
-import { createOpenFoodFactsProvider, type FoodSearchProvider } from "../src/modules/nutrition/openfoodfacts.adapter.js";
+import { labelMore, servingOf, type FoodSearchProvider } from "../src/modules/nutrition/openfoodfacts.adapter.js";
 import { MEAL_PHOTO, MEAL_PHOTO_BYTES } from "./fixtures/mealPhoto.js";
 
 // Sentry is only ever called, never reached: a test that sets SENTRY_DSN reads what the app
@@ -18,6 +18,15 @@ const sentry = vi.hoisted(() => ({ init: vi.fn(), captureException: vi.fn(), htt
 vi.mock("@sentry/node", () => sentry);
 
 const url=process.env["DATABASE_URL"];const d=describe.skipIf(url===undefined||url==="");
+/** A packaged list answering with these products, each served by its label. */
+const listOf = (answer: (query: string) => { code: string; product_name: string; serving_size?: string; nutriments: Record<string, number> }[]): FoodSearchProvider => ({
+  search: (query) => Promise.resolve(answer(query.toLowerCase()).map((p) => {
+    const more = labelMore(p.nutriments);
+    const serving = servingOf(p.serving_size);
+    return { canonical: `off_${p.code}`, name: p.product_name, kcal: p.nutriments["energy-kcal_100g"] ?? 0, proteinG: p.nutriments["proteins_100g"] ?? 0, carbsG: p.nutriments["carbohydrates_100g"] ?? 0, fatG: p.nutriments["fat_100g"] ?? 0, fiberG: more.fiberG, serving: serving.grams, unit: serving.unit, source: "openfoodfacts" as const, more };
+  })),
+});
+
 const PASSWORD="p26a-safe-test-password-1"; // gitleaks:allow
 const env={NODE_ENV:"test",DATABASE_URL:url??"",WEB_ORIGIN:"http://localhost:5173",JWT_SECRET:"p26a-test-secret-0123456789abcdef-32",LOG_LEVEL:"error"}; // gitleaks:allow
 type App=Awaited<ReturnType<typeof buildApp>>;
@@ -163,13 +172,12 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
   // word of the item's hint: the search's top product for other words is another
   // food, so the item is named as not on the list instead of priced as that food.
   it("a scanned item takes a packaged product only when the product's name holds every word of its hint",async()=>{
-    // Open Food Facts' own reply shape, through the real adapter: the search's top
-    // product for every query, and Yakult's label, "1 bottle (65 ml)". Every hint here is
+    // The search's top product for every query, and Yakult's label, "1 bottle (65 ml)". Every hint here is
     // one neither our list nor USDA holds ("chips" alone is USDA's rice chips), so the
     // packaged product is the table asked.
     const hit=(code:string,product_name:string,serving_size:string)=>({code,product_name,serving_size,nutriments:{"energy-kcal_100g":65}});
     const top=(q:string)=>q.includes("yakult")?hit("4901392000034","Yakult Original","1 bottle (65 ml)"):q.includes("noodles")?hit("4902105000001","Cup Noodles Chicken","1 cup (64 g)"):hit("1","Mystery","30 g");
-    const answersEverything=createOpenFoodFactsProvider((input)=>Promise.resolve(new Response(JSON.stringify({hits:[top(input instanceof URL?(input.searchParams.get("q")??"").toLowerCase():"")]}),{status:200})));
+    const answersEverything=listOf((q)=>[top(q)]);
     const scanned=fakeVision();
     const item=(name:string,canonical_hint:string,count:number|null=null)=>seen({name,canonical_hint,count});
     // Three bottles the model saw at 195 g, 127 kcal: Yakult's own 65 kcal per 100 g.

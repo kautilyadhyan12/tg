@@ -134,76 +134,6 @@ describe("P2.6a nutrition pure pipeline", () => {
     await expect(reply(31).analyze("AA==", "image/jpeg")).rejects.toMatchObject({ message: "vision malformed evidence shape" });
   });
 
-  it("OpenFoodFacts adapter: kJ→kcal, array names, fallback URL, malformed → [] (T3 R9 gap)", async () => {
-    const { createOpenFoodFactsProvider } = await import("../src/modules/nutrition/openfoodfacts.adapter.js");
-    // kJ fallback (energy_100g is kJ) + array product_name (Search-a-licious).
-    const hit = { hits: [{ product_name: ["Paneer Cubes", "alt"], nutriments: { energy_100g: 1230 }, serving_size: "30 g" }] };
-    const p1 = createOpenFoodFactsProvider(() => Promise.resolve(new Response(JSON.stringify(hit), { status: 200 })));
-    const foods1 = await p1.search("paneer", 5);
-    expect(foods1[0]?.name).toBe("Paneer Cubes");
-    expect(foods1[0]?.kcal).toBeCloseTo(1230 / 4.184, 3);
-    expect(foods1[0]?.serving).toBe(30);
-    // No code → name-slug canonical (fallback).
-    expect(foods1[0]?.canonical).toBe("off_paneer_cubes");
-    // T3 manual-off-foods: barcode makes canonicals UNIQUE per product, and
-    // physically impossible per-100g values are dropped, never served.
-    const hit2 = { hits: [
-      { code: "8901063014312", product_name: "Peanut Butter", nutriments: { "energy-kcal_100g": 588 } },
-      { code: 8901063999999, product_name: "Peanut Butter", nutriments: { "energy-kcal_100g": 612 } },
-      { product_name: "Prank Bar", nutriments: { "energy-kcal_100g": 1e9 } },
-    ] };
-    const p5 = createOpenFoodFactsProvider(() => Promise.resolve(new Response(JSON.stringify(hit2), { status: 200 })));
-    const foods5 = await p5.search("peanut butter", 5);
-    expect(foods5.map((f) => f.canonical)).toEqual(["off_8901063014312", "off_8901063999999"]);
-    expect(foods5.some((f) => f.name === "Prank Bar")).toBe(false);
-    // Each jar reads with its brand (RULINGS 2026-09-14): the search service
-    // sends a list, the legacy search a comma-separated string, and a brand the
-    // name already holds is not repeated.
-    const branded = { hits: [
-      { code: "1", product_name: "Peanut butter", brands: ["Happy Shopper", "Other"], nutriments: { "energy-kcal_100g": 563 } },
-      { code: "2", product_name: "Peanut Butter", brands: "Peanut Butter & Co, Other", nutriments: { "energy-kcal_100g": 563 } },
-      { code: "3", product_name: "Kabayan's Peanut Butter", brands: ["Kabayan's Peanut Butter"], nutriments: { "energy-kcal_100g": 571 } },
-      { code: "4", product_name: "Crunchy peanut butter", nutriments: { "energy-kcal_100g": 590 } },
-    ] };
-    const p6 = createOpenFoodFactsProvider(() => Promise.resolve(new Response(JSON.stringify(branded), { status: 200 })));
-    expect((await p6.search("peanut butter", 5)).map((f) => f.name)).toEqual([
-      "Peanut butter · Happy Shopper",
-      "Peanut Butter · Peanut Butter & Co",
-      "Kabayan's Peanut Butter",
-      "Crunchy peanut butter",
-    ]);
-    // Two brands' jars with no barcode and one name stay two foods: the fallback
-    // canonical is the name as shown, brand included, so picking the second
-    // never saves the first.
-    const codeless = { hits: [
-      { product_name: "Peanut butter", brands: "Happy Shopper", nutriments: { "energy-kcal_100g": 563 } },
-      { product_name: "Peanut butter", brands: "Whole Earth", nutriments: { "energy-kcal_100g": 616 } },
-    ] };
-    const p7 = createOpenFoodFactsProvider(() => Promise.resolve(new Response(JSON.stringify(codeless), { status: 200 })));
-    expect((await p7.search("peanut butter", 5)).map((f) => [f.canonical, f.name, f.kcal])).toEqual([
-      ["off_peanut_butter_happy_shopper", "Peanut butter · Happy Shopper", 563],
-      ["off_peanut_butter_whole_earth", "Peanut butter · Whole Earth", 616],
-    ]);
-    // First URL fails → legacy CGI fallback answers with `products`.
-    let calls = 0;
-    const p2 = createOpenFoodFactsProvider(() => {
-      calls++;
-      if (calls === 1) return Promise.resolve(new Response("oops", { status: 503 }));
-      return Promise.resolve(
-        new Response(JSON.stringify({ products: [{ product_name: "Dal Fry", nutriments: { "energy-kcal_100g": 120 } }] }), { status: 200 }),
-      );
-    });
-    const foods2 = await p2.search("dal", 5);
-    expect(calls).toBe(2);
-    expect(foods2[0]?.name).toBe("Dal Fry");
-    expect(foods2[0]?.kcal).toBe(120);
-    // Malformed / network-down on both → defined degrade to [].
-    const p3 = createOpenFoodFactsProvider(() => Promise.reject(new Error("ECONNRESET")));
-    expect(await p3.search("anything", 5)).toEqual([]);
-    const p4 = createOpenFoodFactsProvider(() => Promise.resolve(new Response("not json", { status: 200 })));
-    expect(await p4.search("anything", 5)).toEqual([]);
-  });
-
   it("reads a label's serving as the grams it gives, by the pack or measure it names", async () => {
     const labels: [string | undefined, number, string][] = [
       // The pack a label names is its unit, and the grams or millilitres beside it the serving.
@@ -222,11 +152,6 @@ describe("P2.6a nutrition pure pipeline", () => {
       ["1 bottle", 100, "g"], ["", 100, "g"], [undefined, 100, "g"], ["99999 g", 100, "g"], ["0 g", 100, "g"],
     ];
     for (const [label, grams, unit] of labels) expect(servingOf(label), String(label)).toEqual({ grams, unit });
-    // The adapter serves each product by its label, and its label's pack is one of its measures (measures.ts).
-    const { createOpenFoodFactsProvider } = await import("../src/modules/nutrition/openfoodfacts.adapter.js");
-    const yakult = { hits: [{ code: "4901392000034", product_name: "Yakult Original", brands: "Yakult", serving_size: "1 bottle (65 ml)", nutriments: { "energy-kcal_100g": 65 } }] };
-    const [product] = await createOpenFoodFactsProvider(() => Promise.resolve(new Response(JSON.stringify(yakult), { status: 200 }))).search("yakult", 1);
-    expect(product).toMatchObject({ serving: 65, unit: "bottle" });
   });
 
   // ── Vision model swap card (2026-07-16): the browser smoke proved BOTH real
@@ -596,30 +521,6 @@ describe("P2.6a nutrition pure pipeline", () => {
         expect(signals[0], make.name).toBe(fired);
         timeout.mockRestore();
       }
-    });
-
-    it("is given up on after 3 seconds for a packaged-product search, both addresses together, with no products", async () => {
-      const { OFF_SEARCH_TIMEOUT_MS, createOpenFoodFactsProvider } = await import("../src/modules/nutrition/openfoodfacts.adapter.js");
-      expect(OFF_SEARCH_TIMEOUT_MS).toBe(3_000);
-      // As above: the deadline's own signal is handed back already fired, and
-      // each address answers only when its signal fires.
-      const fired = AbortSignal.abort(new DOMException("The operation timed out.", "TimeoutError"));
-      const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(fired);
-      const signals: (AbortSignal | null | undefined)[] = [];
-      const hangs: typeof fetch = (_input, init) => {
-        signals.push(init?.signal);
-        return new Promise((_resolve, reject) => {
-          const signal = init?.signal;
-          if (signal?.aborted === true) reject(new Error("aborted"));
-          signal?.addEventListener("abort", () => { reject(new Error("aborted")); });
-        });
-      };
-      expect(await createOpenFoodFactsProvider(hangs).search("milk", 3)).toEqual([]);
-      // ONE deadline for the search: the fallback address is tried under the
-      // same one, never given three seconds of its own.
-      expect(timeout.mock.calls).toEqual([[3_000]]);
-      expect(signals).toHaveLength(2);
-      expect(signals.every((signal) => signal === fired)).toBe(true);
     });
   });
 

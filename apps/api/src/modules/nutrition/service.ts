@@ -55,7 +55,7 @@ import { foodWeek, spanDays } from "./foodWeek.js";
 import { CURATED_FOODS, curatedPieceFdcId, curatedUsdaFdcId, findCurated, findCuratedVersions, holdsEveryWord, searchCurated, slug } from "./foods.js";
 import { GRAM, dishwareGrams, foodMeasures, gramsPerMl, measureGrams, scanStart, startingMeasure, type UsdaPortion } from "./measures.js";
 import type { FoodReference, FoodSearchProvider } from "./openfoodfacts.adapter.js";
-import { packagedRowsFor, packagedRowsForCodes } from "./packagedRepo.js";
+import { packagedRowsFor } from "./packagedRepo.js";
 import { isPackagedCanonical, packagedCode, packagedFoodOf, type PackagedFood } from "./packagedRows.js";
 import { itemsVersion, ownPer100g, savedPlaces } from "./mealEdit.js";
 import { RECENT_MEALS_READ, recentFoods, type RecentPick } from "./recentFoods.js";
@@ -152,6 +152,7 @@ const foodSchema = z.object({
   source: z.enum(["curated", "openfoodfacts", "usda", "estimate", "label"]),
   more: moreNutrientsSchema.optional(),
   pack: z.object({ grams: z.number().positive().max(MAX_ITEM_GRAMS), volume: z.boolean() }).optional(),
+  doubtful: z.literal(true).optional(),
 });
 
 const draftSchema = z
@@ -237,7 +238,7 @@ export async function consumeRetake(deps: NutritionDeps, userId: string, value: 
   return true;
 }
 
-// ── food search (Stage 3 sources: curated → cached OpenFoodFacts) ───────────
+// ── food search (our list → USDA's table → our copy of the packaged lists) ──
 
 const foodRefKey = (canonical: string): string => `food:ref:${digest(canonical.toLowerCase())}`;
 
@@ -272,29 +273,8 @@ async function canonicalCached(deps: NutritionDeps, canonical: string): Promise<
   }
 }
 
-/** What their live search found, each product our own copy holds as the copy has it, so a pick is
- *  priced as it was shown (a real case: Amy's quinoa read 106 kcal live and 18 on the list). One read of
- *  each list for the page. Until 33b-iii-d, when nothing is asked live. */
-async function asListed(deps: NutritionDeps, foods: FoodReference[]): Promise<FoodReference[]> {
-  const codes = foods.flatMap((food) => {
-    const code = packagedCode(food.canonical);
-    const kind = code === null ? null : classifyBarcode(code);
-    return kind?.kind === "product" ? [{ canonical: food.canonical, code: kind.code }] : [];
-  });
-  if (codes.length === 0) return foods;
-  const rows = await packagedRowsForCodes(deps.sql, codes.map((c) => c.code));
-  return foods.map((food) => {
-    const code = codes.find((c) => c.canonical === food.canonical)?.code;
-    const held = code === undefined ? null : packagedFoodOf(rows.off.get(code) ?? null, rows.usda.get(code) ?? null);
-    return held === null ? food : { ...held.food, canonical: food.canonical };
-  });
-}
-
+/** A packaged search, each word's answer kept for a day: the first person pays for a common word. */
 async function cachedExternal(deps: NutritionDeps, query: string, limit: number): Promise<FoodReference[]> {
-  return await asListed(deps, await liveSearch(deps, query, limit));
-}
-
-async function liveSearch(deps: NutritionDeps, query: string, limit: number): Promise<FoodReference[]> {
   const key = `food:off:${digest(`${query.toLowerCase()}:${String(limit)}`)}`;
   const cached = await deps.redis.get(key);
   if (cached !== null) {
@@ -349,8 +329,8 @@ const asUsdaReference = (row: repo.UsdaFoodRow): FoodReference => ({
  *  at all (measured 2026-09-16 against the loaded table, in a box of 15: "milk"
  *  10 curated + 5 USDA, "peanut butter" 2 + 13, "greek yogurt" 1 + 14 — nought
  *  left over each time), which shrank a rung nobody ruled out. So USDA fills the
- *  page only down to `PACKAGED_RESERVE`, and those places go to Open Food Facts
- *  where it has something to put in them — still last, as Kd ruled. Nothing is
+ *  page only down to `PACKAGED_RESERVE`, and those places go to the packaged lists
+ *  where they have something to put in them — still last, as Kd ruled. Nothing is
  *  held back from a brand: a query USDA cannot answer ("yakult" 0 rows, "oreo"
  *  2, "nutella" 2) still gives the whole page to packaged products.
  *
@@ -605,8 +585,8 @@ async function findFood(deps: NutritionDeps, query: string, search = true, owner
   if (query.startsWith(OWN_CANONICAL_PREFIX)) return null;
   // A usda_* canonical is one row of our own table and nothing else: it must
   // not reach findCurated's fuzzy match, and one the table does not hold must
-  // not be handed to OpenFoodFacts as if it were a food's NAME (searching their
-  // index for "usda_sr_167512" can only ever find a wrong food).
+  // not be searched for as if it were a food's NAME ("usda_sr_167512" can only
+  // ever find a wrong food).
   if (USDA_CANONICAL_PREFIX.test(query)) {
     const row = await repo.usdaFoodByCanonical(deps.sql, query);
     return row === null ? null : asUsdaReference(row);
@@ -614,10 +594,8 @@ async function findFood(deps: NutritionDeps, query: string, search = true, owner
   // T3 (manual-off-foods): an off_* canonical must NEVER resolve through
   // findCurated's fuzzy substring match — off_banana_chips would hijack to
   // curated "banana" and save macros different from what search displayed.
-  // Nor through a search: the canonical is our slug of a product a search
-  // returned, kept for a day (rememberFoods), and searching Open Food Facts for
-  // the slug itself can find nothing but another product (the review of PR #83,
-  // L1) — so one past its day is not found, as a usda_* canonical is.
+  // Nor through a search: a search for the slug itself can find nothing but
+  // another product (the review of PR #83, L1).
   // Our own copy of the lists first (33b-iii-a): a product stays found after its day, and the price is
   // the same however it was reached. Under the name it was asked by, which a saved meal keeps.
   if (isPackagedCanonical(query)) {
@@ -652,7 +630,7 @@ const scanLookups = (deps: NutritionDeps): ScanLookups => ({
   },
   packaged: async (hint) => {
     const [product] = await cachedExternal(deps, hint, 1);
-    return product !== undefined && holdsEveryWord(product.name, hint) ? product : null;
+    return product !== undefined && product.doubtful !== true && holdsEveryWord(product.name, hint) ? product : null;
   },
 });
 

@@ -112,6 +112,8 @@ export const offProductSchema = z.object({
   allergens: z.array(z.string()),
   traces: z.array(z.string()),
   figures: z.record(z.string(), z.number()),
+  /** How many people have scanned it: what the food search puts first. */
+  scans: z.number().int().nonnegative().optional(),
 });
 export type OffProduct = z.infer<typeof offProductSchema>;
 
