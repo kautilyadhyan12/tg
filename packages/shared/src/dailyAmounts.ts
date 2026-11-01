@@ -4,7 +4,7 @@
 // Dietary Reference Intakes, the same tables in the US and Canada, as Health Canada prints them
 // (canada.ca, "Dietary reference intakes tables", elements page modified 2025-11-19): fibre,
 // potassium, calcium, iron, magnesium, vitamin D by age and sex; sodium's 2,300 mg is the amount
-// that lowers chronic disease risk. An 18-year-old reads the 14-18 row.
+// that lowers chronic disease risk. An 18-year-old reads the 14-18 row; the app is for 18 and over.
 // US FDA Daily Values (fda.gov, "Daily Value on the Nutrition and Supplement Facts Labels"): saturated
 // fat, which the Reference Intakes give no number for, and the whole set for somebody whose age or
 // sex the tables cannot be read by. Total sugars and unsaturated fat have no published amount.
@@ -60,9 +60,9 @@ const answer = (forWhom: string | null, [fiber, calcium, iron, magnesium, potass
 };
 
 /** The amounts for a person's age and gender answers. The tables are by sex, so "other", "prefer not
- *  to say" or an unanswered age or gender reads the labels' Daily Values, never a guessed sex's row. */
+ *  to say", an unanswered age or gender, or an age kept from before the app was 18 and over reads the labels' Daily Values, never a guessed sex's row. */
 export function dailyAmountsFor(age: number | null, gender: Gender | null): DailyAmountsResponse {
-  if (age === null || (gender !== "male" && gender !== "female")) return answer(null, LABEL_DAILY_VALUES);
+  if (age === null || age < 18 || (gender !== "male" && gender !== "female")) return answer(null, LABEL_DAILY_VALUES);
   const bands = gender === "male" ? MEN : WOMEN;
   const band = bands.find((b) => age <= b.upTo);
   // Infinity closes both lists; an age that is not a number finds no band.

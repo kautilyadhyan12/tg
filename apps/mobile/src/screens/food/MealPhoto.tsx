@@ -702,7 +702,7 @@ function Review({
   const priceTriesFrom = useRef(0);
   const [openRow, setOpenRow] = useState<string | null>(null);
   const [rowFigures, setRowFigures] = useState(false);
-  const daily = useDailyAmounts();
+  const { daily } = useDailyAmounts();
   const [finding, setFinding] = useState<{ query: string; change: string | null } | null>(null);
   const [ask, setAsk] = useState<Ask>("none");
   const [said, setSaid] = useState<string | null>(null);

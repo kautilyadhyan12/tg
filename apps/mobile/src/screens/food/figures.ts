@@ -13,10 +13,10 @@ const FIGURE_NAMES: Readonly<Record<MoreNutrient, { name: string; unit: string }
   calciumMg: { name: "Calcium", unit: "mg" },
   ironMg: { name: "Iron", unit: "mg" },
   magnesiumMg: { name: "Magnesium", unit: "mg" },
-  vitaminDUg: { name: "Vitamin D", unit: "µg" },
+  vitaminDUg: { name: "Vitamin D", unit: "mcg" },
 };
 
-export const FIGURES_LINK = "Fibre, sugars, vitamins and minerals";
+export const FIGURES_LINK = "Nutrients";
 
 /** "2,300" and "11.9": the thousands marked, and a figure's own decimal kept. */
 const amountWords = (n: number): string => {
@@ -40,7 +40,7 @@ export function figureLines(items: readonly Pick<MealItem, "more">[], partial: b
   return MORE_NUTRIENTS.map((key) => {
     const { name, unit } = FIGURE_NAMES[key];
     const { amount, notKnown } = totals[key];
-    const none = items.length === 0 ? partial : notKnown === items.length;
+    const none = items.length === 0 || notKnown === items.length;
     const incomplete = partial || notKnown > 0;
     const daily = amounts?.[key] ?? null;
     return {
@@ -56,8 +56,9 @@ export function figureLines(items: readonly Pick<MealItem, "more">[], partial: b
  *  does: a row reading No data already says it. */
 export function missingFoodsWords(items: readonly Pick<MealItem, "name" | "seenAs" | "more">[]): string | null {
   const totals = sumMoreNutrients(items);
-  if (!MORE_NUTRIENTS.some((key) => totals[key].notKnown > 0 && totals[key].notKnown < items.length)) return null;
-  const names = [...new Set(items.filter((i) => MORE_NUTRIENTS.some((key) => (i.more?.[key] ?? null) === null)).map((i) => i.seenAs ?? i.name))];
+  const starred = MORE_NUTRIENTS.filter((key) => totals[key].notKnown > 0 && totals[key].notKnown < items.length);
+  if (starred.length === 0) return null;
+  const names = [...new Set(items.filter((i) => starred.some((key) => (i.more?.[key] ?? null) === null)).map((i) => i.seenAs ?? i.name))];
   const [first, second, third] = names;
   const who =
     names.length === 1

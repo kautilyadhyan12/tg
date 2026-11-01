@@ -182,7 +182,7 @@ export function FoodScreen() {
   const settle = useCallback((upTo: number) => outbox?.settle(upTo), [outbox]);
   const { read, again } = useDayMeals(day, view.sent, settle);
   const targets = useRead(TARGETS_READ, nutritionTargetsResponseSchema);
-  const daily = useDailyAmounts();
+  const { daily, again: dailyAgain } = useDailyAmounts();
   const [dayFigures, setDayFigures] = useState(false);
   // The rings as the server answered a save of the daily numbers, until a read begun after the save
   // comes back: from then the reads are drawn, whatever they say (32b-ii-b's review, H2).
@@ -453,6 +453,7 @@ export function FoodScreen() {
           setSetupAt(null);
           setJustSaved(null);
           targets.again();
+          dailyAgain();
         }}
       />
     </Page>

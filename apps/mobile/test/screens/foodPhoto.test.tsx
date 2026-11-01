@@ -159,6 +159,8 @@ interface Phone {
   scanGone?: boolean;
   /** The previews stop answering (no signal), from the moment this is set. */
   previewsLost?: boolean;
+  /** The ten figures each food is priced with, by its canonical. */
+  figures?: Record<string, unknown>;
   /** The person's own dishes. */
   dishes?: unknown[];
   /** The server answers the previews no, from the moment this is set. */
@@ -197,7 +199,8 @@ function photoServer(phone: Phone) {
       if (phone.previewsRefused === true) return refusal(400, "unknown_food", "Food not found.");
       if (phone.scanGone === true && (body as { scanToken?: string }).scanToken !== undefined) return refusal(400, "invalid_scan", "Invalid or expired scan token.");
       const items = (body as { items: Sent[] }).items.map(priced);
-      return { status: 200, body: { items, totals: sum(items) } };
+      const withFigures = items.map((it) => ({ ...it, ...(phone.figures?.[it.canonical] === undefined ? {} : { more: phone.figures[it.canonical] }) }));
+      return { status: 200, body: { items: withFigures, totals: sum(items) } };
     },
     "/v1/nutrition/meals": (body) => {
       if (body === undefined) return { status: 200, body: { items: phone.meals, nextCursor: null } };
@@ -841,14 +844,28 @@ describe("the camera not allowed", () => {
 });
 
 describe("a food's ten figures on the photo's review (34b)", () => {
-  it("opens from the food's box, keeps the amount box behind it, and a food with none reads No data, never 0", async () => {
-    await openFood({ meals: [], scans: [] });
+  const none = { fiberG: null, sugarsG: null, satFatG: null, unsatFatG: null, potassiumMg: null, calciumMg: null, ironMg: null, magnesiumMg: null, vitaminDUg: null };
+  const figures = { toast: { ...none, sodiumMg: 111 }, eggs_scrambled: { ...none, sodiumMg: 222 } };
+
+  it("shows the opened food's own figures, never another's, and a food with none reads No data", async () => {
+    await openFood({ meals: [], scans: [], figures });
     await takePhoto();
     await fireEvent.press(await screen.findByRole("button", { name: "Change Toast, 2 × slice · 60 g" }));
-    await fireEvent.press(await screen.findByRole("button", { name: "Fibre, sugars, vitamins and minerals" }));
-    expect(await screen.findByLabelText("Sodium, No data")).toBeTruthy();
-    await fireEvent.press(screen.getByRole("button", { name: "Back" }));
-    expect(await screen.findByRole("button", { name: "Not this? Change food" })).toBeTruthy();
-    expect(screen.queryByLabelText("Sodium, No data")).toBeNull();
+    await fireEvent.press(await screen.findByRole("button", { name: "Nutrients" }));
+    expect(await screen.findByLabelText("Sodium, 111 mg")).toBeTruthy();
+    expect(screen.queryByLabelText("Sodium, 222 mg")).toBeNull();
+    expect(screen.getByLabelText("Iron, No data")).toBeTruthy();
+  });
+
+  it("Back returns to the food's box as it was left", async () => {
+    await openFood({ meals: [], scans: [], figures });
+    await takePhoto();
+    await fireEvent.press(await screen.findByRole("button", { name: /^Change Eggs \(scrambled\), / }));
+    const field = await screen.findByLabelText("Amount");
+    await fireEvent.changeText(field, "77");
+    await fireEvent.press(await screen.findByRole("button", { name: "Nutrients" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Back" }));
+    expect(screen.getByLabelText("Amount").props.value).toBe("77");
+    expect(screen.queryByLabelText(/^Sodium, /)).toBeNull();
   });
 });

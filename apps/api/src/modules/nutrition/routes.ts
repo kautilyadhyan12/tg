@@ -319,18 +319,18 @@ export function registerNutritionRoutes(
     reply.send(await quotaLeft("meal_scan", { sql: deps.sql, redis: deps.redis }, authedUserId(req))),
   );
 
-  /** The macro rings' daily calories and macros: the person's own plan, from
-   *  their stored onboarding answers (R3.1; ROADMAP 4a-iii) — the same number
-   *  the onboarding screens show. No input to parse — the identity is the
-   *  request's own session, so there is no id to tamper with. Responds
-   *  { targets: null, missing: [...] } while the plan still lacks an answer:
-   *  the server never fabricates a target (RULINGS 2026-07-15). */
   /** The published daily amounts for the person's own age and gender (Stage 5 34b). No id to tamper with. */
   app.get("/v1/nutrition/daily-amounts", { preHandler: [app.authenticate] }, async (req, reply) => {
     const { age, gender } = await getUserAgeAndGender(nutritionDeps.sql, authedUserId(req));
     return reply.send(dailyAmountsFor(age, gender));
   });
 
+  /** The macro rings' daily calories and macros: the person's own plan, from
+   *  their stored onboarding answers (R3.1; ROADMAP 4a-iii) — the same number
+   *  the onboarding screens show. No input to parse — the identity is the
+   *  request's own session, so there is no id to tamper with. Responds
+   *  { targets: null, missing: [...] } while the plan still lacks an answer:
+   *  the server never fabricates a target (RULINGS 2026-07-15). */
   app.get("/v1/nutrition/targets", { preHandler: [app.authenticate] }, async (req, reply) => {
     return reply.send(await service.getTargets(nutritionDeps, authedUserId(req)));
   });

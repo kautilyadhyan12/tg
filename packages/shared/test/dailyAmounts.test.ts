@@ -43,7 +43,7 @@ describe("the daily amount a person is shown", () => {
   });
 
   it.each<[number | null, Gender | null]>([
-    [30, "other"], [30, "prefer_not_to_say"], [30, null], [null, "female"], [null, "male"], [null, null], [Number.NaN, "female"],
+    [30, "other"], [30, "prefer_not_to_say"], [30, null], [null, "female"], [null, "male"], [null, null], [Number.NaN, "female"], [16, "female"], [13, "male"],
   ])("age %s, gender %s reads the labels' Daily Values, never a guessed row", (age, gender) => {
     expect(dailyAmountsFor(age, gender)).toEqual({
       forWhom: null,
@@ -52,10 +52,6 @@ describe("the daily amount a person is shown", () => {
         potassiumMg: about(4700), calciumMg: about(1300), ironMg: about(18), magnesiumMg: about(420), vitaminDUg: about(20),
       },
     });
-  });
-
-  it("an age kept from before the app was 18 and over reads the 14 to 18 row", () => {
-    expect(dailyAmountsFor(16, "female").amounts.ironMg).toEqual(about(15));
   });
 
   it("the two with no published amount have none, for anybody", () => {
