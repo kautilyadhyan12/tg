@@ -93,6 +93,8 @@ const SMALL_BODIES_AT_ONCE = 150;
 const LARGE_BODIES_AT_ONCE = 20;
 const BODIES_FROM_ONE_ADDRESS = 10;
 const SMALL_BODY_DEADLINE_MS = 30_000;
+const LATE_BODY_WAIT_SECONDS = 180;
+const lateKey = (userId: string): string => `photo-late:${userId}`;
 
 const notFound = (req: FastifyRequest, reply: FastifyReply) =>
   reply.status(404).send({ error: "not_found", message: "Resource not found", requestId: req.id });
@@ -209,6 +211,10 @@ export function registerNutritionRoutes(
   const oneBodyAtATime = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
     const length = Number(req.headers["content-length"]);
     const small = Number.isFinite(length) && length <= SMALL_BODY_BYTES;
+    if ((await deps.redis.get(lateKey(authedUserId(req)))) !== null) {
+      await reply.status(429).send({ error: "rate_limited", message: "Too many requests. Please try again shortly.", requestId: req.id });
+      return;
+    }
     const held = [...sending.values()];
     const full = held.some((b) => b.who === authedUserId(req))
       || held.filter((b) => b.from === req.ip).length >= BODIES_FROM_ONE_ADDRESS
@@ -221,6 +227,9 @@ export function registerNutritionRoutes(
     const timer = setTimeout(() => {
       sending.delete(req.id);
       req.raw.destroy();
+      // Holding a body open then costs a fresh account each time. Only the account: an address may be a
+      // whole gym's. Short, as a phone whose signal died mid-photo lands here too.
+      void deps.redis.setex(lateKey(authedUserId(req)), LATE_BODY_WAIT_SECONDS, "1");
     }, small ? SMALL_BODY_DEADLINE_MS : REQUEST_TIMEOUT_MS);
     timer.unref();
     sending.set(req.id, { who: authedUserId(req), from: req.ip, small, timer });

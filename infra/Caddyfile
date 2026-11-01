@@ -27,7 +27,7 @@
 		format filter {
 			wrap json
 			fields {
-				request>uri regexp "^(/v1/nutrition/barcode/)[^?]*|\\?.*$" "$1"
+				request>uri regexp "^(/v1/nutrition/barcode/)[^?]*|\?.*$" "$1"
 			}
 		}
 	}
