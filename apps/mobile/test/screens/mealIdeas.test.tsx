@@ -192,16 +192,21 @@ describe("the worst thing: one tap saves one meal, at the calories it showed", (
     expect(screen.getByText(/^Logged to /)).toBeTruthy();
   });
 
-  it("a meal the server refuses is said on the Dashboard, where it was logged", async () => {
+  it.each(["Dashboard", "Food"] as const)("a meal the server refuses never reads as logged on %s, after OK too", async (tab) => {
     const world: World = {
       ideas: () => ({ status: 200, body: answer() }),
       save: () => ({ status: 422, body: { error: "bad", message: "That food is no longer on the list.", requestId: "r" } }),
       meals: [],
     };
-    await open(world, "Dashboard");
+    await open(world, tab);
     await fireEvent.press(await logRice());
     expect(await screen.findByText(/Chicken breast \+ Rice wasn’t saved\. That food is no longer on the list\./)).toBeTruthy();
     expect(world.meals).toHaveLength(0);
+    expect(screen.queryByText(/^Logged to /)).toBeNull();
+    await fireEvent.press(screen.getByRole("button", { name: "OK" }));
+    await waitFor(() => {
+      expect(screen.queryByText(/wasn’t saved/)).toBeNull();
+    });
     expect(screen.queryByText(/^Logged to /)).toBeNull();
   });
 

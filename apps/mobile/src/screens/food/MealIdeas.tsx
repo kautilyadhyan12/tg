@@ -58,6 +58,12 @@ export function MealIdeas({ onMore, onAnswered }: MealIdeasProps) {
     if (!focused) setSaid(null);
   }, [focused]);
 
+  // A meal the server refused was not logged: what was said when it was kept goes for good.
+  const refusedNow = said !== null && view.refused.some((r) => r.id === said.meal);
+  useEffect(() => {
+    if (refusedNow) setSaid(null);
+  }, [refusedNow]);
+
   const log = async (idea: MealIdea) => {
     if (outbox === null || loggingNow.current) return;
     loggingNow.current = true;
@@ -199,9 +205,8 @@ export function MealIdeas({ onMore, onAnswered }: MealIdeasProps) {
     );
   }
 
-  // A meal the server refused was not logged, whatever was said when it was kept.
   const saidLine =
-    said === null || view.refused.some((r) => r.id === said.meal) ? null : (
+    said === null || refusedNow ? null : (
       <Txt kind="small" colour="orange">
         {said.words}
       </Txt>
