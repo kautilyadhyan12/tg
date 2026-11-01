@@ -73,12 +73,14 @@ const boardPath = (place: Place, board: LeaderboardBoard, period: LeaderboardPer
 const HIDE_ME = "/v1/users/me/leaderboard";
 const hideMe = (hidden: boolean, under18 = false) => ({ hidden, hideMe: hidden, under18 });
 
-async function openBoard(ask: Ask, place: Place) {
+async function openBoard(ask: Ask, place: Place, justBefore: () => void = () => undefined) {
   await render(<App extra={extra} ask={ask} store={memoryStore(kept(1))} wait={noWait} />);
   const tab = (await screen.findAllByRole("tab"))[3];
   if (tab === undefined) throw new Error("no fourth tab");
   await fireEvent.press(tab);
-  await fireEvent.press(await screen.findByLabelText(`Leaderboard at ${place.name}`));
+  const link = await screen.findByLabelText(`Leaderboard at ${place.name}`);
+  justBefore();
+  await fireEvent.press(link);
 }
 const page = () => within(screen.getByTestId("leaderboard-page"));
 const hideSwitch = async () => page().findByLabelText("Hide me on leaderboards");
@@ -109,6 +111,23 @@ function listenForComeBack(): () => Promise<void> {
 afterEach(() => {
   jest.restoreAllMocks();
 });
+const settle = (ms = 30) => act(() => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+/** A reply held back until the test lets it go. */
+function later() {
+  let letGo: (reply: Reply) => void = () => undefined;
+  const reply = new Promise<Reply>((resolve) => {
+    letGo = resolve;
+  });
+  return {
+    reply,
+    answer: (body: unknown) =>
+      act(async () => {
+        letGo({ status: 200, body });
+        await new Promise((resolve) => setTimeout(resolve, 30));
+      }),
+  };
+}
+const isSave = (body: unknown) => body !== undefined && body !== null;
 
 describe("the worst thing: Hide me says only what the server holds", () => {
   it("a press with no answer leaves the switch off and says so; the server's next answer is what it shows", async () => {
@@ -227,7 +246,90 @@ describe("the worst thing: Hide me says only what the server holds", () => {
   });
 });
 
+describe("the worst thing, with the answers in the worst order", () => {
+  it("a read begun during the save never overwrites the save's answer", async () => {
+    const comeBack = listenForComeBack();
+    const save = later();
+    const slowRead = later();
+    let reads = 0;
+    const server = fakeServer(
+      routes({
+        [HIDE_ME]: (body) => {
+          if (isSave(body)) return save.reply;
+          reads += 1;
+          return reads === 1 ? { status: 200, body: hideMe(true) } : slowRead.reply;
+        },
+      }),
+    );
+    await openBoard(server.ask, IRON);
+    expect(isOn(await hideSwitch())).toBe(true);
+    await pressSwitch(false);
+    await comeBack();
+    await save.answer(hideMe(false));
+    expect(isOn(await hideSwitch())).toBe(false);
+    await slowRead.answer(hideMe(true));
+    expect(isOn(await hideSwitch())).toBe(false);
+  });
+
+  it("a tab pressed while Hide me saves keeps its own rows when the save answers", async () => {
+    const save = later();
+    const server = fakeServer(
+      routes({
+        [boardPath(IRON, "streak")]: ok(boardOf(IRON, "streak", { rows: [row(PRIYA, "Streak S.", 1, 4)] })),
+        [HIDE_ME]: (body) => (isSave(body) ? save.reply : { status: 200, body: hideMe(false) }),
+      }),
+    );
+    await openBoard(server.ask, IRON);
+    expect(await page().findByText("Priya S.")).toBeTruthy();
+    await hideSwitch();
+    await pressSwitch(true);
+    await fireEvent.press(page().getByLabelText("Streak"));
+    expect(await page().findByText("Streak S.")).toBeTruthy();
+    await save.answer(hideMe(true));
+    expect(page().getByLabelText("Streak").props.accessibilityState).toMatchObject({ selected: true });
+    expect(page().getByText("Streak S.")).toBeTruthy();
+    expect(page().queryByText("Priya S.")).toBeNull();
+  });
+});
+
 describe("one gym's board is its own, and the answer on screen is the tab on screen", () => {
+  it("says when it was read, on the gym's own clock", async () => {
+    const server = fakeServer(routes());
+    await openBoard(server.ask, IRON);
+    expect(await page().findByText(/Updated 11:30 AM/)).toBeTruthy();
+  });
+
+  it("a board the gym switched off stays gone while another tab loads", async () => {
+    const off = { boardsOff: ["workout_days"] };
+    const streak = later();
+    const server = fakeServer(
+      routes({
+        [boardPath(IRON, "gym_days")]: ok(boardOf(IRON, "gym_days", off)),
+        [boardPath(IRON, "streak")]: () => streak.reply,
+      }),
+    );
+    await openBoard(server.ask, IRON);
+    expect(await page().findByText("Priya S.")).toBeTruthy();
+    expect(page().queryByLabelText("Workout days")).toBeNull();
+    await fireEvent.press(page().getByLabelText("Streak"));
+    await settle();
+    expect(page().queryByLabelText("Workout days")).toBeNull();
+    await streak.answer(boardOf(IRON, "streak", off));
+  });
+
+  it("scrolled, Back has a bar of its own, so it never sits on the rows", async () => {
+    const server = fakeServer(routes());
+    await openBoard(server.ask, IRON);
+    const list = await page().findByTestId("leaderboard-list");
+    expect(page().queryByTestId("leaderboard-bar")).toBeNull();
+    const scrollTo = (y: number) =>
+      fireEvent.scroll(list, { nativeEvent: { contentOffset: { x: 0, y }, contentSize: { width: 400, height: 3000 }, layoutMeasurement: { width: 400, height: 800 } } });
+    await scrollTo(2000);
+    expect(page().getByTestId("leaderboard-bar")).toBeTruthy();
+    await scrollTo(0);
+    expect(page().queryByTestId("leaderboard-bar")).toBeNull();
+  });
+
   it("another gym's answer is never drawn under this one", async () => {
     const server = fakeServer(routes({ [boardPath(IRON, "gym_days")]: ok(boardOf(LOTUS, "gym_days", { rows: [row(PRIYA, "Stranger T.", 1, 9)] })) }));
     await openBoard(server.ask, IRON);
@@ -272,17 +374,23 @@ describe("one gym's board is its own, and the answer on screen is the tab on scr
     expect(page().getByText("Priya S.")).toBeTruthy();
   });
 
-  it("the app coming back reads the board again, with no timer", async () => {
-    let later = false;
+  it("the app coming back reads the board again, and the page sets no timer of its own", async () => {
+    let moved = false;
     const comeBack = listenForComeBack();
+    const timers = jest.spyOn(global, "setInterval");
+    const timersOnOpening = () => {
+      timers.mockClear();
+    };
     const server = fakeServer(
       routes({
-        [boardPath(IRON, "gym_days")]: () => ({ status: 200, body: boardOf(IRON, "gym_days", later ? { rows: [row(PRIYA, "Later L.", 1, 6)] } : {}) }),
+        [boardPath(IRON, "gym_days")]: () => ({ status: 200, body: boardOf(IRON, "gym_days", moved ? { rows: [row(PRIYA, "Later L.", 1, 6)] } : {}) }),
       }),
     );
-    await openBoard(server.ask, IRON);
+    await openBoard(server.ask, IRON, timersOnOpening);
     expect(await page().findByText("Priya S.")).toBeTruthy();
-    later = true;
+    // The test library waits on short timers of its own; a page that read by itself would set a long one.
+    expect(timers.mock.calls.filter(([, ms]) => (ms ?? 0) >= 1000)).toEqual([]);
+    moved = true;
     await comeBack();
     expect(await page().findByText("Later L.")).toBeTruthy();
   });
@@ -329,6 +437,64 @@ describe("every reason there is no board", () => {
 });
 
 describe("the person's own row", () => {
+  it("carries their own flames, which are all a hidden person has", async () => {
+    const server = fakeServer(routes({ [boardPath(IRON, "gym_days")]: ok(boardOf(IRON, "gym_days", { rows: [row(PRIYA, "Priya S.", 1, 5)], me: me({ hidden: "hide_me" }) })) }));
+    await openBoard(server.ask, IRON);
+    expect(await page().findByText("Hide me is on. Only you see this row.")).toBeTruthy();
+    expect(page().getAllByRole("image", { name: /26 Oct/ })).toHaveLength(2);
+  });
+
+  it("What counted says the count beside each day, and a workout that did not count keeps its time", async () => {
+    const counted = leaderboardCountedResponseSchema.parse({
+      gymName: IRON.name,
+      timezone: "Asia/Kolkata",
+      board: "workout_days",
+      period: "this_week",
+      from: WEEK[0],
+      to: WEEK[6],
+      value: 1,
+      days: [],
+      notCounted: [],
+      workoutDays: [
+        {
+          day: "2026-10-26",
+          workouts: [
+            { at: "2026-10-26T04:30:00.000Z", countedBy: "camera" },
+            { at: "2026-10-26T12:30:00.000Z", countedBy: "you" },
+          ],
+        },
+      ],
+      workoutsNotCounted: [{ day: "2026-10-27", at: "2026-10-27T05:30:00.000Z", why: "no_sets", daysLate: null }],
+      weeks: [],
+    });
+    const server = fakeServer(
+      routes({
+        [boardPath(IRON, "workout_days")]: ok(boardOf(IRON, "workout_days")),
+        [`/v1/orgs/${IRON.id}/leaderboard/mine?board=workout_days&period=this_week`]: ok(counted),
+      }),
+    );
+    await openBoard(server.ask, IRON);
+    await fireEvent.press(await page().findByLabelText("Workout days"));
+    await fireEvent.press(await page().findByLabelText("You: 2 workout days. See what counted."));
+    expect(await screen.findByText(/26 Oct · 2 workouts, 1 day/)).toBeTruthy();
+    expect(screen.getByText(/27 Oct · 11:00 AM · No reps or holds saved/)).toBeTruthy();
+  });
+
+  it("a name the board still will not show keeps the box open and says what to type", async () => {
+    const server = fakeServer(
+      routes({
+        [boardPath(IRON, "gym_days")]: ok(boardOf(IRON, "gym_days", { rows: [row(PRIYA, "Priya S.", 1, 5)], me: me({ hidden: "no_name" }) })),
+        "/v1/users/me": () => ({ status: 200, body: profile(true) }),
+      }),
+    );
+    await openBoard(server.ask, IRON);
+    await fireEvent.press(await page().findByLabelText("Add your name"));
+    await fireEvent.changeText(await screen.findByLabelText("Your full name"), "ravi");
+    await fireEvent.press(screen.getByLabelText("Save"));
+    expect(await screen.findByText("Add your first and last name.")).toBeTruthy();
+    expect(screen.getByLabelText("Your full name")).toBeTruthy();
+  });
+
   it("says the next place, and opens What counted from the server's answer", async () => {
     const counted = leaderboardCountedResponseSchema.parse({
       gymName: IRON.name,
@@ -418,9 +584,69 @@ describe("Your Rank on the Dashboard", () => {
     expect(within(box).getByText("1st")).toBeTruthy();
   });
 
-  it("the board not read is –, never a place", async () => {
-    await openDash({ [boardPath(IRON, "gym_days")]: () => lost() });
+  it("the board not read is –, never a place; the line at the top says so, and Try again reads it", async () => {
+    let up = false;
+    await openDash({ [boardPath(IRON, "gym_days")]: () => (up ? { status: 200, body: boardOf(IRON, "gym_days") } : lost()) });
     const box = await screen.findByLabelText("Your Rank at Iron House");
+    expect(await screen.findByText("Some of your numbers couldn’t load.")).toBeTruthy();
     expect(within(box).getByText("–")).toBeTruthy();
+    up = true;
+    await fireEvent.press(screen.getByLabelText("Try again"));
+    expect(await within(await screen.findByLabelText("Your Rank at Iron House")).findByText("2nd")).toBeTruthy();
+  });
+
+  it("another gym's answer is never their place", async () => {
+    const server = await openDash({ [boardPath(IRON, "gym_days")]: ok(boardOf(LOTUS, "gym_days")) });
+    const box = await screen.findByLabelText("Your Rank at Iron House");
+    await waitFor(() => {
+      expect(server.paths()).toContain(boardPath(IRON, "gym_days"));
+    });
+    await settle();
+    expect(within(box).queryByText("2nd")).toBeNull();
+    expect(within(box).getByText("–")).toBeTruthy();
+  });
+
+  it("a gym that checks nobody in with Workout days switched off: one read, never back and forth", async () => {
+    const off = { boardsOff: ["workout_days"], rows: [], ranked: 0 };
+    const server = await openDash({
+      [boardPath(IRON, "gym_days")]: ok(boardOf(IRON, "gym_days", { status: "no_checkins", ...off })),
+      [boardPath(IRON, "workout_days")]: ok(boardOf(IRON, "workout_days", { status: "switched_off", ...off })),
+    });
+    const box = await screen.findByLabelText("Your Rank at Iron House");
+    expect(await within(box).findByText("Not showing")).toBeTruthy();
+    await settle(200);
+    expect(server.asked.filter((one) => one.path.includes("/leaderboard?")).map((one) => one.path)).toEqual([boardPath(IRON, "gym_days")]);
+  });
+
+  it("a member whose gyms are still being read never reads Coming soon", async () => {
+    await openDash({ "/v1/orgs/mine": never });
+    expect(await screen.findByText("Your Rank")).toBeTruthy();
+    await settle();
+    expect(screen.queryByText("Coming soon")).toBeNull();
+  });
+
+  it("a member whose gyms could not be read never reads Coming soon, and Try again finds their place", async () => {
+    let up = false;
+    await openDash({ "/v1/orgs/mine": () => (up ? mine(IRON)() : lost()) });
+    expect(await screen.findByText("Some of your numbers couldn’t load.")).toBeTruthy();
+    expect(screen.queryByText("Coming soon")).toBeNull();
+    up = true;
+    await fireEvent.press(screen.getByLabelText("Try again"));
+    expect(await within(await screen.findByLabelText("Your Rank at Iron House")).findByText("2nd")).toBeTruthy();
+  });
+
+  it("a gym that starts checking people in goes back to Visits when the Dashboard is opened again", async () => {
+    let quiet = true;
+    await openDash({
+      [boardPath(IRON, "gym_days")]: () => ({ status: 200, body: boardOf(IRON, "gym_days", quiet ? { status: "no_checkins", rows: [], ranked: 0 } : {}) }),
+      [boardPath(IRON, "workout_days")]: ok(boardOf(IRON, "workout_days")),
+    });
+    expect(await within(await screen.findByLabelText("Your Rank at Iron House")).findByText("Workout days this week")).toBeTruthy();
+    quiet = false;
+    const [first, , second] = await screen.findAllByRole("tab");
+    if (first === undefined || second === undefined) throw new Error("no tabs");
+    await fireEvent.press(second);
+    await fireEvent.press(first);
+    expect(await within(await screen.findByLabelText("Your Rank at Iron House")).findByText("Visits this week")).toBeTruthy();
   });
 });

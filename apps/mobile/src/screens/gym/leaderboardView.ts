@@ -40,9 +40,10 @@ export function boardTabs(boardsOff: readonly LeaderboardBoard[]): readonly { id
 }
 
 /** The board to open instead of the one just read, or null to show it. A gym that checks nobody in opens on Workout
- *  days until the person picks a tab; a board the gym switched off gives way to the first still on. */
+ *  days until the person picks a tab, if it shows Workout days; a board the gym switched off gives way to the first
+ *  still on. Each move lands on a board still on, so a reader never goes back and forth. */
 export function boardInstead(board: Pick<LeaderboardResponse, "board" | "status" | "boardsOff">, picked: boolean): LeaderboardBoard | null {
-  if (board.status === "no_checkins" && board.board === "gym_days" && !picked) return "workout_days";
+  if (board.status === "no_checkins" && board.board === "gym_days" && !picked && !board.boardsOff.includes("workout_days")) return "workout_days";
   if (board.status === "switched_off") return boardTabs(board.boardsOff)[0]?.id ?? null;
   return null;
 }
@@ -117,6 +118,22 @@ export function datesLine(board: Pick<LeaderboardResponse, "board" | "from" | "t
   if (board.board === "streak") return `Weeks in a row, up to this week · ${whose}`;
   if (board.from === null) return `Every ${UNIT[board.board]} up to ${shortDay(board.to)} · ${whose}`;
   return `${shortDay(board.from)} – ${shortDay(board.to)} · ${whose}`;
+}
+
+/** "Updated 10:42 AM": when this board was worked out, on the gym's clock. The page reads only on opening and on coming
+ *  back, so an old board says it is old. */
+export function updatedText(asOf: string, zone: string, clock: GymClockFormat): string {
+  return `Updated ${visitTime(asOf, zone, clock)}`;
+}
+
+/** "2 visits, 1 day" */
+export function dayCountText(visits: number): string {
+  return visits === 1 ? "1 visit" : `${String(visits)} visits, 1 day`;
+}
+
+/** "2 workouts, 1 day" */
+export function workoutCountText(workouts: number): string {
+  return workouts === 1 ? "1 workout" : `${String(workouts)} workouts, 1 day`;
 }
 
 /** What the flames stand for, where the page's own dates do not say (RULINGS 2026-10-04). */

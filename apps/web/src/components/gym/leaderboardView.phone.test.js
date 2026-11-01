@@ -25,19 +25,29 @@ describe('the phone and the browser agree on the leaderboard', () => {
     }
   });
 
+  const same = (words) => words?.replaceAll('’', "'") ?? null;
+
   it('a board with nothing to show says so on both, and a shown board on neither', () => {
     for (const status of ['shown', 'too_few', 'no_checkins', 'paused', 'switched_off']) {
       for (const board of LEADERBOARD_BOARDS) {
-        const b = { status, board, gymName: 'Iron House', boardsOff: [] };
+        const b = { status, board, gymName: 'Iron House', boardsOff: [...LEADERBOARD_BOARDS] };
         expect(phone.statusText(b) === null).toBe(browser.statusText(b) === null);
+        // The phone's own line for nobody checked in is shorter, and its tabs say the rest.
+        if (status !== 'no_checkins') expect(same(phone.statusText(b))).toBe(same(browser.statusText(b)));
       }
     }
   });
 
-  it('every hidden reason has words on both', () => {
-    for (const reason of ['staff', 'taken_off', 'hide_me', 'under_18', 'no_name']) {
-      expect(browser.hiddenText(reason, 'Iron House')).toBeTruthy();
-      expect(phone.hiddenText(reason, 'Iron House')).toBeTruthy();
+  it('why a person is greyed reads the same, but for the two lines the phone says its own way', () => {
+    for (const reason of ['taken_off', 'hide_me', 'under_18']) {
+      expect(same(phone.hiddenText(reason, 'Iron House'))).toBe(same(browser.hiddenText(reason, 'Iron House')));
+    }
+  });
+
+  it('the same count beside a day', () => {
+    for (const n of [1, 2, 3]) {
+      expect(phone.dayCountText(n)).toBe(browser.dayCountText(n));
+      expect(phone.workoutCountText(n)).toBe(browser.workoutCountText(n));
     }
   });
 });

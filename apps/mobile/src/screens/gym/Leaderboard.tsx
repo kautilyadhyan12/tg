@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, FlatList, Pressable, ScrollView, StyleSheet, Switch, View } from "react-native";
+import { AppState, FlatList, Pressable, ScrollView, StyleSheet, Switch, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   leaderboardCountedResponseSchema,
@@ -25,15 +25,18 @@ import { Icon } from "../../look/Icon";
 import { Modal } from "../../look/Modal";
 import { PictureTop } from "../../look/PictureTop";
 import { Sheet } from "../../look/Sheet";
+import { pictureTopHeight } from "../../look/sizing";
 import { Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
 import { NO_ANSWER } from "../SignIn";
 import { shortDay } from "./classesView";
+import { visitTime } from "./visitsView";
 import {
   PERIODS,
   boardInstead,
   boardTabs,
   datesLine,
+  dayCountText,
   flameLabel,
   flamesLine,
   hiddenText,
@@ -41,11 +44,13 @@ import {
   notCountedText,
   ordinal,
   statusText,
+  updatedText,
   valueText,
   visitText,
   weekLine,
   weekdayInitial,
   whatCounts,
+  workoutCountText,
   workoutNotCountedText,
   workoutText,
 } from "./leaderboardView";
@@ -65,6 +70,7 @@ const boardBase = (gymId: string) => `/v1/orgs/${encodeURIComponent(gymId)}/lead
 export const leaderboardPath = (gymId: string, board: LeaderboardBoard, period: LeaderboardPeriod) => `${boardBase(gymId)}?board=${board}&period=${period}`;
 const countedPath = (gymId: string, board: LeaderboardBoard, period: LeaderboardPeriod) => `${boardBase(gymId)}/mine?board=${board}&period=${period}`;
 export const HIDE_ME_PATH = "/v1/users/me/leaderboard";
+const PICTURE_TALL = 0.6;
 
 /** The page over the Gym tab or the Dashboard; closed while `place` is null. */
 export function LeaderboardPage({ place, onClose }: { place: LeaderboardPlace | null; onClose: () => void }) {
@@ -83,6 +89,7 @@ type Hide = { kind: "loading" } | { kind: "failed" } | { kind: "ok"; now: Leader
 
 function Body({ place, onClose, top, bottom }: { place: LeaderboardPlace; onClose: () => void; top: number; bottom: number }) {
   const { session } = useSession();
+  const { width, height } = useWindowDimensions();
   const [boardId, setBoardId] = useState<LeaderboardBoard>("gym_days");
   const [period, setPeriod] = useState<LeaderboardPeriod>("this_week");
   const [held, setHeld] = useState<Held>({ kind: "loading" });
@@ -90,6 +97,10 @@ function Body({ place, onClose, top, bottom }: { place: LeaderboardPlace; onClos
   const [hideBusy, setHideBusy] = useState(false);
   const [hideSaid, setHideSaid] = useState<string | null>(null);
   const [box, setBox] = useState<"info" | "period" | "counted" | "name" | null>(null);
+  // The boards the gym switched off, as last read: a tab pressed does not bring one back while the next board loads.
+  const [boardsOff, setBoardsOff] = useState<readonly LeaderboardBoard[]>([]);
+  // The page's own picture has gone under the Back button: it gets a bar, so it never sits on the rows.
+  const [scrolled, setScrolled] = useState(false);
   // The person has picked a tab: a gym that checks nobody in no longer moves them off Visits.
   const picked = useRef(false);
   // Reads are numbered as they start: an answer stands only if no later read has started, so a slow answer to an
@@ -98,27 +109,35 @@ function Body({ place, onClose, top, bottom }: { place: LeaderboardPlace; onClos
   const hideStarted = useRef(0);
   const live = useRef(true);
 
+  /** The board as read, or null where this read shows none: one that failed, gave way or was overtaken. */
   const load = useCallback(
-    async (quiet: boolean) => {
+    async (quiet: boolean): Promise<LeaderboardResponse | null> => {
       started.current += 1;
       const number = started.current;
       const answer = await session.signedIn({ method: "GET", path: leaderboardPath(place.id, boardId, period) }, leaderboardResponseSchema);
-      if (!live.current || number !== started.current) return;
+      if (!live.current || number !== started.current) return null;
       if (answer.kind === "ok" && answer.data.gymId === place.id && answer.data.board === boardId) {
+        setBoardsOff(answer.data.boardsOff);
         const instead = boardInstead(answer.data, picked.current);
         if (instead !== null && instead !== boardId) {
           if (answer.data.status === "no_checkins") picked.current = true;
           setBoardId(instead);
-          return;
+          return null;
         }
         setHeld({ kind: "ok", board: answer.data });
-      } else if (!quiet || (answer.kind === "refused" && answer.status === 404)) {
+        return answer.data;
+      }
+      if (!quiet || (answer.kind === "refused" && answer.status === 404)) {
         // A read made by itself never takes the board away over a lost connection; a 404 does.
         setHeld({ kind: "failed", status: answer.kind === "refused" ? answer.status : null });
       }
+      return null;
     },
     [session, place.id, boardId, period],
   );
+  // A save that was pressed under one tab may answer under another: it reads the tab on screen now.
+  const loadNow = useRef(load);
+  loadNow.current = load;
 
   const loadHide = useCallback(async () => {
     hideStarted.current += 1;
@@ -155,6 +174,8 @@ function Body({ place, onClose, top, bottom }: { place: LeaderboardPlace; onClos
     // A read that started before this press may not hold what the press does.
     hideStarted.current += 1;
     const answer = await session.signedIn({ method: "PUT", path: HIDE_ME_PATH, body: { hidden } }, leaderboardVisibilitySchema);
+    // A read begun during the save, by the app coming back, may be older than this answer.
+    hideStarted.current += 1;
     if (!live.current) return;
     setHideBusy(false);
     if (answer.kind === "ok") {
@@ -164,12 +185,12 @@ function Body({ place, onClose, top, bottom }: { place: LeaderboardPlace; onClos
       // The save may have reached the server: the switch shows what the server holds.
       void loadHide();
     }
-    void load(true);
+    void loadNow.current(true);
   };
 
   const board = held.kind === "ok" ? held.board : null;
   const noBoard = board === null ? null : statusText(board);
-  const tabs = boardTabs(board === null ? [] : board.boardsOff);
+  const tabs = boardTabs(boardsOff);
   const showMe = board !== null && board.status !== "no_checkins" && board.status !== "paused" && board.status !== "switched_off";
   const flames = board === null ? null : flamesLine(board.board, board.period);
   const periodLabel = PERIODS.find((p) => p.value === period)?.label ?? "";
@@ -179,7 +200,7 @@ function Body({ place, onClose, top, bottom }: { place: LeaderboardPlace; onClos
 
   const header = (
     <View>
-      <PictureTop picture="rank" tall={0.6} eyebrow={place.name} title="Leaderboard" />
+      <PictureTop picture="rank" tall={PICTURE_TALL} eyebrow={place.name} title="Leaderboard" />
       <View style={styles.controls}>
         <View style={styles.tabs}>
           {tabs.map((t) => (
@@ -224,7 +245,7 @@ function Body({ place, onClose, top, bottom }: { place: LeaderboardPlace; onClos
           onChange={(hidden) => void setHidden(hidden)}
           onAgain={() => void loadHide()}
         />
-        {board === null ? null : <Txt kind="tiny">{datesLine(board)}</Txt>}
+        {board === null ? null : <Txt kind="tiny">{`${datesLine(board)} · ${updatedText(board.asOf, board.timezone, place.clockFormat)}`}</Txt>}
         {flames === null || noBoard !== null ? null : <Txt kind="tiny">{flames}</Txt>}
       </View>
     </View>
@@ -253,8 +274,13 @@ function Body({ place, onClose, top, bottom }: { place: LeaderboardPlace; onClos
   return (
     <>
       <FlatList
+        testID="leaderboard-list"
         style={styles.grow}
         contentContainerStyle={styles.list}
+        scrollEventThrottle={32}
+        onScroll={(event) => {
+          setScrolled(event.nativeEvent.contentOffset.y > pictureTopHeight(width, height, PICTURE_TALL) - top - BACK_BAR);
+        }}
         data={board === null || noBoard !== null ? [] : board.rows}
         keyExtractor={(r) => r.userId}
         ListHeaderComponent={header}
@@ -270,7 +296,14 @@ function Body({ place, onClose, top, bottom }: { place: LeaderboardPlace; onClos
           />
         )}
       />
-      <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={onClose} style={[styles.back, { top: top + 12 }]}>
+      {scrolled ? (
+        <View testID="leaderboard-bar" style={[styles.bar, { height: top + BACK_BAR }]}>
+          <Txt kind="h3" numberOfLines={1}>
+            Leaderboard
+          </Txt>
+        </View>
+      ) : null}
+      <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={onClose} style={[styles.back, { top: top + BACK_TOP }]}>
         <Icon name="back" size={18} />
       </Pressable>
       {!showMe ? null : (
@@ -287,10 +320,13 @@ function Body({ place, onClose, top, bottom }: { place: LeaderboardPlace; onClos
               {board.me.place === null ? "–" : ordinal(board.me.place)}
             </Txt>
             <View style={styles.grow}>
-              <Txt kind="h3">You</Txt>
-              <Txt kind="small" colour="orange">
-                What counted
+              <Txt kind="h3">
+                You{" "}
+                <Txt kind="small" colour="orange">
+                  What counted
+                </Txt>
               </Txt>
+              {board.circleDays === null ? null : <Flames circles={board.me.circles} days={board.circleDays} boardId={board.board} />}
             </View>
             <Txt kind="h3" style={styles.value}>
               {String(board.me.value)}
@@ -338,9 +374,12 @@ function Body({ place, onClose, top, bottom }: { place: LeaderboardPlace; onClos
       <Sheet open={box === "name"} title="Your full name" onClose={closeBox}>
         {box === "name" ? (
           <NameBox
-            onSaved={() => {
+            onSaved={async () => {
+              // The server does not show a name that is only the email's first part: it says so where it was typed.
+              const now = await loadNow.current(true);
+              if (now?.me.hidden === "no_name") return false;
               closeBox();
-              void load(true);
+              return true;
             }}
           />
         ) : null}
@@ -500,7 +539,7 @@ function Counted({ place, boardId, period }: { place: LeaderboardPlace; boardId:
           {data.days.length === 0 ? <Txt kind="small">No visits in this period yet.</Txt> : null}
           {data.days.map((d) => (
             <Card key={d.day} style={styles.dayBox}>
-              <Txt colour="text">{shortDay(d.day)}</Txt>
+              <Txt colour="text">{`${shortDay(d.day)} · ${dayCountText(d.visits.length)}`}</Txt>
               {d.visits.map((v) => (
                 <Txt key={`${v.at}${v.how}`} kind="small">
                   {visitText(v, data.timezone, clock)}
@@ -520,7 +559,7 @@ function Counted({ place, boardId, period }: { place: LeaderboardPlace; boardId:
           {data.workoutDays.length === 0 ? <Txt kind="small">No workout days in this period yet.</Txt> : null}
           {data.workoutDays.map((d) => (
             <Card key={d.day} style={styles.dayBox}>
-              <Txt colour="text">{shortDay(d.day)}</Txt>
+              <Txt colour="text">{`${shortDay(d.day)} · ${workoutCountText(d.workouts.length)}`}</Txt>
               {d.workouts.map((w, i) => (
                 <Txt key={`${w.at}${String(i)}`} kind="small">
                   {workoutText(w, data.timezone, clock)}
@@ -531,7 +570,7 @@ function Counted({ place, boardId, period }: { place: LeaderboardPlace; boardId:
           {data.workoutsNotCounted.length === 0 ? null : <Txt kind="eyebrow">Didn’t count</Txt>}
           {data.workoutsNotCounted.map((n, i) => (
             <Txt key={`${n.at}${String(i)}`} kind="small">
-              {`${shortDay(n.day)} · ${workoutNotCountedText(n, data.gymName)}`}
+              {`${shortDay(n.day)} · ${visitTime(n.at, data.timezone, clock)} · ${workoutNotCountedText(n, data.gymName)}`}
             </Txt>
           ))}
         </>
@@ -552,7 +591,7 @@ function Counted({ place, boardId, period }: { place: LeaderboardPlace; boardId:
   );
 }
 
-function NameBox({ onSaved }: { onSaved: () => void }) {
+function NameBox({ onSaved }: { onSaved: () => Promise<boolean> }) {
   const { session } = useSession();
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -563,13 +602,13 @@ function NameBox({ onSaved }: { onSaved: () => void }) {
     setBusy(true);
     setSaid(null);
     const answer = await session.signedIn({ method: "PATCH", path: "/v1/users/me", body: { displayName } }, userProfileResponseSchema);
-    setBusy(false);
     if (answer.kind === "ok") {
       await session.keepName(answer.data.user.displayName);
-      onSaved();
+      if (!(await onSaved())) setSaid("Add your first and last name.");
     } else {
       setSaid(answer.kind === "refused" ? answer.message : NO_ANSWER);
     }
+    setBusy(false);
   };
   return (
     <View style={styles.lines}>
@@ -583,6 +622,10 @@ function NameBox({ onSaved }: { onSaved: () => void }) {
     </View>
   );
 }
+
+/** The Back button's place under the phone's clock, and the bar that holds it once the page has scrolled. */
+const BACK_TOP = 12;
+const BACK_BAR = BACK_TOP + sizes.press + 8;
 
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: colours.page },
@@ -600,6 +643,19 @@ const styles = StyleSheet.create({
     backgroundColor: colours.box,
     alignItems: "center",
     justifyContent: "center",
+  },
+  bar: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    justifyContent: "flex-end",
+    paddingLeft: sizes.edge + sizes.press + 12,
+    paddingRight: sizes.edge,
+    paddingBottom: 8 + (sizes.press - 20) / 2,
+    backgroundColor: colours.page,
+    borderBottomWidth: 1,
+    borderBottomColor: colours.lineStrong,
   },
   controls: { paddingHorizontal: sizes.edge, paddingTop: 12, paddingBottom: 8, gap: 10 },
   tabs: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
