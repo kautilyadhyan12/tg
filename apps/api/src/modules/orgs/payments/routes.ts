@@ -70,6 +70,7 @@ import {
   failedPaymentsQuerySchema,
   refundReviewFeeParamsSchema,
   refundReviewPressParamsSchema,
+  placeSquareRefundParamsSchema,
   placeSquareRefundRequestSchema,
   refundsToReviewQuerySchema,
   saveCardRequestSchema,
@@ -378,7 +379,7 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
   });
 
   app.post("/v1/orgs/:gymId/register/sales/:saleId/square-refunds/:pressId/place", { preHandler: [app.authenticate, staffOnly(deps.sql, refundLimit)] }, async (req, reply) => {
-    const params = parseOr400(z.object({ gymId: z.string().uuid(), saleId: z.string().uuid(), pressId: z.string().uuid() }).strict(), req.params, req, reply);
+    const params = parseOr400(placeSquareRefundParamsSchema, req.params, req, reply);
     if (params === null) return;
     const body = parseOr400(placeSquareRefundRequestSchema, req.body, req, reply);
     if (body === null) return;

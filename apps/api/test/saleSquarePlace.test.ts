@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkPlaceAnswer, placeSquareRefund, type AnswerLine, type PlaceLine, type PlaceNote } from "../src/modules/orgs/payments/saleSquarePlace.js";
+import { checkPlaceAnswer, placeRoom, placeSquareRefund, type AnswerLine, type PlaceLine, type PlaceNote } from "../src/modules/orgs/payments/saleSquarePlace.js";
 
 const A = "a";
 const B = "b";
@@ -61,6 +61,20 @@ describe("staff's answer", () => {
   });
   it("refuses more than the product can take", () => {
     expect(checkPlaceAnswer(lines, [], 500, [{ saleId: A, amountMinor: 500, restock: 0 }])).toEqual({ ok: false, reason: "too_much" });
+  });
+  it("a sale with less left than Square gave back takes it on any product, as notes in cash were made since", () => {
+    const spent: AnswerLine[] = [{ ...line(A, 400, 400), quantity: 2, restocked: 0, stockCounted: true }, { ...line(B, 1500, 1500), quantity: 1, restocked: 0, stockCounted: false }];
+    expect(placeRoom(spent, [], 300)).toEqual([{ saleId: A, minor: 300 }, { saleId: B, minor: 300 }]);
+    expect(checkPlaceAnswer(spent, [], 300, [{ saleId: B, amountMinor: 300, restock: 0 }])).toMatchObject({ ok: true, parts: [{ saleId: B, amountMinor: 300 }] });
+  });
+  it("a note on a product not chosen was another refund: it stands, with its shelf count", () => {
+    const noted: AnswerLine[] = [{ ...line(A, 400, 200), quantity: 2, restocked: 1, stockCounted: true }, { ...line(B, 1500), quantity: 1, restocked: 0, stockCounted: false }];
+    expect(checkPlaceAnswer(noted, [note("n1", A, 200, 1)], 300, [{ saleId: B, amountMinor: 300, restock: 0 }])).toEqual({ ok: true, parts: [{ saleId: B, amountMinor: 300, restock: 0 }], crossed: [] });
+  });
+  it("a product's room counts the note Square's refund would replace", () => {
+    const noted: AnswerLine[] = [{ ...line(A, 400, 300), quantity: 2, restocked: 0, stockCounted: true }, { ...line(B, 1500), quantity: 1, restocked: 0, stockCounted: false }];
+    expect(placeRoom(noted, [note("n1", A, 300)], 400)).toEqual([{ saleId: A, minor: 400 }, { saleId: B, minor: 1500 }]);
+    expect(checkPlaceAnswer(noted, [note("n1", A, 300)], 400, [{ saleId: A, amountMinor: 400, restock: 0 }])).toMatchObject({ ok: true, crossed: [{ id: "n1" }] });
   });
   it("takes a split that adds up, and keeps a replaced note's shelf count", () => {
     const noted = [{ ...lines[0], refundedMinor: 100, restocked: 1 } as AnswerLine, lines[1] as AnswerLine];

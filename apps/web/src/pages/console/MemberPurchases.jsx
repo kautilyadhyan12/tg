@@ -5,7 +5,7 @@ import { errorText } from '../../api/orgsApi';
 import { viewerPrivileges } from './consoleView';
 import { placeFor } from './consolePlaces';
 import { saleBaskets } from '@app/shared';
-import { canSell, purchaseLine } from './sellView';
+import { canManageProducts, canSell, purchaseLine } from './sellView';
 import { RECEIPT_BUTTON, receiptButtonLabel } from './receiptView';
 import ReceiptBox from '../../components/console/ReceiptBox';
 import MoreMenu from '../../components/console/MoreMenu';
@@ -24,7 +24,7 @@ import { useReadWhileSquareWaits } from './useReadWhileSquareWaits';
 /** A sale's refunds where the page can open Sell, for Change stock count. */
 function StockLines({ sellTo, ...props }) {
   const navigate = useNavigate();
-  return <SaleRefundLines {...props} onStock={() => navigate(sellTo, { state: { showProducts: true } })} />;
+  return <SaleRefundLines {...props} onStock={(productId) => navigate(sellTo, { state: { showProducts: true, productId } })} />;
 }
 
 export default function MemberPurchases({ gymId, gym, entryId, name, past, squareEveryMs }) {
@@ -121,7 +121,7 @@ export default function MemberPurchases({ gymId, gym, entryId, name, past, squar
                 ) : null}
                 <SquareRefundsToPlace gymId={gymId} basket={basket} canAct={acts} onDone={doneHere(sale.id)} />
                 {basket.lines.map((l) => (
-                  routed && sellTo !== null ? <StockLines key={l.id} sellTo={sellTo} gymId={gymId} gym={gym} sale={l} named={basket.lines.length > 1} canAct={acts} onDone={doneHere(sale.id)} /> : <SaleRefundLines key={l.id} gymId={gymId} gym={gym} sale={l} named={basket.lines.length > 1} canAct={acts} onDone={doneHere(sale.id)} />
+                  routed && sellTo !== null && canManageProducts(privileges) && acts ? <StockLines key={l.id} sellTo={sellTo} gymId={gymId} gym={gym} sale={l} named={basket.lines.length > 1} canAct={acts} onDone={doneHere(sale.id)} /> : <SaleRefundLines key={l.id} gymId={gymId} gym={gym} sale={l} named={basket.lines.length > 1} canAct={acts} onDone={doneHere(sale.id)} />
                 ))}
               </li>
             );

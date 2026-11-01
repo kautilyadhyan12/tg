@@ -87,21 +87,33 @@ export interface AnswerLine extends PlaceLine {
   stockCounted: boolean;
 }
 
+/** What each product can take when staff choose: what is left of it, and what its notes by card would free. Where the whole sale has less
+ *  than Square's amount, as notes in cash were written after it, any product takes it, as what is written is what Square did. */
+export function placeRoom(lines: readonly PlaceLine[], notes: readonly PlaceNote[], amountMinor: number): { saleId: string; minor: number }[] {
+  const room = lines.map((l) => ({ saleId: l.saleId, minor: leftAfter(l, notes.filter((n) => n.saleId === l.saleId)) }));
+  if (room.reduce((total, r) => total + r.minor, 0) >= amountMinor) return room;
+  return room.map((r) => ({ saleId: r.saleId, minor: amountMinor }));
+}
+
 export type AnswerCheck = { ok: true; parts: PlacedPart[]; crossed: PlaceNote[] } | { ok: false; reason: "not_on_sale" | "wrong_total" | "too_much" | "too_many_back" };
 
-/** Staff's answer: every part on this sale, adding up to what Square gave back, none past what its product can take. The box's shelf
- *  count comes on top of what the replaced notes already put back. */
+/** Staff's answer: every part on this sale, adding up to what Square gave back, none past what its product can take. Staff saying which
+ *  product also says which notes were this money: only notes on a product they chose are replaced, and such a note's shelf count stays
+ *  with it, on top of the box's. A note on any other product was another refund, and stands. */
 export function checkPlaceAnswer(lines: readonly AnswerLine[], notes: readonly PlaceNote[], amountMinor: number, answer: readonly PlacedPart[]): AnswerCheck {
-  const crossed = notesCrossedOut(notes, amountMinor);
   if (answer.reduce((total, p) => total + p.amountMinor, 0) !== amountMinor) return { ok: false, reason: "wrong_total" };
   if (new Set(answer.map((p) => p.saleId)).size !== answer.length) return { ok: false, reason: "not_on_sale" };
+  const room = placeRoom(lines, notes, amountMinor);
   const parts: PlacedPart[] = [];
+  const crossed: PlaceNote[] = [];
   for (const part of answer) {
     const line = lines.find((l) => l.saleId === part.saleId);
     if (line === undefined) return { ok: false, reason: "not_on_sale" };
-    if (part.amountMinor > leftAfter(line, crossed)) return { ok: false, reason: "too_much" };
-    const carried = sumOn(crossed, line.saleId, (n) => n.restocked);
+    if (part.amountMinor > (room.find((r) => r.saleId === part.saleId)?.minor ?? 0)) return { ok: false, reason: "too_much" };
+    const replaced = notesCrossedOut(notes.filter((n) => n.saleId === part.saleId), part.amountMinor);
+    const carried = replaced.reduce((total, n) => total + n.restocked, 0);
     if (part.restock > 0 && (!line.stockCounted || line.restocked + part.restock > line.quantity)) return { ok: false, reason: "too_many_back" };
+    crossed.push(...replaced);
     parts.push({ saleId: part.saleId, amountMinor: part.amountMinor, restock: part.restock + carried });
   }
   return { ok: true, parts, crossed };

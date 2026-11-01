@@ -143,7 +143,7 @@ const shownSales = (sales: readonly repo.SaleRow[], today: string, canSell: bool
         square:
           r.square === null
             ? null
-            : { state: r.square.state, card: r.square.card, late: r.square.state === "pending" && daysBetween(r.square.startedOn, today) > CARD_REFUND_LIMITS.pendingDays, pressId: r.square.pressId, inSquare: r.square.inSquare },
+            : { state: r.square.state, card: r.square.card, late: r.square.state === "pending" && daysBetween(r.square.startedOn, today) > CARD_REFUND_LIMITS.pendingDays, pressId: r.square.pressId, inSquare: r.square.inSquare, shelfAsked: r.square.shelfAsked },
       })),
     };
   });

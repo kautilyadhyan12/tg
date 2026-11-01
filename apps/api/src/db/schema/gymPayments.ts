@@ -589,6 +589,8 @@ export const gymSquareRefunds = pgTable(
     fromSquare: boolean("from_square").notNull().default(false),
     /** Square refunded part of a basket and names no product (0185; 18d-iv-d-ii): no refund row holds the money until staff say which. */
     toPlace: boolean("to_place").notNull().default(false),
+    /** Staff said which product, and so answered the shelf question. */
+    chosen: boolean("chosen").notNull().default(false),
   },
   (t) => [
     unique("gym_square_refunds_request_uq").on(t.gymId, t.requestKey),

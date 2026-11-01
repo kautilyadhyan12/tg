@@ -114,6 +114,8 @@ describe('a refund made in Square', () => {
     expect(line.detail).toContain('Refunded in Square to Visa ending 1111');
     expect(line.stockNote).toBe(IN_SQUARE_STOCK_LINE);
     expect(saleRefundLines({ ...towel, refunds: [inSquare] })[0].stockNote).toBeNull();
+    // Staff answered the shelf question in the box.
+    expect(saleRefundLines({ ...water, refunds: [{ ...inSquare, square: { ...inSquare.square, shelfAsked: true } }] })[0].stockNote).toBeNull();
     // All of what was sold is already back on the shelf: nothing is left to say.
     expect(saleRefundLines({ ...water, refunds: [inSquare, { ...inSquare, id: 'r2', restocked: 2 }] })[0].stockNote).toBeNull();
     expect(saleRefundLines({ ...water, refunds: [{ ...inSquare, restocked: 1 }] })[0].stockNote).toBeNull();
@@ -121,9 +123,12 @@ describe('a refund made in Square', () => {
   });
 
   it('offers only the products that can take all of it', () => {
-    expect(placeChoices([water, towel], 500).map((l) => l.id)).toEqual(['t']);
-    expect(placeChoices([water, towel], 300).map((l) => l.id)).toEqual(['w', 't']);
-    expect(placeChoices([water, { ...towel, totalMinor: 400 }], 600)).toEqual([]);
+    const press = (amountMinor, w, t) => ({ amountMinor, room: [{ saleId: 'w', minor: w }, { saleId: 't', minor: t }] });
+    expect(placeChoices([water, towel], press(500, 400, 1500)).map((l) => l.id)).toEqual(['t']);
+    expect(placeChoices([water, towel], press(300, 400, 1500)).map((l) => l.id)).toEqual(['w', 't']);
+    expect(placeChoices([water, towel], press(600, 400, 400))).toEqual([]);
+    // A note Square's refund replaces frees its product.
+    expect(placeChoices([water, towel], press(400, 400, 0)).map((l) => l.id)).toEqual(['w']);
   });
 
   it('sends one product, or a split only where it adds up', () => {

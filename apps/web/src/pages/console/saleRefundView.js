@@ -159,6 +159,7 @@ export function refundLineOption(sale) {
 }
 
 export const IN_SQUARE_STOCK_LINE = 'Square does not say whether this product came back. If it did, change its stock count.';
+export const IN_SQUARE_STOCK_ASK_LINE = 'Square does not say whether this product came back. If it did, ask the owner to change its stock count.';
 
 /** What is waiting on staff on a sale: refunds made in Square with no product said. */
 export const placeLines = (basket) => (basket?.lines ?? []).flatMap((line) => line.toPlace ?? []);
@@ -166,8 +167,16 @@ export const placeLines = (basket) => (basket?.lines ?? []).flatMap((line) => li
 /** Said on the sale, and on Overview: the money has gone, and which product is the one thing the app cannot know. */
 export const placeLine = (amountMinor, currency) => `Square refunded ${formatMinor(amountMinor, currency)} of this sale. Which product was it for? It counts in your reports once you choose.`;
 
-/** The products that can take all of it on their own. */
-export const placeChoices = (lines, amountMinor) => lines.filter((line) => line.undone !== true && refundableMinor(line) >= amountMinor);
+const roomOn = (press, line) => press.room.find((r) => r.saleId === line.id)?.minor ?? 0;
+
+/** The products that can take all of it on their own, by what the server says each can take. */
+export const placeChoices = (lines, press) => lines.filter((line) => roomOn(press, line) >= press.amountMinor);
+
+/** The products that can take some of it. */
+export const placeOpen = (lines, press) => lines.filter((line) => roomOn(press, line) > 0);
+
+/** A product as the box offers it. */
+export const placeOption = (line, press) => `${String(line.quantity)} × ${line.itemName} · ${formatMinor(Math.min(roomOn(press, line), line.totalMinor), line.currency)} can be refunded`;
 
 export const SEVERAL = 'several';
 
@@ -213,7 +222,7 @@ export function saleRefundLines(sale, named = false) {
     toCard: r.method === 'terminal',
     note: r.square?.late === true ? CARD_REFUND_LATE_LINE : null,
     // Square cannot say whether the product came back.
-    stockNote: r.square?.inSquare === true && r.voided === null && sale.stockCounted === true && r.restocked === 0 && restockLeft(sale) > 0 ? IN_SQUARE_STOCK_LINE : null,
+    stockNote: r.square?.inSquare === true && r.voided === null && sale.stockCounted === true && r.square.shelfAsked !== true && r.restocked === 0 && restockLeft(sale) > 0 ? IN_SQUARE_STOCK_LINE : null,
     // Made inside Square: Square says neither why nor who.
     detail: r.square?.inSquare === true ? joined([
       named ? sale.itemName : null,

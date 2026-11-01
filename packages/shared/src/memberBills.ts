@@ -168,7 +168,7 @@ const minorSchema = z.number().int().min(0).max(99_999_999);
 /** A refund sent to the card through Square (18d-iv-a): where it stands there, and the card, where Square named it. `late`:
  *  still pending after Square's 14 days. `pressId`: the press it came from (`cardRefundResponseSchema`). */
 export const squareRefundSeenSchema = z
-  .object({ state: z.enum(["pending", "completed"]), card: cardSeenSchema.nullable(), late: z.boolean(), pressId: z.string().uuid().nullable().default(null), inSquare: z.boolean().default(false) })
+  .object({ state: z.enum(["pending", "completed"]), card: cardSeenSchema.nullable(), late: z.boolean(), pressId: z.string().uuid().nullable().default(null), inSquare: z.boolean().default(false), shelfAsked: z.boolean().default(false) })
   .strict();
 export type SquareRefundSeen = z.infer<typeof squareRefundSeenSchema>;
 

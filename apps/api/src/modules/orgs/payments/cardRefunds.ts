@@ -555,8 +555,14 @@ const theirSale = async (deps: PaymentsDeps, gymId: string, saleId: string): Pro
   return line;
 };
 
-const checkOfSale = (deps: PaymentsDeps, ready: Ready, sale: SaleToRefund): Promise<CardRefundCheck> =>
-  checkWithSquare(deps, ready, sale, sale.squarePaymentId ?? "", () => saleRefundAsking(deps.sql, ready.row.gymId, sale.saleId), () => refunds.waitingOnTerminal(deps.sql, ready.row.gymId, sale.squarePaymentId ?? ""));
+/** A refund made in Square waiting on its product stops this box: staff say which first, so nothing is sent or noted against the wrong one. */
+const checkOfSale = async (deps: PaymentsDeps, ready: Ready, sale: SaleToRefund): Promise<CardRefundCheck> => {
+  const paymentId = sale.squarePaymentId ?? "";
+  const check = await checkWithSquare(deps, ready, sale, paymentId, () => saleRefundAsking(deps.sql, ready.row.gymId, sale.saleId), () => refunds.waitingOnTerminal(deps.sql, ready.row.gymId, paymentId));
+  const toPlace = await sales.toPlaceOn(deps.sql, ready.row.gymId, paymentId);
+  if (toPlace === 0) return check;
+  return { ...check, refundedInSquareMinor: Math.max(0, check.refundedInSquareMinor - toPlace), block: check.block === "waiting" ? "waiting" : "to_place" };
+};
 
 /** What Square says of all that is left of a sale: nothing goes back at once where Square shows less left than the app does. */
 async function checkOfWholeSale(deps: PaymentsDeps, ready: Ready, lines: readonly [SaleToRefund, ...SaleToRefund[]]): Promise<CardRefundCheck> {
@@ -760,6 +766,6 @@ export async function placeSquareRefund(deps: PaymentsDeps, userId: string, gymI
     case "too_much":
       throw refused("place_refund_too_much", PLACE_SQUARE_REFUND_WORDS.too_much);
     case "too_many_back":
-      throw refused("restock_too_many", saleRestockTooManyWords(0));
+      throw refused("restock_too_many", PLACE_SQUARE_REFUND_WORDS.too_many_back);
   }
 }

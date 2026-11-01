@@ -7,6 +7,7 @@
 // sale's id included. Every write takes the gym's row lock first, so the stock count, the
 // name check and the same request arriving twice are decided against rows nobody else is
 // changing.
+import { placeRoom } from "../payments/saleSquarePlace.js";
 import type { Sql, TransactionSql } from "postgres";
 import type { CardRefundOpen } from "@app/shared";
 import { z } from "zod";
@@ -78,6 +79,7 @@ const product = (r: RawProduct): ProductRow => ({
 
 export interface SaleRow {
   id: string;
+  productId: string;
   itemName: string;
   quantity: number;
   unitPriceMinor: number;
@@ -127,13 +129,14 @@ export interface SaleRefundRow {
   receiptNumber: number;
   voided: { reason: RefundVoidKept; on: string; by: string | null } | null;
   /** Sent to the card through Square: where it stands, and the gym's day it was pressed. */
-  square: { state: "pending" | "completed"; card: { brand: string; last4: string } | null; startedOn: string; pressId: string; inSquare: boolean } | null;
+  square: { state: "pending" | "completed"; card: { brand: string; last4: string } | null; startedOn: string; pressId: string; inSquare: boolean; shelfAsked: boolean } | null;
 }
 
 export type OpenSalePress = CardRefundOpen;
 
 interface RawSale {
   id: string;
+  product_id: string;
   item_name: string;
   quantity: number;
   unit_price_minor: number;
@@ -169,6 +172,7 @@ export const NO_NAME = "No name on their record";
 
 const sale = (r: RawSale): SaleRow => ({
   id: r.id,
+  productId: r.product_id,
   itemName: r.item_name,
   quantity: r.quantity,
   unitPriceMinor: r.unit_price_minor,
@@ -221,6 +225,9 @@ interface RawSaleRefund {
   q_brand: string | null;
   q_last4: string | null;
   q_from_square: boolean | null;
+  q_chosen: boolean | null;
+  created_at: Date;
+  undone_at: Date | null;
   q_started: string | null;
 }
 
@@ -359,7 +366,7 @@ async function refundsOf(sql: Sql | TransactionSql, gymId: string, sales: SaleRo
              u.display_name AS by, r.receipt_number, r.void_reason,
              CASE WHEN r.undone_at IS NOT NULL THEN (r.undone_at AT TIME ZONE g.timezone)::date::text END AS voided_on,
              v.display_name AS voided_by,
-             q.id AS q_id, q.state AS q_state, q.brand AS q_brand, q.last4 AS q_last4, q.from_square AS q_from_square,
+             q.id AS q_id, q.state AS q_state, q.brand AS q_brand, q.last4 AS q_last4, q.from_square AS q_from_square, q.chosen AS q_chosen, r.created_at, r.undone_at,
              (q.started_at AT TIME ZONE g.timezone)::date::text AS q_started
       FROM gym_sale_refunds r
       JOIN gyms g ON g.id = r.gym_id
@@ -370,8 +377,8 @@ async function refundsOf(sql: Sql | TransactionSql, gymId: string, sales: SaleRo
       ORDER BY r.receipt_number`,
     openPressesOfSales(sql, gymId, onTerminal),
     // Part of a basket refunded in Square, its product not yet said.
-    sql<{ id: string; sale_id: string; amount_minor: number; on_day: string }[]>`
-      SELECT q.id, q.sale_id, q.amount_minor, (q.started_at AT TIME ZONE g.timezone)::date::text AS on_day
+    sql<{ id: string; sale_id: string; amount_minor: number; on_day: string; checked_at: Date }[]>`
+      SELECT q.id, q.sale_id, q.amount_minor, (q.started_at AT TIME ZONE g.timezone)::date::text AS on_day, q.checked_at
       FROM gym_square_refunds q JOIN gyms g ON g.id = q.gym_id
       WHERE q.gym_id = ${gymId} AND q.to_place AND q.sale_id = ANY(${onTerminal}::uuid[])
       ORDER BY q.started_at, q.id`,
@@ -399,17 +406,29 @@ async function refundsOf(sql: Sql | TransactionSql, gymId: string, sales: SaleRo
               startedOn: r.q_started,
               pressId: r.q_id,
               inSquare: r.q_from_square === true,
+              shelfAsked: r.q_chosen === true,
             },
     });
     bySale.set(r.sale_id, list);
   }
-  return sales.map((s) => ({ ...s, refunds: bySale.get(s.id) ?? [], cardRefund: open.get(s.id) ?? null, toPlace: toPlace.filter((p) => p.sale_id === s.id).map((p) => ({ pressId: p.id, amountMinor: p.amount_minor, on: p.on_day })) }));
+  // What each product can take in the Choose product box: the rule the answer is checked by, on the same notes.
+  const roomOf = (s: SaleRow, p: { amount_minor: number; checked_at: Date }) => {
+    const basket = sales.filter((l) => l.receiptNumber === s.receiptNumber);
+    const ids = new Set(basket.map((l) => l.id));
+    const crossings = rows.filter((r) => ids.has(r.sale_id) && r.void_reason === "in_square").map((r) => r.undone_at?.getTime() ?? 0);
+    const notes = rows
+      .filter((r) => ids.has(r.sale_id) && r.voided_on === null && r.method === "card_at_desk" && r.created_at.getTime() <= p.checked_at.getTime() && !crossings.some((at) => at <= r.created_at.getTime()))
+      .map((r) => ({ id: r.id, saleId: r.sale_id, amountMinor: r.amount_minor, restocked: r.restocked }));
+    const lines = basket.map((l) => ({ saleId: l.id, lineMinor: l.totalMinor, refundedMinor: rows.filter((r) => r.sale_id === l.id && r.voided_on === null).reduce((n, r) => n + r.amount_minor, 0) }));
+    return placeRoom(lines, notes, p.amount_minor);
+  };
+  return sales.map((s) => ({ ...s, refunds: bySale.get(s.id) ?? [], cardRefund: open.get(s.id) ?? null, toPlace: toPlace.filter((p) => p.sale_id === s.id).map((p) => ({ pressId: p.id, amountMinor: p.amount_minor, on: p.on_day, room: roomOf(s, p) })) }));
 }
 
 /** The columns every read of a sale takes, from `gym_sales s` with its two joins. Who
  *  voided one and on what day are read on their own, for the few that were. */
 const saleColumns = (sql: Sql | TransactionSql) => sql`
-  s.id, s.item_name, s.quantity, s.unit_price_minor, s.net_minor, s.tax_minor, s.total_minor, s.tax_bp, s.tax_name, s.tax_included,
+  s.id, s.product_id, s.item_name, s.quantity, s.unit_price_minor, s.net_minor, s.tax_minor, s.total_minor, s.tax_bp, s.tax_name, s.tax_included,
   s.discount_name, s.discount_minor,
   CASE WHEN s.member_gift THEN (
     SELECT NULLIF(btrim(f.full_name), '') FROM gym_referral_member_gifts g

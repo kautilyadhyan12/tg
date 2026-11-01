@@ -149,7 +149,7 @@ function billingOf(
     square:
       r.square === null
         ? null
-        : { state: r.square.state, card: r.square.card, late: r.square.state === "pending" && daysBetween(r.square.startedOn, ctx.today) > CARD_REFUND_LIMITS.pendingDays, pressId: r.square.pressId, inSquare: r.square.inSquare },
+        : { state: r.square.state, card: r.square.card, late: r.square.state === "pending" && daysBetween(r.square.startedOn, ctx.today) > CARD_REFUND_LIMITS.pendingDays, pressId: r.square.pressId, inSquare: r.square.inSquare, shelfAsked: false },
   });
   const refundsOf = (paymentId: string) => refunds.filter((r) => r.paymentId === paymentId).map(refundOf);
   const voidedRefundsOf = (paymentId: string) => voided.refunds.filter((r) => r.paymentId === paymentId).map((r) => ({ ...refundOf(r), voided: r.voided }));

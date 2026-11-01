@@ -1,17 +1,19 @@
 import { useState } from 'react';
 import { Check, Loader2 } from 'lucide-react';
 import { registerService } from '../../api/registerApi';
-import { errorText } from '../../api/orgsApi';
+import { errorCode, errorText } from '../../api/orgsApi';
 import { paymentMethodsFor } from './memberBillsView';
 import { RECEIPT_BUTTON, receiptButtonLabel } from './receiptView';
 import {
   SEVERAL,
   placeBody,
   placeChoices,
+  placeOpen,
+  placeOption,
+  IN_SQUARE_STOCK_ASK_LINE,
   placeLine,
   placeLines,
   placedWords,
-  refundableMinor,
   SALE_MENU_WORDS,
   SALE_REFUND_CHOICES,
   SALE_REFUND_VOID_CHOICES,
@@ -368,8 +370,8 @@ export function BasketRefundBox({ gymId, country = null, basket, who, toCard = f
 
 /** Choose product: which product a refund made in Square was for (18d-iv-d-ii). */
 function PlaceRefundBox({ gymId, lines, press, currency, onDone, onClose }) {
-  const open = lines.filter((line) => refundableMinor(line) > 0);
-  const choices = placeChoices(lines, press.amountMinor);
+  const open = placeOpen(lines, press);
+  const choices = placeChoices(lines, press);
   const [draft, setDraft] = useState({ pick: choices.length === 0 ? SEVERAL : '', amounts: {}, shelf: {}, tried: false });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -383,6 +385,11 @@ function PlaceRefundBox({ gymId, lines, press, currency, onDone, onClose }) {
       const answer = await registerService.placeSquareRefund(gymId, lines[0].id, press.pressId, body);
       onDone(placedWords(lines, body, currency, answer.receiptNumbers));
     } catch (err) {
+      // Somebody else chose, or Square failed it: the box closes and the page reads again, so what it says is true.
+      if (errorCode(err) === 'place_refund_changed') {
+        onDone(errorText(err, "We couldn't save that. Try again."));
+        return;
+      }
       setError(errorText(err, "We couldn't save that. Try again."));
       setBusy(false);
     }
@@ -411,7 +418,7 @@ function PlaceRefundBox({ gymId, lines, press, currency, onDone, onClose }) {
             <option value="">Choose one</option>
             {choices.map((line) => (
               <option key={line.id} value={line.id}>
-                {refundLineOption(line)}
+                {placeOption(line, press)}
               </option>
             ))}
             {open.length > 1 ? <option value={SEVERAL}>Several products</option> : null}
@@ -421,7 +428,7 @@ function PlaceRefundBox({ gymId, lines, press, currency, onDone, onClose }) {
       {draft.pick === SEVERAL
         ? open.map((line) => (
             <label key={line.id} className="c-field">
-              <span className="c-label">{`${refundLineOption(line)}: amount (${currency})`}</span>
+              <span className="c-label">{`${placeOption(line, press)}: amount (${currency})`}</span>
               <input className="c-input" type="text" inputMode="decimal" value={draft.amounts[line.id] ?? ''} onChange={(e) => setDraft((d) => ({ ...d, amounts: { ...d.amounts, [line.id]: e.target.value.slice(0, 12) } }))} />
             </label>
           ))
@@ -545,11 +552,11 @@ export function SaleRefundLines({ gymId, gym, sale, canAct, onDone, named = fals
                 <span>{r.detail}</span>
                 {r.voided === null ? null : <span>{r.voided}</span>}
                 {r.note === null ? null : <span>{r.note}</span>}
-                {r.stockNote === null ? null : <span>{r.stockNote}</span>}
+                {r.stockNote === null ? null : <span>{onStock === null ? IN_SQUARE_STOCK_ASK_LINE : r.stockNote}</span>}
               </span>
               <span className="flex items-center gap-2 self-start md:self-auto">
                 {r.stockNote !== null && canAct && onStock !== null ? (
-                  <button type="button" className={SMALL} onClick={onStock}>
+                  <button type="button" className={SMALL} onClick={() => onStock(sale.productId)}>
                     Change stock count
                   </button>
                 ) : null}
