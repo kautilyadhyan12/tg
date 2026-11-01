@@ -265,8 +265,11 @@ describe("the Dashboard's Recommended box", () => {
     const box = within(await screen.findByTestId("recommended-box"));
     expect(box.getByText("Recommended For You")).toBeTruthy();
     expect(box.getByRole("radio", { name: "Food" })).toBeTruthy();
-    expect(await box.findByText("Rice 1 cup · 200 g")).toBeTruthy();
-    expect(box.queryByText("Dal 1 cup · 240 g")).toBeNull();
+    expect(await box.findByText("Rice")).toBeTruthy();
+    expect(box.getByText("1 cup · 200 g")).toBeTruthy();
+    expect(box.getByLabelText("508 kcal")).toBeTruthy();
+    expect(box.getByLabelText("40 g protein")).toBeTruthy();
+    expect(box.queryByText("Dal")).toBeNull();
     expect(box.getByText(FOOD_ALLERGY_CAUTION)).toBeTruthy();
     expect(box.getByText(DIET_LABEL_CAUTION)).toBeTruthy();
     expect(box.queryByRole("radio", { name: "Exercise" })).toBeNull();

@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import { App } from "../../src/App";
 import { DASHBOARD_READS } from "../../src/screens/Dashboard";
 import { dayWords, weekOf } from "../../src/screens/dashboard/words";
@@ -252,11 +252,14 @@ describe("the Dashboard, with the person's own numbers", () => {
     expect(screen.getAllByText("Coming soon")).toHaveLength(1);
     // Recent Activity: the workout, the meal and the run, newest first, each named by its day.
     expect(screen.getByText("Recent Activity")).toBeTruthy();
-    const details = ["Workout · 42 min · 91 form", "Lunch · Meal scan", "Evening run · 31 min"];
-    for (const detail of details) expect(screen.getByText(detail)).toBeTruthy();
-    const order = screen.queryAllByText(/^(Workout ·|Lunch ·|Evening run ·)/).map((one) => String(one.props.children));
-    expect(order).toEqual(details);
-    expect(screen.getAllByText(dayWords(hoursAgo(1)) ?? "").length).toBeGreaterThanOrEqual(1);
+    const names = ["Workout", "Lunch", "Evening run"];
+    const recentBox = within(screen.getByTestId("recent-activity"));
+    const order = recentBox.queryAllByText(/^(Workout|Lunch|Evening run)$/).map((one) => String(one.props.children));
+    expect(order).toEqual(names);
+    expect(screen.getByText(/· 42 min · 91 form$/)).toBeTruthy();
+    expect(screen.getByText(/· Meal scan$/)).toBeTruthy();
+    expect(screen.getByText(/· 31 min$/)).toBeTruthy();
+    expect(screen.getAllByText(new RegExp(`^${dayWords(hoursAgo(1)) ?? ""}`)).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("348 kcal")).toBeTruthy();
     expect(screen.getByText("540 kcal")).toBeTruthy();
     expect(screen.getByText("5.2 km")).toBeTruthy();

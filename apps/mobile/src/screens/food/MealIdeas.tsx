@@ -5,7 +5,7 @@ import { mealIdeasResponseSchema, missingText, type MealIdea, type SetupScreenId
 import { Button } from "../../look/Button";
 import { Card } from "../../look/Card";
 import { Chip } from "../../look/Chip";
-import { colours, sizes } from "../../look/colours";
+import { colours, pictureShade, sizes } from "../../look/colours";
 import { Icon } from "../../look/Icon";
 import { pictures } from "../../look/pictures";
 import { Sheet } from "../../look/Sheet";
@@ -16,7 +16,7 @@ import { NOT_KNOWN, count } from "../dashboard/words";
 import { newGoalId } from "../goals/words";
 import { Setup } from "../setup/Setup";
 import { mealTypeName } from "./day";
-import { ideaAsMeal, ideaFoodWords, ideaMealType, ideaName } from "./ideaRules";
+import { ideaAmountWords, ideaAsMeal, ideaFoodWords, ideaMealType, ideaName } from "./ideaRules";
 import { useMealOutbox } from "./MealOutbox";
 
 export const IDEAS_READ = "/v1/nutrition/suggestions";
@@ -149,10 +149,21 @@ export function MealIdeas({ onMore, onAnswered }: MealIdeasProps) {
     const [next, ...rest] = read.data.meals;
     body = (
       <>
-        {(onDashboard ? next.ideas.slice(0, 1) : next.ideas).map(row)}
         {onDashboard ? (
-          <Button label="More ideas" kind="link" style={styles.start} onPress={onMore} />
-        ) : rest.length === 0 ? null : (
+          next.ideas[0] === undefined ? null : (
+            <BestIdea
+              idea={next.ideas[0]}
+              held={logging || outbox === null}
+              onLog={(idea) => {
+                void log(idea);
+              }}
+              onMore={onMore}
+            />
+          )
+        ) : (
+          next.ideas.map(row)
+        )}
+        {onDashboard || rest.length === 0 ? null : (
           <Button
             label={rest.length === 1 ? "1 more meal today" : `${String(rest.length)} more meals today`}
             kind="link"
@@ -188,24 +199,27 @@ export function MealIdeas({ onMore, onAnswered }: MealIdeasProps) {
     );
   }
 
+  const saidLine =
+    said === null ? null : (
+      <Txt kind="small" colour="orange">
+        {said}
+      </Txt>
+    );
   return (
     <>
-      <Card style={styles.card} testID={onDashboard ? "recommended-box" : "meal-ideas-box"}>
-        {onDashboard ? (
-          <Image source={pictures.recommended} resizeMode="contain" style={styles.picture} accessible={false} />
-        ) : null}
-        <View style={styles.titleRow}>
-          <Icon name={onDashboard ? "target" : "apple"} size={16} colour="orange" />
-          <Txt kind="h3">{onDashboard ? "Recommended For You" : "What to eat next"}</Txt>
-        </View>
-        {/* The Exercise and Running options join with their own plans (ROADMAP 36, 37). */}
-        {onDashboard ? (
-          <View style={styles.options}>
-            <Chip label="Food" on onPress={() => undefined} />
+      {onDashboard ? (
+        <View style={styles.box} testID="recommended-box">
+          <View style={styles.banner}>
+            <Image source={pictures.food} resizeMode="cover" style={styles.fill} accessible={false} />
+            <View style={[StyleSheet.absoluteFill, styles.shade]} />
+            {/* The Exercise and Running options join with their own plans (ROADMAP 36, 37). */}
+            <View style={styles.options}>
+              <Chip label="Food" on onPress={() => undefined} />
+            </View>
+            <Txt kind="h2">Recommended For You</Txt>
           </View>
-        ) : null}
-        {onDashboard
-          ? view.refused.map((r) => (
+          <View style={styles.body}>
+            {view.refused.map((r) => (
               <View key={r.id} style={styles.row}>
                 <Icon name="warn" size={16} colour="badText" />
                 <Txt kind="small" style={styles.grow}>
@@ -219,16 +233,23 @@ export function MealIdeas({ onMore, onAnswered }: MealIdeasProps) {
                   }}
                 />
               </View>
-            ))
-          : null}
-        {said === null ? null : (
-          <Txt kind="small" colour="orange">
-            {said}
-          </Txt>
-        )}
-        {body}
-        {foot}
-      </Card>
+            ))}
+            {saidLine}
+            {body}
+            {foot}
+          </View>
+        </View>
+      ) : (
+        <Card style={styles.card} testID="meal-ideas-box">
+          <View style={styles.titleRow}>
+            <Icon name="apple" size={16} colour="orange" />
+            <Txt kind="h3">What to eat next</Txt>
+          </View>
+          {saidLine}
+          {body}
+          {foot}
+        </Card>
+      )}
       {setupAt === null ? null : (
         <Setup
           open
@@ -244,6 +265,51 @@ export function MealIdeas({ onMore, onAnswered }: MealIdeasProps) {
           }}
         />
       )}
+    </>
+  );
+}
+
+/** The Dashboard's one idea: its numbers large, its foods as a short table, and the one thing to do. */
+function BestIdea({ idea, held, onLog, onMore }: { idea: MealIdea; held: boolean; onLog: (idea: MealIdea) => void; onMore: () => void }) {
+  const figures = [
+    { value: count(idea.totals.kcal), label: "kcal" },
+    { value: count(Math.round(idea.totals.proteinG)), label: "g protein" },
+    { value: count(Math.round(idea.totals.carbsG)), label: "g carbs" },
+  ];
+  return (
+    <>
+      <View style={styles.figures}>
+        {figures.map((f) => (
+          <View key={f.label} style={styles.figure} accessible accessibilityLabel={`${f.value} ${f.label}`}>
+            <Txt kind="big" colour="orange">
+              {f.value}
+            </Txt>
+            <Txt kind="tiny">{f.label}</Txt>
+          </View>
+        ))}
+      </View>
+      <View style={styles.foods}>
+        {idea.items.map((food) => (
+          <View key={food.canonical} style={styles.food}>
+            <Txt kind="small" colour="text" style={styles.grow}>
+              {food.name}
+            </Txt>
+            <Txt kind="small">{ideaAmountWords(food)}</Txt>
+          </View>
+        ))}
+      </View>
+      <View style={styles.actions}>
+        <Button
+          label="Log meal"
+          small
+          disabled={held}
+          say={`Log ${ideaName(idea)}`}
+          onPress={() => {
+            onLog(idea);
+          }}
+        />
+        <Button label="More ideas" kind="link" onPress={onMore} />
+      </View>
     </>
   );
 }
@@ -271,11 +337,19 @@ const styles = StyleSheet.create({
   grow: { flex: 1 },
   row: { flexDirection: "row", alignItems: "center", gap: 10 },
   titleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  box: { backgroundColor: colours.box, borderWidth: 1, borderColor: colours.line, borderRadius: sizes.boxRadius, overflow: "hidden" },
+  banner: { minHeight: 170, padding: 14, justifyContent: "space-between", gap: 24 },
+  fill: { position: "absolute", width: "100%", height: "100%" },
+  shade: { experimental_backgroundImage: pictureShade },
   options: { flexDirection: "row", gap: 8 },
+  body: { paddingHorizontal: 14, paddingBottom: 14, paddingTop: 4, gap: 14 },
+  figures: { flexDirection: "row", gap: 6 },
+  figure: { flex: 1, alignItems: "center" },
+  foods: { gap: 8, padding: 12, borderRadius: sizes.boxRadius, backgroundColor: colours.fill },
+  food: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  actions: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 },
   start: { alignSelf: "flex-start" },
   idea: { flexDirection: "row", alignItems: "center", gap: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: colours.line },
   numbers: { fontFamily: fonts.semibold, marginTop: 2 },
   later: { gap: 8, marginBottom: sizes.edge },
-  // Whole, in the corner beside the title and the option row.
-  picture: { position: "absolute", top: 8, right: 10, width: 84, height: 92 },
 });

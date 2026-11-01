@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { manualMealRequestSchema, mealIdeaSchema } from "@app/shared";
-import { ideaAsMeal, ideaFoodWords, ideaMealType, ideaName } from "../src/screens/food/ideaRules";
+import { ideaAmountWords, ideaAsMeal, ideaFoodWords, ideaMealType, ideaName } from "../src/screens/food/ideaRules";
 
 const rice = { canonical: "rice_white", name: "Rice", grams: 200, servings: 1, unit: "cup", kcal: 260, proteinG: 5, carbsG: 56, fatG: 1 };
 const chicken = { canonical: "chicken_breast", name: "Chicken breast", grams: 150, servings: 1.5, unit: "g", kcal: 248, proteinG: 46, carbsG: 0, fatG: 5 };
@@ -25,6 +25,8 @@ describe("an idea's words", () => {
   });
   it("gives a food served by weight its grams once", () => {
     expect(ideaFoodWords(chicken)).toBe("Chicken breast 150 g");
+    expect(ideaAmountWords(chicken)).toBe("150 g");
+    expect(ideaAmountWords(rice)).toBe("1 cup · 200 g");
   });
   it("names the meal by its foods, within what a name may hold", () => {
     expect(ideaName(idea)).toBe("Chicken breast + Rice");

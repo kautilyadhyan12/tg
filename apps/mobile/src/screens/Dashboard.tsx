@@ -539,6 +539,8 @@ function Badges({ me, onPress }: { me: Read<GamificationMe>; onPress: () => void
 }
 
 const ACTIVITY_ICONS: Record<ActivityKind, IconName> = { workout: "dumbbell", run: "pin", meal: "utensils" };
+const ACTIVITY_TONES = { workout: "orange", run: "good", meal: "gold" } as const;
+const ACTIVITY_INK = { workout: "orange", run: "goodText", meal: "gold" } as const;
 
 /** Everything done lately, of any kind. Shown only when all three lists are read: a list missing
  *  would leave out what may be the newest thing. */
@@ -548,12 +550,14 @@ function Recent({ workouts, runs, meals }: { workouts: Read<WorkoutPage>; runs: 
       ? recentActivity({ workouts: workouts.data.items, runs: runs.data.items, meals: meals.data.items })
       : null;
   return (
-    <Card style={styles.recent}>
+    <Card style={styles.recent} testID="recent-activity">
       <Image source={pictures.recentworkout} resizeMode="contain" style={styles.recentArt} accessible={false} />
-      <View style={[StyleSheet.absoluteFill, styles.statShade]} />
-      <Txt kind="h3" style={styles.boxTitle}>
-        Recent Activity
-      </Txt>
+      <View style={[styles.titleRow, styles.recentHead]}>
+        <Icon name="clock" size={16} colour="orange" />
+        <Txt kind="h3" style={styles.boxTitle}>
+          Recent Activity
+        </Txt>
+      </View>
       {rows === null || workouts.kind !== "ok" ? (
         <Txt kind="small">{NOT_KNOWN}</Txt>
       ) : rows.length === 0 ? (
@@ -561,15 +565,15 @@ function Recent({ workouts, runs, meals }: { workouts: Read<WorkoutPage>; runs: 
       ) : (
         rows.map((row) => (
           <View key={row.key} style={[styles.row, styles.workout]}>
-            <Badge icon={ACTIVITY_ICONS[row.kind]} />
+            <Badge icon={ACTIVITY_ICONS[row.kind]} tone={ACTIVITY_TONES[row.kind]} />
             <View style={styles.grow}>
-              <Txt kind="body" style={styles.semibold}>
-                {row.day}
+              <Txt kind="body" numberOfLines={1} style={styles.semibold}>
+                {row.name}
               </Txt>
-              {row.detail === "" ? null : <Txt kind="tiny">{row.detail}</Txt>}
+              {row.facts === "" ? null : <Txt kind="tiny">{row.facts}</Txt>}
             </View>
             {row.value === null ? null : (
-              <Txt kind="small" colour="orange" style={styles.semibold}>
+              <Txt kind="strong" colour={ACTIVITY_INK[row.kind]}>
                 {row.value}
               </Txt>
             )}
@@ -651,9 +655,11 @@ const styles = StyleSheet.create({
   rank: { width: 140, minHeight: 210, justifyContent: "flex-end" },
   rankNumber: { flexDirection: "row", alignItems: "flex-end", flexWrap: "wrap", gap: 6 },
   badges: { width: 230, minHeight: 210 },
-  recent: { gap: 4 },
-  recentArt: { position: "absolute", top: 0, right: -10, width: "75%", height: "100%", opacity: 0.6 },
-  workout: { minHeight: 56, borderTopWidth: 1, borderTopColor: colours.line, paddingTop: 8 },
+  recent: { gap: 8 },
+  // The picture stands at the top right, above the rows and never behind their words.
+  recentHead: { minHeight: 70, alignItems: "flex-start" },
+  recentArt: { position: "absolute", top: 6, right: 8, width: 118, height: 82 },
+  workout: { minHeight: 60, paddingHorizontal: 12, paddingVertical: 10, borderRadius: sizes.boxRadius, backgroundColor: colours.fill },
   ready: { height: 210, borderRadius: 22, justifyContent: "center" },
   readyWords: { padding: 18, gap: 14, alignItems: "flex-start", maxWidth: "62%" },
 });

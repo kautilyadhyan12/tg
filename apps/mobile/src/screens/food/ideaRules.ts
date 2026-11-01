@@ -12,9 +12,14 @@ import {
 /** A food of an idea as a line: "Rice 1 cup · 200 g". An idea is saved by weight, so the saved meal
  *  reads the same grams. A food served by weight has only its grams. */
 export function ideaFoodWords(food: SuggestedFood): string {
+  return `${food.name} ${ideaAmountWords(food)}`;
+}
+
+/** Only the amount: "1 cup · 200 g", or "150 g" for a food served by weight. */
+export function ideaAmountWords(food: SuggestedFood): string {
   const amount = amountWords(food);
   const grams = `${String(Math.round(food.grams))} g`;
-  return amount === grams ? `${food.name} ${grams}` : `${food.name} ${amount} · ${grams}`;
+  return amount === grams ? grams : `${amount} · ${grams}`;
 }
 
 /** The meal an idea is logged to, by the hour. Never Snack: the server does not count a snack as a
