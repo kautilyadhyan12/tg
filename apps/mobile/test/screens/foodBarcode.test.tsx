@@ -559,6 +559,30 @@ describe("a pack's label (33b-iii-c)", () => {
     expect(fake.asked.find((a) => a.method === "PUT")?.body).toMatchObject({ name: "Same pack", code: NUTELLA_CODE });
   });
 
+  it("closed during a read: on opening, the box waits for the scanner to show, as a phone never draws it sooner", async () => {
+    let answer: (reply: Reply) => void = () => undefined;
+    await openScan(labelRoutes({ "/v1/nutrition/labels/read": () => new Promise<Reply>((resolve) => { answer = resolve; }) }));
+    await toLabel();
+    await screen.findByText("Reading the label\u2026");
+    await fireEvent.press(screen.getByRole("button", { name: "Close" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Scan food" }));
+    await screen.findByText("Reading the label\u2026");
+    await act(async () => {
+      answer({ status: 200, body: draft });
+      await Promise.resolve();
+    });
+    await waitFor(() => { expect(screen.queryByText("Reading the label\u2026")).toBeNull(); });
+    expect(screen.queryByText("Check the label")).toBeNull();
+    // The scanner's own Modal, up from its page.
+    let scanner: { props: { onShow?: () => void }; parent: unknown } | null = screen.getByTestId("meal-photo") as unknown as { props: { onShow?: () => void }; parent: unknown };
+    while (scanner !== null && scanner.props.onShow === undefined) scanner = scanner.parent as typeof scanner;
+    await act(async () => {
+      scanner?.props.onShow?.();
+      await Promise.resolve();
+    });
+    expect(await screen.findByText("Check the label")).toBeTruthy();
+  });
+
   it("Leave: the barcode goes with the read, so the next photo takes no barcode", async () => {
     const fake = await openScan(labelRoutes({ "/v1/nutrition/labels/saved": ok(saved) }));
     await toLabel();

@@ -143,10 +143,14 @@ export function MealPhoto({ open, barcode, kept, onClose, onSaved, onSearch }: M
   // meal kept, its review; else the camera on Meal, or on Barcode where that was asked for, holding no
   // barcode. Only a read under way, or a read that has used a scan and is not yet saved, is kept.
   const [wasOpen, setWasOpen] = useState(false);
+  // On a phone, a box opened in the same moment as the scanner under it is never drawn: the page stays
+  // black, on every opening, until the app is closed. So a kept read waits for the scanner to show.
+  const [waitingToShow, setWaitingToShow] = useState(false);
   if (open !== wasOpen) {
     setWasOpen(open);
     if (open) {
       setNotice(null);
+      setWaitingToShow(stage.kind === "reading" || stage.kind === "label");
       if (stage.kind !== "reading" && stage.kind !== "label") {
         setCameraStart(null);
         setStage(!barcode && kept.sheet !== null && kept.sheet !== undefined ? { kind: "review" } : { kind: "camera" });
@@ -257,7 +261,7 @@ export function MealPhoto({ open, barcode, kept, onClose, onSaved, onSearch }: M
 
   if (!open) return null;
   return (
-    <Modal visible animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
+    <Modal visible animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose} onShow={() => { setWaitingToShow(false); }}>
       <View style={styles.page} testID="meal-photo">
         {stage.kind === "camera" ? (
           <Camera
@@ -281,6 +285,8 @@ export function MealPhoto({ open, barcode, kept, onClose, onSaved, onSearch }: M
           />
         ) : stage.kind === "reading" ? (
           <Reading uri={stage.uri} what={stage.what} onClose={onClose} />
+        ) : stage.kind === "label" && waitingToShow ? (
+          <View style={styles.page} />
         ) : stage.kind === "label" ? (
           <LabelCheck
             start={typedFromDraft(stage.draft)}
