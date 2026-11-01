@@ -16,7 +16,7 @@ import {
   serializeTrace,
   type Trace,
 } from "../src/index.js";
-import { checkTraceFrames, measureTrace, personCountOf, safeLabel, summaryLines } from "../scripts/video/measure.js";
+import { checkTraceFrames, labelFor, measureTrace, personCountOf, reportFromTraceText, safeLabel, summaryLines } from "../scripts/video/measure.js";
 import { assertFolderStaysOutOfGit, prepareOutFolder } from "../scripts/video/outFolder.js";
 import { must } from "./fixtures.js";
 
@@ -117,6 +117,7 @@ describe("a folder that holds other things", () => {
       writeFileSync(join(out, "01_x.jpg"), "ours");
       expect(() => { prepareOutFolder(out, "D:/a/reference.mp4"); }).not.toThrow();
       expect(() => { prepareOutFolder(out, "D:/b/reference.mp4"); }).toThrow(/another video/);
+      expect(() => { prepareOutFolder(out, join(out, "own.jsonl")); }).not.toThrow();
     });
   });
 
@@ -164,8 +165,27 @@ describe("names and counts on the report", () => {
 
   it("the summary says when a rep was still open at the end, and gives the two-knee rule", () => {
     const text = summaryLines(measureTrace(clip("sqauta_sideview1goodform.jsonl"), rules("squat"), null)).join("\n");
-    expect(text).toMatch(/still open when the video ended.*not counted/);
+    expect(text).toMatch(/Lowest point after the last counted rep.*not counted\. The movement was still open/);
     expect(text).toMatch(/with the other knee under 150/);
+  });
+
+  it("a dip after the last rep, standing again by the end, is not called still open", () => {
+    const text = summaryLines(measureTrace(clip("jump_squat_goodform_sideview2.jsonl"), rules("jump_squat"), null)).join("\n");
+    expect(text).toMatch(/Lowest point after the last counted rep.*not counted\./);
+    expect(text).not.toMatch(/still open/);
+  });
+
+  it("the command's step reads a stored count and names what was asked for", () => {
+    const text = readFileSync(join(PARITY, SQUAT_CLIP), "utf8");
+    const report = reportFromTraceText(text, null, null, "sqaut");
+    expect(report.exercise).toBe("sqaut");
+    expect(report.personCount).toBe(parseTrace(text).header.expected.reps);
+    expect(reportFromTraceText(text, null, 9, "x").personCount).toBe(9);
+  });
+
+  it("a run's name comes from the file, without its folders, or from what was typed", () => {
+    expect(labelFor(undefined, join("D:", "mum", "a b.mp4"))).toBe("a_b");
+    expect(labelFor("my/clip", "x.mp4")).toBe("my_clip");
   });
 
   it.each([

@@ -10,8 +10,8 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, extname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { exerciseDefinitionSchema, type ExerciseDefinition } from "@app/shared";
-import { ENGINE_VERSION, UNCOUNTED_REPS, parseTrace } from "../../src/index.js";
-import { measureTrace, personCountOf, safeLabel, summaryLines } from "./measure.js";
+import { ENGINE_VERSION, UNCOUNTED_REPS } from "../../src/index.js";
+import { labelFor, reportFromTraceText, summaryLines } from "./measure.js";
 import { prepareOutFolder } from "./outFolder.js";
 
 const REPO = resolve(import.meta.dirname, "../../../..");
@@ -91,7 +91,7 @@ const fps = Number(values.fps);
 if (values.fps.trim() === "" || !(fps >= 8 && fps <= 40)) fail("--fps is a number from 8 to 40, what the engine accepts.");
 
 // The name reaches the trace, which may go to git: never a path.
-const label = safeLabel(values.label ?? basename(input, extname(input)));
+const label = labelFor(values.label, input);
 if (label === "") fail("--label needs at least one letter or number.");
 const out = values.out === undefined ? join(REPO, "measured", label) : fromTyped(values.out);
 try {
@@ -121,8 +121,7 @@ if (!isTrace) {
 
 let lines: string[] = [];
 try {
-  const trace = parseTrace(readFileSync(tracePath, "utf8"));
-  const report = measureTrace(trace, definition, personCountOf(trace, reps), exercise);
+  const report = reportFromTraceText(readFileSync(tracePath, "utf8"), definition, reps, exercise);
   lines = summaryLines(report);
   writeFileSync(join(out, "report.json"), JSON.stringify(report));
 } catch (err) {

@@ -49,7 +49,7 @@ export function assertFolderStaysOutOfGit(folder: string): void {
       `real people. Use that checkout's measured/ folder or a folder outside it.`,
   );
   const measured = join(root, "measured");
-  if (target === measured || !isInside(measured, target)) throw refused;
+  if (relative(measured, target) === "" || !isInside(measured, target)) throw refused;
   const probe = relative(root, join(target, "a-picture.jpg"));
   if (git(root, ["check-ignore", "-q", "--", probe]).status !== 0) throw refused;
 }
@@ -58,7 +58,7 @@ export function assertFolderStaysOutOfGit(folder: string): void {
  *  holding anything but this tool's own run of the same source is refused. */
 export function prepareOutFolder(folder: string, source: string): void {
   assertFolderStaysOutOfGit(folder);
-  const target = resolve(folder);
+  const target = realFolder(folder).target;
   if (isInside(KD_VIDEOS, target)) throw new Error(`${KD_VIDEOS} is Kd's own folder and is never changed.`);
   const marker = join(target, MARKER);
   if (existsSync(target) && readdirSync(target).length > 0) {
@@ -66,7 +66,10 @@ export function prepareOutFolder(folder: string, source: string): void {
       throw new Error(`${target} holds files this tool did not make. Use an empty folder.`);
     }
     const before: unknown = JSON.parse(readFileSync(marker, "utf8"));
-    const same = typeof before === "object" && before !== null && "source" in before && before.source === source;
+    // A run's own trace, read again, is the same video.
+    const same =
+      dirname(resolve(source)) === target ||
+      (typeof before === "object" && before !== null && "source" in before && before.source === source);
     if (!same) {
       throw new Error(`${target} holds the pictures of another video. Give this one its own --label.`);
     }

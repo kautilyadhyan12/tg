@@ -1,6 +1,7 @@
 // Turns a trace into the report the pictures and the terminal read. Every number here
 // comes out of a real engine session; this file holds no maths of its own beyond
 // finding which frame to look at.
+import { basename, extname } from "node:path";
 import type { ExerciseDefinition, FrameResult, SetSummary } from "@app/shared";
 import { traceFrameSchema } from "@app/shared";
 import {
@@ -9,6 +10,7 @@ import {
   UNCOUNTED_REPS,
   compileDefinition,
   createSession,
+  parseTrace,
   replay,
   type EngineConfig,
   type SignalName,
@@ -183,6 +185,11 @@ export function safeLabel(name: string): string {
   return name.replace(/[^A-Za-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "");
 }
 
+/** The run's name: the one typed, else the file's own, and never a path. */
+export function labelFor(typed: string | undefined, input: string): string {
+  return safeLabel(typed ?? basename(input, extname(input)));
+}
+
 /** What a person counted: what they just said, else what the trace's header holds. */
 export function personCountOf(trace: Trace, given: number | null): number | null {
   if (given !== null) return given;
@@ -250,6 +257,17 @@ export function measureTrace(
   };
 }
 
+/** The command's own step between reading a trace and drawing it. */
+export function reportFromTraceText(
+  text: string,
+  definition: ExerciseDefinition | null,
+  given: number | null,
+  askedFor: string,
+): VideoReport {
+  const trace = parseTrace(text);
+  return measureTrace(trace, definition, personCountOf(trace, given), askedFor);
+}
+
 /** What the terminal reads in its own window after a run. */
 export function summaryLines(report: VideoReport): string[] {
   const lines = [
@@ -275,7 +293,10 @@ export function summaryLines(report: VideoReport): string[] {
       );
     }
     const open = report.moments.find((m) => m.why.includes("not counted"));
-    if (open) lines.push(`  A movement was still open when the video ended, at ${(open.t / 1000).toFixed(1)} s: not counted.`);
+    if (open) {
+      const stillOpen = rules.decisions.at(-1)?.phase !== "top" ? " The movement was still open when the video ended." : "";
+      lines.push(`  Lowest point after the last counted rep, at ${(open.t / 1000).toFixed(1)} s: not counted.${stillOpen}`);
+    }
   } else {
     lines.push(`${report.exercise} has no rules yet: every angle is measured, nothing is counted.`);
   }
