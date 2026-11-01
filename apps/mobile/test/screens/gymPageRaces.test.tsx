@@ -231,7 +231,7 @@ describe("reactions", () => {
     await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
     // The second post's first send is still on its way.
     const second = opens()[1];
-    stateOf(expect(second).disabled).toBe(true);
+    expect(stateOf(second).disabled).toBe(true);
   });
 });
 
@@ -277,7 +277,7 @@ describe("more", () => {
     await act(async () => { b1.resolve(ok({ reactions: { like: 1, love: 0, strong: 0, fire: 0 }, mine: "like" })()); await b1.promise; });
     await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
     expect(opens()[1]?.props.accessibilityLabel).toContain("Like");
-    stateOf(expect(opens()[1]).disabled).toBe(false);
+    expect(stateOf(opens()[1]).disabled).toBe(false);
   });
 
   it("T9 a 51st kept comment: words on a post that has gone leave first, and only otherwise is the oldest dropped, and that is said", () => {
