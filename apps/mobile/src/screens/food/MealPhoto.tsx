@@ -967,7 +967,7 @@ function Review({
               <Button label="Back" kind="quiet" wide onPress={() => { setRowFigures(false); }} />
             </>
           ) : null}
-          {/* Hidden, not closed: what is being typed into the amount stays. */}
+          {/* Hidden, not closed: the box keeps its own state, such as an open panel. */}
           <View style={rowFigures ? styles.hidden : styles.shown}>
           <RowAmount
             row={row}

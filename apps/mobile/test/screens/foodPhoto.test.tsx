@@ -850,10 +850,10 @@ describe("a food's ten figures on the photo's review (34b)", () => {
   it("shows the opened food's own figures, never another's, and a food with none reads No data", async () => {
     await openFood({ meals: [], scans: [], figures });
     await takePhoto();
-    await fireEvent.press(await screen.findByRole("button", { name: "Change Toast, 2 × slice · 60 g" }));
+    await fireEvent.press(await screen.findByRole("button", { name: /^Change Eggs (scrambled), / }));
     await fireEvent.press(await screen.findByRole("button", { name: "Nutrients" }));
-    expect(await screen.findByLabelText("Sodium, 111 mg")).toBeTruthy();
-    expect(screen.queryByLabelText("Sodium, 222 mg")).toBeNull();
+    expect(await screen.findByLabelText("Sodium, 222 mg")).toBeTruthy();
+    expect(screen.queryByLabelText("Sodium, 111 mg")).toBeNull();
     expect(screen.getByLabelText("Iron, No data")).toBeTruthy();
   });
 

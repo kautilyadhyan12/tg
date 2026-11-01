@@ -843,7 +843,9 @@ describe("the ten figures (34b)", () => {
   });
 
   it("a day cut short by the pages read marks its figures and says why", async () => {
-    const meal = twoFoods();
+    const whole = twoFoods();
+    const lentils = whole.items[0];
+    const meal = { ...whole, items: lentils === undefined ? [] : [lentils] };
     const server = foodServer({ meals: [meal] }, daily);
     const ask: Ask = (url, init) =>
       new URL(url).pathname === "/v1/nutrition/meals" && (init.method ?? "GET") === "GET"
@@ -854,7 +856,7 @@ describe("the ten figures (34b)", () => {
     const links = await screen.findAllByRole("button", { name: "Nutrients" });
     await fireEvent.press(links[0] as NonNullable<(typeof links)[number]>);
     expect(await screen.findByText("* Meals this far back couldn’t all be read.")).toBeTruthy();
-    expect(screen.getByLabelText(/^Fibre, /).props.accessibilityLabel).toContain("*");
+    expect(screen.getByLabelText("Fibre, 11.9 g*. Recommended 25 g")).toBeTruthy();
   });
 
   it("an empty day offers no list", async () => {

@@ -9,7 +9,7 @@
 // fat, which the Reference Intakes give no number for, and the whole set for somebody whose age or
 // sex the tables cannot be read by. Total sugars and unsaturated fat have no published amount.
 import { z } from "zod";
-import type { Gender } from "./users.js";
+import { ADULT_AGE, type Gender } from "./users.js";
 import type { MoreNutrient } from "./nutrition.js";
 
 /** "about": an amount to reach. "most": an amount not to go over. */
@@ -62,7 +62,7 @@ const answer = (forWhom: string | null, [fiber, calcium, iron, magnesium, potass
 /** The amounts for a person's age and gender answers. The tables are by sex, so "other", "prefer not
  *  to say", an unanswered age or gender, or an age kept from before the app was 18 and over reads the labels' Daily Values, never a guessed sex's row. */
 export function dailyAmountsFor(age: number | null, gender: Gender | null): DailyAmountsResponse {
-  if (age === null || age < 18 || (gender !== "male" && gender !== "female")) return answer(null, LABEL_DAILY_VALUES);
+  if (age === null || age < ADULT_AGE || (gender !== "male" && gender !== "female")) return answer(null, LABEL_DAILY_VALUES);
   const bands = gender === "male" ? MEN : WOMEN;
   const band = bands.find((b) => age <= b.upTo);
   // Infinity closes both lists; an age that is not a number finds no band.

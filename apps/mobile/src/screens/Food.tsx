@@ -455,6 +455,10 @@ export function FoodScreen() {
           targets.again();
           dailyAgain();
         }}
+        onSettled={() => {
+          targets.again();
+          dailyAgain();
+        }}
       />
     </Page>
   );
