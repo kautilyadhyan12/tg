@@ -18,21 +18,21 @@ const line = (lines: ReturnType<typeof figureLines>, key: keyof MoreNutrients) =
 describe("the ten figures, read as a list", () => {
   it("the worst thing: a food with no sodium figure never lets the day read as the whole amount", () => {
     expect(line(figureLines([lentils, pizza], false, woman), "sodiumMg")).toEqual({
-      key: "sodiumMg", name: "Sodium", value: "At least 3 mg", note: "Daily limit 2,300 mg",
+      key: "sodiumMg", name: "Sodium", value: "3 mg*", note: "Limit 2,300 mg",
     });
   });
 
   it("every food known: the amount alone, beside the published one", () => {
     const lines = figureLines([lentils], false, woman);
-    expect(line(lines, "fiberG")).toMatchObject({ name: "Fibre", value: "11.9 g", note: "Daily guide 25 g" });
-    expect(line(lines, "sodiumMg")).toMatchObject({ value: "3 mg", note: "Daily limit 2,300 mg" });
-    expect(line(lines, "ironMg")).toMatchObject({ value: "5 mg", note: "Daily guide 18 mg" });
+    expect(line(lines, "fiberG")).toMatchObject({ name: "Fibre", value: "11.9 g", note: "Recommended 25 g" });
+    expect(line(lines, "sodiumMg")).toMatchObject({ value: "3 mg", note: "Limit 2,300 mg" });
+    expect(line(lines, "ironMg")).toMatchObject({ value: "5 mg", note: "Recommended 18 mg" });
   });
 
-  it("a measured 0 reads 0; a figure no food gives reads Not known, never 0", () => {
+  it("a measured 0 reads 0; a figure no food gives reads No data, never 0", () => {
     expect(line(figureLines([lentils], false, null), "vitaminDUg")?.value).toBe("0 µg");
-    expect(line(figureLines([lentils], false, woman), "unsatFatG")).toMatchObject({ value: "Not known", note: null });
-    expect(line(figureLines([pizza], false, woman), "vitaminDUg")).toMatchObject({ value: "Not known", note: "Daily guide 15 µg" });
+    expect(line(figureLines([lentils], false, woman), "unsatFatG")).toMatchObject({ value: "No data", note: null });
+    expect(line(figureLines([pizza], false, woman), "vitaminDUg")).toMatchObject({ value: "No data", note: "Recommended 15 µg" });
   });
 
   it("no published amount: no reference, and none invented", () => {
@@ -45,13 +45,13 @@ describe("the ten figures, read as a list", () => {
 
   it("the foods missing it are named, and a food saved before the figures were kept is one of them", () => {
     const old = { name: "Oats", canonical: "oats", nutritionSource: "usda" as const, more: undefined };
-    expect(line(figureLines([lentils, pizza, old], false, null), "ironMg")).toMatchObject({ value: "At least 5 mg", note: null });
-    expect(missingFoodsWords([lentils, pizza, old])).toBe("We don’t have every number for Lentils, Pizza and Oats, so some totals may be higher.");
+    expect(line(figureLines([lentils, pizza, old], false, null), "ironMg")).toMatchObject({ value: "5 mg*", note: null });
+    expect(missingFoodsWords([lentils, pizza, old])).toBe("* Some data is missing for Lentils, Pizza and Oats.");
   });
 
-  it("a meal not here yet makes every figure at least, and none alone reads Not known", () => {
-    expect(line(figureLines([lentils], true, null), "fiberG")?.value).toBe("At least 11.9 g");
-    expect(line(figureLines([], true, null), "fiberG")?.value).toBe("Not known");
+  it("a meal not here yet marks every figure, and none alone reads No data", () => {
+    expect(line(figureLines([lentils], true, null), "fiberG")?.value).toBe("11.9 g*");
+    expect(line(figureLines([], true, null), "fiberG")?.value).toBe("No data");
   });
 
   it("marks the thousands", () => {
@@ -62,15 +62,15 @@ describe("the ten figures, read as a list", () => {
 
 describe("the line naming the foods", () => {
   const whole = { ...lentils, more: { ...lentils.more, unsatFatG: 1 } };
-  it("no line where every total is whole, or where a row already reads Not known", () => {
+  it("no line where every total is whole, or where a row already reads No data", () => {
     expect(missingFoodsWords([whole])).toBeNull();
     expect(missingFoodsWords([pizza])).toBeNull();
   });
   it("names one, two, and then a count; what the photo saw is the name the person knows", () => {
-    expect(missingFoodsWords([whole, pizza])).toBe("We don’t have every number for Pizza, so some totals may be higher.");
-    expect(missingFoodsWords([whole, pizza, { ...pizza, name: "Dal" }])).toBe("We don’t have every number for Pizza and Dal, so some totals may be higher.");
-    expect(missingFoodsWords([whole, pizza, { ...pizza, name: "A" }, { ...pizza, name: "B" }, { ...pizza, name: "C" }])).toBe("We don’t have every number for Pizza, A and 2 more, so some totals may be higher.");
-    expect(missingFoodsWords([whole, { ...pizza, seenAs: "Slice" }])).toBe("We don’t have every number for Slice, so some totals may be higher.");
+    expect(missingFoodsWords([whole, pizza])).toBe("* Some data is missing for Pizza.");
+    expect(missingFoodsWords([whole, pizza, { ...pizza, name: "Dal" }])).toBe("* Some data is missing for Pizza and Dal.");
+    expect(missingFoodsWords([whole, pizza, { ...pizza, name: "A" }, { ...pizza, name: "B" }, { ...pizza, name: "C" }])).toBe("* Some data is missing for Pizza, A and 2 more.");
+    expect(missingFoodsWords([whole, { ...pizza, seenAs: "Slice" }])).toBe("* Some data is missing for Slice.");
   });
 });
 

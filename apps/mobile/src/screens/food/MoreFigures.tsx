@@ -57,15 +57,15 @@ export function FiguresList({ items, daily, partial = false, partialWords = null
           {line.note === null ? null : <Txt kind="tiny">{line.note}</Txt>}
         </View>
       ))}
-      {figuresFromALabel(items) ? <Txt kind="tiny">Packaged foods use the numbers on their labels.</Txt> : null}
+      {figuresFromALabel(items) ? <Txt kind="tiny">Packaged food values are from the label.</Txt> : null}
       {daily === null ? null : (
         <View style={styles.foot}>
           <Txt kind="tiny">
-            {daily.forWhom === null ? "Daily guide: the standard values on US food labels." : `Daily guide for ${daily.forWhom}, from your setup answers.`}
+            {daily.forWhom === null ? "Daily amounts are the US Daily Values used on food labels." : `Daily amounts for ${daily.forWhom}.`}
           </Txt>
-          <Txt kind="tiny">It is for reference, not a goal set by the app.</Txt>
-          <Txt kind="tiny">Pregnancy or a health condition can change it.</Txt>
-          <Txt kind="tiny">Source: Dietary Reference Intakes (US and Canada) and the US FDA.</Txt>
+          <Txt kind="tiny">These are general guidelines, not goals set by the app.</Txt>
+          <Txt kind="tiny">Pregnancy or a health condition can change them.</Txt>
+          <Txt kind="tiny">Sources: Health Canada and the US FDA.</Txt>
         </View>
       )}
     </ScrollView>

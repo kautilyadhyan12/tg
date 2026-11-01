@@ -1,7 +1,7 @@
 import { isPackagedCanonical, MORE_NUTRIENTS, sumMoreNutrients, type DailyAmountsResponse, type MealItem, type MoreNutrient } from "@app/shared";
 
 // The ten further figures as a list reads them (ROADMAP Stage 5 34b). A figure a food does not give
-// is never read as 0: the total reads "at least", and one line names the foods.
+// is never read as 0: the total carries a *, and one line names the foods.
 
 const FIGURE_NAMES: Readonly<Record<MoreNutrient, { name: string; unit: string }>> = {
   fiberG: { name: "Fibre", unit: "g" },
@@ -41,19 +41,19 @@ export function figureLines(items: readonly Pick<MealItem, "more">[], partial: b
     const { name, unit } = FIGURE_NAMES[key];
     const { amount, notKnown } = totals[key];
     const none = items.length === 0 ? partial : notKnown === items.length;
-    const atLeast = partial || notKnown > 0;
+    const incomplete = partial || notKnown > 0;
     const daily = amounts?.[key] ?? null;
     return {
       key,
       name,
-      value: none ? "Not known" : `${atLeast ? "At least " : ""}${amountWords(amount)} ${unit}`,
-      note: daily === null ? null : `${daily.kind === "most" ? "Daily limit" : "Daily guide"} ${amountWords(daily.amount)} ${unit}`,
+      value: none ? "No data" : `${amountWords(amount)} ${unit}${incomplete ? "*" : ""}`,
+      note: daily === null ? null : `${daily.kind === "most" ? "Limit" : "Recommended"} ${amountWords(daily.amount)} ${unit}`,
     };
   });
 }
 
 /** Which foods hold totals back, where a total adds up some foods and not others. Null where no total
- *  does: a row reading Not known already says it. */
+ *  does: a row reading No data already says it. */
 export function missingFoodsWords(items: readonly Pick<MealItem, "name" | "seenAs" | "more">[]): string | null {
   const totals = sumMoreNutrients(items);
   if (!MORE_NUTRIENTS.some((key) => totals[key].notKnown > 0 && totals[key].notKnown < items.length)) return null;
@@ -67,7 +67,7 @@ export function missingFoodsWords(items: readonly Pick<MealItem, "name" | "seenA
         : names.length === 3
           ? `${first ?? ""}, ${second ?? ""} and ${third ?? ""}`
           : `${first ?? ""}, ${second ?? ""} and ${String(names.length - 2)} more`;
-  return `We don’t have every number for ${who}, so some totals may be higher.`;
+  return `* Some data is missing for ${who}.`;
 }
 
 /** A packaged product gave at least one of the figures on the list: what is shown is its label's. */

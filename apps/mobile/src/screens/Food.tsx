@@ -301,9 +301,9 @@ export function FoodScreen() {
           partial={(rows ?? []).some((r) => r.items === null) || (read.kind === "ok" && read.cut)}
           partialWords={
             (rows ?? []).some((r) => r.items === null)
-              ? "A meal waiting to send isn’t counted yet."
+              ? "* A meal waiting to send isn’t counted yet."
               : read.kind === "ok" && read.cut
-                ? "Meals this far back couldn’t all be read."
+                ? "* Meals this far back couldn’t all be read."
                 : null
           }
         />

@@ -841,14 +841,14 @@ describe("the camera not allowed", () => {
 });
 
 describe("a food's ten figures on the photo's review (34b)", () => {
-  it("opens from the food's box, keeps the amount box behind it, and a food with none reads Not known, never 0", async () => {
+  it("opens from the food's box, keeps the amount box behind it, and a food with none reads No data, never 0", async () => {
     await openFood({ meals: [], scans: [] });
     await takePhoto();
     await fireEvent.press(await screen.findByRole("button", { name: "Change Toast, 2 × slice · 60 g" }));
     await fireEvent.press(await screen.findByRole("button", { name: "Fibre, sugars, vitamins and minerals" }));
-    expect(await screen.findByLabelText("Sodium, Not known")).toBeTruthy();
+    expect(await screen.findByLabelText("Sodium, No data")).toBeTruthy();
     await fireEvent.press(screen.getByRole("button", { name: "Back" }));
     expect(await screen.findByRole("button", { name: "Not this? Change food" })).toBeTruthy();
-    expect(screen.queryByLabelText("Sodium, Not known")).toBeNull();
+    expect(screen.queryByLabelText("Sodium, No data")).toBeNull();
   });
 });

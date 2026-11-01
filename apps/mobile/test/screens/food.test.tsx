@@ -770,16 +770,16 @@ describe("the ten figures (34b)", () => {
   };
   const daily = { "/v1/nutrition/daily-amounts": () => ({ status: 200, body: figures }) };
 
-  it("the worst thing: a day with a food missing its sodium reads at least, names the food, with whose amount it is and that it is no goal", async () => {
+  it("the worst thing: a day with a food missing its sodium marks the total, names the food, with whose amount it is and that it is no goal", async () => {
     await openFood({ meals: [twoFoods()] }, undefined, daily);
     await fireEvent.press(await screen.findByRole("button", { name: "Fibre, sugars, vitamins and minerals" }));
-    expect(await screen.findByLabelText("Sodium, At least 3 mg. Daily limit 2,300 mg")).toBeTruthy();
-    expect(screen.getByLabelText("Iron, At least 5 mg. Daily guide 18 mg")).toBeTruthy();
-    expect(screen.getByLabelText("Unsaturated fat, Not known")).toBeTruthy();
-    expect(screen.getByText("We don’t have every number for Lentils and Pizza, so some totals may be higher.")).toBeTruthy();
-    expect(screen.getByText("Daily guide for women aged 19 to 30, from your setup answers.")).toBeTruthy();
-    expect(screen.getByText("It is for reference, not a goal set by the app.")).toBeTruthy();
-    expect(screen.getByText("Pregnancy or a health condition can change it.")).toBeTruthy();
+    expect(await screen.findByLabelText("Sodium, 3 mg*. Limit 2,300 mg")).toBeTruthy();
+    expect(screen.getByLabelText("Iron, 5 mg*. Recommended 18 mg")).toBeTruthy();
+    expect(screen.getByLabelText("Unsaturated fat, No data")).toBeTruthy();
+    expect(screen.getByText("* Some data is missing for Lentils and Pizza.")).toBeTruthy();
+    expect(screen.getByText("Daily amounts for women aged 19 to 30.")).toBeTruthy();
+    expect(screen.getByText("These are general guidelines, not goals set by the app.")).toBeTruthy();
+    expect(screen.getByText("Pregnancy or a health condition can change them.")).toBeTruthy();
   });
 
   it("a saved meal shows its own figures", async () => {
@@ -788,14 +788,14 @@ describe("the ten figures (34b)", () => {
     const links = await screen.findAllByRole("button", { name: "Fibre, sugars, vitamins and minerals" });
     await fireEvent.press(links[links.length - 1] as NonNullable<(typeof links)[number]>);
     expect(await screen.findByText("Nutrients · Lunch")).toBeTruthy();
-    expect(screen.getByLabelText("Calcium, At least 29 mg. Daily guide 1,000 mg")).toBeTruthy();
+    expect(screen.getByLabelText("Calcium, 29 mg*. Recommended 1,000 mg")).toBeTruthy();
   });
 
   it("the amounts not loading still shows the figures, and says nothing about whose they are", async () => {
     await openFood({ meals: [twoFoods()] });
     await fireEvent.press(await screen.findByRole("button", { name: "Fibre, sugars, vitamins and minerals" }));
-    expect(await screen.findByLabelText("Sodium, At least 3 mg")).toBeTruthy();
-    expect(screen.queryByText(/^Daily guide/)).toBeNull();
+    expect(await screen.findByLabelText("Sodium, 3 mg*")).toBeTruthy();
+    expect(screen.queryByText(/^Daily amounts/)).toBeNull();
   });
 
   it("an empty day offers no list", async () => {
