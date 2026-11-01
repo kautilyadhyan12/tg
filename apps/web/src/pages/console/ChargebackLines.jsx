@@ -69,7 +69,7 @@ function StartCharges({ gymId, id, onStarted }) {
           {box.button}
         </button>
         <button type="button" className="c-btn c-btn-s c-btn-sm" disabled={busy} onClick={() => setPreview(null)}>
-          Keep charges stopped
+          Go back
         </button>
       </div>
     </div>

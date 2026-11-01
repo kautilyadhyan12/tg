@@ -98,7 +98,7 @@ describe('the lines', () => {
     expect(box.textContent).toContain('The app will charge Visa ending 1111 by itself again for:');
     expect(box.textContent).toContain('Sam Kapoor · Silver');
     expect(svc.start).not.toHaveBeenCalled();
-    fireEvent.click(within(box).getByRole('button', { name: 'Keep charges stopped' }));
+    fireEvent.click(within(box).getByRole('button', { name: 'Go back' }));
     expect(screen.queryByTestId('chargeback-start-box')).toBeNull();
     expect(svc.start).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Start automatic charges again' }));
