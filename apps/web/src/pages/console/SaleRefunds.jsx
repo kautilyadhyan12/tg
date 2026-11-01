@@ -10,6 +10,7 @@ import {
   placeChoices,
   placeOpen,
   placeOption,
+  placeOverLine,
   IN_SQUARE_STOCK_ASK_LINE,
   placeLine,
   placeLines,
@@ -411,6 +412,7 @@ function PlaceRefundBox({ gymId, lines, press, currency, onDone, onClose }) {
         void send();
       }}
     >
+      {placeOverLine(lines, press) !== null ? <p className="c-s14 c-t2 m-0">{placeOverLine(lines, press)}</p> : null}
       {choices.length > 0 ? (
         <label className="c-field">
           <span className="c-label">Which product was it for?</span>

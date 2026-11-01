@@ -176,7 +176,16 @@ export const placeChoices = (lines, press) => lines.filter((line) => roomOn(pres
 export const placeOpen = (lines, press) => lines.filter((line) => roomOn(press, line) > 0);
 
 /** A product as the box offers it. */
-export const placeOption = (line, press) => `${String(line.quantity)} × ${line.itemName} · ${formatMinor(Math.min(roomOn(press, line), line.totalMinor), line.currency)} can be refunded`;
+export const placeOption = (line, press) => {
+  const name = `${String(line.quantity)} × ${line.itemName}`;
+  return placeOverLeft(line, press) ? name : `${name} · ${formatMinor(Math.min(roomOn(press, line), line.totalMinor), line.currency)} can be refunded`;
+};
+
+/** Refunds noted since leave this product less than Square gave back: which product takes it is all the box asks. */
+const placeOverLeft = (line, press) => refundableMinor(line) < roomOn(press, line) && roomOn(press, line) === press.amountMinor && press.room.every((r) => r.minor === press.amountMinor);
+
+/** Said above the choices when Square refunded more than is left on the sale. */
+export const placeOverLine = (lines, press) => (lines.reduce((n, line) => n + refundableMinor(line), 0) < press.amountMinor && press.room.every((r) => r.minor === press.amountMinor) ? 'Square refunded more than is left on this sale. Choose the product it was for.' : null);
 
 export const SEVERAL = 'several';
 

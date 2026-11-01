@@ -65,6 +65,16 @@ describe('Choose product', () => {
     expect(names.some((n) => n.includes('Water'))).toBe(true);
   });
 
+  it('more than is left on the sale: it asks only which product, with no amount that is not true', async () => {
+    const room = [{ saleId: 's1', minor: 300 }, { saleId: 's2', minor: 300 }];
+    await draw([water({ refundedMinor: 400, toPlace: [press({ room })] }), towel({ refundedMinor: 1500 })]);
+    const box = await open();
+    expect(box.getByText('Square refunded more than is left on this sale. Choose the product it was for.')).toBeTruthy();
+    const names = within(box.getByLabelText('Which product was it for?')).getAllByRole('option').map((o) => o.textContent);
+    expect(names).toContain('2 × Water');
+    expect(names.join()).not.toContain('can be refunded');
+  });
+
   it('a change somebody else made closes the box and says so', async () => {
     svc.placeSquareRefund.mockRejectedValue({ response: { status: 409, data: { error: 'place_refund_changed', message: 'This refund has changed since the page was read. The page now shows what is left to do.' } } });
     await draw([water(), towel()]);

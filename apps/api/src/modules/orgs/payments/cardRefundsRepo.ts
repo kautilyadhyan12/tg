@@ -300,7 +300,7 @@ export async function claimAsking(sql: Sql, environment: SquareEnvironment, now:
 /** Refunds Square has taken up and not finished, due a look. */
 export async function claimLooks(sql: Sql, environment: SquareEnvironment, now: Date, until: Date, limit: number, gymIds: readonly string[] | null): Promise<RefundPress[]> {
   const rows = await sql<RawPress[]>`
-    UPDATE gym_square_refunds SET checking_until = ${until}, checked_at = ${now}, look_at = ${until}
+    UPDATE gym_square_refunds SET checking_until = ${until}, checked_at = CASE WHEN to_place THEN checked_at ELSE ${now}::timestamptz END, look_at = ${until}
     WHERE id IN (
       SELECT id FROM gym_square_refunds
       WHERE environment = ${environment} AND state = 'pending' AND look_at <= ${now}

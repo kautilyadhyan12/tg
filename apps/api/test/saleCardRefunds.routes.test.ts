@@ -1076,6 +1076,19 @@ d("Refund to card at Sell (real Postgres)", { timeout: T }, () => {
       expect((await refundsOf(shop, b.water)).map((r) => [r.amount_minor, r.undone])).toEqual([[350, false]]);
     });
 
+    it("a note made after Square's refund stands when staff choose, however many times the worker looks at a pending refund", async () => {
+      const b = await sold(shop);
+      await made(b, 300, "PENDING");
+      tick();
+      expect((await cardNote(b.water, 350)).statusCode).toBe(201);
+      clock = new Date(clock.getTime() + 2 * 60 * 60_000);
+      await work();
+      const [waiting] = await toPlace(b);
+      expect(waiting?.room).toContainEqual({ saleId: b.water, minor: 50 });
+      expect(errorOf(await place(b, waiting?.pressId ?? "", [{ saleId: b.water, amountMinor: 300, restock: 0 }]))).toBe("place_refund_too_much");
+      expect((await refundsOf(shop, b.water)).map((r) => [r.amount_minor, r.undone])).toEqual([[350, false]]);
+    });
+
     it("a note from before, on a product not chosen, stands with its shelf count; on one chosen it is replaced and the box offers it", async () => {
       const b = await sold(shop);
       expect((await cardNote(b.water, 200, 1)).statusCode).toBe(201);
