@@ -65,6 +65,7 @@ import {
   type PhotoSheet,
   type SheetRow,
 } from "./photo";
+import { FiguresLink, FiguresList, useDailyAmounts } from "./MoreFigures";
 import type { KeptSheet } from "./PhotoSheetStore";
 import { sharedDish } from "./dishShares";
 import { OwnFood } from "./OwnFood";
@@ -700,6 +701,8 @@ function Review({
   const [priceTry, setPriceTry] = useState(0);
   const priceTriesFrom = useRef(0);
   const [openRow, setOpenRow] = useState<string | null>(null);
+  const [rowFigures, setRowFigures] = useState(false);
+  const { daily } = useDailyAmounts();
   const [finding, setFinding] = useState<{ query: string; change: string | null } | null>(null);
   const [ask, setAsk] = useState<Ask>("none");
   const [said, setSaid] = useState<string | null>(null);
@@ -948,7 +951,24 @@ function Review({
         </View>
       </View>
       {row === null ? null : (
-        <Sheet open title={row.title} onClose={() => { setOpenRow(null); }}>
+        <Sheet
+          open
+          title={row.title}
+          onClose={() => { setRowFigures(false); setOpenRow(null); }}
+          onBack={() => {
+            if (!rowFigures) return false;
+            setRowFigures(false);
+            return true;
+          }}
+        >
+          {rowFigures && numbers?.items[rowAt] !== undefined ? (
+            <>
+              <FiguresList items={[numbers.items[rowAt]]} daily={daily} />
+              <Button label="Back" kind="quiet" wide onPress={() => { setRowFigures(false); }} />
+            </>
+          ) : null}
+          {/* Hidden, not closed: the box keeps its own state, such as an open panel. */}
+          <View style={rowFigures ? styles.hidden : styles.shown}>
           <RowAmount
             row={row}
             waiting={rows.some((r, i) => r.amount.share !== undefined && rowGrams[i] === null)}
@@ -981,6 +1001,8 @@ function Review({
               setSaid(`${row.title} taken off.`);
             }}
           />
+          {rowFigures || numbers?.items[rowAt] === undefined ? null : <FiguresLink onPress={() => { setRowFigures(true); }} />}
+          </View>
         </Sheet>
       )}
       <FindFood
@@ -1285,6 +1307,8 @@ function FindFood({
 }
 
 const styles = StyleSheet.create({
+  hidden: { display: "none" },
+  shown: { flexShrink: 1 },
   page: { flex: 1, backgroundColor: colours.page },
   grow: { flex: 1 },
   centre: { textAlign: "center" },
