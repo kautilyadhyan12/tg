@@ -8,6 +8,7 @@ import { z } from "zod";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createMemoryRedis } from "../src/redis.js";
+import { packagedCodesFor } from "../src/modules/nutrition/packagedRepo.js";
 import { packagedSearchText } from "../src/modules/nutrition/packagedRows.js";
 import type { VisionEvidence } from "@app/shared";
 import type { VisionProvider, VisionResult } from "../src/modules/nutrition/vision.adapter.js";
@@ -31,9 +32,9 @@ const newCode = (): string => {
   return `${body}${checkDigit(body)}`;
 };
 
-interface Row { name: string; kcal: number; protein?: number | null; carbs?: number | null; fat?: number | null; scans?: number; fit?: boolean }
+interface Row { name: string; kcal: number; protein?: number | null; carbs?: number | null; fat?: number | null; scans?: number; fit?: boolean; allergens?: string[] }
 
-const shape = z.object({ items: z.array(z.object({ canonical: z.string(), name: z.string(), kcal: z.number(), source: z.string(), measures: z.array(z.object({ id: z.string() })) })) });
+const shape = z.object({ items: z.array(z.object({ canonical: z.string(), name: z.string(), kcal: z.number(), source: z.string(), measures: z.array(z.object({ id: z.string() })), packaged: z.object({ check: z.string(), allergens: z.array(z.string()), mayContain: z.array(z.string()), listedAsTyped: z.array(z.string()), allergensFrom: z.string().nullable() }).optional() })) });
 
 d("the food search reads our own copy", () => {
   const sql = postgres(url ?? "", { max: 2, prepare: false });
@@ -53,7 +54,7 @@ d("the food search reads our own copy", () => {
     const code = newCode();
     codes.push(code);
     await sql`INSERT INTO off_products (code, name, kcal, protein_g, carbs_g, fat_g, numbers_fit, allergens, traces, listed_as_typed, scans, search_text)
-      VALUES (${code}, ${row.name}, ${row.kcal}, ${row.protein === undefined ? 1 : row.protein}, ${row.carbs === undefined ? 1 : row.carbs}, ${row.fat === undefined ? 1 : row.fat}, ${row.fit ?? true}, '{}', '{}', '{}', ${row.scans ?? 0}, ${packagedSearchText(row.name)})`;
+      VALUES (${code}, ${row.name}, ${row.kcal}, ${row.protein === undefined ? 1 : row.protein}, ${row.carbs === undefined ? 1 : row.carbs}, ${row.fat === undefined ? 1 : row.fat}, ${row.fit ?? true}, ${sql.array(row.allergens ?? [])}, '{}', '{}', ${row.scans ?? 0}, ${packagedSearchText(row.name)})`;
     return code;
   };
   const addUsda = async (row: Row): Promise<string> => {
@@ -95,6 +96,16 @@ d("the food search reads our own copy", () => {
     const shown = await search("zqxone");
     expect(shown.map((f) => f.canonical)).toEqual([`off_${right}`, `off_${wrong}`]);
     expect(shown[0]?.kcal).toBe(448);
+    // Where it is all there is, the person is told, as a barcode tells them.
+    expect(shown.map((f) => f.packaged?.check)).toEqual(["fine", "doesnt_add_up"]);
+  });
+
+  it("a search says what a barcode says: why to check the numbers, and the allergens", async () => {
+    const milk = await addOff({ name: "Dairy Milk zqxallergen", kcal: 534, protein: 7, carbs: 57, fat: 30, scans: 9, allergens: ["milk"] });
+    const blank = await addOff({ name: "Marmite zqxallergen", kcal: 260, protein: 34, carbs: 30, fat: null, scans: 5 });
+    const shown = await search("zqxallergen");
+    expect(shown.find((f) => f.canonical === `off_${milk}`)?.packaged).toEqual({ check: "fine", allergens: ["milk"], mayContain: [], listedAsTyped: [], allergensFrom: "openfoodfacts" });
+    expect(shown.find((f) => f.canonical === `off_${blank}`)?.packaged?.check).toBe("part_missing");
   });
 
   it("the same goes for 0 kcal on a blank panel, and a stated 0 stays in its place", async () => {
@@ -127,6 +138,22 @@ d("the food search reads our own copy", () => {
     expect((await search("zqxfive")).map((f) => f.canonical)).toEqual([`off_${most}`, `off_${fewer}`]);
   });
 
+  it("a full page of scanned products is the answer: the rest of the list is not read for that word", async () => {
+    const page: string[] = [];
+    for (let n = 0; n < 12; n++) page.push(await addOff({ name: `Zqxfull product ${String(n)}`, kcal: 100 + n, carbs: 20, fat: 1, protein: 1, scans: 100 - n }));
+    await addOff({ name: "zqxfull", kcal: 300, carbs: 40, fat: 10, protein: 10, scans: 2 });
+    await addUsda({ name: "Zqxfull usda only", kcal: 50 });
+    expect(await packagedCodesFor(sql, "zqxfull", 12)).toEqual(page);
+  });
+
+  it("a page one short takes the best of the rest, then a product only USDA has, once each", async () => {
+    const scanned = await addOff({ name: "Zqxshort scanned", kcal: 100, carbs: 20, fat: 1, protein: 1, scans: 50 });
+    const named = await addOff({ name: "zqxshort", kcal: 300, carbs: 40, fat: 10, protein: 10, scans: 0 });
+    const usda = await addUsda({ name: "Zqxshort usda only", kcal: 50 });
+    expect(await packagedCodesFor(sql, "zqxshort", 12)).toEqual([scanned, named, usda]);
+    expect(await packagedCodesFor(sql, "zqxshort", 2)).toEqual([scanned, named]);
+  });
+
   it("a product scanned by few, and one only USDA has, are still found", async () => {
     const popular = await addOff({ name: "Quinoa zqxsix", kcal: 120, carbs: 20, fat: 2, protein: 4, scans: 3 });
     const few = await addOff({ name: "Quinoa zqxsix Kale", kcal: 56, carbs: 8, fat: 1, protein: 3, scans: 2 });
@@ -139,7 +166,7 @@ d("the food search reads our own copy", () => {
   it("USDA's numbers show where the two lists are far apart, as a barcode's do", async () => {
     const code = await addOff({ name: "Amy's quinoa zqxseven", kcal: 106, carbs: 1, fat: 1, protein: 1, scans: 6 });
     await sql`INSERT INTO usda_branded_products (code, name, kcal, protein_g, carbs_g, fat_g, numbers_fit, search_text) VALUES (${code}, 'Amy''s quinoa', 18, 1, 1, 1, true, 'amy s quinoa')`;
-    expect((await search("zqxseven"))[0]).toMatchObject({ canonical: `off_${code}`, kcal: 18, source: "usda" });
+    expect((await search("zqxseven"))[0]).toMatchObject({ canonical: `off_${code}`, kcal: 18, source: "usda", packaged: { check: "lists_differ", allergensFrom: "openfoodfacts" } });
   });
 
   // Real words from real labels, and words our rule has never seen. Typed as a person types them.
@@ -149,6 +176,7 @@ d("the food search reads our own copy", () => {
     ["Coca-Cola Original zqxeight", "coca cola zqxeight", "a hyphen in the name"],
     ["Parle-G zqxeight", "parle g zqxeight", "a one-letter word after a hyphen"],
     ["Weizenbrötchen zqxeight", "zqxeight weizenbrotchen", "another language, words in another order"],
+    // Both sides lose the vowel marks, so this proves they agree; no name on the real list holds this word.
     ["दूध zqxeight", "दूध zqxeight", "Hindi"],
     ["牛奶 zqxeight", "牛奶 zqxeight", "Chinese"],
     ["Kit Kat Chunky zqxeight", "zqxeight kit ka", "still being typed"],
@@ -160,13 +188,16 @@ d("the food search reads our own copy", () => {
   });
 
   it("one letter alone, and what a search box must not read as an instruction, find nothing and break nothing", async () => {
-    for (const typed of ["x", "'; DROP TABLE off_products; --", "a & b | !c", ":*", "(((", "the of"]) {
-      const shown = await search(typed);
-      expect(shown.every((f) => f.source !== "openfoodfacts" || f.name.length > 0), typed).toBe(true);
+    // Their first words are in no name a person would type, so none of these can find a product.
+    const code = await addOff({ name: "Zqxtwelve DROP TABLE", kcal: 300, carbs: 40, fat: 10, protein: 10, scans: 4 });
+    for (const typed of ["'; DROP TABLE zqxnothing; --", "zqxnothing & b | !c", ":*", "(((", "the of"]) {
+      expect((await search(typed)).filter((f) => f.canonical.startsWith("off_")), typed).toEqual([]);
     }
-    expect((await sql`SELECT 1 FROM off_products LIMIT 1`).length).toBeGreaterThanOrEqual(0);
-    const packaged = await search("q");
-    expect(packaged.filter((f) => f.canonical.startsWith("off_"))).toEqual([]);
+    const [held] = await sql<{ n: string }[]>`SELECT count(*) AS n FROM off_products WHERE code = ${code}`;
+    expect(held?.n).toBe("1");
+    for (const typed of ["x", "q", "the c", "and m", "or b", "a c"]) {
+      expect((await packagedCodesFor(sql, typed, 10)), typed).toEqual([]);
+    }
   });
 
   it("nothing is asked over the internet: a search and a meal scan send nothing out", { timeout: 60_000 }, async () => {
@@ -187,6 +218,7 @@ d("the food search reads our own copy", () => {
 
   it("a meal scan does not take numbers that do not add up, or that the lists disagree on: it is left for the person to name", { timeout: 60_000 }, async () => {
     const wrong = await addOff({ name: "Zqxten biscuit", kcal: 3.4, protein: 7, carbs: 77, fat: 12, scans: 40, fit: false });
+    const blank = await addOff({ name: "Zqxthirteen tartine", kcal: 635, protein: 5, carbs: null, fat: 70, scans: 40 });
     const apart = await addOff({ name: "Zqxeleven soup", kcal: 106, protein: 1, carbs: 1, fat: 1, scans: 40 });
     await sql`INSERT INTO usda_branded_products (code, name, kcal, protein_g, carbs_g, fat_g, numbers_fit, search_text) VALUES (${apart}, 'Zqxeleven soup', 18, 1, 1, 1, true, 'zqxeleven soup')`;
     evidence.now = {
@@ -195,6 +227,7 @@ d("the food search reads our own copy", () => {
         { name: "Banana", canonical_hint: "banana", count: 1, grams: null, kcal: null, protein_g: null, carbs_g: null, fat_g: null },
         { name: "Zqxten biscuit", canonical_hint: "zqxten biscuit", count: null, grams: 50, kcal: null, protein_g: null, carbs_g: null, fat_g: null },
         { name: "Zqxeleven soup", canonical_hint: "zqxeleven soup", count: null, grams: 200, kcal: null, protein_g: null, carbs_g: null, fat_g: null },
+        { name: "Zqxthirteen tartine", canonical_hint: "zqxthirteen tartine", count: null, grams: 40, kcal: null, protein_g: null, carbs_g: null, fat_g: null },
       ],
       unknown_items: [],
       photo_quality: "good",
@@ -204,5 +237,25 @@ d("the food search reads our own copy", () => {
     const items = z.object({ items: z.array(z.object({ canonical: z.string() })) }).parse(scan.json()).items;
     expect(items.map((i) => i.canonical)).not.toContain(`off_${wrong}`);
     expect(items.map((i) => i.canonical)).not.toContain(`off_${apart}`);
+    expect(items.map((i) => i.canonical)).not.toContain(`off_${blank}`);
+    expect(items.map((i) => i.canonical)).toContain("banana");
+  });
+
+  it("a name sent as a food takes no product whose numbers want checking", async () => {
+    await addOff({ name: "Zqxfourteen biscuit", kcal: 144, protein: 8, carbs: 57, fat: 20, scans: 40, fit: false });
+    const res = await app.inject({ method: "POST", url: "/v1/nutrition/meals/preview", cookies: { accessToken: cookie }, headers: { "content-type": "application/json" }, payload: JSON.stringify({ items: [{ canonical: "Zqxfourteen biscuit", grams: 50 }] }) });
+    expect(res.statusCode, res.body).not.toBe(200);
+  });
+
+  it("punctuation does not ask the same search again", async () => {
+    const asked = vi.spyOn(redis, "setex");
+    await search("zqxfifteen cola");
+    await addOff({ name: "Zqxfifteen cola", kcal: 42, carbs: 10, fat: 0, protein: 0, scans: 9 });
+    const first = await search("zqxfifteen cola");
+    const again = await search("zqxfifteen, cola!!");
+    expect(again.map((f) => f.canonical)).toEqual(first.map((f) => f.canonical));
+    const keys = asked.mock.calls.map((c) => c[0]).filter((k) => k.startsWith("food:pack:"));
+    expect(new Set(keys).size).toBe(1);
+    asked.mockRestore();
   });
 });

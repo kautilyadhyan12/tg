@@ -1,13 +1,14 @@
 // How a packaged product's label reads, and the shape of a food. Nothing here asks anybody: the lists are
 // our own copy (`packagedSearch.ts`).
-import { MAX_ITEM_GRAMS, type MoreNutrients, type NutritionSource } from "@app/shared";
+import { MAX_ITEM_GRAMS, type MoreNutrients, type NutritionSource, type PackagedFacts } from "@app/shared";
 
 /** `fiberG` is null where a food's table or label has no figure. `more` is the
  *  ten further figures per 100 g (ROADMAP 34a): a packaged product carries what
  *  the lists hold of its label; a table food's are read when it is priced (`withMore`, service.ts). */
 export interface FoodReference { canonical: string; name: string; kcal: number; proteinG: number; carbsG: number; fatG: number; fiberG: number | null; serving: number; unit: string; source: NutritionSource; more?: MoreNutrients | undefined; pack?: { grams: number; volume: boolean } | undefined;
-  /** A packaged product whose numbers a meal scan must not take on its own: the person is shown nothing to check them by. */
-  doubtful?: true | undefined; }
+  /** Found by search in the packaged lists: what its barcode would say about it. A meal scan takes it only
+   *  where that is "fine", as nobody is shown the words on a scan's row. */
+  packaged?: PackagedFacts | undefined; }
 export interface FoodSearchProvider { search(query: string, limit: number): Promise<FoodReference[]>; }
 /** A label's figure, or null where the label gives none: a missing figure is never a zero. */
 const given = (v: unknown): number | null => typeof v === "number" ? (Number.isFinite(v) ? v : null) : typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v)) ? Number(v) : null;

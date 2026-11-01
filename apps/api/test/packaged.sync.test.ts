@@ -148,6 +148,17 @@ d("filling the lists and the nightly update (real Postgres)", () => {
     const B = dailyName(1793086400, 1793172800);
     const index = `${B}${NEWLINE}${A}${NEWLINE}`;
 
+    it("the full import writes each list's search words, and Open Food Facts' scan counts", async () => {
+      await load();
+      await fillPackagedList(sql, "usda_branded_products", usdaRowsOfDir(FIXTURES));
+      const [off] = await sql<{ blank: string; scanned: string }[]>`SELECT count(*) FILTER (WHERE search_text = '') AS blank, count(*) FILTER (WHERE scans > 0) AS scanned FROM off_products`;
+      const [usda] = await sql<{ blank: string; n: string }[]>`SELECT count(*) FILTER (WHERE search_text = '') AS blank, count(*) AS n FROM usda_branded_products`;
+      expect(off?.blank).toBe("0");
+      expect(Number(off?.scanned)).toBeGreaterThan(0);
+      expect(usda?.blank).toBe("0");
+      expect(Number(usda?.n)).toBeGreaterThan(0);
+    });
+
     it("a product it writes can be searched for, and a line with no scan count takes none away", async () => {
       const row = (scans: number, name: string): WrittenRow => {
         const read = offRowOf(offProductOfDaily({ code: "5449000000996", product_name: name, unique_scans_n: scans === 0 ? undefined : scans, nutrition: { aggregated_set: { per: "100ml", nutrients: { "energy-kcal": { value: 42 } } } } }));

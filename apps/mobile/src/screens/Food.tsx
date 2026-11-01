@@ -103,6 +103,7 @@ import {
   type Row,
 } from "./food/rows";
 import { newGoalId } from "./goals/words";
+import { PackWords } from "./food/PackWords";
 import { Credits, SOURCE_WORDS, SourceLine } from "./food/SourceLine";
 import { Setup } from "./setup/Setup";
 
@@ -1154,6 +1155,9 @@ const SHEET_FOOT = 130;
 const SHEET_LIST_LEAST = 120;
 
 
+/** Whose words a search's food shows: USDA's numbers can sit beside Open Food Facts' allergens. */
+const sourcesOf = (f: FoodSearchItem): string[] => [f.source, ...(f.packaged?.allergensFrom == null ? [] : [f.packaged.allergensFrom])];
+
 type Found = { kind: "idle" } | { kind: "looking" } | { kind: "ok"; items: FoodSearchItem[] } | { kind: "failed"; words: string };
 /** A food in the picker: one found by the search, or one the person logged before, with the food as
  *  it was last logged, whose numbers stand in at that same amount until the server's come back. */
@@ -1574,6 +1578,7 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
                 }}
               />
             </View>
+            {food.packaged === undefined || food.kcal === undefined ? null : <PackWords kcal={food.kcal} {...food.packaged} />}
             {amount === null ? null : (
               <AmountPicker
                 key={food.canonical}
@@ -1601,7 +1606,7 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
         )}
         <Credits
           sources={
-            new Set(food === null ? [...(found.kind === "ok" ? found.items.map((f) => f.source) : []), ...(showRecent ? recent.map((f) => f.source) : [])] : [food.source])
+            new Set(food === null ? [...(found.kind === "ok" ? found.items.flatMap(sourcesOf) : []), ...(showRecent ? recent.map((f) => f.source) : [])] : [food.source])
           }
         />
       </ScrollView>

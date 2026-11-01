@@ -85,11 +85,14 @@ export async function packagedRowsForCodes(sql: Sql, codes: readonly string[]): 
  *
  *  The products scanned at least 3 times are asked first, by their own small index: a common word then
  *  sorts a few thousand and not ninety thousand. Only if they do not fill the page is the whole list read.
- *  One letter alone is no search. */
+ *  One letter alone is no search, whatever stop words come with it. */
 export async function packagedCodesFor(sql: Sql, query: string, limit: number): Promise<string[]> {
   const words = usdaSearchWords(query);
   const tsQuery = usdaTsQuery(query);
-  if (tsQuery === null || limit < 1 || (words.length === 1 && (words[0]?.length ?? 0) < 2)) return [];
+  if (tsQuery === null || limit < 1) return [];
+  // What is left once Postgres drops the stop words: "the c" is one letter too.
+  const [left] = await sql<{ lexemes: string[] }[]>`SELECT tsvector_to_array(to_tsvector('english', ${words.join(" ")})) AS lexemes`;
+  if ((left?.lexemes ?? []).every((lexeme) => lexeme.length < 2)) return [];
   const typed = words.join(" ");
   const order = sql`
     (numbers_fit AND NOT (kcal = 0 AND (protein_g IS NULL OR carbs_g IS NULL OR fat_g IS NULL))) DESC,

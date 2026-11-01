@@ -454,6 +454,19 @@ export const foodSearchQuerySchema = z.object({ q: z.string().trim().min(1).max(
 /** One food the search box offers: its figures per 100 g, its serving, where it
  *  comes from, the measures it can be logged by (ROADMAP 7a-iv-a) and the one and
  *  amount it starts at. */
+/** What a person is told about a packaged product's numbers: the same on a barcode and in a search. */
+export const packagedCheckSchema = z.enum(["fine", "doesnt_add_up", "part_missing", "lists_differ"]);
+export type PackagedCheck = z.infer<typeof packagedCheckSchema>;
+
+export const packagedFactsSchema = z.object({
+  check: packagedCheckSchema,
+  allergens: z.array(z.string()),
+  mayContain: z.array(z.string()),
+  listedAsTyped: z.array(z.string()),
+  allergensFrom: z.literal("openfoodfacts").nullable(),
+}).strict();
+export type PackagedFacts = z.infer<typeof packagedFactsSchema>;
+
 export const foodSearchItemSchema = z.object({
   canonical: z.string().min(1), name: z.string().min(1),
   kcal: z.number().nonnegative(), proteinG: z.number().nonnegative(), carbsG: z.number().nonnegative(), fatG: z.number().nonnegative(),
@@ -464,6 +477,8 @@ export const foodSearchItemSchema = z.object({
   /** Its calories at the amount it starts at, as the server prices that amount: the search lists a
    *  food by them ("94 kcal · 1 apple"), never per 100 g (ROADMAP 32b-ii-b). */
   startsKcal: z.number().int().nonnegative(),
+  /** A packaged product found by search: what its barcode would say about it. */
+  packaged: packagedFactsSchema.optional(),
 }).strict().refine((food) => food.measures.some((m) => m.id === food.startsAt.measure), {
   message: "a food starts at one of its own measures",
 });

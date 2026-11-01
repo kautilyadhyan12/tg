@@ -3,7 +3,7 @@
 // precedence over v1 §6.1's R2 path); the image exists only as a request
 // value handed to the vision adapter. Reformatted to house style at T3.
 import { randomUUID } from "node:crypto";
-import { labelFoodParamSchema, panelOfLabel, type LabelDraft, type LabelFoodSave } from "@app/shared";
+import { labelFoodParamSchema, packagedFactsSchema, panelOfLabel, type LabelDraft, type LabelFoodSave } from "@app/shared";
 import * as labelRepo from "./labelRepo.js";
 import { numbersFit } from "./packagedRows.js";
 import type { LabelReader, LabelResult } from "./vision.adapter.js";
@@ -56,6 +56,7 @@ import { CURATED_FOODS, curatedPieceFdcId, curatedUsdaFdcId, findCurated, findCu
 import { GRAM, dishwareGrams, foodMeasures, gramsPerMl, measureGrams, scanStart, startingMeasure, type UsdaPortion } from "./measures.js";
 import type { FoodReference, FoodSearchProvider } from "./openfoodfacts.adapter.js";
 import { packagedRowsFor } from "./packagedRepo.js";
+import { usdaWords } from "./usdaWords.js";
 import { isPackagedCanonical, packagedCode, packagedFoodOf, type PackagedFood } from "./packagedRows.js";
 import { itemsVersion, ownPer100g, savedPlaces } from "./mealEdit.js";
 import { RECENT_MEALS_READ, recentFoods, type RecentPick } from "./recentFoods.js";
@@ -152,7 +153,7 @@ const foodSchema = z.object({
   source: z.enum(["curated", "openfoodfacts", "usda", "estimate", "label"]),
   more: moreNutrientsSchema.optional(),
   pack: z.object({ grams: z.number().positive().max(MAX_ITEM_GRAMS), volume: z.boolean() }).optional(),
-  doubtful: z.literal(true).optional(),
+  packaged: packagedFactsSchema.optional(),
 });
 
 const draftSchema = z
@@ -247,9 +248,8 @@ const USDA_CANONICAL_PREFIX = /^usda_(?:sr|fndds)_/;
 
 /** Card-5b smoke finding: every food a search RETURNS must stay resolvable by
  *  its canonical afterwards — the manual-log/preview path looks foods up by
- *  canonical, and an OFF slug full-text-searched against OFF misses (the
- *  slug is ours, not their product name). So each returned food is also
- *  cached individually under its canonical. */
+ *  canonical. So each returned food is also cached individually under its
+ *  canonical. */
 async function rememberFoods(deps: NutritionDeps, foods: readonly FoodReference[]): Promise<void> {
   // First-wins within a batch: if OFF ever yields same-canonical products
   // (code-less fallback slugs), the entry the user SEES ranked first is the
@@ -273,9 +273,12 @@ async function canonicalCached(deps: NutritionDeps, canonical: string): Promise<
   }
 }
 
-/** A packaged search, each word's answer kept for a day: the first person pays for a common word. */
+/** A packaged search's answer, kept briefly so the first person pays for a common word. Keyed on the words, so
+ *  punctuation cannot ask the same thing again. Short, so a pick is priced as shown after the nightly update. */
+const FOOD_SEARCH_CACHE_SECONDS = 5 * 60;
+
 async function cachedExternal(deps: NutritionDeps, query: string, limit: number): Promise<FoodReference[]> {
-  const key = `food:off:${digest(`${query.toLowerCase()}:${String(limit)}`)}`;
+  const key = `food:pack:${digest(`${usdaWords(query).join(" ")}:${String(limit)}`)}`;
   const cached = await deps.redis.get(key);
   if (cached !== null) {
     try {
@@ -287,7 +290,7 @@ async function cachedExternal(deps: NutritionDeps, query: string, limit: number)
   }
   const found = await deps.foods.search(query, limit);
   if (found.length > 0) {
-    await deps.redis.setex(key, FOOD_CACHE_TTL_SECONDS, JSON.stringify(found));
+    await deps.redis.setex(key, FOOD_SEARCH_CACHE_SECONDS, JSON.stringify(found));
     await rememberFoods(deps, found);
   }
   return found;
@@ -424,6 +427,7 @@ async function withMeasures(deps: NutritionDeps, foods: readonly FoodReference[]
     const start = own.find((m) => m.id === startsAt.measure) ?? GRAM;
     return {
       ...asReference(food),
+      ...(food.packaged === undefined ? {} : { packaged: food.packaged }),
       measures: own,
       startsAt,
       // The grams a save of that amount weighs, priced as a save prices them (`nutritionItem`).
@@ -435,7 +439,7 @@ async function withMeasures(deps: NutritionDeps, foods: readonly FoodReference[]
 /** Each food with its ten further figures per 100 g (ROADMAP 34a), with ONE read
  *  of the USDA entries they share. A USDA table food reads its own row; one of our
  *  list reads the entry it cites; a CoFID food, which cites none, has the list's
- *  fibre and nothing else; a packaged product keeps what Open Food Facts sent of
+ *  fibre and nothing else; a packaged product keeps what the lists hold of
  *  its label; a scan's estimate has none. Whatever a kept draft says a table
  *  food's figures are is never used: they are read here. */
 async function withMore<T extends FoodReference>(deps: Pick<NutritionDeps, "sql">, foods: readonly T[]): Promise<T[]> {
@@ -611,8 +615,16 @@ async function findFood(deps: NutritionDeps, query: string, search = true, owner
   // path); full-text search is the last resort.
   const remembered = await canonicalCached(deps, query);
   if (remembered !== null) return remembered;
-  return search ? ((await cachedExternal(deps, query, 1))[0] ?? null) : null;
+  if (!search) return null;
+  const [product] = await cachedExternal(deps, query, 1);
+  return product === undefined ? null : takenByName(product, query);
 }
+
+/** A packaged product taken with nobody choosing it, by a name alone: only where its name holds every word
+ *  (the top product for other words is another food: "mystery sauce" finds one named "Mystery"), and
+ *  never one whose numbers want checking, as nobody is shown why. */
+const takenByName = (product: FoodReference, name: string): FoodReference | null =>
+  (product.packaged === undefined || product.packaged.check === "fine") && holdsEveryWord(product.name, name) ? product : null;
 
 /** Where a scanned food's numbers come from (`scanMatch.ts`): our list by whole
  *  words; the USDA table; a packaged product (§3.5) only where the product's name
@@ -630,7 +642,7 @@ const scanLookups = (deps: NutritionDeps): ScanLookups => ({
   },
   packaged: async (hint) => {
     const [product] = await cachedExternal(deps, hint, 1);
-    return product !== undefined && product.doubtful !== true && holdsEveryWord(product.name, hint) ? product : null;
+    return product === undefined ? null : takenByName(product, hint);
   },
 });
 

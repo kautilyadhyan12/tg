@@ -23,7 +23,7 @@ export function createPackagedSearch(sql: Sql): FoodSearchProvider {
         if (seen.has(same)) continue;
         seen.add(same);
         const sinks = isDoubtful(found);
-        foods.push({ food: { ...found.food, canonical: `off_${code}`, ...(sinks || found.check === "lists_differ" ? { doubtful: true as const } : {}) }, sinks });
+        foods.push({ food: { ...found.food, canonical: `off_${code}`, packaged: { check: found.check, allergens: found.allergens, mayContain: found.mayContain, listedAsTyped: found.listedAsTyped, allergensFrom: found.allergensFrom } }, sinks });
       }
       // The other list can put a row right, so this is decided on what will be shown, not on the row.
       return [...foods.filter((f) => !f.sinks), ...foods.filter((f) => f.sinks)].slice(0, limit).map((f) => f.food);

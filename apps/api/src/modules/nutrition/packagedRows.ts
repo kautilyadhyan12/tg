@@ -139,11 +139,13 @@ const GRAMS_PER_VOL = 0.789;
 /** The CSV's columns the importer reads. A file without them has changed its shape, and is refused.
  *  The CSV mixes their estimates in with the labels' figures and cannot tell them apart (49 of a real
  *  day's 6,010 products), so a real server's list is loaded from the JSONL export, which marks them. */
-export const OFF_CSV_COLUMNS = ["code", "product_name", "generic_name", "brands", "serving_size", "quantity", "allergens_en", "traces_en", "energy-kcal_100g", "energy_100g", "proteins_100g", "carbohydrates_100g", "fat_100g"] as const;
+export const OFF_CSV_COLUMNS = ["code", "product_name", "generic_name", "brands", "serving_size", "quantity", "allergens_en", "traces_en", "energy-kcal_100g", "energy_100g", "proteins_100g", "carbohydrates_100g", "fat_100g", "unique_scans_n"] as const;
 const CSV_FIGURES = ["energy-kcal_100g", "energy_100g", "proteins_100g", "carbohydrates_100g", "fat_100g", "fiber_100g", "sugars_100g", "saturated-fat_100g", "monounsaturated-fat_100g", "polyunsaturated-fat_100g", "salt_100g", "sodium_100g", "alcohol_100g", "potassium_100g", "calcium_100g", "iron_100g", "magnesium_100g", "vitamin-d_100g"] as const;
 
-/** A scan count from either file; anything but a whole count is none. */
-const scansOf = (value: unknown): number => (typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : 0);
+/** The most the column holds. The real most today is 1,683. */
+const MOST_SCANS = 2_147_483_647;
+/** A scan count from either file; anything but a whole count that fits is none. */
+const scansOf = (value: unknown): number => (typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= MOST_SCANS ? value : 0);
 
 /** One tab-separated row of the download, under its header. */
 export function offProductOfCsv(index: ReadonlyMap<string, number>, cells: readonly string[]): OffProduct {

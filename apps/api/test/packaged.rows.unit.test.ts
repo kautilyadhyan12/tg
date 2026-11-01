@@ -363,7 +363,8 @@ describe("what the food search keeps of a row", () => {
     const scans = (extra: Record<string, unknown>) => { const r = line(extra); return "row" in r ? r.row.scans : null; };
     expect(scans({ unique_scans_n: 619 })).toBe(619);
     expect(scans({})).toBe(0);
-    for (const bad of ["619", -3, 1.5, null, 1e30]) expect(scans({ unique_scans_n: bad }), String(bad)).toBe(0);
+    expect(scans({ unique_scans_n: 2_147_483_647 })).toBe(2_147_483_647);
+    for (const bad of ["619", -3, 1.5, null, 1e30, 3_000_000_000]) expect(scans({ unique_scans_n: bad }), String(bad)).toBe(0);
   });
 
   it("the download's scan count is kept, and a file without the column has none", () => {
