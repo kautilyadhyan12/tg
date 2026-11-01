@@ -758,3 +758,110 @@ describe("previously logged foods (32b-ii-a)", () => {
     expect(await screen.findByText("Previously logged")).toBeTruthy();
   });
 });
+
+describe("the ten figures (34b)", () => {
+  const figures = { forWhom: "women aged 19 to 30", amounts: { fiberG: { kind: "about", amount: 25 }, sugarsG: null, satFatG: { kind: "most", amount: 20 }, unsatFatG: null, sodiumMg: { kind: "most", amount: 2300 }, potassiumMg: { kind: "about", amount: 2600 }, calciumMg: { kind: "about", amount: 1000 }, ironMg: { kind: "about", amount: 18 }, magnesiumMg: { kind: "about", amount: 310 }, vitaminDUg: { kind: "about", amount: 15 } } };
+  const MORE = { fiberG: 11.9, sugarsG: 2.7, satFatG: 0.1, unsatFatG: null, sodiumMg: 3, potassiumMg: 554, calciumMg: 29, ironMg: 5, magnesiumMg: 54, vitaminDUg: 0 };
+  const twoFoods = (): Meal => {
+    const meal = savedMeal("66666666-6666-4666-8666-666666666666", { mealName: "Lunch", takenAt: new Date().toISOString(), mealType: "lunch" });
+    const known = { ...item(150, 174), name: "Lentils", more: MORE } as Meal["items"][number];
+    const estimate = { ...item(200, 500), name: "Pizza", nutritionSource: "estimate" } as Meal["items"][number];
+    return { ...meal, items: [known, estimate] };
+  };
+  const daily = { "/v1/nutrition/daily-amounts": () => ({ status: 200, body: figures }) };
+
+  it("the worst thing: a day with a food missing its sodium marks the total, names the food, with whose amount it is and that it is no goal", async () => {
+    await openFood({ meals: [twoFoods()] }, undefined, daily);
+    await fireEvent.press(await screen.findByRole("button", { name: "Nutrients" }));
+    expect(await screen.findByLabelText("Sodium, 3 mg*. Limit 2,300 mg")).toBeTruthy();
+    expect(screen.getByLabelText("Iron, 5 mg*. Recommended 18 mg")).toBeTruthy();
+    expect(screen.getByLabelText("Unsaturated fat, No data")).toBeTruthy();
+    expect(screen.getByText("* Some data is missing for Pizza.")).toBeTruthy();
+    expect(screen.getByText("Daily amounts for women aged 19 to 30.")).toBeTruthy();
+    expect(screen.getByText("These are general guidelines, not goals set by the app.")).toBeTruthy();
+    expect(screen.getByText("Pregnancy or a health condition can change them.")).toBeTruthy();
+    expect(screen.getByText("The saturated fat limit is the US Daily Value.")).toBeTruthy();
+    expect(screen.getByText("Sources: Health Canada and the US FDA.")).toBeTruthy();
+  });
+
+  it("a saved meal shows its own figures", async () => {
+    await openFood({ meals: [twoFoods()] }, undefined, daily);
+    await fireEvent.press(await screen.findByRole("button", { name: /^Lunch, / }));
+    const links = await screen.findAllByRole("button", { name: "Nutrients" });
+    await fireEvent.press(links[links.length - 1] as NonNullable<(typeof links)[number]>);
+    expect(await screen.findByText("Nutrients · Lunch")).toBeTruthy();
+    expect(screen.getByLabelText("Calcium, 29 mg*. Recommended 1,000 mg")).toBeTruthy();
+  });
+
+  it("the amounts not loading still shows the figures, and says nothing about whose they are", async () => {
+    await openFood({ meals: [twoFoods()] });
+    await fireEvent.press(await screen.findByRole("button", { name: "Nutrients" }));
+    expect(await screen.findByLabelText("Sodium, 3 mg*")).toBeTruthy();
+    expect(screen.queryByText(/^Daily amounts/)).toBeNull();
+  });
+
+  it("a packaged food says its values are from the label, and somebody with no age or gender is told whose amounts they read", async () => {
+    const meal = twoFoods();
+    const pack = { ...item(15, 67), name: "Parle-G", canonical: "off_8901719101038", nutritionSource: "openfoodfacts", more: MORE } as Meal["items"][number];
+    await openFood({ meals: [{ ...meal, items: [pack] }] }, undefined, { "/v1/nutrition/daily-amounts": () => ({ status: 200, body: { ...figures, forWhom: null } }) });
+    await fireEvent.press(await screen.findByRole("button", { name: "Nutrients" }));
+    expect(await screen.findByText("Packaged food values are from the label.")).toBeTruthy();
+    expect(screen.getByText("Daily amounts are the US Daily Values used on food labels.")).toBeTruthy();
+    expect(screen.queryByText("The saturated fat limit is the US Daily Value.")).toBeNull();
+  });
+
+  it("answers changed in setup read the amounts again: a woman is not left with a man's", async () => {
+    const hers = { ...figures, amounts: { ...figures.amounts, ironMg: { kind: "about", amount: 18 } } };
+    const his = { forWhom: "men aged 19 to 30", amounts: { ...figures.amounts, ironMg: { kind: "about", amount: 8 } } };
+    let now: unknown = his;
+    await openFood(
+      { meals: [twoFoods()], targets: targets({ targets: null, appTargets: null, missing: ["heightCm"] }) },
+      undefined,
+      { "/v1/nutrition/daily-amounts": () => ({ status: 200, body: now }) },
+    );
+    await fireEvent.press(await screen.findByRole("button", { name: "Answer now" }));
+    const setup = await screen.findByTestId("setup");
+    now = hers;
+    await fireEvent(setup, "requestClose");
+    await fireEvent.press(await screen.findByRole("button", { name: "Nutrients" }));
+    expect(await screen.findByLabelText("Iron, 5 mg*. Recommended 18 mg")).toBeTruthy();
+    expect(screen.getByText("Daily amounts for women aged 19 to 30.")).toBeTruthy();
+  });
+
+  it("a meal waiting to send marks the day's figures and says why", async () => {
+    const server = foodServer({ meals: [], save: () => lost() }, { "/v1/nutrition/meals/preview": () => lost() });
+    await render(<App extra={extra} ask={server.ask} store={memoryStore(kept(1))} wait={noWait} mealStore={files().store} />);
+    await fireEvent.press(await screen.findByRole("tab", { name: "Food" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Add to Breakfast" }));
+    await fireEvent.changeText(screen.getByLabelText("Search food"), "oats");
+    await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 307 kcal · 1 cup, USDA" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Add Oats, rolled" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Save meal to Breakfast" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Nutrients" }));
+    expect(await screen.findByText("* A meal waiting to send isn’t counted yet.")).toBeTruthy();
+    expect(screen.getByLabelText("Sodium, No data")).toBeTruthy();
+  });
+
+  it("a day cut short by the pages read marks its figures and says why", async () => {
+    const whole = twoFoods();
+    const lentils = whole.items[0];
+    const meal = { ...whole, items: lentils === undefined ? [] : [lentils] };
+    const server = foodServer({ meals: [meal] }, daily);
+    const ask: Ask = (url, init) =>
+      new URL(url).pathname === "/v1/nutrition/meals" && (init.method ?? "GET") === "GET"
+        ? Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ items: new URL(url).searchParams.has("cursor") ? [] : [meal], nextCursor: "next" }) })
+        : server.ask(url, init);
+    await render(<App extra={extra} ask={ask} store={memoryStore(kept(1))} wait={noWait} mealStore={files().store} />);
+    await fireEvent.press(await screen.findByRole("tab", { name: "Food" }));
+    const links = await screen.findAllByRole("button", { name: "Nutrients" });
+    await fireEvent.press(links[0] as NonNullable<(typeof links)[number]>);
+    expect(await screen.findByText("* Meals this far back couldn’t all be read.")).toBeTruthy();
+    expect(await screen.findByLabelText("Fibre, 11.9 g*. Recommended 25 g")).toBeTruthy();
+  });
+
+  it("an empty day offers no list", async () => {
+    await openFood({ meals: [] }, undefined, daily);
+    await screen.findByText("No lunch logged yet.");
+    expect(screen.queryByRole("button", { name: "Nutrients" })).toBeNull();
+  });
+});
