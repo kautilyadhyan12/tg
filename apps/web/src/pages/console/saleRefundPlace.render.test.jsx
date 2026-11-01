@@ -75,6 +75,14 @@ describe('Choose product', () => {
     expect(names.join()).not.toContain('can be refunded');
   });
 
+  it('notes that free just enough keep their amounts: the sale can take it', async () => {
+    const room = [{ saleId: 's1', minor: 300 }, { saleId: 's2', minor: 300 }];
+    await draw([water({ refundedMinor: 100, toPlace: [press({ room })] }), towel({ refundedMinor: 1200 })]);
+    const box = await open();
+    expect(box.queryByText(/more than is left/)).toBeNull();
+    expect(within(box.getByLabelText('Which product was it for?')).getAllByRole('option').map((o) => o.textContent).join()).toContain('can be refunded');
+  });
+
   it('a change somebody else made closes the box and says so', async () => {
     svc.placeSquareRefund.mockRejectedValue({ response: { status: 409, data: { error: 'place_refund_changed', message: 'This refund has changed since the page was read. The page now shows what is left to do.' } } });
     await draw([water(), towel()]);
