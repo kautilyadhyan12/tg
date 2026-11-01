@@ -21,7 +21,11 @@ export function useGymRank(gymId: string | null): { read: Read<LeaderboardRespon
   const started = useRef(0);
 
   const again = useCallback(() => {
-    if (me === null || gymId === null) return;
+    if (me === null || gymId === null) {
+      // No gym, no board: a read that failed for the one they had is no longer said.
+      setRead((before) => (before.kind === "loading" ? before : { kind: "loading" }));
+      return;
+    }
     started.current += 1;
     const mine = started.current;
     void (async () => {

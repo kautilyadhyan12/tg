@@ -127,10 +127,10 @@ function Body({ place, onClose, top, bottom }: { place: LeaderboardPlace; onClos
         setHeld({ kind: "ok", board: answer.data });
         return answer.data;
       }
-      if (!quiet || (answer.kind === "refused" && answer.status === 404)) {
-        // A read made by itself never takes the board away over a lost connection; a 404 does.
-        setHeld({ kind: "failed", status: answer.kind === "refused" ? answer.status : null });
-      }
+      // A read made by itself never takes a board on screen away over a lost connection; a 404 does.
+      const failed: Held = { kind: "failed", status: answer.kind === "refused" ? answer.status : null };
+      if (!quiet || failed.status === 404) setHeld(failed);
+      else setHeld((was) => (was.kind === "ok" ? was : failed));
       return null;
     },
     [session, place.id, boardId, period],
@@ -299,7 +299,7 @@ function Body({ place, onClose, top, bottom }: { place: LeaderboardPlace; onClos
         )}
       />
       {scrolled ? (
-        <View testID="leaderboard-bar" style={[styles.bar, { height: top + BACK_BAR }]}>
+        <View testID="leaderboard-bar" style={[styles.bar, { minHeight: top + BACK_BAR }]}>
           <Txt kind="h3" numberOfLines={1}>
             Leaderboard
           </Txt>

@@ -293,6 +293,31 @@ describe("the worst thing, with the answers in the worst order", () => {
 });
 
 describe("one gym's board is its own, and the answer on screen is the tab on screen", () => {
+  it("a read made by itself that fails with no board on screen offers Try again, never Loading for good", async () => {
+    const save = later();
+    const first = later();
+    let reads = 0;
+    const server = fakeServer(
+      routes({
+        [boardPath(IRON, "streak")]: () => {
+          reads += 1;
+          return reads === 1 ? first.reply : lost();
+        },
+        [HIDE_ME]: (body) => (isSave(body) ? save.reply : { status: 200, body: hideMe(false) }),
+      }),
+    );
+    await openBoard(server.ask, IRON);
+    expect(await page().findByText("Priya S.")).toBeTruthy();
+    await hideSwitch();
+    await pressSwitch(true);
+    await fireEvent.press(page().getByLabelText("Streak"));
+    await save.answer(hideMe(true));
+    await first.answer(boardOf(IRON, "streak"));
+    expect(await page().findByText("Couldn’t load the leaderboard.")).toBeTruthy();
+    expect(page().getByLabelText("Try again")).toBeTruthy();
+    expect(page().queryByText("Loading…")).toBeNull();
+  });
+
   it("says when it was read, on the gym's own clock", async () => {
     const server = fakeServer(routes());
     await openBoard(server.ask, IRON);
