@@ -159,8 +159,6 @@ function Body({ place, firstOpen, onClose, onChanged, top, bottom }: BodyProps) 
     if (busy !== null) return;
     setBusy({ id: challenge.id, doing });
     setSaid((all) => ({ ...all, [challenge.id]: undefined }));
-    // A read that started before this press may not hold what the press does.
-    started.current += 1;
     const answer = await session.signedIn(
       doing.kind === "pick"
         ? { method: "PUT", path: teamPath(place.id, challenge.id), body: { teamId: doing.teamId } }
@@ -171,6 +169,7 @@ function Body({ place, firstOpen, onClose, onChanged, top, bottom }: BodyProps) 
     setBusy(null);
     if (answer.kind === "ok" && answer.data.challenge.id === challenge.id) {
       const now = answer.data.challenge;
+      // A read that started before this answer may not hold what the press did.
       started.current += 1;
       setHeld((was) => (was.kind !== "ok" ? was : { ...was, list: { ...was.list, challenges: was.list.challenges.map((c) => (c.id === now.id ? now : c)) } }));
       return;

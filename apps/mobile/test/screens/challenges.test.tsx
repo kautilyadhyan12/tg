@@ -163,6 +163,8 @@ describe("the worst thing: somebody shown who is hidden, or a win or a join the 
     await openOne("October Six");
     await fireEvent.press(await screen.findByLabelText("Join October Six"));
     expect(screen.queryByText("You’re in.")).toBeNull();
+    expect(onePage().queryByLabelText("Leave October Six")).toBeNull();
+    expect(onePage().getByLabelText("Join October Six")).toBeTruthy();
     const nowIn = challenge(C1, "October Six", joinedOne({ state: "coming", startsOn: "2099-12-01", endsOn: "2099-12-20", me: me({ value: 0, place: null }), board: board({ status: "not_started", ranked: 0, top: [], leaders: 0 }) }));
     held = listOf(IRON, [nowIn]);
     await act(async () => {
@@ -222,6 +224,45 @@ describe("the worst thing: somebody shown who is hidden, or a win or a join the 
     expect(screen.queryByLabelText("Join October Six")).toBeNull();
   });
 
+  it("a read begun while Join is on its way never draws over Join's answer", async () => {
+    const before = listOf(IRON, [challenge(C1, "October Six", joinable())]);
+    const nowIn = challenge(C1, "October Six", joinedOne());
+    const reads: ((reply: Reply) => void)[] = [];
+    let release: (reply: Reply) => void = () => undefined;
+    let count = 0;
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [pathOf(IRON)]: () => {
+        count += 1;
+        return count === 1 ? { status: 200, body: before } : new Promise<Reply>((resolve) => { reads.push(resolve); });
+      },
+      [joinedOf(IRON, C1)]: () => new Promise<Reply>((resolve) => { release = resolve; }),
+    });
+    await openChallenges(server.ask, IRON);
+    await openOne("October Six");
+    await fireEvent.press(await screen.findByLabelText("Join October Six"));
+    await act(async () => {
+      comeBack();
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(reads.length).toBeGreaterThan(0);
+    });
+    await act(async () => {
+      release({ status: 200, body: { challenge: nowIn } });
+      await Promise.resolve();
+    });
+    expect(await onePage().findByLabelText("Leave October Six")).toBeTruthy();
+    await act(async () => {
+      for (const one of reads) one({ status: 200, body: before });
+      await Promise.resolve();
+    });
+    await settle();
+    expect(onePage().getByLabelText("Leave October Six")).toBeTruthy();
+    expect(onePage().queryByLabelText("Join October Six")).toBeNull();
+  });
+
   it("another place's answer is never drawn under this one", async () => {
     const server = fakeServer(routes(IRON, listOf(LOTUS, [challenge(C1, "Their Secret")])));
     await openChallenges(server.ask, IRON);
@@ -237,8 +278,8 @@ describe("the worst thing: somebody shown who is hidden, or a win or a join the 
     await openChallenges(server.ask, IRON);
     await openOne("October Six");
     await fireEvent.press(await screen.findByLabelText("Join October Six"));
-    await settle();
-    expect(screen.getByLabelText("Join October Six")).toBeTruthy();
+    expect(await onePage().findByText(NO_ANSWER)).toBeTruthy();
+    expect(onePage().getByLabelText("Join October Six")).toBeTruthy();
     expect(screen.queryByText("Other")).toBeNull();
   });
 
