@@ -297,6 +297,10 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
     const amount = money(s, "amountMinor");
     return `Refunded${amount === null ? "" : ` ${amount}`} to ${cardOf(s, "brand", "last4") ?? "the card"} for ${person(s)}`;
   },
+  "org.member_refund_in_square": (s) => {
+    const amount = money(s, "amountMinor");
+    return `${amount ?? "A refund"} was refunded in Square to ${cardOf(s, "brand", "last4") ?? "the card"} for ${person(s)}`;
+  },
   "org.member_refund_failed": (s) => {
     const amount = money(s, "amountMinor");
     return `Square could not refund${amount === null ? "" : ` ${amount}`} to ${person(s)}. No money went back`;

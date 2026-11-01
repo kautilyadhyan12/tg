@@ -508,7 +508,7 @@ export async function writeRefund(
     today: string;
     actorUserId: string | null;
     now: Date;
-    action: "org.member_refund_noted" | "org.member_refund_sent";
+    action: "org.member_refund_noted" | "org.member_refund_sent" | "org.member_refund_in_square";
     /** The card it went back to, for the gym's record. */
     card: { brand: string; last4: string } | null;
   },

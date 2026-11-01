@@ -315,7 +315,7 @@ async function openPressesOfSales(sql: Sql | TransactionSql, gymId: string, sale
              AND (l.id = o.id OR (q.parts IS NOT NULL AND l.receipt_number = o.receipt_number))) < q.amount_minor
     ORDER BY q.sale_id, q.state = 'asking' DESC, COALESCE(q.outcome = 'lost' AND q.no_refund_at IS NULL, false) DESC, q.started_at DESC`;
   // A failed press says itself on the crossed-out line, unless staff decided on it; it is read so an older decision does not stand over it.
-  for (const r of rows) if (!r.failed || r.decided_on !== null) open.set(r.sale_id, { amountMinor: r.amount_minor, on: r.on_day, lost: r.lost, onTerminal: r.on_terminal, decided: r.decided_on === null ? null : { on: r.decided_on, by: r.decided_by } });
+  for (const r of rows) if (!r.failed || r.decided_on !== null) open.set(r.sale_id, { amountMinor: r.amount_minor, on: r.on_day, lost: r.lost, noRecord: false, onTerminal: r.on_terminal, decided: r.decided_on === null ? null : { on: r.decided_on, by: r.decided_by } });
   return open;
 }
 

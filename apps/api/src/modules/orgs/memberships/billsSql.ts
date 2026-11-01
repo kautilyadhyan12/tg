@@ -244,11 +244,11 @@ export interface RefundRow {
   by: string | null;
   receiptNumber: number;
   /** Sent to the card through Square (18d-iv-a): null for one noted by hand. */
-  square: { state: "pending" | "completed"; card: { brand: string; last4: string } | null; startedOn: string; pressId: string } | null;
+  square: { state: "pending" | "completed"; card: { brand: string; last4: string } | null; startedOn: string; pressId: string; inSquare: boolean } | null;
 }
 
 /** What a refund row reads of its press at Square (18d-iv-a). */
-const squareOfRefund = (r: { q_id: string | null; q_state: string | null; q_brand: string | null; q_last4: string | null; q_started: string | null }): RefundRow["square"] =>
+const squareOfRefund = (r: { q_id: string | null; q_state: string | null; q_brand: string | null; q_last4: string | null; q_started: string | null; q_from_square: boolean | null }): RefundRow["square"] =>
   r.q_id === null || r.q_state === null || r.q_started === null
     ? null
     : {
@@ -256,6 +256,7 @@ const squareOfRefund = (r: { q_id: string | null; q_state: string | null; q_bran
         card: r.q_brand === null || r.q_last4 === null ? null : { brand: r.q_brand, last4: r.q_last4 },
         startedOn: r.q_started,
         pressId: r.q_id,
+        inSquare: r.q_from_square === true,
       };
 
 /** The refunds that stand against the standing payments of the memberships named, a fee's too (18d-iv-b-i), in the
@@ -277,11 +278,12 @@ export async function refundsFor(sql: Sql | TransactionSql, gymId: string, membe
       q_state: string | null;
       q_brand: string | null;
       q_last4: string | null;
+      q_from_square: boolean | null;
       q_started: string | null;
     }[]
   >`
     SELECT r.id, r.payment_id, b.held_membership_id, r.amount_minor, r.method, r.refunded_on::text AS refunded_on, r.reason,
-           u.display_name AS by, r.receipt_number, q.id AS q_id, q.state AS q_state, q.brand AS q_brand, q.last4 AS q_last4,
+           u.display_name AS by, r.receipt_number, q.id AS q_id, q.state AS q_state, q.brand AS q_brand, q.last4 AS q_last4, q.from_square AS q_from_square,
            (q.started_at AT TIME ZONE g.timezone)::date::text AS q_started
     FROM gym_member_refunds r
     JOIN gym_member_payments p ON p.gym_id = r.gym_id AND p.id = r.payment_id
@@ -385,13 +387,14 @@ export async function voidedRefundsFor(sql: Sql | TransactionSql, gymId: string,
       q_state: string | null;
       q_brand: string | null;
       q_last4: string | null;
+      q_from_square: boolean | null;
       q_started: string | null;
     }[]
   >`
     SELECT r.id, r.payment_id, b.held_membership_id, r.amount_minor, r.method, r.refunded_on::text AS refunded_on, r.reason,
            u.display_name AS by, r.receipt_number, r.void_reason,
            (r.undone_at AT TIME ZONE g.timezone)::date::text AS voided_on, v.display_name AS voided_by,
-           q.id AS q_id, q.state AS q_state, q.brand AS q_brand, q.last4 AS q_last4,
+           q.id AS q_id, q.state AS q_state, q.brand AS q_brand, q.last4 AS q_last4, q.from_square AS q_from_square,
            (q.started_at AT TIME ZONE g.timezone)::date::text AS q_started
     FROM gym_member_refunds r
     JOIN gym_member_payments p ON p.gym_id = r.gym_id AND p.id = r.payment_id

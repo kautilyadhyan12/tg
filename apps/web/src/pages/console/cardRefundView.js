@@ -71,6 +71,7 @@ export function cardRefundOpenLine(open, currency) {
   if (open.decided !== null && open.decided !== undefined) {
     return `No refund needed on the ${money} refund of ${dayWords(open.on)}${open.decided.by === null ? ', decided' : `, decided by ${open.decided.by}`} on ${dayWords(open.decided.on)}.`;
   }
+  if (open.noRecord === true) return `Square has no record of the ${money} refund of ${dayWords(open.on)}. No money went back.`;
   return open.lost
     ? `We don't know whether Square took the ${money} refund of ${dayWords(open.on)}. Check your Square Dashboard. If it went through, note the refund here.`
     : open.onTerminal === true

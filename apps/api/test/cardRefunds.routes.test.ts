@@ -29,6 +29,7 @@ import { waitingOnTerminalOfBill } from "../src/modules/orgs/payments/cardRefund
 import { linesPage, totals } from "../src/modules/orgs/paymentsDownload/repo.js";
 import { squareSettings } from "../src/modules/orgs/payments/settings.js";
 import { processSquareWork } from "../src/modules/orgs/payments/work.js";
+import { keepSquareEvent } from "../src/modules/webhooks/repo.js";
 import { account, fakeSquare, type Account, type Behaviour } from "./fakeSquareTerminal.js";
 import { recordingHub } from "./liveNewsRecorder.js";
 import { proveAddress } from "./proveAddress.js";
@@ -445,6 +446,173 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
       expect((await send("GET", refundUrl(maya), staff.cookies)).statusCode).toBe(403);
       expect((await press(maya, 100, randomUUID(), staff)).statusCode).toBe(403);
       expect(madeFor(maya)).toHaveLength(0);
+    });
+  });
+
+  describe("a refund made inside Square (18d-iv-d-i)", () => {
+    /** Square's message about a refund, kept as the route keeps it, then the worker's minute for it alone. */
+    const message = async (merchantId: string, refundId: string) => {
+      const eventId = randomUUID();
+      await keepSquareEvent(sql, { eventId, payload: { type: "refund.created", accountId: merchantId, refundId } });
+      return await processSquareWork(workDeps(), [eventId], gyms.map((g) => g.id));
+    };
+    const reasonsOf = (p: Paid) => sql<{ recorded_by: string | null }[]>`SELECT recorded_by FROM gym_member_refunds WHERE gym_id = ${p.gym.id} AND payment_id = ${p.paymentId}`;
+    const onReview = async (g: Gym, name: string) => {
+      const res = await send("GET", `/v1/orgs/${g.id}/refunds-to-review`, g.owner.cookies);
+      expect(res.statusCode, res.body).toBe(200);
+      return refundsToReviewResponseSchema.parse(JSON.parse(res.body)).rows.some((r) => r.name === name);
+    };
+
+    it("the worst thing: Maya's refund is written once, on Maya's payment, and nobody else's moves", async () => {
+      const maya = await paidByCard(gym, "Square Maya");
+      const ravi = await paidByCard(gym, "Square Ravi");
+      const nina = await paidByCard(nextDoor, "Square Nina");
+
+      const made = square.refundInSquare(maya.squarePaymentId, 2500);
+      await message(gym.acct.merchantId, made.id);
+      expect((await refundsOf(maya)).map((r) => [r.amount_minor, r.method, r.undone])).toEqual([[2500, "company", false]]);
+      expect(await billStatus(maya)).toBe("refunded");
+
+      // Nobody pressed anything, so no member of staff is named.
+      expect((await reasonsOf(maya))[0]?.recorded_by).toBeNull();
+      const seen = (await paymentOnPage(maya)).refunds[0]?.square;
+      expect(seen).toMatchObject({ state: "completed", inSquare: true, card: { brand: "VISA", last4: "1111" } });
+
+      // The same refund again, by a second message and by the hourly read: one row.
+      await message(gym.acct.merchantId, made.id);
+      clock = new Date(clock.getTime() + 2 * 60 * 60_000);
+      await work();
+      expect(await refundsOf(maya)).toHaveLength(1);
+      expect(await pressesOf(maya)).toHaveLength(1);
+
+      // Same price, other people: untouched.
+      expect(await refundsOf(ravi)).toHaveLength(0);
+      expect(await billStatus(ravi)).toBe("paid");
+      expect(await refundsOf(nina)).toHaveLength(0);
+      expect(await billStatus(nina)).toBe("paid");
+
+      // A message naming next door's account about our refund: its token cannot read it, so nothing there moves.
+      const ravisRefund = square.refundInSquare(ravi.squarePaymentId, 500);
+      await message(nextDoor.acct.merchantId, ravisRefund.id);
+      expect(await refundsOf(nina)).toHaveLength(0);
+      expect(await refundsOf(ravi)).toHaveLength(0);
+
+      // The owner can see it happened.
+      const [audit] = await sql<{ action: string; actor_user_id: string | null }[]>`
+        SELECT action, actor_user_id FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.member_refund_in_square' AND meta->>'paymentId' = ${maya.paymentId}`;
+      expect(audit?.actor_user_id).toBeNull();
+    });
+
+    it("a refund staff already noted is not counted twice; what Square gave back above it is written", async () => {
+      const maya = await paidByCard(gym, "Noted First");
+      const noted = await send("POST", `${entryUrl(gym, maya.entryId)}/memberships/${maya.membershipId}/payments/${maya.paymentId}/refunds`, gym.owner.cookies, { requestKey: randomUUID(), amountMinor: 1000, method: "card_at_desk", reason: "other" });
+      expect(noted.statusCode, noted.body).toBe(200);
+
+      await message(gym.acct.merchantId, square.refundInSquare(maya.squarePaymentId, 1000).id);
+      expect((await refundsOf(maya)).map((r) => r.amount_minor)).toEqual([1000]);
+
+      await message(gym.acct.merchantId, square.refundInSquare(maya.squarePaymentId, 500).id);
+      expect((await refundsOf(maya)).map((r) => r.amount_minor).sort()).toEqual([1000, 500]);
+      expect(await billStatus(maya)).toBe("paid");
+
+      // Never past what was paid, however Square's and the notes add up.
+      await message(gym.acct.merchantId, square.refundInSquare(maya.squarePaymentId, 1000).id);
+      const total = (await refundsOf(maya)).reduce((n, r) => n + r.amount_minor, 0);
+      expect(total).toBe(2500);
+      expect(await billStatus(maya)).toBe("refunded");
+    });
+
+    it("while a press on that payment waits on Square, nothing is written and the message is asked again", async () => {
+      const maya = await paidByCard(gym, "Press Waiting");
+      square.state.refundDown = true;
+      await press(maya, 1500);
+      const made = square.refundInSquare(maya.squarePaymentId, 1000);
+      const run = await message(gym.acct.merchantId, made.id);
+      square.state.refundDown = false;
+      expect(run.deferred).toBe(1);
+      expect(await refundsOf(maya)).toHaveLength(0);
+    });
+
+    it("Square's message finishes a press's own refund at once, and writes nothing more", async () => {
+      const maya = await paidByCard(gym, "Own Refund");
+      const res = await press(maya, 2500);
+      expect(cardRefundResponseSchema.parse(JSON.parse(res.body)).step).toBe("pending");
+      const [ours] = madeFor(maya);
+      if (ours === undefined) throw new Error("no refund made");
+      ours.status = "COMPLETED";
+      await message(gym.acct.merchantId, ours.id);
+      expect((await pressesOf(maya))[0]).toMatchObject({ state: "done", outcome: "completed" });
+      expect(await refundsOf(maya)).toHaveLength(1);
+    });
+
+    it("one that fails after being taken in is voided, the bill reads as it did, and it goes on no list", async () => {
+      const maya = await paidByCard(gym, "Failed In Square");
+      const made = square.refundInSquare(maya.squarePaymentId, 2500, "PENDING");
+      await message(gym.acct.merchantId, made.id);
+      expect(await billStatus(maya)).toBe("refunded");
+      expect((await paymentOnPage(maya)).refunds[0]?.square).toMatchObject({ state: "pending", inSquare: true });
+      made.status = "FAILED";
+      await message(gym.acct.merchantId, made.id);
+      expect((await refundsOf(maya)).map((r) => r.undone)).toEqual([true]);
+      expect(await billStatus(maya)).toBe("paid");
+      expect((await paymentOnPage(maya)).cardRefund).toBeNull();
+      expect(await onReview(gym, "Failed In Square")).toBe(false);
+    });
+
+    it("a refund that failed before it was seen writes nothing", async () => {
+      const maya = await paidByCard(gym, "Failed Unseen");
+      await message(gym.acct.merchantId, square.refundInSquare(maya.squarePaymentId, 2500, "FAILED").id);
+      expect(await refundsOf(maya)).toHaveLength(0);
+      expect(await billStatus(maya)).toBe("paid");
+    });
+
+    it("no message at all: the hourly read still finds it", async () => {
+      const maya = await paidByCard(gym, "Message Lost");
+      square.refundInSquare(maya.squarePaymentId, 700);
+      clock = new Date(clock.getTime() + 2 * 60 * 60_000);
+      await work();
+      expect((await refundsOf(maya)).map((r) => r.amount_minor)).toEqual([700]);
+      await work();
+      expect(await refundsOf(maya)).toHaveLength(1);
+    });
+
+    it("\"We don't know\": Square's record shows no such refund, so the line says so and leaves the list", async () => {
+      const maya = await paidByCard(gym, "Not In Square");
+      square.state.refundDown = true;
+      await press(maya, 1500);
+      clock = new Date(clock.getTime() + CARD_REFUND.resendForMs + 1000);
+      await work();
+      square.state.refundDown = false;
+      expect((await paymentOnPage(maya)).cardRefund).toMatchObject({ lost: true, noRecord: false });
+      expect(await onReview(gym, "Not In Square")).toBe(true);
+
+      clock = new Date(clock.getTime() + 16 * 60_000);
+      await work();
+      expect((await paymentOnPage(maya)).cardRefund).toMatchObject({ amountMinor: 1500, lost: true, noRecord: true });
+      expect(await onReview(gym, "Not In Square")).toBe(false);
+      expect(await refundsOf(maya)).toHaveLength(0);
+
+      // It shows up after all: written as that press's own, with its reason, and the line goes.
+      await message(gym.acct.merchantId, square.refundInSquare(maya.squarePaymentId, 1500).id);
+      expect((await refundsOf(maya)).map((r) => r.amount_minor)).toEqual([1500]);
+      expect((await paymentOnPage(maya)).cardRefund).toBeNull();
+      expect((await pressesOf(maya))[0]).toMatchObject({ state: "done", outcome: "completed" });
+    });
+
+    it("\"We don't know\": Square's record shows the refund, so it is written once and the line goes", async () => {
+      const maya = await paidByCard(gym, "In Square After All");
+      square.state.refundDown = true;
+      await press(maya, 1500);
+      clock = new Date(clock.getTime() + CARD_REFUND.resendForMs + 1000);
+      await work();
+      square.state.refundDown = false;
+      square.refundInSquare(maya.squarePaymentId, 1500);
+      clock = new Date(clock.getTime() + 16 * 60_000);
+      await work();
+      expect((await refundsOf(maya)).map((r) => r.amount_minor)).toEqual([1500]);
+      expect((await paymentOnPage(maya)).cardRefund).toBeNull();
+      expect((await paymentOnPage(maya)).refunds[0]?.square).toMatchObject({ inSquare: false });
+      expect(await pressesOf(maya)).toHaveLength(1);
     });
   });
 

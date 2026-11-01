@@ -275,6 +275,7 @@ function fakeSquare() {
     refundPayment: () => Promise.resolve({ kind: "unavailable", status: null }),
 
     getRefund: () => Promise.resolve({ kind: "unavailable", status: null }),
+    listRefunds: () => Promise.resolve({ kind: "unavailable", status: null }),
     createTerminalRefund: () => Promise.resolve({ kind: "unavailable", status: null }),
     getTerminalRefund: () => Promise.resolve({ kind: "unavailable", status: null }),
     cancelTerminalRefund: () => Promise.resolve({ kind: "unavailable", status: null }),

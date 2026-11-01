@@ -279,6 +279,8 @@ export const squarePaymentSchema = z.object({
   /** What Square has given back of it: a refund leaves the payment COMPLETED with this filled in ("Payment",
    *  read 2026-10-25), so a payment refunded before it is taken in is never put on a bill (18d-iii-b-i). */
   refunded_money: squareMoneySchema.nullish(),
+  /** Every refund of it (18d-iv-d-i; measured in Square's test area, 2026-11-01). */
+  refund_ids: z.array(z.string().regex(/^[A-Za-z0-9_-]{1,255}$/)).max(500).nullish(),
   /** "Details about the device that took the payment"; its `device_name` is "The name of the device set by
    *  the seller" (Square's Payment and DeviceDetails references, read 2026-10-25). A name of any length is
    *  read, so it never makes the payment unreadable, and the app keeps its first 100 characters. */
@@ -297,11 +299,19 @@ export const squareRefundSchema = z.object({
   status: z.string().max(40),
   amount_money: squareMoneySchema,
   payment_id: squarePaymentIdSchema,
+  /** When Square made it (18d-iv-d-i). */
+  created_at: squareTimeSchema.nullish(),
 });
 export type SquareRefund = z.infer<typeof squareRefundSchema>;
 
 /** RefundPayment's and GetPaymentRefund's answer. */
 export const squareRefundAnswerSchema = z.object({ refund: squareRefundSchema });
+
+/** ListPaymentRefunds' answer (18d-iv-d-i): each read on its own, so one Square cannot be read never hides the rest. */
+export const squareRefundsPageSchema = z.object({
+  refunds: z.array(z.unknown()).max(100).nullish(),
+  cursor: z.string().max(2048).nullish(),
+});
 
 /** ListPayments' answer (18d-iii-b-i): at most 100 a page, each read on its own, so one Square cannot
  *  be read never hides the rest; `cursor` while there are more ("List payments", read 2026-10-24). */

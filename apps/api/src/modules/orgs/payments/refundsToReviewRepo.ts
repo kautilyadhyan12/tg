@@ -7,6 +7,7 @@ import type { Sql } from "postgres";
 import { lockGym } from "../memberList/repo.js";
 import { stillOwedSql } from "../memberships/feesRepo.js";
 import { insertAudit } from "../repo.js";
+import { NOT_IN_SQUARE } from "./cardRefundsRepo.js";
 
 interface RawRow {
   id: string;
@@ -77,6 +78,7 @@ export async function refundsToReview(sql: Sql, gymId: string, members: boolean,
       ) c
       WHERE q.gym_id = ${gymId} AND q.no_refund_at IS NULL
         AND (q.outcome IN ('failed','lost') OR (q.state = 'pending' AND q.started_at <= ${lateBefore}))
+        AND q.code IS DISTINCT FROM ${NOT_IN_SQUARE} AND NOT (q.from_square AND q.outcome = 'failed')
         AND (${members}::boolean OR q.sale_id IS NOT NULL)
         AND (q.state = 'pending' OR c.since < q.amount_minor)
       ORDER BY q.square_payment_id, q.started_at DESC
