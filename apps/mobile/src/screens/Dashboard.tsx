@@ -70,8 +70,9 @@ export const DASHBOARD_READS = {
   runs: "/v1/geo/runs?limit=3",
   meals: "/v1/nutrition/meals?limit=3",
   goals: GOALS_READ,
-  places: "/v1/orgs/mine",
 } as const;
+/** Your Rank's: which gym. The Gym tab reads the same. */
+const PLACES_READ = "/v1/orgs/mine";
 
 export function DashboardScreen() {
   const { state } = useSession();
@@ -89,7 +90,7 @@ export function DashboardScreen() {
   const goals = useRead(DASHBOARD_READS.goals, goalsResponseSchema, zoneSaved);
   const [goalsOpen, setGoalsOpen] = useState<GoalsOpen | null>(null);
   // Your Rank is the person's first gym's board; somebody using the app alone has a board of their own to come (item 38).
-  const places = useRead(DASHBOARD_READS.places, myOrgsResponseSchema);
+  const places = useRead(PLACES_READ, myOrgsResponseSchema);
   const firstGym = places.read.kind === "ok" ? (places.read.data.orgs.find((org) => org.isMember) ?? null) : null;
   // The clock ticks only while the Dashboard is what the person sees.
   const focused = useIsFocused();

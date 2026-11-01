@@ -3,7 +3,7 @@ import { AppState } from "react-native";
 import { leaderboardCountedResponseSchema, leaderboardResponseSchema, type LeaderboardBoard, type LeaderboardPeriod } from "@app/shared";
 import { App } from "../../src/App";
 import type { Ask } from "../../src/session/calls";
-import { fakeServer as kitServer, kept, lost, memoryStore, profile, refusal, tokens, type Reply, type Route } from "../kit";
+import { fakeServer as kitServer, kept, lost, memoryStore, never, profile, refusal, tokens, type Reply, type Route } from "../kit";
 
 const extra = { copyName: "Feature 1", apiUrl: "http://localhost:3000" };
 const noWait = () => Promise.resolve();
@@ -125,6 +125,16 @@ describe("the worst thing: Hide me says only what the server holds", () => {
     await pressSwitch(true);
     expect(await page().findByText("Can’t connect. Check your internet and try again.")).toBeTruthy();
     expect(isOn(await hideSwitch())).toBe(false);
+  });
+
+  it("while the save is on its way the switch still shows what the server last said, and cannot be pressed again", async () => {
+    const server = fakeServer(routes({ [HIDE_ME]: (body) => (body === undefined || body === null ? { status: 200, body: hideMe(false) } : never()) }));
+    await openBoard(server.ask, IRON);
+    await hideSwitch();
+    await pressSwitch(true);
+    const one = await hideSwitch();
+    expect(isOn(one)).toBe(false);
+    expect(one.props.disabled).toBe(true);
   });
 
   it("the save that reached the server though its answer was lost: the switch reads it back as on", async () => {

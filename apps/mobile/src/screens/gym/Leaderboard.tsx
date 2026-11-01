@@ -412,7 +412,7 @@ function Flames({ circles, days, boardId }: { circles: readonly LeaderboardCircl
           >
             <Icon name="flame" size={14} colour={c === "yes" || c === "open" ? "orange" : "textFaint"} filled={c === "yes"} />
             {boardId === "streak" ? null : (
-              <Txt kind="tiny" style={styles.letter}>
+              <Txt kind="tiny">
                 {weekdayInitial(day)}
               </Txt>
             )}
@@ -636,7 +636,6 @@ const styles = StyleSheet.create({
   lit: { filter: [{ dropShadow: { offsetX: 0, offsetY: 0, standardDeviation: 3, color: colours.orange } }] },
   open: { opacity: 0.45 },
   skipped: { opacity: 0.4 },
-  letter: { fontSize: 9, lineHeight: 11 },
   mine: { borderTopWidth: 1, borderTopColor: colours.lineStrong, backgroundColor: colours.box, paddingHorizontal: sizes.edge - 8, paddingTop: 10, gap: 4 },
   mineRow: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: sizes.press },
   faded: { opacity: 0.6 },
