@@ -6,10 +6,9 @@
 // the STRING from that Python file. The meal ideas are not ported: they come from
 // the day's own rule (ROADMAP 34d-ii).
 import { describe, expect, it } from "vitest";
-import { mealSuggestionSchema } from "@app/shared";
+import { amountWords, mealSuggestionSchema } from "@app/shared";
 import { SUGGEST_POOLS, suggestAfterWorkout } from "../src/modules/nutrition/suggest.js";
 import {
-  amountWords,
   mealSuggestionsFrom,
   personalRecordsFor,
   primaryMusclesFor,
