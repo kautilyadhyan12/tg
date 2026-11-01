@@ -420,7 +420,7 @@ function PlaceRefundBox({ gymId, lines, press, currency, onDone, onClose }) {
             <option value="">Choose one</option>
             {choices.map((line) => (
               <option key={line.id} value={line.id}>
-                {placeOption(line, press)}
+                {placeOption(line, press, lines)}
               </option>
             ))}
             {open.length > 1 ? <option value={SEVERAL}>Several products</option> : null}
@@ -430,7 +430,7 @@ function PlaceRefundBox({ gymId, lines, press, currency, onDone, onClose }) {
       {draft.pick === SEVERAL
         ? open.map((line) => (
             <label key={line.id} className="c-field">
-              <span className="c-label">{`${placeOption(line, press)}: amount (${currency})`}</span>
+              <span className="c-label">{`${placeOption(line, press, lines)}: amount (${currency})`}</span>
               <input className="c-input" type="text" inputMode="decimal" value={draft.amounts[line.id] ?? ''} onChange={(e) => setDraft((d) => ({ ...d, amounts: { ...d.amounts, [line.id]: e.target.value.slice(0, 12) } }))} />
             </label>
           ))
