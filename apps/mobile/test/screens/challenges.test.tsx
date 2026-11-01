@@ -405,6 +405,16 @@ describe("one challenge", () => {
     expect(screen.queryByText(/Done\./)).toBeNull();
   });
 
+  it("scrolled past its picture, the page's name sits in a bar, so nothing lies under Back", async () => {
+    const server = fakeServer(routes(IRON, listOf(IRON, [challenge(C1, "October Six")])));
+    await openChallenges(server.ask, IRON);
+    await openOne("October Six");
+    await onePage().findByText("Most visits wins");
+    expect(screen.queryByTestId("challenge-bar")).toBeNull();
+    await fireEvent.scroll(screen.getByTestId("challenge-scroll"), { nativeEvent: { contentOffset: { y: 2000 }, contentSize: { height: 3000, width: 400 }, layoutMeasurement: { height: 800, width: 400 } } });
+    expect(within(screen.getByTestId("challenge-bar")).getByText("October Six")).toBeTruthy();
+  });
+
   it("a cancelled challenge says so and offers nothing", async () => {
     const server = fakeServer(routes(IRON, listOf(IRON, [challenge(C1, "October Six", joinable({ cancelled: true, can: { join: false, leave: false, pick: false } }))])));
     await openChallenges(server.ask, IRON);

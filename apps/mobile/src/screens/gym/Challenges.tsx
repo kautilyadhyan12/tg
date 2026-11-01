@@ -364,6 +364,9 @@ function Loaded({ place, list, challenge, busy, said, top, bottom, onPress, onRe
   const [picking, setPicking] = useState<TeamLine | null>(null);
   const [boardOpen, setBoardOpen] = useState(false);
   const [person, setPerson] = useState<ProfilePerson | null>(null);
+  // The page's own picture has gone under the Back button: it gets a bar, so it never sits on the words.
+  const [scrolled, setScrolled] = useState(false);
+  const { width, height } = useWindowDimensions();
   const gym = place.name;
   const chip = challengeChip(challenge, list.today);
   const result = resultOf(challenge, list.today, gym);
@@ -380,7 +383,15 @@ function Loaded({ place, list, challenge, busy, said, top, bottom, onPress, onRe
   const leave = leaveBox(challenge);
   return (
     <>
-      <ScrollView style={styles.grow} contentContainerStyle={{ paddingBottom: bottom + 24 }}>
+      <ScrollView
+        testID="challenge-scroll"
+        style={styles.grow}
+        contentContainerStyle={{ paddingBottom: bottom + 24 }}
+        scrollEventThrottle={32}
+        onScroll={(event) => {
+          setScrolled(event.nativeEvent.contentOffset.y > pictureTopHeight(width, height, PAGE_PICTURE_TALL) - top - BACK_BAR);
+        }}
+      >
         <PictureTop picture="weeklychallenges" tall={PAGE_PICTURE_TALL} eyebrow={gym} title={challenge.name} />
         <View style={[styles.edge, styles.lines]}>
           <View style={styles.between}>
@@ -487,6 +498,13 @@ function Loaded({ place, list, challenge, busy, said, top, bottom, onPress, onRe
           )}
         </View>
       </ScrollView>
+      {scrolled ? (
+        <View testID="challenge-bar" style={[styles.bar, { minHeight: top + BACK_BAR }]}>
+          <Txt kind="h3" numberOfLines={1}>
+            {challenge.name}
+          </Txt>
+        </View>
+      ) : null}
 
       <Sheet
         open={box === "counts"}
@@ -904,7 +922,7 @@ function WholeBoard({ open, place, challenge, timezone, top, bottom, onClose, on
           keyExtractor={(r) => r.userId}
           ListHeaderComponent={
             <View>
-              <PictureTop picture="rank" tall={PAGE_PICTURE_TALL} eyebrow={challenge.name} title="The board" />
+              <PictureTop picture="weeklychallenges" tall={PAGE_PICTURE_TALL} eyebrow={challenge.name} title="The board" />
               <View style={styles.edge}>
                 <Txt kind="tiny">
                   {`${howToWin(challenge)}${board === null ? "" : ` · ${board.ranked.toLocaleString("en")} on the board · ${updatedText(board.asOf, timezone, place.clockFormat)}`}`}
