@@ -523,10 +523,12 @@ export async function recordMadeInSquare(
     if (where === undefined || where.currency !== r.currency) return { kind: "no_payment" };
     if ((await refundTargetOf(tx, r.gymId, where.membership_id, where.id)) === null) return { kind: "no_payment" };
 
+    // A note made after one was crossed out is staff saying it is another refund, so it stands.
     const notes = await tx<{ id: string; amount_minor: number }[]>`
-      SELECT id, amount_minor FROM gym_member_refunds
-      WHERE gym_id = ${r.gymId} AND payment_id = ${where.id} AND undone_at IS NULL AND method = 'card_at_desk'
-      ORDER BY created_at, id FOR UPDATE`;
+      SELECT n.id, n.amount_minor FROM gym_member_refunds n
+      WHERE n.gym_id = ${r.gymId} AND n.payment_id = ${where.id} AND n.undone_at IS NULL AND n.method = 'card_at_desk'
+        AND NOT EXISTS (SELECT 1 FROM gym_member_refunds v WHERE v.gym_id = n.gym_id AND v.payment_id = n.payment_id AND v.void_reason = 'in_square' AND v.undone_at <= n.created_at)
+      ORDER BY n.created_at, n.id FOR UPDATE OF n`;
     let covered = 0;
     for (const note of notes) {
       if (covered >= r.amountMinor) break;
