@@ -74,6 +74,7 @@ import { NO_READS, PACK_CODES, afterRead, codeFromCamera, troubleWords, type Fou
 import { removeCachedPhoto } from "./fileStore";
 import { LabelCheck } from "./LabelCheck";
 import { canReadLabel, labelCostWords, scansLeftWords, typedFromDraft } from "./labelRead";
+import { PackWords } from "./PackWords";
 import { Credits, SourceLine } from "./SourceLine";
 
 // Log a meal from a photo (ROADMAP Stage 5 33b-i). The live camera opens at once, as food apps open
@@ -1260,6 +1261,7 @@ function FindFood({
               {f.name}
             </Txt>
             <SourceLine source={f.source} before={`${startWords(f)} ·`} />
+            {f.packaged === undefined ? null : <PackWords brief kcal={f.kcal} {...f.packaged} />}
           </Pressable>
         ))}
         {found.kind === "ok" && q !== "" ? (
@@ -1275,7 +1277,8 @@ function FindFood({
             <Txt kind="tiny">Not on the list? Enter what you ate.</Txt>
           </Pressable>
         ) : null}
-        <Credits sources={new Set([...closeList, ...list].map((f) => f.source))} />
+        {list.some((f) => f.packaged !== undefined) ? <Txt kind="tiny">{FOOD_ALLERGY_CAUTION}</Txt> : null}
+        <Credits sources={new Set([...closeList, ...list].flatMap((f) => [f.source, ...(f.packaged?.allergensFrom == null ? [] : [f.packaged.allergensFrom])]))} />
       </ScrollView>
     </Sheet>
   );

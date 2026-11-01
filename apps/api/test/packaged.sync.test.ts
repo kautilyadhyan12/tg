@@ -9,9 +9,10 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { PackagedFileRefused, readDailyFile, updatePackagedFoods, type PackagedSyncDeps } from "../src/modules/nutrition/packagedSync.js";
 import { packagedRowsFor } from "../src/modules/nutrition/packagedRepo.js";
+import { offProductOfDaily, offRowOf, type WrittenRow } from "../src/modules/nutrition/packagedRows.js";
 import { offRowsOfFile, usdaRowsOfDir } from "../tools/packaged-files.js";
 import { downloadStillCovered, fillPackagedList, PackagedListRefused, recordFullLoad } from "../tools/packaged-table.js";
-import { OFF_LIST_LOCK, PackagedListBusy, applyDailyFile } from "../src/modules/nutrition/packagedRepo.js";
+import { OFF_LIST_LOCK, PackagedListBusy, applyDailyFile, packagedCodesFor } from "../src/modules/nutrition/packagedRepo.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -102,7 +103,7 @@ d("filling the lists and the nightly update (real Postgres)", () => {
     it("a product the file no longer holds is removed, a changed one is written", async () => {
       await load();
       await sql`UPDATE off_products SET kcal = 1 WHERE code = '3017620422003'`;
-      await sql`INSERT INTO off_products SELECT * FROM jsonb_populate_recordset(NULL::off_products, ${JSON.stringify([{ code: "5901234123457", name: "Gone", kcal: 1, numbers_fit: true, allergens: [], traces: [], listed_as_typed: [] }])}::text::jsonb)`;
+      await sql`INSERT INTO off_products (code, name, kcal, numbers_fit, allergens, traces, listed_as_typed) SELECT code, name, kcal, numbers_fit, allergens, traces, listed_as_typed FROM jsonb_populate_recordset(NULL::off_products, ${JSON.stringify([{ code: "5901234123457", name: "Gone", kcal: 1, numbers_fit: true, allergens: [], traces: [], listed_as_typed: [] }])}::text::jsonb)`;
       const report = await load();
       expect(report.written).toBe(1);
       expect(report.removed).toBe(1);
@@ -147,6 +148,34 @@ d("filling the lists and the nightly update (real Postgres)", () => {
     const B = dailyName(1793086400, 1793172800);
     const index = `${B}${NEWLINE}${A}${NEWLINE}`;
 
+    it("the full import writes each list's search words, and Open Food Facts' scan counts", async () => {
+      await load();
+      await fillPackagedList(sql, "usda_branded_products", usdaRowsOfDir(FIXTURES));
+      const [off] = await sql<{ blank: string; scanned: string }[]>`SELECT count(*) FILTER (WHERE search_text = '') AS blank, count(*) FILTER (WHERE scans > 0) AS scanned FROM off_products`;
+      const [usda] = await sql<{ blank: string; n: string }[]>`SELECT count(*) FILTER (WHERE search_text = '') AS blank, count(*) AS n FROM usda_branded_products`;
+      expect(off?.blank).toBe("0");
+      expect(Number(off?.scanned)).toBeGreaterThan(0);
+      expect(usda?.blank).toBe("0");
+      expect(Number(usda?.n)).toBeGreaterThan(0);
+    });
+
+    it("a product it writes can be searched for, and a line with no scan count takes none away", async () => {
+      const row = (scans: number, name: string): WrittenRow => {
+        const read = offRowOf(offProductOfDaily({ code: "5449000000996", product_name: name, unique_scans_n: scans === 0 ? undefined : scans, nutrition: { aggregated_set: { per: "100ml", nutrients: { "energy-kcal": { value: 42 } } } } }));
+        if (!("row" in read)) throw new Error("kept");
+        return read.row;
+      };
+      await applyDailyFile(sql, { name: "one.json.gz", toSecond: 1, products: 1 }, [row(619, "Zqxsync cola")], []);
+      expect(await packagedCodesFor(sql, "zqxsync", 5)).toEqual(["5449000000996"]);
+      await applyDailyFile(sql, { name: "two.json.gz", toSecond: 2, products: 1 }, [row(0, "Zqxrenamed cola")], []);
+      expect(await packagedCodesFor(sql, "zqxsync", 5)).toEqual([]);
+      expect(await packagedCodesFor(sql, "zqxrenamed", 5)).toEqual(["5449000000996"]);
+      const [kept] = await sql<{ scans: number }[]>`SELECT scans FROM off_products WHERE code = '5449000000996'`;
+      expect(kept?.scans).toBe(619);
+      await sql`DELETE FROM off_products WHERE code = '5449000000996'`;
+      await sql`DELETE FROM off_daily_files WHERE name IN ('one.json.gz', 'two.json.gz')`;
+    });
+
     it("does nothing and asks nobody while the list has never been loaded", async () => {
       const server = fakeFetch({ "index.txt": index });
       expect(await updatePackagedFoods(deps({ fetch: server.fetch }))).toMatchObject({ outcome: "not_loaded", files: 0 });
@@ -155,7 +184,7 @@ d("filling the lists and the nightly update (real Postgres)", () => {
 
     it("applies the real file, oldest first, says who it is, and takes off what lost its numbers", async () => {
       await load();
-      await sql`INSERT INTO off_products SELECT * FROM jsonb_populate_recordset(NULL::off_products, ${JSON.stringify([{ code: "0194346516261", name: "Had numbers", kcal: 76, numbers_fit: true, allergens: [], traces: [], listed_as_typed: [] }])}::text::jsonb)`;
+      await sql`INSERT INTO off_products (code, name, kcal, numbers_fit, allergens, traces, listed_as_typed) SELECT code, name, kcal, numbers_fit, allergens, traces, listed_as_typed FROM jsonb_populate_recordset(NULL::off_products, ${JSON.stringify([{ code: "0194346516261", name: "Had numbers", kcal: 76, numbers_fit: true, allergens: [], traces: [], listed_as_typed: [] }])}::text::jsonb)`;
       const server = fakeFetch({ "index.txt": index, [A]: gzipSync(DAILY), [B]: gzipSync(Buffer.alloc(0)) });
       const report = await updatePackagedFoods(deps({ fetch: server.fetch }));
       expect(report).toMatchObject({ outcome: "updated", files: 2 });

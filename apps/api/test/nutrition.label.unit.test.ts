@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MORE_NOT_KNOWN, MORE_NUTRIENTS, moreForGrams, sumMoreNutrients } from "@app/shared";
-import { createOpenFoodFactsProvider, labelMore } from "../src/modules/nutrition/openfoodfacts.adapter.js";
+import { labelMore } from "../src/modules/nutrition/openfoodfacts.adapter.js";
 
 // A product label's ten further figures (ROADMAP 34a). The first four are the
 // `nutriments` of Open Food Facts' product PAGE for these barcodes on 2026-10-13,
@@ -43,14 +43,6 @@ describe("a product label's further figures", () => {
     ["a label with none of the ten", { "energy-kcal_100g": 250 }, MORE_NOT_KNOWN],
   ])("%s", (_name, nutriments, expected) => {
     expect(labelMore(nutriments)).toEqual(expected);
-  });
-
-  it("a product the search returns carries its label's figures, and a fibre the label lacks is not a fibre of 0", async () => {
-    const cola = { code: "5449000000996", product_name: "Coca-Cola Original", serving_size: "330 ml", nutriments: { "energy-kcal_100g": 42.4, proteins_100g: 0, carbohydrates_100g: 10.6, fat_100g: 0, sugars_100g: 10.6, "saturated-fat_100g": 0, sodium_100g: 0 } };
-    const provider = createOpenFoodFactsProvider(() => Promise.resolve(new Response(JSON.stringify({ hits: [cola] }), { status: 200 })));
-    const [food] = await provider.search("cola", 1);
-    expect(food?.fiberG).toBeNull();
-    expect(food?.more).toEqual({ ...MORE_NOT_KNOWN, sugarsG: 10.6, satFatG: 0, sodiumMg: 0 });
   });
 });
 

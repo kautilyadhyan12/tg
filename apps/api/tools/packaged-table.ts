@@ -5,11 +5,11 @@ import { OFF_LIST_LOCK } from "../src/modules/nutrition/packagedRepo.js";
 import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
 import type { Sql } from "postgres";
-import type { OffRow, RowResult } from "../src/modules/nutrition/packagedRows.js";
+import type { RowResult, WrittenRow } from "../src/modules/nutrition/packagedRows.js";
 import { noRefusals, type Refusals } from "./packaged-files.js";
 
-const SHARED = ["code", "name", "kcal", "protein_g", "carbs_g", "fat_g", "fiber_g", "sugars_g", "sat_fat_g", "unsat_fat_g", "sodium_mg", "potassium_mg", "calcium_mg", "iron_mg", "magnesium_mg", "vitamin_d_ug", "serving_size", "quantity", "numbers_fit"] as const;
-const OFF_ONLY = ["allergens", "traces", "listed_as_typed"] as const;
+const SHARED = ["search_text", "code", "name", "kcal", "protein_g", "carbs_g", "fat_g", "fiber_g", "sugars_g", "sat_fat_g", "unsat_fat_g", "sodium_mg", "potassium_mg", "calcium_mg", "iron_mg", "magnesium_mg", "vitamin_d_ug", "serving_size", "quantity", "numbers_fit"] as const;
+const OFF_ONLY = ["allergens", "traces", "listed_as_typed", "scans"] as const;
 
 /** A list smaller than this share of what is there is a bad file, not a smaller world. */
 const LEAST_SHARE_OF_CURRENT = 0.5;
@@ -26,9 +26,9 @@ const cell = (value: string | number | boolean | null): string => {
 /** `allergenLists` leaves letters, marks, digits and spaces only, so no word needs escaping. */
 const textArray = (words: readonly string[]): string => `{${words.map((word) => `"${word}"`).join(",")}}`;
 
-const lineOf = (row: OffRow, withAllergens: boolean): string => {
-  const shared = [row.code, row.name, row.kcal, row.proteinG, row.carbsG, row.fatG, row.more.fiberG, row.more.sugarsG, row.more.satFatG, row.more.unsatFatG, row.more.sodiumMg, row.more.potassiumMg, row.more.calciumMg, row.more.ironMg, row.more.magnesiumMg, row.more.vitaminDUg, row.servingSize, row.quantity, row.numbersFit].map(cell);
-  return `${[...shared, ...(withAllergens ? [textArray(row.allergens), textArray(row.traces), textArray(row.listedAsTyped)] : [])].join("\t")}\n`;
+const lineOf = (row: WrittenRow, withAllergens: boolean): string => {
+  const shared = [row.searchText, row.code, row.name, row.kcal, row.proteinG, row.carbsG, row.fatG, row.more.fiberG, row.more.sugarsG, row.more.satFatG, row.more.unsatFatG, row.more.sodiumMg, row.more.potassiumMg, row.more.calciumMg, row.more.ironMg, row.more.magnesiumMg, row.more.vitaminDUg, row.servingSize, row.quantity, row.numbersFit].map(cell);
+  return `${[...shared, ...(withAllergens ? [textArray(row.allergens), textArray(row.traces), textArray(row.listedAsTyped), String(row.scans)] : [])].join("\t")}\n`;
 };
 
 export interface ListReport {

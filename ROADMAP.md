@@ -617,7 +617,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
         - 33b-iii-a. [x] **Our own copy of the food lists, and the barcode lookup on the server** — merged 2026-10-31 (PR #403).
         - 33b-iii-b. [x] **Scan a barcode on the phone** — merged 2026-10-31 (PR #414).
         - 33b-iii-c. [x] **Read a label with Luna** — merged 2026-11-01 (PR #418).
-        - 33b-iii-d. [ ] **The food search and the meal scan read our copy**, so nothing asks Open Food Facts live; every feature kept; a common word answers quickly.
+        - 33b-iii-d. [x] **The food search and the meal scan read our copy** — merged 2026-11-01 (PR #424).
 34. **More food** (split 2026-10-13: the parts on the server need no phone).
     - 34a. [x] **Ten more figures kept with every food in a meal** — merged 2026-10-13 (PR #245).
     - 34b. [ ] **The ten figures on the Food screen** (7a-v, the rest): on a saved meal, the photo sheet's rows and under the rings, each beside a published daily reference whose source its plan names; "about, N items not known"; a product's figures said to be from its label. Waits for 32b.
