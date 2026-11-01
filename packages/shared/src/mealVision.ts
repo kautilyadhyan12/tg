@@ -38,7 +38,7 @@ export const saysNotIdentified = (name: string): boolean => {
 const NAME_MOST = 200;
 const cleanName = (v: unknown): unknown => {
   if (typeof v !== "string") return v;
-  return Array.from(v).filter((c) => { const n = c.codePointAt(0) ?? 0; return n > 31 && n !== 127; }).join("").slice(0, NAME_MOST);
+  return Array.from(v).filter((c) => { const n = c.codePointAt(0) ?? 0; return n > 31 && n !== 127; }).slice(0, NAME_MOST).join("");
 };
 const optionalNameSchema = z.preprocess(
   (v) => { const clean = cleanName(v); return typeof clean === "string" && isNoValueWord(clean) ? null : clean; },

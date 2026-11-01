@@ -1,7 +1,7 @@
 // ROADMAP Stage 5 33b-iii-c. The worst thing: a misread number (kJ as kcal, a serving as 100 g, a %
 // Daily Value as grams) saved and shown again on every scan. Cases are what real labels print.
 import { describe, expect, it } from "vitest";
-import { allergensFrom, labelEvidenceSchema, panelOfLabel, printedAmount, type LabelColumn } from "../src/index.js";
+import { allergensFrom, labelEvidenceSchema, mealVisionEvidenceSchema, panelOfLabel, printedAmount, type LabelColumn } from "../src/index.js";
 
 const column = (over: Partial<LabelColumn>): LabelColumn => ({ per: "100g", serving_amount: null, serving_unit: null, prepared: false, kcal: null, kj: null, protein_g: null, carbs_g: null, fat_g: null, ...over });
 
@@ -52,6 +52,15 @@ describe("allergens: the worst thing, one read and then lost", () => {
     const read = allergensFrom([long]);
     expect(read.join(" ")).toBe(long);
     expect(read.every((w) => w.length <= 120)).toBe(true);
+  });
+});
+
+describe("a name cut to fit", () => {
+  it("never leaves half an emoji, which the database refuses", () => {
+    const parsed = labelEvidenceSchema.parse({ is_nutrition_label: true, name: `${"x".repeat(79)}\u{1F36A}y`, columns: [], contains: [], may_contain: [], photo_quality: "good" });
+    expect(parsed.name).toBe(`${"x".repeat(79)}\u{1F36A}`);
+    const meal = mealVisionEvidenceSchema.parse({ meal_name: "m", items: [[`${"x".repeat(199)}\u{1F36A}y`, "h", null, null, null, null, null, null]], unknown_items: [], photo_quality: "good" });
+    expect(JSON.stringify(meal.items[0])).toContain(`${"x".repeat(199)}\u{1F36A}`);
   });
 });
 

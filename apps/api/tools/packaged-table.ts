@@ -102,7 +102,7 @@ const markSeconds = (downloadMade: Date): number => Math.floor(downloadMade.getT
 export async function recordFullLoad(sql: Sql, downloadMade: Date): Promise<void> {
   const seconds = markSeconds(downloadMade);
   await sql`DELETE FROM off_daily_files WHERE to_second > ${seconds}`;
-  await sql`INSERT INTO off_daily_files (name, to_second, products, written, removed) VALUES (${`full_${downloadMade.toISOString()}`}, ${seconds}, 0, 0, 0)`;
+  await sql`INSERT INTO off_daily_files (name, to_second, products, written, removed) VALUES (${`full_${downloadMade.toISOString()}`}, ${seconds}, 0, 0, 0) ON CONFLICT (name) DO UPDATE SET to_second = EXCLUDED.to_second`;
 }
 
 /** Whether the nightly files still reach back to a download of this date: if not, days would be lost. */

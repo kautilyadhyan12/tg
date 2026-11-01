@@ -66,7 +66,7 @@ export type LabelColumn = z.infer<typeof labelColumnSchema>;
 
 export const labelEvidenceSchema = z.object({
   is_nutrition_label: z.boolean(),
-  name: z.preprocess((v) => (typeof v === "string" && withoutControls(v) !== "" ? withoutControls(v).slice(0, 80) : null), z.string().nullable()),
+  name: z.preprocess((v) => (typeof v === "string" && withoutControls(v) !== "" ? Array.from(withoutControls(v)).slice(0, 80).join("") : null), z.string().nullable()),
   columns: z.array(labelColumnSchema).max(8),
   contains: wordList,
   may_contain: wordList,

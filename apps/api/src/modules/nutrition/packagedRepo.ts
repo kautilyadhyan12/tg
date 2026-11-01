@@ -111,6 +111,9 @@ export async function applyDailyFile(
     await tx`SET LOCAL lock_timeout = '30s'`;
     const [free] = await tx<{ ok: boolean }[]>`SELECT pg_try_advisory_xact_lock_shared(${OFF_LIST_LOCK}) AS ok`;
     if (free?.ok !== true) throw new PackagedListBusy("a full import of the list is running");
+    // A file whose read began before an import finished, and which that import already covers.
+    const [mark] = await tx<{ to_second: string | null }[]>`SELECT max(to_second) AS to_second FROM off_daily_files WHERE name LIKE 'full\_%'`;
+    if (mark?.to_second != null && file.toSecond <= Number(mark.to_second)) return null;
     const claimed = await tx`
       INSERT INTO off_daily_files (name, to_second, products, written, removed)
       VALUES (${file.name}, ${file.toSecond}, ${file.products}, 0, 0)

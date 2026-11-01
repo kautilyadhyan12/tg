@@ -1360,13 +1360,10 @@ const scanClaimKey = (userId: string, value: string): string => `${scanKey(userI
 /** One scan is one meal: the first meal to ask holds it, and that same meal can ask again. */
 async function claimScan(deps: NutritionDeps, userId: string, value: string, mealId: string): Promise<void> {
   const key = scanClaimKey(userId, value);
-  const nth = await deps.redis.incrWithTtl(key, MEAL_SCAN_SAVE_SECONDS);
-  if (nth === null) throw new NutritionError(503, "nutrition_unavailable", "Meal confirmation is temporarily unavailable.");
-  if (nth === 1) {
-    if (!(await deps.redis.setex(`${key}:by`, MEAL_SCAN_SAVE_SECONDS, mealId))) throw new NutritionError(503, "nutrition_unavailable", "Meal confirmation is temporarily unavailable.");
-    return;
-  }
-  if ((await deps.redis.get(`${key}:by`)) !== mealId) throw new NutritionError(400, "invalid_scan", "Invalid or expired scan token.");
+  const first = await deps.redis.setNx(key, MEAL_SCAN_SAVE_SECONDS, mealId);
+  if (first === null) throw new NutritionError(503, "nutrition_unavailable", "Meal confirmation is temporarily unavailable.");
+  if (first) return;
+  if ((await deps.redis.get(key)) !== mealId) throw new NutritionError(400, "invalid_scan", "Invalid or expired scan token.");
 }
 
 async function takeDraft(deps: NutritionDeps, userId: string, value: string): Promise<Draft> {
@@ -1618,6 +1615,8 @@ async function confirmNewMeal(deps: NutritionDeps, userId: string, input: Confir
     if (kept !== null) return kept;
     throw new NutritionError(404, "not_found", "Meal not found.");
   }
+  // A save under way holds the scan until it commits, so this path asks the same claim first.
+  await claimScan(deps, userId, input.scanToken, input.id ?? randomUUID());
   const recovered = await takeDraft(deps, userId, input.scanToken);
   const built = await buildConfirmItems(deps, userId, recovered, input);
   return await writeMeal(deps, userId, input.id, confirmWrite(input, recovered, built));

@@ -323,6 +323,7 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     const flaky:RedisLike={
       incrWithTtl:(k,t)=>base.incrWithTtl(k,t),
       decrIfPositive:(k)=>base.decrIfPositive(k),
+      setNx:(k,t,v)=>base.setNx(k,t,v),
       // The draft key (`meal-scan:`) reads null once — the "Redis momentarily
       // down" moment. take() below still sees it: the flap recovered.
       get:(k)=>k.startsWith("meal-scan:")&&blindGets-->0?Promise.resolve(null):base.get(k),
@@ -349,6 +350,7 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     const recording:RedisLike={
       incrWithTtl:(k,t)=>base.incrWithTtl(k,t),
       decrIfPositive:(k)=>base.decrIfPositive(k),
+      setNx:(k,t,v)=>base.setNx(k,t,v),
       get:(k)=>base.get(k),
       setex:(k,t,v)=>{kept.push({key:k,ttl:t});return base.setex(k,t,v);},
       take:(k)=>base.take(k),

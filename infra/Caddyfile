@@ -55,12 +55,12 @@
 		# out of logs on the application side and this must not reintroduce them.
 		# The query string is dropped as well, as the api's own log drops it
 		# (logSafety.ts): it carries an invitation's unsubscribe token and a
-		# member list's search words.
+		# member list's search words. A barcode says what somebody eats, so it goes as well.
 		output stdout
 		format filter {
 			wrap json
 			fields {
-				request>uri regexp "\?.*$" ""
+				request>uri regexp "^(/v1/nutrition/barcode/)[^?]*|\?.*$" "$1"
 			}
 		}
 	}

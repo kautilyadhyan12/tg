@@ -49,6 +49,7 @@ function photoRedis(memory: RedisLike, photos: RedisLike, play: PhotoPlay): Redi
   return {
     incrWithTtl: (key, ttl) => memory.incrWithTtl(key, ttl),
     decrIfPositive: (key) => memory.decrIfPositive(key),
+    setNx: (key, ttl, value) => of(key).setNx(key, ttl, value),
     setex: (key, ttl, value) => of(key).setex(key, ttl, value),
     del: (key) => of(key).del(key),
     async get(key) {

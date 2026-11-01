@@ -263,6 +263,26 @@ d("a pack's label (real Postgres)", () => {
       expect(barcodeReplySchema.parse((await inject("GET", `/v1/nutrition/barcode/${CODE}`, person)).json())).toMatchObject({ labelId: fresh });
     });
 
+    it("the same change sent twice, its answer lost, is the person's own save and not somebody else's", async () => {
+      const person = await session("label33-again@example.com");
+      const id = randomUUID();
+      const first = barcodeReplySchema.parse((await save(id, CODE, person, { name: "First" })).json());
+      if (first.status !== "found") throw new Error(first.status);
+      expect((await save(id, CODE, person, { name: "Two", seen: first.labelSeen })).statusCode).toBe(200);
+      expect((await save(id, CODE, person, { name: "Two", seen: first.labelSeen })).statusCode).toBe(200);
+    });
+
+    it("removed labels do not pile up: at most 200 of one person's stay", async () => {
+      const person = await session("label33-pile@example.com");
+      const [row] = await sql<{ id: string }[]>`SELECT id FROM users WHERE email = 'label33-pile@example.com'`;
+      await sql`INSERT INTO member_label_foods (id, user_id, name, unit, kcal, protein_g, carbs_g, fat_g, removed_at) SELECT gen_random_uuid(), ${row?.id ?? ""}, 'x', 'g', 1, 0, 0, 0, now() FROM generate_series(1, 220)`;
+      const id = randomUUID();
+      await save(id, null, person);
+      expect((await inject("DELETE", `/v1/nutrition/labels/${id}`, person)).statusCode).toBe(204);
+      const [kept] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM member_label_foods WHERE user_id = ${row?.id ?? ""}`;
+      expect(kept?.n).toBe(200);
+    });
+
     it("an older change does not overwrite a newer one; an id cannot move to another barcode", async () => {
       const person = await session("label33-seen@example.com");
       const id = randomUUID();

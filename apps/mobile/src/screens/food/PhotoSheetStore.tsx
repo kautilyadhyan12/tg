@@ -12,6 +12,16 @@ import { readSheetFile, sheetFileText, type PhotoSheet } from "./photo";
 const StoreContext = createContext<(userId: string) => TextStore>(photoSheetFile);
 
 export function PhotoSheetStoreProvider({ store, children }: { store: (userId: string) => TextStore; children: ReactNode }) {
+  // Above every screen, as the screens are gone by then. Signing out on purpose: the photo goes too, as
+  // the next person to hold the phone is not its owner. Signed out by the server, it stays for its owner.
+  const { state } = useSession();
+  const last = useRef<string | null>(null);
+  useEffect(() => {
+    if (state.kind === "in") last.current = state.user.id;
+    if (state.kind !== "out" || state.note !== SIGNED_OUT_NOTES.own || last.current === null) return;
+    void store(last.current).write("").catch(() => undefined);
+    last.current = null;
+  }, [state, store]);
   return <StoreContext.Provider value={store}>{children}</StoreContext.Provider>;
 }
 
@@ -36,14 +46,6 @@ export function useKeptSheet(): KeptSheet {
     if (kept === null) return;
     writing.current = writing.current.then(() => kept.file.write(text)).catch(() => undefined);
   }, []);
-
-  // Signing out on purpose: the photo goes too, as the next person to hold the phone is not its owner.
-  const signedOutOnPurpose = state.kind === "out" && state.note === SIGNED_OUT_NOTES.own;
-  useEffect(() => {
-    if (!signedOutOnPurpose || store.current === null) return;
-    write("");
-    store.current = null;
-  }, [signedOutOnPurpose, write]);
 
   useEffect(() => {
     setSheet(undefined);

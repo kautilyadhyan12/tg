@@ -86,6 +86,10 @@ function parse<S extends z.ZodTypeAny>(
   return parsed.data;
 }
 
+/** Photos being received across the server at one moment. A body is up to 14 MB, and memory is what this
+ *  protects: 60 held open ended a server with a 1 GB heap. A phone's photo takes a moment to arrive. */
+const BODIES_AT_ONCE_MOST = 20;
+
 const notFound = (req: FastifyRequest, reply: FastifyReply) =>
   reply.status(404).send({ error: "not_found", message: "Resource not found", requestId: req.id });
 
@@ -203,6 +207,12 @@ export function registerNutritionRoutes(
     const id = authedUserId(req);
     const since = sendingBody.get(id);
     if (since !== undefined && Date.now() - since < REQUEST_TIMEOUT_MS) {
+      await reply.status(429).send({ error: "rate_limited", message: "Too many requests. Please try again shortly.", requestId: req.id });
+      return;
+    }
+    // Accounts are free, so one body each is not enough: the whole server receives this many at a time.
+    for (const [who, at] of sendingBody) if (Date.now() - at >= REQUEST_TIMEOUT_MS) sendingBody.delete(who);
+    if (sendingBody.size >= BODIES_AT_ONCE_MOST) {
       await reply.status(429).send({ error: "rate_limited", message: "Too many requests. Please try again shortly.", requestId: req.id });
       return;
     }

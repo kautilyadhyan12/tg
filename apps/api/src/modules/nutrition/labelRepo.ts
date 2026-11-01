@@ -37,6 +37,15 @@ export interface LabelFoodValues {
   seen: string | null;
 }
 
+const sameList = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((word, at) => word === b[at]);
+const sameValues = (row: LabelFoodRow, v: LabelFoodValues): boolean =>
+  row.name === v.name && row.unit === v.unit && row.kcal === v.kcal && row.protein_g === v.proteinG && row.carbs_g === v.carbsG && row.fat_g === v.fatG
+  && row.serving_amount === v.servingAmount && sameList(row.contains, v.contains) && sameList(row.may_contain, v.mayContain);
+
+/** How long a removed label stays, for a meal still waiting on a phone, and how many of one person's. */
+const REMOVED_KEPT_DAYS = 30;
+const REMOVED_KEPT_MOST = LABEL_FOODS_MOST;
+
 const COLUMNS = "id, code, name, unit, kcal, protein_g, carbs_g, fat_g, serving_amount, contains, may_contain, updated_at::text AS seen";
 
 export async function labelFoodByCode(sql: Sql, userId: string, code: string): Promise<LabelFoodRow | null> {
@@ -72,7 +81,11 @@ export async function saveLabelFood(sql: Sql, userId: string, id: string, v: Lab
     const same = held ?? null;
     if (same !== null && (same.user_id !== userId || same.removed)) return "taken";
     if (same !== null && v.code !== null && same.code !== v.code) return "other_code";
-    if (same !== null && v.seen !== null && same.seen !== v.seen) return "changed";
+    if (same !== null && v.seen !== null && same.seen !== v.seen) {
+      // The person's own save sent again, its answer having been lost: not somebody else's change.
+      const [row] = await tx<LabelFoodRow[]>`SELECT ${tx.unsafe(COLUMNS)} FROM member_label_foods WHERE id = ${id}`;
+      return row !== undefined && sameValues(row, v) ? row : "changed";
+    }
     const [byCode] = same !== null || v.code === null ? [] : await tx<{ id: string }[]>`
       SELECT id FROM member_label_foods WHERE user_id = ${userId} AND code = ${v.code} AND removed_at IS NULL`;
     const target = same !== null ? id : byCode?.id ?? null;
@@ -96,5 +109,10 @@ export async function saveLabelFood(sql: Sql, userId: string, id: string, v: Lab
 
 export async function removeLabelFood(sql: Sql, userId: string, id: string): Promise<boolean> {
   const gone = await sql`UPDATE member_label_foods SET removed_at = now() WHERE id = ${id} AND user_id = ${userId} AND removed_at IS NULL`;
-  return gone.count > 0;
+  if (gone.count === 0) return false;
+  await sql`
+    DELETE FROM member_label_foods WHERE user_id = ${userId} AND removed_at IS NOT NULL AND (
+      removed_at < now() - make_interval(days => ${REMOVED_KEPT_DAYS})
+      OR id NOT IN (SELECT id FROM member_label_foods WHERE user_id = ${userId} AND removed_at IS NOT NULL ORDER BY removed_at DESC, id LIMIT ${REMOVED_KEPT_MOST}))`;
+  return true;
 }
