@@ -50,6 +50,8 @@ import {
 } from "./dashboard/words";
 import { Clock } from "./dashboard/Clock";
 import { useRead, type Read } from "./dashboard/useRead";
+import { IDEAS_READ, MealIdeas } from "./food/MealIdeas";
+import { useMealOutbox } from "./food/MealOutbox";
 import { GOALS_READ, GoalsBox, GoalsPage, type GoalsOpen } from "./Goals";
 import { LeaderboardPage, type LeaderboardPlace } from "./gym/Leaderboard";
 import { rankWords } from "./gym/leaderboardView";
@@ -70,6 +72,7 @@ export const DASHBOARD_READS = {
   runs: "/v1/geo/runs?limit=3",
   meals: "/v1/nutrition/meals?limit=3",
   goals: GOALS_READ,
+  ideas: IDEAS_READ,
 } as const;
 /** Your Rank's: which gym. The Gym tab reads the same. */
 const PLACES_READ = "/v1/orgs/mine";
@@ -85,7 +88,9 @@ export function DashboardScreen() {
   const challenges = useRead(DASHBOARD_READS.challenges, weeklyChallengesSchema);
   const recent = useRead(DASHBOARD_READS.recent, workoutPageSchema);
   const runs = useRead(DASHBOARD_READS.runs, runPageSchema);
-  const meals = useRead(DASHBOARD_READS.meals, mealPageSchema);
+  // A meal logged from the Recommended box shows in Recent Activity once the server has it.
+  const { view: mealsSent } = useMealOutbox();
+  const meals = useRead(DASHBOARD_READS.meals, mealPageSchema, mealsSent.sent);
   // A goal's days are the person's own: read again once the zone is saved.
   const goals = useRead(DASHBOARD_READS.goals, goalsResponseSchema, zoneSaved);
   const [goalsOpen, setGoalsOpen] = useState<GoalsOpen | null>(null);
@@ -181,6 +186,11 @@ export function DashboardScreen() {
         )}
         <Badges me={me.read} onPress={toMe} />
       </Swipe>
+      <MealIdeas
+        onMore={() => {
+          go.navigate("Food", { today: Date.now() });
+        }}
+      />
       <Recent workouts={recent.read} runs={runs.read} meals={meals.read} />
       <Ready onPress={toWorkout} />
       <GoalsPage
