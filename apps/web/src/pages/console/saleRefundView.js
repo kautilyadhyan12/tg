@@ -213,7 +213,7 @@ export function saleRefundLines(sale, named = false) {
     toCard: r.method === 'terminal',
     note: r.square?.late === true ? CARD_REFUND_LATE_LINE : null,
     // Square cannot say whether the product came back.
-    stockNote: r.square?.inSquare === true && r.voided === null && sale.stockCounted === true && r.restocked === 0 ? IN_SQUARE_STOCK_LINE : null,
+    stockNote: r.square?.inSquare === true && r.voided === null && sale.stockCounted === true && r.restocked === 0 && restockLeft(sale) > 0 ? IN_SQUARE_STOCK_LINE : null,
     // Made inside Square: Square says neither why nor who.
     detail: r.square?.inSquare === true ? joined([
       named ? sale.itemName : null,

@@ -114,6 +114,8 @@ describe('a refund made in Square', () => {
     expect(line.detail).toContain('Refunded in Square to Visa ending 1111');
     expect(line.stockNote).toBe(IN_SQUARE_STOCK_LINE);
     expect(saleRefundLines({ ...towel, refunds: [inSquare] })[0].stockNote).toBeNull();
+    // All of what was sold is already back on the shelf: nothing is left to say.
+    expect(saleRefundLines({ ...water, refunds: [inSquare, { ...inSquare, id: 'r2', restocked: 2 }] })[0].stockNote).toBeNull();
     expect(saleRefundLines({ ...water, refunds: [{ ...inSquare, restocked: 1 }] })[0].stockNote).toBeNull();
     expect(saleRefundLines({ ...water, refunds: [{ ...inSquare, square: { ...inSquare.square, inSquare: false } }] })[0].stockNote).toBeNull();
   });
