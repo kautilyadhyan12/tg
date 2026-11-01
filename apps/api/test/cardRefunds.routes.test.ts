@@ -646,6 +646,9 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
       expect(audit).toMatchObject({ actor_user_id: null });
       expect((await note(maya, 1000, "card_at_desk")).statusCode).toBe(200);
       expect((await live(maya)).map((r) => String(r[1])).sort()).toEqual(["card_at_desk", "company"]);
+      // Only up to what was crossed out: Square's next refund noted by card is still refused.
+      await message(gym.acct.merchantId, square.refundInSquare(maya.squarePaymentId, 500).id);
+      expect((await note(maya, 500, "card_at_desk")).statusCode).toBe(409);
     });
 
     it("a refund sent from here counts too: a note by card of the same money is refused", async () => {

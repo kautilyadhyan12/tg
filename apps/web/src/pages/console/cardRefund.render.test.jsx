@@ -518,11 +518,11 @@ describe('What the box and the page say', () => {
     expect(cardRefundOpenLine({ amountMinor: 4999, on: TODAY, lost: false, onTerminal: true, decided: null }, 'USD')).toBe('A refund of $49.99 is waiting on the Terminal.');
   });
 
-  it('money already refunded inside Square is said, with Note a refund beside it', async () => {
+  it('money refunded inside Square and not here yet is said, and that it will come by itself', async () => {
     orgService.getCardRefund.mockResolvedValue({ data: { card: VISA, leftMinor: 3999, refundedInSquareMinor: 1000, block: null } });
     draw();
     const box = await openBox();
-    await box.findByText('Square shows $10.00 of this payment was already refunded there. Note that refund here so your records match.');
+    await box.findByText('Square shows $10.00 more of this payment was refunded there. It will appear here by itself within the hour.');
     expect(box.getByRole('button', { name: 'Refund $39.99 to Visa ending 1111' })).toBeTruthy();
     expect(box.getByRole('button', { name: 'Note a refund' })).toBeTruthy();
   });

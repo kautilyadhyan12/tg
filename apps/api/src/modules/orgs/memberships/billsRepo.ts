@@ -466,10 +466,12 @@ export async function noteRefund(
         SELECT COALESCE(sum(r.amount_minor), 0)::int AS total
         FROM gym_square_refunds q JOIN gym_member_refunds r ON r.gym_id = q.gym_id AND r.id = q.member_refund_id AND r.undone_at IS NULL
         WHERE q.gym_id = ${input.gymId} AND q.payment_id = ${input.paymentId} AND q.square_refund_id IS NOT NULL AND q.outcome IS DISTINCT FROM 'failed'`;
-      // A note the app crossed out for this money and noted again is staff saying it is another refund.
-      const [crossedOut] = await tx<{ id: string }[]>`
-        SELECT id FROM gym_member_refunds WHERE gym_id = ${input.gymId} AND payment_id = ${input.paymentId} AND void_reason = 'in_square' LIMIT 1`;
-      if (crossedOut === undefined && input.amountMinor <= (inSquare?.total ?? 0)) return { kind: "refund_in_square", amountMinor: inSquare?.total ?? 0, currency: payment.currency };
+      // What the app crossed out and staff note again, up to that amount, is staff saying it is another refund.
+      const [crossedOut] = await tx<{ left: number }[]>`
+        SELECT (COALESCE(sum(amount_minor) FILTER (WHERE void_reason = 'in_square'), 0)
+              - COALESCE(sum(amount_minor) FILTER (WHERE undone_at IS NULL AND method = 'card_at_desk'), 0))::int AS left
+        FROM gym_member_refunds WHERE gym_id = ${input.gymId} AND payment_id = ${input.paymentId}`;
+      if (input.amountMinor > (crossedOut?.left ?? 0) && input.amountMinor <= (inSquare?.total ?? 0)) return { kind: "refund_in_square", amountMinor: inSquare?.total ?? 0, currency: payment.currency };
     }
 
     const refund = refundMemberPayment(bill, standing, input.amountMinor);
