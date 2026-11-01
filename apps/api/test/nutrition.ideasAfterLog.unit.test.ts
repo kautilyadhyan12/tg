@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { ideasSeed } from "../src/modules/nutrition/service.js";
 import { suggestMeals } from "../src/modules/nutrition/suggest.js";
 
-const seedOf = (person: number, meals: number) => `person-${String(person)}:${String(meals)}`;
+const seedOf = (person: number, meals: number) => ideasSeed(`person-${String(person)}`, meals);
 const foods = (idea: { items: { canonical: string }[] }) => idea.items.map((f) => f.canonical).sort().join("+");
 
 describe("what to eat next, once an idea is logged", () => {

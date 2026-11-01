@@ -48,7 +48,7 @@ interface MealIdeasProps {
 export function MealIdeas({ onMore, onAnswered }: MealIdeasProps) {
   const { read, again, outbox, view, waiting, old } = useIdeas();
   const onDashboard = onMore !== undefined;
-  const [said, setSaid] = useState<string | null>(null);
+  const [said, setSaid] = useState<{ words: string; meal: string | null } | null>(null);
   const [later, setLater] = useState(false);
   const [setupAt, setSetupAt] = useState<SetupScreenId | "where" | null>(null);
   const [logging, setLogging] = useState(false);
@@ -64,11 +64,12 @@ export function MealIdeas({ onMore, onAnswered }: MealIdeasProps) {
     setLogging(true);
     const now = new Date();
     const type = ideaMealType(now.getHours());
-    const kept = await outbox.add(ideaAsMeal(idea, newGoalId(), type, now));
+    const id = newGoalId();
+    const kept = await outbox.add(ideaAsMeal(idea, id, type, now));
     loggingNow.current = false;
     setLogging(false);
     setLater(false);
-    setSaid(kept ? `Logged to ${mealTypeName(type)}.` : "Too many meals are waiting to send. Go online, then log this one.");
+    setSaid(kept ? { words: `Logged to ${mealTypeName(type)}.`, meal: id } : { words: "Too many meals are waiting to send. Go online, then log this one.", meal: null });
   };
 
   const row = (idea: MealIdea) => (
@@ -101,7 +102,7 @@ export function MealIdeas({ onMore, onAnswered }: MealIdeasProps) {
       <View style={styles.row}>
         <Icon name="wifioff" size={16} colour="textSoft" />
         <Txt kind="small" style={styles.grow}>
-          Waiting to send your meal.
+          {view.unsaved ? "Waiting to send. It couldn’t be saved on this phone yet, so keep the app open." : "Waiting to send your meal."}
         </Txt>
       </View>
     );
@@ -187,7 +188,7 @@ export function MealIdeas({ onMore, onAnswered }: MealIdeasProps) {
         >
           {rest.map((meal, at) => (
             <View key={String(at)} style={styles.later}>
-              <Txt kind="strong">Meal {String(at + 2)} · about {count(meal.kcalTarget)} kcal</Txt>
+              <Txt kind="strong">{at === 0 ? "1 meal later" : `${String(at + 1)} meals later`} · about {count(meal.kcalTarget)} kcal</Txt>
               {meal.ideas.map(row)}
             </View>
           ))}
@@ -198,10 +199,11 @@ export function MealIdeas({ onMore, onAnswered }: MealIdeasProps) {
     );
   }
 
+  // A meal the server refused was not logged, whatever was said when it was kept.
   const saidLine =
-    said === null ? null : (
+    said === null || view.refused.some((r) => r.id === said.meal) ? null : (
       <Txt kind="small" colour="orange">
-        {said}
+        {said.words}
       </Txt>
     );
   return (

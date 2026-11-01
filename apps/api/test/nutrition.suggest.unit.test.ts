@@ -197,6 +197,26 @@ describe("what is suggested", () => {
   });
 });
 
+describe("the least an idea holds", () => {
+  it("no idea is under what counts as a meal, and every meal has an idea, down to the last calories of a day", () => {
+    let days = 0;
+    for (const diet of ["vegan", "vegetarian", "vegetarian_eggs", "non_vegetarian"] as const) {
+      for (let left = LEAST_MEAL_KCAL; left <= 400; left += 5) {
+        for (let person = 0; person < 40; person++) {
+          const reply = suggestMeals(input({ seed: `person-${String(person)}`, diet, kcalEaten: 2000 - left, mealsLogged: 2 }));
+          days++;
+          expect(reply.meals.length, `${diet} ${String(left)} ${String(person)}`).toBeGreaterThan(0);
+          for (const meal of reply.meals) {
+            expect(meal.ideas.length).toBeGreaterThan(0);
+            for (const idea of meal.ideas) expect(idea.totals.kcal).toBeGreaterThanOrEqual(LEAST_MEAL_KCAL);
+          }
+        }
+      }
+    }
+    expect(days).toBeGreaterThan(0);
+  });
+});
+
 describe("how many meals, and how big: every class of day", () => {
   const cases: readonly (readonly [name: string, over: Partial<SuggestInput>, meals: number, kcalTarget: number | null])[] = [
     ["nothing eaten, three meals a day", {}, 3, 667],

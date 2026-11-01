@@ -259,7 +259,7 @@ export function ideaMaker(
   seed: string,
   diet: Diet,
   avoid: Iterable<string> = [],
-): (kcalTarget: number, wanted: MealIdeaKind, mostKcal?: number) => MealIdea | null {
+): (kcalTarget: number, wanted: MealIdeaKind, mostKcal?: number, leastKcal?: number) => MealIdea | null {
   const next = drawer(hash(seed));
   const allowed = (role: SuggestRole): CuratedFood[] => SUGGEST_POOLS[role].filter((f) => dietAllows(diet, f.diet));
   /** The foods already in an idea of this reply, and those `avoid` names (a meal being swapped). */
@@ -280,7 +280,7 @@ export function ideaMaker(
   const given = new Set<string>();
   const keyOf = (parts: readonly Part[]): string => parts.map((p) => `${p.food.canonical}:${String(p.grams)}`).sort().join("|");
 
-  return (kcalTarget, wanted, mostKcal = Infinity) => {
+  return (kcalTarget, wanted, mostKcal = Infinity, leastKcal = 0) => {
     const size = (...shares: Share[]): Part[] => sized(shares, kcalTarget);
     const plate = (): Part[] => size([pick("protein"), "protein", 0.42], [pick("starch"), "starch", 0.48], [pick("vegetable"), "vegetable", 0.1]);
     const dish = (): Part[] => {
@@ -303,7 +303,7 @@ export function ideaMaker(
     };
     const shapes: Readonly<Record<MealIdeaKind, () => Part[]>> = { plate, dish, light: kcalTarget < LEAST_PLATE_KCAL ? snack : light };
     const fits = (parts: readonly Part[]): boolean =>
-      Math.abs(partsKcal(parts) - kcalTarget) <= kcalTarget * IDEA_TOLERANCE && partsKcal(parts) <= mostKcal
+      Math.abs(partsKcal(parts) - kcalTarget) <= kcalTarget * IDEA_TOLERANCE && partsKcal(parts) <= mostKcal && partsKcal(parts) >= leastKcal
       && partsGrams(parts) <= MOST_IDEA_GRAMS && !given.has(keyOf(parts));
 
     // The shape drawn again until its foods can be sized to the meal. Where no
@@ -333,10 +333,11 @@ export function suggestMeals(input: SuggestInput): Suggested {
   for (let m = 0; m < count; m++) {
     const ideas: MealIdea[] = [];
     for (const wanted of kindsFor(kcalTarget)) {
-      const idea = make(kcalTarget, wanted);
+      // Under the least a meal holds, a logged idea would not count as a meal, and would be offered again.
+      const idea = make(kcalTarget, wanted, Infinity, LEAST_MEAL_KCAL);
       if (idea !== null) ideas.push(idea);
     }
-    meals.push({ kcalTarget, ideas });
+    if (ideas.length > 0) meals.push({ kcalTarget, ideas });
   }
   return { kcalLeft, meals };
 }

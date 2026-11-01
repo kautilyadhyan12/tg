@@ -74,6 +74,8 @@ function server(world: World, more: Record<string, Route> = {}) {
     "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }),
     "/v1/nutrition/targets": () => ({ status: 200, body: TARGETS }),
     "/v1/nutrition/suggestions": () => world.ideas(),
+    "/v1/workouts": () => ({ status: 200, body: { items: [], nextCursor: null, limitedToDays: 90, hasAnyWorkouts: false } }),
+    "/v1/geo/runs": () => ({ status: 200, body: { items: [], nextCursor: null } }),
     "/v1/nutrition/meals": (body) => {
       if (body === undefined) return { status: 200, body: { items: world.meals, nextCursor: null } };
       const refused = world.save?.();
@@ -118,8 +120,14 @@ describe("the worst thing: one tap saves one meal, at the calories it showed", (
     });
     const s = await open(world, "Food", slow);
     const log = await logRice();
-    await fireEvent.press(log);
-    await fireEvent.press(log);
+    // Both presses in one go, with no drawing between: the row is still there for the second.
+    const press = log.props.onClick as (event: object) => void;
+    expect(typeof press).toBe("function");
+    await act(async () => {
+      press({});
+      press({});
+      await Promise.resolve();
+    });
     await act(async () => {
       release();
       await Promise.resolve();
@@ -194,6 +202,14 @@ describe("the worst thing: one tap saves one meal, at the calories it showed", (
     await fireEvent.press(await logRice());
     expect(await screen.findByText(/Chicken breast \+ Rice wasn’t saved\. That food is no longer on the list\./)).toBeTruthy();
     expect(world.meals).toHaveLength(0);
+    expect(screen.queryByText(/^Logged to /)).toBeNull();
+  });
+
+  it("a meal the phone couldn't write to its file says to keep the app open", async () => {
+    const failing = (): TextStore => ({ read: () => Promise.resolve(null), write: () => Promise.reject(new Error("disk full")) });
+    await open({ ideas: () => ({ status: 200, body: answer() }), save: lost, meals: [] }, "Dashboard", failing);
+    await fireEvent.press(await logRice());
+    expect(await screen.findByText("Waiting to send. It couldn’t be saved on this phone yet, so keep the app open.")).toBeTruthy();
   });
 });
 
@@ -205,8 +221,12 @@ describe("the Food screen's box", () => {
     expect(box.getByText("Chicken breast 150 g")).toBeTruthy();
     expect(box.getByText(/^508 kcal · 40 g protein/)).toBeTruthy();
     expect(box.queryByRole("button", { name: "Log Salmon" })).toBeNull();
+    expect(screen.getAllByText(FOOD_ALLERGY_CAUTION)).toHaveLength(1);
     await fireEvent.press(box.getByRole("button", { name: "1 more meal today" }));
     expect(await screen.findByRole("button", { name: "Log Salmon" })).toBeTruthy();
+    expect(screen.getByText(/^1 meal later · about 500 kcal/)).toBeTruthy();
+    // The box that opens carries the line too.
+    expect(screen.getAllByText(FOOD_ALLERGY_CAUTION)).toHaveLength(2);
   });
 
   it("always carries the allergy line, and the label line only for a vegetarian or vegan", async () => {
@@ -230,7 +250,8 @@ describe("why the box has no ideas", () => {
   it("names the food questions still to answer, with a button", async () => {
     await open({ ideas: () => ({ status: 200, body: { status: "needs_answers", missing: ["diet", "mealsPerDay"] } }), meals: [] }, "Food");
     expect(await screen.findByText(/To see meal ideas, answer your diet and how many meals a day\./)).toBeTruthy();
-    expect(within(screen.getByTestId("meal-ideas-box")).getByRole("button", { name: "Answer now" })).toBeTruthy();
+    await fireEvent.press(within(screen.getByTestId("meal-ideas-box")).getByRole("button", { name: "Answer now" }));
+    expect(await screen.findByTestId("setup")).toBeTruthy();
   });
 
   it("no calorie number: said on the Dashboard; on the Food screen the rings already ask", async () => {
@@ -240,6 +261,9 @@ describe("why the box has no ideas", () => {
     await waitFor(() => {
       expect(screen.queryByTestId("meal-ideas-box")).toBeNull();
     });
+    await fireEvent.press(await screen.findByRole("tab", { name: "Dashboard" }));
+    await fireEvent.press(within(screen.getByTestId("recommended-box")).getByRole("button", { name: "Answer now" }));
+    expect(await screen.findByTestId("setup")).toBeTruthy();
   });
 
   it("today's calories eaten: says so, with no made-up idea", async () => {
@@ -281,6 +305,8 @@ describe("the Dashboard's Recommended box", () => {
       expect(world.meals).toHaveLength(1);
     });
     expect(await box.findByRole("button", { name: "Log Salmon" })).toBeTruthy();
+    // And it shows in Recent Activity, read again once the server has it.
+    expect(await within(screen.getByTestId("recent-activity")).findByText("Chicken breast + Rice")).toBeTruthy();
   });
 
   it("More ideas opens the Food tab on today, from any day it was left on", async () => {
