@@ -319,6 +319,7 @@ export function createSession(
       view,
       visibilityOk: accepted.visibilityOk,
       liveCue: frameFaults.voiceCue,
+      ...(fsmResult.currentMetric !== null ? { metric: fsmResult.currentMetric } : {}),
       signals: emittedSignals(values),
       calibrationState,
     };
