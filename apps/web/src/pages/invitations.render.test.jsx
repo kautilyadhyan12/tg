@@ -359,14 +359,14 @@ describe('Not me, and a plan of your own (ROADMAP 3b-ii-b)', () => {
     waiting({
       ...IRON,
       yourPlan: {
-        extras: [{ feature: 'meal_scan', own: { window: 'day', limit: 20 }, gym: { window: 'day', limit: 7 } }],
+        extras: [{ feature: 'meal_scan', own: { window: 'day', limit: 15 }, gym: { window: 'day', limit: 7 } }],
         cancelAt: 'app_store',
       },
     });
     draw('/dashboard');
     const box = await screen.findByTestId('your-plan');
     expect(box.textContent).toContain(
-      "You pay for your own plan. Once you join, Iron House gives you the app's features, and your own plan still adds 20 meal scans a day instead of 7.",
+      "You pay for your own plan. Once you join, Iron House gives you the app's features, and your own plan still adds 15 photo scans a day instead of 7.",
     );
     expect(box.textContent).toContain("If you don't need that, only you can cancel it, in your phone's App Store or Google Play subscriptions.");
   });

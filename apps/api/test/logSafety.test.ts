@@ -106,6 +106,11 @@ d("a database error carries a person, and nothing we write carries it on", () =>
     expect(err.message).not.toContain(NAME);
   });
 
+  it("a request line never holds a barcode, which says what somebody eats", () => {
+    expect(safeRequestSerializer({ method: "GET", url: "/v1/nutrition/barcode/8901042954516" }).url).toBe("/v1/nutrition/barcode/:code");
+    expect(safeRequestSerializer({ method: "GET", url: "/v1/nutrition/foods?q=x" }).url).toBe("/v1/nutrition/foods");
+  });
+
   it("the serializer keeps which rule refused and drops who it refused", async () => {
     const err = await refusedRow();
     const line = JSON.stringify(safeErrorSerializer(err));

@@ -339,7 +339,7 @@ const sameWords = (a: string, b: string): boolean => {
 export function seenNameOf(item: Pick<VisionItem, "name" | "canonical_hint">, food: Pick<FoodReference, "name" | "source">): string | undefined {
   if (food.source === "estimate") return undefined;
   const seen = shownFoodName(item).replaceAll(/\s+/g, " ").trim();
-  return seen === "" || sameWords(seen, food.name) ? undefined : capitalFirst(seen).slice(0, 200);
+  return seen === "" || sameWords(seen, food.name) ? undefined : capitalFirst(seen).slice(0, 200).replace(/[\ud800-\udbff]$/, "");
 }
 
 /** The foods offered first when a scanned food is not what the photo shows (ROADMAP Stage 5

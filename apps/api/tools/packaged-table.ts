@@ -1,6 +1,7 @@
 // Fills one packaged-food list from its rows (ROADMAP Stage 5 33b-iii-a): the rows into a staging table,
 // then one transaction that writes what changed and removes what the file no longer holds. Members keep
 // reading the old rows until it commits, and a second run writes nothing.
+import { OFF_LIST_LOCK } from "../src/modules/nutrition/packagedRepo.js";
 import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
 import type { Sql } from "postgres";
@@ -38,7 +39,7 @@ export interface ListReport {
   removed: number;
 }
 
-export async function fillPackagedList(sql: Sql, table: "off_products" | "usda_branded_products", rows: AsyncIterable<RowResult>): Promise<ListReport> {
+export async function fillPackagedList(sql: Sql, table: "off_products" | "usda_branded_products", rows: AsyncIterable<RowResult>, markUpTo?: Date): Promise<ListReport> {
   const withAllergens = table === "off_products";
   const columns = [...SHARED, ...(withAllergens ? OFF_ONLY : [])];
   const list = sql(columns);
@@ -56,6 +57,10 @@ export async function fillPackagedList(sql: Sql, table: "off_products" | "usda_b
   const reserved = await sql.reserve();
   try {
     await reserved`BEGIN`;
+    if (withAllergens) {
+      const [free] = await reserved<{ ok: boolean }[]>`SELECT pg_try_advisory_xact_lock(${OFF_LIST_LOCK}) AS ok`;
+      if (free?.ok !== true) throw new PackagedListRefused("The nightly update is applying a file. Try again in a few minutes.");
+    }
     await reserved`CREATE TEMP TABLE ${stage} (LIKE ${target} INCLUDING DEFAULTS) ON COMMIT DROP`;
     // The same code twice in a file (two ways of writing it): the last one stands.
     await reserved`ALTER TABLE ${stage} ADD COLUMN at bigserial`;
@@ -74,6 +79,10 @@ export async function fillPackagedList(sql: Sql, table: "off_products" | "usda_b
       WHERE (${reserved.unsafe(updates.map((c) => `${table}."${c}"`).join(", "))}) IS DISTINCT FROM (${reserved.unsafe(updates.map((c) => `EXCLUDED."${c}"`).join(", "))})
       RETURNING code`;
     const removed = await reserved`DELETE FROM ${target} t WHERE NOT EXISTS (SELECT 1 FROM ${stage} s WHERE s.code = t.code) RETURNING code`;
+    // In the same commit as the rows: a load with no mark would leave the days after it marked as done.
+    if (markUpTo !== undefined) {
+      await recordFullLoad(reserved, markUpTo);
+    }
     await reserved`COMMIT`;
     return { read, kept, refused, written: written.length, removed: removed.length };
   } catch (err) {
@@ -84,16 +93,17 @@ export async function fillPackagedList(sql: Sql, table: "off_products" | "usda_b
   }
 }
 
-/** Marks the list as loaded up to two days before now, and forgets the days after that, so the nightly
- *  update applies again the days the download might not hold: left marked as done, an older download
- *  would stay as it is. It also undoes a wrong far-off date from their list. Applying a day twice leaves
- *  the same rows. */
-export async function recordFullLoad(sql: Sql, now: Date): Promise<void> {
-  const seconds = Math.floor(now.getTime() / 1000) - 2 * 24 * 3600;
-  await sql.begin(async (tx) => {
-    await tx`DELETE FROM off_daily_files WHERE to_second > ${seconds}`;
-    await tx`
-      INSERT INTO off_daily_files (name, to_second, products, written, removed)
-      VALUES (${`full_${now.toISOString()}`}, ${seconds}, 0, 0, 0)`;
-  });
+/** A load marks the list as loaded up to a day before its download was made, not before the import
+ *  ran, and forgets the days after that, so the nightly update applies again the days the download might
+ *  not hold: left marked as done, an older download would stay as it is. It also undoes a wrong far-off
+ *  date from their list. Applying a day twice leaves the same rows. */
+const markSeconds = (downloadMade: Date): number => Math.floor(downloadMade.getTime() / 1000) - 24 * 3600;
+
+export async function recordFullLoad(sql: Sql, downloadMade: Date): Promise<void> {
+  const seconds = markSeconds(downloadMade);
+  await sql`DELETE FROM off_daily_files WHERE to_second > ${seconds}`;
+  await sql`INSERT INTO off_daily_files (name, to_second, products, written, removed) VALUES (${`full_${downloadMade.toISOString()}`}, ${seconds}, 0, 0, 0) ON CONFLICT (name) DO UPDATE SET to_second = EXCLUDED.to_second`;
 }
+
+/** Whether the nightly files still reach back to a download of this date: if not, days would be lost. */
+export const downloadStillCovered = (downloadMade: Date, oldestListedFrom: number): boolean => markSeconds(downloadMade) >= oldestListedFrom;

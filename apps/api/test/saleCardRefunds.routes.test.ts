@@ -86,7 +86,12 @@ const uniq = (): string => `${String(Date.now())}${String(seq++)}`;
 d("Refund to card at Sell (real Postgres)", { timeout: T }, () => {
   const sql = postgres(url ?? "", { prepare: false, max: 8 });
   const square = fakeSquare();
-  let clock = new Date();
+  // Noon at the gym in Chicago, the last one past: the tests move this clock on by hours, and Sell lists
+  // the gym's today, so a start near its midnight lost a sale from the list.
+  const lastNoon = new Date();
+  lastNoon.setUTCHours(17, 0, 0, 0);
+  if (lastNoon.getTime() > Date.now()) lastNoon.setUTCDate(lastNoon.getUTCDate() - 1);
+  let clock = lastNoon;
   square.state.now = () => clock;
   let app: App | undefined;
   const api = (): App => {

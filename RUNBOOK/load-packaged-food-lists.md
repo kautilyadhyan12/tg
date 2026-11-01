@@ -22,7 +22,7 @@ GB of Postgres storage in a project... blocks writes"). Never load these lists o
 real environment passes the variable's NAME, so no password reaches the shell's history.
 
 ```bash
-curl -L -A "AIHomeGym/1.0 (<the app's address>)" -o off.jsonl.gz https://static.openfoodfacts.org/data/openfoodfacts-products.jsonl.gz
+curl -L -R -A "AIHomeGym/1.0 (<the app's address>)" -o off.jsonl.gz https://static.openfoodfacts.org/data/openfoodfacts-products.jsonl.gz
 # Download the Branded Foods CSV zip from https://fdc.nal.usda.gov/download-datasets and unpack it into ./usda
 read -rs PROD_DATABASE_URL && export PROD_DATABASE_URL      # paste the address; it is not echoed
 corepack pnpm --filter api exec tsx tools/import-packaged-foods.ts --database-url-env=PROD_DATABASE_URL --off=off.jsonl.gz --usda=usda

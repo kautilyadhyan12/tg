@@ -119,7 +119,8 @@ export function safeRequestSerializer(req: {
   const mark = req.url.indexOf("?");
   return {
     method: req.method,
-    url: mark === -1 ? req.url : req.url.slice(0, mark),
+    // A barcode says what somebody eats: the line says which route, as for a query.
+    url: (mark === -1 ? req.url : req.url.slice(0, mark)).replace(/^(\/v1\/nutrition\/barcode\/)[^/]+/, "$1:code"),
     ...(req.host === undefined ? {} : { host: req.host }),
     ...(req.ip === undefined ? {} : { remoteAddress: req.ip }),
     ...(req.socket?.remotePort === undefined ? {} : { remotePort: req.socket.remotePort }),

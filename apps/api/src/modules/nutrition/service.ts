@@ -2,6 +2,11 @@
 // pipeline. Photos are NEVER persisted or logged (2B §3.4 guarantee — ruled
 // precedence over v1 §6.1's R2 path); the image exists only as a request
 // value handed to the vision adapter. Reformatted to house style at T3.
+import { randomUUID } from "node:crypto";
+import { labelFoodParamSchema, panelOfLabel, type LabelDraft, type LabelFoodSave } from "@app/shared";
+import * as labelRepo from "./labelRepo.js";
+import { numbersFit } from "./packagedRows.js";
+import type { LabelReader, LabelResult } from "./vision.adapter.js";
 import { createHash, randomBytes } from "node:crypto";
 import type { FastifyBaseLogger } from "fastify";
 import type { Sql } from "postgres";
@@ -120,6 +125,8 @@ export interface NutritionDeps {
   /** The match check on the scanner's model (ROADMAP 33a-ii); null with the key unset,
    *  where no scan runs either, and in tests that price by the tables alone. */
   matchChecker: MatchChecker | null;
+  /** Reads a pack's label (ROADMAP 33b-iii-c), on the scanner's model and key. */
+  labels: LabelReader | null;
   /** The configured scanner model: it prices and names every ledger row. */
   visionModel: MealVisionModel;
   foods: FoodSearchProvider;
@@ -142,7 +149,7 @@ const foodSchema = z.object({
   fiberG: z.number().min(0).max(100).nullable(),
   serving: z.number(),
   unit: z.string(),
-  source: z.enum(["curated", "openfoodfacts", "usda", "estimate"]),
+  source: z.enum(["curated", "openfoodfacts", "usda", "estimate", "label"]),
   more: moreNutrientsSchema.optional(),
   pack: z.object({ grams: z.number().positive().max(MAX_ITEM_GRAMS), volume: z.boolean() }).optional(),
 });
@@ -367,7 +374,7 @@ export async function recentFoodsOf(deps: NutritionDeps, userId: string): Promis
     // Found by its own name in our tables or the cache only: never searched for outside, where a
     // product of a similar name would be listed as the person's food.
     // A packaged product no list holds any more is not offered again: nothing would price it.
-    const food = isPackagedCanonical(pick.canonical) ? await findFood(deps, pick.canonical, false) : await foodOfItem(deps, pick.item, pick.canonical, false);
+    const food = isPackagedCanonical(pick.canonical) || pick.canonical.startsWith(LABEL_CANONICAL_PREFIX) ? await findFood(deps, pick.canonical, false, userId) : await foodOfItem(deps, userId, pick.item, pick.canonical, false);
     if (food !== null) found.push({ pick, food });
   }
   const measures = await measuresOf(deps, found.map((f) => f.food));
@@ -566,10 +573,13 @@ async function packagedFood(deps: Pick<NutritionDeps, "sql">, code: string): Pro
 
 /** A code from a pack (ROADMAP 33b-iii-a). A store's own code, a book's and a misread one never reach
  *  a query. Nothing leaves the server: the lists are our own copy. */
-export async function barcodeLookup(deps: NutritionDeps, raw: string): Promise<BarcodeReply> {
+export async function barcodeLookup(deps: NutritionDeps, userId: string, raw: string): Promise<BarcodeReply> {
   const kind = classifyBarcode(raw);
   if (kind.kind === "bad") return { status: "bad_code" };
   if (kind.kind === "store_only" || kind.kind === "not_a_food") return { status: kind.kind };
+  // What the person checked against this pack themselves comes before any list.
+  const theirs = await labelRepo.labelFoodByCode(deps.sql, userId, kind.code);
+  if (theirs !== null) return await labelReply(deps, theirs, kind.code);
   const found = await packagedFood(deps, kind.code);
   if (found === null) return { status: "not_found", code: kind.code };
   const [food] = await withMeasures(deps, [found.food]);
@@ -577,7 +587,16 @@ export async function barcodeLookup(deps: NutritionDeps, raw: string): Promise<B
   return { status: "found", code: kind.code, food, allergens: found.allergens, mayContain: found.mayContain, listedAsTyped: found.listedAsTyped, allergensFrom: found.allergensFrom, check: found.check };
 }
 
-async function findFood(deps: NutritionDeps, query: string, search = true): Promise<FoodReference | null> {
+async function findFood(deps: NutritionDeps, query: string, search = true, owner: string | null = null): Promise<FoodReference | null> {
+  // A label_* canonical is one person's own saved label, and only ever theirs.
+  if (query.toLowerCase().startsWith(LABEL_CANONICAL_PREFIX)) {
+    const id = query.slice(LABEL_CANONICAL_PREFIX.length);
+    if (owner === null || !labelFoodParamSchema.safeParse({ id }).success) return null;
+    // A meal waiting on the phone may hold a label removed since, and is priced by it. Offered again
+    // (no search, as Recent asks), a removed one is not.
+    const row = search ? await labelRepo.labelFoodForMeal(deps.sql, owner, id) : await labelRepo.labelFoodById(deps.sql, owner, id);
+    return row === null ? null : labelFoodReference(row);
+  }
   // An est_* canonical is a scan's own estimate, and lives only in that scan's
   // draft and the meal saved from it: nothing may look one up by name, or a
   // request could price a food at figures no table and no scan gave it.
@@ -673,7 +692,7 @@ function nutritionItem(
     // figures, and the saved meal can change its grams later (patchMeal).
     // So does a packaged product: its list changes nightly, and a later change of amount must not
     // re-price what was eaten, or fail if the product has left the list.
-    ...(food.source === "estimate" || isPackagedCanonical(food.canonical) ? { per100g: { kcal: food.kcal, proteinG: food.proteinG, carbsG: food.carbsG, fatG: food.fatG } } : {}),
+    ...(food.source === "estimate" || food.source === "label" || isPackagedCanonical(food.canonical) ? { per100g: { kcal: food.kcal, proteinG: food.proteinG, carbsG: food.carbsG, fatG: food.fatG } } : {}),
     ...(measure === null ? {} : { measure }),
     more: moreForGrams(food.more ?? MORE_NOT_KNOWN, gramsPoint),
   };
@@ -933,8 +952,7 @@ function ownRefusal(held: OwnTargetsHeld): { code: string; message: string } {
 /** Shared badge hook: failure degrades with a warn — a meal save must never
  *  break on gamification (event name + id only, R3.10). */
 async function awardMealBadges(deps: NutritionDeps, userId: string): Promise<void> {
-  const ctx = await getUserSyncContext(deps.sql, userId);
-  await onMealLogged({ sql: deps.sql }, userId, ctx.timezone).catch((err: unknown) => {
+  await getUserSyncContext(deps.sql, userId).then((ctx) => onMealLogged({ sql: deps.sql }, userId, ctx.timezone)).catch((err: unknown) => {
     deps.log.warn(
       { event: "gamification.meal_award_failed", userId, errName: err instanceof Error ? err.name : typeof err },
       "meal badge evaluation failed",
@@ -1078,6 +1096,105 @@ async function scanFailed(
     ? new ScanFailedError(retakeToken, SCAN_BUSY, 503, "scanner_unavailable")
     : new ScanFailedError(retakeToken, SCAN_UNAVAILABLE, 503, "nutrition_unavailable");
 }
+
+// ── A pack's label (ROADMAP Stage 5 33b-iii-c) ───────────────────────────────
+
+const LABEL_CANONICAL_PREFIX = "label_";
+/** A label's protein, carbs and fat can come to a little over 100 g in 100 g, from rounding a small serving. */
+const LABEL_MOST_GRAMS_PER_100 = 110;
+
+function labelFoodReference(row: labelRepo.LabelFoodRow): FoodReference {
+  return {
+    canonical: `${LABEL_CANONICAL_PREFIX}${row.id}`, name: row.name, kcal: row.kcal, proteinG: row.protein_g, carbsG: row.carbs_g, fatG: row.fat_g,
+    fiberG: null, serving: row.serving_amount ?? 100, unit: row.unit, source: "label", more: MORE_NOT_KNOWN,
+  };
+}
+
+async function labelReply(deps: NutritionDeps, row: labelRepo.LabelFoodRow, code: string | null): Promise<Extract<BarcodeReply, { status: "found" }>> {
+  const [food] = await withMeasures(deps, [labelFoodReference(row)]);
+  if (food === undefined) throw new Error("withMeasures returns one food for each it is given");
+  return labelReplyOf(row, food, code);
+}
+
+function labelReplyOf(row: labelRepo.LabelFoodRow, food: FoodSearchItem, code: string | null): Extract<BarcodeReply, { status: "found" }> {
+  return {
+    status: "found", code: code ?? "", food, allergens: row.contains, mayContain: row.may_contain, listedAsTyped: [], allergensFrom: null,
+    check: numbersFit(row.kcal, row.protein_g, row.carbs_g, row.fat_g, null) ? "fine" : "doesnt_add_up", labelId: row.id, labelSeen: row.seen,
+  };
+}
+
+/** A label read: nothing is kept until the person has checked it and saved. A photo with no table in
+ *  it, or one nothing usable can be read from, is a free retake, as a meal photo with no food is. */
+export async function readLabel(deps: NutritionDeps, userId: string, imageBase64: string, mimeType: string, paidWith: ScanPaidWith, requestId: string): Promise<LabelDraft> {
+  if (deps.labels === null) throw new NutritionError(503, "nutrition_unavailable", SCAN_UNAVAILABLE);
+  const usedRetake = "retake" in paidWith;
+  const askAgain = async (): Promise<ScanFailedError> =>
+    new ScanFailedError(usedRetake ? null : await issueRetake(deps, userId), "Please retake the photo with the whole nutrition table in frame.");
+  try {
+    let result: LabelResult;
+    try {
+      result = await deps.labels.read(imageBase64, mimeType);
+    } catch (err) {
+      if (!(err instanceof VisionProviderError) || err.kind !== "unreadable") throw err;
+      if (err.usage !== undefined) await ledger(deps, userId, err.usage);
+      deps.log.warn({ event: "nutrition.label_failed", userId, model: deps.visionModel, kind: err.kind, reason: err.message, requestId }, "label reply unusable");
+      throw await askAgain();
+    }
+    await ledger(deps, userId, result);
+    // A poor photo is asked for again, as a meal's is: what it gave may be misread (Part 2B §3.5).
+    const panel = result.evidence.is_nutrition_label && result.evidence.photo_quality === "good" ? panelOfLabel(result.evidence) : null;
+    if (panel === null) throw await askAgain();
+    const { proteinG, carbsG, fatG } = panel;
+    const scale = 100 / panel.amount;
+    const part = (n: number | null): number | null => (n === null ? null : n * scale);
+    const missing = proteinG === null || carbsG === null || fatG === null;
+    const per100Kcal = panel.kcal * scale;
+    const fits = !missing && per100Kcal <= 1000 && numbersFit(per100Kcal, part(proteinG), part(carbsG), part(fatG), null);
+    return {
+      name: result.evidence.name, per: panel.per, unit: panel.unit, amount: panel.amount, kcal: panel.kcal, proteinG, carbsG, fatG,
+      servingAmount: panel.servingAmount === null || panel.servingAmount <= 0 ? null : panel.servingAmount,
+      contains: result.evidence.contains, mayContain: result.evidence.may_contain, kcalFromKj: panel.kcalFromKj,
+      check: missing ? "part_missing" : fits ? "fine" : "doesnt_add_up",
+    };
+  } catch (err) {
+    if (err instanceof NutritionError) throw err;
+    throw await scanFailed(deps, userId, paidWith, requestId, err);
+  }
+}
+
+/** Keeps what the person checked, per 100 g or ml. Numbers no food can have are refused: they came
+ *  from a misread or a mistyped serving, and would come back on every scan. */
+export async function saveLabelFood(deps: NutritionDeps, userId: string, id: string, body: LabelFoodSave): Promise<Extract<BarcodeReply, { status: "found" }> | null> {
+  const kind = body.code === null ? null : classifyBarcode(body.code);
+  if (kind !== null && kind.kind !== "product") throw new NutritionError(400, "bad_code", "That barcode isn’t right.");
+  const scale = 100 / body.amount;
+  const [kcal, proteinG, carbsG, fatG] = [body.kcal * scale, body.proteinG * scale, body.carbsG * scale, body.fatG * scale];
+  if (kcal > 1000 || proteinG + carbsG + fatG > LABEL_MOST_GRAMS_PER_100) {
+    throw new NutritionError(400, "label_numbers_impossible", "These numbers are too high for that amount. Check them against the pack.");
+  }
+  const saved = await labelRepo.saveLabelFood(deps.sql, userId, id, {
+    code: kind === null ? null : kind.code, name: body.name, unit: body.unit, kcal,
+    proteinG: Math.min(100, proteinG), carbsG: Math.min(100, carbsG), fatG: Math.min(100, fatG),
+    servingAmount: body.servingAmount, contains: body.contains, mayContain: body.mayContain, seen: body.seen ?? null,
+  });
+  if (saved === "taken") return null;
+  if (saved === "other_code") throw new NutritionError(409, "label_other_barcode", "This label belongs to another barcode.");
+  if (saved === "changed") throw new NutritionError(409, "label_changed", "This label was changed somewhere else. Close it and open it again.");
+  if (saved === "full") throw new NutritionError(409, "label_foods_full", "You’ve saved as many labels as you can. Remove one to add another.");
+  return await labelReply(deps, saved, saved.code);
+}
+
+export async function labelFoodsOf(deps: NutritionDeps, userId: string): Promise<{ items: Extract<BarcodeReply, { status: "found" }>[] }> {
+  const rows = await labelRepo.labelFoodsOf(deps.sql, userId);
+  // One read of the measures for the whole list, whatever its length.
+  const foods = await withMeasures(deps, rows.map(labelFoodReference));
+  return { items: rows.flatMap((row, at) => {
+    const food = foods[at];
+    return food === undefined ? [] : [labelReplyOf(row, food, row.code)];
+  }) };
+}
+
+export const removeLabelFood = async (deps: NutritionDeps, userId: string, id: string): Promise<boolean> => await labelRepo.removeLabelFood(deps.sql, userId, id);
 
 /** The foods around what the model saw (ROADMAP 33a-ii; 33b-ii): our list's foods
  *  for the model's hint and name and the search box's best three for each, and
@@ -1238,6 +1355,17 @@ function parseDraft(raw: string, userId: string): Draft {
   return parsed.data;
 }
 
+const scanClaimKey = (userId: string, value: string): string => `${scanKey(userId, value)}:claim`;
+
+/** One scan is one meal: the first meal to ask holds it, and that same meal can ask again. */
+async function claimScan(deps: NutritionDeps, userId: string, value: string, mealId: string, seconds = MEAL_SCAN_SAVE_SECONDS): Promise<void> {
+  const key = scanClaimKey(userId, value);
+  const first = await deps.redis.setNx(key, seconds, mealId);
+  if (first === null) throw new NutritionError(503, "nutrition_unavailable", "Meal confirmation is temporarily unavailable.");
+  if (first) return;
+  if ((await deps.redis.get(key)) !== mealId) throw new NutritionError(400, "invalid_scan", "Invalid or expired scan token.");
+}
+
 async function takeDraft(deps: NutritionDeps, userId: string, value: string): Promise<Draft> {
   const raw = await deps.redis.take(scanKey(userId, value));
   if (raw === null) {
@@ -1326,7 +1454,7 @@ async function resolveDraftItems(
       found.push({ food, estimate });
       continue;
     }
-    const extra = await findFood(deps, chosen.canonical);
+    const extra = await findFood(deps, chosen.canonical, true, userId);
     if (extra === null) throw new NutritionError(400, "unknown_food", "Food reference not found.");
     found.push({ food: extra, estimate: null });
   }
@@ -1454,10 +1582,24 @@ async function confirmNewMeal(deps: NutritionDeps, userId: string, input: Confir
   const peeked = await readDraft(deps, userId, input.scanToken);
   if (peeked !== null) {
     const built = await buildConfirmItems(deps, userId, peeked, input);
-    // Everything that could reject has passed — NOW consume the draft. Still
-    // the atomic single-use gate: two concurrent confirms both read, but only
-    // one take() returns the draft; the loser gets its 400 here.
-    return await writeMeal(deps, userId, input.id, confirmWrite(input, peeked, built), () => takeDraft(deps, userId, input.scanToken));
+    // Everything that could reject has passed. The scan is claimed for this one meal, inside the save,
+    // and taken only once that has committed: a save lost on the way (a dropped connection) can be sent
+    // again under its id, and any other meal is still refused. Two at once: one claims, the other's 400.
+    const mealId = input.id ?? randomUUID();
+    const claim = { held: false };
+    let saved: SavedMeal;
+    try {
+      saved = await writeMeal(deps, userId, input.id, confirmWrite(input, peeked, built), async () => {
+        await claimScan(deps, userId, input.scanToken, mealId);
+        claim.held = true;
+      });
+    } catch (err) {
+      // With no id nothing can send this same meal again, so its claim goes with it.
+      if (claim.held && input.id === undefined) await deps.redis.del(scanClaimKey(userId, input.scanToken));
+      throw err;
+    }
+    await deps.redis.take(scanKey(userId, input.scanToken));
+    return saved;
   }
   // get() returned null: the draft is expired, OR Redis was momentarily down.
   // take()'s Lua GET+DEL distinguishes them (undefined → 400, null → 503) and,
@@ -1473,6 +1615,9 @@ async function confirmNewMeal(deps: NutritionDeps, userId: string, input: Confir
     if (kept !== null) return kept;
     throw new NutritionError(404, "not_found", "Meal not found.");
   }
+  // A save under way holds the scan until it commits, so this path asks the same claim first.
+  // Not yet known to be a scan, and taken straight after, so its claim is short.
+  await claimScan(deps, userId, input.scanToken, input.id ?? randomUUID(), 60);
   const recovered = await takeDraft(deps, userId, input.scanToken);
   const built = await buildConfirmItems(deps, userId, recovered, input);
   return await writeMeal(deps, userId, input.id, confirmWrite(input, recovered, built));
@@ -1490,7 +1635,7 @@ export async function resolveChosenItems(
 ): Promise<MealItem[]> {
   const foods: FoodReference[] = [];
   for (const chosen of chosenItems) {
-    const food = await findFood(deps, chosen.canonical, search);
+    const food = await findFood(deps, chosen.canonical, search, userId);
     if (food === null) throw new NutritionError(400, "unknown_food", "Food reference not found.");
     foods.push(food);
   }
@@ -1592,13 +1737,13 @@ const savedFood = (item: MealItem, figures: Per100g | null): FoodReference => ({
 /** The food a saved item is weighed by, and priced by unless the person's own
  *  numbers price it: the scan's figures it carries (no table has that food), else
  *  its table's entry, as when it was saved; null where no table has it now. */
-async function foodOfItem(deps: NutritionDeps, item: MealItem | undefined, canonical: string, search = true): Promise<FoodReference | null> {
+async function foodOfItem(deps: NutritionDeps, userId: string, item: MealItem | undefined, canonical: string, search = true): Promise<FoodReference | null> {
   const scanned = item === undefined ? null : scanFiguresOf(item);
   if (item !== undefined && scanned !== null) return savedFood(item, scanned);
-  const now = await findFood(deps, canonical, search);
-  const source = item?.canonical === canonical && isPackagedCanonical(canonical) ? item.nutritionSource : null;
+  const now = await findFood(deps, canonical, search, userId);
+  const source = item?.canonical === canonical && (isPackagedCanonical(canonical) || canonical.startsWith(LABEL_CANONICAL_PREFIX)) ? item.nutritionSource : null;
   const figures = item?.per100g;
-  if (item === undefined || figures === undefined || (source !== "openfoodfacts" && source !== "usda")) return now;
+  if (item === undefined || figures === undefined || (source !== "openfoodfacts" && source !== "usda" && source !== "label")) return now;
   // The same packaged product at a new amount: the figures it was saved at, by today's measures where
   // the list still has it, and its ten further figures grown from the saved ones.
   const base = now ?? savedFood(item, figures);
@@ -1652,7 +1797,7 @@ async function editedItems(
   });
   const foods: FoodReference[] = [];
   for (const { edit, prior } of changed) {
-    const food = await foodOfItem(deps, prior, edit.canonical);
+    const food = await foodOfItem(deps, userId, prior, edit.canonical);
     // A food no table has any more is weighed by grams alone, and only where the
     // person's own numbers price it: kept from the saved item, or typed now.
     const ownPrices = edit.own !== null && (edit.own !== undefined || (prior?.nutritionSource === "own" && prior.per100g !== undefined));
@@ -1731,7 +1876,7 @@ export async function mealMeasures(deps: NutritionDeps, userId: string, id: stri
   const meal = await repo.getMeal(deps.sql, userId, id);
   if (meal === null) return null;
   const foods: FoodReference[] = [];
-  for (const item of meal.items) foods.push((await foodOfItem(deps, item, item.canonical)) ?? savedFood(item, null));
+  for (const item of meal.items) foods.push((await foodOfItem(deps, userId, item, item.canonical)) ?? savedFood(item, null));
   return await measuresOf(deps, foods);
 }
 

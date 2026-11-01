@@ -299,9 +299,9 @@ d("0001_init on a real database", () => {
     expect(row("org_micro").active, "the seed must retire a legacy plan row").toBe(false);
 
     // ---- allowances -------------------------------------------------------
-    expect(row("pro_us_m").entitlements["meal_scan"], "paid scans").toEqual(day(20));
+    expect(row("pro_us_m").entitlements["meal_scan"], "paid scans").toEqual(day(15));
     expect(row("pro_us_m").entitlements["route_gen"], "paid routes").toEqual(day(2));
-    expect(row("free").entitlements["meal_scan"], "free scans").toEqual(day(1));
+    expect(row("free").entitlements["meal_scan"], "free scans").toEqual({ window: "month", limit: 3 });
   });
 
   it("subs_one_live_uq rejects a second live subscription (23505)", async () => {

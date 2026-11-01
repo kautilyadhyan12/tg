@@ -36,12 +36,12 @@ export type YourPlan = z.infer<typeof yourPlanSchema>;
 
 const meterWords = (meter: { limit: number; window: MeteredWindow }): string => `${String(meter.limit)} a ${meter.window}`;
 
-/** The words for one extra: "20 meal scans a day instead of 7". */
+/** The words for one extra: "15 photo scans a day instead of 7". */
 export function ownPlanExtraWords(extra: OwnPlanExtra): string {
   switch (extra.feature) {
     case "meal_scan":
     case "route_gen": {
-      const noun = `${extra.feature === "meal_scan" ? "meal scan" : "route plan"}${extra.own.limit === 1 ? "" : "s"}`;
+      const noun = `${extra.feature === "meal_scan" ? "photo scan" : "route plan"}${extra.own.limit === 1 ? "" : "s"}`;
       const gym = extra.own.window === extra.gym.window ? String(extra.gym.limit) : meterWords(extra.gym);
       return `${String(extra.own.limit)} ${noun} a ${extra.own.window} instead of ${gym}`;
     }

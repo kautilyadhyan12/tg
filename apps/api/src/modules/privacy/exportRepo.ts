@@ -61,6 +61,8 @@ export const EXPORT_READERS: Record<ExportedTable, (sql: Sql, userId: string) =>
   meal_removed_ids: (sql, u) =>
     sql<Row[]>`SELECT * FROM meal_removed_ids WHERE user_id = ${u} ORDER BY removed_at, id`,
 
+  member_label_foods: (sql, u) =>
+    sql<Row[]>`SELECT * FROM member_label_foods WHERE user_id = ${u} ORDER BY created_at, id`,
   user_dishware: (sql, u) =>
     sql<Row[]>`SELECT * FROM user_dishware WHERE user_id = ${u} ORDER BY created_at, id`,
 

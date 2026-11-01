@@ -1,6 +1,7 @@
 // Fastify app factory (P0.4). Route order doctrine (R3.3) applies per-module
 // from P2.1 on; here only platform concerns: logging, CORS, rate limit,
 // error mapping, /health.
+import { REQUEST_TIMEOUT_MS } from "./requestTimeout.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Fastify, { LogController, type FastifyError, type FastifyInstance } from "fastify";
@@ -137,6 +138,7 @@ export async function buildApp(
 
   const app = Fastify({
     trustProxy: true, // behind Caddy (R3.7); secure cookies depend on this
+    requestTimeout: REQUEST_TIMEOUT_MS,
     logger: {
       level: config.LOG_LEVEL,
       // R3.10: never log tokens/cookies.

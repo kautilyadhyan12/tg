@@ -7,6 +7,11 @@ import { act, render, screen, waitFor, cleanup, fireEvent, within } from '@testi
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { attendanceDay, overview } from './__fixtures__/overview';
 
+// Dates that follow the calendar, so none of these tests expires.
+const NEXT_PAYMENT = new Date(Date.now() + 10 * 86_400_000).toISOString();
+const DECIDE_BY = new Date(Date.now() + 9 * 86_400_000).toISOString();
+const LATER_PAYMENT = new Date(Date.now() + 40 * 86_400_000).toISOString();
+
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
   return {
@@ -79,7 +84,7 @@ const plan = (patch = {}) => ({
   trialEndsAt: null,
   seatCap: 500,
   priceLabel: '$129',
-  currentPeriodEnd: '2026-11-01T00:00:00.000Z',
+  currentPeriodEnd: NEXT_PAYMENT,
   cancelAtPeriodEnd: false,
   ...patch,
 });
@@ -229,7 +234,7 @@ describe("the plan card's way to Paddle's page", () => {
   });
 
   it('is not drawn for a free trial, nor for staff who cannot manage billing', async () => {
-    orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: plan({ status: 'trialing', trialEndsAt: '2026-12-01T00:00:00.000Z', priceLabel: null, currentPeriodEnd: null }) }));
+    orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: plan({ status: 'trialing', trialEndsAt: LATER_PAYMENT, priceLabel: null, currentPeriodEnd: null }) }));
     const { unmount } = renderOverview();
     expect(await screen.findByText('Free trial')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /manage payment|update payment method/i })).toBeNull();
@@ -315,7 +320,7 @@ describe('a plan paid through Razorpay (an Indian gym, 1d-i and 1d-ii)', () => {
   });
 
   it('a trial paid through Razorpay, not yet charged, says its size changes after the first payment, and offers no Change size', async () => {
-    orgService.getMine.mockResolvedValue(mineIs({ ...INDIA, subscription: rupees({ status: 'trialing', trialEndsAt: '2026-11-01T00:00:00.000Z' }) }));
+    orgService.getMine.mockResolvedValue(mineIs({ ...INDIA, subscription: rupees({ status: 'trialing', trialEndsAt: NEXT_PAYMENT }) }));
     renderOverview();
     expect((await screen.findByTestId('paid-through-razorpay')).textContent).toBe(
       'Paid through Razorpay, which emails you about each payment. You can change your size once your first payment is taken.',
@@ -355,7 +360,7 @@ describe('a plan paid through Razorpay (an Indian gym, 1d-i and 1d-ii)', () => {
     fireEvent.click(within(screen.getByTestId('cancel-box')).getByRole('button', { name: 'Keep my plan' }));
     expect(screen.queryByTestId('cancel-box')).toBeNull();
 
-    const ending = rupees({ cancelAtPeriodEnd: true, keepUntil: '2026-10-31T21:00:00.000Z' });
+    const ending = rupees({ cancelAtPeriodEnd: true, keepUntil: DECIDE_BY });
     orgService.cancelPlan.mockResolvedValue({ data: { subscription: ending } });
     orgService.getMine.mockResolvedValue(mineIs({ ...INDIA, subscription: ending }));
     fireEvent.click(screen.getByRole('button', { name: 'Cancel plan' }));

@@ -35,7 +35,7 @@ export const gymPaymentConnections = pgTable(
     accessExpiresAt: timestamp("access_expires_at", { withTimezone: true }),
     /** When the worker next renews the tokens; pushed on while a renewal is under way. */
     refreshDueAt: timestamp("refresh_due_at", { withTimezone: true }),
-    /** When the worker last read this connection's refunds (0183; 18d-iv-d-i). */
+    /** When the worker last read this connection's refunds (0184; 18d-iv-d-i). */
     refundsReadAt: timestamp("refunds_read_at", { withTimezone: true }),
     connectedBy: uuid("connected_by").references(() => users.id, { onDelete: "set null" }),
     connectedAt: timestamp("connected_at", { withTimezone: true }).notNull(),
@@ -585,7 +585,7 @@ export const gymSquareRefunds = pgTable(
     pickedUp: boolean("picked_up").notNull().default(false),
     cancelWantedAt: timestamp("cancel_wanted_at", { withTimezone: true }),
     cancelTooLate: boolean("cancel_too_late").notNull().default(false),
-    /** Square's own record of a refund made inside Square, which no press made (0183; 18d-iv-d-i). */
+    /** Square's own record of a refund made inside Square, which no press made (0184; 18d-iv-d-i). */
     fromSquare: boolean("from_square").notNull().default(false),
   },
   (t) => [

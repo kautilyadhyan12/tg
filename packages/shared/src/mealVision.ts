@@ -33,8 +33,15 @@ export const saysNotIdentified = (name: string): boolean => {
   const said = asWritten(name);
   return NOT_IDENTIFIED.test(said) || VAGUE_NAME.test(said);
 };
+/** What a model wrote as a name, held to what a saved meal can keep: its control characters would be
+ *  refused by the database after the scan was used, and a typed name stops at 200 letters. */
+const NAME_MOST = 200;
+const cleanName = (v: unknown): unknown => {
+  if (typeof v !== "string") return v;
+  return Array.from(v).filter((c) => { const n = c.codePointAt(0) ?? 0; return n > 31 && n !== 127 && (n < 0xd800 || n > 0xdfff); }).slice(0, NAME_MOST).join("");
+};
 const optionalNameSchema = z.preprocess(
-  (v) => (typeof v === "string" && isNoValueWord(v) ? null : v),
+  (v) => { const clean = cleanName(v); return typeof clean === "string" && isNoValueWord(clean) ? null : clean; },
   z.string().nullable(),
 );
 
@@ -93,8 +100,8 @@ const MAX_ESTIMATE = 90_000;
  *  - grams that are none, or more than a meal item may weigh, and kcal or macros
  *    below zero. */
 const mealVisionItemSchema = z.tuple([
-  z.string().min(1),
-  z.string().nullable(),
+  z.preprocess(cleanName, z.string().min(1)),
+  z.preprocess(cleanName, z.string().nullable()),
   orUnknown(z.number().int().min(1).max(MAX_PHOTO_COUNT)),
   orUnknown(z.number().positive().max(MAX_ITEM_GRAMS)),
   orUnknown(z.number().min(0).max(MAX_ESTIMATE)),
@@ -137,7 +144,7 @@ export const mealVisionEvidenceSchema = z.preprocess((v) => dropFields(RETIRED_E
   // "none", "N/A" and "null" are no name.
   meal_name: optionalNameSchema.default(null),
   items: z.array(mealVisionItemSchema).max(MAX_REPLY_FOODS).default([]),
-  unknown_items: z.array(z.union([z.string(), z.array(z.unknown()).transform(nameInList)])).default([]),
+  unknown_items: z.array(z.union([z.string().transform((v) => String(cleanName(v))), z.array(z.unknown()).transform(nameInList)])).default([]),
   photo_quality: z.preprocess((v) => (typeof v === "string" ? v.toLowerCase() : v), z.enum(["good", "poor"])),
 }).strict().transform((evidence) => (evidence.items.length <= MAX_SCAN_FOODS ? evidence : {
   ...evidence,

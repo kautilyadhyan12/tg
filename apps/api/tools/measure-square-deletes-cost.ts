@@ -145,6 +145,7 @@ const redis = {
   setex: () => Promise.resolve(true),
   take: () => Promise.resolve(undefined),
   del: () => Promise.resolve(),
+  setNx: () => Promise.resolve(true),
   close: () => Promise.resolve(),
 };
 const clock = new Date();
