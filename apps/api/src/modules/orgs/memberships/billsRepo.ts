@@ -7,10 +7,8 @@
 // period can be paid (`memberPayTarget`), which payment can be taken back
 // (`memberUndoTarget`), and which bills a membership is owed (`billsToOpen`). The count
 // of paid periods moves only through `moveHeldMembership`.
-import { randomUUID } from "node:crypto";
 import type { Sql, TransactionSql } from "postgres";
 import {
-  memberRefundMethodSchema,
   billsToOpen,
   periodListedMinor,
   countAfterGap,
@@ -462,13 +460,13 @@ export async function noteRefund(
     // A fee paid by hand is voided, not refunded: its payment takes no refund to stand behind.
     if (bill.fee !== null && !paidThroughSquare(standing.method)) return { kind: "not_allowed" };
 
-    // A card refund noted over one Square already showed here would count that money twice (18d-iv-d-i).
+    // A card refund noted over one Square already showed here would count that money twice (18d-iv-d-i): more than Square gave back is another refund.
     if (input.method === "card_at_desk") {
       const [inSquare] = await tx<{ total: number }[]>`
         SELECT COALESCE(sum(r.amount_minor), 0)::int AS total
         FROM gym_square_refunds q JOIN gym_member_refunds r ON r.gym_id = q.gym_id AND r.id = q.member_refund_id AND r.undone_at IS NULL
         WHERE q.gym_id = ${input.gymId} AND q.payment_id = ${input.paymentId} AND q.from_square`;
-      if ((inSquare?.total ?? 0) > 0) return { kind: "refund_in_square", amountMinor: inSquare?.total ?? 0, currency: payment.currency };
+      if (input.amountMinor <= (inSquare?.total ?? 0)) return { kind: "refund_in_square", amountMinor: inSquare?.total ?? 0, currency: payment.currency };
     }
 
     const refund = refundMemberPayment(bill, standing, input.amountMinor);
@@ -571,41 +569,6 @@ export async function writeRefund(
   return refundId;
 }
 
-/** What a voided note stood in for at Square, written as Square's own. */
-async function writeAbsorbed(tx: TransactionSql, input: { gymId: string; entryId: string; paymentId: string; today: string; now: Date }, membershipId: string, voidedMinor: number): Promise<void> {
-  let left = voidedMinor;
-  const rows = await tx<{ id: string; absorbed_minor: number; currency: string; brand: string | null; last4: string | null }[]>`
-    SELECT id, absorbed_minor, currency, brand, last4 FROM gym_square_refunds
-    WHERE gym_id = ${input.gymId} AND payment_id = ${input.paymentId} AND from_square AND absorbed_minor > 0 AND outcome IS DISTINCT FROM 'failed'
-    ORDER BY started_at FOR UPDATE`;
-  for (const q of rows) {
-    const take = Math.min(left, q.absorbed_minor);
-    if (take === 0) break;
-    const target = await refundTargetOf(tx, input.gymId, membershipId, input.paymentId);
-    if (target === null) return;
-    const written = await writeRefund(tx, {
-      gymId: input.gymId,
-      entryId: input.entryId,
-      membershipId,
-      bill: target.bill,
-      standing: target.payment,
-      paymentId: input.paymentId,
-      requestKey: randomUUID(),
-      amountMinor: take,
-      currency: q.currency,
-      method: memberRefundMethodSchema.parse(target.payment.method),
-      reason: "other",
-      today: input.today,
-      actorUserId: null,
-      now: input.now,
-      action: "org.member_refund_in_square",
-      card: q.brand === null || q.last4 === null ? null : { brand: q.brand, last4: q.last4 },
-    });
-    await tx`UPDATE gym_square_refunds SET absorbed_minor = absorbed_minor - ${take}, member_refund_id = COALESCE(member_refund_id, ${written}) WHERE gym_id = ${input.gymId} AND id = ${q.id}`;
-    left -= take;
-  }
-}
-
 /** Voids a refund noted by mistake (18o): its row is kept, marked with who, when and why,
  *  and a bill that read Refunded reads Paid again. Nothing else moves. */
 export async function voidRefund(
@@ -620,8 +583,8 @@ export async function voidRefund(
     const payment = await paymentOf(tx, input.gymId, row.id, input.paymentId);
     if (payment === null) return { kind: "payment_not_found" };
 
-    const [refund] = await tx<{ undone: boolean; amount_minor: number; currency: string; to_card: boolean; method: string }[]>`
-      SELECT undone_at IS NOT NULL AS undone, amount_minor, currency, method IN ('company','terminal') AS to_card, method
+    const [refund] = await tx<{ undone: boolean; amount_minor: number; currency: string; to_card: boolean }[]>`
+      SELECT undone_at IS NOT NULL AS undone, amount_minor, currency, method IN ('company','terminal') AS to_card
       FROM gym_member_refunds
       WHERE gym_id = ${input.gymId} AND id = ${input.refundId} AND payment_id = ${input.paymentId}`;
     if (refund === undefined) return { kind: "refund_not_found" };
@@ -637,8 +600,6 @@ export async function voidRefund(
       WHERE gym_id = ${input.gymId} AND id = ${payment.bill_id} AND status = 'refunded'`;
     // The payment stands again: a friend's payment gives the member's gift where none stands. A fee's never does.
     if (!payment.undone && payment.period_index !== null) await giveMemberGift(tx, { gymId: input.gymId, friendEntryId: input.entryId, by: { paymentId: input.paymentId }, today: input.today, now: input.now });
-    // The note stood in for a refund made in Square (18d-iv-d-i): that money still went, so it is written now.
-    if (refund.method === "card_at_desk") await writeAbsorbed(tx, input, row.id, refund.amount_minor);
 
     await insertAudit(tx, {
       actorUserId: input.actorUserId,

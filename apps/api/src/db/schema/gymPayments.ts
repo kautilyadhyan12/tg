@@ -587,8 +587,6 @@ export const gymSquareRefunds = pgTable(
     cancelTooLate: boolean("cancel_too_late").notNull().default(false),
     /** Square's own record of a refund made inside Square, which no press made (0183; 18d-iv-d-i). */
     fromSquare: boolean("from_square").notNull().default(false),
-    /** How much of it staff had already noted by card, so was not written again (0183). */
-    absorbedMinor: integer("absorbed_minor").notNull().default(0),
   },
   (t) => [
     unique("gym_square_refunds_request_uq").on(t.gymId, t.requestKey),

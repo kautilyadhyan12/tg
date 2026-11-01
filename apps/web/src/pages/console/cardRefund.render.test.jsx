@@ -511,7 +511,6 @@ describe('What the box and the page say', () => {
     expect(cardRefundOpenLine({ amountMinor: 4999, on: '2026-10-30', lost: true, noRecord: true, onTerminal: false, decided: null }, 'USD')).toBe('Square has no record of the $49.99 refund of 30 October 2026. No money went back.');
     expect(cardRefundOpenLine({ amountMinor: 4999, on: '2026-10-30', lost: true, noRecord: false, onTerminal: false, decided: null }, 'USD')).toContain("We don't know whether Square took");
     expect(cardRefundOpenLine({ amountMinor: 4999, on: '2026-10-30', lost: true, failedInSquare: true, onTerminal: false, decided: null }, 'USD')).toBe('Square could not make the $49.99 refund of 30 October 2026. No money went back.');
-    expect(cardRefundOpenLine({ amountMinor: 4999, on: '2026-10-30', lost: true, noteToCheck: true, onTerminal: false, decided: null }, 'USD')).toBe('Square could not make the $49.99 refund of 30 October 2026, so no money went back through Square. Check the refund noted here.');
   });
 
   it('the page says a refund waits on the Terminal', async () => {

@@ -3,9 +3,9 @@
 //
 // THE WORST THING here is a member shown money they never got, a refund counted twice, or another person's payment marked. So a
 // message is only a doorbell: Square's own record is read with the gym's own token, and that record names the payment exactly;
-// never a price or a name. A refund is one row, unique by Square's id, written under the gym's lock; a refund noted by card is not
-// written again, while one noted as cash, UPI or a bank transfer never went through Square; nothing is written while a press on that
-// payment waits on Square.
+// never a price or a name. A refund is one row, unique by Square's id, written in full under the gym's lock; a refund noted by card
+// may be the same money, so it is crossed out, while one noted as cash, UPI or a bank transfer never went through Square; nothing is
+// written while a press on that payment waits on Square.
 //
 // Square sends `refund.created` and `refund.updated` "regardless of which Square product or Square API application" made it
 // ("Refunds API Webhooks", read 2026-11-01). It can switch messages off after failed deliveries and does not resend what it

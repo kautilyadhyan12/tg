@@ -751,7 +751,7 @@ function throwOnBillFailure(outcome: billsRepo.BillWriteOutcome): void {
       throw new OrgsError(
         409,
         "refund_in_square",
-        `${formatMinor(outcome.amountMinor, outcome.currency)} of this payment was refunded in Square and is already shown here, so it does not need noting. If you gave more back another way, pick how: cash, UPI or bank transfer.`,
+        `${formatMinor(outcome.amountMinor, outcome.currency)} of this payment was refunded in Square and is already shown here, so it does not need noting. If you gave more back another way, pick how you gave it.`,
       );
     case "refund_too_much":
       throw new OrgsError(
