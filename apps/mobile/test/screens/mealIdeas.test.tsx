@@ -127,6 +127,11 @@ describe("the worst thing: one tap saves one meal, at the calories it showed", (
     await waitFor(() => {
       expect(world.meals).toHaveLength(1);
     });
+    // Long enough for a second save to reach the server, had the second tap made one.
+    await act(async () => {
+      await new Promise((done) => setTimeout(done, 200));
+    });
+    expect(world.meals).toHaveLength(1);
     expect(posts(s)).toHaveLength(1);
     expect(posts(s)[0]?.body).toMatchObject({ mealName: "Chicken breast + Rice", items: [{ canonical: "chicken_breast", grams: 150 }, { canonical: "rice_white", grams: 200 }] });
   });
