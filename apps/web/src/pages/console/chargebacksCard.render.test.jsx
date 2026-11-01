@@ -36,6 +36,17 @@ describe('ChargebacksCard', () => {
     await screen.findByRole('dialog', { name: `person ${ENTRY}` });
   });
 
+  it('a lost one says charges are stopped: no Respond in Square, and their page opens', async () => {
+    svc.list.mockResolvedValue(list({ lostCount: 1, rows: [{ ...seen, state: 'LOST', reason: null, dueOn: null }] }));
+    show(BOTH);
+    const row = await screen.findByTestId('chargeback-row');
+    expect(screen.getByTestId('chargebacks-headline').textContent).toBe('1 lost chargeback has automatic charges stopped');
+    expect(row.textContent).toContain('Lost. The money went back to the card. Automatic charges stay stopped until you start them again.');
+    expect(within(row).queryByRole('link', { name: 'Respond in Square' })).toBeNull();
+    fireEvent.click(within(row).getByRole('button', { name: 'Open their page' }));
+    await screen.findByRole('dialog', { name: `person ${ENTRY}` });
+  });
+
   it('a deleted member has no page to open, and still has the date', async () => {
     svc.list.mockResolvedValue(list({ rows: [{ ...seen, name: null, personDeleted: true, member: { entryId: null, what: 'Silver' } }] }));
     show(BOTH);

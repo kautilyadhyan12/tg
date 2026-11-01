@@ -130,9 +130,10 @@ export async function readChargebacks(deps: PaymentsDeps, userId: string, gymId:
   const gym = await connections.readGym(deps.sql, gymId);
   if (gym === null) throw new OrgsError(404, "org_not_found", "Organisation not found.");
   const row = deps.square === null ? null : await connections.readConnection(deps.sql, gymId, deps.square.environment);
-  const { count, rows } = await repo.chargebacksToAnswer(deps.sql, gymId, privileges.includes(MEMBERS), deps.now(), from, CHARGEBACKS_PAGE);
+  const { count, lostCount, rows } = await repo.chargebacksToAnswer(deps.sql, gymId, privileges.includes(MEMBERS), deps.now(), from, CHARGEBACKS_PAGE);
   return chargebacksResponseSchema.parse({
     count,
+    lostCount,
     rows: rows.map((r) => ({ ...r, member: r.member === null ? null : { entryId: r.member.entryId, what: r.member.fee === null ? r.member.typeName : MEMBER_FEE_WORDS[r.member.fee] } })),
     next: from + CHARGEBACKS_PAGE < count ? from + CHARGEBACKS_PAGE : null,
     needsReconnect: row?.state === "connected" && !row.scopes.includes(READ_SCOPE),

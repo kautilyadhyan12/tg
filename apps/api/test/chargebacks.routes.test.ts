@@ -726,6 +726,27 @@ d("A chargeback (real Postgres)", { timeout: T }, () => {
       expect(notes).toEqual([{ actor_user_id: gym.owner.userId }]);
     });
 
+    it("Overview says charges are still stopped until staff start them; a membership no longer renewing leaves nothing to decide; a sale's is never there", async () => {
+      const fresh = await makeGym(`Lost Gym ${uniq()}`, `MERCH${uniq()}`);
+      const ada = await paidByCard(fresh, "Lost Ada");
+      const bea = await paidByCard(fresh, "Lost Bea");
+      const open = await paidByCard(fresh, "Lost Open");
+      await lose(ada);
+      await lose(bea);
+      await message(fresh.acct.merchantId, square.disputeInSquare(open.squarePaymentId).id);
+      const list = await onOverview(fresh);
+      expect(list.count).toBe(3);
+      expect(list.lostCount).toBe(2);
+      expect(list.rows[0]?.name, "those needing a response come first").toBe("Lost Open");
+      expect(list.rows.slice(1).map((r) => r.state)).toEqual(["LOST", "LOST"]);
+
+      expect((await send("POST", startUrl(fresh, await chargebackIdOf(ada.squarePaymentId)), fresh.owner.cookies)).statusCode).toBe(204);
+      await sql`UPDATE gym_held_memberships SET renews = false WHERE gym_id = ${fresh.id} AND id = ${bea.membershipId}`;
+      const after = await onOverview(fresh);
+      expect(after.rows.map((r) => r.name)).toEqual(["Lost Open"]);
+      expect(after.lostCount).toBe(0);
+    });
+
     it("started again weeks after a bill fell due: that old bill is never charged by itself, and says so", async () => {
       const uma = await paidByCard(gym, "Lost Uma");
       await lose(uma);

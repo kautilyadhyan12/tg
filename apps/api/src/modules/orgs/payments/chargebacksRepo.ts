@@ -327,16 +327,19 @@ export async function chargebacksOfSales(sql: SqlOrTx, gymId: string, saleIds: r
 
 export type ChargebackRow = Omit<ChargebackToAnswer, "member"> & { member: { entryId: string | null; typeName: string; fee: MemberFeeKind | null } | null };
 
-/** Those still to answer, the soonest date first: Square still waits on the gym, and its date has not passed. */
-export async function chargebacksToAnswer(sql: Sql, gymId: string, members: boolean, now: Date, from: number, limit: number): Promise<{ count: number; rows: ChargebackRow[] }> {
+/** Those still to answer, the soonest date first: Square still waits on the gym, and its date has not passed. After them, those lost
+ *  whose automatic charges staff have not started again, while whoever pays still has a renewing membership: nothing else says so. */
+export async function chargebacksToAnswer(sql: Sql, gymId: string, members: boolean, now: Date, from: number, limit: number): Promise<{ count: number; lostCount: number; rows: ChargebackRow[] }> {
   const rows = await sql<
-    (RawSeen & { at: Date | null; total: number; name: string | null; past: boolean; person_deleted: boolean; entry_id: string | null; type_name: string | null; fee: string | null; sale_id: string | null; sold_on: string | null; item_name: string | null; more: number })[]
+    (RawSeen & { at: Date | null; total: number; lost_total: number; name: string | null; past: boolean; person_deleted: boolean; entry_id: string | null; type_name: string | null; fee: string | null; sale_id: string | null; sold_on: string | null; item_name: string | null; more: number })[]
   >`
     WITH open AS (
       SELECT ${seenColumns(sql, now)}, q.due_at AS at, q.square_payment_id, q.gym_id
       FROM gym_square_disputes q
       JOIN gyms g ON g.id = q.gym_id
-      WHERE q.gym_id = ${gymId} AND q.state IN ('EVIDENCE_REQUIRED','INQUIRY_EVIDENCE_REQUIRED','UNKNOWN') AND (q.due_at IS NULL OR q.due_at > ${now}) AND ${stillReadable(sql)}
+      WHERE q.gym_id = ${gymId} AND ${stillReadable(sql)}
+        AND ((q.state IN ('EVIDENCE_REQUIRED','INQUIRY_EVIDENCE_REQUIRED','UNKNOWN') AND (q.due_at IS NULL OR q.due_at > ${now}))
+             OR (q.state IN ('LOST','ACCEPTED') AND q.charges_restarted_at IS NULL))
     ),
     listed AS (
       SELECT o.*, e.full_name AS name, COALESCE(e.former_at IS NOT NULL, false) AS past, h.entry_id IS NULL AS person_deleted, e.id AS entry_id, t.name AS type_name, b.fee,
@@ -349,20 +352,28 @@ export async function chargebacksToAnswer(sql: Sql, gymId: string, members: bool
       -- Delete permanently keeps a paid membership with no record: the date still runs, so the row stays, as "A deleted member".
       LEFT JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id
       WHERE ${members}::boolean
+        AND (o.state NOT IN ('LOST','ACCEPTED') OR EXISTS (
+          SELECT 1 FROM gym_held_memberships r
+          LEFT JOIN gym_member_list_entries re ON re.gym_id = r.gym_id AND re.id = r.entry_id
+          WHERE r.gym_id = h.gym_id AND r.kind = 'recurring' AND r.renews AND r.status IN ('active','frozen') AND r.entry_id IS NOT NULL AND re.former_at IS NULL
+            AND COALESCE((SELECT x.payer_entry_id FROM gym_member_payers x WHERE x.gym_id = r.gym_id AND x.entry_id = r.entry_id), r.entry_id)
+              = COALESCE((SELECT x.payer_entry_id FROM gym_member_payers x WHERE x.gym_id = h.gym_id AND x.entry_id = h.entry_id), h.entry_id)))
       UNION ALL
       SELECT o.*, e.full_name, COALESCE(e.former_at IS NOT NULL, false), s.entry_id IS NULL AND s.for_member, NULL, NULL, NULL,
              s.id, s.sold_on::text, s.item_name, (SELECT count(*)::int - 1 FROM gym_sales l WHERE l.gym_id = s.gym_id AND l.receipt_number = s.receipt_number)
       FROM open o
       JOIN gym_sales s ON s.gym_id = o.gym_id AND s.square_payment_id = o.square_payment_id AND s.line_no = 1 AND s.undone_at IS NULL
       LEFT JOIN gym_member_list_entries e ON e.gym_id = s.gym_id AND e.id = s.entry_id
+      WHERE o.state NOT IN ('LOST','ACCEPTED')
     )
-    SELECT l.*, count(*) OVER ()::int AS total
+    SELECT l.*, count(*) OVER ()::int AS total, count(*) FILTER (WHERE l.state IN ('LOST','ACCEPTED')) OVER ()::int AS lost_total
     FROM listed l
-    ORDER BY l.at NULLS FIRST, l.id
+    ORDER BY l.state IN ('LOST','ACCEPTED'), l.at NULLS FIRST, l.id
     LIMIT ${limit} OFFSET ${from}`;
   const count = rows[0]?.total ?? (from === 0 ? 0 : from);
   return {
     count,
+    lostCount: rows[0]?.lost_total ?? 0,
     rows: rows.map((r) => {
       const fee = memberFeeKindSchema.safeParse(r.fee);
       return {

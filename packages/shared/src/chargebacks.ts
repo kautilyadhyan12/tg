@@ -57,6 +57,8 @@ export type ChargebackToAnswer = z.infer<typeof chargebackToAnswerSchema>;
 export const chargebacksResponseSchema = z
   .object({
     count: z.number().int().min(0),
+    /** Of `count`, those lost or accepted whose automatic charges are still stopped, listed after those that need a response. */
+    lostCount: z.number().int().min(0).default(0),
     rows: z.array(chargebackToAnswerSchema),
     next: z.number().int().min(0).nullable(),
     /** Connected before the app asked to read chargebacks: none can be seen until the owner reconnects. */

@@ -110,13 +110,21 @@ export function chargebackStartBox(preview) {
 
 // Overview.
 
-/** "1 chargeback to answer"; null where there are none. */
-export function chargebacksHeadline(count) {
+/** A row that needs no response in Square: it was lost, and only automatic charges are left to decide. */
+export const chargebackRowLost = (row) => LOST.includes(row.state);
+
+/** "1 chargeback needs a response"; null where there are none. `lost`: how many of them are lost, with charges still stopped. */
+export function chargebacksHeadline(count, lost = 0) {
   if (count <= 0) return null;
+  if (lost > 0) {
+    if (lost < count) return `${String(count)} chargebacks need attention`;
+    return lost === 1 ? '1 lost chargeback has automatic charges stopped' : `${String(lost)} lost chargebacks have automatic charges stopped`;
+  }
   return count === 1 ? '1 chargeback needs a response' : `${String(count)} chargebacks need a response`;
 }
 
 export const CHARGEBACKS_INTRO = "A cardholder asked their bank to reverse a payment. Respond in Square by the date shown. If you don't, Square challenges it for you.";
+export const CHARGEBACKS_LOST_INTRO = 'The bank decided for the cardholder. Open their page to start automatic charges again. If they have left, cancel their membership.';
 export const CHARGEBACKS_RECONNECT = 'Reconnect Square so chargebacks show here, with the date to respond to each one.';
 export const CHARGEBACKS_RECONNECT_OTHERS = 'The owner needs to reconnect Square before chargebacks can show here.';
 
@@ -130,7 +138,7 @@ export function chargebackWhat(row) {
 }
 
 /** The row's own sentence, on Overview. */
-export const chargebackRowDetail = (row) => [reasonOf(row), row.dueOn === null || row.state === 'UNKNOWN' ? 'Check it in Square.' : `Respond in Square by ${dayWords(row.dueOn)}.`].filter((part) => part !== null).join(' ');
+export const chargebackRowDetail = (row) => [reasonOf(row), chargebackRowLost(row) ? `${stateWords(row)} ${STOPPED_LOST}` : row.dueOn === null || row.state === 'UNKNOWN' ? 'Check it in Square.' : `Respond in Square by ${dayWords(row.dueOn)}.`].filter((part) => part !== null).join(' ');
 
 /** The second button: the sale, or the person's page while they have one. */
 export const chargebackOpenWords = (row) => (row.sale !== null ? 'Open the sale' : row.member?.entryId != null ? 'Open their page' : null);
