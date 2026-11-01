@@ -849,14 +849,14 @@ describe("the ten figures (34b)", () => {
     const server = foodServer({ meals: [meal] }, daily);
     const ask: Ask = (url, init) =>
       new URL(url).pathname === "/v1/nutrition/meals" && (init.method ?? "GET") === "GET"
-        ? Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ items: [meal], nextCursor: "next" }) })
+        ? Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ items: new URL(url).searchParams.has("cursor") ? [] : [meal], nextCursor: "next" }) })
         : server.ask(url, init);
     await render(<App extra={extra} ask={ask} store={memoryStore(kept(1))} wait={noWait} mealStore={files().store} />);
     await fireEvent.press(await screen.findByRole("tab", { name: "Food" }));
     const links = await screen.findAllByRole("button", { name: "Nutrients" });
     await fireEvent.press(links[0] as NonNullable<(typeof links)[number]>);
     expect(await screen.findByText("* Meals this far back couldn’t all be read.")).toBeTruthy();
-    expect(screen.getByLabelText("Fibre, 11.9 g*. Recommended 25 g")).toBeTruthy();
+    expect(await screen.findByLabelText("Fibre, 11.9 g*. Recommended 25 g")).toBeTruthy();
   });
 
   it("an empty day offers no list", async () => {
