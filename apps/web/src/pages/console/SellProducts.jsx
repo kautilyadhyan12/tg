@@ -132,7 +132,7 @@ function ProductForm({ gymId, currency, rates, onPage, draft, setDraft, busy, er
 }
 
 /** `addAsk`: a number the page raises each time a button elsewhere asks for the Add form. */
-export default function SellProducts({ gymId, page, locked, lockedNote, countryTo, addAsk = 0, onPage }) {
+export default function SellProducts({ gymId, page, locked, lockedNote, countryTo, addAsk = 0, changeAsk = null, onPage }) {
   const canManage = page.canManage;
   const [draft, setDraft] = useState(null);
   const [state, setState] = useState({ busy: false, error: null, done: null });
@@ -145,6 +145,14 @@ export default function SellProducts({ gymId, page, locked, lockedNote, countryT
   if (addAsk !== asked) {
     setAsked(addAsk);
     if (draft === null && canManage && !locked && page.currency !== null && !full) setDraft(emptyProductDraft(page.tax));
+  }
+
+  // Change stock count on a sale: that product's own form.
+  const [changeAsked, setChangeAsked] = useState(0);
+  if (changeAsk !== null && changeAsk.n !== changeAsked) {
+    setChangeAsked(changeAsk.n);
+    const product = page.products.find((p) => p.id === changeAsk.productId);
+    if (product !== undefined && canManage && !locked) setDraft(draftFromProduct(product));
   }
 
   const run = async (work, done) => {

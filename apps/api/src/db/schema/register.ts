@@ -321,7 +321,7 @@ export const gymSaleRefunds = pgTable(
     check("gym_sale_refunds_restocked_check", sql`${t.restocked} BETWEEN 0 AND 99`),
     check(
       "gym_sale_refunds_void_reason_check",
-      sql`${t.voidReason} IS NULL OR (${t.undoneAt} IS NOT NULL AND ${t.voidReason} IN ('mistake','wrong_amount','other','square_failed'))`,
+      sql`${t.voidReason} IS NULL OR (${t.undoneAt} IS NOT NULL AND ${t.voidReason} IN ('mistake','wrong_amount','other','square_failed','in_square'))`,
     ),
     foreignKey({
       name: "gym_sale_refunds_sale_fk",

@@ -10,7 +10,7 @@ const minorSchema = z.number().int().min(0).max(99_999_999);
 /** Rows a page, read a page at a time: refunds that went wrong first, then fees, the newest first in each. */
 export const REFUNDS_TO_REVIEW_PAGE = 10;
 
-export const REFUND_REVIEW_KINDS = ["fee", "failed", "lost", "late"] as const;
+export const REFUND_REVIEW_KINDS = ["fee", "failed", "lost", "late", "place"] as const;
 
 export const refundToReviewSchema = z
   .object({

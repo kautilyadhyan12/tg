@@ -72,6 +72,8 @@ export interface RefundPress {
   cancelTooLate: boolean;
   /** Square's record of a refund made inside Square: no press made it. */
   fromSquare: boolean;
+  /** Part of a basket, refunded in Square: staff have not yet said which product. */
+  toPlace: boolean;
 }
 
 export interface RawPress {
@@ -105,6 +107,7 @@ export interface RawPress {
   cancel_wanted_at: Date | null;
   cancel_too_late: boolean;
   from_square: boolean;
+  to_place: boolean;
 }
 
 export const toPress = (r: RawPress): RefundPress => ({
@@ -138,6 +141,7 @@ export const toPress = (r: RawPress): RefundPress => ({
   cancelWantedAt: r.cancel_wanted_at,
   cancelTooLate: r.cancel_too_late,
   fromSquare: r.from_square,
+  toPlace: r.to_place,
 });
 
 /** What a press left "We don't know" says once Square's own record shows no such refund. */
@@ -145,7 +149,7 @@ export const NOT_IN_SQUARE = "NOT_IN_SQUARE";
 /** And once Square's own record shows it could not make it. */
 export const FAILED_IN_SQUARE = "FAILED_IN_SQUARE";
 /** How far apart Square's clock and ours may be, when a refund is matched to a press. */
-const CLOCKS_APART_MS = 60_000;
+export const CLOCKS_APART_MS = 60_000;
 /** A press left "We don't know" is first read against Square's record this long after. */
 const LOST_LOOK_AFTER_MS = 15 * 60_000;
 
@@ -296,7 +300,7 @@ export async function claimAsking(sql: Sql, environment: SquareEnvironment, now:
 /** Refunds Square has taken up and not finished, due a look. */
 export async function claimLooks(sql: Sql, environment: SquareEnvironment, now: Date, until: Date, limit: number, gymIds: readonly string[] | null): Promise<RefundPress[]> {
   const rows = await sql<RawPress[]>`
-    UPDATE gym_square_refunds SET checking_until = ${until}, checked_at = ${now}, look_at = ${until}
+    UPDATE gym_square_refunds SET checking_until = ${until}, checked_at = CASE WHEN to_place THEN checked_at ELSE ${now}::timestamptz END, look_at = ${until}
     WHERE id IN (
       SELECT id FROM gym_square_refunds
       WHERE environment = ${environment} AND state = 'pending' AND look_at <= ${now}
@@ -478,11 +482,13 @@ export async function pressOfSquareRefund(sql: SqlOrTx, gymId: string, environme
   return row === undefined ? null : toPress(row);
 }
 
-/** Whether this gym holds a member's payment of this Square id. A sale's comes with 18d-iv-d-ii. */
-export async function paymentHeldHere(sql: SqlOrTx, gymId: string, squarePaymentId: string): Promise<boolean> {
+/** What this gym holds of this Square id: a member's payment, a sale, or nothing. */
+export async function paymentHeldHere(sql: SqlOrTx, gymId: string, squarePaymentId: string): Promise<"member" | "sale" | null> {
   const [row] = await sql<{ id: string }[]>`
     SELECT id FROM gym_member_payments WHERE gym_id = ${gymId} AND provider = 'square' AND provider_payment_id = ${squarePaymentId} AND undone_at IS NULL`;
-  return row !== undefined;
+  if (row !== undefined) return "member";
+  const [sale] = await sql<{ id: string }[]>`SELECT id FROM gym_sales WHERE gym_id = ${gymId} AND square_payment_id = ${squarePaymentId} AND undone_at IS NULL LIMIT 1`;
+  return sale === undefined ? null : "sale";
 }
 
 export type MadeInSquareOutcome = { kind: "written"; press: RefundPress } | { kind: "waiting" | "already" | "no_payment" };
@@ -604,13 +610,13 @@ export async function recordMadeInSquare(
   });
 }
 
-/** Presses left "We don't know" due a read of Square's record, a member's payment's alone until 18d-iv-d-ii; each cleared, so it is read once unless it is set again. */
+/** Presses left "We don't know" due a read of Square's record; each cleared, so it is read once unless it is set again. */
 export async function claimLostLooks(sql: Sql, environment: SquareEnvironment, now: Date, limit: number, gymIds: readonly string[] | null): Promise<RefundPress[]> {
   const rows = await sql<RawPress[]>`
     UPDATE gym_square_refunds SET look_at = NULL
     WHERE id IN (
       SELECT id FROM gym_square_refunds
-      WHERE environment = ${environment} AND outcome = 'lost' AND look_at <= ${now} AND payment_id IS NOT NULL AND no_refund_at IS NULL
+      WHERE environment = ${environment} AND outcome = 'lost' AND look_at <= ${now} AND no_refund_at IS NULL
         ${gymIds === null ? sql`` : sql`AND gym_id = ANY(${[...gymIds]}::uuid[])`}
       ORDER BY look_at LIMIT ${limit} FOR UPDATE SKIP LOCKED)
     RETURNING *`;
