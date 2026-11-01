@@ -66,6 +66,29 @@ const membership = (over = {}, billing = {}) => ({
   ...over,
 });
 
+describe('a refund made inside Square (18d-iv-d-i)', () => {
+  const refund = (square) => ({ id: 'r1', amountMinor: 2500, method: 'company', refundedOn: '2026-11-01', reason: 'other', by: null, receiptNumber: 9, square });
+  const lineOf = (square) => billRow(bill({ state: 'refunded', paidMinor: 4999, payments: [payment({ method: 'company', refunds: [refund(square)] })] }), 'GBP', TODAY).payments[0].refunds[0];
+
+  it('says Square, the card and the day, with no reason and no name it cannot know, and is not voided here', () => {
+    const line = lineOf({ state: 'completed', card: { brand: 'VISA', last4: '1111' }, late: false, pressId: null, inSquare: true });
+    expect(line.detail).toBe('Refunded in Square to Visa ending 1111 · 1 Nov 2026');
+    expect(line.amount).toBe('£25.00 refunded');
+    expect(line.toCard).toBe(true);
+  });
+
+  it('says pending until Square finishes, and copes with no card', () => {
+    const line = lineOf({ state: 'pending', card: null, late: false, pressId: null, inSquare: true });
+    expect(line.detail).toBe('Refunded in Square · 1 Nov 2026');
+    expect(line.amount).toBe('£25.00 refund pending');
+  });
+
+  it('a refund sent from here reads as before', () => {
+    const line = lineOf({ state: 'completed', card: { brand: 'VISA', last4: '1111' }, late: false, pressId: null, inSquare: false });
+    expect(line.detail).toContain('Something else');
+  });
+});
+
 describe('each state the server sends has its own word, and no other', () => {
   it('Paid is Paid, with no due day beside it', () => {
     const row = billRow(bill({ state: 'paid', paidMinor: 4999, payments: [payment()] }), 'GBP', TODAY);

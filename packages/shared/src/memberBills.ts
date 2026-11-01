@@ -109,9 +109,9 @@ export const REFUND_VOID_REASONS = ["mistake", "wrong_amount", "other"] as const
 export const refundVoidReasonSchema = z.enum(REFUND_VOID_REASONS);
 export type RefundVoidReason = z.infer<typeof refundVoidReasonSchema>;
 
-/** The picked reasons, and `square_failed`: Square took a refund to the card up, then said it failed (18d-iv-a). The
- *  app writes it; nobody picks it. */
-export const REFUND_VOID_REASONS_KEPT = [...REFUND_VOID_REASONS, "square_failed"] as const;
+/** The picked reasons, `square_failed`: Square took a refund to the card up, then said it failed (18d-iv-a), and `in_square`: a refund
+ *  noted by card that Square's own record of that money replaced (18d-iv-d-i). The app writes them; nobody picks them. */
+export const REFUND_VOID_REASONS_KEPT = [...REFUND_VOID_REASONS, "square_failed", "in_square"] as const;
 export const refundVoidKeptSchema = z.enum(REFUND_VOID_REASONS_KEPT);
 export type RefundVoidKept = z.infer<typeof refundVoidKeptSchema>;
 
@@ -120,6 +120,7 @@ export const REFUND_VOID_REASON_WORDS: Readonly<Record<RefundVoidKept, string>> 
   wrong_amount: "Wrong amount",
   other: "Something else",
   square_failed: "Square could not refund it",
+  in_square: "Replaced by Square's own record. If more went back than Square shows, note it again",
 };
 
 /** How money went back: by hand, or to the card that paid, through Square (18d-iv-a), which reads as that payment's own
@@ -167,7 +168,7 @@ const minorSchema = z.number().int().min(0).max(99_999_999);
 /** A refund sent to the card through Square (18d-iv-a): where it stands there, and the card, where Square named it. `late`:
  *  still pending after Square's 14 days. `pressId`: the press it came from (`cardRefundResponseSchema`). */
 export const squareRefundSeenSchema = z
-  .object({ state: z.enum(["pending", "completed"]), card: cardSeenSchema.nullable(), late: z.boolean(), pressId: z.string().uuid().nullable().default(null) })
+  .object({ state: z.enum(["pending", "completed"]), card: cardSeenSchema.nullable(), late: z.boolean(), pressId: z.string().uuid().nullable().default(null), inSquare: z.boolean().default(false) })
   .strict();
 export type SquareRefundSeen = z.infer<typeof squareRefundSeenSchema>;
 
@@ -201,7 +202,7 @@ export type VoidedMemberRefund = z.infer<typeof voidedMemberRefundSchema>;
 
 /** A refund to the card with no answer, or none ever (`lost`), said under its payment. `decided`: staff said no refund is needed. */
 export const cardRefundOpenSchema = z
-  .object({ amountMinor: minorSchema, on: daySchema, lost: z.boolean(), onTerminal: z.boolean().default(false), decided: z.object({ on: daySchema, by: z.string().nullable() }).strict().nullable().default(null) })
+  .object({ amountMinor: minorSchema, on: daySchema, lost: z.boolean(), noRecord: z.boolean().default(false), failedInSquare: z.boolean().default(false), onTerminal: z.boolean().default(false), decided: z.object({ on: daySchema, by: z.string().nullable() }).strict().nullable().default(null) })
   .strict();
 export type CardRefundOpen = z.infer<typeof cardRefundOpenSchema>;
 

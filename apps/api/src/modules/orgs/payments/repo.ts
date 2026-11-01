@@ -184,7 +184,11 @@ export async function writeConnection(tx: TransactionSql, c: NewConnection): Pro
       location_choices = EXCLUDED.location_choices, access_token = EXCLUDED.access_token,
       refresh_token = EXCLUDED.refresh_token, access_expires_at = EXCLUDED.access_expires_at,
       refresh_due_at = EXCLUDED.refresh_due_at, connected_by = EXCLUDED.connected_by,
-      connected_at = EXCLUDED.connected_at, removed_at = NULL, scopes = EXCLUDED.scopes`;
+      connected_at = EXCLUDED.connected_at, removed_at = NULL, scopes = EXCLUDED.scopes, refunds_read_at = NULL`;
+  // Back on an account it left: what happened there meanwhile is read again, and any press left "We don't know" there.
+  await tx`
+    UPDATE gym_square_refunds SET look_at = ${c.connectedAt}
+    WHERE gym_id = ${c.gymId} AND environment = ${c.environment} AND account_id = ${c.accountId} AND outcome = 'lost' AND no_refund_at IS NULL`;
 }
 
 /** Connect Square again on the account already connected, to allow what it did not: the new
@@ -253,6 +257,38 @@ export async function connectionsOfAccount(sql: SqlOrTx, environment: SquareEnvi
     WHERE provider = 'square' AND environment = ${environment} AND account_id = ${accountId} AND state = 'connected'
     ORDER BY gym_id`;
   return rows.map(toRow);
+}
+
+/** Connections whose refunds are due their hourly read (18d-iv-d-i), each marked read now, so a second worker skips them; `readBefore`
+ *  is when it was last read, null the first time. */
+export async function claimRefundReads(
+  sql: Sql,
+  environment: SquareEnvironment,
+  now: Date,
+  dueBefore: Date,
+  limit: number,
+  gymIds: readonly string[] | null,
+): Promise<{ row: ConnectionRow; readBefore: Date | null }[]> {
+  const rows = await sql<(RawConnection & { read_before: Date | null })[]>`
+    WITH due AS (
+      SELECT gym_id, provider, refunds_read_at AS read_before FROM gym_payment_connections
+      WHERE provider = 'square' AND environment = ${environment} AND state = 'connected' AND (refunds_read_at IS NULL OR refunds_read_at <= ${dueBefore})
+        AND (${gymIds === null}::boolean OR gym_id = ANY(${[...(gymIds ?? [])]}::uuid[]))
+      ORDER BY refunds_read_at NULLS FIRST
+      LIMIT ${limit}
+      FOR UPDATE SKIP LOCKED
+    )
+    UPDATE gym_payment_connections c
+    SET refunds_read_at = ${now}
+    FROM due
+    WHERE c.gym_id = due.gym_id AND c.provider = due.provider AND c.environment = ${environment}
+    RETURNING c.*, due.read_before`;
+  return rows.map((r) => ({ row: toRow(r), readBefore: r.read_before }));
+}
+
+/** Square could not be read: the same stretch is read again by the next run. */
+export async function setRefundsRead(sql: SqlOrTx, gymId: string, environment: SquareEnvironment, at: Date | null): Promise<void> {
+  await sql`UPDATE gym_payment_connections SET refunds_read_at = ${at} WHERE gym_id = ${gymId} AND provider = 'square' AND environment = ${environment}`;
 }
 
 /** Take the connections whose renewal is due and hold each for `leaseMs`: a second worker

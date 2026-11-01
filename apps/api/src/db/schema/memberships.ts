@@ -491,7 +491,7 @@ export const gymMemberRefunds = pgTable(
   (t) => [
     check(
       "gym_member_refunds_void_reason_check",
-      sql`${t.voidReason} IS NULL OR (${t.undoneAt} IS NOT NULL AND ${t.voidReason} IN ('mistake','wrong_amount','other','square_failed'))`,
+      sql`${t.voidReason} IS NULL OR (${t.undoneAt} IS NOT NULL AND ${t.voidReason} IN ('mistake','wrong_amount','other','square_failed','in_square'))`,
     ),
     unique("gym_member_refunds_receipt_uq").on(t.gymId, t.receiptNumber),
     check("gym_member_refunds_receipt_check", sql`${t.receiptNumber} >= 1`),

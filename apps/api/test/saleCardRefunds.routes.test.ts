@@ -28,6 +28,7 @@ import { startSaleRefund, startWholeSaleRefund } from "../src/modules/orgs/payme
 import { linesPage, totals } from "../src/modules/orgs/paymentsDownload/repo.js";
 import { squareSettings } from "../src/modules/orgs/payments/settings.js";
 import { processSquareWork } from "../src/modules/orgs/payments/work.js";
+import { keepSquareEvent } from "../src/modules/webhooks/repo.js";
 import { account, fakeSquare, type Account } from "./fakeSquareTerminal.js";
 import { proveAddress } from "./proveAddress.js";
 
@@ -500,6 +501,22 @@ d("Refund to card at Sell (real Postgres)", { timeout: T }, () => {
       expect(errorOf(await pressAll(basket, 1900, { shelf: [{ saleId: basket.towel, count: 1 }] }))).toBe("restock_not_counted");
       expect(errorOf(await pressAll(basket, 1900, { shelf: [{ saleId: other.water, count: 1 }] }))).toBe("restock_too_many");
       expect(madeFor(basket)).toHaveLength(0);
+    });
+
+    it("Square's own message finishes a sale's refund sooner than the next look, and writes nothing more", async () => {
+      const own = await makeGym(`Sale Message ${uniq()}`, `MERCH${uniq()}`);
+      const basket = await sold(own);
+      await pressAll(basket, 1900, { shelf: [] });
+      const made = madeFor(basket)[0];
+      if (made === undefined) throw new Error("no refund made");
+      const rowsBefore = (await sql`SELECT id FROM gym_sale_refunds WHERE gym_id = ${own.id} AND sale_id = ANY(${[basket.water, basket.towel]}::uuid[])`).length;
+      square.refundEnds(made.id, "COMPLETED");
+      const eventId = randomUUID();
+      await keepSquareEvent(sql, { eventId, payload: { type: "refund.updated", accountId: own.acct.merchantId, refundId: made.id } });
+      await processSquareWork(workDeps(), [eventId], [own.id]);
+      const presses = await sql<{ state: string; outcome: string | null }[]>`SELECT state, outcome FROM gym_square_refunds WHERE gym_id = ${own.id} AND square_refund_id = ${made.id}`;
+      expect(presses).toEqual([{ state: "done", outcome: "completed" }]);
+      expect((await sql`SELECT id FROM gym_sale_refunds WHERE gym_id = ${own.id} AND sale_id = ANY(${[basket.water, basket.towel]}::uuid[])`).length).toBe(rowsBefore);
     });
 
     it("Square fails it: every product's refund is voided, the shelf count comes off, and it can be sent again", async () => {

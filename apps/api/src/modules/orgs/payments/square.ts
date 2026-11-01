@@ -38,6 +38,8 @@ import {
   squareTerminalRefundAnswerSchema,
   squareEmptyAnswerSchema,
   squareRevokeSchema,
+  squareRefundSchema,
+  squareRefundsPageSchema,
   squareSubscriptionSchema,
   squareSubscriptionsPageSchema,
   squareTerminalActionAnswerSchema,
@@ -140,6 +142,8 @@ export interface SquareApi {
    *  the same key with another amount is refused (CONFLICTING_PARAMETERS) (measured 2026-10-30). */
   refundPayment(accessToken: string, refund: NewCardRefund): Promise<SquareResult<SquareRefund>>;
   getRefund(accessToken: string, refundId: string): Promise<SquareResult<SquareRefund>>;
+  /** One page of the business's refunds from `beginTime`, oldest first, at every location (18d-iv-d-i). `unread`: how many could not be read. */
+  listRefunds(accessToken: string, q: { beginTime: Date; cursor: string | null }): Promise<SquareResult<{ refunds: SquareRefund[]; unread: number; cursor: string | null }>>;
   /** Give money back on the Terminal, for a payment Square marks as needing the card present (18d-iv-c). `idempotencyKey`:
    *  asked again, Square gives back the same request. */
   createTerminalRefund(accessToken: string, refund: NewTerminalRefund): Promise<SquareResult<SquareTerminalRefund>>;
@@ -584,6 +588,19 @@ export function createSquareApi(opts: {
     async getRefund(accessToken, refundId) {
       const result = await call("GET", refundPath(refundId), squareRefundAnswerSchema, bearer(accessToken));
       return result.kind === "ok" ? { kind: "ok", value: result.value.refund } : result;
+    },
+    async listRefunds(accessToken, q) {
+      const query = new URLSearchParams({ begin_time: q.beginTime.toISOString(), sort_order: "ASC", limit: "100", ...(q.cursor === null ? {} : { cursor: q.cursor }) });
+      const result = await call("GET", `/v2/refunds?${query.toString()}`, squareRefundsPageSchema, bearer(accessToken));
+      if (result.kind !== "ok") return result;
+      const refunds: SquareRefund[] = [];
+      let unread = 0;
+      for (const raw of result.value.refunds ?? []) {
+        const one = squareRefundSchema.safeParse(raw);
+        if (one.success) refunds.push(one.data);
+        else unread += 1;
+      }
+      return { kind: "ok", value: { refunds, unread, cursor: result.value.cursor ?? null } };
     },
     async createTerminalRefund(accessToken, r) {
       const result = await call("POST", "/v2/terminals/refunds", squareTerminalRefundAnswerSchema, bearer(accessToken), {
