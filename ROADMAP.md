@@ -583,7 +583,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 17c. **Events, the Leaderboard and a person's profile** (split 2026-10-31: Events first).
       - 17c-i. [x] **Events on the phone** — merged 2026-10-31 (PR #415).
       - 17c-ii. **The Leaderboard, Hide me and a person's profile** (split 2026-11-01: the board first).
-        - 17c-ii-a. [ ] **The Leaderboard, Hide me and Your Rank** on the Dashboard; somebody with no gym keeps Coming soon until their own board (item 38).
+        - 17c-ii-a. [x] **The Leaderboard, Hide me and Your Rank** — merged 2026-11-01 (PR #421).
         - 17c-ii-b. [ ] **A person's profile**: their places and posts; a name on Updates and a row of the board open it.
     - 17d. [ ] **Challenges**, and who won under a challenge's ended post on Updates, with See the challenge.
 18. [ ] **Inbox, Contact the gym, and phone notifications** (spec Part 3 §16.1; Part 6 §6): the class reminder, a place is free, a message, somebody commented on your post or replied to you. Needs Kd's Firebase project.
