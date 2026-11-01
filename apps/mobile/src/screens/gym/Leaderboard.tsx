@@ -606,7 +606,7 @@ function Counted({ place, boardId, period }: { place: LeaderboardPlace; boardId:
   );
 }
 
-function NameBox({ onSaved }: { onSaved: () => Promise<boolean> }) {
+export function NameBox({ onSaved }: { onSaved: () => Promise<boolean> }) {
   const { session } = useSession();
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
