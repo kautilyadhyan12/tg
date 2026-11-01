@@ -223,6 +223,7 @@ describe("the Dashboard, with the person's own numbers", () => {
     expect(screen.getByText("7-Day Streak")).toBeTruthy();
     expect(screen.getByText("First Workout")).toBeTruthy();
     expect(screen.getByText("Your Rank")).toBeTruthy();
+    // Somebody with no gym: Your Rank waits for their own board.
     expect(screen.getAllByText("Coming soon")).toHaveLength(1);
     // Recent Activity: the workout, the meal and the run, newest first, each named by its day.
     expect(screen.getByText("Recent Activity")).toBeTruthy();

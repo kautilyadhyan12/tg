@@ -4,13 +4,16 @@ import { useIsFocused, useNavigation, type NavigationProp, type ParamListBase } 
 import {
   gamificationMeSchema,
   goalsResponseSchema,
+  leaderboardResponseSchema,
   mealPageSchema,
+  myOrgsResponseSchema,
   progressOverviewSchema,
   progressTrendSchema,
   runPageSchema,
   weeklyChallengesSchema,
   workoutPageSchema,
   type GamificationMe,
+  type LeaderboardBoard,
   type MealPage,
   type ProgressOverview,
   type ProgressTrend,
@@ -49,6 +52,8 @@ import {
 import { Clock } from "./dashboard/Clock";
 import { useRead, type Read } from "./dashboard/useRead";
 import { GOALS_READ, GoalsBox, GoalsPage, type GoalsOpen } from "./Goals";
+import { LeaderboardPage, leaderboardPath, type LeaderboardPlace } from "./gym/Leaderboard";
+import { boardInstead, rankWords } from "./gym/leaderboardView";
 import { greetingAt } from "./greeting";
 import { COMING_SOON } from "./Soon";
 
@@ -65,6 +70,7 @@ export const DASHBOARD_READS = {
   runs: "/v1/geo/runs?limit=3",
   meals: "/v1/nutrition/meals?limit=3",
   goals: GOALS_READ,
+  places: "/v1/orgs/mine",
 } as const;
 
 export function DashboardScreen() {
@@ -82,6 +88,9 @@ export function DashboardScreen() {
   // A goal's days are the person's own: read again once the zone is saved.
   const goals = useRead(DASHBOARD_READS.goals, goalsResponseSchema, zoneSaved);
   const [goalsOpen, setGoalsOpen] = useState<GoalsOpen | null>(null);
+  // Your Rank is the person's first gym's board; somebody using the app alone has a board of their own to come (item 38).
+  const places = useRead(DASHBOARD_READS.places, myOrgsResponseSchema);
+  const firstGym = places.read.kind === "ok" ? (places.read.data.orgs.find((org) => org.isMember) ?? null) : null;
   // The clock ticks only while the Dashboard is what the person sees.
   const focused = useIsFocused();
   const [awake, setAwake] = useState(AppState.currentState === "active");
@@ -93,7 +102,7 @@ export function DashboardScreen() {
       heard.remove();
     };
   }, []);
-  const reads = [overview, me, week, challenges, recent, runs, meals, goals];
+  const reads = [overview, me, week, challenges, recent, runs, meals, goals, places];
   const failed = reads.some((one) => one.read.kind === "failed");
   const now = new Date();
   // The workout and the Library are the exercise folders' (items 53, 63, 64); their tab says so.
@@ -161,7 +170,11 @@ export function DashboardScreen() {
       </Swipe>
       <Swipe>
         <Challenges read={challenges.read} />
-        <Rank />
+        {firstGym === null ? (
+          <RankBox big={null} />
+        ) : (
+          <GymRank key={firstGym.id} place={{ id: firstGym.id, name: firstGym.name, clockFormat: firstGym.clockFormat }} />
+        )}
         <Badges me={me.read} onPress={toMe} />
       </Swipe>
       <Recent workouts={recent.read} runs={runs.read} meals={meals.read} />
@@ -417,10 +430,52 @@ function Challenges({ read }: { read: Read<WeeklyChallenges> }) {
   );
 }
 
-/** The gym's leaderboard reaches the phone with feature folder 1's item 17. */
-function Rank() {
+/** Your Rank from the person's first gym's board; a press opens the board. */
+function GymRank({ place }: { place: LeaderboardPlace }) {
+  const [board, setBoard] = useState<LeaderboardBoard>("gym_days");
+  const [open, setOpen] = useState(false);
+  const { read, again } = useRead(leaderboardPath(place.id, board, "this_week"), leaderboardResponseSchema);
+  const data = read.kind === "ok" && read.data.gymId === place.id && read.data.board === board ? read.data : null;
+  // The board the page itself opens on: a gym that checks nobody in, or a board switched off, gives way.
+  const instead = data === null ? null : boardInstead(data, false);
+  useEffect(() => {
+    if (instead !== null) setBoard(instead);
+  }, [instead]);
+  const words = data === null ? null : rankWords(data);
   return (
-    <View style={[styles.box, styles.rank]}>
+    <>
+      <RankBox
+        big={words?.big ?? NOT_KNOWN}
+        of={words?.of ?? null}
+        line={words?.line ?? null}
+        say={`Your Rank at ${place.name}`}
+        onPress={() => {
+          setOpen(true);
+        }}
+      />
+      <LeaderboardPage
+        place={open ? place : null}
+        onClose={() => {
+          setOpen(false);
+          again();
+        }}
+      />
+    </>
+  );
+}
+
+interface RankBoxProps {
+  /** Null: somebody with no gym, whose own board is still to come. */
+  big: string | null;
+  of?: string | null;
+  line?: string | null;
+  say?: string;
+  onPress?: () => void;
+}
+
+function RankBox({ big, of = null, line = null, say, onPress }: RankBoxProps) {
+  const inside = (
+    <>
       <Image source={pictures.rank} resizeMode="cover" style={styles.fill} accessible={false} />
       <View style={[StyleSheet.absoluteFill, styles.shade]} />
       <View style={styles.inner}>
@@ -428,9 +483,25 @@ function Rank() {
           <Icon name="crown" size={16} colour="orange" />
           <Txt kind="h3" style={styles.boxTitle}>Your Rank</Txt>
         </View>
-        <Pill label={COMING_SOON} />
+        {big === null ? (
+          <Pill label={COMING_SOON} />
+        ) : (
+          <View>
+            <View style={styles.rankNumber}>
+              <Txt kind="h1" colour="gold">{big}</Txt>
+              {of === null ? null : <Txt kind="small" colour="text">{of}</Txt>}
+            </View>
+            {line === null ? null : <Txt kind="small" colour="text">{line}</Txt>}
+          </View>
+        )}
       </View>
-    </View>
+    </>
+  );
+  if (onPress === undefined) return <View style={[styles.box, styles.rank]}>{inside}</View>;
+  return (
+    <Pressable accessibilityRole="button" {...(say === undefined ? {} : { accessibilityLabel: say })} onPress={onPress} style={[styles.box, styles.rank]}>
+      {inside}
+    </Pressable>
   );
 }
 
@@ -572,6 +643,7 @@ const styles = StyleSheet.create({
   challenges: { width: 360, minHeight: 210 },
   challengeRow: { width: "52%" },
   rank: { width: 140, minHeight: 210, justifyContent: "flex-end" },
+  rankNumber: { flexDirection: "row", alignItems: "flex-end", flexWrap: "wrap", gap: 6 },
   badges: { width: 230, minHeight: 210 },
   recent: { gap: 4 },
   recentArt: { position: "absolute", top: 0, right: -10, width: "75%", height: "100%", opacity: 0.6 },
