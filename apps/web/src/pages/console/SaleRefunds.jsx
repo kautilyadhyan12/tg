@@ -1,3 +1,5 @@
+import ChargebackLines from './ChargebackLines';
+import { chargebackLines } from './chargebackView';
 import { useState } from 'react';
 import { Check, Loader2 } from 'lucide-react';
 import { registerService } from '../../api/registerApi';
@@ -512,7 +514,8 @@ export function SaleRefundLines({ gymId, gym, sale, canAct, onDone, named = fals
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const waiting = saleOpenLine(sale);
-  if (lines.length === 0 && waiting === null) return null;
+  const chargebacks = chargebackLines(sale.chargebacks);
+  if (lines.length === 0 && waiting === null && chargebacks.length === 0) return null;
 
   const send = async (refundId, words) => {
     if (form.reason === '') {
@@ -533,6 +536,7 @@ export function SaleRefundLines({ gymId, gym, sale, canAct, onDone, named = fals
 
   return (
     <div className="flex flex-col gap-2">
+      <ChargebackLines lines={chargebacks} />
       {waiting !== null ? (
         <p className="c-s14 c-w5 m-0" style={{ color: 'var(--warn)' }} data-testid="sale-card-refund-open">
           {waiting}

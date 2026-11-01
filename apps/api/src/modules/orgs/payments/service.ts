@@ -94,7 +94,7 @@ export async function requireGymOwner(deps: PaymentsDeps, gymId: string, userId:
 /** What Square Terminals and the card on file need: every permission but Square's own subscriptions read
  *  (SUBSCRIPTIONS_READ, 18d-iii-b-ii-b-i), which Delete permanently checks before it takes a customer out of Square;
  *  a gym connected before it asked for that one is never made to reconnect for the Terminal. */
-const TERMINAL_SCOPES: readonly string[] = SQUARE_SCOPES.filter((scope) => scope !== "SUBSCRIPTIONS_READ");
+const TERMINAL_SCOPES: readonly string[] = SQUARE_SCOPES.filter((scope) => scope !== "SUBSCRIPTIONS_READ" && scope !== "DISPUTES_READ");
 
 /** The connection allows less than Square Terminals need: the owner connects Square again. */
 export const missingScopes = (row: repo.ConnectionRow): boolean => TERMINAL_SCOPES.some((scope) => !row.scopes.includes(scope));
@@ -152,6 +152,10 @@ export async function readPayments(deps: PaymentsDeps, userId: string, gymId: st
       square: connectionView(row, isOwner),
       terminals: deps.square === null ? null : await terminalsView(deps, deps.square, row, isOwner),
       needsAllow: row?.state === "connected" && allowsLess(row),
+      allowFor:
+        row?.state === "connected"
+          ? [...(row.scopes.includes("SUBSCRIPTIONS_READ") ? [] : (["subscriptions"] as const)), ...(row.scopes.includes("DISPUTES_READ") ? [] : (["chargebacks"] as const))]
+          : [],
     },
   });
 }

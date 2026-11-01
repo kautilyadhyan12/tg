@@ -56,6 +56,7 @@
 //   GET    /v1/orgs/:gymId/card-refunds/:pressId              where a refund on the Terminal stands (18d-iv-c)
 //   POST   /v1/orgs/:gymId/card-refunds/:pressId/cancel       stops it, until the person starts
 //   POST   /v1/orgs/:gymId/register/sales/:saleId/square-refunds/:pressId/place   which product a refund made in Square was for (18d-iv-d-ii)
+//   GET    /v1/orgs/:gymId/chargebacks?from=0                 Overview's list of chargebacks to answer
 //   GET    /v1/orgs/:gymId/refunds-to-review?from=0           Overview's list of refunds to review
 //   POST   /v1/orgs/:gymId/refunds-to-review/fees/:billId/keep            Keep the fee
 //   POST   /v1/orgs/:gymId/refunds-to-review/presses/:pressId/no-refund   No refund needed
@@ -72,6 +73,8 @@ import {
   refundReviewPressParamsSchema,
   placeSquareRefundParamsSchema,
   placeSquareRefundRequestSchema,
+  chargebacksQuerySchema,
+  squareDisputeIdSchema,
   refundsToReviewQuerySchema,
   saveCardRequestSchema,
   squareCardIdSchema,
@@ -114,6 +117,7 @@ import * as terminalCards from "./terminalCards.js";
 import * as terminalPayments from "./terminalPayments.js";
 import * as terminals from "./terminals.js";
 import { SQUARE_REVOKED_EVENT } from "./work.js";
+import { SQUARE_DISPUTE_EVENTS, readChargebacks } from "./chargebacks.js";
 import { SQUARE_REFUND_EVENTS } from "./squareMadeRefunds.js";
 
 export const SQUARE_WEBHOOK_PATH = "/v1/webhooks/square";
@@ -441,6 +445,17 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
   const reviewReadLimit = createDualRateLimit({ name: "refunds_to_review", max: 600, ipMax: 3000, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
   const reviewPressLimit = createDualRateLimit({ name: "refunds_to_review_press", max: 120, ipMax: 1200, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
 
+  // Chargebacks to answer: Overview reads it each time it opens.
+  const chargebacksReadLimit = createDualRateLimit({ name: "chargebacks", max: 600, ipMax: 3000, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
+  app.get("/v1/orgs/:gymId/chargebacks", { preHandler: [app.authenticate, staffOnly(deps.sql, chargebacksReadLimit)] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const query = parseOr400(chargebacksQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    const answer = await readChargebacks(paymentsDeps, callerId(req), params.gymId, query.from);
+    return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
   app.get("/v1/orgs/:gymId/refunds-to-review", { preHandler: [app.authenticate, staffOnly(deps.sql, reviewReadLimit)] }, async (req, reply) => {
     const params = parseOr400(orgParamsSchema, req.params, req, reply);
     if (params === null) return;
@@ -591,6 +606,19 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
           await webhooks.keepSquareEvent(deps.sql, {
             eventId: event.data.event_id,
             payload: { type: event.data.type, accountId: event.data.merchant_id, refundId: refundId.data },
+          });
+          return reply.status(200).send();
+        }
+        // A chargeback (18d-iv-e-i): the worker reads Square's own record of it. Square's example names it in its object as well as `data.id`.
+        if (SQUARE_DISPUTE_EVENTS.includes(event.data.type)) {
+          const disputeId = squareDisputeIdSchema.safeParse(event.data.data?.object?.dispute?.id ?? event.data.data?.id);
+          if (!disputeId.success) {
+            req.log.warn({ event: "webhook.square_dispute_unreadable" }, "a signed Square dispute message names no dispute");
+            return reply.status(200).send();
+          }
+          await webhooks.keepSquareEvent(deps.sql, {
+            eventId: event.data.event_id,
+            payload: { type: event.data.type, accountId: event.data.merchant_id, disputeId: disputeId.data },
           });
           return reply.status(200).send();
         }

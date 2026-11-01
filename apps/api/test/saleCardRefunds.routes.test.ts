@@ -11,6 +11,7 @@ import postgres from "postgres";
 import {
   ROLE_PRIVILEGES,
   cardRefundCheckSchema,
+  chargebacksResponseSchema,
   refundsToReviewResponseSchema,
   cardRefundResponseSchema,
   sellPageResponseSchema,
@@ -113,6 +114,7 @@ d("Refund to card at Sell (real Postgres)", { timeout: T }, () => {
   const mineSql = sql`SELECT id FROM gyms WHERE owner_user_id IN (SELECT id FROM users WHERE email LIKE 'scrf-t-%@example.com')`;
   const cleanup = async () => {
     const myUsers = sql`SELECT id FROM users WHERE email LIKE 'scrf-t-%@example.com'`;
+    await sql`DELETE FROM gym_square_disputes WHERE gym_id IN (${mineSql})`;
     await sql`DELETE FROM gym_square_refunds WHERE gym_id IN (${mineSql})`;
     await sql`DELETE FROM gym_terminal_payments WHERE gym_id IN (${mineSql})`;
     await sql`DELETE FROM gym_sales WHERE gym_id IN (${mineSql})`;
@@ -881,6 +883,35 @@ d("Refund to card at Sell (real Postgres)", { timeout: T }, () => {
       const [audit] = await sql<{ action: string; meta: Record<string, string> }[]>`
         SELECT action, meta FROM audit_log WHERE gym_id = ${gym.id} AND target_id = ${row?.id ?? ""}`;
       expect(audit).toMatchObject({ action: "org.sale_refund_sent", meta: { product: "Water", amountMinor: "300", brand: "VISA", last4: "1111", method: "terminal", restocked: "1" } });
+    });
+  });
+
+  describe("a chargeback (18d-iv-e-i)", () => {
+    it("is on the basket's first line alone, on this gym's page, and on Overview's list as the sale", async () => {
+      clock = new Date(Math.max(clock.getTime(), Date.now()));
+      const basket = await sold(gym);
+      const other = await sold(gym);
+      const theirs = await sold(nextDoor);
+      const [paid] = await sql<{ square_payment_id: string }[]>`SELECT square_payment_id FROM gym_sales WHERE id = ${basket.water}`;
+      const made = square.disputeInSquare(paid?.square_payment_id ?? "", { reason: "NOT_RECEIVED" });
+      // A kept message falls due on the real clock: the test clock never runs behind it.
+      clock = new Date(Date.now() + 5000);
+      const eventId = randomUUID();
+      await keepSquareEvent(sql, { eventId, payload: { type: "dispute.created", accountId: gym.acct.merchantId, disputeId: made.id } });
+      await processSquareWork(workDeps(), [eventId], gyms.map((g) => g.id));
+
+      const lines = [await line(basket, basket.water), await line(basket, basket.towel)];
+      expect(lines.flatMap((l) => l.chargebacks).map((c) => c.reason)).toEqual(["NOT_RECEIVED"]);
+      expect(lines.find((l) => l.lineNo === 1)?.chargebacks).toHaveLength(1);
+      for (const l of [await line(other, other.water), await line(other, other.towel), await line(theirs, theirs.water), await line(theirs, theirs.towel)]) expect(l.chargebacks).toEqual([]);
+
+      const res = await send("GET", `/v1/orgs/${gym.id}/chargebacks`, gym.owner.cookies);
+      const rows = chargebacksResponseSchema.parse(JSON.parse(res.body)).rows.filter((r) => r.id === lines.find((l) => l.lineNo === 1)?.chargebacks[0]?.id);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.sale).toMatchObject({ more: 1 });
+      expect(rows[0]?.member).toBeNull();
+      // A sale holds no membership, so the automatic charge is untouched by it.
+      expect(await sql`SELECT 1 FROM gym_square_disputes q JOIN gym_member_payments p ON p.provider_payment_id = q.square_payment_id WHERE q.square_payment_id = ${paid?.square_payment_id ?? ""}`).toHaveLength(0);
     });
   });
 

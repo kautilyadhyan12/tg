@@ -22,6 +22,7 @@
 // (`.cost/18d-iv-a/probe-refund.mts`): PENDING first; the same key gives back the same refund, another amount under it is
 // refused (CONFLICTING_PARAMETERS), more than is left is refused (REFUND_AMOUNT_INVALID), and the payment's `refunded_money`
 // grows.
+import type { SquareDispute } from "@app/shared";
 import { randomBytes } from "node:crypto";
 import type { SquareCustomer, SquareCustomerFound, SquareLocation, SquarePayment, SquareRefund, SquareTerminalCheckout, SquareTerminalRefund } from "@app/shared";
 import type { CardPaymentResult, NewCardPayment, NewSquareCustomer, NewTerminalCheckout, SquareApi, SquareResult } from "../src/modules/orgs/payments/square.js";
@@ -69,6 +70,8 @@ export function fakeSquare() {
   const checkoutKeys = new Map<string, string>();
   const listings: { locationId: string }[] = [];
   /** Every refund Square made, as it stands: its key, whose it is, and what was asked. */
+  /** Every chargeback the app asked Square for by its id. */
+  const disputeAsks: string[] = [];
   const refundsMade: (SquareRefund & { accountId: string; key: string; reason: string })[] = [];
   /** Refunds asked of a Terminal (18d-iv-c). A simulated Terminal plays its part on the first read; a person's waits for `terminalRefundUsed`. */
   const terminalRefunds: (SquareTerminalRefund & { accountId: string; key: string; reason: string; deadline: string })[] = [];
@@ -271,6 +274,38 @@ export function fakeSquare() {
     refundsMade.push(made);
     return made;
   };
+  /** Chargebacks, as Square's test area shows them (read 2026-11-01). */
+  const disputes: (SquareDispute & { accountId: string })[] = [];
+  /** A member's bank starts a chargeback: Square makes the dispute, 14 days to answer. */
+  const disputeInSquare = (paymentId: string, over: Partial<SquareDispute> = {}): SquareDispute & { accountId: string } => {
+    const p = paymentById(paymentId);
+    if (p === undefined) throw new Error("no such payment at the fake Square");
+    n += 1;
+    const due = new Date(state.now().getTime() + 14 * 24 * 60 * 60_000);
+    due.setUTCHours(0, 0, 0, 0);
+    const made = {
+      id: `DSP${String(n)}${randomBytes(6).toString("hex")}`,
+      state: "EVIDENCE_REQUIRED",
+      reason: "NO_KNOWLEDGE",
+      amount_money: p.total_money ?? p.amount_money,
+      due_at: due.toISOString(),
+      card_brand: "VISA",
+      disputed_payment: { payment_id: p.id },
+      updated_at: state.now().toISOString(),
+      ...over,
+      accountId: p.accountId,
+    };
+    disputes.push(made);
+    return made;
+  };
+  /** Square moves a chargeback on. */
+  const disputeMoves = (id: string, moved: string) => {
+    const made = disputes.find((d) => d.id === id);
+    if (made === undefined) throw new Error("no such dispute");
+    made.state = moved;
+    made.updated_at = state.now().toISOString();
+  };
+  const shownDispute = (d: SquareDispute): SquareDispute => ({ id: d.id, state: d.state, reason: d.reason ?? null, amount_money: d.amount_money, due_at: d.due_at ?? null, card_brand: d.card_brand ?? null, disputed_payment: d.disputed_payment, updated_at: d.updated_at ?? null });
   const api: SquareApi = {
     authorizeUrl: (s) => `https://connect.squareup.com/oauth2/authorize?state=${s}`,
     exchangeCode(code) {
@@ -633,6 +668,21 @@ export function fakeSquare() {
       if (made?.accountId !== a.merchantId) return Promise.resolve(notFound);
       return Promise.resolve({ kind: "ok", value: shownRefund(made) });
     },
+    getDispute(token, id) {
+      disputeAsks.push(id);
+      if (state.down) return Promise.resolve(unavailable);
+      const a = tokenAccount(token);
+      if (a === undefined) return Promise.resolve(unauthorized);
+      const made = disputes.find((d) => d.id === id);
+      if (made?.accountId !== a.merchantId) return Promise.resolve(notFound);
+      return Promise.resolve({ kind: "ok", value: shownDispute(made) });
+    },
+    listDisputes(token) {
+      if (state.down) return Promise.resolve(unavailable);
+      const a = tokenAccount(token);
+      if (a === undefined) return Promise.resolve(unauthorized);
+      return Promise.resolve({ kind: "ok", value: { disputes: disputes.filter((d) => d.accountId === a.merchantId).map(shownDispute), unread: 0, cursor: null } });
+    },
     listRefunds(token, q) {
       if (state.down || state.refundUnread) return Promise.resolve(unavailable);
       const a = tokenAccount(token);
@@ -761,6 +811,9 @@ export function fakeSquare() {
   return {
     api,
     refundInSquare,
+    disputeInSquare,
+    disputeMoves,
+    disputeAsks,
     allow,
     state,
     devices,

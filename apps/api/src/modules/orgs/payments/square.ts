@@ -34,6 +34,9 @@ import {
   squarePaymentSchema,
   squarePaymentsPageSchema,
   squarePaymentRefusalSchema,
+  squareDisputeAnswerSchema,
+  squareDisputeSchema,
+  squareDisputesPageSchema,
   squareRefundAnswerSchema,
   squareTerminalRefundAnswerSchema,
   squareEmptyAnswerSchema,
@@ -53,6 +56,7 @@ import {
   type SquareLocation,
   type SquareMerchant,
   type SquarePayment,
+  type SquareDispute,
   type SquareRefund,
   type SquareTerminalAction,
   type SquareTerminalCheckout,
@@ -142,6 +146,9 @@ export interface SquareApi {
    *  the same key with another amount is refused (CONFLICTING_PARAMETERS) (measured 2026-10-30). */
   refundPayment(accessToken: string, refund: NewCardRefund): Promise<SquareResult<SquareRefund>>;
   getRefund(accessToken: string, refundId: string): Promise<SquareResult<SquareRefund>>;
+  /** A chargeback (18d-iv-e-i): both need DISPUTES_READ. */
+  getDispute(accessToken: string, disputeId: string): Promise<SquareResult<SquareDispute>>;
+  listDisputes(accessToken: string, q: { cursor: string | null }): Promise<SquareResult<{ disputes: SquareDispute[]; unread: number; cursor: string | null }>>;
   /** One page of the business's refunds from `beginTime`, oldest first, at every location (18d-iv-d-i). `unread`: how many could not be read. */
   listRefunds(accessToken: string, q: { beginTime: Date; cursor: string | null }): Promise<SquareResult<{ refunds: SquareRefund[]; unread: number; cursor: string | null }>>;
   /** Give money back on the Terminal, for a payment Square marks as needing the card present (18d-iv-c). `idempotencyKey`:
@@ -284,6 +291,7 @@ export const SQUARE_SCOPES = [
   "PAYMENTS_WRITE_IN_PERSON",
   "DEVICE_CREDENTIAL_MANAGEMENT",
   "SUBSCRIPTIONS_READ",
+  "DISPUTES_READ",
 ] as const;
 export const SQUARE_VERSION = "2026-09-16";
 export const SQUARE_TIMEOUT_MS = 10_000;
@@ -588,6 +596,24 @@ export function createSquareApi(opts: {
     async getRefund(accessToken, refundId) {
       const result = await call("GET", refundPath(refundId), squareRefundAnswerSchema, bearer(accessToken));
       return result.kind === "ok" ? { kind: "ok", value: result.value.refund } : result;
+    },
+    async getDispute(accessToken, disputeId) {
+      if (!/^[A-Za-z0-9_-]{1,255}$/.test(disputeId)) throw new Error("not a Square dispute id");
+      const result = await call("GET", `/v2/disputes/${disputeId}`, squareDisputeAnswerSchema, bearer(accessToken));
+      return result.kind === "ok" ? { kind: "ok", value: result.value.dispute } : result;
+    },
+    async listDisputes(accessToken, q) {
+      const query = q.cursor === null ? "" : `?${new URLSearchParams({ cursor: q.cursor }).toString()}`;
+      const result = await call("GET", `/v2/disputes${query}`, squareDisputesPageSchema, bearer(accessToken));
+      if (result.kind !== "ok") return result;
+      const disputes: SquareDispute[] = [];
+      let unread = 0;
+      for (const raw of result.value.disputes ?? []) {
+        const one = squareDisputeSchema.safeParse(raw);
+        if (one.success) disputes.push(one.data);
+        else unread += 1;
+      }
+      return { kind: "ok", value: { disputes, unread, cursor: result.value.cursor ?? null } };
     },
     async listRefunds(accessToken, q) {
       const query = new URLSearchParams({ begin_time: q.beginTime.toISOString(), sort_order: "ASC", limit: "100", ...(q.cursor === null ? {} : { cursor: q.cursor }) });
