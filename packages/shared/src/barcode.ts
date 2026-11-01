@@ -1,7 +1,7 @@
 // Packaged foods by barcode (ROADMAP Stage 5 33b-iii-a; rulings/2026-10-30-33b-iii-a.md): what a code
 // on a pack is, the server's reply about it, and the shape of Open Food Facts' files.
 import { z } from "zod";
-import { foodSearchItemSchema } from "./nutrition.js";
+import { foodSearchItemSchema, packagedCheckSchema } from "./nutrition.js";
 
 /** GS1's check digit: the last digit is worked out from the others, so a misread digit fails. */
 export function barcodeCheckDigitOk(code: string): boolean {
@@ -59,13 +59,6 @@ export function classifyBarcode(raw: string): BarcodeKind {
 /** The lookup's address. Digits only, so nothing else reaches a query. */
 export const barcodeParamSchema = z.object({ code: z.string().regex(/^\d{8,14}$/) }).strict();
 
-/** Why a product's numbers should be checked against its pack, or `fine`:
- *  `doesnt_add_up`, its calories are far from what its protein, carbs and fat come to;
- *  `part_missing`, its protein, carbs or fat are not known;
- *  `lists_differ`, the two lists are over a fifth apart on its calories. */
-export const packagedCheckSchema = z.enum(["fine", "doesnt_add_up", "part_missing", "lists_differ"]);
-export type PackagedCheck = z.infer<typeof packagedCheckSchema>;
-
 /** The reply. `allergens` and `mayContain` are words of Open Food Facts' own list of allergens: most
  *  products have neither, so an empty list says nothing about the food and must never read as safe. */
 export const barcodeReplySchema = z.discriminatedUnion("status", [
@@ -112,6 +105,8 @@ export const offProductSchema = z.object({
   allergens: z.array(z.string()),
   traces: z.array(z.string()),
   figures: z.record(z.string(), z.number()),
+  /** How many people have scanned it: what the food search puts first. */
+  scans: z.number().int().nonnegative().optional(),
 });
 export type OffProduct = z.infer<typeof offProductSchema>;
 

@@ -7,7 +7,7 @@ import { totalsOf } from "./rows";
 // and Cronometer add foods to a meal: each food picked goes on a list, and one save keeps them as one meal.
 
 /** A food as the amount box holds it: one the search found, or one logged before (`last`). */
-export type BasketPick = Pick<FoodSearchItem, "canonical" | "name" | "source" | "measures" | "startsAt"> & { last?: RecentFood };
+export type BasketPick = Pick<FoodSearchItem, "canonical" | "name" | "source" | "measures" | "startsAt"> & Partial<Pick<FoodSearchItem, "kcal" | "packaged">> & { last?: RecentFood };
 
 /** A food on the list: what is sent for it, its amount as it reads, and the server's numbers for it
  *  where they came back before it was put on the list. */

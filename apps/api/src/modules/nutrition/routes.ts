@@ -12,7 +12,8 @@ import { REQUEST_TIMEOUT_MS } from "../../requestTimeout.js";
 import type { RedisLike } from "../../redis.js";
 import { createDualRateLimit } from "../auth/rateLimit.js";
 import { quotaLeft, requireQuota, resetsAt } from "../quotas/service.js";
-import { createOpenFoodFactsProvider, type FoodSearchProvider } from "./openfoodfacts.adapter.js";
+import type { FoodSearchProvider } from "./openfoodfacts.adapter.js";
+import { createPackagedSearch } from "./packagedSearch.js";
 import {
   analyzeMealPhotoRequestSchema,
   bodyMeasurementInputSchema,
@@ -134,7 +135,7 @@ export function registerNutritionRoutes(
     matchChecker: overrides.matchChecker === undefined ? createMealMatchChecker(deps.config) : overrides.matchChecker,
     labels: overrides.labelReader ?? createLabelReader(deps.config),
     visionModel: deps.config.MEAL_VISION_MODEL,
-    foods: overrides.foodSearchProvider ?? createOpenFoodFactsProvider(),
+    foods: overrides.foodSearchProvider ?? createPackagedSearch(deps.sql),
     log: app.log,
     reportError: deps.reportError,
   };

@@ -5,12 +5,14 @@ import {
   gamificationMeSchema,
   goalsResponseSchema,
   mealPageSchema,
+  myOrgsResponseSchema,
   progressOverviewSchema,
   progressTrendSchema,
   runPageSchema,
   weeklyChallengesSchema,
   workoutPageSchema,
   type GamificationMe,
+  type LeaderboardResponse,
   type MealPage,
   type ProgressOverview,
   type ProgressTrend,
@@ -49,6 +51,9 @@ import {
 import { Clock } from "./dashboard/Clock";
 import { useRead, type Read } from "./dashboard/useRead";
 import { GOALS_READ, GoalsBox, GoalsPage, type GoalsOpen } from "./Goals";
+import { LeaderboardPage, type LeaderboardPlace } from "./gym/Leaderboard";
+import { rankWords } from "./gym/leaderboardView";
+import { useGymRank } from "./gym/useGymRank";
 import { greetingAt } from "./greeting";
 import { COMING_SOON } from "./Soon";
 
@@ -66,6 +71,8 @@ export const DASHBOARD_READS = {
   meals: "/v1/nutrition/meals?limit=3",
   goals: GOALS_READ,
 } as const;
+/** Your Rank's: which gym. The Gym tab reads the same. */
+const PLACES_READ = "/v1/orgs/mine";
 
 export function DashboardScreen() {
   const { state } = useSession();
@@ -82,6 +89,10 @@ export function DashboardScreen() {
   // A goal's days are the person's own: read again once the zone is saved.
   const goals = useRead(DASHBOARD_READS.goals, goalsResponseSchema, zoneSaved);
   const [goalsOpen, setGoalsOpen] = useState<GoalsOpen | null>(null);
+  // Your Rank is the person's first gym's board; somebody using the app alone has a board of their own to come (item 38).
+  const places = useRead(PLACES_READ, myOrgsResponseSchema);
+  const firstGym = places.read.kind === "ok" ? (places.read.data.orgs.find((org) => org.isMember) ?? null) : null;
+  const rank = useGymRank(firstGym?.id ?? null);
   // The clock ticks only while the Dashboard is what the person sees.
   const focused = useIsFocused();
   const [awake, setAwake] = useState(AppState.currentState === "active");
@@ -93,7 +104,7 @@ export function DashboardScreen() {
       heard.remove();
     };
   }, []);
-  const reads = [overview, me, week, challenges, recent, runs, meals, goals];
+  const reads = [overview, me, week, challenges, recent, runs, meals, goals, places, rank];
   const failed = reads.some((one) => one.read.kind === "failed");
   const now = new Date();
   // The workout and the Library are the exercise folders' (items 53, 63, 64); their tab says so.
@@ -161,7 +172,13 @@ export function DashboardScreen() {
       </Swipe>
       <Swipe>
         <Challenges read={challenges.read} />
-        <Rank />
+        {firstGym !== null ? (
+          <GymRank key={firstGym.id} place={{ id: firstGym.id, name: firstGym.name, clockFormat: firstGym.clockFormat }} read={rank.read} onClosed={rank.again} />
+        ) : places.read.kind === "ok" ? (
+          <RankBox big={null} />
+        ) : (
+          <RankBox big={NOT_KNOWN} />
+        )}
         <Badges me={me.read} onPress={toMe} />
       </Swipe>
       <Recent workouts={recent.read} runs={runs.read} meals={meals.read} />
@@ -417,10 +434,44 @@ function Challenges({ read }: { read: Read<WeeklyChallenges> }) {
   );
 }
 
-/** The gym's leaderboard reaches the phone with feature folder 1's item 17. */
-function Rank() {
+/** Your Rank from the person's first gym's board; a press opens the board. */
+function GymRank({ place, read, onClosed }: { place: LeaderboardPlace; read: Read<LeaderboardResponse>; onClosed: () => void }) {
+  const [open, setOpen] = useState(false);
+  const words = read.kind === "ok" && read.data.gymId === place.id ? rankWords(read.data) : null;
   return (
-    <View style={[styles.box, styles.rank]}>
+    <>
+      <RankBox
+        big={words?.big ?? NOT_KNOWN}
+        of={words?.of ?? null}
+        line={words?.line ?? null}
+        say={`Your Rank at ${place.name}`}
+        onPress={() => {
+          setOpen(true);
+        }}
+      />
+      <LeaderboardPage
+        place={open ? place : null}
+        onClose={() => {
+          setOpen(false);
+          onClosed();
+        }}
+      />
+    </>
+  );
+}
+
+interface RankBoxProps {
+  /** Null: somebody who has no gym, whose own board is still to come. */
+  big: string | null;
+  of?: string | null;
+  line?: string | null;
+  say?: string;
+  onPress?: () => void;
+}
+
+function RankBox({ big, of = null, line = null, say, onPress }: RankBoxProps) {
+  const inside = (
+    <>
       <Image source={pictures.rank} resizeMode="cover" style={styles.fill} accessible={false} />
       <View style={[StyleSheet.absoluteFill, styles.shade]} />
       <View style={styles.inner}>
@@ -428,9 +479,25 @@ function Rank() {
           <Icon name="crown" size={16} colour="orange" />
           <Txt kind="h3" style={styles.boxTitle}>Your Rank</Txt>
         </View>
-        <Pill label={COMING_SOON} />
+        {big === null ? (
+          <Pill label={COMING_SOON} />
+        ) : (
+          <View>
+            <View style={styles.rankNumber}>
+              <Txt kind="h1" colour="gold">{big}</Txt>
+              {of === null ? null : <Txt kind="small" colour="text">{of}</Txt>}
+            </View>
+            {line === null ? null : <Txt kind="small" colour="text">{line}</Txt>}
+          </View>
+        )}
       </View>
-    </View>
+    </>
+  );
+  if (onPress === undefined) return <View style={[styles.box, styles.rank]}>{inside}</View>;
+  return (
+    <Pressable accessibilityRole="button" {...(say === undefined ? {} : { accessibilityLabel: say })} onPress={onPress} style={[styles.box, styles.rank]}>
+      {inside}
+    </Pressable>
   );
 }
 
@@ -572,6 +639,7 @@ const styles = StyleSheet.create({
   challenges: { width: 360, minHeight: 210 },
   challengeRow: { width: "52%" },
   rank: { width: 140, minHeight: 210, justifyContent: "flex-end" },
+  rankNumber: { flexDirection: "row", alignItems: "flex-end", flexWrap: "wrap", gap: 6 },
   badges: { width: 230, minHeight: 210 },
   recent: { gap: 4 },
   recentArt: { position: "absolute", top: 0, right: -10, width: "75%", height: "100%", opacity: 0.6 },

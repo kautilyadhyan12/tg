@@ -587,7 +587,7 @@ export const gymSquareRefunds = pgTable(
     cancelTooLate: boolean("cancel_too_late").notNull().default(false),
     /** Square's own record of a refund made inside Square, which no press made (0184; 18d-iv-d-i). */
     fromSquare: boolean("from_square").notNull().default(false),
-    /** Square refunded part of a basket and names no product (0185; 18d-iv-d-ii): no refund row holds the money until staff say which. */
+    /** Square refunded part of a basket and names no product (0186; 18d-iv-d-ii): no refund row holds the money until staff say which. */
     toPlace: boolean("to_place").notNull().default(false),
     /** Staff said which product, and so answered the shelf question. */
     chosen: boolean("chosen").notNull().default(false),

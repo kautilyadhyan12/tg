@@ -3,6 +3,7 @@
 import { classifyBarcode, isCountMeasure, offProductSchema, type MoreNutrients, type NutritionSource, type OffDailyLine, type OffProduct, type PackagedCheck } from "@app/shared";
 import { NO_LABEL, labelMore, servingOf, withBrand, type FoodReference } from "./openfoodfacts.adapter.js";
 import { packSize, type PackSize } from "./packSize.js";
+import { usdaWords } from "./usdaWords.js";
 
 export interface PackagedRow {
   code: string;
@@ -25,7 +26,20 @@ export interface OffRow extends PackagedRow {
   listedAsTyped: string[];
 }
 export type RowRefusal = "bad_code" | "store_only" | "not_a_food" | "no_name" | "no_calories" | "out_of_bounds";
-export type RowResult = { row: OffRow } | { refused: RowRefusal; code: string | null };
+/** A row as the importer and the nightly update write it. */
+export interface WrittenRow extends OffRow {
+  scans: number;
+  searchText: string;
+}
+export type RowResult = { row: WrittenRow } | { refused: RowRefusal; code: string | null };
+
+/** A product's name as the food search reads it, by the one rule the search reads what is typed
+ *  (`usdaWords`), its brand kept apart so that "Milk · Amul" can rank as the food named "milk". */
+export function packagedSearchText(name: string): string {
+  const at = name.lastIndexOf(" · ");
+  const words = (text: string): string => usdaWords(text).join(" ");
+  return at < 0 ? words(name) : `${words(name.slice(0, at))} · ${words(name.slice(at + 3))}`;
+}
 
 /** What the file's text may hold and a database or a screen may not: control characters (one real row
  *  has a NUL in the middle of its ingredients) and the line separators. */
@@ -97,10 +111,13 @@ export function offRowOf(product: OffProduct): RowResult {
   const serving = clean(clean(product.servingSize ?? "").slice(0, 60));
   const allergens = allergenLists(product.allergens);
   const traces = allergenLists(product.traces);
+  const name = clean(withBrand(rawName, clean(first(product.brands))));
   return {
     row: {
       code,
-      name: clean(withBrand(rawName, clean(first(product.brands)))),
+      name,
+      scans: product.scans ?? 0,
+      searchText: packagedSearchText(name),
       kcal,
       proteinG: protein === null ? null : round(protein, 3),
       carbsG: carbs === null ? null : round(carbs, 3),
@@ -122,8 +139,13 @@ const GRAMS_PER_VOL = 0.789;
 /** The CSV's columns the importer reads. A file without them has changed its shape, and is refused.
  *  The CSV mixes their estimates in with the labels' figures and cannot tell them apart (49 of a real
  *  day's 6,010 products), so a real server's list is loaded from the JSONL export, which marks them. */
-export const OFF_CSV_COLUMNS = ["code", "product_name", "generic_name", "brands", "serving_size", "quantity", "allergens_en", "traces_en", "energy-kcal_100g", "energy_100g", "proteins_100g", "carbohydrates_100g", "fat_100g"] as const;
+export const OFF_CSV_COLUMNS = ["code", "product_name", "generic_name", "brands", "serving_size", "quantity", "allergens_en", "traces_en", "energy-kcal_100g", "energy_100g", "proteins_100g", "carbohydrates_100g", "fat_100g", "unique_scans_n"] as const;
 const CSV_FIGURES = ["energy-kcal_100g", "energy_100g", "proteins_100g", "carbohydrates_100g", "fat_100g", "fiber_100g", "sugars_100g", "saturated-fat_100g", "monounsaturated-fat_100g", "polyunsaturated-fat_100g", "salt_100g", "sodium_100g", "alcohol_100g", "potassium_100g", "calcium_100g", "iron_100g", "magnesium_100g", "vitamin-d_100g"] as const;
+
+/** The most the column holds. The real most today is 1,683. */
+const MOST_SCANS = 2_147_483_647;
+/** A scan count from either file; anything but a whole count that fits is none. */
+const scansOf = (value: unknown): number => (typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= MOST_SCANS ? value : 0);
 
 /** One tab-separated row of the download, under its header. */
 export function offProductOfCsv(index: ReadonlyMap<string, number>, cells: readonly string[]): OffProduct {
@@ -144,6 +166,7 @@ export function offProductOfCsv(index: ReadonlyMap<string, number>, cells: reado
     allergens: cell("allergens_en").split(","),
     traces: cell("traces_en").split(","),
     figures,
+    scans: scansOf(cell("unique_scans_n").trim() === "" ? undefined : Number(cell("unique_scans_n"))),
   });
 }
 
@@ -183,6 +206,7 @@ export function offProductOfDaily(line: OffDailyLine): OffProduct {
     allergens: line.allergens_tags ?? [],
     traces: line.traces_tags ?? [],
     figures,
+    scans: scansOf(line["unique_scans_n"]),
   });
 }
 
@@ -225,6 +249,11 @@ export function usdaRowOf(product: { code: string; name: string; brand: string; 
 const PACKAGED_CANONICAL = /^(?:off|pack)_(\d{8,14})$/;
 export const packagedCode = (canonical: string): string | null => PACKAGED_CANONICAL.exec(canonical)?.[1] ?? null;
 export const isPackagedCanonical = (canonical: string): boolean => /^(?:off|pack)_/.test(canonical);
+
+/** Figures the search does not put forward: numbers that do not add up (Parle-G at 3.4 kcal), or 0 kcal
+ *  on a blank panel, which is how a chicken fillet reads as nothing. */
+export const isDoubtful = (found: { food: { kcal: number }; check: PackagedCheck }): boolean =>
+  found.check === "doesnt_add_up" || (found.check === "part_missing" && found.food.kcal === 0);
 
 /** Two lists more than this apart on a product's calories: one is wrong, and nothing says which. Real
  *  shares, 2026-10-30: 7.0% of the 324,580 products both hold. */

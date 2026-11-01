@@ -9,7 +9,7 @@ import { Readable, Transform, pipeline } from "node:stream";
 import type { Sql } from "postgres";
 import { OFF_DAILY_FILE, offDailyLineSchema } from "@app/shared";
 import { applyDailyFile, appliedDailyFiles, offListLoaded } from "./packagedRepo.js";
-import { offProductOfDaily, offRowOf, type OffRow, type RowResult } from "./packagedRows.js";
+import { offProductOfDaily, offRowOf, type OffRow, type RowResult, type WrittenRow } from "./packagedRows.js";
 
 export const OFF_DAILY_BASE = "https://static.openfoodfacts.org/data/delta/";
 
@@ -76,8 +76,8 @@ export function rowOfJsonLine(line: Buffer): RowResult | null {
 }
 
 /** What one daily file says: the rows it changed, the codes that no longer have numbers. */
-export async function readDailyFile(lines: AsyncIterable<Buffer>, mostLines = DAILY_LIMITS.lines): Promise<{ products: number; bad: number; rows: OffRow[]; removeCodes: string[] }> {
-  const rows = new Map<string, OffRow>();
+export async function readDailyFile(lines: AsyncIterable<Buffer>, mostLines = DAILY_LIMITS.lines): Promise<{ products: number; bad: number; rows: WrittenRow[]; removeCodes: string[] }> {
+  const rows = new Map<string, WrittenRow>();
   const removeCodes = new Set<string>();
   let products = 0;
   let bad = 0;

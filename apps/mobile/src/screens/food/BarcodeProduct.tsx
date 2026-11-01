@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
-import { mealPreviewSchema, FOOD_ALLERGY_CAUTION, type MealItem, type MealType, type OwnFoodItem } from "@app/shared";
+import { mealPreviewSchema, type MealItem, type MealType, type OwnFoodItem } from "@app/shared";
 import { Button } from "../../look/Button";
 import { Chip } from "../../look/Chip";
 import { sizes } from "../../look/colours";
@@ -10,13 +10,14 @@ import { Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
 import { newGoalId } from "../goals/words";
 import { AmountPicker, nothing, useDishes } from "./AmountPicker";
-import { allergenWords, checkWords, codeFromTyped, type FoundProduct } from "./barcode";
+import { codeFromTyped, type FoundProduct } from "./barcode";
 import { LabelCheck } from "./LabelCheck";
 import { typedFromProduct } from "./labelRead";
 import { MEAL_TYPES, kcalWords, mealTypeName, sectionOf } from "./day";
 import { useMealOutbox } from "./MealOutbox";
 import { amountRefusal, chosenItem, loggedAmount, startingAmount, underAGram, type Amount } from "./measures";
 import { OwnFood } from "./OwnFood";
+import { PackWords } from "./PackWords";
 import { Credits, SourceLine } from "./SourceLine";
 
 // What a scanned barcode opens (ROADMAP Stage 5 33b-iii-b): the product, its allergens, how much was
@@ -151,8 +152,6 @@ export function BarcodeProduct({ product: first, onClose, onSaved }: { product: 
       </Sheet>
     );
   }
-  const check = checkWords(product);
-  const words = allergenWords(product);
   const credits = new Set<string>([food.source, ...(product.allergensFrom === null ? [] : [product.allergensFrom])]);
   return (
     <Sheet open title={food.name} onClose={onClose}>
@@ -164,38 +163,7 @@ export function BarcodeProduct({ product: first, onClose, onSaved }: { product: 
             <Button label="Remove" kind="link" onPress={() => { setRemoving("ask"); }} />
           </View>
         )}
-        {check === null ? null : (
-          <Txt kind="small" colour="gold">
-            {check}
-          </Txt>
-        )}
-        <View style={styles.allergens} testID="pack-allergens">
-          {words.contains === null ? null : (
-            <Txt kind="small" colour="text">
-              <Txt kind="strong">Contains: </Txt>
-              {words.contains}
-            </Txt>
-          )}
-          {words.mayContain === null ? null : (
-            <Txt kind="small" colour="text">
-              <Txt kind="strong">May contain: </Txt>
-              {words.mayContain}
-            </Txt>
-          )}
-          {words.typed === null ? null : (
-            <Txt kind="small" colour="text">
-              <Txt kind="strong">Also listed: </Txt>
-              {words.typed}
-            </Txt>
-          )}
-          {words.noneListed ? (
-            <Txt kind="small" colour="gold">
-              No allergens listed. Check the pack.
-            </Txt>
-          ) : (
-            <Txt kind="tiny">{FOOD_ALLERGY_CAUTION}</Txt>
-          )}
-        </View>
+        <PackWords kcal={food.kcal} check={product.check} allergens={product.allergens} mayContain={product.mayContain} listedAsTyped={product.listedAsTyped} />
         <AmountPicker
           measures={food.measures}
           amount={amount}
@@ -313,7 +281,6 @@ export function TypeBarcode({ busy, said, onLook, onClose }: { busy: boolean; sa
 const styles = StyleSheet.create({
   list: { flexGrow: 0, flexShrink: 1 },
   listInner: { gap: 14 },
-  allergens: { gap: 4 },
   labelActions: { flexDirection: "row", gap: 16 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   foot: { gap: sizes.gap / 2 },

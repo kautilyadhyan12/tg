@@ -378,6 +378,27 @@ describe("what the numbers are, and where they come from", () => {
     expect(screen.queryByText(/Our list/)).toBeNull();
   });
 
+  const pickPackaged = async (packaged: Record<string, unknown>) => {
+    const server = foodServer({ meals: [] }, { "/v1/nutrition/foods": ok({ items: [{ ...OATS, source: "usda", packaged }] }) });
+    await render(<App extra={extra} ask={server.ask} store={memoryStore(kept(1))} wait={noWait} mealStore={files().store} />);
+    await fireEvent.press(await screen.findByRole("tab", { name: "Food" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Add to Breakfast" }));
+    await fireEvent.changeText(screen.getByLabelText("Search food"), "oats");
+    await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 307 kcal · 1 cup, USDA" }));
+  };
+
+  it("a product picked in the search says what its barcode says: why to check it, and its allergens", async () => {
+    await pickPackaged({ check: "doesnt_add_up", allergens: ["milk"], mayContain: ["nuts"], listedAsTyped: [], allergensFrom: "openfoodfacts" });
+    expect(await screen.findByText("These numbers don’t add up. Check the pack.")).toBeTruthy();
+    expect(screen.getByText(/Milk/)).toBeTruthy();
+    expect(screen.getByText(/Nuts/)).toBeTruthy();
+  });
+
+  it("a packaged product with no allergens listed never reads as safe once picked", async () => {
+    await pickPackaged({ check: "fine", allergens: [], mayContain: [], listedAsTyped: [], allergensFrom: null });
+    expect(await screen.findByText("No allergens listed. Check the pack.")).toBeTruthy();
+  });
+
   it("a packaged product in the search carries Open Food Facts' licence notice", async () => {
     const server = foodServer({ meals: [] }, { "/v1/nutrition/foods": ok({ items: [{ ...OATS, source: "openfoodfacts" }] }) });
     await render(<App extra={extra} ask={server.ask} store={memoryStore(kept(1))} wait={noWait} mealStore={files().store} />);

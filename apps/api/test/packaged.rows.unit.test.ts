@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { MORE_NOT_KNOWN, type MoreNutrients } from "@app/shared";
 import { offDailyLineSchema } from "@app/shared";
 import { loadConfig } from "../src/config.js";
-import { allergenLists, numbersFit, offProductOfDaily, offRowOf, packagedFoodOf, usdaServing, type OffRow, type PackagedRow, type RowResult } from "../src/modules/nutrition/packagedRows.js";
+import { allergenLists, numbersFit, offProductOfCsv, offProductOfDaily, offRowOf, packagedFoodOf, packagedSearchText, usdaServing, type OffRow, type PackagedRow, type RowResult } from "../src/modules/nutrition/packagedRows.js";
 import { judgeDailyFile, linesOf, PackagedFileRefused, readDailyFile } from "../src/modules/nutrition/packagedSync.js";
 import { offRowsOfFile, usdaRowsOfDir } from "../tools/packaged-files.js";
 
@@ -343,5 +343,34 @@ describe("USDA's list, real rows", () => {
     ["", "", "", null],
   ])("a serving of %s %s, %s, reads %s", (size, unit, household, read) => {
     expect(usdaServing(size, unit, household)).toBe(read);
+  });
+});
+
+describe("what the food search keeps of a row", () => {
+  it.each([
+    ["Nutella · Ferrero", "nutella · ferrero"],
+    ["Coca-Cola Original", "coca cola original"],
+    ["Crème fraîche · Président", "creme fraiche · president"],
+    ["Milk · Amul", "milk · amul"],
+    ["牛奶", "牛奶"],
+    ["3.25% milk", "3.25 milk"],
+  ])("%s reads as %s", (name, read) => {
+    expect(packagedSearchText(name)).toBe(read);
+  });
+
+  const line = (extra: Record<string, unknown>) => offRowOf(offProductOfDaily({ code: "5449000000996", product_name: "Coca-Cola", nutrition: { aggregated_set: { per: "100ml", nutrients: { "energy-kcal": { value: 42 } } } }, ...extra }));
+  it("the daily file's scan count is kept; none, or anything but a whole count, is no scans", () => {
+    const scans = (extra: Record<string, unknown>) => { const r = line(extra); return "row" in r ? r.row.scans : null; };
+    expect(scans({ unique_scans_n: 619 })).toBe(619);
+    expect(scans({})).toBe(0);
+    expect(scans({ unique_scans_n: 2_147_483_647 })).toBe(2_147_483_647);
+    for (const bad of ["619", -3, 1.5, null, 1e30, 3_000_000_000]) expect(scans({ unique_scans_n: bad }), String(bad)).toBe(0);
+  });
+
+  it("the download's scan count is kept, and a file without the column has none", () => {
+    const parse = (head: string[], cells: string[]) => offProductOfCsv(new Map(head.map((name, at) => [name, at])), cells).scans;
+    expect(parse(["code", "unique_scans_n"], ["5449000000996", "619"])).toBe(619);
+    expect(parse(["code", "unique_scans_n"], ["5449000000996", ""])).toBe(0);
+    expect(parse(["code"], ["5449000000996"])).toBe(0);
   });
 });

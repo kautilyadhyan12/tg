@@ -4,7 +4,7 @@ import { MORE_NOT_KNOWN, sumMoreNutrients, type MoreNutrients, type VisionEviden
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createMemoryRedis } from "../src/redis.js";
-import { createOpenFoodFactsProvider } from "../src/modules/nutrition/openfoodfacts.adapter.js";
+import { labelMore, servingOf, type FoodSearchProvider } from "../src/modules/nutrition/openfoodfacts.adapter.js";
 import type { VisionProvider, VisionResult } from "../src/modules/nutrition/vision.adapter.js";
 import { importUsda } from "../tools/usda-table.js";
 import { USDA_NUTRIENTS, type UsdaEntry, type UsdaNutrient } from "../tools/usda-files.js";
@@ -57,10 +57,15 @@ const SOUP_C = "off_1400000010006";
 // its label on a machine with the USDA files loaded and on one without.
 const BROTH = { code: "90001090", product_name: "Zqxlabel broth", nutriments: SOUP.nutriments };
 const BROTH_C = "off_90001090";
-const labels = createOpenFoodFactsProvider((input) => {
-  const q = new URL(input instanceof Request ? input.url : input).searchParams.get("q") ?? "";
-  return Promise.resolve(new Response(JSON.stringify({ hits: q.includes("mushroom") ? [SOUP] : q.includes("zqxlabel") ? [BROTH] : [] }), { status: 200 }));
+/** A packaged list answering with these products, each served by its label. */
+const listOf = (answer: (query: string) => { code: string; product_name: string; serving_size?: string; nutriments: Record<string, number> }[]): FoodSearchProvider => ({
+  search: (query) => Promise.resolve(answer(query.toLowerCase()).map((p) => {
+    const more = labelMore(p.nutriments);
+    const serving = servingOf(p.serving_size);
+    return { canonical: `off_${p.code}`, name: p.product_name, kcal: p.nutriments["energy-kcal_100g"] ?? 0, proteinG: p.nutriments["proteins_100g"] ?? 0, carbsG: p.nutriments["carbohydrates_100g"] ?? 0, fatG: p.nutriments["fat_100g"] ?? 0, fiberG: more.fiberG, serving: serving.grams, unit: serving.unit, source: "openfoodfacts" as const, more };
+  })),
 });
+const labels = listOf((q) => (q.includes("mushroom") ? [SOUP] : q.includes("zqxlabel") ? [BROTH] : []));
 
 const evidence: VisionEvidence = {
   meal_name: "Banana and stew",
