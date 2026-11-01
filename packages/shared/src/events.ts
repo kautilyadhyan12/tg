@@ -16,6 +16,7 @@ export const frameResultSchema = z
     view: viewSchema,
     visibilityOk: z.boolean(),
     liveCue: z.string().nullable(), // message KEY (App A), not display text
+    metric: z.number().optional(), // the steadied rep number the count decides on, when there is one
     signals: z.record(z.string(), z.number()), // the small set the definition declares
     calibrationState: calibrationStateSchema,
   })
