@@ -15,7 +15,7 @@ const { reconnectWords } = await import('./paymentsView');
 
 const ENTRY = '11111111-1111-4111-8111-111111111111';
 const org = { id: '77777777-7777-4777-8777-777777777777', orgType: 'gym', slug: 'demo' };
-const seen = { id: '22222222-2222-4222-8222-222222222222', amountMinor: 8804, currency: 'USD', state: 'EVIDENCE_REQUIRED', reason: 'NO_KNOWLEDGE', dueOn: '2026-11-14', duePassed: false, card: null, name: 'Priya Kapoor', past: false, personDeleted: false, member: { entryId: ENTRY, what: 'Silver' }, sale: null };
+const seen = { id: '22222222-2222-4222-8222-222222222222', amountMinor: 8804, currency: 'USD', state: 'EVIDENCE_REQUIRED', reason: 'NO_KNOWLEDGE', dueOn: '2026-11-14', duePassed: false, card: null, stops: true, name: 'Priya Kapoor', past: false, personDeleted: false, member: { entryId: ENTRY, what: 'Silver' }, sale: null };
 const list = (over = {}) => ({ count: 1, rows: [seen], next: null, needsReconnect: false, canReconnect: false, ...over });
 const show = (privileges) => render(<MemoryRouter><ChargebacksCard org={org} orgSlug="demo" privileges={privileges} readOnly={false} /></MemoryRouter>);
 const BOTH = ['billing.members', 'members.confirm'];
@@ -77,8 +77,8 @@ describe('the lines', () => {
   it('each stop says what is true', () => {
     expect(chargeStopLine(null)).toBeNull();
     expect(chargeStopLine({ kind: 'stopped', heldBy: null })).toBe('Not charged automatically because of a chargeback. You can still charge the card here.');
-    expect(chargeStopLine({ kind: 'stopped', heldBy: 'Pat' })).toContain("a chargeback on Pat's payment");
-    expect(chargeStopLine({ kind: 'missed', heldBy: null })).toBe('Not charged automatically while a chargeback was open. Charge the card here, and automatic charges carry on.');
+    expect(chargeStopLine({ kind: 'stopped', heldBy: { entryId: ENTRY, name: 'Pat' } })).toContain("a chargeback on Pat's payment");
+    expect(chargeStopLine({ kind: 'missed', heldBy: null })).toBe('Not charged automatically while a chargeback was open. Charge the card here, oldest first. Automatic charges carry on once the missed bills are paid.');
   });
   it('Settings says why to reconnect', () => {
     expect(reconnectWords(['chargebacks']).line).toContain('chargebacks show here');

@@ -43,7 +43,7 @@ export async function takeInDispute(deps: PaymentsDeps, square: SquareSettings, 
   if (!state.success) deps.log.warn({ event: "square.dispute_state_unknown", gymId: conn.gymId, state: dispute.state }, "a chargeback in Square has a state not placed");
   const reason = chargebackReasonSchema.safeParse(dispute.reason);
 
-  // A chargeback's answer names no card number: the card comes from the payment, once.
+  // A chargeback's answer names no card number: the card comes from the payment, asked until Square has named it.
   let card: { brand: string; last4: string } | null = null;
   if (!(await repo.cardKnown(deps.sql, conn.gymId, square.environment, dispute.id))) {
     const paid = await square.api.getPayment(token, paymentId);

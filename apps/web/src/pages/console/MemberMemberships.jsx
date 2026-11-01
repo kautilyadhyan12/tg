@@ -25,7 +25,7 @@ import { changeBody, changeChoice, changeCreditLine, changeDoneWords, changeEndi
 import { viewerPrivileges } from './consoleView';
 import { placeFor } from './consolePlaces';
 import CardRefundBox from './CardRefundBox';
-import ChargebackLines from './ChargebackLines';
+import ChargebackLines, { ChargeStopHolder } from './ChargebackLines';
 import { cardRefundSaidNow, refundReasonsFor, waitsOnSquare } from './cardRefundView';
 import MembershipAgreement from './MembershipAgreement';
 import { noteDay } from './memberListPeople';
@@ -933,6 +933,7 @@ export default function MemberMemberships({
                       {row.declined}
                     </span>
                   ) : null}
+                  <ChargeStopHolder holder={row.stopHolder} gym={gym} />
                   {row.charging !== null ? <span className="c-s13 c-t2">{row.charging}</span> : null}
                 </div>
                 {row.payments.map((p) => (
@@ -1542,6 +1543,7 @@ export default function MemberMemberships({
                         {row.declined}
                       </span>
                     ) : null}
+                    <ChargeStopHolder holder={row.stopHolder} gym={gym} />
                     {row.charging !== null ? <span className="c-s13 c-t2">{row.charging}</span> : null}
                     {row.left !== null ? (
                       <span className="c-s13 c-w5" style={{ color: 'var(--warn)' }}>

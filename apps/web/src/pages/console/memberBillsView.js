@@ -109,6 +109,7 @@ const cardLines = (b) => ({
     ]
       .filter((line) => line !== null)
       .join(' ') || null,
+  stopHolder: b.chargeStop?.heldBy ?? null,
   charging: b.charging === true ? CARD_CHARGING_LINE : null,
 });
 const byWords = (by) => (by === null ? null : `by ${by}`);

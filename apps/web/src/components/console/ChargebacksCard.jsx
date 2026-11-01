@@ -163,7 +163,6 @@ export default function ChargebacksCard({ org, orgSlug, privileges, readOnly }) 
                     </button>
                   ) : null}
                 </div>
-
               </li>
             ))}
           </ul>

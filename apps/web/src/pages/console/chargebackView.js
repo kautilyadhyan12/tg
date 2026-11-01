@@ -51,26 +51,26 @@ function stateWords(c) {
   }
 }
 
-/** What a payment says of one chargeback. `stops`: a member's payment, where the card is not charged by itself while this stands. */
-export function chargebackLine(c, stops = false) {
+/** What a payment says of one chargeback. `member`: a member's payment, where the server says whether this stops the card being charged by itself. */
+export function chargebackLine(c, member = false) {
   const inquiry = c.state.startsWith('INQUIRY');
   const money = formatMinor(c.amountMinor, c.currency);
   return {
     id: c.id,
     title: [inquiry ? 'Bank inquiry' : 'Chargeback', money, c.card === null ? null : cardName(c.card)].filter((part) => part !== null).join(' · '),
-    detail: [reasonOf(c), stateWords(c), stops && !OVER_IN_YOUR_FAVOUR.includes(c.state) ? STOPPED : null].filter((part) => part !== null).join(' '),
+    detail: [reasonOf(c), stateWords(c), member && c.stops ? STOPPED : null].filter((part) => part !== null).join(' '),
     button: ASKING.includes(c.state) && !c.duePassed ? 'Respond in Square' : 'Open in Square',
     over: OVER_IN_YOUR_FAVOUR.includes(c.state),
   };
 }
 
-export const chargebackLines = (list, stops = false) => (list ?? []).map((c) => chargebackLine(c, stops));
+export const chargebackLines = (list, member = false) => (list ?? []).map((c) => chargebackLine(c, member));
 
 /** An owed bill or fee the app would have charged by itself. */
 export function chargeStopLine(stop) {
   if (stop === null || stop === undefined) return null;
-  if (stop.kind === 'missed') return 'Not charged automatically while a chargeback was open. Charge the card here, and automatic charges carry on.';
-  const whose = stop.heldBy === null ? 'a chargeback' : `a chargeback on ${stop.heldBy}'s payment`;
+  if (stop.kind === 'missed') return 'Not charged automatically while a chargeback was open. Charge the card here, oldest first. Automatic charges carry on once the missed bills are paid.';
+  const whose = stop.heldBy === null ? 'a chargeback' : `a chargeback on ${stop.heldBy.name}'s payment`;
   return `Not charged automatically because of ${whose}. You can still charge the card here.`;
 }
 

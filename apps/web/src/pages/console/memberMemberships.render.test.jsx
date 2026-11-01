@@ -922,6 +922,20 @@ describe('changing a membership', () => {
     expect(await (await boxSoon()).findByText('Payment voided.')).toBeTruthy();
   });
 
+  it('a chargeback shows under its payment, and a bill says why it was not charged (18d-iv-e-i)', async () => {
+    const gold = held(1, GOLD, '2026-10-04', true);
+    const bill = gold.billing.bills[0];
+    const pay = { id: '77777777-7777-4777-8777-000000000001', amountMinor: 4999, method: 'company', paidOn: '2026-10-04', by: null, refunds: [], voidedRefunds: [], refundableMinor: 4999, cardRefund: null, receiptNumber: 9, card: null, chargebacks: [{ id: '77777777-7777-4777-8777-000000000002', amountMinor: 4999, currency: 'GBP', state: 'EVIDENCE_REQUIRED', reason: 'DUPLICATE', dueOn: '2026-11-14', duePassed: false, card: null, stops: true }] };
+    const owed = { ...bill, id: '77777777-7777-4777-8777-000000000003', periodIndex: bill.periodIndex + 1, state: 'due', paidMinor: 0, payments: [], chargeStop: { kind: 'stopped', heldBy: null } };
+    const shown = { ...gold, billing: { ...gold.billing, bills: [owed, { ...bill, state: 'paid', payments: [pay] }] } };
+    orgService.getHeldMemberships.mockResolvedValue(answer([shown]));
+    render(draw(ADA, 'Ada Lovelace'));
+    const found = await (await boxSoon()).findByTestId('chargeback');
+    expect(found.textContent).toContain('The cardholder says they were charged twice.');
+    expect(box().getByTestId('held-bill-declined').textContent).toBe('Not charged automatically because of a chargeback. You can still charge the card here.');
+    cleanup();
+  });
+
   it("Freeze with the gym's freeze fee (18z): the box says what it charges and when, ticked; unticked sends none; staff who cannot record payments have no tick", async () => {
     const gold = { ...held(1, GOLD, '2026-10-04', true), freezeFeeMinor: 1000, freezeFeeFirstOn: TODAY };
     const frozenNoFee = { ...held(1, GOLD, '2026-10-04', true, [[{ type: 'freeze' }, TODAY]]), freezeFeeMinor: 1000 };

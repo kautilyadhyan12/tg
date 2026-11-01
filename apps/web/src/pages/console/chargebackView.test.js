@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { CHARGEBACK_REASONS, CHARGEBACK_STATES } from '@app/shared';
 import { CHARGEBACK_REASON_WORDS, chargebackLine, chargebackRowDetail, chargebacksHeadline } from './chargebackView';
 
-const c = (over = {}) => ({ id: 'x', amountMinor: 2000, currency: 'USD', state: 'EVIDENCE_REQUIRED', reason: 'NO_KNOWLEDGE', dueOn: '2026-11-14', duePassed: false, card: { brand: 'VISA', last4: '1111' }, ...over });
+const c = (over = {}) => ({ id: 'x', amountMinor: 2000, currency: 'USD', state: 'EVIDENCE_REQUIRED', reason: 'NO_KNOWLEDGE', dueOn: '2026-11-14', duePassed: false, card: { brand: 'VISA', last4: '1111' }, stops: true, ...over });
 
 describe('chargebackLine', () => {
   it('reads as gym staff should read it, with Square\'s date', () => {
@@ -54,8 +54,11 @@ describe('chargebackLine', () => {
     expect(chargebackLine(c(), true).detail).toContain(words);
     expect(chargebackLine(c({ state: 'LOST' }), true).detail).toContain(words);
     expect(chargebackLine(c()).detail).not.toContain(words);
-    expect(chargebackLine(c({ state: 'WON' }), true).detail).not.toContain(words);
-    expect(chargebackLine(c({ state: 'INQUIRY_CLOSED' }), true).detail).not.toContain(words);
+    expect(chargebackLine(c({ state: 'WON', stops: false }), true).detail).not.toContain(words);
+    expect(chargebackLine(c({ state: 'INQUIRY_CLOSED', stops: false }), true).detail).not.toContain(words);
+    // In a Square account the gym has left it reads as unplaced, and the card is charged.
+    expect(chargebackLine(c({ state: 'UNKNOWN', stops: false }), true).detail).not.toContain(words);
+    expect(chargebackLine(c({ state: 'UNKNOWN', stops: true }), true).detail).toContain(words);
   });
 
   it('a card Square gave no number for is left out', () => {

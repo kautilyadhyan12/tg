@@ -25,13 +25,15 @@ export const chargebackSeenSchema = z
     dueOn: daySchema.nullable(),
     duePassed: z.boolean(),
     card: cardSeenSchema.nullable(),
+    /** While this stands the app does not charge whoever pays by itself: false once won, closed, or in a Square account the gym has left. */
+    stops: z.boolean(),
   })
   .strict();
 export type ChargebackSeen = z.infer<typeof chargebackSeenSchema>;
 
 /** Why the app has not charged an owed bill by itself, on a bill it otherwise would. `stopped`: a chargeback stands, on the payment of
  *  `heldBy` where that is somebody else this person's payer pays for. `missed`: one has ended, and the bill is past the days the app charges. */
-export const chargeStopSchema = z.object({ kind: z.enum(["stopped", "missed"]), heldBy: z.string().nullable() }).strict();
+export const chargeStopSchema = z.object({ kind: z.enum(["stopped", "missed"]), heldBy: z.object({ entryId: z.string().uuid(), name: z.string() }).strict().nullable() }).strict();
 export type ChargeStop = z.infer<typeof chargeStopSchema>;
 
 /** Rows a page on Overview, the soonest date first. */

@@ -654,9 +654,9 @@ export async function clearRetry(sql: Sql, gymId: string, billId: string): Promi
  *  that left the bill past the days the app charges. Its payer has a card, so "charge the card" is true. */
 export async function chargeStopsOfBills(sql: SqlOrTx, gymId: string, billIds: readonly string[], now: Date): Promise<Map<string, ChargeStop>> {
   if (billIds.length === 0) return new Map();
-  const rows = await sql<{ id: string; stopped: boolean; ended: boolean; old: boolean; held_by: string | null }[]>`
+  const rows = await sql<{ id: string; stopped: boolean; ended: boolean; old: boolean; held_by: { entryId: string; name: string } | null }[]>`
     WITH ${gymDay(sql, { environment: null, now, gymIds: [gymId] })}
-    SELECT b.id, EXISTS (${chargebackStops(sql)}) AS stopped, EXISTS (${chargebackEnded(sql)}) AS ended, b.due_on < d.today - 2 AS old, (${chargebackHolder(sql)}) AS held_by
+    SELECT b.id, EXISTS (${chargebackStops(sql)}) AS stopped, EXISTS (${chargebackEnded(sql)}) AS ended, b.due_on < d.today - 2 AND NOT EXISTS (SELECT 1 FROM gym_card_charges x WHERE x.gym_id = b.gym_id AND x.bill_id = b.id AND x.by_schedule) AS old, (${chargebackHolder(sql)}) AS held_by
     FROM gym_day d
     JOIN gym_member_bills b ON b.gym_id = d.gym_id
     JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id

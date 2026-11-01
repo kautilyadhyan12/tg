@@ -17,6 +17,7 @@ interface RawSeen {
   due_passed: boolean;
   brand: string | null;
   last4: string | null;
+  stops: boolean;
 }
 
 const seenOf = (r: RawSeen, now: { reason: ChargebackReason | null; state: ChargebackState }): ChargebackSeen => ({
@@ -28,6 +29,7 @@ const seenOf = (r: RawSeen, now: { reason: ChargebackReason | null; state: Charg
   dueOn: r.due_on,
   duePassed: r.due_passed,
   card: r.brand === null || r.last4 === null ? null : { brand: r.brand, last4: r.last4 },
+  stops: r.stops,
 });
 const seen = (r: RawSeen): ChargebackSeen => {
   const reason = chargebackReasonSchema.safeParse(r.reason);
@@ -41,6 +43,7 @@ const seenColumns = (sql: SqlOrTx, now: Date) => sql`
   q.id, q.amount_minor, q.currency, q.reason, q.brand, q.last4,
   -- In a Square account the gym has left, an open one can no longer be followed: only the gym can check.
   CASE WHEN q.state IN ('WON','LOST','ACCEPTED','INQUIRY_CLOSED') OR ${stillReadable(sql)} THEN q.state ELSE 'UNKNOWN' END AS state,
+  q.state NOT IN ('WON','INQUIRY_CLOSED') AND ${stillReadable(sql)} AS stops,
   (q.due_at AT TIME ZONE g.timezone)::date::text AS due_on, COALESCE(q.due_at <= ${now}, false) AS due_passed`;
 
 const disputesOfPayer = (sql: SqlOrTx) => sql`
@@ -57,13 +60,13 @@ const disputesOfPayer = (sql: SqlOrTx) => sql`
  *  membership, or of any membership the same person pays for, unless the gym won it or the bank closed its question. */
 export const chargebackStops = (sql: SqlOrTx) => sql`SELECT 1 ${disputesOfPayer(sql)} AND q.state NOT IN ('WON','INQUIRY_CLOSED')`;
 
-/** The same for one that has ended in the gym's favour. */
-export const chargebackEnded = (sql: SqlOrTx) => sql`SELECT 1 ${disputesOfPayer(sql)} AND q.state IN ('WON','INQUIRY_CLOSED')`;
+/** One that ended in the gym's favour and stood through all of the days the app could have charged bill `b` (its due day and the two after). */
+export const chargebackEnded = (sql: SqlOrTx) => sql`SELECT 1 ${disputesOfPayer(sql)} AND q.state IN ('WON','INQUIRY_CLOSED') AND q.created_at < b.due_on + 3 AND q.square_updated_at >= b.due_on + 3`;
 
-/** The name of somebody else whose chargeback stops membership `h`. */
+/** Somebody else whose chargeback stops membership `h`: their record and name. */
 export const chargebackHolder = (sql: SqlOrTx) => sql`
-      SELECT (SELECT e.full_name FROM gym_member_list_entries e WHERE e.gym_id = held.gym_id AND e.id = held.entry_id) ${disputesOfPayer(sql)}
-        AND q.state NOT IN ('WON','INQUIRY_CLOSED') AND held.entry_id IS DISTINCT FROM h.entry_id
+      SELECT jsonb_build_object('entryId', held.entry_id, 'name', (SELECT e.full_name FROM gym_member_list_entries e WHERE e.gym_id = held.gym_id AND e.id = held.entry_id)) ${disputesOfPayer(sql)}
+        AND q.state NOT IN ('WON','INQUIRY_CLOSED') AND held.entry_id IS NOT NULL AND held.entry_id IS DISTINCT FROM h.entry_id
       LIMIT 1`;
 
 /** Which of these memberships the app no longer charges by itself. */

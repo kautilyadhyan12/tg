@@ -1,4 +1,7 @@
+import { Link, useInRouterContext } from 'react-router-dom';
 import { SQUARE_DISPUTES_URL } from './chargebackView';
+import { placeFor } from './consolePlaces';
+import { viewerPrivileges } from './consoleView';
 
 // A chargeback under its payment or sale (ROADMAP 18d-iv-e-i). The gym answers in Square, so the one button opens Square's own page.
 export default function ChargebackLines({ lines }) {
@@ -17,5 +20,17 @@ export default function ChargebackLines({ lines }) {
         </div>
       ))}
     </div>
+  );
+}
+
+/** The person whose chargeback holds this bill back, where that is somebody else: their page holds it. */
+export function ChargeStopHolder({ holder, gym }) {
+  const routed = useInRouterContext();
+  const to = routed && holder !== null ? placeFor(gym?.slug, viewerPrivileges(gym), 'members') : null;
+  if (to === null) return null;
+  return (
+    <Link to={`${to}?person=${encodeURIComponent(holder.entryId)}`} className="c-s13 c-w6 c-t1" style={{ textDecoration: 'underline' }}>
+      {`Open ${holder.name}'s page`}
+    </Link>
   );
 }
