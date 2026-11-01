@@ -279,7 +279,7 @@ function Body({ place, person, period, shared, onClose, onChanged, top, bottom }
         windowSize={5}
         ListHeaderComponent={
           <View>
-            <PictureTop picture="hero" tall={PICTURE_TALL} />
+            <PictureTop picture="cave" tall={PICTURE_TALL} />
             <View style={styles.who}>
               <View style={styles.mark}>
                 <Txt kind="h2" colour="orange" numberOfLines={1}>
