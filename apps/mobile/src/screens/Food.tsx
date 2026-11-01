@@ -14,6 +14,7 @@ import {
   type FoodMeasure,
   type FoodSearchItem,
   type MealEditItem,
+  type DailyAmountsResponse,
   type MealItem,
   type MealPreview,
   type MealType,
@@ -103,6 +104,7 @@ import {
   type Row,
 } from "./food/rows";
 import { newGoalId } from "./goals/words";
+import { FiguresLink, FiguresList, useDailyAmounts } from "./food/MoreFigures";
 import { PackWords } from "./food/PackWords";
 import { Credits, SOURCE_WORDS, SourceLine } from "./food/SourceLine";
 import { Setup } from "./setup/Setup";
@@ -180,6 +182,8 @@ export function FoodScreen() {
   const settle = useCallback((upTo: number) => outbox?.settle(upTo), [outbox]);
   const { read, again } = useDayMeals(day, view.sent, settle);
   const targets = useRead(TARGETS_READ, nutritionTargetsResponseSchema);
+  const { daily, again: dailyAgain } = useDailyAmounts();
+  const [dayFigures, setDayFigures] = useState(false);
   // The rings as the server answered a save of the daily numbers, until a read begun after the save
   // comes back: from then the reads are drawn, whatever they say (32b-ii-b's review, H2).
   const [justSaved, setJustSaved] = useState<NutritionTargetsResponse | null>(null);
@@ -285,6 +289,25 @@ export function FoodScreen() {
         about={rows !== null && rows.some((r) => hasEstimate(r.items))}
         onSetup={setSetupAt}
       />
+      {rows === null || rows.length === 0 ? null : (
+        <Card>
+          <FiguresLink onPress={() => { setDayFigures(true); }} />
+        </Card>
+      )}
+      <Sheet open={dayFigures && rows !== null} title={`Nutrients · ${dayWords(day, new Date())}`} onClose={() => { setDayFigures(false); }}>
+        <FiguresList
+          items={(rows ?? []).flatMap((r) => r.items ?? [])}
+          daily={daily}
+          partial={(rows ?? []).some((r) => r.items === null) || (read.kind === "ok" && read.cut)}
+          partialWords={
+            (rows ?? []).some((r) => r.items === null)
+              ? "* A meal waiting to send isn’t counted yet."
+              : read.kind === "ok" && read.cut
+                ? "* Meals this far back couldn’t all be read."
+                : null
+          }
+        />
+      </Sheet>
       <View style={styles.dayRow}>
         <Pressable
           accessibilityRole="button"
@@ -386,6 +409,7 @@ export function FoodScreen() {
         }}
       />
       <MealSheet
+        daily={daily}
         unsaved={view.unsaved}
         row={openRow}
         onClose={() => { setOpen(null); }}
@@ -429,6 +453,11 @@ export function FoodScreen() {
           setSetupAt(null);
           setJustSaved(null);
           targets.again();
+          dailyAgain();
+        }}
+        onSettled={() => {
+          targets.again();
+          dailyAgain();
         }}
       />
     </Page>
@@ -658,7 +687,7 @@ function amountLine(items: MealItem[] | null): string {
   return items.length === 1 && only !== undefined ? loggedAmount(only) + itemMark(only) : `${count(items.length)} foods`;
 }
 
-type Mode = { kind: "foods" } | { kind: "remove" } | { kind: "details" } | { kind: "food"; at: number } | { kind: "removeFood"; at: number };
+type Mode = { kind: "foods" } | { kind: "figures" } | { kind: "remove" } | { kind: "details" } | { kind: "food"; at: number } | { kind: "removeFood"; at: number };
 
 const HELD_WORDS = {
   not_sent: "You can change its foods once it’s sent.",
@@ -672,12 +701,14 @@ const HELD_WORDS = {
 const beforeDish = new Map<string, readonly MealItem[]>();
 
 function MealSheet({
+  daily,
   row,
   unsaved,
   onClose,
   onRemove,
   onChanged,
 }: {
+  daily: DailyAmountsResponse | null;
   row: Row | null;
   unsaved: boolean;
   onClose: () => void;
@@ -790,6 +821,13 @@ function MealSheet({
         />
         <Button label="Keep it" kind="quiet" wide onPress={() => { setMode({ kind: "food", at }); }} />
         {fullWords}
+      </Sheet>
+    );
+  }
+  if (mode.kind === "figures" && row.items !== null) {
+    return (
+      <Sheet open title={`Nutrients · ${row.name}`} onClose={onClose} onBack={back}>
+        <FiguresList items={row.items} daily={daily} />
       </Sheet>
     );
   }
@@ -912,6 +950,7 @@ function MealSheet({
           {count(Math.round(row.totals.fatG))} g
         </Txt>
       )}
+      {row.items === null ? null : <FiguresLink onPress={() => { setMode({ kind: "figures" }); }} />}
       <Button label="Remove meal" icon="trash" kind="danger" wide onPress={() => { setMode({ kind: "remove" }); }} />
     </Sheet>
   );

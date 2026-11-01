@@ -621,7 +621,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
         - 33b-iii-d. [x] **The food search and the meal scan read our copy** — merged 2026-11-01 (PR #424).
 34. **More food** (split 2026-10-13: the parts on the server need no phone).
     - 34a. [x] **Ten more figures kept with every food in a meal** — merged 2026-10-13 (PR #245).
-    - 34b. [ ] **The ten figures on the Food screen** (7a-v, the rest): on a saved meal, the photo sheet's rows and under the rings, each beside a published daily reference whose source its plan names; "about, N items not known"; a product's figures said to be from its label. Waits for 32b.
+    - 34b. [x] **The ten figures on the Food screen** — merged 2026-11-01 (PR #429).
     - 34c. **More foods** (7a-i-b; split 2026-10-13 in three: the first needs only the two tables the list already uses).
       - 34c-i. [x] **Healthy everyday foods and more fruit** — merged 2026-10-13 (PR #249).
       - 34c-ii. [x] **The traditional dishes of the US, Canada, Europe, Australia and New Zealand** — merged 2026-10-13 (PR #253).

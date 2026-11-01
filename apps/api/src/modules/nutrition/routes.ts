@@ -6,12 +6,13 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import type { z } from "zod";
-import { MEAL_PHOTO_MAX_BYTES, barcodeParamSchema, cleanPhoto, labelFoodParamSchema, labelFoodSaveSchema } from "@app/shared";
+import { MEAL_PHOTO_MAX_BYTES, barcodeParamSchema, cleanPhoto, dailyAmountsFor, labelFoodParamSchema, labelFoodSaveSchema } from "@app/shared";
 import type { AppConfig } from "../../config.js";
 import { REQUEST_TIMEOUT_MS } from "../../requestTimeout.js";
 import type { RedisLike } from "../../redis.js";
 import { createDualRateLimit } from "../auth/rateLimit.js";
 import { quotaLeft, requireQuota, resetsAt } from "../quotas/service.js";
+import { getUserAgeAndGender } from "../users/service.js";
 import type { FoodSearchProvider } from "./openfoodfacts.adapter.js";
 import { createPackagedSearch } from "./packagedSearch.js";
 import {
@@ -317,6 +318,12 @@ export function registerNutritionRoutes(
   app.get("/v1/nutrition/photo-scans", { preHandler: [app.authenticate] }, async (req, reply) =>
     reply.send(await quotaLeft("meal_scan", { sql: deps.sql, redis: deps.redis }, authedUserId(req))),
   );
+
+  /** The published daily amounts for the person's own age and gender (Stage 5 34b). No id to tamper with. */
+  app.get("/v1/nutrition/daily-amounts", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const { age, gender } = await getUserAgeAndGender(nutritionDeps.sql, authedUserId(req));
+    return reply.send(dailyAmountsFor(age, gender));
+  });
 
   /** The macro rings' daily calories and macros: the person's own plan, from
    *  their stored onboarding answers (R3.1; ROADMAP 4a-iii) — the same number

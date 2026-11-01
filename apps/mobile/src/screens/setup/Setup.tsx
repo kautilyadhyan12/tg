@@ -83,12 +83,14 @@ interface SetupProps {
   open: boolean;
   /** Close; in front of the tabs, the end of setup. */
   onClose: () => void;
+  /** Closed by the person: every save still on its way has answered, so a page can read again. */
+  onSettled?: () => void;
   /** `at`: the screen it opens on, where another page sends the person to one answer (31b: a goal's target). */
   at?: SetupScreenId | null;
   mode?: Mode;
 }
 
-export function Setup({ open, onClose, at = null, mode = "over" }: SetupProps) {
+export function Setup({ open, onClose, onSettled, at = null, mode = "over" }: SetupProps) {
   const insets = useSafeAreaInsets();
   // Android's back leaves as the ✕ does: the name typed is saved first, and a blank one stays to be
   // fixed. In front of the tabs it goes back a step, and nowhere from the first.
@@ -106,7 +108,7 @@ export function Setup({ open, onClose, at = null, mode = "over" }: SetupProps) {
     >
       <KeyboardAvoidingView accessibilityViewIsModal behavior="padding" style={[styles.page, { paddingTop: insets.top }]}>
         <Image source={pictures.setup} resizeMode="cover" accessible={false} style={styles.picture} />
-        {open ? <SetupBody onClose={onClose} leave={leave} bottom={insets.bottom} at={at} mode={mode} /> : null}
+        {open ? <SetupBody onClose={onClose} {...(onSettled === undefined ? {} : { onSettled })} leave={leave} bottom={insets.bottom} at={at} mode={mode} /> : null}
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -132,12 +134,14 @@ function useWaiting(): MyInvitation[] | null {
 
 function SetupBody({
   onClose,
+  onSettled,
   leave,
   bottom,
   at,
   mode,
 }: {
   onClose: () => void;
+  onSettled?: () => void;
   leave: RefObject<() => void>;
   bottom: number;
   at: SetupScreenId | null;
@@ -225,7 +229,9 @@ function SetupBody({
   };
 
   const close = () => {
-    if (commitName()) onClose();
+    if (!commitName()) return;
+    onClose();
+    if (onSettled !== undefined) void ob.settled().then(onSettled, onSettled);
   };
   const back = index > 0 ? screens[index - 1] : undefined;
   useEffect(() => {

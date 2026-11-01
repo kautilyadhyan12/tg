@@ -1,6 +1,6 @@
 // What one row of the packaged-food lists becomes (ROADMAP Stage 5 33b-iii-a), and what a person is
 // told about a code both lists may hold. Pure: the importer, the nightly update and the lookup share it.
-import { classifyBarcode, isCountMeasure, offProductSchema, type MoreNutrients, type NutritionSource, type OffDailyLine, type OffProduct, type PackagedCheck } from "@app/shared";
+import { classifyBarcode, isCountMeasure, isPackagedCanonical, offProductSchema, type MoreNutrients, type NutritionSource, type OffDailyLine, type OffProduct, type PackagedCheck } from "@app/shared";
 import { NO_LABEL, labelMore, servingOf, withBrand, type FoodReference } from "./openfoodfacts.adapter.js";
 import { packSize, type PackSize } from "./packSize.js";
 import { usdaWords } from "./usdaWords.js";
@@ -248,7 +248,7 @@ export function usdaRowOf(product: { code: string; name: string; brand: string; 
  *  named one, `pack_` what a scanned barcode names it; both read the lists below. */
 const PACKAGED_CANONICAL = /^(?:off|pack)_(\d{8,14})$/;
 export const packagedCode = (canonical: string): string | null => PACKAGED_CANONICAL.exec(canonical)?.[1] ?? null;
-export const isPackagedCanonical = (canonical: string): boolean => /^(?:off|pack)_/.test(canonical);
+export { isPackagedCanonical };
 
 /** Figures the search does not put forward: numbers that do not add up (Parle-G at 3.4 kcal), or 0 kcal
  *  on a blank panel, which is how a chicken fillet reads as nothing. */
