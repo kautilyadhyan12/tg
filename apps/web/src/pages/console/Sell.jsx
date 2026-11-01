@@ -781,6 +781,14 @@ function MembershipFinder({ gymId, words, locked, addMemberTo, onOpen }) {
 
 /** The day's product sales and membership payments, newest first, with the day's total: today,
  *  or an earlier day picked to find a sale to refund (18p). */
+/** Change stock count on a person's page opens Sell at its products. */
+function ScrollHere({ target }) {
+  useEffect(() => {
+    target.current?.scrollIntoView?.({ block: 'start' });
+  }, [target]);
+  return null;
+}
+
 function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage, onReload, squareEveryMs, refundSale = null, onStock }) {
   /** The day picked; null is today. Another day's list is read here, apart from the page. */
   // Opened from Overview's Refunds to review: that sale's day first.
@@ -1147,11 +1155,6 @@ export default function Sell() {
   const page = mine.page;
   const setPage = (next) => setState({ gymId, error: null, refused: false, page: next });
   const sellsMemberships = canSellMemberships(privileges);
-  // Change stock count on a person's page opens Sell at its products.
-  const showProducts = location.state?.showProducts === true && page !== null;
-  useEffect(() => {
-    if (showProducts) productsRef.current?.scrollIntoView?.({ block: 'start' });
-  }, [showProducts]);
   const addProduct = () => {
     setAddAsk((n) => n + 1);
     productsRef.current?.scrollIntoView?.({ block: 'start' });
@@ -1207,6 +1210,7 @@ export default function Sell() {
           {page.canSell ? <Takings gymId={gymId} org={org} page={page} locked={readOnly} canOpenPeople={sellsMemberships} onOpenPerson={openPerson} onPage={setPage} onReload={load} refundSale={location.state?.refundSale ?? null} onStock={() => productsRef.current?.scrollIntoView?.({ block: 'start' })} /> : null}
 
           <div ref={productsRef}>
+            {location.state?.showProducts === true ? <ScrollHere target={productsRef} /> : null}
             <SellProducts key={`products-${gymId}`} gymId={gymId} page={page} locked={readOnly} lockedNote={readOnlyNote(org.orgType)} countryTo={placeFor(orgSlug, privileges, 'country')} addAsk={addAsk} onPage={setPage} />
           </div>
           <TaxRates key={`tax-${gymId}`} gymId={gymId} page={page} locked={readOnly} lockedNote={readOnlyNote(org.orgType)} onPage={setPage} />

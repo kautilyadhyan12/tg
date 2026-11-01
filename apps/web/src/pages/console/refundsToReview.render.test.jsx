@@ -172,7 +172,7 @@ describe('the card on Overview', () => {
     svc.list.mockResolvedValue(answer([saleRow]));
     draw();
     fireEvent.click(await within(await screen.findByTestId('refund-review-row')).findByRole('button', { name: 'Refund' }));
-    expect(JSON.parse((await screen.findByTestId('sell')).textContent)).toEqual({ refundSale: { saleId: SALE, day: '2026-10-30', open: true } });
+    expect(JSON.parse((await screen.findByTestId('sell')).textContent)).toEqual({ refundSale: { saleId: SALE, day: '2026-10-30', open: true, place: null } });
   });
 
   it('Keep the fee asks first, Back leaves nothing, then it is said in the same card once the row has gone', async () => {

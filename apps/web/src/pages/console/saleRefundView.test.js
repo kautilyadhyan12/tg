@@ -88,8 +88,8 @@ describe('a sale’s refunds', () => {
   it('each with how, when, why, the shelf and who; a voided one says who voided it and why', () => {
     const voided = refund({ id: 'rf2', receiptNumber: 45, restocked: 0, reason: 'charged_too_much', by: null, voided: { reason: 'wrong_amount', on: '2026-10-16', by: 'Sam Owner' } });
     expect(saleRefundLines(sale({ refunds: [refund(), voided] }))).toEqual([
-      { id: 'rf1', receiptNumber: 44, amount: '$2.50 refunded', money: '$2.50', toCard: false, note: null, detail: 'Cash · 16 Oct 2026 · Brought back · 1 back on the shelf · by Priya Desk', voided: null },
-      { id: 'rf2', receiptNumber: 45, amount: '$2.50 refunded', money: '$2.50', toCard: false, note: null, detail: 'Cash · 16 Oct 2026 · Charged too much', voided: 'Voided 16 October 2026 by Sam Owner · Wrong amount' },
+      { id: 'rf1', receiptNumber: 44, amount: '$2.50 refunded', money: '$2.50', toCard: false, note: null, stockNote: null, detail: 'Cash · 16 Oct 2026 · Brought back · 1 back on the shelf · by Priya Desk', voided: null },
+      { id: 'rf2', receiptNumber: 45, amount: '$2.50 refunded', money: '$2.50', toCard: false, note: null, stockNote: null, detail: 'Cash · 16 Oct 2026 · Charged too much', voided: 'Voided 16 October 2026 by Sam Owner · Wrong amount' },
     ]);
   });
 
