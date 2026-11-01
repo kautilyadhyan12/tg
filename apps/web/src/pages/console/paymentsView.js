@@ -175,6 +175,7 @@ export const PRACTICE_TERMINAL_WORDS = {
   cancels: 'Member cancels',
   times_out: 'Times out',
   offline: 'Offline',
+  interac: 'Interac card',
 };
 
 export function terminalName(terminal) {

@@ -527,7 +527,8 @@ describe("the console's Challenges page", () => {
     // Back on page 1 the box it typed in is still what it typed until the page is read again.
     fireEvent.click(board.getByRole('button', { name: 'Previous' }));
     await board.findByLabelText('Person 1: number');
-  });
+    // Seven pages of a hundred rows drawn: 5.2 s on GitHub, past the default 5 s.
+  }, 30_000);
 
   it("the app's own counts and a gym on no plan have no boxes to type in", async () => {
     svc.list.mockResolvedValue(listOf([challenge('a', 'Gym Week'), challenge('b', 'Push-up Day', { counts: 'own', unit: 'push-ups' })]));

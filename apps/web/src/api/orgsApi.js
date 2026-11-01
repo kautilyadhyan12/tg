@@ -1872,6 +1872,9 @@ export const orgService = {
         body,
       ),
     ),
+  /** A refund on the Terminal (ROADMAP 18d-iv-c): where it stands, and Cancel. */
+  checkCardRefund: (gymId, pressId) => readThrough(cardRefundResponseSchema, 'that refund', authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/card-refunds/${encodeURIComponent(pressId)}`)),
+  cancelCardRefund: (gymId, pressId) => readThrough(cardRefundResponseSchema, 'that refund', authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/card-refunds/${encodeURIComponent(pressId)}/cancel`, {})),
   /** Refund to card (ROADMAP 18d-iv-a): what Square says of the payment, then the press. */
   getCardRefund: (gymId, entryId, membershipId, paymentId) =>
     readThrough(

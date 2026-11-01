@@ -18,6 +18,8 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       getTerminalPayments: vi.fn(),
       getCardRefund: vi.fn(),
       refundToCard: vi.fn(),
+      checkCardRefund: vi.fn(),
+      cancelCardRefund: vi.fn(),
     },
   };
 });
@@ -397,14 +399,116 @@ describe('Refund to card: the worst thing first', () => {
 });
 
 describe('What the box and the page say', () => {
-  it('an Interac debit card: the reason, and Note a refund opens where it can be noted', async () => {
-    orgService.getCardRefund.mockResolvedValue({ data: { card: null, leftMinor: 0, refundedInSquareMinor: 0, block: 'card_present' } });
+  const INTERAC = { brand: 'INTERAC', last4: '4242' };
+  const DESK = { id: 'dddddddd-dddd-4ddd-8ddd-000000000001', serial: 'R5WNWB5BKNG9R', practice: null };
+  const FRONT = { id: 'dddddddd-dddd-4ddd-8ddd-000000000002', serial: 'R5WNWB5BKNG9S', practice: null };
+  const interacCheck = (over = {}) => ({ data: { card: INTERAC, leftMinor: 4999, refundedInSquareMinor: 0, block: null, onTerminal: true, terminals: [DESK], waitingPress: null, ...over } });
+  const onTerminal = (over = {}, press = {}) => ({
+    step: 'terminal',
+    amountMinor: 4999,
+    currency: 'USD',
+    card: INTERAC,
+    pressId: 'cccccccc-cccc-4ccc-8ccc-000000000001',
+    onTerminal: { terminal: DESK, pickedUp: false, stopping: false, tooLate: false, ended: null, ...over },
+    ...press,
+  });
+  const pickReason = (box) => fireEvent.change(box.getByLabelText('Why it is being refunded'), { target: { value: 'paid_twice' } });
+
+  it('an Interac debit card: it says the person must be here, Note a refund stays beside it, and the press names the Terminal', async () => {
+    orgService.getCardRefund.mockResolvedValue(interacCheck());
+    orgService.refundToCard.mockResolvedValue({ data: onTerminal() });
+    orgService.checkCardRefund.mockResolvedValue({ data: onTerminal() });
     draw();
     const box = await openBox();
-    await box.findByText('An Interac debit card can only be refunded with the card on your Square device. Refund it there, then note the refund here.');
+    await box.findByText(/The person who paid must be here with it/);
+    expect(box.getByRole('button', { name: 'Note a refund' })).toBeTruthy();
+    expect(box.queryByLabelText('Which Terminal')).toBeNull();
+    pickReason(box);
+    fireEvent.click(box.getByRole('button', { name: 'Refund $49.99 on the Terminal' }));
+    expect(await screen.findByTestId('terminal-refund-wait')).toBeTruthy();
+    expect(orgService.refundToCard.mock.calls[0]?.[4]).toMatchObject({ amountMinor: 4999, reason: 'paid_twice', terminalId: DESK.id });
+    expect(screen.getByText('Ask them to use the card they paid with on the Terminal')).toBeTruthy();
+  });
+
+  it('with two Terminals it asks which, and sends nothing until one is chosen', async () => {
+    orgService.getCardRefund.mockResolvedValue(interacCheck({ terminals: [DESK, FRONT] }));
+    draw();
+    const box = await openBox();
+    pickReason(box);
+    fireEvent.click(await box.findByRole('button', { name: 'Refund $49.99 on the Terminal' }));
+    await box.findByText('Choose the Terminal.');
+    expect(orgService.refundToCard).not.toHaveBeenCalled();
+    fireEvent.change(box.getByLabelText('Which Terminal'), { target: { value: FRONT.id } });
+    orgService.refundToCard.mockResolvedValue({ data: onTerminal() });
+    orgService.checkCardRefund.mockResolvedValue({ data: onTerminal() });
+    fireEvent.click(box.getByRole('button', { name: 'Refund $49.99 on the Terminal' }));
+    await screen.findByTestId('terminal-refund-wait');
+    expect(orgService.refundToCard.mock.calls[0]?.[4]).toMatchObject({ terminalId: FRONT.id });
+  });
+
+  it('no Terminal paired: nothing can be pressed but Note a refund, and it says who can pair one', async () => {
+    orgService.getCardRefund.mockResolvedValue(interacCheck({ terminals: [] }));
+    draw();
+    const box = await openBox();
+    await box.findByText(/none is set up here/);
+    expect(box.queryByRole('button', { name: /on the Terminal/ })).toBeNull();
     fireEvent.click(box.getByRole('button', { name: 'Note a refund' }));
     expect(await screen.findByTestId('held-refund-form')).toBeTruthy();
-    expect(screen.queryByTestId('card-refund-box')).toBeNull();
+  });
+
+  it('a box opened on a refund already waiting shows it, with Cancel, and the end is said in the same place with no money claimed', async () => {
+    orgService.getCardRefund.mockResolvedValue(interacCheck({ block: 'waiting', waitingPress: onTerminal({ pickedUp: true }) }));
+    orgService.cancelCardRefund.mockResolvedValue({ data: onTerminal({ ended: 'cancelled' }, { step: 'ended' }) });
+    orgService.checkCardRefund.mockResolvedValue({ data: onTerminal({ pickedUp: true }) });
+    draw();
+    const items = await menuItems(await paymentRow());
+    fireEvent.click(items.find((i) => i.textContent.startsWith('Refund to card')));
+    const wait = within(await screen.findByTestId('terminal-refund-wait'));
+    const readsBefore = orgService.getHeldMemberships.mock.calls.length;
+    fireEvent.click(wait.getByRole('button', { name: 'Cancel' }));
+    const box = within(await screen.findByTestId('card-refund-box'));
+    await box.findByText('The refund was cancelled. No money went back.');
+    // The page reads again, so its "waiting on the Terminal" line goes.
+    await waitFor(() => expect(orgService.getHeldMemberships.mock.calls.length).toBeGreaterThan(readsBefore));
+    expect(box.getByRole('button', { name: 'Refund $49.99 on the Terminal' })).toBeTruthy();
+  });
+
+  it('Back leaves it waiting, and the page reads again so it says so', async () => {
+    orgService.getCardRefund.mockResolvedValue(interacCheck());
+    orgService.refundToCard.mockResolvedValue({ data: onTerminal() });
+    orgService.checkCardRefund.mockResolvedValue({ data: onTerminal() });
+    draw();
+    const box = await openBox();
+    pickReason(box);
+    fireEvent.click(box.getByRole('button', { name: 'Refund $49.99 on the Terminal' }));
+    const wait = within(await screen.findByTestId('terminal-refund-wait'));
+    const readsBefore = orgService.getHeldMemberships.mock.calls.length;
+    fireEvent.click(wait.getByRole('button', { name: 'Back' }));
+    await waitFor(() => expect(orgService.getHeldMemberships.mock.calls.length).toBeGreaterThan(readsBefore));
+    expect(screen.queryByTestId('terminal-refund-wait')).toBeNull();
+    expect(orgService.cancelCardRefund).not.toHaveBeenCalled();
+  });
+
+  it('a Terminal removed while the box was open: nothing claimed, and the box offers what is left', async () => {
+    orgService.getCardRefund.mockResolvedValueOnce(interacCheck({ terminals: [DESK, FRONT] })).mockResolvedValue(interacCheck({ terminals: [FRONT] }));
+    orgService.refundToCard.mockRejectedValue({ response: { status: 404, data: { error: 'terminal_gone', message: 'This Terminal is no longer paired, so nothing was sent. Press again to use another Terminal.' } } });
+    draw();
+    const box = await openBox();
+    pickReason(box);
+    fireEvent.change(box.getByLabelText('Which Terminal'), { target: { value: DESK.id } });
+    fireEvent.click(box.getByRole('button', { name: 'Refund $49.99 on the Terminal' }));
+    await box.findByText(/no longer paired, so nothing was sent/);
+    await waitFor(() => expect(box.queryByLabelText('Which Terminal')).toBeNull());
+    orgService.refundToCard.mockResolvedValue({ data: onTerminal() });
+    orgService.checkCardRefund.mockResolvedValue({ data: onTerminal() });
+    fireEvent.click(box.getByRole('button', { name: 'Refund $49.99 on the Terminal' }));
+    await screen.findByTestId('terminal-refund-wait');
+    expect(orgService.refundToCard.mock.calls[1]?.[4]).toMatchObject({ terminalId: FRONT.id });
+  });
+
+  it('the page says a refund waits on the Terminal', async () => {
+    const { cardRefundOpenLine } = await import('./cardRefundView');
+    expect(cardRefundOpenLine({ amountMinor: 4999, on: TODAY, lost: false, onTerminal: true, decided: null }, 'USD')).toBe('A refund of $49.99 is waiting on the Terminal.');
   });
 
   it('money already refunded inside Square is said, with Note a refund beside it', async () => {
