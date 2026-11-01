@@ -1,7 +1,7 @@
 import { isPackagedCanonical, MORE_NUTRIENTS, sumMoreNutrients, type DailyAmountsResponse, type MealItem, type MoreNutrient } from "@app/shared";
 
 // The ten further figures as a list reads them (ROADMAP Stage 5 34b). A figure a food does not give
-// is never read as 0: the total says "about" and how many foods are missing it.
+// is never read as 0: the total reads "at least", and one line names the foods.
 
 const FIGURE_NAMES: Readonly<Record<MoreNutrient, { name: string; unit: string }>> = {
   fiberG: { name: "Fibre", unit: "g" },
@@ -29,7 +29,7 @@ export interface FigureLine {
   key: MoreNutrient;
   name: string;
   value: string;
-  /** Under the value: the foods missing it, and the published amount beside it. */
+  /** Under the value: the published amount beside it. */
   note: string | null;
 }
 
@@ -41,23 +41,33 @@ export function figureLines(items: readonly Pick<MealItem, "more">[], partial: b
     const { name, unit } = FIGURE_NAMES[key];
     const { amount, notKnown } = totals[key];
     const none = items.length === 0 ? partial : notKnown === items.length;
-    const about = partial || notKnown > 0;
+    const atLeast = partial || notKnown > 0;
     const daily = amounts?.[key] ?? null;
-    const reference =
-      daily === null
-        ? null
-        : daily.kind === "most"
-          ? `no more than ${amountWords(daily.amount)} ${unit} a day`
-          : `${none ? "" : "of "}about ${amountWords(daily.amount)} ${unit} a day`;
-    const missing = none || notKnown === 0 ? null : `${String(notKnown)} ${notKnown === 1 ? "food" : "foods"} not known`;
-    const words = [missing, reference].filter((w) => w !== null).join(" · ");
     return {
       key,
       name,
-      value: none ? "Not known" : `${about ? "about " : ""}${amountWords(amount)} ${unit}`,
-      note: words === "" ? null : `${words.charAt(0).toUpperCase()}${words.slice(1)}`,
+      value: none ? "Not known" : `${atLeast ? "At least " : ""}${amountWords(amount)} ${unit}`,
+      note: daily === null ? null : `${daily.kind === "most" ? "Daily limit" : "Daily guide"} ${amountWords(daily.amount)} ${unit}`,
     };
   });
+}
+
+/** Which foods hold totals back, where a total adds up some foods and not others. Null where no total
+ *  does: a row reading Not known already says it. */
+export function missingFoodsWords(items: readonly Pick<MealItem, "name" | "seenAs" | "more">[]): string | null {
+  const totals = sumMoreNutrients(items);
+  if (!MORE_NUTRIENTS.some((key) => totals[key].notKnown > 0 && totals[key].notKnown < items.length)) return null;
+  const names = [...new Set(items.filter((i) => MORE_NUTRIENTS.some((key) => (i.more?.[key] ?? null) === null)).map((i) => i.seenAs ?? i.name))];
+  const [first, second, third] = names;
+  const who =
+    names.length === 1
+      ? (first ?? "")
+      : names.length === 2
+        ? `${first ?? ""} and ${second ?? ""}`
+        : names.length === 3
+          ? `${first ?? ""}, ${second ?? ""} and ${third ?? ""}`
+          : `${first ?? ""}, ${second ?? ""} and ${String(names.length - 2)} more`;
+  return `We don’t have every number for ${who}, so some totals may be higher.`;
 }
 
 /** A packaged product gave at least one of the figures on the list: what is shown is its label's. */

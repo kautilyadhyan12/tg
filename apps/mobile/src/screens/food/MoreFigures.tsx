@@ -3,7 +3,7 @@ import { dailyAmountsResponseSchema, type DailyAmountsResponse, type MealItem } 
 import { Icon } from "../../look/Icon";
 import { Txt } from "../../look/Txt";
 import { useRead } from "../dashboard/useRead";
-import { FIGURES_LINK, figureLines, figuresFromALabel } from "./figures";
+import { FIGURES_LINK, figureLines, figuresFromALabel, missingFoodsWords } from "./figures";
 
 // The ten further figures on the Food screen (ROADMAP Stage 5 34b): for the day, a saved meal and a
 // food of a meal photo. The daily amounts beside them are a reference, never a goal.
@@ -28,7 +28,7 @@ export function FiguresLink({ onPress }: { onPress: () => void }) {
 }
 
 interface ListProps {
-  items: readonly Pick<MealItem, "canonical" | "nutritionSource" | "more">[];
+  items: readonly Pick<MealItem, "name" | "seenAs" | "canonical" | "nutritionSource" | "more">[];
   daily: DailyAmountsResponse | null;
   /** Meals of the day whose foods are not here yet; said in `partialWords`. */
   partial?: boolean;
@@ -43,6 +43,7 @@ export function FiguresList({ items, daily, partial = false, partialWords = null
           {partialWords}
         </Txt>
       )}
+      {missingFoodsWords(items) === null ? null : <Txt kind="small">{missingFoodsWords(items)}</Txt>}
       {figureLines(items, partial, daily?.amounts ?? null).map((line) => (
         <View key={line.key} style={styles.line} accessible accessibilityLabel={`${line.name}, ${line.value}${line.note === null ? "" : `. ${line.note}`}`}>
           <View style={styles.top}>
@@ -56,15 +57,15 @@ export function FiguresList({ items, daily, partial = false, partialWords = null
           {line.note === null ? null : <Txt kind="tiny">{line.note}</Txt>}
         </View>
       ))}
-      {figuresFromALabel(items) ? <Txt kind="tiny">Figures for packaged foods are from their labels.</Txt> : null}
+      {figuresFromALabel(items) ? <Txt kind="tiny">Packaged foods use the numbers on their labels.</Txt> : null}
       {daily === null ? null : (
         <View style={styles.foot}>
           <Txt kind="tiny">
-            {daily.forWhom === null ? "Daily amounts are the US Daily Values shown on food labels." : `Daily amounts are for ${daily.forWhom}.`}
+            {daily.forWhom === null ? "Daily guide: the standard values on US food labels." : `Daily guide for ${daily.forWhom}, from your setup answers.`}
           </Txt>
-          <Txt kind="tiny">Daily amounts are for reference. They are not goals set by the app.</Txt>
-          <Txt kind="tiny">Pregnancy or a health condition can change them.</Txt>
-          <Txt kind="tiny">Sources: Dietary Reference Intakes (US and Canada) and US FDA Daily Values.</Txt>
+          <Txt kind="tiny">It is for reference, not a goal set by the app.</Txt>
+          <Txt kind="tiny">Pregnancy or a health condition can change it.</Txt>
+          <Txt kind="tiny">Source: Dietary Reference Intakes (US and Canada) and the US FDA.</Txt>
         </View>
       )}
     </ScrollView>
