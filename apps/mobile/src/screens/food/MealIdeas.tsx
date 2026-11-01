@@ -149,7 +149,7 @@ export function MealIdeas({ onMore, onAnswered }: MealIdeasProps) {
     const [next, ...rest] = read.data.meals;
     body = (
       <>
-        {(onDashboard ? read.data.meals[0].ideas.slice(0, 1) : (next?.ideas ?? [])).map(row)}
+        {(onDashboard ? next.ideas.slice(0, 1) : next.ideas).map(row)}
         {onDashboard ? (
           <Button label="More ideas" kind="link" style={styles.start} onPress={onMore} />
         ) : rest.length === 0 ? null : (
