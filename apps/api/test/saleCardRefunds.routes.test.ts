@@ -894,6 +894,8 @@ d("Refund to card at Sell (real Postgres)", { timeout: T }, () => {
       const theirs = await sold(nextDoor);
       const [paid] = await sql<{ square_payment_id: string }[]>`SELECT square_payment_id FROM gym_sales WHERE id = ${basket.water}`;
       const made = square.disputeInSquare(paid?.square_payment_id ?? "", { reason: "NOT_RECEIVED" });
+      // A kept message falls due on the real clock: the test clock never runs behind it.
+      clock = new Date(Date.now() + 5000);
       const eventId = randomUUID();
       await keepSquareEvent(sql, { eventId, payload: { type: "dispute.created", accountId: gym.acct.merchantId, disputeId: made.id } });
       await processSquareWork(workDeps(), [eventId], gyms.map((g) => g.id));
