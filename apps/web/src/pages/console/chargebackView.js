@@ -70,6 +70,7 @@ export const chargebackLines = (list, member = false) => (list ?? []).map((c) =>
 export function chargeStopLine(stop) {
   if (stop === null || stop === undefined) return null;
   if (stop.kind === 'missed') return 'Not charged automatically while a chargeback was open. Charge the card here, oldest first. Automatic charges carry on once the missed bills are paid.';
+  if (stop.kind === 'behind') return 'Not charged automatically because the bill before it was paid late. Charge the card here, oldest first. Automatic charges carry on once the older bills are paid.';
   const whose = stop.heldBy === null ? 'a chargeback' : `a chargeback on ${stop.heldBy.name}'s payment`;
   return `Not charged automatically because of ${whose}. You can still charge the card here.`;
 }

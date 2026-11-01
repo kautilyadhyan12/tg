@@ -536,6 +536,37 @@ d("A chargeback (real Postgres)", { timeout: T }, () => {
       expect(frozenCharges).toEqual([]);
     });
 
+    it("won, then staff catch up ten days later: every owed bill says what to press, and once paid the app charges again", async () => {
+      const ida = await paidByCard(gym, "Dispute Slow");
+      const made = square.disputeInSquare(ida.squarePaymentId);
+      await message(gym.acct.merchantId, made.id);
+      await nextWeekOpens(ida);
+      clock = new Date(clock.getTime() + 14 * 24 * 60 * 60_000);
+      await openDueBills({ sql, log: quiet }, { now: clock, gymIds: [gym.id] });
+      square.disputeMoves(made.id, "WON");
+      await message(gym.acct.merchantId, made.id, "dispute.state.updated");
+      clock = new Date(clock.getTime() + 10 * 24 * 60 * 60_000);
+      await openDueBills({ sql, log: quiet }, { now: clock, gymIds: [gym.id] });
+      const owed = async () => (await held(gym, gym.owner, ida.entryId)).memberships.flatMap((m) => m.billing?.bills ?? []).filter((b) => b.state === "due" || b.state === "overdue").sort((a, b) => a.periodIndex - b.periodIndex);
+      for (let i = 0; i < 8; i++) {
+        const list = await owed();
+        const oldest = list[0];
+        if (oldest === undefined) break;
+        // Only a bill still inside the app's two days may go without a line: the app charges that one itself.
+        if (oldest.dueOn < (await held(gym, gym.owner, ida.entryId)).today) expect(oldest.chargeStop, `period ${String(oldest.periodIndex)}`).not.toBeNull();
+        const press = await send("POST", `${entryUrl(gym, ida.entryId)}/memberships/${ida.membershipId}/card-charge`, gym.owner.cookies, { requestKey: randomUUID(), periodIndex: oldest.periodIndex, amountMinor: 2500, cardRef: await cardRefOf(gym, ida.entryId) });
+        expect(press.statusCode, press.body).toBe(200);
+        // This route runs on the real clock, not the test's: the day it wrote is put on the test's.
+        await sql`UPDATE gym_member_payments p SET paid_on = ${(await held(gym, gym.owner, ida.entryId)).today}::date FROM gym_member_bills b WHERE b.gym_id = p.gym_id AND b.id = p.bill_id AND b.held_membership_id = ${ida.membershipId} AND b.period_index = ${oldest.periodIndex}`;
+      }
+      expect(await owed()).toEqual([]);
+      clock = new Date(clock.getTime() + 7 * 24 * 60 * 60_000);
+      await openDueBills({ sql, log: quiet }, { now: clock, gymIds: [gym.id] });
+      await work();
+      const byApp = await sql<{ id: string }[]>`SELECT id FROM gym_card_charges WHERE held_membership_id = ${ida.membershipId} AND by_schedule`;
+      expect(byApp).toHaveLength(1);
+    });
+
     it("a chargeback won before a bill fell due never explains that bill: tried and declined, or no card when it fell due", async () => {
       const bea = await paidByCard(gym, "Dispute Bea");
       const won = square.disputeInSquare(bea.squarePaymentId, { state: "WON" });

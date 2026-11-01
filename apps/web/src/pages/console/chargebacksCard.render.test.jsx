@@ -9,7 +9,7 @@ vi.mock('../../api/chargebacksApi', () => ({ chargebacksService: svc }));
 vi.mock('./MemberListPerson', () => ({ default: ({ entryId }) => <div role="dialog" aria-label={`person ${entryId}`} /> }));
 
 const { default: ChargebacksCard } = await import('../../components/console/ChargebacksCard');
-const { default: ChargebackLines } = await import('./ChargebackLines');
+const { default: ChargebackLines, ChargeStopHolder } = await import('./ChargebackLines');
 const { chargeStopLine, chargebackLines } = await import('./chargebackView');
 const { reconnectWords } = await import('./paymentsView');
 
@@ -74,8 +74,13 @@ describe('the lines', () => {
     render(<ChargebackLines lines={chargebackLines([seen], true)} />);
     expect(screen.getByTestId('chargeback').textContent).toContain("The app won't charge this card by itself.");
   });
+  it("the person whose chargeback it is opens from the bill", () => {
+    render(<MemoryRouter><ChargeStopHolder holder={{ entryId: ENTRY, name: 'Pat' }} gym={{ slug: 'demo', viewerPrivileges: ['members.read'], privileges: ['members.read'] }} /></MemoryRouter>);
+    expect(screen.getByRole('link', { name: "Open Pat's page" }).getAttribute('href')).toContain(`?person=${ENTRY}`);
+  });
   it('each stop says what is true', () => {
     expect(chargeStopLine(null)).toBeNull();
+    expect(chargeStopLine({ kind: 'behind', heldBy: null })).toContain('the bill before it was paid late');
     expect(chargeStopLine({ kind: 'stopped', heldBy: null })).toBe('Not charged automatically because of a chargeback. You can still charge the card here.');
     expect(chargeStopLine({ kind: 'stopped', heldBy: { entryId: ENTRY, name: 'Pat' } })).toContain("a chargeback on Pat's payment");
     expect(chargeStopLine({ kind: 'missed', heldBy: null })).toBe('Not charged automatically while a chargeback was open. Charge the card here, oldest first. Automatic charges carry on once the missed bills are paid.');

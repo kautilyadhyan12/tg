@@ -32,8 +32,9 @@ export const chargebackSeenSchema = z
 export type ChargebackSeen = z.infer<typeof chargebackSeenSchema>;
 
 /** Why the app has not charged an owed bill by itself, on a bill it otherwise would. `stopped`: a chargeback stands, on the payment of
- *  `heldBy` where that is somebody else this person's payer pays for. `missed`: one has ended, and the bill is past the days the app charges. */
-export const chargeStopSchema = z.object({ kind: z.enum(["stopped", "missed"]), heldBy: z.object({ entryId: z.string().uuid(), name: z.string() }).strict().nullable() }).strict();
+ *  `heldBy` where that is somebody else this person's payer pays for. `missed`: one stood through the days the app could have charged it. `behind`: one has ended, and the bill's own days passed
+ *  while the bill before it was unpaid, as the app charges in order. */
+export const chargeStopSchema = z.object({ kind: z.enum(["stopped", "missed", "behind"]), heldBy: z.object({ entryId: z.string().uuid(), name: z.string() }).strict().nullable() }).strict();
 export type ChargeStop = z.infer<typeof chargeStopSchema>;
 
 /** Rows a page on Overview, the soonest date first. */

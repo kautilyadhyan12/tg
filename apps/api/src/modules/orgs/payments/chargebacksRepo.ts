@@ -60,8 +60,12 @@ const disputesOfPayer = (sql: SqlOrTx) => sql`
  *  membership, or of any membership the same person pays for, unless the gym won it or the bank closed its question. */
 export const chargebackStops = (sql: SqlOrTx) => sql`SELECT 1 ${disputesOfPayer(sql)} AND q.state NOT IN ('WON','INQUIRY_CLOSED')`;
 
-/** One that ended in the gym's favour and stood through all of the days the app could have charged bill `b` (its due day and the two after). */
-export const chargebackEnded = (sql: SqlOrTx) => sql`SELECT 1 ${disputesOfPayer(sql)} AND q.state IN ('WON','INQUIRY_CLOSED') AND q.created_at < b.due_on + 3 AND q.square_updated_at >= b.due_on + 3`;
+/** One that ended in the gym's favour. */
+export const chargebackEnded = (sql: SqlOrTx) => sql`SELECT 1 ${disputesOfPayer(sql)} AND q.state IN ('WON','INQUIRY_CLOSED')`;
+
+/** The same, and it stood through all of the days the app could have charged bill `b` (its due day and the two after), on the gym's calendar `d`. */
+export const chargebackStoodThrough = (sql: SqlOrTx) => sql`${chargebackEnded(sql)}
+        AND (q.created_at AT TIME ZONE d.timezone)::date <= b.due_on + 2 AND (q.square_updated_at AT TIME ZONE d.timezone)::date > b.due_on + 2`;
 
 /** Somebody else whose chargeback stops membership `h`: their record and name. */
 export const chargebackHolder = (sql: SqlOrTx) => sql`
@@ -164,7 +168,8 @@ export async function chargebacksOfSales(sql: SqlOrTx, gymId: string, saleIds: r
     JOIN gym_sales s ON s.gym_id = q.gym_id AND s.square_payment_id = q.square_payment_id
     WHERE q.gym_id = ${gymId} AND s.id = ANY(${[...saleIds]}::uuid[])
     ORDER BY q.created_at, q.id`;
-  for (const r of rows) out.set(r.sale_id, [...(out.get(r.sale_id) ?? []), seen(r)]);
+  // A sale holds no membership, so its chargeback stops no charge.
+  for (const r of rows) out.set(r.sale_id, [...(out.get(r.sale_id) ?? []), { ...seen(r), stops: false }]);
   return out;
 }
 
