@@ -18,6 +18,15 @@ export interface TrialCheckout {
   currency: string;
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** The dates these tests were written with, moved as one so that 2026-11-01 is always two weeks ahead. The plans' rules
+ *  compare them with today, and the fixed ones expired on their own day. Whole days, so each keeps its clock time. */
+const WRITTEN_SHIFT_MS = Math.ceil((Date.now() + 14 * DAY_MS - Date.parse("2026-11-01T00:00:00Z")) / DAY_MS) * DAY_MS;
+export const fakeDay = (written: string): string => {
+  const moved = new Date(Date.parse(written) + WRITTEN_SHIFT_MS).toISOString();
+  return written.includes(".") ? moved : moved.replace(".000Z", "Z");
+};
+
 export const paddleId = (prefix: string) => `${prefix}_${randomBytes(20).toString("hex").slice(0, 26)}`;
 
 export class FakePaddle implements PaddleApi {
@@ -403,8 +412,8 @@ export class FakePaddle implements PaddleApi {
       canceled_at: null,
       paused_at: null,
       current_billing_period:
-        trialEnd === null ? { starts_at: "2026-10-01T00:00:00Z", ends_at: "2026-11-01T00:00:00Z" } : { starts_at: new Date(this.clock).toISOString(), ends_at: trialEnd },
-      next_billed_at: trialEnd ?? "2026-11-01T00:00:00Z",
+        trialEnd === null ? { starts_at: fakeDay("2026-10-01T00:00:00Z"), ends_at: fakeDay("2026-11-01T00:00:00Z") } : { starts_at: new Date(this.clock).toISOString(), ends_at: trialEnd },
+      next_billed_at: trialEnd ?? fakeDay("2026-11-01T00:00:00Z"),
       scheduled_change: null,
       items: txn.items.map((i) => ({
         quantity: i.quantity,

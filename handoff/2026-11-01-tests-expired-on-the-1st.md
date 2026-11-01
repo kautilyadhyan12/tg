@@ -1,0 +1,8 @@
+# Handoff · 2026-11-01 · Tests that expired on the 1st (feature folder 1)
+
+- **Why:** on 2026-11-01 GitHub failed on 12 billing tests, 3 plan-size and plan-cancel screens and 2 refund tests, on pull request #421, which touches none of them. They block every folder's merges. Master's last green run was at 20:35 UTC the night before.
+- **Cause 1, expired dates:** the fake Paddle's paid month ended on the fixed date 2026-11-01. Checked by running: on the day, the plan is "too close to the charge" (409), and the screens stop saying "by {date}".
+- **Cause 2, the time of day:** `saleCardRefunds` starts its clock at the real time and moves it on by hours, and Sell lists one day's sales, so within about two hours of midnight in the gym's zone (Chicago) a sale slips to yesterday. Proved: the clock at 23:30 Chicago gave 5 failures, at 12:00 Chicago none. It would have failed every day at about 09:00 to 10:30 India time.
+- **Built, tests only:** `fakeDay()` in `fakePaddle.ts` moves the dates as written so that 2026-11-01 is always two weeks ahead; `billing.routes` reads them through it, and its email line prints the moved day. The web fixtures are in 2099. The refund test's clock starts at the next midday in Chicago. A first try moved the billing dates to 2099 too: it sent the billing worker 73 years ahead, and a parallel test file failed, so that was dropped.
+- **Proof here:** eight api files, 213 passed; two web files, 42 passed; lint and typecheck clean.
+- **Left as it is:** 18 other api test files start a clock at the real time. Those that failed at this hour would have shown; this one did. Not changed.

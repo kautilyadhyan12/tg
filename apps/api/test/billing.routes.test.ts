@@ -16,7 +16,7 @@ import { processPaddleEvents } from "../src/modules/billing/events.js";
 import { gymSeatCap } from "../src/modules/orgs/repo.js";
 import { expireLapsedGymTrials } from "../src/modules/orgs/trialSweep.js";
 import { BILLING_LOCK_WAIT_MS, holdBillingSuiteLock } from "./billingSuiteLock.js";
-import { FakePaddle, paddleId } from "./fakePaddle.js";
+import { FakePaddle, fakeDay, paddleId } from "./fakePaddle.js";
 import { createMemoryRedis } from "../src/redis.js";
 import { confirmOwnerOf } from "./confirmOwner.js";
 
@@ -233,7 +233,7 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       const gym = (JSON.parse(mineRes.body) as { orgs: { id: string; subscription: Record<string, unknown> | null; consoleReadOnly: boolean | null }[] }).orgs.find(
         (o) => o.id === a.gymId,
       );
-      expect(gym?.subscription).toMatchObject({ status: "active", priceLabel: "$20", currentPeriodEnd: "2026-11-01T00:00:00.000Z", cancelAtPeriodEnd: false, seatCap: 5000 });
+      expect(gym?.subscription).toMatchObject({ status: "active", priceLabel: "$20", currentPeriodEnd: fakeDay("2026-11-01T00:00:00.000Z"), cancelAtPeriodEnd: false, seatCap: 5000 });
       expect(gym?.consoleReadOnly).toBe(false);
     },
     TEST_TIMEOUT_MS,
@@ -912,8 +912,8 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
     "a cancel made on Paddle's page keeps the plan to the end of its month and says when it ends",
     async () => {
       const a = await paying();
-      await paddleSays(a.subId, { scheduled_change: { action: "cancel", effective_at: "2026-11-01T00:00:00Z" } });
-      expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({ status: "active", cancelAtPeriodEnd: true, currentPeriodEnd: "2026-11-01T00:00:00.000Z" });
+      await paddleSays(a.subId, { scheduled_change: { action: "cancel", effective_at: fakeDay("2026-11-01T00:00:00Z") } });
+      expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({ status: "active", cancelAtPeriodEnd: true, currentPeriodEnd: fakeDay("2026-11-01T00:00:00.000Z") });
       await paddleSays(a.subId, { status: "canceled", scheduled_change: null, canceled_at: paddle.tick() });
       const gym = await myGym(a.gymId, a.cookies);
       expect(gym?.subscription).toBeNull();
@@ -940,7 +940,7 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       expect((JSON.parse(onCard.body) as { url: string }).url).toContain("action=update_subscription_payment_method");
 
       // Paddle retries and fails again a day later: the grace does not start over.
-      await paddleSays(a.subId, { current_billing_period: { starts_at: "2026-10-01T00:00:00Z", ends_at: "2026-11-02T00:00:00Z" } }, 24 * 60 * 60 * 1000);
+      await paddleSays(a.subId, { current_billing_period: { starts_at: fakeDay("2026-10-01T00:00:00Z"), ends_at: fakeDay("2026-11-02T00:00:00Z") } }, 24 * 60 * 60 * 1000);
       expect((await graceRow(a.subId))?.past_due_since).toEqual(failed?.past_due_since);
 
       // A minute short of 2 days: still in grace.
@@ -1126,7 +1126,7 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
         seatCap: 5000,
         priceLabel: "$20",
         dueNow: { totalLabel: "$5.50", subtotalLabel: "$5", taxLabel: "$0.50" },
-        nextPaymentAt: "2026-11-01T00:00:00.000Z",
+        nextPaymentAt: fakeDay("2026-11-01T00:00:00.000Z"),
       });
       expect(changesAsked(a.subId)).toBe(0);
       paddle.down = true;
@@ -1177,15 +1177,15 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       // The trial's last day: Paddle takes the first payment.
       await paddleSays(a.subId, {
         status: "active",
-        current_billing_period: { starts_at: trialEnd ?? "", ends_at: "2026-12-11T00:00:00Z" },
-        next_billed_at: "2026-12-11T00:00:00Z",
+        current_billing_period: { starts_at: trialEnd ?? "", ends_at: fakeDay("2026-12-11T00:00:00Z") },
+        next_billed_at: fakeDay("2026-12-11T00:00:00Z"),
       });
       expect(await planOf(a.subId)).toEqual({ code: BIG, status: "active" });
       const converted = await sql`SELECT 1 FROM audit_log WHERE gym_id = ${a.gymId} AND action = 'billing.converted'`;
       expect(converted).toHaveLength(1);
       expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({
         status: "active",
-        currentPeriodEnd: "2026-12-11T00:00:00.000Z",
+        currentPeriodEnd: fakeDay("2026-12-11T00:00:00.000Z"),
         subscribed: true,
         seatCap: 5000,
         nextSeatCap: null,
@@ -1529,7 +1529,7 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       expect(JSON.parse((await sizeChange(overdue.gymId, overdue.cookies, BIG)).body)).toMatchObject({ error: "payment_overdue" });
 
       const ending = await payingOn(SMALL);
-      await paddleSays(ending.subId, { scheduled_change: { action: "cancel", effective_at: "2026-11-01T00:00:00Z" } });
+      await paddleSays(ending.subId, { scheduled_change: { action: "cancel", effective_at: fakeDay("2026-11-01T00:00:00Z") } });
       expect(JSON.parse((await sizeChange(ending.gymId, ending.cookies, BIG)).body)).toMatchObject({ error: "plan_ending" });
       expect(changesAsked(a.subId) + changesAsked(overdue.subId) + changesAsked(ending.subId)).toBe(0);
     },
@@ -1570,11 +1570,13 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
     (await sql<{ code: string | null; pending_from: Date | null }[]>`
       SELECT p.code, s.pending_from FROM subscriptions s LEFT JOIN plans p ON p.id = s.pending_plan_id
       WHERE s.provider_ref = ${subId}`)[0];
-  /** Run the worker at this instant (the fake's paid month ends 2026-11-01). */
+  /** Run the worker at this instant (the fake's paid month ends on `PERIOD_END`). */
   const workerAt = (at: string) => runWorker(Date.parse(at) - Date.now());
-  const PERIOD_END = "2026-11-01T00:00:00.000Z";
+  const PERIOD_END = fakeDay("2026-11-01T00:00:00.000Z");
   /** Three hours before it: when a smaller size is decided. */
-  const DECIDE_AT = "2026-10-31T21:00:00.000Z";
+  const DECIDE_AT = fakeDay("2026-10-31T21:00:00.000Z");
+  /** That day as the email prints it, in the gym's zone. */
+  const decideDay = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "America/Chicago" }).format(new Date(DECIDE_AT));
   const mailTo = (to: string) => mails.sent.filter((m) => m.to === to);
   const emailOf = async (userId: string) => (await sql<{ email: string }[]>`SELECT email FROM users WHERE id = ${userId}`)[0]?.email ?? "";
 
@@ -1630,16 +1632,16 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       expect(mailTo(await emailOf(billing.userId))).toHaveLength(1);
       for (const other of [trainer, manager, member]) expect(mailTo(await emailOf(other.userId))).toEqual([]);
       // Another run: no second email, nothing more.
-      await workerAt("2026-10-31T21:30:00.000Z");
+      await workerAt(fakeDay("2026-10-31T21:30:00.000Z"));
       expect(mailTo(await emailOf(a.userId))).toHaveLength(1);
       expect(changesAsked(a.subId)).toBe(0);
       // Still said after the first payment on the size kept; gone after the one after it.
-      await paddleSays(a.subId, { current_billing_period: { starts_at: "2026-11-01T00:00:00Z", ends_at: "2026-12-01T00:00:00Z" }, next_billed_at: "2026-12-01T00:00:00Z" });
+      await paddleSays(a.subId, { current_billing_period: { starts_at: fakeDay("2026-11-01T00:00:00Z"), ends_at: fakeDay("2026-12-01T00:00:00Z") }, next_billed_at: fakeDay("2026-12-01T00:00:00Z") });
       expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({ sizeKept: { seatCap: 1, members: 3 } });
-      await paddleSays(a.subId, { current_billing_period: { starts_at: "2026-12-01T00:00:00Z", ends_at: "2027-01-01T00:00:00Z" }, next_billed_at: "2027-01-01T00:00:00Z" });
+      await paddleSays(a.subId, { current_billing_period: { starts_at: fakeDay("2026-12-01T00:00:00Z"), ends_at: fakeDay("2027-01-01T00:00:00Z") }, next_billed_at: fakeDay("2027-01-01T00:00:00Z") });
       expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({ sizeKept: null });
       // And choosing again clears it at once.
-      await paddleSays(a.subId, { current_billing_period: { starts_at: "2026-10-01T00:00:00Z", ends_at: "2026-11-01T00:00:00Z" }, next_billed_at: "2026-11-01T00:00:00Z" });
+      await paddleSays(a.subId, { current_billing_period: { starts_at: fakeDay("2026-10-01T00:00:00Z"), ends_at: fakeDay("2026-11-01T00:00:00Z") }, next_billed_at: fakeDay("2026-11-01T00:00:00Z") });
       expect((await sizeChange(a.gymId, a.cookies, SMALL)).statusCode).toBe(200);
       expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({ sizeKept: null, pendingSize: { seatCap: 1 } });
       expect(changesAsked(b.subId)).toBe(0);
@@ -1732,7 +1734,7 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       await addMember(a.gymId);
       expect((await sizeChange(a.gymId, a.cookies, SMALL)).statusCode).toBe(200);
       // Days before the end: nothing yet.
-      await workerAt("2026-10-20T00:00:00Z");
+      await workerAt(fakeDay("2026-10-20T00:00:00Z"));
       expect(changesAsked(a.subId)).toBe(0);
       // At the decide time: one member fits the size for one; made with nothing billed now.
       await workerAt(DECIDE_AT);
@@ -1742,8 +1744,8 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       expect(await pendingOf(a.subId)).toEqual({ code: null, pending_from: null });
       expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({ seatCap: 1, priceLabel: "$10", pendingSize: null, sizeKept: null, currentPeriodEnd: PERIOD_END });
       // Again, and again later: nothing more asked, nobody emailed.
-      await workerAt("2026-10-31T21:30:00Z");
-      await workerAt("2026-10-31T22:00:00Z");
+      await workerAt(fakeDay("2026-10-31T21:30:00Z"));
+      await workerAt(fakeDay("2026-10-31T22:00:00Z"));
       expect(changesAsked(a.subId)).toBe(1);
       expect(mailTo(await emailOf(a.userId))).toEqual([]);
     },
@@ -1760,14 +1762,15 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       const fits = await payingOn(MID);
       expect((await sizeChange(fits.gymId, fits.cookies, SMALL)).statusCode).toBe(200);
 
-      await workerAt("2026-10-28T12:00:00Z");
+      await workerAt(fakeDay("2026-10-28T12:00:00Z"));
       expect(mailTo(await emailOf(a.userId))).toEqual([]);
-      await workerAt("2026-10-29T01:00:00Z");
-      await workerAt("2026-10-29T02:00:00Z");
+      await workerAt(fakeDay("2026-10-29T01:00:00Z"));
+      await workerAt(fakeDay("2026-10-29T02:00:00Z"));
       const sent = mailTo(await emailOf(a.userId));
       expect(sent).toHaveLength(1);
-      expect(sent[0]?.text).toMatch(/has 2 members now\. If you do nothing, on 31 Oct Billing Gym \d+ will stay on up to 50 members at \$15 a month\./);
-      expect(sent[0]?.text).toContain("To move to 1, remove 1 member before 31 Oct,");
+      expect(sent[0]?.text).toContain(`has 2 members now. If you do nothing, on ${decideDay} Billing Gym `);
+      expect(sent[0]?.text).toContain(" will stay on up to 50 members at $15 a month.");
+      expect(sent[0]?.text).toContain(`To move to 1, remove 1 member before ${decideDay},`);
       expect(sent[0]?.text).toContain(`http://localhost:5173/console/`);
       expect(mailTo(await emailOf(fits.userId))).toEqual([]);
       expect(changesAsked(a.subId) + changesAsked(fits.subId)).toBe(0);
@@ -1806,9 +1809,9 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       const audit = await sql`SELECT 1 FROM audit_log WHERE gym_id = ${a.gymId} AND action = 'billing.size_change_fitted'`;
       expect(audit).toHaveLength(1);
       // Still said after the first payment at the new size; gone after the one after it.
-      await paddleSays(a.subId, { current_billing_period: { starts_at: "2026-11-01T00:00:00Z", ends_at: "2026-12-01T00:00:00Z" }, next_billed_at: "2026-12-01T00:00:00Z" });
+      await paddleSays(a.subId, { current_billing_period: { starts_at: fakeDay("2026-11-01T00:00:00Z"), ends_at: fakeDay("2026-12-01T00:00:00Z") }, next_billed_at: fakeDay("2026-12-01T00:00:00Z") });
       expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({ sizeFitted: { askedSeatCap: 1, members: 3 } });
-      await paddleSays(a.subId, { current_billing_period: { starts_at: "2026-12-01T00:00:00Z", ends_at: "2027-01-01T00:00:00Z" }, next_billed_at: "2027-01-01T00:00:00Z" });
+      await paddleSays(a.subId, { current_billing_period: { starts_at: fakeDay("2026-12-01T00:00:00Z"), ends_at: fakeDay("2027-01-01T00:00:00Z") }, next_billed_at: fakeDay("2027-01-01T00:00:00Z") });
       expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({ sizeFitted: null });
     },
     TEST_TIMEOUT_MS,
@@ -1820,15 +1823,15 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       const a = await payingOn(MID);
       expect((await sizeChange(a.gymId, a.cookies, SMALL)).statusCode).toBe(200);
       // Twenty minutes before the charge Paddle takes no change: nothing is asked.
-      await workerAt("2026-10-31T23:40:00Z");
+      await workerAt(fakeDay("2026-10-31T23:40:00Z"));
       expect(changesAsked(a.subId)).toBe(0);
       expect(await pendingOf(a.subId)).toMatchObject({ code: SMALL });
 
       // Paddle renews at $15 for November.
       await paddleSays(
         a.subId,
-        { current_billing_period: { starts_at: "2026-11-01T00:00:00Z", ends_at: "2026-12-01T00:00:00Z" }, next_billed_at: "2026-12-01T00:00:00Z" },
-        Date.parse("2026-11-01T00:05:00Z") - Date.now(),
+        { current_billing_period: { starts_at: fakeDay("2026-11-01T00:00:00Z"), ends_at: fakeDay("2026-12-01T00:00:00Z") }, next_billed_at: fakeDay("2026-12-01T00:00:00Z") },
+        Date.parse(fakeDay("2026-11-01T00:05:00Z")) - Date.now(),
       );
       // The worker ran with that event: the smaller size is made with the rest of November
       // credited (the fake: half the $5 difference back).
@@ -1848,12 +1851,12 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       const a = await payingOn(MID);
       expect((await sizeChange(a.gymId, a.cookies, SMALL)).statusCode).toBe(200);
       paddle.declineChangeFor = a.subId;
-      await workerAt("2026-10-31T21:00:00Z");
-      await workerAt("2026-10-31T21:01:00Z");
+      await workerAt(fakeDay("2026-10-31T21:00:00Z"));
+      await workerAt(fakeDay("2026-10-31T21:01:00Z"));
       expect(changesAsked(a.subId)).toBe(1);
       expect(await pendingOf(a.subId)).toMatchObject({ code: SMALL });
       // Ten minutes on it is asked again, and made.
-      await workerAt("2026-10-31T21:11:00Z");
+      await workerAt(fakeDay("2026-10-31T21:11:00Z"));
       expect(changesAsked(a.subId)).toBe(2);
       expect(await planOf(a.subId)).toEqual({ code: SMALL, status: "active" });
 
@@ -1974,7 +1977,7 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       expect(await planOf(a.subId)).toEqual({ code: BIG, status: "active" });
 
       // Ten minutes on it is made, and the gym is told it moved to 50 instead of 1.
-      await workerAt("2026-10-31T21:11:00.000Z");
+      await workerAt(fakeDay("2026-10-31T21:11:00.000Z"));
       expect(await planOf(a.subId)).toEqual({ code: MID, status: "active" });
       expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({
         seatCap: 50,
@@ -2002,7 +2005,7 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       expect((await confirmJoin(a.gymId, first.applicationId, a.cookies)).statusCode).toBe(200);
       expect((await confirmJoin(a.gymId, second.applicationId, a.cookies)).statusCode).toBe(200);
       // The next attempt recounts: two members do not fit 1, and nothing between fits them, so it stays.
-      await workerAt("2026-10-31T21:11:00.000Z");
+      await workerAt(fakeDay("2026-10-31T21:11:00.000Z"));
       expect(await planOf(a.subId)).toEqual({ code: MID, status: "active" });
       expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({ seatCap: 50, sizeKept: { seatCap: 1, members: 2 } });
     },
@@ -2025,7 +2028,7 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       await addMember(a.gymId);
       await addMember(a.gymId);
       expect((await sizeChange(a.gymId, a.cookies, SMALL)).statusCode).toBe(200);
-      await workerAt("2026-10-29T01:00:00Z");
+      await workerAt(fakeDay("2026-10-29T01:00:00Z"));
       await workerAt(DECIDE_AT);
       expect(mailTo(await emailOf(ghost.userId))).toEqual([]);
       expect(mailTo(await emailOf(current.userId)).map((m) => m.subject)).toEqual([

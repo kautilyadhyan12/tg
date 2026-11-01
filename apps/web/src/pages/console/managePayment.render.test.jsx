@@ -68,7 +68,7 @@ const OWNER = {
   seatsUsed: 12,
   ownerTrialUsed: true,
   isMember: true,
-  joinedAt: '2026-08-18T09:00:00.000Z',
+  joinedAt: '2099-08-18T09:00:00.000Z',
   consoleReadOnly: false,
   paymentOverdue: false,
 };
@@ -79,7 +79,7 @@ const plan = (patch = {}) => ({
   trialEndsAt: null,
   seatCap: 500,
   priceLabel: '$129',
-  currentPeriodEnd: '2026-11-01T00:00:00.000Z',
+  currentPeriodEnd: '2099-11-01T00:00:00.000Z',
   cancelAtPeriodEnd: false,
   ...patch,
 });
@@ -229,7 +229,7 @@ describe("the plan card's way to Paddle's page", () => {
   });
 
   it('is not drawn for a free trial, nor for staff who cannot manage billing', async () => {
-    orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: plan({ status: 'trialing', trialEndsAt: '2026-12-01T00:00:00.000Z', priceLabel: null, currentPeriodEnd: null }) }));
+    orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: plan({ status: 'trialing', trialEndsAt: '2099-12-01T00:00:00.000Z', priceLabel: null, currentPeriodEnd: null }) }));
     const { unmount } = renderOverview();
     expect(await screen.findByText('Free trial')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /manage payment|update payment method/i })).toBeNull();
@@ -315,7 +315,7 @@ describe('a plan paid through Razorpay (an Indian gym, 1d-i and 1d-ii)', () => {
   });
 
   it('a trial paid through Razorpay, not yet charged, says its size changes after the first payment, and offers no Change size', async () => {
-    orgService.getMine.mockResolvedValue(mineIs({ ...INDIA, subscription: rupees({ status: 'trialing', trialEndsAt: '2026-11-01T00:00:00.000Z' }) }));
+    orgService.getMine.mockResolvedValue(mineIs({ ...INDIA, subscription: rupees({ status: 'trialing', trialEndsAt: '2099-11-01T00:00:00.000Z' }) }));
     renderOverview();
     expect((await screen.findByTestId('paid-through-razorpay')).textContent).toBe(
       'Paid through Razorpay, which emails you about each payment. You can change your size once your first payment is taken.',
@@ -355,7 +355,7 @@ describe('a plan paid through Razorpay (an Indian gym, 1d-i and 1d-ii)', () => {
     fireEvent.click(within(screen.getByTestId('cancel-box')).getByRole('button', { name: 'Keep my plan' }));
     expect(screen.queryByTestId('cancel-box')).toBeNull();
 
-    const ending = rupees({ cancelAtPeriodEnd: true, keepUntil: '2026-10-31T21:00:00.000Z' });
+    const ending = rupees({ cancelAtPeriodEnd: true, keepUntil: '2099-10-31T21:00:00.000Z' });
     orgService.cancelPlan.mockResolvedValue({ data: { subscription: ending } });
     orgService.getMine.mockResolvedValue(mineIs({ ...INDIA, subscription: ending }));
     fireEvent.click(screen.getByRole('button', { name: 'Cancel plan' }));

@@ -85,7 +85,9 @@ const uniq = (): string => `${String(Date.now())}${String(seq++)}`;
 d("Refund to card at Sell (real Postgres)", { timeout: T }, () => {
   const sql = postgres(url ?? "", { prepare: false, max: 8 });
   const square = fakeSquare();
-  let clock = new Date();
+  // Sell lists one day's sales, and this clock moves on by hours through the file: it starts at the next midday in
+  // the gym's zone (Chicago), or near midnight a sale slips to yesterday.
+  let clock = new Date(Math.ceil((Date.now() - 18 * 3_600_000) / 86_400_000) * 86_400_000 + 18 * 3_600_000);
   square.state.now = () => clock;
   let app: App | undefined;
   const api = (): App => {
