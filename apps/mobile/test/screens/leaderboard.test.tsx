@@ -409,6 +409,16 @@ describe("every reason there is no board", () => {
     expect(page().queryByText("Priya S.")).toBeNull();
   });
 
+  it("a board that is not showing has no dates to read, and one the gym switched off has nothing to explain", async () => {
+    const server = fakeServer(routes({ [boardPath(IRON, "gym_days")]: ok(boardOf(IRON, "gym_days", { status: "switched_off", rows: [], ranked: 0, boardsOff: ["gym_days", "workout_days", "streak"] })) }));
+    await openBoard(server.ask, IRON);
+    expect(await page().findByText("Iron House has switched its leaderboard off.")).toBeTruthy();
+    expect(page().queryByText(/Updated/)).toBeNull();
+    expect(page().queryByLabelText("What this board counts")).toBeNull();
+    expect(page().queryByLabelText(/^Period/)).toBeNull();
+    expect(isOn(await hideSwitch())).toBe(false);
+  });
+
   it("a gym that checks nobody in opens on Workout days; Visits pressed then stays and says why", async () => {
     const server = fakeServer(
       routes({

@@ -215,29 +215,31 @@ function Body({ place, onClose, top, bottom }: { place: LeaderboardPlace; onClos
             />
           ))}
         </View>
-        <View style={styles.between}>
-          {boardId === "streak" || tabs.length === 0 ? (
-            <View />
-          ) : (
+        {tabs.length === 0 || board?.status === "paused" ? null : (
+          <View style={styles.between}>
+            {boardId === "streak" || (board !== null && !showMe) ? (
+              <View />
+            ) : (
+              <Button
+                label={periodLabel}
+                kind="link"
+                icon="calendar"
+                say={`Period: ${periodLabel}. Change`}
+                onPress={() => {
+                  setBox("period");
+                }}
+              />
+            )}
             <Button
-              label={periodLabel}
-              kind="link"
-              icon="calendar"
-              say={`Period: ${periodLabel}. Change`}
+              label="What counts"
+              kind="quiet"
+              say="What this board counts"
               onPress={() => {
-                setBox("period");
+                setBox("info");
               }}
             />
-          )}
-          <Button
-            label="What counts"
-            kind="quiet"
-            say="What this board counts"
-            onPress={() => {
-              setBox("info");
-            }}
-          />
-        </View>
+          </View>
+        )}
         <HideMe
           hide={hide}
           busy={hideBusy}
@@ -245,7 +247,7 @@ function Body({ place, onClose, top, bottom }: { place: LeaderboardPlace; onClos
           onChange={(hidden) => void setHidden(hidden)}
           onAgain={() => void loadHide()}
         />
-        {board === null ? null : <Txt kind="tiny">{`${datesLine(board)} · ${updatedText(board.asOf, board.timezone, place.clockFormat)}`}</Txt>}
+        {!showMe ? null : <Txt kind="tiny">{`${datesLine(board)} · ${updatedText(board.asOf, board.timezone, place.clockFormat)}`}</Txt>}
         {flames === null || noBoard !== null ? null : <Txt kind="tiny">{flames}</Txt>}
       </View>
     </View>
@@ -612,7 +614,7 @@ function NameBox({ onSaved }: { onSaved: () => Promise<boolean> }) {
   };
   return (
     <View style={styles.lines}>
-      <Field label="Your full name" value={name} onChange={setName} name ready maxLength={100} onDone={() => void save()} />
+      <Field label="Your full name" bare placeholder="First and last name" value={name} onChange={setName} name ready maxLength={100} onDone={() => void save()} />
       {said === null ? null : (
         <Txt kind="small" colour="badText">
           {said}
