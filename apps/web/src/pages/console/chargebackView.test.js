@@ -10,19 +10,19 @@ describe('chargebackLine', () => {
     expect(chargebackLine(c())).toEqual({
       id: 'x',
       title: 'Chargeback · $20.00 · Visa ending 1111',
-      detail: 'They say they never made this payment. Square may hold this money until the bank decides. Answer in Square by 14 November 2026.',
-      button: 'Answer in Square',
+      detail: 'Reason: Did not make this payment. Square may hold this money until the bank decides. Respond in Square by 14 November 2026.',
+      button: 'Respond in Square',
       over: false,
     });
   });
 
   it.each([
-    ['PROCESSING', 'The bank is reviewing it.'],
-    ['WON', 'You won.'],
+    ['PROCESSING', 'Under review by the bank.'],
+    ['WON', 'Won.'],
     ['LOST', 'The money went back to the card.'],
     ['ACCEPTED', 'The money went back to the card.'],
     ['INQUIRY_EVIDENCE_REQUIRED', 'The bank is asking about this payment.'],
-    ['INQUIRY_PROCESSING', 'The bank is reviewing it.'],
+    ['INQUIRY_PROCESSING', 'Under review by the bank.'],
     ['INQUIRY_CLOSED', 'The bank closed its inquiry.'],
     ['UNKNOWN', 'Check it in Square.'],
   ])('%s says so', (state, words) => {
@@ -40,13 +40,13 @@ describe('chargebackLine', () => {
 
   it('never tells staff to answer by a date that has gone', () => {
     const line = chargebackLine(c({ duePassed: true }));
-    expect(line.detail).toContain('The date to answer has passed, so Square challenges it for you.');
-    expect(line.detail).not.toContain('Answer in Square by');
+    expect(line.detail).toContain('The date to respond has passed, so Square challenges it for you.');
+    expect(line.detail).not.toContain('Respond in Square by');
     expect(line.button).toBe('Open in Square');
   });
 
   it('with no date it asks for an answer but names none', () => {
-    expect(chargebackLine(c({ dueOn: null })).detail).toContain('Answer in Square.');
+    expect(chargebackLine(c({ dueOn: null })).detail).toContain('Respond in Square.');
   });
 
   it("says the card is not charged only where that is true", () => {
@@ -66,10 +66,10 @@ describe('chargebackLine', () => {
 describe('Overview', () => {
   it('counts in words, and says nothing of none', () => {
     expect(chargebacksHeadline(0)).toBeNull();
-    expect(chargebacksHeadline(1)).toBe('1 chargeback to answer');
-    expect(chargebacksHeadline(3)).toBe('3 chargebacks to answer');
+    expect(chargebacksHeadline(1)).toBe('1 chargeback needs a response');
+    expect(chargebacksHeadline(3)).toBe('3 chargebacks need a response');
   });
   it("a row names Square's date", () => {
-    expect(chargebackRowDetail(c())).toBe('They say they never made this payment. Answer in Square by 14 November 2026.');
+    expect(chargebackRowDetail(c())).toBe('Reason: Did not make this payment. Respond in Square by 14 November 2026.');
   });
 });

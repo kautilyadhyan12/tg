@@ -242,7 +242,7 @@ export function reconnectWords(allowFor) {
   }
   if (chargebacks) {
     return {
-      line: 'Reconnect Square so chargebacks show here, with the date to answer each one.',
+      line: 'Reconnect Square so chargebacks show here, with the date to respond to each one.',
       hint: 'Square will ask you to approve one more thing: reading your chargebacks.',
       others: 'The owner needs to reconnect Square before chargebacks can show here.',
     };

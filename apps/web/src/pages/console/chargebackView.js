@@ -7,15 +7,15 @@ export const SQUARE_DISPUTES_URL = 'https://squareup.com/dashboard/sales/dispute
 
 /** Why the member's bank was asked, from Square's own reason. A reason nobody has placed says nothing rather than guess. */
 export const CHARGEBACK_REASON_WORDS = {
-  AMOUNT_DIFFERS: 'They say they were charged the wrong amount.',
-  CANCELLED: 'They say they cancelled.',
-  DUPLICATE: 'They say they were charged twice.',
-  NO_KNOWLEDGE: 'They say they never made this payment.',
-  NOT_AS_DESCRIBED: "They say it wasn't what was described.",
-  NOT_RECEIVED: 'They say they never received it.',
-  PAID_BY_OTHER_MEANS: 'They say they already paid another way.',
-  CUSTOMER_REQUESTS_CREDIT: 'They say they are owed a refund they never got.',
-  EMV_LIABILITY_SHIFT: 'Their bank says the card was used without its chip being read.',
+  AMOUNT_DIFFERS: 'Charged the wrong amount',
+  CANCELLED: 'Cancelled, but still charged',
+  DUPLICATE: 'Charged twice',
+  NO_KNOWLEDGE: 'Did not make this payment',
+  NOT_AS_DESCRIBED: 'Not as described',
+  NOT_RECEIVED: 'Not received',
+  PAID_BY_OTHER_MEANS: 'Already paid another way',
+  CUSTOMER_REQUESTS_CREDIT: 'Refund not received',
+  EMV_LIABILITY_SHIFT: 'Card chip was not read',
 };
 
 const HOLD = 'Square may hold this money until the bank decides.';
@@ -23,7 +23,7 @@ const STOPPED = "The app won't charge this card by itself.";
 const OVER_IN_YOUR_FAVOUR = ['WON', 'INQUIRY_CLOSED'];
 const ASKING = ['EVIDENCE_REQUIRED', 'INQUIRY_EVIDENCE_REQUIRED'];
 
-const reasonOf = (c) => (c.reason === null ? null : (CHARGEBACK_REASON_WORDS[c.reason] ?? null));
+const reasonOf = (c) => (c.reason === null || CHARGEBACK_REASON_WORDS[c.reason] === undefined ? null : `Reason: ${CHARGEBACK_REASON_WORDS[c.reason]}.`);
 
 /** The state's own sentence. */
 function stateWords(c) {
@@ -32,20 +32,20 @@ function stateWords(c) {
     case 'EVIDENCE_REQUIRED':
     case 'INQUIRY_EVIDENCE_REQUIRED': {
       const first = inquiry ? 'The bank is asking about this payment.' : HOLD;
-      if (c.dueOn === null) return `${first} Answer in Square.`;
-      return c.duePassed ? `${first} The date to answer has passed, so Square challenges it for you.` : `${first} Answer in Square by ${dayWords(c.dueOn)}.`;
+      if (c.dueOn === null) return `${first} Respond in Square.`;
+      return c.duePassed ? `${first} The date to respond has passed, so Square challenges it for you.` : `${first} Respond in Square by ${dayWords(c.dueOn)}.`;
     }
     case 'PROCESSING':
     case 'INQUIRY_PROCESSING':
-      return `The bank is reviewing it. ${HOLD}`;
+      return `Under review by the bank. ${HOLD}`;
     case 'WON':
-      return 'You won. Square releases the money back to you.';
+      return 'Won. Square releases the money back to you.';
     case 'INQUIRY_CLOSED':
       return 'The bank closed its inquiry.';
     case 'LOST':
-      return 'You lost. The money went back to the card.';
+      return 'Lost. The money went back to the card.';
     case 'ACCEPTED':
-      return 'You accepted it. The money went back to the card.';
+      return 'Accepted. The money went back to the card.';
     default:
       return 'Check it in Square.';
   }
@@ -59,7 +59,7 @@ export function chargebackLine(c, stops = false) {
     id: c.id,
     title: [inquiry ? 'Bank inquiry' : 'Chargeback', money, c.card === null ? null : cardName(c.card)].filter((part) => part !== null).join(' · '),
     detail: [reasonOf(c), stateWords(c), stops && !OVER_IN_YOUR_FAVOUR.includes(c.state) ? STOPPED : null].filter((part) => part !== null).join(' '),
-    button: ASKING.includes(c.state) && !c.duePassed ? 'Answer in Square' : 'Open in Square',
+    button: ASKING.includes(c.state) && !c.duePassed ? 'Respond in Square' : 'Open in Square',
     over: OVER_IN_YOUR_FAVOUR.includes(c.state),
   };
 }
@@ -74,11 +74,11 @@ export const CHARGES_STOPPED_LINE = 'Not charged automatically because of a char
 /** "1 chargeback to answer"; null where there are none. */
 export function chargebacksHeadline(count) {
   if (count <= 0) return null;
-  return count === 1 ? '1 chargeback to answer' : `${String(count)} chargebacks to answer`;
+  return count === 1 ? '1 chargeback needs a response' : `${String(count)} chargebacks need a response`;
 }
 
-export const CHARGEBACKS_INTRO = "A member asked their bank for a payment back. Answer in Square by the date shown. If you don't, Square challenges it for you.";
-export const CHARGEBACKS_RECONNECT = 'Reconnect Square so chargebacks show here, with the date to answer each one.';
+export const CHARGEBACKS_INTRO = "A cardholder asked their bank to reverse a payment. Respond in Square by the date shown. If you don't, Square challenges it for you.";
+export const CHARGEBACKS_RECONNECT = 'Reconnect Square so chargebacks show here, with the date to respond to each one.';
 export const CHARGEBACKS_RECONNECT_OTHERS = 'The owner needs to reconnect Square before chargebacks can show here.';
 
 export const chargebackWho = (row) => row.name ?? (row.personDeleted ? 'A deleted member' : 'Walk-in');
@@ -91,6 +91,6 @@ export function chargebackWhat(row) {
 }
 
 /** The row's own sentence, on Overview. */
-export const chargebackRowDetail = (row) => [reasonOf(row), row.dueOn === null ? 'Check it in Square.' : `Answer in Square by ${dayWords(row.dueOn)}.`].filter((part) => part !== null).join(' ');
+export const chargebackRowDetail = (row) => [reasonOf(row), row.dueOn === null ? 'Check it in Square.' : `Respond in Square by ${dayWords(row.dueOn)}.`].filter((part) => part !== null).join(' ');
 
 export const chargebackOpenWords = (row) => (row.sale !== null ? 'Open the sale' : row.member !== null ? 'Open their page' : null);

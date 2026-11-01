@@ -155,7 +155,7 @@ export default function ChargebacksCard({ org, orgSlug, privileges, readOnly }) 
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <a className={BUTTON} style={MAIN_STYLE} href={SQUARE_DISPUTES_URL} target="_blank" rel="noreferrer">
-                    Answer in Square
+                    Respond in Square
                   </a>
                   {chargebackOpenWords(row) !== null ? (
                     <button type="button" className={BUTTON} style={PLAIN_STYLE} onClick={() => open(row)}>
