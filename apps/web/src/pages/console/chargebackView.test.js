@@ -10,7 +10,7 @@ describe('chargebackLine', () => {
     expect(chargebackLine(c())).toEqual({
       id: 'x',
       title: 'Chargeback · $20.00 · Visa ending 1111',
-      detail: 'Reason: Did not make this payment. Square may hold this money until the bank decides. Respond in Square by 14 November 2026.',
+      detail: 'The cardholder says they did not make this payment. Square may hold this money until the bank decides. Respond in Square by 14 November 2026.',
       button: 'Respond in Square',
       over: false,
     });
@@ -70,6 +70,6 @@ describe('Overview', () => {
     expect(chargebacksHeadline(3)).toBe('3 chargebacks need a response');
   });
   it("a row names Square's date", () => {
-    expect(chargebackRowDetail(c())).toBe('Reason: Did not make this payment. Respond in Square by 14 November 2026.');
+    expect(chargebackRowDetail(c())).toBe('The cardholder says they did not make this payment. Respond in Square by 14 November 2026.');
   });
 });

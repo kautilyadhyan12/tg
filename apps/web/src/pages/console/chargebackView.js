@@ -7,15 +7,15 @@ export const SQUARE_DISPUTES_URL = 'https://squareup.com/dashboard/sales/dispute
 
 /** Why the member's bank was asked, from Square's own reason. A reason nobody has placed says nothing rather than guess. */
 export const CHARGEBACK_REASON_WORDS = {
-  AMOUNT_DIFFERS: 'Charged the wrong amount',
-  CANCELLED: 'Cancelled, but still charged',
-  DUPLICATE: 'Charged twice',
-  NO_KNOWLEDGE: 'Did not make this payment',
-  NOT_AS_DESCRIBED: 'Not as described',
-  NOT_RECEIVED: 'Not received',
-  PAID_BY_OTHER_MEANS: 'Already paid another way',
-  CUSTOMER_REQUESTS_CREDIT: 'Refund not received',
-  EMV_LIABILITY_SHIFT: 'Card chip was not read',
+  AMOUNT_DIFFERS: 'The cardholder says they were charged the wrong amount',
+  CANCELLED: 'The cardholder says they cancelled',
+  DUPLICATE: 'The cardholder says they were charged twice',
+  NO_KNOWLEDGE: 'The cardholder says they did not make this payment',
+  NOT_AS_DESCRIBED: 'The cardholder says it was not as described',
+  NOT_RECEIVED: 'The cardholder says they did not receive it',
+  PAID_BY_OTHER_MEANS: 'The cardholder says they already paid another way',
+  CUSTOMER_REQUESTS_CREDIT: 'The cardholder says they did not get a refund they were due',
+  EMV_LIABILITY_SHIFT: 'The bank says the card was used without reading its chip',
 };
 
 const HOLD = 'Square may hold this money until the bank decides.';
@@ -23,7 +23,7 @@ const STOPPED = "The app won't charge this card by itself.";
 const OVER_IN_YOUR_FAVOUR = ['WON', 'INQUIRY_CLOSED'];
 const ASKING = ['EVIDENCE_REQUIRED', 'INQUIRY_EVIDENCE_REQUIRED'];
 
-const reasonOf = (c) => (c.reason === null || CHARGEBACK_REASON_WORDS[c.reason] === undefined ? null : `Reason: ${CHARGEBACK_REASON_WORDS[c.reason]}.`);
+const reasonOf = (c) => (c.reason === null || CHARGEBACK_REASON_WORDS[c.reason] === undefined ? null : `${CHARGEBACK_REASON_WORDS[c.reason]}.`);
 
 /** The state's own sentence. */
 function stateWords(c) {
