@@ -758,3 +758,48 @@ describe("previously logged foods (32b-ii-a)", () => {
     expect(await screen.findByText("Previously logged")).toBeTruthy();
   });
 });
+
+describe("the ten figures (34b)", () => {
+  const figures = { forWhom: "women aged 19 to 30", amounts: { fiberG: { kind: "about", amount: 25 }, sugarsG: null, satFatG: { kind: "most", amount: 20 }, unsatFatG: null, sodiumMg: { kind: "most", amount: 2300 }, potassiumMg: { kind: "about", amount: 2600 }, calciumMg: { kind: "about", amount: 1000 }, ironMg: { kind: "about", amount: 18 }, magnesiumMg: { kind: "about", amount: 310 }, vitaminDUg: { kind: "about", amount: 15 } } };
+  const MORE = { fiberG: 11.9, sugarsG: 2.7, satFatG: 0.1, unsatFatG: null, sodiumMg: 3, potassiumMg: 554, calciumMg: 29, ironMg: 5, magnesiumMg: 54, vitaminDUg: 0 };
+  const twoFoods = (): Meal => {
+    const meal = savedMeal("66666666-6666-4666-8666-666666666666", { mealName: "Lunch", takenAt: new Date().toISOString(), mealType: "lunch" });
+    const known = { ...item(150, 174), name: "Lentils", more: MORE } as Meal["items"][number];
+    const estimate = { ...item(200, 500), name: "Pizza", nutritionSource: "estimate" } as Meal["items"][number];
+    return { ...meal, items: [known, estimate] };
+  };
+  const daily = { "/v1/nutrition/daily-amounts": () => ({ status: 200, body: figures }) };
+
+  it("the worst thing: a day with a food missing its sodium says about, and how many, with whose amount it is and that it is no goal", async () => {
+    await openFood({ meals: [twoFoods()] }, undefined, daily);
+    await fireEvent.press(await screen.findByRole("button", { name: "Fibre, sugars, vitamins and minerals" }));
+    expect(await screen.findByLabelText("Sodium, about 3 mg. 1 food not known · no more than 2,300 mg a day")).toBeTruthy();
+    expect(screen.getByLabelText("Iron, about 5 mg. 1 food not known · of about 18 mg a day")).toBeTruthy();
+    expect(screen.getByLabelText("Unsaturated fat, Not known")).toBeTruthy();
+    expect(screen.getByText("Daily amounts are for women aged 19 to 30.")).toBeTruthy();
+    expect(screen.getByText("Daily amounts are for reference. They are not goals set by the app.")).toBeTruthy();
+    expect(screen.getByText("Pregnancy or a health condition can change them.")).toBeTruthy();
+  });
+
+  it("a saved meal shows its own figures", async () => {
+    await openFood({ meals: [twoFoods()] }, undefined, daily);
+    await fireEvent.press(await screen.findByRole("button", { name: /^Lunch, / }));
+    const links = await screen.findAllByRole("button", { name: "Fibre, sugars, vitamins and minerals" });
+    await fireEvent.press(links[links.length - 1] as NonNullable<(typeof links)[number]>);
+    expect(await screen.findByText("Nutrients · Lunch")).toBeTruthy();
+    expect(screen.getByLabelText("Calcium, about 29 mg. 1 food not known · of about 1,000 mg a day")).toBeTruthy();
+  });
+
+  it("the amounts not loading still shows the figures, and says nothing about whose they are", async () => {
+    await openFood({ meals: [twoFoods()] });
+    await fireEvent.press(await screen.findByRole("button", { name: "Fibre, sugars, vitamins and minerals" }));
+    expect(await screen.findByLabelText("Sodium, about 3 mg. 1 food not known")).toBeTruthy();
+    expect(screen.queryByText(/^Daily amounts/)).toBeNull();
+  });
+
+  it("an empty day offers no list", async () => {
+    await openFood({ meals: [] }, undefined, daily);
+    await screen.findByText("No lunch logged yet.");
+    expect(screen.queryByRole("button", { name: "Fibre, sugars, vitamins and minerals" })).toBeNull();
+  });
+});

@@ -6,12 +6,13 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import type { z } from "zod";
-import { MEAL_PHOTO_MAX_BYTES, barcodeParamSchema, cleanPhoto, labelFoodParamSchema, labelFoodSaveSchema } from "@app/shared";
+import { MEAL_PHOTO_MAX_BYTES, barcodeParamSchema, cleanPhoto, dailyAmountsFor, labelFoodParamSchema, labelFoodSaveSchema } from "@app/shared";
 import type { AppConfig } from "../../config.js";
 import { REQUEST_TIMEOUT_MS } from "../../requestTimeout.js";
 import type { RedisLike } from "../../redis.js";
 import { createDualRateLimit } from "../auth/rateLimit.js";
 import { quotaLeft, requireQuota, resetsAt } from "../quotas/service.js";
+import { getUserAgeAndGender } from "../users/service.js";
 import type { FoodSearchProvider } from "./openfoodfacts.adapter.js";
 import { createPackagedSearch } from "./packagedSearch.js";
 import {
@@ -324,6 +325,12 @@ export function registerNutritionRoutes(
    *  request's own session, so there is no id to tamper with. Responds
    *  { targets: null, missing: [...] } while the plan still lacks an answer:
    *  the server never fabricates a target (RULINGS 2026-07-15). */
+  /** The published daily amounts for the person's own age and gender (Stage 5 34b). No id to tamper with. */
+  app.get("/v1/nutrition/daily-amounts", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const { age, gender } = await getUserAgeAndGender(nutritionDeps.sql, authedUserId(req));
+    return reply.send(dailyAmountsFor(age, gender));
+  });
+
   app.get("/v1/nutrition/targets", { preHandler: [app.authenticate] }, async (req, reply) => {
     return reply.send(await service.getTargets(nutritionDeps, authedUserId(req)));
   });
