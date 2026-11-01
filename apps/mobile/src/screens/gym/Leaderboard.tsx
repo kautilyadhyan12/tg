@@ -28,6 +28,7 @@ import { Sheet } from "../../look/Sheet";
 import { pictureTopHeight } from "../../look/sizing";
 import { Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
+import { PersonProfile, type ProfilePerson } from "./PersonProfile";
 import { NO_ANSWER } from "../SignIn";
 import { shortDay } from "./classesView";
 import { visitTime } from "./visitsView";
@@ -101,6 +102,7 @@ function Body({ place, onClose, top, bottom }: { place: LeaderboardPlace; onClos
   const [boardsOff, setBoardsOff] = useState<readonly LeaderboardBoard[]>([]);
   // The page's own picture has gone under the Back button: it gets a bar, so it never sits on the rows.
   const [scrolled, setScrolled] = useState(false);
+  const [person, setPerson] = useState<ProfilePerson | null>(null);
   // The person has picked a tab: a gym that checks nobody in no longer moves them off Visits.
   const picked = useRef(false);
   // Reads are numbered as they start: an answer stands only if no later read has started, so a slow answer to an
@@ -295,6 +297,9 @@ function Body({ place, onClose, top, bottom }: { place: LeaderboardPlace; onClos
             onMine={() => {
               setBox("counted");
             }}
+            onPerson={() => {
+              setPerson({ userId: item.userId, name: item.name, initials: item.initials });
+            }}
           />
         )}
       />
@@ -305,6 +310,14 @@ function Body({ place, onClose, top, bottom }: { place: LeaderboardPlace; onClos
           </Txt>
         </View>
       ) : null}
+      <PersonProfile
+        place={place}
+        person={person}
+        period={period}
+        onClose={() => {
+          setPerson(null);
+        }}
+      />
       <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={onClose} style={[styles.back, { top: top + BACK_TOP }]}>
         <Icon name="back" size={18} />
       </Pressable>
@@ -464,7 +477,7 @@ function Flames({ circles, days, boardId }: { circles: readonly LeaderboardCircl
   );
 }
 
-function Row({ row, days, boardId, onMine }: { row: LeaderboardRow; days: readonly string[] | null; boardId: LeaderboardBoard; onMine: () => void }) {
+function Row({ row, days, boardId, onMine, onPerson }: { row: LeaderboardRow; days: readonly string[] | null; boardId: LeaderboardBoard; onMine: () => void; onPerson: () => void }) {
   const inside = (
     <>
       <Txt kind="h3" colour={row.place <= 3 ? "orange" : "textSoft"} style={styles.place}>
@@ -488,9 +501,9 @@ function Row({ row, days, boardId, onMine }: { row: LeaderboardRow; days: readon
   );
   if (!row.isMe) {
     return (
-      <View testID={`row-${row.userId}`} style={styles.rowBox}>
+      <Pressable testID={`row-${row.userId}`} accessibilityRole="button" accessibilityLabel={`${ordinal(row.place)}, ${row.name}. See their profile.`} onPress={onPerson} style={styles.rowBox}>
         {inside}
-      </View>
+      </Pressable>
     );
   }
   return (

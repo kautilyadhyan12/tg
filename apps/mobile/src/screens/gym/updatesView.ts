@@ -262,7 +262,7 @@ export function blockedButton(feed: GymPostsResponse): string | null {
 }
 
 /** Under the blocked list when the member has blocked more people than it carries, or null. */
-export function blockedMore(feed: GymPostsResponse, shown: number): string | null {
+export function blockedMore(feed: Pick<GymPostsResponse, "blockedCount">, shown: number): string | null {
   if (shown === 0 || feed.blockedCount <= shown) return null;
   return `Showing the ${shown.toLocaleString("en")} you blocked most recently. ${(feed.blockedCount - shown).toLocaleString("en")} more will show as you unblock these.`;
 }
@@ -275,6 +275,16 @@ export function unblockedNote(name: string | null): string {
 /** The help line under Updates: null until an address is set. */
 export function helpLine(feed: GymPostsResponse): { text: string; email: string } | null {
   return feed.supportEmail === null ? null : { text: "Need help with the app? Email", email: feed.supportEmail };
+}
+
+/** A member's post opens the person who wrote it; a post the staff wrote for the gym is the gym's and opens nobody. */
+export function canOpenPerson(post: Pick<GymPost, "fromMember" | "authorId">): boolean {
+  return post.fromMember && post.authorId !== null;
+}
+
+/** What a screen reader says for the name that opens a person's profile. */
+export function personLink(post: Pick<GymPost, "author">): string {
+  return `See ${post.author.name ?? "this member"}'s profile`;
 }
 
 /** What the member reads after removing their own post. */

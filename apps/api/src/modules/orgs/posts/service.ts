@@ -292,11 +292,13 @@ export async function getPersonPosts(
 ): Promise<PersonGymPostsResponse | null> {
   await requireMember(deps, gymId, viewerId);
   if (!(await limit())) return null;
-  const [feed, blocked] = await Promise.all([
+  const [feed, blocked, commenting, blockedCount] = await Promise.all([
     personPage(deps, gymId, { member: viewerId }, userId, before, (rows) => shaped(deps, gymId, rows, viewerId)),
     repo.hasBlocked(deps.sql, gymId, viewerId, userId),
+    commentsRepo.commentingOf(deps.sql, gymId, viewerId),
+    repo.countBlocked(deps.sql, gymId, viewerId),
   ]);
-  return personGymPostsResponseSchema.parse({ ...feed, blocked });
+  return personGymPostsResponseSchema.parse({ ...feed, blocked, commenting, blockedCount });
 }
 
 /** The same for staff holding the tick, each post as the console's Updates page has it. */
