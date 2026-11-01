@@ -310,7 +310,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
        - 18d-iv-c. [x] **An Interac debit card refunded on the Square Terminal** — merged 2026-11-01 (PR #419).
        - 18d-iv-d. **A refund made inside Square shown here**, in two parts since 2026-11-01 (`handoff/2026-11-01-18d-iv-d-i.md` keeps its line as first written):
         - 18d-iv-d-i. [x] **On a member's payment or fee** — merged 2026-11-01 (PR #423).
-        - 18d-iv-d-ii. [ ] **On a sale**: part of a basket asks staff which product; "We don't know" on a sale answered. Web folder 1. Built; waiting on its review (`handoff/2026-11-01-18d-iv-d-ii.md`).
+        - 18d-iv-d-ii. [x] **On a sale** — merged 2026-11-01 (PR #425).
        - 18d-iv-e. [ ] **A chargeback shown on its payment with Square's own deadline** (Square's new permission DISPUTES_READ: connected gyms press Reconnect Square once). Web folder 1.
      - 18d-vii. [ ] **Ask members to add their card** (Kd, 2026-10-30, `rulings/2026-10-30-18d-iii-b-iv-f.md`): a button that asks every member with no card on file to add it in the app, as saved cards don't move from a gym's old software. After Stage 5 item 20's saving their card. Web folder 1.
      - 18d-v. [ ] **KWAZO listed in Square's App Marketplace, at launch** (Kd, 2026-10-20): once the site is online with Square's live return address. Square's partner page: "Any developer" can list, no fee or developer-country rule named; Square's quality review first. Unproven for a developer in India until applied.
