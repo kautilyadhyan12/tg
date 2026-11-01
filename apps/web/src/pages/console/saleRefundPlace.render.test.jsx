@@ -1,5 +1,5 @@
 // CHOOSE PRODUCT (ROADMAP 18d-iv-d-ii): a refund made in Square on part of a basket, on a person's "Bought at the desk". Only the network is mocked.
-import { waitFor, afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { waitFor, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
