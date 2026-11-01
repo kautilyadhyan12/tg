@@ -55,7 +55,7 @@ export function configFor(copy: Copy): ExpoConfig {
     userInterfaceStyle: "dark",
     backgroundColor: "#0A0908",
     scheme: copy.scheme,
-    android: { package: copy.applicationId },
+    android: { package: copy.applicationId, allowBackup: false },
     // Keeps the key store's sign-in out of Android's backups, so it never lands on another phone.
     // shortNativeBuild: C++ build folders kept under Windows' path limit (its own file says why).
     // The meal photo (ROADMAP Stage 5 33b-i): the camera and the photos the person picks, and never the

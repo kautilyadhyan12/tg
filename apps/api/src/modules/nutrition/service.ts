@@ -2,6 +2,7 @@
 // pipeline. Photos are NEVER persisted or logged (2B §3.4 guarantee — ruled
 // precedence over v1 §6.1's R2 path); the image exists only as a request
 // value handed to the vision adapter. Reformatted to house style at T3.
+import { randomUUID } from "node:crypto";
 import { labelFoodParamSchema, panelOfLabel, type LabelDraft, type LabelFoodSave } from "@app/shared";
 import * as labelRepo from "./labelRepo.js";
 import { numbersFit } from "./packagedRows.js";
@@ -588,9 +589,12 @@ export async function barcodeLookup(deps: NutritionDeps, userId: string, raw: st
 
 async function findFood(deps: NutritionDeps, query: string, search = true, owner: string | null = null): Promise<FoodReference | null> {
   // A label_* canonical is one person's own saved label, and only ever theirs.
-  if (query.startsWith(LABEL_CANONICAL_PREFIX)) {
+  if (query.toLowerCase().startsWith(LABEL_CANONICAL_PREFIX)) {
     const id = query.slice(LABEL_CANONICAL_PREFIX.length);
-    const row = owner === null || !labelFoodParamSchema.safeParse({ id }).success ? null : await labelRepo.labelFoodById(deps.sql, owner, id);
+    if (owner === null || !labelFoodParamSchema.safeParse({ id }).success) return null;
+    // A meal waiting on the phone may hold a label removed since, and is priced by it. Offered again
+    // (no search, as Recent asks), a removed one is not.
+    const row = search ? await labelRepo.labelFoodForMeal(deps.sql, owner, id) : await labelRepo.labelFoodById(deps.sql, owner, id);
     return row === null ? null : labelFoodReference(row);
   }
   // An est_* canonical is a scan's own estimate, and lives only in that scan's
@@ -948,8 +952,7 @@ function ownRefusal(held: OwnTargetsHeld): { code: string; message: string } {
 /** Shared badge hook: failure degrades with a warn — a meal save must never
  *  break on gamification (event name + id only, R3.10). */
 async function awardMealBadges(deps: NutritionDeps, userId: string): Promise<void> {
-  const ctx = await getUserSyncContext(deps.sql, userId);
-  await onMealLogged({ sql: deps.sql }, userId, ctx.timezone).catch((err: unknown) => {
+  await getUserSyncContext(deps.sql, userId).then((ctx) => onMealLogged({ sql: deps.sql }, userId, ctx.timezone)).catch((err: unknown) => {
     deps.log.warn(
       { event: "gamification.meal_award_failed", userId, errName: err instanceof Error ? err.name : typeof err },
       "meal badge evaluation failed",
@@ -1116,7 +1119,7 @@ async function labelReply(deps: NutritionDeps, row: labelRepo.LabelFoodRow, code
 function labelReplyOf(row: labelRepo.LabelFoodRow, food: FoodSearchItem, code: string | null): Extract<BarcodeReply, { status: "found" }> {
   return {
     status: "found", code: code ?? "", food, allergens: row.contains, mayContain: row.may_contain, listedAsTyped: [], allergensFrom: null,
-    check: numbersFit(row.kcal, row.protein_g, row.carbs_g, row.fat_g, null) ? "fine" : "doesnt_add_up", labelId: row.id,
+    check: numbersFit(row.kcal, row.protein_g, row.carbs_g, row.fat_g, null) ? "fine" : "doesnt_add_up", labelId: row.id, labelSeen: row.seen,
   };
 }
 
@@ -1172,9 +1175,11 @@ export async function saveLabelFood(deps: NutritionDeps, userId: string, id: str
   const saved = await labelRepo.saveLabelFood(deps.sql, userId, id, {
     code: kind === null ? null : kind.code, name: body.name, unit: body.unit, kcal,
     proteinG: Math.min(100, proteinG), carbsG: Math.min(100, carbsG), fatG: Math.min(100, fatG),
-    servingAmount: body.servingAmount, contains: body.contains, mayContain: body.mayContain,
+    servingAmount: body.servingAmount, contains: body.contains, mayContain: body.mayContain, seen: body.seen ?? null,
   });
   if (saved === "taken") return null;
+  if (saved === "other_code") throw new NutritionError(409, "label_other_barcode", "This label belongs to another barcode.");
+  if (saved === "changed") throw new NutritionError(409, "label_changed", "This label was changed somewhere else. Close it and open it again.");
   if (saved === "full") throw new NutritionError(409, "label_foods_full", "You’ve saved as many labels as you can. Remove one to add another.");
   return await labelReply(deps, saved, saved.code);
 }
@@ -1348,6 +1353,20 @@ function parseDraft(raw: string, userId: string): Draft {
     throw new NutritionError(400, "invalid_scan", "Invalid or expired scan token.");
   }
   return parsed.data;
+}
+
+const scanClaimKey = (userId: string, value: string): string => `${scanKey(userId, value)}:claim`;
+
+/** One scan is one meal: the first meal to ask holds it, and that same meal can ask again. */
+async function claimScan(deps: NutritionDeps, userId: string, value: string, mealId: string): Promise<void> {
+  const key = scanClaimKey(userId, value);
+  const nth = await deps.redis.incrWithTtl(key, MEAL_SCAN_SAVE_SECONDS);
+  if (nth === null) throw new NutritionError(503, "nutrition_unavailable", "Meal confirmation is temporarily unavailable.");
+  if (nth === 1) {
+    if (!(await deps.redis.setex(`${key}:by`, MEAL_SCAN_SAVE_SECONDS, mealId))) throw new NutritionError(503, "nutrition_unavailable", "Meal confirmation is temporarily unavailable.");
+    return;
+  }
+  if ((await deps.redis.get(`${key}:by`)) !== mealId) throw new NutritionError(400, "invalid_scan", "Invalid or expired scan token.");
 }
 
 async function takeDraft(deps: NutritionDeps, userId: string, value: string): Promise<Draft> {
@@ -1566,10 +1585,24 @@ async function confirmNewMeal(deps: NutritionDeps, userId: string, input: Confir
   const peeked = await readDraft(deps, userId, input.scanToken);
   if (peeked !== null) {
     const built = await buildConfirmItems(deps, userId, peeked, input);
-    // Everything that could reject has passed — NOW consume the draft. Still
-    // the atomic single-use gate: two concurrent confirms both read, but only
-    // one take() returns the draft; the loser gets its 400 here.
-    return await writeMeal(deps, userId, input.id, confirmWrite(input, peeked, built), () => takeDraft(deps, userId, input.scanToken));
+    // Everything that could reject has passed. The scan is claimed for this one meal, inside the save,
+    // and taken only once that has committed: a save lost on the way (a dropped connection) can be sent
+    // again under its id, and any other meal is still refused. Two at once: one claims, the other's 400.
+    const mealId = input.id ?? randomUUID();
+    const claim = { held: false };
+    let saved: SavedMeal;
+    try {
+      saved = await writeMeal(deps, userId, input.id, confirmWrite(input, peeked, built), async () => {
+        await claimScan(deps, userId, input.scanToken, mealId);
+        claim.held = true;
+      });
+    } catch (err) {
+      // With no id nothing can send this same meal again, so its claim goes with it.
+      if (claim.held && input.id === undefined) await deps.redis.del(scanClaimKey(userId, input.scanToken));
+      throw err;
+    }
+    await deps.redis.take(scanKey(userId, input.scanToken));
+    return saved;
   }
   // get() returned null: the draft is expired, OR Redis was momentarily down.
   // take()'s Lua GET+DEL distinguishes them (undefined → 400, null → 503) and,

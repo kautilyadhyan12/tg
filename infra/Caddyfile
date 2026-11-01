@@ -25,6 +25,12 @@
 }
 
 {$API_DOMAIN} {
+	# A photo is held to its limit here too, before it reaches the api.
+	@photos path /v1/nutrition/analyze-photo /v1/nutrition/labels/read
+	request_body @photos {
+		max_size 15MB
+	}
+
 	# The console's open lines (ROADMAP Stage 4 item 18) go to their own server, uncompressed and
 	# passed on at once: compression would hold each message back until a block filled.
 	@live path_regexp live ^/v1/orgs/[^/]+/live$

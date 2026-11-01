@@ -122,6 +122,7 @@ export function BarcodeProduct({ product: first, onClose, onSaved }: { product: 
         start={typedFromProduct(product)}
         code={product.code === "" ? null : product.code}
         id={labelId}
+        seen={product.labelSeen}
         check={product.check === "doesnt_add_up" ? "doesnt_add_up" : "fine"}
         onClose={() => { setChanging(false); }}
         onSaved={(saved) => {

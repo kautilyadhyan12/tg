@@ -622,7 +622,7 @@ describe("a pack's label (33b-iii-c)", () => {
     await read("ean13", NUTELLA_CODE);
     await fireEvent.press(await screen.findByRole("button", { name: "Photo of the label" }));
     expect(await screen.findByText(`For barcode ${NUTELLA_CODE}`)).toBeTruthy();
-    expect(screen.getByText("Photos are analyzed and never kept by the app. The scanning service keeps a copy for up to 30 days to check for abuse.")).toBeTruthy();
+    expect(screen.getByText("Photos aren’t kept on our servers. An unsaved one stays on this device until you save or discard it. The scanning service keeps a copy for up to 30 days to check for abuse.")).toBeTruthy();
   });
 
   it("a saved label with no barcode is found again from the Label camera, with Change and Remove", async () => {

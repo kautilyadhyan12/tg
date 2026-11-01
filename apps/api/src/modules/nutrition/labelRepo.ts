@@ -1,5 +1,6 @@
 // A person's own foods read from a pack's label (ROADMAP Stage 5 33b-iii-c). Every read and write
-// holds the owner in its WHERE: a label is never anybody else's.
+// holds the owner in its WHERE: a label is never anybody else's. A removed label stays as a row, as a
+// meal's removed id does: a late save cannot bring it back, and a meal waiting on the phone still prices.
 import type { Sql } from "postgres";
 
 /** The most foods one person keeps this way, all of them listed so each can be changed or removed:
@@ -18,6 +19,8 @@ export interface LabelFoodRow {
   serving_amount: number | null;
   contains: string[];
   may_contain: string[];
+  /** When it was last saved, to the microsecond, as text: what a change is checked against. */
+  seen: string;
 }
 
 export interface LabelFoodValues {
@@ -31,54 +34,67 @@ export interface LabelFoodValues {
   servingAmount: number | null;
   contains: readonly string[];
   mayContain: readonly string[];
+  seen: string | null;
 }
 
-const COLUMNS = "id, code, name, unit, kcal, protein_g, carbs_g, fat_g, serving_amount, contains, may_contain";
+const COLUMNS = "id, code, name, unit, kcal, protein_g, carbs_g, fat_g, serving_amount, contains, may_contain, updated_at::text AS seen";
 
 export async function labelFoodByCode(sql: Sql, userId: string, code: string): Promise<LabelFoodRow | null> {
-  const [row] = await sql<LabelFoodRow[]>`SELECT ${sql.unsafe(COLUMNS)} FROM member_label_foods WHERE user_id = ${userId} AND code = ${code}`;
+  const [row] = await sql<LabelFoodRow[]>`SELECT ${sql.unsafe(COLUMNS)} FROM member_label_foods WHERE user_id = ${userId} AND code = ${code} AND removed_at IS NULL`;
   return row ?? null;
 }
 
 export async function labelFoodsOf(sql: Sql, userId: string): Promise<LabelFoodRow[]> {
-  return await sql<LabelFoodRow[]>`SELECT ${sql.unsafe(COLUMNS)} FROM member_label_foods WHERE user_id = ${userId} ORDER BY updated_at DESC, id LIMIT ${LABEL_FOODS_MOST}`;
+  return await sql<LabelFoodRow[]>`SELECT ${sql.unsafe(COLUMNS)} FROM member_label_foods WHERE user_id = ${userId} AND removed_at IS NULL ORDER BY updated_at DESC, id LIMIT ${LABEL_FOODS_MOST}`;
 }
 
 export async function labelFoodById(sql: Sql, userId: string, id: string): Promise<LabelFoodRow | null> {
+  const [row] = await sql<LabelFoodRow[]>`SELECT ${sql.unsafe(COLUMNS)} FROM member_label_foods WHERE user_id = ${userId} AND id = ${id} AND removed_at IS NULL`;
+  return row ?? null;
+}
+
+/** A label as a meal prices it: removed since or not, as it is the owner's. */
+export async function labelFoodForMeal(sql: Sql, userId: string, id: string): Promise<LabelFoodRow | null> {
   const [row] = await sql<LabelFoodRow[]>`SELECT ${sql.unsafe(COLUMNS)} FROM member_label_foods WHERE user_id = ${userId} AND id = ${id}`;
   return row ?? null;
 }
 
-/** Keeps a label. The same id again changes that row, whose barcode stays; a barcode the person already
- *  kept changes the one they have, so a save sent twice is one food. "taken" is an id somebody else
- *  holds; "full" is the most one person may keep. */
-export async function saveLabelFood(sql: Sql, userId: string, id: string, v: LabelFoodValues): Promise<LabelFoodRow | "taken" | "full"> {
-  const [changed] = await sql<LabelFoodRow[]>`
-    UPDATE member_label_foods SET name = ${v.name}, unit = ${v.unit}, kcal = ${v.kcal}, protein_g = ${v.proteinG}, carbs_g = ${v.carbsG}, fat_g = ${v.fatG},
-      serving_amount = ${v.servingAmount}, contains = ${sql.array([...v.contains])}, may_contain = ${sql.array([...v.mayContain])}, updated_at = now()
-    WHERE id = ${id} AND user_id = ${userId}
-    RETURNING ${sql.unsafe(COLUMNS)}`;
-  if (changed !== undefined) return changed;
-  try {
-    const [made] = await sql<LabelFoodRow[]>`
-      INSERT INTO member_label_foods (id, user_id, code, name, unit, kcal, protein_g, carbs_g, fat_g, serving_amount, contains, may_contain)
-      SELECT ${id}, ${userId}, ${v.code}, ${v.name}, ${v.unit}, ${v.kcal}, ${v.proteinG}, ${v.carbsG}, ${v.fatG}, ${v.servingAmount}, ${sql.array([...v.contains])}, ${sql.array([...v.mayContain])}
-      WHERE (SELECT count(*) FROM member_label_foods WHERE user_id = ${userId}) < ${LABEL_FOODS_MOST}
-      ON CONFLICT (user_id, code) WHERE code IS NOT NULL DO UPDATE SET
-        name = EXCLUDED.name, unit = EXCLUDED.unit, kcal = EXCLUDED.kcal, protein_g = EXCLUDED.protein_g, carbs_g = EXCLUDED.carbs_g, fat_g = EXCLUDED.fat_g,
-        serving_amount = EXCLUDED.serving_amount, contains = EXCLUDED.contains, may_contain = EXCLUDED.may_contain, updated_at = now()
-      RETURNING ${sql.unsafe(COLUMNS)}`;
-    return made ?? "full";
-  } catch (err) {
-    if (typeof err === "object" && err !== null && "code" in err && err.code === "23505") {
-      // The same save at the same moment holds this id for this person: that row is the answer.
-      return (await labelFoodById(sql, userId, id)) ?? "taken";
+/** Keeps a label, one person's saves one at a time. The same id again changes that row, whose barcode
+ *  stays; a barcode the person already kept changes the one they have, so a save sent twice is one food.
+ *  "taken": an id somebody else holds, or a label removed, which a late save does not bring back.
+ *  "other_code": the id holds another barcode. "changed": saved since it was read. "full": the most one
+ *  person may keep. */
+export async function saveLabelFood(sql: Sql, userId: string, id: string, v: LabelFoodValues): Promise<LabelFoodRow | "taken" | "full" | "other_code" | "changed"> {
+  return await sql.begin(async (tx) => {
+    await tx`SELECT pg_advisory_xact_lock(hashtext(${`label:${userId}`}))`;
+    const [held] = await tx<{ user_id: string; code: string | null; removed: boolean; seen: string }[]>`
+      SELECT user_id, code, removed_at IS NOT NULL AS removed, updated_at::text AS seen FROM member_label_foods WHERE id = ${id}`;
+    const same = held ?? null;
+    if (same !== null && (same.user_id !== userId || same.removed)) return "taken";
+    if (same !== null && v.code !== null && same.code !== v.code) return "other_code";
+    if (same !== null && v.seen !== null && same.seen !== v.seen) return "changed";
+    const [byCode] = same !== null || v.code === null ? [] : await tx<{ id: string }[]>`
+      SELECT id FROM member_label_foods WHERE user_id = ${userId} AND code = ${v.code} AND removed_at IS NULL`;
+    const target = same !== null ? id : byCode?.id ?? null;
+    if (target !== null) {
+      const [changed] = await tx<LabelFoodRow[]>`
+        UPDATE member_label_foods SET name = ${v.name}, unit = ${v.unit}, kcal = ${v.kcal}, protein_g = ${v.proteinG}, carbs_g = ${v.carbsG}, fat_g = ${v.fatG},
+          serving_amount = ${v.servingAmount}, contains = ${tx.array([...v.contains])}, may_contain = ${tx.array([...v.mayContain])}, updated_at = clock_timestamp()
+        WHERE id = ${target} AND user_id = ${userId}
+        RETURNING ${tx.unsafe(COLUMNS)}`;
+      return changed ?? "taken";
     }
-    throw err;
-  }
+    const [kept] = await tx<{ n: number }[]>`SELECT count(*)::int AS n FROM member_label_foods WHERE user_id = ${userId} AND removed_at IS NULL`;
+    if ((kept?.n ?? 0) >= LABEL_FOODS_MOST) return "full";
+    const [made] = await tx<LabelFoodRow[]>`
+      INSERT INTO member_label_foods (id, user_id, code, name, unit, kcal, protein_g, carbs_g, fat_g, serving_amount, contains, may_contain)
+      VALUES (${id}, ${userId}, ${v.code}, ${v.name}, ${v.unit}, ${v.kcal}, ${v.proteinG}, ${v.carbsG}, ${v.fatG}, ${v.servingAmount}, ${tx.array([...v.contains])}, ${tx.array([...v.mayContain])})
+      RETURNING ${tx.unsafe(COLUMNS)}`;
+    return made ?? "taken";
+  });
 }
 
 export async function removeLabelFood(sql: Sql, userId: string, id: string): Promise<boolean> {
-  const gone = await sql`DELETE FROM member_label_foods WHERE id = ${id} AND user_id = ${userId}`;
+  const gone = await sql`UPDATE member_label_foods SET removed_at = now() WHERE id = ${id} AND user_id = ${userId} AND removed_at IS NULL`;
   return gone.count > 0;
 }

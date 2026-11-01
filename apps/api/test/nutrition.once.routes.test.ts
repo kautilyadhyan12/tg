@@ -132,6 +132,32 @@ d("a meal saved under the phone's own id (real Postgres)", () => {
   });
   afterAll(async () => { if (app !== undefined) await app.close(); await wipe(); await sql.end({ timeout: 5 }); });
 
+  it("the worst thing, a save lost on the way: the same meal sent again is saved, and no other meal can take its scan", async () => {
+    const id = randomUUID();
+    const name = `once_fail_${id.replaceAll("-", "")}`;
+    await sql.unsafe(`CREATE FUNCTION ${name}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'database blinked'; END $$`);
+    await sql.unsafe(`CREATE CONSTRAINT TRIGGER ${name} AFTER INSERT ON meal_logs DEFERRABLE INITIALLY DEFERRED FOR EACH ROW WHEN (NEW.id = '${id}') EXECUTE FUNCTION ${name}()`);
+    let dropped = false;
+    const drop = async (): Promise<void> => {
+      if (dropped) return;
+      dropped = true;
+      await sql.unsafe(`DROP TRIGGER ${name} ON meal_logs`);
+      await sql.unsafe(`DROP FUNCTION ${name}()`);
+    };
+    try {
+      const s = await scan(alice.access);
+      const lost = await save(alice.access, photo(id, s));
+      expect(lost.statusCode).toBeGreaterThanOrEqual(500);
+      await drop();
+      expect((await save(alice.access, photo(randomUUID(), s))).statusCode).toBe(400);
+      const again = await save(alice.access, photo(id, s));
+      expect(again.statusCode, again.body).toBe(201);
+      expect((await save(alice.access, photo(randomUUID(), s))).statusCode).toBe(400);
+    } finally {
+      await drop();
+    }
+  }, 30_000);
+
   it("an id that is somebody else's meal reads nothing and changes nothing, typed or from a photo", async () => {
     const id = randomUUID();
     const first = await save(alice.access, typed(id, "Alice's lunch"));
@@ -267,7 +293,7 @@ d("a meal saved under the phone's own id (real Postgres)", () => {
     expect((await rowsOf(alice.userId)).map((r) => r.id)).toEqual([id]);
   }, 30_000);
 
-  it("a send that finds the photo already taken waits for the save under way and answers with its meal", async () => {
+  it("five sends of one meal at once are one meal, each answered with it", async () => {
     const id = randomUUID();
     const body = photo(id, await scan(alice.access));
     let markTaken = (): void => undefined;
@@ -276,8 +302,6 @@ d("a meal saved under the phone's own id (real Postgres)", () => {
     const replies = await Promise.all([1, 2, 3, 4, 5].map(() => save(alice.access, body)));
     expect(replies.map((r) => r.statusCode).sort()).toEqual([200, 200, 200, 200, 201]);
     expect(new Set(replies.map((r) => JSON.stringify(r.json<MealBody>()))).size).toBe(1);
-    // Four sends met "the photo is gone" while the first was still saving.
-    expect(play.gone).toBe(4);
     expect((await rowsOf(alice.userId)).map((r) => r.id)).toEqual([id]);
   }, 30_000);
 

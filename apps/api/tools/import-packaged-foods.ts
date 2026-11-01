@@ -15,10 +15,13 @@
 //
 // As `import-usda.ts`: the database is named by this tool's own argument and nothing else. It never
 // reads `apps/api/.env` or `DATABASE_URL`.
+import { statSync } from "node:fs";
+import { OFF_DAILY_FILE } from "@app/shared";
+import { OFF_DAILY_BASE } from "../src/modules/nutrition/packagedSync.js";
 import postgres from "postgres";
 import { argValue, databaseUrlFrom } from "./import-usda-args.js";
 import { offRowsOfFile, usdaRowsOfDir } from "./packaged-files.js";
-import { fillPackagedList, recordFullLoad, type ListReport } from "./packaged-table.js";
+import { fillPackagedList, downloadStillCovered, type ListReport } from "./packaged-table.js";
 
 const arg = (name: string): string | undefined => argValue(process.argv, name);
 const chosen = databaseUrlFrom(process.argv, process.env);
@@ -46,8 +49,13 @@ const sql = postgres(chosen.url, { prepare: false, max: 2 });
 try {
   if (offFile !== undefined) {
     const started = Date.now();
-    say("Open Food Facts", await fillPackagedList(sql, "off_products", offRowsOfFile(offFile)), (Date.now() - started) / 1000);
-    await recordFullLoad(sql, new Date());
+    // The file's own date, which `curl -R` keeps: how old the download is decides which days to apply again.
+    const made = statSync(offFile).mtime;
+    const index = await fetch(`${OFF_DAILY_BASE}index.txt`, { signal: AbortSignal.timeout(60_000) }).then((r) => r.text());
+    const froms = index.split("\n").flatMap((name) => { const m = OFF_DAILY_FILE.exec(name.trim()); return m === null ? [] : [Number(m[1])]; });
+    if (froms.length === 0) throw new Error("Their list of daily files could not be read, so this download's age cannot be judged.");
+    if (!downloadStillCovered(made, Math.min(...froms))) throw new Error(`This download is from ${made.toISOString()}, older than the daily files reach back. Download it again.`);
+    say("Open Food Facts", await fillPackagedList(sql, "off_products", offRowsOfFile(offFile), made), (Date.now() - started) / 1000);
   }
   if (usdaDir !== undefined) {
     const started = Date.now();

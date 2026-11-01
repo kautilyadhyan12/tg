@@ -207,6 +207,78 @@ d("a pack's label (real Postgres)", () => {
     expect((await save(randomUUID(), null, alice, over)).statusCode).toBe(400);
   });
 
+  describe("the second passes' faults", () => {
+    it("a stranger's body is never read: the biggest photo answers who-are-you, not too-big, and fast", async () => {
+      for (const path of ["/v1/nutrition/labels/read", "/v1/nutrition/analyze-photo"]) {
+        const res = await api().inject({ method: "POST", url: path, remoteAddress: "203.0.113.90", headers: { "content-type": "application/json" }, payload: "x".repeat(20 * 1024 * 1024) });
+        expect(res.statusCode).toBe(401);
+      }
+    });
+
+    it("a person with no scans left is told before any work on the photo, and has a limit of their own", async () => {
+      const person = await session("label33-none@example.com");
+      next = says(NOODLES);
+      for (let i = 0; i < 3; i++) expect((await read(person)).statusCode).toBe(200);
+      const before = reads;
+      const refused = await read(person);
+      expect(refused.statusCode).toBe(429);
+      expect(refused.json()).toMatchObject({ error: "quota_exceeded" });
+      expect(reads).toBe(before);
+      const answers: number[] = [];
+      for (let i = 0; i < 20; i++) answers.push((await read(person)).statusCode);
+      expect(answers.at(-1)).toBe(429);
+      expect((await read(person)).json()).toMatchObject({ error: "rate_limited" });
+      const other = await session("label33-none2@example.com");
+      expect((await read(other)).statusCode).toBe(200);
+    });
+
+    it("the limit of 200 holds with 40 saves at once, and every one kept is listed", async () => {
+      const person = await session("label33-race2@example.com");
+      const [row] = await sql<{ id: string }[]>`SELECT id FROM users WHERE email = 'label33-race2@example.com'`;
+      await sql`INSERT INTO member_label_foods (id, user_id, name, unit, kcal, protein_g, carbs_g, fat_g) SELECT gen_random_uuid(), ${row?.id ?? ""}, 'x', 'g', 1, 0, 0, 0 FROM generate_series(1, 195)`;
+      await Promise.all(Array.from({ length: 40 }, () => save(randomUUID(), null, person)));
+      const [kept] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM member_label_foods WHERE user_id = ${row?.id ?? ""}`;
+      expect(kept?.n).toBe(200);
+    });
+
+    it("at the limit, a barcode already kept can still be changed", async () => {
+      const person = await session("label33-full2@example.com");
+      const [row] = await sql<{ id: string }[]>`SELECT id FROM users WHERE email = 'label33-full2@example.com'`;
+      await save(randomUUID(), CODE, person);
+      await sql`INSERT INTO member_label_foods (id, user_id, name, unit, kcal, protein_g, carbs_g, fat_g) SELECT gen_random_uuid(), ${row?.id ?? ""}, 'x', 'g', 1, 0, 0, 0 FROM generate_series(1, 199)`;
+      expect((await save(randomUUID(), CODE, person, { kcal: 380 })).statusCode).toBe(200);
+    });
+
+    it("removed: a late save does not bring it back, and a meal holding it is still priced", async () => {
+      const person = await session("label33-late@example.com");
+      const id = randomUUID();
+      await save(id, CODE, person);
+      expect((await inject("DELETE", `/v1/nutrition/labels/${id}`, person)).statusCode).toBe(204);
+      expect((await save(id, CODE, person)).statusCode).toBe(404);
+      expect(barcodeReplySchema.parse((await inject("GET", `/v1/nutrition/barcode/${CODE}`, person)).json()).status).toBe("not_found");
+      const meal = await inject("POST", "/v1/nutrition/meals", person, { id: randomUUID(), mealName: "Noodles", takenAt: new Date().toISOString(), mealType: "lunch", items: [{ canonical: `label_${id}`, grams: 100 }] });
+      expect(meal.statusCode, meal.body).toBe(201);
+      const fresh = randomUUID();
+      expect((await save(fresh, CODE, person)).statusCode).toBe(200);
+      expect(barcodeReplySchema.parse((await inject("GET", `/v1/nutrition/barcode/${CODE}`, person)).json())).toMatchObject({ labelId: fresh });
+    });
+
+    it("an older change does not overwrite a newer one; an id cannot move to another barcode", async () => {
+      const person = await session("label33-seen@example.com");
+      const id = randomUUID();
+      const first = barcodeReplySchema.parse((await save(id, CODE, person, { name: "First" })).json());
+      if (first.status !== "found") throw new Error(first.status);
+      expect((await save(id, CODE, person, { name: "Newer", seen: first.labelSeen })).statusCode).toBe(200);
+      const late = await save(id, CODE, person, { name: "Older", seen: first.labelSeen });
+      expect(late.statusCode).toBe(409);
+      expect(late.json()).toMatchObject({ error: "label_changed" });
+      const other = await save(id, CODE_2, person, { name: "Pack B" });
+      expect(other.statusCode).toBe(409);
+      expect(other.json()).toMatchObject({ error: "label_other_barcode" });
+      expect(barcodeReplySchema.parse((await inject("GET", `/v1/nutrition/barcode/${CODE}`, person)).json())).toMatchObject({ food: { name: "Newer" } });
+    });
+  });
+
   describe("the count of photo scans", () => {
     it("a read uses one and says so; a free plan has 3 a month, then is refused and costs nothing", async () => {
       const carol = await session("label33-carol@example.com");

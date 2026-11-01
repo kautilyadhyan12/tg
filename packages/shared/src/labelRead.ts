@@ -2,6 +2,9 @@
 // which of the label's columns is the product's. Only vision.adapter.ts reads a provider's reply.
 import { z } from "zod";
 
+/** A character no pack prints and the database may refuse. Used on whatever a model writes. */
+export const withoutControls = (text: string): string => Array.from(text).filter((c) => { const n = c.codePointAt(0) ?? 0; return n > 31 && n !== 127; }).join("").trim();
+
 export type PrintedKind = "kcal" | "kj" | "g" | "amount";
 const UNITS: Readonly<Record<PrintedKind, string>> = { kcal: "kcal|cal|calories", kj: "kj", g: "g", amount: "g|ml" };
 
@@ -27,7 +30,7 @@ export const ALLERGENS_MOST = 100;
 /** Allergens as Luna wrote them: a list, or one line of them. Each is its own word, whole: a word is
  *  never cut, or the rest of a line of allergens would be lost with nothing to say so. */
 export function allergensFrom(value: unknown): string[] {
-  const lines = Array.isArray(value) ? value.filter((w): w is string => typeof w === "string") : typeof value === "string" ? [value] : [];
+  const lines = (Array.isArray(value) ? value.filter((w): w is string => typeof w === "string") : typeof value === "string" ? [value] : []).map(withoutControls);
   const words = lines.flatMap((line) => line.replace(/^\s*(?:contains|may contain|allergens?)\s*:\s*/i, "").split(/[,;\n]/)).map((w) => w.trim()).filter((w) => w !== "");
   return [...new Set(words.flatMap((word) => {
     const pieces: string[] = [];
@@ -63,7 +66,7 @@ export type LabelColumn = z.infer<typeof labelColumnSchema>;
 
 export const labelEvidenceSchema = z.object({
   is_nutrition_label: z.boolean(),
-  name: z.preprocess((v) => (typeof v === "string" && v.trim() !== "" ? v.trim().slice(0, 80) : null), z.string().nullable()),
+  name: z.preprocess((v) => (typeof v === "string" && withoutControls(v) !== "" ? withoutControls(v).slice(0, 80) : null), z.string().nullable()),
   columns: z.array(labelColumnSchema).max(8),
   contains: wordList,
   may_contain: wordList,
@@ -122,7 +125,10 @@ export function panelOfLabel(evidence: Pick<LabelEvidence, "columns">): LabelPan
 const labelAmount = z.number().nonnegative().max(10_000);
 /** No control character: the database cannot hold some, and no pack prints one. */
 const plainWords = /^[^\u0000-\u001f\u007f]*$/;
-const allergenWords = z.array(z.string().trim().min(1).max(ALLERGEN_WORD_MOST).regex(plainWords)).max(ALLERGENS_MOST);
+/** All of one list's words together: a real pack's are far fewer, and the list of labels is read whole. */
+const ALLERGEN_LETTERS_MOST = 2000;
+const allergenWords = z.array(z.string().trim().min(1).max(ALLERGEN_WORD_MOST).regex(plainWords)).max(ALLERGENS_MOST)
+  .refine((words) => words.join("").length <= ALLERGEN_LETTERS_MOST, { message: "too many letters" });
 
 /** What a read gives the person to check. Nothing of it is kept until they save. */
 export const labelDraftSchema = z.object({
@@ -151,6 +157,8 @@ export const labelFoodSaveSchema = z.object({
   name: z.string().trim().min(1).max(80).regex(plainWords),
   unit: z.enum(["g", "ml"]),
   amount: z.number().min(0.1).max(10_000),
+  /** When the label being changed was last saved, as it was read; a change made since is not overwritten. */
+  seen: z.string().max(64).optional(),
   kcal: labelAmount,
   proteinG: labelAmount,
   carbsG: labelAmount,
@@ -164,7 +172,7 @@ export type LabelFoodSave = z.infer<typeof labelFoodSaveSchema>;
 export const labelFoodParamSchema = z.object({ id: z.string().uuid() }).strict();
 
 /** The photo line the spec asks for in the scan screen (Part 2B §7, amended 2026-10-28). */
-export const PHOTO_PRIVACY_LINE = "Photos are analyzed and never kept by the app. The scanning service keeps a copy for up to 30 days to check for abuse.";
+export const PHOTO_PRIVACY_LINE = "Photos aren’t kept on our servers. An unsaved one stays on this device until you save or discard it. The scanning service keeps a copy for up to 30 days to check for abuse.";
 
 /** How many photo scans a person has left. `left` is null where the count cannot be read: nothing is said then. */
 export const photoScansLeftSchema = z.object({

@@ -23,6 +23,7 @@ export function LabelCheck({
   code,
   id,
   check,
+  seen,
   fromKj = false,
   onClose,
   onSaved,
@@ -31,6 +32,8 @@ export function LabelCheck({
   code: string | null;
   id: string | null;
   check: "fine" | "part_missing" | "doesnt_add_up";
+  /** When the label being changed was last saved, as it was read. */
+  seen?: string | undefined;
   fromKj?: boolean;
   onClose: () => void;
   onSaved: (product: FoundProduct) => void;
@@ -54,7 +57,7 @@ export function LabelCheck({
       return;
     }
     setSaving(true);
-    const answer = await session.signedIn({ method: "PUT", path: `/v1/nutrition/labels/${saveId.current}`, body: made.body }, barcodeReplySchema);
+    const answer = await session.signedIn({ method: "PUT", path: `/v1/nutrition/labels/${saveId.current}`, body: seen === undefined ? made.body : { ...made.body, seen } }, barcodeReplySchema);
     setSaving(false);
     if (answer.kind === "ok" && answer.data.status === "found") onSaved(answer.data);
     else if (answer.kind === "refused") setSaying(answer.message);

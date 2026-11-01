@@ -71,6 +71,7 @@ import { OwnFood } from "./OwnFood";
 import { WholeDish } from "./WholeDish";
 import { BarcodeOwnFood, BarcodeProduct, TypeBarcode } from "./BarcodeProduct";
 import { NO_READS, PACK_CODES, afterRead, codeFromCamera, troubleWords, type FoundProduct } from "./barcode";
+import { removeCachedPhoto } from "./fileStore";
 import { LabelCheck } from "./LabelCheck";
 import { canReadLabel, labelCostWords, scansLeftWords, typedFromDraft } from "./labelRead";
 import { Credits, SourceLine } from "./SourceLine";
@@ -125,6 +126,7 @@ async function drawnSmall(uri: string): Promise<string | null> {
   if (size.width !== upright.width || size.height !== upright.height) context.resize(size);
   const small = await context.renderAsync();
   const saved = await small.saveAsync({ format: SaveFormat.JPEG, compress: JPEG_QUALITY, base64: true });
+  removeCachedPhoto(saved.uri);
   return saved.base64 ?? null;
 }
 
@@ -268,7 +270,7 @@ export function MealPhoto({ open, barcode, kept, onClose, onSaved, onSearch }: M
             startMode={cameraStart?.mode ?? (barcode ? "barcode" : "meal")}
             startCode={cameraStart?.code ?? null}
             onLabelPhoto={(uri, code) => {
-              void scanLabel(uri, code);
+              void scanLabel(uri, code).finally(() => { removeCachedPhoto(uri); });
             }}
             onMealMode={() => {
               // A photo meal already kept is what Meal means: it is never thrown away for a new photo.
@@ -278,7 +280,7 @@ export function MealPhoto({ open, barcode, kept, onClose, onSaved, onSearch }: M
             onSaved={onSaved}
             notice={notice}
             onPhoto={(uri) => {
-              void scan(uri);
+              void scan(uri).finally(() => { removeCachedPhoto(uri); });
             }}
             onClose={onClose}
             onSearch={onSearch}

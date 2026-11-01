@@ -83,6 +83,8 @@ export const barcodeReplySchema = z.discriminatedUnion("status", [
     check: packagedCheckSchema,
     /** Set where this is the person's own saved label, not a list's product. */
     labelId: z.string().uuid().optional(),
+    /** When that label was last saved: sent back with a change to it. */
+    labelSeen: z.string().optional(),
   }).strict(),
   z.object({ status: z.literal("not_found"), code: z.string() }).strict(),
   z.object({ status: z.literal("store_only") }).strict(),

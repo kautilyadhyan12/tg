@@ -8,9 +8,10 @@ import type { Sql } from "postgres";
 import type { z } from "zod";
 import { MEAL_PHOTO_MAX_BYTES, barcodeParamSchema, cleanPhoto, labelFoodParamSchema, labelFoodSaveSchema } from "@app/shared";
 import type { AppConfig } from "../../config.js";
+import { REQUEST_TIMEOUT_MS } from "../../requestTimeout.js";
 import type { RedisLike } from "../../redis.js";
 import { createDualRateLimit } from "../auth/rateLimit.js";
-import { quotaLeft, requireQuota } from "../quotas/service.js";
+import { quotaLeft, requireQuota, resetsAt } from "../quotas/service.js";
 import { createOpenFoodFactsProvider, type FoodSearchProvider } from "./openfoodfacts.adapter.js";
 import {
   analyzeMealPhotoRequestSchema,
@@ -38,6 +39,8 @@ import { createLabelReader, createMealMatchChecker, createMealVisionProvider, ty
 declare module "fastify" {
   interface FastifyRequest {
     /** Set by validateScan; present on the analyze-photo handler. */
+    /** This request holds its person's one body being sent (`oneBodyAtATime`). */
+    nutritionSendingBody?: boolean;
     nutritionScanInput?: { imageBase64: string; mimeType: "image/jpeg" | "image/png" | "image/webp" };
     nutritionUsedRetake?: boolean;
     /** Set by the meter: the quota key the scan was counted under. */
@@ -127,6 +130,7 @@ export function registerNutritionRoutes(
   };
   const readDeps = { sql: deps.sql };
   app.decorateRequest("nutritionScanInput", undefined);
+  app.decorateRequest("nutritionSendingBody", undefined);
   app.decorateRequest("nutritionUsedRetake", undefined);
   app.decorateRequest("nutritionScanQuotaKey", undefined);
 
@@ -142,6 +146,14 @@ export function registerNutritionRoutes(
     }
     const input = parse(analyzeMealPhotoRequestSchema, req.body, req, reply);
     if (input === null) return;
+    // No scans left: answered before any work on the photo. A retake is free, so it is not asked of it.
+    if (input.retakeToken === undefined) {
+      const scans = await quotaLeft("meal_scan", { sql: deps.sql, redis: deps.redis }, authedUserId(req));
+      if (scans.left === 0) {
+        void reply.status(429).send({ error: "quota_exceeded", message: `You've used all ${String(scans.limit)} meal_scan uses for this ${scans.window}.`, resetsAt: resetsAt(scans.window, new Date()), requestId: req.id });
+        return;
+      }
+    }
     if (input.imageBase64.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(input.imageBase64)) {
       void reply.status(400).send({ error: "invalid_image", message: "Image must be valid base64.", requestId: req.id });
       return;
@@ -175,9 +187,46 @@ export function registerNutritionRoutes(
     if (req.nutritionUsedRetake !== true) await quota(req, reply);
   };
 
+  // A photo is the biggest thing anyone sends, and holding it costs the server before any check that
+  // runs on a body. So who is asking is settled before the body is read: a stranger's never is. One
+  // person sends one body at a time, at most this many a minute; a real meal takes far longer.
+  const photoLimit = createDualRateLimit({
+    name: "nutrition_photo",
+    max: 20,
+    ipMax: null,
+    windowMs: 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
+  const sendingBody = new Map<string, number>();
+  const oneBodyAtATime = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    const id = authedUserId(req);
+    const since = sendingBody.get(id);
+    if (since !== undefined && Date.now() - since < REQUEST_TIMEOUT_MS) {
+      await reply.status(429).send({ error: "rate_limited", message: "Too many requests. Please try again shortly.", requestId: req.id });
+      return;
+    }
+    sendingBody.set(id, Date.now());
+    req.nutritionSendingBody = true;
+  };
+  const bodyArrived = async (req: FastifyRequest): Promise<void> => {
+    if (req.nutritionSendingBody !== true) return;
+    req.nutritionSendingBody = false;
+    if (req.authUser !== undefined) sendingBody.delete(req.authUser.id);
+    await Promise.resolve();
+  };
+  const photoRoute = {
+    bodyLimit: 14 * 1024 * 1024 + 1024,
+    onRequest: [app.authenticate, photoLimit, oneBodyAtATime],
+    preValidation: [bodyArrived],
+    onResponse: [bodyArrived],
+    onRequestAbort: [bodyArrived],
+    preHandler: [validateScan, meter],
+  };
+
   app.post(
     "/v1/nutrition/analyze-photo",
-    { bodyLimit: 14 * 1024 * 1024 + 1024, preHandler: [app.authenticate, validateScan, meter] },
+    photoRoute,
     async (req, reply) => {
       const input = req.nutritionScanInput;
       if (input === undefined) throw new Error("scan validation did not run");
@@ -212,7 +261,7 @@ export function registerNutritionRoutes(
   // A pack's label (ROADMAP 33b-iii-c): the same checks and meter as a meal photo, and one scan counted.
   app.post(
     "/v1/nutrition/labels/read",
-    { bodyLimit: 14 * 1024 * 1024 + 1024, preHandler: [app.authenticate, validateScan, meter] },
+    photoRoute,
     async (req, reply) => {
       const input = req.nutritionScanInput;
       if (input === undefined) throw new Error("scan validation did not run");

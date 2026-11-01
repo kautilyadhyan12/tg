@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { SIGNED_OUT_NOTES } from "../../session/session";
 import { useSession } from "../../session/SessionProvider";
 import { photoSheetFile } from "./fileStore";
 import type { TextStore } from "./outbox";
@@ -30,6 +31,20 @@ export function useKeptSheet(): KeptSheet {
   const store = useRef<{ me: string; file: TextStore } | null>(null);
   const writing = useRef<Promise<void>>(Promise.resolve());
 
+  const write = useCallback((text: string) => {
+    const kept = store.current;
+    if (kept === null) return;
+    writing.current = writing.current.then(() => kept.file.write(text)).catch(() => undefined);
+  }, []);
+
+  // Signing out on purpose: the photo goes too, as the next person to hold the phone is not its owner.
+  const signedOutOnPurpose = state.kind === "out" && state.note === SIGNED_OUT_NOTES.own;
+  useEffect(() => {
+    if (!signedOutOnPurpose || store.current === null) return;
+    write("");
+    store.current = null;
+  }, [signedOutOnPurpose, write]);
+
   useEffect(() => {
     setSheet(undefined);
     if (me === null) return undefined;
@@ -38,7 +53,10 @@ export function useKeptSheet(): KeptSheet {
     let stale = false;
     void file.read().then(
       (text) => {
-        if (!stale) setSheet((now) => (now === undefined ? readSheetFile(text, new Date()) : now));
+        const read = readSheetFile(text, new Date());
+        // A photo meal that can no longer be saved has no reason to stay on the phone.
+        if (read === null && text !== null && text !== "") write("");
+        if (!stale) setSheet((now) => (now === undefined ? read : now));
       },
       () => {
         if (!stale) setSheet((now) => (now === undefined ? null : now));
@@ -47,13 +65,7 @@ export function useKeptSheet(): KeptSheet {
     return () => {
       stale = true;
     };
-  }, [me, make]);
-
-  const write = useCallback((text: string) => {
-    const kept = store.current;
-    if (kept === null) return;
-    writing.current = writing.current.then(() => kept.file.write(text)).catch(() => undefined);
-  }, []);
+  }, [me, make, write]);
 
   const keep = useCallback(
     (next: PhotoSheet) => {

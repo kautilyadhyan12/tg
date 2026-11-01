@@ -7,10 +7,11 @@ import { join } from "node:path";
 import { gzipSync } from "node:zlib";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import postgres from "postgres";
-import { PackagedFileRefused, updatePackagedFoods, type PackagedSyncDeps } from "../src/modules/nutrition/packagedSync.js";
+import { PackagedFileRefused, readDailyFile, updatePackagedFoods, type PackagedSyncDeps } from "../src/modules/nutrition/packagedSync.js";
 import { packagedRowsFor } from "../src/modules/nutrition/packagedRepo.js";
 import { offRowsOfFile, usdaRowsOfDir } from "../tools/packaged-files.js";
-import { fillPackagedList, PackagedListRefused, recordFullLoad } from "../tools/packaged-table.js";
+import { downloadStillCovered, fillPackagedList, PackagedListRefused, recordFullLoad } from "../tools/packaged-table.js";
+import { OFF_LIST_LOCK, PackagedListBusy, applyDailyFile } from "../src/modules/nutrition/packagedRepo.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -242,10 +243,47 @@ d("filling the lists and the nightly update (real Postgres)", () => {
       expect((await packagedRowsFor(sql, code)).off?.kcal).toBe(113);
       // An older download, then the import: the row goes back, and the import's mark is before that night.
       await sql`UPDATE off_products SET kcal = 1 WHERE code = ${code}`;
-      await recordFullLoad(sql, new Date((1793086400 + 3600) * 1000));
+      await recordFullLoad(sql, new Date((1793086400 + 3600 - 24 * 3600) * 1000));
       const night2 = fakeFetch({ "index.txt": A, [A]: gzipSync(DAILY) });
       expect(await updatePackagedFoods(deps({ fetch: night2.fetch }))).toMatchObject({ outcome: "updated", files: 1 });
       expect((await packagedRowsFor(sql, code)).off?.kcal).toBe(113);
+    });
+
+    it("a file naming a time over an hour ahead is passed over, and never becomes the mark", async () => {
+      const ahead = `openfoodfacts_products_${String(1793500000)}_${String(1793500000 + 2 * 3600)}.json.gz`;
+      const night = fakeFetch({ "index.txt": ahead });
+      await updatePackagedFoods(deps({ fetch: night.fetch })).catch(() => undefined);
+      const rows = await sql<{ name: string }[]>`SELECT name FROM off_daily_files WHERE name = ${ahead}`;
+      expect(rows).toEqual([]);
+    });
+
+    it("empty lines count: a small file that unpacks to nothing but them is refused", async () => {
+      async function* blanks(): AsyncGenerator<Buffer> {
+        for (let i = 0; i < 11; i++) { await Promise.resolve(); yield Buffer.alloc(0); }
+      }
+      await expect(readDailyFile(blanks(), 10)).rejects.toBeInstanceOf(PackagedFileRefused);
+    });
+
+    it("the update and a full import never run together: whichever comes second stops and says so", async () => {
+      const holder = postgres(url ?? "", { prepare: false, max: 1 });
+      try {
+        await holder.begin(async (tx) => {
+          await tx`SELECT pg_advisory_xact_lock(${OFF_LIST_LOCK})`;
+          await expect(fillPackagedList(sql, "off_products", offRowsOfFile(join(FIXTURES, "off-products.tsv")))).rejects.toBeInstanceOf(PackagedListRefused);
+          await expect(applyDailyFile(sql, { name: "lock-test.json.gz", toSecond: 1, products: 0 }, [], [])).rejects.toBeInstanceOf(PackagedListBusy);
+        });
+      } finally {
+        await holder.end();
+      }
+    });
+
+    it("a load's mark is the download's date, a day back, in the load's own commit", async () => {
+      const made = new Date((1793086400 + 5 * 24 * 3600) * 1000);
+      await fillPackagedList(sql, "off_products", offRowsOfFile(join(FIXTURES, "off-products.tsv")), made);
+      const [row] = await sql<{ to_second: string }[]>`SELECT to_second FROM off_daily_files WHERE name = ${`full_${made.toISOString()}`}`;
+      expect(Number(row?.to_second)).toBe(1793086400 + 4 * 24 * 3600);
+      expect(downloadStillCovered(new Date((1000 * 1000 + 24 * 3600) * 1000), 1000 * 1000)).toBe(true);
+      expect(downloadStillCovered(new Date(1000 * 1000), 1000 * 1000)).toBe(false);
     });
 
     describe("a real download over a real connection", () => {

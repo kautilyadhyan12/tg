@@ -141,10 +141,11 @@ export const memberLabelFoods = pgTable(
     mayContain: text("may_contain").array().notNull().default(sql`'{}'`),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    removedAt: timestamp("removed_at", { withTimezone: true }),
   },
   (t) => [
     index("member_label_foods_user_idx").on(t.userId),
-    uniqueIndex("member_label_foods_user_code_idx").on(t.userId, t.code).where(sql`${t.code} IS NOT NULL`),
+    uniqueIndex("member_label_foods_user_code_idx").on(t.userId, t.code).where(sql`${t.code} IS NOT NULL AND ${t.removedAt} IS NULL`),
     check("member_label_foods_unit_check", sql`${t.unit} IN ('g','ml')`),
     check("member_label_foods_kcal_check", sql`${t.kcal} >= 0 AND ${t.kcal} <= 1000`),
     check("member_label_foods_macros_check", sql`${t.proteinG} BETWEEN 0 AND 100 AND ${t.carbsG} BETWEEN 0 AND 100 AND ${t.fatG} BETWEEN 0 AND 100`),
