@@ -99,6 +99,7 @@ export function compileDefinition(
       ...(rep.minRepMs !== undefined ? { minRepMs: rep.minRepMs } : {}),
       ...(rep.maxRepMs !== undefined ? { maxRepMs: rep.maxRepMs } : {}),
       bilateralGate: rep.bilateralGate !== undefined,
+      ...(rep.uprightUnder !== undefined ? { uprightUnder: rep.uprightUnder } : {}),
     },
     declaredSignals: def.signals ?? [],
     ...(faultRules ? { faultRules } : {}),
