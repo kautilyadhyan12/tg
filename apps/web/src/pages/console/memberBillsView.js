@@ -181,12 +181,15 @@ const refundLine = (r, currency) => {
     receiptNumber: r.receiptNumber,
     amount: `${formatMinor(r.amountMinor, currency)} ${pending ? 'refund pending' : 'refunded'}`,
     money: formatMinor(r.amountMinor, currency),
-    detail: joined([
-      square?.card === null || square?.card === undefined ? methodWords(r.method) : `${methodWords(r.method)}, ${cardName(square.card)}`,
-      shortDay(r.refundedOn),
-      REFUND_REASON_WORDS[r.reason] ?? null,
-      byWords(r.by),
-    ]),
+    // Made inside Square (18d-iv-d-i): Square says neither why nor who.
+    detail: square?.inSquare === true
+      ? joined([square.card === null ? 'Refunded in Square' : `Refunded in Square to ${cardName(square.card)}`, shortDay(r.refundedOn)])
+      : joined([
+          square?.card === null || square?.card === undefined ? methodWords(r.method) : `${methodWords(r.method)}, ${cardName(square.card)}`,
+          shortDay(r.refundedOn),
+          REFUND_REASON_WORDS[r.reason] ?? null,
+          byWords(r.by),
+        ]),
     note: square?.late === true ? CARD_REFUND_LATE_LINE : null,
     toCard: square !== null,
     voided: null,

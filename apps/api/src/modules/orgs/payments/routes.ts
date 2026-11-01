@@ -79,6 +79,7 @@ import {
   squareFinishRequestSchema,
   squareLocationRequestSchema,
   squareObjectIdSchema,
+  squareRefundIdSchema,
   squareWebhookBodySchema,
 } from "@app/shared";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -110,6 +111,7 @@ import * as terminalCards from "./terminalCards.js";
 import * as terminalPayments from "./terminalPayments.js";
 import * as terminals from "./terminals.js";
 import { SQUARE_REVOKED_EVENT } from "./work.js";
+import { SQUARE_REFUND_EVENTS } from "./squareMadeRefunds.js";
 
 export const SQUARE_WEBHOOK_PATH = "/v1/webhooks/square";
 /** Square's own messages are a few kilobytes. */
@@ -564,6 +566,19 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
           await webhooks.keepSquareEvent(deps.sql, {
             eventId: event.data.event_id,
             payload: { type: event.data.type, accountId: event.data.merchant_id, customerId: customerId.data },
+          });
+          return reply.status(200).send();
+        }
+        // A refund, made here or inside Square (18d-iv-d-i): the worker reads Square's own record of it.
+        if (SQUARE_REFUND_EVENTS.includes(event.data.type)) {
+          const refundId = squareRefundIdSchema.safeParse(event.data.data?.id);
+          if (!refundId.success) {
+            req.log.warn({ event: "webhook.square_refund_unreadable" }, "a signed Square refund message names no refund");
+            return reply.status(200).send();
+          }
+          await webhooks.keepSquareEvent(deps.sql, {
+            eventId: event.data.event_id,
+            payload: { type: event.data.type, accountId: event.data.merchant_id, refundId: refundId.data },
           });
           return reply.status(200).send();
         }

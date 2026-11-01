@@ -1,6 +1,6 @@
 // `webhook_events`: every provider event kept once by its own id (Part 4 §3.3), so a
 // webhook answers at once and the worker acts on each event, however often it arrives.
-import { paddleSubscriptionIdSchema, razorpaySubscriptionIdSchema, resendEmailEventTypeSchema, squareCardIdSchema, squareObjectIdSchema } from "@app/shared";
+import { paddleSubscriptionIdSchema, razorpaySubscriptionIdSchema, resendEmailEventTypeSchema, squareCardIdSchema, squareObjectIdSchema, squareRefundIdSchema } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import { z } from "zod";
 
@@ -179,6 +179,7 @@ export const storedSquareEventSchema = z
     accountId: squareObjectIdSchema,
     cardId: squareCardIdSchema.optional(),
     customerId: squareObjectIdSchema.optional(),
+    refundId: squareRefundIdSchema.optional(),
     paymentId: z.string().max(192).optional(),
   })
   .strict();
