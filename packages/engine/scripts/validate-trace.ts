@@ -1,11 +1,11 @@
 // Trace validator (P1.3): run on every recorded .jsonl BEFORE committing it.
 //   pnpm --filter @app/engine exec tsx scripts/validate-trace.ts <file...>
-// Checks: §7.1 structure (parseTrace), deep CameraFrame validation (@app/shared
-// zod), monotonic t, fps within the §2.1 8–40 contract. Node shell — outside
-// the engine's pure runtime boundary.
+// Checks: §7.1 structure (parseTrace), deep frame validation (@app/shared zod),
+// monotonic t, fps within the §2.1 8–40 contract, and that a person has counted
+// the reps. Node shell — outside the engine's pure runtime boundary.
 import { readFileSync } from "node:fs";
-import { cameraFrameSchema } from "@app/shared";
-import { parseTrace } from "../src/index.js";
+import { UNCOUNTED_REPS, parseTrace } from "../src/index.js";
+import { checkTraceFrames } from "./video/measure.js";
 
 const files = process.argv.slice(2);
 if (files.length === 0) {
@@ -17,19 +17,9 @@ let failed = false;
 for (const file of files) {
   try {
     const trace = parseTrace(readFileSync(file, "utf8"));
-    let prevT = -1;
-    for (let i = 0; i < trace.frames.length; i++) {
-      const frame = trace.frames[i];
-      cameraFrameSchema.parse(frame);
-      if (frame !== undefined && frame.t <= prevT) {
-        throw new Error(`frame ${String(i + 1)}: t=${String(frame.t)} not strictly increasing`);
-      }
-      prevT = frame?.t ?? prevT;
-    }
-    const durS = (trace.frames[trace.frames.length - 1]?.t ?? 0) / 1000;
-    const fps = durS > 0 ? (trace.frames.length - 1) / durS : 0;
-    if (fps < 8 || fps > 40) {
-      throw new Error(`measured fps ${fps.toFixed(1)} outside the §2.1 8–40 contract`);
+    const fps = checkTraceFrames(trace);
+    if (trace.header.expected.reps === UNCOUNTED_REPS) {
+      throw new Error("nobody has counted this video's reps: set expected.reps by eye first");
     }
     console.log(
       `OK  ${file}: ${String(trace.frames.length)} frames, ${fps.toFixed(1)} fps, ` +

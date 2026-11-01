@@ -19,7 +19,8 @@
     "test:fuzz": "vitest run test/fuzz.test.ts",
     "test:perf": "vitest run test/perf.test.ts",
     "lint:defs": "tsx scripts/lint-defs.ts",
-    "bench": "tsx scripts/bench.ts"
+    "bench": "tsx scripts/bench.ts",
+    "measure-video": "tsx scripts/video/measure-video.ts"
   },
   "devDependencies": {
     "@app/config": "workspace:*",

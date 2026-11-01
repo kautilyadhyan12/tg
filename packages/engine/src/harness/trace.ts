@@ -2,8 +2,12 @@
 // per line (JSONL). Pure string↔object transforms only: no fs, no zod (I1 —
 // deep validation with @app/shared schemas happens in the Node-side test
 // shell, not inside the engine package's runtime code).
-import type { CameraFrame } from "@app/shared";
+import type { TraceFrame } from "@app/shared";
 import { isUsableAspect } from "../pipeline/trueProportions.js";
+
+/** `expected.reps` of a trace no person has counted yet. No engine can reach it, so
+ *  such a trace can never pass as a stored test. */
+export const UNCOUNTED_REPS = -1;
 
 export interface TraceExpected {
   reps: number;
@@ -53,7 +57,7 @@ export interface TraceHeader {
 
 export interface Trace {
   header: TraceHeader;
-  frames: CameraFrame[];
+  frames: TraceFrame[];
 }
 
 export class TraceParseError extends Error {
@@ -92,14 +96,19 @@ function assertHeader(v: unknown): TraceHeader {
   return v as unknown as TraceHeader;
 }
 
-function assertFrame(v: unknown, line: number, aspect: number): CameraFrame {
+function assertFrame(v: unknown, line: number, aspect: number): TraceFrame {
   if (!isRecord(v) || typeof v["t"] !== "number" || !Array.isArray(v["kp"])) {
     throw new TraceParseError("frame must be {t, kp}", line);
   }
-  if (v["kp"].length !== 33) {
+  // Empty is a frame where the model found nobody, as the app feeds it.
+  if (v["kp"].length !== 33 && v["kp"].length !== 0) {
     throw new TraceParseError(`frame has ${String(v["kp"].length)} keypoints, expected 33`, line);
   }
-  return { aspect, ...v } as unknown as CameraFrame;
+  const wkp = v["wkp"];
+  if (wkp !== undefined && (!Array.isArray(wkp) || wkp.length !== 33)) {
+    throw new TraceParseError("frame's wkp must hold 33 points", line);
+  }
+  return { aspect, ...v } as unknown as TraceFrame;
 }
 
 export function parseTrace(content: string): Trace {
@@ -112,7 +121,7 @@ export function parseTrace(content: string): Trace {
     throw new TraceParseError("header is not valid JSON", 1);
   }
   const header = assertHeader(headerRaw);
-  const frames: CameraFrame[] = [];
+  const frames: TraceFrame[] = [];
   for (let i = 1; i < lines.length; i++) {
     let raw: unknown;
     try {
@@ -129,7 +138,8 @@ export function parseTrace(content: string): Trace {
 export function serializeTrace(trace: Trace): string {
   const lines = [JSON.stringify(trace.header)];
   for (const f of trace.frames) {
-    lines.push(JSON.stringify(f.aspect === trace.header.aspect ? { t: f.t, kp: f.kp } : f));
+    const { aspect, ...rest } = f;
+    lines.push(JSON.stringify(aspect === trace.header.aspect ? rest : f));
   }
   return lines.join("\n") + "\n";
 }
