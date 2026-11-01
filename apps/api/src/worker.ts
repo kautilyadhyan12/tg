@@ -49,6 +49,7 @@ import { rollUpGymDays } from "./modules/orgs/rollup.js";
 import { ORGS_SWEEP_JOB, runJoinSweep, scheduleJoinSweep } from "./modules/orgs/joinSweepSchedule.js";
 import { expireLapsedGymTrials } from "./modules/orgs/trialSweep.js";
 import { sweepGoneForGood } from "./modules/orgs/goneForGood/sweep.js";
+import { clearOldRemovedLabels } from "./modules/nutrition/labelRepo.js";
 import { updatePackagedFoods } from "./modules/nutrition/packagedSync.js";
 import { purgeDueUsers, purgeShortfall } from "./modules/privacy/purge.js";
 import { createDiskPhotoStore } from "./modules/orgs/gymPage/photoStore.js";
@@ -944,6 +945,7 @@ const worker = new Worker(
       return;
     }
 
+    await clearOldRemovedLabels(sql);
     const result = await purgeDueUsers({ sql, log, photos: createDiskPhotoStore(config.PHOTO_DIR ?? join(tmpdir(), "aihg-gym-photos")) });
     log.info(
       { ...result, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },

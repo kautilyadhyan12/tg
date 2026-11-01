@@ -10,6 +10,7 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createMemoryRedis, type RedisLike } from "../src/redis.js";
 import { VisionProviderError, type LabelReader } from "../src/modules/nutrition/vision.adapter.js";
+import { clearOldRemovedLabels } from "../src/modules/nutrition/labelRepo.js";
 import { MEAL_PHOTO } from "./fixtures/mealPhoto.js";
 
 const real = JSON.parse(readFileSync(new URL("./fixtures/label-replies.json", import.meta.url), "utf8")) as { code: string; evidence: unknown }[];
@@ -270,6 +271,15 @@ d("a pack's label (real Postgres)", () => {
       if (first.status !== "found") throw new Error(first.status);
       expect((await save(id, CODE, person, { name: "Two", seen: first.labelSeen })).statusCode).toBe(200);
       expect((await save(id, CODE, person, { name: "Two", seen: first.labelSeen })).statusCode).toBe(200);
+    });
+
+    it("a removed label goes after its days, even for somebody who removes nothing more", async () => {
+      const person = await session("label33-old@example.com");
+      const [row] = await sql<{ id: string }[]>`SELECT id FROM users WHERE email = 'label33-old@example.com'`;
+      await sql`INSERT INTO member_label_foods (id, user_id, name, unit, kcal, protein_g, carbs_g, fat_g, removed_at) VALUES (gen_random_uuid(), ${row?.id ?? ""}, 'old', 'g', 1, 0, 0, 0, now() - interval '40 days'), (gen_random_uuid(), ${row?.id ?? ""}, 'new', 'g', 1, 0, 0, 0, now() - interval '20 days')`;
+      await clearOldRemovedLabels(sql);
+      expect((await sql<{ name: string }[]>`SELECT name FROM member_label_foods WHERE user_id = ${row?.id ?? ""}`).map((r) => r.name)).toEqual(["new"]);
+      expect(person).not.toBe("");
     });
 
     it("removed labels do not pile up: at most 200 of one person's stay", async () => {

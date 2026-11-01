@@ -39,8 +39,6 @@ import { createLabelReader, createMealMatchChecker, createMealVisionProvider, ty
 declare module "fastify" {
   interface FastifyRequest {
     /** Set by validateScan; present on the analyze-photo handler. */
-    /** This request holds its person's one body being sent (`oneBodyAtATime`). */
-    nutritionSendingBody?: boolean;
     nutritionScanInput?: { imageBase64: string; mimeType: "image/jpeg" | "image/png" | "image/webp" };
     nutritionUsedRetake?: boolean;
     /** Set by the meter: the quota key the scan was counted under. */
@@ -86,9 +84,15 @@ function parse<S extends z.ZodTypeAny>(
   return parsed.data;
 }
 
-/** Photos being received across the server at one moment. A body is up to 14 MB, and memory is what this
- *  protects: 60 held open ended a server with a 1 GB heap. A phone's photo takes a moment to arrive. */
-const BODIES_AT_ONCE_MOST = 20;
+/** Photos being received at one moment, as memory is what a held body costs: 60 of 14 MB ended a server
+ *  with a 1 GB heap. The phone sends about 100 KB and the browser the file as it is, so what is told to
+ *  be small (the limit below is held by the server) has far more places and a far shorter deadline, and
+ *  somebody holding big bodies open never stands in a phone's way. One address cannot fill either. */
+const SMALL_BODY_BYTES = 2 * 1024 * 1024;
+const SMALL_BODIES_AT_ONCE = 150;
+const LARGE_BODIES_AT_ONCE = 20;
+const BODIES_FROM_ONE_ADDRESS = 10;
+const SMALL_BODY_DEADLINE_MS = 30_000;
 
 const notFound = (req: FastifyRequest, reply: FastifyReply) =>
   reply.status(404).send({ error: "not_found", message: "Resource not found", requestId: req.id });
@@ -134,7 +138,6 @@ export function registerNutritionRoutes(
   };
   const readDeps = { sql: deps.sql };
   app.decorateRequest("nutritionScanInput", undefined);
-  app.decorateRequest("nutritionSendingBody", undefined);
   app.decorateRequest("nutritionUsedRetake", undefined);
   app.decorateRequest("nutritionScanQuotaKey", undefined);
 
@@ -202,27 +205,32 @@ export function registerNutritionRoutes(
     identifier: (req) => req.authUser?.id ?? null,
     redis: deps.redis,
   });
-  const sendingBody = new Map<string, number>();
+  const sending = new Map<string, { who: string; from: string; small: boolean; timer: ReturnType<typeof setTimeout> }>();
   const oneBodyAtATime = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
-    const id = authedUserId(req);
-    const since = sendingBody.get(id);
-    if (since !== undefined && Date.now() - since < REQUEST_TIMEOUT_MS) {
+    const length = Number(req.headers["content-length"]);
+    const small = Number.isFinite(length) && length <= SMALL_BODY_BYTES;
+    const held = [...sending.values()];
+    const full = held.some((b) => b.who === authedUserId(req))
+      || held.filter((b) => b.from === req.ip).length >= BODIES_FROM_ONE_ADDRESS
+      || held.filter((b) => b.small === small).length >= (small ? SMALL_BODIES_AT_ONCE : LARGE_BODIES_AT_ONCE);
+    if (full) {
       await reply.status(429).send({ error: "rate_limited", message: "Too many requests. Please try again shortly.", requestId: req.id });
       return;
     }
-    // Accounts are free, so one body each is not enough: the whole server receives this many at a time.
-    for (const [who, at] of sendingBody) if (Date.now() - at >= REQUEST_TIMEOUT_MS) sendingBody.delete(who);
-    if (sendingBody.size >= BODIES_AT_ONCE_MOST) {
-      await reply.status(429).send({ error: "rate_limited", message: "Too many requests. Please try again shortly.", requestId: req.id });
-      return;
-    }
-    sendingBody.set(id, Date.now());
-    req.nutritionSendingBody = true;
+    // A body that has not arrived by its deadline is closed, and only then is its place given up.
+    const timer = setTimeout(() => {
+      sending.delete(req.id);
+      req.raw.destroy();
+    }, small ? SMALL_BODY_DEADLINE_MS : REQUEST_TIMEOUT_MS);
+    timer.unref();
+    sending.set(req.id, { who: authedUserId(req), from: req.ip, small, timer });
   };
   const bodyArrived = async (req: FastifyRequest): Promise<void> => {
-    if (req.nutritionSendingBody !== true) return;
-    req.nutritionSendingBody = false;
-    if (req.authUser !== undefined) sendingBody.delete(req.authUser.id);
+    const mine = sending.get(req.id);
+    if (mine !== undefined) {
+      clearTimeout(mine.timer);
+      sending.delete(req.id);
+    }
     await Promise.resolve();
   };
   const photoRoute = {

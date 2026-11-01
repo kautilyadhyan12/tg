@@ -61,6 +61,8 @@ describe("a name cut to fit", () => {
     expect(parsed.name).toBe(`${"x".repeat(79)}\u{1F36A}`);
     const meal = mealVisionEvidenceSchema.parse({ meal_name: "m", items: [[`${"x".repeat(199)}\u{1F36A}y`, "h", null, null, null, null, null, null]], unknown_items: [], photo_quality: "good" });
     expect(JSON.stringify(meal.items[0])).toContain(`${"x".repeat(199)}\u{1F36A}`);
+    const half = mealVisionEvidenceSchema.parse({ meal_name: "m", items: [["Rice\ud83c", "h", null, null, null, null, null, null]], unknown_items: [], photo_quality: "good" });
+    expect(half.items[0]?.name).toBe("Rice");
   });
 });
 

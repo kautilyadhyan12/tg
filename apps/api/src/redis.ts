@@ -159,9 +159,9 @@ export function createMemoryRedis(clock: () => number = Date.now): RedisLike & {
     },
     async setNx(key, ttlSeconds, value) {
       if (this.down) return null;
-      if (live(key) !== undefined) return false;
+      if (live(key) !== undefined) return Promise.resolve(false);
       store.set(key, { value, expiresAt: clock() + ttlSeconds * 1000 });
-      return true;
+      return Promise.resolve(true);
     },
     async setex(key, ttlSeconds, value) {
       if (this.down) return false;

@@ -22,6 +22,15 @@
 
 {
 	email {$ACME_EMAIL}
+	# Caddy's own errors name the request as well: the same words stay out of them.
+	log default {
+		format filter {
+			wrap json
+			fields {
+				request>uri regexp "^(/v1/nutrition/barcode/)[^?]*|\\?.*$" "$1"
+			}
+		}
+	}
 }
 
 {$API_DOMAIN} {

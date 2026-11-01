@@ -1358,9 +1358,9 @@ function parseDraft(raw: string, userId: string): Draft {
 const scanClaimKey = (userId: string, value: string): string => `${scanKey(userId, value)}:claim`;
 
 /** One scan is one meal: the first meal to ask holds it, and that same meal can ask again. */
-async function claimScan(deps: NutritionDeps, userId: string, value: string, mealId: string): Promise<void> {
+async function claimScan(deps: NutritionDeps, userId: string, value: string, mealId: string, seconds = MEAL_SCAN_SAVE_SECONDS): Promise<void> {
   const key = scanClaimKey(userId, value);
-  const first = await deps.redis.setNx(key, MEAL_SCAN_SAVE_SECONDS, mealId);
+  const first = await deps.redis.setNx(key, seconds, mealId);
   if (first === null) throw new NutritionError(503, "nutrition_unavailable", "Meal confirmation is temporarily unavailable.");
   if (first) return;
   if ((await deps.redis.get(key)) !== mealId) throw new NutritionError(400, "invalid_scan", "Invalid or expired scan token.");
@@ -1616,7 +1616,8 @@ async function confirmNewMeal(deps: NutritionDeps, userId: string, input: Confir
     throw new NutritionError(404, "not_found", "Meal not found.");
   }
   // A save under way holds the scan until it commits, so this path asks the same claim first.
-  await claimScan(deps, userId, input.scanToken, input.id ?? randomUUID());
+  // Not yet known to be a scan, and taken straight after, so its claim is short.
+  await claimScan(deps, userId, input.scanToken, input.id ?? randomUUID(), 60);
   const recovered = await takeDraft(deps, userId, input.scanToken);
   const built = await buildConfirmItems(deps, userId, recovered, input);
   return await writeMeal(deps, userId, input.id, confirmWrite(input, recovered, built));

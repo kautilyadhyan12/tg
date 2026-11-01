@@ -107,6 +107,13 @@ export async function saveLabelFood(sql: Sql, userId: string, id: string, v: Lab
   });
 }
 
+/** Removed labels past their days, everybody's: the daily purge calls it, so they go even for somebody
+ *  who removes nothing more. */
+export async function clearOldRemovedLabels(sql: Sql): Promise<number> {
+  const gone = await sql`DELETE FROM member_label_foods WHERE removed_at < now() - make_interval(days => ${REMOVED_KEPT_DAYS})`;
+  return gone.count;
+}
+
 export async function removeLabelFood(sql: Sql, userId: string, id: string): Promise<boolean> {
   const gone = await sql`UPDATE member_label_foods SET removed_at = now() WHERE id = ${id} AND user_id = ${userId} AND removed_at IS NULL`;
   if (gone.count === 0) return false;

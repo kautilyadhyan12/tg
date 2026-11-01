@@ -538,6 +538,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 20. [ ] **Cheaper scan models tried on Kd's eight plates** (2026-10-30): today's price list has vision models below Luna, none tested. Foods found, calories and cost side by side, for cents; the choice is Kd's.
 21. [ ] **A lost database connection must not end the api** (item 33's data pass, 2026-11-01): `postgres` 3.4.9 threw uncaught when a connection ended during a transaction, and every gym stops with it. Read upstream's fix, then a test that ends one.
 22. [ ] **A daily ceiling on what the scanner spends** (item 33's security pass, 2026-11-01): past Kd's amount scanning turns off and Sentry is told; refuse a photo over about 2,000 px.
+23. [ ] **Every other route's body, read before sign-in** (item 33's security pass, 2026-11-01): the photo routes settle who is asking first; the others read up to Fastify's limit first. Measure at full size. And a lost reply to a photo scan costs a use (its data pass, L11): plan it.
 
 ## Stage 5 — The phone app
 

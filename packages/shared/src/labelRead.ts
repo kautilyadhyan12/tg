@@ -3,7 +3,7 @@
 import { z } from "zod";
 
 /** A character no pack prints and the database may refuse. Used on whatever a model writes. */
-export const withoutControls = (text: string): string => Array.from(text).filter((c) => { const n = c.codePointAt(0) ?? 0; return n > 31 && n !== 127; }).join("").trim();
+export const withoutControls = (text: string): string => Array.from(text).filter((c) => { const n = c.codePointAt(0) ?? 0; return n > 31 && n !== 127 && (n < 0xd800 || n > 0xdfff); }).join("").trim();
 
 export type PrintedKind = "kcal" | "kj" | "g" | "amount";
 const UNITS: Readonly<Record<PrintedKind, string>> = { kcal: "kcal|cal|calories", kj: "kj", g: "g", amount: "g|ml" };
