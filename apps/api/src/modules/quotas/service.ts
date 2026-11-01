@@ -113,3 +113,19 @@ export function requireQuota(
 export async function refundQuota(redis: RedisLike, key: string): Promise<boolean> {
   return (await redis.decrIfPositive(key)) === true;
 }
+
+/** How many uses a person has left of what their plan allows, read without counting one. Null where
+ *  the count cannot be read: an empty read is no use yet, unless Redis itself does not answer. */
+export async function quotaLeft(
+  feature: MeteredFeatureName,
+  deps: QuotaDeps,
+  userId: string,
+): Promise<{ window: MeteredWindow; limit: number; left: number | null }> {
+  const now = (deps.now ?? (() => new Date()))();
+  const { entitlements } = await getEntitlements(deps, userId);
+  const { window, limit } = entitlements[feature];
+  const held = await deps.redis.get(quotaKey(feature, userId, window, now));
+  if (held === null && !(await deps.redis.setex(`quota:reachable:${userId}`, 60, "1"))) return { window, limit, left: null };
+  const used = held === null ? 0 : Number(held);
+  return { window, limit, left: Number.isSafeInteger(used) ? Math.max(0, limit - used) : null };
+}

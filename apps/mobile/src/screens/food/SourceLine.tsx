@@ -16,6 +16,7 @@ export const SOURCE_WORDS: Readonly<Record<FoodSource, string>> = {
   openfoodfacts: "Packaged product",
   estimate: "Estimate",
   own: "Your numbers",
+  label: "From your label",
 };
 
 /** Where a food's numbers come from; the hand-checked foods with a tick. */

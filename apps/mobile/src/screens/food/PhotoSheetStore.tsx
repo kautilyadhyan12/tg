@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { SIGNED_OUT_NOTES } from "../../session/session";
 import { useSession } from "../../session/SessionProvider";
 import { photoSheetFile } from "./fileStore";
 import type { TextStore } from "./outbox";
@@ -11,6 +12,16 @@ import { readSheetFile, sheetFileText, type PhotoSheet } from "./photo";
 const StoreContext = createContext<(userId: string) => TextStore>(photoSheetFile);
 
 export function PhotoSheetStoreProvider({ store, children }: { store: (userId: string) => TextStore; children: ReactNode }) {
+  // Above every screen, as the screens are gone by then. Signing out on purpose: the photo goes too, as
+  // the next person to hold the phone is not its owner. Signed out by the server, it stays for its owner.
+  const { state } = useSession();
+  const last = useRef<string | null>(null);
+  useEffect(() => {
+    if (state.kind === "in") last.current = state.user.id;
+    if (state.kind !== "out" || state.note !== SIGNED_OUT_NOTES.own || last.current === null) return;
+    void store(last.current).write("").catch(() => undefined);
+    last.current = null;
+  }, [state, store]);
   return <StoreContext.Provider value={store}>{children}</StoreContext.Provider>;
 }
 
@@ -30,6 +41,12 @@ export function useKeptSheet(): KeptSheet {
   const store = useRef<{ me: string; file: TextStore } | null>(null);
   const writing = useRef<Promise<void>>(Promise.resolve());
 
+  const write = useCallback((text: string) => {
+    const kept = store.current;
+    if (kept === null) return;
+    writing.current = writing.current.then(() => kept.file.write(text)).catch(() => undefined);
+  }, []);
+
   useEffect(() => {
     setSheet(undefined);
     if (me === null) return undefined;
@@ -38,7 +55,10 @@ export function useKeptSheet(): KeptSheet {
     let stale = false;
     void file.read().then(
       (text) => {
-        if (!stale) setSheet((now) => (now === undefined ? readSheetFile(text, new Date()) : now));
+        const read = readSheetFile(text, new Date());
+        // A photo meal that can no longer be saved has no reason to stay on the phone.
+        if (read === null && text !== null && text !== "") write("");
+        if (!stale) setSheet((now) => (now === undefined ? read : now));
       },
       () => {
         if (!stale) setSheet((now) => (now === undefined ? null : now));
@@ -47,13 +67,7 @@ export function useKeptSheet(): KeptSheet {
     return () => {
       stale = true;
     };
-  }, [me, make]);
-
-  const write = useCallback((text: string) => {
-    const kept = store.current;
-    if (kept === null) return;
-    writing.current = writing.current.then(() => kept.file.write(text)).catch(() => undefined);
-  }, []);
+  }, [me, make, write]);
 
   const keep = useCallback(
     (next: PhotoSheet) => {

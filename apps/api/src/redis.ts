@@ -18,6 +18,8 @@ export interface RedisLike {
   get(key: string): Promise<string | null>;
   /** true = stored; false = backend down. */
   setex(key: string, ttlSeconds: number, value: string): Promise<boolean>;
+  /** Stored only if the key is absent, in one step. true = stored, false = already held, null = backend down. */
+  setNx(key: string, ttlSeconds: number, value: string): Promise<boolean | null>;
   /** Atomic get+delete. undefined = absent, null = backend down. */
   take(key: string): Promise<string | undefined | null>;
   del(key: string): Promise<void>;
@@ -77,6 +79,13 @@ export function createIoRedis(url: string): RedisLike {
     async get(key) {
       try {
         return await client.get(key);
+      } catch {
+        return null;
+      }
+    },
+    async setNx(key, ttlSeconds, value) {
+      try {
+        return (await client.set(key, value, "EX", ttlSeconds, "NX")) === "OK";
       } catch {
         return null;
       }
@@ -147,6 +156,12 @@ export function createMemoryRedis(clock: () => number = Date.now): RedisLike & {
     async get(key) {
       if (this.down) return null;
       return Promise.resolve(live(key)?.value ?? null);
+    },
+    async setNx(key, ttlSeconds, value) {
+      if (this.down) return null;
+      if (live(key) !== undefined) return Promise.resolve(false);
+      store.set(key, { value, expiresAt: clock() + ttlSeconds * 1000 });
+      return Promise.resolve(true);
     },
     async setex(key, ttlSeconds, value) {
       if (this.down) return false;

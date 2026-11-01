@@ -35,9 +35,11 @@ const LEAST_USABLE_SHARE = 0.25;
 const MOST_BAD_SHARE = 0.01;
 const FEWEST_TO_JUDGE = 200;
 const MOST_REMOVALS = 20_000;
-/** Their file names say when they run to. One past tomorrow is no real file, and must never become the
- *  point every later file is measured from. */
-const MOST_AHEAD_SECONDS = 24 * 3600;
+/** Their file names say when they run to. One ahead of now by more than a clock can be wrong is no real
+ *  file, and must never become the point every later file is measured from. */
+const MOST_AHEAD_SECONDS = 3600;
+/** One file's whole read, however its bytes arrive. */
+const MOST_READ_MS = 10 * 60 * 1000;
 
 export class PackagedFileRefused extends Error {}
 
@@ -79,10 +81,15 @@ export async function readDailyFile(lines: AsyncIterable<Buffer>, mostLines = DA
   const removeCodes = new Set<string>();
   let products = 0;
   let bad = 0;
+  let seen = 0;
+  const started = Date.now();
   for await (const line of lines) {
+    // Empty lines count too: a small file can unpack to nothing but them.
+    seen++;
+    if (seen > mostLines) throw new PackagedFileRefused(`more than ${String(mostLines)} lines in one file`);
+    if (seen % 4096 === 0 && Date.now() - started > MOST_READ_MS) throw new PackagedFileRefused("one file took too long to read");
     if (line.length === 0) continue;
     products++;
-    if (products > mostLines) throw new PackagedFileRefused(`more than ${String(mostLines)} products in one file`);
     const result = rowOfJsonLine(line);
     if (result === null) {
       bad++;

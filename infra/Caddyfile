@@ -22,9 +22,24 @@
 
 {
 	email {$ACME_EMAIL}
+	# Caddy's own errors name the request as well: the same words stay out of them.
+	log default {
+		format filter {
+			wrap json
+			fields {
+				request>uri regexp "^(/v1/nutrition/barcode/)[^?]*|\?.*$" "$1"
+			}
+		}
+	}
 }
 
 {$API_DOMAIN} {
+	# A photo is held to its limit here too, before it reaches the api.
+	@photos path /v1/nutrition/analyze-photo /v1/nutrition/labels/read
+	request_body @photos {
+		max_size 15MB
+	}
+
 	# The console's open lines (ROADMAP Stage 4 item 18) go to their own server, uncompressed and
 	# passed on at once: compression would hold each message back until a block filled.
 	@live path_regexp live ^/v1/orgs/[^/]+/live$
@@ -49,12 +64,12 @@
 		# out of logs on the application side and this must not reintroduce them.
 		# The query string is dropped as well, as the api's own log drops it
 		# (logSafety.ts): it carries an invitation's unsubscribe token and a
-		# member list's search words.
+		# member list's search words. A barcode says what somebody eats, so it goes as well.
 		output stdout
 		format filter {
 			wrap json
 			fields {
-				request>uri regexp "\?.*$" ""
+				request>uri regexp "^(/v1/nutrition/barcode/)[^?]*|\?.*$" "$1"
 			}
 		}
 	}

@@ -8,13 +8,13 @@ export const portionSourceSchema = z.enum(["user_dishware", "regional_prior", "d
  *  credits on screen; `openfoodfacts` is one brand's packaged product;
  *  `estimate` is the scanner's own figures for a food no table has (RULINGS
  *  2026-09-15), shown marked "estimate". */
-export const nutritionSourceSchema = z.enum(["curated", "openfoodfacts", "usda", "estimate"]);
+export const nutritionSourceSchema = z.enum(["curated", "openfoodfacts", "usda", "estimate", "label"]);
 export type NutritionSource = z.infer<typeof nutritionSourceSchema>;
 /** Where a saved meal's item has its numbers from: its food's source, or `own` —
  *  the person typed that food's protein, carbs and fat and its calories were
  *  worked out from them (ROADMAP 7a-iv-g). No food the search or the scanner
  *  returns is ever `own`; only an item of a saved meal becomes one. */
-export const mealItemSourceSchema = z.enum(["curated", "openfoodfacts", "usda", "estimate", "own"]);
+export const mealItemSourceSchema = z.enum(["curated", "openfoodfacts", "usda", "estimate", "own", "label"]);
 export type MealItemSource = z.infer<typeof mealItemSourceSchema>;
 export const mealOriginSchema = z.enum(["photo", "manual"]);
 /** Kd ruling 2026-07-17 (Card-5b smoke; supersedes the D1 time-bucket
@@ -479,7 +479,7 @@ export const RECENT_FOODS_MOST = 10;
  *  the measure picker as a searched food does (Kd, 2026-10-29). */
 export const recentFoodSchema = z.object({
   canonical: z.string().min(1).max(120),
-  source: z.enum(["curated", "usda", "openfoodfacts"]),
+  source: z.enum(["curated", "usda", "openfoodfacts", "label"]),
   add: measureStartSchema,
   item: mealItemSchema,
   measures: z.array(foodMeasureSchema).min(1),

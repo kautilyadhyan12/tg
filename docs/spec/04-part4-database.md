@@ -309,7 +309,7 @@ features):
 { "exercises": { "mode": "tier", "tier": "T1" },          // or {"mode":"all"} —
 free set = the T1 tag (Part 2 App B #6), swappable as data
   "coach":       { "window": "day",     "limit": 30 },
-  "meal_scan":   { "window": "day",     "limit": 8   },
+  "meal_scan":   { "window": "day",     "limit": 15  },  // free 3 a month, gym member 7 a day (Kd, 2026-10-31)
   "route_gen":   { "window": "day",     "limit": 5   },
   "history_days": -1,                                     // -1 = unlimited; free
 = 90 (read-gate, §0.2)

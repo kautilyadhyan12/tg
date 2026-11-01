@@ -536,6 +536,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 
 19. [ ] **The real site under heavy load, before launch** (Kd, 2026-10-24): the live server tested with thousands of pretend staff and members at once, at launch size, then 10 and 100 times it; more than one api server; alarms when answers slow down. After item 1. Meal photos too (Kd, 2026-10-30): a waiting line so a rush waits seconds instead of being refused, and OpenAI's top level ($500 of credit, 30,000 requests a minute).
 20. [ ] **Cheaper scan models tried on Kd's eight plates** (2026-10-30): today's price list has vision models below Luna, none tested. Foods found, calories and cost side by side, for cents; the choice is Kd's.
+21. [ ] **A lost database connection must not end the api** (item 33's data pass, 2026-11-01): `postgres` 3.4.9 threw uncaught when a connection ended during a transaction, and every gym stops with it. Read upstream's fix, then a test that ends one.
+22. [ ] **A daily ceiling on what the scanner spends** (item 33's security pass, 2026-11-01): past Kd's amount scanning turns off and Sentry is told; refuse a photo over about 2,000 px.
+23. [ ] **Every other route's body, read before sign-in** (item 33's security pass, 2026-11-01): the photo routes settle who is asking first; the others read up to Fastify's limit first. Measure at full size. And a lost reply to a photo scan costs a use (its data pass, L11): plan it.
 
 ## Stage 5 — The phone app
 
@@ -609,7 +612,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 33b-iii. **Barcode scan** (split 2026-10-30 in four, Kd's "go", `rulings/2026-10-30-33b-iii-a.md`: our own copy of the lists, no live calls). Risky; the two extra passes run once, after 33b-iii-c, over item 33.
         - 33b-iii-a. [x] **Our own copy of the food lists, and the barcode lookup on the server** — merged 2026-10-31 (PR #403).
         - 33b-iii-b. [x] **Scan a barcode on the phone** — merged 2026-10-31 (PR #414).
-        - 33b-iii-c. [ ] **Read a label with Luna**: a product not found is read from a photo of its label, the person checks it, and it is remembered for them by barcode. About 20 real labels tried first, for under a cent. Uses one of their scans.
+        - 33b-iii-c. [x] **Read a label with Luna** — merged 2026-11-01 (PR #418).
         - 33b-iii-d. [ ] **The food search and the meal scan read our copy**, so nothing asks Open Food Facts live; every feature kept; a common word answers quickly.
 34. **More food** (split 2026-10-13: the parts on the server need no phone).
     - 34a. [x] **Ten more figures kept with every food in a meal** — merged 2026-10-13 (PR #245).

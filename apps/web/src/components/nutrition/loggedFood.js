@@ -9,6 +9,7 @@ export const SOURCE_WORDS = {
   curated: 'Verified · from the food list',
   usda: 'From the food list · USDA FoodData Central',
   openfoodfacts: 'Packaged product · Open Food Facts',
+  label: 'From your label',
   estimate: "The scan's estimate",
   own: 'Your numbers',
 };

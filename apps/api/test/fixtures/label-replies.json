@@ -1,0 +1,519 @@
+[
+ {
+  "code": "0013087245950",
+  "country": "Canada",
+  "evidence": {
+   "is_nutrition_label": true,
+   "name": null,
+   "columns": [
+    {
+     "per": "100g",
+     "serving_amount": 100,
+     "serving_unit": "g",
+     "prepared": false,
+     "kcal": 360,
+     "kj": null,
+     "protein_g": 5,
+     "carbs_g": 45,
+     "fat_g": 18
+    }
+   ],
+   "contains": [],
+   "may_contain": [],
+   "photo_quality": "good"
+  }
+ },
+ {
+  "code": "0014100170945",
+  "country": "Canada",
+  "evidence": {
+   "is_nutrition_label": true,
+   "name": null,
+   "columns": [
+    {
+     "per": "serving",
+     "serving_amount": 30,
+     "serving_unit": "g",
+     "prepared": false,
+     "kcal": 140,
+     "kj": null,
+     "protein_g": 3,
+     "carbs_g": 20,
+     "fat_g": 5
+    }
+   ],
+   "contains": [],
+   "may_contain": [],
+   "photo_quality": "good"
+  }
+ },
+ {
+  "code": "0000247016406",
+  "country": "France",
+  "evidence": {
+   "is_nutrition_label": true,
+   "name": null,
+   "columns": [
+    {
+     "per": "100g",
+     "serving_amount": null,
+     "serving_unit": null,
+     "prepared": false,
+     "kcal": 406,
+     "kj": 1708,
+     "protein_g": null,
+     "carbs_g": 50,
+     "fat_g": 20
+    },
+    {
+     "per": "serving",
+     "serving_amount": null,
+     "serving_unit": null,
+     "prepared": false,
+     "kcal": 284,
+     "kj": 1196,
+     "protein_g": null,
+     "carbs_g": 29,
+     "fat_g": 14
+    }
+   ],
+   "contains": [],
+   "may_contain": [],
+   "photo_quality": "poor"
+  }
+ },
+ {
+  "code": "0000672016408",
+  "country": "France",
+  "evidence": {
+   "is_nutrition_label": true,
+   "name": "Brooklyn Coffee Bar New York",
+   "columns": [
+    {
+     "per": "100g",
+     "serving_amount": null,
+     "serving_unit": null,
+     "prepared": false,
+     "kcal": 390,
+     "kj": 1631,
+     "protein_g": 5.8,
+     "carbs_g": 46.2,
+     "fat_g": 24.3
+    }
+   ],
+   "contains": [],
+   "may_contain": [],
+   "photo_quality": "good"
+  }
+ },
+ {
+  "code": "0010700021526",
+  "country": "Germany",
+  "evidence": {
+   "is_nutrition_label": true,
+   "name": null,
+   "columns": [
+    {
+     "per": "serving",
+     "serving_amount": 39,
+     "serving_unit": "g",
+     "prepared": false,
+     "kcal": 170,
+     "kj": null,
+     "protein_g": null,
+     "carbs_g": 27,
+     "fat_g": 6
+    }
+   ],
+   "contains": [],
+   "may_contain": [],
+   "photo_quality": "good"
+  }
+ },
+ {
+  "code": "0011110897367",
+  "country": "Germany",
+  "evidence": {
+   "is_nutrition_label": true,
+   "name": null,
+   "columns": [
+    {
+     "per": "serving",
+     "serving_amount": 85,
+     "serving_unit": "g",
+     "prepared": false,
+     "kcal": 70,
+     "kj": null,
+     "protein_g": 4,
+     "carbs_g": 12,
+     "fat_g": 0
+    }
+   ],
+   "contains": [],
+   "may_contain": [],
+   "photo_quality": "good"
+  }
+ },
+ {
+  "code": "0075779311145",
+  "country": "India",
+  "evidence": {
+   "is_nutrition_label": true,
+   "name": null,
+   "columns": [
+    {
+     "per": "serving",
+     "serving_amount": 8,
+     "serving_unit": "g",
+     "prepared": false,
+     "kcal": 30,
+     "kj": null,
+     "protein_g": 0,
+     "carbs_g": 8,
+     "fat_g": 0
+    }
+   ],
+   "contains": [],
+   "may_contain": [],
+   "photo_quality": "good"
+  }
+ },
+ {
+  "code": "8901042954516",
+  "country": "India",
+  "evidence": {
+   "is_nutrition_label": true,
+   "name": null,
+   "columns": [
+    {
+     "per": "100g",
+     "serving_amount": null,
+     "serving_unit": null,
+     "prepared": false,
+     "kcal": 365,
+     "kj": 1533,
+     "protein_g": 10,
+     "carbs_g": 63,
+     "fat_g": 8
+    }
+   ],
+   "contains": [],
+   "may_contain": [],
+   "photo_quality": "good"
+  }
+ },
+ {
+  "code": "8901058851311",
+  "country": "India",
+  "evidence": {
+   "is_nutrition_label": true,
+   "name": null,
+   "columns": [
+    {
+     "per": "100g",
+     "serving_amount": null,
+     "serving_unit": null,
+     "prepared": false,
+     "kcal": 427,
+     "kj": null,
+     "protein_g": 8,
+     "carbs_g": 63.5,
+     "fat_g": 15.7
+    },
+    {
+     "per": "serving",
+     "serving_amount": 70,
+     "serving_unit": "g",
+     "prepared": false,
+     "kcal": 299,
+     "kj": null,
+     "protein_g": 5.6,
+     "carbs_g": 44.5,
+     "fat_g": 11
+    }
+   ],
+   "contains": [],
+   "may_contain": [],
+   "photo_quality": "good"
+  }
+ },
+ {
+  "code": "8901063004092",
+  "country": "India",
+  "evidence": {
+   "is_nutrition_label": true,
+   "name": null,
+   "columns": [
+    {
+     "per": "100g",
+     "serving_amount": null,
+     "serving_unit": null,
+     "prepared": false,
+     "kcal": 493,
+     "kj": null,
+     "protein_g": 5,
+     "carbs_g": 71,
+     "fat_g": 21
+    }
+   ],
+   "contains": [],
+   "may_contain": [],
+   "photo_quality": "good"
+  }
+ },
+ {
+  "code": "8901063154025",
+  "country": "India",
+  "evidence": {
+   "is_nutrition_label": true,
+   "name": null,
+   "columns": [
+    {
+     "per": "100g",
+     "serving_amount": null,
+     "serving_unit": null,
+     "prepared": false,
+     "kcal": 478,
+     "kj": null,
+     "protein_g": 7,
+     "carbs_g": 72,
+     "fat_g": 18
+    }
+   ],
+   "contains": [],
+   "may_contain": [],
+   "photo_quality": "good"
+  }
+ },
+ {
+  "code": "8901088047142",
+  "country": "India",
+  "evidence": {
+   "is_nutrition_label": true,
+   "name": null,
+   "columns": [
+    {
+     "per": "100g",
+     "serving_amount": null,
+     "serving_unit": null,
+     "prepared": false,
+     "kcal": 900,
+     "kj": null,
+     "protein_g": 0,
+     "carbs_g": 0,
+     "fat_g": 100
+    }
+   ],
+   "contains": [],
+   "may_contain": [],
+   "photo_quality": "good"
+  }
+ },
+ {
+  "code": "00025751",
+  "country": "United Kingdom",
+  "evidence": {
+   "is_nutrition_label": true,
+   "name": null,
+   "columns": [
+    {
+     "per": "100g",
+     "serving_amount": null,
+     "serving_unit": null,
+     "prepared": false,
+     "kcal": 133,
+     "kj": 564,
+     "protein_g": 24.5,
+     "carbs_g": 4.3,
+     "fat_g": 2
+    }
+   ],
+   "contains": [],
+   "may_contain": [],
+   "photo_quality": "good"
+  }
+ },
+ {
+  "code": "00030182",
+  "country": "United Kingdom",
+  "evidence": {
+   "is_nutrition_label": true,
+   "name": "sweet chilli flavoured potato crisps",
+   "columns": [
+    {
+     "per": "100g",
+     "serving_amount": null,
+     "serving_unit": null,
+     "prepared": false,
+     "kcal": 496,
+     "kj": 2072,
+     "protein_g": 6.8,
+     "carbs_g": 56.5,
+     "fat_g": 26.2
+    },
+    {
+     "per": "other",
+     "serving_amount": 40,
+     "serving_unit": "g",
+     "prepared": false,
+     "kcal": 198,
+     "kj": 829,
+     "protein_g": 2.7,
+     "carbs_g": 22.6,
+     "fat_g": 10.5
+    }
+   ],
+   "contains": [],
+   "may_contain": [],
+   "photo_quality": "good"
+  }
+ },
+ {
+  "code": "0008077102146",
+  "country": "United States",
+  "evidence": {
+   "is_nutrition_label": true,
+   "name": null,
+   "columns": [
+    {
+     "per": "serving",
+     "serving_amount": 15,
+     "serving_unit": "g",
+     "prepared": false,
+     "kcal": 80,
+     "kj": null,
+     "protein_g": 1,
+     "carbs_g": 10,
+     "fat_g": 4
+    }
+   ],
+   "contains": [
+    "Wheat",
+    "Milk",
+    "Soy"
+   ],
+   "may_contain": [],
+   "photo_quality": "good"
+  }
+ },
+ {
+  "code": "0008112100281",
+  "country": "United States",
+  "evidence": {
+   "is_nutrition_label": true,
+   "name": null,
+   "columns": [
+    {
+     "per": "serving",
+     "serving_amount": 15,
+     "serving_unit": "ml",
+     "prepared": false,
+     "kcal": 120,
+     "kj": null,
+     "protein_g": 0,
+     "carbs_g": 0,
+     "fat_g": 14
+    }
+   ],
+   "contains": [],
+   "may_contain": [],
+   "photo_quality": "good"
+  }
+ },
+ {
+  "code": "0008295661012",
+  "country": "United States",
+  "evidence": {
+   "is_nutrition_label": true,
+   "name": null,
+   "columns": [
+    {
+     "per": "serving",
+     "serving_amount": 15,
+     "serving_unit": "ml",
+     "prepared": false,
+     "kcal": 13,
+     "kj": null,
+     "protein_g": 0,
+     "carbs_g": 2,
+     "fat_g": 0
+    }
+   ],
+   "contains": [],
+   "may_contain": [],
+   "photo_quality": "good"
+  }
+ },
+ {
+  "code": "0008295663177",
+  "country": "United States",
+  "evidence": {
+   "is_nutrition_label": true,
+   "name": null,
+   "columns": [
+    {
+     "per": "serving",
+     "serving_amount": 15,
+     "serving_unit": "ml",
+     "prepared": false,
+     "kcal": 10,
+     "kj": null,
+     "protein_g": 0,
+     "carbs_g": 2,
+     "fat_g": 0
+    }
+   ],
+   "contains": [],
+   "may_contain": [],
+   "photo_quality": "good"
+  }
+ },
+ {
+  "code": "0009073102963",
+  "country": "United States",
+  "evidence": {
+   "is_nutrition_label": true,
+   "name": null,
+   "columns": [
+    {
+     "per": "serving",
+     "serving_amount": 96,
+     "serving_unit": "g",
+     "prepared": false,
+     "kcal": 100,
+     "kj": null,
+     "protein_g": 0,
+     "carbs_g": 25,
+     "fat_g": 0
+    }
+   ],
+   "contains": [],
+   "may_contain": [],
+   "photo_quality": "good"
+  }
+ },
+ {
+  "code": "0009300000079",
+  "country": "United States",
+  "evidence": {
+   "is_nutrition_label": true,
+   "name": "Mt. Olive",
+   "columns": [
+    {
+     "per": "serving",
+     "serving_amount": 15,
+     "serving_unit": "g",
+     "prepared": false,
+     "kcal": 20,
+     "kj": null,
+     "protein_g": null,
+     "carbs_g": null,
+     "fat_g": null
+    }
+   ],
+   "contains": [],
+   "may_contain": [],
+   "photo_quality": "good"
+  }
+ }
+]

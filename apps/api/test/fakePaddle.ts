@@ -8,7 +8,7 @@ import type { PaddleApi, PaddleResult, ProrationMode } from "../src/modules/bill
 
 /** A trial window as our server made one before 2f-i (1c-ii): a price of its own, the plan's
  *  amount with `trialDays` free, marked with the plan's code. Our server no longer makes one
- *  (Kd, RULINGS 2026-09-30); the tests make it here to follow paid trials already made. */
+ *  (Kd, RULINGS 2027-09-30); the tests make it here to follow paid trials already made. */
 export interface TrialCheckout {
   trialDays: number;
   planCode: string;
@@ -303,13 +303,13 @@ export class FakePaddle implements PaddleApi {
     }
     const sub = this.subs.get(subscriptionId);
     if (sub === undefined) return Promise.resolve<PaddleResult<PaddleSubscription>>({ kind: "not_found" });
-    // A change already waiting locks it (measured on Kd's sandbox, 2026-10-18).
+    // A change already waiting locks it (measured on Kd's sandbox, 2027-10-18).
     if (sub.scheduled_change !== null) {
       return Promise.resolve<PaddleResult<PaddleSubscription>>({ kind: "refused", status: 400, code: "subscription_locked_pending_changes" });
     }
     this.endsAtPeriodEnd.push(subscriptionId);
     const at = sub.current_billing_period?.ends_at ?? sub.next_billed_at ?? new Date(this.clock).toISOString();
-    // Set to end, Paddle answers with no next charge (sandbox, 2026-10-19).
+    // Set to end, Paddle answers with no next charge (sandbox, 2027-10-19).
     this.update(subscriptionId, { scheduled_change: { action: "cancel", effective_at: at }, next_billed_at: null });
     return Promise.resolve<PaddleResult<PaddleSubscription>>({ kind: "ok", value: this.subs.get(subscriptionId) ?? sub });
   }
@@ -403,8 +403,8 @@ export class FakePaddle implements PaddleApi {
       canceled_at: null,
       paused_at: null,
       current_billing_period:
-        trialEnd === null ? { starts_at: "2026-10-01T00:00:00Z", ends_at: "2026-11-01T00:00:00Z" } : { starts_at: new Date(this.clock).toISOString(), ends_at: trialEnd },
-      next_billed_at: trialEnd ?? "2026-11-01T00:00:00Z",
+        trialEnd === null ? { starts_at: "2027-10-01T00:00:00Z", ends_at: "2027-11-01T00:00:00Z" } : { starts_at: new Date(this.clock).toISOString(), ends_at: trialEnd },
+      next_billed_at: trialEnd ?? "2027-11-01T00:00:00Z",
       scheduled_change: null,
       items: txn.items.map((i) => ({
         quantity: i.quantity,
