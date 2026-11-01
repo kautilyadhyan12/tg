@@ -116,3 +116,6 @@ FOLDER.md
 reviews/
 # A terminal's own logs, screenshots and one-off scripts.
 .cost/
+
+# What the video tool writes: pictures of real people. Never in git.
+/measured/

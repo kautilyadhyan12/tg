@@ -76,6 +76,20 @@ export const cameraFrameSchema = poseFrameSchema
   .extend({ aspect: z.number().min(MIN_ASPECT).max(MAX_ASPECT) })
   .strict();
 
+// One line of a stored trace. `kp` is empty on a frame where the model found nobody,
+// exactly what the app feeds the engine then. `wkp` is the model's world points
+// ([x, y, z] in metres, hip-centred), kept beside the picture points; a session
+// ignores them.
+export const traceFrameSchema = z
+  .object({
+    t: z.number().nonnegative().finite(),
+    aspect: z.number().min(MIN_ASPECT).max(MAX_ASPECT),
+    kp: z.union([z.array(keypointSchema).length(KEYPOINT_COUNT), z.array(keypointSchema).length(0)]),
+    wkp: z.array(z.tuple([z.number(), z.number(), z.number()])).length(KEYPOINT_COUNT).optional(),
+  })
+  .strict();
+
 export type CameraFrame = z.infer<typeof cameraFrameSchema>;
+export type TraceFrame = z.infer<typeof traceFrameSchema>;
 export type Keypoint = z.infer<typeof keypointSchema>;
 export type PoseFrame = z.infer<typeof poseFrameSchema>;
