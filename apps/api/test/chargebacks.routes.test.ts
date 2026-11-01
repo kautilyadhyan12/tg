@@ -761,6 +761,7 @@ d("A chargeback (real Postgres)", { timeout: T }, () => {
       await message(gym.acct.merchantId, made.id);
       square.disputeMoves(made.id, "ACCEPTED");
       await message(gym.acct.merchantId, made.id, "dispute.state.updated");
+      await message(gym.acct.merchantId, made.id, "dispute.state.updated");
       expect((await refundsOf(pam.paymentId)).map((r) => r.amount_minor)).toEqual([700]);
       expect(await billOf(pam)).toBe("paid");
     });
