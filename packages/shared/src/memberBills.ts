@@ -120,7 +120,7 @@ export const REFUND_VOID_REASON_WORDS: Readonly<Record<RefundVoidKept, string>> 
   wrong_amount: "Wrong amount",
   other: "Something else",
   square_failed: "Square could not refund it",
-  in_square: "Replaced by Square's own record of this refund",
+  in_square: "Replaced by Square's own record. If more went back than Square shows, note it again",
 };
 
 /** How money went back: by hand, or to the card that paid, through Square (18d-iv-a), which reads as that payment's own

@@ -514,7 +514,7 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
       expect(page.voidedRefunds[0]).toMatchObject({ amountMinor: 1000, method: "card_at_desk", voided: { reason: "in_square" } });
 
       await message(gym.acct.merchantId, square.refundInSquare(maya.squarePaymentId, 1500).id);
-      expect((await paymentOnPage(maya)).refunds.map((r) => r.amountMinor)).toEqual([1000, 1500]);
+      expect((await paymentOnPage(maya)).refunds.map((r) => r.amountMinor).sort((x, y) => x - y)).toEqual([1000, 1500]);
       expect(await billStatus(maya)).toBe("refunded");
     });
 
@@ -613,6 +613,47 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
       const box = await send("GET", refundUrl(ravi), gym.owner.cookies);
       expect(box.statusCode, box.body).toBe(200);
       expect(cardRefundCheckSchema.parse(JSON.parse(box.body))).toMatchObject({ leftMinor: 0, block: "nothing_left" });
+    });
+
+    it("the bill says Refunded while refunds standing still cover all that was paid", async () => {
+      // Cash fills the payment, then Square's fails: the cash still stands.
+      const maya = await paidByCard(gym, "Cash Then Failed");
+      expect((await note(maya, 2500, "cash")).statusCode).toBe(200);
+      const made = square.refundInSquare(maya.squarePaymentId, 2500, "PENDING");
+      await message(gym.acct.merchantId, made.id);
+      made.status = "FAILED";
+      await message(gym.acct.merchantId, made.id);
+      expect(await live(maya)).toEqual([[2500, "cash"]]);
+      expect(await billStatus(maya)).toBe("refunded");
+
+      // Square's fills it, then the cash note is voided: Square's still stands.
+      const ravi = await paidByCard(gym, "Cash Voided");
+      expect((await note(ravi, 1000, "cash")).statusCode).toBe(200);
+      await message(gym.acct.merchantId, square.refundInSquare(ravi.squarePaymentId, 2500).id);
+      const cash = (await paymentOnPage(ravi)).refunds.find((r) => r.method === "cash");
+      const voided = await send("POST", `${entryUrl(gym, ravi.entryId)}/memberships/${ravi.membershipId}/payments/${ravi.paymentId}/refunds/${cash?.id ?? ""}/void`, gym.owner.cookies, { reason: "mistake" });
+      expect(voided.statusCode, voided.body).toBe(200);
+      expect(await live(ravi)).toEqual([[2500, "company"]]);
+      expect(await billStatus(ravi)).toBe("refunded");
+    });
+
+    it("a note crossed out can be noted again, and the record says the app replaced it", async () => {
+      const maya = await paidByCard(gym, "Noted Again");
+      expect((await note(maya, 1000, "card_at_desk")).statusCode).toBe(200);
+      await message(gym.acct.merchantId, square.refundInSquare(maya.squarePaymentId, 1000).id);
+      const [audit] = await sql<{ actor_user_id: string | null }[]>`
+        SELECT actor_user_id FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.member_refund_replaced' AND meta->>'paymentId' = ${maya.paymentId}`;
+      expect(audit).toMatchObject({ actor_user_id: null });
+      expect((await note(maya, 1000, "card_at_desk")).statusCode).toBe(200);
+      expect((await live(maya)).map((r) => String(r[1])).sort()).toEqual(["card_at_desk", "company"]);
+    });
+
+    it("a refund sent from here counts too: a note by card of the same money is refused", async () => {
+      const maya = await paidByCard(gym, "Press Then Note Open");
+      expect((await press(maya, 1000)).statusCode).toBe(200);
+      const again = await note(maya, 1000, "card_at_desk");
+      expect(again.statusCode).toBe(409);
+      expect(JSON.parse(again.body)).toMatchObject({ error: "refund_in_square" });
     });
 
     it("a note crossed out for a refund Square then failed: no money shown as gone, and the crossed-out lines say why", async () => {

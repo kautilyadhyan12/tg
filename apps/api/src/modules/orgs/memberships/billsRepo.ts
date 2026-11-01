@@ -465,8 +465,11 @@ export async function noteRefund(
       const [inSquare] = await tx<{ total: number }[]>`
         SELECT COALESCE(sum(r.amount_minor), 0)::int AS total
         FROM gym_square_refunds q JOIN gym_member_refunds r ON r.gym_id = q.gym_id AND r.id = q.member_refund_id AND r.undone_at IS NULL
-        WHERE q.gym_id = ${input.gymId} AND q.payment_id = ${input.paymentId} AND q.from_square`;
-      if (input.amountMinor <= (inSquare?.total ?? 0)) return { kind: "refund_in_square", amountMinor: inSquare?.total ?? 0, currency: payment.currency };
+        WHERE q.gym_id = ${input.gymId} AND q.payment_id = ${input.paymentId} AND q.square_refund_id IS NOT NULL AND q.outcome IS DISTINCT FROM 'failed'`;
+      // A note the app crossed out for this money and noted again is staff saying it is another refund.
+      const [crossedOut] = await tx<{ id: string }[]>`
+        SELECT id FROM gym_member_refunds WHERE gym_id = ${input.gymId} AND payment_id = ${input.paymentId} AND void_reason = 'in_square' LIMIT 1`;
+      if (crossedOut === undefined && input.amountMinor <= (inSquare?.total ?? 0)) return { kind: "refund_in_square", amountMinor: inSquare?.total ?? 0, currency: payment.currency };
     }
 
     const refund = refundMemberPayment(bill, standing, input.amountMinor);
@@ -594,12 +597,15 @@ export async function voidRefund(
     await tx`
       UPDATE gym_member_refunds SET undone_at = ${input.now}, undone_by = ${input.actorUserId}, void_reason = ${input.reason}
       WHERE gym_id = ${input.gymId} AND id = ${input.refundId} AND undone_at IS NULL`;
-    // Less than everything paid is now given back: the bill is Paid, not Refunded.
-    await tx`
-      UPDATE gym_member_bills SET status = 'paid', updated_at = ${input.now}
-      WHERE gym_id = ${input.gymId} AND id = ${payment.bill_id} AND status = 'refunded'`;
+    // Less than everything paid is now given back: the bill is Paid, not Refunded. Refunds still standing may cover it all: Square's beside a note as cash.
+    const after = await refundTargetOf(tx, input.gymId, row.id, input.paymentId);
+    if (after === null || after.bill.refundedMinor < after.bill.paidMinor) {
+      await tx`
+        UPDATE gym_member_bills SET status = 'paid', updated_at = ${input.now}
+        WHERE gym_id = ${input.gymId} AND id = ${payment.bill_id} AND status = 'refunded'`;
+    }
     // The payment stands again: a friend's payment gives the member's gift where none stands. A fee's never does.
-    if (!payment.undone && payment.period_index !== null) await giveMemberGift(tx, { gymId: input.gymId, friendEntryId: input.entryId, by: { paymentId: input.paymentId }, today: input.today, now: input.now });
+    if (!payment.undone && payment.period_index !== null && (after === null || after.payment.refundedMinor < after.payment.amountMinor)) await giveMemberGift(tx, { gymId: input.gymId, friendEntryId: input.entryId, by: { paymentId: input.paymentId }, today: input.today, now: input.now });
 
     await insertAudit(tx, {
       actorUserId: input.actorUserId,

@@ -440,9 +440,14 @@ export async function recordFailed(sql: Sql, press: RefundPress, failed: { code:
       JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
       WHERE p.gym_id = ${press.gymId} AND p.id = ${paymentId}`;
     if (where === undefined) throw new Error("the payment of a refund press is gone");
-    await tx`UPDATE gym_member_bills SET status = 'paid', updated_at = ${failed.now} WHERE gym_id = ${press.gymId} AND id = ${where.bill_id} AND status = 'refunded'`;
+    // Other refunds on it may still cover all that was paid: a note as cash beside Square's.
+    const after = await refundTargetOf(tx, press.gymId, where.membership_id, paymentId);
+    if (after === null) throw new Error("the payment of a refund press no longer stands");
+    if (after.bill.refundedMinor < after.bill.paidMinor) {
+      await tx`UPDATE gym_member_bills SET status = 'paid', updated_at = ${failed.now} WHERE gym_id = ${press.gymId} AND id = ${where.bill_id} AND status = 'refunded'`;
+    }
     // A fee's payment never gives a member's gift.
-    if (where.entry_id !== null && where.period_index !== null) {
+    if (where.entry_id !== null && where.period_index !== null && after.payment.refundedMinor < after.payment.amountMinor) {
       await giveMemberGift(tx, { gymId: press.gymId, friendEntryId: where.entry_id, by: { paymentId }, today: failed.today, now: failed.now });
     }
     await tx`
@@ -531,7 +536,7 @@ export async function recordMadeInSquare(
       await insertAudit(tx, {
         actorUserId: null,
         gymId: r.gymId,
-        action: "org.member_refund_undone",
+        action: "org.member_refund_replaced",
         targetType: "gym_member_refund",
         targetId: note.id,
         meta: {
