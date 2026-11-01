@@ -118,4 +118,4 @@ reviews/
 .cost/
 
 # What the video tool writes: pictures of real people. Never in git.
-measured/
+/measured/

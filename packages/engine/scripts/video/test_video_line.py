@@ -96,6 +96,83 @@ class Lines(unittest.TestCase):
         self.assertEqual(len(line["wkp"][0]), 3)
 
 
+class Pictures(unittest.TestCase):
+    """The draw step, on a plain picture and on a video, with a small report."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.out = self.tmp.name
+        kp = [[0.5, 0.5, 0.0, 0.9]] * 33
+        self.frames = [{"t": 0.0, "kp": kp}, {"t": 66.7, "kp": []}]
+        self.report = {
+            "label": "x", "aspect": 0.5, "times": [0.0, 66.7],
+            "signals": {"knee_L": [97.5, None]}, "ranges": {"knee_L": {"min": 97.5, "max": 97.5}},
+            "rules": {"exercise": "squat", "metric": "knee_L", "upAt": 160, "downAt": 130, "otherKneeUnder": 150,
+                      "reps": [{"endFrame": 1}], "summary": {"reps": 1},
+                      "decisions": [{"repCount": 0, "phase": "descent", "view": "side", "metric": 101.2},
+                                    {"repCount": 1, "phase": "top", "view": "side"}]},
+            "moments": [{"frame": 0, "t": 0.0, "why": "bottom of rep 1"},
+                        {"frame": 1, "t": 66.7, "why": "nobody seen from here"}],
+        }
+        self.write("report.json", json.dumps(self.report))
+        self.write("t.jsonl", "{}\n" + "".join(json.dumps(f) + "\n" for f in self.frames))
+
+    def write(self, name, text):
+        with open(os.path.join(self.out, name), "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def draw(self, video=None):
+        args = [sys.executable, vl.__file__, "draw", "--report", os.path.join(self.out, "report.json"),
+                "--trace", os.path.join(self.out, "t.jsonl"), "--out", self.out]
+        if video:
+            args += ["--video", video, "--fps", "15"]
+        return subprocess.run(args, capture_output=True, text=True)
+
+    def test_someone_elses_numbered_photo_survives(self):
+        self.write(vl.MARKER, json.dumps({"source": "s", "pictures": ["01_old.jpg"]}))
+        self.write("01_old.jpg", "ours")
+        self.write("19_mum_birthday.jpg", "theirs")
+        r = self.draw()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        files = os.listdir(self.out)
+        self.assertNotIn("01_old.jpg", files)
+        self.assertIn("19_mum_birthday.jpg", files)
+        self.assertIn("01_bottom_of_rep_1.jpg", files)
+        self.assertIn("02_nobody_seen_from_here.jpg", files)
+        self.assertIn("all.jpg", files)
+        self.assertIn("chart.png", files)
+        with open(os.path.join(self.out, vl.MARKER), encoding="utf-8") as f:
+            self.assertEqual(len(json.load(f)["pictures"]), 2)
+
+    def test_a_folder_the_tool_did_not_make_is_refused(self):
+        self.write("19_mum_birthday.jpg", "theirs")
+        self.assertNotEqual(self.draw().returncode, 0)
+        self.assertNotIn("all.jpg", os.listdir(self.out))
+
+    def test_the_wrong_video_changes_nothing(self):
+        self.write(vl.MARKER, json.dumps({"source": "s", "pictures": ["01_old.jpg"]}))
+        self.write("01_old.jpg", "ours")
+        video = os.path.join(self.out, "v.mp4")
+        make_video(video, seconds=0.04)
+        r = self.draw(video)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("same video", r.stderr)
+        self.assertIn("01_old.jpg", os.listdir(self.out))
+
+    def test_a_picture_says_the_engines_numbers(self):
+        text = "\n".join(vl.moment_lines(self.report, self.report["moments"][0]))
+        for part in ("bottom of rep 1", "count 0", "phase descent", "steadied 101.2", "down<130", "up>160",
+                     "other knee under 150", "knee_L 97.5"):
+            self.assertIn(part, text)
+
+    def test_nobody_in_view_still_draws(self):
+        img = np.zeros((100, 100, 3), np.uint8)
+        lines = vl.moment_lines(self.report, self.report["moments"][1])
+        self.assertIn("count 1", "\n".join(lines))
+        self.assertIsNotNone(vl.draw_moment(img, [], lines))
+
+
 @unittest.skipUnless(os.path.exists(MODEL), "the pose model is not on this laptop")
 class WholeRun(unittest.TestCase):
     def test_a_video_of_nobody_gives_empty_frames_and_no_path(self):

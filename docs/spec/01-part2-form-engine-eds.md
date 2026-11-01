@@ -1198,7 +1198,7 @@ change; the workout save is safe to send twice.
    (§7.1's format, with the world landmarks beside the image ones), made with the SAME
    model file and settings the phone runs (tool 5 decides them). Python with MediaPipe is
    on Kd's laptop already and may stay the extractor; nothing but landmarks comes from it.
-   **As built (50b, 2026-11-01):** `corepack pnpm --filter @app/engine measure-video "<video>" --exercise <key> [--reps <counted by eye>]` writes the trace, `report.json` and pictures to `measured/<label>/`, which git ignores; it refuses any folder git could pick up. A frame where the model found nobody stays in the trace with an empty `kp`, as the app feeds it; world points are `wkp`; a trace nobody has counted has `expected.reps` -1 and cannot pass as a stored test. The model is Kd's heavy one until item 51 picks.
+   **As built (50b, 2026-11-01):** `corepack pnpm --filter @app/engine measure-video "<video>" --exercise <key> [--reps <counted by eye>]` writes the trace, `report.json` and pictures to `measured/<label>/`, which git ignores; inside a checkout it writes nowhere else, and it refuses a folder holding files it did not make. A frame where the model found nobody stays in the trace with an empty `kp`, as the app feeds it; world points are `wkp`; a trace nobody has counted has `expected.reps` -1 and cannot pass as a stored test. The model is Kd's heavy one until item 51 picks.
 2. **Measured by the app's own engine.** The trace is replayed through `@app/engine`
    (§7), and the numbers that set a rule are the engine's own signals, never a second
    copy of the maths. Kd's `analyze*.py` measure angles their own way: a cross-check,

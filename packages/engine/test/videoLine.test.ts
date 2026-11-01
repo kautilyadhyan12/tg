@@ -1,6 +1,7 @@
 // The measuring tool: its pictures never reach git, and every number it gives is the
 // engine's own. The video half is test_video_line.py, on the laptop.
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -15,8 +16,8 @@ import {
   serializeTrace,
   type Trace,
 } from "../src/index.js";
-import { checkTraceFrames, measureTrace, summaryLines } from "../scripts/video/measure.js";
-import { assertFolderStaysOutOfGit } from "../scripts/video/outFolder.js";
+import { checkTraceFrames, measureTrace, personCountOf, safeLabel, summaryLines } from "../scripts/video/measure.js";
+import { assertFolderStaysOutOfGit, prepareOutFolder } from "../scripts/video/outFolder.js";
 import { must } from "./fixtures.js";
 
 const REPO = resolve(import.meta.dirname, "../../..");
@@ -33,6 +34,12 @@ function rules(exercise: string): ExerciseDefinition {
   return exerciseDefinitionSchema.parse(raw);
 }
 const SQUAT_CLIP = "squat_sideview2goodform.jsonl";
+const COMMAND = join(import.meta.dirname, "../scripts/video/measure-video.ts");
+const TSX = join(import.meta.dirname, "../node_modules/tsx/dist/cli.mjs");
+// Only refusals are run here: they all come before Python, which GitHub lacks.
+function runCommand(args: string[]) {
+  return spawnSync(process.execPath, [TSX, COMMAND, ...args], { encoding: "utf8" });
+}
 
 describe("a picture of a real person never reaches GitHub", () => {
   it.each([
@@ -40,12 +47,34 @@ describe("a picture of a real person never reaches GitHub", () => {
     ["a stored-test folder", join(REPO, "packages/engine/test/traces/parity")],
     ["a new folder in the code", join(REPO, "packages/engine/scripts/video/pictures/a/b")],
     ["a way round through the ignored folder", join(REPO, "measured/../apps/web/public/x")],
+    ["a measured folder inside the code", join(REPO, "apps/web/public/measured/x")],
+    ["a folder git ignores but the web build copies", join(REPO, "apps/web/dist/x")],
   ])("refuses %s", (_what, folder) => {
-    expect(() => { assertFolderStaysOutOfGit(folder); }).toThrow(/could end up on GitHub/);
+    expect(() => { assertFolderStaysOutOfGit(folder); }).toThrow(/git checkout/);
   });
 
   it("allows the tool's own folder, which git ignores", () => {
     expect(() => { assertFolderStaysOutOfGit(join(REPO, "measured/some_video")); }).not.toThrow();
+  });
+
+  it("a junction cannot lead out of the tool's own folder", () => {
+    const measured = join(REPO, "measured");
+    mkdirSync(measured, { recursive: true });
+    const link = join(measured, `link-${String(process.pid)}`);
+    symlinkSync(join(REPO, "packages/engine/test"), link, "junction");
+    try {
+      expect(() => { assertFolderStaysOutOfGit(join(link, "x")); }).toThrow(/git checkout/);
+    } finally {
+      rmSync(link, { recursive: true });
+    }
+  });
+
+  it("the command itself refuses, and makes no folder", () => {
+    const folder = join(REPO, "packages/engine/test/refused-folder");
+    const r = runCommand([join(PARITY, SQUAT_CLIP), "--exercise", "squat", "--out", folder]);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/git checkout/);
+    expect(existsSync(folder)).toBe(false);
   });
 
   it("allows a folder outside any checkout", () => {
@@ -58,6 +87,94 @@ describe("a picture of a real person never reaches GitHub", () => {
       delete process.env["GIT_CEILING_DIRECTORIES"];
       rmSync(dir, { recursive: true });
     }
+  });
+});
+
+describe("a folder that holds other things", () => {
+  function inTemp(run: (dir: string) => void): void {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), "video-line-")));
+    process.env["GIT_CEILING_DIRECTORIES"] = dirname(dir);
+    try {
+      run(dir);
+    } finally {
+      delete process.env["GIT_CEILING_DIRECTORIES"];
+      rmSync(dir, { recursive: true });
+    }
+  }
+
+  it("is refused and left as it was", () => {
+    inTemp((dir) => {
+      writeFileSync(join(dir, "19_mum_birthday.jpg"), "theirs");
+      expect(() => { prepareOutFolder(dir, "v.mp4"); }).toThrow(/did not make/);
+      expect(readdirSync(dir)).toEqual(["19_mum_birthday.jpg"]);
+    });
+  });
+
+  it("an empty one is taken, then the same video may run again, and another may not", () => {
+    inTemp((dir) => {
+      const out = join(dir, "new");
+      prepareOutFolder(out, "D:/a/reference.mp4");
+      writeFileSync(join(out, "01_x.jpg"), "ours");
+      expect(() => { prepareOutFolder(out, "D:/a/reference.mp4"); }).not.toThrow();
+      expect(() => { prepareOutFolder(out, "D:/b/reference.mp4"); }).toThrow(/another video/);
+    });
+  });
+
+  it.runIf(process.platform === "win32")("Kd's own video folder is never written to", () => {
+    expect(() => { prepareOutFolder("D:\\vidoe referene\\new", "v.mp4"); }).toThrow(/never changed/);
+  });
+});
+
+describe("the command's options", () => {
+  it.each([
+    ["--reps empty", ["--reps", ""], /whole number/],
+    ["--view unknown word", ["--view", "nonsense"], /--view/],
+    ["--view on a trace", ["--view", "side"], /--view does nothing/],
+    ["--fps too slow", ["--fps", "5"], /--fps/],
+    ["--fps nought", ["--fps", "0"], /--fps/],
+    ["--label empty", ["--label", ""], /--label/],
+    ["an unknown option", ["--nonsense", "1"], /Usage/],
+  ])("%s is refused in plain words", (_what, extra, says) => {
+    const r = runCommand([join(PARITY, SQUAT_CLIP), "--exercise", "squat", ...extra]);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(says);
+    expect(r.stderr).not.toMatch(/\n\s+at /);
+  });
+});
+
+describe("names and counts on the report", () => {
+  it("names the rules that ran, and says when they are another exercise's", () => {
+    const lines = summaryLines(measureTrace(clip(SQUAT_CLIP), rules("chair_squat"), null, "chair_squat"));
+    expect(lines[1]).toMatch(/^chair_squat v2:/);
+    expect(lines.join("\n")).toMatch(/chair_squat's rules on a video recorded as squat/);
+  });
+
+  it("no rules: names what was asked for, not the trace's exercise", () => {
+    const report = measureTrace(clip(SQUAT_CLIP), null, null, "sqaut");
+    expect(summaryLines(report)[1]).toMatch(/^sqaut has no rules yet/);
+  });
+
+  it("a stored count is a person's count, unless nobody counted", () => {
+    const trace = clip(SQUAT_CLIP);
+    expect(personCountOf(trace, null)).toBe(trace.header.expected.reps);
+    expect(personCountOf(trace, 9)).toBe(9);
+    const uncounted = { ...trace, header: { ...trace.header, expected: { ...trace.header.expected, reps: UNCOUNTED_REPS } } };
+    expect(personCountOf(uncounted, null)).toBeNull();
+  });
+
+  it("the summary says when a rep was still open at the end, and gives the two-knee rule", () => {
+    const text = summaryLines(measureTrace(clip("sqauta_sideview1goodform.jsonl"), rules("squat"), null)).join("\n");
+    expect(text).toMatch(/still open when the video ended.*not counted/);
+    expect(text).toMatch(/with the other knee under 150/);
+  });
+
+  it.each([
+    ["D:\\Users\\mum\\a b.mp4", "D_Users_mum_a_b_mp4"],
+    ["Kd's clip", "Kd_s_clip"],
+    ["../../up", "up"],
+    ["...", ""],
+  ])("the name from %s holds no path", (name, label) => {
+    expect(safeLabel(name)).toBe(label);
   });
 });
 
@@ -137,6 +254,38 @@ describe("the pictures' moments", () => {
     expect(report.moments.length).toBeGreaterThanOrEqual(8);
     expect(report.moments.length).toBeLessThanOrEqual(40);
     expect(report.moments.map((m) => m.frame)).toEqual([...report.moments.map((m) => m.frame)].sort((a, b) => a - b));
+  });
+
+  it("a flickering cue hits the cap, says so, and pushes out no rep's picture", () => {
+    const flicker = { id: "flicker", when: "knee_avg > 1", sustainMs: 0, cueCooldownMs: 150, severity: 10, msg: "fault.test.flicker" };
+    const report = measureTrace(clip("squat_badform_sideview.jsonl"), { ...rules("squat"), faults: [flicker] }, null);
+    expect(report.moments.length).toBe(40);
+    expect(report.momentsLeftOut).toBeGreaterThan(0);
+    for (const r of must(report.rules ?? undefined).reps) {
+      expect(report.moments.some((m) => m.frame === r.bottomFrame && m.why.startsWith("bottom of rep"))).toBe(true);
+    }
+    expect(summaryLines(report).join("\n")).toMatch(/moments have no picture/);
+  });
+
+  it("with the left knee unseen, a rep's picture is at the right knee's lowest", () => {
+    const trace = clip(SQUAT_CLIP);
+    const hidden: Trace = {
+      header: trace.header,
+      frames: trace.frames.map((f) => ({
+        ...f,
+        kp: f.kp.map((p, i) => (i === 23 || i === 25 || i === 27 ? ([p[0], p[1], p[2], 0] as typeof p) : p)),
+      })),
+    };
+    const report = measureTrace(hidden, rules("squat"), null);
+    const { reps } = must(report.rules ?? undefined);
+    expect(must(report.signals["knee_L"]).every((v) => v === null)).toBe(true);
+    expect(reps.length).toBeGreaterThan(0);
+    let from = 0;
+    for (const r of reps) {
+      const knee = must(report.signals["knee_R"]).slice(from, r.endFrame + 1).map((v) => v ?? Infinity);
+      expect(must(report.signals["knee_R"])[r.bottomFrame]).toBe(Math.min(...knee));
+      from = r.endFrame + 1;
+    }
   });
 });
 

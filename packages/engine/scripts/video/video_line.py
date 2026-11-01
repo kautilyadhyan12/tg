@@ -7,7 +7,6 @@ Laptop only: it needs mediapipe, cv2 and matplotlib. Start it through measure-vi
 which checks the output folder first.
 """
 import argparse
-import glob
 import json
 import math
 import os
@@ -20,6 +19,7 @@ NUM_POSES = 1
 MIN_CONFIDENCE = 0.5
 # The engine ignores a point seen less than this (VISIBILITY_THRESHOLD, @app/shared).
 VISIBLE = 0.3
+MARKER = ".measure-video.json"
 LONG_SIDE = 900
 PLAIN_HEIGHT = 720
 
@@ -159,6 +159,8 @@ def moment_lines(report, moment):
         steady = "none" if metric is None else f"{metric:.1f}"
         lines.append(f"count {d['repCount']}  phase {d['phase']}  view {d['view']}")
         lines.append(f"{rules['metric']} steadied {steady}  down<{rules['downAt']} up>{rules['upAt']}")
+        if rules.get("otherKneeUnder") is not None:
+            lines.append(f"down also needs the other knee under {rules['otherKneeUnder']}")
     for name in ("knee_L", "knee_R", "hip_L", "hip_R", "elbow_L", "elbow_R", "trunk_incline"):
         v = report["signals"].get(name, [None] * (i + 1))[i]
         if v is not None:
@@ -223,7 +225,7 @@ def chart(report, path):
         ax.axhline(rules["downAt"], color="red", ls="--", label=f"down {rules['downAt']}")
         for r in rules["reps"]:
             ax.axvline(seconds[r["endFrame"]], color="blue", alpha=0.4)
-        ax.set_title(f"{report['label']}: {rules['summary']['reps']} counted (blue lines)", loc="left")
+        ax.set_title(f"{report['label']}, {rules['exercise']}'s rules: {rules['summary']['reps']} counted (blue lines)", loc="left")
         ax.legend(loc="center left", bbox_to_anchor=(1.0, 0.5), fontsize=7)
     for ax, (title, names) in zip(axes[1 if rules else 0:], panels):
         for name in names:
@@ -263,19 +265,32 @@ def make_pictures(a):
         report = json.load(f)
     with open(a.trace, encoding="utf-8") as f:
         frames = [json.loads(line) for line in f if line.strip()][1:]
-    for old in glob.glob(os.path.join(a.out, "[0-9][0-9]_*.jpg")):
-        os.remove(old)
+    marker_path = os.path.join(a.out, MARKER)
+    if not os.path.exists(marker_path):
+        sys.exit(f"{a.out} is not this tool's folder. Start through measure-video.")
+    with open(marker_path, encoding="utf-8") as f:
+        marker = json.load(f)
     pictures = wanted_frames(report, frames, a.video, a.fps)
-    drawn = []
+    # Only what this folder's last run wrote: nothing else here is ours to remove.
+    for old in marker["pictures"]:
+        old_path = os.path.join(a.out, os.path.basename(old))
+        if os.path.exists(old_path):
+            os.remove(old_path)
+    drawn, names = [], []
     for n, moment in enumerate(report["moments"]):
         i = moment["frame"]
         img = draw_moment(pictures[i].copy(), frames[i]["kp"], moment_lines(report, moment))
         word = "".join(c if c.isalnum() else "_" for c in moment["why"])[:28].strip("_")
-        cv2.imwrite(os.path.join(a.out, f"{n + 1:02d}_{word}.jpg"), img, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        name = f"{n + 1:02d}_{word}.jpg"
+        names.append(name)
+        cv2.imwrite(os.path.join(a.out, name), img, [cv2.IMWRITE_JPEG_QUALITY, 85])
         drawn.append(img)
     if drawn:
         sheet(drawn, os.path.join(a.out, "all.jpg"))
     chart(report, os.path.join(a.out, "chart.png"))
+    marker["pictures"] = names
+    with open(marker_path, "w", encoding="utf-8") as f:
+        json.dump(marker, f)
 
 
 def main():

@@ -4,7 +4,9 @@
 import type { ExerciseDefinition, FrameResult, SetSummary } from "@app/shared";
 import { traceFrameSchema } from "@app/shared";
 import {
+  BILATERAL_ENGAGE_ANGLE,
   SIGNAL_REGISTRY,
+  UNCOUNTED_REPS,
   compileDefinition,
   createSession,
   replay,
@@ -53,6 +55,8 @@ export interface MeasuredRep {
 export interface VideoReport {
   label: string;
   exercise: string;
+  /** The exercise the video was recorded as; rules of another may be run on it. */
+  traceExercise: string;
   aspect: number;
   fps: number;
   provider: TraceProvider | null;
@@ -63,10 +67,13 @@ export interface VideoReport {
   signals: Record<string, (number | null)[]>;
   ranges: Record<string, { min: number; max: number }>;
   rules: {
+    exercise: string;
     version: number;
     metric: string;
     upAt: number;
     downAt: number;
+    /** "Down" also needs the other knee, steadied, under this; null when it does not. */
+    otherKneeUnder: number | null;
     decisions: FrameResult[];
     reps: MeasuredRep[];
     summary: SetSummary;
@@ -159,22 +166,39 @@ function measureRules(
   });
 
   return {
+    exercise: definition.key,
     version: definition.version,
     metric: metricName,
     upAt: config.rep.upAt,
     downAt: config.rep.downAt,
+    otherKneeUnder: config.rep.bilateralGate ? BILATERAL_ENGAGE_ANGLE : null,
     decisions: result.frameResults,
     reps,
     summary: result.summary,
   };
 }
 
-/** `definition` is null for an exercise with no rules yet: it still gets every signal. */
+/** The name the tool may put in a trace: no path, nothing but plain characters. */
+export function safeLabel(name: string): string {
+  return name.replace(/[^A-Za-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "");
+}
+
+/** What a person counted: what they just said, else what the trace's header holds. */
+export function personCountOf(trace: Trace, given: number | null): number | null {
+  if (given !== null) return given;
+  const stored = trace.header.expected.reps;
+  return stored === UNCOUNTED_REPS ? null : stored;
+}
+
+/** `definition` is null for an exercise with no rules yet: it still gets every signal.
+ *  `askedFor` is the exercise named on the command, which may not be the trace's own. */
 export function measureTrace(
   trace: Trace,
   definition: ExerciseDefinition | null,
   personCount: number | null,
+  askedFor: string = trace.header.exercise,
 ): VideoReport {
+  const fps = checkTraceFrames(trace);
   const seen = replay(createSession(SIGNALS_ONLY), trace);
   const signals: Record<string, (number | null)[]> = {};
   const ranges: Record<string, { min: number; max: number }> = {};
@@ -209,9 +233,10 @@ export function measureTrace(
 
   return {
     label: trace.header.label,
-    exercise: trace.header.exercise,
+    exercise: definition?.key ?? askedFor,
+    traceExercise: trace.header.exercise,
     aspect: trace.header.aspect,
-    fps: checkTraceFrames(trace),
+    fps,
     provider: trace.header.provider ?? null,
     frames: count,
     framesWithPerson: trace.frames.filter((f) => f.kp.length > 0).length,
@@ -233,18 +258,24 @@ export function summaryLines(report: VideoReport): string[] {
   const { rules } = report;
   if (rules) {
     lines.push(
-      `${report.exercise} v${String(rules.version)}: the engine counted ${String(rules.summary.reps)}` +
+      `${rules.exercise} v${String(rules.version)}: the engine counted ${String(rules.summary.reps)}` +
         (report.personCount === null
           ? "; nobody has counted this video by eye."
           : `; a person counted ${String(report.personCount)}${report.personCount === rules.summary.reps ? "." : ". THEY DIFFER."}`),
     );
-    lines.push(`Counts on ${rules.metric}: down below ${String(rules.downAt)}, up above ${String(rules.upAt)}. View: ${rules.summary.view}.`);
+    if (rules.exercise !== report.traceExercise) {
+      lines.push(`These are ${rules.exercise}'s rules on a video recorded as ${report.traceExercise}.`);
+    }
+    const other = rules.otherKneeUnder === null ? "" : ` with the other knee under ${String(rules.otherKneeUnder)}`;
+    lines.push(`Counts on ${rules.metric}: down below ${String(rules.downAt)}${other}, up above ${String(rules.upAt)}. View: ${rules.summary.view}.`);
     for (const r of rules.reps) {
       lines.push(
         `  rep ${String(r.rep)}: lowest ${String(r.lowest)}, score ${String(r.score)}, ${(r.durationMs / 1000).toFixed(1)} s` +
           (r.faults.length > 0 ? `, rules: ${r.faults.join(", ")}` : ""),
       );
     }
+    const open = report.moments.find((m) => m.why.includes("not counted"));
+    if (open) lines.push(`  A movement was still open when the video ended, at ${(open.t / 1000).toFixed(1)} s: not counted.`);
   } else {
     lines.push(`${report.exercise} has no rules yet: every angle is measured, nothing is counted.`);
   }
