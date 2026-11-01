@@ -541,12 +541,17 @@ d("A chargeback (real Postgres)", { timeout: T }, () => {
       const made = square.disputeInSquare(ida.squarePaymentId);
       await message(gym.acct.merchantId, made.id);
       await nextWeekOpens(ida);
-      clock = new Date(clock.getTime() + 14 * 24 * 60 * 60_000);
-      await openDueBills({ sql, log: quiet }, { now: clock, gymIds: [gym.id] });
+      // The worker opens each week as it falls due.
+      const onDays = async (days: number) => {
+        for (let d = 0; d < days; d++) {
+          clock = new Date(clock.getTime() + 24 * 60 * 60_000);
+          await openDueBills({ sql, log: quiet }, { now: clock, gymIds: [gym.id] });
+        }
+      };
+      await onDays(14);
       square.disputeMoves(made.id, "WON");
       await message(gym.acct.merchantId, made.id, "dispute.state.updated");
-      clock = new Date(clock.getTime() + 10 * 24 * 60 * 60_000);
-      await openDueBills({ sql, log: quiet }, { now: clock, gymIds: [gym.id] });
+      await onDays(10);
       const owed = async () => (await held(gym, gym.owner, ida.entryId)).memberships.flatMap((m) => m.billing?.bills ?? []).filter((b) => b.state === "due" || b.state === "overdue").sort((a, b) => a.periodIndex - b.periodIndex);
       for (let i = 0; i < 8; i++) {
         const list = await owed();
@@ -560,8 +565,7 @@ d("A chargeback (real Postgres)", { timeout: T }, () => {
         await sql`UPDATE gym_member_payments p SET paid_on = ${(await held(gym, gym.owner, ida.entryId)).today}::date FROM gym_member_bills b WHERE b.gym_id = p.gym_id AND b.id = p.bill_id AND b.held_membership_id = ${ida.membershipId} AND b.period_index = ${oldest.periodIndex}`;
       }
       expect(await owed()).toEqual([]);
-      clock = new Date(clock.getTime() + 7 * 24 * 60 * 60_000);
-      await openDueBills({ sql, log: quiet }, { now: clock, gymIds: [gym.id] });
+      await onDays(4);
       await work();
       const byApp = await sql<{ id: string }[]>`SELECT id FROM gym_card_charges WHERE held_membership_id = ${ida.membershipId} AND by_schedule`;
       expect(byApp).toHaveLength(1);
