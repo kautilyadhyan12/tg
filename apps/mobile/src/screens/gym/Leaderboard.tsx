@@ -501,7 +501,7 @@ function Row({ row, days, boardId, onMine, onPerson }: { row: LeaderboardRow; da
   );
   if (!row.isMe) {
     return (
-      <Pressable testID={`row-${row.userId}`} accessibilityRole="button" accessibilityLabel={`${ordinal(row.place)}, ${row.name}. See their profile.`} onPress={onPerson} style={styles.rowBox}>
+      <Pressable testID={`row-${row.userId}`} accessibilityRole="button" accessibilityLabel={`${ordinal(row.place)}, ${row.name}, see their profile`} onPress={onPerson} style={styles.rowBox}>
         {inside}
       </Pressable>
     );

@@ -1,6 +1,6 @@
 // A person's profile, in words: the browser's rules (apps/web/src/components/gym/PersonProfile.jsx). Pure, so tested alone.
 import type { GymPost, GymPostsResponse, LeaderboardPeriod, LeaderboardProfileResponse, PersonGymPostsResponse } from "@app/shared";
-import { BOARD_TABS, PERIODS, ordinal } from "./leaderboardView";
+import { BOARD_TABS, PERIODS, ordinal, valueText } from "./leaderboardView";
 
 export const personPlacesPath = (gymId: string, userId: string, period: LeaderboardPeriod) =>
   `/v1/orgs/${encodeURIComponent(gymId)}/leaderboard/people/${encodeURIComponent(userId)}?period=${period}`;
@@ -36,7 +36,7 @@ export function placeStats(boards: LeaderboardProfileResponse["boards"], period:
   return boards.map((b) => {
     const label = BOARD_TABS.find((t) => t.id === b.board)?.label ?? "";
     const words = PERIODS.find((p) => p.value === (b.period ?? period))?.label.toLowerCase() ?? "";
-    const under = b.board === "streak" ? (b.value === 1 ? "1 week" : `${String(b.value)} weeks`) : `${String(b.value)} ${words}`;
+    const under = b.board === "streak" ? valueText(b.value, b.board) : `${valueText(b.value, b.board)} ${words}`;
     return { key: b.board, number: b.place === null ? "–" : ordinal(b.place), label, under };
   });
 }

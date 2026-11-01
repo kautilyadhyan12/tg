@@ -4,7 +4,7 @@ import { leaderboardProfileResponseSchema, leaderboardResponseSchema, personGymP
 import { App } from "../../src/App";
 import { placeStats, postsStat } from "../../src/screens/gym/personView";
 import type { Ask } from "../../src/session/calls";
-import { fakeServer as kitServer, kept, lost, memoryStore, refusal, tokens, type Reply, type Route } from "../kit";
+import { fakeServer as kitServer, kept, lost, memoryStore, never, refusal, tokens, type Reply, type Route } from "../kit";
 
 const extra = { copyName: "Feature 1", apiUrl: "http://localhost:3000" };
 const noWait = () => Promise.resolve();
@@ -35,6 +35,7 @@ const PRIYA = "22222222-2222-4222-8222-222222222222";
 const P1 = "a1111111-1111-4111-8111-111111111111";
 const P2 = "a2222222-2222-4222-8222-222222222222";
 const BLOCK = "b1111111-1111-4111-8111-111111111111";
+const PHOTO = "c1111111-1111-4111-8111-111111111111";
 const STAFF_POST = "a3333333-3333-4333-8333-333333333333";
 
 type Row = Record<string, unknown>;
@@ -178,8 +179,7 @@ describe("the worst thing: somebody is shown what they chose to keep, or what is
     expect(profilePage().queryByText("Priya S.")).toBeNull();
   });
 
-  it("a slow answer for the first person never lands on the second person's page", async () => {
-    let answerTom: (reply: Reply) => void = () => undefined;
+  it("a row of the board opens that person, and Back then another row opens the other", async () => {
     const board = leaderboardResponseSchema.parse({
       gymId: IRON.id,
       gymName: IRON.name,
@@ -199,33 +199,25 @@ describe("the worst thing: somebody is shown what they chose to keep, or what is
       boardsOff: [],
       asOf: "2026-11-01T10:00:00.000Z",
     });
-    const { ask } = fakeServer({
+    const server = fakeServer({
       ...ROUTES,
       [`/v1/orgs/${IRON.id}/leaderboard?board=gym_days&period=this_week`]: ok(board),
       "/v1/users/me/leaderboard": ok({ hidden: false, hideMe: false, under18: false }),
       [POSTS_OF()]: ok(theirPosts([])),
-      [PLACES_OF()]: () =>
-        new Promise<Reply>((resolve) => {
-          answerTom = resolve;
-        }),
+      [PLACES_OF()]: ok(places()),
       [POSTS_OF(PRIYA)]: ok(theirPosts([])),
       [PLACES_OF(PRIYA)]: noPlaces,
     });
-    await render(<App extra={extra} ask={ask} store={memoryStore(kept(1))} wait={noWait} />);
+    await render(<App extra={extra} ask={server.ask} store={memoryStore(kept(1))} wait={noWait} />);
     const tab = (await screen.findAllByRole("tab"))[3];
     if (tab === undefined) throw new Error("no fourth tab");
     await fireEvent.press(tab);
     await fireEvent.press(await screen.findByLabelText(`Leaderboard at ${IRON.name}`));
-    await fireEvent.press(await screen.findByLabelText("1st, Tom B.. See their profile."));
-    await profilePage().findByText("Member at Iron House");
+    await fireEvent.press(await screen.findByLabelText("1st, Tom B., see their profile"));
+    expect(await profilePage().findByTestId("stat-gym_days")).toBeTruthy();
     await fireEvent.press(profilePage().getByLabelText("Back"));
-    await fireEvent.press(await screen.findByLabelText("2nd, Priya S.. See their profile."));
-    await profilePage().findByText("Priya S. hasn't posted anything.");
-    await act(async () => {
-      answerTom({ status: 200, body: places() });
-      await Promise.resolve();
-    });
-    await settle();
+    await fireEvent.press(await screen.findByLabelText("2nd, Priya S., see their profile"));
+    expect(await profilePage().findByText("Priya S. hasn't posted anything.")).toBeTruthy();
     expect(profilePage().queryByTestId("stat-gym_days")).toBeNull();
   });
 
@@ -248,11 +240,17 @@ describe("the worst thing: somebody is shown what they chose to keep, or what is
     expect(await profilePage().findByText("Words of " + P1)).toBeTruthy();
   });
 
-  it("blocking from the profile takes their posts away at once and says why; Updates reads again on Back", async () => {
+  it("blocking takes their posts away and says why before any read answers", async () => {
     let blocked = false;
+    let answerRead: (reply: Reply) => void = () => undefined;
     const server = fakeServer({
       ...ROUTES,
-      [POSTS_OF()]: () => ({ status: 200, body: blocked ? theirPosts([], { blocked: true, blockedCount: 1 }) : theirPosts([post(P1)]) }),
+      [POSTS_OF()]: () =>
+        blocked
+          ? new Promise<Reply>((resolve) => {
+              answerRead = resolve;
+            })
+          : { status: 200, body: theirPosts([post(P1)], { next: "2026-10-28T09:05:00.000Z_x", total: 25 }) },
       [PLACES_OF()]: noPlaces,
       [`${FEED}/${P1}/block`]: () => {
         blocked = true;
@@ -265,12 +263,86 @@ describe("the worst thing: somebody is shown what they chose to keep, or what is
     await fireEvent.press(await screen.findByText("Block Tom B."));
     expect(await profilePage().findByText("You've blocked Tom B., so their posts aren't shown.")).toBeTruthy();
     expect(profilePage().queryByText("Words of " + P1)).toBeNull();
-    const before = server.asked.filter((a) => a.path === FEED).length;
+    expect(profilePage().queryByText("Tom B. hasn't posted anything.")).toBeNull();
+    expect(profilePage().queryByText("Show older posts")).toBeNull();
+    expect(within(profilePage().getByTestId("stat-posts")).getByText("0")).toBeTruthy();
+    await act(async () => {
+      answerRead({ status: 200, body: theirPosts([], { blocked: true, blockedCount: 1 }) });
+      await Promise.resolve();
+    });
+  });
+
+  const blockTom = (blockAnswer: () => Reply | Promise<Reply>) => {
+    let blocked = false;
+    return fakeServer({
+      ...ROUTES,
+      [FEED]: () => ({ status: 200, body: feed(blocked ? [] : [post(P1)]) }),
+      [POSTS_OF()]: () => ({ status: 200, body: blocked ? theirPosts([], { blocked: true, blockedCount: 1 }) : theirPosts([post(P1)]) }),
+      [PLACES_OF()]: noPlaces,
+      [`${FEED}/${P1}/block`]: async () => {
+        const reply = await blockAnswer();
+        blocked = true;
+        return reply;
+      },
+    });
+  };
+  const blockedReply = { status: 200, body: { blocked: true } };
+  const updatesReads = (server: ReturnType<typeof fakeServer>) => server.asked.filter((a) => a.path === FEED).length;
+  const pressBlock = async () => {
+    await fireEvent.press(await profilePage().findByLabelText("Post options"));
+    await fireEvent.press(await profilePage().findByLabelText("Block Tom B."));
+    await fireEvent.press(await screen.findByText("Block Tom B."));
+  };
+
+  it("a block, then the on-screen Back: Updates no longer shows them", async () => {
+    const server = blockTom(() => blockedReply);
+    await openTom(server.ask);
+    await pressBlock();
     await fireEvent.press(await screen.findByText("Done"));
     await fireEvent.press(profilePage().getByLabelText("Back"));
     await waitFor(() => {
-      expect(server.asked.filter((a) => a.path === FEED).length).toBe(before + 1);
+      expect(screen.queryByLabelText("See Tom B.'s profile")).toBeNull();
     });
+  });
+
+  it("a block, then the phone's own Back: Updates no longer shows them", async () => {
+    const server = blockTom(() => blockedReply);
+    await openTom(server.ask);
+    await pressBlock();
+    await fireEvent.press(await screen.findByText("Done"));
+    await fireEvent(screen.getByTestId("person-profile"), "requestClose");
+    await waitFor(() => {
+      expect(screen.queryByLabelText("See Tom B.'s profile")).toBeNull();
+    });
+  });
+
+  it("a block answered after the page has closed: Updates reads again then, and no longer shows them", async () => {
+    let answer: (reply: Reply) => void = () => undefined;
+    const server = blockTom(
+      () =>
+        new Promise<Reply>((resolve) => {
+          answer = resolve;
+        }),
+    );
+    await openTom(server.ask);
+    await pressBlock();
+    await fireEvent(screen.getByTestId("person-profile"), "requestClose");
+    await settle();
+    expect(screen.queryByTestId("person-list")).toBeNull();
+    answer(blockedReply);
+    await waitFor(() => {
+      expect(screen.queryByLabelText("See Tom B.'s profile")).toBeNull();
+    });
+  });
+
+  it("nothing pressed: leaving reads Updates no more than it did", async () => {
+    const server = blockTom(() => blockedReply);
+    await openTom(server.ask);
+    await profilePage().findByText("Words of " + P1);
+    const before = updatesReads(server);
+    await fireEvent(screen.getByTestId("person-profile"), "requestClose");
+    await settle();
+    expect(updatesReads(server)).toBe(before);
   });
 });
 
@@ -288,8 +360,8 @@ describe("the numbers, in words", () => {
       "last_month",
     );
     expect(stats).toEqual([
-      { key: "gym_days", number: "1st", label: "Visits", under: "9 last month" },
-      { key: "workout_days", number: "–", label: "Workout days", under: "0 last month" },
+      { key: "gym_days", number: "1st", label: "Visits", under: "9 visits last month" },
+      { key: "workout_days", number: "–", label: "Workout days", under: "0 workout days last month" },
       { key: "streak", number: "2nd", label: "Streak", under: "1 week" },
     ]);
   });
@@ -311,7 +383,7 @@ describe("the page", () => {
     const visits = within(await profilePage().findByTestId("stat-gym_days"));
     expect(visits.getByText("3rd")).toBeTruthy();
     expect(visits.getByText("Visits")).toBeTruthy();
-    expect(visits.getByText("4 this week")).toBeTruthy();
+    expect(visits.getByText("4 visits this week")).toBeTruthy();
     const streak = within(profilePage().getByTestId("stat-streak"));
     expect(streak.getByText("5th")).toBeTruthy();
     expect(streak.getByText("2 weeks")).toBeTruthy();
@@ -319,7 +391,7 @@ describe("the page", () => {
     expect(within(profilePage().getByTestId("stat-posts")).getByText("Posts")).toBeTruthy();
   });
 
-  it("somebody with no posts says so, and nobody's id reads the same", async () => {
+  it("somebody with no posts says so", async () => {
     const { ask } = fakeServer({ ...ROUTES, [POSTS_OF()]: ok(theirPosts([])), [PLACES_OF()]: noPlaces });
     await openTom(ask);
     expect(await profilePage().findByText("Tom B. hasn't posted anything.")).toBeTruthy();
@@ -381,6 +453,59 @@ describe("the page", () => {
     expect(await profilePage().findByText("Words of " + P2)).toBeTruthy();
     expect(profilePage().getAllByText("Words of " + P1)).toHaveLength(1);
     expect(profilePage().queryByText("Show older posts")).toBeNull();
+  });
+
+  it("a first read overtaken by one that gets no answer ends in Try again, not Loading", async () => {
+    const come = listenForComeBack();
+    const { ask } = fakeServer({ ...ROUTES, [POSTS_OF()]: never, [PLACES_OF()]: never });
+    let reads = 0;
+    const counted: Ask = (url, init) => {
+      if (new URL(url).pathname === POSTS_OF() && ++reads === 2) throw new Error("no connection");
+      return ask(url, init);
+    };
+    await openTom(counted);
+    await come();
+    expect(await profilePage().findByText("Couldn't load their posts.")).toBeTruthy();
+    expect(profilePage().queryByText("Loading…")).toBeNull();
+  });
+
+  it("each press a post offers works from the profile: react, comment, report and photos", async () => {
+    const server = fakeServer({
+      ...ROUTES,
+      [POSTS_OF()]: ok(theirPosts([post(P1, { photos: [{ id: PHOTO, width: 1600, height: 1200 }] })])),
+      [PLACES_OF()]: noPlaces,
+      [`${FEED}/${P1}/reaction`]: () => ({ status: 200, body: { reactions: { like: 0, love: 0, strong: 0, fire: 1 }, mine: "fire" } }),
+      [`${FEED}/${P1}/report`]: ok({ reported: true }),
+      [`${FEED}/${P1}/comments`]: ok({ comments: [], next: null, commenting: "on" }),
+    });
+    await openTom(server.ask);
+    const card = within(await profilePage().findByTestId(`post-${P1}`));
+    expect(await card.findByTestId(`photo-${PHOTO}`)).toBeTruthy();
+    // No name on a post of a profile: the page already says whose it is.
+    expect(card.queryByText("Tom B.")).toBeNull();
+    await fireEvent.press(card.getByTestId("react-open"));
+    await fireEvent.press(card.getByTestId("react-fire"));
+    expect(await card.findByLabelText("Reactions: Fire, 1 person, including you. Choose a reaction")).toBeTruthy();
+    await fireEvent.press(card.getByTestId("comments-open"));
+    expect(await profilePage().findByText("Comments")).toBeTruthy();
+    await fireEvent.press(profilePage().getByLabelText("Close"));
+    await fireEvent.press(card.getByLabelText("Post options"));
+    await fireEvent.press(await profilePage().findByLabelText("Report this post by Tom B."));
+    await fireEvent.press(await screen.findByLabelText("Spam or selling"));
+    await fireEvent.press(screen.getByLabelText("Send report"));
+    expect(await screen.findByText("Reported. The staff at Iron House will look at it.")).toBeTruthy();
+    expect(server.asked.filter((a) => a.path.endsWith("/report")).map((a) => a.body)).toEqual([{ reason: "spam" }]);
+  });
+
+  it.each([
+    ["on", true],
+    ["stopped", true],
+    ["off", false],
+  ] as const)("comments %s at this place: the button shows is %s", async (commenting, shows) => {
+    const { ask } = fakeServer({ ...ROUTES, [POSTS_OF()]: ok(theirPosts([post(P1)], { commenting })), [PLACES_OF()]: noPlaces });
+    await openTom(ask);
+    const card = within(await profilePage().findByTestId(`post-${P1}`));
+    expect(card.queryByTestId("comments-open") !== null).toBe(shows);
   });
 
   it("removing your own post from your own profile lowers the count", async () => {

@@ -283,6 +283,12 @@ d("a person's posts on their profile, and the day's photo posts (real Postgres, 
 
       // STAFF read the same posts by whole name, with whether the person is stopped.
       expect((await inject("PUT", `${posts(gym.id)}/stopped/${writer.userId}`, gym.owner.cookies)).statusCode).toBe(200);
+      // Whether the reader may comment is the reader's own: this person is stopped, somebody else is not.
+      expect((await profile(gym, writer, reader.userId)).commenting).toBe("stopped");
+      expect((await profile(gym, reader, writer.userId)).commenting).toBe("on");
+      await sql`UPDATE gyms SET members_can_comment = false WHERE id = ${gym.id}`;
+      expect((await profile(gym, reader, writer.userId)).commenting).toBe("off");
+      await sql`UPDATE gyms SET members_can_comment = true WHERE id = ${gym.id}`;
       const staffView = await staffProfile(gym, gym.owner, writer.userId);
       expect(bodies(staffView)).toEqual(["Wendy's newest", "Wendy's pinned one", "Wendy's first"]);
       expect(staffView.total).toBe(3);

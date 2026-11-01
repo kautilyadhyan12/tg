@@ -97,6 +97,13 @@ function OwnStores(props: Inside) {
 type Places = { kind: "loading" } | { kind: "none" } | { kind: "failed" } | { kind: "ok"; boards: LeaderboardProfileResponse["boards"] };
 type Posts = { kind: "loading" } | { kind: "failed"; status: number | null } | { kind: "ok"; feed: GymPostsResponse; total: number; blocked: boolean };
 
+/** The page after a block. Blocking this page's own person leaves nothing of theirs, and says why, before any read. */
+function afterBlock(posts: Extract<Posts, { kind: "ok" }>, authorId: string, personId: string): Posts {
+  const feed = withoutAuthor(posts.feed, authorId);
+  if (authorId !== personId) return { ...posts, feed };
+  return { ...posts, feed: { ...feed, next: null, blockedCount: feed.blockedCount + 1 }, total: 0, blocked: true };
+}
+
 const PICTURE_TALL = 0.42;
 const MARK = 92;
 const BACK_TOP = 12;
@@ -123,7 +130,21 @@ function Body({ place, person, period, shared, onClose, onChanged, top, bottom }
   const placesStarted = useRef(0);
   const postsStarted = useRef(0);
   const live = useRef(true);
+  // A press has changed something the page behind shows. It reads again when this page has gone, by whichever way out,
+  // or when the press is answered if that comes later: a read sent before the answer may not hold it.
   const told = useRef(false);
+  const tellBehind = useRef(onChanged);
+  tellBehind.current = onChanged;
+  const changed = useCallback(() => {
+    if (live.current) told.current = true;
+    else tellBehind.current?.();
+  }, []);
+  useEffect(
+    () => () => {
+      if (told.current) tellBehind.current?.();
+    },
+    [],
+  );
 
   const loadPlaces = useCallback(
     async (quiet: boolean) => {
@@ -135,7 +156,7 @@ function Body({ place, person, period, shared, onClose, onChanged, top, bottom }
       if (answer.kind === "ok") setPlaces(answer.data.userId === person.userId ? { kind: "ok", boards: answer.data.boards } : { kind: "none" });
       // "Not found" is the answer for somebody on no board, Hide me included: their places leave the screen.
       else if (answer.kind === "refused" && answer.status === 404) setPlaces({ kind: "none" });
-      else if (!quiet) setPlaces({ kind: "failed" });
+      else setPlaces((was) => (!quiet || was.kind === "loading" ? { kind: "failed" } : was));
     },
     [session, place.id, person.userId, period],
   );
@@ -151,8 +172,10 @@ function Body({ place, person, period, shared, onClose, onChanged, top, bottom }
         setGone({});
         setMore({ busy: false, error: null });
         setPhotoRound((round) => round + 1);
-      } else if (!quiet || (answer.kind === "refused" && answer.status === 404)) {
-        setPosts({ kind: "failed", status: answer.kind === "refused" ? answer.status : null });
+      } else {
+        // A read made by itself never takes posts away over a lost connection, and never leaves "Loading…" for good.
+        const failed: Posts = { kind: "failed", status: answer.kind === "refused" ? answer.status : null };
+        setPosts((was) => (!quiet || failed.status === 404 || was.kind === "loading" ? failed : was));
       }
     },
     [session, place.id, place.name, person.userId],
@@ -172,14 +195,6 @@ function Body({ place, person, period, shared, onClose, onChanged, top, bottom }
       back.remove();
     };
   }, [loadPlaces, loadPosts]);
-
-  const changed = () => {
-    told.current = true;
-  };
-  const close = () => {
-    if (told.current) onChanged?.();
-    onClose();
-  };
 
   const change = (fn: (feed: GymPostsResponse) => GymPostsResponse, by = 0) => {
     setPosts((p) => (p.kind === "ok" ? { ...p, feed: fn(p.feed), total: Math.max(0, p.total + by) } : p));
@@ -209,10 +224,10 @@ function Body({ place, person, period, shared, onClose, onChanged, top, bottom }
     setReacting(post.id);
     change((feed) => withPost(feed, next));
     const answer = await session.signedIn({ method: "PUT", path: reactionPath(place.id, post.id), body: { reaction: next.mine } }, gymPostReactionResponseSchema);
+    changed();
     if (!live.current) return;
     setReacting(null);
     if (answer.kind === "ok") {
-      changed();
       change((feed) => withPost(feed, { ...next, reactions: answer.data.reactions, mine: answer.data.mine }));
       return;
     }
@@ -231,26 +246,26 @@ function Body({ place, person, period, shared, onClose, onChanged, top, bottom }
   };
 
   const onCommentCount = useCallback((postId: string, by: number) => {
-    told.current = true;
+    changed();
     setPosts((p) => {
       if (p.kind !== "ok") return p;
       const post = p.feed.posts.find((x) => x.id === postId);
       return post === undefined ? p : { ...p, feed: withPost(p.feed, { ...post, commentCount: Math.max(0, post.commentCount + by) }) };
     });
-  }, []);
+  }, [changed]);
   const onCommenting = useCallback((commenting: GymMemberPosting) => {
     setPosts((p) => (p.kind === "ok" && p.feed.commenting !== commenting ? { ...p, feed: { ...p.feed, commenting } } : p));
   }, []);
   const onCommentPostGone = useCallback((postId: string) => {
     setGone((g) => ({ ...g, [postId]: true }));
   }, []);
-  const onCommentBlocked = useCallback(
+  const blockedAuthor = useCallback(
     (authorId: string) => {
-      told.current = true;
-      setPosts((p) => (p.kind === "ok" ? { ...p, feed: withoutAuthor(p.feed, authorId) } : p));
+      changed();
+      setPosts((p) => (p.kind === "ok" ? afterBlock(p, authorId, person.userId) : p));
       void loadPosts(true);
     },
-    [loadPosts],
+    [changed, loadPosts, person.userId],
   );
 
   const feed = posts.kind === "ok" ? posts.feed : null;
@@ -410,7 +425,7 @@ function Body({ place, person, period, shared, onClose, onChanged, top, bottom }
           </Txt>
         </View>
       ) : null}
-      <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={close} style={[styles.back, { top: top + BACK_TOP }]}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={onClose} style={[styles.back, { top: top + BACK_TOP }]}>
         <Icon name="back" size={18} />
       </Pressable>
       <CommentsBox
@@ -424,7 +439,7 @@ function Body({ place, person, period, shared, onClose, onChanged, top, bottom }
         }}
         onCount={onCommentCount}
         onCommenting={onCommenting}
-        onBlocked={onCommentBlocked}
+        onBlocked={blockedAuthor}
         onPostGone={onCommentPostGone}
       />
       <AskSheet
@@ -443,12 +458,7 @@ function Body({ place, person, period, shared, onClose, onChanged, top, bottom }
           change((f) => withPost(f, { ...post, reported: true }));
         }}
         onBlocked={(post) => {
-          changed();
-          if (post.authorId !== null) {
-            const authorId = post.authorId;
-            change((f) => withoutAuthor(f, authorId));
-          }
-          void loadPosts(true);
+          if (post.authorId !== null) blockedAuthor(post.authorId);
         }}
         onGone={(post) => {
           setGone((g) => ({ ...g, [post.id]: true }));
