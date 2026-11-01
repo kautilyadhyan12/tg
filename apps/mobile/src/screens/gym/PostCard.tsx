@@ -22,6 +22,7 @@ import { Sheet } from "../../look/Sheet";
 import { ASK_MOST } from "../../look/sizing";
 import { fonts, Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
+import { resultPost } from "./challengesView";
 import { commentButton, offersComments } from "./commentsView";
 import { PhotoPages } from "./PhotoPages";
 import type { PhotoFiles } from "./photoFiles";
@@ -84,11 +85,13 @@ interface PostCardProps {
   onPhoto: (index: number) => void;
   /** Pressing a member's picture or name; on their own profile there is nowhere further to go. */
   onPerson?: () => void;
+  /** See the challenge, on the post that says how a challenge finished. */
+  onChallenge?: (challengeId: string) => void;
   /** On a person's own profile: one line of a feed, with no name or box, and its presses behind Post options. */
   inFeed?: boolean;
 }
 
-export function PostCard({ post, gymName, posted, photoUrl, files, photoRound, busy, reactError, onReact, commenting, keptComment, onComments, onAsk, onPhoto, onPerson, inFeed = false }: PostCardProps) {
+export function PostCard({ post, gymName, posted, photoUrl, files, photoRound, busy, reactError, onReact, commenting, keptComment, onComments, onAsk, onPhoto, onPerson, onChallenge, inFeed = false }: PostCardProps) {
   const tag = authorTag(post);
   const hidden = hiddenOwnNote(post, gymName);
   const action = memberPostAction(post);
@@ -142,6 +145,7 @@ export function PostCard({ post, gymName, posted, photoUrl, files, photoRound, b
         </View>
       )}
       {post.body === "" ? null : <Txt colour="text">{post.body}</Txt>}
+      <ChallengeResult post={post} gymName={gymName} {...(onChallenge === undefined ? {} : { onChallenge })} />
       {post.photos.length === 0 ? null : <PostPhotos post={post} photoUrl={photoUrl} files={files} photoRound={photoRound} onPhoto={onPhoto} />}
       <View style={styles.reactions}>
         <Reactions item={post} what="post" busy={busy} onReact={onReact} onPicking={setPicking} />
@@ -208,6 +212,61 @@ export function PostCard({ post, gymName, posted, photoUrl, files, photoRound, b
       </View>
       {inside}
     </Card>
+  );
+}
+
+/** Who won, under the post that says a challenge has ended: the same sentences as its page, read with the post each time. */
+function ChallengeResult({ post, gymName, onChallenge }: { post: GymPost; gymName: string; onChallenge?: (challengeId: string) => void }) {
+  const result = resultPost(post.challengeResult, gymName);
+  if (result === null) return null;
+  return (
+    <View testID="challenge-result" style={styles.result}>
+      <View style={styles.resultHead}>
+        <Icon name="trophy" size={20} colour="gold" />
+        <View style={styles.grow}>
+          <Txt colour="text" style={styles.bold}>
+            {result.headline}
+          </Txt>
+          {result.mine === null ? null : <Txt kind="small">{result.mine}</Txt>}
+        </View>
+      </View>
+      {result.rows.map((row) => (
+        <View key={row.key} accessible accessibilityLabel={row.label} style={styles.resultRow}>
+          <Txt kind="small" colour={row.place === 1 ? "gold" : "textSoft"} style={[styles.bold, styles.resultPlace]}>
+            {row.placeText ?? "–"}
+          </Txt>
+          <View style={styles.grow}>
+            <Txt kind="small" colour="text" numberOfLines={1}>
+              {row.name}
+            </Txt>
+            {row.sub === null ? null : <Txt kind="tiny">{row.sub}</Txt>}
+          </View>
+          {row.mine === null ? null : <Pill label={row.mine} tone="orange" />}
+          {row.reached ? <Icon name="check" size={14} colour="orange" /> : null}
+          {row.number === null ? null : (
+            <Txt kind="small" colour="text" style={styles.bold}>
+              {row.number}
+            </Txt>
+          )}
+        </View>
+      ))}
+      <Txt kind="tiny">{result.facts}</Txt>
+      {result.prize === null ? null : (
+        <Txt kind="small" colour="text">
+          {result.prize}
+        </Txt>
+      )}
+      {result.canOpen && onChallenge !== undefined ? (
+        <Button
+          label="See the challenge"
+          kind="link"
+          style={styles.resultOpen}
+          onPress={() => {
+            onChallenge(result.challengeId);
+          }}
+        />
+      ) : null}
+    </View>
   );
 }
 
@@ -545,6 +604,11 @@ export function PhotoViewer({ viewing, url, files, photoRound, onIndex, onClose 
 }
 
 const styles = StyleSheet.create({
+  result: { gap: 8, padding: 12, borderRadius: 16, borderWidth: 1, borderColor: colours.goldLine, backgroundColor: colours.goldFill },
+  resultHead: { flexDirection: "row", gap: 10 },
+  resultRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  resultPlace: { minWidth: 30 },
+  resultOpen: { alignSelf: "flex-start" },
   box: { padding: 16, gap: 10 },
   // One line of a person's feed: edge to edge, a thin line under it.
   feedLine: { paddingHorizontal: sizes.edge, paddingVertical: 14, gap: 10, borderBottomWidth: 1, borderBottomColor: colours.line },

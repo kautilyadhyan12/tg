@@ -25,6 +25,7 @@ import { usePlaces } from "./places";
 import { placesHeading } from "./placesHeading";
 import { ClassesPage, type ClassesPlace } from "./gym/Classes";
 import { DaysYouCame } from "./gym/DaysYouCame";
+import { ChallengesPage, type ChallengesPlace } from "./gym/Challenges";
 import { EventsPage, type EventsPlace } from "./gym/Events";
 import { LeaderboardPage, type LeaderboardPlace } from "./gym/Leaderboard";
 import { MembershipPage, type MembershipPlace } from "./gym/Membership";
@@ -81,6 +82,8 @@ export function GymScreen() {
   const [eventsAt, setEventsAt] = useState<EventsPlace | null>(null);
   // The place whose Leaderboard page is open over the tab, or null.
   const [boardAt, setBoardAt] = useState<LeaderboardPlace | null>(null);
+  // The place whose Challenges page is open over the tab, or null.
+  const [challengesAt, setChallengesAt] = useState<ChallengesPlace | null>(null);
   // The place whose Personal training page is open over the tab, or null.
   const [ptAt, setPtAt] = useState<PtPlace | null>(null);
   const [membershipAt, setMembershipAt] = useState<MembershipPlace | null>(null);
@@ -259,6 +262,15 @@ export function GymScreen() {
                 }}
               />
               <Button
+                label="Challenges"
+                kind="link"
+                icon="flag"
+                say={`Challenges at ${org.name}`}
+                onPress={() => {
+                  setChallengesAt({ id: org.id, name: org.name, clockFormat: org.clockFormat });
+                }}
+              />
+              <Button
                 label="Personal training"
                 kind="link"
                 icon="dumbbell"
@@ -301,6 +313,12 @@ export function GymScreen() {
         place={boardAt}
         onClose={() => {
           setBoardAt(null);
+        }}
+      />
+      <ChallengesPage
+        place={challengesAt}
+        onClose={() => {
+          setChallengesAt(null);
         }}
       />
       <ClassesPage
