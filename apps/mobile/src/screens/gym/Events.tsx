@@ -34,7 +34,7 @@ import {
   type EventAct,
 } from "./eventsView";
 import { photoFiles, type PhotoFiles } from "./photoFiles";
-import { SignedPhoto } from "./Updates";
+import { SignedPhoto } from "./PostCard";
 
 // A place's events for its member (spec Part 3 §15.4; ROADMAP Stage 5 item 17c-i): every event that has not ended,
 // soonest first, with its poster, booking and the waitlist. A page over the Gym tab, read when it opens and when the

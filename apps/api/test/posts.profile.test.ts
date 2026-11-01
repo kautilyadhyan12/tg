@@ -181,7 +181,7 @@ d("a person's posts on their profile, and the day's photo posts (real Postgres, 
     }
   };
   const errorOf = (res: { body: string }): string => (JSON.parse(res.body) as { error: string }).error;
-  const NOBODY: PersonGymPostsResponse = { posts: [], next: null, total: 0, blocked: false };
+  const NOBODY: PersonGymPostsResponse = { posts: [], next: null, total: 0, blocked: false, commenting: "on", blockedCount: 0 };
   const NOBODY_STAFF = { posts: [], next: null, total: 0 };
 
   beforeAll(async () => {
@@ -235,6 +235,8 @@ d("a person's posts on their profile, and the day's photo posts (real Postgres, 
       const hers = await profile(gym, reader, writer.userId);
       expect(bodies(hers)).toEqual(["Wendy's newest", "Wendy's pinned one", "Wendy's first"]);
       expect(hers.blocked).toBe(false);
+      expect(hers.commenting).toBe("on");
+      expect(hers.blockedCount).toBe(0);
       expect(hers.next).toBeNull();
       // The number beside "Posts" is what the reader is sent: the removed one is not in it.
       expect(hers.total).toBe(3);
@@ -253,7 +255,7 @@ d("a person's posts on their profile, and the day's photo posts (real Postgres, 
       // BLOCKED: the blocker is sent none of it, by the profile either.
       expect((await inject("PUT", `${posts(gym.id)}/${first.id}/block`, blocker.cookies)).statusCode).toBe(200);
       const blockedView = await inject("GET", profilePath(gym, writer.userId), blocker.cookies);
-      expect(JSON.parse(blockedView.body)).toEqual({ posts: [], next: null, total: 0, blocked: true });
+      expect(JSON.parse(blockedView.body)).toEqual({ posts: [], next: null, total: 0, blocked: true, commenting: "on", blockedCount: 1 });
       expect(blockedView.body).not.toMatch(/Wendy/);
       expect((await inject("GET", photoPath(gym, first), blocker.cookies)).statusCode).toBe(404);
       // Nobody else loses anything.
@@ -281,6 +283,12 @@ d("a person's posts on their profile, and the day's photo posts (real Postgres, 
 
       // STAFF read the same posts by whole name, with whether the person is stopped.
       expect((await inject("PUT", `${posts(gym.id)}/stopped/${writer.userId}`, gym.owner.cookies)).statusCode).toBe(200);
+      // Whether the reader may comment is the reader's own: this person is stopped, somebody else is not.
+      expect((await profile(gym, writer, reader.userId)).commenting).toBe("stopped");
+      expect((await profile(gym, reader, writer.userId)).commenting).toBe("on");
+      await sql`UPDATE gyms SET members_can_comment = false WHERE id = ${gym.id}`;
+      expect((await profile(gym, reader, writer.userId)).commenting).toBe("off");
+      await sql`UPDATE gyms SET members_can_comment = true WHERE id = ${gym.id}`;
       const staffView = await staffProfile(gym, gym.owner, writer.userId);
       expect(bodies(staffView)).toEqual(["Wendy's newest", "Wendy's pinned one", "Wendy's first"]);
       expect(staffView.total).toBe(3);

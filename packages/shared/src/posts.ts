@@ -416,6 +416,9 @@ export const personGymPostsResponseSchema = z
     total: z.number().int().nonnegative(),
     /** The reader has blocked this person here, which is why no post of theirs is sent. */
     blocked: z.boolean(),
+    /** Whether the reader may comment here, and how many people they have blocked here, as Updates says. */
+    commenting: gymMemberPostingSchema,
+    blockedCount: z.number().int().nonnegative(),
   })
   .strict();
 export type PersonGymPostsResponse = z.infer<typeof personGymPostsResponseSchema>;

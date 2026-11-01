@@ -584,7 +584,8 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 17c-i. [x] **Events on the phone** — merged 2026-10-31 (PR #415).
       - 17c-ii. **The Leaderboard, Hide me and a person's profile** (split 2026-11-01: the board first).
         - 17c-ii-a. [x] **The Leaderboard, Hide me and Your Rank** — merged 2026-11-01 (PR #421).
-        - 17c-ii-b. [ ] **A person's profile**: their places and posts; a name on Updates and a row of the board open it.
+        - 17c-ii-b. [x] **A person's profile** — merged 2026-11-01 (PR #428).
+        - 17c-ii-c. [ ] **Your own profile picture and background picture** (Kd, 2026-11-01, `rulings/2026-11-01-17c-ii-b.md`), shown on the profile. With the member photo (5b-vi); waits for photo storage.
     - 17d. [ ] **Challenges**, and who won under a challenge's ended post on Updates, with See the challenge.
 18. [ ] **Inbox, Contact the gym, and phone notifications** (spec Part 3 §16.1; Part 6 §6): the class reminder, a place is free, a message, somebody commented on your post or replied to you. Needs Kd's Firebase project.
 19. [ ] **Settings and account**: profile, units, hide me on leaderboards, notification switches that save, change email (Stage 2's 3b-iii), what a gym can see (Stage 1's 8a), download my data, delete account and undo.
@@ -641,7 +642,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 35c. [ ] **The Progress screen**: the charts, the workout calendar, body measurements and weigh-ins, badges, the weekly challenges and the predictions. Waits for items 10 to 12.
 36. [ ] **The weekly plan**: the plan builder on the server (6a), the week screen (6b). Doing a planned workout (6c) is exercise folder 2's item 64. Once the plan names a week's sessions, calories burned joins the starter goals with the plan's own number (RULINGS 2026-10-13).
 37. [ ] **Running** (item 4; Stage 1's 7b): recording by GPS with the screen off, the map, the summary, the run plan, routes.
-38. [ ] **Reminders** for workouts, meals and streaks (the six switches the web drew and never saved); the global board last, as Kd ruled on 2026-11-01 (`rulings/2026-11-01-17c-ii-a.md`): Active days and Running, the server's checks, a stranger's profile. It waits for items 37, 53 and 64.
+38. [ ] **Reminders** for workouts, meals and streaks (the six switches the web drew and never saved); the global board last, as Kd ruled on 2026-11-01 (`rulings/2026-11-01-17c-ii-a.md`): Active days and Running, the server's checks, a stranger's profile, and follow requests for somebody who chose Hide me, seen from outside their gym; Follow with Followers and Following counts everywhere, gyms included (`rulings/2026-11-01-17c-ii-b.md`). It waits for items 18, 37, 53 and 64.
 39. [ ] **Share with your photo** (Kd, 2026-10-18; spec Part 2 §11.8): after a workout, a meal photo or a run, the person takes or picks a photo and the stats are drawn on it, made on the phone and sent through the phone's own share menu. Built once for all three, after items 33 and 37 and exercise folder 2's 64; it brings Part 7 §5's share cards forward from After launch.
 
 **Exercise folder 1 — `D:\Projects\ai-home-gym-ex1`: the camera and the form rules** (spec Part 2 §11).
