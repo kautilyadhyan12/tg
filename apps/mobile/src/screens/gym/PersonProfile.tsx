@@ -33,8 +33,8 @@ import { couldNotRead, missingThing, photoPath, postedText, reactionPath, withPa
 
 export type { ProfilePerson } from "./personView";
 
-// A person's profile, for another member of their gym (spec Part 3 §15.5, §15.2): a picture across the top with their
-// round mark over its edge, a row of numbers, then their posts as a feed. The server sends a hidden person's places to
+// A person's profile, for another member of their gym (spec Part 3 §15.5, §15.2): a picture across the top, their round
+// mark over its edge with the numbers beside it, the name under them, then their posts as one feed. The server sends a hidden person's places to
 // nobody and a blocked or departed person's posts to nobody; the page draws only what was answered about this person.
 // Read when it opens and when the app comes back.
 
@@ -280,31 +280,33 @@ function Body({ place, person, period, shared, onClose, onChanged, top, bottom }
         ListHeaderComponent={
           <View>
             <PictureTop picture="cave" tall={PICTURE_TALL} />
-            <View style={styles.who}>
+            <View style={styles.markRow}>
               <View style={styles.mark}>
                 <Txt kind="h2" colour="orange" numberOfLines={1}>
                   {person.initials}
                 </Txt>
               </View>
+              <View testID="person-stats" accessibilityLabel={`${person.name} in numbers`} style={styles.stats}>
+                {stats.map((stat) => (
+                  <View key={stat.key} testID={`stat-${stat.key}`} style={styles.stat}>
+                    <Txt kind="h3" style={styles.centre}>
+                      {stat.number}
+                    </Txt>
+                    <Txt kind="small" colour="text" style={styles.centre}>
+                      {stat.label}
+                    </Txt>
+                    {stat.under === null ? null : (
+                      <Txt kind="tiny" style={styles.centre}>
+                        {stat.under}
+                      </Txt>
+                    )}
+                  </View>
+                ))}
+              </View>
+            </View>
+            <View style={styles.who}>
               <Txt kind="h2">{person.name}</Txt>
               <Txt kind="small">{`Member at ${place.name}`}</Txt>
-            </View>
-            <View testID="person-stats" accessibilityLabel={`${person.name} in numbers`} style={styles.stats}>
-              {stats.map((stat) => (
-                <View key={stat.key} testID={`stat-${stat.key}`} style={styles.stat}>
-                  <Txt kind="h2" style={styles.centre}>
-                    {stat.number}
-                  </Txt>
-                  <Txt kind="small" colour="text" style={styles.centre}>
-                    {stat.label}
-                  </Txt>
-                  {stat.under === null ? null : (
-                    <Txt kind="tiny" style={styles.centre}>
-                      {stat.under}
-                    </Txt>
-                  )}
-                </View>
-              ))}
             </View>
             {places.kind !== "failed" ? null : (
               <View style={styles.saying}>
@@ -358,13 +360,16 @@ function Body({ place, person, period, shared, onClose, onChanged, top, bottom }
           </View>
         }
         renderItem={({ item: post }) => (
-          <View style={styles.card}>
+          <View>
             {gone[post.id] === true ? (
-              <Card testID={`post-gone-${post.id}`} style={styles.box}>
-                <Txt>{GYM_POST_WORDS.not_found}</Txt>
-              </Card>
+              <View style={styles.card}>
+                <Card testID={`post-gone-${post.id}`} style={styles.box}>
+                  <Txt>{GYM_POST_WORDS.not_found}</Txt>
+                </Card>
+              </View>
             ) : (
               <PostCard
+                inFeed
                 post={post}
                 gymName={place.name}
                 posted={postedText(post.createdAt, now, zone, place.clockFormat)}
@@ -483,14 +488,13 @@ function Body({ place, person, period, shared, onClose, onChanged, top, bottom }
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: colours.page },
   grow: { flex: 1 },
-  list: { gap: sizes.gap },
-  who: { paddingHorizontal: sizes.edge, gap: 4, marginTop: -MARK / 2 },
+  list: {},
+  markRow: { flexDirection: "row", alignItems: "flex-start", gap: 12, paddingHorizontal: sizes.edge, marginTop: -MARK / 2 },
+  who: { paddingHorizontal: sizes.edge, paddingTop: 10, gap: 2 },
   mark: {
     minWidth: MARK,
     minHeight: MARK,
-    alignSelf: "flex-start",
     paddingHorizontal: 6,
-    marginBottom: 8,
     borderRadius: sizes.round,
     borderWidth: 3,
     borderColor: colours.page,
@@ -498,15 +502,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  stats: { flexDirection: "row", flexWrap: "wrap", paddingHorizontal: sizes.edge, paddingTop: 16, rowGap: 12 },
-  stat: { flexGrow: 1, flexBasis: 72, gap: 2, alignItems: "center" },
+  // Below the picture, beside the mark's lower half.
+  stats: { flex: 1, flexDirection: "row", flexWrap: "wrap", paddingTop: MARK / 2 + 6, rowGap: 10 },
+  stat: { flexGrow: 1, flexBasis: 58, gap: 1, alignItems: "center" },
   centre: { textAlign: "center" },
   saying: { paddingHorizontal: sizes.edge, paddingTop: 8, alignItems: "flex-start" },
-  line: { height: 1, backgroundColor: colours.line, marginTop: 16 },
-  top: { paddingHorizontal: sizes.edge, paddingTop: sizes.gap, gap: sizes.gap },
+  line: { height: 1, backgroundColor: colours.line, marginTop: 14, marginBottom: 2 },
+  top: { paddingHorizontal: sizes.edge, gap: sizes.gap },
   box: { padding: 16, gap: 10 },
   card: { paddingHorizontal: sizes.edge },
-  more: { paddingHorizontal: sizes.edge, alignSelf: "center", alignItems: "center", gap: 8 },
+  more: { paddingHorizontal: sizes.edge, paddingTop: sizes.gap, alignSelf: "center", alignItems: "center", gap: 8 },
   bar: { position: "absolute", top: 0, left: 0, right: 0, justifyContent: "flex-end", paddingLeft: sizes.edge + sizes.press + 12, paddingRight: sizes.edge, paddingBottom: 8 + (sizes.press - 24) / 2, backgroundColor: colours.page, borderBottomWidth: 1, borderBottomColor: colours.line },
   back: {
     position: "absolute",

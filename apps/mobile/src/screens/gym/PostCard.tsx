@@ -84,13 +84,16 @@ interface PostCardProps {
   onPhoto: (index: number) => void;
   /** Pressing a member's picture or name; on their own profile there is nowhere further to go. */
   onPerson?: () => void;
+  /** On a person's own profile: one line of a feed, with no name or box, and its presses behind Post options. */
+  inFeed?: boolean;
 }
 
-export function PostCard({ post, gymName, posted, photoUrl, files, photoRound, busy, reactError, onReact, commenting, keptComment, onComments, onAsk, onPhoto, onPerson }: PostCardProps) {
+export function PostCard({ post, gymName, posted, photoUrl, files, photoRound, busy, reactError, onReact, commenting, keptComment, onComments, onAsk, onPhoto, onPerson, inFeed = false }: PostCardProps) {
   const tag = authorTag(post);
   const hidden = hiddenOwnNote(post, gymName);
   const action = memberPostAction(post);
   const [picking, setPicking] = useState(false);
+  const [options, setOptions] = useState(false);
   const comments = commentButton(post.commentCount, keptComment);
   const who = (
     <>
@@ -108,18 +111,28 @@ export function PostCard({ post, gymName, posted, photoUrl, files, photoRound, b
       </View>
     </>
   );
-  return (
-    <Card testID={`post-${post.id}`} style={styles.box}>
-      <View style={styles.row}>
-        {onPerson !== undefined && canOpenPerson(post) ? (
-          <Pressable testID={`person-open-${post.id}`} accessibilityRole="button" accessibilityLabel={personLink(post)} onPress={onPerson} style={[styles.row, styles.grow]}>
-            {who}
-          </Pressable>
-        ) : (
-          who
-        )}
-        {post.pinned ? <Pill label="Pinned" tone="orange" icon="pin" /> : null}
-      </View>
+  const ask = (kind: Asking["kind"]) => {
+    setOptions(false);
+    onAsk(kind);
+  };
+  const presses = (
+    <>
+      {action === "remove" ? <Button label="Remove" kind="quiet" icon="trash" say="Remove your post" onPress={() => { ask("remove"); }} /> : null}
+      {action === "report" ? <Button label="Report" kind="quiet" icon="flag" say={`Report this post by ${authorName(post, gymName)}`} onPress={() => { ask("report"); }} /> : null}
+      {action === "reported" ? (
+        <View style={styles.reported}>
+          <Icon name="flag" size={14} colour="textFaint" />
+          <Txt kind="small" colour="textFaint">
+            Reported
+          </Txt>
+        </View>
+      ) : null}
+      {canBlock(post) ? <Button label="Block" kind="quiet" icon="ban" say={`Block ${authorName(post, gymName)}`} onPress={() => { ask("block"); }} /> : null}
+    </>
+  );
+  const hasPresses = action !== null || canBlock(post);
+  const inside = (
+    <>
       {hidden === null ? null : (
         <View style={styles.note}>
           <Icon name="eyeoff" size={14} colour="orange" />
@@ -140,27 +153,60 @@ export function PostCard({ post, gymName, posted, photoUrl, files, photoRound, b
             </Txt>
           </Pressable>
         )}
-        {action === null && !canBlock(post) ? null : (
-          <View style={styles.actions}>
-            {action === "remove" ? (
-              <Button label="Remove" kind="quiet" icon="trash" say="Remove your post" onPress={() => { onAsk("remove"); }} />
-            ) : action === "report" ? (
-              <Button label="Report" kind="quiet" icon="flag" say={`Report this post by ${authorName(post, gymName)}`} onPress={() => { onAsk("report"); }} />
-            ) : action === "reported" ? (
-              <View style={styles.reported}>
-                <Icon name="flag" size={14} colour="textFaint" />
-                <Txt kind="small" colour="textFaint">
-                  Reported
-                </Txt>
-              </View>
-            ) : null}
-            {canBlock(post) ? (
-              <Button label="Block" kind="quiet" icon="ban" say={`Block ${authorName(post, gymName)}`} onPress={() => { onAsk("block"); }} />
-            ) : null}
-          </View>
-        )}
+        {inFeed || !hasPresses ? null : <View style={styles.actions}>{presses}</View>}
       </View>
       {reactError === null ? null : <Txt colour="badText">{reactError}</Txt>}
+    </>
+  );
+  if (inFeed) {
+    return (
+      <View testID={`post-${post.id}`} style={styles.feedLine}>
+        <View style={styles.row}>
+          <Txt kind="small" style={styles.grow}>
+            {posted}
+          </Txt>
+          {post.pinned ? <Pill label="Pinned" tone="orange" icon="pin" /> : null}
+          {hasPresses ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Post options"
+              hitSlop={4}
+              onPress={() => {
+                setOptions(true);
+              }}
+              style={styles.options}
+            >
+              <Icon name="more" size={18} colour="textSoft" />
+            </Pressable>
+          ) : null}
+        </View>
+        {inside}
+        <Sheet
+          open={options}
+          title="Post options"
+          place="middle"
+          onClose={() => {
+            setOptions(false);
+          }}
+        >
+          <View style={styles.ask}>{presses}</View>
+        </Sheet>
+      </View>
+    );
+  }
+  return (
+    <Card testID={`post-${post.id}`} style={styles.box}>
+      <View style={styles.row}>
+        {onPerson !== undefined && canOpenPerson(post) ? (
+          <Pressable testID={`person-open-${post.id}`} accessibilityRole="button" accessibilityLabel={personLink(post)} onPress={onPerson} style={[styles.row, styles.grow]}>
+            {who}
+          </Pressable>
+        ) : (
+          who
+        )}
+        {post.pinned ? <Pill label="Pinned" tone="orange" icon="pin" /> : null}
+      </View>
+      {inside}
     </Card>
   );
 }
@@ -500,6 +546,9 @@ export function PhotoViewer({ viewing, url, files, photoRound, onIndex, onClose 
 
 const styles = StyleSheet.create({
   box: { padding: 16, gap: 10 },
+  // One line of a person's feed: edge to edge, a thin line under it.
+  feedLine: { paddingHorizontal: sizes.edge, paddingVertical: 14, gap: 10, borderBottomWidth: 1, borderBottomColor: colours.line },
+  options: { minWidth: sizes.press, minHeight: sizes.press, alignItems: "center", justifyContent: "center" },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },
   grow: { flex: 1 },
   bold: { fontFamily: fonts.bold },

@@ -260,6 +260,7 @@ describe("the worst thing: somebody is shown what they chose to keep, or what is
       },
     });
     await openTom(server.ask);
+    await fireEvent.press(await profilePage().findByLabelText("Post options"));
     await fireEvent.press(await profilePage().findByLabelText("Block Tom B."));
     await fireEvent.press(await screen.findByText("Block Tom B."));
     expect(await profilePage().findByText("You've blocked Tom B., so their posts aren't shown.")).toBeTruthy();
@@ -392,7 +393,8 @@ describe("the page", () => {
     await openTom(ask);
     await profilePage().findByText("Words of " + P1);
     const card = within(profilePage().getByTestId(`post-${P1}`));
-    await fireEvent.press(card.getByLabelText("Remove your post"));
+    await fireEvent.press(card.getByLabelText("Post options"));
+    await fireEvent.press(await screen.findByLabelText("Remove your post"));
     await fireEvent.press(await screen.findByText("Remove post"));
     await screen.findByText("Your post has been removed.");
     expect(within(profilePage().getByTestId("stat-posts")).getByText("1")).toBeTruthy();
