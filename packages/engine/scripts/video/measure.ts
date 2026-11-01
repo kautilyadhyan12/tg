@@ -76,6 +76,8 @@ export interface VideoReport {
     downAt: number;
     /** "Down" also needs the other knee, steadied, under this; null when it does not. */
     otherKneeUnder: number | null;
+    /** A rep finishes only with the trunk within this many degrees of upright; null when not asked. */
+    uprightUnder: number | null;
     decisions: FrameResult[];
     reps: MeasuredRep[];
     summary: SetSummary;
@@ -174,6 +176,7 @@ function measureRules(
     upAt: config.rep.upAt,
     downAt: config.rep.downAt,
     otherKneeUnder: config.rep.bilateralGate ? BILATERAL_ENGAGE_ANGLE : null,
+    uprightUnder: config.rep.uprightUnder ?? null,
     decisions: result.frameResults,
     reps,
     summary: result.summary,
@@ -285,7 +288,8 @@ export function summaryLines(report: VideoReport): string[] {
       lines.push(`These are ${rules.exercise}'s rules on a video recorded as ${report.traceExercise}.`);
     }
     const other = rules.otherKneeUnder === null ? "" : ` with the other knee under ${String(rules.otherKneeUnder)}`;
-    lines.push(`Counts on ${rules.metric}: down below ${String(rules.downAt)}${other}, up above ${String(rules.upAt)}. View: ${rules.summary.view}.`);
+    const upright = rules.uprightUnder === null ? "" : ` with the body within ${String(rules.uprightUnder)} degrees of upright`;
+    lines.push(`Counts on ${rules.metric}: down below ${String(rules.downAt)}${other}, up above ${String(rules.upAt)}${upright}. View: ${rules.summary.view}.`);
     for (const r of rules.reps) {
       lines.push(
         `  rep ${String(r.rep)}: lowest ${String(r.lowest)}, score ${String(r.score)}, ${(r.durationMs / 1000).toFixed(1)} s` +
