@@ -42,6 +42,7 @@ import {
   onboardingResponseSchema,
   UNANSWERED_HEALTH_SCREENING,
 } from "./schemas.js";
+import { genderSchema, type Gender } from "@app/shared";
 import type {
   ConsentListResponse,
   ConsentRecord,
@@ -122,6 +123,12 @@ export async function getPlanHealth(sql: repo.SqlOrTx, userId: string): Promise<
 export async function getUserFoodAnswers(sql: Sql, userId: string): Promise<{ diet: Diet | null; mealsPerDay: number | null }> {
   const profile = await repo.getFitnessProfile(sql, userId);
   return { diet: dietSchema.nullable().parse(profile?.diet ?? null), mealsPerDay: mealsPerDaySchema.nullable().parse(profile?.mealsPerDay ?? null) };
+}
+
+/** Setup's age and gender, for the daily amounts beside the food figures (Stage 5 34b): null until answered. */
+export async function getUserAgeAndGender(sql: Sql, userId: string): Promise<{ age: number | null; gender: Gender | null }> {
+  const profile = await repo.getFitnessProfile(sql, userId);
+  return { age: profile?.age ?? null, gender: genderSchema.nullable().parse(profile?.gender ?? null) };
 }
 
 /** Setup's fitness level, for the weekly challenges (35b): null until answered.

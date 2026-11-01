@@ -108,6 +108,9 @@ export function sumMoreNutrients(items: readonly { more?: MoreNutrients | undefi
   };
 }
 
+/** A packaged product's food name: `off_` what a search names it, `pack_` what a scanned barcode does. */
+export const isPackagedCanonical = (canonical: string): boolean => /^(?:off|pack)_/.test(canonical);
+
 /** The measure a meal item was logged by (ROADMAP 7a-iv-a): the measure's id and
  *  name as the food's list gave them when it was logged — or "dish" and the
  *  person's own name for a saved dish — and how many of it. The item's grams are
