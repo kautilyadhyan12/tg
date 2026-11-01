@@ -32,6 +32,18 @@ export function mealFile(userId: string): TextStore {
   };
 }
 
+/** A photo's file in the app's own cache, once it has been read: the camera's, the gallery's copy, or
+ *  the small one drawn from it. A file anywhere else is the person's own and is left alone. */
+export function removeCachedPhoto(uri: string): void {
+  try {
+    if (!uri.includes("/cache/")) return;
+    const file = new File(uri);
+    if (file.exists) file.delete();
+  } catch {
+    // Not kept for long by the phone either; nothing a person can do about it.
+  }
+}
+
 /** A person's photo meal not yet saved (ROADMAP Stage 5 33b-i): one file a person, written whole,
  *  and removed once the meal is saved or thrown away (an empty write). */
 export function photoSheetFile(userId: string): TextStore {

@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   check,
+  doublePrecision,
   index,
   integer,
   jsonb,
@@ -117,5 +118,36 @@ export const bodyMeasurements = pgTable(
   (t) => [
     index("body_measurements_user_measured_idx").on(t.userId, t.measuredAt.desc()),
     check("body_measurements_source_check", sql`${t.source} IN ('manual','self_reported')`),
+  ],
+);
+
+/** A person's own food read from a pack's label (ROADMAP Stage 5 33b-iii-c), per 100 g or ml. */
+export const memberLabelFoods = pgTable(
+  "member_label_foods",
+  {
+    id: uuid("id").primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    code: text("code"),
+    name: text("name").notNull(),
+    unit: text("unit").notNull(),
+    kcal: doublePrecision("kcal").notNull(),
+    proteinG: doublePrecision("protein_g").notNull(),
+    carbsG: doublePrecision("carbs_g").notNull(),
+    fatG: doublePrecision("fat_g").notNull(),
+    servingAmount: doublePrecision("serving_amount"),
+    contains: text("contains").array().notNull().default(sql`'{}'`),
+    mayContain: text("may_contain").array().notNull().default(sql`'{}'`),
+    createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    removedAt: timestamp("removed_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("member_label_foods_user_idx").on(t.userId),
+    uniqueIndex("member_label_foods_user_code_idx").on(t.userId, t.code).where(sql`${t.code} IS NOT NULL AND ${t.removedAt} IS NULL`),
+    check("member_label_foods_unit_check", sql`${t.unit} IN ('g','ml')`),
+    check("member_label_foods_kcal_check", sql`${t.kcal} >= 0 AND ${t.kcal} <= 1000`),
+    check("member_label_foods_macros_check", sql`${t.proteinG} BETWEEN 0 AND 100 AND ${t.carbsG} BETWEEN 0 AND 100 AND ${t.fatG} BETWEEN 0 AND 100`),
   ],
 );

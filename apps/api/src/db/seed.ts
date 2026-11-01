@@ -28,8 +28,8 @@ import {
 // Part 4 §3.3 canonical entitlements JSON — every key present, defaults explicit.
 const proEntitlements = {
   exercises: { mode: "all" },
-  // 20/day — Kd, DECISIONS :17366 §1.
-  meal_scan: { window: "day", limit: 20 },
+  // 15 a day (Kd, rulings/2026-10-31-33b-iii-c.md).
+  meal_scan: { window: "day", limit: 15 },
   route_gen: { window: "day", limit: 2 },
   history_days: -1,
   programs: "all",
@@ -38,9 +38,9 @@ const proEntitlements = {
 } as const;
 
 /** What a MEMBER of a paying gym gets. **One difference from the paid consumer
- *  block and one only: 7 scans a day instead of 20** (Kd, RULINGS 2026-09-15,
+ *  block and one only: 7 scans a day instead of 15** (Kd, RULINGS 2026-09-15,
  *  raised from the 5 of :17366 §1 when the gym price book was rebuilt to cover
- *  every member scanning 7 times a day at the scanner's measured cost; 20/day
+ *  every member scanning 7 times a day at the scanner's measured cost; 20/day then
  *  for gym members puts bands underwater, because an individual pays ~$10 a
  *  head and a gym far less). **The gap is an UPSELL, not a defect**:
  *  `mergeEntitlements` hands a member who also buys the individual plan the
@@ -53,9 +53,9 @@ const gymMemberEntitlements = {
 
 const freeEntitlements = {
   exercises: { mode: "tier", tier: "T1" },
-  // One meal photo a day without a subscription (Kd, RULINGS 2026-09-22: "PER
-  // DAY 1 MEAL"; was 2).
-  meal_scan: { window: "day", limit: 1 },
+  // Three photo scans a month without a subscription (Kd, rulings/2026-10-31-33b-iii-c.md; was
+  // one a day).
+  meal_scan: { window: "month", limit: 3 },
   route_gen: { window: "month", limit: 2 },
   history_days: 90, // read-gate, not deletion (Part 4 §0.2)
   programs: "starter",

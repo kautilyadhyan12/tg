@@ -6,11 +6,12 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import type { z } from "zod";
-import { MEAL_PHOTO_MAX_BYTES, barcodeParamSchema, cleanPhoto } from "@app/shared";
+import { MEAL_PHOTO_MAX_BYTES, barcodeParamSchema, cleanPhoto, labelFoodParamSchema, labelFoodSaveSchema } from "@app/shared";
 import type { AppConfig } from "../../config.js";
+import { REQUEST_TIMEOUT_MS } from "../../requestTimeout.js";
 import type { RedisLike } from "../../redis.js";
 import { createDualRateLimit } from "../auth/rateLimit.js";
-import { requireQuota } from "../quotas/service.js";
+import { quotaLeft, requireQuota, resetsAt } from "../quotas/service.js";
 import { createOpenFoodFactsProvider, type FoodSearchProvider } from "./openfoodfacts.adapter.js";
 import {
   analyzeMealPhotoRequestSchema,
@@ -33,7 +34,7 @@ import {
 } from "./schemas.js";
 import * as dietPlan from "./dietPlanService.js";
 import * as service from "./service.js";
-import { createMealMatchChecker, createMealVisionProvider, type MatchChecker, type VisionProvider } from "./vision.adapter.js";
+import { createLabelReader, createMealMatchChecker, createMealVisionProvider, type LabelReader, type MatchChecker, type VisionProvider } from "./vision.adapter.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -50,6 +51,7 @@ export interface NutritionRouteOverrides {
   /** null switches the match check off: the foods are priced by the tables alone. */
   matchChecker?: MatchChecker | null;
   foodSearchProvider?: FoodSearchProvider;
+  labelReader?: LabelReader;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -81,6 +83,18 @@ function parse<S extends z.ZodTypeAny>(
   }
   return parsed.data;
 }
+
+/** Photos being received at one moment, as memory is what a held body costs: 60 of 14 MB ended a server
+ *  with a 1 GB heap. The phone sends about 100 KB and the browser the file as it is, so what is told to
+ *  be small (the limit below is held by the server) has far more places and a far shorter deadline, and
+ *  somebody holding big bodies open never stands in a phone's way. One address cannot fill either. */
+const SMALL_BODY_BYTES = 2 * 1024 * 1024;
+const SMALL_BODIES_AT_ONCE = 150;
+const LARGE_BODIES_AT_ONCE = 20;
+const BODIES_FROM_ONE_ADDRESS = 10;
+const SMALL_BODY_DEADLINE_MS = 30_000;
+const LATE_BODY_WAIT_SECONDS = 180;
+const lateKey = (userId: string): string => `photo-late:${userId}`;
 
 const notFound = (req: FastifyRequest, reply: FastifyReply) =>
   reply.status(404).send({ error: "not_found", message: "Resource not found", requestId: req.id });
@@ -118,6 +132,7 @@ export function registerNutritionRoutes(
     redis: deps.redis,
     vision: overrides.visionProvider ?? createMealVisionProvider(deps.config),
     matchChecker: overrides.matchChecker === undefined ? createMealMatchChecker(deps.config) : overrides.matchChecker,
+    labels: overrides.labelReader ?? createLabelReader(deps.config),
     visionModel: deps.config.MEAL_VISION_MODEL,
     foods: overrides.foodSearchProvider ?? createOpenFoodFactsProvider(),
     log: app.log,
@@ -140,6 +155,14 @@ export function registerNutritionRoutes(
     }
     const input = parse(analyzeMealPhotoRequestSchema, req.body, req, reply);
     if (input === null) return;
+    // No scans left: answered before any work on the photo. A retake is free, so it is not asked of it.
+    if (input.retakeToken === undefined) {
+      const scans = await quotaLeft("meal_scan", { sql: deps.sql, redis: deps.redis }, authedUserId(req));
+      if (scans.left === 0) {
+        void reply.status(429).send({ error: "quota_exceeded", message: `You've used all ${String(scans.limit)} meal_scan uses for this ${scans.window}.`, resetsAt: resetsAt(scans.window, new Date()), requestId: req.id });
+        return;
+      }
+    }
     if (input.imageBase64.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(input.imageBase64)) {
       void reply.status(400).send({ error: "invalid_image", message: "Image must be valid base64.", requestId: req.id });
       return;
@@ -173,9 +196,64 @@ export function registerNutritionRoutes(
     if (req.nutritionUsedRetake !== true) await quota(req, reply);
   };
 
+  // A photo is the biggest thing anyone sends, and holding it costs the server before any check that
+  // runs on a body. So who is asking is settled before the body is read: a stranger's never is. One
+  // person sends one body at a time, at most this many a minute; a real meal takes far longer.
+  const photoLimit = createDualRateLimit({
+    name: "nutrition_photo",
+    max: 20,
+    ipMax: null,
+    windowMs: 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
+  const sending = new Map<string, { who: string; from: string; small: boolean; timer: ReturnType<typeof setTimeout> }>();
+  const oneBodyAtATime = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    const length = Number(req.headers["content-length"]);
+    const small = Number.isFinite(length) && length <= SMALL_BODY_BYTES;
+    if ((await deps.redis.get(lateKey(authedUserId(req)))) !== null) {
+      await reply.status(429).send({ error: "rate_limited", message: "Too many requests. Please try again shortly.", requestId: req.id });
+      return;
+    }
+    const held = [...sending.values()];
+    const full = held.some((b) => b.who === authedUserId(req))
+      || held.filter((b) => b.from === req.ip).length >= BODIES_FROM_ONE_ADDRESS
+      || held.filter((b) => b.small === small).length >= (small ? SMALL_BODIES_AT_ONCE : LARGE_BODIES_AT_ONCE);
+    if (full) {
+      await reply.status(429).send({ error: "rate_limited", message: "Too many requests. Please try again shortly.", requestId: req.id });
+      return;
+    }
+    // A body that has not arrived by its deadline is closed, and only then is its place given up.
+    const timer = setTimeout(() => {
+      sending.delete(req.id);
+      req.raw.destroy();
+      // Holding a body open then costs a fresh account each time. Only the account: an address may be a
+      // whole gym's. Short, as a phone whose signal died mid-photo lands here too.
+      void deps.redis.setex(lateKey(authedUserId(req)), LATE_BODY_WAIT_SECONDS, "1");
+    }, small ? SMALL_BODY_DEADLINE_MS : REQUEST_TIMEOUT_MS);
+    timer.unref();
+    sending.set(req.id, { who: authedUserId(req), from: req.ip, small, timer });
+  };
+  const bodyArrived = async (req: FastifyRequest): Promise<void> => {
+    const mine = sending.get(req.id);
+    if (mine !== undefined) {
+      clearTimeout(mine.timer);
+      sending.delete(req.id);
+    }
+    await Promise.resolve();
+  };
+  const photoRoute = {
+    bodyLimit: 14 * 1024 * 1024 + 1024,
+    onRequest: [app.authenticate, photoLimit, oneBodyAtATime],
+    preValidation: [bodyArrived],
+    onResponse: [bodyArrived],
+    onRequestAbort: [bodyArrived],
+    preHandler: [validateScan, meter],
+  };
+
   app.post(
     "/v1/nutrition/analyze-photo",
-    { bodyLimit: 14 * 1024 * 1024 + 1024, preHandler: [app.authenticate, validateScan, meter] },
+    photoRoute,
     async (req, reply) => {
       const input = req.nutritionScanInput;
       if (input === undefined) throw new Error("scan validation did not run");
@@ -205,6 +283,38 @@ export function registerNutritionRoutes(
         throw err;
       }
     },
+  );
+
+  // A pack's label (ROADMAP 33b-iii-c): the same checks and meter as a meal photo, and one scan counted.
+  app.post(
+    "/v1/nutrition/labels/read",
+    photoRoute,
+    async (req, reply) => {
+      const input = req.nutritionScanInput;
+      if (input === undefined) throw new Error("scan validation did not run");
+      const quotaKey = req.nutritionScanQuotaKey;
+      const paidWith: service.ScanPaidWith | null =
+        req.nutritionUsedRetake === true ? { retake: true } : quotaKey === undefined ? null : { quotaKey };
+      if (paidWith === null) throw new Error("the scan meter did not run");
+      try {
+        return await reply.status(200).send(await service.readLabel(nutritionDeps, authedUserId(req), input.imageBase64, input.mimeType, paidWith, req.id));
+      } catch (err) {
+        if (err instanceof service.ScanFailedError) {
+          return await reply.status(err.statusCode).send({
+            error: err.code,
+            message: err.message,
+            ...(err.retakeToken === null ? {} : { retakeToken: err.retakeToken }),
+            requestId: req.id,
+          });
+        }
+        throw err;
+      }
+    },
+  );
+
+  /** How many photo scans the person has left: their own, from their own session. */
+  app.get("/v1/nutrition/photo-scans", { preHandler: [app.authenticate] }, async (req, reply) =>
+    reply.send(await quotaLeft("meal_scan", { sql: deps.sql, redis: deps.redis }, authedUserId(req))),
   );
 
   /** The macro rings' daily calories and macros: the person's own plan, from
@@ -294,10 +404,36 @@ export function registerNutritionRoutes(
   app.get("/v1/nutrition/barcode/:code", { preHandler: [app.authenticate, barcodeLimit] }, async (req, reply) => {
     const p = parse(barcodeParamSchema, req.params, req, reply);
     if (p === null) return;
-    return reply.send(await service.barcodeLookup(nutritionDeps, p.code));
+    return reply.send(await service.barcodeLookup(nutritionDeps, authedUserId(req), p.code));
   });
 
   /** The person's last different foods, each at the amount they last had (ROADMAP 32b-ii-a). */
+  // What a person checked against a pack. Only stops a script: saving costs no scan.
+  const labelLimit = createDualRateLimit({
+    name: "nutrition_label_save",
+    max: 60,
+    ipMax: null,
+    windowMs: 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
+  app.get("/v1/nutrition/labels", { preHandler: [app.authenticate, labelLimit] }, async (req, reply) =>
+    reply.send(await service.labelFoodsOf(nutritionDeps, authedUserId(req))),
+  );
+  app.put("/v1/nutrition/labels/:id", { preHandler: [app.authenticate, labelLimit] }, async (req, reply) => {
+    const p = parse(labelFoodParamSchema, req.params, req, reply);
+    if (p === null) return;
+    const body = parse(labelFoodSaveSchema, req.body, req, reply);
+    if (body === null) return;
+    const saved = await service.saveLabelFood(nutritionDeps, authedUserId(req), p.id, body);
+    return saved === null ? notFound(req, reply) : reply.send(saved);
+  });
+  app.delete("/v1/nutrition/labels/:id", { preHandler: [app.authenticate, labelLimit] }, async (req, reply) => {
+    const p = parse(labelFoodParamSchema, req.params, req, reply);
+    if (p === null) return;
+    return (await service.removeLabelFood(nutritionDeps, authedUserId(req), p.id)) ? reply.status(204).send() : notFound(req, reply);
+  });
+
   app.get("/v1/nutrition/foods/recent", { preHandler: [app.authenticate] }, async (req, reply) => {
     return reply.send({ items: await service.recentFoodsOf(nutritionDeps, authedUserId(req)) });
   });

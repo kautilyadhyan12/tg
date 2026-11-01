@@ -289,6 +289,27 @@ describe("the worst thing: a meal photo never leaves the phone with where or whe
 });
 
 describe("a meal from a photo", () => {
+  it("signing out on purpose removes the kept photo: the next person to hold the phone is not its owner", async () => {
+    const phone: Phone = { meals: [], scans: [] };
+    const photos = files();
+    await openFood(phone, { meals: files(), photos });
+    await fireEvent.press(await screen.findByRole("button", { name: "Scan food" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Take photo" }));
+    await screen.findByText("Toast and eggs");
+    await waitFor(() => { expect([...photos.kept.values()].some((text) => text.length > 0)).toBe(true); });
+    const closes = await screen.findAllByRole("button", { name: "Close" });
+    const close = closes[0];
+    if (close === undefined) throw new Error("no Close");
+    await fireEvent.press(close);
+    await fireEvent.press(await screen.findByRole("tab", { name: "Me" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Sign out" }));
+    const asks = await screen.findAllByRole("button", { name: "Sign out" });
+    const ask = asks[asks.length - 1];
+    if (ask === undefined) throw new Error("no Sign out");
+    await fireEvent.press(ask);
+    await waitFor(() => { expect([...photos.kept.values()].every((text) => text === "")).toBe(true); });
+  });
+
   it("opens the live camera at once, and saves the scan's foods once to the meal picked", async () => {
     const phone: Phone = { meals: [], scans: [] };
     const photos = files();
@@ -385,7 +406,7 @@ describe("a scan that did not read the photo", () => {
     const later = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
     await openFood({ meals: [], scans: [() => refusal(429, "quota_exceeded", "You've used all 3 meal_scan uses for this month.", { resetsAt: later.toISOString() })] });
     await takePhoto();
-    expect(await screen.findByText(`You’ve used all your meal scans. More on ${String(later.getDate())} ${MONTH_NAMES[later.getMonth()] ?? ""}.`)).toBeTruthy();
+    expect(await screen.findByText(`You’ve used all your photo scans. More on ${String(later.getDate())} ${MONTH_NAMES[later.getMonth()] ?? ""}.`)).toBeTruthy();
     expect(screen.queryByText(/meal_scan/)).toBeNull();
     await fireEvent.press(screen.getByRole("button", { name: "Search food instead" }));
     const section = mealTypeName(sectionOf({ mealType: null, takenAt: new Date().toISOString() }));

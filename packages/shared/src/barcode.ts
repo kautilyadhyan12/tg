@@ -81,6 +81,10 @@ export const barcodeReplySchema = z.discriminatedUnion("status", [
     /** Whose words the three lists are, for the credit: USDA keeps none. */
     allergensFrom: z.literal("openfoodfacts").nullable(),
     check: packagedCheckSchema,
+    /** Set where this is the person's own saved label, not a list's product. */
+    labelId: z.string().uuid().optional(),
+    /** When that label was last saved: sent back with a change to it. */
+    labelSeen: z.string().optional(),
   }).strict(),
   z.object({ status: z.literal("not_found"), code: z.string() }).strict(),
   z.object({ status: z.literal("store_only") }).strict(),
@@ -88,6 +92,9 @@ export const barcodeReplySchema = z.discriminatedUnion("status", [
   z.object({ status: z.literal("bad_code") }).strict(),
 ]);
 export type BarcodeReply = z.infer<typeof barcodeReplySchema>;
+
+/** A person's saved labels, newest first: the way back to one with no barcode. */
+export const labelFoodsSchema = z.object({ items: z.array(barcodeReplySchema) }).strict();
 
 // ── Open Food Facts' files ───────────────────────────────────────────────────
 

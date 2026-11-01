@@ -6,7 +6,7 @@ import {
   Sparkles, Check, Tag, Pencil, ChevronDown,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { MEAL_SCAN_SAVE_SECONDS, PHOTO_SCAN_CAUTION, mealTypeAtHour } from '@app/shared';
+import { MEAL_SCAN_SAVE_SECONDS, PHOTO_PRIVACY_LINE, PHOTO_SCAN_CAUTION, mealTypeAtHour } from '@app/shared';
 import { nutritionService, composeAddIngredient, missingAnswers, toDisplayTargets, toRingChoice } from '../api/nutritionApi';
 import LoggedFoodSheet from '../components/nutrition/LoggedFoodSheet';
 import MacroRings from '../components/nutrition/MacroRings';
@@ -26,7 +26,7 @@ const MAX_ITEMS = 30;
 // Where a scanned food's numbers came from, as the photo sheet tags its row
 // (ROADMAP 7a-iii-b): a food table, or the scanner's own estimate for a food no
 // table has.
-const SOURCE_TAGS = { curated: 'Verified', usda: 'USDA', openfoodfacts: 'Packaged product', estimate: 'Estimate' };
+const SOURCE_TAGS = { curated: 'Verified', usda: 'USDA', openfoodfacts: 'Packaged product', estimate: 'Estimate', label: 'From your label' };
 /** Whether any of these items is priced by the scanner's own estimate, which
  *  makes their total "about". */
 const hasEstimate = (items) => (items || []).some((i) => i?.nutritionSource === 'estimate');
@@ -948,7 +948,7 @@ function PhotoModal({ open, onClose, onSave }) {
         setRetakeMsg({ title: 'Try again', text: 'That free retry has run out. Pick the photo again.' });
         setPreview(null);
       } else if (err.response?.status === 429) {
-        toast.error('Daily photo-scan limit reached.');
+        toast.error('You’ve used all your photo scans.');
         setPreview(null);
       } else {
         toast.error(err.message || 'Photo analysis failed');
@@ -1305,6 +1305,9 @@ function PhotoModal({ open, onClose, onSave }) {
                   <p className="text-xs mt-1"
                      style={{ color: retakeMsg ? 'rgba(251,191,36,0.85)' : 'rgba(255,255,255,0.50)' }}>
                     {retakeMsg ? retakeMsg.text : 'AI estimates the portions — you confirm them'}
+                  </p>
+                  <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                    {PHOTO_PRIVACY_LINE}
                   </p>
                 </div>
                 <input

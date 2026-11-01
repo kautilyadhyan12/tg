@@ -93,6 +93,10 @@ const recordOf = (row: OffRow): Record<string, unknown> => ({
   numbers_fit: row.numbersFit, allergens: row.allergens, traces: row.traces, listed_as_typed: row.listedAsTyped,
 });
 
+/** The one lock the nightly update and a full import of Open Food Facts' list share: neither runs during the other; two runs of the update may, as each file is claimed once. */
+export const OFF_LIST_LOCK = 3301;
+export class PackagedListBusy extends Error {}
+
 /** One daily file, in one transaction, or nothing: the rows it changed written, the codes it took the
  *  numbers from removed, and its name recorded. A name already recorded means another run did it, and
  *  nothing is written, so two runs of a night are safe. Returns null then. */
@@ -103,6 +107,13 @@ export async function applyDailyFile(
   removeCodes: readonly string[],
 ): Promise<{ written: number; removed: number } | null> {
   return await sql.begin(async (tx: TransactionSql) => {
+    // A full import running: tonight's file waits for the next night, which applies it after the import.
+    await tx`SET LOCAL lock_timeout = '30s'`;
+    const [free] = await tx<{ ok: boolean }[]>`SELECT pg_try_advisory_xact_lock_shared(${OFF_LIST_LOCK}) AS ok`;
+    if (free?.ok !== true) throw new PackagedListBusy("a full import of the list is running");
+    // A file whose read began before an import finished, and which that import already covers.
+    const [mark] = await tx<{ to_second: string | null }[]>`SELECT max(to_second) AS to_second FROM off_daily_files WHERE name LIKE 'full\_%'`;
+    if (mark?.to_second != null && file.toSecond <= Number(mark.to_second)) return null;
     const claimed = await tx`
       INSERT INTO off_daily_files (name, to_second, products, written, removed)
       VALUES (${file.name}, ${file.toSecond}, ${file.products}, 0, 0)
@@ -110,7 +121,7 @@ export async function applyDailyFile(
     if (claimed.length === 0) return null;
     const written = rows.length === 0 ? [] : await tx`
       INSERT INTO off_products AS p
-        SELECT * FROM jsonb_populate_recordset(NULL::off_products, ${JSON.stringify(rows.map(recordOf))}::text::jsonb)
+        SELECT * FROM jsonb_populate_recordset(NULL::off_products, ${JSON.stringify(rows.map(recordOf))}::text::jsonb) ORDER BY code
       ON CONFLICT (code) DO UPDATE SET
         name = EXCLUDED.name, kcal = EXCLUDED.kcal, protein_g = EXCLUDED.protein_g, carbs_g = EXCLUDED.carbs_g, fat_g = EXCLUDED.fat_g,
         fiber_g = EXCLUDED.fiber_g, sugars_g = EXCLUDED.sugars_g, sat_fat_g = EXCLUDED.sat_fat_g, unsat_fat_g = EXCLUDED.unsat_fat_g,

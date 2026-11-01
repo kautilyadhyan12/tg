@@ -1172,8 +1172,8 @@ export async function requireWritableGym(deps: Pick<OrgsDeps, "sql">, org: repo.
  *  measurement moved BOTH of them before he decided:
  *
  *  **Friend-pooling is no longer worth doing** and Kd's own 5-vs-20 ruling is
- *  what killed it (:17366 §2). A gym's member gets 5 meal scans a day; a paid
- *  individual gets 20 and everything else is identical (`gymMemberEntitlements`
+ *  what killed it (:17366 §2). A gym's member gets 7 photo scans a day; a paid
+ *  individual gets 15 and everything else is identical (`gymMemberEntitlements`
  *  is `proEntitlements` with ONE key changed). So five people splitting band 1
  *  buy a WORSE product than the individual plan, each.
  *
