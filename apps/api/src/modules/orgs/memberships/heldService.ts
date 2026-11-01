@@ -747,6 +747,12 @@ function throwOnBillFailure(outcome: billsRepo.BillWriteOutcome): void {
         "refund_not_settled",
         "This bill isn't fully paid, so there is nothing to refund yet. If a payment was recorded by mistake, void it.",
       );
+    case "refund_in_square":
+      throw new OrgsError(
+        409,
+        "refund_in_square",
+        `${formatMinor(outcome.amountMinor, outcome.currency)} of this payment was refunded in Square and is already shown here, so it does not need noting. If you gave more back another way, pick how: cash, UPI or bank transfer.`,
+      );
     case "refund_too_much":
       throw new OrgsError(
         409,

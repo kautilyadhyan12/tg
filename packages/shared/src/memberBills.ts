@@ -201,7 +201,7 @@ export type VoidedMemberRefund = z.infer<typeof voidedMemberRefundSchema>;
 
 /** A refund to the card with no answer, or none ever (`lost`), said under its payment. `decided`: staff said no refund is needed. */
 export const cardRefundOpenSchema = z
-  .object({ amountMinor: minorSchema, on: daySchema, lost: z.boolean(), noRecord: z.boolean().default(false), onTerminal: z.boolean().default(false), decided: z.object({ on: daySchema, by: z.string().nullable() }).strict().nullable().default(null) })
+  .object({ amountMinor: minorSchema, on: daySchema, lost: z.boolean(), noRecord: z.boolean().default(false), failedInSquare: z.boolean().default(false), noteToCheck: z.boolean().default(false), onTerminal: z.boolean().default(false), decided: z.object({ on: daySchema, by: z.string().nullable() }).strict().nullable().default(null) })
   .strict();
 export type CardRefundOpen = z.infer<typeof cardRefundOpenSchema>;
 

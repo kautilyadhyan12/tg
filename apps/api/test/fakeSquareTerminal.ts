@@ -131,6 +131,9 @@ export function fakeSquare() {
     refundDown: boolean;
     /** GetRefund gives no answer. */
     refundUnread: boolean;
+    /** Square refuses to read refunds, with this status. */
+    refundRefusal: number | null;
+    refundPageSize: number;
     /** The status CancelTerminalRefund refuses with once the request is past PENDING: Square names none. */
     terminalCancelRefusal: number;
     refundLost: boolean;
@@ -164,6 +167,8 @@ export function fakeSquare() {
     beforeCard: null,
     refundDown: false,
     refundUnread: false,
+    refundRefusal: null,
+    refundPageSize: 100,
     terminalCancelRefusal: 400,
     refundLost: false,
     refundRefused: null,
@@ -562,6 +567,7 @@ export function fakeSquare() {
         status: state.refundStatus,
         amount_money: { amount: r.amountMinor, currency: r.currency },
         payment_id: p.id,
+        created_at: state.now().toISOString(),
         accountId: a.merchantId,
         key: r.idempotencyKey,
         reason: r.reason,
@@ -622,6 +628,7 @@ export function fakeSquare() {
       if (state.down || state.refundUnread) return Promise.resolve(unavailable);
       const a = tokenAccount(token);
       if (a === undefined) return Promise.resolve(unauthorized);
+      if (state.refundRefusal !== null) return Promise.resolve({ kind: "refused", status: state.refundRefusal, code: "UNAUTHORIZED" });
       const made = refundsMade.find((f) => f.id === id);
       if (made?.accountId !== a.merchantId) return Promise.resolve(notFound);
       return Promise.resolve({ kind: "ok", value: shownRefund(made) });
@@ -630,8 +637,11 @@ export function fakeSquare() {
       if (state.down || state.refundUnread) return Promise.resolve(unavailable);
       const a = tokenAccount(token);
       if (a === undefined) return Promise.resolve(unauthorized);
+      if (state.refundRefusal !== null) return Promise.resolve({ kind: "refused", status: state.refundRefusal, code: "UNAUTHORIZED" });
       const mine = refundsMade.filter((f) => f.accountId === a.merchantId && (f.created_at == null || new Date(f.created_at).getTime() >= q.beginTime.getTime()));
-      return Promise.resolve({ kind: "ok", value: { refunds: mine.map(shownRefund), unread: 0, cursor: null } });
+      const from = q.cursor === null ? 0 : Number(q.cursor);
+      const size = state.refundPageSize;
+      return Promise.resolve({ kind: "ok", value: { refunds: mine.slice(from, from + size).map(shownRefund), unread: 0, cursor: from + size < mine.length ? String(from + size) : null } });
     },
     listPayments(token, q) {
       listings.push({ locationId: q.locationId });

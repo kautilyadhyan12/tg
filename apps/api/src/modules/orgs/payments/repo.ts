@@ -184,7 +184,11 @@ export async function writeConnection(tx: TransactionSql, c: NewConnection): Pro
       location_choices = EXCLUDED.location_choices, access_token = EXCLUDED.access_token,
       refresh_token = EXCLUDED.refresh_token, access_expires_at = EXCLUDED.access_expires_at,
       refresh_due_at = EXCLUDED.refresh_due_at, connected_by = EXCLUDED.connected_by,
-      connected_at = EXCLUDED.connected_at, removed_at = NULL, scopes = EXCLUDED.scopes`;
+      connected_at = EXCLUDED.connected_at, removed_at = NULL, scopes = EXCLUDED.scopes, refunds_read_at = NULL`;
+  // Back on an account it left: what happened there meanwhile is read again, and any press left "We don't know" there.
+  await tx`
+    UPDATE gym_square_refunds SET look_at = ${c.connectedAt}
+    WHERE gym_id = ${c.gymId} AND environment = ${c.environment} AND account_id = ${c.accountId} AND outcome = 'lost' AND no_refund_at IS NULL`;
 }
 
 /** Connect Square again on the account already connected, to allow what it did not: the new

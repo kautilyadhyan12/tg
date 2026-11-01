@@ -142,6 +142,10 @@ export const toPress = (r: RawPress): RefundPress => ({
 
 /** What a press left "We don't know" says once Square's own record shows no such refund. */
 export const NOT_IN_SQUARE = "NOT_IN_SQUARE";
+/** And once Square's own record shows it could not make it. */
+export const FAILED_IN_SQUARE = "FAILED_IN_SQUARE";
+/** How far apart Square's clock and ours may be, when a refund is matched to a press. */
+const CLOCKS_APART_MS = 5 * 60_000;
 /** A press left "We don't know" is first read against Square's record this long after. */
 const LOST_LOOK_AFTER_MS = 15 * 60_000;
 
@@ -526,11 +530,17 @@ export async function recordMadeInSquare(
       SELECT COALESCE(sum(amount_minor), 0)::int AS total FROM gym_square_refunds
       WHERE gym_id = ${r.gymId} AND payment_id = ${where.id} AND square_refund_id IS NOT NULL AND outcome IS DISTINCT FROM 'failed'`;
     const inSquare = (held?.total ?? 0) + r.amountMinor;
-    const write = Math.max(0, Math.min(r.amountMinor, inSquare - standing.refundedMinor, standing.amountMinor - standing.refundedMinor));
+    // Only a note by card can be this refund: cash, UPI or a bank transfer never went through Square.
+    const [byCard] = await tx<{ total: number }[]>`
+      SELECT COALESCE(sum(amount_minor), 0)::int AS total FROM gym_member_refunds
+      WHERE gym_id = ${r.gymId} AND payment_id = ${where.id} AND undone_at IS NULL AND method IN ('card_at_desk','company','terminal')`;
+    const write = Math.max(0, Math.min(r.amountMinor, inSquare - (byCard?.total ?? 0), standing.amountMinor - standing.refundedMinor));
+    const absorbed = r.amountMinor - write;
 
     const [lost] = await tx<RawPress[]>`
       SELECT * FROM gym_square_refunds
-      WHERE gym_id = ${r.gymId} AND payment_id = ${where.id} AND outcome = 'lost' AND no_refund_at IS NULL AND amount_minor = ${r.amountMinor} AND started_at <= ${r.madeAt}
+      WHERE gym_id = ${r.gymId} AND payment_id = ${where.id} AND outcome = 'lost' AND no_refund_at IS NULL AND amount_minor = ${r.amountMinor}
+        AND started_at <= ${new Date(r.madeAt.getTime() + CLOCKS_APART_MS)} AND finished_at >= ${new Date(r.madeAt.getTime() - CLOCKS_APART_MS)}
       ORDER BY started_at DESC LIMIT 1 FOR UPDATE`;
     const press = lost === undefined ? null : toPress(lost);
     const requestKey = press?.requestKey ?? randomUUID();
@@ -555,19 +565,39 @@ export async function recordMadeInSquare(
             action: press === null ? "org.member_refund_in_square" : "org.member_refund_sent",
             card: press?.brand != null && press.last4 !== null ? { brand: press.brand, last4: press.last4 } : r.card,
           });
+    // Already noted: nothing moves, but the gym's record still says Square did it.
+    if (write === 0 && press === null) {
+      await insertAudit(tx, {
+        actorUserId: null,
+        gymId: r.gymId,
+        action: "org.member_refund_in_square",
+        targetType: "gym_member_payment",
+        targetId: where.id,
+        meta: {
+          ...(where.entry_id === null ? {} : { entryId: where.entry_id }),
+          membershipId: where.membership_id,
+          billId: bill.id,
+          paymentId: where.id,
+          amountMinor: String(r.amountMinor),
+          currency: r.currency,
+          alreadyNoted: "true",
+          ...(r.card === null ? {} : { brand: r.card.brand, last4: r.card.last4 }),
+        },
+      });
+    }
     const [row] =
       press !== null
         ? await tx<RawPress[]>`
             UPDATE gym_square_refunds
-            SET state = 'pending', outcome = NULL, code = NULL, finished_at = NULL, member_refund_id = ${memberRefundId}, square_refund_id = ${r.squareRefundId}, look_at = ${r.lookAt}, checking_until = NULL
+            SET state = 'pending', outcome = NULL, code = NULL, finished_at = NULL, absorbed_minor = ${absorbed}, member_refund_id = ${memberRefundId}, square_refund_id = ${r.squareRefundId}, look_at = ${r.lookAt}, checking_until = NULL
             WHERE gym_id = ${r.gymId} AND id = ${press.id}
             RETURNING *`
         : await tx<RawPress[]>`
             INSERT INTO gym_square_refunds
               (id, gym_id, payment_id, member_refund_id, environment, account_id, square_payment_id, square_refund_id, amount_minor, currency, reason, brand, last4,
-               request_key, state, look_at, from_square, started_at, checked_at)
+               request_key, state, look_at, from_square, absorbed_minor, started_at, checked_at)
             VALUES (${randomUUID()}, ${r.gymId}, ${where.id}, ${memberRefundId}, ${r.environment}, ${r.accountId}, ${r.squarePaymentId}, ${r.squareRefundId}, ${r.amountMinor}, ${r.currency}, 'other',
-                    ${r.card?.brand ?? null}, ${r.card?.last4 ?? null}, ${requestKey}, 'pending', ${r.lookAt}, true, ${r.madeAt}, ${r.now})
+                    ${r.card?.brand ?? null}, ${r.card?.last4 ?? null}, ${requestKey}, 'pending', ${r.lookAt}, true, ${absorbed}, ${r.madeAt}, ${r.now})
             RETURNING *`;
     if (row === undefined) throw new Error("a refund made in Square was not written under the gym's lock");
     return { kind: "written", press: toPress(row) };
@@ -592,8 +622,8 @@ export async function setLostLook(sql: SqlOrTx, press: RefundPress, at: Date): P
 }
 
 /** Square's record shows no such refund: a refund showing up later still moves it on. */
-export async function markNotInSquare(sql: SqlOrTx, press: RefundPress): Promise<void> {
-  await sql`UPDATE gym_square_refunds SET code = ${NOT_IN_SQUARE} WHERE gym_id = ${press.gymId} AND id = ${press.id} AND outcome = 'lost'`;
+export async function markAnswered(sql: SqlOrTx, press: RefundPress, code: typeof NOT_IN_SQUARE | typeof FAILED_IN_SQUARE): Promise<void> {
+  await sql`UPDATE gym_square_refunds SET code = ${code} WHERE gym_id = ${press.gymId} AND id = ${press.id} AND outcome = 'lost'`;
 }
 
 /** What a person's page says of a press with no answer yet, or none ever, by payment: the newest, until refunds written on that
@@ -601,18 +631,18 @@ export async function markNotInSquare(sql: SqlOrTx, press: RefundPress): Promise
 export async function openPressesOf(sql: SqlOrTx, gymId: string, paymentIds: readonly string[]): Promise<Map<string, CardRefundOpen>> {
   const open = new Map<string, CardRefundOpen>();
   if (paymentIds.length === 0) return open;
-  const rows = await sql<{ payment_id: string; amount_minor: number; on_day: string; lost: boolean; no_record: boolean; failed: boolean; on_terminal: boolean; decided_on: string | null; decided_by: string | null }[]>`
-    SELECT DISTINCT ON (q.payment_id) q.payment_id, q.amount_minor, (q.started_at AT TIME ZONE g.timezone)::date::text AS on_day, q.state = 'done' AS lost, COALESCE(q.code = ${NOT_IN_SQUARE}, false) AS no_record, q.outcome = 'failed' AS failed,
+  const rows = await sql<{ payment_id: string; amount_minor: number; on_day: string; lost: boolean; no_record: boolean; failed_in_square: boolean; note_to_check: boolean; failed: boolean; on_terminal: boolean; decided_on: string | null; decided_by: string | null }[]>`
+    SELECT DISTINCT ON (q.payment_id) q.payment_id, q.amount_minor, (q.started_at AT TIME ZONE g.timezone)::date::text AS on_day, q.state = 'done' AS lost, COALESCE(q.code = ${NOT_IN_SQUARE}, false) AS no_record, COALESCE(q.code = ${FAILED_IN_SQUARE}, false) AS failed_in_square, q.from_square AND q.outcome = 'failed' AS note_to_check, q.outcome = 'failed' AS failed,
            q.state = 'asking' AND q.device_id IS NOT NULL AS on_terminal,
            (q.no_refund_at AT TIME ZONE g.timezone)::date::text AS decided_on, u.display_name AS decided_by
     FROM gym_square_refunds q
     JOIN gyms g ON g.id = q.gym_id
     LEFT JOIN users u ON u.id = q.no_refund_by
-    WHERE q.gym_id = ${gymId} AND q.payment_id = ANY(${[...paymentIds]}::uuid[]) AND (q.state = 'asking' OR q.outcome IN ('lost','failed')) AND NOT q.from_square
+    WHERE q.gym_id = ${gymId} AND q.payment_id = ANY(${[...paymentIds]}::uuid[]) AND (q.state = 'asking' OR q.outcome IN ('lost','failed')) AND (NOT q.from_square OR q.absorbed_minor > 0)
       AND (SELECT COALESCE(sum(r.amount_minor), 0) FROM gym_member_refunds r
            WHERE r.gym_id = q.gym_id AND r.payment_id = q.payment_id AND r.created_at > q.started_at AND r.undone_at IS NULL) < q.amount_minor
     ORDER BY q.payment_id, q.state = 'asking' DESC, COALESCE(q.outcome = 'lost' AND q.no_refund_at IS NULL, false) DESC, q.started_at DESC`;
   // A failed press says itself on the crossed-out line, unless staff decided on it; it is read so an older decision does not stand over it.
-  for (const r of rows) if (!r.failed || r.decided_on !== null) open.set(r.payment_id, { amountMinor: r.amount_minor, on: r.on_day, lost: r.lost, noRecord: r.no_record, onTerminal: r.on_terminal, decided: r.decided_on === null ? null : { on: r.decided_on, by: r.decided_by } });
+  for (const r of rows) if (!r.failed || r.decided_on !== null || r.note_to_check) open.set(r.payment_id, { amountMinor: r.amount_minor, on: r.on_day, lost: r.lost, noRecord: r.no_record, failedInSquare: r.failed_in_square, noteToCheck: r.note_to_check && r.decided_on === null, onTerminal: r.on_terminal, decided: r.decided_on === null ? null : { on: r.decided_on, by: r.decided_by } });
   return open;
 }
