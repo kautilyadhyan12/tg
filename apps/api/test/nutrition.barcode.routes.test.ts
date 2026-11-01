@@ -59,7 +59,7 @@ d("a pack's barcode (real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 4 });
   const redis = createMemoryRedis();
   const asked: string[] = [];
-  /** What their live search answers, until 33b-iii-d. */
+  /** What the search answers here: this file is about the barcode. */
   const live: FoodReference[] = [];
   const foods: FoodSearchProvider = { search(query) { asked.push(query); return Promise.resolve(live); } };
   let app: Awaited<ReturnType<typeof buildApp>> | undefined;
@@ -91,7 +91,7 @@ d("a pack's barcode (real Postgres)", () => {
   };
   const addOff = async (code: string, row: { name: string; kcal: number; protein: number | null; carbs: number | null; fat: number | null; serving?: string; quantity?: string; allergens?: string[]; traces?: string[]; typed?: string[]; fit?: boolean }) => {
     const record = { code, name: row.name, kcal: row.kcal, protein_g: row.protein, carbs_g: row.carbs, fat_g: row.fat, potassium_mg: 120, serving_size: row.serving ?? null, quantity: row.quantity ?? null, numbers_fit: row.fit ?? true, allergens: row.allergens ?? [], traces: row.traces ?? [], listed_as_typed: row.typed ?? [] };
-    await sql`INSERT INTO off_products SELECT * FROM jsonb_populate_recordset(NULL::off_products, ${JSON.stringify([record])}::text::jsonb) ON CONFLICT (code) DO NOTHING`;
+    await sql`INSERT INTO off_products (code, name, kcal, protein_g, carbs_g, fat_g, fiber_g, sugars_g, sat_fat_g, unsat_fat_g, sodium_mg, potassium_mg, calcium_mg, iron_mg, magnesium_mg, vitamin_d_ug, serving_size, quantity, numbers_fit, allergens, traces, listed_as_typed) SELECT code, name, kcal, protein_g, carbs_g, fat_g, fiber_g, sugars_g, sat_fat_g, unsat_fat_g, sodium_mg, potassium_mg, calcium_mg, iron_mg, magnesium_mg, vitamin_d_ug, serving_size, quantity, numbers_fit, allergens, traces, listed_as_typed FROM jsonb_populate_recordset(NULL::off_products, ${JSON.stringify([record])}::text::jsonb) ON CONFLICT (code) DO NOTHING`;
   };
   const addUsda = async (code: string, name: string, kcal: number) => {
     await sql`INSERT INTO usda_branded_products (code, name, kcal, protein_g, carbs_g, fat_g, potassium_mg, serving_size, numbers_fit) VALUES (${code}, ${name}, ${kcal}, 1, 1, 1, 40, '1 CUP (240 mL)', true) ON CONFLICT (code) DO NOTHING`;
@@ -223,17 +223,6 @@ d("a pack's barcode (real Postgres)", () => {
     const previewed = z.object({ items: z.array(z.object({ kcalPoint: z.number(), name: z.string(), nutritionSource: z.string() })) }).parse(preview.json()).items[0];
     expect(previewed).toMatchObject({ kcalPoint: 16, name: "Swanson Broth Beef", nutritionSource: "usda" });
     expect(z.object({ meal: z.object({ items: z.array(z.object({ kcalPoint: z.number() })) }) }).parse(saved.json()).meal.items[0]?.kcalPoint).toBe(16);
-  });
-
-  it("the search box shows the list's numbers, not another's, for a product the list holds", async () => {
-    // A real case: Amy's quinoa read 106 kcal live and 18 on the list.
-    live.length = 0;
-    live.push({ canonical: `off_${APART}`, name: "Live search's name", kcal: 106, proteinG: 1, carbsG: 1, fatG: 1, fiberG: null, serving: 100, unit: "g", source: "openfoodfacts" });
-    const res = await inject("GET", "/v1/nutrition/foods?q=zqxlistedword&limit=10", alice);
-    live.length = 0;
-    expect(res.statusCode, res.body).toBe(200);
-    const shown = z.object({ items: z.array(z.object({ canonical: z.string(), name: z.string(), kcal: z.number(), source: z.string() })) }).parse(res.json()).items;
-    expect(shown[0]).toMatchObject({ canonical: `off_${APART}`, name: "Swanson Broth Beef", kcal: 8, source: "usda" });
   });
 
   it("two lists apart: the maker's numbers, the volunteers' allergens, and told to check the pack", async () => {

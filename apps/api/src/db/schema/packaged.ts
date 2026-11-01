@@ -6,7 +6,9 @@
 // nothing a member makes is ever written here. `apps/api/tools/import-packaged-foods.ts` and the
 // nightly update (`modules/nutrition/packagedSync.ts`) are the only writers.
 import { sql } from "drizzle-orm";
-import { boolean, check, integer, pgTable, real, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, check, customType, index, integer, pgTable, real, text, timestamp } from "drizzle-orm/pg-core";
+
+const tsvector = customType<{ data: string; driverData: string }>({ dataType: () => "tsvector" });
 
 const productColumns = {
   /** As Open Food Facts writes it (`classifyBarcode`): leading zeros kept, so a text. */
@@ -35,6 +37,9 @@ const productColumns = {
   quantity: text("quantity"),
   /** false: its calories are far from what its protein, carbs, fat and alcohol come to. */
   numbersFit: boolean("numbers_fit").notNull(),
+  /** The name as the food search reads it (`packagedSearchText`). */
+  searchText: text("search_text").notNull().default(""),
+  search: tsvector("search").generatedAlwaysAs(sql`to_tsvector('english', "search_text")`),
 };
 
 export const offProducts = pgTable(
@@ -48,14 +53,24 @@ export const offProducts = pgTable(
     /** Anything else in those fields, as somebody typed it: "gluten free", "weizeneiweiß". Shown as
      *  typed, never as an allergen. */
     listedAsTyped: text("listed_as_typed").array().notNull(),
+    /** How many people have scanned it, from their files: what the food search puts first. */
+    scans: integer("scans").notNull().default(0),
   },
-  (t) => [check("off_products_kcal_check", sql`${t.kcal} >= 0 AND ${t.kcal} <= 1000`)],
+  (t) => [
+    check("off_products_kcal_check", sql`${t.kcal} >= 0 AND ${t.kcal} <= 1000`),
+    check("off_products_scans_check", sql`${t.scans} >= 0`),
+    index("off_products_search_idx").using("gin", t.search),
+    index("off_products_popular_search_idx").using("gin", t.search).where(sql`${t.scans} >= 3`),
+  ],
 );
 
 export const usdaBrandedProducts = pgTable(
   "usda_branded_products",
   productColumns,
-  (t) => [check("usda_branded_products_kcal_check", sql`${t.kcal} >= 0 AND ${t.kcal} <= 1000`)],
+  (t) => [
+    check("usda_branded_products_kcal_check", sql`${t.kcal} >= 0 AND ${t.kcal} <= 1000`),
+    index("usda_branded_products_search_idx").using("gin", t.search),
+  ],
 );
 
 /** Each of Open Food Facts' daily files once applied: the nightly update reads this, so a second run

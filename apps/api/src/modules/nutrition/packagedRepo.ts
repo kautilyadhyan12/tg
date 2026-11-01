@@ -1,7 +1,12 @@
 // The packaged-food lists' reads and writes (ROADMAP Stage 5 33b-iii-a). Public data, no owner: no
 // tenancy WHERE to get wrong, as `usda_foods`.
 import type { Sql, TransactionSql } from "postgres";
-import type { OffRow, PackagedRow } from "./packagedRows.js";
+import type { OffRow, PackagedRow, WrittenRow } from "./packagedRows.js";
+import { usdaSearchWords, usdaTsQuery } from "./repo.js";
+
+const PRODUCT_COLUMNS = ["code", "name", "kcal", "protein_g", "carbs_g", "fat_g", "fiber_g", "sugars_g", "sat_fat_g", "unsat_fat_g", "sodium_mg", "potassium_mg", "calcium_mg", "iron_mg", "magnesium_mg", "vitamin_d_ug", "serving_size", "quantity", "numbers_fit"] as const;
+const OFF_COLUMNS = [...PRODUCT_COLUMNS, "allergens", "traces", "listed_as_typed"] as const;
+const WRITTEN_COLUMNS = [...OFF_COLUMNS, "search_text", "scans"] as const;
 
 interface ProductRecord {
   code: string;
@@ -55,8 +60,8 @@ const offOf = (r: OffRecord): OffRow => ({ ...productOf(r), allergens: r.allerge
 /** What each list holds for one code. Exact on the primary key: one row or none. */
 export async function packagedRowsFor(sql: Sql, code: string): Promise<{ off: OffRow | null; usda: PackagedRow | null }> {
   const [offRows, usdaRows] = await Promise.all([
-    sql<OffRecord[]>`SELECT * FROM off_products WHERE code = ${code}`,
-    sql<ProductRecord[]>`SELECT * FROM usda_branded_products WHERE code = ${code}`,
+    sql<OffRecord[]>`SELECT ${sql(OFF_COLUMNS)} FROM off_products WHERE code = ${code}`,
+    sql<ProductRecord[]>`SELECT ${sql(PRODUCT_COLUMNS)} FROM usda_branded_products WHERE code = ${code}`,
   ]);
   const off = offRows[0];
   const usda = usdaRows[0];
@@ -68,10 +73,42 @@ export async function packagedRowsForCodes(sql: Sql, codes: readonly string[]): 
   if (codes.length === 0) return { off: new Map(), usda: new Map() };
   const list = sql.array([...codes]);
   const [offRows, usdaRows] = await Promise.all([
-    sql<OffRecord[]>`SELECT * FROM off_products WHERE code = ANY(${list})`,
-    sql<ProductRecord[]>`SELECT * FROM usda_branded_products WHERE code = ANY(${list})`,
+    sql<OffRecord[]>`SELECT ${sql(OFF_COLUMNS)} FROM off_products WHERE code = ANY(${list})`,
+    sql<ProductRecord[]>`SELECT ${sql(PRODUCT_COLUMNS)} FROM usda_branded_products WHERE code = ANY(${list})`,
   ]);
   return { off: new Map(offRows.map((r) => [r.code, offOf(r)])), usda: new Map(usdaRows.map((r) => [r.code, productOf(r)])) };
+}
+
+/** The codes of the products a typed search finds, best first. Every word must match, the last as the
+ *  start of a word, as the USDA table's search reads them. Numbers that add up first, then a product
+ *  named just what was typed, one whose name starts with it, then the most scanned.
+ *
+ *  The products scanned at least 3 times are asked first, by their own small index: a common word then
+ *  sorts a few thousand and not ninety thousand. Only if they do not fill the page is the whole list read.
+ *  One letter alone is no search, whatever stop words come with it. */
+export async function packagedCodesFor(sql: Sql, query: string, limit: number): Promise<string[]> {
+  const words = usdaSearchWords(query);
+  const tsQuery = usdaTsQuery(query);
+  if (tsQuery === null || limit < 1) return [];
+  // What is left once Postgres drops the stop words: "the c" is one letter too.
+  const [left] = await sql<{ lexemes: string[] }[]>`SELECT tsvector_to_array(to_tsvector('english', ${words.join(" ")})) AS lexemes`;
+  if ((left?.lexemes ?? []).every((lexeme) => lexeme.length < 2)) return [];
+  const typed = words.join(" ");
+  const order = sql`
+    (numbers_fit AND NOT (kcal = 0 AND (protein_g IS NULL OR carbs_g IS NULL OR fat_g IS NULL))) DESC,
+    (search_text = ${typed} OR search_text LIKE ${`${typed} · %`}) DESC,
+    (search_text LIKE ${`${typed} %`}) DESC`;
+  const popular = await sql<{ code: string }[]>`
+    SELECT code FROM off_products WHERE scans >= 3 AND search @@ to_tsquery('english', ${tsQuery})
+    ORDER BY ${order}, scans DESC, length(name) ASC, code ASC LIMIT ${limit}`;
+  if (popular.length >= limit) return popular.map((r) => r.code);
+  const rest = await sql<{ code: string }[]>`
+    SELECT code FROM off_products WHERE scans < 3 AND search @@ to_tsquery('english', ${tsQuery})
+    ORDER BY ${order}, scans DESC, length(name) ASC, code ASC LIMIT ${limit - popular.length}`;
+  const usda = await sql<{ code: string }[]>`
+    SELECT code FROM usda_branded_products WHERE search @@ to_tsquery('english', ${tsQuery})
+    ORDER BY ${order}, length(name) ASC, code ASC LIMIT ${limit}`;
+  return [...new Set([...popular, ...rest, ...usda].map((r) => r.code))].slice(0, limit);
 }
 
 /** Whether the list has been loaded: until it has, the nightly update has nothing to change. */
@@ -85,7 +122,8 @@ export async function appliedDailyFiles(sql: Sql): Promise<{ names: Set<string>;
   return { names: new Set(rows.map((r) => r.name)), lastToSecond: rows.length === 0 ? null : Math.max(...rows.map((r) => r.to_second)) };
 }
 
-const recordOf = (row: OffRow): Record<string, unknown> => ({
+const recordOf = (row: WrittenRow): Record<string, unknown> => ({
+  scans: row.scans, search_text: row.searchText,
   code: row.code, name: row.name, kcal: row.kcal, protein_g: row.proteinG, carbs_g: row.carbsG, fat_g: row.fatG,
   fiber_g: row.more.fiberG, sugars_g: row.more.sugarsG, sat_fat_g: row.more.satFatG, unsat_fat_g: row.more.unsatFatG,
   sodium_mg: row.more.sodiumMg, potassium_mg: row.more.potassiumMg, calcium_mg: row.more.calciumMg, iron_mg: row.more.ironMg,
@@ -103,7 +141,7 @@ export class PackagedListBusy extends Error {}
 export async function applyDailyFile(
   sql: Sql,
   file: { name: string; toSecond: number; products: number },
-  rows: readonly OffRow[],
+  rows: readonly WrittenRow[],
   removeCodes: readonly string[],
 ): Promise<{ written: number; removed: number } | null> {
   return await sql.begin(async (tx: TransactionSql) => {
@@ -120,14 +158,15 @@ export async function applyDailyFile(
       ON CONFLICT (name) DO NOTHING RETURNING name`;
     if (claimed.length === 0) return null;
     const written = rows.length === 0 ? [] : await tx`
-      INSERT INTO off_products AS p
-        SELECT * FROM jsonb_populate_recordset(NULL::off_products, ${JSON.stringify(rows.map(recordOf))}::text::jsonb) ORDER BY code
+      INSERT INTO off_products AS p (${sql(WRITTEN_COLUMNS)})
+        SELECT ${sql(WRITTEN_COLUMNS)} FROM jsonb_populate_recordset(NULL::off_products, ${JSON.stringify(rows.map(recordOf))}::text::jsonb) ORDER BY code
       ON CONFLICT (code) DO UPDATE SET
         name = EXCLUDED.name, kcal = EXCLUDED.kcal, protein_g = EXCLUDED.protein_g, carbs_g = EXCLUDED.carbs_g, fat_g = EXCLUDED.fat_g,
         fiber_g = EXCLUDED.fiber_g, sugars_g = EXCLUDED.sugars_g, sat_fat_g = EXCLUDED.sat_fat_g, unsat_fat_g = EXCLUDED.unsat_fat_g,
         sodium_mg = EXCLUDED.sodium_mg, potassium_mg = EXCLUDED.potassium_mg, calcium_mg = EXCLUDED.calcium_mg, iron_mg = EXCLUDED.iron_mg,
         magnesium_mg = EXCLUDED.magnesium_mg, vitamin_d_ug = EXCLUDED.vitamin_d_ug, serving_size = EXCLUDED.serving_size, quantity = EXCLUDED.quantity,
-        numbers_fit = EXCLUDED.numbers_fit, allergens = EXCLUDED.allergens, traces = EXCLUDED.traces, listed_as_typed = EXCLUDED.listed_as_typed
+        numbers_fit = EXCLUDED.numbers_fit, allergens = EXCLUDED.allergens, traces = EXCLUDED.traces, listed_as_typed = EXCLUDED.listed_as_typed,
+        search_text = EXCLUDED.search_text, scans = GREATEST(p.scans, EXCLUDED.scans)
       RETURNING code`;
     const removed = removeCodes.length === 0 ? [] : await tx`DELETE FROM off_products WHERE code = ANY(${tx.array([...removeCodes])}) RETURNING code`;
     await tx`UPDATE off_daily_files SET written = ${written.length}, removed = ${removed.length} WHERE name = ${file.name}`;

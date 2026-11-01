@@ -34,6 +34,10 @@ carry only an estimate). The JSONL marks them, and the importer never reads them
 whole JSONL has not yet been run through the importer: its lines are the daily file's, whose reader was
 checked against the CSV on 2026-10-30 (`handoff/2026-10-30-33b-iii-a.md`). Check the counts it prints.
 
+**The food search and the meal scan read these lists too (33b-iii-d).** Nothing asks Open Food Facts live.
+Until the lists are loaded, the search shows only our own foods and USDA's table. A list loaded before
+migration `0185` has no search words or scan counts until it is imported again.
+
 **Then switch on the nightly update.** On the worker, `PACKAGED_FOOD_UPDATES=on` and
 `OPEN_FOOD_FACTS_CONTACT=<the app's address>`: their page asks for "AppName/Version (ContactEmail)".
 It runs at 04:37. A file it refuses (mostly unusable, or not their shape) changes nothing and reaches
