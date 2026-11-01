@@ -25,7 +25,7 @@ export const cardRefundDraft = (check, currency, newKey) => ({
 
 const capital = (name) => `${name.charAt(0).toUpperCase()}${name.slice(1)}`;
 
-/** What Square gave back with no note here (the app shows it by itself from 18d-iv-d). */
+/** What Square gave back on a sale with no note here. */
 export function inSquareLine(m, check) {
   return check.refundedInSquareMinor > 0 ? `Square shows ${formatMinor(check.refundedInSquareMinor, m.currency)} of this payment was already refunded there. Note that refund here so your records match.` : null;
 }
@@ -38,7 +38,8 @@ export function cardRefundBoxWords(m, name, payment, check, live, fee = null) {
   return {
     title: `Refund ${name}'s ${fee === null ? m.typeName : fee.name} to the card`,
     detail: `This is for the ${formatMinor(payment.amountMinor, m.currency)} paid on ${dayWords(payment.paidOn)}${forWhat}.${some} ${CARD_REFUND_WORDS.fee} ${CARD_REFUND_WORDS.days}${keeps}`,
-    inSquare: inSquareLine(m, check),
+    // A member's payment takes in what Square gave back by itself (18d-iv-d-i); a sale's still asks for a note until 18d-iv-d-ii.
+    inSquare: check.refundedInSquareMinor > 0 ? `Square shows ${formatMinor(check.refundedInSquareMinor, m.currency)} more of this payment was refunded there. It will appear here by itself within the hour.` : null,
   };
 }
 
@@ -71,6 +72,8 @@ export function cardRefundOpenLine(open, currency) {
   if (open.decided !== null && open.decided !== undefined) {
     return `No refund needed on the ${money} refund of ${dayWords(open.on)}${open.decided.by === null ? ', decided' : `, decided by ${open.decided.by}`} on ${dayWords(open.decided.on)}.`;
   }
+  if (open.failedInSquare === true) return `Square could not make the ${money} refund of ${dayWords(open.on)}. No money went back.`;
+  if (open.noRecord === true) return `Square has no record of the ${money} refund of ${dayWords(open.on)}. No money went back.`;
   return open.lost
     ? `We don't know whether Square took the ${money} refund of ${dayWords(open.on)}. Check your Square Dashboard. If it went through, note the refund here.`
     : open.onTerminal === true

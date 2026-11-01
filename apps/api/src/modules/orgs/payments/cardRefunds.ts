@@ -11,8 +11,8 @@
 // No answer from Square is asked again with the same key for an hour. How long Square keeps a key is written nowhere (read
 // 2026-10-24), so after that the press is ended as one to check in Square, and the box's own read of Square shows anything
 // it did. A refund Square takes up reads pending until Square finishes it: most finish "within a few hours", the longest is
-// 14 days ("Refund Payments", read 2026-10-30), and the worker reads each on the times below. Square's own messages about a
-// refund are not needed for that, and come with 18d-iv-d.
+// 14 days ("Refund Payments", read 2026-10-30), and the worker reads each on the times below. Square's own messages finish it
+// sooner (18d-iv-d-i, `squareMadeRefunds.ts`).
 //
 // A REFUND ON THE TERMINAL (18d-iv-c). Square marks an Interac debit card's payment as needing the card present: "Interac card
 // payments in Canada can only be refunded when the payment card is present" ("Refund Interac Payments", read 2026-10-31). Such a
@@ -101,7 +101,7 @@ const paymentGone = (): OrgsError => new OrgsError(404, "member_payment_not_foun
 const refused = (code: string, line: string): OrgsError => new OrgsError(409, code, line);
 
 const leaseFrom = (at: Date): Date => new Date(at.getTime() + CARD_REFUND.leaseMs);
-const lookFrom = (at: Date, looks: number): Date =>
+export const lookFrom = (at: Date, looks: number): Date =>
   new Date(at.getTime() + (CARD_REFUND.lookAfterMs[Math.min(looks, CARD_REFUND.lookAfterMs.length - 1)] ?? 3 * 60 * 60_000));
 
 /** Square's code, as a row keeps it. */
@@ -216,7 +216,7 @@ async function answered(deps: PaymentsDeps, press: refunds.RefundPress, result: 
 }
 
 /** A refund Square has taken up, by what it says now. */
-async function afterTaken(deps: PaymentsDeps, press: refunds.RefundPress, refund: SquareRefund, today: string, now: Date): Promise<Step> {
+export async function afterTaken(deps: PaymentsDeps, press: refunds.RefundPress, refund: SquareRefund, today: string, now: Date): Promise<Step> {
   if (refund.status === "COMPLETED") {
     await refunds.endCompleted(deps.sql, press, now);
     return "completed";
@@ -231,7 +231,7 @@ async function afterTaken(deps: PaymentsDeps, press: refunds.RefundPress, refund
 }
 
 /** The gym's token for the Square account the press was made in, while it is connected to it. */
-async function tokenFor(deps: PaymentsDeps, square: SquareSettings, press: refunds.RefundPress): Promise<string | null> {
+export async function tokenFor(deps: PaymentsDeps, square: SquareSettings, press: refunds.RefundPress): Promise<string | null> {
   const row = await repo.readConnection(deps.sql, press.gymId, square.environment);
   if (row?.state !== "connected" || row.accountId !== press.accountId || row.accessToken === null) return null;
   return square.tokens.open(row.accessToken, accessContext(press.gymId));

@@ -149,7 +149,7 @@ function billingOf(
     square:
       r.square === null
         ? null
-        : { state: r.square.state, card: r.square.card, late: r.square.state === "pending" && daysBetween(r.square.startedOn, ctx.today) > CARD_REFUND_LIMITS.pendingDays, pressId: r.square.pressId },
+        : { state: r.square.state, card: r.square.card, late: r.square.state === "pending" && daysBetween(r.square.startedOn, ctx.today) > CARD_REFUND_LIMITS.pendingDays, pressId: r.square.pressId, inSquare: r.square.inSquare },
   });
   const refundsOf = (paymentId: string) => refunds.filter((r) => r.paymentId === paymentId).map(refundOf);
   const voidedRefundsOf = (paymentId: string) => voided.refunds.filter((r) => r.paymentId === paymentId).map((r) => ({ ...refundOf(r), voided: r.voided }));
@@ -746,6 +746,12 @@ function throwOnBillFailure(outcome: billsRepo.BillWriteOutcome): void {
         409,
         "refund_not_settled",
         "This bill isn't fully paid, so there is nothing to refund yet. If a payment was recorded by mistake, void it.",
+      );
+    case "refund_in_square":
+      throw new OrgsError(
+        409,
+        "refund_in_square",
+        `${formatMinor(outcome.amountMinor, outcome.currency)} of this payment was refunded through Square and is already shown here, so it does not need noting. If you gave more back another way, pick how you gave it.`,
       );
     case "refund_too_much":
       throw new OrgsError(

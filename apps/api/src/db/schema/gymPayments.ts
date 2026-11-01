@@ -35,6 +35,8 @@ export const gymPaymentConnections = pgTable(
     accessExpiresAt: timestamp("access_expires_at", { withTimezone: true }),
     /** When the worker next renews the tokens; pushed on while a renewal is under way. */
     refreshDueAt: timestamp("refresh_due_at", { withTimezone: true }),
+    /** When the worker last read this connection's refunds (0184; 18d-iv-d-i). */
+    refundsReadAt: timestamp("refunds_read_at", { withTimezone: true }),
     connectedBy: uuid("connected_by").references(() => users.id, { onDelete: "set null" }),
     connectedAt: timestamp("connected_at", { withTimezone: true }).notNull(),
     removedAt: timestamp("removed_at", { withTimezone: true }),
@@ -583,6 +585,8 @@ export const gymSquareRefunds = pgTable(
     pickedUp: boolean("picked_up").notNull().default(false),
     cancelWantedAt: timestamp("cancel_wanted_at", { withTimezone: true }),
     cancelTooLate: boolean("cancel_too_late").notNull().default(false),
+    /** Square's own record of a refund made inside Square, which no press made (0184; 18d-iv-d-i). */
+    fromSquare: boolean("from_square").notNull().default(false),
   },
   (t) => [
     unique("gym_square_refunds_request_uq").on(t.gymId, t.requestKey),
@@ -604,6 +608,7 @@ export const gymSquareRefunds = pgTable(
     index("gym_square_refunds_sale_idx").on(t.gymId, t.saleId).where(sql`${t.saleId} IS NOT NULL`),
     uniqueIndex("gym_square_refunds_refund_uq").on(t.environment, t.squareRefundId).where(sql`${t.squareRefundId} IS NOT NULL`),
     index("gym_square_refunds_payment_idx").on(t.gymId, t.paymentId),
+    index("gym_square_refunds_lost_look_idx").on(t.lookAt).where(sql`${t.outcome} = 'lost' AND ${t.lookAt} IS NOT NULL`),
     check("gym_square_refunds_terminal_check", sql`(${t.deviceId} IS NOT NULL OR (${t.terminalRefundId} IS NULL AND ${t.outcome} IS DISTINCT FROM 'cancelled')) AND (${t.terminalRefundId} IS NULL OR ${t.terminalRefundId} ~ '^[A-Za-z0-9:_-]{1,255}$')`),
     index("gym_square_refunds_terminal_idx").on(t.environment, t.accountId, t.deviceId).where(sql`${t.state} = 'asking' AND ${t.deviceId} IS NOT NULL`),
     check("gym_square_refunds_no_refund_check", sql`${t.noRefundAt} IS NULL OR ${t.outcome} IN ('failed','lost')`),

@@ -131,6 +131,9 @@ export function fakeSquare() {
     refundDown: boolean;
     /** GetRefund gives no answer. */
     refundUnread: boolean;
+    /** Square refuses to read refunds, with this status. */
+    refundRefusal: number | null;
+    refundPageSize: number;
     /** The status CancelTerminalRefund refuses with once the request is past PENDING: Square names none. */
     terminalCancelRefusal: number;
     refundLost: boolean;
@@ -164,6 +167,8 @@ export function fakeSquare() {
     beforeCard: null,
     refundDown: false,
     refundUnread: false,
+    refundRefusal: null,
+    refundPageSize: 100,
     terminalCancelRefusal: 400,
     refundLost: false,
     refundRefused: null,
@@ -253,7 +258,19 @@ export function fakeSquare() {
   };
   /** A payment, taken on a Terminal or charged to a card on file. */
   const paymentById = (id: string): (SquarePayment & { accountId: string }) | undefined => payments.get(id) ?? charged.find((p) => p.id === id);
-  const shownRefund = (f: SquareRefund): SquareRefund => ({ id: f.id, status: f.status, amount_money: f.amount_money, payment_id: f.payment_id });
+  const shownRefund = (f: SquareRefund): SquareRefund => ({ id: f.id, status: f.status, amount_money: f.amount_money, payment_id: f.payment_id, created_at: f.created_at ?? null });
+  /** Somebody refunds a payment inside Square: on its Dashboard, in its own app. */
+  const refundInSquare = (paymentId: string, amountMinor: number, status = "COMPLETED"): SquareRefund => {
+    const p = paymentById(paymentId);
+    if (p === undefined) throw new Error("no such payment at the fake Square");
+    const total = p.total_money ?? p.amount_money;
+    const out = p.refunded_money?.amount ?? 0;
+    p.refunded_money = { amount: out + amountMinor, currency: total.currency };
+    n += 1;
+    const made = { id: `${p.id}_${String(n)}${randomBytes(6).toString("hex")}`, status, amount_money: { amount: amountMinor, currency: total.currency }, payment_id: p.id, created_at: state.now().toISOString(), accountId: p.accountId, key: randomBytes(8).toString("hex"), reason: "" };
+    refundsMade.push(made);
+    return made;
+  };
   const api: SquareApi = {
     authorizeUrl: (s) => `https://connect.squareup.com/oauth2/authorize?state=${s}`,
     exchangeCode(code) {
@@ -519,7 +536,7 @@ export function fakeSquare() {
       if (a === undefined) return Promise.resolve(unauthorized);
       const p = paymentById(id);
       if (p?.accountId !== a.merchantId) return Promise.resolve(notFound);
-      const payment: SquarePayment = { ...p };
+      const payment: SquarePayment = { ...p, refund_ids: refundsMade.filter((f) => f.payment_id === p.id).map((f) => f.id) };
       delete (payment as { accountId?: string }).accountId;
       return Promise.resolve({ kind: "ok", value: payment });
     },
@@ -550,6 +567,7 @@ export function fakeSquare() {
         status: state.refundStatus,
         amount_money: { amount: r.amountMinor, currency: r.currency },
         payment_id: p.id,
+        created_at: state.now().toISOString(),
         accountId: a.merchantId,
         key: r.idempotencyKey,
         reason: r.reason,
@@ -610,9 +628,20 @@ export function fakeSquare() {
       if (state.down || state.refundUnread) return Promise.resolve(unavailable);
       const a = tokenAccount(token);
       if (a === undefined) return Promise.resolve(unauthorized);
+      if (state.refundRefusal !== null) return Promise.resolve({ kind: "refused", status: state.refundRefusal, code: "UNAUTHORIZED" });
       const made = refundsMade.find((f) => f.id === id);
       if (made?.accountId !== a.merchantId) return Promise.resolve(notFound);
       return Promise.resolve({ kind: "ok", value: shownRefund(made) });
+    },
+    listRefunds(token, q) {
+      if (state.down || state.refundUnread) return Promise.resolve(unavailable);
+      const a = tokenAccount(token);
+      if (a === undefined) return Promise.resolve(unauthorized);
+      if (state.refundRefusal !== null) return Promise.resolve({ kind: "refused", status: state.refundRefusal, code: "UNAUTHORIZED" });
+      const mine = refundsMade.filter((f) => f.accountId === a.merchantId && (f.created_at == null || new Date(f.created_at).getTime() >= q.beginTime.getTime()));
+      const from = q.cursor === null ? 0 : Number(q.cursor);
+      const size = state.refundPageSize;
+      return Promise.resolve({ kind: "ok", value: { refunds: mine.slice(from, from + size).map(shownRefund), unread: 0, cursor: from + size < mine.length ? String(from + size) : null } });
     },
     listPayments(token, q) {
       listings.push({ locationId: q.locationId });
@@ -731,6 +760,7 @@ export function fakeSquare() {
   const listed = () => [...listings];
   return {
     api,
+    refundInSquare,
     allow,
     state,
     devices,

@@ -59,6 +59,7 @@ import { listHeldMembership, lockedEntry, lockedHeld, settle, writeCountsAfterGa
 
 export type BillWriteOutcome =
   | { kind: "ok" }
+  | { kind: "refund_in_square"; amountMinor: number; currency: string }
   | { kind: "entry_not_found" }
   | { kind: "membership_not_found" }
   | { kind: "payment_not_found" }
@@ -459,6 +460,20 @@ export async function noteRefund(
     // A fee paid by hand is voided, not refunded: its payment takes no refund to stand behind.
     if (bill.fee !== null && !paidThroughSquare(standing.method)) return { kind: "not_allowed" };
 
+    // A card refund noted over one Square already showed here would count that money twice (18d-iv-d-i): more than Square gave back is another refund.
+    if (input.method === "card_at_desk") {
+      const [inSquare] = await tx<{ total: number }[]>`
+        SELECT COALESCE(sum(r.amount_minor), 0)::int AS total
+        FROM gym_square_refunds q JOIN gym_member_refunds r ON r.gym_id = q.gym_id AND r.id = q.member_refund_id AND r.undone_at IS NULL
+        WHERE q.gym_id = ${input.gymId} AND q.payment_id = ${input.paymentId} AND q.square_refund_id IS NOT NULL AND q.outcome IS DISTINCT FROM 'failed'`;
+      // What the app crossed out and staff note again, up to that amount, is staff saying it is another refund.
+      const [crossedOut] = await tx<{ left: number }[]>`
+        SELECT (COALESCE(sum(amount_minor) FILTER (WHERE void_reason = 'in_square'), 0)
+              - COALESCE(sum(amount_minor) FILTER (WHERE undone_at IS NULL AND method = 'card_at_desk'), 0))::int AS left
+        FROM gym_member_refunds WHERE gym_id = ${input.gymId} AND payment_id = ${input.paymentId}`;
+      if (input.amountMinor > (crossedOut?.left ?? 0) && input.amountMinor <= (inSquare?.total ?? 0)) return { kind: "refund_in_square", amountMinor: inSquare?.total ?? 0, currency: payment.currency };
+    }
+
     const refund = refundMemberPayment(bill, standing, input.amountMinor);
     if (!refund.ok) {
       if (refund.reason === "too_much") return { kind: "refund_too_much", leftMinor: refund.leftMinor, currency: payment.currency };
@@ -508,7 +523,7 @@ export async function writeRefund(
     today: string;
     actorUserId: string | null;
     now: Date;
-    action: "org.member_refund_noted" | "org.member_refund_sent";
+    action: "org.member_refund_noted" | "org.member_refund_sent" | "org.member_refund_in_square";
     /** The card it went back to, for the gym's record. */
     card: { brand: string; last4: string } | null;
   },
@@ -584,12 +599,15 @@ export async function voidRefund(
     await tx`
       UPDATE gym_member_refunds SET undone_at = ${input.now}, undone_by = ${input.actorUserId}, void_reason = ${input.reason}
       WHERE gym_id = ${input.gymId} AND id = ${input.refundId} AND undone_at IS NULL`;
-    // Less than everything paid is now given back: the bill is Paid, not Refunded.
-    await tx`
-      UPDATE gym_member_bills SET status = 'paid', updated_at = ${input.now}
-      WHERE gym_id = ${input.gymId} AND id = ${payment.bill_id} AND status = 'refunded'`;
+    // Less than everything paid is now given back: the bill is Paid, not Refunded. Refunds still standing may cover it all: Square's beside a note as cash.
+    const after = await refundTargetOf(tx, input.gymId, row.id, input.paymentId);
+    if (after === null || after.bill.refundedMinor < after.bill.paidMinor) {
+      await tx`
+        UPDATE gym_member_bills SET status = 'paid', updated_at = ${input.now}
+        WHERE gym_id = ${input.gymId} AND id = ${payment.bill_id} AND status = 'refunded'`;
+    }
     // The payment stands again: a friend's payment gives the member's gift where none stands. A fee's never does.
-    if (!payment.undone && payment.period_index !== null) await giveMemberGift(tx, { gymId: input.gymId, friendEntryId: input.entryId, by: { paymentId: input.paymentId }, today: input.today, now: input.now });
+    if (!payment.undone && payment.period_index !== null && (after === null || after.payment.refundedMinor < after.payment.amountMinor)) await giveMemberGift(tx, { gymId: input.gymId, friendEntryId: input.entryId, by: { paymentId: input.paymentId }, today: input.today, now: input.now });
 
     await insertAudit(tx, {
       actorUserId: input.actorUserId,
