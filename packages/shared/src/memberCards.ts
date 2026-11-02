@@ -197,6 +197,8 @@ export const memberCardViewSchema = z
     pairTerminal: z.boolean(),
     /** A save waiting at a Terminal for this person, from this page or another. */
     terminalSave: terminalSaveSchema.nullable(),
+    /** Staff paused automatic payments of whoever pays for this person (18d-iv-f): the day, on the gym's calendar. */
+    autopayPausedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().default(null),
   })
   .strict();
 export type MemberCardView = z.infer<typeof memberCardViewSchema>;

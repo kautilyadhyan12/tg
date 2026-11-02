@@ -7,6 +7,7 @@ import { viewerPrivileges } from './consoleView';
 import { placeFor } from './consolePlaces';
 import { consoleIsReadOnly } from './billingView';
 import { attachCardForm, tokenizeToSave } from './squareCard';
+import { AUTOPAY_NAMES_SHOWN, autopayPauseBox, autopayPausedLine, autopayPausedWords, autopayResumeBox, autopayResumedWords } from './autopayView';
 import {
   CARD_FORM_DIDNT_LOAD,
   CARD_NOT_TAKEN,
@@ -381,6 +382,49 @@ function RemoveAsk({ view, name, busy, refusal, onYes, onBack }) {
   );
 }
 
+/** Pause or Resume automatic payments asks first, under the button, naming the card and each membership it changes. */
+function AutopayAsk({ ask, busy, refusal, onYes, onBack }) {
+  const [all, setAll] = useState(false);
+  const words = ask.kind === 'pause' ? autopayPauseBox(ask.preview) : autopayResumeBox(ask.preview);
+  const shown = all ? words.people : words.people.slice(0, AUTOPAY_NAMES_SHOWN);
+  const more = words.people.length - shown.length + words.more;
+  return (
+    <div className="rounded-[14px] p-3 flex flex-col gap-2" style={{ background: 'var(--raise)' }} data-testid="autopay-ask">
+      <p className="c-s15 c-w6 c-t1 m-0">{words.title}</p>
+      <p className="c-s14 c-t2 m-0">{words.lead}</p>
+      {shown.map((person, at) => (
+        <p key={`${String(at)} ${person}`} className="c-s14 c-t1 m-0">
+          {person}
+        </p>
+      ))}
+      {more > 0 ? (
+        all || words.people.length <= AUTOPAY_NAMES_SHOWN ? (
+          <p className="c-s14 c-t2 m-0">{`and ${String(more)} more`}</p>
+        ) : (
+          <button type="button" className="c-s14 c-w6 c-t1 self-start" style={{ textDecoration: 'underline' }} onClick={() => setAll(true)}>
+            {`and ${String(more)} more. See all`}
+          </button>
+        )
+      ) : null}
+      {words.note !== null ? <p className="c-s14 c-t2 m-0">{words.note}</p> : null}
+      {refusal !== null ? (
+        <p className="c-s14 m-0" style={BAD} role="alert">
+          {refusal}
+        </p>
+      ) : null}
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className={SMALL_MAIN} disabled={busy} onClick={onYes}>
+          {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+          {words.button}
+        </button>
+        <button type="button" className={SMALL} disabled={busy} onClick={onBack}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /** `onCardSaved`: told once a card is saved here, typed or on a Terminal (Failed payments opens this
  *  box under a row, 18d-iii-ii-b, and charges the new card from there). */
 export default function MemberCard({ gymId, gym, entryId, name, readOnly, checkEveryMs = CHECK_EVERY_MS, onCardSaved = null }) {
@@ -407,6 +451,9 @@ export default function MemberCard({ gymId, gym, entryId, name, readOnly, checkE
   const setSave = useCallback((s) => setFollowed({ entryId, save: s }), [entryId]);
   const [lastTerminal, setLastTerminal] = useState(null);
   const saveNow = useRef(null);
+  /** The Pause or Resume box's own answer from the server (18d-iv-f), for this page's person alone. */
+  const [autopayAsk, setAutopayAsk] = useState({ entryId: null, ask: null });
+  const ask = autopayAsk.entryId === entryId ? autopayAsk.ask : null;
 
   useEffect(() => {
     let live = true;
@@ -505,6 +552,37 @@ export default function MemberCard({ gymId, gym, entryId, name, readOnly, checkE
     setOpen('form');
   };
 
+  const autopayButton = changing && box.autopay !== null ? (box.autopay.pausedOn !== null ? 'resume' : box.autopay.canPause ? 'pause' : null) : null;
+  const openAutopay = async (kind) => {
+    setBusy(true);
+    setRefusal(null);
+    setDone(null);
+    try {
+      const res = await orgService.getAutopay(gymId, entryId);
+      setAutopayAsk({ entryId, ask: { kind, preview: res.data } });
+      setOpen('autopay');
+    } catch (err) {
+      setDone(errorText(err, 'That could not be opened. Try again.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const pressAutopay = async () => {
+    if (ask === null) return;
+    setBusy(true);
+    setRefusal(null);
+    try {
+      const res = ask.kind === 'pause' ? await orgService.pauseAutopay(gymId, entryId) : await orgService.resumeAutopay(gymId, entryId);
+      setState({ entryId, view: res.data.cardOnFile, error: null });
+      setOpen(null);
+      setDone(ask.kind === 'pause' ? autopayPausedWords(ask.preview) : autopayResumedWords(ask.preview));
+    } catch (err) {
+      setRefusal(errorText(err, ask.kind === 'pause' ? 'Automatic payments were not paused. Try again.' : 'Automatic payments were not resumed. Try again.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const remove = async () => {
     const before = view.card;
     setBusy(true);
@@ -543,6 +621,16 @@ export default function MemberCard({ gymId, gym, entryId, name, readOnly, checkE
         </p>
       ) : null}
       {box.reminderLine !== null ? <p className="c-s14 c-t2 m-0">{box.reminderLine}</p> : null}
+      {box.autopay !== null && box.autopay.pausedOn !== null ? (
+        <p className="c-s14 c-w6 m-0" style={{ color: 'var(--warn)' }} data-testid="autopay-paused">
+          {autopayPausedLine(box.autopay.pausedOn)}
+        </p>
+      ) : null}
+      {box.payerPausedLine !== null ? (
+        <p className="c-s14 c-w6 m-0" style={{ color: 'var(--warn)' }} data-testid="autopay-paused">
+          {box.payerPausedLine}
+        </p>
+      ) : null}
       {box.noneLine !== null ? <p className="c-s15 c-t1 m-0">{box.noneLine}</p> : null}
       {box.earlierLine !== null ? <p className="c-s14 c-t2 m-0">{box.earlierLine}</p> : null}
       {box.appLine !== null ? <p className="c-s14 c-t2 m-0">{box.appLine}</p> : null}
@@ -562,7 +650,7 @@ export default function MemberCard({ gymId, gym, entryId, name, readOnly, checkE
           </Link>
         </div>
       ) : null}
-      {open === null && changing && (box.canAdd || box.canRemove) ? (
+      {open === null && changing && (box.canAdd || box.canRemove || autopayButton !== null) ? (
         <div className="flex flex-wrap items-center gap-2">
           {box.canAdd && box.terminals.length > 0 ? (
             <button type="button" className={SMALL_MAIN} disabled={busy} onClick={saveOnTerminal}>
@@ -593,6 +681,11 @@ export default function MemberCard({ gymId, gym, entryId, name, readOnly, checkE
               }}
             >
               Remove card
+            </button>
+          ) : null}
+          {autopayButton !== null ? (
+            <button type="button" className={SMALL} disabled={busy} onClick={() => void openAutopay(autopayButton)}>
+              {autopayButton === 'pause' ? 'Pause automatic payments' : 'Resume automatic payments'}
             </button>
           ) : null}
           {box.canAdd && box.pairTerminal && paymentsTo !== null ? (
@@ -649,6 +742,7 @@ export default function MemberCard({ gymId, gym, entryId, name, readOnly, checkE
           }}
         />
       ) : null}
+      {open === 'autopay' && ask !== null ? <AutopayAsk ask={ask} busy={busy} refusal={refusal} onBack={close} onYes={() => void pressAutopay()} /> : null}
       {open === 'remove' ? <RemoveAsk view={view} name={name} busy={busy} refusal={refusal} onBack={close} onYes={() => void remove()} /> : null}
     </section>
   );

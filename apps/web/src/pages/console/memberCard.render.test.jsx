@@ -14,7 +14,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...actual,
-    orgService: { getMemberCard: vi.fn(), saveMemberCard: vi.fn(), removeMemberCard: vi.fn() },
+    orgService: { getMemberCard: vi.fn(), saveMemberCard: vi.fn(), removeMemberCard: vi.fn(), getAutopay: vi.fn(), pauseAutopay: vi.fn(), resumeAutopay: vi.fn() },
   };
 });
 vi.mock('./squareCard', () => ({ attachCardForm: vi.fn(), tokenizeToSave: vi.fn() }));
@@ -241,6 +241,92 @@ describe('Card on file: what it says', () => {
     show({ readOnly: true });
     expect(await screen.findByText('Card on file: Visa ending 1111 · expires 12/2028')).toBeTruthy();
     expect(screen.queryByRole('button')).toBeNull();
+  });
+});
+
+describe('Pause automatic payments (18d-iv-f)', () => {
+  const preview = (over = {}) =>
+    Promise.resolve({
+      data: {
+        pausedOn: null,
+        people: [
+          { name: 'Tara Singh', what: 'Gold Weekly' },
+          { name: 'Zed Singh', what: 'Gold Weekly' },
+        ],
+        more: 0,
+        card: { brand: 'VISA', last4: '1111' },
+        chargebackStops: false,
+        ...over,
+      },
+    });
+
+  it('Pause opens a box naming the card and each membership; only its own Pause pauses, and the card stays', async () => {
+    orgService.getMemberCard.mockReturnValue(answer({ card: VISA }));
+    orgService.getAutopay.mockReturnValue(preview());
+    orgService.pauseAutopay.mockReturnValue(answer({ card: VISA, autopayPausedOn: '2026-11-02' }));
+    show();
+    fireEvent.click(await screen.findByRole('button', { name: 'Pause automatic payments' }));
+    const box = await screen.findByTestId('autopay-ask');
+    expect(box.textContent).toContain('Pause automatic payments?');
+    expect(box.textContent).toContain("Visa ending 1111 won't be charged automatically for:");
+    expect(box.textContent).toContain('Tara Singh · Gold Weekly');
+    expect(box.textContent).toContain('Zed Singh · Gold Weekly');
+    expect(box.textContent).toContain('The card stays saved. Bills still come due: take payment at the desk, or charge the card from the bill.');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByTestId('autopay-ask')).toBeNull();
+    expect(orgService.pauseAutopay).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pause automatic payments' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Pause' }));
+    await waitFor(() => expect(orgService.pauseAutopay).toHaveBeenCalledWith(GYM, TARA));
+    expect((await screen.findByRole('status')).textContent).toBe('Automatic payments paused. Visa ending 1111 stays saved.');
+    expect(screen.getByTestId('autopay-paused').textContent).toBe('Automatic payments paused on 2 November 2026.');
+    expect(screen.getByText('Card on file: Visa ending 1111 · expires 12/2028')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Resume automatic payments' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Pause automatic payments' })).toBeNull();
+  });
+
+  it('Resume says what will be charged, and what is said once it is done', async () => {
+    orgService.getMemberCard.mockReturnValue(answer({ card: VISA, autopayPausedOn: '2026-11-02' }));
+    orgService.getAutopay.mockReturnValue(preview({ pausedOn: '2026-11-02' }));
+    orgService.resumeAutopay.mockReturnValue(answer({ card: VISA, autopayPausedOn: null }));
+    show();
+    fireEvent.click(await screen.findByRole('button', { name: 'Resume automatic payments' }));
+    const box = await screen.findByTestId('autopay-ask');
+    expect(box.textContent).toContain('Visa ending 1111 will be charged automatically for:');
+    expect(box.textContent).toContain('A bill due in the last two days may be charged today. Charge older bills by hand, oldest first.');
+    fireEvent.click(screen.getByRole('button', { name: 'Resume' }));
+    expect((await screen.findByRole('status')).textContent).toBe('Automatic payments resumed. Visa ending 1111 will be charged when bills are due.');
+    expect(screen.queryByTestId('autopay-paused')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Pause automatic payments' })).toBeTruthy();
+  });
+
+  it('paused, with the card since removed and Square no longer connected: Resume is still there', async () => {
+    orgService.getMemberCard.mockReturnValue(answer({ state: 'connect', card: null, form: null, autopayPausedOn: '2026-11-02' }));
+    show();
+    expect((await screen.findByTestId('autopay-paused')).textContent).toBe('Automatic payments paused on 2 November 2026.');
+    expect(screen.getByRole('button', { name: 'Resume automatic payments' })).toBeTruthy();
+  });
+
+  it('no card: no Pause button', async () => {
+    orgService.getMemberCard.mockReturnValue(answer({}));
+    show();
+    expect(await screen.findByText('No card on file')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Pause automatic payments' })).toBeNull();
+  });
+
+  it("somebody paid for by another person: says their payer's card is paused, with no button here", async () => {
+    orgService.getMemberCard.mockReturnValue(answer({ paidBy: { entryId: PRIYA, name: 'Priya Sharma' }, form: null, autopayPausedOn: '2026-11-02' }));
+    show({ name: 'Aarav Sharma' });
+    expect((await screen.findByTestId('autopay-paused')).textContent).toBe("Automatic payments are paused on Priya Sharma's card.");
+    expect(screen.queryByRole('button', { name: /automatic payments/ })).toBeNull();
+  });
+
+  it('a read-only console shows the line and no button', async () => {
+    orgService.getMemberCard.mockReturnValue(answer({ card: VISA, autopayPausedOn: '2026-11-02' }));
+    show({ readOnly: true });
+    expect(await screen.findByTestId('autopay-paused')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /automatic payments/ })).toBeNull();
   });
 });
 

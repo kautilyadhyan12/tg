@@ -1116,6 +1116,10 @@ d("member list: keeping it by hand (real Postgres)", () => {
       // driven in `checkin.fixVisit.routes.test.ts`.
       "gym_attendance_removed.entry_id",
       "gym_attendance_removed.gym_id",
+      // A pause of automatic payments (0191; 18d-iv-f): moved by the join, so a pause on either stands on the kept record, and
+      // deleted with a record deleted for good (`autopay.routes.test.ts`).
+      "gym_autopay_pauses.entry_id",
+      "gym_autopay_pauses.gym_id",
       // A card's agreement (0144; 18d-ii): moved by the join, and kept with no record and the
       // day when one is deleted for good, as the gym's proof (`memberCards.routes.test.ts`).
       "gym_card_agreements.entry_id",

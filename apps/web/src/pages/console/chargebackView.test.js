@@ -1,7 +1,7 @@
 // A chargeback's words (ROADMAP 18d-iv-e-i): every state and reason Square has, and those it has not told us about yet.
 import { describe, expect, it } from 'vitest';
 import { CHARGEBACK_REASONS, CHARGEBACK_STATES } from '@app/shared';
-import { CHARGEBACK_REASON_WORDS, chargebackLine, chargebackRowDetail, chargebackStartBox, chargebackStartedWords, chargebacksHeadline } from './chargebackView';
+import { CHARGEBACK_REASON_WORDS, chargeStopLine, chargebackLine, chargebackRowDetail, chargebackStartBox, chargebackStartedWords, chargebacksHeadline } from './chargebackView';
 
 const c = (over = {}) => ({ id: 'x', amountMinor: 2000, currency: 'USD', state: 'EVIDENCE_REQUIRED', reason: 'NO_KNOWLEDGE', dueOn: '2026-11-14', duePassed: false, card: { brand: 'VISA', last4: '1111' }, stops: true, ...over });
 
@@ -49,6 +49,26 @@ describe('a lost chargeback (18d-iv-e-ii-a)', () => {
     expect(chargebackStartBox({ people, card, otherStops: true }).note).toBeNull();
     expect(chargebackStartBox({ people, card: null, otherStops: false }).lead).toContain('No card is on file');
     expect(chargebackStartBox({ people: [], card, otherStops: false }).lead).toContain('nothing will be charged');
+  });
+
+  it('staff also paused them under Card on file (18d-iv-f): never says the card will be charged', () => {
+    const people = [{ name: 'Maya Patel', what: 'Gold Weekly' }];
+    const card = { brand: 'VISA', last4: '1111' };
+    const box = chargebackStartBox({ people, card, otherStops: false, staffPaused: true });
+    expect(box.lead).toBe('Automatic payments are also paused under Card on file, so nothing will be charged until they are resumed there. This applies to:');
+    expect(box.note).toBeNull();
+    expect(chargebackStartedWords({ people, card, otherStops: false, staffPaused: true })).toBe('This chargeback no longer pauses automatic payments. They stay paused until you resume them under Card on file.');
+    const line = chargebackLine({ ...lost, stops: false, chargesStartedOn: '2026-11-02', staffPaused: true }, true);
+    expect(line.detail).toContain('Automatic payments are paused under Card on file.');
+    expect(line.detail).not.toContain('resumed');
+  });
+});
+
+describe('a bill not charged automatically because of a pause (18d-iv-f)', () => {
+  it("says so, naming whoever pays where it is somebody else, and what to press after weeks paused", () => {
+    expect(chargeStopLine({ kind: 'paused', heldBy: null })).toBe('Not charged automatically because automatic payments are paused. You can still charge the card here.');
+    expect(chargeStopLine({ kind: 'paused', heldBy: { entryId: 'x', name: 'Priya Sharma' } })).toBe("Not charged automatically because automatic payments are paused on Priya Sharma's card. You can still charge the card here.");
+    expect(chargeStopLine({ kind: 'paused_missed', heldBy: null })).toBe('Not charged automatically while automatic payments were paused. Charge the card here, oldest first. Automatic payments carry on once the missed bills are paid.');
   });
 });
 
