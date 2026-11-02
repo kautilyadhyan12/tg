@@ -157,6 +157,8 @@ export function FoodScreen() {
   // More ideas on the Dashboard opens this page's box, so the page goes to today.
   const asked = useRoute().params;
   const toToday = typeof asked === "object" && "today" in asked ? asked.today : null;
+  // The Dashboard's See meal plan opens the week itself.
+  const toWeek = typeof asked === "object" && "week" in asked && typeof asked.week === "number" ? asked.week : null;
   useEffect(() => {
     if (toToday !== null) setDay(startOfDay(new Date()));
   }, [toToday]);
@@ -242,7 +244,14 @@ export function FoodScreen() {
         />
       </Sheet>
       {today ? (
-        <WhatToEatNext foodsToday={rows === null ? null : rows.map((r) => foodsOfRow(r, view.waiting))} fresh={answers} onAnswered={answered} />
+        <WhatToEatNext
+          foodsToday={rows === null ? null : rows.map((r) => foodsOfRow(r, view.waiting))}
+          todayFailed={read.kind === "failed"}
+          retryToday={again}
+          openWeekAt={toWeek}
+          fresh={answers}
+          onAnswered={answered}
+        />
       ) : null}
       <View style={styles.dayRow}>
         <Pressable

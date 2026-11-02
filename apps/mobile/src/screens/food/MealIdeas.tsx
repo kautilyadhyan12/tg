@@ -57,7 +57,7 @@ interface MealIdeasProps {
 }
 
 /** "loading": whether there is a plan isn't known yet. `meal` null: every meal of today's plan is logged, or today has none. */
-export type PlannedNow = "loading" | { meal: DietPlanMeal | null; allLogged: boolean; canLog: boolean; caution: string; labelCaution: string | null }
+export type PlannedNow = "loading" | { failed: string; retry: () => void } | { meal: DietPlanMeal | null; allLogged: boolean; canLog: boolean; caution: string; labelCaution: string | null }
 
 export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = false, planned }: MealIdeasProps) {
   const { read, again, outbox, view, waiting, old } = useIdeas(fresh);
@@ -122,6 +122,15 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
   const plannedNow = onDashboard && planned !== undefined ? planned : null;
   if (plannedNow === "loading") {
     body = <Txt kind="small">{NOT_KNOWN}</Txt>;
+  } else if (plannedNow !== null && "failed" in plannedNow) {
+    body = (
+      <View style={styles.row}>
+        <Txt kind="small" style={styles.grow}>
+          {plannedNow.failed}
+        </Txt>
+        <Button label="Try again" kind="link" say="Try again" onPress={plannedNow.retry} />
+      </View>
+    );
   } else if (plannedNow !== null && onMore !== undefined) {
     const { meal, allLogged, canLog, caution, labelCaution } = plannedNow;
     body =
@@ -387,7 +396,7 @@ function BestPlanned({ meal, held, onLog, onMore }: { meal: DietPlanMeal; held: 
           {mealTypeName(meal.mealType)} · {count(meal.totals.kcalPoint)} kcal
         </Txt>
         <Txt kind="tiny">
-          {count(Math.round(meal.totals.proteinG))} g protein · {count(Math.round(meal.totals.carbsG))} g carbs
+          {count(Math.round(meal.totals.proteinG))} g protein · {count(Math.round(meal.totals.carbsG))} g carbs · {count(Math.round(meal.totals.fatG))} g fat
         </Txt>
       </View>
       <View style={styles.foods}>

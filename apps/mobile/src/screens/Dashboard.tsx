@@ -192,6 +192,9 @@ export function DashboardScreen() {
         onMore={() => {
           go.navigate("Food", { today: Date.now() });
         }}
+        onPlan={() => {
+          go.navigate("Food", { today: Date.now(), week: Date.now() });
+        }}
       />
       <Recent workouts={recent.read} runs={runs.read} meals={meals.read} />
       <Ready onPress={toWorkout} />

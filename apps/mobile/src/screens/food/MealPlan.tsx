@@ -34,11 +34,16 @@ interface WhatToEatNextProps {
   /** Moves when setup answers change elsewhere on the page. */
   fresh: number;
   onAnswered: () => void;
+  /** Today's meals could not be read, and how to read them again. */
+  todayFailed: boolean;
+  retryToday: () => void;
+  /** Moves when another page asks for the week to open (the Dashboard's See meal plan). */
+  openWeekAt: number | null;
 }
 
 /** The Food page's one answer to "what do I eat now?": the plan's next meal for somebody with a plan,
  *  the meal ideas for somebody without. Every number and every refusal is the server's. */
-export function WhatToEatNext({ foodsToday, fresh, onAnswered }: WhatToEatNextProps) {
+export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retryToday, openWeekAt }: WhatToEatNextProps) {
   const { session } = useSession();
   const { height } = useWindowDimensions();
   const { read, again, begun, shownFrom } = useRead(PLAN_READ, dietPlanResponseSchema, fresh);
@@ -62,6 +67,10 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered }: WhatToEatNextPr
   const [logging, setLogging] = useState(false);
   // A change whose answer never came keeps its id, so trying again can't make it twice.
   const changeIds = useRef(new Map<string, string>());
+  // A plan read that lands shows what the server holds: a change sent after it is a new change.
+  useEffect(() => {
+    changeIds.current.clear();
+  }, [shownFrom]);
   const quiet = () => {
     setSaid(null);
     setTrouble(null);
@@ -73,6 +82,12 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered }: WhatToEatNextPr
   }, [focused]);
 
   const plan = answered?.data ?? (read.kind === "ok" ? read.data : null);
+  useEffect(() => {
+    if (openWeekAt === null) return;
+    setShownDay(planDayOf(new Date()));
+    setAsking(false);
+    setWeek(true);
+  }, [openWeekAt]);
 
   const send = async (key: string, method: "POST" | "PUT", path: string, body: Record<string, unknown>): Promise<boolean> => {
     if (sendingNow.current) return false;
@@ -95,8 +110,9 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered }: WhatToEatNextPr
       return true;
     }
     setUndo(null);
-    setTrouble(answer.status === 409 ? answer.message : NO_CONNECTION);
-    if (answer.error === "plan_changed") again();
+    setTrouble(answer.message === "" ? NO_CONNECTION : answer.message);
+    // The phone's copy of the plan is older than the server's: read it again.
+    if (answer.error === "plan_changed" || answer.status === 404) again();
     return false;
   };
 
@@ -110,14 +126,16 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered }: WhatToEatNextPr
   };
   const swap = async (day: number, at: number) => {
     const before = plan?.days[day - 1]?.meals ?? [];
-    if (await send(`swap|${String(day)}|${String(at)}`, "POST", `${PLAN_READ}/days/${String(day)}/swap`, { meal: at })) {
+    const shown = (before[at]?.items ?? []).map((i) => i.canonical);
+    if (await send(`swap|${String(day)}|${String(at)}`, "POST", `${PLAN_READ}/days/${String(day)}/swap`, { meal: at, shown })) {
       setUndo({ id: newGoalId(), day, meals: before });
       setSaid("Meal swapped.");
     }
   };
   const undoSwap = async (u: Undo) => {
     const meals = u.meals.map((m) => ({ mealType: m.mealType, items: m.items.map((i) => ({ canonical: i.canonical, grams: i.gramsPoint })) }));
-    if (await send(`undo|${u.id}`, "PUT", `${PLAN_READ}/days/${String(u.day)}`, { meals })) {
+    const shown = (plan?.days[u.day - 1]?.meals ?? []).map((m) => m.items.map((i) => i.canonical));
+    if (await send(`undo|${u.id}`, "PUT", `${PLAN_READ}/days/${String(u.day)}`, { meals, shown })) {
       setUndo(null);
       setSaid("Meal put back.");
     }
@@ -138,12 +156,14 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered }: WhatToEatNextPr
     }
   };
 
-  const held = busy || logging || outbox === null;
+  // Until today's meals are read, which planned meal is next isn't known.
+  const held = busy || logging || outbox === null || foodsToday === null;
+  // Undo stays offered until it is done or something else happens, even after a try that got no answer.
   const saidLine =
-    said === null ? null : (
+    said === null && undo === null ? null : (
       <View style={styles.row}>
         <Txt kind="small" colour="orange" style={styles.grow}>
-          {said}
+          {said ?? "Meal swapped."}
         </Txt>
         {undo === null ? null : <Button label="Undo" kind="link" compact disabled={busy} say="Undo the swap" onPress={() => { void undoSwap(undo); }} />}
       </View>
@@ -221,7 +241,18 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered }: WhatToEatNextPr
         <Title />
         {week ? null : saidLine}
         {week ? null : troubleLine}
-        {next === undefined ? (
+        {foodsToday === null ? (
+          todayFailed ? (
+            <View style={styles.row}>
+              <Txt kind="small" style={styles.grow}>
+                Your meals couldn’t load.
+              </Txt>
+              <Button label="Try again" kind="link" say="Try your meals again" onPress={retryToday} />
+            </View>
+          ) : (
+            <Txt kind="small">{NOT_KNOWN}</Txt>
+          )
+        ) : next === undefined ? (
           <>
             <Txt kind="small">{meals.length === 0 ? "Nothing planned for today." : "All of today’s meals are logged."}</Txt>
             <View style={styles.actions}>
@@ -234,7 +265,7 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered }: WhatToEatNextPr
             <MealWords meal={next} />
             <OutsideDiet meal={next} />
             <View style={styles.actions}>
-              <Button label="Log meal" compact disabled={held || foodsToday === null} say={`Log ${ideaName(next)}`} onPress={() => { void log(next); }} />
+              <Button label="Log meal" compact disabled={held} say={`Log ${ideaName(next)}`} onPress={() => { void log(next); }} />
               <Button label="Swap" kind="link" compact disabled={held} say={`Swap ${ideaName(next)}`} onPress={() => { void swap(today, nextAt); }} />
               {seeWeek}
               {otherIdeas}
@@ -307,7 +338,7 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered }: WhatToEatNextPr
                 ) : (
                   <View style={styles.actions}>
                     {shownDay === today ? (
-                      <Button label="Log meal" kind="soft" compact disabled={held || foodsToday === null} say={`Log ${ideaName(meal)}`} onPress={() => { void log(meal); }} />
+                      <Button label="Log meal" kind="soft" compact disabled={held} say={`Log ${ideaName(meal)}`} onPress={() => { void log(meal); }} />
                     ) : null}
                     <Button label="Swap" kind="link" compact disabled={held} say={`Swap ${ideaName(meal)}`} onPress={() => { void swap(shownDay, at); }} />
                   </View>
@@ -325,10 +356,12 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered }: WhatToEatNextPr
 
 /** The Dashboard's Recommended box: the same answer as the Food page's. Today's meals are read only
  *  for somebody with a plan. */
-export function Recommended({ onMore }: { onMore: () => void }) {
-  const { read } = useRead(PLAN_READ, dietPlanResponseSchema);
+export function Recommended({ onMore, onPlan }: { onMore: () => void; onPlan: () => void }) {
+  const { read, again } = useRead(PLAN_READ, dietPlanResponseSchema);
   if (read.kind === "loading") return <MealIdeas onMore={onMore} planned="loading" />;
-  if (read.kind === "ok" && hasMeals(read.data)) return <RecommendedFromPlan plan={read.data} onMore={onMore} />;
+  // Never the ideas as if there were no plan: Food says the same.
+  if (read.kind === "failed") return <MealIdeas onMore={onMore} planned={{ failed: "Your meal plan couldn’t load.", retry: again }} />;
+  if (hasMeals(read.data)) return <RecommendedFromPlan plan={read.data} onMore={onPlan} />;
   return <MealIdeas onMore={onMore} />;
 }
 
@@ -337,14 +370,18 @@ function RecommendedFromPlan({ plan, onMore }: { plan: DietPlanResponse; onMore:
   const dayStart = startOfDay(new Date()).getTime();
   const day = useMemo(() => new Date(dayStart), [dayStart]);
   // The Food page is the one that tells the outbox a read has caught up.
-  const { read: mealsRead } = useDayMeals(day, view.sent, NO_SETTLE);
+  const { read: mealsRead, again } = useDayMeals(day, view.sent, NO_SETTLE);
   const rows = dayRows(mealsRead, view, day);
+  // Until today's meals are read, which planned meal is next isn't known.
+  if (rows === null) {
+    return <MealIdeas onMore={onMore} planned={mealsRead.kind === "failed" ? { failed: "Your meals couldn’t load.", retry: again } : "loading"} />;
+  }
   const meals = plan.days[planDayOf(day) - 1]?.meals ?? [];
-  const foods = rows === null ? [] : rows.map((r) => foodsOfRow(r, view.waiting));
+  const foods = rows.map((r) => foodsOfRow(r, view.waiting));
   const planned: PlannedNow = {
     meal: meals[loggedOfDay(meals, foods).indexOf(false)] ?? null,
     allLogged: meals.length > 0,
-    canLog: rows !== null,
+    canLog: true,
     caution: plan.caution,
     labelCaution: plan.labelCaution,
   };
