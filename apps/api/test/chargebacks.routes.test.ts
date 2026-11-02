@@ -1153,8 +1153,8 @@ d("A chargeback (real Postgres)", { timeout: T }, () => {
       await loseOn(s, 2000);
       expect((await refunded()) - before).toBe(2000);
       const after = await readCollected(sql, nextDoor.id, "USD", span);
-      expect(after.refundedMinor - collected.refundedMinor).toBe(2000);
-      expect(after.paidMinor).toBe(collected.paidMinor);
+      expect(after.saleRefundedMinor - collected.saleRefundedMinor).toBe(2000);
+      expect(after.refundedMinor).toBe(collected.refundedMinor);
       const day = await send("GET", `/v1/orgs/${nextDoor.id}/register`, nextDoor.owner.cookies);
       expect(day.statusCode, day.body).toBe(200);
       expect(day.body).toContain('"reason":"chargeback"');
