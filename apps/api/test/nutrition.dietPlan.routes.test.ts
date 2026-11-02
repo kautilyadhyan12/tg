@@ -240,6 +240,18 @@ d("diet plan routes (real Postgres)", () => {
   });
 
   describe("A planned meal logged, as the phone sends it (ROADMAP 34e-ii-a)", () => {
+    it("Undo of a swap, the day sent back whole as it stood, puts back the same foods at the same numbers", { timeout: 30_000 }, async () => {
+      const cookies = await eater("undo", "non_vegetarian", 4);
+      const made = parsed(await make(cookies));
+      const before = made.days[0];
+      if (before === undefined) throw new Error("no Monday");
+      const swapped = parsed(await swap(cookies, 1, { changeId: randomUUID(), meal: 1 }));
+      expect(swapped.days[0]?.meals[1]).not.toEqual(before.meals[1]);
+      const meals = before.meals.map((m) => ({ mealType: m.mealType, items: m.items.map((i) => ({ canonical: i.canonical, grams: i.gramsPoint })) }));
+      const undone = parsed(await putDay(cookies, 1, { changeId: randomUUID(), meals }));
+      expect(undone.days[0]).toEqual(before);
+    });
+
     it("every meal of a made week saves at the numbers the plan showed, and sent twice is one meal", { timeout: 60_000 }, async () => {
       const cookies = await eater("logged", "non_vegetarian", 4);
       const plan = parsed(await make(cookies));

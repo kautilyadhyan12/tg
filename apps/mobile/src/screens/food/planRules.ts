@@ -5,6 +5,9 @@ import { ideaName } from "./ideaRules";
 
 const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const;
 
+/** Whether the person has a plan: a meal on any day of the week. */
+export const hasMeals = (plan: { days: readonly { meals: readonly unknown[] }[] }): boolean => plan.days.some((d) => d.meals.length > 0);
+
 /** The plan's day for a date, in the phone's own time: 1 is Monday, 7 Sunday. */
 export const planDayOf = (at: Date): number => ((at.getDay() + 6) % 7) + 1;
 

@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, Keyboard, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
+import { Keyboard, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useFocusEffect, useRoute } from "@react-navigation/native";
+import { useRoute } from "@react-navigation/native";
 import {
   MEAL_MOST_FOODS,
   foodSearchResponseSchema,
   mealMeasuresResponseSchema,
-  mealPageSchema,
   mealPreviewSchema,
   nutritionTargetsResponseSchema,
   recentFoodsResponseSchema,
@@ -37,21 +36,18 @@ import { Ring } from "../look/Ring";
 import { Sheet } from "../look/Sheet";
 import { Txt } from "../look/Txt";
 import { useSession } from "../session/SessionProvider";
-import { useZoneSaved } from "../session/TimeZoneSync";
 import { NOT_KNOWN, count } from "./dashboard/words";
 import { useRead } from "./dashboard/useRead";
-import { MealIdeas } from "./food/MealIdeas";
-import { MealPlan } from "./food/MealPlan";
+import { dayRows, useDayMeals } from "./food/dayRows";
+import { WhatToEatNext } from "./food/MealPlan";
 import { foodsOfRow } from "./food/planRules";
 import {
-  MEAL_PAGE_SIZE,
   MEAL_TYPES,
   aboutKcal,
   addDays,
   daySums,
   dayWords,
   hasEstimate,
-  inDay,
   itemMark,
   kcalWords,
   leftWords,
@@ -63,7 +59,6 @@ import {
   sameDay,
   sectionOf,
   startOfDay,
-  walkDay,
   type Sums,
 } from "./food/day";
 import { AmountPicker, dishByName, pickedDish, useDishes } from "./food/AmountPicker";
@@ -96,13 +91,10 @@ import {
   foodTitle,
   foodsHeld,
   measuresWithoutServer,
-  serverRow,
   steppedTime,
   totalsWithout,
   typedAmount,
-  waitingRow,
   withAmount,
-  withChanges,
   without,
   type Row,
 } from "./food/rows";
@@ -121,63 +113,6 @@ export const TARGETS_READ = "/v1/nutrition/targets";
 const NO_CONNECTION = "No connection. Try again.";
 const MEAL_CHANGED_WORDS = "This meal was changed on another device. Close it and open it again.";
 
-type DayRead = { kind: "loading" } | { kind: "ok"; rows: Row[]; cut: boolean } | { kind: "failed" };
-
-/** The day's meals from the server, read when the tab opens, when the day changes, when the app comes
- *  back, and each time the server takes a waiting meal; only the newest read is drawn. A read that
- *  comes back tells the outbox how many sends it began after (`settle`): until then a meal just sent
- *  is shown as the server answered it, and one just removed stays hidden. */
-function useDayMeals(day: Date, sent: number, settle: (upTo: number) => void): { read: DayRead; again: () => void } {
-  const { session, state } = useSession();
-  const me = state.kind === "in" ? state.user.id : null;
-  const zone = useZoneSaved();
-  const [read, setRead] = useState<DayRead>({ kind: "loading" });
-  const latest = useRef(0);
-  const shown = useRef<number | null>(null);
-  const sentNow = useRef(sent);
-  sentNow.current = sent;
-
-  const again = useCallback(() => {
-    if (me === null) return;
-    latest.current += 1;
-    const mine = latest.current;
-    const upTo = sentNow.current;
-    const dayKey = day.getTime();
-    if (shown.current !== dayKey) setRead({ kind: "loading" });
-    void walkDay(async (cursor) => {
-      const query = cursor === null ? `limit=${String(MEAL_PAGE_SIZE)}` : `limit=${String(MEAL_PAGE_SIZE)}&cursor=${encodeURIComponent(cursor)}`;
-      const answer = await session.signedIn({ method: "GET", path: `/v1/nutrition/meals?${query}` }, mealPageSchema);
-      return answer.kind === "ok" ? answer.data : null;
-    }, day).then((walked) => {
-      if (latest.current !== mine) return;
-      const now = session.state();
-      if (now.kind !== "in" || now.user.id !== me) return;
-      if (walked === null) {
-        setRead((before) => (before.kind === "ok" && shown.current === dayKey ? before : { kind: "failed" }));
-        return;
-      }
-      shown.current = dayKey;
-      setRead({ kind: "ok", rows: walked.meals.map(serverRow), cut: walked.cut });
-      settle(upTo);
-    });
-  }, [session, me, day, settle]);
-
-  useEffect(() => {
-    again();
-  }, [again, sent, zone]);
-
-  useEffect(() => {
-    const heard = AppState.addEventListener("change", (next) => {
-      if (next === "active") again();
-    });
-    return () => {
-      heard.remove();
-    };
-  }, [again]);
-
-  useFocusEffect(again);
-  return { read, again };
-}
 
 export function FoodScreen() {
   const [day, setDay] = useState(() => startOfDay(new Date()));
@@ -226,25 +161,7 @@ export function FoodScreen() {
     if (toToday !== null) setDay(startOfDay(new Date()));
   }, [toToday]);
 
-  // The server's meals, less those removed here, each as the server last answered it where that came
-  // after this read began; the ones just sent that this read began before; the ones still waiting on
-  // the phone; and every change still waiting laid over them.
-  const landed = new Map(view.landed.map((m) => [m.id, m]));
-  const rows: Row[] | null =
-    read.kind === "ok"
-      ? [
-          ...read.rows.filter((r) => !view.removing.has(r.id)).map((r) => {
-            const newer = landed.get(r.id);
-            return newer === undefined ? r : serverRow(newer);
-          }),
-          // The newest answer for each meal: a meal saved and then changed has landed twice.
-          ...[...landed.values()].filter((m) => !read.rows.some((r) => r.id === m.id)).map(serverRow),
-          ...view.waiting.filter((m) => !read.rows.some((r) => r.id === m.id) && !landed.has(m.id)).map(waitingRow),
-        ]
-          .map((r) => withChanges(r, view.changing.get(r.id)))
-          .filter((r) => inDay(r.takenAt, day))
-          .sort((a, b) => Date.parse(a.takenAt) - Date.parse(b.takenAt))
-      : null;
+  const rows = dayRows(read, view, day);
   // The meal open in its box, as the day now reads it: a change saved there shows at once.
   const openRow = open === null ? null : (rows?.find((r) => r.id === open.id) ?? open);
 
@@ -325,10 +242,7 @@ export function FoodScreen() {
         />
       </Sheet>
       {today ? (
-        <>
-          <MealIdeas fresh={answers} onAnswered={answered} />
-          <MealPlan foodsToday={rows === null ? null : rows.map((r) => foodsOfRow(r, view.waiting))} fresh={answers} onAnswered={answered} />
-        </>
+        <WhatToEatNext foodsToday={rows === null ? null : rows.map((r) => foodsOfRow(r, view.waiting))} fresh={answers} onAnswered={answered} />
       ) : null}
       <View style={styles.dayRow}>
         <Pressable

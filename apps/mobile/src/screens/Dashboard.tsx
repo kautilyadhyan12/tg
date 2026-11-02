@@ -50,7 +50,8 @@ import {
 } from "./dashboard/words";
 import { Clock } from "./dashboard/Clock";
 import { useRead, type Read } from "./dashboard/useRead";
-import { IDEAS_READ, MealIdeas } from "./food/MealIdeas";
+import { IDEAS_READ } from "./food/MealIdeas";
+import { Recommended } from "./food/MealPlan";
 import { useMealOutbox } from "./food/MealOutbox";
 import { GOALS_READ, GoalsBox, GoalsPage, type GoalsOpen } from "./Goals";
 import { LeaderboardPage, type LeaderboardPlace } from "./gym/Leaderboard";
@@ -73,6 +74,7 @@ export const DASHBOARD_READS = {
   meals: "/v1/nutrition/meals?limit=3",
   goals: GOALS_READ,
   ideas: IDEAS_READ,
+  plan: "/v1/nutrition/diet-plan",
 } as const;
 /** Your Rank's: which gym. The Gym tab reads the same. */
 const PLACES_READ = "/v1/orgs/mine";
@@ -186,7 +188,7 @@ export function DashboardScreen() {
         )}
         <Badges me={me.read} onPress={toMe} />
       </Swipe>
-      <MealIdeas
+      <Recommended
         onMore={() => {
           go.navigate("Food", { today: Date.now() });
         }}

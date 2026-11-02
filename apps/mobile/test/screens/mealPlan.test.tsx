@@ -86,10 +86,10 @@ function serverOf(plan: () => Reply, more: Record<string, Route> = {}, saving: R
   return { s, meals };
 }
 
-async function open(world: ReturnType<typeof serverOf>, store = files()) {
+async function open(world: ReturnType<typeof serverOf>, store = files(), tab: "Food" | "Dashboard" = "Food") {
   await render(<App extra={extra} ask={world.s.ask} store={memoryStore(kept(1))} wait={noWait} mealStore={store} />);
-  await fireEvent.press(await screen.findByRole("tab", { name: "Food" }));
-  return within(await screen.findByTestId("meal-plan-box"));
+  await fireEvent.press(await screen.findByRole("tab", { name: tab }));
+  return screen;
 }
 const posts = (world: ReturnType<typeof serverOf>, path: string) => world.s.asked.filter((a) => a.method === "POST" && a.path === path);
 const ok = (body: unknown): Reply => ({ status: 200, body });
@@ -213,6 +213,73 @@ describe("swapping", () => {
   });
 });
 
+describe("one box, one answer", () => {
+  it("with a plan the Food page has no second box of ideas; Other ideas opens them", async () => {
+    const world = serverOf(() => ok(week([RICE])));
+    const box = await open(world);
+    expect(await box.findByRole("button", { name: "Log Rice + Dal" })).toBeTruthy();
+    expect(box.queryByTestId("meal-ideas-box")).toBeNull();
+    expect(box.getAllByText("What to eat next")).toHaveLength(1);
+    await fireEvent.press(box.getByRole("button", { name: "Other ideas" }));
+    expect(await screen.findByText("No more meals to suggest today.")).toBeTruthy();
+  });
+
+  it("without a plan the ideas' box is the one box, with Make my plan under it", async () => {
+    const world = serverOf(() => ok(week([])));
+    const box = await open(world);
+    expect(await box.findByRole("button", { name: "Make my plan" })).toBeTruthy();
+    expect(box.queryByTestId("meal-plan-box")).toBeNull();
+    expect(box.getAllByText("What to eat next")).toHaveLength(1);
+  });
+
+  it("the Dashboard offers the plan's next meal, logs it once, and then the same next meal as Food", async () => {
+    const world = serverOf(() => ok(week([RICE, SALMON])));
+    const box = await open(world, files(), "Dashboard");
+    const card = within(await box.findByTestId("recommended-box"));
+    const log = await card.findByRole("button", { name: "Log Rice + Dal" });
+    expect(card.getByText(FOOD_ALLERGY_CAUTION)).toBeTruthy();
+    expect(log).toBeTruthy();
+    await card.findByRole("button", { name: "Log Rice + Dal", disabled: false });
+    await fireEvent.press(await card.findByRole("button", { name: "Log Rice + Dal" }));
+    await waitFor(() => { expect(world.meals).toHaveLength(1); });
+    expect(await card.findByRole("button", { name: "Log Salmon" })).toBeTruthy();
+    expect(((posts(world, "/v1/nutrition/meals")[0]?.body) as SentMeal).mealType).toBe("lunch");
+    await fireEvent.press(screen.getByRole("tab", { name: "Food" }));
+    const food = within(await screen.findByTestId("meal-plan-box"));
+    expect(await food.findByRole("button", { name: "Log Salmon" })).toBeTruthy();
+    expect(food.queryByRole("button", { name: "Log Rice + Dal" })).toBeNull();
+  });
+});
+
+describe("Undo of a swap", () => {
+  const SWAP = `/v1/nutrition/diet-plan/days/${String(TODAY)}/swap`;
+  const DAY = `/v1/nutrition/diet-plan/days/${String(TODAY)}`;
+
+  it("sends the day back whole as it stood, shows it, and is gone once used", async () => {
+    const world = serverOf(() => ok(week([OATS, RICE])), { [SWAP]: () => ok(week([OATS, TOFU])), [DAY]: () => ok(week([OATS, RICE])) });
+    const box = await open(world);
+    await fireEvent.press(await box.findByRole("button", { name: "Swap Oatmeal" }));
+    expect(await box.findByRole("button", { name: "Undo the swap" })).toBeTruthy();
+    await fireEvent.press(box.getByRole("button", { name: "Undo the swap" }));
+    expect(await box.findByText("Meal put back.")).toBeTruthy();
+    expect(box.queryByRole("button", { name: "Undo the swap" })).toBeNull();
+    const sent = world.s.asked.find((a) => a.method === "PUT" && a.path === DAY)?.body as { meals: unknown };
+    expect(sent.meals).toEqual([
+      { mealType: "breakfast", items: [{ canonical: "oats", grams: 250 }] },
+      { mealType: "lunch", items: [{ canonical: "rice_white", grams: 212 }, { canonical: "dal", grams: 150 }] },
+    ]);
+  });
+
+  it("a meal logged after the swap takes Undo away, so a logged meal's plan isn't changed under it", async () => {
+    const world = serverOf(() => ok(week([RICE, SALMON])), { [SWAP]: () => ok(week([TOFU, SALMON])) });
+    const box = await open(world);
+    await fireEvent.press(await box.findByRole("button", { name: "Swap Rice + Dal" }));
+    await fireEvent.press(await box.findByRole("button", { name: "Log Tofu" }));
+    expect(await box.findByText("Logged to Lunch.")).toBeTruthy();
+    expect(box.queryByRole("button", { name: "Undo the swap" })).toBeNull();
+  });
+});
+
 describe("making the plan", () => {
   const MAKE = "/v1/nutrition/diet-plan/make";
 
@@ -229,6 +296,9 @@ describe("making the plan", () => {
     const box = await open(world);
     await fireEvent.press(await box.findByRole("button", { name: "See the week" }));
     const sheet = within(await screen.findByTestId("sheet"));
+    // At the top of the week, above the day's meals: never under them.
+    const order = JSON.stringify(screen.toJSON());
+    expect(order.indexOf("Make a new plan")).toBeLessThan(order.indexOf("kcal planned"));
     await fireEvent.press(sheet.getByRole("button", { name: "Make a new plan" }));
     expect(sheet.getByText("This replaces your whole week, and any meals you swapped.")).toBeTruthy();
     await fireEvent.press(sheet.getByRole("button", { name: "Keep my plan" }));
@@ -239,11 +309,11 @@ describe("making the plan", () => {
     expect(posts(world, MAKE)).toHaveLength(1);
   });
 
-  it("answers missing: the box says which, with Answer now, and no Make my plan", async () => {
+  it("answers missing: no Make my plan; the ideas' own question is the one question asked", async () => {
     const world = serverOf(() => ok(week([], { make: { status: "needs_answers", missing: ["diet"] } })));
     const box = await open(world);
-    expect(await box.findByText(/To make your meal plan, answer/)).toBeTruthy();
-    expect(box.getByRole("button", { name: "Answer now for your meal plan" })).toBeTruthy();
+    expect(await box.findByTestId("meal-ideas-box")).toBeTruthy();
+    await act(async () => { await new Promise((done) => setTimeout(done, 50)); });
     expect(box.queryByRole("button", { name: "Make my plan" })).toBeNull();
   });
 });
