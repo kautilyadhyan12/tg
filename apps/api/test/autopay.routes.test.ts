@@ -20,7 +20,7 @@ import {
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { openDueBills } from "../src/modules/orgs/memberships/billsRepo.js";
-import { pendingRetries, startCharge } from "../src/modules/orgs/payments/cardChargesRepo.js";
+import { dueBills, pendingRetries, startCharge } from "../src/modules/orgs/payments/cardChargesRepo.js";
 import { squareSettings } from "../src/modules/orgs/payments/settings.js";
 import { STAFF_LINES } from "../src/modules/orgs/staffActivity/words.js";
 import { processSquareWork } from "../src/modules/orgs/payments/work.js";
@@ -342,6 +342,10 @@ d("Pause automatic payments (real Postgres)", { timeout: T }, () => {
       expect(shown.autopayPausedOn).toBe((await held(gym, gym.owner, pia.entryId)).today);
       const piaBill = await nextWeekOpens(pia);
       const sonBill = await nextWeekOpens(son);
+      // Never even found by the worker's look, whose own write checks again under the record's lock.
+      const listed = await dueBills(sql, { environment: "production", now: clock, limit: 1000, after: null, gymIds: [gym.id] });
+      expect(listed.map((b) => b.billId)).not.toContain(piaBill);
+      expect(listed.map((b) => b.billId)).not.toContain(sonBill);
 
       await work();
       await work();
