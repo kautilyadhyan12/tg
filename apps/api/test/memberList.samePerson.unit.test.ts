@@ -544,6 +544,8 @@ describe("a file whose rows share one key is matched in one pass", () => {
     const took = performance.now() - started;
     expect(matches.every((match) => match?.by === "memberNumber")).toBe(true);
     expect(new Set(matches.map((match) => match?.entry)).size).toBe(size);
-    expect(took).toBeLessThan(1_000);
+    // The quadratic walk took 1.5–2.5 s for 10,000 rows, so 20,000 would take several times that. A linear pass takes 0.4–0.9 s on
+    // GitHub's busy runners, which crossed 1 s twice on 2026-11-02; 3 s leaves room for that and still fails the quadratic walk.
+    expect(took).toBeLessThan(3_000);
   });
 });
