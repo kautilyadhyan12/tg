@@ -117,11 +117,13 @@ function FiveTabs({ mealStore }: { mealStore: (userId: string) => TextStore }) {
 
 /** The Gym tab is named for the places the person joined ("Studio" for a yoga studio). */
 function TabsOfPlaces() {
-  const { kinds } = usePlaces();
+  const { kinds, newMessages } = usePlaces();
   const labels = { Gym: tabWord(kinds ?? []) };
+  // Lit while any of the person's places holds a message they have not opened.
+  const dots: Record<string, string> = newMessages > 0 ? { Gym: newMessages === 1 ? "1 new message" : `${String(newMessages)} new messages` } : {};
   return (
     <NavigationContainer theme={theme}>
-      <Tabs.Navigator screenOptions={{ headerShown: false }} tabBar={(props) => <TabBar {...props} icons={tabIcons} labels={labels} />}>
+      <Tabs.Navigator screenOptions={{ headerShown: false }} tabBar={(props) => <TabBar {...props} icons={tabIcons} labels={labels} dots={dots} />}>
         {TABS.map((tab) => (
           <Tabs.Screen key={tab.name} name={tab.name} component={tab.screen} />
         ))}

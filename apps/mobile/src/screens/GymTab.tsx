@@ -27,6 +27,8 @@ import { ClassesPage, type ClassesPlace } from "./gym/Classes";
 import { DaysYouCame } from "./gym/DaysYouCame";
 import { ChallengesPage, type ChallengesPlace } from "./gym/Challenges";
 import { EventsPage, type EventsPlace } from "./gym/Events";
+import { InboxPage, type InboxPlace } from "./gym/Inbox";
+import { inboxButtonLabel, inboxButtonSay, newMessagesAt } from "./gym/inboxView";
 import { LeaderboardPage, type LeaderboardPlace } from "./gym/Leaderboard";
 import { MembershipPage, type MembershipPlace } from "./gym/Membership";
 import { PersonalTrainingPage, type PtPlace } from "./gym/PersonalTraining";
@@ -36,7 +38,7 @@ import { makePhonePass, phoneDay } from "./gym/phonePass";
 import { NO_ANSWER } from "./SignIn";
 
 // The Gym tab (docs/design/phone/pages/Gym and GymNone): the places the person joined, each with
-// Show my pass, its Updates, its Classes, its Events, its Personal training, My membership and the days they came there, a place that removed them, and every invitation still open for their address. It reads again when the
+// Show my pass, its Inbox, its Updates, its Classes, its Events, its Personal training, My membership and the days they came there, a place that removed them, and every invitation still open for their address. It reads again when the
 // tab is opened or the app comes back, at most every 30 seconds. With the internet it also asks for
 // this sign-in's keys for passes with no signal, today's and tomorrow's, whenever the phone lacks
 // tomorrow's; with none, Show my pass stands alone where the places could not be read, or are more
@@ -58,7 +60,7 @@ export function GymScreen() {
   const keyRefused = useRef(false);
   // The places have been waited for long enough to offer the pass without them.
   const [placesSlow, setPlacesSlow] = useState(false);
-  const { setKinds } = usePlaces();
+  const { setKinds, setNewMessages } = usePlaces();
   const [mine, setMine] = useState<Read<MyOrgsResponse> | null>(null);
   const [invites, setInvites] = useState<Read<MyInvitationsResponse> | null>(null);
   /** The newest finished read of the invitations, numbered as reads start: an answer on the phone stands
@@ -89,6 +91,10 @@ export function GymScreen() {
   const [membershipAt, setMembershipAt] = useState<MembershipPlace | null>(null);
   // The place whose Updates page is open over the tab, or null.
   const [updatesAt, setUpdatesAt] = useState<UpdatesPlace | null>(null);
+  // The place whose Inbox is open over the tab, or null.
+  const [inboxAt, setInboxAt] = useState<InboxPlace | null>(null);
+  // A place's count of new messages as its Inbox last said it, until the places are read again.
+  const [unreadAt, setUnreadAt] = useState<Record<string, number>>({});
 
   const fetchPass = useCallback(() => session.signedIn({ method: "GET", path: PASS_PATH }, checkinPassResponseSchema), [session]);
   const makeOwnPass = useMemo(
@@ -121,6 +127,7 @@ export function GymScreen() {
     if (answer.kind === "ok") {
       const kinds = answer.data.orgs.filter((org) => org.isMember).map((org) => org.orgType);
       setKinds(kinds);
+      setUnreadAt({});
       await session.keepBelongs(kinds.length > 0);
     }
   }, [session, setKinds]);
@@ -181,6 +188,16 @@ export function GymScreen() {
   };
 
   const joined = mine?.kind === "ok" ? mine.data.orgs.filter((org) => org.isMember) : [];
+  const unreadOf = (org: { id: string; newMessages: number }) => unreadAt[org.id] ?? org.newMessages;
+
+  // What an Inbox said moves the count on its button and the tab's dot at once.
+  const inboxSaid = useCallback((gymId: string, unread: number) => {
+    setUnreadAt((was) => ({ ...was, [gymId]: unread }));
+  }, []);
+  useEffect(() => {
+    if (mine?.kind !== "ok") return;
+    setNewMessages(newMessagesAt(mine.data.orgs.map((org) => ({ isMember: org.isMember, newMessages: unreadAt[org.id] ?? org.newMessages }))));
+  }, [mine, unreadAt, setNewMessages]);
   const removed = mine?.kind === "ok" ? mine.data.formerOrgs : [];
   // A place the person has joined is listed once, as theirs, never again as an invitation.
   const open =
@@ -225,6 +242,15 @@ export function GymScreen() {
             </Txt>
             <Button label="Show my pass" icon="qr" wide onPress={() => { setPassOrgType(org.orgType); }} />
             <View style={styles.links}>
+              <Button
+                label={inboxButtonLabel(unreadOf(org))}
+                kind="link"
+                icon="mail"
+                say={inboxButtonSay(org.name, unreadOf(org))}
+                onPress={() => {
+                  setInboxAt({ id: org.id, name: org.name, orgType: org.orgType, latestCheer: org.latestCheer, latestNudge: org.latestNudge });
+                }}
+              />
               <Button
                 label="Updates"
                 kind="link"
@@ -339,6 +365,13 @@ export function GymScreen() {
           setMembershipAt(null);
         }}
       />
+      <InboxPage
+        place={inboxAt}
+        onClose={() => {
+          setInboxAt(null);
+        }}
+        onUnread={inboxSaid}
+      />
       <UpdatesPage
         place={updatesAt}
         onClose={() => {
@@ -417,7 +450,7 @@ const styles = StyleSheet.create({
   none: { padding: 18, gap: 10 },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },
   grow: { flex: 1 },
-  // Updates, Classes, Events, Leaderboard, Personal training and My membership side by side, one under the other where they do not fit.
+  // Inbox, Updates, Classes, Events, Leaderboard, Personal training and My membership side by side, one under the other where they do not fit.
   links: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", columnGap: 24 },
   address: {
     flexDirection: "row",
