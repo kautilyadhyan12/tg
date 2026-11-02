@@ -8,6 +8,7 @@ export const inboxReadPath = (gymId: string) => `${inboxPath(gymId)}/read`;
 export const inboxSwitchPath = (gymId: string) => `${inboxPath(gymId)}/switches`;
 
 export const INBOX_NOT_READ = "Couldn’t load your messages.";
+export const LINK_NOT_OPENED = "No app on this phone can open that.";
 export const SWITCH_NOT_SAVED = "We couldn’t change that. Please try again.";
 
 export interface InboxRow {
@@ -36,9 +37,4 @@ export function inboxButtonSay(gymName: string, unread: number): string {
   const badge = unreadBadge(unread);
   if (badge === null) return `Inbox at ${gymName}`;
   return `Inbox at ${gymName}, ${unread === 1 ? "1 new message" : `${badge} new messages`}`;
-}
-
-/** New messages at all the person's places together: the Gym tab's dot is lit while there are any. */
-export function newMessagesAt(orgs: readonly { isMember: boolean; newMessages: number }[]): number {
-  return orgs.filter((org) => org.isMember).reduce((sum, org) => sum + org.newMessages, 0);
 }

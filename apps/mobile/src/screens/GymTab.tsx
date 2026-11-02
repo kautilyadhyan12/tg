@@ -28,7 +28,7 @@ import { DaysYouCame } from "./gym/DaysYouCame";
 import { ChallengesPage, type ChallengesPlace } from "./gym/Challenges";
 import { EventsPage, type EventsPlace } from "./gym/Events";
 import { InboxPage, type InboxPlace } from "./gym/Inbox";
-import { inboxButtonLabel, inboxButtonSay, newMessagesAt } from "./gym/inboxView";
+import { inboxButtonLabel, inboxButtonSay } from "./gym/inboxView";
 import { LeaderboardPage, type LeaderboardPlace } from "./gym/Leaderboard";
 import { MembershipPage, type MembershipPlace } from "./gym/Membership";
 import { PersonalTrainingPage, type PtPlace } from "./gym/PersonalTraining";
@@ -60,7 +60,7 @@ export function GymScreen() {
   const keyRefused = useRef(false);
   // The places have been waited for long enough to offer the pass without them.
   const [placesSlow, setPlacesSlow] = useState(false);
-  const { setKinds, setNewMessages } = usePlaces();
+  const { setKinds, unreadOf: placeUnread, startRead, placesRead, inboxSaid } = usePlaces();
   const [mine, setMine] = useState<Read<MyOrgsResponse> | null>(null);
   const [invites, setInvites] = useState<Read<MyInvitationsResponse> | null>(null);
   /** The newest finished read of the invitations, numbered as reads start: an answer on the phone stands
@@ -93,8 +93,6 @@ export function GymScreen() {
   const [updatesAt, setUpdatesAt] = useState<UpdatesPlace | null>(null);
   // The place whose Inbox is open over the tab, or null.
   const [inboxAt, setInboxAt] = useState<InboxPlace | null>(null);
-  // A place's count of new messages as its Inbox last said it, until the places are read again.
-  const [unreadAt, setUnreadAt] = useState<Record<string, number>>({});
 
   const fetchPass = useCallback(() => session.signedIn({ method: "GET", path: PASS_PATH }, checkinPassResponseSchema), [session]);
   const makeOwnPass = useMemo(
@@ -121,16 +119,18 @@ export function GymScreen() {
   const fetchVisits = useCallback((path: string) => session.signedIn({ method: "GET", path }, gymAttendanceHistoryResponseSchema), [session]);
 
   const readMine = useCallback(async () => {
+    const number = startRead();
     const answer = await session.signedIn({ method: "GET", path: "/v1/orgs/mine" }, myOrgsResponseSchema);
     if (!live.current) return;
     setMine(answer.kind === "ok" ? answer : { kind: "failed" });
     if (answer.kind === "ok") {
       const kinds = answer.data.orgs.filter((org) => org.isMember).map((org) => org.orgType);
       setKinds(kinds);
-      setUnreadAt({});
+      // Each place's count of new messages, kept where it can lose no newer one an Inbox said.
+      placesRead(number, answer.data.orgs);
       await session.keepBelongs(kinds.length > 0);
     }
-  }, [session, setKinds]);
+  }, [session, setKinds, startRead, placesRead]);
 
   const readInvites = useCallback(async () => {
     invitesStarted.current += 1;
@@ -188,16 +188,7 @@ export function GymScreen() {
   };
 
   const joined = mine?.kind === "ok" ? mine.data.orgs.filter((org) => org.isMember) : [];
-  const unreadOf = (org: { id: string; newMessages: number }) => unreadAt[org.id] ?? org.newMessages;
-
-  // What an Inbox said moves the count on its button and the tab's dot at once.
-  const inboxSaid = useCallback((gymId: string, unread: number) => {
-    setUnreadAt((was) => ({ ...was, [gymId]: unread }));
-  }, []);
-  useEffect(() => {
-    if (mine?.kind !== "ok") return;
-    setNewMessages(newMessagesAt(mine.data.orgs.map((org) => ({ isMember: org.isMember, newMessages: unreadAt[org.id] ?? org.newMessages }))));
-  }, [mine, unreadAt, setNewMessages]);
+  const unreadOf = (org: { id: string; newMessages: number }) => placeUnread(org.id) ?? org.newMessages;
   const removed = mine?.kind === "ok" ? mine.data.formerOrgs : [];
   // A place the person has joined is listed once, as theirs, never again as an invitation.
   const open =

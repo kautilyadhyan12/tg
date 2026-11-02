@@ -18,8 +18,8 @@ export const GYM_CHEER_LINES: Record<GymCheerPreset, { emoji: string; text: stri
 
 /** A cheer's words, or null for a code these words do not know. */
 export function gymCheerText(preset: unknown): string | null {
-  if (typeof preset !== "string" || !(GYM_CHEER_PRESETS as readonly string[]).includes(preset)) return null;
-  return GYM_CHEER_LINES[preset as GymCheerPreset].text;
+  const code = GYM_CHEER_PRESETS.find((known) => known === preset);
+  return code === undefined ? null : GYM_CHEER_LINES[code].text;
 }
 
 /** A come-back line's words, or null for a code these words do not know. */

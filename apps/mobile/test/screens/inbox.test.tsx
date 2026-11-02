@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react-native";
-import { Linking } from "react-native";
+import { AppState, Linking } from "react-native";
 import { App } from "../../src/App";
 import type { Ask } from "../../src/session/calls";
 import { fakeServer, kept, lost, memoryStore, refusal, tokens, type Reply, type Route } from "../kit";
@@ -72,6 +72,54 @@ const putsTo = (server: { asked: { method: string; path: string; body: unknown }
 
 afterEach(() => {
   jest.restoreAllMocks();
+});
+function listenForComeBack(): () => Promise<void> {
+  const listeners: ((state: string) => void)[] = [];
+  jest.spyOn(AppState, "addEventListener").mockImplementation((_type, handler) => {
+    listeners.push(handler as (state: string) => void);
+    return { remove: () => undefined };
+  });
+  return async () => {
+    await act(() => {
+      for (const one of listeners) one("active");
+    });
+  };
+}
+
+describe("the Gym tab's dot, before the Gym tab is ever opened", () => {
+  it("is lit on Home when the places hold new messages", async () => {
+    const server = fakeServer(routes({ "/v1/orgs/mine": ok({ orgs: [org(IRON, { newMessages: 2 })], formerOrgs: [] }) }));
+    await render(<App extra={extra} ask={server.ask} store={memoryStore(kept(1))} wait={noWait} />);
+    expect(await screen.findByTestId("dot-Gym")).toBeTruthy();
+    expect(screen.getByLabelText("Gym, 2 new messages")).toBeTruthy();
+  });
+
+  it("lights when a message comes while the app was away, and the app comes back on Home", async () => {
+    let count = 0;
+    const comeBack = listenForComeBack();
+    const server = fakeServer(routes({ "/v1/orgs/mine": () => ({ status: 200, body: { orgs: [org(IRON, { newMessages: count })], formerOrgs: [] } }) }));
+    const now = jest.spyOn(Date, "now");
+    const start = Date.now();
+    now.mockReturnValue(start);
+    await render(<App extra={extra} ask={server.ask} store={memoryStore(kept(1))} wait={noWait} />);
+    await screen.findAllByRole("tab");
+    await settle();
+    expect(screen.queryByTestId("dot-Gym")).toBeNull();
+    count = 2;
+    now.mockReturnValue(start + 31_000);
+    await comeBack();
+    expect(await screen.findByTestId("dot-Gym")).toBeTruthy();
+  });
+
+  it("counts only the places the person is a member of", async () => {
+    const server = fakeServer(
+      routes({ "/v1/orgs/mine": ok({ orgs: [org(IRON, { isMember: false, staffRole: "trainer", newMessages: 3 })], formerOrgs: [] }) }),
+    );
+    await render(<App extra={extra} ask={server.ask} store={memoryStore(kept(1))} wait={noWait} />);
+    await screen.findAllByRole("tab");
+    await settle();
+    expect(screen.queryByTestId("dot-Gym")).toBeNull();
+  });
 });
 
 describe("the worst thing: a switch says only what the server saved, so a member never misses a message they think is on", () => {
@@ -198,7 +246,7 @@ describe("the messages", () => {
       routes({
         [inboxPath(IRON)]: ok(
           inboxOf(IRON, {
-            messages: [message(M1, "How was your month?", { kind: "review", link: "https://g.page/r/iron-house/review" }), message(M2, "New class on Monday.", { link: null })],
+            messages: [message(M1, "How was your month?", { kind: "review", link: "https://g.page/r/iron-house/review" }), message(M2, "New class on Monday.", { link: "https://g.page/r/iron-house/review" })],
           }),
         ),
       }),
@@ -235,7 +283,61 @@ describe("the messages", () => {
   });
 });
 
+describe("the count after reading", () => {
+  it("a read of the places that started before the Inbox marked them read never brings the old count back", async () => {
+    const comeBack = listenForComeBack();
+    let mineReads = 0;
+    let hold = false;
+    let held = 0;
+    let release: (reply: Reply) => void = () => undefined;
+    const server = fakeServer(
+      routes({
+        "/v1/orgs/mine": () => {
+          mineReads += 1;
+          // The read the app makes when it comes back answers late, with the count from before.
+          if (hold && held === 0) {
+            held += 1;
+            return new Promise<Reply>((resolve) => { release = resolve; });
+          }
+          return { status: 200, body: { orgs: [org(IRON, { newMessages: hold ? 0 : 2 })], formerOrgs: [] } };
+        },
+        [inboxPath(IRON)]: ok(inboxOf(IRON, { messages: [message(M1, "Closed Friday.")], unread: 2 })),
+        [`${inboxPath(IRON)}/read`]: ok({ unread: 0 }),
+      }),
+    );
+    const now = jest.spyOn(Date, "now");
+    const start = Date.now();
+    now.mockReturnValue(start);
+    await openGym(server.ask);
+    await fireEvent.press(await screen.findByLabelText("Inbox at Iron House, 2 new messages"));
+    await page().findByText("Closed Friday.");
+    await settle();
+    hold = true;
+    now.mockReturnValue(start + 31_000);
+    await comeBack();
+    await settle();
+    expect(held).toBe(1);
+    expect(mineReads).toBeGreaterThanOrEqual(3);
+    await act(() => {
+      release({ status: 200, body: { orgs: [org(IRON, { newMessages: 2 })], formerOrgs: [] } });
+    });
+    await settle();
+    await fireEvent.press(page().getByLabelText("Back"));
+    expect(await screen.findByLabelText("Inbox at Iron House")).toBeTruthy();
+    expect(screen.queryByTestId("dot-Gym")).toBeNull();
+  });
+});
+
 describe("Contact the gym", () => {
+  it("a link no app can open says so where it was pressed", async () => {
+    jest.spyOn(Linking, "openURL").mockRejectedValue(new Error("No app"));
+    const server = fakeServer(routes({ [inboxPath(IRON)]: ok(inboxOf(IRON, { contact: { phone: null, email: "desk@ironhouse.in" } })) }));
+    await openInbox(server.ask);
+    await fireEvent.press(await page().findByText("Contact the gym"));
+    await fireEvent.press(await screen.findByText("Email desk@ironhouse.in"));
+    expect(await page().findByText("No app on this phone can open that.")).toBeTruthy();
+  });
+
   it("opens a box with the gym's phone and email; each press calls or writes", async () => {
     const opened = jest.spyOn(Linking, "openURL").mockResolvedValue(true);
     const server = fakeServer(routes({ [inboxPath(IRON)]: ok(inboxOf(IRON, { contact: { phone: "+44 (0)20 7946 0958", email: "desk@ironhouse.in" } })) }));

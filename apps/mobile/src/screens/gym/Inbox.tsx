@@ -27,7 +27,7 @@ import { Sheet } from "../../look/Sheet";
 import { fonts, Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
 import { NO_ANSWER } from "../SignIn";
-import { INBOX_NOT_READ, SWITCH_NOT_SAVED, inboxPath, inboxReadPath, inboxRow, inboxSwitchPath } from "./inboxView";
+import { INBOX_NOT_READ, LINK_NOT_OPENED, SWITCH_NOT_SAVED, inboxPath, inboxReadPath, inboxRow, inboxSwitchPath } from "./inboxView";
 
 // A place's messages to its member (spec Part 3 §16.1; ROADMAP Stage 5 item 18a): the place's pinned note, then its
 // messages, newest first, Contact the gym, and the member's two switches. A page over the Gym tab, read when it opens
@@ -66,6 +66,8 @@ function InboxBody({ place, onClose, onUnread, bottom }: { place: InboxPlace; on
   const [switchesOpen, setSwitchesOpen] = useState(false);
   const [busyGroup, setBusyGroup] = useState<GymMessageMemberSwitchGroup | null>(null);
   const [switchSaid, setSwitchSaid] = useState<string | null>(null);
+  // A link no app on the phone could open, said where it was pressed: a message's id, or "contact".
+  const [notOpened, setNotOpened] = useState<string | null>(null);
   // Reads are numbered as they start: an answer stands only if no later read has started.
   const started = useRef(0);
   const live = useRef(true);
@@ -121,6 +123,13 @@ function InboxBody({ place, onClose, onUnread, bottom }: { place: InboxPlace; on
       return;
     }
     setSwitchSaid(answer.kind === "no_answer" ? NO_ANSWER : SWITCH_NOT_SAVED);
+  };
+
+  const open = (url: string, where: string) => {
+    setNotOpened(null);
+    Linking.openURL(url).catch(() => {
+      if (isLive()) setNotOpened(where);
+    });
   };
 
   const inbox = held.kind === "ok" ? held.inbox : null;
@@ -189,10 +198,15 @@ function InboxBody({ place, onClose, onUnread, bottom }: { place: InboxPlace; on
                     small
                     style={styles.under}
                     onPress={() => {
-                      if (row.link !== null) void Linking.openURL(row.link);
+                      if (row.link !== null) open(row.link, row.id);
                     }}
                   />
                 )}
+                {notOpened === row.id ? (
+                  <Txt kind="small" colour="badText" style={styles.under}>
+                    {LINK_NOT_OPENED}
+                  </Txt>
+                ) : null}
                 {row.isNew || row.when !== null ? (
                   <Txt kind="tiny" style={styles.under}>
                     {row.isNew ? (
@@ -220,6 +234,11 @@ function InboxBody({ place, onClose, onUnread, bottom }: { place: InboxPlace; on
             ) : (
               <Txt kind="small">{contact.none}</Txt>
             )}
+            {notOpened === "contact" ? (
+              <Txt kind="small" colour="badText">
+                {LINK_NOT_OPENED}
+              </Txt>
+            ) : null}
             <Button
               label={memberSwitchesHeading(place.name)}
               kind="link"
@@ -249,7 +268,7 @@ function InboxBody({ place, onClose, onUnread, bottom }: { place: InboxPlace; on
               wide
               onPress={() => {
                 setContactOpen(false);
-                void Linking.openURL(way.href);
+                open(way.href, "contact");
               }}
             />
           ))}
