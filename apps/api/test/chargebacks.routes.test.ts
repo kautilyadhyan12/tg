@@ -1152,7 +1152,7 @@ d("A chargeback (real Postgres)", { timeout: T }, () => {
       expect(await waitingOn(s)).toEqual([]);
       const seen = JSON.parse((await send("GET", `/v1/orgs/${gym.id}/register/sales/${s.lines[1] ?? ""}/card-refund`, gym.owner.cookies)).body) as { block?: string };
       expect(seen.block).not.toBe("to_place");
-      const [day] = await sql<{ same: boolean; method: string }[]>`SELECT refunded_on = (SELECT (q.square_updated_at AT TIME ZONE 'UTC')::date FROM gym_square_disputes q WHERE q.square_payment_id = ${s.payment}) AS same, method FROM gym_sale_refunds WHERE sale_id = ${s.lines[1] ?? ""}`;
+      const [day] = await sql<{ same: boolean; method: string }[]>`SELECT refunded_on = (SELECT (q.square_updated_at AT TIME ZONE g.timezone)::date FROM gym_square_disputes q JOIN gyms g ON g.id = q.gym_id WHERE q.square_payment_id = ${s.payment}) AS same, method FROM gym_sale_refunds WHERE sale_id = ${s.lines[1] ?? ""}`;
       expect(day?.method).toBe("terminal");
       expect(day?.same).toBe(true);
       // Chosen on a row of its own, it still reads as a chargeback, never as a refund made in Square.
