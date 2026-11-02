@@ -4,7 +4,7 @@ import { AppState } from "react-native";
 import { gymPostCommentSchema, gymPostsResponseSchema } from "@app/shared";
 import { App } from "../../src/App";
 import { useKeptComments } from "../../src/screens/gym/Comments";
-import { commentDraftsText, dropsAKeptComment, readCommentDrafts, withKept, type KeptComment, type KeptComments } from "../../src/screens/gym/commentsView";
+import { commentDraftsText, differsFromKept, dropsAKeptComment, readCommentDrafts, withKept, type KeptComment, type KeptComments } from "../../src/screens/gym/commentsView";
 import type { Ask } from "../../src/session/calls";
 import { fakeServer, kept, lost, memoryStore, tokens, type Reply } from "../kit";
 
@@ -432,7 +432,35 @@ describe("more", () => {
     await screen.findByText("This post may already be up. Check Updates. You can discard this copy.");
   });
 
-  it("N2 a reply sent again over a comment now hidden: said to be up, and its replies are not read", async () => {
+  it("N3 a reply sent again with its list closed: the other replies are read too", async () => {
+    let answerFor: () => Reply = lost;
+    const parentId = id(1, "c");
+    const reply = comment(9, 1, { body: "My reply", parentId, own: true, wrote: true });
+    const server = serverOf({
+      [posts]: ok(feed([post(1, { commentCount: 2 })])),
+      [onPost(1)]: (b) => (b === undefined ? ok(page([comment(1, 1, { body: "Above", replyCount: 1 })]))() : answerFor()),
+      [`/v1/orgs/${IRON.id}/post-comments/${parentId}/replies`]: ok(page([comment(8, 1, { body: "Other reply one", parentId }), reply])),
+    });
+    await openUpdates(server.ask);
+    await fireEvent.press(await screen.findByTestId("comments-open"));
+    await screen.findByText("Above");
+    await fireEvent.press(screen.getByRole("button", { name: "Reply to Asha R." }));
+    await fireEvent.changeText(await screen.findByLabelText("Your comment"), "My reply");
+    await fireEvent.press(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText("No connection. Your comment is kept. Try again.");
+    answerFor = () => ({ status: 201, body: { comment: reply, firstKept: false } });
+    await fireEvent.press(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText("My reply");
+    await screen.findByText("Other reply one");
+  });
+
+  it("N4 the same words moved to another comment by somebody of the same name are not taken as the same", () => {
+    const up = { body: "Same words", parentId: id(1, "c"), replyingTo: "Asha R." };
+    expect(differsFromKept({ body: "Same words", replyTo: { id: id(2, "c"), name: "Asha R." } }, up)).toBe(false);
+    expect(differsFromKept({ body: "Same words", replyTo: { id: id(2, "c"), name: "Asha R." }, replyMoved: true }, up)).toBe(true);
+  });
+
+  it("N2 a reply sent again over a comment now hidden: said to be up, and not called removed", async () => {
     let answerFor: () => Reply = lost;
     const parentId = id(1, "c");
     const reply = comment(9, 1, { body: "My reply", parentId, own: true, wrote: true });
@@ -455,7 +483,7 @@ describe("more", () => {
     answerFor = () => ({ status: 201, body: { comment: reply, firstKept: false } });
     await fireEvent.press(screen.getByRole("button", { name: "Send" }));
     await screen.findByText("Your reply is up, but the comment it answers is no longer showing.");
-    expect(server.asked.filter((a) => a.path.endsWith("/replies"))).toHaveLength(0);
+    expect(screen.queryByText("This comment has been removed.")).toBeNull();
   });
 
   it("L6 the sentence that the oldest was dropped stays through the typing", async () => {

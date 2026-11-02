@@ -308,18 +308,22 @@ function Body({
     }
   };
 
-  const readReplies = async (parentId: string, after: string | null) => {
+  /** `quiet`: a 404 here says nothing, as the person's own reply is up whatever has happened above it. */
+  const readReplies = async (parentId: string, after: string | null, { quiet = false, again = false }: { quiet?: boolean; again?: boolean } = {}) => {
     changeUnder(parentId, (u) => ({ ...u, open: true, busy: true, failed: false }));
     const before = presses.current;
     const answer = await session.signedIn({ method: "GET", path: repliesPath(gymId, parentId, after) }, gymPostCommentsResponseSchema);
     if (!live.current) return;
     if (before !== presses.current) {
-      // The button is there to press again.
+      // The button is there to press again; a first page, which it would not read again, is read once more.
       changeUnder(parentId, (u) => ({ ...u, busy: false, open: u.open && u.comments.length > 0 }));
+      if (after === null && !again) void readReplies(parentId, null, { quiet, again: true });
       return;
     }
     if (answer.kind === "ok") {
       changeUnder(parentId, (u) => ({ ...u, busy: false, comments: merged(u.comments, answer.data.comments), next: answer.data.next }));
+    } else if (answer.kind === "refused" && answer.status === 404 && quiet) {
+      changeUnder(parentId, (u) => ({ ...u, busy: false }));
     } else if (answer.kind === "refused" && answer.status === 404) {
       void load(true);
       changeUnder(parentId, (u) => ({ ...u, busy: false, open: false }));
@@ -376,7 +380,7 @@ function Body({
     if (had === undefined && dropsAKeptComment(kept.drafts ?? {}, postId)) setSaid({ text: KEPT_COMMENTS_FULL, bad: true });
     const base: KeptComment = had ?? { commentKey: newRequestKey(), body: "", replyTo: null };
     // A change after a send whose answer never came: the server would answer with it as it first was.
-    kept.put(postId, { ...base, ...next, ...(base.sent === true ? { changed: true } : {}) });
+    kept.put(postId, { ...base, ...next, ...(base.sent === true ? { changed: true, ...("replyTo" in next ? { replyMoved: true } : {}) } : {}) });
   };
 
   const commenting = held.kind === "ok" ? held.commenting : null;
@@ -416,7 +420,7 @@ function Body({
         const parentId = comment.parentId;
         if (firstKept) changeTop((c) => c.map((x) => (x.id === parentId ? { ...x, replyCount: x.replyCount + 1 } : x)));
         changeUnder(parentId, (u) => ({ ...u, open: true, comments: merged(u.comments, [comment]) }));
-        if (firstKept && (under[parentId]?.comments.length ?? 0) === 0) void readReplies(parentId, null);
+        if ((under[parentId]?.comments.length ?? 0) === 0) void readReplies(parentId, null, { quiet: !firstKept });
         // Sent again, it is answered with the reply though the comment above has gone from this person's screen.
         if (!firstKept && held.kind === "ok" && !held.comments.some((c) => c.id === parentId)) setSaid({ text: REPLY_UP_ABOVE_GONE, bad: false });
       }

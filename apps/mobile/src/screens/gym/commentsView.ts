@@ -129,6 +129,8 @@ export interface KeptComment {
   changed?: boolean;
   /** The post it is on has gone. */
   postGone?: boolean;
+  /** What it answers has been changed since a send. */
+  replyMoved?: boolean;
 }
 export type KeptComments = Readonly<Record<string, KeptComment | undefined>>;
 
@@ -147,7 +149,7 @@ export function readCommentDrafts(text: string | null): KeptComments {
   if (!parsed.success) return {};
   const kept: Record<string, KeptComment> = {};
   for (const [postId, d] of Object.entries(parsed.data.drafts)) {
-    kept[postId] = { commentKey: d.commentKey, body: d.body, replyTo: d.replyTo, ...(d.sent === undefined ? {} : { sent: d.sent }), ...(d.changed === undefined ? {} : { changed: d.changed }), ...(d.postGone === undefined ? {} : { postGone: d.postGone }) };
+    kept[postId] = { commentKey: d.commentKey, body: d.body, replyTo: d.replyTo, ...(d.sent === undefined ? {} : { sent: d.sent }), ...(d.changed === undefined ? {} : { changed: d.changed }), ...(d.postGone === undefined ? {} : { postGone: d.postGone }), ...(d.replyMoved === undefined ? {} : { replyMoved: d.replyMoved }) };
   }
   return kept;
 }
@@ -170,8 +172,8 @@ export function dropsAKeptComment(drafts: KeptComments, postId: string): boolean
 }
 
 /** Whether what is in the box is other than the comment the server kept: other words, or another place to be. */
-export function differsFromKept(draft: Pick<KeptComment, "body" | "replyTo">, comment: Pick<GymPostComment, "body" | "parentId" | "replyingTo">): boolean {
-  if (draft.body.trim() !== comment.body) return true;
+export function differsFromKept(draft: Pick<KeptComment, "body" | "replyTo" | "replyMoved">, comment: Pick<GymPostComment, "body" | "parentId" | "replyingTo">): boolean {
+  if (draft.body.trim() !== comment.body || draft.replyMoved === true) return true;
   if (draft.replyTo === null) return comment.parentId !== null;
   return comment.parentId !== draft.replyTo.id && comment.replyingTo !== draft.replyTo.name;
 }

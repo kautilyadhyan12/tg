@@ -184,6 +184,8 @@ export const gymPostCommentDraftsFileSchema = z
           changed: z.boolean().optional(),
           /** The post it is on has gone. */
           postGone: z.boolean().optional(),
+          /** What it answers has been changed since a send. */
+          replyMoved: z.boolean().optional(),
         })
         .strict(),
     ),
