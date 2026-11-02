@@ -386,7 +386,7 @@ function PlaceRefundBox({ gymId, lines, press, currency, onDone, onClose }) {
     setError(null);
     try {
       const answer = await registerService.placeSquareRefund(gymId, lines[0].id, press.pressId, body);
-      onDone(placedWords(lines, body, currency, answer.receiptNumbers));
+      onDone(placedWords(lines, body, currency, answer.receiptNumbers, press.chargeback === true));
     } catch (err) {
       // Somebody else chose, or Square failed it: the box closes and the page reads again, so what it says is true.
       if (errorCode(err) === 'place_refund_changed') {
@@ -437,7 +437,7 @@ function PlaceRefundBox({ gymId, lines, press, currency, onDone, onClose }) {
             </label>
           ))
         : null}
-      {picked.filter(asksRestock).map((line) => (
+      {(press.chargeback === true ? [] : picked.filter(asksRestock)).map((line) => (
         <label key={line.id} className="c-field">
           <span className="c-label">{`${line.itemName}: how many went back on the shelf`}</span>
           <select className="c-sel" value={draft.shelf[line.id] ?? '0'} onChange={(e) => setDraft((d) => ({ ...d, shelf: { ...d.shelf, [line.id]: e.target.value } }))}>
@@ -480,7 +480,7 @@ export function SquareRefundsToPlace({ gymId, basket, canAct, opened = null, onD
   return placeLines(basket).map((press) => (
     <div key={press.pressId} className="flex flex-col gap-2" data-testid="sale-refund-to-place">
       <p className="c-s14 c-w5 m-0" style={{ color: 'var(--warn)' }}>
-        {placeLine(press.amountMinor, currency)}
+        {placeLine(press.amountMinor, currency, press.chargeback === true)}
       </p>
       {canAct && open !== press.pressId ? (
         <button type="button" className={`${SMALL} self-start`} onClick={() => setOpen(press.pressId)}>

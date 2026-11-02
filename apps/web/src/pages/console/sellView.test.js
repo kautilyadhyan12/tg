@@ -39,6 +39,7 @@ import {
   taxModes,
   saleVoidedLine,
   voidSaleQuestion,
+  basketRefundTag,
 } from './sellView';
 import { saleDiscountWords } from './sellView';
 
@@ -449,5 +450,18 @@ describe('round one of 18b-iii', () => {
   it('a free membership is not offered to charge a rate', () => {
     const page = { tax: { included: false, rates: [r()] }, membershipTypes: [{ id: 't1', name: 'Gold', taxRateId: null, free: false }, { id: 't2', name: 'Free week', taxRateId: null, free: true }], products: [] };
     expect(chargeChoices(page, r(), 'memberships').map((c) => c.name)).toEqual(['Gold']);
+  });
+});
+
+describe('a basket lost to a chargeback (18d-iv-e-ii-b)', () => {
+  it('reads Chargeback lost once all of it went back, a chargeback among it', () => {
+    const lost = { id: 'r1', amountMinor: 500, method: 'terminal', reason: 'chargeback', restocked: 0, refundedOn: '2026-11-02', by: null, receiptNumber: 9, voided: null, square: null };
+    const line = (id, lineNo, totalMinor, refunds) => ({ id, lineNo, receiptNumber: 7, itemName: id, quantity: 1, totalMinor, refundedMinor: refunds.reduce((n, r) => n + r.amountMinor, 0), refunds, undone: false, currency: 'USD', method: 'terminal', soldOn: '2026-11-02' });
+    // As the server sends a basket: the first line holds only its own refunds, here cash; the chargeback is on the second.
+    const first = line('water', 1, 500, [{ ...lost, method: 'cash', reason: 'returned' }]);
+    const second = line('gloves', 2, 1500, [{ ...lost, id: 'r2', amountMinor: 1500 }]);
+    const basket = { receiptNumber: 7, first, lines: [first, second], totalMinor: 2000, taxMinor: 0, refundedMinor: 2000 };
+    expect(basketRefundTag(basket)).toBe('Chargeback lost');
+    expect(basketRefundTag({ ...basket, lines: [first, { ...second, refunds: [{ ...second.refunds[0], reason: 'returned' }] }] })).toBe('Refunded');
   });
 });

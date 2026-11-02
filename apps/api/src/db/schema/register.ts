@@ -317,7 +317,7 @@ export const gymSaleRefunds = pgTable(
     check("gym_sale_refunds_amount_check", sql`${t.amountMinor} BETWEEN 1 AND 99999999`),
     check("gym_sale_refunds_currency_check", sql`${t.currency} ~ '^[A-Z]{3}$'`),
     check("gym_sale_refunds_method_check", sql`${t.method} IN ('cash','upi','card_at_desk','bank_transfer','terminal')`),
-    check("gym_sale_refunds_reason_check", sql`${t.reason} IN ('returned','charged_too_much','faulty','other')`),
+    check("gym_sale_refunds_reason_check", sql`${t.reason} IN ('returned','charged_too_much','faulty','other','chargeback')`),
     check("gym_sale_refunds_restocked_check", sql`${t.restocked} BETWEEN 0 AND 99`),
     check(
       "gym_sale_refunds_void_reason_check",

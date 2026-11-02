@@ -30,8 +30,8 @@ export const CARD_REFUND_WORDS = {
   nothing_left: "There is nothing left of this payment to refund.",
   /** All of a sale, where Square shows less left than the app does. */
   less_in_square: "Square shows less of this sale left to refund than your records do, as part was refunded there. It will appear here by itself within the hour, or you can refund one product at a time.",
-  /** A refund made in Square is waiting on its product. */
-  to_place: "Square refunded part of this sale there. Press Choose product on the sale first, then come back to refund the rest.",
+  /** A refund made in Square, or a lost chargeback, is waiting on its product. */
+  to_place: "Part of this sale has already gone back and its product is not chosen yet. Press Choose product on the sale first, then come back to refund the rest.",
   /** Square took it up, then said it failed. */
   failed: "Square could not refund this. No money went back.",
 } as const;
