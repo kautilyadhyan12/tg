@@ -301,6 +301,18 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
     const amount = money(s, "amountMinor");
     return `${amount ?? "A refund"} of a sale of ${text(s, "product") ?? "a product"} was refunded in Square to ${cardOf(s, "brand", "last4") ?? "the card"}`;
   },
+  "org.sale_refund_chargeback": (s) => {
+    const amount = money(s, "amountMinor");
+    return `${amount ?? "A payment"} of a sale of ${text(s, "product") ?? "a product"} went back to ${cardOf(s, "brand", "last4") ?? "the card"} because a chargeback was lost`;
+  },
+  "org.sale_chargeback_to_place": (s) => {
+    const amount = money(s, "amountMinor");
+    return `A chargeback of ${amount ?? "some money"} on a sale was lost, and its product is still to be chosen`;
+  },
+  "org.sale_chargeback_placed": (s) => {
+    const amount = money(s, "amountMinor");
+    return `Said that a lost chargeback of ${amount ?? "some money"} was for ${text(s, "product") ?? "a product"}`;
+  },
   "org.sale_refund_placed": (s) => {
     const amount = money(s, "amountMinor");
     return `Said that ${amount ?? "a refund"} refunded in Square was for ${text(s, "product") ?? "a product"}`;

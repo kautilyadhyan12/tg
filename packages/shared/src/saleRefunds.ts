@@ -12,7 +12,7 @@ import {
   REFUND_REASON_WORDS,
   memberPaymentByHandSchema,
   receiptNumberSchema,
-  refundReasonSchema,
+  refundReasonKeptSchema,
   refundVoidKeptSchema,
   refundVoidReasonSchema,
   squareRefundSeenSchema,
@@ -23,15 +23,20 @@ export const SALE_REFUND_REASONS = ["returned", "charged_too_much", "faulty", "o
 export const saleRefundReasonSchema = z.enum(SALE_REFUND_REASONS);
 export type SaleRefundReason = z.infer<typeof saleRefundReasonSchema>;
 
-export const SALE_REFUND_REASON_WORDS: Readonly<Record<SaleRefundReason, string>> = {
+/** The picked reasons, and `chargeback`: the gym lost a chargeback (18d-iv-e-ii-b). The app writes it; nobody picks it. */
+export const saleRefundReasonKeptSchema = z.enum([...SALE_REFUND_REASONS, "chargeback"]);
+export type SaleRefundReasonKept = z.infer<typeof saleRefundReasonKeptSchema>;
+
+export const SALE_REFUND_REASON_WORDS: Readonly<Record<SaleRefundReasonKept, string>> = {
   returned: "Brought back",
   charged_too_much: "Charged too much",
   faulty: "Faulty or damaged",
   other: "Something else",
+  chargeback: "Chargeback lost",
 };
 
 /** Any reason a refund to the card can carry: a member's payment's, or a sale's. */
-export const cardRefundReasonSchema = z.union([refundReasonSchema, saleRefundReasonSchema]);
+export const cardRefundReasonSchema = z.union([refundReasonKeptSchema, saleRefundReasonKeptSchema]);
 export type CardRefundReason = z.infer<typeof cardRefundReasonSchema>;
 export const CARD_REFUND_REASON_WORDS: Readonly<Record<CardRefundReason, string>> = { ...REFUND_REASON_WORDS, ...SALE_REFUND_REASON_WORDS };
 
@@ -50,7 +55,7 @@ export const saleRefundSchema = z
     amountMinor: minorSchema,
     /** How the money went back. */
     method: saleRefundMethodSchema,
-    reason: saleRefundReasonSchema,
+    reason: saleRefundReasonKeptSchema,
     /** How many of what was sold went back on the shelf with it. */
     restocked: z.number().int().min(0).max(99),
     /** The gym's own day it was noted on. */

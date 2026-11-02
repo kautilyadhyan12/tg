@@ -12,6 +12,7 @@ import { FAILED_IN_SQUARE, NOT_IN_SQUARE } from "./cardRefundsRepo.js";
 interface RawRow {
   id: string;
   kind: RefundToReview["kind"];
+  chargeback: boolean;
   amount_minor: number;
   paid_minor: number;
   currency: string;
@@ -88,7 +89,7 @@ export async function refundsToReview(sql: Sql, gymId: string, members: boolean,
              q.asked_minor AS paid_minor, q.currency, e.full_name, e.former_at IS NOT NULL AS past, false AS person_deleted, q.on_day,
              e.id AS entry_id, h.id AS membership_id, p.id AS payment_id, t.name AS type_name, p.method, b.fee, b.fee_for,
              b.pt_appointment_id IS NOT NULL AS of_pt, b.covers_from::text AS covers_from, b.covers_to::text AS covers_to,
-             NULL::uuid AS sale_id, NULL::text AS sold_on, NULL::text AS item_name, 0 AS more, q.others
+             NULL::uuid AS sale_id, NULL::text AS sold_on, NULL::text AS item_name, 0 AS more, q.others, false AS chargeback
       FROM open_press q
       JOIN gym_member_payments p ON p.gym_id = ${gymId} AND p.id = q.payment_id AND p.undone_at IS NULL
       JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
@@ -100,7 +101,7 @@ export async function refundsToReview(sql: Sql, gymId: string, members: boolean,
              q.asked_minor, q.currency, e.full_name, COALESCE(e.former_at IS NOT NULL, false), s.entry_id IS NULL AND s.for_member, q.on_day,
              NULL, NULL, NULL, NULL, NULL, NULL, NULL,
              false, NULL, NULL,
-             s.id, s.sold_on::text, s.item_name, GREATEST(COALESCE(jsonb_array_length(q.parts), 1) - 1, 0), q.others
+             s.id, s.sold_on::text, s.item_name, GREATEST(COALESCE(jsonb_array_length(q.parts), 1) - 1, 0), q.others, false
       FROM open_press q
       JOIN gym_sales s ON s.gym_id = ${gymId} AND s.id = q.sale_id AND s.undone_at IS NULL
       LEFT JOIN gym_member_list_entries e ON e.gym_id = s.gym_id AND e.id = s.entry_id
@@ -109,7 +110,7 @@ export async function refundsToReview(sql: Sql, gymId: string, members: boolean,
              q.amount_minor, q.currency, e.full_name, COALESCE(e.former_at IS NOT NULL, false), s.entry_id IS NULL AND s.for_member, (q.started_at AT TIME ZONE g.timezone)::date::text,
              NULL, NULL, NULL, NULL, NULL, NULL, NULL,
              false, NULL, NULL,
-             s.id, s.sold_on::text, s.item_name, (SELECT count(*)::int - 1 FROM gym_sales o WHERE o.gym_id = s.gym_id AND o.receipt_number = s.receipt_number), 0
+             s.id, s.sold_on::text, s.item_name, (SELECT count(*)::int - 1 FROM gym_sales o WHERE o.gym_id = s.gym_id AND o.receipt_number = s.receipt_number), 0, q.reason = 'chargeback'
       FROM gym_square_refunds q
       JOIN gyms g ON g.id = q.gym_id
       JOIN gym_sales s ON s.gym_id = q.gym_id AND s.id = q.sale_id AND s.undone_at IS NULL
@@ -120,7 +121,7 @@ export async function refundsToReview(sql: Sql, gymId: string, members: boolean,
              p.amount_minor, b.currency, e.full_name, e.former_at IS NOT NULL, false, NULL,
              e.id, h.id, p.id, t.name, p.method, b.fee, b.fee_for,
              b.pt_appointment_id IS NOT NULL, b.covers_from::text, b.covers_to::text,
-             NULL, NULL, NULL, 0, 0
+             NULL, NULL, NULL, 0, 0, false
       FROM gym_member_bills b
       JOIN gym_member_payments p ON p.gym_id = b.gym_id AND p.bill_id = b.id AND p.undone_at IS NULL
       JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
@@ -146,6 +147,7 @@ export async function refundsToReview(sql: Sql, gymId: string, members: boolean,
       return {
         id: r.id,
         kind: r.kind,
+        chargeback: r.chargeback,
         amountMinor: r.amount_minor,
         paidMinor: r.paid_minor,
         others: r.others,

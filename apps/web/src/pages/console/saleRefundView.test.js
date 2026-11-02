@@ -142,4 +142,19 @@ describe('a refund made in Square', () => {
     expect(placedWords([water, towel], { parts: [{ saleId: 't', amountMinor: 300, restock: 0 }] }, 'USD', [12])).toBe('The $3.00 refund is now on Towel. Its receipt is #12.');
     expect(placeLine(500, 'USD')).toBe('Square refunded $5.00 of this sale. Which product was it for? It counts in your reports once you choose.');
   });
+
+  it('a lost chargeback reads as one, never as a refund made in Square', () => {
+    expect(placeLine(300, 'USD', true)).toBe('You lost a $3.00 chargeback on this sale. Which product was it for? It counts in your reports once you choose.');
+    expect(placedWords([water, towel], { parts: [{ saleId: 't', amountMinor: 300, restock: 0 }] }, 'USD', [12], true)).toBe('The $3.00 chargeback is now on Towel. Its receipt is #12.');
+    const lost = { id: 'r', amountMinor: 2000, method: 'terminal', reason: 'chargeback', restocked: 0, refundedOn: '2026-11-02', by: null, receiptNumber: 9, voided: null, square: null };
+    const whole = { ...water, totalMinor: 2000, refundedMinor: 2000, refunds: [lost], stockCounted: true, quantity: 1, undone: false, currency: 'USD' };
+    expect(saleRefundTag(whole)).toBe('Chargeback lost');
+    expect(saleRefundTag({ ...whole, refundedMinor: 500 })).toBe('Part refunded');
+    expect(saleRefundTag({ ...whole, refunds: [{ ...lost, voided: { reason: 'mistake', on: '2026-11-02', by: null } }] })).toBe('Refunded');
+    const [line] = saleRefundLines(whole);
+    expect(line.amount).toBe('$20.00 refunded');
+    expect(line.detail).toBe('Card on Terminal · 2 Nov 2026 · Chargeback lost');
+    expect(line.toCard).toBe(true);
+    expect(line.stockNote).toBeNull();
+  });
 });

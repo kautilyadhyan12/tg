@@ -58,6 +58,20 @@ describe('Choose product', () => {
     expect(svc.placeSquareRefund).toHaveBeenCalledWith('g1', 's1', PRESS, { parts: [{ saleId: 's1', amountMinor: 300, restock: 1 }] });
   });
 
+  it('a lost chargeback: its own words, no shelf question, and no shelf count sent', async () => {
+    svc.placeSquareRefund.mockResolvedValue({ receiptNumbers: [12] });
+    const line = await draw([water({ toPlace: [press({ chargeback: true })] }), towel()]);
+    expect(line.textContent).toContain('You lost a $3.00 chargeback on this sale. Which product was it for?');
+    const box = await open();
+    const names = within(box.getByLabelText('Which product was it for?')).getAllByRole('option').map((o) => o.textContent);
+    expect(names).toContain('2 × Water · $4.00 left');
+    fireEvent.change(box.getByLabelText('Which product was it for?'), { target: { value: 's1' } });
+    expect(box.queryByText(/went back on the shelf/)).toBeNull();
+    fireEvent.click(box.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('The $3.00 chargeback is now on Water. Its receipt is #12.')).toBeTruthy();
+    expect(svc.placeSquareRefund).toHaveBeenCalledWith('g1', 's1', PRESS, { parts: [{ saleId: 's1', amountMinor: 300, restock: 0 }] });
+  });
+
   it('offers the product a replaced note frees, by what the server says it can take', async () => {
     await draw([water({ refundedMinor: 300, canRefund: true, toPlace: [press({ amountMinor: 400, room: [{ saleId: 's1', minor: 400 }, { saleId: 's2', minor: 1500 }] })] }), towel()]);
     const box = await open();
