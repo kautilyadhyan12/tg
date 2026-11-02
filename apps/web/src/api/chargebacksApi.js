@@ -1,4 +1,4 @@
-import { chargebacksResponseSchema } from '@app/shared';
+import { chargebackStartPreviewSchema, chargebacksResponseSchema } from '@app/shared';
 import authApi from './authApi';
 
 // OVERVIEW'S CHARGEBACKS (ROADMAP 18d-iv-e-i). The answer is read through its contract, so a body this card cannot read is an error,
@@ -14,5 +14,19 @@ export const chargebacksService = {
       throw err;
     }
     return parsed.data;
+  },
+  /** Who starting automatic charges again changes. */
+  startPreview: async (gymId, chargebackId) => {
+    const res = await authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/chargebacks/${encodeURIComponent(chargebackId)}/start-charges`);
+    const parsed = chargebackStartPreviewSchema.safeParse(res.data);
+    if (!parsed.success) {
+      const err = new Error('response for starting charges did not match its contract');
+      err.isContractError = true;
+      throw err;
+    }
+    return parsed.data;
+  },
+  start: async (gymId, chargebackId) => {
+    await authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/chargebacks/${encodeURIComponent(chargebackId)}/start-charges`);
   },
 };

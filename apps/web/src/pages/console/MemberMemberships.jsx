@@ -197,6 +197,7 @@ export default function MemberMemberships({
   const [form, setForm] = useState(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
+  const [chargesStarted, setChargesStarted] = useState(null);
   /** Where `notice` belongs when it is about one payment: { paymentId, line, sent }, said under that payment, where it was pressed.
    *  `sent`: Square's answer to a Refund to card, so the sentence follows the refund. */
   const [saidAt, setSaidAt] = useState(null);
@@ -970,7 +971,7 @@ export default function MemberMemberships({
                         {p.cardRefund}
                       </span>
                     ) : null}
-                    <ChargebackLines lines={p.chargebacks ?? []} />
+                    <ChargebackLines lines={p.chargebacks ?? []} gymId={gymId} said={chargesStarted} onStarted={readOnly ? null : (done) => { setChargesStarted(done); setAttempt((n) => n + 1); }} />
                     {receiptFor === p.receiptNumber ? <ReceiptBox gymId={gymId} gym={gym} number={p.receiptNumber} onClose={() => setReceiptFor(null)} /> : null}
                     {saidUnder(m, p.id)}
                     {refundBoxUnder(m, p.id)}
@@ -1587,7 +1588,7 @@ export default function MemberMemberships({
                         {p.cardRefund}
                       </span>
                     ) : null}
-                    <ChargebackLines lines={p.chargebacks ?? []} />
+                    <ChargebackLines lines={p.chargebacks ?? []} gymId={gymId} said={chargesStarted} onStarted={readOnly ? null : (done) => { setChargesStarted(done); setAttempt((n) => n + 1); }} />
                     {receiptFor === p.receiptNumber ? <ReceiptBox gymId={gymId} gym={gym} number={p.receiptNumber} onClose={() => setReceiptFor(null)} /> : null}
                     {saidUnder(m, p.id)}
                     {boxUnderPayment(p.id)}

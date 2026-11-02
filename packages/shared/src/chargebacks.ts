@@ -25,8 +25,12 @@ export const chargebackSeenSchema = z
     dueOn: daySchema.nullable(),
     duePassed: z.boolean(),
     card: cardSeenSchema.nullable(),
-    /** While this stands the app does not charge whoever pays by itself: false once won, closed, or in a Square account the gym has left. */
+    /** While this stands the app does not charge whoever pays by itself: false once won, closed, started again by staff, or in a Square account the gym has left. */
     stops: z.boolean(),
+    /** Staff started automatic charges again after a lost one, on the gym's calendar. */
+    chargesStartedOn: daySchema.nullable().default(null),
+    /** Started again, and another chargeback of whoever pays still stops them. */
+    stillPaused: z.boolean().default(false),
   })
   .strict();
 export type ChargebackSeen = z.infer<typeof chargebackSeenSchema>;
@@ -55,6 +59,8 @@ export type ChargebackToAnswer = z.infer<typeof chargebackToAnswerSchema>;
 export const chargebacksResponseSchema = z
   .object({
     count: z.number().int().min(0),
+    /** Of `count`, those lost or accepted whose automatic charges are still stopped, listed after those that need a response. */
+    lostCount: z.number().int().min(0).default(0),
     rows: z.array(chargebackToAnswerSchema),
     next: z.number().int().min(0).nullable(),
     /** Connected before the app asked to read chargebacks: none can be seen until the owner reconnects. */
@@ -63,5 +69,17 @@ export const chargebacksResponseSchema = z
   })
   .strict();
 export type ChargebacksResponse = z.infer<typeof chargebacksResponseSchema>;
+
+/** Who Start automatic charges again changes, for the box that asks first. `otherStops`: another chargeback still stops the same people. */
+export const chargebackStartPreviewSchema = z
+  .object({
+    people: z.array(z.object({ name: z.string(), what: z.string() }).strict()),
+    card: cardSeenSchema.nullable(),
+    otherStops: z.boolean(),
+  })
+  .strict();
+export type ChargebackStartPreview = z.infer<typeof chargebackStartPreviewSchema>;
+
+export const chargebackParamsSchema = z.object({ gymId: z.string().uuid(), chargebackId: z.string().uuid() }).strict();
 
 export const chargebacksQuerySchema = z.object({ from: z.coerce.number().int().min(0).max(100_000).default(0) }).strict();

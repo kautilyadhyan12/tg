@@ -20,8 +20,10 @@ export const CHARGEBACK_REASON_WORDS = {
 
 const HOLD = 'Square may hold this money until the bank decides.';
 const STOPPED = "The app won't charge this card by itself.";
+const STOPPED_LOST = 'Automatic payments are paused until you resume them.';
 const OVER_IN_YOUR_FAVOUR = ['WON', 'INQUIRY_CLOSED'];
 const ASKING = ['EVIDENCE_REQUIRED', 'INQUIRY_EVIDENCE_REQUIRED'];
+const LOST = ['LOST', 'ACCEPTED'];
 
 const reasonOf = (c) => (c.reason === null || CHARGEBACK_REASON_WORDS[c.reason] === undefined ? null : `${CHARGEBACK_REASON_WORDS[c.reason]}.`);
 
@@ -39,16 +41,24 @@ function stateWords(c) {
     case 'INQUIRY_PROCESSING':
       return `Under review by the bank. ${HOLD}`;
     case 'WON':
-      return 'Won. Square releases the money back to you.';
+      return 'You won this chargeback. Square releases the money back to you.';
     case 'INQUIRY_CLOSED':
       return 'The bank closed its inquiry.';
     case 'LOST':
-      return 'Lost. The money went back to the card.';
+      return "You lost this chargeback. The money was returned to the cardholder.";
     case 'ACCEPTED':
-      return 'Accepted. The money went back to the card.';
+      return "You accepted this chargeback. The money was returned to the cardholder.";
     default:
       return 'Check it in Square.';
   }
+}
+
+/** Whether the app charges this card by itself. */
+function chargesWords(c) {
+  if (c.stillPaused === true) return 'Automatic payments are paused because of another chargeback.';
+  if (c.chargesStartedOn !== null && c.chargesStartedOn !== undefined) return `Automatic payments resumed on ${dayWords(c.chargesStartedOn)}.`;
+  if (!c.stops) return null;
+  return LOST.includes(c.state) ? STOPPED_LOST : STOPPED;
 }
 
 /** What a payment says of one chargeback. `member`: a member's payment, where the server says whether this stops the card being charged by itself. */
@@ -58,9 +68,10 @@ export function chargebackLine(c, member = false) {
   return {
     id: c.id,
     title: [inquiry ? 'Bank inquiry' : 'Chargeback', money, c.card === null ? null : cardName(c.card)].filter((part) => part !== null).join(' · '),
-    detail: [reasonOf(c), stateWords(c), member && c.stops ? STOPPED : null].filter((part) => part !== null).join(' '),
+    detail: [reasonOf(c), stateWords(c), member ? chargesWords(c) : null].filter((part) => part !== null).join(' '),
     button: ASKING.includes(c.state) && !c.duePassed ? 'Respond in Square' : 'Open in Square',
     over: OVER_IN_YOUR_FAVOUR.includes(c.state),
+    canStart: member && c.stops && LOST.includes(c.state),
   };
 }
 
@@ -75,15 +86,54 @@ export function chargeStopLine(stop) {
   return `Not charged automatically because of ${whose}. You can still charge the card here.`;
 }
 
+// The box before automatic charges start again.
+
+/** How many names the box shows before "and N more". */
+export const START_NAMES_SHOWN = 5;
+
+/** What the box says, from the server's preview: who will be charged, and who won't be and why. */
+export function chargebackStartBox(preview) {
+  const card = preview.card === null ? null : cardName(preview.card);
+  const people = preview.people.map((p) => (p.what === '' ? p.name : `${p.name} · ${p.what}`));
+  let lead;
+  if (people.length === 0) lead = 'This person has no renewing membership, so nothing will be charged.';
+  else if (preview.otherStops) lead = 'Another chargeback is still open, so automatic payments stay paused until it is closed. This applies to:';
+  else if (card === null) lead = 'No card is on file, so nothing will be charged until one is added. This applies to:';
+  else lead = `${card} will be charged automatically for:`;
+  return {
+    title: 'Resume automatic payments?',
+    lead,
+    people,
+    note: people.length === 0 || preview.otherStops || card === null ? null : 'A bill due in the last two days may be charged today. Charge older bills by hand, oldest first.',
+    button: 'Resume',
+  };
+}
+
+/** What is said in that place once it is done. */
+export function chargebackStartedWords(preview) {
+  if (preview.otherStops) return 'Automatic payments stay paused until the other chargeback is closed.';
+  if (preview.people.length === 0) return 'Automatic payments resumed. This person has no renewing membership, so nothing will be charged.';
+  if (preview.card === null) return 'Automatic payments resumed. Nothing will be charged until a card is on file.';
+  return `Automatic payments resumed. ${cardName(preview.card)} will be charged when bills are due.`;
+}
+
 // Overview.
 
-/** "1 chargeback to answer"; null where there are none. */
-export function chargebacksHeadline(count) {
+/** A row that needs no response in Square: it was lost, and only automatic charges are left to decide. */
+export const chargebackRowLost = (row) => LOST.includes(row.state);
+
+/** "1 chargeback needs a response"; null where there are none. `lost`: how many of them are lost, with charges still stopped. */
+export function chargebacksHeadline(count, lost = 0) {
   if (count <= 0) return null;
+  if (lost > 0) {
+    if (lost < count) return `${String(count)} chargebacks need attention`;
+    return lost === 1 ? '1 lost chargeback has automatic payments paused' : `${String(lost)} lost chargebacks have automatic payments paused`;
+  }
   return count === 1 ? '1 chargeback needs a response' : `${String(count)} chargebacks need a response`;
 }
 
 export const CHARGEBACKS_INTRO = "A cardholder asked their bank to reverse a payment. Respond in Square by the date shown. If you don't, Square challenges it for you.";
+export const CHARGEBACKS_LOST_INTRO = 'The money went back to the cardholder. Open their page to resume automatic payments. If they have left, cancel their membership.';
 export const CHARGEBACKS_RECONNECT = 'Reconnect Square so chargebacks show here, with the date to respond to each one.';
 export const CHARGEBACKS_RECONNECT_OTHERS = 'The owner needs to reconnect Square before chargebacks can show here.';
 
@@ -97,7 +147,7 @@ export function chargebackWhat(row) {
 }
 
 /** The row's own sentence, on Overview. */
-export const chargebackRowDetail = (row) => [reasonOf(row), row.dueOn === null || row.state === 'UNKNOWN' ? 'Check it in Square.' : `Respond in Square by ${dayWords(row.dueOn)}.`].filter((part) => part !== null).join(' ');
+export const chargebackRowDetail = (row) => [reasonOf(row), chargebackRowLost(row) ? `${stateWords(row)} ${STOPPED_LOST}` : row.dueOn === null || row.state === 'UNKNOWN' ? 'Check it in Square.' : `Respond in Square by ${dayWords(row.dueOn)}.`].filter((part) => part !== null).join(' ');
 
 /** The second button: the sale, or the person's page while they have one. */
 export const chargebackOpenWords = (row) => (row.sale !== null ? 'Open the sale' : row.member?.entryId != null ? 'Open their page' : null);

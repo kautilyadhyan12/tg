@@ -57,6 +57,8 @@
 //   POST   /v1/orgs/:gymId/card-refunds/:pressId/cancel       stops it, until the person starts
 //   POST   /v1/orgs/:gymId/register/sales/:saleId/square-refunds/:pressId/place   which product a refund made in Square was for (18d-iv-d-ii)
 //   GET    /v1/orgs/:gymId/chargebacks?from=0                 Overview's list of chargebacks to answer
+//   GET    /v1/orgs/:gymId/chargebacks/:chargebackId/start-charges   Who starting automatic charges again changes
+//   POST   /v1/orgs/:gymId/chargebacks/:chargebackId/start-charges   Start them again after a lost chargeback
 //   GET    /v1/orgs/:gymId/refunds-to-review?from=0           Overview's list of refunds to review
 //   POST   /v1/orgs/:gymId/refunds-to-review/fees/:billId/keep            Keep the fee
 //   POST   /v1/orgs/:gymId/refunds-to-review/presses/:pressId/no-refund   No refund needed
@@ -74,6 +76,7 @@ import {
   placeSquareRefundParamsSchema,
   placeSquareRefundRequestSchema,
   chargebacksQuerySchema,
+  chargebackParamsSchema,
   squareDisputeIdSchema,
   refundsToReviewQuerySchema,
   saveCardRequestSchema,
@@ -117,7 +120,7 @@ import * as terminalCards from "./terminalCards.js";
 import * as terminalPayments from "./terminalPayments.js";
 import * as terminals from "./terminals.js";
 import { SQUARE_REVOKED_EVENT } from "./work.js";
-import { SQUARE_DISPUTE_EVENTS, readChargebacks } from "./chargebacks.js";
+import { SQUARE_DISPUTE_EVENTS, readChargebackStart, readChargebacks, startCharges } from "./chargebacks.js";
 import { SQUARE_REFUND_EVENTS } from "./squareMadeRefunds.js";
 
 export const SQUARE_WEBHOOK_PATH = "/v1/webhooks/square";
@@ -454,6 +457,20 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     if (query === null) return;
     const answer = await readChargebacks(paymentsDeps, callerId(req), params.gymId, query.from);
     return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  const chargebacksStartLimit = createDualRateLimit({ name: "chargebacks_start", max: 120, ipMax: 1200, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
+  app.get("/v1/orgs/:gymId/chargebacks/:chargebackId/start-charges", { preHandler: [app.authenticate, staffOnly(deps.sql, chargebacksStartLimit)] }, async (req, reply) => {
+    const params = parseOr400(chargebackParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const answer = await readChargebackStart(paymentsDeps, callerId(req), params.gymId, params.chargebackId);
+    return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+  app.post("/v1/orgs/:gymId/chargebacks/:chargebackId/start-charges", { preHandler: [app.authenticate, staffOnly(deps.sql, chargebacksStartLimit)] }, async (req, reply) => {
+    const params = parseOr400(chargebackParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    await startCharges(paymentsDeps, callerId(req), params.gymId, params.chargebackId);
+    return reply.status(204).send();
   });
 
   app.get("/v1/orgs/:gymId/refunds-to-review", { preHandler: [app.authenticate, staffOnly(deps.sql, reviewReadLimit)] }, async (req, reply) => {

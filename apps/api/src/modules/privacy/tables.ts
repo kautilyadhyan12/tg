@@ -568,6 +568,9 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // gym_member_payments' footing: the gym's record of money sent back; `ON DELETE set null`. It holds Square's
   // ids, the amount, a reason from a fixed list and the card's brand and last four, no card number.
   "gym_square_refunds",
+  // gym_square_disputes.charges_restarted_by — which member of staff started automatic charges again after a lost chargeback (`0188`; 18d-iv-e-ii-a), on
+  // the same footing: `ON DELETE set null`. It holds Square's ids, the amount, and the card's brand and last four.
+  "gym_square_disputes",
   // gym_waivers.saved_by — which member of staff saved a wording of the gym's waiver
   // (`0103`), on gym_leads' footing: the gym's record; `ON DELETE set null`.
   "gym_waivers",

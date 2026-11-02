@@ -491,6 +491,46 @@ export async function paymentHeldHere(sql: SqlOrTx, gymId: string, squarePayment
   return sale === undefined ? null : "sale";
 }
 
+/** A refund staff noted by card may be the same money Square has now given back, so such notes up to that amount are crossed out, with the
+ *  reason said. A note made after one was crossed out is staff saying it is another refund, so it stands. Under the gym's lock. */
+export async function crossOutCardNotes(
+  tx: TransactionSql,
+  r: { gymId: string; paymentId: string; billId: string; membershipId: string; entryId: string | null; periodIndex: number | null; currency: string; amountMinor: number; today: string; now: Date },
+): Promise<void> {
+  const notes = await tx<{ id: string; amount_minor: number }[]>`
+    SELECT n.id, n.amount_minor FROM gym_member_refunds n
+    WHERE n.gym_id = ${r.gymId} AND n.payment_id = ${r.paymentId} AND n.undone_at IS NULL AND n.method = 'card_at_desk'
+      AND NOT EXISTS (SELECT 1 FROM gym_member_refunds v WHERE v.gym_id = n.gym_id AND v.payment_id = n.payment_id AND v.void_reason = 'in_square' AND v.undone_at <= n.created_at)
+    ORDER BY n.created_at, n.id FOR UPDATE OF n`;
+  let covered = 0;
+  for (const note of notes) {
+    if (covered >= r.amountMinor) break;
+    covered += note.amount_minor;
+    await tx`UPDATE gym_member_refunds SET undone_at = ${r.now}, void_reason = 'in_square' WHERE gym_id = ${r.gymId} AND id = ${note.id}`;
+    await tx`UPDATE gym_member_bills SET status = 'paid', updated_at = ${r.now} WHERE gym_id = ${r.gymId} AND id = ${r.billId} AND status = 'refunded'`;
+    await insertAudit(tx, {
+      actorUserId: null,
+      gymId: r.gymId,
+      action: "org.member_refund_replaced",
+      targetType: "gym_member_refund",
+      targetId: note.id,
+      meta: {
+        ...(r.entryId === null ? {} : { entryId: r.entryId }),
+        membershipId: r.membershipId,
+        billId: r.billId,
+        paymentId: r.paymentId,
+        amountMinor: String(note.amount_minor),
+        currency: r.currency,
+        reason: "in_square",
+      },
+    });
+  }
+  // A note crossed out gives a friend's payment back its gift; writing Square's refund then takes it again if all of it went.
+  if (covered > 0 && r.entryId !== null && r.periodIndex !== null) {
+    await giveMemberGift(tx, { gymId: r.gymId, friendEntryId: r.entryId, by: { paymentId: r.paymentId }, today: r.today, now: r.now });
+  }
+}
+
 export type MadeInSquareOutcome = { kind: "written"; press: RefundPress } | { kind: "waiting" | "already" | "no_payment" };
 
 /** A refund Square made and no row here holds: written once and in full, under the gym's lock, as what is written is what Square did. A
@@ -529,39 +569,7 @@ export async function recordMadeInSquare(
     if (where === undefined || where.currency !== r.currency) return { kind: "no_payment" };
     if ((await refundTargetOf(tx, r.gymId, where.membership_id, where.id)) === null) return { kind: "no_payment" };
 
-    // A note made after one was crossed out is staff saying it is another refund, so it stands.
-    const notes = await tx<{ id: string; amount_minor: number }[]>`
-      SELECT n.id, n.amount_minor FROM gym_member_refunds n
-      WHERE n.gym_id = ${r.gymId} AND n.payment_id = ${where.id} AND n.undone_at IS NULL AND n.method = 'card_at_desk'
-        AND NOT EXISTS (SELECT 1 FROM gym_member_refunds v WHERE v.gym_id = n.gym_id AND v.payment_id = n.payment_id AND v.void_reason = 'in_square' AND v.undone_at <= n.created_at)
-      ORDER BY n.created_at, n.id FOR UPDATE OF n`;
-    let covered = 0;
-    for (const note of notes) {
-      if (covered >= r.amountMinor) break;
-      covered += note.amount_minor;
-      await tx`UPDATE gym_member_refunds SET undone_at = ${r.now}, void_reason = 'in_square' WHERE gym_id = ${r.gymId} AND id = ${note.id}`;
-      await tx`UPDATE gym_member_bills SET status = 'paid', updated_at = ${r.now} WHERE gym_id = ${r.gymId} AND id = ${where.bill_id} AND status = 'refunded'`;
-      await insertAudit(tx, {
-        actorUserId: null,
-        gymId: r.gymId,
-        action: "org.member_refund_replaced",
-        targetType: "gym_member_refund",
-        targetId: note.id,
-        meta: {
-          ...(where.entry_id === null ? {} : { entryId: where.entry_id }),
-          membershipId: where.membership_id,
-          billId: where.bill_id,
-          paymentId: where.id,
-          amountMinor: String(note.amount_minor),
-          currency: r.currency,
-          reason: "in_square",
-        },
-      });
-    }
-    // A note crossed out gives a friend's payment back its gift; writing Square's refund then takes it again if all of it went.
-    if (covered > 0 && where.entry_id !== null && where.period_index !== null) {
-      await giveMemberGift(tx, { gymId: r.gymId, friendEntryId: where.entry_id, by: { paymentId: where.id }, today: r.today, now: r.now });
-    }
+    await crossOutCardNotes(tx, { gymId: r.gymId, paymentId: where.id, billId: where.bill_id, membershipId: where.membership_id, entryId: where.entry_id, periodIndex: where.period_index, currency: r.currency, amountMinor: r.amountMinor, today: r.today, now: r.now });
     const target = await refundTargetOf(tx, r.gymId, where.membership_id, where.id);
     if (target === null) throw new Error("a payment stopped standing under the gym's lock");
     const { bill, payment: standing } = target;
