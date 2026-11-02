@@ -44,11 +44,12 @@ export function restockLeft(sale) {
   return Math.max(0, sale.quantity - back);
 }
 
-/** "Refunded" once all of it went back, "Part refunded" while some did; null for none. */
+/** "Refunded", or "Chargeback lost" where one took it, once all of it went back; "Part refunded" while some did; null for none. */
 export function saleRefundTag(sale) {
   const back = sale.refundedMinor ?? 0;
   if (sale.undone || back <= 0) return null;
-  return back >= sale.totalMinor ? 'Refunded' : 'Part refunded';
+  if (back < sale.totalMinor) return 'Part refunded';
+  return (sale.refunds ?? []).some((r) => r.voided === null && r.reason === 'chargeback') ? 'Chargeback lost' : 'Refunded';
 }
 
 /** A fresh Refund sale box: all that is left, given back the way it was paid. */
@@ -165,7 +166,7 @@ export const IN_SQUARE_STOCK_ASK_LINE = 'Square does not say whether this produc
 export const placeLines = (basket) => (basket?.lines ?? []).flatMap((line) => line.toPlace ?? []);
 
 /** Said on the sale, and on Overview: the money has gone, and which product is the one thing the app cannot know. */
-export const placeLine = (amountMinor, currency) => `Square refunded ${formatMinor(amountMinor, currency)} of this sale. Which product was it for? It counts in your reports once you choose.`;
+export const placeLine = (amountMinor, currency, chargeback = false) => `${chargeback ? `You lost a ${formatMinor(amountMinor, currency)} chargeback on this sale.` : `Square refunded ${formatMinor(amountMinor, currency)} of this sale.`} Which product was it for? It counts in your reports once you choose.`;
 
 const roomOn = (press, line) => press.room.find((r) => r.saleId === line.id)?.minor ?? 0;
 
@@ -178,11 +179,13 @@ export const placeOpen = (lines, press) => lines.filter((line) => roomOn(press, 
 /** A product as the box offers it. */
 export const placeOption = (line, press, lines) => {
   const name = `${String(line.quantity)} × ${line.itemName}`;
-  return placeOverLine(lines, press) !== null ? name : `${name} · ${formatMinor(Math.min(roomOn(press, line), line.totalMinor), line.currency)} can be refunded`;
+  const room = formatMinor(Math.min(roomOn(press, line), line.totalMinor), line.currency);
+  // A chargeback is no refund: the box says what is left of the product.
+  return placeOverLine(lines, press) !== null ? name : `${name} · ${room} ${press.chargeback === true ? 'left' : 'can be refunded'}`;
 };
 
 /** Said above the choices when Square refunded more than the sale can take: which product is all the box asks, so it says no amounts. The server gives every product Square's whole amount only then. */
-export const placeOverLine = (lines, press) => (lines.reduce((n, line) => n + refundableMinor(line), 0) < press.amountMinor && press.room.every((r) => r.minor === press.amountMinor) ? 'Square refunded more than is left on this sale. Choose the product it was for.' : null);
+export const placeOverLine = (lines, press) => (lines.reduce((n, line) => n + refundableMinor(line), 0) < press.amountMinor && press.room.every((r) => r.minor === press.amountMinor) ? (press.chargeback === true ? 'The chargeback is more than is left on this sale. Choose the product it was for.' : 'Square refunded more than is left on this sale. Choose the product it was for.') : null);
 
 export const SEVERAL = 'several';
 
@@ -207,13 +210,13 @@ export function placeBody(lines, amountMinor, currency, draft) {
 }
 
 /** Said in the sale's own place once it is chosen. */
-export function placedWords(lines, body, currency, receiptNumbers) {
+export function placedWords(lines, body, currency, receiptNumbers, chargeback = false) {
   const money = formatMinor(body.parts.reduce((n, p) => n + p.amountMinor, 0), currency);
   const numbers = receiptNumbers.map((n) => `#${String(n)}`);
   const receipts = numbers.length === 1 ? `Its receipt is ${numbers[0]}` : `Its receipts are ${numbers.join(', ')}`;
   const [only] = body.parts;
   const name = body.parts.length === 1 ? (lines.find((l) => l.id === only.saleId)?.itemName ?? 'that product') : `${String(body.parts.length)} products`;
-  return `The ${money} refund is now on ${name}. ${receipts}.`;
+  return `The ${money} ${chargeback ? 'chargeback' : 'refund'} is now on ${name}. ${receipts}.`;
 }
 
 /** A sale's refunds, those that stand and those voided, in the order they were noted. `named`:

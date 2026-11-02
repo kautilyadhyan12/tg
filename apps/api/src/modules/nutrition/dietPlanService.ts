@@ -152,9 +152,18 @@ export async function putDietPlanDay(
     let at = 0;
     return { mealType: m.mealType, items: m.items.flatMap((c) => { const item = keptOf(c) ?? own[at++]; return item === undefined ? [] : [item]; }) };
   });
-  const week = await changeDietPlan(deps.sql, userId, input.changeId, (current) => current.map((old, at) => (at === day - 1 ? meals : old)));
+  const week = await changeDietPlan(deps.sql, userId, input.changeId, (current) => {
+    if (input.shown !== undefined && !sameFoods(current[day - 1] ?? [], input.shown)) {
+      throw new NutritionError(409, "plan_changed", "Your plan has changed. Open it again to make this change.");
+    }
+    return current.map((old, at) => (at === day - 1 ? meals : old));
+  });
   return reply(week, await person(deps, userId));
 }
+
+/** Whether a day's meals hold, in order, the foods the phone showed. */
+const sameFoods = (meals: readonly StoredMeal[], shown: readonly (readonly string[])[]): boolean =>
+  meals.length === shown.length && meals.every((m, at) => JSON.stringify(m.items.map((i) => i.canonical)) === JSON.stringify(shown[at]));
 
 const sameMeal = (a: StoredMeal | undefined, b: StoredMeal): boolean => a !== undefined && JSON.stringify(a) === JSON.stringify(b);
 
@@ -169,6 +178,9 @@ export async function swapDietPlanMeal(
   if (plan.recentChanges.includes(input.changeId)) return reply(plan.days, who);
   const meal = plan.days[day - 1]?.[input.meal];
   if (meal === undefined) throw new NutritionError(404, "not_found", "Meal not found.");
+  if (input.shown !== undefined && JSON.stringify(meal.items.map((i) => i.canonical)) !== JSON.stringify(input.shown)) {
+    throw new NutritionError(409, "plan_changed", "Your plan has changed. Open it again to swap this meal.");
+  }
   if (who.diet === null) throw refusal({ status: "needs_answers", missing: ["diet"] });
   const idea = swapMeal({
     seed: `${userId}|swap|${input.changeId}`, diet: who.diet, mealType: meal.mealType,

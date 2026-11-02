@@ -38,7 +38,7 @@ export function reviewWhy(row) {
       return owed;
     }
     case 'place':
-      return `Square refunded ${reviewAmount(row)} of this sale. Which product was it for? It counts in your reports once you choose.`;
+      return `${row.chargeback === true ? `You lost a ${reviewAmount(row)} chargeback on this sale.` : `Square refunded ${reviewAmount(row)} of this sale.`} Which product was it for? It counts in your reports once you choose.`;
     case 'failed':
       if (row.amountMinor < row.paidMinor) return `Square could not refund ${formatMinor(row.paidMinor, row.currency)}. ${reviewAmount(row)} of it has not been refunded another way.`;
       return CARD_REFUND_WORDS.failed;

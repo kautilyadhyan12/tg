@@ -306,7 +306,7 @@ export function basketRefundTag(sale) {
   if (basket.lines.some((line) => (line.refunds ?? []).some((r) => r.voided === null && r.square?.state === 'pending'))) return 'Refund pending';
   // Each line's refunds, as the server counts them; a line read without them has none.
   const refundedMinor = basket.lines.reduce((n, line) => n + (line.refundedMinor ?? 0), 0);
-  return saleRefundTag({ ...basket.first, totalMinor: basket.totalMinor, refundedMinor });
+  return saleRefundTag({ ...basket.first, totalMinor: basket.totalMinor, refundedMinor, refunds: basket.lines.flatMap((line) => line.refunds ?? []) });
 }
 
 /** Today's product sales and membership payments as one list, newest first: a sale of several

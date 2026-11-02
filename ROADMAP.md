@@ -315,7 +315,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
         - 18d-iv-e-i. [x] **Shown on its payment with Square's own date; automatic charges stop** — merged 2026-11-02 (PR #430).
         - 18d-iv-e-ii. **A lost one**, in two parts since 2026-11-02 (`handoff/2026-11-02-18d-iv-e-ii-a.md` keeps its line as first written):
          - 18d-iv-e-ii-a. [x] **On a member's payment or fee** — merged 2026-11-02 (PR #435).
-         - 18d-iv-e-ii-b. [ ] **On a sale**: the money written as gone back on its products. Web folder 1.
+         - 18d-iv-e-ii-b. [x] **On a sale** — merged 2026-11-02 (PR #438).
        - 18d-iv-f. [ ] **Pause automatic payments** on a member's page, and Resume, keeping their saved card (Kd, 2026-11-02). Web folder 1.
      - 18d-vii. [ ] **Ask members to add their card** (Kd, 2026-10-30, `rulings/2026-10-30-18d-iii-b-iv-f.md`): a button that asks every member with no card on file to add it in the app, as saved cards don't move from a gym's old software. After Stage 5 item 20's saving their card. Web folder 1.
      - 18d-v. [ ] **KWAZO listed in Square's App Marketplace, at launch** (Kd, 2026-10-20): once the site is online with Square's live return address. Square's partner page: "Any developer" can list, no fee or developer-country rule named; Square's quality review first. Unproven for a developer in India until applied.
@@ -639,7 +639,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 34d-iii. [x] **The ideas on the Food screen, and Recommended For You on the Dashboard** — merged 2026-11-02 (PR #433).
     - 34e. **Your own diet plan** (7c; split 2026-10-14: the server part needs no phone).
       - 34e-i. [x] **The diet plan on the server** — merged 2026-10-14 (PR #264).
-      - 34e-ii. [ ] **The diet plan on the Food screen**, each meal logged with one tap; a meal outside the diet says so with Swap. Waits for 32b.
+      - 34e-ii. **The diet plan on the Food screen** (split 2026-11-02: following the plan first).
+        - 34e-ii-a. [x] **Follow your meal plan** — merged 2026-11-02 (PR #439).
+        - 34e-ii-b. [ ] **Build your own meal plan**: your own foods, amounts, add and remove a meal, from empty or from the app's week.
     - 34f. **Your week in food** (7d; split 2026-10-14: the server part needs no phone).
       - 34f-i. [x] **The server works out your week in food** — merged 2026-10-14 (PR #269).
       - 34f-ii. [ ] **The chart on the Food screen**, with the facts under it in words ("Protein was under target on 5 of 6 days"). Waits for 32b.

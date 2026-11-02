@@ -25,7 +25,7 @@ import {
   refundVoidKeptSchema,
   saleAmounts,
   saleRefundMethodSchema,
-  saleRefundReasonSchema,
+  saleRefundReasonKeptSchema,
   saleVoidReasonSchema,
   salePaymentMethodSchema,
   type DiscountRefusal,
@@ -33,6 +33,7 @@ import {
   type RefundVoidReason,
   type SaleRefundMethod,
   type SaleRefundReason,
+  type SaleRefundReasonKept,
   type SalesTax,
   type MemberPaymentByHand,
   type SalePaymentMethod,
@@ -118,14 +119,14 @@ export interface SaleRow {
   /** The chargebacks on its payment (18d-iv-e-i): on the sale's first line. */
   chargebacks: ChargebackSeen[];
   /** Refunded in Square with no product said: on the sale's first line. */
-  toPlace: { pressId: string; amountMinor: number; on: string }[];
+  toPlace: { pressId: string; chargeback: boolean; amountMinor: number; on: string }[];
 }
 
 export interface SaleRefundRow {
   id: string;
   amountMinor: number;
   method: SaleRefundMethod;
-  reason: SaleRefundReason;
+  reason: SaleRefundReasonKept;
   restocked: number;
   refundedOn: string;
   by: string | null;
@@ -381,8 +382,8 @@ async function refundsOf(sql: Sql | TransactionSql, gymId: string, sales: SaleRo
       ORDER BY r.receipt_number`,
     openPressesOfSales(sql, gymId, onTerminal),
     // Part of a basket refunded in Square, its product not yet said.
-    sql<{ id: string; sale_id: string; amount_minor: number; on_day: string; checked_at: Date }[]>`
-      SELECT q.id, q.sale_id, q.amount_minor, (q.started_at AT TIME ZONE g.timezone)::date::text AS on_day, q.checked_at
+    sql<{ id: string; sale_id: string; reason: string; amount_minor: number; on_day: string; checked_at: Date }[]>`
+      SELECT q.id, q.sale_id, q.reason, q.amount_minor, (q.started_at AT TIME ZONE g.timezone)::date::text AS on_day, q.checked_at
       FROM gym_square_refunds q JOIN gyms g ON g.id = q.gym_id
       WHERE q.gym_id = ${gymId} AND q.to_place AND q.sale_id = ANY(${onTerminal}::uuid[])
       ORDER BY q.started_at, q.id`,
@@ -395,14 +396,15 @@ async function refundsOf(sql: Sql | TransactionSql, gymId: string, sales: SaleRo
       amountMinor: r.amount_minor,
       // Text under a CHECK: parsed, so a value this build does not know fails here.
       method: saleRefundMethodSchema.parse(r.method),
-      reason: saleRefundReasonSchema.parse(r.reason),
+      reason: saleRefundReasonKeptSchema.parse(r.reason),
       restocked: r.restocked,
       refundedOn: r.refunded_on,
       by: r.by,
       receiptNumber: r.receipt_number,
       voided: r.voided_on === null ? null : { reason: refundVoidKeptSchema.parse(r.void_reason ?? ""), on: r.voided_on, by: r.voided_by },
+      // A lost chargeback is no refund at Square, even where its row waited on a product.
       square:
-        r.q_id === null || r.q_state === null || r.q_started === null
+        r.reason === "chargeback" || r.q_id === null || r.q_state === null || r.q_started === null
           ? null
           : {
               state: r.q_state === "pending" ? "pending" : "completed",
@@ -426,7 +428,7 @@ async function refundsOf(sql: Sql | TransactionSql, gymId: string, sales: SaleRo
     const lines = basket.map((l) => ({ saleId: l.id, lineMinor: l.totalMinor, refundedMinor: rows.filter((r) => r.sale_id === l.id && r.voided_on === null).reduce((n, r) => n + r.amount_minor, 0) }));
     return placeRoom(lines, notes, p.amount_minor);
   };
-  return sales.map((s) => ({ ...s, refunds: bySale.get(s.id) ?? [], cardRefund: open.get(s.id) ?? null, toPlace: toPlace.filter((p) => p.sale_id === s.id).map((p) => ({ pressId: p.id, amountMinor: p.amount_minor, on: p.on_day, room: roomOf(s, p) })) }));
+  return sales.map((s) => ({ ...s, refunds: bySale.get(s.id) ?? [], cardRefund: open.get(s.id) ?? null, toPlace: toPlace.filter((p) => p.sale_id === s.id).map((p) => ({ pressId: p.id, chargeback: p.reason === "chargeback", amountMinor: p.amount_minor, on: p.on_day, room: roomOf(s, p) })) }));
 }
 
 /** The columns every read of a sale takes, from `gym_sales s` with its two joins. Who
@@ -1321,13 +1323,13 @@ export async function writeSaleRefund(
     requestKey: string;
     amountMinor: number;
     method: SaleRefundMethod;
-    reason: SaleRefundReason;
+    reason: SaleRefundReasonKept;
     restock: number;
     refundedInFull: boolean;
     today: string;
     actorUserId: string | null;
     now: Date;
-    action: "org.sale_refund_noted" | "org.sale_refund_sent" | "org.sale_refund_in_square";
+    action: "org.sale_refund_noted" | "org.sale_refund_sent" | "org.sale_refund_in_square" | "org.sale_refund_chargeback";
     card: { brand: string; last4: string } | null;
     /** The refund to the card it came from. */
     pressId: string | null;

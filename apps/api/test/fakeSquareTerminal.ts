@@ -274,6 +274,10 @@ export function fakeSquare() {
     refundsMade.push(made);
     return made;
   };
+  /** A sale's payment taken on the Terminal, for a test that writes the sale itself. */
+  const paymentInSquare = (id: string, accountId: string, amountMinor: number): void => {
+    payments.set(id, { id, status: "COMPLETED", amount_money: { amount: amountMinor, currency: "USD" }, total_money: { amount: amountMinor, currency: "USD" }, accountId });
+  };
   /** Chargebacks, as Square's test area shows them (read 2026-11-01). */
   const disputes: (SquareDispute & { accountId: string })[] = [];
   /** A member's bank starts a chargeback: Square makes the dispute, 14 days to answer. */
@@ -842,6 +846,7 @@ export function fakeSquare() {
     terminalRefundShown,
     terminalRefundUsed,
     paymentById,
+    paymentInSquare,
     listed,
   };
 }

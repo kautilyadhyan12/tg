@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
 import { useIsFocused } from "@react-navigation/native";
-import { mealIdeasResponseSchema, missingText, type MealIdea, type SetupScreenId } from "@app/shared";
+import { mealIdeasResponseSchema, missingText, type DietPlanMeal, type MealIdea, type SetupScreenId, type WaitingMeal } from "@app/shared";
 import { Button } from "../../look/Button";
 import { Card } from "../../look/Card";
 import { colours, sizes } from "../../look/colours";
@@ -17,14 +17,17 @@ import { Setup } from "../setup/Setup";
 import { mealTypeName } from "./day";
 import { ideaAmountWords, ideaAsMeal, ideaFoodWords, ideaMealType, ideaName } from "./ideaRules";
 import { useMealOutbox } from "./MealOutbox";
+import { loggedAmount } from "./measures";
+import { planMealAsMeal } from "./planRules";
+import { foodTitle } from "./rows";
 
 export const IDEAS_READ = "/v1/nutrition/suggestions";
 
 /** The day's ideas, and whether they can be offered. The server can't count a meal still on the phone,
  *  and a read begun before a meal landed doesn't hold it: either way the ideas drawn are old, and the
  *  same one could be logged twice, so none is offered until a read begun after. */
-function useIdeas() {
-  const ideas = useRead(IDEAS_READ, mealIdeasResponseSchema, useZoneSaved());
+function useIdeas(fresh: number) {
+  const ideas = useRead(IDEAS_READ, mealIdeasResponseSchema, useZoneSaved() + fresh);
   const { outbox, view } = useMealOutbox();
   const { begun, again } = ideas;
   const [seen, setSeen] = useState({ sent: view.sent, read: 0 });
@@ -43,10 +46,21 @@ interface MealIdeasProps {
   onMore?: () => void;
   /** Answers were given in setup from this box: the page reads what hangs on them again. */
   onAnswered?: () => void;
+  /** Moves when setup answers change elsewhere on the page. */
+  fresh?: number;
+  /** On the Food page's box: what goes under the ideas. */
+  below?: ReactNode;
+  /** Inside a box of its own: no card and no title. */
+  bare?: boolean;
+  /** The Dashboard's Recommended box, for somebody with a meal plan: the plan's next meal, in place of an idea. */
+  planned?: PlannedNow;
 }
 
-export function MealIdeas({ onMore, onAnswered }: MealIdeasProps) {
-  const { read, again, outbox, view, waiting, old } = useIdeas();
+/** "loading": whether there is a plan isn't known yet. `meal` null: every meal of today's plan is logged, or today has none. */
+export type PlannedNow = "loading" | { failed: string; retry: () => void } | { meal: DietPlanMeal | null; allLogged: boolean; canLog: boolean; caution: string; labelCaution: string | null }
+
+export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = false, planned }: MealIdeasProps) {
+  const { read, again, outbox, view, waiting, old } = useIdeas(fresh);
   const onDashboard = onMore !== undefined;
   const [said, setSaid] = useState<{ words: string; meal: string | null } | null>(null);
   const [later, setLater] = useState(false);
@@ -64,18 +78,20 @@ export function MealIdeas({ onMore, onAnswered }: MealIdeasProps) {
     if (refusedNow) setSaid(null);
   }, [refusedNow]);
 
-  const log = async (idea: MealIdea) => {
+  const keep = async (meal: WaitingMeal, type: DietPlanMeal["mealType"]) => {
     if (outbox === null || loggingNow.current) return;
     loggingNow.current = true;
     setLogging(true);
-    const now = new Date();
-    const type = ideaMealType(now.getHours());
-    const id = newGoalId();
-    const kept = await outbox.add(ideaAsMeal(idea, id, type, now));
+    const kept = await outbox.add(meal);
     loggingNow.current = false;
     setLogging(false);
     setLater(false);
-    setSaid(kept ? { words: `Logged to ${mealTypeName(type)}.`, meal: id } : { words: "Too many meals are waiting to send. Go online, then log this one.", meal: null });
+    setSaid(kept ? { words: `Logged to ${mealTypeName(type)}.`, meal: meal.id } : { words: "Too many meals are waiting to send. Go online, then log this one.", meal: null });
+  };
+  const log = async (idea: MealIdea) => {
+    const now = new Date();
+    const type = ideaMealType(now.getHours());
+    await keep(ideaAsMeal(idea, newGoalId(), type, now), type);
   };
 
   const row = (idea: MealIdea) => (
@@ -103,7 +119,44 @@ export function MealIdeas({ onMore, onAnswered }: MealIdeasProps) {
 
   let body;
   let foot = null;
-  if (waiting) {
+  const plannedNow = onDashboard && planned !== undefined ? planned : null;
+  if (plannedNow === "loading") {
+    body = <Txt kind="small">{NOT_KNOWN}</Txt>;
+  } else if (plannedNow !== null && "failed" in plannedNow) {
+    body = (
+      <View style={styles.row}>
+        <Txt kind="small" style={styles.grow}>
+          {plannedNow.failed}
+        </Txt>
+        <Button label="Try again" kind="link" say="Try again" onPress={plannedNow.retry} />
+      </View>
+    );
+  } else if (plannedNow !== null && onMore !== undefined) {
+    const { meal, allLogged, canLog, caution, labelCaution } = plannedNow;
+    body =
+      meal === null ? (
+        <>
+          <Txt kind="small">{allLogged ? "All of today’s meals are logged." : "Nothing planned for today."}</Txt>
+          <Button label="See meal plan" kind="link" compact style={styles.start} onPress={onMore} />
+        </>
+      ) : (
+        <BestPlanned
+          meal={meal}
+          held={logging || outbox === null || !canLog}
+          onLog={() => {
+            void keep(planMealAsMeal(meal, newGoalId(), new Date()), meal.mealType);
+          }}
+          onMore={onMore}
+        />
+      );
+    foot =
+      meal === null ? null : (
+        <>
+          <Txt kind="tiny">{caution}</Txt>
+          {labelCaution === null ? null : <Txt kind="tiny">{labelCaution}</Txt>}
+        </>
+      );
+  } else if (waiting) {
     body = (
       <View style={styles.row}>
         <Icon name="wifioff" size={16} colour="textSoft" />
@@ -141,7 +194,7 @@ export function MealIdeas({ onMore, onAnswered }: MealIdeasProps) {
     );
   } else if (read.data.status === "needs_plan") {
     // The Food screen's rings, just above, already ask for it.
-    if (!onDashboard) return null;
+    if (!onDashboard && !bare) return null;
     body = (
       <>
         <Txt kind="small">Finish setting up to see meal ideas.</Txt>
@@ -211,6 +264,32 @@ export function MealIdeas({ onMore, onAnswered }: MealIdeasProps) {
         {said.words}
       </Txt>
     );
+  const setup =
+    setupAt === null ? null : (
+      <Setup
+        open
+        at={setupAt === "where" ? null : setupAt}
+        onClose={() => {
+          setSetupAt(null);
+          again();
+          onAnswered?.();
+        }}
+        onSettled={() => {
+          again();
+          onAnswered?.();
+        }}
+      />
+    );
+  if (bare) {
+    return (
+      <>
+        {saidLine}
+        {body}
+        {foot}
+        {setup}
+      </>
+    );
+  }
   return (
     <>
       {onDashboard ? (
@@ -262,23 +341,10 @@ export function MealIdeas({ onMore, onAnswered }: MealIdeasProps) {
           {saidLine}
           {body}
           {foot}
+          {below}
         </Card>
       )}
-      {setupAt === null ? null : (
-        <Setup
-          open
-          at={setupAt === "where" ? null : setupAt}
-          onClose={() => {
-            setSetupAt(null);
-            again();
-            onAnswered?.();
-          }}
-          onSettled={() => {
-            again();
-            onAnswered?.();
-          }}
-        />
-      )}
+      {setup}
     </>
   );
 }
@@ -316,6 +382,41 @@ function BestIdea({ idea, held, onLog, onMore }: { idea: MealIdea; held: boolean
           }}
         />
         <Button label="More ideas" kind="link" compact onPress={onMore} />
+      </View>
+    </>
+  );
+}
+
+/** The same box for somebody with a meal plan: the plan's next meal. */
+function BestPlanned({ meal, held, onLog, onMore }: { meal: DietPlanMeal; held: boolean; onLog: () => void; onMore: () => void }) {
+  return (
+    <>
+      <View>
+        <Txt colour="orange" style={styles.kcal}>
+          {mealTypeName(meal.mealType)} · {count(meal.totals.kcalPoint)} kcal
+        </Txt>
+        <Txt kind="tiny">
+          {count(Math.round(meal.totals.proteinG))} g protein · {count(Math.round(meal.totals.carbsG))} g carbs · {count(Math.round(meal.totals.fatG))} g fat
+        </Txt>
+      </View>
+      <View style={styles.foods}>
+        {meal.items.map((food, at) => (
+          <Txt key={String(at)} kind="tiny" colour="text">
+            {foodTitle(food)}{" "}
+            <Txt kind="tiny" colour="textFaint">
+              {loggedAmount(food).replace(/ /g, KEEP_TOGETHER)}
+            </Txt>
+          </Txt>
+        ))}
+      </View>
+      {meal.outsideDiet.length === 0 ? null : (
+        <Txt kind="tiny" colour="gold">
+          Not in your diet: {meal.outsideDiet.join(", ")}.
+        </Txt>
+      )}
+      <View style={styles.actions}>
+        <Button label="Log meal" compact disabled={held} say={`Log ${ideaName(meal)}`} onPress={onLog} />
+        <Button label="See meal plan" kind="link" compact onPress={onMore} />
       </View>
     </>
   );
