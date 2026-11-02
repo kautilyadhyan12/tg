@@ -182,12 +182,14 @@ export function FoodScreen() {
   }, [askedNext]);
   const scroller = useRef<ScrollView | null>(null);
   // Where the box sits: under the page's picture and the gap below it, at its own place among the boxes.
+  // It stops below the phone's clock bar, which the page runs under.
   const topHeight = useRef<number | null>(null);
   const nextAt = useRef<number | null>(null);
+  const clockBar = useSafeAreaInsets().top;
   const showNext = useCallback(() => {
     if (topHeight.current === null || nextAt.current === null) return;
-    scroller.current?.scrollTo({ y: Math.max(0, topHeight.current + sizes.gap + nextAt.current - sizes.edge), animated: true });
-  }, []);
+    scroller.current?.scrollTo({ y: Math.max(0, topHeight.current + sizes.gap + nextAt.current - sizes.edge - clockBar), animated: true });
+  }, [clockBar]);
   useEffect(() => {
     if (toNext) showNext();
   }, [toNext, showNext]);
