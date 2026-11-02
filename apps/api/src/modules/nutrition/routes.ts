@@ -21,6 +21,7 @@ import {
   createDishwareRequestSchema,
   createMealRequestSchema,
   dietPlanDayParamsSchema,
+  dietPlanMealParamsSchema,
   foodSearchQuerySchema,
   foodWeekQuerySchema,
   makeDietPlanRequestSchema,
@@ -382,6 +383,13 @@ export function registerNutritionRoutes(
     const v = parse(putDietPlanDayRequestSchema, req.body, req, reply);
     if (v === null) return;
     return reply.send(await dietPlan.putDietPlanDay(nutritionDeps, authedUserId(req), p.day, v));
+  });
+
+  app.get("/v1/nutrition/diet-plan/days/:day/meals/:meal/measures", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const p = parse(dietPlanMealParamsSchema, req.params, req, reply);
+    if (p === null) return;
+    const measures = await dietPlan.planMealMeasures(nutritionDeps, authedUserId(req), p.day, p.meal);
+    return measures === null ? notFound(req, reply) : reply.send({ measures });
   });
 
   app.post("/v1/nutrition/diet-plan/days/:day/swap", { preHandler: [app.authenticate] }, async (req, reply) => {

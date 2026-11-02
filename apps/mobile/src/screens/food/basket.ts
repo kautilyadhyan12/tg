@@ -1,4 +1,4 @@
-import type { FoodSearchItem, Meal, MealChoice, MealItem, RecentFood } from "@app/shared";
+import type { FoodSearchItem, Meal, MealChoice, MealItem, MealType, RecentFood } from "@app/shared";
 import type { Amount } from "./measures";
 import { totalsOf } from "./rows";
 
@@ -49,3 +49,17 @@ export function basketNumbers(foods: readonly Pick<BasketFood, "item">[]): { ite
 
 /** "1 food", "2 foods". */
 export const foodsWords = (n: number): string => (n === 1 ? "1 food" : `${String(n)} foods`);
+
+/** A meal of the meal plan changed in the same box as a meal is logged (34e-ii-b): its foods on the list
+ *  from the start, and the plan's own save in place of logging it. */
+export interface PlanMealTarget {
+  mealType: MealType;
+  /** The box's heading: "Lunch · Tuesday". */
+  title: string;
+  start: BasketFood[];
+  /** Sends the day with this meal's foods; the plan box closes the box when it is saved. */
+  save: (foods: readonly BasketFood[]) => Promise<void>;
+  busy: boolean;
+  /** Why the last save did not go through. */
+  trouble: string | null;
+}

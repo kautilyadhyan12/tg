@@ -241,7 +241,6 @@ export const chosenItemSchema = z.union([gramsItemSchema, dishwareItemSchema, me
 export type ChosenItem = z.infer<typeof chosenItemSchema>;
 /** The most foods one meal holds. */
 export const MEAL_MOST_FOODS = 30;
-const chosenItemsSchema = z.array(chosenItemSchema).min(1).max(MEAL_MOST_FOODS);
 
 // ROADMAP 7a-iv-g — changing a food already logged (RULINGS 2026-09-17).
 /** The person's own protein, carbs and fat for one food, in grams, as eaten at the
@@ -290,6 +289,9 @@ export const manualMealRequestSchema = z.object({
   mealName: z.string().trim().min(1).max(200), takenAt: takenAtSchema,
   mealType: mealTypeSchema.optional(),
   items: mealChoicesSchema,
+  /** A meal of the person's own plan, logged from it (34e-ii-b): while the plan still holds these foods
+   *  at these amounts there, the meal is saved at the plan's own numbers, whatever the lists say now. */
+  planned: z.object({ day: z.number().int().min(1).max(7), meal: z.number().int().min(0).max(7) }).strict().optional(),
 }).strict();
 export type ManualMealRequest = z.infer<typeof manualMealRequestSchema>;
 
@@ -780,8 +782,15 @@ export const PHOTO_SCAN_CAUTION = "Calories from a photo are an estimate. A phot
 /** A day of the plan's week: 1 is Monday, 7 Sunday. */
 export const dietPlanDaySchema = z.number().int().min(1).max(7);
 export const dietPlanDayParamsSchema = z.object({ day: z.coerce.number().pipe(dietPlanDaySchema) }).strict();
+/** One meal of a day of the plan, by its place in the day. */
+export const dietPlanMealParamsSchema = z.object({
+  day: z.coerce.number().pipe(dietPlanDaySchema),
+  meal: z.coerce.number().int().min(0).max(7),
+}).strict();
 /** The most meals one day of the plan holds. */
 export const MOST_PLAN_MEALS = 8;
+/** A day of the plan as it stands, in a word: changed in any food, amount or number, it is another. */
+export const dayVersionSchema = z.string().regex(/^[0-9a-f]{16}$/);
 /** One change's id, made by the phone: the same change sent twice is made once. */
 const planChangeIdSchema = z.string().uuid().toLowerCase();
 
@@ -808,6 +817,9 @@ export const dietPlanDayReplySchema = z.object({
   target: planNumbersSchema.nullable(),
   /** planned less target, each figure; null with the target. Below 0 is under it. */
   off: planNumbersSchema.nullable(),
+  /** The day as it is now, every food, amount and own number of it: a change sent with an older one
+   *  is refused (`plan_changed`), never laid over a change made since (34e-ii-b). */
+  version: dayVersionSchema,
 }).strict();
 export type DietPlanDayReply = z.infer<typeof dietPlanDayReplySchema>;
 
@@ -838,17 +850,15 @@ export const makeDietPlanRequestSchema = z.object({
 }).strict();
 export type MakeDietPlanRequest = z.infer<typeof makeDietPlanRequestSchema>;
 
-/** The foods of each meal of a day, in order, as the phone showed them: a change made from a day
- *  that is no longer the server's is refused (`plan_changed`), never laid over another device's. */
-const shownMealsSchema = z.array(z.array(z.string().min(1).max(120)).max(MEAL_MOST_FOODS)).max(MOST_PLAN_MEALS);
 
 /** A day as the person wants it, whole: its meals in order, each with its foods and
  *  amounts. A meal left out is removed; no meals clears the day. */
 export const putDietPlanDayRequestSchema = z.object({
   changeId: planChangeIdSchema,
-  /** The day as the phone showed it, where the change was made from it (Undo). */
-  shown: shownMealsSchema.optional(),
-  meals: z.array(z.object({ mealType: mealTypeSchema, items: chosenItemsSchema }).strict()).max(MOST_PLAN_MEALS),
+  /** The day's `version` as the phone showed it: a day changed since is refused (`plan_changed`). */
+  version: dayVersionSchema.optional(),
+  /** Foods of the lists, and the person's own foods with their own numbers (34e-ii-b). */
+  meals: z.array(z.object({ mealType: mealTypeSchema, items: mealChoicesSchema }).strict()).max(MOST_PLAN_MEALS),
 }).strict();
 export type PutDietPlanDayRequest = z.infer<typeof putDietPlanDayRequestSchema>;
 
@@ -856,10 +866,25 @@ export type PutDietPlanDayRequest = z.infer<typeof putDietPlanDayRequestSchema>;
 export const swapDietPlanMealRequestSchema = z.object({
   changeId: planChangeIdSchema,
   meal: z.number().int().min(0).max(MOST_PLAN_MEALS - 1),
-  /** The foods of the meal as the phone showed it: another meal now in its place is not swapped. */
-  shown: z.array(z.string().min(1).max(120)).max(MEAL_MOST_FOODS).optional(),
+  /** The day's `version` as the phone showed it: a day changed since is not swapped in. */
+  version: dayVersionSchema.optional(),
 }).strict();
 export type SwapDietPlanMealRequest = z.infer<typeof swapDietPlanMealRequestSchema>;
+
+/** A food of a planned meal as it is sent again, to log the meal or to keep it in the plan: a food of
+ *  the lists by its grams, which the server prices at the plan's numbers; the person's own food by
+ *  the numbers the plan keeps for it, for those grams (34e-ii-b). */
+export function planItemChoice(item: MealItem): MealChoice {
+  const per = item.per100g;
+  if (item.nutritionSource !== "own" || per === undefined) return { canonical: item.canonical, grams: item.gramsPoint };
+  // To six places, which gives back the numbers the person typed, at the same calories. Only where
+  // that comes to a hair over the food's weight (numbers that added up to all of it) is it cut down.
+  const at = (per100: number, round: (n: number) => number): number => round(((per100 * item.gramsPoint) / 100) * 1e6) / 1e6;
+  const own = (round: (n: number) => number) => ({ proteinG: at(per.proteinG, round), carbsG: at(per.carbsG, round), fatG: at(per.fatG, round) });
+  const typed = own(Math.round);
+  const fits = typed.proteinG + typed.carbsG + typed.fatG <= item.gramsPoint;
+  return { name: item.name.slice(0, 80), grams: item.gramsPoint, own: fits ? typed : own(Math.floor) };
+}
 
 // ── Your week in food (ROADMAP 34f-i) ──────────────────────────────────────────
 

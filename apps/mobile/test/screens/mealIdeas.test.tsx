@@ -192,7 +192,8 @@ describe("the worst thing: one tap saves one meal, at the calories it showed", (
     expect(screen.getByText(/^Logged to /)).toBeTruthy();
   });
 
-  it.each(["Dashboard", "Food"] as const)("a meal the server refuses never reads as logged on %s, after OK too", async (tab) => {
+  it("a meal the server refuses never reads as logged, after OK too", async () => {
+    const tab = "Food";
     const world: World = {
       ideas: () => ({ status: 200, body: answer() }),
       save: () => ({ status: 422, body: { error: "bad", message: "That food is no longer on the list.", requestId: "r" } }),
@@ -212,7 +213,7 @@ describe("the worst thing: one tap saves one meal, at the calories it showed", (
 
   it("a meal the phone couldn't write to its file says to keep the app open", async () => {
     const failing = (): TextStore => ({ read: () => Promise.resolve(null), write: () => Promise.reject(new Error("disk full")) });
-    await open({ ideas: () => ({ status: 200, body: answer() }), save: lost, meals: [] }, "Dashboard", failing);
+    await open({ ideas: () => ({ status: 200, body: answer() }), save: lost, meals: [] }, "Food", failing);
     await fireEvent.press(await logRice());
     expect(await screen.findByText("Waiting to send. It couldn’t be saved on this phone yet, so keep the app open.")).toBeTruthy();
   });
@@ -288,7 +289,7 @@ describe("why the box has no ideas", () => {
 });
 
 describe("the Dashboard's Recommended box", () => {
-  it("holds the Food option, the next meal's first idea, the allergy line, and logs it", async () => {
+  it("holds the Food option, the next meal's first idea and the allergy line; its Log meal opens Food's box and logs nothing (Kd, 2026-11-02)", async () => {
     const world: World = { ideas: () => ({ status: 200, body: answer({ labelCaution: DIET_LABEL_CAUTION }) }), meals: [] };
     await open(world, "Dashboard");
     const box = within(await screen.findByTestId("recommended-box"));
@@ -303,14 +304,19 @@ describe("the Dashboard's Recommended box", () => {
     expect(box.getByText(DIET_LABEL_CAUTION)).toBeTruthy();
     expect(box.queryByRole("radio", { name: "Exercise" })).toBeNull();
     expect(box.queryByRole("radio", { name: "Running" })).toBeNull();
-    world.ideas = () => ({ status: 200, body: AFTER_LOG });
     await fireEvent.press(box.getByRole("button", { name: "Log Chicken breast + Rice" }));
-    expect(await box.findByText(/^Logged to /)).toBeTruthy();
+    // The Food page, at its box, where the same meal is logged with one more press.
+    const food = within(await screen.findByTestId("meal-ideas-box"));
+    expect(screen.getByRole("tab", { name: "Food", selected: true })).toBeTruthy();
+    await act(async () => { await new Promise((done) => setTimeout(done, 200)); });
+    expect(world.meals).toHaveLength(0);
+    world.ideas = () => ({ status: 200, body: AFTER_LOG });
+    await fireEvent.press(await food.findByRole("button", { name: "Log Chicken breast + Rice" }));
     await waitFor(() => {
       expect(world.meals).toHaveLength(1);
     });
-    expect(await box.findByRole("button", { name: "Log Salmon" })).toBeTruthy();
-    // And it shows in Recent Activity, read again once the server has it.
+    // And it shows in the Dashboard's Recent Activity, read again once the server has it.
+    await fireEvent.press(screen.getByRole("tab", { name: "Dashboard" }));
     expect(await within(screen.getByTestId("recent-activity")).findByText("Chicken breast + Rice")).toBeTruthy();
   });
 

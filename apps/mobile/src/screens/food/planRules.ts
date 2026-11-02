@@ -1,5 +1,9 @@
-import type { DietPlanMeal, MealItem, WaitingMeal } from "@app/shared";
+import { planItemChoice, type DietPlanMeal, type FoodMeasure, type MealChoice, type MealItem, type MealType, type WaitingMeal } from "@app/shared";
+import type { BasketFood } from "./basket";
+import { itemMark } from "./day";
 import { ideaName } from "./ideaRules";
+import { loggedAmount } from "./measures";
+import { amountOf, foodTitle } from "./rows";
 
 // A person's meal plan (ROADMAP Stage 5 34e-ii-a), as the phone shows and logs it.
 
@@ -46,9 +50,9 @@ export function foodsOfRow(
   return (waiting.find((m) => m.id === row.id)?.body.items ?? []).flatMap((i) => ("canonical" in i ? [i.canonical] : []));
 }
 
-/** What the outbox keeps for a planned meal logged: by canonical and grams, as the plan priced it, so
- *  the server saves the numbers the plan showed. */
-export function planMealAsMeal(meal: Pick<DietPlanMeal, "mealType" | "items" | "totals">, id: string, now: Date): WaitingMeal {
+/** What the outbox keeps for a planned meal logged: its foods as the plan holds them, and which meal of
+ *  the plan it is, so the server saves the numbers the plan showed (round one of 34e-ii-b, H4). */
+export function planMealAsMeal(meal: Pick<DietPlanMeal, "mealType" | "items" | "totals">, id: string, now: Date, planned: { day: number; meal: number }): WaitingMeal {
   return {
     id,
     body: {
@@ -56,10 +60,51 @@ export function planMealAsMeal(meal: Pick<DietPlanMeal, "mealType" | "items" | "
       mealName: ideaName(meal),
       takenAt: now.toISOString(),
       mealType: meal.mealType,
-      items: meal.items.map((i) => ({ canonical: i.canonical, grams: i.gramsPoint })),
+      items: meal.items.map(planItemChoice),
+      planned,
     },
     items: meal.items,
     totals: meal.totals,
     tried: false,
   };
+}
+
+/** A planned food as the food box holds it, to change its amount or take it off: sent back as it is, the
+ *  server keeps it at the plan's numbers; a tap opens it at its amount with its own measures. */
+export function planBasketFood(item: MealItem, measures: readonly FoodMeasure[], key: string): BasketFood {
+  const chosen = planItemChoice(item);
+  const amount = amountOf(item);
+  const source = item.nutritionSource;
+  // An own food opens again in its own form, from what it is sent as.
+  const again =
+    source === "own" || "own" in chosen
+      ? undefined
+      : { food: { canonical: item.canonical, name: item.name, source, measures: [...measures], startsAt: { measure: amount.measure, amount: Number(amount.amount) } }, amount };
+  return { key, name: foodTitle(item), chosen, amount: loggedAmount(item) + itemMark(item), item, again };
+}
+
+/** Where a meal goes in a day as people eat them: breakfast, lunch, a snack, dinner. */
+const MEAL_ORDER: Record<MealType, number> = { breakfast: 0, lunch: 1, snack: 2, dinner: 3 };
+
+/** A day's meals with a new one put in its place: after the last meal that comes before or with it. */
+export function withNewMeal<T extends { mealType: MealType }>(meals: readonly T[], meal: T): T[] {
+  let at = 0;
+  meals.forEach((m, i) => {
+    if (MEAL_ORDER[m.mealType] <= MEAL_ORDER[meal.mealType]) at = i + 1;
+  });
+  return [...meals.slice(0, at), meal, ...meals.slice(at)];
+}
+
+/** A day of the plan as it is sent again whole, with one meal's foods in place of its own (`at`), a new
+ *  meal put in its place (`at` null), or one meal taken out (`items` null). Every other food is sent as it
+ *  is, so the server keeps it at the numbers the plan showed. */
+export function dayWithMeal(
+  meals: readonly Pick<DietPlanMeal, "mealType" | "items">[],
+  change: { at: number | null; mealType: MealType; items: readonly MealChoice[] | null },
+): { mealType: MealType; items: MealChoice[] }[] {
+  const kept = meals.map((m) => ({ mealType: m.mealType, items: m.items.map(planItemChoice) }));
+  const { at, items } = change;
+  if (at === null) return items === null ? kept : withNewMeal(kept, { mealType: change.mealType, items: [...items] });
+  if (items === null) return kept.filter((_, i) => i !== at);
+  return kept.map((m, i) => (i === at ? { mealType: m.mealType, items: [...items] } : m));
 }
