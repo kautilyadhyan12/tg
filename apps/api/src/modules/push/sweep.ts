@@ -40,7 +40,14 @@ export interface PushSweepResult {
   failed: number;
 }
 
+/** The pairs a run sends for at most, and how many it reads at a time, paging past those left for the
+ *  morning so they never hold up the rest. */
 const BATCH = 500;
+const PAGE = 500;
+/** A run stops reading after this many pages (20,000 pairs waiting for the morning). */
+const MAX_PAGES = 40;
+/** Firebase is asked for this many people at once: one at a time, a gym of 200 waits on 200 answers. */
+const AT_ONCE = 10;
 
 export async function sendGymMessageNotifications(deps: {
   sql: Sql;
@@ -48,30 +55,31 @@ export async function sendGymMessageNotifications(deps: {
   now: () => Date;
   /** For tests on a shared database. */
   gymIds?: readonly string[];
+  /** For tests: smaller pages and batches than a real run's. */
+  sizes?: { batch: number; page: number };
 }): Promise<PushSweepResult> {
   const { sql, sender } = deps;
+  const batch = deps.sizes?.batch ?? BATCH;
+  const page = deps.sizes?.page ?? PAGE;
   const now = deps.now();
   const since = new Date(now.getTime() - PUSH_WITHIN_HOURS * 3_600_000);
   const result: PushSweepResult = { sent: 0, skipped: 0, waiting: 0, failed: 0 };
-  const pairs = await repo.pendingPairs(sql, now, since, BATCH, deps.gymIds);
-  for (const pair of pairs) {
-    // Night: left for a later run, nothing marked.
-    if (pair.fresh && !pushHourOpen(localHour(pair.userZone, pair.gymZone, now))) {
-      result.waiting += 1;
-      continue;
-    }
+
+  const handle = async (pair: repo.PendingPair): Promise<void> => {
     // Claimed first, so what is counted below includes every message the claim took.
     const claimed = await repo.claim(sql, pair.userId, pair.gymId, now);
-    if (claimed === 0) continue;
+    if (claimed === 0) return;
     const tokens = pair.fresh ? await repo.liveTokens(sql, pair.userId, now) : [];
     // The Inbox's own count and rule: a former member, a closed gym or one on no plan has none.
     const unread = tokens.length === 0 ? 0 : ((await unreadCounts(sql, pair.userId, now)).get(pair.gymId) ?? 0);
     const newest = unread === 0 ? null : await repo.newestUnread(sql, pair.userId, pair.gymId, now);
     if (newest === null) {
       result.skipped += 1;
-      continue;
+      return;
     }
     const { title, body } = gymMessageNotification(pair.gymName, newest, unread);
+    let reached = false;
+    let failed = false;
     for (const token of tokens) {
       const sent = await sender.send({
         token,
@@ -81,10 +89,37 @@ export async function sendGymMessageNotifications(deps: {
         channelId: GYM_MESSAGES_CHANNEL.id,
         data: { kind: "gym_inbox", gymId: pair.gymId },
       });
-      if (sent === "sent") result.sent += 1;
-      else if (sent === "gone") await repo.forgetToken(sql, pair.userId, token);
-      else result.failed += 1;
+      if (sent === "sent") {
+        result.sent += 1;
+        reached = true;
+      } else if (sent === "gone") {
+        await repo.forgetToken(sql, pair.userId, token);
+      } else {
+        result.failed += 1;
+        failed = true;
+      }
     }
+    // Firebase did not answer for any phone: tried again on the next run, never lost.
+    if (failed && !reached) await repo.unclaim(sql, pair.userId, pair.gymId, now);
+  };
+
+  let after: repo.PairMark | null = null;
+  let taken = 0;
+  for (let pages = 0; pages < MAX_PAGES && taken < batch; pages += 1) {
+    const pairs = await repo.pendingPairs(sql, { now, since, limit: page, after, gymIds: deps.gymIds });
+    const due: repo.PendingPair[] = [];
+    for (const pair of pairs) {
+      // Night: left for a later run, nothing marked.
+      if (pair.fresh && !pushHourOpen(localHour(pair.userZone, pair.gymZone, now))) result.waiting += 1;
+      else if (taken < batch) {
+        due.push(pair);
+        taken += 1;
+      }
+    }
+    for (let i = 0; i < due.length; i += AT_ONCE) await Promise.all(due.slice(i, i + AT_ONCE).map(handle));
+    const last = pairs.at(-1);
+    if (last === undefined || pairs.length < page) break;
+    after = last.mark;
   }
   return result;
 }

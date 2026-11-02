@@ -31,7 +31,10 @@ export function SessionProvider({
     void session.start();
     // Coming back to the app is when an older phone learns it was signed out.
     const heard = AppState.addEventListener("change", (next) => {
-      if (next === "active") void session.refreshIfDue();
+      if (next === "active") {
+        void session.refreshIfDue();
+        void session.tellOwedSignOut();
+      }
     });
     return () => {
       heard.remove();

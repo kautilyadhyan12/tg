@@ -12,7 +12,7 @@ import { loadConfig } from "../src/config.js";
 import { createMemoryRedis } from "../src/redis.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
 import type { PushMessage, PushResult, PushSender } from "../src/modules/push/fcm.adapter.js";
-import { sendGymMessageNotifications } from "../src/modules/push/sweep.js";
+import { hourIn, sendGymMessageNotifications } from "../src/modules/push/sweep.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -76,7 +76,8 @@ d("phone notifications for a gym's messages (real Postgres)", () => {
       return Promise.resolve(answers.get(message.token) ?? "sent");
     },
   };
-  const sweep = (at: Date) => sendGymMessageNotifications({ sql, sender, now: () => at, gymIds });
+  const sweep = (at: Date, sizes?: { batch: number; page: number }) =>
+    sendGymMessageNotifications({ sql, sender, now: () => at, gymIds, ...(sizes === undefined ? {} : { sizes }) });
   const sentTo = (token: string) => sent.filter((m) => m.token === token);
 
   const cleanup = async () => {
@@ -249,7 +250,26 @@ d("phone notifications for a gym's messages (real Postgres)", () => {
     expect(sentTo(newPhone).map((m) => m.body)).toEqual(["See you tomorrow."]);
   });
 
+  it("a phone sign-in that ran out is told nothing, and cannot give an address", { timeout: TIMEOUT_MS }, async () => {
+    const at = minutes(noonIndia(), 25);
+    const phone = await phoneSignIn(email("ran-out"));
+    await join(gymA, phone.userId);
+    const token = address("ran-out");
+    expect((await giveAddress(phone, token)).statusCode).toBe(200);
+    await sql`UPDATE refresh_tokens SET expires_at = ${minutes(at, -1)} WHERE user_id = ${phone.userId}`;
+    await message(gymA, phone.userId, "After it ran out.", minutes(at, -1));
+    await sweep(at);
+    expect(sentTo(token)).toEqual([]);
+    expect((await giveAddress(phone, address("ran-out-2"))).statusCode).toBe(403);
+  });
+
   // ── The phone's address ──
+
+  it("a person may give an address 30 times an hour; the 31st is refused", { timeout: TIMEOUT_MS }, async () => {
+    const phone = await phoneSignIn(email("limit"));
+    for (let i = 0; i < 30; i += 1) expect((await giveAddress(phone, address(`limit${String(i)}`))).statusCode).toBe(200);
+    expect((await giveAddress(phone, address("limit-31"))).statusCode).toBe(429);
+  });
 
   it("only a phone sign-in may give an address; a bad one is refused", { timeout: TIMEOUT_MS }, async () => {
     const res = await request("PUT", "/v1/push-tokens", { payload: { token: address("nobody"), platform: "android" } });
@@ -338,6 +358,33 @@ d("phone notifications for a gym's messages (real Postgres)", () => {
     await message(gymA, phone.userId, "Hello from India.", minutes(at, -1));
     await sweep(at);
     expect(sentTo(token)).toEqual([]);
+    // 08:00 in New York, whatever the season: then it goes.
+    let morning = at;
+    while (hourIn("America/New_York", morning) !== 8) morning = minutes(morning, 30);
+    await sweep(morning);
+    expect(sentTo(token).map((m) => m.body)).toEqual(["Hello from India."]);
+  });
+
+  it("more people waiting for their morning than a run reads never hold up a person whose day it is", { timeout: TIMEOUT_MS }, async () => {
+    // 23:30 in India is 13:00 in New York in winter and 14:00 in summer: day there, night here.
+    const at = minutes(noonIndia(), 11 * 60);
+    expect(hourIn("Asia/Kolkata", at)).toBe(23);
+    for (const name of ["late1", "late2", "late3"]) {
+      const sleeper = await phoneSignIn(email(name));
+      await sql`UPDATE users SET timezone = 'Asia/Kolkata' WHERE id = ${sleeper.userId}`;
+      await join(gymA, sleeper.userId);
+      await giveAddress(sleeper, address(name));
+      await message(gymA, sleeper.userId, "Late news.", minutes(at, -30));
+    }
+    const awake = await phoneSignIn(email("awake"));
+    await sql`UPDATE users SET timezone = 'America/New_York' WHERE id = ${awake.userId}`;
+    await join(gymA, awake.userId);
+    const token = address("awake");
+    await giveAddress(awake, token);
+    await message(gymA, awake.userId, "Good afternoon.", minutes(at, -1));
+    // Pages of two and a batch of two, with three people asleep ahead of the one awake.
+    await sweep(at, { batch: 2, page: 2 });
+    expect(sentTo(token).map((m) => m.body)).toEqual(["Good afternoon."]);
   });
 
   it("nothing is sent for a message read, gone, too old, from a gym left or on no plan, or with no phone", { timeout: TIMEOUT_MS }, async () => {
@@ -363,6 +410,24 @@ d("phone notifications for a gym's messages (real Postgres)", () => {
     expect(sentTo(token)).toEqual([]);
     expect((await waiting(phone.userId))[0]?.n).toBe(0);
     expect((await waiting(nobody.userId))[0]?.n).toBe(0);
+  });
+
+  it("when Firebase does not answer, the notification is sent on the next run, once", { timeout: TIMEOUT_MS }, async () => {
+    const at = minutes(noonIndia(), 70);
+    const phone = await phoneSignIn(email("blip"));
+    await join(gymA, phone.userId);
+    const token = address("blip");
+    await giveAddress(phone, token);
+    answers.set(token, "failed");
+    await message(gymA, phone.userId, "Sent during a blip.", minutes(at, -1));
+    await sweep(at);
+    expect(sentTo(token)).toHaveLength(1);
+    expect((await waiting(phone.userId))[0]?.n).toBe(1);
+    answers.set(token, "sent");
+    await sweep(minutes(at, 1));
+    await sweep(minutes(at, 2));
+    expect(sentTo(token).map((m) => m.body)).toEqual(["Sent during a blip.", "Sent during a blip."]);
+    expect((await waiting(phone.userId))[0]?.n).toBe(0);
   });
 
   it("an address Firebase says is gone is forgotten", { timeout: TIMEOUT_MS }, async () => {

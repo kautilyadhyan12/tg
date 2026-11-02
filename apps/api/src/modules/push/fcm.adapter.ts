@@ -94,11 +94,12 @@ export function createFcmSender(deps: {
         if (res.ok) return fcmSendReplySchema.safeParse(reply).success ? "sent" : "failed";
         if (res.status === 401) cached = null;
         const error = fcmErrorReplySchema.safeParse(reply);
-        // Google's own word that the address is gone: the app was removed or its address replaced.
-        const gone =
-          res.status === 404 ||
-          (error.success && (error.data.error.details ?? []).some((d) => d.errorCode === "UNREGISTERED"));
-        return gone ? "gone" : "failed";
+        // Google's own word that the address is gone (the app was removed or its address replaced), or
+        // that it was never one: a refused address is not tried again with every message.
+        const codes = error.success ? (error.data.error.details ?? []).map((d) => d.errorCode) : [];
+        const notAnAddress =
+          res.status === 400 && codes.includes("INVALID_ARGUMENT") && /registration token/i.test(error.success ? (error.data.error.message ?? "") : "");
+        return res.status === 404 || codes.includes("UNREGISTERED") || notAnAddress ? "gone" : "failed";
       } catch {
         return "failed";
       }

@@ -112,9 +112,13 @@ export async function clearGym(gymId: string): Promise<void> {
   }
 }
 
-/** Signed out: nothing of the person stays on the phone, and Firebase forgets the address, so a
- *  message on its way reaches nobody even when the server was not told. */
+/** Signed out: nothing of the person stays on the phone, none is shown while the app is open, and
+ *  Firebase forgets the address, so a message on its way reaches nobody even when the server was not
+ *  told. Asked again at each opening and each return while signed out: with no signal it fails. */
 export async function forgetNotifications(): Promise<void> {
+  Notifications.setNotificationHandler({
+    handleNotification: () => Promise.resolve({ shouldShowBanner: false, shouldShowList: false, shouldPlaySound: false, shouldSetBadge: false }),
+  });
   await Notifications.dismissAllNotificationsAsync().catch(() => undefined);
   await Notifications.unregisterForNotificationsAsync().catch(() => undefined);
 }

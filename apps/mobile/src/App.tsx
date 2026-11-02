@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { StatusBar, StyleSheet, View } from "react-native";
+import { AppState, StatusBar, StyleSheet, View } from "react-native";
 import {
   Inter_400Regular,
   Inter_500Medium,
@@ -90,11 +90,16 @@ function SignedInOrOut({ mealStore }: { mealStore: (userId: string) => TextStore
   const { state } = useSession();
   // With nobody signed in, nothing of the last person's stays: an app killed with Updates open left its photos.
   useEffect(() => {
-    if (state.kind === "out") {
-      emptyPhotoFolder();
-      // Nobody's notifications stay on the phone, and none on its way reaches it.
-      void forgetNotifications();
-    }
+    if (state.kind !== "out") return;
+    emptyPhotoFolder();
+    // Nobody's notifications stay on the phone, and none on its way reaches it; asked again on each return.
+    void forgetNotifications();
+    const heard = AppState.addEventListener("change", (next) => {
+      if (next === "active") void forgetNotifications();
+    });
+    return () => {
+      heard.remove();
+    };
   }, [state.kind]);
   if (state.kind === "starting") return <View style={styles.page} />;
   if (state.kind === "out") return <SignInScreen note={state.note} />;

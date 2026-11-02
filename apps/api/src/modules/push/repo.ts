@@ -64,20 +64,35 @@ export interface PendingPair {
   gymZone: string;
   /** Some message waiting is unread, still in the inbox and recent enough to tell. */
   fresh: boolean;
+  /** Where the next page starts after this pair: its oldest waiting message, to the microsecond. */
+  mark: PairMark;
 }
 
-/** Each (person, gym) with messages not yet handed to the notifications, oldest first. */
-export async function pendingPairs(sql: SqlOrTx, now: Date, since: Date, limit: number, gymIds?: readonly string[]): Promise<PendingPair[]> {
-  const rows = await sql<{ user_id: string; gym_id: string; gym_name: string; user_zone: string | null; gym_zone: string; fresh: boolean }[]>`
+export interface PairMark {
+  at: string;
+  userId: string;
+  gymId: string;
+}
+
+/** One page of (person, gym) with messages not yet handed to the notifications, oldest first, after
+ *  `after`: the run pages on past pairs left for the morning, so they never hold up the rest. */
+export async function pendingPairs(
+  sql: SqlOrTx,
+  input: { now: Date; since: Date; limit: number; after: PairMark | null; gymIds?: readonly string[] | undefined },
+): Promise<PendingPair[]> {
+  const { now, since, limit, after, gymIds } = input;
+  const rows = await sql<{ user_id: string; gym_id: string; gym_name: string; user_zone: string | null; gym_zone: string; fresh: boolean; first: string }[]>`
     SELECT x.user_id, x.gym_id, g.name AS gym_name, u.timezone AS user_zone, g.timezone AS gym_zone,
-           bool_or(x.read_at IS NULL AND x.expires_at > ${now} AND x.sent_at >= ${since}) AS fresh
+           bool_or(x.read_at IS NULL AND x.expires_at > ${now} AND x.sent_at >= ${since}) AS fresh,
+           min(x.sent_at)::text AS first
     FROM gym_member_messages x
     JOIN users u ON u.id = x.user_id
     JOIN gyms g ON g.id = x.gym_id
     WHERE x.push_done_at IS NULL AND x.sent_at <= ${now}
       ${gymIds === undefined ? sql`` : sql`AND x.gym_id IN ${sql(gymIds)}`}
     GROUP BY x.user_id, x.gym_id, g.name, u.timezone, g.timezone
-    ORDER BY min(x.sent_at)
+    ${after === null ? sql`` : sql`HAVING (min(x.sent_at), x.user_id, x.gym_id) > (${after.at}::timestamptz, ${after.userId}::uuid, ${after.gymId}::uuid)`}
+    ORDER BY min(x.sent_at), x.user_id, x.gym_id
     LIMIT ${limit}`;
   return rows.map((row) => ({
     userId: row.user_id,
@@ -86,6 +101,7 @@ export async function pendingPairs(sql: SqlOrTx, now: Date, since: Date, limit: 
     userZone: row.user_zone,
     gymZone: row.gym_zone,
     fresh: row.fresh,
+    mark: { at: row.first, userId: row.user_id, gymId: row.gym_id },
   }));
 }
 
@@ -98,6 +114,14 @@ export async function newestUnread(sql: SqlOrTx, userId: string, gymId: string, 
     ORDER BY x.sent_at DESC
     LIMIT 1`;
   return rows[0]?.body ?? null;
+}
+
+/** Puts back a pair's messages that this run claimed and could not hand to Firebase, so the next run
+ *  tries again while they are still fresh. */
+export async function unclaim(sql: SqlOrTx, userId: string, gymId: string, claimedAt: Date): Promise<void> {
+  await sql`
+    UPDATE gym_member_messages SET push_done_at = NULL
+    WHERE user_id = ${userId} AND gym_id = ${gymId} AND push_done_at = ${claimedAt}`;
 }
 
 /** Marks the pair's waiting messages as handled, once: a second run at the same instant gets none

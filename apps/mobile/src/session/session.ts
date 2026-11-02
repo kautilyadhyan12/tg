@@ -2,6 +2,7 @@ import {
   SIGNED_IN_ELSEWHERE,
   googlePhoneStartResponseSchema,
   phoneKeptSessionSchema,
+  phoneSignOutOwedSchema,
   phoneRefreshResponseSchema,
   sendCodeResponseSchema,
   verifyCodePhoneResponseSchema,
@@ -69,6 +70,8 @@ export interface Session {
   refresh: () => Promise<void>;
   refreshIfDue: () => Promise<void>;
   signOut: () => Promise<void>;
+  /** Tells the server a Sign out it has not heard yet, if there is one (opening, coming back). */
+  tellOwedSignOut: () => Promise<void>;
   /** In memory only, for the requests a signed-in screen makes. */
   accessToken: () => string | null;
   /** A request as the person signed in now. A token the server no longer takes is refreshed
@@ -172,6 +175,33 @@ export function createSession({
     }
   };
 
+  /** A Sign out the server has not heard yet, or null. */
+  const readOwed = async (): Promise<string | null> => {
+    try {
+      const written = await store.read();
+      if (written === null || written === "") return null;
+      const parsed = phoneSignOutOwedSchema.safeParse(JSON.parse(written));
+      return parsed.success ? parsed.data.signOutOwed : null;
+    } catch {
+      return null;
+    }
+  };
+
+  /** Tells the server a Sign out. Any answer of the server's own (ended, or already ended) settles
+   *  it; no answer leaves it owed. A sign-in made since then is never touched. */
+  const tellSignOut = async (refreshToken: string) => {
+    const answer = await post(server, "/v1/auth/logout", { refreshToken }, anything);
+    if (answer.kind === "no_answer" || kept !== null) return;
+    if ((await readOwed()) !== refreshToken) return;
+    await store.clear().catch(() => store.write("").catch(() => undefined));
+  };
+
+  const tellOwedSignOut = async () => {
+    if (kept !== null) return;
+    const owed = await readOwed();
+    if (owed !== null) await tellSignOut(owed);
+  };
+
   const refreshOnce = async (mine: PhoneKeptSession): Promise<"done" | "no_answer"> => {
     const answer = await post(
       server,
@@ -228,6 +258,7 @@ export function createSession({
     start: async () => {
       kept = await readKept();
       show(kept === null ? { kind: "out", note: null } : { kind: "in", user: kept.user });
+      if (kept === null) await tellOwedSignOut();
       await refresh();
     },
 
@@ -334,8 +365,12 @@ export function createSession({
       const mine = kept;
       await forget();
       show({ kind: "out", note: SIGNED_OUT_NOTES.own });
-      // Told to the server when it can be reached; the phone is signed out either way.
-      if (mine !== null) await post(server, "/v1/auth/logout", { refreshToken: mine.refreshToken }, anything);
+      if (mine === null) return;
+      // Kept as owed until the server hears it: until then the sign-in, and its notifications, stay open there.
+      await store.write(JSON.stringify({ signOutOwed: mine.refreshToken })).catch(() => undefined);
+      await tellSignOut(mine.refreshToken);
     },
+
+    tellOwedSignOut,
   };
 }

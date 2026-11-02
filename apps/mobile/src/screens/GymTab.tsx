@@ -201,7 +201,8 @@ export function GymScreen() {
 
   // A tapped notification's gym: its Inbox opens once the places are read, and only if it is one of
   // this person's own.
-  const asked = inboxAsked === null || mine === null ? null : mine.kind === "ok" ? (joined.find((org) => org.id === inboxAsked) ?? false) : false;
+  // A read that failed keeps the ask for the next read, which the tab makes on coming back.
+  const asked = inboxAsked === null || mine?.kind !== "ok" ? null : (joined.find((org) => org.id === inboxAsked) ?? false);
   useEffect(() => {
     if (asked === null) return;
     if (asked !== false) setInboxAt({ id: asked.id, name: asked.name, orgType: asked.orgType, latestCheer: asked.latestCheer, latestNudge: asked.latestNudge });

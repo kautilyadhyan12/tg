@@ -73,6 +73,7 @@ export const fcmErrorReplySchema = z.object({
   error: z.object({
     code: z.number().int().optional(),
     status: z.string().optional(),
+    message: z.string().optional(),
     details: z.array(z.object({ errorCode: z.string().optional() }).passthrough()).optional(),
   }),
 });

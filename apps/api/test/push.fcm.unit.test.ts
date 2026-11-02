@@ -70,6 +70,12 @@ describe("createFcmSender", () => {
   it.each([
     ["404, the address is gone", () => json(404, { error: { code: 404, status: "NOT_FOUND" } }), "gone"],
     ["UNREGISTERED in the details", () => json(400, { error: { code: 400, details: [{ errorCode: "UNREGISTERED" }] } }), "gone"],
+    [
+      "not an address at all (Google's own words, run 2026-11-02)",
+      () => json(400, { error: { code: 400, message: "The registration token is not a valid FCM registration token", details: [{ errorCode: "INVALID_ARGUMENT" }] } }),
+      "gone",
+    ],
+    ["a bad request about something else", () => json(400, { error: { code: 400, message: "Invalid JSON payload", details: [{ errorCode: "INVALID_ARGUMENT" }] } }), "failed"],
     ["a bad request otherwise", () => json(400, { error: { code: 400, status: "INVALID_ARGUMENT" } }), "failed"],
     ["Google is down", () => json(503, { error: { code: 503 } }), "failed"],
     ["an answer that is not Google's", () => new Response("<html>proxy</html>", { status: 200 }), "failed"],
