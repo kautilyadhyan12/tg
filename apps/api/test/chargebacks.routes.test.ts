@@ -952,7 +952,7 @@ d("A chargeback (real Postgres)", { timeout: T }, () => {
       const paused = await send("POST", `${entryUrl(gym, kay.entryId)}/card/autopay/pause`, gym.owner.cookies);
       expect(paused.statusCode, paused.body).toBe(200);
       expect((JSON.parse((await send("GET", startUrl(gym, id), gym.owner.cookies)).body) as { staffPaused: boolean }).staffPaused).toBe(true);
-      const kayPayment = (await paymentOnPage(kay)).chargebacks ?? [];
+      const kayPayment = (await paymentOnPage(kay)).chargebacks;
       expect(kayPayment[0]?.staffPaused).toBe(true);
       const resumed = await send("POST", `${entryUrl(gym, kay.entryId)}/card/autopay/resume`, gym.owner.cookies);
       expect(resumed.statusCode, resumed.body).toBe(200);
