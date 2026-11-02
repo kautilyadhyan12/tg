@@ -637,7 +637,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 34d-iii. [x] **The ideas on the Food screen, and Recommended For You on the Dashboard** — merged 2026-11-02 (PR #433).
     - 34e. **Your own diet plan** (7c; split 2026-10-14: the server part needs no phone).
       - 34e-i. [x] **The diet plan on the server** — merged 2026-10-14 (PR #264).
-      - 34e-ii. [ ] **The diet plan on the Food screen**, each meal logged with one tap; a meal outside the diet says so with Swap. Waits for 32b.
+      - 34e-ii. **The diet plan on the Food screen** (split 2026-11-02: following the plan first).
+        - 34e-ii-a. [x] **Follow your meal plan** — merged 2026-11-02 (PR #439).
+        - 34e-ii-b. [ ] **Build your own meal plan**: your own foods, amounts, add and remove a meal, from empty or from the app's week.
     - 34f. **Your week in food** (7d; split 2026-10-14: the server part needs no phone).
       - 34f-i. [x] **The server works out your week in food** — merged 2026-10-14 (PR #269).
       - 34f-ii. [ ] **The chart on the Food screen**, with the facts under it in words ("Protein was under target on 5 of 6 days"). Waits for 32b.

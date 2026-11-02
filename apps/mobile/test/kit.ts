@@ -1,4 +1,4 @@
-import { CURRENT_DISCLAIMER_VERSION } from "@app/shared";
+import { CURRENT_DISCLAIMER_VERSION, FOOD_ALLERGY_CAUTION } from "@app/shared";
 import type { Ask, AskInit } from "../src/session/calls";
 import type { KeyStore } from "../src/session/session";
 
@@ -65,6 +65,13 @@ export interface Asked {
 
 /** A server of the routes it is handed; any other path answers 404. `/health` is up, and the
  *  profile says the person ticked "Before you start", and no gym has invited or taken them, unless told. */
+const NO_PLAN = {
+  days: [1, 2, 3, 4, 5, 6, 7].map((day) => ({ day, meals: [], planned: { kcal: 0, proteinG: 0, carbsG: 0, fatG: 0 }, target: null, off: null })),
+  make: { status: "ok" },
+  caution: FOOD_ALLERGY_CAUTION,
+  labelCaution: null,
+};
+
 export function fakeServer(routes: Record<string, Route>): { ask: Ask; asked: Asked[]; paths: () => string[] } {
   const asked: Asked[] = [];
   const all: Record<string, Route> = {
@@ -80,6 +87,8 @@ export function fakeServer(routes: Record<string, Route>): { ask: Ask; asked: As
       body: { healthScreening: { answered: false, hasCondition: null, checkFirst: null, safeMode: false, noCalorieCut: false, updatedAt: null } },
     }),
     "/v1/users/me/consents": () => ({ status: 200, body: { consents: [], total: 0 } }),
+    // No meal plan made yet, unless a test says otherwise.
+    "/v1/nutrition/diet-plan": () => ({ status: 200, body: NO_PLAN }),
     ...routes,
   };
   const ask: Ask = async (url: string, init: AskInit) => {
