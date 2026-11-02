@@ -994,6 +994,183 @@ d("A chargeback (real Postgres)", { timeout: T }, () => {
     });
   });
 
+  describe("a lost one on a sale (18d-iv-e-ii-b)", () => {
+    interface Sold { g: Gym; payment: string; lines: string[]; products: string[] }
+    const sold = async (g: Gym, prices: readonly number[], stock: number | null = null): Promise<Sold> => {
+      const products: string[] = [];
+      for (const priceMinor of prices) {
+        const name = `Item ${uniq()}`;
+        const made = await send("POST", `/v1/orgs/${g.id}/register/products`, g.owner.cookies, { name, priceMinor, taxRateId: null, stock });
+        expect(made.statusCode, made.body).toBeLessThan(300);
+        const product = (JSON.parse(made.body) as { products: { id: string; name: string }[] }).products.find((p) => p.name === name);
+        products.push(product?.id ?? "");
+      }
+      const res = await send("POST", `/v1/orgs/${g.id}/register/sales`, g.owner.cookies, { requestKey: randomUUID(), method: "cash", entryId: null, totalMinor: prices.reduce((n, p) => n + p, 0), lines: products.map((productId, i) => ({ productId, quantity: 1, totalMinor: prices[i], discountId: null })) });
+      expect(res.statusCode, res.body).toBeLessThan(300);
+      const payment = `SALE${uniq()}`;
+      square.paymentInSquare(payment, g.acct.merchantId, prices.reduce((n, p) => n + p, 0));
+      const rows = await sql<{ id: string }[]>`UPDATE gym_sales SET method = 'terminal', square_payment_id = ${payment} WHERE gym_id = ${g.id} AND product_id = ANY(${products}::uuid[]) RETURNING id`;
+      const lines = (await sql<{ id: string }[]>`SELECT id FROM gym_sales WHERE id = ANY(${rows.map((r) => r.id)}::uuid[]) ORDER BY line_no`).map((r) => r.id);
+      return { g, payment, lines, products };
+    };
+    const loseOn = async (s: Sold, amount: number) => {
+      const made = square.disputeInSquare(s.payment, { amount_money: { amount, currency: "USD" } });
+      await message(s.g.acct.merchantId, made.id);
+      square.disputeMoves(made.id, "LOST");
+      await message(s.g.acct.merchantId, made.id, "dispute.state.updated");
+      return made;
+    };
+    const backOn = (s: Sold) =>
+      sql<{ sale_id: string; amount_minor: number; method: string; reason: string; restocked: number; recorded_by: string | null; undone: boolean }[]>`
+        SELECT sale_id, amount_minor, method, reason, restocked, recorded_by, undone_at IS NOT NULL AS undone FROM gym_sale_refunds WHERE sale_id = ANY(${s.lines}::uuid[]) ORDER BY receipt_number`;
+    const standing = async (s: Sold) => (await backOn(s)).filter((r) => !r.undone).map((r) => [s.lines.indexOf(r.sale_id), r.amount_minor, r.reason]);
+    const noted = async (s: Sold, line: number, amountMinor: number, method: string) => {
+      const res = await send("POST", `/v1/orgs/${s.g.id}/register/sales/${s.lines[line] ?? ""}/refunds`, s.g.owner.cookies, { requestKey: randomUUID(), amountMinor, method, reason: "other", restock: 0 });
+      expect(res.statusCode, res.body).toBeLessThan(300);
+    };
+    const waitingOn = (s: Sold) => sql<{ id: string; amount_minor: number }[]>`SELECT id, amount_minor FROM gym_square_refunds WHERE square_payment_id = ${s.payment} AND to_place`;
+    const answer = (s: Sold, press: string, parts: unknown, by: Person = s.g.owner) => send("POST", `/v1/orgs/${s.g.id}/register/sales/${s.lines[0] ?? ""}/square-refunds/${press}/place`, by.cookies, { parts });
+    const stockOf = async (id: string | undefined) => (await sql<{ stock: number | null }[]>`SELECT stock FROM gym_products WHERE id = ${id ?? ""}`)[0]?.stock;
+
+    it("THE WORST THING: the money goes off this sale alone, once, however often Square says so", async () => {
+      const ours = await sold(gym, [2000]);
+      const other = await sold(gym, [2000]);
+      const theirs = await sold(nextDoor, [2000]);
+      const made = await loseOn(ours, 2000);
+      await message(gym.acct.merchantId, made.id, "dispute.state.updated");
+      await Promise.all([message(gym.acct.merchantId, made.id, "dispute.state.updated"), message(gym.acct.merchantId, made.id, "dispute.state.updated")]);
+      clock = new Date(clock.getTime() + 2 * 60 * 60_000);
+      await work();
+      expect(await backOn(ours)).toEqual([{ sale_id: ours.lines[0], amount_minor: 2000, method: "terminal", reason: "chargeback", restocked: 0, recorded_by: null, undone: false }]);
+      expect(await backOn(other)).toEqual([]);
+      expect(await backOn(theirs)).toEqual([]);
+      const notes = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.sale_refund_chargeback' AND meta->>'saleId' = ${ours.lines[0] ?? ""}`;
+      expect(notes[0]?.n).toBe(1);
+    });
+
+    // Every shape a lost chargeback can meet. [line, amount, reason], the product by its place in the basket; "ask" waits on staff.
+    const CASES: { name: string; prices: number[]; before?: (s: Sold) => Promise<void>; amount: number; want: unknown[] | "ask" }[] = [
+      { name: "one product, all of it", prices: [2000], amount: 2000, want: [[0, 2000, "chargeback"]] },
+      { name: "one product, part of it", prices: [2000], amount: 500, want: [[0, 500, "chargeback"]] },
+      { name: "a basket, all of it", prices: [1500, 500], amount: 2000, want: [[0, 1500, "chargeback"], [1, 500, "chargeback"]] },
+      { name: "a basket, part of it: nothing guessed", prices: [1500, 500], amount: 300, want: "ask" },
+      { name: "a basket, part, the same as one product's price: still asked", prices: [1500, 500], amount: 500, want: "ask" },
+      { name: "a note by card is this money: crossed out", prices: [2000], before: (s) => noted(s, 0, 500, "card_at_desk"), amount: 2000, want: [[0, 2000, "chargeback"]] },
+      { name: "a note by card says which product of a basket", prices: [1500, 500], before: (s) => noted(s, 1, 300, "card_at_desk"), amount: 300, want: [[1, 300, "chargeback"]] },
+      { name: "cash given back stays beside it, past what was paid", prices: [2000], before: (s) => noted(s, 0, 500, "cash"), amount: 2000, want: [[0, 500, "other"], [0, 2000, "chargeback"]] },
+      { name: "one product of a basket already all back: the other takes it", prices: [1500, 500], before: (s) => noted(s, 0, 1500, "cash"), amount: 300, want: [[0, 1500, "other"], [1, 300, "chargeback"]] },
+    ];
+    for (const c of CASES) {
+      it(`table: ${c.name}`, async () => {
+        const s = await sold(gym, c.prices);
+        await c.before?.(s);
+        await loseOn(s, c.amount);
+        if (c.want === "ask") {
+          expect((await waitingOn(s)).map((w) => w.amount_minor)).toEqual([c.amount]);
+          expect(await standing(s)).toEqual([]);
+        } else {
+          expect(await waitingOn(s)).toEqual([]);
+          expect(await standing(s)).toEqual(c.want);
+        }
+      });
+    }
+
+    it("what already went back through Square lowers it", async () => {
+      const s = await sold(gym, [2000]);
+      await noted(s, 0, 100, "cash");
+      await sql`UPDATE gym_sale_refunds SET method = 'terminal', amount_minor = 800 WHERE sale_id = ${s.lines[0] ?? ""}`;
+      await loseOn(s, 2000);
+      expect(await standing(s)).toEqual([[0, 800, "other"], [0, 1200, "chargeback"]]);
+    });
+
+    it("waits while a refund Square has not finished, then writes at the next read; a voided sale takes nothing", async () => {
+      const s = await sold(gym, [2000]);
+      await sql`INSERT INTO gym_square_refunds (id, gym_id, sale_id, environment, account_id, square_payment_id, square_refund_id, amount_minor, currency, reason, request_key, state, started_at, checked_at)
+                VALUES (${randomUUID()}, ${gym.id}, ${s.lines[0] ?? ""}, 'production', ${gym.acct.merchantId}, ${s.payment}, ${"R" + uniq()}, 100, 'USD', 'other', ${randomUUID()}, 'pending', now(), now())`;
+      const made = await loseOn(s, 2000);
+      expect(await standing(s)).toEqual([]);
+      expect((await sql<{ written: boolean }[]>`SELECT lost_written_at IS NOT NULL AS written FROM gym_square_disputes WHERE square_payment_id = ${s.payment}`)[0]?.written).toBe(false);
+      await sql`DELETE FROM gym_square_refunds WHERE square_payment_id = ${s.payment}`;
+      await message(gym.acct.merchantId, made.id, "dispute.state.updated");
+      expect(await standing(s)).toEqual([[0, 2000, "chargeback"]]);
+
+      const voided = await sold(gym, [2000]);
+      await sql`UPDATE gym_sales SET undone_at = now(), void_reason = 'mistake' WHERE id = ${voided.lines[0] ?? ""}`;
+      await loseOn(voided, 2000);
+      expect(await backOn(voided)).toEqual([]);
+    });
+
+    it("the shelf count does not move, and staff cannot void it", async () => {
+      const s = await sold(gym, [2000], 5);
+      await loseOn(s, 2000);
+      expect(await stockOf(s.products[0])).toBe(4);
+      const [row] = await sql<{ id: string }[]>`SELECT id FROM gym_sale_refunds WHERE sale_id = ${s.lines[0] ?? ""}`;
+      const refused = await send("POST", `/v1/orgs/${gym.id}/register/sales/${s.lines[0] ?? ""}/refunds/${row?.id ?? ""}/void`, gym.owner.cookies, { reason: "mistake" });
+      expect(refused.statusCode).toBe(409);
+      expect((await backOn(s))[0]?.undone).toBe(false);
+    });
+
+    it("part of a basket: on Refunds to review, chosen by staff, on Square's day, once, never on the shelf; a stranger gets 404", async () => {
+      const s = await sold(gym, [1500, 500], 5);
+      const made = await loseOn(s, 300);
+      await message(gym.acct.merchantId, made.id, "dispute.state.updated");
+      const [press] = await waitingOn(s);
+      expect(await waitingOn(s)).toHaveLength(1);
+      const listed = JSON.parse((await send("GET", `/v1/orgs/${gym.id}/refunds-to-review`, gym.owner.cookies)).body) as { rows: { id: string; kind: string; chargeback: boolean }[] };
+      expect(listed.rows.find((r) => r.id === press?.id)).toMatchObject({ kind: "place", chargeback: true });
+      const check = JSON.parse((await send("GET", `/v1/orgs/${gym.id}/register/sales/${s.lines[0] ?? ""}/card-refund`, gym.owner.cookies)).body) as { block?: string };
+      expect(check.block).toBe("to_place");
+
+      const strangerBasket = await sold(nextDoor, [1500, 500]);
+      const stranger = await send("POST", `/v1/orgs/${nextDoor.id}/register/sales/${strangerBasket.lines[0] ?? ""}/square-refunds/${press?.id ?? ""}/place`, nextDoor.owner.cookies, { parts: [{ saleId: strangerBasket.lines[1], amountMinor: 300, restock: 0 }] });
+      expect(stranger.statusCode).toBe(404);
+
+      // A shelf count sent by hand is not taken: a chargeback puts nothing back.
+      const parts = [{ saleId: s.lines[1], amountMinor: 300, restock: 1 }];
+      const first = await answer(s, press?.id ?? "", parts);
+      expect(first.statusCode, first.body).toBeLessThan(300);
+      expect((await answer(s, press?.id ?? "", parts)).statusCode).toBeLessThan(300);
+      expect(await standing(s)).toEqual([[1, 300, "chargeback"]]);
+      expect(await stockOf(s.products[1])).toBe(4);
+      expect(await waitingOn(s)).toEqual([]);
+      const seen = JSON.parse((await send("GET", `/v1/orgs/${gym.id}/register/sales/${s.lines[1] ?? ""}/card-refund`, gym.owner.cookies)).body) as { block?: string };
+      expect(seen.block).not.toBe("to_place");
+      const [day] = await sql<{ same: boolean; method: string }[]>`SELECT refunded_on = (SELECT (q.square_updated_at AT TIME ZONE 'UTC')::date FROM gym_square_disputes q WHERE q.square_payment_id = ${s.payment}) AS same, method FROM gym_sale_refunds WHERE sale_id = ${s.lines[1] ?? ""}`;
+      expect(day?.method).toBe("terminal");
+      expect(day?.same).toBe(true);
+    });
+
+    it("it comes off Reports and reads on the sale's own page, with Chargeback lost as its reason", async () => {
+      const s = await sold(nextDoor, [2000]);
+      const span = { from: "2000-01-01", to: "2100-01-01" };
+      const refunded = async () => {
+        const res = await send("GET", `/v1/orgs/${nextDoor.id}/reports/money`, nextDoor.owner.cookies);
+        expect(res.statusCode, res.body).toBe(200);
+        return (JSON.parse(res.body) as { report: { thisMonth: { refundedMinor: number } } }).report.thisMonth.refundedMinor;
+      };
+      const before = await refunded();
+      const collected = await readCollected(sql, nextDoor.id, "USD", span);
+      await loseOn(s, 2000);
+      expect((await refunded()) - before).toBe(2000);
+      const after = await readCollected(sql, nextDoor.id, "USD", span);
+      expect(after.refundedMinor - collected.refundedMinor).toBe(2000);
+      expect(after.paidMinor).toBe(collected.paidMinor);
+      const day = await send("GET", `/v1/orgs/${nextDoor.id}/register`, nextDoor.owner.cookies);
+      expect(day.statusCode, day.body).toBe(200);
+      expect(day.body).toContain('"reason":"chargeback"');
+      const [row] = await sql<{ receipt_number: number }[]>`SELECT receipt_number FROM gym_sale_refunds WHERE sale_id = ${s.lines[0] ?? ""}`;
+      const receipt = await send("GET", `/v1/orgs/${nextDoor.id}/receipts/${String(row?.receipt_number ?? 0)}`, nextDoor.owner.cookies);
+      expect(receipt.statusCode, receipt.body).toBe(200);
+    });
+
+    it("Staff activity says it in plain words", () => {
+      const ctx = { about: "Maya", words: orgWords("gym"), currency: "USD", meta: { amountMinor: "2000", currency: "USD", product: "Water", brand: "VISA", last4: "1111" } };
+      expect(STAFF_LINES["org.sale_refund_chargeback"]?.(ctx)).toContain("because a chargeback was lost");
+      expect(STAFF_LINES["org.sale_chargeback_to_place"]?.(ctx)).toContain("its product is still to be chosen");
+      expect(STAFF_LINES["org.sale_chargeback_placed"]?.(ctx)).toContain("was for Water");
+    });
+  });
+
   describe("what Square answers", () => {
     it("the hourly read finds one no message brought, and follows it", async () => {
       const una = await paidByCard(gym, "Dispute Una");

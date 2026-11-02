@@ -17,6 +17,8 @@ export const refundToReviewSchema = z
     /** The fee's bill for a fee; the refund press for the rest. */
     id: z.string().uuid(),
     kind: z.enum(REFUND_REVIEW_KINDS),
+    /** Choose product on a lost chargeback, not a refund made in Square (18d-iv-e-ii-b). */
+    chargeback: z.boolean().default(false),
     /** What is left to give back: of a fee, or of a refund after any refund since. */
     amountMinor: minorSchema,
     /** What was paid, on a fee; what was asked for, on a refund. */

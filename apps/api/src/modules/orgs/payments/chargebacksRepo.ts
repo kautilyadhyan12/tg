@@ -17,6 +17,7 @@ import { writeRefund } from "../memberships/billsRepo.js";
 import { refundTargetOf } from "../memberships/billsSql.js";
 import { lockGym } from "../memberList/repo.js";
 import { crossOutCardNotes } from "./cardRefundsRepo.js";
+import { settleLostOnSale } from "./saleCardRefundsRepo.js";
 import { insertAudit } from "../repo.js";
 import type { SquareEnvironment } from "./square.js";
 
@@ -172,15 +173,15 @@ export async function writeDispute(
  *  made in Square (18d-iv-d-i) it is written beside money the gym gave back in cash, UPI or by bank transfer, as that money did go too; a
  *  note by card may be this same money, so it is crossed out; only what already went back through Square lowers it. Under the gym's lock,
  *  keyed by the chargeback's own id. Not yet where the app cannot write it true (a refund Square has not finished, a bill still part
- *  paid): the next hourly read asks again. `cannot`: it never will, without somebody looking. A sale's waits for 18d-iv-e-ii-b. */
+ *  paid): the next hourly read asks again. `cannot`: it never will, without somebody looking. A sale's: `settleLostOnSale`. */
 export async function settleLostChargeback(sql: Sql, d: { gymId: string; environment: SquareEnvironment; squareDisputeId: string; now: Date }): Promise<"done" | "cannot"> {
   const [first] = await sql<{ state: string; lost_written_at: Date | null }[]>`
     SELECT state, lost_written_at FROM gym_square_disputes WHERE gym_id = ${d.gymId} AND environment = ${d.environment} AND square_dispute_id = ${d.squareDisputeId}`;
   if (first === undefined || first.lost_written_at !== null || !lostOrAccepted(first.state)) return "done";
   return await sql.begin(async (tx): Promise<"done" | "cannot"> => {
     await lockGym(tx, d.gymId);
-    const [row] = await tx<{ id: string; state: string; amount_minor: number; currency: string; square_payment_id: string; lost_written_at: Date | null; brand: string | null; last4: string | null; on_day: string }[]>`
-      SELECT q.id, q.state, q.amount_minor, q.currency, q.square_payment_id, q.lost_written_at, q.brand, q.last4,
+    const [row] = await tx<{ id: string; account_id: string; lost_at: Date; state: string; amount_minor: number; currency: string; square_payment_id: string; lost_written_at: Date | null; brand: string | null; last4: string | null; on_day: string }[]>`
+      SELECT q.id, q.account_id, COALESCE(q.square_updated_at, ${d.now}) AS lost_at, q.state, q.amount_minor, q.currency, q.square_payment_id, q.lost_written_at, q.brand, q.last4,
              (COALESCE(q.square_updated_at, ${d.now}) AT TIME ZONE g.timezone)::date::text AS on_day
       FROM gym_square_disputes q JOIN gyms g ON g.id = q.gym_id
       WHERE q.gym_id = ${d.gymId} AND q.environment = ${d.environment} AND q.square_dispute_id = ${d.squareDisputeId}
@@ -192,7 +193,24 @@ export async function settleLostChargeback(sql: Sql, d: { gymId: string; environ
       JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
       JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
       WHERE p.gym_id = ${d.gymId} AND p.provider = 'square' AND p.provider_payment_id = ${row.square_payment_id} AND p.undone_at IS NULL`;
-    if (where === undefined) return "done";
+    if (where === undefined) {
+      const onSale = await settleLostOnSale(tx, {
+        gymId: d.gymId,
+        environment: d.environment,
+        accountId: row.account_id,
+        disputeRowId: row.id,
+        squarePaymentId: row.square_payment_id,
+        amountMinor: row.amount_minor,
+        currency: row.currency,
+        card: row.brand === null || row.last4 === null ? null : { brand: row.brand, last4: row.last4 },
+        lostAt: row.lost_at,
+        onDay: row.on_day,
+        now: d.now,
+      });
+      if (onSale === "cannot") return "cannot";
+      if (onSale === "written") await tx`UPDATE gym_square_disputes SET lost_written_at = ${d.now} WHERE gym_id = ${d.gymId} AND id = ${row.id}`;
+      return "done";
+    }
     if (where.currency !== row.currency) return "cannot";
     const [waiting] = await tx<{ id: string }[]>`SELECT id FROM gym_square_refunds WHERE gym_id = ${d.gymId} AND square_payment_id = ${row.square_payment_id} AND state IN ('asking','pending') LIMIT 1`;
     if (waiting !== undefined) return "done";

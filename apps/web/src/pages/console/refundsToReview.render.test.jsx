@@ -70,6 +70,7 @@ describe('the words of a row', () => {
   });
 
   it('a refund made in Square with no product said asks which, and only opens the box', () => {
+    expect(reviewWhy({ ...saleRow, kind: 'place', chargeback: true, amountMinor: 300, paidMinor: 300 })).toBe('You lost a $3.00 chargeback on this sale. Which product was it for? It counts in your reports once you choose.');
     const row = { ...saleRow, kind: 'place', amountMinor: 500, paidMinor: 500 };
     expect(reviewWhy(row)).toBe('Square refunded $5.00 of this sale. Which product was it for? It counts in your reports once you choose.');
     expect(reviewButtons(row)).toEqual({ open: 'Choose product', decide: null });

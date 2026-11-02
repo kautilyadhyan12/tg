@@ -560,8 +560,8 @@ const checkOfSale = async (deps: PaymentsDeps, ready: Ready, sale: SaleToRefund)
   const paymentId = sale.squarePaymentId ?? "";
   const check = await checkWithSquare(deps, ready, sale, paymentId, () => saleRefundAsking(deps.sql, ready.row.gymId, sale.saleId), () => refunds.waitingOnTerminal(deps.sql, ready.row.gymId, paymentId));
   const toPlace = await sales.toPlaceOn(deps.sql, ready.row.gymId, paymentId);
-  if (toPlace === 0) return check;
-  return { ...check, refundedInSquareMinor: Math.max(0, check.refundedInSquareMinor - toPlace), block: check.block === "waiting" ? "waiting" : "to_place" };
+  if (!toPlace.waits) return check;
+  return { ...check, refundedInSquareMinor: Math.max(0, check.refundedInSquareMinor - toPlace.inSquareMinor), block: check.block === "waiting" ? "waiting" : "to_place" };
 };
 
 /** What Square says of all that is left of a sale: nothing goes back at once where Square shows less left than the app does. */
