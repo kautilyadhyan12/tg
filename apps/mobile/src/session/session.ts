@@ -50,6 +50,9 @@ export type GoogleSignIn = Answer<VerifyCodePhoneResponse> | { kind: "closed" } 
 interface SessionOptions {
   server: Server;
   store: KeyStore;
+  /** Where a Sign out the server has not heard yet is kept: a key of its own, so a sign-in made since
+   *  never writes over it. In memory when none is given. */
+  owedStore?: KeyStore;
   /** Google's own box; without one, Google's sign-in is broken on this phone. */
   google?: AskGoogle;
   onChange: (state: SessionState) => void;
@@ -101,6 +104,7 @@ export interface Session {
 export function createSession({
   server,
   store,
+  owedStore = memoryKeyStore(),
   google = () => Promise.resolve({ kind: "failed" }),
   onChange,
   now = Date.now,
@@ -178,7 +182,7 @@ export function createSession({
   /** A Sign out the server has not heard yet, or null. */
   const readOwed = async (): Promise<string | null> => {
     try {
-      const written = await store.read();
+      const written = await owedStore.read();
       if (written === null || written === "") return null;
       const parsed = phoneSignOutOwedSchema.safeParse(JSON.parse(written));
       return parsed.success ? parsed.data.signOutOwed : null;
@@ -191,13 +195,14 @@ export function createSession({
    *  it; no answer leaves it owed. A sign-in made since then is never touched. */
   const tellSignOut = async (refreshToken: string) => {
     const answer = await post(server, "/v1/auth/logout", { refreshToken }, anything);
-    if (answer.kind === "no_answer" || kept !== null) return;
+    // Only the server's own answer settles it: no answer, or its own failure (5xx), leaves it owed.
+    if (answer.kind === "no_answer" || (answer.kind === "refused" && answer.status >= 500)) return;
     if ((await readOwed()) !== refreshToken) return;
-    await store.clear().catch(() => store.write("").catch(() => undefined));
+    await owedStore.clear().catch(() => owedStore.write("").catch(() => undefined));
   };
 
+  // Its own key: told whoever is signed in now, since it can only ever end the sign-in it names.
   const tellOwedSignOut = async () => {
-    if (kept !== null) return;
     const owed = await readOwed();
     if (owed !== null) await tellSignOut(owed);
   };
@@ -258,7 +263,7 @@ export function createSession({
     start: async () => {
       kept = await readKept();
       show(kept === null ? { kind: "out", note: null } : { kind: "in", user: kept.user });
-      if (kept === null) await tellOwedSignOut();
+      await tellOwedSignOut();
       await refresh();
     },
 
@@ -367,10 +372,26 @@ export function createSession({
       show({ kind: "out", note: SIGNED_OUT_NOTES.own });
       if (mine === null) return;
       // Kept as owed until the server hears it: until then the sign-in, and its notifications, stay open there.
-      await store.write(JSON.stringify({ signOutOwed: mine.refreshToken })).catch(() => undefined);
+      await owedStore.write(JSON.stringify({ signOutOwed: mine.refreshToken })).catch(() => undefined);
       await tellSignOut(mine.refreshToken);
     },
 
     tellOwedSignOut,
+  };
+}
+
+/** A key store held in memory: a test's, or the owed sign-out where the phone gives no key of its own. */
+export function memoryKeyStore(): KeyStore {
+  let value: string | null = null;
+  return {
+    read: () => Promise.resolve(value),
+    write: (next) => {
+      value = next;
+      return Promise.resolve();
+    },
+    clear: () => {
+      value = null;
+      return Promise.resolve();
+    },
   };
 }

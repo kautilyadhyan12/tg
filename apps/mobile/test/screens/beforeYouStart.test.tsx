@@ -205,8 +205,9 @@ describe("Sign out on the note", () => {
     await screen.findByRole("header", { name: "Before you start" });
     await press("Sign out");
     expect(await screen.findByText("Get started.")).toBeTruthy();
-    // The server did not hear the Sign out: only that sign-out is kept, owed, and nothing of the person (18b-i).
-    expect(store.value).toBe(JSON.stringify({ signOutOwed: "refresh-2" }));
+    expect(store.value).toBeNull();
+    // The server did not hear it: only that sign-out is owed, under its own key (18b-i).
+    expect(jest.requireMock<{ kept: Map<string, string> }>("expo-secure-store").kept.get("sign-out-owed")).toBe(JSON.stringify({ signOutOwed: "refresh-2" }));
     noTabs();
   });
 });
