@@ -56,6 +56,7 @@ function stateWords(c) {
 /** Whether the app charges this card by itself. */
 function chargesWords(c) {
   if (c.stillPaused === true) return 'Automatic payments are paused because of another chargeback.';
+  if (c.chargesStartedOn !== null && c.chargesStartedOn !== undefined && c.staffPaused === true) return 'Automatic payments are paused under Card on file.';
   if (c.chargesStartedOn !== null && c.chargesStartedOn !== undefined) return `Automatic payments resumed on ${dayWords(c.chargesStartedOn)}.`;
   if (!c.stops) return null;
   return LOST.includes(c.state) ? STOPPED_LOST : STOPPED;
@@ -80,6 +81,11 @@ export const chargebackLines = (list, member = false) => (list ?? []).map((c) =>
 /** An owed bill or fee the app would have charged by itself. */
 export function chargeStopLine(stop) {
   if (stop === null || stop === undefined) return null;
+  if (stop.kind === 'paused') {
+    const on = stop.heldBy === null ? '' : ` on ${stop.heldBy.name}'s card`;
+    return `Not charged automatically because automatic payments are paused${on}. You can still charge the card here.`;
+  }
+  if (stop.kind === 'paused_missed') return 'Not charged automatically while automatic payments were paused. Charge the card here, oldest first. Automatic payments carry on once the missed bills are paid.';
   if (stop.kind === 'missed') return 'Not charged automatically while a chargeback was open. Charge the card here, oldest first. Automatic charges carry on once the missed bills are paid.';
   if (stop.kind === 'behind') return 'Not charged automatically because the bill before it was paid late. Charge the card here, oldest first. Automatic charges carry on once the older bills are paid.';
   const whose = stop.heldBy === null ? 'a chargeback' : `a chargeback on ${stop.heldBy.name}'s payment`;
@@ -98,13 +104,14 @@ export function chargebackStartBox(preview) {
   let lead;
   if (people.length === 0) lead = 'This person has no renewing membership, so nothing will be charged.';
   else if (preview.otherStops) lead = 'Another chargeback is still open, so automatic payments stay paused until it is closed. This applies to:';
+  else if (preview.staffPaused) lead = 'Automatic payments are also paused under Card on file, so nothing will be charged until they are resumed there. This applies to:';
   else if (card === null) lead = 'No card is on file, so nothing will be charged until one is added. This applies to:';
   else lead = `${card} will be charged automatically for:`;
   return {
     title: 'Resume automatic payments?',
     lead,
     people,
-    note: people.length === 0 || preview.otherStops || card === null ? null : 'A bill due in the last two days may be charged today. Charge older bills by hand, oldest first.',
+    note: people.length === 0 || preview.otherStops || preview.staffPaused || card === null ? null : 'A bill due in the last two days may be charged today. Charge older bills by hand, oldest first.',
     button: 'Resume',
   };
 }
@@ -112,6 +119,7 @@ export function chargebackStartBox(preview) {
 /** What is said in that place once it is done. */
 export function chargebackStartedWords(preview) {
   if (preview.otherStops) return 'Automatic payments stay paused until the other chargeback is closed.';
+  if (preview.staffPaused) return 'This chargeback no longer pauses automatic payments. They stay paused until you resume them under Card on file.';
   if (preview.people.length === 0) return 'Automatic payments resumed. This person has no renewing membership, so nothing will be charged.';
   if (preview.card === null) return 'Automatic payments resumed. Nothing will be charged until a card is on file.';
   return `Automatic payments resumed. ${cardName(preview.card)} will be charged when bills are due.`;
