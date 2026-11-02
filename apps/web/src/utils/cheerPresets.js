@@ -30,7 +30,7 @@
 // reachable that was not already. It needs a shared-contract change, which is a
 // different card (R1.1), and it has its own `OWED.md` line. **Adding a fifth
 // preset is therefore not a list edit** — read that line first.
-import { GYM_CHEER_PRESETS } from '@app/shared';
+import { GYM_CHEER_LINES, GYM_CHEER_PRESETS } from '@app/shared';
 
 /** The four lines, keyed by the server's own codes.
  *
@@ -43,12 +43,7 @@ import { GYM_CHEER_PRESETS } from '@app/shared';
  *  the ARRAY is the server's, this table is the words for it, and
  *  `cheerPresets.test.js` asserts the two have exactly the same keys so a fifth
  *  code cannot arrive with no sentence behind it. */
-const LINES = {
-  keep_going: { emoji: '💪', text: 'Great week — keep it going.' },
-  on_a_roll: { emoji: '🔥', text: "You're on a roll." },
-  consistency: { emoji: '👏', text: 'Nice consistency — we see you.' },
-  strong_streak: { emoji: '🏆', text: 'Strong streak.' },
-};
+const LINES = GYM_CHEER_LINES;
 
 /** The picker's order, and it is the server's own array rather than a second
  *  list written here. A code with no line is DROPPED instead of drawn with a

@@ -87,6 +87,7 @@ export * from "./memberGift.js";
 export * from "./gymWeek.js";
 export * from "./gymMessageSettings.js";
 export * from "./gymContact.js";
+export * from "./gymInboxWords.js";
 export * from "./phoneApp.js";
 export * from "./goals.js";
 export * from "./trialPerson.js";
