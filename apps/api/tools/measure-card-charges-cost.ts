@@ -15,7 +15,7 @@
 // charges and the emails are the worker's thread; the page read is the api's.
 //
 //   $env:DATABASE_URL='postgres://aihg:aihg@localhost:5433/aihg_web1'
-//   corepack pnpm --filter api exec tsx tools/measure-card-charges-cost.ts [--declines [--list-only]]
+//   corepack pnpm --filter api exec tsx tools/measure-card-charges-cost.ts [--declines [--list-only]] [--paused]
 //
 // LOCAL DATABASES ONLY: it writes gyms, their lists, memberships, bills and cards, and removes them.
 import { createHash, randomUUID } from "node:crypto";
@@ -46,6 +46,8 @@ const PREFIX = "charges-cost-";
 const DECLINES = process.argv.includes("--declines");
 /** With `--declines`: stop once Failed payments is measured. */
 const LIST_ONLY = process.argv.includes("--list-only");
+/** `--paused` (18d-iv-f): staff paused automatic payments of about one person in eight, at every gym. */
+const PAUSED = process.argv.includes("--paused");
 const square = fakeSquare();
 const settings = squareSettings(
   {
@@ -195,13 +197,21 @@ const big = await seedGym(BIG, GYMS);
 await sql`VACUUM ANALYZE gym_member_bills`;
 await sql`VACUUM ANALYZE gym_member_cards`;
 await sql`VACUUM ANALYZE gym_held_memberships`;
+if (PAUSED) {
+  await sql`
+    INSERT INTO gym_autopay_pauses (gym_id, entry_id, paused_at)
+    SELECT e.gym_id, e.id, now() FROM gym_member_list_entries e
+    JOIN gyms g ON g.id = e.gym_id AND g.slug LIKE ${PREFIX + "%"}
+    WHERE left(e.id::text, 1) IN ('0', '1')`;
+  await sql`VACUUM ANALYZE gym_autopay_pauses`;
+}
 const all = [...gyms.map((g) => g.id), big.id];
 // Noon in Chicago today: past 6 in the morning there.
 const [noon] = await sql<{ at: Date }[]>`SELECT ((now() AT TIME ZONE 'America/Chicago')::date + time '12:00') AT TIME ZONE 'America/Chicago' AS at`;
 const clock = noon?.at ?? new Date();
 const quiet = { info: () => undefined, warn: () => undefined, error: (obj: object) => { console.error("error", obj); } };
 const deps = { sql, square: settings, log: quiet, now: () => clock };
-console.log(`${String(GYMS)} gyms of ${String(PEOPLE)} and one of ${String(BIG)}, every person a bill due today and a card on file${DECLINES ? " that declines" : ""}; cpu ${String(cpus()[0]?.speed ?? 0)} MHz`);
+console.log(`${String(GYMS)} gyms of ${String(PEOPLE)} and one of ${String(BIG)}, every person a bill due today and a card on file${DECLINES ? " that declines" : ""}${PAUSED ? ", about one in eight paused" : ""}; cpu ${String(cpus()[0]?.speed ?? 0)} MHz`);
 
 const delay = monitorEventLoopDelay({ resolution: 1 });
 delay.enable();
