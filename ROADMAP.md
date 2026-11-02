@@ -599,7 +599,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 18. **Inbox, Contact the gym, and phone notifications** (spec Part 3 §16.1; Part 6 §6; split 2026-11-02: the Inbox needs no Firebase).
     - 18a. [x] **Inbox and Contact the gym on the phone** — merged 2026-11-02 (PR #440).
     - 18b. **Phone notifications** (split 2026-11-02; Kd's Firebase project `kwazo` made that day).
-        - 18b-i. [ ] **A gym's messages as phone notifications**, the class reminder among them; one a gym, none at night.
+       - 18b-i. [x] **A gym's messages as phone notifications** — merged 2026-11-03 (PR #443).
         - 18b-ii. [ ] **A place is free, and a comment or reply on your post.**
 19. [ ] **Settings and account**: profile, units, hide me on leaderboards, notification switches that save, change email (Stage 2's 3b-iii), what a gym can see (Stage 1's 8a), download my data, delete account and undo.
 20. [ ] **What the gym side adds for members**, each after its web job: the waiver (3e), the membership agreement signed in the app (18u), the referral link (20e), the member photo (5b-vi), saving their card (18d-ii), buying from the gym (18k), stopping a membership (18l), a gym's plan for a member (19e).
