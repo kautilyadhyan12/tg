@@ -30,6 +30,7 @@ import { createDevCoOwnerEmailSender, createResendCoOwnerEmailSender, type CoOwn
 import { createDevAgreementEmailSender, createResendAgreementEmailSender, type AgreementEmailSender } from "./modules/orgs/agreement/email.js";
 import { registerUserRoutes } from "./modules/users/routes.js";
 import { registerPrivacyRoutes } from "./modules/privacy/routes.js";
+import { registerPushRoutes } from "./modules/push/routes.js";
 import { registerExerciseRoutes } from "./modules/exercises/routes.js";
 import { registerGamificationRoutes } from "./modules/gamification/routes.js";
 import { registerGoalRoutes } from "./modules/goals/routes.js";
@@ -381,6 +382,7 @@ export async function buildApp(
   // Part 4 §5.2's export right. Serves /v1/users/me/export but lives in the
   // privacy module, next to the Day-14 delete list it must stay in step with.
   registerPrivacyRoutes(app, { sql, redis });
+  registerPushRoutes(app, { sql, redis });
   registerExerciseRoutes(app, { sql });
   registerGamificationRoutes(app, { sql });
   registerGoalRoutes(app, { sql, ...(overrides.goals?.now === undefined ? {} : { now: overrides.goals.now }) });

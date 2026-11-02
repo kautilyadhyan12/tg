@@ -25,6 +25,8 @@ import { Redis } from "ioredis";
 import pino from "pino";
 import postgres from "postgres";
 import { loadConfig } from "./config.js";
+import { createFcmSender, readServiceAccount } from "./modules/push/fcm.adapter.js";
+import { sendGymMessageNotifications } from "./modules/push/sweep.js";
 import { createResendEmailReader, createResendInviteTransport, createResendTransport } from "./email/resend.js";
 import { cachedMailDomainCheck, systemResolver } from "./modules/orgs/invites/mailDomain.js";
 import { operatorTeller } from "./modules/orgs/invites/operatorNote.js";
@@ -759,6 +761,52 @@ if (square === null) {
   });
 }
 
+// PHONE NOTIFICATIONS (ROADMAP Stage 5 item 18b-i). Their own queue, every minute: a gym's new
+// messages told to the phones of the people they are for, one notification a gym. The rows are the
+// queue. Only when Firebase's key file is set.
+export const PUSH_QUEUE = "push";
+export const PUSH_GYM_MESSAGES_JOB = "push.gym_messages";
+
+const pushAccount = config.FIREBASE_SERVICE_ACCOUNT_FILE === undefined ? null : readServiceAccount(config.FIREBASE_SERVICE_ACCOUNT_FILE);
+let pushQueue: Queue | null = null;
+let pushWorker: Worker | null = null;
+if (pushAccount === null) {
+  log.warn({ event: "worker.push_off" }, "phone notifications are not sent: FIREBASE_SERVICE_ACCOUNT_FILE is missing");
+} else {
+  const pushSender = createFcmSender({ account: pushAccount, now: () => new Date() });
+  pushQueue = new Queue(PUSH_QUEUE, { connection });
+  try {
+    await pushQueue.upsertJobScheduler(
+      PUSH_GYM_MESSAGES_JOB,
+      { every: 60_000 },
+      {
+        name: PUSH_GYM_MESSAGES_JOB,
+        // Each (person, gym) is claimed before it is sent, so a retry or a second run sends nothing twice.
+        opts: { attempts: 1, removeOnComplete: { count: 50 }, removeOnFail: { count: 200 } },
+      },
+    );
+  } catch (err) {
+    log.fatal({ err }, "failed to register the phone notifications schedule");
+    process.exit(1);
+  }
+  pushWorker = new Worker(
+    PUSH_QUEUE,
+    async (job) => {
+      if (job.name !== PUSH_GYM_MESSAGES_JOB) throw new Error(`unknown job on ${PUSH_QUEUE}: ${job.name}`);
+      const startedAt = Date.now();
+      const run = await sendGymMessageNotifications({ sql, sender: pushSender, now: () => new Date() });
+      if (run.sent + run.skipped + run.failed > 0) {
+        log.info({ ...run, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
+      }
+    },
+    { connection },
+  );
+  pushWorker.on("failed", (job, err) => {
+    Sentry.captureException(err, { tags: { job: job?.name ?? "unknown", queue: PUSH_QUEUE } });
+    log.error({ errName: err.name, errMessage: err.message, event: "job.failed", job: job?.name, jobId: job?.id }, "job failed");
+  });
+}
+
 const worker = new Worker(
   ROLLUPS_QUEUE,
   async (job) => {
@@ -1002,10 +1050,12 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
       await invitesWorker?.close();
       await billingWorker?.close();
       await paymentsWorker?.close();
+      await pushWorker?.close();
       await queue.close();
       await invitesQueue?.close();
       await billingQueue?.close();
       await paymentsQueue?.close();
+      await pushQueue?.close();
       await connection.quit();
       await sql.end();
       // T3 round 3 minor: an exception captured moments before SIGTERM would

@@ -285,7 +285,7 @@ d("users routes (real Postgres)", () => {
     const gymId = gymRows[0]?.id;
     if (gymId === undefined) throw new Error("gym fixture insert failed");
     await sql`INSERT INTO gym_members (gym_id, user_id) VALUES (${gymId}, ${userId})`;
-    await sql`INSERT INTO push_tokens (user_id, token, platform) VALUES (${userId}, 'p22u-push-token', 'android')`;
+    await sql`INSERT INTO push_tokens (user_id, token, platform, family_id) VALUES (${userId}, 'p22u-push-token', 'android', gen_random_uuid())`;
 
     // No code, or a wrong one, deletes nothing — the account stays active.
     const bare = await inject({ method: "DELETE", url: "/v1/users/me", cookies });

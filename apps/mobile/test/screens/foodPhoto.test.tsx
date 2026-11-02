@@ -823,7 +823,7 @@ describe("a food the photo got wrong, and one no list has (Kd, 2026-10-30)", () 
 });
 
 describe("the camera not allowed", () => {
-  it("asks once, then offers the phone's settings, and a photo from the gallery still works", async () => {
+  it("says why, asks when pressed, then offers the phone's settings, and a photo from the gallery still works", async () => {
     const no = { granted: false, canAskAgain: false, status: "denied", expires: "never" };
     camera.permission = { granted: false, canAskAgain: true, status: "undetermined", expires: "never" };
     camera.afterAsk = no;
@@ -831,8 +831,14 @@ describe("the camera not allowed", () => {
     const settings = jest.spyOn(Linking, "openSettings").mockResolvedValue();
     const server = await openFood({ meals: [], scans: [] });
     await fireEvent.press(await screen.findByRole("button", { name: "Scan food" }));
-    expect(await screen.findByText("Allow the camera")).toBeTruthy();
+    // The reason first: Android asks only when the person presses Allow camera (18b-i).
+    expect(await screen.findByText("Allow camera access")).toBeTruthy();
+    expect(screen.getByText("Take a photo of your meal to estimate what’s in it.")).toBeTruthy();
+    expect(camera.asked).toBe(0);
+    await fireEvent.press(screen.getByRole("button", { name: "Allow camera" }));
     expect(camera.asked).toBe(1);
+    expect(await screen.findByText("Camera access is off")).toBeTruthy();
+    expect(screen.getByText("Turn on the camera for this app in your phone’s settings.")).toBeTruthy();
     expect(screen.queryByTestId("camera-view")).toBeNull();
     await fireEvent.press(await screen.findByRole("button", { name: "Open settings" }));
     expect(settings).toHaveBeenCalled();

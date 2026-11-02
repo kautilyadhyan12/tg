@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import { AppState } from "react-native";
 import type { Server } from "./calls";
 import type { AskGoogle } from "./google";
+import { phoneOwedStore } from "./keyStore";
 import { createSession, type KeyStore, type Session, type SessionState } from "./session";
 
 const SessionContext = createContext<{ session: Session; state: SessionState } | null>(null);
@@ -10,12 +11,15 @@ const SessionContext = createContext<{ session: Session; state: SessionState } |
 export function SessionProvider({
   server,
   store,
+  owedStore = phoneOwedStore,
   google,
   wait,
   children,
 }: {
   server: Server;
   store: KeyStore;
+  /** Where a Sign out the server has not heard yet is kept; the phone's own key store unless a test gives one. */
+  owedStore?: KeyStore;
   google: AskGoogle;
   /** A test's stand-in for the pause between two tries of a refresh. */
   wait?: ((ms: number) => Promise<void>) | undefined;
@@ -23,15 +27,18 @@ export function SessionProvider({
 }) {
   const [state, setState] = useState<SessionState>({ kind: "starting" });
   const session = useMemo(
-    () => createSession({ server, store, google, onChange: setState, ...(wait === undefined ? {} : { wait }) }),
-    [server, store, google, wait],
+    () => createSession({ server, store, owedStore, google, onChange: setState, ...(wait === undefined ? {} : { wait }) }),
+    [server, store, owedStore, google, wait],
   );
 
   useEffect(() => {
     void session.start();
     // Coming back to the app is when an older phone learns it was signed out.
     const heard = AppState.addEventListener("change", (next) => {
-      if (next === "active") void session.refreshIfDue();
+      if (next === "active") {
+        void session.refreshIfDue();
+        void session.tellOwedSignOut();
+      }
     });
     return () => {
       heard.remove();

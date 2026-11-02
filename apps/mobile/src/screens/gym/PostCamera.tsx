@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Linking, Pressable, StyleSheet, View } from "react-native";
 import { Modal } from "../../look/Modal";
 import { CameraView, useCameraPermissions } from "expo-camera";
+import { CAMERA_OFF } from "../../look/cameraWords";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Button } from "../../look/Button";
 import { colours, orangeGradient, shadows, sizes } from "../../look/colours";
@@ -28,14 +29,7 @@ function Lens({ onPhoto, onClose }: { onPhoto: (uri: string) => void; onClose: (
   // The main camera to start with; the button beside the shutter changes to the selfie camera and back.
   const [facing, setFacing] = useState<"back" | "front">("back");
   const [failed, setFailed] = useState<string | null>(null);
-  const asked = useRef(false);
 
-  // The phone's own question, once, the first time the camera opens.
-  useEffect(() => {
-    if (permission === null || permission.granted || !permission.canAskAgain || asked.current) return;
-    asked.current = true;
-    void ask();
-  }, [permission, ask]);
 
   const take = async () => {
     if (lens.current === null || !ready || taking) return;
@@ -72,10 +66,10 @@ function Lens({ onPhoto, onClose }: { onPhoto: (uri: string) => void; onClose: (
         <View style={[styles.allow, { paddingTop: insets.top + 80 }]}>
           <Icon name="camera" size={34} colour="orange" />
           <Txt kind="h2" style={styles.centre}>
-            Allow the camera
+            {permission?.canAskAgain === false ? CAMERA_OFF.title : "Allow camera access"}
           </Txt>
           <Txt kind="small" style={styles.centre}>
-            To take a photo for your post.
+            {permission?.canAskAgain === false ? CAMERA_OFF.line : "Take a photo to share in your gym’s Updates."}
           </Txt>
           {permission === null ? null : (
             <Button

@@ -50,6 +50,9 @@ const envSchema = z.object({
   // 503s cleanly (fail-closed, OPENAI_API_KEY precedent); the browse/read side
   // (saved_routes, runs) works without it.
   ORS_API_KEY: z.string().min(1).optional(),
+  // Phone notifications (ROADMAP Stage 5 item 18b-i): the path of the service account's key file that
+  // Firebase's console downloads, kept outside the repository. Unset = the worker sends none.
+  FIREBASE_SERVICE_ACCOUNT_FILE: z.string().trim().min(1).optional(),
   // google-login card: v1 §6.1's Google OAuth. All three unset = Google
   // sign-in cleanly disabled (the routes redirect with ?error=google_not_
   // configured), the rest of auth runs — porting the old `googleConfigured`
