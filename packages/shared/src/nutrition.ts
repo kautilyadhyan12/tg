@@ -838,10 +838,16 @@ export const makeDietPlanRequestSchema = z.object({
 }).strict();
 export type MakeDietPlanRequest = z.infer<typeof makeDietPlanRequestSchema>;
 
+/** The foods of each meal of a day, in order, as the phone showed them: a change made from a day
+ *  that is no longer the server's is refused (`plan_changed`), never laid over another device's. */
+const shownMealsSchema = z.array(z.array(z.string().min(1).max(120)).max(MEAL_MOST_FOODS)).max(MOST_PLAN_MEALS);
+
 /** A day as the person wants it, whole: its meals in order, each with its foods and
  *  amounts. A meal left out is removed; no meals clears the day. */
 export const putDietPlanDayRequestSchema = z.object({
   changeId: planChangeIdSchema,
+  /** The day as the phone showed it, where the change was made from it (Undo). */
+  shown: shownMealsSchema.optional(),
   meals: z.array(z.object({ mealType: mealTypeSchema, items: chosenItemsSchema }).strict()).max(MOST_PLAN_MEALS),
 }).strict();
 export type PutDietPlanDayRequest = z.infer<typeof putDietPlanDayRequestSchema>;
@@ -850,6 +856,8 @@ export type PutDietPlanDayRequest = z.infer<typeof putDietPlanDayRequestSchema>;
 export const swapDietPlanMealRequestSchema = z.object({
   changeId: planChangeIdSchema,
   meal: z.number().int().min(0).max(MOST_PLAN_MEALS - 1),
+  /** The foods of the meal as the phone showed it: another meal now in its place is not swapped. */
+  shown: z.array(z.string().min(1).max(120)).max(MEAL_MOST_FOODS).optional(),
 }).strict();
 export type SwapDietPlanMealRequest = z.infer<typeof swapDietPlanMealRequestSchema>;
 

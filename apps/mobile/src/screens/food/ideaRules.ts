@@ -30,7 +30,7 @@ export function ideaMealType(hour: number): MealType {
 }
 
 /** An idea's name on the day's list: its foods, within what a meal's name may hold. */
-export function ideaName(idea: Pick<MealIdea, "items">): string {
+export function ideaName(idea: { items: readonly { name: string }[] }): string {
   return idea.items.map((f) => f.name).join(" + ").slice(0, 200);
 }
 

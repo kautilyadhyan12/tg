@@ -137,6 +137,7 @@ d("diet plan routes (real Postgres)", () => {
   const mine = sql`SELECT id FROM users WHERE email LIKE 'dietplan-%@example.com'`;
   const clear = async () => {
     await sql`DELETE FROM diet_plans WHERE user_id IN (${mine})`;
+    await sql`DELETE FROM meal_logs WHERE user_id IN (${mine})`;
     await sql`DELETE FROM users WHERE email LIKE 'dietplan-%@example.com'`;
   };
 
@@ -235,6 +236,66 @@ d("diet plan routes (real Postgres)", () => {
       expect(adultRings?.kcal).toBeLessThan(teenKcal);
       expect(bigKcal).toBeGreaterThan(3200);
       expect(hugeKcal).toBeGreaterThan(4100);
+    });
+  });
+
+  describe("A planned meal logged, as the phone sends it (ROADMAP 34e-ii-a)", () => {
+    it("Undo of a swap, the day sent back whole as it stood, puts back the same foods at the same numbers", { timeout: 30_000 }, async () => {
+      const cookies = await eater("undo", "non_vegetarian", 4);
+      const made = parsed(await make(cookies));
+      const before = made.days[0];
+      if (before === undefined) throw new Error("no Monday");
+      const swapped = parsed(await swap(cookies, 1, { changeId: randomUUID(), meal: 1 }));
+      expect(swapped.days[0]?.meals[1]).not.toEqual(before.meals[1]);
+      const meals = before.meals.map((m) => ({ mealType: m.mealType, items: m.items.map((i) => ({ canonical: i.canonical, grams: i.gramsPoint })) }));
+      const undone = parsed(await putDay(cookies, 1, { changeId: randomUUID(), meals }));
+      expect(undone.days[0]).toEqual(before);
+    });
+
+    it("a swap or an Undo made from a day another device has since changed is refused, and changes nothing", { timeout: 30_000 }, async () => {
+      const cookies = await eater("twophones", "non_vegetarian", 4);
+      const made = parsed(await make(cookies));
+      const monday = made.days[0];
+      if (monday === undefined) throw new Error("no Monday");
+      const shown = monday.meals.map((m) => m.items.map((i) => i.canonical));
+      // The other phone swaps meal 1.
+      const other = parsed(await swap(cookies, 1, { changeId: randomUUID(), meal: 1 }));
+      // This phone, still showing the old day, swaps meal 1: refused.
+      const stale = await swap(cookies, 1, { changeId: randomUUID(), meal: 1, shown: shown[1] });
+      expect(stale.statusCode).toBe(409);
+      expect(errorOf(stale)).toBe("plan_changed");
+      // And Undo of a swap made from the old day: refused, the other phone's change kept.
+      const meals = monday.meals.map((m) => ({ mealType: m.mealType, items: m.items.map((i) => ({ canonical: i.canonical, grams: i.gramsPoint })) }));
+      const undo = await putDay(cookies, 1, { changeId: randomUUID(), shown, meals });
+      expect(undo.statusCode).toBe(409);
+      expect(errorOf(undo)).toBe("plan_changed");
+      expect(await read(cookies)).toEqual(other);
+      // From the day as it is now, both go through.
+      const now = other.days[0]?.meals.map((m) => m.items.map((i) => i.canonical)) ?? [];
+      expect((await swap(cookies, 1, { changeId: randomUUID(), meal: 1, shown: now[1] })).statusCode).toBe(200);
+    });
+
+    it("every meal of a made week saves at the numbers the plan showed, and sent twice is one meal", { timeout: 60_000 }, async () => {
+      const cookies = await eater("logged", "non_vegetarian", 4);
+      const plan = parsed(await make(cookies));
+      const meals = plan.days.flatMap((d) => d.meals);
+      expect(meals.length).toBeGreaterThan(20);
+      for (const meal of meals) {
+        const body = {
+          id: randomUUID(),
+          mealName: meal.items.map((i) => i.name).join(" + ").slice(0, 200),
+          takenAt: new Date().toISOString(),
+          mealType: meal.mealType,
+          items: meal.items.map((i) => ({ canonical: i.canonical, grams: i.gramsPoint })),
+        };
+        const first = await inject({ method: "POST", url: "/v1/nutrition/meals", body, cookies });
+        expect(first.statusCode, first.body).toBe(201);
+        const saved = (JSON.parse(first.body) as { meal: { id: string; mealType: string; totals: typeof meal.totals } }).meal;
+        expect(saved.mealType).toBe(meal.mealType);
+        expect(saved.totals).toEqual(meal.totals);
+        const again = await inject({ method: "POST", url: "/v1/nutrition/meals", body, cookies });
+        expect((JSON.parse(again.body) as { meal: { id: string } }).meal.id).toBe(saved.id);
+      }
     });
   });
 
