@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { AppState } from "react-native";
 import { myOrgsResponseSchema, type MyOrgsResponse } from "@app/shared";
 import { useSession } from "../session/SessionProvider";
+import { NO_COUNTS, allUnread, inboxAnswered, placeUnread, placesAnswered, type UnreadCounts } from "./gym/inboxView";
 
 // The kinds of place the person is a member of, read once when the tabs open and again by the
 // Gym tab, so the tab's own word under its icon is the place's ("Studio" for a yoga studio), and with them
@@ -44,24 +45,19 @@ export const usePlaces = () => useContext(PlacesContext);
 export function PlacesProvider({ children }: { children: ReactNode }) {
   const { session } = useSession();
   const [kinds, setKinds] = useState<readonly unknown[] | null>(null);
-  // Each place's count, from the newest read of the places to answer, and what an Inbox said since.
-  const [counts, setCounts] = useState<Record<string, number>>({});
-  const [said, setSaid] = useState<Record<string, { unread: number; after: number }>>({});
+  // Each place's count of new messages: one rule for every read of the places and every Inbox (inboxView).
+  const [unread, setUnread] = useState<UnreadCounts>(NO_COUNTS);
   const started = useRef(0);
-  const applied = useRef(0);
 
   const startRead = useCallback(() => {
     started.current += 1;
     return started.current;
   }, []);
   const placesRead = useCallback((number: number, orgs: MyOrgsResponse["orgs"]) => {
-    if (number < applied.current) return;
-    applied.current = number;
-    setCounts(Object.fromEntries(orgs.filter((org) => org.isMember).map((org) => [org.id, org.newMessages])));
-    setSaid((was) => Object.fromEntries(Object.entries(was).filter(([, one]) => one.after >= number)));
+    setUnread((was) => placesAnswered(was, number, orgs));
   }, []);
-  const inboxSaid = useCallback((gymId: string, unread: number) => {
-    setSaid((was) => ({ ...was, [gymId]: { unread, after: started.current } }));
+  const inboxSaid = useCallback((gymId: string, count: number) => {
+    setUnread((was) => inboxAnswered(was, gymId, count, started.current));
   }, []);
 
   useEffect(() => {
@@ -99,10 +95,9 @@ export function PlacesProvider({ children }: { children: ReactNode }) {
     };
   }, [session, startRead, placesRead]);
 
-  const value = useMemo(() => {
-    const unreadOf = (gymId: string) => said[gymId]?.unread ?? counts[gymId] ?? null;
-    const newMessages = Object.keys(counts).reduce((sum, gymId) => sum + (unreadOf(gymId) ?? 0), 0);
-    return { kinds, setKinds, newMessages, unreadOf, startRead, placesRead, inboxSaid };
-  }, [kinds, counts, said, startRead, placesRead, inboxSaid]);
+  const value = useMemo(
+    () => ({ kinds, setKinds, newMessages: allUnread(unread), unreadOf: (gymId: string) => placeUnread(unread, gymId), startRead, placesRead, inboxSaid }),
+    [kinds, unread, startRead, placesRead, inboxSaid],
+  );
   return <PlacesContext.Provider value={value}>{children}</PlacesContext.Provider>;
 }
