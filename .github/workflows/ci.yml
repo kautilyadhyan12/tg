@@ -210,7 +210,8 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # 30, not 20: the suite took 18.8 to 19.6 minutes on 2026-11-02 and a slow runner crossed 20 on a green run.
+    timeout-minutes: 30
     services:
       postgres:
         image: pgvector/pgvector:pg16
