@@ -21,7 +21,8 @@ import {
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { openDueBills } from "../src/modules/orgs/memberships/billsRepo.js";
-import { dueBills, pendingRetries, startCharge } from "../src/modules/orgs/payments/cardChargesRepo.js";
+import { chargeDueBill } from "../src/modules/orgs/payments/cardCharges.js";
+import { dueBills, pendingRetries, retryBills, startCharge } from "../src/modules/orgs/payments/cardChargesRepo.js";
 import { squareSettings } from "../src/modules/orgs/payments/settings.js";
 import { STAFF_LINES } from "../src/modules/orgs/staffActivity/words.js";
 import { processSquareWork } from "../src/modules/orgs/payments/work.js";
@@ -382,6 +383,29 @@ d("Pause automatic payments (real Postgres)", { timeout: T }, () => {
         await work();
       }
       expect(await chargesByTheApp(billId)).toHaveLength(1);
+    });
+
+    it("a retry the worker listed a moment before Pause keeps its day, and comes back after Resume", async () => {
+      const rex = await paidByCard(gym, "Pause Rex");
+      const billId = await nextWeekOpens(rex);
+      const [card] = await sql<{ card_id: string; customer_id: string }[]>`SELECT card_id, customer_id FROM gym_member_cards WHERE gym_id = ${gym.id} AND entry_id = ${rex.entryId}`;
+      square.card(card?.card_id ?? "", gym.acct.merchantId, card?.customer_id ?? "", "insufficient");
+      await work();
+      expect(await chargesByTheApp(billId)).toHaveLength(1);
+      // The first retry day (3 days after the decline): the worker lists the bill, then staff press Pause before it is charged.
+      clock = new Date(clock.getTime() + 3 * 24 * 60 * 60_000);
+      const settings = workDeps().square;
+      if (settings === null) throw new Error("the fake Square is not set up");
+      const listed = (await retryBills(sql, { environment: settings.environment, now: clock, limit: 50, after: null, gymIds: [gym.id] })).find((b) => b.billId === billId);
+      if (listed === undefined) throw new Error("the retry was not listed on its day");
+      await pause(gym, rex.entryId);
+      expect(await chargeDueBill(workDeps(), settings, listed, true)).toBeUndefined();
+      expect(await chargesByTheApp(billId)).toHaveLength(1);
+      await resume(gym, rex.entryId);
+      expect((await pendingRetries(sql, gym.id, [billId], clock)).size).toBe(1);
+      square.card(card?.card_id ?? "", gym.acct.merchantId, card?.customer_id ?? "", "pays");
+      await work();
+      expect(await chargesByTheApp(billId)).toHaveLength(2);
     });
 
     it("the write's own check refuses it too, for the payer and for whom she pays, if the list ever let one through", async () => {

@@ -36,8 +36,8 @@ function requireUserId(req: FastifyRequest): string {
   return userId;
 }
 
-export function registerPayerRoutes(app: FastifyInstance, deps: { sql: Sql; redis: RedisLike }): void {
-  const payersDeps: service.PayersDeps = { sql: deps.sql };
+export function registerPayerRoutes(app: FastifyInstance, deps: { sql: Sql; redis: RedisLike; now: () => Date }): void {
+  const payersDeps: service.PayersDeps = { sql: deps.sql, now: deps.now };
   const limitOf = (name: string, max: number, ipMax: number) =>
     createDualRateLimit({ name, max, ipMax, windowMs: 60 * 60 * 1000, identifier: (req) => req.authUser?.id ?? null, redis: deps.redis });
   /** Read with every person's page that is opened, and once for each person a payer pays

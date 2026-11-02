@@ -444,7 +444,7 @@ export async function processCardCharges(
 
 /** One bill the app charges by itself, or undefined where the write's own check found it should not
  *  be charged after all (it is looked at again next minute only if it still qualifies then). */
-async function chargeDueBill(deps: PaymentsDeps, square: SquareSettings, bill: charges.DueBill, again: boolean): Promise<Step | undefined> {
+export async function chargeDueBill(deps: PaymentsDeps, square: SquareSettings, bill: charges.DueBill, again: boolean): Promise<Step | undefined> {
   const row = await repo.readConnection(deps.sql, bill.gymId, square.environment);
   if (row?.state !== "connected" || row.locationId === null) return undefined;
   const now = deps.now();

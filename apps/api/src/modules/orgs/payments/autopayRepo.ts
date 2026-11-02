@@ -99,9 +99,9 @@ export async function resume(sql: Sql, gymId: string, entryId: string, userId: s
 
 /** Somebody else now pays for this record (18i): its own pause no longer decides anything, and nothing on its page could show or
  *  resume it, so it ends now, said in Staff activity. Under the caller's gym lock. */
-export async function endOwnPause(tx: TransactionSql, gymId: string, entryId: string, userId: string): Promise<void> {
+export async function endOwnPause(tx: TransactionSql, gymId: string, entryId: string, userId: string, at: Date): Promise<void> {
   const closed = await tx<{ id: string }[]>`
-    UPDATE gym_autopay_pauses SET resumed_at = GREATEST(now(), paused_at), resumed_by = ${userId}
+    UPDATE gym_autopay_pauses SET resumed_at = GREATEST(${at}::timestamptz, paused_at), resumed_by = ${userId}
     WHERE gym_id = ${gymId} AND entry_id = ${entryId} AND resumed_at IS NULL
     RETURNING id`;
   if (closed.length === 0) return;
