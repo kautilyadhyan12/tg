@@ -331,6 +331,151 @@ describe("more", () => {
     expect(screen.queryByText("This post may already be up. Check Updates. You can discard this copy.")).toBeNull();
   });
 
+  it("N1 the words the server holds are not offered again: a second send that landed, its answer lost", async () => {
+    const held: string[] = [];
+    let answerFor: () => Reply = lost;
+    const mine = (body: string) => post(60, { body, fromMember: true, own: true, wrote: true, authorId: "b1111111-1111-4111-8111-111111111111" });
+    const server = serverOf({
+      [posts]: ok(feed([post(1)])),
+      [`${posts}/mine`]: (b) => { held.push((b as { body: string }).body); return answerFor(); },
+    });
+    await openUpdates(server.ask);
+    await screen.findByText("Post 1");
+    await fireEvent.press(screen.getByTestId("write-post"));
+    await fireEvent.changeText(await screen.findByLabelText("Your post"), "The first words");
+    await fireEvent.press(screen.getByRole("button", { name: "Post" }));
+    await screen.findByText("No connection. Your post is kept. Try again.");
+    await fireEvent.changeText(await screen.findByLabelText("Your post"), "The changed words");
+    await fireEvent.press(screen.getByRole("button", { name: "Post" }));
+    await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
+    answerFor = () => ({ status: 201, body: { post: mine("The changed words"), firstKept: false } });
+    await fireEvent.press(screen.getByRole("button", { name: "Post" }));
+    expect((await screen.findByTestId("post-done"))).toBeTruthy();
+    await screen.findByText("Your post is up.");
+    expect(screen.queryByText("Your first version is up. Press Post to post this one as well, or Discard it.")).toBeNull();
+    expect(held).toEqual(["The first words", "The changed words", "The changed words"]);
+  });
+
+  it("N1 a comment too", async () => {
+    let answerFor: () => Reply = lost;
+    const server = serverOf({
+      [posts]: ok(feed([post(1)])),
+      [onPost(1)]: (b) => (b === undefined ? ok(page([]))() : answerFor()),
+    });
+    await openUpdates(server.ask);
+    await fireEvent.press(await screen.findByTestId("comments-open"));
+    await fireEvent.changeText(await screen.findByLabelText("Your comment"), "The first words");
+    await fireEvent.press(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText("No connection. Your comment is kept. Try again.");
+    await fireEvent.changeText(await screen.findByLabelText("Your comment"), "The changed words");
+    answerFor = () => ({ status: 201, body: { comment: comment(9, 1, { body: "The changed words", own: true, wrote: true }), firstKept: false } });
+    await fireEvent.press(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText("The changed words");
+    expect(screen.queryByText("Your first version is up. Press Send to post this one as well.")).toBeNull();
+    expect(screen.getByLabelText("Your comment").props.value).toBe("");
+  });
+
+  it("H2 a page of comments begun before a block does not bring the blocked person back", async () => {
+    const slow = deferred<Reply>();
+    let blocked = false;
+    const ben = comment(1, 1, { body: "Ben first", authorId: "c2222222-2222-4222-8222-222222222222", author: { name: "Ben K.", initials: "BK" } });
+    const server = serverOf({
+      [posts]: ok(feed([post(1, { commentCount: 2 })])),
+      [onPost(1)]: () => ok(page(blocked ? [] : [ben], { next: blocked ? null : "cursor" }))(),
+      [`/v1/orgs/${IRON.id}/post-comments/${id(1, "c")}/block`]: () => { blocked = true; return ok({ blocked: true })(); },
+    });
+    const ask: Ask = async (url, init) => {
+      const { pathname, search } = new URL(url);
+      if (search === "?after=cursor") {
+        const reply = await slow.promise;
+        return { ok: true, status: reply.status, json: () => Promise.resolve(reply.body) };
+      }
+      return server.ask(`http://localhost:3000${pathname}`, init);
+    };
+    await openUpdates(ask);
+    await fireEvent.press(await screen.findByTestId("comments-open"));
+    await screen.findByText("Ben first");
+    await fireEvent.press(screen.getByRole("button", { name: "Show more comments" }));
+    await fireEvent.press(screen.getByLabelText("More about this comment by Ben K."));
+    await fireEvent.press(within(await screen.findByTestId("comment-menu")).getByRole("button", { name: "Block Ben K." }));
+    await fireEvent.press(within(screen.getByTestId("comment-ask")).getByRole("button", { name: "Block Ben K." }));
+    await waitFor(() => { expect(screen.queryByText("Ben first")).toBeNull(); });
+    await act(async () => {
+      slow.resolve(ok(page([comment(2, 1, { body: "Ben again", authorId: "c2222222-2222-4222-8222-222222222222", author: { name: "Ben K.", initials: "BK" } })]))());
+      await slow.promise;
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(screen.queryByText("Ben again")).toBeNull();
+  });
+
+  it("H7 posting switched off after a lost send: the post is not called unsent, in the box or on the page", async () => {
+    let answer: () => Reply = lost;
+    let posting = "on";
+    const server = serverOf({
+      [posts]: () => ok(feed([post(1)], { posting }))(),
+      [`${posts}/mine`]: () => answer(),
+    });
+    await openUpdates(server.ask);
+    await screen.findByText("Post 1");
+    await fireEvent.press(screen.getByTestId("write-post"));
+    await fireEvent.changeText(await screen.findByLabelText("Your post"), "Yoga is on Sunday");
+    await fireEvent.press(screen.getByRole("button", { name: "Post" }));
+    await screen.findByText("No connection. Your post is kept. Try again.");
+    posting = "off";
+    answer = () => ({ status: 403, body: { error: "posting_off", message: "Posting is off here." } });
+    await fireEvent.press(screen.getByRole("button", { name: "Post" }));
+    await screen.findByText("This post may already be up. Check Updates. You can discard this copy.");
+    await waitFor(() => { expect(screen.queryByText("Your unsent post")).toBeNull(); expect(screen.getByText("Your post")).toBeTruthy(); });
+    // Closed and opened again: still said.
+    await fireEvent.press(screen.getByLabelText("Close"));
+    await fireEvent.press(await screen.findByRole("button", { name: "See your post" }));
+    await screen.findByText("This post may already be up. Check Updates. You can discard this copy.");
+  });
+
+  it("N2 a reply sent again over a comment now hidden: said to be up, and its replies are not read", async () => {
+    let answerFor: () => Reply = lost;
+    const parentId = id(1, "c");
+    const reply = comment(9, 1, { body: "My reply", parentId, own: true, wrote: true });
+    let parentShown = true;
+    const back = listenForComeBack();
+    const server = serverOf({
+      [posts]: ok(feed([post(1, { commentCount: 1 })])),
+      [onPost(1)]: (b) => (b === undefined ? ok(page(parentShown ? [comment(1, 1, { body: "Above" })] : []))() : answerFor()),
+    });
+    await openUpdates(server.ask);
+    await fireEvent.press(await screen.findByTestId("comments-open"));
+    await screen.findByText("Above");
+    await fireEvent.press(screen.getByRole("button", { name: "Reply to Asha R." }));
+    await fireEvent.changeText(await screen.findByLabelText("Your comment"), "My reply");
+    await fireEvent.press(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText("No connection. Your comment is kept. Try again.");
+    parentShown = false;
+    await back();
+    await waitFor(() => { expect(screen.queryByText("Above")).toBeNull(); });
+    answerFor = () => ({ status: 201, body: { comment: reply, firstKept: false } });
+    await fireEvent.press(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText("Your reply is up, but the comment it answers is no longer showing.");
+    expect(server.asked.filter((a) => a.path.endsWith("/replies"))).toHaveLength(0);
+  });
+
+  it("L6 the sentence that the oldest was dropped stays through the typing", async () => {
+    const words = (i: number): KeptComment => ({ commentKey: id(i, "d"), body: `words ${String(i)}`, replyTo: null });
+    const { result, unmount } = await renderHook(() => useKeptComments("7b0c8a52-6f0e-4d59-9a3c-1f2e3d4c5b6a", IRON.id));
+    await waitFor(() => { expect(result.current.drafts).toBeDefined(); });
+    await act(async () => { for (let i = 2; i <= 51; i++) result.current.put(id(i), words(i)); await new Promise((r) => setTimeout(r, 10)); });
+    await unmount();
+    const server = serverOf({
+      [posts]: ok(feed([post(1)])),
+      [onPost(1)]: ok(page([])),
+    });
+    await openUpdates(server.ask);
+    await fireEvent.press(await screen.findByTestId("comments-open"));
+    await fireEvent.changeText(await screen.findByLabelText("Your comment"), "a");
+    await screen.findByText("The phone keeps 50 unsent comments, so your oldest one was dropped.");
+    await fireEvent.changeText(screen.getByLabelText("Your comment"), "ab");
+    expect(screen.queryByText("The phone keeps 50 unsent comments, so your oldest one was dropped.")).toBeTruthy();
+  });
+
   it("H3 a comment's reaction with its answer lost: the screen asks the server", async () => {
     let reads = 0;
     const server = serverOf({

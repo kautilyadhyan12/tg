@@ -4,7 +4,7 @@
 // list and names who it answers. Words only. One reaction a person each, Report, Block and Remove
 // work as on a post. A member writes up to 100 a day (Kd, 2026-10-30, `rulings/2026-10-30-17b.md`).
 import { z } from "zod";
-import { DISGUISED_WORDS, hasCommentWords, hasDisguisedWords, postLength } from "./postBasics.js";
+import { DISGUISED_WORDS, hasCommentWords, postLength } from "./postBasics.js";
 import { GYM_POST_REPORTS_SHOWN, GYM_POST_REPORT_NOTES_SHOWN, gymMemberPostingSchema, gymPostReactionSchema, postsCursor, reactionCountsSchema, reportNote } from "./posts.js";
 
 /** The words of one comment or reply, by `postLength`. */
@@ -66,7 +66,7 @@ export const gymPostCommentsResponseSchema = z
   .strict();
 export type GymPostCommentsResponse = z.infer<typeof gymPostCommentsResponseSchema>;
 
-export { DISGUISED_WORDS, hasCommentWords, hasDisguisedWords };
+export { DISGUISED_WORDS, hasCommentWords };
 
 const commentWords = z
   .string()

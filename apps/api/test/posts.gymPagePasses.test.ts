@@ -411,12 +411,13 @@ d("what the gym page's two extra passes found (real Postgres)", () => {
     async () => {
       const gym = await makeGym("Words");
       const writer = await member(gym, "Wyn Words");
-      const hidden = [String.fromCodePoint(0x200b), String.fromCodePoint(0x202e), String.fromCodePoint(0x3164)];
+      const hidden = [0x200b, 0x202e, 0x3164, 0xffa0, 0x034f, 0x115f, 0x1160, 0x17b4, 0x180b, 0x1bca0, 0x1d173, 0xfff9, 0xe0100, 0x0085].map((c) => String.fromCodePoint(c));
       for (const blank of hidden) expect((await sendPost(gym, writer, blank)).statusCode).toBe(400);
       const post = await addPost(gym, writer);
       const turned = `${String.fromCodePoint(0x202e)}kcuf`;
       const stacked = `Z${String.fromCodePoint(0x0301).repeat(499)}`;
-      for (const body of [turned, stacked]) {
+      const otherScripts = [0x0951, 0x0610, 0x064b, 0x0591, 0x1cd0, 0x302a, 0x1d167].map((mark) => `Z${String.fromCodePoint(mark).repeat(200)}`);
+      for (const body of [turned, stacked, ...otherScripts]) {
         const asPost = await sendPost(gym, writer, body);
         expect(asPost.statusCode, asPost.body).toBe(400);
         expect((JSON.parse(asPost.body) as { message: string }).message).toBe(DISGUISED_WORDS);
@@ -460,6 +461,9 @@ d("what the gym page's two extra passes found (real Postgres)", () => {
         expect(other.statusCode, `${name} gym B: ${other.body}`).toBe(200);
         expect(full.statusCode, `${name} gym A`).toBe(429);
       }
+      // Capitals in the id are the same gym, and the same count.
+      const capitals = await inject("GET", posts(here.id.toUpperCase()), inA.cookies, undefined, address);
+      expect(capitals.statusCode).toBe(429);
       // Comments have their own count, by the same rule.
       const comments = await inject("GET", onPost(here.id, post.id), inA.cookies, undefined, address);
       expect(comments.statusCode).toBe(200);

@@ -143,6 +143,6 @@ export function keepCommentNote(answer, comment, words) {
 
 /** A list of posts after a change to how many comments one has. */
 export function withCommentCount(feed, postId, change) {
-  const mark = (p) => (p.id === postId ? { ...p, commentCount: Math.max(0, p.commentCount + change) } : p);
+  const mark = (p) => (p.id === postId ? { ...p, commentCount: p.commentCount >= GYM_POST_COMMENT_COUNT_MOST ? p.commentCount : Math.max(0, p.commentCount + change) } : p);
   return { ...feed, ...(feed.pinned === undefined ? {} : { pinned: feed.pinned.map(mark) }), posts: feed.posts.map(mark) };
 }

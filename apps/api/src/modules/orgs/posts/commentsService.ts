@@ -11,7 +11,6 @@ import {
   GYM_POST_COMMENTS_PAGE,
   DISGUISED_WORDS,
   GYM_POST_COMMENT_WORDS,
-  hasDisguisedWords,
   GYM_POST_REACTIONS,
   GYM_POST_WORDS,
   gymPostCommentSchema,
@@ -29,7 +28,7 @@ import {
 import { getOrgById, gymHasLivePlan, insertAudit } from "../repo.js";
 import { OrgsError } from "../service.js";
 import { shownName } from "../leaderboard/rank.js";
-import { badWordsIn } from "./badWords.js";
+import { badWordsIn, hasDisguisedWords } from "./badWords.js";
 import * as repo from "./commentsRepo.js";
 import * as postsRepo from "./repo.js";
 

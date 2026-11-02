@@ -25,6 +25,7 @@ import { Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
 import { CopyContext } from "../ThisCopy";
 import { useBusyIds } from "./Reactions";
+import { countAfter } from "./commentsView";
 import { CommentsBox, useKeptComments, type KeptCommentsHook } from "./Comments";
 import { hasKeptWords } from "./commentsView";
 import { photoFiles, type PhotoFiles } from "./photoFiles";
@@ -257,7 +258,7 @@ function Body({ place, person, period, shared, onClose, onChanged, top, bottom }
     setPosts((p) => {
       if (p.kind !== "ok") return p;
       const post = p.feed.posts.find((x) => x.id === postId);
-      return post === undefined ? p : { ...p, feed: withPost(p.feed, { ...post, commentCount: Math.max(0, post.commentCount + by) }) };
+      return post === undefined ? p : { ...p, feed: withPost(p.feed, { ...post, commentCount: countAfter(post.commentCount, by) }) };
     });
   }, [changed]);
   const onCommenting = useCallback((commenting: GymMemberPosting) => {

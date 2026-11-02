@@ -1507,6 +1507,7 @@ describe("a post removed after a lost reply", () => {
     await screen.findByTestId("draft-photo-1");
     answer = () => ({ status: 201, body: { post: { ...SENT, photos: [{ id: PHOTO, width: 100, height: 100 }] }, firstKept: false } });
     await pressPost();
+    // Which photo the server kept cannot be told from its answer, so the one in the box stays.
     expect(await screen.findByText("Your first version is up. Press Post to post this one as well, or Discard it.")).toBeTruthy();
     await screen.findByTestId("draft-photo-1");
   });

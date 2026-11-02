@@ -39,7 +39,7 @@ const LIVE_PLAN = "zz_events_live";
 const MORNING = new Date("2026-10-07T06:30:00Z");
 
 const photo = (name: string): string => readFileSync(new URL(`./fixtures/photos/${name}`, import.meta.url)).toString("base64");
-const IPHONE = photo("iphone16.jpg");
+const IPHONE = photo("pixel7-meta.jpg");
 const PNG = photo("iphone16-exif.png");
 
 /** The GPS block's tag, either byte order, anywhere before the picture starts. */

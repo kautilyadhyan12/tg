@@ -27,6 +27,9 @@ export const commentReportPath = (gymId: string, commentId: string) => `${onePat
 export const commentBlockPath = (gymId: string, commentId: string) => `${onePath(gymId, commentId)}/block`;
 export const commentRemovePath = onePath;
 
+/** A post's count after a comment is added or removed: at the most, the server stopped counting, so the real number is not known. */
+export const countAfter = (count: number, by: number): number => (count >= GYM_POST_COMMENT_COUNT_MOST ? count : Math.max(0, count + by));
+
 /** What the button on a post says. */
 export function commentButton(count: number, kept: boolean): { label: string; say: string } {
   if (kept) return { label: "Finish your comment", say: "Finish your comment" };
@@ -165,6 +168,19 @@ export function dropsAKeptComment(drafts: KeptComments, postId: string): boolean
   const rest = Object.entries(drafts).filter(([id, d]) => id !== postId && d !== undefined);
   return rest.length >= GYM_POST_COMMENT_DRAFTS_MOST && !rest.some(([, d]) => d?.postGone === true);
 }
+
+/** Whether what is in the box is other than the comment the server kept: other words, or another place to be. */
+export function differsFromKept(draft: Pick<KeptComment, "body" | "replyTo">, comment: Pick<GymPostComment, "body" | "parentId" | "replyingTo">): boolean {
+  if (draft.body.trim() !== comment.body) return true;
+  if (draft.replyTo === null) return comment.parentId !== null;
+  return comment.parentId !== draft.replyTo.id && comment.replyingTo !== draft.replyTo.name;
+}
+
+/** Said over a comment kept after a send whose answer never came, when comments have closed since. */
+export const COMMENT_MAY_BE_UP = "This comment may already be up. You can discard this copy.";
+
+/** Said when a reply is up but the comment it answers is not on this person's screen. */
+export const REPLY_UP_ABOVE_GONE = "Your reply is up, but the comment it answers is no longer showing.";
 
 export const KEPT_COMMENTS_FULL = `The phone keeps ${String(GYM_POST_COMMENT_DRAFTS_MOST)} unsent comments, so your oldest one was dropped.`;
 

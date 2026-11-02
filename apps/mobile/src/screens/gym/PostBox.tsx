@@ -13,7 +13,7 @@ import { Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
 import { fitWithin } from "../food/photo";
 import { newRequestKey } from "./classesView";
-import { POST_PHOTO_QUALITIES, draftFileText, hasWork, photoTrouble, postHint, postPhotoToSend, FIRST_POST_UP, POST_MAY_BE_UP, POST_UP, readDraftFile, removedAndKept, type DraftPost, type PostPhotoReading } from "./postDraft";
+import { POST_PHOTO_QUALITIES, draftFileText, hasWork, photoTrouble, postHint, postPhotoToSend, differsFromKept, FIRST_POST_UP, POST_MAY_BE_UP, POST_UP, readDraftFile, removedAndKept, type DraftPost, type PostPhotoReading } from "./postDraft";
 import { PhotoPages } from "./PhotoPages";
 import { draftFolder, removeSourcePhoto } from "./postDraftFiles";
 import { PostCamera } from "./PostCamera";
@@ -117,6 +117,7 @@ export function useKeptPost(me: string | null, gymId: string): KeptPost {
   const current = (): DraftPost => now.current ?? { postKey: newRequestKey(), body: "", photos: [] };
   // A change after a send whose answer never came.
   const touched = (draft: DraftPost): DraftPost => (draft.sent === true ? { ...draft, changed: true } : draft);
+  const photosTouched = (draft: DraftPost): DraftPost => (draft.sent === true ? { ...draft, changed: true, photosChanged: true } : draft);
   const withoutSend = (draft: DraftPost): DraftPost => ({ postKey: draft.postKey, body: draft.body, photos: draft.photos });
 
   return {
@@ -138,12 +139,12 @@ export function useKeptPost(me: string | null, gymId: string): KeptPost {
       }
       const had = current();
       if (had.photos.length >= GYM_POST_MAX_PHOTOS) return false;
-      put(touched({ ...had, photos: [...had.photos, name] }));
+      put(photosTouched({ ...had, photos: [...had.photos, name] }));
       return true;
     },
     removePhoto: (name) => {
       const had = current();
-      put(touched({ ...had, photos: had.photos.filter((p) => p !== name) }));
+      put(photosTouched({ ...had, photos: had.photos.filter((p) => p !== name) }));
       const here = folder.current;
       if (here !== null) void inTurn(() => { here.removePhoto(name); }).catch(() => undefined);
     },
@@ -277,7 +278,7 @@ export function PostBox({ open, gymId, gymName, kept, mayPost, onClose, onPosted
     pressed.current = false;
     setSending(false);
     if (answer.kind === "ok") {
-      if (!answer.data.firstKept && changed) {
+      if (!answer.data.firstKept && changed && differsFromKept({ ...draft, body: sentBody }, answer.data.post)) {
         kept.newKey();
         setTrouble(FIRST_POST_UP);
         onPosted(answer.data.post, null);
@@ -309,7 +310,7 @@ export function PostBox({ open, gymId, gymName, kept, mayPost, onClose, onPosted
   };
 
   return (
-    <Sheet open={open} title={mayPost ? "Write a post" : "Your unsent post"} onClose={close}>
+    <Sheet open={open} title={mayPost ? "Write a post" : draft?.sent === true ? "Your post" : "Your unsent post"} onClose={close}>
       <ScrollView testID="post-box" style={{ maxHeight: height * ASK_MOST }} contentContainerStyle={styles.box} keyboardShouldPersistTaps="handled">
         <View pointerEvents={sending ? "none" : "auto"} style={styles.box}>
           <Field
@@ -370,6 +371,7 @@ export function PostBox({ open, gymId, gymName, kept, mayPost, onClose, onPosted
           ) : null}
           {trouble === null ? null : <Txt colour="text">{trouble}</Txt>}
           {refused === null ? null : <Txt colour="badText">{refused}</Txt>}
+          {refused === null && !mayPost && draft?.sent === true ? <Txt>{POST_MAY_BE_UP}</Txt> : null}
           {mayPost ? <Txt kind="small">{postHint(gymName)}</Txt> : null}
         </View>
       </ScrollView>

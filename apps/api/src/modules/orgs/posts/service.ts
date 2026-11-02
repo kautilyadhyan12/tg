@@ -55,7 +55,6 @@ import {
   type StoppedGymPostersResponse,
   DISGUISED_WORDS,
   GYM_POST_PHOTO_SEND_SIDE,
-  hasDisguisedWords,
 } from "@app/shared";
 import { getOrgById, gymHasLivePlan, insertAudit } from "../repo.js";
 import { OrgsError, holdsPrivilege, requirePrivilege, requireWritablePrivilege } from "../service.js";
@@ -65,7 +64,7 @@ import { postPhotoKey, type PhotoStore } from "../gymPage/photoStore.js";
 import { PHOTO_PROBLEM_STATUS, type PhotoFile } from "../gymPage/service.js";
 import { fullName, shownName } from "../leaderboard/rank.js";
 import { lockGym } from "../memberList/repo.js";
-import { badWordsIn } from "./badWords.js";
+import { badWordsIn, hasDisguisedWords } from "./badWords.js";
 import { removeListed } from "./photoFiles.js";
 import * as commentsRepo from "./commentsRepo.js";
 import * as repo from "./repo.js";

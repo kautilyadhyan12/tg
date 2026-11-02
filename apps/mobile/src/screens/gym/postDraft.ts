@@ -37,8 +37,8 @@ export function readDraftFile(text: string | null): DraftPost | null {
   }
   const parsed = gymPostDraftFileSchema.safeParse(raw);
   if (!parsed.success) return null;
-  const { postKey, body, photos, sent, changed } = parsed.data;
-  return { postKey, body, photos, ...(sent === undefined ? {} : { sent }), ...(changed === undefined ? {} : { changed }) };
+  const { postKey, body, photos, sent, changed, photosChanged } = parsed.data;
+  return { postKey, body, photos, ...(sent === undefined ? {} : { sent }), ...(changed === undefined ? {} : { changed }), ...(photosChanged === undefined ? {} : { photosChanged }) };
 }
 
 /** Under the box: who sees it. A full day is said by the server's own sentence when it happens. */
@@ -60,6 +60,11 @@ export const removedAndKept = (serverWords: string): string => `${serverWords} P
 /** Said where the button is once a post is up. Only the server knows whether a send whose answer was lost reached it:
  *  it says whether this send made the post. If not, changes made since may not have gone: any of several sends may have made it. */
 export const POST_UP = "Your post is up.";
+
+/** Whether what is in the box is other than the post the server kept. Photos changed since a send cannot be told apart by
+ *  what the server answers, so those count as other: nothing of theirs is thrown away. */
+export const differsFromKept = (draft: Pick<DraftPost, "body" | "photos" | "photosChanged">, post: { body: string; photos: readonly unknown[] }): boolean =>
+  draft.body.trim() !== post.body || draft.photos.length !== post.photos.length || draft.photosChanged === true;
 /** An earlier send made the post, as it first was, and they have changed it since: those words are still theirs. */
 export const FIRST_POST_UP = "Your first version is up. Press Post to post this one as well, or Discard it.";
 /** Refused for now, after a send whose answer never came: that send may have made it. */

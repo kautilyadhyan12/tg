@@ -20,6 +20,7 @@ import { fonts, Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
 import { CopyContext } from "../ThisCopy";
 import { CommentsBox, useKeptComments } from "./Comments";
+import { countAfter } from "./commentsView";
 import { hasKeptWords } from "./commentsView";
 import { ChallengesPage } from "./Challenges";
 import { PersonProfile, type ProfilePerson } from "./PersonProfile";
@@ -223,7 +224,7 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
     setHeld((h) => {
       if (h.kind !== "ok") return h;
       const post = [...h.feed.pinned, ...h.feed.posts].find((p) => p.id === postId);
-      return post === undefined ? h : { kind: "ok", feed: withPost(h.feed, { ...post, commentCount: Math.max(0, post.commentCount + by) }) };
+      return post === undefined ? h : { kind: "ok", feed: withPost(h.feed, { ...post, commentCount: countAfter(post.commentCount, by) }) };
     });
   }, []);
   const onCommenting = useCallback((commenting: GymMemberPosting) => {
@@ -304,7 +305,7 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
             )}
             {!mayPost && feed !== null && unsent ? (
               <Button
-                label="See your unsent post"
+                label={kept.draft?.sent === true ? "See your post" : "See your unsent post"}
                 kind="plain"
                 small
                 onPress={() => {

@@ -39,7 +39,10 @@ import {
   commentReportBox,
   commentReportPath,
   commentRoom,
+  COMMENT_MAY_BE_UP,
+  differsFromKept,
   dropsAKeptComment,
+  REPLY_UP_ABOVE_GONE,
   FIRST_COMMENT_UP,
   KEPT_COMMENTS_FULL,
   commentsPath,
@@ -293,9 +296,12 @@ function Body({
     const before = presses.current;
     const answer = await session.signedIn({ method: "GET", path: commentsPath(gymId, postId, next) }, gymPostCommentsResponseSchema);
     if (!live.current) return;
+    if (before !== presses.current) {
+      setMore({ busy: false, failed: false });
+      return;
+    }
     if (answer.kind === "ok") {
-      const later = before !== presses.current;
-      setHeld((h) => (h.kind === "ok" ? { ...h, comments: later ? merged(answer.data.comments, h.comments) : merged(h.comments, answer.data.comments), next: answer.data.next } : h));
+      setHeld((h) => (h.kind === "ok" ? { ...h, comments: merged(h.comments, answer.data.comments), next: answer.data.next } : h));
       setMore({ busy: false, failed: false });
     } else {
       setMore({ busy: false, failed: true });
@@ -307,9 +313,13 @@ function Body({
     const before = presses.current;
     const answer = await session.signedIn({ method: "GET", path: repliesPath(gymId, parentId, after) }, gymPostCommentsResponseSchema);
     if (!live.current) return;
+    if (before !== presses.current) {
+      // The button is there to press again.
+      changeUnder(parentId, (u) => ({ ...u, busy: false, open: u.open && u.comments.length > 0 }));
+      return;
+    }
     if (answer.kind === "ok") {
-      const later = before !== presses.current;
-      changeUnder(parentId, (u) => ({ ...u, busy: false, comments: later ? merged(answer.data.comments, u.comments) : merged(u.comments, answer.data.comments), next: answer.data.next }));
+      changeUnder(parentId, (u) => ({ ...u, busy: false, comments: merged(u.comments, answer.data.comments), next: answer.data.next }));
     } else if (answer.kind === "refused" && answer.status === 404) {
       void load(true);
       changeUnder(parentId, (u) => ({ ...u, busy: false, open: false }));
@@ -391,7 +401,7 @@ function Body({
     if (answer.kind === "ok") {
       const { comment, firstKept } = answer.data;
       pressMoved();
-      if (!firstKept && changed) {
+      if (!firstKept && changed && differsFromKept(mine, comment)) {
         // An earlier send made it, as it first was. What they have written since is theirs, under a key of its own.
         kept.put(postId, { commentKey: newRequestKey(), body: mine.body, replyTo: mine.replyTo });
         setSaid({ text: FIRST_COMMENT_UP, bad: false });
@@ -406,7 +416,9 @@ function Body({
         const parentId = comment.parentId;
         if (firstKept) changeTop((c) => c.map((x) => (x.id === parentId ? { ...x, replyCount: x.replyCount + 1 } : x)));
         changeUnder(parentId, (u) => ({ ...u, open: true, comments: merged(u.comments, [comment]) }));
-        if ((under[parentId]?.comments.length ?? 0) === 0) void readReplies(parentId, null);
+        if (firstKept && (under[parentId]?.comments.length ?? 0) === 0) void readReplies(parentId, null);
+        // Sent again, it is answered with the reply though the comment above has gone from this person's screen.
+        if (!firstKept && held.kind === "ok" && !held.comments.some((c) => c.id === parentId)) setSaid({ text: REPLY_UP_ABOVE_GONE, bad: false });
       }
       return;
     }
@@ -534,7 +546,7 @@ function Body({
           </View>
           {!hasKeptWords(draft) ? null : (
             <View style={styles.gap}>
-              <Txt kind="small">Your unsent comment</Txt>
+              <Txt kind="small">{draft?.sent === true ? COMMENT_MAY_BE_UP : "Your unsent comment"}</Txt>
               <ScrollView style={{ maxHeight: height * 0.2 }}>
                 <Txt colour="text">{body}</Txt>
               </ScrollView>
@@ -576,7 +588,7 @@ function Body({
                 bare
                 value={body}
                 onChange={(next) => {
-                  setSaid(null);
+                  setSaid((was) => (was?.text === KEPT_COMMENTS_FULL ? was : null));
                   setDraft({ body: next });
                 }}
                 placeholder={draft?.replyTo == null ? "Write a comment" : `Reply to ${draft.replyTo.name}`}

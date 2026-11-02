@@ -46,6 +46,7 @@ describe("the button on a post, and whether there is one", () => {
     [0, false, "Comment", "Comment on this post"],
     [1, false, "1", "1 comment. Read or write a comment"],
     [99, false, "99", "99 comments. Read or write a comment"],
+
     [100, false, "99+", "More than 99 comments. Read or write a comment"],
     [1200, false, "99+", "More than 99 comments. Read or write a comment"],
     [3, true, "Finish your comment", "Finish your comment"],

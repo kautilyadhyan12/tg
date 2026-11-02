@@ -259,6 +259,8 @@ export const gymPostDraftFileSchema = z
     sent: z.boolean().optional(),
     /** And it has been changed since: the server would answer with the post as it first was. */
     changed: z.boolean().optional(),
+    /** And its photos have been changed since. */
+    photosChanged: z.boolean().optional(),
   })
   .strict();
 export type GymPostDraftFile = z.infer<typeof gymPostDraftFileSchema>;
