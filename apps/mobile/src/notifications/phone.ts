@@ -74,20 +74,29 @@ export function onNewAddress(listener: (address: string) => void): () => void {
   };
 }
 
+// A tap is heard from the moment the app starts: one that opened the app arrives before the tabs
+// are drawn, and is held until they are.
+let heldTap: string | null = null;
+const tapWatchers = new Set<(gymId: string) => void>();
+Notifications.addNotificationResponseReceivedListener((response) => {
+  const gymId = gymOfNotification(response.notification.request.content.data);
+  if (gymId === null) return;
+  if (tapWatchers.size === 0) heldTap = gymId;
+  for (const watcher of tapWatchers) watcher(gymId);
+});
+
 /** A tap on a gym's notification, including the one that opened the app. */
 export function onGymTapped(listener: (gymId: string) => void): () => void {
-  const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
-    const gymId = gymOfNotification(response.notification.request.content.data);
-    if (gymId !== null) listener(gymId);
-  });
+  tapWatchers.add(listener);
+  // The tap that opened the app, which Expo keeps for whoever asks.
   const last = Notifications.getLastNotificationResponse();
-  const lastGym = last === null ? null : gymOfNotification(last.notification.request.content.data);
-  if (lastGym !== null) {
-    Notifications.clearLastNotificationResponse();
-    listener(lastGym);
-  }
+  const opened = last === null ? null : gymOfNotification(last.notification.request.content.data);
+  if (opened !== null) Notifications.clearLastNotificationResponse();
+  const held = opened ?? heldTap;
+  heldTap = null;
+  if (held !== null) listener(held);
   return () => {
-    subscription.remove();
+    tapWatchers.delete(listener);
   };
 }
 

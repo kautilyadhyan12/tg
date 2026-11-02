@@ -179,6 +179,13 @@ describe("a tapped notification", () => {
     expect(await within(await screen.findByTestId("inbox-page")).findByText("Class moved to 7 pm.")).toBeTruthy();
   });
 
+  it("a tap heard before the tabs are drawn (the app opened by it) is kept and opens its Inbox", async () => {
+    notifications.permission = YES;
+    for (const tap of notifications.taps) tap(tapFor(IRON.id));
+    await open(fakeServer(routes()));
+    expect(await within(await screen.findByTestId("inbox-page")).findByText("Class moved to 7 pm.")).toBeTruthy();
+  });
+
   it("a gym that is not one of this person's opens nothing", async () => {
     notifications.permission = YES;
     await open(fakeServer(routes()));

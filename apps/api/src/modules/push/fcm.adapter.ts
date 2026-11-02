@@ -79,14 +79,13 @@ export function createFcmSender(deps: {
           method: "POST",
           headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
           body: JSON.stringify({
+            // A data message, shown by the app's own notifications package (expo-notifications) in the
+            // shape it reads: so a tap reaches the app, and `tag` keeps one notification per gym. A
+            // notification Android drew by itself would open the app and say nothing of the tap.
             message: {
               token: message.token,
-              notification: { title: message.title, body: message.body },
-              data: message.data,
-              android: {
-                collapse_key: message.tag,
-                notification: { tag: message.tag, channel_id: message.channelId },
-              },
+              data: { title: message.title, message: message.body, body: JSON.stringify(message.data), channelId: message.channelId, tag: message.tag },
+              android: { priority: "high", collapse_key: message.tag },
             },
           }),
           signal: AbortSignal.timeout(TIMEOUT_MS),

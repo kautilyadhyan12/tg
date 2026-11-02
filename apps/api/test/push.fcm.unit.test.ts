@@ -37,7 +37,7 @@ const fakeGoogle = (sendReply: () => Response) => {
 };
 
 describe("createFcmSender", () => {
-  it("signs in once as the service account and sends one notification tagged with the gym", async () => {
+  it("signs in once as the service account and sends one data message, tagged with the gym, in the app's own shape", async () => {
     const google = fakeGoogle(() => json(200, { name: "projects/kwazo-test/messages/1" }));
     const sender = createFcmSender({ account, now: () => new Date("2026-11-02T06:30:00Z"), fetch: google.fetcher });
     expect(await sender.send(message)).toBe("sent");
@@ -55,9 +55,14 @@ describe("createFcmSender", () => {
     expect(JSON.parse(typeof send?.init.body === "string" ? send.init.body : "null")).toEqual({
       message: {
         token: "phone-address",
-        notification: { title: "Lotus Yoga · 2 new messages", body: "Class moved to 7 pm." },
-        data: { kind: "gym_inbox", gymId: "gym-1" },
-        android: { collapse_key: "gym-1", notification: { tag: "gym-1", channel_id: "gym-messages" } },
+        data: {
+          title: "Lotus Yoga · 2 new messages",
+          message: "Class moved to 7 pm.",
+          body: JSON.stringify({ kind: "gym_inbox", gymId: "gym-1" }),
+          channelId: "gym-messages",
+          tag: "gym-1",
+        },
+        android: { priority: "high", collapse_key: "gym-1" },
       },
     });
   });

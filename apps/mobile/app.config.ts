@@ -70,7 +70,7 @@ export function configFor(copy: Copy, firebase = false): ExpoConfig {
       ["expo-camera", { cameraPermission: "Allow $(PRODUCT_NAME) to take photos of your meals and your gym's updates.", microphonePermission: false, recordAudioAndroid: false }],
       ["expo-image-picker", { photosPermission: "Allow $(PRODUCT_NAME) to open the photos you pick.", microphonePermission: false }],
       // A gym's messages as notifications (18b-i): the small icon and its colour on Android's bar.
-      ["expo-notifications", { color: "#FF8A1F" }],
+      ["expo-notifications", { icon: "./assets/notification-icon.png", color: "#FF8A1F" }],
       "./plugins/shortNativeBuild.js",
     ],
     extra,
