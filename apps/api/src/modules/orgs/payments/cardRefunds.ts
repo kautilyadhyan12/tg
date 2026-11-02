@@ -103,6 +103,25 @@ const NO_BILLING = "Recording payments isn't part of your role. Ask the owner to
 const paymentGone = (): OrgsError => new OrgsError(404, "member_payment_not_found", "That payment was not found.");
 const refused = (code: string, line: string): OrgsError => new OrgsError(409, code, line);
 
+const refuse = (error: OrgsError): never => {
+  throw error;
+};
+
+/** The press already made under this key: the same press gets its answer, another press is refused. The same press sent twice at
+ *  once can read no press here, then find the first's money waiting or gone, so a refusal before the write reads the key again. */
+async function pressSent(
+  deps: PaymentsDeps,
+  gymId: string,
+  requestKey: string,
+  same: (press: refunds.RefundPress) => boolean | Promise<boolean>,
+  reusedWords: string,
+): Promise<CardRefundResponse | null> {
+  const before = await refunds.pressOfKey(deps.sql, gymId, requestKey);
+  if (before === null) return null;
+  if (!(await same(before))) throw refused("card_refund_key_reused", reusedWords);
+  return await answer(deps, gymId, before.id);
+}
+
 const leaseFrom = (at: Date): Date => new Date(at.getTime() + CARD_REFUND.leaseMs);
 export const lookFrom = (at: Date, looks: number): Date =>
   new Date(at.getTime() + (CARD_REFUND.lookAfterMs[Math.min(looks, CARD_REFUND.lookAfterMs.length - 1)] ?? 3 * 60 * 60_000));
@@ -471,16 +490,15 @@ export async function refundToCard(
   body: CardRefundRequest,
 ): Promise<CardRefundResponse> {
   const { ready } = await allowed(deps, userId, gymId);
-  const before = await refunds.pressOfKey(deps.sql, gymId, body.requestKey);
-  if (before !== null) {
-    if (before.paymentId !== paymentId || before.amountMinor !== body.amountMinor || before.reason !== body.reason) throw refused("card_refund_key_reused", CARD_REFUND_WORDS.key_reused);
-    return await answer(deps, gymId, before.id);
-  }
+  const same = (press: refunds.RefundPress): boolean => press.paymentId === paymentId && press.amountMinor === body.amountMinor && press.reason === body.reason;
+  const sent = async (): Promise<CardRefundResponse | null> => await pressSent(deps, gymId, body.requestKey, same, CARD_REFUND_WORDS.key_reused);
+  const done = await sent();
+  if (done !== null) return done;
   const payment = await theirPayment(deps, gymId, entryId, membershipId, paymentId);
   const check = await checkOfPayment(deps, ready, payment);
-  if (check.block !== null) throw refused(`card_refund_${check.block}`, CARD_REFUND_WORDS[check.block]);
+  if (check.block !== null) return (await sent()) ?? refuse(refused(`card_refund_${check.block}`, CARD_REFUND_WORDS[check.block]));
   if (body.amountMinor > check.leftMinor) {
-    throw refused("card_refund_too_much", `That is more than can be refunded. ${formatMinor(check.leftMinor, payment.currency)} is the most.`);
+    return (await sent()) ?? refuse(refused("card_refund_too_much", `That is more than can be refunded. ${formatMinor(check.leftMinor, payment.currency)} is the most.`));
   }
   const deviceId = await deviceFor(deps, ready, check, body.terminalId);
   const now = deps.now();
@@ -581,16 +599,15 @@ export async function readSaleCardRefund(deps: PaymentsDeps, userId: string, gym
 /** A press on one product of a sale: the money goes back now. The same press sent twice is one refund. */
 export async function refundSaleToCard(deps: PaymentsDeps, userId: string, gymId: string, saleId: string, body: SaleCardRefundRequest): Promise<CardRefundResponse> {
   const ready = await allowedAtSell(deps, userId, gymId);
-  const before = await refunds.pressOfKey(deps.sql, gymId, body.requestKey);
-  if (before !== null) {
-    if (!sales.samePress(before, saleId, body)) throw refused("card_refund_key_reused", SALE_REFUND_WORDS.key_reused);
-    return await answer(deps, gymId, before.id);
-  }
+  const sent = async (): Promise<CardRefundResponse | null> =>
+    await pressSent(deps, gymId, body.requestKey, (press) => sales.samePress(press, saleId, body), SALE_REFUND_WORDS.key_reused);
+  const done = await sent();
+  if (done !== null) return done;
   const sale = await theirSale(deps, gymId, saleId);
   const check = await checkOfSale(deps, ready, sale);
-  if (check.block !== null) throw refused(`card_refund_${check.block}`, CARD_REFUND_WORDS[check.block]);
+  if (check.block !== null) return (await sent()) ?? refuse(refused(`card_refund_${check.block}`, CARD_REFUND_WORDS[check.block]));
   if (body.amountMinor > check.leftMinor) {
-    throw refused("card_refund_too_much", `That is more than can be refunded. ${formatMinor(check.leftMinor, sale.currency)} is the most.`);
+    return (await sent()) ?? refuse(refused("card_refund_too_much", `That is more than can be refunded. ${formatMinor(check.leftMinor, sale.currency)} is the most.`));
   }
   const deviceId = await deviceFor(deps, ready, check, body.terminalId);
   const now = deps.now();
@@ -647,14 +664,13 @@ export async function readWholeSaleCardRefund(deps: PaymentsDeps, userId: string
 /** A press on all of a sale: one refund at Square, for all that is left, written against each product. */
 export async function refundWholeSaleToCard(deps: PaymentsDeps, userId: string, gymId: string, saleId: string, body: SaleWholeCardRefundRequest): Promise<CardRefundResponse> {
   const ready = await allowedAtSell(deps, userId, gymId);
-  const before = await refunds.pressOfKey(deps.sql, gymId, body.requestKey);
-  if (before !== null) {
-    if (!sales.sameWholePress(before, await saleLinesToRefund(deps.sql, gymId, saleId), body)) throw refused("card_refund_key_reused", SALE_REFUND_WORDS.key_reused);
-    return await answer(deps, gymId, before.id);
-  }
+  const sent = async (): Promise<CardRefundResponse | null> =>
+    await pressSent(deps, gymId, body.requestKey, async (press) => sales.sameWholePress(press, await saleLinesToRefund(deps.sql, gymId, saleId), body), SALE_REFUND_WORDS.key_reused);
+  const done = await sent();
+  if (done !== null) return done;
   const lines = await theirSaleLines(deps, gymId, saleId);
   const check = await checkOfWholeSale(deps, ready, lines);
-  if (check.block !== null) throw refused(`card_refund_${check.block}`, CARD_REFUND_WORDS[check.block]);
+  if (check.block !== null) return (await sent()) ?? refuse(refused(`card_refund_${check.block}`, CARD_REFUND_WORDS[check.block]));
   const deviceId = await deviceFor(deps, ready, check, body.terminalId);
   const now = deps.now();
   const written = await sales.startWholeSaleRefund(deps.sql, {

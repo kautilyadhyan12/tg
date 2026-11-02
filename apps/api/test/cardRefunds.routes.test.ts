@@ -1623,9 +1623,9 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
       expect(cardRefundCheckSchema.parse(JSON.parse(box.body))).toMatchObject({ card: { brand: "VISA", last4: "1111" }, leftMinor: 1000, refundedInSquareMinor: 0, block: null });
 
       const key = randomUUID();
-      const [first, again] = await Promise.all([press(maya, 1000, key), press(maya, 1000, key)]);
-      expect(first.statusCode, first.body).toBe(200);
-      expect(again.statusCode, again.body).toBe(200);
+      // The same press four times at once (a double click, a retry): each gets the one refund's answer, never "waiting".
+      const same = await Promise.all([1, 2, 3, 4].map(() => press(maya, 1000, key)));
+      for (const res of same) expect(res.statusCode, res.body).toBe(200);
       expect(madeFor(maya)).toHaveLength(1);
       expect(madeFor(maya)[0]).toMatchObject({ amount_money: { amount: 1000, currency: "USD" }, accountId: gym.acct.merchantId });
       expect((await refundsOf(maya)).map((r) => [r.amount_minor, r.method, r.undone])).toEqual([[1000, "company", false]]);
