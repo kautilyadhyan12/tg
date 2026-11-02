@@ -65,8 +65,19 @@ export interface Asked {
 
 /** A server of the routes it is handed; any other path answers 404. `/health` is up, and the
  *  profile says the person ticked "Before you start", and no gym has invited or taken them, unless told. */
+/** A day's version as the server's reply carries it: sixteen hex figures, another for other meals. */
+export function versionOf(day: number, meals: unknown): string {
+  let a = 5381;
+  let b = 52711;
+  for (const c of `${String(day)}|${JSON.stringify(meals)}`) {
+    a = (a * 33 + c.charCodeAt(0)) % 4294967296;
+    b = (b * 31 + c.charCodeAt(0)) % 4294967296;
+  }
+  return a.toString(16).padStart(8, "0") + b.toString(16).padStart(8, "0");
+}
+
 const NO_PLAN = {
-  days: [1, 2, 3, 4, 5, 6, 7].map((day) => ({ day, meals: [], planned: { kcal: 0, proteinG: 0, carbsG: 0, fatG: 0 }, target: null, off: null })),
+  days: [1, 2, 3, 4, 5, 6, 7].map((day) => ({ day, meals: [], planned: { kcal: 0, proteinG: 0, carbsG: 0, fatG: 0 }, target: null, off: null, version: versionOf(day, []) })),
   make: { status: "ok" },
   caution: FOOD_ALLERGY_CAUTION,
   labelCaution: null,

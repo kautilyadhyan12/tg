@@ -705,6 +705,96 @@ a Firebase project (item 18) · a Cloudflare account for clips and photos (item 
 4 item 4) · the Google Play developer account and twelve testers, when the app is
 completely built (item 21) · the Apple developer account and an iPhone (item 21).
 
+### 16.6 Recommended For You: three choices for each kind (planned 2026-11-03, job 31c)
+
+Kd's rulings: `rulings/2026-11-02-34e-ii-b.md` (the kinds, the three sources, "scientific accurate and
+user specific") and `rulings/2026-11-03-31c.md` (how a gym gives a plan, allergies, the order). The jobs:
+ROADMAP Stage 5's 31d to 31g, 36 and 37, and Stage 2's item 24. What was read and measured:
+`handoff/2026-11-03-31c.md`.
+
+**What a person sees.** The Dashboard's box keeps its drawing (34d-iii): the picture on the right, small
+words on the left. Across its top, one tab for each kind the app can suggest: **Food** now; **Workout**
+joins with item 36's weekly plan and **Running** with item 37's run plan; a later feature that suggests
+something adds its own tab in its own job. A kind not built yet has no tab. Under the tabs, one row of
+three choices:
+
+| Choice | What it holds | When it is there |
+|---|---|---|
+| **Suggested** | the app's own, by the rules below | always; where an answer is missing, a button to that exact question |
+| **The gym's name** | the plan the gym gave this person, with who wrote it ("By Sam") | for a member of a gym, once item 24's job for that kind is built; a gym that gave none: "Iron House hasn't given you a meal plan." with Contact the gym, already on a message to them |
+| **My plan** | the person's own: Food, the meal plan of 34e-ii; Workout, their own week; Running, their own run plan | always; with none yet, Build my own, opening the week |
+
+The choice is one for each kind, kept on the server, so the Dashboard, Food's What to eat next and a
+second phone show the same one. It starts at the gym's plan where a gym has given one, else at My plan
+where the person has one, else at Suggested. The box shows one thing from that choice (the next meal,
+today's session, today's run) and its one main button: Log meal opens Food at What to eat next (Kd,
+2026-11-02), Start opens the workout, Start run the run; See all opens that choice's own page.
+
+**What every choice keeps** (RULINGS 2026-09-07; CLAUDE.md §4). No calorie cut under 18, in pregnancy or
+for a flagged heart, blood-pressure or diabetes answer: a gym's or a person's own meal plan whose day is
+under what that person may eat says so in one line beside it and is never changed. Safe mode shows no
+workout or run from any choice until a professional's clearance, and says why. Every food shows its
+allergens, and a meal holding one of the person's own is marked on it ("Contains milk"), whoever wrote it.
+
+**Suggested: food (31d, 31e).** The day's numbers stay the plan calculator's (`plan/maths.ts`: Mifflin–St
+Jeor, ISSN 2017, Iraki 2019, Morton 2018), inside or above the 1.2–1.6 g/kg of protein a day of the
+Dietary Guidelines for Americans 2025–2030. Measured on 2026-11-03 (`suggest.ts`, four people, four diets,
+60 days, four meals a day): the ideas follow calories and diet only, so a 100 kg person losing weight
+(200 g of protein a day, 50 g a meal) was offered less than the meal's share in 86 % of ideas eating meat
+and in 100 % as a vegetarian or vegan; a 60 kg person keeping weight, in 31 % to 57 %. From 31d the
+ideas, and the app's own week, are drawn for the person:
+1. **Protein for this meal, from this person.** The day's protein still to eat, shared across the meals
+   still to come: never under 0.25 g/kg for a meal (ISSN 2017: "0.25 g of a high-quality protein per kg
+   of body weight, or an absolute dose of 20–40 g", spread "every 3–4 h"), aimed at 0.4 g/kg and at most
+   0.55 (Schoenfeld and Aragon, JISSN 2018). An idea is drawn for its protein as well as its calories;
+   where the diet's foods cannot reach the meal's least at its calories, the idea with the most protein
+   is offered.
+2. **What is eaten today counts**: the protein logged so far, not only its calories.
+3. **The meal after a workout**, within two hours: carbohydrate with protein of about 0.3 g/kg (Thomas,
+   Erdman and Burke 2016, the joint position of the Academy of Nutrition and Dietetics, Dietitians of
+   Canada and the ACSM). 34d-ii's after-workout ideas are drawn by the same rule.
+4. **The meal's time.** Breakfast and a snack are a bowl, toast or eggs; a plate or a dish is lunch or
+   dinner, as the week already does (`dietPlan.ts`), now in the day's ideas too. Oats are offered cooked,
+   with milk or yogurt (Kd, 2026-11-02: oats are "mixed with milk").
+5. **Foods as they are eaten.** Every suggested food is cooked or ready to eat: no dry grain, raw meat,
+   fish, egg or bean. Its test reads every suggested food's own name and table words against words from
+   outside labels that the list has never held ("dry", "uncooked", "raw", "flour", "powder"), fruit and
+   salad vegetables apart.
+6. **Allergies** (Kd, 2026-11-03). Asked once, where the meal ideas first show, as a pick list of the 14
+   allergens EU food labels must name (Regulation 1169/2011, Annex II), which hold the 9 of the US, the
+   11 of Canada and India's, with None one tap; changed in Settings. A food holding one is never
+   suggested. Each food that may be suggested carries its allergens, written once in the food list
+   (paneer: milk; hummus: sesame; tempeh and edamame: soy); a typed food, or a searched one with no such
+   words, shows "Check the label". The caution line stays on every suggestion. Its worst-thing test uses
+   real labels' and dishes' wording the list does not have (ghee, tahini, seitan, pesto, Worcestershire
+   sauce, Caesar dressing).
+7. **Sugar.** Sweets and sugary drinks stay out (RULINGS 2026-09-12); 31d's plan reads the Dietary
+   Guidelines 2025–2030's limit on added sugars in its primary text and checks the foods against it.
+8. **Why, in one short line** under the idea, so it never reads as out of nowhere: "41 g protein · your
+   share for this meal".
+
+**Suggested: workout (item 36).** Built from setup's answers (fitness level, push-ups, plank, days,
+minutes, equipment, places) and the workouts done. Every major muscle group at least two days a week;
+about 10 sets a week for each to build muscle, 2–3 sets at heavier loads for strength (ACSM's 2026
+position stand on resistance training, *Medicine & Science in Sports & Exercise*, April 2026; read in its
+primary text at item 36's plan); 150–300 minutes of moderate activity a week or 75–150 vigorous, and an
+hour a day on average under 18 (WHO 2020). Today's session is the plan's; a missed one moves (6b).
+
+**Suggested: running (item 37).** ROADMAP 7b's rules (RULINGS 2026-09-10), and one more: no single run
+more than 10 % longer than the longest run of the last 30 days (Frandsen and colleagues, *BJSM* 2025,
+5,205 runners: runs past that raised overuse injuries by 52 % to 128 %, while the week-to-week increase
+showed almost no link).
+
+**The gym's plan (Stage 2's item 24, the web folder).** Staff write a plan once and tick who gets it:
+everybody, a group, or members they pick, with tick boxes and one action bar as Members already has; a
+member in two of a gym's audiences for one kind gets the newest. A meal plan is a week of meals from the
+food list, own foods allowed, priced by the server as a person's own (34e-ii-b); a workout plan, sessions
+from the exercise list (item 60); a run plan, days of runs. The member sees it as written, with the
+author's name, and the app never resizes it; what every choice keeps still holds. The gym sees nothing
+new of the member's: food and weight stay behind the member's own tap (RULINGS 2026-09-22). Who may write
+one: staff with the Plans tick, the owner by default. A gym of 200 giving one plan to everybody is one
+plan and one audience, never 200 copies; its cost is measured at that job's plan.
+
 ---
 
 *— End of Part 6. Queue: **Part 7 — Retention & Growth Playbook** (exact

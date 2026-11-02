@@ -40,6 +40,7 @@ import {
   type Per100g,
   type VisionEvidence,
   isOwnFood,
+  planItemChoice,
   classifyBarcode,
   type BarcodeReply,
   type MoreNutrients,
@@ -59,6 +60,7 @@ import { packagedRowsFor } from "./packagedRepo.js";
 import { usdaWords } from "./usdaWords.js";
 import { isPackagedCanonical, packagedCode, packagedFoodOf, type PackagedFood } from "./packagedRows.js";
 import { itemsVersion, ownPer100g, savedPlaces } from "./mealEdit.js";
+import { getDietPlan as getStoredDietPlan } from "./dietPlanRepo.js";
 import { RECENT_MEALS_READ, recentFoods, type RecentPick } from "./recentFoods.js";
 import * as repo from "./repo.js";
 import { ESTIMATE_CANONICAL_PREFIX, checkedPrice, closeFoodsOf, estimateFood, isPlainMatch, offeredFoodsOf, priceScannedFood, seenNameOf, type ScanLookups, type ScanPrice } from "./scanMatch.js";
@@ -547,6 +549,22 @@ async function sharedDishGrams(
     for (const part of group.parts) grams.set(part.at, Math.round((meal * part.share) / whole));
   }
   return grams;
+}
+
+/** Whether a food can be priced again on any later day: every food but a product the outside search
+ *  found that our own copy of the lists does not hold, which is remembered for a day only, and a label
+ *  the person has removed. Refused, the food's name where the server still knows it. */
+export async function pricedForGood(deps: NutritionDeps, userId: string, canonical: string): Promise<{ ok: true } | { ok: false; name: string | null }> {
+  if (canonical.toLowerCase().startsWith(LABEL_CANONICAL_PREFIX)) {
+    const id = canonical.slice(LABEL_CANONICAL_PREFIX.length);
+    const held = labelFoodParamSchema.safeParse({ id }).success ? await labelRepo.labelFoodById(deps.sql, userId, id) : null;
+    return held === null ? { ok: false, name: null } : { ok: true };
+  }
+  if (!isPackagedCanonical(canonical)) return { ok: true };
+  const code = packagedCode(canonical);
+  const kind = code === null ? null : classifyBarcode(code);
+  if (kind?.kind === "product" && (await packagedFood(deps, kind.code)) !== null) return { ok: true };
+  return { ok: false, name: (await canonicalCached(deps, canonical))?.name ?? null };
 }
 
 /** What the lists hold for a code already known to be one product worldwide (`classifyBarcode`). */
@@ -1408,7 +1426,7 @@ const OWN_CANONICAL_PREFIX = "own_";
 
 /** A person's own food as a meal keeps it: its name, the grams eaten, priced by their own protein,
  *  carbs and fat (`ownPer100g`), under a canonical of its own in the meal. */
-function ownFoodItem(choice: OwnFoodItem, taken: Set<string>): MealItem {
+export function ownFoodItem(choice: OwnFoodItem, taken: Set<string>): MealItem {
   const figures = ownPer100g(choice.own, choice.grams);
   if (figures === null) throw ownNumbersTooHeavy(choice.grams);
   const base = `${OWN_CANONICAL_PREFIX}${slug(choice.name).slice(0, 100) || "food"}`;
@@ -1655,7 +1673,7 @@ export async function resolveChosenItems(
 export async function createManualMeal(deps: NutritionDeps, userId: string, input: ManualMealRequest): Promise<SavedMeal> {
   const kept = await alreadySaved(deps, userId, input.id);
   if (kept !== null) return kept;
-  const items = await withOwnFoods(input.items, (table) => resolveChosenItems(deps, userId, table), (item) => item);
+  const items = (await plannedItems(deps, userId, input)) ?? (await withOwnFoods(input.items, (table) => resolveChosenItems(deps, userId, table), (item) => item));
   return await writeMeal(deps, userId, input.id, {
     takenAt: new Date(input.takenAt),
     mealType: input.mealType ?? null,
@@ -1663,6 +1681,29 @@ export async function createManualMeal(deps: NutritionDeps, userId: string, inpu
     items,
     origin: "manual",
   });
+}
+
+/** A meal logged from the person's own plan (34e-ii-b): the plan's own items, at the numbers it showed,
+ *  while that meal of the plan still holds the foods sent at those amounts. A product whose search is
+ *  forgotten, or whose list has changed since, still logs as the plan showed it. Otherwise none. */
+async function plannedItems(deps: NutritionDeps, userId: string, input: ManualMealRequest): Promise<MealItem[] | null> {
+  if (input.planned === undefined) return null;
+  const plan = await getStoredDietPlan(deps.sql, userId);
+  const items = plan.days[input.planned.day - 1]?.[input.planned.meal]?.items;
+  if (items === undefined || items.length !== input.items.length) return null;
+  const same = input.items.every((choice, at) => {
+    const item = items[at];
+    if (item === undefined) return false;
+    // The food exactly as the plan sends it back, an own food's numbers too: a meal kept on the phone
+    // from before the person changed it is priced as it was sent, never at the plan's new numbers.
+    const kept = planItemChoice(item);
+    if (isOwnFood(choice)) {
+      return isOwnFood(kept) && choice.name === kept.name && choice.grams === kept.grams &&
+        choice.own.proteinG === kept.own.proteinG && choice.own.carbsG === kept.own.carbsG && choice.own.fatG === kept.own.fatG;
+    }
+    return !isOwnFood(kept) && "grams" in choice && "grams" in kept && choice.canonical === kept.canonical && choice.grams === kept.grams;
+  });
+  return same ? items.map((item) => ({ ...item })) : null;
 }
 
 /** Kd-approved 2026-07-16 (Card-5a smoke): live preview — NOTHING persists,
@@ -1876,8 +1917,14 @@ export async function previewMealEdit(
 export async function mealMeasures(deps: NutritionDeps, userId: string, id: string): Promise<FoodMeasure[][] | null> {
   const meal = await repo.getMeal(deps.sql, userId, id);
   if (meal === null) return null;
+  return await itemsMeasures(deps, userId, meal.items);
+}
+
+/** Each kept food's own measures, as the picker offers them. `search` false where the foods are many
+ *  (a meal of a diet plan): none is searched for by its name. */
+export async function itemsMeasures(deps: NutritionDeps, userId: string, items: readonly MealItem[], search = true): Promise<FoodMeasure[][]> {
   const foods: FoodReference[] = [];
-  for (const item of meal.items) foods.push((await foodOfItem(deps, userId, item, item.canonical)) ?? savedFood(item, null));
+  for (const item of items) foods.push((await foodOfItem(deps, userId, item, item.canonical, search)) ?? savedFood(item, null));
   return await measuresOf(deps, foods);
 }
 

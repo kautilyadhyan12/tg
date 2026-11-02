@@ -66,7 +66,7 @@ import { useMealOutbox } from "./food/MealOutbox";
 import { MealPhoto } from "./food/MealPhoto";
 import { useKeptSheet } from "./food/PhotoSheetStore";
 import { holdWords } from "./food/numbers";
-import { basketName, basketNumbers, foodsWords, withBasketFood, type BasketFood, type BasketPick } from "./food/basket";
+import { basketName, basketNumbers, foodsWords, withBasketFood, type BasketFood, type BasketPick, type PlanMealTarget } from "./food/basket";
 import { OwnFood } from "./food/OwnFood";
 import { sharedDishOfItems, wholeDishEdits, wholeDishOffEdits } from "./food/dishShares";
 import { WholeDish, type DishPicked } from "./food/WholeDish";
@@ -170,6 +170,29 @@ export function FoodScreen() {
   useEffect(() => {
     if (toToday !== null) setDay(startOfDay(new Date()));
   }, [toToday]);
+  // The Dashboard's Log meal opens this page at What to eat next, where the meal is logged (Kd,
+  // 2026-11-02). The page keeps the box in view as the boxes above it load, until the person scrolls.
+  const askedNext = typeof asked === "object" && "next" in asked && typeof asked.next === "number" ? asked.next : null;
+  const nextSeen = useRef<number | null>(null);
+  const [toNext, setToNext] = useState(false);
+  useEffect(() => {
+    if (askedNext === null || askedNext === nextSeen.current) return;
+    nextSeen.current = askedNext;
+    setToNext(true);
+  }, [askedNext]);
+  const scroller = useRef<ScrollView | null>(null);
+  // Where the box sits: under the page's picture and the gap below it, at its own place among the boxes.
+  // It stops below the phone's clock bar, which the page runs under.
+  const topHeight = useRef<number | null>(null);
+  const nextAt = useRef<number | null>(null);
+  const clockBar = useSafeAreaInsets().top;
+  const showNext = useCallback(() => {
+    if (topHeight.current === null || nextAt.current === null) return;
+    scroller.current?.scrollTo({ y: Math.max(0, topHeight.current + sizes.gap + nextAt.current - sizes.edge - clockBar), animated: true });
+  }, [clockBar]);
+  useEffect(() => {
+    if (toNext) showNext();
+  }, [toNext, showNext]);
 
   const rows = dayRows(read, view, day);
   // The meal open in its box, as the day now reads it: a change saved there shows at once.
@@ -187,7 +210,17 @@ export function FoodScreen() {
 
   return (
     <Page
+      scroller={scroller}
+      onDrag={() => {
+        setToNext(false);
+      }}
       top={
+        <View
+          onLayout={(e) => {
+            topHeight.current = e.nativeEvent.layout.height;
+            if (toNext) showNext();
+          }}
+        >
         <PictureTop
           picture="food"
           tall={0.62}
@@ -195,6 +228,7 @@ export function FoodScreen() {
           title="Fuel Your Training"
           foot={<Button label={photoKept ? "Finish photo meal" : "Scan food"} icon="camera" onPress={() => { setSaid(null); setBarcodeFirst(false); setPhotoOpen(true); }} />}
         />
+        </View>
       }
     >
       {photoKept ? (
@@ -252,7 +286,14 @@ export function FoodScreen() {
         />
       </Sheet>
       {today ? (
+        <View
+          onLayout={(e) => {
+            nextAt.current = e.nativeEvent.layout.y;
+            if (toNext) showNext();
+          }}
+        >
         <WhatToEatNext
+          pickFoods={(plan, onClose) => <AddFood type={plan.mealType} plan={plan} onClose={onClose} onAdded={onClose} />}
           foodsToday={rows === null ? null : rows.map((r) => foodsOfRow(r, view.waiting))}
           todayFailed={read.kind === "failed"}
           retryToday={again}
@@ -263,6 +304,7 @@ export function FoodScreen() {
           fresh={answers}
           onAnswered={answered}
         />
+        </View>
       ) : null}
       <View style={styles.dayRow}>
         <Pressable
@@ -1159,7 +1201,7 @@ type Priced = { kind: "none" } | { kind: "ok"; preview: MealPreview; for: string
  *  Add, which puts it on the meal's list (Kd, 2026-10-30: oats and milk in one meal); more foods; then
  *  one Save keeps them as one meal on the phone and sends it. The server prices each amount before it
  *  goes on the list. A food logged before opens at the amount last had (Kd, 2026-10-29). */
-function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: () => void; onAdded: (type: MealType, name: string) => void }) {
+function AddFood({ type, plan, onClose, onAdded }: { type: MealType | null; plan?: PlanMealTarget; onClose: () => void; onAdded: (type: MealType, name: string) => void }) {
   const { session } = useSession();
   const { outbox } = useMealOutbox();
   const [query, setQuery] = useState("");
@@ -1182,18 +1224,21 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
   // A food no list has, added with the person's own numbers (33b-i): its form in place of the search.
   const [own, setOwn] = useState(false);
   // The meal's foods so far, saved together (Kd, 2026-10-30).
-  const [basket, setBasket] = useState<BasketFood[]>([]);
+  const [basket, setBasket] = useState<BasketFood[]>(plan?.start ?? []);
   // Leaving with foods on the list asks first: they are never thrown away by a back press.
   const [leaving, setLeaving] = useState(false);
   // The meal so far, or the search for its next food: after each Add the meal is shown, with Add
   // another food and Save (Kd, 2026-10-30).
-  const [searching, setSearching] = useState(true);
+  const [searching, setSearching] = useState((plan?.start.length ?? 0) === 0);
   // A food on the meal opened again to change: put back in its own place.
   const [changing, setChanging] = useState<string | null>(null);
   // The meal's own name, as the person types it; blank, the foods name it (Kd, 2026-10-30).
   const [mealName, setMealName] = useState("");
   const [ownAgain, setOwnAgain] = useState<OwnFoodItem | null>(null);
   const addingNow = useRef(false);
+  // A meal of the meal plan: its foods on the list from the start, kept until something changes.
+  const startFoods = plan?.start;
+  const changed = plan === undefined ? basket.length > 0 : basket !== plan.start && basket.length > 0;
   // The box fits between the top of the screen and the keyboard: its title and the search box stay in
   // view, and the list under them scrolls.
   const { height } = useWindowDimensions();
@@ -1224,12 +1269,14 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
     setAdding(false);
     addingNow.current = false;
     setOwn(false);
-    setBasket([]);
+    setBasket(startFoods ?? []);
     setLeaving(false);
-    setSearching(true);
+    setSearching((startFoods ?? []).length === 0);
     setChanging(null);
     setOwnAgain(null);
     setMealName("");
+    // Opened again for another meal only when `type` changes; a plan meal's box is a new box each time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [type]);
 
   // The person's recent foods, read each time the box opens; with no answer the box offers the search.
@@ -1304,8 +1351,12 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
   const refusedWords = priced.kind === "refused" && priced.for === key ? priced.words : null;
   const held = item === null || tooSmall || refusedWords !== null || outbox === null || adding;
 
-  /** The list saved as one meal, kept on the phone and sent. */
+  /** The list saved as one meal, kept on the phone and sent; for a meal of the plan, the plan's own save. */
   const save = async () => {
+    if (plan !== undefined) {
+      if (basket.length > 0) await plan.save(basket);
+      return;
+    }
     if (outbox === null || addingNow.current || basket.length === 0) return;
     addingNow.current = true;
     setAdding(true);
@@ -1370,7 +1421,8 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
     if (food === null && basket.length > 0) {
       // From the search, back to the meal; from the meal, the question.
       if (searching) setSearching(false);
-      else setLeaving(true);
+      else if (changed) setLeaving(true);
+      else return false;
       return true;
     }
     if (food === null) return false;
@@ -1398,14 +1450,26 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
   };
   // The X: with foods on the list it asks first, as the back button does.
   const close = () => {
-    if (basket.length > 0 && !leaving) setLeaving(true);
+    if (changed && !leaving) setLeaving(true);
     else onClose();
   };
+  const saveHeld = plan === undefined ? outbox === null || adding : plan.busy;
+  const saveLabel = plan === undefined ? `Save meal to ${name}` : "Save to your plan";
+  const planTrouble = plan?.trouble == null ? null : (
+    <Txt kind="small" colour="badText">
+      {plan.trouble}
+    </Txt>
+  );
   if (leaving) {
     return (
-      <Sheet open title="Save this meal?" onClose={onClose} onBack={back}>
-        <Txt kind="small">{basketName(basket)} {basket.length === 1 ? "isn’t" : "aren’t"} saved yet.</Txt>
-        <Button label={`Save ${foodsWords(basket.length)} to ${name}`} wide disabled={outbox === null || adding} onPress={() => { void save(); }} />
+      <Sheet open title={plan === undefined ? "Save this meal?" : "Save your changes?"} onClose={onClose} onBack={back}>
+        <Txt kind="small">
+          {plan === undefined
+            ? `${basketName(basket)} ${basket.length === 1 ? "isn’t" : "aren’t"} saved yet.`
+            : `Your changes to ${plan.title} aren’t saved to your plan yet.`}
+        </Txt>
+        {planTrouble}
+        <Button label={plan === undefined ? `Save ${foodsWords(basket.length)} to ${name}` : saveLabel} wide disabled={saveHeld} onPress={() => { void save(); }} />
         <Button label="Leave without saving" kind="quiet" wide onPress={onClose} />
       </Sheet>
     );
@@ -1414,9 +1478,9 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
   if (basket.length > 0 && !searching && food === null && !own) {
     const numbers = basketNumbers(basket);
     return (
-      <Sheet open title={`Add to ${name}`} onClose={close} onBack={back}>
+      <Sheet open title={plan === undefined ? `Add to ${name}` : plan.title} onClose={close} onBack={back}>
         <ScrollView style={{ maxHeight: Math.max(SHEET_LIST_LEAST, height - keyboard - insets.top - SHEET_ABOVE_LIST - SHEET_FOOT) }} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.sheetList}>
-          <Field label="Meal name" value={mealName} onChange={setMealName} placeholder={basketName(basket)} maxLength={200} />
+          {plan === undefined ? <Field label="Meal name" value={mealName} onChange={setMealName} placeholder={basketName(basket)} maxLength={200} /> : null}
           <Txt kind="tiny" style={styles.label}>
             Your meal
           </Txt>
@@ -1459,7 +1523,8 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
               {count(Math.round(numbers.totals.fatG))} g
             </Txt>
           )}
-          <Button label={`Save meal to ${name}`} wide disabled={outbox === null || adding} onPress={() => { void save(); }} />
+          {planTrouble}
+          <Button label={saveLabel} wide disabled={saveHeld} onPress={() => { void save(); }} />
           {full ? (
             <Txt kind="small" colour="badText">
               Too many meals are waiting to be sent. Go online to send them, then save this one.
@@ -1471,7 +1536,7 @@ function AddFood({ type, onClose, onAdded }: { type: MealType | null; onClose: (
   }
 
   return (
-    <Sheet open title={own ? "Your own food" : `Add to ${name}`} onClose={close} onBack={back}>
+    <Sheet open title={own ? "Your own food" : plan === undefined ? `Add to ${name}` : plan.title} onClose={close} onBack={back}>
       {food === null && !own && basket.length > 0 ? (
         <Button label={`Back to your meal · ${foodsWords(basket.length)}`} icon="back" kind="link" onPress={() => { setSearching(false); }} style={styles.start} />
       ) : null}
