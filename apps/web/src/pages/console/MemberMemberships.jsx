@@ -1354,7 +1354,7 @@ export default function MemberMemberships({
               onClick={() =>
                 void (feeOwed
                   ? startTerminalFee(m, fee, again.id, newRequestKey())
-                  : startTerminal(m, again.id, { requestKey: newRequestKey(), periodIndex: owed.periodIndex, amountMinor: payment.amountMinor }))
+                  : startTerminal(m, again.id, { requestKey: newRequestKey(), periodIndex: owed.periodIndex, amountMinor: payment.amountMinor }, payment.card != null))
               }
             >
               {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}

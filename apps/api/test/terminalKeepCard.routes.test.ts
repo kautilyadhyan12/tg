@@ -340,9 +340,10 @@ d("The card kept from a Terminal payment: only with their I agree, on their reco
     const payerList = await send("GET", `${entryUrl(gym, tara.entryId)}/terminal-payments`, gym.owner.cookies);
     expect(terminalPaymentsResponseSchema.parse(JSON.parse(payerList.body)).keepsCard).toBe(true);
     // Another gym's owner reaches nothing.
+    const asked = square.actions.size;
     const stranger = await payPress(gym, other.gym.owner, tara, desk.id, { keepCard: true });
     expect(stranger.statusCode, stranger.body).toBe(404);
-    expect(square.actions.size).toBe(0);
+    expect(square.actions.size).toBe(asked);
   });
 
   it("Square refusing, or not answering, leaves the payment on the bill; the worker finishes it; a press with no tick is as before", async () => {

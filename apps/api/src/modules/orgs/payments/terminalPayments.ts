@@ -358,13 +358,21 @@ async function keepFromPayment(deps: PaymentsDeps, square: SquareSettings, pay: 
   const row = await repo.readConnection(deps.sql, pay.gymId, square.environment);
   const token = row?.state === "connected" && row.accountId === pay.accountId && row.accessToken !== null ? square.tokens.open(row.accessToken, accessContext(pay.gymId)) : null;
   const { squarePaymentId, cardKey, cardAnsweredAt, cardWords, membershipId } = pay;
-  if (row === null || token === null || squarePaymentId === null || cardKey === null || cardAnsweredAt === null || cardWords === null || membershipId === null) return await notSaved();
+  if (row === null || token === null || squarePaymentId === null || cardKey === null || cardAnsweredAt === null || cardWords === null || membershipId === null) {
+    await notSaved();
+    return;
+  }
   const holder = await pays.holderOf(deps.sql, pay.gymId, membershipId);
   const person = holder === null ? null : await cards.readPerson(deps.sql, pay.gymId, holder);
-  if (holder === null || person === null || (await payerOf(deps.sql, pay.gymId, holder)) !== null) return await notSaved();
+  if (holder === null || person === null || (await payerOf(deps.sql, pay.gymId, holder)) !== null) {
+    await notSaved();
+    return;
+  }
   if (deps.now().getTime() > (pay.finishedAt ?? pay.startedAt).getTime() + TERMINAL_PAYMENT.keepCardMs) {
     deps.log.warn({ event: "square.terminal_keep_given_up", gymId: pay.gymId }, "Square gave no answer about keeping a card from a Terminal payment");
-    return await notSaved();
+    await notSaved();
+
+    return;
   }
   const ready: Ready = { square, row, token };
   let customerId: string;
@@ -380,14 +388,18 @@ async function keepFromPayment(deps: PaymentsDeps, square: SquareSettings, pay: 
   if (created.kind === "refused") {
     deps.log.warn({ event: "square.terminal_keep_refused", gymId: pay.gymId, status: created.status, code: created.code }, "Square refused to save a card from a Terminal payment");
     if (created.code === "CUSTOMER_NOT_FOUND") await cards.dropCustomer(deps.sql, pay.gymId, holder, square.environment, pay.accountId, customerId);
-    return await notSaved();
+    await notSaved();
+
+    return;
   }
   const merged = await onMergedCustomer(deps, square, token, pay.accountId, created.value, customerId);
   const usable = merged?.usable ?? usableCard(created.value, customerId, pay.accountId);
   if (usable === null) {
     deps.log.error({ event: "square.card_unexpected", gymId: pay.gymId }, "Square saved a card from a payment that is not the one asked for");
     await letGoOfCard(deps, square, { gymId: pay.gymId, environment: pay.environment, accountId: pay.accountId, cardId: created.value.id });
-    return await notSaved();
+    await notSaved();
+
+    return;
   }
   const at = deps.now();
   const owed = await deps.sql.begin(async (tx) => {
