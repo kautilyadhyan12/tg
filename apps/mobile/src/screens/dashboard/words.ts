@@ -97,8 +97,10 @@ export interface ActivityRow {
   key: string;
   kind: ActivityKind;
   at: string;
-  day: string;
-  detail: string;
+  /** What it was: a meal's name, a run's route. */
+  name: string;
+  /** Its day, and the rest of what is known of it. */
+  facts: string;
   value: string | null;
 }
 
@@ -117,8 +119,8 @@ export function workoutRow(w: WorkoutListItem): ActivityRow {
     key: `workout-${w.id}`,
     kind: "workout",
     at: w.startedAt,
-    day: dayWords(w.startedAt) ?? "Workout",
-    detail: joined(["Workout", minutesWords(w.durationMs === null ? null : w.durationMs / 60_000), w.avgFormScore === null ? null : `${count(w.avgFormScore)} form`]),
+    name: "Workout",
+    facts: joined([dayWords(w.startedAt), minutesWords(w.durationMs === null ? null : w.durationMs / 60_000), w.avgFormScore === null ? null : `${count(w.avgFormScore)} form`]),
     value: w.kcalPoint === null ? null : `${count(w.kcalPoint)} kcal`,
   };
 }
@@ -128,8 +130,8 @@ export function runRow(r: RunSummary): ActivityRow {
     key: `run-${r.id}`,
     kind: "run",
     at: r.startedAt,
-    day: dayWords(r.startedAt) ?? "Run",
-    detail: joined([r.routeName ?? "Run", minutesWords(r.durationS / 60)]),
+    name: r.routeName ?? "Run",
+    facts: joined([dayWords(r.startedAt), minutesWords(r.durationS / 60)]),
     value: distanceWords(r.distanceM),
   };
 }
@@ -139,8 +141,8 @@ export function mealRow(m: Meal): ActivityRow {
     key: `meal-${m.id}`,
     kind: "meal",
     at: m.takenAt,
-    day: dayWords(m.takenAt) ?? "Meal",
-    detail: joined([m.mealName ?? (m.mealType === null ? "Meal" : MEAL_TYPES[m.mealType]), m.origin === "photo" ? "Meal scan" : "Logged"]),
+    name: m.mealName ?? (m.mealType === null ? "Meal" : MEAL_TYPES[m.mealType]),
+    facts: joined([dayWords(m.takenAt), m.origin === "photo" ? "Meal scan" : "Logged"]),
     value: `${count(m.totals.kcalPoint)} kcal`,
   };
 }

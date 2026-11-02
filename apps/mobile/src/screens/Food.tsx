@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, Keyboard, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useRoute } from "@react-navigation/native";
 import {
   MEAL_MOST_FOODS,
   foodSearchResponseSchema,
@@ -40,6 +40,7 @@ import { useSession } from "../session/SessionProvider";
 import { useZoneSaved } from "../session/TimeZoneSync";
 import { NOT_KNOWN, count } from "./dashboard/words";
 import { useRead } from "./dashboard/useRead";
+import { MealIdeas } from "./food/MealIdeas";
 import {
   MEAL_PAGE_SIZE,
   MEAL_TYPES,
@@ -209,6 +210,12 @@ export function FoodScreen() {
   const [discarding, setDiscarding] = useState(false);
   const photoKept = kept.sheet !== null && kept.sheet !== undefined;
   const today = sameDay(day, new Date());
+  // More ideas on the Dashboard opens this page's box, so the page goes to today.
+  const asked = useRoute().params;
+  const toToday = typeof asked === "object" && "today" in asked ? asked.today : null;
+  useEffect(() => {
+    if (toToday !== null) setDay(startOfDay(new Date()));
+  }, [toToday]);
 
   // The server's meals, less those removed here, each as the server last answered it where that came
   // after this read began; the ones just sent that this read began before; the ones still waiting on
@@ -308,6 +315,14 @@ export function FoodScreen() {
           }
         />
       </Sheet>
+      {today ? (
+        <MealIdeas
+          onAnswered={() => {
+            targets.again();
+            dailyAgain();
+          }}
+        />
+      ) : null}
       <View style={styles.dayRow}>
         <Pressable
           accessibilityRole="button"

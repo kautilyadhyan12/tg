@@ -22,9 +22,8 @@ import postgres from "postgres";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { seed } from "../src/db/seed.js";
-import { DIET_LABEL_CAUTION, dietAllows, workoutSummarySchema, type Diet, type WorkoutSummary } from "@app/shared";
+import { DIET_LABEL_CAUTION, amountWords, dietAllows, workoutSummarySchema, type Diet, type WorkoutSummary } from "@app/shared";
 import { CURATED_FOODS } from "../src/modules/nutrition/foods.js";
-import { amountWords } from "../src/modules/workouts/summaryContent.js";
 
 const DIET_OF = new Map(CURATED_FOODS.map((f) => [f.canonical, f.diet]));
 

@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import { App } from "../../src/App";
 import { DASHBOARD_READS } from "../../src/screens/Dashboard";
 import { dayWords, weekOf } from "../../src/screens/dashboard/words";
@@ -101,6 +101,7 @@ const trained: Record<string, Route> = {
   "/v1/gamification/me": ok(gamification()),
   "/v1/progress/trend": ok({ points: [{ date: today, kcal: 348, workouts: 2 }], runDays: [], limitedToDays: 90 }),
   "/v1/gamification/challenges": ok(challenges),
+  "/v1/nutrition/suggestions": ok({ status: "needs_plan" }),
   "/v1/workouts": ok(page([workoutRow("1b6f0a3e-2c4d-4e5f-8a9b-0c1d2e3f4a5b", hoursAgo(1))], true)),
   "/v1/geo/runs": ok(list([runRow("5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a", hoursAgo(30), "Evening run")])),
   "/v1/nutrition/meals": ok(list([mealRow("6e5d4c3b-2a1f-4e0d-9c8b-7a6f5e4d3c2b", hoursAgo(3), null)])),
@@ -251,17 +252,20 @@ describe("the Dashboard, with the person's own numbers", () => {
     expect(screen.getAllByText("Coming soon")).toHaveLength(1);
     // Recent Activity: the workout, the meal and the run, newest first, each named by its day.
     expect(screen.getByText("Recent Activity")).toBeTruthy();
-    const details = ["Workout · 42 min · 91 form", "Lunch · Meal scan", "Evening run · 31 min"];
-    for (const detail of details) expect(screen.getByText(detail)).toBeTruthy();
-    const order = screen.queryAllByText(/^(Workout ·|Lunch ·|Evening run ·)/).map((one) => String(one.props.children));
-    expect(order).toEqual(details);
-    expect(screen.getAllByText(dayWords(hoursAgo(1)) ?? "").length).toBeGreaterThanOrEqual(1);
+    const names = ["Workout", "Lunch", "Evening run"];
+    const recentBox = within(screen.getByTestId("recent-activity"));
+    const order = recentBox.queryAllByText(/^(Workout|Lunch|Evening run)$/).map((one) => String(one.props.children));
+    expect(order).toEqual(names);
+    expect(screen.getByText(/· 42 min · 91 form$/)).toBeTruthy();
+    expect(screen.getByText(/· Meal scan$/)).toBeTruthy();
+    expect(screen.getByText(/· 31 min$/)).toBeTruthy();
+    expect(screen.getAllByText(new RegExp(`^${dayWords(hoursAgo(1)) ?? ""}`)).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("348 kcal")).toBeTruthy();
     expect(screen.getByText("540 kcal")).toBeTruthy();
     expect(screen.getByText("5.2 km")).toBeTruthy();
     expect(screen.queryByText(/couldn’t load/)).toBeNull();
-    // Recommended For You comes with its first option, Food (ROADMAP 34d-iii).
-    expect(screen.queryByText("Recommended For You")).toBeNull();
+    // Recommended For You, with its first option, Food (ROADMAP 34d-iii).
+    expect(screen.getByText("Recommended For You")).toBeTruthy();
     // Each read once, as the person signed in, and only these (the Gym tab's places are read at opening too).
     const reads = server.asked.filter((one) => !one.path.startsWith("/v1/auth/") && !one.path.startsWith("/v1/orgs/") && one.path !== "/v1/users/me");
     expect(reads.map((one) => one.path).sort()).toEqual(Object.values(DASHBOARD_READS).map((p) => p.split("?")[0]).sort());

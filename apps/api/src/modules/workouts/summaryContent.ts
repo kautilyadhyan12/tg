@@ -26,28 +26,10 @@
 // (R3.1). The old backend chose server-side too; a client that picked its own
 // meal ideas from a number it computed itself is the class of thing this
 // project keeps deleting.
-import { EXERCISE_CONTENT, type MealSuggestion, type SuggestedFood } from "@app/shared";
+import { EXERCISE_CONTENT, amountWords, type MealSuggestion } from "@app/shared";
 import type { AfterWorkoutIdea, AfterWorkoutWhen } from "../nutrition/suggest.js";
 
 const TIMING: Readonly<Record<AfterWorkoutWhen, string>> = { soon: "Within 30 mins", meal: "Within 2 hours" };
-
-/** A count in halves, as a menu writes it: "½", "1", "1½". */
-function halves(n: number): string {
-  const whole = Math.floor(n + 1e-9);
-  const half = n - whole > 0.25;
-  return whole === 0 ? (half ? "½" : "0") : `${String(whole)}${half ? "½" : ""}`;
-}
-
-/** A food's amount in its own unit: "150 g", "1½ cups", "1 oz", "4 tbsp", "2 slices", "1 banana". */
-export function amountWords(item: Pick<SuggestedFood, "grams" | "servings" | "unit">): string {
-  if (item.unit === "g") return `${String(Math.round(item.grams))} g`;
-  const tbsp = /^(\d+) tbsp$/.exec(item.unit);
-  if (tbsp !== null) return `${halves(item.servings * Number(tbsp[1]))} tbsp`;
-  if (item.unit === "oz") return `${halves(item.servings)} oz`;
-  const many = item.servings > 1;
-  const plural = /(ch|sh|s|x|o)$/.test(item.unit) ? `${item.unit}es` : `${item.unit}s`;
-  return `${halves(item.servings)} ${many ? plural : item.unit}`;
-}
 
 /** The ideas in the card's words: each food with its amount, and when to eat it. */
 export function mealSuggestionsFrom(ideas: readonly AfterWorkoutIdea[]): MealSuggestion[] {
