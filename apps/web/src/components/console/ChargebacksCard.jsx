@@ -5,12 +5,14 @@ import { chargebacksService } from '../../api/chargebacksApi';
 import { orgService, errorText } from '../../api/orgsApi';
 import {
   CHARGEBACKS_INTRO,
+  CHARGEBACKS_LOST_INTRO,
   CHARGEBACKS_RECONNECT,
   CHARGEBACKS_RECONNECT_OTHERS,
   SQUARE_DISPUTES_URL,
   chargebackAmount,
   chargebackOpenWords,
   chargebackRowDetail,
+  chargebackRowLost,
   chargebackWhat,
   chargebackWho,
   chargebacksHeadline,
@@ -93,7 +95,7 @@ export default function ChargebacksCard({ org, orgSlug, privileges, readOnly }) 
   };
 
   const list = state.gymId === gymId ? state.list : null;
-  const headline = list === null ? null : chargebacksHeadline(list.count);
+  const headline = list === null ? null : chargebacksHeadline(list.count, list.lostCount);
   const reconnect = list?.needsReconnect === true;
   if (!may || (headline === null && !reconnect && person === null)) return null;
   const settings = reconnect && list.canReconnect ? placeFor(orgSlug, privileges, 'payments') : null;
@@ -126,7 +128,7 @@ export default function ChargebacksCard({ org, orgSlug, privileges, readOnly }) 
               {headline}
             </p>
             <p className="text-sm m-0 mb-2" style={QUIET}>
-              {CHARGEBACKS_INTRO}
+              {list.lostCount === list.count ? CHARGEBACKS_LOST_INTRO : CHARGEBACKS_INTRO}
             </p>
           </>
         ) : null}
@@ -154,11 +156,13 @@ export default function ChargebacksCard({ org, orgSlug, privileges, readOnly }) 
                   {chargebackRowDetail(row)}
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  <a className={BUTTON} style={MAIN_STYLE} href={SQUARE_DISPUTES_URL} target="_blank" rel="noreferrer">
-                    Respond in Square
-                  </a>
+                  {chargebackRowLost(row) ? null : (
+                    <a className={BUTTON} style={MAIN_STYLE} href={SQUARE_DISPUTES_URL} target="_blank" rel="noreferrer">
+                      Respond in Square
+                    </a>
+                  )}
                   {chargebackOpenWords(row) !== null ? (
-                    <button type="button" className={BUTTON} style={PLAIN_STYLE} onClick={() => open(row)}>
+                    <button type="button" className={BUTTON} style={chargebackRowLost(row) ? MAIN_STYLE : PLAIN_STYLE} onClick={() => open(row)}>
                       {chargebackOpenWords(row)}
                     </button>
                   ) : null}

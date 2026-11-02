@@ -194,7 +194,8 @@ const refundLine = (r, currency) => {
           byWords(r.by),
         ]),
     note: square?.late === true ? CARD_REFUND_LATE_LINE : null,
-    toCard: square !== null,
+    // Square's or the bank's money: never voided here.
+    toCard: square !== null || r.reason === 'chargeback',
     voided: null,
   };
 };
@@ -208,6 +209,9 @@ const refundLines = (p, currency) =>
 
 /** Square has not finished a refund to the card: the bill or fee does not say Refunded until it has. */
 const REFUND_PENDING_TAG = { tag: 'Refund pending', tone: 'soft' };
+/** All of it went back because a chargeback was lost (18d-iv-e-ii-a). */
+const lostInFull = (billOrFee) => billOrFee.state === 'refunded' && billOrFee.payments.some((p) => (p.refunds ?? []).some((r) => r.reason === 'chargeback'));
+const CHARGEBACK_LOST_TAG = { tag: 'Chargeback lost', tone: 'soft' };
 const refundPending = (billOrFee) => billOrFee.payments.some((p) => (p.refunds ?? []).some((r) => r.square?.state === 'pending'));
 
 /** One bill as a box: the days it is for, its amount and tag, its tax, when it is or was
@@ -217,7 +221,7 @@ export function billRow(bill, currency, today) {
   const amount = formatMinor(bill.amountMinor, currency);
   // Some of what was paid has been given back, and not all: still paid, and said so.
   const partRefunded = bill.state === 'paid' && bill.refundedMinor > 0;
-  const state = refundPending(bill) ? REFUND_PENDING_TAG : partRefunded ? { tag: 'Part refunded', tone: 'soft' } : (STATE_TAGS[bill.state] ?? STATE_TAGS.due);
+  const state = refundPending(bill) ? REFUND_PENDING_TAG : lostInFull(bill) ? CHARGEBACK_LOST_TAG : partRefunded ? { tag: 'Part refunded', tone: 'soft' } : (STATE_TAGS[bill.state] ?? STATE_TAGS.due);
   let cancelled = null;
   if (bill.state === 'void') {
     cancelled = bill.cancelled === null ? 'Voided when the membership was cancelled' : voidedLine(bill.cancelled, BILL_CANCEL_REASON_WORDS);
@@ -303,7 +307,7 @@ const keptWords = (fee) => (fee.kept === null || fee.kept === undefined ? '' : `
 export function feeRow(fee, currency, today) {
   // Some of it has been given back, and not all: still paid, and said so, as on a bill.
   const partRefunded = fee.state === 'paid' && (fee.refundedMinor ?? 0) > 0;
-  const state = refundPending(fee) ? REFUND_PENDING_TAG : partRefunded ? { tag: 'Part refunded', tone: 'soft' } : (FEE_TAGS[fee.state] ?? STATE_TAGS.due);
+  const state = refundPending(fee) ? REFUND_PENDING_TAG : lostInFull(fee) ? CHARGEBACK_LOST_TAG : partRefunded ? { tag: 'Part refunded', tone: 'soft' } : (FEE_TAGS[fee.state] ?? STATE_TAGS.due);
   let when = null;
   if (fee.state === 'overdue') when = `Was due ${dayWords(fee.dueOn)}`;
   else if (fee.state === 'due') when = fee.dueOn === today ? 'Due today' : `Due ${dayWords(fee.dueOn)}`;

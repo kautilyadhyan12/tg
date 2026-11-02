@@ -28,6 +28,7 @@ import {
   type MemberRefundMethod,
   type PaymentVoidReason,
   type RefundReason,
+  type RefundReasonKept,
   type RefundVoidReason,
 } from "@app/shared";
 import { dayInTz } from "../../gamification/streak.js";
@@ -519,11 +520,11 @@ export async function writeRefund(
     amountMinor: number;
     currency: string;
     method: MemberRefundMethod;
-    reason: RefundReason;
+    reason: RefundReasonKept;
     today: string;
     actorUserId: string | null;
     now: Date;
-    action: "org.member_refund_noted" | "org.member_refund_sent" | "org.member_refund_in_square";
+    action: "org.member_refund_noted" | "org.member_refund_sent" | "org.member_refund_in_square" | "org.member_refund_chargeback";
     /** The card it went back to, for the gym's record. */
     card: { brand: string; last4: string } | null;
   },
@@ -545,7 +546,7 @@ export async function writeRefund(
   );
   if (refundId === null) throw new Error("a refund was not written under the gym's lock");
   const refunded = r.bill.refundedMinor + r.amountMinor >= r.bill.paidMinor;
-  if (refunded) await setBillStatus(tx, r.gymId, r.bill.id, "refunded", r.now);
+  if (refunded && r.bill.status === "paid") await setBillStatus(tx, r.gymId, r.bill.id, "refunded", r.now);
   // A friend's payment refunded in full no longer stands for a member's Refer a friend gift.
   if (r.standing.refundedMinor + r.amountMinor >= r.standing.amountMinor) {
     await friendPaymentGone(tx, { gymId: r.gymId, by: { paymentId: r.paymentId }, why: "refunded", today: r.today, now: r.now });

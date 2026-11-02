@@ -68,6 +68,14 @@ const membership = (over = {}, billing = {}) => ({
 
 describe('a refund made inside Square (18d-iv-d-i)', () => {
   const refund = (square) => ({ id: 'r1', amountMinor: 2500, method: 'company', refundedOn: '2026-11-01', reason: 'other', by: null, receiptNumber: 9, square });
+  it('a lost chargeback: the bill says so, and its line cannot be voided (18d-iv-e-ii-a)', () => {
+    const lost = { ...refund(null), reason: 'chargeback', by: null };
+    const row = billRow(bill({ state: 'refunded', paidMinor: 4999, refundedMinor: 4999, payments: [payment({ method: 'company', refunds: [lost] })] }), 'GBP', TODAY);
+    expect(row.tag).toBe('Chargeback lost');
+    expect(row.payments[0].refunds[0].toCard).toBe(true);
+    expect(row.payments[0].refunds[0].detail).toContain('Chargeback lost');
+  });
+
   const lineOf = (square) => billRow(bill({ state: 'refunded', paidMinor: 4999, payments: [payment({ method: 'company', refunds: [refund(square)] })] }), 'GBP', TODAY).payments[0].refunds[0];
 
   it('says Square, the card and the day, with no reason and no name it cannot know, and is not voided here', () => {
