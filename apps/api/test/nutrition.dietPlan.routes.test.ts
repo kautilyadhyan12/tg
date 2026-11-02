@@ -137,6 +137,7 @@ d("diet plan routes (real Postgres)", () => {
   const mine = sql`SELECT id FROM users WHERE email LIKE 'dietplan-%@example.com'`;
   const clear = async () => {
     await sql`DELETE FROM diet_plans WHERE user_id IN (${mine})`;
+    await sql`DELETE FROM meal_logs WHERE user_id IN (${mine})`;
     await sql`DELETE FROM users WHERE email LIKE 'dietplan-%@example.com'`;
   };
 
@@ -235,6 +236,31 @@ d("diet plan routes (real Postgres)", () => {
       expect(adultRings?.kcal).toBeLessThan(teenKcal);
       expect(bigKcal).toBeGreaterThan(3200);
       expect(hugeKcal).toBeGreaterThan(4100);
+    });
+  });
+
+  describe("A planned meal logged, as the phone sends it (ROADMAP 34e-ii-a)", () => {
+    it("every meal of a made week saves at the numbers the plan showed, and sent twice is one meal", { timeout: 60_000 }, async () => {
+      const cookies = await eater("logged", "non_vegetarian", 4);
+      const plan = parsed(await make(cookies));
+      const meals = plan.days.flatMap((d) => d.meals);
+      expect(meals.length).toBeGreaterThan(20);
+      for (const meal of meals) {
+        const body = {
+          id: randomUUID(),
+          mealName: meal.items.map((i) => i.name).join(" + ").slice(0, 200),
+          takenAt: new Date().toISOString(),
+          mealType: meal.mealType,
+          items: meal.items.map((i) => ({ canonical: i.canonical, grams: i.gramsPoint })),
+        };
+        const first = await inject({ method: "POST", url: "/v1/nutrition/meals", body, cookies });
+        expect(first.statusCode, first.body).toBe(201);
+        const saved = (JSON.parse(first.body) as { meal: { id: string; mealType: string; totals: typeof meal.totals } }).meal;
+        expect(saved.mealType).toBe(meal.mealType);
+        expect(saved.totals).toEqual(meal.totals);
+        const again = await inject({ method: "POST", url: "/v1/nutrition/meals", body, cookies });
+        expect((JSON.parse(again.body) as { meal: { id: string } }).meal.id).toBe(saved.id);
+      }
     });
   });
 
