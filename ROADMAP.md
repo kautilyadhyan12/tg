@@ -314,7 +314,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
        - 18d-iv-e. **A chargeback**, in two parts since 2026-11-01 (`handoff/2026-11-01-18d-iv-e-i.md` keeps its line as first written):
         - 18d-iv-e-i. [x] **Shown on its payment with Square's own date; automatic charges stop** — merged 2026-11-02 (PR #430).
         - 18d-iv-e-ii. **A lost one**, in two parts since 2026-11-02 (`handoff/2026-11-02-18d-iv-e-ii-a.md` keeps its line as first written):
-         - 18d-iv-e-ii-a. [ ] **On a member's payment or fee**: the money written as gone back, and Start automatic charges again. Web folder 1.
+         - 18d-iv-e-ii-a. [x] **On a member's payment or fee** — merged 2026-11-02 (PR #435).
          - 18d-iv-e-ii-b. [ ] **On a sale**: the money written as gone back on its products. Web folder 1.
        - 18d-iv-f. [ ] **Pause automatic payments** on a member's page, and Resume, keeping their saved card (Kd, 2026-11-02). Web folder 1.
      - 18d-vii. [ ] **Ask members to add their card** (Kd, 2026-10-30, `rulings/2026-10-30-18d-iii-b-iv-f.md`): a button that asks every member with no card on file to add it in the app, as saved cards don't move from a gym's old software. After Stage 5 item 20's saving their card. Web folder 1.
