@@ -257,22 +257,22 @@ d("diet plan routes (real Postgres)", () => {
       const made = parsed(await make(cookies));
       const monday = made.days[0];
       if (monday === undefined) throw new Error("no Monday");
-      const shown = monday.meals.map((m) => m.items.map((i) => i.canonical));
+      const shown = monday.version;
       // The other phone swaps meal 1.
       const other = parsed(await swap(cookies, 1, { changeId: randomUUID(), meal: 1 }));
       // This phone, still showing the old day, swaps meal 1: refused.
-      const stale = await swap(cookies, 1, { changeId: randomUUID(), meal: 1, shown: shown[1] });
+      const stale = await swap(cookies, 1, { changeId: randomUUID(), meal: 1, version: shown });
       expect(stale.statusCode).toBe(409);
       expect(errorOf(stale)).toBe("plan_changed");
       // And Undo of a swap made from the old day: refused, the other phone's change kept.
       const meals = monday.meals.map((m) => ({ mealType: m.mealType, items: m.items.map((i) => ({ canonical: i.canonical, grams: i.gramsPoint })) }));
-      const undo = await putDay(cookies, 1, { changeId: randomUUID(), shown, meals });
+      const undo = await putDay(cookies, 1, { changeId: randomUUID(), version: shown, meals });
       expect(undo.statusCode).toBe(409);
       expect(errorOf(undo)).toBe("plan_changed");
       expect(await read(cookies)).toEqual(other);
       // From the day as it is now, both go through.
-      const now = other.days[0]?.meals.map((m) => m.items.map((i) => i.canonical)) ?? [];
-      expect((await swap(cookies, 1, { changeId: randomUUID(), meal: 1, shown: now[1] })).statusCode).toBe(200);
+      const now = other.days[0]?.version;
+      expect((await swap(cookies, 1, { changeId: randomUUID(), meal: 1, version: now })).statusCode).toBe(200);
     });
 
     it("every meal of a made week saves at the numbers the plan showed, and sent twice is one meal", { timeout: 60_000 }, async () => {
@@ -365,6 +365,85 @@ d("diet plan routes (real Postgres)", () => {
         expect(saved.items.map((i) => [i.kcalPoint, i.proteinG, i.carbsG, i.fatG])).toEqual(meal.items.map((i) => [i.kcalPoint, i.proteinG, i.carbsG, i.fatG]));
         expect(saved.totals).toEqual(meal.totals);
       }
+    });
+
+    it("round one H1: a change made from an older copy of the day is refused when only an amount or an own number changed since", { timeout: 30_000 }, async () => {
+      const cookies = await makeUser("staleamount", null);
+      const first = parsed(await putDay(cookies, 2, {
+        changeId: randomUUID(),
+        meals: [
+          { mealType: "breakfast", items: [{ canonical: "banana", grams: 118 }] },
+          { mealType: "lunch", items: [{ canonical: "rice", grams: 180 }, OWN[0]] },
+        ],
+      }));
+      const old = first.days[1]?.version;
+      // Phone A: more rice. Phone B, still showing 180 g, changes breakfast: refused, A's rice kept.
+      const a = parsed(await putDay(cookies, 2, {
+        changeId: randomUUID(), version: old,
+        meals: [{ mealType: "breakfast", items: [{ canonical: "banana", grams: 118 }] }, { mealType: "lunch", items: [{ canonical: "rice", grams: 300 }, OWN[0]] }],
+      }));
+      const b = await putDay(cookies, 2, {
+        changeId: randomUUID(), version: old,
+        meals: [{ mealType: "breakfast", items: [{ canonical: "banana", grams: 200 }] }, { mealType: "lunch", items: [{ canonical: "rice", grams: 180 }, OWN[0]] }],
+      });
+      expect(b.statusCode).toBe(409);
+      expect(errorOf(b)).toBe("plan_changed");
+      expect((await read(cookies)).days[1]).toEqual(a.days[1]);
+      // Only the own food's protein changed: the day is another day.
+      const fatter = { ...OWN[0], own: { ...OWN[0]?.own, proteinG: 20 } };
+      const c = parsed(await putDay(cookies, 2, { changeId: randomUUID(), version: a.days[1]?.version, meals: [{ mealType: "lunch", items: [{ canonical: "rice", grams: 300 }, fatter] }] }));
+      expect(c.days[1]?.version).not.toBe(a.days[1]?.version);
+      const d = await swap(cookies, 2, { changeId: randomUUID(), meal: 0, version: a.days[1]?.version });
+      expect(d.statusCode).toBe(409);
+      expect(errorOf(d)).toBe("plan_changed");
+      // The version reads the same however often the day is read.
+      expect((await read(cookies)).days[1]?.version).toBe(c.days[1]?.version);
+    });
+
+    it("round one H3: Undo of a swap away from a meal of the person's own foods puts them back at their numbers", { timeout: 30_000 }, async () => {
+      const cookies = await eater("undoown", "non_vegetarian");
+      const before = parsed(await putDay(cookies, 1, { changeId: randomUUID(), meals: [{ mealType: "breakfast", items: [OWN[0], OWN[2]] }] })).days[0];
+      if (before === undefined) throw new Error("no Monday");
+      const swapped = parsed(await swap(cookies, 1, { changeId: randomUUID(), meal: 0, version: before.version }));
+      const meals = before.meals.map((m) => ({ mealType: m.mealType, items: m.items.map(planItemChoice) }));
+      const undone = parsed(await putDay(cookies, 1, { changeId: randomUUID(), version: swapped.days[0]?.version, meals }));
+      expect(undone.days[0]?.meals).toEqual(before.meals);
+    });
+
+    it("round one H4: a planned product whose search is forgotten logs from the plan at the plan's numbers; never another person's plan", { timeout: 30_000 }, async () => {
+      const cookies = await eater("plannedoff", "non_vegetarian");
+      const stranger = await eater("plannedstranger", "non_vegetarian");
+      const made = parsed(await make(cookies));
+      const userId = await idOf("plannedoff");
+      const like = made.days[0]?.meals[0]?.items[0];
+      if (like === undefined) throw new Error("no planned food");
+      // A product of the search, put in the plan more than a day ago, with a measure: its search is gone.
+      const bar = { ...like, name: "Zqxlog bar · Brand", canonical: "off_zqxlog_gone", gramsPoint: 50, gramsRange: [50, 50], nutritionSource: "openfoodfacts", kcalPoint: 200, kcalLow: 200, kcalHigh: 200, measure: { id: "piece", name: "bar", amount: 1 } };
+      const stored = made.days.map((d, at) => d.meals.map((m, j) => ({ mealType: m.mealType, items: at === 0 && j === 0 ? [bar, ...m.items.slice(1)] : m.items })));
+      await sql`UPDATE diet_plans SET days = ${sql.json(stored)} WHERE user_id = ${userId}`;
+      const meal = (await read(cookies)).days[0]?.meals[0];
+      if (meal === undefined) throw new Error("no meal");
+      const body = (planned: unknown) => ({
+        id: randomUUID(), mealName: "Planned", takenAt: new Date().toISOString(), mealType: meal.mealType, items: meal.items.map(planItemChoice),
+        ...(planned === undefined ? {} : { planned }),
+      });
+      // Without saying it is the plan's meal, the product is not found: the hole round one ran.
+      const unsaid = await inject({ method: "POST", url: "/v1/nutrition/meals", body: body(undefined), cookies });
+      expect(unsaid.statusCode).toBe(400);
+      expect(errorOf(unsaid)).toBe("unknown_food");
+      // From the plan: saved at the plan's own numbers, the bar still "1 bar" (round one L1).
+      const res = await inject({ method: "POST", url: "/v1/nutrition/meals", body: body({ day: 1, meal: 0 }), cookies });
+      expect(res.statusCode, res.body).toBe(201);
+      const saved = (JSON.parse(res.body) as { meal: { totals: typeof meal.totals; items: { canonical: string; kcalPoint: number; measure?: unknown }[] } }).meal;
+      expect(saved.totals).toEqual(meal.totals);
+      expect(saved.items[0]).toMatchObject({ canonical: "off_zqxlog_gone", kcalPoint: 200, measure: { id: "piece", name: "bar", amount: 1 } });
+      // Another meal of the plan, or other amounts: priced from the lists, never at the plan's numbers.
+      const elsewhere = await inject({ method: "POST", url: "/v1/nutrition/meals", body: body({ day: 1, meal: 1 }), cookies });
+      expect(elsewhere.statusCode).toBe(400);
+      // A stranger naming the same day and meal reaches only their own plan.
+      const theirs = await inject({ method: "POST", url: "/v1/nutrition/meals", body: body({ day: 1, meal: 0 }), cookies: stranger });
+      expect(theirs.statusCode).toBe(400);
+      expect(errorOf(theirs)).toBe("unknown_food");
     });
 
     it("an own food sent back as the phone sends it is kept at the same numbers when another meal of the day changes", { timeout: 30_000 }, async () => {

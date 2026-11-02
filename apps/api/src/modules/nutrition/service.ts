@@ -59,6 +59,7 @@ import { packagedRowsFor } from "./packagedRepo.js";
 import { usdaWords } from "./usdaWords.js";
 import { isPackagedCanonical, packagedCode, packagedFoodOf, type PackagedFood } from "./packagedRows.js";
 import { itemsVersion, ownPer100g, savedPlaces } from "./mealEdit.js";
+import { getDietPlan as getStoredDietPlan } from "./dietPlanRepo.js";
 import { RECENT_MEALS_READ, recentFoods, type RecentPick } from "./recentFoods.js";
 import * as repo from "./repo.js";
 import { ESTIMATE_CANONICAL_PREFIX, checkedPrice, closeFoodsOf, estimateFood, isPlainMatch, offeredFoodsOf, priceScannedFood, seenNameOf, type ScanLookups, type ScanPrice } from "./scanMatch.js";
@@ -1655,7 +1656,7 @@ export async function resolveChosenItems(
 export async function createManualMeal(deps: NutritionDeps, userId: string, input: ManualMealRequest): Promise<SavedMeal> {
   const kept = await alreadySaved(deps, userId, input.id);
   if (kept !== null) return kept;
-  const items = await withOwnFoods(input.items, (table) => resolveChosenItems(deps, userId, table), (item) => item);
+  const items = (await plannedItems(deps, userId, input)) ?? (await withOwnFoods(input.items, (table) => resolveChosenItems(deps, userId, table), (item) => item));
   return await writeMeal(deps, userId, input.id, {
     takenAt: new Date(input.takenAt),
     mealType: input.mealType ?? null,
@@ -1663,6 +1664,23 @@ export async function createManualMeal(deps: NutritionDeps, userId: string, inpu
     items,
     origin: "manual",
   });
+}
+
+/** A meal logged from the person's own plan (34e-ii-b): the plan's own items, at the numbers it showed,
+ *  while that meal of the plan still holds the foods sent at those amounts. A product whose search is
+ *  forgotten, or whose list has changed since, still logs as the plan showed it. Otherwise none. */
+async function plannedItems(deps: NutritionDeps, userId: string, input: ManualMealRequest): Promise<MealItem[] | null> {
+  if (input.planned === undefined) return null;
+  const plan = await getStoredDietPlan(deps.sql, userId);
+  const items = plan.days[input.planned.day - 1]?.[input.planned.meal]?.items;
+  if (items === undefined || items.length !== input.items.length) return null;
+  const same = input.items.every((choice, at) => {
+    const item = items[at];
+    if (item === undefined) return false;
+    if (isOwnFood(choice)) return item.nutritionSource === "own" && choice.name === item.name.slice(0, 80) && choice.grams === item.gramsPoint;
+    return "grams" in choice && choice.canonical === item.canonical && choice.grams === item.gramsPoint;
+  });
+  return same ? items.map((item) => ({ ...item })) : null;
 }
 
 /** Kd-approved 2026-07-16 (Card-5a smoke): live preview — NOTHING persists,
