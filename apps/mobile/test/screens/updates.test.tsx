@@ -1105,7 +1105,7 @@ describe("posting", () => {
     expect(keys[0]).toBe(keys[1]);
   });
 
-  it("says so when the server kept the post as it first was", async () => {
+  it("the server kept the post as it first was: the changed words stay, under a new key, with the box open", async () => {
     let answer: () => Reply = lost;
     const server = serverOf({ [postsOf(IRON)]: on(IRON), [minePath(IRON)]: () => answer() });
     await openUpdates(server.ask, IRON);
@@ -1115,7 +1115,14 @@ describe("posting", () => {
     await fireEvent.changeText(screen.getByLabelText("Your post"), "Leg day, and more");
     answer = () => ({ status: 201, body: { post: SENT, firstKept: false } });
     await pressPost();
-    expect(await page().findByText("Your post is up. Your latest changes may not be on it.")).toBeTruthy();
+    expect(await screen.findByText("Your first version is up. Press Post to post this one as well, or Discard it.")).toBeTruthy();
+    expect(screen.getByLabelText("Your post").props.value).toBe("Leg day, and more");
+    answer = () => ({ status: 201, body: { post: SENT, firstKept: true } });
+    await pressPost();
+    expect(await page().findByText("Your post is up.")).toBeTruthy();
+    const keys = sendsTo(server, IRON).map((a) => (a.body as { postKey: string }).postKey);
+    expect(keys[0]).toBe(keys[1]);
+    expect(keys[2]).not.toBe(keys[1]);
   });
 
   it("a correction that did go up, the first send never having reached the server, says it is up", async () => {
@@ -1129,7 +1136,6 @@ describe("posting", () => {
     answer = () => ({ status: 201, body: { post: SENT, firstKept: true } });
     await pressPost();
     expect(await page().findByText("Your post is up.")).toBeTruthy();
-    expect(page().queryByText("Your post is up. Your latest changes may not be on it.")).toBeNull();
   });
 
   it("a photo added that did go up says it is up", async () => {
@@ -1501,7 +1507,9 @@ describe("a post removed after a lost reply", () => {
     await screen.findByTestId("draft-photo-1");
     answer = () => ({ status: 201, body: { post: { ...SENT, photos: [{ id: PHOTO, width: 100, height: 100 }] }, firstKept: false } });
     await pressPost();
-    expect(await page().findByText("Your post is up. Your latest changes may not be on it.")).toBeTruthy();
+    // Which photo the server kept cannot be told from its answer, so the one in the box stays.
+    expect(await screen.findByText("Your first version is up. Press Post to post this one as well, or Discard it.")).toBeTruthy();
+    await screen.findByTestId("draft-photo-1");
   });
 });
 

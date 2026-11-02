@@ -1,7 +1,7 @@
 // COMMENTS ON A GYM'S UPDATES, in the database (ROADMAP Stage 5 17e; spec Part 3 §15.2). Every read
 // and write names the gym.
 import type { Sql, TransactionSql } from "postgres";
-import { GYM_POST_COMMENT_REPORTS_TO_HIDE, type GymMemberPosting, type GymPostCommentReportReason, type GymPostReaction } from "@app/shared";
+import { GYM_POST_COMMENT_COUNT_MOST, GYM_POST_COMMENT_REPORTS_TO_HIDE, type GymMemberPosting, type GymPostCommentReportReason, type GymPostReaction } from "@app/shared";
 import { posts, type Reader, type ReactorRow } from "./repo.js";
 
 type SqlOrTx = Sql | TransactionSql;
@@ -120,6 +120,14 @@ export async function commentById(sql: SqlOrTx, gymId: string, commentId: string
   return r === undefined ? null : toComment(r);
 }
 
+/** A member's own comment or reply, as they are sent it whatever has happened to the comment above it: sent again after
+ *  that comment was hidden or its writer blocked, the server holds it and says so. */
+export async function ownComment(sql: SqlOrTx, gymId: string, commentId: string, userId: string): Promise<CommentRow | null> {
+  const rows = await sql<RawComment[]>`${shown(sql)} WHERE c.gym_id = ${gymId} AND c.id = ${commentId} AND ${rowSeen(sql, "c", { member: userId })}`;
+  const r = rows[0];
+  return r === undefined ? null : toComment(r);
+}
+
 /** Those of these comments and replies this reader is sent. */
 export async function commentsByIds(sql: SqlOrTx, gymId: string, ids: readonly string[], reader: Reader): Promise<CommentRow[]> {
   if (ids.length === 0) return [];
@@ -127,13 +135,21 @@ export async function commentsByIds(sql: SqlOrTx, gymId: string, ids: readonly s
   return rows.map(toComment);
 }
 
-/** How many comments and replies this reader is sent, by post. */
+/** How many comments and replies this reader is sent, by post, each counted up to the most a page says: every read of a
+ *  page asks this, and a crowded post must not slow it for the gym. */
 export async function commentCounts(sql: SqlOrTx, gymId: string, postIds: readonly string[], reader: Reader): Promise<Map<string, number>> {
   if (postIds.length === 0) return new Map();
   const rows = await sql<{ post_id: string; n: number }[]>`
-    SELECT c.post_id, count(*)::int AS n FROM gym_post_comments c
-    WHERE c.gym_id = ${gymId} AND c.post_id = ANY (${[...postIds]}::uuid[]) AND ${seenBy(sql, reader)}
-    GROUP BY c.post_id`;
+    SELECT p.post_id, x.n
+    FROM unnest(${[...postIds]}::uuid[]) AS p(post_id)
+    CROSS JOIN LATERAL (
+      SELECT count(*)::int AS n FROM (
+        SELECT 1 FROM gym_post_comments c
+        WHERE c.gym_id = ${gymId} AND c.post_id = p.post_id AND ${seenBy(sql, reader)}
+        LIMIT ${GYM_POST_COMMENT_COUNT_MOST}
+      ) counted
+    ) x
+    WHERE x.n > 0`;
   return new Map(rows.map((r) => [r.post_id, r.n]));
 }
 
@@ -147,14 +163,19 @@ export async function replyCounts(sql: SqlOrTx, gymId: string, parentIds: readon
   return new Map(rows.map((r) => [r.parent_id, r.n]));
 }
 
-/** A reaction counts while its giver is a live app member of the gym who has not blocked the comment's writer. */
+/** A reaction counts while its giver is a live app member of the gym who has not blocked the comment's writer, or the
+ *  writer of the comment it sits under: they can no longer see it to take the reaction off. */
 const countedReaction = (sql: SqlOrTx) => sql`
   JOIN gym_members m ON m.gym_id = r.gym_id AND m.user_id = r.user_id AND m.removed_at IS NULL
   JOIN users u ON u.id = r.user_id AND u.status = 'active'
   JOIN gym_post_comments rc ON rc.gym_id = r.gym_id AND rc.id = r.comment_id
     AND NOT (rc.by_member AND EXISTS (
       SELECT 1 FROM gym_post_blocks rb
-      WHERE rb.gym_id = r.gym_id AND rb.user_id = r.user_id AND rb.blocked_user_id = rc.author_user_id))`;
+      WHERE rb.gym_id = r.gym_id AND rb.user_id = r.user_id AND rb.blocked_user_id = rc.author_user_id))
+    AND NOT EXISTS (
+      SELECT 1 FROM gym_post_comments rp
+      JOIN gym_post_blocks pb ON pb.gym_id = rp.gym_id AND pb.user_id = r.user_id AND pb.blocked_user_id = rp.author_user_id
+      WHERE rp.gym_id = rc.gym_id AND rp.id = rc.parent_id AND rp.by_member)`;
 
 /** The reactions counted for these comments; a member reading is not sent those of anybody they blocked, as on a post. */
 export async function reactionCounts(sql: SqlOrTx, gymId: string, commentIds: readonly string[], viewerId: string | null): Promise<{ commentId: string; reaction: string; count: number }[]> {
@@ -252,9 +273,19 @@ async function clearRemoved(tx: TransactionSql, gymId: string, ids: readonly str
     WHERE gym_id = ${gymId} AND comment_id = ANY (${[...ids]}::uuid[]) AND closed_at IS NULL`;
 }
 
+/** The post a comment is on, held for a removal of the comment. A post's removal takes the post first and then its comments
+ *  in no set order, so this makes both meet on one row instead of waiting on each other for good. */
+async function holdPostOf(tx: TransactionSql, gymId: string, commentId: string): Promise<void> {
+  await tx`
+    SELECT 1 AS ok FROM gym_posts p
+    WHERE p.gym_id = ${gymId} AND p.id = (SELECT c.post_id FROM gym_post_comments c WHERE c.gym_id = ${gymId} AND c.id = ${commentId})
+    FOR SHARE`;
+}
+
 /** A member removes their own comment or reply, and a comment's replies go with it. False when it is
  *  not theirs, or was removed already. */
 export async function removeOwn(tx: TransactionSql, gymId: string, commentId: string, userId: string, at: Date): Promise<boolean> {
+  await holdPostOf(tx, gymId, commentId);
   const rows = await tx<{ id: string }[]>`
     UPDATE gym_post_comments SET removed_at = ${at}, removed_by_user_id = ${userId}
     WHERE gym_id = ${gymId} AND id = ${commentId} AND author_user_id = ${userId} AND by_member AND removed_at IS NULL
@@ -271,6 +302,7 @@ export async function removeOwn(tx: TransactionSql, gymId: string, commentId: st
 /** Staff remove anybody's comment or reply, and a comment's replies go with it. False when it was
  *  removed already. */
 export async function removeByStaff(tx: TransactionSql, gymId: string, commentId: string, staffId: string, at: Date): Promise<boolean> {
+  await holdPostOf(tx, gymId, commentId);
   const rows = await tx<{ id: string }[]>`
     UPDATE gym_post_comments SET removed_at = ${at}, removed_by_user_id = ${staffId}
     WHERE gym_id = ${gymId} AND id = ${commentId} AND removed_at IS NULL

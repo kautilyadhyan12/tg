@@ -13,7 +13,7 @@ import { Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
 import { fitWithin } from "../food/photo";
 import { newRequestKey } from "./classesView";
-import { POST_PHOTO_QUALITIES, draftFileText, hasWork, photoTrouble, postHint, postPhotoToSend, postedWords, readDraftFile, removedAndKept, type DraftPost, type PostPhotoReading } from "./postDraft";
+import { POST_PHOTO_QUALITIES, draftFileText, hasWork, photoTrouble, postHint, postPhotoToSend, differsFromKept, FIRST_POST_UP, POST_MAY_BE_UP, POST_UP, readDraftFile, removedAndKept, type DraftPost, type PostPhotoReading } from "./postDraft";
 import { PhotoPages } from "./PhotoPages";
 import { draftFolder, removeSourcePhoto } from "./postDraftFiles";
 import { PostCamera } from "./PostCamera";
@@ -117,6 +117,7 @@ export function useKeptPost(me: string | null, gymId: string): KeptPost {
   const current = (): DraftPost => now.current ?? { postKey: newRequestKey(), body: "", photos: [] };
   // A change after a send whose answer never came.
   const touched = (draft: DraftPost): DraftPost => (draft.sent === true ? { ...draft, changed: true } : draft);
+  const photosTouched = (draft: DraftPost): DraftPost => (draft.sent === true ? { ...draft, changed: true, photosChanged: true } : draft);
   const withoutSend = (draft: DraftPost): DraftPost => ({ postKey: draft.postKey, body: draft.body, photos: draft.photos });
 
   return {
@@ -138,12 +139,12 @@ export function useKeptPost(me: string | null, gymId: string): KeptPost {
       }
       const had = current();
       if (had.photos.length >= GYM_POST_MAX_PHOTOS) return false;
-      put(touched({ ...had, photos: [...had.photos, name] }));
+      put(photosTouched({ ...had, photos: [...had.photos, name] }));
       return true;
     },
     removePhoto: (name) => {
       const had = current();
-      put(touched({ ...had, photos: had.photos.filter((p) => p !== name) }));
+      put(photosTouched({ ...had, photos: had.photos.filter((p) => p !== name) }));
       const here = folder.current;
       if (here !== null) void inTurn(() => { here.removePhoto(name); }).catch(() => undefined);
     },
@@ -184,7 +185,8 @@ interface PostBoxProps {
   /** The gym lets this member post now; otherwise the post can only be read and thrown away. */
   mayPost: boolean;
   onClose: () => void;
-  onPosted: (post: GymPost, note: string) => void;
+  /** A post is up. With no note, the box stays open: it holds words that are not on that post. */
+  onPosted: (post: GymPost, note: string | null) => void;
   /** The gym or the person's place in it has changed: the page reads again. */
   onRefused: () => void;
 }
@@ -260,6 +262,7 @@ export function PostBox({ open, gymId, gymName, kept, mayPost, onClose, onPosted
     setTrouble(null);
     const sentBody = draft.body;
     const changed = draft.changed === true;
+    const sentBefore = draft.sent === true;
     const pictures = await kept.readPhotos();
     if (pictures === null) {
       pressed.current = false;
@@ -275,8 +278,14 @@ export function PostBox({ open, gymId, gymName, kept, mayPost, onClose, onPosted
     pressed.current = false;
     setSending(false);
     if (answer.kind === "ok") {
+      if (!answer.data.firstKept && changed && differsFromKept({ ...draft, body: sentBody }, answer.data.post)) {
+        kept.newKey();
+        setTrouble(FIRST_POST_UP);
+        onPosted(answer.data.post, null);
+        return;
+      }
       kept.clear();
-      onPosted(answer.data.post, postedWords({ firstKept: answer.data.firstKept, changed }));
+      onPosted(answer.data.post, POST_UP);
       return;
     }
     if (answer.kind === "no_answer") {
@@ -290,8 +299,8 @@ export function PostBox({ open, gymId, gymName, kept, mayPost, onClose, onPosted
       setRefused(removedAndKept(answer.message));
       return;
     }
-    kept.markNotSent();
-    setRefused(missing !== null ? couldNotRead(404, gymName) : pressFailed(answer.message));
+    if (!sentBefore) kept.markNotSent();
+    setRefused(missing !== null ? couldNotRead(404, gymName) : sentBefore && answer.status === 403 ? POST_MAY_BE_UP : pressFailed(answer.message));
     if (missing !== null || answer.status === 403) onRefused();
   };
 
@@ -301,7 +310,7 @@ export function PostBox({ open, gymId, gymName, kept, mayPost, onClose, onPosted
   };
 
   return (
-    <Sheet open={open} title={mayPost ? "Write a post" : "Your unsent post"} onClose={close}>
+    <Sheet open={open} title={mayPost ? "Write a post" : draft?.sent === true ? "Your post" : "Your unsent post"} onClose={close}>
       <ScrollView testID="post-box" style={{ maxHeight: height * ASK_MOST }} contentContainerStyle={styles.box} keyboardShouldPersistTaps="handled">
         <View pointerEvents={sending ? "none" : "auto"} style={styles.box}>
           <Field
@@ -362,6 +371,7 @@ export function PostBox({ open, gymId, gymName, kept, mayPost, onClose, onPosted
           ) : null}
           {trouble === null ? null : <Txt colour="text">{trouble}</Txt>}
           {refused === null ? null : <Txt colour="badText">{refused}</Txt>}
+          {refused === null && !mayPost && draft?.sent === true ? <Txt>{POST_MAY_BE_UP}</Txt> : null}
           {mayPost ? <Txt kind="small">{postHint(gymName)}</Txt> : null}
         </View>
       </ScrollView>

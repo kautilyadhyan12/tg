@@ -15,7 +15,7 @@ import {
 } from "@app/shared";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
-import { orgParamsSchema } from "../schemas.js";
+import { orgParamsSchema, gymInPath } from "../schemas.js";
 import * as service from "./service.js";
 
 const ISSUES_SAID = 10;
@@ -49,6 +49,9 @@ export function registerChallengeRoutes(app: FastifyInstance, deps: service.Chal
       ipMax,
       windowMs: 60 * 60 * 1000,
       identifier: (req) => req.authUser?.id ?? null,
+      // Each gym has its own count at an address: one gym in a building cannot use up another's. The limit is asked after
+      // who is asking, so nobody can charge a gym they are not in.
+      ipScope: gymInPath,
       redis: deps.redis,
     });
   // A whole gym's members share one address on its wi-fi, hence each explicit `ipMax`.

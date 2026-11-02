@@ -39,7 +39,12 @@ import {
   commentReportBox,
   commentReportPath,
   commentRoom,
-  commentedWords,
+  COMMENT_MAY_BE_UP,
+  differsFromKept,
+  dropsAKeptComment,
+  REPLY_UP_ABOVE_GONE,
+  FIRST_COMMENT_UP,
+  KEPT_COMMENTS_FULL,
   commentsPath,
   goneWith,
   hasKeptWords,
@@ -54,54 +59,91 @@ import {
   type KeptComments,
 } from "./commentsView";
 import { draftFolder } from "./postDraftFiles";
-import { Reactions } from "./Reactions";
+import { Reactions, useBusyIds } from "./Reactions";
 import { authorInitials, authorName, authorTag, blockBox, canBlock, couldNotRead, hiddenOwnNote, memberPostAction, postedText, pressFailed, reportNoteLine, withReaction } from "./updatesView";
 
 // Comments and replies on a post (ROADMAP Stage 5 17e; spec Part 3 §15.2): a box from the bottom of Updates. The browser
 // has no such screen, so this is the terminal's design, as Instagram's: the words oldest first and the place to write at
 // the bottom. What a member writes is kept on the phone until the server has it, under one key, and never sent by itself.
 
+/** One person's unsent comments at one place. Every page open on them shares this, so none writes over another's. */
+interface KeptStore {
+  folder: ReturnType<typeof draftFolder>;
+  now: KeptComments;
+  listeners: Set<(drafts: KeptComments) => void>;
+  queue: Promise<unknown>;
+}
+const keptStores = new Map<string, KeptStore>();
+/** The writes still going in for a store whose last page has closed. */
+const lastWrites = new Map<string, Promise<unknown>>();
+
+function openKeptStore(me: string, gymId: string, listener: (drafts: KeptComments) => void): { store: KeptStore; close: () => void } {
+  const key = `${me}:${gymId}`;
+  const open = keptStores.get(key);
+  const store: KeptStore = open ?? { folder: draftFolder(me, gymId, "comment-draft"), now: {}, listeners: new Set(), queue: Promise.resolve() };
+  store.listeners.add(listener);
+  if (open === undefined) {
+    keptStores.set(key, store);
+    // What the last page to close wrote is in the file by the time this is read: draftFolder's writes go in as they are made.
+    store.queue = lastWrites.get(key) ?? Promise.resolve();
+    store.queue = store.queue
+      .then(() => store.folder.read())
+      .then(readCommentDrafts, (): KeptComments => ({}))
+      .then((read) => {
+        store.now = read;
+        for (const tell of store.listeners) tell(store.now);
+      });
+  } else {
+    void store.queue.then(() => {
+      if (store.listeners.has(listener)) listener(store.now);
+    });
+  }
+  return {
+    store,
+    close: () => {
+      store.listeners.delete(listener);
+      if (store.listeners.size === 0) {
+        lastWrites.set(key, store.queue);
+        keptStores.delete(key);
+      }
+    },
+  };
+}
+
 /** One person's unsent comments at one place, one a post. Each change is written in order. */
 export function useKeptComments(me: string | null, gymId: string) {
   const [drafts, setDrafts] = useState<KeptComments | undefined>(undefined);
-  const now = useRef<KeptComments>({});
-  const folder = useRef(me === null ? null : draftFolder(me, gymId, "comment-draft"));
-  const queue = useRef<Promise<unknown>>(Promise.resolve());
+  const store = useRef<KeptStore | null>(null);
 
   useEffect(() => {
-    const here = me === null ? null : draftFolder(me, gymId, "comment-draft");
-    folder.current = here;
-    now.current = {};
     setDrafts(undefined);
-    if (here === null) return undefined;
-    let stale = false;
-    void here.read().then(
-      (text) => {
-        if (stale) return;
-        now.current = readCommentDrafts(text);
-        setDrafts(now.current);
-      },
-      () => {
-        if (!stale) setDrafts({});
-      },
-    );
-    return () => {
-      stale = true;
-    };
+    if (me === null) {
+      store.current = null;
+      return undefined;
+    }
+    const opened = openKeptStore(me, gymId, setDrafts);
+    store.current = opened.store;
+    return opened.close;
   }, [me, gymId]);
 
   const put = useCallback((postId: string, next: KeptComment | null) => {
-    now.current = withKept(now.current, postId, next);
-    setDrafts(now.current);
-    const here = folder.current;
+    const here = store.current;
     if (here === null) return;
-    const text = commentDraftsText(now.current);
-    queue.current = queue.current.then(() => here.write(text)).catch(() => undefined);
+    here.now = withKept(here.now, postId, next);
+    for (const tell of here.listeners) tell(here.now);
+    const text = commentDraftsText(here.now);
+    here.queue = here.queue.then(() => here.folder.write(text)).catch(() => undefined);
   }, []);
 
-  return { drafts, put, of: (postId: string): KeptComment | undefined => now.current[postId] };
+  return { drafts, put, of: (postId: string): KeptComment | undefined => store.current?.now[postId] };
 }
 export type KeptCommentsHook = ReturnType<typeof useKeptComments>;
+
+/** Words on a post that has gone can never be sent: theirs are the first to go when the phone holds too many. */
+function markKeptPostGone(put: KeptCommentsHook["put"], of: KeptCommentsHook["of"], postId: string): void {
+  const draft = of(postId);
+  if (draft !== undefined && draft.postGone !== true) put(postId, { ...draft, postGone: true });
+}
 
 export interface CommentsPlace {
   id: string;
@@ -169,18 +211,28 @@ function Body({
   const [held, setHeld] = useState<Held>({ kind: "loading" });
   const [under, setUnder] = useState<Readonly<Record<string, Under | undefined>>>({});
   const [more, setMore] = useState<{ busy: boolean; failed: boolean }>({ busy: false, failed: false });
-  const [reacting, setReacting] = useState<string | null>(null);
+  const reacting = useBusyIds();
   const [said, setSaid] = useState<{ text: string; bad: boolean } | null>(null);
   const [asking, setAsking] = useState<Asking | null>(null);
   const [typing, setTyping] = useState(false);
   const list = useRef<FlatList<GymPostComment>>(null);
   const live = useRef(true);
   const started = useRef(0);
+  // How many presses have changed what is on the screen: a read begun before one may not hold it.
+  const presses = useRef(0);
+  const pressMoved = () => {
+    started.current += 1;
+    presses.current += 1;
+  };
   const pressed = useRef(false);
   const postId = post.id;
   const gymId = place.id;
   const draft = kept.drafts?.[postId];
   const body = draft?.body ?? "";
+  const putKept = kept.put;
+  const keptNow = useRef(kept.of);
+  keptNow.current = kept.of;
+  const ofKept = useCallback((id: string) => keptNow.current(id), []);
 
   const load = useCallback(
     async (quiet: boolean) => {
@@ -194,6 +246,7 @@ function Body({
         onCommenting(commenting);
       } else if (answer.kind === "refused" && answer.error === "post_not_found") {
         onPostGone(postId);
+        markKeptPostGone(putKept, ofKept, postId);
         setHeld({ kind: "failed", text: answer.message });
       } else if (answer.kind === "refused" && answer.status === 404) {
         setHeld({ kind: "failed", text: couldNotRead(404, gymName) });
@@ -201,7 +254,7 @@ function Body({
         setHeld({ kind: "failed", text: "Couldn't load the comments." });
       }
     },
-    [session, gymId, postId, gymName, onCommenting, onPostGone],
+    [session, gymId, postId, gymName, putKept, ofKept, onCommenting, onPostGone],
   );
 
   useEffect(() => {
@@ -240,8 +293,13 @@ function Body({
 
   const showMore = async (next: string) => {
     setMore({ busy: true, failed: false });
+    const before = presses.current;
     const answer = await session.signedIn({ method: "GET", path: commentsPath(gymId, postId, next) }, gymPostCommentsResponseSchema);
     if (!live.current) return;
+    if (before !== presses.current) {
+      setMore({ busy: false, failed: false });
+      return;
+    }
     if (answer.kind === "ok") {
       setHeld((h) => (h.kind === "ok" ? { ...h, comments: merged(h.comments, answer.data.comments), next: answer.data.next } : h));
       setMore({ busy: false, failed: false });
@@ -250,12 +308,23 @@ function Body({
     }
   };
 
-  const readReplies = async (parentId: string, after: string | null) => {
+  /** `quiet`: a 404 here says nothing, as the person's own reply is up whatever has happened above it. */
+  const readReplies = async (parentId: string, after: string | null, { quiet = false, again = false }: { quiet?: boolean; again?: boolean } = {}) => {
     changeUnder(parentId, (u) => ({ ...u, open: true, busy: true, failed: false }));
+    const before = presses.current;
     const answer = await session.signedIn({ method: "GET", path: repliesPath(gymId, parentId, after) }, gymPostCommentsResponseSchema);
     if (!live.current) return;
-    if (answer.kind === "ok") changeUnder(parentId, (u) => ({ ...u, busy: false, comments: merged(u.comments, answer.data.comments), next: answer.data.next }));
-    else if (answer.kind === "refused" && answer.status === 404) {
+    if (before !== presses.current) {
+      // The button is there to press again; a first page, which it would not read again, is read once more.
+      changeUnder(parentId, (u) => ({ ...u, busy: false, open: u.open && u.comments.length > 0 }));
+      if (after === null && !again) void readReplies(parentId, null, { quiet, again: true });
+      return;
+    }
+    if (answer.kind === "ok") {
+      changeUnder(parentId, (u) => ({ ...u, busy: false, comments: merged(u.comments, answer.data.comments), next: answer.data.next }));
+    } else if (answer.kind === "refused" && answer.status === 404 && quiet) {
+      changeUnder(parentId, (u) => ({ ...u, busy: false }));
+    } else if (answer.kind === "refused" && answer.status === 404) {
       void load(true);
       changeUnder(parentId, (u) => ({ ...u, busy: false, open: false }));
       changeTop((c) => c.filter((x) => x.id !== parentId));
@@ -264,14 +333,18 @@ function Body({
   };
 
   const readRepliesAgain = async (parentId: string) => {
+    const before = presses.current;
     const answer = await session.signedIn({ method: "GET", path: repliesPath(gymId, parentId) }, gymPostCommentsResponseSchema);
     if (!live.current) return;
+    // A press since: what is on the screen holds it, and this read may not.
+    if (before !== presses.current) return;
     if (answer.kind === "ok") changeUnder(parentId, (u) => ({ ...u, comments: answer.data.comments, next: answer.data.next }));
     else if (answer.kind === "refused" && answer.status === 404) changeUnder(parentId, (u) => ({ ...u, comments: [], next: null, open: false }));
   };
 
   /** A press found the comment gone: it leaves the screen, and the page's count is put right by its next read. */
   const foundGone = (comment: GymPostComment) => {
+    pressMoved();
     dropOne(comment);
     onCount(postId, -goneWith(comment));
     setSaid({ text: GYM_POST_COMMENT_WORDS.not_found, bad: false });
@@ -279,12 +352,14 @@ function Body({
 
   const onReact = async (comment: GymPostComment, tapped: GymPostReaction) => {
     const next = withReaction(comment, tapped);
-    setReacting(comment.id);
+    reacting.add(comment.id);
     setSaid(null);
+    pressMoved();
     changeOne(next);
     const answer = await session.signedIn({ method: "PUT", path: commentReactionPath(gymId, comment.id), body: { reaction: next.mine } }, reactToGymPostCommentResponseSchema);
     if (!live.current) return;
-    setReacting(null);
+    reacting.remove(comment.id);
+    pressMoved();
     if (answer.kind === "ok") {
       changeOne({ ...next, reactions: answer.data.reactions, mine: answer.data.mine });
     } else if (answer.kind === "refused" && answer.status === 404) {
@@ -292,14 +367,20 @@ function Body({
     } else {
       changeOne(comment);
       setSaid({ text: answer.kind === "refused" ? answer.message : "Couldn't save your reaction. Please try again.", bad: true });
+      // The press may have reached the server with only its answer lost: the server says what it holds.
+      if (answer.kind === "no_answer") {
+        void load(true);
+        if (comment.parentId !== null) void readRepliesAgain(comment.parentId);
+      }
     }
   };
 
   const setDraft = (next: Partial<KeptComment>) => {
     const had = kept.of(postId);
+    if (had === undefined && dropsAKeptComment(kept.drafts ?? {}, postId)) setSaid({ text: KEPT_COMMENTS_FULL, bad: true });
     const base: KeptComment = had ?? { commentKey: newRequestKey(), body: "", replyTo: null };
     // A change after a send whose answer never came: the server would answer with it as it first was.
-    kept.put(postId, { ...base, ...next, ...(base.sent === true ? { changed: true } : {}) });
+    kept.put(postId, { ...base, ...next, ...(base.sent === true ? { changed: true, ...("replyTo" in next ? { replyMoved: true } : {}) } : {}) });
   };
 
   const commenting = held.kind === "ok" ? held.commenting : null;
@@ -313,6 +394,7 @@ function Body({
     setSending(true);
     setSaid(null);
     const changed = mine.changed === true;
+    const sentBefore = mine.sent === true;
     kept.put(postId, { ...mine, sent: true });
     const answer = await session.signedIn(
       { method: "POST", path: commentsPath(gymId, postId), body: { commentKey: mine.commentKey, body: mine.body.trim(), ...(mine.replyTo === null ? {} : { replyTo: mine.replyTo.id }) } },
@@ -321,11 +403,16 @@ function Body({
     pressed.current = false;
     setSending(false);
     if (answer.kind === "ok") {
-      kept.put(postId, null);
       const { comment, firstKept } = answer.data;
+      pressMoved();
+      if (!firstKept && changed && differsFromKept(mine, comment)) {
+        // An earlier send made it, as it first was. What they have written since is theirs, under a key of its own.
+        kept.put(postId, { commentKey: newRequestKey(), body: mine.body, replyTo: mine.replyTo });
+        setSaid({ text: FIRST_COMMENT_UP, bad: false });
+      } else {
+        kept.put(postId, null);
+      }
       if (firstKept) onCount(postId, 1);
-      const note = commentedWords({ firstKept, changed });
-      if (note !== null) setSaid({ text: note, bad: false });
       if (comment.parentId === null) {
         changeTop((c) => merged(c, [comment]));
         if (live.current) setTimeout(() => list.current?.scrollToEnd({ animated: true }), 0);
@@ -333,7 +420,9 @@ function Body({
         const parentId = comment.parentId;
         if (firstKept) changeTop((c) => c.map((x) => (x.id === parentId ? { ...x, replyCount: x.replyCount + 1 } : x)));
         changeUnder(parentId, (u) => ({ ...u, open: true, comments: merged(u.comments, [comment]) }));
-        if ((under[parentId]?.comments.length ?? 0) === 0) void readReplies(parentId, null);
+        if ((under[parentId]?.comments.length ?? 0) === 0) void readReplies(parentId, null, { quiet: !firstKept });
+        // Sent again, it is answered with the reply though the comment above has gone from this person's screen.
+        if (!firstKept && held.kind === "ok" && !held.comments.some((c) => c.id === parentId)) setSaid({ text: REPLY_UP_ABOVE_GONE, bad: false });
       }
       return;
     }
@@ -350,8 +439,12 @@ function Body({
       void load(true);
       return;
     }
-    if (clean !== null) kept.put(postId, clean);
-    if (answer.error === "post_not_found") onPostGone(postId);
+    // Refused after an earlier send whose answer never came: that send may still have made it.
+    if (clean !== null && !sentBefore) kept.put(postId, clean);
+    if (answer.error === "post_not_found") {
+      onPostGone(postId);
+      markKeptPostGone(putKept, ofKept, postId);
+    }
     setSaid({ text: answer.status === 404 && answer.error !== "post_not_found" ? couldNotRead(404, gymName) : pressFailed(answer.message), bad: true });
     if (answer.status === 403 || answer.status === 404) void load(true);
   };
@@ -367,7 +460,7 @@ function Body({
       comment={comment}
       gymName={gymName}
       posted={postedText(comment.createdAt, new Date(), zone, place.clockFormat)}
-      busy={reacting === comment.id}
+      busy={reacting.has(comment.id)}
       canReply={commenting === "on"}
       onReact={(r) => void onReact(comment, r)}
       onReply={() => {
@@ -457,7 +550,7 @@ function Body({
           </View>
           {!hasKeptWords(draft) ? null : (
             <View style={styles.gap}>
-              <Txt kind="small">Your unsent comment</Txt>
+              <Txt kind="small">{draft?.sent === true ? COMMENT_MAY_BE_UP : "Your unsent comment"}</Txt>
               <ScrollView style={{ maxHeight: height * 0.2 }}>
                 <Txt colour="text">{body}</Txt>
               </ScrollView>
@@ -499,7 +592,7 @@ function Body({
                 bare
                 value={body}
                 onChange={(next) => {
-                  setSaid(null);
+                  setSaid((was) => (was?.text === KEPT_COMMENTS_FULL ? was : null));
                   setDraft({ body: next });
                 }}
                 placeholder={draft?.replyTo == null ? "Write a comment" : `Reply to ${draft.replyTo.name}`}
@@ -523,15 +616,18 @@ function Body({
         gymId={gymId}
         gymName={gymName}
         onRemoved={(comment) => {
+          pressMoved();
           dropOne(comment);
           onCount(postId, -goneWith(comment));
         }}
         onReported={(comment) => {
+          pressMoved();
           changeOne({ ...comment, reported: true });
         }}
         onBlocked={(comment) => {
           const authorId = comment.authorId;
           if (authorId === null) return;
+          pressMoved();
           const keep = (c: GymPostComment) => !(c.fromMember && c.authorId === authorId);
           // A kept reply to that person answers nobody now.
           const answering = kept.of(postId)?.replyTo?.id;

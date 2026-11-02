@@ -8,6 +8,24 @@ import { reactionButtons, reactionSummary, type Reactable } from "./updatesView"
 
 const REACTION_ICONS: Readonly<Record<GymPostReaction, IconName>> = { like: "like", love: "heart", strong: "strong", fire: "flame" };
 
+/** The things whose reaction is on its way, each until its own answer. */
+export function useBusyIds() {
+  const [ids, setIds] = useState<ReadonlySet<string>>(new Set());
+  return {
+    has: (id: string): boolean => ids.has(id),
+    add: (id: string): void => {
+      setIds((was) => new Set(was).add(id));
+    },
+    remove: (id: string): void => {
+      setIds((was) => {
+        const next = new Set(was);
+        next.delete(id);
+        return next;
+      });
+    },
+  };
+}
+
 /** One button until it is tapped; then the four reactions, and picking one closes them (Kd's click-through, 2026-10-30).
  *  `onPicking` says while the four are open, so what sits beside them can make room. */
 export function Reactions({ item, what, busy, onReact, onPicking }: { item: Reactable; what: string; busy: boolean; onReact: (reaction: GymPostReaction) => void; onPicking?: (picking: boolean) => void }) {

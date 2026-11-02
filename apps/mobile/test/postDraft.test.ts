@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { GYM_POST_DRAFT_MOST, GYM_POST_PHONE_PHOTO_MAX_BYTES } from "@app/shared";
 import { fromBase64, toBase64 } from "../src/screens/food/photo";
 import { clampScale, clampShift } from "../src/screens/gym/zoom";
-import { draftFileText, hasWork, photoTrouble, postPhotoToSend, postedWords, readDraftFile } from "../src/screens/gym/postDraft";
+import { draftFileText, hasWork, photoTrouble, postPhotoToSend, readDraftFile } from "../src/screens/gym/postDraft";
 
 // A member's post on the phone (ROADMAP Stage 5 17b).
 
@@ -132,17 +132,5 @@ describe("what the member reads", () => {
     [{ unreadable: 0, tooBig: 0, left: 3 }, "A post holds up to 4 photos, so 3 photos were not added."],
   ])("%j", (counts, words) => {
     expect(photoTrouble(counts)).toBe(words);
-  });
-
-  it("says when the server kept the post as it first was", () => {
-    const up = "Your post is up.";
-    const first = "Your post is up. Your latest changes may not be on it.";
-    // This send made the post: whatever was changed went.
-    expect(postedWords({ firstKept: true, changed: false })).toBe(up);
-    expect(postedWords({ firstKept: true, changed: true })).toBe(up);
-    // An earlier send made it: nothing was changed, so it is what they meant.
-    expect(postedWords({ firstKept: false, changed: false })).toBe(up);
-    // An earlier send made it, and they changed it since.
-    expect(postedWords({ firstKept: false, changed: true })).toBe(first);
   });
 });

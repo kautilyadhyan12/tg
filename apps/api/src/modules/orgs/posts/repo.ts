@@ -242,13 +242,13 @@ export async function reactorsOf(sql: SqlOrTx, gymId: string, postId: string, re
 export async function insertPost(
   tx: TransactionSql,
   gymId: string,
-  post: { id: string; postKey: string; body: string; byMember: boolean },
+  post: { id: string; postKey: string; body: string; byMember: boolean; photoCount: number },
   authorId: string,
   at: Date,
 ): Promise<boolean> {
   const rows = await tx<{ id: string }[]>`
-    INSERT INTO gym_posts (id, gym_id, author_user_id, post_key, body, by_member, created_at)
-    VALUES (${post.id}, ${gymId}, ${authorId}, ${post.postKey}, ${post.body}, ${post.byMember}, ${at})
+    INSERT INTO gym_posts (id, gym_id, author_user_id, post_key, body, by_member, photo_count, created_at)
+    VALUES (${post.id}, ${gymId}, ${authorId}, ${post.postKey}, ${post.body}, ${post.byMember}, ${post.photoCount}, ${at})
     ON CONFLICT (gym_id, post_key) DO NOTHING
     RETURNING id`;
   return rows.length === 1;
@@ -405,16 +405,14 @@ export async function countMemberPostsSince(sql: SqlOrTx, gymId: string, userId:
   return rows[0] ?? { n: 0, oldest: null };
 }
 
-/** When each of a member's photos still here was posted, oldest first. A removed post's photos are
- *  deleted with it, whoever removed it, so they are not counted: the day's posts above are what stop
- *  post-and-remove, and staff stop a person whose photos they keep taking down. */
+/** When each photo this member has posted was posted, oldest first, those on removed posts too:
+ *  removing a post gives no photo back, as it gives no post back. */
 export async function memberPhotoTimesSince(sql: SqlOrTx, gymId: string, userId: string, since: Date): Promise<Date[]> {
-  const rows = await sql<{ createdAt: Date }[]>`
-    SELECT p.created_at AS "createdAt" FROM gym_posts p
-    JOIN gym_post_photos ph ON ph.gym_id = p.gym_id AND ph.post_id = p.id
-    WHERE p.author_user_id = ${userId} AND p.gym_id = ${gymId} AND p.by_member AND p.created_at > ${since}
-    ORDER BY p.created_at`;
-  return rows.map((r) => r.createdAt);
+  const rows = await sql<{ createdAt: Date; photos: number }[]>`
+    SELECT created_at AS "createdAt", photo_count AS photos FROM gym_posts
+    WHERE author_user_id = ${userId} AND gym_id = ${gymId} AND by_member AND created_at > ${since} AND photo_count > 0
+    ORDER BY created_at`;
+  return rows.flatMap((r) => Array.from({ length: r.photos }, () => r.createdAt));
 }
 
 /** The same for the photos a gym's staff have posted, all of them together. */

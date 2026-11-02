@@ -11,6 +11,7 @@ import {
   type GymPostReaction,
   type GymPostReportReason,
   type GymPostsResponse,
+  hasCommentWords,
 } from "@app/shared";
 import type { ClockFormat } from "./visitsView";
 
@@ -196,7 +197,7 @@ export function charsLine(body: string): { over: boolean; text: string } {
 
 /** Whether Post can be pressed: something to post, and not too long. */
 export function canPost(body: string, photos: readonly unknown[]): boolean {
-  return (body.trim() !== "" || photos.length > 0) && !charsLine(body).over;
+  return (hasCommentWords(body) || photos.length > 0) && !charsLine(body).over;
 }
 
 /** The list with the member's new post at the top of the unpinned ones; never twice. */
