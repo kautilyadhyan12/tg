@@ -756,3 +756,26 @@ export const gymCardExpiryNotices = pgTable(
     index("gym_card_expiry_notices_entry_idx").on(t.gymId, t.entryId),
   ],
 );
+
+/** Pause automatic payments (0191; ROADMAP 18d-iv-f): staff paused the app charging this record's saved card by itself, for every
+ *  membership it pays for. One open pause a record at most; Resume closes it, and the row stays to say when it stood. */
+export const gymAutopayPauses = pgTable(
+  "gym_autopay_pauses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    entryId: uuid("entry_id").notNull(),
+    pausedAt: timestamp("paused_at", { withTimezone: true }).notNull(),
+    pausedBy: uuid("paused_by").references(() => users.id, { onDelete: "set null" }),
+    resumedAt: timestamp("resumed_at", { withTimezone: true }),
+    resumedBy: uuid("resumed_by").references(() => users.id, { onDelete: "set null" }),
+  },
+  (t) => [
+    uniqueIndex("gym_autopay_pauses_open_idx").on(t.gymId, t.entryId).where(sql`${t.resumedAt} IS NULL`),
+    index("gym_autopay_pauses_entry_idx").on(t.gymId, t.entryId),
+    check("gym_autopay_pauses_order_check", sql`${t.resumedAt} IS NULL OR ${t.resumedAt} >= ${t.pausedAt}`),
+    foreignKey({ name: "gym_autopay_pauses_entry_fk", columns: [t.gymId, t.entryId], foreignColumns: [gymMemberListEntries.gymId, gymMemberListEntries.id] }).onDelete("cascade"),
+  ],
+);

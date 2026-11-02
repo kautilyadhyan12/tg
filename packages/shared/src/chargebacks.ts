@@ -31,14 +31,17 @@ export const chargebackSeenSchema = z
     chargesStartedOn: daySchema.nullable().default(null),
     /** Started again, and another chargeback of whoever pays still stops them. */
     stillPaused: z.boolean().default(false),
+    /** Staff paused automatic payments of whoever pays, under Card on file (18d-iv-f). */
+    staffPaused: z.boolean().default(false),
   })
   .strict();
 export type ChargebackSeen = z.infer<typeof chargebackSeenSchema>;
 
 /** Why the app has not charged an owed bill by itself, on a bill it otherwise would. `stopped`: a chargeback stands, on the payment of
  *  `heldBy` where that is somebody else this person's payer pays for. `missed`: one stood through the days the app could have charged it. `behind`: one has ended, and the bill's own days passed
- *  while the bill before it was unpaid, as the app charges in order. */
-export const chargeStopSchema = z.object({ kind: z.enum(["stopped", "missed", "behind"]), heldBy: z.object({ entryId: z.string().uuid(), name: z.string() }).strict().nullable() }).strict();
+ *  while the bill before it was unpaid, as the app charges in order. `paused`: staff paused automatic payments of whoever pays, `heldBy`
+ *  where that is somebody else (18d-iv-f). `paused_missed`: a pause stood through the days the app could have charged it. */
+export const chargeStopSchema = z.object({ kind: z.enum(["stopped", "missed", "behind", "paused", "paused_missed"]), heldBy: z.object({ entryId: z.string().uuid(), name: z.string() }).strict().nullable() }).strict();
 export type ChargeStop = z.infer<typeof chargeStopSchema>;
 
 /** Rows a page on Overview, the soonest date first. */
@@ -76,6 +79,8 @@ export const chargebackStartPreviewSchema = z
     people: z.array(z.object({ name: z.string(), what: z.string() }).strict()),
     card: cardSeenSchema.nullable(),
     otherStops: z.boolean(),
+    /** Staff also paused automatic payments of whoever pays (18d-iv-f): nothing is charged until they are resumed under Card on file. */
+    staffPaused: z.boolean().default(false),
   })
   .strict();
 export type ChargebackStartPreview = z.infer<typeof chargebackStartPreviewSchema>;

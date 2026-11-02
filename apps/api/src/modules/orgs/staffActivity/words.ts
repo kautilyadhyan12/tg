@@ -356,6 +356,8 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
     return `${amount ?? "A payment"} went back to ${cardOf(s, "brand", "last4") ?? "the card"} for ${person(s)} because a chargeback was lost`;
   },
   "org.chargeback_charges_started": (s) => `Automatic payments were resumed for ${person(s)} after a lost chargeback`,
+  "org.autopay_paused": (s) => `Automatic payments were paused for ${person(s)}. Their card stays saved`,
+  "org.autopay_resumed": (s) => `Automatic payments were resumed for ${person(s)}`,
   "org.member_refund_replaced": (s) => {
     const amount = money(s, "amountMinor");
     return `A noted refund${amount === null ? "" : ` of ${amount}`} for ${person(s)} was replaced by Square's own record`;

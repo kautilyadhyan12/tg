@@ -103,5 +103,6 @@ export * from "./cardRetries.js";
 export * from "./failedPayments.js";
 export * from "./refundsToReview.js";
 export * from "./chargebacks.js";
+export * from "./autopay.js";
 export * from "./liveUpdates.js";
 export * from "./setupScreens.js";

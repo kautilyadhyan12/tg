@@ -946,7 +946,16 @@ d("A chargeback (real Postgres)", { timeout: T }, () => {
       const id = await chargebackIdOf(kay.squarePaymentId);
       const box = await send("GET", startUrl(gym, id), gym.owner.cookies);
       expect(box.statusCode, box.body).toBe(200);
-      expect(JSON.parse(box.body)).toEqual({ people: [{ name: "Lost Kay", what: "Gold Weekly" }, { name: "Lost Kid", what: "Gold Weekly" }], card: { brand: "VISA", last4: "1111" }, otherStops: false });
+      expect(JSON.parse(box.body)).toEqual({ people: [{ name: "Lost Kay", what: "Gold Weekly" }, { name: "Lost Kid", what: "Gold Weekly" }], card: { brand: "VISA", last4: "1111" }, otherStops: false, staffPaused: false });
+
+      // Staff also paused Kay's automatic payments (18d-iv-f): the box must not say the card will be charged.
+      const paused = await send("POST", `${entryUrl(gym, kay.entryId)}/card/autopay/pause`, gym.owner.cookies);
+      expect(paused.statusCode, paused.body).toBe(200);
+      expect((JSON.parse((await send("GET", startUrl(gym, id), gym.owner.cookies)).body) as { staffPaused: boolean }).staffPaused).toBe(true);
+      const kayPayment = (await paymentOnPage(kay)).chargebacks ?? [];
+      expect(kayPayment[0]?.staffPaused).toBe(true);
+      const resumed = await send("POST", `${entryUrl(gym, kay.entryId)}/card/autopay/resume`, gym.owner.cookies);
+      expect(resumed.statusCode, resumed.body).toBe(200);
 
       const second = await paidByCard(gym, "Lost Second");
       const open = square.disputeInSquare(second.squarePaymentId);
