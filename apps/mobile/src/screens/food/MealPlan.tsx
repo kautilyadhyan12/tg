@@ -257,7 +257,7 @@ export function MealPlan({ foodsToday, fresh, onAnswered }: MealPlanProps) {
                 ) : (
                   <View style={styles.actions}>
                     {shownDay === today ? (
-                      <Button label="Log meal" compact disabled={held || foodsToday === null} say={`Log ${ideaName(meal)}`} onPress={() => { void log(meal); }} />
+                      <Button label="Log meal" kind="soft" compact disabled={held || foodsToday === null} say={`Log ${ideaName(meal)}`} onPress={() => { void log(meal); }} />
                     ) : null}
                     <Button label="Swap" kind="link" compact disabled={held} say={`Swap ${ideaName(meal)}`} onPress={() => { void swap(shownDay, at); }} />
                   </View>
