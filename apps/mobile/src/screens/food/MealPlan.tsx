@@ -1,7 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { useIsFocused } from "@react-navigation/native";
-import { dietPlanResponseSchema, type DietPlanDayReply, type DietPlanMeal, type DietPlanResponse } from "@app/shared";
+import {
+  MOST_PLAN_MEALS, dietPlanResponseSchema, mealMeasuresResponseSchema, mealTypeSchema,
+  type DietPlanDayReply, type DietPlanMeal, type DietPlanResponse, type MealType,
+} from "@app/shared";
 import { Button } from "../../look/Button";
 import { Card } from "../../look/Card";
 import { colours } from "../../look/colours";
@@ -18,8 +21,9 @@ import { ideaName } from "./ideaRules";
 import { MealIdeas, type PlannedNow } from "./MealIdeas";
 import { useMealOutbox } from "./MealOutbox";
 import { loggedAmount } from "./measures";
-import { foodsOfRow, hasMeals, loggedOfDay, planDayName, planDayOf, planMealAsMeal, stepDay } from "./planRules";
-import { foodTitle } from "./rows";
+import type { BasketFood, PlanMealTarget } from "./basket";
+import { dayWithMeal, foodsOfRow, hasMeals, loggedOfDay, planBasketFood, planDayName, planDayOf, planMealAsMeal, stepDay } from "./planRules";
+import { foodTitle, measuresWithoutServer } from "./rows";
 
 export const PLAN_READ = "/v1/nutrition/diet-plan";
 const NO_CONNECTION = "No connection. Try again.";
@@ -27,6 +31,9 @@ const NO_SETTLE = () => undefined;
 
 /** What Undo puts back: the day as it stood before the last swap. */
 interface Undo { id: string; day: number; meals: DietPlanMeal[] }
+
+/** A meal of the plan open in the food box: one of a day's (`at`), or a new one (`at` null). */
+interface Editing { id: string; day: number; at: number | null; mealType: MealType; start: BasketFood[] }
 
 interface WhatToEatNextProps {
   /** The foods of each meal on today's list; null until the list is read, and nothing is logged till then. */
@@ -40,11 +47,13 @@ interface WhatToEatNextProps {
   /** Moves when another page asks for the week to open (the Dashboard's See meal plan). */
   openWeekAt: number | null;
   onWeekOpened: () => void;
+  /** The Food page's own food box, to change a meal of the plan or put a new one in (34e-ii-b). */
+  pickFoods: (plan: PlanMealTarget, onClose: () => void) => ReactNode;
 }
 
 /** The Food page's one answer to "what do I eat now?": the plan's next meal for somebody with a plan,
  *  the meal ideas for somebody without. Every number and every refusal is the server's. */
-export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retryToday, openWeekAt, onWeekOpened }: WhatToEatNextProps) {
+export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retryToday, openWeekAt, onWeekOpened, pickFoods }: WhatToEatNextProps) {
   const { session } = useSession();
   const { height } = useWindowDimensions();
   const { read, again, begun, shownFrom } = useRead(PLAN_READ, dietPlanResponseSchema, fresh);
@@ -63,6 +72,11 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
   const [trouble, setTrouble] = useState<string | null>(null);
   const [said, setSaid] = useState<string | null>(null);
   const [undo, setUndo] = useState<Undo | null>(null);
+  const [editing, setEditing] = useState<Editing | null>(null);
+  // The week's two questions: which meal to add to the day shown, and whether to remove one of its meals.
+  const [choosing, setChoosing] = useState(false);
+  const [removing, setRemoving] = useState<number | null>(null);
+  const [opening, setOpening] = useState(false);
   const loggingNow = useRef(false);
   const sendingNow = useRef(false);
   const [logging, setLogging] = useState(false);
@@ -87,6 +101,8 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
     if (openWeekAt === null) return;
     setShownDay(planDayOf(new Date()));
     setAsking(false);
+    setChoosing(false);
+    setRemoving(null);
     setWeek(true);
     onWeekOpened();
   }, [openWeekAt, onWeekOpened]);
@@ -160,6 +176,53 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
     }
   };
 
+  /** A meal of the plan opened in the food box, each food with its own measures where the server gives them. */
+  const openMeal = async (day: number, at: number, meal: DietPlanMeal) => {
+    if (opening) return;
+    quiet();
+    setOpening(true);
+    const answer = await session.signedIn({ method: "GET", path: `${PLAN_READ}/days/${String(day)}/meals/${String(at)}/measures` }, mealMeasuresResponseSchema);
+    setOpening(false);
+    const measures = answer.kind === "ok" && answer.data.measures.length === meal.items.length ? answer.data.measures : null;
+    const start = meal.items.map((item, i) => planBasketFood(item, measures?.[i] ?? measuresWithoutServer(item), newGoalId()));
+    setEditing({ id: newGoalId(), day, at, mealType: meal.mealType, start });
+  };
+  const newMeal = (mealType: MealType) => {
+    quiet();
+    setChoosing(false);
+    setEditing({ id: newGoalId(), day: shownDay, at: null, mealType, start: [] });
+  };
+  /** The day sent whole with the meal's foods, from the day as the phone shows it. */
+  const saveMeal = async (e: Editing, foods: readonly BasketFood[]) => {
+    const before = plan?.days[e.day - 1]?.meals ?? [];
+    const shown = before.map((m) => m.items.map((i) => i.canonical));
+    const meals = dayWithMeal(before, { at: e.at, mealType: e.mealType, items: foods.map((f) => f.chosen) });
+    if (await send(`edit|${e.id}`, "PUT", `${PLAN_READ}/days/${String(e.day)}`, { meals, shown })) {
+      setEditing(null);
+      setUndo(null);
+      setSaid(e.at === null ? `${mealTypeName(e.mealType)} added to ${planDayName(e.day)}.` : `${mealTypeName(e.mealType)} saved.`);
+    }
+  };
+  const removeMeal = async (day: number, at: number) => {
+    const before = plan?.days[day - 1]?.meals ?? [];
+    const meal = before[at];
+    if (meal === undefined) return;
+    const shown = before.map((m) => m.items.map((i) => i.canonical));
+    const meals = dayWithMeal(before, { at, mealType: meal.mealType, items: null });
+    if (await send(`remove|${String(day)}|${String(at)}|${shown.join("/")}`, "PUT", `${PLAN_READ}/days/${String(day)}`, { meals, shown })) {
+      setRemoving(null);
+      setUndo(null);
+      setSaid(`${mealTypeName(meal.mealType)} removed from ${planDayName(day)}.`);
+    }
+  };
+  const openWeek = () => {
+    quiet();
+    setShownDay(today);
+    setChoosing(false);
+    setRemoving(null);
+    setWeek(true);
+  };
+
   // Until today's meals are read, which planned meal is next isn't known.
   const held = busy || logging || outbox === null || foodsToday === null;
   // Undo stays offered until it is done or something else happens, even after a try that got no answer.
@@ -174,54 +237,198 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
     );
   const troubleLine = trouble === null ? null : <Txt kind="small" colour="badText">{trouble}</Txt>;
 
-  if (plan === null && read.kind !== "failed") {
-    return (
+  if (plan === null) {
+    return read.kind === "failed" ? (
+      <MealIdeas
+        fresh={fresh}
+        onAnswered={onAnswered}
+        below={
+          <View style={styles.row}>
+            <Txt kind="small" style={styles.grow}>
+              Your meal plan couldn’t load.
+            </Txt>
+            <Button label="Try again" kind="link" say="Try your meal plan again" onPress={again} />
+          </View>
+        }
+      />
+    ) : (
       <Card style={styles.card}>
         <Title />
         <Txt kind="small">{NOT_KNOWN}</Txt>
       </Card>
     );
   }
-  if (plan === null || !hasMeals(plan)) {
-    // No plan: the meal ideas, which also ask for any answer still missing.
-    return (
-      <MealIdeas
-        fresh={fresh}
-        onAnswered={onAnswered}
-        below={
-          plan === null ? (
-            <View style={styles.row}>
-              <Txt kind="small" style={styles.grow}>
-                Your meal plan couldn’t load.
+
+  const shown = plan.days[shownDay - 1];
+  const shownLogged = shown === undefined || shownDay !== today ? [] : loggedOfDay(shown.meals, foodsToday ?? []);
+  const toDay = (by: 1 | -1) => {
+    quiet();
+    setShownDay(stepDay(shownDay, by));
+  };
+  const removingMeal = removing === null ? undefined : shown?.meals[removing];
+  const backStep = (): boolean => {
+    if (!asking && !choosing && removing === null) return false;
+    setTrouble(null);
+    setAsking(false);
+    setChoosing(false);
+    setRemoving(null);
+    return true;
+  };
+  const planned = hasMeals(plan);
+  const sheets = (
+    <>
+      <Sheet
+        open={ideasOpen}
+        title="Other ideas"
+        onClose={() => {
+          setIdeasOpen(false);
+        }}
+      >
+        <ScrollView style={{ maxHeight: height * 0.72 }} contentContainerStyle={styles.list}>
+          {ideasOpen ? <MealIdeas bare fresh={fresh} onAnswered={onAnswered} /> : null}
+        </ScrollView>
+      </Sheet>
+      <Sheet
+        open={week && editing === null}
+        title={asking ? "Make a new plan?" : choosing ? "Add a meal" : removingMeal !== undefined ? "Remove this meal?" : "Your meal plan"}
+        onClose={() => {
+          quiet();
+          setWeek(false);
+          setAsking(false);
+          setChoosing(false);
+          setRemoving(null);
+        }}
+        onBack={backStep}
+      >
+        {shown === undefined ? null : asking ? (
+          <>
+            <Txt kind="small">This replaces your whole week, and any changes you made to it.</Txt>
+            {troubleLine}
+            <Button label="Make new plan" wide disabled={busy} onPress={() => { void make(); }} />
+            <Button label="Keep my plan" kind="quiet" wide onPress={() => { setTrouble(null); setAsking(false); }} />
+          </>
+        ) : choosing ? (
+          <>
+            <Txt kind="small">Which meal on {planDayName(shownDay)}?</Txt>
+            {mealTypeSchema.options.map((type) => (
+              <Button key={type} label={mealTypeName(type)} kind="soft" wide onPress={() => { newMeal(type); }} />
+            ))}
+          </>
+        ) : removingMeal !== undefined && removing !== null ? (
+          <>
+            <Txt kind="small">
+              {mealTypeName(removingMeal.mealType)} · {ideaName(removingMeal)} comes off {planDayName(shownDay)} in your plan.
+            </Txt>
+            {troubleLine}
+            <Button label="Remove meal" kind="danger" wide disabled={busy} onPress={() => { void removeMeal(shownDay, removing); }} />
+            <Button label="Keep it" kind="quiet" wide onPress={() => { setTrouble(null); setRemoving(null); }} />
+          </>
+        ) : (
+          <ScrollView style={{ maxHeight: height * 0.72 }} contentContainerStyle={styles.list}>
+            {plan.make.status !== "ok" ? null : planned ? (
+              <Button label="Make a new plan" kind="link" compact style={styles.start} onPress={() => { quiet(); setAsking(true); }} />
+            ) : (
+              <Button label="Make my plan" kind="link" compact disabled={busy} style={styles.start} onPress={() => { void make(); }} />
+            )}
+            <View style={styles.dayRow}>
+              <DayArrow name="back" say="Previous day" onPress={() => { toDay(-1); }} />
+              <Txt kind="h3" style={styles.dayName}>
+                {shownDay === today ? `Today · ${planDayName(shownDay)}` : planDayName(shownDay)}
               </Txt>
-              <Button label="Try again" kind="link" say="Try your meal plan again" onPress={again} />
+              <DayArrow name="go" say="Next day" onPress={() => { toDay(1); }} />
             </View>
-          ) : plan.make.status === "ok" ? (
+            <DayNumbers day={shown} />
+            {saidLine}
+            {troubleLine}
+            {shown.meals.length === 0 ? <Txt kind="small">Nothing planned for this day.</Txt> : null}
+            {shown.meals.map((meal, at) => {
+              const change = (
+                <>
+                  <Button label="Change" kind="link" compact disabled={busy || opening} say={`Change ${ideaName(meal)}`} onPress={() => { void openMeal(shownDay, at, meal); }} />
+                  <Button label="Remove" kind="link" compact disabled={busy} say={`Remove ${ideaName(meal)}`} onPress={() => { quiet(); setRemoving(at); }} />
+                </>
+              );
+              return (
+                <View key={String(at)} style={styles.meal}>
+                  <MealWords meal={meal} />
+                  <OutsideDiet meal={meal} />
+                  {shownLogged[at] === true ? (
+                    <View style={styles.actions}>
+                      <Icon name="check" size={14} colour="goodText" />
+                      <Txt kind="small" colour="goodText" style={styles.logged}>
+                        Logged
+                      </Txt>
+                      {change}
+                    </View>
+                  ) : (
+                    <View style={styles.actions}>
+                      {shownDay === today ? (
+                        <Button label="Log meal" kind="soft" compact disabled={held} say={`Log ${ideaName(meal)}`} onPress={() => { void log(meal); }} />
+                      ) : null}
+                      <Button label="Swap" kind="link" compact disabled={held} say={`Swap ${ideaName(meal)}`} onPress={() => { void swap(shownDay, at); }} />
+                      {change}
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+            {shown.meals.length >= MOST_PLAN_MEALS ? (
+              <Txt kind="small">A day holds up to {String(MOST_PLAN_MEALS)} meals.</Txt>
+            ) : (
+              <Button label="Add a meal" icon="plus" kind="soft" wide disabled={busy} onPress={() => { quiet(); setChoosing(true); }} />
+            )}
+            <Txt kind="tiny">{plan.caution}</Txt>
+            {plan.labelCaution === null ? null : <Txt kind="tiny">{plan.labelCaution}</Txt>}
+          </ScrollView>
+        )}
+      </Sheet>
+      {editing === null ? null : (
+        <Fragment key={editing.id}>
+          {pickFoods(
+            {
+              mealType: editing.mealType,
+              title: `${mealTypeName(editing.mealType)} · ${planDayName(editing.day)}`,
+              start: editing.start,
+              save: (foods) => saveMeal(editing, foods),
+              busy,
+              trouble,
+            },
+            () => {
+              setTrouble(null);
+              setEditing(null);
+            },
+          )}
+        </Fragment>
+      )}
+    </>
+  );
+
+  if (!planned) {
+    // No plan: the meal ideas, which also ask for any answer still missing; the app's plan, or one's own.
+    return (
+      <>
+        <MealIdeas
+          fresh={fresh}
+          onAnswered={onAnswered}
+          below={
             <>
-              {troubleLine}
-              <Button label="Make my plan" compact disabled={busy} style={styles.start} onPress={() => { void make(); }} />
+              {week ? null : troubleLine}
+              <View style={styles.actions}>
+                {plan.make.status === "ok" ? <Button label="Make my plan" compact disabled={busy} onPress={() => { void make(); }} /> : null}
+                <Button label="Build my own" kind="link" compact onPress={openWeek} />
+              </View>
             </>
-          ) : null
-        }
-      />
+          }
+        />
+        {sheets}
+      </>
     );
   }
 
   const meals = plan.days[today - 1]?.meals ?? [];
   const nextAt = loggedOfDay(meals, foodsToday ?? []).indexOf(false);
   const next = meals[nextAt];
-  const seeWeek = (
-    <Button
-      label="See the week"
-      kind="link"
-      compact
-      onPress={() => {
-        quiet();
-        setShownDay(today);
-        setWeek(true);
-      }}
-    />
-  );
+  const seeWeek = <Button label="See the week" kind="link" compact onPress={openWeek} />;
   const otherIdeas = (
     <Button
       label="Other ideas"
@@ -233,12 +440,6 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
       }}
     />
   );
-  const shown = plan.days[shownDay - 1];
-  const shownLogged = shown === undefined || shownDay !== today ? [] : loggedOfDay(shown.meals, foodsToday ?? []);
-  const toDay = (by: 1 | -1) => {
-    quiet();
-    setShownDay(stepDay(shownDay, by));
-  };
   return (
     <>
       <Card style={styles.card} testID="meal-plan-box">
@@ -279,81 +480,7 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
           </>
         )}
       </Card>
-      <Sheet
-        open={ideasOpen}
-        title="Other ideas"
-        onClose={() => {
-          setIdeasOpen(false);
-        }}
-      >
-        <ScrollView style={{ maxHeight: height * 0.72 }} contentContainerStyle={styles.list}>
-          {ideasOpen ? <MealIdeas bare fresh={fresh} onAnswered={onAnswered} /> : null}
-        </ScrollView>
-      </Sheet>
-      <Sheet
-        open={week}
-        title={asking ? "Make a new plan?" : "Your meal plan"}
-        onClose={() => {
-          quiet();
-          setWeek(false);
-          setAsking(false);
-        }}
-        onBack={() => {
-          if (!asking) return false;
-          setTrouble(null);
-          setAsking(false);
-          return true;
-        }}
-      >
-        {shown === undefined ? null : asking ? (
-          <>
-            <Txt kind="small">This replaces your whole week, and any meals you swapped.</Txt>
-            {troubleLine}
-            <Button label="Make new plan" wide disabled={busy} onPress={() => { void make(); }} />
-            <Button label="Keep my plan" kind="quiet" wide onPress={() => { setTrouble(null); setAsking(false); }} />
-          </>
-        ) : (
-          <ScrollView style={{ maxHeight: height * 0.72 }} contentContainerStyle={styles.list}>
-            {plan.make.status === "ok" ? (
-              <Button label="Make a new plan" kind="link" compact style={styles.start} onPress={() => { quiet(); setAsking(true); }} />
-            ) : null}
-            <View style={styles.dayRow}>
-              <DayArrow name="back" say="Previous day" onPress={() => { toDay(-1); }} />
-              <Txt kind="h3" style={styles.dayName}>
-                {shownDay === today ? `Today · ${planDayName(shownDay)}` : planDayName(shownDay)}
-              </Txt>
-              <DayArrow name="go" say="Next day" onPress={() => { toDay(1); }} />
-            </View>
-            <DayNumbers day={shown} />
-            {saidLine}
-            {troubleLine}
-            {shown.meals.length === 0 ? <Txt kind="small">Nothing planned for this day.</Txt> : null}
-            {shown.meals.map((meal, at) => (
-              <View key={String(at)} style={styles.meal}>
-                <MealWords meal={meal} />
-                <OutsideDiet meal={meal} />
-                {shownLogged[at] === true ? (
-                  <View style={styles.row}>
-                    <Icon name="check" size={14} colour="goodText" />
-                    <Txt kind="small" colour="goodText">
-                      Logged
-                    </Txt>
-                  </View>
-                ) : (
-                  <View style={styles.actions}>
-                    {shownDay === today ? (
-                      <Button label="Log meal" kind="soft" compact disabled={held} say={`Log ${ideaName(meal)}`} onPress={() => { void log(meal); }} />
-                    ) : null}
-                    <Button label="Swap" kind="link" compact disabled={held} say={`Swap ${ideaName(meal)}`} onPress={() => { void swap(shownDay, at); }} />
-                  </View>
-                )}
-              </View>
-            ))}
-            <Txt kind="tiny">{plan.caution}</Txt>
-            {plan.labelCaution === null ? null : <Txt kind="tiny">{plan.labelCaution}</Txt>}
-          </ScrollView>
-        )}
-      </Sheet>
+      {sheets}
     </>
   );
 }
@@ -460,6 +587,7 @@ const styles = StyleSheet.create({
   list: { gap: 12, paddingBottom: 8 },
   dayRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
   dayName: { flexShrink: 1, textAlign: "center" },
+  logged: { marginRight: 8 },
   arrow: { minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" },
   meal: { gap: 8, paddingTop: 12, borderTopWidth: 1, borderTopColor: colours.line },
 });
