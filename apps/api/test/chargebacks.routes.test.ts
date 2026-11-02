@@ -1075,6 +1075,23 @@ d("A chargeback (real Postgres)", { timeout: T }, () => {
       });
     }
 
+    it("part of one product, said three times: one row, as the chargeback is written once", async () => {
+      const s = await sold(gym, [2000]);
+      const made = await loseOn(s, 500);
+      await Promise.all([message(gym.acct.merchantId, made.id, "dispute.state.updated"), message(gym.acct.merchantId, made.id, "dispute.state.updated")]);
+      clock = new Date(clock.getTime() + 2 * 60 * 60_000);
+      await work();
+      expect(await standing(s)).toEqual([[0, 500, "chargeback"]]);
+    });
+
+    it("a voided sale is not taken in, so nothing is written and nothing is read again each hour", async () => {
+      const s = await sold(gym, [2000]);
+      await sql`UPDATE gym_sales SET undone_at = now(), void_reason = 'mistake' WHERE id = ${s.lines[0] ?? ""}`;
+      await loseOn(s, 2000);
+      expect(await backOn(s)).toEqual([]);
+      expect((await sql<{ written: boolean }[]>`SELECT lost_written_at IS NOT NULL AS written FROM gym_square_disputes WHERE square_payment_id = ${s.payment}`)[0]?.written).toBeUndefined();
+    });
+
     it("what already went back through Square lowers it", async () => {
       const s = await sold(gym, [2000]);
       await noted(s, 0, 100, "cash");
@@ -1138,6 +1155,10 @@ d("A chargeback (real Postgres)", { timeout: T }, () => {
       const [day] = await sql<{ same: boolean; method: string }[]>`SELECT refunded_on = (SELECT (q.square_updated_at AT TIME ZONE 'UTC')::date FROM gym_square_disputes q WHERE q.square_payment_id = ${s.payment}) AS same, method FROM gym_sale_refunds WHERE sale_id = ${s.lines[1] ?? ""}`;
       expect(day?.method).toBe("terminal");
       expect(day?.same).toBe(true);
+      // Chosen on a row of its own, it still reads as a chargeback, never as a refund made in Square.
+      const page = await send("GET", `/v1/orgs/${gym.id}/register`, gym.owner.cookies);
+      const gloves = (JSON.parse(page.body) as { sales: { id: string; refunds?: { reason: string; square: unknown }[] }[] }).sales.find((x) => x.id === s.lines[1]);
+      expect(gloves?.refunds).toMatchObject([{ reason: "chargeback", square: null }]);
     });
 
     it("it comes off Reports and reads on the sale's own page, with Chargeback lost as its reason", async () => {

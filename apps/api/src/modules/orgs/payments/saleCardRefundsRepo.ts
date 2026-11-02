@@ -375,8 +375,9 @@ export async function settleLostOnSale(
   const [line] = await tx<{ id: string }[]>`SELECT id FROM gym_sales WHERE gym_id = ${d.gymId} AND square_payment_id = ${d.squarePaymentId} LIMIT 1`;
   const lines = line === undefined ? [] : await saleLinesToRefund(tx, d.gymId, line.id);
   const first = lines[0];
-  // A voided sale takes nothing.
-  if (first === undefined || first.undone) return "wait";
+  if (first === undefined) return "wait";
+  // A voided sale takes nothing, and is never asked again.
+  if (first.undone) return "written";
   if (first.currency !== d.currency) return "cannot";
   const [waiting] = await tx<{ id: string }[]>`SELECT id FROM gym_square_refunds WHERE gym_id = ${d.gymId} AND square_payment_id = ${d.squarePaymentId} AND state IN ('asking','pending') LIMIT 1`;
   if (waiting !== undefined) return "wait";

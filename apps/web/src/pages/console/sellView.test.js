@@ -38,8 +38,7 @@ import {
   taxLine,
   taxModes,
   saleVoidedLine,
-  voidSaleQuestion,
-} from './sellView';
+  voidSaleQuestion, basketRefundTag } from './sellView';
 import { saleDiscountWords } from './sellView';
 
 const water = (over = {}) => ({ id: 'p1', name: 'Water', priceMinor: 199, currency: 'USD', taxRateId: 'r1', stock: null, archivedAt: null, updatedAt: '2026-10-12T10:00:00.000Z', ...over });
@@ -449,5 +448,15 @@ describe('round one of 18b-iii', () => {
   it('a free membership is not offered to charge a rate', () => {
     const page = { tax: { included: false, rates: [r()] }, membershipTypes: [{ id: 't1', name: 'Gold', taxRateId: null, free: false }, { id: 't2', name: 'Free week', taxRateId: null, free: true }], products: [] };
     expect(chargeChoices(page, r(), 'memberships').map((c) => c.name)).toEqual(['Gold']);
+  });
+});
+
+describe('a basket lost to a chargeback (18d-iv-e-ii-b)', () => {
+  it('reads Chargeback lost once all of it went back, a chargeback among it', () => {
+    const lost = { id: 'r1', amountMinor: 500, method: 'terminal', reason: 'chargeback', restocked: 0, refundedOn: '2026-11-02', by: null, receiptNumber: 9, voided: null, square: null };
+    const line = (id, lineNo, totalMinor, refunds) => ({ id, lineNo, receiptNumber: 7, itemName: id, quantity: 1, totalMinor, refundedMinor: refunds.reduce((n, r) => n + r.amountMinor, 0), refunds, undone: false, currency: 'USD', method: 'terminal', soldOn: '2026-11-02' });
+    const first = line('water', 1, 500, [lost]);
+    const second = line('gloves', 2, 1500, [{ ...lost, id: 'r2', amountMinor: 1500 }]);
+    expect(basketRefundTag({ ...first, lines: [first, second] })).toBe('Chargeback lost');
   });
 });

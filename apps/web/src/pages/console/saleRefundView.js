@@ -179,7 +179,9 @@ export const placeOpen = (lines, press) => lines.filter((line) => roomOn(press, 
 /** A product as the box offers it. */
 export const placeOption = (line, press, lines) => {
   const name = `${String(line.quantity)} × ${line.itemName}`;
-  return placeOverLine(lines, press) !== null ? name : `${name} · ${formatMinor(Math.min(roomOn(press, line), line.totalMinor), line.currency)} can be refunded`;
+  const room = formatMinor(Math.min(roomOn(press, line), line.totalMinor), line.currency);
+  // A chargeback is no refund: the box says what is left of the product.
+  return placeOverLine(lines, press) !== null ? name : `${name} · ${room} ${press.chargeback === true ? 'left' : 'can be refunded'}`;
 };
 
 /** Said above the choices when Square refunded more than the sale can take: which product is all the box asks, so it says no amounts. The server gives every product Square's whole amount only then. */
