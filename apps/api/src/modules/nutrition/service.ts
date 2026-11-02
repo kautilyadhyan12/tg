@@ -552,12 +552,19 @@ async function sharedDishGrams(
 }
 
 /** Whether a food can be priced again on any later day: every food but a product the outside search
- *  found that our own copy of the lists does not hold, which is remembered for a day only. */
-export async function pricedForGood(deps: Pick<NutritionDeps, "sql">, canonical: string): Promise<boolean> {
-  if (!isPackagedCanonical(canonical)) return true;
+ *  found that our own copy of the lists does not hold, which is remembered for a day only, and a label
+ *  the person has removed. Refused, the food's name where the server still knows it. */
+export async function pricedForGood(deps: NutritionDeps, userId: string, canonical: string): Promise<{ ok: true } | { ok: false; name: string | null }> {
+  if (canonical.toLowerCase().startsWith(LABEL_CANONICAL_PREFIX)) {
+    const id = canonical.slice(LABEL_CANONICAL_PREFIX.length);
+    const held = labelFoodParamSchema.safeParse({ id }).success ? await labelRepo.labelFoodById(deps.sql, userId, id) : null;
+    return held === null ? { ok: false, name: null } : { ok: true };
+  }
+  if (!isPackagedCanonical(canonical)) return { ok: true };
   const code = packagedCode(canonical);
   const kind = code === null ? null : classifyBarcode(code);
-  return kind?.kind === "product" && (await packagedFood(deps, kind.code)) !== null;
+  if (kind?.kind === "product" && (await packagedFood(deps, kind.code)) !== null) return { ok: true };
+  return { ok: false, name: (await canonicalCached(deps, canonical))?.name ?? null };
 }
 
 /** What the lists hold for a code already known to be one product worldwide (`classifyBarcode`). */

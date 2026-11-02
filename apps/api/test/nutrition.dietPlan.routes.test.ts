@@ -669,7 +669,7 @@ d("diet plan routes (real Postgres)", () => {
       const twoBars = await putDay(cookies, 1, { changeId: randomUUID(), meals: [{ mealType: day[0]?.mealType, items: [{ canonical: "off_zqxplan_gone", grams: 100 }] }] });
       expect(twoBars.statusCode).toBe(400);
       expect(errorOf(twoBars)).toBe("not_for_plan");
-      expect(messageOf(twoBars)).toBe("This product can’t go in a meal plan. You can still log it to a meal.");
+      expect(messageOf(twoBars)).toBe("This food can’t go in a meal plan. Take it off, then save. You can still log it to a meal.");
     });
 
     it("sent twice, the second does not undo what came between", { timeout: 30_000 }, async () => {

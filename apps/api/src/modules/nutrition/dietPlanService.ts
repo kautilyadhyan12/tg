@@ -164,8 +164,10 @@ export async function putDietPlanDay(
   const toPrice = input.meals.map((m) => m.items.filter((c): c is ChosenItem => !isOwnFood(c) && keptOf(c) === undefined));
   // A plan is for days to come: a food it could not price again on one of them is not put in it.
   for (const c of toPrice.flat()) {
-    if (!(await pricedForGood(deps, c.canonical))) {
-      throw new NutritionError(400, "not_for_plan", "This product can’t go in a meal plan. You can still log it to a meal.");
+    const held = await pricedForGood(deps, userId, c.canonical);
+    if (!held.ok) {
+      const what = held.name === null ? "This food" : held.name;
+      throw new NutritionError(400, "not_for_plan", `${what} can’t go in a meal plan. Take it off, then save. You can still log it to a meal.`);
     }
   }
   const fresh = await priced(deps, userId, toPrice);
