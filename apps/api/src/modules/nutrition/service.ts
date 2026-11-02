@@ -40,6 +40,7 @@ import {
   type Per100g,
   type VisionEvidence,
   isOwnFood,
+  planItemChoice,
   classifyBarcode,
   type BarcodeReply,
   type MoreNutrients,
@@ -548,6 +549,15 @@ async function sharedDishGrams(
     for (const part of group.parts) grams.set(part.at, Math.round((meal * part.share) / whole));
   }
   return grams;
+}
+
+/** Whether a food can be priced again on any later day: every food but a product the outside search
+ *  found that our own copy of the lists does not hold, which is remembered for a day only. */
+export async function pricedForGood(deps: Pick<NutritionDeps, "sql">, canonical: string): Promise<boolean> {
+  if (!isPackagedCanonical(canonical)) return true;
+  const code = packagedCode(canonical);
+  const kind = code === null ? null : classifyBarcode(code);
+  return kind?.kind === "product" && (await packagedFood(deps, kind.code)) !== null;
 }
 
 /** What the lists hold for a code already known to be one product worldwide (`classifyBarcode`). */
@@ -1677,8 +1687,14 @@ async function plannedItems(deps: NutritionDeps, userId: string, input: ManualMe
   const same = input.items.every((choice, at) => {
     const item = items[at];
     if (item === undefined) return false;
-    if (isOwnFood(choice)) return item.nutritionSource === "own" && choice.name === item.name.slice(0, 80) && choice.grams === item.gramsPoint;
-    return "grams" in choice && choice.canonical === item.canonical && choice.grams === item.gramsPoint;
+    // The food exactly as the plan sends it back, an own food's numbers too: a meal kept on the phone
+    // from before the person changed it is priced as it was sent, never at the plan's new numbers.
+    const kept = planItemChoice(item);
+    if (isOwnFood(choice)) {
+      return isOwnFood(kept) && choice.name === kept.name && choice.grams === kept.grams &&
+        choice.own.proteinG === kept.own.proteinG && choice.own.carbsG === kept.own.carbsG && choice.own.fatG === kept.own.fatG;
+    }
+    return !isOwnFood(kept) && "grams" in choice && "grams" in kept && choice.canonical === kept.canonical && choice.grams === kept.grams;
   });
   return same ? items.map((item) => ({ ...item })) : null;
 }

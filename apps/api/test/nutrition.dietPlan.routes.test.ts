@@ -446,6 +446,18 @@ d("diet plan routes (real Postgres)", () => {
       expect(errorOf(theirs)).toBe("unknown_food");
     });
 
+    it("re-check Low: a meal kept on the phone from before its own food's numbers changed is saved as it was sent, not at the plan's new numbers", { timeout: 30_000 }, async () => {
+      const cookies = await makeUser("plannedownold", null);
+      parsed(await putDay(cookies, 3, { changeId: randomUUID(), meals: [{ mealType: "snack", items: [OWN[3]] }] }));
+      // The phone kept the meal when Ghee was 5 g protein and 5 g fat; the plan now holds 10 g fat.
+      const old = { name: "Ghee", grams: 10, own: { proteinG: 5, carbsG: 0, fatG: 5 } };
+      const body = { id: randomUUID(), mealName: "Planned", takenAt: new Date().toISOString(), mealType: "snack", items: [old], planned: { day: 3, meal: 0 } };
+      const res = await inject({ method: "POST", url: "/v1/nutrition/meals", body, cookies });
+      expect(res.statusCode, res.body).toBe(201);
+      const saved = (JSON.parse(res.body) as { meal: { items: { proteinG: number; fatG: number }[] } }).meal;
+      expect(saved.items[0]).toMatchObject({ proteinG: 5, fatG: 5 });
+    });
+
     it("an own food sent back as the phone sends it is kept at the same numbers when another meal of the day changes", { timeout: 30_000 }, async () => {
       const cookies = await makeUser("keepown", null);
       const first = parsed(await putDay(cookies, 1, { changeId: randomUUID(), meals: [{ mealType: "dinner", items: [OWN[0], OWN[1]] }] }));
@@ -653,9 +665,11 @@ d("diet plan routes (real Postgres)", () => {
       expect(after.days[0]?.meals[0]?.items).toEqual([bar]);
       expect(after.days[0]?.meals.length).toBe(day.length - 1);
 
+      // A new amount of it would have to be priced again on a later day: not put in a plan (re-check, H3b).
       const twoBars = await putDay(cookies, 1, { changeId: randomUUID(), meals: [{ mealType: day[0]?.mealType, items: [{ canonical: "off_zqxplan_gone", grams: 100 }] }] });
       expect(twoBars.statusCode).toBe(400);
-      expect(errorOf(twoBars)).toBe("unknown_food");
+      expect(errorOf(twoBars)).toBe("not_for_plan");
+      expect(messageOf(twoBars)).toBe("This product can’t go in a meal plan. You can still log it to a meal.");
     });
 
     it("sent twice, the second does not undo what came between", { timeout: 30_000 }, async () => {

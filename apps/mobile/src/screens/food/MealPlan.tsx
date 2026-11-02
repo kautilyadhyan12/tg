@@ -101,6 +101,14 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
   }, [focused]);
 
   const plan = answered?.data ?? (read.kind === "ok" ? read.data : null);
+  // The plan changed under "Remove this meal?": the question goes, and the week says why.
+  const removingFrom = removing?.version ?? null;
+  const shownVersion = plan?.days[shownDay - 1]?.version ?? null;
+  useEffect(() => {
+    if (removingFrom === null || shownVersion === null || removingFrom === shownVersion) return;
+    setRemoving(null);
+    setTrouble("Your plan has changed, so nothing was removed.");
+  }, [removingFrom, shownVersion]);
   useEffect(() => {
     if (openWeekAt === null) return;
     setShownDay(planDayOf(new Date()));

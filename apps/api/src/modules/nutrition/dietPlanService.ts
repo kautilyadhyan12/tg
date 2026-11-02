@@ -15,7 +15,7 @@ import { getUserFoodAnswers } from "../users/service.js";
 import { planDay, swapMeal } from "./dietPlan.js";
 import { CURATED_FOODS } from "./foods.js";
 import { changeDietPlan, getDietPlan as readDietPlan, type StoredDays, type StoredMeal } from "./dietPlanRepo.js";
-import { NutritionError, getTargets, itemsMeasures, ownFoodItem, resolveChosenItems, totals, type NutritionDeps } from "./service.js";
+import { NutritionError, getTargets, itemsMeasures, ownFoodItem, pricedForGood, resolveChosenItems, totals, type NutritionDeps } from "./service.js";
 
 type Targets = NonNullable<Awaited<ReturnType<typeof getTargets>>["targets"]>;
 interface Person { make: DietPlanMake; diet: Awaited<ReturnType<typeof getUserFoodAnswers>>["diet"]; mealsPerDay: number | null; targets: Targets | null }
@@ -161,7 +161,14 @@ export async function putDietPlanDay(
   if (plan.recentChanges.includes(input.changeId)) return reply(plan.days, await person(deps, userId));
   const kept = new Map((plan.days[day - 1] ?? []).flatMap((m) => m.items).map((i) => [`${i.canonical}|${String(i.gramsPoint)}`, i]));
   const keptOf = (c: MealChoice): MealItem | undefined => (!isOwnFood(c) && "grams" in c ? kept.get(`${c.canonical}|${String(c.grams)}`) : undefined);
-  const fresh = await priced(deps, userId, input.meals.map((m) => m.items.filter((c): c is ChosenItem => !isOwnFood(c) && keptOf(c) === undefined)));
+  const toPrice = input.meals.map((m) => m.items.filter((c): c is ChosenItem => !isOwnFood(c) && keptOf(c) === undefined));
+  // A plan is for days to come: a food it could not price again on one of them is not put in it.
+  for (const c of toPrice.flat()) {
+    if (!(await pricedForGood(deps, c.canonical))) {
+      throw new NutritionError(400, "not_for_plan", "This product can’t go in a meal plan. You can still log it to a meal.");
+    }
+  }
+  const fresh = await priced(deps, userId, toPrice);
   const meals = input.meals.map((m, i) => {
     const priced = fresh[i] ?? [];
     let at = 0;
