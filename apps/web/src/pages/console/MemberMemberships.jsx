@@ -12,7 +12,7 @@ import MembershipChoice from './MembershipChoice';
 import { Tick } from './MemberListUpload';
 import TerminalPayBox from './TerminalPayBox';
 import { cardTerminalSerial } from './memberCardView';
-import { TERMINAL_METHOD, mayHavePaid, payTerminalName, terminalPayDetail, terminalPayOutcomeLine } from './terminalPayView';
+import { TERMINAL_METHOD, keepCardTickLine, mayHavePaid, payTerminalName, terminalKeepLine, terminalPayDetail, terminalPayOutcomeLine } from './terminalPayView';
 import { CARD_ON_FILE_METHOD, cardChargeOutcome, cardOnFileDetail, cardOnFileLabel, cardOnFileStoppedLine } from './cardChargeView';
 import { JoiningFeeTick, MembershipDiscountPicker, MembershipTotal } from './MembershipDiscount';
 import { NO_CODE, discountsForType, heldDiscountLine, heldTaxLine, membershipSummary, pickedDiscount } from './sellDiscountsView';
@@ -186,6 +186,8 @@ export default function MemberMemberships({
   squareEveryMs = 30_000,
   /** The record has an email address: its memberships' agreements can be signed from an emailed link (18u-ii-b). */
   hasEmail = false,
+  /** A Terminal payment asked to keep the card: Card on file reads again (18d-vi-c). */
+  onCardAsked = null,
 }) {
   const payMethods = paymentMethodsFor(gym?.country);
   /** The answer on screen, and the record it is about: never shown under another. */
@@ -197,6 +199,8 @@ export default function MemberMemberships({
   const [form, setForm] = useState(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
+  /** The card was not kept from a Terminal payment: Open Card on file is offered beside the notice. */
+  const [cardNotKept, setCardNotKept] = useState(false);
   const [chargesStarted, setChargesStarted] = useState(null);
   /** Where `notice` belongs when it is about one payment: { paymentId, line, sent }, said under that payment, where it was pressed.
    *  `sent`: Square's answer to a Refund to card, so the sentence follows the refund. */
@@ -238,7 +242,7 @@ export default function MemberMemberships({
   /** Take payment on Terminal (18d-vi-a): the Terminals a bill can be paid on, and the payment the
    *  open box follows, { membershipId, feeBillId, payment, terminalId }, until it ends. `feeBillId`:
    *  a late cancel or no-show fee's (18d-vi-b-i), whose box is drawn under that fee. */
-  const [terminals, setTerminals] = useState({ entryId: null, list: [], square: 'not_offered', isOwner: false, cardOnFile: null });
+  const [terminals, setTerminals] = useState({ entryId: null, list: [], square: 'not_offered', isOwner: false, cardOnFile: null, keepsCard: false });
   const routed = useInRouterContext();
   const paymentsTo = routed ? placeFor(gym?.slug, viewerPrivileges(gym), 'payments') : null;
   // Booking rules, where a gym stops new bookings while a payment is overdue (17i).
@@ -343,7 +347,7 @@ export default function MemberMemberships({
     orgService.getTerminalPayments(gymId, entryId).then(
       (res) => {
         if (!live) return;
-        setTerminals({ entryId, list: res.data.terminals, square: res.data.square, isOwner: res.data.isOwner, cardOnFile: res.data.cardOnFile ?? null });
+        setTerminals({ entryId, list: res.data.terminals, square: res.data.square, isOwner: res.data.isOwner, cardOnFile: res.data.cardOnFile ?? null, keepsCard: res.data.keepsCard === true });
         // One waiting for this person, pressed here before or on another screen: its box is open.
         const waiting = res.data.waiting[0];
         if (waiting !== undefined) {
@@ -1205,12 +1209,12 @@ export default function MemberMemberships({
 
   /** Take payment on Terminal (18d-vi-a): the amount goes to the chosen Terminal, and the box
    *  under it waits for the person. */
-  const startTerminal = async (m, terminalId, body) => {
+  const startTerminal = async (m, terminalId, body, keepCard) => {
     setBusy(true);
     setNotice(null);
     setRefusal(null);
     try {
-      const res = await orgService.startTerminalPayment(gymId, entryId, m.id, { terminalId, requestKey: body.requestKey, periodIndex: body.periodIndex, amountMinor: body.amountMinor });
+      const res = await orgService.startTerminalPayment(gymId, entryId, m.id, { terminalId, requestKey: body.requestKey, periodIndex: body.periodIndex, amountMinor: body.amountMinor, keepCard });
       setTerminalPay({ membershipId: m.id, feeBillId: null, payment: res.data.payment, terminalId });
       setOpen({ what: 'terminalPay', id: m.id });
     } catch (err) {
@@ -1297,7 +1301,10 @@ export default function MemberMemberships({
     setFeeForm(null);
     // What was left on the bill, as on screen while it waited: the bill is read again only after.
     const owedOn = shown?.memberships.find((x) => x.id === payment.membershipId)?.billing?.pay;
-    setNotice(terminalPayOutcomeLine(payment, name, owedOn?.leftMinor ?? payment.amountMinor));
+    const kept = terminalKeepLine(payment, name);
+    setNotice(kept === null ? terminalPayOutcomeLine(payment, name, owedOn?.leftMinor ?? payment.amountMinor) : `${terminalPayOutcomeLine(payment, name, owedOn?.leftMinor ?? payment.amountMinor)} ${kept}`);
+    setCardNotKept(payment.card?.step === 'not_saved' || payment.card?.step === 'declined');
+    if (payment.card != null) onCardAsked?.();
     setAttempt((n) => n + 1);
     onChanged?.();
   };
@@ -1393,6 +1400,9 @@ export default function MemberMemberships({
     const { problem, body } = paymentBody(m, payForm);
     const pickedTerminal = terminalList.length === 1 ? terminalList[0] : terminalList.find((t) => t.id === payForm.terminalId);
     const terminalProblem = onTerminal && pickedTerminal === undefined ? 'Choose a Terminal.' : null;
+    // A membership that renews, paid by the person themselves: the card they pay with can be kept (18d-vi-c).
+    const keepOffered = onTerminal && m.kind === 'recurring' && m.view.renewsOn !== null && terminals.keepsCard;
+    const keepTicked = payForm.keepCard ?? cardOnFile === null;
     const methods = payMethodsWithSquare;
     const said = chargeSaid !== null && chargeSaid.membershipId === m.id && chargeSaid.feeBillId === null ? chargeSaid.line : null;
     return (
@@ -1409,7 +1419,7 @@ export default function MemberMemberships({
             return;
           }
           if (onTerminal) {
-            void startTerminal(m, pickedTerminal.id, body);
+            void startTerminal(m, pickedTerminal.id, body, keepOffered && keepTicked);
             return;
           }
           if (onCard) {
@@ -1456,6 +1466,11 @@ export default function MemberMemberships({
               ))}
             </select>
           </label>
+        ) : null}
+        {keepOffered ? (
+          <Tick checked={keepTicked} onChange={(keepCard) => setPayForm((f) => ({ ...f, keepCard }))}>
+            {keepCardTickLine(cardOnFile)}
+          </Tick>
         ) : null}
         {onCard ? <p className="c-s14 c-t2 m-0">{cardOnFileDetail(cardOnFile, body?.amountMinor ?? null, m.currency, name)}</p> : null}
         {payForm.tried && (problem ?? terminalProblem) !== null ? (
@@ -2241,6 +2256,13 @@ export default function MemberMemberships({
           <Check aria-hidden="true" className="w-4 h-4" />
           {notice}
         </p>
+      ) : null}
+      {notice !== null && cardNotKept ? (
+        <div>
+          <button type="button" className={SMALL} onClick={() => document.querySelector('[data-testid="card-on-file"]')?.scrollIntoView({ block: 'center' })}>
+            Open Card on file
+          </button>
+        </div>
       ) : null}
       {refusal !== null ? (
         <p className="c-s14 c-t1 m-0 rounded-[14px] p-3" style={{ background: 'var(--bad-bg)' }} role="alert">

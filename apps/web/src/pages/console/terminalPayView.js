@@ -1,7 +1,7 @@
 // TAKE PAYMENT ON TERMINAL (ROADMAP 18d-vi-a; a fee, 18d-vi-b-i): the words of the box on a bill. Pure functions, so
 // every line is tested without a page. The waiting box follows Save card on Terminal's
 // (`memberCardView.js`): what the person does at the Terminal, then how it ended.
-import { GYM_PAYMENTS_WORDS, cardOwnerOnlyLine, formatMinor } from '@app/shared';
+import { GYM_PAYMENTS_WORDS, cardName, cardOwnerOnlyLine, formatMinor } from '@app/shared';
 import { personNames } from './memberCardView';
 import { squareSetUpLine } from './membershipChangeView';
 
@@ -45,10 +45,34 @@ export function terminalPayWaitWords(payment, name) {
   return {
     title: `Waiting for ${who.inside} to pay ${formatMinor(payment.amountMinor, payment.currency)} on the Terminal`,
     shown: 'The Terminal shows the amount.',
+    agree: `${who.first} agrees to save the card, or chooses Pay without saving.`,
     card: `${who.first} taps, inserts or swipes their card.`,
     notShown: "The Terminal hasn't shown it yet. Check it's on and connected to the internet.",
     tooLate: `Too late to cancel: ${who.inside} is paying on the Terminal.`,
   };
+}
+
+/** The tick in Record payment: what it does and, where a card is saved, which card it replaces (18d-vi-c). */
+export function keepCardTickLine(cardOnFile) {
+  return cardOnFile === null ? 'Save the card for automatic payments' : `Save the card for automatic payments, in place of ${cardName(cardOnFile)}`;
+}
+
+/** The sentence after a payment that asked to keep the card (18d-vi-c); null where it did not. */
+export function terminalKeepLine(payment, name) {
+  const { card } = payment;
+  if (card == null) return null;
+  switch (card.step) {
+    case 'saved':
+      return `Card saved: ${cardName(card)}.`;
+    case 'declined':
+      return `The card wasn't saved: ${personNames(name).first} chose Pay without saving.`;
+    case 'keeping':
+      return "Square hasn't saved the card yet. It will appear under Card on file when it has.";
+    case 'not_saved':
+      return "Square couldn't save this card. Apple Pay, Google Pay and some debit cards can't be saved.";
+    default:
+      return null;
+  }
 }
 
 /** A fee's payment still on the Terminal after the fee was taken off (marked Came, 18d-vi-b-i). */

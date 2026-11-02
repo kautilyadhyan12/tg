@@ -568,6 +568,8 @@ export interface KeepCard {
   /** The Terminal the person agreed on (`terminal` only). */
   deviceId: string | null;
   agreedAt: Date;
+  /** The membership it was kept for, when kept from a Terminal payment (18d-vi-c). */
+  membershipId?: string;
   at: Date;
 }
 
@@ -608,6 +610,7 @@ export async function keepCard(tx: TransactionSql, k: KeepCard): Promise<Kept> {
     brand: card.brand,
     last4: card.last4,
     agreedAt: k.agreedAt,
+    ...(k.membershipId === undefined ? {} : { membershipId: k.membershipId }),
   });
   await cards.writeCard(tx, {
     gymId,

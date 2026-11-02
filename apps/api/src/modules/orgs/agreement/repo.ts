@@ -490,3 +490,13 @@ export async function workingLinksOf(sql: SqlOrTx, gymId: string, membershipIds:
     WHERE l.gym_id = ${gymId} AND l.held_membership_id = ANY(${[...membershipIds]}::uuid[]) AND ${linkWorks(sql, at)}`;
   return new Map(rows.map((row) => [row.held_membership_id, { sentAt: row.sent_at, expiresAt: row.expires_at }]));
 }
+
+/** The newest card kept for this membership from a Terminal payment, agreed there (18d-vi-c). */
+export async function cardKeptFor(sql: SqlOrTx, gymId: string, membershipId: string): Promise<{ brand: string; last4: string; at: string } | null> {
+  const [row] = await sql<{ brand: string; last4: string; agreed_at: Date }[]>`
+    SELECT brand, last4, agreed_at FROM gym_card_agreements
+    WHERE gym_id = ${gymId} AND held_membership_id = ${membershipId}
+    ORDER BY agreed_at DESC
+    LIMIT 1`;
+  return row === undefined ? null : { brand: row.brand, last4: row.last4, at: row.agreed_at.toISOString() };
+}

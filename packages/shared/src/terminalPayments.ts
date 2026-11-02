@@ -20,6 +20,12 @@ import { SQUARE_TERMINALS_MAX } from "./gymPayments.js";
 export const terminalPaymentOutcomeSchema = z.enum(["paid", "cancelled_on_terminal", "timed_out", "no_answer", "cancelled", "refused", "gone", "not_recorded"]);
 export type TerminalPaymentOutcome = z.infer<typeof terminalPaymentOutcomeSchema>;
 
+/** Keeping the card a payment is made with (18d-vi-c), as the press stands. `agreeing`: the agreement is on the
+ *  Terminal; `paying`: they agreed, the payment follows; `declined`: Pay without saving; `keeping`: paid, Square has
+ *  not yet saved the card; `saved`, `not_saved`: how it ended. */
+export const terminalKeepStepSchema = z.enum(["agreeing", "paying", "declined", "keeping", "saved", "not_saved"]);
+export type TerminalKeepStep = z.infer<typeof terminalKeepStepSchema>;
+
 export const terminalPaymentSchema = z
   .object({
     id: z.string().uuid(),
@@ -47,6 +53,12 @@ export const terminalPaymentSchema = z
     receiptNumber: receiptNumberSchema.nullable(),
     /** Who pressed it: sent for Sell's waiting sales, so another desk sees whose it is. */
     startedByName: z.string().nullable().default(null),
+    /** The card asked to be kept from this payment (18d-vi-c); null where it was not. */
+    card: z
+      .object({ step: terminalKeepStepSchema, brand: z.string().nullable(), last4: z.string().nullable() })
+      .strict()
+      .nullable()
+      .default(null),
   })
   .strict();
 export type TerminalPayment = z.infer<typeof terminalPaymentSchema>;
@@ -62,6 +74,8 @@ export const terminalPaymentsResponseSchema = z
     isOwner: z.boolean().default(false),
     /** The card on file Record payment can charge (18d-iii-i); null where there is none to charge. */
     cardOnFile: cardOnFileSchema.nullable().default(null),
+    /** The person pays for themselves, so the card they pay with can be kept (18d-vi-c). */
+    keepsCard: z.boolean().default(false),
   })
   .strict();
 export type TerminalPaymentsResponse = z.infer<typeof terminalPaymentsResponseSchema>;
@@ -90,6 +104,8 @@ export const terminalPaymentRequestSchema = z
     requestKey: z.string().uuid(),
     periodIndex: z.number().int().min(0).max(100_000),
     amountMinor: z.number().int().min(1).max(99_999_999),
+    /** Ask the person on the Terminal to save the card they pay with (18d-vi-c). */
+    keepCard: z.boolean().default(false),
   })
   .strict();
 export type TerminalPaymentRequest = z.infer<typeof terminalPaymentRequestSchema>;
@@ -107,6 +123,12 @@ export type TerminalFeePaymentRequest = z.infer<typeof terminalFeePaymentRequest
 export const terminalPaymentResponseSchema = z.object({ payment: terminalPaymentSchema }).strict();
 export type TerminalPaymentResponse = z.infer<typeof terminalPaymentResponseSchema>;
 
+/** The Terminal's second button when a payment asks to keep the card: the payment goes ahead either way. */
+export const TERMINAL_KEEP_DISAGREE = "Pay without saving";
+
+/** What the Terminal shows before a payment that keeps the card: the membership, then the card agreement word for word. */
+export const terminalKeepWords = (membershipLine: string, agreement: string): string => `${membershipLine}\n\n${agreement}`;
+
 /** The server's refusals, as staff read them. */
 export const TERMINAL_PAYMENT_WORDS = {
   terminal_gone: "This Terminal is no longer paired. Choose another, or record the payment by hand.",
@@ -116,6 +138,8 @@ export const TERMINAL_PAYMENT_WORDS = {
   sale_currency: "Your products are priced in another currency from your Square account, so this sale can't be paid on the Terminal.",
   waiting: "A payment for this membership is waiting on the Terminal. Wait for it to finish, or cancel it first.",
   payment_gone: "This payment is no longer active.",
+  keep_card_not_offered: "This card can't be saved with this payment. Untick Save the card for automatic payments and try again.",
+  keep_card_save_waiting: "A card save is waiting on the Terminal for this person. Wait for it to finish, or cancel it first.",
   disconnect_waiting: "A payment is waiting on a Square Terminal. Let it finish, or cancel it, then disconnect.",
   void_terminal: "This was paid by card on the Terminal. To give the money back, press Refund on the payment.",
   void_terminal_sale: "This sale was paid by card on the Terminal, so it can't be voided. To give the money back, press Refund on the sale.",

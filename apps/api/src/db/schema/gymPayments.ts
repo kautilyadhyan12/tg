@@ -192,9 +192,11 @@ export const gymCardAgreements = pgTable(
     brand: text("brand").notNull(),
     last4: text("last4").notNull(),
     agreedAt: timestamp("agreed_at", { withTimezone: true }).notNull(),
+    /** The membership it was kept for, when kept from a Terminal payment (18d-vi-c). */
+    heldMembershipId: uuid("held_membership_id"),
   },
   (t) => [
-    check("gym_card_agreements_words_check", sql`char_length(${t.words}) BETWEEN 20 AND 600`),
+    check("gym_card_agreements_words_check", sql`char_length(${t.words}) BETWEEN 20 AND 1000`),
     check(
       "gym_card_agreements_screen_check",
       sql`${t.screen} IN ('desk','app','terminal') AND (${t.screen} = 'terminal') = (${t.deviceId} IS NOT NULL) AND (${t.deviceId} IS NULL OR ${t.deviceId} ~ '^[A-Za-z0-9:_-]{1,100}$')`,
@@ -202,6 +204,7 @@ export const gymCardAgreements = pgTable(
     check("gym_card_agreements_card_check", sql`${t.brand} ~ '^[A-Z_]{1,40}$' AND ${t.last4} ~ '^[0-9]{4}$'`),
     check("gym_card_agreements_deleted_day_check", sql`${t.entryId} IS NOT NULL OR ${t.recordDeletedAt} IS NOT NULL`),
     index("gym_card_agreements_entry_idx").on(t.gymId, t.entryId),
+    index("gym_card_agreements_membership_idx").on(t.gymId, t.heldMembershipId).where(sql`${t.heldMembershipId} IS NOT NULL`),
     index("gym_card_agreements_deleted_idx").on(t.recordDeletedAt).where(sql`${t.entryId} IS NULL`),
   ],
 );
@@ -425,8 +428,20 @@ export const gymTerminalPayments = pgTable(
     cancelWantedAt: timestamp("cancel_wanted_at", { withTimezone: true }),
     cancelTooLate: boolean("cancel_too_late").notNull().default(false),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
+    /** Keeping the card it is paid with (18d-vi-c): the words the Terminal shows, and how far it got. */
+    cardWords: text("card_words"),
+    cardStep: text("card_step"),
+    confirmKey: uuid("confirm_key"),
+    confirmActionId: text("confirm_action_id"),
+    /** Square's time of the person's answer on the Terminal. */
+    cardAnsweredAt: timestamp("card_answered_at", { withTimezone: true }),
+    cardKey: uuid("card_key"),
+    cardBrand: text("card_brand"),
+    cardLast4: text("card_last4"),
   },
   (t) => [
+    check("gym_terminal_payments_card_check", sql`(${t.cardStep} IS NULL) = (${t.cardWords} IS NULL) AND (${t.cardStep} IS NULL OR ${t.cardStep} IN ('agreeing','paying','declined','keeping','saved','not_saved'))`),
+    index("gym_terminal_payments_keeping_idx").on(t.checkedAt).where(sql`${t.cardStep} = 'keeping'`),
     check("gym_terminal_payments_environment_check", sql`${t.environment} IN ('sandbox','production')`),
     check(
       "gym_terminal_payments_ids_check",
