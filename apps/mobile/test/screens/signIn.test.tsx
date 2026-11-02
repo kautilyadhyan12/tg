@@ -86,7 +86,8 @@ describe("the worst thing, on the screen", () => {
     expect(screen.getByText("You’re signed out.")).toBeTruthy();
     expect(screen.queryByText(/ravi/i)).toBeNull();
     expect(screen.queryAllByRole("tab")).toEqual([]);
-    expect(store.value).toBeNull();
+    // The server did not hear the Sign out: only that sign-out is kept, owed, and nothing of the person (18b-i).
+    expect(store.value).toBe(JSON.stringify({ signOutOwed: "refresh-2" }));
     expect(server.paths().at(-1)).toBe("/v1/auth/logout");
   });
 

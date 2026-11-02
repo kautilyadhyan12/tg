@@ -75,6 +75,10 @@ async function open(server: ReturnType<typeof fakeServer>) {
   await settle();
 }
 
+afterEach(() => {
+  jest.restoreAllMocks();
+});
+
 beforeEach(() => {
   reset();
   secureStore.kept.clear();
@@ -186,6 +190,29 @@ describe("a tapped notification", () => {
     expect(await within(await screen.findByTestId("inbox-page")).findByText("Class moved to 7 pm.")).toBeTruthy();
   });
 
+  it("a tap while the places cannot be read is kept, and opens its Inbox once they are", async () => {
+    notifications.permission = YES;
+    let up = false;
+    await open(
+      fakeServer(
+        routes({
+          "/v1/orgs/mine": (): Reply => {
+            return !up ? { status: 503, body: { error: "unavailable", message: "Try again." } } : { status: 200, body: { orgs: [org(IRON)], formerOrgs: [] } };
+          },
+        }),
+      ),
+    );
+    await act(async () => {
+      for (const tap of notifications.taps) tap(tapFor(IRON.id));
+      await Promise.resolve();
+    });
+    await settle();
+    expect(screen.queryByTestId("inbox-page")).toBeNull();
+    up = true;
+    await fireEvent.press((await screen.findAllByRole("button", { name: "Try again" }))[0] ?? screen.getByText("Try again"));
+    expect(await within(await screen.findByTestId("inbox-page")).findByText("Class moved to 7 pm.")).toBeTruthy();
+  });
+
   it("a gym that is not one of this person's opens nothing", async () => {
     notifications.permission = YES;
     await open(fakeServer(routes()));
@@ -214,5 +241,8 @@ describe("signing out", () => {
     await settle();
     expect(notifications.dismissedAll).toBeGreaterThanOrEqual(1);
     expect(notifications.unregistered).toBeGreaterThanOrEqual(1);
+    // Signed out, one that still arrives while the app is open is shown to nobody.
+    const shown = await notifications.handler?.handleNotification({ request: { content: { data: { kind: "gym_inbox", gymId: IRON.id } } } });
+    expect(shown?.shouldShowBanner).toBe(false);
   });
 });

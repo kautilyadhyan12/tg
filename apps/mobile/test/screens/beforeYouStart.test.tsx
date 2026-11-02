@@ -205,7 +205,8 @@ describe("Sign out on the note", () => {
     await screen.findByRole("header", { name: "Before you start" });
     await press("Sign out");
     expect(await screen.findByText("Get started.")).toBeTruthy();
-    expect(store.value).toBeNull();
+    // The server did not hear the Sign out: only that sign-out is kept, owed, and nothing of the person (18b-i).
+    expect(store.value).toBe(JSON.stringify({ signOutOwed: "refresh-2" }));
     noTabs();
   });
 });

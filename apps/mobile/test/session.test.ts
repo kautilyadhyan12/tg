@@ -62,13 +62,41 @@ describe("the worst thing: no internet never signs anybody out, and a signed-out
     expect(store.value).toBe(kept(1));
   });
 
-  it("Sign out with no internet: signed out at once, and nothing of the person is left on the phone", async () => {
-    const { session, store, seen } = phone({ "/v1/auth/logout": lost }, kept(1));
+  it("Sign out with no internet: signed out at once, nothing of the person is left, and the sign-out is owed to the server", async () => {
+    const { session, store, seen, server } = phone({ "/v1/auth/logout": lost }, kept(1));
     await session.start();
     await session.signOut();
     expect(seen.at(-1)).toEqual({ kind: "out", note: "You’re signed out." });
-    expect(store.value).toBeNull();
+    // Only the sign-in to end is kept: no name, no address, nothing of the person (18b-i round one, H1).
+    expect(JSON.parse(store.value ?? "null")).toEqual({ signOutOwed: "refresh-1" });
     expect(session.accessToken()).toBeNull();
+    // The next opening still has no internet: still owed, and still signed out.
+    const offline = createSession({ server: { apiUrl: API, ask: server.ask }, store, onChange: () => undefined });
+    await offline.start();
+    expect(offline.state()).toEqual({ kind: "out", note: null });
+    expect(JSON.parse(store.value ?? "null")).toEqual({ signOutOwed: "refresh-1" });
+    // With internet again, coming back tells the server once, and the owed sign-out is gone.
+    const online = fakeServer({ "/v1/auth/logout": () => ({ status: 200, body: {} }) });
+    const back = createSession({ server: { apiUrl: API, ask: online.ask }, store, onChange: () => undefined });
+    await back.start();
+    expect(online.asked.filter((a) => a.path === "/v1/auth/logout").map((a) => a.body)).toEqual([{ refreshToken: "refresh-1" }]);
+    expect(store.value).toBeNull();
+    await back.tellOwedSignOut();
+    expect(online.asked.filter((a) => a.path === "/v1/auth/logout")).toHaveLength(1);
+  });
+
+  it("an owed sign-out the server refuses as already ended is settled too, and never touches a sign-in made since", async () => {
+    const store = memoryStore(JSON.stringify({ signOutOwed: "refresh-1" }));
+    const server = fakeServer({ "/v1/auth/logout": () => ({ status: 401, body: { error: "unauthorized", message: "Signed out." } }) });
+    const session = createSession({ server: { apiUrl: API, ask: server.ask }, store, onChange: () => undefined });
+    await session.start();
+    expect(store.value).toBeNull();
+    // Somebody signed in before the owed one was told: their sign-in is kept as it is.
+    const signedIn = memoryStore(kept(2));
+    const other = createSession({ server: { apiUrl: API, ask: server.ask }, store: signedIn, onChange: () => undefined });
+    await other.start();
+    await other.tellOwedSignOut();
+    expect(signedIn.value).toBe(kept(2));
   });
 
   it("a key store that will not delete is overwritten, so the next opening is signed out", async () => {
