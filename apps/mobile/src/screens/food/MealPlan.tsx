@@ -39,11 +39,12 @@ interface WhatToEatNextProps {
   retryToday: () => void;
   /** Moves when another page asks for the week to open (the Dashboard's See meal plan). */
   openWeekAt: number | null;
+  onWeekOpened: () => void;
 }
 
 /** The Food page's one answer to "what do I eat now?": the plan's next meal for somebody with a plan,
  *  the meal ideas for somebody without. Every number and every refusal is the server's. */
-export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retryToday, openWeekAt }: WhatToEatNextProps) {
+export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retryToday, openWeekAt, onWeekOpened }: WhatToEatNextProps) {
   const { session } = useSession();
   const { height } = useWindowDimensions();
   const { read, again, begun, shownFrom } = useRead(PLAN_READ, dietPlanResponseSchema, fresh);
@@ -87,7 +88,8 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
     setShownDay(planDayOf(new Date()));
     setAsking(false);
     setWeek(true);
-  }, [openWeekAt]);
+    onWeekOpened();
+  }, [openWeekAt, onWeekOpened]);
 
   const send = async (key: string, method: "POST" | "PUT", path: string, body: Record<string, unknown>): Promise<boolean> => {
     if (sendingNow.current) return false;
@@ -101,6 +103,8 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
     sendingNow.current = false;
     setBusy(false);
     if (answer.kind === "no_answer") {
+      // Only Undo itself is still offered: an earlier swap's Undo beside a swap that failed would read as if it worked.
+      if (!key.startsWith("undo|")) setUndo(null);
       setTrouble(NO_CONNECTION);
       return false;
     }

@@ -158,7 +158,15 @@ export function FoodScreen() {
   const asked = useRoute().params;
   const toToday = typeof asked === "object" && "today" in asked ? asked.today : null;
   // The Dashboard's See meal plan opens the week itself.
-  const toWeek = typeof asked === "object" && "week" in asked && typeof asked.week === "number" ? asked.week : null;
+  const askedWeek = typeof asked === "object" && "week" in asked && typeof asked.week === "number" ? asked.week : null;
+  // Opened once: coming back to today later never opens it again.
+  const [toWeek, setToWeek] = useState<number | null>(null);
+  const weekSeen = useRef<number | null>(null);
+  useEffect(() => {
+    if (askedWeek === null || askedWeek === weekSeen.current) return;
+    weekSeen.current = askedWeek;
+    setToWeek(askedWeek);
+  }, [askedWeek]);
   useEffect(() => {
     if (toToday !== null) setDay(startOfDay(new Date()));
   }, [toToday]);
@@ -249,6 +257,9 @@ export function FoodScreen() {
           todayFailed={read.kind === "failed"}
           retryToday={again}
           openWeekAt={toWeek}
+          onWeekOpened={() => {
+            setToWeek(null);
+          }}
           fresh={answers}
           onAnswered={answered}
         />

@@ -311,6 +311,33 @@ describe("one box, one answer", () => {
     const box = await open(world, files(), "Dashboard");
     await fireEvent.press(await within(await box.findByTestId("recommended-box")).findByRole("button", { name: "See meal plan" }));
     expect(await screen.findByText(/^Today · /)).toBeTruthy();
+    // Closed, then back to today from another day: it stays closed (re-check, N1).
+    await fireEvent.press(screen.getByRole("button", { name: "Close" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Previous day" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Next day" }));
+    await act(async () => { await new Promise((done) => setTimeout(done, 100)); });
+    expect(screen.queryByText(/^Today · /)).toBeNull();
+  });
+
+  it("a second swap with no answer takes away the first swap's Undo (re-check, N2)", async () => {
+    let first = true;
+    const SWAP = `/v1/nutrition/diet-plan/days/${String(TODAY)}/swap`;
+    const world = serverOf(() => ok(week([OATS, RICE])), {
+      [SWAP]: () => {
+        if (first) {
+          first = false;
+          return ok(week([TOFU, RICE]));
+        }
+        return Promise.reject(new Error("no signal"));
+      },
+    });
+    const box = await open(world);
+    await fireEvent.press(await box.findByRole("button", { name: "Swap Oatmeal" }));
+    expect(await box.findByRole("button", { name: "Undo the swap" })).toBeTruthy();
+    await fireEvent.press(box.getByRole("button", { name: "Swap Tofu" }));
+    expect(await box.findByText("No connection. Try again.")).toBeTruthy();
+    expect(box.queryByText("Meal swapped.")).toBeNull();
+    expect(box.queryByRole("button", { name: "Undo the swap" })).toBeNull();
   });
 });
 
