@@ -50,9 +50,9 @@ export function foodsOfRow(
   return (waiting.find((m) => m.id === row.id)?.body.items ?? []).flatMap((i) => ("canonical" in i ? [i.canonical] : []));
 }
 
-/** What the outbox keeps for a planned meal logged: by canonical and grams, as the plan priced it, so
- *  the server saves the numbers the plan showed. */
-export function planMealAsMeal(meal: Pick<DietPlanMeal, "mealType" | "items" | "totals">, id: string, now: Date): WaitingMeal {
+/** What the outbox keeps for a planned meal logged: its foods as the plan holds them, and which meal of
+ *  the plan it is, so the server saves the numbers the plan showed (round one of 34e-ii-b, H4). */
+export function planMealAsMeal(meal: Pick<DietPlanMeal, "mealType" | "items" | "totals">, id: string, now: Date, planned: { day: number; meal: number }): WaitingMeal {
   return {
     id,
     body: {
@@ -61,6 +61,7 @@ export function planMealAsMeal(meal: Pick<DietPlanMeal, "mealType" | "items" | "
       takenAt: now.toISOString(),
       mealType: meal.mealType,
       items: meal.items.map(planItemChoice),
+      planned,
     },
     items: meal.items,
     totals: meal.totals,

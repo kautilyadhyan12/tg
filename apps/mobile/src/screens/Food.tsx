@@ -170,6 +170,27 @@ export function FoodScreen() {
   useEffect(() => {
     if (toToday !== null) setDay(startOfDay(new Date()));
   }, [toToday]);
+  // The Dashboard's Log meal opens this page at What to eat next, where the meal is logged (Kd,
+  // 2026-11-02). The page keeps the box in view as the boxes above it load, until the person scrolls.
+  const askedNext = typeof asked === "object" && "next" in asked && typeof asked.next === "number" ? asked.next : null;
+  const nextSeen = useRef<number | null>(null);
+  const [toNext, setToNext] = useState(false);
+  useEffect(() => {
+    if (askedNext === null || askedNext === nextSeen.current) return;
+    nextSeen.current = askedNext;
+    setToNext(true);
+  }, [askedNext]);
+  const scroller = useRef<ScrollView | null>(null);
+  // Where the box sits: under the page's picture and the gap below it, at its own place among the boxes.
+  const topHeight = useRef<number | null>(null);
+  const nextAt = useRef<number | null>(null);
+  const showNext = useCallback(() => {
+    if (topHeight.current === null || nextAt.current === null) return;
+    scroller.current?.scrollTo({ y: Math.max(0, topHeight.current + sizes.gap + nextAt.current - sizes.edge), animated: true });
+  }, []);
+  useEffect(() => {
+    if (toNext) showNext();
+  }, [toNext, showNext]);
 
   const rows = dayRows(read, view, day);
   // The meal open in its box, as the day now reads it: a change saved there shows at once.
@@ -187,7 +208,17 @@ export function FoodScreen() {
 
   return (
     <Page
+      scroller={scroller}
+      onDrag={() => {
+        setToNext(false);
+      }}
       top={
+        <View
+          onLayout={(e) => {
+            topHeight.current = e.nativeEvent.layout.height;
+            if (toNext) showNext();
+          }}
+        >
         <PictureTop
           picture="food"
           tall={0.62}
@@ -195,6 +226,7 @@ export function FoodScreen() {
           title="Fuel Your Training"
           foot={<Button label={photoKept ? "Finish photo meal" : "Scan food"} icon="camera" onPress={() => { setSaid(null); setBarcodeFirst(false); setPhotoOpen(true); }} />}
         />
+        </View>
       }
     >
       {photoKept ? (
@@ -252,6 +284,12 @@ export function FoodScreen() {
         />
       </Sheet>
       {today ? (
+        <View
+          onLayout={(e) => {
+            nextAt.current = e.nativeEvent.layout.y;
+            if (toNext) showNext();
+          }}
+        >
         <WhatToEatNext
           pickFoods={(plan, onClose) => <AddFood type={plan.mealType} plan={plan} onClose={onClose} onAdded={onClose} />}
           foodsToday={rows === null ? null : rows.map((r) => foodsOfRow(r, view.waiting))}
@@ -264,6 +302,7 @@ export function FoodScreen() {
           fresh={answers}
           onAnswered={answered}
         />
+        </View>
       ) : null}
       <View style={styles.dayRow}>
         <Pressable

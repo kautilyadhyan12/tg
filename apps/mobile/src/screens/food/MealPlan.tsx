@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "
 import { Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { useIsFocused } from "@react-navigation/native";
 import {
-  MOST_PLAN_MEALS, dietPlanResponseSchema, mealMeasuresResponseSchema, mealTypeSchema,
+  MOST_PLAN_MEALS, dietPlanResponseSchema, mealMeasuresResponseSchema, mealTypeSchema, planItemChoice,
   type DietPlanDayReply, type DietPlanMeal, type DietPlanResponse, type MealType,
 } from "@app/shared";
 import { Button } from "../../look/Button";
@@ -29,11 +29,15 @@ export const PLAN_READ = "/v1/nutrition/diet-plan";
 const NO_CONNECTION = "No connection. Try again.";
 const NO_SETTLE = () => undefined;
 
-/** What Undo puts back: the day as it stood before the last swap. */
-interface Undo { id: string; day: number; meals: DietPlanMeal[] }
+/** What Undo puts back: the day as it stood before the last swap, and the day's version the swap made. */
+interface Undo { id: string; day: number; meals: DietPlanMeal[]; version: string }
 
-/** A meal of the plan open in the food box: one of a day's (`at`), or a new one (`at` null). */
-interface Editing { id: string; day: number; at: number | null; mealType: MealType; start: BasketFood[] }
+/** A meal of the plan open in the food box: one of a day's (`at`), or a new one (`at` null), with the day
+ *  as it was when the box opened. Saved, the change is made to that day or refused, never to another. */
+interface Editing { id: string; day: number; at: number | null; mealType: MealType; start: BasketFood[]; before: DietPlanMeal[]; version: string }
+
+/** What a change came to: made, refused as made from an older copy of the plan, or not made. */
+type Sent = { kind: "ok"; data: DietPlanResponse } | { kind: "changed" } | { kind: "failed" };
 
 interface WhatToEatNextProps {
   /** The foods of each meal on today's list; null until the list is read, and nothing is logged till then. */
@@ -75,7 +79,7 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
   const [editing, setEditing] = useState<Editing | null>(null);
   // The week's two questions: which meal to add to the day shown, and whether to remove one of its meals.
   const [choosing, setChoosing] = useState(false);
-  const [removing, setRemoving] = useState<number | null>(null);
+  const [removing, setRemoving] = useState<{ at: number; version: string } | null>(null);
   const [opening, setOpening] = useState(false);
   const loggingNow = useRef(false);
   const sendingNow = useRef(false);
@@ -107,8 +111,8 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
     onWeekOpened();
   }, [openWeekAt, onWeekOpened]);
 
-  const send = async (key: string, method: "POST" | "PUT", path: string, body: Record<string, unknown>): Promise<boolean> => {
-    if (sendingNow.current) return false;
+  const send = async (key: string, method: "POST" | "PUT", path: string, body: Record<string, unknown>): Promise<Sent> => {
+    if (sendingNow.current) return { kind: "failed" };
     sendingNow.current = true;
     setBusy(true);
     setTrouble(null);
@@ -122,22 +126,23 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
       // Only Undo itself is still offered: an earlier swap's Undo beside a swap that failed would read as if it worked.
       if (!key.startsWith("undo|")) setUndo(null);
       setTrouble(NO_CONNECTION);
-      return false;
+      return { kind: "failed" };
     }
     changeIds.current.delete(key);
     if (answer.kind === "ok") {
       setAnswered({ data: answer.data, after: begun() });
-      return true;
+      return { kind: "ok", data: answer.data };
     }
     setUndo(null);
     setTrouble(answer.message === "" ? NO_CONNECTION : answer.message);
     // The phone's copy of the plan is older than the server's: read it again.
-    if (answer.error === "plan_changed" || answer.status === 404) again();
-    return false;
+    const changed = answer.error === "plan_changed" || answer.status === 404;
+    if (changed) again();
+    return changed ? { kind: "changed" } : { kind: "failed" };
   };
 
   const make = async () => {
-    if (await send("make", "POST", `${PLAN_READ}/make`, {})) {
+    if ((await send("make", "POST", `${PLAN_READ}/make`, {})).kind === "ok") {
       setUndo(null);
       setAsking(false);
       setShownDay(today);
@@ -145,27 +150,28 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
     }
   };
   const swap = async (day: number, at: number) => {
-    const before = plan?.days[day - 1]?.meals ?? [];
-    const shown = (before[at]?.items ?? []).map((i) => i.canonical);
-    if (await send(`swap|${String(day)}|${String(at)}`, "POST", `${PLAN_READ}/days/${String(day)}/swap`, { meal: at, shown })) {
-      setUndo({ id: newGoalId(), day, meals: before });
+    const shown = plan?.days[day - 1];
+    if (shown === undefined) return;
+    const sent = await send(`swap|${String(day)}|${String(at)}|${shown.version}`, "POST", `${PLAN_READ}/days/${String(day)}/swap`, { meal: at, version: shown.version });
+    if (sent.kind === "ok") {
+      setUndo({ id: newGoalId(), day, meals: shown.meals, version: sent.data.days[day - 1]?.version ?? "" });
       setSaid("Meal swapped.");
     }
   };
   const undoSwap = async (u: Undo) => {
-    const meals = u.meals.map((m) => ({ mealType: m.mealType, items: m.items.map((i) => ({ canonical: i.canonical, grams: i.gramsPoint })) }));
-    const shown = (plan?.days[u.day - 1]?.meals ?? []).map((m) => m.items.map((i) => i.canonical));
-    if (await send(`undo|${u.id}`, "PUT", `${PLAN_READ}/days/${String(u.day)}`, { meals, shown })) {
+    // Each food as it was, the person's own by their own numbers.
+    const meals = u.meals.map((m) => ({ mealType: m.mealType, items: m.items.map(planItemChoice) }));
+    if ((await send(`undo|${u.id}`, "PUT", `${PLAN_READ}/days/${String(u.day)}`, { meals, version: u.version })).kind === "ok") {
       setUndo(null);
       setSaid("Meal put back.");
     }
   };
-  const log = async (meal: DietPlanMeal) => {
+  const log = async (meal: DietPlanMeal, at: number) => {
     if (outbox === null || foodsToday === null || loggingNow.current) return;
     loggingNow.current = true;
     setLogging(true);
     setTrouble(null);
-    const kept = await outbox.add(planMealAsMeal(meal, newGoalId(), new Date()));
+    const kept = await outbox.add(planMealAsMeal(meal, newGoalId(), new Date(), { day: today, meal: at }));
     loggingNow.current = false;
     setLogging(false);
     setUndo(null);
@@ -178,38 +184,41 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
 
   /** A meal of the plan opened in the food box, each food with its own measures where the server gives them. */
   const openMeal = async (day: number, at: number, meal: DietPlanMeal) => {
-    if (opening) return;
+    const shown = plan?.days[day - 1];
+    if (opening || shown === undefined) return;
     quiet();
     setOpening(true);
     const answer = await session.signedIn({ method: "GET", path: `${PLAN_READ}/days/${String(day)}/meals/${String(at)}/measures` }, mealMeasuresResponseSchema);
     setOpening(false);
     const measures = answer.kind === "ok" && answer.data.measures.length === meal.items.length ? answer.data.measures : null;
     const start = meal.items.map((item, i) => planBasketFood(item, measures?.[i] ?? measuresWithoutServer(item), newGoalId()));
-    setEditing({ id: newGoalId(), day, at, mealType: meal.mealType, start });
+    setEditing({ id: newGoalId(), day, at, mealType: meal.mealType, start, before: shown.meals, version: shown.version });
   };
   const newMeal = (mealType: MealType) => {
+    const shown = plan?.days[shownDay - 1];
+    if (shown === undefined) return;
     quiet();
     setChoosing(false);
-    setEditing({ id: newGoalId(), day: shownDay, at: null, mealType, start: [] });
+    setEditing({ id: newGoalId(), day: shownDay, at: null, mealType, start: [], before: shown.meals, version: shown.version });
   };
-  /** The day sent whole with the meal's foods, from the day as the phone shows it. */
+  /** The day sent whole with the meal's foods, from the day as it was when the box opened. */
   const saveMeal = async (e: Editing, foods: readonly BasketFood[]) => {
-    const before = plan?.days[e.day - 1]?.meals ?? [];
-    const shown = before.map((m) => m.items.map((i) => i.canonical));
-    const meals = dayWithMeal(before, { at: e.at, mealType: e.mealType, items: foods.map((f) => f.chosen) });
-    if (await send(`edit|${e.id}`, "PUT", `${PLAN_READ}/days/${String(e.day)}`, { meals, shown })) {
+    const meals = dayWithMeal(e.before, { at: e.at, mealType: e.mealType, items: foods.map((f) => f.chosen) });
+    const sent = await send(`edit|${e.id}`, "PUT", `${PLAN_READ}/days/${String(e.day)}`, { meals, version: e.version });
+    // Changed since the box opened: it closes, and the week, read again, says so.
+    if (sent.kind === "changed") setEditing(null);
+    if (sent.kind === "ok") {
       setEditing(null);
       setUndo(null);
       setSaid(e.at === null ? `${mealTypeName(e.mealType)} added to ${planDayName(e.day)}.` : `${mealTypeName(e.mealType)} saved.`);
     }
   };
-  const removeMeal = async (day: number, at: number) => {
-    const before = plan?.days[day - 1]?.meals ?? [];
-    const meal = before[at];
-    if (meal === undefined) return;
-    const shown = before.map((m) => m.items.map((i) => i.canonical));
-    const meals = dayWithMeal(before, { at, mealType: meal.mealType, items: null });
-    if (await send(`remove|${String(day)}|${String(at)}|${shown.join("/")}`, "PUT", `${PLAN_READ}/days/${String(day)}`, { meals, shown })) {
+  const removeMeal = async (day: number, r: { at: number; version: string }) => {
+    const shown = plan?.days[day - 1];
+    const meal = shown?.meals[r.at];
+    if (shown === undefined || meal === undefined) return;
+    const meals = dayWithMeal(shown.meals, { at: r.at, mealType: meal.mealType, items: null });
+    if ((await send(`remove|${String(day)}|${String(r.at)}|${r.version}`, "PUT", `${PLAN_READ}/days/${String(day)}`, { meals, version: r.version })).kind === "ok") {
       setRemoving(null);
       setUndo(null);
       setSaid(`${mealTypeName(meal.mealType)} removed from ${planDayName(day)}.`);
@@ -265,7 +274,8 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
     quiet();
     setShownDay(stepDay(shownDay, by));
   };
-  const removingMeal = removing === null ? undefined : shown?.meals[removing];
+  // The meal asked about, while the day is the one it was asked from.
+  const removingMeal = removing === null || shown?.version !== removing.version ? undefined : shown.meals[removing.at];
   const backStep = (): boolean => {
     if (!asking && !choosing && removing === null) return false;
     setTrouble(null);
@@ -345,7 +355,7 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
               const change = (
                 <>
                   <Button label="Change" kind="link" compact disabled={busy || opening} say={`Change ${ideaName(meal)}`} onPress={() => { void openMeal(shownDay, at, meal); }} />
-                  <Button label="Remove" kind="link" compact disabled={busy} say={`Remove ${ideaName(meal)}`} onPress={() => { quiet(); setRemoving(at); }} />
+                  <Button label="Remove" kind="link" compact disabled={busy} say={`Remove ${ideaName(meal)}`} onPress={() => { quiet(); setRemoving({ at, version: shown.version }); }} />
                 </>
               );
               return (
@@ -363,7 +373,7 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
                   ) : (
                     <View style={styles.actions}>
                       {shownDay === today ? (
-                        <Button label="Log meal" kind="soft" compact disabled={held} say={`Log ${ideaName(meal)}`} onPress={() => { void log(meal); }} />
+                        <Button label="Log meal" kind="soft" compact disabled={held} say={`Log ${ideaName(meal)}`} onPress={() => { void log(meal, at); }} />
                       ) : null}
                       <Button label="Swap" kind="link" compact disabled={held} say={`Swap ${ideaName(meal)}`} onPress={() => { void swap(shownDay, at); }} />
                       {change}
@@ -470,7 +480,7 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
             <MealWords meal={next} />
             <OutsideDiet meal={next} />
             <View style={styles.actions}>
-              <Button label="Log meal" compact disabled={held} say={`Log ${ideaName(next)}`} onPress={() => { void log(next); }} />
+              <Button label="Log meal" compact disabled={held} say={`Log ${ideaName(next)}`} onPress={() => { void log(next, nextAt); }} />
               <Button label="Swap" kind="link" compact disabled={held} say={`Swap ${ideaName(next)}`} onPress={() => { void swap(today, nextAt); }} />
               {seeWeek}
               {otherIdeas}
@@ -487,16 +497,18 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
 
 /** The Dashboard's Recommended box: the same answer as the Food page's. Today's meals are read only
  *  for somebody with a plan. */
-export function Recommended({ onMore, onPlan }: { onMore: () => void; onPlan: () => void }) {
+/** The Dashboard's Recommended box. Its Log meal opens the Food page's What to eat next, where the meal
+ *  is logged: the Dashboard never logs one by itself (Kd, 2026-11-02). */
+export function Recommended({ onMore, onPlan, onLog }: { onMore: () => void; onPlan: () => void; onLog: () => void }) {
   const { read, again } = useRead(PLAN_READ, dietPlanResponseSchema);
-  if (read.kind === "loading") return <MealIdeas onMore={onMore} planned="loading" />;
+  if (read.kind === "loading") return <MealIdeas onMore={onMore} onLog={onLog} planned="loading" />;
   // Never the ideas as if there were no plan: Food says the same.
-  if (read.kind === "failed") return <MealIdeas onMore={onMore} planned={{ failed: "Your meal plan couldn’t load.", retry: again }} />;
-  if (hasMeals(read.data)) return <RecommendedFromPlan plan={read.data} onMore={onPlan} />;
-  return <MealIdeas onMore={onMore} />;
+  if (read.kind === "failed") return <MealIdeas onMore={onMore} onLog={onLog} planned={{ failed: "Your meal plan couldn’t load.", retry: again }} />;
+  if (hasMeals(read.data)) return <RecommendedFromPlan plan={read.data} onMore={onPlan} onLog={onLog} />;
+  return <MealIdeas onMore={onMore} onLog={onLog} />;
 }
 
-function RecommendedFromPlan({ plan, onMore }: { plan: DietPlanResponse; onMore: () => void }) {
+function RecommendedFromPlan({ plan, onMore, onLog }: { plan: DietPlanResponse; onMore: () => void; onLog: () => void }) {
   const { view } = useMealOutbox();
   const dayStart = startOfDay(new Date()).getTime();
   const day = useMemo(() => new Date(dayStart), [dayStart]);
@@ -516,7 +528,7 @@ function RecommendedFromPlan({ plan, onMore }: { plan: DietPlanResponse; onMore:
     caution: plan.caution,
     labelCaution: plan.labelCaution,
   };
-  return <MealIdeas onMore={onMore} planned={planned} />;
+  return <MealIdeas onMore={onMore} onLog={onLog} planned={planned} />;
 }
 
 function Title() {

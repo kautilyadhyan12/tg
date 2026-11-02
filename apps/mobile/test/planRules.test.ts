@@ -36,13 +36,14 @@ describe("a planned meal logged", () => {
   it("is sent by canonical and the plan's own grams, under its own meal, with the plan's totals", () => {
     const totals = { kcalPoint: 640, kcalLow: 600, kcalHigh: 700, proteinG: 40, carbsG: 60, fatG: 10 };
     const items = [{ canonical: "rice_white", name: "Rice", gramsPoint: 212 }, { canonical: "dal", name: "Dal", gramsPoint: 150 }];
-    const kept = planMealAsMeal({ mealType: "snack", items, totals } as never, "id-1", new Date("2026-11-02T10:00:00.000Z"));
+    const kept = planMealAsMeal({ mealType: "snack", items, totals } as never, "id-1", new Date("2026-11-02T10:00:00.000Z"), { day: 1, meal: 2 });
     expect(kept.body).toEqual({
       id: "id-1",
       mealName: "Rice + Dal",
       takenAt: "2026-11-02T10:00:00.000Z",
       mealType: "snack",
       items: [{ canonical: "rice_white", grams: 212 }, { canonical: "dal", grams: 150 }],
+      planned: { day: 1, meal: 2 },
     });
     expect(kept.totals).toEqual(totals);
   });
