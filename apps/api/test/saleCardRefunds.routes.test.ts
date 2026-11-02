@@ -6,7 +6,7 @@
 // basket, refunded twice, or another gym's sale refunded. Every claim is read from the tables and from what the fake Square
 // made, never from the reply alone.
 import { randomBytes, randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, onTestFinished } from "vitest";
 import postgres from "postgres";
 import {
   ROLE_PRIVILEGES,
@@ -888,6 +888,11 @@ d("Refund to card at Sell (real Postgres)", { timeout: T }, () => {
 
   describe("a chargeback (18d-iv-e-i)", () => {
     it("is on the basket's first line alone, on this gym's page, and on Overview's list as the sale", async () => {
+      // Back to noon afterwards: the tests below move this clock on by hours, and from the real time that can cross the gym's midnight.
+      const noon = clock;
+      onTestFinished(() => {
+        clock = noon;
+      });
       clock = new Date(Math.max(clock.getTime(), Date.now()));
       const basket = await sold(gym);
       const other = await sold(gym);
