@@ -50,7 +50,7 @@ const LIVE_PLAN = "zz_postsm_live";
 const NOON = new Date("2026-10-07T06:30:00Z");
 const HOUR = 60 * 60 * 1000;
 
-const IPHONE = readFileSync(new URL("./fixtures/photos/iphone16.jpg", import.meta.url)).toString("base64");
+const PHONE_PHOTO = readFileSync(new URL("./fixtures/photos/pixel7-meta.jpg", import.meta.url)).toString("base64");
 
 let ipCounter = 0;
 const nextIp = () => `10.72.${String(Math.floor(ipCounter / 250) % 250)}.${String((ipCounter++ % 250) + 1)}`;
@@ -306,7 +306,7 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
   it("a member's photo one byte over 1 MB is refused in words and nothing is kept", async () => {
     const gym = await makeGym("Heavy House");
     const writer = await member(gym, "Wendy Writer");
-    const real = Buffer.from(IPHONE, "base64");
+    const real = Buffer.from(PHONE_PHOTO, "base64");
     const end = real.lastIndexOf(Buffer.from([0xff, 0xd9]));
     const over = Buffer.concat([real.subarray(0, end), Buffer.alloc(1024 * 1024 + 1 - real.length, 0x55), real.subarray(end)]).toString("base64");
     const res = await inject("POST", `${posts(gym.id)}/mine`, writer.cookies, { postKey: randomUUID(), body: "Too heavy", photos: [over] });
@@ -322,7 +322,7 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
       const writer = await member(gym, "Wendy Writer");
       const reader = await member(gym, "Rita Reader");
       const other = await member(gym, "Omar Other");
-      const post = await add(gym, writer, "Look at the state of him on the bench", [IPHONE]);
+      const post = await add(gym, writer, "Look at the state of him on the bench", [PHONE_PHOTO]);
       const photoPath = `${posts(gym.id)}/${post.id}/photos/${post.photos[0]?.id ?? ""}`;
       expect(await filesOf(gym.id)).toHaveLength(1);
       expect((await inject("GET", photoPath, reader.cookies)).statusCode).toBe(200);
@@ -422,7 +422,7 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
         ["a member of a gym whose plan lapsed", lapsed, lapsedMember.cookies, 404, "org_not_found"],
       ];
       for (const [who, where, cookies, status, error] of cases) {
-        const res = await inject("POST", `${posts(where.id)}/mine`, cookies, { postKey: randomUUID(), body: "hello", photos: [IPHONE] });
+        const res = await inject("POST", `${posts(where.id)}/mine`, cookies, { postKey: randomUUID(), body: "hello", photos: [PHONE_PHOTO] });
         expect({ who, status: res.statusCode }).toEqual({ who, status });
         if (status !== 401) expect({ who, error: errorOf(res) }).toEqual({ who, error });
         // Refused before the body is read: one that cannot be read is refused the same way.
@@ -442,7 +442,7 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
       }
 
       // The member who may: posted under their own name, and theirs to remove.
-      const post = await add(gym, inside, "First time on the rower today", [IPHONE]);
+      const post = await add(gym, inside, "First time on the rower today", [PHONE_PHOTO]);
       expect(post).toMatchObject({ fromMember: true, own: true, reported: false, author: { name: "Ina I.", initials: "II" } });
       expect((await feed(gym, stopped)).posts[0]).toMatchObject({ fromMember: true, own: false, author: { name: "Ina I." } });
       expect((await feed(gym, inside)).posting).toBe("on");
@@ -468,7 +468,7 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
         expect(res.statusCode).toBe(400);
       }
       const key = randomUUID();
-      const sends = await Promise.all([0, 1, 2, 3, 4].map((n) => send(gym, writer, "Sent five times at once", [IPHONE], key, nextIp(), either(n))));
+      const sends = await Promise.all([0, 1, 2, 3, 4].map((n) => send(gym, writer, "Sent five times at once", [PHONE_PHOTO], key, nextIp(), either(n))));
       expect(sends.map((r) => r.statusCode)).toEqual([201, 201, 201, 201, 201]);
       expect(new Set(sends.map((r) => (JSON.parse(r.body) as { post: GymPost }).post.id)).size).toBe(1);
       expect(await count("posts", gym.id)).toBe(1);
@@ -555,7 +555,7 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
       const rival = await member(gym, "Rhea Rival");
       const other = await makeGym("Other Own House");
       const outsider = await member(other, "Olga Outsider");
-      const post = await add(gym, writer, "Mine to take down", [IPHONE]);
+      const post = await add(gym, writer, "Mine to take down", [PHONE_PHOTO]);
       const gymPost = await inject("POST", posts(gym.id), gym.owner.cookies, { postKey: randomUUID(), body: "The gym's own", photos: [] });
       const gymPostId = (JSON.parse(gymPost.body) as { post: { id: string } }).post.id;
       expect((await report(gym, rival, post.id, "other")).statusCode).toBe(200);
@@ -585,7 +585,7 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
       const gym = await makeGym("Leaving House");
       const leaver = await member(gym, "Lena Leaver");
       const reader = await member(gym, "Rita Reader");
-      const post = await add(gym, leaver, "My last session here", [IPHONE]);
+      const post = await add(gym, leaver, "My last session here", [PHONE_PHOTO]);
       const photoPath = `${posts(gym.id)}/${post.id}/photos/${post.photos[0]?.id ?? ""}`;
       expect((await inject("PUT", `${posts(gym.id)}/${post.id}/pin`, gym.owner.cookies, { pinned: true })).statusCode).toBe(200);
       expect((await report(gym, reader, post.id, "other")).statusCode).toBe(200);
@@ -824,9 +824,9 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
     async () => {
       const gym = await makeGym("Leftover House");
       const writer = await member(gym, "Wendy Writer");
-      const kept = await add(gym, writer, "Stays", [IPHONE]);
-      const taken = await add(gym, writer, "Taken down by staff", [IPHONE]);
-      const own = await add(gym, writer, "Taken down by me", [IPHONE]);
+      const kept = await add(gym, writer, "Stays", [PHONE_PHOTO]);
+      const taken = await add(gym, writer, "Taken down by staff", [PHONE_PHOTO]);
+      const own = await add(gym, writer, "Taken down by me", [PHONE_PHOTO]);
       expect(await filesOf(gym.id)).toHaveLength(3);
       // Nothing of a post that was kept is on the list.
       expect(await listedOf(gym.id)).toEqual([]);
@@ -893,7 +893,7 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
       const writer = await member(gym, "Wendy Writer");
       await seedPosts(gym, writer, GYM_MEMBER_POSTS_A_DAY - 1);
       clock += 1000;
-      const body = { postKey: randomUUID(), body: "The last", photos: [IPHONE] };
+      const body = { postKey: randomUUID(), body: "The last", photos: [PHONE_PHOTO] };
       // Both are held at the person's membership, past the first look for the key.
       const release = await hold((tx) => tx`SELECT 1 FROM gym_members WHERE gym_id = ${gym.id} AND user_id = ${writer.userId} FOR UPDATE`);
       const both = [0, 1].map((n) => inject("POST", `${posts(gym.id)}/mine`, writer.cookies, body, nextIp(), either(n)));

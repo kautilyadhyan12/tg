@@ -9,7 +9,7 @@ import { z } from "zod";
 import { classDaySchema } from "./classes.js";
 import { memberGymChallengeSchema } from "./gymChallenges.js";
 import { gymPagePhotoSchema } from "./gymPage.js";
-import { GYM_POST_PHOTO_MAX_BYTES, postLength } from "./postBasics.js";
+import { GYM_POST_PHOTO_MAX_BYTES, hasCommentWords, postLength } from "./postBasics.js";
 
 export { GYM_POST_PHOTO_MAX_BYTES, postLength };
 
@@ -235,7 +235,7 @@ export const addGymPostRequestSchema = z
       .pipe(z.array(photoBase64)),
   })
   .strict()
-  .refine((post) => post.body.trim() !== "" || post.photos.length > 0, { message: "nothing to post", path: ["body"] });
+  .refine((post) => hasCommentWords(post.body) || post.photos.length > 0, { message: "nothing to post", path: ["body"] });
 export type AddGymPostRequest = z.infer<typeof addGymPostRequestSchema>;
 
 export const gymPostResponseSchema = z.object({ post: gymPostSchema }).strict();
@@ -259,6 +259,8 @@ export const gymPostDraftFileSchema = z
     sent: z.boolean().optional(),
     /** And it has been changed since: the server would answer with the post as it first was. */
     changed: z.boolean().optional(),
+    /** And its photos have been changed since. */
+    photosChanged: z.boolean().optional(),
   })
   .strict();
 export type GymPostDraftFile = z.infer<typeof gymPostDraftFileSchema>;

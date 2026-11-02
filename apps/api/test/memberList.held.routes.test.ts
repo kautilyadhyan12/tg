@@ -182,7 +182,9 @@ d("the Members list says what each person holds (real Postgres)", () => {
   };
   /** Give one as it was given so many days ago: the same service, its clock set back. */
   const gaveDaysAgo = async (days: number, owner: User, gymId: string, entryId: string, body: { typeId: string; startsOn: string; paid: boolean }): Promise<string> => {
-    const then = new Date(Date.now() - days * DAY_MS);
+    // Midday on the day it started: so many times 24 hours back lands on another day around a change of the clocks.
+    expect(days).toBeGreaterThan(0);
+    const then = new Date(`${body.startsOn}T12:00:00Z`);
     const page = await heldService.giveHeldMembership({ sql, now: () => then }, owner.userId, gymId, entryId, { requestKey: nextKey(), ...body, ...(body.paid ? { method: "cash" as const } : {}) });
     const made = page.memberships.find((m) => m.typeId === body.typeId);
     if (made === undefined) throw new Error("the membership given is not on the page");

@@ -53,6 +53,8 @@ import {
   type StaffGymPostsResponse,
   type StaffPersonGymPostsResponse,
   type StoppedGymPostersResponse,
+  DISGUISED_WORDS,
+  GYM_POST_PHOTO_SEND_SIDE,
 } from "@app/shared";
 import { getOrgById, gymHasLivePlan, insertAudit } from "../repo.js";
 import { OrgsError, holdsPrivilege, requirePrivilege, requireWritablePrivilege } from "../service.js";
@@ -62,7 +64,7 @@ import { postPhotoKey, type PhotoStore } from "../gymPage/photoStore.js";
 import { PHOTO_PROBLEM_STATUS, type PhotoFile } from "../gymPage/service.js";
 import { fullName, shownName } from "../leaderboard/rank.js";
 import { lockGym } from "../memberList/repo.js";
-import { badWordsIn } from "./badWords.js";
+import { badWordsIn, hasDisguisedWords } from "./badWords.js";
 import { removeListed } from "./photoFiles.js";
 import * as commentsRepo from "./commentsRepo.js";
 import * as repo from "./repo.js";
@@ -448,7 +450,7 @@ async function keepPost(
   for (const [i, base64] of body.photos.entries()) {
     // One photo at a time, with the thread free for other requests between them.
     if (i > 0) await new Promise((resolve) => setImmediate(resolve));
-    const read = cleanPhoto(new Uint8Array(Buffer.from(base64, "base64")), GYM_POST_PHOTO_MAX_BYTES);
+    const read = cleanPhoto(new Uint8Array(Buffer.from(base64, "base64")), { maxBytes: GYM_POST_PHOTO_MAX_BYTES, maxSide: GYM_POST_PHOTO_SEND_SIDE, still: true });
     if (!read.ok) {
       const problem = PHOTO_PROBLEM_STATUS[read.problem];
       const why = read.problem === "too_big" ? GYM_POST_WORDS.photo_too_big : problem.message;
@@ -470,7 +472,7 @@ async function keepPost(
     made = await deps.sql.begin(async (tx) => {
       await guard(tx, at);
       // The same key sent twice at once: the second finds the first's row and keeps nothing.
-      if (!(await repo.insertPost(tx, gymId, { id, postKey: body.postKey, body: body.body.trim(), byMember }, authorId, at))) return false;
+      if (!(await repo.insertPost(tx, gymId, { id, postKey: body.postKey, body: body.body.trim(), byMember, photoCount: photos.length }, authorId, at))) return false;
       await repo.insertPhotos(tx, gymId, id, photos, at);
       await repo.unqueueFiles(tx, keys);
       await insertAudit(tx, {
@@ -543,6 +545,7 @@ export async function addMemberPost(deps: PostsDeps, userId: string, gymId: stri
   if (kept !== null) return { post: kept, firstKept: false };
   // The app checks a member's words itself and says which it will not take: nothing is
   // kept, no photo is cleaned, and the day's count is not touched. Staff's posts are not checked.
+  if (hasDisguisedWords(body.body)) throw new OrgsError(400, "post_disguised", DISGUISED_WORDS);
   const words = badWordsIn(body.body);
   if (words.length > 0) throw new OrgsError(400, "post_bad_words", GYM_POST_WORDS.bad_words(words));
   // A full day is refused before any photo is cleaned or written; the count that decides
@@ -643,8 +646,9 @@ export async function react(
   } else if (!(await repo.setReaction(deps.sql, gymId, postId, userId, reaction, deps.now()))) {
     throw postNotFound();
   }
-  const counts = await repo.reactionCounts(deps.sql, gymId, [postId], userId);
-  return gymPostReactionResponseSchema.parse({ reactions: countsOf(counts, postId), mine: reaction });
+  // Both from one moment: with several changes at once, what was asked may not be what the server holds.
+  const [counts, mine] = await deps.sql.begin("isolation level repeatable read read only", async (tx) => [await repo.reactionCounts(tx, gymId, [postId], userId), await repo.reactionsOf(tx, gymId, [postId], userId)] as const);
+  return gymPostReactionResponseSchema.parse({ reactions: countsOf(counts, postId), mine: mine.get(postId) ?? null });
 }
 
 /** A member reports a post, once, with a reason and anything they typed beside it. Nothing

@@ -132,14 +132,18 @@ function memberStatus(gym: repo.BoardGym, board: LeaderboardBoard, built: Board[
   return built;
 }
 
+export async function getLeaderboard(deps: LeaderboardDeps, viewerId: string, gymId: string, query: LeaderboardQuery): Promise<LeaderboardResponse>;
+export async function getLeaderboard(deps: LeaderboardDeps, viewerId: string, gymId: string, query: LeaderboardQuery, limit: Limit): Promise<LeaderboardResponse | null>;
 export async function getLeaderboard(
   deps: LeaderboardDeps,
   viewerId: string,
   gymId: string,
   query: LeaderboardQuery,
-): Promise<LeaderboardResponse> {
+  limit?: Limit,
+): Promise<LeaderboardResponse | null> {
   const now = deps.now();
   const gym = await gymForMember(deps, gymId, viewerId, now);
+  if (limit !== undefined && !(await limit())) return null;
   const at: At = { at: now.toISOString(), today: gym.today };
   const built =
     query.board === "streak" ? await buildStreak(deps, gymId, viewerId, at) : await buildDays(deps, query.board, gymId, viewerId, at, query.period);
@@ -168,14 +172,18 @@ export async function getLeaderboard(
 }
 
 /** What counted for the viewer's own number on one board. */
+export async function getMyCounted(deps: LeaderboardDeps, viewerId: string, gymId: string, query: LeaderboardQuery): Promise<LeaderboardCountedResponse>;
+export async function getMyCounted(deps: LeaderboardDeps, viewerId: string, gymId: string, query: LeaderboardQuery, limit: Limit): Promise<LeaderboardCountedResponse | null>;
 export async function getMyCounted(
   deps: LeaderboardDeps,
   viewerId: string,
   gymId: string,
   query: LeaderboardQuery,
-): Promise<LeaderboardCountedResponse> {
+  limit?: Limit,
+): Promise<LeaderboardCountedResponse | null> {
   const now = deps.now();
   const gym = await gymForMember(deps, gymId, viewerId, now);
+  if (limit !== undefined && !(await limit())) return null;
   const counted = await countedFor(deps, gym, gymId, viewerId, query, now);
   // A visit's id is staff's, to remove it by: the person's own list carries none.
   return leaderboardCountedResponseSchema.parse({
@@ -334,15 +342,19 @@ async function countedFor(
 /** A person's places on the boards the viewer can see. Nothing for anyone hidden or not a
  *  live app member, and nothing while the gym shows no board: the same 404 as a gym that
  *  does not exist. */
+export async function getProfile(deps: LeaderboardDeps, viewerId: string, gymId: string, userId: string, period: LeaderboardPeriod): Promise<LeaderboardProfileResponse>;
+export async function getProfile(deps: LeaderboardDeps, viewerId: string, gymId: string, userId: string, period: LeaderboardPeriod, limit: Limit): Promise<LeaderboardProfileResponse | null>;
 export async function getProfile(
   deps: LeaderboardDeps,
   viewerId: string,
   gymId: string,
   userId: string,
   period: LeaderboardPeriod,
-): Promise<LeaderboardProfileResponse> {
+  limit?: Limit,
+): Promise<LeaderboardProfileResponse | null> {
   const now = deps.now();
   const gym = await gymForMember(deps, gymId, viewerId, now);
+  if (limit !== undefined && !(await limit())) return null;
   if (!gym.live) throw notFound();
   const at: At = { at: now.toISOString(), today: gym.today };
   const person = await repo.memberFacts(deps.sql, gymId, userId, at.at);

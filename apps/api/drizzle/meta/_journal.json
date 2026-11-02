@@ -1317,6 +1317,13 @@
       "when": 1790726400188,
       "tag": "0188_chargeback_lost",
       "breakpoints": true
+    },
+    {
+      "idx": 188,
+      "version": "7",
+      "when": 1790726400189,
+      "tag": "0189_post_photo_count",
+      "breakpoints": true
     }
   ]
 }

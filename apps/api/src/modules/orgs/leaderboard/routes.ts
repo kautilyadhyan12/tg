@@ -16,7 +16,7 @@ import {
 } from "@app/shared";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
-import { orgParamsSchema } from "../schemas.js";
+import { orgParamsSchema, gymInPath } from "../schemas.js";
 import * as service from "./service.js";
 import { tellMembersLeaderboards, type LiveNewsSender } from "../../live/news.js";
 
@@ -55,6 +55,8 @@ export function registerLeaderboardRoutes(
     ipMax: 6000,
     windowMs: 60 * 60 * 1000,
     identifier: (req) => req.authUser?.id ?? null,
+    // Each gym has its own count at an address. Asked after who is asking, so nobody can charge a gym they are not in.
+    ipScope: gymInPath,
     redis: deps.redis,
   });
   const writeLimit = createDualRateLimit({
@@ -63,36 +65,48 @@ export function registerLeaderboardRoutes(
     ipMax: 3000,
     windowMs: 60 * 60 * 1000,
     identifier: (req) => req.authUser?.id ?? null,
+    // Each gym has its own count at an address. Asked after who is asking, so nobody can charge a gym they are not in.
+    ipScope: gymInPath,
     redis: deps.redis,
   });
 
-  app.get("/v1/orgs/:gymId/leaderboard", { preHandler: [app.authenticate, readLimit] }, async (req, reply) => {
+  // Who is asking first and the limit after it, so a stranger's 404 is never a 429 and never counts against the gym's address.
+  const memberGate = (req: FastifyRequest, reply: FastifyReply) => async (): Promise<boolean> => {
+    await readLimit(req, reply);
+    return !reply.sent;
+  };
+
+  app.get("/v1/orgs/:gymId/leaderboard", { preHandler: app.authenticate }, async (req, reply) => {
     const params = parseOr400(orgParamsSchema, req.params, req, reply);
     if (params === null) return;
     const query = parseOr400(leaderboardQuerySchema, req.query, req, reply);
     if (query === null) return;
-    return reply.status(200).send(await service.getLeaderboard(deps, requireUserId(req), params.gymId, query));
+    const board = await service.getLeaderboard(deps, requireUserId(req), params.gymId, query, memberGate(req, reply));
+    if (board === null) return;
+    return reply.status(200).send(board);
   });
 
-  app.get("/v1/orgs/:gymId/leaderboard/mine", { preHandler: [app.authenticate, readLimit] }, async (req, reply) => {
+  app.get("/v1/orgs/:gymId/leaderboard/mine", { preHandler: app.authenticate }, async (req, reply) => {
     const params = parseOr400(orgParamsSchema, req.params, req, reply);
     if (params === null) return;
     const query = parseOr400(leaderboardQuerySchema, req.query, req, reply);
     if (query === null) return;
-    return reply.status(200).send(await service.getMyCounted(deps, requireUserId(req), params.gymId, query));
+    const counted = await service.getMyCounted(deps, requireUserId(req), params.gymId, query, memberGate(req, reply));
+    if (counted === null) return;
+    return reply.status(200).send(counted);
   });
 
   app.get(
     "/v1/orgs/:gymId/leaderboard/people/:userId",
-    { preHandler: [app.authenticate, readLimit] },
+    { preHandler: app.authenticate },
     async (req, reply) => {
       const params = parseOr400(leaderboardPersonParamsSchema, req.params, req, reply);
       if (params === null) return;
       const query = parseOr400(leaderboardProfileQuerySchema, req.query, req, reply);
       if (query === null) return;
-      return reply
-        .status(200)
-        .send(await service.getProfile(deps, requireUserId(req), params.gymId, params.userId, query.period));
+      const profile = await service.getProfile(deps, requireUserId(req), params.gymId, params.userId, query.period, memberGate(req, reply));
+      if (profile === null) return;
+      return reply.status(200).send(profile);
     },
   );
 
@@ -125,6 +139,8 @@ export function registerLeaderboardRoutes(
     ipMax: 6000,
     windowMs: 60 * 60 * 1000,
     identifier: (req) => req.authUser?.id ?? null,
+    // Each gym has its own count at an address. Asked after who is asking, so nobody can charge a gym they are not in.
+    ipScope: gymInPath,
     redis: deps.redis,
   });
   const staffWriteLimit = createDualRateLimit({
@@ -133,6 +149,8 @@ export function registerLeaderboardRoutes(
     ipMax: 1500,
     windowMs: 60 * 60 * 1000,
     identifier: (req) => req.authUser?.id ?? null,
+    // Each gym has its own count at an address. Asked after who is asking, so nobody can charge a gym they are not in.
+    ipScope: gymInPath,
     redis: deps.redis,
   });
 

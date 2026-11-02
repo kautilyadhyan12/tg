@@ -48,7 +48,7 @@ const HOUR = 60 * 60 * 1000;
 const LIVE_PLAN = "zz_postsp_live";
 const NOON = new Date("2026-10-07T06:30:00Z");
 
-const IPHONE = readFileSync(new URL("./fixtures/photos/iphone16.jpg", import.meta.url)).toString("base64");
+const PHONE_PHOTO = readFileSync(new URL("./fixtures/photos/pixel7-meta.jpg", import.meta.url)).toString("base64");
 
 let ipCounter = 0;
 const nextIp = () => `10.75.${String(Math.floor(ipCounter / 250) % 250)}.${String((ipCounter++ % 250) + 1)}`;
@@ -161,8 +161,8 @@ d("a person's posts on their profile, and the day's photo posts (real Postgres, 
   const seedPhotos = (gym: Gym, who: { userId: string }, n: number, byMember = true, at = new Date(clock)) =>
     sql`
       WITH p AS (
-        INSERT INTO gym_posts (gym_id, author_user_id, post_key, body, by_member, created_at)
-        SELECT ${gym.id}, ${who.userId}, gen_random_uuid(), 'Seeded ' || i, ${byMember}, ${at} FROM generate_series(1, ${n}::int) i
+        INSERT INTO gym_posts (gym_id, author_user_id, post_key, body, by_member, photo_count, created_at)
+        SELECT ${gym.id}, ${who.userId}, gen_random_uuid(), 'Seeded ' || i, ${byMember}, 1, ${at} FROM generate_series(1, ${n}::int) i
         RETURNING gym_id, id)
       INSERT INTO gym_post_photos (gym_id, post_id, storage_key, content_type, byte_size, width, height, position)
       SELECT gym_id, id, 'gym-post/' || gym_id || '/' || gen_random_uuid() || '.jpg', 'image/jpeg', 1000, 100, 100, 0 FROM p`;
@@ -221,14 +221,14 @@ d("a person's posts on their profile, and the day's photo posts (real Postgres, 
       // The owner also trains here, and posts for the gym as staff.
       await sql`INSERT INTO gym_members (gym_id, user_id, joined_at) VALUES (${gym.id}, ${gym.owner.userId}, '2026-01-01T00:00:00Z')`;
 
-      const first = await add(gym, writer, "Wendy's first", [IPHONE]);
+      const first = await add(gym, writer, "Wendy's first", [PHONE_PHOTO]);
       const pinned = await add(gym, writer, "Wendy's pinned one");
       expect((await inject("PUT", `${posts(gym.id)}/${pinned.id}/pin`, gym.owner.cookies, { pinned: true })).statusCode).toBe(200);
       await add(gym, writer, "Wendy's newest");
       const removed = await add(gym, writer, "Wendy took this down");
       expect((await inject("DELETE", `${posts(gym.id)}/mine/${removed.id}`, writer.cookies)).statusCode).toBe(200);
       await add(gym, reader, "Rob's own");
-      await add(gym, leaver, "Liam's last session", [IPHONE]);
+      await add(gym, leaver, "Liam's last session", [PHONE_PHOTO]);
       await staffAdd(gym, "Closed on Monday");
 
       // Her posts, newest first, the pinned one in its own place, and nobody else's.
@@ -407,8 +407,8 @@ d("a person's posts on their profile, and the day's photo posts (real Postgres, 
         FROM generate_series(0, 89) n`;
       await sql`
         WITH p AS (
-          INSERT INTO gym_posts (gym_id, author_user_id, post_key, body, by_member, created_at)
-          SELECT ${gym.id}, ${writer.userId}, gen_random_uuid(), 'Photo ' || n, true, ${at(10)}::timestamptz + n * interval '1 second'
+          INSERT INTO gym_posts (gym_id, author_user_id, post_key, body, by_member, photo_count, created_at)
+          SELECT ${gym.id}, ${writer.userId}, gen_random_uuid(), 'Photo ' || n, true, 1, ${at(10)}::timestamptz + n * interval '1 second'
           FROM generate_series(0, 9) n
           RETURNING gym_id, id)
         INSERT INTO gym_post_photos (gym_id, post_id, storage_key, content_type, byte_size, width, height, position)
@@ -419,7 +419,7 @@ d("a person's posts on their profile, and the day's photo posts (real Postgres, 
       expect({ status: words.statusCode, error: errorOf(words) }).toEqual({ status: 429, error: "posts_day_full" });
       expect(message(words)).toBe("You've posted 100 times in the last 24 hours, which is the most allowed. You can post again in about 4 hours.");
       // With photos it waits for the oldest photo post too, 14 hours off: told that, not 4.
-      const photo = await send(gym, writer, "An eleventh, with a photo", [IPHONE]);
+      const photo = await send(gym, writer, "An eleventh, with a photo", [PHONE_PHOTO]);
       expect({ status: photo.statusCode, error: errorOf(photo) }).toEqual({ status: 429, error: "posts_day_full" });
       expect(message(photo)).toBe("You've posted 100 times in the last 24 hours, which is the most allowed. You can post again in about 14 hours.");
       // Four hours on the oldest words post has gone: words post, photos still wait ten hours.
@@ -458,17 +458,17 @@ d("a person's posts on their profile, and the day's photo posts (real Postgres, 
       const gym = await makeGym("Photo House");
       const writer = await member(gym, "Wendy Writer");
       const quiet = await member(gym, "Quinn Quiet");
-      const firstPhoto = await add(gym, writer, "Photo 1", [IPHONE]);
+      const firstPhoto = await add(gym, writer, "Photo 1", [PHONE_PHOTO]);
       await seedPhotos(gym, writer, GYM_MEMBER_PHOTOS_A_DAY - 2);
       // One left, and four sent at the same moment across two servers: one lands.
       const keys = [0, 1, 2, 3].map(() => randomUUID());
-      const burst = await Promise.all([0, 1, 2, 3].map((n) => send(gym, writer, `Burst ${String(n)}`, [IPHONE], keys[n], either(n))));
+      const burst = await Promise.all([0, 1, 2, 3].map((n) => send(gym, writer, `Burst ${String(n)}`, [PHONE_PHOTO], keys[n], either(n))));
       expect(burst.map((r) => r.statusCode).sort()).toEqual([201, 429, 429, 429]);
       expect(burst.filter((r) => r.statusCode === 429).map(errorOf)).toEqual(["posts_photo_day_full", "posts_photo_day_full", "posts_photo_day_full"]);
       expect(await filesOf(gym.id)).toHaveLength(2);
       // The day's last photo sent again under its key after a lost reply: the same post back.
       const landed = burst.findIndex((r) => r.statusCode === 201);
-      const again = await send(gym, writer, `Burst ${String(landed)}`, [IPHONE], keys[landed]);
+      const again = await send(gym, writer, `Burst ${String(landed)}`, [PHONE_PHOTO], keys[landed]);
       expect(again.statusCode, again.body).toBe(201);
       expect((JSON.parse(again.body) as { post: GymPost }).post.id).toBe((JSON.parse(burst[landed]?.body ?? "{}") as { post: GymPost }).post.id);
 
@@ -487,27 +487,26 @@ d("a person's posts on their profile, and the day's photo posts (real Postgres, 
 
       // Words alone still post, and somebody else's photos are not held up.
       expect((await send(gym, writer, "Words are fine")).statusCode).toBe(201);
-      expect((await send(gym, quiet, "My first", [IPHONE])).statusCode).toBe(201);
+      expect((await send(gym, quiet, "My first", [PHONE_PHOTO])).statusCode).toBe(201);
 
       // It counts photos, not posts: three do not fit in the two left, and two do.
       await seedPhotos(gym, quiet, GYM_MEMBER_PHOTOS_A_DAY - 3);
-      const three = await send(gym, quiet, "Three", [IPHONE, IPHONE, IPHONE]);
+      const three = await send(gym, quiet, "Three", [PHONE_PHOTO, PHONE_PHOTO, PHONE_PHOTO]);
       expect({ status: three.statusCode, error: errorOf(three) }).toEqual({ status: 429, error: "posts_photo_day_full" });
       expect((JSON.parse(three.body) as { message: string }).message).toBe(
         "You've posted 8 of the 10 photos allowed in 24 hours. Take some off to post now, or post all of them in about 24 hours.",
       );
-      const taken = await send(gym, quiet, "Two", [IPHONE, IPHONE]);
+      const taken = await send(gym, quiet, "Two", [PHONE_PHOTO, PHONE_PHOTO]);
       expect(taken.statusCode, taken.body).toBe(201);
-      expect((await send(gym, quiet, "One too many", [IPHONE])).statusCode).toBe(429);
+      expect((await send(gym, quiet, "One too many", [PHONE_PHOTO])).statusCode).toBe(429);
 
-      // A photo post staff remove gives its places back: its photos are gone either way.
+      // A photo post staff remove gives no place back: it was posted.
       expect((await inject("DELETE", `${posts(gym.id)}/${(JSON.parse(taken.body) as { post: GymPost }).post.id}`, gym.owner.cookies)).statusCode).toBe(200);
-      expect((await send(gym, quiet, "After staff took one down", [IPHONE, IPHONE])).statusCode).toBe(201);
+      expect((await send(gym, quiet, "After staff took one down", [PHONE_PHOTO, PHONE_PHOTO])).statusCode).toBe(429);
 
-      // A photo post the member removes, its files gone, gives its place back.
+      // Nor does one the member removes: posting and removing is not a way round the day's ten.
       expect((await inject("DELETE", `${posts(gym.id)}/mine/${firstPhoto.id}`, writer.cookies)).statusCode).toBe(200);
-      expect((await send(gym, writer, "In its place", [IPHONE])).statusCode).toBe(201);
-      expect((await send(gym, writer, "One too many", [IPHONE])).statusCode).toBe(429);
+      expect((await send(gym, writer, "In its place", [PHONE_PHOTO])).statusCode).toBe(429);
 
       // A photo from yesterday evening still counts this morning, and the sentence says how long is left.
       clock += 19 * HOUR;
@@ -515,14 +514,14 @@ d("a person's posts on their profile, and the day's photo posts (real Postgres, 
       await sql`
         INSERT INTO gym_posts (gym_id, author_user_id, post_key, body, by_member, created_at)
         VALUES (${gym.id}, ${writer.userId}, gen_random_uuid(), 'Words from last night', true, ${new Date(clock - 23 * HOUR)})`;
-      const morning = await send(gym, writer, "Next morning", [IPHONE]);
+      const morning = await send(gym, writer, "Next morning", [PHONE_PHOTO]);
       expect(morning.statusCode).toBe(429);
       expect((JSON.parse(morning.body) as { message: string }).message).toMatch(/post photos again in about 5 hours\.$/);
       clock += 4 * HOUR + 50 * 60 * 1000;
-      expect((JSON.parse((await send(gym, writer, "Nearly", [IPHONE])).body) as { message: string }).message).toMatch(/post photos again in under an hour\.$/);
+      expect((JSON.parse((await send(gym, writer, "Nearly", [PHONE_PHOTO])).body) as { message: string }).message).toMatch(/post photos again in under an hour\.$/);
       // 24 hours after the last of them, none counts.
       clock += 24 * HOUR;
-      expect((await send(gym, writer, "A new day", [IPHONE])).statusCode).toBe(201);
+      expect((await send(gym, writer, "A new day", [PHONE_PHOTO])).statusCode).toBe(201);
     },
     T,
   );
@@ -542,14 +541,14 @@ d("a person's posts on their profile, and the day's photo posts (real Postgres, 
         return (JSON.parse(res.body) as { message: string }).message;
       };
       // One waits for the oldest, three for the third oldest: both 4 hours. Four for the fourth: 14.
-      expect(await hoursFor([IPHONE])).toMatch(/in about 4 hours\.$/);
-      expect(await hoursFor([IPHONE, IPHONE, IPHONE])).toMatch(/in about 4 hours\.$/);
-      expect(await hoursFor([IPHONE, IPHONE, IPHONE, IPHONE])).toMatch(/in about 14 hours\.$/);
+      expect(await hoursFor([PHONE_PHOTO])).toMatch(/in about 4 hours\.$/);
+      expect(await hoursFor([PHONE_PHOTO, PHONE_PHOTO, PHONE_PHOTO])).toMatch(/in about 4 hours\.$/);
+      expect(await hoursFor([PHONE_PHOTO, PHONE_PHOTO, PHONE_PHOTO, PHONE_PHOTO])).toMatch(/in about 14 hours\.$/);
       // Staff are counted the same way.
       await seedPhotos(gym, gym.owner, 18, false, new Date(clock - 20 * HOUR));
       await seedPhotos(gym, gym.owner, 2, false, new Date(clock - 2 * HOUR));
       clock += 1000;
-      const staff = await inject("POST", posts(gym.id), gym.owner.cookies, { postKey: randomUUID(), body: "Words", photos: [IPHONE, IPHONE, IPHONE] });
+      const staff = await inject("POST", posts(gym.id), gym.owner.cookies, { postKey: randomUUID(), body: "Words", photos: [PHONE_PHOTO, PHONE_PHOTO, PHONE_PHOTO] });
       expect((JSON.parse(staff.body) as { message: string }).message).toMatch(/^Your team has posted 20 photos.*in about 4 hours\.$/);
     },
     T,
@@ -561,7 +560,7 @@ d("a person's posts on their profile, and the day's photo posts (real Postgres, 
       const gym = await makeGym("Staff Last House");
       await seedPhotos(gym, gym.owner, GYM_STAFF_PHOTOS_A_DAY - 1, false);
       clock += 1000;
-      const body = { postKey: randomUUID(), body: "The last", photos: [IPHONE] };
+      const body = { postKey: randomUUID(), body: "The last", photos: [PHONE_PHOTO] };
       // Both are held at the gym's lock, past the first look for the key.
       const lock = await sql.reserve();
       await lock`BEGIN`;
@@ -591,13 +590,13 @@ d("a person's posts on their profile, and the day's photo posts (real Postgres, 
       await seedPhotos(gym, gym.owner, GYM_STAFF_PHOTOS_A_DAY - 1, false);
       // One left, and four sent at the same moment across two servers: one lands.
       const keys = [0, 1, 2, 3].map(() => randomUUID());
-      const burst = await Promise.all([0, 1, 2, 3].map((n) => staffSend(`Burst ${String(n)}`, [IPHONE], keys[n], either(n))));
+      const burst = await Promise.all([0, 1, 2, 3].map((n) => staffSend(`Burst ${String(n)}`, [PHONE_PHOTO], keys[n], either(n))));
       expect(burst.map((r) => r.statusCode).sort()).toEqual([201, 429, 429, 429]);
       expect(burst.filter((r) => r.statusCode === 429).map(errorOf)).toEqual(["posts_photo_day_full", "posts_photo_day_full", "posts_photo_day_full"]);
       expect(await filesOf(gym.id)).toHaveLength(1);
       // The last one sent again under its key after a lost reply: the same post back.
       const landed = burst.findIndex((r) => r.statusCode === 201);
-      const again = await staffSend(`Burst ${String(landed)}`, [IPHONE], keys[landed]);
+      const again = await staffSend(`Burst ${String(landed)}`, [PHONE_PHOTO], keys[landed]);
       expect(again.statusCode, again.body).toBe(201);
       expect((JSON.parse(again.body) as { post: GymPost }).post.id).toBe((JSON.parse(burst[landed]?.body ?? "{}") as { post: GymPost }).post.id);
 
@@ -608,12 +607,12 @@ d("a person's posts on their profile, and the day's photo posts (real Postgres, 
       );
       // Words go on, past any member's number; a member's photos are their own count.
       for (let i = 0; i < 3; i++) expect((await staffSend(`Words ${String(i)}`, [])).statusCode).toBe(201);
-      expect((await send(gym, writer, "Mine", [IPHONE])).statusCode).toBe(201);
+      expect((await send(gym, writer, "Mine", [PHONE_PHOTO])).statusCode).toBe(201);
 
       // Staff removing a post give its photo's place back.
       const lastId = (JSON.parse(burst[landed]?.body ?? "{}") as { post: GymPost }).post.id;
       expect((await inject("DELETE", `${posts(gym.id)}/${lastId}`, gym.owner.cookies)).statusCode).toBe(200);
-      expect((await staffSend("In its place", [IPHONE])).statusCode).toBe(201);
+      expect((await staffSend("In its place", [PHONE_PHOTO])).statusCode).toBe(201);
     },
     T,
   );

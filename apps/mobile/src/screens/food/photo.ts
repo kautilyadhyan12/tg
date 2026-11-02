@@ -78,7 +78,7 @@ export function toBase64(bytes: Uint8Array): string {
 export function photoToSend(base64: string): string | null {
   const bytes = fromBase64(base64);
   if (bytes === null) return null;
-  const cleaned = cleanPhoto(bytes, MEAL_PHOTO_MAX_BYTES);
+  const cleaned = cleanPhoto(bytes, { maxBytes: MEAL_PHOTO_MAX_BYTES });
   return cleaned.ok && cleaned.type === "image/jpeg" ? toBase64(cleaned.bytes) : null;
 }
 

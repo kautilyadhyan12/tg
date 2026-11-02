@@ -15,7 +15,7 @@ import {
 } from "@app/shared";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
-import { orgParamsSchema } from "../schemas.js";
+import { orgParamsSchema, gymInPath } from "../schemas.js";
 import * as service from "./commentsService.js";
 import * as staff from "./commentsStaffService.js";
 import { parseOr400, requireUserId } from "./routes.js";
@@ -25,7 +25,17 @@ const COMMENT_BODY_LIMIT = 16 * 1024;
 export function registerPostCommentRoutes(app: FastifyInstance, deps: service.CommentsDeps & { redis: RedisLike }): void {
   const commentDeps: service.CommentsDeps = { sql: deps.sql, now: deps.now };
   const limiter = (name: string, max: number, ipMax: number) =>
-    createDualRateLimit({ name, max, ipMax, windowMs: 60 * 60 * 1000, identifier: (req) => req.authUser?.id ?? null, redis: deps.redis });
+    createDualRateLimit({
+      name,
+      max,
+      ipMax,
+      windowMs: 60 * 60 * 1000,
+      identifier: (req) => req.authUser?.id ?? null,
+      // Each gym has its own count at an address: one gym in a building cannot use up another's. The limit is asked after
+      // who is asking, so nobody can charge a gym they are not in.
+      ipScope: gymInPath,
+      redis: deps.redis,
+    });
   // A whole gym's members share one address on its wi-fi, hence each explicit `ipMax`.
   const readLimit = limiter("orgs_comments_read", 900, 9000);
   // The day's hundred are counted in the database; this only stops a flood of tries.

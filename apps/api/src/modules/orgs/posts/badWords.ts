@@ -258,3 +258,11 @@ export function badWordsIn(text: string): string[] {
 export function hasBadWords(text: string): boolean {
   return badWordsIn(text).length > 0;
 }
+
+/** Characters that make words read other than they are written, past the check above. */
+const TURNS_TEXT = /[\u202A-\u202E\u2066-\u2069]/;
+/** Marks stacked on one letter draw over the rows around it: five in a row, of any script, are refused. */
+const STACKED_MARKS = /\p{M}{5,}/u;
+
+/** Whether a member's words hold either. */
+export const hasDisguisedWords = (text: string): boolean => TURNS_TEXT.test(text) || STACKED_MARKS.test(text);

@@ -579,7 +579,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 16a. [x] **Classes** — merged 2026-10-29 (PR #385).
     - 16b. [x] **Personal training** — merged 2026-10-29 (PR #388).
     - 16c. [x] **My membership and receipts** — merged 2026-10-29 (PR #390).
-17. **The gym's page**: Updates (post, photos, react, report, block), Events, Leaderboard, Challenges, a person's profile (spec Part 3 §15). Split 2026-10-29 in four (the browser's four pages are more than one terminal); comments added 2026-10-30. Risky; the two extra passes run once, after the last of them.
+17. **The gym's page**: Updates (post, photos, react, report, block), Events, Leaderboard, Challenges, a person's profile (spec Part 3 §15). Split 2026-10-29 in four (the browser's four pages are more than one terminal); comments added 2026-10-30. Risky; the two extra passes ran once, after the last of them (2026-11-02, PR #436).
     - 17a. [x] **Updates: read, react, report, block** — merged 2026-10-30 (PR #398).
     - 17b. [x] **Post an update** — merged 2026-10-31 (PR #405).
     - 17e. **Comments, replies and their reactions** (split 2026-10-31: members on the phone first).

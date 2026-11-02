@@ -39,7 +39,7 @@ const LIVE_PLAN = "zz_postsh_live";
 const NOON = new Date("2026-10-07T06:30:00Z");
 const REASONS = ["nudity", "unkind", "spam", "photo_of_someone", "other"] as const;
 
-const IPHONE = readFileSync(new URL("./fixtures/photos/iphone16.jpg", import.meta.url)).toString("base64");
+const PHONE_PHOTO = readFileSync(new URL("./fixtures/photos/pixel7-meta.jpg", import.meta.url)).toString("base64");
 
 let ipCounter = 0;
 const nextIp = () => `10.75.${String(Math.floor(ipCounter / 250) % 250)}.${String((ipCounter++ % 250) + 1)}`;
@@ -211,7 +211,7 @@ d("a post five people have reported is hidden until staff decide (real Postgres,
       const reader = await member(gym, "Rita Reader");
       const reporters = await members(gym, ["Ann One", "Ben Two", "Cat Three", "Dan Four", "Eve Five"]);
       const fine = await add(gym, writer, "First 5k done");
-      const bad = await add(gym, writer, "Changing room, this morning", [IPHONE]);
+      const bad = await add(gym, writer, "Changing room, this morning", [PHONE_PHOTO]);
       // Pinned, so it rides on the top of every member's first page.
       expect((await inject("PUT", `${posts(gym.id)}/${bad.id}/pin`, gym.owner.cookies, { pinned: true })).statusCode).toBe(200);
 
@@ -352,7 +352,7 @@ d("a post five people have reported is hidden until staff decide (real Postgres,
       const writer = await member(gym, "Wes Writer");
       const reader = await member(gym, "Rita Reader");
       const five = await members(gym, ["A One", "B Two", "C Three", "D Four", "E Five"]);
-      const post = await add(gym, writer, "Changing room again", [IPHONE]);
+      const post = await add(gym, writer, "Changing room again", [PHONE_PHOTO]);
       await reportAll(gym, five, post.id);
       // The purge's own statements for one person, as the nightly run makes them.
       const purge = (who: Person) => sql.begin((tx) => deleteUserOwnedRows(tx, who.userId));

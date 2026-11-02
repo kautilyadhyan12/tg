@@ -166,39 +166,55 @@ export const EXPORT_READERS: Record<ExportedTable, (sql: Sql, userId: string) =>
     sql<Row[]>`SELECT * FROM gym_challenge_team_people WHERE user_id = ${u} ORDER BY updated_at, challenge_id`,
 };
 
-/** The most posts one export carries; `total` says how many there are. */
-export const MEMBER_POSTS_EXPORT_LIMIT = 1000;
+/** How many of a person's posts or comments the download reads at a time. It reads them all: a person's
+ *  own words are never left out. */
+const MEMBER_WRITING_PAGE = 1000;
+
+/** Every page, newest first, by the exact stored time, then without the columns only the pages needed. */
+async function allPages(read: (after: { at: string; id: string } | null) => Promise<(Row & { cursor_at?: string })[]>): Promise<Row[]> {
+  const all: Row[] = [];
+  let after: { at: string; id: string } | null = null;
+  for (;;) {
+    const page = await read(after);
+    const last = page[page.length - 1];
+    for (const row of page) {
+      const kept = { ...row };
+      delete kept.cursor_at;
+      all.push(kept);
+    }
+    if (last === undefined || page.length < MEMBER_WRITING_PAGE) return all;
+    after = { at: String(last.cursor_at), id: String(last["id"]) };
+  }
+}
 
 /** The posts the person made as a MEMBER of a gym (tables.ts, gym_posts): their own words,
  *  newest first, with how many photos each carries. A post made as staff is the gym's and
  *  is not here. Explicit columns: `removed_by_user_id` names somebody else. */
-export async function selectExportMemberPosts(sql: Sql, userId: string): Promise<{ rows: Row[]; total: number }> {
-  const rows = await sql<(Row & { total?: number })[]>`
-    SELECT p.id, p.gym_id, p.body, p.created_at, p.removed_at,
-           (SELECT count(*)::int FROM gym_post_photos ph WHERE ph.post_id = p.id) AS photos,
-           count(*) OVER ()::int AS total
-    FROM gym_posts p
-    WHERE p.author_user_id = ${userId} AND p.by_member
-    ORDER BY p.created_at DESC, p.id DESC
-    LIMIT ${MEMBER_POSTS_EXPORT_LIMIT}`;
-  const total = rows[0]?.total ?? 0;
-  for (const row of rows) delete row["total"];
-  return { rows, total };
+export async function selectExportMemberPosts(sql: Sql, userId: string): Promise<Row[]> {
+  return await allPages(
+    (after) => sql<Row[]>`
+      SELECT p.id, p.gym_id, p.body, p.created_at, p.removed_at, p.created_at::text AS cursor_at,
+             (SELECT count(*)::int FROM gym_post_photos ph WHERE ph.post_id = p.id) AS photos
+      FROM gym_posts p
+      WHERE p.author_user_id = ${userId} AND p.by_member
+        ${after === null ? sql`` : sql`AND (p.created_at, p.id) < (${after.at}::text::timestamptz, ${after.id}::uuid)`}
+      ORDER BY p.created_at DESC, p.id DESC
+      LIMIT ${MEMBER_WRITING_PAGE}`,
+  );
 }
 
 /** The comments and replies the person wrote as a MEMBER, newest first. Explicit columns:
  *  `removed_by_user_id` names somebody else. */
-export async function selectExportMemberComments(sql: Sql, userId: string): Promise<{ rows: Row[]; total: number }> {
-  const rows = await sql<(Row & { total?: number })[]>`
-    SELECT c.id, c.gym_id, c.post_id, c.parent_id, c.body, c.created_at, c.removed_at,
-           count(*) OVER ()::int AS total
-    FROM gym_post_comments c
-    WHERE c.author_user_id = ${userId} AND c.by_member
-    ORDER BY c.created_at DESC, c.id DESC
-    LIMIT ${MEMBER_POSTS_EXPORT_LIMIT}`;
-  const total = rows[0]?.total ?? 0;
-  for (const row of rows) delete row["total"];
-  return { rows, total };
+export async function selectExportMemberComments(sql: Sql, userId: string): Promise<Row[]> {
+  return await allPages(
+    (after) => sql<Row[]>`
+      SELECT c.id, c.gym_id, c.post_id, c.parent_id, c.body, c.created_at, c.removed_at, c.created_at::text AS cursor_at
+      FROM gym_post_comments c
+      WHERE c.author_user_id = ${userId} AND c.by_member
+        ${after === null ? sql`` : sql`AND (c.created_at, c.id) < (${after.at}::text::timestamptz, ${after.id}::uuid)`}
+      ORDER BY c.created_at DESC, c.id DESC
+      LIMIT ${MEMBER_WRITING_PAGE}`,
+  );
 }
 
 /** The most consent rows one export carries. Thirty taps an hour is the route's

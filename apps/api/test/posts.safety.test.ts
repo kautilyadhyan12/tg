@@ -39,7 +39,7 @@ const LIVE_PLAN = "zz_postss_live";
 const NOON = new Date("2026-10-07T06:30:00Z");
 const SUPPORT = "help@gym-app.example";
 
-const IPHONE = readFileSync(new URL("./fixtures/photos/iphone16.jpg", import.meta.url)).toString("base64");
+const PHONE_PHOTO = readFileSync(new URL("./fixtures/photos/pixel7-meta.jpg", import.meta.url)).toString("base64");
 
 let ipCounter = 0;
 const nextIp = () => `10.74.${String(Math.floor(ipCounter / 250) % 250)}.${String((ipCounter++ % 250) + 1)}`;
@@ -206,7 +206,7 @@ d("block, the bad-words check and the support address (real Postgres, real disk)
       const bully = await member(gym, "Barry Bully");
       const blocker = await member(gym, "Bea Blocker");
       const bystander = await member(gym, "Bob Bystander");
-      const cruel = await add(gym, bully, "Look who skipped leg day again", [IPHONE]);
+      const cruel = await add(gym, bully, "Look who skipped leg day again", [PHONE_PHOTO]);
       const second = await add(gym, bully, "And here she is on the treadmill");
       const pinned = await add(gym, bully, "Pinned by the gym");
       expect((await inject("PUT", `${posts(gym.id)}/${pinned.id}/pin`, gym.owner.cookies, { pinned: true })).statusCode).toBe(200);
@@ -257,7 +257,7 @@ d("block, the bad-words check and the support address (real Postgres, real disk)
       expect(logged[0]?.n).toBe(0);
 
       // A post they write afterwards is not sent either.
-      await add(gym, bully, "New one after the block", [IPHONE]);
+      await add(gym, bully, "New one after the block", [PHONE_PHOTO]);
       expect(shown(await feed(gym, blocker)).sort()).toEqual(["Closed on Monday", "First 5k done"]);
 
       // The list names them as members see each other, and Unblock brings everything back.
@@ -290,7 +290,7 @@ d("block, the bad-words check and the support address (real Postgres, real disk)
           SELECT ${gym.id}, ${who.userId}, gen_random_uuid(), ${label} || ' ' || n, true, '2026-10-01T00:00:00Z'::timestamptz + n * interval '1 minute'
           FROM generate_series(1, 30) n`;
       }
-      const cruel = await add(gym, bully, "With a photo", [IPHONE]);
+      const cruel = await add(gym, bully, "With a photo", [PHONE_PHOTO]);
       const fine = await add(gym, bystander, "A fine post");
       // The blocker reacted to both before blocking.
       expect((await reactTo(gym, blocker, cruel.id, "love")).statusCode).toBe(200);
@@ -364,7 +364,7 @@ d("block, the bad-words check and the support address (real Postgres, real disk)
       const reader = await member(gym, "Rita Reader");
       await add(gym, writer, "Great class tonight");
 
-      const refused = await send(gym, writer, "The new coach is a total tosser", [IPHONE]);
+      const refused = await send(gym, writer, "The new coach is a total tosser", [PHONE_PHOTO]);
       expect(refused.statusCode).toBe(400);
       expect(JSON.parse(refused.body)).toMatchObject({
         error: "post_bad_words",

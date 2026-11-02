@@ -24,6 +24,8 @@ import { pictureTopHeight } from "../../look/sizing";
 import { Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
 import { CopyContext } from "../ThisCopy";
+import { useBusyIds } from "./Reactions";
+import { countAfter } from "./commentsView";
 import { CommentsBox, useKeptComments, type KeptCommentsHook } from "./Comments";
 import { hasKeptWords } from "./commentsView";
 import { photoFiles, type PhotoFiles } from "./photoFiles";
@@ -117,7 +119,7 @@ function Body({ place, person, period, shared, onClose, onChanged, top, bottom }
   const [places, setPlaces] = useState<Places>({ kind: "loading" });
   const [posts, setPosts] = useState<Posts>({ kind: "loading" });
   const [more, setMore] = useState<{ busy: boolean; error: string | null }>({ busy: false, error: null });
-  const [reacting, setReacting] = useState<string | null>(null);
+  const reacting = useBusyIds();
   const [reactError, setReactError] = useState<{ postId: string; text: string } | null>(null);
   const [gone, setGone] = useState<Record<string, true | undefined>>({});
   const [asking, setAsking] = useState<Asking | null>(null);
@@ -221,12 +223,15 @@ function Body({ place, person, period, shared, onClose, onChanged, top, bottom }
   const onReact = async (post: GymPost, tapped: GymPostReaction) => {
     const next = withReaction(post, tapped);
     setReactError(null);
-    setReacting(post.id);
+    reacting.add(post.id);
+    // A read that started before this press may not hold it.
+    postsStarted.current += 1;
     change((feed) => withPost(feed, next));
     const answer = await session.signedIn({ method: "PUT", path: reactionPath(place.id, post.id), body: { reaction: next.mine } }, gymPostReactionResponseSchema);
     changed();
     if (!live.current) return;
-    setReacting(null);
+    reacting.remove(post.id);
+    postsStarted.current += 1;
     if (answer.kind === "ok") {
       change((feed) => withPost(feed, { ...next, reactions: answer.data.reactions, mine: answer.data.mine }));
       return;
@@ -242,21 +247,25 @@ function Body({ place, person, period, shared, onClose, onChanged, top, bottom }
       void loadPosts(true);
     } else {
       setReactError({ postId: post.id, text: answer.kind === "refused" ? answer.message : "Couldn't save your reaction. Please try again." });
+      // The press may have reached the server with only its answer lost: the server says what it holds.
+      if (answer.kind === "no_answer") void loadPosts(true);
     }
   };
 
   const onCommentCount = useCallback((postId: string, by: number) => {
     changed();
+    postsStarted.current += 1;
     setPosts((p) => {
       if (p.kind !== "ok") return p;
       const post = p.feed.posts.find((x) => x.id === postId);
-      return post === undefined ? p : { ...p, feed: withPost(p.feed, { ...post, commentCount: Math.max(0, post.commentCount + by) }) };
+      return post === undefined ? p : { ...p, feed: withPost(p.feed, { ...post, commentCount: countAfter(post.commentCount, by) }) };
     });
   }, [changed]);
   const onCommenting = useCallback((commenting: GymMemberPosting) => {
     setPosts((p) => (p.kind === "ok" && p.feed.commenting !== commenting ? { ...p, feed: { ...p.feed, commenting } } : p));
   }, []);
   const onCommentPostGone = useCallback((postId: string) => {
+    postsStarted.current += 1;
     setGone((g) => ({ ...g, [postId]: true }));
   }, []);
   const blockedAuthor = useCallback(
@@ -391,7 +400,7 @@ function Body({ place, person, period, shared, onClose, onChanged, top, bottom }
                 photoUrl={(photoId) => photoUrl(post, photoId)}
                 files={files}
                 photoRound={photoRound}
-                busy={reacting === post.id}
+                busy={reacting.has(post.id)}
                 reactError={reactError?.postId === post.id ? reactError.text : null}
                 onReact={(r) => void onReact(post, r)}
                 commenting={feed?.commenting ?? "off"}
@@ -451,16 +460,19 @@ function Body({ place, person, period, shared, onClose, onChanged, top, bottom }
         }}
         onRemoved={(post) => {
           changed();
+          postsStarted.current += 1;
           change((f) => withoutPost(f, post.id), -1);
         }}
         onReported={(post) => {
           changed();
+          postsStarted.current += 1;
           change((f) => withPost(f, { ...post, reported: true }));
         }}
         onBlocked={(post) => {
           if (post.authorId !== null) blockedAuthor(post.authorId);
         }}
         onGone={(post) => {
+          postsStarted.current += 1;
           setGone((g) => ({ ...g, [post.id]: true }));
         }}
         onPlaceGone={() => void loadPosts(true)}

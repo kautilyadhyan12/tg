@@ -4645,8 +4645,8 @@ it is on, a live app member writes a post on their gym's Updates tab: the same w
 photos as staff (`POST …/posts/mine`, one key a post), **100 posts and 10 photos in any 24 hours; a gym's staff, all together, 20 photos and no daily limit on words** (Kd, 2026-10-30, `rulings/2026-10-30-17b.md`, replacing 10 posts, 3 with photos, of 2026-10-05; the counting below still reads "ten" and "photo post" for those; 429 `posts_photo_day_full`, "take the photos off to
 post the words now"; both refusals say the 24 hours and in about how many hours the next
 may be made, since a post from yesterday evening still counts this morning) counted in the database with the person's membership held (a removed
-post gives none of the ten back; a removed photo post, its files deleted, gives its photo
-place back whoever removed it, the member or staff, and the ten bound that; a photo post
+post gives no post back, and a removed photo post gives no photo back, whoever removed it, the member
+or staff (`photo_count`, migration 0189; since 2026-11-02, as 100 posts a day no longer bound post-and-remove); a photo post
 that waits on both limits is told the later of the two hours; "take the photos off" is
 said only to a post that has words), and who
 may post — the switch and a stop — is settled before the body is read, as for staff; a
