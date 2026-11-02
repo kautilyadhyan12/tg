@@ -22,7 +22,12 @@ export const pushTokens = pgTable("push_tokens", {
   platform: text("platform").notNull(),
   lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
   createdAt: createdAt(),
-});
+  /** 0191: the sign-in (`refresh_tokens.family_id`) it was given under; nothing is sent once it ends. */
+  familyId: uuid("family_id").notNull(),
+}, (t) => [
+  index("push_tokens_user_idx").on(t.userId),
+  check("push_tokens_platform_check", sql`${t.platform} IN ('android')`),
+]);
 
 export const featureFlags = pgTable("feature_flags", {
   key: text("key").primaryKey(),

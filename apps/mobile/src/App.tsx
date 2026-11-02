@@ -11,7 +11,7 @@ import {
 import { Oswald_400Regular } from "@expo-google-fonts/oswald/400Regular";
 import { Oswald_600SemiBold } from "@expo-google-fonts/oswald/600SemiBold";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { DarkTheme, NavigationContainer, type Theme } from "@react-navigation/native";
+import { DarkTheme, NavigationContainer, createNavigationContainerRef, type Theme } from "@react-navigation/native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import type { PhoneAppExtra } from "@app/shared";
 import { readAppExtra } from "./appExtra";
@@ -32,6 +32,8 @@ import { SessionProvider, useSession } from "./session/SessionProvider";
 import { TimeZoneSync } from "./session/TimeZoneSync";
 import { DashboardScreen } from "./screens/Dashboard";
 import { GymScreen } from "./screens/GymTab";
+import { NotificationsProvider } from "./notifications/Notifications";
+import { forgetNotifications } from "./notifications/phone";
 import { emptyPhotoFolder } from "./screens/gym/photoFiles";
 import { PlacesProvider, usePlaces } from "./screens/places";
 import { tabWord } from "./screens/placesHeading";
@@ -88,7 +90,11 @@ function SignedInOrOut({ mealStore }: { mealStore: (userId: string) => TextStore
   const { state } = useSession();
   // With nobody signed in, nothing of the last person's stays: an app killed with Updates open left its photos.
   useEffect(() => {
-    if (state.kind === "out") emptyPhotoFolder();
+    if (state.kind === "out") {
+      emptyPhotoFolder();
+      // Nobody's notifications stay on the phone, and none on its way reaches it.
+      void forgetNotifications();
+    }
   }, [state.kind]);
   if (state.kind === "starting") return <View style={styles.page} />;
   if (state.kind === "out") return <SignInScreen note={state.note} />;
@@ -105,11 +111,19 @@ function SignedInOrOut({ mealStore }: { mealStore: (userId: string) => TextStore
   );
 }
 
+// The tabs, reached from outside them: a tapped notification opens the Gym tab.
+const tabsRef = createNavigationContainerRef<Record<string, undefined>>();
+const openGymTab = () => {
+  if (tabsRef.isReady()) tabsRef.navigate("Gym");
+};
+
 function FiveTabs({ mealStore }: { mealStore: (userId: string) => TextStore }) {
   return (
     <PlacesProvider>
       <MealOutboxProvider store={mealStore}>
-        <TabsOfPlaces />
+        <NotificationsProvider onTapped={openGymTab}>
+          <TabsOfPlaces />
+        </NotificationsProvider>
       </MealOutboxProvider>
     </PlacesProvider>
   );
@@ -122,7 +136,7 @@ function TabsOfPlaces() {
   // Lit while any of the person's places holds a message they have not opened.
   const dots: Record<string, string> = newMessages > 0 ? { Gym: newMessages === 1 ? "1 new message" : `${String(newMessages)} new messages` } : {};
   return (
-    <NavigationContainer theme={theme}>
+    <NavigationContainer ref={tabsRef} theme={theme}>
       <Tabs.Navigator screenOptions={{ headerShown: false }} tabBar={(props) => <TabBar {...props} icons={tabIcons} labels={labels} dots={dots} />}>
         {TABS.map((tab) => (
           <Tabs.Screen key={tab.name} name={tab.name} component={tab.screen} />

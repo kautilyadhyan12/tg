@@ -35,8 +35,11 @@ export const gymMemberMessages = pgTable(
     readAt: timestamp("read_at", { withTimezone: true }),
     /** Out of the inbox from here on; the row stays, so the occasion is not sent again. */
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    /** 0191: when it was handed to the phone notifications, or needed none. */
+    pushDoneAt: timestamp("push_done_at", { withTimezone: true }),
   },
   (t) => [
+    index("gym_member_messages_push_idx").on(t.sentAt).where(sql`${t.pushDoneAt} IS NULL`),
     uniqueIndex("gym_member_messages_occasion_uq").on(t.gymId, t.userId, t.kind, t.occasion),
     index("gym_member_messages_inbox_idx").on(t.userId, t.gymId, t.sentAt.desc()),
     check(

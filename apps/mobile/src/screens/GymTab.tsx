@@ -19,6 +19,7 @@ import { colours } from "../look/colours";
 import { Icon } from "../look/Icon";
 import { Page } from "../look/Page";
 import { Txt } from "../look/Txt";
+import { useInboxAsked } from "../notifications/Notifications";
 import { useSession } from "../session/SessionProvider";
 import { InvitationList, PlaceHead, invitationsPath } from "./Invitation";
 import { usePlaces } from "./places";
@@ -61,6 +62,7 @@ export function GymScreen() {
   // The places have been waited for long enough to offer the pass without them.
   const [placesSlow, setPlacesSlow] = useState(false);
   const { setKinds, unreadOf: placeUnread, startRead, placesRead, inboxSaid } = usePlaces();
+  const { inboxAsked, inboxOpened } = useInboxAsked();
   const [mine, setMine] = useState<Read<MyOrgsResponse> | null>(null);
   const [invites, setInvites] = useState<Read<MyInvitationsResponse> | null>(null);
   /** The newest finished read of the invitations, numbered as reads start: an answer on the phone stands
@@ -196,6 +198,15 @@ export function GymScreen() {
       ? invites.data.invitations.filter((invitation) => !joined.some((org) => org.id === invitation.gym.id))
       : [];
   const nothing = mine?.kind === "ok" && invites?.kind === "ok" && invites.data.addressProved && joined.length === 0 && open.length === 0;
+
+  // A tapped notification's gym: its Inbox opens once the places are read, and only if it is one of
+  // this person's own.
+  const asked = inboxAsked === null || mine === null ? null : mine.kind === "ok" ? (joined.find((org) => org.id === inboxAsked) ?? false) : false;
+  useEffect(() => {
+    if (asked === null) return;
+    if (asked !== false) setInboxAt({ id: asked.id, name: asked.name, orgType: asked.orgType, latestCheer: asked.latestCheer, latestNudge: asked.latestNudge });
+    inboxOpened();
+  }, [asked, inboxOpened]);
 
   return (
     <Page>
