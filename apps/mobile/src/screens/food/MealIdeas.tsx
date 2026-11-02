@@ -23,8 +23,8 @@ export const IDEAS_READ = "/v1/nutrition/suggestions";
 /** The day's ideas, and whether they can be offered. The server can't count a meal still on the phone,
  *  and a read begun before a meal landed doesn't hold it: either way the ideas drawn are old, and the
  *  same one could be logged twice, so none is offered until a read begun after. */
-function useIdeas() {
-  const ideas = useRead(IDEAS_READ, mealIdeasResponseSchema, useZoneSaved());
+function useIdeas(fresh: number) {
+  const ideas = useRead(IDEAS_READ, mealIdeasResponseSchema, useZoneSaved() + fresh);
   const { outbox, view } = useMealOutbox();
   const { begun, again } = ideas;
   const [seen, setSeen] = useState({ sent: view.sent, read: 0 });
@@ -43,10 +43,12 @@ interface MealIdeasProps {
   onMore?: () => void;
   /** Answers were given in setup from this box: the page reads what hangs on them again. */
   onAnswered?: () => void;
+  /** Moves when setup answers change elsewhere on the page. */
+  fresh?: number;
 }
 
-export function MealIdeas({ onMore, onAnswered }: MealIdeasProps) {
-  const { read, again, outbox, view, waiting, old } = useIdeas();
+export function MealIdeas({ onMore, onAnswered, fresh = 0 }: MealIdeasProps) {
+  const { read, again, outbox, view, waiting, old } = useIdeas(fresh);
   const onDashboard = onMore !== undefined;
   const [said, setSaid] = useState<{ words: string; meal: string | null } | null>(null);
   const [later, setLater] = useState(false);

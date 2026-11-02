@@ -41,6 +41,8 @@ import { useZoneSaved } from "../session/TimeZoneSync";
 import { NOT_KNOWN, count } from "./dashboard/words";
 import { useRead } from "./dashboard/useRead";
 import { MealIdeas } from "./food/MealIdeas";
+import { MealPlan } from "./food/MealPlan";
+import { foodsOfRow } from "./food/planRules";
 import {
   MEAL_PAGE_SIZE,
   MEAL_TYPES,
@@ -202,6 +204,13 @@ export function FoodScreen() {
   const [said, setSaid] = useState<{ section: MealType; words: string } | null>(null);
   const [setupAt, setSetupAt] = useState<SetupScreenId | "where" | null>(null);
   const [picking, setPicking] = useState(false);
+  // Moves when setup answers change: the two food boxes hang on them.
+  const [answers, setAnswers] = useState(0);
+  const answered = () => {
+    targets.again();
+    dailyAgain();
+    setAnswers((n) => n + 1);
+  };
   // A meal from a photo (33b-i): the camera, and the photo meal kept until it is saved.
   const kept = useKeptSheet();
   const [photoOpen, setPhotoOpen] = useState(false);
@@ -316,12 +325,10 @@ export function FoodScreen() {
         />
       </Sheet>
       {today ? (
-        <MealIdeas
-          onAnswered={() => {
-            targets.again();
-            dailyAgain();
-          }}
-        />
+        <>
+          <MealIdeas fresh={answers} onAnswered={answered} />
+          <MealPlan foodsToday={rows === null ? null : rows.map((r) => foodsOfRow(r, view.waiting))} fresh={answers} onAnswered={answered} />
+        </>
       ) : null}
       <View style={styles.dayRow}>
         <Pressable
@@ -467,13 +474,9 @@ export function FoodScreen() {
         onClose={() => {
           setSetupAt(null);
           setJustSaved(null);
-          targets.again();
-          dailyAgain();
+          answered();
         }}
-        onSettled={() => {
-          targets.again();
-          dailyAgain();
-        }}
+        onSettled={answered}
       />
     </Page>
   );
