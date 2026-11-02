@@ -518,6 +518,8 @@ gains an **On-plan %** column (sessions matching assigned program ÷
 assigned sessions, week window). Micro seat tier live. Pitch delta: gyms
 buy *differentiation*, studios buy *client accountability* — same console,
 different first screen emphasis (Members-first default tab for studios).
+*(2026-11-03: the plans a gym gives its members, meals first, are planned in Part 6 §16.6 and
+ROADMAP Stage 2's item 24; that section wins where the two differ.)*
 
 ### 6.2 Physio clinic (Phase 2 — **gate: one committed pilot clinic or 5
 inbound clinic requests; do not build speculatively**)
