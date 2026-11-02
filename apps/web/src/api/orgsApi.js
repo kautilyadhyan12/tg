@@ -116,6 +116,7 @@ import {
   memberGymTagsResponseSchema,
   memberPayersResponseSchema,
   memberCardResponseSchema,
+  autopayPreviewSchema,
   terminalSaveResponseSchema,
   terminalPaymentResponseSchema,
   cardChargeResponseSchema,
@@ -1834,6 +1835,25 @@ export const orgService = {
       memberCardResponseSchema,
       'their card on file',
       authApi.delete(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/card`),
+    ),
+  /** Pause automatic payments (ROADMAP 18d-iv-f): what Pause or Resume changes, then the press. The card stays saved. */
+  getAutopay: (gymId, entryId) =>
+    readThrough(
+      autopayPreviewSchema,
+      'their automatic payments',
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/card/autopay`),
+    ),
+  pauseAutopay: (gymId, entryId) =>
+    readThrough(
+      memberCardResponseSchema,
+      'their card on file',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/card/autopay/pause`),
+    ),
+  resumeAutopay: (gymId, entryId) =>
+    readThrough(
+      memberCardResponseSchema,
+      'their card on file',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/card/autopay/resume`),
     ),
   /** Save card on Terminal (ROADMAP 18d-ii-b-ii): the agreement goes to the gym's Square Terminal,
    *  then the card the person gives there. Asked about every few seconds until it ends. */

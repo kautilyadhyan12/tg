@@ -17,9 +17,11 @@ import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../servic
 import { gymHasLivePlan, insertAudit } from "../repo.js";
 import { lockGym } from "../memberList/repo.js";
 import * as repo from "./repo.js";
+import { endOwnPause } from "../payments/autopayRepo.js";
 
 export interface PayersDeps {
   sql: Sql;
+  now: () => Date;
 }
 
 const BILLING = "billing.members";
@@ -51,6 +53,8 @@ export async function setPayer(deps: PayersDeps, userId: string, gymId: string, 
     if (before?.entryId === payerEntryId) return;
     if ((await repo.paysForCount(tx, gymId, payerEntryId)) >= PAYS_FOR_MAX) throw new OrgsError(409, "pays_for_full", MEMBER_PAYER_WORDS.pays_for_full);
     await repo.setPayer(tx, gymId, entryId, payerEntryId, userId);
+    // Their own pause of automatic payments (18d-iv-f) gives way to the payer's card.
+    await endOwnPause(tx, gymId, entryId, userId, deps.now());
     await insertAudit(tx, {
       actorUserId: userId,
       gymId,

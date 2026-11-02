@@ -1,6 +1,7 @@
 import { MEMBER_CARD_WORDS, cardEarlierLine, cardName, cardOnFileLine, cardOwnerOnlyLine, cardPaidByLine } from '@app/shared';
 import { PRACTICE_TERMINAL_WORDS } from './paymentsView';
 import { cardReminderLine } from './cardExpiryView';
+import { autopayPayerPausedLine } from './autopayView';
 
 // CARD ON FILE, ON A PERSON'S PAGE (ROADMAP 18d-ii): what the box says, from the server's
 // answer. Only staff holding the payments tick open it; a gym outside Square's countries shows
@@ -46,6 +47,9 @@ export function cardBoxView(view, name) {
     connect: ready || !view.isOwner ? null : view.state === 'choose_location' ? 'choose' : 'connect',
     connectLine: ready || !view.isOwner ? null : view.state === 'choose_location' ? MEMBER_CARD_WORDS.choose_location : MEMBER_CARD_WORDS.connect,
     ownerOnly,
+    // Pause automatic payments (18d-iv-f), on the page of whoever pays: Pause with a card saved, Resume while paused.
+    autopay: paidBy === null ? { pausedOn: view.autopayPausedOn ?? null, canPause: card !== null && (view.autopayPausedOn ?? null) === null } : null,
+    payerPausedLine: paidBy !== null && (view.autopayPausedOn ?? null) !== null ? autopayPayerPausedLine(paidBy.name) : null,
   };
 }
 

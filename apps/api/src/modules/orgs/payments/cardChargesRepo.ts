@@ -24,6 +24,7 @@ import {
 } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import { insertAudit } from "../repo.js";
+import { autopayHolder, autopayPauseEnded, autopayPauseStoodThrough, autopayPaused, autopayPausedOf } from "./autopayRepo.js";
 import { chargebackEnded, chargebackHolder, chargebackStoodThrough, chargebackStops, chargesStoppedOf } from "./chargebacksRepo.js";
 import { recordPaymentIn } from "../memberships/billsRepo.js";
 import { recordFeePaymentIn } from "../memberships/feesRepo.js";
@@ -259,6 +260,8 @@ export async function startCharge(sql: Sql, s: NewCharge): Promise<StartChargeOu
     if (s.bySchedule && status !== (s.target.kind === "period" ? "active" : "frozen")) return { kind: "not_allowed" };
     // Whoever pays told their bank a charge was wrong (18d-iv-e-i): the app does not charge them again by itself. Staff still may.
     if (s.bySchedule && (await chargesStoppedOf(tx, s.gymId, [row.id])).size > 0) return { kind: "not_allowed" };
+    // Staff paused automatic payments of whoever pays (18d-iv-f). Staff still may charge.
+    if (s.bySchedule && (await autopayPausedOf(tx, s.gymId, [row.id])).size > 0) return { kind: "not_allowed" };
 
     let billId: string | null;
     let amountMinor: number;
@@ -527,10 +530,11 @@ export interface DueBill {
  *  charges by itself, whatever try it is: a renewing membership's bill with a bill before it while
  *  it is in use, or its freeze fee while it is frozen, of a current member, open, in the Square
  *  account's money. The worker's looks, the bill's "retried automatically on" and the email's all
- *  read it (review round one: the bill must never promise what the worker will not do). */
-const appCharges = (sql: SqlOrTx) => sql`${appChargesKind(sql)} AND NOT EXISTS (${chargebackStops(sql)})`;
+ *  read it (review round one: the bill must never promise what the worker will not do). Never while a chargeback stands, or while staff
+ *  have paused automatic payments of whoever pays (18d-iv-f). */
+const appCharges = (sql: SqlOrTx) => sql`${appChargesKind(sql)} AND NOT EXISTS (${chargebackStops(sql)}) AND NOT EXISTS (${autopayPaused(sql)})`;
 
-/** The same, with or without a chargeback standing (18d-iv-e-i). */
+/** The same, with or without a chargeback standing or a pause (18d-iv-e-i, 18d-iv-f). */
 const appChargesKind = (sql: SqlOrTx) => sql`
       b.status = 'open'
       AND h.kind = 'recurring' AND h.renews AND b.currency = d.currency AND h.entry_id IS NOT NULL
@@ -650,13 +654,28 @@ export async function clearRetry(sql: Sql, gymId: string, billId: string): Promi
   await sql`UPDATE gym_card_charges SET next_try_on = NULL WHERE gym_id = ${gymId} AND bill_id = ${billId} AND next_try_on IS NOT NULL`;
 }
 
-/** Each of these bills the app would have charged by itself but for a chargeback, by the worker's own rule: one standing, or one ended
- *  that left the bill past the days the app charges. Its payer has a card, so "charge the card" is true. */
+/** Each of these bills the app would have charged by itself but for a chargeback or a pause, by the worker's own rule: one standing, or
+ *  one ended that left the bill past the days the app charges. Its payer has a card, so "charge the card" is true. */
 export async function chargeStopsOfBills(sql: SqlOrTx, gymId: string, billIds: readonly string[], now: Date): Promise<Map<string, ChargeStop>> {
   if (billIds.length === 0) return new Map();
-  const rows = await sql<{ id: string; stopped: boolean; stood: boolean; ended: boolean; waited: boolean; old: boolean; held_by: { entryId: string; name: string } | null }[]>`
+  const rows = await sql<
+    {
+      id: string;
+      stopped: boolean;
+      stood: boolean;
+      ended: boolean;
+      paused: boolean;
+      pause_stood: boolean;
+      waited: boolean;
+      old: boolean;
+      held_by: { entryId: string; name: string } | null;
+      paused_by: { entryId: string; name: string } | null;
+    }[]
+  >`
     WITH ${gymDay(sql, { environment: null, now, gymIds: [gymId] })}
-    SELECT b.id, EXISTS (${chargebackStops(sql)}) AS stopped, EXISTS (${chargebackStoodThrough(sql)}) AS stood, EXISTS (${chargebackEnded(sql)}) AS ended,
+    SELECT b.id, EXISTS (${chargebackStops(sql)}) AS stopped, EXISTS (${chargebackStoodThrough(sql)}) AS stood,
+           EXISTS (${chargebackEnded(sql)}) OR EXISTS (${autopayPauseEnded(sql)}) AS ended,
+           EXISTS (${autopayPaused(sql)}) AS paused, EXISTS (${autopayPauseStoodThrough(sql)}) AS pause_stood, (${autopayHolder(sql)}) AS paused_by,
            EXISTS (SELECT 1 FROM gym_member_bills o LEFT JOIN gym_member_payments op ON op.gym_id = o.gym_id AND op.bill_id = o.id AND op.undone_at IS NULL
                    WHERE o.gym_id = b.gym_id AND o.held_membership_id = b.held_membership_id AND o.fee IS NULL AND b.fee IS NULL AND o.period_index = b.period_index - 1
                      AND (op.paid_on > b.due_on + 2 OR (o.status = 'void' AND (o.updated_at AT TIME ZONE d.timezone)::date > b.due_on + 2))) AS waited, b.due_on < d.today - 2 AND NOT EXISTS (SELECT 1 FROM gym_card_charges x WHERE x.gym_id = b.gym_id AND x.bill_id = b.id AND x.by_schedule) AS old, (${chargebackHolder(sql)}) AS held_by
@@ -667,7 +686,9 @@ export async function chargeStopsOfBills(sql: SqlOrTx, gymId: string, billIds: r
   const out = new Map<string, ChargeStop>();
   for (const r of rows) {
     if (r.stopped) out.set(r.id, { kind: "stopped", heldBy: r.held_by });
+    else if (r.paused) out.set(r.id, { kind: "paused", heldBy: r.paused_by });
     else if (r.stood && r.old) out.set(r.id, { kind: "missed", heldBy: null });
+    else if (r.pause_stood && r.old) out.set(r.id, { kind: "paused_missed", heldBy: null });
     else if (r.ended && r.waited && r.old) out.set(r.id, { kind: "behind", heldBy: null });
   }
   return out;

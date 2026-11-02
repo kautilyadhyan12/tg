@@ -16,6 +16,7 @@ import type { Sql, TransactionSql } from "postgres";
 import { writeRefund } from "../memberships/billsRepo.js";
 import { refundTargetOf } from "../memberships/billsSql.js";
 import { lockGym } from "../memberList/repo.js";
+import { autopayPaused } from "./autopayRepo.js";
 import { crossOutCardNotes } from "./cardRefundsRepo.js";
 import { settleLostOnSale } from "./saleCardRefundsRepo.js";
 import { insertAudit } from "../repo.js";
@@ -49,6 +50,7 @@ const seenOf = (r: RawSeen, now: { reason: ChargebackReason | null; state: Charg
   stops: r.stops,
   chargesStartedOn: r.started_on,
   stillPaused: false,
+  staffPaused: false,
 });
 const seen = (r: RawSeen): ChargebackSeen => {
   const reason = chargebackReasonSchema.safeParse(r.reason);
@@ -292,10 +294,11 @@ export async function chargebackStartPreview(sql: SqlOrTx, gymId: string, id: st
       ? []
       : await sql<{ brand: string; last4: string }[]>`
           SELECT brand, last4 FROM gym_member_cards WHERE gym_id = ${gymId} AND environment = ${row.environment} AND account_id = ${row.accountId} AND entry_id = ${row.payerId}`;
-  const [other] = await sql<{ id: string }[]>`
-    SELECT h.id FROM gym_held_memberships h
-    WHERE h.gym_id = ${gymId} AND h.id = ${row.membershipId} AND EXISTS (${chargebackStops(sql)} AND q.state NOT IN ('LOST','ACCEPTED'))`;
-  return { people: people.map((p) => ({ name: p.name, what: p.what ?? "" })), card: card ?? null, otherStops: other !== undefined };
+  const [other] = await sql<{ other: boolean; paused: boolean }[]>`
+    SELECT EXISTS (${chargebackStops(sql)} AND q.state NOT IN ('LOST','ACCEPTED')) AS other, EXISTS (${autopayPaused(sql)}) AS paused
+    FROM gym_held_memberships h
+    WHERE h.gym_id = ${gymId} AND h.id = ${row.membershipId}`;
+  return { people: people.map((p) => ({ name: p.name, what: p.what ?? "" })), card: card ?? null, otherStops: other?.other === true, staffPaused: other?.paused === true };
 }
 
 export type StartChargesOutcome = "done" | "not_found" | "not_lost";
@@ -338,8 +341,8 @@ export async function startChargesAgain(sql: Sql, gymId: string, id: string, use
 export async function chargebacksOfPayments(sql: SqlOrTx, gymId: string, paymentIds: readonly string[], now: Date): Promise<Map<string, ChargebackSeen[]>> {
   const out = new Map<string, ChargebackSeen[]>();
   if (paymentIds.length === 0) return out;
-  const rows = await sql<(RawSeen & { payment_id: string; payer_paused: boolean })[]>`
-    SELECT p.id AS payment_id, ${seenColumns(sql, now)}, EXISTS (${chargebackStops(sql)}) AS payer_paused
+  const rows = await sql<(RawSeen & { payment_id: string; payer_paused: boolean; staff_paused: boolean })[]>`
+    SELECT p.id AS payment_id, ${seenColumns(sql, now)}, EXISTS (${chargebackStops(sql)}) AS payer_paused, EXISTS (${autopayPaused(sql)}) AS staff_paused
     FROM gym_square_disputes q
     JOIN gyms g ON g.id = q.gym_id
     JOIN gym_member_payments p ON p.gym_id = q.gym_id AND p.provider = 'square' AND p.provider_payment_id = q.square_payment_id
@@ -347,7 +350,7 @@ export async function chargebacksOfPayments(sql: SqlOrTx, gymId: string, payment
     JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
     WHERE q.gym_id = ${gymId} AND p.id = ANY(${[...paymentIds]}::uuid[])
     ORDER BY q.created_at, q.id`;
-  for (const r of rows) out.set(r.payment_id, [...(out.get(r.payment_id) ?? []), { ...seen(r), stillPaused: r.started_on !== null && r.payer_paused }]);
+  for (const r of rows) out.set(r.payment_id, [...(out.get(r.payment_id) ?? []), { ...seen(r), stillPaused: r.started_on !== null && r.payer_paused, staffPaused: r.staff_paused }]);
   return out;
 }
 
