@@ -151,8 +151,7 @@ describe("the messages", () => {
     await fireEvent.press(screen.getByLabelText("Inbox at Iron House, 2 new messages"));
     const first = within(await page().findByTestId(`message-${M1}`));
     expect(first.getByText("Closed on Friday for Diwali.")).toBeTruthy();
-    expect(first.getByText("New")).toBeTruthy();
-    expect(first.getByText("3 hours ago")).toBeTruthy();
+    expect(first.getByText("New · 3 hours ago")).toBeTruthy();
     const second = within(page().getByTestId(`message-${M2}`));
     expect(second.queryByText("New")).toBeNull();
     expect(second.getByText("2 days ago")).toBeTruthy();
@@ -161,7 +160,7 @@ describe("the messages", () => {
     const seen = server.asked.filter((one) => one.method === "POST" && one.path === `${inboxPath(IRON)}/read`);
     expect(seen.map((one) => one.body)).toEqual([{ upTo: ASOF }]);
     // The New marks stay while it is open; the count and the dot go.
-    expect(first.getByText("New")).toBeTruthy();
+    expect(first.getByText("New · 3 hours ago")).toBeTruthy();
     expect(screen.queryByTestId("dot-Gym")).toBeNull();
     await fireEvent.press(page().getByLabelText("Back"));
     expect(await screen.findByLabelText("Inbox at Iron House")).toBeTruthy();

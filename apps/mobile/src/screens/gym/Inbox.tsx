@@ -19,12 +19,12 @@ import {
   type GymNudge,
 } from "@app/shared";
 import { Button } from "../../look/Button";
-import { Card, Pill } from "../../look/Card";
+import { Card } from "../../look/Card";
 import { colours, sizes } from "../../look/colours";
 import { Icon } from "../../look/Icon";
 import { Modal } from "../../look/Modal";
 import { Sheet } from "../../look/Sheet";
-import { Txt } from "../../look/Txt";
+import { fonts, Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
 import { NO_ANSWER } from "../SignIn";
 import { INBOX_NOT_READ, SWITCH_NOT_SAVED, inboxPath, inboxReadPath, inboxRow, inboxSwitchPath } from "./inboxView";
@@ -187,22 +187,30 @@ function InboxBody({ place, onClose, onUnread, bottom }: { place: InboxPlace; on
                     label="Leave a review"
                     kind="soft"
                     small
+                    style={styles.under}
                     onPress={() => {
                       if (row.link !== null) void Linking.openURL(row.link);
                     }}
                   />
                 )}
-                <View style={styles.row}>
-                  {row.isNew ? <Pill label="New" tone="orange" /> : null}
-                  {row.when === null ? null : <Txt kind="tiny">{row.when}</Txt>}
-                </View>
+                {row.isNew || row.when !== null ? (
+                  <Txt kind="tiny" style={styles.under}>
+                    {row.isNew ? (
+                      <Txt kind="tiny" colour="orange" style={styles.strong}>
+                        New
+                      </Txt>
+                    ) : null}
+                    {row.isNew && row.when !== null ? " · " : ""}
+                    {row.when}
+                  </Txt>
+                ) : null}
               </Card>
             ))}
             <Txt kind="small">{INBOX_NOTE}</Txt>
             {contact.none === null ? (
               <Button
                 label={contactGymLabel(place.orgType)}
-                kind="plain"
+                kind="soft"
                 icon="phone"
                 wide
                 onPress={() => {
@@ -302,6 +310,9 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: 10 },
   grow: { flex: 1 },
   middle: { alignSelf: "center" },
+  // Under the words, beside the envelope.
+  under: { marginLeft: 26, alignSelf: "flex-start" },
+  strong: { fontFamily: fonts.semibold },
   sheet: { gap: 12 },
   switchRow: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: sizes.press },
 });

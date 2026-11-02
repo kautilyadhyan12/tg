@@ -592,7 +592,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
         - 17c-ii-b. [x] **A person's profile** — merged 2026-11-01 (PR #428).
         - 17c-ii-c. [ ] **Your own profile picture and background picture** (Kd, 2026-11-01, `rulings/2026-11-01-17c-ii-b.md`), shown on the profile. With the member photo (5b-vi); waits for photo storage.
     - 17d. [x] **Challenges** — merged 2026-11-02 (PR #432).
-18. [ ] **Inbox, Contact the gym, and phone notifications** (spec Part 3 §16.1; Part 6 §6): the class reminder, a place is free, a message, somebody commented on your post or replied to you. Needs Kd's Firebase project.
+18. **Inbox, Contact the gym, and phone notifications** (spec Part 3 §16.1; Part 6 §6; split 2026-11-02: the Inbox needs no Firebase).
+    - 18a. [ ] **Inbox and Contact the gym on the phone**, a count on each place's Inbox and a dot on the Gym tab.
+    - 18b. [ ] **Phone notifications**: the class reminder, a place is free, a message, a comment or reply on your post. Needs Kd's Firebase project.
 19. [ ] **Settings and account**: profile, units, hide me on leaderboards, notification switches that save, change email (Stage 2's 3b-iii), what a gym can see (Stage 1's 8a), download my data, delete account and undo.
 20. [ ] **What the gym side adds for members**, each after its web job: the waiver (3e), the membership agreement signed in the app (18u), the referral link (20e), the member photo (5b-vi), saving their card (18d-ii), buying from the gym (18k), stopping a membership (18l), a gym's plan for a member (19e).
 21. [ ] **Paying, the stores and release**: the $10 plan through the stores (item 6), one device one trial (Stage 3's 2c), the store pages rated 18+, the Terms and Privacy pages that Get started's line opens (it opens nothing today, as the browser's), Google's closed test, then the iPhone version with Apple sign-in.
