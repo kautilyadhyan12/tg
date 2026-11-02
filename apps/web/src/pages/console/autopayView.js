@@ -38,6 +38,7 @@ export function autopayResumeBox(preview) {
   let lead;
   if (preview.chargebackStops) lead = people.length === 0 ? 'A chargeback still pauses automatic payments until it is closed.' : 'A chargeback still pauses automatic payments, so nothing will be charged until it is closed. This applies to:';
   else if (people.length === 0) lead = 'Nobody this card pays for has a renewing membership, so nothing will be charged.';
+  else if (preview.squareConnected === false) lead = 'Square is not connected, so nothing will be charged until it is connected again. This applies to:';
   else if (card === null) lead = 'No card is on file, so nothing will be charged until one is added. This applies to:';
   else lead = `${card} will be charged automatically for:`;
   return {
@@ -45,7 +46,7 @@ export function autopayResumeBox(preview) {
     lead,
     people,
     more: preview.more,
-    note: preview.chargebackStops || people.length === 0 || card === null ? null : 'A bill due in the last two days may be charged today. Charge older bills by hand, oldest first.',
+    note: preview.chargebackStops || people.length === 0 || preview.squareConnected === false || card === null ? null : 'A bill due in the last two days may be charged today. Charge older bills by hand, oldest first.',
     button: 'Resume',
   };
 }
@@ -54,6 +55,7 @@ export function autopayResumeBox(preview) {
 export function autopayResumedWords(preview) {
   if (preview.chargebackStops) return 'Automatic payments resumed. A chargeback still pauses them until it is closed.';
   if (preview.people.length === 0) return 'Automatic payments resumed. Nobody this card pays for has a renewing membership, so nothing will be charged.';
+  if (preview.squareConnected === false) return 'Automatic payments resumed. Nothing will be charged until Square is connected again.';
   if (preview.card === null) return 'Automatic payments resumed. Nothing will be charged until a card is on file.';
   return `Automatic payments resumed. ${cardName(preview.card)} will be charged when bills are due.`;
 }

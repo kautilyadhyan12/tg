@@ -4,7 +4,9 @@
 //
 // THE WORST THING here is a member who asked to pay at the desk having their saved card charged anyway: by the bill's date, by a retry
 // after a decline, or as the payer for somebody else. So the pause is read by the one rule every automatic charge and retry is found by
-// (`appCharges`), and again under the record's lock just before a charge is sent (`startCharge`).
+// (`appCharges`), and again by the write, under the record's lock, before a charge is sent (`startCharge`). Pause takes the gym's lock,
+// not each record's: a charge whose write checked a moment before the press, or one already waiting on Square, may still go through,
+// as with Remove card.
 import { autopayPreviewSchema, type AutopayPreview, type MemberCardResponse } from "@app/shared";
 import { payerOf } from "../payers/repo.js";
 import { requirePrivilege, requireWritablePrivilege } from "../service.js";
@@ -44,6 +46,7 @@ export async function readAutopay(deps: PaymentsDeps, userId: string, gymId: str
     people,
     more: Math.max(0, total - people.length),
     card: shown === null ? null : { brand: shown.brand, last4: shown.last4 },
+    squareConnected: row?.state === "connected",
     chargebackStops,
   });
 }

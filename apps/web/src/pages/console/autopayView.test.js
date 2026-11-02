@@ -7,7 +7,7 @@ const people = [
   { name: 'Maya Patel', what: 'Gold Weekly' },
   { name: 'Arun Patel', what: '' },
 ];
-const preview = (over = {}) => ({ pausedOn: null, people, more: 0, card, chargebackStops: false, ...over });
+const preview = (over = {}) => ({ pausedOn: null, people, more: 0, card, squareConnected: true, chargebackStops: false, ...over });
 
 describe('Pause', () => {
   it('names the card and each membership, and says the card stays and bills still come due', () => {
@@ -43,6 +43,7 @@ describe('Resume', () => {
       { over: { chargebackStops: true }, lead: 'A chargeback still pauses automatic payments, so nothing will be charged until it is closed. This applies to:', done: 'Automatic payments resumed. A chargeback still pauses them until it is closed.' },
       { over: { chargebackStops: true, people: [] }, lead: 'A chargeback still pauses automatic payments until it is closed.', done: 'Automatic payments resumed. A chargeback still pauses them until it is closed.' },
       { over: { people: [] }, lead: 'Nobody this card pays for has a renewing membership, so nothing will be charged.', done: 'Automatic payments resumed. Nobody this card pays for has a renewing membership, so nothing will be charged.' },
+      { over: { card: null, squareConnected: false }, lead: 'Square is not connected, so nothing will be charged until it is connected again. This applies to:', done: 'Automatic payments resumed. Nothing will be charged until Square is connected again.' },
       { over: { card: null }, lead: 'No card is on file, so nothing will be charged until one is added. This applies to:', done: 'Automatic payments resumed. Nothing will be charged until a card is on file.' },
     ];
     for (const c of cases) {

@@ -49,7 +49,9 @@ import {
 import { dayInTz } from "../../gamification/streak.js";
 import { OrgsError, requireWritablePrivilege } from "../service.js";
 import { BILLING, connectionRefused, entryNotFound, orgNotFound, readyOrThrow } from "./cards.js";
+import { autopayPausedOf } from "./autopayRepo.js";
 import * as charges from "./cardChargesRepo.js";
+import { chargesStoppedOf } from "./chargebacksRepo.js";
 import * as repo from "./repo.js";
 import { accessContext, type PaymentsDeps } from "./service.js";
 import type { SquareSettings } from "./settings.js";
@@ -468,8 +470,10 @@ async function chargeDueBill(deps: PaymentsDeps, square: SquareSettings, bill: c
   });
   if (written.kind !== "new") {
     if (written.kind !== "not_allowed" && written.kind !== "no_card") deps.log.warn({ event: "square.card_charge_skipped", gymId: bill.gymId, why: written.kind }, "a bill due was not charged");
-    // A try again the write's own checks refuse is staff's from now: the bill stops showing its day.
-    if (again && (written.kind === "not_allowed" || written.kind === "no_card" || written.kind === "currency")) await charges.clearRetry(deps.sql, bill.gymId, bill.billId);
+    // A try again the write's own checks refuse is staff's from now: the bill stops showing its day. Not while a pause or a chargeback
+    // holds it: those end, and the try comes back with them.
+    const held = written.kind === "not_allowed" && ((await autopayPausedOf(deps.sql, bill.gymId, [bill.membershipId])).size > 0 || (await chargesStoppedOf(deps.sql, bill.gymId, [bill.membershipId])).size > 0);
+    if (again && !held && (written.kind === "not_allowed" || written.kind === "no_card" || written.kind === "currency")) await charges.clearRetry(deps.sql, bill.gymId, bill.billId);
     return undefined;
   }
   return await advance(deps, square, written.charge, leaseFrom(now));

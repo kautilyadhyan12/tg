@@ -11,6 +11,8 @@ export const autopayPreviewSchema = z
     /** How many more renewing memberships than `people` names. */
     more: z.number().int().min(0),
     card: cardSeenSchema.nullable(),
+    /** The gym is connected to Square now: a card saved before it left is charged again once it reconnects. */
+    squareConnected: z.boolean(),
     /** A chargeback also stops automatic payments of whoever pays, so Resume alone charges nothing yet. */
     chargebackStops: z.boolean(),
   })

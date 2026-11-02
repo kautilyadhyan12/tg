@@ -9,6 +9,7 @@ import postgres from "postgres";
 import {
   autopayPreviewSchema,
   memberCardResponseSchema,
+  staffActivityResponseSchema,
   orgWords,
   heldMembershipsResponseSchema,
   squareConnectResponseSchema,
@@ -451,6 +452,7 @@ d("Pause automatic payments (real Postgres)", { timeout: T }, () => {
         ],
         more: 0,
         card: { brand: "VISA", last4: "1111" },
+        squareConnected: true,
         chargebackStops: false,
       });
 
@@ -505,10 +507,59 @@ d("Pause automatic payments (real Postgres)", { timeout: T }, () => {
       expect(await sql`SELECT 1 FROM gym_autopay_pauses WHERE gym_id = ${gym.id} AND entry_id = ${twin} AND resumed_at IS NULL`).toHaveLength(1);
     });
 
+    it("two records joined, both paused: the kept one holds one open pause, and the other is closed", async () => {
+      const one = await paidByCard(gym, "Pause Both One");
+      const two = await person(gym, "Pause Both Two");
+      await saveCard(gym, two);
+      await pause(gym, one.entryId);
+      await pause(gym, two);
+      const merged = await send("POST", `${entryUrl(gym, one.entryId)}/merge`, gym.owner.cookies, { keepEntryId: two });
+      expect(merged.statusCode, merged.body).toBe(200);
+      const rows = await sql<{ open: boolean }[]>`SELECT resumed_at IS NULL AS open FROM gym_autopay_pauses WHERE gym_id = ${gym.id} AND entry_id = ${two} ORDER BY paused_at`;
+      expect(rows.map((r) => r.open).sort()).toEqual([false, true]);
+    });
+
+    it("paused and resumed before a bill's dates: a bill missed later for another reason never says it was paused", async () => {
+      const una = await paidByCard(gym, "Pause Una");
+      await pause(gym, una.entryId);
+      await resume(gym, una.entryId);
+      await sql`DELETE FROM gym_member_cards WHERE gym_id = ${gym.id} AND entry_id = ${una.entryId}`;
+      const billId = await nextWeekOpens(una);
+      clock = new Date(clock.getTime() + 5 * 24 * 60 * 60_000);
+      await saveCard(gym, una.entryId);
+      expect((await billOnPage(gym, una.entryId, billId))?.chargeStop ?? null).toBeNull();
+    });
+
+    it("somebody else is set to pay for a paused person: their own pause ends, and Staff activity says so", async () => {
+      const ivy = await paidByCard(gym, "Pause Ivy");
+      const mum = await paidByCard(gym, "Pause Ivy Mum");
+      await pause(gym, ivy.entryId);
+      const set = await send("PUT", `${entryUrl(gym, ivy.entryId)}/payer`, gym.owner.cookies, { payerEntryId: mum.entryId });
+      expect(set.statusCode, set.body).toBe(200);
+      expect(await sql`SELECT 1 FROM gym_autopay_pauses WHERE gym_id = ${gym.id} AND entry_id = ${ivy.entryId} AND resumed_at IS NULL`).toEqual([]);
+      expect(await sql`SELECT 1 FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.autopay_pause_ended_by_payer' AND target_id = ${ivy.entryId}`).toHaveLength(1);
+      // Removing the payer later brings no old pause back.
+      const removed = await send("DELETE", `${entryUrl(gym, ivy.entryId)}/payer`, gym.owner.cookies);
+      expect(removed.statusCode, removed.body).toBe(200);
+      expect((await send("GET", `${entryUrl(gym, ivy.entryId)}/card`, gym.owner.cookies)).body).toContain('"autopayPausedOn":null');
+    });
+
+    it("Staff activity names the person and says who paused and resumed, read through its own route", async () => {
+      const ola = await paidByCard(gym, "Pause Ola");
+      await pause(gym, ola.entryId);
+      await resume(gym, ola.entryId);
+      const res = await send("GET", `/v1/orgs/${gym.id}/staff-activity`, gym.owner.cookies);
+      expect(res.statusCode, res.body).toBe(200);
+      const lines = staffActivityResponseSchema.parse(JSON.parse(res.body)).lines.map((l) => l.line);
+      expect(lines).toContain("Automatic payments were paused for Pause Ola. Their card stays saved");
+      expect(lines).toContain("Automatic payments were resumed for Pause Ola");
+    });
+
     it("Staff activity says who paused and resumed", () => {
       const ctx = { about: "Maya", words: orgWords("gym"), currency: "USD" };
       expect(STAFF_LINES["org.autopay_paused"]?.({ ...ctx, meta: { entryId: "x" } })).toBe("Automatic payments were paused for Maya. Their card stays saved");
       expect(STAFF_LINES["org.autopay_resumed"]?.({ ...ctx, meta: { entryId: "x" } })).toBe("Automatic payments were resumed for Maya");
+      expect(STAFF_LINES["org.autopay_pause_ended_by_payer"]?.({ ...ctx, meta: { entryId: "x" } })).toBe("The pause of automatic payments for Maya ended, as somebody else now pays for them");
     });
   });
 });

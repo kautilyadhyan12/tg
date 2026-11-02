@@ -78,7 +78,7 @@ export async function pause(sql: Sql, gymId: string, entryId: string, userId: st
       WHERE NOT EXISTS (SELECT 1 FROM gym_autopay_pauses WHERE gym_id = ${gymId} AND entry_id = ${entryId} AND resumed_at IS NULL)
       RETURNING id`;
     if (made.length === 0) return "already";
-    await insertAudit(tx, { actorUserId: userId, gymId, action: "org.autopay_paused", targetType: "gym_member_list_entry", targetId: entryId, meta: { entryId } });
+    await insertAudit(tx, { actorUserId: userId, gymId, action: "org.autopay_paused", targetType: "member_list_entry", targetId: entryId, meta: { entryId } });
     return "done";
   });
 }
@@ -92,9 +92,20 @@ export async function resume(sql: Sql, gymId: string, entryId: string, userId: s
       WHERE gym_id = ${gymId} AND entry_id = ${entryId} AND resumed_at IS NULL
       RETURNING id`;
     if (closed.length === 0) return "already";
-    await insertAudit(tx, { actorUserId: userId, gymId, action: "org.autopay_resumed", targetType: "gym_member_list_entry", targetId: entryId, meta: { entryId } });
+    await insertAudit(tx, { actorUserId: userId, gymId, action: "org.autopay_resumed", targetType: "member_list_entry", targetId: entryId, meta: { entryId } });
     return "done";
   });
+}
+
+/** Somebody else now pays for this record (18i): its own pause no longer decides anything, and nothing on its page could show or
+ *  resume it, so it ends now, said in Staff activity. Under the caller's gym lock. */
+export async function endOwnPause(tx: TransactionSql, gymId: string, entryId: string, userId: string): Promise<void> {
+  const closed = await tx<{ id: string }[]>`
+    UPDATE gym_autopay_pauses SET resumed_at = GREATEST(now(), paused_at), resumed_by = ${userId}
+    WHERE gym_id = ${gymId} AND entry_id = ${entryId} AND resumed_at IS NULL
+    RETURNING id`;
+  if (closed.length === 0) return;
+  await insertAudit(tx, { actorUserId: userId, gymId, action: "org.autopay_pause_ended_by_payer", targetType: "member_list_entry", targetId: entryId, meta: { entryId } });
 }
 
 /** Two records of one person joined (`mergeEntries`): the pauses of the one not kept move onto the kept one, so a pause on either still
