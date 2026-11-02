@@ -257,7 +257,7 @@ export function registerOrgRoutes(
   registerRegisterRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
   registerReceiptRoutes(app, { sql: deps.sql, redis: deps.redis });
   // Who pays for a person: family plans (ROADMAP 18i).
-  registerPayerRoutes(app, { sql: deps.sql, redis: deps.redis });
+  registerPayerRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
   // My membership: a member's own memberships, payments and receipts (ROADMAP 18j).
   registerMyMembershipRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
   registerPaymentsDownloadRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });

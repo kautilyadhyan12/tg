@@ -1331,6 +1331,13 @@
       "when": 1790726400190,
       "tag": "0190_chargeback_lost_on_a_sale",
       "breakpoints": true
+    },
+    {
+      "idx": 190,
+      "version": "7",
+      "when": 1790726400191,
+      "tag": "0191_autopay_pauses",
+      "breakpoints": true
     }
   ]
 }

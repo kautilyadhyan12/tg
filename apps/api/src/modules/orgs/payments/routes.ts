@@ -17,6 +17,9 @@
 //   GET    /v1/orgs/:gymId/member-list/entries/:entryId/card   Card on file (`billing.members`)
 //   POST   /v1/orgs/:gymId/member-list/entries/:entryId/card   save the card typed into Square's form
 //   DELETE /v1/orgs/:gymId/member-list/entries/:entryId/card   Remove card
+//   GET    …/member-list/entries/:entryId/card/autopay          what Pause or Resume automatic payments changes (18d-iv-f)
+//   POST   …/member-list/entries/:entryId/card/autopay/pause    Pause automatic payments
+//   POST   …/member-list/entries/:entryId/card/autopay/resume   Resume automatic payments
 //   GET    /v1/orgs/:gymId/my-card                             the member's own, for the phone
 //   POST   /v1/orgs/:gymId/my-card                             the member adds or updates their own
 //
@@ -109,6 +112,7 @@ import {
   terminalSaveParamsSchema,
 } from "../schemas.js";
 import { staffOnly } from "../staffLimit.js";
+import * as autopay from "./autopay.js";
 import * as cardCharges from "./cardCharges.js";
 import * as cardRefunds from "./cardRefunds.js";
 import * as cards from "./cards.js";
@@ -242,6 +246,27 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
     if (params === null) return;
     return reply.status(200).send(await cards.removeMemberCard(paymentsDeps, callerId(req), params.gymId, params.entryId));
+  });
+
+  // Pause and Resume automatic payments (18d-iv-f): no trip to Square, a row and a line in Staff activity each.
+  const autopayLimit = createDualRateLimit({ name: "autopay_change", max: 120, ipMax: 600, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
+
+  app.get(`${cardUrl}/autopay`, { preHandler: [app.authenticate, staffOnly(deps.sql, cardReadLimit)] }, async (req, reply) => {
+    const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    return reply.status(200).header("cache-control", "no-store").send(await autopay.readAutopay(paymentsDeps, callerId(req), params.gymId, params.entryId));
+  });
+
+  app.post(`${cardUrl}/autopay/pause`, { preHandler: [app.authenticate, staffOnly(deps.sql, autopayLimit)] }, async (req, reply) => {
+    const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    return reply.status(200).send(await autopay.pauseAutopay(paymentsDeps, callerId(req), params.gymId, params.entryId));
+  });
+
+  app.post(`${cardUrl}/autopay/resume`, { preHandler: [app.authenticate, staffOnly(deps.sql, autopayLimit)] }, async (req, reply) => {
+    const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    return reply.status(200).send(await autopay.resumeAutopay(paymentsDeps, callerId(req), params.gymId, params.entryId));
   });
 
   // Save card on Terminal: a press is a trip to Square and a customer made there, so it counts

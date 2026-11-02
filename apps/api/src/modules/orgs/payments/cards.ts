@@ -52,6 +52,7 @@ import { payerOf } from "../payers/repo.js";
 import { gymHasLivePlan, insertAudit, type OrgRow } from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import { cardPaysForRenewal, noticeOfCard, remindersOn } from "./cardExpiryRepo.js";
+import { pausedOn } from "./autopayRepo.js";
 import * as cards from "./cardsRepo.js";
 import * as repo from "./repo.js";
 import { followMerge } from "./squareMerges.js";
@@ -87,7 +88,7 @@ export function stateOf(square: SquareSettings | null, gym: repo.GymForPayments,
 }
 
 /** The card, while it is in the Square account the gym is connected to now. */
-function shownCard(card: cards.CardRow | null, square: SquareSettings | null, row: repo.ConnectionRow | null): cards.CardRow | null {
+export function shownCard(card: cards.CardRow | null, square: SquareSettings | null, row: repo.ConnectionRow | null): cards.CardRow | null {
   if (card === null || square === null || row?.state !== "connected") return null;
   return card.environment === square.environment && card.accountId === row.accountId ? card : null;
 }
@@ -204,6 +205,7 @@ export async function staffView(deps: PaymentsDeps, org: OrgRow, userId: string,
       terminals: canChange && payer === null ? paired.map(({ id, serial, practice }) => ({ id, serial, practice })) : [],
       pairTerminal: withTerminals && canChange && gym.ownerUserId === userId && paired.length === 0,
       terminalSave: open === null ? null : terminalSaveView(open, gym.country, await terminalsOf(deps, open.environment, open.gymId, open.accountId)),
+      autopayPausedOn: await pausedOn(deps.sql, org.id, payer?.entryId ?? entryId),
     },
   });
 }
