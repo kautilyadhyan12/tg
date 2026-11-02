@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import {
-  DIET_LABEL_CAUTION, FOOD_ALLERGY_CAUTION, dietAllows, dietPlanResponseSchema, nutritionTargetsResponseSchema,
+  DIET_LABEL_CAUTION, FOOD_ALLERGY_CAUTION, dietAllows, dietPlanResponseSchema, mealMeasuresResponseSchema, nutritionTargetsResponseSchema, planItemChoice,
   type Diet, type DietPlanResponse,
 } from "@app/shared";
 import { buildApp } from "../src/app.js";
@@ -296,6 +296,128 @@ d("diet plan routes (real Postgres)", () => {
         const again = await inject({ method: "POST", url: "/v1/nutrition/meals", body, cookies });
         expect((JSON.parse(again.body) as { meal: { id: string } }).meal.id).toBe(saved.id);
       }
+    });
+  });
+
+  describe("THE WORST THING (34e-ii-b): a meal the person built logs at other numbers than the plan shows", () => {
+    // Real wording of foods people make at home, with own numbers as people type them: whole, tenths,
+    // and protein, carbs and fat that add up to the whole weight.
+    const OWN = [
+      { name: "Mum's dal", grams: 250, own: { proteinG: 12.3, carbsG: 30.1, fatG: 7.7 } },
+      { name: "Protein shake (my recipe)", grams: 330, own: { proteinG: 31, carbsG: 9, fatG: 3 } },
+      { name: "Homemade granola", grams: 45, own: { proteinG: 4.5, carbsG: 29.7, fatG: 10.8 } },
+      { name: "Ghee", grams: 10, own: { proteinG: 0, carbsG: 0, fatG: 10 } },
+      { name: "Pão de queijo da vó", grams: 1.5, own: { proteinG: 0.5, carbsG: 0.5, fatG: 0.5 } },
+    ];
+
+    it("a day built from the lists and the person's own foods logs, meal by meal, at the plan's numbers", { timeout: 60_000 }, async () => {
+      const cookies = await makeUser("built", null);
+      const plan = parsed(await putDay(cookies, 3, {
+        changeId: randomUUID(),
+        meals: [
+          { mealType: "breakfast", items: [OWN[2], { canonical: "banana", grams: 118 }, OWN[4]] },
+          { mealType: "lunch", items: [{ canonical: "rice", grams: 180 }, OWN[0], OWN[3]] },
+          { mealType: "snack", items: [OWN[1]] },
+        ],
+      }));
+      const meals = plan.days[2]?.meals ?? [];
+      expect(meals.map((m) => m.items.map((i) => i.name))).toEqual([
+        ["Homemade granola", expect.any(String), "Pão de queijo da vó"],
+        [expect.any(String), "Mum's dal", "Ghee"],
+        ["Protein shake (my recipe)"],
+      ]);
+      for (const meal of meals) {
+        const body = { id: randomUUID(), mealName: "Planned", takenAt: new Date().toISOString(), mealType: meal.mealType, items: meal.items.map(planItemChoice) };
+        const res = await inject({ method: "POST", url: "/v1/nutrition/meals", body, cookies });
+        expect(res.statusCode, res.body).toBe(201);
+        const saved = (JSON.parse(res.body) as { meal: { totals: typeof meal.totals; items: { canonical: string; kcalPoint: number }[] } }).meal;
+        expect(saved.totals).toEqual(meal.totals);
+        // The same names, so the phone counts the meal as the plan's meal logged.
+        expect(saved.items.map((i) => i.canonical)).toEqual(meal.items.map((i) => i.canonical));
+      }
+    });
+
+    it("a sweep of 240 own foods as people type them, tenths and whole weights included: each logs at the plan's own numbers", { timeout: 120_000 }, async () => {
+      const cookies = await makeUser("ownsweep", null);
+      const weights = [1.5, 7, 15, 33, 45, 60, 99, 120, 150.5, 200, 250, 333, 480, 500, 750];
+      const foods = Array.from({ length: 240 }, (_, n) => {
+        const grams = weights[n % weights.length] ?? 100;
+        // Protein, carbs and fat in tenths of a gram, a third of the time adding up to the whole weight.
+        const tenths = Math.round(grams * 10);
+        const p = (n * 37) % (tenths + 1);
+        const c = (n * 53) % (tenths - p + 1);
+        const whole = n % 3 === 0 ? tenths - p - c : (n * 11) % (tenths - p - c + 1);
+        // The server refuses tenths whose sum comes out a hair over the weight in floating point, as it
+        // does for a logged meal: a tenth less there.
+        const f = p / 10 + c / 10 + whole / 10 > grams ? whole - 1 : whole;
+        return { name: `Food ${String(n)}`, grams, own: { proteinG: p / 10, carbsG: c / 10, fatG: f / 10 } };
+      });
+      const meals = Array.from({ length: 8 }, (_, m) => ({ mealType: "snack", items: foods.slice(m * 30, m * 30 + 30) }));
+      const plan = parsed(await putDay(cookies, 4, { changeId: randomUUID(), meals }));
+      const kept = plan.days[3]?.meals ?? [];
+      expect(kept.flatMap((m) => m.items).length).toBe(240);
+      for (const meal of kept) {
+        const choices = meal.items.map(planItemChoice);
+        const body = { id: randomUUID(), mealName: "Planned", takenAt: new Date().toISOString(), mealType: meal.mealType, items: choices };
+        const res = await inject({ method: "POST", url: "/v1/nutrition/meals", body, cookies });
+        expect(res.statusCode, res.body).toBe(201);
+        const saved = (JSON.parse(res.body) as { meal: { totals: typeof meal.totals; items: { kcalPoint: number; proteinG: number; carbsG: number; fatG: number }[] } }).meal;
+        expect(saved.items.map((i) => [i.kcalPoint, i.proteinG, i.carbsG, i.fatG])).toEqual(meal.items.map((i) => [i.kcalPoint, i.proteinG, i.carbsG, i.fatG]));
+        expect(saved.totals).toEqual(meal.totals);
+      }
+    });
+
+    it("an own food sent back as the phone sends it is kept at the same numbers when another meal of the day changes", { timeout: 30_000 }, async () => {
+      const cookies = await makeUser("keepown", null);
+      const first = parsed(await putDay(cookies, 1, { changeId: randomUUID(), meals: [{ mealType: "dinner", items: [OWN[0], OWN[1]] }] }));
+      const dinner = first.days[0]?.meals[0];
+      if (dinner === undefined) throw new Error("no dinner");
+      const again = parsed(await putDay(cookies, 1, {
+        changeId: randomUUID(),
+        meals: [{ mealType: "breakfast", items: [{ canonical: "banana", grams: 100 }] }, { mealType: "dinner", items: dinner.items.map(planItemChoice) }],
+      }));
+      expect(again.days[0]?.meals[1]?.totals).toEqual(dinner.totals);
+      expect(again.days[0]?.meals[1]?.items.map((i) => i.canonical)).toEqual(dinner.items.map((i) => i.canonical));
+    });
+
+    it("own numbers heavier than the food are refused, and the day is left as it was", { timeout: 30_000 }, async () => {
+      const cookies = await makeUser("heavyown", null);
+      const res = await putDay(cookies, 1, { changeId: randomUUID(), meals: [{ mealType: "lunch", items: [{ name: "Salad", grams: 50, own: { proteinG: 40, carbsG: 20, fatG: 0 } }] }] });
+      expect(res.statusCode).toBe(400);
+      expect(errorOf(res)).toBe("own_numbers_too_heavy");
+      expect((await read(cookies)).days[0]?.meals).toEqual([]);
+    });
+  });
+
+  describe("GET /v1/nutrition/diet-plan/days/:day/meals/:meal/measures", () => {
+    const measures = (cookies: Cookies, day: number | string, meal: number | string) =>
+      inject({ method: "GET", url: `/v1/nutrition/diet-plan/days/${String(day)}/meals/${String(meal)}/measures`, cookies });
+
+    it("gives each food of the meal its own measures, in the meal's order, an own food its weight only", { timeout: 30_000 }, async () => {
+      const cookies = await makeUser("measures", null);
+      parsed(await putDay(cookies, 5, {
+        changeId: randomUUID(),
+        meals: [{ mealType: "breakfast", items: [{ canonical: "banana", grams: 118 }, { name: "Homemade granola", grams: 45, own: { proteinG: 4.5, carbsG: 29.7, fatG: 10.8 } }] }],
+      }));
+      const res = await measures(cookies, 5, 0);
+      expect(res.statusCode, res.body).toBe(200);
+      const body = mealMeasuresResponseSchema.parse(JSON.parse(res.body));
+      expect(body.measures.length).toBe(2);
+      expect(body.measures[0]?.some((m) => m.id !== "g")).toBe(true);
+      expect(body.measures[1]?.map((m) => m.id)).toEqual(["g", "oz"]);
+    });
+
+    it("refuses a meal past the day's last, a day out of the week, and a stranger", { timeout: 30_000 }, async () => {
+      const owner = await makeUser("measowner", null);
+      const stranger = await makeUser("measstranger", null);
+      parsed(await putDay(owner, 2, { changeId: randomUUID(), meals: [{ mealType: "lunch", items: [{ canonical: "rice", grams: 180 }] }] }));
+      expect((await measures(owner, 2, 1)).statusCode).toBe(404);
+      expect((await measures(owner, 8, 0)).statusCode).toBe(400);
+      expect((await measures(owner, 2, 8)).statusCode).toBe(400);
+      expect((await measures(owner, 2, "x")).statusCode).toBe(400);
+      // The stranger has no plan of their own: the owner's meal is not reached.
+      expect((await measures(stranger, 2, 0)).statusCode).toBe(404);
+      expect((await measures({}, 2, 0)).statusCode).toBe(401);
     });
   });
 

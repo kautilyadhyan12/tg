@@ -1408,7 +1408,7 @@ const OWN_CANONICAL_PREFIX = "own_";
 
 /** A person's own food as a meal keeps it: its name, the grams eaten, priced by their own protein,
  *  carbs and fat (`ownPer100g`), under a canonical of its own in the meal. */
-function ownFoodItem(choice: OwnFoodItem, taken: Set<string>): MealItem {
+export function ownFoodItem(choice: OwnFoodItem, taken: Set<string>): MealItem {
   const figures = ownPer100g(choice.own, choice.grams);
   if (figures === null) throw ownNumbersTooHeavy(choice.grams);
   const base = `${OWN_CANONICAL_PREFIX}${slug(choice.name).slice(0, 100) || "food"}`;
@@ -1876,8 +1876,14 @@ export async function previewMealEdit(
 export async function mealMeasures(deps: NutritionDeps, userId: string, id: string): Promise<FoodMeasure[][] | null> {
   const meal = await repo.getMeal(deps.sql, userId, id);
   if (meal === null) return null;
+  return await itemsMeasures(deps, userId, meal.items);
+}
+
+/** Each kept food's own measures, as the picker offers them. `search` false where the foods are many
+ *  (a meal of a diet plan): none is searched for by its name. */
+export async function itemsMeasures(deps: NutritionDeps, userId: string, items: readonly MealItem[], search = true): Promise<FoodMeasure[][]> {
   const foods: FoodReference[] = [];
-  for (const item of meal.items) foods.push((await foodOfItem(deps, userId, item, item.canonical)) ?? savedFood(item, null));
+  for (const item of items) foods.push((await foodOfItem(deps, userId, item, item.canonical, search)) ?? savedFood(item, null));
   return await measuresOf(deps, foods);
 }
 

@@ -241,7 +241,6 @@ export const chosenItemSchema = z.union([gramsItemSchema, dishwareItemSchema, me
 export type ChosenItem = z.infer<typeof chosenItemSchema>;
 /** The most foods one meal holds. */
 export const MEAL_MOST_FOODS = 30;
-const chosenItemsSchema = z.array(chosenItemSchema).min(1).max(MEAL_MOST_FOODS);
 
 // ROADMAP 7a-iv-g — changing a food already logged (RULINGS 2026-09-17).
 /** The person's own protein, carbs and fat for one food, in grams, as eaten at the
@@ -780,6 +779,11 @@ export const PHOTO_SCAN_CAUTION = "Calories from a photo are an estimate. A phot
 /** A day of the plan's week: 1 is Monday, 7 Sunday. */
 export const dietPlanDaySchema = z.number().int().min(1).max(7);
 export const dietPlanDayParamsSchema = z.object({ day: z.coerce.number().pipe(dietPlanDaySchema) }).strict();
+/** One meal of a day of the plan, by its place in the day. */
+export const dietPlanMealParamsSchema = z.object({
+  day: z.coerce.number().pipe(dietPlanDaySchema),
+  meal: z.coerce.number().int().min(0).max(7),
+}).strict();
 /** The most meals one day of the plan holds. */
 export const MOST_PLAN_MEALS = 8;
 /** One change's id, made by the phone: the same change sent twice is made once. */
@@ -848,7 +852,8 @@ export const putDietPlanDayRequestSchema = z.object({
   changeId: planChangeIdSchema,
   /** The day as the phone showed it, where the change was made from it (Undo). */
   shown: shownMealsSchema.optional(),
-  meals: z.array(z.object({ mealType: mealTypeSchema, items: chosenItemsSchema }).strict()).max(MOST_PLAN_MEALS),
+  /** Foods of the lists, and the person's own foods with their own numbers (34e-ii-b). */
+  meals: z.array(z.object({ mealType: mealTypeSchema, items: mealChoicesSchema }).strict()).max(MOST_PLAN_MEALS),
 }).strict();
 export type PutDietPlanDayRequest = z.infer<typeof putDietPlanDayRequestSchema>;
 
@@ -860,6 +865,21 @@ export const swapDietPlanMealRequestSchema = z.object({
   shown: z.array(z.string().min(1).max(120)).max(MEAL_MOST_FOODS).optional(),
 }).strict();
 export type SwapDietPlanMealRequest = z.infer<typeof swapDietPlanMealRequestSchema>;
+
+/** A food of a planned meal as it is sent again, to log the meal or to keep it in the plan: a food of
+ *  the lists by its grams, which the server prices at the plan's numbers; the person's own food by
+ *  the numbers the plan keeps for it, for those grams (34e-ii-b). */
+export function planItemChoice(item: MealItem): MealChoice {
+  const per = item.per100g;
+  if (item.nutritionSource !== "own" || per === undefined) return { canonical: item.canonical, grams: item.gramsPoint };
+  // To six places, which gives back the numbers the person typed, at the same calories. Only where
+  // that comes to a hair over the food's weight (numbers that added up to all of it) is it cut down.
+  const at = (per100: number, round: (n: number) => number): number => round(((per100 * item.gramsPoint) / 100) * 1e6) / 1e6;
+  const own = (round: (n: number) => number) => ({ proteinG: at(per.proteinG, round), carbsG: at(per.carbsG, round), fatG: at(per.fatG, round) });
+  const typed = own(Math.round);
+  const fits = typed.proteinG + typed.carbsG + typed.fatG <= item.gramsPoint;
+  return { name: item.name.slice(0, 80), grams: item.gramsPoint, own: fits ? typed : own(Math.floor) };
+}
 
 // ── Your week in food (ROADMAP 34f-i) ──────────────────────────────────────────
 
