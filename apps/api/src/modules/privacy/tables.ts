@@ -89,7 +89,7 @@ export const DIRECT_DELETE_TABLES = [
   "gym_post_comment_reactions",
   "gym_post_comment_reports",
   // Which new comments the person is owed, or was sent, as a phone notification (migration
-  // 0195; Stage 5 18b-ii-b): about the person, deleted at Day 14, not exported (below).
+  // 0196; Stage 5 18b-ii-b): about the person, deleted at Day 14, not exported (below).
   "gym_post_comment_notices",
   // Who a member has blocked on a gym's Updates (migration 0074; ROADMAP 19b-ii-b): the
   // person's own choice, deleted at Day 14 and exported without the other person's id.

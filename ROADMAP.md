@@ -341,7 +341,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 18u-ii. **An agreement for each thing sold, and signing from afar**, in two jobs since 2026-10-24 (the line as first written is in `handoff/2026-10-24-18u-ii-a.md`).
        - 18u-ii-a. [x] **An agreement for each line of the price list, and Members' Agreement not signed** · merged 2026-10-24 · PR #353
        - 18u-ii-b. [x] **Signing from afar** · merged 2026-10-24 · PR #355
-     - 18u-iii. [ ] **The signed papers of people deleted for good**: in Settings, for the owner, each signed membership agreement and desk waiver of a record deleted for good, as signed, until the purge removes it six years on (Kd, 2026-10-23). Web folder 2, after 18u-ii.
+     - 18u-iii. [x] **The signed papers of people deleted for good** — merged 2026-11-03 (PR #452).
      - 18u-iv. [ ] **No new bookings until the membership agreement is signed**: the business's own switch, off until it turns it on, as Wodify's Contract Enforcement and Glofox's are; Sign later stays (Kd, 2026-10-23). Web folder 2, after 18u-ii.
    - 18s. [x] **A business only from India and Square's countries** — merged 2026-10-24 (PR #351).
    - 18v. [ ] **Each place's rules**: renewal on or off per type (Quebec: none paid), a longest term, a cooling-off refund, a notice period, a cancellation fee, release on death, disability or a move, reminders before a renewal, a price change or a trial's end (Kd, 2026-10-22; spec §14.8). No lawyer (Kd, 2026-10-23, `rulings/2026-10-23-18u-i.md`). Web folder 2.
@@ -616,7 +616,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 31a. [x] **The Dashboard as drawn** — merged 2026-10-27 (PR #371).
     - 31b. [x] **Your Goals on the Dashboard** — merged 2026-10-28 (PR #374).
     - 31c. [x] **Recommended For You, by kind and by choice: the plan** — merged 2026-11-03 (PR #448).
-    - 31d. [ ] **Meal ideas that fit the person** (spec Part 6 §16.6): each meal's protein from the person's weight and what is left today, the meal after a workout, breakfast foods at breakfast, oats cooked with milk, a one-line why; the same in the app's week. Opus xhigh: a rule that picks.
+    - 31d. **Meal ideas that fit the person** (spec Part 6 §16.6; split 2026-11-03: the server first).
+      - 31d-i. [x] **The ideas drawn for the person** — merged 2026-11-03 (PR #449).
+      - 31d-ii. [ ] **Why, in one line, under each idea on the phone** ("41 g protein · your share for this meal"), and the app's ideas in What to eat next where My plan has nothing today.
     - 31e. [ ] **Food allergies** (§16.6): asked once where the meal ideas first show, changed in Settings; never suggested; marked on any plan's meal that holds one.
     - 31f. [ ] **Recommended For You's three choices**: Suggested, the gym's and My plan, one choice for each kind, kept on the server and the same on the Dashboard and in Food (§16.6). The gym's appears with 31g.
     - 31g. [ ] **The gym's meal plan on the phone** (§16.6). Waits for Stage 2's 24a.

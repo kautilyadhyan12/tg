@@ -4486,7 +4486,19 @@ is signed where either changed (`facts_changed`, `agreement_changed`). The signa
 details and the wording, with who opened the screen; a copy is emailed to the record's address
 (View, then Email a copy, sends it again). A wording changed later reaches memberships given after
 it. A record deleted for good lets go of its signatures with the day; the purge removes them six
-years later, as a desk waiver's. *As built, 18u-ii-a (an agreement for each line of the price
+years later, as a desk waiver's. *As built, 18u-iii (signed forms of deleted members):* Settings →
+Signed forms of deleted members, for the gym's own owner alone (a co-owner and other staff read
+"Only the owner of {gym} can see the signed forms of deleted members."; the server answers them
+403, anybody not on its staff 404): each desk waiver and membership agreement whose record was
+deleted for good, newest deletion first, fifty at a time with Show more (from the last form shown),
+searched by the name signed or the member's own (an agreement's details, or the record's name a
+waiver keeps when it is deleted, so a child's waiver a parent signed is found by the child's); a
+signature left on the record not kept when two are joined is the kept person's and is not listed
+while that record is on the list; each row says whom it is about, what it is, who signed
+and when, the day of the deletion and "Kept until" (that day six years on, when the purge removes
+it); View opens it under its row as signed, word for word, with nothing to change or remove.
+Delete permanently says waivers signed at the front desk and membership agreements are kept for the
+owner in Settings. The section reads again when staff come back to the window. *As built, 18u-ii-a (an agreement for each line of the price
 list):* Settings → Membership agreements keeps the main agreement and Add agreement, for others
 with a name of their own (no two alike, "Main agreement" included), each with its words, numbered
 as the main one's, and "Used for", the lines of the price list ticked for it; a line not ticked on
@@ -4698,7 +4710,7 @@ sits under to be seen; a post the reader may not read has none. A removed post t
 on it in its own step. A member's are the person's: deleted at Day 14 with what is under them,
 and in their export; staff's are the gym's. The bad-words check refuses and names the word, as for
 a post. **Told to the phone (Stage 5 18b-ii-b, 2026-11-03):** a new comment is owed to the member who wrote the post
-and to the member whose comment or reply it answers, never to its writer (`gym_post_comment_notices`, migration 0195);
+and to the member whose comment or reply it answers, never to its writer (`gym_post_comment_notices`, migration 0196);
 one comments notification a gym, replaced by the next, counting what was told and not yet seen on that gym's Updates;
 at most once a half hour a gym, never 23:00 to 04:00; each comment read again by `seenBy` just before it goes. A tap
 opens Updates on the post's comments (`GET …/posts/:postId`).

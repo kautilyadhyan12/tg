@@ -961,6 +961,8 @@ export async function mergeEntries(
     // The record not kept may take a number with it, which is never given to somebody new
     // (5e-i).
     await repo.keepGoingMemberNumber(tx, gymId, gone.values.memberNumber);
+    // What was signed and did not move stays the kept person's, not a deleted member's (18u-iii).
+    await repo.markSignaturesMerged(tx, gymId, goneId, keepId);
     await repo.deleteEntry(tx, gymId, goneId, at);
     const lost = await leftOff(tx, gymId, gone.values, [keepId], reached);
     if (lost > 0 && !acknowledgeLeavesList) throw new LeavesList(lost, "merge");

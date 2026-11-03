@@ -1,5 +1,5 @@
 // PHONE NOTIFICATIONS FOR COMMENTS (ROADMAP Stage 5 item 18b-ii-b): the only file that reads or clears
-// `gym_post_comment_notices` (migration 0195) for sending. A new comment writes who it is owed to
+// `gym_post_comment_notices` (migration 0196) for sending. A new comment writes who it is owed to
 // (`commentsRepo.insertComment`); the worker sends it here.
 import type { Sql, TransactionSql } from "postgres";
 

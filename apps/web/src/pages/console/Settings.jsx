@@ -11,6 +11,7 @@ import CheckinDevicesPanel from '../../components/console/CheckinDevicesPanel';
 import CheckinRulesPanel from '../../components/console/CheckinRulesPanel';
 import WaiverPanel from '../../components/console/WaiverPanel';
 import AgreementPanel from '../../components/console/AgreementPanel';
+import DeletedFormsPanel from '../../components/console/DeletedFormsPanel';
 import BookingSettingsPanel from '../../components/console/BookingSettingsPanel';
 import PaymentsPanel from '../../components/console/PaymentsPanel';
 import { useConsoleOrg } from './useConsoleOrg';
@@ -307,6 +308,14 @@ export default function Settings() {
             membersTo={placeTo(orgSlug, 'members') ?? '../members'}
             membersName={membersPageName(privileges, org.orgType)}
           />
+        </div>
+      ) : null}
+
+      {/* SIGNED FORMS OF DELETED MEMBERS (18u-iii): the gym's own owner's alone, as the server
+          gates it; anybody else who manages Settings reads who can see them. */}
+      {canEditGym ? (
+        <div id={SETTINGS_SECTION.deletedForms} style={{ scrollMarginTop: 16 }}>
+          <DeletedFormsPanel key={`deleted-forms-${org.id}`} org={org} isOwner={isGymOwner} startOpen={linked(section === SETTINGS_SECTION.deletedForms)} />
         </div>
       ) : null}
 

@@ -227,7 +227,7 @@ export const gymPostCommentReports = pgTable(
   ],
 );
 
-/** A person a new comment is owed to as a phone notification (`0195_comment_notifications.sql`). */
+/** A person a new comment is owed to as a phone notification (`0196_comment_notifications.sql`). */
 export const gymPostCommentNotices = pgTable(
   "gym_post_comment_notices",
   {

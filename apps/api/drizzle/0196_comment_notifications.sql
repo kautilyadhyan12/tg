@@ -1,4 +1,5 @@
 -- A comment or reply on your post, told to the phone (ROADMAP Stage 5 item 18b-ii-b). Forward-only.
+-- Renumbered from 0195 on 2026-11-03: 18u-iii merged its 0195 first.
 -- Hand-written, as `0016` onwards are; its journal entry is part of this commit.
 -- One row for each person a new comment is owed to: the writer of the member's post it is on, and of
 -- the member's comment or reply it answers; never its own writer. Written in the comment's own step.
