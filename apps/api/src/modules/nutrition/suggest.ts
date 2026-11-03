@@ -196,17 +196,18 @@ const NEAR_AIM = 0.1;
 const proteinMet = (proteinG: number, carbsG: number, aim: ProteinAim): boolean =>
   proteinG >= Math.max(aim.leastG, aim.aimG * (1 - NEAR_AIM)) - 0.05 && proteinG <= aim.mostG + 0.05 && (!aim.withCarbs || carbsG >= proteinG);
 /** Why an idea holds the protein it does, the line under it (spec Part 6 §16.6, 8). Its own
- *  protein first: a line never says an idea meets an aim it misses. `shareG` is the day's share
- *  `proteinAim` was given; no aim, the idea was drawn for calories alone. */
-export function ideaWhy(proteinG: number, aim: ProteinAim | undefined, shareG: number | null): IdeaWhy {
+ *  protein and carbohydrate first: a line never says an idea meets an aim it misses, nor that it
+ *  is the share when it holds well over it. `shareG` is the day's share `proteinAim` was given;
+ *  no aim, the idea was drawn for calories alone. */
+export function ideaWhy(proteinG: number, carbsG: number, aim: ProteinAim | undefined, shareG: number | null): IdeaWhy {
   if (aim === undefined) return "calories";
   if (proteinG > aim.mostG + 0.05) return "over";
   if (proteinG < Math.max(aim.leastG, aim.aimG * (1 - NEAR_AIM)) - 0.05) return "under";
-  if (aim.withCarbs) return "after_workout";
+  if (aim.withCarbs) return carbsG >= proteinG - 0.05 ? "after_workout" : "after_workout_protein";
   if (shareG === null) return "weight";
   if (shareG < aim.leastG) return "least";
   if (shareG > aim.mostG) return "most";
-  return "share";
+  return proteinG > shareG * (1 + NEAR_AIM) + 0.05 ? "above" : "share";
 }
 const DISH_SIDE: ReadonlyMap<string, DishSide> = new Map(DISH_NAMES.map(([name, side]) => [named(name).canonical, side]));
 
@@ -602,7 +603,7 @@ export function suggestMeals(input: SuggestInput): Suggested {
     for (const wanted of kindsFor(kcalTarget, types?.[m])) {
       // Under the least a meal holds, a logged idea would not count as a meal, and would be offered again.
       const idea = make(kcalTarget, wanted, Infinity, LEAST_MEAL_KCAL, aim);
-      if (idea !== null) ideas.push({ ...idea, why: ideaWhy(idea.totals.proteinG, aim, shareG) });
+      if (idea !== null) ideas.push({ ...idea, why: ideaWhy(idea.totals.proteinG, idea.totals.carbsG, aim, shareG) });
     }
     if (ideas.length > 0) meals.push({ kcalTarget, ideas });
   }

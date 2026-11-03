@@ -700,8 +700,8 @@ export type NutritionTargets = z.infer<typeof nutritionTargetsSchema>;
 export type NutritionTargetsResponse = z.infer<typeof nutritionTargetsResponseSchema>;
 
 /** The line every food suggestion carries (RULINGS 2026-09-09): there are no
- *  allergen tags on foods and no allergy question anywhere, so the person is
- *  told to take care if they have any food allergy, and to check labels. One
+ *  allergen tags on foods and no allergy question anywhere, so a person with a
+ *  food allergy is told always to check the label (reworded at 31d-ii). One
  *  wording, read by every screen that suggests food — the meal ideas after a
  *  workout today, the meal suggestions (ROADMAP 7a) when they are built. */
 export const FOOD_ALLERGY_CAUTION = "Have a food allergy? Always check the label.";
@@ -750,21 +750,25 @@ export const mealIdeaSchema = z.object({
 }).strict();
 export type MealIdea = z.infer<typeof mealIdeaSchema>;
 /** Why a day's idea holds the protein it does (spec Part 6 §16.6, 8), decided by the server:
- *  `share` its share of what today has left; `least` the least a meal should hold, today's
+ *  `share` its share of what today has left, within a tenth; `above` well over that share, within the
+ *  most; `least` the least a meal should hold, today's
  *  share being under it; `most` the most one meal makes use of, today's share being over it;
  *  `weight` aimed at the person's weight, the day having no protein number; `after_workout` the
- *  meal after a workout; `under` and `over` the idea's own protein is under its aim or over the
+ *  meal after a workout, with at least as much carbohydrate; `after_workout_protein` its protein
+ *  met, its carbohydrate under it; `under` and `over` the idea's own protein is under its aim or over the
  *  most; `calories` drawn for calories alone, the weight not known. */
-export const ideaWhySchema = z.enum(["share", "least", "most", "weight", "after_workout", "under", "over", "calories"]);
+export const ideaWhySchema = z.enum(["share", "above", "least", "most", "weight", "after_workout", "after_workout_protein", "under", "over", "calories"]);
 export type IdeaWhy = z.infer<typeof ideaWhySchema>;
 /** The one line under an idea, the same on every screen. */
 export const IDEA_WHY_WORDS: Readonly<Record<IdeaWhy, string>> = {
   share: "Your share of today’s protein",
+  above: "More than this meal’s share of protein",
   least: "Enough protein for one meal",
   most: "As much protein as one meal can use",
   weight: "Protein for your weight",
   after_workout: "Protein and carbs for after your workout",
-  under: "Less protein than your aim for this meal",
+  after_workout_protein: "Protein for after your workout",
+  under: "Less protein than this meal should have",
   over: "More protein than one meal can use",
   calories: "Sized to what today has left",
 };

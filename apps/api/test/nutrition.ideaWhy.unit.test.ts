@@ -11,7 +11,7 @@ const DIETS: readonly Diet[] = ["vegan", "vegetarian", "vegetarian_eggs", "non_v
 const LEAST_PER_KG = 0.25;
 const MOST_PER_KG = 0.55;
 /** A line that says the idea's protein is right for the meal. */
-const MET: ReadonlySet<IdeaWhy> = new Set(["share", "least", "most", "weight", "after_workout"]);
+const MET: ReadonlySet<IdeaWhy> = new Set(["share", "above", "least", "most", "weight", "after_workout", "after_workout_protein"]);
 
 const PEOPLE = [
   { weightKg: 50, kcal: 1700, proteinG: 80 }, { weightKg: 60, kcal: 2000, proteinG: 96 }, { weightKg: 80, kcal: 2600, proteinG: 128 },
@@ -62,11 +62,15 @@ describe("THE WORST THING: no line says an idea's protein is right when it is no
             }
             // "After your workout" only on the next meal, and only after a workout.
             const afterIt = input.afterWorkout === true && m === 0;
-            if (idea.why === "after_workout") expect(afterIt, what).toBe(true);
-            if (afterIt && MET.has(idea.why)) expect(idea.why, what).toBe("after_workout");
+            if (idea.why === "after_workout" || idea.why === "after_workout_protein") expect(afterIt, what).toBe(true);
+            if (afterIt && MET.has(idea.why)) expect(["after_workout", "after_workout_protein"], what).toContain(idea.why);
+            // "Protein and carbs": at least as much carbohydrate as protein (Thomas, Erdman and Burke 2016).
+            if (idea.why === "after_workout") expect(idea.totals.carbsG, what).toBeGreaterThanOrEqual(g - 0.05);
+            if (idea.why === "after_workout_protein") expect(idea.totals.carbsG, what).toBeLessThan(g);
             if (idea.why === "share") {
               expect(shareG, what).not.toBeNull();
               expect(g, what).toBeGreaterThanOrEqual(0.9 * (shareG ?? 0) - 0.05);
+              expect(g, what).toBeLessThanOrEqual(1.1 * (shareG ?? 0) + 0.05);
               expect(shareG ?? 0, what).toBeGreaterThanOrEqual(LEAST_PER_KG * weightKg);
               expect(shareG ?? 0, what).toBeLessThanOrEqual(MOST_PER_KG * weightKg);
             }
@@ -74,13 +78,14 @@ describe("THE WORST THING: no line says an idea's protein is right when it is no
             if (idea.why === "least") expect(shareG ?? Infinity, what).toBeLessThan(LEAST_PER_KG * weightKg);
             if (idea.why === "most") expect(shareG ?? 0, what).toBeGreaterThan(MOST_PER_KG * weightKg);
             if (idea.why === "over") expect(g, what).toBeGreaterThan(MOST_PER_KG * weightKg);
+            if (idea.why === "above") expect(g, what).toBeGreaterThan(1.1 * (shareG ?? Infinity));
           }
         });
       }
     }
     expect(ideas).toBeGreaterThan(1000);
     // The sweep reaches every line a person with a weight can be shown.
-    for (const why of ["share", "least", "most", "weight", "after_workout", "under"] as const) expect(seen.has(why), why).toBe(true);
+    for (const why of ["share", "least", "most", "weight", "after_workout", "under", "above"] as const) expect(seen.has(why), why).toBe(true);
   });
 
   it("without the person's weight every idea says it was sized to the day, and none speaks of protein", () => {
@@ -95,9 +100,11 @@ describe("THE WORST THING: no line says an idea's protein is right when it is no
 
 describe("the line for each class of case", () => {
   // 80 kg: the least a meal holds is 20 g, the most 44 g, the aim with no day's number 32 g.
-  const cases: [what: string, proteinG: number, shareG: number | null, afterWorkout: boolean, why: IdeaWhy][] = [
+  const cases: [what: string, proteinG: number, shareG: number | null, afterWorkout: boolean, why: IdeaWhy, carbsG?: number][] = [
     ["its share", 30, 30, false, "share"],
     ["just inside a tenth under its share", 27.1, 30, false, "share"],
+    ["just inside a tenth over its share", 27.4, 25, false, "share"],
+    ["well over its share, under the most", 40, 25, false, "above"],
     ["a tenth under its share and more", 26.5, 30, false, "under"],
     ["today's share under the least, the least met", 21, 10, false, "least"],
     ["today's share under the least, the least missed", 18, 10, false, "under"],
@@ -107,16 +114,17 @@ describe("the line for each class of case", () => {
     ["no protein number for the day", 32, null, false, "weight"],
     ["no protein number, under the aim", 20, null, false, "under"],
     ["after a workout", 25, 30, true, "after_workout"],
+    ["after a workout, its protein met, less carbohydrate than protein", 25, 30, true, "after_workout_protein", 10],
     ["after a workout, under the least", 15, 30, true, "under"],
     ["after a workout, over the most", 50, 30, true, "over"],
   ];
-  for (const [what, proteinG, shareG, afterWorkout, why] of cases) {
+  for (const [what, proteinG, shareG, afterWorkout, why, carbsG = 60] of cases) {
     it(what, () => {
-      expect(ideaWhy(proteinG, proteinAim(80, shareG, { afterWorkout }), shareG)).toBe(why);
+      expect(ideaWhy(proteinG, carbsG, proteinAim(80, shareG, { afterWorkout }), shareG)).toBe(why);
     });
   }
   it("no aim: calories", () => {
-    expect(ideaWhy(40, undefined, null)).toBe("calories");
+    expect(ideaWhy(40, 60, undefined, null)).toBe("calories");
   });
   it("every reason has its words, and the reply refuses a reason it does not know", () => {
     for (const why of ideaWhySchema.options) expect(IDEA_WHY_WORDS[why].length).toBeGreaterThan(0);

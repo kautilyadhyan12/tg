@@ -134,7 +134,7 @@ describe("the words both screens show (4b-i)", () => {
     expect(CHECK_FIRST_OPTIONS.cleared.detail).not.toContain("Safe mode");
   });
 
-  it("the food caution says both halves of the ruling: a food allergy, and the label, always (RULINGS 2026-09-09; Kd's words, 31d-ii)", () => {
+  it("the food caution says both halves of the ruling: a food allergy, and the label, always (RULINGS 2026-09-09; reworded at Kd's click-through, 31d-ii)", () => {
     const lower = FOOD_ALLERGY_CAUTION.toLowerCase();
     expect(lower).toContain("food allergy");
     expect(lower).toContain("always check the label");
