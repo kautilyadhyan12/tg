@@ -300,7 +300,9 @@ describe("one box, one answer", () => {
     const box = await open(world, files(), "Dashboard");
     const card = within(await box.findByTestId("recommended-box"));
     expect(card.getByText(FOOD_ALLERGY_CAUTION)).toBeTruthy();
-    expect(await card.findByText("MY PLAN")).toBeTruthy();
+    // Whose meal it is: the lit choice says it, once.
+    expect(await card.findByRole("radio", { name: "My plan", selected: true })).toBeTruthy();
+    expect(card.queryByText("MY PLAN")).toBeNull();
     expect(card.queryByText("SUGGESTED")).toBeNull();
     await fireEvent.press(await card.findByRole("button", { name: "Log Rice + Dal" }));
     const food = within(await screen.findByTestId("meal-plan-box"));

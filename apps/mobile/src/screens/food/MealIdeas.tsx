@@ -158,7 +158,7 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
         </>
       ) : (
         <>
-          <Source word="My plan" />
+          {choices === null ? <Source word="My plan" /> : null}
           <BestPlanned meal={meal} onLog={onLog ?? onMore} onMore={onMore} />
         </>
       );
@@ -221,7 +221,8 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
     const [next, ...rest] = read.data.meals;
     body = (
       <>
-        <Source word="Suggested" />
+        {/* The lit choice already says whose ideas these are; under My plan's empty day, it doesn't. */}
+        {choices === null || lead !== undefined ? <Source word="Suggested" /> : null}
         {onDashboard ? (
           next.ideas[0] === undefined ? null : (
             <BestIdea idea={next.ideas[0]} onLog={onLog ?? onMore} onMore={onMore} />
@@ -310,9 +311,6 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
     <>
       {onDashboard ? (
         <Card style={styles.card} testID="recommended-box">
-          <View style={styles.art}>
-            <Image source={pictures.foodbowl} resizeMode="contain" style={styles.artFill} accessible={false} />
-          </View>
           <View style={styles.titleRow}>
             <Icon name="target" size={16} colour="orange" />
             <Txt kind="h3" style={styles.boxTitle}>
@@ -327,26 +325,32 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
               </Txt>
             </Pressable>
           </View>
-          <View style={styles.leftWords}>
-            {choices}
-            {view.refused.map((r) => (
-              <View key={r.id} style={styles.row}>
-                <Icon name="warn" size={16} colour="badText" />
-                <Txt kind="small" style={styles.grow}>
-                  {r.name} wasn’t saved. {r.message}
-                </Txt>
-                <Button
-                  label="OK"
-                  kind="link"
-                  onPress={() => {
-                    outbox?.forget(r.id);
-                  }}
-                />
-              </View>
-            ))}
-            {saidLine}
-            {leadLine}
-            {body}
+          {choices}
+          {/* The picture beside the words and never under them, as on Weekly Challenges; the choices above both, across the box. */}
+          <View style={styles.beside}>
+            <View style={styles.leftWords}>
+              {view.refused.map((r) => (
+                <View key={r.id} style={styles.row}>
+                  <Icon name="warn" size={16} colour="badText" />
+                  <Txt kind="small" style={styles.grow}>
+                    {r.name} wasn’t saved. {r.message}
+                  </Txt>
+                  <Button
+                    label="OK"
+                    kind="link"
+                    onPress={() => {
+                      outbox?.forget(r.id);
+                    }}
+                  />
+                </View>
+              ))}
+              {saidLine}
+              {leadLine}
+              {body}
+            </View>
+            <View style={styles.art}>
+              <Image source={pictures.foodbowl} resizeMode="contain" style={styles.artFill} accessible={false} />
+            </View>
           </View>
           {foot}
         </Card>
@@ -482,10 +486,10 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: 10 },
   titleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   boxTitle: { fontSize: 14, lineHeight: 18, color: colours.textSoft },
-  // Beside the words and never under them, as on Weekly Challenges.
-  art: { position: "absolute", top: 10, right: 10, bottom: 44, width: "36%" },
-  artFill: { width: "100%", height: "100%" },
-  leftWords: { width: "62%", gap: 10 },
+  beside: { flexDirection: "row", gap: 8 },
+  art: { width: "36%", minHeight: 120 },
+  artFill: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, width: "100%", height: "100%" },
+  leftWords: { flex: 1, gap: 10 },
   options: { flexDirection: "row", gap: 14 },
   option: { alignSelf: "flex-start", paddingBottom: 3, borderBottomWidth: 2, borderBottomColor: colours.orange },
   optionWord: { fontFamily: fonts.semibold },

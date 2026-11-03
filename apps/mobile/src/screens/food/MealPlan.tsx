@@ -19,7 +19,7 @@ import { mealTypeName, startOfDay } from "./day";
 import { dayRows, useDayMeals } from "./dayRows";
 import { ideaName } from "./ideaRules";
 import { FoodChoiceRow, useFoodChoice } from "./FoodChoice";
-import { MealIdeas, NO_PLAN_YET, Source, type PlannedNow } from "./MealIdeas";
+import { MealIdeas, NO_PLAN_YET, type PlannedNow } from "./MealIdeas";
 import { useMealOutbox } from "./MealOutbox";
 import { loggedAmount } from "./measures";
 import type { BasketFood, PlanMealTarget } from "./basket";
@@ -527,7 +527,6 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
           </>
         ) : (
           <>
-            <Source word="My plan" />
             <MealWords meal={next} />
             <OutsideDiet meal={next} />
             <View style={styles.actions}>
