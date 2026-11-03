@@ -175,6 +175,8 @@ d("DPDP Day-14 purge (real Postgres)", () => {
       VALUES (${postGymId}, ${postId}, ${postOwnerId}, false, gen_random_uuid(), 'fixture comment') RETURNING id`;
     await sql`INSERT INTO gym_post_comment_reactions (gym_id, comment_id, user_id, reaction) VALUES (${postGymId}, ${onComment[0]?.id ?? ""}, ${userId}, 'fire')`;
     await sql`INSERT INTO gym_post_comment_reports (gym_id, comment_id, user_id, reason) VALUES (${postGymId}, ${onComment[0]?.id ?? ""}, ${userId}, 'spam')`;
+    // A comment they are owed as a phone notification (18b-ii-b).
+    await sql`INSERT INTO gym_post_comment_notices (gym_id, comment_id, user_id) VALUES (${postGymId}, ${onComment[0]?.id ?? ""}, ${userId})`;
     // Who they blocked on a gym's Updates (19b-ii-b), and somebody's block of them.
     await sql`INSERT INTO gym_post_blocks (gym_id, user_id, blocked_user_id) SELECT ${postGymId}, ${userId}, owner_user_id FROM gyms WHERE id = ${postGymId}`;
     await sql`INSERT INTO gym_post_blocks (gym_id, user_id, blocked_user_id) SELECT ${postGymId}, owner_user_id, ${userId} FROM gyms WHERE id = ${postGymId}`;

@@ -275,3 +275,50 @@ export async function blockCommenter(deps: CommentsDeps, userId: string, gymId: 
   });
   return true;
 }
+
+/** One comment a phone notification may tell this member of now. */
+export interface CommentToTell {
+  postId: string;
+  name: string;
+  notice: "on_post" | "reply";
+  words: string;
+  createdAt: Date;
+}
+
+/** Of these comments, those this member may read now, as their own comments page would send them
+ *  (Stage 5 18b-ii-b): the gym and its plan live, the member still one, the comment by `seenBy` (not
+ *  removed, writer still here, not hidden, not by somebody they blocked) on a post they may read.
+ *  Null when the member may read none of the gym's. Newest first. */
+export async function commentsToTell(deps: CommentsDeps, userId: string, gymId: string, commentIds: readonly string[]): Promise<{ gymName: string; comments: CommentToTell[] } | null> {
+  let gymName: string;
+  try {
+    gymName = await requireMember(deps, gymId, userId);
+  } catch (err) {
+    if (err instanceof OrgsError) return null;
+    throw err;
+  }
+  const rows = await repo.commentsByIds(deps.sql, gymId, commentIds, { member: userId });
+  const answered = [...new Set(rows.flatMap((r) => [r.parentId, r.replyToId].filter((id): id is string => id !== null)))];
+  const postIds = [...new Set(rows.map((r) => r.postId))];
+  const [mine, readable] = await Promise.all([
+    repo.commentsByIds(deps.sql, gymId, answered, { member: userId }),
+    Promise.all(postIds.map((id) => postsRepo.postById(deps.sql, gymId, id, { member: userId }))),
+  ]);
+  const ownAnswered = new Set(mine.filter((r) => r.authorId === userId && r.byMember).map((r) => r.id));
+  const posts = new Map(readable.flatMap((p) => (p === null ? [] : [[p.id, p] as const])));
+  // What it is to this person NOW: an answer to their comment or reply that they can still read, else a
+  // comment on their own member's post; neither (their reply since removed, on somebody else's post) is
+  // told to nobody.
+  const comments = rows
+    .flatMap((r): CommentToTell[] => {
+      const post = posts.get(r.postId);
+      if (post === undefined || r.authorId === userId) return [];
+      const reply = (r.parentId !== null && ownAnswered.has(r.parentId)) || (r.replyToId !== null && ownAnswered.has(r.replyToId));
+      const onTheirPost = post.byMember && post.authorId === userId;
+      if (!reply && !onTheirPost) return [];
+      const named = shownName({ displayName: r.authorName ?? "", email: r.authorEmail, recordName: r.authorRecordName });
+      return [{ postId: r.postId, name: named?.name ?? (r.byMember ? "A member" : "Staff"), notice: reply ? "reply" : "on_post", words: r.body, createdAt: r.createdAt }];
+    })
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  return { gymName, comments };
+}

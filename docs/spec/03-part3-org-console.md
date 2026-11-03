@@ -4535,7 +4535,7 @@ signs in the app (Stage 5 item 20).
 **No new bookings until the membership agreement is signed, as built (18u-iv; Kd, 2026-10-23,
 `rulings/2026-10-23-18u-i.md`; its place, Kd 2026-11-03).** Settings → Membership agreements, its last
 part **Before they book**, shown once any agreement is in use: **Let them book** (where every business
-starts) or **Stop new bookings until they sign** (`gyms.bookings_unsigned`, migration `0196`), with
+starts) or **Stop new bookings until they sign** (`gyms.bookings_unsigned`, migration `0197`), with
 its own Save, as Wodify's Contract Enforcement sits with its contracts (`GET`/`PUT
 /v1/orgs/:gymId/agreement/bookings`, `org.manage` as the agreements are). Under Stop, a member whose
 own record holds a membership whose agreement is not signed, by the one rule Members → Agreement not
@@ -4726,7 +4726,11 @@ removed, a writer who has left, hidden unless theirs, blocked; a reply also need
 sits under to be seen; a post the reader may not read has none. A removed post takes everything
 on it in its own step. A member's are the person's: deleted at Day 14 with what is under them,
 and in their export; staff's are the gym's. The bad-words check refuses and names the word, as for
-a post. Nobody is told of a new comment until phone notifications (Stage 5 item 18).
+a post. **Told to the phone (Stage 5 18b-ii-b, 2026-11-03):** a new comment is owed to the member who wrote the post
+and to the member whose comment or reply it answers, never to its writer (`gym_post_comment_notices`, migration 0196);
+one comments notification a gym, replaced by the next, counting what was told and not yet seen on that gym's Updates;
+at most once a half hour a gym, never 23:00 to 04:00; each comment read again by `seenBy` just before it goes. A tap
+opens Updates on the post's comments (`GET …/posts/:postId`).
 
 **As built in Stage 5 17e-ii (2026-10-31): comments in the console.** For staff holding `posts.manage`
 on the console's Updates page; a lapsed gym's staff read and change nothing. **Comments (n)** on every

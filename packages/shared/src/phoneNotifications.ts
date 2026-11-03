@@ -84,6 +84,57 @@ export const gymPlacePushDataSchema = z
   .strip();
 export type GymPlacePushData = z.infer<typeof gymPlacePushDataSchema>;
 
+// ── A COMMENT OR REPLY ON YOUR POST (ROADMAP Stage 5 item 18b-ii-b) ──
+
+/** The Android channel for comments and replies on the person's posts and comments. */
+export const GYM_COMMENTS_CHANNEL = { id: "gym-comments", name: "Comments" } as const;
+
+/** One comments notification a gym, replaced by the next (Kd, 2026-11-03: "top of one another"), and
+ *  it sounds the same person's phone at most once in this long; what comes in between joins it. */
+export const COMMENTS_AGAIN_MINUTES = 30;
+
+/** What a comment was to the person told: on their post, or an answer to their comment or reply. */
+export type CommentNotice = "on_post" | "reply";
+
+/** The longest piece of a comment's words a notification shows: one comment, and each line of several. */
+export const COMMENT_NOTIFICATION_WORDS = 200;
+export const COMMENT_NOTIFICATION_LINE_WORDS = 100;
+/** Several new comments: this many newest are listed, one a line, when the notification is opened (Kd,
+ *  2026-11-03); the rest are counted in a last line. */
+export const COMMENT_NOTIFICATION_LINES = 5;
+
+function clip(words: string, most: number): string {
+  const flat = words.replace(/\s+/g, " ").trim();
+  return flat.length <= most ? flat : `${flat.slice(0, most - 1).trimEnd()}…`;
+}
+
+export interface CommentNotified {
+  name: string;
+  notice: CommentNotice;
+  words: string;
+}
+
+/** What the phone shows, from the new comments newest first: one says who and what; several give the
+ *  count in the title and list the newest, newest on top, one a line, which the phone shows in full when
+ *  the notification is opened. None is no notification. */
+export function commentNotification(input: { gymName: string; comments: readonly CommentNotified[] }): { title: string; body: string } | null {
+  const { gymName, comments } = input;
+  const [newest] = comments;
+  if (newest === undefined) return null;
+  if (comments.length === 1) {
+    const what = newest.notice === "reply" ? "replied to your comment" : "commented on your post";
+    return { title: gymName, body: `${newest.name} ${what}: ${clip(newest.words, COMMENT_NOTIFICATION_WORDS)}` };
+  }
+  const lines = comments.slice(0, COMMENT_NOTIFICATION_LINES).map((c) => `${c.name}: ${clip(c.words, COMMENT_NOTIFICATION_LINE_WORDS)}`);
+  const rest = comments.length - lines.length;
+  if (rest > 0) lines.push(`and ${String(rest)} more`);
+  return { title: `${gymName} · ${String(comments.length)} new comments`, body: lines.join("\n") };
+}
+
+/** What a comment's notification carries for the app: the gym, and the post whose comments a tap opens. */
+export const gymCommentPushDataSchema = z.object({ kind: z.literal("gym_comment"), gymId: z.string().uuid(), postId: z.string().uuid() }).strip();
+export type GymCommentPushData = z.infer<typeof gymCommentPushDataSchema>;
+
 // ── Google's replies (the adapter parses them here) ──
 
 /** Google's sign-in for a service account: the access token for Firebase. */

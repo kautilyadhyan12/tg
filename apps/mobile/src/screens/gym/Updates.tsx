@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   GYM_POST_WORDS,
   gymPostReactionResponseSchema,
+  gymPostResponseSchema,
   gymPostsResponseSchema,
   type GymClockFormat,
   type GymMemberPosting,
@@ -17,6 +18,7 @@ import { Card } from "../../look/Card";
 import { colours, orangeGradient, shadows, sizes } from "../../look/colours";
 import { Icon } from "../../look/Icon";
 import { fonts, Txt } from "../../look/Txt";
+import { clearComments, setUpdatesOpen } from "../../notifications/phone";
 import { useSession } from "../../session/SessionProvider";
 import { CopyContext } from "../ThisCopy";
 import { CommentsBox, useKeptComments } from "./Comments";
@@ -37,6 +39,7 @@ import {
   memberCanPost,
   missingThing,
   photoPath,
+  postPath,
   postedText,
   reactionPath,
   stoppedNote,
@@ -62,6 +65,8 @@ export interface UpdatesPlace {
   id: string;
   name: string;
   clockFormat: GymClockFormat;
+  /** A tapped comments notification's post: its comments open over the page (Stage 5 18b-ii-b). */
+  postId?: string;
 }
 
 /** The page over the Gym tab; closed while `place` is null. */
@@ -70,7 +75,7 @@ export function UpdatesPage({ place, onClose }: { place: UpdatesPlace | null; on
   return (
     <Modal visible={place !== null} animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
       <View testID="updates-page" accessibilityViewIsModal style={[styles.page, { paddingTop: insets.top }]}>
-        {place === null ? null : <UpdatesBody key={place.id} place={place} onClose={onClose} bottom={insets.bottom} />}
+        {place === null ? null : <UpdatesBody key={`${place.id}:${place.postId ?? ""}`} place={place} onClose={onClose} bottom={insets.bottom} />}
       </View>
     </Modal>
   );
@@ -90,7 +95,10 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
   const kept = useKeptPost(state.kind === "in" ? state.user.id : null, place.id);
   const keptComments = useKeptComments(state.kind === "in" ? state.user.id : null, place.id);
   // The post whose comments are open, by id, so it is the one the list holds now.
-  const [commentsOn, setCommentsOn] = useState<string | null>(null);
+  const [commentsOn, setCommentsOn] = useState<string | null>(place.postId ?? null);
+  // The tapped notification's post, read by itself, as it may be far down the list: "gone" when the gym's
+  // Updates no longer shows it to this person.
+  const [tappedPost, setTappedPost] = useState<GymPost | "gone" | "failed" | null>(null);
   const [writing, setWriting] = useState(false);
   // What the last post came to, said where its button is.
   const [postedNote, setPostedNote] = useState<string | null>(null);
@@ -150,6 +158,30 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
     },
     [session, place.id],
   );
+
+  // The comments notification is about this place's Updates, which is open now.
+  useEffect(() => {
+    void clearComments(place.id);
+    setUpdatesOpen(place.id);
+    return () => {
+      setUpdatesOpen(null);
+    };
+  }, [place.id]);
+
+  useEffect(() => {
+    const postId = place.postId;
+    if (postId === undefined) return;
+    const run = { live: true };
+    void (async () => {
+      const answer = await session.signedIn({ method: "GET", path: postPath(place.id, postId) }, gymPostResponseSchema);
+      if (!run.live) return;
+      if (answer.kind === "ok" && answer.data.post.id === postId) setTappedPost(answer.data.post);
+      else setTappedPost(answer.kind === "refused" && answer.status === 404 ? "gone" : "failed");
+    })();
+    return () => {
+      run.live = false;
+    };
+  }, [session, place.id, place.postId]);
 
   useEffect(() => {
     live.current = true;
@@ -218,7 +250,12 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
   };
 
   const feed = held.kind === "ok" ? held.feed : null;
-  const commentsPost = commentsOn === null || feed === null ? null : ([...feed.pinned, ...feed.posts].find((p) => p.id === commentsOn) ?? null);
+  const listed = commentsOn === null || feed === null ? null : ([...feed.pinned, ...feed.posts].find((p) => p.id === commentsOn) ?? null);
+  const tapped = typeof tappedPost === "object" && tappedPost !== null && tappedPost.id === commentsOn ? tappedPost : null;
+  const commentsPost = feed === null ? null : (listed ?? tapped);
+  // The tapped post could not be opened: said under the heading, while the list shows as usual.
+  const tapNote =
+    commentsOn !== place.postId || listed !== null ? null : tappedPost === "gone" ? "That post is no longer on Updates." : tappedPost === "failed" ? "Couldn't open that post." : null;
   const onCommentCount = useCallback((postId: string, by: number) => {
     started.current += 1;
     setHeld((h) => {
@@ -269,6 +306,11 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
           </Txt>
         </View>
       </View>
+      {tapNote === null ? null : (
+        <Txt kind="small" style={styles.tapGone}>
+          {tapNote}
+        </Txt>
+      )}
       <FlatList
         ref={list}
         testID="updates-list"
@@ -626,6 +668,7 @@ const styles = StyleSheet.create({
   penLabel: { fontFamily: fonts.semibold, fontSize: 15, lineHeight: 20 },
   box: { padding: 16, gap: 10 },
   grow: { flex: 1 },
+  tapGone: { paddingHorizontal: sizes.edge, paddingBottom: 8 },
   foot: { gap: sizes.gap },
   middle: { alignSelf: "center", alignItems: "center", gap: 8 },
   help: { textAlign: "center" },

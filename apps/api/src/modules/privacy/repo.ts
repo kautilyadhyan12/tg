@@ -138,6 +138,8 @@ export async function deleteUserOwnedRows(tx: TransactionSql, userId: string): P
   await tx`DELETE FROM gym_post_stops WHERE user_id = ${userId}`;
   // Their reactions to comments and reports of them (tables.ts, 0179), the reports as above.
   await tx`DELETE FROM gym_post_comment_reactions WHERE user_id = ${userId}`;
+  // The comments they were owed or sent as phone notifications (tables.ts, 0196).
+  await tx`DELETE FROM gym_post_comment_notices WHERE user_id = ${userId}`;
   await tx`
     WITH gone AS (DELETE FROM gym_post_comment_reports WHERE user_id = ${userId} RETURNING gym_id, comment_id)
     UPDATE gym_post_comments c SET hidden_at = NULL

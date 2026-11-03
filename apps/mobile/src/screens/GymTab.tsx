@@ -200,7 +200,7 @@ export function GymScreen() {
       : [];
   const nothing = mine?.kind === "ok" && invites?.kind === "ok" && invites.data.addressProved && joined.length === 0 && open.length === 0;
 
-  // A tapped notification's gym: its Inbox, or the class or event it is about, opens once the places
+  // A tapped notification's gym: its Inbox, the class or event it is about, or the post's comments on its Updates, opens once the places
   // are read, and only if it is one of this person's own.
   // A read that failed keeps the ask for the next read, which the tab makes on coming back.
   const asked = tapAsked === null || mine?.kind !== "ok" ? null : (joined.find((org) => org.id === tapAsked.gymId) ?? false);
@@ -209,6 +209,7 @@ export function GymScreen() {
     if (asked !== false) {
       const at = { id: asked.id, name: asked.name, clockFormat: asked.clockFormat };
       if (tapAsked.kind === "inbox") setInboxAt({ id: asked.id, name: asked.name, orgType: asked.orgType, latestCheer: asked.latestCheer, latestNudge: asked.latestNudge });
+      else if (tapAsked.kind === "comment") setUpdatesAt({ ...at, postId: tapAsked.postId });
       else if (tapAsked.what === "class") setClassesAt({ ...at, week: weekOfDay(tapAsked.day, asked.timezone, Date.now()), sessionId: tapAsked.id });
       else setEventsAt({ ...at, eventId: tapAsked.id });
     }

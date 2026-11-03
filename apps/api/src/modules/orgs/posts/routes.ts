@@ -103,6 +103,14 @@ export function registerPostRoutes(app: FastifyInstance, deps: Omit<service.Post
     return reply.status(200).send(feed);
   });
 
+  app.get("/v1/orgs/:gymId/posts/:postId", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(gymPostParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const one = await service.getPost(postsDeps, requireUserId(req), params.gymId, params.postId, gate(readLimit)(req, reply));
+    if (one === null) return;
+    return reply.status(200).send(one);
+  });
+
   app.put("/v1/orgs/:gymId/posts/:postId/reaction", { preHandler: app.authenticate }, async (req, reply) => {
     const params = parseOr400(gymPostParamsSchema, req.params, req, reply);
     if (params === null) return;
