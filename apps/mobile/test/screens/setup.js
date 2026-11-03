@@ -183,6 +183,7 @@ jest.mock("expo-notifications", () => {
     last: null,
     handler: null,
     channels: [],
+    registeredTasks: [],
   };
   // Listeners stay: the app listens for taps from the moment it starts, once.
   const reset = () => {
@@ -235,11 +236,20 @@ jest.mock("expo-notifications", () => {
       notifications.dismissedAll += 1;
       return Promise.resolve();
     },
+    registerTaskAsync: (name) => {
+      notifications.registeredTasks.push(name);
+      return Promise.resolve(null);
+    },
     unregisterForNotificationsAsync: () => {
       notifications.unregistered += 1;
       return Promise.resolve();
     },
   };
+});
+// The task Android runs to draw a notification: its body is called by the tests themselves (drawPush).
+jest.mock("expo-task-manager", () => {
+  const tasks = new Map();
+  return { tasks, defineTask: (name, task) => { tasks.set(name, task); } };
 });
 // The phone's own key store, for what is not the sign-in (the notifications' "Not now").
 jest.mock("expo-secure-store", () => {

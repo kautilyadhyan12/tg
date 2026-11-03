@@ -242,6 +242,8 @@ export const gymPostCommentNotices = pgTable(
     doneAt: timestamp("done_at", { withTimezone: true }),
     toldAt: timestamp("told_at", { withTimezone: true }),
     seenAt: timestamp("seen_at", { withTimezone: true }),
+    /** 0198: a run took it and has not finished; past `PUSH_CLAIM_MINUTES` the next run takes it again. */
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
   },
   (t) => [
     primaryKey({ name: "gym_post_comment_notices_pk", columns: [t.commentId, t.userId] }),
@@ -394,6 +396,8 @@ export const gymEventPlaces = pgTable(
     pushOccasion: text("push_occasion"),
     /** 0194: when the person was last told about this class or event: a free place again within the hour is not told. */
     pushToldAt: timestamp("push_told_at", { withTimezone: true }),
+    /** 0198: a run took the notice and has not finished; past `PUSH_CLAIM_MINUTES` the next run takes it again. */
+    pushClaimedAt: timestamp("push_claimed_at", { withTimezone: true }),
   },
   (t) => [
     foreignKey({ name: "gym_event_places_event_fk", columns: [t.gymId, t.eventId], foreignColumns: [gymEvents.gymId, gymEvents.id] }).onDelete("cascade"),

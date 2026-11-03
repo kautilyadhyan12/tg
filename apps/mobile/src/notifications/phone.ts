@@ -1,7 +1,7 @@
 // The phone's own notifications (ROADMAP Stage 5 items 18b-i, 18b-ii-a and 18b-ii-b): the one file that knows the package.
-// Android shows a gym's notification by itself when the app is closed; the server tags each with
-// the gym, so the gym's next one replaces it. In the app, one is shown unless that gym's Inbox is
-// already open.
+// The app draws each of ours itself, only for the person signed in (`drawn.ts`); each has one
+// identifier a gym's Inbox, class or comments, so the next replaces it. In the app, one is shown
+// unless that gym's Inbox (or, for comments, its Updates) is already open.
 import * as Notifications from "expo-notifications";
 import * as SecureStore from "expo-secure-store";
 import {
@@ -78,33 +78,11 @@ export function identifierOf(tapped: Tapped): string {
   return `place:${tapped.id}`;
 }
 
-const channelOf = (tapped: Tapped): string =>
+export const channelOf = (tapped: Tapped): string =>
   tapped.kind === "inbox" ? GYM_MESSAGES_CHANNEL.id : tapped.kind === "comment" ? GYM_COMMENTS_CHANNEL.id : GYM_PLACES_CHANNEL.id;
-
-// Our messages carry data only, so a tap on one Android draws reaches the app. With the app open the
-// notifications package neither shows such a message nor asks the handler, so the app shows it itself:
-// same words, same channel, same tap, through the handler, so a gym's Inbox already open shows none.
-let received: { remove: () => void } | null = null;
-async function showInApp(notification: Notifications.Notification): Promise<void> {
-  const { content, trigger } = notification.request;
-  // Only Firebase's: the one the app shows below is heard here too.
-  if (trigger === null || typeof trigger !== "object" || !("type" in trigger) || trigger.type !== "push") return;
-  const tapped = tappedOf(content.data);
-  if (tapped === null || content.title === null || content.body === null) return;
-  const channelId = channelOf(tapped);
-  await Notifications.scheduleNotificationAsync({
-    identifier: identifierOf(tapped),
-    content: { title: content.title, body: content.body, data: content.data ?? {} },
-    trigger: { channelId },
-  }).catch(() => undefined);
-}
 
 /** When the tabs open: the channel the phone's settings name, and what shows in the app. Safe to repeat. */
 export function startNotifications(): void {
-  received?.remove();
-  received = Notifications.addNotificationReceivedListener((notification) => {
-    void showInApp(notification);
-  });
   Notifications.setNotificationHandler({
     handleNotification: (notification) => {
       const gymId = gymOfNotification(notification.request.content.data);
@@ -215,8 +193,6 @@ export async function clearComments(gymId: string): Promise<void> {
  *  Firebase forgets the address, so a message on its way reaches nobody even when the server was not
  *  told. Asked again at each opening and each return while signed out: with no signal it fails. */
 export async function forgetNotifications(): Promise<void> {
-  received?.remove();
-  received = null;
   Notifications.setNotificationHandler({
     handleNotification: () => Promise.resolve({ shouldShowBanner: false, shouldShowList: false, shouldPlaySound: false, shouldSetBadge: false }),
   });

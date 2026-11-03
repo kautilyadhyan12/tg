@@ -596,7 +596,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
         - 17c-ii-b. [x] **A person's profile** — merged 2026-11-01 (PR #428).
         - 17c-ii-c. [ ] **Your own profile picture and background picture** (Kd, 2026-11-01, `rulings/2026-11-01-17c-ii-b.md`), shown on the profile. With the member photo (5b-vi); waits for photo storage.
     - 17d. [x] **Challenges** — merged 2026-11-02 (PR #432).
-18. **Inbox, Contact the gym, and phone notifications** (spec Part 3 §16.1; Part 6 §6; split 2026-11-02: the Inbox needs no Firebase).
+18. **Inbox, Contact the gym, and phone notifications** (spec Part 3 §16.1; Part 6 §6; split 2026-11-02: the Inbox needs no Firebase). Risky; the two extra passes ran once, after the last of them (2026-11-03, PR #456).
     - 18a. [x] **Inbox and Contact the gym on the phone** — merged 2026-11-02 (PR #440).
     - 18b. **Phone notifications** (split 2026-11-02; Kd's Firebase project `kwazo` made that day).
        - 18b-i. [x] **A gym's messages as phone notifications** — merged 2026-11-03 (PR #443).

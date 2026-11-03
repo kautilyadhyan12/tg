@@ -37,6 +37,8 @@ export const gymMemberMessages = pgTable(
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     /** 0192: when it was handed to the phone notifications, or needed none. */
     pushDoneAt: timestamp("push_done_at", { withTimezone: true }),
+    /** 0198: a run took it and has not finished; past `PUSH_CLAIM_MINUTES` the next run takes it again. */
+    pushClaimedAt: timestamp("push_claimed_at", { withTimezone: true }),
   },
   (t) => [
     index("gym_member_messages_push_idx").on(t.sentAt).where(sql`${t.pushDoneAt} IS NULL`),

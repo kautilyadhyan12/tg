@@ -5,7 +5,7 @@
 // sounds the same person's phone at most once every half hour a gym, and waits from 23:00 to 04:00 on
 // their clock, as a gym's messages do; what comes in between waits on its rows and joins the next one.
 // The rows are the queue: a pair is claimed before anything is sent, so a second run sends nothing
-// twice; and each comment is read again just before it goes, as the person's own comments page would
+// twice, and settled only once a phone has it, so a run that stops halfway loses nothing; and each comment is read again just before it goes, as the person's own comments page would
 // send it: one since removed or hidden, by somebody they blocked or who left, on a post they may no
 // longer read, or in a gym they left, is told to nobody.
 import { COMMENTS_AGAIN_MINUTES, GYM_COMMENTS_CHANNEL, PUSH_WITHIN_HOURS, commentNotification, pushHourOpen } from "@app/shared";
@@ -40,11 +40,13 @@ export async function sendCommentNotifications(deps: {
   const now = deps.now();
   const since = new Date(now.getTime() - PUSH_WITHIN_HOURS * 3_600_000);
   const toldSince = new Date(now.getTime() - COMMENTS_AGAIN_MINUTES * 60_000);
+  const claimedBefore = new Date(now.getTime() - repo.PUSH_CLAIM_MINUTES * 60_000);
   const result: PushSweepResult = { sent: 0, skipped: 0, waiting: 0, failed: 0 };
   const onError = deps.onError ?? (() => undefined);
 
-  // `reached`: some phone has it, so it is never put back to be sent again.
-  const tell = async (pair: comments.CommentPair, fresh: readonly string[], state: { reached: boolean }): Promise<void> => {
+  // `reached`: some phone has it, so it is never put back to be sent again. `again`: Firebase did not
+  // answer for any phone, so the next run tries again.
+  const tell = async (pair: comments.CommentPair, fresh: readonly string[], state: { reached: boolean; again: boolean }): Promise<void> => {
     if (fresh.length === 0) {
       result.skipped += 1;
       return;
@@ -64,6 +66,7 @@ export async function sendCommentNotifications(deps: {
     for (const token of tokens) {
       const sent = await sender.send({
         token,
+        userId: pair.userId,
         title,
         body,
         tag: `comments:${pair.gymId}`,
@@ -80,13 +83,14 @@ export async function sendCommentNotifications(deps: {
         failed = true;
       }
     }
-    if (failed && !state.reached) await comments.unclaimComments(sql, pair.userId, pair.gymId, now);
+    state.again = failed && !state.reached;
   };
 
   const handle = async (pair: comments.CommentPair): Promise<void> => {
-    const claimed = await comments.claimComments(sql, pair.userId, pair.gymId, since, now);
+    const claimedAt = deps.now();
+    const claimed = await comments.claimComments(sql, pair.userId, pair.gymId, { since, toldSince, claimedAt, claimedBefore });
     if (claimed.taken === 0) return;
-    const state = { reached: false };
+    const state = { reached: false, again: false };
     try {
       await tell(pair, claimed.fresh, state);
     } catch (err) {
@@ -94,20 +98,22 @@ export async function sendCommentNotifications(deps: {
       // unless a phone already has it, and the rest of this run goes on.
       onError(err);
       result.failed += 1;
-      if (!state.reached) await comments.unclaimComments(sql, pair.userId, pair.gymId, now).catch(onError);
+      state.again = !state.reached;
     }
-    if (state.reached) await comments.markCommentsTold(sql, pair.userId, pair.gymId, now, now).catch(onError);
+    if (state.again) await comments.unclaimComments(sql, pair.userId, pair.gymId, claimedAt).catch(onError);
+    else await comments.settleComments(sql, pair.userId, pair.gymId, claimedAt, now, state.reached).catch(onError);
   };
 
   let after: comments.CommentPairMark | null = null;
   let taken = 0;
   for (let pages = 0; pages < MAX_PAGES && taken < batch; pages += 1) {
-    const pairs = await comments.pendingCommentPairs(sql, { since, toldSince, limit: page, after, gymIds: deps.gymIds });
+    const pairs = await comments.pendingCommentPairs(sql, { since, toldSince, claimedBefore, limit: page, after, gymIds: deps.gymIds });
     const due: comments.CommentPair[] = [];
     for (const pair of pairs) {
-      // Night, or told within the half hour: left on its rows for a later run, nothing marked. Those too
-      // old to tell are taken at once, with no send.
-      if (pair.fresh && (pair.toldLately || !pushHourOpen(localHour(pair.userZone, pair.gymZone, now)))) result.waiting += 1;
+      // Night, told within the half hour, or another run still sending it: left on its rows for a later
+      // run, nothing marked. Those too old to tell are taken at once, with no send.
+      if (pair.busy) result.waiting += 1;
+      else if (pair.fresh && (pair.toldLately || !pushHourOpen(localHour(pair.userZone, pair.gymZone, now)))) result.waiting += 1;
       else if (taken < batch) {
         due.push(pair);
         taken += 1;

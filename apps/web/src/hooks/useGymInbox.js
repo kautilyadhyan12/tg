@@ -44,7 +44,7 @@ export function useGymInbox(gymId) {
   const unread = shown.unread;
   const markSeen = useCallback(() => {
     if (gymId === null || read === null || unread === 0) return;
-    inboxService.markRead(gymId, read.asOf).then(
+    inboxService.markRead(gymId, read.asOf, read.messages.map((m) => m.id)).then(
       (left) => {
         setState((s) => (s.inbox === read ? { ...s, unread: left } : s));
         applyInboxCount(gymId, left);

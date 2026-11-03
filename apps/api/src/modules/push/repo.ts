@@ -22,6 +22,8 @@ export async function saveToken(
 ): Promise<boolean> {
   const { userId, familyId, token, platform, now } = input;
   return sql.begin(async (tx) => {
+    // Two calls from one sign-in at once (two openings, two new addresses) end on one address.
+    await tx`SELECT pg_advisory_xact_lock(hashtext(${`push-family|${familyId}`}))`;
     const saved = await tx<{ token: string }[]>`
       INSERT INTO push_tokens (user_id, token, platform, family_id, last_seen_at)
       SELECT ${userId}, ${token}, ${platform}, ${familyId}, ${now}
@@ -32,6 +34,15 @@ export async function saveToken(
       RETURNING token`;
     if (saved.length === 0) return false;
     await tx`DELETE FROM push_tokens WHERE family_id = ${familyId} AND token <> ${token}`;
+    // The person's addresses from sign-ins that have ended: nothing is sent to them, so none is kept.
+    await tx`
+      DELETE FROM push_tokens p
+      WHERE p.user_id = ${userId} AND p.family_id <> ${familyId}
+        AND NOT EXISTS (
+          SELECT 1 FROM refresh_tokens rt
+          WHERE rt.user_id = p.user_id AND rt.family_id = p.family_id AND rt.client = 'phone'
+            AND rt.revoked_at IS NULL AND rt.expires_at > ${now}
+        )`;
     return true;
   });
 }
@@ -78,9 +89,9 @@ export interface PairMark {
  *  `after`: the run pages on past pairs left for the morning, so they never hold up the rest. */
 export async function pendingPairs(
   sql: SqlOrTx,
-  input: { now: Date; since: Date; limit: number; after: PairMark | null; gymIds?: readonly string[] | undefined },
+  input: { now: Date; since: Date; claimedBefore: Date; limit: number; after: PairMark | null; gymIds?: readonly string[] | undefined },
 ): Promise<PendingPair[]> {
-  const { now, since, limit, after, gymIds } = input;
+  const { now, since, claimedBefore, limit, after, gymIds } = input;
   const rows = await sql<{ user_id: string; gym_id: string; gym_name: string; user_zone: string | null; gym_zone: string; fresh: boolean; first: string }[]>`
     SELECT x.user_id, x.gym_id, g.name AS gym_name, u.timezone AS user_zone, g.timezone AS gym_zone,
            bool_or(x.read_at IS NULL AND x.expires_at > ${now} AND x.sent_at >= ${since}) AS fresh,
@@ -89,6 +100,7 @@ export async function pendingPairs(
     JOIN users u ON u.id = x.user_id
     JOIN gyms g ON g.id = x.gym_id
     WHERE x.push_done_at IS NULL AND x.sent_at <= ${now}
+      AND (x.push_claimed_at IS NULL OR x.push_claimed_at < ${claimedBefore})
       ${gymIds === undefined ? sql`` : sql`AND x.gym_id IN ${sql(gymIds)}`}
     GROUP BY x.user_id, x.gym_id, g.name, u.timezone, g.timezone
     ${after === null ? sql`` : sql`HAVING (min(x.sent_at), x.user_id, x.gym_id) > (${after.at}::timestamptz, ${after.userId}::uuid, ${after.gymId}::uuid)`}
@@ -116,20 +128,33 @@ export async function newestUnread(sql: SqlOrTx, userId: string, gymId: string, 
   return rows[0]?.body ?? null;
 }
 
+/** How long a run's claim holds a notification. A run that stops between taking it and finishing (the
+ *  worker restarted, its process killed) leaves it owed, and past this the next run takes it again; a
+ *  run's own send ends long before (Firebase is given 10 seconds an address). */
+export const PUSH_CLAIM_MINUTES = 5;
+
 /** Puts back a pair's messages that this run claimed and could not hand to Firebase, so the next run
  *  tries again while they are still fresh. */
 export async function unclaim(sql: SqlOrTx, userId: string, gymId: string, claimedAt: Date): Promise<void> {
   await sql`
-    UPDATE gym_member_messages SET push_done_at = NULL
-    WHERE user_id = ${userId} AND gym_id = ${gymId} AND push_done_at = ${claimedAt}`;
+    UPDATE gym_member_messages SET push_claimed_at = NULL
+    WHERE user_id = ${userId} AND gym_id = ${gymId} AND push_claimed_at = ${claimedAt} AND push_done_at IS NULL`;
 }
 
-/** Marks the pair's waiting messages as handled, once: a second run at the same instant gets none
- *  back and sends nothing. */
-export async function claim(sql: SqlOrTx, userId: string, gymId: string, now: Date): Promise<number> {
+/** Takes the pair's waiting messages, once: a second run at the same instant gets none back and sends
+ *  nothing. They stay owed until `settle`. */
+export async function claim(sql: SqlOrTx, userId: string, gymId: string, input: { now: Date; claimedAt: Date; claimedBefore: Date }): Promise<number> {
   const rows = await sql<{ id: string }[]>`
-    UPDATE gym_member_messages SET push_done_at = ${now}
-    WHERE user_id = ${userId} AND gym_id = ${gymId} AND push_done_at IS NULL AND sent_at <= ${now}
+    UPDATE gym_member_messages SET push_claimed_at = ${input.claimedAt}
+    WHERE user_id = ${userId} AND gym_id = ${gymId} AND push_done_at IS NULL AND sent_at <= ${input.now}
+      AND (push_claimed_at IS NULL OR push_claimed_at < ${input.claimedBefore})
     RETURNING id`;
   return rows.length;
+}
+
+/** What this run took is handled: a phone has it, or nothing was still true to send. */
+export async function settle(sql: SqlOrTx, userId: string, gymId: string, claimedAt: Date, now: Date): Promise<void> {
+  await sql`
+    UPDATE gym_member_messages SET push_done_at = ${now}, push_claimed_at = NULL
+    WHERE user_id = ${userId} AND gym_id = ${gymId} AND push_claimed_at = ${claimedAt} AND push_done_at IS NULL`;
 }

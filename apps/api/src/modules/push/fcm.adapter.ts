@@ -16,6 +16,8 @@ export type PushResult = "sent" | "gone" | "failed";
 
 export interface PushMessage {
   token: string;
+  /** The person it is for: the phone draws it only while they are the one signed in there. */
+  userId: string;
   title: string;
   body: string;
   /** One notification per tag on the phone: the next one with the same tag replaces it. */
@@ -79,12 +81,20 @@ export function createFcmSender(deps: {
           method: "POST",
           headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
           body: JSON.stringify({
-            // A data message, shown by the app's own notifications package (expo-notifications) in the
-            // shape it reads: so a tap reaches the app, and `tag` keeps one notification per gym. A
-            // notification Android drew by itself would open the app and say nothing of the tap.
+            // A data message the app draws itself (`phonePushSchema`), only while the person it is for is
+            // signed in on the phone: under `title` and `message` the notifications package would draw
+            // it by itself while the app is closed, signed out or not. A notification Android drew by
+            // itself would open the app and say nothing of the tap.
             message: {
               token: message.token,
-              data: { title: message.title, message: message.body, body: JSON.stringify(message.data), channelId: message.channelId, tag: message.tag },
+              data: {
+                heading: message.title,
+                text: message.body,
+                to: message.userId,
+                body: JSON.stringify(message.data),
+                channelId: message.channelId,
+                tag: message.tag,
+              },
               android: { priority: "high", collapse_key: message.tag },
             },
           }),

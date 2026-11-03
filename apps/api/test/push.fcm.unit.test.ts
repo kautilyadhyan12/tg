@@ -15,6 +15,7 @@ const account = firebaseServiceAccountSchema.parse({
 });
 const message: PushMessage = {
   token: "phone-address",
+  userId: "11111111-1111-4111-8111-111111111111",
   title: "Lotus Yoga · 2 new messages",
   body: "Class moved to 7 pm.",
   tag: "gym-1",
@@ -37,7 +38,7 @@ const fakeGoogle = (sendReply: () => Response) => {
 };
 
 describe("createFcmSender", () => {
-  it("signs in once as the service account and sends one data message, tagged with the gym, in the app's own shape", async () => {
+  it("signs in once as the service account and sends one data message, tagged with the gym, that only the app draws", async () => {
     const google = fakeGoogle(() => json(200, { name: "projects/kwazo-test/messages/1" }));
     const sender = createFcmSender({ account, now: () => new Date("2026-11-02T06:30:00Z"), fetch: google.fetcher });
     expect(await sender.send(message)).toBe("sent");
@@ -55,9 +56,11 @@ describe("createFcmSender", () => {
     expect(JSON.parse(typeof send?.init.body === "string" ? send.init.body : "null")).toEqual({
       message: {
         token: "phone-address",
+        // Never under `title` or `message`: the notifications package would draw those by itself, signed in or not.
         data: {
-          title: "Lotus Yoga · 2 new messages",
-          message: "Class moved to 7 pm.",
+          heading: "Lotus Yoga · 2 new messages",
+          text: "Class moved to 7 pm.",
+          to: "11111111-1111-4111-8111-111111111111",
           body: JSON.stringify({ kind: "gym_inbox", gymId: "gym-1" }),
           channelId: "gym-messages",
           tag: "gym-1",
