@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
 import { useIsFocused } from "@react-navigation/native";
-import { mealIdeasResponseSchema, missingText, type DietPlanMeal, type MealIdea, type SetupScreenId, type WaitingMeal } from "@app/shared";
+import { IDEA_WHY_WORDS, mealIdeasResponseSchema, missingText, type DietPlanMeal, type SetupScreenId, type SuggestedIdea, type WaitingMeal } from "@app/shared";
 import { Button } from "../../look/Button";
 import { Card } from "../../look/Card";
 import { colours, sizes } from "../../look/colours";
@@ -55,12 +55,14 @@ interface MealIdeasProps {
   planned?: PlannedNow;
   /** The Dashboard's Log meal: it opens the Food page's What to eat next, never logs by itself (Kd, 2026-11-02). */
   onLog?: () => void;
+  /** A line above the ideas, with its one button: on a day the person's own plan has no meals, it says so. */
+  lead?: { words: string; action: { label: string; onPress: () => void } };
 }
 
-/** "loading": whether there is a plan isn't known yet. `meal` null: every meal of today's plan is logged, or today has none. */
-export type PlannedNow = "loading" | { failed: string; retry: () => void } | { meal: DietPlanMeal | null; allLogged: boolean; canLog: boolean; caution: string; labelCaution: string | null }
+/** "loading": whether there is a plan isn't known yet. `meal` null: every meal of today's plan is logged. */
+export type PlannedNow = "loading" | { failed: string; retry: () => void } | { meal: DietPlanMeal | null; canLog: boolean; caution: string; labelCaution: string | null }
 
-export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = false, planned, onLog }: MealIdeasProps) {
+export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = false, planned, onLog, lead }: MealIdeasProps) {
   const { read, again, outbox, view, waiting, old } = useIdeas(fresh);
   const onDashboard = onMore !== undefined;
   const [said, setSaid] = useState<{ words: string; meal: string | null } | null>(null);
@@ -89,13 +91,13 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
     setLater(false);
     setSaid(kept ? { words: `Logged to ${mealTypeName(type)}.`, meal: meal.id } : { words: "Too many meals are waiting to send. Go online, then log this one.", meal: null });
   };
-  const log = async (idea: MealIdea) => {
+  const log = async (idea: SuggestedIdea) => {
     const now = new Date();
     const type = ideaMealType(now.getHours());
     await keep(ideaAsMeal(idea, newGoalId(), type, now), type);
   };
 
-  const row = (idea: MealIdea) => (
+  const row = (idea: SuggestedIdea) => (
     <IdeaRow
       key={ideaName(idea)}
       idea={idea}
@@ -133,15 +135,18 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
       </View>
     );
   } else if (plannedNow !== null && onMore !== undefined) {
-    const { meal, allLogged, caution, labelCaution } = plannedNow;
+    const { meal, caution, labelCaution } = plannedNow;
     body =
       meal === null ? (
         <>
-          <Txt kind="small">{allLogged ? "All of today’s meals are logged." : "Nothing planned for today."}</Txt>
+          <Txt kind="small">All of today’s meals are logged.</Txt>
           <Button label="See meal plan" kind="link" compact style={styles.start} onPress={onMore} />
         </>
       ) : (
-        <BestPlanned meal={meal} onLog={onLog ?? onMore} onMore={onMore} />
+        <>
+          <Source word="My plan" />
+          <BestPlanned meal={meal} onLog={onLog ?? onMore} onMore={onMore} />
+        </>
       );
     foot =
       meal === null ? null : (
@@ -202,6 +207,7 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
     const [next, ...rest] = read.data.meals;
     body = (
       <>
+        <Source word="Suggested" />
         {onDashboard ? (
           next.ideas[0] === undefined ? null : (
             <BestIdea idea={next.ideas[0]} onLog={onLog ?? onMore} onMore={onMore} />
@@ -267,10 +273,18 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
         }}
       />
     );
+  const leadLine =
+    lead === undefined ? null : (
+      <View>
+        <Txt kind="small">{lead.words}</Txt>
+        <Button label={lead.action.label} kind="link" compact style={styles.start} onPress={lead.action.onPress} />
+      </View>
+    );
   if (bare) {
     return (
       <>
         {saidLine}
+        {leadLine}
         {body}
         {foot}
         {setup}
@@ -315,6 +329,7 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
               </View>
             ))}
             {saidLine}
+            {leadLine}
             {body}
           </View>
           {foot}
@@ -337,7 +352,7 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
 }
 
 /** The Dashboard's one idea: its numbers large, its foods as a short table, and the one thing to do. */
-function BestIdea({ idea, onLog, onMore }: { idea: MealIdea; onLog: () => void; onMore: () => void }) {
+function BestIdea({ idea, onLog, onMore }: { idea: SuggestedIdea; onLog: () => void; onMore: () => void }) {
   return (
     <>
       <View>
@@ -347,6 +362,7 @@ function BestIdea({ idea, onLog, onMore }: { idea: MealIdea; onLog: () => void; 
         <Txt kind="tiny">
           {count(Math.round(idea.totals.proteinG))} g protein · {count(Math.round(idea.totals.carbsG))} g carbs
         </Txt>
+        <Why idea={idea} />
       </View>
       <View style={styles.foods}>
         {idea.items.map((food) => (
@@ -401,7 +417,23 @@ function BestPlanned({ meal, onLog, onMore }: { meal: DietPlanMeal; onLog: () =>
   );
 }
 
-function IdeaRow({ idea, held, onLog }: { idea: MealIdea; held: boolean; onLog: () => void }) {
+/** Whose meal is shown: the app's ("Suggested") or the person's own ("My plan"). */
+export function Source({ word }: { word: "Suggested" | "My plan" }) {
+  return (
+    <Txt kind="tiny" colour="textSoft" style={styles.source}>
+      {word.toUpperCase()}
+    </Txt>
+  );
+}
+
+/** Why the idea holds what it does, in the server's one reason (spec Part 6 §16.6, 8). */
+function Why({ idea }: { idea: SuggestedIdea }) {
+  return (
+    <Txt kind="tiny">{IDEA_WHY_WORDS[idea.why]}</Txt>
+  );
+}
+
+function IdeaRow({ idea, held, onLog }: { idea: SuggestedIdea; held: boolean; onLog: () => void }) {
   return (
     <View style={styles.idea}>
       <View style={styles.grow}>
@@ -413,6 +445,7 @@ function IdeaRow({ idea, held, onLog }: { idea: MealIdea; held: boolean; onLog: 
         <Txt kind="tiny" style={styles.numbers}>
           {count(idea.totals.kcal)} kcal · {count(Math.round(idea.totals.proteinG))} g protein
         </Txt>
+        <Why idea={idea} />
       </View>
       <Button label="Log" kind="soft" small disabled={held} say={`Log ${ideaName(idea)}`} onPress={onLog} />
     </View>
@@ -442,5 +475,6 @@ const styles = StyleSheet.create({
   start: { alignSelf: "flex-start" },
   idea: { flexDirection: "row", alignItems: "center", gap: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: colours.line },
   numbers: { fontFamily: fonts.semibold, marginTop: 2 },
+  source: { fontFamily: fonts.semibold, letterSpacing: 1 },
   later: { gap: 8, marginBottom: sizes.edge },
 });
