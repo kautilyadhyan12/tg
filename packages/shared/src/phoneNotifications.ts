@@ -84,6 +84,40 @@ export const gymPlacePushDataSchema = z
   .strip();
 export type GymPlacePushData = z.infer<typeof gymPlacePushDataSchema>;
 
+// ── A COMMENT OR REPLY ON YOUR POST (ROADMAP Stage 5 item 18b-ii-b) ──
+
+/** The Android channel for comments and replies on the person's posts and comments. */
+export const GYM_COMMENTS_CHANNEL = { id: "gym-comments", name: "Comments" } as const;
+
+/** One comments notification a gym, replaced by the next (Kd, 2026-11-03: "top of one another"), and
+ *  it sounds the same person's phone at most once in this long; what comes in between joins it. */
+export const COMMENTS_AGAIN_MINUTES = 30;
+
+/** What a comment was to the person told: on their post, or an answer to their comment or reply. */
+export type CommentNotice = "on_post" | "reply";
+
+/** The longest piece of a comment's words a notification shows. */
+export const COMMENT_NOTIFICATION_WORDS = 200;
+
+function clip(words: string): string {
+  const flat = words.replace(/\s+/g, " ").trim();
+  return flat.length <= COMMENT_NOTIFICATION_WORDS ? flat : `${flat.slice(0, COMMENT_NOTIFICATION_WORDS - 1).trimEnd()}…`;
+}
+
+/** What the phone shows: the gym, then the newest comment with who wrote it; once more than one is new,
+ *  the count in the title. */
+export function commentNotification(input: { gymName: string; count: number; newest: { name: string; notice: CommentNotice; words: string } }): { title: string; body: string } {
+  const { gymName, count, newest } = input;
+  const words = clip(newest.words);
+  if (count > 1) return { title: `${gymName} · ${String(count)} new comments`, body: `${newest.name}: ${words}` };
+  const what = newest.notice === "reply" ? "replied to your comment" : "commented on your post";
+  return { title: gymName, body: `${newest.name} ${what}: ${words}` };
+}
+
+/** What a comment's notification carries for the app: the gym, and the post whose comments a tap opens. */
+export const gymCommentPushDataSchema = z.object({ kind: z.literal("gym_comment"), gymId: z.string().uuid(), postId: z.string().uuid() }).strip();
+export type GymCommentPushData = z.infer<typeof gymCommentPushDataSchema>;
+
 // ── Google's replies (the adapter parses them here) ──
 
 /** Google's sign-in for a service account: the access token for Firebase. */

@@ -28,6 +28,7 @@ import {
   gymPostReactionResponseSchema,
   gymPostReactorsResponseSchema,
   gymPostSchema,
+  gymPostResponseSchema,
   gymPostsResponseSchema,
   personGymPostsResponseSchema,
   reportedGymPostsResponseSchema,
@@ -46,6 +47,7 @@ import {
   type GymPostReasonCounts,
   type GymPostReportReason,
   type GymPostsCursor,
+  type GymPostResponse,
   type GymPostsResponse,
   type PersonGymPostsResponse,
   type ReportedGymPostsResponse,
@@ -240,6 +242,13 @@ export async function getPosts(
     repo.countBlocked(deps.sql, gymId, userId),
   ]);
   return gymPostsResponseSchema.parse({ gymId, gymName: org.name, status: "shown", posting, commenting, blockedCount, supportEmail, ...feed });
+}
+
+/** One post, for a member of a live gym who may read it (Stage 5 18b-ii-b); 404 for anybody else. */
+export async function getPost(deps: Pick<PostsDeps, "sql" | "now">, userId: string, gymId: string, postId: string, limit: Limit): Promise<GymPostResponse | null> {
+  await requireMember(deps, gymId, userId);
+  if (!(await limit())) return null;
+  return gymPostResponseSchema.parse({ post: await memberPost(deps, gymId, postId, userId) });
 }
 
 /** The gym's posts for its staff holding the tick. */

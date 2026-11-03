@@ -88,6 +88,9 @@ export const DIRECT_DELETE_TABLES = [
   // 17e): as for posts, deleted at Day 14 and exported.
   "gym_post_comment_reactions",
   "gym_post_comment_reports",
+  // Which new comments the person is owed, or was sent, as a phone notification (migration
+  // 0195; Stage 5 18b-ii-b): about the person, deleted at Day 14, not exported (below).
+  "gym_post_comment_notices",
   // Who a member has blocked on a gym's Updates (migration 0074; ROADMAP 19b-ii-b): the
   // person's own choice, deleted at Day 14 and exported without the other person's id.
   // A block OF the person by somebody else names them too, and is deleted with it.
@@ -185,6 +188,9 @@ export const EXPORT_EXCLUDED_TABLES = {
   // ("every user-owned table above") does cover them, which is exactly why
   // this exclusion is written down rather than silently applied.
   push_tokens: "device push credentials — exporting them is a spoofing vector, not user content",
+  // Only which of OTHER people's comments the phone was told of, and when: their ids, none of
+  // the person's own words or choices (the comments themselves are in the export).
+  gym_post_comment_notices: "a send queue of other people's comment ids, not the person's content",
 } as const;
 
 /** Tables whose rows go into the user's export = the delete list minus the

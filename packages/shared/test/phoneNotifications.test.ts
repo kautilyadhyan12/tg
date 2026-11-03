@@ -2,7 +2,7 @@
 // in, and what one says. Every class of case, garbage included.
 import { describe, expect, it } from "vitest";
 import { bookingTime, tellsPlaceFree } from "../src/classBookings.js";
-import { gymMessageNotification, gymPlacePushDataSchema, placeNotification, pushHourOpen, pushTokenRequestSchema } from "../src/phoneNotifications.js";
+import { COMMENT_NOTIFICATION_WORDS, commentNotification, gymCommentPushDataSchema, gymMessageNotification, gymPlacePushDataSchema, placeNotification, pushHourOpen, pushTokenRequestSchema } from "../src/phoneNotifications.js";
 
 describe("pushHourOpen: from 04:00 up to 23:00 on the person's clock", () => {
   it.each([
@@ -115,5 +115,40 @@ describe("gymPlacePushDataSchema: what a tap opens", () => {
     { kind: "gym_place", gymId, what: "event", id },
   ])("refuses %j", (data) => {
     expect(gymPlacePushDataSchema.safeParse(data).success).toBe(false);
+  });
+});
+
+describe("commentNotification: one a gym, the newest under it", () => {
+  it("one comment on the person's post, and one reply to their comment", () => {
+    expect(commentNotification({ gymName: "Lotus Yoga", count: 1, newest: { name: "Ravi S.", notice: "on_post", words: "Great work!" } })).toEqual({
+      title: "Lotus Yoga",
+      body: "Ravi S. commented on your post: Great work!",
+    });
+    expect(commentNotification({ gymName: "Lotus Yoga", count: 1, newest: { name: "Ravi S.", notice: "reply", words: "Thanks" } }).body).toBe("Ravi S. replied to your comment: Thanks");
+  });
+  it("more than one: the count in the title, the newest with its writer", () => {
+    expect(commentNotification({ gymName: "Lotus Yoga", count: 3, newest: { name: "Asha K.", notice: "reply", words: "See you there" } })).toEqual({
+      title: "Lotus Yoga · 3 new comments",
+      body: "Asha K.: See you there",
+    });
+  });
+  it("long words are cut with an ellipsis, and lines run together", () => {
+    const body = commentNotification({ gymName: "G", count: 1, newest: { name: "A", notice: "on_post", words: `line one
+
+line two ${"x".repeat(400)}` } }).body;
+    const words = body.slice("A commented on your post: ".length);
+    expect(words.startsWith("line one line two x")).toBe(true);
+    expect(words.length).toBe(COMMENT_NOTIFICATION_WORDS);
+    expect(words.endsWith("…")).toBe(true);
+  });
+});
+
+describe("gymCommentPushDataSchema: what a tap opens", () => {
+  it("takes the gym and the post, and nothing else", () => {
+    const gymId = "8f0e7a3c-1d2b-4c5e-9f60-7a8b9c0d1e2f";
+    const postId = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
+    expect(gymCommentPushDataSchema.parse({ kind: "gym_comment", gymId, postId, extra: 1 })).toEqual({ kind: "gym_comment", gymId, postId });
+    expect(gymCommentPushDataSchema.safeParse({ kind: "gym_comment", gymId, postId: "nope" }).success).toBe(false);
+    expect(gymCommentPushDataSchema.safeParse({ kind: "gym_inbox", gymId, postId }).success).toBe(false);
   });
 });
