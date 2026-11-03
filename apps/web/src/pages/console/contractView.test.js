@@ -47,7 +47,7 @@ describe('the price list', () => {
   it('marks a number out of range and a free contract, and nothing else', () => {
     expect(draftProblems(draft({ contract: 'fixed', contractPeriods: '0' }), 'USD')).toEqual({ contractPeriods: 'Type how many payments, from 1 to 156.' });
     expect(draftProblems(draft({ contract: 'fixed', contractPeriods: '157' }), 'USD')).toEqual({ contractPeriods: 'Type how many payments, from 1 to 156.' });
-    expect(draftProblems(draft({ contract: 'fixed', price: '0' }), 'USD')).toEqual({ contractPeriods: 'A free membership has no contract. Choose No contract.' });
+    expect(draftProblems(draft({ contract: 'fixed', price: '0' }), 'USD')).toEqual({ contractPeriods: 'A free membership has no minimum term. Choose No minimum term.' });
     expect(draftProblems(draft({ contract: 'fixed' }), 'USD')).toBeNull();
   });
 
@@ -57,11 +57,11 @@ describe('the price list', () => {
   });
 
   it('says how long it runs, in the words of its payments', () => {
-    expect(contractHint(draft({ contract: 'fixed' }))).toBe('The contract runs 12 months. After it, it renews until they cancel.');
-    expect(contractHint(draft({ contract: 'fixed', contractPeriods: '24', contractThen: 'ends' }))).toBe('The contract runs 2 years. It ends after the last payment.');
+    expect(contractHint(draft({ contract: 'fixed' }))).toBe('They stay at least 12 months. After that, it renews until they cancel.');
+    expect(contractHint(draft({ contract: 'fixed', contractPeriods: '24', contractThen: 'ends' }))).toBe('They stay 2 years. It ends after the last payment.');
     expect(contractHint(draft({ contract: 'fixed', contractPeriods: 'x' }))).toBeNull();
-    expect(contractLine(listType())).toBe('Contract: 12 months, then renews until cancelled');
-    expect(contractLine(listType({ contractThen: 'ends', termCount: 3, contractPeriods: 4 }))).toBe('Contract: 12 months, then it ends');
+    expect(contractLine(listType())).toBe('Minimum term: 12 months, then renews until cancelled');
+    expect(contractLine(listType({ contractThen: 'ends', termCount: 3, contractPeriods: 4 }))).toBe('Minimum term: 12 months, then it ends');
     expect(contractLine(listType({ contractPeriods: null, contractThen: null }))).toBeNull();
   });
 });
@@ -86,10 +86,10 @@ describe("the person's page", () => {
   });
 
   it('names the contract and its last day, and a release with its reason', () => {
-    expect(contractShownLine(held())).toBe('Contract: 12 months, until 3 October 2027');
-    expect(contractShownLine({ ...held(), view: { ...held().view, contract: { until: '2027-10-03', then: 'ends' } } })).toBe('Contract: 12 months, until 3 October 2027, then it ends');
+    expect(contractShownLine(held())).toBe('Minimum term: 12 months, until 3 October 2027');
+    expect(contractShownLine({ ...held(), view: { ...held().view, contract: { until: '2027-10-03', then: 'ends' } } })).toBe('Minimum term: 12 months, until 3 October 2027, then it ends');
     expect(contractShownLine({ ...held(), view: { ...held().view, contract: null } })).toBeNull();
-    expect(releaseShownLine(held({ release: 'medical' }))).toBe('Released from contract: Medical or disability');
+    expect(releaseShownLine(held({ release: 'medical' }))).toBe('Released early: Medical or disability');
     expect(releaseShownLine(held())).toBeNull();
   });
 
@@ -100,11 +100,11 @@ describe("the person's page", () => {
     ends.view = { ...ends.view, contract: { until: '2027-10-03', then: 'ends' }, can: { ...ends.view.can, cancelAtContractEnd: null } };
     expect(askWords('cancel', ends, 'Ada', '2026-11-03')).toMatchObject({
       endButton: null,
-      detail: 'Ada is in contract until 3 October 2027, when it ends. To stop it sooner, release them from the contract.',
+      detail: 'Ada is in their minimum term until 3 October 2027, when it ends. To stop it sooner, release them early.',
     });
     const free = held();
     free.view = { ...free.view, contract: null, can: { ...free.view.can, releaseNeeded: false } };
     expect(askWords('cancel', free, 'Ada', '2026-11-03')).toMatchObject({ button: 'Cancel today', laterButton: 'Cancel on 3 December 2026' });
-    expect(doneWords('cancelContract', held())).toBe('Gold 12 months ends on 3 October 2027, with its contract.');
+    expect(doneWords('cancelContract', held())).toBe('Gold 12 months ends on 3 October 2027, at the end of its minimum term.');
   });
 });

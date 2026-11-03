@@ -212,8 +212,8 @@ export function contractCancelWords(m, name) {
     question: `Cancel ${whose}?`,
     detail:
       end !== null
-        ? `${name} is in contract until ${dayWords(until)}. End it then, and they keep paying until then; or release them from the contract sooner.`
-        : `${name} is in contract until ${dayWords(until)}, when it ends. To stop it sooner, release them from the contract.`,
+        ? `${name} is in their minimum term until ${dayWords(until)}. End it then, and they keep paying until then; or release them early.`
+        : `${name} is in their minimum term until ${dayWords(until)}, when it ends. To stop it sooner, release them early.`,
     endButton: end === null ? null : `End on ${dayWords(end)}`,
     releaseQuestion: 'Why are you releasing them?',
     releaseLaterButton: paid === null ? null : `Release on ${dayWords(paid)}`,
@@ -227,12 +227,12 @@ export function contractShownLine(m) {
   const c = m.view?.contract ?? null;
   if (c === null) return null;
   const length = m.contractPeriods !== null && m.contractPeriods !== undefined && m.termCount !== null && m.termUnit !== null ? `${contractLengthWords(m.contractPeriods, m.termCount, m.termUnit)}, ` : '';
-  return `Contract: ${length}until ${dayWords(c.until)}${c.then === 'ends' ? ', then it ends' : ''}`;
+  return `Minimum term: ${length}until ${dayWords(c.until)}${c.then === 'ends' ? ', then it ends' : ''}`;
 }
 
 /** "Released from contract: Moved away" on a membership cancelled inside one; null for none. */
 export function releaseShownLine(m) {
-  return m.release ? `Released from contract: ${CONTRACT_RELEASE_WORDS[m.release] ?? 'Other reason'}` : null;
+  return m.release ? `Released early: ${CONTRACT_RELEASE_WORDS[m.release] ?? 'Other reason'}` : null;
 }
 
 /** The classes the server says a cancel would end the bookings of (409
@@ -361,7 +361,7 @@ export function doneWords(what, m) {
     case 'cancelLater':
       return `${m.typeName} will end and won't renew.`;
     case 'cancelContract':
-      return m.view.can.cancelAtContractEnd ? `${m.typeName} ends on ${dayWords(m.view.can.cancelAtContractEnd)}, with its contract.` : `${m.typeName} ends with its contract.`;
+      return m.view.can.cancelAtContractEnd ? `${m.typeName} ends on ${dayWords(m.view.can.cancelAtContractEnd)}, at the end of its minimum term.` : `${m.typeName} ends at the end of its minimum term.`;
     case 'cancel':
       return `${m.typeName} is cancelled.`;
     case 'change':

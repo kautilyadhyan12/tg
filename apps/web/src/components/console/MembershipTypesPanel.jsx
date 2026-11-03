@@ -300,16 +300,16 @@ function TypeForm({ gymId, orgType, currency, options, taxRates, onRateAdded, dr
         ) : null}
 
         {choice === 'recurring' ? (
-          <Field id={id('contract')} label="Contract" problem={problems?.contractPeriods}>
+          <Field id={id('contract')} label="Minimum term" problem={problems?.contractPeriods}>
             <select id={id('contract')} value={draft.contract} onChange={text('contract')} className="c-input" style={{ maxWidth: 280 }}>
-              <option value="none">No contract</option>
-              <option value="fixed">A contract</option>
+              <option value="none">No minimum term</option>
+              <option value="fixed">A minimum term</option>
             </select>
             {draft.contract === 'fixed' ? (
               <div className="flex flex-wrap items-center gap-2" style={{ maxWidth: 520 }}>
                 <input
                   id={id('contract-periods')}
-                  aria-label="How many payments the contract runs for"
+                  aria-label="How many payments the minimum term runs for"
                   aria-invalid={problems?.contractPeriods ? 'true' : undefined}
                   value={draft.contractPeriods}
                   inputMode="numeric"
@@ -318,7 +318,7 @@ function TypeForm({ gymId, orgType, currency, options, taxRates, onRateAdded, dr
                   style={{ width: 104, flexShrink: 0 }}
                 />
                 <span className="c-s15 c-t1">payments, then</span>
-                <select aria-label="After the contract" value={draft.contractThen} onChange={text('contractThen')} className="c-input" style={{ maxWidth: 280 }}>
+                <select aria-label="After the minimum term" value={draft.contractThen} onChange={text('contractThen')} className="c-input" style={{ maxWidth: 280 }}>
                   <option value="renews">it renews until they cancel</option>
                   <option value="ends">it ends</option>
                 </select>
@@ -327,7 +327,7 @@ function TypeForm({ gymId, orgType, currency, options, taxRates, onRateAdded, dr
             <p className="c-s13 c-t3 m-0">
               {[
                 draft.contract === 'fixed' ? contractHint(draft) : 'Members can cancel at any time.',
-                editing ? 'Members who already hold it keep the contract they joined on.' : null,
+                editing ? 'Members who already hold it keep the minimum term they joined on.' : null,
               ]
                 .filter((line) => line !== null)
                 .join(' ')}

@@ -2177,17 +2177,17 @@ describe('cancelling a membership still in its contract', () => {
     orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
     render(draw(ADA, 'Ada Lovelace'));
     const b = await boxSoon();
-    expect(b.getByTestId('held-contract-line').textContent).toBe('Contract: 12 months, until 3 October 2027');
+    expect(b.getByTestId('held-contract-line').textContent).toBe('Minimum term: 12 months, until 3 October 2027');
     fireEvent.click(b.getByRole('button', { name: 'Cancel membership' }));
     const box = within(b.getByTestId('held-ask-cancel'));
-    expect(box.getByText('Ada Lovelace is in contract until 3 October 2027. End it then, and they keep paying until then; or release them from the contract sooner.')).toBeTruthy();
+    expect(box.getByText('Ada Lovelace is in their minimum term until 3 October 2027. End it then, and they keep paying until then; or release them early.')).toBeTruthy();
     expect(box.queryByRole('button', { name: 'Cancel today' })).toBeNull();
     const ended = inContract([[{ type: 'cancel', when: 'contract_end' }, TODAY]]);
     orgService.changeHeldMembership.mockResolvedValueOnce(answer([ended]));
     fireEvent.click(box.getByRole('button', { name: 'End on 3 October 2027' }));
     await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledTimes(1));
     expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, 'cancel', { when: 'contract_end' });
-    expect(await b.findByText('Gold 12 months ends on 3 October 2027, with its contract.')).toBeTruthy();
+    expect(await b.findByText('Gold 12 months ends on 3 October 2027, at the end of its minimum term.')).toBeTruthy();
   });
 
   it('releases nobody until a reason is picked, then sends that reason', async () => {

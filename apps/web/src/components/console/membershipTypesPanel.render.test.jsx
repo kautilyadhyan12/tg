@@ -156,13 +156,13 @@ describe('adding a type', () => {
     type_('Name', 'Gold 12 months');
     type_('Price (GBP)', '49.99');
     expect(screen.getByText('Members can cancel at any time.')).toBeTruthy();
-    fireEvent.change(screen.getByLabelText('Contract'), { target: { value: 'fixed' } });
-    fireEvent.change(screen.getByLabelText('After the contract'), { target: { value: 'ends' } });
-    expect(screen.getByText('The contract runs 12 months. It ends after the last payment.')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Minimum term'), { target: { value: 'fixed' } });
+    fireEvent.change(screen.getByLabelText('After the minimum term'), { target: { value: 'ends' } });
+    expect(screen.getByText('They stay 12 months. It ends after the last payment.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Add membership type' }));
     await waitFor(() => expect(orgService.createMembershipType).toHaveBeenCalledTimes(1));
     expect(orgService.createMembershipType.mock.calls[0][1]).toMatchObject({ kind: 'recurring', contractPeriods: 12, contractThen: 'ends' });
-    expect(await screen.findByText('Contract: 12 months, then it ends')).toBeTruthy();
+    expect(await screen.findByText('Minimum term: 12 months, then it ends')).toBeTruthy();
   });
 
   it('sends the typed price as whole minor units, once, and the list that comes back is drawn', async () => {

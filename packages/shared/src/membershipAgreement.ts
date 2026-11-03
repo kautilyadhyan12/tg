@@ -315,11 +315,11 @@ export function agreementFacts(input: AgreementFactsInput): AgreementFact[] {
   const contract = m.view.contract;
   const periods = m.contractPeriods ?? null;
   if (m.kind === "recurring" && contract !== null && periods !== null && m.termCount !== null && m.termUnit !== null) {
-    facts.push({ label: "Contract", value: `${contractLengthWords(periods, m.termCount, m.termUnit)}, to ${dayWords(contract.until)}` });
+    facts.push({ label: "Minimum term", value: `${contractLengthWords(periods, m.termCount, m.termUnit)}, to ${dayWords(contract.until)}` });
   }
   if (m.kind === "recurring") {
     if (endsOn === null && m.termCount !== null && m.termUnit !== null) {
-      const after = contract === null ? "" : " after the contract";
+      const after = contract === null ? "" : " after the minimum term";
       facts.push({ label: "Renews", value: `Every ${plural(m.termCount, m.termUnit)}${after} until you cancel` });
     }
     else if (endsOn !== null) facts.push({ label: "Ends", value: dayWords(endsOn) });

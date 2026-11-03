@@ -568,7 +568,7 @@ function throwOnFailure(outcome: repo.HeldWriteOutcome): void {
       throw new OrgsError(
         409,
         "contract_release_needed",
-        "They are still in contract. Choose End when the contract ends, or pick why you are releasing them.",
+        "They are still in their minimum term. Choose End at the end of the minimum term, or pick why you are releasing them early.",
       );
     case "not_allowed":
       throw new OrgsError(

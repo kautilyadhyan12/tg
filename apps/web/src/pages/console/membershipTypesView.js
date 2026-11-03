@@ -212,7 +212,7 @@ export function joiningFeeLine(type) {
 export function contractLine(type) {
   if (type.contractPeriods === null || type.contractPeriods === undefined || type.termCount === null || type.termUnit === null) return null;
   const length = contractLengthWords(type.contractPeriods, type.termCount, type.termUnit);
-  return `Contract: ${length}, then ${type.contractThen === 'ends' ? 'it ends' : 'renews until cancelled'}`;
+  return `Minimum term: ${length}, then ${type.contractThen === 'ends' ? 'it ends' : 'renews until cancelled'}`;
 }
 
 /** Under the contract boxes: how long so many payments run, where the number reads. */
@@ -222,8 +222,8 @@ export function contractHint(draft) {
   if (periods === null || count === null) return null;
   const length = contractLengthWords(periods, count, draft.termUnit);
   return draft.contractThen === 'ends'
-    ? `The contract runs ${length}. It ends after the last payment.`
-    : `The contract runs ${length}. After it, it renews until they cancel.`;
+    ? `They stay ${length}. It ends after the last payment.`
+    : `They stay at least ${length}. After that, it renews until they cancel.`;
 }
 
 /** A new type's form, before anything is typed. */
@@ -385,7 +385,7 @@ export function draftProblems(draft, currency) {
     if (wholeNumber(draft.contractPeriods, 1, MEMBERSHIP_CONTRACT_PERIODS_MAX) === null) {
       problems.contractPeriods = `Type how many payments, from 1 to ${String(MEMBERSHIP_CONTRACT_PERIODS_MAX)}.`;
     } else if (priceMinor === 0) {
-      problems.contractPeriods = 'A free membership has no contract. Choose No contract.';
+      problems.contractPeriods = 'A free membership has no minimum term. Choose No minimum term.';
     }
   }
   if (draft.choice === 'pack') {
