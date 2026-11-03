@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 import {
   CLASS_BOOKING_WORDS,
   UNSIGNED_BOOKING_WORDS,
+  agreementBookingsBodySchema,
   bookingSettingsBodySchema,
   bookingTime,
   decideBook,
@@ -83,13 +84,16 @@ describe("what the member reads", () => {
   });
 });
 
-describe("the choice as a save sends it", () => {
-  const body = { opensDays: 7, freeCancelMinutes: 120, handoverMinutes: 60, waitlistMax: 20, pt: { opensDays: 7, freeCancelMinutes: 120 } };
-  it("is one of the two choices, or left out to stay as it is", () => {
-    expect(bookingSettingsBodySchema.safeParse({ ...body, unsigned: "stop" }).success).toBe(true);
-    expect(bookingSettingsBodySchema.safeParse({ ...body, unsigned: "let_book" }).success).toBe(true);
-    expect(bookingSettingsBodySchema.safeParse(body).success).toBe(true);
-    expect(bookingSettingsBodySchema.safeParse({ ...body, unsigned: "sign_later" }).success).toBe(false);
-    expect(bookingSettingsBodySchema.safeParse({ ...body, unsigned: true }).success).toBe(false);
+describe("the choice as Membership agreements saves it", () => {
+  it("is one of the two choices, and nothing else", () => {
+    expect(agreementBookingsBodySchema.safeParse({ rule: "stop" }).success).toBe(true);
+    expect(agreementBookingsBodySchema.safeParse({ rule: "let_book" }).success).toBe(true);
+    expect(agreementBookingsBodySchema.safeParse({}).success).toBe(false);
+    expect(agreementBookingsBodySchema.safeParse({ rule: "sign_later" }).success).toBe(false);
+    expect(agreementBookingsBodySchema.safeParse({ rule: "stop", overdue: "stop" }).success).toBe(false);
+  });
+  it("booking settings no longer take it", () => {
+    const body = { opensDays: 7, freeCancelMinutes: 120, handoverMinutes: 60, waitlistMax: 20, pt: { opensDays: 7, freeCancelMinutes: 120 } };
+    expect(bookingSettingsBodySchema.safeParse({ ...body, unsigned: "stop" }).success).toBe(false);
   });
 });

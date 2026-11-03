@@ -492,7 +492,7 @@ export default function Members() {
   };
 
   // Overview's Last 7 days box opens the list showing who has a payment due, or the past
-  // members who still owe, and Booking rules who has an agreement to sign (`?show=`), once.
+  // members who still owe, and Membership agreements who has one to sign (`?show=`), once.
   const [startShow, setStartShow] = useState(() => {
     const show = searchParams.get('show');
     return show === PAYMENT_DUE_SHOW || show === PAST_PAYMENT_DUE_SHOW || show === AGREEMENT_NOT_SIGNED_SHOW ? show : null;

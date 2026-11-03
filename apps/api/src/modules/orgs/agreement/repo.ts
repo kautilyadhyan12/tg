@@ -57,6 +57,18 @@ export async function latestAgreement(sql: SqlOrTx, gymId: string): Promise<Agre
 }
 
 /** Any of the business's agreements is asked for today. */
+/** The business's choice for a member with an agreement to sign (18u-iv), and its time zone; null
+ *  where there is no such gym. */
+export async function bookingsChoice(sql: SqlOrTx, gymId: string): Promise<{ rule: string; timezone: string } | null> {
+  const rows = await sql<{ rule: string; timezone: string }[]>`SELECT bookings_unsigned AS rule, timezone FROM gyms WHERE id = ${gymId}`;
+  return rows[0] ?? null;
+}
+
+/** Saves that choice. The caller holds the gym's row lock. */
+export async function setBookingsChoice(tx: TransactionSql, gymId: string, rule: string): Promise<void> {
+  await tx`UPDATE gyms SET bookings_unsigned = ${rule} WHERE id = ${gymId}`;
+}
+
 export async function anyInUse(sql: SqlOrTx, gymId: string): Promise<boolean> {
   const rows = await sql<{ yes: boolean }[]>`
     SELECT EXISTS (

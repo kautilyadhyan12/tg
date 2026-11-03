@@ -16,7 +16,6 @@ import {
   CLASS_BOOKINGS_LATE_SHOWN,
   CLASS_BOOKING_HOLDS_PLACE,
   BOOKING_OVERDUE_NAMES,
-  BOOKING_UNSIGNED_NAMES,
   type BookingStop,
   CLASS_BOOKING_WORDS,
   CLASS_FEES_NO_CURRENCY,
@@ -63,9 +62,8 @@ import { fullName } from "../leaderboard/rank.js";
 import { chargePack, givePackClassBack } from "../memberships/heldRepo.js";
 import { classFeesOf, openClassFees, removeClassFees } from "../memberships/feesRepo.js";
 import { bookersOf, handOver, handOverComing, handOverPlan, handsOverTo, pick, planHandOver, type HandOverPlan } from "./bookingChanges.js";
-import { overduePeople, stopOf, stoppedBookers, unsignedPeople } from "./bookingStops.js";
+import { overduePeople, stopOf, stoppedBookers } from "./bookingStops.js";
 import { handOverComingEvents } from "../events/places.js";
-import { anyInUse as anyAgreementInUse } from "../agreement/repo.js";
 import * as repo from "./bookingsRepo.js";
 import { endingPerson } from "./service.js";
 
@@ -766,32 +764,23 @@ export async function getEndingBookings(
 const BILLING = "billing.members";
 const NO_FEES = "Changing fees isn't part of your role. Ask the owner to turn on \"Record members' payments\" for you.";
 const NO_OVERDUE = "Changing what happens to overdue payments isn't part of your role. Ask the owner to turn on \"Record members' payments\" for you.";
-/** The agreements' own tick: whoever changes them changes whether they stop bookings (18u-iv). */
-const AGREEMENTS = "org.manage";
-const NO_UNSIGNED = "Changing what happens to unsigned agreements isn't part of your role. Ask the owner to change it.";
 
 /** The settings as a reader is sent them, with the class fees in the gym's money. */
 async function rulesView(deps: Pick<BookingsDeps, "sql" | "now">, org: OrgRow, staffId: string, rules: repo.BookingRules): Promise<ClassBookingSettingsResponse> {
-  const [canChange, onBills, stops, mayAgreements, seesMembers, inUse] = await Promise.all([
+  const [canChange, onBills, stops] = await Promise.all([
     holdsPrivilege(deps, org.id, staffId, BILLING),
     repo.hasMembershipTypes(deps.sql, org.id),
     repo.stopRule(deps.sql, org.id),
-    holdsPrivilege(deps, org.id, staffId, AGREEMENTS),
-    holdsPrivilege(deps, org.id, staffId, "members.confirm"),
-    anyAgreementInUse(deps.sql, org.id),
   ]);
   if (stops === null) throw notFound();
   // Who owes is the payments' business: their names go only to a reader holding that tick.
   const stopped = canChange ? await overduePeople(deps.sql, org.id, stops, deps.now(), BOOKING_OVERDUE_NAMES) : null;
-  // Who has an agreement to sign is Members' "Agreement not signed": names to who sees Members.
-  const toSign = seesMembers && inUse ? await unsignedPeople(deps.sql, org.id, stops, deps.now(), BOOKING_UNSIGNED_NAMES) : null;
   return classBookingSettingsResponseSchema.parse({
     settings: rules.settings,
     pt: rules.pt,
     fees: { ...rules.fees, currency: memberCurrencyForCountry(org.country), canChange, onBills },
     ptFees: rules.ptFees,
     overdue: { rule: rules.overdue, afterDays: stops.afterDays, stopped },
-    unsigned: { rule: rules.unsigned, canChange: mayAgreements, inUse, stopped: toSign },
   });
 }
 
@@ -824,8 +813,8 @@ export async function setBookingSettings(
 ): Promise<(ClassBookingSettingsResponse & { movedIn: number }) | null> {
   const { org } = await requireWritablePrivilege(deps, gymId, staffId, "schedule.manage");
   if (!(await limit())) return null;
-  const { pt, fees: asked, ptFees: askedPt, overdue: askedOverdue, unsigned: askedUnsigned, ...settings } = body;
-  const [mayFees, mayAgreements] = await Promise.all([holdsPrivilege(deps, gymId, staffId, BILLING), holdsPrivilege(deps, gymId, staffId, AGREEMENTS)]);
+  const { pt, fees: asked, ptFees: askedPt, overdue: askedOverdue, ...settings } = body;
+  const mayFees = await holdsPrivilege(deps, gymId, staffId, BILLING);
   let movedIn = 0;
   const saved = await deps.sql.begin(async (tx): Promise<repo.BookingRules | OrgsError | null> => {
     await lockOrgRow(tx, gymId);
@@ -834,7 +823,6 @@ export async function setBookingSettings(
     const fees = asked ?? before.fees;
     const ptFees = askedPt ?? before.ptFees;
     const overdue = askedOverdue ?? before.overdue;
-    const unsigned = askedUnsigned ?? before.unsigned;
     const keys = ["opensDays", "freeCancelMinutes", "handoverMinutes", "waitlistMax"] as const;
     const ptKeys = ["opensDays", "freeCancelMinutes"] as const;
     const feeKeys = ["lateCancelMinor", "noShowMinor"] as const;
@@ -843,17 +831,13 @@ export async function setBookingSettings(
     const feesChanged = feeKeys.filter((k) => before.fees[k] !== fees[k]);
     const ptFeesChanged = feeKeys.filter((k) => before.ptFees[k] !== ptFees[k]);
     const overdueChanged = overdue !== before.overdue;
-    const unsignedChanged = unsigned !== before.unsigned;
     if ((feesChanged.length > 0 || ptFeesChanged.length > 0) && !mayFees) return new OrgsError(403, "forbidden", NO_FEES);
     if (overdueChanged && !mayFees) return new OrgsError(403, "forbidden", NO_OVERDUE);
-    if (unsignedChanged && !mayAgreements) return new OrgsError(403, "forbidden", NO_UNSIGNED);
     if ((feesChanged.length > 0 || ptFeesChanged.length > 0) && memberCurrencyForCountry(org.country) === null) {
       return new OrgsError(409, "no_member_currency", CLASS_FEES_NO_CURRENCY);
     }
-    if (changed.length === 0 && ptChanged.length === 0 && feesChanged.length === 0 && ptFeesChanged.length === 0 && !overdueChanged && !unsignedChanged) {
-      return before;
-    }
-    await repo.writeSettings(tx, gymId, { settings, pt, fees, ptFees, overdue, unsigned });
+    if (changed.length === 0 && ptChanged.length === 0 && feesChanged.length === 0 && ptFeesChanged.length === 0 && !overdueChanged) return before;
+    await repo.writeSettings(tx, gymId, { settings, pt, fees, ptFees, overdue });
     await insertAudit(tx, {
       actorUserId: staffId,
       gymId,
@@ -866,7 +850,6 @@ export async function setBookingSettings(
         ...feesChanged.map((k): [string, string] => [`fees.${k}`, `${String(before.fees[k])} -> ${String(fees[k])}`]),
         ...ptFeesChanged.map((k): [string, string] => [`ptFees.${k}`, `${String(before.ptFees[k])} -> ${String(ptFees[k])}`]),
         ...(overdueChanged ? [["overdue", `${before.overdue} -> ${overdue}`] satisfies [string, string]] : []),
-        ...(unsignedChanged ? [["unsigned", `${before.unsigned} -> ${unsigned}`] satisfies [string, string]] : []),
       ]),
     });
     if (settings.handoverMinutes < before.settings.handoverMinutes) {
@@ -874,7 +857,7 @@ export async function setBookingSettings(
       // An event's waitlist is handed over by the same setting (19c-ii).
       movedIn += await handOverComingEvents(tx, gymId, deps.now());
     }
-    return { settings, pt, fees, ptFees, overdue, unsigned };
+    return { settings, pt, fees, ptFees, overdue };
   });
   if (saved === null) throw notFound();
   if (saved instanceof OrgsError) throw saved;

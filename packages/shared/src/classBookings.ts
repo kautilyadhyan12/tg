@@ -587,7 +587,7 @@ export type PtBookingSettings = z.infer<typeof ptBookingSettingsSchema>;
  *  and the class fees (18h-i) and personal training's (18h-ii) from a screen that shows them;
  *  left out, they stay as they are. */
 export const bookingSettingsBodySchema = classBookingSettingsSchema
-  .extend({ pt: ptBookingSettingsSchema, fees: classFeesSchema.optional(), ptFees: classFeesSchema.optional(), overdue: bookingOverdueSchema.optional(), unsigned: bookingUnsignedSchema.optional() })
+  .extend({ pt: ptBookingSettingsSchema, fees: classFeesSchema.optional(), ptFees: classFeesSchema.optional(), overdue: bookingOverdueSchema.optional() })
   .strict();
 export type BookingSettingsBody = z.infer<typeof bookingSettingsBodySchema>;
 
@@ -596,6 +596,27 @@ export const BOOKING_OVERDUE_NAMES = 500;
 
 /** How many of the people with an agreement to sign the box is sent by name: a few, then See all. */
 export const BOOKING_UNSIGNED_NAMES = 5;
+
+/** Settings → Membership agreements, "Before they book" (18u-iv): the choice, whether the business
+ *  asks for any agreement, and the current records with one to sign today, staff left out, the first
+ *  by name; `stopped` is sent only to a reader who also sees Members (null otherwise). */
+export const agreementBookingsResponseSchema = z
+  .object({
+    rule: bookingUnsignedSchema,
+    inUse: z.boolean(),
+    stopped: z
+      .object({
+        count: z.number().int().min(0),
+        people: z.array(z.object({ entryId: z.string().uuid(), name: z.string() }).strict()).max(BOOKING_UNSIGNED_NAMES),
+      })
+      .strict()
+      .nullable(),
+  })
+  .strict();
+export type AgreementBookingsResponse = z.infer<typeof agreementBookingsResponseSchema>;
+
+export const agreementBookingsBodySchema = z.object({ rule: bookingUnsignedSchema }).strict();
+export type AgreementBookingsBody = z.infer<typeof agreementBookingsBodySchema>;
 
 /** `movedIn`, on a save only: how many waiting people a shorter hand-over time gave a
  *  free place to at once. */
@@ -622,24 +643,6 @@ export const classBookingSettingsResponseSchema = z
           .object({
             count: z.number().int().min(0),
             people: z.array(z.object({ entryId: z.string().uuid(), name: z.string() }).strict()).max(BOOKING_OVERDUE_NAMES),
-          })
-          .strict()
-          .nullable(),
-      })
-      .strict(),
-    /** No new bookings until the membership agreement is signed (18u-iv), changed by whoever
-     *  changes the agreements (`canChange`). `inUse`: the business asks for an agreement on some
-     *  line of its price list. `stopped`: the current records with one to sign today, staff left
-     *  out, and the first by name; sent only to a reader who sees Members (null otherwise). */
-    unsigned: z
-      .object({
-        rule: bookingUnsignedSchema,
-        canChange: z.boolean(),
-        inUse: z.boolean(),
-        stopped: z
-          .object({
-            count: z.number().int().min(0),
-            people: z.array(z.object({ entryId: z.string().uuid(), name: z.string() }).strict()).max(BOOKING_UNSIGNED_NAMES),
           })
           .strict()
           .nullable(),

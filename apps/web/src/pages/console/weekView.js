@@ -8,7 +8,7 @@ import { shortDay } from './atRiskView';
  *  still owe (`Members.jsx` reads them). */
 export const PAYMENT_DUE_SHOW = 'payment-due';
 export const PAST_PAYMENT_DUE_SHOW = 'past-payment-due';
-/** Members opened showing who has a membership agreement to sign (Booking rules' See all, 18u-iv). */
+/** Members opened showing who has a membership agreement to sign (Membership agreements' See all, 18u-iv). */
 export const AGREEMENT_NOT_SIGNED_SHOW = 'agreement-not-signed';
 
 const n = (count) => count.toLocaleString('en');

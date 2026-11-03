@@ -4533,22 +4533,21 @@ The phone app
 signs in the app (Stage 5 item 20).
 
 **No new bookings until the membership agreement is signed, as built (18u-iv; Kd, 2026-10-23,
-`rulings/2026-10-23-18u-i.md`).** Booking rules, its own part **Unsigned agreements**: **Let them
-book** (where every gym starts) or **Stop new bookings until they sign** (`gyms.bookings_unsigned`,
-migration `0196`), as Wodify's Contract Enforcement. Under Stop, a member whose own record holds a
-membership whose agreement is not signed, by the one rule Members → Agreement not signed reads
-(`agreementNotSignedRecords`), books no class, joins no waitlist, claims no freed place and books no
-personal training session in the app (403 `agreement_not_signed`: "Your membership agreement isn't
-signed yet. Please sign it at the front desk to book."), exactly as an overdue payment stops them;
-where both hold, the overdue payment is said. Places held stay, staff still book for them, the
-gym's owner and staff are never stopped, a parent is never stopped by a child's record, an event's
-"I'm coming" is not stopped, and a business that asks for no agreement stops nobody. Signed, they
-book at once. The choice is changed by whoever changes the agreements (`org.manage`; anybody else
-reads "Only the owner can change this."); staff who see Members read who has one to sign today, the
-first five by name, "and N more" and See all (Members opened on Agreement not signed). A business
-with no agreement reads "You don't ask members to sign a membership agreement." with Set up
-membership agreements, or who can. The person's page says "Can't book until signed." beside
-Agreement not signed while the choice is Stop.
+`rulings/2026-10-23-18u-i.md`; its place, Kd 2026-11-03).** Settings → Membership agreements, its last
+part **Before they book**, shown once any agreement is in use: **Let them book** (where every business
+starts) or **Stop new bookings until they sign** (`gyms.bookings_unsigned`, migration `0196`), with
+its own Save, as Wodify's Contract Enforcement sits with its contracts (`GET`/`PUT
+/v1/orgs/:gymId/agreement/bookings`, `org.manage` as the agreements are). Under Stop, a member whose
+own record holds a membership whose agreement is not signed, by the one rule Members → Agreement not
+signed reads (`agreementNotSignedRecords`), books no class, joins no waitlist, claims no freed place
+and books no personal training session in the app (403 `agreement_not_signed`: "Your membership
+agreement isn't signed yet. Please sign it at the front desk to book."), exactly as an overdue payment
+stops them; where both hold, the overdue payment is said. Places held stay, staff still book for them,
+the gym's owner and staff are never stopped, a parent is never stopped by a child's record, an
+event's "I'm coming" is not stopped, and a business that asks for no agreement stops nobody. Signed,
+they book at once. A reader who also sees Members reads who has one to sign today, the first five by
+name, "and N more" and See all (Members opened on Agreement not signed). The person's page says
+"Can't book until signed." beside Agreement not signed while the choice is Stop.
 
 **Live updates** (ROADMAP Stage 4 item 18; Kd, 2026-10-24, `rulings/2026-10-24-18u-ii-b.md`). A
 console tab on screen keeps one open line to the server for the gym it shows (`GET

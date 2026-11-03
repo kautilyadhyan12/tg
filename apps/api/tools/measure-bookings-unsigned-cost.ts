@@ -5,7 +5,7 @@
 // and the gym has thirty classes in the coming week.
 //
 // For each thing staff and members do, with the gym's choice where it starts (nothing extra is
-// read) and switched on: a member's week of classes, Book, and the box in Settings naming who
+// read) and switched on: a member's week of classes, Book, Membership agreements' read naming who
 // has one to sign today, and a person's page. Two numbers each: how long it takes, and how long the
 // server's one thread is busy and answers nobody.
 //
@@ -17,7 +17,9 @@ import { createHash, randomUUID } from "node:crypto";
 import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 import os from "node:os";
 import postgres from "postgres";
-import { book, createLine, getBookingSettings, getMemberClasses } from "../src/modules/orgs/classes/bookingsService.js";
+import { BOOKING_UNSIGNED_NAMES } from "@app/shared";
+import { unsignedPeople } from "../src/modules/orgs/classes/bookingStops.js";
+import { book, createLine, getMemberClasses } from "../src/modules/orgs/classes/bookingsService.js";
 import { getHeldMemberships } from "../src/modules/orgs/memberships/heldService.js";
 
 const url = process.env["DATABASE_URL"] ?? "";
@@ -201,7 +203,7 @@ for (const rule of ["let_book", "stop"] as const) {
     if (said !== (rule === "stop" ? "agreement_not_signed" : "booked")) throw new Error(`an unsigned Book answered ${said}`);
   });
   await measure("the person's page, not signed", (i) => getHeldMemberships(deps, big.owner, big.id, unsigned(i).entryId));
-  await measure("Booking rules in Settings, naming who has one to sign", () => getBookingSettings(deps, big.owner, big.id, yes));
+  await measure("Membership agreements in Settings, naming who has one to sign", () => unsignedPeople(sql, big.id, ZONE, new Date(), BOOKING_UNSIGNED_NAMES));
 }
 await cleanup();
 await sql.end({ timeout: 5 });

@@ -344,8 +344,7 @@ describe("the booking settings a save sends", () => {
     expect(bookingSettingsBodySchema.parse({ ...classes, pt, ptFees })).toEqual({ ...classes, pt, ptFees });
     // No new bookings while a payment is overdue (17i): always answered.
     const overdue = { rule: "let_book", afterDays: 0, stopped: null };
-    const unsigned = { rule: "let_book", canChange: false, inUse: false, stopped: null };
-    expect(classBookingSettingsResponseSchema.parse({ settings: classes, pt, fees: answered, ptFees, overdue, unsigned })).toEqual({ settings: classes, pt, fees: answered, ptFees, overdue, unsigned });
+    expect(classBookingSettingsResponseSchema.parse({ settings: classes, pt, fees: answered, ptFees, overdue })).toEqual({ settings: classes, pt, fees: answered, ptFees, overdue });
     expect(() => classBookingSettingsResponseSchema.parse({ settings: classes, pt, fees: answered, ptFees })).toThrow();
     expect(() => classBookingSettingsResponseSchema.parse({ settings: classes, pt })).toThrow();
     expect(() => classBookingSettingsResponseSchema.parse({ settings: classes, pt, fees: answered })).toThrow();

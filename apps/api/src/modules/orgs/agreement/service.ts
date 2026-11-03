@@ -47,6 +47,11 @@ import {
   type SignMembershipAgreementBody,
   type SignMembershipAgreementResponse,
   type WaiverToRead,
+  BOOKING_UNSIGNED_NAMES,
+  agreementBookingsResponseSchema,
+  bookingUnsignedSchema,
+  type AgreementBookingsResponse,
+  type BookingUnsigned,
 } from "@app/shared";
 import type { Sql } from "postgres";
 import { sha256Hex } from "../../auth/tokens.js";
@@ -56,7 +61,8 @@ import { gymNameForEmail } from "../invites/gymText.js";
 import { suppressionsFor } from "../invites/repo.js";
 import { readOwnHeld } from "../memberships/heldService.js";
 import { getOrgById, insertAudit, lockOrgRow, type OrgRow } from "../repo.js";
-import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
+import { OrgsError, holdsPrivilege, requirePrivilege, requireWritablePrivilege } from "../service.js";
+import { unsignedPeople } from "../classes/bookingStops.js";
 import type { LiveNewsSender } from "../../live/news.js";
 import type { AgreementEmailSender } from "./email.js";
 import * as repo from "./repo.js";
@@ -109,6 +115,54 @@ export async function getGymAgreement(deps: AgreementDeps, userId: string, gymId
   await requirePrivilege(deps, gymId, userId, TICK);
   if (!(await limit())) return null;
   return await gymAgreement(deps.sql, gymId);
+}
+
+// ── BEFORE THEY BOOK (18u-iv): no new bookings until the membership agreement is signed ──
+
+/** The choice as Membership agreements shows it, to whoever changes the agreements; the names of
+ *  who has one to sign only where they also see Members. */
+async function bookingsView(deps: Pick<AgreementDeps, "sql" | "now">, gymId: string, userId: string): Promise<AgreementBookingsResponse> {
+  const [choice, inUse, seesMembers] = await Promise.all([
+    repo.bookingsChoice(deps.sql, gymId),
+    repo.anyInUse(deps.sql, gymId),
+    holdsPrivilege(deps, gymId, userId, DESK_TICK),
+  ]);
+  if (choice === null) throw new OrgsError(404, "not_found", AGREEMENT_WORDS.not_found);
+  const stopped = inUse && seesMembers ? await unsignedPeople(deps.sql, gymId, choice.timezone, deps.now(), BOOKING_UNSIGNED_NAMES) : null;
+  return agreementBookingsResponseSchema.parse({ rule: bookingUnsignedSchema.parse(choice.rule), inUse, stopped });
+}
+
+export async function getAgreementBookings(deps: AgreementDeps, userId: string, gymId: string, limit: Limit): Promise<AgreementBookingsResponse | null> {
+  await requirePrivilege(deps, gymId, userId, TICK);
+  if (!(await limit())) return null;
+  return await bookingsView(deps, gymId, userId);
+}
+
+/** The choice changed. It is read at each booking, so it holds from now; no booking made is touched. */
+export async function setAgreementBookings(
+  deps: AgreementDeps,
+  userId: string,
+  gymId: string,
+  rule: BookingUnsigned,
+  limit: Limit,
+): Promise<AgreementBookingsResponse | null> {
+  await requireWritablePrivilege(deps, gymId, userId, TICK);
+  if (!(await limit())) return null;
+  await deps.sql.begin(async (tx) => {
+    await lockOrgRow(tx, gymId);
+    const before = await repo.bookingsChoice(tx, gymId);
+    if (before === null || before.rule === rule) return;
+    await repo.setBookingsChoice(tx, gymId, rule);
+    await insertAudit(tx, {
+      actorUserId: userId,
+      gymId,
+      action: "org.agreement_bookings_changed",
+      targetType: "gym",
+      targetId: gymId,
+      meta: { unsigned: `${before.rule} -> ${rule}` },
+    });
+  });
+  return await bookingsView(deps, gymId, userId);
 }
 
 /** Saves the business's words. The same words as the newest wording make no new one: they

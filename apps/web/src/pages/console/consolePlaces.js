@@ -25,8 +25,6 @@ export const SETTINGS_SECTION = {
   bookingRules: 'booking-rules',
   // The Overdue payments part of Booking rules (17i): the box opens, with the part in view.
   overdueBookings: 'overdue-bookings',
-  // The Unsigned agreements part of Booking rules (18u-iv): the box opens, with the part in view.
-  unsignedBookings: 'unsigned-bookings',
   frontDesk: 'check-in-devices',
   leadEmails: 'follow-up-emails',
   waiver: 'waiver',
@@ -56,8 +54,7 @@ const PLACES = {
   messages: { path: `/settings#${SETTINGS_SECTION.messages}`, may: canManageOrg },
   bookingRules: { path: `/settings#${SETTINGS_SECTION.bookingRules}`, may: canManageSchedule },
   overdueBookings: { path: `/settings#${SETTINGS_SECTION.overdueBookings}`, may: canManageSchedule },
-  unsignedBookings: { path: `/settings#${SETTINGS_SECTION.unsignedBookings}`, may: canManageSchedule },
-  // Members showing who has a membership agreement to sign (Booking rules' See all, 18u-iv).
+  // Members showing who has a membership agreement to sign (Membership agreements' See all, 18u-iv).
   membersToSign: { path: '/members?show=agreement-not-signed', may: onStaff },
   frontDesk: { path: `/settings#${SETTINGS_SECTION.frontDesk}`, may: canManageOrg },
   leadEmails: { path: `/settings#${SETTINGS_SECTION.leadEmails}`, may: canManageOrg },

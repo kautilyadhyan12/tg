@@ -254,10 +254,8 @@ export function currencySign(currency) {
 
 /** The closed section's one line: the settings as they stand, classes then personal training,
  *  each with its fees where any is set (18h-i, 18h-ii). */
-export function bookingSettingsSummary(settings, pt, fees = null, ptFees = null, overdue = null, unsigned = null) {
+export function bookingSettingsSummary(settings, pt, fees = null, ptFees = null, overdue = null) {
   if (settings === null || settings === undefined) return 'When members can book and cancel, and how the waitlist works';
-  // No new bookings until the membership agreement is signed (18u-iv), said last where the gym has it on.
-  if (unsigned === 'stop') return `${bookingSettingsSummary(settings, pt, fees, ptFees, overdue).replace(/\.$/, '')}. No new bookings until the membership agreement is signed.`;
   // No new bookings while a payment is overdue (17i), said last where the gym has it on.
   if (overdue === 'stop') return `${bookingSettingsSummary(settings, pt, fees, ptFees).replace(/\.$/, '')}. No new bookings while a payment is overdue.`;
   const waitlist = settings.waitlistMax === 0 ? 'no waitlist' : `waitlist of ${settings.waitlistMax}`;
@@ -333,47 +331,6 @@ export function overdueNames(stopped, all) {
     canSeeAll: !all && list.length > shown.length,
     /** How many were not sent by name (a very long list). */
     notSent: count - list.length,
-  };
-}
-
-// ── NO NEW BOOKINGS UNTIL THE MEMBERSHIP AGREEMENT IS SIGNED (18u-iv) ──
-
-/** The two choices, in the box's own words. Every gym starts on the first. */
-export const UNSIGNED_BOOKING_CHOICES = [
-  { value: 'let_book', label: 'Let them book' },
-  { value: 'stop', label: 'Stop new bookings until they sign' },
-];
-
-/** What the part is about, said under its title. */
-export const UNSIGNED_BOOKING_INTRO = "What happens when a member who hasn't signed their membership agreement tries to book in the app.";
-
-/** What the choice does and does not touch, said under it. */
-export const UNSIGNED_BOOKING_HINT =
-  'This stops booking classes, waitlists and personal training in the app. Places already booked stay booked, and your staff can still book a personal training session for them. Once they sign, they can book again.';
-
-/** Said in place of the choice where the business asks for no membership agreement. */
-export const UNSIGNED_NONE_LINE = "You don't ask members to sign a membership agreement.";
-
-/** The box's sentences about who has a membership agreement to sign today, under the choice
- *  picked (`rule`); `changed`: it is not saved yet. Null where the reader is sent no names. */
-export function unsignedPeopleWords(stopped, rule, changed) {
-  if (stopped === null || stopped === undefined || typeof stopped.count !== 'number') return null;
-  const { count } = stopped;
-  if (count === 0) return { title: 'Nobody on your list has a membership agreement to sign today.', rest: null };
-  const title = `Today ${people(count)} on your list ${count === 1 ? 'has' : 'have'} a membership agreement to sign:`;
-  if (rule === 'stop') {
-    return { title, rest: `${changed ? 'Once you save, they' : 'They'} can't book classes or personal training in the app until they sign.` };
-  }
-  return { title, rest: changed ? 'Once you save, they can book in the app again.' : 'They can still book in the app.' };
-}
-
-/** The names sent (the first few by name) and how many more there are. */
-export function unsignedNames(stopped) {
-  const list = Array.isArray(stopped?.people) ? stopped.people : [];
-  const count = typeof stopped?.count === 'number' ? stopped.count : list.length;
-  return {
-    shown: list.map((person) => ({ entryId: person.entryId, name: person.name === '' ? 'No name' : person.name })),
-    more: Math.max(0, count - list.length),
   };
 }
 

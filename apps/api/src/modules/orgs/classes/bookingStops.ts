@@ -78,16 +78,16 @@ export async function overduePeople(
 }
 
 /** The people on the gym's list with a membership agreement to sign today, its own staff left
- *  out: the ones its choice stops, or would, named in Booking settings, by the rule Members'
+ *  out: the ones its choice stops, or would, named in Membership agreements, by the rule Members'
  *  "Agreement not signed" reads. The first \`names\` by name. */
 export async function unsignedPeople(
   sql: Sql,
   gymId: string,
-  rule: StopRule,
+  timezone: string,
   now: Date,
   names: number,
 ): Promise<{ count: number; people: { entryId: string; name: string }[] }> {
-  const toSign = await agreementNotSignedRecords(sql, gymId, dayInTz(now, rule.timezone));
+  const toSign = await agreementNotSignedRecords(sql, gymId, dayInTz(now, timezone));
   return await named(sql, gymId, toSign === null ? [] : [...toSign], names);
 }
 

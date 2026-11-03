@@ -8,12 +8,6 @@ import { useSectionLink } from '../../pages/console/useSectionLink';
 import PlaceLink from './PlaceLink';
 import { overdueHint } from '../../pages/console/checkinRulesView';
 import {
-  UNSIGNED_BOOKING_CHOICES,
-  UNSIGNED_BOOKING_HINT,
-  UNSIGNED_BOOKING_INTRO,
-  UNSIGNED_NONE_LINE,
-  unsignedNames,
-  unsignedPeopleWords,
   OVERDUE_BOOKING_CHOICES,
   OVERDUE_BOOKING_HINT,
   overdueNames,
@@ -37,9 +31,7 @@ import { ConsoleFailed, ConsoleLoading, ConsoleSection } from './ConsoleStates';
 // (RULINGS 2026-09-21, 2026-10-08). All six wait for one Save, as the gym's details do
 // above, and so do the late cancel and no-show fees, the classes' (18h-i) and personal
 // training's own (18h-ii), which only staff who record members' payments can change; so
-// does whether a member books while a payment is overdue (17i), which names who it stops today,
-// and whether one books until their membership agreement is signed (18u-iv), changed by whoever
-// changes the agreements.
+// does whether a member books while a payment is overdue (17i), which names who it stops today.
 
 const inputStyle = {
   background: '#0A0908',
@@ -175,45 +167,6 @@ function OverduePeople({ stopped, rule, changed }) {
   );
 }
 
-/** Who has a membership agreement to sign today, and what the choice picked does to them. See all
- *  opens Members showing them. */
-function UnsignedPeople({ stopped, rule, changed, allTo, guard }) {
-  const words = unsignedPeopleWords(stopped, rule, changed);
-  if (words === null) return null;
-  const names = unsignedNames(stopped);
-  return (
-    <div role="group" aria-label="Who has a membership agreement to sign today" className="rounded-xl px-4 py-3 flex flex-col gap-2" style={boxStyle}>
-      <p className="text-sm font-semibold m-0" style={{ color: '#fff' }}>
-        {words.title}
-      </p>
-      {names.shown.length > 0 ? (
-        <ul className="m-0 p-0 list-none flex flex-col gap-1">
-          {names.shown.map((person) => (
-            <li key={person.entryId} className="text-sm" style={labelStyle}>
-              {person.name}
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {names.more > 0 || (names.shown.length > 0 && allTo !== null) ? (
-        <p className="text-sm m-0 flex flex-wrap items-center gap-2" style={softStyle}>
-          {names.more > 0 ? <span>{`and ${String(names.more)} more`}</span> : null}
-          {allTo !== null ? (
-            <PlaceLink to={allTo} guard={guard} className="c-lk c-w6">
-              See all
-            </PlaceLink>
-          ) : null}
-        </p>
-      ) : null}
-      {words.rest !== null ? (
-        <p className="text-sm m-0" style={softStyle}>
-          {words.rest}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
 /** "/settings#overdue-bookings" (a person's page, beside an overdue bill) brings the part into
  *  view once the box has drawn it. */
 function ToPart({ ready }) {
@@ -237,9 +190,6 @@ export default function BookingSettingsPanel({ org, orgSlug, privileges, readOnl
   // No new bookings while a payment is overdue (17i): as saved, and as picked.
   const [overdue, setOverdue] = useState(null);
   const [overdueDraft, setOverdueDraft] = useState(null);
-  // No new bookings until the membership agreement is signed (18u-iv): as saved, and as picked.
-  const [unsigned, setUnsigned] = useState(null);
-  const [unsignedDraft, setUnsignedDraft] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [saveError, setSaveError] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -261,8 +211,6 @@ export default function BookingSettingsPanel({ org, orgSlug, privileges, readOnl
           setPtFeeDraft(res.data.fees?.currency && res.data.ptFees ? classFeesDraft({ ...res.data.ptFees, currency: res.data.fees.currency }) : null);
           setOverdue(res.data.overdue ?? null);
           setOverdueDraft(res.data.overdue?.rule ?? null);
-          setUnsigned(res.data.unsigned ?? null);
-          setUnsignedDraft(res.data.unsigned?.rule ?? null);
         })
         .catch((err) => {
           if (isLive()) setLoadError(errorText(err, "We couldn't load your booking settings."));
@@ -295,9 +243,7 @@ export default function BookingSettingsPanel({ org, orgSlug, privileges, readOnl
     hasPtFees && fees.canChange && (typedPtFees === null || typedPtFees.lateCancelMinor !== ptFees.lateCancelMinor || typedPtFees.noShowMinor !== ptFees.noShowMinor);
   const hasOverdue = ready && fees !== null && overdue !== null && overdueDraft !== null;
   const overdueChanged = hasOverdue && fees.canChange && overdueDraft !== overdue.rule;
-  const hasUnsigned = ready && unsigned !== null && unsignedDraft !== null;
-  const unsignedChanged = hasUnsigned && unsigned.canChange && unsignedDraft !== unsigned.rule;
-  const changed = ready && (bookingSettingsChanged(draft, settings, pt) || feesChanged || ptFeesChanged || overdueChanged || unsignedChanged);
+  const changed = ready && (bookingSettingsChanged(draft, settings, pt) || feesChanged || ptFeesChanged || overdueChanged);
   const feeTypo = (hasFees && typedFees === null) || (hasPtFees && typedPtFees === null);
   const problem = !ready || !changed ? null : (bookingSettingsProblem(draft) ?? (feeTypo ? 'Type each fee as an amount, or 0 for no fee.' : null));
   const canSave = changed && problem === null && !saving && !readOnly;
@@ -328,13 +274,6 @@ export default function BookingSettingsPanel({ org, orgSlug, privileges, readOnl
     setSaved(null);
     setSaveError(null);
   };
-  const agreementTo = placeFor(orgSlug, privileges, 'agreement');
-  const toSignTo = routed ? placeFor(orgSlug, privileges, 'membersToSign') : null;
-  const pickUnsigned = (rule) => {
-    setUnsignedDraft(rule);
-    setSaved(null);
-    setSaveError(null);
-  };
 
   const save = async (event) => {
     event.preventDefault();
@@ -345,13 +284,11 @@ export default function BookingSettingsPanel({ org, orgSlug, privileges, readOnl
     if (rules === null || (sendsFees && typedFees === null) || (sendsPtFees && typedPtFees === null)) return;
     // The fees go only from staff who may change them; anybody else's save leaves them be.
     const sendsOverdue = hasOverdue && fees.canChange;
-    const sendsUnsigned = hasUnsigned && unsigned.canChange;
     const body = {
       ...rules,
       ...(sendsFees ? { fees: typedFees } : {}),
       ...(sendsPtFees ? { ptFees: typedPtFees } : {}),
       ...(sendsOverdue ? { overdue: overdueDraft } : {}),
-      ...(sendsUnsigned ? { unsigned: unsignedDraft } : {}),
     };
     setSaving(true);
     setSaveError(null);
@@ -366,8 +303,6 @@ export default function BookingSettingsPanel({ org, orgSlug, privileges, readOnl
       setPtFeeDraft(res.data.fees?.currency && res.data.ptFees ? classFeesDraft({ ...res.data.ptFees, currency: res.data.fees.currency }) : null);
       setOverdue(res.data.overdue ?? null);
       setOverdueDraft(res.data.overdue?.rule ?? null);
-      setUnsigned(res.data.unsigned ?? null);
-      setUnsignedDraft(res.data.unsigned?.rule ?? null);
       setSaved(bookingSettingsSavedLine(res.data.movedIn));
     } catch (err) {
       setSaveError(errorText(err, "We couldn't save your booking settings."));
@@ -377,7 +312,7 @@ export default function BookingSettingsPanel({ org, orgSlug, privileges, readOnl
   };
 
   return (
-    <ConsoleSection title="Booking rules" summary={bookingSettingsSummary(settings, pt, fees, fees !== null && ptFees !== null ? { ...ptFees, currency: fees.currency } : null, overdue?.rule ?? null, unsigned?.inUse ? unsigned.rule : null)} forceOpen={loadError !== null} defaultOpen={startOpen}>
+    <ConsoleSection title="Booking rules" summary={bookingSettingsSummary(settings, pt, fees, fees !== null && ptFees !== null ? { ...ptFees, currency: fees.currency } : null, overdue?.rule ?? null)} forceOpen={loadError !== null} defaultOpen={startOpen}>
       {readOnly ? (
         <p className="text-xs mb-3" style={hintStyle}>
           {readOnlyNote(org.orgType)}
@@ -561,58 +496,6 @@ export default function BookingSettingsPanel({ org, orgSlug, privileges, readOnl
                 ) : (
                   <p className="text-xs m-0" style={hintStyle} data-testid="overdue-who">
                     Only staff who record members' payments can change this. Ask the owner.
-                  </p>
-                )}
-              </Part>
-            </div>
-          ) : null}
-
-          {hasUnsigned ? (
-            <div id={SETTINGS_SECTION.unsignedBookings} style={{ scrollMarginTop: 16 }}>
-              {routed ? <ToPart ready /> : null}
-              <Part title="Unsigned agreements" intro={UNSIGNED_BOOKING_INTRO}>
-                {unsigned.inUse ? (
-                  <>
-                    <fieldset className="flex flex-col gap-1 m-0 p-0 border-0 min-w-0">
-                      <legend className="text-sm font-semibold p-0 mb-1" style={labelStyle}>
-                        New bookings
-                      </legend>
-                      {UNSIGNED_BOOKING_CHOICES.map((choice) => (
-                        <label key={choice.value} className="flex items-center gap-3 py-2 min-h-11 cursor-pointer text-sm" style={labelStyle}>
-                          <input
-                            type="radio"
-                            name="unsigned-bookings"
-                            value={choice.value}
-                            checked={unsignedDraft === choice.value}
-                            onChange={() => pickUnsigned(choice.value)}
-                            disabled={off || !unsigned.canChange}
-                            className="w-4 h-4 flex-shrink-0"
-                            style={{ accentColor: '#FF8A1F' }}
-                          />
-                          <span>{choice.label}</span>
-                        </label>
-                      ))}
-                      <span className="text-xs" style={hintStyle}>
-                        {UNSIGNED_BOOKING_HINT}
-                      </span>
-                    </fieldset>
-                    {unsigned.canChange ? null : (
-                      <p className="text-xs m-0" style={hintStyle} data-testid="unsigned-who">
-                        Only the owner can change this.
-                      </p>
-                    )}
-                    <UnsignedPeople stopped={unsigned.stopped} rule={unsignedDraft} changed={unsignedChanged} allTo={toSignTo} guard={changed} />
-                  </>
-                ) : (
-                  <p className="text-sm m-0 flex flex-wrap items-center gap-x-3 gap-y-1" style={labelStyle} data-testid="unsigned-none">
-                    <span>{UNSIGNED_NONE_LINE}</span>
-                    {agreementTo === null ? (
-                      <span style={hintStyle}>Only the owner can set up membership agreements.</span>
-                    ) : (
-                      <PlaceLink to={agreementTo} guard={changed} className="c-lk c-w6">
-                        Set up membership agreements
-                      </PlaceLink>
-                    )}
                   </p>
                 )}
               </Part>

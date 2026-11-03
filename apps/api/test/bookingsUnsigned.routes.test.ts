@@ -19,6 +19,7 @@ import {
   UNSIGNED_BOOKING_WORDS,
   gymAgreementResponseSchema,
   membershipAgreementResponseSchema,
+  type AgreementBookingsResponse,
   type ClassBookingSettingsResponse,
   type ClassBookingView,
   type HeldMembershipsResponse,
@@ -234,10 +235,14 @@ d("no new bookings until the membership agreement is signed (real Postgres)", { 
   };
   const settingsOf = async (gym: Gym, who: Person): Promise<ClassBookingSettingsResponse> =>
     ok(await inject("GET", `/v1/orgs/${gym.id}/booking-settings`, who.cookies)) as ClassBookingSettingsResponse;
-  const setRules = async (gym: Gym, who: Person, rules: { unsigned?: string; overdue?: string }) => {
+  const setOverdue = async (gym: Gym, overdue: string) => {
     const now = await settingsOf(gym, gym.owner);
-    return await inject("PUT", `/v1/orgs/${gym.id}/booking-settings`, who.cookies, { ...now.settings, pt: now.pt, ...rules });
+    return await inject("PUT", `/v1/orgs/${gym.id}/booking-settings`, gym.owner.cookies, { ...now.settings, pt: now.pt, overdue });
   };
+  /** Settings → Membership agreements, Before they book. */
+  const choiceUrl = (gym: Gym) => `/v1/orgs/${gym.id}/agreement/bookings`;
+  const choiceOf = async (gym: Gym, who: Person): Promise<AgreementBookingsResponse> => ok(await inject("GET", choiceUrl(gym), who.cookies)) as AgreementBookingsResponse;
+  const setChoice = (gym: Gym, who: Person, rule: string) => inject("PUT", choiceUrl(gym), who.cookies, { rule });
   const staffWith = async (gym: Gym, name: string, privileges: string[] | null): Promise<Person> => {
     const person = await signedIn(name);
     await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gym.id}, ${person.userId}, 'trainer', ${privileges})`;
@@ -289,7 +294,7 @@ d("no new bookings until the membership agreement is signed (real Postgres)", { 
     // Not signed.
     const ana = await member(gym, "Ana Lopez");
 
-    expect((await setRules(gym, gym.owner, { unsigned: "stop" })).statusCode).toBe(200);
+    expect((await setChoice(gym, gym.owner, "stop")).statusCode).toBe(200);
     const spin = await classAt(gym, 48, 10);
     for (const who of [priya, dev, lee, kim]) {
       const res = await book(gym, who, spin);
@@ -309,12 +314,12 @@ d("no new bookings until the membership agreement is signed (real Postgres)", { 
 
   it("every gym starts letting everybody book; Stop changes only new bookings, and signing lets them book at once", async () => {
     const gym = await makeGym("Starts Open Gym");
-    expect((await settingsOf(gym, gym.owner)).unsigned.rule).toBe("let_book");
+    expect((await choiceOf(gym, gym.owner)).rule).toBe("let_book");
     const ana = await member(gym, "Ana Lopez");
     const first = await classAt(gym, 30, 10);
     const second = await classAt(gym, 50, 10);
     expect((await book(gym, ana, first)).statusCode).toBe(200);
-    expect((await setRules(gym, gym.owner, { unsigned: "stop" })).statusCode).toBe(200);
+    expect((await setChoice(gym, gym.owner, "stop")).statusCode).toBe(200);
     // The class she holds stays hers and she can cancel it; a new one is refused, and says why.
     expect((await seen(gym, ana, second)).can).toMatchObject({ book: false, joinWaitlist: false, claim: false, why: "agreement_not_signed" });
     expect((await seen(gym, ana, first)).mine?.status).toBe("booked");
@@ -331,7 +336,7 @@ d("no new bookings until the membership agreement is signed (real Postgres)", { 
     expect((await book(gym, ana, second)).statusCode).toBe(200);
     // Switched off again: nobody is stopped.
     const ben = await member(gym, "Ben Unsigned");
-    expect((await setRules(gym, gym.owner, { unsigned: "let_book" })).statusCode).toBe(200);
+    expect((await setChoice(gym, gym.owner, "let_book")).statusCode).toBe(200);
     expect((await book(gym, ben, second)).statusCode).toBe(200);
   });
 
@@ -340,11 +345,13 @@ d("no new bookings until the membership agreement is signed (real Postgres)", { 
     const ana = await member(gym, "Ana Lopez");
     await owes(gym, ana.gold, "2026-09-20");
     const spin = await classAt(gym, 48, 10);
-    expect((await setRules(gym, gym.owner, { unsigned: "stop", overdue: "stop" })).statusCode).toBe(200);
+    expect((await setChoice(gym, gym.owner, "stop")).statusCode).toBe(200);
+    expect((await setOverdue(gym, "stop")).statusCode).toBe(200);
     expect(said(await book(gym, ana, spin))).toEqual([403, "payment_overdue", OVERDUE_BOOKING_WORDS]);
-    expect((await setRules(gym, gym.owner, { overdue: "let_book" })).statusCode).toBe(200);
+    expect((await setOverdue(gym, "let_book")).statusCode).toBe(200);
     expect(said(await book(gym, ana, spin))[1]).toBe("agreement_not_signed");
-    expect((await setRules(gym, gym.owner, { unsigned: "let_book", overdue: "stop" })).statusCode).toBe(200);
+    expect((await setChoice(gym, gym.owner, "let_book")).statusCode).toBe(200);
+    expect((await setOverdue(gym, "stop")).statusCode).toBe(200);
     expect(said(await book(gym, ana, spin))[1]).toBe("payment_overdue");
   });
 
@@ -359,7 +366,7 @@ d("no new bookings until the membership agreement is signed (real Postgres)", { 
     expect((await book(gym, priya, full)).statusCode).toBe(200);
     expect((await book(gym, ana, full, true)).statusCode).toBe(200);
     expect((await book(gym, dev, full, true)).statusCode).toBe(200);
-    expect((await setRules(gym, gym.owner, { unsigned: "stop" })).statusCode).toBe(200);
+    expect((await setChoice(gym, gym.owner, "stop")).statusCode).toBe(200);
     expect(said(await book(gym, ben, full, true))).toEqual([403, "agreement_not_signed", UNSIGNED_BOOKING_WORDS]);
     expect((await seen(gym, ana, full)).mine).toMatchObject({ status: "waitlisted", waitlistPlace: 1 });
     // Priya cancels: the freed place goes past Ana to Dev, and Ana keeps her place.
@@ -387,7 +394,7 @@ d("no new bookings until the membership agreement is signed (real Postgres)", { 
     await signs(gym, dev.entryId, devPt, "Dev Patel");
     // Ana signed her PT pack but not Gold Monthly: one left to sign stops her.
     await signs(gym, ana.entryId, anaPt, "Ana Lopez");
-    expect((await setRules(gym, gym.owner, { unsigned: "stop" })).statusCode).toBe(200);
+    expect((await setChoice(gym, gym.owner, "stop")).statusCode).toBe(200);
 
     const mine = ok(await inject("GET", `/v1/orgs/${gym.id}/member-pt?week=0`, ana.cookies)) as MemberPtResponse;
     expect(mine.days.every((day) => day.why === "agreement_not_signed" && day.pays === null)).toBe(true);
@@ -405,7 +412,7 @@ d("no new bookings until the membership agreement is signed (real Postgres)", { 
     expect(desk.statusCode, desk.body).toBe(200);
   });
 
-  it("Booking settings: who has one to sign by name for staff who see Members, the switch only the owner's, and another gym gets nothing", async () => {
+  it("Membership agreements, Before they book: who has one to sign by name for staff who see Members, the switch only theirs who change the agreements, and another gym gets nothing", async () => {
     const gym = await makeGym("Settings Gym");
     const names = ["Ana Lopez", "Bo Ek", "Cy Dunn", "Di Fox", "Ed Gray", "Flo Hart"];
     const people: Member[] = [];
@@ -417,30 +424,29 @@ d("no new bookings until the membership agreement is signed (real Postgres)", { 
     const gone = await member(gym, "Gone Member");
     await sql`UPDATE gym_member_list_entries SET former_at = now() WHERE id = ${gone.entryId}`;
 
-    const owner = await settingsOf(gym, gym.owner);
-    expect(owner.unsigned).toEqual({
+    expect(await choiceOf(gym, gym.owner)).toEqual({
       rule: "let_book",
-      canChange: true,
       inUse: true,
       stopped: { count: 6, people: people.slice(0, 5).map((p, i) => ({ entryId: p.entryId, name: names[i] ?? "" })) },
     });
+    // Booking settings no longer carry it.
+    expect(Object.keys(await settingsOf(gym, gym.owner))).not.toContain("unsigned");
 
-    // A manager of the timetable who sees Members but may not change the agreements: names, no switch.
+    // Staff who see Members and run the timetable, but may not change the agreements: neither read nor change it.
     const manager = await staffWith(gym, "Pat Manager", ["members.read", "members.confirm", "schedule.manage"]);
-    expect((await settingsOf(gym, manager)).unsigned).toMatchObject({ rule: "let_book", canChange: false, inUse: true, stopped: { count: 6 } });
-    const refused = await setRules(gym, manager, { unsigned: "stop" });
-    expect(said(refused)[0]).toBe(403);
-    expect((await settingsOf(gym, gym.owner)).unsigned.rule).toBe("let_book");
-    expect((await setRules(gym, manager, { unsigned: "let_book" })).statusCode).toBe(200);
-    // One who runs the timetable but does not see Members: no names.
-    const planner = await staffWith(gym, "Pat Planner", ["members.read", "schedule.manage"]);
-    expect((await settingsOf(gym, planner)).unsigned.stopped).toBeNull();
+    expect(said(await inject("GET", choiceUrl(gym), manager.cookies))[0]).toBe(403);
+    expect(said(await setChoice(gym, manager, "stop"))[0]).toBe(403);
+    expect((await choiceOf(gym, gym.owner)).rule).toBe("let_book");
+    // One who changes the agreements but does not see Members: the choice, and no names.
+    const editor = await staffWith(gym, "Pat Editor", ["members.read", "org.manage"]);
+    expect(await choiceOf(gym, editor)).toEqual({ rule: "let_book", inUse: true, stopped: null });
 
-    const saved = ok(await setRules(gym, gym.owner, { unsigned: "stop" })) as ClassBookingSettingsResponse;
-    expect(saved.unsigned.rule).toBe("stop");
+    expect((ok(await setChoice(gym, gym.owner, "stop")) as AgreementBookingsResponse).rule).toBe("stop");
+    // The same again changes nothing and writes nothing more.
+    expect((await setChoice(gym, gym.owner, "stop")).statusCode).toBe(200);
     const audit = await sql<{ meta: Record<string, string> }[]>`
-      SELECT meta FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.booking_settings_changed' ORDER BY at DESC, id DESC LIMIT 1`;
-    expect(audit[0]?.meta).toEqual({ unsigned: "let_book -> stop" });
+      SELECT meta FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.agreement_bookings_changed' ORDER BY at DESC, id DESC`;
+    expect(audit.map((row) => row.meta)).toEqual([{ unsigned: "let_book -> stop" }]);
 
     // The person's page says it under Ana's membership, not the coach's or Zed's.
     expect((await pageOf(gym, gym.owner, people[0]?.entryId ?? "")).unsignedStopsBookings).toBe(true);
@@ -455,14 +461,16 @@ d("no new bookings until the membership agreement is signed (real Postgres)", { 
 
     // Another gym's owner reads and changes nothing here.
     const other = await makeGym("Other Gym", false);
-    const read = await inject("GET", `/v1/orgs/${gym.id}/booking-settings`, other.owner.cookies);
+    const read = await inject("GET", choiceUrl(gym), other.owner.cookies);
     expect([403, 404]).toContain(read.statusCode);
     expect(read.body).not.toContain("Ana Lopez");
-    expect([403, 404]).toContain((await setRules(gym, other.owner, { unsigned: "let_book" })).statusCode);
-    expect((await settingsOf(gym, gym.owner)).unsigned.rule).toBe("stop");
+    expect([403, 404]).toContain((await setChoice(gym, other.owner, "let_book")).statusCode);
+    expect((await choiceOf(gym, gym.owner)).rule).toBe("stop");
+    // No sign-in: nothing.
+    expect((await inject("GET", choiceUrl(gym), {})).statusCode).toBe(401);
     // The other gym asks for no agreement: no names, and the screen says so.
-    expect((await settingsOf(other, other.owner)).unsigned).toEqual({ rule: "let_book", canChange: true, inUse: false, stopped: null });
+    expect(await choiceOf(other, other.owner)).toEqual({ rule: "let_book", inUse: false, stopped: null });
     // A value that is not one of the two is refused.
-    expect((await setRules(gym, gym.owner, { unsigned: "sign_later" })).statusCode).toBe(400);
+    expect((await setChoice(gym, gym.owner, "sign_later")).statusCode).toBe(400);
   });
 });
