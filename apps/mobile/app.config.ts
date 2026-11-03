@@ -2,7 +2,7 @@
 // each folder on his laptop, side by side: each has its own name under the icon,
 // its own application id, and talks only to its own folder's api (CLAUDE.md §8).
 // Expo loads this file alone, so the rule lives here and imports no other .ts.
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ExpoConfig } from "expo/config";
 import type { PhoneAppExtra } from "@app/shared";
@@ -44,7 +44,12 @@ export function copyFor(written: string): Copy {
   };
 }
 
-export function configFor(copy: Copy): ExpoConfig {
+/** Firebase's file for the Android app (ROADMAP Stage 5 item 18b-i), downloaded from the kwazo
+ *  project's console and kept out of git: `apps/mobile/google-services.json`. A copy built without
+ *  it runs, and gets no notifications. */
+export const GOOGLE_SERVICES_FILE = "./google-services.json";
+
+export function configFor(copy: Copy, firebase = false): ExpoConfig {
   const extra: PhoneAppExtra = { copyName: copy.name, apiUrl: copy.apiUrl };
   return {
     name: copy.name,
@@ -55,7 +60,7 @@ export function configFor(copy: Copy): ExpoConfig {
     userInterfaceStyle: "dark",
     backgroundColor: "#0A0908",
     scheme: copy.scheme,
-    android: { package: copy.applicationId, allowBackup: false },
+    android: { package: copy.applicationId, allowBackup: false, ...(firebase ? { googleServicesFile: GOOGLE_SERVICES_FILE } : {}) },
     // Keeps the key store's sign-in out of Android's backups, so it never lands on another phone.
     // shortNativeBuild: C++ build folders kept under Windows' path limit (its own file says why).
     // The meal photo (ROADMAP Stage 5 33b-i): the camera and the photos the person picks, and never the
@@ -64,6 +69,8 @@ export function configFor(copy: Copy): ExpoConfig {
       "expo-secure-store",
       ["expo-camera", { cameraPermission: "Allow $(PRODUCT_NAME) to take photos of your meals and your gym's updates.", microphonePermission: false, recordAudioAndroid: false }],
       ["expo-image-picker", { photosPermission: "Allow $(PRODUCT_NAME) to open the photos you pick.", microphonePermission: false }],
+      // A gym's messages as notifications (18b-i): the small icon and its colour on Android's bar.
+      ["expo-notifications", { icon: "./assets/notification-icon.png", color: "#FF8A1F" }],
       "./plugins/shortNativeBuild.js",
     ],
     extra,
@@ -81,5 +88,5 @@ export default function config(): ExpoConfig {
       `apps/mobile/.copy is missing. Write one word in it: ${COPY_KEYS.join(", ")}.`,
     );
   }
-  return configFor(copyFor(written));
+  return configFor(copyFor(written), existsSync(join(__dirname, GOOGLE_SERVICES_FILE)));
 }

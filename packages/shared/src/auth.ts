@@ -198,6 +198,12 @@ export const phoneKeptSessionSchema = z.object({
 });
 export type PhoneKeptSession = z.infer<typeof phoneKeptSessionSchema>;
 
+/** What the phone keeps after a Sign out the server has not heard yet (no signal): the sign-in to end,
+ *  told again at each opening and each return to the app until the server answers. Until then that
+ *  sign-in stays open on the server, and its phone notifications with it (18b-i round one, H1). */
+export const phoneSignOutOwedSchema = z.object({ signOutOwed: oneTimeTokenSchema }).strict();
+export type PhoneSignOutOwed = z.infer<typeof phoneSignOutOwedSchema>;
+
 /** A refusal as this api words it: `message` is written for people, and `retryAfterSeconds`
  *  is the server's own wait. The phone app reads every refusal through this. */
 export const apiRefusalSchema = z.object({

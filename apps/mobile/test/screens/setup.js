@@ -162,3 +162,88 @@ jest.mock("expo-image-manipulator", () => {
   };
   return { drawing, ImageManipulator: { manipulate }, SaveFormat: { JPEG: "jpeg", PNG: "png", WEBP: "webp" } };
 });
+// The phone's notifications (18b-i). A test says what Android answers (`notifications.permission`,
+// `afterAsk`, `token`) and reads what was asked of it. Off by default, so no screen test meets the
+// question it did not ask for.
+jest.mock("expo-notifications", () => {
+  const off = { granted: false, canAskAgain: false, status: "denied" };
+  const notifications = {
+    permission: off,
+    afterAsk: off,
+    asked: 0,
+    token: "phone-address-1",
+    presented: [],
+    dismissed: [],
+    dismissedAll: 0,
+    unregistered: 0,
+    taps: [],
+    tokenListeners: [],
+    last: null,
+    handler: null,
+    channels: [],
+  };
+  // Listeners stay: the app listens for taps from the moment it starts, once.
+  const reset = () => {
+    Object.assign(notifications, { permission: off, afterAsk: off, asked: 0, token: "phone-address-1", presented: [], dismissed: [], dismissedAll: 0, unregistered: 0, last: null, handler: null, channels: [] });
+  };
+  return {
+    notifications,
+    reset,
+    AndroidImportance: { DEFAULT: 5 },
+    setNotificationHandler: (handler) => {
+      notifications.handler = handler;
+    },
+    setNotificationChannelAsync: (id, channel) => {
+      notifications.channels.push({ id, ...channel });
+      return Promise.resolve(null);
+    },
+    getPermissionsAsync: () => Promise.resolve(notifications.permission),
+    requestPermissionsAsync: () => {
+      notifications.asked += 1;
+      notifications.permission = notifications.afterAsk;
+      return Promise.resolve(notifications.afterAsk);
+    },
+    getDevicePushTokenAsync: () => Promise.resolve({ type: "android", data: notifications.token }),
+    addPushTokenListener: (listener) => {
+      notifications.tokenListeners.push(listener);
+      return { remove: () => { notifications.tokenListeners = notifications.tokenListeners.filter((one) => one !== listener); } };
+    },
+    addNotificationResponseReceivedListener: (listener) => {
+      notifications.taps.push(listener);
+      return { remove: () => { notifications.taps = notifications.taps.filter((one) => one !== listener); } };
+    },
+    getLastNotificationResponse: () => notifications.last,
+    clearLastNotificationResponse: () => {
+      notifications.last = null;
+    },
+    getPresentedNotificationsAsync: () => Promise.resolve(notifications.presented),
+    dismissNotificationAsync: (id) => {
+      notifications.dismissed.push(id);
+      return Promise.resolve();
+    },
+    dismissAllNotificationsAsync: () => {
+      notifications.dismissedAll += 1;
+      return Promise.resolve();
+    },
+    unregisterForNotificationsAsync: () => {
+      notifications.unregistered += 1;
+      return Promise.resolve();
+    },
+  };
+});
+// The phone's own key store, for what is not the sign-in (the notifications' "Not now").
+jest.mock("expo-secure-store", () => {
+  const kept = new Map();
+  return {
+    kept,
+    getItemAsync: (key) => Promise.resolve(kept.has(key) ? kept.get(key) : null),
+    setItemAsync: (key, value) => {
+      kept.set(key, value);
+      return Promise.resolve();
+    },
+    deleteItemAsync: (key) => {
+      kept.delete(key);
+      return Promise.resolve();
+    },
+  };
+});

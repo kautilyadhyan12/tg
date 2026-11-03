@@ -5,16 +5,17 @@
 // removes a meal. Every food is priced as a logged meal's is, so a planned meal logs
 // at the numbers the plan shows. Each change carries the phone's own id: sent twice,
 // it is made once.
+import { createHash } from "node:crypto";
 import {
-  DIET_LABEL_CAUTION, FOOD_ALLERGY_CAUTION, dietAllows, dietPlanResponseSchema,
-  type ChosenItem, type DietPlanDayReply, type DietPlanMake, type DietPlanResponse, type MakeDietPlanRequest,
+  DIET_LABEL_CAUTION, FOOD_ALLERGY_CAUTION, dietAllows, dietPlanResponseSchema, isOwnFood,
+  type ChosenItem, type FoodMeasure, type MealChoice, type DietPlanDayReply, type DietPlanMake, type DietPlanResponse, type MakeDietPlanRequest,
   type Diet, type MealIdea, type MealItem, type PutDietPlanDayRequest, type SwapDietPlanMealRequest,
 } from "@app/shared";
 import { getUserFoodAnswers } from "../users/service.js";
 import { planDay, swapMeal } from "./dietPlan.js";
 import { CURATED_FOODS } from "./foods.js";
 import { changeDietPlan, getDietPlan as readDietPlan, type StoredDays, type StoredMeal } from "./dietPlanRepo.js";
-import { NutritionError, getTargets, resolveChosenItems, totals, type NutritionDeps } from "./service.js";
+import { NutritionError, getTargets, itemsMeasures, ownFoodItem, pricedForGood, resolveChosenItems, totals, type NutritionDeps } from "./service.js";
 
 type Targets = NonNullable<Awaited<ReturnType<typeof getTargets>>["targets"]>;
 interface Person { make: DietPlanMake; diet: Awaited<ReturnType<typeof getUserFoodAnswers>>["diet"]; mealsPerDay: number | null; targets: Targets | null }
@@ -48,8 +49,22 @@ function dayReply(day: number, meals: readonly StoredMeal[], who: Person): DietP
     kcal: planned.kcal - target.kcal, proteinG: planned.proteinG - target.proteinG,
     carbsG: planned.carbsG - target.carbsG, fatG: planned.fatG - target.fatG,
   };
-  return { day, meals: withTotals, planned, target, off };
+  return { day, meals: withTotals, planned, target, off, version: dayVersion(meals) };
 }
+
+/** JSON with every object's keys in one order, so the same day always reads the same. */
+const steady = (value: unknown): string =>
+  Array.isArray(value)
+    ? `[${value.map(steady).join(",")}]`
+    : value !== null && typeof value === "object"
+      ? `{${Object.entries(value).filter(([, v]) => v !== undefined).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([k, v]) => `${JSON.stringify(k)}:${steady(v)}`).join(",")}}`
+      : JSON.stringify(value);
+
+/** A day's version: every food, amount and number of its meals, in order. */
+export const dayVersion = (meals: readonly StoredMeal[]): string => createHash("sha256").update(steady(meals)).digest("hex").slice(0, 16);
+
+const changedSince = (current: readonly StoredMeal[] | undefined, version: string | undefined): boolean =>
+  version !== undefined && dayVersion(current ?? []) !== version;
 
 function reply(days: StoredDays, who: Person): DietPlanResponse {
   return dietPlanResponseSchema.parse({
@@ -145,15 +160,32 @@ export async function putDietPlanDay(
   const plan = await readDietPlan(deps.sql, userId);
   if (plan.recentChanges.includes(input.changeId)) return reply(plan.days, await person(deps, userId));
   const kept = new Map((plan.days[day - 1] ?? []).flatMap((m) => m.items).map((i) => [`${i.canonical}|${String(i.gramsPoint)}`, i]));
-  const keptOf = (c: ChosenItem): MealItem | undefined => ("grams" in c ? kept.get(`${c.canonical}|${String(c.grams)}`) : undefined);
-  const fresh = await priced(deps, userId, input.meals.map((m) => m.items.filter((c) => keptOf(c) === undefined)));
+  const keptOf = (c: MealChoice): MealItem | undefined => (!isOwnFood(c) && "grams" in c ? kept.get(`${c.canonical}|${String(c.grams)}`) : undefined);
+  const toPrice = input.meals.map((m) => m.items.filter((c): c is ChosenItem => !isOwnFood(c) && keptOf(c) === undefined));
+  // A plan is for days to come: a food it could not price again on one of them is not put in it.
+  for (const c of toPrice.flat()) {
+    const held = await pricedForGood(deps, userId, c.canonical);
+    if (!held.ok) {
+      const what = held.name === null ? "This food" : held.name;
+      throw new NutritionError(400, "not_for_plan", `${what} can’t go in a meal plan. Take it off, then save. You can still log it to a meal.`);
+    }
+  }
+  const fresh = await priced(deps, userId, toPrice);
   const meals = input.meals.map((m, i) => {
-    const own = fresh[i] ?? [];
+    const priced = fresh[i] ?? [];
     let at = 0;
-    return { mealType: m.mealType, items: m.items.flatMap((c) => { const item = keptOf(c) ?? own[at++]; return item === undefined ? [] : [item]; }) };
+    // A person's own food is priced by its own numbers, under a name of its own in the meal, as a logged meal's is.
+    const taken = new Set(m.items.flatMap((c) => (isOwnFood(c) ? [] : [c.canonical])));
+    return {
+      mealType: m.mealType,
+      items: m.items.flatMap((c) => {
+        const item = isOwnFood(c) ? ownFoodItem(c, taken) : keptOf(c) ?? priced[at++];
+        return item === undefined ? [] : [item];
+      }),
+    };
   });
   const week = await changeDietPlan(deps.sql, userId, input.changeId, (current) => {
-    if (input.shown !== undefined && !sameFoods(current[day - 1] ?? [], input.shown)) {
+    if (changedSince(current[day - 1], input.version)) {
       throw new NutritionError(409, "plan_changed", "Your plan has changed. Open it again to make this change.");
     }
     return current.map((old, at) => (at === day - 1 ? meals : old));
@@ -161,9 +193,12 @@ export async function putDietPlanDay(
   return reply(week, await person(deps, userId));
 }
 
-/** Whether a day's meals hold, in order, the foods the phone showed. */
-const sameFoods = (meals: readonly StoredMeal[], shown: readonly (readonly string[])[]): boolean =>
-  meals.length === shown.length && meals.every((m, at) => JSON.stringify(m.items.map((i) => i.canonical)) === JSON.stringify(shown[at]));
+/** Each food of one meal of the plan with its own measures, for its amount to be changed. */
+export async function planMealMeasures(deps: NutritionDeps, userId: string, day: number, meal: number): Promise<FoodMeasure[][] | null> {
+  const plan = await readDietPlan(deps.sql, userId);
+  const items = plan.days[day - 1]?.[meal]?.items;
+  return items === undefined ? null : await itemsMeasures(deps, userId, items, false);
+}
 
 const sameMeal = (a: StoredMeal | undefined, b: StoredMeal): boolean => a !== undefined && JSON.stringify(a) === JSON.stringify(b);
 
@@ -178,7 +213,7 @@ export async function swapDietPlanMeal(
   if (plan.recentChanges.includes(input.changeId)) return reply(plan.days, who);
   const meal = plan.days[day - 1]?.[input.meal];
   if (meal === undefined) throw new NutritionError(404, "not_found", "Meal not found.");
-  if (input.shown !== undefined && JSON.stringify(meal.items.map((i) => i.canonical)) !== JSON.stringify(input.shown)) {
+  if (changedSince(plan.days[day - 1], input.version)) {
     throw new NutritionError(409, "plan_changed", "Your plan has changed. Open it again to swap this meal.");
   }
   if (who.diet === null) throw refusal({ status: "needs_answers", missing: ["diet"] });
@@ -196,7 +231,7 @@ export async function swapDietPlanMeal(
   const week = await changeDietPlan(deps.sql, userId, input.changeId, (current) => {
     const meals = current[day - 1] ?? [];
     // Changed since it was read (another change came first): the idea was made for a meal that is gone.
-    if (!sameMeal(meals[input.meal], meal)) throw new NutritionError(409, "plan_changed", "Your plan has changed. Open it again to swap this meal.");
+    if (!sameMeal(meals[input.meal], meal) || changedSince(meals, input.version)) throw new NutritionError(409, "plan_changed", "Your plan has changed. Open it again to swap this meal.");
     return current.map((old, at) => (at === day - 1 ? old.map((m, i) => (i === input.meal ? { mealType: m.mealType, items } : m)) : old));
   });
   return reply(week, who);

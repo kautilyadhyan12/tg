@@ -18,7 +18,6 @@ import { mealTypeName } from "./day";
 import { ideaAmountWords, ideaAsMeal, ideaFoodWords, ideaMealType, ideaName } from "./ideaRules";
 import { useMealOutbox } from "./MealOutbox";
 import { loggedAmount } from "./measures";
-import { planMealAsMeal } from "./planRules";
 import { foodTitle } from "./rows";
 
 export const IDEAS_READ = "/v1/nutrition/suggestions";
@@ -54,12 +53,14 @@ interface MealIdeasProps {
   bare?: boolean;
   /** The Dashboard's Recommended box, for somebody with a meal plan: the plan's next meal, in place of an idea. */
   planned?: PlannedNow;
+  /** The Dashboard's Log meal: it opens the Food page's What to eat next, never logs by itself (Kd, 2026-11-02). */
+  onLog?: () => void;
 }
 
 /** "loading": whether there is a plan isn't known yet. `meal` null: every meal of today's plan is logged, or today has none. */
 export type PlannedNow = "loading" | { failed: string; retry: () => void } | { meal: DietPlanMeal | null; allLogged: boolean; canLog: boolean; caution: string; labelCaution: string | null }
 
-export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = false, planned }: MealIdeasProps) {
+export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = false, planned, onLog }: MealIdeasProps) {
   const { read, again, outbox, view, waiting, old } = useIdeas(fresh);
   const onDashboard = onMore !== undefined;
   const [said, setSaid] = useState<{ words: string; meal: string | null } | null>(null);
@@ -132,7 +133,7 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
       </View>
     );
   } else if (plannedNow !== null && onMore !== undefined) {
-    const { meal, allLogged, canLog, caution, labelCaution } = plannedNow;
+    const { meal, allLogged, caution, labelCaution } = plannedNow;
     body =
       meal === null ? (
         <>
@@ -140,14 +141,7 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
           <Button label="See meal plan" kind="link" compact style={styles.start} onPress={onMore} />
         </>
       ) : (
-        <BestPlanned
-          meal={meal}
-          held={logging || outbox === null || !canLog}
-          onLog={() => {
-            void keep(planMealAsMeal(meal, newGoalId(), new Date()), meal.mealType);
-          }}
-          onMore={onMore}
-        />
+        <BestPlanned meal={meal} onLog={onLog ?? onMore} onMore={onMore} />
       );
     foot =
       meal === null ? null : (
@@ -210,14 +204,7 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
       <>
         {onDashboard ? (
           next.ideas[0] === undefined ? null : (
-            <BestIdea
-              idea={next.ideas[0]}
-              held={logging || outbox === null}
-              onLog={(idea) => {
-                void log(idea);
-              }}
-              onMore={onMore}
-            />
+            <BestIdea idea={next.ideas[0]} onLog={onLog ?? onMore} onMore={onMore} />
           )
         ) : (
           next.ideas.map(row)
@@ -350,7 +337,7 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
 }
 
 /** The Dashboard's one idea: its numbers large, its foods as a short table, and the one thing to do. */
-function BestIdea({ idea, held, onLog, onMore }: { idea: MealIdea; held: boolean; onLog: (idea: MealIdea) => void; onMore: () => void }) {
+function BestIdea({ idea, onLog, onMore }: { idea: MealIdea; onLog: () => void; onMore: () => void }) {
   return (
     <>
       <View>
@@ -372,15 +359,7 @@ function BestIdea({ idea, held, onLog, onMore }: { idea: MealIdea; held: boolean
         ))}
       </View>
       <View style={styles.actions}>
-        <Button
-          label="Log meal"
-          compact
-          disabled={held}
-          say={`Log ${ideaName(idea)}`}
-          onPress={() => {
-            onLog(idea);
-          }}
-        />
+        <Button label="Log meal" compact say={`Log ${ideaName(idea)}`} onPress={onLog} />
         <Button label="More ideas" kind="link" compact onPress={onMore} />
       </View>
     </>
@@ -388,7 +367,7 @@ function BestIdea({ idea, held, onLog, onMore }: { idea: MealIdea; held: boolean
 }
 
 /** The same box for somebody with a meal plan: the plan's next meal. */
-function BestPlanned({ meal, held, onLog, onMore }: { meal: DietPlanMeal; held: boolean; onLog: () => void; onMore: () => void }) {
+function BestPlanned({ meal, onLog, onMore }: { meal: DietPlanMeal; onLog: () => void; onMore: () => void }) {
   return (
     <>
       <View>
@@ -415,7 +394,7 @@ function BestPlanned({ meal, held, onLog, onMore }: { meal: DietPlanMeal; held: 
         </Txt>
       )}
       <View style={styles.actions}>
-        <Button label="Log meal" compact disabled={held} say={`Log ${ideaName(meal)}`} onPress={onLog} />
+        <Button label="Log meal" compact say={`Log ${ideaName(meal)}`} onPress={onLog} />
         <Button label="See meal plan" kind="link" compact onPress={onMore} />
       </View>
     </>

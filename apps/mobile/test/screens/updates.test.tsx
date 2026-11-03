@@ -1321,6 +1321,23 @@ describe("posting", () => {
     expect(screen.queryByTestId("post-camera")).toBeNull();
   });
 
+  it("never asked: the camera says why, and Android asks only when Allow camera is pressed (18b-i)", async () => {
+    const asks = jest.requireMock<{ camera: { asked: number } }>("expo-camera").camera;
+    asks.asked = 0;
+    const server = serverOf({ [postsOf(IRON)]: on(IRON) });
+    await openUpdates(server.ask, IRON);
+    await fireEvent.press(await page().findByRole("button", { name: "Write a post" }));
+    camera.permission = { granted: false, canAskAgain: true, status: "undetermined", expires: "never" };
+    camera.afterAsk = GRANTED;
+    await fireEvent.press(await screen.findByRole("button", { name: "Take a photo" }));
+    expect(await screen.findByText("Allow camera access")).toBeTruthy();
+    expect(screen.getByText("Take a photo to share in your gym’s Updates.")).toBeTruthy();
+    expect(asks.asked).toBe(0);
+    await fireEvent.press(screen.getByRole("button", { name: "Allow camera" }));
+    expect(asks.asked).toBe(1);
+    expect(await screen.findByTestId("camera-view")).toBeTruthy();
+  });
+
   it("the camera starts on the main one, changes to the selfie camera and back, and a selfie goes on the post", async () => {
     const server = serverOf({ [postsOf(IRON)]: on(IRON) });
     await openUpdates(server.ask, IRON);

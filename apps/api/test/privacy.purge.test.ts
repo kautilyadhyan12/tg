@@ -254,8 +254,8 @@ d("DPDP Day-14 purge (real Postgres)", () => {
               VALUES (${challengeId}, ${userId})`;
     // Day 0 deletes push tokens; this row stands in for one that outlived it
     // (a failed Day-0 write, or a later writer) — T3 F5.
-    await sql`INSERT INTO push_tokens (user_id, token, platform)
-              VALUES (${userId}, ${"tok-" + userId}, 'android')`;
+    await sql`INSERT INTO push_tokens (user_id, token, platform, family_id)
+              VALUES (${userId}, ${"tok-" + userId}, 'android', gen_random_uuid())`;
 
     return {
       userId,

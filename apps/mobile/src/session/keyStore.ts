@@ -10,3 +10,11 @@ export const phoneKeyStore: KeyStore = {
     SecureStore.setItemAsync(KEY, value, { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY }),
   clear: () => SecureStore.deleteItemAsync(KEY),
 };
+
+/** A Sign out the server has not heard yet, under its own key (18b-i): a sign-in never writes over it. */
+export const phoneOwedStore: KeyStore = {
+  read: () => SecureStore.getItemAsync("sign-out-owed"),
+  write: (value) =>
+    SecureStore.setItemAsync("sign-out-owed", value, { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY }),
+  clear: () => SecureStore.deleteItemAsync("sign-out-owed"),
+};

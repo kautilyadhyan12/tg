@@ -207,8 +207,8 @@ d("DPDP data export (real Postgres)", () => {
     await sql`INSERT INTO user_xp (user_id, total_xp) VALUES (${userId}, 456)`;
     await sql`INSERT INTO challenge_participants (challenge_id, user_id)
               VALUES (${challengeId}, ${userId})`;
-    await sql`INSERT INTO push_tokens (user_id, token, platform)
-              VALUES (${userId}, ${"tok-" + userId}, 'android')`;
+    await sql`INSERT INTO push_tokens (user_id, token, platform, family_id)
+              VALUES (${userId}, ${"tok-" + userId}, 'android', gen_random_uuid())`;
     return { userId, name };
   }
 

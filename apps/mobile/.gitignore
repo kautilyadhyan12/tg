@@ -4,3 +4,5 @@
 android/
 ios/
 .expo/
+# Firebase's file for the Android app (18b-i), from the kwazo project's console. Each folder copies it in.
+google-services.json

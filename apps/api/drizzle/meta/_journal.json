@@ -1343,7 +1343,14 @@
       "idx": 191,
       "version": "7",
       "when": 1790726400192,
-      "tag": "0192_terminal_keep_card",
+      "tag": "0192_phone_notifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 192,
+      "version": "7",
+      "when": 1790726400193,
+      "tag": "0193_terminal_keep_card",
       "breakpoints": true
     }
   ]

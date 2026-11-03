@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Image, Linking, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { Modal } from "../../look/Modal";
+import { CAMERA_OFF } from "../../look/cameraWords";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
@@ -394,14 +395,7 @@ function Camera({
   const [ready, setReady] = useState(false);
   const [taking, setTaking] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
-  const asked = useRef(false);
 
-  // The phone's own question, once, the first time the camera opens.
-  useEffect(() => {
-    if (permission === null || permission.granted || !permission.canAskAgain || asked.current) return;
-    asked.current = true;
-    void ask();
-  }, [permission, ask]);
 
   // How many photo scans are left, each time the camera opens; never a reason to hold anything up.
   useEffect(() => {
@@ -510,10 +504,16 @@ function Camera({
             <Icon name="camera" size={34} colour="orange" />
           </View>
           <Txt kind="h2" style={styles.centre}>
-            Allow the camera
+            {permission?.canAskAgain === false ? CAMERA_OFF.title : "Allow camera access"}
           </Txt>
           <Txt kind="small" style={styles.centre}>
-            {scanning ? "To scan your food’s barcode." : mode === "label" ? "To take a photo of your food’s label." : "To take a photo of your meal."}
+            {permission?.canAskAgain === false
+              ? CAMERA_OFF.line
+              : scanning
+                ? "Scan a food’s barcode to look it up."
+                : mode === "label"
+                  ? "Take a photo of a food label to read its nutrition."
+                  : "Take a photo of your meal to estimate what’s in it."}
           </Txt>
           {permission === null ? null : (
             <Button

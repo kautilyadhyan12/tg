@@ -25,6 +25,7 @@ import { Icon } from "../../look/Icon";
 import { Modal } from "../../look/Modal";
 import { Sheet } from "../../look/Sheet";
 import { fonts, Txt } from "../../look/Txt";
+import { clearGym, setInboxOpen } from "../../notifications/phone";
 import { useSession } from "../../session/SessionProvider";
 import { NO_ANSWER } from "../SignIn";
 import { INBOX_NOT_READ, LINK_NOT_OPENED, SWITCH_NOT_SAVED, inboxPath, inboxReadPath, inboxRow, inboxSwitchPath } from "./inboxView";
@@ -73,6 +74,15 @@ function InboxBody({ place, onClose, onUnread, bottom }: { place: InboxPlace; on
   const live = useRef(true);
   // Read through a call: after a wait the page may have closed, which a plain read narrowed before the wait hides.
   const isLive = useCallback(() => live.current, []);
+
+  // Open, this gym's notification comes off the phone, and a new one shows here instead.
+  useEffect(() => {
+    setInboxOpen(place.id);
+    void clearGym(place.id);
+    return () => {
+      setInboxOpen(null);
+    };
+  }, [place.id]);
 
   const load = useCallback(
     async (quiet: boolean) => {
