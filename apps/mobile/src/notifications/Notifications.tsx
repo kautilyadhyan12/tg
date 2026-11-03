@@ -10,37 +10,39 @@ import {
   askNotifications,
   keepNotNow,
   notificationsAllowed,
-  onGymTapped,
+  onTapped as onNotificationTapped,
   onNewAddress,
   phoneAddress,
   saidNotNowAt,
   startNotifications,
+  type Tapped,
 } from "./phone";
 
 // A gym's messages as phone notifications (ROADMAP Stage 5 item 18b-i). Once the tabs show, the app
 // says why before Android asks, and once allowed it gives the server this phone's address for the
 // person signed in, each time the app opens and whenever Firebase changes it. Drawn under the
 // sign-in's own key, so somebody else signing in starts it again and the address moves to them.
-// A tap on a gym's notification asks for that gym's Inbox (`useInboxAsked`).
+// A tap on a gym's notification asks for that gym's Inbox, or for the class or event it is about
+// (`useTapAsked`).
 
 interface Asked {
-  /** The gym whose Inbox a tapped notification asked for, until the Gym tab has opened it. */
-  inboxAsked: string | null;
-  inboxOpened: () => void;
+  /** What a tapped notification asked for, until the Gym tab has opened it. */
+  tapAsked: Tapped | null;
+  tapOpened: () => void;
 }
 
-const AskedContext = createContext<Asked>({ inboxAsked: null, inboxOpened: () => undefined });
-export const useInboxAsked = () => useContext(AskedContext);
+const AskedContext = createContext<Asked>({ tapAsked: null, tapOpened: () => undefined });
+export const useTapAsked = () => useContext(AskedContext);
 
 export const NOTIFICATIONS_ASK = {
   title: "Turn on notifications?",
-  line: "Get messages and class reminders from your gym, even when the app is closed.",
+  line: "Get your gym's messages, class reminders and waitlist places, even when the app is closed.",
 } as const;
 
 export function NotificationsProvider({ children, onTapped }: { children: ReactNode; onTapped?: () => void }) {
   const { session } = useSession();
   const [asking, setAsking] = useState(false);
-  const [inboxAsked, setInboxAsked] = useState<string | null>(null);
+  const [tapAsked, setTapAsked] = useState<Tapped | null>(null);
 
   const give = useCallback(
     async (known?: string) => {
@@ -68,9 +70,9 @@ export function NotificationsProvider({ children, onTapped }: { children: ReactN
       if (live() && (notNow === null || Date.now() - notNow >= ASK_AGAIN_MS)) setAsking(true);
     })();
     const offAddress = onNewAddress((address) => void give(address));
-    const offTap = onGymTapped((gymId) => {
+    const offTap = onNotificationTapped((tapped) => {
       if (!live()) return;
-      setInboxAsked(gymId);
+      setTapAsked(tapped);
       onTapped?.();
     });
     return () => {
@@ -88,12 +90,12 @@ export function NotificationsProvider({ children, onTapped }: { children: ReactN
     setAsking(false);
     if (await askNotifications()) await give();
   };
-  const inboxOpened = useCallback(() => {
-    setInboxAsked(null);
+  const tapOpened = useCallback(() => {
+    setTapAsked(null);
   }, []);
 
   return (
-    <AskedContext.Provider value={{ inboxAsked, inboxOpened }}>
+    <AskedContext.Provider value={{ tapAsked, tapOpened }}>
       {children}
       <Sheet open={asking} title={NOTIFICATIONS_ASK.title} onClose={notNow}>
         <Txt kind="body">{NOTIFICATIONS_ASK.line}</Txt>

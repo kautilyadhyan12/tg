@@ -44,7 +44,6 @@ interface Gym {
 /** Tuesday 10 November 2026, noon in India (06:30 UTC). */
 const NOON = Date.parse("2026-11-10T06:30:00Z");
 const HOUR = 3_600_000;
-const DAY = 24 * HOUR;
 
 let ipCounter = 0;
 const nextIp = () => `10.53.${String(Math.floor(ipCounter / 250) % 250)}.${String((ipCounter++ % 250) + 1)}`;

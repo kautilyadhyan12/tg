@@ -19,7 +19,7 @@ import { colours } from "../look/colours";
 import { Icon } from "../look/Icon";
 import { Page } from "../look/Page";
 import { Txt } from "../look/Txt";
-import { useInboxAsked } from "../notifications/Notifications";
+import { useTapAsked } from "../notifications/Notifications";
 import { useSession } from "../session/SessionProvider";
 import { InvitationList, PlaceHead, invitationsPath } from "./Invitation";
 import { usePlaces } from "./places";
@@ -62,7 +62,7 @@ export function GymScreen() {
   // The places have been waited for long enough to offer the pass without them.
   const [placesSlow, setPlacesSlow] = useState(false);
   const { setKinds, unreadOf: placeUnread, startRead, placesRead, inboxSaid } = usePlaces();
-  const { inboxAsked, inboxOpened } = useInboxAsked();
+  const { tapAsked, tapOpened } = useTapAsked();
   const [mine, setMine] = useState<Read<MyOrgsResponse> | null>(null);
   const [invites, setInvites] = useState<Read<MyInvitationsResponse> | null>(null);
   /** The newest finished read of the invitations, numbered as reads start: an answer on the phone stands
@@ -199,15 +199,20 @@ export function GymScreen() {
       : [];
   const nothing = mine?.kind === "ok" && invites?.kind === "ok" && invites.data.addressProved && joined.length === 0 && open.length === 0;
 
-  // A tapped notification's gym: its Inbox opens once the places are read, and only if it is one of
-  // this person's own.
+  // A tapped notification's gym: its Inbox, or the class or event it is about, opens once the places
+  // are read, and only if it is one of this person's own.
   // A read that failed keeps the ask for the next read, which the tab makes on coming back.
-  const asked = inboxAsked === null || mine?.kind !== "ok" ? null : (joined.find((org) => org.id === inboxAsked) ?? false);
+  const asked = tapAsked === null || mine?.kind !== "ok" ? null : (joined.find((org) => org.id === tapAsked.gymId) ?? false);
   useEffect(() => {
-    if (asked === null) return;
-    if (asked !== false) setInboxAt({ id: asked.id, name: asked.name, orgType: asked.orgType, latestCheer: asked.latestCheer, latestNudge: asked.latestNudge });
-    inboxOpened();
-  }, [asked, inboxOpened]);
+    if (asked === null || tapAsked === null) return;
+    if (asked !== false) {
+      const at = { id: asked.id, name: asked.name, clockFormat: asked.clockFormat };
+      if (tapAsked.kind === "inbox") setInboxAt({ id: asked.id, name: asked.name, orgType: asked.orgType, latestCheer: asked.latestCheer, latestNudge: asked.latestNudge });
+      else if (tapAsked.what === "class") setClassesAt({ ...at, week: tapAsked.week, sessionId: tapAsked.id });
+      else setEventsAt({ ...at, eventId: tapAsked.id });
+    }
+    tapOpened();
+  }, [asked, tapAsked, tapOpened]);
 
   return (
     <Page>

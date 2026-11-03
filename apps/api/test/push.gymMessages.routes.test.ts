@@ -256,7 +256,8 @@ d("phone notifications for a gym's messages (real Postgres)", () => {
     await join(gymA, phone.userId);
     const token = address("ran-out");
     expect((await giveAddress(phone, token)).statusCode).toBe(200);
-    await sql`UPDATE refresh_tokens SET expires_at = ${minutes(at, -1)} WHERE user_id = ${phone.userId}`;
+    // Ended before `at` and before the real clock too: the route that takes an address reads the real one.
+    await sql`UPDATE refresh_tokens SET expires_at = LEAST(${minutes(at, -1)}::timestamptz, now() - interval '1 minute') WHERE user_id = ${phone.userId}`;
     await message(gymA, phone.userId, "After it ran out.", minutes(at, -1));
     await sweep(at);
     expect(sentTo(token)).toEqual([]);
@@ -330,8 +331,8 @@ d("phone notifications for a gym's messages (real Postgres)", () => {
   });
 
   it("at night it waits, and goes in the morning", { timeout: TIMEOUT_MS }, async () => {
-    // 22:00 in India.
-    const night = minutes(noonIndia(), 10 * 60);
+    // 23:30 in India.
+    const night = minutes(noonIndia(), 11 * 60 + 30);
     const phone = await phoneSignIn(email("night"));
     await join(gymA, phone.userId);
     const token = address("night");
@@ -340,10 +341,10 @@ d("phone notifications for a gym's messages (real Postgres)", () => {
     await sweep(night);
     expect(sentTo(token)).toEqual([]);
     expect((await waiting(phone.userId))[0]?.n).toBe(1);
-    // 07:59 next day: still night. 08:00: sent.
-    await sweep(minutes(night, 9 * 60 + 59));
+    // 06:59 next day: still night. 07:00: sent.
+    await sweep(minutes(night, 7 * 60 + 29));
     expect(sentTo(token)).toEqual([]);
-    await sweep(minutes(night, 10 * 60));
+    await sweep(minutes(night, 7 * 60 + 30));
     expect(sentTo(token).map((m) => m.body)).toEqual(["Late news."]);
   });
 
