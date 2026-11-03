@@ -78,22 +78,35 @@ export interface Bar {
  *  meals there are. Null where the phone cannot say (the page is on another day, or a meal waits for
  *  its numbers): the server's today is drawn. */
 export interface TodayHere {
+  /** The day the rings are of, on the phone's own calendar: drawn only on the server's day of that date. */
+  day: string;
   sums: Sums;
   meals: number;
   about: boolean;
 }
 
+/** A day of the phone's own calendar as the server writes one, "YYYY-MM-DD". */
+export function localDayKey(at: Date): string {
+  return `${String(at.getFullYear())}-${String(at.getMonth() + 1).padStart(2, "0")}-${String(at.getDate()).padStart(2, "0")}`;
+}
+
+/** The phone's own today, where it is the same date as the server's today; otherwise none. */
+function hereOn(d: FoodWeekDay, here: TodayHere | null): TodayHere | null {
+  return d.today && here !== null && here.day === d.day ? here : null;
+}
+
 export function weekBars(week: FoodWeekResponse, figure: FoodWeekFigure, here: TodayHere | null): Bar[] {
   return week.days.map((d: FoodWeekDay) => {
-    const meals = d.today && here !== null ? here.meals : d.meals;
-    const value = d.today && here !== null ? here.sums[figure] : d[figure];
+    const mine = hereOn(d, here);
+    const meals = mine === null ? d.meals : mine.meals;
+    const value = mine === null ? d[figure] : mine.sums[figure];
     return {
       day: d.day,
       value: meals === 0 ? null : value,
       target: d.targets === null ? null : d.targets[figure],
       band: d.today || d.bands === null || meals === 0 ? null : d.bands[figure],
       today: d.today,
-      about: d.today && here !== null ? here.about : d.about,
+      about: mine === null ? d.about : mine.about,
       current: !d.targetsOfTheDay && d.targets !== null && meals > 0 && !d.today,
     };
   });
@@ -114,7 +127,7 @@ export function chartTop(bars: readonly Bar[]): number {
 
 /** The one line the Food screen's box shows under its bars. */
 export function weekLine(week: FoodWeekResponse, here: TodayHere | null): { words: string; setUp: boolean } {
-  const anyMeals = week.days.some((d) => (d.today && here !== null ? here.meals : d.meals) > 0);
+  const anyMeals = week.days.some((d) => (hereOn(d, here)?.meals ?? d.meals) > 0);
   if (!anyMeals) return { words: "Your week shows here once you log meals.", setUp: false };
   if (week.days.every((d) => d.targets === null)) return { words: "Set your daily numbers to compare your days.", setUp: true };
   return { words: factWords("kcal", week.facts.kcal) ?? "Today counts once it’s over.", setUp: false };

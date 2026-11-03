@@ -921,6 +921,17 @@ describe("your week in food (34f-ii)", () => {
     expect(asked).toContain("?days=30");
   });
 
+  it("with no daily numbers: bars keyed No target, and a button to set them in the box and in See your week", async () => {
+    const none = foodWeekReply(7, (back) => ({ targets: null, ...(back === 0 ? {} : { meals: 2, kcal: 1800 }) }));
+    await openFood({ meals: [] }, undefined, { "/v1/nutrition/food-week": () => ({ status: 200, body: none }) });
+    expect(await screen.findByText("Set your daily numbers to compare your days.")).toBeTruthy();
+    expect(screen.getByText("No target")).toBeTruthy();
+    expect(screen.queryByText("On target")).toBeNull();
+    expect(screen.getByRole("button", { name: "Set daily numbers" })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "See your week" }));
+    expect(await screen.findAllByRole("button", { name: "Set daily numbers" })).toHaveLength(2);
+  });
+
   it("a week that could not load says so, and Try again reads it", async () => {
     let fails = true;
     await openFood({ meals: [] }, undefined, {

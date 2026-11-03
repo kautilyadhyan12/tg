@@ -8,6 +8,7 @@ import { colours, type ColourName } from "../../look/colours";
 import { Icon } from "../../look/Icon";
 import { Sheet } from "../../look/Sheet";
 import { Txt } from "../../look/Txt";
+import { useZoneSaved } from "../../session/TimeZoneSync";
 import { useRead, type Read } from "../dashboard/useRead";
 import { NOT_KNOWN, count } from "../dashboard/words";
 import {
@@ -33,20 +34,31 @@ export const FOOD_WEEK_READ = "/v1/nutrition/food-week";
 const MONTH_READ = `${FOOD_WEEK_READ}?days=30`;
 const CHART_HEIGHT = 112;
 
-interface FoodWeekProps {
+interface Ctx {
   /** Today as the day's rings show it, or null where the phone cannot say. */
   here: TodayHere | null;
   /** Moves each time the server takes a meal or a change: the week is read again. */
   sent: number;
-  /** Moves when the daily numbers or the setup answers change. */
-  fresh: number;
+  /** The phone's own today: the week is read again when it moves on (midnight with the page open). */
+  today: string;
+  /** Opens setup where the daily numbers are missing. */
   onSetup: () => void;
 }
 
-export function FoodWeek({ here, sent, fresh, onSetup }: FoodWeekProps) {
-  const { read, again } = useRead(FOOD_WEEK_READ, foodWeekResponseSchema, fresh);
+interface FoodWeekProps extends Ctx {
+  /** Moves when the daily numbers or the setup answers change. */
+  fresh: number;
+}
+
+export function FoodWeek({ fresh, ...ctx }: FoodWeekProps) {
+  const { read, again } = useRead(FOOD_WEEK_READ, foodWeekResponseSchema, useZoneSaved() + fresh);
   const [open, setOpen] = useState(false);
-  useAgainOn(sent, again);
+  useAgainOn(ctx.sent, again);
+  useAgainOn(ctx.today, again);
+  const setUp = () => {
+    setOpen(false);
+    ctx.onSetup();
+  };
   return (
     <Card style={styles.box}>
       <View style={styles.row}>
@@ -67,22 +79,24 @@ export function FoodWeek({ here, sent, fresh, onSetup }: FoodWeekProps) {
       ) : read.kind === "loading" ? (
         <Txt kind="small">{NOT_KNOWN}</Txt>
       ) : (
-        <WeekBody week={read.data} here={here} onSetup={onSetup} />
+        <WeekBody week={read.data} here={ctx.here} onSetup={ctx.onSetup} />
       )}
       <Sheet open={open && read.kind === "ok"} title="Your Week in Food" onClose={() => { setOpen(false); }}>
-        {read.kind === "ok" && open ? <WeekDetail week={read.data} here={here} sent={sent} /> : null}
+        {read.kind === "ok" && open ? <WeekDetail week={read.data} ctx={{ ...ctx, onSetup: setUp }} /> : null}
       </Sheet>
     </Card>
   );
 }
 
-/** Reads again each time `sent` moves, never on the first draw (the read's own first read covers it). */
-function useAgainOn(sent: number, again: () => void) {
-  const first = useRef(sent);
+/** Reads again each time `moved` moves, never on the first draw (the read's own first read covers it). */
+function useAgainOn(moved: number | string, again: () => void) {
+  const first = useRef(moved);
   useEffect(() => {
-    if (sent !== first.current) again();
-  }, [sent, again]);
+    if (moved !== first.current) again();
+  }, [moved, again]);
 }
+
+const SET_UP_WORDS = "Set daily numbers";
 
 function WeekBody({ week, here, onSetup }: { week: FoodWeekResponse; here: TodayHere | null; onSetup: () => void }) {
   const bars = weekBars(week, "kcal", here);
@@ -93,7 +107,7 @@ function WeekBody({ week, here, onSetup }: { week: FoodWeekResponse; here: Today
       {bars.every((b) => b.value === null) ? null : (
         <>
           <Chart bars={bars} figure="kcal" month={false} line={target ?? null} />
-          <Legend />
+          <Legend bars={bars} />
         </>
       )}
       {bars.every((b) => b.value === null) || target === undefined ? null : (
@@ -103,12 +117,12 @@ function WeekBody({ week, here, onSetup }: { week: FoodWeekResponse; here: Today
       <Txt kind="small" colour="text">
         {line.words}
       </Txt>
-      {line.setUp ? <Button label="Answer now" kind="soft" small onPress={onSetup} style={styles.start} /> : null}
+      {line.setUp ? <Button label={SET_UP_WORDS} kind="soft" small onPress={onSetup} style={styles.start} /> : null}
     </>
   );
 }
 
-function WeekDetail({ week, here, sent }: { week: FoodWeekResponse; here: TodayHere | null; sent: number }) {
+function WeekDetail({ week, ctx }: { week: FoodWeekResponse; ctx: Ctx }) {
   const [month, setMonth] = useState(false);
   const [figure, setFigure] = useState<FoodWeekFigure>("kcal");
   return (
@@ -122,15 +136,16 @@ function WeekDetail({ week, here, sent }: { week: FoodWeekResponse; here: TodayH
           <Chip key={f.key} label={f.name} small on={figure === f.key} onPress={() => { setFigure(f.key); }} />
         ))}
       </View>
-      {month ? <MonthRead figure={figure} here={here} sent={sent} /> : <Detail week={week} figure={figure} here={here} month={false} />}
+      {month ? <MonthRead figure={figure} ctx={ctx} /> : <Detail week={week} figure={figure} ctx={ctx} month={false} />}
     </View>
   );
 }
 
-function MonthRead({ figure, here, sent }: { figure: FoodWeekFigure; here: TodayHere | null; sent: number }) {
-  const { read, again } = useRead(MONTH_READ, foodWeekResponseSchema);
-  useAgainOn(sent, again);
-  return <ReadOr read={read} again={again}>{(month) => <Detail week={month} figure={figure} here={here} month />}</ReadOr>;
+function MonthRead({ figure, ctx }: { figure: FoodWeekFigure; ctx: Ctx }) {
+  const { read, again } = useRead(MONTH_READ, foodWeekResponseSchema, useZoneSaved());
+  useAgainOn(ctx.sent, again);
+  useAgainOn(ctx.today, again);
+  return <ReadOr read={read} again={again}>{(month) => <Detail week={month} figure={figure} ctx={ctx} month />}</ReadOr>;
 }
 
 function ReadOr({ read, again, children }: { read: Read<FoodWeekResponse>; again: () => void; children: (week: FoodWeekResponse) => ReactNode }) {
@@ -147,8 +162,9 @@ function ReadOr({ read, again, children }: { read: Read<FoodWeekResponse>; again
   return <>{children(read.data)}</>;
 }
 
-function Detail({ week, figure, here, month }: { week: FoodWeekResponse; figure: FoodWeekFigure; here: TodayHere | null; month: boolean }) {
-  const bars = weekBars(week, figure, here);
+function Detail({ week, figure, ctx, month }: { week: FoodWeekResponse; figure: FoodWeekFigure; ctx: Ctx; month: boolean }) {
+  const bars = weekBars(week, figure, ctx.here);
+  const line = weekLine(week, ctx.here);
   const facts = WEEK_FIGURES.map((f) => factWords(f.key, week.facts[f.key])).filter((w): w is string => w !== null);
   const average = averageLine(week);
   const of = WEEK_FIGURES.find((f) => f.key === figure);
@@ -160,7 +176,7 @@ function Detail({ week, figure, here, month }: { week: FoodWeekResponse; figure:
       ) : (
         <>
           <Chart bars={bars} figure={figure} month={month} line={target ?? null} />
-          <Legend />
+          <Legend bars={bars} />
           {target === undefined || of === undefined ? null : (
             <Txt kind="tiny">Line: your daily target, {count(target)} {of.unit} today</Txt>
           )}
@@ -175,18 +191,29 @@ function Detail({ week, figure, here, month }: { week: FoodWeekResponse; figure:
             </Txt>
           ))
         ) : (
-          <Txt kind="small" colour="text">
-            {weekLine(week, here).words}
-          </Txt>
+          <>
+            <Txt kind="small" colour="text">
+              {line.words}
+            </Txt>
+            {line.setUp ? <Button label={SET_UP_WORDS} kind="soft" small onPress={ctx.onSetup} style={styles.start} /> : null}
+          </>
         )}
         {average === null ? null : <Txt kind="small">{average.words}</Txt>}
       </View>
       {bars.some((b) => b.about) ? <Txt kind="tiny">~ Includes a scan’s estimate.</Txt> : null}
-      {bars.some((b) => b.current) ? <Txt kind="tiny">Some days are read against your current numbers.</Txt> : null}
+      {bars.some((b) => b.current) ? <Txt kind="tiny">Some days are shown against today’s daily numbers.</Txt> : null}
       {average?.partial === true ? <Txt kind="tiny">* Some foods have no fibre or sodium figure.</Txt> : null}
     </>
   );
 }
+
+const LEGEND: readonly (readonly [ColourName, string])[] = [
+  ["good", "On target"],
+  ["blue", "Under"],
+  ["orange", "Over"],
+  ["textSoft", "No target"],
+  ["textFaint", "Today so far"],
+];
 
 const BAND_COLOUR: Record<NonNullable<Bar["band"]>, ColourName> = { on: "good", under: "blue", over: "orange" };
 
@@ -231,19 +258,18 @@ function Chart({ bars, figure, month, line }: { bars: readonly Bar[]; figure: Fo
   );
 }
 
-function Legend() {
+/** The key names only the colours the bars use. */
+function Legend({ bars }: { bars: readonly Bar[] }) {
+  const used = new Set(bars.filter((b) => b.value !== null).map(barColour));
   const one = (colour: ColourName, words: string) => (
-    <View style={styles.key}>
+    <View key={colour} style={styles.key}>
       <View style={[styles.dot, { backgroundColor: colours[colour] }]} />
       <Txt kind="tiny">{words}</Txt>
     </View>
   );
   return (
     <View style={styles.legend}>
-      {one("good", "On target")}
-      {one("blue", "Under")}
-      {one("orange", "Over")}
-      {one("textFaint", "Today so far")}
+      {LEGEND.filter(([colour]) => used.has(colour)).map(([colour, words]) => one(colour, words))}
     </View>
   );
 }

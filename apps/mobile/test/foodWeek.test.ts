@@ -51,11 +51,21 @@ describe("the worst thing: a bar under the wrong day, or today's half day judged
 
   it("today's bar is the rings' numbers where the phone has them, and only today's", () => {
     const server = week((i) => eaten(i === 6 ? 500 : 2000, "on"));
-    const bars = weekBars(server, "proteinG", { sums: { kcal: 1200, proteinG: 64, carbsG: 150, fatG: 40 }, meals: 2, about: true });
+    const bars = weekBars(server, "proteinG", { day: "2026-11-03", sums: { kcal: 1200, proteinG: 64, carbsG: 150, fatG: 40 }, meals: 2, about: true });
     expect(bars.at(-1)).toMatchObject({ value: 64, about: true });
     expect(bars.slice(0, 6).map((b) => b.value)).toEqual([100, 100, 100, 100, 100, 100]);
     // A meal just removed on the phone: today has none there, so no bar, whatever the server last said.
-    expect(weekBars(server, "kcal", { sums: { kcal: 0, proteinG: 0, carbsG: 0, fatG: 0 }, meals: 0, about: false }).at(-1)?.value).toBeNull();
+    expect(weekBars(server, "kcal", { day: "2026-11-03", sums: { kcal: 0, proteinG: 0, carbsG: 0, fatG: 0 }, meals: 0, about: false }).at(-1)?.value).toBeNull();
+  });
+
+  it("the rings' numbers go only on the server's today of the same date: a phone a day ahead keeps the server's day", () => {
+    // Stored zone London, the phone in India at 01:00 on Wed 4 Nov: the server's today is still Tue 3 Nov.
+    const server = week((i) => eaten(i === 6 ? 1800 : 2000, "on"));
+    const ahead = { day: "2026-11-04", sums: { kcal: 0, proteinG: 0, carbsG: 0, fatG: 0 }, meals: 0, about: false };
+    expect(weekBars(server, "kcal", ahead).at(-1)).toMatchObject({ day: "2026-11-03", value: 1800 });
+    // Midnight with the page open: the new day has no meals, yesterday's still show.
+    expect(weekLine(week((i) => (i === 6 ? eaten(1800, "on") : {})), ahead).words).toBe("Today counts once it’s over.");
+    expect(weekLine(week(), ahead).words).toBe("Your week shows here once you log meals.");
   });
 
   it("a day with no meals has no bar and no band", () => {
@@ -101,7 +111,7 @@ describe("the box's one line", () => {
     expect(weekLine(week((i) => (i === 6 ? eaten(900, "on") : {})), null).words).toBe("Today counts once it’s over.");
   });
   it("meals logged on the phone today, not yet on the server", () => {
-    const here = { sums: { kcal: 300, proteinG: 10, carbsG: 50, fatG: 5 }, meals: 1, about: false };
+    const here = { day: "2026-11-03", sums: { kcal: 300, proteinG: 10, carbsG: 50, fatG: 5 }, meals: 1, about: false };
     expect(weekLine(week(), here).words).toBe("Today counts once it’s over.");
   });
   it("no daily numbers yet: asks for them", () => {

@@ -101,6 +101,7 @@ import {
 import { newGoalId } from "./goals/words";
 import { FiguresLink, FiguresList, useDailyAmounts } from "./food/MoreFigures";
 import { FoodWeek } from "./food/FoodWeek";
+import { localDayKey } from "./food/weekRules";
 import { PackWords } from "./food/PackWords";
 import { Credits, SOURCE_WORDS, SourceLine } from "./food/SourceLine";
 import { Setup } from "./setup/Setup";
@@ -278,12 +279,14 @@ export function FoodScreen() {
       <FoodWeek
         here={
           today && rows !== null && rows.every((r) => r.totals !== null)
-            ? { sums: daySums(rows), meals: rows.length, about: rows.some((r) => hasEstimate(r.items)) }
+            ? { day: localDayKey(day), sums: daySums(rows), meals: rows.length, about: rows.some((r) => hasEstimate(r.items)) }
             : null
         }
         sent={view.sent}
+        today={localDayKey(new Date())}
         fresh={weekFresh}
-        onSetup={() => { setSetupAt("where"); }}
+        // Where the rings send somebody with no daily numbers: the target weight when it is on the wrong side.
+        onSetup={() => { setSetupAt(shownTargets.kind === "ok" && shownTargets.data.targetWrongSide ? "target" : "where"); }}
       />
       <Sheet open={dayFigures && rows !== null} title={`Nutrients · ${dayWords(day, new Date())}`} onClose={() => { setDayFigures(false); }}>
         <FiguresList
