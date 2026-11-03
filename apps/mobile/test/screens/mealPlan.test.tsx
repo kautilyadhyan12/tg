@@ -766,3 +766,44 @@ describe("Suggested or My plan (31f)", () => {
     expect(box.getByRole("button", { name: "Log Rice + Dal" })).toBeTruthy();
   });
 });
+
+describe("Suggested or My plan: an older read landing after the pick (31f round one, B)", () => {
+  it("on the Dashboard the picked chip stays lit when a read sent before the pick answers with the old choice", async () => {
+    const CHOICE = "/v1/nutrition/diet-plan/choice";
+    let picked: "suggested" | "mine" = "mine";
+    let holdReads = false;
+    const heldReads: (() => void)[] = [];
+    let releasePick: (() => void) | null = null;
+    const world = serverOf(
+      async () => {
+        // The answer is what the server holds when the read arrives; it may come back later.
+        const body = week([RICE], { choice: picked });
+        if (holdReads) await new Promise<void>((done) => { heldReads.push(done); });
+        return ok(body);
+      },
+      {
+        "/v1/nutrition/suggestions": () => ok(WITH_IDEA),
+        [CHOICE]: async (body) => {
+          await new Promise<void>((done) => { releasePick = done; });
+          picked = (body as { choice: "suggested" | "mine" }).choice;
+          return ok(week([RICE], { choice: picked }));
+        },
+      },
+    );
+    await open(world, files(), "Dashboard");
+    const card = () => within(screen.getByTestId("recommended-box"));
+    expect(await within(await screen.findByTestId("recommended-box")).findByRole("radio", { name: "My plan", selected: true })).toBeTruthy();
+    await fireEvent.press(card().getByRole("radio", { name: "Suggested" }));
+    // While the pick is on its way, the Dashboard is opened again: a read goes, and is held.
+    holdReads = true;
+    await fireEvent.press(screen.getByRole("tab", { name: "Food" }));
+    await fireEvent.press(screen.getByRole("tab", { name: "Dashboard" }));
+    await waitFor(() => { expect(heldReads.length).toBeGreaterThan(0); });
+    holdReads = false;
+    // The pick is answered, then the older read lands with My plan.
+    await act(async () => { releasePick?.(); await new Promise((done) => setTimeout(done, 20)); });
+    await act(async () => { for (const done of heldReads.splice(0)) done(); await new Promise((done) => setTimeout(done, 20)); });
+    expect(card().getByRole("radio", { name: "Suggested", selected: true })).toBeTruthy();
+    expect(card().queryByRole("radio", { name: "My plan", selected: true })).toBeNull();
+  });
+});
