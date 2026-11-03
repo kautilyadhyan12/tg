@@ -52,6 +52,7 @@ function week(todayMeals: Meal[], over: Partial<DietPlanResponse> = {}, otherMea
       };
     }),
     make: { status: "ok" },
+    choice: todayMeals.length + otherMeals.length > 0 ? "mine" : "suggested",
     caution: FOOD_ALLERGY_CAUTION,
     labelCaution: null,
     ...over,
@@ -687,5 +688,79 @@ describe("building your own plan (34e-ii-b)", () => {
     expect(await screen.findByText(`Your changes to Lunch · ${planDayName(TODAY)} aren’t saved to your plan yet.`)).toBeTruthy();
     await fireEvent.press(screen.getByRole("button", { name: "Leave without saving" }));
     expect(puts(world)).toEqual([]);
+  });
+});
+
+describe("Suggested or My plan (31f)", () => {
+  const CHOICE = "/v1/nutrition/diet-plan/choice";
+  /** A server that keeps the pick, as the real one does, for a person whose week is `meals`. */
+  function keeping(meals: Meal[], answerPick: (body: unknown) => Reply | null = () => null) {
+    let picked: string | null = null;
+    const plan = () => ok(week(meals, picked === null ? {} : { choice: picked as DietPlanResponse["choice"] }));
+    return serverOf(plan, {
+      "/v1/nutrition/suggestions": () => ok(WITH_IDEA),
+      [CHOICE]: (body) => {
+        const refused = answerPick(body);
+        if (refused !== null) return refused;
+        picked = (body as { choice: string }).choice;
+        return plan();
+      },
+    });
+  }
+  const picks = (world: ReturnType<typeof serverOf>) => world.s.asked.filter((a) => a.method === "PUT" && a.path === CHOICE).map((a) => a.body);
+
+  it("the worst thing: with a plan, My plan is picked; Suggested shows the app's ideas, is kept on the server, and the Dashboard shows the same", async () => {
+    const world = keeping([RICE]);
+    const box = await open(world);
+    expect(await box.findByRole("radio", { name: "My plan", selected: true })).toBeTruthy();
+    expect(box.getByRole("button", { name: "Log Rice + Dal" })).toBeTruthy();
+    await fireEvent.press(box.getByRole("radio", { name: "Suggested" }));
+    expect(await box.findByRole("button", { name: "Log Paneer + Rice" })).toBeTruthy();
+    expect(box.getByRole("radio", { name: "Suggested", selected: true })).toBeTruthy();
+    expect(box.queryByRole("button", { name: "Log Rice + Dal" })).toBeNull();
+    expect(box.getByText(FOOD_ALLERGY_CAUTION)).toBeTruthy();
+    expect(picks(world)).toEqual([{ choice: "suggested" }]);
+    // The Dashboard reads the same pick from the server.
+    await fireEvent.press(screen.getByRole("tab", { name: "Dashboard" }));
+    const card = within(await screen.findByTestId("recommended-box"));
+    expect(await card.findByRole("radio", { name: "Suggested", selected: true })).toBeTruthy();
+    expect(await card.findByRole("button", { name: "Log Paneer + Rice" })).toBeTruthy();
+    // Back to My plan from the Dashboard: Food shows the plan again.
+    await fireEvent.press(card.getByRole("radio", { name: "My plan" }));
+    // The box is drawn again for the plan: it is looked for again.
+    expect(await within(await screen.findByTestId("recommended-box")).findByRole("button", { name: "Log Rice + Dal" })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("tab", { name: "Food" }));
+    expect(await screen.findByRole("radio", { name: "My plan", selected: true })).toBeTruthy();
+    expect(picks(world)).toEqual([{ choice: "suggested" }, { choice: "mine" }]);
+  });
+
+  it("no plan: Suggested is picked; My plan says there is none yet, and Build my own opens the week", async () => {
+    const world = keeping([]);
+    const box = await open(world);
+    expect(await box.findByRole("radio", { name: "Suggested", selected: true })).toBeTruthy();
+    await fireEvent.press(box.getByRole("radio", { name: "My plan" }));
+    expect(await box.findByText("You don’t have a meal plan yet.")).toBeTruthy();
+    expect(box.queryByRole("button", { name: "Log Paneer + Rice" })).toBeNull();
+    await fireEvent.press(box.getByRole("button", { name: "Build my own" }));
+    expect(within(await screen.findByTestId("sheet")).getByText("Nothing planned for this day.")).toBeTruthy();
+  });
+
+  it("on the Dashboard, My plan with none yet offers Build my own, which opens Food's week", async () => {
+    const world = keeping([]);
+    const card = within(await (await open(world, files(), "Dashboard")).findByTestId("recommended-box"));
+    await fireEvent.press(await card.findByRole("radio", { name: "My plan" }));
+    const after = within(await screen.findByTestId("recommended-box"));
+    expect(await after.findByText("You don’t have a meal plan yet.")).toBeTruthy();
+    await fireEvent.press(after.getByRole("button", { name: "Build my own" }));
+    expect(await screen.findByText(/^Today · /)).toBeTruthy();
+  });
+
+  it("a pick with no answer goes back to what the server holds, and says so", async () => {
+    const world = keeping([RICE], () => ({ status: 503, body: {} }));
+    const box = await open(world);
+    await fireEvent.press(await box.findByRole("radio", { name: "Suggested" }));
+    expect(await box.findByText("No connection. Try again.")).toBeTruthy();
+    expect(box.getByRole("radio", { name: "My plan", selected: true })).toBeTruthy();
+    expect(box.getByRole("button", { name: "Log Rice + Dal" })).toBeTruthy();
   });
 });

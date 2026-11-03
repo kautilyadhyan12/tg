@@ -1,8 +1,9 @@
 // A person's own diet plan (ROADMAP 34e-i): the only file that reads or writes
-// `diet_plans`. Every statement is keyed on the signed-in person's own id.
+// `diet_plans` and the food row of `recommended_choices` (31f). Every statement is
+// keyed on the signed-in person's own id.
 import type { Sql } from "postgres";
 import { z } from "zod";
-import { mealItemSchema, mealTypeSchema } from "@app/shared";
+import { foodChoiceSchema, mealItemSchema, mealTypeSchema, type FoodChoice } from "@app/shared";
 
 const storedMealSchema = z.object({ mealType: mealTypeSchema, items: z.array(mealItemSchema).min(1) }).strict();
 export type StoredMeal = z.infer<typeof storedMealSchema>;
@@ -15,24 +16,42 @@ export const EMPTY_WEEK: StoredDays = [[], [], [], [], [], [], []];
  *  than a phone holds unsent, so an old whole-day change sent again is never made again. */
 const KEPT_CHANGES = 500;
 
-export interface StoredPlan { days: StoredDays; recentChanges: readonly string[] }
+/** `choice`: the person's own pick for food, null where they have not picked. */
+export interface StoredPlan { days: StoredDays; recentChanges: readonly string[]; choice: FoodChoice | null }
+
+export const hasAMeal = (days: StoredDays): boolean => days.some((meals) => meals.length > 0);
+const choiceOf = (stored: string | null | undefined): FoodChoice | null => (stored == null ? null : foodChoiceSchema.parse(stored));
 
 export async function getDietPlan(sql: Sql, userId: string): Promise<StoredPlan> {
-  const rows = await sql<{ days: unknown; recentChanges: string[] }[]>`
-    SELECT days, recent_changes AS "recentChanges" FROM diet_plans WHERE user_id = ${userId}`;
+  const rows = await sql<{ days: unknown; recentChanges: string[] | null; choice: string | null }[]>`
+    SELECT p.days, p.recent_changes AS "recentChanges", c.choice
+    FROM (SELECT ${userId}::uuid AS user_id) AS me
+    LEFT JOIN diet_plans p ON p.user_id = me.user_id
+    LEFT JOIN recommended_choices c ON c.user_id = me.user_id AND c.kind = 'food'`;
   const row = rows[0];
-  return row === undefined ? { days: EMPTY_WEEK, recentChanges: [] } : { days: storedDaysSchema.parse(row.days), recentChanges: row.recentChanges };
+  const choice = choiceOf(row?.choice);
+  return row?.days == null
+    ? { days: EMPTY_WEEK, recentChanges: [], choice }
+    : { days: storedDaysSchema.parse(row.days), recentChanges: row.recentChanges ?? [], choice };
+}
+
+/** The person's pick for food, kept as sent: the same pick sent twice is the same pick. */
+export async function setFoodChoice(sql: Sql, userId: string, choice: FoodChoice): Promise<void> {
+  await sql`
+    INSERT INTO recommended_choices (user_id, kind, choice) VALUES (${userId}, 'food', ${choice})
+    ON CONFLICT (user_id, kind) DO UPDATE SET choice = EXCLUDED.choice, updated_at = now()`;
 }
 
 /** One change to the person's plan, under a lock on their row: `change` reads the
  *  week as it is and returns it changed, or throws to change nothing. A change id
- *  already made is not made again, and the week is returned as it is. */
+ *  already made is not made again, and the week is returned as it is. The first
+ *  meals put in an empty week make the person's pick My plan: they built it to see it. */
 export async function changeDietPlan(
   sql: Sql,
   userId: string,
   changeId: string,
   change: (days: StoredDays) => StoredDays,
-): Promise<StoredDays> {
+): Promise<{ days: StoredDays; choice: FoodChoice | null }> {
   return await sql.begin(async (tx) => {
     await tx`
       INSERT INTO diet_plans (user_id, days) VALUES (${userId}, ${tx.json(EMPTY_WEEK)})
@@ -43,7 +62,12 @@ export async function changeDietPlan(
     const row = rows[0];
     if (row === undefined) throw new Error("the diet plan row was not written");
     const days = storedDaysSchema.parse(row.days);
-    if (row.made) return days;
+    const chosen = async (): Promise<FoodChoice | null> => {
+      const picked = await tx<{ choice: string }[]>`
+        SELECT choice FROM recommended_choices WHERE user_id = ${userId} AND kind = 'food'`;
+      return choiceOf(picked[0]?.choice);
+    };
+    if (row.made) return { days, choice: await chosen() };
     const next = storedDaysSchema.parse(change(days));
     await tx`
       UPDATE diet_plans
@@ -51,6 +75,11 @@ export async function changeDietPlan(
           recent_changes = (${changeId}::uuid || recent_changes)[1:${KEPT_CHANGES}],
           updated_at = now()
       WHERE user_id = ${userId}`;
-    return next;
+    if (!hasAMeal(days) && hasAMeal(next)) {
+      await tx`
+        INSERT INTO recommended_choices (user_id, kind, choice) VALUES (${userId}, 'food', 'mine')
+        ON CONFLICT (user_id, kind) DO UPDATE SET choice = 'mine', updated_at = now()`;
+    }
+    return { days: next, choice: await chosen() };
   });
 }

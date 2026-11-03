@@ -79,6 +79,7 @@ export function versionOf(day: number, meals: unknown): string {
 const NO_PLAN = {
   days: [1, 2, 3, 4, 5, 6, 7].map((day) => ({ day, meals: [], planned: { kcal: 0, proteinG: 0, carbsG: 0, fatG: 0 }, target: null, off: null, version: versionOf(day, []) })),
   make: { status: "ok" },
+  choice: "suggested",
   caution: FOOD_ALLERGY_CAUTION,
   labelCaution: null,
 };

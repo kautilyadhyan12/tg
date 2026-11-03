@@ -57,12 +57,19 @@ interface MealIdeasProps {
   onLog?: () => void;
   /** A line above the ideas, with its one button: on a day the person's own plan has no meals, it says so. */
   lead?: { words: string; action: { label: string; onPress: () => void } };
+  /** Under the box's title: Suggested or My plan (31f). */
+  choices?: ReactNode;
 }
 
-/** "loading": whether there is a plan isn't known yet. `meal` null: every meal of today's plan is logged. */
-export type PlannedNow = "loading" | { failed: string; retry: () => void } | { meal: DietPlanMeal | null; canLog: boolean; caution: string; labelCaution: string | null }
+/** "loading": whether there is a plan isn't known yet. `meal` null: every meal of today's plan is logged.
+ *  `build`: My plan is picked and there is none yet. */
+export type PlannedNow =
+  | "loading"
+  | { failed: string; retry: () => void }
+  | { build: () => void }
+  | { meal: DietPlanMeal | null; canLog: boolean; caution: string; labelCaution: string | null }
 
-export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = false, planned, onLog, lead }: MealIdeasProps) {
+export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = false, planned, onLog, lead, choices = null }: MealIdeasProps) {
   const { read, again, outbox, view, waiting, old } = useIdeas(fresh);
   const onDashboard = onMore !== undefined;
   const [said, setSaid] = useState<{ words: string; meal: string | null } | null>(null);
@@ -133,6 +140,13 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
         </Txt>
         <Button label="Try again" kind="link" say="Try again" onPress={plannedNow.retry} />
       </View>
+    );
+  } else if (plannedNow !== null && "build" in plannedNow) {
+    body = (
+      <>
+        <Txt kind="small">{NO_PLAN_YET}</Txt>
+        <Button label="Build my own" compact style={styles.start} onPress={plannedNow.build} />
+      </>
     );
   } else if (plannedNow !== null && onMore !== undefined) {
     const { meal, caution, labelCaution } = plannedNow;
@@ -283,6 +297,7 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
   if (bare) {
     return (
       <>
+        {choices}
         {saidLine}
         {leadLine}
         {body}
@@ -313,6 +328,7 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
             </Pressable>
           </View>
           <View style={styles.leftWords}>
+            {choices}
             {view.refused.map((r) => (
               <View key={r.id} style={styles.row}>
                 <Icon name="warn" size={16} colour="badText" />
@@ -340,6 +356,7 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
             <Icon name="apple" size={16} colour="orange" />
             <Txt kind="h3">What to eat next</Txt>
           </View>
+          {choices}
           {saidLine}
           {body}
           {foot}
@@ -451,6 +468,9 @@ function IdeaRow({ idea, held, onLog }: { idea: SuggestedIdea; held: boolean; on
     </View>
   );
 }
+
+/** My plan is picked and the person has none yet. */
+export const NO_PLAN_YET = "You don’t have a meal plan yet.";
 
 /** A space a line never breaks at: an amount is never split from its unit. */
 const KEEP_TOGETHER = "\u00A0";
