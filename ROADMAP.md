@@ -620,7 +620,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 31d-i. [x] **The ideas drawn for the person** — merged 2026-11-03 (PR #449).
       - 31d-ii. [x] **Why, in one line, under each idea on the phone** — merged 2026-11-03 (PR #454).
     - 31e. ~~**Food allergies**~~ — dropped 2026-11-03 (Kd: warn only, `rulings/2026-11-03-31f.md`).
-    - 31f. [ ] **Suggested or My plan in Recommended For You** (Kd, 2026-11-03: *"go"*): one choice, kept on the server, the same on the Dashboard and in Food (§16.6). The gym's joins with 31g.
+    - 31f. [x] **Suggested or My plan in Recommended For You** — merged 2026-11-03 (PR #458).
     - 31g. [ ] **The gym's meal plan on the phone** (§16.6). Waits for Stage 2's 24a.
 32. **Food** (split 2026-10-13: the server part needs no phone).
     - 32a. [x] **A meal sent twice from the phone is saved once** — merged 2026-10-13 (PR #238).
