@@ -1,10 +1,18 @@
-// The phone's own notifications (ROADMAP Stage 5 items 18b-i and 18b-ii-a): the one file that knows the package.
+// The phone's own notifications (ROADMAP Stage 5 items 18b-i, 18b-ii-a and 18b-ii-b): the one file that knows the package.
 // Android shows a gym's notification by itself when the app is closed; the server tags each with
 // the gym, so the gym's next one replaces it. In the app, one is shown unless that gym's Inbox is
 // already open.
 import * as Notifications from "expo-notifications";
 import * as SecureStore from "expo-secure-store";
-import { GYM_MESSAGES_CHANNEL, GYM_PLACES_CHANNEL, gymMessagePushDataSchema, gymPlacePushDataSchema, type GymPlacePushData } from "@app/shared";
+import {
+  GYM_COMMENTS_CHANNEL,
+  GYM_MESSAGES_CHANNEL,
+  GYM_PLACES_CHANNEL,
+  gymCommentPushDataSchema,
+  gymMessagePushDataSchema,
+  gymPlacePushDataSchema,
+  type GymPlacePushData,
+} from "@app/shared";
 
 export type NotificationsAllowed = "yes" | "ask" | "no";
 
@@ -14,19 +22,28 @@ export function setInboxOpen(gymId: string | null): void {
   inboxOpen = gymId;
 }
 
+/** The gym whose Updates is open, if any: its new comments are already a page away. */
+let updatesOpen: string | null = null;
+export function setUpdatesOpen(gymId: string | null): void {
+  updatesOpen = gymId;
+}
+
 /** Which gym's Inbox a notification is for, or null for anything that is not ours. */
 export function gymOfNotification(data: unknown): string | null {
   const parsed = gymMessagePushDataSchema.safeParse(data);
   return parsed.success ? parsed.data.gymId : null;
 }
 
-/** What a tapped notification asks the app to open: a gym's Inbox, or a class or an event of a gym. */
-export type Tapped = { kind: "inbox"; gymId: string } | ({ kind: "place" } & Omit<GymPlacePushData, "kind">);
+/** What a tapped notification asks the app to open: a gym's Inbox, a class or an event of a gym, or the
+ *  comments of a post on a gym's Updates. */
+export type Tapped = { kind: "inbox"; gymId: string } | ({ kind: "place" } & Omit<GymPlacePushData, "kind">) | { kind: "comment"; gymId: string; postId: string };
 
 /** What a notification of ours asks to open, or null for anything else. */
 export function tappedOf(data: unknown): Tapped | null {
   const inbox = gymMessagePushDataSchema.safeParse(data);
   if (inbox.success) return { kind: "inbox", gymId: inbox.data.gymId };
+  const comment = gymCommentPushDataSchema.safeParse(data);
+  if (comment.success) return { kind: "comment", gymId: comment.data.gymId, postId: comment.data.postId };
   const place = gymPlacePushDataSchema.safeParse(data);
   if (!place.success) return null;
   const { gymId, what, id, day } = place.data;
@@ -53,9 +70,16 @@ export function weekOfDay(day: string, zone: string, nowMs: number): number {
   return Math.min(7, Math.max(0, Math.floor((on - from) / 7)));
 }
 
-/** One notification for each gym's Inbox, and each class or event: the next replaces it, as the
- *  server's tag does when Android draws it. */
-export const identifierOf = (tapped: Tapped): string => (tapped.kind === "inbox" ? `inbox:${tapped.gymId}` : `place:${tapped.id}`);
+/** One notification for each gym's Inbox, each class or event, and each gym's comments: the next
+ *  replaces it, as the server's tag does when Android draws it. */
+export function identifierOf(tapped: Tapped): string {
+  if (tapped.kind === "inbox") return `inbox:${tapped.gymId}`;
+  if (tapped.kind === "comment") return `comments:${tapped.gymId}`;
+  return `place:${tapped.id}`;
+}
+
+const channelOf = (tapped: Tapped): string =>
+  tapped.kind === "inbox" ? GYM_MESSAGES_CHANNEL.id : tapped.kind === "comment" ? GYM_COMMENTS_CHANNEL.id : GYM_PLACES_CHANNEL.id;
 
 // Our messages carry data only, so a tap on one Android draws reaches the app. With the app open the
 // notifications package neither shows such a message nor asks the handler, so the app shows it itself:
@@ -67,7 +91,7 @@ async function showInApp(notification: Notifications.Notification): Promise<void
   if (trigger === null || typeof trigger !== "object" || !("type" in trigger) || trigger.type !== "push") return;
   const tapped = tappedOf(content.data);
   if (tapped === null || content.title === null || content.body === null) return;
-  const channelId = tapped.kind === "inbox" ? GYM_MESSAGES_CHANNEL.id : GYM_PLACES_CHANNEL.id;
+  const channelId = channelOf(tapped);
   await Notifications.scheduleNotificationAsync({
     identifier: identifierOf(tapped),
     content: { title: content.title, body: content.body, data: content.data ?? {} },
@@ -84,11 +108,12 @@ export function startNotifications(): void {
   Notifications.setNotificationHandler({
     handleNotification: (notification) => {
       const gymId = gymOfNotification(notification.request.content.data);
-      const show = gymId === null || gymId !== inboxOpen;
+      const tapped = tappedOf(notification.request.content.data);
+      const show = (gymId === null || gymId !== inboxOpen) && !(tapped?.kind === "comment" && tapped.gymId === updatesOpen);
       return Promise.resolve({ shouldShowBanner: show, shouldShowList: show, shouldPlaySound: false, shouldSetBadge: false });
     },
   });
-  for (const channel of [GYM_MESSAGES_CHANNEL, GYM_PLACES_CHANNEL]) {
+  for (const channel of [GYM_MESSAGES_CHANNEL, GYM_PLACES_CHANNEL, GYM_COMMENTS_CHANNEL]) {
     void Notifications.setNotificationChannelAsync(channel.id, {
       name: channel.name,
       importance: Notifications.AndroidImportance.DEFAULT,
@@ -167,6 +192,19 @@ export async function clearGym(gymId: string): Promise<void> {
     const shown = await Notifications.getPresentedNotificationsAsync();
     for (const one of shown) {
       if (gymOfNotification(one.request.content.data) === gymId) await Notifications.dismissNotificationAsync(one.request.identifier);
+    }
+  } catch {
+    // Nothing to clear.
+  }
+}
+
+/** Takes a gym's comments notification off the phone: its Updates has been opened. */
+export async function clearComments(gymId: string): Promise<void> {
+  try {
+    const shown = await Notifications.getPresentedNotificationsAsync();
+    for (const one of shown) {
+      const tapped = tappedOf(one.request.content.data);
+      if (tapped?.kind === "comment" && tapped.gymId === gymId) await Notifications.dismissNotificationAsync(one.request.identifier);
     }
   } catch {
     // Nothing to clear.

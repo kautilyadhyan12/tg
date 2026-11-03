@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react-native";
 import { App } from "../../src/App";
-import { fakeServer, kept, memoryStore, tokens, type Reply, type Route } from "../kit";
+import { fakeServer, kept, memoryStore, refusal, tokens, type Reply, type Route } from "../kit";
 
 // A gym's messages as phone notifications (ROADMAP Stage 5 item 18b-i): the reason before Android
 // asks, the phone's address given for the person signed in, a tap that opens that gym's Inbox, and
@@ -103,6 +103,7 @@ describe("asking for notifications", () => {
     expect(notifications.channels).toEqual([
       expect.objectContaining({ id: "gym-messages", name: "Gym messages" }),
       expect.objectContaining({ id: "gym-places", name: "Classes and events" }),
+      expect.objectContaining({ id: "gym-comments", name: "Comments" }),
     ]);
   });
 
@@ -387,6 +388,143 @@ describe("a tapped notification about a place", () => {
     expect(notifications.channels.map((c) => c.name)).toEqual(expect.arrayContaining(["Gym messages", "Classes and events"]));
     const shown = await notifications.handler?.handleNotification({ request: { content: { data: placeTap(IRON.id, "class", SESSION).notification.request.content.data } } });
     expect(shown?.shouldShowBanner).toBe(true);
+  });
+});
+
+describe("a tapped notification about a comment", () => {
+  const POST = "a1111111-1111-4111-8111-111111111111";
+  const OTHER = "a2222222-2222-4222-8222-222222222222";
+  const commentTap = (gymId: string, postId: string) => ({
+    notification: { request: { identifier: `c-${postId}`, content: { data: { kind: "gym_comment", gymId, postId } } } },
+  });
+  const post = (id: string, body: string) => ({
+    id,
+    author: { name: "Ravi K.", initials: "RK" },
+    body,
+    photos: [],
+    pinned: false,
+    createdAt: "2026-10-28T09:05:00.000Z",
+    reactions: { like: 0, love: 0, strong: 0, fire: 0 },
+    mine: null,
+    fromMember: true,
+    authorId: "b1111111-1111-4111-8111-111111111111",
+    own: true,
+    wrote: true,
+    reported: false,
+    hidden: false,
+    commentCount: 1,
+    challengeResult: null,
+  });
+  const comment = {
+    id: "c1111111-1111-4111-8111-111111111111",
+    postId: POST,
+    parentId: null,
+    replyingTo: null,
+    author: { name: "Asha R.", initials: "AR" },
+    body: "Great work this week!",
+    createdAt: "2026-10-28T10:00:00.000Z",
+    reactions: { like: 0, love: 0, strong: 0, fire: 0 },
+    mine: null,
+    fromMember: true,
+    authorId: "b2222222-2222-4222-8222-222222222222",
+    own: false,
+    wrote: false,
+    reported: false,
+    hidden: false,
+    replyCount: 0,
+  };
+  // The tapped post is not on the first page of Updates: only the one-post read finds it.
+  const feed = { gymId: IRON.id, gymName: IRON.name, pinned: [], posts: [post(OTHER, "Somebody else's post")], next: "x", status: "shown", posting: "on", commenting: "on", blockedCount: 0, supportEmail: null };
+  const commentRoutes = (one: Route = ok({ post: post(POST, "My first deadlift") })) =>
+    routes({
+      [`/v1/orgs/${IRON.id}/posts`]: ok(feed),
+      [`/v1/orgs/${IRON.id}/posts/${POST}`]: one,
+      [`/v1/orgs/${IRON.id}/posts/${POST}/comments`]: ok({ comments: [comment], next: null, commenting: "on" }),
+    });
+  const tap = (data: ReturnType<typeof commentTap>) =>
+    act(async () => {
+      for (const one of notifications.taps) one(data);
+      await Promise.resolve();
+    });
+
+  it("opens that gym's Updates with the post's comments open, though the post is far down the list", async () => {
+    notifications.permission = YES;
+    await open(fakeServer(commentRoutes()));
+    await tap(commentTap(IRON.id, POST));
+    const updates = within(await screen.findByTestId("updates-page"));
+    expect(await updates.findByText("Great work this week!")).toBeTruthy();
+    expect(screen.getByTestId("comments-list")).toBeTruthy();
+  });
+
+  it("a post since removed says so on Updates, and opens no comments", async () => {
+    notifications.permission = YES;
+    await open(fakeServer(commentRoutes(() => refusal(404, "post_not_found", "This post is no longer here."))));
+    await tap(commentTap(IRON.id, POST));
+    const updates = within(await screen.findByTestId("updates-page"));
+    expect(await updates.findByText("That post is no longer on Updates.")).toBeTruthy();
+    expect(screen.queryByTestId("comments-list")).toBeNull();
+  });
+
+  it("a post that cannot be read (no signal, the server's fault) says so, and the list shows as usual", async () => {
+    notifications.permission = YES;
+    await open(fakeServer(commentRoutes(() => refusal(500, "internal", "Something went wrong."))));
+    await tap(commentTap(IRON.id, POST));
+    const updates = within(await screen.findByTestId("updates-page"));
+    expect(await updates.findByText("Couldn't open that post.")).toBeTruthy();
+    expect(await updates.findByText("Somebody else's post")).toBeTruthy();
+    expect(screen.queryByTestId("comments-list")).toBeNull();
+  });
+
+  it("while that gym's Updates is open, its comments notification is not shown; another gym's is", async () => {
+    notifications.permission = YES;
+    await open(fakeServer(commentRoutes()));
+    await tap(commentTap(IRON.id, POST));
+    await screen.findByTestId("updates-page");
+    const shown = (gymId: string) => notifications.handler?.handleNotification({ request: { content: { data: { kind: "gym_comment", gymId, postId: POST } } } });
+    expect((await shown(IRON.id))?.shouldShowBanner).toBe(false);
+    expect((await shown(STRANGER_GYM))?.shouldShowBanner).toBe(true);
+  });
+
+  it("opening that gym's Updates takes its comments notification off the phone, and nobody else's", async () => {
+    notifications.permission = YES;
+    notifications.presented = [
+      { request: { identifier: `comments:${IRON.id}`, content: { data: { kind: "gym_comment", gymId: IRON.id, postId: POST } } } },
+      { request: { identifier: `comments:${STRANGER_GYM}`, content: { data: { kind: "gym_comment", gymId: STRANGER_GYM, postId: POST } } } },
+      { request: { identifier: `inbox:${IRON.id}`, content: { data: { kind: "gym_inbox", gymId: IRON.id } } } },
+    ];
+    await open(fakeServer(commentRoutes()));
+    await tap(commentTap(IRON.id, POST));
+    await screen.findByTestId("updates-page");
+    await settle();
+    expect(notifications.dismissed).toEqual([`comments:${IRON.id}`]);
+  });
+
+  it("a gym that is not one of this person's opens nothing", async () => {
+    notifications.permission = YES;
+    await open(fakeServer(commentRoutes()));
+    await tap(commentTap(STRANGER_GYM, POST));
+    await tap({ notification: { request: { identifier: "x", content: { data: { kind: "gym_comment", gymId: IRON.id, postId: "not-a-post" } } } } });
+    await settle();
+    expect(screen.queryByTestId("updates-page")).toBeNull();
+  });
+
+  it("arriving with the app open, it is shown once for the gym on the Comments channel", async () => {
+    notifications.permission = YES;
+    await open(fakeServer(routes()));
+    expect(notifications.channels.map((c) => c.name)).toContain("Comments");
+    await act(async () => {
+      for (const one of notifications.received) {
+        one({ request: { identifier: "fcm-1", trigger: { type: "push" }, content: { title: "Iron House · 2 new comments", body: "Asha R.: Nice", data: { kind: "gym_comment", gymId: IRON.id, postId: POST } } } });
+      }
+      await Promise.resolve();
+    });
+    expect(notifications.scheduled).toEqual([
+      {
+        identifier: `comments:${IRON.id}`,
+        content: { title: "Iron House · 2 new comments", body: "Asha R.: Nice", data: { kind: "gym_comment", gymId: IRON.id, postId: POST } },
+        trigger: { channelId: "gym-comments" },
+      },
+    ]);
   });
 });
 

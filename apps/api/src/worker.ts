@@ -26,6 +26,7 @@ import pino from "pino";
 import postgres from "postgres";
 import { loadConfig } from "./config.js";
 import { createFcmSender, readServiceAccount } from "./modules/push/fcm.adapter.js";
+import { sendCommentNotifications } from "./modules/push/commentsSweep.js";
 import { sendPlaceNotifications } from "./modules/push/placesSweep.js";
 import { sendGymMessageNotifications } from "./modules/push/sweep.js";
 import { createResendEmailReader, createResendInviteTransport, createResendTransport } from "./email/resend.js";
@@ -819,6 +820,24 @@ if (pushAccount === null) {
         });
         if (placesRun.sent + placesRun.skipped + placesRun.failed > 0) {
           log.info({ ...placesRun, durationMs: Date.now() - placesStartedAt, event: "job.finished", job: "push.places" }, "job finished");
+        }
+      } catch (err) {
+        failure ??= err instanceof Error ? err : new Error(String(err));
+      }
+      // A comment or reply on the person's post (18b-ii-b), in the same minute.
+      const commentsStartedAt = Date.now();
+      try {
+        const commentsRun = await sendCommentNotifications({
+          sql,
+          sender: pushSender,
+          now: () => new Date(),
+          onError: (err) => {
+            const e = err instanceof Error ? err : new Error(String(err));
+            log.warn({ errName: e.name, errMessage: e.message, event: "job.item_failed", job: "push.comments" }, "a comment notification failed and was kept for the next run");
+          },
+        });
+        if (commentsRun.sent + commentsRun.skipped + commentsRun.failed > 0) {
+          log.info({ ...commentsRun, durationMs: Date.now() - commentsStartedAt, event: "job.finished", job: "push.comments" }, "job finished");
         }
       } catch (err) {
         failure ??= err instanceof Error ? err : new Error(String(err));

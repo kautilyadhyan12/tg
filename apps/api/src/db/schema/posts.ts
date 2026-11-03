@@ -227,6 +227,32 @@ export const gymPostCommentReports = pgTable(
   ],
 );
 
+/** A person a new comment is owed to as a phone notification (`0196_comment_notifications.sql`). */
+export const gymPostCommentNotices = pgTable(
+  "gym_post_comment_notices",
+  {
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    commentId: uuid("comment_id").notNull(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: createdAt(),
+    doneAt: timestamp("done_at", { withTimezone: true }),
+    toldAt: timestamp("told_at", { withTimezone: true }),
+    seenAt: timestamp("seen_at", { withTimezone: true }),
+  },
+  (t) => [
+    primaryKey({ name: "gym_post_comment_notices_pk", columns: [t.commentId, t.userId] }),
+    foreignKey({ name: "gym_post_comment_notices_comment_fk", columns: [t.gymId, t.commentId], foreignColumns: [gymPostComments.gymId, gymPostComments.id] }).onDelete("cascade"),
+    index("gym_post_comment_notices_due_idx").on(t.createdAt, t.userId, t.gymId).where(sql`${t.doneAt} IS NULL`),
+    index("gym_post_comment_notices_told_idx").on(t.userId, t.gymId, t.toldAt).where(sql`${t.toldAt} IS NOT NULL`),
+    index("gym_post_comment_notices_unseen_idx").on(t.userId, t.gymId).where(sql`${t.seenAt} IS NULL`),
+    index("gym_post_comment_notices_done_idx").on(t.doneAt).where(sql`${t.doneAt} IS NOT NULL`),
+  ],
+);
+
 /** A person the gym has stopped posting. */
 export const gymPostStops = pgTable(
   "gym_post_stops",

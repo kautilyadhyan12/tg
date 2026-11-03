@@ -28,6 +28,7 @@ import {
   gymPostReactionResponseSchema,
   gymPostReactorsResponseSchema,
   gymPostSchema,
+  gymPostResponseSchema,
   gymPostsResponseSchema,
   personGymPostsResponseSchema,
   reportedGymPostsResponseSchema,
@@ -46,6 +47,7 @@ import {
   type GymPostReasonCounts,
   type GymPostReportReason,
   type GymPostsCursor,
+  type GymPostResponse,
   type GymPostsResponse,
   type PersonGymPostsResponse,
   type ReportedGymPostsResponse,
@@ -63,6 +65,7 @@ import { cleanPhoto } from "../gymPage/photoBytes.js";
 import { postPhotoKey, type PhotoStore } from "../gymPage/photoStore.js";
 import { PHOTO_PROBLEM_STATUS, type PhotoFile } from "../gymPage/service.js";
 import { fullName, shownName } from "../leaderboard/rank.js";
+import { markCommentsSeen } from "../../push/commentsRepo.js";
 import { lockGym } from "../memberList/repo.js";
 import { badWordsIn, hasDisguisedWords } from "./badWords.js";
 import { removeListed } from "./photoFiles.js";
@@ -233,6 +236,8 @@ export async function getPosts(
   if (!(await gymIsLive(deps.sql, gymId, org.status))) {
     return gymPostsResponseSchema.parse({ gymId, gymName: org.name, status: "paused", posting: "off", commenting: "off", blockedCount: await repo.countBlocked(deps.sql, gymId, userId), supportEmail, pinned: [], posts: [], next: null });
   }
+  // The comments their phone was told of are on this page now: the next notification counts from here.
+  if (before === undefined) await markCommentsSeen(deps.sql, userId, gymId, deps.now());
   const [feed, posting, commenting, blockedCount] = await Promise.all([
     page(deps, gymId, before, { member: userId }, (rows) => shaped(deps, gymId, rows, userId)),
     postingOf(deps.sql, gymId, userId),
@@ -240,6 +245,13 @@ export async function getPosts(
     repo.countBlocked(deps.sql, gymId, userId),
   ]);
   return gymPostsResponseSchema.parse({ gymId, gymName: org.name, status: "shown", posting, commenting, blockedCount, supportEmail, ...feed });
+}
+
+/** One post, for a member of a live gym who may read it (Stage 5 18b-ii-b); 404 for anybody else. */
+export async function getPost(deps: Pick<PostsDeps, "sql" | "now">, userId: string, gymId: string, postId: string, limit: Limit): Promise<GymPostResponse | null> {
+  await requireMember(deps, gymId, userId);
+  if (!(await limit())) return null;
+  return gymPostResponseSchema.parse({ post: await memberPost(deps, gymId, postId, userId) });
 }
 
 /** The gym's posts for its staff holding the tick. */
