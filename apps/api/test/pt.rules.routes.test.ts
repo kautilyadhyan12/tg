@@ -261,6 +261,8 @@ d("personal training's own booking rules (real Postgres, two api instances)", { 
   const PT_FEES_START = { lateCancelMinor: 0, noShowMinor: 0 };
   // No new bookings while a payment is overdue (17i): off, and nobody owes.
   const OVERDUE_START = { rule: "let_book", afterDays: 0, stopped: { count: 0, people: [] } };
+  // No new bookings until the membership agreement is signed (18u-iv): off, and no agreement asked.
+  const UNSIGNED_START = { rule: "let_book", canChange: true, inUse: false, stopped: null };
   const settingsUrl = (gym: Gym) => `/v1/orgs/${gym.id}/booking-settings`;
   interface Rules {
     settings: ClassBookingSettings;
@@ -522,7 +524,7 @@ d("personal training's own booking rules (real Postgres, two api instances)", { 
     "the settings: a new gym's two start at 7 days and 2 hours; the owner changes them alone or with the classes' four, each inside its limits, and what changed is written down",
     async () => {
       const gym = await makeGym("Settings");
-      expect(await rulesOf(gym)).toEqual({ settings: CLASS_START, pt: PT_START, fees: FEES_START, ptFees: PT_FEES_START, overdue: OVERDUE_START });
+      expect(await rulesOf(gym)).toEqual({ settings: CLASS_START, pt: PT_START, fees: FEES_START, ptFees: PT_FEES_START, overdue: OVERDUE_START, unsigned: UNSIGNED_START });
 
       // Every value outside its limits, a missing part and an extra one are refused whole.
       const whole = { ...CLASS_START, pt: PT_START };
@@ -552,8 +554,8 @@ d("personal training's own booking rules (real Postgres, two api instances)", { 
       // Personal training's two alone: the classes' four are as they were.
       const res = await inject("PUT", settingsUrl(gym), gym.owner.cookies, { ...CLASS_START, pt: { opensDays: 3, freeCancelMinutes: 0 } });
       expect(res.statusCode, res.body).toBe(200);
-      expect(JSON.parse(res.body)).toEqual({ settings: CLASS_START, pt: { opensDays: 3, freeCancelMinutes: 0 }, fees: FEES_START, ptFees: PT_FEES_START, overdue: OVERDUE_START, movedIn: 0 });
-      expect(await rulesOf(gym)).toEqual({ settings: CLASS_START, pt: { opensDays: 3, freeCancelMinutes: 0 }, fees: FEES_START, ptFees: PT_FEES_START, overdue: OVERDUE_START });
+      expect(JSON.parse(res.body)).toEqual({ settings: CLASS_START, pt: { opensDays: 3, freeCancelMinutes: 0 }, fees: FEES_START, ptFees: PT_FEES_START, overdue: OVERDUE_START, unsigned: UNSIGNED_START, movedIn: 0 });
+      expect(await rulesOf(gym)).toEqual({ settings: CLASS_START, pt: { opensDays: 3, freeCancelMinutes: 0 }, fees: FEES_START, ptFees: PT_FEES_START, overdue: OVERDUE_START, unsigned: UNSIGNED_START });
       expect(await stored(gym)).toEqual({ classes: [7, 120], pt: [3, 0] });
       // The classes' alone: personal training's are as they were.
       await setRules(gym, { opensDays: 14, freeCancelMinutes: 60 }, { opensDays: 3, freeCancelMinutes: 0 });

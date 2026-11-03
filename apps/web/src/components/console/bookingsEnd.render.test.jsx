@@ -2,6 +2,7 @@
 // (ROADMAP 17c-ii-a). Only the network is mocked.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 
 const api = {
   getEndingBookings: vi.fn(),
@@ -432,5 +433,76 @@ describe('Settings → Booking rules: no new bookings while a payment is overdue
     fireEvent.change(screen.getByLabelText('How many people a waitlist holds'), { target: { value: '8' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
     await waitFor(() => expect(api.updateBookingSettings).toHaveBeenCalledWith('g1', { ...START, waitlistMax: 8, pt: PT }));
+  });
+});
+
+describe('Settings → Booking rules: no new bookings until the membership agreement is signed (18u-iv)', () => {
+  const ORG = { id: 'g1', orgType: 'gym' };
+  const START = { opensDays: 7, freeCancelMinutes: 120, handoverMinutes: 1440, waitlistMax: 20 };
+  const PT = { opensDays: 3, freeCancelMinutes: 1440 };
+  const NAMES = ['Ana Lopez', 'Ben Okafor', 'Chloe Martin', 'Dev Patel', 'Ella Rossi'];
+  const STOPPED = { count: 8, people: NAMES.map((name, n) => ({ entryId: bid(200 + n), name })) };
+  const OWNER = ['org.manage', 'schedule.manage', 'members.confirm'];
+  const open = async (unsigned, privileges = OWNER) => {
+    api.getBookingSettings.mockResolvedValue({ data: { settings: START, pt: PT, unsigned } });
+    render(
+      <MemoryRouter initialEntries={['/console/iron-house/settings']}>
+        <BookingSettingsPanel org={ORG} orgSlug="iron-house" privileges={privileges} readOnly={false} />
+      </MemoryRouter>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: /Booking rules/ }));
+    await screen.findByLabelText('Days before a class that booking opens');
+  };
+
+  it('names who has one to sign today, says what the choice does to them, See all opens Members, and Save sends it', async () => {
+    api.updateBookingSettings.mockResolvedValue({ data: { settings: START, pt: PT, unsigned: { rule: 'stop', canChange: true, inUse: true, stopped: STOPPED } } });
+    await open({ rule: 'let_book', canChange: true, inUse: true, stopped: STOPPED });
+    expect(screen.getByText('Unsigned agreements')).toBeTruthy();
+    expect(screen.getByText("What happens when a member who hasn't signed their membership agreement tries to book in the app.")).toBeTruthy();
+    expect(screen.getByRole('radio', { name: 'Let them book' }).checked).toBe(true);
+    const box = screen.getByRole('group', { name: 'Who has a membership agreement to sign today' });
+    expect(within(box).getByText('Today 8 people on your list have a membership agreement to sign:')).toBeTruthy();
+    expect(within(box).getAllByRole('listitem').map((li) => li.textContent)).toEqual(NAMES);
+    expect(within(box).getByText('and 3 more')).toBeTruthy();
+    expect(within(box).getByText('They can still book in the app.')).toBeTruthy();
+    expect(within(box).getByRole('link', { name: 'See all' }).getAttribute('href')).toBe('/console/iron-house/members?show=agreement-not-signed');
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Stop new bookings until they sign' }));
+    expect(within(box).getByText("Once you save, they can't book classes or personal training in the app until they sign.")).toBeTruthy();
+    // With a change not saved, See all asks before leaving.
+    expect(within(box).queryByRole('link', { name: 'See all' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(api.updateBookingSettings).toHaveBeenCalledWith('g1', { ...START, pt: PT, unsigned: 'stop' }));
+    expect(await screen.findByText('Saved.')).toBeTruthy();
+    expect(within(box).getByText("They can't book classes or personal training in the app until they sign.")).toBeTruthy();
+    expect(screen.getByRole('button', { name: /No new bookings until the membership agreement is signed\./ })).toBeTruthy();
+  });
+
+  it('nobody has one to sign today: it says so', async () => {
+    await open({ rule: 'stop', canChange: true, inUse: true, stopped: { count: 0, people: [] } });
+    expect(screen.getByText('Nobody on your list has a membership agreement to sign today.')).toBeTruthy();
+  });
+
+  it('staff who may not change the agreements read the choice, cannot change it, and their save leaves it be', async () => {
+    api.updateBookingSettings.mockResolvedValue({ data: { settings: { ...START, waitlistMax: 8 }, pt: PT, unsigned: { rule: 'stop', canChange: false, inUse: true, stopped: null } } });
+    await open({ rule: 'stop', canChange: false, inUse: true, stopped: null }, ['schedule.manage']);
+    expect(screen.getByRole('radio', { name: 'Stop new bookings until they sign' }).checked).toBe(true);
+    expect(screen.getByRole('radio', { name: 'Let them book' }).disabled).toBe(true);
+    expect(screen.getByTestId('unsigned-who').textContent).toBe('Only the owner can change this.');
+    expect(screen.queryByRole('group', { name: 'Who has a membership agreement to sign today' })).toBeNull();
+    fireEvent.change(screen.getByLabelText('How many people a waitlist holds'), { target: { value: '8' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(api.updateBookingSettings).toHaveBeenCalledWith('g1', { ...START, waitlistMax: 8, pt: PT }));
+  });
+
+  it('a business that asks for no agreement is told so, with the button to set one up, or who can', async () => {
+    await open({ rule: 'let_book', canChange: true, inUse: false, stopped: null });
+    expect(screen.queryByRole('radio', { name: 'Stop new bookings until they sign' })).toBeNull();
+    const none = screen.getByTestId('unsigned-none');
+    expect(none.textContent).toContain("You don't ask members to sign a membership agreement.");
+    expect(within(none).getByRole('link', { name: 'Set up membership agreements' }).getAttribute('href')).toBe('/console/iron-house/settings#membership-agreement');
+    cleanup();
+    await open({ rule: 'let_book', canChange: false, inUse: false, stopped: null }, ['schedule.manage']);
+    expect(screen.getByTestId('unsigned-none').textContent).toContain('Only the owner can set up membership agreements.');
   });
 });

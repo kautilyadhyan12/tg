@@ -177,7 +177,7 @@ function OverduePeople({ stopped, rule, changed }) {
 
 /** Who has a membership agreement to sign today, and what the choice picked does to them. See all
  *  opens Members showing them. */
-function UnsignedPeople({ stopped, rule, changed, allTo }) {
+function UnsignedPeople({ stopped, rule, changed, allTo, guard }) {
   const words = unsignedPeopleWords(stopped, rule, changed);
   if (words === null) return null;
   const names = unsignedNames(stopped);
@@ -199,7 +199,7 @@ function UnsignedPeople({ stopped, rule, changed, allTo }) {
         <p className="text-sm m-0 flex flex-wrap items-center gap-2" style={softStyle}>
           {names.more > 0 ? <span>{`and ${String(names.more)} more`}</span> : null}
           {allTo !== null ? (
-            <PlaceLink to={allTo} className="c-lk c-w6">
+            <PlaceLink to={allTo} guard={guard} className="c-lk c-w6">
               See all
             </PlaceLink>
           ) : null}
@@ -601,7 +601,7 @@ export default function BookingSettingsPanel({ org, orgSlug, privileges, readOnl
                         Only the owner can change this.
                       </p>
                     )}
-                    <UnsignedPeople stopped={unsigned.stopped} rule={unsignedDraft} changed={unsignedChanged} allTo={toSignTo} />
+                    <UnsignedPeople stopped={unsigned.stopped} rule={unsignedDraft} changed={unsignedChanged} allTo={toSignTo} guard={changed} />
                   </>
                 ) : (
                   <p className="text-sm m-0 flex flex-wrap items-center gap-x-3 gap-y-1" style={labelStyle} data-testid="unsigned-none">
@@ -609,7 +609,7 @@ export default function BookingSettingsPanel({ org, orgSlug, privileges, readOnl
                     {agreementTo === null ? (
                       <span style={hintStyle}>Only the owner can set up membership agreements.</span>
                     ) : (
-                      <PlaceLink to={agreementTo} className="c-lk c-w6">
+                      <PlaceLink to={agreementTo} guard={changed} className="c-lk c-w6">
                         Set up membership agreements
                       </PlaceLink>
                     )}
