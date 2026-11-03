@@ -417,6 +417,8 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   const [entry, setEntry] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [attempt, setAttempt] = useState(0);
+  /** Bumped when a Terminal payment asked to keep the card: Card on file reads again (18d-vi-c). */
+  const [cardReads, setCardReads] = useState(0);
   const [mode, setMode] = useState(entryId === null ? 'edit' : pair !== null ? 'join' : 'view');
   /** The person in the app a "Not this person" box is about. */
   const [notThem, setNotThem] = useState(null);
@@ -1494,11 +1496,12 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           refundNow={refundNow}
           signNow={signNow !== null && signNow.entryId === p.entryId ? signNow.membershipId : null}
           hasEmail={typeof p.email === 'string' && p.email !== ''}
+          onCardAsked={() => setCardReads((n) => n + 1)}
         />
         <MemberPayer key={`payer-${p.entryId}`} gymId={gymId} gym={gym} entryId={p.entryId} name={p.fullName} readOnly={readOnly} onChanged={onChanged} />
         {/* The card on file is for staff holding the payments tick alone (18d-ii). */}
         {canRecordPayments(viewerPrivileges(gym)) ? (
-          <MemberCard key={`card-${p.entryId}`} gymId={gymId} gym={gym} entryId={p.entryId} name={p.fullName} readOnly={readOnly} />
+          <MemberCard key={`card-${p.entryId}-${cardReads}`} gymId={gymId} gym={gym} entryId={p.entryId} name={p.fullName} readOnly={readOnly} />
         ) : null}
         <MemberPurchases key={`purchases-${p.entryId}`} gymId={gymId} gym={gym} entryId={p.entryId} name={p.fullName} past={p.formerAt !== null} />
         <MemberNotes key={`notes-${p.entryId}`} gymId={gymId} entryId={p.entryId} name={p.fullName} readOnly={readOnly} timeZone={gym?.timezone ?? null} />

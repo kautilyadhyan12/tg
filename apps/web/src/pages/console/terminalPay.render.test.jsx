@@ -149,7 +149,7 @@ describe('Take payment on Terminal: the worst thing first', () => {
     await waitFor(() => expect(orgService.startTerminalPayment).toHaveBeenCalledTimes(1));
     const [gymId, entryId, membershipId, body] = orgService.startTerminalPayment.mock.calls[0];
     expect([gymId, entryId, membershipId]).toEqual([GYM, TARA, held(1, false).id]);
-    expect(body).toEqual({ terminalId: DESK.id, requestKey: expect.any(String), periodIndex: 0, amountMinor: 4999 });
+    expect(body).toEqual({ terminalId: DESK.id, requestKey: expect.any(String), periodIndex: 0, amountMinor: 4999, keepCard: false });
     expect(orgService.changeHeldMembership).not.toHaveBeenCalled();
 
     // Waiting: no word of paid until the server says it.
@@ -379,5 +379,91 @@ describe('Take payment on Terminal for a fee', () => {
       "Square took $10.00 from Tara's card, but this fee was taken off or changed meanwhile, so it isn't recorded here. Refund it in your Square Dashboard.",
     );
     expect(ended.getAllByRole('button').map((b) => b.textContent)).toEqual(['Done']);
+  });
+});
+
+describe('The card kept from a Terminal payment (18d-vi-c)', () => {
+  const VISA = { brand: 'VISA', last4: '4242', expired: false, stopped: false, payerName: null, ref: 'ref' };
+  const CARD_TICK = 'Save the card for automatic payments';
+  const offered = (cardOnFile = null, keepsCard = true) => Promise.resolve({ data: { terminals: [DESK], waiting: [], cardOnFile, keepsCard } });
+  const onTerminal = async () => {
+    const form = await openPay();
+    await waitFor(() => expect(optionsOf(howPaid(form))[1]).toBe('Card on Terminal'));
+    fireEvent.change(howPaid(form), { target: { value: 'terminal' } });
+    return form;
+  };
+  const ends = (card) => {
+    orgService.startTerminalPayment.mockResolvedValue({ data: { payment: payment({ card: { step: 'agreeing', brand: null, last4: null } }) } });
+    orgService.checkTerminalPayment.mockResolvedValue({ data: { payment: payment({ pickedUp: true, step: 'done', outcome: 'paid', receiptNumber: 12, card }) } });
+  };
+
+  it('no card on file: ticked, and the press asks to keep the card', async () => {
+    orgService.getTerminalPayments.mockReturnValue(offered());
+    ends({ step: 'saved', brand: 'VISA', last4: '1111' });
+    draw();
+    const form = await onTerminal();
+    expect(form.getByRole('checkbox', { name: CARD_TICK }).checked).toBe(true);
+    fireEvent.click(form.getByRole('button', { name: 'Take payment on Terminal' }));
+    await waitFor(() => expect(orgService.startTerminalPayment).toHaveBeenCalledTimes(1));
+    expect(orgService.startTerminalPayment.mock.calls[0][3].keepCard).toBe(true);
+    expect(await screen.findByText('$49.99 paid by card on the Terminal. That bill is paid. Card saved: Visa ending 1111.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Open Card on file' })).toBeNull();
+  });
+
+  it('a card on file: not ticked, and it names the card it would replace', async () => {
+    orgService.getTerminalPayments.mockReturnValue(offered(VISA));
+    orgService.startTerminalPayment.mockResolvedValue({ data: { payment: payment() } });
+    orgService.checkTerminalPayment.mockResolvedValue({ data: { payment: payment() } });
+    draw();
+    const form = await onTerminal();
+    const tick = await form.findByRole('checkbox', { name: `${CARD_TICK}, in place of Visa ending 4242` });
+    expect(tick.checked).toBe(false);
+    fireEvent.click(form.getByRole('button', { name: 'Take payment on Terminal' }));
+    await waitFor(() => expect(orgService.startTerminalPayment).toHaveBeenCalledTimes(1));
+    expect(orgService.startTerminalPayment.mock.calls[0][3].keepCard).toBe(false);
+  });
+
+  it('a membership that does not renew: no tick', async () => {
+    orgService.getHeldMemberships.mockResolvedValue(page([{ ...held(1, false), view: { ...held(1, false).view, renewsOn: null } }]));
+    orgService.getTerminalPayments.mockReturnValue(offered());
+    draw();
+    const form = await onTerminal();
+    expect(form.queryByRole('checkbox')).toBeNull();
+  });
+
+  it('somebody else pays: no tick, and nothing asks to keep the card', async () => {
+    orgService.getTerminalPayments.mockReturnValue(offered(null, false));
+    draw();
+    const form = await onTerminal();
+    expect(form.queryByRole('checkbox')).toBeNull();
+  });
+
+  it('not kept: says why and opens Card on file', async () => {
+    for (const [card, line] of [
+      [{ step: 'declined', brand: null, last4: null }, "The card wasn't saved: Tara chose Pay without saving."],
+      [{ step: 'square_refused', brand: null, last4: null }, "Square couldn't save this card. Apple Pay, Google Pay and some debit cards can't be saved."],
+      [{ step: 'not_saved', brand: null, last4: null }, "The card wasn't saved."],
+    ]) {
+      orgService.getTerminalPayments.mockReturnValue(offered());
+      ends(card);
+      draw();
+      const form = await onTerminal();
+      fireEvent.click(form.getByRole('button', { name: 'Take payment on Terminal' }));
+      expect(await screen.findByText(`$49.99 paid by card on the Terminal. That bill is paid. ${line}`)).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Open Card on file' })).toBeTruthy();
+      cleanup();
+    }
+  });
+
+  it('while the agreement is on the Terminal, the box says so before the amount', async () => {
+    orgService.getTerminalPayments.mockReturnValue(offered());
+    orgService.startTerminalPayment.mockResolvedValue({ data: { payment: payment({ card: { step: 'agreeing', brand: null, last4: null } }) } });
+    orgService.checkTerminalPayment.mockResolvedValue({ data: { payment: payment({ card: { step: 'agreeing', brand: null, last4: null } }) } });
+    draw();
+    const form = await onTerminal();
+    fireEvent.click(form.getByRole('button', { name: 'Take payment on Terminal' }));
+    const wait = within(await screen.findByTestId('terminal-pay-wait'));
+    expect(wait.getByText('Tara agrees to save the card, or chooses Pay without saving.').closest('li').dataset.state).toBe('now');
+    expect(wait.getByText('The Terminal shows the amount.').closest('li').dataset.state).toBe('later');
   });
 });

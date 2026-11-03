@@ -4259,6 +4259,19 @@ is a gym with no country. People who use the app for themselves may be anywhere.
   fee):* the fee's own Record payment → Card on Terminal, all of it, the box under the fee; while
   it waits nothing of that membership is paid by hand, and the fee is not waived; a fee taken off
   meanwhile (marked Came) leaves Square's money "not recorded", told to Staff activity.
+  *As built, 18d-vi-c (the card kept from a Terminal payment; `rulings/2026-11-02-18d-vi-c.md`):* Record payment → Card on Terminal, on a bill of a
+  membership that renews, for somebody who pays for themselves, has the tick "Save the card for automatic payments": ticked where no card is
+  on file, not ticked where one is, and then it adds ", in place of Visa ending 4242". Ticked, the Terminal first shows "Save your card", the
+  membership's line ("Gold Monthly: $49.99 every month. Renews until you cancel."), worked out by the server, and the card agreement word for
+  word, with I agree and Pay without saving (Square's CONFIRMATION). Nothing is charged until they answer; the amount follows either answer. The
+  box under the bill shows that step first. Only after I agree to those very words and a payment recorded on the bill is the card kept: CreateCard
+  with that payment's id, on the customer of the record holding the membership now, through the step every saved card takes, so a newer card
+  replaces the old one. No customer is made in Square before they agree. The words, the moment, the Terminal and the membership are kept in
+  `gym_card_agreements`, and the signed agreement's View says "Card for automatic payments: Visa ending 1111, agreed on the Terminal on
+  2 November 2026." The payment's sentence ends "Card saved: Visa ending 1111.", or says why not, with Open Card on file. Square refusing leaves the
+  payment as it is; Square not answering is asked again by the worker for 23 hours (Square: "authorized within the last 24 hours"). A save waiting
+  for the person, or somebody else paying, refuses the press. **Not proven:** a real card tapped on a real Terminal, and which debit cards Square
+  refuses: its test area kept the card from a simulated EMV payment (2026-11-02).
 - **Square's own app (Square Point of Sale): not connected** (Kd, 2026-10-30; `rulings/2026-10-30-18d-iii-b-v.md`; taken out in
   18d-iii-b-v, PR #399; what was built is in git before that job). A gym takes a card at the desk on the
   Square Terminal, started here, or bills the card on file. Money taken in Square's own app is the gym's to record by hand:

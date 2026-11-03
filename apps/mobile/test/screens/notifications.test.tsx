@@ -16,6 +16,8 @@ type Stand = {
   dismissedAll: number;
   unregistered: number;
   taps: ((response: unknown) => void)[];
+  received: ((notification: unknown) => void)[];
+  scheduled: { identifier: string; content: unknown; trigger: unknown }[];
   last: unknown;
   handler: { handleNotification: (n: unknown) => Promise<{ shouldShowBanner: boolean }> } | null;
   channels: { id: string; name: string }[];
@@ -91,14 +93,17 @@ describe("asking for notifications", () => {
     const server = fakeServer(routes());
     await open(server);
     expect(await screen.findByText("Turn on notifications?")).toBeTruthy();
-    expect(screen.getByText("Get messages and class reminders from your gym, even when the app is closed.")).toBeTruthy();
+    expect(screen.getByText("Get your gym's messages, class reminders and places from the waitlist, even when the app is closed.")).toBeTruthy();
     expect(notifications.asked).toBe(0);
     expect(addressesGiven(server)).toEqual([]);
     await fireEvent.press(screen.getByRole("button", { name: "Continue" }));
     await settle();
     expect(notifications.asked).toBe(1);
     expect(addressesGiven(server)).toEqual([{ token: "phone-address-1", platform: "android" }]);
-    expect(notifications.channels).toEqual([expect.objectContaining({ id: "gym-messages", name: "Gym messages" })]);
+    expect(notifications.channels).toEqual([
+      expect.objectContaining({ id: "gym-messages", name: "Gym messages" }),
+      expect.objectContaining({ id: "gym-places", name: "Classes and events" }),
+    ]);
   });
 
   it("Not now asks nothing of Android, gives no address, and is not asked again for two weeks", async () => {
@@ -244,5 +249,191 @@ describe("signing out", () => {
     // Signed out, one that still arrives while the app is open is shown to nobody.
     const shown = await notifications.handler?.handleNotification({ request: { content: { data: { kind: "gym_inbox", gymId: IRON.id } } } });
     expect(shown?.shouldShowBanner).toBe(false);
+  });
+});
+
+// ── 18b-ii-a: a place in a class or an event ──
+
+describe("a tapped notification about a place", () => {
+  const SESSION = "11111111-1111-4111-8111-111111111111";
+  const EVENT = "22222222-2222-4222-8222-222222222222";
+  /** A day on the gym's clock (India), this many days from today. */
+  const daysOn = (n: number) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).format(Date.now() + n * 86_400_000);
+  const placeTap = (gymId: string, what: "class" | "event", id: string, day = daysOn(0)) => ({
+    notification: { request: { identifier: `p-${id}`, content: { data: { kind: "gym_place", gymId, what, id, day } } } },
+  });
+  const flow = {
+    sessionId: SESSION,
+    className: "Morning Flow",
+    localDate: "2099-11-16",
+    localStartMinute: 18 * 60,
+    timezone: "Asia/Kolkata",
+    startsAt: "2099-11-16T12:30:00.000Z",
+    minutes: 45,
+    cancelled: false,
+    places: 12,
+    booked: 12,
+    waitlisted: 0,
+    opensAt: "2099-11-09T12:30:00.000Z",
+    freeCancelUntil: "2099-11-16T10:30:00.000Z",
+    mine: { status: "booked", waitlistPlace: null, packCharged: false },
+    can: { book: false, joinWaitlist: false, claim: false, cancel: "free", why: null },
+    online: null,
+    fees: null,
+  };
+  const openDay = {
+    id: EVENT,
+    name: "Saturday Open Day",
+    details: "",
+    place: "",
+    startsOn: "2099-11-02",
+    startMinute: 600,
+    endsOn: "2099-11-02",
+    endMinute: 780,
+    startsAt: "2099-11-02T04:30:00.000Z",
+    endsAt: "2099-11-02T07:30:00.000Z",
+    places: 30,
+    cancelled: false,
+    poster: null,
+    going: { coming: 1, waiting: 0, mine: { status: "coming", waitlistPlace: null }, can: { come: false, joinWaitlist: false, claim: false, cancel: true, why: null } },
+  };
+  const placeRoutes = () =>
+    routes({
+      [`/v1/orgs/${IRON.id}/member-classes`]: ok({ week: 2, from: "2099-11-15", to: "2099-11-21", timezone: "Asia/Kolkata", classes: [flow], more: false }),
+      [`/v1/orgs/${IRON.id}/events`]: ok({ gymId: IRON.id, gymName: IRON.name, timezone: "Asia/Kolkata", today: "2099-10-31", status: "shown", events: [openDay] }),
+    });
+  /** The server, with every address the app asked for kept whole, its week included. */
+  const watched = () => {
+    const server = fakeServer(placeRoutes());
+    const urls: string[] = [];
+    const ask: typeof server.ask = (url, init) => {
+      urls.push(url);
+      return server.ask(url, init);
+    };
+    return { ...server, ask, urls };
+  };
+
+  it("a class opens that gym's Classes on the week that holds it now, at the class", async () => {
+    notifications.permission = YES;
+    const server = watched();
+    await open(server);
+    await act(async () => {
+      for (const tap of notifications.taps) tap(placeTap(IRON.id, "class", SESSION, daysOn(15)));
+      await Promise.resolve();
+    });
+    const page = within(await screen.findByTestId("classes-page"));
+    expect(await page.findByText("Morning Flow")).toBeTruthy();
+    expect(page.getByTestId("classes-asked")).toBeTruthy();
+    expect(server.urls.filter((url) => url.includes("/member-classes"))[0]).toContain("week=2");
+  });
+
+  it("a second tap while that gym's Classes is open moves it to the second class's week", async () => {
+    notifications.permission = YES;
+    const server = watched();
+    await open(server);
+    await act(async () => {
+      for (const tap of notifications.taps) tap(placeTap(IRON.id, "class", SESSION, daysOn(0)));
+      await Promise.resolve();
+    });
+    await screen.findByTestId("classes-page");
+    await settle();
+    await act(async () => {
+      for (const tap of notifications.taps) tap(placeTap(IRON.id, "class", "33333333-3333-4333-8333-333333333333", daysOn(8)));
+      await Promise.resolve();
+    });
+    await settle();
+    const weeks = server.urls.filter((url) => url.includes("/member-classes")).map((url) => new URL(url).searchParams.get("week"));
+    expect(weeks[0]).toBe("0");
+    expect(weeks.at(-1)).toBe("1");
+  });
+
+  it("an event opens that gym's Events", async () => {
+    notifications.permission = YES;
+    await open(watched());
+    await act(async () => {
+      for (const tap of notifications.taps) tap(placeTap(IRON.id, "event", EVENT));
+      await Promise.resolve();
+    });
+    expect(await within(await screen.findByTestId("events-page")).findByText("Saturday Open Day")).toBeTruthy();
+    expect(screen.queryByTestId("inbox-page")).toBeNull();
+  });
+
+  it("the one that opened the app opens its class too", async () => {
+    notifications.permission = YES;
+    notifications.last = placeTap(IRON.id, "class", SESSION);
+    await open(watched());
+    expect(await within(await screen.findByTestId("classes-page")).findByText("Morning Flow")).toBeTruthy();
+  });
+
+  it("a gym that is not one of this person's opens nothing; anything else that is not ours opens nothing", async () => {
+    notifications.permission = YES;
+    await open(watched());
+    await act(async () => {
+      for (const tap of notifications.taps) {
+        tap(placeTap(STRANGER_GYM, "class", SESSION));
+        tap(placeTap(IRON.id, "class", SESSION, "13 Nov"));
+        tap({ notification: { request: { identifier: "x", content: { data: { kind: "gym_place", gymId: IRON.id, what: "pt", id: SESSION, day: "2099-11-16" } } } } });
+      }
+      await Promise.resolve();
+    });
+    await settle();
+    expect(screen.queryByTestId("classes-page")).toBeNull();
+    expect(screen.queryByTestId("events-page")).toBeNull();
+  });
+
+  it("is shown in the app, and Android names its channel", async () => {
+    notifications.permission = YES;
+    await open(watched());
+    expect(notifications.channels.map((c) => c.name)).toEqual(expect.arrayContaining(["Gym messages", "Classes and events"]));
+    const shown = await notifications.handler?.handleNotification({ request: { content: { data: placeTap(IRON.id, "class", SESSION).notification.request.content.data } } });
+    expect(shown?.shouldShowBanner).toBe(true);
+  });
+});
+
+describe("a message that arrives while the app is open", () => {
+  const SESSION = "11111111-1111-4111-8111-111111111111";
+  const arrive = (data: unknown, trigger: unknown = { type: "push" }) =>
+    act(async () => {
+      for (const one of notifications.received) one({ request: { identifier: "fcm-1", trigger, content: { title: "Iron House", body: "Words.", data } } });
+      await Promise.resolve();
+    });
+  const scheduled = () => notifications.scheduled;
+
+  it("is shown by the app itself, one for each gym's Inbox and each class, on its own channel", async () => {
+    notifications.permission = YES;
+    await open(fakeServer(routes()));
+    await arrive({ kind: "gym_inbox", gymId: IRON.id });
+    await arrive({ kind: "gym_place", gymId: IRON.id, what: "class", id: SESSION, day: "2099-11-16" });
+    expect(scheduled()).toEqual([
+      { identifier: `inbox:${IRON.id}`, content: { title: "Iron House", body: "Words.", data: { kind: "gym_inbox", gymId: IRON.id } }, trigger: { channelId: "gym-messages" } },
+      {
+        identifier: `place:${SESSION}`,
+        content: { title: "Iron House", body: "Words.", data: { kind: "gym_place", gymId: IRON.id, what: "class", id: SESSION, day: "2099-11-16" } },
+        trigger: { channelId: "gym-places" },
+      },
+    ]);
+  });
+
+  it("the app's own, and anything that is not ours, is not shown again", async () => {
+    notifications.permission = YES;
+    await open(fakeServer(routes()));
+    await arrive({ kind: "gym_inbox", gymId: IRON.id }, null);
+    await arrive({ kind: "something_else" });
+    expect(scheduled()).toEqual([]);
+  });
+
+  it("signed out, one that arrives is not shown by the app", async () => {
+    notifications.permission = YES;
+    await open(fakeServer(routes({ "/v1/auth/logout": ok({}) })));
+    const me = (await screen.findAllByRole("tab"))[4];
+    if (me === undefined) throw new Error("no Me tab");
+    await fireEvent.press(me);
+    await fireEvent.press(await screen.findByRole("button", { name: "Sign out" }));
+    const confirm = (await screen.findAllByRole("button", { name: "Sign out" })).at(-1);
+    if (confirm === undefined) throw new Error("no Sign out in the box");
+    await fireEvent.press(confirm);
+    await settle();
+    await arrive({ kind: "gym_inbox", gymId: IRON.id });
+    expect(scheduled()).toEqual([]);
   });
 });

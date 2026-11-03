@@ -44,6 +44,8 @@ export interface EventsPlace {
   id: string;
   name: string;
   clockFormat: GymClockFormat;
+  /** Opened from a notification (18b-ii-a): the event scrolled to once the list is read. */
+  eventId?: string;
 }
 
 export const eventsPath = (gymId: string) => `/v1/orgs/${encodeURIComponent(gymId)}/events`;
@@ -71,7 +73,7 @@ export function EventsPage({ place, onClose }: { place: EventsPlace | null; onCl
   return (
     <Modal visible={place !== null} animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
       <View testID="events-page" accessibilityViewIsModal style={[styles.page, { paddingTop: insets.top }]}>
-        {place === null ? null : <EventsBody key={place.id} place={place} onClose={onClose} bottom={insets.bottom} />}
+        {place === null ? null : <EventsBody key={`${place.id}:${place.eventId ?? ""}`} place={place} onClose={onClose} bottom={insets.bottom} />}
       </View>
     </Modal>
   );
@@ -204,6 +206,16 @@ function EventsBody({ place, onClose, bottom }: { place: EventsPlace; onClose: (
   };
 
   const list = held.kind === "ok" ? held.list : null;
+  // The event a notification opened the page on: scrolled to once, when the list first holds it.
+  const lister = useRef<FlatList<MemberGymEvent>>(null);
+  const scrolledTo = useRef(false);
+  const retried = useRef(false);
+  const askedIndex = place.eventId === undefined || list === null ? -1 : list.events.findIndex((e) => e.id === place.eventId);
+  useEffect(() => {
+    if (askedIndex < 0 || scrolledTo.current) return;
+    scrolledTo.current = true;
+    lister.current?.scrollToIndex({ index: askedIndex, animated: true });
+  }, [askedIndex]);
   const note = list === null ? null : eventsZoneNote(list.events, place.name, list.timezone, phoneZone());
   const onWaitlist = list?.events.some((e) => e.going.mine?.status === "waitlisted" && !e.cancelled) ?? false;
 
@@ -271,6 +283,14 @@ function EventsBody({ place, onClose, bottom }: { place: EventsPlace; onClose: (
         </View>
       </View>
       <FlatList
+        ref={lister}
+        onScrollToIndexFailed={(info) => {
+          // Not drawn yet: as near as the drawn ones say, then exactly once it is.
+          lister.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
+          if (retried.current) return;
+          retried.current = true;
+          requestAnimationFrame(() => lister.current?.scrollToIndex({ index: info.index, animated: true }));
+        }}
         style={styles.grow}
         contentContainerStyle={[styles.list, { paddingBottom: bottom + 24 }]}
         data={list === null || list.status === "paused" ? [] : list.events}

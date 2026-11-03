@@ -1,4 +1,4 @@
-import { AGREEMENT_AGREE_LABEL, AGREEMENT_NAME_MAX, MAIN_AGREEMENT_NAME, WAIVER_MAX_CHARS, cleanWaiverText } from '@app/shared';
+import { AGREEMENT_AGREE_LABEL, AGREEMENT_NAME_MAX, MAIN_AGREEMENT_NAME, WAIVER_MAX_CHARS, cardName, cleanWaiverText } from '@app/shared';
 
 // The words of the membership agreement (ROADMAP 18u-i): Settings' box, worked out from what the
 // server sent (`gymAgreementResponseSchema`) and what is typed, and the box under a membership on
@@ -115,6 +115,12 @@ export function agreementSignedLine(emailed) {
   if (emailed === 'no_email') return 'Signed. There is no email address on their record, so no copy was emailed.';
   if (emailed === 'blocked') return "Signed. Their email address can't receive our emails, so no copy was sent. Check it in their details.";
   return "Signed, but the copy didn't send. Press View, then Email a copy to try again.";
+}
+
+/** The card kept for this membership from a Terminal payment (18d-vi-c). */
+export function agreementCardLine(card, when) {
+  const day = when(card.at);
+  return `Card for automatic payments: ${cardName(card)}, agreed on the Terminal${day === '' ? '' : ` on ${day}`}.`;
 }
 
 /** Who signed, as the signed copy says it, and from the emailed link where it was (18u-ii-b). */

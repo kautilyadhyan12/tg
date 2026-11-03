@@ -329,6 +329,7 @@ export async function getMembershipAgreement(
     facts: now.facts,
     factsKey: now.facts === null ? null : factsKeyOf(now.facts),
     signed: signed === null ? null : toSigned(signed),
+    card: await repo.cardKeptFor(deps.sql, gymId, membershipId),
     hasEmail: now.record.email !== null,
     past: now.record.former,
   });

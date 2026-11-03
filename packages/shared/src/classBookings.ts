@@ -200,6 +200,20 @@ export function handsOverNow(i: Pick<BookInput, "time" | "cancelled" | "places" 
   return !i.cancelled && i.time.handsOver && (i.places === null || i.booked < i.places);
 }
 
+/** Whether the people waiting are told "a place is free" (ROADMAP Stage 5 item 18b-ii-a): bookings
+ *  are open, the class has not started, and a place is free that no longer goes to the first in line
+ *  by itself, so the first to claim it has it. A class with no limit on places has nobody waiting. */
+export function tellsPlaceFree(i: Pick<BookInput, "time" | "cancelled" | "places" | "booked"> & { waitlisted: number }): boolean {
+  return (
+    !i.cancelled &&
+    i.time.phase === "open" &&
+    !i.time.handsOver &&
+    i.waitlisted > 0 &&
+    i.places !== null &&
+    i.booked < i.places
+  );
+}
+
 export type CancelDecision =
   | { kind: "cancel"; status: "cancelled" | "late_cancelled"; refundPack: boolean; freesPlace: boolean }
   | { kind: "refuse"; reason: "no_booking" | "class_started" | "late_cancel" };

@@ -146,11 +146,13 @@ export async function insertAgreement(
     brand: string;
     last4: string;
     agreedAt: Date;
+    /** The membership it was kept for, when kept from a Terminal payment (18d-vi-c). */
+    membershipId?: string;
   },
 ): Promise<string> {
   const [row] = await tx<{ id: string }[]>`
-    INSERT INTO gym_card_agreements (gym_id, entry_id, words, screen, screen_user_id, device_id, brand, last4, agreed_at)
-    VALUES (${a.gymId}, ${a.entryId}, ${a.words}, ${a.screen}, ${a.screenUserId}, ${a.deviceId}, ${a.brand}, ${a.last4}, ${a.agreedAt})
+    INSERT INTO gym_card_agreements (gym_id, entry_id, words, screen, screen_user_id, device_id, brand, last4, agreed_at, held_membership_id)
+    VALUES (${a.gymId}, ${a.entryId}, ${a.words}, ${a.screen}, ${a.screenUserId}, ${a.deviceId}, ${a.brand}, ${a.last4}, ${a.agreedAt}, ${a.membershipId ?? null})
     RETURNING id`;
   if (row === undefined) throw new Error("card agreement not written");
   return row.id;

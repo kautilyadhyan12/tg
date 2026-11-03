@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, Linking, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { AppState, Linking, Pressable, ScrollView, StyleSheet, View, type LayoutChangeEvent } from "react-native";
 import { Modal } from "../../look/Modal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -56,6 +56,9 @@ export interface ClassesPlace {
   id: string;
   name: string;
   clockFormat: GymClockFormat;
+  /** Opened from a notification (18b-ii-a): the week that holds the class, and the class, scrolled to. */
+  week?: number;
+  sessionId?: string;
 }
 
 export const classesPath = (gymId: string, week: number) => `/v1/orgs/${encodeURIComponent(gymId)}/member-classes?week=${String(week)}`;
@@ -76,7 +79,7 @@ export function ClassesPage({ place, onClose }: { place: ClassesPlace | null; on
   return (
     <Modal visible={place !== null} animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
       <View testID="classes-page" accessibilityViewIsModal style={[styles.page, { paddingTop: insets.top }]}>
-        {place === null ? null : <ClassesBody key={place.id} place={place} onClose={onClose} bottom={insets.bottom} />}
+        {place === null ? null : <ClassesBody key={`${place.id}:${place.sessionId ?? ""}`} place={place} onClose={onClose} bottom={insets.bottom} />}
       </View>
     </Modal>
   );
@@ -87,8 +90,21 @@ type Said = { text: string; bad: boolean };
 
 function ClassesBody({ place, onClose, bottom }: { place: ClassesPlace; onClose: () => void; bottom: number }) {
   const { session } = useSession();
-  const [week, setWeek] = useState(0);
+  const [week, setWeek] = useState(place.week ?? 0);
   const [held, setHeld] = useState<Held>({ kind: "loading" });
+  // The class a notification opened the page on: scrolled to once its day and its box are laid out.
+  const scroller = useRef<ScrollView>(null);
+  const dayAt = useRef(new Map<string, number>());
+  const boxAt = useRef<{ day: string; y: number; first: boolean } | null>(null);
+  const scrolledTo = useRef(false);
+  const toAsked = useCallback(() => {
+    const box = boxAt.current;
+    const day = box === null ? undefined : dayAt.current.get(box.day);
+    if (scrolledTo.current || box === null || day === undefined) return;
+    scrolledTo.current = true;
+    // The first class of its day keeps the day's heading above it on the screen.
+    scroller.current?.scrollTo({ y: Math.max(0, box.first ? day : day + box.y - 8), animated: true });
+  }, []);
   const [busyId, setBusyId] = useState<string | null>(null);
   // What the server last said about a class, by its id, over the list as it was read.
   const [said, setSaid] = useState<Record<string, Said | undefined>>({});
@@ -270,7 +286,7 @@ function ClassesBody({ place, onClose, bottom }: { place: ClassesPlace; onClose:
           <Icon name="go" size={16} />
         </Pressable>
       </View>
-      <ScrollView style={styles.grow} contentContainerStyle={[styles.list, { paddingBottom: bottom + 24 }]}>
+      <ScrollView ref={scroller} style={styles.grow} contentContainerStyle={[styles.list, { paddingBottom: bottom + 24 }]}>
         {held.kind === "loading" ? (
           <Txt kind="small">Loading…</Txt>
         ) : held.kind === "failed" ? (
@@ -296,13 +312,31 @@ function ClassesBody({ place, onClose, bottom }: { place: ClassesPlace; onClose:
               </Txt>
             )}
             {days.map((d) => (
-              <View key={d.day} style={styles.day}>
+              <View
+                key={d.day}
+                style={styles.day}
+                onLayout={(e) => {
+                  dayAt.current.set(d.day, e.nativeEvent.layout.y);
+                  toAsked();
+                }}
+              >
                 <Txt kind="eyebrow" colour="textFaint">
                   {dayHeading(d.day, week === 0 ? held.list.from : null)}
                 </Txt>
-                {d.classes.map((c) => (
-                  <ClassBox
+                {d.classes.map((c, n) => (
+                  <View
                     key={c.sessionId}
+                    {...(c.sessionId === place.sessionId
+                      ? {
+                          testID: "classes-asked",
+                          onLayout: (e: LayoutChangeEvent) => {
+                            boxAt.current = { day: d.day, y: e.nativeEvent.layout.y, first: n === 0 };
+                            toAsked();
+                          },
+                        }
+                      : {})}
+                  >
+                  <ClassBox
                     c={c}
                     clock={place.clockFormat}
                     gym={place.name}
@@ -317,6 +351,7 @@ function ClassesBody({ place, onClose, bottom }: { place: ClassesPlace; onClose:
                       setAsking(c);
                     }}
                   />
+                  </View>
                 ))}
               </View>
             ))}

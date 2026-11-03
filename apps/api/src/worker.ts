@@ -26,6 +26,7 @@ import pino from "pino";
 import postgres from "postgres";
 import { loadConfig } from "./config.js";
 import { createFcmSender, readServiceAccount } from "./modules/push/fcm.adapter.js";
+import { sendPlaceNotifications } from "./modules/push/placesSweep.js";
 import { sendGymMessageNotifications } from "./modules/push/sweep.js";
 import { createResendEmailReader, createResendInviteTransport, createResendTransport } from "./email/resend.js";
 import { cachedMailDomainCheck, systemResolver } from "./modules/orgs/invites/mailDomain.js";
@@ -794,10 +795,35 @@ if (pushAccount === null) {
     async (job) => {
       if (job.name !== PUSH_GYM_MESSAGES_JOB) throw new Error(`unknown job on ${PUSH_QUEUE}: ${job.name}`);
       const startedAt = Date.now();
-      const run = await sendGymMessageNotifications({ sql, sender: pushSender, now: () => new Date() });
-      if (run.sent + run.skipped + run.failed > 0) {
-        log.info({ ...run, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
+      // Each in its own try, so one that keeps failing never stops the other (18b-ii-a).
+      let failure: Error | null = null;
+      try {
+        const run = await sendGymMessageNotifications({ sql, sender: pushSender, now: () => new Date() });
+        if (run.sent + run.skipped + run.failed > 0) {
+          log.info({ ...run, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
+        }
+      } catch (err) {
+        failure = err instanceof Error ? err : new Error(String(err));
       }
+      // A place in a class or an event (18b-ii-a), in the same minute.
+      const placesStartedAt = Date.now();
+      try {
+        const placesRun = await sendPlaceNotifications({
+          sql,
+          sender: pushSender,
+          now: () => new Date(),
+          onError: (err) => {
+            const e = err instanceof Error ? err : new Error(String(err));
+            log.warn({ errName: e.name, errMessage: e.message, event: "job.item_failed", job: "push.places" }, "a place notification failed and was kept for the next run");
+          },
+        });
+        if (placesRun.sent + placesRun.skipped + placesRun.failed > 0) {
+          log.info({ ...placesRun, durationMs: Date.now() - placesStartedAt, event: "job.finished", job: "push.places" }, "job finished");
+        }
+      } catch (err) {
+        failure ??= err instanceof Error ? err : new Error(String(err));
+      }
+      if (failure !== null) throw failure;
     },
     { connection },
   );

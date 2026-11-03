@@ -90,6 +90,10 @@ export type SaveOtherAgreementBody = z.infer<typeof saveOtherAgreementBodySchema
 
 // ── One membership, at the desk (`members.confirm`) ──
 
+/** The card a member agreed on a Terminal to keep for this membership (18d-vi-c). */
+export const agreementCardSchema = z.object({ brand: z.string(), last4: z.string(), at: z.string().datetime() }).strict();
+export type AgreementCard = z.infer<typeof agreementCardSchema>;
+
 /** A signature as staff see it: who signed and the name typed, when, the member of staff who
  *  opened the screen (null where they have since left), and what was signed, word for word. */
 export const agreementSignedSchema = z
@@ -128,6 +132,8 @@ export const membershipAgreementResponseSchema = z
     factsKey: factsKeySchema.nullable(),
     /** This membership's signature, or null. */
     signed: agreementSignedSchema.nullable(),
+    /** The card kept for this membership from a Terminal payment, agreed there; null where none. */
+    card: agreementCardSchema.nullable().default(null),
     /** The record has an email address for the copy. */
     hasEmail: z.boolean(),
     /** The person is no longer on the business's list: what they signed is shown, and nothing is signed. */
@@ -271,6 +277,9 @@ function priceWords(m: AgreementFactsInput["membership"], taxIncluded: boolean):
   if (m.kind === "one_time") return `${price}, paid once${tax}`;
   return `${price}${tax}`;
 }
+
+/** A renewing membership in one line, for the Terminal's card agreement (18d-vi-c). */
+export const renewingMembershipLine = (m: AgreementFactsInput["membership"], taxIncluded: boolean): string => `${oneLine(m.typeName)}: ${priceWords(m, taxIncluded)}. Renews until you cancel.`;
 
 /** The membership's details, in the order a person reads them. Worked out from the membership
  *  as stored, never from what a screen sends. */

@@ -57,7 +57,11 @@ export interface FakeCheckout {
 export type CardBehaviour = "pays" | "declines" | "insufficient" | "expired" | { declines: string };
 
 export function fakeSquare() {
-  const cards = new Map<string, { accountId: string; customerId: string; behaviour: CardBehaviour }>();
+  const cards = new Map<string, { accountId: string; customerId: string; behaviour: CardBehaviour; fromKey?: string }>();
+  /** Terminal agreements (18d-vi-c), as Square's CONFIRMATION action answers: a simulated Terminal agrees on its first look. */
+  const actions = new Map<string, { id: string; accountId: string; key: string; deviceId: string; body: string; status: string; agreed: boolean | null; cancelReason: string | null }>();
+  /** Every CreateCard asked with a payment's id: which payment, for which customer. */
+  const cardsFromPayments: { paymentId: string; customerId: string; key: string }[] = [];
   /** Every card DisableCard stopped, in order. */
   const stopped: string[] = [];
   const cardPayments = new Map<string, { body: NewCardPayment; result: CardPaymentResult }>();
@@ -127,6 +131,9 @@ export function fakeSquare() {
     deleteViaOldId: "nothing" | "deletes_merged";
     /** DisableCard answers (18d-iii-b-ii-c-ii): the card is stopped and listed in `stopped`. Off, it gives no answer, as before. */
     disables: boolean;
+    /** CreateCard from a payment is refused with this code (an Apple Pay payment), or gives no answer. */
+    cardFromPaymentRefused: string | null;
+    cardFromPaymentDown: boolean;
     /** Runs once, as a CreateCard arrives, before Square answers: something happens in the app while a card is being saved. */
     beforeCard: (() => Promise<void>) | null;
     /** RefundPayment (18d-iv-a): gives no answer and makes nothing; makes the refund and loses the answer; is refused with
@@ -168,6 +175,8 @@ export function fakeSquare() {
     deleteViaOldId: "nothing",
     disables: false,
     beforeCard: null,
+    cardFromPaymentRefused: null,
+    cardFromPaymentDown: false,
     refundDown: false,
     refundUnread: false,
     refundRefusal: null,
@@ -192,6 +201,27 @@ export function fakeSquare() {
     ...(c.cancelReason === null ? {} : { cancel_reason: c.cancelReason }),
     ...(c.paymentIds.length === 0 ? {} : { payment_ids: c.paymentIds }),
   });
+  const actionJson = (x: { id: string; deviceId: string; body: string; status: string; agreed: boolean | null; cancelReason: string | null; at?: string }) => ({
+    id: x.id,
+    ...(x.at === undefined ? {} : { updated_at: x.at }),
+    device_id: x.deviceId,
+    type: "CONFIRMATION",
+    status: x.status,
+    ...(x.cancelReason === null ? {} : { cancel_reason: x.cancelReason }),
+    confirmation_options: { body: x.body, ...(x.agreed === null ? {} : { decision: { has_agreed: x.agreed } }) },
+  });
+  /** The person at the Terminal answers the agreement waiting there. */
+  const agreement = (deviceId: string) => {
+    const found = [...actions.values()].find((x) => x.deviceId === deviceId && (x.status === "PENDING" || x.status === "IN_PROGRESS"));
+    if (found === undefined) throw new Error("no agreement on this Terminal");
+    return {
+      words: found.body,
+      seen: () => Object.assign(found, { status: "IN_PROGRESS" }),
+      answers: (agreed: boolean) => Object.assign(found, { status: "COMPLETED", agreed, at: state.now().toISOString() }),
+      cancels: () => Object.assign(found, { status: "CANCELED", cancelReason: "BUYER_CANCELED" }),
+      changesWords: (body: string) => Object.assign(found, { body }),
+    };
+  };
   /** Square takes a payment for the checkout: the amount asked, unless a test says otherwise. */
   const take = (c: FakeCheckout, over: Partial<SquarePayment> = {}) => {
     n += 1;
@@ -396,6 +426,17 @@ export function fakeSquare() {
       if (a === undefined) return Promise.resolve(unauthorized);
       const customerId = mergedInto.get(c.customerId) ?? c.customerId;
       if (customers.get(customerId)?.accountId !== a.merchantId) return Promise.resolve({ kind: "refused", status: 400, code: "CUSTOMER_NOT_FOUND" });
+      const paid = payments.get(c.sourceId);
+      if (paid !== undefined) {
+        cardsFromPayments.push({ paymentId: c.sourceId, customerId, key: c.idempotencyKey });
+        if (state.cardFromPaymentDown) return Promise.resolve(unavailable);
+        if (state.cardFromPaymentRefused !== null) return Promise.resolve({ kind: "refused", status: 400, code: state.cardFromPaymentRefused });
+        if (paid.accountId !== a.merchantId || paid.status !== "COMPLETED") return Promise.resolve({ kind: "refused", status: 400, code: "INVALID_CARD_DATA" });
+        const again = [...cards.entries()].find(([, x]) => x.fromKey === c.idempotencyKey);
+        const fromId = again?.[0] ?? `ccof:fake${String((n += 1))}${randomBytes(4).toString("hex")}`;
+        cards.set(fromId, { accountId: a.merchantId, customerId, behaviour: "pays", fromKey: c.idempotencyKey });
+        return Promise.resolve({ kind: "ok", value: { id: fromId, card_brand: "VISA", last_4: "1111", exp_month: 12, exp_year: 2031, customer_id: customerId, merchant_id: a.merchantId, enabled: true } });
+      }
       const m = /^cnon:ok-([A-Z_]+)-([0-9]{4})/.exec(c.sourceId);
       if (m === null) return Promise.resolve({ kind: "refused", status: 400, code: "INVALID_CARD_DATA" });
       n += 1;
@@ -474,9 +515,41 @@ export function fakeSquare() {
     revokeAccount: () => Promise.resolve({ kind: "ok", value: null }),
     createDeviceCode: () => Promise.resolve(unavailable),
     retrieveDeviceCode: () => Promise.resolve(unavailable),
-    createTerminalAction: () => Promise.resolve(unavailable),
-    getTerminalAction: () => Promise.resolve(unavailable),
-    cancelTerminalAction: () => Promise.resolve(unavailable),
+    createTerminalAction(token, c) {
+      if (state.down) return Promise.resolve(unavailable);
+      const a = tokenAccount(token);
+      if (a === undefined) return Promise.resolve(unauthorized);
+      if (c.type !== "CONFIRMATION") return Promise.resolve(unavailable);
+      const known = [...actions.values()].find((x) => x.accountId === a.merchantId && x.key === c.idempotencyKey);
+      if (known !== undefined) return Promise.resolve({ kind: "ok", value: actionJson(known) });
+      if (state.refuseNew || devices.get(c.deviceId)?.accountId !== a.merchantId) return Promise.resolve({ kind: "refused", status: 400, code: "NOT_FOUND" });
+      n += 1;
+      const made = { id: `ACT${String(n)}${randomBytes(4).toString("hex")}`, accountId: a.merchantId, key: c.idempotencyKey, deviceId: c.deviceId, body: c.body, status: "PENDING", agreed: null, cancelReason: null };
+      actions.set(made.id, made);
+      return Promise.resolve({ kind: "ok", value: actionJson(made) });
+    },
+    getTerminalAction(token, id) {
+      if (state.down) return Promise.resolve(unavailable);
+      const a = tokenAccount(token);
+      if (a === undefined) return Promise.resolve(unauthorized);
+      const made = actions.get(id);
+      if (made?.accountId !== a.merchantId) return Promise.resolve(notFound);
+      const behaviour = devices.get(made.deviceId)?.behaviour ?? "person";
+      if (made.status === "PENDING" && (behaviour === "pays" || behaviour === "cancels" || behaviour === "times_out")) {
+        if (behaviour === "pays") Object.assign(made, { status: "COMPLETED", agreed: true });
+        else Object.assign(made, { status: "CANCELED", cancelReason: behaviour === "cancels" ? "BUYER_CANCELED" : "TIMED_OUT" });
+      }
+      return Promise.resolve({ kind: "ok", value: actionJson(made) });
+    },
+    cancelTerminalAction(token, id) {
+      if (state.down) return Promise.resolve(unavailable);
+      const a = tokenAccount(token);
+      if (a === undefined) return Promise.resolve(unauthorized);
+      const made = actions.get(id);
+      if (made?.accountId !== a.merchantId) return Promise.resolve(notFound);
+      if (made.status === "PENDING" || made.status === "IN_PROGRESS") Object.assign(made, { status: "CANCELED", cancelReason: "SELLER_CANCELED" });
+      return Promise.resolve({ kind: "ok", value: actionJson(made) });
+    },
     createTerminalCheckout(token, c: NewTerminalCheckout) {
       if (state.down) return Promise.resolve(unavailable);
       const a = tokenAccount(token);
@@ -845,6 +918,9 @@ export function fakeSquare() {
     terminalRefunds,
     terminalRefundShown,
     terminalRefundUsed,
+    actions,
+    agreement,
+    cardsFromPayments,
     paymentById,
     paymentInSquare,
     listed,
