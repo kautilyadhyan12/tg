@@ -215,7 +215,7 @@ describe("Account", () => {
   it("shows the email, the sign-in and the month the account was made", async () => {
     await openSettings(fakeServer(routes()).ask);
     const page = within(await screen.findByTestId("settings-page"));
-    expect(await page.findByText("October 2026")).toBeTruthy();
+    expect(await page.findByText("Member since October 2026")).toBeTruthy();
     expect(page.getByText(RAVI.email)).toBeTruthy();
     expect(page.getByText("Email code or Google")).toBeTruthy();
   });

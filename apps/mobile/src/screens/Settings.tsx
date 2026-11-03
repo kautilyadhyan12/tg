@@ -2,12 +2,12 @@ import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { displayNameSchema, myOrgsResponseSchema, onboardingResponseSchema, orgWords, userProfileResponseSchema, type MyOrgsResponse, type Units } from "@app/shared";
 import { Button } from "../look/Button";
-import { Badge, Card } from "../look/Card";
+import { Avatar, Badge, Card } from "../look/Card";
 import { Segments } from "../look/Choice";
 import { colours, sizes } from "../look/colours";
 import { CoverPage } from "../look/CoverPage";
 import { Field } from "../look/Field";
-import { Icon } from "../look/Icon";
+import { Icon, type IconName } from "../look/Icon";
 import { Sheet } from "../look/Sheet";
 import { Txt } from "../look/Txt";
 import { useSession } from "../session/SessionProvider";
@@ -33,15 +33,30 @@ export function memberSinceText(createdAt: string): string | null {
 
 export function SettingsPage({ open, onClose }: { open: boolean; onClose: () => void }) {
   return (
-    <CoverPage open={open} title="Settings" onClose={onClose}>
+    <CoverPage open={open} title="Settings" picture="setting" tall={0.86} onClose={onClose}>
       {open ? <SettingsBody onClose={onClose} /> : null}
     </CoverPage>
   );
 }
 
 function SettingsBody({ onClose }: { onClose: () => void }) {
+  const { session } = useSession();
+  const [since, setSince] = useState<string | null>(null);
+  useEffect(() => {
+    const run = { live: true };
+    void session.signedIn({ method: "GET", path: "/v1/users/me" }, userProfileResponseSchema).then((answer) => {
+      if (!run.live || answer.kind !== "ok") return;
+      setSince(memberSinceText(answer.data.user.createdAt));
+      // What the server holds now, as another device may have changed it since this phone last heard.
+      void session.keepName(answer.data.user.displayName).then(() => session.keepUnits(answer.data.user.units));
+    });
+    return () => {
+      run.live = false;
+    };
+  }, [session]);
   return (
     <View testID="settings-page" style={styles.page}>
+      <Profile since={since} />
       <NamePart />
       <UnitsPart />
       <BoardsPart />
@@ -51,12 +66,32 @@ function SettingsBody({ onClose }: { onClose: () => void }) {
   );
 }
 
-function Part({ title, children }: { title: string; children: React.ReactNode }) {
+/** Who this is, as the browser's Settings shows it at its head: the initial, the name, the email. */
+function Profile({ since }: { since: string | null }) {
+  const { state } = useSession();
+  if (state.kind !== "in") return null;
   return (
-    <View style={styles.part}>
-      <Txt kind="eyebrow">{title}</Txt>
-      <Card style={styles.card}>{children}</Card>
-    </View>
+    <Card glass style={styles.profile}>
+      <Avatar name={state.user.displayName} size={56} />
+      <View style={styles.grow}>
+        <Txt kind="h3">{state.user.displayName}</Txt>
+        {/* An address is long and is never cut: it has the whole line. */}
+        <Txt kind="small">{state.user.email}</Txt>
+        {since === null ? null : <Txt kind="tiny">Member since {since}</Txt>}
+      </View>
+    </Card>
+  );
+}
+
+function Part({ title, icon, children }: { title: string; icon: IconName; children: React.ReactNode }) {
+  return (
+    <Card style={styles.card}>
+      <View style={styles.head}>
+        <Badge icon={icon} />
+        <Txt kind="h3">{title}</Txt>
+      </View>
+      {children}
+    </Card>
   );
 }
 
@@ -98,7 +133,7 @@ function NamePart() {
     }
   };
   return (
-    <Part title="Your name">
+    <Part title="Your name" icon="user">
       <Field label="Full name" bare placeholder="First and last name" value={name} onChange={(v) => { setName(v); setTyping(true); setSaid(null); }} name maxLength={100} onDone={() => void save()} />
       {typed.success ? null : <Txt kind="small" colour="badText">Enter your name.</Txt>}
       <Said words={said?.words ?? null} bad={said?.bad ?? false} />
@@ -122,7 +157,7 @@ function UnitsPart() {
     setBusy(null);
   };
   return (
-    <Part title="Units">
+    <Part title="Units" icon="ruler">
       <Txt kind="small">Weights and heights in the app.</Txt>
       <Segments options={UNIT_OPTIONS} selected={busy ?? now} onPick={(units) => void pick(units)} />
       <Said words={said} bad />
@@ -134,7 +169,7 @@ function BoardsPart() {
   const { hide, busy, said, load, save } = useHideMe();
   if (hide.kind === "loading") return null;
   return (
-    <Part title="Leaderboards">
+    <Part title="Leaderboards" icon="trophy">
       <HideMe hide={hide} busy={busy} said={said} onChange={(hidden) => void save(hidden)} onAgain={() => void load()} />
       {hide.kind === "ok" ? <Txt kind="small">The same at every place you belong to.</Txt> : null}
     </Part>
@@ -160,7 +195,7 @@ function PlacesPart() {
   }, [session, tries]);
   if (places.kind === "loading" || (places.kind === "ok" && places.orgs.length === 0)) return null;
   return (
-    <Part title="Your privacy">
+    <Part title="Your privacy" icon="shield">
       {places.kind === "failed" ? (
         <View style={styles.between}>
           <Txt kind="small" style={styles.grow}>
@@ -177,7 +212,7 @@ function PlacesPart() {
             onPress={() => { setShown(org); }}
             style={styles.line}
           >
-            <Badge icon="shield" />
+            <Badge icon="building" tone="plain" />
             <Txt kind="strong" style={styles.grow}>
               What {org.name} can see
             </Txt>
@@ -193,25 +228,11 @@ function PlacesPart() {
 }
 
 function AccountPart({ onClose }: { onClose: () => void }) {
-  const { session, state } = useSession();
-  const [since, setSince] = useState<string | null>(null);
+  const { session } = useSession();
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState<string | null>(null);
   const [again, setAgain] = useState(false);
-  useEffect(() => {
-    const run = { live: true };
-    void session.signedIn({ method: "GET", path: "/v1/users/me" }, userProfileResponseSchema).then((answer) => {
-      if (!run.live || answer.kind !== "ok") return;
-      setSince(memberSinceText(answer.data.user.createdAt));
-      // What the server holds now, as another device may have changed it since this phone last heard.
-      void session.keepName(answer.data.user.displayName).then(() => session.keepUnits(answer.data.user.units));
-    });
-    return () => {
-      run.live = false;
-    };
-  }, [session]);
-  const email = state.kind === "in" ? state.user.email : null;
   const startAgain = async () => {
     if (busy) return;
     setBusy(true);
@@ -226,27 +247,14 @@ function AccountPart({ onClose }: { onClose: () => void }) {
     setAsking(false);
     setAgain(true);
   };
-  const rows: { label: string; value: string }[] = [
-    { label: "Sign-in", value: "Email code or Google" },
-    ...(since === null ? [] : [{ label: "Member since", value: since }]),
-  ];
   return (
-    <Part title="Account">
-      {/* An address is long and is never cut: it has its own line under its label. */}
-      {email === null ? null : (
-        <View>
-          <Txt kind="small">Email</Txt>
-          <Txt kind="strong">{email}</Txt>
-        </View>
-      )}
-      {rows.map((row) => (
-        <View key={row.label} style={styles.between}>
-          <Txt kind="small">{row.label}</Txt>
-          <Txt kind="strong" style={styles.value}>
-            {row.value}
-          </Txt>
-        </View>
-      ))}
+    <Part title="Account" icon="settings">
+      <View style={styles.between}>
+        <Txt kind="small">Sign-in</Txt>
+        <Txt kind="strong" style={styles.value}>
+          Email code or Google
+        </Txt>
+      </View>
       <View style={styles.rule} />
       <Button label="Start setup again" kind="link" icon="sliders" style={styles.start} onPress={() => { setSaid(null); setAsking(true); }} />
       <Sheet open={asking} title="Start setup again?" onClose={() => { setAsking(false); }}>
@@ -273,9 +281,10 @@ function AccountPart({ onClose }: { onClose: () => void }) {
 }
 
 const styles = StyleSheet.create({
-  page: { gap: 20 },
-  part: { gap: 8 },
+  page: { gap: 14 },
+  profile: { flexDirection: "row", alignItems: "center", gap: 14 },
   card: { gap: 12 },
+  head: { flexDirection: "row", alignItems: "center", gap: 10 },
   between: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
   line: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: sizes.press },
   grow: { flex: 1 },
