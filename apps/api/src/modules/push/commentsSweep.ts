@@ -51,11 +51,12 @@ export async function sendCommentNotifications(deps: {
     const earlier = tokens.length === 0 ? [] : await comments.toldUnseen(sql, pair.userId, pair.gymId, since);
     const seen = tokens.length === 0 ? null : await commentsToTell({ sql, now: () => now }, pair.userId, pair.gymId, [...new Set([...fresh, ...earlier])]);
     const newest = seen?.comments[0];
-    if (seen === null || newest === undefined) {
+    const shown = seen === null ? null : commentNotification({ gymName: seen.gymName, comments: seen.comments });
+    if (shown === null || newest === undefined) {
       result.skipped += 1;
       return;
     }
-    const { title, body } = commentNotification({ gymName: seen.gymName, count: seen.comments.length, newest });
+    const { title, body } = shown;
     let failed = false;
     for (const token of tokens) {
       const sent = await sender.send({

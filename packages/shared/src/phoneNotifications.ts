@@ -96,22 +96,39 @@ export const COMMENTS_AGAIN_MINUTES = 30;
 /** What a comment was to the person told: on their post, or an answer to their comment or reply. */
 export type CommentNotice = "on_post" | "reply";
 
-/** The longest piece of a comment's words a notification shows. */
+/** The longest piece of a comment's words a notification shows: one comment, and each line of several. */
 export const COMMENT_NOTIFICATION_WORDS = 200;
+export const COMMENT_NOTIFICATION_LINE_WORDS = 100;
+/** Several new comments: this many newest are listed, one a line, when the notification is opened (Kd,
+ *  2026-11-03); the rest are counted in a last line. */
+export const COMMENT_NOTIFICATION_LINES = 5;
 
-function clip(words: string): string {
+function clip(words: string, most: number): string {
   const flat = words.replace(/\s+/g, " ").trim();
-  return flat.length <= COMMENT_NOTIFICATION_WORDS ? flat : `${flat.slice(0, COMMENT_NOTIFICATION_WORDS - 1).trimEnd()}…`;
+  return flat.length <= most ? flat : `${flat.slice(0, most - 1).trimEnd()}…`;
 }
 
-/** What the phone shows: the gym, then the newest comment with who wrote it; once more than one is new,
- *  the count in the title. */
-export function commentNotification(input: { gymName: string; count: number; newest: { name: string; notice: CommentNotice; words: string } }): { title: string; body: string } {
-  const { gymName, count, newest } = input;
-  const words = clip(newest.words);
-  if (count > 1) return { title: `${gymName} · ${String(count)} new comments`, body: `${newest.name}: ${words}` };
-  const what = newest.notice === "reply" ? "replied to your comment" : "commented on your post";
-  return { title: gymName, body: `${newest.name} ${what}: ${words}` };
+export interface CommentNotified {
+  name: string;
+  notice: CommentNotice;
+  words: string;
+}
+
+/** What the phone shows, from the new comments newest first: one says who and what; several give the
+ *  count in the title and list the newest, newest on top, one a line, which the phone shows in full when
+ *  the notification is opened. None is no notification. */
+export function commentNotification(input: { gymName: string; comments: readonly CommentNotified[] }): { title: string; body: string } | null {
+  const { gymName, comments } = input;
+  const [newest] = comments;
+  if (newest === undefined) return null;
+  if (comments.length === 1) {
+    const what = newest.notice === "reply" ? "replied to your comment" : "commented on your post";
+    return { title: gymName, body: `${newest.name} ${what}: ${clip(newest.words, COMMENT_NOTIFICATION_WORDS)}` };
+  }
+  const lines = comments.slice(0, COMMENT_NOTIFICATION_LINES).map((c) => `${c.name}: ${clip(c.words, COMMENT_NOTIFICATION_LINE_WORDS)}`);
+  const rest = comments.length - lines.length;
+  if (rest > 0) lines.push(`and ${String(rest)} more`);
+  return { title: `${gymName} · ${String(comments.length)} new comments`, body: lines.join("\n") };
 }
 
 /** What a comment's notification carries for the app: the gym, and the post whose comments a tap opens. */

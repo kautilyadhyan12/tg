@@ -2,7 +2,7 @@
 // in, and what one says. Every class of case, garbage included.
 import { describe, expect, it } from "vitest";
 import { bookingTime, tellsPlaceFree } from "../src/classBookings.js";
-import { COMMENT_NOTIFICATION_WORDS, commentNotification, gymCommentPushDataSchema, gymMessageNotification, gymPlacePushDataSchema, placeNotification, pushHourOpen, pushTokenRequestSchema } from "../src/phoneNotifications.js";
+import { COMMENT_NOTIFICATION_LINES, COMMENT_NOTIFICATION_LINE_WORDS, COMMENT_NOTIFICATION_WORDS, commentNotification, gymCommentPushDataSchema, gymMessageNotification, gymPlacePushDataSchema, placeNotification, pushHourOpen, pushTokenRequestSchema } from "../src/phoneNotifications.js";
 
 describe("pushHourOpen: from 04:00 up to 23:00 on the person's clock", () => {
   it.each([
@@ -118,28 +118,43 @@ describe("gymPlacePushDataSchema: what a tap opens", () => {
   });
 });
 
-describe("commentNotification: one a gym, the newest under it", () => {
+describe("commentNotification: one a gym; several listed, newest on top", () => {
+  const c = (name: string, words: string, notice: "on_post" | "reply" = "on_post") => ({ name, words, notice });
+  it("none is no notification", () => {
+    expect(commentNotification({ gymName: "Lotus Yoga", comments: [] })).toBeNull();
+  });
   it("one comment on the person's post, and one reply to their comment", () => {
-    expect(commentNotification({ gymName: "Lotus Yoga", count: 1, newest: { name: "Ravi S.", notice: "on_post", words: "Great work!" } })).toEqual({
+    expect(commentNotification({ gymName: "Lotus Yoga", comments: [c("Ravi S.", "Great work!")] })).toEqual({
       title: "Lotus Yoga",
       body: "Ravi S. commented on your post: Great work!",
     });
-    expect(commentNotification({ gymName: "Lotus Yoga", count: 1, newest: { name: "Ravi S.", notice: "reply", words: "Thanks" } }).body).toBe("Ravi S. replied to your comment: Thanks");
+    expect(commentNotification({ gymName: "Lotus Yoga", comments: [c("Ravi S.", "Thanks", "reply")] })?.body).toBe("Ravi S. replied to your comment: Thanks");
   });
-  it("more than one: the count in the title, the newest with its writer", () => {
-    expect(commentNotification({ gymName: "Lotus Yoga", count: 3, newest: { name: "Asha K.", notice: "reply", words: "See you there" } })).toEqual({
+  it("several: the count in the title, one a line, newest on top", () => {
+    expect(commentNotification({ gymName: "Lotus Yoga", comments: [c("Kavya S.", "I will join you on Saturday."), c("Kavya S.", "Which route did you take?"), c("Asha K.", "See you there", "reply")] })).toEqual({
       title: "Lotus Yoga · 3 new comments",
-      body: "Asha K.: See you there",
+      body: "Kavya S.: I will join you on Saturday.\nKavya S.: Which route did you take?\nAsha K.: See you there",
     });
   });
-  it("long words are cut with an ellipsis, and lines run together", () => {
-    const body = commentNotification({ gymName: "G", count: 1, newest: { name: "A", notice: "on_post", words: `line one
+  it("past five, the rest are counted in a last line", () => {
+    const seven = Array.from({ length: 7 }, (_, i) => c("A", String(7 - i)));
+    const shown = commentNotification({ gymName: "G", comments: seven });
+    expect(shown?.title).toBe("G · 7 new comments");
+    expect(shown?.body.split("\n")).toEqual(["A: 7", "A: 6", "A: 5", "A: 4", "A: 3", "and 2 more"]);
+    expect(COMMENT_NOTIFICATION_LINES).toBe(5);
+  });
+  it("long words are cut with an ellipsis, and a comment's own lines run together", () => {
+    const long = `line one
 
-line two ${"x".repeat(400)}` } }).body;
-    const words = body.slice("A commented on your post: ".length);
-    expect(words.startsWith("line one line two x")).toBe(true);
-    expect(words.length).toBe(COMMENT_NOTIFICATION_WORDS);
-    expect(words.endsWith("…")).toBe(true);
+line two ${"x".repeat(400)}`;
+    const one = commentNotification({ gymName: "G", comments: [c("A", long)] })?.body.slice("A commented on your post: ".length) ?? "";
+    expect(one.startsWith("line one line two x")).toBe(true);
+    expect(one.length).toBe(COMMENT_NOTIFICATION_WORDS);
+    expect(one.endsWith("…")).toBe(true);
+    const lines = commentNotification({ gymName: "G", comments: [c("A", long), c("B", "short")] })?.body.split("\n") ?? [];
+    expect(lines).toHaveLength(2);
+    expect(lines[0]?.slice("A: ".length)).toHaveLength(COMMENT_NOTIFICATION_LINE_WORDS);
+    expect(lines[0]?.startsWith("A: line one line two x")).toBe(true);
   });
 });
 

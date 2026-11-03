@@ -307,7 +307,7 @@ d("phone notifications for comments and replies (real Postgres)", () => {
     expect(told).toHaveLength(1);
     expect(told[0]).toMatchObject({
       title: "Count Gym · 2 new comments",
-      body: "Cara: Well done",
+      body: "Cara: Well done\nBen: Lovely",
       tag: `comments:${gym}`,
       channelId: "gym-comments",
       data: { kind: "gym_comment", gymId: gym, postId: post },
