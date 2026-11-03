@@ -47,8 +47,8 @@ import { OrgsError } from "../service.js";
 import { dayInTz } from "../../gamification/streak.js";
 import { fullName } from "../leaderboard/rank.js";
 import { requireMember, type Line } from "../classes/bookingsService.js";
-import { overdueRule } from "../classes/bookingsRepo.js";
-import { stoppedBookers } from "../classes/bookingStops.js";
+import { stopRule } from "../classes/bookingsRepo.js";
+import { stopOf } from "../classes/bookingStops.js";
 import * as repo from "./repo.js";
 import { PtLateCancel, bookUnderLock, cancelUnderLock, heldWithUsed, ptFeesOfSession, type Limit, type PtDeps } from "./service.js";
 
@@ -123,8 +123,8 @@ export async function getMemberPt(deps: PtDeps, userId: string, gymId: string, q
   const distinct = [...new Map(offered.flat().map((t) => [keyOf(t), t])).values()];
 
   const entryId = me.entryId;
-  const rule = entryId === null ? null : await overdueRule(deps.sql, gymId);
-  const overdue = rule !== null && (await stoppedBookers(deps.sql, gymId, rule, [{ userId, entryId }], now)).has(userId);
+  const rule = entryId === null ? null : await stopRule(deps.sql, gymId);
+  const stop = rule === null ? null : await stopOf(deps.sql, gymId, rule, { userId, entryId }, now);
   const [instants, heldOn, sessions, history] = await Promise.all([
     repo.instantsOf(deps.sql, clock.timezone, distinct),
     entryId !== null && clock.hasTypes ? heldWithUsed(deps.sql, gymId, [entryId], days) : null,
@@ -160,7 +160,7 @@ export async function getMemberPt(deps: PtDeps, userId: string, gymId: string, q
     record: entryId !== null ? "own" : me.shared ? "shared" : "none",
     days: days.map((localDate) => {
       if (entryId === null) return { localDate, pays: null, why: null, limit: null, fees: null };
-      if (overdue) return { localDate, pays: null, why: "payment_overdue", limit: null, fees: null };
+      if (stop !== null) return { localDate, pays: null, why: stop, limit: null, fees: null };
       // The booking's own rule, with the sessions counted in this day's own week and month.
       const held = heldOn === null ? [] : heldOn(localDate, entryId);
       const cover = pickPtCover({ gymHasTypes: clock.hasTypes, day: localDate, held });
@@ -243,10 +243,9 @@ export async function memberBook(
       if (me.entryId === null) return new OrgsError(409, PT_NOT_ON_LIST_ERROR, ptNotOnListWords(org.orgType));
       if (req.trainerId === userId) return new OrgsError(409, "not_a_time", PT_MEMBER_WORDS.not_a_time);
       // A booking sent again is answered by `bookUnderLock` with the session it made, overdue or not.
-      const rule = (await repo.byKey(tx, gymId, req.requestKey)) === null ? await overdueRule(tx, gymId) : null;
-      if (rule !== null && (await stoppedBookers(tx, gymId, rule, [{ userId, entryId: me.entryId }], deps.now())).has(userId)) {
-        return new OrgsError(403, "payment_overdue", PT_MEMBER_WORDS.payment_overdue);
-      }
+      const rule = (await repo.byKey(tx, gymId, req.requestKey)) === null ? await stopRule(tx, gymId) : null;
+      const stop = rule === null ? null : await stopOf(tx, gymId, rule, { userId, entryId: me.entryId }, deps.now());
+      if (stop !== null) return new OrgsError(403, stop, PT_MEMBER_WORDS[stop]);
       const id = await bookUnderLock(tx, deps.now(), gymId, { ...req, entryId: me.entryId }, { userId, member: true });
       return typeof id === "string" ? { id, entryId: me.entryId } : id;
     });

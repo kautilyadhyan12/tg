@@ -80,6 +80,9 @@ export function agreementLineParts(membership, inUse, signable, when) {
   return null;
 }
 
+/** Said beside "Agreement not signed" while the business stops new bookings until it is (18u-iv). */
+export const UNSIGNED_STOPS_LINE = "Can't book until signed.";
+
 /** What Email a link to sign did, said under the membership. */
 export function agreementLinkSentLine(emailed, days) {
   if (emailed === 'sent') return `A link to sign was emailed to them. It works for ${String(days)} days.`;

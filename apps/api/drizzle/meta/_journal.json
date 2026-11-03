@@ -1366,6 +1366,13 @@
       "when": 1790726400195,
       "tag": "0195_signatures_after_deletion",
       "breakpoints": true
+    },
+    {
+      "idx": 195,
+      "version": "7",
+      "when": 1790726400196,
+      "tag": "0196_bookings_unsigned",
+      "breakpoints": true
     }
   ]
 }

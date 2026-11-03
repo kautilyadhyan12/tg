@@ -1350,13 +1350,19 @@ export async function inUseForMoney(
 
 /** Every membership stored in use of the gym's current records whose line of the price list
  *  asks for an agreement today and that nobody has signed (18u-ii-a), with its record. */
-export async function unsignedAgreementHeld(sql: Sql | TransactionSql, gymId: string): Promise<{ entryId: string; membership: HeldMembership }[]> {
+export async function unsignedAgreementHeld(
+  sql: Sql | TransactionSql,
+  gymId: string,
+  entryIds: readonly string[] | null = null,
+): Promise<{ entryId: string; membership: HeldMembership }[]> {
+  if (entryIds !== null && entryIds.length === 0) return [];
   const rows = await sql<(ListHeldColumns & { entry_id: string })[]>`
     SELECT ${LIST_COLUMNS(sql)}, h.entry_id
     FROM gym_held_memberships h
     JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
     JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id AND e.former_at IS NULL
     WHERE h.gym_id = ${gymId} AND h.status = ANY(${[...IN_USE]}::text[]) AND ${typeAskedSql(sql)}
+      ${entryIds === null ? sql`` : sql`AND h.entry_id = ANY(${[...entryIds]}::uuid[])`}
       AND NOT EXISTS (SELECT 1 FROM gym_agreement_signatures s WHERE s.gym_id = h.gym_id AND s.held_membership_id = h.id)`;
   return rows.map((row) => ({ entryId: row.entry_id, membership: listHeld(row).membership }));
 }

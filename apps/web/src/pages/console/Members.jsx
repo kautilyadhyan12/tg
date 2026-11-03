@@ -28,7 +28,7 @@ import {
 } from './consoleView';
 import { canMakeRoomNow, consoleIsReadOnly, memberMeterText, readOnlyNote, seatMeter } from './billingView';
 import { shortWhen } from './memberListPeople';
-import { PAST_PAYMENT_DUE_SHOW, PAYMENT_DUE_SHOW } from './weekView';
+import { AGREEMENT_NOT_SIGNED_SHOW, PAST_PAYMENT_DUE_SHOW, PAYMENT_DUE_SHOW } from './weekView';
 import { canManageStaff } from './staffView';
 import PlanChoiceDialog from '../../components/console/PlanChoiceDialog';
 import ApplicationsQueue from './ApplicationsQueue';
@@ -492,10 +492,10 @@ export default function Members() {
   };
 
   // Overview's Last 7 days box opens the list showing who has a payment due, or the past
-  // members who still owe (`?show=`), once.
+  // members who still owe, and Booking rules who has an agreement to sign (`?show=`), once.
   const [startShow, setStartShow] = useState(() => {
     const show = searchParams.get('show');
-    return show === PAYMENT_DUE_SHOW || show === PAST_PAYMENT_DUE_SHOW ? show : null;
+    return show === PAYMENT_DUE_SHOW || show === PAST_PAYMENT_DUE_SHOW || show === AGREEMENT_NOT_SIGNED_SHOW ? show : null;
   });
   const showing = searchParams.get('show');
   useEffect(() => {
