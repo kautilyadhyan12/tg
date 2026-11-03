@@ -796,14 +796,14 @@ if (pushAccount === null) {
       if (job.name !== PUSH_GYM_MESSAGES_JOB) throw new Error(`unknown job on ${PUSH_QUEUE}: ${job.name}`);
       const startedAt = Date.now();
       // Each in its own try, so one that keeps failing never stops the other (18b-ii-a).
-      let failure: unknown = null;
+      let failure: Error | null = null;
       try {
         const run = await sendGymMessageNotifications({ sql, sender: pushSender, now: () => new Date() });
         if (run.sent + run.skipped + run.failed > 0) {
           log.info({ ...run, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
         }
       } catch (err) {
-        failure = err;
+        failure = err instanceof Error ? err : new Error(String(err));
       }
       // A place in a class or an event (18b-ii-a), in the same minute.
       const placesStartedAt = Date.now();
@@ -813,7 +813,7 @@ if (pushAccount === null) {
           log.info({ ...placesRun, durationMs: Date.now() - placesStartedAt, event: "job.finished", job: "push.places" }, "job finished");
         }
       } catch (err) {
-        failure ??= err;
+        failure ??= err instanceof Error ? err : new Error(String(err));
       }
       if (failure !== null) throw failure;
     },
