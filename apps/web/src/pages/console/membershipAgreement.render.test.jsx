@@ -170,6 +170,12 @@ describe('what was signed', () => {
     expect(orgService.emailAgreementCopy).toHaveBeenCalledWith(GYM, MAYA, GOLD.id);
   });
 
+  it('names the card kept for this membership from a Terminal payment', async () => {
+    orgService.getMembershipAgreement.mockResolvedValue({ data: { ...BOX, signed: SIGNED, card: { brand: 'VISA', last4: '1111', at: SIGNED.at } } });
+    draw({ membership: { ...GOLD, agreement: { at: SIGNED.at } }, open: true });
+    expect((await screen.findByTestId('agreement-card')).textContent).toMatch(/^Card for automatic payments: Visa ending 1111, agreed on the Terminal on .+.$/);
+  });
+
   it('a record with no email address has no Email a copy, and says why', async () => {
     orgService.getMembershipAgreement.mockResolvedValue({ data: { ...BOX, hasEmail: false, signed: { ...SIGNED, emailedAt: null } } });
     draw({ membership: { ...GOLD, agreement: { at: SIGNED.at } }, open: true });

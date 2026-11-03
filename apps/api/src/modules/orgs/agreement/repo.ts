@@ -490,3 +490,15 @@ export async function workingLinksOf(sql: SqlOrTx, gymId: string, membershipIds:
     WHERE l.gym_id = ${gymId} AND l.held_membership_id = ANY(${[...membershipIds]}::uuid[]) AND ${linkWorks(sql, at)}`;
   return new Map(rows.map((row) => [row.held_membership_id, { sentAt: row.sent_at, expiresAt: row.expires_at }]));
 }
+
+/** The card kept for this membership from a Terminal payment, agreed there (18d-vi-c), while it is still the card on
+ *  file: a card removed or replaced since is not named, as it no longer pays. */
+export async function cardKeptFor(sql: SqlOrTx, gymId: string, membershipId: string): Promise<{ brand: string; last4: string; at: string } | null> {
+  const [row] = await sql<{ brand: string; last4: string; agreed_at: Date }[]>`
+    SELECT a.brand, a.last4, a.agreed_at FROM gym_card_agreements a
+    JOIN gym_member_cards c ON c.gym_id = a.gym_id AND c.agreement_id = a.id
+    WHERE a.gym_id = ${gymId} AND a.held_membership_id = ${membershipId}
+    ORDER BY a.agreed_at DESC
+    LIMIT 1`;
+  return row === undefined ? null : { brand: row.brand, last4: row.last4, at: row.agreed_at.toISOString() };
+}

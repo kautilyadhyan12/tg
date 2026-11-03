@@ -25,13 +25,19 @@ import {
   CARD_CHARGE_WORDS,
   GYM_PAYMENTS_WORDS,
   MEMBER_FEE_WORDS,
+  TERMINAL_AGREEMENT,
+  TERMINAL_KEEP_DISAGREE,
   TERMINAL_PAYMENT_WORDS,
+  cardAgreementWords,
   formatMinor,
+  renewingMembershipLine,
+  terminalKeepWords,
   terminalPaymentResponseSchema,
   terminalPaymentsResponseSchema,
   terminalSalesResponseSchema,
   type CardTerminal,
   type SquarePayment,
+  type SquareTerminalAction,
   type SquareTerminalCheckout,
   type TerminalPayment,
   type TerminalFeePaymentRequest,
@@ -45,7 +51,25 @@ import {
 import { dayInTz } from "../../gamification/streak.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import { saleRefused } from "../register/service.js";
-import { BILLING, connectionRefused, entryNotFound, notReady, orgNotFound, readyOrThrow, stateOf, type Ready } from "./cards.js";
+import { lockGym } from "../memberList/repo.js";
+import { readOwnHeld } from "../memberships/heldService.js";
+import { payerOf } from "../payers/repo.js";
+import {
+  BILLING,
+  connectionRefused,
+  customerFor,
+  entryNotFound,
+  keepCard,
+  letGoOfCard,
+  notReady,
+  onMergedCustomer,
+  orgNotFound,
+  readyOrThrow,
+  sendOwedCardDisables,
+  stateOf,
+  usableCard,
+  type Ready,
+} from "./cards.js";
 import * as cards from "./cardsRepo.js";
 import * as repo from "./repo.js";
 import { accessContext, missingScopes, terminalsOffered, type PaymentsDeps } from "./service.js";
@@ -74,6 +98,10 @@ export const TERMINAL_PAYMENT = {
   /** Square giving no answer at all (down, or out of reach) for a day: given up, and told. Until
    *  then money taken at the Terminal meanwhile is recorded when Square answers again. */
   giveUpMs: 24 * 60 * 60_000,
+  /** After the agreement the Terminal shows Square's waiting screen this long, for the amount that follows. */
+  awaitNext: "PT30S",
+  /** Square saves a card from a payment "authorized within the last 24 hours": stopped asking an hour before. */
+  keepCardMs: 23 * 60 * 60_000,
   /** A done one is kept this long, for the page that asks how it ended. */
   keepMs: 24 * 60 * 60_000,
   perRun: 50,
@@ -107,7 +135,7 @@ const terminalGone = (): OrgsError => new OrgsError(404, "terminal_gone", TERMIN
 const terminalBusy = (): OrgsError => new OrgsError(409, "terminal_busy", TERMINAL_PAYMENT_WORDS.terminal_busy);
 
 /** Why Square's answer ended a payment, from its cancel reason. */
-function cancelledAs(checkout: SquareTerminalCheckout, pickedUp: boolean): NotTaken {
+function cancelledAs(checkout: Pick<SquareTerminalCheckout | SquareTerminalAction, "cancel_reason">, pickedUp: boolean): NotTaken {
   if (checkout.cancel_reason === "BUYER_CANCELED") return "cancelled_on_terminal";
   if (checkout.cancel_reason === "TIMED_OUT") return pickedUp ? "timed_out" : "no_answer";
   return "cancelled";
@@ -220,12 +248,193 @@ async function paid(a: Asking, checkout: SquareTerminalCheckout): Promise<Step> 
   }
   const kept = await pays.recordPaid(deps.sql, { pay, squarePaymentId: taken.id, today, now });
   if (kept?.outcome === "not_recorded") deps.log.error({ event: "square.terminal_payment_not_recorded", gymId: pay.gymId }, "money taken on a Terminal could not be recorded on its bill");
+  if (kept?.outcome === "paid" && pay.cardStep === "paying") await keepFromPayment(deps, square, { ...pay, squarePaymentId: taken.id, finishedAt: now });
   return kept === null ? null : { done: kept.outcome };
+}
+
+/** When the checkout's time began: the press, or the person's answer where the agreement came first. */
+const sinceOf = (pay: pays.PayRow): Date => pay.cardAnsweredAt ?? pay.startedAt;
+
+/** The agreement's action: read from Square, or made with the press's own key. */
+async function agreementOf(a: Asking): Promise<SquareResult<SquareTerminalAction>> {
+  const { pay, square, token } = a;
+  if (pay.confirmActionId !== null) return await square.api.getTerminalAction(token, pay.confirmActionId);
+  if (pay.confirmKey === null || pay.cardWords === null) return { kind: "refused", status: 500, code: "NO_AGREEMENT" };
+  const made = await square.api.createTerminalAction(token, {
+    idempotencyKey: pay.confirmKey,
+    deviceId: pay.deviceId,
+    deadline: TERMINAL_PAYMENT.deadline,
+    type: "CONFIRMATION",
+    title: TERMINAL_AGREEMENT.title,
+    body: pay.cardWords,
+    agree: TERMINAL_AGREEMENT.agree,
+    disagree: TERMINAL_KEEP_DISAGREE,
+    awaitNext: TERMINAL_PAYMENT.awaitNext,
+  });
+  if (made.kind !== "ok") return made;
+  if (!(await pays.setConfirmAction(a.deps.sql, pay.id, made.value.id))) {
+    await square.api.cancelTerminalAction(token, made.value.id);
+    return { kind: "refused", status: 409, code: "PAYMENT_MOVED_ON" };
+  }
+  pay.confirmActionId = made.value.id;
+  return made;
+}
+
+/** Cancel pressed while the agreement is on the Terminal: no money can be taken yet. */
+async function stopAgreement(a: Asking, action: SquareTerminalAction): Promise<Step> {
+  if (action.status === "CANCELED") return await ended(a, cancelledAs(action, a.pay.pickedUp));
+  if (action.status === "COMPLETED") return await ended(a, "cancelled");
+  const cancel = await a.square.api.cancelTerminalAction(a.token, action.id);
+  if (cancel.kind === "refused" && cancel.status === 404) return await ended(a, "cancelled");
+  if (cancel.kind === "ok" && cancel.value.id === action.id && (cancel.value.status === "CANCELED" || cancel.value.status === "COMPLETED")) return await stopAgreement(a, cancel.value);
+  return null;
+}
+
+/** The card agreement is on the Terminal: nothing is charged until the person answers. The checkout follows
+ *  I agree and Pay without saving alike; only I agree, to these very words, lets the card be kept. */
+async function agreeing(a: Asking): Promise<Step> {
+  const { deps, pay } = a;
+  const got = await agreementOf(a);
+  if (got.kind === "unavailable") return a.now.getTime() > pay.startedAt.getTime() + TERMINAL_PAYMENT.giveUpMs ? await ended(a, "no_answer") : null;
+  if (got.kind === "refused") {
+    if (got.code === "PAYMENT_MOVED_ON") return null;
+    if (pay.cancelWantedAt !== null && got.status === 404) return await ended(a, "cancelled");
+    deps.log.warn({ event: "square.terminal_action_refused", gymId: pay.gymId, status: got.status, code: got.code }, "Square refused a Terminal agreement");
+    return await ended(a, "refused", got);
+  }
+  const action = got.value;
+  if (action.id !== pay.confirmActionId || action.device_id !== pay.deviceId || action.type !== "CONFIRMATION") {
+    deps.log.error({ event: "square.terminal_action_unexpected", gymId: pay.gymId }, "Square answered about another Terminal action");
+    return await ended(a, "refused");
+  }
+  if (!pay.pickedUp && (action.status === "IN_PROGRESS" || action.status === "COMPLETED")) {
+    await pays.setPickedUp(deps.sql, pay.id);
+    pay.pickedUp = true;
+  }
+  if (pay.cancelWantedAt !== null) return await stopAgreement(a, action);
+  if (pay.entryId === null) {
+    if (action.status !== "COMPLETED" && action.status !== "CANCELED") await a.square.api.cancelTerminalAction(a.token, action.id);
+    return await ended(a, "cancelled");
+  }
+  if (action.status === "CANCELED") return await ended(a, cancelledAs(action, pay.pickedUp));
+  if (action.status === "COMPLETED") {
+    if (action.confirmation_options?.body !== pay.cardWords) {
+      deps.log.error({ event: "square.terminal_words_changed", gymId: pay.gymId }, "the Terminal answered for other words than the card agreement");
+      return await ended(a, "refused");
+    }
+    const agreed = action.confirmation_options.decision?.has_agreed;
+    if (agreed !== true && agreed !== false) {
+      deps.log.error({ event: "square.terminal_no_decision", gymId: pay.gymId }, "the Terminal finished the agreement without an answer");
+      return await ended(a, "refused");
+    }
+    const said = action.updated_at == null ? Number.NaN : Date.parse(action.updated_at);
+    const at = Number.isNaN(said) || said < pay.startedAt.getTime() || said > a.now.getTime() ? a.now : new Date(said);
+    const next = agreed ? ("paying" as const) : ("declined" as const);
+    if (!(await pays.answerCard(deps.sql, pay.id, next, at))) return null;
+    pay.cardStep = next;
+    pay.cardAnsweredAt = at;
+    pay.pickedUp = true;
+    return await step(a);
+  }
+  const since = pay.startedAt.getTime();
+  if (action.status === "PENDING" && !pay.pickedUp && a.now.getTime() > since + TERMINAL_PAYMENT.notShownMs) {
+    const cancel = await a.square.api.cancelTerminalAction(a.token, action.id);
+    return cancel.kind === "ok" && cancel.value.status === "CANCELED" ? await ended(a, "no_answer") : null;
+  }
+  if (a.now.getTime() > since + TERMINAL_PAYMENT.deadlineMs + TERMINAL_PAYMENT.graceMs) {
+    const cancel = await a.square.api.cancelTerminalAction(a.token, action.id);
+    return cancel.kind === "ok" && cancel.value.status === "CANCELED" ? await ended(a, pay.pickedUp ? "timed_out" : "no_answer") : null;
+  }
+  return null;
+}
+
+/** Paid, and the person agreed on the Terminal: the card is kept from this very payment, on the record holding the
+ *  membership now, through the step every saved card takes. Square saying no leaves the payment as it is; Square
+ *  not answering is asked again by the worker until its 24 hours are nearly up. */
+async function keepFromPayment(deps: PaymentsDeps, square: SquareSettings, pay: pays.PayRow): Promise<void> {
+  const notSaved = async (): Promise<void> => {
+    await pays.finishCard(deps.sql, pay.id, "not_saved", null);
+  };
+  const row = await repo.readConnection(deps.sql, pay.gymId, square.environment);
+  const token = row?.state === "connected" && row.accountId === pay.accountId && row.accessToken !== null ? square.tokens.open(row.accessToken, accessContext(pay.gymId)) : null;
+  const { squarePaymentId, cardKey, cardAnsweredAt, cardWords, membershipId } = pay;
+  if (row === null || token === null || squarePaymentId === null || cardKey === null || cardAnsweredAt === null || cardWords === null || membershipId === null) {
+    await notSaved();
+    return;
+  }
+  const holder = await pays.holderOf(deps.sql, pay.gymId, membershipId);
+  const person = holder === null ? null : await cards.readPerson(deps.sql, pay.gymId, holder);
+  if (holder === null || person === null || (await payerOf(deps.sql, pay.gymId, holder)) !== null) {
+    await notSaved();
+    return;
+  }
+  if (deps.now().getTime() > (pay.finishedAt ?? pay.startedAt).getTime() + TERMINAL_PAYMENT.keepCardMs) {
+    deps.log.warn({ event: "square.terminal_keep_given_up", gymId: pay.gymId }, "Square gave no answer about keeping a card from a Terminal payment");
+    await notSaved();
+    return;
+  }
+  const ready: Ready = { square, row, token };
+  let customerId: string;
+  try {
+    customerId = await customerFor(deps, ready, pay.gymId, person);
+  } catch (err) {
+    deps.log.warn({ event: "square.terminal_keep_no_customer", gymId: pay.gymId, code: err instanceof OrgsError ? err.code : "unknown" }, "no Square customer yet for a card kept from a payment");
+    // No answer from Square: the worker asks again. Square refusing the customer: it would refuse it again.
+    if (err instanceof OrgsError && err.code !== "square_unavailable") await pays.finishCard(deps.sql, pay.id, err.code === "card_connection_refused" ? "not_saved" : "square_refused", null);
+    return;
+  }
+  const created = await square.api.createCard(token, { idempotencyKey: cardKey, sourceId: squarePaymentId, customerId, cardholderName: null });
+  if (created.kind === "unavailable") return;
+  if (created.kind === "refused") {
+    deps.log.warn({ event: "square.terminal_keep_refused", gymId: pay.gymId, status: created.status, code: created.code }, "Square refused to save a card from a Terminal payment");
+    if (created.code === "CUSTOMER_NOT_FOUND") await cards.dropCustomer(deps.sql, pay.gymId, holder, square.environment, pay.accountId, customerId);
+    await pays.finishCard(deps.sql, pay.id, created.status === 401 ? "not_saved" : "square_refused", null);
+    return;
+  }
+  const merged = await onMergedCustomer(deps, square, token, pay.accountId, created.value, customerId);
+  const usable = merged?.usable ?? usableCard(created.value, customerId, pay.accountId);
+  if (usable === null) {
+    deps.log.error({ event: "square.card_unexpected", gymId: pay.gymId }, "Square saved a card from a payment that is not the one asked for");
+    await letGoOfCard(deps, square, { gymId: pay.gymId, environment: pay.environment, accountId: pay.accountId, cardId: created.value.id });
+    await notSaved();
+    return;
+  }
+  const at = deps.now();
+  const owed = await deps.sql.begin(async (tx) => {
+    await lockGym(tx, pay.gymId);
+    if (!(await pays.lockKeeping(tx, pay.id))) return null;
+    const done = await keepCard(tx, {
+      gymId: pay.gymId,
+      entryId: holder,
+      environment: pay.environment,
+      accountId: pay.accountId,
+      connectedAt: row.connectedAt,
+      customerId: merged?.customerId ?? customerId,
+      afterMerge: merged !== null,
+      card: usable,
+      words: cardWords,
+      screen: "terminal",
+      userId: pay.startedBy,
+      deviceId: pay.deviceId,
+      agreedAt: cardAnsweredAt,
+      at,
+      membershipId,
+    });
+    await pays.finishCard(tx, pay.id, done.kind === "saved" ? "saved" : "not_saved", done.kind === "saved" ? { brand: usable.brand, last4: usable.last4 } : null);
+    return done.owed;
+  });
+  if (owed === null) {
+    // Another request ended it first. Square gives back the same card for the same key, so one that kept it kept this
+    // card; one that ended without it leaves this card saved in Square for nobody: it is stopped.
+    if ((await pays.readCardStep(deps.sql, pay.id)) !== "saved") await letGoOfCard(deps, square, { gymId: pay.gymId, environment: pay.environment, accountId: pay.accountId, cardId: usable.cardId });
+    return;
+  }
+  if (owed.length > 0) await sendOwedCardDisables(deps, square, owed);
 }
 
 /** Past Square's own time with no end from it: Square is asked to cancel. */
 async function overdue(a: Asking, checkout: SquareTerminalCheckout): Promise<Step> {
-  if (a.now.getTime() <= a.pay.startedAt.getTime() + TERMINAL_PAYMENT.deadlineMs + TERMINAL_PAYMENT.graceMs) return null;
+  if (a.now.getTime() <= sinceOf(a.pay).getTime() + TERMINAL_PAYMENT.deadlineMs + TERMINAL_PAYMENT.graceMs) return null;
   const cancel = await a.square.api.cancelTerminalCheckout(a.token, checkout.id);
   if (cancel.kind === "ok" && isOurs(a, cancel.value) && cancel.value.status === "CANCELED") return await ended(a, a.pay.pickedUp ? "timed_out" : "no_answer");
   // Paid at the last moment, or no answer: its next look decides.
@@ -275,7 +484,7 @@ async function stopping(a: Asking, checkout: SquareTerminalCheckout): Promise<St
  *  recorded when Square answers again (re-check). */
 async function notYet(a: Asking, why: "refused" | "unavailable"): Promise<Step> {
   const limit = why === "refused" ? TERMINAL_PAYMENT.deadlineMs + TERMINAL_PAYMENT.graceMs : TERMINAL_PAYMENT.giveUpMs;
-  if (a.now.getTime() <= a.pay.startedAt.getTime() + limit) return null;
+  if (a.now.getTime() <= sinceOf(a.pay).getTime() + limit) return null;
   a.deps.log.error({ event: "square.terminal_payment_unchecked", gymId: a.pay.gymId, why }, "a Terminal payment could not be read from Square past its time");
   return await ended(a, "gone");
 }
@@ -284,6 +493,7 @@ async function notYet(a: Asking, why: "refused" | "unavailable"): Promise<Step> 
 async function step(a: Asking): Promise<Step> {
   const { deps, pay } = a;
   pay.cancelWantedAt ??= await pays.readCancelWanted(deps.sql, pay.id);
+  if (pay.cardStep === "agreeing") return await agreeing(a);
   // Even with Cancel pressed and no checkout id kept, Square may have made the checkout and its
   // answer been lost: asking with the press's own key gives it back (or makes it), and `stopping`
   // cancels it. "Cancelled" is said only on Square's own word (review round one, Critical 1).
@@ -363,6 +573,7 @@ function viewOf(pay: pays.PayRow, paired: readonly (CardTerminal & { deviceId: s
     startedAt: pay.startedAt.toISOString(),
     receiptNumber: pay.receiptNumber,
     startedByName: pay.startedByName ?? null,
+    card: pay.cardStep === null ? null : { step: pay.cardStep, brand: pay.cardBrand, last4: pay.cardLast4 },
   };
 }
 
@@ -399,6 +610,7 @@ export async function readTerminalPayments(deps: PaymentsDeps, userId: string, g
     isOwner,
     // Record payment's Card on file (18d-iii-i): the card it would charge, while Square is ready.
     cardOnFile: stateOf(square, gym, row) === "ready" ? await cardOnFileFor(deps, gymId, entryId, row, gym.timezone) : null,
+    keepsCard: (await payerOf(deps.sql, gymId, entryId)) === null,
   });
 }
 
@@ -418,7 +630,7 @@ export async function startTerminalPayment(
   membershipId: string,
   body: TerminalPaymentRequest,
 ): Promise<TerminalPaymentResponse> {
-  return await start(deps, userId, gymId, entryId, membershipId, body, { kind: "period", periodIndex: body.periodIndex });
+  return await start(deps, userId, gymId, entryId, membershipId, body, { kind: "period", periodIndex: body.periodIndex }, body.keepCard);
 }
 
 /** Take payment on Terminal for a late cancel or no-show fee of a membership (18d-vi-b-i). */
@@ -534,6 +746,14 @@ export async function readTerminalSales(deps: PaymentsDeps, userId: string, gymI
   });
 }
 
+/** What the Terminal shows before a payment that keeps the card: worked out here, never sent by a screen. */
+async function keepAsk(deps: PaymentsDeps, gymId: string, gym: repo.GymForPayments, entryId: string, membershipId: string): Promise<NonNullable<pays.NewPay["keepCard"]>> {
+  const held = await readOwnHeld({ sql: deps.sql, now: deps.now }, gymId, entryId, dayInTz(deps.now(), gym.timezone));
+  const membership = held.memberships.find((m) => m.id === membershipId);
+  if (membership === undefined) throw new OrgsError(404, "held_membership_not_found", "That membership was not found.");
+  return { words: terminalKeepWords(renewingMembershipLine(membership, held.taxIncluded), cardAgreementWords(gym.name)), confirmKey: randomUUID(), cardKey: randomUUID() };
+}
+
 /** Take payment on Terminal: the amount goes to the chosen Terminal. The same press sent twice is
  *  one payment; one already waiting for the same bill is answered instead of a second. */
 async function start(
@@ -544,10 +764,12 @@ async function start(
   membershipId: string,
   body: TerminalFeePaymentRequest,
   target: pays.PayTarget,
+  keep = false,
 ): Promise<TerminalPaymentResponse> {
   const { privileges } = await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   if (!privileges.includes(BILLING)) throw new OrgsError(403, "forbidden", NO_BILLING);
   const { gym, ready, deviceId, locationId } = await terminalFor(deps, gymId, body.terminalId);
+  const keepCardAsk = keep ? await keepAsk(deps, gymId, gym, entryId, membershipId) : null;
 
   const press = (now: Date): Promise<pays.StartOutcome> =>
     pays.startPayment(deps.sql, {
@@ -555,6 +777,7 @@ async function start(
       entryId,
       membershipId,
       target,
+      keepCard: keepCardAsk,
       amountMinor: body.amountMinor,
       environment: ready.square.environment,
       accountId: ready.row.accountId,
@@ -594,6 +817,10 @@ async function start(
       throw new OrgsError(409, "terminal_payment_currency", TERMINAL_PAYMENT_WORDS.currency);
     case "other_waiting":
       throw new OrgsError(409, "terminal_payment_waiting", TERMINAL_PAYMENT_WORDS.waiting);
+    case "keep_not_offered":
+      throw new OrgsError(409, "keep_card_not_offered", TERMINAL_PAYMENT_WORDS.keep_card_not_offered);
+    case "keep_save_waiting":
+      throw new OrgsError(409, "keep_card_save_waiting", TERMINAL_PAYMENT_WORDS.keep_card_save_waiting);
     case "card_charging":
       throw new OrgsError(409, "card_charge_waiting", CARD_CHARGE_WORDS.charging);
     case "fee_not_found":
@@ -669,6 +896,16 @@ export async function processTerminalPayments(deps: PaymentsDeps, square: Square
     const [pay] = await pays.claimIdle(deps.sql, square.environment, at, TERMINAL_PAYMENT.idleMs, leaseFrom(at), 1, gymIds);
     if (pay === undefined) break;
     await advance(deps, square, pay, leaseFrom(at));
+    asked += 1;
+  }
+  // Cards Square has not yet saved from a payment it took.
+  for (let i = 0; i < TERMINAL_PAYMENT.perRun; i += 1) {
+    const at = deps.now();
+    const until = leaseFrom(at);
+    const keeping = await pays.claimKeeping(deps.sql, square.environment, at, TERMINAL_PAYMENT.idleMs, until, gymIds);
+    if (keeping === null) break;
+    await keepFromPayment(deps, square, keeping);
+    await pays.release(deps.sql, keeping.id, until);
     asked += 1;
   }
   const forgotten = await pays.forgetDone(deps.sql, new Date(deps.now().getTime() - TERMINAL_PAYMENT.keepMs), gymIds);

@@ -1,5 +1,5 @@
 // PHONE NOTIFICATIONS FOR A PLACE (ROADMAP Stage 5 item 18b-ii-a): the only file that reads or clears
-// what a class booking or an event place is owed (`push_due`, migration 0193). Classes and events
+// what a class booking or an event place is owed (`push_due`, migration 0194). Classes and events
 // write it as places change hands (`owePlaceFree`, `moveIn`); the worker sends it here.
 import type { Sql, TransactionSql } from "postgres";
 import type { PlaceNotice } from "@app/shared";

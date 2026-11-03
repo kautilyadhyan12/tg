@@ -535,13 +535,13 @@ export const gymClassBookings = pgTable(
     createdAt: createdAt(),
     bookedAt: timestamp("booked_at", { withTimezone: true }),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
-    /** 0193: what the person on this row is owed and not yet told on their phone (ROADMAP Stage 5
+    /** 0194: what the person on this row is owed and not yet told on their phone (ROADMAP Stage 5
      *  18b-ii-a): `yours`, moved off the waitlist into the place, or `free`, a place is free to claim. */
     pushDue: text("push_due"),
     pushDueAt: timestamp("push_due_at", { withTimezone: true }),
-    /** 0193: which free place the person was last owed a notice for, so one is never told twice. */
+    /** 0194: which free place the person was last owed a notice for, so one is never told twice. */
     pushOccasion: text("push_occasion"),
-    /** 0193: when the person was last told about this class or event: a free place again within the hour is not told. */
+    /** 0194: when the person was last told about this class or event: a free place again within the hour is not told. */
     pushToldAt: timestamp("push_told_at", { withTimezone: true }),
   },
   (t) => [

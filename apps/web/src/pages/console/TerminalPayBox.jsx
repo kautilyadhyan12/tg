@@ -32,6 +32,8 @@ function Step({ state, children }) {
  *  than one Terminal, so the box says which. `notOwed`: its fee was taken off meanwhile (18d-vi-b-i). */
 export default function TerminalPayBox({ gymId, entryId, payment, name, showName, notOwed = false, onAnswer, onEnded, checkEveryMs = CHECK_EVERY_MS }) {
   const words = terminalPayWaitWords(payment, name);
+  /** The card agreement comes first where the payment asks to keep the card (18d-vi-c). */
+  const agreeing = payment.card?.step === 'agreeing';
   const [cancelling, setCancelling] = useState(false);
   const [problem, setProblem] = useState(null);
   const [slow, setSlow] = useState(false);
@@ -121,8 +123,9 @@ export default function TerminalPayBox({ gymId, entryId, payment, name, showName
         ) : null}
       </div>
       <ol className="flex flex-col gap-2 m-0 p-0 list-none">
-        <Step state={payment.pickedUp ? 'done' : 'now'}>{words.shown}</Step>
-        <Step state={payment.pickedUp ? 'now' : 'later'}>{words.card}</Step>
+        {payment.card != null ? <Step state={agreeing ? 'now' : 'done'}>{words.agree}</Step> : null}
+        <Step state={agreeing ? 'later' : payment.pickedUp ? 'done' : 'now'}>{words.shown}</Step>
+        <Step state={!agreeing && payment.pickedUp ? 'now' : 'later'}>{words.card}</Step>
       </ol>
       {slow && !payment.pickedUp && !payment.stopping ? <p className="c-s14 c-t2 m-0">{words.notShown}</p> : null}
       {payment.tooLate ? <p className="c-s14 c-t1 m-0">{words.tooLate}</p> : null}
