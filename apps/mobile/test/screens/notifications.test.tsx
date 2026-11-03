@@ -16,6 +16,8 @@ type Stand = {
   dismissedAll: number;
   unregistered: number;
   taps: ((response: unknown) => void)[];
+  received: ((notification: unknown) => void)[];
+  scheduled: { identifier: string; content: unknown; trigger: unknown }[];
   last: unknown;
   handler: { handleNotification: (n: unknown) => Promise<{ shouldShowBanner: boolean }> } | null;
   channels: { id: string; name: string }[];
@@ -373,7 +375,7 @@ describe("a message that arrives while the app is open", () => {
       for (const one of notifications.received) one({ request: { identifier: "fcm-1", trigger, content: { title: "Iron House", body: "Words.", data } } });
       await Promise.resolve();
     });
-  const scheduled = () => (notifications as unknown as { scheduled: { identifier: string; content: unknown; trigger: unknown }[] }).scheduled;
+  const scheduled = () => notifications.scheduled;
 
   it("is shown by the app itself, one for each gym's Inbox and each class, on its own channel", async () => {
     notifications.permission = YES;
