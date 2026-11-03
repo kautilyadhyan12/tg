@@ -304,15 +304,18 @@ d("a place in a class or an event, told to the phone (real Postgres)", () => {
       expect(sentTo(who).map((m) => m.body)).toEqual(["A place is free in Morning Flow today at 6:00 PM. The first to claim it gets it."]);
     }
     expect(sentTo(asha)).toHaveLength(0);
-    // The same free place, seen again by another change (the gym saves its booking settings, which
-    // hands over every class's free places), is told to nobody twice.
+    // The same free place, seen again by another change, is told to nobody twice: a shorter hand-over
+    // time (20 hours, the class still inside it) makes the gym look at every class's free places.
     fresh();
     const settings = await request("GET", `/v1/orgs/${gym.id}/booking-settings`, { cookies: gym.owner.cookies });
     expect(settings.statusCode, settings.body).toBe(200);
-    const saved = await request("PUT", `/v1/orgs/${gym.id}/booking-settings`, { cookies: gym.owner.cookies, payload: { ...(JSON.parse(settings.body) as { settings: object; pt: object }).settings, pt: (JSON.parse(settings.body) as { pt: object }).pt } });
-    expect(saved.statusCode, saved.body).toBe(200);
+    const read = JSON.parse(settings.body) as { settings: Record<string, unknown>; pt: object };
+    const put = (handoverMinutes: number) =>
+      request("PUT", `/v1/orgs/${gym.id}/booking-settings`, { cookies: gym.owner.cookies, payload: { ...read.settings, handoverMinutes, pt: read.pt } });
+    expect((await put(1200)).statusCode).toBe(200);
     await sweep();
     expect(sent).toHaveLength(0);
+    expect((await put(1440)).statusCode).toBe(200);
   });
 
   it("a free place claimed before the run: nobody is told it is free", { timeout: T }, async () => {
