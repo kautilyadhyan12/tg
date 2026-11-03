@@ -603,7 +603,11 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
         - 18b-ii. **A place is free, and a comment or reply on your post** (split 2026-11-03: places first).
           - 18b-ii-a. [x] **A place in a class or an event** · merged 2026-11-03 · PR #451
           - 18b-ii-b. [x] **A comment or reply on your post** · merged 2026-11-03 · PR #453
-19. [ ] **Settings and account**: profile, units, hide me on leaderboards, notification switches that save, change email (Stage 2's 3b-iii), what a gym can see (Stage 1's 8a), download my data, delete account and undo.
+19. **Settings and account** (split 2026-11-03 in four: Settings first).
+    - 19a. [ ] **Settings on the phone**: name, units, Hide me, what each place can see, the account and Start setup again.
+    - 19b. [ ] **Download my data, delete my account and undo.**
+    - 19c. [ ] **Change email** (Stage 2's 3b-iii).
+    - 19d. [ ] **Notification switches that save.**
 20. [ ] **What the gym side adds for members**, each after its web job: the waiver (3e), the membership agreement signed in the app (18u), the referral link (20e), the member photo (5b-vi), saving their card (18d-ii), buying from the gym (18k), stopping a membership (18l), a gym's plan for a member (19e).
 21. [ ] **Paying, the stores and release**: the $10 plan through the stores (item 6), one device one trial (Stage 3's 2c), the store pages rated 18+, the Terms and Privacy pages that Get started's line opens (it opens nothing today, as the browser's), Google's closed test, then the iPhone version with Apple sign-in.
 

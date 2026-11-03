@@ -92,9 +92,11 @@ interface SetupProps {
   /** `at`: the screen it opens on, where another page sends the person to one answer (31b: a goal's target). */
   at?: SetupScreenId | null;
   mode?: Mode;
+  /** Started again from Settings: in front of the tabs, in the units the person already chose. */
+  again?: boolean;
 }
 
-export function Setup({ open, onClose, onSettled, at = null, mode = "over" }: SetupProps) {
+export function Setup({ open, onClose, onSettled, at = null, mode = "over", again = false }: SetupProps) {
   const insets = useSafeAreaInsets();
   // Android's back leaves as the ✕ does: the name typed is saved first, and a blank one stays to be
   // fixed. In front of the tabs it goes back a step, and nowhere from the first.
@@ -112,7 +114,7 @@ export function Setup({ open, onClose, onSettled, at = null, mode = "over" }: Se
     >
       <KeyboardAvoidingView accessibilityViewIsModal behavior="padding" style={[styles.page, { paddingTop: insets.top }]}>
         <Image source={pictures.setup} resizeMode="cover" accessible={false} style={styles.picture} />
-        {open ? <SetupBody onClose={onClose} {...(onSettled === undefined ? {} : { onSettled })} leave={leave} bottom={insets.bottom} at={at} mode={mode} /> : null}
+        {open ? <SetupBody onClose={onClose} {...(onSettled === undefined ? {} : { onSettled })} leave={leave} bottom={insets.bottom} at={at} mode={mode} again={again} /> : null}
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -143,6 +145,7 @@ function SetupBody({
   bottom,
   at,
   mode,
+  again,
 }: {
   onClose: () => void;
   onSettled?: () => void;
@@ -150,6 +153,7 @@ function SetupBody({
   bottom: number;
   at: SetupScreenId | null;
   mode: Mode;
+  again: boolean;
 }) {
   const { session, state } = useSession();
   const ob = useSetupAnswers({
@@ -162,9 +166,10 @@ function SetupBody({
   const [picked, setPicked] = useState<SetupScreenId | null>(at);
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
-  // Opened from Me, the units the person chose (Settings); the first time, the phone's own country's.
+  // Opened from Me or started again, the units the person chose (Settings); the first time, the phone's own country's.
   const saved = state.kind === "in" ? accountUnits(state.user.units) : null;
-  const [units, showUnits] = useState<Units>(() => (mode === "over" && saved !== null ? saved : defaultUnits(phoneLanguage())));
+  const chosen = mode === "over" || again;
+  const [units, showUnits] = useState<Units>(() => (chosen && saved !== null ? saved : defaultUnits(phoneLanguage())));
   // One choice for the whole app: the switch here is the one in Settings.
   const keepUnits = useCallback(
     (next: Units) => {
@@ -181,7 +186,7 @@ function SetupBody({
   // In front of the tabs, the units it opened in are the account’s from the start, as the browser has none to read.
   const firstUnits = useRef(units);
   useEffect(() => {
-    if (mode === "front" && saved !== firstUnits.current) keepUnits(firstUnits.current);
+    if (!chosen && saved !== firstUnits.current) keepUnits(firstUnits.current);
     // Once, as setup opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

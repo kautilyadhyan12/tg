@@ -73,7 +73,12 @@ function NamePart() {
   const { session, state } = useSession();
   const now = state.kind === "in" ? state.user.displayName : "";
   const [name, setName] = useState(now);
+  const [typing, setTyping] = useState(false);
   const [busy, setBusy] = useState(false);
+  // A name changed elsewhere (the browser) shows here once the server has said it, unless the person is typing.
+  useEffect(() => {
+    if (!typing) setName(now);
+  }, [now, typing]);
   const [said, setSaid] = useState<{ words: string; bad: boolean } | null>(null);
   const typed = displayNameSchema.safeParse(name);
   const changed = typed.success && typed.data !== now;
@@ -86,6 +91,7 @@ function NamePart() {
     if (answer.kind === "ok") {
       await session.keepName(answer.data.user.displayName);
       setName(answer.data.user.displayName);
+      setTyping(false);
       setSaid({ words: "Your name is saved.", bad: false });
     } else {
       setSaid({ words: answer.kind === "refused" ? answer.message : NO_ANSWER, bad: true });
@@ -93,7 +99,7 @@ function NamePart() {
   };
   return (
     <Part title="Your name">
-      <Field label="Full name" bare placeholder="First and last name" value={name} onChange={(v) => { setName(v); setSaid(null); }} name maxLength={100} onDone={() => void save()} />
+      <Field label="Full name" bare placeholder="First and last name" value={name} onChange={(v) => { setName(v); setTyping(true); setSaid(null); }} name maxLength={100} onDone={() => void save()} />
       {typed.success ? null : <Txt kind="small" colour="badText">Enter your name.</Txt>}
       <Said words={said?.words ?? null} bad={said?.bad ?? false} />
       {changed ? <Button label="Save name" small busy={busy} onPress={() => void save()} style={styles.start} /> : null}
@@ -196,7 +202,10 @@ function AccountPart({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     const run = { live: true };
     void session.signedIn({ method: "GET", path: "/v1/users/me" }, userProfileResponseSchema).then((answer) => {
-      if (run.live && answer.kind === "ok") setSince(memberSinceText(answer.data.user.createdAt));
+      if (!run.live || answer.kind !== "ok") return;
+      setSince(memberSinceText(answer.data.user.createdAt));
+      // What the server holds now, as another device may have changed it since this phone last heard.
+      void session.keepName(answer.data.user.displayName).then(() => session.keepUnits(answer.data.user.units));
     });
     return () => {
       run.live = false;
@@ -218,12 +227,18 @@ function AccountPart({ onClose }: { onClose: () => void }) {
     setAgain(true);
   };
   const rows: { label: string; value: string }[] = [
-    ...(email === null ? [] : [{ label: "Email", value: email }]),
     { label: "Sign-in", value: "Email code or Google" },
     ...(since === null ? [] : [{ label: "Member since", value: since }]),
   ];
   return (
     <Part title="Account">
+      {/* An address is long and is never cut: it has its own line under its label. */}
+      {email === null ? null : (
+        <View>
+          <Txt kind="small">Email</Txt>
+          <Txt kind="strong">{email}</Txt>
+        </View>
+      )}
       {rows.map((row) => (
         <View key={row.label} style={styles.between}>
           <Txt kind="small">{row.label}</Txt>
@@ -247,6 +262,7 @@ function AccountPart({ onClose }: { onClose: () => void }) {
       <Setup
         open={again}
         mode="front"
+        again
         onClose={() => {
           setAgain(false);
           onClose();

@@ -148,6 +148,19 @@ describe("Your name", () => {
     expect(await screen.findByText("Ravi Kumar")).toBeTruthy();
   });
 
+  it("a name and units changed on another device show when Settings opens", async () => {
+    const acct = account();
+    acct.held.displayName = "Ravi Kumar";
+    acct.held.units = "imperial";
+    const server = fakeServer(routes({ [ME]: acct.me }));
+    const store = await openSettings(server.ask);
+    expect(await screen.findByDisplayValue("Ravi Kumar")).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByLabelText("Pounds, feet and inches").props.accessibilityState).toMatchObject({ selected: true });
+    });
+    expect((JSON.parse(store.value ?? "{}") as { user: { displayName: string; units: string } }).user).toMatchObject({ displayName: "Ravi Kumar", units: "imperial" });
+  });
+
   it("a blank name is never sent", async () => {
     const server = fakeServer(routes());
     await openSettings(server.ask);
@@ -207,11 +220,11 @@ describe("Account", () => {
     expect(page.getByText("Email code or Google")).toBeTruthy();
   });
 
-  it("Start setup again asks first: Cancel sends nothing; Start again clears setup and opens it", async () => {
+  it("Start setup again asks first: Cancel sends nothing; Start again clears setup and opens it, in the units chosen", async () => {
     const missing = [...missingPlanInputSchema.options];
     const cleared = { answers: { displayName: "Ravi", weightGoal: null, fitnessGoals: [], age: null, gender: null, heightCm: null, weightKg: null, targetWeightKg: null, pace: null, dayActivity: null, fitnessLevel: null, pushUpsMax: null, plankHoldSeconds: null, trainingDays: null, sessionMinutes: null, availableEquipment: [], trainingPlaces: [], diet: null, mealsPerDay: null, onboardingCompleted: false, updatedAt: null }, plan: null, missing };
     const server = fakeServer(routes({ [SETUP]: ok(cleared) }));
-    const store = await openSettings(server.ask);
+    const store = await openSettings(server.ask, memoryStore(kept(1, { ...RAVI, units: "imperial" })));
     await fireEvent.press(await screen.findByLabelText("Start setup again"));
     await fireEvent.press(await screen.findByLabelText("Cancel"));
     expect(server.asked.some((a) => a.path === SETUP && a.method === "DELETE")).toBe(false);
@@ -225,6 +238,8 @@ describe("Account", () => {
       expect(screen.getByTestId("setup").props.visible).toBe(true);
     });
     expect((JSON.parse(store.value ?? "{}") as { setupDone?: boolean }).setupDone).not.toBe(true);
+    await act(() => new Promise<void>((resolve) => setTimeout(resolve, 50)));
+    expect(server.asked.filter((a) => a.path === ME && a.method === "PATCH")).toEqual([]);
   });
 });
 
