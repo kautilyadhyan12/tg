@@ -96,6 +96,8 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       getGymWaiver: vi.fn(() => Promise.resolve({ data: { waiver: null, inUse: false, people: 0, signed: 0 } })),
 
       getGymAgreement: vi.fn(() => Promise.resolve({ data: { agreement: null, inUse: false, signed: 0 } })),
+      getDeletedForms: vi.fn(() => Promise.resolve({ data: { forms: [], total: 0, next: null, timezone: 'UTC' } })),
+      getDeletedForm: vi.fn(),
       // Settings' Payments box (18d-i): a gym in a country Square serves, not connected.
       getGymPayments: vi.fn(() => Promise.resolve({ data: { payments: { availability: 'square', country: 'GB', canConnect: true, squareReady: true, square: null } } })),
       getCheckinRules: vi.fn(() => Promise.resolve({ data: { rules: { who: 'everyone', overdue: 'let_in', waiver: 'let_in' }, overdueAfterDays: 0 } })),
@@ -1056,8 +1058,10 @@ describe('every Settings panel that greys a control explains itself, in its own 
     'membership agreement',
     'follow-up emails to leads',
   ];
+  // Signed forms of deleted members (18u-iii) only reads: a gym with no plan still reads them, so it greys nothing.
+  const READING_SECTIONS = ['signed forms of deleted members'];
 
-  it('draws exactly these eleven sections and no twelfth one nobody is checking', async () => {
+  it('draws exactly these sections and no other one nobody is checking', async () => {
     orgService.getMine.mockResolvedValue(mineIs(LAPSED));
     renderConsole(Settings, '/console/iron-house/settings');
     await screen.findByTestId('console-banner');
@@ -1069,7 +1073,8 @@ describe('every Settings panel that greys a control explains itself, in its own 
     const headings = screen
       .getAllByRole('button')
       .filter((el) => el.getAttribute('aria-expanded') !== null);
-    expect(headings).toHaveLength(GREYING_SECTIONS.length);
+    expect(headings).toHaveLength(GREYING_SECTIONS.length + READING_SECTIONS.length);
+    for (const name of READING_SECTIONS) expect(headings.some((h) => h.textContent.toLowerCase().startsWith(name))).toBe(true);
   });
 
   for (const name of GREYING_SECTIONS) {

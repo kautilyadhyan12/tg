@@ -29,6 +29,7 @@ export const SETTINGS_SECTION = {
   leadEmails: 'follow-up-emails',
   waiver: 'waiver',
   agreement: 'membership-agreement',
+  deletedForms: 'deleted-forms',
   referrals: 'refer-a-friend',
   payments: 'payments',
 };

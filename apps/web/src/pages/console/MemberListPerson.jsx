@@ -42,7 +42,7 @@ import { canRecordPayments } from './memberBillsView';
 import { canManageMemberships } from './membershipTypesView';
 import { viewerPrivileges } from './consoleView';
 import { canOpenPlace, placeFor } from './consolePlaces';
-import { SQUARE_OWNER_ONLY, deleteSquareLineOne, deletedOneSquareLine } from './memberListDeleteView';
+import { DELETE_WHAT_HAPPENS, SQUARE_OWNER_ONLY, deleteSquareLineOne, deletedOneSquareLine } from './memberListDeleteView';
 import { useCameBack } from './useCameBack';
 import PlaceLink from '../../components/console/PlaceLink';
 import MoreMenu from '../../components/console/MoreMenu';
@@ -1725,10 +1725,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     const squareTo = placeFor(gym?.slug, viewerPrivileges(gym), 'payments');
     return (
       <Ask testId="confirm-delete" question={`Delete ${name} permanently?`}>
-        <p className="c-s14 c-t2 m-0">
-          Their details and history are deleted and can&apos;t be brought back. Payments they made stay in your takings and
-          reports, as &ldquo;A deleted member&rdquo;.
-        </p>
+        <p className="c-s14 c-t2 m-0">{DELETE_WHAT_HAPPENS}</p>
         {squareLine !== null ? (
           <p className="c-s14 c-t2 m-0" data-testid="delete-square">
             {squareLine}

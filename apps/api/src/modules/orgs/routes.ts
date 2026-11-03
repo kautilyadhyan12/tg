@@ -60,6 +60,7 @@ import type { RobotCheck } from "./gymPage/robotCheck.js";
 import { registerInvitationRoutes } from "./invites/joinRoutes.js";
 import { registerWaiverRoutes } from "./waiver/routes.js";
 import { registerAgreementRoutes } from "./agreement/routes.js";
+import { registerDeletedFormsRoutes } from "./deletedForms/routes.js";
 import type { LiveNewsSender } from "../live/news.js";
 import type { AgreementEmailSender } from "./agreement/email.js";
 import { registerStaffInviteRoutes } from "./staffInvites/routes.js";
@@ -241,6 +242,9 @@ export function registerOrgRoutes(
     webOrigin: deps.webOrigin,
     news: deps.news,
   });
+
+  // The signed forms of members deleted for good, for the gym's own owner (18u-iii).
+  registerDeletedFormsRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
 
   // Staff invited by email, and the invited person's Accept (Part 3 §10.3).
   registerStaffInviteRoutes(app, { sql: deps.sql, redis: deps.redis, invites: deps.invites, coOwnerEmail: deps.coOwnerEmail, webOrigin: deps.webOrigin });
