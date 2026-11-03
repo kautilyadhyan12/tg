@@ -380,7 +380,7 @@ async function keepFromPayment(deps: PaymentsDeps, square: SquareSettings, pay: 
   } catch (err) {
     deps.log.warn({ event: "square.terminal_keep_no_customer", gymId: pay.gymId, code: err instanceof OrgsError ? err.code : "unknown" }, "no Square customer yet for a card kept from a payment");
     // No answer from Square: the worker asks again. Square refusing the customer: it would refuse it again.
-    if (err instanceof OrgsError && err.code !== "square_unavailable") await pays.finishCard(deps.sql, pay.id, "square_refused", null);
+    if (err instanceof OrgsError && err.code !== "square_unavailable") await pays.finishCard(deps.sql, pay.id, err.code === "card_connection_refused" ? "not_saved" : "square_refused", null);
     return;
   }
   const created = await square.api.createCard(token, { idempotencyKey: cardKey, sourceId: squarePaymentId, customerId, cardholderName: null });
@@ -388,7 +388,7 @@ async function keepFromPayment(deps: PaymentsDeps, square: SquareSettings, pay: 
   if (created.kind === "refused") {
     deps.log.warn({ event: "square.terminal_keep_refused", gymId: pay.gymId, status: created.status, code: created.code }, "Square refused to save a card from a Terminal payment");
     if (created.code === "CUSTOMER_NOT_FOUND") await cards.dropCustomer(deps.sql, pay.gymId, holder, square.environment, pay.accountId, customerId);
-    await pays.finishCard(deps.sql, pay.id, "square_refused", null);
+    await pays.finishCard(deps.sql, pay.id, created.status === 401 ? "not_saved" : "square_refused", null);
     return;
   }
   const merged = await onMergedCustomer(deps, square, token, pay.accountId, created.value, customerId);

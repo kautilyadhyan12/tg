@@ -525,13 +525,13 @@ export async function claimKeeping(sql: Sql, environment: SquareEnvironment, now
   return row === undefined ? null : toRow(row);
 }
 
-/** The press, held for the keeping statement; false once another request ended the card's step. */
 /** Where keeping the card stands now. */
 export async function readCardStep(sql: SqlOrTx, id: string): Promise<string | null> {
   const [row] = await sql<{ card_step: string | null }[]>`SELECT card_step FROM gym_terminal_payments WHERE id = ${id}`;
   return row?.card_step ?? null;
 }
 
+/** The press, held for the keeping statement; false once another request ended the card's step. */
 export async function lockKeeping(tx: TransactionSql, id: string): Promise<boolean> {
   const [row] = await tx<{ id: string }[]>`SELECT id FROM gym_terminal_payments WHERE id = ${id} AND card_step = 'keeping' FOR UPDATE`;
   return row !== undefined;
