@@ -25,6 +25,8 @@ export interface DuePlace {
   userZone: string | null;
   /** Owed for longer than a notice is told for: taken off with no send. */
   stale: boolean;
+  /** This person was told about this class or event within `PLACE_FREE_AGAIN_MINUTES`. */
+  toldLately: boolean;
 }
 
 export interface DueMark {
@@ -36,23 +38,23 @@ export interface DueMark {
  *  for the morning, so they never hold up the rest. */
 export async function duePlaces(
   sql: SqlOrTx,
-  input: { since: Date; limit: number; after: DueMark | null; gymIds?: readonly string[] | undefined },
+  input: { since: Date; toldSince: Date; limit: number; after: DueMark | null; gymIds?: readonly string[] | undefined },
 ): Promise<DuePlace[]> {
-  const { since, limit, after, gymIds } = input;
+  const { since, toldSince, limit, after, gymIds } = input;
   const gyms = gymIds === undefined ? null : [...gymIds];
   const rows = await sql<
-    { what: PlaceWhat; row_id: string; gym_id: string; user_id: string; subject_id: string; due: PlaceNotice; due_at: string; gym_name: string; gym_zone: string; clock_format: string; user_zone: string | null; stale: boolean }[]
+    { what: PlaceWhat; row_id: string; gym_id: string; user_id: string; subject_id: string; due: PlaceNotice; due_at: string; gym_name: string; gym_zone: string; clock_format: string; user_zone: string | null; stale: boolean; told_lately: boolean }[]
   >`
     SELECT x.what, x.row_id, x.gym_id, x.user_id, x.subject_id, x.due, x.due_at_raw::text AS due_at,
            g.name AS gym_name, g.timezone AS gym_zone, g.clock_format, u.timezone AS user_zone,
-           x.due_at_raw < ${since} AS stale
+           x.due_at_raw < ${since} AS stale, COALESCE(x.told_at > ${toldSince}, false) AS told_lately
     FROM (
       SELECT 'class'::text AS what, b.id AS row_id, b.gym_id, b.user_id, b.session_id AS subject_id, b.push_due AS due,
-             b.push_due_at AS due_at_raw
+             b.push_due_at AS due_at_raw, b.push_told_at AS told_at
       FROM gym_class_bookings b
       WHERE b.push_due IS NOT NULL AND (${gyms}::uuid[] IS NULL OR b.gym_id = ANY(${gyms}::uuid[]))
       UNION ALL
-      SELECT 'event'::text, p.id, p.gym_id, p.user_id, p.event_id, p.push_due, p.push_due_at
+      SELECT 'event'::text, p.id, p.gym_id, p.user_id, p.event_id, p.push_due, p.push_due_at, p.push_told_at
       FROM gym_event_places p
       WHERE p.push_due IS NOT NULL AND (${gyms}::uuid[] IS NULL OR p.gym_id = ANY(${gyms}::uuid[]))
     ) x
@@ -74,6 +76,7 @@ export async function duePlaces(
     clockFormat: r.clock_format,
     userZone: r.user_zone,
     stale: r.stale,
+    toldLately: r.told_lately,
   }));
 }
 
@@ -87,6 +90,11 @@ export async function claimDue(sql: SqlOrTx, place: Pick<DuePlace, "what" | "row
     WHERE gym_id = ${place.gymId} AND id = ${place.rowId} AND push_due = ${place.due} AND push_due_at = ${place.dueAt}::timestamptz
     RETURNING id`;
   return rows.length === 1;
+}
+
+/** The person was told about this class or event now. */
+export async function markTold(sql: SqlOrTx, place: Pick<DuePlace, "what" | "rowId" | "gymId">, now: Date): Promise<void> {
+  await sql`UPDATE ${table(sql, place.what)} SET push_told_at = ${now} WHERE gym_id = ${place.gymId} AND id = ${place.rowId}`;
 }
 
 /** Puts back a notice this run took and Firebase did not take, so the next run tries again; never over

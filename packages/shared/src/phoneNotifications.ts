@@ -16,9 +16,9 @@ export type PushTokenRequest = z.infer<typeof pushTokenRequestSchema>;
 export const pushTokenResponseSchema = z.object({ saved: z.literal(true) }).strict();
 export type PushTokenResponse = z.infer<typeof pushTokenResponseSchema>;
 
-/** Notifications go from 07:00 up to 23:00 on the person's own clock (Kd, 2026-11-03); one due at
- *  night waits for the morning. */
-export const PUSH_FIRST_HOUR = 7;
+/** A gym's messages go from 04:00 up to 23:00 on the person's own clock (Kd, 2026-11-03); one due at
+ *  night waits for 04:00. A place in a class or an event goes at any hour. */
+export const PUSH_FIRST_HOUR = 4;
 export const PUSH_LAST_HOUR = 23;
 
 /** Whether a notification may go now, by the hour on the person's clock (0 to 23). Anything that is
@@ -57,6 +57,10 @@ export const GYM_PLACES_CHANNEL = { id: "gym-places", name: "Classes and events"
  *  before the start, when it is no longer handed over by itself, and the first to claim it has it. */
 export const PLACE_NOTICES = ["yours", "free"] as const;
 export type PlaceNotice = (typeof PLACE_NOTICES)[number];
+
+/** A free place is told to the same person at most once in this long for one class or event, so a
+ *  busy class does not keep sounding their phone (Kd, 2026-11-03). */
+export const PLACE_FREE_AGAIN_MINUTES = 60;
 
 /** What the phone shows. `when` is `reminderWhen`'s: "today at 6:00 PM", "on Tuesday 11 November at
  *  6:00 PM". */

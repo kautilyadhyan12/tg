@@ -4,14 +4,15 @@
 // handed over by itself. Each is claimed off its row before anything is sent, so a second run sends
 // nothing twice, and each is read again as the person's own Classes or Events page reads it just
 // before it goes: a place since taken, a class started or cancelled, a person who left the waitlist
-// or the gym, is told to nobody. At night on the person's clock it waits, and is read again then.
+// or the gym, is told to nobody. These go at any hour (Kd, 2026-11-03): they are about the person's
+// own place and only matter now. A free place is told to the same person at most once an hour a class.
 import {
   GYM_PLACES_CHANNEL,
+  PLACE_FREE_AGAIN_MINUTES,
   PUSH_WITHIN_HOURS,
   gymClockFormatSchema,
   gymMessageDayNumber,
   placeNotification,
-  pushHourOpen,
   reminderWhen,
 } from "@app/shared";
 import type { Sql } from "postgres";
@@ -21,7 +22,6 @@ import { OrgsError } from "../orgs/service.js";
 import type { PushSender } from "./fcm.adapter.js";
 import * as places from "./placesRepo.js";
 import * as repo from "./repo.js";
-import { localHour } from "./sweep.js";
 
 export interface PlaceSweepResult {
   sent: number;
@@ -87,10 +87,12 @@ export async function sendPlaceNotifications(deps: {
   const page = deps.sizes?.page ?? PAGE;
   const now = deps.now();
   const since = new Date(now.getTime() - PUSH_WITHIN_HOURS * 3_600_000);
+  const toldSince = new Date(now.getTime() - PLACE_FREE_AGAIN_MINUTES * 60_000);
   const result: PlaceSweepResult = { sent: 0, skipped: 0, waiting: 0, failed: 0 };
 
   const tell = async (place: places.DuePlace): Promise<void> => {
-    const tokens = place.stale ? [] : await repo.liveTokens(sql, place.userId, now);
+    // Told about this class within the hour: another free place in it is not told again.
+    const tokens = place.stale || (place.due === "free" && place.toldLately) ? [] : await repo.liveTokens(sql, place.userId, now);
     const today = dayIn(place.gymZone, now);
     const clock = gymClockFormatSchema.safeParse(place.clockFormat);
     const facts = tokens.length === 0 || today === null || !clock.success ? null : await stillTrue(sql, place, now);
@@ -121,6 +123,7 @@ export async function sendPlaceNotifications(deps: {
         failed = true;
       }
     }
+    if (reached) await places.markTold(sql, place, now);
     if (failed && !reached) await places.unclaimDue(sql, place);
   };
 
@@ -139,12 +142,10 @@ export async function sendPlaceNotifications(deps: {
   let after: places.DueMark | null = null;
   let taken = 0;
   for (let pages = 0; pages < MAX_PAGES && taken < batch; pages += 1) {
-    const rows = await places.duePlaces(sql, { since, limit: page, after, gymIds: deps.gymIds });
+    const rows = await places.duePlaces(sql, { since, toldSince, limit: page, after, gymIds: deps.gymIds });
     const due: places.DuePlace[] = [];
     for (const place of rows) {
-      // Night on the person's clock: left on its row for a later run, and read again then.
-      if (!pushHourOpen(localHour(place.userZone, place.gymZone, now))) result.waiting += 1;
-      else if (taken < batch) {
+      if (taken < batch) {
         due.push(place);
         taken += 1;
       }

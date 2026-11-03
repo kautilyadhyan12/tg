@@ -341,10 +341,10 @@ d("phone notifications for a gym's messages (real Postgres)", () => {
     await sweep(night);
     expect(sentTo(token)).toEqual([]);
     expect((await waiting(phone.userId))[0]?.n).toBe(1);
-    // 06:59 next day: still night. 07:00: sent.
-    await sweep(minutes(night, 7 * 60 + 29));
+    // 03:59 next day: still night. 04:00: sent.
+    await sweep(minutes(night, 4 * 60 + 29));
     expect(sentTo(token)).toEqual([]);
-    await sweep(minutes(night, 7 * 60 + 30));
+    await sweep(minutes(night, 4 * 60 + 30));
     expect(sentTo(token).map((m) => m.body)).toEqual(["Late news."]);
   });
 

@@ -4,10 +4,11 @@ import { describe, expect, it } from "vitest";
 import { bookingTime, tellsPlaceFree } from "../src/classBookings.js";
 import { gymMessageNotification, gymPlacePushDataSchema, placeNotification, pushHourOpen, pushTokenRequestSchema } from "../src/phoneNotifications.js";
 
-describe("pushHourOpen: from 07:00 up to 23:00 on the person's clock", () => {
+describe("pushHourOpen: from 04:00 up to 23:00 on the person's clock", () => {
   it.each([
     [0, false],
-    [6, false],
+    [3, false],
+    [4, true],
     [7, true],
     [12, true],
     [22, true],

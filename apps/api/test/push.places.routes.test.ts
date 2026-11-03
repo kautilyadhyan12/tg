@@ -351,35 +351,59 @@ d("a place in a class or an event, told to the phone (real Postgres)", () => {
     expect(sentTo(chen)).toHaveLength(1);
   });
 
-  it("at night it waits for 07:00, and is read again then", { timeout: T }, async () => {
-    // 23:30 in India.
-    clock = Date.parse("2026-11-10T18:00:00Z");
+  it("at night it goes at once: moved into a 06:00 class at 01:00, they are told", { timeout: T }, async () => {
+    // 01:00 in India; the gym hands a place over until an hour before the start.
+    clock = Date.parse("2026-11-10T19:30:00Z");
     fresh();
+    const settings = await request("GET", `/v1/orgs/${gym.id}/booking-settings`, { cookies: gym.owner.cookies });
+    const read = JSON.parse(settings.body) as { settings: Record<string, unknown>; pt: object };
+    const put = (handoverMinutes: number) =>
+      request("PUT", `/v1/orgs/${gym.id}/booking-settings`, { cookies: gym.owner.cookies, payload: { ...read.settings, handoverMinutes, pt: read.pt } });
+    expect((await put(60)).statusCode).toBe(200);
     const [asha, bina, chen, dana] = [await member(gym, "asha"), await member(gym, "bina"), await member(gym, "chen"), await member(gym, "dana")];
-    // 10:00 tomorrow: inside the last day.
-    const early = await classAt(gym, 10.5, 1, "Sunrise Flow");
-    await book(gym, asha, early);
-    await book(gym, bina, early, true);
-    await book(gym, chen, early, true);
-    await cancel(gym, asha, early);
-    // A second class whose free place is still free in the morning.
-    const noon = await classAt(gym, 12.5, 1, "Midday Flow");
-    await book(gym, asha, noon);
-    await book(gym, dana, noon, true);
-    await cancel(gym, asha, noon);
+    const dawn = await classAt(gym, 5, 1, "Dawn Flow");
+    await book(gym, asha, dawn);
+    await book(gym, bina, dawn, true);
+    await cancel(gym, asha, dawn);
+    expect((await put(1440)).statusCode).toBe(200);
+    // 05:30 the same night, with a hand-over of a day again: a free place is told to those waiting.
+    const sunrise = await classAt(gym, 4.5, 1, "Sunrise Flow");
+    await book(gym, asha, sunrise);
+    await book(gym, chen, sunrise, true);
+    await book(gym, dana, sunrise, true);
+    await cancel(gym, asha, sunrise);
+    // Told by the first run, at 01:00.
     const night = await sweep();
-    expect(night.waiting).toBe(3);
-    expect(sent).toHaveLength(0);
-    // 06:59, then 07:00.
-    expect((await sweep(Date.parse("2026-11-11T01:29:00Z"))).sent).toBe(0);
-    // Chen takes the place in the night: at 07:00 nobody is told it is free.
-    clock = Date.parse("2026-11-11T01:00:00Z");
-    expect(await book(gym, chen, early)).toBe("booked");
-    await sweep(Date.parse("2026-11-11T01:30:00Z"));
-    expect(sentTo(bina)).toHaveLength(0);
-    expect(sentTo(chen)).toHaveLength(0);
-    // The one still true goes at 07:00.
-    expect(sentTo(dana).map((m) => m.body)).toEqual(["A place is free in Midday Flow today at 12:00 PM. The first to claim it gets it."]);
+    expect(night.waiting).toBe(0);
+    expect(sentTo(bina).map((m) => m.body)).toEqual(["You have a place in Dawn Flow today at 6:00 AM. You were moved off the waitlist."]);
+    for (const who of [chen, dana]) expect(sentTo(who)).toHaveLength(1);
+  });
+
+  it("a free place in the same class within the hour is not told again; after the hour it is", { timeout: T }, async () => {
+    clock = NOON;
+    fresh();
+    const [asha, bina, chen, dev] = [await member(gym, "asha"), await member(gym, "bina"), await member(gym, "chen"), await member(gym, "dev")];
+    const flow = await classAt(gym, 6, 1);
+    await book(gym, asha, flow);
+    await book(gym, bina, flow, true);
+    await book(gym, chen, flow, true);
+    await cancel(gym, asha, flow);
+    await sweep();
+    expect(sentTo(bina)).toHaveLength(1);
+    // Dev takes the place; 20 minutes later Dev gives it up: a second free place, inside the hour.
+    expect(await book(gym, dev, flow)).toBe("booked");
+    clock = NOON + 20 * 60_000;
+    await cancel(gym, dev, flow);
+    await sweep();
+    expect(sentTo(bina)).toHaveLength(1);
+    expect(sentTo(chen)).toHaveLength(1);
+    // A third free place, after the hour: told.
+    expect(await book(gym, dev, flow)).toBe("booked");
+    clock = NOON + 70 * 60_000;
+    await cancel(gym, dev, flow);
+    await sweep();
+    expect(sentTo(bina)).toHaveLength(2);
+    expect(sentTo(chen)).toHaveLength(2);
   });
 
   it("two runs at the same instant tell a person once", { timeout: T }, async () => {

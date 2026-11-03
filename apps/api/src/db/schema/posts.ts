@@ -366,6 +366,8 @@ export const gymEventPlaces = pgTable(
     pushDueAt: timestamp("push_due_at", { withTimezone: true }),
     /** 0193: which free place the person was last owed a notice for, so one is never told twice. */
     pushOccasion: text("push_occasion"),
+    /** 0193: when the person was last told about this class or event: a free place again within the hour is not told. */
+    pushToldAt: timestamp("push_told_at", { withTimezone: true }),
   },
   (t) => [
     foreignKey({ name: "gym_event_places_event_fk", columns: [t.gymId, t.eventId], foreignColumns: [gymEvents.gymId, gymEvents.id] }).onDelete("cascade"),
