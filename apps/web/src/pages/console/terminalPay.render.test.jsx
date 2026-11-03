@@ -423,6 +423,14 @@ describe('The card kept from a Terminal payment (18d-vi-c)', () => {
     expect(orgService.startTerminalPayment.mock.calls[0][3].keepCard).toBe(false);
   });
 
+  it('a membership that does not renew: no tick', async () => {
+    orgService.getHeldMemberships.mockResolvedValue(page([{ ...held(1, false), view: { ...held(1, false).view, renewsOn: null } }]));
+    orgService.getTerminalPayments.mockReturnValue(offered());
+    draw();
+    const form = await onTerminal();
+    expect(form.queryByRole('checkbox')).toBeNull();
+  });
+
   it('somebody else pays: no tick, and nothing asks to keep the card', async () => {
     orgService.getTerminalPayments.mockReturnValue(offered(null, false));
     draw();
@@ -433,7 +441,8 @@ describe('The card kept from a Terminal payment (18d-vi-c)', () => {
   it('not kept: says why and opens Card on file', async () => {
     for (const [card, line] of [
       [{ step: 'declined', brand: null, last4: null }, "The card wasn't saved: Tara chose Pay without saving."],
-      [{ step: 'not_saved', brand: null, last4: null }, "Square couldn't save this card. Apple Pay, Google Pay and some debit cards can't be saved."],
+      [{ step: 'square_refused', brand: null, last4: null }, "Square couldn't save this card. Apple Pay, Google Pay and some debit cards can't be saved."],
+      [{ step: 'not_saved', brand: null, last4: null }, "The card wasn't saved."],
     ]) {
       orgService.getTerminalPayments.mockReturnValue(offered());
       ends(card);

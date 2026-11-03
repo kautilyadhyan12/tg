@@ -22,8 +22,8 @@ export type TerminalPaymentOutcome = z.infer<typeof terminalPaymentOutcomeSchema
 
 /** Keeping the card a payment is made with (18d-vi-c), as the press stands. `agreeing`: the agreement is on the
  *  Terminal; `paying`: they agreed, the payment follows; `declined`: Pay without saving; `keeping`: paid, Square has
- *  not yet saved the card; `saved`, `not_saved`: how it ended. */
-export const terminalKeepStepSchema = z.enum(["agreeing", "paying", "declined", "keeping", "saved", "not_saved"]);
+ *  not yet saved the card; `saved`, `not_saved`, `square_refused` (Square would not save it): how it ended. */
+export const terminalKeepStepSchema = z.enum(["agreeing", "paying", "declined", "keeping", "saved", "not_saved", "square_refused"]);
 export type TerminalKeepStep = z.infer<typeof terminalKeepStepSchema>;
 
 export const terminalPaymentSchema = z

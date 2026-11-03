@@ -68,8 +68,10 @@ export function terminalKeepLine(payment, name) {
       return `The card wasn't saved: ${personNames(name).first} chose Pay without saving.`;
     case 'keeping':
       return "Square hasn't saved the card yet. It will appear under Card on file when it has.";
-    case 'not_saved':
+    case 'square_refused':
       return "Square couldn't save this card. Apple Pay, Google Pay and some debit cards can't be saved.";
+    case 'not_saved':
+      return "The card wasn't saved.";
     default:
       return null;
   }

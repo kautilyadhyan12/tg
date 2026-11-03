@@ -440,7 +440,7 @@ export const gymTerminalPayments = pgTable(
     cardLast4: text("card_last4"),
   },
   (t) => [
-    check("gym_terminal_payments_card_check", sql`(${t.cardStep} IS NULL) = (${t.cardWords} IS NULL) AND (${t.cardStep} IS NULL OR ${t.cardStep} IN ('agreeing','paying','declined','keeping','saved','not_saved'))`),
+    check("gym_terminal_payments_card_check", sql`(${t.cardStep} IS NULL) = (${t.cardWords} IS NULL) AND (${t.cardStep} IS NULL OR ${t.cardStep} IN ('agreeing','paying','declined','keeping','saved','not_saved','square_refused'))`),
     index("gym_terminal_payments_keeping_idx").on(t.checkedAt).where(sql`${t.cardStep} = 'keeping'`),
     check("gym_terminal_payments_environment_check", sql`${t.environment} IN ('sandbox','production')`),
     check(

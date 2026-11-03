@@ -268,7 +268,7 @@ export async function startPayment(sql: Sql, s: NewPay): Promise<StartOutcome> {
     if (await cardCharging(tx, s.gymId, row.id)) return { kind: "card_charging" };
     if (s.keepCard !== null) {
       const m = row.membership;
-      if (s.target.kind !== "period" || m.kind !== "recurring" || !m.renews || m.status === "cancelled" || (await payerOf(tx, s.gymId, s.entryId)) !== null) return { kind: "keep_not_offered" };
+      if (s.target.kind !== "period" || m.kind !== "recurring" || !m.renews || m.status !== "active" || (await payerOf(tx, s.gymId, s.entryId)) !== null) return { kind: "keep_not_offered" };
       const [save] = await tx<{ id: string }[]>`
         SELECT id FROM gym_terminal_card_saves WHERE gym_id = ${s.gymId} AND entry_id = ${s.entryId} AND state IN ('agreeing','saving') LIMIT 1`;
       if (save !== undefined) return { kind: "keep_save_waiting" };
@@ -526,13 +526,19 @@ export async function claimKeeping(sql: Sql, environment: SquareEnvironment, now
 }
 
 /** The press, held for the keeping statement; false once another request ended the card's step. */
+/** Where keeping the card stands now. */
+export async function readCardStep(sql: SqlOrTx, id: string): Promise<string | null> {
+  const [row] = await sql<{ card_step: string | null }[]>`SELECT card_step FROM gym_terminal_payments WHERE id = ${id}`;
+  return row?.card_step ?? null;
+}
+
 export async function lockKeeping(tx: TransactionSql, id: string): Promise<boolean> {
   const [row] = await tx<{ id: string }[]>`SELECT id FROM gym_terminal_payments WHERE id = ${id} AND card_step = 'keeping' FOR UPDATE`;
   return row !== undefined;
 }
 
 /** How keeping the card ended. */
-export async function finishCard(sql: SqlOrTx, id: string, step: "saved" | "not_saved", card: { brand: string; last4: string } | null): Promise<void> {
+export async function finishCard(sql: SqlOrTx, id: string, step: "saved" | "not_saved" | "square_refused", card: { brand: string; last4: string } | null): Promise<void> {
   await sql`
     UPDATE gym_terminal_payments SET card_step = ${step}, card_brand = ${card?.brand ?? null}, card_last4 = ${card?.last4 ?? null}, checking_until = NULL
     WHERE id = ${id} AND card_step = 'keeping'`;

@@ -219,6 +219,8 @@ d("The card kept from a Terminal payment: only with their I agree, on their reco
   const work = async (gymIds?: string[]) => processSquareWork(workDeps(), [], gymIds ?? (await mine()));
 
   beforeAll(async () => {
+    // Square stamps its answers with the test's clock.
+    square.state.now = () => clock;
     await cleanup();
     await sql`
       INSERT INTO plans (code, audience, name_key, price_minor, currency, interval,
@@ -323,6 +325,10 @@ d("The card kept from a Terminal payment: only with their I agree, on their reco
     expect((JSON.parse(box.body) as { card: unknown }).card).toMatchObject({ brand: "VISA", last4: "1111" });
     const none = await send("GET", `${entryUrl(gym, tara.entryId)}/memberships/${tara.membershipId}/agreement`, gym.owner.cookies);
     expect((JSON.parse(none.body) as { card: unknown }).card).toBeNull();
+    // Removed from Card on file: the agreement no longer names a card that pays nothing.
+    await sql`DELETE FROM gym_member_cards WHERE gym_id = ${gym.id} AND entry_id = ${sam.entryId}`;
+    const gone = await send("GET", `${entryUrl(gym, sam.entryId)}/memberships/${sam.membershipId}/agreement`, gym.owner.cookies);
+    expect((JSON.parse(gone.body) as { card: unknown }).card).toBeNull();
   });
 
   it("never offered where it cannot be: somebody else pays, another gym", async () => {
@@ -344,6 +350,29 @@ d("The card kept from a Terminal payment: only with their I agree, on their reco
     const stranger = await payPress(gym, other.gym.owner, tara, desk.id, { keepCard: true });
     expect(stranger.statusCode, stranger.body).toBe(404);
     expect(square.actions.size).toBe(asked);
+
+    // A membership that does not renew, or one frozen: refused, nothing sent to the Terminal.
+    const pack = await send("POST", `/v1/orgs/${gym.id}/membership-types`, gym.owner.cookies, { name: "Ten classes", description: null, kind: "pack", priceMinor: 2000, termCount: null, termUnit: null, packClasses: 10, packDays: 60, access: "all_classes", bookingsLimit: null, bookingsPeriod: null, classTypeIds: null });
+    expect(pack.statusCode, pack.body).toBe(201);
+    const packId = (JSON.parse(pack.body) as GymMembershipTypesResponse).types.find((t) => t.name === "Ten classes")?.id ?? "";
+    const pia = await owing(gym, packId, "Pia Pack");
+    const onPack = await payPress(gym, gym.owner, pia, desk.id, { keepCard: true, amountMinor: 2000 });
+    expect(onPack.statusCode, onPack.body).toBe(409);
+    expect(errorOf(onPack)).toBe("keep_card_not_offered");
+    const ivy = await owing(gym, goldId, "Ivy Frozen");
+    await sql`UPDATE gym_held_memberships SET status = 'frozen', frozen_on = starts_on WHERE gym_id = ${gym.id} AND id = ${ivy.membershipId}`;
+    const onFrozen = await payPress(gym, gym.owner, ivy, desk.id, { keepCard: true });
+    expect(onFrozen.statusCode, onFrozen.body).toBe(409);
+    expect(errorOf(onFrozen)).toBe("keep_card_not_offered");
+    // A card save waiting on a Terminal for the person: refused.
+    await sql`
+      INSERT INTO gym_terminal_card_saves (gym_id, entry_id, environment, account_id, device_id, customer_id, request_key, state, words, confirm_key, save_key, started_by, started_at, checking_until, checked_at)
+      VALUES (${gym.id}, ${tara.entryId}, 'production', ${other.acct.merchantId}, 'R5OTHERDEVICE', 'CUSWAITING', ${randomUUID()}, 'agreeing', 'I agree to the words of a save that waits.', ${randomUUID()}, ${randomUUID()}, ${gym.owner.userId}, ${clock}, NULL, ${clock})`;
+    const busy = await payPress(gym, gym.owner, tara, desk.id, { keepCard: true });
+    expect(busy.statusCode, busy.body).toBe(409);
+    expect(errorOf(busy)).toBe("keep_card_save_waiting");
+    expect(square.actions.size).toBe(asked);
+    await sql`DELETE FROM gym_terminal_card_saves WHERE gym_id = ${gym.id}`;
   });
 
   it("Square refusing, or not answering, leaves the payment on the bill; the worker finishes it; a press with no tick is as before", async () => {
@@ -357,7 +386,7 @@ d("The card kept from a Terminal payment: only with their I agree, on their reco
     square.state.cardFromPaymentRefused = "INVALID_CARD_DATA";
     const a = await pay(gym, gym.owner, ann, desk.id, { keepCard: true });
     const aDone = await answersAndPays(gym, ann, a.payment.id, desk.deviceId, true);
-    expect(aDone.payment).toMatchObject({ outcome: "paid", card: { step: "not_saved" } });
+    expect(aDone.payment).toMatchObject({ outcome: "paid", card: { step: "square_refused" } });
     square.state.cardFromPaymentRefused = null;
     expect(await cardsOf(gym.id)).toEqual([]);
 
@@ -402,9 +431,27 @@ d("The card kept from a Terminal payment: only with their I agree, on their reco
 
     const waiting = await pay(gym, gym.owner, eve, desk.id, { keepCard: true });
     await check(gym, gym.owner, eve.entryId, waiting.payment.id);
+    const onScreen = [...square.actions.values()].find((x) => x.deviceId === desk.deviceId && x.status === "PENDING");
     const stopped = await cancel(gym, gym.owner, eve.entryId, waiting.payment.id);
     expect(stopped.payment.outcome).toBe("cancelled");
     expect(checkoutsOn(desk.deviceId)).toHaveLength(1);
+    // Square was told to take the agreement off the Terminal.
+    expect(onScreen?.status).toBe("CANCELED");
+
+    // The person reads for four minutes before answering: the amount then gets Square's own five minutes, not one.
+    const slow = await owing(gym, goldId, "Sol Slowreader");
+    const reading = await pay(gym, gym.owner, slow, desk.id, { keepCard: true });
+    square.agreement(desk.deviceId).seen();
+    await check(gym, gym.owner, slow.entryId, reading.payment.id);
+    clock = new Date(clock.getTime() + 4 * 60_000);
+    square.agreement(desk.deviceId).answers(false);
+    await check(gym, gym.owner, slow.entryId, reading.payment.id);
+    clock = new Date(clock.getTime() + 3 * 60_000);
+    const still = await check(gym, gym.owner, slow.entryId, reading.payment.id);
+    expect(still.payment.step).toBe("waiting");
+    expect(checkoutsOn(desk.deviceId).at(-1)?.status).toBe("PENDING");
+    square.at(desk.deviceId).taps();
+    expect((await check(gym, gym.owner, slow.entryId, reading.payment.id)).payment).toMatchObject({ outcome: "paid", card: { step: "declined" } });
 
     // Twice with the same key is one press.
     const key = randomUUID();

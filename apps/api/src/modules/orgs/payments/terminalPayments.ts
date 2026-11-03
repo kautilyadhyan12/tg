@@ -371,7 +371,6 @@ async function keepFromPayment(deps: PaymentsDeps, square: SquareSettings, pay: 
   if (deps.now().getTime() > (pay.finishedAt ?? pay.startedAt).getTime() + TERMINAL_PAYMENT.keepCardMs) {
     deps.log.warn({ event: "square.terminal_keep_given_up", gymId: pay.gymId }, "Square gave no answer about keeping a card from a Terminal payment");
     await notSaved();
-
     return;
   }
   const ready: Ready = { square, row, token };
@@ -379,8 +378,9 @@ async function keepFromPayment(deps: PaymentsDeps, square: SquareSettings, pay: 
   try {
     customerId = await customerFor(deps, ready, pay.gymId, person);
   } catch (err) {
-    // Square gave no customer this time: the worker asks again.
     deps.log.warn({ event: "square.terminal_keep_no_customer", gymId: pay.gymId, code: err instanceof OrgsError ? err.code : "unknown" }, "no Square customer yet for a card kept from a payment");
+    // No answer from Square: the worker asks again. Square refusing the customer: it would refuse it again.
+    if (err instanceof OrgsError && err.code !== "square_unavailable") await pays.finishCard(deps.sql, pay.id, "square_refused", null);
     return;
   }
   const created = await square.api.createCard(token, { idempotencyKey: cardKey, sourceId: squarePaymentId, customerId, cardholderName: null });
@@ -388,8 +388,7 @@ async function keepFromPayment(deps: PaymentsDeps, square: SquareSettings, pay: 
   if (created.kind === "refused") {
     deps.log.warn({ event: "square.terminal_keep_refused", gymId: pay.gymId, status: created.status, code: created.code }, "Square refused to save a card from a Terminal payment");
     if (created.code === "CUSTOMER_NOT_FOUND") await cards.dropCustomer(deps.sql, pay.gymId, holder, square.environment, pay.accountId, customerId);
-    await notSaved();
-
+    await pays.finishCard(deps.sql, pay.id, "square_refused", null);
     return;
   }
   const merged = await onMergedCustomer(deps, square, token, pay.accountId, created.value, customerId);
@@ -398,13 +397,12 @@ async function keepFromPayment(deps: PaymentsDeps, square: SquareSettings, pay: 
     deps.log.error({ event: "square.card_unexpected", gymId: pay.gymId }, "Square saved a card from a payment that is not the one asked for");
     await letGoOfCard(deps, square, { gymId: pay.gymId, environment: pay.environment, accountId: pay.accountId, cardId: created.value.id });
     await notSaved();
-
     return;
   }
   const at = deps.now();
   const owed = await deps.sql.begin(async (tx) => {
     await lockGym(tx, pay.gymId);
-    if (!(await pays.lockKeeping(tx, pay.id))) return [];
+    if (!(await pays.lockKeeping(tx, pay.id))) return null;
     const done = await keepCard(tx, {
       gymId: pay.gymId,
       entryId: holder,
@@ -425,6 +423,12 @@ async function keepFromPayment(deps: PaymentsDeps, square: SquareSettings, pay: 
     await pays.finishCard(tx, pay.id, done.kind === "saved" ? "saved" : "not_saved", done.kind === "saved" ? { brand: usable.brand, last4: usable.last4 } : null);
     return done.owed;
   });
+  if (owed === null) {
+    // Another request ended it first. Square gives back the same card for the same key, so one that kept it kept this
+    // card; one that ended without it leaves this card saved in Square for nobody: it is stopped.
+    if ((await pays.readCardStep(deps.sql, pay.id)) !== "saved") await letGoOfCard(deps, square, { gymId: pay.gymId, environment: pay.environment, accountId: pay.accountId, cardId: usable.cardId });
+    return;
+  }
   if (owed.length > 0) await sendOwedCardDisables(deps, square, owed);
 }
 

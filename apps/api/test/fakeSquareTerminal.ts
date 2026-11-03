@@ -201,8 +201,9 @@ export function fakeSquare() {
     ...(c.cancelReason === null ? {} : { cancel_reason: c.cancelReason }),
     ...(c.paymentIds.length === 0 ? {} : { payment_ids: c.paymentIds }),
   });
-  const actionJson = (x: { id: string; deviceId: string; body: string; status: string; agreed: boolean | null; cancelReason: string | null }) => ({
+  const actionJson = (x: { id: string; deviceId: string; body: string; status: string; agreed: boolean | null; cancelReason: string | null; at?: string }) => ({
     id: x.id,
+    ...(x.at === undefined ? {} : { updated_at: x.at }),
     device_id: x.deviceId,
     type: "CONFIRMATION",
     status: x.status,
@@ -216,7 +217,7 @@ export function fakeSquare() {
     return {
       words: found.body,
       seen: () => Object.assign(found, { status: "IN_PROGRESS" }),
-      answers: (agreed: boolean) => Object.assign(found, { status: "COMPLETED", agreed }),
+      answers: (agreed: boolean) => Object.assign(found, { status: "COMPLETED", agreed, at: state.now().toISOString() }),
       cancels: () => Object.assign(found, { status: "CANCELED", cancelReason: "BUYER_CANCELED" }),
       changesWords: (body: string) => Object.assign(found, { body }),
     };

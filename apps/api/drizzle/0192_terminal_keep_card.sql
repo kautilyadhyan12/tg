@@ -7,7 +7,7 @@ ALTER TABLE "gym_terminal_payments" ADD COLUMN "card_answered_at" timestamp with
 ALTER TABLE "gym_terminal_payments" ADD COLUMN "card_key" uuid;
 ALTER TABLE "gym_terminal_payments" ADD COLUMN "card_brand" text;
 ALTER TABLE "gym_terminal_payments" ADD COLUMN "card_last4" text;
-ALTER TABLE "gym_terminal_payments" ADD CONSTRAINT "gym_terminal_payments_card_check" CHECK (("card_step" IS NULL) = ("card_words" IS NULL) AND ("card_step" IS NULL OR "card_step" IN ('agreeing','paying','declined','keeping','saved','not_saved')));
+ALTER TABLE "gym_terminal_payments" ADD CONSTRAINT "gym_terminal_payments_card_check" CHECK (("card_step" IS NULL) = ("card_words" IS NULL) AND ("card_step" IS NULL OR "card_step" IN ('agreeing','paying','declined','keeping','saved','not_saved','square_refused')));
 CREATE INDEX "gym_terminal_payments_keeping_idx" ON "gym_terminal_payments" USING btree ("checked_at") WHERE "card_step" = 'keeping';
 -- The membership a card was kept for, and room for the membership's line above the card agreement.
 ALTER TABLE "gym_card_agreements" ADD COLUMN "held_membership_id" uuid;

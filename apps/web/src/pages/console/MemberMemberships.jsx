@@ -199,8 +199,8 @@ export default function MemberMemberships({
   const [form, setForm] = useState(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
-  /** The card was not kept from a Terminal payment: Open Card on file is offered beside the notice. */
-  const [cardNotKept, setCardNotKept] = useState(false);
+  /** The notice that says a card was not kept from a Terminal payment: Open Card on file is offered under that notice alone. */
+  const [cardNotKept, setCardNotKept] = useState(null);
   const [chargesStarted, setChargesStarted] = useState(null);
   /** Where `notice` belongs when it is about one payment: { paymentId, line, sent }, said under that payment, where it was pressed.
    *  `sent`: Square's answer to a Refund to card, so the sentence follows the refund. */
@@ -1302,8 +1302,9 @@ export default function MemberMemberships({
     // What was left on the bill, as on screen while it waited: the bill is read again only after.
     const owedOn = shown?.memberships.find((x) => x.id === payment.membershipId)?.billing?.pay;
     const kept = terminalKeepLine(payment, name);
-    setNotice(kept === null ? terminalPayOutcomeLine(payment, name, owedOn?.leftMinor ?? payment.amountMinor) : `${terminalPayOutcomeLine(payment, name, owedOn?.leftMinor ?? payment.amountMinor)} ${kept}`);
-    setCardNotKept(payment.card?.step === 'not_saved' || payment.card?.step === 'declined');
+    const line = kept === null ? terminalPayOutcomeLine(payment, name, owedOn?.leftMinor ?? payment.amountMinor) : `${terminalPayOutcomeLine(payment, name, owedOn?.leftMinor ?? payment.amountMinor)} ${kept}`;
+    setNotice(line);
+    setCardNotKept(['not_saved', 'square_refused', 'declined'].includes(payment.card?.step) ? line : null);
     if (payment.card != null) onCardAsked?.();
     setAttempt((n) => n + 1);
     onChanged?.();
@@ -2257,7 +2258,7 @@ export default function MemberMemberships({
           {notice}
         </p>
       ) : null}
-      {notice !== null && cardNotKept ? (
+      {notice !== null && cardNotKept === notice ? (
         <div>
           <button type="button" className={SMALL} onClick={() => document.querySelector('[data-testid="card-on-file"]')?.scrollIntoView({ block: 'center' })}>
             Open Card on file
