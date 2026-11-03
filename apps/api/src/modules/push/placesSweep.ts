@@ -81,6 +81,8 @@ export async function sendPlaceNotifications(deps: {
   /** For tests on a shared database. */
   gymIds?: readonly string[];
   sizes?: { batch: number; page: number };
+  /** Told of a failure the run carried on past: the worker logs it. */
+  onError?: (err: unknown) => void;
 }): Promise<PlaceSweepResult> {
   const { sql, sender } = deps;
   const batch = deps.sizes?.batch ?? BATCH;
@@ -90,9 +92,10 @@ export async function sendPlaceNotifications(deps: {
   const toldSince = new Date(now.getTime() - PLACE_FREE_AGAIN_MINUTES * 60_000);
   const result: PlaceSweepResult = { sent: 0, skipped: 0, waiting: 0, failed: 0 };
 
-  const tell = async (place: places.DuePlace): Promise<void> => {
-    // Told about this class within the hour: another free place in it is not told again.
-    const tokens = place.stale || (place.due === "free" && place.toldLately) ? [] : await repo.liveTokens(sql, place.userId, now);
+  const onError = deps.onError ?? (() => undefined);
+  // `reached`: some phone has it, so it is never put back to be sent again.
+  const tell = async (place: places.DuePlace, state: { reached: boolean }): Promise<void> => {
+    const tokens = place.stale ? [] : await repo.liveTokens(sql, place.userId, now);
     const today = dayIn(place.gymZone, now);
     const clock = gymClockFormatSchema.safeParse(place.clockFormat);
     const facts = tokens.length === 0 || today === null || !clock.success ? null : await stillTrue(sql, place, now);
@@ -102,7 +105,6 @@ export async function sendPlaceNotifications(deps: {
       return;
     }
     const { title, body } = placeNotification({ notice: place.due, gymName: place.gymName, name: facts.name, when });
-    let reached = false;
     let failed = false;
     for (const token of tokens) {
       const sent = await sender.send({
@@ -115,7 +117,7 @@ export async function sendPlaceNotifications(deps: {
       });
       if (sent === "sent") {
         result.sent += 1;
-        reached = true;
+        state.reached = true;
       } else if (sent === "gone") {
         await repo.forgetToken(sql, place.userId, token);
       } else {
@@ -123,20 +125,22 @@ export async function sendPlaceNotifications(deps: {
         failed = true;
       }
     }
-    if (reached) await places.markTold(sql, place, now);
-    if (failed && !reached) await places.unclaimDue(sql, place);
+    if (failed && !state.reached) await places.unclaimDue(sql, place);
   };
 
   const handle = async (place: places.DuePlace): Promise<void> => {
     if (!(await places.claimDue(sql, place))) return;
+    const state = { reached: false };
     try {
-      await tell(place);
-    } catch {
-      // A read that failed after the claim (a dropped connection): put back for the next run, and the
-      // rest of this run goes on.
+      await tell(place, state);
+    } catch (err) {
+      // A failure after the claim (a dropped connection): told to the worker, put back for the next run
+      // unless a phone already has it, and the rest of this run goes on.
+      onError(err);
       result.failed += 1;
-      await places.unclaimDue(sql, place).catch(() => undefined);
+      if (!state.reached) await places.unclaimDue(sql, place).catch(onError);
     }
+    if (state.reached) await places.markTold(sql, place, now).catch(onError);
   };
 
   let after: places.DueMark | null = null;
@@ -145,7 +149,10 @@ export async function sendPlaceNotifications(deps: {
     const rows = await places.duePlaces(sql, { since, toldSince, limit: page, after, gymIds: deps.gymIds });
     const due: places.DuePlace[] = [];
     for (const place of rows) {
-      if (taken < batch) {
+      // Told about this class within the hour: another free place in it waits on its row for the hour
+      // to pass, and is read again then.
+      if (place.due === "free" && place.toldLately) result.waiting += 1;
+      else if (taken < batch) {
         due.push(place);
         taken += 1;
       }

@@ -379,7 +379,7 @@ d("a place in a class or an event, told to the phone (real Postgres)", () => {
     for (const who of [chen, dana]) expect(sentTo(who)).toHaveLength(1);
   });
 
-  it("a free place in the same class within the hour is not told again; after the hour it is", { timeout: T }, async () => {
+  it("a free place in the same class within the hour waits for the hour to pass, then is told", { timeout: T }, async () => {
     clock = NOON;
     fresh();
     const [asha, bina, chen, dev] = [await member(gym, "asha"), await member(gym, "bina"), await member(gym, "chen"), await member(gym, "dev")];
@@ -394,14 +394,14 @@ d("a place in a class or an event, told to the phone (real Postgres)", () => {
     expect(await book(gym, dev, flow)).toBe("booked");
     clock = NOON + 20 * 60_000;
     await cancel(gym, dev, flow);
-    await sweep();
+    const held = await sweep();
+    expect(held.waiting).toBe(2);
     expect(sentTo(bina)).toHaveLength(1);
     expect(sentTo(chen)).toHaveLength(1);
-    // A third free place, after the hour: told.
-    expect(await book(gym, dev, flow)).toBe("booked");
-    clock = NOON + 70 * 60_000;
-    await cancel(gym, dev, flow);
-    await sweep();
+    // 59 minutes after the first: still held. 61: told, with nothing else changed.
+    await sweep(NOON + 59 * 60_000);
+    expect(sentTo(bina)).toHaveLength(1);
+    await sweep(NOON + 61 * 60_000);
     expect(sentTo(bina)).toHaveLength(2);
     expect(sentTo(chen)).toHaveLength(2);
   });

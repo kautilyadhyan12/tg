@@ -808,7 +808,15 @@ if (pushAccount === null) {
       // A place in a class or an event (18b-ii-a), in the same minute.
       const placesStartedAt = Date.now();
       try {
-        const placesRun = await sendPlaceNotifications({ sql, sender: pushSender, now: () => new Date() });
+        const placesRun = await sendPlaceNotifications({
+          sql,
+          sender: pushSender,
+          now: () => new Date(),
+          onError: (err) => {
+            const e = err instanceof Error ? err : new Error(String(err));
+            log.warn({ errName: e.name, errMessage: e.message, event: "job.item_failed", job: "push.places" }, "a place notification failed and was kept for the next run");
+          },
+        });
         if (placesRun.sent + placesRun.skipped + placesRun.failed > 0) {
           log.info({ ...placesRun, durationMs: Date.now() - placesStartedAt, event: "job.finished", job: "push.places" }, "job finished");
         }
