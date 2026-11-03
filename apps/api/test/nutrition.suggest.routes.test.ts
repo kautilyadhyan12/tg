@@ -11,7 +11,8 @@ import { loadConfig } from "../src/config.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
 import { CURATED_FOODS } from "../src/modules/nutrition/foods.js";
 import { ideasSeed } from "../src/modules/nutrition/service.js";
-import { suggestMeals, type SuggestInput } from "../src/modules/nutrition/suggest.js";
+import { suggestAfterWorkout, suggestMeals, type SuggestInput } from "../src/modules/nutrition/suggest.js";
+import { getAfterWorkoutIdeas } from "../src/modules/nutrition/service.js";
 import { hourInTz } from "../src/modules/gamification/streak.js";
 import type { FoodSearchProvider } from "../src/modules/nutrition/openfoodfacts.adapter.js";
 
@@ -88,6 +89,8 @@ d("meal ideas route (real Postgres)", () => {
     return cookies;
   };
   const eater = (name: string, diet: Diet, mealsPerDay = 3) => makeUser(name, { ...PLAN_ANSWERS, diet, mealsPerDay });
+  const login = async (name: string): Promise<Cookies> =>
+    cookieMap(await inject({ method: "POST", url: "/v1/auth/login", body: { email: `ideas-${name}@example.com`, password: PASSWORD } }));
 
   const ideas = async (cookies: Cookies): Promise<MealIdeasResponse> => {
     const res = await inject({ method: "GET", url: "/v1/nutrition/suggestions", cookies });
@@ -325,6 +328,25 @@ d("meal ideas route (real Postgres)", () => {
     const inUsa = await names(usa);
     expect(inUsa.length).toBeGreaterThan(0);
     for (const n of inUsa) expect(/curry|\bdal\b|masala|tandoori|sambar|khichdi|roti|chapati/i.test(n), n).toBe(false);
+  });
+
+  it("the ideas after a workout read the person's weight and time zone: the rule's own for a person in India", { timeout: 60_000 }, async () => {
+    await eater("afterindia", "non_vegetarian", 3);
+    await sql`UPDATE users SET timezone = 'Asia/Kolkata' WHERE email = 'ideas-afterindia@example.com'`;
+    const id = await idOf("afterindia");
+    // A workout of an earlier day: its meal is sized to a usual meal, with nothing eaten.
+    const workout = { id: "11111111-2222-4333-8444-555555555555", startedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000), kcalBurned: 450 };
+    const got = await getAfterWorkoutIdeas({ sql }, id, workout);
+    const targets = JSON.parse((await inject({ method: "GET", url: "/v1/nutrition/targets", cookies: await login("afterindia") })).body) as { targets: { kcal: number } };
+    const want = suggestAfterWorkout({
+      seed: `${id}|${workout.id}`, diet: "non_vegetarian", kcalBurned: 450, weightKg: 70, region: "india",
+      day: { mealsPerDay: 3, kcalTarget: targets.targets.kcal, kcalEaten: 0, mealsLogged: 0 },
+    });
+    expect(got.ideas).toEqual(want);
+    expect(got.ideas).not.toEqual(suggestAfterWorkout({
+      seed: `${id}|${workout.id}`, diet: "non_vegetarian", kcalBurned: 450, weightKg: null,
+      day: { mealsPerDay: 3, kcalTarget: targets.targets.kcal, kcalEaten: 0, mealsLogged: 0 },
+    }));
   });
 
   it("without a sign-in: 401", async () => {

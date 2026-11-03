@@ -15,7 +15,7 @@ import { loadConfig } from "../src/config.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
 import type { FoodSearchProvider } from "../src/modules/nutrition/openfoodfacts.adapter.js";
 import { foodOf, tableLowest } from "./foodDietByTable.js";
-import { planDay } from "../src/modules/nutrition/dietPlan.js";
+import { planDay, slotProtein, swapMeal } from "../src/modules/nutrition/dietPlan.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -256,7 +256,17 @@ d("diet plan routes (real Postgres)", () => {
         expect(day.meals.map((m) => m.items.map((i) => i.canonical).sort()), `day ${String(day.day)}`)
           .toEqual(want.map((m) => m.idea.items.map((i) => i.canonical).sort()));
       }
-      const swapped = parsed(await swap(cookies, 1, { changeId: randomUUID(), meal: 1 }));
+      // The swap is the rule's own for the meal, the person's protein and region.
+      const before = made.days[0]?.meals[1];
+      if (before === undefined) throw new Error("no meal to swap");
+      const swapId = randomUUID();
+      const swapped = parsed(await swap(cookies, 1, { changeId: swapId, meal: 1 }));
+      const kcal = before.items.reduce((n, i) => n + i.kcalPoint, 0);
+      const wantSwap = swapMeal({
+        seed: `${id}|swap|${swapId}`, diet: "non_vegetarian", mealType: before.mealType, kcal, foods: before.items.map((i) => i.canonical), region: "india",
+        protein: slotProtein({ weightKg: 70, dayTargetG: targets.targets.proteinG }, before.mealType, kcal, targets.targets.kcal),
+      });
+      expect(swapped.days[0]?.meals[1]?.items.map((i) => i.canonical).sort()).toEqual(wantSwap?.items.map((i) => i.canonical).sort());
       const BEEF_PORK = /beef|pork|^steak|chili con carne|bolognese|cobb|paella|bibimbap|rice and beans with meat/i;
       for (const name of swapped.days.flatMap((d) => d.meals.flatMap((m) => m.items.map((i) => i.name)))) expect(BEEF_PORK.test(name), name).toBe(false);
     });

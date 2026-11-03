@@ -282,8 +282,8 @@ function sized(shares: readonly Share[], kcalTarget: number, protein?: ProteinAi
 }
 
 /** How far the calories may move from the meal's while an idea is brought to its protein:
- *  a quarter of what an idea may be off by, so the protein never costs the calories, and a week's
- *  days still land near theirs. */
+ *  half of what an idea may be off by, so the protein never costs the calories (a week's own
+ *  room is `WEEK_DRAWING.kcalRoom`). */
 const PROTEIN_KCAL_ROOM = IDEA_TOLERANCE / 2;
 const partsProtein = (parts: readonly Part[]): number => parts.reduce((n, p) => n + (p.food.proteinG * p.grams) / 100, 0);
 const partsCarbs = (parts: readonly Part[]): number => parts.reduce((n, p) => n + (p.food.carbsG * p.grams) / 100, 0);
