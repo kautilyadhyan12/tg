@@ -749,8 +749,29 @@ export const mealIdeaSchema = z.object({
   totals: z.object({ kcal: z.number().int().nonnegative(), proteinG: z.number().nonnegative(), carbsG: z.number().nonnegative(), fatG: z.number().nonnegative() }).strict(),
 }).strict();
 export type MealIdea = z.infer<typeof mealIdeaSchema>;
+/** Why a day's idea holds the protein it does (spec Part 6 §16.6, 8), decided by the server:
+ *  `share` its share of what today has left; `least` the least a meal should hold, today's
+ *  share being under it; `most` the most one meal makes use of, today's share being over it;
+ *  `weight` aimed at the person's weight, the day having no protein number; `after_workout` the
+ *  meal after a workout; `under` and `over` the idea's own protein is under its aim or over the
+ *  most; `calories` drawn for calories alone, the weight not known. */
+export const ideaWhySchema = z.enum(["share", "least", "most", "weight", "after_workout", "under", "over", "calories"]);
+export type IdeaWhy = z.infer<typeof ideaWhySchema>;
+/** The one line under an idea, the same on every screen. */
+export const IDEA_WHY_WORDS: Readonly<Record<IdeaWhy, string>> = {
+  share: "Your share of today’s protein",
+  least: "Enough protein for one meal",
+  most: "As much protein as one meal can use",
+  weight: "Protein for your weight",
+  after_workout: "Protein and carbs for after your workout",
+  under: "Less protein than your aim for this meal",
+  over: "More protein than one meal can use",
+  calories: "Sized to what today has left",
+};
+export const suggestedIdeaSchema = mealIdeaSchema.extend({ why: ideaWhySchema }).strict();
+export type SuggestedIdea = z.infer<typeof suggestedIdeaSchema>;
 /** One meal still to come today: the calories it is sized to, and the ideas for it. */
-export const suggestedMealSchema = z.object({ kcalTarget: z.number().int().positive(), ideas: z.array(mealIdeaSchema).max(3) }).strict();
+export const suggestedMealSchema = z.object({ kcalTarget: z.number().int().positive(), ideas: z.array(suggestedIdeaSchema).max(3) }).strict();
 export type SuggestedMeal = z.infer<typeof suggestedMealSchema>;
 export const foodAnswerSchema = z.enum(["diet", "mealsPerDay"]);
 /** The day's meal ideas. Nobody is given ideas on a guessed answer (RULINGS

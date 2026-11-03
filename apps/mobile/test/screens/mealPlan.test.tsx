@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
-import { DIET_LABEL_CAUTION, FOOD_ALLERGY_CAUTION, type DietPlanResponse } from "@app/shared";
+import { DIET_LABEL_CAUTION, FOOD_ALLERGY_CAUTION, IDEA_WHY_WORDS, type DietPlanResponse } from "@app/shared";
 import { App } from "../../src/App";
 import type { TextStore } from "../../src/screens/food/outbox";
 import { planDayName, planDayOf } from "../../src/screens/food/planRules";
@@ -10,6 +10,17 @@ const noWait = () => Promise.resolve();
 const NUMBERS = { kcal: 2300, bmr: 1600, tdee: 2300, proteinG: 120, carbsG: 280, fatG: 75, noCalorieCut: false };
 const TARGETS = { targets: NUMBERS, missing: [], targetWrongSide: false, source: "app", appTargets: NUMBERS, own: null, ownHeld: null };
 const IDEAS = { status: "ok", day: "2026-11-02", kcalLeft: 0, meals: [], caution: FOOD_ALLERGY_CAUTION, labelCaution: null };
+const WITH_IDEA = {
+  ...IDEAS, kcalLeft: 1500,
+  meals: [{ kcalTarget: 600, ideas: [{
+    kind: "plate", why: "share",
+    items: [
+      { canonical: "paneer", name: "Paneer", grams: 100, servings: 100, unit: "g", kcal: 320, proteinG: 25, carbsG: 4, fatG: 22 },
+      { canonical: "rice_white", name: "Rice", grams: 200, servings: 1, unit: "cup", kcal: 260, proteinG: 5, carbsG: 56, fatG: 1 },
+    ],
+    totals: { kcal: 580, proteinG: 30, carbsG: 60, fatG: 23 },
+  }] }],
+};
 const TODAY = planDayOf(new Date());
 const OTHER = (TODAY % 7) + 1;
 
@@ -300,6 +311,30 @@ describe("one box, one answer", () => {
     expect(sent.planned).toEqual({ day: TODAY, meal: 0 });
     await fireEvent.press(screen.getByRole("tab", { name: "Dashboard" }));
     expect(await within(await screen.findByTestId("recommended-box")).findByRole("button", { name: "Log Salmon" })).toBeTruthy();
+  });
+
+  it("a plan with nothing today shows the app's ideas, each with its reason, and logs one (Kd, 31d-i's click-through)", async () => {
+    const world = serverOf(() => ok(week([], {}, [OATS])), { "/v1/nutrition/suggestions": () => ok(WITH_IDEA) });
+    const box = within(await (await open(world)).findByTestId("meal-plan-box"));
+    expect(await box.findByText("Nothing planned for today.")).toBeTruthy();
+    expect(box.getByText(IDEA_WHY_WORDS.share)).toBeTruthy();
+    expect(box.getByText(FOOD_ALLERGY_CAUTION)).toBeTruthy();
+    expect(box.getByRole("button", { name: "See the week" })).toBeTruthy();
+    expect(box.queryByRole("button", { name: "Other ideas" })).toBeNull();
+    expect(screen.queryByTestId("meal-ideas-box")).toBeNull();
+    await fireEvent.press(box.getByRole("button", { name: "Log Paneer + Rice" }));
+    await waitFor(() => { expect(world.meals).toHaveLength(1); });
+    expect((posts(world, "/v1/nutrition/meals")[0]?.body as { planned?: unknown }).planned).toBeUndefined();
+  });
+
+  it("on the Dashboard a plan with nothing today shows the app's idea, and More ideas opens Food's box", async () => {
+    const world = serverOf(() => ok(week([], {}, [OATS])), { "/v1/nutrition/suggestions": () => ok(WITH_IDEA) });
+    const card = within(await (await open(world, files(), "Dashboard")).findByTestId("recommended-box"));
+    expect(await card.findByText("Nothing planned for today.")).toBeTruthy();
+    expect(card.getByText(IDEA_WHY_WORDS.share)).toBeTruthy();
+    expect(card.getByText(FOOD_ALLERGY_CAUTION)).toBeTruthy();
+    await fireEvent.press(card.getByRole("button", { name: "More ideas" }));
+    expect(await within(await screen.findByTestId("meal-plan-box")).findByRole("button", { name: "Log Paneer + Rice" })).toBeTruthy();
   });
 
   it("the Dashboard's See meal plan opens the week itself (round one, L4)", async () => {

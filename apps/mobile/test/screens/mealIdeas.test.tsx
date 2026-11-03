@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
-import { DIET_LABEL_CAUTION, FOOD_ALLERGY_CAUTION, type MealIdeasResponse } from "@app/shared";
+import { DIET_LABEL_CAUTION, FOOD_ALLERGY_CAUTION, IDEA_WHY_WORDS, type IdeaWhy, type MealIdeasResponse } from "@app/shared";
 import { App } from "../../src/App";
 import type { TextStore } from "../../src/screens/food/outbox";
 import { fakeServer, kept, lost, memoryStore, tokens, type Reply, type Route } from "../kit";
@@ -12,15 +12,16 @@ const TARGETS = { targets: PLAN, missing: [], targetWrongSide: false, source: "a
 const food = (canonical: string, name: string, grams: number, kcal: number, servings = 1, unit = "cup") => ({
   canonical, name, grams, servings, unit, kcal, proteinG: 20, carbsG: 30, fatG: 5,
 });
-const idea = (...items: ReturnType<typeof food>[]) => ({
+const idea = (why: IdeaWhy, ...items: ReturnType<typeof food>[]) => ({
   kind: "plate" as const,
+  why,
   items,
   totals: { kcal: items.reduce((n, f) => n + f.kcal, 0), proteinG: 20 * items.length, carbsG: 30 * items.length, fatG: 5 * items.length },
 });
-const RICE_PLATE = idea(food("chicken_breast", "Chicken breast", 150, 248, 1.5, "g"), food("rice_white", "Rice", 200, 260));
-const DAL_BOWL = idea(food("dal", "Dal", 240, 300));
-const OAT_BOWL = idea(food("oats", "Oatmeal", 250, 200));
-const FISH_PLATE = idea(food("salmon", "Salmon", 150, 310, 1.5, "g"));
+const RICE_PLATE = idea("share", food("chicken_breast", "Chicken breast", 150, 248, 1.5, "g"), food("rice_white", "Rice", 200, 260));
+const DAL_BOWL = idea("under", food("dal", "Dal", 240, 300));
+const OAT_BOWL = idea("after_workout", food("oats", "Oatmeal", 250, 200));
+const FISH_PLATE = idea("most", food("salmon", "Salmon", 150, 310, 1.5, "g"));
 
 const answer = (over: Partial<Extract<MealIdeasResponse, { status: "ok" }>> = {}): MealIdeasResponse => ({
   status: "ok",
@@ -226,10 +227,14 @@ describe("the Food screen's box", () => {
     expect(await box.findByText("Rice 1 cup · 200 g")).toBeTruthy();
     expect(box.getByText("Chicken breast 150 g")).toBeTruthy();
     expect(box.getByText(/^508 kcal · 40 g protein/)).toBeTruthy();
+    // Each idea's own reason, the server's, under it (31d-ii).
+    for (const why of ["share", "under", "after_workout"] as const) expect(box.getByText(IDEA_WHY_WORDS[why])).toBeTruthy();
+    expect(box.queryByText(IDEA_WHY_WORDS.most)).toBeNull();
     expect(box.queryByRole("button", { name: "Log Salmon" })).toBeNull();
     expect(screen.getAllByText(FOOD_ALLERGY_CAUTION)).toHaveLength(1);
     await fireEvent.press(box.getByRole("button", { name: "1 more meal today" }));
     expect(await screen.findByRole("button", { name: "Log Salmon" })).toBeTruthy();
+    expect(screen.getByText(IDEA_WHY_WORDS.most)).toBeTruthy();
     expect(screen.getByText(/^1 meal later · about 500 kcal/)).toBeTruthy();
     // The box that opens carries the line too.
     expect(screen.getAllByText(FOOD_ALLERGY_CAUTION)).toHaveLength(2);
@@ -299,6 +304,7 @@ describe("the Dashboard's Recommended box", () => {
     expect(box.getByText("1 cup · 200 g")).toBeTruthy();
     expect(box.getByText("508 kcal")).toBeTruthy();
     expect(box.getByText("40 g protein · 60 g carbs")).toBeTruthy();
+    expect(box.getByText(IDEA_WHY_WORDS.share)).toBeTruthy();
     expect(box.queryByText(/^Dal/)).toBeNull();
     expect(box.getByText(FOOD_ALLERGY_CAUTION)).toBeTruthy();
     expect(box.getByText(DIET_LABEL_CAUTION)).toBeTruthy();

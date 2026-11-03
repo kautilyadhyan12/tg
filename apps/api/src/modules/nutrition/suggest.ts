@@ -13,7 +13,7 @@
 // The diet is a ceiling (RULINGS 2026-09-13): `dietAllows` is the one rule, so a
 // vegetarian is never offered meat and a non-vegetarian is offered meatless
 // ideas too.
-import { dietAllows, mealTypeAtHour, type Diet, type MealIdea, type MealIdeaKind, type MealType, type SuggestedFood, type SuggestedMeal } from "@app/shared";
+import { dietAllows, mealTypeAtHour, type Diet, type MealIdea, type MealIdeaKind, type MealType, type SuggestedFood, type SuggestedMeal, type IdeaWhy } from "@app/shared";
 import { CURATED_FOODS, type CuratedFood } from "./foods.js";
 
 export type SuggestRole =
@@ -195,6 +195,19 @@ function proteinMiss(proteinG: number, carbsG: number, aim: ProteinAim): number 
 const NEAR_AIM = 0.1;
 const proteinMet = (proteinG: number, carbsG: number, aim: ProteinAim): boolean =>
   proteinG >= Math.max(aim.leastG, aim.aimG * (1 - NEAR_AIM)) - 0.05 && proteinG <= aim.mostG + 0.05 && (!aim.withCarbs || carbsG >= proteinG);
+/** Why an idea holds the protein it does, the line under it (spec Part 6 §16.6, 8). Its own
+ *  protein first: a line never says an idea meets an aim it misses. `shareG` is the day's share
+ *  `proteinAim` was given; no aim, the idea was drawn for calories alone. */
+export function ideaWhy(proteinG: number, aim: ProteinAim | undefined, shareG: number | null): IdeaWhy {
+  if (aim === undefined) return "calories";
+  if (proteinG > aim.mostG + 0.05) return "over";
+  if (proteinG < Math.max(aim.leastG, aim.aimG * (1 - NEAR_AIM)) - 0.05) return "under";
+  if (aim.withCarbs) return "after_workout";
+  if (shareG === null) return "weight";
+  if (shareG < aim.leastG) return "least";
+  if (shareG > aim.mostG) return "most";
+  return "share";
+}
 const DISH_SIDE: ReadonlyMap<string, DishSide> = new Map(DISH_NAMES.map(([name, side]) => [named(name).canonical, side]));
 
 /** The least a day must have left for a meal to be suggested, and the least one idea holds. */
@@ -584,12 +597,12 @@ export function suggestMeals(input: SuggestInput): Suggested {
   const shareG = p === undefined || p.dayTargetG === null ? null : Math.max(0, p.dayTargetG - p.eatenG) / Math.max(1, count);
   const meals: SuggestedMeal[] = [];
   for (let m = 0; m < count; m++) {
-    const ideas: MealIdea[] = [];
+    const ideas: SuggestedMeal["ideas"] = [];
     const aim = p === undefined ? undefined : proteinAim(p.weightKg, shareG, { afterWorkout: m === 0 && input.afterWorkout === true });
     for (const wanted of kindsFor(kcalTarget, types?.[m])) {
       // Under the least a meal holds, a logged idea would not count as a meal, and would be offered again.
       const idea = make(kcalTarget, wanted, Infinity, LEAST_MEAL_KCAL, aim);
-      if (idea !== null) ideas.push(idea);
+      if (idea !== null) ideas.push({ ...idea, why: ideaWhy(idea.totals.proteinG, aim, shareG) });
     }
     if (ideas.length > 0) meals.push({ kcalTarget, ideas });
   }
