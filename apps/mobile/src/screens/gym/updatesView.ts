@@ -21,7 +21,8 @@ import type { ClockFormat } from "./visitsView";
 // a member is sent, and this file only puts them into words.
 
 const postsPath = (gymId: string) => `/v1/orgs/${encodeURIComponent(gymId)}/posts`;
-const postPath = (gymId: string, postId: string) => `${postsPath(gymId)}/${encodeURIComponent(postId)}`;
+/** One post by itself: what a tapped comments notification opens (Stage 5 18b-ii-b). */
+export const postPath = (gymId: string, postId: string) => `${postsPath(gymId)}/${encodeURIComponent(postId)}`;
 
 /** A page of the gym's posts; `before` is the last page's `next`. */
 export const updatesPath = (gymId: string, before: string | null = null) =>

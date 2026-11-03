@@ -261,7 +261,28 @@ export async function insertComment(
     VALUES (${comment.id}, ${gymId}, ${comment.postId}, ${comment.parentId}, ${comment.replyToId}, ${authorId}, ${comment.byMember}, ${comment.commentKey}, ${comment.body}, ${at})
     ON CONFLICT (gym_id, comment_key) DO NOTHING
     RETURNING id`;
-  return rows.length === 1 ? "made" : "taken";
+  if (rows.length !== 1) return "taken";
+  await oweNotices(tx, gymId, comment.id, authorId, at);
+  return "made";
+}
+
+/** Who a new comment is owed to as a phone notification (Stage 5 18b-ii-b), in the comment's own step:
+ *  the writer of the member's post it is on, and of the member's comment and reply it answers; never
+ *  its own writer. Whether each may still read it is decided when it is sent. */
+async function oweNotices(tx: TransactionSql, gymId: string, commentId: string, authorId: string, at: Date): Promise<void> {
+  await tx`
+    INSERT INTO gym_post_comment_notices (gym_id, comment_id, user_id, created_at)
+    SELECT DISTINCT ${gymId}::uuid, ${commentId}::uuid, w.user_id, ${at}::timestamptz
+    FROM gym_post_comments c
+    CROSS JOIN LATERAL (
+      SELECT p.author_user_id AS user_id FROM gym_posts p
+      WHERE p.gym_id = c.gym_id AND p.id = c.post_id AND p.by_member
+      UNION ALL
+      SELECT a.author_user_id FROM gym_post_comments a
+      WHERE a.gym_id = c.gym_id AND a.id IN (c.parent_id, c.reply_to_id) AND a.by_member
+    ) w
+    WHERE c.gym_id = ${gymId} AND c.id = ${commentId} AND w.user_id IS NOT NULL AND w.user_id <> ${authorId}
+    ON CONFLICT (comment_id, user_id) DO NOTHING`;
 }
 
 /** What goes with removed comments, in the removal's step: their reactions, and open reports answered. */
