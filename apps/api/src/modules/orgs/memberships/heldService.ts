@@ -704,6 +704,7 @@ export async function changeHeldMembership(
     shownTotalMinor: req.totalMinor,
     shownStartsOn: req.startsOn,
     shownFullFrom: req.fullFrom ?? null,
+    ...(req.minimumTerm === undefined ? {} : { shownMinimumTerm: req.minimumTerm }),
     paid: req.paid,
     method: req.method ?? null,
     confirmBookings: req.confirmBookings ?? null,

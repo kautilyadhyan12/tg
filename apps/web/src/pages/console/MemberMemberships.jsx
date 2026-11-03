@@ -1876,6 +1876,11 @@ export default function MemberMemberships({
                 ))}
               </fieldset>
             ) : null}
+            {contractLine(choice.type) !== null ? (
+              <p className="c-s14 c-t2 m-0" data-testid="held-change-minimum-term">
+                {contractLine(choice.type)}
+              </p>
+            ) : null}
             {choice.paidLabel !== null ? (
               <div className="flex flex-col gap-2">
                 <Tick checked={changeDraft.paid} onChange={(paid) => set({ paid })}>
@@ -2008,7 +2013,7 @@ export default function MemberMemberships({
         <p className="c-s14 c-t2 m-0">{words.detail}</p>
         {words.endButton !== null ? (
           <div className="flex flex-wrap gap-2">
-            <button type="button" className={MAIN} disabled={busy} onClick={() => void change('cancelContract', m, 'cancel', { when: 'contract_end' })}>
+            <button type="button" className={MAIN} disabled={busy} onClick={() => void change(words.endDone, m, 'cancel', { when: words.endWhen })}>
               {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
               {words.endButton}
             </button>

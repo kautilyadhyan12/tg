@@ -2212,6 +2212,34 @@ describe('cancelling a membership still in its contract', () => {
     expect(await b.findByText('Gold 12 months is cancelled.')).toBeTruthy();
   });
 
+it('paid past the minimum term: End stops it at the end of what is paid, sending no reason (re-check, H1b)', async () => {
+    const paidAhead = inContract([
+      [{ type: 'paid', paidPeriods: 2 }, TODAY],
+      [{ type: 'paid', paidPeriods: 3 }, TODAY],
+      [{ type: 'paid', paidPeriods: 4 }, TODAY],
+      [{ type: 'paid', paidPeriods: 5 }, TODAY],
+      [{ type: 'paid', paidPeriods: 6 }, TODAY],
+      [{ type: 'paid', paidPeriods: 7 }, TODAY],
+      [{ type: 'paid', paidPeriods: 8 }, TODAY],
+      [{ type: 'paid', paidPeriods: 9 }, TODAY],
+      [{ type: 'paid', paidPeriods: 10 }, TODAY],
+      [{ type: 'paid', paidPeriods: 11 }, TODAY],
+      [{ type: 'paid', paidPeriods: 12 }, TODAY],
+      [{ type: 'paid', paidPeriods: 13 }, TODAY],
+    ]);
+    expect(paidAhead.view.can.cancelAtContractEnd).toBeNull();
+    orgService.getHeldMemberships.mockResolvedValue(answer([paidAhead]));
+    render(draw(ADA, 'Ada Lovelace'));
+    const b = await boxSoon();
+    fireEvent.click(b.getByRole('button', { name: 'Cancel membership' }));
+    const box = within(b.getByTestId('held-ask-cancel'));
+    expect(box.getByText(/has paid until 3 November 2027, past their minimum term/)).toBeTruthy();
+    orgService.changeHeldMembership.mockResolvedValueOnce(answer([paidAhead]));
+    fireEvent.click(box.getByRole('button', { name: 'End on 3 November 2027' }));
+    await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledTimes(1));
+    expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, paidAhead.id, 'cancel', { when: 'period_end' });
+  });
+
   it('confirms the bookings it would end with the same reason', async () => {
     const gold = inContract();
     orgService.getHeldMemberships.mockResolvedValue(answer([gold]));

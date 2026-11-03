@@ -146,3 +146,33 @@ describe("round one's findings, on screen", () => {
     expect(contractLine(null)).toBeNull();
   });
 });
+
+describe('the re-check (H1b)', () => {
+  it('paid past a minimum term that renews: the box ends it at the end of what is paid, with no reason, and says so truly', () => {
+    const m = {
+      typeName: 'Gold 12 months',
+      kind: 'recurring',
+      termCount: 1,
+      termUnit: 'month',
+      contractPeriods: 12,
+      release: null,
+      fullFrom: null,
+      view: {
+        status: 'active',
+        endsOn: null,
+        renewsOn: '2027-10-15',
+        payment: null,
+        contract: { until: '2027-10-14', then: 'renews' },
+        can: { freeze: true, unfreeze: false, cancel: true, cancelAtPeriodEnd: '2028-02-14', cancelAtContractEnd: null, releaseNeeded: true, markPaid: null, undoPaid: null },
+      },
+    };
+    expect(askWords('cancel', m, 'Ada', '2027-09-20')).toMatchObject({
+      detail: 'Ada has paid until 14 February 2028, past their minimum term. End it then, with no more payments; or release them early.',
+      endButton: 'End on 14 February 2028',
+      endWhen: 'period_end',
+      endDone: 'cancelLater',
+      releaseLaterButton: null,
+      releaseButton: 'Release today',
+    });
+  });
+});

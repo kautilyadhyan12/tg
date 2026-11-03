@@ -209,6 +209,21 @@ export function contractCancelWords(m, name) {
   const until = m.view.contract.until;
   const end = m.view.can.cancelAtContractEnd ?? null;
   const paid = m.view.can.cancelAtPeriodEnd ?? null;
+  // Paid past the minimum term already: it stops at the end of what is paid, which keeps every
+  // month paid for and lets nobody out early (re-check, H1b).
+  if (end === null && paid !== null && paid >= until) {
+    return {
+      question: `Cancel ${whose}?`,
+      detail: `${name} has paid until ${dayWords(paid)}, past their minimum term. End it then, with no more payments; or release them early.`,
+      endButton: `End on ${dayWords(paid)}`,
+      endWhen: 'period_end',
+      endDone: 'cancelLater',
+      releaseQuestion: 'Why are you releasing them?',
+      releaseLaterButton: null,
+      releaseButton: 'Release today',
+      releaseMissing: 'Pick why you are releasing them first.',
+    };
+  }
   return {
     question: `Cancel ${whose}?`,
     detail:
@@ -216,6 +231,8 @@ export function contractCancelWords(m, name) {
         ? `${name} is in their minimum term until ${dayWords(until)}. End it then, and they keep paying until then; or release them early.`
         : `${name} is in their minimum term until ${dayWords(until)}, when it ends. To stop it sooner, release them early.`,
     endButton: end === null ? null : `End on ${dayWords(end)}`,
+    endWhen: 'contract_end',
+    endDone: 'cancelContract',
     releaseQuestion: 'Why are you releasing them?',
     // On or after the term's last day, the end of what is paid lets nobody out early (round one, L2).
     releaseLaterButton: paid === null || !releaseAsked(m.view, 'period_end') ? null : `Release on ${dayWords(paid)}`,

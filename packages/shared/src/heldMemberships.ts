@@ -1155,6 +1155,8 @@ export const changeHeldMembershipRequestSchema = z
     startsOn: daySchema,
     /** The day the screen said the new one's full payments start (18y); null where it said none. */
     fullFrom: daySchema.nullable().optional(),
+    /** The minimum term the screen showed for the new line (18v-i), null for none; left out, it showed no word of it. */
+    minimumTerm: z.object({ periods: z.number().int().min(1).max(156), then: contractThenSchema }).strict().nullable().optional(),
     priceMinor: z.number().int().min(0).max(99_999_999),
     creditMinor: z.number().int().min(0).max(99_999_999),
     totalMinor: z.number().int().min(0).max(99_999_999),
