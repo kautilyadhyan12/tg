@@ -9,6 +9,7 @@ import {
   GYM_PLACES_CHANNEL,
   PUSH_WITHIN_HOURS,
   gymClockFormatSchema,
+  gymMessageDayNumber,
   placeNotification,
   pushHourOpen,
   reminderWhen,

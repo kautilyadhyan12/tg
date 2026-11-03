@@ -355,15 +355,20 @@ d("a place in a class or an event, told to the phone (real Postgres)", () => {
     // 23:30 in India.
     clock = Date.parse("2026-11-10T18:00:00Z");
     fresh();
-    const [asha, bina, chen] = [await member(gym, "asha"), await member(gym, "bina"), await member(gym, "chen")];
+    const [asha, bina, chen, dana] = [await member(gym, "asha"), await member(gym, "bina"), await member(gym, "chen"), await member(gym, "dana")];
     // 10:00 tomorrow: inside the last day.
     const early = await classAt(gym, 10.5, 1, "Sunrise Flow");
     await book(gym, asha, early);
     await book(gym, bina, early, true);
     await book(gym, chen, early, true);
     await cancel(gym, asha, early);
+    // A second class whose free place is still free in the morning.
+    const noon = await classAt(gym, 12.5, 1, "Midday Flow");
+    await book(gym, asha, noon);
+    await book(gym, dana, noon, true);
+    await cancel(gym, asha, noon);
     const night = await sweep();
-    expect(night.waiting).toBe(2);
+    expect(night.waiting).toBe(3);
     expect(sent).toHaveLength(0);
     // 06:59, then 07:00.
     expect((await sweep(Date.parse("2026-11-11T01:29:00Z"))).sent).toBe(0);
@@ -371,7 +376,71 @@ d("a place in a class or an event, told to the phone (real Postgres)", () => {
     clock = Date.parse("2026-11-11T01:00:00Z");
     expect(await book(gym, chen, early)).toBe("booked");
     await sweep(Date.parse("2026-11-11T01:30:00Z"));
-    expect(sent).toHaveLength(0);
+    expect(sentTo(bina)).toHaveLength(0);
+    expect(sentTo(chen)).toHaveLength(0);
+    // The one still true goes at 07:00.
+    expect(sentTo(dana).map((m) => m.body)).toEqual(["A place is free in Midday Flow today at 12:00 PM. The first to claim it gets it."]);
+  });
+
+  it("two runs at the same instant tell a person once", { timeout: T }, async () => {
+    clock = NOON;
+    fresh();
+    const [asha, bina] = [await member(gym, "asha"), await member(gym, "bina")];
+    const flow = await classAt(gym, 3 * 24, 1);
+    await book(gym, asha, flow);
+    await book(gym, bina, flow, true);
+    await cancel(gym, asha, flow);
+    const runs = await Promise.all([sweep(), sweep(), sweep()]);
+    expect(runs.reduce((n, run) => n + run.sent, 0)).toBe(1);
+    expect(sentTo(bina)).toHaveLength(1);
+  });
+
+  it("a send that fails never puts back an older notice over one owed since", { timeout: T }, async () => {
+    clock = NOON;
+    fresh();
+    const [asha, bina] = [await member(gym, "asha"), await member(gym, "bina")];
+    const flow = await classAt(gym, 6, 1);
+    await book(gym, asha, flow);
+    await book(gym, bina, flow, true);
+    await cancel(gym, asha, flow);
+    // While Firebase is being asked, Bina is owed something newer; then Firebase fails.
+    const [row] = await sql<{ id: string }[]>`SELECT id FROM gym_class_bookings WHERE session_id = ${flow} AND user_id = ${bina.userId} AND status = 'waitlisted'`;
+    const failing: PushSender = {
+      send: async () => {
+        await sql`UPDATE gym_class_bookings SET push_due = 'yours', push_due_at = ${new Date(clock + 1000)} WHERE id = ${row?.id ?? ""}`;
+        return "failed";
+      },
+    };
+    await sendPlaceNotifications({ sql, sender: failing, now: () => new Date(clock), gymIds });
+    const [after] = await sql<{ push_due: string | null; at: string }[]>`SELECT push_due, push_due_at::text AS at FROM gym_class_bookings WHERE id = ${row?.id ?? ""}`;
+    expect(after?.push_due).toBe("yours");
+    expect(Date.parse(after?.at ?? "")).toBe(clock + 1000);
+    await sql`UPDATE gym_class_bookings SET push_due = NULL WHERE id = ${row?.id ?? ""}`;
+  });
+
+  it("a failure partway through puts that notice back, and the rest of the run still goes", { timeout: T }, async () => {
+    clock = NOON;
+    fresh();
+    const [asha, bina, chen] = [await member(gym, "asha"), await member(gym, "bina"), await member(gym, "chen")];
+    const flow = await classAt(gym, 6, 1);
+    await book(gym, asha, flow);
+    await book(gym, bina, flow, true);
+    await book(gym, chen, flow, true);
+    await cancel(gym, asha, flow);
+    const told: string[] = [];
+    const breaking: PushSender = {
+      send: (message) => {
+        if (message.token === bina.phone) return Promise.reject(new Error("connection ended"));
+        told.push(message.token);
+        return Promise.resolve("sent");
+      },
+    };
+    const run = await sendPlaceNotifications({ sql, sender: breaking, now: () => new Date(clock), gymIds });
+    expect(run.failed).toBe(1);
+    expect(told).toEqual([chen.phone]);
+    // Put back: the next run tells Bina.
+    await sweep();
+    expect(sentTo(bina)).toHaveLength(1);
   });
 
   it("an event: moved in is told, and a place free in the last day is told to those waiting", { timeout: T }, async () => {
