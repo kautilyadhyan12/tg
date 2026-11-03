@@ -134,10 +134,10 @@ describe("the words both screens show (4b-i)", () => {
     expect(CHECK_FIRST_OPTIONS.cleared.detail).not.toContain("Safe mode");
   });
 
-  it("the food caution says both halves of the ruling: any food allergy, and the labels (RULINGS 2026-09-09)", () => {
+  it("the food caution says both halves of the ruling: a food allergy, and the label, always (RULINGS 2026-09-09; reworded at Kd's click-through, 31d-ii)", () => {
     const lower = FOOD_ALLERGY_CAUTION.toLowerCase();
-    expect(lower).toContain("any food allergy");
-    expect(lower).toContain("check the labels");
+    expect(lower).toContain("food allergy");
+    expect(lower).toContain("always check the label");
     // It cautions; it never promises a food is free of anything.
     expect(lower).not.toMatch(/allergen-free|allergy-free|\bsafe\b|free from/);
   });

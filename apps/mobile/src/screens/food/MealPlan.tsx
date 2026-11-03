@@ -18,7 +18,7 @@ import { newGoalId } from "../goals/words";
 import { mealTypeName, startOfDay } from "./day";
 import { dayRows, useDayMeals } from "./dayRows";
 import { ideaName } from "./ideaRules";
-import { MealIdeas, type PlannedNow } from "./MealIdeas";
+import { MealIdeas, Source, type PlannedNow } from "./MealIdeas";
 import { useMealOutbox } from "./MealOutbox";
 import { loggedAmount } from "./measures";
 import type { BasketFood, PlanMealTarget } from "./basket";
@@ -28,6 +28,7 @@ import { foodTitle, measuresWithoutServer } from "./rows";
 export const PLAN_READ = "/v1/nutrition/diet-plan";
 const NO_CONNECTION = "No connection. Try again.";
 const NO_SETTLE = () => undefined;
+const NOTHING_TODAY = "No meals in your plan today.";
 
 /** What Undo puts back: the day as it stood before the last swap, and the day's version the swap made. */
 interface Undo { id: string; day: number; meals: DietPlanMeal[]; version: string }
@@ -238,6 +239,11 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
     setChoosing(false);
     setRemoving(null);
     setWeek(true);
+  };
+  /** The week, on today, already asking which meal to add. */
+  const addMeal = () => {
+    openWeek();
+    setChoosing(true);
   };
 
   // Until today's meals are read, which planned meal is next isn't known.
@@ -475,9 +481,17 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
           ) : (
             <Txt kind="small">{NOT_KNOWN}</Txt>
           )
+        ) : meals.length === 0 ? (
+          // A day of the plan with no meals: the app's ideas in its place (Kd, 31d-i's click-through).
+          <MealIdeas
+            bare
+            fresh={fresh}
+            onAnswered={onAnswered}
+            lead={{ words: NOTHING_TODAY, action: { label: "Add a meal", onPress: addMeal } }}
+          />
         ) : next === undefined ? (
           <>
-            <Txt kind="small">{meals.length === 0 ? "Nothing planned for today." : "All of today’s meals are logged."}</Txt>
+            <Txt kind="small">All of today’s meals are logged.</Txt>
             <View style={styles.actions}>
               {seeWeek}
               {otherIdeas}
@@ -485,6 +499,7 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
           </>
         ) : (
           <>
+            <Source word="My plan" />
             <MealWords meal={next} />
             <OutsideDiet meal={next} />
             <View style={styles.actions}>
@@ -512,11 +527,11 @@ export function Recommended({ onMore, onPlan, onLog }: { onMore: () => void; onP
   if (read.kind === "loading") return <MealIdeas onMore={onMore} onLog={onLog} planned="loading" />;
   // Never the ideas as if there were no plan: Food says the same.
   if (read.kind === "failed") return <MealIdeas onMore={onMore} onLog={onLog} planned={{ failed: "Your meal plan couldn’t load.", retry: again }} />;
-  if (hasMeals(read.data)) return <RecommendedFromPlan plan={read.data} onMore={onPlan} onLog={onLog} />;
+  if (hasMeals(read.data)) return <RecommendedFromPlan plan={read.data} onMore={onPlan} onIdeas={onMore} onLog={onLog} />;
   return <MealIdeas onMore={onMore} onLog={onLog} />;
 }
 
-function RecommendedFromPlan({ plan, onMore, onLog }: { plan: DietPlanResponse; onMore: () => void; onLog: () => void }) {
+function RecommendedFromPlan({ plan, onMore, onIdeas, onLog }: { plan: DietPlanResponse; onMore: () => void; onIdeas: () => void; onLog: () => void }) {
   const { view } = useMealOutbox();
   const dayStart = startOfDay(new Date()).getTime();
   const day = useMemo(() => new Date(dayStart), [dayStart]);
@@ -528,10 +543,11 @@ function RecommendedFromPlan({ plan, onMore, onLog }: { plan: DietPlanResponse; 
     return <MealIdeas onMore={onMore} planned={mealsRead.kind === "failed" ? { failed: "Your meals couldn’t load.", retry: again } : "loading"} />;
   }
   const meals = plan.days[planDayOf(day) - 1]?.meals ?? [];
+  // Today has no meals in the plan: the app's ideas, as on the Food page.
+  if (meals.length === 0) return <MealIdeas onMore={onIdeas} onLog={onLog} lead={{ words: NOTHING_TODAY, action: { label: "See meal plan", onPress: onMore } }} />;
   const foods = rows.map((r) => foodsOfRow(r, view.waiting));
   const planned: PlannedNow = {
     meal: meals[loggedOfDay(meals, foods).indexOf(false)] ?? null,
-    allLogged: meals.length > 0,
     canLog: true,
     caution: plan.caution,
     labelCaution: plan.labelCaution,

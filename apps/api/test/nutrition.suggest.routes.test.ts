@@ -230,10 +230,15 @@ d("meal ideas route (real Postgres)", () => {
     await sql`INSERT INTO workouts (id, user_id, started_at, ended_at, platform, engine_version)
       VALUES (gen_random_uuid(), ${id}, ${new Date(old.getTime() - 45 * 60 * 1000)}, ${old}, 'android', 'test')`;
     await expectRule(cookies, { ...numbers(false), day, protein: { weightKg: 70, dayTargetG: target, eatenG: 0 } }, hour);
+    // The line under each idea (31d-ii): no idea speaks of a workout three hours gone.
+    const whys = async () => (await ok(cookies)).meals.flatMap((m, at) => m.ideas.map((i) => `${String(at)}:${i.why}`));
+    expect(await whys()).not.toContain("0:after_workout");
     const recent = new Date(Date.now() - 30 * 60 * 1000);
     await sql`INSERT INTO workouts (id, user_id, started_at, ended_at, platform, engine_version)
       VALUES (gen_random_uuid(), ${id}, ${new Date(recent.getTime() - 45 * 60 * 1000)}, ${recent}, 'android', 'test')`;
     await expectRule(cookies, { ...numbers(true), day, protein: { weightKg: 70, dayTargetG: target, eatenG: 0 } }, hour);
+    expect(await whys()).toContain("0:after_workout");
+    expect((await whys()).filter((w) => w.endsWith("after_workout") && !w.startsWith("0:"))).toEqual([]);
     // The two differ, so the check above tells them apart.
     const p = { weightKg: 70, dayTargetG: target, eatenG: 0 };
     expect(suggestMeals({ ...numbers(true), day, protein: p, hour }).meals).not.toEqual(suggestMeals({ ...numbers(false), day, protein: p, hour }).meals);

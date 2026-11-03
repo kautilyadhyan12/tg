@@ -144,7 +144,7 @@ describe("the worst thing: an allergic person is never told a pack is clear", ()
     expect(await screen.findByText(/Milk, Nuts, Soybeans/)).toBeTruthy();
     expect(screen.getByText(/^May contain: Eggs$/)).toBeTruthy();
     expect(screen.getByText(/^Also listed: weizenmehl$/)).toBeTruthy();
-    expect(screen.getByText("If you have any food allergy, take care and check the labels.")).toBeTruthy();
+    expect(screen.getByText("Have a food allergy? Always check the label.")).toBeTruthy();
   });
 
   it("a 0 kcal isn't taken as certain", async () => {

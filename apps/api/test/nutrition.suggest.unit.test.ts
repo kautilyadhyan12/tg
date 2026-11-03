@@ -4,7 +4,7 @@
 // fixtures `tools/check-food-sources.ts` holds to the downloads), never our names
 // or our labels alone.
 import { describe, expect, it } from "vitest";
-import { DIET_LADDER, dietAllows, mealIdeaSchema, type Diet, type MealIdea } from "@app/shared";
+import { DIET_LADDER, dietAllows, mealIdeaSchema, suggestedIdeaSchema, type Diet, type MealIdea } from "@app/shared";
 import { CURATED_FOODS } from "../src/modules/nutrition/foods.js";
 import { foodOf, lowestByWords, tableLowest } from "./foodDietByTable.js";
 import {
@@ -267,7 +267,7 @@ describe("how many meals, and how big: every class of day", () => {
         });
         for (const idea of meal.ideas) {
           expect(idea.items.reduce((n, i) => n + i.grams, 0), idea.items.map((i) => i.name).join(" + ")).toBeLessThanOrEqual(MOST_IDEA_GRAMS);
-          expect(mealIdeaSchema.safeParse(idea).success).toBe(true);
+          expect(suggestedIdeaSchema.safeParse(idea).success).toBe(true);
           expect(Math.abs(idea.totals.kcal - meal.kcalTarget)).toBeLessThanOrEqual(meal.kcalTarget * IDEA_TOLERANCE);
           expect(idea.totals.kcal).toBe(idea.items.reduce((n, i) => n + i.kcal, 0));
           for (const item of idea.items) {
