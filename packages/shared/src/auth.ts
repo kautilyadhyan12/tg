@@ -198,10 +198,15 @@ export const phoneKeptSessionSchema = z.object({
 });
 export type PhoneKeptSession = z.infer<typeof phoneKeptSessionSchema>;
 
-/** What the phone keeps after a Sign out the server has not heard yet (no signal): the sign-in to end,
- *  told again at each opening and each return to the app until the server answers. Until then that
- *  sign-in stays open on the server, and its phone notifications with it (18b-i round one, H1). */
-export const phoneSignOutOwedSchema = z.object({ signOutOwed: oneTimeTokenSchema }).strict();
+/** What the phone keeps after a Sign out the server has not heard yet (no signal): the sign-ins to end,
+ *  told again at each opening, each return to the app and before each sign-in until the server answers.
+ *  Until then each stays open on the server, and its phone notifications with it (18b-i round one, H1).
+ *  Several, so a second person's Sign out with no signal never writes over the first's; an older copy
+ *  of the app wrote one. */
+export const PHONE_SIGN_OUTS_OWED_MAX = 10;
+export const phoneSignOutOwedSchema = z
+  .object({ signOutOwed: z.union([oneTimeTokenSchema.transform((one) => [one]), z.array(oneTimeTokenSchema).max(PHONE_SIGN_OUTS_OWED_MAX)]) })
+  .strict();
 export type PhoneSignOutOwed = z.infer<typeof phoneSignOutOwedSchema>;
 
 /** A refusal as this api words it: `message` is written for people, and `retryAfterSeconds`

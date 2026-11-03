@@ -72,7 +72,8 @@ describe("a member's inbox from their gym", () => {
     rerender(<Page open />);
     await waitFor(() => expect(count()).toBe('none'));
     expect(svc.markRead).toHaveBeenCalledTimes(1);
-    expect(svc.markRead).toHaveBeenCalledWith('g1', '2026-10-09T06:35:00.000Z');
+    // The ids it showed, so a message saved after the read stays new (item 18's data pass).
+    expect(svc.markRead).toHaveBeenCalledWith('g1', '2026-10-09T06:35:00.000Z', ['m2', 'm1']);
     // What was new when it opened is still marked New on this view.
     expect(rows()).toEqual(['TwoNew · 2 hours ago', 'OneNew · 2 hours ago']);
     expect(svc.read).toHaveBeenCalledTimes(1);

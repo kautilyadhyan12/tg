@@ -59,7 +59,7 @@ export const gymMembershipTypes = pgTable(
      *  null for its main one. The key to `gym_agreement_documents` is in `0161`: `agreement.ts`
      *  already reads this file. */
     agreementDocumentId: uuid("agreement_document_id"),
-    /** Its contract (0198; 18v-i): so many payments, then it renews or ends. Both null for none. */
+    /** Its contract (0199; 18v-i): so many payments, then it renews or ends. Both null for none. */
     contractPeriods: integer("contract_periods"),
     contractThen: text("contract_then"),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
@@ -180,7 +180,7 @@ export const gymHeldMemberships = pgTable(
     paidPeriods: integer("paid_periods").notNull().default(0),
     paidFloor: integer("paid_floor").notNull().default(0),
     renews: boolean("renews").notNull(),
-    /** Its contract as it was given (0198; 18v-i); `contract_then` becomes `ends` where staff
+    /** Its contract as it was given (0199; 18v-i); `contract_then` becomes `ends` where staff
      *  set it to end with the contract. */
     contractPeriods: integer("contract_periods"),
     contractThen: text("contract_then"),
@@ -564,6 +564,8 @@ export const gymClassBookings = pgTable(
     pushOccasion: text("push_occasion"),
     /** 0194: when the person was last told about this class or event: a free place again within the hour is not told. */
     pushToldAt: timestamp("push_told_at", { withTimezone: true }),
+    /** 0198: a run took the notice and has not finished; past `PUSH_CLAIM_MINUTES` the next run takes it again. */
+    pushClaimedAt: timestamp("push_claimed_at", { withTimezone: true }),
   },
   (t) => [
     check("gym_class_bookings_push_due_check", sql`${t.pushDue} IS NULL OR (${t.pushDue} IN ('yours','free') AND ${t.pushDueAt} IS NOT NULL)`),

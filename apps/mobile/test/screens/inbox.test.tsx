@@ -173,6 +173,37 @@ describe("the worst thing: a switch says only what the server saved, so a member
     expect(isOn(await membershipSwitch())).toBe(true);
   });
 
+  it("a read begun before a press and answered after it never shows the switch from before the press", async () => {
+    const comeBack = listenForComeBack();
+    let reads = 0;
+    let lateAnswer: (reply: Reply) => void = () => undefined;
+    const server = fakeServer(
+      routes({
+        [inboxPath(IRON)]: () => {
+          reads += 1;
+          if (reads === 1) return { status: 200, body: inboxOf(IRON) };
+          // The read made when the app came back: answered only after the press, with the switch as it was before.
+          return new Promise<Reply>((resolve) => {
+            lateAnswer = resolve;
+          });
+        },
+        [`${inboxPath(IRON)}/switches`]: ok({ off: ["trial_ending", "membership_ending", "class_reminder"], groupMessages: true }),
+      }),
+    );
+    await openInbox(server.ask);
+    await openSwitches();
+    await comeBack();
+    await fireEvent(await membershipSwitch(), "valueChange", false);
+    await settle();
+    expect(isOn(await membershipSwitch())).toBe(false);
+    await act(async () => {
+      lateAnswer({ status: 200, body: inboxOf(IRON) });
+      await Promise.resolve();
+    });
+    await settle();
+    expect(isOn(await membershipSwitch())).toBe(false);
+  });
+
   it("the switches start as the server sent them: part of a group off reads Off and says some are off", async () => {
     const server = fakeServer(routes({ [inboxPath(IRON)]: ok(inboxOf(IRON, { off: ["birthday"] })) }));
     await openInbox(server.ask);
@@ -206,7 +237,8 @@ describe("the messages", () => {
     expect(page().getByText("Messages stay here for 30 days. You can't reply to them here.")).toBeTruthy();
     await settle();
     const seen = server.asked.filter((one) => one.method === "POST" && one.path === `${inboxPath(IRON)}/read`);
-    expect(seen.map((one) => one.body)).toEqual([{ upTo: ASOF }]);
+    // The ids this read showed: one written before `asOf` and saved after the read stays new (item 18's data pass).
+    expect(seen.map((one) => one.body)).toEqual([{ upTo: ASOF, ids: [M1, M2] }]);
     // The New marks stay while it is open; the count and the dot go.
     expect(first.getByText("New · 3 hours ago")).toBeTruthy();
     expect(screen.queryByTestId("dot-Gym")).toBeNull();

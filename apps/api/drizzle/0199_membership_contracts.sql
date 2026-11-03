@@ -1,6 +1,6 @@
 -- A contract on a repeating membership (ROADMAP Stage 2 item 18v-i; Kd, 2026-11-03,
 -- `rulings/2026-11-03-18v-i.md`). Forward-only. Hand-written, as `0016` onwards are; its journal
--- entry is part of this commit.
+-- entry is part of this commit. Renumbered from 0198 when the phone passes' `0198_push_claims` merged first.
 --
 -- A line of the price list may hold a contract: so many payments (`contract_periods`), then it
 -- goes on renewing or ends (`contract_then`). A membership given from it copies both, as it copies

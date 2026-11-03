@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react-native";
 import { App } from "../../src/App";
-import { fakeServer, kept, memoryStore, refusal, tokens, type Reply, type Route } from "../kit";
+import { PUSH_TASK, drawPush, startPushTask } from "../../src/notifications/drawn";
+import { RAVI, fakeServer, kept, memoryStore, refusal, tokens, type Reply, type Route } from "../kit";
 
 // A gym's messages as phone notifications (ROADMAP Stage 5 item 18b-i): the reason before Android
 // asks, the phone's address given for the person signed in, a tap that opens that gym's Inbox, and
@@ -34,6 +35,12 @@ const NO = { granted: false, canAskAgain: false, status: "denied" };
 
 const IRON = { id: "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f", name: "Iron House" };
 const STRANGER_GYM = "9f8e7d6c-5b4a-4392-8170-6f5e4d3c2b1a";
+const POST = "a1111111-1111-4111-8111-111111111111";
+const MEERA = { ...RAVI, id: "0e3d7a11-58a4-4f0b-8f1d-6c2b9a7e4d10", email: "meera@example.com", displayName: "Meera" };
+/** A message as Firebase hands it to the app's task: the server's words, for `to`. */
+const pushed = (data: Record<string, unknown>, heading = "Iron House", text = "Words.", to: string = RAVI.id) => ({
+  data: { heading, text, to, body: JSON.stringify(data), dataString: JSON.stringify(data), channelId: "gym-messages", tag: "t" },
+});
 const org = (gym: { id: string; name: string }) => ({
   ...gym,
   city: "Pune",
@@ -392,7 +399,6 @@ describe("a tapped notification about a place", () => {
 });
 
 describe("a tapped notification about a comment", () => {
-  const POST = "a1111111-1111-4111-8111-111111111111";
   const OTHER = "a2222222-2222-4222-8222-222222222222";
   const commentTap = (gymId: string, postId: string) => ({
     notification: { request: { identifier: `c-${postId}`, content: { data: { kind: "gym_comment", gymId, postId } } } },
@@ -508,15 +514,13 @@ describe("a tapped notification about a comment", () => {
     expect(screen.queryByTestId("updates-page")).toBeNull();
   });
 
-  it("arriving with the app open, it is shown once for the gym on the Comments channel", async () => {
+  it("arriving, it is drawn once for the gym on the Comments channel", async () => {
     notifications.permission = YES;
     await open(fakeServer(routes()));
     expect(notifications.channels.map((c) => c.name)).toContain("Comments");
+    secureStore.kept.set("session", kept(1));
     await act(async () => {
-      for (const one of notifications.received) {
-        one({ request: { identifier: "fcm-1", trigger: { type: "push" }, content: { title: "Iron House · 2 new comments", body: "Asha R.: Nice", data: { kind: "gym_comment", gymId: IRON.id, postId: POST } } } });
-      }
-      await Promise.resolve();
+      await drawPush(pushed({ kind: "gym_comment", gymId: IRON.id, postId: POST }, "Iron House · 2 new comments", "Asha R.: Nice"));
     });
     expect(notifications.scheduled).toEqual([
       {
@@ -528,20 +532,18 @@ describe("a tapped notification about a comment", () => {
   });
 });
 
-describe("a message that arrives while the app is open", () => {
+describe("THE WORST THING: a message Firebase hands the phone is drawn only for the person signed in on it", () => {
   const SESSION = "11111111-1111-4111-8111-111111111111";
-  const arrive = (data: unknown, trigger: unknown = { type: "push" }) =>
-    act(async () => {
-      for (const one of notifications.received) one({ request: { identifier: "fcm-1", trigger, content: { title: "Iron House", body: "Words.", data } } });
-      await Promise.resolve();
-    });
   const scheduled = () => notifications.scheduled;
+  const arrive = (payload: unknown) =>
+    act(async () => {
+      await drawPush(payload);
+    });
 
-  it("is shown by the app itself, one for each gym's Inbox and each class, on its own channel", async () => {
-    notifications.permission = YES;
-    await open(fakeServer(routes()));
-    await arrive({ kind: "gym_inbox", gymId: IRON.id });
-    await arrive({ kind: "gym_place", gymId: IRON.id, what: "class", id: SESSION, day: "2099-11-16" });
+  it("drawn for the person signed in, one for each gym's Inbox and each class, on its own channel", async () => {
+    secureStore.kept.set("session", kept(1));
+    await arrive(pushed({ kind: "gym_inbox", gymId: IRON.id }));
+    await arrive(pushed({ kind: "gym_place", gymId: IRON.id, what: "class", id: SESSION, day: "2099-11-16" }));
     expect(scheduled()).toEqual([
       { identifier: `inbox:${IRON.id}`, content: { title: "Iron House", body: "Words.", data: { kind: "gym_inbox", gymId: IRON.id } }, trigger: { channelId: "gym-messages" } },
       {
@@ -552,26 +554,48 @@ describe("a message that arrives while the app is open", () => {
     ]);
   });
 
-  it("the app's own, and anything that is not ours, is not shown again", async () => {
-    notifications.permission = YES;
-    await open(fakeServer(routes()));
-    await arrive({ kind: "gym_inbox", gymId: IRON.id }, null);
-    await arrive({ kind: "something_else" });
+  it("signed out (with no signal, so the server still sends), nothing is drawn", async () => {
+    secureStore.kept.delete("session");
+    await arrive(pushed({ kind: "gym_inbox", gymId: IRON.id }));
+    secureStore.kept.set("session", "");
+    await arrive(pushed({ kind: "gym_comment", gymId: IRON.id, postId: POST }));
     expect(scheduled()).toEqual([]);
   });
 
-  it("signed out, one that arrives is not shown by the app", async () => {
-    notifications.permission = YES;
-    await open(fakeServer(routes({ "/v1/auth/logout": ok({}) })));
-    const me = (await screen.findAllByRole("tab"))[4];
-    if (me === undefined) throw new Error("no Me tab");
-    await fireEvent.press(me);
-    await fireEvent.press(await screen.findByRole("button", { name: "Sign out" }));
-    const confirm = (await screen.findAllByRole("button", { name: "Sign out" })).at(-1);
-    if (confirm === undefined) throw new Error("no Sign out in the box");
-    await fireEvent.press(confirm);
-    await settle();
-    await arrive({ kind: "gym_inbox", gymId: IRON.id });
+  it("somebody else signed in since, the first person's is not drawn", async () => {
+    secureStore.kept.set("session", kept(1, MEERA));
+    await arrive(pushed({ kind: "gym_inbox", gymId: IRON.id }));
+    await arrive(pushed({ kind: "gym_comment", gymId: IRON.id, postId: POST }));
+    expect(scheduled()).toEqual([]);
+    await arrive(pushed({ kind: "gym_inbox", gymId: IRON.id }, "Iron House", "Words.", MEERA.id));
+    expect(scheduled()).toHaveLength(1);
+  });
+
+  it("the app's start defines the task Android runs and registers it, and that task draws for the person signed in", async () => {
+    const tasks = jest.requireMock<{ tasks: Map<string, (body: { data: unknown }) => Promise<void>> }>("expo-task-manager").tasks;
+    const registered = jest.requireMock<{ notifications: { registeredTasks: string[] } }>("expo-notifications").notifications.registeredTasks;
+    tasks.clear();
+    registered.length = 0;
+    startPushTask();
+    expect(registered).toEqual([PUSH_TASK]);
+    const task = tasks.get(PUSH_TASK);
+    if (task === undefined) throw new Error("no task defined");
+    secureStore.kept.set("session", kept(1));
+    await act(async () => {
+      await task({ data: pushed({ kind: "gym_inbox", gymId: IRON.id }) });
+    });
+    expect(scheduled()).toHaveLength(1);
+  });
+
+  it("anything that is not ours, or names nobody, is not drawn", async () => {
+    secureStore.kept.set("session", kept(1));
+    const ours = pushed({ kind: "gym_inbox", gymId: IRON.id });
+    await arrive({ data: { ...ours.data, to: undefined } });
+    await arrive({ data: { title: "Iron House", message: "Words.", body: ours.data.body, channelId: "gym-messages", tag: IRON.id } });
+    await arrive(pushed({ kind: "something_else" }));
+    await arrive({ data: { ...ours.data, body: "not json" } });
+    await arrive(null);
+    await arrive({ actionIdentifier: "expo.modules.notifications.actions.DEFAULT", notification: {} });
     expect(scheduled()).toEqual([]);
   });
 });

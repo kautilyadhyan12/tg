@@ -371,6 +371,8 @@ export async function startPhoneSession(
     await tx`
       UPDATE refresh_tokens SET revoked_at = now(), revoked_reason = 'signed_in_elsewhere'
       WHERE user_id = ${input.userId} AND client = 'phone' AND revoked_at IS NULL`;
+    // The ended sign-ins' notification addresses: nothing is sent to them again.
+    await tx`DELETE FROM push_tokens WHERE user_id = ${input.userId}`;
     await tx`
       INSERT INTO refresh_tokens (user_id, family_id, token_hash, expires_at, ip, user_agent, client)
       VALUES (${input.userId}, ${input.familyId}, ${input.tokenHash}, ${input.expiresAt},
@@ -549,6 +551,7 @@ export async function revokeFamily(sql: Sql, userId: string, familyId: string): 
     await tx`
       UPDATE refresh_tokens SET revoked_at = now()
       WHERE user_id = ${userId} AND family_id = ${familyId} AND revoked_at IS NULL`;
+    await tx`DELETE FROM push_tokens WHERE user_id = ${userId} AND family_id = ${familyId}`;
   });
 }
 
@@ -559,6 +562,7 @@ export async function revokeAllRefreshTokens(sql: Sql, userId: string): Promise<
     await tx`
       UPDATE refresh_tokens SET revoked_at = now()
       WHERE user_id = ${userId} AND revoked_at IS NULL`;
+    await tx`DELETE FROM push_tokens WHERE user_id = ${userId}`;
   });
 }
 
