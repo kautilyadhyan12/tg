@@ -74,3 +74,14 @@ export function tableName(food: CuratedFood): string {
   if (name === undefined) throw new Error(`no table words for ${food.name}`);
   return name;
 }
+
+/** All a food's own table says of it: its name, and a survey dish's ingredients. */
+export function tableText(food: CuratedFood): string {
+  const [table, id = ""] = food.citation.split(":");
+  if (table === "usda-fndds") {
+    const entry = SURVEY[id];
+    if (entry === undefined) throw new Error(`no table words for ${food.name}`);
+    return [entry[0], ...entry[1].map(([name]) => name)].join(" | ");
+  }
+  return tableName(food);
+}

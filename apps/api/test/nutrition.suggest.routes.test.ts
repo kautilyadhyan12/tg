@@ -304,6 +304,20 @@ d("meal ideas route (real Postgres)", () => {
     expect((await ok(teen)).kcalLeft).toBe(1901);
   });
 
+  it("the person's own time zone decides: in India no beef or pork, in New York no Indian dish, through the real route", { timeout: 60_000 }, async () => {
+    const india = await eater("india", "non_vegetarian", 6);
+    const usa = await eater("usa", "vegetarian", 6);
+    await sql`UPDATE users SET timezone = 'Asia/Kolkata' WHERE email = 'ideas-india@example.com'`;
+    await sql`UPDATE users SET timezone = 'America/New_York' WHERE email = 'ideas-usa@example.com'`;
+    const names = async (cookies: Cookies) => (await ok(cookies)).meals.flatMap((m) => m.ideas).flatMap((i) => i.items).map((i) => i.name);
+    const inIndia = await names(india);
+    expect(inIndia.length).toBeGreaterThan(0);
+    for (const n of inIndia) expect(/beef|pork|^steak|chili con carne|bolognese|cobb|paella|bibimbap|rice and beans with meat/i.test(n), n).toBe(false);
+    const inUsa = await names(usa);
+    expect(inUsa.length).toBeGreaterThan(0);
+    for (const n of inUsa) expect(/curry|\bdal\b|masala|tandoori|sambar|khichdi|roti|chapati/i.test(n), n).toBe(false);
+  });
+
   it("without a sign-in: 401", async () => {
     expect((await inject({ method: "GET", url: "/v1/nutrition/suggestions" })).statusCode).toBe(401);
   });

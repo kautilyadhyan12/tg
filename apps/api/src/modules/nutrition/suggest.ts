@@ -112,6 +112,48 @@ const SUGARS: readonly (readonly [name: string, gramsPer100g: number])[] = [
   ["Vegetable curry", 3.18], ["Whole wheat bread", 4.34],
 ];
 const SUGARS_PER_100G: ReadonlyMap<string, number> = new Map(SUGARS.map(([name, g]) => [named(name).canonical, g]));
+/** Where a person is, as far as their food goes (Kd, 2026-11-03): India, where beef and pork
+ *  are not suggested; the US, Canada, Europe, Australia and New Zealand, where Indian dishes
+ *  are not; anywhere else, or not known, nothing taken away. */
+export type FoodRegion = "india" | "west" | "other";
+const WEST_PREFIXES = ["Europe/", "Australia/", "US/", "Canada/", "America/Indiana/", "America/Kentucky/", "America/North_Dakota/"];
+const WEST_ZONES = new Set([
+  "Pacific/Honolulu", "Pacific/Auckland", "Pacific/Chatham", "NZ", "NZ-CHAT", "GB", "Eire",
+  "Atlantic/Reykjavik", "Atlantic/Canary", "Atlantic/Madeira", "Atlantic/Faroe", "Atlantic/Azores",
+  "America/New_York", "America/Chicago", "America/Denver", "America/Phoenix", "America/Los_Angeles", "America/Anchorage",
+  "America/Adak", "America/Boise", "America/Detroit", "America/Juneau", "America/Sitka", "America/Yakutat", "America/Nome",
+  "America/Metlakatla", "America/Menominee", "America/Indianapolis", "America/Louisville",
+  "America/Toronto", "America/Vancouver", "America/Edmonton", "America/Winnipeg", "America/Halifax", "America/St_Johns",
+  "America/Regina", "America/Moncton", "America/Glace_Bay", "America/Goose_Bay", "America/Whitehorse", "America/Dawson",
+  "America/Dawson_Creek", "America/Fort_Nelson", "America/Creston", "America/Iqaluit", "America/Rankin_Inlet",
+  "America/Resolute", "America/Cambridge_Bay", "America/Inuvik", "America/Swift_Current", "America/Atikokan",
+  "America/Blanc-Sablon", "America/Thunder_Bay", "America/Nipigon", "America/Rainy_River", "America/Yellowknife",
+  "America/Pangnirtung", "America/Montreal",
+]);
+/** The person's region from their time zone, the one place the app keeps where they are. */
+export function regionOf(timeZone: string | null): FoodRegion {
+  if (timeZone === null) return "other";
+  if (timeZone === "Asia/Kolkata" || timeZone === "Asia/Calcutta") return "india";
+  if (WEST_ZONES.has(timeZone) || WEST_PREFIXES.some((p) => timeZone.startsWith(p))) return "west";
+  return "other";
+}
+/** The suggested foods that hold beef or pork by their own table's words (counted 2026-11-03). */
+const BEEF_OR_PORK = [
+  "Steak (sirloin, cooked)", "Pork tenderloin (cooked)", "Ground beef 90% (cooked)", "Cobb salad (no dressing)", "Chili con carne",
+  "Beef stew", "Beef and broccoli", "Rice and beans with meat", "Spaghetti bolognese", "Paella (seafood)", "Bibimbap",
+];
+const INDIAN_DISHES = [
+  "Dal (lentil curry)", "Chana masala (chickpea curry)", "Chicken curry", "Vegetable curry", "Palak paneer (spinach and cheese curry)",
+  "Sambar (lentil and vegetable stew)", "Tandoori chicken", "Khichdi (rice and mung beans, with ghee)", "Roti / Chapati (homemade flatbread, no fat)",
+];
+const NOT_IN: Readonly<Record<FoodRegion, ReadonlySet<string>>> = {
+  india: new Set(BEEF_OR_PORK.map((n) => named(n).canonical)),
+  west: new Set(INDIAN_DISHES.map((n) => named(n).canonical)),
+  other: new Set(),
+};
+/** Whether a food may be suggested to somebody in the region. */
+export const regionAllows = (region: FoodRegion, canonical: string): boolean => !NOT_IN[region].has(canonical);
+
 /** The Dietary Guidelines for Americans 2025–2030, p. 4: "one meal should contain no more
  *  than 10 grams of added sugars." */
 export const MOST_MEAL_ADDED_SUGAR_G = 10;
@@ -358,6 +400,8 @@ export interface SuggestInput extends DayNumbers {
   hour?: number;
   /** A workout of the person's ended within AFTER_WORKOUT_MS: the next meal is the meal after it. */
   afterWorkout?: boolean;
+  /** Where the person is (`regionOf`); absent, nothing is taken away. */
+  region?: FoodRegion;
 }
 
 export interface Suggested { kcalLeft: number; meals: SuggestedMeal[] }
@@ -417,9 +461,10 @@ export function ideaMaker(
   seed: string,
   diet: Diet,
   avoid: Iterable<string> = [],
+  region: FoodRegion = "other",
 ): (kcalTarget: number, wanted: MealIdeaKind, mostKcal?: number, leastKcal?: number, protein?: ProteinAim) => MealIdea | null {
   const next = drawer(hash(seed));
-  const allowed = (role: SuggestRole): CuratedFood[] => SUGGEST_POOLS[role].filter((f) => dietAllows(diet, f.diet));
+  const allowed = (role: SuggestRole): CuratedFood[] => SUGGEST_POOLS[role].filter((f) => dietAllows(diet, f.diet) && regionAllows(region, f.canonical));
   /** The foods already in an idea of this reply, and those `avoid` names (a meal being swapped). */
   const used = new Set<string>(avoid);
   /** The foods of a meal being swapped: an idea holding one is taken only where no other fits. */
@@ -519,7 +564,7 @@ export function ideaMaker(
  *  An idea that cannot be made to its meal's calories is left out. */
 export function suggestMeals(input: SuggestInput): Suggested {
   const { kcalLeft, count, kcalTarget } = mealSizes(input);
-  const make = ideaMaker(`${input.seed}|${input.day}`, input.diet);
+  const make = ideaMaker(`${input.seed}|${input.day}`, input.diet, [], input.region);
   const types = input.hour === undefined ? null : mealsAhead(input.mealsPerDay, input.hour, count, input.mealsLogged);
   const p = input.protein;
   // The day's protein still to eat, shared across the meals still to come (spec Part 6 §16.6, 1 and 2).
@@ -556,6 +601,7 @@ export interface AfterWorkoutInput {
   day: DayNumbers | null;
   /** The person's weight, for the protein after the workout; null where not known. */
   weightKg: number | null;
+  region?: FoodRegion;
 }
 export type AfterWorkoutWhen = "soon" | "meal";
 export interface AfterWorkoutIdea { when: AfterWorkoutWhen; kcalTarget: number; idea: MealIdea }
@@ -571,7 +617,7 @@ export function suggestAfterWorkout(input: AfterWorkoutInput): AfterWorkoutIdea[
   if (sizes !== null && sizes.count === 0) return [];
   /** What the day has left for the ideas still to make. */
   let room = sizes === null ? Infinity : sizes.kcalLeft;
-  const make = ideaMaker(input.seed, input.diet);
+  const make = ideaMaker(input.seed, input.diet, [], input.region);
   const out: AfterWorkoutIdea[] = [];
   const add = (when: AfterWorkoutWhen, kcalTarget: number, kind: MealIdeaKind): void => {
     if (kcalTarget < LEAST_MEAL_KCAL) return;

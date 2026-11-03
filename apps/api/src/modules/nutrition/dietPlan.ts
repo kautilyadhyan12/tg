@@ -3,7 +3,7 @@
 // out. Every meal is an idea of the meal ideas' own rule (`ideaMaker`), so the foods,
 // the diet rule and the amounts are the same as theirs.
 import { MOST_PLAN_MEALS, type Diet, type MealIdea, type MealIdeaKind, type MealType } from "@app/shared";
-import { LEAST_MEAL_KCAL, MEAL_LAYOUT, MOST_LIGHT_KCAL, MOST_MEALS, MOST_MEAL_KCAL, hash, ideaMaker, proteinAim, type ProteinAim } from "./suggest.js";
+import { LEAST_MEAL_KCAL, MEAL_LAYOUT, MOST_LIGHT_KCAL, MOST_MEALS, MOST_MEAL_KCAL, hash, ideaMaker, proteinAim, type FoodRegion, type ProteinAim } from "./suggest.js";
 
 /** Each meal's share of the day, by its kind. */
 const WEIGHT: Readonly<Record<MealType, number>> = { breakfast: 3, lunch: 4, dinner: 4, snack: 1.5 };
@@ -74,6 +74,8 @@ export interface PlanDayInput {
   kcalTarget: number;
   /** The person's weight and the day's protein (31d); absent, the meals are drawn for calories alone. */
   protein?: { weightKg: number; dayTargetG: number | null };
+  /** Where the person is (`regionOf`); absent, nothing is taken away. */
+  region?: FoodRegion;
 }
 
 /** A meal's protein in the week: the day's shared by each meal's calories (spec Part 6 §16.6). */
@@ -96,7 +98,7 @@ export function planDay(input: PlanDayInput): PlannedMeal[] {
   const better = (kcal: number, than: number): boolean =>
     kcal >= input.kcalTarget !== than >= input.kcalTarget ? kcal >= input.kcalTarget : Math.abs(kcal - input.kcalTarget) < Math.abs(than - input.kcalTarget);
   for (let draw = 0; draw < DAY_DRAWS; draw++) {
-    const make = ideaMaker(`${input.seed}|${String(input.day)}|${String(draw)}`, input.diet);
+    const make = ideaMaker(`${input.seed}|${String(input.day)}|${String(draw)}`, input.diet, [], input.region);
     let turn = input.day;
     const meals = slots.flatMap((slot): PlannedMeal[] => {
       const kind = kindOf(slot.mealType, slot.mealType === "lunch" || slot.mealType === "dinner" ? turn++ : turn);
@@ -123,6 +125,7 @@ export interface SwapInput {
   foods: readonly string[];
   /** The protein the meal is drawn for (`slotProtein`); absent, calories alone. */
   protein?: ProteinAim | undefined;
+  region?: FoodRegion;
 }
 
 /** Another idea for one meal: of the same kind and near the same calories (held to
@@ -133,7 +136,7 @@ export function swapMeal(input: SwapInput): MealIdea | null {
   const now = foodsKey(input.foods);
   for (let draw = 0; draw < DAY_DRAWS; draw++) {
     const seed = `${input.seed}|${String(draw)}`;
-    const idea = ideaMaker(seed, input.diet, input.foods)(kcal, kindOf(input.mealType, hash(seed)), Infinity, 0, input.protein);
+    const idea = ideaMaker(seed, input.diet, input.foods, input.region)(kcal, kindOf(input.mealType, hash(seed)), Infinity, 0, input.protein);
     if (idea !== null && foodsKey(idea.items.map((i) => i.canonical)) !== now) return idea;
   }
   return null;

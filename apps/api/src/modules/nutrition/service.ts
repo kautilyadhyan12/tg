@@ -50,7 +50,7 @@ import { onMealLogged } from "../gamification/service.js";
 import { refundQuota } from "../quotas/service.js";
 import { dayInTz, hourInTz, safeTimeZone } from "../gamification/streak.js";
 import { getUserFoodAnswers, getUserPlanAndCutRules, getUserSyncContext } from "../users/service.js";
-import { AFTER_WORKOUT_MS, LEAST_MEAL_KCAL, suggestAfterWorkout, suggestMeals, type AfterWorkoutIdea, type DayNumbers } from "./suggest.js";
+import { AFTER_WORKOUT_MS, LEAST_MEAL_KCAL, regionOf, suggestAfterWorkout, suggestMeals, type AfterWorkoutIdea, type DayNumbers } from "./suggest.js";
 import { ownTargetsHeld, targetsFromPlan } from "./targets.js";
 import { foodWeek, spanDays } from "./foodWeek.js";
 import { CURATED_FOODS, curatedPieceFdcId, curatedUsdaFdcId, findCurated, findCuratedVersions, holdsEveryWord, searchCurated, slug } from "./foods.js";
@@ -805,7 +805,7 @@ export async function getMealIdeas(deps: Pick<NutritionDeps, "sql">, userId: str
   const weightKg = read.answers.weightKg ?? null;
   const { kcalLeft, meals } = suggestMeals({
     seed: ideasSeed(userId, eaten.meals), day, diet, mealsPerDay, kcalTarget: targets.kcal, kcalEaten: eaten.kcal, mealsLogged: eaten.meals,
-    hour: hourInTz(now, timeZone), afterWorkout,
+    hour: hourInTz(now, timeZone), afterWorkout, region: regionOf(ctx.timezone),
     ...(weightKg === null ? {} : { protein: { weightKg, dayTargetG: targets.proteinG, eatenG: eaten.proteinG } }),
   });
   return mealIdeasResponseSchema.parse({
@@ -845,7 +845,7 @@ export async function getAfterWorkoutIdeas(
     day = { mealsPerDay: answers.mealsPerDay ?? 3, kcalTarget: targets.kcal, kcalEaten: eaten.kcal, mealsLogged: eaten.meals };
   }
   return {
-    ideas: suggestAfterWorkout({ seed: `${userId}|${workout.id}`, diet, kcalBurned: workout.kcalBurned, day, weightKg: read.answers.weightKg ?? null }),
+    ideas: suggestAfterWorkout({ seed: `${userId}|${workout.id}`, diet, kcalBurned: workout.kcalBurned, day, weightKg: read.answers.weightKg ?? null, region: regionOf(ctx.timezone) }),
     labelCaution: diet === "non_vegetarian" ? null : DIET_LABEL_CAUTION,
   };
 }

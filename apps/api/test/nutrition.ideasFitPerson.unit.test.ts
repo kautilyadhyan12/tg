@@ -4,11 +4,11 @@
 // words from real USDA descriptions the list has never held.
 import { describe, expect, it } from "vitest";
 import { dietAllows, type Diet, type MealIdea, type MealType } from "@app/shared";
-import { foodOf, tableName } from "./foodDietByTable.js";
+import { foodOf, tableName, tableText } from "./foodDietByTable.js";
 import { planDay } from "../src/modules/nutrition/dietPlan.js";
 import {
-  IDEA_TOLERANCE, MEAL_LAYOUT, MOST_MEAL_ADDED_SUGAR_G, SUGGEST_POOLS, addedSugarAtMost, mealsAhead, proteinAim, suggestAfterWorkout, suggestMeals,
-  type SuggestInput,
+  IDEA_TOLERANCE, MEAL_LAYOUT, MOST_MEAL_ADDED_SUGAR_G, SUGGEST_POOLS, addedSugarAtMost, mealsAhead, proteinAim, regionOf, suggestAfterWorkout, suggestMeals,
+  type FoodRegion, type SuggestInput,
 } from "../src/modules/nutrition/suggest.js";
 
 const DIETS: readonly Diet[] = ["vegan", "vegetarian", "vegetarian_eggs", "non_vegetarian"];
@@ -271,6 +271,66 @@ describe("the app's week is drawn the same way", () => {
         }
       }
       expect(met / n, diet).toBeGreaterThanOrEqual(0.95);
+    }
+  });
+});
+
+describe("where the person is (Kd, 2026-11-03): no beef or pork in India, no Indian dishes in the US, Canada, Europe, Australia and New Zealand", () => {
+  it("the region is read from the person's real time zone, old names included", () => {
+    const cases: [zone: string | null, region: FoodRegion][] = [
+      ["Asia/Kolkata", "india"], ["Asia/Calcutta", "india"],
+      ["America/New_York", "west"], ["America/Los_Angeles", "west"], ["America/Chicago", "west"], ["America/Toronto", "west"],
+      ["America/Vancouver", "west"], ["America/Indiana/Indianapolis", "west"], ["Europe/London", "west"], ["Europe/Berlin", "west"],
+      ["Australia/Sydney", "west"], ["Pacific/Auckland", "west"], ["Pacific/Honolulu", "west"],
+      ["America/Sao_Paulo", "other"], ["America/Mexico_City", "other"], ["Asia/Dubai", "other"], ["Asia/Singapore", "other"],
+      ["Asia/Tokyo", "other"], ["Asia/Karachi", "other"], ["Africa/Lagos", "other"], ["Etc/GMT-14", "other"], ["UTC", "other"], [null, "other"],
+    ];
+    for (const [zone, region] of cases) expect(regionOf(zone), String(zone)).toBe(region);
+  });
+
+  /** Words a food table uses for beef or pork, read from each food's own USDA entry and a dish's ingredients. */
+  const BEEF_PORK = /\b(beef|pork|bacon|ham|sausage|chorizo|veal|salami|pepperoni|lard|gelatin)\b/i;
+  const INDIAN = /\b(curry|dal|masala|tandoori|sambar|khichdi|roti|chapati)\b/i;
+
+  it("in India, no idea holds a food whose own table says beef or pork; in the West, no Indian dish; elsewhere, nothing taken away", () => {
+    for (const diet of DIETS) {
+      const seen: Record<FoodRegion, Set<string>> = { india: new Set(), west: new Set(), other: new Set() };
+      for (const { input } of sweepInputs(diet)) {
+        for (const region of ["india", "west", "other"] as const) {
+          const meals = suggestMeals({ ...input, region }).meals;
+          for (const meal of meals) {
+            expect(meal.ideas.length, `${diet} ${region}`).toBeGreaterThan(0);
+            for (const item of meal.ideas.flatMap((i) => i.items)) {
+              seen[region].add(item.name);
+              const food = foodOf(item.canonical);
+              if (region === "india") expect(BEEF_PORK.test(tableText(food)), `${diet} in India: ${item.name}`).toBe(false);
+              if (region === "west") expect(INDIAN.test(item.name), `${diet} in the West: ${item.name}`).toBe(false);
+            }
+          }
+          if (region === "other") expect(meals).toEqual(suggestMeals(input).meals);
+        }
+      }
+      // The rule takes only those foods away: a meat eater in the West is still offered meat, and in India Indian dishes.
+      if (diet === "non_vegetarian") {
+        expect([...seen.west].some((n) => BEEF_PORK.test(n) || n.startsWith("Steak"))).toBe(true);
+        expect([...seen.india].some((n) => INDIAN.test(n))).toBe(true);
+      }
+    }
+  });
+
+  it("the week and the meal after a workout keep to the same rule", () => {
+    for (let d = 1; d <= 7; d++) {
+      for (const meal of planDay({ seed: "r", day: d, diet: "non_vegetarian", mealsPerDay: 4, kcalTarget: 2600, region: "india", protein: { weightKg: 80, dayTargetG: 128 } })) {
+        for (const item of meal.idea.items) expect(BEEF_PORK.test(tableText(foodOf(item.canonical))), item.name).toBe(false);
+      }
+      for (const meal of planDay({ seed: "r", day: d, diet: "vegetarian", mealsPerDay: 4, kcalTarget: 2600, region: "west" })) {
+        for (const item of meal.idea.items) expect(INDIAN.test(item.name), item.name).toBe(false);
+      }
+    }
+    for (let w = 0; w < 30; w++) {
+      for (const { idea } of suggestAfterWorkout({ seed: `w${String(w)}`, diet: "non_vegetarian", kcalBurned: 450, day: null, weightKg: 80, region: "india" })) {
+        for (const item of idea.items) expect(BEEF_PORK.test(tableText(foodOf(item.canonical))), item.name).toBe(false);
+      }
     }
   });
 });
