@@ -4486,7 +4486,15 @@ is signed where either changed (`facts_changed`, `agreement_changed`). The signa
 details and the wording, with who opened the screen; a copy is emailed to the record's address
 (View, then Email a copy, sends it again). A wording changed later reaches memberships given after
 it. A record deleted for good lets go of its signatures with the day; the purge removes them six
-years later, as a desk waiver's. *As built, 18u-ii-a (an agreement for each line of the price
+years later, as a desk waiver's. *As built, 18u-iii (signed forms of deleted members):* Settings →
+Signed forms of deleted members, for the gym's own owner alone (a co-owner and other staff read
+"Only the owner of {gym} can see the signed forms of deleted members."; the server answers them
+403, anybody not on its staff 404): each desk waiver and membership agreement whose record was
+deleted for good, newest deletion first, fifty at a time with Show more, searched by the name
+signed or the member the agreement names; each row says whom it is about, what it is, who signed
+and when, the day of the deletion and "Kept until" (that day six years on, when the purge removes
+it); View opens it under its row as signed, word for word, with nothing to change or remove.
+Delete permanently says the signed forms are kept for the owner in Settings. *As built, 18u-ii-a (an agreement for each line of the price
 list):* Settings → Membership agreements keeps the main agreement and Add agreement, for others
 with a name of their own (no two alike, "Main agreement" included), each with its words, numbered
 as the main one's, and "Used for", the lines of the price list ticked for it; a line not ticked on
