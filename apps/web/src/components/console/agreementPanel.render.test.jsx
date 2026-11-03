@@ -257,7 +257,7 @@ describe('Before they book: no new bookings until the membership agreement is si
     orgService.getAgreementBookings.mockResolvedValueOnce({ data: { rule: 'stop', inUse: true, stopped: { ...STOPPED, staff: 1 } } });
     open(IN_USE);
     expect(await screen.findByText('Today 8 people on your list have a membership agreement to sign:')).toBeTruthy();
-    expect(screen.getByText("Except your staff, they can't book classes or personal training in the app until they sign.")).toBeTruthy();
+    expect(screen.getByText("They can't book classes or personal training in the app until they sign. Your staff can still book.")).toBeTruthy();
     cleanup();
     orgService.getAgreementBookings.mockResolvedValueOnce({ data: { rule: 'stop', inUse: true, stopped: { count: 1, staff: 1, people: [{ entryId: bid(9), name: 'Kim Coach' }] } } });
     open(IN_USE);
