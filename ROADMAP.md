@@ -614,7 +614,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 31a. [x] **The Dashboard as drawn** — merged 2026-10-27 (PR #371).
     - 31b. [x] **Your Goals on the Dashboard** — merged 2026-10-28 (PR #374).
     - 31c. [x] **Recommended For You, by kind and by choice: the plan** — merged 2026-11-03 (PR #448).
-    - 31d. [ ] **Meal ideas that fit the person** (spec Part 6 §16.6): each meal's protein from the person's weight and what is left today, the meal after a workout, breakfast foods at breakfast, oats cooked with milk, a one-line why; the same in the app's week. Opus xhigh: a rule that picks.
+    - 31d. **Meal ideas that fit the person** (spec Part 6 §16.6; split 2026-11-03: the server first).
+      - 31d-i. [ ] **The ideas drawn for the person** (Kd, 2026-11-03: *"go"*): each meal's protein from the person's weight and what is left today, the meal after a workout, breakfast foods at breakfast, oats with milk, the sugar limit; the same in the app's week.
+      - 31d-ii. [ ] **Why, in one line, under each idea on the phone** ("41 g protein · your share for this meal").
     - 31e. [ ] **Food allergies** (§16.6): asked once where the meal ideas first show, changed in Settings; never suggested; marked on any plan's meal that holds one.
     - 31f. [ ] **Recommended For You's three choices**: Suggested, the gym's and My plan, one choice for each kind, kept on the server and the same on the Dashboard and in Food (§16.6). The gym's appears with 31g.
     - 31g. [ ] **The gym's meal plan on the phone** (§16.6). Waits for Stage 2's 24a.
