@@ -371,7 +371,16 @@ export function registerNutritionRoutes(
     return reply.send(await dietPlan.getDietPlan(readDeps, authedUserId(req)));
   });
 
-  app.post("/v1/nutrition/diet-plan/make", { preHandler: [app.authenticate] }, async (req, reply) => {
+  // Making a week draws ideas for every meal of seven days: a person may ask a few times a minute, never in a loop.
+  const planMakeLimit = createDualRateLimit({
+    name: "nutrition_diet_plan_make",
+    max: 10,
+    ipMax: null,
+    windowMs: 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
+  app.post("/v1/nutrition/diet-plan/make", { preHandler: [app.authenticate, planMakeLimit] }, async (req, reply) => {
     const v = parse(makeDietPlanRequestSchema, req.body, req, reply);
     if (v === null) return;
     return reply.send(await dietPlan.makeDietPlan(nutritionDeps, authedUserId(req), v));

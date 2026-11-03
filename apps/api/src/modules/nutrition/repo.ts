@@ -264,16 +264,28 @@ export async function dayEaten(
   timeZone: string,
   day: string,
   leastMealKcal: number,
-): Promise<{ kcal: number; meals: number }> {
-  const rows = await sql<{ kcal: string; meals: string }[]>`
-    SELECT coalesce(sum(kcal_point), 0) AS kcal,
+): Promise<{ kcal: number; meals: number; proteinG: number }> {
+  const rows = await sql<{ kcal: string; meals: string; protein_g: string }[]>`
+    SELECT coalesce(sum(kcal_point), 0) AS kcal, coalesce(sum(protein_g), 0) AS protein_g,
            count(*) FILTER (WHERE meal_type IS DISTINCT FROM 'snack' AND kcal_point >= ${leastMealKcal}) AS meals
     FROM meal_logs
     WHERE user_id = ${userId}
       AND taken_at >= (${day}::date - 1)::timestamp AT TIME ZONE 'UTC'
       AND taken_at < (${day}::date + 2)::timestamp AT TIME ZONE 'UTC'
       AND (taken_at AT TIME ZONE ${timeZone})::date = ${day}::date`;
-  return { kcal: Number(rows[0]?.kcal ?? 0), meals: Number(rows[0]?.meals ?? 0) };
+  return { kcal: Number(rows[0]?.kcal ?? 0), meals: Number(rows[0]?.meals ?? 0), proteinG: Number(rows[0]?.protein_g ?? 0) };
+}
+
+/** Whether a workout of the person's own ended at or after `since` (and not after `now`):
+ *  its end, else its start and length, else its start. */
+export async function workoutEndedSince(sql: Sql, userId: string, since: Date, now: Date): Promise<boolean> {
+  const rows = await sql`
+    SELECT 1 FROM workouts
+    WHERE user_id = ${userId}
+      AND started_at >= ${since}::timestamptz - interval '1 day' AND started_at <= ${now}
+      AND coalesce(ended_at, started_at + coalesce(duration_ms, 0) * interval '1 millisecond') BETWEEN ${since} AND ${now}
+    LIMIT 1`;
+  return rows.length > 0;
 }
 
 /** Whether any meal, anybody's, has that id. */

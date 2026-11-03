@@ -33,7 +33,7 @@ function* sweep(diet: Diet): Generator<SuggestInput> {
 }
 
 const dayOf = (over: Partial<DayNumbers> = {}): DayNumbers => ({ mealsPerDay: 3, kcalTarget: 2000, kcalEaten: 0, mealsLogged: 0, ...over });
-const after = (over: Partial<AfterWorkoutInput> = {}): AfterWorkoutInput => ({ seed: "person-1|workout-1", diet: "non_vegetarian", kcalBurned: 300, day: dayOf(), ...over });
+const after = (over: Partial<AfterWorkoutInput> = {}): AfterWorkoutInput => ({ seed: "person-1|workout-1", diet: "non_vegetarian", kcalBurned: 300, day: dayOf(), weightKg: null, ...over });
 
 /** Every case of the workout sweep: 60 workouts, 6 burns, a day with no calorie
  *  number and 6 day sizes at 4 points in the day. */
@@ -108,7 +108,9 @@ describe("THE WORST THING: nobody is offered a food their diet does not eat", ()
   it("every diet has foods for every part of a meal", () => {
     for (const diet of DIETS) {
       for (const [role, pool] of Object.entries(SUGGEST_POOLS)) {
-        expect(pool.filter((f) => dietAllows(diet, f.diet)).length, `${diet} ${role}`).toBeGreaterThanOrEqual(2);
+        // Eggs are for those who eat them; the milk for oats is one for each diet.
+        const least = role === "eggs" ? (dietAllows(diet, "vegetarian_eggs") ? 2 : 0) : role === "milk" ? 1 : 2;
+        expect(pool.filter((f) => dietAllows(diet, f.diet)).length, `${diet} ${role}`).toBeGreaterThanOrEqual(least);
       }
     }
   });
