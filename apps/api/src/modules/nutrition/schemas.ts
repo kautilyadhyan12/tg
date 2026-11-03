@@ -3,7 +3,7 @@ export {
   createDishwareRequestSchema, createMealRequestSchema, dietPlanDayParamsSchema, dietPlanMealParamsSchema, foodSearchQuerySchema, foodWeekQuerySchema, genderSchema, manualMealRequestSchema,
   makeDietPlanRequestSchema, mealEditPreviewRequestSchema, nutritionListQuerySchema, nutritionTargetsResponseSchema,
   nutritionTargetsSchema, ownNutritionTargetsSchema, patchBodyMeasurementSchema, patchDishwareSchema,
-  patchMealRequestSchema, previewMealRequestSchema, putDietPlanDayRequestSchema, putNutritionTargetsRequestSchema,
+  patchMealRequestSchema, previewMealRequestSchema, putDietPlanDayRequestSchema, putFoodChoiceRequestSchema, putNutritionTargetsRequestSchema,
   ringTargetsSourceSchema, swapDietPlanMealRequestSchema,
 } from "@app/shared";
 export type {
