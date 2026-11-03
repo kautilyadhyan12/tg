@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react-native";
 import { App } from "../../src/App";
-import { drawPush } from "../../src/notifications/drawn";
+import { PUSH_TASK, drawPush, startPushTask } from "../../src/notifications/drawn";
 import { RAVI, fakeServer, kept, memoryStore, refusal, tokens, type Reply, type Route } from "../kit";
 
 // A gym's messages as phone notifications (ROADMAP Stage 5 item 18b-i): the reason before Android
@@ -568,6 +568,22 @@ describe("THE WORST THING: a message Firebase hands the phone is drawn only for 
     await arrive(pushed({ kind: "gym_comment", gymId: IRON.id, postId: POST }));
     expect(scheduled()).toEqual([]);
     await arrive(pushed({ kind: "gym_inbox", gymId: IRON.id }, "Iron House", "Words.", MEERA.id));
+    expect(scheduled()).toHaveLength(1);
+  });
+
+  it("the app's start defines the task Android runs and registers it, and that task draws for the person signed in", async () => {
+    const tasks = jest.requireMock<{ tasks: Map<string, (body: { data: unknown }) => Promise<void>> }>("expo-task-manager").tasks;
+    const registered = jest.requireMock<{ notifications: { registeredTasks: string[] } }>("expo-notifications").notifications.registeredTasks;
+    tasks.clear();
+    registered.length = 0;
+    startPushTask();
+    expect(registered).toEqual([PUSH_TASK]);
+    const task = tasks.get(PUSH_TASK);
+    if (task === undefined) throw new Error("no task defined");
+    secureStore.kept.set("session", kept(1));
+    await act(async () => {
+      await task({ data: pushed({ kind: "gym_inbox", gymId: IRON.id }) });
+    });
     expect(scheduled()).toHaveLength(1);
   });
 

@@ -290,6 +290,22 @@ d("a gym's messages and the member's inbox (real Postgres)", () => {
       expect(mark.statusCode, mark.body).toBe(200);
       expect(JSON.parse(mark.body)).toEqual({ unread: 1 });
       expect((await inbox(gym, maya)).messages.map((m) => [m.kind, m.read])).toEqual([["birthday", false], ["welcome", true]]);
+      // The re-check's race: the only message shown is newer than the late one (a new member's Welcome
+      // from the run, landing after a staff message). It stays new too.
+      clock = minutes(NOON, 10);
+      const newcomer = await joins(gym, "Nina Paul");
+      await sql`
+        INSERT INTO gym_member_messages (gym_id, user_id, kind, occasion, body, gym_day, sent_at, expires_at)
+        VALUES (${gym.id}, ${newcomer.userId}, 'group', 'staff:towels', 'Towels are back.', '2026-10-09', ${minutes(NOON, 9)}, ${days(NOON, 30)})`;
+      const first = await inbox(gym, newcomer);
+      expect(first.messages.map((m) => m.body)).toEqual(["Towels are back."]);
+      await sql`
+        INSERT INTO gym_member_messages (gym_id, user_id, kind, occasion, body, gym_day, sent_at, expires_at)
+        VALUES (${gym.id}, ${newcomer.userId}, 'welcome', 'welcome:lag', 'Welcome to the gym, Nina.', '2026-10-09', ${minutes(NOON, 8)}, ${days(NOON, 30)})`;
+      const marked = await inject("POST", `${path(gym.id)}/read`, newcomer.cookies, { upTo: first.asOf, ids: first.messages.map((m) => m.id) });
+      expect(JSON.parse(marked.body)).toEqual({ unread: 1 });
+      expect((await inbox(gym, newcomer)).messages.map((m) => [m.body, m.read])).toEqual([["Towels are back.", true], ["Welcome to the gym, Nina.", false]]);
+
       // An id of somebody else's, or another gym's, marks nothing of theirs; more than a page is refused.
       const other = await joins(gym, "Omar Shah");
       await run([gym]);

@@ -101,17 +101,19 @@ export async function unreadCounts(sql: SqlOrTx, userId: string, now: Date): Pro
   return new Map(rows.map((row) => [row.gym_id, row.n]));
 }
 
-/** Marks as read the person's own messages from this gym sent up to `upTo`; with `ids`, only those
- *  and any older than all of them. Asked twice, the first instant is kept. */
-export async function markRead(sql: SqlOrTx, gymId: string, userId: string, upTo: Date, now: Date, ids: readonly string[] | null): Promise<void> {
+/** Marks as read the person's own messages from this gym sent up to `upTo`; with `ids`, only those.
+ *  A read cut at its limit (`full`) also marks those older than all of them, which it could not show; a
+ *  read that was not cut showed every one, so an older one is one saved after it and stays new. Asked
+ *  twice, the first instant is kept. */
+export async function markRead(sql: SqlOrTx, gymId: string, userId: string, upTo: Date, now: Date, ids: readonly string[] | null, full: boolean): Promise<void> {
   const shown = ids === null ? null : [...ids];
   await sql`
     UPDATE gym_member_messages SET read_at = ${now}
     WHERE gym_id = ${gymId} AND user_id = ${userId} AND read_at IS NULL AND sent_at <= ${upTo}
-      AND (${shown}::uuid[] IS NULL OR id = ANY(${shown}::uuid[]) OR sent_at < (
+      AND (${shown}::uuid[] IS NULL OR id = ANY(${shown}::uuid[]) OR (${full} AND sent_at < (
         SELECT min(s.sent_at) FROM gym_member_messages s
         WHERE s.gym_id = ${gymId} AND s.user_id = ${userId} AND s.id = ANY(${shown}::uuid[])
-      ))`;
+      )))`;
 }
 
 // ── WHAT THE WORKER READS AND WRITES ──

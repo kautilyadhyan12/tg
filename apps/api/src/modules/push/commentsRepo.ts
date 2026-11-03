@@ -40,7 +40,10 @@ export async function pendingCommentPairs(
              SELECT 1 FROM gym_post_comment_notices t
              WHERE t.user_id = x.user_id AND t.gym_id = x.gym_id AND t.told_at IS NOT NULL AND t.told_at > ${toldSince}
            ) AS told_lately,
-           bool_or(x.claimed_at IS NOT NULL AND x.claimed_at >= ${claimedBefore}) AS busy,
+           EXISTS (
+             SELECT 1 FROM gym_post_comment_notices c
+             WHERE c.user_id = x.user_id AND c.gym_id = x.gym_id AND c.claimed_at IS NOT NULL AND c.claimed_at >= ${claimedBefore}
+           ) AS busy,
            min(x.created_at)::text AS first
     FROM gym_post_comment_notices x
     JOIN users u ON u.id = x.user_id
@@ -83,7 +86,7 @@ export async function claimComments(
           SELECT 1 FROM gym_post_comment_notices t
           WHERE t.user_id = ${userId} AND t.gym_id = ${gymId}
             AND ((t.told_at IS NOT NULL AND t.told_at > ${input.toldSince})
-              OR (t.done_at IS NULL AND t.claimed_at IS NOT NULL AND t.claimed_at >= ${input.claimedBefore}))
+              OR (t.claimed_at IS NOT NULL AND t.claimed_at >= ${input.claimedBefore}))
         )
       RETURNING comment_id, created_at >= ${input.since} AS fresh`;
   });

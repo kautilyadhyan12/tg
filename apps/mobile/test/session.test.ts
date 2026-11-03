@@ -99,6 +99,25 @@ describe("the worst thing: no internet never signs anybody out, and a signed-out
     expect(online.asked.filter((a) => a.path === "/v1/auth/logout")).toHaveLength(1);
   });
 
+  it("Google sign-in tells an owed sign-out before it signs anybody in", async () => {
+    const owedStore = memoryStore(JSON.stringify({ signOutOwed: ["refresh-1"] }));
+    const online = fakeServer({
+      "/v1/auth/google/phone/start": () => ({ status: 200, body: { nonce: "n".repeat(43), clientId: "client.apps.googleusercontent.com" } }),
+      "/v1/auth/google/phone": () => ({ status: 200, body: { user: MEERA, isNewAccount: false, tokens: tokens(5) } }),
+      "/v1/auth/logout": () => ({ status: 200, body: {} }),
+    });
+    const session = createSession({
+      server: { apiUrl: API, ask: online.ask },
+      store: memoryStore(null),
+      owedStore,
+      onChange: () => undefined,
+      google: () => Promise.resolve({ kind: "token", idToken: "google-id-token" }),
+    });
+    await session.signInWithGoogle();
+    expect(online.asked.map((one) => one.path)).toEqual(["/v1/auth/google/phone/start", "/v1/auth/logout", "/v1/auth/google/phone"]);
+    expect(owedStore.value).toBeNull();
+  });
+
   it("two people sign out with no internet, one after the other: both are owed, and both are told", async () => {
     const offline = fakeServer({
       "/v1/auth/code/verify": () => ({ status: 200, body: { user: MEERA, isNewAccount: false, tokens: tokens(5) } }),

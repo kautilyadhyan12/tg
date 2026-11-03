@@ -632,6 +632,26 @@ d("phone notifications for comments and replies (real Postgres)", () => {
     expect(sentTo(asha.token)).toHaveLength(before);
   });
 
+  it("Updates opened while a run is telling it, then a new comment and a second run: still one notification in the half hour", { timeout: TIMEOUT_MS }, async () => {
+    const gym = await makeGym("Read And Race Gym");
+    const at = noonIndia();
+    const asha = await member(gym, "Asha", true);
+    const ben = await member(gym, "Ben");
+    const post = await postBy(gym, asha.who);
+    await comment(gym, ben.who, post, "One");
+    await writtenAt(gym, at);
+    const held = holding(asha.token);
+    const first = sendCommentNotifications({ sql, sender: held.holder, now: () => at, gymIds });
+    await held.inSend;
+    expect((await request("GET", `/v1/orgs/${gym}/posts`, { bearer: asha.who.accessToken })).statusCode).toBe(200);
+    await comment(gym, ben.who, post, "Two");
+    await writtenAt(gym, minutes(at, 0.1));
+    await sweep(minutes(at, 0.2));
+    expect(sentTo(asha.token).map((m) => m.body)).toEqual(["Ben commented on your post: One"]);
+    held.release();
+    await first;
+  });
+
   it("one post: a post by somebody the reader blocked, a hidden post, and a reader removed from the gym are told it is not there", { timeout: TIMEOUT_MS }, async () => {
     const gym = await makeGym("Post Rules Gym");
     const asha = await member(gym, "Asha");
