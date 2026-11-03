@@ -5,6 +5,7 @@
 // is cleared in the statement that finishes a row.
 import { CARD_EXPIRY_LAST_DAY } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
+import { STILL_RENEWS } from "../memberships/heldRepo.js";
 import type { SquareEnvironment } from "./square.js";
 
 type SqlOrTx = Sql | TransactionSql;
@@ -25,7 +26,7 @@ const paysForRenewal = (sql: SqlOrTx) => sql`
 /** A membership (alias `h`) that renews, running or frozen, of a current member. Each half of
  *  `paysForRenewal` finds it by its record, so neither reads the gym's other memberships. */
 const renewing = (sql: SqlOrTx) => sql`
-      h.kind = 'recurring' AND h.renews AND h.status IN ('active','frozen')
+      ${STILL_RENEWS(sql)} AND h.status IN ('active','frozen')
       AND NOT EXISTS (SELECT 1 FROM gym_member_list_entries m WHERE m.gym_id = h.gym_id AND m.id = h.entry_id AND m.former_at IS NOT NULL)`;
 
 /** The card (alias `k`) is due a reminder, in the gym's month `today` (alias `d` names the gym's day,

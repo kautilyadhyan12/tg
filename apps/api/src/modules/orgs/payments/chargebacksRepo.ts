@@ -13,6 +13,7 @@ import {
   type MemberFeeKind,
 } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
+import { STILL_RENEWS } from "../memberships/heldRepo.js";
 import { writeRefund } from "../memberships/billsRepo.js";
 import { refundTargetOf } from "../memberships/billsSql.js";
 import { lockGym } from "../memberList/repo.js";
@@ -286,7 +287,7 @@ export async function chargebackStartPreview(sql: SqlOrTx, gymId: string, id: st
           FROM gym_held_memberships h
           JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id AND e.former_at IS NULL
           LEFT JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
-          WHERE h.gym_id = ${gymId} AND h.kind = 'recurring' AND h.renews AND h.status IN ('active','frozen')
+          WHERE h.gym_id = ${gymId} AND ${STILL_RENEWS(sql)} AND h.status IN ('active','frozen')
             AND COALESCE((SELECT x.payer_entry_id FROM gym_member_payers x WHERE x.gym_id = h.gym_id AND x.entry_id = h.entry_id), h.entry_id) = ${row.payerId}
           ORDER BY e.full_name, h.id LIMIT 50`;
   const [card] =

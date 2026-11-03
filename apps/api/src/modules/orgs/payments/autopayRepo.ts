@@ -2,6 +2,7 @@
 // whoever pays: it stops the app charging that record's card by itself for every membership it pays for, as Remove card would, and
 // keeps the card.
 import type { Sql, TransactionSql } from "postgres";
+import { STILL_RENEWS } from "../memberships/heldRepo.js";
 import { lockGym } from "../memberList/repo.js";
 import { insertAudit } from "../repo.js";
 import { chargebackStops } from "./chargebacksRepo.js";
@@ -51,7 +52,7 @@ export async function renewingPaidBy(sql: SqlOrTx, gymId: string, payerId: strin
     FROM gym_held_memberships h
     JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id AND e.former_at IS NULL
     LEFT JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
-    WHERE h.gym_id = ${gymId} AND h.kind = 'recurring' AND h.renews AND h.status IN ('active','frozen')
+    WHERE h.gym_id = ${gymId} AND ${STILL_RENEWS(sql)} AND h.status IN ('active','frozen')
       AND ${payerOfH(sql)} = ${payerId}
     ORDER BY e.full_name, h.id LIMIT ${limit}`;
   return { people: rows.map((r) => ({ name: r.name, what: r.what ?? "" })), total: rows[0]?.total ?? 0 };

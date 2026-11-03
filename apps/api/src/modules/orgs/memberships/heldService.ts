@@ -422,6 +422,8 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
             : 0,
       freezeFeeFirstOn: freezeFeeFirstOn(row, list.freezeFee, list.fees, today),
       classesLeft: row.membership.classesLeft,
+      contractPeriods: row.membership.contractPeriods ?? null,
+      release: row.contractRelease,
       fromList: row.fromList,
       notCharged: list.bills.some((b) => b.membershipId === row.id && b.cancelled !== null && b.periodIndex === row.membership.paidPeriods - 1),
       refundedInFull: list.bills.some((b) => b.membershipId === row.id && b.status === "refunded" && b.periodIndex === row.membership.paidPeriods - 1),
@@ -561,6 +563,12 @@ function throwOnFailure(outcome: repo.HeldWriteOutcome): void {
         409,
         "early_payment_stands",
         "A payment is recorded for a month after its last day. Void that payment first, then cancel.",
+      );
+    case "release_needed":
+      throw new OrgsError(
+        409,
+        "contract_release_needed",
+        "They are still in contract. Choose End when the contract ends, or pick why you are releasing them.",
       );
     case "not_allowed":
       throw new OrgsError(

@@ -277,7 +277,7 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
       params.gymId,
       params.entryId,
       params.membershipId,
-      { type: "cancel", when: body.when },
+      body.release === undefined ? { type: "cancel", when: body.when } : { type: "cancel", when: body.when, release: body.release },
       body.confirmBookings ?? null,
       body.confirmPtSessions ?? null,
     );
