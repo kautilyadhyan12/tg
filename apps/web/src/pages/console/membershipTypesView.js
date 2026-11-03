@@ -210,6 +210,7 @@ export function joiningFeeLine(type) {
 
 /** "Contract: 12 months, then renews until cancelled" (18v-i); null for a type with none. */
 export function contractLine(type) {
+  if (type === null || type === undefined) return null;
   if (type.contractPeriods === null || type.contractPeriods === undefined || type.termCount === null || type.termUnit === null) return null;
   const length = contractLengthWords(type.contractPeriods, type.termCount, type.termUnit);
   return `Minimum term: ${length}, then ${type.contractThen === 'ends' ? 'it ends' : 'renews until cancelled'}`;
@@ -222,7 +223,7 @@ export function contractHint(draft) {
   if (periods === null || count === null) return null;
   const length = contractLengthWords(periods, count, draft.termUnit);
   return draft.contractThen === 'ends'
-    ? `They stay ${length}. It ends after the last payment.`
+    ? `They stay ${length}, then it ends.`
     : `They stay at least ${length}. After that, it renews until they cancel.`;
 }
 

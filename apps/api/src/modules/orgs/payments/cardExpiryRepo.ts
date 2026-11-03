@@ -13,30 +13,30 @@ type SqlOrTx = Sql | TransactionSql;
 /** The card (alias `k`) pays for a membership that renews: its holder's own, where nobody else pays
  *  for them, or that of somebody they pay for; of a current member, running or frozen. The card the
  *  app would charge for it (`payerCard` in `cardChargesRepo.ts`). */
-const paysForRenewal = (sql: SqlOrTx) => sql`
+const paysForRenewal = (sql: SqlOrTx, now: Date) => sql`
       (EXISTS (
          SELECT 1 FROM gym_held_memberships h
-         WHERE h.gym_id = k.gym_id AND h.entry_id = k.entry_id AND ${renewing(sql)}
+         WHERE h.gym_id = k.gym_id AND h.entry_id = k.entry_id AND ${renewing(sql, now)}
            AND NOT EXISTS (SELECT 1 FROM gym_member_payers p WHERE p.gym_id = k.gym_id AND p.entry_id = k.entry_id))
        OR EXISTS (
          SELECT 1 FROM gym_member_payers p
          JOIN gym_held_memberships h ON h.gym_id = p.gym_id AND h.entry_id = p.entry_id
-         WHERE p.gym_id = k.gym_id AND p.payer_entry_id = k.entry_id AND ${renewing(sql)}))`;
+         WHERE p.gym_id = k.gym_id AND p.payer_entry_id = k.entry_id AND ${renewing(sql, now)}))`;
 
 /** A membership (alias `h`) that renews, running or frozen, of a current member. Each half of
  *  `paysForRenewal` finds it by its record, so neither reads the gym's other memberships. */
-const renewing = (sql: SqlOrTx) => sql`
-      ${STILL_RENEWS(sql)} AND h.status IN ('active','frozen')
+const renewing = (sql: SqlOrTx, now: Date) => sql`
+      ${STILL_RENEWS(sql, now)} AND h.status IN ('active','frozen')
       AND NOT EXISTS (SELECT 1 FROM gym_member_list_entries m WHERE m.gym_id = h.gym_id AND m.id = h.entry_id AND m.former_at IS NOT NULL)`;
 
 /** The card (alias `k`) is due a reminder, in the gym's month `today` (alias `d` names the gym's day,
  *  its connected Square account and its switch): the gym sends them, it is active, the card is in the
  *  account it is connected to now, the card's last month is this one, and it pays for a renewal. */
-const dueCard = (sql: SqlOrTx) => sql`
+const dueCard = (sql: SqlOrTx, now: Date) => sql`
       d.reminders AND d.active
       AND k.gym_id = d.gym_id AND k.environment = d.environment AND k.account_id = d.account_id
       AND k.exp_year = extract(year FROM d.today) AND k.exp_month = extract(month FROM d.today)
-      AND ${paysForRenewal(sql)}`;
+      AND ${paysForRenewal(sql, now)}`;
 
 interface DayQuery {
   environment: SquareEnvironment | null;
@@ -75,7 +75,7 @@ export async function queueDueNotices(sql: SqlOrTx, q: { environment: SquareEnvi
         SELECT 1 FROM gym_card_expiry_notices n
         WHERE n.gym_id = k.gym_id AND n.environment = k.environment AND n.account_id = k.account_id AND n.card_id = k.card_id
           AND n.exp_year = k.exp_year AND n.exp_month = k.exp_month)
-      AND ${dueCard(sql)}
+      AND ${dueCard(sql, q.now)}
     ON CONFLICT (gym_id, environment, account_id, card_id, exp_year, exp_month) DO NOTHING
     RETURNING id`;
   return rows.length;
@@ -131,7 +131,7 @@ export async function expiringCards(
   >`
     WITH ${gymDay(sql, { environment: q.environment, now: q.now, gymIds: [q.gymId], remindingOnly: false })}
     SELECT k.entry_id, e.full_name, k.brand, k.last4, e.email::text AS email,
-           ${paysForRenewal(sql)} AS renewing,
+           ${paysForRenewal(sql, q.now)} AS renewing,
            n.state, n.reason, CASE WHEN n.state = 'sent' THEN ((n.finished_at AT TIME ZONE d.timezone)::date)::text END AS on
     FROM gym_day d
     JOIN gym_member_cards k ON k.gym_id = d.gym_id AND k.environment = d.environment AND k.account_id = d.account_id
@@ -164,9 +164,9 @@ export async function blockedOf(sql: SqlOrTx, hmacs: readonly string[]): Promise
 }
 
 /** Whether the record's card pays for a membership that renews (`paysForRenewal`). */
-export async function cardPaysForRenewal(sql: SqlOrTx, card: { gymId: string; entryId: string }): Promise<boolean> {
+export async function cardPaysForRenewal(sql: SqlOrTx, card: { gymId: string; entryId: string }, now: Date): Promise<boolean> {
   const [row] = await sql<{ renewing: boolean }[]>`
-    SELECT ${paysForRenewal(sql)} AS renewing FROM gym_member_cards k WHERE k.gym_id = ${card.gymId} AND k.entry_id = ${card.entryId}`;
+    SELECT ${paysForRenewal(sql, now)} AS renewing FROM gym_member_cards k WHERE k.gym_id = ${card.gymId} AND k.entry_id = ${card.entryId}`;
   return row?.renewing === true;
 }
 
@@ -250,7 +250,7 @@ const stillDue = (sql: SqlOrTx, now: Date) => sql`
         JOIN gym_member_cards k ON k.gym_id = s.gym_id AND k.entry_id = s.entry_id
         WHERE k.environment = s.environment AND k.account_id = s.account_id
           AND k.card_id = s.card_id AND k.exp_year = s.exp_year AND k.exp_month = s.exp_month
-          AND ${dueCard(sql)})
+          AND ${dueCard(sql, now)})
       AND EXISTS (SELECT 1 FROM gym_member_list_entries e WHERE e.gym_id = s.gym_id AND e.id = s.entry_id AND e.email = s.email)`;
 
 /** What the email says, read now. */
@@ -290,7 +290,7 @@ export async function noticeFacts(sql: SqlOrTx, n: ClaimedNotice, now: Date): Pr
       WHERE p.gym_id = ${n.gymId} AND p.payer_entry_id = ${n.entryId}
     ) h
     JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id
-    WHERE ${renewing(sql)}
+    WHERE ${renewing(sql, now)}
     ORDER BY e.full_name, e.id`;
   return {
     due: due?.due === true,

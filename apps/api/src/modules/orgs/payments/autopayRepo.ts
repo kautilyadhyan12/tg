@@ -46,13 +46,13 @@ export async function pausedOn(sql: SqlOrTx, gymId: string, entryId: string): Pr
 }
 
 /** Each renewing membership whoever pays `payerId` pays for, current members only, the first `limit` by name, and how many in all. */
-export async function renewingPaidBy(sql: SqlOrTx, gymId: string, payerId: string, limit: number): Promise<{ people: { name: string; what: string }[]; total: number }> {
+export async function renewingPaidBy(sql: SqlOrTx, gymId: string, payerId: string, limit: number, now: Date): Promise<{ people: { name: string; what: string }[]; total: number }> {
   const rows = await sql<{ name: string; what: string | null; total: number }[]>`
     SELECT e.full_name AS name, t.name AS what, count(*) OVER ()::int AS total
     FROM gym_held_memberships h
     JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id AND e.former_at IS NULL
     LEFT JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
-    WHERE h.gym_id = ${gymId} AND ${STILL_RENEWS(sql)} AND h.status IN ('active','frozen')
+    WHERE h.gym_id = ${gymId} AND ${STILL_RENEWS(sql, now)} AND h.status IN ('active','frozen')
       AND ${payerOfH(sql)} = ${payerId}
     ORDER BY e.full_name, h.id LIMIT ${limit}`;
   return { people: rows.map((r) => ({ name: r.name, what: r.what ?? "" })), total: rows[0]?.total ?? 0 };

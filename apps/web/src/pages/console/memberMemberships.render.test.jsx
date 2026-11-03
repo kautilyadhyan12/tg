@@ -580,6 +580,7 @@ describe('adding a membership', () => {
     expect(orgService.giveHeldMembership.mock.calls[0][2]).toEqual({
       requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
       fullFrom: null,
+      minimumTerm: null,
       typeId: GOLD.id,
       startsOn: TODAY,
       paid: false,
@@ -745,6 +746,7 @@ describe('adding a membership', () => {
     expect(orgService.giveHeldMembership.mock.calls[0][2]).toEqual({
       requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
       fullFrom: null,
+      minimumTerm: null,
       typeId: TAXED.id,
       startsOn: TODAY,
       paid: false,
@@ -832,7 +834,7 @@ describe('adding a membership', () => {
     const [gym, entry, body] = orgService.giveHeldMembership.mock.calls[0];
     expect([gym, entry]).toEqual([GYM, ADA]);
     // The price and what the first bill comes to are sent as the screen showed them (18b-iii).
-    expect(body).toEqual({ requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/), typeId: GOLD.id, startsOn: TODAY, paid: true, method: 'cash', priceMinor: 4999, totalMinor: 4999, fullFrom: null });
+    expect(body).toEqual({ requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/), typeId: GOLD.id, startsOn: TODAY, paid: true, method: 'cash', priceMinor: 4999, totalMinor: 4999, fullFrom: null, minimumTerm: null });
 
     // It failed: the form stays, and pressing again sends the same key, so one membership.
     expect(await (await boxSoon()).findByRole('alert')).toBeTruthy();
@@ -1286,6 +1288,7 @@ describe('Add member gives a membership in the same form', () => {
     expect(body).toEqual({
       requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
       fullFrom: null,
+      minimumTerm: null,
       typeId: PACK.id,
       startsOn: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
       paid: true,

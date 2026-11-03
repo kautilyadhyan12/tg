@@ -14,6 +14,7 @@ import { heldMembershipsResponseSchema, type GymMembershipTypesResponse, type He
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { openDueBills } from "../src/modules/orgs/memberships/billsRepo.js";
+import { LAST_DAY, STILL_RENEWS } from "../src/modules/orgs/memberships/heldRepo.js";
 import { createMemoryRedis } from "../src/redis.js";
 
 const url = process.env["DATABASE_URL"];
@@ -195,14 +196,14 @@ d("a contract on a repeating membership (real Postgres)", () => {
       const cara = await addPerson(gymId, owner, "Cara Singh");
       const caraGold = await give(gymId, cara, owner, renews, "2026-10-15");
 
-      // Three months in. A cancel with no reason is refused, today and at the end of what is paid.
+      // Three months in. A cancel today with no reason is refused.
       clock = new Date("2027-01-20T17:00:00Z");
       await runAll(gymId, 3);
-      for (const when of ["today", "period_end"]) {
-        const res = await post(`${heldUrl(gymId, ben)}/${benGold}/cancel`, { when }, owner);
-        expect(res.statusCode, res.body).toBe(409);
-        expect(errorOf(res)).toBe("contract_release_needed");
-      }
+      const noReason = await post(`${heldUrl(gymId, ben)}/${benGold}/cancel`, { when: "today" }, owner);
+      expect(noReason.statusCode, noReason.body).toBe(409);
+      expect(errorOf(noReason)).toBe("contract_release_needed");
+      // Nothing is paid ahead, so there is no later end of what is paid to stop at.
+      expect((await post(`${heldUrl(gymId, ben)}/${benGold}/cancel`, { when: "period_end" }, owner)).statusCode).toBe(409);
       expect(await stored(benGold)).toMatchObject({ status: "active", renews: true, contract_then: "renews", contract_release: null });
 
       // Ben released, moved away: cancelled today, the reason kept.
@@ -320,4 +321,68 @@ d("a contract on a repeating membership (real Postgres)", () => {
     },
     T,
   );
+
+  it(
+    "the SQL reads a minimum term as the rule does: its last day, billed from the gym's day too, and whether a renewal is left",
+    async () => {
+      clock = new Date("2026-10-15T17:00:00Z");
+      const owner = await makeUser("sql-owner");
+      const gymId = await makeGym(owner, "Contract Sql Gym");
+      const ends = await addType(gymId, owner, monthly({ name: "Gold 12 months", contractPeriods: 12, contractThen: "ends" }));
+      const three = await addType(gymId, owner, monthly({ name: "Gold 3 months", contractPeriods: 3, contractThen: "ends" }));
+      const ivy = await addPerson(gymId, owner, "Ivy Chen");
+      const ivyGold = await give(gymId, ivy, owner, ends, "2026-10-15");
+      // Billed on the 1st from here on: Jay's part month comes before his three whole ones (H2).
+      await sql`UPDATE gyms SET bills_day = 1 WHERE id = ${gymId}`;
+      const jay = await addPerson(gymId, owner, "Jay Kim");
+      const res = await post(heldUrl(gymId, jay), { requestKey: nextForm(), typeId: three, startsOn: "2026-10-15", paid: false, priceMinor: 5000, fullFrom: "2026-11-01", minimumTerm: { periods: 3, then: "ends" } }, owner);
+      expect(res.statusCode, res.body).toBe(201);
+      const jayGold = (await sql<{ id: string }[]>`SELECT id FROM gym_held_memberships WHERE gym_id = ${gymId} AND entry_id = ${jay}`)[0]?.id ?? "";
+
+      const sqlLast = async (id: string) => (await sql<{ d: string }[]>`SELECT (${LAST_DAY(sql)})::text AS d FROM gym_held_memberships h WHERE h.id = ${id}`)[0]?.d;
+      const ruleLast = async (entryId: string, id: string) => held(await get(heldUrl(gymId, entryId), owner)).memberships.find((m) => m.id === id)?.view.endsOn;
+      expect(await sqlLast(ivyGold)).toBe("2027-10-14");
+      expect(await ruleLast(ivy, ivyGold)).toBe("2027-10-14");
+      expect(await sqlLast(jayGold)).toBe("2027-01-31");
+      expect(await ruleLast(jay, jayGold)).toBe("2027-01-31");
+      const jayView = held(await get(heldUrl(gymId, jay), owner)).memberships.find((m) => m.id === jayGold)?.view;
+      expect(jayView?.contract?.until).toBe("2027-01-31");
+
+      const renews = async (id: string, iso: string) => (await sql<{ r: boolean }[]>`SELECT ${STILL_RENEWS(sql, new Date(iso))} AS r FROM gym_held_memberships h WHERE h.id = ${id}`)[0]?.r;
+      expect(await renews(ivyGold, "2027-09-10T17:00:00Z")).toBe(true);
+      // In its last month no renewal is left (L3).
+      expect(await renews(ivyGold, "2027-09-20T17:00:00Z")).toBe(false);
+      await sql`UPDATE gym_held_memberships SET status = 'frozen', frozen_on = '2027-09-01' WHERE id = ${ivyGold}`;
+      expect(await renews(ivyGold, "2027-12-20T17:00:00Z")).toBe(true);
+    },
+    T,
+  );
+
+  it(
+    "a reason with End is a 400, and a minimum term changed since the Add form opened gives nothing",
+    async () => {
+      clock = new Date("2026-10-15T17:00:00Z");
+      const owner = await makeUser("l1-owner");
+      const gymId = await makeGym(owner, "Contract L1 Gym");
+      const gold = await addType(gymId, owner, monthly({ contractPeriods: 12, contractThen: "renews" }));
+      const kim = await addPerson(gymId, owner, "Kim Ray");
+      const kimGold = await give(gymId, kim, owner, gold, "2026-10-15");
+      clock = new Date("2026-11-20T17:00:00Z");
+      const both = await post(`${heldUrl(gymId, kim)}/${kimGold}/cancel`, { when: "contract_end", release: "moved" }, owner);
+      expect(both.statusCode, both.body).toBe(400);
+      expect(await stored(kimGold)).toMatchObject({ status: "active", contract_then: "renews", contract_release: null });
+
+      const lee = await addPerson(gymId, owner, "Lee Fox");
+      const body = (minimumTerm: unknown) => ({ requestKey: nextForm(), typeId: gold, startsOn: "2026-11-20", paid: true, method: "cash", priceMinor: 5000, totalMinor: 5000, minimumTerm });
+      for (const shown of [null, { periods: 6, then: "renews" }, { periods: 12, then: "ends" }]) {
+        const res = await post(heldUrl(gymId, lee), body(shown), owner);
+        expect(res.statusCode, res.body).toBe(409);
+        expect(errorOf(res)).toBe("membership_price_changed");
+      }
+      expect((await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_held_memberships WHERE entry_id = ${lee}`)[0]?.n).toBe(0);
+      expect((await post(heldUrl(gymId, lee), body({ periods: 12, then: "renews" }), owner)).statusCode).toBe(201);
+    },
+    T,
+  );
 });
+

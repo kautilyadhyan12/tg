@@ -6,11 +6,13 @@
 import { describe, expect, it } from "vitest";
 import {
   billsToOpen,
+  cancelHeldMembershipRequestSchema,
   contractLengthWords,
   giveHeldMembership,
   heldMembershipView,
   linkHeldMembership,
   moveHeldMembership,
+  releaseAsked,
   saveGymMembershipTypeRequestSchema,
   type HeldMembership,
   type HeldMembershipEvent,
@@ -128,7 +130,8 @@ describe("cancelling inside a contract", () => {
 
   it("is refused without a reason, today and at the end of what is paid", () => {
     expect(moveHeldMembership(m, { type: "cancel", when: "today" }, "2027-01-20")).toEqual({ ok: false, reason: "release_needed" });
-    expect(moveHeldMembership(m, { type: "cancel", when: "period_end" }, "2027-01-20")).toEqual({ ok: false, reason: "release_needed" });
+    const paidAhead = moved(moved(m, { type: "paid", paidPeriods: 2 }, "2027-01-20"), { type: "paid", paidPeriods: 3 }, "2027-01-20");
+    expect(moveHeldMembership(paidAhead, { type: "cancel", when: "period_end" }, "2027-01-20")).toEqual({ ok: false, reason: "release_needed" });
   });
 
   it("offers End when the contract ends, with its last day, and asks for a reason for anything sooner", () => {
@@ -206,5 +209,51 @@ describe("the contract's length in words", () => {
     [1, 1, "week", "1 week"],
   ] as const)("%i payments every %i %s is %s", (periods, count, unit, words) => {
     expect(contractLengthWords(periods, count, unit)).toBe(words);
+  });
+});
+
+describe("round one's findings", () => {
+  it("H1: paid past the minimum term, End is not offered and is refused; the end of what is paid asks no reason", () => {
+    let m = given(yearThenRenews, "2026-11-03", "2026-11-03");
+    for (let n = 2; n <= 14; n += 1) m = moved(m, { type: "paid", paidPeriods: n }, "2027-10-10");
+    expect(m.paidPeriods).toBe(14);
+    const view = heldMembershipView(m, "2027-10-10");
+    expect(view.can.cancelAtContractEnd).toBeNull();
+    expect(view.can.cancelAtPeriodEnd).toBe("2028-01-02");
+    expect(moveHeldMembership(m, { type: "cancel", when: "contract_end" }, "2027-10-10")).toEqual({ ok: false, reason: "not_allowed" });
+    const out = moved(m, { type: "cancel", when: "period_end" }, "2027-10-10");
+    expect(heldMembershipView(out, "2027-10-10").endsOn).toBe("2028-01-02");
+  });
+
+  it("H2: billed from the gym's 1st, 12 payments run 12 whole months after the part month", () => {
+    const made = giveHeldMembership(yearThenEnds, "2026-10-15", true, "2026-10-15", 1);
+    if (!made.ok) throw new Error(made.reason);
+    const m = { ...made.membership, paidPeriods: 0 };
+    expect(m.fullFrom).toBe("2026-11-01");
+    const { billed } = payEveryMonth(m, ["2026-10-15", ...THIRDS.map((d) => d.replace(/-03$/, "-01"))]);
+    expect(billed).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    const view = heldMembershipView(made.membership, "2026-10-20");
+    expect(view.contract?.until).toBe("2027-10-31");
+    expect(view.endsOn).toBe("2027-10-31");
+  });
+
+  it("L1: a reason sent with End is refused before anything is read", () => {
+    expect(cancelHeldMembershipRequestSchema.safeParse({ when: "contract_end", release: "moved" }).success).toBe(false);
+    expect(cancelHeldMembershipRequestSchema.safeParse({ when: "contract_end" }).success).toBe(true);
+    expect(cancelHeldMembershipRequestSchema.safeParse({ when: "today", release: "moved" }).success).toBe(true);
+  });
+
+  it("L2: paid up to the term's last day, the end of what is paid lets nobody out early", () => {
+    let m = given(yearThenRenews, "2026-11-03", "2026-11-03");
+    for (let n = 2; n <= 12; n += 1) m = moved(m, { type: "paid", paidPeriods: n }, "2027-10-10");
+    const view = heldMembershipView(m, "2027-10-10");
+    expect(view.can.cancelAtPeriodEnd).toBe("2027-11-02");
+    expect(view.contract?.until).toBe("2027-11-02");
+    expect(releaseAsked(view, "period_end")).toBe(false);
+    expect(releaseAsked(view, "today")).toBe(true);
+    expect(moveHeldMembership(m, { type: "cancel", when: "period_end" }, "2027-10-10").ok).toBe(true);
+    // Paid to January only, the end of what is paid is early and asks why.
+    const early = given(yearThenRenews, "2026-11-03", "2026-11-03");
+    expect(releaseAsked(heldMembershipView(moved(early, { type: "paid", paidPeriods: 2 }, "2026-11-20"), "2026-11-20"), "period_end")).toBe(true);
   });
 });

@@ -158,7 +158,7 @@ describe('adding a type', () => {
     expect(screen.getByText('Members can cancel at any time.')).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Minimum term'), { target: { value: 'fixed' } });
     fireEvent.change(screen.getByLabelText('After the minimum term'), { target: { value: 'ends' } });
-    expect(screen.getByText('They stay 12 months. It ends after the last payment.')).toBeTruthy();
+    expect(screen.getByText('They stay 12 months, then it ends.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Add membership type' }));
     await waitFor(() => expect(orgService.createMembershipType).toHaveBeenCalledTimes(1));
     expect(orgService.createMembershipType.mock.calls[0][1]).toMatchObject({ kind: 'recurring', contractPeriods: 12, contractThen: 'ends' });

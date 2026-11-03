@@ -568,7 +568,7 @@ function throwOnFailure(outcome: repo.HeldWriteOutcome): void {
       throw new OrgsError(
         409,
         "contract_release_needed",
-        "They are still in their minimum term. Choose End at the end of the minimum term, or pick why you are releasing them early.",
+        "They are still in their minimum term. Pick why you are releasing them early.",
       );
     case "not_allowed":
       throw new OrgsError(
@@ -629,6 +629,7 @@ export async function giveHeldMembership(
       joiningFeeMinor: req.joiningFeeMinor ?? null,
       // A screen that showed a price and said nothing of a part month showed none (18y).
       ...(req.priceMinor === undefined && req.fullFrom === undefined ? {} : { shownFullFrom: req.fullFrom ?? null }),
+      ...(req.minimumTerm === undefined ? {} : { shownMinimumTerm: req.minimumTerm }),
       // Leaving the fee off is waiving it, which is where payments are taken, as a discount is.
       mayWaiveJoiningFee: canBill,
       discount: req.discountId === undefined || req.discountMinor === undefined ? null : { id: req.discountId, shownOffMinor: req.discountMinor },

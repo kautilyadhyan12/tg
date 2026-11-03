@@ -2,7 +2,7 @@
 // person's page's lines and Cancel box words. Every date here was read off a calendar.
 import { describe, expect, it } from 'vitest';
 import { contractHint, contractLine, draftBody, draftFromType, draftProblems, emptyDraft, withChoice } from './membershipTypesView';
-import { askWords, contractShownLine, doneWords, releaseShownLine } from './heldMembershipsView';
+import { askWords, contractShownLine, doneWords, giveBody, releaseShownLine } from './heldMembershipsView';
 
 const listType = (over = {}) => ({
   id: '22222222-2222-4222-8222-000000000001',
@@ -58,7 +58,7 @@ describe('the price list', () => {
 
   it('says how long it runs, in the words of its payments', () => {
     expect(contractHint(draft({ contract: 'fixed' }))).toBe('They stay at least 12 months. After that, it renews until they cancel.');
-    expect(contractHint(draft({ contract: 'fixed', contractPeriods: '24', contractThen: 'ends' }))).toBe('They stay 2 years. It ends after the last payment.');
+    expect(contractHint(draft({ contract: 'fixed', contractPeriods: '24', contractThen: 'ends' }))).toBe('They stay 2 years, then it ends.');
     expect(contractHint(draft({ contract: 'fixed', contractPeriods: 'x' }))).toBeNull();
     expect(contractLine(listType())).toBe('Minimum term: 12 months, then renews until cancelled');
     expect(contractLine(listType({ contractThen: 'ends', termCount: 3, contractPeriods: 4 }))).toBe('Minimum term: 12 months, then it ends');
@@ -106,5 +106,43 @@ describe("the person's page", () => {
     free.view = { ...free.view, contract: null, can: { ...free.view.can, releaseNeeded: false } };
     expect(askWords('cancel', free, 'Ada', '2026-11-03')).toMatchObject({ button: 'Cancel today', laterButton: 'Cancel on 3 December 2026' });
     expect(doneWords('cancelContract', held())).toBe('Gold 12 months ends on 3 October 2027, at the end of its minimum term.');
+  });
+});
+
+describe("round one's findings, on screen", () => {
+  const base = {
+    typeName: 'Gold 12 months',
+    kind: 'recurring',
+    termCount: 1,
+    termUnit: 'month',
+    contractPeriods: 12,
+    release: null,
+    fullFrom: null,
+    view: {
+      status: 'active',
+      endsOn: null,
+      renewsOn: '2027-10-03',
+      payment: null,
+      contract: { until: '2027-11-02', then: 'renews' },
+      can: { freeze: true, unfreeze: false, cancel: true, cancelAtPeriodEnd: '2027-11-02', cancelAtContractEnd: '2027-11-02', releaseNeeded: true, markPaid: null, undoPaid: null },
+    },
+  };
+
+  it('L2: paid up to the last day of the term, there is no Release on that day', () => {
+    expect(askWords('cancel', base, 'Ada', '2027-10-10')).toMatchObject({ endButton: 'End on 2 November 2027', releaseLaterButton: null, releaseButton: 'Release today' });
+  });
+
+  it("H2: billed from the gym's day, the term says from when its whole payments run", () => {
+    expect(contractShownLine({ ...base, fullFrom: '2026-11-01', view: { ...base.view, contract: { until: '2027-10-31', then: 'renews' } } })).toBe(
+      'Minimum term: 12 months from 1 November 2026, until 31 October 2027',
+    );
+  });
+
+  it('L6: the Add form sends the minimum term it showed, and none for a line without one', () => {
+    const type = { id: 't', priceMinor: 5000, joiningFeeMinor: 0, kind: 'recurring', termCount: 1, termUnit: 'month', contractPeriods: 12, contractThen: 'ends' };
+    const value = { startsOn: '2026-11-03', paid: false };
+    expect(giveBody('k', type, value).minimumTerm).toEqual({ periods: 12, then: 'ends' });
+    expect(giveBody('k', { ...type, contractPeriods: null, contractThen: null }, value).minimumTerm).toBeNull();
+    expect(contractLine(null)).toBeNull();
   });
 });

@@ -20,7 +20,7 @@ import { FriendGiftNote, MemberGiftNote, MemberGiftWaiting } from './FriendGift'
 import { useCameBack } from './useCameBack';
 import { useLiveNews } from './liveNews';
 import { ENDING_NOT_TOLD, bookingsStoppedLine } from './bookingsEndView';
-import { termLine } from './membershipTypesView';
+import { contractLine, termLine } from './membershipTypesView';
 import { changeBody, changeChoice, changeCreditLine, changeDoneWords, changeEndingWords, changeForm, changeLine, showsChange, squareSetUpLine } from './membershipChangeView';
 import { viewerPrivileges } from './consoleView';
 import { placeFor } from './consolePlaces';
@@ -2258,6 +2258,11 @@ export default function MemberMemberships({
               onChange={(next) => setForm((f) => ({ ...f, ...next, ...(next.typeId !== undefined && next.typeId !== f.typeId ? { code: { ...f.code, note: null, appliedId: null }, joiningFee: 'auto' } : {}) }))}
             />
             <JoiningFeeTick type={choice.type} fee={fee} onChange={(joiningFee) => setForm((f) => ({ ...f, joiningFee }))} />
+            {contractLine(choice.type) !== null ? (
+              <p className="c-s14 c-t2 m-0" data-testid="held-add-minimum-term">
+                {contractLine(choice.type)}
+              </p>
+            ) : null}
             {gift !== null && choice.type !== null && !free ? (
               <FriendGiftNote
                 gift={gift}

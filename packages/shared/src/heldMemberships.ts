@@ -202,12 +202,14 @@ export interface HeldMembership {
   contractThen?: ContractThen | null;
 }
 
-/** The contract's length in periods where it has one: a repeating membership only. */
+/** The minimum term where it has one: a repeating membership only. `periods` is how many periods
+ *  it runs for: its whole payments, and on top of them the part month of one billed from the gym's
+ *  day (18y), which is not one of them. */
 function contractOf(m: HeldMembership): { periods: number; then: ContractThen } | null {
   const periods = m.contractPeriods ?? null;
   const then = m.contractThen ?? null;
   if (m.kind !== "recurring" || periods === null || then === null) return null;
-  return { periods, then };
+  return { periods: periods + ((m.fullFrom ?? null) === null ? 0 : 1), then };
 }
 
 /** The number of periods it runs for and no more, where its contract ends it: null where it
@@ -468,6 +470,9 @@ export function heldMembershipView(stored: HeldMembership, today: string): HeldM
   const contract =
     c === null || contractUntil === null || contractUntil < asOf || !m.renews ? null : { until: contractUntil, then: c.then };
   const inContract = contract !== null && !upcoming;
+  // Paid past the minimum term already, ending with it would throw away months paid for: the end of
+  // what is paid is the later end, and that is what Cancel offers (round one, H1).
+  const paidPast = c !== null && m.paidPeriods > c.periods;
 
   let markPaid: HeldMembershipView["can"]["markPaid"] = null;
   let undoPaid: HeldMembershipView["can"]["undoPaid"] = null;
@@ -502,7 +507,7 @@ export function heldMembershipView(stored: HeldMembership, today: string): HeldM
         m.status === "active" && recurring && m.renews && m.paidPeriods > 0 && until !== null && until > today
           ? addDays(until, -1)
           : null,
-      cancelAtContractEnd: contract !== null && contract.then === "renews" ? contract.until : null,
+      cancelAtContractEnd: contract !== null && contract.then === "renews" && !paidPast ? contract.until : null,
       releaseNeeded: inContract,
       markPaid,
       undoPaid,
@@ -563,7 +568,7 @@ export function moveHeldMembership(stored: HeldMembership, event: HeldMembership
       // What is already so is answered before the contract is asked about: a request sent twice is one.
       if (event.when === "period_end" && m.status === "active" && m.kind === "recurring" && !m.renews) return same;
       if (event.when === "today" && m.status === "cancelled") return same;
-      if (view.can.releaseNeeded && event.release === undefined) return { ok: false, reason: "release_needed" };
+      if (releaseAsked(view, event.when) && event.release === undefined) return { ok: false, reason: "release_needed" };
       if (event.when === "period_end") {
         if (m.status === "active" && m.kind === "recurring" && !m.renews) return same;
         if (view.can.cancelAtPeriodEnd === null) return refused;
@@ -580,6 +585,16 @@ export function moveHeldMembership(stored: HeldMembership, event: HeldMembership
       }
       return refused;
   }
+}
+
+/** Whether a cancel `when` lets the member out of a running minimum term early, and so asks why:
+ *  today, or at the end of what is paid where that is before the term's last day. Ending with the
+ *  term, or on or after its last day, is no release (round one, L2). */
+export function releaseAsked(view: Pick<HeldMembershipView, "contract" | "can">, when: "today" | "period_end" | "contract_end"): boolean {
+  if (!view.can.releaseNeeded || view.contract === null || when === "contract_end") return false;
+  if (when === "today") return true;
+  const paidTo = view.can.cancelAtPeriodEnd;
+  return paidTo !== null && paidTo < view.contract.until;
 }
 
 /** What a type has to hold for a membership to be worked out from it. */
@@ -1085,6 +1100,9 @@ export const giveHeldMembershipRequestSchema = z
     /** The day the screen said its full payments start, the part month before it (18y); null
      *  where it said none. Nothing is given where the gym's billing day now says otherwise. */
     fullFrom: daySchema.nullable().optional(),
+    /** The minimum term the screen showed for the line (18v-i), null for none: nothing is given
+     *  where the line's is now another. Left out, the screen showed no word of it. */
+    minimumTerm: z.object({ periods: z.number().int().min(1).max(156), then: contractThenSchema }).strict().nullable().optional(),
   })
   .strict()
   .refine((v) => (v.discountId === undefined) === (v.discountMinor === undefined) && (v.discountId === undefined || v.priceMinor !== undefined), {
@@ -1104,12 +1122,14 @@ export const cancelHeldMembershipRequestSchema = z
   .object({
     /** `contract_end`: runs to the end of its contract, then stops (18v-i). */
     when: z.enum(["today", "period_end", "contract_end"]),
-    /** Why a member is let out of a running contract: asked only then, and refused without it. */
+    /** Why a member is let out of a running minimum term early: asked only then, and refused without it. */
     release: contractReleaseSchema.optional(),
     confirmBookings: z.string().regex(/^[0-9a-f]{64}$/).optional(),
     confirmPtSessions: confirmPtSessionsField.optional(),
   })
-  .strict();
+  .strict()
+  // Ending with the minimum term lets nobody out early: a reason sent with it is refused (round one, L1).
+  .refine((v) => v.when !== "contract_end" || v.release === undefined, { path: ["release"] });
 export type CancelHeldMembershipRequest = z.infer<typeof cancelHeldMembershipRequestSchema>;
 
 /** Freeze (18z): `feeMinor` is the freeze fee a month the screen showed and staff left ticked, or 0

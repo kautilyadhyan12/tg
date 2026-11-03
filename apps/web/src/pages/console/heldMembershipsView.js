@@ -7,6 +7,7 @@ import {
   CONTRACT_RELEASES,
   CONTRACT_RELEASE_WORDS,
   contractLengthWords,
+  releaseAsked,
   HELD_STATUS_WORDS,
   HELD_START_AHEAD_DAYS,
   HELD_START_MIN,
@@ -216,7 +217,8 @@ export function contractCancelWords(m, name) {
         : `${name} is in their minimum term until ${dayWords(until)}, when it ends. To stop it sooner, release them early.`,
     endButton: end === null ? null : `End on ${dayWords(end)}`,
     releaseQuestion: 'Why are you releasing them?',
-    releaseLaterButton: paid === null ? null : `Release on ${dayWords(paid)}`,
+    // On or after the term's last day, the end of what is paid lets nobody out early (round one, L2).
+    releaseLaterButton: paid === null || !releaseAsked(m.view, 'period_end') ? null : `Release on ${dayWords(paid)}`,
     releaseButton: 'Release today',
     releaseMissing: 'Pick why you are releasing them first.',
   };
@@ -226,7 +228,9 @@ export function contractCancelWords(m, name) {
 export function contractShownLine(m) {
   const c = m.view?.contract ?? null;
   if (c === null) return null;
-  const length = m.contractPeriods !== null && m.contractPeriods !== undefined && m.termCount !== null && m.termUnit !== null ? `${contractLengthWords(m.contractPeriods, m.termCount, m.termUnit)}, ` : '';
+  // Billed from the gym's day, the part month comes before the term's whole payments (round one, H2).
+  const from = m.fullFrom ? ` from ${dayWords(m.fullFrom)}` : '';
+  const length = m.contractPeriods !== null && m.contractPeriods !== undefined && m.termCount !== null && m.termUnit !== null ? `${contractLengthWords(m.contractPeriods, m.termCount, m.termUnit)}${from}, ` : '';
   return `Minimum term: ${length}until ${dayWords(c.until)}${c.then === 'ends' ? ', then it ends' : ''}`;
 }
 
@@ -451,6 +455,8 @@ export function giveBody(requestKey, type, value, discount = null, summary = nul
     // The day its full payments start where the gym bills everyone on one day (18y): the
     // server gives nothing where the gym's day now says otherwise.
     fullFrom: value.startsOn === '' ? null : fullFromOf(type, value.startsOn, type.billDay ?? null),
+    // The minimum term the form said (18v-i): the server gives nothing where the line's is now another.
+    minimumTerm: type.contractPeriods ? { periods: type.contractPeriods, then: type.contractThen ?? 'renews' } : null,
   };
   // The person's own Refer a friend gift, and what it takes off (20e-ii-b-ii-a).
   const gifted = memberGift === null || summary === null || !(summary.giftOffMinor > 0) ? shown : { ...shown, memberGiftId: memberGift.id, memberGiftMinor: summary.giftOffMinor };

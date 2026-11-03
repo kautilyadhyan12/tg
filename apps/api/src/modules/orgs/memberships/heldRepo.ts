@@ -24,6 +24,7 @@ import type { Sql, TransactionSql } from "postgres";
 import { z } from "zod";
 import {
   HELD_EARLIER_PAGE,
+  releaseAsked,
   contractReleaseSchema,
   contractThenSchema,
   type ContractRelease,
@@ -673,6 +674,8 @@ export interface GiveHeldInput {
   /** The day the screen said its full payments start, its first bill the part month (18y); null
    *  where it said none; undefined where the caller showed no screen of its own. */
   shownFullFrom?: string | null;
+  /** The minimum term the screen showed (18v-i), null for none; undefined where it showed no word of it. */
+  shownMinimumTerm?: { periods: number; then: string } | null;
   /** Whether this reader may give a type that has a joining fee without it. */
   mayWaiveJoiningFee: boolean;
   /** Given in place of another membership (18x, `changeRepo.ts`): the one it replaces and
@@ -717,6 +720,12 @@ export async function giveHeldIn(tx: TransactionSql, input: GiveHeldInput): Prom
   if (rawType === undefined) return { kind: "type_not_found" };
   const type = typeChoice(rawType);
   if (input.shownPriceMinor !== null && input.shownPriceMinor !== type.priceMinor) return { kind: "price_changed" };
+  // A minimum term set or changed since the screen opened: staff never give one the screen did not say (round one, L6).
+  if (input.shownMinimumTerm !== undefined) {
+    const shown = input.shownMinimumTerm;
+    const now = type.contractPeriods === null || type.contractThen === null ? null : { periods: type.contractPeriods, then: type.contractThen };
+    if ((shown === null) !== (now === null) || (shown !== null && now !== null && (shown.periods !== now.periods || shown.then !== now.then))) return { kind: "price_changed" };
+  }
   // The type's rate as it is now, read under the gym's lock that its changes take: the
   // membership keeps it, and its first bill charges it.
   const taxRateId = typeTaxRateId(rawType);
@@ -996,7 +1005,9 @@ export async function moveHeld(
     if (!move.changed) return { kind: "ok" };
     const m = move.membership;
     // A member let out of a running contract keeps the reason staff gave (18v-i).
-    const release = input.event.type === "cancel" && input.event.release !== undefined && heldMembershipView(before.membership, input.today).can.releaseNeeded ? input.event.release : before.contractRelease;
+    // Kept only where the cancel let them out early and its row is let out (round one, L1, L2).
+    const released = input.event.type === "cancel" && input.event.release !== undefined && releaseAsked(heldMembershipView(before.membership, input.today), input.event.when) && (m.status === "cancelled" || !m.renews);
+    const release = released && input.event.type === "cancel" && input.event.release !== undefined ? input.event.release : before.contractRelease;
 
     // A freeze charges the gym's fee where staff left it ticked: refused where the screen showed
     // another, or a fee on a membership that freezes with none (18z).
@@ -1406,22 +1417,35 @@ export async function unsignedAgreementHeld(
  *  Jan and a month is 28 Feb).
  *  `memberships.overForList.test.ts` and `membershipWords.again.routes.test.ts` hold the
  *  two together. */
-export const LAST_DAY = (sql: Sql | TransactionSql) => sql`
-  ((CASE WHEN h.full_from IS NOT NULL AND (CASE WHEN h.renews AND h.contract_then = 'ends' THEN h.contract_periods ELSE h.paid_periods END) >= 1 THEN h.full_from ELSE h.starts_on END + make_interval(
-      years  => CASE WHEN h.kind <> 'pack' AND h.term_unit = 'year'  THEN h.term_count * (CASE WHEN h.kind = 'recurring' THEN (CASE WHEN h.renews AND h.contract_then = 'ends' THEN h.contract_periods ELSE h.paid_periods END) - (CASE WHEN h.full_from IS NOT NULL AND (CASE WHEN h.renews AND h.contract_then = 'ends' THEN h.contract_periods ELSE h.paid_periods END) >= 1 THEN 1 ELSE 0 END) ELSE 1 END) ELSE 0 END,
-      months => CASE WHEN h.kind <> 'pack' AND h.term_unit = 'month' THEN h.term_count * (CASE WHEN h.kind = 'recurring' THEN (CASE WHEN h.renews AND h.contract_then = 'ends' THEN h.contract_periods ELSE h.paid_periods END) - (CASE WHEN h.full_from IS NOT NULL AND (CASE WHEN h.renews AND h.contract_then = 'ends' THEN h.contract_periods ELSE h.paid_periods END) >= 1 THEN 1 ELSE 0 END) ELSE 1 END) ELSE 0 END,
-      weeks  => CASE WHEN h.kind <> 'pack' AND h.term_unit = 'week'  THEN h.term_count * (CASE WHEN h.kind = 'recurring' THEN (CASE WHEN h.renews AND h.contract_then = 'ends' THEN h.contract_periods ELSE h.paid_periods END) ELSE 1 END) ELSE 0 END,
-      days   => CASE WHEN h.kind = 'pack' THEN h.pack_days
-                     WHEN h.term_unit = 'day' THEN h.term_count * (CASE WHEN h.kind = 'recurring' THEN (CASE WHEN h.renews AND h.contract_then = 'ends' THEN h.contract_periods ELSE h.paid_periods END) ELSE 1 END) ELSE 0 END
-    ))::date + h.frozen_days
-      + CASE WHEN (CASE WHEN h.kind = 'recurring' THEN (CASE WHEN h.renews AND h.contract_then = 'ends' THEN h.contract_periods ELSE h.paid_periods END) ELSE 1 END) >= h.gift_from THEN h.gift_days ELSE 0 END - 1)`;
+export const LAST_DAY = (sql: Sql | TransactionSql, alias = "h") => {
+  const a = sql(alias);
+  // The periods it runs for: those paid, or a minimum term's where that ends it (18v-i), whose part
+  // month, where the gym bills on one day, comes on top.
+  const n = sql`(CASE WHEN ${a}.renews AND ${a}.contract_then = 'ends' THEN ${a}.contract_periods + (CASE WHEN ${a}.full_from IS NOT NULL THEN 1 ELSE 0 END) ELSE ${a}.paid_periods END)`;
+  return sql`
+  ((CASE WHEN ${a}.full_from IS NOT NULL AND ${n} >= 1 THEN ${a}.full_from ELSE ${a}.starts_on END + make_interval(
+      years  => CASE WHEN ${a}.kind <> 'pack' AND ${a}.term_unit = 'year'  THEN ${a}.term_count * (CASE WHEN ${a}.kind = 'recurring' THEN ${n} - (CASE WHEN ${a}.full_from IS NOT NULL AND ${n} >= 1 THEN 1 ELSE 0 END) ELSE 1 END) ELSE 0 END,
+      months => CASE WHEN ${a}.kind <> 'pack' AND ${a}.term_unit = 'month' THEN ${a}.term_count * (CASE WHEN ${a}.kind = 'recurring' THEN ${n} - (CASE WHEN ${a}.full_from IS NOT NULL AND ${n} >= 1 THEN 1 ELSE 0 END) ELSE 1 END) ELSE 0 END,
+      weeks  => CASE WHEN ${a}.kind <> 'pack' AND ${a}.term_unit = 'week'  THEN ${a}.term_count * (CASE WHEN ${a}.kind = 'recurring' THEN ${n} ELSE 1 END) ELSE 0 END,
+      days   => CASE WHEN ${a}.kind = 'pack' THEN ${a}.pack_days
+                     WHEN ${a}.term_unit = 'day' THEN ${a}.term_count * (CASE WHEN ${a}.kind = 'recurring' THEN ${n} ELSE 1 END) ELSE 0 END
+    ))::date + ${a}.frozen_days
+      + CASE WHEN (CASE WHEN ${a}.kind = 'recurring' THEN ${n} ELSE 1 END) >= ${a}.gift_from THEN ${a}.gift_days ELSE 0 END - 1)`;
+};
 
-/** A repeating membership (alias `h`) that renews is still renewing on the gym's own day: one
- *  whose contract ends it (18v-i) stops once that contract is over, though its stored status
- *  stays `active` until somebody next opens it. */
-export const STILL_RENEWS = (sql: Sql | TransactionSql) => sql`
-  (h.kind = 'recurring' AND h.renews AND (h.contract_then IS DISTINCT FROM 'ends'
-    OR ${LAST_DAY(sql)} >= (now() AT TIME ZONE (SELECT g.timezone FROM gyms g WHERE g.id = h.gym_id))::date))`;
+/** A repeating membership (alias `alias`) that renews is still renewing on its gym's day at `now`: one
+ *  whose minimum term ends it (18v-i) has a renewal left only while its last period has not begun (a
+ *  frozen one, whose dates still move, counts as renewing). The caller's clock, never the database's. */
+export const STILL_RENEWS = (sql: Sql | TransactionSql, now: Date, alias = "h") => {
+  const a = sql(alias);
+  return sql`
+  (${a}.kind = 'recurring' AND ${a}.renews AND (${a}.contract_then IS DISTINCT FROM 'ends' OR ${a}.status = 'frozen'
+    OR (${LAST_DAY(sql, alias)} + 1 - make_interval(
+         years => CASE WHEN ${a}.term_unit = 'year' THEN ${a}.term_count ELSE 0 END,
+         months => CASE WHEN ${a}.term_unit = 'month' THEN ${a}.term_count ELSE 0 END,
+         weeks => CASE WHEN ${a}.term_unit = 'week' THEN ${a}.term_count ELSE 0 END))::date
+       > (${now}::timestamptz AT TIME ZONE (SELECT g.timezone FROM gyms g WHERE g.id = ${a}.gym_id))::date))`;
+};
 
 /** For each pack named: the gym's day of the last class or personal training session
  *  charged to it; a pack with none recorded is not in the answer. A plain read. */
