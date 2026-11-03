@@ -799,11 +799,19 @@ describe("Suggested or My plan: an older read landing after the pick (31f round 
     await fireEvent.press(screen.getByRole("tab", { name: "Food" }));
     await fireEvent.press(screen.getByRole("tab", { name: "Dashboard" }));
     await waitFor(() => { expect(heldReads.length).toBeGreaterThan(0); });
-    holdReads = false;
-    // The pick is answered, then the older read lands with My plan.
+    const older = heldReads.splice(0);
+    const lit = () => {
+      expect(card().getByRole("radio", { name: "Suggested", selected: true })).toBeTruthy();
+      expect(card().queryByRole("radio", { name: "My plan", selected: true })).toBeNull();
+    };
+    // The pick is answered: Suggested stays lit while the older read is still away.
     await act(async () => { releasePick?.(); await new Promise((done) => setTimeout(done, 20)); });
+    lit();
+    // The older read lands with My plan: Suggested stays lit; the read asked after the pick is still held.
+    await act(async () => { for (const done of older) done(); await new Promise((done) => setTimeout(done, 20)); });
+    lit();
+    holdReads = false;
     await act(async () => { for (const done of heldReads.splice(0)) done(); await new Promise((done) => setTimeout(done, 20)); });
-    expect(card().getByRole("radio", { name: "Suggested", selected: true })).toBeTruthy();
-    expect(card().queryByRole("radio", { name: "My plan", selected: true })).toBeNull();
+    lit();
   });
 });
