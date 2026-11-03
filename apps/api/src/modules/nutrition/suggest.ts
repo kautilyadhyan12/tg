@@ -217,6 +217,11 @@ const LEAST_PLATE_KCAL = 300;
 export const IDEA_TOLERANCE = 0.2;
 /** How many times one shape is drawn for one idea before it is given up. */
 const DRAWS = 100;
+/** How a week is drawn. It draws ideas for every meal of seven days, a dozen times a day, so
+ *  there, once `staleDraws` drawn ideas that fit come one after another no nearer the protein,
+ *  the best is kept, and the calories move half as far for protein so the day lands near its
+ *  own and is not drawn again. The day's ideas draw them all. */
+export const WEEK_DRAWING = { staleDraws: 6, kcalRoom: IDEA_TOLERANCE / 4 } as const;
 
 interface Bounds { step: number; min: number; max: number }
 
@@ -252,7 +257,7 @@ const partsGrams = (parts: readonly Part[]): number => parts.reduce((n, p) => n 
 
 /** Each part at its share of the meal, on a step of its own; then one step at a
  *  time, whichever brings the whole nearest the meal's calories, until none does. */
-function sized(shares: readonly Share[], kcalTarget: number, protein?: ProteinAim): Part[] {
+function sized(shares: readonly Share[], kcalTarget: number, protein?: ProteinAim, kcalRoom: number = PROTEIN_KCAL_ROOM): Part[] {
   const parts = shares.map(([food, role, share]): Part => {
     const bounds = boundsFor(food, role);
     const wanted = ((share * kcalTarget) / food.kcal) * 100;
@@ -272,26 +277,27 @@ function sized(shares: readonly Share[], kcalTarget: number, protein?: ProteinAi
     if (best === null) break;
     best.part.grams = best.grams;
   }
-  if (protein !== undefined) towardProtein(parts, kcalTarget, protein);
+  if (protein !== undefined) towardProtein(parts, kcalTarget, protein, kcalRoom);
   return parts;
 }
 
 /** How far the calories may move from the meal's while an idea is brought to its protein:
- *  half of what an idea may be off by, so the protein never costs the calories. */
+ *  a quarter of what an idea may be off by, so the protein never costs the calories, and a week's
+ *  days still land near theirs. */
 const PROTEIN_KCAL_ROOM = IDEA_TOLERANCE / 2;
 const partsProtein = (parts: readonly Part[]): number => parts.reduce((n, p) => n + (p.food.proteinG * p.grams) / 100, 0);
 const partsCarbs = (parts: readonly Part[]): number => parts.reduce((n, p) => n + (p.food.carbsG * p.grams) / 100, 0);
 
 /** One step of one part, or one up and another down, at a time, whichever brings the idea
- *  nearest its protein while its calories stay within PROTEIN_KCAL_ROOM of the meal's. */
-function towardProtein(parts: Part[], kcalTarget: number, aim: ProteinAim): void {
+ *  nearest its protein while its calories stay within `kcalRoom` of the meal's. */
+function towardProtein(parts: Part[], kcalTarget: number, aim: ProteinAim, kcalRoom: number): void {
   type Move = readonly (readonly [Part, number])[];
   const can = (p: Part, grams: number): boolean => grams >= p.bounds.min - 1e-9 && grams <= p.bounds.max + 1e-9;
   /** The idea's miss after the moves, or null where they leave its calories out of room. */
   const after = (moves: Move): number | null => {
     const was = moves.map(([p]) => p.grams);
     for (const [p, g] of moves) p.grams = g;
-    const kcalOk = Math.abs(partsKcal(parts) - kcalTarget) <= kcalTarget * PROTEIN_KCAL_ROOM;
+    const kcalOk = Math.abs(partsKcal(parts) - kcalTarget) <= kcalTarget * kcalRoom;
     const miss = proteinMiss(partsProtein(parts), partsCarbs(parts), aim);
     moves.forEach(([p], i) => { p.grams = was[i] ?? p.grams; });
     return kcalOk ? miss : null;
@@ -308,7 +314,6 @@ function towardProtein(parts: Part[], kcalTarget: number, aim: ProteinAim): void
     if (best === null) break;
     for (const [p, g] of best) p.grams = g;
   }
-
 }
 
 /** Every move of one step from where the parts stand now. */
@@ -421,7 +426,8 @@ export const MEAL_LAYOUT: Readonly<Record<number, readonly MealType[]>> = {
 export function mealsAhead(mealsPerDay: number, hour: number, count: number, mealsLogged = 0): MealType[] {
   const layout = MEAL_LAYOUT[Math.min(Math.max(mealsPerDay, 2), MOST_MEALS)] ?? [];
   const now = mealTypeAtHour(hour);
-  const next: MealType = hour < 4 ? "breakfast" : now === "snack" ? "dinner" : now;
+  // Before 4 am the meal is the night's dinner, as the phone logs it (ideaRules.ts).
+  const next: MealType = hour < 4 || now === "snack" ? "dinner" : now;
   const order: Readonly<Record<MealType, number>> = { breakfast: 0, lunch: 1, snack: 1.5, dinner: 2 };
   const byHour = layout.findIndex((t) => t !== "snack" && order[t] >= order[next]);
   const meals = layout.flatMap((t, at) => (t === "snack" ? [] : [at]));
@@ -462,6 +468,7 @@ export function ideaMaker(
   diet: Diet,
   avoid: Iterable<string> = [],
   region: FoodRegion = "other",
+  drawing: { staleDraws: number; kcalRoom: number } = { staleDraws: Infinity, kcalRoom: PROTEIN_KCAL_ROOM },
 ): (kcalTarget: number, wanted: MealIdeaKind, mostKcal?: number, leastKcal?: number, protein?: ProteinAim) => MealIdea | null {
   const next = drawer(hash(seed));
   const allowed = (role: SuggestRole): CuratedFood[] => SUGGEST_POOLS[role].filter((f) => dietAllows(diet, f.diet) && regionAllows(region, f.canonical));
@@ -486,7 +493,7 @@ export function ideaMaker(
   const keyOf = (parts: readonly Part[]): string => parts.map((p) => `${p.food.canonical}:${String(p.grams)}`).sort().join("|");
 
   return (kcalTarget, wanted, mostKcal = Infinity, leastKcal = 0, protein) => {
-    const size = (...shares: Share[]): Part[] => sized(shares, kcalTarget, protein);
+    const size = (...shares: Share[]): Part[] => sized(shares, kcalTarget, protein, drawing.kcalRoom);
     /** A bowl; oats with milk beside them (Kd, 2026-11-02: oats are "mixed with milk"). */
     const bowl = (bowlShare: number, ...rest: Share[]): Part[] => {
       const base = pick("bowl");
@@ -542,11 +549,17 @@ export function ideaMaker(
     let chosen: { kind: MealIdeaKind; parts: Part[] } | null = null;
     for (const kind of kcalTarget < LEAST_PLATE_KCAL || wanted === "plate" ? [wanted] : [wanted, "plate"] as const) {
       let best: Part[] | null = null;
-      for (let tries = 0; tries <= DRAWS; tries++) {
+      // Draws that fit without coming nearer the protein than the best so far; past `drawing.staleDraws`
+      // of them the best is kept, so a meal the foods cannot reach costs a few draws, not all.
+      let stale = 0;
+      for (let tries = 0; tries <= DRAWS && stale < drawing.staleDraws; tries++) {
         freshOnly = tries < DRAWS / 4;
         const parts = shapes[kind]();
         if (!fits(parts)) continue;
-        if (best === null || missOf(parts) < missOf(best)) best = parts;
+        if (best === null || missOf(parts) < missOf(best)) {
+          best = parts;
+          stale = 0;
+        } else stale++;
         if (met(parts) && !parts.some((p) => swappedOut.has(p.food.canonical))) break;
       }
       if (best === null) continue;

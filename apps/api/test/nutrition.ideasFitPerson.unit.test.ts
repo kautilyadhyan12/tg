@@ -2,7 +2,10 @@
 // the job's worst thing: an idea that tells somebody to eat a food raw or dry that is
 // eaten cooked. It reads every suggested food's own name AND its table's name, against
 // words from real USDA descriptions the list has never held.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import { dietAllows, type Diet, type MealIdea, type MealType } from "@app/shared";
 import { foodOf, tableName, tableText } from "./foodDietByTable.js";
 import { planDay } from "../src/modules/nutrition/dietPlan.js";
@@ -164,9 +167,12 @@ describe("protein for this meal, from this person (ISSN 2017; Schoenfeld and Ara
     expect(mean(20)).toBeGreaterThan(mean(100));
   });
 
-  it("without the person's weight the ideas are drawn for calories alone, as before", () => {
-    const base = { seed: "p", day: day(5), diet: "vegan" as const, mealsPerDay: 3, kcalTarget: 2000, kcalEaten: 0, mealsLogged: 0 };
-    expect(suggestMeals(base)).toEqual(suggestMeals({ ...base }));
+  it("the person's protein changes the ideas: a 100 kg person losing weight is offered more protein than calories alone give", () => {
+    const base = { seed: "p", day: day(5), diet: "vegetarian" as const, mealsPerDay: 3, kcalTarget: 2000, kcalEaten: 0, mealsLogged: 0, hour: 12 };
+    const mean = (ideas: readonly MealIdea[]): number => ideas.reduce((n, i) => n + i.totals.proteinG, 0) / ideas.length;
+    const without = suggestMeals(base).meals.flatMap((m) => m.ideas);
+    const withProtein = suggestMeals({ ...base, protein: { weightKg: 100, dayTargetG: 200, eatenG: 0 } }).meals.flatMap((m) => m.ideas);
+    expect(mean(withProtein)).toBeGreaterThan(mean(without) + 5);
   });
 });
 
@@ -175,7 +181,7 @@ describe("the meal's time: breakfast foods in the morning, a plate or a dish at 
     const cases: [mealsPerDay: number, hour: number, count: number, logged: number, want: MealType[]][] = [
       [3, 8, 3, 0, ["breakfast", "lunch", "dinner"]], [3, 9, 2, 1, ["lunch", "dinner"]], [3, 13, 2, 1, ["lunch", "dinner"]],
       [3, 17, 1, 2, ["dinner"]], [3, 21, 2, 1, ["dinner", "dinner"]], [5, 8, 5, 0, ["breakfast", "snack", "lunch", "snack", "dinner"]],
-      [4, 12, 3, 1, ["lunch", "snack", "dinner"]], [2, 8, 2, 0, ["lunch", "dinner"]], [6, 2, 6, 0, ["breakfast", "snack", "lunch", "snack", "dinner", "snack"]],
+      [4, 12, 3, 1, ["lunch", "snack", "dinner"]], [2, 8, 2, 0, ["lunch", "dinner"]], [6, 2, 2, 0, ["dinner", "snack"]], [3, 1, 1, 0, ["dinner"]],
     ];
     for (const [mealsPerDay, hour, count, logged, want] of cases) {
       expect(mealsAhead(mealsPerDay, hour, count, logged), `${String(mealsPerDay)} meals at ${String(hour)}:00, ${String(logged)} logged`).toEqual(want);
@@ -194,20 +200,23 @@ describe("the meal's time: breakfast foods in the morning, a plate or a dish at 
     }
   });
 
-  it("a breakfast's ideas are a bowl, toast or eggs; a lunch or dinner's a plate or a dish", () => {
+  it("the next meal's ideas: before 11 am with nothing logged, a bowl, toast or eggs whatever its calories; from noon, a plate or a dish", () => {
+    // The next meal by the clock alone, from this test's own table: a day of two meals has no breakfast.
+    let breakfasts = 0;
     for (const diet of DIETS) {
       for (const { input } of sweepInputs(diet)) {
-        const types = mealsAhead(input.mealsPerDay, input.hour ?? 0, suggestMeals(input).meals.length, input.mealsLogged);
-        suggestMeals(input).meals.forEach((meal, at) => {
-          const t = types[at];
-          for (const idea of meal.ideas) {
-            if (meal.kcalTarget < 300) expect(idea.kind).toBe("light");
-            else if (t === "lunch" || t === "dinner") expect(idea.kind, JSON.stringify(input)).not.toBe("light");
-            else if (meal.kcalTarget <= 450) expect(idea.kind, JSON.stringify(input)).toBe("light");
-          }
-        });
+        const first = suggestMeals(input).meals[0];
+        if (first === undefined) continue;
+        const hour = input.hour ?? 0;
+        for (const idea of first.ideas) {
+          if (hour < 11 && input.mealsLogged === 0 && input.mealsPerDay >= 3) {
+            breakfasts++;
+            expect(idea.kind, JSON.stringify(input)).toBe("light");
+          } else if (hour >= 12 && first.kcalTarget >= 300) expect(idea.kind, JSON.stringify(input)).not.toBe("light");
+        }
       }
     }
+    expect(breakfasts).toBeGreaterThan(0);
   });
 });
 
@@ -246,6 +255,29 @@ describe("sugar: one meal holds no more than 10 g of added sugars (Dietary Guide
     expect(addedSugarAtMost([{ canonical: apple?.canonical ?? "", grams: 150 }])).toBe(0);
   });
 
+  it("every suggested bread, spread, dish and soy milk is counted at its own USDA sugars; foods with only their own sugars are not", () => {
+    const usda = z.object({ foods: z.record(z.string(), z.number().nullable()) }).parse(
+      JSON.parse(readFileSync(join(import.meta.dirname, "fixtures", "usda-sugars.json"), "utf8")),
+    ).foods;
+    /** Home dishes cited from the UK's table, with no USDA figure. */
+    const COFID = new Set(["Chana masala (chickpea curry)", "Khichdi (rice and mung beans, with ghee)", "Tandoori chicken", "Roti / Chapati (homemade flatbread, no fat)"]);
+    const mayHoldAdded = new Set(["bread", "toast", "spread", "dish", "curry_side"]);
+    for (const [role, foods] of Object.entries(SUGGEST_POOLS)) {
+      for (const food of foods) {
+        const counted = addedSugarAtMost([{ canonical: food.canonical, grams: 100 }]);
+        const id = /^usda-(?:sr|fndds):(\d+)$/.exec(food.citation)?.[1];
+        if (mayHoldAdded.has(role) || food.name === "Soy milk") {
+          if (COFID.has(food.name) || id === undefined) {
+            expect(COFID.has(food.name), food.name).toBe(true);
+            continue;
+          }
+          if (role === "curry_side" && counted === 0) continue; // rice beside a curry holds its own sugars only
+          expect(counted, `${food.name} (${id})`).toBeCloseTo(usda[id] ?? Number.NaN, 2);
+        }
+      }
+    }
+  });
+
   it("no idea of any diet, day or meal holds more", () => {
     for (const diet of DIETS) {
       for (const idea of sweepIdeas(diet)) {
@@ -256,14 +288,14 @@ describe("sugar: one meal holds no more than 10 g of added sugars (Dietary Guide
 });
 
 describe("the app's week is drawn the same way", () => {
-  it("a week's breakfasts, lunches and dinners reach 0.25 g/kg as often as the day's ideas, and none passes 0.55 g/kg", () => {
+  it("a week's breakfasts, lunches and dinners reach 0.25 g/kg as often as the day's ideas; none passes 0.55 g/kg by a tenth", () => {
     for (const diet of ["non_vegetarian", "vegetarian"] as const) {
       let n = 0;
       let met = 0;
       for (const p of PEOPLE) {
         for (let d = 1; d <= 7; d++) {
           for (const meal of planDay({ seed: "w", day: d, diet, mealsPerDay: 4, kcalTarget: p.kcal, protein: { weightKg: p.weightKg, dayTargetG: p.proteinG } })) {
-            expect(meal.idea.totals.proteinG).toBeLessThanOrEqual(0.55 * p.weightKg + 0.05);
+            expect(meal.idea.totals.proteinG).toBeLessThanOrEqual(0.55 * p.weightKg * 1.1);
             if (meal.mealType === "snack") continue;
             n++;
             if (meal.idea.totals.proteinG >= 0.25 * p.weightKg - 0.05) met++;

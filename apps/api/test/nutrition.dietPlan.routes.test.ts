@@ -15,6 +15,7 @@ import { loadConfig } from "../src/config.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
 import type { FoodSearchProvider } from "../src/modules/nutrition/openfoodfacts.adapter.js";
 import { foodOf, tableLowest } from "./foodDietByTable.js";
+import { planDay } from "../src/modules/nutrition/dietPlan.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -236,6 +237,34 @@ d("diet plan routes (real Postgres)", () => {
       expect(adultRings?.kcal).toBeLessThan(teenKcal);
       expect(bigKcal).toBeGreaterThan(3200);
       expect(hugeKcal).toBeGreaterThan(4100);
+    });
+  });
+
+  describe("the week is drawn for the person (31d-i)", () => {
+    it("a week made in India is the rule's own for the person's weight, protein and region, and a swap keeps to the region", { timeout: 60_000 }, async () => {
+      const cookies = await eater("india", "non_vegetarian", 4);
+      await sql`UPDATE users SET timezone = 'Asia/Kolkata' WHERE email = 'dietplan-india@example.com'`;
+      const id = await idOf("india");
+      const targets = JSON.parse((await inject({ method: "GET", url: "/v1/nutrition/targets", cookies })).body) as { targets: { kcal: number; proteinG: number } };
+      const changeId = randomUUID();
+      const made = parsed(await make(cookies, { changeId }));
+      for (const day of made.days) {
+        const want = planDay({
+          seed: `${id}|make|${changeId}`, day: day.day, diet: "non_vegetarian", mealsPerDay: 4, kcalTarget: targets.targets.kcal,
+          region: "india", protein: { weightKg: 70, dayTargetG: targets.targets.proteinG },
+        });
+        expect(day.meals.map((m) => m.items.map((i) => i.canonical).sort()), `day ${String(day.day)}`)
+          .toEqual(want.map((m) => m.idea.items.map((i) => i.canonical).sort()));
+      }
+      const swapped = parsed(await swap(cookies, 1, { changeId: randomUUID(), meal: 1 }));
+      const BEEF_PORK = /beef|pork|^steak|chili con carne|bolognese|cobb|paella|bibimbap|rice and beans with meat/i;
+      for (const name of swapped.days.flatMap((d) => d.meals.flatMap((m) => m.items.map((i) => i.name)))) expect(BEEF_PORK.test(name), name).toBe(false);
+    });
+
+    it("a person may make their week 10 times a minute; the 11th is refused", { timeout: 60_000 }, async () => {
+      const cookies = await eater("limit", "vegan", 3);
+      for (let i = 0; i < 10; i++) expect((await make(cookies)).statusCode).toBe(200);
+      expect((await make(cookies)).statusCode).toBe(429);
     });
   });
 

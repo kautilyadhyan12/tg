@@ -117,9 +117,9 @@ d("meal ideas route (real Postgres)", () => {
   const proteinEaten = async (id: string): Promise<number> =>
     Number((await sql<{ p: string }[]>`SELECT coalesce(sum(protein_g), 0) AS p FROM meal_logs WHERE user_id = ${id}`)[0]?.p ?? 0);
   /** The reply against the rule's own answer for these numbers, at the hour before or after the request (a reply may straddle one). */
-  const expectRule = async (cookies: Cookies, numbers: Omit<SuggestInput, "hour">, before: number): Promise<void> => {
+  const expectRule = async (cookies: Cookies, numbers: Omit<SuggestInput, "hour">, before: number, zone = "UTC"): Promise<void> => {
     const reply = await ok(cookies);
-    const at = [before, hourInTz(new Date(), "UTC")].map((hour) => suggestMeals({ ...numbers, hour }).meals);
+    const at = [before, hourInTz(new Date(), zone)].map((hour) => suggestMeals({ ...numbers, hour }).meals);
     expect(at.some((meals) => JSON.stringify(meals) === JSON.stringify(reply.meals))).toBe(true);
   };
 
@@ -309,6 +309,15 @@ d("meal ideas route (real Postgres)", () => {
     const usa = await eater("usa", "vegetarian", 6);
     await sql`UPDATE users SET timezone = 'Asia/Kolkata' WHERE email = 'ideas-india@example.com'`;
     await sql`UPDATE users SET timezone = 'America/New_York' WHERE email = 'ideas-usa@example.com'`;
+    // Each reply is the rule's own for the person's region, so a reply that merely happened to draw no such food cannot pass.
+    for (const [cookies, name, diet, region, zone] of [[india, "india", "non_vegetarian", "india", "Asia/Kolkata"], [usa, "usa", "vegetarian", "west", "America/New_York"]] as const) {
+      const hour = hourInTz(new Date(), zone);
+      const reply = await ok(cookies);
+      await expectRule(cookies, {
+        seed: ideasSeed(await idOf(name), 0), day: reply.day, diet, mealsPerDay: 6, kcalTarget: 1817, kcalEaten: 0, mealsLogged: 0,
+        afterWorkout: false, region, protein: { weightKg: 70, dayTargetG: await proteinTarget(cookies), eatenG: 0 },
+      }, hour, zone);
+    }
     const names = async (cookies: Cookies) => (await ok(cookies)).meals.flatMap((m) => m.ideas).flatMap((i) => i.items).map((i) => i.name);
     const inIndia = await names(india);
     expect(inIndia.length).toBeGreaterThan(0);

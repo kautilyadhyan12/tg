@@ -3,7 +3,7 @@
 // out. Every meal is an idea of the meal ideas' own rule (`ideaMaker`), so the foods,
 // the diet rule and the amounts are the same as theirs.
 import { MOST_PLAN_MEALS, type Diet, type MealIdea, type MealIdeaKind, type MealType } from "@app/shared";
-import { LEAST_MEAL_KCAL, MEAL_LAYOUT, MOST_LIGHT_KCAL, MOST_MEALS, MOST_MEAL_KCAL, hash, ideaMaker, proteinAim, type FoodRegion, type ProteinAim } from "./suggest.js";
+import { LEAST_MEAL_KCAL, MEAL_LAYOUT, MOST_LIGHT_KCAL, MOST_MEALS, MOST_MEAL_KCAL, WEEK_DRAWING, hash, ideaMaker, proteinAim, type FoodRegion, type ProteinAim } from "./suggest.js";
 
 /** Each meal's share of the day, by its kind. */
 const WEIGHT: Readonly<Record<MealType, number>> = { breakfast: 3, lunch: 4, dinner: 4, snack: 1.5 };
@@ -98,7 +98,7 @@ export function planDay(input: PlanDayInput): PlannedMeal[] {
   const better = (kcal: number, than: number): boolean =>
     kcal >= input.kcalTarget !== than >= input.kcalTarget ? kcal >= input.kcalTarget : Math.abs(kcal - input.kcalTarget) < Math.abs(than - input.kcalTarget);
   for (let draw = 0; draw < DAY_DRAWS; draw++) {
-    const make = ideaMaker(`${input.seed}|${String(input.day)}|${String(draw)}`, input.diet, [], input.region);
+    const make = ideaMaker(`${input.seed}|${String(input.day)}|${String(draw)}`, input.diet, [], input.region, WEEK_DRAWING);
     let turn = input.day;
     const meals = slots.flatMap((slot): PlannedMeal[] => {
       const kind = kindOf(slot.mealType, slot.mealType === "lunch" || slot.mealType === "dinner" ? turn++ : turn);
