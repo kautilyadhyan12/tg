@@ -55,8 +55,8 @@ interface MealIdeasProps {
   planned?: PlannedNow;
   /** The Dashboard's Log meal: it opens the Food page's What to eat next, never logs by itself (Kd, 2026-11-02). */
   onLog?: () => void;
-  /** A line above the ideas: on a day the person's own plan has no meals, it says so. */
-  lead?: string;
+  /** A line above the ideas, with its one button: on a day the person's own plan has no meals, it says so. */
+  lead?: { words: string; action: { label: string; onPress: () => void } };
 }
 
 /** "loading": whether there is a plan isn't known yet. `meal` null: every meal of today's plan is logged. */
@@ -143,7 +143,10 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
           <Button label="See meal plan" kind="link" compact style={styles.start} onPress={onMore} />
         </>
       ) : (
-        <BestPlanned meal={meal} onLog={onLog ?? onMore} onMore={onMore} />
+        <>
+          <Source word="My plan" />
+          <BestPlanned meal={meal} onLog={onLog ?? onMore} onMore={onMore} />
+        </>
       );
     foot =
       meal === null ? null : (
@@ -204,6 +207,7 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
     const [next, ...rest] = read.data.meals;
     body = (
       <>
+        <Source word="Suggested" />
         {onDashboard ? (
           next.ideas[0] === undefined ? null : (
             <BestIdea idea={next.ideas[0]} onLog={onLog ?? onMore} onMore={onMore} />
@@ -269,7 +273,13 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
         }}
       />
     );
-  const leadLine = lead === undefined ? null : <Txt kind="small">{lead}</Txt>;
+  const leadLine =
+    lead === undefined ? null : (
+      <View>
+        <Txt kind="small">{lead.words}</Txt>
+        <Button label={lead.action.label} kind="link" compact style={styles.start} onPress={lead.action.onPress} />
+      </View>
+    );
   if (bare) {
     return (
       <>
@@ -407,6 +417,15 @@ function BestPlanned({ meal, onLog, onMore }: { meal: DietPlanMeal; onLog: () =>
   );
 }
 
+/** Whose meal is shown: the app's ("Suggested") or the person's own ("My plan"). */
+export function Source({ word }: { word: "Suggested" | "My plan" }) {
+  return (
+    <Txt kind="tiny" colour="textSoft" style={styles.source}>
+      {word.toUpperCase()}
+    </Txt>
+  );
+}
+
 /** Why the idea holds what it does, in the server's one reason (spec Part 6 §16.6, 8). */
 function Why({ idea }: { idea: SuggestedIdea }) {
   return (
@@ -456,5 +475,6 @@ const styles = StyleSheet.create({
   start: { alignSelf: "flex-start" },
   idea: { flexDirection: "row", alignItems: "center", gap: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: colours.line },
   numbers: { fontFamily: fonts.semibold, marginTop: 2 },
+  source: { fontFamily: fonts.semibold, letterSpacing: 1 },
   later: { gap: 8, marginBottom: sizes.edge },
 });

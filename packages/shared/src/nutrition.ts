@@ -704,7 +704,7 @@ export type NutritionTargetsResponse = z.infer<typeof nutritionTargetsResponseSc
  *  told to take care if they have any food allergy, and to check labels. One
  *  wording, read by every screen that suggests food — the meal ideas after a
  *  workout today, the meal suggestions (ROADMAP 7a) when they are built. */
-export const FOOD_ALLERGY_CAUTION = "If you have any food allergy, take care and check the labels.";
+export const FOOD_ALLERGY_CAUTION = "Have a food allergy? Always check the label.";
 
 /** The line a vegetarian or vegan reads under the meal ideas, beside the allergy
  *  line (Kd, 2026-10-14): a food's diet follows its usual recipe, and no label

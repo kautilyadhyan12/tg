@@ -299,6 +299,8 @@ describe("one box, one answer", () => {
     const box = await open(world, files(), "Dashboard");
     const card = within(await box.findByTestId("recommended-box"));
     expect(card.getByText(FOOD_ALLERGY_CAUTION)).toBeTruthy();
+    expect(await card.findByText("MY PLAN")).toBeTruthy();
+    expect(card.queryByText("SUGGESTED")).toBeNull();
     await fireEvent.press(await card.findByRole("button", { name: "Log Rice + Dal" }));
     const food = within(await screen.findByTestId("meal-plan-box"));
     expect(screen.getByRole("tab", { name: "Food", selected: true })).toBeTruthy();
@@ -316,21 +318,28 @@ describe("one box, one answer", () => {
   it("a plan with nothing today shows the app's ideas, each with its reason, and logs one (Kd, 31d-i's click-through)", async () => {
     const world = serverOf(() => ok(week([], {}, [OATS])), { "/v1/nutrition/suggestions": () => ok(WITH_IDEA) });
     const box = within(await (await open(world)).findByTestId("meal-plan-box"));
-    expect(await box.findByText("Nothing planned for today.")).toBeTruthy();
+    expect(await box.findByText("No meals in your plan today.")).toBeTruthy();
+    // Whose meal it is: the app's, never read as the plan's.
+    expect(box.getByText("SUGGESTED")).toBeTruthy();
+    expect(box.queryByText("MY PLAN")).toBeNull();
     expect(box.getByText(IDEA_WHY_WORDS.share)).toBeTruthy();
     expect(box.getByText(FOOD_ALLERGY_CAUTION)).toBeTruthy();
-    expect(box.getByRole("button", { name: "See the week" })).toBeTruthy();
     expect(box.queryByRole("button", { name: "Other ideas" })).toBeNull();
     expect(screen.queryByTestId("meal-ideas-box")).toBeNull();
     await fireEvent.press(box.getByRole("button", { name: "Log Paneer + Rice" }));
     await waitFor(() => { expect(world.meals).toHaveLength(1); });
     expect((posts(world, "/v1/nutrition/meals")[0]?.body as { planned?: unknown }).planned).toBeUndefined();
+    // Add a meal opens the week on today, already asking which meal.
+    await fireEvent.press(box.getByRole("button", { name: "Add a meal" }));
+    expect(await screen.findByText(`Which meal on ${planDayName(TODAY)}?`)).toBeTruthy();
   });
 
   it("on the Dashboard a plan with nothing today shows the app's idea, and More ideas opens Food's box", async () => {
     const world = serverOf(() => ok(week([], {}, [OATS])), { "/v1/nutrition/suggestions": () => ok(WITH_IDEA) });
     const card = within(await (await open(world, files(), "Dashboard")).findByTestId("recommended-box"));
-    expect(await card.findByText("Nothing planned for today.")).toBeTruthy();
+    expect(await card.findByText("No meals in your plan today.")).toBeTruthy();
+    expect(card.getByText("SUGGESTED")).toBeTruthy();
+    expect(card.getByRole("button", { name: "See meal plan" })).toBeTruthy();
     expect(card.getByText(IDEA_WHY_WORDS.share)).toBeTruthy();
     expect(card.getByText(FOOD_ALLERGY_CAUTION)).toBeTruthy();
     await fireEvent.press(card.getByRole("button", { name: "More ideas" }));

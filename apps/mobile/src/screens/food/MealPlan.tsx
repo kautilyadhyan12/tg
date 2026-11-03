@@ -18,7 +18,7 @@ import { newGoalId } from "../goals/words";
 import { mealTypeName, startOfDay } from "./day";
 import { dayRows, useDayMeals } from "./dayRows";
 import { ideaName } from "./ideaRules";
-import { MealIdeas, type PlannedNow } from "./MealIdeas";
+import { MealIdeas, Source, type PlannedNow } from "./MealIdeas";
 import { useMealOutbox } from "./MealOutbox";
 import { loggedAmount } from "./measures";
 import type { BasketFood, PlanMealTarget } from "./basket";
@@ -28,7 +28,7 @@ import { foodTitle, measuresWithoutServer } from "./rows";
 export const PLAN_READ = "/v1/nutrition/diet-plan";
 const NO_CONNECTION = "No connection. Try again.";
 const NO_SETTLE = () => undefined;
-const NOTHING_TODAY = "Nothing planned for today.";
+const NOTHING_TODAY = "No meals in your plan today.";
 
 /** What Undo puts back: the day as it stood before the last swap, and the day's version the swap made. */
 interface Undo { id: string; day: number; meals: DietPlanMeal[]; version: string }
@@ -239,6 +239,11 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
     setChoosing(false);
     setRemoving(null);
     setWeek(true);
+  };
+  /** The week, on today, already asking which meal to add. */
+  const addMeal = () => {
+    openWeek();
+    setChoosing(true);
   };
 
   // Until today's meals are read, which planned meal is next isn't known.
@@ -478,10 +483,12 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
           )
         ) : meals.length === 0 ? (
           // A day of the plan with no meals: the app's ideas in its place (Kd, 31d-i's click-through).
-          <>
-            <MealIdeas bare fresh={fresh} onAnswered={onAnswered} lead={NOTHING_TODAY} />
-            <View style={styles.actions}>{seeWeek}</View>
-          </>
+          <MealIdeas
+            bare
+            fresh={fresh}
+            onAnswered={onAnswered}
+            lead={{ words: NOTHING_TODAY, action: { label: "Add a meal", onPress: addMeal } }}
+          />
         ) : next === undefined ? (
           <>
             <Txt kind="small">All of today’s meals are logged.</Txt>
@@ -492,6 +499,7 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
           </>
         ) : (
           <>
+            <Source word="My plan" />
             <MealWords meal={next} />
             <OutsideDiet meal={next} />
             <View style={styles.actions}>
@@ -536,7 +544,7 @@ function RecommendedFromPlan({ plan, onMore, onIdeas, onLog }: { plan: DietPlanR
   }
   const meals = plan.days[planDayOf(day) - 1]?.meals ?? [];
   // Today has no meals in the plan: the app's ideas, as on the Food page.
-  if (meals.length === 0) return <MealIdeas onMore={onIdeas} onLog={onLog} lead={NOTHING_TODAY} />;
+  if (meals.length === 0) return <MealIdeas onMore={onIdeas} onLog={onLog} lead={{ words: NOTHING_TODAY, action: { label: "See meal plan", onPress: onMore } }} />;
   const foods = rows.map((r) => foodsOfRow(r, view.waiting));
   const planned: PlannedNow = {
     meal: meals[loggedOfDay(meals, foods).indexOf(false)] ?? null,
