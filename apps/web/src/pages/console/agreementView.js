@@ -80,6 +80,52 @@ export function agreementLineParts(membership, inUse, signable, when) {
   return null;
 }
 
+// ── BEFORE THEY BOOK (18u-iv), the last part of Membership agreements ──
+
+/** The two choices. Every business starts on the first. */
+export const UNSIGNED_BOOKING_CHOICES = [
+  { value: 'let_book', label: 'Let them book' },
+  { value: 'stop', label: 'Stop new bookings until they sign' },
+];
+
+/** What the part is about, said under its title. */
+export const UNSIGNED_BOOKING_INTRO = "What happens when a member who hasn't signed their membership agreement tries to book in the app.";
+
+/** What the choice does and does not touch, said under it. */
+export const UNSIGNED_BOOKING_HINT =
+  'This stops booking classes, waitlists and personal training in the app. Places already booked stay booked, and your staff can still book a personal training session for them. Once they sign, they can book again.';
+
+const people = (n) => (n === 1 ? '1 person' : `${n.toLocaleString('en')} people`);
+
+/** The sentences about who has a membership agreement to sign today, under the choice picked
+ *  (`rule`); `changed`: it is not saved yet. Null where the reader is sent no names. */
+export function unsignedPeopleWords(stopped, rule, changed) {
+  if (stopped === null || stopped === undefined || typeof stopped.count !== 'number') return null;
+  const { count } = stopped;
+  if (count === 0) return { title: 'Nobody on your list has a membership agreement to sign today.', rest: null };
+  const title = `Today ${people(count)} on your list ${count === 1 ? 'has' : 'have'} a membership agreement to sign:`;
+  if (rule === 'stop') {
+    const staff = typeof stopped.staff === 'number' ? stopped.staff : 0;
+    if (staff === count) return { title, rest: 'They are your staff, so they can still book.' };
+    const line = `${changed ? 'Once you save, they' : 'They'} can't book classes or personal training in the app until they sign.`;
+    return { title, rest: staff === 0 ? line : `${line} Your staff can still book.` };
+  }
+  return { title, rest: changed ? 'Once you save, they can book in the app again.' : 'They can still book in the app.' };
+}
+
+/** The names sent (the first few) and how many more there are. */
+export function unsignedNames(stopped) {
+  const list = Array.isArray(stopped?.people) ? stopped.people : [];
+  const count = typeof stopped?.count === 'number' ? stopped.count : list.length;
+  return {
+    shown: list.map((person) => ({ entryId: person.entryId, name: person.name === '' ? 'No name' : person.name })),
+    more: Math.max(0, count - list.length),
+  };
+}
+
+/** Said beside "Agreement not signed" while the business stops new bookings until it is (18u-iv). */
+export const UNSIGNED_STOPS_LINE = "Can't book until signed.";
+
 /** What Email a link to sign did, said under the membership. */
 export function agreementLinkSentLine(emailed, days) {
   if (emailed === 'sent') return `A link to sign was emailed to them. It works for ${String(days)} days.`;

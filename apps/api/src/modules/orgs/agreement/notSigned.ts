@@ -5,15 +5,22 @@
 // line of the price list asks for an agreement today, and nobody has signed it: the person's page
 // says "Agreement not signed" under that membership by the same rule (`agreementSignable`).
 import { agreementSignable, heldMembershipView } from "@app/shared";
-import type { Sql } from "postgres";
+import type { Sql, TransactionSql } from "postgres";
 import { unsignedAgreementHeld } from "../memberships/heldRepo.js";
 import * as repo from "./repo.js";
 
-/** The current records with an agreement to sign; null where the business asks for none. */
-export async function agreementNotSignedRecords(sql: Sql, gymId: string, today: string): Promise<Set<string> | null> {
+/** The current records with an agreement to sign, of the whole list or only of `among`; null
+ *  where the business asks for none. Bookings read it too, where the gym stops a member's new
+ *  bookings until they sign (18u-iv). */
+export async function agreementNotSignedRecords(
+  sql: Sql | TransactionSql,
+  gymId: string,
+  today: string,
+  among: readonly string[] | null = null,
+): Promise<Set<string> | null> {
   if (!(await repo.anyInUse(sql, gymId))) return null;
   const records = new Set<string>();
-  for (const row of await unsignedAgreementHeld(sql, gymId)) {
+  for (const row of await unsignedAgreementHeld(sql, gymId, among)) {
     if (agreementSignable(heldMembershipView(row.membership, today).status)) records.add(row.entryId);
   }
   return records;

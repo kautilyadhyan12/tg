@@ -763,6 +763,12 @@ describe('opened from Overview on who has a payment due', () => {
     await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'records=former&paymentStatus=Payment+due'));
   });
 
+  it("opens on who has a membership agreement to sign, from Membership agreements' See all (18u-iv)", async () => {
+    draw({ startShow: 'agreement-not-signed' });
+    await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'agreement=not_signed'));
+    expect(within(await screen.findByTestId('showing')).getByRole('button', { name: 'Stop showing only Agreement not signed' })).toBeTruthy();
+  });
+
   it('opens on everybody when not asked', async () => {
     draw();
     await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, ''));

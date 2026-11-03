@@ -2036,6 +2036,7 @@ export default function MemberMemberships({
           membership={m}
           inUse={m.agreementAsked === true}
           signable={!shown.past && (m.view.status === 'active' || m.view.status === 'upcoming')}
+          stopsBookings={shown.unsignedStopsBookings === true}
           readOnly={readOnly}
           open={agreementFor?.id === m.id}
           justGiven={agreementFor?.id === m.id && agreementFor.justGiven}

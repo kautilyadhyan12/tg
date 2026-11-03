@@ -2,6 +2,8 @@
 //   GET    /v1/orgs/:gymId/agreement        its words and how many memberships signed them (`org.manage`)
 //   PUT    /v1/orgs/:gymId/agreement        save the words
 //   DELETE /v1/orgs/:gymId/agreement        stop asking for it
+//   GET    /v1/orgs/:gymId/agreement/bookings   Before they book: the choice and who has one to sign (18u-iv)
+//   PUT    /v1/orgs/:gymId/agreement/bookings   change the choice
 //   POST   /v1/orgs/:gymId/agreements                  add another agreement (18u-ii-a)
 //   PUT    /v1/orgs/:gymId/agreements/:agreementId     save it: its name, words and lines of the price list
 //   DELETE /v1/orgs/:gymId/agreements/:agreementId     stop asking for it
@@ -22,6 +24,7 @@ import {
   saveGymAgreementBodySchema,
   saveOtherAgreementBodySchema,
   signMembershipAgreementBodySchema,
+  agreementBookingsBodySchema,
 } from "@app/shared";
 import type { Sql } from "postgres";
 import type { z } from "zod";
@@ -120,6 +123,24 @@ export function registerAgreementRoutes(
     const agreement = await service.stopGymAgreement(agreementDeps, requireUserId(req), params.gymId, gate(staffWriteLimit)(req, reply));
     if (agreement === null) return;
     return reply.status(200).header("cache-control", "no-store").send(agreement);
+  });
+
+  app.get(`${url}/bookings`, { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const answer = await service.getAgreementBookings(agreementDeps, requireUserId(req), params.gymId, gate(staffReadLimit)(req, reply));
+    if (answer === null) return;
+    return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  app.put(`${url}/bookings`, { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(agreementBookingsBodySchema, req.body, req, reply);
+    if (body === null) return;
+    const answer = await service.setAgreementBookings(agreementDeps, requireUserId(req), params.gymId, body.rule, gate(staffWriteLimit)(req, reply));
+    if (answer === null) return;
+    return reply.status(200).header("cache-control", "no-store").send(answer);
   });
 
   const othersUrl = "/v1/orgs/:gymId/agreements";

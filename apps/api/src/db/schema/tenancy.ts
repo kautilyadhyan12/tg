@@ -177,6 +177,9 @@ export const gyms = pgTable(
     /** Whether a member makes a new booking while a payment is overdue (0157; 17i), under
      *  `gyms_bookings_overdue_check`; `bookingOverdueSchema` in `@app/shared`. */
     bookingsOverdue: text("bookings_overdue").notNull().default("let_book"),
+    /** Whether a member makes a new booking while a membership agreement of theirs is not signed
+     *  (0197; 18u-iv), under `gyms_bookings_unsigned_check`; `bookingUnsignedSchema` in `@app/shared`. */
+    bookingsUnsigned: text("bookings_unsigned").notNull().default("let_book"),
     /** The key the create form sent (0137), so a second press with it answers the gym the
      *  first one made; null for a gym made before it or by a caller with none. */
     createKey: uuid("create_key"),

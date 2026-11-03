@@ -143,6 +143,7 @@ export const CLASS_BOOK_REFUSALS = [
   "class_full",
   "waitlist_full",
   "payment_overdue",
+  "agreement_not_signed",
 ] as const;
 export const classBookRefusalSchema = z.enum(CLASS_BOOK_REFUSALS);
 export type ClassBookRefusal = z.infer<typeof classBookRefusalSchema>;
@@ -162,9 +163,9 @@ export interface BookInput {
   /** The person asked for the waitlist if the class is full. */
   joinWaitlist: boolean;
   cover: Cover;
-  /** The gym stops new bookings while a payment is overdue, and this person's is
-   *  (`bookingStopped`, 17i). */
-  overdue: boolean;
+  /** Why the gym stops this person's new bookings now, or null: a payment overdue
+   *  (`bookingStopped`, 17i), or a membership agreement not signed (`unsignedStopped`, 18u-iv). */
+  stop: BookingStop | null;
 }
 
 export type BookDecision =
@@ -176,8 +177,8 @@ export type BookDecision =
 
 /** Book, Join waitlist and Claim: one rule. A free place goes to whoever asks and is
  *  covered, on the waitlist or not; with none free, the waitlist if they asked for it.
- *  Somebody the gym stops for an overdue payment (17i) is given no place and joins no
- *  waitlist; a place they hold already, or are waiting for already, stays theirs. */
+ *  Somebody the gym stops (an overdue payment, 17i; an agreement not signed, 18u-iv) is
+ *  given no place and joins no waitlist; a place they hold already, or are waiting for already, stays theirs. */
 export function decideBook(i: BookInput): BookDecision {
   if (i.mine === "booked") return { kind: "already", status: "booked" };
   if (i.cancelled) return { kind: "refuse", reason: "class_cancelled" };
@@ -185,11 +186,11 @@ export function decideBook(i: BookInput): BookDecision {
   if (i.time.phase === "before_opening") return { kind: "refuse", reason: "not_open_yet" };
   if (!i.cover.ok) return { kind: "refuse", reason: i.cover.reason };
   if (i.places === null || i.booked < i.places) {
-    if (i.overdue) return { kind: "refuse", reason: "payment_overdue" };
+    if (i.stop !== null) return { kind: "refuse", reason: i.stop };
     return { kind: "book", membershipId: i.cover.membershipId, chargePack: i.cover.chargePack, fromWaitlist: i.mine === "waitlisted" };
   }
   if (i.mine === "waitlisted") return { kind: "already", status: "waitlisted" };
-  if (i.overdue) return { kind: "refuse", reason: "payment_overdue" };
+  if (i.stop !== null) return { kind: "refuse", reason: i.stop };
   if (!i.joinWaitlist) return { kind: "refuse", reason: "class_full" };
   if (i.waitlisted >= i.waitlistMax) return { kind: "refuse", reason: "waitlist_full" };
   return { kind: "waitlist" };
@@ -256,6 +257,27 @@ export function bookingStopped(i: { rule: BookingOverdue; staff: boolean; owedSi
   return i.rule === "stop" && !i.staff && paymentOverdue(i.owedSince, i.today, i.overdueAfterDays);
 }
 
+// ── NO NEW BOOKINGS UNTIL THE MEMBERSHIP AGREEMENT IS SIGNED (18u-iv; Kd, 2026-10-23) ──
+
+/** The gym's choice, in Booking settings, as Wodify's Contract Enforcement: every gym starts
+ *  on `let_book`. */
+export const bookingUnsignedSchema = z.enum(BOOKING_OVERDUE_CHOICES);
+export type BookingUnsigned = z.infer<typeof bookingUnsignedSchema>;
+
+/** Why the gym stops a person's new bookings; a payment overdue is said before an agreement. */
+export type BookingStop = "payment_overdue" | "agreement_not_signed";
+
+/** What a member reads where a class or a session cannot be booked for it. */
+export const UNSIGNED_BOOKING_WORDS = "Your membership agreement isn't signed yet. Please sign it at the front desk to book.";
+
+/** Whether the gym's choice stops this person making a new booking today: a class, its waitlist,
+ *  a freed place or a personal training session. `unsigned`: their own record holds a membership,
+ *  running or still to start, whose agreement nobody has signed, as Members' "Agreement not signed"
+ *  reads it. The gym's owner and staff are never stopped. */
+export function unsignedStopped(i: { rule: BookingUnsigned; staff: boolean; unsigned: boolean }): boolean {
+  return i.rule === "stop" && !i.staff && i.unsigned;
+}
+
 /** What the person reads when the server says no. */
 export const CLASS_BOOKING_WORDS = {
   class_cancelled: "This class has been cancelled.",
@@ -268,6 +290,7 @@ export const CLASS_BOOKING_WORDS = {
   class_full: "This class is full.",
   waitlist_full: "This class and its waitlist are full.",
   payment_overdue: OVERDUE_BOOKING_WORDS,
+  agreement_not_signed: UNSIGNED_BOOKING_WORDS,
   no_booking: "You don't have a booking for this class.",
   cancel_started: "This class has already started, so the booking can't be cancelled.",
   /** A late cancel with no fee and no pack. Never "for free", which says a cost follows; and not "no
@@ -570,6 +593,32 @@ export type BookingSettingsBody = z.infer<typeof bookingSettingsBodySchema>;
 
 /** How many of the people with an overdue payment the box is sent by name. */
 export const BOOKING_OVERDUE_NAMES = 500;
+
+/** How many of the people with an agreement to sign the box is sent by name: a few, then See all. */
+export const BOOKING_UNSIGNED_NAMES = 5;
+
+/** Settings → Membership agreements, "Before they book" (18u-iv): the choice, whether the business
+ *  asks for any agreement, and the current records with one to sign today, as Members' "Agreement
+ *  not signed" counts them (`staff`: how many are its staff, never stopped), the first by name;
+ *  `stopped` is sent only to a reader who also sees Members (null otherwise). */
+export const agreementBookingsResponseSchema = z
+  .object({
+    rule: bookingUnsignedSchema,
+    inUse: z.boolean(),
+    stopped: z
+      .object({
+        count: z.number().int().min(0),
+        staff: z.number().int().min(0),
+        people: z.array(z.object({ entryId: z.string().uuid(), name: z.string() }).strict()).max(BOOKING_UNSIGNED_NAMES),
+      })
+      .strict()
+      .nullable(),
+  })
+  .strict();
+export type AgreementBookingsResponse = z.infer<typeof agreementBookingsResponseSchema>;
+
+export const agreementBookingsBodySchema = z.object({ rule: bookingUnsignedSchema }).strict();
+export type AgreementBookingsBody = z.infer<typeof agreementBookingsBodySchema>;
 
 /** `movedIn`, on a save only: how many waiting people a shorter hand-over time gave a
  *  free place to at once. */

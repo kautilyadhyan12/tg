@@ -187,8 +187,8 @@ const asBook = (i: EventPlaceInput, joinWaitlist: boolean): BookInput => ({
   mine: i.mine === "coming" ? "booked" : i.mine,
   joinWaitlist,
   cover: ANY_MEMBER,
-  // An event is not a booking a gym stops for an overdue payment (17i).
-  overdue: false,
+  // An event is not a booking a gym stops, for an overdue payment (17i) or an agreement (18u-iv).
+  stop: null,
 });
 
 /** "I'm coming", "Join the waitlist" and the claim of a freed place: the class rule. */
