@@ -44,6 +44,26 @@ export function gymMessageNotification(gymName: string, newest: string, unread: 
   };
 }
 
+/** What every notification of ours carries to the phone, as Firebase hands it to the app's own
+ *  notification task. The words are NOT under `title` and `message`: under those the notifications
+ *  package draws a message by itself when the app is not open, whoever is signed in. The app draws it
+ *  only while `to`, the person it was sent to, is the one signed in on the phone. `body` is the tap's
+ *  data as JSON (below), the key the package reads it from. */
+export const phonePushSchema = z
+  .object({
+    heading: z.string().min(1).max(400),
+    text: z.string().min(1).max(2000),
+    to: z.string().uuid(),
+    body: z.string().max(1000),
+    channelId: z.string().min(1).max(100),
+    tag: z.string().min(1).max(200),
+  })
+  .strip();
+export type PhonePush = z.infer<typeof phonePushSchema>;
+
+/** A push's `body`, read from JSON: the tap's data, an object, checked again by the schemas below. */
+export const phonePushTapDataSchema = z.record(z.string(), z.unknown());
+
 /** What a notification carries for the app: which gym's Inbox a tap opens. */
 export const gymMessagePushDataSchema = z.object({ kind: z.literal("gym_inbox"), gymId: z.string().uuid() }).strip();
 export type GymMessagePushData = z.infer<typeof gymMessagePushDataSchema>;
@@ -103,9 +123,10 @@ export const COMMENT_NOTIFICATION_LINE_WORDS = 100;
  *  2026-11-03); the rest are counted in a last line. */
 export const COMMENT_NOTIFICATION_LINES = 5;
 
+/** Cut by whole characters, never between an emoji's two halves. */
 function clip(words: string, most: number): string {
-  const flat = words.replace(/\s+/g, " ").trim();
-  return flat.length <= most ? flat : `${flat.slice(0, most - 1).trimEnd()}…`;
+  const flat = Array.from(words.replace(/\s+/g, " ").trim());
+  return flat.length <= most ? flat.join("") : `${flat.slice(0, most - 1).join("").trimEnd()}…`;
 }
 
 export interface CommentNotified {

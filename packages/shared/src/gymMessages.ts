@@ -584,8 +584,12 @@ export const gymInboxResponseSchema = z.object({
 export type GymInboxResponse = z.infer<typeof gymInboxResponseSchema>;
 
 /** Mark as read every message sent up to this instant: the `asOf` of the read the member
- *  was shown, so a message that arrived after it stays new. */
-export const markGymInboxReadRequestSchema = z.object({ upTo: instantSchema }).strict();
+ *  was shown, so a message that arrived after it stays new. `ids`, the messages that read showed:
+ *  only those (and, when the read was cut at `GYM_INBOX_MAX`, any older than all of them), so a
+ *  message written before `asOf` and saved after the read stays new too. */
+export const markGymInboxReadRequestSchema = z
+  .object({ upTo: instantSchema, ids: z.array(z.string().uuid()).max(GYM_INBOX_MAX).optional() })
+  .strict();
 export type MarkGymInboxReadRequest = z.infer<typeof markGymInboxReadRequestSchema>;
 
 export const markGymInboxReadResponseSchema = z.object({ unread: z.number().int().min(0) });

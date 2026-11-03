@@ -2,6 +2,7 @@
 // in, and what one says. Every class of case, garbage included.
 import { describe, expect, it } from "vitest";
 import { bookingTime, tellsPlaceFree } from "../src/classBookings.js";
+import { phonePushSchema } from "../src/phoneNotifications.js";
 import { COMMENT_NOTIFICATION_LINES, COMMENT_NOTIFICATION_LINE_WORDS, COMMENT_NOTIFICATION_WORDS, commentNotification, gymCommentPushDataSchema, gymMessageNotification, gymPlacePushDataSchema, placeNotification, pushHourOpen, pushTokenRequestSchema } from "../src/phoneNotifications.js";
 
 describe("pushHourOpen: from 04:00 up to 23:00 on the person's clock", () => {
@@ -123,6 +124,16 @@ describe("commentNotification: one a gym; several listed, newest on top", () => 
   it("none is no notification", () => {
     expect(commentNotification({ gymName: "Lotus Yoga", comments: [] })).toBeNull();
   });
+  it("a long comment is cut by whole characters, never inside an emoji", () => {
+    const body = commentNotification({ gymName: "Lotus Yoga", comments: [c("Ravi S.", "😀".repeat(120))] })?.body ?? "";
+    // 120 emoji are 240 UTF-16 units and 120 characters: under the 200 a comment shows, so not cut.
+    expect(body).toBe(`Ravi S. commented on your post: ${"😀".repeat(120)}`);
+    const cut = commentNotification({ gymName: "Lotus Yoga", comments: [c("Ravi S.", "😀".repeat(250))] })?.body ?? "";
+    expect(cut).toBe(`Ravi S. commented on your post: ${"😀".repeat(COMMENT_NOTIFICATION_WORDS - 1)}…`);
+    expect(/[�-�](?![�-�])/.test(body)).toBe(false);
+    const several = commentNotification({ gymName: "Lotus Yoga", comments: [c("Ravi S.", "🏋️".repeat(80)), c("Asha K.", "Hi")] })?.body ?? "";
+    expect(/[�-�](?![�-�])|(?<![�-�])[�-�]/.test(several)).toBe(false);
+  });
   it("one comment on the person's post, and one reply to their comment", () => {
     expect(commentNotification({ gymName: "Lotus Yoga", comments: [c("Ravi S.", "Great work!")] })).toEqual({
       title: "Lotus Yoga",
@@ -165,5 +176,16 @@ describe("gymCommentPushDataSchema: what a tap opens", () => {
     expect(gymCommentPushDataSchema.parse({ kind: "gym_comment", gymId, postId, extra: 1 })).toEqual({ kind: "gym_comment", gymId, postId });
     expect(gymCommentPushDataSchema.safeParse({ kind: "gym_comment", gymId, postId: "nope" }).success).toBe(false);
     expect(gymCommentPushDataSchema.safeParse({ kind: "gym_inbox", gymId, postId }).success).toBe(false);
+  });
+});
+
+describe("phonePushSchema: what the app draws itself", () => {
+  const push = { heading: "Lotus Yoga", text: "Class moved to 7 pm.", to: "11111111-1111-4111-8111-111111111111", body: '{"kind":"gym_inbox"}', channelId: "gym-messages", tag: "gym-1" };
+  it("reads the server's message, and nothing that names no person", () => {
+    expect(phonePushSchema.parse({ ...push, dataString: push.body })).toEqual(push);
+    expect(phonePushSchema.safeParse({ ...push, to: undefined }).success).toBe(false);
+    expect(phonePushSchema.safeParse({ ...push, to: "asha" }).success).toBe(false);
+    // The shape the notifications package draws by itself is not ours.
+    expect(phonePushSchema.safeParse({ title: "Lotus Yoga", message: "Hi", body: push.body, channelId: "gym-messages", tag: "gym-1" }).success).toBe(false);
   });
 });

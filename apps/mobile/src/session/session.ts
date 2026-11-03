@@ -2,6 +2,7 @@ import {
   SIGNED_IN_ELSEWHERE,
   googlePhoneStartResponseSchema,
   phoneKeptSessionSchema,
+  PHONE_SIGN_OUTS_OWED_MAX,
   phoneSignOutOwedSchema,
   phoneRefreshResponseSchema,
   sendCodeResponseSchema,
@@ -179,16 +180,28 @@ export function createSession({
     }
   };
 
-  /** A Sign out the server has not heard yet, or null. */
-  const readOwed = async (): Promise<string | null> => {
+  /** The Sign outs the server has not heard yet, oldest first. */
+  const readOwed = async (): Promise<string[]> => {
     try {
       const written = await owedStore.read();
-      if (written === null || written === "") return null;
+      if (written === null || written === "") return [];
       const parsed = phoneSignOutOwedSchema.safeParse(JSON.parse(written));
-      return parsed.success ? parsed.data.signOutOwed : null;
+      return parsed.success ? parsed.data.signOutOwed : [];
     } catch {
-      return null;
+      return [];
     }
+  };
+
+  // One change to the owed list at a time, so two never write over each other.
+  let owedTurn: Promise<unknown> = Promise.resolve();
+  const changeOwed = (change: (owed: string[]) => string[]): Promise<void> => {
+    const next = owedTurn.then(async () => {
+      const owed = change(await readOwed()).slice(-PHONE_SIGN_OUTS_OWED_MAX);
+      if (owed.length === 0) await owedStore.clear().catch(() => owedStore.write("").catch(() => undefined));
+      else await owedStore.write(JSON.stringify({ signOutOwed: owed })).catch(() => undefined);
+    });
+    owedTurn = next.catch(() => undefined);
+    return next;
   };
 
   /** Tells the server a Sign out. Any answer of the server's own (ended, or already ended) settles
@@ -197,14 +210,12 @@ export function createSession({
     const answer = await post(server, "/v1/auth/logout", { refreshToken }, anything);
     // Only the server's own answer settles it: no answer, or its own failure (5xx), leaves it owed.
     if (answer.kind === "no_answer" || (answer.kind === "refused" && answer.status >= 500)) return;
-    if ((await readOwed()) !== refreshToken) return;
-    await owedStore.clear().catch(() => owedStore.write("").catch(() => undefined));
+    await changeOwed((owed) => owed.filter((one) => one !== refreshToken));
   };
 
   // Its own key: told whoever is signed in now, since it can only ever end the sign-in it names.
   const tellOwedSignOut = async () => {
-    const owed = await readOwed();
-    if (owed !== null) await tellSignOut(owed);
+    for (const owed of await readOwed()) await tellSignOut(owed);
   };
 
   const refreshOnce = async (mine: PhoneKeptSession): Promise<"done" | "no_answer"> => {
@@ -271,6 +282,9 @@ export function createSession({
       post(server, "/v1/auth/code/send", robotToken === undefined ? { email } : { email, robotToken }, sendCodeResponseSchema),
 
     verifyCode: async (email, code) => {
+      // Whoever signed out here with no signal is ended on the server first, so their notifications
+      // never reach the person signing in now.
+      await tellOwedSignOut();
       const answer = await post(
         server,
         "/v1/auth/code/verify",
@@ -291,6 +305,7 @@ export function createSession({
       if (start.kind !== "ok") return start;
       const asked = await google(start.data.clientId, start.data.nonce);
       if (asked.kind !== "token") return asked;
+      await tellOwedSignOut();
       const answer = await post(server, "/v1/auth/google/phone", { idToken: asked.idToken }, verifyCodePhoneResponseSchema);
       if (answer.kind === "ok") {
         const { user, tokens } = answer.data;
@@ -372,7 +387,7 @@ export function createSession({
       show({ kind: "out", note: SIGNED_OUT_NOTES.own });
       if (mine === null) return;
       // Kept as owed until the server hears it: until then the sign-in, and its notifications, stay open there.
-      await owedStore.write(JSON.stringify({ signOutOwed: mine.refreshToken })).catch(() => undefined);
+      await changeOwed((owed) => [...owed.filter((one) => one !== mine.refreshToken), mine.refreshToken]).catch(() => undefined);
       await tellSignOut(mine.refreshToken);
     },
 

@@ -543,6 +543,8 @@ export const gymClassBookings = pgTable(
     pushOccasion: text("push_occasion"),
     /** 0194: when the person was last told about this class or event: a free place again within the hour is not told. */
     pushToldAt: timestamp("push_told_at", { withTimezone: true }),
+    /** 0198: a run took the notice and has not finished; past `PUSH_CLAIM_MINUTES` the next run takes it again. */
+    pushClaimedAt: timestamp("push_claimed_at", { withTimezone: true }),
   },
   (t) => [
     check("gym_class_bookings_push_due_check", sql`${t.pushDue} IS NULL OR (${t.pushDue} IN ('yours','free') AND ${t.pushDueAt} IS NOT NULL)`),

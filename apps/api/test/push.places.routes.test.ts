@@ -543,4 +543,80 @@ d("a place in a class or an event, told to the phone (real Postgres)", () => {
     expect((await sql`SELECT 1 FROM push_tokens WHERE token = ${asha.phone}`).length).toBe(0);
     answers.delete(asha.phone);
   });
+
+  // ── Item 18's two extra passes ──
+
+  /** A sender that holds its answer for one person until `release`; `never` holds it for ever, as a
+   *  worker killed mid-send. Everybody else is answered at once. */
+  const holding = (held: Person) => {
+    let reached = (): void => undefined;
+    let release: (result: PushResult) => void = () => undefined;
+    const inSend = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    const answer = new Promise<PushResult>((resolve) => {
+      release = resolve;
+    });
+    const holder: PushSender = {
+      send: (m) => {
+        if (m.token !== held.phone) return sender.send(m);
+        sent.push(m);
+        reached();
+        return answer;
+      },
+    };
+    return { holder, inSend, release: (result: PushResult = "sent") => {
+        release(result);
+      },
+    };
+  };
+
+  it("a run stopped after taking a notice leaves it owed: five minutes on, the next run tells it, once", { timeout: T }, async () => {
+    clock = NOON;
+    fresh();
+    const [asha, bina] = [await member(gym, "asha"), await member(gym, "bina")];
+    const flow = await classAt(gym, 3 * 24, 1);
+    await book(gym, asha, flow);
+    await book(gym, bina, flow, true);
+    await cancel(gym, asha, flow);
+    const { holder, inSend } = holding(bina);
+    void sendPlaceNotifications({ sql, sender: holder, now: () => new Date(NOON), gymIds });
+    await inSend;
+    fresh();
+    await sweep(NOON + 60_000);
+    expect(sentTo(bina)).toHaveLength(0);
+    await sweep(NOON + 6 * 60_000);
+    await sweep(NOON + 7 * 60_000);
+    expect(sentTo(bina).map((m) => m.body)).toEqual(["You have a place in Morning Flow on Friday 13 November at 12:00 PM. You were moved off the waitlist."]);
+  });
+
+  it("a second free place while a run is still telling the first is not told again by another run", { timeout: T }, async () => {
+    clock = NOON;
+    fresh();
+    const [asha, dev, bina, chen] = [await member(gym, "asha"), await member(gym, "dev"), await member(gym, "bina"), await member(gym, "chen")];
+    const flow = await classAt(gym, 6, 2);
+    await book(gym, asha, flow);
+    await book(gym, dev, flow);
+    await book(gym, bina, flow, true);
+    await book(gym, chen, flow, true);
+    await cancel(gym, asha, flow);
+    const { holder, inSend, release } = holding(bina);
+    const first = sendPlaceNotifications({ sql, sender: holder, now: () => new Date(NOON), gymIds });
+    await inSend;
+    // Chen was told at once; Bina's is still on its way when Dev gives up a second place.
+    clock = NOON + 20_000;
+    await cancel(gym, dev, flow);
+    await sweep(NOON + 30_000);
+    expect(sentTo(bina)).toHaveLength(1);
+    expect(sentTo(chen)).toHaveLength(1);
+    release();
+    await first;
+    await sweep(NOON + 60_000);
+    expect(sentTo(bina)).toHaveLength(1);
+    expect(sentTo(chen)).toHaveLength(1);
+    // The hour passed: the second free place is told to both.
+    await sweep(NOON + 61 * 60_000);
+    expect(sentTo(bina)).toHaveLength(2);
+    expect(sentTo(chen)).toHaveLength(2);
+  });
 });

@@ -527,4 +527,152 @@ d("phone notifications for comments and replies (real Postgres)", () => {
     await sql`UPDATE gym_posts SET removed_at = now() WHERE id = ${post}`;
     expect((await request("GET", `/v1/orgs/${gym}/posts/${post}`, { bearer: asha.who.accessToken })).statusCode).toBe(404);
   });
+
+  // ── Item 18's two extra passes ──
+
+  /** A sender that holds its answer for one address until `release` (for ever if never released, as a
+   *  worker killed mid-send); everybody else is answered at once. */
+  const holding = (held: string) => {
+    let reached = (): void => undefined;
+    let release: (result: PushResult) => void = () => undefined;
+    const inSend = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    const answer = new Promise<PushResult>((resolve) => {
+      release = resolve;
+    });
+    const holder: PushSender = {
+      send: (m) => {
+        if (m.token !== held) return sender.send(m);
+        sent.push(m);
+        reached();
+        return answer;
+      },
+    };
+    return { holder, inSend, release: (result: PushResult = "sent") => {
+        release(result);
+      },
+    };
+  };
+
+  it("a run stopped after taking a comment leaves it owed: five minutes on, the next run tells it, once", { timeout: TIMEOUT_MS }, async () => {
+    const gym = await makeGym("Restart Gym");
+    const at = noonIndia();
+    const asha = await member(gym, "Asha", true);
+    const ben = await member(gym, "Ben");
+    const post = await postBy(gym, asha.who);
+    await comment(gym, ben.who, post, "Lost in a restart?");
+    await writtenAt(gym, at);
+    const { holder, inSend } = holding(asha.token);
+    void sendCommentNotifications({ sql, sender: holder, now: () => at, gymIds });
+    await inSend;
+    await sweep(minutes(at, 1));
+    expect(sentTo(asha.token)).toHaveLength(1);
+    await sweep(minutes(at, 6));
+    await sweep(minutes(at, 7));
+    expect(sentTo(asha.token).map((m) => m.body)).toEqual(["Ben commented on your post: Lost in a restart?", "Ben commented on your post: Lost in a restart?"]);
+  });
+
+  it("a comment written while a run is still telling the last one waits out the half hour, even with a second run", { timeout: TIMEOUT_MS }, async () => {
+    const gym = await makeGym("Two Runs Gym");
+    const at = noonIndia();
+    const asha = await member(gym, "Asha", true);
+    const ben = await member(gym, "Ben");
+    const post = await postBy(gym, asha.who);
+    await comment(gym, ben.who, post, "One");
+    await writtenAt(gym, at);
+    const { holder, inSend, release } = holding(asha.token);
+    const first = sendCommentNotifications({ sql, sender: holder, now: () => at, gymIds });
+    await inSend;
+    await comment(gym, ben.who, post, "Two");
+    await writtenAt(gym, minutes(at, 0.1));
+    await sweep(minutes(at, 0.2));
+    expect(sentTo(asha.token)).toHaveLength(1);
+    release();
+    await first;
+    await sweep(minutes(at, 1));
+    expect(sentTo(asha.token)).toHaveLength(1);
+    await sweep(minutes(at, 31));
+    // It replaces the first, which she never opened: two new comments in all.
+    expect(sentTo(asha.token).map((m) => m.title)).toEqual(["Two Runs Gym", "Two Runs Gym · 2 new comments"]);
+  });
+
+  it("Updates opened while a run is telling it: what was read there is never told or counted again", { timeout: TIMEOUT_MS }, async () => {
+    const gym = await makeGym("Read Meanwhile Gym");
+    const at = noonIndia();
+    const asha = await member(gym, "Asha", true);
+    const ben = await member(gym, "Ben");
+    const post = await postBy(gym, asha.who);
+    await comment(gym, ben.who, post, "First!");
+    await writtenAt(gym, at);
+    const told = holding(asha.token);
+    const first = sendCommentNotifications({ sql, sender: told.holder, now: () => at, gymIds });
+    await told.inSend;
+    expect((await request("GET", `/v1/orgs/${gym}/posts`, { bearer: asha.who.accessToken })).statusCode).toBe(200);
+    told.release();
+    await first;
+    // The next one counts only what is new since she read Updates.
+    await comment(gym, ben.who, post, "Second one");
+    await writtenAt(gym, minutes(at, 40));
+    await sweep(minutes(at, 40));
+    expect(sentTo(asha.token).at(-1)).toMatchObject({ title: "Read Meanwhile Gym", body: "Ben commented on your post: Second one" });
+
+    // And when Firebase fails while she reads, the comment she read is not sent again.
+    await comment(gym, ben.who, post, "Third");
+    await writtenAt(gym, minutes(at, 80));
+    const failing = holding(asha.token);
+    const second = sendCommentNotifications({ sql, sender: failing.holder, now: () => minutes(at, 80), gymIds });
+    await failing.inSend;
+    expect((await request("GET", `/v1/orgs/${gym}/posts`, { bearer: asha.who.accessToken })).statusCode).toBe(200);
+    failing.release("failed");
+    await second;
+    const before = sentTo(asha.token).length;
+    await sweep(minutes(at, 81));
+    await sweep(minutes(at, 120));
+    expect(sentTo(asha.token)).toHaveLength(before);
+  });
+
+  it("Updates opened while a run is telling it, then a new comment and a second run: still one notification in the half hour", { timeout: TIMEOUT_MS }, async () => {
+    const gym = await makeGym("Read And Race Gym");
+    const at = noonIndia();
+    const asha = await member(gym, "Asha", true);
+    const ben = await member(gym, "Ben");
+    const post = await postBy(gym, asha.who);
+    await comment(gym, ben.who, post, "One");
+    await writtenAt(gym, at);
+    const held = holding(asha.token);
+    const first = sendCommentNotifications({ sql, sender: held.holder, now: () => at, gymIds });
+    await held.inSend;
+    expect((await request("GET", `/v1/orgs/${gym}/posts`, { bearer: asha.who.accessToken })).statusCode).toBe(200);
+    await comment(gym, ben.who, post, "Two");
+    await writtenAt(gym, minutes(at, 0.1));
+    await sweep(minutes(at, 0.2));
+    expect(sentTo(asha.token).map((m) => m.body)).toEqual(["Ben commented on your post: One"]);
+    held.release();
+    await first;
+  });
+
+  it("one post: a post by somebody the reader blocked, a hidden post, and a reader removed from the gym are told it is not there", { timeout: TIMEOUT_MS }, async () => {
+    const gym = await makeGym("Post Rules Gym");
+    const asha = await member(gym, "Asha");
+    const ben = await member(gym, "Ben");
+    const cara = await member(gym, "Cara");
+    const bens = await postBy(gym, ben.who, "Ben's post");
+    const read = (who: Phone, postId: string) => request("GET", `/v1/orgs/${gym}/posts/${postId}`, { bearer: who.accessToken });
+    expect((await read(asha.who, bens)).statusCode).toBe(200);
+    expect((await request("PUT", `/v1/orgs/${gym}/posts/${bens}/block`, { bearer: asha.who.accessToken })).statusCode).toBe(200);
+    expect((await read(asha.who, bens)).statusCode).toBe(404);
+
+    const caras = await postBy(gym, cara.who, "Cara's post");
+    expect((await read(ben.who, caras)).statusCode).toBe(200);
+    await sql`UPDATE gym_posts SET hidden_at = now() WHERE id = ${caras}`;
+    expect((await read(ben.who, caras)).statusCode).toBe(404);
+    // Its writer still reads her own.
+    expect((await read(cara.who, caras)).statusCode).toBe(200);
+
+    const open = await postBy(gym, null, "From the gym");
+    expect((await read(ben.who, open)).statusCode).toBe(200);
+    await sql`UPDATE gym_members SET removed_at = now() WHERE gym_id = ${gym} AND user_id = ${ben.who.userId}`;
+    expect((await read(ben.who, open)).statusCode).toBe(404);
+  });
 });

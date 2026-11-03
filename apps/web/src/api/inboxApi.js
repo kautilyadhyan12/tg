@@ -21,9 +21,9 @@ const inboxPath = (gymId) => `/v1/orgs/${encodeURIComponent(gymId)}/inbox`;
 export const inboxService = {
   /** The gym's messages to this member, newest first. Reading marks nothing. */
   read: (gymId) => readThrough(gymInboxResponseSchema, 'the inbox', authApi.get(inboxPath(gymId))),
-  /** Marks as read every message sent up to `upTo`: the `asOf` of the read that was shown. */
-  markRead: (gymId, upTo) =>
-    readThrough(markGymInboxReadResponseSchema, 'the inbox', authApi.post(`${inboxPath(gymId)}/read`, { upTo })).then((data) => data.unread),
+  /** Marks as read the messages the read showed (`ids`), sent up to `upTo`, the `asOf` of that read. */
+  markRead: (gymId, upTo, ids) =>
+    readThrough(markGymInboxReadResponseSchema, 'the inbox', authApi.post(`${inboxPath(gymId)}/read`, { upTo, ids })).then((data) => data.unread),
   /** The member's own switch for this gym's messages to groups; answers how it now stands. */
   setGroupMessages: (gymId, on) =>
     readThrough(gymGroupMessagesSwitchResponseSchema, 'that switch', authApi.put(`${inboxPath(gymId)}/group-messages`, { on })).then(
