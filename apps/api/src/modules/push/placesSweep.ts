@@ -1,8 +1,9 @@
 // A PLACE IN A CLASS OR AN EVENT, TOLD TO THE PHONE (ROADMAP Stage 5 item 18b-ii-a). Every minute the
 // worker reads the class bookings and event places owed a notice: "you have a place" for somebody
 // moved off the waitlist, "a place is free" for everybody waiting once a free place is no longer
-// handed over by itself. Each is claimed off its row before anything is sent, so a second run sends
-// nothing twice, and each is read again as the person's own Classes or Events page reads it just
+// handed over by itself. Each is claimed on its row before anything is sent, so a second run sends
+// nothing twice, and comes off it only once a phone has it (or nothing was true to send), so a run that
+// stops halfway loses nothing. Each is read again as the person's own Classes or Events page reads it just
 // before it goes: a place since taken, a class started or cancelled, a person who left the waitlist
 // or the gym, is told to nobody. These go at any hour (Kd, 2026-11-03): they are about the person's
 // own place and only matter now. A free place is told to the same person at most once an hour a class.
@@ -90,11 +91,13 @@ export async function sendPlaceNotifications(deps: {
   const now = deps.now();
   const since = new Date(now.getTime() - PUSH_WITHIN_HOURS * 3_600_000);
   const toldSince = new Date(now.getTime() - PLACE_FREE_AGAIN_MINUTES * 60_000);
+  const claimedBefore = new Date(now.getTime() - repo.PUSH_CLAIM_MINUTES * 60_000);
   const result: PlaceSweepResult = { sent: 0, skipped: 0, waiting: 0, failed: 0 };
 
   const onError = deps.onError ?? (() => undefined);
-  // `reached`: some phone has it, so it is never put back to be sent again.
-  const tell = async (place: places.DuePlace, state: { reached: boolean }): Promise<void> => {
+  // `reached`: some phone has it, so it is never put back to be sent again. `again`: Firebase did not
+  // answer for any phone, so the next run tries again.
+  const tell = async (place: places.DuePlace, state: { reached: boolean; again: boolean }): Promise<void> => {
     const tokens = place.stale ? [] : await repo.liveTokens(sql, place.userId, now);
     const today = dayIn(place.gymZone, now);
     const clock = gymClockFormatSchema.safeParse(place.clockFormat);
@@ -109,6 +112,7 @@ export async function sendPlaceNotifications(deps: {
     for (const token of tokens) {
       const sent = await sender.send({
         token,
+        userId: place.userId,
         title,
         body,
         tag: `place:${place.subjectId}`,
@@ -125,12 +129,13 @@ export async function sendPlaceNotifications(deps: {
         failed = true;
       }
     }
-    if (failed && !state.reached) await places.unclaimDue(sql, place);
+    state.again = failed && !state.reached;
   };
 
   const handle = async (place: places.DuePlace): Promise<void> => {
-    if (!(await places.claimDue(sql, place))) return;
-    const state = { reached: false };
+    const claimedAt = deps.now();
+    if (!(await places.claimDue(sql, place, { claimedAt, claimedBefore, toldSince }))) return;
+    const state = { reached: false, again: false };
     try {
       await tell(place, state);
     } catch (err) {
@@ -138,15 +143,16 @@ export async function sendPlaceNotifications(deps: {
       // unless a phone already has it, and the rest of this run goes on.
       onError(err);
       result.failed += 1;
-      if (!state.reached) await places.unclaimDue(sql, place).catch(onError);
+      state.again = !state.reached;
     }
-    if (state.reached) await places.markTold(sql, place, now).catch(onError);
+    if (state.again) await places.unclaimDue(sql, place, claimedAt).catch(onError);
+    else await places.settleDue(sql, place, claimedAt, state.reached ? now : null).catch(onError);
   };
 
   let after: places.DueMark | null = null;
   let taken = 0;
   for (let pages = 0; pages < MAX_PAGES && taken < batch; pages += 1) {
-    const rows = await places.duePlaces(sql, { since, toldSince, limit: page, after, gymIds: deps.gymIds });
+    const rows = await places.duePlaces(sql, { since, toldSince, claimedBefore, limit: page, after, gymIds: deps.gymIds });
     const due: places.DuePlace[] = [];
     for (const place of rows) {
       // Told about this class within the hour: another free place in it waits on its row for the hour

@@ -273,6 +273,36 @@ d("a gym's messages and the member's inbox (real Postgres)", () => {
   );
 
   it(
+    "with the ids the read showed, a message written before the read and saved after it stays new (item 18's data pass)",
+    async () => {
+      clock = NOON;
+      const gym = await makeGym("Inbox Lagging Gym");
+      const maya = await joins(gym, "Maya Rao");
+      await run([gym]);
+      clock = minutes(NOON, 5);
+      const shown = await inbox(gym, maya);
+      expect(shown.unread).toBe(1);
+      // The automatic run writes with the instant it started, so this lands after the read, dated before it.
+      await sql`
+        INSERT INTO gym_member_messages (gym_id, user_id, kind, occasion, body, gym_day, sent_at, expires_at)
+        VALUES (${gym.id}, ${maya.userId}, 'birthday', 'birthday:lag', 'Happy birthday, Maya.', '2026-10-09', ${minutes(NOON, 4)}, ${days(NOON, 30)})`;
+      const mark = await inject("POST", `${path(gym.id)}/read`, maya.cookies, { upTo: shown.asOf, ids: shown.messages.map((m) => m.id) });
+      expect(mark.statusCode, mark.body).toBe(200);
+      expect(JSON.parse(mark.body)).toEqual({ unread: 1 });
+      expect((await inbox(gym, maya)).messages.map((m) => [m.kind, m.read])).toEqual([["birthday", false], ["welcome", true]]);
+      // An id of somebody else's, or another gym's, marks nothing of theirs; more than a page is refused.
+      const other = await joins(gym, "Omar Shah");
+      await run([gym]);
+      const [theirs] = await sql<{ id: string }[]>`SELECT id FROM gym_member_messages WHERE user_id = ${other.userId}`;
+      await inject("POST", `${path(gym.id)}/read`, maya.cookies, { upTo: minutes(NOON, 5).toISOString(), ids: [theirs?.id ?? ""] });
+      expect((await inbox(gym, other)).unread).toBe(1);
+      const tooMany = Array.from({ length: 101 }, () => shown.messages[0]?.id ?? "");
+      expect((await inject("POST", `${path(gym.id)}/read`, maya.cookies, { upTo: shown.asOf, ids: tooMany })).statusCode).toBe(400);
+    },
+    T,
+  );
+
+  it(
     "the inbox: new until it is opened, marked read once, and a message that came after the read stays new",
     async () => {
       clock = NOON;

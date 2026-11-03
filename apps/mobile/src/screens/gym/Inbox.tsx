@@ -71,6 +71,8 @@ function InboxBody({ place, onClose, onUnread, bottom }: { place: InboxPlace; on
   const [notOpened, setNotOpened] = useState<string | null>(null);
   // Reads are numbered as they start: an answer stands only if no later read has started.
   const started = useRef(0);
+  // Switch presses so far: a read begun before a press never shows its older switches over the press.
+  const presses = useRef(0);
   const live = useRef(true);
   // Read through a call: after a wait the page may have closed, which a plain read narrowed before the wait hides.
   const isLive = useCallback(() => live.current, []);
@@ -88,17 +90,22 @@ function InboxBody({ place, onClose, onUnread, bottom }: { place: InboxPlace; on
     async (quiet: boolean) => {
       started.current += 1;
       const number = started.current;
+      const pressesBefore = presses.current;
       const answer = await session.signedIn({ method: "GET", path: inboxPath(place.id) }, gymInboxResponseSchema);
       if (!live.current || number !== started.current) return;
       // Another place's messages are never shown under this one.
       if (answer.kind === "ok" && answer.data.gymId === place.id) {
         const inbox = answer.data;
         setHeld({ kind: "ok", inbox, readAt: Date.now() });
-        setSwitches({ off: inbox.off, groupMessages: inbox.groupMessages });
+        // A switch pressed while this read was on its way: the press's own answer is newer.
+        if (presses.current === pressesBefore) setSwitches({ off: inbox.off, groupMessages: inbox.groupMessages });
         onUnread(place.id, inbox.unread);
         if (inbox.unread === 0) return;
-        // Seen up to what this read showed: a message that came after it stays new.
-        const seen = await session.signedIn({ method: "POST", path: inboxReadPath(place.id), body: { upTo: inbox.asOf } }, markGymInboxReadResponseSchema);
+        // Seen: the messages this read showed. One that came after it, or was saved after it, stays new.
+        const seen = await session.signedIn(
+          { method: "POST", path: inboxReadPath(place.id), body: { upTo: inbox.asOf, ids: inbox.messages.map((m) => m.id) } },
+          markGymInboxReadResponseSchema,
+        );
         if (seen.kind === "ok" && isLive()) onUnread(place.id, seen.data.unread);
       } else if (!quiet || answer.kind === "refused") {
         // A read made by itself never takes the messages away over a lost connection.
@@ -124,6 +131,7 @@ function InboxBody({ place, onClose, onUnread, bottom }: { place: InboxPlace; on
     if (busyGroup !== null) return;
     setBusyGroup(group);
     setSwitchSaid(null);
+    presses.current += 1;
     const answer = await session.signedIn({ method: "PUT", path: inboxSwitchPath(place.id), body: { group, on } }, gymMessageSwitchResponseSchema);
     if (!live.current) return;
     setBusyGroup(null);

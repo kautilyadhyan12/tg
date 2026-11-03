@@ -799,7 +799,15 @@ if (pushAccount === null) {
       // Each in its own try, so one that keeps failing never stops the other (18b-ii-a).
       let failure: Error | null = null;
       try {
-        const run = await sendGymMessageNotifications({ sql, sender: pushSender, now: () => new Date() });
+        const run = await sendGymMessageNotifications({
+          sql,
+          sender: pushSender,
+          now: () => new Date(),
+          onError: (err) => {
+            const e = err instanceof Error ? err : new Error(String(err));
+            log.warn({ errName: e.name, errMessage: e.message, event: "job.item_failed", job: "push.messages" }, "a message notification failed and was kept for the next run");
+          },
+        });
         if (run.sent + run.skipped + run.failed > 0) {
           log.info({ ...run, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
         }

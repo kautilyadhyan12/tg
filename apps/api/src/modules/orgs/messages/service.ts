@@ -92,7 +92,7 @@ export async function markRead(deps: MessagesDeps, userId: string, gymId: string
   if (reader.paused) return markGymInboxReadResponseSchema.parse({ unread: 0 });
   // Never past now: an instant in the future would mark what has not been shown.
   const upTo = new Date(Math.min(Date.parse(body.upTo), reader.now.getTime()));
-  await repo.markRead(deps.sql, gymId, userId, upTo, reader.now);
+  await repo.markRead(deps.sql, gymId, userId, upTo, reader.now, body.ids ?? null);
   return markGymInboxReadResponseSchema.parse({ unread: await repo.unreadCount(deps.sql, gymId, userId, reader.now) });
 }
 

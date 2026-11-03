@@ -88,7 +88,7 @@ describe("the worst thing, on the screen", () => {
     expect(screen.queryAllByRole("tab")).toEqual([]);
     expect(store.value).toBeNull();
     // The server did not hear it: only that sign-out is owed, under its own key (18b-i).
-    expect(jest.requireMock<{ kept: Map<string, string> }>("expo-secure-store").kept.get("sign-out-owed")).toBe(JSON.stringify({ signOutOwed: "refresh-2" }));
+    expect(jest.requireMock<{ kept: Map<string, string> }>("expo-secure-store").kept.get("sign-out-owed")).toBe(JSON.stringify({ signOutOwed: ["refresh-2"] }));
     expect(server.paths().at(-1)).toBe("/v1/auth/logout");
   });
 

@@ -98,12 +98,12 @@ d("phone notifications for a gym's messages (real Postgres)", () => {
   const request = (
     method: "POST" | "PUT",
     path: string,
-    opts: { payload?: unknown; cookies?: Cookies; bearer?: string } = {},
+    opts: { payload?: unknown; cookies?: Cookies; bearer?: string; ip?: string } = {},
   ) =>
     api().inject({
       method,
       url: path,
-      remoteAddress: nextIp(),
+      remoteAddress: opts.ip ?? nextIp(),
       cookies: opts.cookies ?? {},
       headers: {
         ...(opts.payload === undefined ? {} : { "content-type": "application/json" }),
@@ -131,8 +131,8 @@ d("phone notifications for a gym's messages (real Postgres)", () => {
     expect(res.statusCode).toBe(200);
     return Object.fromEntries(res.cookies.map((c) => [c.name, c.value]));
   };
-  const giveAddress = (phone: { accessToken: string }, token: string) =>
-    request("PUT", "/v1/push-tokens", { bearer: phone.accessToken, payload: { token, platform: "android" } });
+  const giveAddress = (phone: { accessToken: string }, token: string, ip?: string) =>
+    request("PUT", "/v1/push-tokens", { bearer: phone.accessToken, payload: { token, platform: "android" }, ...(ip === undefined ? {} : { ip }) });
   const signOut = async (phone: Phone) => {
     expect((await request("POST", "/v1/auth/logout", { payload: { refreshToken: phone.refreshToken } })).statusCode).toBe(200);
   };
@@ -215,7 +215,7 @@ d("phone notifications for a gym's messages (real Postgres)", () => {
     await message(gymA, asha.userId, "Your membership ends on Friday.", minutes(at, 1));
     await message(gymB, ravi.userId, "Welcome to Iron Works.", minutes(at, 1));
     await sweep(minutes(at, 2));
-    expect(sentTo(phoneToken).map((m) => [m.title, m.body, m.tag])).toEqual([["Iron Works", "Welcome to Iron Works.", gymB]]);
+    expect(sentTo(phoneToken).map((m) => [m.title, m.body, m.tag, m.userId])).toEqual([["Iron Works", "Welcome to Iron Works.", gymB, ravi.userId]]);
   });
 
   it("a phone that Asha left without signing out, now signed in as Meera, is told only Meera's", { timeout: TIMEOUT_MS }, async () => {
@@ -442,5 +442,97 @@ d("phone notifications for a gym's messages (real Postgres)", () => {
     await message(gymA, phone.userId, "Anyone there?", minutes(at, -1));
     await sweep(at);
     expect(await sql`SELECT 1 FROM push_tokens WHERE token = ${token}`).toHaveLength(0);
+  });
+
+  // ── Item 18's two extra passes ──
+
+  /** A sender that never answers for one address: the run is stopped there, as a worker killed mid-send. */
+  const stuckOn = (stuck: string) => {
+    let reached = (): void => undefined;
+    const inSend = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    const stopped: PushSender = {
+      send: (m) => {
+        if (m.token !== stuck) return sender.send(m);
+        reached();
+        return new Promise<PushResult>(() => undefined);
+      },
+    };
+    return { stopped, inSend };
+  };
+
+  it("a run stopped after taking a message leaves it owed: five minutes on, the next run tells it, once", { timeout: TIMEOUT_MS }, async () => {
+    const at = minutes(noonIndia(), 80);
+    const phone = await phoneSignIn(email("stopped"));
+    await join(gymA, phone.userId);
+    const token = address("stopped");
+    await giveAddress(phone, token);
+    await message(gymA, phone.userId, "Told after a restart.", minutes(at, -1));
+    const { stopped, inSend } = stuckOn(token);
+    void sendGymMessageNotifications({ sql, sender: stopped, now: () => at, gymIds });
+    await inSend;
+    expect((await waiting(phone.userId))[0]?.n).toBe(1);
+    // Inside the five minutes another run leaves it to the first.
+    await sweep(minutes(at, 1));
+    expect(sentTo(token)).toEqual([]);
+    await sweep(minutes(at, 6));
+    await sweep(minutes(at, 7));
+    expect(sentTo(token).map((m) => m.body)).toEqual(["Told after a restart."]);
+    expect((await waiting(phone.userId))[0]?.n).toBe(0);
+  });
+
+  it("a failure partway through puts that person's back, and the rest of the run still goes", { timeout: TIMEOUT_MS }, async () => {
+    const at = minutes(noonIndia(), 90);
+    const [bina, chen] = [await phoneSignIn(email("bina")), await phoneSignIn(email("chen"))];
+    const [binaPhone, chenPhone] = [address("bina"), address("chen")];
+    for (const [who, token] of [[bina, binaPhone], [chen, chenPhone]] as const) {
+      await join(gymA, who.userId);
+      await giveAddress(who, token);
+      await message(gymA, who.userId, "Hello.", minutes(at, -1));
+    }
+    const errors: unknown[] = [];
+    const breaking: PushSender = {
+      send: (m) => (m.token === binaPhone ? Promise.reject(new Error("connection ended")) : sender.send(m)),
+    };
+    const run = await sendGymMessageNotifications({ sql, sender: breaking, now: () => at, gymIds, onError: (err) => errors.push(err) });
+    expect(run.failed).toBe(1);
+    expect(errors).toHaveLength(1);
+    expect(sentTo(chenPhone)).toHaveLength(1);
+    expect((await waiting(bina.userId))[0]?.n).toBe(1);
+    await sweep(minutes(at, 1));
+    expect(sentTo(binaPhone).map((m) => m.body)).toEqual(["Hello."]);
+  });
+
+  it("two addresses given at once by one sign-in leave one", { timeout: TIMEOUT_MS }, async () => {
+    const phone = await phoneSignIn(email("twice"));
+    for (let i = 0; i < 10; i += 1) {
+      const answers = await Promise.all([giveAddress(phone, address(`a${String(i)}`)), giveAddress(phone, address(`b${String(i)}`))]);
+      expect(answers.map((a) => a.statusCode)).toEqual([200, 200]);
+      expect(await sql`SELECT 1 FROM push_tokens WHERE user_id = ${phone.userId}`).toHaveLength(1);
+    }
+  });
+
+  it("an ended sign-in keeps no address: Sign out, and a sign-in on another phone", { timeout: TIMEOUT_MS }, async () => {
+    const to = email("ended");
+    const first = await phoneSignIn(to);
+    await giveAddress(first, address("first"));
+    await signOut(first);
+    expect(await sql`SELECT 1 FROM push_tokens WHERE user_id = ${first.userId}`).toHaveLength(0);
+    const second = await phoneSignIn(to);
+    await giveAddress(second, address("second"));
+    const third = await phoneSignIn(to);
+    expect(await sql`SELECT 1 FROM push_tokens WHERE user_id = ${second.userId}`).toHaveLength(0);
+    const kept = address("third");
+    await giveAddress(third, kept);
+    expect((await sql<{ token: string }[]>`SELECT token FROM push_tokens WHERE user_id = ${third.userId}`).map((r) => r.token)).toEqual([kept]);
+  });
+
+  it("forty members on one gym's wi-fi each give their phone's address", { timeout: TIMEOUT_MS }, async () => {
+    const wifi = "10.47.200.9";
+    for (let i = 0; i < 40; i += 1) {
+      const phone = await phoneSignIn(email(`wifi${String(i)}`));
+      expect((await giveAddress(phone, address(`wifi${String(i)}`), wifi)).statusCode).toBe(200);
+    }
   });
 });

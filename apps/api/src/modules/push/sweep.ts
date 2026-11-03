@@ -3,7 +3,8 @@
 // notification, tagged with the gym, so the phone replaces that gym's last one instead of stacking
 // another; it says the count once more than one is new. At night on the person's clock it waits.
 // The rows are the queue: a pair is claimed before anything is sent, so a second run, or two at
-// once, sends nothing twice. A message that cannot be told (read, gone from the inbox, older than a
+// once, sends nothing twice, and settled only once a phone has it, so a run that stops halfway loses
+// nothing: past `PUSH_CLAIM_MINUTES` the next run takes it again. A message that cannot be told (read, gone from the inbox, older than a
 // day, nobody's phone) is marked handled without a send.
 import {
   GYM_MESSAGES_CHANNEL,
@@ -57,18 +58,20 @@ export async function sendGymMessageNotifications(deps: {
   gymIds?: readonly string[];
   /** For tests: smaller pages and batches than a real run's. */
   sizes?: { batch: number; page: number };
+  /** Told of a failure the run carried on past: the worker logs it. */
+  onError?: (err: unknown) => void;
 }): Promise<PushSweepResult> {
   const { sql, sender } = deps;
   const batch = deps.sizes?.batch ?? BATCH;
   const page = deps.sizes?.page ?? PAGE;
   const now = deps.now();
   const since = new Date(now.getTime() - PUSH_WITHIN_HOURS * 3_600_000);
+  const claimedBefore = new Date(now.getTime() - repo.PUSH_CLAIM_MINUTES * 60_000);
   const result: PushSweepResult = { sent: 0, skipped: 0, waiting: 0, failed: 0 };
+  const onError = deps.onError ?? (() => undefined);
 
-  const handle = async (pair: repo.PendingPair): Promise<void> => {
-    // Claimed first, so what is counted below includes every message the claim took.
-    const claimed = await repo.claim(sql, pair.userId, pair.gymId, now);
-    if (claimed === 0) return;
+  // `reached`: some phone has it. `again`: Firebase did not answer for any phone, so the next run tries again.
+  const tell = async (pair: repo.PendingPair, state: { reached: boolean; again: boolean }): Promise<void> => {
     const tokens = pair.fresh ? await repo.liveTokens(sql, pair.userId, now) : [];
     // The Inbox's own count and rule: a former member, a closed gym or one on no plan has none.
     const unread = tokens.length === 0 ? 0 : ((await unreadCounts(sql, pair.userId, now)).get(pair.gymId) ?? 0);
@@ -78,11 +81,11 @@ export async function sendGymMessageNotifications(deps: {
       return;
     }
     const { title, body } = gymMessageNotification(pair.gymName, newest, unread);
-    let reached = false;
     let failed = false;
     for (const token of tokens) {
       const sent = await sender.send({
         token,
+        userId: pair.userId,
         title,
         body,
         tag: pair.gymId,
@@ -91,7 +94,7 @@ export async function sendGymMessageNotifications(deps: {
       });
       if (sent === "sent") {
         result.sent += 1;
-        reached = true;
+        state.reached = true;
       } else if (sent === "gone") {
         await repo.forgetToken(sql, pair.userId, token);
       } else {
@@ -99,14 +102,32 @@ export async function sendGymMessageNotifications(deps: {
         failed = true;
       }
     }
-    // Firebase did not answer for any phone: tried again on the next run, never lost.
-    if (failed && !reached) await repo.unclaim(sql, pair.userId, pair.gymId, now);
+    state.again = failed && !state.reached;
+  };
+
+  const handle = async (pair: repo.PendingPair): Promise<void> => {
+    // Claimed first, so what is counted below includes every message the claim took.
+    const claimedAt = deps.now();
+    const claimed = await repo.claim(sql, pair.userId, pair.gymId, { now, claimedAt, claimedBefore });
+    if (claimed === 0) return;
+    const state = { reached: false, again: false };
+    try {
+      await tell(pair, state);
+    } catch (err) {
+      // A failure after the claim (a dropped connection): told to the worker, put back for the next run
+      // unless a phone already has it, and the rest of this run goes on.
+      onError(err);
+      result.failed += 1;
+      state.again = !state.reached;
+    }
+    if (state.again) await repo.unclaim(sql, pair.userId, pair.gymId, claimedAt).catch(onError);
+    else await repo.settle(sql, pair.userId, pair.gymId, claimedAt, now).catch(onError);
   };
 
   let after: repo.PairMark | null = null;
   let taken = 0;
   for (let pages = 0; pages < MAX_PAGES && taken < batch; pages += 1) {
-    const pairs = await repo.pendingPairs(sql, { now, since, limit: page, after, gymIds: deps.gymIds });
+    const pairs = await repo.pendingPairs(sql, { now, since, claimedBefore, limit: page, after, gymIds: deps.gymIds });
     const due: repo.PendingPair[] = [];
     for (const pair of pairs) {
       // Night: left for a later run, nothing marked.

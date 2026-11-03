@@ -207,7 +207,7 @@ describe("Sign out on the note", () => {
     expect(await screen.findByText("Get started.")).toBeTruthy();
     expect(store.value).toBeNull();
     // The server did not hear it: only that sign-out is owed, under its own key (18b-i).
-    expect(jest.requireMock<{ kept: Map<string, string> }>("expo-secure-store").kept.get("sign-out-owed")).toBe(JSON.stringify({ signOutOwed: "refresh-2" }));
+    expect(jest.requireMock<{ kept: Map<string, string> }>("expo-secure-store").kept.get("sign-out-owed")).toBe(JSON.stringify({ signOutOwed: ["refresh-2"] }));
     noTabs();
   });
 });

@@ -235,12 +235,15 @@ jest.mock("expo-notifications", () => {
       notifications.dismissedAll += 1;
       return Promise.resolve();
     },
+    registerTaskAsync: () => Promise.resolve(null),
     unregisterForNotificationsAsync: () => {
       notifications.unregistered += 1;
       return Promise.resolve();
     },
   };
 });
+// The task Android runs to draw a notification: its body is called by the tests themselves (drawPush).
+jest.mock("expo-task-manager", () => ({ defineTask: () => undefined }));
 // The phone's own key store, for what is not the sign-in (the notifications' "Not now").
 jest.mock("expo-secure-store", () => {
   const kept = new Map();
