@@ -10,6 +10,8 @@
 // the owner to press the button again — a visible duplicate beats a silent one.
 import {
   acceptInvitationResponseSchema,
+  deletedFormResponseSchema,
+  deletedFormsResponseSchema,
   acceptStaffInvitationResponseSchema,
   cancelStaffInviteResponseSchema,
   checkinDeviceLinkResponseSchema,
@@ -733,6 +735,19 @@ export const orgService = {
 
   // THE MEMBERSHIP AGREEMENT (ROADMAP 18u-i). The first three are Settings', on `org.manage`;
   // the last three are the desk's, under one membership on a person's page (`members.confirm`).
+  // Signed forms of deleted members (18u-iii): the gym's own owner's alone.
+  getDeletedForms: (gymId, { q = '', page = 1 } = {}) =>
+    readThrough(
+      deletedFormsResponseSchema,
+      'the signed forms',
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/deleted-forms`, { params: { ...(q.trim() === '' ? {} : { q: q.trim() }), ...(page > 1 ? { page } : {}) } }),
+    ),
+  getDeletedForm: (gymId, kind, formId) =>
+    readThrough(
+      deletedFormResponseSchema,
+      'the signed form',
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/deleted-forms/${encodeURIComponent(kind)}/${encodeURIComponent(formId)}`),
+    ),
   getGymAgreement: (gymId) =>
     readThrough(gymAgreementResponseSchema, 'your membership agreement', authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/agreement`)),
   saveGymAgreement: (gymId, text) =>
