@@ -20,7 +20,8 @@
     "test:perf": "vitest run test/perf.test.ts",
     "lint:defs": "tsx scripts/lint-defs.ts",
     "bench": "tsx scripts/bench.ts",
-    "measure-video": "tsx scripts/video/measure-video.ts"
+    "measure-video": "tsx scripts/video/measure-video.ts",
+    "cross-check": "tsx scripts/video/cross-check.ts"
   },
   "devDependencies": {
     "@app/config": "workspace:*",

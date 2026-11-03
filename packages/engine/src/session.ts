@@ -25,7 +25,7 @@ import {
 } from "./pipeline/faults.js";
 import { scoreRep, type ScoringComponent } from "./pipeline/scoring.js";
 
-export const ENGINE_VERSION = "1.1.0"; // I4: semver of the package, stamped on every emitted session (P1 = engine v1, Part 2 §10)
+export const ENGINE_VERSION = "1.2.0"; // I4: semver of the package, stamped on every emitted session (P1 = engine v1, Part 2 §10)
 
 /** Internal engine configuration — P1.7 compiles §4 definition documents into
  *  this shape; parity tests hand-build it from the §8.1 constants. */
@@ -74,6 +74,7 @@ export function createSession(
       "knee_L",
       "knee_R",
       "knee_avg",
+      ...(config.rep.uprightUnder !== undefined ? (["trunk_incline"] as const) : []),
     ]),
   ];
   const signals = new SignalEngine(declared);
@@ -265,7 +266,7 @@ export function createSession(
       lastUsableT = frame.t;
     }
 
-    const fsmResult = fsm.update(frame.t, metric, other);
+    const fsmResult = fsm.update(frame.t, metric, other, values.trunk_incline ?? null);
 
     // The OTHER blindness: every frame arrives and is valid, the legs simply
     // are not measurable (:7404 measured it at the same size as walking out of

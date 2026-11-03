@@ -80,6 +80,8 @@ const repSchema = z
     maxRepMs: z.number().int().positive().optional(),
     /** §4 worked example: a NUMBER (the other-knee engage angle), not a bool. */
     bilateralGate: z.number().positive().optional(),
+    /** A rep finishes only with the trunk within this many degrees of upright. */
+    uprightUnder: z.number().positive().max(90).optional(),
     holdBand: z.tuple([z.number(), z.number()]).optional(),
     enterMs: z.number().int().positive().optional(),
     exitMs: z.number().int().positive().optional(),

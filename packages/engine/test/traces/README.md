@@ -9,6 +9,7 @@ One recorded session per `.jsonl` file: JSON header line (with the authored
 - The `.responses.jsonl` beside a parity trace holds the *Python analyzer's* outputs
   (§7.5). `expected` holds the count of finished stand-ups on the clip's hip height
   (see `test/definitions.truecounts.test.ts`), except where its line in that test says otherwise. Every header says its picture's `aspect`.
+- `../cross-check-traces` holds body points of exercises with no rules yet, for the cross-check (Part 2 §11.2, tool 4): nobody has counted them, so they are not stored tests.
 - Raw video is never stored — stick-figure data only (privacy invariant).
 
 Empty until task P1.3 records the first fixtures.

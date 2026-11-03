@@ -146,7 +146,7 @@ describe("the command's options", () => {
 describe("names and counts on the report", () => {
   it("names the rules that ran, and says when they are another exercise's", () => {
     const lines = summaryLines(measureTrace(clip(SQUAT_CLIP), rules("chair_squat"), null, "chair_squat"));
-    expect(lines[1]).toMatch(/^chair_squat v2:/);
+    expect(lines[1]).toMatch(/^chair_squat v3:/);
     expect(lines.join("\n")).toMatch(/chair_squat's rules on a video recorded as squat/);
   });
 

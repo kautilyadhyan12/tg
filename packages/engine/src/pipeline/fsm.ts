@@ -40,6 +40,8 @@ export interface ModeAConfig {
   maxRepMs?: number;
   /** On by default for two-leg knee metrics (§3.6). */
   bilateralGate: boolean;
+  /** A rep finishes only with the trunk within this many degrees of upright. */
+  uprightUnder?: number;
 }
 
 export class NotImplementedError extends Error {
@@ -137,8 +139,14 @@ export class ModeAFsm {
   }
 
   /** @param metric raw (rounded) primary metric, already left/right-resolved
-   *  @param otherKnee raw other-knee angle when both visible, else null */
-  update(t: number, metric: number | null, otherKnee: number | null): ModeAFrameResult {
+   *  @param otherKnee raw other-knee angle when both visible, else null
+   *  @param trunkIncline degrees from upright; null (shoulders or hips unseen) never blocks */
+  update(
+    t: number,
+    metric: number | null,
+    otherKnee: number | null,
+    trunkIncline: number | null = null,
+  ): ModeAFrameResult {
     if (metric === null) {
       // No usable metric — hold everything (rep_counter.py None branch).
       // §3.1's own 3-frame count applies here exactly as it does to frames that
@@ -195,7 +203,10 @@ export class ModeAFsm {
         this.reachedBottom = true;
       }
     } else if (smoothed > this.config.upAt) {
-      this.framesInUp++;
+      const limit = this.config.uprightUnder;
+      const upright = limit === undefined || trunkIncline === null || trunkIncline < limit;
+      // Straight legs on a body lying down are not a finished rep; the rep stays open.
+      this.framesInUp = upright ? this.framesInUp + 1 : 0;
       this.framesInDown = 0;
       if (
         this.state === "down" &&

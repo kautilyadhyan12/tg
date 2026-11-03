@@ -588,7 +588,7 @@ metadata | Carried for the library UI; not read by the engine. |
 | `signals` | array of §3.4 names | Everything the engine must compute.
 Linter cross-checks every rule/curve reference against this list. |
 | `rep` | object | `mode` (A–D §3.6) + mode params: `metric`, `upAt`,
-`downAt`, `countOn`, `minRepMs`, `maxRepMs`, `bilateralGate`, `holdBand`,
+`downAt`, `countOn`, `minRepMs`, `maxRepMs`, `bilateralGate`, `uprightUnder`, `holdBand`,
 `enterMs`, `exitMs`, `cadenceSignal`, `minAmplitude`, `minCadence`,
 `maxCadence`, `perSide`. |
 | `phases` | array | Names for Mode A phases (UI + fault scoping). |
@@ -1209,6 +1209,7 @@ change; the workout save is safe to send twice.
 4. **The cross-check.** Every exercise's definition is replayed on every other
    exercise's trace. A count there is a named twin (a chair squat is a squat) or a fault
    to fix.
+   **As built (50c, 2026-11-02):** `corepack pnpm --filter @app/engine cross-check` prints the table for every definition on every trace in `test/traces`, `test/cross-check-traces` and `measured/`, and exits 1 on a fault; `crossCheck.test.ts` runs the stored half on GitHub. A twin is an exercise of the same `family`. A definition's `rep.uprightUnder` makes a rep finish only with the trunk within that many degrees of upright (no reading of the trunk never blocks): 45 on the three squats, where every clip needs at most 27 and a bicycle crunch counts from 72.
 5. **The camera test on Kd's phone** (item 51; Part 6 §3.2's bars, on an ordinary recent
    phone): each candidate's speed, heat, battery and memory over 20 minutes, and a video
    file run through the phone's own path and compared with tool 1's trace.
