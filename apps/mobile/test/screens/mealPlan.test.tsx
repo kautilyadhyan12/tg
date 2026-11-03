@@ -72,7 +72,7 @@ function files(): (userId: string) => TextStore {
 
 interface SentMeal { id: string; mealName: string; takenAt: string; mealType: string; items: { canonical: string; grams: number }[] }
 
-function serverOf(plan: () => Reply, more: Record<string, Route> = {}, saving: Route | null = null) {
+function serverOf(plan: () => Reply | Promise<Reply>, more: Record<string, Route> = {}, saving: Route | null = null) {
   const meals: unknown[] = [];
   const s = fakeServer({
     "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }),
