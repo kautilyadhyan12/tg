@@ -95,14 +95,15 @@ function ClassesBody({ place, onClose, bottom }: { place: ClassesPlace; onClose:
   // The class a notification opened the page on: scrolled to once its day and its box are laid out.
   const scroller = useRef<ScrollView>(null);
   const dayAt = useRef(new Map<string, number>());
-  const boxAt = useRef<{ day: string; y: number } | null>(null);
+  const boxAt = useRef<{ day: string; y: number; first: boolean } | null>(null);
   const scrolledTo = useRef(false);
   const toAsked = useCallback(() => {
     const box = boxAt.current;
     const day = box === null ? undefined : dayAt.current.get(box.day);
     if (scrolledTo.current || box === null || day === undefined) return;
     scrolledTo.current = true;
-    scroller.current?.scrollTo({ y: Math.max(0, day + box.y - 8), animated: true });
+    // The first class of its day keeps the day's heading above it on the screen.
+    scroller.current?.scrollTo({ y: Math.max(0, box.first ? day : day + box.y - 8), animated: true });
   }, []);
   const [busyId, setBusyId] = useState<string | null>(null);
   // What the server last said about a class, by its id, over the list as it was read.
@@ -322,14 +323,14 @@ function ClassesBody({ place, onClose, bottom }: { place: ClassesPlace; onClose:
                 <Txt kind="eyebrow" colour="textFaint">
                   {dayHeading(d.day, week === 0 ? held.list.from : null)}
                 </Txt>
-                {d.classes.map((c) => (
+                {d.classes.map((c, n) => (
                   <View
                     key={c.sessionId}
                     {...(c.sessionId === place.sessionId
                       ? {
                           testID: "classes-asked",
                           onLayout: (e: LayoutChangeEvent) => {
-                            boxAt.current = { day: d.day, y: e.nativeEvent.layout.y };
+                            boxAt.current = { day: d.day, y: e.nativeEvent.layout.y, first: n === 0 };
                             toAsked();
                           },
                         }

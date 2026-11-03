@@ -33,8 +33,34 @@ export function tappedOf(data: unknown): Tapped | null {
   return { kind: "place", gymId, what, id, week };
 }
 
+/** One notification for each gym's Inbox, and each class or event: the next replaces it, as the
+ *  server's tag does when Android draws it. */
+export const identifierOf = (tapped: Tapped): string => (tapped.kind === "inbox" ? `inbox:${tapped.gymId}` : `place:${tapped.id}`);
+
+// Our messages carry data only, so a tap on one Android draws reaches the app. With the app open the
+// notifications package neither shows such a message nor asks the handler, so the app shows it itself:
+// same words, same channel, same tap, through the handler, so a gym's Inbox already open shows none.
+let received: { remove: () => void } | null = null;
+async function showInApp(notification: Notifications.Notification): Promise<void> {
+  const { content, trigger } = notification.request;
+  // Only Firebase's: the one the app shows below is heard here too.
+  if (trigger === null || typeof trigger !== "object" || !("type" in trigger) || trigger.type !== "push") return;
+  const tapped = tappedOf(content.data);
+  if (tapped === null || content.title === null || content.body === null) return;
+  const channelId = tapped.kind === "inbox" ? GYM_MESSAGES_CHANNEL.id : GYM_PLACES_CHANNEL.id;
+  await Notifications.scheduleNotificationAsync({
+    identifier: identifierOf(tapped),
+    content: { title: content.title, body: content.body, data: content.data ?? {} },
+    trigger: { channelId },
+  }).catch(() => undefined);
+}
+
 /** When the tabs open: the channel the phone's settings name, and what shows in the app. Safe to repeat. */
 export function startNotifications(): void {
+  received?.remove();
+  received = Notifications.addNotificationReceivedListener((notification) => {
+    void showInApp(notification);
+  });
   Notifications.setNotificationHandler({
     handleNotification: (notification) => {
       const gymId = gymOfNotification(notification.request.content.data);
@@ -131,6 +157,8 @@ export async function clearGym(gymId: string): Promise<void> {
  *  Firebase forgets the address, so a message on its way reaches nobody even when the server was not
  *  told. Asked again at each opening and each return while signed out: with no signal it fails. */
 export async function forgetNotifications(): Promise<void> {
+  received?.remove();
+  received = null;
   Notifications.setNotificationHandler({
     handleNotification: () => Promise.resolve({ shouldShowBanner: false, shouldShowList: false, shouldPlaySound: false, shouldSetBadge: false }),
   });

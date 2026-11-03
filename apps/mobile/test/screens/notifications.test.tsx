@@ -365,3 +365,51 @@ describe("a tapped notification about a place", () => {
     expect(shown?.shouldShowBanner).toBe(true);
   });
 });
+
+describe("a message that arrives while the app is open", () => {
+  const SESSION = "11111111-1111-4111-8111-111111111111";
+  const arrive = (data: unknown, trigger: unknown = { type: "push" }) =>
+    act(async () => {
+      for (const one of notifications.received) one({ request: { identifier: "fcm-1", trigger, content: { title: "Iron House", body: "Words.", data } } });
+      await Promise.resolve();
+    });
+  const scheduled = () => (notifications as unknown as { scheduled: { identifier: string; content: unknown; trigger: unknown }[] }).scheduled;
+
+  it("is shown by the app itself, one for each gym's Inbox and each class, on its own channel", async () => {
+    notifications.permission = YES;
+    await open(fakeServer(routes()));
+    await arrive({ kind: "gym_inbox", gymId: IRON.id });
+    await arrive({ kind: "gym_place", gymId: IRON.id, what: "class", id: SESSION, week: "0" });
+    expect(scheduled()).toEqual([
+      { identifier: `inbox:${IRON.id}`, content: { title: "Iron House", body: "Words.", data: { kind: "gym_inbox", gymId: IRON.id } }, trigger: { channelId: "gym-messages" } },
+      {
+        identifier: `place:${SESSION}`,
+        content: { title: "Iron House", body: "Words.", data: { kind: "gym_place", gymId: IRON.id, what: "class", id: SESSION, week: "0" } },
+        trigger: { channelId: "gym-places" },
+      },
+    ]);
+  });
+
+  it("the app's own, and anything that is not ours, is not shown again", async () => {
+    notifications.permission = YES;
+    await open(fakeServer(routes()));
+    await arrive({ kind: "gym_inbox", gymId: IRON.id }, null);
+    await arrive({ kind: "something_else" });
+    expect(scheduled()).toEqual([]);
+  });
+
+  it("signed out, one that arrives is not shown by the app", async () => {
+    notifications.permission = YES;
+    await open(fakeServer(routes({ "/v1/auth/logout": ok({}) })));
+    const me = (await screen.findAllByRole("tab"))[4];
+    if (me === undefined) throw new Error("no Me tab");
+    await fireEvent.press(me);
+    await fireEvent.press(await screen.findByRole("button", { name: "Sign out" }));
+    const confirm = (await screen.findAllByRole("button", { name: "Sign out" })).at(-1);
+    if (confirm === undefined) throw new Error("no Sign out in the box");
+    await fireEvent.press(confirm);
+    await settle();
+    await arrive({ kind: "gym_inbox", gymId: IRON.id });
+    expect(scheduled()).toEqual([]);
+  });
+});
