@@ -580,6 +580,7 @@ describe('adding a membership', () => {
     expect(orgService.giveHeldMembership.mock.calls[0][2]).toEqual({
       requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
       fullFrom: null,
+      minimumTerm: null,
       typeId: GOLD.id,
       startsOn: TODAY,
       paid: false,
@@ -745,6 +746,7 @@ describe('adding a membership', () => {
     expect(orgService.giveHeldMembership.mock.calls[0][2]).toEqual({
       requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
       fullFrom: null,
+      minimumTerm: null,
       typeId: TAXED.id,
       startsOn: TODAY,
       paid: false,
@@ -832,7 +834,7 @@ describe('adding a membership', () => {
     const [gym, entry, body] = orgService.giveHeldMembership.mock.calls[0];
     expect([gym, entry]).toEqual([GYM, ADA]);
     // The price and what the first bill comes to are sent as the screen showed them (18b-iii).
-    expect(body).toEqual({ requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/), typeId: GOLD.id, startsOn: TODAY, paid: true, method: 'cash', priceMinor: 4999, totalMinor: 4999, fullFrom: null });
+    expect(body).toEqual({ requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/), typeId: GOLD.id, startsOn: TODAY, paid: true, method: 'cash', priceMinor: 4999, totalMinor: 4999, fullFrom: null, minimumTerm: null });
 
     // It failed: the form stays, and pressing again sends the same key, so one membership.
     expect(await (await boxSoon()).findByRole('alert')).toBeTruthy();
@@ -1286,6 +1288,7 @@ describe('Add member gives a membership in the same form', () => {
     expect(body).toEqual({
       requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
       fullFrom: null,
+      minimumTerm: null,
       typeId: PACK.id,
       startsOn: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
       paid: true,
@@ -2163,5 +2166,96 @@ describe("live updates on a person's page (Stage 4 item 18)", () => {
     await act(async () => late.resolve(answer([{ ...gold, agreementLink: LINK }], false, { agreementInUse: true })));
     expect(b.getByText('Agreement signed')).toBeTruthy();
     expect(orgService.getHeldMemberships).toHaveBeenCalledTimes(3);
+  });
+});
+
+// A CONTRACT (18v-i). The worst this box could do: let a member out of a contract with nobody
+// saying why, or end it on a day the box did not name.
+describe('cancelling a membership still in its contract', () => {
+  const CONTRACT = typeOf(3, { name: 'Gold 12 months', contractPeriods: 12, contractThen: 'renews' });
+  const inContract = (moves = []) => ({ ...held(3, CONTRACT, '2026-10-04', true, moves), contractPeriods: 12 });
+
+  it('says until when, ends it with the contract on one press, and sends exactly that', async () => {
+    const gold = inContract();
+    orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
+    render(draw(ADA, 'Ada Lovelace'));
+    const b = await boxSoon();
+    expect(b.getByTestId('held-contract-line').textContent).toBe('Minimum term: 12 months, until 3 October 2027');
+    fireEvent.click(b.getByRole('button', { name: 'Cancel membership' }));
+    const box = within(b.getByTestId('held-ask-cancel'));
+    expect(box.getByText('Ada Lovelace is in their minimum term until 3 October 2027. End it then, and they keep paying until then; or release them early.')).toBeTruthy();
+    expect(box.queryByRole('button', { name: 'Cancel today' })).toBeNull();
+    const ended = inContract([[{ type: 'cancel', when: 'contract_end' }, TODAY]]);
+    orgService.changeHeldMembership.mockResolvedValueOnce(answer([ended]));
+    fireEvent.click(box.getByRole('button', { name: 'End on 3 October 2027' }));
+    await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledTimes(1));
+    expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, 'cancel', { when: 'contract_end' });
+    expect(await b.findByText('Gold 12 months ends on 3 October 2027, at the end of its minimum term.')).toBeTruthy();
+  });
+
+  it('releases nobody until a reason is picked, then sends that reason', async () => {
+    const gold = inContract();
+    orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
+    render(draw(ADA, 'Ada Lovelace'));
+    const b = await boxSoon();
+    fireEvent.click(b.getByRole('button', { name: 'Cancel membership' }));
+    const box = within(b.getByTestId('held-ask-cancel'));
+    fireEvent.click(box.getByRole('button', { name: 'Release today' }));
+    expect(box.getByRole('alert').textContent).toBe('Pick why you are releasing them first.');
+    expect(orgService.changeHeldMembership).not.toHaveBeenCalled();
+    fireEvent.change(box.getByLabelText('Why are you releasing them?'), { target: { value: 'moved' } });
+    const released = { ...inContract([[{ type: 'cancel', when: 'today', release: 'moved' }, TODAY]]), release: 'moved' };
+    orgService.changeHeldMembership.mockResolvedValueOnce(answer([released]));
+    fireEvent.click(box.getByRole('button', { name: 'Release today' }));
+    await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledTimes(1));
+    expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, 'cancel', { when: 'today', release: 'moved' });
+    expect(await b.findByText('Gold 12 months is cancelled.')).toBeTruthy();
+  });
+
+it('paid past the minimum term: End stops it at the end of what is paid, sending no reason (re-check, H1b)', async () => {
+    const paidAhead = inContract([
+      [{ type: 'paid', paidPeriods: 2 }, TODAY],
+      [{ type: 'paid', paidPeriods: 3 }, TODAY],
+      [{ type: 'paid', paidPeriods: 4 }, TODAY],
+      [{ type: 'paid', paidPeriods: 5 }, TODAY],
+      [{ type: 'paid', paidPeriods: 6 }, TODAY],
+      [{ type: 'paid', paidPeriods: 7 }, TODAY],
+      [{ type: 'paid', paidPeriods: 8 }, TODAY],
+      [{ type: 'paid', paidPeriods: 9 }, TODAY],
+      [{ type: 'paid', paidPeriods: 10 }, TODAY],
+      [{ type: 'paid', paidPeriods: 11 }, TODAY],
+      [{ type: 'paid', paidPeriods: 12 }, TODAY],
+      [{ type: 'paid', paidPeriods: 13 }, TODAY],
+    ]);
+    expect(paidAhead.view.can.cancelAtContractEnd).toBeNull();
+    orgService.getHeldMemberships.mockResolvedValue(answer([paidAhead]));
+    render(draw(ADA, 'Ada Lovelace'));
+    const b = await boxSoon();
+    fireEvent.click(b.getByRole('button', { name: 'Cancel membership' }));
+    const box = within(b.getByTestId('held-ask-cancel'));
+    expect(box.getByText(/has paid until 3 November 2027, past their minimum term/)).toBeTruthy();
+    orgService.changeHeldMembership.mockResolvedValueOnce(answer([paidAhead]));
+    fireEvent.click(box.getByRole('button', { name: 'End on 3 November 2027' }));
+    await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledTimes(1));
+    expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, paidAhead.id, 'cancel', { when: 'period_end' });
+  });
+
+  it('confirms the bookings it would end with the same reason', async () => {
+    const gold = inContract();
+    orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
+    orgService.changeHeldMembership.mockRejectedValueOnce(
+      refusal(409, { error: 'membership_has_bookings', message: 'x', ending: { classes: 1, booked: 1, waiting: 0, mark: 'e'.repeat(64), people: [] } }),
+    );
+    render(draw(ADA, 'Ada Lovelace'));
+    const b = await boxSoon();
+    fireEvent.click(b.getByRole('button', { name: 'Cancel membership' }));
+    const box = within(b.getByTestId('held-ask-cancel'));
+    fireEvent.change(box.getByLabelText('Why are you releasing them?'), { target: { value: 'death' } });
+    fireEvent.click(box.getByRole('button', { name: 'Release today' }));
+    const ending = within(await b.findByTestId('held-ending'));
+    orgService.changeHeldMembership.mockResolvedValueOnce(answer([inContract([[{ type: 'cancel', when: 'today', release: 'death' }, TODAY]])]));
+    fireEvent.click(ending.getByRole('button', { name: 'Cancel today and end 1 booking' }));
+    await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledTimes(2));
+    expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, 'cancel', { when: 'today', release: 'death', confirmBookings: 'e'.repeat(64) });
   });
 });

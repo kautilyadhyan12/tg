@@ -149,7 +149,7 @@ const NO_MEMBERS = "Resuming automatic payments needs \"Keep the member list and
 export async function readChargebackStart(deps: PaymentsDeps, userId: string, gymId: string, id: string): Promise<ChargebackStartPreview> {
   const { privileges } = await requirePrivilege(deps, gymId, userId, BILLING);
   if (!privileges.includes(MEMBERS)) throw new OrgsError(403, "forbidden", NO_MEMBERS);
-  const preview = await repo.chargebackStartPreview(deps.sql, gymId, id);
+  const preview = await repo.chargebackStartPreview(deps.sql, gymId, id, deps.now());
   if (preview === null) throw new OrgsError(404, "chargeback_not_found", "That chargeback was not found.");
   return chargebackStartPreviewSchema.parse(preview);
 }

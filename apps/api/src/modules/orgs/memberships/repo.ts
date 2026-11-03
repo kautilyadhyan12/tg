@@ -34,6 +34,9 @@ export interface MembershipTypeRow {
   joiningFeeMinor: number;
   /** The business's other agreement it is signed with (18u-ii-a); null for the main one. */
   agreementId: string | null;
+  /** Its contract (18v-i): so many payments, then it renews or ends; both null for none. */
+  contractPeriods: number | null;
+  contractThen: string | null;
   archivedAt: Date | null;
   updatedAt: Date;
 }
@@ -76,6 +79,8 @@ interface RawType {
   tax_rate_id: string | null;
   joining_fee_minor: number;
   agreement_document_id: string | null;
+  contract_periods: number | null;
+  contract_then: string | null;
   archived_at: Date | null;
   updated_at: Date;
 }
@@ -87,7 +92,8 @@ export async function readPriceList(sql: Sql, gymId: string): Promise<PriceListR
   const readTypes = (archived: boolean, limit: number) => sql<RawType[]>`
     SELECT id, name, description, kind, price_minor, currency, term_count, term_unit,
            pack_classes, pack_days, access, bookings_limit, bookings_period,
-           covers_all_classes, includes_pt, pt_limit, pt_period, tax_rate_id, joining_fee_minor, agreement_document_id, archived_at, updated_at
+           covers_all_classes, includes_pt, pt_limit, pt_period, tax_rate_id, joining_fee_minor, agreement_document_id,
+           contract_periods, contract_then, archived_at, updated_at
     FROM gym_membership_types
     WHERE gym_id = ${gymId} AND (archived_at IS NOT NULL) = ${archived}
     ORDER BY ${archived ? sql`archived_at DESC, id` : sql`lower(name), id`}
@@ -149,6 +155,8 @@ export async function readPriceList(sql: Sql, gymId: string): Promise<PriceListR
     taxRateId: r.tax_rate_id,
     joiningFeeMinor: r.joining_fee_minor,
     agreementId: r.agreement_document_id,
+    contractPeriods: r.contract_periods,
+    contractThen: r.contract_then,
     archivedAt: r.archived_at,
     updatedAt: r.updated_at,
   });
@@ -188,6 +196,9 @@ export interface MembershipTypeInput {
   taxRateId: string | null;
   /** Charged on the first bill of a membership given from it; 0 for none. */
   joiningFeeMinor: number;
+  /** Its contract (18v-i); both null for none. */
+  contractPeriods: number | null;
+  contractThen: string | null;
 }
 
 export type MembershipWriteOutcome =
@@ -279,11 +290,12 @@ export async function createMembershipType(
       INSERT INTO gym_membership_types
         (gym_id, name, description, kind, price_minor, currency, term_count, term_unit,
          pack_classes, pack_days, access, bookings_limit, bookings_period, covers_all_classes, includes_pt,
-         pt_limit, pt_period, tax_rate_id, joining_fee_minor)
+         pt_limit, pt_period, tax_rate_id, joining_fee_minor, contract_periods, contract_then)
       VALUES (${input.gymId}, ${input.name}, ${input.description}, ${input.kind}, ${input.priceMinor},
               ${currency}, ${input.termCount}, ${input.termUnit}, ${input.packClasses},
               ${input.packDays}, ${input.access}, ${input.bookingsLimit}, ${input.bookingsPeriod},
-              ${input.classTypeIds === null}, ${input.includesPt}, ${input.ptLimit}, ${input.ptPeriod}, ${input.taxRateId}, ${input.joiningFeeMinor})
+              ${input.classTypeIds === null}, ${input.includesPt}, ${input.ptLimit}, ${input.ptPeriod}, ${input.taxRateId}, ${input.joiningFeeMinor},
+              ${input.contractPeriods}, ${input.contractThen})
       RETURNING id`;
     if (created === undefined) throw new Error("membership type insert returned no row");
     await writeCoveredClasses(tx, input.gymId, created.id, input.classTypeIds);
@@ -300,6 +312,7 @@ export async function createMembershipType(
         priceMinor: String(input.priceMinor),
         currency,
         ...(input.joiningFeeMinor > 0 ? { joiningFeeMinor: String(input.joiningFeeMinor) } : {}),
+        ...(input.contractPeriods === null || input.contractThen === null ? {} : { contractPeriods: String(input.contractPeriods), contractThen: input.contractThen }),
       },
     });
     return { kind: "ok" };
@@ -322,8 +335,10 @@ export async function updateMembershipType(
 ): Promise<MembershipWriteOutcome> {
   return await sql.begin(async (tx) => {
     await lockOrgRow(tx, input.gymId);
-    const [before] = await tx<{ name: string; kind: string; price_minor: number; joining_fee_minor: number; updated_at: Date }[]>`
-      SELECT name, kind, price_minor, joining_fee_minor, updated_at FROM gym_membership_types
+    const [before] = await tx<
+      { name: string; kind: string; price_minor: number; joining_fee_minor: number; contract_periods: number | null; contract_then: string | null; updated_at: Date }[]
+    >`
+      SELECT name, kind, price_minor, joining_fee_minor, contract_periods, contract_then, updated_at FROM gym_membership_types
       WHERE id = ${input.typeId} AND gym_id = ${input.gymId} AND archived_at IS NULL`;
     if (before === undefined) return { kind: "not_found" };
     // To the millisecond, which is what the list sends and a form can send back.
@@ -344,7 +359,8 @@ export async function updateMembershipType(
           bookings_period = ${input.bookingsPeriod},
           covers_all_classes = ${input.classTypeIds === null}, includes_pt = ${input.includesPt},
           pt_limit = ${input.ptLimit}, pt_period = ${input.ptPeriod},
-          tax_rate_id = ${input.taxRateId}, joining_fee_minor = ${input.joiningFeeMinor}, updated_at = ${input.now}
+          tax_rate_id = ${input.taxRateId}, joining_fee_minor = ${input.joiningFeeMinor},
+          contract_periods = ${input.contractPeriods}, contract_then = ${input.contractThen}, updated_at = ${input.now}
       WHERE id = ${input.typeId} AND gym_id = ${input.gymId}`;
     await writeCoveredClasses(tx, input.gymId, input.typeId, input.classTypeIds);
 
@@ -362,6 +378,9 @@ export async function updateMembershipType(
         ...(before.joining_fee_minor === input.joiningFeeMinor
           ? {}
           : { joiningFeeBefore: String(before.joining_fee_minor), joiningFeeAfter: String(input.joiningFeeMinor) }),
+        ...(before.contract_periods === input.contractPeriods && before.contract_then === input.contractThen
+          ? {}
+          : { contractBefore: before.contract_periods === null ? "none" : `${String(before.contract_periods)} ${before.contract_then ?? ""}`, contractAfter: input.contractPeriods === null ? "none" : `${String(input.contractPeriods)} ${input.contractThen ?? ""}` }),
       },
     });
     return { kind: "ok" };

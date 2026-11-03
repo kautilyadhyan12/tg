@@ -88,6 +88,8 @@ export function changeBody(form, choice) {
     when: choice.when,
     startsOn: choice.picked.startsOn,
     fullFrom: choice.picked.fullFrom,
+    // The new line's minimum term the form said (18v-i): the server changes nothing where it is now another.
+    minimumTerm: choice.type.contractPeriods ? { periods: choice.type.contractPeriods, then: choice.type.contractThen ?? 'renews' } : null,
     priceMinor: choice.type.priceMinor,
     creditMinor: choice.picked.creditMinor,
     totalMinor: choice.summary.totalMinor,

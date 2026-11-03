@@ -126,6 +126,8 @@ function typeInput(req: SaveGymMembershipTypeRequest): repo.MembershipTypeInput 
     ptPeriod: req.ptPeriod,
     taxRateId: req.taxRateId,
     joiningFeeMinor: req.joiningFeeMinor,
+    contractPeriods: req.contractPeriods,
+    contractThen: req.contractThen,
   };
 }
 

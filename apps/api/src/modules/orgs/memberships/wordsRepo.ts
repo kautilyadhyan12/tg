@@ -34,7 +34,7 @@ export interface WordRow {
 const IN_USE_TODAY = (sql: Sql | TransactionSql, today: string) => sql`
   (h.status = 'frozen' OR (h.status = 'active'
      AND NOT (h.kind = 'pack' AND h.classes_left = 0)
-     AND ((h.kind = 'recurring' AND h.renews) OR ${LAST_DAY(sql)} >= ${today}::date)))`;
+     AND ((h.kind = 'recurring' AND h.renews AND h.contract_then IS DISTINCT FROM 'ends') OR ${LAST_DAY(sql)} >= ${today}::date)))`;
 
 /** The type each word goes with: the one it is linked to, or, for a word with no link,
  *  the live type of the very same name (one a gym, whatever its capitals). */
