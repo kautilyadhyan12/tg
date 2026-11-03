@@ -4,6 +4,9 @@
 // The one thing worked out here is the Add form's line under the start date, by the same
 // shared rule the server gives the membership with.
 import {
+  CONTRACT_RELEASES,
+  CONTRACT_RELEASE_WORDS,
+  contractLengthWords,
   HELD_STATUS_WORDS,
   HELD_START_AHEAD_DAYS,
   HELD_START_MIN,
@@ -175,6 +178,8 @@ export function askWords(what, m, name, today) {
       return { question: `Unfreeze ${whose}?`, detail: `It runs again from today. ${back}`, button: 'Unfreeze' };
     }
     case 'cancel': {
+      // Inside a running contract (18v-i): end it with the contract, or release them with a reason.
+      if (m.view.can.releaseNeeded === true && m.view.contract) return contractCancelWords(m, name);
       const last = m.view.can.cancelAtPeriodEnd;
       // Cancelled before it starts, a change on the next payment date is undone (18x).
       const back = m.view.status === 'upcoming' && m.changedFrom?.stopped === true ? ` ${m.changedFrom.typeName} renews again, as it did before the change.` : '';
@@ -191,6 +196,43 @@ export function askWords(what, m, name, today) {
     default:
       return null;
   }
+}
+
+/** The reasons a member is let out of a contract, as the box lists them (18v-i). */
+export const RELEASE_CHOICES = CONTRACT_RELEASES.map((value) => ({ value, label: CONTRACT_RELEASE_WORDS[value] }));
+
+/** The Cancel box of a membership still in its contract (18v-i). `endButton` ends it with the
+ *  contract, where it would otherwise renew; the release buttons stop it sooner and ask why. */
+export function contractCancelWords(m, name) {
+  const whose = `${name}'s ${m.typeName}`;
+  const until = m.view.contract.until;
+  const end = m.view.can.cancelAtContractEnd ?? null;
+  const paid = m.view.can.cancelAtPeriodEnd ?? null;
+  return {
+    question: `Cancel ${whose}?`,
+    detail:
+      end !== null
+        ? `${name} is in contract until ${dayWords(until)}. End it then, and they keep paying until then; or release them from the contract sooner.`
+        : `${name} is in contract until ${dayWords(until)}, when it ends. To stop it sooner, release them from the contract.`,
+    endButton: end === null ? null : `End on ${dayWords(end)}`,
+    releaseQuestion: 'Why are you releasing them?',
+    releaseLaterButton: paid === null ? null : `Release on ${dayWords(paid)}`,
+    releaseButton: 'Release today',
+    releaseMissing: 'Pick why you are releasing them first.',
+  };
+}
+
+/** "In contract until 14 Oct 2027" and its length, for the membership's own lines; null for none. */
+export function contractShownLine(m) {
+  const c = m.view?.contract ?? null;
+  if (c === null) return null;
+  const length = m.contractPeriods !== null && m.contractPeriods !== undefined && m.termCount !== null && m.termUnit !== null ? `${contractLengthWords(m.contractPeriods, m.termCount, m.termUnit)}, ` : '';
+  return `Contract: ${length}until ${dayWords(c.until)}${c.then === 'ends' ? ', then it ends' : ''}`;
+}
+
+/** "Released from contract: Moved away" on a membership cancelled inside one; null for none. */
+export function releaseShownLine(m) {
+  return m.release ? `Released from contract: ${CONTRACT_RELEASE_WORDS[m.release] ?? 'Other reason'}` : null;
 }
 
 /** The classes the server says a cancel would end the bookings of (409
@@ -229,7 +271,8 @@ export function endingWords(ending, m, name, later, clockFormat) {
   const n = ending?.booked ?? 0;
   const classes = n === 1 ? '1 class' : `${n.toLocaleString('en')} classes`;
   const bookings = n === 1 ? '1 booking' : `${n.toLocaleString('en')} bookings`;
-  const last = later ? (m.view.can.cancelAtPeriodEnd ?? null) : null;
+  // `later` is the last day itself where a contract sets it (18v-i).
+  const last = typeof later === 'string' ? later : later ? (m.view.can.cancelAtPeriodEnd ?? null) : null;
   const rows = (Array.isArray(ending?.people) ? ending.people : []).map((row) => ({
     id: row.id,
     line: [row.className, dayHeading(row.localDate), clockLabel(row.localStartMinute, clockFormat)].filter((part) => part !== '').join(' · '),
@@ -317,6 +360,8 @@ export function doneWords(what, m) {
       return `${m.typeName} is running again.`;
     case 'cancelLater':
       return `${m.typeName} will end and won't renew.`;
+    case 'cancelContract':
+      return m.view.can.cancelAtContractEnd ? `${m.typeName} ends on ${dayWords(m.view.can.cancelAtContractEnd)}, with its contract.` : `${m.typeName} ends with its contract.`;
     case 'cancel':
       return `${m.typeName} is cancelled.`;
     case 'change':

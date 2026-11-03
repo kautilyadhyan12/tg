@@ -32,6 +32,8 @@ import {
   typeTaxLine,
   joiningFeeLine,
   usesJoiningFee,
+  contractHint,
+  contractLine,
   termUnitOptions,
   typesSummary,
   withChoice,
@@ -297,6 +299,42 @@ function TypeForm({ gymId, orgType, currency, options, taxRates, onRateAdded, dr
           </Field>
         ) : null}
 
+        {choice === 'recurring' ? (
+          <Field id={id('contract')} label="Contract" problem={problems?.contractPeriods}>
+            <select id={id('contract')} value={draft.contract} onChange={text('contract')} className="c-input" style={{ maxWidth: 280 }}>
+              <option value="none">No contract</option>
+              <option value="fixed">A contract</option>
+            </select>
+            {draft.contract === 'fixed' ? (
+              <div className="flex flex-wrap items-center gap-2" style={{ maxWidth: 520 }}>
+                <input
+                  id={id('contract-periods')}
+                  aria-label="How many payments the contract runs for"
+                  aria-invalid={problems?.contractPeriods ? 'true' : undefined}
+                  value={draft.contractPeriods}
+                  inputMode="numeric"
+                  onChange={text('contractPeriods')}
+                  className="c-input"
+                  style={{ width: 104, flexShrink: 0 }}
+                />
+                <span className="c-s15 c-t1">payments, then</span>
+                <select aria-label="After the contract" value={draft.contractThen} onChange={text('contractThen')} className="c-input" style={{ maxWidth: 280 }}>
+                  <option value="renews">it renews until they cancel</option>
+                  <option value="ends">it ends</option>
+                </select>
+              </div>
+            ) : null}
+            <p className="c-s13 c-t3 m-0">
+              {[
+                draft.contract === 'fixed' ? contractHint(draft) : 'Members can cancel at any time.',
+                editing ? 'Members who already hold it keep the contract they joined on.' : null,
+              ]
+                .filter((line) => line !== null)
+                .join(' ')}
+            </p>
+          </Field>
+        ) : null}
+
         {choice === 'pack' ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" style={{ maxWidth: 480 }}>
             <Field id={id('pack-classes')} label="Classes in the pack" problem={problems?.packClasses}>
@@ -491,6 +529,7 @@ function TypeRow({ type, orgType, taxLine = null, agreementLine = null, agreemen
           {type.description ? <p className="c-s14 c-t2 m-0 break-words">{type.description}</p> : null}
           <p className="c-s14 c-t1 m-0">{termLine(type)}</p>
           {joiningFeeLine(type) !== null ? <p className="c-s14 c-t2 m-0">{joiningFeeLine(type)}</p> : null}
+          {contractLine(type) !== null ? <p className="c-s14 c-t2 m-0">{contractLine(type)}</p> : null}
           {taxLine !== null ? <p className="c-s14 c-t2 m-0">{taxLine}</p> : null}
           <p className="c-s14 c-t2 m-0">{includesLine(type, orgType)}</p>
           {agreementLine !== null ? (

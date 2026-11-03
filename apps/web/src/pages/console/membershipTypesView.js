@@ -8,7 +8,9 @@ import {
   MEMBERSHIP_PACK_CLASSES_MAX,
   MEMBERSHIP_PACK_DAYS_MAX,
   MEMBERSHIP_PT_LIMIT_MAX,
+  MEMBERSHIP_CONTRACT_PERIODS_MAX,
   MEMBERSHIP_TERM_COUNT_MAX,
+  contractLengthWords,
   MEMBERSHIP_TYPES_MAX,
   currencyDecimals,
   formatMinor,
@@ -206,6 +208,24 @@ export function joiningFeeLine(type) {
   return `Joining fee ${formatMinor(type.joiningFeeMinor, type.currency)}, on the first bill`;
 }
 
+/** "Contract: 12 months, then renews until cancelled" (18v-i); null for a type with none. */
+export function contractLine(type) {
+  if (type.contractPeriods === null || type.contractPeriods === undefined || type.termCount === null || type.termUnit === null) return null;
+  const length = contractLengthWords(type.contractPeriods, type.termCount, type.termUnit);
+  return `Contract: ${length}, then ${type.contractThen === 'ends' ? 'it ends' : 'renews until cancelled'}`;
+}
+
+/** Under the contract boxes: how long so many payments run, where the number reads. */
+export function contractHint(draft) {
+  const periods = wholeNumber(draft.contractPeriods, 1, MEMBERSHIP_CONTRACT_PERIODS_MAX);
+  const count = wholeNumber(draft.termCount, 1, MEMBERSHIP_TERM_COUNT_MAX);
+  if (periods === null || count === null) return null;
+  const length = contractLengthWords(periods, count, draft.termUnit);
+  return draft.contractThen === 'ends'
+    ? `The contract runs ${length}. It ends after the last payment.`
+    : `The contract runs ${length}. After it, it renews until they cancel.`;
+}
+
 /** A new type's form, before anything is typed. */
 export function emptyDraft() {
   return {
@@ -230,6 +250,9 @@ export function emptyDraft() {
     ptPeriod: 'month',
     taxRateId: '',
     joiningFee: '',
+    contract: 'none',
+    contractPeriods: '12',
+    contractThen: 'renews',
   };
 }
 
@@ -260,6 +283,9 @@ export function draftFromType(type) {
     ptPeriod: hasPtLimit(type) ? type.ptPeriod : base.ptPeriod,
     taxRateId: type.taxRateId ?? '',
     joiningFee: type.joiningFeeMinor > 0 ? minorToPriceText(type.joiningFeeMinor, type.currency) : '',
+    contract: type.contractPeriods === null || type.contractPeriods === undefined ? 'none' : 'fixed',
+    contractPeriods: type.contractPeriods === null || type.contractPeriods === undefined ? base.contractPeriods : String(type.contractPeriods),
+    contractThen: type.contractThen ?? base.contractThen,
   };
 }
 
@@ -305,7 +331,7 @@ const usesTerm = (choice) => choice === 'recurring' || choice === 'one_time' || 
 const usesAccess = usesTerm;
 
 /** The boxes in the order the form draws them, so the first wrong one can be shown. */
-export const PROBLEM_ORDER = ['name', 'description', 'price', 'joiningFee', 'tax', 'termCount', 'packClasses', 'packDays', 'bookingsLimit', 'classes', 'ptLimit'];
+export const PROBLEM_ORDER = ['name', 'description', 'price', 'joiningFee', 'tax', 'termCount', 'contractPeriods', 'packClasses', 'packDays', 'bookingsLimit', 'classes', 'ptLimit'];
 
 /** The first box that is wrong, top to bottom, or null. */
 export function firstProblem(problems) {
@@ -355,6 +381,13 @@ export function draftProblems(draft, currency) {
   if (usesTerm(draft.choice) && wholeNumber(draft.termCount, 1, MEMBERSHIP_TERM_COUNT_MAX) === null) {
     problems.termCount = `Type a whole number from 1 to ${String(MEMBERSHIP_TERM_COUNT_MAX)}.`;
   }
+  if (draftHasContract(draft)) {
+    if (wholeNumber(draft.contractPeriods, 1, MEMBERSHIP_CONTRACT_PERIODS_MAX) === null) {
+      problems.contractPeriods = `Type how many payments, from 1 to ${String(MEMBERSHIP_CONTRACT_PERIODS_MAX)}.`;
+    } else if (priceMinor === 0) {
+      problems.contractPeriods = 'A free membership has no contract. Choose No contract.';
+    }
+  }
   if (draft.choice === 'pack') {
     if (wholeNumber(draft.packClasses, 1, MEMBERSHIP_PACK_CLASSES_MAX) === null) {
       problems.packClasses = `Type how many classes, from 1 to ${String(MEMBERSHIP_PACK_CLASSES_MAX)}.`;
@@ -380,6 +413,11 @@ export function draftProblems(draft, currency) {
     problems.ptLimit = `Type how many sessions, from 1 to ${String(MEMBERSHIP_PT_LIMIT_MAX)}.`;
   }
   return Object.keys(problems).length === 0 ? null : problems;
+}
+
+/** Whether the form sets a contract: a repeating type only (18v-i). */
+export function draftHasContract(draft) {
+  return draft.choice === 'recurring' && draft.contract === 'fixed';
 }
 
 /** Whether the form's ticked classes apply: not for a gym-only type. */
@@ -433,6 +471,8 @@ export function draftBody(draft, currency) {
     ptPeriod: draftLimitsPt(draft) ? draft.ptPeriod : null,
     taxRateId: draft.taxRateId === '' ? null : draft.taxRateId,
     joiningFeeMinor: draftJoiningFee(draft, currency),
+    contractPeriods: draftHasContract(draft) ? wholeNumber(draft.contractPeriods, 1, MEMBERSHIP_CONTRACT_PERIODS_MAX) : null,
+    contractThen: draftHasContract(draft) ? draft.contractThen : null,
     // A change says which version of the type the form read.
     ...(draft.id === null ? {} : { updatedAt: draft.updatedAt }),
   };
