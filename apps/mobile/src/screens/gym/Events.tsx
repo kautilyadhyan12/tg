@@ -73,7 +73,7 @@ export function EventsPage({ place, onClose }: { place: EventsPlace | null; onCl
   return (
     <Modal visible={place !== null} animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
       <View testID="events-page" accessibilityViewIsModal style={[styles.page, { paddingTop: insets.top }]}>
-        {place === null ? null : <EventsBody key={place.id} place={place} onClose={onClose} bottom={insets.bottom} />}
+        {place === null ? null : <EventsBody key={`${place.id}:${place.eventId ?? ""}`} place={place} onClose={onClose} bottom={insets.bottom} />}
       </View>
     </Modal>
   );

@@ -93,7 +93,7 @@ describe("asking for notifications", () => {
     const server = fakeServer(routes());
     await open(server);
     expect(await screen.findByText("Turn on notifications?")).toBeTruthy();
-    expect(screen.getByText("Get your gym's messages, class reminders and waitlist places, even when the app is closed.")).toBeTruthy();
+    expect(screen.getByText("Get your gym's messages, class reminders and places from the waitlist, even when the app is closed.")).toBeTruthy();
     expect(notifications.asked).toBe(0);
     expect(addressesGiven(server)).toEqual([]);
     await fireEvent.press(screen.getByRole("button", { name: "Continue" }));
@@ -257,8 +257,10 @@ describe("signing out", () => {
 describe("a tapped notification about a place", () => {
   const SESSION = "11111111-1111-4111-8111-111111111111";
   const EVENT = "22222222-2222-4222-8222-222222222222";
-  const placeTap = (gymId: string, what: "class" | "event", id: string, week = "0") => ({
-    notification: { request: { identifier: `p-${id}`, content: { data: { kind: "gym_place", gymId, what, id, week } } } },
+  /** A day on the gym's clock (India), this many days from today. */
+  const daysOn = (n: number) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).format(Date.now() + n * 86_400_000);
+  const placeTap = (gymId: string, what: "class" | "event", id: string, day = daysOn(0)) => ({
+    notification: { request: { identifier: `p-${id}`, content: { data: { kind: "gym_place", gymId, what, id, day } } } },
   });
   const flow = {
     sessionId: SESSION,
@@ -311,18 +313,38 @@ describe("a tapped notification about a place", () => {
     return { ...server, ask, urls };
   };
 
-  it("a class opens that gym's Classes on the week that holds it, at the class", async () => {
+  it("a class opens that gym's Classes on the week that holds it now, at the class", async () => {
     notifications.permission = YES;
     const server = watched();
     await open(server);
     await act(async () => {
-      for (const tap of notifications.taps) tap(placeTap(IRON.id, "class", SESSION, "2"));
+      for (const tap of notifications.taps) tap(placeTap(IRON.id, "class", SESSION, daysOn(15)));
       await Promise.resolve();
     });
     const page = within(await screen.findByTestId("classes-page"));
     expect(await page.findByText("Morning Flow")).toBeTruthy();
     expect(page.getByTestId("classes-asked")).toBeTruthy();
     expect(server.urls.filter((url) => url.includes("/member-classes"))[0]).toContain("week=2");
+  });
+
+  it("a second tap while that gym's Classes is open moves it to the second class's week", async () => {
+    notifications.permission = YES;
+    const server = watched();
+    await open(server);
+    await act(async () => {
+      for (const tap of notifications.taps) tap(placeTap(IRON.id, "class", SESSION, daysOn(0)));
+      await Promise.resolve();
+    });
+    await screen.findByTestId("classes-page");
+    await settle();
+    await act(async () => {
+      for (const tap of notifications.taps) tap(placeTap(IRON.id, "class", "33333333-3333-4333-8333-333333333333", daysOn(8)));
+      await Promise.resolve();
+    });
+    await settle();
+    const weeks = server.urls.filter((url) => url.includes("/member-classes")).map((url) => new URL(url).searchParams.get("week"));
+    expect(weeks[0]).toBe("0");
+    expect(weeks.at(-1)).toBe("1");
   });
 
   it("an event opens that gym's Events", async () => {
@@ -349,8 +371,8 @@ describe("a tapped notification about a place", () => {
     await act(async () => {
       for (const tap of notifications.taps) {
         tap(placeTap(STRANGER_GYM, "class", SESSION));
-        tap(placeTap(IRON.id, "class", SESSION, "9"));
-        tap({ notification: { request: { identifier: "x", content: { data: { kind: "gym_place", gymId: IRON.id, what: "pt", id: SESSION, week: "0" } } } } });
+        tap(placeTap(IRON.id, "class", SESSION, "13 Nov"));
+        tap({ notification: { request: { identifier: "x", content: { data: { kind: "gym_place", gymId: IRON.id, what: "pt", id: SESSION, day: "2099-11-16" } } } } });
       }
       await Promise.resolve();
     });
@@ -381,12 +403,12 @@ describe("a message that arrives while the app is open", () => {
     notifications.permission = YES;
     await open(fakeServer(routes()));
     await arrive({ kind: "gym_inbox", gymId: IRON.id });
-    await arrive({ kind: "gym_place", gymId: IRON.id, what: "class", id: SESSION, week: "0" });
+    await arrive({ kind: "gym_place", gymId: IRON.id, what: "class", id: SESSION, day: "2099-11-16" });
     expect(scheduled()).toEqual([
       { identifier: `inbox:${IRON.id}`, content: { title: "Iron House", body: "Words.", data: { kind: "gym_inbox", gymId: IRON.id } }, trigger: { channelId: "gym-messages" } },
       {
         identifier: `place:${SESSION}`,
-        content: { title: "Iron House", body: "Words.", data: { kind: "gym_place", gymId: IRON.id, what: "class", id: SESSION, week: "0" } },
+        content: { title: "Iron House", body: "Words.", data: { kind: "gym_place", gymId: IRON.id, what: "class", id: SESSION, day: "2099-11-16" } },
         trigger: { channelId: "gym-places" },
       },
     ]);

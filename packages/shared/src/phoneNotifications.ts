@@ -63,19 +63,19 @@ export type PlaceNotice = (typeof PLACE_NOTICES)[number];
 export function placeNotification(input: { notice: PlaceNotice; gymName: string; name: string; when: string }): { title: string; body: string } {
   const { notice, gymName, name, when } = input;
   return notice === "yours"
-    ? { title: gymName, body: `You have a place in ${name} ${when}. You were next on the waitlist.` }
+    ? { title: gymName, body: `You have a place in ${name} ${when}. You were moved off the waitlist.` }
     : { title: gymName, body: `A place is free in ${name} ${when}. The first to claim it gets it.` };
 }
 
-/** What a place's notification carries for the app: the gym, and the class or event a tap opens. `week`:
- *  which of the gym's weeks holds the class (0 starts today), as the Classes page counts them. */
+/** What a place's notification carries for the app: the gym, and the class or event a tap opens. `day`:
+ *  its day on the gym's clock, from which the phone works out the week to open when it is tapped. */
 export const gymPlacePushDataSchema = z
   .object({
     kind: z.literal("gym_place"),
     gymId: z.string().uuid(),
     what: z.enum(["class", "event"]),
     id: z.string().uuid(),
-    week: z.coerce.number().int().min(0).max(7),
+    day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   })
   .strip();
 export type GymPlacePushData = z.infer<typeof gymPlacePushDataSchema>;

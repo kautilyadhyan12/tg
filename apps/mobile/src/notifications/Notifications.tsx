@@ -36,7 +36,7 @@ export const useTapAsked = () => useContext(AskedContext);
 
 export const NOTIFICATIONS_ASK = {
   title: "Turn on notifications?",
-  line: "Get your gym's messages, class reminders and waitlist places, even when the app is closed.",
+  line: "Get your gym's messages, class reminders and places from the waitlist, even when the app is closed.",
 } as const;
 
 export function NotificationsProvider({ children, onTapped }: { children: ReactNode; onTapped?: () => void }) {

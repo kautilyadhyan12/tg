@@ -20,6 +20,7 @@ import { Icon } from "../look/Icon";
 import { Page } from "../look/Page";
 import { Txt } from "../look/Txt";
 import { useTapAsked } from "../notifications/Notifications";
+import { weekOfDay } from "../notifications/phone";
 import { useSession } from "../session/SessionProvider";
 import { InvitationList, PlaceHead, invitationsPath } from "./Invitation";
 import { usePlaces } from "./places";
@@ -208,7 +209,7 @@ export function GymScreen() {
     if (asked !== false) {
       const at = { id: asked.id, name: asked.name, clockFormat: asked.clockFormat };
       if (tapAsked.kind === "inbox") setInboxAt({ id: asked.id, name: asked.name, orgType: asked.orgType, latestCheer: asked.latestCheer, latestNudge: asked.latestNudge });
-      else if (tapAsked.what === "class") setClassesAt({ ...at, week: tapAsked.week, sessionId: tapAsked.id });
+      else if (tapAsked.what === "class") setClassesAt({ ...at, week: weekOfDay(tapAsked.day, asked.timezone, Date.now()), sessionId: tapAsked.id });
       else setEventsAt({ ...at, eventId: tapAsked.id });
     }
     tapOpened();

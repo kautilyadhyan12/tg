@@ -29,8 +29,28 @@ export function tappedOf(data: unknown): Tapped | null {
   if (inbox.success) return { kind: "inbox", gymId: inbox.data.gymId };
   const place = gymPlacePushDataSchema.safeParse(data);
   if (!place.success) return null;
-  const { gymId, what, id, week } = place.data;
-  return { kind: "place", gymId, what, id, week };
+  const { gymId, what, id, day } = place.data;
+  return { kind: "place", gymId, what, id, day };
+}
+
+const dayNumber = (day: string): number | null => {
+  const ms = Date.UTC(Number(day.slice(0, 4)), Number(day.slice(5, 7)) - 1, Number(day.slice(8, 10)));
+  return Number.isFinite(ms) ? Math.round(ms / 86_400_000) : null;
+};
+
+/** Which of the Classes page's weeks holds `day` now (0 starts today on the gym's clock), worked out
+ *  when the notification is tapped, however long it waited in the tray. 0 when it cannot be read. */
+export function weekOfDay(day: string, zone: string, nowMs: number): number {
+  let today: string;
+  try {
+    today = new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" }).format(nowMs);
+  } catch {
+    return 0;
+  }
+  const on = dayNumber(day);
+  const from = dayNumber(today);
+  if (on === null || from === null) return 0;
+  return Math.min(7, Math.max(0, Math.floor((on - from) / 7)));
 }
 
 /** One notification for each gym's Inbox, and each class or event: the next replaces it, as the

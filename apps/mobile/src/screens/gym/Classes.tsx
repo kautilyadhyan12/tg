@@ -79,7 +79,7 @@ export function ClassesPage({ place, onClose }: { place: ClassesPlace | null; on
   return (
     <Modal visible={place !== null} animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
       <View testID="classes-page" accessibilityViewIsModal style={[styles.page, { paddingTop: insets.top }]}>
-        {place === null ? null : <ClassesBody key={place.id} place={place} onClose={onClose} bottom={insets.bottom} />}
+        {place === null ? null : <ClassesBody key={`${place.id}:${place.sessionId ?? ""}`} place={place} onClose={onClose} bottom={insets.bottom} />}
       </View>
     </Modal>
   );

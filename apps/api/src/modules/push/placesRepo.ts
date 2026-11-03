@@ -81,18 +81,18 @@ const table = (sql: SqlOrTx, what: PlaceWhat) => (what === "class" ? sql`gym_cla
 
 /** Takes the notice off the row, once: a second run at the same instant, or a change since that owes
  *  something new, gets false back and sends nothing for this one. */
-export async function claimDue(sql: SqlOrTx, place: Pick<DuePlace, "what" | "rowId" | "due" | "dueAt">): Promise<boolean> {
+export async function claimDue(sql: SqlOrTx, place: Pick<DuePlace, "what" | "rowId" | "gymId" | "due" | "dueAt">): Promise<boolean> {
   const rows = await sql<{ id: string }[]>`
     UPDATE ${table(sql, place.what)} SET push_due = NULL
-    WHERE id = ${place.rowId} AND push_due = ${place.due} AND push_due_at = ${place.dueAt}::timestamptz
+    WHERE gym_id = ${place.gymId} AND id = ${place.rowId} AND push_due = ${place.due} AND push_due_at = ${place.dueAt}::timestamptz
     RETURNING id`;
   return rows.length === 1;
 }
 
 /** Puts back a notice this run took and Firebase did not take, so the next run tries again; never over
  *  something owed since. */
-export async function unclaimDue(sql: SqlOrTx, place: Pick<DuePlace, "what" | "rowId" | "due" | "dueAt">): Promise<void> {
+export async function unclaimDue(sql: SqlOrTx, place: Pick<DuePlace, "what" | "rowId" | "gymId" | "due" | "dueAt">): Promise<void> {
   await sql`
     UPDATE ${table(sql, place.what)} SET push_due = ${place.due}, push_due_at = ${place.dueAt}::timestamptz
-    WHERE id = ${place.rowId} AND push_due IS NULL AND push_due_at = ${place.dueAt}::timestamptz`;
+    WHERE gym_id = ${place.gymId} AND id = ${place.rowId} AND push_due IS NULL AND push_due_at = ${place.dueAt}::timestamptz`;
 }

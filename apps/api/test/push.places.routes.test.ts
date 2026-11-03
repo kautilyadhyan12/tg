@@ -253,11 +253,11 @@ d("a place in a class or an event, told to the phone (real Postgres)", () => {
     expect(sentTo(bina)).toHaveLength(1);
     expect(sentTo(bina)[0]).toMatchObject({
       title: "Lotus Yoga",
-      body: "You have a place in Morning Flow on Friday 13 November at 6:00 PM. You were next on the waitlist.",
+      body: "You have a place in Morning Flow on Friday 13 November at 6:00 PM. You were moved off the waitlist.",
       channelId: "gym-places",
       tag: `place:${flow}`,
     });
-    expect(gymPlacePushDataSchema.parse(sentTo(bina)[0]?.data)).toEqual({ kind: "gym_place", gymId: gym.id, what: "class", id: flow, week: 0 });
+    expect(gymPlacePushDataSchema.parse(sentTo(bina)[0]?.data)).toEqual({ kind: "gym_place", gymId: gym.id, what: "class", id: flow, day: "2026-11-13" });
     expect(sentTo(asha)).toHaveLength(0);
     expect(sentTo(chen)).toHaveLength(0);
     // Told once.
@@ -383,7 +383,7 @@ d("a place in a class or an event, told to the phone (real Postgres)", () => {
     await come(gym, bina, later, true);
     await cantCome(gym, asha, later);
     await sweep();
-    expect(sentTo(bina).map((m) => m.body)).toEqual(["You have a place in Saturday Open Day on Friday 13 November at 12:00 PM. You were next on the waitlist."]);
+    expect(sentTo(bina).map((m) => m.body)).toEqual(["You have a place in Saturday Open Day on Friday 13 November at 12:00 PM. You were moved off the waitlist."]);
     expect(gymPlacePushDataSchema.parse(sentTo(bina)[0]?.data)).toMatchObject({ what: "event", id: later });
 
     fresh();
@@ -424,7 +424,7 @@ d("a place in a class or an event, told to the phone (real Postgres)", () => {
       request("PUT", `/v1/orgs/${gym.id}/booking-settings`, { cookies: gym.owner.cookies, payload: { ...read.settings, handoverMinutes, pt: read.pt } });
     expect((await put(60)).statusCode).toBe(200);
     await sweep();
-    expect(sentTo(chen).map((m) => m.body)).toEqual(["You have a place in Morning Flow today at 10:00 PM. You were next on the waitlist."]);
+    expect(sentTo(chen).map((m) => m.body)).toEqual(["You have a place in Morning Flow today at 10:00 PM. You were moved off the waitlist."]);
     expect((await put(1440)).statusCode).toBe(200);
   });
 

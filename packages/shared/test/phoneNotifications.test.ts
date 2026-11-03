@@ -88,7 +88,7 @@ describe("placeNotification: the gym's name over one whole sentence", () => {
   it("you have a place", () => {
     expect(placeNotification({ notice: "yours", gymName: "Lotus Yoga", name: "Morning Flow", when: "on Tuesday 11 November at 6:00 PM" })).toEqual({
       title: "Lotus Yoga",
-      body: "You have a place in Morning Flow on Tuesday 11 November at 6:00 PM. You were next on the waitlist.",
+      body: "You have a place in Morning Flow on Tuesday 11 November at 6:00 PM. You were moved off the waitlist.",
     });
   });
   it("a place is free", () => {
@@ -103,14 +103,14 @@ describe("gymPlacePushDataSchema: what a tap opens", () => {
   const gymId = "6f1c1d1e-8a0a-4c55-9a55-1b2a3c4d5e6f";
   const id = "0b9f3c55-2d7e-4f0a-8c1b-9a8b7c6d5e4f";
   it("reads the strings Firebase carries", () => {
-    expect(gymPlacePushDataSchema.parse({ kind: "gym_place", gymId, what: "class", id, week: "2" })).toEqual({ kind: "gym_place", gymId, what: "class", id, week: 2 });
+    expect(gymPlacePushDataSchema.parse({ kind: "gym_place", gymId, what: "class", id, day: "2026-11-13" })).toEqual({ kind: "gym_place", gymId, what: "class", id, day: "2026-11-13" });
   });
   it.each([
-    { kind: "gym_inbox", gymId, what: "class", id, week: "0" },
-    { kind: "gym_place", gymId: "not-a-gym", what: "class", id, week: "0" },
-    { kind: "gym_place", gymId, what: "pt", id, week: "0" },
-    { kind: "gym_place", gymId, what: "event", id, week: "8" },
-    { kind: "gym_place", gymId, what: "event", id, week: "-1" },
+    { kind: "gym_inbox", gymId, what: "class", id, day: "2026-11-13" },
+    { kind: "gym_place", gymId: "not-a-gym", what: "class", id, day: "2026-11-13" },
+    { kind: "gym_place", gymId, what: "pt", id, day: "2026-11-13" },
+    { kind: "gym_place", gymId, what: "event", id, day: "13 Nov" },
+    { kind: "gym_place", gymId, what: "event", id, day: "" },
     { kind: "gym_place", gymId, what: "event", id },
   ])("refuses %j", (data) => {
     expect(gymPlacePushDataSchema.safeParse(data).success).toBe(false);

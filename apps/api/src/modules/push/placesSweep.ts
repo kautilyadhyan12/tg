@@ -9,7 +9,6 @@ import {
   GYM_PLACES_CHANNEL,
   PUSH_WITHIN_HOURS,
   gymClockFormatSchema,
-  gymMessageDayNumber,
   placeNotification,
   pushHourOpen,
   reminderWhen,
@@ -89,21 +88,17 @@ export async function sendPlaceNotifications(deps: {
   const since = new Date(now.getTime() - PUSH_WITHIN_HOURS * 3_600_000);
   const result: PlaceSweepResult = { sent: 0, skipped: 0, waiting: 0, failed: 0 };
 
-  const handle = async (place: places.DuePlace): Promise<void> => {
-    if (!(await places.claimDue(sql, place))) return;
+  const tell = async (place: places.DuePlace): Promise<void> => {
     const tokens = place.stale ? [] : await repo.liveTokens(sql, place.userId, now);
     const today = dayIn(place.gymZone, now);
     const clock = gymClockFormatSchema.safeParse(place.clockFormat);
     const facts = tokens.length === 0 || today === null || !clock.success ? null : await stillTrue(sql, place, now);
     const when = facts === null || today === null || !clock.success ? null : reminderWhen(today, facts.day, facts.minute, clock.data);
-    const from = today === null ? null : gymMessageDayNumber(today);
-    const on = facts === null ? null : gymMessageDayNumber(facts.day);
-    if (facts === null || when === null || from === null || on === null) {
+    if (facts === null || when === null) {
       result.skipped += 1;
       return;
     }
     const { title, body } = placeNotification({ notice: place.due, gymName: place.gymName, name: facts.name, when });
-    const week = place.what === "class" ? Math.min(7, Math.max(0, Math.floor((on - from) / 7))) : 0;
     let reached = false;
     let failed = false;
     for (const token of tokens) {
@@ -113,7 +108,7 @@ export async function sendPlaceNotifications(deps: {
         body,
         tag: `place:${place.subjectId}`,
         channelId: GYM_PLACES_CHANNEL.id,
-        data: { kind: "gym_place", gymId: place.gymId, what: place.what, id: place.subjectId, week: String(week) },
+        data: { kind: "gym_place", gymId: place.gymId, what: place.what, id: place.subjectId, day: facts.day },
       });
       if (sent === "sent") {
         result.sent += 1;
@@ -126,6 +121,18 @@ export async function sendPlaceNotifications(deps: {
       }
     }
     if (failed && !reached) await places.unclaimDue(sql, place);
+  };
+
+  const handle = async (place: places.DuePlace): Promise<void> => {
+    if (!(await places.claimDue(sql, place))) return;
+    try {
+      await tell(place);
+    } catch {
+      // A read that failed after the claim (a dropped connection): put back for the next run, and the
+      // rest of this run goes on.
+      result.failed += 1;
+      await places.unclaimDue(sql, place).catch(() => undefined);
+    }
   };
 
   let after: places.DueMark | null = null;
