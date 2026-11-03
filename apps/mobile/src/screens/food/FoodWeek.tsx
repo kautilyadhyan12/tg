@@ -18,6 +18,8 @@ import {
   dayLetter,
   factWords,
   monthLabel,
+  TARGETS_DIFFER_WORDS,
+  targetsDiffer,
   weekBars,
   weekLine,
   type Bar,
@@ -90,13 +92,14 @@ function WeekBody({ week, here, onSetup }: { week: FoodWeekResponse; here: Today
     <>
       {bars.every((b) => b.value === null) ? null : (
         <>
-          <Chart bars={bars} figure="kcal" month={false} />
+          <Chart bars={bars} figure="kcal" month={false} line={target ?? null} />
           <Legend />
         </>
       )}
       {bars.every((b) => b.value === null) || target === undefined ? null : (
         <Txt kind="tiny">Line: your daily target, {count(target)} kcal today</Txt>
       )}
+      {targetsDiffer(bars, target ?? null) ? <Txt kind="tiny">{TARGETS_DIFFER_WORDS}</Txt> : null}
       <Txt kind="small" colour="text">
         {line.words}
       </Txt>
@@ -156,11 +159,12 @@ function Detail({ week, figure, here, month }: { week: FoodWeekResponse; figure:
         <Txt kind="small">No meals on these days.</Txt>
       ) : (
         <>
-          <Chart bars={bars} figure={figure} month={month} />
+          <Chart bars={bars} figure={figure} month={month} line={target ?? null} />
           <Legend />
           {target === undefined || of === undefined ? null : (
             <Txt kind="tiny">Line: your daily target, {count(target)} {of.unit} today</Txt>
           )}
+          {targetsDiffer(bars, target ?? null) ? <Txt kind="tiny">{TARGETS_DIFFER_WORDS}</Txt> : null}
         </>
       )}
       <View style={styles.facts}>
@@ -191,7 +195,8 @@ function barColour(bar: Bar): ColourName {
   return bar.band === null ? "textSoft" : BAND_COLOUR[bar.band];
 }
 
-function Chart({ bars, figure, month }: { bars: readonly Bar[]; figure: FoodWeekFigure; month: boolean }) {
+/** `line`: today's target, drawn once straight across the bars (null while there is none). */
+function Chart({ bars, figure, month, line }: { bars: readonly Bar[]; figure: FoodWeekFigure; month: boolean; line: number | null }) {
   const top = chartTop(bars);
   const height = (n: number) => Math.max(2, Math.round((n / top) * CHART_HEIGHT));
   return (
@@ -209,9 +214,9 @@ function Chart({ bars, figure, month }: { bars: readonly Bar[]; figure: FoodWeek
                 <View style={[styles.bar, { height: height(bar.value), backgroundColor: colours[barColour(bar)] }]} />
               </>
             )}
-            {bar.target === null ? null : <View style={[styles.target, { bottom: height(bar.target) }]} />}
           </View>
         ))}
+        {line === null ? null : <View pointerEvents="none" style={[styles.target, { bottom: height(line) }]} />}
       </View>
       <View style={styles.labels}>
         {bars.map((bar, i) => (
@@ -261,7 +266,7 @@ const styles = StyleSheet.create({
   date: { width: 32 },
   thin: { marginHorizontal: -2 },
   bar: { borderTopLeftRadius: 6, borderTopRightRadius: 6 },
-  target: { position: "absolute", left: -3, right: -3, height: 2, borderRadius: 1, backgroundColor: colours.text },
+  target: { position: "absolute", left: 0, right: 0, height: 2, borderRadius: 1, backgroundColor: colours.text },
   about: { textAlign: "center" },
   centre: { textAlign: "center" },
   legend: { flexDirection: "row", flexWrap: "wrap", columnGap: 14, rowGap: 6 },

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { foodWeekResponseSchema, type FoodWeekFact, type FoodWeekResponse } from "@app/shared";
-import { averageLine, barSaid, dayLetter, factWords, monthLabel, weekBars, weekLine } from "../src/screens/food/weekRules";
+import { averageLine, barSaid, dayLetter, factWords, monthLabel, targetsDiffer, weekBars, weekLine } from "../src/screens/food/weekRules";
 
 // ROADMAP Stage 5 34f-ii: the week in food on the Food screen. The days, bands and counts are the
 // server's (34f-i); these check the bars drawn from them and the words picked for them.
@@ -128,5 +128,20 @@ describe("the rest", () => {
   });
   it("the 30 days are labelled by today's date and each week back", () => {
     expect([0, 1, 6, 7, 14].map((n) => monthLabel("2026-11-03", n))).toEqual(["3", "", "", "3", "3"]);
+  });
+});
+
+describe("one straight line at today's target", () => {
+  const own = { kcal: 1900, proteinG: 112, carbsG: 250, fatG: 70 };
+  it("says so only where a finished day with meals had a target of its own", () => {
+    // The test person of the walk: 1,900 kcal on five days, 2,169 today and on the first.
+    const stepped = weekBars(week((i) => ({ ...eaten(2000, "on"), ...(i > 0 && i < 6 ? { targets: own } : {}) })), "kcal", null);
+    expect(targetsDiffer(stepped, 2169)).toBe(true);
+    // Protein was 112 g on every day: no line to say.
+    expect(targetsDiffer(weekBars(week((i) => ({ ...eaten(2000, "on"), targets: i === 6 ? { ...own, kcal: 2169 } : own })), "proteinG", null), 112)).toBe(false);
+    // A day with another target but no meals, or today, is not drawn against it.
+    expect(targetsDiffer(weekBars(week((i) => (i === 2 ? { targets: own } : eaten(2000, "on"))), "kcal", null), 2169)).toBe(false);
+    expect(targetsDiffer(weekBars(week((i) => ({ ...eaten(2000, "on"), ...(i === 6 ? { targets: own } : {}) })), "kcal", null), 1900)).toBe(true);
+    expect(targetsDiffer(stepped, null)).toBe(false);
   });
 });

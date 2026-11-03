@@ -99,6 +99,13 @@ export function weekBars(week: FoodWeekResponse, figure: FoodWeekFigure, here: T
   });
 }
 
+/** The one line across the bars is today's target; a finished day with meals whose own target
+ *  differed is still coloured by its own, and the box says so. */
+export function targetsDiffer(bars: readonly Bar[], line: number | null): boolean {
+  return line !== null && bars.some((b) => !b.today && b.value !== null && b.target !== null && b.target !== line);
+}
+export const TARGETS_DIFFER_WORDS = "Bars are coloured by each day’s own target.";
+
 /** How tall the chart reads: the biggest bar or target, with a little room over it. */
 export function chartTop(bars: readonly Bar[]): number {
   const most = Math.max(0, ...bars.flatMap((b) => [b.value ?? 0, b.target ?? 0]));
