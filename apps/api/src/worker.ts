@@ -26,6 +26,7 @@ import pino from "pino";
 import postgres from "postgres";
 import { loadConfig } from "./config.js";
 import { createFcmSender, readServiceAccount } from "./modules/push/fcm.adapter.js";
+import { sendPlaceNotifications } from "./modules/push/placesSweep.js";
 import { sendGymMessageNotifications } from "./modules/push/sweep.js";
 import { createResendEmailReader, createResendInviteTransport, createResendTransport } from "./email/resend.js";
 import { cachedMailDomainCheck, systemResolver } from "./modules/orgs/invites/mailDomain.js";
@@ -797,6 +798,12 @@ if (pushAccount === null) {
       const run = await sendGymMessageNotifications({ sql, sender: pushSender, now: () => new Date() });
       if (run.sent + run.skipped + run.failed > 0) {
         log.info({ ...run, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
+      }
+      // A place in a class or an event (18b-ii-a), in the same minute.
+      const placesStartedAt = Date.now();
+      const placesRun = await sendPlaceNotifications({ sql, sender: pushSender, now: () => new Date() });
+      if (placesRun.sent + placesRun.skipped + placesRun.failed > 0) {
+        log.info({ ...placesRun, durationMs: Date.now() - placesStartedAt, event: "job.finished", job: "push.places" }, "job finished");
       }
     },
     { connection },

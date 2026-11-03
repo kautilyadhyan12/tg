@@ -22,6 +22,7 @@ import {
   eventHandsOverNow,
   eventRefusal,
   gymEventPeopleResponseSchema,
+  tellsPlaceFree,
   type ClassBookingSettings,
   type ComeToEventRequest,
   type GymEventComingRefusal,
@@ -36,6 +37,7 @@ import { fullName } from "../leaderboard/rank.js";
 import { lockGym } from "../memberList/repo.js";
 import { isLiveMember } from "../posts/repo.js";
 import * as repo from "./placesRepo.js";
+import { eventById, type EventRow } from "./repo.js";
 
 export interface PlacesDeps {
   sql: Sql;
@@ -77,7 +79,12 @@ const placeInput = (ctx: repo.PlaceContext, now: Date) => ({
  *  place goes to it by itself. Somebody no longer a member is passed over and keeps their
  *  place in line. Under the gym's lock and the event's. Answers how many were moved in. */
 async function handOver(tx: TransactionSql, gymId: string, ctx: repo.PlaceContext, now: Date): Promise<number> {
-  if (!eventHandsOverNow(placeInput(ctx, now))) return 0;
+  const input = placeInput(ctx, now);
+  const time = bookingTime(input.nowMs, input.startsAtMs, input.settings);
+  if (input.places !== null && tellsPlaceFree({ time, cancelled: input.cancelled, places: input.places, booked: input.coming, waitlisted: input.waitlisted })) {
+    await repo.owePlaceFree(tx, gymId, ctx.event.id, input.places, now);
+  }
+  if (!eventHandsOverNow(input)) return 0;
   const free = ctx.event.places === null ? Infinity : ctx.event.places - ctx.counts.coming;
   const moves: { placeId: string; entryId: string | null }[] = [];
   for (const waiter of await repo.waitlistOf(tx, gymId, ctx.event.id)) {
@@ -152,6 +159,22 @@ function goingOf(
     mine: mine?.status ?? null,
     waitlistPlace: mine?.waitlistPlace ?? null,
   });
+}
+
+/** One event and the person's place in it as their Events page reads them now, for a phone
+ *  notification about it (ROADMAP Stage 5 18b-ii-a). Null where they are no longer a live member of a
+ *  gym that is open and on a live plan, or the event has gone. */
+export async function memberPlace(sql: Sql, gymId: string, userId: string, eventId: string, now: Date): Promise<{ event: EventRow; going: GymEventGoing } | null> {
+  try {
+    await requireMember({ sql }, gymId, userId);
+    const event = await eventById(sql, gymId, eventId);
+    if (event === null) return null;
+    const going = (await goingFor(sql, gymId, userId, [event], now)).get(event.id);
+    return going === undefined ? null : { event, going };
+  } catch (err) {
+    if (err instanceof OrgsError) return null;
+    throw err;
+  }
 }
 
 /** "I'm coming", "Join the waitlist", and the claim of a freed place. Answers true, or

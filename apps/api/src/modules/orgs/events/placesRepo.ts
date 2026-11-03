@@ -180,7 +180,8 @@ export async function insertPlace(
 export async function moveIn(tx: TransactionSql, input: { gymId: string; placeId: string; entryId: string | null; claimKey: string | null; now: Date }): Promise<void> {
   const rows = await tx<{ id: string }[]>`
     UPDATE gym_event_places
-    SET status = 'coming', coming_at = ${input.now}, entry_id = ${input.entryId}, claim_key = ${input.claimKey}
+    SET status = 'coming', coming_at = ${input.now}, entry_id = ${input.entryId}, claim_key = ${input.claimKey},
+        ${input.claimKey === null ? tx`push_due = 'yours', push_due_at = ${input.now}` : tx`push_due = NULL`}
     WHERE gym_id = ${input.gymId} AND id = ${input.placeId} AND status = 'waitlisted'
     RETURNING id`;
   if (rows.length !== 1) throw new Error("a waitlisted place was not there to move in");
@@ -192,11 +193,26 @@ export async function moveInMany(tx: TransactionSql, gymId: string, moves: reado
   if (moves.length === 0) return;
   const rows = await tx<{ id: string }[]>`
     UPDATE gym_event_places p
-    SET status = 'coming', coming_at = ${now}, entry_id = v.entry_id, claim_key = NULL
+    SET status = 'coming', coming_at = ${now}, entry_id = v.entry_id, claim_key = NULL,
+        push_due = 'yours', push_due_at = ${now}
     FROM unnest(${moves.map((m) => m.placeId)}::uuid[], ${moves.map((m) => m.entryId)}::uuid[]) AS v(id, entry_id)
     WHERE p.gym_id = ${gymId} AND p.id = v.id AND p.status = 'waitlisted'
     RETURNING p.id`;
   if (rows.length !== moves.length) throw new Error("a waitlisted place was not there to move in");
+}
+
+/** As the class's `owePlaceFree`: everybody waiting for the event is owed "a place is free", once
+ *  for each free place. */
+export async function owePlaceFree(tx: TransactionSql, gymId: string, eventId: string, places: number, now: Date): Promise<void> {
+  await tx`
+    UPDATE gym_event_places p
+    SET push_due = 'free', push_due_at = ${now}, push_occasion = o.occasion
+    FROM (
+      SELECT count(*) FILTER (WHERE x.status = 'cancelled' AND x.coming_at IS NOT NULL)::text || ':' || ${String(places)} AS occasion
+      FROM gym_event_places x WHERE x.gym_id = ${gymId} AND x.event_id = ${eventId}
+    ) o
+    WHERE p.gym_id = ${gymId} AND p.event_id = ${eventId} AND p.status = 'waitlisted'
+      AND p.push_occasion IS DISTINCT FROM o.occasion`;
 }
 
 export async function markCancelled(tx: TransactionSql, gymId: string, placeId: string, now: Date): Promise<void> {
