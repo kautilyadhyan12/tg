@@ -177,7 +177,7 @@ function Detail({ week, figure, here, month }: { week: FoodWeekResponse; figure:
         )}
         {average === null ? null : <Txt kind="small">{average.words}</Txt>}
       </View>
-      {bars.some((b) => b.about) ? <Txt kind="tiny">~ This day holds a scan’s estimate.</Txt> : null}
+      {bars.some((b) => b.about) ? <Txt kind="tiny">~ Includes a scan’s estimate.</Txt> : null}
       {bars.some((b) => b.current) ? <Txt kind="tiny">Some days are read against your current numbers.</Txt> : null}
       {average?.partial === true ? <Txt kind="tiny">* Some foods have no fibre or sodium figure.</Txt> : null}
     </>
@@ -216,7 +216,7 @@ function Chart({ bars, figure, month }: { bars: readonly Bar[]; figure: FoodWeek
       <View style={styles.labels}>
         {bars.map((bar, i) => (
           <View key={bar.day} style={[styles.label, month ? styles.thin : null]}>
-            <Txt kind="tiny" colour={bar.today ? "orange" : "textSoft"} numberOfLines={1} style={styles.centre}>
+            <Txt kind="tiny" colour={bar.today ? "orange" : "textSoft"} numberOfLines={1} style={[styles.centre, month ? styles.date : null]}>
               {month ? monthLabel(bar.day, bars.length - 1 - i) : dayLetter(bar.day)}
             </Txt>
           </View>
@@ -256,7 +256,9 @@ const styles = StyleSheet.create({
   bars: { flexDirection: "row", alignItems: "flex-end", gap: 6 },
   labels: { flexDirection: "row", gap: 6 },
   column: { flex: 1, alignItems: "stretch", justifyContent: "flex-end", height: "100%" },
-  label: { flex: 1 },
+  label: { flex: 1, alignItems: "center", overflow: "visible" },
+  // A date under a thin bar of the 30 days is wider than its bar, and is drawn across the bars beside it.
+  date: { width: 32 },
   thin: { marginHorizontal: -2 },
   bar: { borderTopLeftRadius: 6, borderTopRightRadius: 6 },
   target: { position: "absolute", left: -3, right: -3, height: 2, borderRadius: 1, backgroundColor: colours.text },
