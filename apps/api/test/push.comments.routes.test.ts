@@ -364,12 +364,70 @@ d("phone notifications for comments and replies (real Postgres)", () => {
     await sweep(minutes(at, 40));
     expect(sentTo(asha.token).at(-1)?.title).toBe("Seen Gym · 2 new comments");
 
-    // Asha opens Updates; a page further down marks nothing more, and a stranger's read marks nothing of hers.
-    expect((await request("GET", `/v1/orgs/${gym}/posts`, { bearer: asha.who.accessToken })).statusCode).toBe(200);
-    await comment(gym, ben.who, post, "Three");
+    // Ben opening Updates, and a page further down for Asha, mark nothing of hers: still counted.
+    expect((await request("GET", `/v1/orgs/${gym}/posts`, { bearer: ben.who.accessToken })).statusCode).toBe(200);
+    const further = `/v1/orgs/${gym}/posts?before=${encodeURIComponent(`2099-01-01T00:00:00.000Z_${randomUUID()}`)}`;
+    expect((await request("GET", further, { bearer: asha.who.accessToken })).statusCode).toBe(200);
+    await comment(gym, ben.who, post, "Two and a half");
     await writtenAt(gym, minutes(at, 80));
     await sweep(minutes(at, 80));
+    expect(sentTo(asha.token).at(-1)?.title).toBe("Seen Gym · 3 new comments");
+
+    // Asha opens Updates: the count starts again.
+    expect((await request("GET", `/v1/orgs/${gym}/posts`, { bearer: asha.who.accessToken })).statusCode).toBe(200);
+    await comment(gym, ben.who, post, "Three");
+    await writtenAt(gym, minutes(at, 120));
+    await sweep(minutes(at, 120));
     expect(sentTo(asha.token).at(-1)).toMatchObject({ title: "Seen Gym", body: "Ben commented on your post: Three" });
+  });
+
+  it("a comment read on Updates while it waits out the half hour is not told later as new", { timeout: TIMEOUT_MS }, async () => {
+    const gym = await makeGym("Read Early Gym");
+    const at = noonIndia();
+    const asha = await member(gym, "Asha", true);
+    const ben = await member(gym, "Ben");
+    const post = await postBy(gym, asha.who);
+    await comment(gym, ben.who, post, "One");
+    await writtenAt(gym, at);
+    await sweep(at);
+    await comment(gym, ben.who, post, "Two");
+    await writtenAt(gym, minutes(at, 5));
+    expect((await request("GET", `/v1/orgs/${gym}/posts`, { bearer: asha.who.accessToken })).statusCode).toBe(200);
+    await sweep(minutes(at, 31));
+    expect(sentTo(asha.token)).toHaveLength(1);
+  });
+
+  it("a reply to the person's reply, their reply since removed, on somebody else's post, is told to nobody", { timeout: TIMEOUT_MS }, async () => {
+    const gym = await makeGym("Removed Reply Gym");
+    const at = noonIndia();
+    const asha = await member(gym, "Asha", true);
+    const ben = await member(gym, "Ben");
+    const cara = await member(gym, "Cara");
+    const kavya = await member(gym, "Kavya");
+    const post = await postBy(gym, cara.who);
+    const bens = await comment(gym, ben.who, post, "Nice");
+    const ashas = await comment(gym, asha.who, post, "Agreed, Ben", bens);
+    // Kavya answers Asha's reply: it sits under Ben's comment, which stays readable.
+    const kavyas = await comment(gym, kavya.who, post, "Me too Asha", ashas);
+    expect((await owed(gym)).some((r) => r.user_id === asha.who.userId && r.comment_id === kavyas)).toBe(true);
+    expect((await request("DELETE", `/v1/orgs/${gym}/post-comments/${ashas}`, { bearer: asha.who.accessToken })).statusCode).toBe(200);
+    await writtenAt(gym, at);
+    await sweep(at);
+    expect(sentTo(asha.token)).toHaveLength(0);
+  });
+
+  it("a gym whose plan has lapsed tells nothing, and its one post is not there", { timeout: TIMEOUT_MS }, async () => {
+    const gym = await makeGym("Lapsed Gym");
+    const at = noonIndia();
+    const asha = await member(gym, "Asha", true);
+    const ben = await member(gym, "Ben");
+    const post = await postBy(gym, asha.who);
+    await comment(gym, ben.who, post, "Before it lapsed");
+    await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${gym}`;
+    await writtenAt(gym, at);
+    expect((await sweep(at)).skipped).toBe(1);
+    expect(sentTo(asha.token)).toHaveLength(0);
+    expect((await request("GET", `/v1/orgs/${gym}/posts/${post}`, { bearer: asha.who.accessToken })).statusCode).toBe(404);
   });
 
   it("waits from 23:00 to 04:00 on the person's clock", { timeout: TIMEOUT_MS }, async () => {

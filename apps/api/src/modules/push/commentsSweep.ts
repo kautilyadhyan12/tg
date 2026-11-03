@@ -20,6 +20,9 @@ const BATCH = 500;
 const PAGE = 500;
 const MAX_PAGES = 40;
 const AT_ONCE = 10;
+/** Rows taken this long ago are read by no run again (`PUSH_WITHIN_HOURS`, `toldUnseen`), and go. */
+const PRUNE_AFTER_HOURS = 48;
+const PRUNE_MOST = 5_000;
 
 export async function sendCommentNotifications(deps: {
   sql: Sql;
@@ -46,7 +49,7 @@ export async function sendCommentNotifications(deps: {
       result.skipped += 1;
       return;
     }
-    const tokens = fresh.length === 0 ? [] : await repo.liveTokens(sql, pair.userId, now);
+    const tokens = await repo.liveTokens(sql, pair.userId, now);
     // The notification replaces the gym's last one, so it counts what that one held and was not seen.
     const earlier = tokens.length === 0 ? [] : await comments.toldUnseen(sql, pair.userId, pair.gymId, since);
     const seen = tokens.length === 0 ? null : await commentsToTell({ sql, now: () => now }, pair.userId, pair.gymId, [...new Set([...fresh, ...earlier])]);
@@ -115,5 +118,6 @@ export async function sendCommentNotifications(deps: {
     if (last === undefined || pairs.length < page) break;
     after = last.mark;
   }
+  await comments.pruneComments(sql, new Date(now.getTime() - PRUNE_AFTER_HOURS * 3_600_000), PRUNE_MOST).catch(onError);
   return result;
 }

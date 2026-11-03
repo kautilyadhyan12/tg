@@ -22,6 +22,12 @@ export function setInboxOpen(gymId: string | null): void {
   inboxOpen = gymId;
 }
 
+/** The gym whose Updates is open, if any: its new comments are already a page away. */
+let updatesOpen: string | null = null;
+export function setUpdatesOpen(gymId: string | null): void {
+  updatesOpen = gymId;
+}
+
 /** Which gym's Inbox a notification is for, or null for anything that is not ours. */
 export function gymOfNotification(data: unknown): string | null {
   const parsed = gymMessagePushDataSchema.safeParse(data);
@@ -102,7 +108,8 @@ export function startNotifications(): void {
   Notifications.setNotificationHandler({
     handleNotification: (notification) => {
       const gymId = gymOfNotification(notification.request.content.data);
-      const show = gymId === null || gymId !== inboxOpen;
+      const tapped = tappedOf(notification.request.content.data);
+      const show = (gymId === null || gymId !== inboxOpen) && !(tapped?.kind === "comment" && tapped.gymId === updatesOpen);
       return Promise.resolve({ shouldShowBanner: show, shouldShowList: show, shouldPlaySound: false, shouldSetBadge: false });
     },
   });

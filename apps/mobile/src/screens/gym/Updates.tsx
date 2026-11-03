@@ -18,7 +18,7 @@ import { Card } from "../../look/Card";
 import { colours, orangeGradient, shadows, sizes } from "../../look/colours";
 import { Icon } from "../../look/Icon";
 import { fonts, Txt } from "../../look/Txt";
-import { clearComments } from "../../notifications/phone";
+import { clearComments, setUpdatesOpen } from "../../notifications/phone";
 import { useSession } from "../../session/SessionProvider";
 import { CopyContext } from "../ThisCopy";
 import { CommentsBox, useKeptComments } from "./Comments";
@@ -98,7 +98,7 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
   const [commentsOn, setCommentsOn] = useState<string | null>(place.postId ?? null);
   // The tapped notification's post, read by itself, as it may be far down the list: "gone" when the gym's
   // Updates no longer shows it to this person.
-  const [tappedPost, setTappedPost] = useState<GymPost | "gone" | null>(null);
+  const [tappedPost, setTappedPost] = useState<GymPost | "gone" | "failed" | null>(null);
   const [writing, setWriting] = useState(false);
   // What the last post came to, said where its button is.
   const [postedNote, setPostedNote] = useState<string | null>(null);
@@ -162,6 +162,10 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
   // The comments notification is about this place's Updates, which is open now.
   useEffect(() => {
     void clearComments(place.id);
+    setUpdatesOpen(place.id);
+    return () => {
+      setUpdatesOpen(null);
+    };
   }, [place.id]);
 
   useEffect(() => {
@@ -172,7 +176,7 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
       const answer = await session.signedIn({ method: "GET", path: postPath(place.id, postId) }, gymPostResponseSchema);
       if (!run.live) return;
       if (answer.kind === "ok" && answer.data.post.id === postId) setTappedPost(answer.data.post);
-      else if (answer.kind === "refused" && answer.status === 404) setTappedPost("gone");
+      else setTappedPost(answer.kind === "refused" && answer.status === 404 ? "gone" : "failed");
     })();
     return () => {
       run.live = false;
@@ -247,9 +251,11 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
 
   const feed = held.kind === "ok" ? held.feed : null;
   const listed = commentsOn === null || feed === null ? null : ([...feed.pinned, ...feed.posts].find((p) => p.id === commentsOn) ?? null);
-  const tapped = tappedPost !== null && tappedPost !== "gone" && tappedPost.id === commentsOn ? tappedPost : null;
+  const tapped = typeof tappedPost === "object" && tappedPost !== null && tappedPost.id === commentsOn ? tappedPost : null;
   const commentsPost = feed === null ? null : (listed ?? tapped);
-  const tapGone = tappedPost === "gone" && commentsOn === place.postId;
+  // The tapped post could not be opened: said under the heading, while the list shows as usual.
+  const tapNote =
+    commentsOn !== place.postId || listed !== null ? null : tappedPost === "gone" ? "That post is no longer on Updates." : tappedPost === "failed" ? "Couldn't open that post." : null;
   const onCommentCount = useCallback((postId: string, by: number) => {
     started.current += 1;
     setHeld((h) => {
@@ -300,11 +306,11 @@ function UpdatesBody({ place, onClose, bottom }: { place: UpdatesPlace; onClose:
           </Txt>
         </View>
       </View>
-      {tapGone ? (
+      {tapNote === null ? null : (
         <Txt kind="small" style={styles.tapGone}>
-          That post is no longer on Updates.
+          {tapNote}
         </Txt>
-      ) : null}
+      )}
       <FlatList
         ref={list}
         testID="updates-list"

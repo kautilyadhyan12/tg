@@ -248,6 +248,8 @@ export const gymPostCommentNotices = pgTable(
     foreignKey({ name: "gym_post_comment_notices_comment_fk", columns: [t.gymId, t.commentId], foreignColumns: [gymPostComments.gymId, gymPostComments.id] }).onDelete("cascade"),
     index("gym_post_comment_notices_due_idx").on(t.createdAt, t.userId, t.gymId).where(sql`${t.doneAt} IS NULL`),
     index("gym_post_comment_notices_told_idx").on(t.userId, t.gymId, t.toldAt).where(sql`${t.toldAt} IS NOT NULL`),
+    index("gym_post_comment_notices_unseen_idx").on(t.userId, t.gymId).where(sql`${t.seenAt} IS NULL`),
+    index("gym_post_comment_notices_done_idx").on(t.doneAt).where(sql`${t.doneAt} IS NOT NULL`),
   ],
 );
 

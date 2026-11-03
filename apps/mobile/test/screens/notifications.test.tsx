@@ -465,6 +465,26 @@ describe("a tapped notification about a comment", () => {
     expect(screen.queryByTestId("comments-list")).toBeNull();
   });
 
+  it("a post that cannot be read (no signal, the server's fault) says so, and the list shows as usual", async () => {
+    notifications.permission = YES;
+    await open(fakeServer(commentRoutes(() => refusal(500, "internal", "Something went wrong."))));
+    await tap(commentTap(IRON.id, POST));
+    const updates = within(await screen.findByTestId("updates-page"));
+    expect(await updates.findByText("Couldn't open that post.")).toBeTruthy();
+    expect(await updates.findByText("Somebody else's post")).toBeTruthy();
+    expect(screen.queryByTestId("comments-list")).toBeNull();
+  });
+
+  it("while that gym's Updates is open, its comments notification is not shown; another gym's is", async () => {
+    notifications.permission = YES;
+    await open(fakeServer(commentRoutes()));
+    await tap(commentTap(IRON.id, POST));
+    await screen.findByTestId("updates-page");
+    const shown = (gymId: string) => notifications.handler?.handleNotification({ request: { content: { data: { kind: "gym_comment", gymId, postId: POST } } } });
+    expect((await shown(IRON.id))?.shouldShowBanner).toBe(false);
+    expect((await shown(STRANGER_GYM))?.shouldShowBanner).toBe(true);
+  });
+
   it("opening that gym's Updates takes its comments notification off the phone, and nobody else's", async () => {
     notifications.permission = YES;
     notifications.presented = [

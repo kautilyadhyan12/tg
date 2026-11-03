@@ -84,11 +84,22 @@ export async function toldUnseen(sql: SqlOrTx, userId: string, gymId: string, si
   return rows.map((r) => r.comment_id);
 }
 
-/** The person opened this gym's Updates: what their phone was told of so far is seen. */
+/** The person opened this gym's Updates: what their phone was told of so far is seen, and what was still
+ *  waiting (the half hour, the night) is seen there and never told as new. */
 export async function markCommentsSeen(sql: SqlOrTx, userId: string, gymId: string, now: Date): Promise<void> {
   await sql`
-    UPDATE gym_post_comment_notices SET seen_at = ${now}
-    WHERE user_id = ${userId} AND gym_id = ${gymId} AND told_at IS NOT NULL AND seen_at IS NULL`;
+    UPDATE gym_post_comment_notices SET seen_at = ${now}, done_at = COALESCE(done_at, ${now})
+    WHERE user_id = ${userId} AND gym_id = ${gymId} AND seen_at IS NULL
+      AND (told_at IS NOT NULL OR done_at IS NULL)`;
+}
+
+/** What no run reads again (taken more than two days ago, past the day a comment is told within) goes,
+ *  a bounded number a run. */
+export async function pruneComments(sql: SqlOrTx, before: Date, most: number): Promise<number> {
+  const rows = await sql`
+    DELETE FROM gym_post_comment_notices
+    WHERE ctid IN (SELECT ctid FROM gym_post_comment_notices WHERE done_at < ${before} LIMIT ${most})`;
+  return rows.count;
 }
 
 /** A phone has what this run took: the next comments notification from this gym waits out the half hour. */

@@ -302,16 +302,22 @@ export async function commentsToTell(deps: CommentsDeps, userId: string, gymId: 
   const postIds = [...new Set(rows.map((r) => r.postId))];
   const [mine, readable] = await Promise.all([
     repo.commentsByIds(deps.sql, gymId, answered, { member: userId }),
-    Promise.all(postIds.map(async (id) => ((await postsRepo.postById(deps.sql, gymId, id, { member: userId })) === null ? null : id))),
+    Promise.all(postIds.map((id) => postsRepo.postById(deps.sql, gymId, id, { member: userId }))),
   ]);
   const ownAnswered = new Set(mine.filter((r) => r.authorId === userId && r.byMember).map((r) => r.id));
-  const posts = new Set(readable.filter((id): id is string => id !== null));
+  const posts = new Map(readable.flatMap((p) => (p === null ? [] : [[p.id, p] as const])));
+  // What it is to this person NOW: an answer to their comment or reply that they can still read, else a
+  // comment on their own member's post; neither (their reply since removed, on somebody else's post) is
+  // told to nobody.
   const comments = rows
-    .filter((r) => posts.has(r.postId) && r.authorId !== userId)
-    .map((r): CommentToTell => {
-      const named = shownName({ displayName: r.authorName ?? "", email: r.authorEmail, recordName: r.authorRecordName });
+    .flatMap((r): CommentToTell[] => {
+      const post = posts.get(r.postId);
+      if (post === undefined || r.authorId === userId) return [];
       const reply = (r.parentId !== null && ownAnswered.has(r.parentId)) || (r.replyToId !== null && ownAnswered.has(r.replyToId));
-      return { postId: r.postId, name: named?.name ?? (r.byMember ? "A member" : "Staff"), notice: reply ? "reply" : "on_post", words: r.body, createdAt: r.createdAt };
+      const onTheirPost = post.byMember && post.authorId === userId;
+      if (!reply && !onTheirPost) return [];
+      const named = shownName({ displayName: r.authorName ?? "", email: r.authorEmail, recordName: r.authorRecordName });
+      return [{ postId: r.postId, name: named?.name ?? (r.byMember ? "A member" : "Staff"), notice: reply ? "reply" : "on_post", words: r.body, createdAt: r.createdAt }];
     })
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   return { gymName, comments };

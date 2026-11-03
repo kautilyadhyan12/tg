@@ -19,4 +19,6 @@ ALTER TABLE "gym_post_comment_notices" ADD CONSTRAINT "gym_post_comment_notices_
 ALTER TABLE "gym_post_comment_notices" ADD CONSTRAINT "gym_post_comment_notices_comment_fk" FOREIGN KEY ("gym_id", "comment_id") REFERENCES "public"."gym_post_comments"("gym_id", "id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "gym_post_comment_notices" ADD CONSTRAINT "gym_post_comment_notices_user_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "gym_post_comment_notices_due_idx" ON "gym_post_comment_notices" ("created_at", "user_id", "gym_id") WHERE "done_at" IS NULL;--> statement-breakpoint
-CREATE INDEX "gym_post_comment_notices_told_idx" ON "gym_post_comment_notices" ("user_id", "gym_id", "told_at") WHERE "told_at" IS NOT NULL;
+CREATE INDEX "gym_post_comment_notices_told_idx" ON "gym_post_comment_notices" ("user_id", "gym_id", "told_at") WHERE "told_at" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX "gym_post_comment_notices_unseen_idx" ON "gym_post_comment_notices" ("user_id", "gym_id") WHERE "seen_at" IS NULL;--> statement-breakpoint
+CREATE INDEX "gym_post_comment_notices_done_idx" ON "gym_post_comment_notices" ("done_at") WHERE "done_at" IS NOT NULL;
