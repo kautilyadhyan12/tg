@@ -598,8 +598,9 @@ export const BOOKING_OVERDUE_NAMES = 500;
 export const BOOKING_UNSIGNED_NAMES = 5;
 
 /** Settings → Membership agreements, "Before they book" (18u-iv): the choice, whether the business
- *  asks for any agreement, and the current records with one to sign today, staff left out, the first
- *  by name; `stopped` is sent only to a reader who also sees Members (null otherwise). */
+ *  asks for any agreement, and the current records with one to sign today, as Members' "Agreement
+ *  not signed" counts them (`staff`: how many are its staff, never stopped), the first by name;
+ *  `stopped` is sent only to a reader who also sees Members (null otherwise). */
 export const agreementBookingsResponseSchema = z
   .object({
     rule: bookingUnsignedSchema,
@@ -607,6 +608,7 @@ export const agreementBookingsResponseSchema = z
     stopped: z
       .object({
         count: z.number().int().min(0),
+        staff: z.number().int().min(0),
         people: z.array(z.object({ entryId: z.string().uuid(), name: z.string() }).strict()).max(BOOKING_UNSIGNED_NAMES),
       })
       .strict()

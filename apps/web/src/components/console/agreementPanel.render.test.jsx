@@ -212,7 +212,7 @@ describe('another agreement for some memberships', () => {
 describe('Before they book: no new bookings until the membership agreement is signed (18u-iv)', () => {
   const bid = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
   const NAMES = ['Ana Lopez', 'Ben Okafor', 'Chloe Martin', 'Dev Patel', 'Ella Rossi'];
-  const STOPPED = { count: 8, people: NAMES.map((name, n) => ({ entryId: bid(n + 1), name })) };
+  const STOPPED = { count: 8, staff: 0, people: NAMES.map((name, n) => ({ entryId: bid(n + 1), name })) };
 
   it('names who has one to sign, says what the choice does, See all opens Members, and its own Save sends it', async () => {
     orgService.getAgreementBookings.mockResolvedValueOnce({ data: { rule: 'let_book', inUse: true, stopped: STOPPED } });
@@ -227,6 +227,11 @@ describe('Before they book: no new bookings until the membership agreement is si
     expect(within(box).getByText('and 3 more')).toBeTruthy();
     expect(within(box).getByRole('link', { name: 'See all' }).getAttribute('href')).toBe('/console/iron-house/members?show=agreement-not-signed');
     expect(within(box).getByText('They can still book in the app.')).toBeTruthy();
+    // Changed and not saved: See all asks before leaving.
+    fireEvent.click(screen.getByRole('radio', { name: 'Stop new bookings until they sign' }));
+    expect(within(box).queryByRole('link', { name: 'See all' })).toBeNull();
+    fireEvent.click(screen.getByRole('radio', { name: 'Let them book' }));
+    expect(within(box).getByRole('link', { name: 'See all' })).toBeTruthy();
     const save = screen.getByRole('button', { name: 'Save' });
     expect(save.disabled).toBe(true);
     fireEvent.click(screen.getByRole('radio', { name: 'Stop new bookings until they sign' }));
@@ -246,6 +251,17 @@ describe('Before they book: no new bookings until the membership agreement is si
     open(IN_USE);
     expect(await screen.findByText('Before they book')).toBeTruthy();
     expect(screen.queryByRole('group', { name: 'Who has a membership agreement to sign today' })).toBeNull();
+  });
+
+  it('counts its staff as Members does, and says the choice never stops them', async () => {
+    orgService.getAgreementBookings.mockResolvedValueOnce({ data: { rule: 'stop', inUse: true, stopped: { ...STOPPED, staff: 1 } } });
+    open(IN_USE);
+    expect(await screen.findByText('Today 8 people on your list have a membership agreement to sign:')).toBeTruthy();
+    expect(screen.getByText("Except your staff, they can't book classes or personal training in the app until they sign.")).toBeTruthy();
+    cleanup();
+    orgService.getAgreementBookings.mockResolvedValueOnce({ data: { rule: 'stop', inUse: true, stopped: { count: 1, staff: 1, people: [{ entryId: bid(9), name: 'Kim Coach' }] } } });
+    open(IN_USE);
+    expect(await screen.findByText('They are your staff, so they can still book.')).toBeTruthy();
   });
 
   it('a business with no agreement in use is not asked', async () => {

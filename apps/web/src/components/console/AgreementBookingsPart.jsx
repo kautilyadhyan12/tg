@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import PlaceLink from './PlaceLink';
 import { Loader2 } from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
 import {
@@ -132,9 +132,9 @@ export default function AgreementBookingsPart({ gymId, readOnly, membersTo, vers
           {names.shown.length > 0 ? (
             <p className="text-sm m-0 flex flex-wrap items-center gap-2" style={softStyle}>
               {names.more > 0 ? <span>{`and ${String(names.more)} more`}</span> : null}
-              <Link to={`${membersTo}?show=agreement-not-signed`} className="c-lk c-w6">
+              <PlaceLink to={`${membersTo}?show=agreement-not-signed`} guard={changed} className="c-lk c-w6">
                 See all
-              </Link>
+              </PlaceLink>
             </p>
           ) : null}
           {words.rest !== null ? (

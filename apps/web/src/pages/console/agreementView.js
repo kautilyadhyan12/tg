@@ -105,7 +105,11 @@ export function unsignedPeopleWords(stopped, rule, changed) {
   if (count === 0) return { title: 'Nobody on your list has a membership agreement to sign today.', rest: null };
   const title = `Today ${people(count)} on your list ${count === 1 ? 'has' : 'have'} a membership agreement to sign:`;
   if (rule === 'stop') {
-    return { title, rest: `${changed ? 'Once you save, they' : 'They'} can't book classes or personal training in the app until they sign.` };
+    const staff = typeof stopped.staff === 'number' ? stopped.staff : 0;
+    const who = staff === 0 ? 'They' : staff === count ? null : `Except your staff, they`;
+    if (who === null) return { title, rest: 'They are your staff, so they can still book.' };
+    const line = `${who} can't book classes or personal training in the app until they sign.`;
+    return { title, rest: changed ? `Once you save, ${line.charAt(0).toLowerCase()}${line.slice(1)}` : line };
   }
   return { title, rest: changed ? 'Once you save, they can book in the app again.' : 'They can still book in the app.' };
 }

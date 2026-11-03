@@ -63,7 +63,7 @@ export async function stopOf(sql: Sql | TransactionSql, gymId: string, rule: Sto
 }
 
 /** The people on the gym's list whose payment is overdue today, its own staff left out: the
- *  ones its choice stops, or would, named in Booking settings. The first \`names\` by name. */
+ *  ones its choice stops, or would, named in Booking settings. The first `names` by name. */
 export async function overduePeople(
   sql: Sql,
   gymId: string,
@@ -77,18 +77,26 @@ export async function overduePeople(
   return await named(sql, gymId, late, names);
 }
 
-/** The people on the gym's list with a membership agreement to sign today, its own staff left
- *  out: the ones its choice stops, or would, named in Membership agreements, by the rule Members'
- *  "Agreement not signed" reads. The first \`names\` by name. */
+/** The people on the gym's list with a membership agreement to sign today, by the rule Members'
+ *  "Agreement not signed" reads, and counted as it counts them, its staff kept in, so the box and
+ *  the list See all opens give one number. `staff`: how many of them are its staff, whom the choice
+ *  never stops. The first `names` by name. */
 export async function unsignedPeople(
   sql: Sql,
   gymId: string,
   timezone: string,
   now: Date,
   names: number,
-): Promise<{ count: number; people: { entryId: string; name: string }[] }> {
+): Promise<{ count: number; staff: number; people: { entryId: string; name: string }[] }> {
   const toSign = await agreementNotSignedRecords(sql, gymId, dayInTz(now, timezone));
-  return await named(sql, gymId, toSign === null ? [] : [...toSign], names);
+  if (toSign === null || toSign.size === 0) return { count: 0, staff: 0, people: [] };
+  const [current, staff] = await Promise.all([currentNames(sql, gymId), staffAmong(sql, gymId, { userIds: [], entryIds: [...toSign] })]);
+  const listed = current.filter((record) => toSign.has(record.id));
+  return {
+    count: listed.length,
+    staff: listed.filter((record) => staff.entryIds.has(record.id)).length,
+    people: listed.slice(0, names).map((record) => ({ entryId: record.id, name: record.name })),
+  };
 }
 
 /** These records as the list names them, its own staff left out, by name. */

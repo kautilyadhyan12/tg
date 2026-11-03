@@ -134,7 +134,7 @@ d("no new bookings until the membership agreement is signed (real Postgres)", { 
     dropIn: string;
     ptPack: string;
   }
-  /** A gym selling Gold Monthly, a Drop-in pass and a PT pack; \`agreement\`: it saves its main
+  /** A gym selling Gold Monthly, a Drop-in pass and a PT pack; `agreement`: it saves its main
    *  agreement (every line uses it), and a second one for the Drop-in that it then stops, so the
    *  Drop-in asks for none. */
   const makeGym = async (name: string, agreement = true): Promise<Gym> => {
@@ -181,9 +181,10 @@ d("no new bookings until the membership agreement is signed (real Postgres)", { 
     const [row] = await sql<{ id: string }[]>`
       INSERT INTO gym_held_memberships
         (gym_id, entry_id, membership_type_id, request_key, kind, price_minor, currency, term_count, term_unit, pack_classes, pack_days,
-         classes_left, starts_on, status, renews, paid_periods)
+         classes_left, starts_on, status, frozen_on, renews, paid_periods)
       VALUES (${gym.id}, ${entryId}, ${typeId}, gen_random_uuid(), ${pack ? "pack" : "recurring"}, 4000, 'GBP', ${pack ? null : 1}, ${pack ? null : "month"},
-              ${pack ? 10 : null}, ${pack ? 60 : null}, ${pack ? 10 : null}, ${opts.starts ?? "2026-10-01"}::date, ${opts.status ?? "active"}, ${!pack}, 1)
+              ${pack ? 10 : null}, ${pack ? 60 : null}, ${pack ? 10 : null}, ${opts.starts ?? "2026-10-01"}::date, ${opts.status ?? "active"},
+              ${opts.status === "frozen" ? "2026-10-03" : null}::date, ${!pack}, 1)
       RETURNING id`;
     if (row === undefined) throw new Error("no membership");
     return row.id;
@@ -202,7 +203,7 @@ d("no new bookings until the membership agreement is signed (real Postgres)", { 
     const box = membershipAgreementResponseSchema.parse(ok(await inject("GET", boxUrl, gym.owner.cookies)));
     ok(await inject("POST", `${boxUrl}/sign`, gym.owner.cookies, { agreementId: box.agreement?.id, factsKey: box.factsKey, signer: "person", name }));
   };
-  /** An unpaid bill on a membership, due on \`dueOn\`. */
+  /** An unpaid bill on a membership, due on `dueOn`. */
   const owes = async (gym: Gym, heldId: string, dueOn: string): Promise<void> => {
     await sql`UPDATE gym_held_memberships SET paid_periods = 0 WHERE id = ${heldId}`;
     await sql`
@@ -288,6 +289,11 @@ d("no new bookings until the membership agreement is signed (real Postgres)", { 
     const lee = await member(gym, "Lee Chan");
     await sql`UPDATE gym_held_memberships SET status = 'ended' WHERE id = ${lee.gold}`;
     await hold(gym, lee.entryId, gym.dropIn);
+    // Signed Gold Monthly running, and a second membership frozen and never signed: a frozen one
+    // does not count, as on Members.
+    const mo = await member(gym, "Mo Frozen");
+    await signs(gym, mo.entryId, mo.gold, "Mo Frozen");
+    await hold(gym, mo.entryId, gym.gold, { status: "frozen" });
     // A coach who trains here too, not signed: staff are never stopped.
     const kim = await member(gym, "Kim Coach");
     await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gym.id}, ${kim.userId}, 'trainer', ${null})`;
@@ -296,7 +302,7 @@ d("no new bookings until the membership agreement is signed (real Postgres)", { 
 
     expect((await setChoice(gym, gym.owner, "stop")).statusCode).toBe(200);
     const spin = await classAt(gym, 48, 10);
-    for (const who of [priya, dev, lee, kim]) {
+    for (const who of [priya, dev, lee, mo, kim]) {
       const res = await book(gym, who, spin);
       expect(res.statusCode, res.body).toBe(200);
       expect(await statusOf(spin, who)).toBe("booked");
@@ -427,8 +433,11 @@ d("no new bookings until the membership agreement is signed (real Postgres)", { 
     expect(await choiceOf(gym, gym.owner)).toEqual({
       rule: "let_book",
       inUse: true,
-      stopped: { count: 6, people: people.slice(0, 5).map((p, i) => ({ entryId: p.entryId, name: names[i] ?? "" })) },
+      // Counted as Members counts them, the coach kept in: one number on both pages.
+      stopped: { count: 7, staff: 1, people: people.slice(0, 5).map((p, i) => ({ entryId: p.entryId, name: names[i] ?? "" })) },
     });
+    const list = ok(await inject("GET", `/v1/orgs/${gym.id}/member-list`, gym.owner.cookies)) as { list: { agreementNotSigned: number | null } };
+    expect(list.list.agreementNotSigned).toBe(7);
     // Booking settings no longer carry it.
     expect(Object.keys(await settingsOf(gym, gym.owner))).not.toContain("unsigned");
 

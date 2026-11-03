@@ -1885,6 +1885,14 @@ describe('the membership agreement (18u-i)', () => {
     orgService.getHeldMemberships.mockResolvedValue(answer([held(1, GOLD, TODAY, false)], false, { agreementInUse: true, unsignedStopsBookings: false }));
     render(draw(ADA, 'Ada Lovelace'));
     expect((await screen.findByTestId('held-agreement-line')).textContent).toBe('Agreement not signed');
+    cleanup();
+    // A signed membership of a record that is stopped for another one says nothing about booking.
+    orgService.getHeldMemberships.mockResolvedValue(
+      answer([{ ...held(1, GOLD, TODAY, false), agreement: { at: '2026-10-20T10:00:00.000Z' } }], false, { agreementInUse: true, unsignedStopsBookings: true }),
+    );
+    render(draw(ADA, 'Ada Lovelace'));
+    expect((await screen.findByTestId('held-agreement-line')).textContent).toMatch(/^Agreement signed/);
+    expect(screen.queryByTestId('held-agreement-stops')).toBeNull();
   });
 
   it('a past member with a membership still running is not offered Sign agreement', async () => {
