@@ -77,11 +77,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       getGymWaiver: vi.fn(() => Promise.resolve({ data: { waiver: null, inUse: false, people: 0, signed: 0 } })),
 
       getGymAgreement: vi.fn(() => Promise.resolve({ data: { agreement: null, inUse: false, signed: 0 } })),
-
-
-      getDeletedForms: vi.fn(() => Promise.resolve({ data: { forms: [], total: 0, page: 1, pageSize: 50, timezone: 'UTC' } })),
-
-
+      getDeletedForms: vi.fn(() => Promise.resolve({ data: { forms: [], total: 0, next: null, timezone: 'UTC' } })),
       getDeletedForm: vi.fn(),
       // Settings' Payments box (18d-i): a gym in a country Square serves, not connected.
       getGymPayments: vi.fn(() => Promise.resolve({ data: { payments: { availability: 'square', country: 'GB', canConnect: true, squareReady: true, square: null } } })),

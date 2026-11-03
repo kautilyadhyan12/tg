@@ -12,8 +12,12 @@ export function deletedFormsSummary(kept) {
   return kept === 0 ? 'None kept' : `${kept} kept`;
 }
 
-/** Whom the form is about: the member an agreement names, or the name typed on a waiver. */
-export const deletedFormPerson = (form) => (form.kind === 'agreement' && form.member !== null ? form.member : form.signedName);
+/** Whom the form is about: the member, never a parent who signed for them. A waiver deleted before
+ *  its member's name was kept, and signed by a parent, has no name of its own to show. */
+export function deletedFormPerson(form) {
+  if (form.member !== null) return form.member;
+  return form.signer === 'guardian' ? 'A child (name not kept)' : form.signedName;
+}
 
 export function deletedFormWhat(form) {
   if (form.kind === 'waiver') return 'Waiver';

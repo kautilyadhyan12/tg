@@ -49,7 +49,7 @@ describe('the Delete permanently box', () => {
     expect(screen.getByText('Chitra Menon')).toBeTruthy();
     expect(screen.getByTestId('delete-kept').textContent).toBe("1 member you ticked is on your list, so they aren't deleted. Remove them first.");
     expect(screen.getByText(/Payments they made stay in your takings and reports, as “A deleted member”\./)).toBeTruthy();
-    expect(screen.getByText(/Waivers and membership agreements they signed are kept for six years, for the owner, in Settings./)).toBeTruthy();
+    expect(screen.getByText(/Waivers signed at the front desk and membership agreements are kept for six years, for the owner, in Settings./)).toBeTruthy();
   });
 
   // 18d-iii-b-ii-b-ii-b-ii: the box names who is in the gym's Square customer list, what happens to each, and why.

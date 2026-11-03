@@ -736,11 +736,11 @@ export const orgService = {
   // THE MEMBERSHIP AGREEMENT (ROADMAP 18u-i). The first three are Settings', on `org.manage`;
   // the last three are the desk's, under one membership on a person's page (`members.confirm`).
   // Signed forms of deleted members (18u-iii): the gym's own owner's alone.
-  getDeletedForms: (gymId, { q = '', page = 1 } = {}) =>
+  getDeletedForms: (gymId, { q = '', after = null } = {}) =>
     readThrough(
       deletedFormsResponseSchema,
       'the signed forms',
-      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/deleted-forms`, { params: { ...(q.trim() === '' ? {} : { q: q.trim() }), ...(page > 1 ? { page } : {}) } }),
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/deleted-forms`, { params: { ...(q.trim() === '' ? {} : { q: q.trim() }), ...(after === null ? {} : { after }) } }),
     ),
   getDeletedForm: (gymId, kind, formId) =>
     readThrough(

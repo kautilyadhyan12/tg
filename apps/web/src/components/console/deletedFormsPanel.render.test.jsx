@@ -23,9 +23,11 @@ const FORMS = [
   form(1, {}),
   form(2, { kind: 'agreement', member: 'Maya Patel' }),
   form(3, { kind: 'agreement', signedName: 'Asha Patel', signer: 'guardian', member: 'Mia Patel', agreementName: 'Kids classes' }),
-  form(4, { signedName: 'Asha Patel', signer: 'guardian' }),
+  form(4, { signedName: 'Asha Patel', signer: 'guardian', member: 'Mia Patel' }),
+  // Deleted before a waiver kept its member's name.
+  form(5, { signedName: 'Asha Patel', signer: 'guardian' }),
 ];
-const page = (forms, total = forms.length, pageNumber = 1) => ({ data: { forms, total, page: pageNumber, pageSize: 50, timezone: 'America/Chicago' } });
+const page = (forms, total = forms.length, next = null) => ({ data: { forms, total, next, timezone: 'America/Chicago' } });
 
 function open(isOwner = true) {
   render(<DeletedFormsPanel org={ORG} isOwner={isOwner} />);
@@ -62,15 +64,16 @@ describe('the owner', () => {
   it('reads each form: whom it is about, what it is, who signed, and until when it is kept', async () => {
     orgService.getDeletedForms.mockResolvedValue(page(FORMS));
     open();
-    expect(await screen.findByText('4 kept')).toBeTruthy();
+    expect(await screen.findByText('5 kept')).toBeTruthy();
     const rows = within(screen.getByRole('list', { name: 'Signed forms' })).getAllByRole('listitem');
     expect(rows.map((row) => [...row.querySelectorAll('p')].map((p) => p.textContent))).toEqual([
       ['Maya Patel', 'Waiver. Signed on 2 March 2026.', 'Deleted on 15 October 2026. Kept until 15 October 2032.'],
       ['Maya Patel', 'Membership agreement. Signed on 2 March 2026.', 'Deleted on 15 October 2026. Kept until 15 October 2032.'],
       ['Mia Patel', 'Membership agreement: Kids classes. Signed by Asha Patel, parent or guardian, on 2 March 2026.', 'Deleted on 15 October 2026. Kept until 15 October 2032.'],
-      ['Asha Patel', 'Waiver. Signed by Asha Patel, parent or guardian, on 2 March 2026.', 'Deleted on 15 October 2026. Kept until 15 October 2032.'],
+      ['Mia Patel', 'Waiver. Signed by Asha Patel, parent or guardian, on 2 March 2026.', 'Deleted on 15 October 2026. Kept until 15 October 2032.'],
+      ['A child (name not kept)', 'Waiver. Signed by Asha Patel, parent or guardian, on 2 March 2026.', 'Deleted on 15 October 2026. Kept until 15 October 2032.'],
     ]);
-    expect(orgService.getDeletedForms).toHaveBeenCalledWith(ORG.id, { q: '', page: 1 });
+    expect(orgService.getDeletedForms).toHaveBeenCalledWith(ORG.id, { q: '', after: null });
   });
 
   it('View opens the form under its row, as it was signed, and Close shuts it', async () => {
@@ -123,25 +126,35 @@ describe('the owner', () => {
     fireEvent.change(field, { target: { value: '  Ravi ' } });
     fireEvent.click(screen.getByRole('button', { name: 'Search' }));
     expect(await screen.findByText('No signed forms match “Ravi”.')).toBeTruthy();
-    expect(orgService.getDeletedForms).toHaveBeenLastCalledWith(ORG.id, { q: 'Ravi', page: 1 });
+    expect(orgService.getDeletedForms).toHaveBeenLastCalledWith(ORG.id, { q: 'Ravi', after: null });
     // The closed section still counts what is kept, not what the search found.
-    expect(screen.getByText('4 kept')).toBeTruthy();
+    expect(screen.getByText('5 kept')).toBeTruthy();
     orgService.getDeletedForms.mockResolvedValue(page(FORMS));
     fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
     expect(await screen.findAllByText('Maya Patel')).toHaveLength(2);
-    expect(orgService.getDeletedForms).toHaveBeenLastCalledWith(ORG.id, { q: '', page: 1 });
+    expect(orgService.getDeletedForms).toHaveBeenLastCalledWith(ORG.id, { q: '', after: null });
   });
 
   it('Show more adds the next page under the first, until all are shown', async () => {
     const first = Array.from({ length: 50 }, (_, n) => form(n + 10, { signedName: `Old Member ${String(n + 1)}` }));
     const second = Array.from({ length: 7 }, (_, n) => form(n + 60, { signedName: `Old Member ${String(n + 51)}` }));
-    orgService.getDeletedForms.mockResolvedValueOnce(page(first, 57)).mockResolvedValueOnce(page(second, 57, 2));
+    const CURSOR = '2026-10-01 12:00:00+00|2026-03-02 17:00:00+00|22222222-2222-4222-8222-000000000059';
+    orgService.getDeletedForms.mockResolvedValueOnce(page(first, 57, CURSOR)).mockResolvedValueOnce(page(second, 57));
     open();
     expect(await screen.findByText('Showing 50 of 57.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Show more' }));
     expect(await screen.findByText('Old Member 57')).toBeTruthy();
     expect(within(screen.getByRole('list', { name: 'Signed forms' })).getAllByRole('listitem')).toHaveLength(57);
     expect(screen.queryByRole('button', { name: 'Show more' })).toBeNull();
-    expect(orgService.getDeletedForms).toHaveBeenLastCalledWith(ORG.id, { q: '', page: 2 });
+    expect(orgService.getDeletedForms).toHaveBeenLastCalledWith(ORG.id, { q: '', after: CURSOR });
+  });
+
+  it('reads again when staff come back to the window, so a member deleted in another tab shows', async () => {
+    orgService.getDeletedForms.mockResolvedValueOnce(page(FORMS.slice(0, 1))).mockResolvedValueOnce(page(FORMS));
+    open();
+    expect(await screen.findByText('1 kept')).toBeTruthy();
+    window.dispatchEvent(new Event('focus'));
+    expect(await screen.findByText('5 kept')).toBeTruthy();
+    expect(orgService.getDeletedForms).toHaveBeenCalledTimes(2);
   });
 });

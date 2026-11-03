@@ -16,6 +16,7 @@ import {
   deletedFormsSummary,
 } from '../../pages/console/deletedFormsView';
 import { noteDay } from '../../pages/console/memberListPeople';
+import { useCameBack } from '../../pages/console/useCameBack';
 import { ConsoleFailed, ConsoleLoading, ConsoleSection } from './ConsoleStates';
 
 // SIGNED FORMS OF DELETED MEMBERS (ROADMAP 18u-iii; rulings/2026-10-23-18u-i.md). The desk waivers
@@ -110,7 +111,8 @@ export default function DeletedFormsPanel({ org, isOwner, startOpen = false }) {
   const searchId = useId();
   const [forms, setForms] = useState(null);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
+  // Where Show more starts: after the last form shown; null on the last page.
+  const [next, setNext] = useState(null);
   const [kept, setKept] = useState(null);
   const [typed, setTyped] = useState('');
   const [searched, setSearched] = useState('');
@@ -123,16 +125,16 @@ export default function DeletedFormsPanel({ org, isOwner, startOpen = false }) {
   const when = useCallback((iso) => noteDay(iso, timezone), [timezone]);
 
   const read = useCallback(
-    (q, pageNumber) => {
+    (q, after) => {
       const number = ++readNumber.current;
       return orgService
-        .getDeletedForms(gymId, { q, page: pageNumber })
+        .getDeletedForms(gymId, { q, after })
         .then((res) => {
           if (number !== readNumber.current) return;
           setTimezone(res.data.timezone);
-          setForms((before) => (pageNumber === 1 || before === null ? res.data.forms : [...before, ...res.data.forms]));
+          setForms((before) => (after === null || before === null ? res.data.forms : [...before, ...res.data.forms]));
           setTotal(res.data.total);
-          setPage(pageNumber);
+          setNext(res.data.next);
           setSearched(q);
           setLoadError(null);
           if (q === '') setKept(res.data.total);
@@ -149,27 +151,29 @@ export default function DeletedFormsPanel({ org, isOwner, startOpen = false }) {
 
   useEffect(() => {
     if (!isOwner) return undefined;
-    void read('', 1);
+    void read('', null);
     return () => {
       readNumber.current += 1;
     };
   }, [isOwner, read]);
 
   // A press says it is working at once; the first read, from the effect, shows Loading instead.
-  const press = (q, pageNumber) => {
+  const press = (q, after) => {
     setBusy(true);
     setLoadError(null);
-    void read(q, pageNumber);
+    void read(q, after);
   };
+  // Somebody may have deleted a member for good in another tab: read again on coming back.
+  useCameBack(isOwner, () => void read(searched, null));
   const search = (event) => {
     event.preventDefault();
     setOpenId(null);
-    press(typed.trim(), 1);
+    press(typed.trim(), null);
   };
   const clear = () => {
     setTyped('');
     setOpenId(null);
-    press('', 1);
+    press('', null);
   };
 
   if (!isOwner) {
@@ -189,7 +193,7 @@ export default function DeletedFormsPanel({ org, isOwner, startOpen = false }) {
         {deletedFormsAbout(org.name)}
       </p>
       {forms === null && loadError !== null ? (
-        <ConsoleFailed message={loadError} onRetry={() => press(searched, 1)} />
+        <ConsoleFailed message={loadError} onRetry={() => press(searched, null)} />
       ) : forms === null ? (
         <ConsoleLoading label="Loading…" />
       ) : (
@@ -259,12 +263,14 @@ export default function DeletedFormsPanel({ org, isOwner, startOpen = false }) {
           )}
 
           {loadError !== null ? <ConsoleFailed message={loadError} /> : null}
-          {shown !== null ? (
+          {next !== null ? (
             <div className="flex flex-wrap items-center gap-3">
-              <span className="text-sm" style={softStyle}>
-                {shown}
-              </span>
-              <button type="button" onClick={() => press(searched, page + 1)} disabled={busy} className="rounded-xl px-4 py-2.5 text-sm font-semibold min-h-11 flex items-center gap-2 disabled:opacity-40" style={quietButton}>
+              {shown !== null ? (
+                <span className="text-sm" style={softStyle}>
+                  {shown}
+                </span>
+              ) : null}
+              <button type="button" onClick={() => press(searched, next)} disabled={busy} className="rounded-xl px-4 py-2.5 text-sm font-semibold min-h-11 flex items-center gap-2 disabled:opacity-40" style={quietButton}>
                 {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                 Show more
               </button>
