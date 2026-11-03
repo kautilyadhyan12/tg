@@ -3,7 +3,7 @@
 // out. Every meal is an idea of the meal ideas' own rule (`ideaMaker`), so the foods,
 // the diet rule and the amounts are the same as theirs.
 import { MOST_PLAN_MEALS, type Diet, type MealIdea, type MealIdeaKind, type MealType } from "@app/shared";
-import { LEAST_MEAL_KCAL, MOST_LIGHT_KCAL, MOST_MEALS, MOST_MEAL_KCAL, hash, ideaMaker } from "./suggest.js";
+import { LEAST_MEAL_KCAL, MEAL_LAYOUT, MOST_LIGHT_KCAL, MOST_MEALS, MOST_MEAL_KCAL, hash, ideaMaker, proteinAim, type ProteinAim } from "./suggest.js";
 
 /** Each meal's share of the day, by its kind. */
 const WEIGHT: Readonly<Record<MealType, number>> = { breakfast: 3, lunch: 4, dinner: 4, snack: 1.5 };
@@ -11,14 +11,6 @@ const WEIGHT: Readonly<Record<MealType, number>> = { breakfast: 3, lunch: 4, din
  *  fruit with nuts, which cannot be made bigger than this. */
 const MOST: Readonly<Record<MealType, number>> = {
   breakfast: MOST_LIGHT_KCAL, snack: MOST_LIGHT_KCAL, lunch: MOST_MEAL_KCAL, dinner: MOST_MEAL_KCAL,
-};
-/** The meals of a day by how many there are (screen 9 asks for two to six). */
-const LAYOUT: Readonly<Record<number, readonly MealType[]>> = {
-  2: ["lunch", "dinner"],
-  3: ["breakfast", "lunch", "dinner"],
-  4: ["breakfast", "lunch", "snack", "dinner"],
-  5: ["breakfast", "snack", "lunch", "snack", "dinner"],
-  6: ["breakfast", "snack", "lunch", "snack", "dinner", "snack"],
 };
 /** How many times a day is drawn again to bring it nearer its calories. */
 const DAY_DRAWS = 12;
@@ -34,7 +26,7 @@ export interface PlanSlot { mealType: MealType; kcal: number }
  *  Where the person's meals cannot hold the day, snacks are added after them, up to
  *  `mostMeals`; past what those can hold the day is left short, and its reply says by how much. */
 export function planSlots(mealsPerDay: number, kcalTarget: number, mostMeals: number = MOST_MEALS): PlanSlot[] {
-  const own = LAYOUT[Math.min(Math.max(mealsPerDay, 2), MOST_MEALS)] ?? [];
+  const own = MEAL_LAYOUT[Math.min(Math.max(mealsPerDay, 2), MOST_MEALS)] ?? [];
   let slots: PlanSlot[] = [];
   for (let extra = 0; own.length + extra <= mostMeals; extra++) {
     slots = shared([...own, ...Array.from({ length: extra }, (): MealType => "snack")], kcalTarget);
@@ -80,6 +72,15 @@ export interface PlanDayInput {
   diet: Diet;
   mealsPerDay: number;
   kcalTarget: number;
+  /** The person's weight and the day's protein (31d); absent, the meals are drawn for calories alone. */
+  protein?: { weightKg: number; dayTargetG: number | null };
+}
+
+/** A meal's protein in the week: the day's shared by each meal's calories (spec Part 6 §16.6). */
+export function slotProtein(protein: PlanDayInput["protein"], mealType: MealType, kcal: number, dayKcal: number): ProteinAim | undefined {
+  if (protein === undefined) return undefined;
+  const share = protein.dayTargetG === null || dayKcal <= 0 ? null : (protein.dayTargetG * kcal) / dayKcal;
+  return proteinAim(protein.weightKg, share, { snack: mealType === "snack" });
 }
 
 /** One day of the plan: an idea for each meal, drawn again until the day is near its
@@ -99,7 +100,7 @@ export function planDay(input: PlanDayInput): PlannedMeal[] {
     let turn = input.day;
     const meals = slots.flatMap((slot): PlannedMeal[] => {
       const kind = kindOf(slot.mealType, slot.mealType === "lunch" || slot.mealType === "dinner" ? turn++ : turn);
-      const idea = make(Math.round(slot.kcal * AIM_OVER), kind);
+      const idea = make(Math.round(slot.kcal * AIM_OVER), kind, Infinity, 0, slotProtein(input.protein, slot.mealType, slot.kcal, input.kcalTarget));
       return idea === null ? [] : [{ mealType: slot.mealType, idea }];
     });
     const kcal = sumOf(meals);
@@ -120,6 +121,8 @@ export interface SwapInput {
   kcal: number;
   /** The foods the meal holds now. */
   foods: readonly string[];
+  /** The protein the meal is drawn for (`slotProtein`); absent, calories alone. */
+  protein?: ProteinAim | undefined;
 }
 
 /** Another idea for one meal: of the same kind and near the same calories (held to
@@ -130,7 +133,7 @@ export function swapMeal(input: SwapInput): MealIdea | null {
   const now = foodsKey(input.foods);
   for (let draw = 0; draw < DAY_DRAWS; draw++) {
     const seed = `${input.seed}|${String(draw)}`;
-    const idea = ideaMaker(seed, input.diet, input.foods)(kcal, kindOf(input.mealType, hash(seed)));
+    const idea = ideaMaker(seed, input.diet, input.foods)(kcal, kindOf(input.mealType, hash(seed)), Infinity, 0, input.protein);
     if (idea !== null && foodsKey(idea.items.map((i) => i.canonical)) !== now) return idea;
   }
   return null;

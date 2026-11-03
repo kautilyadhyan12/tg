@@ -48,9 +48,9 @@ import {
 import type { RedisLike } from "../../redis.js";
 import { onMealLogged } from "../gamification/service.js";
 import { refundQuota } from "../quotas/service.js";
-import { dayInTz, safeTimeZone } from "../gamification/streak.js";
+import { dayInTz, hourInTz, safeTimeZone } from "../gamification/streak.js";
 import { getUserFoodAnswers, getUserPlanAndCutRules, getUserSyncContext } from "../users/service.js";
-import { LEAST_MEAL_KCAL, suggestAfterWorkout, suggestMeals, type AfterWorkoutIdea, type DayNumbers } from "./suggest.js";
+import { AFTER_WORKOUT_MS, LEAST_MEAL_KCAL, suggestAfterWorkout, suggestMeals, type AfterWorkoutIdea, type DayNumbers } from "./suggest.js";
 import { ownTargetsHeld, targetsFromPlan } from "./targets.js";
 import { foodWeek, spanDays } from "./foodWeek.js";
 import { CURATED_FOODS, curatedPieceFdcId, curatedUsdaFdcId, findCurated, findCuratedVersions, holdsEveryWord, searchCurated, slug } from "./foods.js";
@@ -782,11 +782,12 @@ export const ideasSeed = (userId: string, mealsLogged: number): string => `${use
  *  own diet, meals a day, the rings' calories and what they have logged today.
  *  The calories are the rings' own, so the rules that hold a cut hold here. */
 export async function getMealIdeas(deps: Pick<NutritionDeps, "sql">, userId: string, now: Date = new Date()): Promise<MealIdeasResponse> {
-  const [answers, { targets }, ctx] = await Promise.all([
+  const [answers, read, ctx] = await Promise.all([
     getUserFoodAnswers(deps.sql, userId),
-    getTargets(deps, userId),
+    getUserPlanAndCutRules(deps.sql, userId, null),
     getUserSyncContext(deps.sql, userId),
   ]);
+  const { targets } = targetsFromPlan(read.plan, await repo.getRingTargets(deps.sql, userId), read.noCutReasons);
   const { diet, mealsPerDay } = answers;
   if (diet === null || mealsPerDay === null) {
     return mealIdeasResponseSchema.parse({
@@ -797,9 +798,15 @@ export async function getMealIdeas(deps: Pick<NutritionDeps, "sql">, userId: str
   if (targets === null) return { status: "needs_plan" };
   const timeZone = safeTimeZone(ctx.timezone);
   const day = dayInTz(now, timeZone);
-  const eaten = await repo.dayEaten(deps.sql, userId, timeZone, day, LEAST_MEAL_KCAL);
+  const [eaten, afterWorkout] = await Promise.all([
+    repo.dayEaten(deps.sql, userId, timeZone, day, LEAST_MEAL_KCAL),
+    repo.workoutEndedSince(deps.sql, userId, new Date(now.getTime() - AFTER_WORKOUT_MS), now),
+  ]);
+  const weightKg = read.answers.weightKg ?? null;
   const { kcalLeft, meals } = suggestMeals({
     seed: ideasSeed(userId, eaten.meals), day, diet, mealsPerDay, kcalTarget: targets.kcal, kcalEaten: eaten.kcal, mealsLogged: eaten.meals,
+    hour: hourInTz(now, timeZone), afterWorkout,
+    ...(weightKg === null ? {} : { protein: { weightKg, dayTargetG: targets.proteinG, eatenG: eaten.proteinG } }),
   });
   return mealIdeasResponseSchema.parse({
     status: "ok", day, kcalLeft, meals, caution: FOOD_ALLERGY_CAUTION,
@@ -821,11 +828,12 @@ export async function getAfterWorkoutIdeas(
   workout: { id: string; startedAt: Date; kcalBurned: number | null },
   now: Date = new Date(),
 ): Promise<{ ideas: AfterWorkoutIdea[]; labelCaution: typeof DIET_LABEL_CAUTION | null }> {
-  const [answers, { targets }, ctx] = await Promise.all([
+  const [answers, read, ctx] = await Promise.all([
     getUserFoodAnswers(deps.sql, userId),
-    getTargets(deps, userId),
+    getUserPlanAndCutRules(deps.sql, userId, null),
     getUserSyncContext(deps.sql, userId),
   ]);
+  const { targets } = targetsFromPlan(read.plan, await repo.getRingTargets(deps.sql, userId), read.noCutReasons);
   const diet = answers.diet ?? "vegan";
   const timeZone = safeTimeZone(ctx.timezone);
   const today = dayInTz(now, timeZone);
@@ -837,7 +845,7 @@ export async function getAfterWorkoutIdeas(
     day = { mealsPerDay: answers.mealsPerDay ?? 3, kcalTarget: targets.kcal, kcalEaten: eaten.kcal, mealsLogged: eaten.meals };
   }
   return {
-    ideas: suggestAfterWorkout({ seed: `${userId}|${workout.id}`, diet, kcalBurned: workout.kcalBurned, day }),
+    ideas: suggestAfterWorkout({ seed: `${userId}|${workout.id}`, diet, kcalBurned: workout.kcalBurned, day, weightKg: read.answers.weightKg ?? null }),
     labelCaution: diet === "non_vegetarian" ? null : DIET_LABEL_CAUTION,
   };
 }

@@ -13,11 +13,11 @@
 // The diet is a ceiling (RULINGS 2026-09-13): `dietAllows` is the one rule, so a
 // vegetarian is never offered meat and a non-vegetarian is offered meatless
 // ideas too.
-import { dietAllows, type Diet, type MealIdea, type MealIdeaKind, type SuggestedFood, type SuggestedMeal } from "@app/shared";
+import { dietAllows, mealTypeAtHour, type Diet, type MealIdea, type MealIdeaKind, type MealType, type SuggestedFood, type SuggestedMeal } from "@app/shared";
 import { CURATED_FOODS, type CuratedFood } from "./foods.js";
 
 export type SuggestRole =
-  | "protein" | "starch" | "bread" | "curry_side" | "vegetable" | "fruit" | "bowl" | "toast" | "nuts" | "spread" | "dish";
+  | "protein" | "starch" | "bread" | "curry_side" | "vegetable" | "fruit" | "bowl" | "toast" | "nuts" | "spread" | "eggs" | "milk" | "dish";
 
 /** The foods that may be suggested, by the part of a meal each plays. */
 const POOL_NAMES: Readonly<Record<Exclude<SuggestRole, "dish">, readonly string[]>> = {
@@ -49,6 +49,10 @@ const POOL_NAMES: Readonly<Record<Exclude<SuggestRole, "dish">, readonly string[
   ],
   // A bowl takes fruit, and nuts or seeds.
   bowl: ["Greek yogurt (plain, nonfat)", "Cottage cheese (low-fat)", "Yogurt (plain, low-fat)", "Oatmeal (cooked)", "Soy milk"],
+  // Oats are eaten cooked with milk (Kd, 2026-11-02); soy milk for a vegan.
+  milk: ["Milk (2%)", "Soy milk"],
+  // Breakfast eggs, with toast and fruit.
+  eggs: ["Eggs (scrambled)", "Egg (hard-boiled)", "Omelette (plain)"],
   // Toast takes a spread, and fruit.
   toast: ["Whole wheat bread", "Rye bread", "French bread / sourdough"],
   nuts: ["Almonds", "Walnuts", "Pumpkin seeds", "Pistachios", "Cashews", "Peanuts"],
@@ -84,8 +88,68 @@ const pool = (role: Exclude<SuggestRole, "dish">): CuratedFood[] => POOL_NAMES[r
 export const SUGGEST_POOLS: Readonly<Record<SuggestRole, readonly CuratedFood[]>> = {
   protein: pool("protein"), starch: pool("starch"), bread: pool("bread"), curry_side: pool("curry_side"),
   vegetable: pool("vegetable"), fruit: pool("fruit"), bowl: pool("bowl"), toast: pool("toast"), nuts: pool("nuts"),
-  spread: pool("spread"), dish: DISH_NAMES.map(([name]) => named(name)),
+  spread: pool("spread"), eggs: pool("eggs"), milk: pool("milk"), dish: DISH_NAMES.map(([name]) => named(name)),
 };
+const OATS = named("Oatmeal (cooked)").canonical;
+
+/** Total sugars per 100 g of the suggested foods that may hold added sugar (bread, spreads,
+ *  dishes, soy milk), from USDA's own table, read 2026-11-03. Total sugars are never less than
+ *  the added ones, so an idea held under the limit by these is under it by its added sugars.
+ *  Fruit, vegetables, plain milk, plain yogurt, grains, beans, nuts, meat, fish and eggs hold
+ *  only their own sugars, which the Dietary Guidelines do not count as added. The three home
+ *  dishes cited from the UK's table (chana masala, khichdi, tandoori chicken) and roti hold
+ *  no sugar in their recipes and are not in USDA's table. */
+const SUGARS: readonly (readonly [name: string, gramsPer100g: number])[] = [
+  ["Almond butter", 4.43], ["Beef and broccoli", 1.23], ["Beef stew", 1.57], ["Bibimbap", 1.52],
+  ["Caesar salad (with chicken, no dressing)", 0.99], ["Chicken curry", 2.56], ["Chicken noodle soup", 0.81],
+  ["Chicken stir-fry (with vegetables)", 2.93], ["Chili con carne", 1.48], ["Cobb salad (no dressing)", 1.1],
+  ["Dal (lentil curry)", 1.71], ["French bread / sourdough", 4.62], ["Hummus", 0.62], ["Lentil soup", 1.72],
+  ["Minestrone", 1.04], ["Paella (seafood)", 0.92], ["Palak paneer (spinach and cheese curry)", 1.89],
+  ["Peanut butter", 10.49], ["Ratatouille", 3.39], ["Rice and beans with meat", 0.25],
+  ["Rice and beans, meatless (black beans and white rice)", 0.2], ["Rye bread", 3.85],
+  ["Sambar (lentil and vegetable stew)", 1.97], ["Sandwich (turkey)", 3.2], ["Soy milk", 0.41],
+  ["Spaghetti bolognese", 2.44], ["Tabbouleh", 1.34], ["Teriyaki chicken", 1.47], ["Tomato soup", 4.16],
+  ["Vegetable curry", 3.18], ["Whole wheat bread", 4.34],
+];
+const SUGARS_PER_100G: ReadonlyMap<string, number> = new Map(SUGARS.map(([name, g]) => [named(name).canonical, g]));
+/** The Dietary Guidelines for Americans 2025–2030, p. 4: "one meal should contain no more
+ *  than 10 grams of added sugars." */
+export const MOST_MEAL_ADDED_SUGAR_G = 10;
+/** The most added sugar an idea can hold, in grams. */
+export const addedSugarAtMost = (items: readonly { canonical: string; grams: number }[]): number =>
+  items.reduce((n, i) => n + ((SUGARS_PER_100G.get(i.canonical) ?? 0) * i.grams) / 100, 0);
+
+/** The protein one meal is drawn for, in grams. */
+export interface ProteinAim { leastG: number; aimG: number; mostG: number; withCarbs: boolean }
+/** ISSN 2017 (Jäger): at least 0.25 g of protein per kg of body weight a meal. */
+export const LEAST_MEAL_PROTEIN_PER_KG = 0.25;
+/** Schoenfeld and Aragon, JISSN 2018: 0.4 g/kg a meal, 0.55 at the most. */
+export const AIM_MEAL_PROTEIN_PER_KG = 0.4;
+export const MOST_MEAL_PROTEIN_PER_KG = 0.55;
+/** Thomas, Erdman and Burke 2016: about 0.3 g/kg after exercise, with carbohydrate. */
+export const AFTER_WORKOUT_PROTEIN_PER_KG = 0.3;
+/** Within this long of a workout's end, the next meal is the meal after it. */
+export const AFTER_WORKOUT_MS = 2 * 60 * 60 * 1000;
+
+/** A meal's protein: its share of what the day has left, never under the least a meal
+ *  holds nor over the most. With no share (no day's number), aimed at 0.4 g/kg. A snack
+ *  in the week is not a meal, and has no least. */
+export function proteinAim(weightKg: number, shareG: number | null, opts: { afterWorkout?: boolean; snack?: boolean } = {}): ProteinAim {
+  const least = opts.snack === true ? 0 : LEAST_MEAL_PROTEIN_PER_KG * weightKg;
+  const most = MOST_MEAL_PROTEIN_PER_KG * weightKg;
+  const wanted = opts.afterWorkout === true
+    ? Math.max(AFTER_WORKOUT_PROTEIN_PER_KG * weightKg, shareG ?? 0)
+    : shareG ?? AIM_MEAL_PROTEIN_PER_KG * weightKg;
+  return { leastG: least, aimG: Math.min(most, Math.max(least, wanted)), mostG: most, withCarbs: opts.afterWorkout === true };
+}
+
+/** How far an idea is from its protein: under the least or over the most weighs ten times. */
+function proteinMiss(proteinG: number, carbsG: number, aim: ProteinAim): number {
+  const out = Math.max(0, aim.leastG - proteinG) + Math.max(0, proteinG - aim.mostG) + (aim.withCarbs ? Math.max(0, proteinG - carbsG) : 0);
+  return 10 * out + Math.abs(proteinG - aim.aimG);
+}
+const proteinMet = (proteinG: number, carbsG: number, aim: ProteinAim): boolean =>
+  proteinG >= aim.leastG - 0.05 && proteinG <= aim.mostG + 0.05 && (!aim.withCarbs || carbsG >= proteinG);
 const DISH_SIDE: ReadonlyMap<string, DishSide> = new Map(DISH_NAMES.map(([name, side]) => [named(name).canonical, side]));
 
 /** The least a day must have left for a meal to be suggested, and the least one idea holds. */
@@ -114,11 +178,11 @@ interface Bounds { step: number; min: number; max: number }
 /** A food served by weight, in grams: the least and the most of it in one idea. */
 const BY_WEIGHT: Readonly<Record<SuggestRole, readonly [min: number, max: number]>> = {
   protein: [75, 200], starch: [75, 250], curry_side: [75, 250], vegetable: [75, 200], fruit: [100, 150], dish: [150, 400],
-  bowl: [100, 250], bread: [25, 75], toast: [25, 75], nuts: [25, 50], spread: [25, 50],
+  bowl: [100, 250], bread: [25, 75], toast: [25, 75], nuts: [25, 50], spread: [25, 50], eggs: [50, 150], milk: [120, 240],
 };
 /** A counted food (an egg, a slice, a potato, "2 tbsp"): the most of them in one idea. */
 const MOST_COUNTED: Readonly<Record<SuggestRole, number>> = {
-  protein: 3, starch: 2, curry_side: 2, vegetable: 2, fruit: 1, dish: 2, bowl: 1, bread: 2, toast: 2, nuts: 2, spread: 2,
+  protein: 3, starch: 2, curry_side: 2, vegetable: 2, fruit: 1, dish: 2, bowl: 1, bread: 2, toast: 2, nuts: 2, spread: 2, eggs: 3, milk: 1,
 };
 
 /** The amounts a food may be suggested at, in grams. A food served by weight
@@ -143,7 +207,7 @@ const partsGrams = (parts: readonly Part[]): number => parts.reduce((n, p) => n 
 
 /** Each part at its share of the meal, on a step of its own; then one step at a
  *  time, whichever brings the whole nearest the meal's calories, until none does. */
-function sized(shares: readonly Share[], kcalTarget: number): Part[] {
+function sized(shares: readonly Share[], kcalTarget: number, protein?: ProteinAim): Part[] {
   const parts = shares.map(([food, role, share]): Part => {
     const bounds = boundsFor(food, role);
     const wanted = ((share * kcalTarget) / food.kcal) * 100;
@@ -163,7 +227,55 @@ function sized(shares: readonly Share[], kcalTarget: number): Part[] {
     if (best === null) break;
     best.part.grams = best.grams;
   }
+  if (protein !== undefined) towardProtein(parts, kcalTarget, protein);
   return parts;
+}
+
+/** How far the calories may move from the meal's while an idea is brought to its protein:
+ *  half of what an idea may be off by, so the protein never costs the calories. */
+const PROTEIN_KCAL_ROOM = IDEA_TOLERANCE / 2;
+const partsProtein = (parts: readonly Part[]): number => parts.reduce((n, p) => n + (p.food.proteinG * p.grams) / 100, 0);
+const partsCarbs = (parts: readonly Part[]): number => parts.reduce((n, p) => n + (p.food.carbsG * p.grams) / 100, 0);
+
+/** One step of one part, or one up and another down, at a time, whichever brings the idea
+ *  nearest its protein while its calories stay within PROTEIN_KCAL_ROOM of the meal's. */
+function towardProtein(parts: Part[], kcalTarget: number, aim: ProteinAim): void {
+  type Move = readonly (readonly [Part, number])[];
+  const can = (p: Part, grams: number): boolean => grams >= p.bounds.min - 1e-9 && grams <= p.bounds.max + 1e-9;
+  /** The idea's miss after the moves, or null where they leave its calories out of room. */
+  const after = (moves: Move): number | null => {
+    const was = moves.map(([p]) => p.grams);
+    for (const [p, g] of moves) p.grams = g;
+    const kcalOk = Math.abs(partsKcal(parts) - kcalTarget) <= kcalTarget * PROTEIN_KCAL_ROOM;
+    const miss = proteinMiss(partsProtein(parts), partsCarbs(parts), aim);
+    moves.forEach(([p], i) => { p.grams = was[i] ?? p.grams; });
+    return kcalOk ? miss : null;
+  };
+  for (let round = 0; round < 40; round++) {
+    const now = proteinMiss(partsProtein(parts), partsCarbs(parts), aim);
+    let best: Move | null = null;
+    let bestMiss = now - 1e-6;
+    for (const move of movesNow(parts)) {
+      if (!move.every(([p, g]) => can(p, g))) continue;
+      const miss = after(move);
+      if (miss !== null && miss < bestMiss) { best = move; bestMiss = miss; }
+    }
+    if (best === null) break;
+    for (const [p, g] of best) p.grams = g;
+  }
+
+}
+
+/** Every move of one step from where the parts stand now. */
+function movesNow(parts: readonly Part[]): (readonly (readonly [Part, number])[])[] {
+  const out: (readonly (readonly [Part, number])[])[] = [];
+  for (const a of parts) {
+    for (const da of [-1, 1]) {
+      out.push([[a, a.grams + da * a.bounds.step]]);
+      for (const b of parts) if (b !== a) out.push([[a, a.grams + da * a.bounds.step], [b, b.grams - da * b.bounds.step]]);
+    }
+  }
+  return out;
 }
 
 const toFood = (part: Part): SuggestedFood => ({
@@ -222,19 +334,62 @@ export interface DayNumbers {
   mealsLogged: number;
 }
 
+/** What the meal ideas know of the person for their protein (31d). */
+export interface ProteinNumbers {
+  weightKg: number;
+  /** The day's protein; null where the day has no number for it. */
+  dayTargetG: number | null;
+  /** The protein logged today. */
+  eatenG: number;
+}
+
 export interface SuggestInput extends DayNumbers {
   /** What tells one person's ideas from another's on the same day. */
   seed: string;
   /** The person's day, YYYY-MM-DD. */
   day: string;
   diet: Diet;
+  /** Absent: the ideas are drawn for calories alone. */
+  protein?: ProteinNumbers;
+  /** The hour of the person's own clock, 0–23, which says which meal is next. */
+  hour?: number;
+  /** A workout of the person's ended within AFTER_WORKOUT_MS: the next meal is the meal after it. */
+  afterWorkout?: boolean;
 }
 
 export interface Suggested { kcalLeft: number; meals: SuggestedMeal[] }
 
-/** The three ideas of a meal, by its size. */
-export function kindsFor(kcalTarget: number): readonly [MealIdeaKind, MealIdeaKind, MealIdeaKind] {
+/** The meals of a day by how many there are (screen 9 asks for two to six). */
+export const MEAL_LAYOUT: Readonly<Record<number, readonly MealType[]>> = {
+  2: ["lunch", "dinner"],
+  3: ["breakfast", "lunch", "dinner"],
+  4: ["breakfast", "lunch", "snack", "dinner"],
+  5: ["breakfast", "snack", "lunch", "snack", "dinner"],
+  6: ["breakfast", "snack", "lunch", "snack", "dinner", "snack"],
+};
+
+/** The meals still to come: the next is the meal of the hour (a snack's hours before dinner
+ *  are dinner's), or the meal after those already logged where that is later; then the
+ *  person's own day after it; past its end, dinner. */
+export function mealsAhead(mealsPerDay: number, hour: number, count: number, mealsLogged = 0): MealType[] {
+  const layout = MEAL_LAYOUT[Math.min(Math.max(mealsPerDay, 2), MOST_MEALS)] ?? [];
+  const now = mealTypeAtHour(hour);
+  const next: MealType = hour < 4 ? "breakfast" : now === "snack" ? "dinner" : now;
+  const order: Readonly<Record<MealType, number>> = { breakfast: 0, lunch: 1, snack: 1.5, dinner: 2 };
+  const byHour = layout.findIndex((t) => t !== "snack" && order[t] >= order[next]);
+  const meals = layout.flatMap((t, at) => (t === "snack" ? [] : [at]));
+  const byLogged = meals[mealsLogged] ?? -1;
+  const from = byHour < 0 || byLogged < 0 ? -1 : Math.max(byHour, byLogged);
+  const rest = from < 0 ? [] : layout.slice(from);
+  return Array.from({ length: count }, (_, i): MealType => rest[i] ?? "dinner");
+}
+
+/** The three ideas of a meal, by its size and, where known, its time: breakfast and a snack
+ *  are a bowl, toast or eggs; lunch and dinner a plate or a dish (spec Part 6 §16.6). */
+export function kindsFor(kcalTarget: number, mealType?: MealType): readonly [MealIdeaKind, MealIdeaKind, MealIdeaKind] {
   if (kcalTarget < LEAST_PLATE_KCAL) return ["light", "light", "light"];
+  if (mealType === "breakfast" || mealType === "snack") return ["light", "light", "light"];
+  if (mealType !== undefined) return ["plate", "dish", "plate"];
   return kcalTarget > MOST_LIGHT_KCAL ? ["plate", "dish", "plate"] : ["plate", "dish", "light"];
 }
 
@@ -259,7 +414,7 @@ export function ideaMaker(
   seed: string,
   diet: Diet,
   avoid: Iterable<string> = [],
-): (kcalTarget: number, wanted: MealIdeaKind, mostKcal?: number, leastKcal?: number) => MealIdea | null {
+): (kcalTarget: number, wanted: MealIdeaKind, mostKcal?: number, leastKcal?: number, protein?: ProteinAim) => MealIdea | null {
   const next = drawer(hash(seed));
   const allowed = (role: SuggestRole): CuratedFood[] => SUGGEST_POOLS[role].filter((f) => dietAllows(diet, f.diet));
   /** The foods already in an idea of this reply, and those `avoid` names (a meal being swapped). */
@@ -280,8 +435,15 @@ export function ideaMaker(
   const given = new Set<string>();
   const keyOf = (parts: readonly Part[]): string => parts.map((p) => `${p.food.canonical}:${String(p.grams)}`).sort().join("|");
 
-  return (kcalTarget, wanted, mostKcal = Infinity, leastKcal = 0) => {
-    const size = (...shares: Share[]): Part[] => sized(shares, kcalTarget);
+  return (kcalTarget, wanted, mostKcal = Infinity, leastKcal = 0, protein) => {
+    const size = (...shares: Share[]): Part[] => sized(shares, kcalTarget, protein);
+    /** A bowl; oats with milk beside them (Kd, 2026-11-02: oats are "mixed with milk"). */
+    const bowl = (bowlShare: number, ...rest: Share[]): Part[] => {
+      const base = pick("bowl");
+      return base.canonical === OATS
+        ? size([base, "bowl", bowlShare * 0.65], [pick("milk"), "milk", bowlShare * 0.35], ...rest)
+        : size([base, "bowl", bowlShare], ...rest);
+    };
     const plate = (): Part[] => size([pick("protein"), "protein", 0.42], [pick("starch"), "starch", 0.48], [pick("vegetable"), "vegetable", 0.1]);
     const dish = (): Part[] => {
       const main = pick("dish");
@@ -290,35 +452,53 @@ export function ideaMaker(
         ? size([main, "dish", 0.85], [pick("fruit"), "fruit", 0.15])
         : size([main, "dish", side === "bread" ? 0.6 : 0.55], [pick(side), side, side === "bread" ? 0.4 : 0.45]);
     };
-    const light = (): Part[] =>
-      next() < 0.5
-        ? size([pick("bowl"), "bowl", 0.4], [pick("fruit"), "fruit", 0.25], [pick("nuts"), "nuts", 0.35])
-        : size([pick("toast"), "toast", 0.4], [pick("fruit"), "fruit", 0.25], [pick("spread"), "spread", 0.35]);
+    /** A bowl with fruit and nuts, toast with fruit and a spread, or eggs with toast and fruit. */
+    const light = (): Part[] => {
+      const forms = allowed("eggs").length > 0 ? 3 : 2;
+      const form = Math.floor(next() * forms);
+      if (form === 0) return bowl(0.4, [pick("fruit"), "fruit", 0.25], [pick("nuts"), "nuts", 0.35]);
+      if (form === 1) return size([pick("toast"), "toast", 0.4], [pick("fruit"), "fruit", 0.25], [pick("spread"), "spread", 0.35]);
+      return size([pick("eggs"), "eggs", 0.5], [pick("toast"), "toast", 0.3], [pick("fruit"), "fruit", 0.2]);
+    };
     /** A small meal: a bowl with fruit, fruit with nuts or seeds, or toast with a spread. */
     const snack = (): Part[] => {
       const form = next();
-      if (form < 1 / 3) return size([pick("bowl"), "bowl", 0.6], [pick("fruit"), "fruit", 0.4]);
+      if (form < 1 / 3) {
+        // A small bowl of oats is oats and milk.
+        const base = pick("bowl");
+        return base.canonical === OATS
+          ? size([base, "bowl", 0.65], [pick("milk"), "milk", 0.35])
+          : size([base, "bowl", 0.6], [pick("fruit"), "fruit", 0.4]);
+      }
       if (form < 2 / 3) return size([pick("fruit"), "fruit", 0.4], [pick("nuts"), "nuts", 0.6]);
       return size([pick("toast"), "toast", 0.45], [pick("spread"), "spread", 0.55]);
     };
     const shapes: Readonly<Record<MealIdeaKind, () => Part[]>> = { plate, dish, light: kcalTarget < LEAST_PLATE_KCAL ? snack : light };
     const fits = (parts: readonly Part[]): boolean =>
       Math.abs(partsKcal(parts) - kcalTarget) <= kcalTarget * IDEA_TOLERANCE && partsKcal(parts) <= mostKcal && partsKcal(parts) >= leastKcal
-      && partsGrams(parts) <= MOST_IDEA_GRAMS && !given.has(keyOf(parts));
+      && partsGrams(parts) <= MOST_IDEA_GRAMS && !given.has(keyOf(parts))
+      && addedSugarAtMost(parts.map((p) => ({ canonical: p.food.canonical, grams: p.grams }))) <= MOST_MEAL_ADDED_SUGAR_G;
+    const met = (parts: readonly Part[]): boolean => protein === undefined || proteinMet(partsProtein(parts), partsCarbs(parts), protein);
+    const missOf = (parts: readonly Part[]): number => (protein === undefined ? 0 : proteinMiss(partsProtein(parts), partsCarbs(parts), protein));
 
     // The shape drawn again until its foods can be sized to the meal. Where no
     // dish or bowl of the diet can be (a vegan's big meal), a plate takes its place.
+    // An idea at its calories that meets its protein is taken at once; where none of the
+    // draws does, the one nearest its protein (spec Part 6 §16.6: the most protein the
+    // diet's foods can reach at the meal's calories).
     for (const kind of kcalTarget < LEAST_PLATE_KCAL || wanted === "plate" ? [wanted] : [wanted, "plate"] as const) {
-      freshOnly = true;
-      let parts = shapes[kind]();
-      for (let tries = 0; tries < DRAWS && !fits(parts); tries++) {
+      let best: Part[] | null = null;
+      for (let tries = 0; tries <= DRAWS; tries++) {
         freshOnly = tries < DRAWS / 4;
-        parts = shapes[kind]();
+        const parts = shapes[kind]();
+        if (!fits(parts)) continue;
+        if (best === null || missOf(parts) < missOf(best)) best = parts;
+        if (met(parts)) break;
       }
-      if (!fits(parts)) continue;
-      given.add(keyOf(parts));
-      for (const part of parts) used.add(part.food.canonical);
-      return toIdea(kind, parts);
+      if (best === null) continue;
+      given.add(keyOf(best));
+      for (const part of best) used.add(part.food.canonical);
+      return toIdea(kind, best);
     }
     return null;
   };
@@ -329,12 +509,17 @@ export function ideaMaker(
 export function suggestMeals(input: SuggestInput): Suggested {
   const { kcalLeft, count, kcalTarget } = mealSizes(input);
   const make = ideaMaker(`${input.seed}|${input.day}`, input.diet);
+  const types = input.hour === undefined ? null : mealsAhead(input.mealsPerDay, input.hour, count, input.mealsLogged);
+  const p = input.protein;
+  // The day's protein still to eat, shared across the meals still to come (spec Part 6 §16.6, 1 and 2).
+  const shareG = p === undefined || p.dayTargetG === null ? null : Math.max(0, p.dayTargetG - p.eatenG) / Math.max(1, count);
   const meals: SuggestedMeal[] = [];
   for (let m = 0; m < count; m++) {
     const ideas: MealIdea[] = [];
-    for (const wanted of kindsFor(kcalTarget)) {
+    const aim = p === undefined ? undefined : proteinAim(p.weightKg, shareG, { afterWorkout: m === 0 && input.afterWorkout === true });
+    for (const wanted of kindsFor(kcalTarget, types?.[m])) {
       // Under the least a meal holds, a logged idea would not count as a meal, and would be offered again.
-      const idea = make(kcalTarget, wanted, Infinity, LEAST_MEAL_KCAL);
+      const idea = make(kcalTarget, wanted, Infinity, LEAST_MEAL_KCAL, aim);
       if (idea !== null) ideas.push(idea);
     }
     if (ideas.length > 0) meals.push({ kcalTarget, ideas });
@@ -358,6 +543,8 @@ export interface AfterWorkoutInput {
   /** The day the workout is in: as it stands for today's, with nothing eaten for
    *  an earlier day's; null where the person has no calorie number yet. */
   day: DayNumbers | null;
+  /** The person's weight, for the protein after the workout; null where not known. */
+  weightKg: number | null;
 }
 export type AfterWorkoutWhen = "soon" | "meal";
 export interface AfterWorkoutIdea { when: AfterWorkoutWhen; kcalTarget: number; idea: MealIdea }
@@ -377,7 +564,8 @@ export function suggestAfterWorkout(input: AfterWorkoutInput): AfterWorkoutIdea[
   const out: AfterWorkoutIdea[] = [];
   const add = (when: AfterWorkoutWhen, kcalTarget: number, kind: MealIdeaKind): void => {
     if (kcalTarget < LEAST_MEAL_KCAL) return;
-    const idea = make(kcalTarget, kind, room);
+    const aim = input.weightKg === null ? undefined : proteinAim(input.weightKg, null, { afterWorkout: true });
+    const idea = make(kcalTarget, kind, room, 0, aim);
     if (idea === null) return;
     room -= idea.totals.kcal;
     out.push({ when, kcalTarget, idea });

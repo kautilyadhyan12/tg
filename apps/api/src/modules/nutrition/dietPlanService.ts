@@ -11,22 +11,23 @@ import {
   type ChosenItem, type FoodMeasure, type MealChoice, type DietPlanDayReply, type DietPlanMake, type DietPlanResponse, type MakeDietPlanRequest,
   type Diet, type MealIdea, type MealItem, type PutDietPlanDayRequest, type SwapDietPlanMealRequest,
 } from "@app/shared";
-import { getUserFoodAnswers } from "../users/service.js";
-import { planDay, swapMeal } from "./dietPlan.js";
+import { getUserFoodAnswers, getUserPlanAndCutRules } from "../users/service.js";
+import { planDay, slotProtein, swapMeal } from "./dietPlan.js";
 import { CURATED_FOODS } from "./foods.js";
 import { changeDietPlan, getDietPlan as readDietPlan, type StoredDays, type StoredMeal } from "./dietPlanRepo.js";
-import { NutritionError, getTargets, itemsMeasures, ownFoodItem, pricedForGood, resolveChosenItems, totals, type NutritionDeps } from "./service.js";
+import { NutritionError, getTargets, targetsForPlan, itemsMeasures, ownFoodItem, pricedForGood, resolveChosenItems, totals, type NutritionDeps } from "./service.js";
 
 type Targets = NonNullable<Awaited<ReturnType<typeof getTargets>>["targets"]>;
-interface Person { make: DietPlanMake; diet: Awaited<ReturnType<typeof getUserFoodAnswers>>["diet"]; mealsPerDay: number | null; targets: Targets | null }
+interface Person { make: DietPlanMake; diet: Awaited<ReturnType<typeof getUserFoodAnswers>>["diet"]; mealsPerDay: number | null; targets: Targets | null; weightKg: number | null }
 
 async function person(deps: Pick<NutritionDeps, "sql">, userId: string): Promise<Person> {
-  const [{ diet, mealsPerDay }, { targets, targetWrongSide }] = await Promise.all([getUserFoodAnswers(deps.sql, userId), getTargets(deps, userId)]);
+  const [{ diet, mealsPerDay }, read] = await Promise.all([getUserFoodAnswers(deps.sql, userId), getUserPlanAndCutRules(deps.sql, userId, null)]);
+  const { targets, targetWrongSide } = await targetsForPlan(deps, userId, read);
   const missing = [...(diet === null ? ["diet" as const] : []), ...(mealsPerDay === null ? ["mealsPerDay" as const] : [])];
   const make: DietPlanMake = missing.length > 0
     ? { status: "needs_answers", missing }
     : targets === null ? { status: "needs_plan", reason: targetWrongSide ? "new_goal" : "setup" } : { status: "ok" };
-  return { make, diet, mealsPerDay, targets };
+  return { make, diet, mealsPerDay, targets, weightKg: read.answers.weightKg ?? null };
 }
 
 const whole = (n: number): number => Math.round(n);
@@ -130,6 +131,7 @@ export async function makeDietPlan(deps: NutritionDeps, userId: string, input: M
   const days = input.days ?? [1, 2, 3, 4, 5, 6, 7];
   const made = days.map((day) => planDay({
     seed: `${userId}|make|${input.changeId}`, day, diet, mealsPerDay, kcalTarget: targets.kcal,
+    ...(who.weightKg === null ? {} : { protein: { weightKg: who.weightKg, dayTargetG: targets.proteinG } }),
   }));
   const items = await priced(deps, userId, made.flatMap((meals) => meals.map((m) => chosenOf(m.idea))));
   let at = 0;
@@ -220,6 +222,9 @@ export async function swapDietPlanMeal(
   const idea = swapMeal({
     seed: `${userId}|swap|${input.changeId}`, diet: who.diet, mealType: meal.mealType,
     kcal: totals(meal.items).kcalPoint, foods: meal.items.map((i) => i.canonical),
+    ...(who.weightKg === null || who.targets === null ? {} : {
+      protein: slotProtein({ weightKg: who.weightKg, dayTargetG: who.targets.proteinG }, meal.mealType, totals(meal.items).kcalPoint, who.targets.kcal),
+    }),
   });
   if (idea === null) throw new NutritionError(409, "no_other_meal", "No other meal of this size fits your diet.");
   const swapped = await priced(deps, userId, [chosenOf(idea)]);
