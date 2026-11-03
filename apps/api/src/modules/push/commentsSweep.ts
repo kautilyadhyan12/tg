@@ -118,6 +118,6 @@ export async function sendCommentNotifications(deps: {
     if (last === undefined || pairs.length < page) break;
     after = last.mark;
   }
-  await comments.pruneComments(sql, new Date(now.getTime() - PRUNE_AFTER_HOURS * 3_600_000), PRUNE_MOST).catch(onError);
+  await comments.pruneComments(sql, new Date(now.getTime() - PRUNE_AFTER_HOURS * 3_600_000), PRUNE_MOST, deps.gymIds).catch(onError);
   return result;
 }

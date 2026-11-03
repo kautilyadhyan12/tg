@@ -95,10 +95,11 @@ export async function markCommentsSeen(sql: SqlOrTx, userId: string, gymId: stri
 
 /** What no run reads again (taken more than two days ago, past the day a comment is told within) goes,
  *  a bounded number a run. */
-export async function pruneComments(sql: SqlOrTx, before: Date, most: number): Promise<number> {
+export async function pruneComments(sql: SqlOrTx, before: Date, most: number, gymIds?: readonly string[]): Promise<number> {
+  const gyms = gymIds === undefined ? null : [...gymIds];
   const rows = await sql`
     DELETE FROM gym_post_comment_notices
-    WHERE ctid IN (SELECT ctid FROM gym_post_comment_notices WHERE done_at < ${before} LIMIT ${most})`;
+    WHERE ctid IN (SELECT ctid FROM gym_post_comment_notices WHERE done_at < ${before} AND (${gyms}::uuid[] IS NULL OR gym_id = ANY(${gyms}::uuid[])) LIMIT ${most})`;
   return rows.count;
 }
 
