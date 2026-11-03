@@ -87,6 +87,8 @@ export interface Session {
   keepSignUpNote: (version: string) => Promise<void>;
   /** The name the server now holds for this person, kept with the sign-in and shown at once. */
   keepName: (displayName: string) => Promise<void>;
+  /** The units the server now holds for this person, kept with the sign-in and shown at once. */
+  keepUnits: (units: string) => Promise<void>;
   /** Whether the server has said this person finished setup, as this phone last heard it. */
   setupDone: () => boolean;
   keepSetupDone: (done: boolean) => Promise<void>;
@@ -377,6 +379,14 @@ export function createSession({
       const mine = kept;
       if (mine === null || mine.user.displayName === displayName) return;
       mine.user = { ...mine.user, displayName };
+      show({ kind: "in", user: mine.user });
+      await writeKept(mine);
+    },
+
+    keepUnits: async (units) => {
+      const mine = kept;
+      if (mine === null || mine.user.units === units) return;
+      mine.user = { ...mine.user, units };
       show({ kind: "in", user: mine.user });
       await writeKept(mine);
     },

@@ -143,7 +143,7 @@ function Problem({ children }: { children: string | null }) {
   return children === null ? null : <Txt style={styles.problem}>{children}</Txt>;
 }
 
-const UNIT_OPTIONS = [
+export const UNIT_OPTIONS = [
   { value: "metric", label: "kg · cm", say: "Kilograms and centimetres" },
   { value: "imperial", label: "lb · ft", say: "Pounds, feet and inches" },
 ] as const;

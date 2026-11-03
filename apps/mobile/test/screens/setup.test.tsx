@@ -142,12 +142,15 @@ async function openSetup(
     healthLoadFails = false,
     front = false,
     invitations = [],
+    units = "metric",
   }: {
     health?: Stored;
     ticks?: { purpose: string; wordingVersion: string }[];
     healthLoadFails?: boolean;
     front?: boolean;
     invitations?: object[];
+    /** The account’s units, as Settings or a first setup left them. */
+    units?: string;
   } = {},
 ) {
   const held = {
@@ -170,7 +173,10 @@ async function openSetup(
   };
   const server = fakeServer({
     "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }),
-    "/v1/users/me": () => ({ status: 200, body: profile(true, RAVI, held.answers.onboardingCompleted) }),
+    "/v1/users/me": (body) => ({
+      status: 200,
+      body: profile(true, { ...RAVI, units: (body as { units?: string } | undefined)?.units ?? units }, held.answers.onboardingCompleted),
+    }),
     "/v1/orgs/invitations": () => ({ status: 200, body: { address: RAVI.email, addressProved: true, invitations } }),
     [SETUP]: (body) => {
       if (body !== undefined && held.failNext) {
@@ -224,7 +230,7 @@ async function openSetup(
       return { status: 201, body: { consent: row } };
     },
   });
-  const store = memoryStore(kept(1, RAVI, NOTE_VERSION_SIGN_UP, !front));
+  const store = memoryStore(kept(1, { ...RAVI, units }, NOTE_VERSION_SIGN_UP, !front));
   await render(<App extra={extra} ask={server.ask} store={store} wait={noWait} />);
   if (!front) {
     await fireEvent.press(await screen.findByRole("tab", { name: "Me" }));
@@ -538,9 +544,36 @@ describe("the health note's tick and Food", () => {
 });
 
 describe("setup on the phone", () => {
+  it("opened from Me, it is in the units chosen in Settings, not the phone’s country’s", async () => {
+    phoneLanguage = "en-US";
+    await openSetup({ weightGoal: "maintain" });
+    await screen.findByRole("header", { name: "About you" });
+    expect(selected("Kilograms and centimetres")).toBe(true);
+  });
+
+  it("a switch of units in setup is the account’s, as Settings’ is", async () => {
+    const { server, store } = await openSetup({ weightGoal: "maintain" });
+    await screen.findByRole("header", { name: "About you" });
+    await press("Pounds, feet and inches");
+    await waitFor(() => {
+      expect(server.asked.filter((a) => a.path === "/v1/users/me" && a.method === "PATCH").map((a) => a.body)).toEqual([{ units: "imperial" }]);
+    });
+    await waitFor(() => {
+      expect((JSON.parse(store.value ?? "{}") as { user: { units: string } }).user.units).toBe("imperial");
+    });
+  });
+
+  it("a first setup on a US phone opens in pounds and tells the account", async () => {
+    phoneLanguage = "en-US";
+    const { server } = await openSetup({ weightGoal: "maintain", age: 30 }, { front: true });
+    await waitFor(() => {
+      expect(server.asked.filter((a) => a.path === "/v1/users/me" && a.method === "PATCH").map((a) => a.body)).toEqual([{ units: "imperial" }]);
+    });
+  });
+
   it("a US phone opens in pounds, and saves the pounds picked as kilograms", async () => {
     phoneLanguage = "en-US";
-    const { saves } = await openSetup({ weightGoal: "maintain" });
+    const { saves } = await openSetup({ weightGoal: "maintain" }, { units: "imperial" });
     await screen.findByRole("header", { name: "About you" });
     expect(selected("Pounds, feet and inches")).toBe(true);
     await step("Weight", "increment");

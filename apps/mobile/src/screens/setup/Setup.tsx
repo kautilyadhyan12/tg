@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { Image, KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -18,6 +18,7 @@ import {
   type SetupAnswers,
   type SetupScreenId,
   type Units,
+  userProfileResponseSchema,
 } from "@app/shared";
 import { Button } from "../../look/Button";
 import { colours, orangeGradient, sizes } from "../../look/colours";
@@ -68,6 +69,9 @@ export const NAME_NEEDED = "Type the name we should call you.";
 
 /** The phone's own language tag, which says whether it weighs in pounds. */
 const phoneLanguage = (): string => Intl.DateTimeFormat().resolvedOptions().locale;
+
+/** The account's units, or null for a word this build does not know. */
+export const accountUnits = (units: string): Units | null => (units === "metric" || units === "imperial" ? units : null);
 
 /** The place step's heading, in the words of the places that invited the person: "Your yoga
  *  studio", "Your trainer"; more than one kind is "Where you train". */
@@ -147,7 +151,7 @@ function SetupBody({
   at: SetupScreenId | null;
   mode: Mode;
 }) {
-  const { session } = useSession();
+  const { session, state } = useSession();
   const ob = useSetupAnswers({
     onSaved: (saved) => {
       void session.keepName(saved.displayName);
@@ -158,7 +162,29 @@ function SetupBody({
   const [picked, setPicked] = useState<SetupScreenId | null>(at);
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
-  const [units, setUnits] = useState<Units>(() => defaultUnits(phoneLanguage()));
+  // Opened from Me, the units the person chose (Settings); the first time, the phone's own country's.
+  const saved = state.kind === "in" ? accountUnits(state.user.units) : null;
+  const [units, showUnits] = useState<Units>(() => (mode === "over" && saved !== null ? saved : defaultUnits(phoneLanguage())));
+  // One choice for the whole app: the switch here is the one in Settings.
+  const keepUnits = useCallback(
+    (next: Units) => {
+      void session.signedIn({ method: "PATCH", path: "/v1/users/me", body: { units: next } }, userProfileResponseSchema).then(async (answer) => {
+        if (answer.kind === "ok") await session.keepUnits(answer.data.user.units);
+      });
+    },
+    [session],
+  );
+  const setUnits = (next: Units) => {
+    showUnits(next);
+    keepUnits(next);
+  };
+  // In front of the tabs, the units it opened in are the account’s from the start, as the browser has none to read.
+  const firstUnits = useRef(units);
+  useEffect(() => {
+    if (mode === "front" && saved !== firstUnits.current) keepUnits(firstUnits.current);
+    // Once, as setup opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [busy, setBusy] = useState(false);
   /** On a screen opened by the plan's Adjust: its Continue goes to the first answer still open, or back to the plan. */
   const [adjusting, setAdjusting] = useState(false);

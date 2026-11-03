@@ -369,7 +369,7 @@ function InvitationReview({
 }
 
 /** "What {gym} can see": the browser's own three lists, from @app/shared, each under its own label. */
-function CanSee({ gymName, person }: { gymName: string; person: string }) {
+export function CanSee({ gymName, person }: { gymName: string; person: string }) {
   return (
     <Card style={styles.panel}>
       <View style={styles.row}>
