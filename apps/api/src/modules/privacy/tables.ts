@@ -71,6 +71,9 @@ export const DIRECT_DELETE_TABLES = [
   // A person's own diet plan (migration 0106; ROADMAP 34e-i): their own, deleted at Day 14
   // and exported.
   "diet_plans",
+  // Which plan Recommended For You shows (migration 0200; ROADMAP 31f): the person's own
+  // pick, deleted at Day 14 and exported.
+  "recommended_choices",
   // Each day's food targets (migration 0110; ROADMAP 34f-i): their own, deleted at Day 14
   // and exported.
   "food_day_targets",

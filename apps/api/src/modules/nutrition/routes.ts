@@ -32,6 +32,7 @@ import {
   patchMealRequestSchema,
   previewMealRequestSchema,
   putDietPlanDayRequestSchema,
+  putFoodChoiceRequestSchema,
   putNutritionTargetsRequestSchema,
   swapDietPlanMealRequestSchema,
 } from "./schemas.js";
@@ -384,6 +385,13 @@ export function registerNutritionRoutes(
     const v = parse(makeDietPlanRequestSchema, req.body, req, reply);
     if (v === null) return;
     return reply.send(await dietPlan.makeDietPlan(nutritionDeps, authedUserId(req), v));
+  });
+
+  // What Recommended For You shows for food (31f): the person's own pick, keyed on the session's id.
+  app.put("/v1/nutrition/diet-plan/choice", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const v = parse(putFoodChoiceRequestSchema, req.body, req, reply);
+    if (v === null) return;
+    return reply.send(await dietPlan.putFoodChoice(readDeps, authedUserId(req), v));
   });
 
   app.put("/v1/nutrition/diet-plan/days/:day", { preHandler: [app.authenticate] }, async (req, reply) => {
