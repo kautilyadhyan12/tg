@@ -100,6 +100,7 @@ import {
 } from "./food/rows";
 import { newGoalId } from "./goals/words";
 import { FiguresLink, FiguresList, useDailyAmounts } from "./food/MoreFigures";
+import { FoodWeek } from "./food/FoodWeek";
 import { PackWords } from "./food/PackWords";
 import { Credits, SOURCE_WORDS, SourceLine } from "./food/SourceLine";
 import { Setup } from "./setup/Setup";
@@ -141,10 +142,13 @@ export function FoodScreen() {
   const [picking, setPicking] = useState(false);
   // Moves when setup answers change: the two food boxes hang on them.
   const [answers, setAnswers] = useState(0);
+  // Moves with the answers and with a save of the daily numbers: the week reads its targets again.
+  const [weekFresh, setWeekFresh] = useState(0);
   const answered = () => {
     targets.again();
     dailyAgain();
     setAnswers((n) => n + 1);
+    setWeekFresh((n) => n + 1);
   };
   // A meal from a photo (33b-i): the camera, and the photo meal kept until it is saved.
   const kept = useKeptSheet();
@@ -271,6 +275,16 @@ export function FoodScreen() {
           <FiguresLink onPress={() => { setDayFigures(true); }} />
         </Card>
       )}
+      <FoodWeek
+        here={
+          today && rows !== null && rows.every((r) => r.totals !== null)
+            ? { sums: daySums(rows), meals: rows.length, about: rows.some((r) => hasEstimate(r.items)) }
+            : null
+        }
+        sent={view.sent}
+        fresh={weekFresh}
+        onSetup={() => { setSetupAt("where"); }}
+      />
       <Sheet open={dayFigures && rows !== null} title={`Nutrients · ${dayWords(day, new Date())}`} onClose={() => { setDayFigures(false); }}>
         <FiguresList
           items={(rows ?? []).flatMap((r) => r.items ?? [])}
@@ -439,6 +453,7 @@ export function FoodScreen() {
             setNumbers(false);
             savedAfter.current = targets.begun();
             setJustSaved(answer);
+            setWeekFresh((n) => n + 1);
             setNumbersSaid({ words: answer.source === "own" ? "Now using your own numbers." : "Now using the app’s plan.", source: answer.source });
             targets.again();
           }}
