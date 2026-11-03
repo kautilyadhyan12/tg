@@ -256,7 +256,9 @@ d("phone notifications for a gym's messages (real Postgres)", () => {
     await join(gymA, phone.userId);
     const token = address("ran-out");
     expect((await giveAddress(phone, token)).statusCode).toBe(200);
-    await sql`UPDATE refresh_tokens SET expires_at = ${minutes(at, -1)} WHERE user_id = ${phone.userId}`;
+    // Ran out before the sweep's moment and before the real clock's, whatever the time of day the test runs.
+    const ranOut = new Date(Math.min(minutes(at, -1).getTime(), Date.now() - 60_000));
+    await sql`UPDATE refresh_tokens SET expires_at = ${ranOut} WHERE user_id = ${phone.userId}`;
     await message(gymA, phone.userId, "After it ran out.", minutes(at, -1));
     await sweep(at);
     expect(sentTo(token)).toEqual([]);
