@@ -11,7 +11,8 @@ import { loadConfig } from "../src/config.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
 import { CURATED_FOODS } from "../src/modules/nutrition/foods.js";
 import { ideasSeed } from "../src/modules/nutrition/service.js";
-import { suggestMeals } from "../src/modules/nutrition/suggest.js";
+import { suggestMeals, type SuggestInput } from "../src/modules/nutrition/suggest.js";
+import { hourInTz } from "../src/modules/gamification/streak.js";
 import type { FoodSearchProvider } from "../src/modules/nutrition/openfoodfacts.adapter.js";
 
 const url = process.env["DATABASE_URL"];
@@ -105,7 +106,25 @@ d("meal ideas route (real Postgres)", () => {
     return (JSON.parse(res.body) as { meal: { totals: { kcalPoint: number } } }).meal.totals.kcalPoint;
   };
 
+  const idOf = async (name: string): Promise<string> => {
+    const rows = await sql<{ id: string }[]>`SELECT id FROM users WHERE email = ${`ideas-${name}@example.com`}`;
+    const id = rows[0]?.id;
+    if (id === undefined) throw new Error("no such person");
+    return id;
+  };
+  const proteinTarget = async (cookies: Cookies): Promise<number> =>
+    (JSON.parse((await inject({ method: "GET", url: "/v1/nutrition/targets", cookies })).body) as { targets: { proteinG: number } }).targets.proteinG;
+  const proteinEaten = async (id: string): Promise<number> =>
+    Number((await sql<{ p: string }[]>`SELECT coalesce(sum(protein_g), 0) AS p FROM meal_logs WHERE user_id = ${id}`)[0]?.p ?? 0);
+  /** The reply against the rule's own answer for these numbers, at the hour before or after the request (a reply may straddle one). */
+  const expectRule = async (cookies: Cookies, numbers: Omit<SuggestInput, "hour">, before: number): Promise<void> => {
+    const reply = await ok(cookies);
+    const at = [before, hourInTz(new Date(), "UTC")].map((hour) => suggestMeals({ ...numbers, hour }).meals);
+    expect(at.some((meals) => JSON.stringify(meals) === JSON.stringify(reply.meals))).toBe(true);
+  };
+
   const clear = async () => {
+    await sql`DELETE FROM workouts WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'ideas-%@example.com')`;
     await sql`DELETE FROM meal_logs WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'ideas-%@example.com')`;
     await sql`DELETE FROM users WHERE email LIKE 'ideas-%@example.com'`;
   };
@@ -162,12 +181,63 @@ d("meal ideas route (real Postgres)", () => {
     expect(after.kcalLeft).toBe(1817 - saved);
     expect(after.meals.length).toBe(2);
     // A meal logged draws other ideas: the reply is the rule's for the person's id AND the meals logged.
-    const rows = await sql<{ id: string }[]>`SELECT id FROM users WHERE email = 'ideas-log@example.com'`;
-    const id = rows[0]?.id;
-    if (id === undefined) throw new Error("no such person");
-    const numbers = { day: after.day, diet: "vegetarian_eggs", mealsPerDay: 3, kcalTarget: 1817, kcalEaten: saved, mealsLogged: 1 } as const;
-    expect(after.meals).toEqual(suggestMeals({ ...numbers, seed: ideasSeed(id, 1) }).meals);
-    expect(after.meals).not.toEqual(suggestMeals({ ...numbers, seed: id }).meals);
+    const id = await idOf("log");
+    const hour = hourInTz(new Date(), "UTC");
+    const numbers = {
+      day: after.day, diet: "vegetarian_eggs", mealsPerDay: 3, kcalTarget: 1817, kcalEaten: saved, mealsLogged: 1, afterWorkout: false,
+      protein: { weightKg: 70, dayTargetG: await proteinTarget(cookies), eatenG: await proteinEaten(id) },
+    } as const;
+    await expectRule(cookies, { ...numbers, seed: ideasSeed(id, 1) }, hour);
+    expect(after.meals).not.toEqual(suggestMeals({ ...numbers, hour, seed: id }).meals);
+  });
+
+  it("the protein eaten today is read: the same calories of chicken or of rice draw different ideas, each the rule's", { timeout: 60_000 }, async () => {
+    const chicken = await eater("chicken", "non_vegetarian");
+    const rice = await eater("rice", "non_vegetarian");
+    const hour = hourInTz(new Date(), "UTC");
+    const kcalChicken = await log(chicken, [{ canonical: "chicken_breast_grilled", grams: 300 }]);
+    // Rice of the same calories, near enough: the two differ in protein, not in the meals' sizes.
+    const kcalRice = await log(rice, [{ canonical: "rice_white_cooked", grams: Math.round((kcalChicken / 130) * 100) }]);
+    const target = await proteinTarget(chicken);
+    for (const [cookies, name, kcal] of [[chicken, "chicken", kcalChicken], [rice, "rice", kcalRice]] as const) {
+      const id = await idOf(name);
+      await expectRule(cookies, {
+        seed: ideasSeed(id, 1), day: (await ok(cookies)).day, diet: "non_vegetarian", mealsPerDay: 3, kcalTarget: 1817, kcalEaten: kcal, mealsLogged: 1,
+        afterWorkout: false, protein: { weightKg: 70, dayTargetG: target, eatenG: await proteinEaten(id) },
+      }, hour);
+    }
+    const mean = (r: Extract<MealIdeasResponse, { status: "ok" }>) => {
+      const all = r.meals.flatMap((m) => m.ideas);
+      return all.reduce((n, i) => n + i.totals.proteinG, 0) / all.length;
+    };
+    expect(mean(await ok(rice))).toBeGreaterThan(mean(await ok(chicken)));
+  });
+
+  it("a workout that ended within two hours makes the next meal the meal after it; one that ended three hours ago does not", { timeout: 60_000 }, async () => {
+    const cookies = await eater("workout", "vegetarian");
+    const id = await idOf("workout");
+    const hour = hourInTz(new Date(), "UTC");
+    const numbers = (afterWorkout: boolean) => ({
+      seed: ideasSeed(id, 0), day: "", diet: "vegetarian", mealsPerDay: 3, kcalTarget: 1817, kcalEaten: 0, mealsLogged: 0, afterWorkout,
+      protein: { weightKg: 70, dayTargetG: 0, eatenG: 0 },
+    } as const);
+    const target = await proteinTarget(cookies);
+    const day = (await ok(cookies)).day;
+    const old = new Date(Date.now() - 3 * 60 * 60 * 1000);
+    await sql`INSERT INTO workouts (id, user_id, started_at, ended_at, platform, engine_version)
+      VALUES (gen_random_uuid(), ${id}, ${new Date(old.getTime() - 45 * 60 * 1000)}, ${old}, 'android', 'test')`;
+    await expectRule(cookies, { ...numbers(false), day, protein: { weightKg: 70, dayTargetG: target, eatenG: 0 } }, hour);
+    const recent = new Date(Date.now() - 30 * 60 * 1000);
+    await sql`INSERT INTO workouts (id, user_id, started_at, ended_at, platform, engine_version)
+      VALUES (gen_random_uuid(), ${id}, ${new Date(recent.getTime() - 45 * 60 * 1000)}, ${recent}, 'android', 'test')`;
+    await expectRule(cookies, { ...numbers(true), day, protein: { weightKg: 70, dayTargetG: target, eatenG: 0 } }, hour);
+    // The two differ, so the check above tells them apart.
+    const p = { weightKg: 70, dayTargetG: target, eatenG: 0 };
+    expect(suggestMeals({ ...numbers(true), day, protein: p, hour }).meals).not.toEqual(suggestMeals({ ...numbers(false), day, protein: p, hour }).meals);
+    // Somebody else's workout is not theirs.
+    const other = await eater("otherworkout", "vegetarian");
+    const otherId = await idOf("otherworkout");
+    await expectRule(other, { ...numbers(false), seed: ideasSeed(otherId, 0), day, protein: { weightKg: 70, dayTargetG: target, eatenG: 0 } }, hour);
   });
 
   it("a meal of another day is not counted, and nothing is suggested once the day is eaten", { timeout: 60_000 }, async () => {

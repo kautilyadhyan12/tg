@@ -132,13 +132,14 @@ export const AFTER_WORKOUT_PROTEIN_PER_KG = 0.3;
 export const AFTER_WORKOUT_MS = 2 * 60 * 60 * 1000;
 
 /** A meal's protein: its share of what the day has left, never under the least a meal
- *  holds nor over the most. With no share (no day's number), aimed at 0.4 g/kg. A snack
+ *  holds nor over the most. With no share (no day's number), aimed at 0.4 g/kg; the meal after
+ *  a workout at about 0.3 g/kg, with carbohydrate. A snack
  *  in the week is not a meal, and has no least. */
 export function proteinAim(weightKg: number, shareG: number | null, opts: { afterWorkout?: boolean; snack?: boolean } = {}): ProteinAim {
   const least = opts.snack === true ? 0 : LEAST_MEAL_PROTEIN_PER_KG * weightKg;
   const most = MOST_MEAL_PROTEIN_PER_KG * weightKg;
   const wanted = opts.afterWorkout === true
-    ? Math.max(AFTER_WORKOUT_PROTEIN_PER_KG * weightKg, shareG ?? 0)
+    ? AFTER_WORKOUT_PROTEIN_PER_KG * weightKg
     : shareG ?? AIM_MEAL_PROTEIN_PER_KG * weightKg;
   return { leastG: least, aimG: Math.min(most, Math.max(least, wanted)), mostG: most, withCarbs: opts.afterWorkout === true };
 }
@@ -148,8 +149,10 @@ function proteinMiss(proteinG: number, carbsG: number, aim: ProteinAim): number 
   const out = Math.max(0, aim.leastG - proteinG) + Math.max(0, proteinG - aim.mostG) + (aim.withCarbs ? Math.max(0, proteinG - carbsG) : 0);
   return 10 * out + Math.abs(proteinG - aim.aimG);
 }
+/** An idea within this share under its aim is near enough to take at once. */
+const NEAR_AIM = 0.1;
 const proteinMet = (proteinG: number, carbsG: number, aim: ProteinAim): boolean =>
-  proteinG >= aim.leastG - 0.05 && proteinG <= aim.mostG + 0.05 && (!aim.withCarbs || carbsG >= proteinG);
+  proteinG >= Math.max(aim.leastG, aim.aimG * (1 - NEAR_AIM)) - 0.05 && proteinG <= aim.mostG + 0.05 && (!aim.withCarbs || carbsG >= proteinG);
 const DISH_SIDE: ReadonlyMap<string, DishSide> = new Map(DISH_NAMES.map(([name, side]) => [named(name).canonical, side]));
 
 /** The least a day must have left for a meal to be suggested, and the least one idea holds. */
@@ -419,6 +422,8 @@ export function ideaMaker(
   const allowed = (role: SuggestRole): CuratedFood[] => SUGGEST_POOLS[role].filter((f) => dietAllows(diet, f.diet));
   /** The foods already in an idea of this reply, and those `avoid` names (a meal being swapped). */
   const used = new Set<string>(avoid);
+  /** The foods of a meal being swapped: an idea holding one is taken only where no other fits. */
+  const swappedOut = new Set<string>(used);
   /** Whether a draw keeps to foods not yet in the reply. */
   let freshOnly = true;
   /** One of the role's foods: one not yet in the reply while any is left, unless
@@ -479,13 +484,17 @@ export function ideaMaker(
       && partsGrams(parts) <= MOST_IDEA_GRAMS && !given.has(keyOf(parts))
       && addedSugarAtMost(parts.map((p) => ({ canonical: p.food.canonical, grams: p.grams }))) <= MOST_MEAL_ADDED_SUGAR_G;
     const met = (parts: readonly Part[]): boolean => protein === undefined || proteinMet(partsProtein(parts), partsCarbs(parts), protein);
-    const missOf = (parts: readonly Part[]): number => (protein === undefined ? 0 : proteinMiss(partsProtein(parts), partsCarbs(parts), protein));
+    const missOf = (parts: readonly Part[]): number =>
+      (protein === undefined ? 0 : proteinMiss(partsProtein(parts), partsCarbs(parts), protein)) + (parts.some((p) => swappedOut.has(p.food.canonical)) ? 1e6 : 0);
 
     // The shape drawn again until its foods can be sized to the meal. Where no
     // dish or bowl of the diet can be (a vegan's big meal), a plate takes its place.
     // An idea at its calories that meets its protein is taken at once; where none of the
     // draws does, the one nearest its protein (spec Part 6 §16.6: the most protein the
     // diet's foods can reach at the meal's calories).
+    // A dish that cannot reach the meal's least protein gives way to a plate that can; a breakfast stays a breakfast.
+    const reachesLeast = (parts: readonly Part[]): boolean => protein === undefined || partsProtein(parts) >= protein.leastG - 0.05;
+    let chosen: { kind: MealIdeaKind; parts: Part[] } | null = null;
     for (const kind of kcalTarget < LEAST_PLATE_KCAL || wanted === "plate" ? [wanted] : [wanted, "plate"] as const) {
       let best: Part[] | null = null;
       for (let tries = 0; tries <= DRAWS; tries++) {
@@ -493,14 +502,16 @@ export function ideaMaker(
         const parts = shapes[kind]();
         if (!fits(parts)) continue;
         if (best === null || missOf(parts) < missOf(best)) best = parts;
-        if (met(parts)) break;
+        if (met(parts) && !parts.some((p) => swappedOut.has(p.food.canonical))) break;
       }
       if (best === null) continue;
-      given.add(keyOf(best));
-      for (const part of best) used.add(part.food.canonical);
-      return toIdea(kind, best);
+      if (chosen === null || missOf(best) < missOf(chosen.parts)) chosen = { kind, parts: best };
+      if (wanted !== "dish" || reachesLeast(best)) break;
     }
-    return null;
+    if (chosen === null) return null;
+    given.add(keyOf(chosen.parts));
+    for (const part of chosen.parts) used.add(part.food.canonical);
+    return toIdea(chosen.kind, chosen.parts);
   };
 }
 
