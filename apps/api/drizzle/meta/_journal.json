@@ -1352,6 +1352,13 @@
       "when": 1790726400193,
       "tag": "0193_terminal_keep_card",
       "breakpoints": true
+    },
+    {
+      "idx": 193,
+      "version": "7",
+      "when": 1790726400194,
+      "tag": "0194_place_notifications",
+      "breakpoints": true
     }
   ]
 }

@@ -460,10 +460,26 @@ export async function moveIn(
     UPDATE gym_class_bookings
     SET status = 'booked', booked_at = ${input.now}, entry_id = ${input.entryId},
         held_membership_id = ${input.heldMembershipId}, pack_charged = ${input.packCharged},
-        claim_key = ${input.claimKey}
+        claim_key = ${input.claimKey},
+        ${input.claimKey === null ? tx`push_due = 'yours', push_due_at = ${input.now}` : tx`push_due = NULL`}
     WHERE gym_id = ${input.gymId} AND id = ${input.bookingId} AND status = 'waitlisted'
     RETURNING id`;
   if (rows.length !== 1) throw new Error("a waitlisted booking was not there to move in");
+}
+
+/** A place is free to claim (`tellsPlaceFree`): everybody waiting is owed "a place is free" (ROADMAP
+ *  Stage 5 18b-ii-a). The free place is named by how many places the class has and how many booked
+ *  places have ended, so the same free place, seen again by a later change, is owed to nobody twice. */
+export async function owePlaceFree(tx: TransactionSql, gymId: string, sessionId: string, places: number, now: Date): Promise<void> {
+  await tx`
+    UPDATE gym_class_bookings b
+    SET push_due = 'free', push_due_at = ${now}, push_occasion = o.occasion
+    FROM (
+      SELECT count(*) FILTER (WHERE x.status IN ('cancelled','late_cancelled') AND x.booked_at IS NOT NULL)::text || ':' || ${String(places)} AS occasion
+      FROM gym_class_bookings x WHERE x.gym_id = ${gymId} AND x.session_id = ${sessionId}
+    ) o
+    WHERE b.gym_id = ${gymId} AND b.session_id = ${sessionId} AND b.status = 'waitlisted'
+      AND b.push_occasion IS DISTINCT FROM o.occasion`;
 }
 
 /** A booking cancelled, free or late. */

@@ -177,6 +177,8 @@ jest.mock("expo-notifications", () => {
     dismissedAll: 0,
     unregistered: 0,
     taps: [],
+    received: [],
+    scheduled: [],
     tokenListeners: [],
     last: null,
     handler: null,
@@ -184,7 +186,7 @@ jest.mock("expo-notifications", () => {
   };
   // Listeners stay: the app listens for taps from the moment it starts, once.
   const reset = () => {
-    Object.assign(notifications, { permission: off, afterAsk: off, asked: 0, token: "phone-address-1", presented: [], dismissed: [], dismissedAll: 0, unregistered: 0, last: null, handler: null, channels: [] });
+    Object.assign(notifications, { permission: off, afterAsk: off, asked: 0, token: "phone-address-1", presented: [], dismissed: [], dismissedAll: 0, unregistered: 0, last: null, handler: null, channels: [], scheduled: [] });
   };
   return {
     notifications,
@@ -211,6 +213,14 @@ jest.mock("expo-notifications", () => {
     addNotificationResponseReceivedListener: (listener) => {
       notifications.taps.push(listener);
       return { remove: () => { notifications.taps = notifications.taps.filter((one) => one !== listener); } };
+    },
+    addNotificationReceivedListener: (listener) => {
+      notifications.received.push(listener);
+      return { remove: () => { notifications.received = notifications.received.filter((one) => one !== listener); } };
+    },
+    scheduleNotificationAsync: (request) => {
+      notifications.scheduled.push(request);
+      return Promise.resolve(request.identifier ?? "scheduled");
     },
     getLastNotificationResponse: () => notifications.last,
     clearLastNotificationResponse: () => {

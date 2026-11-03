@@ -7,7 +7,7 @@
 // booking that stops being charged for it, and a booking already ended is not found again,
 // so each class comes back once however often a change arrives.
 import type { Sql, TransactionSql } from "postgres";
-import { CLASS_CHECKIN_BEFORE_MINUTES, MEMBERSHIP_BOOKINGS_ENDING_SHOWN, type PtSessionsEnding, bookingTime, handsOverNow, pickCover, type Cover, type HeldCover } from "@app/shared";
+import { CLASS_CHECKIN_BEFORE_MINUTES, MEMBERSHIP_BOOKINGS_ENDING_SHOWN, type PtSessionsEnding, bookingTime, handsOverNow, pickCover, tellsPlaceFree, type Cover, type HeldCover } from "@app/shared";
 import { chargePack, givePackClassesBack } from "../memberships/heldRepo.js";
 import { removeClassFeesOf } from "../memberships/feesRepo.js";
 import { endLeaversPlaces } from "../events/places.js";
@@ -95,8 +95,14 @@ export const bookersOf = (waiters: readonly repo.Waiter[]): { userId: string; en
   waiters.flatMap((w) => (w.booker === null ? [] : [{ userId: w.userId, entryId: w.booker.entryId }]));
 
 /** The plan carried out, under the gym's lock and the class's. Answers how many were
- *  moved in. */
+ *  moved in. Each person moved in is owed "you have a place"; where a place is free that no longer
+ *  goes to the first in line by itself, everybody waiting is owed "a place is free" (18b-ii-a). */
 export async function handOver(tx: TransactionSql, gymId: string, ctx: repo.ClassContext, now: Date): Promise<number> {
+  const { session, counts } = ctx;
+  const time = bookingTime(now.getTime(), session.startsAt.getTime(), ctx.settings);
+  if (session.places !== null && tellsPlaceFree({ time, cancelled: session.cancelled, places: session.places, booked: counts.booked, waitlisted: counts.waitlisted })) {
+    await repo.owePlaceFree(tx, gymId, session.id, session.places, now);
+  }
   let moved = 0;
   for (const { waiter, entryId, cover } of (await handOverPlan(tx, gymId, ctx, now)).moves) {
     if (cover.chargePack && cover.membershipId !== null && !(await chargePack(tx, gymId, cover.membershipId, now))) {

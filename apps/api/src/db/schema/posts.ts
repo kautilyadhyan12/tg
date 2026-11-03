@@ -360,6 +360,14 @@ export const gymEventPlaces = pgTable(
     createdAt: createdAt(),
     comingAt: timestamp("coming_at", { withTimezone: true }),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    /** 0194: what the person on this row is owed and not yet told on their phone (ROADMAP Stage 5
+     *  18b-ii-a): `yours`, moved off the waitlist into the place, or `free`, a place is free to claim. */
+    pushDue: text("push_due"),
+    pushDueAt: timestamp("push_due_at", { withTimezone: true }),
+    /** 0194: which free place the person was last owed a notice for, so one is never told twice. */
+    pushOccasion: text("push_occasion"),
+    /** 0194: when the person was last told about this class or event: a free place again within the hour is not told. */
+    pushToldAt: timestamp("push_told_at", { withTimezone: true }),
   },
   (t) => [
     foreignKey({ name: "gym_event_places_event_fk", columns: [t.gymId, t.eventId], foreignColumns: [gymEvents.gymId, gymEvents.id] }).onDelete("cascade"),
@@ -368,6 +376,8 @@ export const gymEventPlaces = pgTable(
     check("gym_event_places_status_check", sql`${t.status} IN ('coming','waitlisted','cancelled')`),
     check("gym_event_places_coming_check", sql`${t.status} <> 'coming' OR ${t.comingAt} IS NOT NULL`),
     check("gym_event_places_cancelled_check", sql`(${t.status} = 'cancelled') = (${t.cancelledAt} IS NOT NULL)`),
+    check("gym_event_places_push_due_check", sql`${t.pushDue} IS NULL OR (${t.pushDue} IN ('yours','free') AND ${t.pushDueAt} IS NOT NULL)`),
+    index("gym_event_places_push_idx").on(t.pushDueAt).where(sql`${t.pushDue} IS NOT NULL`),
     uniqueIndex("gym_event_places_live_uq")
       .on(t.eventId, t.userId)
       .where(sql`${t.status} IN ('coming','waitlisted')`),
