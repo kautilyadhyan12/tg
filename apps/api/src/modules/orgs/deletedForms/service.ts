@@ -14,8 +14,8 @@ import {
 import type { Sql } from "postgres";
 import { CONSENT_PROOF_RETENTION_DAYS } from "../../../retention.js";
 import { consentProofCutoff } from "../../privacy/purge.js";
-import type { OrgRow } from "../repo.js";
-import { OrgsError, requireStaff } from "../service.js";
+import { getStaffAuthority } from "../repo.js";
+import { ORG_NOT_FOUND_MESSAGE, OrgsError } from "../service.js";
 import * as repo from "./repo.js";
 
 export interface DeletedFormsDeps {
@@ -28,11 +28,12 @@ type Limit = () => Promise<boolean>;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const keptUntil = (deletedAt: Date): string => new Date(deletedAt.getTime() + CONSENT_PROOF_RETENTION_DAYS * DAY_MS).toISOString();
 
-async function requireOwnOwner(deps: DeletedFormsDeps, gymId: string, userId: string): Promise<OrgRow> {
-  const { org } = await requireStaff(deps, gymId, userId);
-  const owner = await repo.ownerOf(deps.sql, gymId);
-  if (owner !== userId) throw new OrgsError(403, "owner_only", DELETED_FORMS_WORDS.owner_only);
-  return org;
+/** 404 for anybody not on the gym's staff, as every staff route answers; 403 for staff but its own owner. */
+async function requireOwnOwner(deps: DeletedFormsDeps, gymId: string, userId: string): Promise<{ name: string; timezone: string }> {
+  const [gym, authority] = await Promise.all([repo.gymOf(deps.sql, gymId), getStaffAuthority(deps.sql, gymId, userId)]);
+  if (gym === null || authority === null) throw new OrgsError(404, "org_not_found", ORG_NOT_FOUND_MESSAGE);
+  if (gym.ownerUserId !== userId) throw new OrgsError(403, "owner_only", DELETED_FORMS_WORDS.owner_only);
+  return gym;
 }
 
 export async function listDeletedForms(
@@ -44,13 +45,16 @@ export async function listDeletedForms(
 ): Promise<DeletedFormsResponse | null> {
   const org = await requireOwnOwner(deps, gymId, userId);
   if (!(await limit())) return null;
-  const { rows, total } = await repo.listForms(deps.sql, {
+  // One more than a page: whether there is a next one.
+  const { rows: read, total } = await repo.listForms(deps.sql, {
     gymId,
     cutoff: consentProofCutoff(deps.now()),
     pattern: repo.searchPattern(query.q),
-    limit: DELETED_FORMS_PAGE_SIZE,
-    offset: (query.page - 1) * DELETED_FORMS_PAGE_SIZE,
+    limit: DELETED_FORMS_PAGE_SIZE + 1,
+    after: repo.readCursor(query.after),
   });
+  const rows = read.slice(0, DELETED_FORMS_PAGE_SIZE);
+  const last = rows.at(-1);
   return deletedFormsResponseSchema.parse({
     forms: rows.map((row) => ({
       id: row.id,
@@ -64,8 +68,7 @@ export async function listDeletedForms(
       keptUntil: keptUntil(row.deletedAt),
     })),
     total,
-    page: query.page,
-    pageSize: DELETED_FORMS_PAGE_SIZE,
+    next: read.length > DELETED_FORMS_PAGE_SIZE && last !== undefined ? repo.cursorOf(last) : null,
     timezone: org.timezone,
   });
 }

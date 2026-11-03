@@ -79,6 +79,8 @@ export const gymAgreementSignatures = pgTable(
     /** 'desk' or 'link' (18u-ii-b). */
     signedVia: text("signed_via").notNull().default("desk"),
     recordDeletedAt: timestamp("record_deleted_at", { withTimezone: true }),
+    /** Left on the record not kept when two were joined (`0194`): the record kept, still that person. */
+    mergedIntoEntryId: uuid("merged_into_entry_id"),
   },
   (t) => [
     check("gym_agreement_signatures_signer_check", sql`${t.signer} IN ('person', 'guardian')`),
@@ -99,6 +101,7 @@ export const gymAgreementSignatures = pgTable(
     index("gym_agreement_signatures_deleted_idx")
       .on(t.recordDeletedAt)
       .where(sql`${t.recordDeletedAt} IS NOT NULL`),
+    index("gym_agreement_signatures_merged_idx").on(t.gymId, t.mergedIntoEntryId).where(sql`${t.mergedIntoEntryId} IS NOT NULL`),
   ],
 );
 

@@ -277,8 +277,8 @@ d("signed forms of deleted members (real Postgres)", () => {
         [
           ["agreement", "Asha Patel", "guardian", "Mia Patel"],
           ["agreement", "Maya Patel", "person", "Maya Patel"],
-          ["waiver", "Asha Patel", "guardian", null],
-          ["waiver", "Maya Patel", "person", null],
+          ["waiver", "Asha Patel", "guardian", "Mia Patel"],
+          ["waiver", "Maya Patel", "person", "Maya Patel"],
         ].sort(),
       );
       const ids = seen.forms.map((f) => [f.kind, f.id] as const);
@@ -327,6 +327,57 @@ d("signed forms of deleted members (real Postgres)", () => {
   );
 
   it(
+    "a signature left behind when two records are joined stays that person's, never a deleted member's, until they are deleted for good",
+    async () => {
+      const owner = await makeUser("merge-owner");
+      const gymId = (await makeGym(owner, "Forms Merge Gym")).org.id;
+      const waiverId = await saveWaiver(gymId, owner.cookies, WAIVER);
+      const maya = await addPerson(gymId, owner.cookies, "Maya Patel", ADULT_BORN);
+      const mayaR = await addPerson(gymId, owner.cookies, "Maya R Patel", ADULT_BORN);
+      const mp = await addPerson(gymId, owner.cookies, "M Patel", ADULT_BORN);
+      await signWaiver(gymId, maya, owner.cookies, waiverId, "person", "Maya Patel");
+      await signWaiver(gymId, mayaR, owner.cookies, waiverId, "person", "Maya R Patel");
+      const merge = async (gone: string, keep: string) => {
+        const res = await post(`/v1/orgs/${gymId}/member-list/entries/${gone}/merge`, { keepEntryId: keep, acknowledgeLeavesList: true }, owner.cookies);
+        expect(res.statusCode, res.body).toBe(200);
+      };
+      // Both signed the waiver: the one on Maya R stays behind, still Maya's, never listed.
+      await merge(mayaR, maya);
+      expect((await list(gymId, owner.cookies)).total).toBe(0);
+      const [left] = await sql<{ id: string }[]>`SELECT id FROM gym_waiver_desk_signatures WHERE gym_id = ${gymId} AND signed_name = 'Maya R Patel'`;
+      if (left === undefined) throw new Error("the signature left behind was not kept");
+      expect((await get(formUrl(gymId, "waiver", left.id), owner.cookies)).statusCode).toBe(404);
+      // Maya joined again into M Patel: still nobody deleted.
+      await merge(maya, mp);
+      expect((await list(gymId, owner.cookies)).total).toBe(0);
+      // M Patel deleted for good: both forms are now a deleted member's.
+      await deleteForGood(gymId, mp, owner.cookies);
+      const after = await list(gymId, owner.cookies);
+      expect(after.forms.map((f) => [f.signedName, f.member]).sort()).toEqual([
+        ["Maya Patel", "M Patel"],
+        ["Maya R Patel", "Maya R Patel"],
+      ]);
+    },
+    T,
+  );
+
+  it(
+    "a form signed with somebody whose account is gone names nobody at the desk",
+    async () => {
+      const iron = await ironGym("witness");
+      const witness = await makeUser("witness");
+      const [form] = (await list(iron.gymId, iron.owner.cookies, "?q=maya")).forms.filter((f) => f.kind === "waiver");
+      if (form === undefined) throw new Error("no waiver listed");
+      await sql`UPDATE gym_waiver_desk_signatures SET witnessed_by = ${witness.userId} WHERE id = ${form.id}`;
+      const shown = async () => deletedFormResponseSchema.parse(JSON.parse((await get(formUrl(iron.gymId, "waiver", form.id), iron.owner.cookies)).body)).signed.by;
+      expect(await shown()).toBe("Forms witness");
+      await sql`UPDATE users SET status = 'deleted', deleted_at = now() WHERE id = ${witness.userId}`;
+      expect(await shown()).toBeNull();
+    },
+    T,
+  );
+
+  it(
     "a form opens exactly as it was signed, whatever the business has changed since",
     async () => {
       const iron = await ironGym("asis");
@@ -364,11 +415,12 @@ d("signed forms of deleted members (real Postgres)", () => {
       const iron = await ironGym("search");
       const names = async (q: string) => (await list(iron.gymId, iron.owner.cookies, `?q=${encodeURIComponent(q)}`)).forms.map((f) => `${f.kind}:${f.signedName}`).sort();
       expect(await names("MAYA")).toEqual(["agreement:Maya Patel", "waiver:Maya Patel"]);
-      // Mia never signed: her agreement names her as the member; her waiver keeps her mother's name only.
-      expect(await names("mia")).toEqual(["agreement:Asha Patel"]);
+      // Mia never signed: her mother did, and both her forms are found by her own name.
+      expect(await names("mia")).toEqual(["agreement:Asha Patel", "waiver:Asha Patel"]);
       expect(await names("ben")).toEqual([]);
       expect(await names("%")).toEqual([]);
       expect(await names("_")).toEqual([]);
+      expect(await names("\\")).toEqual([]);
       expect(await names("  patel ")).toHaveLength(4);
 
       // Fifty-three more of Maya's kind, as a gym moving off old software would have.
@@ -376,15 +428,18 @@ d("signed forms of deleted members (real Postgres)", () => {
       if (waiverRow === undefined) throw new Error("no waiver signature");
       await sql`
         INSERT INTO gym_waiver_desk_signatures (gym_id, waiver_id, entry_id, signer, signed_name, signed_at, record_deleted_at)
-        SELECT ${iron.gymId}, ${iron.waiverId}, NULL, 'person', 'Old Member ' || n, ${waiverRow.signed_at}, ${clock}::timestamptz - (n || ' days')::interval
+        SELECT ${iron.gymId}, ${iron.waiverId}, NULL, 'person', 'Old Member ' || n, ${waiverRow.signed_at}, ${clock}::timestamptz - (n || ' days')::interval - interval '1 microsecond' * n
         FROM generate_series(1, 53) n`;
       const first = await list(iron.gymId, iron.owner.cookies);
-      const second = await list(iron.gymId, iron.owner.cookies, "?page=2");
-      expect([first.total, first.forms.length, second.forms.length]).toEqual([57, DELETED_FORMS_PAGE_SIZE, 7]);
+      expect([first.total, first.forms.length, first.next === null]).toEqual([57, DELETED_FORMS_PAGE_SIZE, false]);
+      // Ben is deleted for good between the two pages: page two neither repeats nor skips a form.
+      await deleteForGood(iron.gymId, iron.people.ben, iron.owner.cookies);
+      const second = await list(iron.gymId, iron.owner.cookies, `?after=${encodeURIComponent(first.next ?? "")}`);
+      expect([second.total, second.forms.length, second.next]).toEqual([59, 7, null]);
       expect(new Set([...first.forms, ...second.forms].map((f) => f.id)).size).toBe(57);
-      expect((await list(iron.gymId, iron.owner.cookies, "?page=9")).forms).toEqual([]);
+      expect(second.forms.some((f) => f.signedName === "Ben Stone")).toBe(false);
 
-      for (const bad of ["?page=0", "?page=x", "?who=maya", `?q=${"a".repeat(101)}`]) {
+      for (const bad of ["?page=2", "?after=x", "?after=2026-10-15%7C2026-10-15%7Cnot-an-id", "?who=maya", `?q=${"a".repeat(101)}`]) {
         expect((await get(listUrl(iron.gymId, bad), iron.owner.cookies)).statusCode, bad).toBe(400);
       }
       expect((await get(formUrl(iron.gymId, "receipt", iron.waiverId), iron.owner.cookies)).statusCode).toBe(400);

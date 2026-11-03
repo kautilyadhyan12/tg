@@ -16,17 +16,25 @@ export const DELETED_FORMS_SEARCH_MAX = 100;
 export const deletedFormKindSchema = z.enum(["waiver", "agreement"]);
 export type DeletedFormKind = z.infer<typeof deletedFormKindSchema>;
 
-/** The list's query: a name to look for, and which page. */
+/** Where the next page starts: the last form shown, as the server wrote it (its deletion and
+ *  signing as Postgres writes them, and its id). Opaque to the screen. */
+export const deletedFormsCursorSchema = z
+  .string()
+  .max(160)
+  .regex(/^[0-9 :.+-]{19,40}\|[0-9 :.+-]{19,40}\|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+
+/** The list's query: a name to look for, and where the page starts (the first without one). */
 export const deletedFormsQuerySchema = z
   .object({
     q: z.string().trim().max(DELETED_FORMS_SEARCH_MAX).optional(),
-    page: z.coerce.number().int().min(1).max(10_000).default(1),
+    after: deletedFormsCursorSchema.optional(),
   })
   .strict();
 export type DeletedFormsQuery = z.infer<typeof deletedFormsQuerySchema>;
 
-/** One form on the list. `member` is the member the agreement names, which is not the signer
- *  when a parent or guardian signed; a waiver keeps only the name typed. */
+/** One form on the list. `member` is the member it is about, which is not the signer when a parent
+ *  or guardian signed: the member an agreement names, or the record's name a waiver kept when the
+ *  record was deleted (null for one deleted before 18u-iii kept it). */
 export const deletedFormItemSchema = z
   .object({
     id: z.string().uuid(),
@@ -49,8 +57,8 @@ export const deletedFormsResponseSchema = z
     forms: z.array(deletedFormItemSchema).max(DELETED_FORMS_PAGE_SIZE),
     /** How many match the search, on every page. */
     total: z.number().int().min(0),
-    page: z.number().int().min(1),
-    pageSize: z.number().int().min(1),
+    /** Where Show more starts; null on the last page. */
+    next: deletedFormsCursorSchema.nullable(),
     timezone: z.string(),
   })
   .strict();
