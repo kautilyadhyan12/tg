@@ -89,7 +89,7 @@ describe("what a stopped person can and cannot do with a class", () => {
     mine: null,
     joinWaitlist: false,
     cover: { ok: true, membershipId: null, chargePack: false },
-    overdue: true,
+    stop: "payment_overdue",
   };
   const full = { ...base, booked: 10, waitlisted: 2 };
   // [case, input, the answer]
@@ -103,9 +103,9 @@ describe("what a stopped person can and cannot do with a class", () => {
     ["A full class they wait for already: still waiting", { ...full, mine: "waitlisted", joinWaitlist: true }, { kind: "already", status: "waitlisted" }],
     ["A cancelled class says so first", { ...base, cancelled: true }, { kind: "refuse", reason: "class_cancelled" }],
     ["No membership says so first", { ...base, cover: { ok: false, reason: "no_membership" } }, { kind: "refuse", reason: "no_membership" }],
-    ["Not stopped: a free place is booked", { ...base, overdue: false }, { kind: "book", membershipId: null, chargePack: false, fromWaitlist: false }],
-    ["Not stopped: the waitlist is joined", { ...full, joinWaitlist: true, overdue: false }, { kind: "waitlist" }],
-    ["Not stopped: a freed place is claimed", { ...base, mine: "waitlisted", waitlisted: 1, overdue: false }, { kind: "book", membershipId: null, chargePack: false, fromWaitlist: true }],
+    ["Not stopped: a free place is booked", { ...base, stop: null }, { kind: "book", membershipId: null, chargePack: false, fromWaitlist: false }],
+    ["Not stopped: the waitlist is joined", { ...full, joinWaitlist: true, stop: null }, { kind: "waitlist" }],
+    ["Not stopped: a freed place is claimed", { ...base, mine: "waitlisted", waitlisted: 1, stop: null }, { kind: "book", membershipId: null, chargePack: false, fromWaitlist: true }],
   ];
   it.each(table)("%s", (_, input, answer) => {
     expect(decideBook(input)).toEqual(answer);

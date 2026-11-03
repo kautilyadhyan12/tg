@@ -19,6 +19,7 @@ import {
 } from '../../pages/console/agreementView';
 import { ConsoleFailed, ConsoleLoading, ConsoleSection } from './ConsoleStates';
 import OtherAgreementForm from './OtherAgreementForm';
+import AgreementBookingsPart from './AgreementBookingsPart';
 
 // MEMBERSHIP AGREEMENT (ROADMAP 18u-i), on `org.manage` as the server gates it. The business
 // writes its own agreement; each membership it gives is signed on staff's screen, with that
@@ -389,6 +390,14 @@ export default function AgreementPanel({ org, readOnly, startOpen = false, openA
             </div>
           )}
         </div>
+        {data.inUse || data.others.some((other) => other.inUse) ? (
+          <AgreementBookingsPart
+            gymId={gymId}
+            readOnly={readOnly}
+            membersTo={membersTo}
+            version={`${String(data.inUse)}:${String(data.signed)}:${data.others.map((other) => `${other.id}:${String(other.inUse)}:${String(other.signed)}`).join('|')}`}
+          />
+        ) : null}
         </div>
       )}
     </ConsoleSection>

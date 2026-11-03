@@ -97,6 +97,7 @@ import {
   deskWaiverResponseSchema,
   signAtDeskResponseSchema,
   gymAgreementResponseSchema,
+  agreementBookingsResponseSchema,
   membershipAgreementResponseSchema,
   signMembershipAgreementResponseSchema,
   emailAgreementCopyResponseSchema,
@@ -752,6 +753,11 @@ export const orgService = {
     readThrough(gymAgreementResponseSchema, 'your membership agreement', authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/agreement`)),
   saveGymAgreement: (gymId, text) =>
     readThrough(gymAgreementResponseSchema, 'your membership agreement', authApi.put(`/v1/orgs/${encodeURIComponent(gymId)}/agreement`, { text })),
+  /** Before they book (18u-iv): the choice, and who has an agreement to sign today. */
+  getAgreementBookings: (gymId) =>
+    readThrough(agreementBookingsResponseSchema, 'this setting', authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/agreement/bookings`)),
+  setAgreementBookings: (gymId, rule) =>
+    readThrough(agreementBookingsResponseSchema, 'this setting', authApi.put(`/v1/orgs/${encodeURIComponent(gymId)}/agreement/bookings`, { rule })),
   stopGymAgreement: (gymId) =>
     readThrough(gymAgreementResponseSchema, 'your membership agreement', authApi.delete(`/v1/orgs/${encodeURIComponent(gymId)}/agreement`)),
   /** Another agreement (18u-ii-a): `body` is its name, words and the lines it is used for. */

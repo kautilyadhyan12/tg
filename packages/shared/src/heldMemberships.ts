@@ -935,6 +935,10 @@ export const heldMembershipsResponseSchema = z
     /** The gym stops this person's new bookings in the app while their payment is overdue,
      *  and it is (17i): said beside the overdue bill, to a reader who takes payments. */
     bookingsStopped: z.boolean().default(false),
+    /** The gym stops this person's new bookings in the app until a membership agreement of
+     *  theirs is signed (18u-iv), and they are not its staff: said under each membership that
+     *  reads "Agreement not signed". */
+    unsignedStopsBookings: z.boolean().default(false),
     /** The business asks for any of its agreements to be signed (18u-i); each membership says
      *  whether its own is asked (`agreementAsked`). */
     agreementInUse: z.boolean().default(false),

@@ -1876,6 +1876,25 @@ describe('the membership agreement (18u-i)', () => {
     expect(screen.getByRole('button', { name: 'Sign agreement' })).toBeTruthy();
   });
 
+  it("under the business's Stop new bookings until they sign, a membership not signed says they can't book (18u-iv)", async () => {
+    orgService.getHeldMemberships.mockResolvedValue(answer([held(1, GOLD, TODAY, false)], false, { agreementInUse: true, unsignedStopsBookings: true }));
+    render(draw(ADA, 'Ada Lovelace'));
+    const line = await screen.findByTestId('held-agreement-line');
+    expect(line.textContent).toBe("Agreement not signedCan't book until signed.");
+    cleanup();
+    orgService.getHeldMemberships.mockResolvedValue(answer([held(1, GOLD, TODAY, false)], false, { agreementInUse: true, unsignedStopsBookings: false }));
+    render(draw(ADA, 'Ada Lovelace'));
+    expect((await screen.findByTestId('held-agreement-line')).textContent).toBe('Agreement not signed');
+    cleanup();
+    // A signed membership of a record that is stopped for another one says nothing about booking.
+    orgService.getHeldMemberships.mockResolvedValue(
+      answer([{ ...held(1, GOLD, TODAY, false), agreement: { at: '2026-10-20T10:00:00.000Z' } }], false, { agreementInUse: true, unsignedStopsBookings: true }),
+    );
+    render(draw(ADA, 'Ada Lovelace'));
+    expect((await screen.findByTestId('held-agreement-line')).textContent).toMatch(/^Agreement signed/);
+    expect(screen.queryByTestId('held-agreement-stops')).toBeNull();
+  });
+
   it('a past member with a membership still running is not offered Sign agreement', async () => {
     orgService.getHeldMemberships.mockResolvedValue(answer([held(1, GOLD, TODAY, false)], true, { agreementInUse: true }));
     render(draw(ADA, 'Ada Lovelace'));

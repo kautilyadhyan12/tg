@@ -7,7 +7,7 @@
 // booking that stops being charged for it, and a booking already ended is not found again,
 // so each class comes back once however often a change arrives.
 import type { Sql, TransactionSql } from "postgres";
-import { CLASS_CHECKIN_BEFORE_MINUTES, MEMBERSHIP_BOOKINGS_ENDING_SHOWN, type PtSessionsEnding, bookingTime, handsOverNow, pickCover, tellsPlaceFree, type Cover, type HeldCover } from "@app/shared";
+import { CLASS_CHECKIN_BEFORE_MINUTES, MEMBERSHIP_BOOKINGS_ENDING_SHOWN, type PtSessionsEnding, bookingTime, handsOverNow, pickCover, tellsPlaceFree, type BookingStop, type Cover, type HeldCover } from "@app/shared";
 import { chargePack, givePackClassesBack } from "../memberships/heldRepo.js";
 import { removeClassFeesOf } from "../memberships/feesRepo.js";
 import { endLeaversPlaces } from "../events/places.js";
@@ -39,13 +39,14 @@ export function handsOverTo(ctx: repo.ClassContext, now: Date): boolean {
 /** Who the class's free places go to, from its waitlist and the memberships of the
  *  people on it, both read already: the first in line who may book, and so on down the
  *  line. Somebody who may not is passed over and keeps their place. `covers` is changed as
- *  places are given. `stopped`: the accounts the gym stops for an overdue payment (17i). */
+ *  places are given. `stopped`: the accounts the gym stops, for an overdue payment (17i) or an
+ *  agreement not signed (18u-iv). */
 export function planHandOver(
   ctx: repo.ClassContext,
   now: Date,
   waiters: readonly repo.Waiter[],
   covers: Map<string, HeldCover[]>,
-  stopped: ReadonlySet<string>,
+  stopped: ReadonlyMap<string, BookingStop>,
 ): HandOverPlan {
   const time = bookingTime(now.getTime(), ctx.session.startsAt.getTime(), ctx.settings);
   let booked = ctx.counts.booked;
@@ -54,7 +55,7 @@ export function planHandOver(
   for (const waiter of waiters) {
     if (!free()) break;
     if (waiter.booker === null) continue;
-    // Somebody whose payment the gym stops new bookings for keeps their place in line (17i).
+    // Somebody the gym stops new bookings for keeps their place in line (17i, 18u-iv).
     if (stopped.has(waiter.userId)) continue;
     const { entryId } = waiter.booker;
     const cover = pick(ctx, entryId === null ? [] : (covers.get(entryId) ?? []));
@@ -87,7 +88,7 @@ export async function handOverPlan(sql: Sql | TransactionSql, gymId: string, ctx
   const waiters = await repo.waitlistOf(sql, gymId, ctx.session.id);
   const entryIds = ctx.gymHasTypes ? waiters.flatMap((w) => w.booker?.entryId ?? []) : [];
   const covers = await repo.coversOf(sql, gymId, entryIds, ctx.session);
-  return planHandOver(ctx, now, waiters, covers, await stoppedBookers(sql, gymId, ctx.overdue, bookersOf(waiters), now));
+  return planHandOver(ctx, now, waiters, covers, await stoppedBookers(sql, gymId, ctx.stops, bookersOf(waiters), now));
 }
 
 /** The people on a waitlist who are members now, as bookers. */

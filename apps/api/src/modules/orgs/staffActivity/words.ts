@@ -520,6 +520,11 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
   "org.agreement_stopped": (s) => `Stopped asking for ${agreementOf(s)}`,
   "org.agreement_in_use_again": (s) => `Started asking for ${agreementOf(s)} again`,
   "org.agreement_added": (s) => `Added the agreement ${text(s, "agreement") ?? ""}`.trimEnd(),
+  // Before they book (18u-iv): meta `unsigned` is "let_book -> stop" or the other way.
+  "org.agreement_bookings_changed": (s) =>
+    (text(s, "unsigned") ?? "").endsWith("stop")
+      ? "Stopped new bookings until members sign their membership agreement"
+      : "Let members book before they sign their membership agreement",
 
   // Leads
   "org.lead_added": (s) => `Added ${lead(s)}`,

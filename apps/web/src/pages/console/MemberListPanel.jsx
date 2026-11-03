@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { PAST_PAYMENT_DUE_SHOW, PAYMENT_DUE_SHOW } from './weekView';
+import { AGREEMENT_NOT_SIGNED_SHOW, PAST_PAYMENT_DUE_SHOW, PAYMENT_DUE_SHOW } from './weekView';
 import { Link, useParams } from 'react-router-dom';
 import { AlertTriangle, Check, ChevronRight, Download, ListChecks, Loader2, Mail, MessageSquare, Minus, Search, SlidersHorizontal, Tag, Trash2, Upload, UserMinus, UserPlus, X } from 'lucide-react';
 import { HELD_PAYMENT_WORDS, MEMBER_APP_FILTER_WORDS, MEMBER_LIST_QUERY_MAX_CHARS, MEMBER_LIST_TICKED_MAX } from '@app/shared';
@@ -383,6 +383,7 @@ function DuplicatesSign({ duplicates }) {
 function startFilters(show) {
   if (show === PAYMENT_DUE_SHOW) return { ...EMPTY_FILTERS, paymentStatus: [HELD_PAYMENT_WORDS.due] };
   if (show === PAST_PAYMENT_DUE_SHOW) return { ...EMPTY_FILTERS, records: 'former', paymentStatus: [HELD_PAYMENT_WORDS.due] };
+  if (show === AGREEMENT_NOT_SIGNED_SHOW) return { ...EMPTY_FILTERS, agreementNotSigned: true };
   return EMPTY_FILTERS;
 }
 

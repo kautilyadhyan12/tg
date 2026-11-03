@@ -79,7 +79,7 @@ import { giftDaysOn, giftsOnBills, waitingGiftFor } from "../referrals/memberGif
 import { billDayOf, overdueDaysOf, type BillRow, type PaymentRow, type RefundRow, type VoidedPaymentRow, type VoidedRefundRow } from "./billsSql.js";
 import * as feesRepo from "./feesRepo.js";
 import * as agreementRepo from "../agreement/repo.js";
-import { recordStopped } from "../classes/bookingStops.js";
+import { recordStopped, unsignedStopsRecord } from "../classes/bookingStops.js";
 import { freezeFeeOf } from "./freezeFees.js";
 import { chargesOfBills } from "../payments/cardChargesRepo.js";
 import { openPressesOf } from "../payments/cardRefundsRepo.js";
@@ -454,12 +454,14 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
   // The membership agreements (18u-i, 18u-ii-a): which memberships' lines of the price list
   // ask for one, and which were signed.
   const listed = [...inUse, ...shown].map((m) => m.id);
-  const [anyAsked, asked, agreementSigned, agreementLinks] = await Promise.all([
+  const [anyAsked, asked, agreementSigned, agreementLinks, unsignedStops] = await Promise.all([
     agreementRepo.anyInUse(deps.sql, gymId),
     agreementRepo.askedFor(deps.sql, gymId, listed),
     agreementRepo.signedAtOf(deps.sql, gymId, listed),
     // The emailed links to sign that work now (18u-ii-b).
     agreementRepo.workingLinksOf(deps.sql, gymId, listed, deps.now()),
+    // No new bookings until it is signed (18u-iv): said under a membership not signed.
+    list.past ? false : unsignedStopsRecord(deps.sql, gymId, entryId),
   ]);
   return heldMembershipsResponseSchema.parse({
     today,
@@ -471,6 +473,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
       agreementLink: ((l) => (l === undefined ? null : { sentAt: l.sentAt.toISOString(), expiresAt: l.expiresAt.toISOString() }))(agreementLinks.get(m.id)),
     })),
     agreementInUse: anyAsked,
+    unsignedStopsBookings: anyAsked && unsignedStops,
     earlierNotShown: over.length - shown.length + stored,
     types: list.types,
     listed: list.listed,

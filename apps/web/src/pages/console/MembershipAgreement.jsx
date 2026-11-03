@@ -3,7 +3,7 @@ import { Check, Loader2 } from 'lucide-react';
 import { AGREEMENT_LINK_DAYS, WAIVER_NAME_MAX_CHARS, waiverReadyToSign } from '@app/shared';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import { deskSigner } from './waiverView';
-import { agreementBoxWords, agreementCardLine, agreementCopyLine, agreementLineParts, agreementLinkSentLine, agreementResentLine, agreementSignedBy, agreementSignedLine } from './agreementView';
+import { UNSIGNED_STOPS_LINE, agreementBoxWords, agreementCardLine, agreementCopyLine, agreementLineParts, agreementLinkSentLine, agreementResentLine, agreementSignedBy, agreementSignedLine } from './agreementView';
 
 // THE MEMBERSHIP AGREEMENT UNDER ONE MEMBERSHIP (ROADMAP 18u-i; rulings/2026-10-23-18u-i.md),
 // on a person's page. The line says whether this membership's agreement was signed; Sign
@@ -60,7 +60,8 @@ function Terms({ label, text }) {
 // `open`: this membership's box is the one open on the page; `justGiven`: it opened by itself
 // after Add membership, so its way out is Sign later. `when` writes a day in the business's calendar.
 // `hasEmail`: the record has an address to email a link to; `onLinkSent` takes the link that works now.
-export default function MembershipAgreement({ gymId, entryId, membership, inUse, signable, readOnly, open, justGiven, onOpen, onClose, onSigned, when, hasEmail = false, onLinkSent }) {
+// `stopsBookings`: the business stops this person's new bookings until they sign (18u-iv).
+export default function MembershipAgreement({ gymId, entryId, membership, inUse, signable, readOnly, open, justGiven, onOpen, onClose, onSigned, when, hasEmail = false, onLinkSent, stopsBookings = false }) {
   const nameId = useId();
   const [box, setBox] = useState(null);
   const [loadError, setLoadError] = useState(null);
@@ -201,6 +202,7 @@ export default function MembershipAgreement({ gymId, entryId, membership, inUse,
           <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 c-s14 c-t2 m-0" data-testid="held-agreement-line">
             <span className={`c-tag ${TAG[parts.tone]}`}>{parts.label}</span>
             {parts.rest !== '' ? <span>{parts.rest}</span> : null}
+            {!parts.signed && stopsBookings ? <span data-testid="held-agreement-stops">{UNSIGNED_STOPS_LINE}</span> : null}
           </p>
           {!open ? (
             <button
