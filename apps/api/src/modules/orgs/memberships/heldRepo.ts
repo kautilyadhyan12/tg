@@ -447,6 +447,8 @@ export type HeldWriteOutcome =
   | { kind: "not_allowed" }
   /** A cancel inside a running contract that did not say why the member is let out (18v-i). */
   | { kind: "release_needed" }
+  /** The line's minimum term is not the one the screen showed (18v-i). */
+  | { kind: "minimum_term_changed" }
   /** The person has this type running already. `ends`: the one they hold has a last day,
    *  so a start date after it would be taken; a repeating one that renews has none. */
   | { kind: "already_held"; typeName: string; ends: boolean }
@@ -724,7 +726,7 @@ export async function giveHeldIn(tx: TransactionSql, input: GiveHeldInput): Prom
   if (input.shownMinimumTerm !== undefined) {
     const shown = input.shownMinimumTerm;
     const now = type.contractPeriods === null || type.contractThen === null ? null : { periods: type.contractPeriods, then: type.contractThen };
-    if ((shown === null) !== (now === null) || (shown !== null && now !== null && (shown.periods !== now.periods || shown.then !== now.then))) return { kind: "price_changed" };
+    if ((shown === null) !== (now === null) || (shown !== null && now !== null && (shown.periods !== now.periods || shown.then !== now.then))) return { kind: "minimum_term_changed" };
   }
   // The type's rate as it is now, read under the gym's lock that its changes take: the
   // membership keeps it, and its first bill charges it.

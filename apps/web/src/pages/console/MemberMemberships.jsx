@@ -549,7 +549,7 @@ export default function MemberMemberships({
       setRefusal(errorText(err, "We couldn't save that. Please try again."));
       // A discount refused or changed: read the discounts again, and keep the form open.
       const code = errorCode(err);
-      if (what === 'give' && typeof code === 'string' && (code.startsWith('discount_') || code === 'membership_discount_changed' || code === 'membership_price_changed')) {
+      if (what === 'give' && typeof code === 'string' && (code.startsWith('discount_') || code === 'membership_discount_changed' || code === 'membership_price_changed' || code === 'membership_minimum_term_changed')) {
         setAttempt((n) => n + 1);
       }
       // The gym's billing day changed (18y): read it again, and keep the box open with its new total.

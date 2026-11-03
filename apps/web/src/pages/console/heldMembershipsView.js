@@ -211,7 +211,7 @@ export function contractCancelWords(m, name) {
   const paid = m.view.can.cancelAtPeriodEnd ?? null;
   // Paid past the minimum term already: it stops at the end of what is paid, which keeps every
   // month paid for and lets nobody out early (re-check, H1b).
-  if (end === null && paid !== null && paid >= until) {
+  if (end === null && paid !== null && paid > until) {
     return {
       question: `Cancel ${whose}?`,
       detail: `${name} has paid until ${dayWords(paid)}, past their minimum term. End it then, with no more payments; or release them early.`,

@@ -377,10 +377,28 @@ d("a contract on a repeating membership (real Postgres)", () => {
       for (const shown of [null, { periods: 6, then: "renews" }, { periods: 12, then: "ends" }]) {
         const res = await post(heldUrl(gymId, lee), body(shown), owner);
         expect(res.statusCode, res.body).toBe(409);
-        expect(errorOf(res)).toBe("membership_price_changed");
+        expect(errorOf(res)).toBe("membership_minimum_term_changed");
       }
       expect((await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_held_memberships WHERE entry_id = ${lee}`)[0]?.n).toBe(0);
       expect((await post(heldUrl(gymId, lee), body({ periods: 12, then: "renews" }), owner)).statusCode).toBe(201);
+
+      // Change membership checks it the same way: Pia moves from Silver to Gold on her next payment date.
+      const silver = await addType(gymId, owner, monthly({ name: "Silver Monthly" }));
+      const pia = await addPerson(gymId, owner, "Pia Lund");
+      const piaSilver = await give(gymId, pia, owner, silver, "2026-11-20");
+      const changeTo = (minimumTerm: unknown) => ({
+        requestKey: nextForm(), typeId: gold, when: "next_payment", startsOn: "2026-12-20", priceMinor: 5000, creditMinor: 0, totalMinor: 5000, paid: false, minimumTerm,
+      });
+      for (const shown of [null, { periods: 6, then: "renews" }, { periods: 12, then: "ends" }]) {
+        const res = await post(`${heldUrl(gymId, pia)}/${piaSilver}/change`, changeTo(shown), owner);
+        expect(res.statusCode, res.body).toBe(409);
+        expect(errorOf(res)).toBe("membership_minimum_term_changed");
+      }
+      expect((await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_held_memberships WHERE entry_id = ${pia}`)[0]?.n).toBe(1);
+      const changed = await post(`${heldUrl(gymId, pia)}/${piaSilver}/change`, changeTo({ periods: 12, then: "renews" }), owner);
+      expect(changed.statusCode, changed.body).toBe(200);
+      const [piaGold] = await sql<{ contract_periods: number; contract_then: string }[]>`SELECT contract_periods, contract_then FROM gym_held_memberships WHERE entry_id = ${pia} AND membership_type_id = ${gold}`;
+      expect(piaGold).toEqual({ contract_periods: 12, contract_then: "renews" });
     },
     T,
   );
