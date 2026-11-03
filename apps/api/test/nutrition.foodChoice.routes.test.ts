@@ -89,6 +89,7 @@ d("Recommended For You's choice for food (real Postgres)", () => {
   };
   const read = async (cookies: Cookies) => parsed(await inject({ method: "GET", url: "/v1/nutrition/diet-plan", cookies }));
   const pick = (cookies: Cookies, body: unknown) => inject({ method: "PUT", url: "/v1/nutrition/diet-plan/choice", body, cookies });
+  const putDay = (cookies: Cookies, day: number, body: unknown) => inject({ method: "PUT", url: `/v1/nutrition/diet-plan/days/${String(day)}`, body, cookies });
   const make = async (cookies: Cookies) =>
     parsed(await inject({ method: "POST", url: "/v1/nutrition/diet-plan/make", body: { changeId: randomUUID() }, cookies }));
   const stored = async (name: string) =>
@@ -177,6 +178,9 @@ d("Recommended For You's choice for food (real Postgres)", () => {
         expect((await pick(cookies, body)).statusCode, JSON.stringify(body)).toBe(400);
       }
       expect(await stored("refused")).toEqual([]);
+      // Round one, L1: the table holds only the choices the server can read; the gym's joins with 31g.
+      const id = (await sql<{ id: string }[]>`SELECT id FROM users WHERE email = 'foodchoice-refused@example.com'`)[0]?.id ?? "";
+      await expect(sql`INSERT INTO recommended_choices (user_id, kind, choice) VALUES (${id}, 'food', 'gym')`).rejects.toThrow(/recommended_choices_choice_check/);
     });
 
     it("sent twice is one pick, one row", { timeout: 60_000 }, async () => {
@@ -205,6 +209,22 @@ d("Recommended For You's choice for food (real Postgres)", () => {
       // The week already had meals: making it again is not a first plan.
       expect((await make(cookies)).choice).toBe("suggested");
       expect((await read(cookies)).choice).toBe("suggested");
+    });
+
+    it("round one A: a first meal added by hand in Build my own shows My plan; a meal added to another day later leaves the pick alone", { timeout: 60_000 }, async () => {
+      const cookies = await person("by-hand");
+      await pick(cookies, { choice: "suggested" });
+      const meal = { mealType: "breakfast", items: [{ canonical: "banana", grams: 120 }, { canonical: "oatmeal", grams: 240 }] };
+      const first = parsed(await putDay(cookies, 1, { changeId: randomUUID(), meals: [meal] }));
+      expect(first.days[0]?.meals).toHaveLength(1);
+      expect(first.choice).toBe("mine");
+      expect(await stored("by-hand")).toEqual([{ choice: "mine" }]);
+      await pick(cookies, { choice: "suggested" });
+      expect(parsed(await putDay(cookies, 2, { changeId: randomUUID(), meals: [meal] })).choice).toBe("suggested");
+      // Emptying the week and putting a meal in again is a first plan again.
+      await putDay(cookies, 1, { changeId: randomUUID(), meals: [] });
+      await putDay(cookies, 2, { changeId: randomUUID(), meals: [] });
+      expect(parsed(await putDay(cookies, 3, { changeId: randomUUID(), meals: [meal] })).choice).toBe("mine");
     });
   });
 });

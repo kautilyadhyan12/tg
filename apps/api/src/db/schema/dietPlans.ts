@@ -21,6 +21,7 @@ export const dietPlans = pgTable(
 );
 
 // Recommended For You's choice for each kind (migration 0200; ROADMAP 31f). No row: not picked yet.
+// The gym's choice (31g) widens the CHECK and `foodChoiceSchema` together.
 export const recommendedChoices = pgTable(
   "recommended_choices",
   {
@@ -34,6 +35,6 @@ export const recommendedChoices = pgTable(
   (t) => [
     primaryKey({ name: "recommended_choices_pkey", columns: [t.userId, t.kind] }),
     check("recommended_choices_kind_check", sql`${t.kind} IN ('food','workout','running')`),
-    check("recommended_choices_choice_check", sql`${t.choice} IN ('suggested','gym','mine')`),
+    check("recommended_choices_choice_check", sql`${t.choice} IN ('suggested','mine')`),
   ],
 );
