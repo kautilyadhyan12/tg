@@ -2264,6 +2264,11 @@ async function letGoOfDeskSignatures(tx: TransactionSql, gymId: string, entryId:
     FROM gym_member_list_entries e
     WHERE s.gym_id = ${gymId} AND e.gym_id = s.gym_id AND e.id = s.entry_id
       AND (${entryId}::uuid IS NULL OR s.entry_id = ${entryId}::uuid)`;
+  // One left behind when another record was joined into this one is this person's: deleted today with them.
+  await tx`
+    UPDATE gym_waiver_desk_signatures SET record_deleted_at = ${at}, merged_into_entry_id = NULL
+    WHERE gym_id = ${gymId} AND merged_into_entry_id IS NOT NULL
+      AND (${entryId}::uuid IS NULL OR merged_into_entry_id = ${entryId}::uuid)`;
 }
 
 /** Two records joined: the signatures left on the one not kept (a waiver wording both signed, a

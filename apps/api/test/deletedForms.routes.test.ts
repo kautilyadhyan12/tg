@@ -350,13 +350,19 @@ d("signed forms of deleted members (real Postgres)", () => {
       // Maya joined again into M Patel: still nobody deleted.
       await merge(maya, mp);
       expect((await list(gymId, owner.cookies)).total).toBe(0);
-      // M Patel deleted for good: both forms are now a deleted member's.
-      await deleteForGood(gymId, mp, owner.cookies);
-      const after = await list(gymId, owner.cookies);
-      expect(after.forms.map((f) => [f.signedName, f.member]).sort()).toEqual([
-        ["Maya Patel", "M Patel"],
-        ["Maya R Patel", "Maya R Patel"],
-      ]);
+      // M Patel deleted for good three days later: both forms are now a deleted member's, deleted that day.
+      const was = clock;
+      try {
+        clock = new Date(clock.getTime() + 3 * DAY_MS);
+        await deleteForGood(gymId, mp, owner.cookies);
+        const after = await list(gymId, owner.cookies);
+        expect(after.forms.map((f) => [f.signedName, f.member, f.deletedAt]).sort()).toEqual([
+          ["Maya Patel", "M Patel", clock.toISOString()],
+          ["Maya R Patel", "Maya R Patel", clock.toISOString()],
+        ]);
+      } finally {
+        clock = was;
+      }
     },
     T,
   );
@@ -439,7 +445,10 @@ d("signed forms of deleted members (real Postgres)", () => {
       expect(new Set([...first.forms, ...second.forms].map((f) => f.id)).size).toBe(57);
       expect(second.forms.some((f) => f.signedName === "Ben Stone")).toBe(false);
 
-      for (const bad of ["?page=2", "?after=x", "?after=2026-10-15%7C2026-10-15%7Cnot-an-id", "?who=maya", `?q=${"a".repeat(101)}`]) {
+      for (const bad of ["?page=2", "?after=x", "?after=2026-10-15%7C2026-10-15%7Cnot-an-id",
+        // The shape of a time, but not a real one: refused, never a 500.
+        `?after=${encodeURIComponent(`2026-13-45 99:99:99+00|2026-10-15 17:00:00+00|${iron.waiverId}`)}`,
+        `?after=${encodeURIComponent(`2026-02-31 12:00:00+00|2026-10-15 17:00:00+00|${iron.waiverId}`)}`, "?who=maya", `?q=${"a".repeat(101)}`]) {
         expect((await get(listUrl(iron.gymId, bad), iron.owner.cookies)).statusCode, bad).toBe(400);
       }
       expect((await get(formUrl(iron.gymId, "receipt", iron.waiverId), iron.owner.cookies)).statusCode).toBe(400);

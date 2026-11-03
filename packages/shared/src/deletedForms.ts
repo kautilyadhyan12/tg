@@ -21,7 +21,25 @@ export type DeletedFormKind = z.infer<typeof deletedFormKindSchema>;
 export const deletedFormsCursorSchema = z
   .string()
   .max(160)
-  .regex(/^[0-9 :.+-]{19,40}\|[0-9 :.+-]{19,40}\|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+  .regex(/^[0-9 :.+-]{19,40}\|[0-9 :.+-]{19,40}\|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
+  .refine((cursor) => cursor.split("|").slice(0, 2).every(isPostgresTime));
+
+/** A time as Postgres writes a timestamptz, and a real one: never 31 February or minute 99. */
+function isPostgresTime(text: string): boolean {
+  const parts = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})(\.\d{1,6})?[+-]\d{2}(:\d{2})?$/.exec(text)?.slice(1, 7).map(Number);
+  if (parts?.length !== 6) return false;
+  const [year = 0, month = 0, day = 0, hour = 0, minute = 0, second = 0] = parts;
+  const at = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+  return (
+    year >= 1 &&
+    at.getUTCFullYear() === year &&
+    at.getUTCMonth() === month - 1 &&
+    at.getUTCDate() === day &&
+    at.getUTCHours() === hour &&
+    at.getUTCMinutes() === minute &&
+    at.getUTCSeconds() === second
+  );
+}
 
 /** The list's query: a name to look for, and where the page starts (the first without one). */
 export const deletedFormsQuerySchema = z
