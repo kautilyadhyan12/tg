@@ -361,7 +361,7 @@ describe('the screen', () => {
     expect(screen.queryByTestId('updates')).toBeNull();
     await waitFor(() => expect(screen.getByRole('tab', { name: 'Inbox' }).textContent).toBe('Inbox'));
     expect(inboxSvc.markRead).toHaveBeenCalledTimes(1);
-    expect(inboxSvc.markRead).toHaveBeenCalledWith('g1', '2026-09-02T12:00:00.000Z');
+    expect(inboxSvc.markRead).toHaveBeenCalledWith('g1', '2026-09-02T12:00:00.000Z', ['m1']);
     expect(inboxSvc.read).toHaveBeenCalledTimes(1);
   });
 
@@ -1337,12 +1337,12 @@ describe('the dot on the nav item', () => {
       expect(screen.getByRole('tab', { name: 'Bar Bell Club, 2 new messages' })).toBeTruthy();
       expect(screen.getByLabelText('New message')).toBeTruthy();
       expect(inboxSvc.markRead).toHaveBeenCalledTimes(1);
-      expect(inboxSvc.markRead).toHaveBeenCalledWith('g1', '2026-09-02T12:00:00.000Z');
+      expect(inboxSvc.markRead).toHaveBeenCalledWith('g1', '2026-09-02T12:00:00.000Z', ['g1-m0']);
 
       // The other gym's page, its Inbox still the open tab: now nothing is new anywhere.
       fireEvent.click(screen.getByRole('tab', { name: 'Bar Bell Club, 2 new messages' }));
       await waitFor(() => expect(screen.getByRole('tab', { name: 'Bar Bell Club' }).textContent).toBe('Bar Bell Club'));
-      expect(inboxSvc.markRead).toHaveBeenLastCalledWith('g2', '2026-09-02T12:00:00.000Z');
+      expect(inboxSvc.markRead).toHaveBeenLastCalledWith('g2', '2026-09-02T12:00:00.000Z', ['g2-m0', 'g2-m1']);
       await waitFor(() => expect(screen.queryByLabelText('New message')).toBeNull());
       // The list of gyms was asked for once: the counts came from the inbox's own answers.
       expect(api.getMine).toHaveBeenCalledTimes(1);
