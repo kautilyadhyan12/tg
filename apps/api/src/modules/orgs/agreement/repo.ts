@@ -398,6 +398,11 @@ export async function letGoOfAgreementSignatures(tx: TransactionSql, gymId: stri
     WHERE s.gym_id = ${gymId} AND h.gym_id = s.gym_id AND h.id = s.held_membership_id
       AND s.record_deleted_at IS NULL AND h.entry_id IS NOT NULL
       AND (${entryId}::uuid IS NULL OR h.entry_id = ${entryId}::uuid)`;
+  // One left behind when another record was joined into this one is this person's: deleted today with them (18u-iii).
+  await tx`
+    UPDATE gym_agreement_signatures SET record_deleted_at = ${at}, merged_into_entry_id = NULL
+    WHERE gym_id = ${gymId} AND merged_into_entry_id IS NOT NULL
+      AND (${entryId}::uuid IS NULL OR merged_into_entry_id = ${entryId}::uuid)`;
 }
 
 // ── The emailed link to sign (18u-ii-b; migration 0162) ──

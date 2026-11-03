@@ -11,7 +11,7 @@ export function deleteQuestion(preview, words) {
 }
 
 /** The line under the names: what deleting does. */
-export const DELETE_WHAT_HAPPENS = 'Their details and history are deleted and can’t be brought back. Payments they made stay in your takings and reports, as “A deleted member”.';
+export const DELETE_WHAT_HAPPENS = 'Their details and history are deleted and can’t be brought back. Payments they made stay in your takings and reports, as “A deleted member”. Waivers signed at the front desk and membership agreements are kept for six years, for the owner, in Settings.';
 
 /** Who is ticked and not deleted, and why; null where everyone ticked is a past member. */
 export function deleteKeptLine(preview, words) {

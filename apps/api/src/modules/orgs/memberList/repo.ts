@@ -2255,13 +2255,37 @@ export async function setEntryFormer(tx: TransactionSql, gymId: string, entryId:
 }
 
 /** A waiver signed at the desk stays as the gym's proof when its record is deleted for
- *  good, with the day it was deleted: the purge removes it six years later (3e-iii). One
- *  record, or every record of the gym when `entryId` is null. */
+ *  good, with the day it was deleted and the member's name (a parent may have signed it): the
+ *  purge removes it six years later (3e-iii, 18u-iii). One record, or every record of the gym
+ *  when `entryId` is null. */
 async function letGoOfDeskSignatures(tx: TransactionSql, gymId: string, entryId: string | null, at: Date): Promise<void> {
   await tx`
-    UPDATE gym_waiver_desk_signatures SET entry_id = NULL, record_deleted_at = ${at}
-    WHERE gym_id = ${gymId} AND entry_id IS NOT NULL
-      AND (${entryId}::uuid IS NULL OR entry_id = ${entryId}::uuid)`;
+    UPDATE gym_waiver_desk_signatures s SET entry_id = NULL, record_deleted_at = ${at}, member_name = left(NULLIF(trim(e.full_name), ''), 200)
+    FROM gym_member_list_entries e
+    WHERE s.gym_id = ${gymId} AND e.gym_id = s.gym_id AND e.id = s.entry_id
+      AND (${entryId}::uuid IS NULL OR s.entry_id = ${entryId}::uuid)`;
+  // One left behind when another record was joined into this one is this person's: deleted today with them.
+  await tx`
+    UPDATE gym_waiver_desk_signatures SET record_deleted_at = ${at}, merged_into_entry_id = NULL
+    WHERE gym_id = ${gymId} AND merged_into_entry_id IS NOT NULL
+      AND (${entryId}::uuid IS NULL OR merged_into_entry_id = ${entryId}::uuid)`;
+}
+
+/** Two records joined: the signatures left on the one not kept (a waiver wording both signed, a
+ *  membership that did not move) name the kept record, as do those an earlier join left naming
+ *  the one not kept; they stay that person's, never a deleted member's (18u-iii). Runs before
+ *  the record not kept goes. */
+export async function markSignaturesMerged(tx: TransactionSql, gymId: string, goneId: string, keepId: string): Promise<void> {
+  await tx`
+    UPDATE gym_waiver_desk_signatures SET merged_into_entry_id = ${keepId}
+    WHERE gym_id = ${gymId} AND (entry_id = ${goneId} OR merged_into_entry_id = ${goneId})`;
+  await tx`
+    UPDATE gym_agreement_signatures s SET merged_into_entry_id = ${keepId}
+    FROM gym_held_memberships h
+    WHERE s.gym_id = ${gymId} AND h.gym_id = s.gym_id AND h.id = s.held_membership_id AND h.entry_id = ${goneId}`;
+  await tx`
+    UPDATE gym_agreement_signatures SET merged_into_entry_id = ${keepId}
+    WHERE gym_id = ${gymId} AND merged_into_entry_id = ${goneId}`;
 }
 
 /** A record deleted for good: a former one deleted, or the one not kept when two

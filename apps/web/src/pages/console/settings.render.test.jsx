@@ -68,6 +68,8 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       getGymWaiver: vi.fn(() => Promise.resolve({ data: { waiver: null, inUse: false, people: 0, signed: 0 } })),
 
       getGymAgreement: vi.fn(() => Promise.resolve({ data: { agreement: null, inUse: false, signed: 0 } })),
+      getDeletedForms: vi.fn(() => Promise.resolve({ data: { forms: [], total: 0, next: null, timezone: 'UTC' } })),
+      getDeletedForm: vi.fn(),
       // Settings' Payments box (18d-i): a gym in a country Square serves, not connected.
       getGymPayments: vi.fn(() => Promise.resolve({ data: { payments: { availability: 'square', country: 'GB', canConnect: true, squareReady: true, square: null } } })),
       getCheckinRules: vi.fn(() => Promise.resolve({ data: { rules: { who: 'everyone', overdue: 'let_in', waiver: 'let_in' }, overdueAfterDays: 0 } })),
@@ -212,6 +214,21 @@ describe('a manager or trainer at this address', () => {
     expect(screen.queryByRole('button', { name: /^Staff/ })).toBeNull();
     expect(screen.queryByRole('button', { name: /^Check-in devices/ })).toBeNull();
     expect(orgService.getStaff).not.toHaveBeenCalled();
+  });
+
+  /** 18u-iii: the signed forms of deleted members are the gym's own owner's; a co-owner reads who can. */
+  it('a co-owner reads that only the owner sees the signed forms of deleted members, and the server is never asked', async () => {
+    orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'owner', coOwner: true }] } });
+    drawSettings();
+    fireEvent.click(await screen.findByRole('button', { name: /^Signed forms of deleted members/ }));
+    expect(await screen.findByText(/^Only the owner of .+ can see the signed forms of deleted members.$/)).toBeTruthy();
+    expect(orgService.getDeletedForms).not.toHaveBeenCalled();
+  });
+
+  it("the gym's own owner is shown them", async () => {
+    drawSettings();
+    expect(await screen.findByRole('button', { name: /^Signed forms of deleted members/ })).toBeTruthy();
+    await waitFor(() => expect(orgService.getDeletedForms).toHaveBeenCalled());
   });
 
   /** 23c-i: the price list is a page of its own, so its tick opens nothing in Settings. */

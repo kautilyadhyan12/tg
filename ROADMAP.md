@@ -341,7 +341,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 18u-ii. **An agreement for each thing sold, and signing from afar**, in two jobs since 2026-10-24 (the line as first written is in `handoff/2026-10-24-18u-ii-a.md`).
        - 18u-ii-a. [x] **An agreement for each line of the price list, and Members' Agreement not signed** · merged 2026-10-24 · PR #353
        - 18u-ii-b. [x] **Signing from afar** · merged 2026-10-24 · PR #355
-     - 18u-iii. [ ] **The signed papers of people deleted for good**: in Settings, for the owner, each signed membership agreement and desk waiver of a record deleted for good, as signed, until the purge removes it six years on (Kd, 2026-10-23). Web folder 2, after 18u-ii.
+     - 18u-iii. [x] **The signed papers of people deleted for good** — merged 2026-11-03 (PR #452).
      - 18u-iv. [ ] **No new bookings until the membership agreement is signed**: the business's own switch, off until it turns it on, as Wodify's Contract Enforcement and Glofox's are; Sign later stays (Kd, 2026-10-23). Web folder 2, after 18u-ii.
    - 18s. [x] **A business only from India and Square's countries** — merged 2026-10-24 (PR #351).
    - 18v. [ ] **Each place's rules**: renewal on or off per type (Quebec: none paid), a longest term, a cooling-off refund, a notice period, a cancellation fee, release on death, disability or a move, reminders before a renewal, a price change or a trial's end (Kd, 2026-10-22; spec §14.8). No lawyer (Kd, 2026-10-23, `rulings/2026-10-23-18u-i.md`). Web folder 2.
