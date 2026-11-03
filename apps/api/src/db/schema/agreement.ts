@@ -79,7 +79,7 @@ export const gymAgreementSignatures = pgTable(
     /** 'desk' or 'link' (18u-ii-b). */
     signedVia: text("signed_via").notNull().default("desk"),
     recordDeletedAt: timestamp("record_deleted_at", { withTimezone: true }),
-    /** Left on the record not kept when two were joined (`0194`): the record kept, still that person. */
+    /** Left on the record not kept when two were joined (`0195`): the record kept, still that person. */
     mergedIntoEntryId: uuid("merged_into_entry_id"),
   },
   (t) => [

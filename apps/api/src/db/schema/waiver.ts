@@ -66,9 +66,9 @@ export const gymWaiverDeskSignatures = pgTable(
     signedAt: timestamp("signed_at", { withTimezone: true }).notNull().defaultNow(),
     /** The day its record was deleted for good (`0108`): the purge removes it six years later. */
     recordDeletedAt: timestamp("record_deleted_at", { withTimezone: true }),
-    /** The member's name, kept when the record is deleted for good (`0194`): a parent may have signed. */
+    /** The member's name, kept when the record is deleted for good (`0195`): a parent may have signed. */
     memberName: text("member_name"),
-    /** Left on the record not kept when two were joined (`0194`): the record kept, still that person. */
+    /** Left on the record not kept when two were joined (`0195`): the record kept, still that person. */
     mergedIntoEntryId: uuid("merged_into_entry_id"),
   },
   (t) => [

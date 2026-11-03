@@ -111,3 +111,9 @@ export function replayActivityDays(days: readonly string[]): StreakState {
   for (const day of [...days].sort()) s = recordActivity(s, day);
   return s;
 }
+
+/** The hour of an instant on a timezone's clock, 0–23. */
+export function hourInTz(instant: Date, timeZone: string): number {
+  const text = new Intl.DateTimeFormat("en-GB", { timeZone: safeTimeZone(timeZone), hour: "2-digit", hourCycle: "h23" }).format(instant);
+  return Number(text) % 24;
+}

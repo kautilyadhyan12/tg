@@ -16,10 +16,10 @@ export type PushTokenRequest = z.infer<typeof pushTokenRequestSchema>;
 export const pushTokenResponseSchema = z.object({ saved: z.literal(true) }).strict();
 export type PushTokenResponse = z.infer<typeof pushTokenResponseSchema>;
 
-/** Notifications go from 08:00 up to 21:00 on the person's own clock; a message sent at night waits
- *  for the morning. */
-export const PUSH_FIRST_HOUR = 8;
-export const PUSH_LAST_HOUR = 21;
+/** A gym's messages go from 04:00 up to 23:00 on the person's own clock (Kd, 2026-11-03); one due at
+ *  night waits for 04:00. A place in a class or an event goes at any hour. */
+export const PUSH_FIRST_HOUR = 4;
+export const PUSH_LAST_HOUR = 23;
 
 /** Whether a notification may go now, by the hour on the person's clock (0 to 23). Anything that is
  *  not an hour of the day is no: garbage in sends nothing. */
@@ -47,6 +47,42 @@ export function gymMessageNotification(gymName: string, newest: string, unread: 
 /** What a notification carries for the app: which gym's Inbox a tap opens. */
 export const gymMessagePushDataSchema = z.object({ kind: z.literal("gym_inbox"), gymId: z.string().uuid() }).strip();
 export type GymMessagePushData = z.infer<typeof gymMessagePushDataSchema>;
+
+// ── A PLACE IN A CLASS OR AN EVENT (ROADMAP Stage 5 item 18b-ii-a) ──
+
+/** The Android channel for places in classes and events. */
+export const GYM_PLACES_CHANNEL = { id: "gym-places", name: "Classes and events" } as const;
+
+/** `yours`: moved off the waitlist into the class or event. `free`: a place is free in the last stretch
+ *  before the start, when it is no longer handed over by itself, and the first to claim it has it. */
+export const PLACE_NOTICES = ["yours", "free"] as const;
+export type PlaceNotice = (typeof PLACE_NOTICES)[number];
+
+/** A free place is told to the same person at most once in this long for one class or event, so a
+ *  busy class does not keep sounding their phone (Kd, 2026-11-03). */
+export const PLACE_FREE_AGAIN_MINUTES = 60;
+
+/** What the phone shows. `when` is `reminderWhen`'s: "today at 6:00 PM", "on Tuesday 11 November at
+ *  6:00 PM". */
+export function placeNotification(input: { notice: PlaceNotice; gymName: string; name: string; when: string }): { title: string; body: string } {
+  const { notice, gymName, name, when } = input;
+  return notice === "yours"
+    ? { title: gymName, body: `You have a place in ${name} ${when}. You were moved off the waitlist.` }
+    : { title: gymName, body: `A place is free in ${name} ${when}. The first to claim it gets it.` };
+}
+
+/** What a place's notification carries for the app: the gym, and the class or event a tap opens. `day`:
+ *  its day on the gym's clock, from which the phone works out the week to open when it is tapped. */
+export const gymPlacePushDataSchema = z
+  .object({
+    kind: z.literal("gym_place"),
+    gymId: z.string().uuid(),
+    what: z.enum(["class", "event"]),
+    id: z.string().uuid(),
+    day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  })
+  .strip();
+export type GymPlacePushData = z.infer<typeof gymPlacePushDataSchema>;
 
 // ── Google's replies (the adapter parses them here) ──
 

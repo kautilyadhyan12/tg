@@ -17,7 +17,7 @@ import {
 import { isStreakContinuationDay, xpEarnedForWorkout } from "../src/modules/gamification/xp.js";
 
 describe("the meal ideas in the card's words (34d-ii; the rule itself is nutrition.suggest.unit.test.ts)", () => {
-  const ideas = suggestAfterWorkout({ seed: "person-1|workout-1", diet: "vegan", kcalBurned: 450, day: null });
+  const ideas = suggestAfterWorkout({ seed: "person-1|workout-1", diet: "vegan", kcalBurned: 450, day: null, weightKg: null });
 
   it("each food with its amount, joined, and timings that count from the workout", () => {
     const said = mealSuggestionsFrom(ideas);

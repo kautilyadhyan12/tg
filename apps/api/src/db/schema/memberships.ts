@@ -535,8 +535,18 @@ export const gymClassBookings = pgTable(
     createdAt: createdAt(),
     bookedAt: timestamp("booked_at", { withTimezone: true }),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    /** 0194: what the person on this row is owed and not yet told on their phone (ROADMAP Stage 5
+     *  18b-ii-a): `yours`, moved off the waitlist into the place, or `free`, a place is free to claim. */
+    pushDue: text("push_due"),
+    pushDueAt: timestamp("push_due_at", { withTimezone: true }),
+    /** 0194: which free place the person was last owed a notice for, so one is never told twice. */
+    pushOccasion: text("push_occasion"),
+    /** 0194: when the person was last told about this class or event: a free place again within the hour is not told. */
+    pushToldAt: timestamp("push_told_at", { withTimezone: true }),
   },
   (t) => [
+    check("gym_class_bookings_push_due_check", sql`${t.pushDue} IS NULL OR (${t.pushDue} IN ('yours','free') AND ${t.pushDueAt} IS NOT NULL)`),
+    index("gym_class_bookings_push_idx").on(t.pushDueAt).where(sql`${t.pushDue} IS NOT NULL`),
     unique("gym_class_bookings_request_uq").on(t.gymId, t.requestKey),
     unique("gym_class_bookings_claim_uq").on(t.gymId, t.claimKey),
     check(
