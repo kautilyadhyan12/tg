@@ -4,7 +4,7 @@
 // asked about by one request at a time (`checking_until`), and every change names the state it was
 // read in, so two requests never both act on one answer. A press is written under the record's lock
 // (as a payment by hand is) and the Terminal's, which a save on it (18d-ii-b-ii) takes too.
-import { memberFeeKindSchema, memberPayTarget, terminalPaymentOutcomeSchema, type MemberFeeKind, type TerminalPaymentOutcome } from "@app/shared";
+import { memberFeeKindSchema, memberPayTarget, terminalKeepStepSchema, terminalPaymentOutcomeSchema, type MemberFeeKind, type TerminalKeepStep, type TerminalPaymentOutcome } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import { z } from "zod";
 import { insertAudit, lockOrgRow } from "../repo.js";
@@ -14,6 +14,7 @@ import { recordFeePaymentIn } from "../memberships/feesRepo.js";
 import { billsFor, cardCharging } from "../memberships/billsSql.js";
 import { lockedEntry, lockedHeld, settle } from "../memberships/heldRepo.js";
 import { lockGym } from "../memberList/repo.js";
+import { payerOf } from "../payers/repo.js";
 import type { SquareEnvironment } from "./square.js";
 
 type SqlOrTx = Sql | TransactionSql;
@@ -60,6 +61,17 @@ export interface PayRow {
   receiptNumber: number | null;
   /** Who pressed it, as their name reads now: read only for Sell's waiting sales. */
   startedByName?: string | null;
+  finishedAt: Date | null;
+  /** Keeping the card it is paid with (18d-vi-c): the words the Terminal shows; null where it was not asked. */
+  cardWords: string | null;
+  cardStep: TerminalKeepStep | null;
+  confirmKey: string | null;
+  confirmActionId: string | null;
+  /** Square's time of the person's answer on the Terminal. */
+  cardAnsweredAt: Date | null;
+  cardKey: string | null;
+  cardBrand: string | null;
+  cardLast4: string | null;
 }
 
 interface RawPay {
@@ -88,6 +100,15 @@ interface RawPay {
   cancel_wanted_at: Date | null;
   cancel_too_late: boolean;
   receipt_number: number | null;
+  finished_at: Date | null;
+  card_words: string | null;
+  card_step: string | null;
+  confirm_key: string | null;
+  confirm_action_id: string | null;
+  card_answered_at: Date | null;
+  card_key: string | null;
+  card_brand: string | null;
+  card_last4: string | null;
 }
 
 const toRow = (r: RawPay): PayRow => {
@@ -120,6 +141,16 @@ const toRow = (r: RawPay): PayRow => {
     cancelWantedAt: r.cancel_wanted_at,
     cancelTooLate: r.cancel_too_late,
     receiptNumber: r.receipt_number,
+    finishedAt: r.finished_at,
+    cardWords: r.card_words,
+    // Our own column under a CHECK: a value this build does not know fails here.
+    cardStep: r.card_step === null ? null : terminalKeepStepSchema.parse(r.card_step),
+    confirmKey: r.confirm_key,
+    confirmActionId: r.confirm_action_id,
+    cardAnsweredAt: r.card_answered_at,
+    cardKey: r.card_key,
+    cardBrand: r.card_brand,
+    cardLast4: r.card_last4,
   };
 };
 
@@ -127,7 +158,8 @@ const toRow = (r: RawPay): PayRow => {
 const COLUMNS = (sql: SqlOrTx) =>
   sql`t.id, t.gym_id, t.entry_id, t.held_membership_id, t.sale, t.period_index, t.fee_bill_id, t.amount_minor, t.currency, t.environment,
       t.account_id, t.location_id, t.device_id, t.state, t.outcome, t.checkout_key, t.checkout_id, t.picked_up,
-      t.square_payment_id, t.started_by, t.started_at, t.cancel_wanted_at, t.cancel_too_late,
+      t.square_payment_id, t.started_by, t.started_at, t.cancel_wanted_at, t.cancel_too_late, t.finished_at,
+      t.card_words, t.card_step, t.confirm_key, t.confirm_action_id, t.card_answered_at, t.card_key, t.card_brand, t.card_last4,
       COALESCE((SELECT p.receipt_number FROM gym_member_payments p WHERE p.gym_id = t.gym_id AND p.id = t.member_payment_id), t.sale_receipt_number) AS receipt_number,
       (SELECT b.fee FROM gym_member_bills b WHERE b.gym_id = t.gym_id AND b.id = t.fee_bill_id) AS fee_kind`;
 
@@ -182,6 +214,8 @@ export interface NewPay {
   deviceId: string;
   requestKey: string;
   checkoutKey: string;
+  /** Ask to keep the card it is paid with (18d-vi-c): the words the Terminal shows first, and the two keys. */
+  keepCard: { words: string; confirmKey: string; cardKey: string } | null;
   startedBy: string;
   today: string;
   now: Date;
@@ -196,6 +230,10 @@ export type StartOutcome =
   | { kind: "fee_not_found" | "fee_changed" }
   /** Another payment for the membership waits on a Terminal. */
   | { kind: "other_waiting" }
+  /** The card cannot be kept from this payment: not a renewing membership's period, or somebody else pays. */
+  | { kind: "keep_not_offered" }
+  /** A card save for this person waits on a Terminal. */
+  | { kind: "keep_save_waiting" }
   /** The card on file is being charged for the membership (18d-iii-i). */
   | { kind: "card_charging" }
   | { kind: "too_much"; leftMinor: number; currency: string };
@@ -228,6 +266,13 @@ export async function startPayment(sql: Sql, s: NewPay): Promise<StartOutcome> {
       return waiting.period_index === periodIndex && waiting.fee_bill_id === feeBillId ? { kind: "membership_waiting", payment: toRow(waiting) } : { kind: "other_waiting" };
     }
     if (await cardCharging(tx, s.gymId, row.id)) return { kind: "card_charging" };
+    if (s.keepCard !== null) {
+      const m = row.membership;
+      if (s.target.kind !== "period" || m.kind !== "recurring" || !m.renews || m.status !== "active" || (await payerOf(tx, s.gymId, s.entryId)) !== null) return { kind: "keep_not_offered" };
+      const [save] = await tx<{ id: string }[]>`
+        SELECT id FROM gym_terminal_card_saves WHERE gym_id = ${s.gymId} AND entry_id = ${s.entryId} AND state IN ('agreeing','saving') LIMIT 1`;
+      if (save !== undefined) return { kind: "keep_save_waiting" };
+    }
     let currency = row.currency;
     if (s.target.kind === "period") {
       const bills = await billsFor(tx, s.gymId, [row.id]);
@@ -250,10 +295,11 @@ export async function startPayment(sql: Sql, s: NewPay): Promise<StartOutcome> {
     const [made] = await tx<{ id: string }[]>`
       INSERT INTO gym_terminal_payments (gym_id, entry_id, held_membership_id, period_index, fee_bill_id, amount_minor, currency,
                                          environment, account_id, location_id, device_id, request_key, state, checkout_key,
-                                         started_by, started_at, checking_until, checked_at)
+                                         started_by, started_at, checking_until, checked_at, card_words, card_step, confirm_key, card_key)
       VALUES (${s.gymId}, ${s.entryId}, ${row.id}, ${periodIndex}, ${feeBillId}, ${s.amountMinor}, ${currency}, ${s.environment},
               ${s.accountId}, ${s.locationId}, ${s.deviceId}, ${s.requestKey}, 'waiting', ${s.checkoutKey}, ${s.startedBy},
-              ${s.now}, ${s.checkingUntil}, ${s.now})
+              ${s.now}, ${s.checkingUntil}, ${s.now}, ${s.keepCard?.words ?? null}, ${s.keepCard === null ? null : "agreeing"},
+              ${s.keepCard?.confirmKey ?? null}, ${s.keepCard?.cardKey ?? null})
       RETURNING id`;
     if (made === undefined) throw new Error("a Terminal payment was not written under its locks");
     const [written] = await tx<RawPay[]>`SELECT ${COLUMNS(tx)} FROM gym_terminal_payments t WHERE t.id = ${made.id}`;
@@ -436,6 +482,68 @@ export async function setCheckout(sql: SqlOrTx, id: string, checkoutId: string):
   return rows.length === 1;
 }
 
+/** The agreement's action on the Terminal. False once the press has ended or holds another. */
+export async function setConfirmAction(sql: SqlOrTx, id: string, actionId: string): Promise<boolean> {
+  const rows = await sql<{ id: string }[]>`
+    UPDATE gym_terminal_payments SET confirm_action_id = ${actionId}
+    WHERE id = ${id} AND state = 'waiting' AND card_step = 'agreeing' AND (confirm_action_id IS NULL OR confirm_action_id = ${actionId})
+    RETURNING id`;
+  return rows.length === 1;
+}
+
+/** The person answered on the Terminal: the payment follows either way. False when another request took the answer first. */
+export async function answerCard(sql: SqlOrTx, id: string, step: "paying" | "declined", at: Date): Promise<boolean> {
+  const rows = await sql<{ id: string }[]>`
+    UPDATE gym_terminal_payments SET card_step = ${step}, card_answered_at = ${at}, picked_up = true
+    WHERE id = ${id} AND state = 'waiting' AND card_step = 'agreeing'
+    RETURNING id`;
+  return rows.length === 1;
+}
+
+/** The record holding the membership now, which a join may have changed; null once it has none. */
+export async function holderOf(sql: SqlOrTx, gymId: string, membershipId: string): Promise<string | null> {
+  const [row] = await sql<{ entry_id: string | null }[]>`SELECT entry_id FROM gym_held_memberships WHERE gym_id = ${gymId} AND id = ${membershipId}`;
+  return row?.entry_id ?? null;
+}
+
+/** A paid press whose card Square has not yet saved, for the worker. Held like any look. */
+export async function claimKeeping(sql: Sql, environment: SquareEnvironment, now: Date, idleMs: number, until: Date, gymIds: readonly string[] | null): Promise<PayRow | null> {
+  const [row] = await sql<RawPay[]>`
+    WITH due AS (
+      SELECT id FROM gym_terminal_payments
+      WHERE environment = ${environment} AND card_step = 'keeping'
+        AND checked_at <= ${new Date(now.getTime() - idleMs)}
+        AND (checking_until IS NULL OR checking_until <= ${now})
+        AND (${gymIds === null}::boolean OR gym_id = ANY(${[...(gymIds ?? [])]}::uuid[]))
+      ORDER BY checked_at
+      LIMIT 1
+      FOR UPDATE SKIP LOCKED
+    )
+    UPDATE gym_terminal_payments t SET checking_until = ${until}, checked_at = ${now}
+    WHERE t.id IN (SELECT id FROM due)
+    RETURNING ${COLUMNS(sql)}`;
+  return row === undefined ? null : toRow(row);
+}
+
+/** Where keeping the card stands now. */
+export async function readCardStep(sql: SqlOrTx, id: string): Promise<string | null> {
+  const [row] = await sql<{ card_step: string | null }[]>`SELECT card_step FROM gym_terminal_payments WHERE id = ${id}`;
+  return row?.card_step ?? null;
+}
+
+/** The press, held for the keeping statement; false once another request ended the card's step. */
+export async function lockKeeping(tx: TransactionSql, id: string): Promise<boolean> {
+  const [row] = await tx<{ id: string }[]>`SELECT id FROM gym_terminal_payments WHERE id = ${id} AND card_step = 'keeping' FOR UPDATE`;
+  return row !== undefined;
+}
+
+/** How keeping the card ended. */
+export async function finishCard(sql: SqlOrTx, id: string, step: "saved" | "not_saved" | "square_refused", card: { brand: string; last4: string } | null): Promise<void> {
+  await sql`
+    UPDATE gym_terminal_payments SET card_step = ${step}, card_brand = ${card?.brand ?? null}, card_last4 = ${card?.last4 ?? null}, checking_until = NULL
+    WHERE id = ${id} AND card_step = 'keeping'`;
+}
+
 export async function setPickedUp(sql: SqlOrTx, id: string): Promise<void> {
   await sql`UPDATE gym_terminal_payments SET picked_up = true WHERE id = ${id} AND NOT picked_up`;
 }
@@ -524,7 +632,8 @@ export async function recordPaid(
     if (done?.kind === "recorded") {
       await tx`
         UPDATE gym_terminal_payments SET state = 'done', outcome = 'paid', square_payment_id = ${p.squarePaymentId},
-               member_payment_id = ${done.paymentId}, finished_at = ${p.now}, checking_until = NULL
+               member_payment_id = ${done.paymentId}, finished_at = ${p.now}, checking_until = NULL,
+               card_step = CASE WHEN card_step = 'paying' THEN 'keeping' ELSE card_step END
         WHERE id = ${pay.id}`;
       return { outcome: "paid" as const };
     }
@@ -621,7 +730,7 @@ async function saleNotRecorded(tx: TransactionSql, p: { pay: PayRow; squarePayme
 export async function forgetDone(sql: Sql, before: Date, gymIds: readonly string[] | null): Promise<number> {
   const rows = await sql<{ id: string }[]>`
     DELETE FROM gym_terminal_payments
-    WHERE finished_at IS NOT NULL AND finished_at < ${before} AND outcome NOT IN ('not_recorded','gone')
+    WHERE finished_at IS NOT NULL AND finished_at < ${before} AND outcome NOT IN ('not_recorded','gone') AND card_step IS DISTINCT FROM 'keeping'
       AND (${gymIds === null}::boolean OR gym_id = ANY(${[...(gymIds ?? [])]}::uuid[]))
     RETURNING id`;
   return rows.length;

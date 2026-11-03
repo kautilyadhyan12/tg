@@ -3,7 +3,7 @@ import { Check, Loader2 } from 'lucide-react';
 import { AGREEMENT_LINK_DAYS, WAIVER_NAME_MAX_CHARS, waiverReadyToSign } from '@app/shared';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import { deskSigner } from './waiverView';
-import { agreementBoxWords, agreementCopyLine, agreementLineParts, agreementLinkSentLine, agreementResentLine, agreementSignedBy, agreementSignedLine } from './agreementView';
+import { agreementBoxWords, agreementCardLine, agreementCopyLine, agreementLineParts, agreementLinkSentLine, agreementResentLine, agreementSignedBy, agreementSignedLine } from './agreementView';
 
 // THE MEMBERSHIP AGREEMENT UNDER ONE MEMBERSHIP (ROADMAP 18u-i; rulings/2026-10-23-18u-i.md),
 // on a person's page. The line says whether this membership's agreement was signed; Sign
@@ -237,6 +237,7 @@ export default function MembershipAgreement({ gymId, entryId, membership, inUse,
           ) : signed !== null ? (
             <>
               <p className="c-s15 c-w6 c-t1 m-0">{agreementSignedBy(signed, when)}</p>
+              {box.card != null ? <p className="c-s14 c-t2 m-0" data-testid="agreement-card">{agreementCardLine(box.card, when)}</p> : null}
               <Facts facts={signed.facts} />
               {signed.agreementName != null ? <span className="c-label">{signed.agreementName}</span> : null}
               <Terms label={signed.agreementName ?? `${box.gymName}'s terms`} text={signed.text} />
