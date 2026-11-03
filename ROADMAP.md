@@ -344,7 +344,11 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 18u-iii. [x] **The signed papers of people deleted for good** — merged 2026-11-03 (PR #452).
      - 18u-iv. [x] **No new bookings until the membership agreement is signed** — merged 2026-11-03 (PR #455).
    - 18s. [x] **A business only from India and Square's countries** — merged 2026-10-24 (PR #351).
-   - 18v. [ ] **Each place's rules**: renewal on or off per type (Quebec: none paid), a longest term, a cooling-off refund, a notice period, a cancellation fee, release on death, disability or a move, reminders before a renewal, a price change or a trial's end (Kd, 2026-10-22; spec §14.8). No lawyer (Kd, 2026-10-23, `rulings/2026-10-23-18u-i.md`). Web folder 2.
+   - 18v. **Each place's rules**, in four parts since 2026-11-03 (the business sets its own terms per type and the app applies them; `handoff/2026-11-03-18v-i.md` keeps its line as first written):
+     - 18v-i. [ ] **Contract length**: a repeating type's contract, so many payments, then it renews or ends; Cancel inside it ends it with the contract or releases the member with a reason. Web folder 2.
+     - 18v-ii. [ ] **Notice to cancel and a fee for leaving early**, both waived for a release. Web folder 2.
+     - 18v-iii. [ ] **Days to change their mind** after signing, with a full refund. Web folder 2.
+     - 18v-iv. [ ] **A reminder before a renewal or a contract's end**; a price change's is 18w's, a trial's end is sent already. Web folder 2.
    - 18w. [ ] **Raise the price for existing members** from their next payment, with each place's notice (Kd, 2026-10-22). Web folder 2.
    - 18x. [x] **Move to another membership** · merged 2026-10-22 · PR #338
    - 18y. [x] **Bill everyone on one day of the month** · merged 2026-10-22 · PR #340

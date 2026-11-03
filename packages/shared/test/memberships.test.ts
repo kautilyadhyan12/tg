@@ -261,12 +261,14 @@ describe("what a gym may save as a membership type", () => {
 
   it("a change carries the stamp the list gave, and is refused without it", () => {
     const change = (value: unknown) => updateGymMembershipTypeRequestSchema.safeParse(value).success;
-    const stamped = { ...monthly, includesPt: false, ptLimit: null, ptPeriod: null, taxRateId: null, joiningFeeMinor: 0, updatedAt: "2026-10-04T10:00:00.000Z" };
+    const stamped = { ...monthly, includesPt: false, ptLimit: null, ptPeriod: null, taxRateId: null, joiningFeeMinor: 0, contractPeriods: null, contractThen: null, updatedAt: "2026-10-04T10:00:00.000Z" };
     expect(change(stamped)).toBe(true);
     // A change says its tax outright: left out, it would take the tax off the type (18b-iii).
     expect(change({ ...stamped, taxRateId: undefined })).toBe(false);
     // And its joining fee (18t): left out, it would take the fee off the type.
     expect(change({ ...stamped, joiningFeeMinor: undefined })).toBe(false);
+    // And its contract (18v-i): left out, it would take the contract off the type.
+    expect(change({ ...stamped, contractPeriods: undefined, contractThen: undefined })).toBe(false);
     expect(change({ ...monthly, includesPt: false, ptLimit: null, ptPeriod: null })).toBe(false);
     expect(change({ ...stamped, updatedAt: "yesterday" })).toBe(false);
     // The rules between the fields hold on a change too.
