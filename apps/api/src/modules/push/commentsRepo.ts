@@ -75,6 +75,22 @@ export async function unclaimComments(sql: SqlOrTx, userId: string, gymId: strin
     WHERE user_id = ${userId} AND gym_id = ${gymId} AND done_at = ${claimedAt} AND told_at IS NULL`;
 }
 
+/** Comments a phone was told of, recent enough to tell, and not yet seen on that gym's Updates: the next
+ *  notification replaces the one that holds them, so its count holds them too. */
+export async function toldUnseen(sql: SqlOrTx, userId: string, gymId: string, since: Date): Promise<string[]> {
+  const rows = await sql<{ comment_id: string }[]>`
+    SELECT comment_id FROM gym_post_comment_notices
+    WHERE user_id = ${userId} AND gym_id = ${gymId} AND told_at IS NOT NULL AND seen_at IS NULL AND created_at >= ${since}`;
+  return rows.map((r) => r.comment_id);
+}
+
+/** The person opened this gym's Updates: what their phone was told of so far is seen. */
+export async function markCommentsSeen(sql: SqlOrTx, userId: string, gymId: string, now: Date): Promise<void> {
+  await sql`
+    UPDATE gym_post_comment_notices SET seen_at = ${now}
+    WHERE user_id = ${userId} AND gym_id = ${gymId} AND told_at IS NOT NULL AND seen_at IS NULL`;
+}
+
 /** A phone has what this run took: the next comments notification from this gym waits out the half hour. */
 export async function markCommentsTold(sql: SqlOrTx, userId: string, gymId: string, claimedAt: Date, now: Date): Promise<void> {
   await sql`

@@ -42,8 +42,14 @@ export async function sendCommentNotifications(deps: {
 
   // `reached`: some phone has it, so it is never put back to be sent again.
   const tell = async (pair: comments.CommentPair, fresh: readonly string[], state: { reached: boolean }): Promise<void> => {
+    if (fresh.length === 0) {
+      result.skipped += 1;
+      return;
+    }
     const tokens = fresh.length === 0 ? [] : await repo.liveTokens(sql, pair.userId, now);
-    const seen = tokens.length === 0 ? null : await commentsToTell({ sql, now: () => now }, pair.userId, pair.gymId, fresh);
+    // The notification replaces the gym's last one, so it counts what that one held and was not seen.
+    const earlier = tokens.length === 0 ? [] : await comments.toldUnseen(sql, pair.userId, pair.gymId, since);
+    const seen = tokens.length === 0 ? null : await commentsToTell({ sql, now: () => now }, pair.userId, pair.gymId, [...new Set([...fresh, ...earlier])]);
     const newest = seen?.comments[0];
     if (seen === null || newest === undefined) {
       result.skipped += 1;

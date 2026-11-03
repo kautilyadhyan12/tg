@@ -241,6 +241,7 @@ export const gymPostCommentNotices = pgTable(
     createdAt: createdAt(),
     doneAt: timestamp("done_at", { withTimezone: true }),
     toldAt: timestamp("told_at", { withTimezone: true }),
+    seenAt: timestamp("seen_at", { withTimezone: true }),
   },
   (t) => [
     primaryKey({ name: "gym_post_comment_notices_pk", columns: [t.commentId, t.userId] }),

@@ -65,6 +65,7 @@ import { cleanPhoto } from "../gymPage/photoBytes.js";
 import { postPhotoKey, type PhotoStore } from "../gymPage/photoStore.js";
 import { PHOTO_PROBLEM_STATUS, type PhotoFile } from "../gymPage/service.js";
 import { fullName, shownName } from "../leaderboard/rank.js";
+import { markCommentsSeen } from "../../push/commentsRepo.js";
 import { lockGym } from "../memberList/repo.js";
 import { badWordsIn, hasDisguisedWords } from "./badWords.js";
 import { removeListed } from "./photoFiles.js";
@@ -235,6 +236,8 @@ export async function getPosts(
   if (!(await gymIsLive(deps.sql, gymId, org.status))) {
     return gymPostsResponseSchema.parse({ gymId, gymName: org.name, status: "paused", posting: "off", commenting: "off", blockedCount: await repo.countBlocked(deps.sql, gymId, userId), supportEmail, pinned: [], posts: [], next: null });
   }
+  // The comments their phone was told of are on this page now: the next notification counts from here.
+  if (before === undefined) await markCommentsSeen(deps.sql, userId, gymId, deps.now());
   const [feed, posting, commenting, blockedCount] = await Promise.all([
     page(deps, gymId, before, { member: userId }, (rows) => shaped(deps, gymId, rows, userId)),
     postingOf(deps.sql, gymId, userId),

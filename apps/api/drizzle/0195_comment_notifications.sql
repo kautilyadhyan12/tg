@@ -3,7 +3,8 @@
 -- One row for each person a new comment is owed to: the writer of the member's post it is on, and of
 -- the member's comment or reply it answers; never its own writer. Written in the comment's own step.
 -- `done_at`: the worker took it (sent, or nothing still true to send). `told_at`: a phone has it, so
--- the same person's next comments notification in that gym waits out the half hour.
+-- the same person's next comments notification in that gym waits out the half hour. `seen_at`: the
+-- person opened that gym's Updates since, so the next notification's count no longer holds it.
 CREATE TABLE "gym_post_comment_notices" (
 	"gym_id" uuid NOT NULL,
 	"comment_id" uuid NOT NULL,
@@ -11,6 +12,7 @@ CREATE TABLE "gym_post_comment_notices" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"done_at" timestamp with time zone,
 	"told_at" timestamp with time zone,
+	"seen_at" timestamp with time zone,
 	CONSTRAINT "gym_post_comment_notices_pk" PRIMARY KEY ("comment_id", "user_id")
 );--> statement-breakpoint
 ALTER TABLE "gym_post_comment_notices" ADD CONSTRAINT "gym_post_comment_notices_gym_fk" FOREIGN KEY ("gym_id") REFERENCES "public"."gyms"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint

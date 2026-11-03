@@ -346,7 +346,30 @@ d("phone notifications for comments and replies (real Postgres)", () => {
     expect(held.waiting).toBe(1);
     expect(sentTo(asha.token)).toHaveLength(1);
     await sweep(minutes(at, 31));
-    expect(sentTo(asha.token).map((m) => m.title)).toEqual(["Half Hour Gym", "Half Hour Gym · 2 new comments"]);
+    // It replaces the first, which she never opened: three new comments in all.
+    expect(sentTo(asha.token).map((m) => m.title)).toEqual(["Half Hour Gym", "Half Hour Gym · 3 new comments"]);
+  });
+
+  it("opening the gym's Updates starts the count again", { timeout: TIMEOUT_MS }, async () => {
+    const gym = await makeGym("Seen Gym");
+    const at = noonIndia();
+    const asha = await member(gym, "Asha", true);
+    const ben = await member(gym, "Ben");
+    const post = await postBy(gym, asha.who);
+    await comment(gym, ben.who, post, "One");
+    await writtenAt(gym, at);
+    await sweep(at);
+    await comment(gym, ben.who, post, "Two");
+    await writtenAt(gym, minutes(at, 40));
+    await sweep(minutes(at, 40));
+    expect(sentTo(asha.token).at(-1)?.title).toBe("Seen Gym · 2 new comments");
+
+    // Asha opens Updates; a page further down marks nothing more, and a stranger's read marks nothing of hers.
+    expect((await request("GET", `/v1/orgs/${gym}/posts`, { bearer: asha.who.accessToken })).statusCode).toBe(200);
+    await comment(gym, ben.who, post, "Three");
+    await writtenAt(gym, minutes(at, 80));
+    await sweep(minutes(at, 80));
+    expect(sentTo(asha.token).at(-1)).toMatchObject({ title: "Seen Gym", body: "Ben commented on your post: Three" });
   });
 
   it("waits from 23:00 to 04:00 on the person's clock", { timeout: TIMEOUT_MS }, async () => {
