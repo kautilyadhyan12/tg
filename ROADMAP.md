@@ -276,7 +276,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
        - 18d-vi-b. **At Sell and on fees**, in two parts since 2026-10-22 (`handoff/2026-10-22-18d-vi-b-i.md` keeps its line as first written):
          - 18d-vi-b-i. [x] **Take payment on Terminal on a late cancel or no-show fee** — merged 2026-10-22 (PR #337).
          - 18d-vi-b-ii. [x] **Take payment on Terminal at Sell**, for the whole basket — merged 2026-10-22 (PR #339).
-       - 18d-vi-c. [ ] **The card kept from a Terminal payment** for a membership that renews, the member agreeing on the Terminal first. Waits for web folder 2's 18u: the gym's own agreement with the facts filled in, to which it adds the card's tick and details (Kd, 2026-10-22, `rulings/2026-10-22-18r.md`). Web folder 1.
+       - 18d-vi-c. [x] **The card kept from a Terminal payment** — merged 2026-11-03 (PR #447).
      - 18r. [x] **UPI for gyms in India** — merged 2026-10-23 (PR #341).
      - 18d-iii. **Bills charged to the saved card**, in two parts since 2026-10-23 (`handoff/2026-10-23-18d-iii-i.md` keeps its line as first written):
        - 18d-iii-i. [x] **The saved card charged on the bill's date** — merged 2026-10-23 (PR #344).
