@@ -212,6 +212,41 @@ describe("a steady pace", () => {
     expect(s).toMatchObject({ steady: false, kcal: { changePct: 0 }, minutes: { before: 30, recent: 30, changePct: 0 }, form: { before: 80, recent: 90, changePct: 12.5 } });
   });
 
+  // The walk member's own workouts (aihg_b, 2026-11-04): form 89, 88, 87, 86 then 85, 84, 83, 82, the
+  // minutes 65 down to 30 by 5. Shown whole, 88 → 84 beside "5 %" did not add up (Kd's click-through).
+  it("gives the averages to one decimal, as the change is", () => {
+    const at = (days: number[], forms: number[], mins: number[]) =>
+      days.map((d, i) => w(back(d), { kcal: 21, formScore: forms[i] ?? null, durationMs: (mins[i] ?? 0) * 60_000 }));
+    const s = steadyPace(TODAY, [...at([21, 18, 16, 14], [89, 88, 87, 86], [65, 60, 55, 50]), ...at([11, 9, 9, 8], [85, 84, 83, 82], [45, 40, 35, 30])]);
+    expect(s).toMatchObject({
+      available: true,
+      steady: false,
+      form: { before: 87.5, recent: 83.5, changePct: -4.6 },
+      minutes: { before: 57.5, recent: 37.5, changePct: -34.8 },
+      kcal: { before: 21, recent: 21, changePct: 0 },
+    });
+  });
+
+  // The review's case: minutes 20 → 22.33 are shown 20 → 22.3, which is 11.5 % up, not the 11.7 %
+  // of the unrounded averages. Every change is the change of the two figures shown.
+  it("works out the change from the two figures it shows", () => {
+    const mins = [22, 22, 23, 22, 22, 23];
+    const s = steadyPace(TODAY, [...recent(6).map((x, i) => ({ ...x, durationMs: (mins[i] ?? 0) * 60_000 })), ...before(4, { durationMs: 20 * 60_000 })]);
+    expect(s).toMatchObject({ available: true, minutes: { before: 20, recent: 22.3, changePct: 11.5 } });
+    let checked = 0;
+    for (let b = 1; b <= 120; b += 7) {
+      for (const add of [0.04, 0.33, 0.66, 1.25, 7.77, -0.45, -3.3]) {
+        const got = steadyPace(TODAY, [...recent(4, { kcal: b + add }), ...before(4, { kcal: b })]);
+        if (!got.available || got.kcal === null) continue;
+        const { before: shownB, recent: shownR, changePct } = got.kcal;
+        const pct = ((shownR - shownB) / shownB) * 100;
+        expect(changePct).toBeCloseTo((Math.sign(pct) * Math.round(Math.abs(pct) * 10)) / 10, 9);
+        checked += 1;
+      }
+    }
+    expect(checked).toBe(18 * 7);
+  });
+
   it("leaves out a figure nobody has or that was 0 before, and judges on the rest", () => {
     const s = steadyPace(TODAY, [...recent(4, { formScore: null, kcal: 50 }), ...before(4, { formScore: null, kcal: 0 })]);
     expect(s).toMatchObject({ available: true, steady: true, kcal: null, form: null, minutes: { changePct: 0 } });

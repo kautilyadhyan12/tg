@@ -11,6 +11,7 @@ import { useSession } from "../session/SessionProvider";
 import { SettingsPage } from "./Settings";
 import { Setup } from "./setup/Setup";
 import { SignOutAsk } from "./SignOutAsk";
+import { ProgressPage } from "./progress/ProgressPage";
 import { ThisCopy } from "./ThisCopy";
 import { COMING_SOON, Soon } from "./Soon";
 
@@ -33,7 +34,7 @@ export function MeScreen() {
       <Account />
       <YourPlan />
       <View style={styles.two}>
-        <PictureCard picture="progress" height={120} label="Progress" icon="chart" pill={COMING_SOON} style={styles.half} />
+        <ProgressCard />
         <PictureCard
           picture="monalisa"
           height={120}
@@ -95,6 +96,31 @@ function YourPlan() {
         </Card>
       </Pressable>
       <Setup
+        open={open}
+        onClose={() => {
+          setOpen(false);
+        }}
+      />
+    </>
+  );
+}
+
+/** Progress's picture, opening the page over the tab. */
+function ProgressCard() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Progress"
+        style={[styles.half, styles.press]}
+        onPress={() => {
+          setOpen(true);
+        }}
+      >
+        <PictureCard picture="progress" height={120} label="Progress" icon="chart" />
+      </Pressable>
+      <ProgressPage
         open={open}
         onClose={() => {
           setOpen(false);

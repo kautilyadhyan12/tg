@@ -4,7 +4,7 @@
 // run date so streak reconciliation can never rot the suite.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
-import { progressOverviewSchema, progressTrendSchema } from "@app/shared";
+import { personalRecordsSchema, progressDistributionSchema, progressHeatmapSchema, progressOverviewSchema, progressTrendSchema } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { seed } from "../src/db/seed.js";
@@ -286,6 +286,71 @@ d("workouts history + progress + gamification (real Postgres)", () => {
     expect(asB.json<{ items: unknown[] }>().items.length).toBe(0);
   });
 
+  it("Exercise Categories' 7 days are today and the 6 days before: a part of an eighth day is not counted", { timeout: 60_000 }, async () => {
+    // Inside the last 7×24 hours, on the eighth calendar day back (UTC, the person's zone unset).
+    const d = await session("p23-dora@example.com");
+    const edge = new Date(Date.now() - 7 * 86_400_000 + 60_000).toISOString();
+    const inside = new Date(Date.now() - 3 * 86_400_000).toISOString();
+    expect((await sync(crypto.randomUUID(), edge, [squatSet(1), squatSet(2)], d.access)).statusCode).toBe(201);
+    expect((await sync(crypto.randomUUID(), inside, [squatSet(1)], d.access)).statusCode).toBe(201);
+    const week = progressDistributionSchema.parse((await inject({ method: "GET", url: "/v1/progress/distribution?period=7d", access: d.access })).json());
+    const month = progressDistributionSchema.parse((await inject({ method: "GET", url: "/v1/progress/distribution?period=30d", access: d.access })).json());
+    const sets = (x: typeof week) => x.families.reduce((n, f) => n + f.sets, 0);
+    // A run at 23:59 UTC would put the edge on today-6; then both reads hold all three sets.
+    const edgeDay = dayOf(edge);
+    const firstDay = dayOf(new Date(Date.now() - 6 * 86_400_000).toISOString());
+    expect(sets(week)).toBe(edgeDay < firstDay ? 1 : 3);
+    expect(sets(month)).toBe(3);
+  });
+
+  // The review's case for the zone (35c-i round one): a person 14 hours ahead of UTC. A day's edge is
+  // their own midnight, never UTC's: a workout half an hour before their seventh midnight back is out
+  // of 7 days, one half an hour after it is in, and its record is dated their day.
+  it("a person far from UTC: their own midnight bounds 7 days, and a record is dated their day", { timeout: 60_000 }, async () => {
+    const k = await session("p23-kiri@example.com");
+    await sql`UPDATE users SET timezone = 'Pacific/Kiritimati' WHERE id = ${k.userId}`;
+    const [edge] = await sql<{ at: Date; day: string }[]>`
+      SELECT ((date_trunc('day', now() AT TIME ZONE 'Pacific/Kiritimati') - interval '6 days') AT TIME ZONE 'Pacific/Kiritimati') AS at,
+             to_char(date_trunc('day', now() AT TIME ZONE 'Pacific/Kiritimati') - interval '6 days', 'YYYY-MM-DD') AS day`;
+    if (edge === undefined) throw new Error("no edge");
+    const before = new Date(edge.at.getTime() - 30 * 60_000).toISOString();
+    const after = new Date(edge.at.getTime() + 30 * 60_000).toISOString();
+    expect((await sync(crypto.randomUUID(), before, [squatSet(1), squatSet(2)], k.access)).statusCode).toBe(201);
+    // The longest of the two, so the record is the one just after their midnight.
+    expect((await sync(crypto.randomUUID(), after, [squatSet(1, 90_000)], k.access)).statusCode).toBe(201);
+    const week = progressDistributionSchema.parse((await inject({ method: "GET", url: "/v1/progress/distribution?period=7d", access: k.access })).json());
+    expect(week.families.reduce((n, f) => n + f.sets, 0)).toBe(1);
+    const records = personalRecordsSchema.parse((await inject({ method: "GET", url: "/v1/progress/records", access: k.access })).json());
+    expect(records.longestWorkout?.day).toBe(edge.day);
+    // Their day is not UTC's: UTC still calls that instant the day before.
+    expect(dayOf(after)).not.toBe(edge.day);
+  });
+
+  // The review's High 1: the plan's 90 days are 90 whole days in the person's zone. A free member's
+  // workout on the evening of the 91st day back is in no box that says 90 days, and the one just after
+  // the first of the 90 midnights is in every one.
+  it("a plan's last 90 days are 90 whole days of the person's own: the evening of the 91st is in none", { timeout: 60_000 }, async () => {
+    const g = await session("p23-gina@example.com");
+    await sql`UPDATE users SET timezone = 'Asia/Kolkata' WHERE id = ${g.userId}`;
+    const [first] = await sql<{ at: Date; day: string; before: string }[]>`
+      SELECT ((date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata') - interval '89 days') AT TIME ZONE 'Asia/Kolkata') AS at,
+             to_char(date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata') - interval '89 days', 'YYYY-MM-DD') AS day,
+             to_char(date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata') - interval '90 days', 'YYYY-MM-DD') AS before`;
+    if (first === undefined) throw new Error("no first day");
+    const evening = new Date(first.at.getTime() - 30 * 60_000).toISOString();
+    const morning = new Date(first.at.getTime() + 30 * 60_000).toISOString();
+    expect((await sync(crypto.randomUUID(), evening, [squatSet(1), squatSet(2)], g.access)).statusCode).toBe(201);
+    expect((await sync(crypto.randomUUID(), morning, [squatSet(1)], g.access)).statusCode).toBe(201);
+    const year = progressDistributionSchema.parse((await inject({ method: "GET", url: "/v1/progress/distribution?period=1y", access: g.access })).json());
+    expect(year.limitedToDays).toBe(90);
+    expect(year.families.reduce((n, f) => n + f.sets, 0)).toBe(1);
+    const records = personalRecordsSchema.parse((await inject({ method: "GET", url: "/v1/progress/records", access: g.access })).json());
+    expect(records.totalWorkouts).toBe(1);
+    const heat = progressHeatmapSchema.parse((await inject({ method: "GET", url: "/v1/progress/heatmap", access: g.access })).json());
+    expect(heat.days.map((x) => x.date)).toEqual([first.day]);
+    expect(heat.days.some((x) => x.date === first.before)).toBe(false);
+  });
+
   it("a window can NARROW the plan read-gate but never widen it (Part 4 §0.2)", { timeout: 60_000 }, async () => {
     // A user of its own, so the far-past fixture cannot disturb the streak and
     // XP assertions the shared fixtures above and below depend on.
@@ -448,9 +513,16 @@ d("workouts history + progress + gamification (real Postgres)", () => {
     expect(o.consistencyPct).toBe(Math.min(100, Math.round((4 / 7) * 100)));
 
     const trend = await inject({ method: "GET", url: "/v1/progress/trend?period=30d", access: cookieA });
-    const points = trend.json<{ points: { date: string; workouts: number }[] }>().points;
+    const points = progressTrendSchema.parse(trend.json()).points;
     expect(points.length).toBe(3); // three distinct days
     expect(points.reduce((a, p) => a + p.workouts, 0)).toBe(4);
+    // Each day carries its own training time (35c-i): the days add up to the period's total, Alice's alone.
+    const month = progressOverviewSchema.parse((await inject({ method: "GET", url: "/v1/progress/overview?period=30d", access: cookieA })).json());
+    expect(month.totalDurationMs).toBeGreaterThan(0);
+    expect(points.reduce((a, p) => a + p.durationMs, 0)).toBe(month.totalDurationMs);
+    const bobs = progressTrendSchema.parse((await inject({ method: "GET", url: "/v1/progress/trend?period=30d", access: cookieB })).json()).points;
+    const bobsMonth = progressOverviewSchema.parse((await inject({ method: "GET", url: "/v1/progress/overview?period=30d", access: cookieB })).json());
+    expect(bobs.reduce((a, p) => a + p.durationMs, 0)).toBe(bobsMonth.totalDurationMs);
 
     const heatmap = await inject({ method: "GET", url: "/v1/progress/heatmap", access: cookieA });
     expect(heatmap.json<{ days: unknown[] }>().days.length).toBe(3);
@@ -461,15 +533,11 @@ d("workouts history + progress + gamification (real Postgres)", () => {
     ]);
 
     const records = await inject({ method: "GET", url: "/v1/progress/records", access: cookieA });
-    const r = records.json<{
-      maxKcalWorkout: { workoutId: string; value: number } | null;
-      longestWorkout: { value: number } | null;
-      bestAvgForm: { value: number } | null;
-      totalWorkouts: number;
-      longestStreak: number;
-    }>();
+    const r = personalRecordsSchema.parse(records.json());
     expect(r.maxKcalWorkout?.value).toBe(600);
     expect(r.maxKcalWorkout?.workoutId).toBe(workoutIds[1]);
+    // The day each record was set, in the person's zone (unset here, so UTC): 35c-i shows it.
+    expect(r.maxKcalWorkout?.day).toBe(dayOf(daysAgoIso(2)));
     expect(r.longestWorkout?.value).toBe(3_600_000);
     expect(r.bestAvgForm?.value).toBe(84);
     expect(r.totalWorkouts).toBe(4);

@@ -20,15 +20,18 @@ interface CoverPageProps {
   picture?: PictureName;
   /** The picture's height for the phone's width: a band, unless its figures need more. */
   tall?: number;
+  /** A page's own top drawn by the page, edge to edge, in place of the bar; the ✕ lies on it. */
+  hero?: ReactNode;
 }
 
 /** A page that opens over the tab for one task, closed by its ✕, its action held at the bottom. */
-export function CoverPage({ open, title, onClose, children, foot, picture, tall = 0.62 }: CoverPageProps) {
+export function CoverPage({ open, title, onClose, children, foot, picture, tall = 0.62, hero }: CoverPageProps) {
   const insets = useSafeAreaInsets();
+  const top = hero !== undefined || picture !== undefined;
   return (
     <Modal visible={open} animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
       <KeyboardAvoidingView accessibilityViewIsModal behavior="padding" style={styles.page}>
-        {picture === undefined ? (
+        {!top ? (
           <View style={[styles.bar, { paddingTop: insets.top + 8 }]}>
             <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} style={styles.close}>
               <Icon name="x" size={20} />
@@ -39,15 +42,17 @@ export function CoverPage({ open, title, onClose, children, foot, picture, tall 
             <View style={styles.close} />
           </View>
         ) : null}
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.body, picture === undefined ? null : styles.underPicture]}>
-          {picture === undefined ? null : (
+        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.body, top ? styles.underPicture : null]}>
+          {hero !== undefined ? (
+            <View style={styles.bleed}>{hero}</View>
+          ) : picture === undefined ? null : (
             <View style={styles.bleed}>
               <PictureTop picture={picture} tall={tall} title={title} />
             </View>
           )}
           {children}
         </ScrollView>
-        {picture === undefined ? null : (
+        {!top ? null : (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Close"
