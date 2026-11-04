@@ -136,11 +136,15 @@ d("an owner hands the gym over before deleting their account (real Postgres)", {
   };
   const handOverOf = async (who: Person, gym: Gym) => (await mine(who)).find((org) => org.id === gym.id)?.handOver;
   const ask = (gym: Gym, to: Person) => inject("POST", `/v1/orgs/${gym.id}/staff/${to.userId}/owner-request`, gym.owner.cookies, {});
-  const accept = async (gym: Gym, to: Person, target = api()) => {
+  /** The request waiting for `to` at this gym, read before anything races it. */
+  const waitingFor = async (gym: Gym, to: Person): Promise<string> => {
     const waiting = myOwnerRequestResponseSchema.parse(JSON.parse((await inject("GET", `/v1/orgs/${gym.id}/owner-request`, to.cookies)).body)).request;
     if (waiting === null) throw new Error("no request is waiting");
-    return inject("POST", `/v1/orgs/${gym.id}/owner-request/${waiting.id}/accept`, to.cookies, {}, target);
+    return waiting.id;
   };
+  const acceptRequest = (gym: Gym, to: Person, requestId: string, target = api()) =>
+    inject("POST", `/v1/orgs/${gym.id}/owner-request/${requestId}/accept`, to.cookies, {}, target);
+  const accept = async (gym: Gym, to: Person, target = api()) => acceptRequest(gym, to, await waitingFor(gym, to), target);
 
   beforeAll(async () => {
     await cleanup();
@@ -300,9 +304,11 @@ d("an owner hands the gym over before deleting their account (real Postgres)", {
         expect((await ask(gym, cora)).statusCode).toBe(201);
         expect((await askCode(cora)).statusCode).toBe(200);
         const code = deleteCodes.get(cora.email) ?? "";
+        // Read before the race: a deletion that wins first leaves nothing to look up.
+        const requestId = await waitingFor(gym, cora);
         const [gone, took] = await Promise.all([
           deleteWith(cora, code, round % 2 === 0 ? api() : other()),
-          accept(gym, cora, round % 2 === 0 ? other() : api()),
+          acceptRequest(gym, cora, requestId, round % 2 === 0 ? other() : api()),
         ]);
         expect([gone.statusCode, took.statusCode], `accept round ${String(round)}`).not.toEqual([200, 200]);
         const [owner] = await sql<{ status: string }[]>`
