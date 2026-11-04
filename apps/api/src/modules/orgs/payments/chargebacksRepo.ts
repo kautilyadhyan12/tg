@@ -13,6 +13,7 @@ import {
   type MemberFeeKind,
 } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
+import { STILL_RENEWS } from "../memberships/heldRepo.js";
 import { writeRefund } from "../memberships/billsRepo.js";
 import { refundTargetOf } from "../memberships/billsSql.js";
 import { lockGym } from "../memberList/repo.js";
@@ -275,7 +276,7 @@ async function chargebackToStart(sql: SqlOrTx, gymId: string, id: string): Promi
 }
 
 /** Who Start automatic charges again changes: the renewing memberships of whoever pays. Null where there is no such chargeback here. */
-export async function chargebackStartPreview(sql: SqlOrTx, gymId: string, id: string): Promise<ChargebackStartPreview | null> {
+export async function chargebackStartPreview(sql: SqlOrTx, gymId: string, id: string, now: Date): Promise<ChargebackStartPreview | null> {
   const row = await chargebackToStart(sql, gymId, id);
   if (row === null) return null;
   const people =
@@ -286,7 +287,7 @@ export async function chargebackStartPreview(sql: SqlOrTx, gymId: string, id: st
           FROM gym_held_memberships h
           JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id AND e.former_at IS NULL
           LEFT JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
-          WHERE h.gym_id = ${gymId} AND h.kind = 'recurring' AND h.renews AND h.status IN ('active','frozen')
+          WHERE h.gym_id = ${gymId} AND ${STILL_RENEWS(sql, now)} AND h.status IN ('active','frozen')
             AND COALESCE((SELECT x.payer_entry_id FROM gym_member_payers x WHERE x.gym_id = h.gym_id AND x.entry_id = h.entry_id), h.entry_id) = ${row.payerId}
           ORDER BY e.full_name, h.id LIMIT 50`;
   const [card] =
@@ -400,7 +401,7 @@ export async function chargebacksToAnswer(sql: Sql, gymId: string, members: bool
         AND (o.state NOT IN ('LOST','ACCEPTED') OR EXISTS (
           SELECT 1 FROM gym_held_memberships r
           LEFT JOIN gym_member_list_entries re ON re.gym_id = r.gym_id AND re.id = r.entry_id
-          WHERE r.gym_id = h.gym_id AND r.kind = 'recurring' AND r.renews AND r.status IN ('active','frozen') AND r.entry_id IS NOT NULL AND re.former_at IS NULL
+          WHERE r.gym_id = h.gym_id AND ${STILL_RENEWS(sql, now, "r")} AND r.status IN ('active','frozen') AND r.entry_id IS NOT NULL AND re.former_at IS NULL
             AND COALESCE((SELECT x.payer_entry_id FROM gym_member_payers x WHERE x.gym_id = r.gym_id AND x.entry_id = r.entry_id), r.entry_id)
               = COALESCE((SELECT x.payer_entry_id FROM gym_member_payers x WHERE x.gym_id = h.gym_id AND x.entry_id = h.entry_id), h.entry_id)))
       UNION ALL

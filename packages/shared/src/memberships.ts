@@ -43,6 +43,13 @@ export const TAXED_PRICE_MINOR_MAX = 76_923_076;
 export const MEMBERSHIP_TERM_COUNT_MAX = 365;
 export const MEMBERSHIP_PACK_CLASSES_MAX = 500;
 export const MEMBERSHIP_PACK_DAYS_MAX = 730;
+/** A repeating type's contract (18v-i): how many payments it runs for, at most three years of weekly ones. */
+export const MEMBERSHIP_CONTRACT_PERIODS_MAX = 156;
+/** What a contract does once it has run: go on renewing period by period, or end. */
+export const CONTRACT_THEN = ["renews", "ends"] as const;
+export const contractThenSchema = z.enum(CONTRACT_THEN);
+export type ContractThen = z.infer<typeof contractThenSchema>;
+export const contractPeriodsSchema = z.number().int().min(1).max(MEMBERSHIP_CONTRACT_PERIODS_MAX);
 /** What a class limit is counted over. */
 export const MEMBERSHIP_LIMIT_PERIODS = ["week", "month"] as const;
 export const membershipLimitPeriodSchema = z.enum(MEMBERSHIP_LIMIT_PERIODS);
@@ -120,6 +127,9 @@ export const gymMembershipTypeSchema = z
     joiningFeeMinor: priceMinorSchema,
     /** The business's other agreement it is signed with (18u-ii-a); null for the main one. */
     agreementId: z.string().uuid().nullable().default(null),
+    /** Its contract (18v-i): so many payments, then it renews or ends; both null for none. */
+    contractPeriods: contractPeriodsSchema.nullable().default(null),
+    contractThen: contractThenSchema.nullable().default(null),
     archivedAt: z.string().datetime({ offset: true }).nullable(),
     /** When it was last changed. A change sends it back, so a form opened before
      *  somebody else's change is refused, never saved over theirs. */
@@ -175,6 +185,9 @@ const membershipTypeFields = {
   taxRateId: z.string().uuid().nullable().default(null),
   /** Left out of a NEW type is "no joining fee"; a change must say it (below). */
   joiningFeeMinor: priceMinorSchema.default(0),
+  /** Left out of a NEW type is "no contract"; a change must say it (below). */
+  contractPeriods: contractPeriodsSchema.nullable().default(null),
+  contractThen: contractThenSchema.nullable().default(null),
 };
 const membershipTypeObject = z.object(membershipTypeFields);
 
@@ -218,6 +231,19 @@ function refineMembershipType(value: z.infer<typeof membershipTypeObject>, ctx: 
     const cap = value.taxRateId === null ? MEMBERSHIP_PRICE_MINOR_MAX : TAXED_PRICE_MINOR_MAX;
     if (value.priceMinor + value.joiningFeeMinor > cap) wrong("joiningFeeMinor");
   }
+  // A contract is so many payments of a repeating type that has a price.
+  if ((value.contractPeriods === null) !== (value.contractThen === null)) wrong("contractThen");
+  if (value.contractPeriods !== null && (value.kind !== "recurring" || value.priceMinor === 0)) wrong("contractPeriods");
+}
+
+/** How long a contract of `periods` payments, each every `termCount` `termUnit`, runs:
+ *  "12 months", "2 years", "52 weeks". Months that make two or more whole years are said as years. */
+export function contractLengthWords(periods: number, termCount: number, termUnit: MembershipTermUnit): string {
+  const n = periods * termCount;
+  const say = (count: number, one: string): string => `${String(count)} ${one}${count === 1 ? "" : "s"}`;
+  if (termUnit === "year") return say(n, "year");
+  if (termUnit === "month") return n % 12 === 0 && n >= 24 ? say(n / 12, "year") : say(n, "month");
+  return say(n, termUnit);
 }
 
 /** What a gym types. Every field every time: an update replaces, it never merges,
@@ -237,6 +263,8 @@ export const updateGymMembershipTypeRequestSchema = membershipTypeObject
     ptPeriod: membershipLimitPeriodSchema.nullable(),
     taxRateId: z.string().uuid().nullable(),
     joiningFeeMinor: priceMinorSchema,
+    contractPeriods: contractPeriodsSchema.nullable(),
+    contractThen: contractThenSchema.nullable(),
   })
   .strict()
   .superRefine(refineMembershipType);

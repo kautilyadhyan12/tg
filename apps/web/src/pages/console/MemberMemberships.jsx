@@ -20,7 +20,7 @@ import { FriendGiftNote, MemberGiftNote, MemberGiftWaiting } from './FriendGift'
 import { useCameBack } from './useCameBack';
 import { useLiveNews } from './liveNews';
 import { ENDING_NOT_TOLD, bookingsStoppedLine } from './bookingsEndView';
-import { termLine } from './membershipTypesView';
+import { contractLine, termLine } from './membershipTypesView';
 import { changeBody, changeChoice, changeCreditLine, changeDoneWords, changeEndingWords, changeForm, changeLine, showsChange, squareSetUpLine } from './membershipChangeView';
 import { viewerPrivileges } from './consoleView';
 import { placeFor } from './consolePlaces';
@@ -34,6 +34,9 @@ import {
   ENDING_MOVED,
   ENDING_MOVED_WITH_SESSIONS,
   askWords,
+  RELEASE_CHOICES,
+  contractShownLine,
+  releaseShownLine,
   classesLine,
   datesLine,
   doneWords,
@@ -221,6 +224,10 @@ export default function MemberMemberships({
   /** The classes a cancel would end, when the server asked: { id, later, ending, all, moved }.
    *  `moved`: asked again after the box's own button, since the classes had changed. */
   const [ending, setEnding] = useState(null);
+  // The cancel last sent, so the bookings it would end are confirmed with the same choice (18v-i).
+  const cancelSent = useRef(null);
+  // Why a member is let out of their contract, picked in the Cancel box (18v-i).
+  const [release, setRelease] = useState({ reason: '', tried: false });
   /** The Record payment form: { requestKey, amount, method, tried }, for the membership in `open`. */
   const [payForm, setPayForm] = useState(null);
   /** The Void bill box: { reason, tried }, for the membership in `open`. */
@@ -527,14 +534,22 @@ export default function MemberMemberships({
       // Classes are booked with it: the box names them and waits for its own button.
       const booked = m === null ? null : membershipBookingsAsked(err);
       if (booked !== null) {
-        setEnding({ id: m.id, later: what === 'cancelLater', change: what === 'change', ending: booked, all: false, moved: ending !== null && ending.id === m.id });
+        setEnding({
+          id: m.id,
+          what,
+          later: what === 'cancelContract' ? (m.view.can.cancelAtContractEnd ?? true) : what === 'cancelLater',
+          change: what === 'change',
+          ending: booked,
+          all: false,
+          moved: ending !== null && ending.id === m.id,
+        });
         return;
       }
       setEnding(null);
       setRefusal(errorText(err, "We couldn't save that. Please try again."));
       // A discount refused or changed: read the discounts again, and keep the form open.
       const code = errorCode(err);
-      if (what === 'give' && typeof code === 'string' && (code.startsWith('discount_') || code === 'membership_discount_changed' || code === 'membership_price_changed')) {
+      if (what === 'give' && typeof code === 'string' && (code.startsWith('discount_') || code === 'membership_discount_changed' || code === 'membership_price_changed' || code === 'membership_minimum_term_changed')) {
         setAttempt((n) => n + 1);
       }
       // The gym's billing day changed (18y): read it again, and keep the box open with its new total.
@@ -557,7 +572,10 @@ export default function MemberMemberships({
     }
   };
 
-  const change = (what, m, path, body) => run(what, m, () => orgService.changeHeldMembership(gymId, entryId, m.id, path, body));
+  const change = (what, m, path, body) => {
+    if (path === 'cancel') cancelSent.current = body;
+    return run(what, m, () => orgService.changeHeldMembership(gymId, entryId, m.id, path, body));
+  };
 
   const ask = (what, m) => {
     setNotice(null);
@@ -565,6 +583,7 @@ export default function MemberMemberships({
     setEnding(null);
     setVoidForm({ reason: '', tried: false });
     setFreezeCharge(true);
+    setRelease({ reason: '', tried: false });
     setOpen({ what, id: m.id });
   };
 
@@ -1655,7 +1674,8 @@ export default function MemberMemberships({
     const words = endingWords(ending.ending, m, name, ending.later, clockFormat);
     const rows = ending.all ? words.rows : words.rows.slice(0, ENDING_CLASSES_SHOWN);
     const hidden = words.rows.length - rows.length;
-    const body = { when: ending.later ? 'period_end' : 'today', ...endingConfirm(ending.ending) };
+    // Read at the press, never while drawing: the choice the first cancel sent.
+    const body = () => ({ ...(cancelSent.current ?? { when: ending.later ? 'period_end' : 'today' }), ...endingConfirm(ending.ending) });
     const classes = ending.ending.booked > 0;
     const sessions = ending.ending.ptSessions ?? null;
     return (
@@ -1711,7 +1731,7 @@ export default function MemberMemberships({
           </>
         ) : null}
         <div className="flex flex-wrap gap-2">
-          <button type="button" className={DANGER} disabled={busy} onClick={() => void change(ending.later ? 'cancelLater' : 'cancel', m, 'cancel', body)}>
+          <button type="button" className={DANGER} disabled={busy} onClick={() => void change(ending.what ?? (ending.later ? 'cancelLater' : 'cancel'), m, 'cancel', body())}>
             {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
             {words.button}
           </button>
@@ -1856,6 +1876,11 @@ export default function MemberMemberships({
                 ))}
               </fieldset>
             ) : null}
+            {contractLine(choice.type) !== null ? (
+              <p className="c-s14 c-t2 m-0" data-testid="held-change-minimum-term">
+                {contractLine(choice.type)}
+              </p>
+            ) : null}
             {choice.paidLabel !== null ? (
               <div className="flex flex-col gap-2">
                 <Tick checked={changeDraft.paid} onChange={(paid) => set({ paid })}>
@@ -1926,6 +1951,7 @@ export default function MemberMemberships({
       cancel: () => change('cancel', m, 'cancel', { when: 'today' }),
     }[open.what];
     const cancelling = open.what === 'cancel';
+    if (cancelling && words.releaseButton !== undefined) return renderContractCancel(m, words);
     return (
       <div className="rounded-[14px] p-3 flex flex-col gap-2" style={{ background: 'var(--raise)' }} data-testid={`held-ask-${open.what}`}>
         <p className="c-s15 c-w6 c-t1 m-0">{words.question}</p>
@@ -1966,6 +1992,71 @@ export default function MemberMemberships({
           <button type="button" className={PLAIN} disabled={busy} onClick={close}>
             {cancelling ? 'Keep it' : 'Back'}
           </button>
+        </div>
+      </div>
+    );
+  };
+
+  /** Cancel inside a running contract (18v-i): End with the contract, or release them with a reason. */
+  const renderContractCancel = (m, words) => {
+    const releaseWith = (what, when) => {
+      if (release.reason === '') {
+        setRelease((r) => ({ ...r, tried: true }));
+        return;
+      }
+      void change(what, m, 'cancel', { when, release: release.reason });
+    };
+    const missing = release.tried && release.reason === '';
+    return (
+      <div className="rounded-[14px] p-3 flex flex-col gap-2" style={{ background: 'var(--raise)' }} data-testid="held-ask-cancel">
+        <p className="c-s15 c-w6 c-t1 m-0">{words.question}</p>
+        <p className="c-s14 c-t2 m-0">{words.detail}</p>
+        {words.endButton !== null ? (
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className={MAIN} disabled={busy} onClick={() => void change(words.endDone, m, 'cancel', { when: words.endWhen })}>
+              {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+              {words.endButton}
+            </button>
+          </div>
+        ) : null}
+        <div className="flex flex-col gap-2 pt-2" data-testid="held-release">
+          <label htmlFor={`release-${m.id}`} className="c-label">
+            {words.releaseQuestion}
+          </label>
+          <select
+            id={`release-${m.id}`}
+            value={release.reason}
+            aria-invalid={missing ? 'true' : undefined}
+            onChange={(e) => setRelease({ reason: e.target.value, tried: false })}
+            disabled={busy}
+            className="c-input"
+            style={{ maxWidth: 280 }}
+          >
+            <option value="">Pick a reason</option>
+            {RELEASE_CHOICES.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+          {missing ? (
+            <p className="c-s14 c-w5 m-0" style={{ color: 'var(--bad)' }} role="alert">
+              {words.releaseMissing}
+            </p>
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            {words.releaseLaterButton !== null ? (
+              <button type="button" className={PLAIN} disabled={busy} onClick={() => releaseWith('cancelLater', 'period_end')}>
+                {words.releaseLaterButton}
+              </button>
+            ) : null}
+            <button type="button" className={DANGER} disabled={busy} onClick={() => releaseWith('cancel', 'today')}>
+              {words.releaseButton}
+            </button>
+            <button type="button" className={PLAIN} disabled={busy} onClick={close}>
+              Keep it
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -2014,6 +2105,16 @@ export default function MemberMemberships({
           </span>
         ) : null}
         <span className="c-s14 c-t2">{[datesLine(m), classes].filter((part) => part !== null).join(' · ')}</span>
+        {contractShownLine(m) !== null ? (
+          <span className="c-s14 c-t2" data-testid="held-contract-line">
+            {contractShownLine(m)}
+          </span>
+        ) : null}
+        {releaseShownLine(m) !== null ? (
+          <span className="c-s14 c-t2" data-testid="held-release-line">
+            {releaseShownLine(m)}
+          </span>
+        ) : null}
         {changeLine(m, today) !== null ? (
           <span className="c-s14 c-t2" data-testid="held-change-line">
             {changeLine(m, today)}
@@ -2162,6 +2263,11 @@ export default function MemberMemberships({
               onChange={(next) => setForm((f) => ({ ...f, ...next, ...(next.typeId !== undefined && next.typeId !== f.typeId ? { code: { ...f.code, note: null, appliedId: null }, joiningFee: 'auto' } : {}) }))}
             />
             <JoiningFeeTick type={choice.type} fee={fee} onChange={(joiningFee) => setForm((f) => ({ ...f, joiningFee }))} />
+            {contractLine(choice.type) !== null ? (
+              <p className="c-s14 c-t2 m-0" data-testid="held-add-minimum-term">
+                {contractLine(choice.type)}
+              </p>
+            ) : null}
             {gift !== null && choice.type !== null && !free ? (
               <FriendGiftNote
                 gift={gift}

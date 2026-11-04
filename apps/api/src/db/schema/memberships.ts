@@ -59,6 +59,9 @@ export const gymMembershipTypes = pgTable(
      *  null for its main one. The key to `gym_agreement_documents` is in `0161`: `agreement.ts`
      *  already reads this file. */
     agreementDocumentId: uuid("agreement_document_id"),
+    /** Its contract (0199; 18v-i): so many payments, then it renews or ends. Both null for none. */
+    contractPeriods: integer("contract_periods"),
+    contractThen: text("contract_then"),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -76,6 +79,10 @@ export const gymMembershipTypes = pgTable(
       sql`${t.joiningFeeMinor} BETWEEN 0 AND 99999999 AND (${t.joiningFeeMinor} = 0 OR (${t.kind} IN ('recurring','one_time') AND ${t.priceMinor} > 0))`,
     ),
     check("gym_membership_types_currency_check", sql`${t.currency} ~ '^[A-Z]{3}$'`),
+    check(
+      "gym_membership_types_contract_check",
+      sql`(${t.contractPeriods} IS NULL) = (${t.contractThen} IS NULL) AND (${t.contractPeriods} IS NULL OR (${t.kind} = 'recurring' AND ${t.priceMinor} > 0 AND ${t.contractPeriods} BETWEEN 1 AND 156 AND ${t.contractThen} IN ('renews','ends')))`,
+    ),
     check("gym_membership_types_access_check", sql`${t.access} IN ('all_classes','limited','gym_only')`),
     check(
       "gym_membership_types_limit_check",
@@ -173,6 +180,12 @@ export const gymHeldMemberships = pgTable(
     paidPeriods: integer("paid_periods").notNull().default(0),
     paidFloor: integer("paid_floor").notNull().default(0),
     renews: boolean("renews").notNull(),
+    /** Its contract as it was given (0199; 18v-i); `contract_then` becomes `ends` where staff
+     *  set it to end with the contract. */
+    contractPeriods: integer("contract_periods"),
+    contractThen: text("contract_then"),
+    /** Why the member was let out of the contract, where staff cancelled it inside one. */
+    contractRelease: text("contract_release"),
     classesLeft: integer("classes_left"),
     fromList: boolean("from_list").notNull().default(false),
     /** The discount it was given with (`0107`). Its key to `gym_discounts` is the
@@ -254,6 +267,14 @@ export const gymHeldMemberships = pgTable(
       sql`${t.paidFloor} >= 0 AND ${t.paidPeriods} >= ${t.paidFloor} AND (${t.kind} = 'recurring' OR (${t.paidPeriods} <= 1 AND ${t.paidFloor} = 0)) AND (${t.priceMinor} > 0 OR ${t.paidPeriods} = 0)`,
     ),
     check("gym_held_memberships_renews_check", sql`${t.kind} = 'recurring' OR NOT ${t.renews}`),
+    check(
+      "gym_held_memberships_contract_check",
+      sql`(${t.contractPeriods} IS NULL) = (${t.contractThen} IS NULL) AND (${t.contractPeriods} IS NULL OR (${t.kind} = 'recurring' AND ${t.contractPeriods} BETWEEN 1 AND 156 AND ${t.contractThen} IN ('renews','ends')))`,
+    ),
+    check(
+      "gym_held_memberships_contract_release_check",
+      sql`${t.contractRelease} IS NULL OR (${t.contractRelease} IN ('moved','medical','death','other') AND ${t.contractPeriods} IS NOT NULL AND (${t.status} = 'cancelled' OR NOT ${t.renews}))`,
+    ),
     check(
       "gym_held_memberships_discount_check",
       sql`(${t.discountId} IS NULL) = (${t.discountName} IS NULL) AND (${t.discountId} IS NULL) = (${t.discountPayments} IS NULL) AND CASE WHEN ${t.discountId} IS NULL THEN ${t.discountMinor} = 0 ELSE ${t.discountMinor} BETWEEN 1 AND 99999999 AND ${t.discountPayments} IN ('first','every') AND (${t.discountPayments} = 'every' OR ${t.kind} = 'recurring') END`,

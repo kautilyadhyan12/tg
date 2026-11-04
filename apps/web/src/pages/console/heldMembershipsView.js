@@ -4,6 +4,10 @@
 // The one thing worked out here is the Add form's line under the start date, by the same
 // shared rule the server gives the membership with.
 import {
+  CONTRACT_RELEASES,
+  CONTRACT_RELEASE_WORDS,
+  contractLengthWords,
+  releaseAsked,
   HELD_STATUS_WORDS,
   HELD_START_AHEAD_DAYS,
   HELD_START_MIN,
@@ -175,6 +179,8 @@ export function askWords(what, m, name, today) {
       return { question: `Unfreeze ${whose}?`, detail: `It runs again from today. ${back}`, button: 'Unfreeze' };
     }
     case 'cancel': {
+      // Inside a running contract (18v-i): end it with the contract, or release them with a reason.
+      if (m.view.can.releaseNeeded === true && m.view.contract) return contractCancelWords(m, name);
       const last = m.view.can.cancelAtPeriodEnd;
       // Cancelled before it starts, a change on the next payment date is undone (18x).
       const back = m.view.status === 'upcoming' && m.changedFrom?.stopped === true ? ` ${m.changedFrom.typeName} renews again, as it did before the change.` : '';
@@ -191,6 +197,63 @@ export function askWords(what, m, name, today) {
     default:
       return null;
   }
+}
+
+/** The reasons a member is let out of a contract, as the box lists them (18v-i). */
+export const RELEASE_CHOICES = CONTRACT_RELEASES.map((value) => ({ value, label: CONTRACT_RELEASE_WORDS[value] }));
+
+/** The Cancel box of a membership still in its contract (18v-i). `endButton` ends it with the
+ *  contract, where it would otherwise renew; the release buttons stop it sooner and ask why. */
+export function contractCancelWords(m, name) {
+  const whose = `${name}'s ${m.typeName}`;
+  const until = m.view.contract.until;
+  const end = m.view.can.cancelAtContractEnd ?? null;
+  const paid = m.view.can.cancelAtPeriodEnd ?? null;
+  // Paid past the minimum term already: it stops at the end of what is paid, which keeps every
+  // month paid for and lets nobody out early (re-check, H1b).
+  if (end === null && paid !== null && paid > until) {
+    return {
+      question: `Cancel ${whose}?`,
+      detail: `${name} has paid until ${dayWords(paid)}, past their minimum term. End it then, with no more payments; or release them early.`,
+      endButton: `End on ${dayWords(paid)}`,
+      endWhen: 'period_end',
+      endDone: 'cancelLater',
+      releaseQuestion: 'Why are you releasing them?',
+      releaseLaterButton: null,
+      releaseButton: 'Release today',
+      releaseMissing: 'Pick why you are releasing them first.',
+    };
+  }
+  return {
+    question: `Cancel ${whose}?`,
+    detail:
+      end !== null
+        ? `${name} is in their minimum term until ${dayWords(until)}. End it then, and they keep paying until then; or release them early.`
+        : `${name} is in their minimum term until ${dayWords(until)}, when it ends. To stop it sooner, release them early.`,
+    endButton: end === null ? null : `End on ${dayWords(end)}`,
+    endWhen: 'contract_end',
+    endDone: 'cancelContract',
+    releaseQuestion: 'Why are you releasing them?',
+    // On or after the term's last day, the end of what is paid lets nobody out early (round one, L2).
+    releaseLaterButton: paid === null || !releaseAsked(m.view, 'period_end') ? null : `Release on ${dayWords(paid)}`,
+    releaseButton: 'Release today',
+    releaseMissing: 'Pick why you are releasing them first.',
+  };
+}
+
+/** "In contract until 14 Oct 2027" and its length, for the membership's own lines; null for none. */
+export function contractShownLine(m) {
+  const c = m.view?.contract ?? null;
+  if (c === null) return null;
+  // Billed from the gym's day, the part month comes before the term's whole payments (round one, H2).
+  const from = m.fullFrom ? ` from ${dayWords(m.fullFrom)}` : '';
+  const length = m.contractPeriods !== null && m.contractPeriods !== undefined && m.termCount !== null && m.termUnit !== null ? `${contractLengthWords(m.contractPeriods, m.termCount, m.termUnit)}${from}, ` : '';
+  return `Minimum term: ${length}until ${dayWords(c.until)}${c.then === 'ends' ? ', then it ends' : ''}`;
+}
+
+/** "Released from contract: Moved away" on a membership cancelled inside one; null for none. */
+export function releaseShownLine(m) {
+  return m.release ? `Released early: ${CONTRACT_RELEASE_WORDS[m.release] ?? 'Other reason'}` : null;
 }
 
 /** The classes the server says a cancel would end the bookings of (409
@@ -229,7 +292,8 @@ export function endingWords(ending, m, name, later, clockFormat) {
   const n = ending?.booked ?? 0;
   const classes = n === 1 ? '1 class' : `${n.toLocaleString('en')} classes`;
   const bookings = n === 1 ? '1 booking' : `${n.toLocaleString('en')} bookings`;
-  const last = later ? (m.view.can.cancelAtPeriodEnd ?? null) : null;
+  // `later` is the last day itself where a contract sets it (18v-i).
+  const last = typeof later === 'string' ? later : later ? (m.view.can.cancelAtPeriodEnd ?? null) : null;
   const rows = (Array.isArray(ending?.people) ? ending.people : []).map((row) => ({
     id: row.id,
     line: [row.className, dayHeading(row.localDate), clockLabel(row.localStartMinute, clockFormat)].filter((part) => part !== '').join(' · '),
@@ -317,6 +381,8 @@ export function doneWords(what, m) {
       return `${m.typeName} is running again.`;
     case 'cancelLater':
       return `${m.typeName} will end and won't renew.`;
+    case 'cancelContract':
+      return m.view.can.cancelAtContractEnd ? `${m.typeName} ends on ${dayWords(m.view.can.cancelAtContractEnd)}, at the end of its minimum term.` : `${m.typeName} ends at the end of its minimum term.`;
     case 'cancel':
       return `${m.typeName} is cancelled.`;
     case 'change':
@@ -406,6 +472,8 @@ export function giveBody(requestKey, type, value, discount = null, summary = nul
     // The day its full payments start where the gym bills everyone on one day (18y): the
     // server gives nothing where the gym's day now says otherwise.
     fullFrom: value.startsOn === '' ? null : fullFromOf(type, value.startsOn, type.billDay ?? null),
+    // The minimum term the form said (18v-i): the server gives nothing where the line's is now another.
+    minimumTerm: type.contractPeriods ? { periods: type.contractPeriods, then: type.contractThen ?? 'renews' } : null,
   };
   // The person's own Refer a friend gift, and what it takes off (20e-ii-b-ii-a).
   const gifted = memberGift === null || summary === null || !(summary.giftOffMinor > 0) ? shown : { ...shown, memberGiftId: memberGift.id, memberGiftMinor: summary.giftOffMinor };

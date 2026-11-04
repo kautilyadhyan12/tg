@@ -30,11 +30,17 @@
 //                  of those days after the start: the first period runs from the start to
 //                  the day before it (the part month), and every later one is counted
 //                  from it. Null for a membership counted from its start;
+//   `contractPeriods` its contract (18v-i), copied from its type when it was given: so many
+//   `contractThen`    periods, then it goes on renewing or ends. Until that many periods
+//                    have begun it is "in contract", and staff stop it only by ending it with
+//                    the contract or by releasing the member with a reason;
 //   the end day, the renewal day and what is owed are worked out from those.
 import { z } from "zod";
 import {
   membershipKindSchema,
   membershipTermUnitSchema,
+  contractThenSchema,
+  type ContractThen,
   type MembershipKind,
   type MembershipTermUnit,
 } from "./memberships.js";
@@ -52,6 +58,17 @@ export type HeldMembershipStatus = z.infer<typeof heldMembershipStatusSchema>;
 export const HELD_MEMBERSHIP_SHOWN = ["upcoming", ...HELD_MEMBERSHIP_STATUSES] as const;
 export const heldMembershipShownSchema = z.enum(HELD_MEMBERSHIP_SHOWN);
 export type HeldMembershipShown = z.infer<typeof heldMembershipShownSchema>;
+
+/** Why a member is let out of their contract early (18v-i): what gym software asks. */
+export const CONTRACT_RELEASES = ["moved", "medical", "death", "other"] as const;
+export const contractReleaseSchema = z.enum(CONTRACT_RELEASES);
+export type ContractRelease = z.infer<typeof contractReleaseSchema>;
+export const CONTRACT_RELEASE_WORDS: Readonly<Record<ContractRelease, string>> = {
+  moved: "Moved away",
+  medical: "Medical or disability",
+  death: "Death",
+  other: "Other reason",
+};
 
 /** How many memberships one record can have running, frozen or still to start. */
 export const HELD_LIVE_MAX = 20;
@@ -179,6 +196,27 @@ export interface HeldMembership {
   classesLeft: number | null;
   /** The first of the gym's billing days after the start (18y); null where it is counted from its start. */
   fullFrom: string | null;
+  /** Its contract (18v-i): so many periods, then it renews or ends. Both null for none. A
+   *  screen's own copy may leave them out: read as none. */
+  contractPeriods?: number | null;
+  contractThen?: ContractThen | null;
+}
+
+/** The minimum term where it has one: a repeating membership only. `periods` is how many periods
+ *  it runs for: its whole payments, and on top of them the part month of one billed from the gym's
+ *  day (18y), which is not one of them. */
+function contractOf(m: HeldMembership): { periods: number; then: ContractThen } | null {
+  const periods = m.contractPeriods ?? null;
+  const then = m.contractThen ?? null;
+  if (m.kind !== "recurring" || periods === null || then === null) return null;
+  return { periods: periods + ((m.fullFrom ?? null) === null ? 0 : 1), then };
+}
+
+/** The number of periods it runs for and no more, where its contract ends it: null where it
+ *  renews, or already stops at the end of what is paid. */
+function endsAfter(m: HeldMembership): number | null {
+  const c = contractOf(m);
+  return m.renews && c !== null && c.then === "ends" ? c.periods : null;
 }
 
 function term(m: Pick<HeldMembership, "kind" | "termCount" | "termUnit" | "packDays">): { count: number; unit: MembershipTermUnit } {
@@ -281,7 +319,11 @@ function paidUntil(m: HeldMembership): string {
 
 /** The last day it runs, or null for a repeating membership that goes on renewing. */
 function lastDay(m: HeldMembership): string | null {
-  if (m.kind === "recurring") return m.renews ? null : addDays(paidUntil(m), -1);
+  if (m.kind === "recurring") {
+    if (!m.renews) return addDays(paidUntil(m), -1);
+    const after = endsAfter(m);
+    return after === null ? null : addDays(periodStart(m, after), -1);
+  }
   return addDays(periodStart(m, 1), -1);
 }
 
@@ -302,6 +344,9 @@ export const heldMembershipViewSchema = z
     endsOn: z.string().nullable(),
     /** The next renewal of a repeating membership that renews; null while frozen. */
     renewsOn: z.string().nullable(),
+    /** Its contract while it lasts (18v-i): its last day (moving with a freeze, as every
+     *  date does), and whether it then renews or ends. Null for none, and once it is over. */
+    contract: z.object({ until: z.string(), then: contractThenSchema }).strict().nullable().default(null),
     /** What is owed, or null where there is nothing to pay or it is over. `since` is
      *  the day the payment fell due; `until` the day a repeating one is paid up to. */
     payment: z
@@ -317,6 +362,12 @@ export const heldMembershipViewSchema = z
         cancel: z.boolean(),
         /** The last day it would run if cancelled at the end of what is paid. */
         cancelAtPeriodEnd: z.string().nullable(),
+        /** The last day it would run if set to end with its contract (18v-i); null where it
+         *  is in none, or one that ends already. */
+        cancelAtContractEnd: z.string().nullable().default(null),
+        /** Cancelling now or at the end of what is paid lets the member out of a contract
+         *  that is running: it asks for the reason (18v-i). */
+        releaseNeeded: z.boolean().default(false),
         /** Mark paid: the count it moves to, and for a repeating one the day paid up to. */
         markPaid: z.object({ paidPeriods: z.number().int(), until: z.string().nullable() }).strict().nullable(),
         /** Take the last mark back. */
@@ -370,10 +421,18 @@ function settled(m: HeldMembership, today: string): Settled {
   const facts: HeldMembershipFacts = {
     status: upcoming ? "upcoming" : m.status,
     endsOn: frozen ? null : lastDay(m),
-    renewsOn: frozen || !recurring || !m.renews ? null : periodStart(m, periodIndex(m, today) + 1),
+    renewsOn: renewalOn(m, today, frozen),
     payment,
   };
   return { facts, frozen, asOf, upcoming, recurring, until };
+}
+
+/** The next renewal: none while frozen, for one that will not renew, and none past a contract that ends. */
+function renewalOn(m: HeldMembership, today: string, frozen: boolean): string | null {
+  if (frozen || m.kind !== "recurring" || !m.renews) return null;
+  const next = periodIndex(m, today) + 1;
+  const after = endsAfter(m);
+  return after !== null && next >= after ? null : periodStart(m, next);
 }
 
 /** What a held membership is on `today`, the gym's own day, without what staff can do. */
@@ -398,8 +457,22 @@ export function heldMembershipView(stored: HeldMembership, today: string): HeldM
   const m = settle(stored, today);
   const { facts, frozen, asOf, upcoming, recurring, until } = settled(m, today);
   if (m.status === "ended" || m.status === "cancelled") {
-    return { ...facts, can: { freeze: false, unfreeze: false, cancel: false, cancelAtPeriodEnd: null, markPaid: null, undoPaid: null } };
+    return {
+      ...facts,
+      contract: null,
+      can: { freeze: false, unfreeze: false, cancel: false, cancelAtPeriodEnd: null, cancelAtContractEnd: null, releaseNeeded: false, markPaid: null, undoPaid: null },
+    };
   }
+  // A contract lasts until so many periods have begun; a member is held to it once the
+  // membership has started, and while it still renews (one set to stop is let out already).
+  const c = contractOf(m);
+  const contractUntil = c === null ? null : addDays(periodStart(m, c.periods), -1);
+  const contract =
+    c === null || contractUntil === null || contractUntil < asOf || !m.renews ? null : { until: contractUntil, then: c.then };
+  const inContract = contract !== null && !upcoming;
+  // Paid past the minimum term already, ending with it would throw away months paid for: the end of
+  // what is paid is the later end, and that is what Cancel offers (round one, H1).
+  const paidPast = c !== null && m.paidPeriods > c.periods;
 
   let markPaid: HeldMembershipView["can"]["markPaid"] = null;
   let undoPaid: HeldMembershipView["can"]["undoPaid"] = null;
@@ -409,7 +482,9 @@ export function heldMembershipView(stored: HeldMembership, today: string): HeldM
       // what is paid, so a mark is not taken back either.
       if (m.renews) {
         const next = m.paidPeriods + 1;
-        if (next <= periodIndex(m, asOf) + 1 + HELD_PAID_AHEAD_MAX) {
+        // A contract that ends takes no payment for a period after it.
+        const cap = endsAfter(m);
+        if (next <= periodIndex(m, asOf) + 1 + HELD_PAID_AHEAD_MAX && (cap === null || next <= cap)) {
           markPaid = { paidPeriods: next, until: frozen ? null : periodStart(m, next) };
         }
         if (m.paidPeriods > m.paidFloor) undoPaid = { paidPeriods: m.paidPeriods - 1 };
@@ -423,6 +498,7 @@ export function heldMembershipView(stored: HeldMembership, today: string): HeldM
 
   return {
     ...facts,
+    contract,
     can: {
       freeze: m.status === "active" && !upcoming,
       unfreeze: frozen,
@@ -431,6 +507,8 @@ export function heldMembershipView(stored: HeldMembership, today: string): HeldM
         m.status === "active" && recurring && m.renews && m.paidPeriods > 0 && until !== null && until > today
           ? addDays(until, -1)
           : null,
+      cancelAtContractEnd: contract !== null && contract.then === "renews" && !paidPast ? contract.until : null,
+      releaseNeeded: inContract,
       markPaid,
       undoPaid,
     },
@@ -440,15 +518,18 @@ export function heldMembershipView(stored: HeldMembership, today: string): HeldM
 export type HeldMembershipEvent =
   | { type: "freeze" }
   | { type: "unfreeze" }
-  /** `period_end`: a repeating membership runs to the end of what is paid, then stops. */
-  | { type: "cancel"; when: "today" | "period_end" }
+  /** `period_end`: a repeating membership runs to the end of what is paid, then stops.
+   *  `contract_end`: it runs, and is paid for, to the end of its contract, then stops
+   *  (18v-i). Today or at the end of what is paid, while a contract runs, lets the member
+   *  out of it: `release` says why, and without it the cancel is refused. */
+  | { type: "cancel"; when: "today" | "period_end" | "contract_end"; release?: ContractRelease }
   /** The count of paid periods to move to: one more, or one fewer. */
   | { type: "paid"; paidPeriods: number };
 
 export type HeldMembershipMove =
   /** `changed` false: it was already so, and nothing is to be written. */
   | { ok: true; membership: HeldMembership; changed: boolean }
-  | { ok: false; reason: "not_allowed" };
+  | { ok: false; reason: "not_allowed" | "release_needed" };
 
 /** THE ONE TRANSITION (CLAUDE.md §4, Money). The clock is applied first, so an
  *  event meets the membership as it is today; an event that asks for what is already
@@ -479,6 +560,15 @@ export function moveHeldMembership(stored: HeldMembership, event: HeldMembership
     }
 
     case "cancel":
+      if (event.when === "contract_end") {
+        if (view.contract?.then === "ends") return same;
+        if (view.can.cancelAtContractEnd === null) return refused;
+        return { ok: true, membership: { ...m, contractThen: "ends" }, changed: true };
+      }
+      // What is already so is answered before the contract is asked about: a request sent twice is one.
+      if (event.when === "period_end" && m.status === "active" && m.kind === "recurring" && !m.renews) return same;
+      if (event.when === "today" && m.status === "cancelled") return same;
+      if (releaseAsked(view, event.when) && event.release === undefined) return { ok: false, reason: "release_needed" };
       if (event.when === "period_end") {
         if (m.status === "active" && m.kind === "recurring" && !m.renews) return same;
         if (view.can.cancelAtPeriodEnd === null) return refused;
@@ -497,6 +587,16 @@ export function moveHeldMembership(stored: HeldMembership, event: HeldMembership
   }
 }
 
+/** Whether a cancel `when` lets the member out of a running minimum term early, and so asks why:
+ *  today, or at the end of what is paid where that is before the term's last day. Ending with the
+ *  term, or on or after its last day, is no release (round one, L2). */
+export function releaseAsked(view: Pick<HeldMembershipView, "contract" | "can">, when: "today" | "period_end" | "contract_end"): boolean {
+  if (!view.can.releaseNeeded || view.contract === null || when === "contract_end") return false;
+  if (when === "today") return true;
+  const paidTo = view.can.cancelAtPeriodEnd;
+  return paidTo !== null && paidTo < view.contract.until;
+}
+
 /** What a type has to hold for a membership to be worked out from it. */
 export interface HeldMembershipTerms {
   kind: MembershipKind;
@@ -505,6 +605,16 @@ export interface HeldMembershipTerms {
   packClasses: number | null;
   packDays: number | null;
   priceMinor: number;
+  /** Its contract (18v-i); left out is none. */
+  contractPeriods?: number | null;
+  contractThen?: ContractThen | null;
+}
+
+/** The contract a membership given from `type` holds: a repeating one's only. */
+function contractFrom(type: HeldMembershipTerms): { contractPeriods: number | null; contractThen: ContractThen | null } {
+  const periods = type.contractPeriods ?? null;
+  const then = type.contractThen ?? null;
+  return type.kind === "recurring" && periods !== null && then !== null ? { contractPeriods: periods, contractThen: then } : { contractPeriods: null, contractThen: null };
 }
 
 export type GiveHeldMembership =
@@ -538,6 +648,7 @@ export function giveHeldMembership(type: HeldMembershipTerms, startsOn: string, 
     renews: type.kind === "recurring",
     classesLeft: type.kind === "pack" ? type.packClasses : null,
     fullFrom: fullFromOf(type, startsOn, billDay),
+    ...contractFrom(type),
   };
   const free = base.free;
   const current = type.kind === "recurring" ? periodIndex(base, today) : 0;
@@ -589,7 +700,8 @@ export function linkHeldMembership(
 ): LinkedHeldMembership {
   const free = type.priceMinor === 0;
   if (dates.endsOn === null) {
-    const made = giveHeldMembership(type, today, paid, today);
+    // A contract signed in the gym's old software is not known here: none is invented (18v-i).
+    const made = giveHeldMembership({ ...type, contractPeriods: null, contractThen: null }, today, paid, today);
     if (!made.ok) return { ok: false, reason: "day_out_of_range" };
     return { ok: true, membership: made.membership, group: free ? "settled" : "ask" };
   }
@@ -816,6 +928,10 @@ export const heldMembershipSchema = z
      *  where a fee of an earlier freeze still covers today (18z). Null where none would be charged. */
     freezeFeeFirstOn: daySchema.nullable().default(null),
     classesLeft: z.number().int().min(0).nullable(),
+    /** Its contract's length in payments (18v-i), as it was given; null for none. */
+    contractPeriods: z.number().int().min(1).nullable().default(null),
+    /** Why the member was let out of their contract, where staff cancelled it inside one (18v-i). */
+    release: contractReleaseSchema.nullable().default(null),
     /** Taken from the gym's own list (17a-iii): its start day was worked back from the
      *  list's day, so a screen does not print it as the day the person started. */
     fromList: z.boolean(),
@@ -878,6 +994,9 @@ export const heldMembershipTypeChoiceSchema = z
     tax: heldTaxSchema.nullable(),
     /** Charged on the first bill (18t); 0 for none. */
     joiningFeeMinor: z.number().int().min(0).default(0),
+    /** Its contract (18v-i), which a membership given from it holds; both null for none. */
+    contractPeriods: z.number().int().min(1).nullable().default(null),
+    contractThen: contractThenSchema.nullable().default(null),
   })
   .strict();
 export type HeldMembershipTypeChoice = z.infer<typeof heldMembershipTypeChoiceSchema>;
@@ -981,6 +1100,9 @@ export const giveHeldMembershipRequestSchema = z
     /** The day the screen said its full payments start, the part month before it (18y); null
      *  where it said none. Nothing is given where the gym's billing day now says otherwise. */
     fullFrom: daySchema.nullable().optional(),
+    /** The minimum term the screen showed for the line (18v-i), null for none: nothing is given
+     *  where the line's is now another. Left out, the screen showed no word of it. */
+    minimumTerm: z.object({ periods: z.number().int().min(1).max(156), then: contractThenSchema }).strict().nullable().optional(),
   })
   .strict()
   .refine((v) => (v.discountId === undefined) === (v.discountMinor === undefined) && (v.discountId === undefined || v.priceMinor !== undefined), {
@@ -998,11 +1120,16 @@ export type GiveHeldMembershipRequest = z.infer<typeof giveHeldMembershipRequest
  *  `confirmPtSessions`: the `mark` of the personal training sessions it was told would end. */
 export const cancelHeldMembershipRequestSchema = z
   .object({
-    when: z.enum(["today", "period_end"]),
+    /** `contract_end`: runs to the end of its contract, then stops (18v-i). */
+    when: z.enum(["today", "period_end", "contract_end"]),
+    /** Why a member is let out of a running minimum term early: asked only then, and refused without it. */
+    release: contractReleaseSchema.optional(),
     confirmBookings: z.string().regex(/^[0-9a-f]{64}$/).optional(),
     confirmPtSessions: confirmPtSessionsField.optional(),
   })
-  .strict();
+  .strict()
+  // Ending with the minimum term lets nobody out early: a reason sent with it is refused (round one, L1).
+  .refine((v) => v.when !== "contract_end" || v.release === undefined, { path: ["release"] });
 export type CancelHeldMembershipRequest = z.infer<typeof cancelHeldMembershipRequestSchema>;
 
 /** Freeze (18z): `feeMinor` is the freeze fee a month the screen showed and staff left ticked, or 0
@@ -1028,6 +1155,8 @@ export const changeHeldMembershipRequestSchema = z
     startsOn: daySchema,
     /** The day the screen said the new one's full payments start (18y); null where it said none. */
     fullFrom: daySchema.nullable().optional(),
+    /** The minimum term the screen showed for the new line (18v-i), null for none; left out, it showed no word of it. */
+    minimumTerm: z.object({ periods: z.number().int().min(1).max(156), then: contractThenSchema }).strict().nullable().optional(),
     priceMinor: z.number().int().min(0).max(99_999_999),
     creditMinor: z.number().int().min(0).max(99_999_999),
     totalMinor: z.number().int().min(0).max(99_999_999),
