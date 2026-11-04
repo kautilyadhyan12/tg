@@ -21,13 +21,14 @@
 // 2,000, each inside a twelve-month minimum term, a new person each time.
 //
 // Then a cooling-off period (18v-iii): every membership holds 3 days from today, so a person's page reads the
-// day they count from, and Cancel with full refund is one press on a person of the gym of 2,000. Then Overview's
-// Refunds to review, once every person of one gym of 200 paid and cancelled so (more than any gym will ever have
-// waiting), and for the gym of 2,000.
+// day they count from, and Cancel with full refund is one press on a person of the gym of 2,000.
 //
 // Then a fee while frozen (18z): every membership frozen 40 days ago with a fee of its own, so the
 // run opens this month's fee for every person at once (more than any gym will ever have frozen),
 // and every other hour opens nothing.
+//
+// Last, Overview's Refunds to review (18v-iii), once every person of one gym of 200 paid and was cancelled with a
+// full refund (more than any gym will ever have waiting), and for the gym of 2,000.
 //
 // LOCAL DATABASES ONLY: it writes gyms, their lists and memberships, and removes them.
 import { createHash, randomUUID } from "node:crypto";
@@ -172,8 +173,9 @@ console.log(
 );
 
 const deps = { sql, now: () => new Date() };
-// A cooling-off period on every membership, counted from today (18v-iii).
-await sql`UPDATE gym_held_memberships SET cooling_off_days = 3 WHERE gym_id = ANY(${all}::uuid[]) AND kind = 'recurring'`;
+// A cooling-off period on every membership of the gyms of 200, counted from today (18v-iii). The gym of 2,000 is
+// given its days after Cancel early is measured: inside them, that is not offered.
+await sql`UPDATE gym_held_memberships SET cooling_off_days = 3 WHERE gym_id = ANY(${ids}::uuid[]) AND kind = 'recurring'`;
 const calls: [string, () => Promise<unknown>][] = [
   ["read a person's page, with its bill", () => getHeldMemberships(deps, gyms[0]?.owner ?? "", ids[0] ?? "", gyms[0]?.first ?? "")],
   [
@@ -194,6 +196,8 @@ const calls: [string, () => Promise<unknown>][] = [
       return moveHeldMembership(deps, big.owner, big.id, m?.entry_id ?? "", m?.id ?? "", { type: "cancel", when: "leave_early" }, null, null, 0, 9900);
     },
   ],
+];
+const coolingCalls: [string, () => Promise<unknown>][] = [
   [
     "cancel with a full refund (a new person each time)",
     async () => {
@@ -211,22 +215,49 @@ const calls: [string, () => Promise<unknown>][] = [
 await sql`
   UPDATE gym_held_memberships SET contract_periods = 12, contract_then = 'renews', leave_fee_minor = 9900
   WHERE gym_id = ${big.id} AND kind = 'recurring'`;
-for (const [name, call] of calls) {
-  await call();
-  const walls: number[] = [];
-  const jss: number[] = [];
-  for (let i = 0; i < RUNS; i++) {
-    const t = await time(call);
-    walls.push(t.wall);
-    jss.push(t.js);
+async function measureAll(list: [string, () => Promise<unknown>][]): Promise<void> {
+  for (const [name, call] of list) {
+    await call();
+    const walls: number[] = [];
+    const jss: number[] = [];
+    for (let i = 0; i < RUNS; i++) {
+      const t = await time(call);
+      walls.push(t.wall);
+      jss.push(t.js);
+    }
+    console.log(`${name.padEnd(52)} total median ${fmt(median(walls))} (worst ${fmt(Math.max(...walls))}) · thread busy median ${fmt(median(jss))} (worst ${fmt(Math.max(...jss))})`);
   }
-  console.log(`${name.padEnd(52)} total median ${fmt(median(walls))} (worst ${fmt(Math.max(...walls))}) · thread busy median ${fmt(median(jss))} (worst ${fmt(Math.max(...jss))})`);
 }
+await measureAll(calls);
+await sql`UPDATE gym_held_memberships SET cooling_off_days = 3 WHERE gym_id = ${big.id} AND kind = 'recurring'`;
+await measureAll(coolingCalls);
+// Every membership frozen 40 days ago with its fee: this month's fee is owed by every person.
+await sql`
+  UPDATE gym_held_memberships SET status = 'frozen', frozen_on = current_date - 40, freeze_fee_minor = 1000
+  WHERE gym_id = ANY(${all}::uuid[]) AND status = 'active'`;
+await sql`VACUUM ANALYZE gym_held_memberships`;
+for (const [name, gymIds] of [
+  [`the freeze fee run, one gym of ${String(PEOPLE)}, all frozen`, [ids[0] ?? ""]],
+  [`the freeze fee run, the other ${String(GYMS - 1)} gyms`, ids.slice(1)],
+  [`the freeze fee run, one gym of ${String(BIG)}, all frozen`, [big.id]],
+] as const) {
+  let fees = 0;
+  const t = await time(async () => {
+    fees = (await openDueFreezeFees({ sql, log }, { gymIds })).opened;
+  });
+  line(name, t, ` · ${String(fees)} fees`);
+}
+const idleFees: { wall: number; js: number }[] = [];
+for (let i = 0; i < RUNS; i++) idleFees.push(await time(() => openDueFreezeFees({ sql, log }, { gymIds: all })));
+console.log(
+  `${"the freeze fee run, all 21 gyms, nothing owed".padEnd(52)} total median ${fmt(median(idleFees.map((t) => t.wall)))} (worst ${fmt(Math.max(...idleFees.map((t) => t.wall)))}) · thread busy median ${fmt(median(idleFees.map((t) => t.js)))}`,
+);
+
 // Every person of one gym of 200 pays their open bill in full and is cancelled with a full refund (18v-iii).
 const owedBills = await sql<{ id: string; entry_id: string; period_index: number; amount_minor: number }[]>`
   SELECT h.id, h.entry_id, b.period_index, b.amount_minor FROM gym_held_memberships h
   JOIN gym_member_bills b ON b.gym_id = h.gym_id AND b.held_membership_id = h.id AND b.status = 'open' AND b.period_index IS NOT NULL
-  WHERE h.gym_id = ${ids[0] ?? ""} AND h.status = 'active'`;
+  WHERE h.gym_id = ${ids[0] ?? ""} AND h.status IN ('active', 'frozen')`;
 for (const b of owedBills) {
   await recordMemberPayment(deps, gyms[0]?.owner ?? "", ids[0] ?? "", b.entry_id, b.id, { requestKey: randomUUID(), periodIndex: b.period_index, amountMinor: b.amount_minor, method: "cash" });
 }
@@ -250,28 +281,6 @@ for (const [name, gymId] of [
   }
   console.log(`${name.padEnd(52)} total median ${fmt(median(walls))} (worst ${fmt(Math.max(...walls))}) · thread busy median ${fmt(median(jss))} · ${String(count)} rows`);
 }
-// Every membership frozen 40 days ago with its fee: this month's fee is owed by every person.
-await sql`
-  UPDATE gym_held_memberships SET status = 'frozen', frozen_on = current_date - 40, freeze_fee_minor = 1000
-  WHERE gym_id = ANY(${all}::uuid[]) AND status = 'active'`;
-await sql`VACUUM ANALYZE gym_held_memberships`;
-for (const [name, gymIds] of [
-  [`the freeze fee run, one gym of ${String(PEOPLE)}, all frozen`, [ids[0] ?? ""]],
-  [`the freeze fee run, the other ${String(GYMS - 1)} gyms`, ids.slice(1)],
-  [`the freeze fee run, one gym of ${String(BIG)}, all frozen`, [big.id]],
-] as const) {
-  let fees = 0;
-  const t = await time(async () => {
-    fees = (await openDueFreezeFees({ sql, log }, { gymIds })).opened;
-  });
-  line(name, t, ` · ${String(fees)} fees`);
-}
-const idleFees: { wall: number; js: number }[] = [];
-for (let i = 0; i < RUNS; i++) idleFees.push(await time(() => openDueFreezeFees({ sql, log }, { gymIds: all })));
-console.log(
-  `${"the freeze fee run, all 21 gyms, nothing owed".padEnd(52)} total median ${fmt(median(idleFees.map((t) => t.wall)))} (worst ${fmt(Math.max(...idleFees.map((t) => t.wall)))}) · thread busy median ${fmt(median(idleFees.map((t) => t.js)))}`,
-);
-
 delay.disable();
 console.log(`longest single stall of the thread during all of it: ${fmt(delay.max / 1e6)}`);
 
