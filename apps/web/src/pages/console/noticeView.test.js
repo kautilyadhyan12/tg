@@ -37,6 +37,10 @@ describe('the price list', () => {
     expect(draftProblems(draft({ noticeDays: 'a month' }), 'USD')?.noticeDays).toBeDefined();
     expect(draftProblems(draft({ noticeDays: '30', price: '0' }), 'USD')?.noticeDays).toBe('A free membership has no notice to cancel. Leave it empty.');
     expect(draftProblems(draft({ noticeDays: '30' }), 'USD')?.noticeDays).toBeUndefined();
+    // A minimum term that ends by itself takes none (round one, H2).
+    expect(draftProblems(draft({ noticeDays: '30', contract: 'fixed', contractPeriods: '12', contractThen: 'ends' }), 'USD')?.noticeDays).toBe(
+      'A minimum term that ends by itself has no notice to cancel. Leave it empty.',
+    );
   });
 
   it('reads the line back, says what the days mean, and shows it on its row', () => {
@@ -82,7 +86,9 @@ describe("a person's page", () => {
   });
 
   it('a member ended without notice reads why', () => {
-    expect(noticeWaivedLine({ noticeWaived: 'moved' })).toBe('Ended without notice: Moved away');
+    expect(noticeWaivedLine({ noticeWaived: 'moved', view: { status: 'cancelled' } })).toBe('Ended without notice: Moved away');
+    // Still running to the end of what is paid, it has not ended yet (round one, L5).
+    expect(noticeWaivedLine({ noticeWaived: 'moved', view: { status: 'active' } })).toBe('Ends without notice: Moved away');
     expect(noticeWaivedLine({ noticeWaived: null })).toBeNull();
   });
 
@@ -93,6 +99,8 @@ describe("a person's page", () => {
     expect(words.endButton).toBe('End on 31 October 2027');
     expect(words.endWhen).toBe('notice');
     expect(words.releaseButton).toBe('Release today');
+    // Paid to the term's end, ending then is before the notice ends: offered, with a reason (round one, L2).
+    expect(words.releaseLaterButton).toBe('Release on 30 September 2027');
   });
 
   it('with no notice, the Cancel box is as it was', () => {
