@@ -185,8 +185,6 @@ export default function MemberMemberships({
   managesTypes = true,
   membershipsTo = null,
   addNow = false,
-  /** A membership Add member has just given (18u-i): its agreement box opens, with Sign later. */
-  signNow = null,
   /** Opened by Take payment on Failed payments (18d-iii-ii-b): { membershipId, feeBillId }, the
    *  bill whose Record payment is open already, once, when their memberships have loaded. */
   payNow = null,
@@ -218,13 +216,7 @@ export default function MemberMemberships({
   const [refusal, setRefusal] = useState(null);
   const [showPast, setShowPast] = useState(false);
   /** The membership whose agreement box is open (18u-i): { id, justGiven }, or null. */
-  const [agreementFor, setAgreementFor] = useState(() => (signNow === null ? null : { id: signNow, justGiven: true }));
-  // A membership Add member gives after this box was drawn opens its agreement too.
-  const [signNowSeen, setSignNowSeen] = useState(signNow);
-  if (signNow !== signNowSeen) {
-    setSignNowSeen(signNow);
-    if (signNow !== null) setAgreementFor({ id: signNow, justGiven: true });
-  }
+  const [agreementFor, setAgreementFor] = useState(null);
   /** The receipt open under its payment or refund, by its number. */
   const [receiptFor, setReceiptFor] = useState(null);
   const toggleReceipt = (number) => setReceiptFor((was) => (was === number ? null : number));
@@ -458,11 +450,11 @@ export default function MemberMemberships({
     }
   }
   const scrolledNow = useRef(false);
-  const payOpenNow = (paidNow && (open?.what === 'pay' || open?.what === 'payFee')) || (refundedNow && (open?.what === 'cardRefund' || open?.what === 'voidFeePayment' || open?.what === 'refund'));
+  const payOpenNow = (paidNow && (open?.what === 'pay' || open?.what === 'payFee')) || (refundedNow && (open?.what === 'cardRefund' || open?.what === 'voidFeePayment' || open?.what === 'refund')) || (addsNow && open?.what === 'add');
   useEffect(() => {
     if (!payOpenNow || scrolledNow.current) return;
     scrolledNow.current = true;
-    document.querySelector('[data-testid="held-pay"], [data-testid="held-fee-pay"], [data-testid="card-refund-box"], [data-testid="held-fee-void"], [data-testid="held-refund-form"]')?.scrollIntoView?.({ block: 'center' });
+    document.querySelector('[data-testid="held-pay"], [data-testid="held-fee-pay"], [data-testid="card-refund-box"], [data-testid="held-fee-void"], [data-testid="held-refund-form"], [data-testid="held-add"]')?.scrollIntoView?.({ block: 'center' });
   }, [payOpenNow]);
   // What their list says their membership is, where they do not hold it here.
   const listed = shown === null ? null : listedRow(shown.listed, name, managesTypes);
@@ -2346,7 +2338,7 @@ export default function MemberMemberships({
     const giftUsed = giftFits && form.memberGiftOff !== true ? memberGift : null;
     const fee = joiningFeeFor(choice.type, form.joiningFee, shown.canBill, shown.memberships.some(isLive));
     const summary = choice.type === null ? null : membershipSummary(choice.type, discount, shown.taxIncluded, giftUsed, fee.feeMinor, part);
-    const ready = choice.type !== null && choice.problem === null && !choice.methodNeeded && summary !== null;
+    const ready = choice.type !== null && choice.problem === null && summary !== null;
     return (
       <form
         noValidate
@@ -2356,7 +2348,8 @@ export default function MemberMemberships({
         onSubmit={(e) => {
           e.preventDefault();
           if (!ready || busy) return;
-          void run('give', null, () => orgService.giveHeldMembership(gymId, entryId, giveBody(form.requestKey, choice.type, form, discount, summary, giftUsed, fee.feeMinor)));
+          // Given owed: the line it leaves says where its payment is recorded (Kd, 2026-11-04).
+          void run('give', null, () => orgService.giveHeldMembership(gymId, entryId, giveBody(form.requestKey, choice.type, form, discount, summary, giftUsed, fee.feeMinor)), free ? null : doneWords('giveOwed'));
         }}
       >
         <p className="c-s15 c-w6 c-t1 m-0">Add a membership for {name}</p>
@@ -2370,12 +2363,10 @@ export default function MemberMemberships({
         ) : (
           <>
             <MembershipChoice
-              country={gym?.country}
               types={types}
               today={today}
               value={form}
               canBill={shown.canBill}
-              paidMinor={summary === null || !summary.shows ? null : summary.totalMinor}
               onChange={(next) => setForm((f) => ({ ...f, ...next, ...(next.typeId !== undefined && next.typeId !== f.typeId ? { code: { ...f.code, note: null, appliedId: null }, joiningFee: 'auto' } : {}) }))}
             />
             <JoiningFeeTick type={choice.type} fee={fee} onChange={(joiningFee) => setForm((f) => ({ ...f, joiningFee }))} />

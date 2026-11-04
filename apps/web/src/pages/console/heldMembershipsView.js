@@ -549,6 +549,8 @@ export function doneWords(what, m) {
   switch (what) {
     case 'give':
       return 'Membership added.';
+    case 'giveOwed':
+      return 'Membership added. When they pay, press Record payment on its bill.';
     case 'freeze':
       return `${m.typeName} is frozen.`;
     case 'unfreeze':
@@ -582,15 +584,14 @@ export function startRange(today) {
   return { min: HELD_START_MIN, max: addDays(today, HELD_START_AHEAD_DAYS) };
 }
 
-/** The Add form, worked out as staff choose: the line under the start date, and the
- *  words of the "paid" tick. `problem` is why it cannot be added as it stands. */
-export function givePreview(type, startsOn, paid, today, paidMinor = null) {
-  if (type === null || startsOn === '') return { line: null, paidLabel: null, problem: null };
+/** The Add form, worked out as staff choose: the line under the start date. `problem` is why it
+ *  cannot be added as it stands. */
+export function givePreview(type, startsOn, paid, today) {
+  if (type === null || startsOn === '') return { line: null, problem: null };
   const made = giveHeldMembership(type, startsOn, paid, today, type.billDay ?? null);
   if (!made.ok) {
     return {
       line: null,
-      paidLabel: null,
       problem:
         made.reason === 'already_over'
           ? 'With that start date this membership would already be over. Pick a later start date.'
@@ -599,18 +600,7 @@ export function givePreview(type, startsOn, paid, today, paidMinor = null) {
   }
   const view = heldMembershipView(made.membership, today);
   const held = { ...type, startsOn, frozenOn: null, classesLeft: made.membership.classesLeft, view };
-  const line = [datesLine(held), classesLine(held)].filter((part) => part !== null).join(' · ');
-  if (type.priceMinor === 0) return { line, paidLabel: null, problem: null };
-  // What the tick would mean, said with its date for a repeating membership.
-  const ifPaid = giveHeldMembership(type, startsOn, true, today, type.billDay ?? null);
-  const until = ifPaid.ok ? heldMembershipView(ifPaid.membership, today).payment : null;
-  // With a discount the tick says what they pay, the Total under it (18b-ii-b).
-  const price = formatMinor(paidMinor ?? type.priceMinor, type.currency);
-  const paidLabel =
-    type.kind === 'recurring' && until !== null && until.state === 'paid' && until.until !== null
-      ? `They have paid up to ${dayWords(until.until)}`
-      : `They have paid the ${price}`;
-  return { line, paidLabel, problem: null };
+  return { line: [datesLine(held), classesLine(held)].filter((part) => part !== null).join(' · '), problem: null };
 }
 
 /** THE PART MONTH a new membership's first bill is for, where the gym bills everyone on one
@@ -627,18 +617,12 @@ export function firstBillPart(type, startsOn, today) {
   return { ...part, from: startsOn, to: addDays(made.membership.fullFrom, -1), fullFrom: made.membership.fullFrom };
 }
 
-/** What a choice of membership comes to: the type, the line under the date, the words of
- *  the paid tick, and why it cannot be given. `value` is { typeId, startsOn, paid, method }.
- *  `methodNeeded`: it is ticked as paid and how they paid is not picked yet. */
-export function membershipChoice(types, value, today, paidMinor = null) {
+/** What a choice of membership comes to: the type, the line under the date, and why it cannot be
+ *  given. `value` is { typeId, startsOn }: it is given owed (Kd, 2026-11-04). */
+export function membershipChoice(types, value, today) {
   const type = types.find((t) => t.id === value.typeId) ?? null;
-  const preview = givePreview(type, value.startsOn, value.paid, today, paidMinor);
-  const pays = type !== null && type.priceMinor > 0 && value.paid === true;
-  return { type, ...preview, methodNeeded: pays && preview.problem === null && (value.method ?? '') === '' };
+  return { type, ...givePreview(type, value.startsOn, false, today) };
 }
-
-/** Said where a form is sent with the paid tick on and no way of paying picked. */
-export const METHOD_NEEDED = 'Choose a payment method.';
 
 /** What the server is sent for a choice. `requestKey` is made once a form. A paid one
  *  says how it was paid: the server records the payment with the membership. */

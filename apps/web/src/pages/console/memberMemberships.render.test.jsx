@@ -593,7 +593,7 @@ describe('adding a membership', () => {
       discountMinor: 1000,
     });
     const box = await boxSoon();
-    expect(await box.findByText('Membership added.')).toBeTruthy();
+    expect(await box.findByText('Membership added. When they pay, press Record payment on its bill.')).toBeTruthy();
     expect(box.getByText('Sold with Founders: £10.00 off every payment.')).toBeTruthy();
     expect(box.getByText('£39.99 every month')).toBeTruthy();
   });
@@ -760,7 +760,7 @@ describe('adding a membership', () => {
       totalMinor: 6000,
     });
     const box = await boxSoon();
-    expect(await box.findByText('Membership added.')).toBeTruthy();
+    expect(await box.findByText('Membership added. When they pay, press Record payment on its bill.')).toBeTruthy();
     expect(box.getByText('Each bill charges VAT 20%.')).toBeTruthy();
     expect(box.getByText('£50.00 plus £10.00 VAT 20%')).toBeTruthy();
   });
@@ -777,7 +777,7 @@ describe('adding a membership', () => {
     expect([...lines.querySelectorAll('dd')].map((x) => x.textContent)).toEqual(['£50.00', '£8.33']);
   });
 
-  it('a discounted pack ticked as paid says the amount paid, the Total, never the full price', async () => {
+  it('a discounted pack shows its Total, and the payment is recorded on its bill once it is added (Kd, 2026-11-04)', async () => {
     const base = { kind: 'percent', percentBp: 2000, amountMinor: null, currency: null, startsOn: null, endsOn: null, maxUses: null, uses: 0, archivedAt: null, updatedAt: '2026-10-12T10:00:00.000Z' };
     const reach = { forProducts: false, allProducts: true, productIds: [], forMemberships: true, allMembershipTypes: true, membershipTypeIds: [] };
     const first = { ...base, ...reach, id: '66666666-6666-4666-8666-666666666666', name: 'First month', code: 'FIRST20', membershipPayments: 'first' };
@@ -786,12 +786,11 @@ describe('adding a membership', () => {
     fireEvent.click(await (await boxSoon()).findByRole('button', { name: 'Add membership' }));
     const form = within(screen.getByTestId('held-add'));
     fireEvent.change(form.getAllByRole('combobox')[0], { target: { value: PACK.id } });
-    expect(form.getByText('They have paid the £90.00')).toBeTruthy();
-    // 20% of £90.00 is £18.00: £72.00 is what is recorded, and what the tick says.
+    // 20% of £90.00 is £18.00: £72.00 is what its bill will ask.
     fireEvent.change(form.getByLabelText('Discount'), { target: { value: first.id } });
-    expect(form.getByText('They have paid the £72.00')).toBeTruthy();
-    expect(form.queryByText('They have paid the £90.00')).toBeNull();
     expect([...form.getByTestId('sale-summary').querySelectorAll('dd')].map((x) => x.textContent)).toEqual(['£90.00', '-£18.00', '£72.00']);
+    expect(form.getByTestId('held-add-pay-later').textContent).toBe('Once it is added, record the payment on its bill.');
+    expect(form.queryByRole('checkbox')).toBeNull();
   });
 
   it('staff who cannot take payments are offered no discount, and are sent none', async () => {
@@ -806,7 +805,7 @@ describe('adding a membership', () => {
     expect(form.queryByLabelText('Promo code')).toBeNull();
   });
 
-  it('shows what the dates will be before it is added, and sends the type, the day and the tick once', async () => {
+  it('shows what the dates will be before it is added, asks nothing of a payment, and sends the type and the day once', async () => {
     orgService.getHeldMemberships.mockResolvedValue(answer([]));
     orgService.giveHeldMembership.mockRejectedValueOnce(refusal(500, { error: 'internal', message: 'Something went wrong.' }));
     orgService.giveHeldMembership.mockResolvedValue(answer([held(1, GOLD, TODAY, true)]));
@@ -824,30 +823,23 @@ describe('adding a membership', () => {
 
     fireEvent.change(form.getByRole('combobox'), { target: { value: GOLD.id } });
     expect(form.getByTestId('held-add-line').textContent).toBe('Started 20 October 2026 · Renews 20 November 2026');
-    // How they paid is asked only once it is ticked as paid, and the form waits for it.
+    // Given owed: no paid tick and no way of paying is asked; its bill takes the payment (Kd, 2026-11-04).
+    expect(form.queryByRole('checkbox')).toBeNull();
     expect(form.queryByLabelText('Payment method')).toBeNull();
-    fireEvent.click(form.getByRole('checkbox', { name: 'They have paid up to 20 November 2026' }));
-    expect(form.getByRole('button', { name: 'Add membership' }).disabled).toBe(true);
-    expect(within(form.getByLabelText('Payment method')).getAllByRole('option').map((o) => o.textContent)).toEqual([
-      'Choose one',
-      'Cash',
-      'Card at the desk',
-      'Bank transfer',
-    ]);
-    fireEvent.change(form.getByLabelText('Payment method'), { target: { value: 'cash' } });
+    expect(form.getByTestId('held-add-pay-later').textContent).toBe('Once it is added, record the payment on its bill.');
     fireEvent.click(form.getByRole('button', { name: 'Add membership' }));
     await waitFor(() => expect(orgService.giveHeldMembership).toHaveBeenCalledTimes(1));
     const [gym, entry, body] = orgService.giveHeldMembership.mock.calls[0];
     expect([gym, entry]).toEqual([GYM, ADA]);
     // The price and what the first bill comes to are sent as the screen showed them (18b-iii).
-    expect(body).toEqual({ requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/), typeId: GOLD.id, startsOn: TODAY, paid: true, method: 'cash', priceMinor: 4999, totalMinor: 4999, fullFrom: null, minimumTerm: null, noticeDays: null, coolingOffDays: null });
+    expect(body).toEqual({ requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/), typeId: GOLD.id, startsOn: TODAY, paid: false, priceMinor: 4999, totalMinor: 4999, fullFrom: null, minimumTerm: null, noticeDays: null, coolingOffDays: null });
 
     // It failed: the form stays, and pressing again sends the same key, so one membership.
     expect(await (await boxSoon()).findByRole('alert')).toBeTruthy();
     fireEvent.click(form.getByRole('button', { name: 'Add membership' }));
     await waitFor(() => expect(orgService.giveHeldMembership).toHaveBeenCalledTimes(2));
     expect(orgService.giveHeldMembership.mock.calls[1][2]).toEqual(body);
-    expect(await (await boxSoon()).findByText('Membership added.')).toBeTruthy();
+    expect(await (await boxSoon()).findByText('Membership added. When they pay, press Record payment on its bill.')).toBeTruthy();
     expect(screen.queryByTestId('held-add')).toBeNull();
     expect(box().getByText('Gold Monthly')).toBeTruthy();
   });
@@ -1074,7 +1066,9 @@ describe('changing a membership', () => {
 const WORDS = { people: 'members', person: 'member', peopleCap: 'Members', personCap: 'Member', it: 'gym' };
 const IRON = { name: 'Iron Temple', slug: 'iron-temple', timezone: 'Europe/London' };
 
-describe('Add member gives a membership in the same form', () => {
+// ADD MEMBER, THEN THEIR MEMBERSHIP ON THEIR PAGE (Kd, 2026-11-04): a gym that sells asks only who the person is;
+// once they are added, their page opens with Add membership open already, and the membership is given there.
+describe('Add member, then their membership on their page', () => {
   const bea = () =>
     memberListEntryDetailSchema.parse({
       entryId: BEA,
@@ -1101,60 +1095,66 @@ describe('Add member gives a membership in the same form', () => {
   const openAdd = (gym = IRON) =>
     render(<MemberListPerson gymId={GYM} gym={gym} entryId={null} list={{ fields: [] }} words={WORDS} readOnly={false} onClose={() => {}} onChanged={() => {}} />);
   const typeName = (label, value) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
+  const priceListRead = () => waitFor(() => expect(orgService.getMembershipTypes).toHaveBeenCalledWith(GYM));
 
   beforeEach(() => {
     orgService.getMembershipTypes.mockResolvedValue({ data: { types: [GOLD, PACK] } });
     orgService.matchLead.mockResolvedValue({ data: { lead: null } });
     orgService.addMemberListEntry.mockResolvedValue({ data: { outcome: 'added', entry: bea(), version: 4 } });
-    orgService.changeMemberListEntry.mockResolvedValue({ data: { outcome: 'changed', entry: { ...bea(), membershipType: '10 classes' }, version: 5 } });
     // Once added, the page reads the new person again.
     orgService.getMemberListEntry.mockResolvedValue({ data: { entry: bea() } });
     orgService.getHeldMemberships.mockResolvedValue(answer([]));
   });
 
-  it('a gym in India offers UPI after Cash for a membership given as paid; a gym elsewhere never (18r)', async () => {
-    const methods = async (gym) => {
-      openAdd({ ...IRON, ...gym, privileges: ['members.confirm', 'billing.members'] });
-      const choice = within(await screen.findByTestId('add-membership'));
-      fireEvent.change(choice.getByLabelText('Membership type'), { target: { value: GOLD.id } });
-      fireEvent.click(choice.getByRole('checkbox'));
-      const shown = Array.from(choice.getByLabelText('Payment method').options).map((o) => o.textContent);
-      cleanup();
-      return shown;
-    };
-    expect(await methods({ country: 'IN' })).toEqual(['Choose one', 'Cash', 'UPI', 'Card at the desk', 'Bank transfer']);
-    expect(await methods({ country: 'GB' })).toEqual(['Choose one', 'Cash', 'Card at the desk', 'Bank transfer']);
-  });
-
-  it('offers the price list with "No membership" chosen, and adds nobody a membership unless one is picked', async () => {
-    openAdd();
-    const choice = within(await screen.findByTestId('add-membership'));
-    expect(choice.getAllByRole('option').map((o) => o.textContent)).toEqual([
-      'No membership',
-      'Gold Monthly · £49.99 every month',
-      '10 classes · £90.00 · 10 classes, used within 60 days',
-    ]);
-    // Nothing picked: no date, no tick.
-    expect(choice.queryByRole('checkbox')).toBeNull();
-    // One membership question, not two (23a-ii): none of the list's own words for a
-    // membership is asked beside the price list.
-    for (const label of ['Membership', 'Status', 'Payment status']) expect(screen.queryByLabelText(label), label).toBeNull();
+  it('asks only who the person is; once added, their page opens with Add membership open, and says so', async () => {
+    openAdd({ ...IRON, privileges: ['members.confirm', 'billing.members'] });
+    await priceListRead();
+    // No membership question, and none of the list's own words for one (23a-ii).
+    expect(screen.queryByTestId('add-membership')).toBeNull();
+    for (const label of ['Membership type', 'Membership', 'Status', 'Payment status']) expect(screen.queryByLabelText(label), label).toBeNull();
     expect(screen.queryByRole('button', { name: /End or renewal date/ })).toBeNull();
     expect(screen.queryByTestId('set-up-memberships')).toBeNull();
-    expect(screen.queryByTestId('typed-not-saved')).toBeNull();
     typeName('Name', 'Bea Hart');
     typeName('Email', 'bea@members.example');
     fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
     await waitFor(() => expect(orgService.addMemberListEntry).toHaveBeenCalledTimes(1));
-    await screen.findByRole('status');
-    expect(orgService.giveHeldMembership).not.toHaveBeenCalled();
     expect(orgService.addMemberListEntry).toHaveBeenCalledWith(GYM, { fullName: 'Bea Hart', email: 'bea@members.example' });
+    expect(await screen.findByText('Member added. Add their membership below.')).toBeTruthy();
+    const form = within(await screen.findByTestId('held-add'));
+    expect(form.getByText('Add a membership for Bea Hart')).toBeTruthy();
+    expect(orgService.getHeldMemberships).toHaveBeenCalledWith(GYM, BEA);
+    // Nothing is given until staff pick one and press.
+    expect(orgService.giveHeldMembership).not.toHaveBeenCalled();
+    // Given there owed, its payment is recorded on its bill.
+    fireEvent.change(form.getByLabelText('Membership type'), { target: { value: GOLD.id } });
+    expect(form.getByTestId('held-add-pay-later').textContent).toBe('Once it is added, record the payment on its bill.');
+    orgService.giveHeldMembership.mockResolvedValue(answer([held(1, GOLD, TODAY, false)]));
+    fireEvent.click(form.getByRole('button', { name: 'Add membership' }));
+    await waitFor(() => expect(orgService.giveHeldMembership).toHaveBeenCalledTimes(1));
+    expect(orgService.giveHeldMembership.mock.calls[0][1]).toBe(BEA);
+    expect(orgService.giveHeldMembership.mock.calls[0][2]).toMatchObject({ typeId: GOLD.id, paid: false });
+    expect(await screen.findByText('Membership added. When they pay, press Record payment on its bill.')).toBeTruthy();
   });
 
-  it('where the business asks for its membership agreement, the new person opens with it under the membership just given, with Sign later (18u-i)', async () => {
+  it('staff who cannot record payments are told who can, on the form that opens', async () => {
+    openAdd({ ...IRON, privileges: ['members.confirm'] });
+    await priceListRead();
+    orgService.getHeldMemberships.mockResolvedValue(answer([], false, { canBill: false }));
+    typeName('Name', 'Bea Hart');
+    typeName('Email', 'bea@members.example');
+    fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
+    const form = within(await screen.findByTestId('held-add'));
+    fireEvent.change(form.getByLabelText('Membership type'), { target: { value: PACK.id } });
+    expect(form.queryByRole('checkbox')).toBeNull();
+    expect(form.getByTestId('held-add-no-payments').textContent).toBe(
+      `They will owe it until a payment is recorded. You can't record payments. Ask the owner to turn on "Record members' payments" for you.`,
+    );
+  });
+
+  it('where the business asks for its membership agreement, the membership given on the page opens it, with Sign later (18u-i)', async () => {
     const given = held(1, GOLD, TODAY, false);
+    orgService.getHeldMemberships.mockResolvedValue(answer([], false, { agreementInUse: true }));
     orgService.giveHeldMembership.mockResolvedValue(answer([given], false, { agreementInUse: true }));
-    orgService.getHeldMemberships.mockResolvedValue(answer([given], false, { agreementInUse: true }));
     orgService.getMembershipAgreement.mockResolvedValue({
       data: {
         gymName: 'Iron House',
@@ -1169,14 +1169,34 @@ describe('Add member gives a membership in the same form', () => {
       },
     });
     openAdd();
-    const choice = within(await screen.findByTestId('add-membership'));
-    fireEvent.change(choice.getByLabelText('Membership type'), { target: { value: GOLD.id } });
+    await priceListRead();
     typeName('Name', 'Bea Hart');
     typeName('Email', 'bea@members.example');
     fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
+    const form = within(await screen.findByTestId('held-add'));
+    fireEvent.change(form.getByLabelText('Membership type'), { target: { value: GOLD.id } });
+    fireEvent.click(form.getByRole('button', { name: 'Add membership' }));
     expect(await screen.findByText('Hand this screen to Bea Hart. They read the agreement and sign it themselves.')).toBeTruthy();
     expect(orgService.getMembershipAgreement).toHaveBeenCalledWith(GYM, BEA, given.id);
     expect(screen.getByRole('button', { name: 'Sign later' })).toBeTruthy();
+  });
+
+  it('opens no form when nobody new was added: someone already on the list, or a past member put back', async () => {
+    for (const outcome of ['already_on_list', 'revived']) {
+      orgService.addMemberListEntry.mockResolvedValue({ data: { outcome, entry: bea(), version: 4 } });
+      const view = openAdd();
+      await priceListRead();
+      typeName('Name', 'Bea Hart');
+      typeName('Email', 'bea@members.example');
+      fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
+      // Their page is open, as they are, with nothing opened for them.
+      expect(await screen.findByRole('heading', { name: 'Bea Hart' })).toBeTruthy();
+      await waitFor(() => expect(orgService.getHeldMemberships).toHaveBeenCalledWith(GYM, BEA));
+      expect(screen.queryByTestId('held-add'), outcome).toBeNull();
+      expect(screen.queryByText(/Add their membership below/), outcome).toBeNull();
+      expect(orgService.giveHeldMembership, outcome).not.toHaveBeenCalled();
+      view.unmount();
+    }
   });
 
   describe("the person typed is in Leads (20e-ii-b-i)", () => {
@@ -1199,68 +1219,53 @@ describe('Add member gives a membership in the same form', () => {
       },
     });
 
-    it('with the same name: says so, fills in the friend\'s gift, marks them Joined and gives the membership with it', async () => {
+    it('with the same name: says so, and marks them Joined', async () => {
       orgService.matchLead.mockResolvedValue(found());
       orgService.addMemberListEntry.mockResolvedValue({ data: { outcome: 'added', entry: bea(), version: 4, lead: { id: LEAD, fullName: 'Bea Hart' } } });
-      orgService.giveHeldMembership.mockResolvedValue(answer([]));
       openAdd({ ...IRON, privileges: ['members.confirm', 'billing.members'] });
-      const choice = within(await screen.findByTestId('add-membership'));
+      await priceListRead();
       typeName('Name', 'Bea Hart');
       typeName('Email', 'bea@members.example');
       expect((await screen.findByTestId('lead-found')).textContent).toBe('Bea Hart is in Leads, invited by Maya Patel. Adding them marks them Joined.');
       expect(orgService.matchLead).toHaveBeenLastCalledWith(GYM, { fullName: 'Bea Hart', email: 'bea@members.example' });
-      fireEvent.change(choice.getByRole('combobox'), { target: { value: GOLD.id } });
-      expect(within(choice.getByTestId('friend-gift')).getByText("Friend's gift filled in")).toBeTruthy();
-      // What they pay, the gift taken off.
-      expect([...choice.getByTestId('sale-summary').querySelectorAll('dd')].map((x) => x.textContent)).toEqual(['£49.99', '-£10.00', '£39.99']);
       fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
-      await waitFor(() => expect(orgService.giveHeldMembership).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(orgService.addMemberListEntry).toHaveBeenCalledTimes(1));
       expect(orgService.addMemberListEntry).toHaveBeenCalledWith(GYM, { fullName: 'Bea Hart', email: 'bea@members.example', leadId: LEAD });
-      expect(orgService.giveHeldMembership.mock.calls[0][2]).toMatchObject({ typeId: GOLD.id, priceMinor: 4999, totalMinor: 3999, discountId: gift.id, discountMinor: 1000 });
       expect(await screen.findByText(/Bea Hart was in Leads and is now marked Joined\./)).toBeTruthy();
     });
 
-    it('with another name: asks, and nobody is joined or given the gift until staff tick that it is them', async () => {
+    it('with another name: asks, and nobody is joined until staff tick that it is them', async () => {
       orgService.matchLead.mockResolvedValue(found({ fullName: 'Bea', sameName: false }));
-      orgService.giveHeldMembership.mockResolvedValue(answer([]));
       openAdd({ ...IRON, privileges: ['members.confirm', 'billing.members'] });
-      const choice = within(await screen.findByTestId('add-membership'));
+      await priceListRead();
       typeName('Name', 'Beatrice Hart');
       typeName('Email', 'bea@members.example');
       const box = within(await screen.findByTestId('lead-found'));
       expect(box.getByText('Bea in Leads has this email or phone, invited by Maya Patel.')).toBeTruthy();
-      fireEvent.change(choice.getByRole('combobox'), { target: { value: GOLD.id } });
-      expect(choice.queryByTestId('friend-gift')).toBeNull();
       fireEvent.click(box.getByRole('checkbox', { name: 'This is Bea: mark them Joined in Leads' }));
-      expect(within(choice.getByTestId('friend-gift')).getByText("Friend's gift filled in")).toBeTruthy();
       fireEvent.click(box.getByRole('checkbox', { name: 'This is Bea: mark them Joined in Leads' }));
-      expect(choice.queryByTestId('friend-gift')).toBeNull();
       fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
-      await waitFor(() => expect(orgService.giveHeldMembership).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(orgService.addMemberListEntry).toHaveBeenCalledTimes(1));
       expect(orgService.addMemberListEntry).toHaveBeenCalledWith(GYM, { fullName: 'Beatrice Hart', email: 'bea@members.example' });
-      expect(orgService.giveHeldMembership.mock.calls[0][2].discountId).toBeUndefined();
     });
 
-    it('with another name, ticked: the lead is sent to be joined, and the membership has the gift', async () => {
+    it('with another name, ticked: the lead is sent to be joined', async () => {
       orgService.matchLead.mockResolvedValue(found({ fullName: 'Bea', sameName: false }));
-      orgService.giveHeldMembership.mockResolvedValue(answer([]));
       openAdd({ ...IRON, privileges: ['members.confirm', 'billing.members'] });
-      const choice = within(await screen.findByTestId('add-membership'));
+      await priceListRead();
       typeName('Name', 'Beatrice Hart');
       typeName('Email', 'bea@members.example');
       const box = within(await screen.findByTestId('lead-found'));
-      fireEvent.change(choice.getByRole('combobox'), { target: { value: GOLD.id } });
       fireEvent.click(box.getByRole('checkbox', { name: 'This is Bea: mark them Joined in Leads' }));
       fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
-      await waitFor(() => expect(orgService.giveHeldMembership).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(orgService.addMemberListEntry).toHaveBeenCalledTimes(1));
       expect(orgService.addMemberListEntry).toHaveBeenCalledWith(GYM, { fullName: 'Beatrice Hart', email: 'bea@members.example', leadId: LEAD });
-      expect(orgService.giveHeldMembership.mock.calls[0][2]).toMatchObject({ discountId: gift.id, discountMinor: 1000, totalMinor: 3999 });
     });
 
     it('with the same name, renamed before the next answer: nothing is joined on the old answer', async () => {
       orgService.matchLead.mockImplementation((_gym, query) => Promise.resolve(query.fullName === 'Bea Hart' ? found() : found({ sameName: false })));
       openAdd({ ...IRON, privileges: ['members.confirm', 'billing.members'] });
-      await screen.findByTestId('add-membership');
+      await priceListRead();
       typeName('Name', 'Bea Hart');
       typeName('Email', 'bea@members.example');
       await screen.findByText('Bea Hart is in Leads, invited by Maya Patel. Adding them marks them Joined.');
@@ -1272,138 +1277,16 @@ describe('Add member gives a membership in the same form', () => {
     });
   });
 
-  it('gives the membership picked to the person just added, and to nobody else', async () => {
-    orgService.giveHeldMembership.mockResolvedValue(answer([]));
-    // Staff who may record payments: saying it is paid records one.
-    openAdd({ ...IRON, privileges: ['members.confirm', 'billing.members'] });
-    const choice = within(await screen.findByTestId('add-membership'));
-    typeName('Name', 'Bea Hart');
-    typeName('Email', 'bea@members.example');
-    fireEvent.change(choice.getByRole('combobox'), { target: { value: PACK.id } });
-    expect(choice.getByTestId('held-add-line').textContent).toMatch(/^Start(ed|s) .* · Ends .* · 10 of 10 classes left$/);
-    fireEvent.click(choice.getByRole('checkbox', { name: 'They have paid the £90.00' }));
-    // Ticked as paid with no way of paying picked: nobody is added, and the form says why.
-    fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
-    expect(await screen.findByText('Choose a payment method.')).toBeTruthy();
-    expect(orgService.addMemberListEntry).not.toHaveBeenCalled();
-    fireEvent.change(choice.getByLabelText('Payment method'), { target: { value: 'bank_transfer' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
-    await waitFor(() => expect(orgService.giveHeldMembership).toHaveBeenCalledTimes(1));
-    const [gym, entry, body] = orgService.giveHeldMembership.mock.calls[0];
-    expect([gym, entry]).toEqual([GYM, BEA]);
-    expect(body).toEqual({
-      requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
-      fullFrom: null,
-      minimumTerm: null,
-      noticeDays: null,
-
-      coolingOffDays: null,
-      typeId: PACK.id,
-      startsOn: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
-      paid: true,
-      method: 'bank_transfer',
-      priceMinor: 9000,
-      totalMinor: 9000,
-    });
-    // The person was added first, as typed; the type's name became their Membership word
-    // on the list only after the membership was given.
-    expect(orgService.addMemberListEntry).toHaveBeenCalledWith(GYM, { fullName: 'Bea Hart', email: 'bea@members.example' });
-    expect(orgService.addMemberListEntry.mock.invocationCallOrder[0]).toBeLessThan(orgService.giveHeldMembership.mock.invocationCallOrder[0]);
-    expect(orgService.changeMemberListEntry).toHaveBeenCalledTimes(1);
-    expect(orgService.changeMemberListEntry).toHaveBeenCalledWith(GYM, BEA, { membershipType: '10 classes' });
-    expect(orgService.giveHeldMembership.mock.invocationCallOrder[0]).toBeLessThan(orgService.changeMemberListEntry.mock.invocationCallOrder[0]);
-    expect(await screen.findByText('Member added.')).toBeTruthy();
-    // Their page opens, with the Memberships box read for them.
-    await waitFor(() => expect(orgService.getHeldMemberships).toHaveBeenCalledWith(GYM, BEA));
-    expect(screen.queryByRole('alert')).toBeNull();
-  });
-
-  it('gives nobody a membership when nobody new was added: someone already on the list, or a past member put back', async () => {
-    const outcomes = [
-      ['already_on_list', 'Bea Hart was already on your list, so the Gold Monthly membership was not added. Add it under Memberships below.'],
-      ['revived', 'Bea Hart was a past member and is back on your list, so the Gold Monthly membership was not added. Add it under Memberships below.'],
-    ];
-    for (const [outcome, sentence] of outcomes) {
-      orgService.addMemberListEntry.mockResolvedValue({ data: { outcome, entry: bea(), version: 4 } });
-      const view = openAdd();
-      const choice = within(await screen.findByTestId('add-membership'));
-      typeName('Name', 'Bea Hart');
-      typeName('Email', 'bea@members.example');
-      fireEvent.change(choice.getByRole('combobox'), { target: { value: GOLD.id } });
-      fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
-      expect((await screen.findByRole('alert')).textContent, outcome).toContain(sentence);
-      // Their page is open, and what they hold is untouched.
-      expect(screen.getByRole('heading', { name: 'Bea Hart' })).toBeTruthy();
-      expect(orgService.giveHeldMembership, outcome).not.toHaveBeenCalled();
-      // Nor is a type they do not hold written as their Membership word.
-      expect(orgService.addMemberListEntry).toHaveBeenLastCalledWith(GYM, { fullName: 'Bea Hart', email: 'bea@members.example' });
-      expect(orgService.changeMemberListEntry, outcome).not.toHaveBeenCalled();
-      view.unmount();
-    }
-  });
-
-  it('says so when the person was added and the membership was not', async () => {
-    orgService.giveHeldMembership.mockRejectedValue(
-      refusal(409, { error: 'membership_type_not_found', message: 'That membership type is no longer on your price list. Pick another.' }),
-    );
-    openAdd();
-    const choice = within(await screen.findByTestId('add-membership'));
-    typeName('Name', 'Bea Hart');
-    typeName('Email', 'bea@members.example');
-    fireEvent.change(choice.getByRole('combobox'), { target: { value: GOLD.id } });
-    fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
-    expect((await screen.findByRole('alert')).textContent).toContain(
-      'Bea Hart was added, but the Gold Monthly membership was not: That membership type is no longer on your price list. Pick another. Add it under Memberships.',
-    );
-    // Their page is open, so it can be added there; no type's name was written for them.
-    expect(screen.getByRole('heading', { name: 'Bea Hart' })).toBeTruthy();
-    expect(orgService.changeMemberListEntry).not.toHaveBeenCalled();
-  });
-
-  it('adds nobody while the membership picked cannot be given', async () => {
-    orgService.getMembershipTypes.mockResolvedValue({ data: { types: [typeOf(3, { name: 'Day pass', kind: 'pack', termCount: null, termUnit: null, packClasses: 1, packDays: 1, priceMinor: 1500 })] } });
-    openAdd();
-    const choice = within(await screen.findByTestId('add-membership'));
-    typeName('Name', 'Bea Hart');
-    typeName('Email', 'bea@members.example');
-    fireEvent.change(choice.getByRole('combobox'), { target: { value: typeOf(3).id } });
-    // A day pass for a day already gone: pick the day through the calendar's own button.
-    fireEvent.click(choice.getByRole('button', { name: /Start date/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Previous month' }));
-    fireEvent.click(screen.getAllByRole('button').find((b) => b.textContent === '1'));
-    expect(choice.getByRole('alert').textContent).toBe('With that start date this membership would already be over. Pick a later start date.');
-    fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
-    expect((await screen.findByTestId('panel-alert')).textContent).toContain('this membership would already be over');
-    expect(orgService.addMemberListEntry).not.toHaveBeenCalled();
-  });
-
-  it('staff who cannot record payments are not offered the paid tick, are told who can, and the membership is given unpaid', async () => {
-    orgService.giveHeldMembership.mockResolvedValue(answer([]));
-    openAdd({ ...IRON, privileges: ['members.confirm'] });
-    const choice = within(await screen.findByTestId('add-membership'));
-    typeName('Name', 'Bea Hart');
-    typeName('Email', 'bea@members.example');
-    fireEvent.change(choice.getByRole('combobox'), { target: { value: PACK.id } });
-    expect(choice.queryByRole('checkbox')).toBeNull();
-    expect(choice.getByTestId('held-add-no-payments').textContent).toBe(
-      `They will owe it until a payment is recorded. You can't record payments. Ask the owner to turn on "Record members' payments" for you.`,
-    );
-    fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
-    await waitFor(() => expect(orgService.giveHeldMembership).toHaveBeenCalledTimes(1));
-    expect(orgService.giveHeldMembership.mock.calls[0][2]).toMatchObject({ typeId: PACK.id, paid: false });
-    expect(orgService.giveHeldMembership.mock.calls[0][2].method).toBeUndefined();
-  });
-
   it('adds the person as before where the gym has no price list', async () => {
     orgService.getMembershipTypes.mockResolvedValue({ data: { types: [] } });
     openAdd();
-    await waitFor(() => expect(orgService.getMembershipTypes).toHaveBeenCalledWith(GYM));
+    await priceListRead();
     // Its own words for a membership are still asked.
     expect(await screen.findByLabelText('Membership')).toBeTruthy();
     expect(screen.queryByTestId('add-membership')).toBeNull();
   });
 
-  // ── 23a-ii: the membership is asked straight after who the person is ──
+  // ── 23a-ii: a gym with nothing to sell types its own words straight after who the person is ──
 
   const before = (a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
   const OWNER = { ...IRON, privileges: ['members.confirm', 'memberships.manage'] };
@@ -1414,26 +1297,15 @@ describe('Add member gives a membership in the same form', () => {
       </MemoryRouter>,
     );
 
-  it('asks for the membership straight after name, email and phone, before the member number and the dates', async () => {
-    openAdd();
-    const box = await screen.findByTestId('add-membership');
-    expect(within(box).getByText('Membership')).toBeTruthy();
-    for (const label of ['Name', 'Email', 'Phone']) expect(before(screen.getByLabelText(label), box), label).toBe(true);
-    expect(before(box, screen.getByLabelText('Member number'))).toBe(true);
-    for (const name of [/Join date/, /Date of birth/]) expect(before(box, screen.getByRole('button', { name })), String(name)).toBe(true);
-    expect(before(box, screen.getByRole('button', { name: 'Add member' }))).toBe(true);
-  });
-
   it('asks nothing about a membership until the price list is read', async () => {
     const wait = later();
     orgService.getMembershipTypes.mockReturnValue(wait.promise);
     openAdd();
     expect(await screen.findByText('Checking the memberships you sell…')).toBeTruthy();
     for (const label of ['Membership', 'Status', 'Payment status']) expect(screen.queryByLabelText(label), label).toBeNull();
-    expect(screen.queryByTestId('add-membership')).toBeNull();
     wait.resolve({ data: { types: [GOLD] } });
-    expect(await screen.findByTestId('add-membership')).toBeTruthy();
-    expect(screen.queryByText('Checking the memberships you sell…')).toBeNull();
+    await waitFor(() => expect(screen.queryByText('Checking the memberships you sell…')).toBeNull());
+    for (const label of ['Membership', 'Status', 'Payment status']) expect(screen.queryByLabelText(label), label).toBeNull();
   });
 
   it("a gym that has set up nothing to sell types its own words, in the membership's place, and is offered Set up memberships", async () => {
@@ -1441,7 +1313,7 @@ describe('Add member gives a membership in the same form', () => {
     openAddAs(OWNER);
     const callout = await screen.findByTestId('set-up-memberships');
     expect(callout.textContent).toContain(
-      "You haven't set up the memberships you sell yet. Once you have, you pick one here. Until then, type this member's status and payment yourself.",
+      "You haven't set up the memberships you sell yet. Once you have, you add one on each member's page. Until then, type this member's status and payment yourself.",
     );
     // With nothing typed yet it opens Memberships, in this tab.
     const link = within(callout).getByRole('link', { name: 'Set up memberships' });
@@ -1486,7 +1358,7 @@ describe('Add member gives a membership in the same form', () => {
     // The warning was for the details as typed, the status and the payment among them.
     expect(Object.keys(orgService.addMemberListEntry.mock.calls[0][1]).sort()).toEqual(['email', 'fullName', 'paymentStatus', 'status']);
     fireEvent(window, new Event('focus'));
-    await screen.findByTestId('add-membership');
+    await waitFor(() => expect(screen.queryByLabelText('Status')).toBeNull());
     fireEvent.click(box.getByRole('button', { name: 'Add anyway' }));
     await waitFor(() => expect(orgService.addMemberListEntry).toHaveBeenCalledTimes(2));
     expect(orgService.addMemberListEntry).toHaveBeenLastCalledWith(GYM, { fullName: 'Bea Hart', email: 'bea2@members.example', acknowledgedDuplicates: [ADA] });
@@ -1509,7 +1381,7 @@ describe('Add member gives a membership in the same form', () => {
     expect(screen.queryByTestId('add-membership')).toBeNull();
   });
 
-  it('back from setting memberships up, the form offers them, keeps who was typed, and a box it no longer shows sends nothing', async () => {
+  it('back from setting memberships up, the typed words go, the form says so, keeps who was typed, and sends nothing it no longer shows', async () => {
     orgService.getMembershipTypes.mockResolvedValueOnce({ data: { types: [] } }).mockResolvedValue({ data: { types: [GOLD] } });
     openAddAs(OWNER);
     typeName('Name', 'Bea Hart');
@@ -1518,17 +1390,16 @@ describe('Add member gives a membership in the same form', () => {
     typeName('Payment status', 'Overdue');
     // Staff come back to this window from Settings.
     fireEvent(window, new Event('focus'));
-    const choice = within(await screen.findByTestId('add-membership'));
-    expect(choice.getAllByRole('option').map((o) => o.textContent)).toEqual(['No membership', 'Gold Monthly · £49.99 every month']);
+    expect((await screen.findByTestId('typed-not-saved')).textContent).toBe(
+      "You add their membership on their page once they are added. The status and payment you typed won't be saved.",
+    );
     expect(screen.queryByTestId('set-up-memberships')).toBeNull();
     for (const label of ['Membership', 'Status', 'Payment status']) expect(screen.queryByLabelText(label), label).toBeNull();
-    // What was typed in them is not kept, and the form says so.
-    expect(screen.getByTestId('typed-not-saved').textContent).toBe("You can now pick a membership. The status and payment you typed won't be saved.");
     expect(screen.getByLabelText('Name').value).toBe('Bea Hart');
     fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
     await waitFor(() => expect(orgService.addMemberListEntry).toHaveBeenCalledTimes(1));
     expect(orgService.addMemberListEntry).toHaveBeenCalledWith(GYM, { fullName: 'Bea Hart', email: 'bea@members.example' });
-    // With a price list to pick from, coming back to the window asks nothing more.
+    // With a price list there, coming back to the window asks nothing more.
     const asked = orgService.getMembershipTypes.mock.calls.length;
     fireEvent(window, new Event('focus'));
     await new Promise((r) => setTimeout(r, 0));
@@ -1923,7 +1794,7 @@ describe('the membership agreement (18u-i)', () => {
     const form = within(screen.getByTestId('held-add'));
     fireEvent.change(form.getAllByRole('combobox')[0], { target: { value: GOLD.id } });
     fireEvent.click(form.getByRole('button', { name: 'Add membership' }));
-    expect(await (await boxSoon()).findByText('Membership added.')).toBeTruthy();
+    expect(await (await boxSoon()).findByText('Membership added. When they pay, press Record payment on its bill.')).toBeTruthy();
     expect(screen.queryByText('Agreement not signed')).toBeNull();
     expect(orgService.getMembershipAgreement).not.toHaveBeenCalled();
   });
@@ -1958,7 +1829,7 @@ describe('the membership agreement (18u-i)', () => {
     const form = within(screen.getByTestId('held-add'));
     fireEvent.change(form.getAllByRole('combobox')[0], { target: { value: GOLD.id } });
     fireEvent.click(form.getByRole('button', { name: 'Add membership' }));
-    expect(await (await boxSoon()).findByText('Membership added.')).toBeTruthy();
+    expect(await (await boxSoon()).findByText('Membership added. When they pay, press Record payment on its bill.')).toBeTruthy();
     expect(screen.queryByTestId('held-agreement')).toBeNull();
     expect(orgService.getMembershipAgreement).not.toHaveBeenCalled();
   });

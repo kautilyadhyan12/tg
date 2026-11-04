@@ -19,7 +19,6 @@ import {
   MEMBER_INVITE_AGAIN_PER_PERSON,
   MEMBER_INVITE_AGAIN_PERSON_DAYS,
   MEMBER_INVITE_WORDS,
-  MEMBER_LIST_MAX_STATUS_CHARS,
   MEMBER_LIST_QUERY_MAX_CHARS,
   memberListReviewWords,
 } from '@app/shared';
@@ -32,11 +31,7 @@ import MemberPurchases from './MemberPurchases';
 import MemberPayer from './MemberPayer';
 import MemberCard from './MemberCard';
 import MemberNotes from './MemberNotes';
-import MembershipChoice from './MembershipChoice';
-import { METHOD_NEEDED, firstBillPart, giveBody, joiningFeeFor, membershipChoice, newRequestKey, typeWithTax } from './heldMembershipsView';
-import { discountsForType, membershipSummary } from './sellDiscountsView';
-import { FriendGiftNote } from './FriendGift';
-import { JoiningFeeTick, MembershipTotal } from './MembershipDiscount';
+import { typeWithTax } from './heldMembershipsView';
 import { leadMatchLine } from '@app/shared';
 import { canRecordPayments } from './memberBillsView';
 import { canManageMemberships } from './membershipTypesView';
@@ -438,22 +433,18 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   const [maybe, setMaybe] = useState(null);
   /** The details typed for somebody new, kept while staff Open a record the warning named. */
   const [draft, setDraft] = useState(null);
-  /** Add member's membership (17a-ii, 23a-ii): the gym's price list. `undefined` until it
-   *  is read and null where it cannot be read; else its types, none where the gym has set
-   *  up nothing to sell. The choice is "No membership" until staff pick one. */
+  /** Add member's price list (17a-ii, 23a-ii): `undefined` until it is read and null where it
+   *  cannot be read; else its types, none where the gym has set up nothing to sell. A gym that
+   *  sells gives the membership on the person's page once they are added (Kd, 2026-11-04). */
   const [priceList, setPriceList] = useState(undefined);
   const [priceAsk, setPriceAsk] = useState(0);
   const giveTypes = Array.isArray(priceList) && priceList.length > 0 ? priceList : null;
-  const [giving, setGiving] = useState(() => ({ requestKey: newRequestKey(), typeId: '', startsOn: gymToday(gym?.timezone), paid: false, method: '', joiningFee: 'auto' }));
-  /** Add member finds the person in Leads (20e-ii-b-i): the lead with the email or phone typed;
-   *  whether staff ticked that a lead with another name is this person; and whether they
-   *  removed Refer a friend's gift from the membership. */
+  /** Add member finds the person in Leads (20e-ii-b-i): the lead with the email or phone typed,
+   *  and whether staff ticked that a lead with another name is this person. */
   const [leadRead, setLeadRead] = useState(null);
   const [sameAs, setSameAs] = useState(null);
-  const [giftOffFor, setGiftOffFor] = useState(null);
-  /** The membership Add member just gave, whose agreement opens on the new person's page
-   *  (18u-i): { entryId, membershipId }, or null. */
-  const [signNow, setSignNow] = useState(null);
+  /** The person Add member just added at a gym that sells: their page opens with Add membership open. */
+  const [addNowFor, setAddNowFor] = useState(null);
   /** Where a refusal or the warning shows: at the top, above a form whose buttons are at its foot. */
   const alertRef = useRef(null);
 
@@ -534,19 +525,9 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   const foundId = leadFound?.id ?? null;
   const leadSame = foundId !== null && sameAs === foundId;
   const setLeadSame = (yes) => setSameAs(yes ? foundId : null);
-  const giftOff = foundId !== null && giftOffFor === foundId;
-  const setGiftOff = (off) => setGiftOffFor(off ? foundId : null);
   /** The lead this person is: by the same name (as typed when it was asked: a name changed
    *  since waits for the next answer), or ticked by staff. */
   const leadJoins = leadFound !== null && ((leadFound.sameName && leadRead?.name === typedName) || leadSame);
-  /** Refer a friend's gift on the membership picked here; null where there is none, it cannot
-   *  be used on that type, or staff do not take payments. */
-  const giftOf = (type) => {
-    const gift = leadJoins ? leadFound.friendGift : null;
-    if (gift === null || type === null || !gift.discount.forMemberships || !canRecordPayments(viewerPrivileges(gym))) return null;
-    const page = { discounts: [gift.discount], friendGiftId: gift.discount.id, today: gymToday(gym?.timezone) };
-    return discountsForType(page, type).length > 0 ? gift : null;
-  };
 
   // The price list, for somebody being added: nothing is asked about a membership until it
   // is read. Where it cannot be read the person is added with the gym's own words, as a gym
@@ -778,58 +759,14 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     setNotice(null);
     setRefusal(null);
     setMaybe(null);
-    // A membership chosen in the form is given once the person is added. If that fails
-    // the person stays added, and the page says the membership was not.
-    const givenType = giveTypes === null ? null : (giveTypes.find((t) => t.id === giving.typeId) ?? null);
-    const givenGift = giftOff ? null : giftOf(givenType);
-    const givenDiscount = givenGift === null ? null : givenGift.discount;
-    // Somebody just added has no membership here yet: a joining fee starts ticked.
-    const givenFee = joiningFeeFor(givenType, giving.joiningFee, canRecordPayments(viewerPrivileges(gym)), false);
-    const givenPart = firstBillPart(givenType, giving.startsOn, gymToday(gym?.timezone));
-    const givenSummary = givenType === null ? null : membershipSummary(givenType, givenDiscount, givenType.taxIncluded, null, givenFee.feeMinor, givenPart);
-    const choice = giveTypes === null ? null : membershipChoice(giveTypes, giving, gymToday(gym?.timezone), givenSummary === null || !givenSummary.shows ? null : givenSummary.totalMinor);
-    if (choice !== null && choice.type !== null && choice.problem !== null) {
-      setRefusal({ message: choice.problem, openId: null, ack: null });
-      setBusy(false);
-      return;
-    }
-    if (choice !== null && choice.methodNeeded) {
-      setRefusal({ message: METHOD_NEEDED, openId: null, ack: null });
-      setBusy(false);
-      return;
-    }
     try {
-      let res = await orgService.addMemberListEntry(gymId, input);
-      const who = res.data.entry.fullName || 'This person';
-      let notGiven = null;
-      if (choice !== null && choice.type !== null) {
-        if (res.data.outcome !== 'added') {
-          // Nobody new was added: the answer is a record the gym already had, and what
-          // that person holds is not changed from this form.
-          const why = res.data.outcome === 'revived' ? `was a past ${words.person} and is back on your list` : 'was already on your list';
-          notGiven = `${who} ${why}, so the ${choice.type.name} membership was not added. Add it under Memberships below.`;
-        } else {
-          try {
-            const given = await orgService.giveHeldMembership(gymId, res.data.entry.entryId, giveBody(giving.requestKey, choice.type, giving, givenDiscount, givenSummary, null, givenFee.feeMinor));
-            // Where the business asks for the agreement its line of the price list uses, it is signed there and then.
-            const toSign = given.data.memberships.find((m) => m.agreement === null && m.agreementAsked === true);
-            setSignNow(toSign === undefined ? null : { entryId: res.data.entry.entryId, membershipId: toSign.id });
-            // Once it is given, and only then, the type's name becomes their Membership word,
-            // so the list's Membership column and filter show it as they show a file's word.
-            if (input.membershipType === undefined && choice.type.name.length <= MEMBER_LIST_MAX_STATUS_CHARS) {
-              try {
-                const named = await orgService.changeMemberListEntry(gymId, res.data.entry.entryId, { membershipType: choice.type.name });
-                res = { ...res, data: { ...res.data, entry: named.data.entry } };
-              } catch {
-                // The membership is given; the list's word stays empty.
-              }
-            }
-          } catch (err) {
-            notGiven = `${who} was added, but the ${choice.type.name} membership was not: ${errorText(err, 'Please try again.')} Add it under Memberships.`;
-          }
-        }
-      }
+      const res = await orgService.addMemberListEntry(gymId, input);
       written(null, res);
+      // At a gym that sells, the membership is given on their page, its form open already (Kd, 2026-11-04).
+      if (res.data.outcome === 'added' && sells) {
+        setAddNowFor(res.data.entry.entryId);
+        setNotice((said) => `${said} Add their membership below.`);
+      }
       // The number shown was given to somebody else a moment before (5e-i): said where the
       // person added is, so a desk that wrote it down knows.
       const givenNumber = res.data.entry.memberNumber;
@@ -838,7 +775,6 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       if (stillThere && res.data.outcome === 'added' && input.memberNumber === undefined && offered !== null && givenNumber !== null && givenNumber !== offered) {
         setNotice((said) => `${said} Their member number is ${givenNumber}, as ${offered} was given to someone else a moment ago.`);
       }
-      if (notGiven !== null) setRefusal({ message: notGiven, openId: null, ack: null });
     } catch (err) {
       if (wanted.current !== null) return;
       const people = err?.response?.data?.people;
@@ -856,8 +792,8 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   /** Save the form. Adding, `invite` is "Add and invite": both happen, or neither. */
   const save = async (invite = false) => {
     if (shown === null) {
-      // With a price list the membership is picked, and the list's own words for it are
-      // not asked: a box the form does not show sends nothing.
+      // With a price list the membership is given on their page, and the list's own words for
+      // it are not asked: a box the form does not show sends nothing.
       const answers = inputFrom(form, sells ? HELD_ANSWERS : []);
       // The number filled in, left as it is, is the server's to give (5e-i).
       if (offered !== null && answers.memberNumber === offered) delete answers.memberNumber;
@@ -1250,41 +1186,14 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
         </p>
       );
     }
+    // A gym that sells gives the membership on the person's page once they are added (Kd, 2026-11-04);
+    // words typed before the price list arrived are not sent, and the form says so.
     if (giveTypes !== null) {
-      // The paid tick says what the first bill comes to, its tax in (18b-iii).
-      const picked = giveTypes.find((t) => t.id === giving.typeId) ?? null;
-      const gift = giftOf(picked);
-      const fee = joiningFeeFor(picked, giving.joiningFee, canRecordPayments(viewerPrivileges(gym)), false);
-      const part = firstBillPart(picked, giving.startsOn, gymToday(gym?.timezone));
-      const total = picked === null ? null : membershipSummary(picked, gift === null || giftOff ? null : gift.discount, picked.taxIncluded, null, fee.feeMinor, part);
-      return (
-        <div className="c-card p-3 flex flex-col gap-3" data-testid="add-membership">
-          <span className="c-s15 c-w6 c-t1">Membership</span>
-          <MembershipChoice
-            allowNone
-            country={gym?.country}
-            types={giveTypes}
-            today={gymToday(gym?.timezone)}
-            value={giving}
-            paidMinor={total === null || !total.shows ? null : total.totalMinor}
-            canBill={canRecordPayments(viewerPrivileges(gym))}
-            onChange={(next) => {
-              setRefusal(null);
-              setGiving(next.typeId !== giving.typeId ? { ...next, joiningFee: 'auto' } : next);
-            }}
-          />
-          <JoiningFeeTick type={picked} fee={fee} onChange={(joiningFee) => setGiving((g) => ({ ...g, joiningFee }))} />
-          {gift !== null ? (
-            <FriendGiftNote gift={gift} applied={!giftOff} onRemove={() => setGiftOff(true)} onPutBack={() => setGiftOff(false)} disabled={busy} />
-          ) : null}
-          {total !== null && total.shows && ((gift !== null && !giftOff) || total.joiningFeeMinor > 0 || total.part) ? <MembershipTotal summary={total} /> : null}
-          {HELD_ANSWERS.some((key) => (form[key] ?? '').trim() !== '') ? (
-            <p className="c-hint m-0" data-testid="typed-not-saved">
-              You can now pick a membership. The status and payment you typed won&apos;t be saved.
-            </p>
-          ) : null}
-        </div>
-      );
+      return HELD_ANSWERS.some((key) => (form[key] ?? '').trim() !== '') ? (
+        <p className="c-hint m-0" data-testid="typed-not-saved">
+          You add their membership on their page once they are added. The status and payment you typed won&apos;t be saved.
+        </p>
+      ) : null;
     }
     const mayManage = canManageMemberships(viewerPrivileges(gym));
     return (
@@ -1293,7 +1202,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           <div className="c-card p-3 flex flex-col gap-2 items-start" data-testid="set-up-memberships">
             <p className="c-s14 c-t2 m-0">
               {mayManage
-                ? `You haven't set up the memberships you sell yet. Once you have, you pick one here. Until then, type this ${words.person}'s status and payment yourself.`
+                ? `You haven't set up the memberships you sell yet. Once you have, you add one on each ${words.person}'s page. Until then, type this ${words.person}'s status and payment yourself.`
                 : `Your ${words.it ?? 'gym'} hasn't set up the memberships it sells yet. Until the owner does, type this ${words.person}'s status and payment yourself.`}
             </p>
             {/* It leaves this form, so it asks first once something has been typed. */}
@@ -1491,10 +1400,9 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           nothingNow={nothingNow}
           managesTypes={canManageMemberships(viewerPrivileges(gym))}
           membershipsTo={placeFor(gym?.slug, viewerPrivileges(gym), 'memberships')}
-          addNow={addMembership}
+          addNow={addMembership || (addNowFor !== null && addNowFor === p.entryId)}
           payNow={payNow}
           refundNow={refundNow}
-          signNow={signNow !== null && signNow.entryId === p.entryId ? signNow.membershipId : null}
           hasEmail={typeof p.email === 'string' && p.email !== ''}
           onCardAsked={() => setCardReads((n) => n + 1)}
         />
