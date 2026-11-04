@@ -24,6 +24,7 @@ import { Icon, type IconName } from "../look/Icon";
 import { Sheet } from "../look/Sheet";
 import { Txt } from "../look/Txt";
 import { exportFileFor, forgetPersonFiles } from "../session/personFiles";
+import { SIGNED_OUT_NOTES } from "../session/session";
 import { useSession } from "../session/SessionProvider";
 import { HideMe, useHideMe } from "./gym/hideMe";
 import { CanSee } from "./Invitation";
@@ -428,10 +429,13 @@ function DeleteAsk({ open, places, onClose }: { open: boolean; places: Places; o
       return;
     }
     // The server replies only once the undo email is sent, so its reply can be lost after the account is
-    // gone. Asked once more: a sign-in the server no longer knows means it was deleted.
-    if (answer.kind === "no_answer") {
+    // gone. Only a DELETE that went out and came back with nothing is asked about once more; a sign-in the
+    // server then turns away as no longer valid means deleted. Signed out already, or signed in on another
+    // phone, it was turned away before it was read: nothing is forgotten.
+    if (answer.kind === "no_answer" && session.state().kind === "in") {
       await session.signedIn({ method: "GET", path: "/v1/users/me" }, userProfileResponseSchema);
-      if (session.state().kind === "out") {
+      const now = session.state();
+      if (now.kind === "out" && now.note === SIGNED_OUT_NOTES.ended) {
         await forgetMe(false);
         return;
       }

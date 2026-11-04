@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react-native";
+import { SIGNED_IN_ELSEWHERE } from "@app/shared";
 import { Directory, File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import { App } from "../../src/App";
@@ -164,6 +165,32 @@ describe("Delete account (the worst thing: after deleting, the phone still shows
     expect(await screen.findByText(deletedNote(false, new Date()))).toBeTruthy();
     expect(store.value).toBeNull();
     expect(new File(Paths.document, `meals-${RAVI.id}.json`).exists).toBe(false);
+  });
+
+  it.each([
+    ["signed in on another phone", SIGNED_IN_ELSEWHERE.error, SIGNED_IN_ELSEWHERE.message],
+    ["a sign-in that simply ended", "invalid_refresh", "Your session ended. Sign in again."],
+  ])("a sign-in turned away before the DELETE was read (%s) deletes nothing on the phone and says why", async (_case, error, note) => {
+    write(`meals-${RAVI.id}.json`, '{"meals":["Poha"]}');
+    let turnedAway = false;
+    const server = fakeServer(
+      routes({
+        [ME]: (body) => {
+          if (body !== undefined && typeof body === "object" && body !== null && "code" in body) {
+            turnedAway = true; // the access key ran out; the server never read the DELETE
+            return refusal(401, "unauthorized", "Sign in again.");
+          }
+          return { status: 200, body: profile(true) };
+        },
+        "/v1/auth/refresh": () => (turnedAway ? refusal(401, error, "Sign in again.") : { status: 200, body: { tokens: tokens(2) } }),
+      }),
+    );
+    await openSettings(server.ask);
+    await upToTheCode();
+    await fireEvent.press(screen.getByLabelText("Delete"));
+    expect(await screen.findByText(note)).toBeTruthy();
+    expect(screen.queryByText(/will be deleted on/)).toBeNull();
+    expect(new File(Paths.document, `meals-${RAVI.id}.json`).exists).toBe(true);
   });
 
   it("a meal written while the sign-in is being forgotten is removed too", async () => {
