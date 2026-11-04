@@ -1,3 +1,5 @@
+import { ACCOUNT_UNDO_DAYS } from "@app/shared";
+
 // Part 4 §5.2's account-deletion window, in ONE place.
 //
 // §5.2 defines a single number: the soft-delete window between Day 0 (the
@@ -19,7 +21,7 @@
 // day the window moves to 30 the API would still tell the user "you have 14
 // days to undo" while purging at 30. The app would be lying about its own
 // deletion behaviour, produced by the very change meant to keep it lawful.
-export const DPDP_RETENTION_DAYS = 14;
+export const DPDP_RETENTION_DAYS = ACCOUNT_UNDO_DAYS;
 
 /** The same window in milliseconds, for the one-time-token TTL. */
 export const DPDP_RETENTION_MS = DPDP_RETENTION_DAYS * 24 * 60 * 60 * 1000;

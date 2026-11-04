@@ -44,6 +44,9 @@ jest.mock("expo-file-system", () => {
     get exists() {
       return files.has(this.uri);
     }
+    get name() {
+      return this.uri.slice(this.uri.lastIndexOf("/") + 1);
+    }
     text() {
       return Promise.resolve(files.get(this.uri) ?? "");
     }
@@ -77,10 +80,19 @@ jest.mock("expo-file-system", () => {
   });
   class Directory {
     constructor(dir, name) {
-      this.uri = `${dir.uri}/${name}`;
+      const at = typeof dir === "string" ? dir : dir.uri;
+      this.uri = name === undefined ? at : `${at}/${name}`;
     }
     get exists() {
       return folders.has(this.uri);
+    }
+    get name() {
+      return this.uri.slice(this.uri.lastIndexOf("/") + 1);
+    }
+    /** What is right inside it, files and folders, as the phone lists them. */
+    list() {
+      const inside = (uri) => uri.startsWith(`${this.uri}/`) && !uri.slice(this.uri.length + 1).includes("/");
+      return [...[...folders].filter(inside).map((uri) => new Directory({ uri })), ...[...files.keys()].filter(inside).map((uri) => new File(uri))];
     }
     create() {
       folders.add(this.uri);
@@ -90,8 +102,14 @@ jest.mock("expo-file-system", () => {
       for (const uri of [...files.keys()]) if (uri.startsWith(`${this.uri}/`)) files.delete(uri);
     }
   }
-  return { File, Directory, Paths: { document: { uri: "documents" }, cache: { uri: "cache" } } };
+  return { File, Directory, Paths: { document: new Directory({ uri: "documents" }), cache: new Directory({ uri: "cache" }) } };
 });
+// The phone's own Share box (19b): it takes a file's address; a test reads what it was given
+// (`shareAsync.mock.calls`) or says it fails (`mockRejectedValueOnce`, `isAvailableAsync.mockResolvedValueOnce(false)`).
+jest.mock("expo-sharing", () => ({
+  isAvailableAsync: jest.fn(() => Promise.resolve(true)),
+  shareAsync: jest.fn(() => Promise.resolve()),
+}));
 // The camera, the gallery and the drawing of a photo are the phone's own (33b-i). A test says what
 // each gives back (`camera`, `picker.next`, `drawing.base64`) and reads what was asked of it.
 jest.mock("expo-camera", () => {

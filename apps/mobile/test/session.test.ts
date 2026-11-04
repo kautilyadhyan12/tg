@@ -489,6 +489,39 @@ describe("a signed-in request is only ever sent as the person who made it", () =
   });
 });
 
+describe("a DELETE carries a body only where one is given", () => {
+  it("deleting the account sends its code; another DELETE sends none", async () => {
+    const { session, server } = phone(
+      {
+        "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }),
+        "/v1/users/me": () => ({ status: 200, body: { message: "Account scheduled for deletion.", emailSent: true } }),
+        "/v1/users/me/onboarding": () => ({ status: 200, body: {} }),
+      },
+      kept(1),
+    );
+    await session.start();
+    await session.signedIn({ method: "DELETE", path: "/v1/users/me", body: { code: "123456" } }, anyReply);
+    await session.signedIn({ method: "DELETE", path: "/v1/users/me/onboarding" }, anyReply);
+    expect(server.asked.filter((one) => one.method === "DELETE")).toEqual([
+      { method: "DELETE", path: "/v1/users/me", body: { code: "123456" }, headers: { "content-type": "application/json", authorization: "Bearer access-2" } },
+      { method: "DELETE", path: "/v1/users/me/onboarding", body: undefined, headers: { authorization: "Bearer access-2" } },
+    ]);
+  });
+});
+
+describe("an account deleted from this phone", () => {
+  it("is signed out with its note, keeps nothing, and owes no Sign out", async () => {
+    const { session, store, server } = phone({ "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }) }, kept(1));
+    await session.start();
+    await session.accountDeleted("Your account will be deleted on 18 November.");
+    expect(session.state()).toEqual({ kind: "out", note: "Your account will be deleted on 18 November." });
+    expect(store.value).toBeNull();
+    expect(session.accessToken()).toBeNull();
+    await session.tellOwedSignOut();
+    expect(server.paths()).not.toContain("/v1/auth/logout");
+  });
+});
+
 describe("a late write never undoes a sign-out", () => {
   /** A key store whose writes, while `slow`, finish only when the test says. */
   function slowStore(value: string) {
