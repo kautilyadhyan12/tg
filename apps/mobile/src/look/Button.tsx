@@ -4,8 +4,9 @@ import { colours, orangeGradient, shadows, sizes, type ColourName } from "./colo
 import { Icon, type IconName } from "./Icon";
 import { fonts, Txt } from "./Txt";
 
-/** `link` and `quiet` are words alone, with no box: a second thing to do beside a main button. */
-export type ButtonKind = "main" | "plain" | "soft" | "danger" | "link" | "quiet";
+/** `link`, `dangerLink` and `quiet` are words alone, with no box: a second thing to do beside a main button
+ *  (`dangerLink` for one that removes something, such as Delete account). */
+export type ButtonKind = "main" | "plain" | "soft" | "danger" | "link" | "dangerLink" | "quiet";
 
 interface ButtonProps {
   label: string;
@@ -33,6 +34,7 @@ const ink: Record<ButtonKind, ColourName> = {
   soft: "orange",
   danger: "badText",
   link: "orange",
+  dangerLink: "badText",
   quiet: "textSoft",
 };
 
@@ -51,7 +53,7 @@ export function Button({
   style,
   say,
 }: ButtonProps) {
-  const words = kind === "link" || kind === "quiet";
+  const words = kind === "link" || kind === "dangerLink" || kind === "quiet";
   return (
     <Pressable
       accessibilityRole="button"
@@ -106,6 +108,7 @@ const styles = StyleSheet.create({
   soft: { backgroundColor: colours.orangeFill, borderColor: colours.orangeLine },
   danger: { backgroundColor: colours.badFill, borderColor: colours.badLine },
   link: {},
+  dangerLink: {},
   quiet: {},
   small: { height: sizes.press, paddingHorizontal: 16 },
   compact: { height: 34, paddingHorizontal: 13, gap: 6 },

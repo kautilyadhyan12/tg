@@ -47,7 +47,8 @@ export default function RestoreAccount() {
             <>
               <p className="text-gray-300 flex items-start gap-2">
                 <Check className="w-5 h-5 mt-0.5 flex-shrink-0" style={{ color: '#4ade80' }} />
-                Your account and everything in it are exactly as you left them. Sign in to continue.
+                Your workouts, meals, goals and progress are back. Sign in to continue. If you were a member of a
+                gym, join it again from its invitation after you sign in.
               </p>
               <Link to="/login" className="btn-primary w-full inline-block text-center">
                 Sign in
@@ -57,7 +58,7 @@ export default function RestoreAccount() {
             <>
               <p className="text-gray-300">
                 You asked us to delete your account. If you have changed your mind, press the button
-                and it will be restored with everything in it.
+                and your workouts, meals, goals and progress come back.
               </p>
               {!token && (
                 <p role="alert" className="text-sm" style={{ color: '#f87171' }}>

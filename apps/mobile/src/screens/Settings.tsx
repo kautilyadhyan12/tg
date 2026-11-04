@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { AppState, Pressable, StyleSheet, View } from "react-native";
+import { AppState, Platform, Pressable, StyleSheet, View } from "react-native";
 import {
   ACCOUNT_UNDO_DAYS,
   deleteAccountResponseSchema,
@@ -339,6 +339,9 @@ export function placesOnDelete(orgs: readonly Place[]): { leaves: string[]; owns
   };
 }
 
+/** The phone's own Documents folder, as Android's folder box names it: Android lets no app save straight into Download. */
+const ANDROID_DOCUMENTS = "content://com.android.externalstorage.documents/document/primary%3ADocuments";
+
 function DataPart({ places }: { places: Places }) {
   const { session, state } = useSession();
   const [busy, setBusy] = useState(false);
@@ -349,9 +352,10 @@ function DataPart({ places }: { places: Places }) {
     if (busy || me === null) return;
     setSaid(null);
     // The folder first, as Save as does: closing the phone's own box saves nothing and says nothing.
+    // Android's box opens in Documents: at the top of the phone, or in Download, it cannot save at all.
     let folder: Directory;
     try {
-      folder = await Directory.pickDirectoryAsync();
+      folder = await Directory.pickDirectoryAsync(Platform.OS === "android" ? ANDROID_DOCUMENTS : undefined);
     } catch {
       return;
     }
@@ -378,7 +382,7 @@ function DataPart({ places }: { places: Places }) {
       <Button label="Download my data" kind="link" icon="download" busy={busy} style={styles.start} onPress={() => void download()} />
       <Said words={said?.words ?? null} bad={said?.bad ?? false} />
       <View style={styles.rule} />
-      <Button label="Delete account" kind="link" icon="trash" style={styles.start} onPress={() => { setAsking(true); }} />
+      <Button label="Delete account" kind="dangerLink" icon="trash" style={styles.start} onPress={() => { setAsking(true); }} />
       <DeleteAsk open={asking} places={places} onClose={() => { setAsking(false); }} />
     </Part>
   );
@@ -442,9 +446,9 @@ function DeleteAsk({ open, places, onClose }: { open: boolean; places: Places; o
             {places.kind === "ok" ? null : <Txt>You also leave every place you belong to.</Txt>}
             {owns.length > 0 ? <Txt>You own {namesText(owns)}. Deleting your account does not close it.</Txt> : null}
             {problem === null ? null : <Txt kind="small" colour="badText">{problem}</Txt>}
-            <View style={styles.two}>
-              <Button label="Cancel" kind="plain" style={styles.half} onPress={onClose} />
-              <Button label="Email me a code" kind="danger" busy={busy} style={styles.half} onPress={() => void sendCode()} />
+            <View style={styles.stack}>
+              <Button label="Email me a code" kind="danger" wide busy={busy} onPress={() => void sendCode()} />
+              <Button label="Cancel" kind="plain" wide onPress={onClose} />
             </View>
           </>
         ) : (
@@ -467,9 +471,9 @@ function DeleteAsk({ open, places, onClose }: { open: boolean; places: Places; o
               onDone={() => void remove()}
             />
             {problem === null ? null : <Txt kind="small" colour="badText">{problem}</Txt>}
-            <View style={styles.two}>
-              <Button label="Cancel" kind="plain" style={styles.half} onPress={onClose} />
-              <Button label="Delete" kind="danger" icon="trash" busy={busy} style={styles.half} onPress={() => void remove()} />
+            <View style={styles.stack}>
+              <Button label="Delete" kind="danger" icon="trash" wide busy={busy} onPress={() => void remove()} />
+              <Button label="Cancel" kind="plain" wide onPress={onClose} />
             </View>
             <Button label="Email me a new code" kind="link" style={styles.start} onPress={() => void sendCode()} />
           </>
@@ -492,5 +496,7 @@ const styles = StyleSheet.create({
   start: { alignSelf: "flex-start" },
   ask: { gap: 14 },
   two: { flexDirection: "row", gap: 10 },
+  // One above the other, the whole width: a box's words never spill out of its buttons on a small phone or in large text.
+  stack: { gap: 10 },
   half: { flex: 1 },
 });

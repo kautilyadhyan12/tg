@@ -37,6 +37,9 @@ describe('the restore page', () => {
     fireEvent.click(screen.getByRole('button', { name: /restore my account/i }));
     await waitFor(() => expect(api.restoreAccount).toHaveBeenCalledWith('abc123'));
     expect(await screen.findByText(/your account is back/i)).toBeTruthy();
+    // Gyms are left on deleting (Part 4 §5.2): the page never says everything is as it was.
+    expect(screen.getByText(/join it again from its invitation/)).toBeTruthy();
+    expect(screen.queryByText(/exactly as you left/)).toBeNull();
     fireEvent.click(screen.getByText('Sign in'));
     expect(await screen.findByText('GET STARTED')).toBeTruthy();
   });
