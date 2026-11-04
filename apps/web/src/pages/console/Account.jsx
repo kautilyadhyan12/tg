@@ -48,10 +48,12 @@ export default function Account() {
     setProblem(null);
   };
   const refused = (err) => {
-    // A gym the console did not know they own: read again, and the box turns to its owner.
+    // A gym the console did not know they own: read again, and the box turns to its owner, which
+    // says the server's sentence itself.
     if (errorCode(err) === 'owns_gym') {
       refreshConsoleOrgsAfterChange();
       setStep('ask');
+      return;
     }
     setProblem(errorText(err, 'Something went wrong. Please try again.'));
   };

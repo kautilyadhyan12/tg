@@ -334,7 +334,6 @@ export class OrgNameTakenError extends Error {
   }
 }
 
-/** The owner already has as many gyms that never paid as one owner may (2g). */
 /** The account making the gym was deleted in that same instant (19b-ii). */
 export class OwnerGoneError extends Error {
   constructor() {
@@ -343,6 +342,7 @@ export class OwnerGoneError extends Error {
   }
 }
 
+/** The owner already has as many gyms that never paid as one owner may (2g). */
 export class UnpaidGymLimitError extends Error {
   constructor() {
     super("org create refused: the owner's unpaid gyms are at the limit");
@@ -1782,6 +1782,8 @@ export async function getOrgIdBySlug(sql: SqlOrTx, slug: string): Promise<string
 export type RestoreGymOutcome =
   | { kind: "restored"; org: OrgRow }
   | { kind: "not_archived"; org: OrgRow }
+  /** Its owner's account is deleted: an open gym always has an owner who can run it (19b-ii). */
+  | { kind: "owner_gone"; org: OrgRow }
   | { kind: "not_found" };
 
 /** RE-OPEN A CLOSED GYM — the other half of `archiveSweep.ts`, and today the
@@ -1845,6 +1847,12 @@ export async function restoreGym(
     // state that already holds, and telling them which is what stops an
     // operator re-running this and believing they fixed something.
     if (org.status !== "archived") return { kind: "not_archived", org };
+    // An archived gym's owner may delete their account (19b-ii), so its owner is asked for again
+    // here, held against a deletion until this commits.
+    const owner = await tx`
+      SELECT 1 FROM users u JOIN gyms g ON g.owner_user_id = u.id
+      WHERE g.id = ${input.gymId} AND u.status = 'active' FOR SHARE OF u`;
+    if (owner.length === 0) return { kind: "owner_gone", org };
 
     const updated = await tx<RawOrg[]>`
       UPDATE gyms SET status = 'active'

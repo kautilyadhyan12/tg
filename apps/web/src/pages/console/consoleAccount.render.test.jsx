@@ -132,7 +132,9 @@ describe('Your account → Delete account (the worst thing: an owner deleted, or
     auths.requestDeleteCode.mockRejectedValue(apiError(409, 'owns_gym', OWNS_LINE));
     fireEvent.click(send);
     expect(await screen.findByRole('link', { name: 'Choose a new owner' })).toBeTruthy();
-    expect(screen.getByRole('alert').textContent).toBe(OWNS_LINE);
+    // The box says it, once: not again in a red line under it (round one, L-3).
+    expect(screen.getAllByText(OWNS_LINE)).toHaveLength(1);
+    expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Email me a code' })).toBeNull();
   });
 });

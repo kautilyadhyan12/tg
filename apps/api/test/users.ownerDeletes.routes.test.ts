@@ -8,6 +8,7 @@ import { myOrgsResponseSchema, myOwnerRequestResponseSchema, type MyOrgsResponse
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createIoRedis, createMemoryRedis, type RedisLike } from "../src/redis.js";
+import { restoreGym } from "../src/modules/orgs/repo.js";
 import { proveAddress } from "./proveAddress.js";
 
 const url = process.env["DATABASE_URL"];
@@ -218,6 +219,9 @@ d("an owner hands the gym over before deleting their account (real Postgres)", {
       await sql`UPDATE gyms SET status = 'archived', archived_at = now() WHERE id = ${archived.id}`;
       const shut = await tryDelete(archived.owner);
       expect([shut.asked.statusCode, shut.deleted?.statusCode, await statusOf(archived.owner)]).toEqual([200, 200, "deleted"]);
+      // And it is not re-opened by hand with nobody to run it (round one, L-4).
+      expect((await restoreGym(sql, { gymId: archived.id, actorUserId: null, via: "test" })).kind).toBe("owner_gone");
+      expect((await sql<{ status: string }[]>`SELECT status FROM gyms WHERE id = ${archived.id}`)[0]?.status).toBe("archived");
 
       // Somebody with no gym.
       const nobody = await signedIn("Nadia Nowhere");

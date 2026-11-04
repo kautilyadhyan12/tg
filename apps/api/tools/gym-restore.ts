@@ -107,6 +107,14 @@ try {
       code = 1;
       break;
     }
+    case "owner_gone": {
+      log.warn(
+        { gymId, name: outcome.org.name, event: "orgs.gym_owner_gone" },
+        "that gym's owner has deleted their account — it is not re-opened with nobody to run it",
+      );
+      code = 1;
+      break;
+    }
     case "not_found": {
       log.error({ gymId, event: "orgs.gym_not_found" }, "no gym with that id");
       code = 1;

@@ -118,12 +118,36 @@ export function forgetDoor(store = defaultStore()) {
 }
 
 // ── A console page opened signed out, opened again after sign-in (19b-ii) ───
-// The phone's Choose a new owner opens a gym's Staff tab in the phone's browser, which is
-// usually signed out: without this, signing in lands on the console's front page and the
-// place is lost. Only this site's own console pages are kept, for 30 minutes, in this tab.
+// The phone's Open the website opens the console's Your account page in the phone's browser,
+// which is usually signed out: without this, signing in lands on the console's front page and
+// the place is lost. Only this site's own console pages are kept, for 30 minutes, in this tab.
+//
+// Never the page somebody signs out FROM: the page still on screen renders once with nobody
+// signed in before the sign-in page opens, and keeping it then would hand it, and "Manage my
+// gym or studio", to the next person at a shared front-desk browser (19b-ii round one, H-1).
 
 const RETURN_KEY = 'aihg.signInReturn';
 export const RETURN_FOR_MS = 30 * 60 * 1000;
+
+// Set when this page load signs somebody out; cleared when somebody is signed in again. A page
+// opened from a link or the address bar is a new page load, so it starts unset.
+let signedOutHere = false;
+
+/** Sign-out: forget the kept page, and keep none until somebody signs in again. */
+export function noteSignedOut(store = defaultStore()) {
+  signedOutHere = true;
+  return forgetReturn(store);
+}
+
+/** Somebody is signed in: a later sign-out is theirs to note. */
+export function noteSignedIn() {
+  signedOutHere = false;
+}
+
+/** The kept page, for the door the person is going through: the console door only. */
+export function returnForDoor(door, store = defaultStore(), now = Date.now()) {
+  return door === GYM_DOOR ? readReturn(store, now) : null;
+}
 
 /** A page of this site's console: "/console/iron-house/members?view=staff". Never another site. */
 export function isReturnPath(path) {
@@ -134,7 +158,7 @@ export function isReturnPath(path) {
  *  also chooses "Manage my gym or studio" on the sign-in page, since that is who opens one (Kd,
  *  2026-11-04: the owner signs in as the person who manages the gym). */
 export function rememberReturn(path, store = defaultStore(), now = Date.now()) {
-  if (store === null) return false;
+  if (store === null || signedOutHere) return false;
   try {
     if (isReturnPath(path)) {
       store.setItem(RETURN_KEY, JSON.stringify({ path, at: now }));
