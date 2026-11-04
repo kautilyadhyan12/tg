@@ -582,6 +582,8 @@ describe('adding a membership', () => {
       fullFrom: null,
       minimumTerm: null,
       noticeDays: null,
+
+      coolingOffDays: null,
       typeId: GOLD.id,
       startsOn: TODAY,
       paid: false,
@@ -749,6 +751,8 @@ describe('adding a membership', () => {
       fullFrom: null,
       minimumTerm: null,
       noticeDays: null,
+
+      coolingOffDays: null,
       typeId: TAXED.id,
       startsOn: TODAY,
       paid: false,
@@ -836,7 +840,7 @@ describe('adding a membership', () => {
     const [gym, entry, body] = orgService.giveHeldMembership.mock.calls[0];
     expect([gym, entry]).toEqual([GYM, ADA]);
     // The price and what the first bill comes to are sent as the screen showed them (18b-iii).
-    expect(body).toEqual({ requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/), typeId: GOLD.id, startsOn: TODAY, paid: true, method: 'cash', priceMinor: 4999, totalMinor: 4999, fullFrom: null, minimumTerm: null, noticeDays: null });
+    expect(body).toEqual({ requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/), typeId: GOLD.id, startsOn: TODAY, paid: true, method: 'cash', priceMinor: 4999, totalMinor: 4999, fullFrom: null, minimumTerm: null, noticeDays: null, coolingOffDays: null });
 
     // It failed: the form stays, and pressing again sends the same key, so one membership.
     expect(await (await boxSoon()).findByRole('alert')).toBeTruthy();
@@ -1292,6 +1296,8 @@ describe('Add member gives a membership in the same form', () => {
       fullFrom: null,
       minimumTerm: null,
       noticeDays: null,
+
+      coolingOffDays: null,
       typeId: PACK.id,
       startsOn: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
       paid: true,
@@ -2372,5 +2378,82 @@ describe('cancelling early with the early cancellation fee', () => {
     const box = within(b.getByTestId('held-ask-cancel'));
     expect(box.queryByTestId('held-leave-early')).toBeNull();
     expect(box.getByRole('button', { name: 'Release today' })).toBeTruthy();
+  });
+});
+
+// A COOLING-OFF PERIOD (18v-iii). The worst this box could do: offer a full refund once the days are over, or
+// leave the refund owed where nobody sees it.
+describe('cancelling with a full refund in the cooling-off period', () => {
+  const COOLING = typeOf(8, { name: 'Gold 3 days', coolingOffDays: 3 });
+  const COOL = { type: 'cancel', when: 'cooling_off' };
+  /** Given on `startsOn` with its first month paid in cash; what is left to refund is that payment, as the server says. */
+  const cooling = (startsOn, moves = [], left = 4999) => {
+    const h = held(8, COOLING, startsOn, true, moves);
+    const paymentId = h.billing.bills[0].payments[0].id;
+    return {
+      ...h,
+      coolingOffDays: 3,
+      changedMind: moves.length > 0,
+      billing: { ...h.billing, coolingOffRefund: left === null ? null : { leftMinor: left, paymentId } },
+    };
+  };
+
+  it('offers it to the last day, sends it on one press, and keeps the refund owed in sight with its button', async () => {
+    // Given on 18 October: its three days run to 21 October, and today is 20 October.
+    const gold = cooling('2026-10-18');
+    orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
+    render(draw(ADA, 'Ada Lovelace'));
+    const b = await boxSoon();
+    expect(b.getByTestId('held-cooling-off-line').textContent).toBe('Cooling-off period: until 21 October 2026');
+    fireEvent.click(b.getByRole('button', { name: 'Cancel membership' }));
+    const ask = within(b.getByTestId('held-ask-cancel'));
+    expect(within(ask.getByTestId('held-cooling-off')).getByText('Ada Lovelace is in their cooling-off period until 21 October 2026. Cancel today and refund the £49.99 they paid.')).toBeTruthy();
+    // Cancel today is still there, under it, for staff who mean that instead.
+    expect(ask.getByRole('button', { name: 'Cancel today' })).toBeTruthy();
+    orgService.changeHeldMembership.mockResolvedValueOnce(answer([cooling('2026-10-18', [[COOL, TODAY]])]));
+    fireEvent.click(ask.getByRole('button', { name: 'Cancel with full refund' }));
+    await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledTimes(1));
+    expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, 'cancel', { when: 'cooling_off' });
+    expect(await b.findByText('Gold 3 days is cancelled. Refund the £49.99 they paid: press Refund under it.')).toBeTruthy();
+    // Cancelled, it is not folded away under earlier memberships while money is owed back.
+    const line = within(b.getByTestId('held-changed-mind-line'));
+    expect(line.getByText('Cancelled in its cooling-off period: £49.99 to refund')).toBeTruthy();
+    expect(b.queryByRole('button', { name: /earlier membership/ })).toBeNull();
+    expect(b.queryByTestId('held-cooling-off-line')).toBeNull();
+    // Refund opens Note a refund under the payment, the whole amount and its reason filled in.
+    fireEvent.click(line.getByRole('button', { name: 'Refund' }));
+    const form = within(b.getByTestId('held-refund-form'));
+    expect(form.getByDisplayValue('49.99')).toBeTruthy();
+    expect(form.getAllByRole('combobox')[1].value).toBe('leaving');
+  });
+
+  it('the day after the last, neither the line nor the box offers it', async () => {
+    // Given on 16 October: its three days ran to 19 October.
+    orgService.getHeldMemberships.mockResolvedValue(answer([cooling('2026-10-16')]));
+    render(draw(ADA, 'Ada Lovelace'));
+    const b = await boxSoon();
+    expect(b.queryByTestId('held-cooling-off-line')).toBeNull();
+    fireEvent.click(b.getByRole('button', { name: 'Cancel membership' }));
+    expect(within(b.getByTestId('held-ask-cancel')).queryByTestId('held-cooling-off')).toBeNull();
+  });
+
+  it('refunded in full, it says so and folds away as any cancelled membership does', async () => {
+    orgService.getHeldMemberships.mockResolvedValue(answer([cooling('2026-10-18', [[COOL, TODAY]], null)]));
+    render(draw(ADA, 'Ada Lovelace'));
+    const b = await boxSoon();
+    fireEvent.click(b.getByRole('button', { name: 'Show 1 earlier membership' }));
+    const line = within(b.getByTestId('held-changed-mind-line'));
+    expect(line.getByText('Cancelled in its cooling-off period: refunded in full')).toBeTruthy();
+    expect(line.queryByRole('button', { name: 'Refund' })).toBeNull();
+  });
+
+  it("Refund on Overview's Refunds to review opens Note a refund for a payment taken by hand", async () => {
+    const gold = cooling('2026-10-18', [[COOL, TODAY]]);
+    orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
+    render(draw(ADA, 'Ada Lovelace', { refundNow: { membershipId: gold.id, paymentId: gold.billing.coolingOffRefund.paymentId, voidFeeId: null } }));
+    const form = within(await screen.findByTestId('held-refund-form'));
+    expect(form.getByDisplayValue('49.99')).toBeTruthy();
+    expect(form.getAllByRole('combobox')[1].value).toBe('leaving');
+    expect(screen.queryByTestId('card-refund-box')).toBeNull();
   });
 });

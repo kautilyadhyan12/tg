@@ -378,6 +378,53 @@ export function leftEarlyLine(m) {
   return m.leaveFeeMinor > 0 ? `Cancelled early, with the early cancellation fee of ${formatMinor(m.leaveFeeMinor, m.currency)}` : 'Cancelled early, with the early cancellation fee';
 }
 
+/** What a full refund gives back, as the server worked it out (18v-iii): "$50.00", or null where nothing is left
+ *  or this reader is not sent the bills. */
+function coolingOffAmount(m) {
+  const left = m.billing?.coolingOffRefund?.leftMinor ?? null;
+  return left === null ? null : formatMinor(left, m.currency);
+}
+
+/** Cancel with a full refund in the Cancel box, while its cooling-off period is open (18v-iii): the sentence and
+ *  the button, or nulls where it is not offered. */
+export function coolingOffWords(m, name) {
+  const cool = m.view?.can?.coolingOff ?? null;
+  if (cool === null) return { coolLine: null, coolButton: null };
+  const amount = coolingOffAmount(m);
+  // What would otherwise hold them, named only where this membership has it.
+  const held = [m.view.contract !== null ? 'minimum term' : null, m.view.notice !== null ? 'notice' : null, m.view.contract !== null && m.leaveFeeMinor > 0 ? 'early cancellation fee' : null].filter(
+    (part) => part !== null,
+  );
+  const holds = held.length === 0 ? '' : ` Their ${held.length === 1 ? held[0] : `${held.slice(0, -1).join(', ')} and ${held[held.length - 1]}`} ${held.length === 1 ? "doesn't" : "don't"} apply.`;
+  const refund =
+    amount !== null
+      ? `Cancel today and refund the ${amount} they paid.`
+      : m.billing !== null && m.billing !== undefined
+        ? 'Cancel today, with nothing to refund.'
+        : 'Cancel today and refund what they paid.';
+  return {
+    coolLine: `${name} is in their cooling-off period until ${dayWords(cool.until)}. ${refund}${holds}`,
+    coolButton: 'Cancel with full refund',
+  };
+}
+
+/** "Cooling-off period: until 7 Nov 2026" while it is open (18v-iii); null otherwise. */
+export function coolingOffShownLine(m) {
+  const cool = m.view?.can?.coolingOff ?? null;
+  return cool === null ? null : `Cooling-off period: until ${dayWords(cool.until)}`;
+}
+
+/** On one cancelled in its cooling-off period (18v-iii): what is left to refund, with `refund` true where the
+ *  Refund button goes beside it; null for none. Said as the page knows it: a reader not sent the bills reads
+ *  only that it was cancelled so. */
+export function changedMindLine(m) {
+  if (m.changedMind !== true) return null;
+  const amount = coolingOffAmount(m);
+  if (amount !== null) return { text: `Cancelled in its cooling-off period: ${amount} to refund`, refund: true };
+  const paid = (m.billing?.bills ?? []).some((b) => b.paidMinor > 0);
+  return { text: paid ? 'Cancelled in its cooling-off period: refunded in full' : 'Cancelled in its cooling-off period', refund: false };
+}
+
 /** "Released from contract: Moved away" on a membership cancelled inside one; null for none. */
 export function releaseShownLine(m) {
   return m.release ? `Released early: ${CONTRACT_RELEASE_WORDS[m.release] ?? 'Other reason'}` : null;
@@ -515,6 +562,10 @@ export function doneWords(what, m) {
       const fee = leave === null ? 'The early cancellation fee' : `The early cancellation fee of ${formatMinor(leave.feeMinor, m.currency)}`;
       return `${m.typeName} is cancelled early. ${fee} is on their bills.`;
     }
+    case 'cancelCoolingOff': {
+      const amount = coolingOffAmount(m);
+      return amount === null ? `${m.typeName} is cancelled.` : `${m.typeName} is cancelled. Refund the ${amount} they paid: press Refund under it.`;
+    }
     case 'cancelContract':
       return m.view.can.cancelAtContractEnd ? `${m.typeName} ends on ${dayWords(m.view.can.cancelAtContractEnd)}, at the end of its minimum term.` : `${m.typeName} ends at the end of its minimum term.`;
     case 'cancel':
@@ -610,6 +661,8 @@ export function giveBody(requestKey, type, value, discount = null, summary = nul
     minimumTerm: type.contractPeriods ? { periods: type.contractPeriods, then: type.contractThen ?? 'renews', leaveFeeMinor: type.leaveFeeMinor ?? null } : null,
     // The notice to cancel the form said (18v-ii-a), checked the same way.
     noticeDays: type.noticeDays ?? null,
+    // And its cooling-off period (18v-iii).
+    coolingOffDays: type.priceMinor > 0 ? (type.coolingOffDays ?? null) : null,
   };
   // The person's own Refer a friend gift, and what it takes off (20e-ii-b-ii-a).
   const gifted = memberGift === null || summary === null || !(summary.giftOffMinor > 0) ? shown : { ...shown, memberGiftId: memberGift.id, memberGiftMinor: summary.giftOffMinor };

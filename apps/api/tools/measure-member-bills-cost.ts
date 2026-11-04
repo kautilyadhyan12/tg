@@ -20,6 +20,11 @@
 // Then cancel early with the early cancellation fee (18v-ii-b): one press on a person of the gym of
 // 2,000, each inside a twelve-month minimum term, a new person each time.
 //
+// Then a cooling-off period (18v-iii): every membership holds 3 days from today, so a person's page reads the
+// day they count from, and Cancel with full refund is one press on a person of the gym of 2,000. Then Overview's
+// Refunds to review, once every person of one gym of 200 paid and cancelled so (more than any gym will ever have
+// waiting), and for the gym of 2,000.
+//
 // Then a fee while frozen (18z): every membership frozen 40 days ago with a fee of its own, so the
 // run opens this month's fee for every person at once (more than any gym will ever have frozen),
 // and every other hour opens nothing.
@@ -32,6 +37,7 @@ import postgres from "postgres";
 import { openDueBills } from "../src/modules/orgs/memberships/billsRepo.js";
 import { getHeldMemberships, moveHeldMembership, recordMemberPayment } from "../src/modules/orgs/memberships/heldService.js";
 import { openDueFreezeFees } from "../src/modules/orgs/memberships/freezeFees.js";
+import { refundsToReview } from "../src/modules/orgs/payments/refundsToReviewRepo.js";
 
 const url = process.env["DATABASE_URL"] ?? "";
 if (!/localhost|127\.0\.0\.1/.test(url)) {
@@ -166,6 +172,8 @@ console.log(
 );
 
 const deps = { sql, now: () => new Date() };
+// A cooling-off period on every membership, counted from today (18v-iii).
+await sql`UPDATE gym_held_memberships SET cooling_off_days = 3 WHERE gym_id = ANY(${all}::uuid[]) AND kind = 'recurring'`;
 const calls: [string, () => Promise<unknown>][] = [
   ["read a person's page, with its bill", () => getHeldMemberships(deps, gyms[0]?.owner ?? "", ids[0] ?? "", gyms[0]?.first ?? "")],
   [
@@ -186,6 +194,18 @@ const calls: [string, () => Promise<unknown>][] = [
       return moveHeldMembership(deps, big.owner, big.id, m?.entry_id ?? "", m?.id ?? "", { type: "cancel", when: "leave_early" }, null, null, 0, 9900);
     },
   ],
+  [
+    "cancel with a full refund (a new person each time)",
+    async () => {
+      const [m] = await sql<{ id: string; entry_id: string }[]>`
+        SELECT h.id, h.entry_id FROM gym_held_memberships h
+        WHERE h.gym_id = ${big.id} AND h.status = 'active' AND NOT h.left_early AND NOT h.changed_mind
+          AND NOT EXISTS (SELECT 1 FROM gym_member_bills b JOIN gym_member_payments p ON p.gym_id = b.gym_id AND p.bill_id = b.id AND p.undone_at IS NULL
+                          WHERE b.gym_id = h.gym_id AND b.held_membership_id = h.id AND b.status = 'open')
+        ORDER BY random() LIMIT 1`;
+      return moveHeldMembership(deps, big.owner, big.id, m?.entry_id ?? "", m?.id ?? "", { type: "cancel", when: "cooling_off" });
+    },
+  ],
 ];
 // Every membership of the gym of 2,000 inside a twelve-month minimum term with a fee (18v-ii-b).
 await sql`
@@ -201,6 +221,34 @@ for (const [name, call] of calls) {
     jss.push(t.js);
   }
   console.log(`${name.padEnd(52)} total median ${fmt(median(walls))} (worst ${fmt(Math.max(...walls))}) · thread busy median ${fmt(median(jss))} (worst ${fmt(Math.max(...jss))})`);
+}
+// Every person of one gym of 200 pays their open bill in full and is cancelled with a full refund (18v-iii).
+const owedBills = await sql<{ id: string; entry_id: string; period_index: number; amount_minor: number }[]>`
+  SELECT h.id, h.entry_id, b.period_index, b.amount_minor FROM gym_held_memberships h
+  JOIN gym_member_bills b ON b.gym_id = h.gym_id AND b.held_membership_id = h.id AND b.status = 'open' AND b.period_index IS NOT NULL
+  WHERE h.gym_id = ${ids[0] ?? ""} AND h.status = 'active'`;
+for (const b of owedBills) {
+  await recordMemberPayment(deps, gyms[0]?.owner ?? "", ids[0] ?? "", b.entry_id, b.id, { requestKey: randomUUID(), periodIndex: b.period_index, amountMinor: b.amount_minor, method: "cash" });
+}
+for (const id of new Set(owedBills.map((b) => b.id))) {
+  const b = owedBills.find((x) => x.id === id);
+  await moveHeldMembership(deps, gyms[0]?.owner ?? "", ids[0] ?? "", b?.entry_id ?? "", id, { type: "cancel", when: "cooling_off" });
+}
+for (const [name, gymId] of [
+  [`Refunds to review, one gym of ${String(PEOPLE)}, all refunds owed`, ids[0] ?? ""],
+  [`Refunds to review, one gym of ${String(BIG)}`, big.id],
+] as const) {
+  let count = 0;
+  const walls: number[] = [];
+  const jss: number[] = [];
+  for (let i = 0; i < RUNS; i++) {
+    const t = await time(async () => {
+      count = (await refundsToReview(sql, gymId, true, new Date(), 0, 10)).count;
+    });
+    walls.push(t.wall);
+    jss.push(t.js);
+  }
+  console.log(`${name.padEnd(52)} total median ${fmt(median(walls))} (worst ${fmt(Math.max(...walls))}) · thread busy median ${fmt(median(jss))} · ${String(count)} rows`);
 }
 // Every membership frozen 40 days ago with its fee: this month's fee is owed by every person.
 await sql`
