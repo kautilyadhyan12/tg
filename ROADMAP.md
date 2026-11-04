@@ -350,7 +350,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 18v-i. [x] **Minimum term** (contract length) — merged 2026-11-03 (PR #457).
      - 18v-ii. **Notice to cancel and a fee for leaving early**, both waived for a release, in two parts since 2026-11-04:
        - 18v-ii-a. [x] **Notice to cancel** — merged 2026-11-04 (PR #461).
-       - 18v-ii-b. [ ] **A fee for leaving early**: a set amount on the line, put on a member who leaves inside the minimum term, none for a release. Web folder 2.
+       - 18v-ii-b. [x] **An early cancellation fee** — merged 2026-11-04 (PR #464).
      - 18v-iii. [ ] **Days to change their mind** after signing, with a full refund. Web folder 2.
      - 18v-iv. [ ] **A reminder before a renewal or a contract's end**; a price change's is 18w's, a trial's end is sent already. Web folder 2.
    - 18w. [ ] **Raise the price for existing members** from their next payment, with each place's notice (Kd, 2026-10-22). Web folder 2.

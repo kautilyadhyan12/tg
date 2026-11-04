@@ -85,7 +85,7 @@ export async function changeHeld(
     /** The day it said the new one's full payments start (18y); null for none. */
     shownFullFrom: string | null;
     /** The new line's minimum term the screen showed (18v-i); undefined where it showed no word of it. */
-    shownMinimumTerm?: { periods: number; then: string } | null;
+    shownMinimumTerm?: { periods: number; then: string; leaveFeeMinor?: number | null | undefined } | null;
     /** The new line's notice to cancel the screen showed (18v-ii-a); undefined where it showed no word of it. */
     shownNoticeDays?: number | null;
     paid: boolean;

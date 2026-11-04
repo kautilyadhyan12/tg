@@ -141,7 +141,9 @@ describe("round one's findings, on screen", () => {
   it('L6: the Add form sends the minimum term it showed, and none for a line without one', () => {
     const type = { id: 't', priceMinor: 5000, joiningFeeMinor: 0, kind: 'recurring', termCount: 1, termUnit: 'month', contractPeriods: 12, contractThen: 'ends' };
     const value = { startsOn: '2026-11-03', paid: false };
-    expect(giveBody('k', type, value).minimumTerm).toEqual({ periods: 12, then: 'ends' });
+    expect(giveBody('k', type, value).minimumTerm).toEqual({ periods: 12, then: 'ends', leaveFeeMinor: null });
+    // And the early cancellation fee it showed (18v-ii-b).
+    expect(giveBody('k', { ...type, leaveFeeMinor: 9900 }, value).minimumTerm).toEqual({ periods: 12, then: 'ends', leaveFeeMinor: 9900 });
     expect(giveBody('k', { ...type, contractPeriods: null, contractThen: null }, value).minimumTerm).toBeNull();
     expect(contractLine(null)).toBeNull();
   });

@@ -76,7 +76,7 @@ import { lockedDiscount, takeUse } from "../register/discountsRepo.js";
 import { friendGiftOpen } from "../referrals/friendGiftRepo.js";
 import { giftUseUndone, giveMemberGift, lockedWaitingGift, markUsed } from "../referrals/memberGiftRepo.js";
 import { rateOf, taxIncludedOf } from "../register/taxRepo.js";
-import { feesFor, type FeePaymentRow, type FeeRow } from "./feesRepo.js";
+import { feesFor, openLeaveFee, type FeePaymentRow, type FeeRow } from "./feesRepo.js";
 import { freezeFeeOf, openFreezeFee, removeFreezeFees } from "./freezeFees.js";
 import {
   billOf,
@@ -156,6 +156,8 @@ const rawSchema = z.object({
   notice_days: z.number().int().nullable(),
   stops_after: z.number().int().nullable(),
   notice_waived: contractReleaseSchema.nullable(),
+  leave_fee_minor: z.number().int().nullable(),
+  left_early: z.boolean(),
   freeze_fee_minor: z.number().int(),
   from_list: z.boolean(),
   discount_name: z.string().nullable(),
@@ -214,6 +216,8 @@ function shape(row: unknown): HeldRow {
       contractThen: r.contract_then,
       noticeDays: r.notice_days,
       stopsAfter: r.stops_after,
+      leaveFeeMinor: r.leave_fee_minor,
+      leftEarly: r.left_early,
     },
   };
 }
@@ -235,6 +239,7 @@ const typeSchema = z.object({
   contract_periods: z.number().int().nullable(),
   contract_then: contractThenSchema.nullable(),
   notice_days: z.number().int().nullable(),
+  leave_fee_minor: z.number().int().nullable(),
 });
 
 /** The tax rate a type charges, by id: what a membership given from it keeps. None for a
@@ -263,13 +268,14 @@ export function typeChoice(row: unknown): HeldMembershipTypeChoice {
     contractPeriods: t.contract_periods,
     contractThen: t.contract_then,
     noticeDays: t.notice_days,
+    leaveFeeMinor: t.leave_fee_minor,
   };
 }
 
 /** A gym's live types, or the one named; a gym has at most 60. */
 export const liveTypes = (sql: Sql | TransactionSql, gymId: string, typeId: string | null) => sql`
   SELECT id, name, kind, price_minor, currency, term_count, term_unit, pack_classes, pack_days, updated_at, tax_rate_id, joining_fee_minor,
-         contract_periods, contract_then, notice_days,
+         contract_periods, contract_then, notice_days, leave_fee_minor,
          (SELECT r.name FROM gym_tax_rates r WHERE r.gym_id = gym_membership_types.gym_id AND r.id = gym_membership_types.tax_rate_id) AS tax_name,
          (SELECT r.rate_bp FROM gym_tax_rates r WHERE r.gym_id = gym_membership_types.gym_id AND r.id = gym_membership_types.tax_rate_id) AS tax_bp
   FROM gym_membership_types
@@ -283,7 +289,7 @@ const COLUMNS = (sql: Sql | TransactionSql) => sql`
   h.starts_on::text AS starts_on, h.frozen_days, h.gift_days, h.gift_from, h.status,
   h.frozen_on::text AS frozen_on, h.cancelled_on::text AS cancelled_on,
   h.paid_periods, h.paid_floor, h.renews, h.classes_left, h.from_list, h.full_from::text AS full_from,
-  h.contract_periods, h.contract_then, h.contract_release, h.notice_days, h.stops_after, h.notice_waived,
+  h.contract_periods, h.contract_then, h.contract_release, h.notice_days, h.stops_after, h.notice_waived, h.leave_fee_minor, h.left_early,
   h.freeze_fee_minor, h.discount_name, h.discount_minor, h.discount_payments,
   (SELECT r.name FROM gym_tax_rates r WHERE r.gym_id = h.gym_id AND r.id = h.tax_rate_id) AS tax_name,
   (SELECT r.rate_bp FROM gym_tax_rates r WHERE r.gym_id = h.gym_id AND r.id = h.tax_rate_id) AS tax_bp,
@@ -462,6 +468,8 @@ export type HeldWriteOutcome =
   | { kind: "minimum_term_changed" }
   /** The line's notice to cancel is not the one the screen showed (18v-ii-a). */
   | { kind: "notice_changed" }
+  /** The early cancellation fee is not the one the screen showed: leaving early, or the line's on Add or Change membership (18v-ii-b). */
+  | { kind: "leave_fee_changed" }
   /** The person has this type running already. `ends`: the one they hold has a last day,
    *  so a start date after it would be taken; a repeating one that renews has none. */
   | { kind: "already_held"; typeName: string; ends: boolean }
@@ -690,7 +698,7 @@ export interface GiveHeldInput {
    *  where it said none; undefined where the caller showed no screen of its own. */
   shownFullFrom?: string | null;
   /** The minimum term the screen showed (18v-i), null for none; undefined where it showed no word of it. */
-  shownMinimumTerm?: { periods: number; then: string } | null;
+  shownMinimumTerm?: { periods: number; then: string; leaveFeeMinor?: number | null | undefined } | null;
   /** The notice to cancel the screen showed (18v-ii-a), null for none; undefined where it showed no word of it. */
   shownNoticeDays?: number | null;
   /** Whether this reader may give a type that has a joining fee without it. */
@@ -742,6 +750,8 @@ export async function giveHeldIn(tx: TransactionSql, input: GiveHeldInput): Prom
     const shown = input.shownMinimumTerm;
     const now = type.contractPeriods === null || type.contractThen === null ? null : { periods: type.contractPeriods, then: type.contractThen };
     if ((shown === null) !== (now === null) || (shown !== null && now !== null && (shown.periods !== now.periods || shown.then !== now.then))) return { kind: "minimum_term_changed" };
+    // Its early cancellation fee too, where the screen said it (18v-ii-b).
+    if (shown?.leaveFeeMinor !== undefined && shown.leaveFeeMinor !== type.leaveFeeMinor) return { kind: "leave_fee_changed" };
   }
   // A notice to cancel set or changed since the screen opened is refused the same way (18v-ii-a).
   if (input.shownNoticeDays !== undefined && input.shownNoticeDays !== type.noticeDays) return { kind: "notice_changed" };
@@ -837,14 +847,14 @@ export async function giveHeldIn(tx: TransactionSql, input: GiveHeldInput): Prom
        term_count, term_unit, pack_classes, pack_days, starts_on, status,
        paid_periods, paid_floor, renews, classes_left,
        discount_id, discount_name, discount_minor, discount_payments, tax_rate_id, tax_included, replaces_id, replaced_stopped, full_from,
-       contract_periods, contract_then, notice_days)
+       contract_periods, contract_then, notice_days, leave_fee_minor)
     VALUES (${input.gymId}, ${input.entryId}, ${input.typeId}, ${input.requestKey}, ${m.kind},
             ${priceMinor}, ${type.currency}, ${m.termCount}, ${m.termUnit}, ${m.packClasses},
             ${m.packDays}, ${m.startsOn}::date, ${m.status},
             ${m.paidPeriods}, ${m.paidFloor}, ${m.renews}, ${m.classesLeft},
             ${used?.id ?? null}, ${used?.name ?? null}, ${used?.offMinor ?? 0}, ${used?.payments ?? null}, ${rate?.id ?? null}, ${tax?.included ?? null},
             ${change?.fromId ?? null}, ${change?.stoppedOld ?? false}, ${m.fullFrom}::date,
-            ${m.contractPeriods ?? null}, ${m.contractThen ?? null}, ${m.noticeDays ?? null})
+            ${m.contractPeriods ?? null}, ${m.contractThen ?? null}, ${m.noticeDays ?? null}, ${m.leaveFeeMinor ?? null})
     RETURNING id`;
   if (created === undefined) throw new Error("held membership insert returned no row");
 
@@ -996,6 +1006,8 @@ export async function moveHeld(
     freezeFeeMinor?: number;
     /** Whether this reader may freeze with no fee where the gym charges one (`billing.members`). */
     mayWaiveFreezeFee?: boolean;
+    /** Leaving early (18v-ii-b): the early cancellation fee the screen showed. */
+    leaveFeeMinor?: number;
     actorUserId: string;
     now: Date;
   },
@@ -1019,10 +1031,14 @@ export async function moveHeld(
     const out = await squareMoneyOut(tx, input.gymId, before.id);
     if (out !== null) return out;
 
+    // Leaving early charges the fee the membership holds, and only the one the screen showed (18v-ii-b).
+    const leaving = input.event.type === "cancel" && input.event.when === "leave_early";
+    if (leaving && before.membership.leftEarly !== true && input.leaveFeeMinor !== (before.membership.leaveFeeMinor ?? null)) return { kind: "leave_fee_changed" };
     const move = moveHeldMembership(before.membership, input.event, input.today);
     if (!move.ok) return { kind: move.reason };
     if (!move.changed) return { kind: "ok" };
     const m = move.membership;
+    const leftEarly = leaving && m.leftEarly === true && before.membership.leftEarly !== true;
     // A member let out of a running contract keeps the reason staff gave (18v-i).
     // Kept only where the cancel let them out early and its row is let out (round one, L1, L2).
     const released = input.event.type === "cancel" && input.event.release !== undefined && releaseAsked(heldMembershipView(before.membership, input.today), input.event.when) && (m.status === "cancelled" || !m.renews);
@@ -1078,10 +1094,12 @@ export async function moveHeld(
       SET status = ${m.status}, frozen_days = ${m.frozenDays}, frozen_on = ${m.frozenOn}::date,
           cancelled_on = ${m.cancelledOn}::date, paid_periods = ${m.paidPeriods}, renews = ${m.renews},
           contract_then = ${m.contractThen ?? null}, contract_release = ${release},
-          stops_after = ${m.stopsAfter ?? null}, notice_waived = ${noticeWaived},
+          stops_after = ${m.stopsAfter ?? null}, notice_waived = ${noticeWaived}, left_early = ${m.leftEarly === true},
           freeze_fee_minor = ${freezeFee}, updated_at = ${input.now}
       WHERE gym_id = ${input.gymId} AND entry_id = ${input.entryId} AND id = ${input.membershipId}`;
     const ended = ends === null ? null : await bookings.end(tx, input.gymId, ends, input.now);
+    // The early cancellation fee, a fee bill of its own, due today (18v-ii-b).
+    const leaveFeeOpened = leftEarly ? await openLeaveFee(tx, input.gymId, before.id, input.today, input.now) : false;
     // Its first month's freeze fee, at once; an unfreeze or a cancel takes off the unpaid fees of
     // months that begin today or later (18z).
     const feesOpened = m.status === "frozen" && input.event.type === "freeze" && freezeFee > 0 ? await openFreezeFee(tx, input.gymId, before.id, input.now) : 0;
@@ -1135,6 +1153,7 @@ export async function moveHeld(
         ...(voided.length === 0 ? {} : { billsCancelled: String(voided.length) }),
         ...(input.event.type === "freeze" ? { freezeFeeMinor: String(freezeFee), freezeFeeOffered: String(freezeOffered) } : {}),
         ...(feesOpened === 0 ? {} : { freezeFeesOpened: String(feesOpened) }),
+        ...(leftEarly ? { leaveFeeMinor: String(before.membership.leaveFeeMinor ?? 0), leaveFeeOpened: String(leaveFeeOpened) } : {}),
         ...(feesRemoved === 0 ? {} : { freezeFeesRemoved: String(feesRemoved) }),
         ...(renewsAgain ? { replacedRenewsAgain: "true" } : {}),
         ...(ended === null

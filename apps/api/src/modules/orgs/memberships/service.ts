@@ -129,6 +129,7 @@ function typeInput(req: SaveGymMembershipTypeRequest): repo.MembershipTypeInput 
     contractPeriods: req.contractPeriods,
     contractThen: req.contractThen,
     noticeDays: req.noticeDays,
+    leaveFeeMinor: req.leaveFeeMinor,
   };
 }
 

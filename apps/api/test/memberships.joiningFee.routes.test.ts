@@ -189,6 +189,7 @@ d("a joining fee on a membership type (real Postgres)", () => {
     contractPeriods: t.contractPeriods,
     contractThen: t.contractThen,
     noticeDays: t.noticeDays,
+    leaveFeeMinor: t.leaveFeeMinor,
     updatedAt: t.updatedAt,
   });
   /** A change as the screen sends it: every field as the list has it, with `over` on top. */
