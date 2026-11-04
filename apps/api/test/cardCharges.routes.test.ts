@@ -525,7 +525,7 @@ d("Card on file charged on the bill's date (real Postgres)", { timeout: T }, () 
     expect(told).toEqual({ action: "org.card_charge_not_recorded", why: "amount_differs" });
   });
 
-  it("a freeze fee is charged on its day; a late cancel fee never is", async () => {
+  it("a freeze fee is charged on its day; a late cancel fee and an early cancellation fee never are", async () => {
     const gym = await makeGym(`Freeze Gym ${uniq()}`, `MFZ${uniq()}`);
     const typeId = await typeOf(gym);
     const fay = await holding(gym, typeId, await person(gym, "Fay Frozen"));
@@ -540,12 +540,18 @@ d("Card on file charged on the bill's date (real Postgres)", { timeout: T }, () 
       INSERT INTO gym_member_bills (gym_id, held_membership_id, amount_minor, currency, due_on, covers_from, covers_to, fee, fee_for)
       SELECT gym_id, id, 1500, currency, ${await todayOf(gym, fay.entryId)}, ${await todayOf(gym, fay.entryId)}, ${await todayOf(gym, fay.entryId)}, 'late_cancel', 'Spin'
       FROM gym_held_memberships WHERE id = ${fay.membershipId}`;
+    // And an early cancellation fee (18v-ii-b): staff take it by hand too.
+    await sql`
+      INSERT INTO gym_member_bills (gym_id, held_membership_id, amount_minor, currency, due_on, covers_from, covers_to, fee, fee_for)
+      SELECT gym_id, id, 9900, currency, ${await todayOf(gym, fay.entryId)}, ${await todayOf(gym, fay.entryId)}, ${await todayOf(gym, fay.entryId)}, 'leave_early', 'Gold'
+      FROM gym_held_memberships WHERE id = ${fay.membershipId}`;
 
     await work();
     const fees = (await billsOf(fay)).filter((b) => b.fee !== null);
     expect(fees.map((b) => [b.fee, b.status]).sort()).toEqual([
       ["freeze", "paid"],
       ["late_cancel", "open"],
+      ["leave_early", "open"],
     ]);
     expect(takenFrom(card).map((p) => p.amount_money.amount)).toEqual([1000]);
   });

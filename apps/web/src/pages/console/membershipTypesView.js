@@ -217,10 +217,10 @@ export function contractLine(type) {
   return `Minimum term: ${length}, then ${type.contractThen === 'ends' ? 'it ends' : 'renews until cancelled'}`;
 }
 
-/** "Early cancellation fee $99.00" (18v-ii-b); null for a type with none. */
+/** "Early cancellation fee: $99.00" (18v-ii-b); null for a type with none. */
 export function leaveFeeLine(type) {
   if (type === null || type === undefined || !(type.leaveFeeMinor > 0) || type.contractPeriods === null || type.contractPeriods === undefined) return null;
-  return `Early cancellation fee ${formatMinor(type.leaveFeeMinor, type.currency)}`;
+  return `Early cancellation fee: ${formatMinor(type.leaveFeeMinor, type.currency)}`;
 }
 
 /** "Notice to cancel: 30 days" (18v-ii-a); null for a type with none. */

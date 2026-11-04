@@ -544,7 +544,7 @@ function throwOnFailure(outcome: repo.HeldWriteOutcome): void {
     case "bill_day_changed":
       throw new OrgsError(409, "membership_bill_day_changed", "Your gym's billing day changed while this was open. Nothing was saved: check the total and press again.");
     case "leave_fee_changed":
-      throw new OrgsError(409, "membership_leave_fee_changed", "The early cancellation fee of this membership is not the one shown. Nothing was saved: check it and try again.");
+      throw new OrgsError(409, "membership_leave_fee_changed", "The early cancellation fee of this membership changed while this was open. Nothing was saved: check it and press again.");
     case "freeze_fee_changed":
       throw new OrgsError(409, "membership_freeze_fee_changed", "Your gym's freeze fee changed while this was open. Nothing was saved: check the fee and press Freeze again.");
     case "discount_not_found":

@@ -14,6 +14,7 @@ import { heldMembershipsResponseSchema, type GymMembershipTypesResponse, type He
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { openDueBills } from "../src/modules/orgs/memberships/billsRepo.js";
+import { openLeaveFee } from "../src/modules/orgs/memberships/feesRepo.js";
 import { createMemoryRedis } from "../src/redis.js";
 
 const url = process.env["DATABASE_URL"];
@@ -259,6 +260,43 @@ d("an early cancellation fee on a minimum term (real Postgres)", () => {
   );
 
   it(
+    "round one: six presses at one instant open one fee; once waived, it is never opened again; the gym's tax is inside it",
+    async () => {
+      clock = new Date("2026-10-15T17:00:00Z");
+      const owner = await makeUser("race-owner");
+      const gymId = await makeGym(owner, "Leave Race Gym");
+      const rate = await post(`/v1/orgs/${gymId}/register/tax-rates`, { name: "GST", bp: 1800 }, owner);
+      expect(rate.statusCode, rate.body).toBe(201);
+      const [gst] = await sql<{ id: string }[]>`SELECT id FROM gym_tax_rates WHERE gym_id = ${gymId} AND name = 'GST'`;
+      const gold = await addType(gymId, owner, monthly({ taxRateId: gst?.id }));
+      const hal = await addPerson(gymId, owner, "Hal Moore");
+      // $50.00 plus 18% is $59.00.
+      const given = await post(heldUrl(gymId, hal), { requestKey: nextForm(), typeId: gold, startsOn: "2026-10-15", paid: true, method: "cash", priceMinor: 5000, totalMinor: 5900 }, owner);
+      expect(given.statusCode, given.body).toBe(201);
+      const [row] = await sql<{ id: string }[]>`SELECT id FROM gym_held_memberships WHERE gym_id = ${gymId} AND entry_id = ${hal}`;
+      const halGold = row?.id ?? "";
+
+      clock = new Date("2026-11-10T17:00:00Z");
+      const presses = await Promise.all(Array.from({ length: 6 }, () => post(`${heldUrl(gymId, hal)}/${halGold}/cancel`, leave(), owner)));
+      expect(presses.map((r) => r.statusCode)).toEqual([200, 200, 200, 200, 200, 200]);
+      // The fee is the amount the gym set, its 18% inside it: 9,900 x 18 / 118 is 1,510.17.
+      const [fee] = await sql<{ id: string; amount_minor: number; tax_minor: number; tax_bp: number; tax_name: string | null; tax_included: boolean | null }[]>`
+        SELECT id, amount_minor, tax_minor, tax_bp, tax_name, tax_included FROM gym_member_bills WHERE held_membership_id = ${halGold} AND fee = 'leave_early'`;
+      expect(fee).toMatchObject({ amount_minor: 9900, tax_minor: 1510, tax_bp: 1800, tax_name: "GST", tax_included: true });
+      expect(await leaveFees(halGold)).toHaveLength(1);
+
+      // Waived: neither another press nor the opening itself puts it on again.
+      const waived = await post(`${heldUrl(gymId, hal)}/${halGold}/fees/${fee?.id ?? ""}/waive`, {}, owner);
+      expect(waived.statusCode, waived.body).toBe(200);
+      expect((await post(`${heldUrl(gymId, hal)}/${halGold}/cancel`, leave(), owner)).statusCode).toBe(200);
+      const again = await sql.begin((tx) => openLeaveFee(tx, gymId, halGold, "2026-11-10", new Date("2026-11-10T17:00:00Z")));
+      expect(again).toBe(false);
+      expect(await leaveFees(halGold)).toEqual([{ amount_minor: 9900, status: "void", fee_for: "Gold 12", due_on: "2026-11-10" }]);
+    },
+    T,
+  );
+
+  it(
     "another gym's owner can put no fee on a member",
     async () => {
       clock = new Date("2026-10-15T17:00:00Z");
@@ -356,7 +394,7 @@ d("an early cancellation fee on a minimum term (real Postgres)", () => {
       for (const shown of [9900, null]) {
         const res = await post(heldUrl(gymId, fay), body(shown), owner);
         expect(res.statusCode, res.body).toBe(409);
-        expect(errorOf(res)).toBe("membership_minimum_term_changed");
+        expect(errorOf(res)).toBe("membership_leave_fee_changed");
       }
       expect((await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_held_memberships WHERE entry_id = ${fay}`)[0]?.n).toBe(0);
       expect((await post(heldUrl(gymId, fay), body(15000), owner)).statusCode).toBe(201);

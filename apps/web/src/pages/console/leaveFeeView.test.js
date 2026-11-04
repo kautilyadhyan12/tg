@@ -57,7 +57,7 @@ describe('the price list', () => {
 
   it('reads the line back and shows it on its row', () => {
     expect(draftFromType({ ...draftBody(draft({ leaveFee: '99' }), 'USD'), currency: 'USD', classTypes: null }).leaveFee).toBe('99.00');
-    expect(leaveFeeLine({ leaveFeeMinor: 9900, contractPeriods: 12, currency: 'USD' })).toBe('Early cancellation fee $99.00');
+    expect(leaveFeeLine({ leaveFeeMinor: 9900, contractPeriods: 12, currency: 'USD' })).toBe('Early cancellation fee: $99.00');
     expect(leaveFeeLine({ leaveFeeMinor: null, contractPeriods: 12, currency: 'USD' })).toBeNull();
   });
 });

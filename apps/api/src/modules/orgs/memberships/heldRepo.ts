@@ -468,7 +468,7 @@ export type HeldWriteOutcome =
   | { kind: "minimum_term_changed" }
   /** The line's notice to cancel is not the one the screen showed (18v-ii-a). */
   | { kind: "notice_changed" }
-  /** Leaving early: the early cancellation fee is not the one the screen showed (18v-ii-b). */
+  /** The early cancellation fee is not the one the screen showed: leaving early, or the line's on Add or Change membership (18v-ii-b). */
   | { kind: "leave_fee_changed" }
   /** The person has this type running already. `ends`: the one they hold has a last day,
    *  so a start date after it would be taken; a repeating one that renews has none. */
@@ -751,7 +751,7 @@ export async function giveHeldIn(tx: TransactionSql, input: GiveHeldInput): Prom
     const now = type.contractPeriods === null || type.contractThen === null ? null : { periods: type.contractPeriods, then: type.contractThen };
     if ((shown === null) !== (now === null) || (shown !== null && now !== null && (shown.periods !== now.periods || shown.then !== now.then))) return { kind: "minimum_term_changed" };
     // Its early cancellation fee too, where the screen said it (18v-ii-b).
-    if (shown?.leaveFeeMinor !== undefined && shown.leaveFeeMinor !== type.leaveFeeMinor) return { kind: "minimum_term_changed" };
+    if (shown?.leaveFeeMinor !== undefined && shown.leaveFeeMinor !== type.leaveFeeMinor) return { kind: "leave_fee_changed" };
   }
   // A notice to cancel set or changed since the screen opened is refused the same way (18v-ii-a).
   if (input.shownNoticeDays !== undefined && input.shownNoticeDays !== type.noticeDays) return { kind: "notice_changed" };

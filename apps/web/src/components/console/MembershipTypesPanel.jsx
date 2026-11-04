@@ -353,7 +353,7 @@ function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRate
             />
             <p className="c-s13 c-t3 m-0">
               {[
-                'Charged once to a member who cancels before the minimum term ends. Members you release for a reason, such as moving away, pay none. Leave it empty for none.',
+                'Added once to the bills of a member you cancel early, inside the minimum term. Members you release for a reason, such as moving away, pay none. Leave it empty for none.',
                 editing ? 'Members who already hold it keep the fee they joined on.' : null,
               ]
                 .filter((line) => line !== null)

@@ -189,7 +189,7 @@ describe('adding a type', () => {
     expect(screen.queryByLabelText('Early cancellation fee (GBP)')).toBeNull();
     fireEvent.change(screen.getByLabelText('Minimum term'), { target: { value: 'fixed' } });
     expect(
-      screen.getByText('Charged once to a member who cancels before the minimum term ends. Members you release for a reason, such as moving away, pay none. Leave it empty for none.'),
+      screen.getByText('Added once to the bills of a member you cancel early, inside the minimum term. Members you release for a reason, such as moving away, pay none. Leave it empty for none.'),
     ).toBeTruthy();
     type_('Early cancellation fee (GBP)', '0');
     fireEvent.click(screen.getByRole('button', { name: 'Add membership type' }));
@@ -199,7 +199,7 @@ describe('adding a type', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add membership type' }));
     await waitFor(() => expect(orgService.createMembershipType).toHaveBeenCalledTimes(1));
     expect(orgService.createMembershipType.mock.calls[0][1]).toMatchObject({ contractPeriods: 12, contractThen: 'renews', leaveFeeMinor: 9900 });
-    expect(await screen.findByText('Early cancellation fee £99.00')).toBeTruthy();
+    expect(await screen.findByText('Early cancellation fee: £99.00')).toBeTruthy();
   });
 
   it('sends the typed price as whole minor units, once, and the list that comes back is drawn', async () => {
