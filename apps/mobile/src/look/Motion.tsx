@@ -110,3 +110,27 @@ export function GrowUp({ delay = 0, style, children }: { delay?: number; style?:
   }, [on, delay, grown]);
   return <Animated.View style={[style, { transformOrigin: "bottom", transform: [{ scaleY: grown }] }]}>{children}</Animated.View>;
 }
+
+/** A value that runs from 0 to 1 and back, over and over, `duration` ms each way: a picture's slow
+ *  zoom, a glow that breathes. Still at 0 where there is no motion. */
+export function useLoop(duration: number): Animated.Value {
+  const on = useMotion();
+  const value = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!on) {
+      value.setValue(0);
+      return;
+    }
+    const run = Animated.loop(
+      Animated.sequence([
+        Animated.timing(value, { toValue: 1, duration, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(value, { toValue: 0, duration, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      ]),
+    );
+    run.start();
+    return () => {
+      run.stop();
+    };
+  }, [on, duration, value]);
+  return value;
+}

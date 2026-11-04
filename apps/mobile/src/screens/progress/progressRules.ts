@@ -208,20 +208,32 @@ export function cutWords(w: Window): string | null {
 }
 
 export interface RecordRow {
-  icon: "clock" | "flame" | "star" | "dumbbell";
+  icon: "clock" | "flame" | "star" | "dumbbell" | "zap";
   label: string;
   value: string;
+  /** The day it was set, "14 Oct" (its year where it is not this one), or null where none is kept. */
+  day: string | null;
   /** False where there is no record yet: the value is drawn quiet. */
   held: boolean;
 }
 
-/** The web's records, but the longest streak, which the Streak box shows beside today's. */
-export function recordRows(r: PersonalRecords): RecordRow[] {
+const SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
+
+/** "2026-10-14" → "14 Oct"; a day of another year than `today`'s keeps its year: "14 Oct 2025". */
+export function shortDay(key: string, today: string): string {
+  const [y = 0, m = 1, d = 1] = key.split("-").map(Number);
+  const year = key.slice(0, 4) === today.slice(0, 4) ? "" : ` ${String(y)}`;
+  return `${String(d)} ${SHORT_MONTHS[m - 1] ?? ""}${year}`;
+}
+
+/** The web's five records, the longest workout first and widest. */
+export function recordRows(r: PersonalRecords, today: string): RecordRow[] {
   return [
-    { icon: "clock", label: "Longest workout", value: r.longestWorkout === null ? "None yet" : hoursWords(r.longestWorkout.value), held: r.longestWorkout !== null },
-    { icon: "flame", label: "Most calories", value: r.maxKcalWorkout === null ? "None yet" : `${count(Math.round(r.maxKcalWorkout.value))} kcal`, held: r.maxKcalWorkout !== null },
-    { icon: "star", label: "Best form", value: r.bestAvgForm === null ? "No score yet" : count(Math.round(r.bestAvgForm.value)), held: r.bestAvgForm !== null },
-    { icon: "dumbbell", label: "Total workouts", value: count(r.totalWorkouts), held: r.totalWorkouts > 0 },
+    { icon: "clock", label: "Longest workout", value: r.longestWorkout === null ? "None yet" : hoursWords(r.longestWorkout.value), day: r.longestWorkout === null ? null : shortDay(r.longestWorkout.day, today), held: r.longestWorkout !== null },
+    { icon: "flame", label: "Most calories", value: r.maxKcalWorkout === null ? "None yet" : `${count(Math.round(r.maxKcalWorkout.value))} kcal`, day: r.maxKcalWorkout === null ? null : shortDay(r.maxKcalWorkout.day, today), held: r.maxKcalWorkout !== null },
+    { icon: "star", label: "Best form", value: r.bestAvgForm === null ? "No score yet" : count(Math.round(r.bestAvgForm.value)), day: r.bestAvgForm === null ? null : shortDay(r.bestAvgForm.day, today), held: r.bestAvgForm !== null },
+    { icon: "dumbbell", label: "Total workouts", value: count(r.totalWorkouts), day: null, held: r.totalWorkouts > 0 },
+    { icon: "zap", label: "Longest streak", value: streakWords(r.longestStreak), day: null, held: r.longestStreak > 0 },
   ];
 }
 

@@ -234,30 +234,34 @@ describe("the words", () => {
 });
 
 describe("personal records", () => {
+  const ID = "0d1e2f3a-4b5c-4d6e-9f80-910213243546";
   const records = (over: Partial<PersonalRecords> = {}): PersonalRecords => ({
-    maxKcalWorkout: { workoutId: "0d1e2f3a-4b5c-4d6e-9f80-910213243546", value: 410 },
-    longestWorkout: { workoutId: "0d1e2f3a-4b5c-4d6e-9f80-910213243546", value: 52 * 60_000 },
-    bestAvgForm: { workoutId: "0d1e2f3a-4b5c-4d6e-9f80-910213243546", value: 93.6 },
+    maxKcalWorkout: { workoutId: ID, value: 410, day: "2026-10-27" },
+    longestWorkout: { workoutId: ID, value: 52 * 60_000, day: "2026-10-14" },
+    bestAvgForm: { workoutId: ID, value: 93.6, day: "2025-12-30" },
     totalWorkouts: 4,
     longestStreak: 3,
     limitedToDays: null,
     ...over,
   });
-  it("reads as drawn", () => {
-    expect(recordRows(records()).map((r) => [r.label, r.value])).toEqual([
-      ["Longest workout", "52 min"],
-      ["Most calories", "410 kcal"],
-      ["Best form", "94"],
-      ["Total workouts", "4"],
+  it("the web's five, as drawn, each with the day it was set", () => {
+    expect(recordRows(records(), TODAY).map((r) => [r.label, r.value, r.day])).toEqual([
+      ["Longest workout", "52 min", "14 Oct"],
+      ["Most calories", "410 kcal", "27 Oct"],
+      // A day of another year keeps its year.
+      ["Best form", "94", "30 Dec 2025"],
+      ["Total workouts", "4", null],
+      ["Longest streak", "3 days", null],
     ]);
   });
   it("an hour and more, and what has no record yet", () => {
-    const rows = recordRows(records({ longestWorkout: { workoutId: "0d1e2f3a-4b5c-4d6e-9f80-910213243546", value: 65 * 60_000 }, bestAvgForm: null, maxKcalWorkout: null }));
-    expect(rows.map((r) => [r.value, r.held])).toEqual([
-      ["1h 5m", true],
-      ["None yet", false],
-      ["No score yet", false],
-      ["4", true],
+    const rows = recordRows(records({ longestWorkout: { workoutId: ID, value: 65 * 60_000, day: "2026-10-14" }, bestAvgForm: null, maxKcalWorkout: null, longestStreak: 0 }), TODAY);
+    expect(rows.map((r) => [r.value, r.day, r.held])).toEqual([
+      ["1h 5m", "14 Oct", true],
+      ["None yet", null, false],
+      ["No score yet", null, false],
+      ["4", null, true],
+      ["0 days", null, false],
     ]);
   });
   // Records take no period: the box says what they are from, so nobody reads them as the chip's.

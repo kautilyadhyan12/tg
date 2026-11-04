@@ -59,6 +59,14 @@ export const colours = {
   goldLine: "rgba(255,214,107,0.25)",
   blue: "#60a5fa",
   purple: "#a78bfa",
+  pink: "#f472b6",
+  pinkFill: "rgba(244,114,182,0.16)",
+  blueFill: "rgba(96,165,250,0.16)",
+  /** A flame's foot and its heart (Progress's calendar, 35c-i). */
+  flameDeep: "#E0400A",
+  flamePale: "#FFF6D6",
+  /** A number written on an orange bar. */
+  onBar: "#3a1f05",
 } as const;
 
 export type ColourName = keyof typeof colours;
@@ -67,6 +75,16 @@ export type ColourName = keyof typeof colours;
 export const orangeGradient = `linear-gradient(135deg, ${colours.orange}, ${colours.orangeLight})`;
 /** A chart's bar: light orange at its top running to orange at its foot (Progress, 35c-i). */
 export const barGradient = `linear-gradient(to bottom, ${colours.orangeLight}, ${colours.orange})`;
+/** Across a box with a chalk drawing on its right: the box's own colour under the words, the drawing
+ *  showing through on the right (Progress, 35c-i). */
+export const artShade =
+  "linear-gradient(90deg, rgba(18,17,16,0.98) 0%, rgba(18,17,16,0.9) 34%, rgba(18,17,16,0.55) 70%, rgba(18,17,16,0.35) 100%)";
+/** Over a drawing across a box's top: clear at the top, the box's own colour at its foot. */
+export const bandShade =
+  "linear-gradient(to top, rgba(18,17,16,1) 0%, rgba(18,17,16,0.55) 45%, rgba(18,17,16,0.05) 100%)";
+/** Over a box's top drawing that fades into the rest of the box (Progress's calendar). */
+export const topShade =
+  "linear-gradient(to bottom, rgba(18,17,16,0.5) 0%, rgba(18,17,16,0.45) 45%, rgba(18,17,16,1) 100%)";
 /** Over a picture, so the words on it can be read. */
 export const pictureShade =
   "linear-gradient(to top, rgba(10,9,8,0.94) 0%, rgba(10,9,8,0.45) 50%, rgba(10,9,8,0.05) 100%)";
@@ -93,6 +111,9 @@ export const shadows = {
   logo: "0 0 20px rgba(255,138,31,0.35)",
   fieldOn: "0 0 0 3px rgba(255,138,31,0.08)",
   chip: "0 4px 14px rgba(255,138,31,0.3)",
+  /** A chart's best bar, and a lit day's dot (Progress, 35c-i). */
+  barGlow: "0 0 0 6px rgba(255,138,31,0.16), 0 8px 22px rgba(255,138,31,0.35)",
+  dotGlow: "0 0 8px rgba(255,138,31,0.75)",
   sheet: "0 -12px 48px rgba(0,0,0,0.6)",
 } as const;
 
