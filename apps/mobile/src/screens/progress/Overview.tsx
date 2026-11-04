@@ -18,6 +18,10 @@ import { dayKeyOf, recordRows, recordsFrom, type RecordRow } from "./progressRul
 export const PREDICTIONS_READ = "/v1/progress/predictions";
 export const RECORDS_READ = "/v1/progress/records";
 
+/** The push-up drawing below his face (its top 120 of 701 points), from his arm on the bench across
+ *  his body (Kd, 2026-11-04: "only show working out not showing his face"). */
+const PUSHUP_AT_WORK = { left: 0.184, top: 0.171, width: 0.609 } as const;
+
 export function Overview() {
   const zone = useZoneSaved();
   const predictions = useRead(PREDICTIONS_READ, progressPredictionsSchema, zone);
@@ -44,6 +48,7 @@ export function Overview() {
       <Rise delay={180}>
         <BehindBox
           picture="pushup"
+          crop={PUSHUP_AT_WORK}
           title={<BoxTitle icon="trophy" colour="gold" title="Personal Records" side={records.read.kind === "ok" ? <Txt kind="tiny" colour="textSoft">{recordsFrom(records.read.data)}</Txt> : undefined} />}
         >
           <ReadOr read={records.read} again={records.again} what="Personal records">
@@ -143,7 +148,7 @@ function RecordTile({ row, wide = false }: { row: RecordRow; wide?: boolean }) {
         <Txt kind="tiny" colour="textSoft">
           {row.label}
         </Txt>
-        <Txt colour={row.held ? "text" : "textSoft"} numberOfLines={1} style={wide ? styles.bestValue : styles.recordValue}>
+        <Txt colour={row.held ? "text" : "textSoft"} numberOfLines={1} fit style={wide ? styles.bestValue : styles.recordValue}>
           {row.value}
         </Txt>
         {row.day === null || wide ? null : <Txt kind="tiny">{row.day}</Txt>}

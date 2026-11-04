@@ -133,9 +133,11 @@ export const chalkShadows = {
   picked: "0 8px 26px rgba(255,138,31,0.5)",
   trained: "0 0 16px rgba(255,138,31,0.18)",
 } as const;
-/** Over the drawing behind the records: clear at the top for the title, darker under the numbers. */
-export const recordsShade =
-  "linear-gradient(to bottom, rgba(18,17,16,0.05) 0%, rgba(18,17,16,0.35) 30%, rgba(18,17,16,0.55) 60%, rgba(18,17,16,0.82) 100%)";
+/** Over the records' drawing on the right: the box's colour on its left, as the Trends boxes, a
+ *  little clearer on the right; and darker at its foot, under the numbers. */
+export const recordsArtShade =
+  "linear-gradient(90deg, rgba(18,17,16,0.98) 0%, rgba(18,17,16,0.85) 30%, rgba(18,17,16,0.4) 65%, rgba(18,17,16,0.12) 100%)";
+export const recordsFootShade = "linear-gradient(to bottom, rgba(18,17,16,0) 40%, rgba(18,17,16,0.45) 100%)";
 /** The best record's glass: warm on its left. */
 export const bestRecordGradient = "linear-gradient(100deg, rgba(64,36,12,0.78), rgba(16,15,13,0.62))";
 /** A box from the bottom's drawing, fading into the box under its title. */

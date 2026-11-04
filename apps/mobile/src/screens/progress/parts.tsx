@@ -1,8 +1,8 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Animated, Image, Pressable, StyleSheet, useWindowDimensions, View, type StyleProp, type ViewStyle } from "react-native";
 import Svg, { Circle, Defs, LinearGradient, Path, RadialGradient, Stop } from "react-native-svg";
 import { Button } from "../../look/Button";
-import { artShade, bandShade, chalk, chalkShadows, colours, orangeGradient, pictureFadeUnderWords, recordsShade, shadows, sizes, topShade } from "../../look/colours";
+import { artShade, bandShade, chalk, chalkShadows, colours, orangeGradient, pictureFadeUnderWords, recordsArtShade, recordsFootShade, shadows, sizes, topShade } from "../../look/colours";
 import { Icon, type IconName } from "../../look/Icon";
 import { useLoop } from "../../look/Motion";
 import { pictures, type PictureName } from "../../look/pictures";
@@ -230,13 +230,36 @@ export function RingSign({ icon, size, held }: { icon: IconName; size: number; h
   );
 }
 
-/** A box with a chalk drawing behind all of it: its top clear for the title, darker under the numbers,
- *  which lie on dark glass (Personal Records, Kd's drawing). The drawing keeps its left edge. */
-export function BehindBox({ picture, title, children }: { picture: PictureName; title: ReactNode; children: ReactNode }) {
+/** The part of a drawing a box shows, as fractions of the drawing: its left edge, its top, its width. */
+export interface Crop {
+  left: number;
+  top: number;
+  width: number;
+}
+
+/** A box with a part of a chalk drawing on its right, fading into the box on its left as the Trends
+ *  boxes do, and darker at its foot; the title on its top and the numbers on dark glass (Personal
+ *  Records, Kd's drawing: him working out, not his face). */
+export function BehindBox({ picture, crop, title, children }: { picture: PictureName; crop: Crop; title: ReactNode; children: ReactNode }) {
+  const [frame, setFrame] = useState(0);
+  const source = pictures[picture];
+  const size = Image.resolveAssetSource(source);
+  const shape = size.width > 0 && size.height > 0 ? size.height / size.width : 1;
+  const wide = frame / crop.width;
   return (
     <View style={styles.box}>
-      <Image source={pictures[picture]} resizeMode="cover" style={styles.behind} accessible={false} />
+      <View
+        style={styles.behindArt}
+        onLayout={(e) => {
+          setFrame(e.nativeEvent.layout.width);
+        }}
+      >
+        {frame === 0 ? null : (
+          <Image source={source} resizeMode="cover" accessible={false} style={{ position: "absolute", left: -crop.left * wide, top: -crop.top * wide * shape, width: wide, height: wide * shape }} />
+        )}
+      </View>
       <View style={[StyleSheet.absoluteFill, styles.behindShade]} />
+      <View style={[StyleSheet.absoluteFill, styles.behindFoot]} />
       <View style={styles.band}>
         <View style={styles.bandTitle}>{title}</View>
       </View>
@@ -293,7 +316,7 @@ const styles = StyleSheet.create({
   tileRow: { flexDirection: "row", gap: 10 },
   // The same border picked or not: a gradient on a box whose border changes crashed Android (31a).
   tile: { flex: 1, minHeight: 96, justifyContent: "center", paddingHorizontal: 16, paddingVertical: 12, borderRadius: 18, backgroundColor: colours.fill, borderWidth: 1, borderColor: chalk.glassLine },
-  tileWide: { minHeight: 76, flexDirection: "row", alignItems: "center", gap: 12 },
+  tileWide: { minHeight: 76, flexDirection: "row", alignItems: "center", justifyContent: "flex-start", gap: 12 },
   tileOn: { backgroundColor: colours.orange, experimental_backgroundImage: orangeGradient, borderColor: colours.orange, boxShadow: chalkShadows.picked },
   figure: { fontFamily: fonts.bold, fontSize: 40, lineHeight: 46, letterSpacing: -1.2 },
   figureWide: { fontFamily: fonts.bold, fontSize: 30, lineHeight: 36, letterSpacing: -0.8 },
@@ -304,8 +327,9 @@ const styles = StyleSheet.create({
   ringLit: { borderColor: chalk.ring, boxShadow: chalkShadows.ring },
   ringDim: { borderColor: colours.lineStrong },
   ringGlow: { position: "absolute", top: 0, left: 0 },
-  behind: { position: "absolute", top: 0, bottom: 0, left: 0, width: "130%" },
-  behindShade: { experimental_backgroundImage: recordsShade },
+  behindArt: { position: "absolute", top: 0, bottom: 0, right: 0, width: "76%", overflow: "hidden" },
+  behindShade: { experimental_backgroundImage: recordsArtShade },
+  behindFoot: { experimental_backgroundImage: recordsFootShade },
   photo: { position: "absolute", left: 0, right: 0, width: "100%" },
   fade: { experimental_backgroundImage: pictureFadeUnderWords },
   words: { position: "absolute", left: sizes.edge, right: sizes.edge, bottom: 14, gap: 4 },
