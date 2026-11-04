@@ -103,6 +103,15 @@ describe("Me → Progress", () => {
     expect(screen.getByText("Workouts Per Week")).toBeTruthy();
   });
 
+  it("a period with no workout says so in place of the two charts, and keeps the records", async () => {
+    const server = progressServer({ "30d": ok(trend([day(40, 1, 300)])) });
+    await openProgress(server.ask);
+    expect(await screen.findByText("No workouts in the last 30 days")).toBeTruthy();
+    expect(screen.queryByText("Calories Burned")).toBeNull();
+    expect(screen.getByText("Personal Records")).toBeTruthy();
+    expect(screen.getByText("0 of 30 days")).toBeTruthy();
+  });
+
   it("with no workouts says so and nothing more", async () => {
     const server = progressServer({ "30d": ok(trend([])) }, ok({ ...RECORDS, maxKcalWorkout: null, longestWorkout: null, bestAvgForm: null, totalWorkouts: 0 }));
     await openProgress(server.ask);

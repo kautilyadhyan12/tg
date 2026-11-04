@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
 import Svg, { Circle, Defs, LinearGradient, Path, Stop } from "react-native-svg";
 import { personalRecordsSchema, progressTrendSchema, type PersonalRecords, type ProgressPeriod } from "@app/shared";
 import { Button } from "../../look/Button";
 import { Badge, Card } from "../../look/Card";
 import { Chip } from "../../look/Chip";
-import { colours } from "../../look/colours";
+import { colours, sizes } from "../../look/colours";
 import { CoverPage } from "../../look/CoverPage";
 import { Icon } from "../../look/Icon";
 import { Txt } from "../../look/Txt";
@@ -19,6 +19,7 @@ import {
   consistencyWords,
   cutWords,
   dayKeyOf,
+  noneWords,
   periodWindow,
   recordRows,
   recordsFrom,
@@ -41,11 +42,12 @@ export function ProgressPage({ open, onClose }: { open: boolean; onClose: () => 
     <CoverPage open={open} title="Progress" picture="progress" onClose={onClose}>
       {open ? (
         <>
-          <View style={styles.chips} accessibilityRole="radiogroup">
+          {/* One row, swiped sideways where the phone is too narrow for all five, as drawn. */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.swipe} contentContainerStyle={styles.chips} accessibilityRole="radiogroup">
             {PERIODS.map((p) => (
               <Chip key={p.key} label={p.label} small on={period === p.key} onPress={() => { setPeriod(p.key); }} />
             ))}
-          </View>
+          </ScrollView>
           {/* One read for each period, drawn only under its own chip: a late answer for the chip left
               behind is dropped with its box. */}
           <PeriodBoxes key={period} period={period} />
@@ -96,24 +98,32 @@ function PeriodBoxes({ period }: { period: ProgressPeriod }) {
           </Txt>
         </View>
       )}
-      <Card style={styles.box}>
-        <View style={styles.between}>
-          <Txt kind="h3">Calories Burned</Txt>
-          <Txt kind="strong" colour="orange">
-            {count(sum.kcal)} kcal
-          </Txt>
-        </View>
-        <Area bars={bars} said={caloriesSaid(bars, sum.kcal)} />
-      </Card>
-      <Card style={styles.box}>
-        <View style={styles.between}>
-          <Txt kind="h3">{stepTitle(stepFor(w.days))}</Txt>
-          <Txt kind="small">
-            {count(sum.workouts)} {sum.workouts === 1 ? "workout" : "workouts"}
-          </Txt>
-        </View>
-        <Bars bars={bars} />
-      </Card>
+      {sum.workouts === 0 ? (
+        <Card style={styles.box}>
+          <Txt kind="strong">{noneWords(w)}</Txt>
+        </Card>
+      ) : (
+        <>
+          <Card style={styles.box}>
+            <View style={styles.between}>
+              <Txt kind="h3">Calories Burned</Txt>
+              <Txt kind="strong" colour="orange">
+                {count(sum.kcal)} kcal
+              </Txt>
+            </View>
+            <Area bars={bars} said={caloriesSaid(bars, sum.kcal)} />
+          </Card>
+          <Card style={styles.box}>
+            <View style={styles.between}>
+              <Txt kind="h3">{stepTitle(stepFor(w.days))}</Txt>
+              <Txt kind="small">
+                {count(sum.workouts)} {sum.workouts === 1 ? "workout" : "workouts"}
+              </Txt>
+            </View>
+            <Bars bars={bars} />
+          </Card>
+        </>
+      )}
       <Records records={r} />
       <Card style={styles.box}>
         <View style={styles.between}>
@@ -228,7 +238,9 @@ function Bars({ bars }: { bars: readonly Bucket[] }) {
 }
 
 const styles = StyleSheet.create({
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  // To the phone's edge, with room for the lit chip's glow.
+  swipe: { marginHorizontal: -sizes.edge, marginVertical: -8 },
+  chips: { gap: 8, paddingHorizontal: sizes.edge, paddingVertical: 8 },
   box: { gap: 12 },
   between: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" },
   grow: { flex: 1 },
@@ -243,5 +255,6 @@ const styles = StyleSheet.create({
   bar: { borderTopLeftRadius: 6, borderTopRightRadius: 6, borderBottomLeftRadius: 2, borderBottomRightRadius: 2, backgroundColor: colours.orange },
   labels: { flexDirection: "row", gap: 8 },
   label: { flex: 1, alignItems: "center", overflow: "visible" },
-  centre: { textAlign: "center", width: 44 },
+  // Wider than a thin bar: a crowded row names only some bars, so a name runs under its blank neighbours.
+  centre: { textAlign: "center", width: 72 },
 });

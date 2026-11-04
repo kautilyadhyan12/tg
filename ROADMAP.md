@@ -667,7 +667,12 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 35. **Progress** (split 2026-10-14: the parts on the server need no phone).
     - 35a. [x] **The predictions on the server** — merged 2026-10-14 (PR #270).
     - 35b. [x] **Weekly challenges on the server** — merged 2026-10-15 (PR #272).
-    - 35c. [ ] **The Progress screen**: the charts, the workout calendar, body measurements and weigh-ins, badges, the weekly challenges and the predictions. Waits for items 10 to 12.
+    - 35c. **The Progress screen** (split 2026-11-04 in five, Kd's "go": the page as drawn first).
+      - 35c-i. [ ] **The Progress page as drawn**: five periods, Calories Burned, the workouts in bars, Personal Records, Consistency.
+      - 35c-ii. [ ] **The predictions on Progress** (35a's forecast, this week's goal, steady pace, best time).
+      - 35c-iii. [ ] **The workout calendar and activity**.
+      - 35c-iv. [ ] **Body measurements and weigh-ins**.
+      - 35c-v. [ ] **Achievements**: badges, the weekly challenges, the leaderboard.
 36. [ ] **The weekly plan**: the plan builder on the server (6a), the week screen (6b). Doing a planned workout (6c) is exercise folder 2's item 64. Once the plan names a week's sessions, calories burned joins the starter goals with the plan's own number (RULINGS 2026-10-13). Its Workout tab in Recommended For You takes the three choices and rules of spec Part 6 §16.6.
 37. [ ] **Running** (item 4; Stage 1's 7b): recording by GPS with the screen off, the map, the summary, the run plan, routes. Its Running tab in Recommended For You takes the three choices and rules of spec Part 6 §16.6.
 38. [ ] **Reminders** for workouts, meals and streaks (the six switches the web drew and never saved); the global board last, as Kd ruled on 2026-11-01 (`rulings/2026-11-01-17c-ii-a.md`): Active days and Running, the server's checks, a stranger's profile, and follow requests for somebody who chose Hide me, seen from outside their gym; Follow with Followers and Following counts everywhere, gyms included (`rulings/2026-11-01-17c-ii-b.md`). It waits for items 18, 37, 53 and 64.

@@ -8,6 +8,7 @@ import {
   consistencyWords,
   cutWords,
   dayKeyOf,
+  noneWords,
   periodWindow,
   recordRows,
   recordsFrom,
@@ -190,6 +191,18 @@ describe("the words", () => {
   ])("%i days trained of %i reads %s", (daysTrained, days, words) => {
     const w: Window = { from: "2026-01-01", to: "2026-01-01", days, cut: null };
     expect(consistencyWords({ workouts: daysTrained, kcal: 0, daysTrained }, w)).toBe(words);
+  });
+
+  it.each([
+    ["7d", "No workouts in the last 7 days"],
+    ["30d", "No workouts in the last 30 days"],
+    ["90d", "No workouts in the last 90 days"],
+    ["1y", "No workouts in the last year"],
+  ] as const)("%s with no workout reads %s", (period, words) => {
+    const t = trend([point(addDays(TODAY, -400))]);
+    const w = win(period, t);
+    expect(totals(t.points, w).workouts).toBe(0);
+    expect(noneWords(w)).toBe(words);
   });
 
   it("the calories box says each bar's number", () => {

@@ -183,6 +183,11 @@ export function consistencyWords(t: Totals, w: Window): string {
   return `${count(t.daysTrained)} of ${count(w.days)} ${w.days === 1 ? "day" : "days"}`;
 }
 
+/** In place of the two charts, for a period with no workout in it. */
+export function noneWords(w: Window): string {
+  return `No workouts in the last ${w.days === 365 ? "year" : w.days === 1 ? "day" : `${count(w.days)} days`}`;
+}
+
 /** Said only where the plan made the period shorter. "Any": the server cannot say whether there are older ones. */
 export function cutWords(w: Window): string | null {
   return w.cut === null ? null : `Your plan shows your last ${count(w.cut)} days. Any older workouts are still saved.`;
