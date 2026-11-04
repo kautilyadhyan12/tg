@@ -35,6 +35,7 @@ import { GymScreen } from "./screens/GymTab";
 import { NotificationsProvider } from "./notifications/Notifications";
 import { forgetNotifications } from "./notifications/phone";
 import { emptyPhotoFolder } from "./screens/gym/photoFiles";
+import { forgetExports } from "./session/personFiles";
 import { PlacesProvider, usePlaces } from "./screens/places";
 import { tabWord } from "./screens/placesHeading";
 import { FoodScreen } from "./screens/Food";
@@ -92,6 +93,7 @@ function SignedInOrOut({ mealStore }: { mealStore: (userId: string) => TextStore
   useEffect(() => {
     if (state.kind !== "out") return;
     emptyPhotoFolder();
+    forgetExports();
     // Nobody's notifications stay on the phone, and none on its way reaches it; asked again on each return.
     void forgetNotifications();
     const heard = AppState.addEventListener("change", (next) => {

@@ -7,6 +7,7 @@
 // restore flow (window enforced in the DB, not just the token TTL).
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
+import { deleteAccountResponseSchema } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
@@ -298,6 +299,8 @@ d("users routes (real Postgres)", () => {
     const code = usersSender.codes[usersSender.codes.length - 1];
     const del = await inject({ method: "DELETE", url: "/v1/users/me", cookies, body: { code } });
     expect(del.statusCode).toBe(200);
+    // The phone says "open the link we emailed you" only when the server says one went.
+    expect(deleteAccountResponseSchema.parse(del.json()).emailSent).toBe(true);
 
     const row = (await sql<{ status: string; deleted_at: Date | null }[]>`
       SELECT status, deleted_at FROM users WHERE id = ${userId}`)[0];

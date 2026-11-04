@@ -11,6 +11,10 @@
 // what is in it.
 import { z } from "zod";
 
+/** Part 4 §5.2's window between asking to delete an account and its data being removed for good: the undo
+ *  link, the purge and every screen that names the day read this one number (the api's retention.ts). */
+export const ACCOUNT_UNDO_DAYS = 14;
+
 /** Bump when the envelope's SHAPE changes (not when a table's columns do) —
  *  a downstream re-importer needs to know which layout it is reading.
  *  2 (2026-09-09): `truncated` joined the envelope, always present. Version 1

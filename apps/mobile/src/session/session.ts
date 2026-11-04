@@ -74,6 +74,9 @@ export interface Session {
   refresh: () => Promise<void>;
   refreshIfDue: () => Promise<void>;
   signOut: () => Promise<void>;
+  /** The account was deleted from this phone: signed out with `note`, nothing of the person kept.
+   *  The server ended every sign-in itself, so no Sign out is owed. */
+  accountDeleted: (note: string) => Promise<void>;
   /** Tells the server a Sign out it has not heard yet, if there is one (opening, coming back). */
   tellOwedSignOut: () => Promise<void>;
   /** In memory only, for the requests a signed-in screen makes. */
@@ -404,6 +407,11 @@ export function createSession({
       // Kept as owed until the server hears it: until then the sign-in, and its notifications, stay open there.
       await changeOwed((owed) => [...owed.filter((one) => one !== mine.refreshToken), mine.refreshToken]).catch(() => undefined);
       await tellSignOut(mine.refreshToken);
+    },
+
+    accountDeleted: async (note) => {
+      await forget();
+      show({ kind: "out", note });
     },
 
     tellOwedSignOut,

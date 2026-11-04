@@ -613,7 +613,8 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
           - 18b-ii-b. [x] **A comment or reply on your post** · merged 2026-11-03 · PR #453
 19. **Settings and account** (split 2026-11-03 in four: Settings first).
     - 19a. [x] **Settings on the phone** — merged 2026-11-04 (PR #459).
-    - 19b. [ ] **Download my data, delete my account and undo.**
+    - 19b. [x] **Download my data, delete my account and undo** · merged 2026-11-04 · PR #465
+    - 19b-ii. [ ] **An owner hands the gym over before deleting their account** (Kd, 2026-11-04): the server refuses to delete a gym's own owner; the phone's Delete box says so and points to the console's hand-over (4b-ii).
     - 19c. [ ] **Change email** (Stage 2's 3b-iii).
     - 19d. [ ] **Notification switches that save.**
 20. [ ] **What the gym side adds for members**, each after its web job: the waiver (3e), the membership agreement signed in the app (18u), the referral link (20e), the member photo (5b-vi), saving their card (18d-ii), buying from the gym (18k), stopping a membership (18l), a gym's plan for a member (19e).
