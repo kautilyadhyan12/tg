@@ -666,6 +666,28 @@ describe('products and tax', () => {
     await waitFor(() => expect(svc.get).toHaveBeenCalledTimes(2));
   });
 
+  it('the Tax box and a product’s own Add a tax rate suggest the gym country’s tax, and no rate (18b-iv)', async () => {
+    for (const [country, name] of [['US', 'Sales tax'], ['GB', 'VAT'], ['IN', 'GST'], ['JP', 'Consumption tax']]) {
+      cleanup();
+      resetConsoleOrgs();
+      open({ ...ORG, country });
+      await screen.findByRole('region', { name: 'Tax' });
+      fireEvent.click(within(taxBox()).getByRole('button', { name: 'Add a tax rate' }));
+      const form = within(within(taxBox()).getByRole('form', { name: 'Add a tax rate' }));
+      expect(form.getByLabelText('Tax name').getAttribute('placeholder')).toBe(name);
+      expect(form.getByLabelText('Rate (%)').getAttribute('placeholder')).toBeNull();
+      expect(form.getByText('Use the tax name and rate registered with your tax authority.')).toBeTruthy();
+      fireEvent.click(form.getByRole('button', { name: 'Add tax rate' }));
+      expect(form.getByText(`Enter a tax name, such as ${name}.`)).toBeTruthy();
+      fireEvent.click(within(products()).getByRole('button', { name: 'Add a product' }));
+      const product = within(within(products()).getByRole('form', { name: 'Add a product' }));
+      fireEvent.click(product.getByRole('button', { name: 'Add a tax rate' }));
+      const inline = within(product.getByRole('group', { name: 'Add a tax rate' }));
+      expect(inline.getByLabelText('Tax name').getAttribute('placeholder')).toBe(name);
+      expect(inline.getByLabelText('Rate (%)').getAttribute('placeholder')).toBeNull();
+    }
+  });
+
   it('the Tax box: a rate is added with its name and percentage, says what is wrong first, and is changed', async () => {
     const GST = { id: 'r2', name: 'GST', bp: 1800, products: 0, membershipTypes: 0, memberships: 0 };
     svc.addTaxRate.mockResolvedValue(page({ tax: { included: false, rates: [GST, RATE] } }));
@@ -677,11 +699,11 @@ describe('products and tax', () => {
     fireEvent.click(within(taxBox()).getByRole('button', { name: 'Add a tax rate' }));
     const form = within(within(taxBox()).getByRole('form', { name: 'Add a tax rate' }));
     fireEvent.click(form.getByRole('button', { name: 'Add tax rate' }));
-    expect(form.getByText('Give the tax a name, such as GST, VAT or Sales tax.')).toBeTruthy();
-    expect(form.getByText('Enter the rate as a number above 0 and up to 30, like 8.25.')).toBeTruthy();
+    expect(form.getByText('Enter a tax name.')).toBeTruthy();
+    expect(form.getByText('Enter a rate from 0.01 to 30, with up to two decimal places.')).toBeTruthy();
     expect(svc.addTaxRate).not.toHaveBeenCalled();
     fireEvent.change(form.getByLabelText('Tax name'), { target: { value: ' GST ' } });
-    fireEvent.change(form.getByLabelText('Rate, in percent'), { target: { value: '18' } });
+    fireEvent.change(form.getByLabelText('Rate (%)'), { target: { value: '18' } });
     fireEvent.click(form.getByRole('button', { name: 'Add tax rate' }));
     await waitFor(() => expect(svc.addTaxRate).toHaveBeenCalledWith('g1', { name: 'GST', bp: 1800 }));
     expect(await within(taxBox()).findByText('GST 18% added. Now tick what charges it.')).toBeTruthy();
@@ -691,9 +713,9 @@ describe('products and tax', () => {
     // A new rate reaches what is made from now on, and the form says so.
     fireEvent.click(within(taxBox()).getByRole('button', { name: 'Change GST' }));
     const change = within(within(taxBox()).getByRole('form', { name: 'Change tax rate' }));
-    expect(change.getByLabelText('Rate, in percent').value).toBe('18');
+    expect(change.getByLabelText('Rate (%)').value).toBe('18');
     expect(change.getByText('A new rate is charged on sales and bills from now on. Sales and bills already made keep the tax they were made with.')).toBeTruthy();
-    fireEvent.change(change.getByLabelText('Rate, in percent'), { target: { value: '12' } });
+    fireEvent.change(change.getByLabelText('Rate (%)'), { target: { value: '12' } });
     fireEvent.click(change.getByRole('button', { name: 'Save tax rate' }));
     await waitFor(() => expect(svc.changeTaxRate).toHaveBeenCalledWith('g1', 'r2', { name: 'GST', bp: 1200 }));
   });
@@ -765,7 +787,7 @@ describe('products and tax', () => {
     fireEvent.click(form.getByRole('button', { name: 'Add a tax rate' }));
     const rate = within(form.getByRole('group', { name: 'Add a tax rate' }));
     fireEvent.change(rate.getByLabelText('Tax name'), { target: { value: 'GST' } });
-    fireEvent.change(rate.getByLabelText('Rate, in percent'), { target: { value: '18' } });
+    fireEvent.change(rate.getByLabelText('Rate (%)'), { target: { value: '18' } });
     fireEvent.click(rate.getByRole('button', { name: 'Add tax rate' }));
     await waitFor(() => expect(svc.addTaxRate).toHaveBeenCalledWith('g1', { name: 'GST', bp: 1800 }));
     await waitFor(() => expect(form.getByLabelText('Tax').value).toBe('r2'));

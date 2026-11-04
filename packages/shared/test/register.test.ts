@@ -7,7 +7,9 @@ import {
   saleAmounts,
   saveGymProductRequestSchema,
   sellProductRequestSchema,
+  SUPPORTED_COUNTRIES,
   taxIncludedForCountry,
+  taxNameForCountry,
   taxRateToBp,
 } from "../src/index.js";
 
@@ -92,6 +94,36 @@ describe("the tax rate as staff type it", () => {
   it("prints back what was typed", () => {
     expect([0, 5, 725, 825, 850, 2000, 3000].map(bpToTaxRateText)).toEqual(["0", "0.05", "7.25", "8.25", "8.5", "20", "30"]);
     for (let bp = 0; bp <= SALES_TAX_BP_MAX; bp += 1) expect(taxRateToBp(bpToTaxRateText(bp))).toBe(bp);
+  });
+});
+
+describe("the tax name a gym is offered (18b-iv)", () => {
+  // The worst thing: a gym offered another country's tax, which then prints on its receipts.
+  // The names each tax office uses: the IRS and the states (sales tax), HMRC, Revenue,
+  // the DGFiP and the AEAT (VAT, in English), the CBIC, the ATO and the CRA (GST), and
+  // Japan's National Tax Agency (consumption tax). Every served country is listed here,
+  // so one added later fails this test until it has its own name.
+  const table: [string, string][] = [
+    ["US", "Sales tax"],
+    ["GB", "VAT"],
+    ["IE", "VAT"],
+    ["FR", "VAT"],
+    ["ES", "VAT"],
+    ["IN", "GST"],
+    ["AU", "GST"],
+    ["CA", "GST"],
+    ["JP", "Consumption tax"],
+  ];
+  it.each(table)("%s is offered %s, and nothing with a rate in it", (country, name) => {
+    expect(taxNameForCountry(country)).toBe(name);
+    expect(taxNameForCountry(` ${country.toLowerCase()} `)).toBe(name);
+    expect(name).not.toMatch(/\d|%/);
+  });
+  it("every served country is in the table", () => {
+    expect(table.map(([c]) => c).sort()).toEqual([...SUPPORTED_COUNTRIES].sort());
+  });
+  it("no country, or one not served, is offered nothing", () => {
+    for (const country of [null, "", "DE", "NZ", "XX", "constructor", "toString", "USA"]) expect(taxNameForCountry(country)).toBeNull();
   });
 });
 

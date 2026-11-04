@@ -1216,9 +1216,9 @@ export default function Sell() {
 
           <div ref={productsRef}>
             {location.state?.showProducts === true ? <ScrollHere target={productsRef} /> : null}
-            <SellProducts key={`products-${gymId}`} gymId={gymId} page={page} locked={readOnly} lockedNote={readOnlyNote(org.orgType)} countryTo={placeFor(orgSlug, privileges, 'country')} addAsk={addAsk} changeAsk={changeAsk} onPage={setPage} />
+            <SellProducts key={`products-${gymId}`} gymId={gymId} country={org.country ?? null} page={page} locked={readOnly} lockedNote={readOnlyNote(org.orgType)} countryTo={placeFor(orgSlug, privileges, 'country')} addAsk={addAsk} changeAsk={changeAsk} onPage={setPage} />
           </div>
-          <TaxRates key={`tax-${gymId}`} gymId={gymId} page={page} locked={readOnly} lockedNote={readOnlyNote(org.orgType)} onPage={setPage} />
+          <TaxRates key={`tax-${gymId}`} gymId={gymId} country={org.country ?? null} page={page} locked={readOnly} lockedNote={readOnlyNote(org.orgType)} onPage={setPage} />
           <SellDiscounts
             key={`discounts-${gymId}`}
             gymId={gymId}
