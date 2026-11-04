@@ -665,7 +665,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
         - 34e-ii-b. [x] **Build your own meal plan** — merged 2026-11-03 (PR #442).
     - 34f. **Your week in food** (7d; split 2026-10-14: the server part needs no phone).
       - 34f-i. [x] **The server works out your week in food** — merged 2026-10-14 (PR #269).
-      - 34f-ii. [ ] **The chart on the Food screen**, with the facts under it in words ("Protein was under target on 5 of 6 days"). Waits for 32b.
+      - 34f-ii. [x] **The chart on the Food screen** — merged 2026-11-04 (PR #460).
 35. **Progress** (split 2026-10-14: the parts on the server need no phone).
     - 35a. [x] **The predictions on the server** — merged 2026-10-14 (PR #270).
     - 35b. [x] **Weekly challenges on the server** — merged 2026-10-15 (PR #272).

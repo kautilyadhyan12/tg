@@ -186,7 +186,7 @@ function server(state: State) {
     }
     return answer({ status: 200, body: { items: state.meals, nextCursor: null } });
   };
-  return { ask, sent };
+  return { ask, sent, asked: base.asked };
 }
 
 function files(): () => TextStore {
@@ -292,6 +292,23 @@ describe("the daily numbers", () => {
     expect(screen.getByLabelText("Calories, 0 of 2,000 kcal")).toBeTruthy();
     // Said once: the card's own line waits until the word of the save has gone.
     expect(screen.queryByText("These are your own daily numbers.")).toBeNull();
+  });
+
+  it("a save of the daily numbers reads the week in food again, so its line moves to them (34f-ii)", async () => {
+    const state: State = { targets: targets(), dishes: [], meals: [] };
+    const s = await openFood(state);
+    await screen.findByText("This Week");
+    const weekReads = () => s.asked.filter((a) => a.path === "/v1/nutrition/food-week").length;
+    const before = weekReads();
+    await changeNumbers();
+    await fireEvent.press(screen.getByRole("button", { name: "My own. Set your own numbers" }));
+    await fireEvent.changeText(screen.getByLabelText("Calories (kcal)"), "2000");
+    await fireEvent.changeText(screen.getByLabelText("Protein (g)"), "150");
+    await fireEvent.changeText(screen.getByLabelText("Carbs (g)"), "200");
+    await fireEvent.changeText(screen.getByLabelText("Fat (g)"), "60");
+    await fireEvent.press(screen.getByRole("button", { name: "Use my numbers" }));
+    expect(await screen.findByText("Now using your own numbers.")).toBeTruthy();
+    await waitFor(() => { expect(weekReads()).toBeGreaterThan(before); });
   });
 
   it("switches back to the app's plan and keeps the person's own numbers", async () => {
