@@ -2684,6 +2684,9 @@ just show (§11).
 - The person's page shows them in a **Memberships** box, drawn only where the gym has
   types or the person holds one; what the gym's own list says about the person sits
   under **Details**.
+- *(Since 2026-11-04, `rulings/2026-11-04-18v-iii.md`: Add member asks no membership and Add membership no payment; once a
+  person is added at a gym that sells, their page opens with Add membership open, and a membership is given owed, its payment
+  recorded on its bill. The two notes below are as first built.)*
 - Add member carries the same choice ("Give a membership": a type, a start date, paid;
   "No membership" until staff pick one). The person is added first and the membership
   given next, by the two routes above, and only where the add answered that somebody
@@ -2841,7 +2844,7 @@ is owed without what staff can do to it (`heldMembershipFacts`; `heldMembershipV
 that and the buttons).
 
 *(23a-ii's notes, 2026-10-07.)* **Every other screen gives the same one answer.**
-- **Add member asks who the person is, then their membership**: Name, Email, Phone; then a
+- *(Amended 2026-11-04: no Membership box; see above.)* **Add member asks who the person is, then their membership**: Name, Email, Phone; then a
   **Membership** box picked from the price list ("No membership" until staff pick one);
   then Member number, Join date, Date of birth and the gym's own columns. A gym with a
   price list is not asked the typed Status, Membership, Payment status or End or renewal
