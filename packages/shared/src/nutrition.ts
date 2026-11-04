@@ -418,6 +418,9 @@ export const dishwareResponseSchema = z.object({ dishware: dishwareSchema }).str
 export type PatchDishware = z.infer<typeof patchDishwareSchema>;
 
 export const bodyMeasurementInputSchema = z.object({
+  // The entry's id, made by the phone (ROADMAP 35c-ii): sent twice it is one entry, and one
+  // removed stays removed. Without it every send is a new entry, as the web's is.
+  id: z.string().uuid().toLowerCase().optional(),
   // Same ≤24h-future bound as takenAt (T3 P2.6a: a measurement dated 2099
   // would stay the person's weight, as the newest weigh-in, forever).
   measuredAt: z
@@ -429,9 +432,9 @@ export const bodyMeasurementInputSchema = z.object({
   weightKg: z.number().positive().lt(1000).multipleOf(0.01).nullable().optional(),
   metrics: z.record(z.number().finite().nonnegative()).default({}), source: z.literal("manual").default("manual"),
 }).strict();
-// `source` is not patchable: a row the person typed ("self_reported") must
+// `source` and `id` are not patchable: a row the person typed ("self_reported") must
 // not be relabelled a weigh-in, and nothing else is ever sent for it.
-export const patchBodyMeasurementSchema = bodyMeasurementInputSchema.omit({ source: true }).partial().refine((v) => Object.keys(v).length > 0, { message: "at least one field required" });
+export const patchBodyMeasurementSchema = bodyMeasurementInputSchema.omit({ source: true, id: true }).partial().refine((v) => Object.keys(v).length > 0, { message: "at least one field required" });
 export type BodyMeasurementInput = z.infer<typeof bodyMeasurementInputSchema>;
 export type PatchBodyMeasurement = z.infer<typeof patchBodyMeasurementSchema>;
 

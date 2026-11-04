@@ -43,6 +43,9 @@ export const DIRECT_DELETE_TABLES = [
   "saved_routes",
   "run_schedules",
   "body_measurements",
+  // The ids of body measurements the person removed (migration 0203, ROADMAP Stage 5 35c-ii), on
+  // meal_removed_ids' footing: their own record, deleted and exported.
+  "body_measurement_removed_ids",
   "workout_templates",
   "workouts", // §5.2 "workouts(+sets CASCADE)" — sets go by cascade, see below
   "user_achievements",

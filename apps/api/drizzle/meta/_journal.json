@@ -1415,6 +1415,13 @@
       "when": 1790726400202,
       "tag": "0202_early_cancellation_fee",
       "breakpoints": true
+    },
+    {
+      "idx": 202,
+      "version": "7",
+      "when": 1790726400203,
+      "tag": "0203_body_measurement_removed_ids",
+      "breakpoints": true
     }
   ]
 }

@@ -846,21 +846,39 @@ export async function listMeasurements(
   return rows.map(toMeasurement);
 }
 
-/** Throws AccountNotActiveError for an account that is not active. */
+/** A save and a removal of the same id wait for each other. */
+const lockMeasurementId = async (tx: TransactionSql, id: string): Promise<void> => {
+  await tx`SELECT pg_advisory_xact_lock(hashtext(${`measurement:${id}`}))`;
+};
+
+/** Throws AccountNotActiveError for an account that is not active. With the phone's own id
+ *  (ROADMAP 35c-ii) the same id sent twice is one entry, answered as it is now; null: the id is
+ *  somebody else's, or an entry removed (`deleteMeasurement`), and nothing is kept. */
 export async function createMeasurement(
   sql: Sql,
   userId: string,
   v: BodyMeasurementInput,
-): Promise<MeasurementRow> {
+): Promise<MeasurementRow | null> {
   return await sql.begin(async (tx) => {
     await lockOwner(tx, userId);
+    const id = v.id ?? null;
+    if (id !== null) {
+      await lockMeasurementId(tx, id);
+      const removed = await tx`SELECT 1 FROM body_measurement_removed_ids WHERE id = ${id}`;
+      if (removed.length > 0) return null;
+    }
     const rows = await tx<MeasurementDbRow[]>`
-      INSERT INTO body_measurements (user_id, measured_at, weight_kg, metrics, source)
-      VALUES (${userId}, ${new Date(v.measuredAt)}, ${v.weightKg ?? null}, ${tx.json(v.metrics)}, ${v.source})
+      INSERT INTO body_measurements (id, user_id, measured_at, weight_kg, metrics, source)
+      VALUES (COALESCE(${id}::uuid, gen_random_uuid()), ${userId}, ${new Date(v.measuredAt)}, ${v.weightKg ?? null}, ${tx.json(v.metrics)}, ${v.source})
+      ON CONFLICT (id) DO NOTHING
       RETURNING id, measured_at, weight_kg, metrics, source, created_at`;
     const r = rows[0];
-    if (r === undefined) throw new Error("measurement insert returned no row");
-    return toMeasurement(r);
+    if (r !== undefined) return toMeasurement(r);
+    if (id === null) throw new Error("measurement insert returned no row");
+    const kept = await tx<MeasurementDbRow[]>`
+      SELECT id, measured_at, weight_kg, metrics, source, created_at FROM body_measurements
+      WHERE id = ${id} AND user_id = ${userId}`;
+    return kept[0] === undefined ? null : toMeasurement(kept[0]);
   });
 }
 
@@ -891,9 +909,12 @@ export async function updateMeasurement(
 export async function deleteMeasurement(sql: Sql, userId: string, id: string): Promise<boolean> {
   return await sql.begin(async (tx) => {
     await lockOwner(tx, userId);
+    await lockMeasurementId(tx, id);
     const rows = await tx<{ id: string }[]>`
       DELETE FROM body_measurements WHERE id = ${id} AND user_id = ${userId} RETURNING id`;
-    return rows.length > 0;
+    if (rows.length === 0) return false;
+    await tx`INSERT INTO body_measurement_removed_ids (id, user_id) VALUES (${id}, ${userId}) ON CONFLICT (id) DO NOTHING`;
+    return true;
   });
 }
 
