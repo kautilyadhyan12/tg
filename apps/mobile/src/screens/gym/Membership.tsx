@@ -40,6 +40,7 @@ import {
   receiptTitle,
   refundText,
   statusTag,
+  termValue,
   theirNoMembershipText,
   type FeeItem,
   type Tone,
@@ -297,16 +298,6 @@ function MembershipCard({ m, gym, paidBy, receiptButton }: { m: MyMembership; gy
       {dates === null ? null : <Txt kind="small">{dates}</Txt>}
       {classes === null ? null : <Txt kind="small">{classes}</Txt>}
       {owed === null ? null : <Txt colour={TEXT_TONES[owed.tone]}>{owed.text}</Txt>}
-      {m.terms.length === 0 ? null : (
-        <View testID={`terms-${m.id}`} style={styles.terms}>
-          {m.terms.map((t) => (
-            <View key={t.key}>
-              <Txt colour="text">{t.label}</Txt>
-              <Txt kind="small">{t.value}</Txt>
-            </View>
-          ))}
-        </View>
-      )}
       {m.payments.map((p) => {
         const t = paymentText(p, m.currency);
         return (
@@ -335,6 +326,16 @@ function MembershipCard({ m, gym, paidBy, receiptButton }: { m: MyMembership; gy
       })}
       {!paidBy && !m.fromList && m.payments.length === 0 && m.priceMinor !== null && m.priceMinor > 0 ? <Txt kind="small">{NO_PAYMENTS}</Txt> : null}
       {m.olderPeriodsNotShown > 0 ? <Txt kind="small">{olderPayments(gym)}</Txt> : null}
+      {m.terms.length === 0 ? null : (
+        <View testID={`terms-${m.id}`} style={styles.terms}>
+          {m.terms.map((t) => (
+            <View key={t.key}>
+              <Txt colour="text">{t.label}</Txt>
+              <Txt kind="small">{termValue(t.value)}</Txt>
+            </View>
+          ))}
+        </View>
+      )}
     </Card>
   );
 }

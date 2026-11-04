@@ -478,8 +478,9 @@ describe("the My membership page", () => {
     const max = within(await page().findByTestId(`terms-${M1}`));
     for (const t of terms) {
       expect(max.getByText(t.label)).toBeTruthy();
-      expect(max.getByText(t.value)).toBeTruthy();
+      expect(max.getByText(`${t.value.charAt(0).toUpperCase()}${t.value.slice(1)}`)).toBeTruthy();
     }
+    expect(max.getByText("Until 7 Nov 2026, to cancel with a full refund")).toBeTruthy();
     expect(within(page().getByTestId(`membership-${M2}`)).queryByText("Minimum term")).toBeNull();
     expect(page().queryByTestId(`terms-${M2}`)).toBeNull();
     expect(page().getAllByText("Cooling-off period")).toHaveLength(1);
