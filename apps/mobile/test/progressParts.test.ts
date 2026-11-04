@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { bestTimeSchema, bodyMeasurementSchema, workoutListItemSchema, calorieForecastSchema, progressPredictionsSchema, weekGoalPredictionSchema, type BodyMeasurement, type SteadyPace } from "@app/shared";
 import { average, bestIndex, columnCentres, firstFigure, guides, monotoneControls, monotonePath, rangeWords, tagWords } from "../src/screens/progress/chartRules";
-import { activeDaysWords, clockWords, daySaid, daySum, dayTitle, dayWindow, dayWorkouts, level, monthCells, monthPickSaid, monthRange, monthsToPick, monthWords, nextMonth, squareSaid, yearColumns } from "../src/screens/progress/calendarRules";
+import { activeDaysWords, clockWords, daySaid, daySum, dayTitle, dayWindow, dayWorkouts, level, monthCells, monthPickSaid, monthRange, monthsToPick, monthWords, nextMonth, squareSaid, windowWorkouts, yearColumns } from "../src/screens/progress/calendarRules";
 import { addDays, dayKeyOf } from "../src/screens/progress/progressRules";
 import { entryRows, latestWeight, slices } from "../src/screens/progress/otherRules";
 import { bestTimeMini, forecastMini, plateauMini, predictionsFrom, tenths, weekGoalMini } from "../src/screens/progress/predictionWords";
@@ -214,21 +214,22 @@ describe("Predictions, every other state the server sends", () => {
 });
 
 describe("the calendar's month", () => {
+  const YEAR_FIRST = "2025-11-05";
   const counts = new Map([["2026-10-14", 1], ["2026-10-26", 2], ["2026-11-04", 1], ["2026-11-05", 3]]);
   it("starts on Monday with blanks, each day its own workouts, a day after today never lit", () => {
-    const oct = monthCells({ y: 2026, m: 10 }, counts, TODAY);
+    const oct = monthCells({ y: 2026, m: 10 }, counts, TODAY, YEAR_FIRST);
     // 1 Oct 2026 is a Thursday: three blanks before it.
     expect(oct.slice(0, 4).map((c) => c?.date ?? null)).toEqual([null, null, null, 1]);
     expect(oct.filter((c) => c !== null)).toHaveLength(31);
     expect(oct.find((c) => c?.date === 26)?.workouts).toBe(2);
-    const nov = monthCells({ y: 2026, m: 11 }, counts, TODAY);
+    const nov = monthCells({ y: 2026, m: 11 }, counts, TODAY, YEAR_FIRST);
     expect(nov.find((c) => c?.date === 4)).toMatchObject({ workouts: 1, today: true, later: false });
     expect(nov.find((c) => c?.date === 5)).toMatchObject({ workouts: 0, later: true });
     expect(activeDaysWords(nov)).toBe("1 active day");
     expect(activeDaysWords(oct)).toBe("2 active days");
   });
   it("says each day in words for a screen reader", () => {
-    const oct = monthCells({ y: 2026, m: 10 }, counts, TODAY);
+    const oct = monthCells({ y: 2026, m: 10 }, counts, TODAY, YEAR_FIRST);
     const say = (d: number) => {
       const c = oct.find((x) => x?.date === d);
       return c === null || c === undefined ? "" : daySaid(c);
@@ -241,6 +242,36 @@ describe("the calendar's month", () => {
     expect(squareSaid({ key: "2026-10-26", workouts: 2, outside: false }, TODAY)).toBe("Monday 26 October, 2 workouts");
     expect(squareSaid({ key: TODAY, workouts: 1, outside: false }, TODAY)).toMatch(/, today, 1 workout$/);
   });
+  // The review's High 3: a free member's first month opens before the plan's first day. Those days
+  // were never sent, so they are faint, cannot be opened, and say nothing of workouts; never "no workout".
+  it("a day before the first day the server sent is faint and says nothing of its workouts", () => {
+    const planFirst = "2026-08-07"; // today and the 89 days before it
+    const aug = monthCells({ y: 2026, m: 8 }, new Map([["2026-08-06", 2], ["2026-08-07", 1]]), TODAY, planFirst);
+    const day = (d: number) => aug.find((c) => c?.date === d);
+    expect(day(6)).toMatchObject({ before: true, workouts: 0 });
+    expect(day(7)).toMatchObject({ before: false, workouts: 1 });
+    const six = day(6);
+    expect(six === null || six === undefined ? "" : daySaid(six)).toBe("Thursday 6 August");
+    const eight = day(8);
+    expect(eight === null || eight === undefined ? "" : daySaid(eight)).toBe("Saturday 8 August, no workout");
+    expect(activeDaysWords(aug)).toBe("1 active day");
+  });
+
+  // The review's High 2: the server's year once began part way into a 366th day back, and the plan's
+  // 90 days into a 91st. The calendar keeps only the days it draws, so no count takes such a day in.
+  it("keeps only the server's days that it draws: the window's first day to today", () => {
+    const sent = [
+      { date: "2025-11-04", count: 1 },
+      { date: "2025-11-05", count: 2 },
+      { date: "2026-08-06", count: 1 },
+      { date: "2026-08-07", count: 1 },
+      { date: TODAY, count: 1 },
+      { date: "2026-11-05", count: 4 },
+    ];
+    expect([...windowWorkouts(sent, TODAY, 365).keys()]).toEqual(["2025-11-05", "2026-08-06", "2026-08-07", TODAY]);
+    expect([...windowWorkouts(sent, TODAY, 90).keys()]).toEqual(["2026-08-07", TODAY]);
+  });
+
   it("moves a month at a time across a year's end, within the server's year of days", () => {
     expect(nextMonth({ y: 2026, m: 1 }, -1)).toEqual({ y: 2025, m: 12 });
     expect(nextMonth({ y: 2025, m: 12 }, 1)).toEqual({ y: 2026, m: 1 });

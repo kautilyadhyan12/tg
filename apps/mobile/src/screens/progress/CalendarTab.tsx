@@ -26,12 +26,13 @@ import {
   nextMonth,
   sameMonth,
   squareSaid,
+  windowWorkouts,
   yearColumns,
   type Month,
   type MonthPick,
 } from "./calendarRules";
 import { ArtBox, BoxTitle, Flame, ReadOr } from "./parts";
-import { dayKeyOf } from "./progressRules";
+import { addDays, dayKeyOf } from "./progressRules";
 
 // Progress's Calendar (ROADMAP Stage 5 35c-i): the web's month and its year of activity in one box,
 // a flame on each day trained, under the trainer and its footprints.
@@ -56,7 +57,9 @@ export function CalendarTab() {
 function Activity({ heatmap }: { heatmap: ProgressHeatmap }) {
   const today = dayKeyOf(new Date());
   const days = heatmap.limitedToDays === null ? YEAR_DAYS : Math.min(YEAR_DAYS, heatmap.limitedToDays);
-  const workouts = useMemo(() => new Map(heatmap.days.map((d) => [d.date, d.count])), [heatmap]);
+  // Only the days the calendar draws: the year's or the plan's, today the last (35c-i review).
+  const workouts = useMemo(() => windowWorkouts(heatmap.days, today, days), [heatmap, today, days]);
+  const firstDay = addDays(today, -(days - 1));
   const range = monthRange(today, days);
   const [view, setView] = useState<"month" | "year">("month");
   const [month, setMonth] = useState<Month>(monthOf(today));
@@ -98,6 +101,7 @@ function Activity({ heatmap }: { heatmap: ProgressHeatmap }) {
           last={range.last}
           workouts={workouts}
           today={today}
+          firstDay={firstDay}
           onPick={() => {
             setPicking(true);
           }}
@@ -265,6 +269,7 @@ function MonthView({
   last,
   workouts,
   today,
+  firstDay,
   onPick,
   onDay,
 }: {
@@ -274,10 +279,11 @@ function MonthView({
   last: Month;
   workouts: ReadonlyMap<string, number>;
   today: string;
+  firstDay: string;
   onPick: () => void;
   onDay: (key: string) => void;
 }) {
-  const cells = monthCells(month, workouts, today);
+  const cells = monthCells(month, workouts, today, firstDay);
   const earlier = !sameMonth(month, first);
   const later = !sameMonth(month, last);
   return (
@@ -320,9 +326,9 @@ function MonthView({
                 <Pressable
                   key={c.key}
                   style={({ pressed }) => [styles.cell, pressed ? styles.pressed : null]}
-                  accessibilityRole={c.later ? undefined : "button"}
+                  accessibilityRole={c.later || c.before ? undefined : "button"}
                   accessibilityLabel={daySaid(c)}
-                  disabled={c.later}
+                  disabled={c.later || c.before}
                   onPress={() => {
                     onDay(c.key);
                   }}
@@ -333,7 +339,7 @@ function MonthView({
                     </Rise>
                   ) : null}
                   <View style={[styles.dayRing, c.today ? styles.today : null, c.workouts > 0 ? styles.litRing : null]}>
-                    <Txt kind={c.workouts > 0 ? "tiny" : "small"} colour={c.workouts > 0 ? "onOrange" : c.later ? "textFaint" : "textSoft"} style={c.workouts > 0 ? styles.litNumber : styles.number}>
+                    <Txt kind={c.workouts > 0 ? "tiny" : "small"} colour={c.workouts > 0 ? "onOrange" : c.later || c.before ? "textFaint" : "textSoft"} style={c.workouts > 0 ? styles.litNumber : styles.number}>
                       {String(c.date)}
                     </Txt>
                   </View>

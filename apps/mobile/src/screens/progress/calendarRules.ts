@@ -46,17 +46,29 @@ export interface DayCell {
   today: boolean;
   /** After today: drawn faint, never lit. */
   later: boolean;
+  /** Before the first day the server sent: drawn faint, never lit, nothing said of its workouts, as
+   *  the calendar was never told them (a plan's limit, or the year's start). */
+  before: boolean;
 }
 
-/** A month, Monday first: blanks before its first day, then each day with its workouts. */
-export function monthCells(mo: Month, workouts: ReadonlyMap<string, number>, today: string): (DayCell | null)[] {
+/** The server's days the calendar draws: from the window's first day (`span` days back, today the
+ *  last) to today. A day sent outside it, such as part of the day before, is counted nowhere. */
+export function windowWorkouts(days: readonly { date: string; count: number }[], today: string, span: number): Map<string, number> {
+  const first = addDays(today, -(span - 1));
+  return new Map(days.filter((d) => d.date >= first && d.date <= today).map((d) => [d.date, d.count]));
+}
+
+/** A month, Monday first: blanks before its first day, then each day with its workouts; `firstDay`
+ *  is the first day the server sent. */
+export function monthCells(mo: Month, workouts: ReadonlyMap<string, number>, today: string, firstDay: string): (DayCell | null)[] {
   const first = keyOf(mo.y, mo.m, 1);
   const days = new Date(Date.UTC(mo.y, mo.m, 0)).getUTCDate();
   const cells: (DayCell | null)[] = Array.from({ length: weekday(first) }, () => null);
   for (let d = 1; d <= days; d += 1) {
     const key = keyOf(mo.y, mo.m, d);
     const later = key > today;
-    cells.push({ key, date: d, workouts: later ? 0 : Math.max(0, workouts.get(key) ?? 0), today: key === today, later });
+    const before = key < firstDay;
+    cells.push({ key, date: d, workouts: later || before ? 0 : Math.max(0, workouts.get(key) ?? 0), today: key === today, later, before });
   }
   return cells;
 }
@@ -70,13 +82,13 @@ export function activeDaysWords(cells: readonly (DayCell | null)[]): string {
 export function daySaid(c: DayCell): string {
   const names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
   const { m } = parts(c.key);
-  const what = c.workouts === 0 ? (c.later ? "" : ", no workout") : `, ${count(c.workouts)} ${c.workouts === 1 ? "workout" : "workouts"}`;
+  const what = c.workouts === 0 ? (c.later || c.before ? "" : ", no workout") : `, ${count(c.workouts)} ${c.workouts === 1 ? "workout" : "workouts"}`;
   return `${names[weekday(c.key)] ?? ""} ${String(c.date)} ${MONTHS[m - 1] ?? ""}${c.today ? ", today" : ""}${what}`;
 }
 
 /** What a screen reader says for a lit square of the year: "Monday 26 October, 2 workouts". */
 export function squareSaid(s: YearSquare, today: string): string {
-  return daySaid({ key: s.key, date: parts(s.key).d, workouts: s.workouts, today: s.key === today, later: false });
+  return daySaid({ key: s.key, date: parts(s.key).d, workouts: s.workouts, today: s.key === today, later: false, before: false });
 }
 
 /** The months the calendar can show: from the first month of the server's year of days to this one. */

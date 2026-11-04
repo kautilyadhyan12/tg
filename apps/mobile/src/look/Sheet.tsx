@@ -1,5 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, type ReactNode } from "react";
-import { Image, KeyboardAvoidingView, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Image, KeyboardAvoidingView, Pressable, StyleSheet, View } from "react-native";
 import { Modal } from "./Modal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colours, shadows, sheetBandShade, sizes } from "./colours";
@@ -98,14 +98,22 @@ export function Sheet({ open, title, onClose, children, place = "bottom", onBack
 /** The drawing across a box's top: as wide as the box, its height from the drawing's own shape, moved
  *  up by `focus` of what overhangs the band. */
 function SheetBand({ picture }: { picture: { name: PictureName; focus: number } }) {
-  const { width } = useWindowDimensions();
+  const [width, setWidth] = useState(0);
   const source = pictures[picture.name];
   const size = Image.resolveAssetSource(source);
   const tall = size.width > 0 && size.height > 0 ? (width * size.height) / size.width : BAND_TALL;
   const lift = Math.max(0, tall - BAND_TALL) * picture.focus;
   return (
-    <View pointerEvents="none" style={styles.band}>
-      <Image source={source} resizeMode="cover" accessible={false} style={{ position: "absolute", left: 0, width, top: -lift, height: Math.max(tall, BAND_TALL) }} />
+    <View
+      pointerEvents="none"
+      style={styles.band}
+      onLayout={(e) => {
+        setWidth(e.nativeEvent.layout.width);
+      }}
+    >
+      {width === 0 ? null : (
+        <Image source={source} resizeMode="cover" accessible={false} style={{ position: "absolute", left: 0, width, top: -lift, height: Math.max(tall, BAND_TALL) }} />
+      )}
       <View style={[StyleSheet.absoluteFill, styles.bandShade]} />
     </View>
   );

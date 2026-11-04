@@ -225,6 +225,31 @@ describe("Me → Progress", () => {
     }
   });
 
+  // The review's High 3: on a plan that shows 90 days, the calendar's first month opens before the
+  // plan's first day. The days before it were never sent: the screen reader is told nothing of their
+  // workouts (never "no workout", which a member whose older workouts are saved would read as false),
+  // and they cannot be opened.
+  it("Calendar on a 90-day plan: a day before its first is never said to have no workout, and cannot be opened", async () => {
+    const server = progressServer({}, { [HEATMAP_READ]: ok({ ...HEATMAP, limitedToDays: 90 }) });
+    await openProgress(server.ask);
+    await openTab("Calendar");
+    const now = new Date();
+    const first = new Date();
+    first.setDate(first.getDate() - 89);
+    const back = (now.getFullYear() - first.getFullYear()) * 12 + now.getMonth() - first.getMonth();
+    for (let i = 0; i < back; i += 1) await fireEvent.press(await screen.findByRole("button", { name: "Month before" }));
+    expect(screen.getByRole("button", { name: "Month before" }).props.accessibilityState).toEqual({ disabled: true });
+    const name = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"][first.getMonth()] ?? "";
+    // Today and the 89 days before it: the 1st of that month is before them unless it is their first.
+    if (first.getDate() > 1) {
+      const one = await screen.findByLabelText(new RegExp(`^[A-Za-z]+ 1 ${name}$`));
+      expect(one.props.accessibilityRole).toBeUndefined();
+      expect(screen.queryByLabelText(new RegExp(`^[A-Za-z]+ 1 ${name}, no workout$`))).toBeNull();
+    }
+    // The plan's first day itself is drawn and said as any other.
+    expect(await screen.findByLabelText(new RegExp(`^[A-Za-z]+ ${String(first.getDate())} ${name}, no workout$`))).toBeTruthy();
+  });
+
   it("builds every tab once: going back to a tab reads nothing again", async () => {
     const server = progressServer({});
     await openProgress(server.ask);

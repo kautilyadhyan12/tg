@@ -4,7 +4,7 @@
 // run date so streak reconciliation can never rot the suite.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
-import { personalRecordsSchema, progressDistributionSchema, progressOverviewSchema, progressTrendSchema } from "@app/shared";
+import { personalRecordsSchema, progressDistributionSchema, progressHeatmapSchema, progressOverviewSchema, progressTrendSchema } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { seed } from "../src/db/seed.js";
@@ -301,6 +301,54 @@ d("workouts history + progress + gamification (real Postgres)", () => {
     const firstDay = dayOf(new Date(Date.now() - 6 * 86_400_000).toISOString());
     expect(sets(week)).toBe(edgeDay < firstDay ? 1 : 3);
     expect(sets(month)).toBe(3);
+  });
+
+  // The review's case for the zone (35c-i round one): a person 14 hours ahead of UTC. A day's edge is
+  // their own midnight, never UTC's: a workout half an hour before their seventh midnight back is out
+  // of 7 days, one half an hour after it is in, and its record is dated their day.
+  it("a person far from UTC: their own midnight bounds 7 days, and a record is dated their day", { timeout: 60_000 }, async () => {
+    const k = await session("p23-kiri@example.com");
+    await sql`UPDATE users SET timezone = 'Pacific/Kiritimati' WHERE id = ${k.userId}`;
+    const [edge] = await sql<{ at: Date; day: string }[]>`
+      SELECT ((date_trunc('day', now() AT TIME ZONE 'Pacific/Kiritimati') - interval '6 days') AT TIME ZONE 'Pacific/Kiritimati') AS at,
+             to_char(date_trunc('day', now() AT TIME ZONE 'Pacific/Kiritimati') - interval '6 days', 'YYYY-MM-DD') AS day`;
+    if (edge === undefined) throw new Error("no edge");
+    const before = new Date(edge.at.getTime() - 30 * 60_000).toISOString();
+    const after = new Date(edge.at.getTime() + 30 * 60_000).toISOString();
+    expect((await sync(crypto.randomUUID(), before, [squatSet(1), squatSet(2)], k.access)).statusCode).toBe(201);
+    // The longest of the two, so the record is the one just after their midnight.
+    expect((await sync(crypto.randomUUID(), after, [squatSet(1, 90_000)], k.access)).statusCode).toBe(201);
+    const week = progressDistributionSchema.parse((await inject({ method: "GET", url: "/v1/progress/distribution?period=7d", access: k.access })).json());
+    expect(week.families.reduce((n, f) => n + f.sets, 0)).toBe(1);
+    const records = personalRecordsSchema.parse((await inject({ method: "GET", url: "/v1/progress/records", access: k.access })).json());
+    expect(records.longestWorkout?.day).toBe(edge.day);
+    // Their day is not UTC's: UTC still calls that instant the day before.
+    expect(dayOf(after)).not.toBe(edge.day);
+  });
+
+  // The review's High 1: the plan's 90 days are 90 whole days in the person's zone. A free member's
+  // workout on the evening of the 91st day back is in no box that says 90 days, and the one just after
+  // the first of the 90 midnights is in every one.
+  it("a plan's last 90 days are 90 whole days of the person's own: the evening of the 91st is in none", { timeout: 60_000 }, async () => {
+    const g = await session("p23-gina@example.com");
+    await sql`UPDATE users SET timezone = 'Asia/Kolkata' WHERE id = ${g.userId}`;
+    const [first] = await sql<{ at: Date; day: string; before: string }[]>`
+      SELECT ((date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata') - interval '89 days') AT TIME ZONE 'Asia/Kolkata') AS at,
+             to_char(date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata') - interval '89 days', 'YYYY-MM-DD') AS day,
+             to_char(date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata') - interval '90 days', 'YYYY-MM-DD') AS before`;
+    if (first === undefined) throw new Error("no first day");
+    const evening = new Date(first.at.getTime() - 30 * 60_000).toISOString();
+    const morning = new Date(first.at.getTime() + 30 * 60_000).toISOString();
+    expect((await sync(crypto.randomUUID(), evening, [squatSet(1), squatSet(2)], g.access)).statusCode).toBe(201);
+    expect((await sync(crypto.randomUUID(), morning, [squatSet(1)], g.access)).statusCode).toBe(201);
+    const year = progressDistributionSchema.parse((await inject({ method: "GET", url: "/v1/progress/distribution?period=1y", access: g.access })).json());
+    expect(year.limitedToDays).toBe(90);
+    expect(year.families.reduce((n, f) => n + f.sets, 0)).toBe(1);
+    const records = personalRecordsSchema.parse((await inject({ method: "GET", url: "/v1/progress/records", access: g.access })).json());
+    expect(records.totalWorkouts).toBe(1);
+    const heat = progressHeatmapSchema.parse((await inject({ method: "GET", url: "/v1/progress/heatmap", access: g.access })).json());
+    expect(heat.days.map((x) => x.date)).toEqual([first.day]);
+    expect(heat.days.some((x) => x.date === first.before)).toBe(false);
   });
 
   it("a window can NARROW the plan read-gate but never widen it (Part 4 §0.2)", { timeout: 60_000 }, async () => {
