@@ -49,7 +49,7 @@ import {
 // (`rulings/2026-10-15-18m.md`, `rulings/2026-10-29-16b.md`): Memberships (each with when it renews, what is owed and
 // each payment with its refunds under it), Fees (every late cancel, no-show and freeze fee), Purchases (what they
 // bought at the desk), and the people they pay for. Every payment, refund, purchase and paid fee opens its receipt
-// in the middle box; none is emailed. Read when it opens and when the app comes back; the server decides whose
+// in the middle box; none is emailed. Each membership shows its terms as its agreement says them (16d). Read when it opens and when the app comes back; the server decides whose
 // money is shown.
 
 export interface MembershipPlace {
@@ -297,6 +297,16 @@ function MembershipCard({ m, gym, paidBy, receiptButton }: { m: MyMembership; gy
       {dates === null ? null : <Txt kind="small">{dates}</Txt>}
       {classes === null ? null : <Txt kind="small">{classes}</Txt>}
       {owed === null ? null : <Txt colour={TEXT_TONES[owed.tone]}>{owed.text}</Txt>}
+      {m.terms.length === 0 ? null : (
+        <View testID={`terms-${m.id}`} style={styles.terms}>
+          {m.terms.map((t) => (
+            <View key={t.key}>
+              <Txt colour="text">{t.label}</Txt>
+              <Txt kind="small">{t.value}</Txt>
+            </View>
+          ))}
+        </View>
+      )}
       {m.payments.map((p) => {
         const t = paymentText(p, m.currency);
         return (
@@ -440,6 +450,7 @@ const styles = StyleSheet.create({
   under: { paddingLeft: 14, borderLeftWidth: 2, borderLeftColor: colours.orangeLine },
   ask: { gap: 12 },
   receipt: { gap: 12 },
+  terms: { gap: 8, paddingTop: 10, borderTopWidth: 1, borderTopColor: colours.line },
   rule: { gap: 6, paddingTop: 10, borderTopWidth: 1, borderTopColor: colours.line },
   middle: { alignSelf: "center" },
 });

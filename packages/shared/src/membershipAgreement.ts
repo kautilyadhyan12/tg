@@ -353,16 +353,34 @@ function coolingOffFacts(m: AgreementFactsInput["membership"]): AgreementFact[] 
   return [{ label: "Cooling-off period", value: `${cooling === 1 ? "1 day" : `${String(cooling)} days`} after signing, to cancel with a full refund` }];
 }
 
+/** One of a membership's terms, by what it is: a member who is paid for is not shown the money ones (16d). */
+export const membershipTermSchema = z
+  .object({ key: z.enum(["minimum_term", "early_cancellation_fee", "notice", "cooling_off"]), label: z.string().min(1), value: z.string().min(1) })
+  .strict();
+export type MembershipTerm = z.infer<typeof membershipTermSchema>;
+
+const TERM_KEYS: Readonly<Record<string, MembershipTerm["key"]>> = {
+  "Minimum term": "minimum_term",
+  "Early cancellation fee": "early_cancellation_fee",
+  "Notice to cancel": "notice",
+};
+
 /** THE MEMBERSHIP'S TERMS, as its agreement says them (Kd, 2026-11-04): the minimum term and its early cancellation fee,
- *  the notice to cancel, each a line "Label: value.", and its cooling-off period with its last day while it is open today
- *  (round one, H2); none it does not have. What the Terminal shows before it keeps a card for automatic payments. */
-export function membershipTermLines(m: AgreementFactsInput["membership"]): string[] {
+ *  the notice to cancel, and its cooling-off period with its last day while it is open today (round one, H2); none it
+ *  does not have. What the Terminal shows before it keeps a card, and My membership on the phone (16d). */
+export function membershipTerms(m: AgreementFactsInput["membership"]): MembershipTerm[] {
   const cooling = m.priceMinor > 0 ? m.view.can.coolingOff : null;
   return [
-    ...[...minimumTermFacts(m), ...noticeFacts(m)].map((fact) => `${fact.label}: ${fact.value}.`),
-    ...(cooling === null ? [] : [`Cooling-off period: until ${dayWords(cooling.until)}, to cancel with a full refund.`]),
+    ...[...minimumTermFacts(m), ...noticeFacts(m)].flatMap((fact) => {
+      const key = TERM_KEYS[fact.label];
+      return key === undefined ? [] : [{ key, label: fact.label, value: fact.value }];
+    }),
+    ...(cooling === null ? [] : [{ key: "cooling_off" as const, label: "Cooling-off period", value: `until ${dayWords(cooling.until)}, to cancel with a full refund` }]),
   ];
 }
+
+/** The terms as the Terminal lists them, each a line "Label: value.". */
+export const membershipTermLines = (m: AgreementFactsInput["membership"]): string[] => membershipTerms(m).map((t) => `${t.label}: ${t.value}.`);
 
 /** A membership's first bill among those listed: the one for its first period. */
 export const firstBillOf = (billing: MemberBilling | null): MemberBill | null => billing?.bills.find((bill) => bill.periodIndex === 0) ?? null;

@@ -462,6 +462,29 @@ describe("the My membership page", () => {
     expect(within(page().getByTestId(`membership-${M2}`)).getByText("No payments yet.")).toBeTruthy();
   });
 
+  it("each membership shows its own terms under it, as the server words them; one with none shows none (16d)", async () => {
+    const terms = [
+      { key: "minimum_term", label: "Minimum term", value: "12 months, to 3 Nov 2027" },
+      { key: "early_cancellation_fee", label: "Early cancellation fee", value: "₹990.00" },
+      { key: "notice", label: "Notice to cancel", value: "30 days" },
+      { key: "cooling_off", label: "Cooling-off period", value: "until 7 Nov 2026, to cancel with a full refund" },
+    ];
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [pathOf(IRON)]: ok(answer("Iron House", { memberships: [membership(M1, "Gold Max", { terms }), membership(M2, "Gold Plain")] })),
+    });
+    await openMembership(server.ask, IRON);
+    const max = within(await page().findByTestId(`terms-${M1}`));
+    for (const t of terms) {
+      expect(max.getByText(t.label)).toBeTruthy();
+      expect(max.getByText(t.value)).toBeTruthy();
+    }
+    expect(within(page().getByTestId(`membership-${M2}`)).queryByText("Minimum term")).toBeNull();
+    expect(page().queryByTestId(`terms-${M2}`)).toBeNull();
+    expect(page().getAllByText("Cooling-off period")).toHaveLength(1);
+  });
+
   it("a page whose place no longer shows it, found when the app comes back, takes the old money off the screen", async () => {
     let gone = false;
     const listeners: ((state: string) => void)[] = [];
