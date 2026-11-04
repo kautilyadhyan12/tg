@@ -448,9 +448,16 @@ d("workouts history + progress + gamification (real Postgres)", () => {
     expect(o.consistencyPct).toBe(Math.min(100, Math.round((4 / 7) * 100)));
 
     const trend = await inject({ method: "GET", url: "/v1/progress/trend?period=30d", access: cookieA });
-    const points = trend.json<{ points: { date: string; workouts: number }[] }>().points;
+    const points = progressTrendSchema.parse(trend.json()).points;
     expect(points.length).toBe(3); // three distinct days
     expect(points.reduce((a, p) => a + p.workouts, 0)).toBe(4);
+    // Each day carries its own training time (35c-i): the days add up to the period's total, Alice's alone.
+    const month = progressOverviewSchema.parse((await inject({ method: "GET", url: "/v1/progress/overview?period=30d", access: cookieA })).json());
+    expect(month.totalDurationMs).toBeGreaterThan(0);
+    expect(points.reduce((a, p) => a + p.durationMs, 0)).toBe(month.totalDurationMs);
+    const bobs = progressTrendSchema.parse((await inject({ method: "GET", url: "/v1/progress/trend?period=30d", access: cookieB })).json()).points;
+    const bobsMonth = progressOverviewSchema.parse((await inject({ method: "GET", url: "/v1/progress/overview?period=30d", access: cookieB })).json());
+    expect(bobs.reduce((a, p) => a + p.durationMs, 0)).toBe(bobsMonth.totalDurationMs);
 
     const heatmap = await inject({ method: "GET", url: "/v1/progress/heatmap", access: cookieA });
     expect(heatmap.json<{ days: unknown[] }>().days.length).toBe(3);

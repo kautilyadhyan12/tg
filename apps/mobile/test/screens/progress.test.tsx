@@ -14,14 +14,20 @@ const RECORDS = {
   longestStreak: 3,
   limitedToDays: null,
 };
-const day = (back: number, workouts: number, kcal: number) => ({ date: dayKey(back), workouts, kcal });
+const day = (back: number, workouts: number, kcal: number) => ({ date: dayKey(back), workouts, kcal, durationMs: workouts * 30 * 60_000 });
+const STREAK = { totalWorkouts: 9, totalKcal: 0, totalDurationMs: 0, avgFormScore: null, currentStreak: 2, longestStreak: 5, consistencyPct: 0, totalRuns: 0, runDurationMs: 0, runKcal: 0, limitedToDays: null };
 const trend = (points: ReturnType<typeof day>[], limitedToDays: number | null = null) => ({ points, runDays: [], limitedToDays });
 
 type Answer = Reply | Promise<Reply>;
 
 /** The server, with the trend answered by its period (the kit's fake reads only the path). */
 function progressServer(byPeriod: Record<string, () => Answer>, records: () => Answer = () => ({ status: 200, body: RECORDS })) {
-  const server = fakeServer({ "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }), [RECORDS_READ]: records });
+  const server = fakeServer({
+    "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }),
+    [RECORDS_READ]: records,
+    // The streak's read; the Dashboard reads the same path.
+    "/v1/progress/overview": () => ({ status: 200, body: STREAK }),
+  });
   const periods: string[] = [];
   const ask: Ask = async (url: string, init: AskInit) => {
     const u = new URL(url);
@@ -57,14 +63,15 @@ describe("Me → Progress", () => {
     await openProgress(ask);
     await waitFor(() => { expect(server.periods).toContain("30d"); });
     await fireEvent.press(screen.getByRole("radio", { name: "7 Days" }));
-    expect(await screen.findByText("550 kcal")).toBeTruthy();
-    // The eighth day back (day 7) is the server's part-day: not counted.
+    expect(await screen.findByLabelText("550 calories burned")).toBeTruthy();
+    // The eighth day back (day 7) is the server's part-day: not counted, in any box.
+    expect(screen.getByLabelText("2 workouts")).toBeTruthy();
+    expect(screen.getByLabelText("1h trained")).toBeTruthy();
     expect(screen.getByText("2 of 7 days")).toBeTruthy();
-    expect(screen.getByText("2 workouts")).toBeTruthy();
     expect(screen.getByText("Workouts Per Day")).toBeTruthy();
     await act(async () => { late({ status: 200, body: trend([day(0, 5, 5000)]) }); await Promise.resolve(); });
-    expect(screen.queryByText("5,000 kcal")).toBeNull();
-    expect(screen.getByText("550 kcal")).toBeTruthy();
+    expect(screen.queryByLabelText("5,000 calories burned")).toBeNull();
+    expect(screen.getByLabelText("550 calories burned")).toBeTruthy();
   });
 
   it("opens on 30 Days, as drawn: the four boxes, and Me's picture no longer says Coming soon", async () => {
@@ -74,17 +81,23 @@ describe("Me → Progress", () => {
     const card = await screen.findByRole("button", { name: "Progress" });
     expect(within(card).queryByText("Coming soon")).toBeNull();
     await fireEvent.press(card);
-    expect(await screen.findByText("920 kcal")).toBeTruthy();
+    expect(await screen.findByLabelText("920 calories burned")).toBeTruthy();
     expect(screen.getByRole("radio", { name: "30 Days" }).props.accessibilityState).toEqual({ selected: true });
-    expect(screen.getByText("Calories Burned")).toBeTruthy();
+    // The browser's four numbers: the period's workouts and time, its calories, and today's streak.
+    expect(screen.getByLabelText("4 workouts")).toBeTruthy();
+    expect(screen.getByLabelText("2h trained")).toBeTruthy();
+    expect(screen.getByLabelText("Streak 2 days, longest 5 days")).toBeTruthy();
+    expect(screen.getAllByText("Calories Burned")).toHaveLength(2);
+    expect(screen.getByText("Each week")).toBeTruthy();
     expect(screen.getByText("Workouts Per Week")).toBeTruthy();
-    expect(screen.getByText("4 workouts")).toBeTruthy();
     expect(screen.getByText("Personal Records")).toBeTruthy();
     expect(screen.getByText("From all your workouts")).toBeTruthy();
     expect(screen.getByText("52 min")).toBeTruthy();
     expect(screen.getByText("410 kcal")).toBeTruthy();
     expect(screen.getByText("94")).toBeTruthy();
+    expect(screen.getByText("Total workouts")).toBeTruthy();
     expect(screen.getByText("3 of 30 days")).toBeTruthy();
+    expect(screen.getByText("10%")).toBeTruthy();
     expect(screen.queryByText(/Any older workouts/)).toBeNull();
   });
 
@@ -107,7 +120,8 @@ describe("Me → Progress", () => {
     const server = progressServer({ "30d": ok(trend([day(40, 1, 300)])) });
     await openProgress(server.ask);
     expect(await screen.findByText("No workouts in the last 30 days")).toBeTruthy();
-    expect(screen.queryByText("Calories Burned")).toBeNull();
+    expect(screen.queryByText("Each week")).toBeNull();
+    expect(screen.getByLabelText("0 workouts")).toBeTruthy();
     expect(screen.getByText("Personal Records")).toBeTruthy();
     expect(screen.getByText("0 of 30 days")).toBeTruthy();
   });

@@ -56,6 +56,8 @@ export const trendPointSchema = z.object({
   date: z.string(),
   kcal: z.number().int(),
   workouts: z.number().int(),
+  /** The day's training time, so a phone's whole-day period counts time on the same days as the rest (35c-i). */
+  durationMs: z.number().int(),
 });
 /** The days with a run, keyed the same way, apart from the workout points above (ROADMAP 31a). */
 export const runDaySchema = z.object({ date: z.string(), runs: z.number().int() });

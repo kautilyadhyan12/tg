@@ -393,14 +393,14 @@ export async function getDailyTrend(
   userId: string,
   since: Date | null,
   timeZone: string,
-): Promise<{ date: string; kcal: number; workouts: number }[]> {
-  const rows = await sql<{ day: string; kcal: string; n: string }[]>`
+): Promise<{ date: string; kcal: number; workouts: number; durationMs: number }[]> {
+  const rows = await sql<{ day: string; kcal: string; n: string; dur: string }[]>`
     SELECT to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day,
-           coalesce(sum(kcal_point), 0) AS kcal, count(*) AS n
+           coalesce(sum(kcal_point), 0) AS kcal, count(*) AS n, coalesce(sum(duration_ms), 0) AS dur
     FROM workouts
     WHERE user_id = ${userId} AND (${since === null} OR started_at >= ${since})
     GROUP BY day ORDER BY day ASC`;
-  return rows.map((r) => ({ date: r.day, kcal: Number(r.kcal), workouts: Number(r.n) }));
+  return rows.map((r) => ({ date: r.day, kcal: Number(r.kcal), workouts: Number(r.n), durationMs: Number(r.dur) }));
 }
 
 export async function getWeeklyTrend(

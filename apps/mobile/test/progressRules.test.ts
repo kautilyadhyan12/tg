@@ -5,6 +5,7 @@ import {
   addDays,
   buckets,
   caloriesSaid,
+  consistencyPct,
   consistencyWords,
   cutWords,
   dayKeyOf,
@@ -14,12 +15,13 @@ import {
   recordsFrom,
   stepFor,
   stepTitle,
+  streakWords,
   totals,
   type Window,
 } from "../src/screens/progress/progressRules";
 
 const TODAY = "2026-11-04"; // a Wednesday
-const point = (date: string, workouts = 1, kcal = 300) => ({ date, workouts, kcal });
+const point = (date: string, workouts = 1, kcal = 300, durationMs = workouts * 30 * 60_000) => ({ date, workouts, kcal, durationMs });
 const trend = (points: ProgressTrend["points"], limitedToDays: number | null = null): ProgressTrend => ({ points, runDays: [], limitedToDays });
 const win = (period: ProgressPeriod, t: ProgressTrend, today = TODAY): Window => {
   const w = periodWindow(period, today, t);
@@ -34,7 +36,7 @@ describe("a period counts exactly its own calendar days, ending today", () => {
     const t = trend([point("2026-10-28", 2, 999), point("2026-10-29"), point("2026-11-01"), point(TODAY, 1, 250)]);
     const w = win("7d", t);
     expect([w.from, w.to, w.days]).toEqual(["2026-10-29", TODAY, 7]);
-    expect(totals(t.points, w)).toEqual({ workouts: 3, kcal: 850, daysTrained: 3 });
+    expect(totals(t.points, w)).toEqual({ workouts: 3, kcal: 850, durationMs: 90 * 60_000, daysTrained: 3 });
     expect(consistencyWords(totals(t.points, w), w)).toBe("3 of 7 days");
   });
 
@@ -47,12 +49,12 @@ describe("a period counts exactly its own calendar days, ending today", () => {
     const t = trend([point(before, 1, 500), point(from, 1, 100), point(TODAY, 1, 100)]);
     const w = win(period, t);
     expect([w.from, w.days]).toEqual([from, days]);
-    expect(totals(t.points, w)).toEqual({ workouts: 2, kcal: 200, daysTrained: 2 });
+    expect(totals(t.points, w)).toEqual({ workouts: 2, kcal: 200, durationMs: 60 * 60_000, daysTrained: 2 });
   });
 
   it("a day after the phone's today (a server a zone ahead) is not counted", () => {
     const t = trend([point(TODAY), point("2026-11-05", 3, 900)]);
-    expect(totals(t.points, win("7d", t))).toEqual({ workouts: 1, kcal: 300, daysTrained: 1 });
+    expect(totals(t.points, win("7d", t))).toEqual({ workouts: 1, kcal: 300, durationMs: 30 * 60_000, daysTrained: 1 });
   });
 
   it("every bar's days lie inside the window, and the bars add up to the totals", () => {
@@ -190,7 +192,7 @@ describe("the words", () => {
     [365, 365, "365 of 365 days"],
   ])("%i days trained of %i reads %s", (daysTrained, days, words) => {
     const w: Window = { from: "2026-01-01", to: "2026-01-01", days, cut: null };
-    expect(consistencyWords({ workouts: daysTrained, kcal: 0, daysTrained }, w)).toBe(words);
+    expect(consistencyWords({ workouts: daysTrained, kcal: 0, durationMs: 0, daysTrained }, w)).toBe(words);
   });
 
   it.each([
@@ -203,6 +205,25 @@ describe("the words", () => {
     const w = win(period, t);
     expect(totals(t.points, w).workouts).toBe(0);
     expect(noneWords(w)).toBe(words);
+  });
+
+  it.each([
+    [0, 7, 0],
+    [7, 30, 23],
+    [1, 3, 33],
+    [2, 3, 67],
+    [30, 30, 100],
+  ])("%i of %i days is %i%%", (daysTrained, days, pct) => {
+    const w: Window = { from: "2026-01-01", to: "2026-01-01", days, cut: null };
+    expect(consistencyPct({ workouts: daysTrained, kcal: 0, durationMs: 0, daysTrained }, w)).toBe(pct);
+  });
+
+  it.each([
+    [0, "0 days"],
+    [1, "1 day"],
+    [12, "12 days"],
+  ])("a streak of %i reads %s", (days, words) => {
+    expect(streakWords(days)).toBe(words);
   });
 
   it("the calories box says each bar's number", () => {
@@ -227,11 +248,17 @@ describe("personal records", () => {
       ["Longest workout", "52 min"],
       ["Most calories", "410 kcal"],
       ["Best form", "94"],
+      ["Total workouts", "4"],
     ]);
   });
   it("an hour and more, and what has no record yet", () => {
     const rows = recordRows(records({ longestWorkout: { workoutId: "0d1e2f3a-4b5c-4d6e-9f80-910213243546", value: 65 * 60_000 }, bestAvgForm: null, maxKcalWorkout: null }));
-    expect(rows.map((r) => r.value)).toEqual(["1h 5m", "None yet", "No score yet"]);
+    expect(rows.map((r) => [r.value, r.held])).toEqual([
+      ["1h 5m", true],
+      ["None yet", false],
+      ["No score yet", false],
+      ["4", true],
+    ]);
   });
   // Records take no period: the box says what they are from, so nobody reads them as the chip's.
   it("say what they are from, whatever the chip", () => {

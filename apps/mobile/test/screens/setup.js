@@ -1,3 +1,5 @@
+// The screens are read finished: a number counting up or a box rising in would be read mid-way.
+require("../../src/look/Motion").setMotionAllowed(false);
 // The phone's own bars are measured by Android; a test gives the screen a plain one.
 jest.mock("react-native-safe-area-context", () => require("react-native-safe-area-context/jest/mock").default);
 // The robot check's web page runs only on a phone. A test's box is a plain view, and each box

@@ -4,11 +4,14 @@
 // `motivation` is Kd's "Glowing spear ring and lone warrior" (2026-10-28), darkened for the clock.
 // `goals` and `goalsbox` are Kd's own drawing (2026-10-27), made dark by reviews/pics31b.py.
 // `getstarted` is the browser's sign-in picture, cut by the same tool to sit at the top of a phone.
+// `streak` and `records` are from Kd's posters (`DASHBOARD/`: the golden flame, the trophy lifted), and
+// `consistency` his "Woven progress, tracked" without its words (35c-i, 2026-11-04).
 // `setup` is the browser's setup picture (its Vitruvian figure), its lines drawn light and glowing for the dark page.
 import benchpress from "../../assets/pictures/benchpress.webp";
 import bicepcurls from "../../assets/pictures/bicepcurls.webp";
 import caloriesburned from "../../assets/pictures/caloriesburned.webp";
 import cave from "../../assets/pictures/cave.webp";
+import consistency from "../../assets/pictures/consistency.webp";
 import chairsquat from "../../assets/pictures/chairsquat.webp";
 import currentlevel from "../../assets/pictures/currentlevel.webp";
 import cyclingcrunch from "../../assets/pictures/cyclingcrunch.webp";
@@ -31,12 +34,14 @@ import progress from "../../assets/pictures/progress.webp";
 import rank from "../../assets/pictures/rank.webp";
 import ready from "../../assets/pictures/ready.webp";
 import recentworkout from "../../assets/pictures/recentworkout.webp";
+import records from "../../assets/pictures/records.webp";
 import recommended from "../../assets/pictures/recommended.webp";
 import ropping from "../../assets/pictures/ropping.webp";
 import running from "../../assets/pictures/running.webp";
 import setting from "../../assets/pictures/setting.webp";
 import setup from "../../assets/pictures/setup.webp";
 import squat from "../../assets/pictures/squat.webp";
+import streak from "../../assets/pictures/streak.webp";
 import thisweek from "../../assets/pictures/thisweek.webp";
 import totalworkout from "../../assets/pictures/totalworkout.webp";
 import weeklychallenges from "../../assets/pictures/weeklychallenges.webp";
@@ -50,6 +55,7 @@ export const pictures = {
   caloriesburned,
   cave,
   chairsquat,
+  consistency,
   currentlevel,
   cyclingcrunch,
   dailymotivation,
@@ -72,11 +78,13 @@ export const pictures = {
   ready,
   recentworkout,
   recommended,
+  records,
   ropping,
   running,
   setting,
   setup,
   squat,
+  streak,
   thisweek,
   totalworkout,
   weeklychallenges,

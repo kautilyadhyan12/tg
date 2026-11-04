@@ -65,6 +65,8 @@ export type ColourName = keyof typeof colours;
 
 /** What is pressed: orange running to light orange. */
 export const orangeGradient = `linear-gradient(135deg, ${colours.orange}, ${colours.orangeLight})`;
+/** A chart's bar: light orange at its top running to orange at its foot (Progress, 35c-i). */
+export const barGradient = `linear-gradient(to bottom, ${colours.orangeLight}, ${colours.orange})`;
 /** Over a picture, so the words on it can be read. */
 export const pictureShade =
   "linear-gradient(to top, rgba(10,9,8,0.94) 0%, rgba(10,9,8,0.45) 50%, rgba(10,9,8,0.05) 100%)";

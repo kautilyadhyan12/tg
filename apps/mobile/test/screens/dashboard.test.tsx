@@ -99,7 +99,7 @@ const hoursAgo = (hours: number) => new Date(Date.now() - hours * 3_600_000).toI
 const trained: Record<string, Route> = {
   "/v1/progress/overview": ok(overview(24)),
   "/v1/gamification/me": ok(gamification()),
-  "/v1/progress/trend": ok({ points: [{ date: today, kcal: 348, workouts: 2 }], runDays: [], limitedToDays: 90 }),
+  "/v1/progress/trend": ok({ points: [{ date: today, kcal: 348, workouts: 2, durationMs: 3_600_000 }], runDays: [], limitedToDays: 90 }),
   "/v1/gamification/challenges": ok(challenges),
   "/v1/nutrition/suggestions": ok({ status: "needs_plan" }),
   "/v1/workouts": ok(page([workoutRow("1b6f0a3e-2c4d-4e5f-8a9b-0c1d2e3f4a5b", hoursAgo(1))], true)),
@@ -279,7 +279,7 @@ describe("the Dashboard, with the person's own numbers", () => {
       // 37 sessions: a number no day of the week's calendar can show.
       "/v1/progress/overview": ok(overview(24, { totalRuns: 13, runDurationMs: 30 * 60_000, runKcal: 100 })),
       "/v1/progress/trend": ok({
-        points: [{ date: today, kcal: 348, workouts: 2 }],
+        points: [{ date: today, kcal: 348, workouts: 2, durationMs: 3_600_000 }],
         runDays: [
           { date: today, runs: 1 },
           { date: otherDay, runs: 1 },

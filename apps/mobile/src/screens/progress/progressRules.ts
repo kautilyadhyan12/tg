@@ -67,6 +67,8 @@ const inside = (date: string, w: Window) => date >= w.from && date <= w.to;
 export interface Totals {
   workouts: number;
   kcal: number;
+  /** Training time on the same days, as the server keeps it for each day. */
+  durationMs: number;
   daysTrained: number;
 }
 
@@ -74,13 +76,25 @@ export function totals(points: ProgressTrend["points"], w: Window): Totals {
   const days = new Set<string>();
   let workouts = 0;
   let kcal = 0;
+  let durationMs = 0;
   for (const p of points) {
     if (!inside(p.date, w) || p.workouts <= 0) continue;
     days.add(p.date);
     workouts += p.workouts;
     kcal += Math.max(0, p.kcal);
+    durationMs += Math.max(0, p.durationMs);
   }
-  return { workouts, kcal, daysTrained: days.size };
+  return { workouts, kcal, durationMs, daysTrained: days.size };
+}
+
+/** Consistency as a whole percent of the period's days: never over 100, never a made-up 0 of 0. */
+export function consistencyPct(t: Totals, w: Window): number {
+  return w.days <= 0 ? 0 : Math.min(100, Math.round((t.daysTrained / w.days) * 100));
+}
+
+/** The streak's box: "3 days" and the longest ever beside it. */
+export function streakWords(days: number): string {
+  return `${count(days)} ${days === 1 ? "day" : "days"}`;
 }
 
 export type Step = "day" | "week" | "month" | "year";
@@ -194,16 +208,20 @@ export function cutWords(w: Window): string | null {
 }
 
 export interface RecordRow {
-  icon: "clock" | "flame" | "star";
+  icon: "clock" | "flame" | "star" | "dumbbell";
   label: string;
   value: string;
+  /** False where there is no record yet: the value is drawn quiet. */
+  held: boolean;
 }
 
+/** The web's records, but the longest streak, which the Streak box shows beside today's. */
 export function recordRows(r: PersonalRecords): RecordRow[] {
   return [
-    { icon: "clock", label: "Longest workout", value: r.longestWorkout === null ? "None yet" : hoursWords(r.longestWorkout.value) },
-    { icon: "flame", label: "Most calories", value: r.maxKcalWorkout === null ? "None yet" : `${count(Math.round(r.maxKcalWorkout.value))} kcal` },
-    { icon: "star", label: "Best form", value: r.bestAvgForm === null ? "No score yet" : count(Math.round(r.bestAvgForm.value)) },
+    { icon: "clock", label: "Longest workout", value: r.longestWorkout === null ? "None yet" : hoursWords(r.longestWorkout.value), held: r.longestWorkout !== null },
+    { icon: "flame", label: "Most calories", value: r.maxKcalWorkout === null ? "None yet" : `${count(Math.round(r.maxKcalWorkout.value))} kcal`, held: r.maxKcalWorkout !== null },
+    { icon: "star", label: "Best form", value: r.bestAvgForm === null ? "No score yet" : count(Math.round(r.bestAvgForm.value)), held: r.bestAvgForm !== null },
+    { icon: "dumbbell", label: "Total workouts", value: count(r.totalWorkouts), held: r.totalWorkouts > 0 },
   ];
 }
 
