@@ -1192,6 +1192,9 @@ export const giveHeldMembershipRequestSchema = z
     /** The minimum term the screen showed for the line (18v-i), null for none: nothing is given
      *  where the line's is now another. Left out, the screen showed no word of it. */
     minimumTerm: z.object({ periods: z.number().int().min(1).max(156), then: contractThenSchema }).strict().nullable().optional(),
+    /** The notice to cancel the screen showed for the line (18v-ii-a), null for none: nothing is given
+     *  where the line's is now another. Left out, the screen showed no word of it. */
+    noticeDays: z.number().int().min(1).max(90).nullable().optional(),
   })
   .strict()
   .refine((v) => (v.discountId === undefined) === (v.discountMinor === undefined) && (v.discountId === undefined || v.priceMinor !== undefined), {
@@ -1247,6 +1250,8 @@ export const changeHeldMembershipRequestSchema = z
     fullFrom: daySchema.nullable().optional(),
     /** The minimum term the screen showed for the new line (18v-i), null for none; left out, it showed no word of it. */
     minimumTerm: z.object({ periods: z.number().int().min(1).max(156), then: contractThenSchema }).strict().nullable().optional(),
+    /** The notice to cancel the screen showed for the new line (18v-ii-a), null for none; left out, it showed no word of it. */
+    noticeDays: z.number().int().min(1).max(90).nullable().optional(),
     priceMinor: z.number().int().min(0).max(99_999_999),
     creditMinor: z.number().int().min(0).max(99_999_999),
     totalMinor: z.number().int().min(0).max(99_999_999),

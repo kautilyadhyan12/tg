@@ -270,7 +270,7 @@ d("a contract on a repeating membership (real Postgres)", () => {
       const plain = await addType(gymId, owner, monthly({ name: "Silver Monthly" }));
       const list = JSON.parse((await get(typesUrl(gymId), owner)).body) as GymMembershipTypesResponse;
       expect(list.types.find((t) => t.id === gold)).toMatchObject({ contractPeriods: 12, contractThen: "renews" });
-      expect(list.types.find((t) => t.id === plain)).toMatchObject({ contractPeriods: null, contractThen: null });
+      expect(list.types.find((t) => t.id === plain)).toMatchObject({ contractPeriods: null, contractThen: null, noticeDays: null });
 
       // A contract on a paid-once type, or half of one, is refused.
       expect((await post(typesUrl(gymId), monthly({ name: "Year once", kind: "one_time", contractPeriods: 12, contractThen: "ends" }), owner)).statusCode).toBe(400);
@@ -283,7 +283,7 @@ d("a contract on a repeating membership (real Postgres)", () => {
       if (t === undefined) throw new Error("no type");
       const change = await put(
         `${typesUrl(gymId)}/${gold}`,
-        { ...monthly(), name: t.name, includesPt: false, ptLimit: null, ptPeriod: null, taxRateId: null, joiningFeeMinor: 0, contractPeriods: null, contractThen: null, updatedAt: t.updatedAt },
+        { ...monthly(), name: t.name, includesPt: false, ptLimit: null, ptPeriod: null, taxRateId: null, joiningFeeMinor: 0, contractPeriods: null, contractThen: null, noticeDays: null, updatedAt: t.updatedAt },
         owner,
       );
       expect(change.statusCode, change.body).toBe(200);

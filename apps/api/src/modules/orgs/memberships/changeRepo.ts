@@ -86,6 +86,8 @@ export async function changeHeld(
     shownFullFrom: string | null;
     /** The new line's minimum term the screen showed (18v-i); undefined where it showed no word of it. */
     shownMinimumTerm?: { periods: number; then: string } | null;
+    /** The new line's notice to cancel the screen showed (18v-ii-a); undefined where it showed no word of it. */
+    shownNoticeDays?: number | null;
     paid: boolean;
     method: MemberPaymentByHand | null;
     confirmBookings: string | null;
@@ -160,6 +162,7 @@ export async function changeHeld(
         joiningFeeMinor: null,
         shownFullFrom: to.fullFrom,
         ...(input.shownMinimumTerm === undefined ? {} : { shownMinimumTerm: input.shownMinimumTerm }),
+        ...(input.shownNoticeDays === undefined ? {} : { shownNoticeDays: input.shownNoticeDays }),
         mayWaiveJoiningFee: false,
         // Set to stop by this change: cancelling the new one before it starts undoes that (Low-2).
         change: { fromId: before.id, creditMinor: to.creditMinor, paidByChange: to.paidByChange, stoppedOld: before.membership.renews && !stops.renews && stops.status !== "cancelled" },

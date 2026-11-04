@@ -460,6 +460,8 @@ export type HeldWriteOutcome =
   | { kind: "release_needed" }
   /** The line's minimum term is not the one the screen showed (18v-i). */
   | { kind: "minimum_term_changed" }
+  /** The line's notice to cancel is not the one the screen showed (18v-ii-a). */
+  | { kind: "notice_changed" }
   /** The person has this type running already. `ends`: the one they hold has a last day,
    *  so a start date after it would be taken; a repeating one that renews has none. */
   | { kind: "already_held"; typeName: string; ends: boolean }
@@ -689,6 +691,8 @@ export interface GiveHeldInput {
   shownFullFrom?: string | null;
   /** The minimum term the screen showed (18v-i), null for none; undefined where it showed no word of it. */
   shownMinimumTerm?: { periods: number; then: string } | null;
+  /** The notice to cancel the screen showed (18v-ii-a), null for none; undefined where it showed no word of it. */
+  shownNoticeDays?: number | null;
   /** Whether this reader may give a type that has a joining fee without it. */
   mayWaiveJoiningFee: boolean;
   /** Given in place of another membership (18x, `changeRepo.ts`): the one it replaces and
@@ -739,6 +743,8 @@ export async function giveHeldIn(tx: TransactionSql, input: GiveHeldInput): Prom
     const now = type.contractPeriods === null || type.contractThen === null ? null : { periods: type.contractPeriods, then: type.contractThen };
     if ((shown === null) !== (now === null) || (shown !== null && now !== null && (shown.periods !== now.periods || shown.then !== now.then))) return { kind: "minimum_term_changed" };
   }
+  // A notice to cancel set or changed since the screen opened is refused the same way (18v-ii-a).
+  if (input.shownNoticeDays !== undefined && input.shownNoticeDays !== type.noticeDays) return { kind: "notice_changed" };
   // The type's rate as it is now, read under the gym's lock that its changes take: the
   // membership keeps it, and its first bill charges it.
   const taxRateId = typeTaxRateId(rawType);

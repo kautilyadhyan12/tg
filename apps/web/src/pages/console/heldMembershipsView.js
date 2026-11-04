@@ -566,6 +566,8 @@ export function giveBody(requestKey, type, value, discount = null, summary = nul
     fullFrom: value.startsOn === '' ? null : fullFromOf(type, value.startsOn, type.billDay ?? null),
     // The minimum term the form said (18v-i): the server gives nothing where the line's is now another.
     minimumTerm: type.contractPeriods ? { periods: type.contractPeriods, then: type.contractThen ?? 'renews' } : null,
+    // The notice to cancel the form said (18v-ii-a), checked the same way.
+    noticeDays: type.noticeDays ?? null,
   };
   // The person's own Refer a friend gift, and what it takes off (20e-ii-b-ii-a).
   const gifted = memberGift === null || summary === null || !(summary.giftOffMinor > 0) ? shown : { ...shown, memberGiftId: memberGift.id, memberGiftMinor: summary.giftOffMinor };
