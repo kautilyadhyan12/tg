@@ -62,6 +62,8 @@ export const gymMembershipTypes = pgTable(
     /** Its contract (0199; 18v-i): so many payments, then it renews or ends. Both null for none. */
     contractPeriods: integer("contract_periods"),
     contractThen: text("contract_then"),
+    /** Its notice to cancel in days (0201; 18v-ii-a); null for none. */
+    noticeDays: integer("notice_days"),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -82,6 +84,10 @@ export const gymMembershipTypes = pgTable(
     check(
       "gym_membership_types_contract_check",
       sql`(${t.contractPeriods} IS NULL) = (${t.contractThen} IS NULL) AND (${t.contractPeriods} IS NULL OR (${t.kind} = 'recurring' AND ${t.priceMinor} > 0 AND ${t.contractPeriods} BETWEEN 1 AND 156 AND ${t.contractThen} IN ('renews','ends')))`,
+    ),
+    check(
+      "gym_membership_types_notice_check",
+      sql`${t.noticeDays} IS NULL OR (${t.kind} = 'recurring' AND ${t.priceMinor} > 0 AND ${t.noticeDays} BETWEEN 1 AND 90 AND ${t.contractThen} IS DISTINCT FROM 'ends')`,
     ),
     check("gym_membership_types_access_check", sql`${t.access} IN ('all_classes','limited','gym_only')`),
     check(
@@ -186,6 +192,12 @@ export const gymHeldMemberships = pgTable(
     contractThen: text("contract_then"),
     /** Why the member was let out of the contract, where staff cancelled it inside one. */
     contractRelease: text("contract_release"),
+    /** Its notice to cancel as it was given (0201; 18v-ii-a); null for none. */
+    noticeDays: integer("notice_days"),
+    /** Notice given: the periods it renews and is paid for, the part month among them, then stops. */
+    stopsAfter: integer("stops_after"),
+    /** Why it was ended before its notice allowed, outside a minimum term. */
+    noticeWaived: text("notice_waived"),
     classesLeft: integer("classes_left"),
     fromList: boolean("from_list").notNull().default(false),
     /** The discount it was given with (`0107`). Its key to `gym_discounts` is the
@@ -274,6 +286,10 @@ export const gymHeldMemberships = pgTable(
     check(
       "gym_held_memberships_contract_release_check",
       sql`${t.contractRelease} IS NULL OR (${t.contractRelease} IN ('moved','medical','death','other') AND ${t.contractPeriods} IS NOT NULL AND (${t.status} = 'cancelled' OR NOT ${t.renews}))`,
+    ),
+    check(
+      "gym_held_memberships_notice_check",
+      sql`(${t.noticeDays} IS NULL OR (${t.kind} = 'recurring' AND ${t.noticeDays} BETWEEN 1 AND 90)) AND (${t.stopsAfter} IS NULL OR (${t.noticeDays} IS NOT NULL AND ${t.stopsAfter} >= 1)) AND (${t.noticeWaived} IS NULL OR (${t.noticeWaived} IN ('moved','medical','death','other') AND ${t.noticeDays} IS NOT NULL AND (${t.status} = 'cancelled' OR NOT ${t.renews})))`,
     ),
     check(
       "gym_held_memberships_discount_check",

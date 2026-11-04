@@ -205,6 +205,7 @@ describe('the form', () => {
       joiningFeeMinor: 0,
       contractPeriods: null,
       contractThen: null,
+      noticeDays: null,
     });
     expect(draftBody(named({ description: '  All classes and open gym  ' }), 'USD').description).toBe('All classes and open gym');
     expect(draftBody(named({ choice: 'pack' }), 'USD')).toMatchObject({ kind: 'pack', packClasses: 10, packDays: 60, termCount: null, termUnit: null, access: 'all_classes' });
@@ -296,6 +297,7 @@ describe('the form', () => {
       joiningFeeMinor: 0,
       contractPeriods: null,
       contractThen: null,
+      noticeDays: null,
       // A change carries the stamp the list gave; a new type has none.
       updatedAt: '2026-10-04T09:00:00.000Z',
     });

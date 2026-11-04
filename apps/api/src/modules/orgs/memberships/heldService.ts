@@ -424,6 +424,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
       classesLeft: row.membership.classesLeft,
       contractPeriods: row.membership.contractPeriods ?? null,
       release: row.contractRelease,
+      noticeWaived: row.noticeWaived,
       fromList: row.fromList,
       notCharged: list.bills.some((b) => b.membershipId === row.id && b.cancelled !== null && b.periodIndex === row.membership.paidPeriods - 1),
       refundedInFull: list.bills.some((b) => b.membershipId === row.id && b.status === "refunded" && b.periodIndex === row.membership.paidPeriods - 1),
@@ -536,6 +537,8 @@ function throwOnFailure(outcome: repo.HeldWriteOutcome): void {
       throw new OrgsError(409, "membership_price_changed", "The price of this membership changed while this was open. Nothing was saved: check the total and press again.");
     case "minimum_term_changed":
       throw new OrgsError(409, "membership_minimum_term_changed", "The minimum term of this membership changed while this was open. Nothing was saved: check it and press again.");
+    case "notice_changed":
+      throw new OrgsError(409, "membership_notice_changed", "The notice to cancel of this membership changed while this was open. Nothing was saved: check it and press again.");
     case "bill_day_changed":
       throw new OrgsError(409, "membership_bill_day_changed", "Your gym's billing day changed while this was open. Nothing was saved: check the total and press again.");
     case "freeze_fee_changed":
@@ -632,6 +635,7 @@ export async function giveHeldMembership(
       // A screen that showed a price and said nothing of a part month showed none (18y).
       ...(req.priceMinor === undefined && req.fullFrom === undefined ? {} : { shownFullFrom: req.fullFrom ?? null }),
       ...(req.minimumTerm === undefined ? {} : { shownMinimumTerm: req.minimumTerm }),
+      ...(req.noticeDays === undefined ? {} : { shownNoticeDays: req.noticeDays }),
       // Leaving the fee off is waiving it, which is where payments are taken, as a discount is.
       mayWaiveJoiningFee: canBill,
       discount: req.discountId === undefined || req.discountMinor === undefined ? null : { id: req.discountId, shownOffMinor: req.discountMinor },
@@ -707,6 +711,7 @@ export async function changeHeldMembership(
     shownStartsOn: req.startsOn,
     shownFullFrom: req.fullFrom ?? null,
     ...(req.minimumTerm === undefined ? {} : { shownMinimumTerm: req.minimumTerm }),
+    ...(req.noticeDays === undefined ? {} : { shownNoticeDays: req.noticeDays }),
     paid: req.paid,
     method: req.method ?? null,
     confirmBookings: req.confirmBookings ?? null,

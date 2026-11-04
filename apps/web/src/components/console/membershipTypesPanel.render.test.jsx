@@ -149,6 +149,21 @@ describe('which agreement each line is signed with (18u-ii-a)', () => {
 });
 
 describe('adding a type', () => {
+  it('a notice to cancel (18v-ii-a): typed in days, said under the box, sent with the type and shown on its row', async () => {
+    orgService.createMembershipType.mockResolvedValue({ data: listOf({ types: [type({ name: 'Gold Monthly', noticeDays: 30 })] }) });
+    open(listOf());
+    fireEvent.click(await screen.findByRole('button', { name: 'Add a membership type' }));
+    type_('Name', 'Gold Monthly');
+    type_('Price (GBP)', '49.99');
+    expect(screen.getByText('Leave empty for no notice: members can stop at the end of what they have paid.')).toBeTruthy();
+    type_('Notice to cancel', '30');
+    expect(screen.getByText("Members who cancel give 30 days' notice: they stay, and pay, to the end of the payment period it ends in.")).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Add membership type' }));
+    await waitFor(() => expect(orgService.createMembershipType).toHaveBeenCalledTimes(1));
+    expect(orgService.createMembershipType.mock.calls[0][1]).toMatchObject({ kind: 'recurring', noticeDays: 30 });
+    expect(await screen.findByText('Notice to cancel: 30 days')).toBeTruthy();
+  });
+
   it('a contract (18v-i): its boxes appear when chosen, say how long it runs, and are sent with the type', async () => {
     orgService.createMembershipType.mockResolvedValue({ data: listOf({ types: [type({ name: 'Gold 12 months', contractPeriods: 12, contractThen: 'ends' })] }) });
     open(listOf());
@@ -194,6 +209,7 @@ describe('adding a type', () => {
       joiningFeeMinor: 0,
       contractPeriods: null,
       contractThen: null,
+      noticeDays: null,
     });
     expect(await screen.findByText('£49.99 every month')).toBeTruthy();
     // The form closes on a save.
