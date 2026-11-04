@@ -19,6 +19,7 @@ import {
   priceToMinor,
   saleAmounts,
   saleBaskets,
+  taxNameForCountry,
   taxRateToBp,
 } from '@app/shared';
 import { sentTime } from './memberListPeople';
@@ -490,7 +491,12 @@ export function productRow(product, tax, currency) {
 // ── Tax ─────────────────────────────────────────────────────────────────────
 
 export const TOO_MANY_RATES = `You can have ${String(TAX_RATES_MAX)} tax rates. Remove one you no longer charge first.`;
-export const RATE_HINT = 'Your accountant or tax office can tell you the name and rate of the tax you charge, such as GST 18% or Sales tax 8.25%.';
+export const RATE_HINT = 'Use the tax name and rate registered with your tax authority.';
+
+/** What the tax name box shows in grey: the gym country's own tax, never a rate (18b-iv). */
+export function taxNameHint(country) {
+  return taxNameForCountry(country ?? null) ?? '';
+}
 export const RATE_CHANGE_NOTE = 'A new rate is charged on sales and bills from now on. Sales and bills already made keep the tax they were made with.';
 
 /** Said in a rate's Change form: who else a new percentage reaches (round one, L2). */
@@ -515,12 +521,12 @@ export function taxModes(currency, rate = null) {
     {
       value: 'added',
       label: 'Added on top of the price',
-      hint: `${example}, a price of ${money(price)} costs the customer ${money(onTop.ok ? onTop.totalMinor : price)}. Usual in the United States and Canada.`,
+      hint: `${example}, a price of ${money(price)} costs the customer ${money(onTop.ok ? onTop.totalMinor : price)}. Standard in the United States and Canada.`,
     },
     {
       value: 'included',
       label: 'Already included in the price',
-      hint: `${example}, a price of ${money(price)} costs the customer ${money(price)}, and ${money(inside.ok ? inside.taxMinor : 0)} of it is tax. Usual where VAT or GST is charged.`,
+      hint: `${example}, a price of ${money(price)} costs the customer ${money(price)}, and ${money(inside.ok ? inside.taxMinor : 0)} of it is tax. Standard where VAT, GST or consumption tax applies.`,
     },
   ];
 }
@@ -585,15 +591,17 @@ export function draftFromRate(rate) {
   return { id: rate.id, name: rate.name, rate: bpToTaxRateText(rate.bp) };
 }
 
-/** What is wrong with a rate form, by box; empty where it can be saved. */
-export function rateProblems(draft) {
+/** What is wrong with a rate form, by box; empty where it can be saved. The name's line
+ *  names the gym country's own tax where it has one. */
+export function rateProblems(draft, country = null) {
   const problems = {};
   const name = draft.name.trim();
-  if (name === '') problems.name = 'Give the tax a name, such as GST, VAT or Sales tax.';
+  const suggested = taxNameForCountry(country ?? null);
+  if (name === '') problems.name = suggested === null ? 'Enter a tax name.' : `Enter a tax name, such as ${suggested}.`;
   else if (name.length > TAX_NAME_MAX) problems.name = `Keep the name to ${String(TAX_NAME_MAX)} characters.`;
   else if (!isVisibleText(name)) problems.name = HIDDEN_TEXT;
   const bp = taxRateToBp(draft.rate);
-  if (bp === null || bp < 1) problems.rate = 'Enter the rate as a number above 0 and up to 30, like 8.25.';
+  if (bp === null || bp < 1) problems.rate = 'Enter a rate from 0.01 to 30, with up to two decimal places.';
   return problems;
 }
 

@@ -15,6 +15,7 @@ import { MEMBERSHIP_PRICE_MINOR_MAX } from "./memberships.js";
 import { isRealDay } from "./discounts.js";
 import { saleRefundSchema } from "./saleRefunds.js";
 import { VISIBLE_TEXT } from "./visibleText.js";
+import { supportedCountrySchema, type SupportedCountry } from "./orgs.js";
 
 export const PRODUCT_NAME_MAX = 80;
 /** How many products a gym can have on sale at once. */
@@ -42,6 +43,28 @@ export const TAX_NAME_MAX = 30;
 export function taxIncludedForCountry(country: string | null): boolean {
   const code = country === null ? "" : country.trim().toUpperCase();
   return code !== "US" && code !== "CA";
+}
+
+/** The tax a business in each country charges, by the name its tax office uses (18b-iv):
+ *  what the tax box suggests, never a rate. A total Record, so a country added to the list
+ *  without its tax name does not compile. */
+const COUNTRY_TAX_NAME: Readonly<Record<SupportedCountry, string>> = {
+  US: "Sales tax",
+  GB: "VAT",
+  IE: "VAT",
+  FR: "VAT",
+  ES: "VAT",
+  IN: "GST",
+  AU: "GST",
+  CA: "GST",
+  JP: "Consumption tax",
+};
+
+/** The tax name a gym in this country is offered; null with no country, or one not served. */
+export function taxNameForCountry(country: string | null): string | null {
+  if (country === null) return null;
+  const parsed = supportedCountrySchema.safeParse(country.trim().toUpperCase());
+  return parsed.success ? COUNTRY_TAX_NAME[parsed.data] : null;
 }
 
 /** A typed rate as hundredths of a percent, or null where it is not plainly a rate:

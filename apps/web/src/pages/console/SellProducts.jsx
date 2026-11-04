@@ -41,7 +41,7 @@ export function SavedNote({ children }) {
   );
 }
 
-function ProductForm({ gymId, currency, rates, onPage, draft, setDraft, busy, error, onSave, onCancel }) {
+function ProductForm({ gymId, country, currency, rates, onPage, draft, setDraft, busy, error, onSave, onCancel }) {
   const [addingRate, setAddingRate] = useState(false);
   const problems = draft.pressed ? productProblems(draft, currency) : {};
   const id = useId();
@@ -95,6 +95,7 @@ function ProductForm({ gymId, currency, rates, onPage, draft, setDraft, busy, er
       {addingRate ? (
         <NewRateInline
           gymId={gymId}
+          country={country}
           onPage={onPage}
           onAdded={(rate) => {
             setAddingRate(false);
@@ -132,7 +133,7 @@ function ProductForm({ gymId, currency, rates, onPage, draft, setDraft, busy, er
 }
 
 /** `addAsk`: a number the page raises each time a button elsewhere asks for the Add form. */
-export default function SellProducts({ gymId, page, locked, lockedNote, countryTo, addAsk = 0, changeAsk = null, onPage }) {
+export default function SellProducts({ gymId, country = null, page, locked, lockedNote, countryTo, addAsk = 0, changeAsk = null, onPage }) {
   const canManage = page.canManage;
   const [draft, setDraft] = useState(null);
   const [state, setState] = useState({ busy: false, error: null, done: null });
@@ -205,7 +206,7 @@ export default function SellProducts({ gymId, page, locked, lockedNote, countryT
       ) : null}
 
       {draft !== null && draft.id === null ? (
-        <ProductForm gymId={gymId} currency={page.currency} rates={page.tax.rates} onPage={onPage} draft={draft} setDraft={setDraft} busy={state.busy} error={state.error} onSave={() => void save()} onCancel={() => { setDraft(null); setState({ busy: false, error: null, done: null }); }} />
+        <ProductForm gymId={gymId} country={country} currency={page.currency} rates={page.tax.rates} onPage={onPage} draft={draft} setDraft={setDraft} busy={state.busy} error={state.error} onSave={() => void save()} onCancel={() => { setDraft(null); setState({ busy: false, error: null, done: null }); }} />
       ) : null}
       {state.done !== null ? <SavedNote>{state.done}</SavedNote> : null}
       {state.error !== null && draft === null ? <Refusal>{state.error}</Refusal> : null}
@@ -217,7 +218,7 @@ export default function SellProducts({ gymId, page, locked, lockedNote, countryT
           {page.products.map((product) => (
             <li key={product.id} className="flex flex-col gap-3 py-3" style={LINE} data-testid="product-row">
               {draft !== null && draft.id === product.id ? (
-                <ProductForm gymId={gymId} currency={page.currency} rates={page.tax.rates} onPage={onPage} draft={draft} setDraft={setDraft} busy={state.busy} error={state.error} onSave={() => void save()} onCancel={() => { setDraft(null); setState({ busy: false, error: null, done: null }); }} />
+                <ProductForm gymId={gymId} country={country} currency={page.currency} rates={page.tax.rates} onPage={onPage} draft={draft} setDraft={setDraft} busy={state.busy} error={state.error} onSave={() => void save()} onCancel={() => { setDraft(null); setState({ busy: false, error: null, done: null }); }} />
               ) : (
                 <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                   <div className="flex flex-col min-w-0">

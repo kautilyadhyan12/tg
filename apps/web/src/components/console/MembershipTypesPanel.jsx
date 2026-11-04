@@ -101,7 +101,7 @@ function Part({ title, children }) {
 
 /** `inRow`: the form is inside a row of a list, under that list's own heading.
  *  `error`: why the server refused the last save, said beside the button that sent it. */
-function TypeForm({ gymId, orgType, currency, options, taxRates, onRateAdded, draft, setDraft, problems, refused, busy, forWord, error, inRow, onSave, onCancel }) {
+function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRateAdded, draft, setDraft, problems, refused, busy, forWord, error, inRow, onSave, onCancel }) {
   const [addingRate, setAddingRate] = useState(false);
   const editing = draft.id !== null;
   const title = editing ? 'Change membership type' : (forWord?.heading ?? 'Add a membership type');
@@ -260,6 +260,7 @@ function TypeForm({ gymId, orgType, currency, options, taxRates, onRateAdded, dr
         {addingRate ? (
           <NewRateInline
             gymId={gymId}
+            country={country}
             onAdded={(rate) => {
               setAddingRate(false);
               onRateAdded(rate);
@@ -803,6 +804,7 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
     <TypeForm
       gymId={gymId}
       orgType={org.orgType}
+      country={org.country ?? null}
       currency={draftCurrency}
       options={classOptions(list, editing)}
       taxRates={list?.taxRates ?? []}

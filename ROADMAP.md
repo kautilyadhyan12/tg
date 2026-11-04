@@ -263,7 +263,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
        - 18b-ii-a. [x] **Discounts and promo codes on products** — merged 2026-10-13 (PR #244).
        - 18b-ii-b. [x] **The same discounts on memberships** — merged 2026-10-14 (PR #261).
      - 18b-iii. [x] **Tax on memberships, with named tax rates** — merged 2026-10-15 (PR #267).
-     - 18b-iv. [ ] **The tax box suggests the gym country's own tax** (Kd, 2026-11-04): "Sales tax" in the US, "VAT" in the UK, Ireland, France and Spain, "GST" in India, Australia and Canada, "Consumption tax" in Japan; no example rate. Web folder 2.
+     - 18b-iv. [x] **The tax box suggests the gym country’s own tax** — merged 2026-11-04 (PR #463).
      - 18b-v. [ ] **Two taxes on one membership or product** (Kd, 2026-11-04): each named and shown on the bill and the receipt, as Quebec's GST 5% and QST 9.975% must be (Revenu Québec, "Showing the Taxes"). Before any gym in Quebec or British Columbia uses the app. Web folder 2.
    - 18c. ~~Pay by the gym's own link~~ **Dropped 2026-10-15** (Kd, `rulings/2026-10-15-18g-i.md`): not standard practice; members pay through 18d's company or at the desk.
    - 18d. **The first Connect button: Square** (Kd's sign-up worked 2026-10-19; `rulings/2026-10-19-18d-i.md`), split that day in four (the line as first written is in `handoff/2026-10-19-18d-i.md`):
