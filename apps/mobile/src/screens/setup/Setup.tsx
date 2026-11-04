@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { Image, KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -18,6 +18,7 @@ import {
   type SetupAnswers,
   type SetupScreenId,
   type Units,
+  userProfileResponseSchema,
 } from "@app/shared";
 import { Button } from "../../look/Button";
 import { colours, orangeGradient, sizes } from "../../look/colours";
@@ -69,6 +70,9 @@ export const NAME_NEEDED = "Type the name we should call you.";
 /** The phone's own language tag, which says whether it weighs in pounds. */
 const phoneLanguage = (): string => Intl.DateTimeFormat().resolvedOptions().locale;
 
+/** The account's units, or null for a word this build does not know. */
+export const accountUnits = (units: string): Units | null => (units === "metric" || units === "imperial" ? units : null);
+
 /** The place step's heading, in the words of the places that invited the person: "Your yoga
  *  studio", "Your trainer"; more than one kind is "Where you train". */
 export function placeTitle(invitations: readonly MyInvitation[]): string {
@@ -88,9 +92,11 @@ interface SetupProps {
   /** `at`: the screen it opens on, where another page sends the person to one answer (31b: a goal's target). */
   at?: SetupScreenId | null;
   mode?: Mode;
+  /** Started again from Settings: in front of the tabs, in the units the person already chose. */
+  again?: boolean;
 }
 
-export function Setup({ open, onClose, onSettled, at = null, mode = "over" }: SetupProps) {
+export function Setup({ open, onClose, onSettled, at = null, mode = "over", again = false }: SetupProps) {
   const insets = useSafeAreaInsets();
   // Android's back leaves as the ✕ does: the name typed is saved first, and a blank one stays to be
   // fixed. In front of the tabs it goes back a step, and nowhere from the first.
@@ -108,7 +114,7 @@ export function Setup({ open, onClose, onSettled, at = null, mode = "over" }: Se
     >
       <KeyboardAvoidingView accessibilityViewIsModal behavior="padding" style={[styles.page, { paddingTop: insets.top }]}>
         <Image source={pictures.setup} resizeMode="cover" accessible={false} style={styles.picture} />
-        {open ? <SetupBody onClose={onClose} {...(onSettled === undefined ? {} : { onSettled })} leave={leave} bottom={insets.bottom} at={at} mode={mode} /> : null}
+        {open ? <SetupBody onClose={onClose} {...(onSettled === undefined ? {} : { onSettled })} leave={leave} bottom={insets.bottom} at={at} mode={mode} again={again} /> : null}
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -139,6 +145,7 @@ function SetupBody({
   bottom,
   at,
   mode,
+  again,
 }: {
   onClose: () => void;
   onSettled?: () => void;
@@ -146,8 +153,9 @@ function SetupBody({
   bottom: number;
   at: SetupScreenId | null;
   mode: Mode;
+  again: boolean;
 }) {
-  const { session } = useSession();
+  const { session, state } = useSession();
   const ob = useSetupAnswers({
     onSaved: (saved) => {
       void session.keepName(saved.displayName);
@@ -158,7 +166,44 @@ function SetupBody({
   const [picked, setPicked] = useState<SetupScreenId | null>(at);
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
-  const [units, setUnits] = useState<Units>(() => defaultUnits(phoneLanguage()));
+  // The account's units once they have been chosen anywhere (Settings, setup, a first setup's own);
+  // until then, the very first time, the phone's own country's. The server's own start is kg · cm,
+  // so an account in anything else was chosen.
+  const saved = state.kind === "in" ? accountUnits(state.user.units) : null;
+  const chosen = mode === "over" || again || session.unitsChosen() || (saved !== null && saved !== "metric");
+  const [units, showUnits] = useState<Units>(() => (chosen && saved !== null ? saved : defaultUnits(phoneLanguage())));
+  const savedNow = useRef(saved);
+  savedNow.current = saved;
+  const unitSaves = useRef(0);
+  // One choice for the whole app: the switch here is the one in Settings. Only the newest press's
+  // answer counts; a refused or lost one shows the account's units again.
+  const keepUnits = useCallback(
+    (next: Units) => {
+      unitSaves.current += 1;
+      const number = unitSaves.current;
+      void session.signedIn({ method: "PATCH", path: "/v1/users/me", body: { units: next } }, userProfileResponseSchema).then(async (answer) => {
+        if (number !== unitSaves.current) return;
+        if (answer.kind === "ok") {
+          await session.keepUnits(answer.data.user.units, true);
+          return;
+        }
+        const now = savedNow.current;
+        if (now !== null) showUnits(now);
+      });
+    },
+    [session],
+  );
+  const setUnits = (next: Units) => {
+    showUnits(next);
+    keepUnits(next);
+  };
+  // In front of the tabs, the units it opened in are the account’s from the start, as the browser has none to read.
+  const firstUnits = useRef(units);
+  useEffect(() => {
+    if (!chosen && saved !== firstUnits.current) keepUnits(firstUnits.current);
+    // Once, as setup opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [busy, setBusy] = useState(false);
   /** On a screen opened by the plan's Adjust: its Continue goes to the first answer still open, or back to the plan. */
   const [adjusting, setAdjusting] = useState(false);

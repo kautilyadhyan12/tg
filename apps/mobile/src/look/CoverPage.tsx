@@ -18,10 +18,12 @@ interface CoverPageProps {
   foot?: ReactNode;
   /** The page's own picture across its top, the title over it and the ✕ on it, in place of the bar. */
   picture?: PictureName;
+  /** The picture's height for the phone's width: a band, unless its figures need more. */
+  tall?: number;
 }
 
 /** A page that opens over the tab for one task, closed by its ✕, its action held at the bottom. */
-export function CoverPage({ open, title, onClose, children, foot, picture }: CoverPageProps) {
+export function CoverPage({ open, title, onClose, children, foot, picture, tall = 0.62 }: CoverPageProps) {
   const insets = useSafeAreaInsets();
   return (
     <Modal visible={open} animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
@@ -40,7 +42,7 @@ export function CoverPage({ open, title, onClose, children, foot, picture }: Cov
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.body, picture === undefined ? null : styles.underPicture]}>
           {picture === undefined ? null : (
             <View style={styles.bleed}>
-              <PictureTop picture={picture} tall={0.62} title={title} />
+              <PictureTop picture={picture} tall={tall} title={title} />
             </View>
           )}
           {children}

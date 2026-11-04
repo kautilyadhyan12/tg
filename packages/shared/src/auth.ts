@@ -195,6 +195,9 @@ export const phoneKeptSessionSchema = z.object({
   passKeys: z.array(checkinPhoneDayKeySchema).max(2).optional(),
   /** The last places the server answered held at least one the person belongs to. */
   belongs: z.boolean().optional(),
+  /** The units were chosen on this phone (Settings, setup, or a first setup's own), so a setup in
+   *  front of the tabs keeps them rather than the phone's country's. */
+  unitsChosen: z.boolean().optional(),
 });
 export type PhoneKeptSession = z.infer<typeof phoneKeptSessionSchema>;
 
