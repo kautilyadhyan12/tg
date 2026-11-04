@@ -331,6 +331,24 @@ d("The card kept from a Terminal payment: only with their I agree, on their reco
     expect((JSON.parse(gone.body) as { card: unknown }).card).toBeNull();
   });
 
+  it("the membership's terms are on the Terminal before the card is kept, as its agreement says them (Kd, 2026-11-04)", async () => {
+    clock = new Date();
+    const { gym, desk } = await setUp("Terms");
+    const termed = { ...gold, name: "Gold 12", contractPeriods: 12, contractThen: "renews", leaveFeeMinor: 9900, noticeDays: 30, coolingOffDays: 3 };
+    const res = await send("POST", `/v1/orgs/${gym.id}/membership-types`, gym.owner.cookies, termed);
+    expect(res.statusCode, res.body).toBe(201);
+    const typeId = (JSON.parse(res.body) as GymMembershipTypesResponse).types.find((t) => t.name === "Gold 12")?.id ?? "";
+    const ivy = await owing(gym, typeId, "Ivy Chen");
+    const started = await pay(gym, gym.owner, ivy, desk.id, { keepCard: true });
+    expect(started.payment.card).toMatchObject({ step: "agreeing" });
+    const words = square.agreement(desk.deviceId).words;
+    expect(words).toContain("Gold 12: $49.99 every month. Renews until you cancel.\nMinimum term: 12 months, to ");
+    for (const line of ["Early cancellation fee: $99.00.", "Notice to cancel: 30 days.", "Cooling-off period: 3 days after signing, to cancel with a full refund."]) {
+      expect(words).toContain(line);
+    }
+    expect(words).toContain(`I agree that ${gym.name} may save this card`);
+  });
+
   it("never offered where it cannot be: somebody else pays, another gym", async () => {
     clock = new Date();
     const { gym, goldId, desk } = await setUp("Offer");

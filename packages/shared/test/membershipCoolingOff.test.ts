@@ -9,10 +9,12 @@ import {
   cancelHeldMembershipRequestSchema,
   giveHeldMembership,
   heldMembershipView,
+  membershipTermLines,
   moveHeldMembership,
   noticeAsked,
   releaseAsked,
   saveGymMembershipTypeRequestSchema,
+  terminalKeepWords,
   type HeldMembership,
   type HeldMembershipEvent,
   type HeldMembershipTerms,
@@ -189,5 +191,47 @@ describe("the signed agreement says it", () => {
 
   it("says nothing on a free one", () => {
     expect(facts(3, 0)).toBeUndefined();
+  });
+});
+
+describe("the Terminal names the terms before it keeps a card (Kd, 2026-11-04)", () => {
+  const item = (type: HeldMembershipTerms, over: Record<string, unknown> = {}) => {
+    const m = ana({}, type);
+    return {
+      typeName: "Gold 12",
+      kind: m.kind,
+      priceMinor: type.priceMinor,
+      currency: "USD",
+      termCount: m.termCount,
+      termUnit: m.termUnit,
+      packClasses: null,
+      startsOn: m.startsOn,
+      discount: null,
+      tax: null,
+      view: heldMembershipView(m, "2026-11-04"),
+      contractPeriods: m.contractPeriods ?? null,
+      leaveFeeMinor: m.leaveFeeMinor ?? null,
+      coolingOffDays: m.coolingOffDays ?? null,
+      ...over,
+    };
+  };
+
+  it("each term the membership has, as its agreement says it, one a line under the membership", () => {
+    const term = item({ ...monthly, contractPeriods: 12, contractThen: "renews", leaveFeeMinor: 9900, noticeDays: 30 });
+    expect(membershipTermLines(term)).toEqual([
+      "Minimum term: 12 months, to 3 Nov 2027.",
+      "Early cancellation fee: $99.00.",
+      "Notice to cancel: 30 days.",
+      "Cooling-off period: 3 days after signing, to cancel with a full refund.",
+    ]);
+    expect(terminalKeepWords("Gold 12: $50.00 every month. Renews until you cancel.", "I agree.", membershipTermLines(term))).toBe(
+      "Gold 12: $50.00 every month. Renews until you cancel.\nMinimum term: 12 months, to 3 Nov 2027.\nEarly cancellation fee: $99.00.\nNotice to cancel: 30 days.\nCooling-off period: 3 days after signing, to cancel with a full refund.\n\nI agree.",
+    );
+  });
+
+  it("none it does not have, and the words stay as they were for a membership with no terms", () => {
+    const plain = item({ ...monthly, coolingOffDays: null });
+    expect(membershipTermLines(plain)).toEqual([]);
+    expect(terminalKeepWords("Gold: $50.00 every month. Renews until you cancel.", "I agree.", membershipTermLines(plain))).toBe("Gold: $50.00 every month. Renews until you cancel.\n\nI agree.");
   });
 });

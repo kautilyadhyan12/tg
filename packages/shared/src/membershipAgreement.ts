@@ -311,33 +311,53 @@ export function agreementFacts(input: AgreementFactsInput): AgreementFact[] {
   }
   facts.push({ label: "Starts", value: dayWords(m.startsOn) });
   const endsOn = m.view.endsOn;
-  // Its contract (18v-i), while it runs: how long, and to which day.
-  const contract = m.view.contract;
-  const periods = m.contractPeriods ?? null;
-  if (m.kind === "recurring" && contract !== null && periods !== null && m.termCount !== null && m.termUnit !== null) {
-    // Billed from the gym's day, the part month comes before its whole payments (round one, H2).
-    const from = (m.fullFrom ?? null) === null ? "" : ` from ${dayWords(m.fullFrom ?? "")}`;
-    facts.push({ label: "Minimum term", value: `${contractLengthWords(periods, m.termCount, m.termUnit)}${from}, to ${dayWords(contract.until)}` });
-    // Its early cancellation fee (18v-ii-b): what cancelling inside the term costs, the tax in it.
-    const fee = m.leaveFeeMinor ?? null;
-    if (fee !== null && fee > 0) facts.push({ label: "Early cancellation fee", value: `${formatMinor(fee, m.currency)}${m.tax === null ? "" : `, ${m.tax.name} included`}` });
-  }
+  facts.push(...minimumTermFacts(m));
   if (m.kind === "recurring") {
     if (endsOn === null && m.termCount !== null && m.termUnit !== null) {
-      const after = contract === null ? "" : " after the minimum term";
+      const after = m.view.contract === null ? "" : " after the minimum term";
       facts.push({ label: "Renews", value: `Every ${plural(m.termCount, m.termUnit)}${after} until you cancel` });
-      // Its notice to cancel (18v-ii-a), while it renews.
-      const notice = m.view.notice;
-      if (notice !== null) facts.push({ label: "Notice to cancel", value: `${String(notice.days)} day${notice.days === 1 ? "" : "s"}` });
+      facts.push(...noticeFacts(m));
     }
     else if (endsOn !== null) facts.push({ label: "Ends", value: dayWords(endsOn) });
   } else if (endsOn !== null) {
     facts.push({ label: m.kind === "pack" ? "Use by" : "Ends", value: dayWords(endsOn) });
   }
-  // Its cooling-off period (18v-iii): counted from the day this is signed.
-  const cooling = m.coolingOffDays ?? null;
-  if (cooling !== null && cooling > 0 && m.priceMinor > 0) facts.push({ label: "Cooling-off period", value: `${cooling === 1 ? "1 day" : `${String(cooling)} days`} after signing, to cancel with a full refund` });
+  facts.push(...coolingOffFacts(m));
   return facts;
+}
+
+/** Its minimum term (18v-i) while it runs, how long and to which day, and its early cancellation fee (18v-ii-b), the tax in it. */
+function minimumTermFacts(m: AgreementFactsInput["membership"]): AgreementFact[] {
+  const contract = m.view.contract;
+  const periods = m.contractPeriods ?? null;
+  if (m.kind !== "recurring" || contract === null || periods === null || m.termCount === null || m.termUnit === null) return [];
+  // Billed from the gym's day, the part month comes before its whole payments (round one, H2).
+  const from = (m.fullFrom ?? null) === null ? "" : ` from ${dayWords(m.fullFrom ?? "")}`;
+  const facts: AgreementFact[] = [{ label: "Minimum term", value: `${contractLengthWords(periods, m.termCount, m.termUnit)}${from}, to ${dayWords(contract.until)}` }];
+  const fee = m.leaveFeeMinor ?? null;
+  if (fee !== null && fee > 0) facts.push({ label: "Early cancellation fee", value: `${formatMinor(fee, m.currency)}${m.tax === null ? "" : `, ${m.tax.name} included`}` });
+  return facts;
+}
+
+/** Its notice to cancel (18v-ii-a), while it renews. */
+function noticeFacts(m: AgreementFactsInput["membership"]): AgreementFact[] {
+  const notice = m.view.notice;
+  if (m.kind !== "recurring" || m.view.endsOn !== null || notice === null) return [];
+  return [{ label: "Notice to cancel", value: `${String(notice.days)} day${notice.days === 1 ? "" : "s"}` }];
+}
+
+/** Its cooling-off period (18v-iii), counted from the day the agreement is signed. */
+function coolingOffFacts(m: AgreementFactsInput["membership"]): AgreementFact[] {
+  const cooling = m.coolingOffDays ?? null;
+  if (cooling === null || cooling <= 0 || m.priceMinor <= 0) return [];
+  return [{ label: "Cooling-off period", value: `${cooling === 1 ? "1 day" : `${String(cooling)} days`} after signing, to cancel with a full refund` }];
+}
+
+/** THE MEMBERSHIP'S TERMS, as its agreement says them (Kd, 2026-11-04): the minimum term and its early cancellation fee,
+ *  the notice to cancel and the cooling-off period, each a line "Label: value."; none it does not have. What the Terminal
+ *  shows before it keeps a card for automatic payments. */
+export function membershipTermLines(m: AgreementFactsInput["membership"]): string[] {
+  return [...minimumTermFacts(m), ...noticeFacts(m), ...coolingOffFacts(m)].map((fact) => `${fact.label}: ${fact.value}.`);
 }
 
 /** A membership's first bill among those listed: the one for its first period. */
