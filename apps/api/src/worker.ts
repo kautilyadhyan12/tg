@@ -63,6 +63,7 @@ import { sendPlanEndReminders } from "./modules/billing/service.js";
 import { squareSettings } from "./modules/orgs/payments/settings.js";
 import { processSquareWork } from "./modules/orgs/payments/work.js";
 import { sendDueCardExpiryNotices } from "./modules/orgs/payments/cardExpiry.js";
+import { sendDueRenewalReminders } from "./modules/orgs/memberships/renewalReminders.js";
 import { sendDueCardNotices } from "./modules/orgs/payments/cardNotices.js";
 // The worker busts no entitlement cache: a gym's members pick a change up within the cache's 60 s.
 import { createMemoryRedis } from "./redis.js";
@@ -609,6 +610,21 @@ if (invites === null || inviteSender === null) {
       });
       if (expiry.revived + expiry.queued + expiry.sent + expiry.skipped + expiry.dropped + expiry.failed + expiry.retried > 0) {
         log.info({ ...expiry, durationMs: Date.now() - expiryStartedAt, event: "job.finished", job: "invites.card_expiry" }, "job finished");
+      }
+      // A reminder before a renewal or a minimum term's end, for the lines that ask for one (18v-iv): the same
+      // sender and kill switch, never the daily cap.
+      const renewalStartedAt = Date.now();
+      const renewal = await sendDueRenewalReminders({
+        sql,
+        log,
+        settings: invites,
+        sender: inviteSender,
+        transport: inviteTransport,
+        now: () => new Date(),
+        sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+      });
+      if (renewal.queued + renewal.sent + renewal.skipped + renewal.dropped + renewal.failed + renewal.retried > 0) {
+        log.info({ ...renewal, durationMs: Date.now() - renewalStartedAt, event: "job.finished", job: "invites.renewal_reminders" }, "job finished");
       }
     },
     { connection },

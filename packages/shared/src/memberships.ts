@@ -97,6 +97,26 @@ export function renewalReminderDaysOffered(when: RenewalReminderWhen, termCount:
   return RENEWAL_REMINDER_DAYS.filter((days) => days < longest);
 }
 export const renewalReminderSchema = z.object({ when: renewalReminderWhenSchema, days: renewalReminderDaysSchema }).strict();
+/** What happens to one membership's reminder: sent (`on` the gym's day); on its way; to be emailed (`on` the day
+ *  it goes); or why not. `aboutOn` is the day it names, where there is one to come. */
+export const RENEWAL_REMINDER_STATES = [
+  "sent",
+  "sending",
+  "will_send",
+  "no_email",
+  "address_blocked",
+  "not_sent",
+  "frozen",
+  "not_renewing",
+  "no_term",
+  "former_payer",
+  "billed_elsewhere",
+] as const;
+export const renewalReminderStatusSchema = z
+  .object({ state: z.enum(RENEWAL_REMINDER_STATES), on: z.string().nullable(), aboutOn: z.string().nullable() })
+  .strict();
+export type RenewalReminderStatus = z.infer<typeof renewalReminderStatusSchema>;
+
 
 /** What a class limit is counted over. */
 export const MEMBERSHIP_LIMIT_PERIODS = ["week", "month"] as const;

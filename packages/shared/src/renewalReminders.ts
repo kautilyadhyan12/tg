@@ -7,8 +7,9 @@
 // notice, or their term ends), or naming the wrong day or amount. `renewalReminderNext` is the ONE rule: the
 // queue, the line's box, a person's page and the check before each email all read it, from the membership as
 // the person's page reads it, and it is pure.
+import { z } from "zod";
 import { addDays, heldMembershipView, periodIndex, periodStart, type HeldMembership, type HeldMembershipView } from "./heldMemberships.js";
-import { formatMinor, type MembershipTermUnit, type RenewalReminderSetting } from "./memberships.js";
+import { formatMinor, renewalReminderSchema, renewalReminderStatusSchema, type MembershipTermUnit, type RenewalReminderSetting } from "./memberships.js";
 import { dayWords } from "./paymentsDownload.js";
 
 /** What the email is about: a renewal; a minimum term that ends with the membership carrying on; or a
@@ -158,3 +159,16 @@ export function renewalReminderWords(input: RenewalReminderWordsInput): RenewalR
     lines: [`${membership} renews on ${day}${amount === null ? "" : ` for ${amount}`}.`, paid, cancel],
   };
 }
+
+// ── WHAT A SCREEN SAYS OF ONE MEMBERSHIP'S REMINDER ──
+
+/** One person on a line, as its box lists them (18v-iv): their name, and whose membership where somebody else pays. */
+export const renewalReminderPersonSchema = z
+  .object({ entryId: z.string().uuid(), name: z.string(), paidBy: z.string().nullable(), status: renewalReminderStatusSchema })
+  .strict();
+export const renewalReminderPreviewResponseSchema = z.object({ people: z.array(renewalReminderPersonSchema) }).strict();
+export type RenewalReminderPreviewResponse = z.infer<typeof renewalReminderPreviewResponseSchema>;
+
+/** What the line's box asks: who would be emailed, and when, with this reminder on the line (18v-iv). */
+export const renewalReminderPreviewRequestSchema = z.object({ renewalReminder: renewalReminderSchema }).strict();
+export type RenewalReminderPreviewRequest = z.infer<typeof renewalReminderPreviewRequestSchema>;

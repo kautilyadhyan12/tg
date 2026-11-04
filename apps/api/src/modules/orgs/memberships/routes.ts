@@ -50,6 +50,7 @@ import {
   voidMemberRefundRequestSchema,
   saveGymMembershipTypeRequestSchema,
   updateGymMembershipTypeRequestSchema,
+  renewalReminderPreviewRequestSchema,
 } from "@app/shared";
 import type { RedisLike } from "../../../redis.js";
 import { tellMembershipsAfter, type LiveNewsSender } from "../../live/news.js";
@@ -182,6 +183,16 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
       params.typeId,
     );
     return reply.status(200).send(list);
+  });
+
+  // Who a line's renewal reminder would email, and when (18v-iv): the box under its pick, before Save.
+  app.post("/v1/orgs/:gymId/membership-types/:typeId/renewal-reminders/preview", guarded, async (req, reply) => {
+    const params = parseOr400(membershipTypeParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(renewalReminderPreviewRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const answer = await service.previewRenewalReminder({ ...membershipDeps, emailKey: deps.emailKey ?? null }, requireUserId(req), params.gymId, params.typeId, body);
+    return reply.status(200).send(answer);
   });
 
   app.post("/v1/orgs/:gymId/membership-types/:typeId/restore", guarded, async (req, reply) => {
