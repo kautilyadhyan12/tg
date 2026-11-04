@@ -280,6 +280,8 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
       body.release === undefined ? { type: "cancel", when: body.when } : { type: "cancel", when: body.when, release: body.release },
       body.confirmBookings ?? null,
       body.confirmPtSessions ?? null,
+      0,
+      body.leaveFeeMinor,
     );
     return sendHeld(reply, req, answer);
   });

@@ -39,6 +39,7 @@ export const billItemSql = (sql: Sql | TransactionSql) => sql`
   CASE b.fee WHEN 'late_cancel' THEN ${MEMBER_FEE_WORDS.late_cancel}::text || ' · ' || b.fee_for
              WHEN 'no_show' THEN ${MEMBER_FEE_WORDS.no_show}::text || ' · ' || b.fee_for
              WHEN 'freeze' THEN ${MEMBER_FEE_WORDS.freeze}::text || ' · ' || b.fee_for
+             WHEN 'leave_early' THEN ${MEMBER_FEE_WORDS.leave_early}::text || ' · ' || b.fee_for
              ELSE t.name END`;
 
 /** The tax inside a bill's amount, as it was opened (18b-iii). */

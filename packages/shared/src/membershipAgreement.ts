@@ -251,7 +251,7 @@ export interface AgreementFactsInput {
   membership: Pick<
     HeldMembershipItem,
     "typeName" | "kind" | "priceMinor" | "currency" | "termCount" | "termUnit" | "packClasses" | "startsOn" | "discount" | "tax" | "view"
-  > & { contractPeriods?: number | null; fullFrom?: string | null };
+  > & { contractPeriods?: number | null; fullFrom?: string | null; leaveFeeMinor?: number | null };
   /** Its first bill, as opened with it (`firstBillOf`); null where it has none listed. */
   firstBill: Pick<MemberBill, "amountMinor" | "joiningFeeMinor" | "part" | "covers" | "dueOn"> | null;
   /** The business's prices hold the tax, or it is added on top. */
@@ -318,6 +318,9 @@ export function agreementFacts(input: AgreementFactsInput): AgreementFact[] {
     // Billed from the gym's day, the part month comes before its whole payments (round one, H2).
     const from = (m.fullFrom ?? null) === null ? "" : ` from ${dayWords(m.fullFrom ?? "")}`;
     facts.push({ label: "Minimum term", value: `${contractLengthWords(periods, m.termCount, m.termUnit)}${from}, to ${dayWords(contract.until)}` });
+    // Its early cancellation fee (18v-ii-b): what cancelling inside the term costs, the tax in it.
+    const fee = m.leaveFeeMinor ?? null;
+    if (fee !== null && fee > 0) facts.push({ label: "Early cancellation fee", value: `${formatMinor(fee, m.currency)}${m.tax === null ? "" : `, ${m.tax.name} included`}` });
   }
   if (m.kind === "recurring") {
     if (endsOn === null && m.termCount !== null && m.termUnit !== null) {

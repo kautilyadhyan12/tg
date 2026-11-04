@@ -37,6 +37,8 @@
 //   `noticeDays`  its notice to cancel (18v-ii-a), copied from its type as the contract is;
 //   `stopsAfter`  once notice is given, the periods it still renews and is paid for, then stops:
 //                  to the end of the period the notice's last day falls in;
+//   `leaveFeeMinor` its minimum term's early cancellation fee (18v-ii-b), copied as the term is;
+//   `leftEarly`   staff ended it inside its minimum term with that fee: the term holds it no more;
 //   the end day, the renewal day and what is owed are worked out from those.
 import { z } from "zod";
 import {
@@ -208,6 +210,10 @@ export interface HeldMembership {
   /** Notice given (18v-ii-a): it renews, and is paid for, to so many periods (counted as `periods` of
    *  `contractOf` are, the part month among them), then stops. Null where none is given. */
   stopsAfter?: number | null;
+  /** Its minimum term's early cancellation fee as it was given (18v-ii-b); null for none. A screen's own copy may leave it out. */
+  leaveFeeMinor?: number | null;
+  /** Ended inside its minimum term with that fee (18v-ii-b): the term holds it no more. */
+  leftEarly?: boolean;
 }
 
 /** The minimum term where it has one: a repeating membership only. `periods` is how many periods
@@ -245,6 +251,42 @@ function noticeOf(m: HeldMembership, today: string): { periods: number; lastDay:
   const c = contractOf(m);
   if (c !== null && m.paidPeriods <= c.periods) periods = Math.max(periods, c.periods);
   return { periods, lastDay: addDays(periodStart(at, periods), -1) };
+}
+
+/** WHAT ENDING IT EARLY WITH ITS FEE TODAY WOULD DO (18v-ii-b): what is written, and its last day. It
+ *  runs to the end of what is paid, or to the end of the period its notice's last day falls in where
+ *  that is later, then stops; it ends today where neither reaches today, and where it is frozen with no
+ *  notice, as a release does. Null where it holds no fee, left early already, is in no running minimum
+ *  term, or would run to the term's last day anyway: that is no early cancellation, and costs nothing. */
+function leaveOf(m: HeldMembership, today: string): { patch: Partial<HeldMembership>; lastDay: string } | null {
+  const fee = m.leaveFeeMinor ?? null;
+  const c = contractOf(m);
+  if (fee === null || fee <= 0 || c === null || m.leftEarly === true || !m.renews || today < m.startsOn) return null;
+  if (m.status !== "active" && m.status !== "frozen") return null;
+  const frozenSoFar = m.status === "frozen" && m.frozenOn !== null ? Math.max(0, daysBetween(m.frozenOn, today)) : 0;
+  const at: HeldMembership = { ...m, frozenDays: m.frozenDays + frozenSoFar };
+  const termUntil = addDays(periodStart(at, c.periods), -1);
+  // A term that ends by itself takes no notice (18v-ii-a).
+  const days = c.then === "renews" ? (m.noticeDays ?? null) : null;
+  let periods = m.paidPeriods;
+  if (days !== null) periods = Math.max(periods, periodIndex(at, addDays(today, days - 1)) + 1);
+  // Notice already given never runs longer for leaving early.
+  const stops = m.stopsAfter ?? null;
+  if (stops !== null) periods = Math.min(periods, Math.max(stops, m.paidPeriods));
+  const runsTo = periods > 0 ? addDays(periodStart(at, periods), -1) : null;
+  let patch: Partial<HeldMembership>;
+  let lastDay: string;
+  if (runsTo !== null && runsTo >= today && days !== null) {
+    patch = { stopsAfter: periods };
+    lastDay = runsTo;
+  } else if (runsTo !== null && runsTo >= today && m.status === "active") {
+    patch = { renews: false, stopsAfter: null };
+    lastDay = runsTo;
+  } else {
+    patch = { status: "cancelled", frozenOn: null, cancelledOn: today };
+    lastDay = today;
+  }
+  return lastDay < termUntil ? { patch, lastDay } : null;
 }
 
 function term(m: Pick<HeldMembership, "kind" | "termCount" | "termUnit" | "packDays">): { count: number; unit: MembershipTermUnit } {
@@ -407,6 +449,9 @@ export const heldMembershipViewSchema = z
         /** Giving notice today charges nothing more: what is paid already runs past the notice's end
          *  (18v-ii-a, re-check H3). False where it has no notice. */
         noticePaid: z.boolean().default(false),
+        /** Ending it inside its minimum term with its early cancellation fee (18v-ii-b): the fee, and the last
+         *  day it would run. Null where it holds no fee, is in no running term, or would run to the term's end anyway. */
+        leaveEarly: z.object({ feeMinor: z.number().int().min(1), endsOn: z.string() }).strict().nullable().default(null),
         /** Mark paid: the count it moves to, and for a repeating one the day paid up to. */
         markPaid: z.object({ paidPeriods: z.number().int(), until: z.string().nullable() }).strict().nullable(),
         /** Take the last mark back. */
@@ -510,6 +555,7 @@ export function heldMembershipView(stored: HeldMembership, today: string): HeldM
         cancelAfterNotice: null,
         noticeEnds: null,
         noticePaid: false,
+        leaveEarly: null,
         markPaid: null,
         undoPaid: null,
       },
@@ -520,7 +566,7 @@ export function heldMembershipView(stored: HeldMembership, today: string): HeldM
   const c = contractOf(m);
   const contractUntil = c === null ? null : addDays(periodStart(m, c.periods), -1);
   const contract =
-    c === null || contractUntil === null || contractUntil < asOf || !m.renews ? null : { until: contractUntil, then: c.then };
+    c === null || contractUntil === null || contractUntil < asOf || !m.renews || m.leftEarly === true ? null : { until: contractUntil, then: c.then };
   const inContract = contract !== null && !upcoming;
   // Paid past the minimum term already, ending with it would throw away months paid for: the end of
   // what is paid is the later end, and that is what Cancel offers (round one, H1).
@@ -576,6 +622,7 @@ export function heldMembershipView(stored: HeldMembership, today: string): HeldM
         willEnd !== null && (willEnd.periods > m.paidPeriods || paidTo === null) && !(contract !== null && !paidPast && willEnd.lastDay === contract.until) ? willEnd.lastDay : null,
       noticeEnds,
       noticePaid: willEnd !== null && willEnd.periods <= m.paidPeriods,
+      leaveEarly: ((leave) => (leave === null || !inContract ? null : { feeMinor: m.leaveFeeMinor ?? 0, endsOn: leave.lastDay }))(leaveOf(m, today)),
       markPaid,
       undoPaid,
     },
@@ -593,8 +640,9 @@ export type HeldMembershipEvent =
   /** The count of paid periods to move to: one more, or one fewer. */
   | { type: "paid"; paidPeriods: number };
 
-/** `notice`: it runs, and is paid for, to the end of the period its notice ends in, then stops (18v-ii-a). */
-export type CancelWhen = "today" | "period_end" | "contract_end" | "notice";
+/** `notice`: it runs, and is paid for, to the end of the period its notice ends in, then stops (18v-ii-a).
+ *  `leave_early`: it leaves a running minimum term with its early cancellation fee, ending as `leaveOf` says (18v-ii-b). */
+export type CancelWhen = "today" | "period_end" | "contract_end" | "notice" | "leave_early";
 
 export type HeldMembershipMove =
   /** `changed` false: it was already so, and nothing is to be written. */
@@ -630,6 +678,12 @@ export function moveHeldMembership(stored: HeldMembership, event: HeldMembership
     }
 
     case "cancel":
+      if (event.when === "leave_early") {
+        if (m.leftEarly === true) return same;
+        const leave = view.can.leaveEarly === null ? null : leaveOf(m, today);
+        if (leave === null) return refused;
+        return { ok: true, membership: { ...m, ...leave.patch, leftEarly: true }, changed: true };
+      }
       if (event.when === "notice") {
         if (view.notice?.given === true) return same;
         const notice = view.can.cancelAfterNotice === null ? null : noticeOf(m, today);
@@ -669,7 +723,7 @@ export function moveHeldMembership(stored: HeldMembership, event: HeldMembership
  *  today, or at the end of what is paid where that is before the term's last day. Ending with the
  *  term, or on or after its last day, is no release (round one, L2). */
 export function releaseAsked(view: Pick<HeldMembershipView, "contract" | "can">, when: CancelWhen): boolean {
-  if (!view.can.releaseNeeded || view.contract === null || when === "contract_end" || when === "notice") return false;
+  if (!view.can.releaseNeeded || view.contract === null || when === "contract_end" || when === "notice" || when === "leave_early") return false;
   if (when === "today") return true;
   const paidTo = view.can.cancelAtPeriodEnd;
   return paidTo !== null && paidTo < view.contract.until;
@@ -680,7 +734,7 @@ export function releaseAsked(view: Pick<HeldMembershipView, "contract" | "can">,
  *  or ending with a minimum term the notice does not run past, is not. */
 export function noticeAsked(view: Pick<HeldMembershipView, "can">, when: CancelWhen): boolean {
   const ends = view.can.noticeEnds;
-  if (ends === null || when === "contract_end" || when === "notice") return false;
+  if (ends === null || when === "contract_end" || when === "notice" || when === "leave_early") return false;
   if (when === "today") return true;
   const paidTo = view.can.cancelAtPeriodEnd;
   return paidTo !== null && paidTo < ends;
@@ -699,13 +753,18 @@ export interface HeldMembershipTerms {
   contractThen?: ContractThen | null;
   /** Its notice to cancel (18v-ii-a); left out is none. */
   noticeDays?: number | null;
+  /** Its minimum term's early cancellation fee (18v-ii-b); left out is none. */
+  leaveFeeMinor?: number | null;
 }
 
 /** The contract a membership given from `type` holds: a repeating one's only. */
-function contractFrom(type: HeldMembershipTerms): { contractPeriods: number | null; contractThen: ContractThen | null } {
+function contractFrom(type: HeldMembershipTerms): { contractPeriods: number | null; contractThen: ContractThen | null; leaveFeeMinor: number | null } {
   const periods = type.contractPeriods ?? null;
   const then = type.contractThen ?? null;
-  return type.kind === "recurring" && periods !== null && then !== null ? { contractPeriods: periods, contractThen: then } : { contractPeriods: null, contractThen: null };
+  const fee = type.leaveFeeMinor ?? null;
+  return type.kind === "recurring" && periods !== null && then !== null
+    ? { contractPeriods: periods, contractThen: then, leaveFeeMinor: fee !== null && fee > 0 ? fee : null }
+    : { contractPeriods: null, contractThen: null, leaveFeeMinor: null };
 }
 
 export type GiveHeldMembership =
@@ -742,6 +801,7 @@ export function giveHeldMembership(type: HeldMembershipTerms, startsOn: string, 
     ...contractFrom(type),
     noticeDays: type.kind === "recurring" && type.priceMinor > 0 ? (type.noticeDays ?? null) : null,
     stopsAfter: null,
+    leftEarly: false,
   };
   const free = base.free;
   const current = type.kind === "recurring" ? periodIndex(base, today) : 0;
@@ -794,7 +854,7 @@ export function linkHeldMembership(
   const free = type.priceMinor === 0;
   if (dates.endsOn === null) {
     // A contract signed in the gym's old software is not known here: none is invented (18v-i).
-    const made = giveHeldMembership({ ...type, contractPeriods: null, contractThen: null, noticeDays: null }, today, paid, today);
+    const made = giveHeldMembership({ ...type, contractPeriods: null, contractThen: null, noticeDays: null, leaveFeeMinor: null }, today, paid, today);
     if (!made.ok) return { ok: false, reason: "day_out_of_range" };
     return { ok: true, membership: made.membership, group: free ? "settled" : "ask" };
   }
@@ -1029,6 +1089,10 @@ export const heldMembershipSchema = z
     release: contractReleaseSchema.nullable().default(null),
     /** Why it was ended before its notice allowed, where staff did so outside a minimum term (18v-ii-a). */
     noticeWaived: contractReleaseSchema.nullable().default(null),
+    /** Its minimum term's early cancellation fee as it was given (18v-ii-b); null for none. */
+    leaveFeeMinor: z.number().int().min(1).nullable().default(null),
+    /** Staff ended it inside its minimum term with that fee (18v-ii-b). */
+    leftEarly: z.boolean().default(false),
     /** Taken from the gym's own list (17a-iii): its start day was worked back from the
      *  list's day, so a screen does not print it as the day the person started. */
     fromList: z.boolean(),
@@ -1096,6 +1160,8 @@ export const heldMembershipTypeChoiceSchema = z
     contractThen: contractThenSchema.nullable().default(null),
     /** Its notice to cancel in days (18v-ii-a), which a membership given from it holds; null for none. */
     noticeDays: z.number().int().min(1).nullable().default(null),
+    /** Its minimum term's early cancellation fee (18v-ii-b), which a membership given from it holds; null for none. */
+    leaveFeeMinor: z.number().int().min(1).nullable().default(null),
   })
   .strict();
 export type HeldMembershipTypeChoice = z.infer<typeof heldMembershipTypeChoiceSchema>;
@@ -1201,7 +1267,16 @@ export const giveHeldMembershipRequestSchema = z
     fullFrom: daySchema.nullable().optional(),
     /** The minimum term the screen showed for the line (18v-i), null for none: nothing is given
      *  where the line's is now another. Left out, the screen showed no word of it. */
-    minimumTerm: z.object({ periods: z.number().int().min(1).max(156), then: contractThenSchema }).strict().nullable().optional(),
+    minimumTerm: z
+      .object({
+        periods: z.number().int().min(1).max(156),
+        then: contractThenSchema,
+        /** Its early cancellation fee the screen showed (18v-ii-b), null for none; left out, it showed no word of it. */
+        leaveFeeMinor: z.number().int().min(1).nullable().optional(),
+      })
+      .strict()
+      .nullable()
+      .optional(),
     /** The notice to cancel the screen showed for the line (18v-ii-a), null for none: nothing is given
      *  where the line's is now another. Left out, the screen showed no word of it. */
     noticeDays: z.number().int().min(1).max(90).nullable().optional(),
@@ -1224,15 +1299,19 @@ export const cancelHeldMembershipRequestSchema = z
   .object({
     /** `contract_end`: runs to the end of its contract, then stops (18v-i). `notice`: runs to the end of
      *  the period its notice ends in, then stops (18v-ii-a). */
-    when: z.enum(["today", "period_end", "contract_end", "notice"]),
+    when: z.enum(["today", "period_end", "contract_end", "notice", "leave_early"]),
     /** Why a member is let out of a running minimum term early: asked only then, and refused without it. */
     release: contractReleaseSchema.optional(),
+    /** `leave_early` (18v-ii-b): the early cancellation fee the screen showed; refused where it is not the membership's. */
+    leaveFeeMinor: z.number().int().min(1).max(99_999_999).optional(),
     confirmBookings: z.string().regex(/^[0-9a-f]{64}$/).optional(),
     confirmPtSessions: confirmPtSessionsField.optional(),
   })
   .strict()
   // Ending with the minimum term lets nobody out early: a reason sent with it is refused (round one, L1).
-  .refine((v) => (v.when !== "contract_end" && v.when !== "notice") || v.release === undefined, { path: ["release"] });
+  .refine((v) => (v.when !== "contract_end" && v.when !== "notice" && v.when !== "leave_early") || v.release === undefined, { path: ["release"] })
+  // The fee goes with leaving early alone, and leaving early always says it (18v-ii-b).
+  .refine((v) => (v.when === "leave_early") === (v.leaveFeeMinor !== undefined), { path: ["leaveFeeMinor"] });
 export type CancelHeldMembershipRequest = z.infer<typeof cancelHeldMembershipRequestSchema>;
 
 /** Freeze (18z): `feeMinor` is the freeze fee a month the screen showed and staff left ticked, or 0
@@ -1259,7 +1338,16 @@ export const changeHeldMembershipRequestSchema = z
     /** The day the screen said the new one's full payments start (18y); null where it said none. */
     fullFrom: daySchema.nullable().optional(),
     /** The minimum term the screen showed for the new line (18v-i), null for none; left out, it showed no word of it. */
-    minimumTerm: z.object({ periods: z.number().int().min(1).max(156), then: contractThenSchema }).strict().nullable().optional(),
+    minimumTerm: z
+      .object({
+        periods: z.number().int().min(1).max(156),
+        then: contractThenSchema,
+        /** Its early cancellation fee the screen showed (18v-ii-b), null for none; left out, it showed no word of it. */
+        leaveFeeMinor: z.number().int().min(1).nullable().optional(),
+      })
+      .strict()
+      .nullable()
+      .optional(),
     /** The notice to cancel the screen showed for the new line (18v-ii-a), null for none; left out, it showed no word of it. */
     noticeDays: z.number().int().min(1).max(90).nullable().optional(),
     priceMinor: z.number().int().min(0).max(99_999_999),

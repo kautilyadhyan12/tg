@@ -425,6 +425,8 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
       contractPeriods: row.membership.contractPeriods ?? null,
       release: row.contractRelease,
       noticeWaived: row.noticeWaived,
+      leaveFeeMinor: row.membership.leaveFeeMinor ?? null,
+      leftEarly: row.membership.leftEarly === true,
       fromList: row.fromList,
       notCharged: list.bills.some((b) => b.membershipId === row.id && b.cancelled !== null && b.periodIndex === row.membership.paidPeriods - 1),
       refundedInFull: list.bills.some((b) => b.membershipId === row.id && b.status === "refunded" && b.periodIndex === row.membership.paidPeriods - 1),
@@ -541,6 +543,8 @@ function throwOnFailure(outcome: repo.HeldWriteOutcome): void {
       throw new OrgsError(409, "membership_notice_changed", "The notice to cancel of this membership changed while this was open. Nothing was saved: check it and press again.");
     case "bill_day_changed":
       throw new OrgsError(409, "membership_bill_day_changed", "Your gym's billing day changed while this was open. Nothing was saved: check the total and press again.");
+    case "leave_fee_changed":
+      throw new OrgsError(409, "membership_leave_fee_changed", "The early cancellation fee of this membership is not the one shown. Nothing was saved: check it and try again.");
     case "freeze_fee_changed":
       throw new OrgsError(409, "membership_freeze_fee_changed", "Your gym's freeze fee changed while this was open. Nothing was saved: check the fee and press Freeze again.");
     case "discount_not_found":
@@ -660,6 +664,8 @@ export async function moveHeldMembership(
   confirmBookings: string | null = null,
   confirmPtSessions: string | null = null,
   freezeFeeMinor = 0,
+  /** Leaving early (18v-ii-b): the early cancellation fee the screen showed. */
+  leaveFeeMinor?: number,
 ): Promise<BookingsAnswer<HeldMembershipsResponse>> {
   const { org, privileges } = await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   const now = deps.now();
@@ -675,6 +681,7 @@ export async function moveHeldMembership(
     freezeFeeMinor,
     // Freezing with no fee where the gym charges one is a waiver: staff who record payments only.
     mayWaiveFreezeFee: privileges.includes(BILLING),
+    ...(leaveFeeMinor === undefined ? {} : { leaveFeeMinor }),
     actorUserId: userId,
     now,
   });

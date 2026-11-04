@@ -18,6 +18,9 @@
 //
 // A fee is paid on the gym's Square Terminal too (18d-vi-b-i): while that payment waits, nothing
 // else pays or waives the fee, and a payment taken there is refunded in Square, never voided here.
+//
+// An early cancellation fee (18v-ii-b) is the membership's own: opened once, when staff end it inside
+// its minimum term with the fee it was given (`openLeaveFee`), and owed until paid or waived.
 import type { Sql, TransactionSql } from "postgres";
 import {
   classFeeFor,
@@ -40,17 +43,22 @@ import { insertAudit } from "../repo.js";
 import { lockedEntry } from "./heldRepo.js";
 import { billOf, insertPayment, squareMoneyOut, type BillTax, type Voided } from "./billsSql.js";
 
-const STATUS_FOR: Record<Exclude<MemberFeeKind, "freeze">, "late_cancelled" | "no_show"> = { late_cancel: "late_cancelled", no_show: "no_show" };
-/** A booking's or a session's own fee: a freeze fee is the membership's (`freezeFees.ts`). */
-type BookingFeeKind = Exclude<MemberFeeKind, "freeze">;
+/** A booking's or a session's own fee: a freeze fee (`freezeFees.ts`) and an early cancellation fee are the membership's. */
+type BookingFeeKind = Exclude<MemberFeeKind, "freeze" | "leave_early">;
+const STATUS_FOR: Record<BookingFeeKind, "late_cancelled" | "no_show"> = { late_cancel: "late_cancelled", no_show: "no_show" };
+
+/** Whether a fee is the membership's own rather than a class's or a session's. */
+export const membershipFee = (fee: string): boolean => fee === "freeze" || fee === "leave_early";
 
 /** In a statement that names a fee's bill `b`: its booking is still the late cancel or the
  *  no-show it was opened for, in a class that runs, or its personal training session still
  *  is (18h-ii). False once staff marked them came, the class was cancelled or removed, or
  *  the booking or session is gone. A freeze fee (18z) is owed while its month began before the
- *  freeze ended (`freeze_stopped`, set by an unfreeze or a cancel). */
+ *  freeze ended (`freeze_stopped`, set by an unfreeze or a cancel). An early cancellation fee is owed
+ *  for good (18v-ii-b): leaving early is never taken back, and staff waive it where they mean to. */
 export const stillOwedSql = (sql: Sql | TransactionSql) => sql`
   ((b.fee = 'freeze' AND NOT b.freeze_stopped)
+   OR b.fee = 'leave_early'
    OR EXISTS (SELECT 1 FROM gym_class_bookings k
            JOIN gym_class_sessions s ON s.gym_id = k.gym_id AND s.id = k.session_id
            WHERE k.gym_id = b.gym_id AND k.id = b.class_booking_id AND s.status = 'scheduled'
@@ -178,6 +186,42 @@ export async function openClassFees(tx: TransactionSql, gymId: string, bookingId
     });
   }
   return opened.length;
+}
+
+/** A MEMBERSHIP ENDED INSIDE ITS MINIMUM TERM WITH ITS EARLY CANCELLATION FEE (18v-ii-b): its fee bill,
+ *  due today. In the caller's transaction, under the membership's lock, after the write that set
+ *  `left_early`: opened only for a membership stored so, at the fee it was given, its own tax rate inside
+ *  it as a late cancel's is, and one a membership (`gym_member_bills_leave_fee_uq`, 0202). Answers
+ *  whether it opened one. */
+export async function openLeaveFee(tx: TransactionSql, gymId: string, membershipId: string, today: string, now: Date): Promise<boolean> {
+  const [row] = await tx<{ id: string; fee: number | null; currency: string; type_name: string; tax_name: string | null; tax_bp: number | null }[]>`
+    SELECT h.id, h.leave_fee_minor AS fee, h.currency, left(t.name, 80) AS type_name, r.name AS tax_name, r.rate_bp AS tax_bp
+    FROM gym_held_memberships h
+    JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
+    LEFT JOIN gym_tax_rates r ON r.gym_id = h.gym_id AND r.id = h.tax_rate_id
+    WHERE h.gym_id = ${gymId} AND h.id = ${membershipId} AND h.left_early`;
+  if (row === undefined || row.fee === null || row.fee <= 0) return false;
+  const tax = row.tax_name === null || row.tax_bp === null ? null : { name: row.tax_name, bp: row.tax_bp, included: true };
+  const bill = billOf(row.fee, tax);
+  const opened = await tx<{ id: string }[]>`
+    INSERT INTO gym_member_bills
+      (gym_id, held_membership_id, period_index, fee, fee_for, amount_minor, tax_minor, tax_bp, tax_name, tax_included,
+       currency, due_on, covers_from, covers_to, created_at, updated_at)
+    VALUES (${gymId}, ${row.id}, NULL, 'leave_early', ${row.type_name}, ${bill.amountMinor}, ${bill.tax?.minor ?? 0}, ${bill.tax?.bp ?? 0},
+            ${bill.tax?.name ?? null}, ${bill.tax?.included ?? null}, ${row.currency}, ${today}::date, ${today}::date, ${today}::date, ${now}, ${now})
+    ON CONFLICT (held_membership_id) WHERE fee = 'leave_early' AND (status <> 'void' OR void_reason = 'waived') DO NOTHING
+    RETURNING id`;
+  if (opened.length > 0) {
+    await insertAudit(tx, {
+      actorUserId: null,
+      gymId,
+      action: "org.member_fees_opened",
+      targetType: "gym",
+      targetId: gymId,
+      meta: { fee: "leave_early", bills: "1" },
+    });
+  }
+  return opened.length > 0;
 }
 
 /** THESE BOOKINGS NO LONGER OWE A FEE: marked came after a no-show, or their class did not
@@ -450,7 +494,7 @@ export async function feesFor(sql: Sql | TransactionSql, gymId: string, membersh
       membershipId: r.held_membership_id,
       // Text under a CHECK: parsed, so a kind this build does not know fails here.
       fee: memberFeeKindSchema.parse(r.fee),
-      of: r.fee === "freeze" ? "membership" : r.of_pt ? "pt" : "class",
+      of: membershipFee(r.fee) ? "membership" : r.of_pt ? "pt" : "class",
       forName: r.fee_for,
       on: r.covers_from,
       to: r.covers_to,

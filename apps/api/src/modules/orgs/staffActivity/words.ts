@@ -114,7 +114,7 @@ const methodWords = (s: Said): string => {
 /** "late cancel fee", from a fee's note (18h-i). */
 const feeOf = (s: Said): string => {
   const fee = text(s, "fee");
-  return fee === "no_show" ? "no-show fee" : fee === "freeze" ? "freeze fee" : "late cancel fee";
+  return fee === "no_show" ? "no-show fee" : fee === "freeze" ? "freeze fee" : fee === "leave_early" ? "early cancellation fee" : "late cancel fee";
 };
 const membershipOf = (s: Said): string => {
   const type = text(s, "type");

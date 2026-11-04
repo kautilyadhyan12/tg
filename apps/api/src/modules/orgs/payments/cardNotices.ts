@@ -129,7 +129,7 @@ export function noticeLines(
 ): Omit<Parameters<typeof cardDeclinedEmail>[0], "to"> {
   const amount = formatMinor(charge.amountMinor, charge.currency);
   const forName = charge.forName === null ? "" : cleanGymText(charge.forName, GYM_TEXT_IN_EMAIL_CHARS);
-  const kind = bill.fee === "freeze" ? "freeze fee" : "membership";
+  const kind = bill.fee === "freeze" ? "freeze fee" : bill.fee === "leave_early" ? "early cancellation fee" : "membership";
   const card = cardName(charge);
   const code = charge.code ?? "UNKNOWN";
   const next =
