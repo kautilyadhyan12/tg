@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, FlatList, Pressable, ScrollView, StyleSheet, Switch, useWindowDimensions, View } from "react-native";
+import { AppState, FlatList, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   leaderboardCountedResponseSchema,
   leaderboardResponseSchema,
-  leaderboardVisibilitySchema,
   userProfileResponseSchema,
   type GymClockFormat,
   type LeaderboardBoard,
@@ -13,7 +12,6 @@ import {
   type LeaderboardPeriod,
   type LeaderboardResponse,
   type LeaderboardRow,
-  type LeaderboardVisibility,
 } from "@app/shared";
 import { Button } from "../../look/Button";
 import { Card } from "../../look/Card";
@@ -30,6 +28,7 @@ import { Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
 import { PersonProfile, type ProfilePerson } from "./PersonProfile";
 import { NO_ANSWER } from "../SignIn";
+import { HideMe, useHideMe } from "./hideMe";
 import { shortDay } from "./classesView";
 import { visitTime } from "./visitsView";
 import {
@@ -70,7 +69,6 @@ export interface LeaderboardPlace {
 const boardBase = (gymId: string) => `/v1/orgs/${encodeURIComponent(gymId)}/leaderboard`;
 export const leaderboardPath = (gymId: string, board: LeaderboardBoard, period: LeaderboardPeriod) => `${boardBase(gymId)}?board=${board}&period=${period}`;
 const countedPath = (gymId: string, board: LeaderboardBoard, period: LeaderboardPeriod) => `${boardBase(gymId)}/mine?board=${board}&period=${period}`;
-export const HIDE_ME_PATH = "/v1/users/me/leaderboard";
 const PICTURE_TALL = 0.6;
 
 /** The page over the Gym tab or the Dashboard; closed while `place` is null. */
@@ -86,7 +84,6 @@ export function LeaderboardPage({ place, onClose }: { place: LeaderboardPlace | 
 }
 
 type Held = { kind: "loading" } | { kind: "failed"; status: number | null } | { kind: "ok"; board: LeaderboardResponse };
-type Hide = { kind: "loading" } | { kind: "failed" } | { kind: "ok"; now: LeaderboardVisibility };
 
 function Body({ place, onClose, top, bottom }: { place: LeaderboardPlace; onClose: () => void; top: number; bottom: number }) {
   const { session } = useSession();
@@ -94,9 +91,6 @@ function Body({ place, onClose, top, bottom }: { place: LeaderboardPlace; onClos
   const [boardId, setBoardId] = useState<LeaderboardBoard>("gym_days");
   const [period, setPeriod] = useState<LeaderboardPeriod>("this_week");
   const [held, setHeld] = useState<Held>({ kind: "loading" });
-  const [hide, setHide] = useState<Hide>({ kind: "loading" });
-  const [hideBusy, setHideBusy] = useState(false);
-  const [hideSaid, setHideSaid] = useState<string | null>(null);
   const [box, setBox] = useState<"info" | "period" | "counted" | "name" | null>(null);
   // The boards the gym switched off, as last read: a tab pressed does not bring one back while the next board loads.
   const [boardsOff, setBoardsOff] = useState<readonly LeaderboardBoard[]>([]);
@@ -108,7 +102,6 @@ function Body({ place, onClose, top, bottom }: { place: LeaderboardPlace; onClos
   // Reads are numbered as they start: an answer stands only if no later read has started, so a slow answer to an
   // earlier tab is never drawn under a later one.
   const started = useRef(0);
-  const hideStarted = useRef(0);
   const live = useRef(true);
 
   /** The board as read, or null where this read shows none: one that failed, gave way or was overtaken. */
@@ -140,15 +133,7 @@ function Body({ place, onClose, top, bottom }: { place: LeaderboardPlace; onClos
   // A save that was pressed under one tab may answer under another: it reads the tab on screen now.
   const loadNow = useRef(load);
   loadNow.current = load;
-
-  const loadHide = useCallback(async () => {
-    hideStarted.current += 1;
-    const number = hideStarted.current;
-    const answer = await session.signedIn({ method: "GET", path: HIDE_ME_PATH }, leaderboardVisibilitySchema);
-    if (!live.current || number !== hideStarted.current) return;
-    if (answer.kind === "ok") setHide({ kind: "ok", now: answer.data });
-    else setHide((was) => (was.kind === "ok" ? was : { kind: "failed" }));
-  }, [session]);
+  const { hide, busy: hideBusy, said: hideSaid, load: loadHide, save: setHidden } = useHideMe(() => void loadNow.current(true));
 
   useEffect(() => {
     live.current = true;
@@ -157,38 +142,12 @@ function Body({ place, onClose, top, bottom }: { place: LeaderboardPlace; onClos
     const back = AppState.addEventListener("change", (state) => {
       if (state !== "active") return;
       void load(true);
-      void loadHide();
     });
     return () => {
       live.current = false;
       back.remove();
     };
   }, [load, loadHide]);
-
-  useEffect(() => {
-    void loadHide();
-  }, [loadHide]);
-
-  const setHidden = async (hidden: boolean) => {
-    if (hideBusy) return;
-    setHideBusy(true);
-    setHideSaid(null);
-    // A read that started before this press may not hold what the press does.
-    hideStarted.current += 1;
-    const answer = await session.signedIn({ method: "PUT", path: HIDE_ME_PATH, body: { hidden } }, leaderboardVisibilitySchema);
-    // A read begun during the save, by the app coming back, may be older than this answer.
-    hideStarted.current += 1;
-    if (!live.current) return;
-    setHideBusy(false);
-    if (answer.kind === "ok") {
-      setHide({ kind: "ok", now: answer.data });
-    } else {
-      setHideSaid(answer.kind === "refused" ? answer.message : NO_ANSWER);
-      // The save may have reached the server: the switch shows what the server holds.
-      void loadHide();
-    }
-    void loadNow.current(true);
-  };
 
   const board = held.kind === "ok" ? held.board : null;
   const noBoard = board === null ? null : statusText(board);
@@ -400,53 +359,6 @@ function Body({ place, onClose, top, bottom }: { place: LeaderboardPlace; onClos
         ) : null}
       </Sheet>
     </>
-  );
-}
-
-interface HideMeProps {
-  hide: Hide;
-  busy: boolean;
-  said: string | null;
-  onChange: (hidden: boolean) => void;
-  onAgain: () => void;
-}
-
-/** Drawn only from the server's answer: not known, there is no switch to read wrongly. */
-function HideMe({ hide, busy, said, onChange, onAgain }: HideMeProps) {
-  if (hide.kind === "loading") return null;
-  if (hide.kind === "failed") {
-    return (
-      <View style={styles.between}>
-        <Txt kind="small" style={styles.grow}>
-          Couldn’t load Hide me.
-        </Txt>
-        <Button label="Try again" kind="link" say="Try Hide me again" onPress={onAgain} />
-      </View>
-    );
-  }
-  const { now } = hide;
-  return (
-    <View style={styles.hide}>
-      <View style={styles.between}>
-        <View style={styles.grow}>
-          <Txt kind="h3">Hide me</Txt>
-          <Txt kind="small">{now.under18 && now.hidden ? "You’re under 18, so you’re hidden until you switch this off." : "Only staff will see you on the boards."}</Txt>
-        </View>
-        <Switch
-          accessibilityLabel="Hide me on leaderboards"
-          value={now.hidden}
-          disabled={busy}
-          onValueChange={onChange}
-          trackColor={{ false: colours.lineStrong, true: colours.orange }}
-          thumbColor={colours.text}
-        />
-      </View>
-      {said === null ? null : (
-        <Txt kind="small" colour="badText">
-          {said}
-        </Txt>
-      )}
-    </View>
   );
 }
 

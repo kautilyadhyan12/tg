@@ -77,7 +77,7 @@ describe("the five tabs", () => {
       // Food has nothing to come since its photo log was built (33b-i).
       const first = tab.name === "Gym" ? "Check for an invitation" : tab.name === "Food" ? "Scan food" : "Coming soon";
       expect(await screen.findAllByText(first)).toBeTruthy();
-      expect(screen.queryAllByText("Coming soon")).toHaveLength(tab.name === "Me" ? 3 : tab.name === "Gym" || tab.name === "Food" ? 0 : 1);
+      expect(screen.queryAllByText("Coming soon")).toHaveLength(tab.name === "Me" ? 2 : tab.name === "Gym" || tab.name === "Food" ? 0 : 1);
       // The Dashboard's calendar shows this week's dates and its clock the phone's time; its numbers did
       // not load here, so none shows.
       const dates = tab.name === "Dashboard" ? weekOf(new Date()).map((day) => String(day.date)) : [];
@@ -99,8 +99,8 @@ describe("the five tabs", () => {
     }
     await screen.findByRole("button", { name: "Try again" });
     const pressed = [...screen.getAllByRole("tab"), ...screen.getAllByRole("button")];
-    expect(pressed.map(label).slice(5)).toEqual(["Your plan", "Sign out", "Try again"]);
-    expect(pressed).toHaveLength(8);
+    expect(pressed.map(label).slice(5)).toEqual(["Your plan", "Settings", "Sign out", "Try again"]);
+    expect(pressed).toHaveLength(9);
     const heights = pressed.map((one) => Number(drawn(one).height ?? drawn(one).minHeight ?? 0));
     expect(heights.filter((height) => height < 44)).toEqual([]);
   });

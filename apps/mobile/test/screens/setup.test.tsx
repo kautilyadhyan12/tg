@@ -142,12 +142,21 @@ async function openSetup(
     healthLoadFails = false,
     front = false,
     invitations = [],
+    units = "metric",
+    unitsChosen = false,
+    mePatch,
   }: {
     health?: Stored;
     ticks?: { purpose: string; wordingVersion: string }[];
     healthLoadFails?: boolean;
     front?: boolean;
     invitations?: object[];
+    /** The account’s units, as Settings or a first setup left them. */
+    units?: string;
+    /** This phone has kept a choice of units: the person's, or a first setup's. */
+    unitsChosen?: boolean;
+    /** The account's answer to a units save, in place of the plain one. */
+    mePatch?: (body: unknown) => Reply | Promise<Reply>;
   } = {},
 ) {
   const held = {
@@ -170,7 +179,13 @@ async function openSetup(
   };
   const server = fakeServer({
     "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }),
-    "/v1/users/me": () => ({ status: 200, body: profile(true, RAVI, held.answers.onboardingCompleted) }),
+    "/v1/users/me": (body) =>
+      body !== undefined && mePatch !== undefined
+        ? mePatch(body)
+        : {
+      status: 200,
+      body: profile(true, { ...RAVI, units: (body as { units?: string } | undefined)?.units ?? units }, held.answers.onboardingCompleted),
+          },
     "/v1/orgs/invitations": () => ({ status: 200, body: { address: RAVI.email, addressProved: true, invitations } }),
     [SETUP]: (body) => {
       if (body !== undefined && held.failNext) {
@@ -224,7 +239,8 @@ async function openSetup(
       return { status: 201, body: { consent: row } };
     },
   });
-  const store = memoryStore(kept(1, RAVI, NOTE_VERSION_SIGN_UP, !front));
+  const keptNow = JSON.parse(kept(1, { ...RAVI, units }, NOTE_VERSION_SIGN_UP, !front)) as object;
+  const store = memoryStore(JSON.stringify(unitsChosen ? { ...keptNow, unitsChosen } : keptNow));
   await render(<App extra={extra} ask={server.ask} store={store} wait={noWait} />);
   if (!front) {
     await fireEvent.press(await screen.findByRole("tab", { name: "Me" }));
@@ -538,9 +554,104 @@ describe("the health note's tick and Food", () => {
 });
 
 describe("setup on the phone", () => {
+  it("opened from Me, it is in the units chosen in Settings, not the phone’s country’s", async () => {
+    phoneLanguage = "en-US";
+    await openSetup({ weightGoal: "maintain" });
+    await screen.findByRole("header", { name: "About you" });
+    expect(selected("Kilograms and centimetres")).toBe(true);
+  });
+
+  it("a switch of units in setup is the account’s, as Settings’ is", async () => {
+    const { server, store } = await openSetup({ weightGoal: "maintain" });
+    await screen.findByRole("header", { name: "About you" });
+    await press("Pounds, feet and inches");
+    await waitFor(() => {
+      expect(server.asked.filter((a) => a.path === "/v1/users/me" && a.method === "PATCH").map((a) => a.body)).toEqual([{ units: "imperial" }]);
+    });
+    await waitFor(() => {
+      expect((JSON.parse(store.value ?? "{}") as { user: { units: string } }).user.units).toBe("imperial");
+    });
+  });
+
+  it("a first setup on a US phone opens in pounds and tells the account", async () => {
+    phoneLanguage = "en-US";
+    const { server } = await openSetup({ weightGoal: "maintain", age: 30 }, { front: true });
+    await waitFor(() => {
+      expect(server.asked.filter((a) => a.path === "/v1/users/me" && a.method === "PATCH").map((a) => a.body)).toEqual([{ units: "imperial" }]);
+    });
+  });
+
+  it("in front of the tabs, an account already in pounds stays in pounds on a phone that would say kilograms", async () => {
+    const { server } = await openSetup({ weightGoal: "maintain" }, { front: true, units: "imperial" });
+    await screen.findByRole("header", { name: "About you" });
+    expect(selected("Pounds, feet and inches")).toBe(true);
+    await act(() => new Promise<void>((resolve) => setTimeout(resolve, 50)));
+    expect(server.asked.filter((a) => a.path === "/v1/users/me" && a.method === "PATCH")).toEqual([]);
+  });
+
+  it("in front of the tabs, kilograms this phone already chose stay, on a US phone", async () => {
+    phoneLanguage = "en-US";
+    const { server } = await openSetup({ weightGoal: "maintain" }, { front: true, unitsChosen: true });
+    await screen.findByRole("header", { name: "About you" });
+    expect(selected("Kilograms and centimetres")).toBe(true);
+    await act(() => new Promise<void>((resolve) => setTimeout(resolve, 50)));
+    expect(server.asked.filter((a) => a.path === "/v1/users/me" && a.method === "PATCH")).toEqual([]);
+  });
+
+  it("a first setup's own units are kept as chosen, so the next opening does not switch them again", async () => {
+    phoneLanguage = "en-US";
+    const { store } = await openSetup({ weightGoal: "maintain", age: 30 }, { front: true });
+    await waitFor(() => {
+      expect(JSON.parse(store.value ?? "{}")).toMatchObject({ unitsChosen: true, user: { units: "imperial" } });
+    });
+  });
+
+  it("a units switch the account refuses goes back to the account's units", async () => {
+    const { server } = await openSetup({ weightGoal: "maintain" }, { mePatch: () => refusal(429, "rate_limited", "Too many changes.") });
+    await screen.findByRole("header", { name: "About you" });
+    await press("Pounds, feet and inches");
+    await waitFor(() => {
+      expect(server.asked.some((a) => a.path === "/v1/users/me" && a.method === "PATCH")).toBe(true);
+    });
+    await waitFor(() => {
+      expect(selected("Kilograms and centimetres")).toBe(true);
+    });
+  });
+
+  it("two quick switches: the phone keeps the last one, whatever order the answers come in", async () => {
+    const waiting: (() => void)[] = [];
+    const { store } = await openSetup(
+      { weightGoal: "maintain" },
+      {
+        mePatch: (body) =>
+          new Promise<Reply>((resolve) => {
+            waiting.push(() => {
+              resolve({ status: 200, body: profile(true, { ...RAVI, units: (body as { units: string }).units }) });
+            });
+          }),
+      },
+    );
+    await screen.findByRole("header", { name: "About you" });
+    await press("Pounds, feet and inches");
+    await press("Kilograms and centimetres");
+    await waitFor(() => {
+      expect(waiting).toHaveLength(2);
+    });
+    await act(() => {
+      waiting[1]?.();
+      return new Promise<void>((resolve) => setTimeout(resolve, 20));
+    });
+    await act(() => {
+      waiting[0]?.();
+      return new Promise<void>((resolve) => setTimeout(resolve, 20));
+    });
+    expect(selected("Kilograms and centimetres")).toBe(true);
+    expect((JSON.parse(store.value ?? "{}") as { user: { units: string } }).user.units).toBe("metric");
+  });
+
   it("a US phone opens in pounds, and saves the pounds picked as kilograms", async () => {
     phoneLanguage = "en-US";
-    const { saves } = await openSetup({ weightGoal: "maintain" });
+    const { saves } = await openSetup({ weightGoal: "maintain" }, { units: "imperial" });
     await screen.findByRole("header", { name: "About you" });
     expect(selected("Pounds, feet and inches")).toBe(true);
     await step("Weight", "increment");
