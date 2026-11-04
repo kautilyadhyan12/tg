@@ -344,6 +344,9 @@ d("a pass the phone makes with no signal (real Postgres)", () => {
       ahead = 0;
       const eve = await member("eve", "Eve Kim", [gymB]);
       const keys = await phoneKeysOf(eve.phone);
+      // The desk's clock at the very start of a window: a slow machine crossing into the next would
+      // make the window before too old (seen on GitHub on master's run of PR 465's merge).
+      ahead = windowEndsAt(now()).getTime() - Date.now();
       const w = now();
       expect((await scan(desk, makePhonePass(keyFor(keys, w + 1), eve.phone.userId, w + 1))).result).toBe("checked_in");
       // Her pass for the desk's own window, at the other gym, is now grey: one of the two is used.
@@ -360,6 +363,9 @@ d("a pass the phone makes with no signal (real Postgres)", () => {
       ahead = 0;
       const hal = await member("hal", "Hal Rao");
       const keys = await phoneKeysOf(hal.phone);
+      // The desk's clock at the very start of a window: a slow machine crossing into the next would
+      // make the window before too old (seen on GitHub on master's run of PR 465's merge).
+      ahead = windowEndsAt(now()).getTime() - Date.now();
       const w = now();
       expect((await scan(desk, makePhonePass(keyFor(keys, w + 3), hal.phone.userId, w + 3))).result).toBe("fresh_pass_needed");
       expect((await scan(desk, makePhonePass(keyFor(keys, w - 3), hal.phone.userId, w - 3))).result).toBe("fresh_pass_needed");
