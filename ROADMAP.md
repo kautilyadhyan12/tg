@@ -677,7 +677,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 35a. [x] **The predictions on the server** — merged 2026-10-14 (PR #270).
     - 35b. [x] **Weekly challenges on the server** — merged 2026-10-15 (PR #272).
     - 35c. **The Progress screen** (split 2026-11-04 in three, after Kd's drawing of the four tabs).
-      - 35c-i. [ ] **Progress in four tabs** (Overview · Trends · Calendar · Body), as Kd's drawing: Predictions, records with their days, the charts, the calendar's flames, the newest weight.
+      - 35c-i. [x] **Progress in four tabs** — merged 2026-11-04 (PR #462).
       - 35c-ii. [ ] **Log body measurements on Body**: kept on the phone until the server has it, and the server takes it once though it is sent twice.
       - 35c-iii. [ ] **Achievements**: badges, the weekly challenges, the leaderboard.
 36. [ ] **The weekly plan**: the plan builder on the server (6a), the week screen (6b). Doing a planned workout (6c) is exercise folder 2's item 64. Once the plan names a week's sessions, calories burned joins the starter goals with the plan's own number (RULINGS 2026-10-13). Its Workout tab in Recommended For You takes the three choices and rules of spec Part 6 §16.6.
