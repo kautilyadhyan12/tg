@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { AppState, Platform, Pressable, StyleSheet, View } from "react-native";
+import { AppState, Pressable, StyleSheet, View } from "react-native";
 import {
   ACCOUNT_UNDO_DAYS,
   deleteAccountResponseSchema,
@@ -13,7 +13,7 @@ import {
   type MyOrgsResponse,
   type Units,
 } from "@app/shared";
-import { Directory } from "expo-file-system";
+import * as Sharing from "expo-sharing";
 import { Button } from "../look/Button";
 import { Avatar, Badge, Card } from "../look/Card";
 import { Segments } from "../look/Choice";
@@ -23,7 +23,7 @@ import { Field } from "../look/Field";
 import { Icon, type IconName } from "../look/Icon";
 import { Sheet } from "../look/Sheet";
 import { Txt } from "../look/Txt";
-import { forgetPersonFiles } from "../session/personFiles";
+import { exportFileFor, forgetPersonFiles } from "../session/personFiles";
 import { useSession } from "../session/SessionProvider";
 import { HideMe, useHideMe } from "./gym/hideMe";
 import { CanSee } from "./Invitation";
@@ -35,7 +35,7 @@ import { NO_ANSWER } from "./SignIn";
 // Settings on the phone (ROADMAP Stage 5 item 19a): the browser's Profile name, Units, Hide me, what
 // each place can see and Account, opened over Me. Each part saves on its own and says so in its own
 // place; every answer shown is the server's. Setup's answers are under Me's "Your plan", not here again.
-// Your data (19b): the server's export saved to a folder the person picks, and Delete account with a
+// Your data (19b): the server's export handed to the phone's Share box, and Delete account with a
 // code emailed to the account's own address; the undo is the link in the email that follows.
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -339,9 +339,6 @@ export function placesOnDelete(orgs: readonly Place[]): { leaves: string[]; owns
   };
 }
 
-/** The phone's own Documents folder, as Android's folder box names it: Android lets no app save straight into Download. */
-const ANDROID_DOCUMENTS = "content://com.android.externalstorage.documents/document/primary%3ADocuments";
-
 function DataPart({ places }: { places: Places }) {
   const { session, state } = useSession();
   const [busy, setBusy] = useState(false);
@@ -351,14 +348,6 @@ function DataPart({ places }: { places: Places }) {
   const download = async () => {
     if (busy || me === null) return;
     setSaid(null);
-    // The folder first, as Save as does: closing the phone's own box saves nothing and says nothing.
-    // Android's box opens in Documents: at the top of the phone, or in Download, it cannot save at all.
-    let folder: Directory;
-    try {
-      folder = await Directory.pickDirectoryAsync(Platform.OS === "android" ? ANDROID_DOCUMENTS : undefined);
-    } catch {
-      return;
-    }
     setBusy(true);
     const answer = await session.signedIn({ method: "GET", path: "/v1/users/me/export", waitMs: 60_000 }, dpdpExportSchema);
     // The file is only ever that of the person who asked for it, still signed in.
@@ -368,12 +357,18 @@ function DataPart({ places }: { places: Places }) {
       return;
     }
     const name = `aihomegym-export-${answer.data.exportedAt.slice(0, 10)}.json`;
+    // The phone's own Share box takes the file (Files, Drive, email): a folder box sends the app to the
+    // back, where a phone short of memory closes it and the file is lost (Kd, 2026-11-04).
     try {
-      const file = folder.createFile(name, "application/json");
-      file.write(JSON.stringify(answer.data, null, 2));
-      setSaid({ words: `Saved as ${name}.`, bad: false });
+      if (!(await Sharing.isAvailableAsync())) {
+        setSaid({ words: "This phone can’t share files.", bad: true });
+      } else {
+        const file = exportFileFor(me, name, JSON.stringify(answer.data, null, 2));
+        await Sharing.shareAsync(file.uri, { mimeType: "application/json", dialogTitle: "Save your data" });
+        setSaid({ words: `Your file is ${name}.`, bad: false });
+      }
     } catch {
-      setSaid({ words: "Couldn’t save the file there. Try another folder.", bad: true });
+      setSaid({ words: "Couldn’t make the file. Try again.", bad: true });
     }
     setBusy(false);
   };

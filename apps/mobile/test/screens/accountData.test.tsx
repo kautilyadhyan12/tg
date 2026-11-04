@@ -1,5 +1,6 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { fireEvent, render, screen } from "@testing-library/react-native";
 import { Directory, File, Paths } from "expo-file-system";
+import * as Sharing from "expo-sharing";
 import { App } from "../../src/App";
 import { NO_ANSWER } from "../../src/screens/SignIn";
 import { deletesOnText, deletedNote, namesText } from "../../src/screens/Settings";
@@ -78,7 +79,8 @@ const write = (name: string, text: string) => {
 };
 
 afterEach(() => {
-  for (const one of [...Paths.document.list(), ...new Directory("picked").list()]) one.delete();
+  for (const one of [...Paths.document.list(), ...Paths.cache.list()]) one.delete();
+  jest.mocked(Sharing.shareAsync).mockClear();
 });
 
 describe("Delete account (the worst thing: after deleting, the phone still shows or keeps the person, or stays signed in)", () => {
@@ -89,6 +91,12 @@ describe("Delete account (the worst thing: after deleting, the phone still shows
     draft.create();
     new File(draft, "post.json").create();
     write(`meals-${ANOTHER}.json`, '{"meals":["Idli"]}');
+    // The copy of a download handed to the Share box earlier, and another person's.
+    const exported = new Directory(Paths.cache, `export-${RAVI.id}`);
+    exported.create();
+    new File(exported, "aihomegym-export-2026-11-01.json").create();
+    const theirs = new Directory(Paths.cache, `export-${ANOTHER}`);
+    theirs.create();
     const server = fakeServer(routes({ [ME]: me(deleted(true)) }));
     const store = await openSettings(server.ask);
     await upToTheCode();
@@ -102,6 +110,9 @@ describe("Delete account (the worst thing: after deleting, the phone still shows
     expect(new File(Paths.document, `photo-meal-${RAVI.id}.json`).exists).toBe(false);
     expect(draft.exists).toBe(false);
     expect(new File(Paths.document, `meals-${ANOTHER}.json`).exists).toBe(true);
+    expect(exported.exists).toBe(false);
+    expect(new File(exported, "aihomegym-export-2026-11-01.json").exists).toBe(false);
+    expect(theirs.exists).toBe(true);
     // The code went with the DELETE, and the server ended the sign-in itself: no Sign out is owed.
     expect(server.asked.filter((a) => a.path === ME && a.method === "DELETE").map((a) => a.body)).toEqual([{ code: "123456" }]);
     expect(server.paths()).not.toContain("/v1/auth/logout");
@@ -167,43 +178,45 @@ describe("Delete account (the worst thing: after deleting, the phone still shows
 });
 
 describe("Download my data", () => {
-  const saved = (name: string) => new File(`picked/Download/${name}`);
+  const NAME = "aihomegym-export-2026-11-04.json";
+  const shared = () => jest.mocked(Sharing.shareAsync).mock.calls.map(([uri]) => uri);
 
-  it("saves the server's file of the person's data in the folder picked, and says so in place", async () => {
+  it("hands the server's file of the person's data to the phone's Share box, and says so in place", async () => {
     const server = fakeServer(routes({ [EXPORT]: ok(anExport(RAVI.id)) }));
     await openSettings(server.ask);
     await fireEvent.press(await screen.findByLabelText("Download my data"));
-    expect(await screen.findByText("Saved as aihomegym-export-2026-11-04.json.")).toBeTruthy();
-    const file = saved("aihomegym-export-2026-11-04.json");
-    expect(file.exists).toBe(true);
-    expect(JSON.parse(await file.text())).toEqual(anExport(RAVI.id));
+    expect(await screen.findByText(`Your file is ${NAME}.`)).toBeTruthy();
+    expect(shared()).toEqual([`cache/export-${RAVI.id}/${NAME}`]);
+    expect(JSON.parse(await new File(`cache/export-${RAVI.id}/${NAME}`).text())).toEqual(anExport(RAVI.id));
   });
 
-  it("never saves a file that is not the signed-in person's", async () => {
+  it("never hands over a file that is not the signed-in person's", async () => {
     const server = fakeServer(routes({ [EXPORT]: ok(anExport(ANOTHER)) }));
     await openSettings(server.ask);
     await fireEvent.press(await screen.findByLabelText("Download my data"));
     expect(await screen.findByText(NO_ANSWER)).toBeTruthy();
-    expect(saved("aihomegym-export-2026-11-04.json").exists).toBe(false);
+    expect(shared()).toEqual([]);
+    expect(Paths.cache.list()).toEqual([]);
   });
 
-  it("closing the folder box asks the server nothing and says nothing", async () => {
-    jest.mocked(Directory.pickDirectoryAsync).mockRejectedValueOnce(new Error("closed"));
-    const server = fakeServer(routes({ [EXPORT]: ok(anExport(RAVI.id)) }));
-    await openSettings(server.ask);
-    await fireEvent.press(await screen.findByLabelText("Download my data"));
-    await waitFor(() => {
-      expect(jest.mocked(Directory.pickDirectoryAsync)).toHaveBeenCalled();
-    });
-    expect(server.paths()).not.toContain(EXPORT);
-    expect(screen.queryByText(/Saved as/)).toBeNull();
-  });
-
-  it("a refusal shows the server's words", async () => {
+  it("a refusal shows the server's words and shares nothing", async () => {
     const server = fakeServer(routes({ [EXPORT]: () => refusal(429, "rate_limited", "You've requested several exports recently. Please try again later.") }));
     await openSettings(server.ask);
     await fireEvent.press(await screen.findByLabelText("Download my data"));
     expect(await screen.findByText("You've requested several exports recently. Please try again later.")).toBeTruthy();
+    expect(shared()).toEqual([]);
+  });
+
+  it("says so on a phone that cannot share files, and when the Share box fails", async () => {
+    jest.mocked(Sharing.isAvailableAsync).mockResolvedValueOnce(false);
+    const server = fakeServer(routes({ [EXPORT]: ok(anExport(RAVI.id)) }));
+    await openSettings(server.ask);
+    await fireEvent.press(await screen.findByLabelText("Download my data"));
+    expect(await screen.findByText("This phone can’t share files.")).toBeTruthy();
+    expect(shared()).toEqual([]);
+    jest.mocked(Sharing.shareAsync).mockRejectedValueOnce(new Error("no activity"));
+    await fireEvent.press(screen.getByLabelText("Download my data"));
+    expect(await screen.findByText("Couldn’t make the file. Try again.")).toBeTruthy();
   });
 });
 
