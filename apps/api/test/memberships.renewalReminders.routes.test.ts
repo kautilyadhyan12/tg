@@ -271,10 +271,18 @@ d("A reminder before a renewal or a minimum term's end (real Postgres)", { timeo
       VALUES (${gym.id}, ${fayM}, ${fay}, 'renew:1', 'renews', ${addDays(chicagoToday, 2)}::date, ${await emailOf(fay)}, 'queued', ${clock}, ${clock})`;
     await sql`UPDATE gyms SET renewal_reminders_checked_on = ${chicagoToday}::date WHERE id = ${gym.id}`;
     expect((await send("POST", `${entryUrl(gym, fay)}/memberships/${fayM}/cancel`, gym.cookies, { when: "today" })).statusCode).toBe(200);
+    // Gil's is still running, but set to end at the end of what is paid after it was written: no renewal comes.
+    const gil = await person(gym, "Gil Stops");
+    const gilM = await give(gym, line, gil, addDays(chicagoToday, -5));
+    await sql`
+      INSERT INTO gym_renewal_reminders (gym_id, held_membership_id, entry_id, occasion, what, about_on, email, state, not_before, created_at)
+      VALUES (${gym.id}, ${gilM}, ${gil}, 'renew:1', 'renews', ${addDays(chicagoToday, 2)}::date, ${await emailOf(gil)}, 'queued', ${clock}, ${clock})`;
+    expect((await send("POST", `${entryUrl(gym, gil)}/memberships/${gilM}/cancel`, gym.cookies, { when: "period_end" })).statusCode).toBe(200);
     const run = await remind();
-    expect(run.dropped).toBe(1);
+    expect(run.dropped).toBe(2);
     expect(mailTo(await emailOf(fay))).toHaveLength(0);
-    expect(await sql`SELECT 1 FROM gym_renewal_reminders WHERE held_membership_id = ${fayM}`).toHaveLength(0);
+    expect(mailTo(await emailOf(gil))).toHaveLength(0);
+    expect(await sql`SELECT 1 FROM gym_renewal_reminders WHERE held_membership_id IN (${fayM}, ${gilM})`).toHaveLength(0);
   });
 
   it("the line's box lists who would be emailed and why not; another gym's owner gets nothing", async () => {
