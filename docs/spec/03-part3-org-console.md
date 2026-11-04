@@ -4607,6 +4607,12 @@ gym's own list has none. One that ends opens no bill and takes no payment for a 
 day after. Once it has started, Cancel inside a contract offers End on its last day, or a release (Moved away,
 Medical or disability, Death, Other reason) today or at the end of what is paid; the reason is kept and said on it.
 
+**A cooling-off period, as built (18v-iii; Kd, 2026-11-04, `rulings/2026-11-04-18v-iii.md`).** A line with a price may hold 1 to
+30 days, weekends counted, copied to a membership when it is given (never by Change membership or from the gym's own list).
+They count from the day its agreement is signed, or it was added where none is signed. Inside them Cancel offers **Cancel with
+full refund**: it ends today, held to no minimum term, notice or fee, and its unpaid bills are cancelled. What was paid for it is
+said on their page with Refund, and on Overview's Refunds to review, until it is all given back; the app sends no refund by itself.
+
 **Also before launch:** a joining fee on the first bill (18t), moving to another membership with
 the difference worked out (18x), raising the price for existing members with each place's
 notice (18w), and the gym's own choices of billing everyone on one day with the first payment
