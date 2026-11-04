@@ -235,12 +235,12 @@ d("an owner hands the gym over before deleting their account (real Postgres)", {
   );
 
   it(
-    "the hand-over: the owner's link opens their Staff tab and names who was asked; once they accept, the old owner deletes and the new one is the one refused",
+    "the hand-over: the owner's link opens the console's Your account page and names who was asked; once they accept, the old owner deletes and the new one is the one refused",
     async () => {
       const gym = await makeGym("Lotus Owndel");
       const priya = await onStaff(gym, "Priya Shah", "owner");
       const mia = await asMember(gym, "Mia Member");
-      const link = `http://localhost:5173/console/${gym.slug}/members?view=staff&handOver=1`;
+      const link = `http://localhost:5173/console/${gym.slug}/account`;
 
       // The owner alone carries it; a co-owner, a member and a stranger do not.
       expect(await handOverOf(gym.owner, gym)).toEqual({ url: link, askedName: null });

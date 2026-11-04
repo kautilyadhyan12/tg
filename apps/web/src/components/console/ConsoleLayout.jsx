@@ -1,7 +1,7 @@
 import { Fragment } from 'react';
 import { orgWords } from '@app/shared';
 import { NavLink, Link, useLocation, useParams } from 'react-router-dom';
-import { Building2, ChevronsUpDown, Ellipsis, LogOut } from 'lucide-react';
+import { Building2, ChevronsUpDown, Ellipsis, LogOut, UserRound } from 'lucide-react';
 import ConsoleBanner from './ConsoleBanner';
 import PlanModal from './PlanModal';
 import SizeDecisionPrompt from './SizeDecisionPrompt';
@@ -124,6 +124,13 @@ export default function ConsoleLayout({ children }) {
                 </span>
               ) : null}
             </div>
+          ) : null}
+          {/* Their own account, and Delete account in it (19b-ii). */}
+          {menu ? (
+            <NavLink to={`/console/${orgSlug}/account`} className={({ isActive }) => `c-nav${isActive ? ' c-nav-on' : ''}`}>
+              <UserRound size={20} />
+              <span>Your account</span>
+            </NavLink>
           ) : null}
           <button type="button" onClick={signOut} disabled={signingOut} className="c-nav">
             <LogOut size={20} />

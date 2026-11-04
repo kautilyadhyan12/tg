@@ -1,8 +1,9 @@
-// A console page opened signed out is opened again after sign-in (19b-ii): the phone's Choose a new
-// owner opens a gym's Staff tab in a browser that is usually signed out. Only this site's console
-// pages, for 30 minutes, until a signed-in page is reached.
+// A console page opened signed out is opened again after sign-in (19b-ii): the phone's Open the
+// website opens the console's Your account page in a browser that is usually signed out. Only this
+// site's console pages, for 30 minutes, until a signed-in page is reached; and the sign-in page
+// opens on "Manage my gym or studio".
 import { describe, expect, it } from 'vitest';
-import { RETURN_FOR_MS, forgetReturn, isReturnPath, rememberReturn, readReturn } from './landingRoute';
+import { GYM_DOOR, MEMBER_DOOR, RETURN_FOR_MS, forgetReturn, isReturnPath, readDoor, rememberDoor, rememberReturn, readReturn } from './landingRoute';
 
 const fakeStore = () => {
   const map = new Map();
@@ -67,7 +68,16 @@ describe('kept for 30 minutes, in this tab, until a signed-in page is reached', 
     expect(readReturn(store, 3_000)).toBeNull();
     rememberReturn(STAFF, store, 1_000);
     forgetReturn(store);
-    expect(store.size()).toBe(0);
+    expect(readReturn(store, 2_000)).toBeNull();
+  });
+
+  it('a console page opens the sign-in on Manage my gym or studio; any other page leaves the door as chosen', () => {
+    const store = fakeStore();
+    rememberDoor(MEMBER_DOOR, store);
+    rememberReturn('/dashboard', store, 1_000);
+    expect(readDoor(store)).toBe(MEMBER_DOOR);
+    rememberReturn('/console/iron-house/account', store, 2_000);
+    expect(readDoor(store)).toBe(GYM_DOOR);
   });
 
   it('a value written by anything else is no page', () => {

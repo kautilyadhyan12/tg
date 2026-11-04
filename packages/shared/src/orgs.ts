@@ -1087,9 +1087,9 @@ export const myOrgSchema = orgSummarySchema.extend({
   /** An owner here who is not the gym's own owner (ROADMAP 4b-i): "Co-owner". */
   coOwner: z.boolean().optional(),
   /** For this open gym's own owner alone (19b-ii; Kd, 2026-11-04): their account is not deleted
-   *  until they make someone else its owner. `url` opens the console's Staff tab, which says at
-   *  its top what to press; `askedName` is the co-owner asked to take it over who has not
-   *  answered yet. Absent for everybody else. */
+   *  until they make someone else its owner, and they delete it on the website where they manage
+   *  the gym. `url` opens the console's Your account page; `askedName` is the co-owner asked to
+   *  take the gym over who has not answered yet. Absent for everybody else. */
   handOver: z.object({ url: z.string().url(), askedName: z.string().nullable() }).strict().optional(),
   /** WHAT THE CALLER MAY DO AT THIS GYM — their OWN effective set, not anybody
    *  else's (T3 round 1 C/H-1).

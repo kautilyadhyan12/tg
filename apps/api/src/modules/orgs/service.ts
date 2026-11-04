@@ -587,10 +587,10 @@ export async function listMyOrgs(
       ...toOrgSummary(r),
       staffRole: r.staffRole,
       coOwner: r.coOwner,
-      // Where the owner chooses a new owner: the console's Staff tab, said at its top (19b-ii).
+      // Where the owner deletes their account: the console's Your account page (19b-ii; Kd, 2026-11-04).
       ...(r.handOver === null
         ? {}
-        : { handOver: { url: `${deps.webOrigin}/console/${encodeURIComponent(r.slug)}/members?view=staff&handOver=1`, askedName: r.handOver.askedName } }),
+        : { handOver: { url: `${deps.webOrigin}/console/${encodeURIComponent(r.slug)}/account`, askedName: r.handOver.askedName } }),
       // WHAT THIS CALLER MAY DO HERE, so the console can stop deciding on the
       // role NAME (T3 round 1 C/H-1). Run through the SAME `privilegesFor` that
       // `requirePrivilege` uses, so the answer a screen draws and the answer the

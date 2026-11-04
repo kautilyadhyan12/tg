@@ -130,12 +130,18 @@ export function isReturnPath(path) {
   return typeof path === 'string' && /^\/console\/[A-Za-z0-9-]/.test(path) && !path.includes('\\') && !path.includes('//');
 }
 
-/** The page asked for when sign-in was needed; any other page forgets an older one. */
+/** The page asked for when sign-in was needed; any other page forgets an older one. A console page
+ *  also chooses "Manage my gym or studio" on the sign-in page, since that is who opens one (Kd,
+ *  2026-11-04: the owner signs in as the person who manages the gym). */
 export function rememberReturn(path, store = defaultStore(), now = Date.now()) {
   if (store === null) return false;
   try {
-    if (isReturnPath(path)) store.setItem(RETURN_KEY, JSON.stringify({ path, at: now }));
-    else store.removeItem(RETURN_KEY);
+    if (isReturnPath(path)) {
+      store.setItem(RETURN_KEY, JSON.stringify({ path, at: now }));
+      rememberDoor(GYM_DOOR, store);
+    } else {
+      store.removeItem(RETURN_KEY);
+    }
     return true;
   } catch {
     return false;

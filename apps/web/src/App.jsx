@@ -63,6 +63,7 @@ import ConsoleSell     from './pages/console/Sell';
 import ConsoleSettings from './pages/console/Settings';
 import SquareReturn from './pages/console/SquareReturn';
 import ConsoleMore     from './pages/console/More';
+import ConsoleAccount  from './pages/console/Account';
 import FrameGuard from './components/common/FrameGuard';
 
 export default function App() {
@@ -387,6 +388,12 @@ export default function App() {
             <Route path="/console/:orgSlug/more" element={
               <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
                 <ConsoleLayout><ConsoleMore /></ConsoleLayout>
+              </ProtectedRoute>
+            } />
+            {/* YOUR ACCOUNT (19b-ii): Delete account, for the person who manages the gym. */}
+            <Route path="/console/:orgSlug/account" element={
+              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
+                <ConsoleLayout><ConsoleAccount /></ConsoleLayout>
               </ProtectedRoute>
             } />
 

@@ -8,7 +8,6 @@ import {
   myOrgsResponseSchema,
   onboardingResponseSchema,
   orgWords,
-  ownedGymLine,
   sendCodeResponseSchema,
   userProfileResponseSchema,
   type MyOrgsResponse,
@@ -39,8 +38,8 @@ import { NO_ANSWER } from "./SignIn";
 // place; every answer shown is the server's. Setup's answers are under Me's "Your plan", not here again.
 // Your data (19b): the server's export handed to the phone's Share box, and Delete account with a
 // code emailed to the account's own address; the undo is the link in the email that follows.
-// A gym's own owner is not deleted until they make someone else its owner (19b-ii): their box says so
-// and opens that gym's Staff page in the browser, where the console's Make owner is.
+// A gym's own owner deletes their account on the website where they manage the gym (19b-ii; Kd,
+// 2026-11-04): their box says so and opens the console's Your account page in the browser.
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -347,23 +346,31 @@ export function deletedNote(emailSent: boolean, now: Date): string {
 
 export interface OwnedPlace {
   name: string;
+  /** The website's Your account page, where an owner deletes their account. */
   url: string;
-  askedName: string | null;
+  orgType: Place["orgType"];
 }
 
-/** The places a deleted account leaves at once, and the open gyms it owns, which stop the deletion until
- *  they are handed over (19b-ii): the server's own answer, sent to a gym's own owner alone. A co-owner,
- *  staff and members all leave (users/repo.ts softDeleteUser). */
+/** The places a deleted account leaves at once, and the open gyms it owns: an owner deletes their account
+ *  on the website where they manage the gym (19b-ii; Kd, 2026-11-04), the server's own answer, sent to a
+ *  gym's own owner alone. A co-owner, staff and members all leave (users/repo.ts softDeleteUser). */
 export function placesOnDelete(orgs: readonly Place[]): { leaves: string[]; owns: OwnedPlace[] } {
   const ownsIt = (org: Place) => org.staffRole === "owner" && org.coOwner !== true;
   const owns: OwnedPlace[] = [];
   for (const org of orgs) {
-    if (org.handOver !== undefined) owns.push({ name: org.name, url: org.handOver.url, askedName: org.handOver.askedName });
+    if (org.handOver !== undefined) owns.push({ name: org.name, url: org.handOver.url, orgType: org.orgType });
   }
   return {
     leaves: orgs.filter((org) => !ownsIt(org) && (org.isMember || org.staffRole !== null)).map((org) => org.name),
     owns,
   };
+}
+
+/** "You own Iron House. Delete your account on our website, where you manage your gym." */
+export function ownerDeletesOnWebLine(owns: readonly OwnedPlace[]): string {
+  const first = owns[0];
+  const where = owns.length === 1 && first !== undefined ? `your ${orgWords(first.orgType).it}` : "them";
+  return `You own ${namesText(owns.map((place) => place.name))}. Delete your account on our website, where you manage ${where}.`;
 }
 
 
@@ -488,27 +495,22 @@ function DeleteAsk({ open, places, onStale, onClose }: { open: boolean; places: 
   return (
     <Sheet open={open} title="Delete account?" onClose={onClose}>
       <View style={styles.ask}>
-        {step === "ask" && owns.length > 0 ? (
+        {step === "ask" && owns[0] !== undefined ? (
           <>
-            {owns.map((place) => (
-              <Txt key={place.url}>{ownedGymLine(place)}</Txt>
-            ))}
+            <Txt>{ownerDeletesOnWebLine(owns)}</Txt>
             <View style={styles.stack}>
-              {owns.map((place, at) => (
-                <Button
-                  key={place.url}
-                  label={owns.length === 1 ? "Choose a new owner" : `Choose a new owner for ${place.name}`}
-                  kind={at === 0 ? "main" : "soft"}
-                  icon="user"
-                  wide
-                  onPress={() => {
-                    setNoBrowser(false);
-                    void Linking.openURL(place.url).catch(() => {
-                      setNoBrowser(true);
-                    });
-                  }}
-                />
-              ))}
+              <Button
+                label="Open the website"
+                wide
+                onPress={() => {
+                  const to = owns[0]?.url;
+                  if (to === undefined) return;
+                  setNoBrowser(false);
+                  void Linking.openURL(to).catch(() => {
+                    setNoBrowser(true);
+                  });
+                }}
+              />
               <Button label="Cancel" kind="plain" wide onPress={onClose} />
             </View>
             {noBrowser ? <Txt kind="small" colour="badText">Couldn’t open the browser.</Txt> : null}

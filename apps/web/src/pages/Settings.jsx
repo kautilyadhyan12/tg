@@ -22,7 +22,7 @@ import HealthQuestion from './onboarding/HealthQuestion';
 import { useHealthScreening } from './onboarding/useHealthScreening';
 import { ADULT_AGE, CURRENT_DISCLAIMER_VERSION, DISCLAIMER_WORDINGS, UNDER_AGE_LINE, ownedGymLine } from '@app/shared';
 import { consoleOrgsSnapshot, ensureConsoleOrgs, refreshConsoleOrgsAfterChange, subscribeConsoleOrgs } from './console/consoleOrgs';
-import { inAppPath, ownedForDelete } from './deleteOwnerView';
+import { handOverPath, ownedForDelete } from './deleteOwnerView';
 import { authService } from '../api/authApi';
 import mlApi from '../api/mlApi'; // KEPT: avatar/profile-picture only — no new-API home (owed card)
 import Select from '../components/common/Select';
@@ -874,10 +874,10 @@ function OwnerFirst({ owned, onClose }) {
       ))}
       <div className="flex flex-col gap-3 mt-5">
         {owned.map((gym) => {
-          const path = inAppPath(gym.url);
+          const path = handOverPath(gym.slug);
           const label = owned.length === 1 ? 'Choose a new owner' : `Choose a new owner for ${gym.name}`;
           const look = { background: 'linear-gradient(135deg, #FF8A1F, #FFB347)', boxShadow: '0 4px 16px rgba(255,138,31,0.25)' };
-          return path === null ? null : (
+          return (
             <Link key={gym.id} to={path}
               className="w-full py-2.5 rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2"
               style={look}>
