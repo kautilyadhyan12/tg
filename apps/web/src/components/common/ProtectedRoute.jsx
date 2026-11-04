@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { landingRoute, readDoor } from '../../pages/landingRoute';
+import { forgetReturn, landingRoute, noteSignedIn, readDoor, rememberReturn, returnForDoor } from '../../pages/landingRoute';
 import InvitationsGate from '../../pages/InvitationsGate';
 import SignUpNote from '../../pages/SignUpNote';
 import { refreshConsoleOrgsAfterChange } from '../../pages/console/consoleOrgs';
@@ -92,8 +92,16 @@ function InvitationsCheck({ userId, children }) {
 
 export const ProtectedRoute = ({ children, requireOnboarding = true, requireSignUpNote = true, requireInvitations = true }) => {
   const { user, loading } = useAuth();
+  const location = useLocation();
   if (loading) return <Spinner />;
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) {
+    // A console page opened signed out is opened again once they sign in (19b-ii).
+    rememberReturn(`${location.pathname}${location.search}`);
+    return <Navigate to="/login" replace />;
+  }
+  // Signed in and arrived: the page kept for sign-in has done its work.
+  noteSignedIn();
+  forgetReturn();
   // THE SIGN-UP NOTE COMES FIRST ON THE TRAINING SIDE (ROADMAP 4d): before
   // setup and every member screen. The console opts out, route by route, as it
   // opts out of setup: Kd, 2026-09-14, from the click-through, *"it should show
@@ -128,5 +136,5 @@ export const PublicRoute = ({ children }) => {
   const { user, loading } = useAuth();
   if (loading) return <Spinner />;
   if (!user) return children;
-  return <Navigate to={landingRoute(user, readDoor())} replace />;
+  return <Navigate to={returnForDoor(readDoor()) ?? landingRoute(user, readDoor())} replace />;
 };

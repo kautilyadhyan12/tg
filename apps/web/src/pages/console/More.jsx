@@ -1,5 +1,5 @@
 import { Link, useParams } from 'react-router-dom';
-import { Building2, ChevronRight, LogOut } from 'lucide-react';
+import { Building2, ChevronRight, LogOut, UserRound } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { PAGE_ICONS } from '../../components/console/consoleIcons';
 import { useConsoleOrg } from './useConsoleOrg';
@@ -41,6 +41,7 @@ export default function More() {
           <Row key={page.key} to={page.to} icon={PAGE_ICONS[page.key]} label={page.label} />
         ))}
         <Row to="/console" icon={Building2} label="Your organisations" />
+        <Row to={`/console/${orgSlug}/account`} icon={UserRound} label="Your account" />
       </nav>
 
       <div

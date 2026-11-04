@@ -73,6 +73,15 @@ export type DeleteAccountRequest = z.infer<typeof deleteAccountRequestSchema>;
 export const deleteAccountResponseSchema = z.object({ message: z.string(), emailSent: z.boolean() });
 export type DeleteAccountResponse = z.infer<typeof deleteAccountResponseSchema>;
 
+/** What a gym's own owner reads in Delete account, on the phone and in the browser, and the server's
+ *  refusal for one gym (19b-ii; Kd, 2026-11-04): what to do, or who they are waiting for. Make owner is
+ *  the console's own name for handing a gym over. */
+export function ownedGymLine(gym: { name: string; askedName: string | null }): string {
+  return gym.askedName === null
+    ? `You own ${gym.name}. Before you delete your account, make someone else its owner.`
+    : `You asked ${gym.askedName} to be the owner of ${gym.name}. Once they accept, you can delete your account.`;
+}
+
 // ── onboarding / fitness profile (onboarding-storage card) ──────────────────
 // v1 §6.1:442 puts onboarding data in the users module; Part 4 defines no
 // storage, so P2.7 DROPped these fields (INVENTORY.md:45) and Part 2B §4.1:358's

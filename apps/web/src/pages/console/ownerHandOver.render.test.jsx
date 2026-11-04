@@ -317,3 +317,36 @@ describe('the co-owner asked, on Overview', () => {
     expect(onAccepted).not.toHaveBeenCalled();
   });
 });
+
+describe('opened from Delete account (19b-ii): the Staff tab says at its top what the owner presses', () => {
+  const drawFrom = () =>
+    render(
+      <MemoryRouter initialEntries={['/console/iron-house/members?view=staff&handOver=1']}>
+        <Routes>
+          <Route path="/console/:orgSlug/members" element={<Members />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+  it.each([
+    ['with co-owners', 'u1', [OWNER, CORA, DAN, RITA], 'To hand Iron House over, open a co-owner below and press Make owner. Once they accept, you can delete your account.'],
+    ['with one asked', 'u1', [OWNER, CORA_ASKED, DAN, RITA], 'You asked Cora Lim to be the owner of Iron House. Once they accept, you can delete your account.'],
+    ['with no co-owner', 'u1', [OWNER, RITA], 'Only a co-owner can become the owner of Iron House. Open a staff member below and press Make co-owner, or press Invite staff and choose Co-owner.'],
+    ['alone', 'u1', [OWNER], 'Only a co-owner can become the owner of Iron House. Press Invite staff and choose Co-owner.'],
+  ])('the owner, %s', async (_case, you, list, words) => {
+    orgService.getStaff.mockResolvedValue(staffAs(you, list));
+    drawFrom();
+    expect((await screen.findByTestId('hand-over-note')).textContent).toBe(words);
+  });
+
+  it('a co-owner reading it, or the owner opening Staff any other way, reads no such line', async () => {
+    orgService.getStaff.mockResolvedValue(staffAs('u3', [OWNER, CORA, DAN, RITA]));
+    drawFrom();
+    await screen.findByTestId('staff-tab-u1');
+    expect(screen.queryByTestId('hand-over-note')).toBeNull();
+    cleanup();
+    orgService.getStaff.mockResolvedValue(staffAs('u1', [OWNER, CORA, DAN, RITA]));
+    drawStaff();
+    await screen.findByTestId('staff-tab-u1');
+    expect(screen.queryByTestId('hand-over-note')).toBeNull();
+  });
+});

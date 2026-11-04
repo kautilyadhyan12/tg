@@ -94,6 +94,8 @@ export function consoleMenu(orgSlug, privileges, orgType) {
  *  reached from it. */
 export function moreIsCurrent(menu, pathname) {
   if (pathname === menu.moreTo) return true;
+  // Your account is opened from More on a phone (19b-ii).
+  if (pathname === `${menu.moreTo.slice(0, -'/more'.length)}/account`) return true;
   return menu.more.some((p) => pathname === p.to || pathname.startsWith(`${p.to}/`));
 }
 
