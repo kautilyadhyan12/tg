@@ -34,6 +34,7 @@ export * from "./invitations.js";
 export * from "./resendWebhook.js";
 export * from "./classes.js";
 export * from "./memberships.js";
+export * from "./renewalReminders.js";
 export * from "./visibleText.js";
 export * from "./heldMemberships.js";
 export * from "./heldOnList.js";

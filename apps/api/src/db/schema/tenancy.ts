@@ -160,6 +160,8 @@ export const gyms = pgTable(
     /** Whether a cardholder is emailed in the month their card on file expires (0163; 18d-iii-c):
      *  the gym's own choice, off until it switches it on. */
     cardExpiryReminders: boolean("card_expiry_reminders").notNull().default(false),
+    /** The gym's day its renewal reminders (0204; 18v-iv) were last looked for; null: look again. */
+    renewalRemindersCheckedOn: date("renewal_reminders_checked_on"),
     /** The At risk list's two numbers (0098; spec Part 3 §16.4), under `gyms_at_risk_check`;
      *  `AT_RISK_QUIET_DAYS` and `AT_RISK_WEEKS_CAME` in `@app/shared`. */
     atRiskQuietDays: integer("at_risk_quiet_days").notNull().default(14),

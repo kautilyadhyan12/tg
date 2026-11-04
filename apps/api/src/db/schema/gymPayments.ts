@@ -772,6 +772,51 @@ export const gymCardExpiryNotices = pgTable(
   ],
 );
 
+/** The email reminding whoever pays for a membership that it renews soon, or that its minimum term ends soon
+ *  (0204; 18v-iv): one a membership and occasion, for a line that asks for it. The address is kept only while it
+ *  waits to go. Its links to the membership and to the record (`entry_id`, `ON DELETE SET NULL` of that
+ *  column alone) are in the migration only. */
+export const gymRenewalReminders = pgTable(
+  "gym_renewal_reminders",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    heldMembershipId: uuid("held_membership_id").notNull(),
+    /** Whoever pays for it: the record emailed. */
+    entryId: uuid("entry_id"),
+    occasion: text("occasion").notNull(),
+    what: text("what").notNull(),
+    aboutOn: date("about_on").notNull(),
+    email: citext("email"),
+    state: text("state").notNull(),
+    reason: text("reason"),
+    attempts: integer("attempts").notNull().default(0),
+    notBefore: timestamp("not_before", { withTimezone: true }).notNull(),
+    leaseUntil: timestamp("lease_until", { withTimezone: true }),
+    maybeSentAt: timestamp("maybe_sent_at", { withTimezone: true }),
+    providerId: text("provider_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (t) => [
+    check("gym_renewal_reminders_occasion_check", sql`${t.occasion} ~ '^(renew:[0-9]{1,5}|term)$'`),
+    check("gym_renewal_reminders_what_check", sql`${t.what} IN ('renews','term_renews','ends')`),
+    check("gym_renewal_reminders_state_check", sql`${t.state} IN ('queued','sending','sent','skipped','failed')`),
+    check("gym_renewal_reminders_email_check", sql`(${t.state} IN ('queued','sending') OR ${t.email} IS NULL) AND (${t.email} IS NULL OR length(${t.email}) <= 254)`),
+    check("gym_renewal_reminders_waiting_check", sql`${t.state} NOT IN ('queued','sending') OR ${t.email} IS NOT NULL`),
+    check("gym_renewal_reminders_lease_check", sql`(${t.state} = 'sending') = (${t.leaseUntil} IS NOT NULL)`),
+    check("gym_renewal_reminders_finished_check", sql`(${t.state} IN ('sent','skipped','failed')) = (${t.finishedAt} IS NOT NULL)`),
+    check("gym_renewal_reminders_reason_check", sql`((${t.state} IN ('skipped','failed')) = (${t.reason} IS NOT NULL)) AND (${t.reason} IS NULL OR ${t.reason} ~ '^[a-z_]{1,40}$')`),
+    check("gym_renewal_reminders_provider_check", sql`${t.providerId} IS NULL OR (${t.state} = 'sent' AND length(${t.providerId}) <= 100)`),
+    check("gym_renewal_reminders_attempts_check", sql`${t.attempts} >= 0`),
+    uniqueIndex("gym_renewal_reminders_occasion_uq").on(t.gymId, t.heldMembershipId, t.occasion),
+    index("gym_renewal_reminders_due_idx").on(t.notBefore, t.id).where(sql`${t.state} IN ('queued','sending')`),
+    index("gym_renewal_reminders_entry_idx").on(t.gymId, t.entryId),
+  ],
+);
+
 /** Pause automatic payments (0191; ROADMAP 18d-iv-f): staff paused the app charging this record's saved card by itself, for every
  *  membership it pays for. One open pause a record at most; Resume closes it, and the row stays to say when it stood. */
 export const gymAutopayPauses = pgTable(
