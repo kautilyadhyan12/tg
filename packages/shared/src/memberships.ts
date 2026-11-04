@@ -55,6 +55,10 @@ export const MEMBERSHIP_NOTICE_DAYS_MAX = 90;
 export const noticeDaysSchema = z.number().int().min(1).max(MEMBERSHIP_NOTICE_DAYS_MAX);
 /** A minimum term's early cancellation fee (18v-ii-b): a set amount, the line's tax inside it. */
 export const leaveFeeMinorSchema = z.number().int().min(1).max(99_999_999);
+/** A line's cooling-off period (18v-iii): so many days after signing in which a member may cancel with a
+ *  full refund, at most 30. Weekends count. */
+export const MEMBERSHIP_COOLING_OFF_DAYS_MAX = 30;
+export const coolingOffDaysSchema = z.number().int().min(1).max(MEMBERSHIP_COOLING_OFF_DAYS_MAX);
 /** What a class limit is counted over. */
 export const MEMBERSHIP_LIMIT_PERIODS = ["week", "month"] as const;
 export const membershipLimitPeriodSchema = z.enum(MEMBERSHIP_LIMIT_PERIODS);
@@ -139,6 +143,8 @@ export const gymMembershipTypeSchema = z
     noticeDays: noticeDaysSchema.nullable().default(null),
     /** Its minimum term's early cancellation fee (18v-ii-b); null for none. */
     leaveFeeMinor: leaveFeeMinorSchema.nullable().default(null),
+    /** Its cooling-off period in days (18v-iii); null for none. */
+    coolingOffDays: coolingOffDaysSchema.nullable().default(null),
     archivedAt: z.string().datetime({ offset: true }).nullable(),
     /** When it was last changed. A change sends it back, so a form opened before
      *  somebody else's change is refused, never saved over theirs. */
@@ -201,6 +207,8 @@ const membershipTypeFields = {
   noticeDays: noticeDaysSchema.nullable().default(null),
   /** Left out of a NEW type is "no early cancellation fee"; a change must say it (below). */
   leaveFeeMinor: leaveFeeMinorSchema.nullable().default(null),
+  /** Left out of a NEW type is "no cooling-off period"; a change must say it (below). */
+  coolingOffDays: coolingOffDaysSchema.nullable().default(null),
 };
 const membershipTypeObject = z.object(membershipTypeFields);
 
@@ -253,6 +261,8 @@ function refineMembershipType(value: z.infer<typeof membershipTypeObject>, ctx: 
   if (value.noticeDays !== null && value.contractThen === "ends") wrong("noticeDays");
   // An early cancellation fee is a minimum term's (18v-ii-b).
   if (value.leaveFeeMinor !== null && value.contractPeriods === null) wrong("leaveFeeMinor");
+  // A cooling-off period gives back what was paid: a line with a price, of any kind (18v-iii).
+  if (value.coolingOffDays !== null && value.priceMinor === 0) wrong("coolingOffDays");
 }
 
 /** How long a contract of `periods` payments, each every `termCount` `termUnit`, runs:
@@ -286,6 +296,7 @@ export const updateGymMembershipTypeRequestSchema = membershipTypeObject
     contractThen: contractThenSchema.nullable(),
     noticeDays: noticeDaysSchema.nullable(),
     leaveFeeMinor: leaveFeeMinorSchema.nullable(),
+    coolingOffDays: coolingOffDaysSchema.nullable(),
   })
   .strict()
   .superRefine(refineMembershipType);

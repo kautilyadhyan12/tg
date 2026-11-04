@@ -59,12 +59,32 @@ export const colours = {
   goldLine: "rgba(255,214,107,0.25)",
   blue: "#60a5fa",
   purple: "#a78bfa",
+  pink: "#f472b6",
+  pinkFill: "rgba(244,114,182,0.16)",
+  blueFill: "rgba(96,165,250,0.16)",
+  /** A flame's foot and its heart (Progress's calendar, 35c-i). */
+  flameDeep: "#E0400A",
+  flamePale: "#FFF6D6",
+  /** A number written on an orange bar. */
+  onBar: "#3a1f05",
 } as const;
 
 export type ColourName = keyof typeof colours;
 
 /** What is pressed: orange running to light orange. */
 export const orangeGradient = `linear-gradient(135deg, ${colours.orange}, ${colours.orangeLight})`;
+/** A chart's bar: light orange at its top running to orange at its foot (Progress, 35c-i). */
+export const barGradient = `linear-gradient(to bottom, ${colours.orangeLight}, ${colours.orange})`;
+/** Across a box with a chalk drawing on its right: the box's own colour under the words, the drawing
+ *  showing through on the right (Progress, 35c-i). */
+export const artShade =
+  "linear-gradient(90deg, rgba(18,17,16,0.98) 0%, rgba(18,17,16,0.9) 34%, rgba(18,17,16,0.55) 70%, rgba(18,17,16,0.35) 100%)";
+/** Over a drawing across a box's top: clear at the top, the box's own colour at its foot. */
+export const bandShade =
+  "linear-gradient(to top, rgba(18,17,16,1) 0%, rgba(18,17,16,0.55) 45%, rgba(18,17,16,0.05) 100%)";
+/** Over a box's top drawing that fades into the rest of the box (Progress's calendar). */
+export const topShade =
+  "linear-gradient(to bottom, rgba(18,17,16,0.5) 0%, rgba(18,17,16,0.45) 45%, rgba(18,17,16,1) 100%)";
 /** Over a picture, so the words on it can be read. */
 export const pictureShade =
   "linear-gradient(to top, rgba(10,9,8,0.94) 0%, rgba(10,9,8,0.45) 50%, rgba(10,9,8,0.05) 100%)";
@@ -91,8 +111,38 @@ export const shadows = {
   logo: "0 0 20px rgba(255,138,31,0.35)",
   fieldOn: "0 0 0 3px rgba(255,138,31,0.08)",
   chip: "0 4px 14px rgba(255,138,31,0.3)",
+  /** A chart's best bar, and a lit day's dot (Progress, 35c-i). */
+  barGlow: "0 0 0 6px rgba(255,138,31,0.16), 0 8px 22px rgba(255,138,31,0.35)",
+  dotGlow: "0 0 8px rgba(255,138,31,0.75)",
   sheet: "0 -12px 48px rgba(0,0,0,0.6)",
 } as const;
+
+/** Progress's redrawn boxes (35c-i, Kd's drawing of 2026-11-04, "excellent job"): the records over
+ *  the push-up drawing on dark glass, each sign in a chalk-white ring like the drawing's joint marks;
+ *  the boxes from the bottom under their tab's drawing; the picked tile glowing as the tabs do. */
+export const chalk = {
+  ring: "rgba(255,253,248,0.85)",
+  ringInside: "rgba(10,9,8,0.72)",
+  glass: "rgba(16,15,13,0.62)",
+  glassLine: "rgba(255,255,255,0.12)",
+  bestLine: "rgba(255,138,31,0.45)",
+} as const;
+export const chalkShadows = {
+  ring: "0 0 0 4px rgba(255,138,31,0.10), 0 0 16px rgba(255,138,31,0.35)",
+  best: "0 0 24px rgba(255,138,31,0.18)",
+  picked: "0 8px 26px rgba(255,138,31,0.5)",
+  trained: "0 0 16px rgba(255,138,31,0.18)",
+} as const;
+/** Over the records' drawing on the right: the box's colour on its left, as the Trends boxes, a
+ *  little clearer on the right; and darker at its foot, under the numbers. */
+export const recordsArtShade =
+  "linear-gradient(90deg, rgba(18,17,16,0.98) 0%, rgba(18,17,16,0.85) 30%, rgba(18,17,16,0.4) 65%, rgba(18,17,16,0.12) 100%)";
+export const recordsFootShade = "linear-gradient(to bottom, rgba(18,17,16,0) 40%, rgba(18,17,16,0.45) 100%)";
+/** The best record's glass: warm on its left. */
+export const bestRecordGradient = "linear-gradient(100deg, rgba(64,36,12,0.78), rgba(16,15,13,0.62))";
+/** A box from the bottom's drawing, fading into the box under its title. */
+export const sheetBandShade =
+  "linear-gradient(to top, rgba(18,17,16,1) 0%, rgba(18,17,16,0.6) 40%, rgba(18,17,16,0.1) 80%, rgba(18,17,16,0.35) 100%)";
 
 export const sizes = {
   /** A page's edge, and the gap between its boxes. */

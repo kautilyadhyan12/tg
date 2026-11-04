@@ -130,6 +130,7 @@ function typeInput(req: SaveGymMembershipTypeRequest): repo.MembershipTypeInput 
     contractThen: req.contractThen,
     noticeDays: req.noticeDays,
     leaveFeeMinor: req.leaveFeeMinor,
+    coolingOffDays: req.coolingOffDays,
   };
 }
 

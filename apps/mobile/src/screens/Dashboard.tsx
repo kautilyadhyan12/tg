@@ -21,13 +21,14 @@ import {
   type WorkoutPage,
 } from "@app/shared";
 import { Button } from "../look/Button";
-import { Badge, Card, Pill } from "../look/Card";
+import { Card, Pill } from "../look/Card";
 import { boxShade, colours, orangeGradient, pictureShade, sizes } from "../look/colours";
 import { Icon, type IconName } from "../look/Icon";
 import { Page } from "../look/Page";
 import { pictures, type PictureName } from "../look/pictures";
 import { PictureTop } from "../look/PictureTop";
 import { Steps } from "../look/Progress";
+import { StatTile } from "../look/StatTile";
 import { fonts, Txt } from "../look/Txt";
 import { useSession } from "../session/SessionProvider";
 import { useZoneSaved } from "../session/TimeZoneSync";
@@ -234,25 +235,25 @@ function Totals({ overview, me }: { overview: Read<ProgressOverview>; me: Read<G
         </Txt>
       )}
       <View style={styles.grid}>
-      <Stat
+      <StatTile
         picture="totalworkout"
         icon="dumbbell"
         value={totals === null ? NOT_KNOWN : count(totals.sessions)}
         label="Total Sessions"
       />
-      <Stat
+      <StatTile
         picture="hourstrained"
         icon="clock"
         value={totals === null ? NOT_KNOWN : totals.hours}
         label="Hours Trained"
       />
-      <Stat
+      <StatTile
         picture="caloriesburned"
         icon="flame"
         value={totals === null ? NOT_KNOWN : count(totals.kcal)}
         label="Calories Burned"
       />
-      <Stat
+      <StatTile
         picture="currentlevel"
         icon="trophy"
         tone="gold"
@@ -261,22 +262,6 @@ function Totals({ overview, me }: { overview: Read<ProgressOverview>; me: Read<G
       />
       </View>
     </View>
-  );
-}
-
-function Stat(props: { picture: PictureName; icon: IconName; tone?: "orange" | "gold"; value: string; label: string }) {
-  return (
-    <Card style={styles.stat}>
-      <Image source={pictures[props.picture]} resizeMode="contain" style={styles.statArt} accessible={false} />
-      <View style={[StyleSheet.absoluteFill, styles.statShade]} />
-      <Badge icon={props.icon} tone={props.tone ?? "orange"} />
-      <View>
-        <Txt kind="big">{props.value}</Txt>
-        <Txt kind="small" style={styles.statLabel}>
-          {props.label}
-        </Txt>
-      </View>
-    </Card>
   );
 }
 
@@ -634,14 +619,11 @@ const styles = StyleSheet.create({
   // A little lower than the picture's own foot, on the ground under the figures (Kd).
   footDrop: { transform: [{ translateY: 12 }] },
   boxTitle: { fontSize: 14, lineHeight: 18, color: colours.textSoft },
-  statLabel: { fontSize: 12, lineHeight: 16 },
   centre: { textAlign: "center" },
   fill: { position: "absolute", width: "100%", height: "100%" },
   shade: { experimental_backgroundImage: pictureShade },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   windowWords: { textAlign: "right" },
-  stat: { width: "47%", flexGrow: 1, minHeight: 96, padding: 12, gap: 6 },
-  statArt: { position: "absolute", top: 0, right: 0, width: "65%", height: "100%", opacity: 0.95 },
   statShade: { experimental_backgroundImage: boxShade },
   split: { flexDirection: "row", padding: 0, gap: 0 },
   sideArt: { width: 92 },

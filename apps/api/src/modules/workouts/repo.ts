@@ -393,14 +393,14 @@ export async function getDailyTrend(
   userId: string,
   since: Date | null,
   timeZone: string,
-): Promise<{ date: string; kcal: number; workouts: number }[]> {
-  const rows = await sql<{ day: string; kcal: string; n: string }[]>`
+): Promise<{ date: string; kcal: number; workouts: number; durationMs: number }[]> {
+  const rows = await sql<{ day: string; kcal: string; n: string; dur: string }[]>`
     SELECT to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day,
-           coalesce(sum(kcal_point), 0) AS kcal, count(*) AS n
+           coalesce(sum(kcal_point), 0) AS kcal, count(*) AS n, coalesce(sum(duration_ms), 0) AS dur
     FROM workouts
     WHERE user_id = ${userId} AND (${since === null} OR started_at >= ${since})
     GROUP BY day ORDER BY day ASC`;
-  return rows.map((r) => ({ date: r.day, kcal: Number(r.kcal), workouts: Number(r.n) }));
+  return rows.map((r) => ({ date: r.day, kcal: Number(r.kcal), workouts: Number(r.n), durationMs: Number(r.dur) }));
 }
 
 export async function getWeeklyTrend(
@@ -440,6 +440,8 @@ export async function getFamilyDistribution(
 export interface RecordRef {
   workoutId: string;
   value: number;
+  /** The day it was set, "YYYY-MM-DD" in the person's own time zone (35c-i). */
+  day: string;
 }
 
 async function topWorkoutBy(
@@ -447,28 +449,29 @@ async function topWorkoutBy(
   userId: string,
   column: "kcal_point" | "duration_ms" | "avg_form_score",
   since: Date | null,
+  timeZone: string,
 ): Promise<RecordRef | null> {
   // Fixed column set — identifiers never come from input (R3.8).
   const rows =
     column === "kcal_point"
-      ? await sql<{ id: string; v: number | null }[]>`
-          SELECT id, kcal_point AS v FROM workouts
+      ? await sql<{ id: string; v: number | null; day: string }[]>`
+          SELECT id, kcal_point AS v, to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day FROM workouts
           WHERE user_id = ${userId} AND kcal_point IS NOT NULL
             AND (${since === null} OR started_at >= ${since})
           ORDER BY kcal_point DESC, started_at DESC LIMIT 1`
       : column === "duration_ms"
-        ? await sql<{ id: string; v: number | null }[]>`
-            SELECT id, duration_ms AS v FROM workouts
+        ? await sql<{ id: string; v: number | null; day: string }[]>`
+            SELECT id, duration_ms AS v, to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day FROM workouts
             WHERE user_id = ${userId} AND duration_ms IS NOT NULL
               AND (${since === null} OR started_at >= ${since})
             ORDER BY duration_ms DESC, started_at DESC LIMIT 1`
-        : await sql<{ id: string; v: number | null }[]>`
-            SELECT id, avg_form_score AS v FROM workouts
+        : await sql<{ id: string; v: number | null; day: string }[]>`
+            SELECT id, avg_form_score AS v, to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day FROM workouts
             WHERE user_id = ${userId} AND avg_form_score IS NOT NULL
               AND (${since === null} OR started_at >= ${since})
             ORDER BY avg_form_score DESC, started_at DESC LIMIT 1`;
   const r = rows[0];
-  return r === undefined || r.v === null ? null : { workoutId: r.id, value: r.v };
+  return r === undefined || r.v === null ? null : { workoutId: r.id, value: r.v, day: r.day };
 }
 
 /** Does this user have an EARLIER workout on the same user-local day?
@@ -510,6 +513,7 @@ export async function getPersonalRecords(
   sql: Sql,
   userId: string,
   since: Date | null,
+  timeZone: string,
 ): Promise<{
   maxKcalWorkout: RecordRef | null;
   longestWorkout: RecordRef | null;
@@ -517,9 +521,9 @@ export async function getPersonalRecords(
   totalWorkouts: number;
 }> {
   const [maxKcalWorkout, longestWorkout, bestAvgForm, count] = await Promise.all([
-    topWorkoutBy(sql, userId, "kcal_point", since),
-    topWorkoutBy(sql, userId, "duration_ms", since),
-    topWorkoutBy(sql, userId, "avg_form_score", since),
+    topWorkoutBy(sql, userId, "kcal_point", since, timeZone),
+    topWorkoutBy(sql, userId, "duration_ms", since, timeZone),
+    topWorkoutBy(sql, userId, "avg_form_score", since, timeZone),
     sql<{ n: string }[]>`
       SELECT count(*) AS n FROM workouts
       WHERE user_id = ${userId} AND (${since === null} OR started_at >= ${since})`,
