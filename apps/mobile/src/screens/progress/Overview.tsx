@@ -1,14 +1,14 @@
 import type { ReactNode } from "react";
 import { StyleSheet, View } from "react-native";
 import { personalRecordsSchema, progressPredictionsSchema, type PersonalRecords, type ProgressPredictions } from "@app/shared";
-import { colours, type ColourName } from "../../look/colours";
+import { colours } from "../../look/colours";
 import { Icon, type IconName } from "../../look/Icon";
 import { Rise } from "../../look/Motion";
 import { fonts, Txt } from "../../look/Txt";
 import { useZoneSaved } from "../../session/TimeZoneSync";
 import { useRead } from "../dashboard/useRead";
 import { ForecastDays } from "./charts";
-import { BandBox, BoxTitle, ReadOr } from "./parts";
+import { Badge, BandBox, BoxTitle, ReadOr } from "./parts";
 import { bestTimeMini, forecastMini, plateauMini, predictionsFrom, weekGoalMini, type Mini } from "./predictionWords";
 import { dayKeyOf, recordRows, recordsFrom, type RecordRow } from "./progressRules";
 
@@ -107,13 +107,6 @@ function Steps({ done, of }: { done: number; of: number }) {
   );
 }
 
-const TINTS: Record<RecordRow["icon"], { ink: ColourName; fill: ColourName }> = {
-  clock: { ink: "orangeLight", fill: "orangeFill" },
-  flame: { ink: "orange", fill: "orangeFill" },
-  star: { ink: "pink", fill: "pinkFill" },
-  dumbbell: { ink: "gold", fill: "goldFill" },
-  zap: { ink: "blue", fill: "blueFill" },
-};
 
 function Records({ records }: { records: PersonalRecords }) {
   const [first, ...rest] = recordRows(records, dayKeyOf(new Date()));
@@ -130,12 +123,9 @@ function Records({ records }: { records: PersonalRecords }) {
 }
 
 function RecordTile({ row, wide = false }: { row: RecordRow; wide?: boolean }) {
-  const tint = TINTS[row.icon];
   return (
     <View style={[styles.record, wide ? styles.recordWide : styles.recordHalf]} accessible accessibilityLabel={`${row.label}, ${row.value}${row.day === null ? "" : `, ${row.day}`}`}>
-      <View style={[styles.recordIcon, { backgroundColor: colours[row.held ? tint.fill : "fill"] }]}>
-        <Icon name={row.icon} size={18} colour={row.held ? tint.ink : "textFaint"} />
-      </View>
+      <Badge icon={row.icon} tint={row.held ? row.icon : "none"} size={wide ? 48 : 40} />
       <View style={styles.grow}>
         <Txt kind="tiny">{row.label}</Txt>
         <Txt kind={wide ? "big" : "strong"} colour={row.held ? "text" : "textSoft"} numberOfLines={1}>
@@ -161,6 +151,5 @@ const styles = StyleSheet.create({
   record: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12, borderRadius: 16, backgroundColor: colours.fill, borderWidth: 1, borderColor: colours.line },
   recordWide: { backgroundColor: colours.orangeFill, borderColor: colours.orangeLine },
   recordHalf: { width: "47%", flexGrow: 1 },
-  recordIcon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   grow: { flex: 1 },
 });

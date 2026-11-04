@@ -180,7 +180,7 @@ export type WeekGoalPrediction = z.infer<typeof weekGoalPredictionSchema>;
 /** One figure's average in the 4 weeks before and the last 2 weeks; null where either
  *  side has nothing to average or the earlier one is 0. */
 export const steadyFigureSchema = z
-  .object({ before: int, recent: int, changePct: z.number() })
+  .object({ before: z.number(), recent: z.number(), changePct: z.number() })
   .nullable();
 
 /** few_workouts: under the gate · nothing_to_compare: enough workouts, and no figure

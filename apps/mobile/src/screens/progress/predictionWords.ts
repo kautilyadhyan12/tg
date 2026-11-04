@@ -68,10 +68,17 @@ const MOVED: Record<Figure, readonly [string, string]> = {
   form: ["Form slipping", "Form rising"],
 };
 
+/** A figure to one decimal, as the server sends it, the ".0" left off: 87.5, 21. */
+export function tenths(v: number): string {
+  const t = Math.round(Math.abs(v) * 10);
+  const whole = count(Math.trunc(t / 10));
+  const sign = v < 0 && t > 0 ? "-" : "";
+  return t % 10 === 0 ? `${sign}${whole}` : `${sign}${whole}.${String(t % 10)}`;
+}
+
 const changeWords = (pct: number) => {
-  const whole = Math.round(Math.abs(pct));
-  if (whole === 0) return "";
-  return pct < 0 ? ` ▼${String(whole)}%` : ` ▲${String(whole)}%`;
+  if (Math.round(Math.abs(pct) * 10) === 0) return "";
+  return pct < 0 ? ` ▼${tenths(-pct)}%` : ` ▲${tenths(pct)}%`;
 };
 
 /** The web's Plateau Detector: the last 2 weeks beside the 4 weeks before them. */
@@ -85,7 +92,7 @@ export function plateauMini(s: SteadyPace): Mini {
     const f = s[key];
     if (f !== null) figures.push({ key, ...f });
   }
-  const lines = figures.map((f) => `${FIGURE_NAMES[f.key]} ${count(f.before)} → ${count(f.recent)}${changeWords(f.changePct)}`);
+  const lines = figures.map((f) => `${FIGURE_NAMES[f.key]} ${tenths(f.before)} → ${tenths(f.recent)}${changeWords(f.changePct)}`);
   if (s.steady) return { value: "Steady", lines, warm: false };
   const moved = figures.reduce<(typeof figures)[number] | null>((most, f) => (most === null || Math.abs(f.changePct) > Math.abs(most.changePct) ? f : most), null);
   if (moved === null) return { value: "Steady", lines, warm: false };

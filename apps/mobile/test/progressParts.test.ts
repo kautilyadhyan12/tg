@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { bestTimeSchema, bodyMeasurementSchema, calorieForecastSchema, progressPredictionsSchema, weekGoalPredictionSchema, type BodyMeasurement, type SteadyPace } from "@app/shared";
+import { bestTimeSchema, bodyMeasurementSchema, workoutListItemSchema, calorieForecastSchema, progressPredictionsSchema, weekGoalPredictionSchema, type BodyMeasurement, type SteadyPace } from "@app/shared";
 import { average, bestIndex, columnCentres, firstFigure, guides, monotoneControls, monotonePath, rangeWords, tagWords } from "../src/screens/progress/chartRules";
-import { activeDaysWords, daySaid, level, monthCells, monthRange, monthWords, nextMonth, squareSaid, yearColumns } from "../src/screens/progress/calendarRules";
+import { activeDaysWords, clockWords, daySaid, daySum, dayTitle, dayWindow, dayWorkouts, level, monthCells, monthPickSaid, monthRange, monthsToPick, monthWords, nextMonth, squareSaid, yearColumns } from "../src/screens/progress/calendarRules";
+import { addDays, dayKeyOf } from "../src/screens/progress/progressRules";
 import { entryRows, latestWeight, slices } from "../src/screens/progress/otherRules";
-import { bestTimeMini, forecastMini, plateauMini, predictionsFrom, weekGoalMini } from "../src/screens/progress/predictionWords";
+import { bestTimeMini, forecastMini, plateauMini, predictionsFrom, tenths, weekGoalMini } from "../src/screens/progress/predictionWords";
 
 const TODAY = "2026-11-04"; // a Wednesday
 
@@ -28,7 +29,7 @@ const REAL = progressPredictionsSchema.parse({
     totalHigh: 100,
   },
   weekGoal: { available: false, reason: "few_weeks", weeks: 2, needed: 3 },
-  steady: { available: true, steady: false, recentDays: 14, kcal: { before: 21, recent: 21, changePct: 0 }, minutes: { before: 58, recent: 38, changePct: -34.8 }, form: { before: 88, recent: 84, changePct: -4.6 } },
+  steady: { available: true, steady: false, recentDays: 14, kcal: { before: 21, recent: 21, changePct: 0 }, minutes: { before: 57.5, recent: 37.5, changePct: -34.8 }, form: { before: 87.5, recent: 83.5, changePct: -4.6 } },
   bestTime: { available: true, best: "evening", slots: [{ slot: "afternoon", workouts: 1, avgForm: 82 }, { slot: "evening", workouts: 7, avgForm: 86 }] },
   limitedToDays: null,
 });
@@ -129,8 +130,8 @@ describe("Predictions, from the walk member's real reply", () => {
   it("names the best time of day and how many of the workouts fell in it", () => {
     expect(bestTimeMini(REAL.bestTime)).toEqual({ value: "Evening", lines: ["7 of 8 workouts", "5 pm – 10 pm"], warm: false, slot: "evening" });
   });
-  it("calls the biggest move: workouts 35% shorter", () => {
-    expect(plateauMini(REAL.steady)).toEqual({ value: "Shorter workouts", lines: ["Minutes 58 → 38 ▼35%", "Calories 21 → 21", "Form 88 → 84 ▼5%"], warm: true });
+  it("calls the biggest move, every figure to one decimal so its sum adds up: 87.5 → 83.5 is 4.6% down", () => {
+    expect(plateauMini(REAL.steady)).toEqual({ value: "Shorter workouts", lines: ["Minutes 57.5 → 37.5 ▼34.8%", "Calories 21 → 21", "Form 87.5 → 83.5 ▼4.6%"], warm: true });
   });
   it("counts the weeks the weekly goal still waits for", () => {
     expect(weekGoalMini(REAL.weekGoal)).toEqual({ value: "2 of 3 weeks", lines: ["Ready next week"], warm: false, steps: { done: 2, of: 3 } });
@@ -138,6 +139,23 @@ describe("Predictions, from the walk member's real reply", () => {
   it("says what it is read from", () => {
     expect(predictionsFrom(REAL.workouts)).toBe("From your 8 workouts");
     expect(predictionsFrom(1)).toBe("From your 1 workout");
+  });
+});
+
+describe("a figure to one decimal", () => {
+  it.each([
+    [87.5, "87.5"],
+    [21, "21"],
+    [34.8, "34.8"],
+    [4.6, "4.6"],
+    [0.04, "0"],
+    [1234.56, "1,234.6"],
+    [99.96, "100"],
+  ])("%d reads %s", (v, words) => {
+    expect(tenths(v)).toBe(words);
+  });
+  it("leaves off a change too small to show", () => {
+    expect(plateauMini({ available: true, steady: true, recentDays: 14, kcal: { before: 300, recent: 300.1, changePct: 0.03 }, minutes: null, form: null }).lines).toEqual(["Calories 300 → 300.1"]);
   });
 });
 
@@ -160,12 +178,12 @@ describe("Predictions, every other state the server sends", () => {
   it.each([
     [{ available: false, reason: "few_workouts", recent: 2, before: 3, needed: 8, neededEachSide: 3 } as const, "Not yet", ["5 of 8 workouts in the last 6 weeks"], false],
     [{ available: false, reason: "nothing_to_compare", recent: 4, before: 5, needed: 8, neededEachSide: 3 } as const, "Not yet", ["Nothing to compare yet"], false],
-    [pace({ steady: true, minutes: { before: 40, recent: 41, changePct: 2.5 } }), "Steady", ["Minutes 40 → 41 ▲3%"], false],
+    [pace({ steady: true, minutes: { before: 40, recent: 41, changePct: 2.5 } }), "Steady", ["Minutes 40 → 41 ▲2.5%"], false],
     [pace({ minutes: { before: 30, recent: 45, changePct: 50 } }), "Longer workouts", ["Minutes 30 → 45 ▲50%"], false],
-    [pace({ kcal: { before: 300, recent: 200, changePct: -33.3 }, minutes: { before: 40, recent: 42, changePct: 5 } }), "Fewer calories", ["Minutes 40 → 42 ▲5%", "Calories 300 → 200 ▼33%"], true],
+    [pace({ kcal: { before: 300, recent: 200, changePct: -33.3 }, minutes: { before: 40, recent: 42, changePct: 5 } }), "Fewer calories", ["Minutes 40 → 42 ▲5%", "Calories 300 → 200 ▼33.3%"], true],
     [pace({ kcal: { before: 100, recent: 130, changePct: 30 } }), "More calories", ["Calories 100 → 130 ▲30%"], false],
-    [pace({ form: { before: 70, recent: 85, changePct: 21.4 } }), "Form rising", ["Form 70 → 85 ▲21%"], false],
-    [pace({ form: { before: 90, recent: 80, changePct: -11.1 } }), "Form slipping", ["Form 90 → 80 ▼11%"], true],
+    [pace({ form: { before: 70, recent: 85, changePct: 21.4 } }), "Form rising", ["Form 70 → 85 ▲21.4%"], false],
+    [pace({ form: { before: 90, recent: 80, changePct: -11.1 } }), "Form slipping", ["Form 90 → 80 ▼11.1%"], true],
   ])("plateau %j", (s, value, lines, warm) => {
     expect(plateauMini(s)).toEqual({ value, lines, warm });
   });
@@ -270,5 +288,82 @@ describe("Body", () => {
       ["Typed by you", "69.9 kg", null],
     ]);
     expect(entryRows([typed], "imperial")[0]?.weight).toBe("154 lb");
+  });
+});
+
+// The day box (Kd's click-through, 35c-i): the worst thing it could do is show a workout under a day it
+// was not done on. Its window is the day as the phone's own clock keys it, the same keys the calendar's
+// cells and today use: its first instant and its last are that day, the instant it ends is the next.
+describe("a day tapped on the calendar", () => {
+  // With the days the clocks change in Europe (29 Mar, 25 Oct) and America (8 Mar, 1 Nov).
+  const keys = ["2026-10-26", "2026-01-01", "2025-12-31", "2026-03-29", "2026-10-25", "2026-03-08", "2026-11-01", "2024-02-29", TODAY];
+  it.each(keys)("reads %s from its first instant to the first instant of the next day, and no further", (key) => {
+    const { from, to } = dayWindow(key);
+    expect(dayKeyOf(new Date(from))).toBe(key);
+    expect(dayKeyOf(new Date(Date.parse(from) - 1))).toBe(addDays(key, -1));
+    expect(dayKeyOf(new Date(Date.parse(to) - 1))).toBe(key);
+    expect(dayKeyOf(new Date(to))).toBe(addDays(key, 1));
+    expect(from).toMatch(/Z$/);
+    expect(to).toMatch(/Z$/);
+  });
+
+  it("names the day, with its year only when it is not this year's", () => {
+    expect(dayTitle("2026-10-26", TODAY)).toBe("Monday 26 October");
+    expect(dayTitle("2025-12-31", TODAY)).toBe("Wednesday 31 December 2025");
+  });
+
+  it.each([
+    [new Date(2026, 9, 26, 18, 30), "6:30 pm"],
+    [new Date(2026, 9, 27, 13, 55), "1:55 pm"],
+    [new Date(2026, 9, 27, 0, 5), "12:05 am"],
+    [new Date(2026, 9, 27, 12, 0), "12:00 pm"],
+    [new Date(2026, 9, 27, 9, 7), "9:07 am"],
+  ])("tells the time %s as %s", (at, words) => {
+    expect(clockWords(at)).toBe(words);
+  });
+
+  // The walk member's own two workouts of 26 October (aihg_b, 2026-11-04), as the server lists them,
+  // the newest first.
+  const item = (o: Record<string, unknown>) =>
+    workoutListItemSchema.parse({ platform: "android", setsCount: 3, totalReps: 30, kcalCalcVersion: 1, qualityFlags: [], ...o });
+  const late = item({ id: "8d1b5b8e-1c3e-4f53-9d0e-8a9c2b1f0a11", startedAt: new Date(2026, 9, 26, 18, 31).toISOString(), durationMs: 35 * 60_000, avgFormScore: 83, kcalPoint: 21 });
+  const early = item({ id: "2f6a9c4d-7e1b-4a8f-b3c2-5d6e7f8a9b0c", startedAt: new Date(2026, 9, 26, 18, 30).toISOString(), durationMs: 40 * 60_000, avgFormScore: 84, kcalPoint: 21 });
+
+  it("lists the day's workouts earliest first, each with its time, minutes, sets, reps, form and calories", () => {
+    expect(dayWorkouts([late, early]).map((w) => [w.when, w.what, w.kcal])).toEqual([
+      ["6:30 pm · 40 min", "3 sets · 30 reps · form 84", "21"],
+      ["6:31 pm · 35 min", "3 sets · 30 reps · form 83", "21"],
+    ]);
+    expect(dayWorkouts([early])[0]?.said).toBe("6:30 pm · 40 min, 3 sets · 30 reps · form 84, 21 kcal");
+    expect(daySum([late, early])).toEqual({ workouts: "2", trained: "1h 15m", kcal: "42" });
+  });
+
+  it("leaves out what a workout does not have, and never adds up a number nobody has", () => {
+    const bare = item({ id: "5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d", startedAt: new Date(2026, 9, 26, 7, 0).toISOString(), setsCount: 1, totalReps: 1, durationMs: null, avgFormScore: null, kcalPoint: null });
+    expect(dayWorkouts([bare]).map((w) => [w.when, w.what, w.kcal])).toEqual([["7:00 am", "1 set · 1 rep", null]]);
+    expect(daySum([bare])).toEqual({ workouts: "1", trained: null, kcal: null });
+    expect(daySum([bare, early])).toEqual({ workouts: "2", trained: "40 min", kcal: "21" });
+  });
+});
+
+describe("the box that picks a month", () => {
+  const counts = new Map([["2026-10-14", 1], ["2026-10-26", 2], ["2026-10-27", 1], ["2025-11-20", 0], ["2025-12-02", 1]]);
+  it("holds every month of the server's year, the newest year first, this year's later months shut", () => {
+    const years = monthsToPick({ y: 2025, m: 11 }, { y: 2026, m: 11 }, counts);
+    expect(years.map((y) => y.year)).toEqual([2026, 2025]);
+    expect(years[0]?.months.map((p) => p.label)).toEqual(["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]);
+    expect(years[0]?.months.filter((p) => !p.open).map((p) => p.label)).toEqual(["Dec"]);
+    expect(years[1]?.months.map((p) => p.label)).toEqual(["Nov", "Dec"]);
+    expect(years[1]?.months.every((p) => p.open)).toBe(true);
+  });
+  it("counts each month's days with a workout, not its workouts", () => {
+    const years = monthsToPick({ y: 2025, m: 11 }, { y: 2026, m: 11 }, counts);
+    const oct = years[0]?.months.find((p) => p.label === "Oct");
+    expect(oct?.active).toBe(3);
+    expect(years[1]?.months.map((p) => p.active)).toEqual([0, 1]);
+    expect(oct === undefined ? "" : monthPickSaid(oct)).toBe("October 2026, 3 active days");
+  });
+  it("is one year where the server's days are all this year's", () => {
+    expect(monthsToPick({ y: 2026, m: 8 }, { y: 2026, m: 11 }, counts).map((y) => y.months.filter((p) => p.open).map((p) => p.label))).toEqual([["Aug", "Sep", "Oct", "Nov"]]);
   });
 });

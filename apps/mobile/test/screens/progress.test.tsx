@@ -20,7 +20,7 @@ const PREDICTIONS = {
   workouts: 8,
   forecast: { available: true, days: [1, 2, 3, 4, 5, 6, 7].map((n, i) => ({ date: dayKey(-n), kcalPoint: [0, 0, 10, 0, 20, 10, 10][i] ?? 0, kcalLow: 0, kcalHigh: [0, 0, 20, 0, 40, 20, 20][i] ?? 0 })), totalPoint: 50, totalLow: 0, totalHigh: 100 },
   weekGoal: { available: false, reason: "few_weeks", weeks: 2, needed: 3 },
-  steady: { available: true, steady: false, recentDays: 14, kcal: { before: 21, recent: 21, changePct: 0 }, minutes: { before: 58, recent: 38, changePct: -34.8 }, form: { before: 88, recent: 84, changePct: -4.6 } },
+  steady: { available: true, steady: false, recentDays: 14, kcal: { before: 21, recent: 21, changePct: 0 }, minutes: { before: 57.5, recent: 37.5, changePct: -34.8 }, form: { before: 87.5, recent: 83.5, changePct: -4.6 } },
   bestTime: { available: true, best: "evening", slots: [{ slot: "afternoon", workouts: 1, avgForm: 82 }, { slot: "evening", workouts: 7, avgForm: 86 }] },
   limitedToDays: null,
 };
@@ -33,8 +33,9 @@ const MEASUREMENTS = { items: [{ id: "76f3008b-7b75-4846-af4e-9e8278028445", mea
 type Answer = Reply | Promise<Reply>;
 const ok = (body: unknown) => (): Reply => ({ status: 200, body });
 
-/** The server: the trend and the families answered by their period (the kit's fake reads only the path). */
-function progressServer(byPeriod: Record<string, () => Answer>, more: Record<string, () => Answer> = {}) {
+/** The server: the trend and the families answered by their period, a day's workouts by its window
+ *  (the kit's fake reads only the path). */
+function progressServer(byPeriod: Record<string, () => Answer>, more: Record<string, () => Answer> = {}, byDay: (from: string, to: string) => Answer = () => ({ status: 200, body: { items: [], nextCursor: null, limitedToDays: null, hasAnyWorkouts: false } })) {
   const server = fakeServer({
     "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }),
     [PREDICTIONS_READ]: ok(PREDICTIONS),
@@ -45,8 +46,17 @@ function progressServer(byPeriod: Record<string, () => Answer>, more: Record<str
     ...more,
   });
   const periods: string[] = [];
+  const days: { from: string; to: string }[] = [];
   const ask: Ask = async (url: string, init: AskInit) => {
     const u = new URL(url);
+    if (u.pathname === "/v1/workouts") {
+      const from = u.searchParams.get("from") ?? "";
+      const to = u.searchParams.get("to") ?? "";
+      // The Dashboard's recent workouts read the list too, with no day.
+      if (from !== "") days.push({ from, to });
+      const reply = await byDay(from, to);
+      return { ok: reply.status < 300, status: reply.status, json: () => Promise.resolve(reply.body) };
+    }
     if (u.pathname !== "/v1/progress/trend") return server.ask(url, init);
     const period = u.searchParams.get("period") ?? "";
     periods.push(period);
@@ -54,8 +64,20 @@ function progressServer(byPeriod: Record<string, () => Answer>, more: Record<str
     const reply = route === undefined ? { status: 200, body: trend([]) } : await route();
     return { ok: reply.status < 300, status: reply.status, json: () => Promise.resolve(reply.body) };
   };
-  return { ask, periods };
+  return { ask, periods, days, asked: server.asked };
 }
+
+/** A workout of the day `back` days ago, at `hour` on the phone's clock, as the server lists it. */
+const listed = (id: string, back: number, hour: number, minutes: number, form: number) => {
+  const at = new Date();
+  at.setDate(at.getDate() - back);
+  at.setHours(hour, 30, 0, 0);
+  return { id, startedAt: at.toISOString(), platform: "android", setsCount: 3, totalReps: 30, avgFormScore: form, durationMs: minutes * 60_000, kcalPoint: 21, kcalCalcVersion: 1, qualityFlags: [] };
+};
+const pickPeriod = async (now: string, to: string) => {
+  await fireEvent.press(screen.getByRole("button", { name: `Period: ${now}. Change` }));
+  await fireEvent.press(await screen.findByRole("button", { name: to }));
+};
 
 async function openProgress(ask: Ask) {
   await render(<App extra={extra} store={memoryStore(kept(1))} ask={ask} />);
@@ -76,7 +98,7 @@ describe("Me → Progress", () => {
     expect(screen.queryByText(/AI/)).toBeNull();
     expect(screen.getByText("From your 8 workouts")).toBeTruthy();
     expect(screen.getByLabelText("Best time, Evening, 7 of 8 workouts, 5 pm – 10 pm")).toBeTruthy();
-    expect(screen.getByLabelText("Plateau detector, Shorter workouts, Minutes 58 → 38 ▼35%, Calories 21 → 21, Form 88 → 84 ▼5%")).toBeTruthy();
+    expect(screen.getByLabelText("Plateau detector, Shorter workouts, Minutes 57.5 → 37.5 ▼34.8%, Calories 21 → 21, Form 87.5 → 83.5 ▼4.6%")).toBeTruthy();
     expect(screen.getByLabelText("Weekly goal, 2 of 3 weeks, Ready next week")).toBeTruthy();
     expect(await screen.findByText("Personal Records")).toBeTruthy();
     expect(screen.getByText("From all your workouts")).toBeTruthy();
@@ -97,8 +119,9 @@ describe("Me → Progress", () => {
     await openProgress(server.ask);
     await openTab("Trends");
     await waitFor(() => { expect(server.periods).toContain("30d"); });
-    await fireEvent.press(screen.getByRole("radio", { name: "7 Days" }));
+    await pickPeriod("Last 30 days", "Last 7 days");
     expect(await screen.findByLabelText(/^Calories burned, 550 kcal: /)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Period: Last 7 days. Change" })).toBeTruthy();
     expect(screen.getByLabelText("Consistency: 2 of 7 days with a workout, 29 percent")).toBeTruthy();
     expect(screen.getByText("Workouts Per Day")).toBeTruthy();
     expect(screen.getByText("· 1h")).toBeTruthy();
@@ -112,7 +135,7 @@ describe("Me → Progress", () => {
     await openProgress(server.ask);
     await openTab("Trends");
     expect(await screen.findByLabelText(/^Calories burned, 920 kcal: /)).toBeTruthy();
-    expect(screen.getByRole("radio", { name: "30 Days" }).props.accessibilityState).toEqual({ selected: true });
+    expect(screen.getByRole("button", { name: "Period: Last 30 days. Change" })).toBeTruthy();
     expect(screen.getByText("Workouts Per Week")).toBeTruthy();
     expect(screen.getByLabelText("Consistency: 3 of 30 days with a workout, 10 percent")).toBeTruthy();
     expect(await screen.findByLabelText("Squats, 100 percent, 24 sets")).toBeTruthy();
@@ -125,7 +148,7 @@ describe("Me → Progress", () => {
     await openTab("Trends");
     expect(await screen.findByLabelText("Consistency: 1 of 30 days with a workout, 3 percent")).toBeTruthy();
     expect(screen.queryByText(/Your plan shows/)).toBeNull();
-    await fireEvent.press(screen.getByRole("radio", { name: "1 Year" }));
+    await pickPeriod("Last 30 days", "Last year");
     expect(await screen.findByText("Your plan shows your last 90 days. Any older workouts are still saved.")).toBeTruthy();
     expect(screen.getByLabelText("Consistency: 1 of 90 days with a workout, 1 percent")).toBeTruthy();
   });
@@ -149,6 +172,69 @@ describe("Me → Progress", () => {
     await fireEvent.press(screen.getByRole("radio", { name: "Year" }));
     expect(await screen.findByText("Last 365 days")).toBeTruthy();
     expect(screen.getByText("2 active days")).toBeTruthy();
+  });
+
+  // The worst thing the day box could do: show a workout under a day it was not done on. Each day
+  // tapped reads its own window, and the answer for the day tapped first, coming late, is never drawn
+  // under the day tapped after it.
+  it("Calendar: a day tapped reads that day's own workouts, and drops a late answer for the day left", async () => {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const keyOf = (d: Date) => `${String(d.getFullYear())}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    let late: (r: Reply) => void = () => undefined;
+    const server = progressServer({}, {}, (from) => {
+      if (new Date(from).getDate() === yesterday.getDate()) return new Promise<Reply>((resolve) => { late = resolve; });
+      return { status: 200, body: { items: [listed("8d1b5b8e-1c3e-4f53-9d0e-8a9c2b1f0a11", 0, 7, 25, 91)], nextCursor: null, limitedToDays: null, hasAnyWorkouts: true } };
+    });
+    await openProgress(server.ask);
+    await openTab("Calendar");
+    // Yesterday is on this month's page unless today is the 1st; the year's squares hold it either way.
+    if (new Date().getDate() === 1) await fireEvent.press(screen.getByRole("radio", { name: "Year" }));
+    await fireEvent.press(await screen.findByRole("button", { name: /, 2 workouts$/ }));
+    await waitFor(() => { expect(server.days).toHaveLength(1); });
+    const asked = server.days[0];
+    expect(asked === undefined ? "" : keyOf(new Date(asked.from))).toBe(keyOf(yesterday));
+    expect(asked === undefined ? 0 : Date.parse(asked.to) - Date.parse(asked.from)).toBeGreaterThanOrEqual(23 * 3_600_000);
+    await fireEvent.press(within(screen.getByTestId("sheet")).getByRole("button", { name: "Close" }));
+    await fireEvent.press(screen.getByRole("button", { name: /, today, 1 workout$/ }));
+    expect(await screen.findByLabelText("7:30 am · 25 min, 3 sets · 30 reps · form 91, 21 kcal")).toBeTruthy();
+    await act(async () => {
+      late({ status: 200, body: { items: [listed("2f6a9c4d-7e1b-4a8f-b3c2-5d6e7f8a9b0c", 1, 18, 40, 84), listed("5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d", 1, 18, 35, 83)], nextCursor: null, limitedToDays: null, hasAnyWorkouts: true } });
+      await Promise.resolve();
+    });
+    expect(screen.queryByLabelText(/form 84/)).toBeNull();
+    expect(screen.getByLabelText("1 workout")).toBeTruthy();
+  });
+
+  it("Calendar: a day with no workout says so, and the month's name opens every month", async () => {
+    const server = progressServer({});
+    await openProgress(server.ask);
+    await openTab("Calendar");
+    const now = new Date();
+    const name = `${["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"][now.getMonth()] ?? ""} ${String(now.getFullYear())}`;
+    await fireEvent.press(await screen.findByRole("button", { name: `${name}. Pick a month` }));
+    expect(await screen.findByText("Pick a month")).toBeTruthy();
+    const thisMonth = screen.getByRole("button", { name: new RegExp(`^${name}, \\d+ active days?$`) });
+    expect(thisMonth.props.accessibilityState).toEqual({ selected: true, disabled: false });
+    await fireEvent.press(thisMonth);
+    await waitFor(() => { expect(screen.queryByText("Pick a month")).toBeNull(); });
+    // A day before today with no workout: the 1st, or today's own page's first day when that is today.
+    if (now.getDate() > 2) {
+      await fireEvent.press(screen.getByRole("button", { name: / 1 \w+, no workout$/ }));
+      expect(await screen.findByText("No workout this day")).toBeTruthy();
+    }
+  });
+
+  it("builds every tab once: going back to a tab reads nothing again", async () => {
+    const server = progressServer({});
+    await openProgress(server.ask);
+    expect(await screen.findByLabelText("Total workouts, 9")).toBeTruthy();
+    await openTab("Trends");
+    await openTab("Calendar");
+    await openTab("Overview");
+    expect(screen.getByLabelText("Total workouts, 9")).toBeTruthy();
+    expect(server.asked.filter((a) => a.path === RECORDS_READ)).toHaveLength(1);
+    expect(server.asked.filter((a) => a.path === HEATMAP_READ)).toHaveLength(1);
   });
 
   it("Body shows the newest weight in the person's units, and its entries", async () => {

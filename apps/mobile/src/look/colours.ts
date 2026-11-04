@@ -73,6 +73,8 @@ export type ColourName = keyof typeof colours;
 
 /** What is pressed: orange running to light orange. */
 export const orangeGradient = `linear-gradient(135deg, ${colours.orange}, ${colours.orangeLight})`;
+/** The picked row of a box from the bottom: orange fading to the right (Progress's period, 35c-i). */
+export const pickedRowGradient = "linear-gradient(100deg, rgba(255,138,31,0.24), rgba(255,138,31,0.06))";
 /** A chart's bar: light orange at its top running to orange at its foot (Progress, 35c-i). */
 export const barGradient = `linear-gradient(to bottom, ${colours.orangeLight}, ${colours.orange})`;
 /** Across a box with a chalk drawing on its right: the box's own colour under the words, the drawing
@@ -116,6 +118,19 @@ export const shadows = {
   dotGlow: "0 0 8px rgba(255,138,31,0.75)",
   sheet: "0 -12px 48px rgba(0,0,0,0.6)",
 } as const;
+
+/** Personal Records' badges (35c-i, Kd's pick A of three drawings): a disc lit from its top left,
+ *  light to deep, glowing in its own colour; grey for a record not yet set. */
+export const badges = {
+  clock: { light: "#FFD08A", deep: "#F06A0A", glow: "0 6px 18px rgba(255,120,20,0.45)" },
+  flame: { light: "#FFB070", deep: "#C2260C", glow: "0 6px 18px rgba(230,70,20,0.42)" },
+  star: { light: "#FBB6D8", deep: "#BE185D", glow: "0 6px 18px rgba(219,39,119,0.4)" },
+  dumbbell: { light: "#FDE68A", deep: "#B7791F", glow: "0 6px 18px rgba(202,138,4,0.4)" },
+  zap: { light: "#A5C8FF", deep: "#1D4ED8", glow: "0 6px 18px rgba(37,99,235,0.42)" },
+  none: { light: "#6B655D", deep: "#2B2824", glow: "0 0 0 rgba(0,0,0,0)" },
+} as const;
+/** A badge's shine: white at its top, its foot a little darker. */
+export const badgeShine = { top: colours.passLight, foot: colours.passDark } as const;
 
 export const sizes = {
   /** A page's edge, and the gap between its boxes. */

@@ -7,11 +7,11 @@ import { count, hoursWords } from "../dashboard/words";
 // and that day is not counted. Pure, so tested alone.
 
 export const PERIODS: readonly { key: ProgressPeriod; label: string; days: number | null }[] = [
-  { key: "7d", label: "7 Days", days: 7 },
-  { key: "30d", label: "30 Days", days: 30 },
-  { key: "90d", label: "90 Days", days: 90 },
-  { key: "1y", label: "1 Year", days: 365 },
-  { key: "all", label: "All Time", days: null },
+  { key: "7d", label: "Last 7 days", days: 7 },
+  { key: "30d", label: "Last 30 days", days: 30 },
+  { key: "90d", label: "Last 90 days", days: 90 },
+  { key: "1y", label: "Last year", days: 365 },
+  { key: "all", label: "All time", days: null },
 ];
 
 const DAY = 86_400_000;

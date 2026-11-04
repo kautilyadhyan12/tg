@@ -164,7 +164,8 @@ const mean = (values: readonly number[]): number | null =>
 
 function figure(before: number | null, recent: number | null): { before: number; recent: number; changePct: number } | null {
   if (before === null || recent === null || before === 0) return null;
-  return { before: Math.round(before), recent: Math.round(recent), changePct: round1(((recent - before) / before) * 100) };
+  // To one decimal, as the change is: 87.5 → 83.5 is 4.6 % down, where 88 → 84 would read as 4.5 %.
+  return { before: round1(before), recent: round1(recent), changePct: round1(((recent - before) / before) * 100) };
 }
 
 /** The last 2 weeks against the 4 weeks before them: calories, minutes and form, each

@@ -1,13 +1,35 @@
 import { useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
-import { progressHeatmapSchema, type ProgressHeatmap } from "@app/shared";
+import { progressHeatmapSchema, workoutPageSchema, type ProgressHeatmap } from "@app/shared";
 import { colours, shadows, sizes } from "../../look/colours";
 import { Icon } from "../../look/Icon";
 import { Rise } from "../../look/Motion";
+import { Sheet } from "../../look/Sheet";
 import { fonts, Txt } from "../../look/Txt";
 import { useZoneSaved } from "../../session/TimeZoneSync";
 import { useRead } from "../dashboard/useRead";
-import { activeDaysWords, daySaid, level, monthCells, monthOf, monthRange, monthWords, nextMonth, sameMonth, squareSaid, yearColumns, type Month } from "./calendarRules";
+import { count } from "../dashboard/words";
+import {
+  activeDaysWords,
+  dayTitle,
+  daySaid,
+  daySum,
+  dayWindow,
+  dayWorkouts,
+  level,
+  monthCells,
+  monthOf,
+  monthPickSaid,
+  monthRange,
+  monthWords,
+  monthsToPick,
+  nextMonth,
+  sameMonth,
+  squareSaid,
+  yearColumns,
+  type Month,
+  type MonthPick,
+} from "./calendarRules";
 import { ArtBox, BoxTitle, Flame, ReadOr } from "./parts";
 import { dayKeyOf } from "./progressRules";
 
@@ -38,6 +60,8 @@ function Activity({ heatmap }: { heatmap: ProgressHeatmap }) {
   const range = monthRange(today, days);
   const [view, setView] = useState<"month" | "year">("month");
   const [month, setMonth] = useState<Month>(monthOf(today));
+  const [picking, setPicking] = useState(false);
+  const [day, setDay] = useState<string | null>(null);
   return (
     <>
       <BoxTitle
@@ -67,15 +91,174 @@ function Activity({ heatmap }: { heatmap: ProgressHeatmap }) {
       {/* Room for the trainer's drawing above the days. */}
       <View style={styles.room} />
       {view === "month" ? (
-        <MonthView month={month} setMonth={setMonth} first={range.first} last={range.last} workouts={workouts} today={today} />
+        <MonthView
+          month={month}
+          setMonth={setMonth}
+          first={range.first}
+          last={range.last}
+          workouts={workouts}
+          today={today}
+          onPick={() => {
+            setPicking(true);
+          }}
+          onDay={setDay}
+        />
       ) : (
-        <YearView today={today} days={days} workouts={workouts} />
+        <YearView today={today} days={days} workouts={workouts} onDay={setDay} />
       )}
+      <Sheet
+        open={picking}
+        title="Pick a month"
+        onClose={() => {
+          setPicking(false);
+        }}
+      >
+        <MonthPicker
+          years={monthsToPick(range.first, range.last, workouts)}
+          month={month}
+          onPick={(m) => {
+            setMonth(m);
+            setView("month");
+            setPicking(false);
+          }}
+        />
+      </Sheet>
+      <Sheet
+        open={day !== null}
+        title={day === null ? "" : dayTitle(day, today)}
+        onClose={() => {
+          setDay(null);
+        }}
+      >
+        {/* One read for each day, so a late answer for a day left behind is never drawn under another. */}
+        {day === null ? null : <DayBox key={day} day={day} />}
+      </Sheet>
     </>
   );
 }
 
-function MonthView({ month, setMonth, first, last, workouts, today }: { month: Month; setMonth: (m: Month) => void; first: Month; last: Month; workouts: ReadonlyMap<string, number>; today: string }) {
+function MonthPicker({ years, month, onPick }: { years: readonly { year: number; months: readonly MonthPick[] }[]; month: Month; onPick: (m: Month) => void }) {
+  return (
+    <View style={styles.picker}>
+      {years.map((y) => (
+        <View key={y.year} style={styles.pickYear}>
+          <Txt kind="tiny" style={styles.head}>
+            {String(y.year)}
+          </Txt>
+          <View style={styles.pickGrid}>
+            {y.months.map((p) => {
+              const on = sameMonth(p.month, month);
+              return (
+                <Pressable
+                  key={p.label}
+                  accessibilityRole="button"
+                  accessibilityLabel={monthPickSaid(p)}
+                  accessibilityState={{ selected: on, disabled: !p.open }}
+                  disabled={!p.open}
+                  onPress={() => {
+                    onPick(p.month);
+                  }}
+                  style={({ pressed }) => [styles.pickMonth, on ? styles.pickOn : null, pressed ? styles.pressed : null, p.open ? null : styles.pickShut]}
+                >
+                  <Txt kind="strong" colour={on ? "onOrange" : p.open ? "text" : "textFaint"}>
+                    {p.label}
+                  </Txt>
+                  {p.open ? (
+                    <View style={styles.pickDays}>
+                      {p.active > 0 && !on ? <Flame size={9} /> : null}
+                      <Txt kind="tiny" colour={on ? "onBar" : p.active > 0 ? "orangeLight" : "textFaint"} style={styles.boldWords}>
+                        {p.active === 1 ? "1 day" : `${count(p.active)} days`}
+                      </Txt>
+                    </View>
+                  ) : null}
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+const WORKOUTS_MOST = 100;
+
+function DayBox({ day }: { day: string }) {
+  const { from, to } = dayWindow(day);
+  const list = useRead(`/v1/workouts?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&limit=${String(WORKOUTS_MOST)}`, workoutPageSchema);
+  return (
+    <ReadOr read={list.read} again={list.again} what="This day’s workouts">
+      {(page) => {
+        if (page.items.length === 0) {
+          return (
+            <View style={styles.dayNone}>
+              <Txt kind="small">No workout this day</Txt>
+            </View>
+          );
+        }
+        const sum = daySum(page.items);
+        return (
+          <View style={styles.dayBox}>
+            <View style={styles.daySum}>
+              <DayStat value={sum.workouts} label={page.items.length === 1 ? "workout" : "workouts"} />
+              {sum.trained === null ? null : <DayStat value={sum.trained} label="trained" />}
+              {sum.kcal === null ? null : <DayStat value={sum.kcal} label="kcal" warm />}
+            </View>
+            {dayWorkouts(page.items).map((w) => (
+              <View key={w.id} style={styles.dayWorkout} accessible accessibilityLabel={w.said}>
+                <Flame size={28} glow />
+                <View style={styles.grow}>
+                  <Txt kind="strong">{w.when}</Txt>
+                  <Txt kind="tiny">{w.what}</Txt>
+                </View>
+                {w.kcal === null ? null : (
+                  <View style={styles.dayKcal}>
+                    <Txt kind="strong" colour="orangeLight">
+                      {w.kcal}
+                    </Txt>
+                    <Txt kind="tiny">kcal</Txt>
+                  </View>
+                )}
+              </View>
+            ))}
+            {page.nextCursor === null ? null : <Txt kind="tiny">{`Showing the first ${String(WORKOUTS_MOST)} workouts of the day`}</Txt>}
+          </View>
+        );
+      }}
+    </ReadOr>
+  );
+}
+
+function DayStat({ value, label, warm = false }: { value: string; label: string; warm?: boolean }) {
+  return (
+    <View style={styles.dayStat} accessible accessibilityLabel={`${value} ${label}`}>
+      <Txt kind="big" colour={warm ? "orangeLight" : "text"} numberOfLines={1} fit>
+        {value}
+      </Txt>
+      <Txt kind="tiny">{label}</Txt>
+    </View>
+  );
+}
+
+function MonthView({
+  month,
+  setMonth,
+  first,
+  last,
+  workouts,
+  today,
+  onPick,
+  onDay,
+}: {
+  month: Month;
+  setMonth: (m: Month) => void;
+  first: Month;
+  last: Month;
+  workouts: ReadonlyMap<string, number>;
+  today: string;
+  onPick: () => void;
+  onDay: (key: string) => void;
+}) {
   const cells = monthCells(month, workouts, today);
   const earlier = !sameMonth(month, first);
   const later = !sameMonth(month, last);
@@ -86,9 +269,12 @@ function MonthView({ month, setMonth, first, last, workouts, today }: { month: M
           <Pressable accessibilityRole="button" accessibilityLabel="Month before" accessibilityState={{ disabled: !earlier }} disabled={!earlier} onPress={() => { setMonth(nextMonth(month, -1)); }} style={styles.arrow}>
             <Icon name="back" size={18} colour={earlier ? "text" : "textFaint"} />
           </Pressable>
-          <Txt kind="h3" numberOfLines={1}>
-            {monthWords(month)}
-          </Txt>
+          <Pressable accessibilityRole="button" accessibilityLabel={`${monthWords(month)}. Pick a month`} onPress={onPick} style={styles.monthName}>
+            <Txt kind="h3" numberOfLines={1}>
+              {monthWords(month)}
+            </Txt>
+            <Icon name="down" size={16} colour="orangeLight" />
+          </Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel="Month after" accessibilityState={{ disabled: !later }} disabled={!later} onPress={() => { setMonth(nextMonth(month, 1)); }} style={styles.arrow}>
             <Icon name="go" size={18} colour={later ? "text" : "textFaint"} />
           </Pressable>
@@ -113,7 +299,16 @@ function MonthView({ month, setMonth, first, last, workouts, today }: { month: M
               c === null ? (
                 <View key={`blank${String(i)}`} style={styles.cell} />
               ) : (
-                <View key={c.key} style={styles.cell} accessible accessibilityLabel={daySaid(c)}>
+                <Pressable
+                  key={c.key}
+                  style={({ pressed }) => [styles.cell, pressed ? styles.pressed : null]}
+                  accessibilityRole={c.later ? undefined : "button"}
+                  accessibilityLabel={daySaid(c)}
+                  disabled={c.later}
+                  onPress={() => {
+                    onDay(c.key);
+                  }}
+                >
                   {c.workouts > 0 ? (
                     <Rise delay={200 + (w * 7 + i) * 12} style={styles.flame}>
                       <Flame size={36} glow />
@@ -129,7 +324,7 @@ function MonthView({ month, setMonth, first, last, workouts, today }: { month: M
                       {`×${String(c.workouts)}`}
                     </Txt>
                   ) : null}
-                </View>
+                </Pressable>
               ),
             )}
           </View>
@@ -160,7 +355,7 @@ function weeksOf<T>(cells: readonly (T | null)[]): (T | null)[][] {
 
 const SQUARE = 13;
 
-function YearView({ today, days, workouts }: { today: string; days: number; workouts: ReadonlyMap<string, number> }) {
+function YearView({ today, days, workouts, onDay }: { today: string; days: number; workouts: ReadonlyMap<string, number>; onDay: (key: string) => void }) {
   const columns = yearColumns(today, days, workouts);
   const scroll = useRef<ScrollView>(null);
   const lit = [...workouts.entries()].filter(([, n]) => n > 0).length;
@@ -186,14 +381,21 @@ function YearView({ today, days, workouts }: { today: string; days: number; work
                 {col.label}
               </Txt>
             </View>
-            {col.squares.map((s) => (
-              <View
-                key={s.key}
-                style={[styles.square, s.outside ? styles.squareOut : LEVELS[level(s.workouts)]]}
-                accessible={s.workouts > 0}
-                accessibilityLabel={s.workouts > 0 ? squareSaid(s, today) : undefined}
-              />
-            ))}
+            {col.squares.map((s) =>
+              s.workouts > 0 ? (
+                <Pressable
+                  key={s.key}
+                  style={[styles.square, LEVELS[level(s.workouts)]]}
+                  accessibilityRole="button"
+                  accessibilityLabel={squareSaid(s, today)}
+                  onPress={() => {
+                    onDay(s.key);
+                  }}
+                />
+              ) : (
+                <View key={s.key} style={[styles.square, s.outside ? styles.squareOut : LEVELS[level(s.workouts)]]} />
+              ),
+            )}
           </View>
         ))}
       </ScrollView>
@@ -220,7 +422,24 @@ const styles = StyleSheet.create({
   grid: { gap: 4 },
   week: { flexDirection: "row" },
   headCell: { flex: 1, alignItems: "center" },
-  cell: { flex: 1, minHeight: 50, alignItems: "center", justifyContent: "center" },
+  cell: { flex: 1, minHeight: 50, alignItems: "center", justifyContent: "center", borderRadius: 14 },
+  pressed: { opacity: 0.7 },
+  monthName: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: sizes.press },
+  picker: { gap: 14 },
+  pickYear: { gap: 8 },
+  pickGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  pickMonth: { width: "22%", flexGrow: 1, minHeight: 62, alignItems: "center", justifyContent: "center", gap: 2, borderRadius: 14, backgroundColor: colours.fill, borderWidth: 1, borderColor: colours.line },
+  pickOn: { backgroundColor: colours.orange, borderColor: colours.orange, boxShadow: shadows.chip },
+  pickShut: { opacity: 0.45 },
+  pickDays: { flexDirection: "row", alignItems: "center", gap: 3 },
+  boldWords: { fontFamily: fonts.bold },
+  dayNone: { alignItems: "center", padding: 22, borderRadius: 16, backgroundColor: colours.fill, borderWidth: 1, borderColor: colours.line },
+  dayBox: { gap: 8 },
+  daySum: { flexDirection: "row", gap: 8, marginBottom: 6 },
+  dayStat: { flex: 1, minHeight: 64, justifyContent: "center", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14, backgroundColor: colours.fill, borderWidth: 1, borderColor: colours.line },
+  dayWorkout: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderRadius: 16, backgroundColor: colours.fill, borderWidth: 1, borderColor: colours.line },
+  dayKcal: { alignItems: "flex-end" },
+  grow: { flex: 1 },
   head: { fontFamily: fonts.bold, letterSpacing: 0.8 },
   flame: { position: "absolute", top: 0, bottom: 2, alignItems: "center", justifyContent: "center" },
   dayRing: { minWidth: 30, minHeight: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", marginTop: 6 },

@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Animated, Image, Pressable, StyleSheet, useWindowDimensions, View, type StyleProp, type ViewStyle } from "react-native";
 import Svg, { Circle, Defs, LinearGradient, Path, RadialGradient, Stop } from "react-native-svg";
 import { Button } from "../../look/Button";
-import { artShade, bandShade, colours, orangeGradient, pictureFadeUnderWords, shadows, sizes, topShade } from "../../look/colours";
+import { artShade, badges, badgeShine, bandShade, colours, orangeGradient, pickedRowGradient, pictureFadeUnderWords, shadows, sizes, topShade } from "../../look/colours";
 import { Icon, type IconName } from "../../look/Icon";
 import { useLoop } from "../../look/Motion";
 import { pictures, type PictureName } from "../../look/pictures";
@@ -139,6 +139,81 @@ export function ReadOr<T>({ read, again, what, children }: { read: Read<T>; agai
 }
 
 /** The flame of a day trained, gold at its tip running to deep orange, its heart pale. */
+/** A glowing pill that opens a box from the bottom to pick from: the period on Trends. */
+export function PickButton({ label, say, onPress }: { label: string; say: string; onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={say} onPress={onPress} style={({ pressed }) => [styles.pick, pressed ? styles.pickPressed : null]}>
+      <Txt kind="small" colour="orangeLight" numberOfLines={1} style={styles.pickWords}>
+        {label}
+      </Txt>
+      <Icon name="down" size={16} colour="orangeLight" />
+    </Pressable>
+  );
+}
+
+/** The rows of a box from the bottom to pick one from, the picked one lit with a tick (Kd's drawing 1). */
+export function PickList<V extends string>({ options, selected, onPick }: { options: readonly { value: V; label: string }[]; selected: V; onPick: (value: V) => void }) {
+  return (
+    <View style={styles.pickList}>
+      {options.map((o) => {
+        const on = o.value === selected;
+        return (
+          <Pressable
+            key={o.value}
+            accessibilityRole="button"
+            accessibilityLabel={o.label}
+            accessibilityState={{ selected: on }}
+            onPress={() => {
+              onPick(o.value);
+            }}
+            style={({ pressed }) => [styles.pickRow, on ? styles.pickRowOn : null, pressed ? styles.pickPressed : null]}
+          >
+            <Txt colour={on ? "orangeLight" : "text"} style={styles.pickRowWords}>
+              {o.label}
+            </Txt>
+            {on ? <Icon name="check" size={20} colour="orangeLight" /> : null}
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+export type BadgeTint = keyof typeof badges;
+
+/** A record's badge: a disc lit from its top left, a dark gap and a thin ring of its colour round it,
+ *  a white sign on it, glowing in its own colour. */
+export function Badge({ icon, tint, size }: { icon: IconName; tint: BadgeTint; size: number }) {
+  const t = badges[tint];
+  const box = size + 10;
+  const mid = box / 2;
+  const r = size / 2;
+  return (
+    <View style={{ width: box, height: box, alignItems: "center", justifyContent: "center" }} accessible={false}>
+      <View style={{ position: "absolute", width: size, height: size, borderRadius: r, backgroundColor: t.deep, boxShadow: t.glow }} />
+      <Svg width={box} height={box} style={StyleSheet.absoluteFill}>
+        <Defs>
+          <RadialGradient id="badgeDisc" cx="34%" cy="28%" r="75%">
+            <Stop offset="0" stopColor={t.light} />
+            <Stop offset="1" stopColor={t.deep} />
+          </RadialGradient>
+          <LinearGradient id="badgeShine" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor={badgeShine.top} stopOpacity={0.34} />
+            <Stop offset="0.45" stopColor={badgeShine.top} stopOpacity={0} />
+            <Stop offset="0.7" stopColor={badgeShine.foot} stopOpacity={0} />
+            <Stop offset="1" stopColor={badgeShine.foot} stopOpacity={0.24} />
+          </LinearGradient>
+        </Defs>
+        <Circle cx={mid} cy={mid} r={r + 3.75} fill="none" stroke={t.deep} strokeOpacity={0.65} strokeWidth={1.5} />
+        <Circle cx={mid} cy={mid} r={r + 1.5} fill="none" stroke={colours.box} strokeWidth={3} />
+        <Circle cx={mid} cy={mid} r={r} fill="url(#badgeDisc)" />
+        <Circle cx={mid} cy={mid} r={r - 0.5} fill="url(#badgeShine)" />
+      </Svg>
+      <Icon name={icon} size={Math.round(size * 0.46)} colour={tint === "none" ? "textSoft" : "onOrange"} />
+    </View>
+  );
+}
+
 export function Flame({ size, glow = false }: { size: number; glow?: boolean }) {
   const tall = size * (28 / 24);
   const flame = (
@@ -179,6 +254,14 @@ export function Flame({ size, glow = false }: { size: number; glow?: boolean }) 
 
 const styles = StyleSheet.create({
   clip: { overflow: "hidden" },
+  pick: { flexDirection: "row", alignSelf: "flex-start", alignItems: "center", gap: 8, minHeight: sizes.press, paddingHorizontal: 18, borderRadius: sizes.round, backgroundColor: colours.orangeFill, borderWidth: 1, borderColor: colours.orangeLine, boxShadow: shadows.chip },
+  pickPressed: { opacity: 0.8 },
+  pickWords: { fontFamily: fonts.bold },
+  pickList: { gap: 8 },
+  // The same border picked or not: a gradient on a box whose border changes crashed Android (31a).
+  pickRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, minHeight: 54, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 16, backgroundColor: colours.fill, borderWidth: 1, borderColor: colours.line },
+  pickRowOn: { backgroundColor: colours.orangeFill, experimental_backgroundImage: pickedRowGradient, borderColor: colours.fieldOnLine },
+  pickRowWords: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 22, flexShrink: 1 },
   photo: { position: "absolute", left: 0, right: 0, bottom: 0, width: "100%" },
   fade: { experimental_backgroundImage: pictureFadeUnderWords },
   words: { position: "absolute", left: sizes.edge, right: sizes.edge, bottom: 14, gap: 4 },

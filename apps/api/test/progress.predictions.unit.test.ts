@@ -212,6 +212,21 @@ describe("a steady pace", () => {
     expect(s).toMatchObject({ steady: false, kcal: { changePct: 0 }, minutes: { before: 30, recent: 30, changePct: 0 }, form: { before: 80, recent: 90, changePct: 12.5 } });
   });
 
+  // The walk member's own workouts (aihg_b, 2026-11-04): form 89, 88, 87, 86 then 85, 84, 83, 82, the
+  // minutes 65 down to 30 by 5. Shown whole, 88 → 84 beside "5 %" did not add up (Kd's click-through).
+  it("gives the averages to one decimal, as the change is", () => {
+    const at = (days: number[], forms: number[], mins: number[]) =>
+      days.map((d, i) => w(back(d), { kcal: 21, formScore: forms[i] ?? null, durationMs: (mins[i] ?? 0) * 60_000 }));
+    const s = steadyPace(TODAY, [...at([21, 18, 16, 14], [89, 88, 87, 86], [65, 60, 55, 50]), ...at([11, 9, 9, 8], [85, 84, 83, 82], [45, 40, 35, 30])]);
+    expect(s).toMatchObject({
+      available: true,
+      steady: false,
+      form: { before: 87.5, recent: 83.5, changePct: -4.6 },
+      minutes: { before: 57.5, recent: 37.5, changePct: -34.8 },
+      kcal: { before: 21, recent: 21, changePct: 0 },
+    });
+  });
+
   it("leaves out a figure nobody has or that was 0 before, and judges on the rest", () => {
     const s = steadyPace(TODAY, [...recent(4, { formScore: null, kcal: 50 }), ...before(4, { formScore: null, kcal: 0 })]);
     expect(s).toMatchObject({ available: true, steady: true, kcal: null, form: null, minutes: { changePct: 0 } });

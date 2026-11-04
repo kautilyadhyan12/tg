@@ -1,17 +1,17 @@
 import { useState } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { progressDistributionSchema, progressTrendSchema, type ProgressDistribution, type ProgressPeriod } from "@app/shared";
-import { Chip } from "../../look/Chip";
-import { colours, sizes } from "../../look/colours";
+import { colours } from "../../look/colours";
 import { Icon } from "../../look/Icon";
 import { Rise } from "../../look/Motion";
+import { Sheet } from "../../look/Sheet";
 import { Txt } from "../../look/Txt";
 import { useZoneSaved } from "../../session/TimeZoneSync";
 import { useRead } from "../dashboard/useRead";
 import { count, hoursWords } from "../dashboard/words";
 import { CaloriesChart, DayDots, FamilyRing, FillRing, sliceColour, WeekBars } from "./charts";
 import { setsWords, slices } from "./otherRules";
-import { ArtBox, BoxTitle, ReadOr } from "./parts";
+import { ArtBox, BoxTitle, PickButton, PickList, ReadOr } from "./parts";
 import {
   PERIODS,
   addDays,
@@ -28,23 +28,45 @@ import {
   type Window,
 } from "./progressRules";
 
-// Progress's Trends (ROADMAP Stage 5 35c-i): the five periods, then Calories Burned, Workouts Per
+// Progress's Trends (ROADMAP Stage 5 35c-i): the period, then Calories Burned, Workouts Per
 // Week, Consistency and Exercise Categories, each over the period's whole days ending today.
 
 export const trendRead = (period: ProgressPeriod) => `/v1/progress/trend?period=${period}`;
 export const distributionRead = (period: ProgressPeriod) => `/v1/progress/distribution?period=${period}`;
 const EACH = { day: "Each day", week: "Each week", month: "Each month", year: "Each year" } as const;
 
+const PERIOD_OPTIONS = PERIODS.map((p) => ({ value: p.key, label: p.label }));
+
 export function Trends() {
   const [period, setPeriod] = useState<ProgressPeriod>("30d");
+  const [picking, setPicking] = useState(false);
+  const label = PERIODS.find((p) => p.key === period)?.label ?? "";
   return (
     <>
-      {/* One row, swiped sideways where the phone is too narrow for all five. */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.swipe} contentContainerStyle={styles.chips} accessibilityRole="radiogroup">
-        {PERIODS.map((p) => (
-          <Chip key={p.key} label={p.label} small on={period === p.key} onPress={() => { setPeriod(p.key); }} />
-        ))}
-      </ScrollView>
+      {/* One button: the five in a box from the bottom, as Kd's drawing 1 (35c-i). */}
+      <PickButton
+        label={label}
+        say={`Period: ${label}. Change`}
+        onPress={() => {
+          setPicking(true);
+        }}
+      />
+      <Sheet
+        open={picking}
+        title="Period"
+        onClose={() => {
+          setPicking(false);
+        }}
+      >
+        <PickList
+          options={PERIOD_OPTIONS}
+          selected={period}
+          onPick={(value) => {
+            setPeriod(value);
+            setPicking(false);
+          }}
+        />
+      </Sheet>
       {/* One read for each period, drawn only under its own chip: a late answer for the chip left
           behind is dropped with its boxes, and the boxes rise in again. */}
       <PeriodTrends key={period} period={period} />
@@ -202,8 +224,6 @@ function Families({ d, w }: { d: ProgressDistribution; w: Window }) {
 
 const styles = StyleSheet.create({
   // To the phone's edge, with room for the lit chip's glow.
-  swipe: { marginHorizontal: -sizes.edge, marginVertical: -8 },
-  chips: { gap: 8, paddingHorizontal: sizes.edge, paddingVertical: 8 },
   grow: { flex: 1 },
   between: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
   cut: { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 12, borderRadius: 14, backgroundColor: colours.orangeFill },

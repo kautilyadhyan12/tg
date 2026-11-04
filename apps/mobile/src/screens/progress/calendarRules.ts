@@ -1,4 +1,5 @@
-import { count } from "../dashboard/words";
+import type { WorkoutListItem } from "@app/shared";
+import { count, hoursWords } from "../dashboard/words";
 import { addDays } from "./progressRules";
 
 // Progress's Calendar (ROADMAP Stage 5 35c-i): a month of days with a flame on each day trained, and
@@ -116,3 +117,91 @@ export function yearColumns(today: string, days: number, workouts: ReadonlyMap<s
 
 /** How bright a day's square is: none, one workout, two, three or more. */
 export const level = (workouts: number): 0 | 1 | 2 | 3 => (workouts <= 0 ? 0 : workouts === 1 ? 1 : workouts === 2 ? 2 : 3);
+
+export interface MonthPick {
+  month: Month;
+  /** "Oct". */
+  label: string;
+  /** Days with a workout in it. */
+  active: number;
+  /** Inside the server's year of days, so it can be opened. */
+  open: boolean;
+}
+
+/** Every month the calendar can open, for the box that picks one: the newest year first, each year's
+ *  months in order; the first year from its first month, this year to December, its later months shut. */
+export function monthsToPick(first: Month, last: Month, workouts: ReadonlyMap<string, number>): { year: number; months: MonthPick[] }[] {
+  const active = new Map<string, number>();
+  for (const [key, n] of workouts) if (n > 0) active.set(key.slice(0, 7), (active.get(key.slice(0, 7)) ?? 0) + 1);
+  const at = (mo: Month) => mo.y * 12 + mo.m;
+  const years: { year: number; months: MonthPick[] }[] = [];
+  for (let y = last.y; y >= first.y; y -= 1) {
+    const months: MonthPick[] = [];
+    for (let m = y === first.y ? first.m : 1; m <= 12; m += 1) {
+      const month = { y, m };
+      months.push({ month, label: SHORT[m - 1] ?? "", active: active.get(`${String(y)}-${pad(m)}`) ?? 0, open: at(month) >= at(first) && at(month) <= at(last) });
+    }
+    years.push({ year: y, months });
+  }
+  return years;
+}
+
+/** What a screen reader says for a month to pick: "October 2026, 7 active days". */
+export const monthPickSaid = (p: MonthPick) => `${monthWords(p.month)}, ${p.active === 1 ? "1 active day" : `${count(p.active)} active days`}`;
+
+/** A day as the phone's clock has it, from its midnight to the next, as instants: the window the
+ *  server's list of workouts is read over (`from` in, `to` out). */
+export function dayWindow(key: string): { from: string; to: string } {
+  const { y, m, d } = parts(key);
+  return { from: new Date(y, m - 1, d).toISOString(), to: new Date(y, m - 1, d + 1).toISOString() };
+}
+
+/** The day box's title: "Monday 26 October", with its year when it is not this year's. */
+export function dayTitle(key: string, today: string): string {
+  const names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+  const { y, m, d } = parts(key);
+  const year = key.slice(0, 4) === today.slice(0, 4) ? "" : ` ${String(y)}`;
+  return `${names[weekday(key)] ?? ""} ${String(d)} ${MONTHS[m - 1] ?? ""}${year}`;
+}
+
+/** "6:30 pm", on the phone's clock. */
+export function clockWords(at: Date): string {
+  const h = at.getHours();
+  return `${String(h % 12 === 0 ? 12 : h % 12)}:${pad(at.getMinutes())} ${h < 12 ? "am" : "pm"}`;
+}
+
+export interface DayWorkout {
+  id: string;
+  /** "6:30 pm · 40 min". */
+  when: string;
+  /** "3 sets · 30 reps · form 84". */
+  what: string;
+  /** "21", or null where the workout has no calories. */
+  kcal: string | null;
+  said: string;
+}
+
+const many = (n: number, one: string, more: string) => `${count(n)} ${n === 1 ? one : more}`;
+
+/** A day's workouts, earliest first, in the words of the day box. */
+export function dayWorkouts(items: readonly WorkoutListItem[]): DayWorkout[] {
+  return [...items]
+    .sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt))
+    .map((w) => {
+      const when = [clockWords(new Date(w.startedAt)), w.durationMs === null ? null : hoursWords(w.durationMs)].filter((x) => x !== null).join(" · ");
+      const what = [many(w.setsCount, "set", "sets"), many(w.totalReps, "rep", "reps"), w.avgFormScore === null ? null : `form ${String(w.avgFormScore)}`].filter((x) => x !== null).join(" · ");
+      const kcal = w.kcalPoint === null ? null : count(w.kcalPoint);
+      return { id: w.id, when, what, kcal, said: [when, what, kcal === null ? null : `${kcal} kcal`].filter((x) => x !== null).join(", ") };
+    });
+}
+
+/** The day's three numbers above its workouts: how many, the time trained, the calories. */
+export function daySum(items: readonly WorkoutListItem[]): { workouts: string; trained: string | null; kcal: string | null } {
+  const ms = items.reduce((n, w) => n + (w.durationMs ?? 0), 0);
+  const withKcal = items.filter((w) => w.kcalPoint !== null);
+  return {
+    workouts: count(items.length),
+    trained: items.some((w) => w.durationMs !== null) ? hoursWords(ms) : null,
+    kcal: withKcal.length === 0 ? null : count(withKcal.reduce((n, w) => n + (w.kcalPoint ?? 0), 0)),
+  };
+}
