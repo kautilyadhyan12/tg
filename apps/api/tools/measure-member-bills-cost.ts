@@ -17,6 +17,9 @@
 // With `BILL_DAY=1` (1 to 28) every membership is billed from that day of the month (18y), its
 // first period the part month before it.
 //
+// Then cancel early with the early cancellation fee (18v-ii-b): one press on a person of the gym of
+// 2,000, each inside a twelve-month minimum term, a new person each time.
+//
 // Then a fee while frozen (18z): every membership frozen 40 days ago with a fee of its own, so the
 // run opens this month's fee for every person at once (more than any gym will ever have frozen),
 // and every other hour opens nothing.
@@ -27,7 +30,7 @@ import { cpus } from "node:os";
 import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 import postgres from "postgres";
 import { openDueBills } from "../src/modules/orgs/memberships/billsRepo.js";
-import { getHeldMemberships, recordMemberPayment } from "../src/modules/orgs/memberships/heldService.js";
+import { getHeldMemberships, moveHeldMembership, recordMemberPayment } from "../src/modules/orgs/memberships/heldService.js";
 import { openDueFreezeFees } from "../src/modules/orgs/memberships/freezeFees.js";
 
 const url = process.env["DATABASE_URL"] ?? "";
@@ -174,7 +177,20 @@ const calls: [string, () => Promise<unknown>][] = [
       return recordMemberPayment(deps, big.owner, big.id, m?.entry_id ?? "", m?.id ?? "", { requestKey: randomUUID(), periodIndex: 1, amountMinor: 4999, method: "cash" });
     },
   ],
+  [
+    "cancel early with the fee (a new person each time)",
+    async () => {
+      const [m] = await sql<{ id: string; entry_id: string }[]>`
+        SELECT h.id, h.entry_id FROM gym_held_memberships h
+        WHERE h.gym_id = ${big.id} AND h.status = 'active' AND NOT h.left_early AND h.leave_fee_minor IS NOT NULL ORDER BY random() LIMIT 1`;
+      return moveHeldMembership(deps, big.owner, big.id, m?.entry_id ?? "", m?.id ?? "", { type: "cancel", when: "leave_early" }, null, null, 0, 9900);
+    },
+  ],
 ];
+// Every membership of the gym of 2,000 inside a twelve-month minimum term with a fee (18v-ii-b).
+await sql`
+  UPDATE gym_held_memberships SET contract_periods = 12, contract_then = 'renews', leave_fee_minor = 9900
+  WHERE gym_id = ${big.id} AND kind = 'recurring'`;
 for (const [name, call] of calls) {
   await call();
   const walls: number[] = [];
