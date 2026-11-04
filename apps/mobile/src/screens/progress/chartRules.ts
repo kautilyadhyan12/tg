@@ -79,10 +79,11 @@ export function firstFigure(v: number): number {
   return Math.floor(v / mag) * mag;
 }
 
-/** The faint guide lines' numbers: 0, about half the top and about the top, never two the same. */
+/** The faint guide lines' numbers: 0 and two even steps of a round whole number, none above the top. */
 export function guides(top: number): number[] {
   if (top <= 0) return [0];
-  return [...new Set([0, firstFigure(top / 2), firstFigure(top)])];
+  const step = Math.max(1, firstFigure(top / 2));
+  return [0, step, 2 * step].filter((g) => g <= top);
 }
 
 /** The bar a chart picks first: the highest, the later of two the same; null where every bar is 0. */

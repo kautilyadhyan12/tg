@@ -73,6 +73,11 @@ export function daySaid(c: DayCell): string {
   return `${names[weekday(c.key)] ?? ""} ${String(c.date)} ${MONTHS[m - 1] ?? ""}${c.today ? ", today" : ""}${what}`;
 }
 
+/** What a screen reader says for a lit square of the year: "Monday 26 October, 2 workouts". */
+export function squareSaid(s: YearSquare, today: string): string {
+  return daySaid({ key: s.key, date: parts(s.key).d, workouts: s.workouts, today: s.key === today, later: false });
+}
+
 /** The months the calendar can show: from the first month of the server's year of days to this one. */
 export function monthRange(today: string, days: number): { first: Month; last: Month } {
   return { first: monthOf(addDays(today, -(days - 1))), last: monthOf(today) };

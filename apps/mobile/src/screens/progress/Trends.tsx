@@ -104,8 +104,7 @@ function PeriodTrends({ period }: { period: ProgressPeriod }) {
                         </Txt>
                       }
                     />
-                    <Txt kind="tiny">{EACH[step]}</Txt>
-                    <CaloriesChart bars={bars} step={step} total={sum.kcal} />
+                    <CaloriesChart bars={bars} step={step} total={sum.kcal} each={EACH[step]} />
                   </ArtBox>
                 </Rise>
                 <Rise delay={140}>

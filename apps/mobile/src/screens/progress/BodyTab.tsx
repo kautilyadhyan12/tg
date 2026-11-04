@@ -41,7 +41,7 @@ function Body({ items, units }: { items: readonly BodyMeasurement[]; units: stri
       ) : (
         <View accessible accessibilityLabel={`Weight ${weightWords(latest.weightKg, units)}, ${dateWords(entryDay(latest))}`}>
           <Txt kind="hero">{weightWords(latest.weightKg, units)}</Txt>
-          <Txt kind="small">{`Weight · ${latest.source === "self_reported" ? "typed by you" : "logged"} ${dateWords(entryDay(latest))}`}</Txt>
+          <Txt kind="small">{`Weight · logged ${dateWords(entryDay(latest))}${latest.source === "self_reported" ? ", typed by you" : ""}`}</Txt>
         </View>
       )}
       {rows.length === 0 ? null : (
@@ -65,7 +65,7 @@ function Body({ items, units }: { items: readonly BodyMeasurement[]; units: stri
 }
 
 const styles = StyleSheet.create({
-  entries: { gap: 8, width: "88%" },
+  entries: { gap: 8 },
   heading: { fontFamily: fonts.bold, textTransform: "uppercase", letterSpacing: 0.9 },
   entry: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12, borderRadius: 14, backgroundColor: colours.overWords, borderWidth: 1, borderColor: colours.line },
   grow: { flex: 1 },

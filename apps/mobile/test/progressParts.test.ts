@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { bestTimeSchema, bodyMeasurementSchema, calorieForecastSchema, progressPredictionsSchema, weekGoalPredictionSchema, type BodyMeasurement, type SteadyPace } from "@app/shared";
 import { average, bestIndex, columnCentres, firstFigure, guides, monotoneControls, monotonePath, rangeWords, tagWords } from "../src/screens/progress/chartRules";
-import { activeDaysWords, daySaid, level, monthCells, monthRange, monthWords, nextMonth, yearColumns } from "../src/screens/progress/calendarRules";
+import { activeDaysWords, daySaid, level, monthCells, monthRange, monthWords, nextMonth, squareSaid, yearColumns } from "../src/screens/progress/calendarRules";
 import { entryRows, latestWeight, slices } from "../src/screens/progress/otherRules";
 import { bestTimeMini, forecastMini, plateauMini, predictionsFrom, weekGoalMini } from "../src/screens/progress/predictionWords";
 
@@ -76,10 +76,22 @@ describe("the charts' numbers", () => {
   ])("%d rounded down to its first figure is %d", (v, out) => {
     expect(firstFigure(v)).toBeCloseTo(out, 9);
   });
-  it("guide lines: 0, about half, about the top, never twice the same", () => {
+  it("guide lines: 0 and two even round steps, none above the top", () => {
     expect(guides(63)).toEqual([0, 30, 60]);
-    expect(guides(1)).toEqual([0, 0.5, 1]);
+    expect(guides(168)).toEqual([0, 80, 160]);
+    expect(guides(7)).toEqual([0, 3, 6]);
+    expect(guides(1)).toEqual([0, 1]);
     expect(guides(0)).toEqual([0]);
+  });
+  it.each([1, 2, 5, 19, 63, 99, 100, 168, 999, 1000, 4321])("the guides under %d are evenly spaced whole numbers", (top) => {
+    const g = guides(top);
+    const step = g[1] ?? 0;
+    expect(Number.isInteger(step)).toBe(true);
+    g.forEach((v, i) => {
+      expect(v).toBe(i * step);
+    });
+    expect(g.at(-1) ?? 0).toBeLessThanOrEqual(top);
+    expect(2 * step).toBeGreaterThan(top / 4);
   });
   it("picks the highest bar, the later of two the same, none where all are 0", () => {
     expect(bestIndex([0, 42, 63, 63, 0])).toBe(3);
@@ -193,6 +205,10 @@ describe("the calendar's month", () => {
     expect(say(14)).toBe("Wednesday 14 October, 1 workout");
     expect(say(26)).toBe("Monday 26 October, 2 workouts");
     expect(say(15)).toBe("Thursday 15 October, no workout");
+  });
+  it("says a lit square of the year as its day, not its key", () => {
+    expect(squareSaid({ key: "2026-10-26", workouts: 2, outside: false }, TODAY)).toBe("Monday 26 October, 2 workouts");
+    expect(squareSaid({ key: TODAY, workouts: 1, outside: false }, TODAY)).toMatch(/, today, 1 workout$/);
   });
   it("moves a month at a time across a year's end, within the server's year of days", () => {
     expect(nextMonth({ y: 2026, m: 1 }, -1)).toEqual({ y: 2025, m: 12 });

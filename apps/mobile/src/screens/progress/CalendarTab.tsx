@@ -7,7 +7,7 @@ import { Rise } from "../../look/Motion";
 import { fonts, Txt } from "../../look/Txt";
 import { useZoneSaved } from "../../session/TimeZoneSync";
 import { useRead } from "../dashboard/useRead";
-import { activeDaysWords, daySaid, level, monthCells, monthOf, monthRange, monthWords, nextMonth, sameMonth, yearColumns, type Month } from "./calendarRules";
+import { activeDaysWords, daySaid, level, monthCells, monthOf, monthRange, monthWords, nextMonth, sameMonth, squareSaid, yearColumns, type Month } from "./calendarRules";
 import { ArtBox, BoxTitle, Flame, ReadOr } from "./parts";
 import { dayKeyOf } from "./progressRules";
 
@@ -116,11 +116,11 @@ function MonthView({ month, setMonth, first, last, workouts, today }: { month: M
                 <View key={c.key} style={styles.cell} accessible accessibilityLabel={daySaid(c)}>
                   {c.workouts > 0 ? (
                     <Rise delay={200 + (w * 7 + i) * 12} style={styles.flame}>
-                      <Flame size={30} />
+                      <Flame size={36} glow />
                     </Rise>
                   ) : null}
-                  <View style={[styles.dayRing, c.today ? styles.today : null]}>
-                    <Txt kind="small" colour={c.workouts > 0 ? "onOrange" : c.later ? "textFaint" : "textSoft"} style={c.workouts > 0 ? styles.litNumber : styles.number}>
+                  <View style={[styles.dayRing, c.today ? styles.today : null, c.workouts > 0 ? styles.litRing : null]}>
+                    <Txt kind={c.workouts > 0 ? "tiny" : "small"} colour={c.workouts > 0 ? "onOrange" : c.later ? "textFaint" : "textSoft"} style={c.workouts > 0 ? styles.litNumber : styles.number}>
                       {String(c.date)}
                     </Txt>
                   </View>
@@ -191,7 +191,7 @@ function YearView({ today, days, workouts }: { today: string; days: number; work
                 key={s.key}
                 style={[styles.square, s.outside ? styles.squareOut : LEVELS[level(s.workouts)]]}
                 accessible={s.workouts > 0}
-                accessibilityLabel={s.workouts > 0 ? `${s.key}, ${String(s.workouts)} ${s.workouts === 1 ? "workout" : "workouts"}` : undefined}
+                accessibilityLabel={s.workouts > 0 ? squareSaid(s, today) : undefined}
               />
             ))}
           </View>
@@ -209,28 +209,31 @@ function YearView({ today, days, workouts }: { today: string; days: number; work
 }
 
 const styles = StyleSheet.create({
-  between: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  between: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", columnGap: 8, flexWrap: "wrap" },
   room: { height: 92 },
   seg: { flexDirection: "row", padding: 3, borderRadius: sizes.round, backgroundColor: colours.overPicture, borderWidth: 1, borderColor: colours.line },
   segItem: { minHeight: 32, paddingHorizontal: 12, borderRadius: sizes.round, alignItems: "center", justifyContent: "center" },
   segOn: { backgroundColor: colours.orangeFill, borderWidth: 1, borderColor: colours.orangeLine },
   segWords: { fontFamily: fonts.semibold },
-  monthNav: { flexDirection: "row", alignItems: "center", gap: 2, flexShrink: 1 },
+  monthNav: { flexDirection: "row", alignItems: "center", gap: 2 },
   arrow: { width: sizes.press, height: sizes.press, alignItems: "center", justifyContent: "center" },
   grid: { gap: 4 },
   week: { flexDirection: "row" },
   headCell: { flex: 1, alignItems: "center" },
-  cell: { flex: 1, minHeight: 44, alignItems: "center", justifyContent: "center" },
+  cell: { flex: 1, minHeight: 50, alignItems: "center", justifyContent: "center" },
   head: { fontFamily: fonts.bold, letterSpacing: 0.8 },
   flame: { position: "absolute", top: 0, bottom: 2, alignItems: "center", justifyContent: "center" },
   dayRing: { minWidth: 30, minHeight: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", marginTop: 6 },
   today: { borderWidth: 1.5, borderColor: colours.text },
   number: { fontFamily: fonts.semibold },
+  // A trained day's number sits low in its flame.
+  litRing: { marginTop: 18 },
   litNumber: { fontFamily: fonts.bold, textShadowColor: colours.wordShadow, textShadowRadius: 3 },
   times: { position: "absolute", top: 0, right: 2, fontFamily: fonts.bold },
   legend: { flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" },
   bold: { fontFamily: fonts.bold, marginLeft: 8 },
-  year: { gap: 3, paddingVertical: 4 },
+  // Room after the last column for its month's name.
+  year: { gap: 3, paddingVertical: 4, paddingRight: 28 },
   yearColumn: { gap: 3 },
   // A month's name runs on over the columns after it, which have none.
   yearLabelBox: { height: 14, width: SQUARE, overflow: "visible" },

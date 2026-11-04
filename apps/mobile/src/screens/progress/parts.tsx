@@ -22,7 +22,7 @@ export const TABS = [
 ] as const;
 export type TabKey = (typeof TABS)[number]["key"];
 
-/** The bandage, big and clear, slowly closing in with its glow breathing; the title and the four tabs on it. */
+/** The bandage, big and clear, slowly closing in, its warm glow breathing over it; the title and the four tabs on it. */
 export function Hero({ tab, onTab }: { tab: TabKey; onTab: (t: TabKey) => void }) {
   const { width, height } = useWindowDimensions();
   const tall = pictureTopHeight(width, height, 0.95);
@@ -33,6 +33,12 @@ export function Hero({ tab, onTab }: { tab: TabKey; onTab: (t: TabKey) => void }
   return (
     <View style={{ height: tall }}>
       <View style={[StyleSheet.absoluteFill, styles.clip]}>
+        <Animated.Image
+          source={pictures.progress}
+          resizeMode="cover"
+          accessible={false}
+          style={[styles.photo, { height: tall, transform: [{ scale }] }]}
+        />
         <Animated.View style={[StyleSheet.absoluteFill, { opacity: glow }]}>
           <Svg width="100%" height="100%">
             <Defs>
@@ -45,12 +51,6 @@ export function Hero({ tab, onTab }: { tab: TabKey; onTab: (t: TabKey) => void }
             <Circle cx="68%" cy="42%" r="75%" fill="url(#heroGlow)" />
           </Svg>
         </Animated.View>
-        <Animated.Image
-          source={pictures.progress}
-          resizeMode="cover"
-          accessible={false}
-          style={[styles.photo, { height: tall, transform: [{ scale }] }]}
-        />
       </View>
       <View style={[StyleSheet.absoluteFill, styles.fade]} />
       <View style={styles.words}>
@@ -70,7 +70,7 @@ export function Hero({ tab, onTab }: { tab: TabKey; onTab: (t: TabKey) => void }
               }}
               style={[styles.tab, tab === t.key ? styles.tabOn : null]}
             >
-              <Txt kind="small" colour={tab === t.key ? "onOrange" : "textSoft"} numberOfLines={1} style={styles.tabWords}>
+              <Txt kind="small" colour={tab === t.key ? "onOrange" : "textSoft"} numberOfLines={1} fit style={styles.tabWords}>
                 {t.label}
               </Txt>
             </Pressable>
@@ -139,9 +139,10 @@ export function ReadOr<T>({ read, again, what, children }: { read: Read<T>; agai
 }
 
 /** The flame of a day trained, gold at its tip running to deep orange, its heart pale. */
-export function Flame({ size }: { size: number }) {
-  return (
-    <Svg width={size} height={size * (28 / 24)} viewBox="0 0 24 28">
+export function Flame({ size, glow = false }: { size: number; glow?: boolean }) {
+  const tall = size * (28 / 24);
+  const flame = (
+    <Svg width={size} height={tall} viewBox="0 0 24 28">
       <Defs>
         <LinearGradient id="flameOut" x1="0" y1="0" x2="0" y2="1">
           <Stop offset="0" stopColor={colours.gold} />
@@ -157,6 +158,22 @@ export function Flame({ size }: { size: number }) {
       <Path d="M12 1.5C13.4 5.2 18.6 7.8 18.6 15C18.6 20.3 15.6 24.5 12 24.5C8.4 24.5 5.4 21 5.4 16.6C5.4 13 7.2 11 8.6 9.6C8.6 12.4 9.7 13.9 11 14.4C10.3 10.4 11.3 5.4 12 1.5Z" fill="url(#flameOut)" />
       <Path d="M12 12.8C13 14.9 15.2 16 15.2 18.9C15.2 20.9 13.8 22.4 12 22.4C10.2 22.4 8.8 20.9 8.8 19.2C8.8 17.4 10 16.3 10.9 15.7C11.1 16.8 11.6 17.4 12.2 17.6C11.8 16 12 14.4 12 12.8Z" fill="url(#flameIn)" />
     </Svg>
+  );
+  if (!glow) return flame;
+  const halo = size * 1.6;
+  return (
+    <View style={{ width: size, height: tall }}>
+      <Svg width={halo} height={halo} style={{ position: "absolute", left: (size - halo) / 2, top: tall * 0.62 - halo / 2 }}>
+        <Defs>
+          <RadialGradient id="flameGlow" cx="50%" cy="50%" r="50%">
+            <Stop offset="0" stopColor={colours.orange} stopOpacity={0.5} />
+            <Stop offset="1" stopColor={colours.orange} stopOpacity={0} />
+          </RadialGradient>
+        </Defs>
+        <Circle cx={halo / 2} cy={halo / 2} r={halo / 2} fill="url(#flameGlow)" />
+      </Svg>
+      {flame}
+    </View>
   );
 }
 
@@ -174,7 +191,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colours.lineStrong,
   },
-  tab: { flex: 1, minHeight: sizes.press, alignItems: "center", justifyContent: "center", borderRadius: sizes.round, paddingHorizontal: 4 },
+  // Each tab as wide as its word, the room left shared out; a word that still cannot fit shrinks.
+  tab: { flexGrow: 1, flexShrink: 1, flexBasis: "auto", minHeight: sizes.press, alignItems: "center", justifyContent: "center", borderRadius: sizes.round, paddingHorizontal: 10 },
   tabOn: { backgroundColor: colours.orange, experimental_backgroundImage: orangeGradient, boxShadow: shadows.chip },
   tabWords: { fontFamily: fonts.bold, textAlign: "center" },
   between: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" },

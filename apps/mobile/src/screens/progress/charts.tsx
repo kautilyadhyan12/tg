@@ -19,7 +19,6 @@ const ROOF = 44;
 const FOOT = 176;
 /** Room on the right for the guide numbers. */
 const GUIDE_ROOM = 26;
-const TAG_WIDTH = 116;
 
 /** A box with round top corners as a path: the picked bar's beam of light. */
 function roundedTop(x: number, top: number, w: number, h: number, r: number): string {
@@ -45,10 +44,11 @@ export function Labels({ bars, picked = null }: { bars: readonly Bucket[]; picke
 
 /** The calories of each bar as a smooth glowing line drawn from the left, the picked bar lit by a beam
  *  with its days and number on a tag; pressing the chart picks the bar under the finger. */
-export function CaloriesChart({ bars, step, total }: { bars: readonly Bucket[]; step: Step; total: number }) {
+export function CaloriesChart({ bars, step, total, each }: { bars: readonly Bucket[]; step: Step; total: number; each: string }) {
   const [width, setWidth] = useState(0);
   const values = bars.map((b) => b.kcal);
   const [picked, setPicked] = useState<number | null>(() => bestIndex(values));
+  const [tag, setTag] = useState({ w: 0, h: 26 });
   const drawn = useGrow(1, 260, 1100);
   const most = Math.max(0, ...values);
   const top = most === 0 ? 1 : most / 0.9;
@@ -64,6 +64,19 @@ export function CaloriesChart({ bars, step, total }: { bars: readonly Bucket[]; 
   const nearest = (x: number) => xs.reduce((best, cx, i) => (Math.abs(cx - x) < Math.abs((xs[best] ?? 0) - x) ? i : best), 0);
   return (
     <View style={styles.chart}>
+      <View style={styles.chartHead}>
+        <Txt kind="tiny">{each}</Txt>
+        {avg > 0 ? (
+          <View style={styles.averageKey}>
+            <Svg width={16} height={2}>
+              <Line x1={0} x2={16} y1={1} y2={1} stroke={colours.textSoft} strokeWidth={1.5} strokeDasharray="4 3" />
+            </Svg>
+            <Txt kind="tiny" colour="textSoft" style={styles.averageWords}>
+              {`Average ${count(Math.round(avg))}`}
+            </Txt>
+          </View>
+        ) : null}
+      </View>
       <Pressable
         accessible
         accessibilityLabel={caloriesSaid(bars, total)}
@@ -88,13 +101,6 @@ export function CaloriesChart({ bars, step, total }: { bars: readonly Bucket[]; 
                 {count(g)}
               </Txt>
             ))}
-            {avg > 0 ? (
-              <View pointerEvents="none" style={[styles.average, { top: y(avg) - 20 }]}>
-                <Txt kind="tiny" colour="textSoft" style={styles.averageWords}>
-                  {`Average ${count(Math.round(avg))}`}
-                </Txt>
-              </View>
-            ) : null}
             <Animated.View style={[styles.reveal, { width: drawn.interpolate({ inputRange: [0, 1], outputRange: [0, width] }) }]}>
               <Svg width={width} height={CHART}>
                 <Defs>
@@ -134,8 +140,14 @@ export function CaloriesChart({ bars, step, total }: { bars: readonly Bucket[]; 
               </Svg>
             </Animated.View>
             {pick === undefined || pick === null || pickBar === undefined ? null : (
-              <View pointerEvents="none" style={[styles.tag, { left: Math.max(0, Math.min(width - TAG_WIDTH, pick.x - TAG_WIDTH / 2)), top: Math.max(0, pick.y - 40) }]}>
-                <Txt kind="tiny" colour="onOrange" numberOfLines={1} style={styles.tagWords}>
+              <View
+                pointerEvents="none"
+                onLayout={(e) => {
+                  setTag({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height });
+                }}
+                style={[styles.tag, { maxWidth: width, left: Math.max(0, Math.min(width - tag.w, pick.x - tag.w / 2)), top: Math.max(0, pick.y - 14 - tag.h), opacity: tag.w === 0 ? 0 : 1 }]}
+              >
+                <Txt kind="tiny" colour="onOrange" style={styles.tagWords}>
                   {tagWords(pickBar, step, pickBar.kcal)}
                 </Txt>
               </View>
@@ -149,7 +161,7 @@ export function CaloriesChart({ bars, step, total }: { bars: readonly Bucket[]; 
 }
 
 /** The workouts of each bar as capsules on faint tracks, growing up one after another, the number in
- *  each; the period's best glow. */
+ *  each (over it, where the capsule is too thin); the period's best glow. */
 export function WeekBars({ bars }: { bars: readonly Bucket[] }) {
   const most = Math.max(1, ...bars.map((b) => b.workouts));
   const wide = bars.length <= 7 ? 30 : bars.length <= 10 ? 20 : 14;
@@ -158,10 +170,18 @@ export function WeekBars({ bars }: { bars: readonly Bucket[] }) {
     <View style={styles.chart}>
       <View style={styles.bars}>
         {bars.map((bar, i) => {
-          const tall = Math.max(wide, Math.round((bar.workouts / most) * BAR_TRACK));
+          const inside = wide >= 20;
+          const tall = Math.max(wide, Math.round((bar.workouts / most) * (BAR_TRACK - (inside ? 0 : OVER_ROOM))));
           return (
             <View key={bar.from} style={styles.column} accessible accessibilityLabel={bar.said}>
               <View style={[styles.track, { width: wide, borderRadius: wide / 2 }]} />
+              {bar.workouts === 0 || inside ? null : (
+                <Rise delay={760 + i * each}>
+                  <Txt kind="tiny" colour="orangeLight" style={styles.overBar}>
+                    {count(bar.workouts)}
+                  </Txt>
+                </Rise>
+              )}
               {bar.workouts === 0 ? null : (
                 <GrowUp
                   delay={280 + i * each}
@@ -171,7 +191,7 @@ export function WeekBars({ bars }: { bars: readonly Bucket[] }) {
                     bar.workouts === most ? styles.best : null,
                   ]}
                 >
-                  {wide >= 20 ? (
+                  {inside ? (
                     <Txt kind="tiny" colour="onBar" style={styles.inBar}>
                       {count(bar.workouts)}
                     </Txt>
@@ -187,6 +207,7 @@ export function WeekBars({ bars }: { bars: readonly Bucket[] }) {
   );
 }
 const BAR_TRACK = 138;
+const OVER_ROOM = 20;
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -194,7 +215,8 @@ const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 export function FillRing({ pct, size = 112, stroke = 10, delay = 480 }: { pct: number; size?: number; stroke?: number; delay?: number }) {
   const shown = useCountUp(pct, delay, 1000);
   const grown = useGrow(pct / 100, delay, 1000);
-  const r = (size - stroke) / 2;
+  const halo = 8;
+  const r = (size - stroke - halo) / 2;
   const around = 2 * Math.PI * r;
   const offset = grown.interpolate({ inputRange: [0, 1], outputRange: [around, 0] });
   const mid = size / 2;
@@ -210,7 +232,7 @@ export function FillRing({ pct, size = 112, stroke = 10, delay = 480 }: { pct: n
         <Circle cx={mid} cy={mid} r={r} stroke={colours.track} strokeWidth={stroke} fill="none" />
         {pct > 0 ? (
           <>
-            <AnimatedCircle cx={mid} cy={mid} r={r} stroke={colours.orange} strokeOpacity={0.16} strokeWidth={stroke + 8} strokeDasharray={`${String(around)} ${String(around)}`} strokeDashoffset={offset} fill="none" transform={`rotate(-90 ${String(mid)} ${String(mid)})`} />
+            <AnimatedCircle cx={mid} cy={mid} r={r} stroke={colours.orange} strokeOpacity={0.16} strokeWidth={stroke + halo} strokeDasharray={`${String(around)} ${String(around)}`} strokeDashoffset={offset} fill="none" transform={`rotate(-90 ${String(mid)} ${String(mid)})`} />
             <AnimatedCircle cx={mid} cy={mid} r={r} stroke="url(#ringFill)" strokeWidth={stroke} strokeLinecap="round" strokeDasharray={`${String(around)} ${String(around)}`} strokeDashoffset={offset} fill="none" transform={`rotate(-90 ${String(mid)} ${String(mid)})`} />
           </>
         ) : null}
@@ -242,7 +264,8 @@ export const sliceColour = (i: number) => SLICE_COLOURS[Math.min(i, SLICE_COLOUR
 export function FamilyRing({ shares, total }: { shares: readonly number[]; total: number }) {
   const size = 120;
   const stroke = 14;
-  const r = (size - stroke) / 2;
+  const halo = 10;
+  const r = (size - stroke - halo) / 2;
   const around = 2 * Math.PI * r;
   const sum = shares.reduce((a, b) => a + b, 0);
   let start = 0;
@@ -250,7 +273,7 @@ export function FamilyRing({ shares, total }: { shares: readonly number[]; total
     <View style={{ width: size, height: size }}>
       <Svg width={size} height={size}>
         <Circle cx={size / 2} cy={size / 2} r={r} stroke={colours.track} strokeWidth={stroke} fill="none" />
-        <Circle cx={size / 2} cy={size / 2} r={r} stroke={colours.orange} strokeOpacity={0.15} strokeWidth={stroke + 10} fill="none" />
+        <Circle cx={size / 2} cy={size / 2} r={r} stroke={colours.orange} strokeOpacity={0.15} strokeWidth={stroke + halo} fill="none" />
         {shares.map((share, i) => {
           const len = sum === 0 ? 0 : (share / sum) * around;
           const gap = shares.length > 1 ? 2 : 0;
@@ -306,10 +329,11 @@ const styles = StyleSheet.create({
   chart: { gap: 6 },
   reveal: { position: "absolute", left: 0, top: 0, height: CHART, overflow: "hidden" },
   guide: { position: "absolute", right: 0, width: GUIDE_ROOM, textAlign: "right" },
-  average: { position: "absolute", left: 2, paddingHorizontal: 8, borderRadius: 8, backgroundColor: colours.fill },
+  chartHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" },
+  averageKey: { flexDirection: "row", alignItems: "center", gap: 6 },
   averageWords: { fontFamily: fonts.bold, lineHeight: 16 },
-  tag: { position: "absolute", width: TAG_WIDTH, height: 26, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: colours.orange, boxShadow: shadows.chip },
-  tagWords: { fontFamily: fonts.bold, fontSize: 11.5, lineHeight: 15 },
+  tag: { position: "absolute", minHeight: 26, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: colours.orange, boxShadow: shadows.chip },
+  tagWords: { fontFamily: fonts.bold, fontSize: 11.5, lineHeight: 15, textAlign: "center" },
   labels: { flexDirection: "row", gap: LABEL_GAP },
   label: { flex: 1, alignItems: "center", overflow: "visible" },
   // Wider than a thin bar: a crowded row names only some bars, so a name runs under its blank neighbours.
@@ -321,6 +345,7 @@ const styles = StyleSheet.create({
   capsule: { alignItems: "center", paddingTop: 6, backgroundColor: colours.orange, experimental_backgroundImage: barGradient },
   best: { boxShadow: shadows.barGlow },
   inBar: { fontFamily: fonts.bold, fontSize: 13, lineHeight: 16 },
+  overBar: { fontFamily: fonts.bold, fontSize: 12, lineHeight: 15, marginBottom: 3 },
   middle: { alignItems: "center", justifyContent: "center" },
   dots: { flexDirection: "row", flexWrap: "wrap", gap: 5 },
   dotBox: { width: 10, height: 10 },
