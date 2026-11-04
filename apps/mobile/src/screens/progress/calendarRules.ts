@@ -217,3 +217,10 @@ export function daySum(items: readonly WorkoutListItem[]): { workouts: string; t
     kcal: withKcal.length === 0 ? null : count(withKcal.reduce((n, w) => n + (w.kcalPoint ?? 0), 0)),
   };
 }
+
+/** A day older than the plan's last days, by the server's own word on the read (`limitedToDays`):
+ *  its workouts, if any, are saved but not shown, so the day box says so rather than "No workout"
+ *  (the calendar left open past midnight, 35c-i re-check). */
+export function beyondPlan(day: string, today: string, limitedToDays: number | null): boolean {
+  return limitedToDays !== null && day < addDays(today, -(limitedToDays - 1));
+}

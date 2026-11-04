@@ -11,6 +11,7 @@ import { useRead } from "../dashboard/useRead";
 import { count } from "../dashboard/words";
 import {
   activeDaysWords,
+  beyondPlan,
   dayTitle,
   daySaid,
   daySum,
@@ -32,7 +33,7 @@ import {
   type MonthPick,
 } from "./calendarRules";
 import { ArtBox, BoxTitle, Flame, ReadOr } from "./parts";
-import { addDays, dayKeyOf } from "./progressRules";
+import { addDays, dayKeyOf, planWords } from "./progressRules";
 
 // Progress's Calendar (ROADMAP Stage 5 35c-i): the web's month and its year of activity in one box,
 // a flame on each day trained, under the trainer and its footprints.
@@ -212,9 +213,12 @@ function DayBox({ day }: { day: string }) {
     <ReadOr read={list.read} again={list.again} what="This day’s workouts">
       {(page) => {
         if (page.items.length === 0) {
+          const hidden = page.limitedToDays !== null && beyondPlan(day, dayKeyOf(new Date()), page.limitedToDays);
           return (
             <View style={styles.dayNone}>
-              <Txt kind="small">No workout this day</Txt>
+              <Txt kind="small" style={styles.centre}>
+                {hidden && page.limitedToDays !== null ? planWords(page.limitedToDays) : "No workout this day"}
+              </Txt>
             </View>
           );
         }
@@ -462,6 +466,7 @@ const styles = StyleSheet.create({
   boldWords: { fontFamily: fonts.bold },
   dayNone: { alignItems: "center", padding: 22, borderRadius: 16, backgroundColor: colours.fill, borderWidth: 1, borderColor: colours.line },
   dayBox: { gap: 8 },
+  centre: { textAlign: "center" },
   daySum: { flexDirection: "row", gap: 8, marginBottom: 6 },
   dayStat: { flex: 1, minHeight: 64, justifyContent: "center", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14, backgroundColor: colours.fill, borderWidth: 1, borderColor: colours.line },
   dayWorkout: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderRadius: 16, backgroundColor: colours.fill, borderWidth: 1, borderColor: colours.line },

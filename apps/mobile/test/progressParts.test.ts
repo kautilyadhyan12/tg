@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { bestTimeSchema, bodyMeasurementSchema, workoutListItemSchema, calorieForecastSchema, progressPredictionsSchema, weekGoalPredictionSchema, type BodyMeasurement, type SteadyPace } from "@app/shared";
 import { average, bestIndex, columnCentres, firstFigure, guides, monotoneControls, monotonePath, rangeWords, tagWords } from "../src/screens/progress/chartRules";
-import { activeDaysWords, clockWords, daySaid, daySum, dayTitle, dayWindow, dayWorkouts, level, monthCells, monthPickSaid, monthRange, monthsToPick, monthWords, nextMonth, squareSaid, windowWorkouts, yearColumns } from "../src/screens/progress/calendarRules";
+import { activeDaysWords, clockWords, daySaid, daySum, dayTitle, dayWindow, dayWorkouts, level, monthCells, monthPickSaid, monthRange, monthsToPick, monthWords, nextMonth, squareSaid, windowWorkouts, yearColumns, beyondPlan } from "../src/screens/progress/calendarRules";
 import { addDays, dayKeyOf } from "../src/screens/progress/progressRules";
 import { entryRows, latestWeight, slices } from "../src/screens/progress/otherRules";
 import { bestTimeMini, forecastMini, plateauMini, predictionsFrom, tenths, weekGoalMini } from "../src/screens/progress/predictionWords";
@@ -409,5 +409,18 @@ describe("the box that picks a month", () => {
   });
   it("is one year where the server's days are all this year's", () => {
     expect(monthsToPick({ y: 2026, m: 8 }, { y: 2026, m: 11 }, counts).map((y) => y.months.filter((p) => p.open).map((p) => p.label))).toEqual([["Aug", "Sep", "Oct", "Nov"]]);
+  });
+});
+
+describe("a day older than the plan's last days", () => {
+  it.each([
+    ["2026-08-07", 90, false],
+    ["2026-08-06", 90, true],
+    [TODAY, 90, false],
+    ["2025-11-05", 365, false],
+    ["2025-11-04", 365, true],
+    ["2020-01-01", null, false],
+  ] as const)("%s on a plan of %s days: beyond it %s", (day, limit, beyond) => {
+    expect(beyondPlan(day, TODAY, limit)).toBe(beyond);
   });
 });

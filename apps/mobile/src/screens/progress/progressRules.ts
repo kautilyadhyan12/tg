@@ -204,8 +204,11 @@ export function noneWords(w: Window): string {
 }
 
 /** Said only where the plan made the period shorter. "Any": the server cannot say whether there are older ones. */
+/** A plan's limit, said where it hides something. */
+export const planWords = (days: number) => `Your plan shows your last ${count(days)} days. Any older workouts are still saved.`;
+
 export function cutWords(w: Window): string | null {
-  return w.cut === null ? null : `Your plan shows your last ${count(w.cut)} days. Any older workouts are still saved.`;
+  return w.cut === null ? null : planWords(w.cut);
 }
 
 export interface RecordRow {

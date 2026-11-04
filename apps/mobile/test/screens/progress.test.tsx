@@ -250,6 +250,24 @@ describe("Me → Progress", () => {
     expect(await screen.findByLabelText(new RegExp(`^[A-Za-z]+ ${String(first.getDate())} ${name}, no workout$`))).toBeTruthy();
   });
 
+  // The re-check's edge: the calendar left open past midnight still offers the oldest day of the
+  // plan, which the server's floor has passed. The two reads then disagree, as here: the calendar's
+  // year reaches the day, the list's plan does not. The box says the plan hides it, not "No workout".
+  it("Calendar: a day the plan's list no longer shows says the plan hides it, never no workout", async () => {
+    const server = progressServer({}, {}, () => ({ status: 200, body: { items: [], nextCursor: null, limitedToDays: 90, hasAnyWorkouts: true } }));
+    await openProgress(server.ask);
+    await openTab("Calendar");
+    const old = new Date();
+    old.setDate(old.getDate() - 100);
+    const now = new Date();
+    const back = (now.getFullYear() - old.getFullYear()) * 12 + now.getMonth() - old.getMonth();
+    for (let i = 0; i < back; i += 1) await fireEvent.press(await screen.findByRole("button", { name: "Month before" }));
+    const name = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"][old.getMonth()] ?? "";
+    await fireEvent.press(await screen.findByRole("button", { name: new RegExp(`^[A-Za-z]+ ${String(old.getDate())} ${name}, no workout$`) }));
+    expect(await screen.findByText("Your plan shows your last 90 days. Any older workouts are still saved.")).toBeTruthy();
+    expect(screen.queryByText("No workout this day")).toBeNull();
+  });
+
   it("builds every tab once: going back to a tab reads nothing again", async () => {
     const server = progressServer({});
     await openProgress(server.ask);
