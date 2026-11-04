@@ -244,7 +244,7 @@ describe('tax on memberships (18b-iii)', () => {
     fireEvent.click(within(box).getByRole('button', { name: 'Add a tax rate' }));
     const form = within(within(box).getByRole('form', { name: 'Add a tax rate' }));
     fireEvent.change(form.getByLabelText('Tax name'), { target: { value: 'GST' } });
-    fireEvent.change(form.getByLabelText('Rate, in percent'), { target: { value: '18' } });
+    fireEvent.change(form.getByLabelText('Rate (%)'), { target: { value: '18' } });
     // The price list is read again once the rate is charged.
     orgService.getMembershipTypes.mockResolvedValue({ data: listOf({ types: [type({ taxRateId: GST.id })], taxRates: [GST], taxIncluded: false }) });
     // Read again after the add, the Sell page has the new rate, as the server answers.
@@ -259,6 +259,26 @@ describe('tax on memberships (18b-iii)', () => {
     await waitFor(() => expect(register.chargeTaxRate).toHaveBeenCalledWith(IRON, GST.id, { use: 'memberships', ids: [type().id] }));
     expect(await screen.findByText('GST 18% is now charged on Gold Monthly.')).toBeTruthy();
     expect(await screen.findByText('Plus GST 18% on each payment')).toBeTruthy();
+  });
+
+  it('the Tax box and a type’s own Add a tax rate suggest the gym country’s tax, and no rate (18b-iv)', async () => {
+    for (const [country, name] of [['JP', 'Consumption tax'], ['CA', 'GST'], ['IE', 'VAT']]) {
+      cleanup();
+      resetConsoleOrgs();
+      orgService.getMembershipTypes.mockResolvedValue({ data: listOf({ types: [type({ taxRateId: null })], taxRates: [], taxIncluded: country !== 'CA' }) });
+      register.get.mockResolvedValue(sellPage([]));
+      draw([gym({ country })]);
+      const box = await screen.findByRole('region', { name: 'Tax' });
+      fireEvent.click(await within(box).findByRole('button', { name: 'Add a tax rate' }));
+      const form = within(within(box).getByRole('form', { name: 'Add a tax rate' }));
+      expect(form.getByLabelText('Tax name').getAttribute('placeholder')).toBe(name);
+      expect(form.getByLabelText('Rate (%)').getAttribute('placeholder')).toBeNull();
+      fireEvent.click(await screen.findByRole('button', { name: 'Change Gold Monthly' }));
+      const typeForm = within(screen.getByRole('form', { name: 'Change membership type' }));
+      fireEvent.click(typeForm.getByRole('button', { name: 'Add a tax rate' }));
+      const inline = within(typeForm.getByRole('group', { name: 'Add a tax rate' }));
+      expect(inline.getByLabelText('Tax name').getAttribute('placeholder')).toBe(name);
+    }
   });
 
   it('where the gym’s prices hold the tax, the row says the price includes it', async () => {
@@ -281,7 +301,7 @@ describe('tax on memberships (18b-iii)', () => {
     fireEvent.click(form.getByRole('button', { name: 'Add a tax rate' }));
     const rate = within(form.getByRole('group', { name: 'Add a tax rate' }));
     fireEvent.change(rate.getByLabelText('Tax name'), { target: { value: 'VAT' } });
-    fireEvent.change(rate.getByLabelText('Rate, in percent'), { target: { value: '20' } });
+    fireEvent.change(rate.getByLabelText('Rate (%)'), { target: { value: '20' } });
     fireEvent.click(rate.getByRole('button', { name: 'Add tax rate' }));
     await waitFor(() => expect(register.addTaxRate).toHaveBeenCalledWith(IRON, { name: 'VAT', bp: 2000 }));
     await waitFor(() => expect(form.getByLabelText('Tax').value).toBe(VAT.id));
