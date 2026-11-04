@@ -20,7 +20,7 @@ import { FriendGiftNote, MemberGiftNote, MemberGiftWaiting } from './FriendGift'
 import { useCameBack } from './useCameBack';
 import { useLiveNews } from './liveNews';
 import { ENDING_NOT_TOLD, bookingsStoppedLine } from './bookingsEndView';
-import { contractLine, noticeLine, termLine } from './membershipTypesView';
+import { contractLine, leaveFeeLine, noticeLine, termLine } from './membershipTypesView';
 import { changeBody, changeChoice, changeCreditLine, changeDoneWords, changeEndingWords, changeForm, changeLine, showsChange, squareSetUpLine } from './membershipChangeView';
 import { viewerPrivileges } from './consoleView';
 import { placeFor } from './consolePlaces';
@@ -36,6 +36,8 @@ import {
   askWords,
   RELEASE_CHOICES,
   contractShownLine,
+  leaveFeeShownLine,
+  leftEarlyLine,
   releaseShownLine,
   noticeShownLine,
   noticeWaivedLine,
@@ -544,7 +546,9 @@ export default function MemberMemberships({
               ? (m.view.can.cancelAtContractEnd ?? true)
               : what === 'cancelNotice'
                 ? (m.view.can.cancelAfterNotice ?? true)
-                : what === 'cancelLater',
+                : what === 'cancelEarly'
+                  ? ((d) => (d !== null && d > today ? d : false))(m.view.can.leaveEarly?.endsOn ?? null)
+                  : what === 'cancelLater',
           change: what === 'change',
           ending: booked,
           all: false,
@@ -1888,6 +1892,11 @@ export default function MemberMemberships({
                 {contractLine(choice.type)}
               </p>
             ) : null}
+            {leaveFeeLine(choice.type) !== null ? (
+              <p className="c-s14 c-t2 m-0" data-testid="held-change-leave-fee">
+                {leaveFeeLine(choice.type)}
+              </p>
+            ) : null}
             {noticeLine(choice.type) !== null ? (
               <p className="c-s14 c-t2 m-0" data-testid="held-change-notice">
                 {noticeLine(choice.type)}
@@ -2031,6 +2040,21 @@ export default function MemberMemberships({
             </button>
           </div>
         ) : null}
+        {words.leaveButton ? (
+          <div className="flex flex-col gap-2 pt-2" data-testid="held-leave-early">
+            <p className="c-s14 c-t2 m-0">{words.leaveLine}</p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className={PLAIN}
+                disabled={busy}
+                onClick={() => void change('cancelEarly', m, 'cancel', { when: 'leave_early', leaveFeeMinor: m.view.can.leaveEarly.feeMinor })}
+              >
+                {words.leaveButton}
+              </button>
+            </div>
+          </div>
+        ) : null}
         <div className="flex flex-col gap-2 pt-2" data-testid="held-release">
           <label htmlFor={`release-${m.id}`} className="c-label">
             {words.releaseQuestion}
@@ -2122,9 +2146,19 @@ export default function MemberMemberships({
             {contractShownLine(m)}
           </span>
         ) : null}
+        {leaveFeeShownLine(m) !== null ? (
+          <span className="c-s14 c-t2" data-testid="held-leave-fee-line">
+            {leaveFeeShownLine(m)}
+          </span>
+        ) : null}
         {releaseShownLine(m) !== null ? (
           <span className="c-s14 c-t2" data-testid="held-release-line">
             {releaseShownLine(m)}
+          </span>
+        ) : null}
+        {leftEarlyLine(m) !== null ? (
+          <span className="c-s14 c-t2" data-testid="held-left-early-line">
+            {leftEarlyLine(m)}
           </span>
         ) : null}
         {noticeShownLine(m) !== null ? (
@@ -2288,6 +2322,11 @@ export default function MemberMemberships({
             {contractLine(choice.type) !== null ? (
               <p className="c-s14 c-t2 m-0" data-testid="held-add-minimum-term">
                 {contractLine(choice.type)}
+              </p>
+            ) : null}
+            {leaveFeeLine(choice.type) !== null ? (
+              <p className="c-s14 c-t2 m-0" data-testid="held-add-leave-fee">
+                {leaveFeeLine(choice.type)}
               </p>
             ) : null}
             {noticeLine(choice.type) !== null ? (

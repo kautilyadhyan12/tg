@@ -34,6 +34,7 @@ import {
   usesJoiningFee,
   contractHint,
   contractLine,
+  leaveFeeLine,
   noticeHint,
   noticeLine,
   termUnitOptions,
@@ -338,6 +339,29 @@ function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRate
           </Field>
         ) : null}
 
+        {choice === 'recurring' && draft.contract === 'fixed' ? (
+          <Field id={id('leave-fee')} label={`Early cancellation fee (${currency})`} problem={problems?.leaveFee}>
+            <input
+              id={id('leave-fee')}
+              aria-invalid={problems?.leaveFee ? 'true' : undefined}
+              value={draft.leaveFee}
+              inputMode="decimal"
+              onChange={text('leaveFee')}
+              placeholder="None"
+              className="c-input"
+              style={{ maxWidth: 240 }}
+            />
+            <p className="c-s13 c-t3 m-0">
+              {[
+                'Charged once to a member who cancels before the minimum term ends. Members you release for a reason, such as moving away, pay none. Leave it empty for none.',
+                editing ? 'Members who already hold it keep the fee they joined on.' : null,
+              ]
+                .filter((line) => line !== null)
+                .join(' ')}
+            </p>
+          </Field>
+        ) : null}
+
         {choice === 'recurring' ? (
           <Field id={id('notice')} label="Notice to cancel" problem={problems?.noticeDays}>
             <div className="flex flex-wrap items-center gap-2" style={{ maxWidth: 520 }}>
@@ -555,6 +579,7 @@ function TypeRow({ type, orgType, taxLine = null, agreementLine = null, agreemen
           <p className="c-s14 c-t1 m-0">{termLine(type)}</p>
           {joiningFeeLine(type) !== null ? <p className="c-s14 c-t2 m-0">{joiningFeeLine(type)}</p> : null}
           {contractLine(type) !== null ? <p className="c-s14 c-t2 m-0">{contractLine(type)}</p> : null}
+          {leaveFeeLine(type) !== null ? <p className="c-s14 c-t2 m-0">{leaveFeeLine(type)}</p> : null}
           {noticeLine(type) !== null ? <p className="c-s14 c-t2 m-0">{noticeLine(type)}</p> : null}
           {taxLine !== null ? <p className="c-s14 c-t2 m-0">{taxLine}</p> : null}
           <p className="c-s14 c-t2 m-0">{includesLine(type, orgType)}</p>

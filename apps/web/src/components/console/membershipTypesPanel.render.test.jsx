@@ -180,6 +180,28 @@ describe('adding a type', () => {
     expect(await screen.findByText('Minimum term: 12 months, then it ends')).toBeTruthy();
   });
 
+  it('an early cancellation fee (18v-ii-b): its box comes with a minimum term only, is sent in minor units, and shows on its row', async () => {
+    orgService.createMembershipType.mockResolvedValue({ data: listOf({ types: [type({ name: 'Gold 12 months', contractPeriods: 12, contractThen: 'renews', leaveFeeMinor: 9900 })] }) });
+    open(listOf());
+    fireEvent.click(await screen.findByRole('button', { name: 'Add a membership type' }));
+    type_('Name', 'Gold 12 months');
+    type_('Price (GBP)', '49.99');
+    expect(screen.queryByLabelText('Early cancellation fee (GBP)')).toBeNull();
+    fireEvent.change(screen.getByLabelText('Minimum term'), { target: { value: 'fixed' } });
+    expect(
+      screen.getByText('Charged once to a member who cancels before the minimum term ends. Members you release for a reason, such as moving away, pay none. Leave it empty for none.'),
+    ).toBeTruthy();
+    type_('Early cancellation fee (GBP)', '0');
+    fireEvent.click(screen.getByRole('button', { name: 'Add membership type' }));
+    expect(await screen.findByText('Type the early cancellation fee as a number, like 25.00, or leave it empty.')).toBeTruthy();
+    expect(orgService.createMembershipType).not.toHaveBeenCalled();
+    type_('Early cancellation fee (GBP)', '99');
+    fireEvent.click(screen.getByRole('button', { name: 'Add membership type' }));
+    await waitFor(() => expect(orgService.createMembershipType).toHaveBeenCalledTimes(1));
+    expect(orgService.createMembershipType.mock.calls[0][1]).toMatchObject({ contractPeriods: 12, contractThen: 'renews', leaveFeeMinor: 9900 });
+    expect(await screen.findByText('Early cancellation fee £99.00')).toBeTruthy();
+  });
+
   it('sends the typed price as whole minor units, once, and the list that comes back is drawn', async () => {
     const saved = type({ name: 'Gold Monthly', priceMinor: 4999 });
     orgService.createMembershipType.mockResolvedValue({ data: listOf({ types: [saved] }) });
@@ -209,6 +231,7 @@ describe('adding a type', () => {
       joiningFeeMinor: 0,
       contractPeriods: null,
       contractThen: null,
+      leaveFeeMinor: null,
       noticeDays: null,
     });
     expect(await screen.findByText('£49.99 every month')).toBeTruthy();

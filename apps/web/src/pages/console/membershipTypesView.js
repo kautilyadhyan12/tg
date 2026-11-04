@@ -217,6 +217,12 @@ export function contractLine(type) {
   return `Minimum term: ${length}, then ${type.contractThen === 'ends' ? 'it ends' : 'renews until cancelled'}`;
 }
 
+/** "Early cancellation fee $99.00" (18v-ii-b); null for a type with none. */
+export function leaveFeeLine(type) {
+  if (type === null || type === undefined || !(type.leaveFeeMinor > 0) || type.contractPeriods === null || type.contractPeriods === undefined) return null;
+  return `Early cancellation fee ${formatMinor(type.leaveFeeMinor, type.currency)}`;
+}
+
 /** "Notice to cancel: 30 days" (18v-ii-a); null for a type with none. */
 export function noticeLine(type) {
   if (type === null || type === undefined || type.noticeDays === null || type.noticeDays === undefined) return null;
@@ -269,6 +275,7 @@ export function emptyDraft() {
     contract: 'none',
     contractPeriods: '12',
     contractThen: 'renews',
+    leaveFee: '',
     noticeDays: '',
   };
 }
@@ -303,6 +310,7 @@ export function draftFromType(type) {
     contract: type.contractPeriods === null || type.contractPeriods === undefined ? 'none' : 'fixed',
     contractPeriods: type.contractPeriods === null || type.contractPeriods === undefined ? base.contractPeriods : String(type.contractPeriods),
     contractThen: type.contractThen ?? base.contractThen,
+    leaveFee: type.leaveFeeMinor > 0 ? minorToPriceText(type.leaveFeeMinor, type.currency) : '',
     noticeDays: type.noticeDays === null || type.noticeDays === undefined ? '' : String(type.noticeDays),
   };
 }
@@ -338,6 +346,14 @@ export function joiningFeeExample(currency) {
   return currencyDecimals(currency) === 0 ? '2500' : '25.00';
 }
 
+/** The early cancellation fee the form holds in minor units (18v-ii-b): 0 where it is empty or there
+ *  is no minimum term, null where what is typed is not an amount above 0. */
+function draftLeaveFee(draft, currency) {
+  if (!draftHasContract(draft) || String(draft.leaveFee ?? '').trim() === '') return 0;
+  const minor = priceToMinor(draft.leaveFee, currency);
+  return minor === null || minor === 0 ? null : minor;
+}
+
 /** The joining fee the form holds in minor units: 0 where it is empty or the kind has none,
  *  null where what is typed is not an amount. */
 function draftJoiningFee(draft, currency) {
@@ -349,7 +365,7 @@ const usesTerm = (choice) => choice === 'recurring' || choice === 'one_time' || 
 const usesAccess = usesTerm;
 
 /** The boxes in the order the form draws them, so the first wrong one can be shown. */
-export const PROBLEM_ORDER = ['name', 'description', 'price', 'joiningFee', 'tax', 'termCount', 'contractPeriods', 'noticeDays', 'packClasses', 'packDays', 'bookingsLimit', 'classes', 'ptLimit'];
+export const PROBLEM_ORDER = ['name', 'description', 'price', 'joiningFee', 'tax', 'termCount', 'contractPeriods', 'leaveFee', 'noticeDays', 'packClasses', 'packDays', 'bookingsLimit', 'classes', 'ptLimit'];
 
 /** The first box that is wrong, top to bottom, or null. */
 export function firstProblem(problems) {
@@ -405,6 +421,12 @@ export function draftProblems(draft, currency) {
     } else if (priceMinor === 0) {
       problems.contractPeriods = 'A free membership has no minimum term. Choose No minimum term.';
     }
+  }
+  const leaveMinor = draftLeaveFee(draft, currency);
+  if (leaveMinor === null) {
+    problems.leaveFee = `Type the early cancellation fee as a number, like ${joiningFeeExample(currency)}, or leave it empty.`;
+  } else if (leaveMinor > MEMBERSHIP_PRICE_MINOR_MAX) {
+    problems.leaveFee = `The early cancellation fee can be at most ${formatMinor(MEMBERSHIP_PRICE_MINOR_MAX, currency)}.`;
   }
   if (draftHasNotice(draft)) {
     if (wholeNumber(draft.noticeDays, 1, MEMBERSHIP_NOTICE_DAYS_MAX) === null) {
@@ -505,6 +527,7 @@ export function draftBody(draft, currency) {
     joiningFeeMinor: draftJoiningFee(draft, currency),
     contractPeriods: draftHasContract(draft) ? wholeNumber(draft.contractPeriods, 1, MEMBERSHIP_CONTRACT_PERIODS_MAX) : null,
     contractThen: draftHasContract(draft) ? draft.contractThen : null,
+    leaveFeeMinor: ((minor) => (minor === null || minor === 0 ? null : minor))(draftLeaveFee(draft, currency)),
     noticeDays: draftHasNotice(draft) ? wholeNumber(draft.noticeDays, 1, MEMBERSHIP_NOTICE_DAYS_MAX) : null,
     // A change says which version of the type the form read.
     ...(draft.id === null ? {} : { updatedAt: draft.updatedAt }),
