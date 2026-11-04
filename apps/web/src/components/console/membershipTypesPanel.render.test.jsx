@@ -254,7 +254,7 @@ describe('adding a type', () => {
       leaveFeeMinor: null,
       noticeDays: null,
       coolingOffDays: null,
-      renewalReminder: null,
+      renewalReminderDays: null, termReminderDays: null,
     });
     expect(await screen.findByText('£49.99 every month')).toBeTruthy();
     // The form closes on a save.
@@ -457,14 +457,13 @@ describe('a renewal reminder (18v-iv)', () => {
         ],
       },
     });
-    orgService.updateMembershipType.mockResolvedValue({ data: listOf({ types: [{ ...gold, renewalReminder: { when: 'every_renewal', days: 30 } }] }) });
+    orgService.updateMembershipType.mockResolvedValue({ data: listOf({ types: [{ ...gold, renewalReminderDays: 30 }] }) });
     open(listOf({ types: [gold] }));
     fireEvent.click(await screen.findByRole('button', { name: 'Change Gold Yearly' }));
     // No minimum term: only before every renewal is offered.
-    expect(within(screen.getByLabelText('Renewal reminder email')).queryByRole('option', { name: 'Before the minimum term ends' })).toBeNull();
-    type_('Renewal reminder email', 'every_renewal');
-    type_('How many days before', '30');
-    const box = await screen.findByTestId('renewal-reminder-box');
+    expect(screen.queryByLabelText('Reminder before the minimum term ends')).toBeNull();
+    type_('Reminder before every renewal', '30');
+    const box = await screen.findByTestId('reminder-box-every_renewal');
     expect(within(box).getByText('Will be emailed (1)')).toBeTruthy();
     expect(within(box).getByText('Ana Ruiz · emailed 7 Nov · renews 7 Dec')).toBeTruthy();
     expect(within(box).getByText('Not emailed: no email address on the record of whoever pays (1)')).toBeTruthy();
@@ -472,8 +471,28 @@ describe('a renewal reminder (18v-iv)', () => {
     expect(orgService.updateMembershipType).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
     await waitFor(() => expect(orgService.updateMembershipType).toHaveBeenCalledTimes(1));
-    expect(orgService.updateMembershipType.mock.calls[0][2]).toMatchObject({ renewalReminder: { when: 'every_renewal', days: 30 } });
+    expect(orgService.updateMembershipType.mock.calls[0][2]).toMatchObject({ renewalReminderDays: 30, termReminderDays: null });
     expect(await screen.findByText('Renewal reminder: 30 days before every renewal')).toBeTruthy();
+  });
+
+  it('with a minimum term, both: each its own pick and its own box, sent together', async () => {
+    const gold = type({ name: 'Gold Term', contractPeriods: 12, contractThen: 'renews' });
+    orgService.previewRenewalReminder.mockImplementation((_g, _t, setting) =>
+      Promise.resolve({
+        data: { people: [{ entryId: '44444444-4444-4444-8444-000000000001', name: 'Ana Ruiz', paidBy: null, status: { state: 'will_send', on: setting.when === 'term_end' ? '2027-10-04' : '2026-11-27', aboutOn: setting.when === 'term_end' ? '2027-11-02' : '2026-12-03' } }] },
+      }),
+    );
+    orgService.updateMembershipType.mockResolvedValue({ data: listOf({ types: [{ ...gold, renewalReminderDays: 7, termReminderDays: 30 }] }) });
+    open(listOf({ types: [gold] }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Change Gold Term' }));
+    type_('Reminder before every renewal', '7');
+    type_('Reminder before the minimum term ends', '30');
+    expect(within(await screen.findByTestId('reminder-box-every_renewal')).getByText('Ana Ruiz · emailed 27 Nov · renews 3 Dec')).toBeTruthy();
+    expect(within(await screen.findByTestId('reminder-box-term_end')).getByText('Ana Ruiz · emailed 4 Oct · term ends 2 Nov')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(orgService.updateMembershipType).toHaveBeenCalledTimes(1));
+    expect(orgService.updateMembershipType.mock.calls[0][2]).toMatchObject({ renewalReminderDays: 7, termReminderDays: 30 });
+    expect(await screen.findByText('Minimum term reminder: 30 days before it ends')).toBeTruthy();
   });
 });
 

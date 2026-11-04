@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import {
   giveHeldMembership,
   moveHeldMembership,
+  lineReminders,
   renewalReminderDaysOffered,
   renewalReminderDue,
   renewalReminderNext,
@@ -159,13 +160,18 @@ describe("the days a line offers, and what a line may hold", () => {
   const parsed = (extra: object) => saveGymMembershipTypeRequestSchema.safeParse({ ...line, ...extra }).success;
 
   it("refuses 30 days before every monthly renewal, before the term's end with no term, on a free line, and a day not offered", () => {
-    expect(parsed({ renewalReminder: { when: "every_renewal", days: 7 } })).toBe(true);
-    expect(parsed({ renewalReminder: { when: "every_renewal", days: 30 } })).toBe(false);
-    expect(parsed({ renewalReminder: { when: "term_end", days: 30 } })).toBe(false);
-    expect(parsed({ renewalReminder: { when: "term_end", days: 30 }, contractPeriods: 12, contractThen: "renews" })).toBe(true);
-    expect(parsed({ renewalReminder: { when: "every_renewal", days: 7 }, priceMinor: 0 })).toBe(false);
-    expect(parsed({ renewalReminder: { when: "every_renewal", days: 10 } })).toBe(false);
-    expect(parsed({ renewalReminder: { when: "every_renewal", days: 3 }, kind: "one_time", termCount: null, termUnit: null })).toBe(false);
+    expect(parsed({ renewalReminderDays: 7 })).toBe(true);
+    expect(parsed({ renewalReminderDays: 30 })).toBe(false);
+    expect(parsed({ termReminderDays: 30 })).toBe(false);
+    expect(parsed({ termReminderDays: 30, contractPeriods: 12, contractThen: "renews" })).toBe(true);
+    expect(parsed({ renewalReminderDays: 7, priceMinor: 0 })).toBe(false);
+    expect(parsed({ renewalReminderDays: 10 })).toBe(false);
+    expect(parsed({ renewalReminderDays: 3, kind: "one_time", termCount: null, termUnit: null })).toBe(false);
+    expect(parsed({ renewalReminderDays: 7, termReminderDays: 30, contractPeriods: 12, contractThen: "renews" })).toBe(true);
+    expect(lineReminders({ renewalReminderDays: 7, termReminderDays: 30 })).toEqual([
+      { when: "every_renewal", days: 7 },
+      { when: "term_end", days: 30 },
+    ]);
   });
 });
 

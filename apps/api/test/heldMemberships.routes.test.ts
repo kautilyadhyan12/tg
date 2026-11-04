@@ -482,7 +482,7 @@ d("a person's memberships: the gym's own day, who may read and change them, and 
       const stamp = types.types.find((t) => t.id === ten)?.updatedAt;
       const changed = await put(
         `/v1/orgs/${gymId}/membership-types/${ten}`,
-        { ...pack({ name: "20 classes", packClasses: 20, packDays: 30, priceMinor: 15000 }), taxRateId: null, joiningFeeMinor: 0, contractPeriods: null, contractThen: null, noticeDays: null, leaveFeeMinor: null, coolingOffDays: null, renewalReminder: null, updatedAt: stamp },
+        { ...pack({ name: "20 classes", packClasses: 20, packDays: 30, priceMinor: 15000 }), taxRateId: null, joiningFeeMinor: 0, contractPeriods: null, contractThen: null, noticeDays: null, leaveFeeMinor: null, coolingOffDays: null, renewalReminderDays: null, termReminderDays: null, updatedAt: stamp },
         owner.cookies,
       );
       expect(changed.statusCode, changed.body).toBe(200);

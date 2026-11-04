@@ -3,11 +3,12 @@
 -- is part of this commit.
 --
 -- A repeating line of the price list with a price may email a reminder so many days before every renewal
--- (`every_renewal`), or before its minimum term ends (`term_end`, a line with one). It is read from the line
--- as it is now, so it covers everybody already on it; it is never copied to a membership.
-ALTER TABLE "gym_membership_types" ADD COLUMN "renewal_reminder" text;--> statement-breakpoint
+-- (`renewal_reminder_days`), and one so many days before its minimum term ends (`term_reminder_days`, a line with
+-- one); either, both or neither. Read from the line as it is now, so they cover everybody already on it; never
+-- copied to a membership.
 ALTER TABLE "gym_membership_types" ADD COLUMN "renewal_reminder_days" integer;--> statement-breakpoint
-ALTER TABLE "gym_membership_types" ADD CONSTRAINT "gym_membership_types_renewal_reminder_check" CHECK ((("renewal_reminder" IS NULL) = ("renewal_reminder_days" IS NULL)) AND ("renewal_reminder" IS NULL OR ("renewal_reminder" IN ('every_renewal','term_end') AND "renewal_reminder_days" IN (3,7,14,30,45,60) AND "kind" = 'recurring' AND "price_minor" > 0 AND ("renewal_reminder" = 'every_renewal' OR "contract_periods" IS NOT NULL))));--> statement-breakpoint
+ALTER TABLE "gym_membership_types" ADD COLUMN "term_reminder_days" integer;--> statement-breakpoint
+ALTER TABLE "gym_membership_types" ADD CONSTRAINT "gym_membership_types_renewal_reminder_check" CHECK (("renewal_reminder_days" IS NULL OR ("renewal_reminder_days" IN (3,7,14,30,45,60) AND "kind" = 'recurring' AND "price_minor" > 0)) AND ("term_reminder_days" IS NULL OR ("term_reminder_days" IN (3,7,14,30,45,60) AND "contract_periods" IS NOT NULL)));--> statement-breakpoint
 --
 -- The day each gym's reminders were last looked for: once a gym's day, from 8 in the morning there, and
 -- again the day a line's reminder is changed (set back to null).

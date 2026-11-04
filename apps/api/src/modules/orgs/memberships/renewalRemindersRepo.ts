@@ -2,9 +2,8 @@
 // (18v-iv). The rule is `renewalReminderNext` in `@app/shared`; this file reads what it needs and keeps the
 // queue. The worker leases one row at a time and names its lease in every write that finishes it, as the card
 // expiry queue does (`cardExpiryRepo.ts`). The address is cleared in the statement that finishes a row.
-import { periodListedMinor, RENEWAL_REMINDER_FROM_HOUR, type RenewalReminderSetting, type RenewalReminderWhat } from "@app/shared";
+import { lineReminders, periodListedMinor, RENEWAL_REMINDER_FROM_HOUR, type RenewalReminderSetting, type RenewalReminderWhat } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
-import { renewalReminderOf } from "./repo.js";
 import { billOf } from "./billsSql.js";
 import { heldRowsOf, type HeldRow } from "./heldRepo.js";
 import { autopayPaused } from "../payments/autopayRepo.js";
@@ -21,7 +20,7 @@ export async function gymsToCheck(sql: SqlOrTx, q: { now: Date; gymIds: readonly
     WHERE g.status = 'active'
       AND extract(hour FROM ${q.now}::timestamptz AT TIME ZONE g.timezone) >= ${RENEWAL_REMINDER_FROM_HOUR}
       AND (g.renewal_reminders_checked_on IS NULL OR g.renewal_reminders_checked_on < (${q.now}::timestamptz AT TIME ZONE g.timezone)::date)
-      AND EXISTS (SELECT 1 FROM gym_membership_types t WHERE t.gym_id = g.id AND t.renewal_reminder IS NOT NULL)
+      AND EXISTS (SELECT 1 FROM gym_membership_types t WHERE t.gym_id = g.id AND (t.renewal_reminder_days IS NOT NULL OR t.term_reminder_days IS NOT NULL))
       AND (${q.gymIds === null}::boolean OR g.id = ANY(${[...(q.gymIds ?? [])]}::uuid[]))
     ORDER BY g.id`;
   return rows.map((r) => ({ gymId: r.id, today: r.today }));
@@ -48,7 +47,9 @@ export interface RemindedHeld {
 }
 
 /** The memberships in use, of the gym's current records, whose line asks for a reminder; or of one line, or
- *  one membership. Each with whoever pays for it (18i) and the address on that record now. */
+ *  one membership. One entry for each reminder its line asks for (before every renewal, then before its minimum
+ *  term ends), or for `setting` alone where it is given. Each with whoever pays for it (18i) and the address on
+ *  that record now. */
 export async function remindedHeld(
   sql: SqlOrTx,
   q: { gymId: string; typeId?: string; heldId?: string; entryId?: string; setting?: RenewalReminderSetting },
@@ -59,8 +60,8 @@ export async function remindedHeld(
       id: string;
       entry_id: string;
       holder_name: string | null;
-      renewal_reminder: string | null;
       renewal_reminder_days: number | null;
+      term_reminder_days: number | null;
       payer_entry_id: string;
       payer_name: string | null;
       payer_email: string | null;
@@ -71,16 +72,16 @@ export async function remindedHeld(
     -- The memberships and whoever pays for each first, then both records by their key: just after an import of
     -- 2,000, matched in one join the plan paired every record with every record (28 s for one gym).
     WITH held AS MATERIALIZED (
-      SELECT h.id, h.entry_id, h.from_list, h.gym_id, t.renewal_reminder, t.renewal_reminder_days, COALESCE(x.payer_entry_id, h.entry_id) AS payer_id
+      SELECT h.id, h.entry_id, h.from_list, h.gym_id, t.renewal_reminder_days, t.term_reminder_days, COALESCE(x.payer_entry_id, h.entry_id) AS payer_id
       FROM gym_held_memberships h
       JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
       LEFT JOIN gym_member_payers x ON x.gym_id = h.gym_id AND x.entry_id = h.entry_id
-      WHERE h.gym_id = ${q.gymId} AND h.status IN ('active','frozen') AND h.kind = 'recurring' AND (${asked}::boolean OR t.renewal_reminder IS NOT NULL)
+      WHERE h.gym_id = ${q.gymId} AND h.status IN ('active','frozen') AND h.kind = 'recurring' AND (${asked}::boolean OR t.renewal_reminder_days IS NOT NULL OR t.term_reminder_days IS NOT NULL)
         AND (${q.typeId ?? null}::uuid IS NULL OR t.id = ${q.typeId ?? null}::uuid)
         AND (${q.heldId ?? null}::uuid IS NULL OR h.id = ${q.heldId ?? null}::uuid)
         AND (${q.entryId ?? null}::uuid IS NULL OR h.entry_id = ${q.entryId ?? null}::uuid)
     )
-    SELECT h.id, h.entry_id, e.full_name AS holder_name, h.renewal_reminder, h.renewal_reminder_days,
+    SELECT h.id, h.entry_id, e.full_name AS holder_name, h.renewal_reminder_days, h.term_reminder_days,
            pe.id AS payer_entry_id, pe.full_name AS payer_name, pe.email::text AS payer_email, (pe.former_at IS NOT NULL) AS payer_former,
            -- One taken from the gym's own list is billed here only once a payment for it was recorded here.
            (h.from_list AND NOT EXISTS (
@@ -97,10 +98,9 @@ export async function remindedHeld(
   );
   return rows.flatMap((r) => {
     const row = held.get(r.id);
-    const setting = q.setting ?? renewalReminderOf(r.renewal_reminder, r.renewal_reminder_days);
-    if (row === undefined || setting === null) return [];
-    return [
-      {
+    if (row === undefined) return [];
+    const settings = q.setting === undefined ? lineReminders({ renewalReminderDays: r.renewal_reminder_days, termReminderDays: r.term_reminder_days }) : [q.setting];
+    return settings.map((setting) => ({
         row,
         setting,
         entryId: r.entry_id,
@@ -108,9 +108,8 @@ export async function remindedHeld(
         payerEntryId: r.payer_entry_id,
         payerName: r.payer_name ?? "",
         payerEmail: r.payer_email,
-        skipped: r.payer_former ? "former_payer" : r.billed_elsewhere ? "billed_elsewhere" : null,
-      },
-    ];
+        skipped: r.payer_former ? ("former_payer" as const) : r.billed_elsewhere ? ("billed_elsewhere" as const) : null,
+      }));
   });
 }
 

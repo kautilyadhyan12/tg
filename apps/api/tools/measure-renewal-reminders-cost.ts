@@ -61,8 +61,8 @@ async function seedGym(people: number): Promise<Gym> {
   await sql`INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider) VALUES ('gym', ${id}, (SELECT id FROM plans WHERE code = ${PLAN}), 'active', 'pilot')`;
   const typeId = randomUUID();
   await sql`
-    INSERT INTO gym_membership_types (id, gym_id, name, kind, price_minor, currency, term_count, term_unit, access, renewal_reminder, renewal_reminder_days)
-    VALUES (${typeId}, ${id}, 'Gold Weekly', 'recurring', 2500, 'GBP', 1, 'week', 'all_classes', 'every_renewal', 3)`;
+    INSERT INTO gym_membership_types (id, gym_id, name, kind, price_minor, currency, term_count, term_unit, access, renewal_reminder_days)
+    VALUES (${typeId}, ${id}, 'Gold Weekly', 'recurring', 2500, 'GBP', 1, 'week', 'all_classes', 3)`;
   const records = Array.from({ length: people }, (_, i) => {
     const entry = randomUUID();
     return {

@@ -139,11 +139,11 @@ d("A reminder before a renewal or a minimum term's end (real Postgres)", { timeo
   };
   /** Gold Weekly with a reminder 3 days before every renewal. */
   const lineOf = async (gym: Gym): Promise<string> => {
-    const res = await send("POST", `/v1/orgs/${gym.id}/membership-types`, gym.cookies, { ...weekly, renewalReminder: { when: "every_renewal", days: 3 } });
+    const res = await send("POST", `/v1/orgs/${gym.id}/membership-types`, gym.cookies, { ...weekly, renewalReminderDays: 3 });
     expect(res.statusCode, res.body).toBe(201);
     const found = (JSON.parse(res.body) as GymMembershipTypesResponse).types.find((t) => t.name === weekly.name);
     if (found === undefined) throw new Error("no type");
-    expect(found.renewalReminder).toEqual({ when: "every_renewal", days: 3 });
+    expect([found.renewalReminderDays, found.termReminderDays]).toEqual([3, null]);
     return found.id;
   };
   const entryUrl = (gym: Gym, entryId: string) => `/v1/orgs/${gym.id}/member-list/entries/${entryId}`;
@@ -321,14 +321,35 @@ d("A reminder before a renewal or a minimum term's end (real Postgres)", { timeo
 
   it("a line refuses a reminder before the minimum term ends without a term, and 30 days before every weekly renewal", async () => {
     const gym = await makeGym("Rule Gym");
-    for (const renewalReminder of [
-      { when: "term_end", days: 30 },
-      { when: "every_renewal", days: 7 },
-    ]) {
-      const res = await send("POST", `/v1/orgs/${gym.id}/membership-types`, gym.cookies, { ...weekly, renewalReminder });
+    for (const asked of [{ termReminderDays: 30 }, { renewalReminderDays: 7 }]) {
+      const res = await send("POST", `/v1/orgs/${gym.id}/membership-types`, gym.cookies, { ...weekly, ...asked });
       expect(res.statusCode, res.body).toBe(400);
     }
-    const ok = await send("POST", `/v1/orgs/${gym.id}/membership-types`, gym.cookies, { ...weekly, contractPeriods: 12, contractThen: "renews", renewalReminder: { when: "term_end", days: 30 } });
+    const ok = await send("POST", `/v1/orgs/${gym.id}/membership-types`, gym.cookies, { ...weekly, contractPeriods: 12, contractThen: "renews", renewalReminderDays: 3, termReminderDays: 30 });
     expect(ok.statusCode, ok.body).toBe(201);
+  });
+
+  it("a line with both: before its minimum term ends and before every renewal, each emailed once, each saying its own", async () => {
+    const gym = await makeGym("Both Gym");
+    const res = await send("POST", `/v1/orgs/${gym.id}/membership-types`, gym.cookies, { ...weekly, contractPeriods: 4, contractThen: "renews", renewalReminderDays: 3, termReminderDays: 7 });
+    expect(res.statusCode, res.body).toBe(201);
+    const line = (JSON.parse(res.body) as GymMembershipTypesResponse).types.find((t) => t.name === weekly.name)?.id ?? "";
+    // Four weekly payments from 26 days ago: the term's last day is tomorrow, and it renews the day after.
+    const ivy = await person(gym, "Ivy Both");
+    await give(gym, line, ivy, addDays(chicagoToday, -26));
+    const lastDay = addDays(chicagoToday, 1);
+    const renewsOn = addDays(chicagoToday, 2);
+    await remind();
+    await remind();
+    const ivyMail = mailTo(await emailOf(ivy));
+    expect(ivyMail.map((m) => m.subject).sort()).toEqual(
+      [`Your membership at ${gym.name} renews on ${dayWords(renewsOn)}`, `Your minimum term at ${gym.name} ends on ${dayWords(lastDay)}`].sort(),
+    );
+    expect(ivyMail.find((m) => m.subject.includes("minimum term"))?.text).toContain("After that, it carries on at $25.00 every week until you cancel.");
+    const page = await pageOf(gym, ivy);
+    expect(page.renewalReminders.map((r) => [r.when, r.status.state]).sort()).toEqual([
+      ["every_renewal", "sent"],
+      ["term_end", "sent"],
+    ]);
   });
 });

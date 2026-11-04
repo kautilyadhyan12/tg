@@ -1,51 +1,38 @@
 import { RENEWAL_REMINDER_DAYS, renewalReminderDaysOffered } from '@app/shared';
 import { shortDay } from './memberBillsView';
 
-// A REMINDER BEFORE A RENEWAL OR A MINIMUM TERM'S END (ROADMAP 18v-iv): the line's pick, its box of who
-// would be emailed, the price list's line and a person's page, from the server's answers.
+// A REMINDER BEFORE A RENEWAL OR A MINIMUM TERM'S END (ROADMAP 18v-iv): a line's two picks, the box of who each
+// would email, the price list's lines and a person's page, from the server's answers.
 
-export const RENEWAL_REMINDER_LABEL = 'Renewal reminder email';
+/** Each reminder as the form and the page name it. */
+export const REMINDER_WORDS = {
+  every_renewal: {
+    label: 'Reminder before every renewal',
+    noun: 'Renewal reminder',
+    hint: 'Emailed to whoever pays, with the amount and how to cancel. It covers everybody already on this membership.',
+  },
+  term_end: {
+    label: 'Reminder before the minimum term ends',
+    noun: 'Minimum term reminder',
+    hint: 'Emailed to whoever pays, with what happens after the minimum term and how to cancel. It covers everybody already on this membership.',
+  },
+};
 
-/** The pick's choices; "Before the minimum term ends" only on a line with one. */
-export function reminderWhenOptions(hasTerm) {
-  return [
-    { value: '', label: 'No reminder' },
-    { value: 'every_renewal', label: 'Before every renewal' },
-    ...(hasTerm ? [{ value: 'term_end', label: 'Before the minimum term ends' }] : []),
-  ];
-}
-
-/** The days a line paid every `termCount` `termUnit` offers for `when`; all of them where the length cannot be read. */
+/** The pick's choices: none, then the days offered. Before every renewal, fewer days than one payment holds;
+ *  all of them where the length cannot be read. */
 export function reminderDayOptions(when, termCount, termUnit) {
   const count = Number(termCount);
-  const days = when === '' || !Number.isInteger(count) || count < 1 ? [...RENEWAL_REMINDER_DAYS] : renewalReminderDaysOffered(when, count, termUnit);
-  return days.map((d) => ({ value: String(d), label: `${String(d)} days before` }));
+  const days = !Number.isInteger(count) || count < 1 ? [...RENEWAL_REMINDER_DAYS] : renewalReminderDaysOffered(when, count, termUnit);
+  return [{ value: '', label: 'No reminder' }, ...days.map((d) => ({ value: String(d), label: `${String(d)} days before` }))];
 }
 
-/** The days a new pick starts at: a week before every renewal where a period holds it, else the most it does;
- *  a month before a minimum term ends. */
-export function startingDays(when, termCount, termUnit) {
-  const offered = reminderDayOptions(when, termCount, termUnit).map((o) => o.value);
-  const wanted = when === 'term_end' ? '30' : '7';
-  return offered.includes(wanted) ? wanted : (offered[offered.length - 1] ?? '');
-}
-
-/** Under the pick: what it does, to whom. */
-export function reminderHint(when, days) {
-  if (when === 'every_renewal') {
-    return `Emailed ${days} days before every renewal to whoever pays, with the amount and how to cancel. It covers everybody already on this membership.`;
-  }
-  if (when === 'term_end') {
-    return `Emailed ${days} days before the minimum term ends to whoever pays, with what happens after and how to cancel. It covers everybody already on this membership.`;
-  }
-  return 'Email whoever pays a reminder before it renews, with the amount and how to cancel.';
-}
-
-/** "Renewal reminder: 7 days before every renewal", on the price list; null for none. */
-export function renewalReminderLine(type) {
-  const r = type?.renewalReminder;
-  if (r === null || r === undefined) return null;
-  return `Renewal reminder: ${String(r.days)} days before ${r.when === 'term_end' ? 'the minimum term ends' : 'every renewal'}`;
+/** "Renewal reminder: 7 days before every renewal" and "Minimum term reminder: 30 days before it ends", on the
+ *  price list; none for a line with neither. */
+export function reminderLines(type) {
+  return [
+    ...(type?.renewalReminderDays > 0 ? [`Renewal reminder: ${String(type.renewalReminderDays)} days before every renewal`] : []),
+    ...(type?.termReminderDays > 0 ? [`Minimum term reminder: ${String(type.termReminderDays)} days before it ends`] : []),
+  ];
 }
 
 const GROUPS = [
@@ -73,9 +60,9 @@ function personLine(p, when) {
   return who;
 }
 
-/** What the box under the pick lists, or null where there is nothing to ask the server about. */
+/** What the box under a pick lists, or null where there is nothing to ask the server about. */
 export function renewalReminderBox(preview, when) {
-  if (preview === null || preview === undefined || when === '') return null;
+  if (preview === null || preview === undefined) return null;
   const groups = GROUPS.map(([state, title]) => {
     const people = preview.people.filter((p) => p.status.state === state).map((p) => ({ entryId: p.entryId, line: personLine(p, when) }));
     return { key: state, title: `${title} (${String(people.length)})`, people };
@@ -90,24 +77,26 @@ export function renewalReminderBox(preview, when) {
 /** The names shown before See all. */
 export const REMINDER_FEW = 3;
 
-/** A person's page, under a membership: what happens to its renewal reminder; null where there is nothing to say. */
-export function reminderStatusLine(status) {
+/** A person's page, under a membership: what happens to one of its reminders; null where there is nothing to say. */
+export function reminderStatusLine(status, when = 'every_renewal') {
   if (status === null || status === undefined) return null;
+  const noun = (REMINDER_WORDS[when] ?? REMINDER_WORDS.every_renewal).noun;
+  const lower = noun.charAt(0).toLowerCase() + noun.slice(1);
   switch (status.state) {
     case 'sent':
-      return status.on === null ? 'Renewal reminder emailed.' : `Renewal reminder emailed on ${shortDay(status.on, false)}.`;
+      return status.on === null ? `${noun} emailed.` : `${noun} emailed on ${shortDay(status.on, false)}.`;
     case 'sending':
-      return 'Renewal reminder being sent.';
+      return `${noun} being sent.`;
     case 'will_send':
-      return status.on === null ? null : `Renewal reminder will be emailed on ${shortDay(status.on, false)}.`;
+      return status.on === null ? null : `${noun} will be emailed on ${shortDay(status.on, false)}.`;
     case 'no_email':
-      return 'No renewal reminder can be emailed: whoever pays for it has no email address on their record.';
+      return `No ${lower} can be emailed: whoever pays for it has no email address on their record.`;
     case 'address_blocked':
-      return 'The renewal reminder could not be emailed: their email address could not be delivered to.';
+      return `The ${lower} could not be emailed: their email address could not be delivered to.`;
     case 'not_sent':
-      return 'The renewal reminder could not be delivered.';
+      return `The ${lower} could not be delivered.`;
     case 'former_payer':
-      return 'No renewal reminder is emailed: whoever pays for it is a past member.';
+      return `No ${lower} is emailed: whoever pays for it is a past member.`;
     default:
       return null;
   }

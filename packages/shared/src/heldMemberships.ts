@@ -51,6 +51,7 @@ import {
   membershipTermUnitSchema,
   contractThenSchema,
   renewalReminderStatusSchema,
+  renewalReminderWhenSchema,
   type ContractThen,
   type MembershipKind,
   type MembershipTermUnit,
@@ -1293,7 +1294,7 @@ export const heldMembershipsResponseSchema = z
      *  whether its own is asked (`agreementAsked`). */
     agreementInUse: z.boolean().default(false),
     /** Each membership in use whose line asks for a renewal reminder (18v-iv), and what happens to it. */
-    renewalReminders: z.array(z.object({ membershipId: z.string().uuid(), status: renewalReminderStatusSchema }).strict()).default([]),
+    renewalReminders: z.array(z.object({ membershipId: z.string().uuid(), when: renewalReminderWhenSchema, status: renewalReminderStatusSchema }).strict()).default([]),
   })
   .strict();
 export type HeldMembershipsResponse = z.infer<typeof heldMembershipsResponseSchema>;

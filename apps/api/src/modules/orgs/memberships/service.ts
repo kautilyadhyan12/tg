@@ -137,7 +137,8 @@ function typeInput(req: SaveGymMembershipTypeRequest): repo.MembershipTypeInput 
     noticeDays: req.noticeDays,
     leaveFeeMinor: req.leaveFeeMinor,
     coolingOffDays: req.coolingOffDays,
-    renewalReminder: req.renewalReminder,
+    renewalReminderDays: req.renewalReminderDays,
+    termReminderDays: req.termReminderDays,
   };
 }
 

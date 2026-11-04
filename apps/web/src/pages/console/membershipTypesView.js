@@ -294,8 +294,8 @@ export function emptyDraft() {
     leaveFee: '',
     noticeDays: '',
     coolingOffDays: '',
-    renewalReminderWhen: '',
     renewalReminderDays: '',
+    termReminderDays: '',
   };
 }
 
@@ -332,8 +332,8 @@ export function draftFromType(type) {
     leaveFee: type.leaveFeeMinor > 0 ? minorToPriceText(type.leaveFeeMinor, type.currency) : '',
     noticeDays: type.noticeDays === null || type.noticeDays === undefined ? '' : String(type.noticeDays),
     coolingOffDays: type.coolingOffDays === null || type.coolingOffDays === undefined ? '' : String(type.coolingOffDays),
-    renewalReminderWhen: type.renewalReminder?.when ?? '',
-    renewalReminderDays: type.renewalReminder ? String(type.renewalReminder.days) : '',
+    renewalReminderDays: type.renewalReminderDays > 0 ? String(type.renewalReminderDays) : '',
+    termReminderDays: type.termReminderDays > 0 ? String(type.termReminderDays) : '',
   };
 }
 
@@ -387,7 +387,7 @@ const usesTerm = (choice) => choice === 'recurring' || choice === 'one_time' || 
 const usesAccess = usesTerm;
 
 /** The boxes in the order the form draws them, so the first wrong one can be shown. */
-export const PROBLEM_ORDER = ['name', 'description', 'price', 'joiningFee', 'tax', 'termCount', 'contractPeriods', 'leaveFee', 'noticeDays', 'coolingOffDays', 'renewalReminder', 'packClasses', 'packDays', 'bookingsLimit', 'classes', 'ptLimit'];
+export const PROBLEM_ORDER = ['name', 'description', 'price', 'joiningFee', 'tax', 'termCount', 'contractPeriods', 'leaveFee', 'noticeDays', 'coolingOffDays', 'renewalReminderDays', 'packClasses', 'packDays', 'bookingsLimit', 'classes', 'ptLimit'];
 
 /** The first box that is wrong, top to bottom, or null. */
 export function firstProblem(problems) {
@@ -467,10 +467,9 @@ export function draftProblems(draft, currency) {
     }
   }
   if (draftHasReminder(draft)) {
-    const offered = reminderDayOptions(draft.renewalReminderWhen, draft.termCount, draft.termUnit).map((o) => o.value);
-    if (priceMinor === 0) problems.renewalReminder = 'A free membership has no renewal reminder. Choose No reminder.';
-    else if (draft.renewalReminderWhen === 'term_end' && !draftHasContract(draft)) problems.renewalReminder = 'Set a minimum term first, or choose Before every renewal.';
-    else if (!offered.includes(draft.renewalReminderDays)) problems.renewalReminder = 'Choose how many days before.';
+    const offered = reminderDayOptions('every_renewal', draft.termCount, draft.termUnit).map((o) => o.value);
+    if (priceMinor === 0) problems.renewalReminderDays = 'A free membership has no renewal reminder. Choose No reminder.';
+    else if (!offered.includes(draft.renewalReminderDays)) problems.renewalReminderDays = 'That is longer than one payment. Choose fewer days before.';
   }
   if (draft.choice === 'pack') {
     if (wholeNumber(draft.packClasses, 1, MEMBERSHIP_PACK_CLASSES_MAX) === null) {
@@ -516,7 +515,12 @@ export function draftHasCoolingOff(draft) {
 
 /** Whether the form sets a renewal reminder: a repeating type with a choice picked (18v-iv). */
 export function draftHasReminder(draft) {
-  return draft.choice === 'recurring' && (draft.renewalReminderWhen ?? '') !== '';
+  return draft.choice === 'recurring' && (draft.renewalReminderDays ?? '') !== '';
+}
+
+/** Whether the form sets a reminder before its minimum term ends: a minimum term, and days picked (18v-iv). */
+export function draftHasTermReminder(draft) {
+  return draftHasContract(draft) && (draft.termReminderDays ?? '') !== '';
 }
 
 /** Whether the form's ticked classes apply: not for a gym-only type. */
@@ -575,7 +579,8 @@ export function draftBody(draft, currency) {
     leaveFeeMinor: ((minor) => (minor === null || minor === 0 ? null : minor))(draftLeaveFee(draft, currency)),
     noticeDays: draftHasNotice(draft) ? wholeNumber(draft.noticeDays, 1, MEMBERSHIP_NOTICE_DAYS_MAX) : null,
     coolingOffDays: draftHasCoolingOff(draft) ? wholeNumber(draft.coolingOffDays, 1, MEMBERSHIP_COOLING_OFF_DAYS_MAX) : null,
-    renewalReminder: draftHasReminder(draft) ? { when: draft.renewalReminderWhen, days: Number(draft.renewalReminderDays) } : null,
+    renewalReminderDays: draftHasReminder(draft) ? Number(draft.renewalReminderDays) : null,
+    termReminderDays: draftHasTermReminder(draft) ? Number(draft.termReminderDays) : null,
     // A change says which version of the type the form read.
     ...(draft.id === null ? {} : { updatedAt: draft.updatedAt }),
   };

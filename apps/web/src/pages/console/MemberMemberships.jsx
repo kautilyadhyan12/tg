@@ -2240,13 +2240,16 @@ export default function MemberMemberships({
             {pay.text}
           </span>
         ) : null}
-        {/* Its renewal reminder (18v-iv): emailed, when it will be, or why it cannot be. */}
-        {((line) =>
-          line === null ? null : (
-            <span className="c-s14 c-t2" data-testid="held-renewal-reminder">
-              {line}
+        {/* Its reminders (18v-iv): emailed, when they will be, or why they cannot be. */}
+        {(shown.renewalReminders ?? [])
+          .filter((r) => r.membershipId === m.id)
+          .map((r) => ({ when: r.when, line: reminderStatusLine(r.status, r.when) }))
+          .filter((r) => r.line !== null)
+          .map((r) => (
+            <span key={r.when} className="c-s14 c-t2" data-testid="held-renewal-reminder">
+              {r.line}
             </span>
-          ))(reminderStatusLine((shown.renewalReminders ?? []).find((r) => r.membershipId === m.id)?.status ?? null))}
+          ))}
         <MembershipAgreement
           gymId={gymId}
           entryId={entryId}

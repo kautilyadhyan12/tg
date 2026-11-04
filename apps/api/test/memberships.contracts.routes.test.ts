@@ -283,7 +283,7 @@ d("a contract on a repeating membership (real Postgres)", () => {
       if (t === undefined) throw new Error("no type");
       const change = await put(
         `${typesUrl(gymId)}/${gold}`,
-        { ...monthly(), name: t.name, includesPt: false, ptLimit: null, ptPeriod: null, taxRateId: null, joiningFeeMinor: 0, contractPeriods: null, contractThen: null, noticeDays: null, leaveFeeMinor: null, coolingOffDays: null, renewalReminder: null, updatedAt: t.updatedAt },
+        { ...monthly(), name: t.name, includesPt: false, ptLimit: null, ptPeriod: null, taxRateId: null, joiningFeeMinor: 0, contractPeriods: null, contractThen: null, noticeDays: null, leaveFeeMinor: null, coolingOffDays: null, renewalReminderDays: null, termReminderDays: null, updatedAt: t.updatedAt },
         owner,
       );
       expect(change.statusCode, change.body).toBe(200);

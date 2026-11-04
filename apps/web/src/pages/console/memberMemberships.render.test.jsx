@@ -2336,14 +2336,15 @@ describe('a renewal reminder (18v-iv)', () => {
     orgService.getHeldMemberships.mockResolvedValue(
       answer([gold, silver], false, {
         renewalReminders: [
-          { membershipId: gold.id, status: { state: 'sent', on: '2026-10-18', aboutOn: '2026-11-01' } },
-          { membershipId: silver.id, status: { state: 'no_email', on: null, aboutOn: '2026-11-05' } },
+          { membershipId: gold.id, when: 'every_renewal', status: { state: 'sent', on: '2026-10-18', aboutOn: '2026-11-01' } },
+          { membershipId: gold.id, when: 'term_end', status: { state: 'will_send', on: '2026-10-25', aboutOn: '2026-11-24' } },
+          { membershipId: silver.id, when: 'every_renewal', status: { state: 'no_email', on: null, aboutOn: '2026-11-05' } },
         ],
       }),
     );
     render(draw(ADA, 'Ada Lovelace'));
     const b = await boxSoon();
     const lines = b.getAllByTestId('held-renewal-reminder').map((el) => el.textContent);
-    expect(lines.sort()).toEqual(['No renewal reminder can be emailed: whoever pays for it has no email address on their record.', 'Renewal reminder emailed on 18 Oct.'].sort());
+    expect(lines.sort()).toEqual(['No renewal reminder can be emailed: whoever pays for it has no email address on their record.', 'Renewal reminder emailed on 18 Oct.', 'Minimum term reminder will be emailed on 25 Oct.'].sort());
   });
 });

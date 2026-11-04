@@ -141,7 +141,9 @@ async function sendOne(deps: RenewalReminderDeps, claim: repo.ClaimedReminder): 
   const checked = await deps.sql.begin(async (tx): Promise<{ letter: Letter } | "not_due" | "lost"> => {
     await repo.holdMembership(tx, claim.gymId, claim.heldId);
     const today = await repo.gymToday(tx, claim.gymId, now);
-    const [held] = await repo.remindedHeld(tx, { gymId: claim.gymId, heldId: claim.heldId });
+    // The reminder this one was written by: before the minimum term ends for its term, else before every renewal.
+    const when = claim.occasion === "term" ? "term_end" : "every_renewal";
+    const held = (await repo.remindedHeld(tx, { gymId: claim.gymId, heldId: claim.heldId })).find((h) => h.setting.when === when);
     if (today === null || held === undefined || !stillDue(held, claim, email, today)) return "not_due";
     return (await repo.markMaybeSent(tx, claim, hmac, now)) ? { letter: { held, today } } : "lost";
   });
@@ -296,12 +298,18 @@ async function statusesOf(sql: Sql, emailKey: Buffer | null, gymId: string, held
 }
 
 /** A person's page: each of their memberships in use whose line asks for a reminder, and what happens to it. */
-export async function remindersOfRecord(sql: Sql, emailKey: Buffer | null, gymId: string, entryId: string, today: string): Promise<{ membershipId: string; status: RenewalReminderStatus }[]> {
+export async function remindersOfRecord(
+  sql: Sql,
+  emailKey: Buffer | null,
+  gymId: string,
+  entryId: string,
+  today: string,
+): Promise<{ membershipId: string; when: RenewalReminderSetting["when"]; status: RenewalReminderStatus }[]> {
   const held = await repo.remindedHeld(sql, { gymId, entryId });
   const statuses = await statusesOf(sql, emailKey, gymId, held, today);
   return held.flatMap((h, i) => {
     const status = statuses[i];
-    return status === undefined ? [] : [{ membershipId: h.row.id, status }];
+    return status === undefined ? [] : [{ membershipId: h.row.id, when: h.setting.when, status }];
   });
 }
 
