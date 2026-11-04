@@ -53,6 +53,16 @@ import PlaceLink from './PlaceLink';
 import { GiveBox, NotSetUp, TypeTies } from './MembershipFromList';
 import { otherAgreementTo, priceAgreementLine } from '../../pages/console/agreementView';
 import { useListMemberships } from './useListMemberships';
+import {
+  REMINDER_FEW,
+  RENEWAL_REMINDER_LABEL,
+  reminderDayOptions,
+  reminderHint,
+  reminderWhenOptions,
+  renewalReminderBox,
+  renewalReminderLine,
+  startingDays,
+} from '../../pages/console/renewalReminderView';
 
 // THE MEMBERSHIPS PAGE (spec Part 3 §13.1; ROADMAP 17a-i, a page of its own since 23c-i),
 // on `memberships.manage` as the server gates the changes. What the gym sells: a name, a
@@ -104,6 +114,103 @@ function Part({ title, children }) {
 
 /** `inRow`: the form is inside a row of a list, under that list's own heading.
  *  `error`: why the server refused the last save, said beside the button that sent it. */
+/** One group of the reminder's box: a few names, then See all. */
+function ReminderGroup({ group }) {
+  const [all, setAll] = useState(false);
+  const shown = all ? group.people : group.people.slice(0, REMINDER_FEW);
+  const more = group.people.length - shown.length;
+  return (
+    <div className="flex flex-col gap-1" data-testid={`reminder-${group.key}`}>
+      <span className="c-s14 c-w6 c-t1">{group.title}</span>
+      <ul className="m-0 pl-5 c-s14 c-t2 flex flex-col gap-0.5">
+        {shown.map((p) => (
+          <li key={p.entryId}>{p.line}</li>
+        ))}
+      </ul>
+      {more > 0 ? (
+        <button type="button" className="c-btn c-btn-link c-s14 self-start" onClick={() => setAll(true)}>
+          {`and ${String(more)} more · See all`}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+/** The renewal reminder (18v-iv): when, how many days before, and on a line already on the list, who it would
+ *  email before anything is saved. */
+function ReminderField({ gymId, draft, set, problem, id }) {
+  const when = draft.renewalReminderWhen ?? '';
+  const days = draft.renewalReminderDays ?? '';
+  const hasTerm = draft.contract === 'fixed';
+  const dayOptions = reminderDayOptions(when, draft.termCount, draft.termUnit);
+  const ready = when !== '' && dayOptions.some((o) => o.value === days) && !(when === 'term_end' && !hasTerm);
+  // The answer is kept with the pick it was for: a box from an earlier pick is never shown.
+  const key = draft.id === null || !ready ? null : `${draft.id}|${when}|${days}`;
+  const [answer, setAnswer] = useState({ key: null, data: null, failed: false });
+  useEffect(() => {
+    if (key === null) return undefined;
+    let live = true;
+    orgService
+      .previewRenewalReminder(gymId, draft.id, { when, days: Number(days) })
+      .then((res) => {
+        if (live) setAnswer({ key, data: res.data, failed: false });
+      })
+      .catch(() => {
+        if (live) setAnswer({ key, data: null, failed: true });
+      });
+    return () => {
+      live = false;
+    };
+  }, [gymId, draft.id, when, days, key]);
+  const current = key !== null && answer.key === key;
+  const previewFailed = current && answer.failed;
+  const box = renewalReminderBox(current ? answer.data : null, when);
+  return (
+    <Field id={id('reminder')} label={RENEWAL_REMINDER_LABEL} problem={problem}>
+      <div className="flex flex-wrap items-center gap-2" style={{ maxWidth: 560 }}>
+        <select
+          id={id('reminder')}
+          aria-invalid={problem ? 'true' : undefined}
+          value={when}
+          onChange={(event) => {
+            const next = event.target.value;
+            set({ renewalReminderWhen: next, renewalReminderDays: next === '' ? '' : startingDays(next, draft.termCount, draft.termUnit) });
+          }}
+          className="c-input"
+          style={{ maxWidth: 280 }}
+        >
+          {reminderWhenOptions(hasTerm || when === 'term_end').map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+        {when !== '' ? (
+          <select aria-label="How many days before" value={days} onChange={(event) => set({ renewalReminderDays: event.target.value })} className="c-input" style={{ maxWidth: 200 }}>
+            {dayOptions.some((o) => o.value === days) ? null : <option value={days}>Choose</option>}
+            {dayOptions.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        ) : null}
+      </div>
+      <p className="c-s13 c-t3 m-0">{reminderHint(when, days)}</p>
+      {previewFailed ? <p className="c-s14 c-t2 m-0">{"We couldn't load who gets the reminder. You can still save."}</p> : null}
+      {box !== null ? (
+        <div className="rounded-[14px] p-3 flex flex-col gap-2" style={{ background: 'var(--raise)', border: '1px solid var(--raise-line)' }} data-testid="renewal-reminder-box">
+          <span className="c-s14 c-w6 c-t1">{box.heading}</span>
+          {box.empty !== null ? <span className="c-s14 c-t2">{box.empty}</span> : null}
+          {box.groups.map((group) => (
+            <ReminderGroup key={group.key} group={group} />
+          ))}
+        </div>
+      ) : null}
+    </Field>
+  );
+}
+
 function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRateAdded, draft, setDraft, problems, refused, busy, forWord, error, inRow, onSave, onCancel }) {
   const [addingRate, setAddingRate] = useState(false);
   const editing = draft.id !== null;
@@ -406,6 +513,8 @@ function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRate
           </p>
         </Field>
 
+        {choice === 'recurring' ? <ReminderField gymId={gymId} draft={draft} set={set} problem={problems?.renewalReminder} id={id} /> : null}
+
         {choice === 'pack' ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" style={{ maxWidth: 480 }}>
             <Field id={id('pack-classes')} label="Classes in the pack" problem={problems?.packClasses}>
@@ -604,6 +713,7 @@ function TypeRow({ type, orgType, taxLine = null, agreementLine = null, agreemen
           {leaveFeeLine(type) !== null ? <p className="c-s14 c-t2 m-0">{leaveFeeLine(type)}</p> : null}
           {noticeLine(type) !== null ? <p className="c-s14 c-t2 m-0">{noticeLine(type)}</p> : null}
           {coolingOffLine(type) !== null ? <p className="c-s14 c-t2 m-0">{coolingOffLine(type)}</p> : null}
+          {renewalReminderLine(type) !== null ? <p className="c-s14 c-t2 m-0">{renewalReminderLine(type)}</p> : null}
           {taxLine !== null ? <p className="c-s14 c-t2 m-0">{taxLine}</p> : null}
           <p className="c-s14 c-t2 m-0">{includesLine(type, orgType)}</p>
           {agreementLine !== null ? (

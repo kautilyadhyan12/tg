@@ -29,6 +29,7 @@ import ChargebackLines, { ChargeStopHolder } from './ChargebackLines';
 import { cardRefundSaidNow, refundReasonsFor, waitsOnSquare } from './cardRefundView';
 import MembershipAgreement from './MembershipAgreement';
 import { noteDay } from './memberListPeople';
+import { reminderStatusLine } from './renewalReminderView';
 import {
   ENDING_CLASSES_SHOWN,
   ENDING_MOVED,
@@ -2239,6 +2240,13 @@ export default function MemberMemberships({
             {pay.text}
           </span>
         ) : null}
+        {/* Its renewal reminder (18v-iv): emailed, when it will be, or why it cannot be. */}
+        {((line) =>
+          line === null ? null : (
+            <span className="c-s14 c-t2" data-testid="held-renewal-reminder">
+              {line}
+            </span>
+          ))(reminderStatusLine((shown.renewalReminders ?? []).find((r) => r.membershipId === m.id)?.status ?? null))}
         <MembershipAgreement
           gymId={gymId}
           entryId={entryId}

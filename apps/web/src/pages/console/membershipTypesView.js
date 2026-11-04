@@ -24,6 +24,7 @@ import {
   TAXED_PRICE_MINOR_MAX,
   bpToTaxRateText,
 } from '@app/shared';
+import { reminderDayOptions } from './renewalReminderView';
 
 /** Whether this person may change the price list. The tick, never the job title: an
  *  owner can give it to anyone on staff. */
@@ -293,6 +294,8 @@ export function emptyDraft() {
     leaveFee: '',
     noticeDays: '',
     coolingOffDays: '',
+    renewalReminderWhen: '',
+    renewalReminderDays: '',
   };
 }
 
@@ -329,6 +332,8 @@ export function draftFromType(type) {
     leaveFee: type.leaveFeeMinor > 0 ? minorToPriceText(type.leaveFeeMinor, type.currency) : '',
     noticeDays: type.noticeDays === null || type.noticeDays === undefined ? '' : String(type.noticeDays),
     coolingOffDays: type.coolingOffDays === null || type.coolingOffDays === undefined ? '' : String(type.coolingOffDays),
+    renewalReminderWhen: type.renewalReminder?.when ?? '',
+    renewalReminderDays: type.renewalReminder ? String(type.renewalReminder.days) : '',
   };
 }
 
@@ -382,7 +387,7 @@ const usesTerm = (choice) => choice === 'recurring' || choice === 'one_time' || 
 const usesAccess = usesTerm;
 
 /** The boxes in the order the form draws them, so the first wrong one can be shown. */
-export const PROBLEM_ORDER = ['name', 'description', 'price', 'joiningFee', 'tax', 'termCount', 'contractPeriods', 'leaveFee', 'noticeDays', 'coolingOffDays', 'packClasses', 'packDays', 'bookingsLimit', 'classes', 'ptLimit'];
+export const PROBLEM_ORDER = ['name', 'description', 'price', 'joiningFee', 'tax', 'termCount', 'contractPeriods', 'leaveFee', 'noticeDays', 'coolingOffDays', 'renewalReminder', 'packClasses', 'packDays', 'bookingsLimit', 'classes', 'ptLimit'];
 
 /** The first box that is wrong, top to bottom, or null. */
 export function firstProblem(problems) {
@@ -461,6 +466,12 @@ export function draftProblems(draft, currency) {
       problems.coolingOffDays = 'A free membership has no cooling-off period. Leave it empty.';
     }
   }
+  if (draftHasReminder(draft)) {
+    const offered = reminderDayOptions(draft.renewalReminderWhen, draft.termCount, draft.termUnit).map((o) => o.value);
+    if (priceMinor === 0) problems.renewalReminder = 'A free membership has no renewal reminder. Choose No reminder.';
+    else if (draft.renewalReminderWhen === 'term_end' && !draftHasContract(draft)) problems.renewalReminder = 'Set a minimum term first, or choose Before every renewal.';
+    else if (!offered.includes(draft.renewalReminderDays)) problems.renewalReminder = 'Choose how many days before.';
+  }
   if (draft.choice === 'pack') {
     if (wholeNumber(draft.packClasses, 1, MEMBERSHIP_PACK_CLASSES_MAX) === null) {
       problems.packClasses = `Type how many classes, from 1 to ${String(MEMBERSHIP_PACK_CLASSES_MAX)}.`;
@@ -501,6 +512,11 @@ export function draftHasNotice(draft) {
 /** Whether the form sets a cooling-off period: days typed, on any kind (18v-iii). */
 export function draftHasCoolingOff(draft) {
   return String(draft.coolingOffDays ?? '').trim() !== '';
+}
+
+/** Whether the form sets a renewal reminder: a repeating type with a choice picked (18v-iv). */
+export function draftHasReminder(draft) {
+  return draft.choice === 'recurring' && (draft.renewalReminderWhen ?? '') !== '';
 }
 
 /** Whether the form's ticked classes apply: not for a gym-only type. */
@@ -559,6 +575,7 @@ export function draftBody(draft, currency) {
     leaveFeeMinor: ((minor) => (minor === null || minor === 0 ? null : minor))(draftLeaveFee(draft, currency)),
     noticeDays: draftHasNotice(draft) ? wholeNumber(draft.noticeDays, 1, MEMBERSHIP_NOTICE_DAYS_MAX) : null,
     coolingOffDays: draftHasCoolingOff(draft) ? wholeNumber(draft.coolingOffDays, 1, MEMBERSHIP_COOLING_OFF_DAYS_MAX) : null,
+    renewalReminder: draftHasReminder(draft) ? { when: draft.renewalReminderWhen, days: Number(draft.renewalReminderDays) } : null,
     // A change says which version of the type the form read.
     ...(draft.id === null ? {} : { updatedAt: draft.updatedAt }),
   };
