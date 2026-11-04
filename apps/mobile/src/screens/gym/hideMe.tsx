@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { StyleSheet, Switch, View } from "react-native";
+import { AppState, StyleSheet, Switch, View } from "react-native";
 import { leaderboardVisibilitySchema, type LeaderboardVisibility } from "@app/shared";
 import { Button } from "../../look/Button";
 import { colours } from "../../look/colours";
@@ -35,11 +35,16 @@ export function useHideMe(afterSave: () => void = () => undefined) {
     else setHide((was) => (was.kind === "ok" ? was : { kind: "failed" }));
   }, [session]);
 
+  // Read again whenever the app comes back: the browser, or another phone, may have changed it.
   useEffect(() => {
     live.current = true;
     void load();
+    const back = AppState.addEventListener("change", (state) => {
+      if (state === "active") void load();
+    });
     return () => {
       live.current = false;
+      back.remove();
     };
   }, [load]);
 

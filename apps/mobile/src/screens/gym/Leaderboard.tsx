@@ -142,7 +142,6 @@ function Body({ place, onClose, top, bottom }: { place: LeaderboardPlace; onClos
     const back = AppState.addEventListener("change", (state) => {
       if (state !== "active") return;
       void load(true);
-      void loadHide();
     });
     return () => {
       live.current = false;

@@ -166,15 +166,29 @@ function SetupBody({
   const [picked, setPicked] = useState<SetupScreenId | null>(at);
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
-  // Opened from Me or started again, the units the person chose (Settings); the first time, the phone's own country's.
+  // The account's units once they have been chosen anywhere (Settings, setup, a first setup's own);
+  // until then, the very first time, the phone's own country's. The server's own start is kg · cm,
+  // so an account in anything else was chosen.
   const saved = state.kind === "in" ? accountUnits(state.user.units) : null;
-  const chosen = mode === "over" || again;
+  const chosen = mode === "over" || again || session.unitsChosen() || (saved !== null && saved !== "metric");
   const [units, showUnits] = useState<Units>(() => (chosen && saved !== null ? saved : defaultUnits(phoneLanguage())));
-  // One choice for the whole app: the switch here is the one in Settings.
+  const savedNow = useRef(saved);
+  savedNow.current = saved;
+  const unitSaves = useRef(0);
+  // One choice for the whole app: the switch here is the one in Settings. Only the newest press's
+  // answer counts; a refused or lost one shows the account's units again.
   const keepUnits = useCallback(
     (next: Units) => {
+      unitSaves.current += 1;
+      const number = unitSaves.current;
       void session.signedIn({ method: "PATCH", path: "/v1/users/me", body: { units: next } }, userProfileResponseSchema).then(async (answer) => {
-        if (answer.kind === "ok") await session.keepUnits(answer.data.user.units);
+        if (number !== unitSaves.current) return;
+        if (answer.kind === "ok") {
+          await session.keepUnits(answer.data.user.units, true);
+          return;
+        }
+        const now = savedNow.current;
+        if (now !== null) showUnits(now);
       });
     },
     [session],

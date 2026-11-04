@@ -87,8 +87,11 @@ export interface Session {
   keepSignUpNote: (version: string) => Promise<void>;
   /** The name the server now holds for this person, kept with the sign-in and shown at once. */
   keepName: (displayName: string) => Promise<void>;
-  /** The units the server now holds for this person, kept with the sign-in and shown at once. */
-  keepUnits: (units: string) => Promise<void>;
+  /** The units the server now holds for this person, kept with the sign-in and shown at once.
+   *  `chosen`: the answer to a save from this phone, so they count as chosen from now on. */
+  keepUnits: (units: string, chosen?: boolean) => Promise<void>;
+  /** Units have been chosen on this phone: a setup in front of the tabs keeps them. */
+  unitsChosen: () => boolean;
   /** Whether the server has said this person finished setup, as this phone last heard it. */
   setupDone: () => boolean;
   keepSetupDone: (done: boolean) => Promise<void>;
@@ -347,6 +350,7 @@ export function createSession({
     },
 
     setupDone: () => kept?.setupDone === true,
+    unitsChosen: () => kept?.unitsChosen === true,
 
     keepSetupDone: async (done) => {
       const mine = kept;
@@ -383,9 +387,10 @@ export function createSession({
       await writeKept(mine);
     },
 
-    keepUnits: async (units) => {
+    keepUnits: async (units, chosen = false) => {
       const mine = kept;
-      if (mine === null || mine.user.units === units) return;
+      if (mine === null || (mine.user.units === units && (!chosen || mine.unitsChosen === true))) return;
+      if (chosen) mine.unitsChosen = true;
       mine.user = { ...mine.user, units };
       show({ kind: "in", user: mine.user });
       await writeKept(mine);

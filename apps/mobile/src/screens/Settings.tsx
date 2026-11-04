@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { useEffect, useRef, useState, type RefObject } from "react";
+import { AppState, Pressable, StyleSheet, View } from "react-native";
 import { displayNameSchema, myOrgsResponseSchema, onboardingResponseSchema, orgWords, userProfileResponseSchema, type MyOrgsResponse, type Units } from "@app/shared";
 import { Button } from "../look/Button";
 import { Avatar, Badge, Card } from "../look/Card";
@@ -24,11 +24,11 @@ import { NO_ANSWER } from "./SignIn";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-/** "October 2026", the month the account was made, in UTC. */
+/** "October 2026", the month the account was made on the phone's own calendar, as the browser shows it. */
 export function memberSinceText(createdAt: string): string | null {
   const at = new Date(createdAt);
-  const month = MONTHS[at.getUTCMonth()];
-  return Number.isNaN(at.getTime()) || month === undefined ? null : `${month} ${String(at.getUTCFullYear())}`;
+  const month = MONTHS[at.getMonth()];
+  return Number.isNaN(at.getTime()) || month === undefined ? null : `${month} ${String(at.getFullYear())}`;
 }
 
 export function SettingsPage({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -39,28 +39,53 @@ export function SettingsPage({ open, onClose }: { open: boolean; onClose: () => 
   );
 }
 
+type Places = { kind: "loading" } | { kind: "failed" } | { kind: "ok"; orgs: MyOrgsResponse["orgs"] };
+
 function SettingsBody({ onClose }: { onClose: () => void }) {
   const { session } = useSession();
   const [since, setSince] = useState<string | null>(null);
+  // Each name or units press counts here, so a read begun before it never puts the old answer back.
+  const saves = useRef(0);
   useEffect(() => {
     const run = { live: true };
-    void session.signedIn({ method: "GET", path: "/v1/users/me" }, userProfileResponseSchema).then((answer) => {
-      if (!run.live || answer.kind !== "ok") return;
-      setSince(memberSinceText(answer.data.user.createdAt));
-      // What the server holds now, as another device may have changed it since this phone last heard.
-      void session.keepName(answer.data.user.displayName).then(() => session.keepUnits(answer.data.user.units));
+    const read = () => {
+      const at = saves.current;
+      void session.signedIn({ method: "GET", path: "/v1/users/me" }, userProfileResponseSchema).then((answer) => {
+        if (!run.live || answer.kind !== "ok") return;
+        setSince(memberSinceText(answer.data.user.createdAt));
+        if (saves.current !== at) return;
+        // What the server holds now, as another device may have changed it since this phone last heard.
+        void session.keepName(answer.data.user.displayName).then(() => session.keepUnits(answer.data.user.units));
+      });
+    };
+    read();
+    const back = AppState.addEventListener("change", (state) => {
+      if (state === "active") read();
+    });
+    return () => {
+      run.live = false;
+      back.remove();
+    };
+  }, [session]);
+  const [places, setPlaces] = useState<Places>({ kind: "loading" });
+  const [tries, setTries] = useState(0);
+  useEffect(() => {
+    const run = { live: true };
+    void session.signedIn({ method: "GET", path: "/v1/orgs/mine" }, myOrgsResponseSchema).then((answer) => {
+      if (!run.live) return;
+      setPlaces(answer.kind === "ok" ? { kind: "ok", orgs: answer.data.orgs.filter((org) => org.isMember) } : { kind: "failed" });
     });
     return () => {
       run.live = false;
     };
-  }, [session]);
+  }, [session, tries]);
   return (
     <View testID="settings-page" style={styles.page}>
       <Profile since={since} />
-      <NamePart />
-      <UnitsPart />
-      <BoardsPart />
-      <PlacesPart />
+      <NamePart saves={saves} />
+      <UnitsPart saves={saves} />
+      <BoardsPart belongs={places.kind === "ok" && places.orgs.length > 0} />
+      <PlacesPart places={places} onAgain={() => { setTries((n) => n + 1); }} />
       <AccountPart onClose={onClose} />
     </View>
   );
@@ -104,7 +129,7 @@ function Said({ words, bad }: { words: string | null; bad: boolean }) {
   );
 }
 
-function NamePart() {
+function NamePart({ saves }: { saves: RefObject<number> }) {
   const { session, state } = useSession();
   const now = state.kind === "in" ? state.user.displayName : "";
   const [name, setName] = useState(now);
@@ -119,6 +144,7 @@ function NamePart() {
   const changed = typed.success && typed.data !== now;
   const save = async () => {
     if (!typed.success || !changed || busy) return;
+    saves.current += 1;
     setBusy(true);
     setSaid(null);
     const answer = await session.signedIn({ method: "PATCH", path: "/v1/users/me", body: { displayName: typed.data } }, userProfileResponseSchema);
@@ -142,17 +168,18 @@ function NamePart() {
   );
 }
 
-function UnitsPart() {
+function UnitsPart({ saves }: { saves: RefObject<number> }) {
   const { session, state } = useSession();
   const now = state.kind === "in" ? accountUnits(state.user.units) : null;
   const [busy, setBusy] = useState<Units | null>(null);
   const [said, setSaid] = useState<string | null>(null);
   const pick = async (units: Units) => {
     if (busy !== null || units === now) return;
+    saves.current += 1;
     setBusy(units);
     setSaid(null);
     const answer = await session.signedIn({ method: "PATCH", path: "/v1/users/me", body: { units } }, userProfileResponseSchema);
-    if (answer.kind === "ok") await session.keepUnits(answer.data.user.units);
+    if (answer.kind === "ok") await session.keepUnits(answer.data.user.units, true);
     else setSaid(answer.kind === "refused" ? answer.message : NO_ANSWER);
     setBusy(null);
   };
@@ -165,34 +192,19 @@ function UnitsPart() {
   );
 }
 
-function BoardsPart() {
+function BoardsPart({ belongs }: { belongs: boolean }) {
   const { hide, busy, said, load, save } = useHideMe();
   if (hide.kind === "loading") return null;
   return (
     <Part title="Leaderboards" icon="trophy">
       <HideMe hide={hide} busy={busy} said={said} onChange={(hidden) => void save(hidden)} onAgain={() => void load()} />
-      {hide.kind === "ok" ? <Txt kind="small">The same at every place you belong to.</Txt> : null}
+      {hide.kind === "ok" && belongs ? <Txt kind="small">The same at every place you belong to.</Txt> : null}
     </Part>
   );
 }
 
-type Places = { kind: "loading" } | { kind: "failed" } | { kind: "ok"; orgs: MyOrgsResponse["orgs"] };
-
-function PlacesPart() {
-  const { session } = useSession();
-  const [places, setPlaces] = useState<Places>({ kind: "loading" });
+function PlacesPart({ places, onAgain }: { places: Places; onAgain: () => void }) {
   const [shown, setShown] = useState<MyOrgsResponse["orgs"][number] | null>(null);
-  const [tries, setTries] = useState(0);
-  useEffect(() => {
-    const run = { live: true };
-    void session.signedIn({ method: "GET", path: "/v1/orgs/mine" }, myOrgsResponseSchema).then((answer) => {
-      if (!run.live) return;
-      setPlaces(answer.kind === "ok" ? { kind: "ok", orgs: answer.data.orgs.filter((org) => org.isMember) } : { kind: "failed" });
-    });
-    return () => {
-      run.live = false;
-    };
-  }, [session, tries]);
   if (places.kind === "loading" || (places.kind === "ok" && places.orgs.length === 0)) return null;
   return (
     <Part title="Your privacy" icon="shield">
@@ -201,7 +213,7 @@ function PlacesPart() {
           <Txt kind="small" style={styles.grow}>
             Couldn’t load your places.
           </Txt>
-          <Button label="Try again" kind="link" say="Try your places again" onPress={() => { setTries((n) => n + 1); }} />
+          <Button label="Try again" kind="link" say="Try your places again" onPress={onAgain} />
         </View>
       ) : (
         places.orgs.map((org) => (

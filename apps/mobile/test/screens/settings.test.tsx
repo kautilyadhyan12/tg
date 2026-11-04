@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
+import { AppState } from "react-native";
 import { missingPlanInputSchema } from "@app/shared";
 import { App } from "../../src/App";
 import { NO_ANSWER } from "../../src/screens/SignIn";
@@ -68,6 +69,23 @@ function withBoard(server: ReturnType<typeof fakeServer>, hidden: () => boolean)
   };
 }
 
+/** The app coming back to the front, as Android says it. */
+function listenForComeBack(): () => Promise<void> {
+  const listeners: ((state: string) => void)[] = [];
+  jest.spyOn(AppState, "addEventListener").mockImplementation((_type, handler) => {
+    listeners.push(handler as (state: string) => void);
+    return { remove: () => undefined };
+  });
+  return async () => {
+    await act(() => {
+      for (const one of listeners) one("active");
+    });
+  };
+}
+afterEach(() => {
+  jest.restoreAllMocks();
+});
+
 async function openSettings(ask: Ask, store = memoryStore(kept(1))) {
   await render(<App extra={extra} ask={ask} store={store} wait={noWait} />);
   const tab = (await screen.findAllByRole("tab"))[4];
@@ -103,6 +121,25 @@ describe("Hide me in Settings is the leaderboards' own (the worst thing: Setting
     await fireEvent.press(await screen.findByLabelText(`Leaderboard at ${IRON.name}`));
     const boardSwitch = await within(screen.getByTestId("leaderboard-page")).findByLabelText("Hide me on leaderboards");
     expect(boardSwitch.props.value).toBe(true);
+  });
+
+  it("changed on another screen while Settings is open, it shows the server's answer when the app comes back", async () => {
+    const comeBack = listenForComeBack();
+    const acct = account();
+    const server = fakeServer(routes({ [ME]: acct.me, [HIDE_ME]: acct.hide }));
+    await openSettings(server.ask);
+    expect((await screen.findByLabelText("Hide me on leaderboards")).props.value).toBe(false);
+    acct.held.hidden = true;
+    acct.held.displayName = "Ravi Kumar";
+    acct.held.units = "imperial";
+    await comeBack();
+    await waitFor(() => {
+      expect(screen.getByLabelText("Hide me on leaderboards").props.value).toBe(true);
+    });
+    expect(await screen.findByDisplayValue("Ravi Kumar")).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByLabelText("Pounds, feet and inches").props.accessibilityState).toMatchObject({ selected: true });
+    });
   });
 
   it("shows the server's answer, not the press: a refused save leaves it off and says why", async () => {
@@ -186,6 +223,44 @@ describe("Units", () => {
     expect((JSON.parse(store.value ?? "{}") as { user: { units: string } }).user.units).toBe("imperial");
   });
 
+  it("a press made before Settings' opening read answers is not undone by that read", async () => {
+    const acct = account();
+    let letGo = (): void => undefined;
+    // Only the read Settings makes as it opens is held back.
+    let armed = false;
+    const server = fakeServer(
+      routes({
+        [ME]: (body) => {
+          if (body !== undefined || !armed) return acct.me(body);
+          armed = false;
+          const then = acct.me(undefined);
+          return new Promise<Reply>((resolve) => {
+            letGo = () => {
+              resolve(then);
+            };
+          });
+        },
+      }),
+    );
+    const store = memoryStore(kept(1));
+    await render(<App extra={extra} ask={server.ask} store={store} wait={noWait} />);
+    await fireEvent.press(await screen.findByRole("tab", { name: "Me" }));
+    await act(() => new Promise<void>((resolve) => setTimeout(resolve, 30)));
+    armed = true;
+    await fireEvent.press(await screen.findByLabelText("Settings"));
+    await fireEvent.press(await screen.findByLabelText("Pounds, feet and inches"));
+    expect(armed).toBe(false);
+    await waitFor(() => {
+      expect(acct.held.units).toBe("imperial");
+    });
+    await act(() => {
+      letGo();
+      return new Promise<void>((resolve) => setTimeout(resolve, 30));
+    });
+    expect(screen.getByLabelText("Pounds, feet and inches").props.accessibilityState).toMatchObject({ selected: true });
+    expect((JSON.parse(store.value ?? "{}") as { user: { units: string } }).user.units).toBe("imperial");
+  });
+
   it("with no signal it stays as it was and says so", async () => {
     const acct = account();
     const server = fakeServer(routes({ [ME]: (body) => (body === undefined ? acct.me(undefined) : lost()) }));
@@ -205,9 +280,11 @@ describe("What each place can see", () => {
   });
 
   it("is not there for somebody with no place", async () => {
-    await openSettings(fakeServer(routes({ "/v1/orgs/mine": ok({ orgs: [], formerOrgs: [] }) })).ask);
+    await openSettings(fakeServer(routes({ "/v1/orgs/mine": ok({ orgs: [], formerOrgs: [] }), [HIDE_ME]: account().hide })).ask);
     await screen.findByText("Account");
     expect(screen.queryByText("Your privacy")).toBeNull();
+    await screen.findByLabelText("Hide me on leaderboards");
+    expect(screen.queryByText("The same at every place you belong to.")).toBeNull();
   });
 });
 
@@ -223,7 +300,18 @@ describe("Account", () => {
   it("Start setup again asks first: Cancel sends nothing; Start again clears setup and opens it, in the units chosen", async () => {
     const missing = [...missingPlanInputSchema.options];
     const cleared = { answers: { displayName: "Ravi", weightGoal: null, fitnessGoals: [], age: null, gender: null, heightCm: null, weightKg: null, targetWeightKg: null, pace: null, dayActivity: null, fitnessLevel: null, pushUpsMax: null, plankHoldSeconds: null, trainingDays: null, sessionMinutes: null, availableEquipment: [], trainingPlaces: [], diet: null, mealsPerDay: null, onboardingCompleted: false, updatedAt: null }, plan: null, missing };
-    const server = fakeServer(routes({ [SETUP]: ok(cleared) }));
+    const held = structuredClone(cleared);
+    const acct = account();
+    acct.held.units = "imperial";
+    const server = fakeServer(
+      routes({
+        [ME]: acct.me,
+        [SETUP]: (body) => {
+          if (typeof body === "object" && body !== null) Object.assign(held.answers, body);
+          return { status: 200, body: held };
+        },
+      }),
+    );
     const store = await openSettings(server.ask, memoryStore(kept(1, { ...RAVI, units: "imperial" })));
     await fireEvent.press(await screen.findByLabelText("Start setup again"));
     await fireEvent.press(await screen.findByLabelText("Cancel"));
@@ -240,13 +328,24 @@ describe("Account", () => {
     expect((JSON.parse(store.value ?? "{}") as { setupDone?: boolean }).setupDone).not.toBe(true);
     await act(() => new Promise<void>((resolve) => setTimeout(resolve, 50)));
     expect(server.asked.filter((a) => a.path === ME && a.method === "PATCH")).toEqual([]);
+    // And setup itself is in the units chosen: About you weighs in pounds.
+    await fireEvent.press(await screen.findByRole("button", { name: "Keep my weight" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Build muscle" }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Continue" }).props.accessibilityState).toMatchObject({ disabled: false });
+    });
+    await fireEvent.press(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("header", { name: "About you" });
+    expect(within(screen.getByTestId("setup")).getByRole("button", { name: "Pounds, feet and inches" }).props.accessibilityState).toMatchObject({ selected: true });
   });
 });
 
 describe("memberSinceText", () => {
   it.each([
-    ["2026-10-14T09:00:00.000Z", "October 2026"],
-    ["2026-01-31T23:59:59.000Z", "January 2026"],
+    // The month on the phone's own calendar, as the browser shows it: early on the 1st is that month.
+    [new Date(2026, 9, 14, 9, 0).toISOString(), "October 2026"],
+    [new Date(2026, 10, 1, 3, 0).toISOString(), "November 2026"],
+    [new Date(2026, 0, 31, 23, 59).toISOString(), "January 2026"],
     ["not a date", null],
   ])("%s → %s", (at, words) => {
     expect(memberSinceText(at)).toBe(words);
