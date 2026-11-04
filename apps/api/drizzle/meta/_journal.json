@@ -1401,6 +1401,13 @@
       "when": 1790726400200,
       "tag": "0200_recommended_choices",
       "breakpoints": true
+    },
+    {
+      "idx": 200,
+      "version": "7",
+      "when": 1790726400201,
+      "tag": "0201_membership_notice",
+      "breakpoints": true
     }
   ]
 }

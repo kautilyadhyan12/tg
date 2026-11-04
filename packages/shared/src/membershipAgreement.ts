@@ -323,6 +323,9 @@ export function agreementFacts(input: AgreementFactsInput): AgreementFact[] {
     if (endsOn === null && m.termCount !== null && m.termUnit !== null) {
       const after = contract === null ? "" : " after the minimum term";
       facts.push({ label: "Renews", value: `Every ${plural(m.termCount, m.termUnit)}${after} until you cancel` });
+      // Its notice to cancel (18v-ii-a), while it renews.
+      const notice = m.view.notice;
+      if (notice !== null) facts.push({ label: "Notice to cancel", value: `${String(notice.days)} day${notice.days === 1 ? "" : "s"}` });
     }
     else if (endsOn !== null) facts.push({ label: "Ends", value: dayWords(endsOn) });
   } else if (endsOn !== null) {

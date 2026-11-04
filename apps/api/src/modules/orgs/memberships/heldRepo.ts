@@ -25,6 +25,7 @@ import { z } from "zod";
 import {
   HELD_EARLIER_PAGE,
   releaseAsked,
+  noticeAsked,
   contractReleaseSchema,
   contractThenSchema,
   type ContractRelease,
@@ -120,6 +121,8 @@ export interface HeldRow {
   freezeFeeMinor: number;
   /** Why the member was let out of its contract (18v-i); null for none. */
   contractRelease: ContractRelease | null;
+  /** Why it was ended before its notice allowed (18v-ii-a). */
+  noticeWaived: ContractRelease | null;
   membership: HeldMembership;
 }
 
@@ -150,6 +153,9 @@ const rawSchema = z.object({
   contract_periods: z.number().int().nullable(),
   contract_then: contractThenSchema.nullable(),
   contract_release: contractReleaseSchema.nullable(),
+  notice_days: z.number().int().nullable(),
+  stops_after: z.number().int().nullable(),
+  notice_waived: contractReleaseSchema.nullable(),
   freeze_fee_minor: z.number().int(),
   from_list: z.boolean(),
   discount_name: z.string().nullable(),
@@ -176,6 +182,7 @@ function shape(row: unknown): HeldRow {
     taxApplied,
     freezeFeeMinor: r.freeze_fee_minor,
     contractRelease: r.contract_release,
+    noticeWaived: r.notice_waived,
     nextBillMinor: r.price_minor === 0 ? 0 : billOf(r.full_from !== null && r.paid_periods === 0 ? partOf(r) : r.price_minor, taxApplied).amountMinor,
     id: r.id,
     typeId: r.membership_type_id,
@@ -205,6 +212,8 @@ function shape(row: unknown): HeldRow {
       fullFrom: r.full_from,
       contractPeriods: r.contract_periods,
       contractThen: r.contract_then,
+      noticeDays: r.notice_days,
+      stopsAfter: r.stops_after,
     },
   };
 }
@@ -225,6 +234,7 @@ const typeSchema = z.object({
   joining_fee_minor: z.number().int(),
   contract_periods: z.number().int().nullable(),
   contract_then: contractThenSchema.nullable(),
+  notice_days: z.number().int().nullable(),
 });
 
 /** The tax rate a type charges, by id: what a membership given from it keeps. None for a
@@ -252,13 +262,14 @@ export function typeChoice(row: unknown): HeldMembershipTypeChoice {
     joiningFeeMinor: t.joining_fee_minor,
     contractPeriods: t.contract_periods,
     contractThen: t.contract_then,
+    noticeDays: t.notice_days,
   };
 }
 
 /** A gym's live types, or the one named; a gym has at most 60. */
 export const liveTypes = (sql: Sql | TransactionSql, gymId: string, typeId: string | null) => sql`
   SELECT id, name, kind, price_minor, currency, term_count, term_unit, pack_classes, pack_days, updated_at, tax_rate_id, joining_fee_minor,
-         contract_periods, contract_then,
+         contract_periods, contract_then, notice_days,
          (SELECT r.name FROM gym_tax_rates r WHERE r.gym_id = gym_membership_types.gym_id AND r.id = gym_membership_types.tax_rate_id) AS tax_name,
          (SELECT r.rate_bp FROM gym_tax_rates r WHERE r.gym_id = gym_membership_types.gym_id AND r.id = gym_membership_types.tax_rate_id) AS tax_bp
   FROM gym_membership_types
@@ -272,7 +283,7 @@ const COLUMNS = (sql: Sql | TransactionSql) => sql`
   h.starts_on::text AS starts_on, h.frozen_days, h.gift_days, h.gift_from, h.status,
   h.frozen_on::text AS frozen_on, h.cancelled_on::text AS cancelled_on,
   h.paid_periods, h.paid_floor, h.renews, h.classes_left, h.from_list, h.full_from::text AS full_from,
-  h.contract_periods, h.contract_then, h.contract_release,
+  h.contract_periods, h.contract_then, h.contract_release, h.notice_days, h.stops_after, h.notice_waived,
   h.freeze_fee_minor, h.discount_name, h.discount_minor, h.discount_payments,
   (SELECT r.name FROM gym_tax_rates r WHERE r.gym_id = h.gym_id AND r.id = h.tax_rate_id) AS tax_name,
   (SELECT r.rate_bp FROM gym_tax_rates r WHERE r.gym_id = h.gym_id AND r.id = h.tax_rate_id) AS tax_bp,
@@ -820,14 +831,14 @@ export async function giveHeldIn(tx: TransactionSql, input: GiveHeldInput): Prom
        term_count, term_unit, pack_classes, pack_days, starts_on, status,
        paid_periods, paid_floor, renews, classes_left,
        discount_id, discount_name, discount_minor, discount_payments, tax_rate_id, tax_included, replaces_id, replaced_stopped, full_from,
-       contract_periods, contract_then)
+       contract_periods, contract_then, notice_days)
     VALUES (${input.gymId}, ${input.entryId}, ${input.typeId}, ${input.requestKey}, ${m.kind},
             ${priceMinor}, ${type.currency}, ${m.termCount}, ${m.termUnit}, ${m.packClasses},
             ${m.packDays}, ${m.startsOn}::date, ${m.status},
             ${m.paidPeriods}, ${m.paidFloor}, ${m.renews}, ${m.classesLeft},
             ${used?.id ?? null}, ${used?.name ?? null}, ${used?.offMinor ?? 0}, ${used?.payments ?? null}, ${rate?.id ?? null}, ${tax?.included ?? null},
             ${change?.fromId ?? null}, ${change?.stoppedOld ?? false}, ${m.fullFrom}::date,
-            ${m.contractPeriods ?? null}, ${m.contractThen ?? null})
+            ${m.contractPeriods ?? null}, ${m.contractThen ?? null}, ${m.noticeDays ?? null})
     RETURNING id`;
   if (created === undefined) throw new Error("held membership insert returned no row");
 
@@ -1010,6 +1021,11 @@ export async function moveHeld(
     // Kept only where the cancel let them out early and its row is let out (round one, L1, L2).
     const released = input.event.type === "cancel" && input.event.release !== undefined && releaseAsked(heldMembershipView(before.membership, input.today), input.event.when) && (m.status === "cancelled" || !m.renews);
     const release = released && input.event.type === "cancel" && input.event.release !== undefined ? input.event.release : before.contractRelease;
+    // Ended before its notice allowed, outside a minimum term, keeps the reason too (18v-ii-a): a
+    // release from the term lets them out of the notice with it, and is the one kept.
+    const waived =
+      !released && input.event.type === "cancel" && input.event.release !== undefined && noticeAsked(heldMembershipView(before.membership, input.today), input.event.when) && (m.status === "cancelled" || !m.renews);
+    const noticeWaived = waived && input.event.type === "cancel" && input.event.release !== undefined ? input.event.release : before.noticeWaived;
 
     // A freeze charges the gym's fee where staff left it ticked: refused where the screen showed
     // another, or a fee on a membership that freezes with none (18z).
@@ -1056,6 +1072,7 @@ export async function moveHeld(
       SET status = ${m.status}, frozen_days = ${m.frozenDays}, frozen_on = ${m.frozenOn}::date,
           cancelled_on = ${m.cancelledOn}::date, paid_periods = ${m.paidPeriods}, renews = ${m.renews},
           contract_then = ${m.contractThen ?? null}, contract_release = ${release},
+          stops_after = ${m.stopsAfter ?? null}, notice_waived = ${noticeWaived},
           freeze_fee_minor = ${freezeFee}, updated_at = ${input.now}
       WHERE gym_id = ${input.gymId} AND entry_id = ${input.entryId} AND id = ${input.membershipId}`;
     const ended = ends === null ? null : await bookings.end(tx, input.gymId, ends, input.now);
@@ -1106,6 +1123,8 @@ export async function moveHeld(
         renews: String(m.renews),
         ...(input.event.type === "cancel" ? { when: input.event.when } : {}),
         ...(release !== before.contractRelease && release !== null ? { release } : {}),
+        ...(noticeWaived !== before.noticeWaived && noticeWaived !== null ? { noticeWaived } : {}),
+        ...((m.stopsAfter ?? null) !== (before.membership.stopsAfter ?? null) && m.stopsAfter != null ? { stopsAfter: String(m.stopsAfter) } : {}),
         ...(m.contractThen !== before.membership.contractThen && m.contractThen != null ? { contractThen: m.contractThen } : {}),
         ...(voided.length === 0 ? {} : { billsCancelled: String(voided.length) }),
         ...(input.event.type === "freeze" ? { freezeFeeMinor: String(freezeFee), freezeFeeOffered: String(freezeOffered) } : {}),
@@ -1279,6 +1298,8 @@ export interface ListHeldColumns {
   full_from: string | null;
   contract_periods: number | null;
   contract_then: string | null;
+  notice_days: number | null;
+  stops_after: number | null;
 }
 
 /** A row of an outer join: every column may be missing. */
@@ -1289,7 +1310,7 @@ const LIST_COLUMNS = (sql: Sql | TransactionSql) => sql`
   (h.price_minor = 0) AS free, h.starts_on::text AS starts_on, h.frozen_days, h.gift_days, h.gift_from, h.status,
   h.frozen_on::text AS frozen_on, h.cancelled_on::text AS cancelled_on,
   h.paid_periods, h.paid_floor, h.renews, h.classes_left, h.from_list, h.full_from::text AS full_from,
-  h.contract_periods, h.contract_then`;
+  h.contract_periods, h.contract_then, h.notice_days, h.stops_after`;
 
 /** A text column under a CHECK, as one of the values the rule knows: a value this build
  *  does not know fails here, as it does in `shape`. */
@@ -1325,6 +1346,8 @@ function listHeld(row: ListHeldColumns): ListHeld {
       fullFrom: row.full_from,
       contractPeriods: row.contract_periods,
       contractThen: row.contract_then === null ? null : oneOf(contractThenSchema.options, row.contract_then, "contract"),
+      noticeDays: row.notice_days,
+      stopsAfter: row.stops_after,
     },
   };
 }
@@ -1423,7 +1446,11 @@ export const LAST_DAY = (sql: Sql | TransactionSql, alias = "h") => {
   const a = sql(alias);
   // The periods it runs for: those paid, or a minimum term's where that ends it (18v-i), whose part
   // month, where the gym bills on one day, comes on top.
-  const n = sql`(CASE WHEN ${a}.renews AND ${a}.contract_then = 'ends' THEN ${a}.contract_periods + (CASE WHEN ${a}.full_from IS NOT NULL THEN 1 ELSE 0 END) ELSE ${a}.paid_periods END)`;
+  // Notice given (18v-ii-a) stops it after `stops_after` periods, the part month among them; the
+  // earlier of that and a minimum term that ends it.
+  const n = sql`(CASE WHEN ${a}.renews AND (${a}.contract_then = 'ends' OR (${a}.kind = 'recurring' AND ${a}.stops_after IS NOT NULL))
+    THEN LEAST(CASE WHEN ${a}.contract_then = 'ends' THEN ${a}.contract_periods + (CASE WHEN ${a}.full_from IS NOT NULL THEN 1 ELSE 0 END) END, CASE WHEN ${a}.kind = 'recurring' THEN ${a}.stops_after END)
+    ELSE ${a}.paid_periods END)`;
   return sql`
   ((CASE WHEN ${a}.full_from IS NOT NULL AND ${n} >= 1 THEN ${a}.full_from ELSE ${a}.starts_on END + make_interval(
       years  => CASE WHEN ${a}.kind <> 'pack' AND ${a}.term_unit = 'year'  THEN ${a}.term_count * (CASE WHEN ${a}.kind = 'recurring' THEN ${n} - (CASE WHEN ${a}.full_from IS NOT NULL AND ${n} >= 1 THEN 1 ELSE 0 END) ELSE 1 END) ELSE 0 END,
@@ -1441,7 +1468,7 @@ export const LAST_DAY = (sql: Sql | TransactionSql, alias = "h") => {
 export const STILL_RENEWS = (sql: Sql | TransactionSql, now: Date, alias = "h") => {
   const a = sql(alias);
   return sql`
-  (${a}.kind = 'recurring' AND ${a}.renews AND (${a}.contract_then IS DISTINCT FROM 'ends' OR ${a}.status = 'frozen'
+  (${a}.kind = 'recurring' AND ${a}.renews AND ((${a}.contract_then IS DISTINCT FROM 'ends' AND ${a}.stops_after IS NULL) OR ${a}.status = 'frozen'
     OR (${LAST_DAY(sql, alias)} + 1 - make_interval(
          years => CASE WHEN ${a}.term_unit = 'year' THEN ${a}.term_count ELSE 0 END,
          months => CASE WHEN ${a}.term_unit = 'month' THEN ${a}.term_count ELSE 0 END,
@@ -1547,7 +1574,7 @@ export async function overForList(
         CASE
           WHEN h.status = 'cancelled' THEN h.cancelled_on
           -- One that renews has no last day; the rule falls back on its start day.
-          WHEN h.kind = 'recurring' AND h.renews AND h.contract_then IS DISTINCT FROM 'ends' THEN h.starts_on
+          WHEN h.kind = 'recurring' AND h.renews AND h.contract_then IS DISTINCT FROM 'ends' AND h.stops_after IS NULL THEN h.starts_on
           ELSE (
             -- A repeating one that will not renew runs to the end of what is paid.
             SELECT CASE WHEN d.last_day <= ${today}::date THEN d.last_day ELSE h.starts_on END
@@ -1612,6 +1639,8 @@ function wholeRow(row: Nullable<ListHeldColumns>): ListHeld | null {
     full_from: row.full_from,
     contract_periods: row.contract_periods,
     contract_then: row.contract_then,
+    notice_days: row.notice_days,
+    stops_after: row.stops_after,
   });
 }
 

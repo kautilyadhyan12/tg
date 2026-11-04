@@ -12,7 +12,8 @@ const view = (over: Partial<Membership["view"]> = {}): Membership["view"] => ({
   renewsOn: "2026-11-15",
   payment: null,
   contract: null,
-  can: { freeze: true, unfreeze: false, cancel: true, cancelAtPeriodEnd: null, cancelAtContractEnd: null, releaseNeeded: false, markPaid: null, undoPaid: null },
+  notice: null,
+  can: { freeze: true, unfreeze: false, cancel: true, cancelAtPeriodEnd: null, cancelAtContractEnd: null, releaseNeeded: false, cancelAfterNotice: null, noticeEnds: null, markPaid: null, undoPaid: null },
   ...over,
 });
 

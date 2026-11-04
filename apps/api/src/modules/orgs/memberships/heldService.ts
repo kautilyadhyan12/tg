@@ -424,6 +424,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
       classesLeft: row.membership.classesLeft,
       contractPeriods: row.membership.contractPeriods ?? null,
       release: row.contractRelease,
+      noticeWaived: row.noticeWaived,
       fromList: row.fromList,
       notCharged: list.bills.some((b) => b.membershipId === row.id && b.cancelled !== null && b.periodIndex === row.membership.paidPeriods - 1),
       refundedInFull: list.bills.some((b) => b.membershipId === row.id && b.status === "refunded" && b.periodIndex === row.membership.paidPeriods - 1),
