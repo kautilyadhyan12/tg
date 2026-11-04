@@ -312,4 +312,100 @@ d("a notice to cancel on a repeating membership (real Postgres)", () => {
     },
     T,
   );
+  it(
+    "round one C1: Change membership stops the old one, with a notice or inside a minimum term, and each month is billed once",
+    async () => {
+      clock = new Date("2026-10-15T17:00:00Z");
+      const owner = await makeUser("change-owner");
+      const gymId = await makeGym(owner, "Notice Change Gym");
+      const gold = await addType(gymId, owner, monthly({ noticeDays: 30 }));
+      const plat = await addType(gymId, owner, monthly({ name: "Plat Monthly", contractPeriods: 12, contractThen: "renews" }));
+      const silver = await addType(gymId, owner, monthly({ name: "Silver Monthly", priceMinor: 4000 }));
+      const ana = await addPerson(gymId, owner, "Ana Lopez");
+      const ben = await addPerson(gymId, owner, "Ben Okafor");
+      const dan = await addPerson(gymId, owner, "Dan Moss");
+      const anaGold = await give(gymId, ana, owner, gold, "2026-10-15");
+      const benGold = await give(gymId, ben, owner, gold, "2026-10-15");
+      const danPlat = await give(gymId, dan, owner, plat, "2026-10-15");
+
+      clock = new Date("2026-11-10T17:00:00Z");
+      expect((await post(`${heldUrl(gymId, ben)}/${benGold}/cancel`, { when: "notice" }, owner)).statusCode).toBe(200);
+      const changeTo = { typeId: silver, when: "next_payment", startsOn: "2026-11-15", priceMinor: 4000, creditMinor: 0, totalMinor: 4000, paid: false, noticeDays: null };
+      for (const [entryId, id] of [[ana, anaGold], [ben, benGold], [dan, danPlat]] as const) {
+        const res = await post(`${heldUrl(gymId, entryId)}/${id}/change`, { requestKey: nextForm(), ...changeTo }, owner);
+        expect(res.statusCode, res.body).toBe(200);
+        expect(await stored(id)).toMatchObject({ status: "active", renews: false });
+      }
+      // Ben's notice is kept on the old row, so a change undone before Silver starts still ends where it said.
+      expect(await stored(benGold)).toMatchObject({ stops_after: 2 });
+
+      await runAll(gymId);
+      for (const [entryId, id] of [[ana, anaGold], [ben, benGold], [dan, danPlat]] as const) {
+        expect(await billed(id)).toEqual([0]);
+        // Never two bills for the same month: one membership or the other.
+        const twice = await sql<{ due: string }[]>`
+          SELECT b.due_on::text AS due FROM gym_member_bills b JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
+          WHERE b.gym_id = ${gymId} AND h.entry_id = ${entryId} AND b.period_index IS NOT NULL GROUP BY b.due_on HAVING count(*) > 1`;
+        expect(twice).toEqual([]);
+        const silverBills = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_member_bills b JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id WHERE b.gym_id = ${gymId} AND h.entry_id = ${entryId} AND h.membership_type_id = ${silver}`;
+        expect(silverBills[0]?.n ?? 0).toBeGreaterThan(0);
+      }
+    },
+    T,
+  );
+
+  it(
+    "a release inside a minimum term lets them out of the notice too, and keeps one reason",
+    async () => {
+      clock = new Date("2026-10-15T17:00:00Z");
+      const owner = await makeUser("both-owner");
+      const gymId = await makeGym(owner, "Notice Both Gym");
+      const both = await addType(gymId, owner, monthly({ contractPeriods: 12, contractThen: "renews", noticeDays: 30 }));
+      const eve = await addPerson(gymId, owner, "Eve Hart");
+      const eveGold = await give(gymId, eve, owner, both, "2026-10-15");
+      clock = new Date("2026-11-10T17:00:00Z");
+      expect((await post(`${heldUrl(gymId, eve)}/${eveGold}/cancel`, { when: "today" }, owner)).statusCode).toBe(409);
+      expect((await post(`${heldUrl(gymId, eve)}/${eveGold}/cancel`, { when: "today", release: "medical" }, owner)).statusCode).toBe(200);
+      expect(await stored(eveGold)).toMatchObject({ status: "cancelled", contract_release: "medical", notice_waived: null });
+      // A line whose minimum term ends by itself takes no notice.
+      expect((await post(typesUrl(gymId), monthly({ name: "Year ends", contractPeriods: 12, contractThen: "ends", noticeDays: 30 }), owner)).statusCode).toBe(400);
+    },
+    T,
+  );
+
+  it(
+    "the SQL reads notice given as the rule does, billed from the gym's day and with free days on a period that never comes",
+    async () => {
+      clock = new Date("2026-10-15T17:00:00Z");
+      const owner = await makeUser("twin-owner");
+      const gymId = await makeGym(owner, "Notice Twin Gym");
+      const gold = await addType(gymId, owner, monthly({ noticeDays: 30 }));
+      await sql`UPDATE gyms SET bills_day = 1 WHERE id = ${gymId}`;
+      const jay = await addPerson(gymId, owner, "Jay Kim");
+      const res = await post(heldUrl(gymId, jay), { requestKey: nextForm(), typeId: gold, startsOn: "2026-10-15", paid: false, priceMinor: 5000, fullFrom: "2026-11-01", noticeDays: 30 }, owner);
+      expect(res.statusCode, res.body).toBe(201);
+      const jayGold = (await sql<{ id: string }[]>`SELECT id FROM gym_held_memberships WHERE gym_id = ${gymId} AND entry_id = ${jay}`)[0]?.id ?? "";
+      // 10 November: the notice's last day, 9 December, falls in December: the part month, November, December.
+      clock = new Date("2026-11-10T17:00:00Z");
+      expect((await post(`${heldUrl(gymId, jay)}/${jayGold}/cancel`, { when: "notice" }, owner)).statusCode).toBe(200);
+      expect(await stored(jayGold)).toMatchObject({ stops_after: 3 });
+
+      const sqlLast = async () => (await sql<{ d: string }[]>`SELECT (${LAST_DAY(sql)})::text AS d FROM gym_held_memberships h WHERE h.id = ${jayGold}`)[0]?.d;
+      const ruleLast = async () => held(await get(heldUrl(gymId, jay), owner)).memberships.find((m) => m.id === jayGold)?.view.endsOn;
+      const renews = async (iso: string) => (await sql<{ r: boolean }[]>`SELECT ${STILL_RENEWS(sql, new Date(iso))} AS r FROM gym_held_memberships h WHERE h.id = ${jayGold}`)[0]?.r;
+      expect(await sqlLast()).toBe("2026-12-31");
+      expect(await ruleLast()).toBe("2026-12-31");
+      expect(await renews("2026-11-30T17:00:00Z")).toBe(true);
+      expect(await renews("2026-12-02T17:00:00Z")).toBe(false);
+
+      // Seven free days from the period after the last: the last day moves to 7 January, and the last
+      // period still began on 1 December (round one, L4).
+      await sql`UPDATE gym_held_memberships SET gift_days = 7, gift_from = 3 WHERE id = ${jayGold}`;
+      expect(await sqlLast()).toBe("2027-01-07");
+      expect(await ruleLast()).toBe("2027-01-07");
+      expect(await renews("2026-11-30T17:00:00Z")).toBe(true);
+      expect(await renews("2026-12-03T17:00:00Z")).toBe(false);
+    },
+    T,
+  );
 });

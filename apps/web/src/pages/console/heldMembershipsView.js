@@ -212,7 +212,8 @@ export function contractCancelWords(m, name) {
   const until = m.view.contract.until;
   const end = m.view.can.cancelAtContractEnd ?? null;
   const paid = m.view.can.cancelAtPeriodEnd ?? null;
-  const releaseLater = paid === null || !releaseAsked(m.view, 'period_end') ? null : `Release on ${dayWords(paid)}`;
+  // Asked where it lets them out of the term, or ends before a notice that runs past it (round one, L2).
+  const releaseLater = paid === null || !(releaseAsked(m.view, 'period_end') || noticeAsked(m.view, 'period_end')) ? null : `Release on ${dayWords(paid)}`;
   // Notice given already, or a notice that runs past the term's end (18v-ii-a).
   if (m.view.notice?.given === true) {
     return {
@@ -326,9 +327,12 @@ export function noticeShownLine(m) {
   return n.given ? `Notice given: it ends on ${dayWords(m.view.can.noticeEnds ?? m.view.endsOn)}` : `Notice to cancel: ${String(n.days)} day${n.days === 1 ? '' : 's'}`;
 }
 
-/** "Ended without notice: Moved away" on a membership ended before its notice allowed; null for none. */
+/** "Ended without notice: Moved away" on a membership ended before its notice allowed, "Ends without
+ *  notice: …" while it still runs to the end of what is paid (round one, L5); null for none. */
 export function noticeWaivedLine(m) {
-  return m.noticeWaived ? `Ended without notice: ${CONTRACT_RELEASE_WORDS[m.noticeWaived] ?? 'Other reason'}` : null;
+  if (!m.noticeWaived) return null;
+  const over = m.view?.status === 'ended' || m.view?.status === 'cancelled';
+  return `${over ? 'Ended' : 'Ends'} without notice: ${CONTRACT_RELEASE_WORDS[m.noticeWaived] ?? 'Other reason'}`;
 }
 
 /** "In contract until 14 Oct 2027" and its length, for the membership's own lines; null for none. */

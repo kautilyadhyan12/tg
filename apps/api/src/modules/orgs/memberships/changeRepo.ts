@@ -132,9 +132,12 @@ export async function changeHeld(
       if (to.fullFrom !== input.shownFullFrom) return { kind: "bill_day_changed" };
 
       // The membership changed: today it ends now; later it stops at the end of what is paid.
-      const event: HeldMembershipEvent = { type: "cancel", when: input.when === "today" ? "today" : "period_end" };
+      // Not held to a minimum term or a notice: the member stays, on the new one (18v-i; 18v-ii-a, C1).
+      const event: HeldMembershipEvent = { type: "cancel", when: input.when === "today" ? "today" : "period_end", change: true };
       const move = moveHeldMembership(before.membership, event, input.today);
-      // One already set to stop, or paid once, ends by itself on its last day: nothing to change.
+      // One already set to stop, or paid once, ends by itself on its last day: nothing to change. Any
+      // other refusal would leave the old one renewing beside the new one, billed twice: never written.
+      if (!move.ok && move.reason !== "not_allowed") throw new Error(`a change could not stop the membership it replaces: ${move.reason}`);
       const stops = move.ok ? move.membership : before.membership;
       const lastDay = input.when === "today" ? input.today : addDays(to.startsOn, -1);
       // Its bills for days after its last day go, as a cancel's do (18a-i); paid ones are the credit.

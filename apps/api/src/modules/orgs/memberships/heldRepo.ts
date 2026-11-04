@@ -1450,13 +1450,7 @@ export async function unsignedAgreementHeld(
  *  two together. */
 export const LAST_DAY = (sql: Sql | TransactionSql, alias = "h") => {
   const a = sql(alias);
-  // The periods it runs for: those paid, or a minimum term's where that ends it (18v-i), whose part
-  // month, where the gym bills on one day, comes on top.
-  // Notice given (18v-ii-a) stops it after `stops_after` periods, the part month among them; the
-  // earlier of that and a minimum term that ends it.
-  const n = sql`(CASE WHEN ${a}.renews AND (${a}.contract_then = 'ends' OR (${a}.kind = 'recurring' AND ${a}.stops_after IS NOT NULL))
-    THEN LEAST(CASE WHEN ${a}.contract_then = 'ends' THEN ${a}.contract_periods + (CASE WHEN ${a}.full_from IS NOT NULL THEN 1 ELSE 0 END) END, CASE WHEN ${a}.kind = 'recurring' THEN ${a}.stops_after END)
-    ELSE ${a}.paid_periods END)`;
+  const n = RUNS_FOR(sql, alias);
   return sql`
   ((CASE WHEN ${a}.full_from IS NOT NULL AND ${n} >= 1 THEN ${a}.full_from ELSE ${a}.starts_on END + make_interval(
       years  => CASE WHEN ${a}.kind <> 'pack' AND ${a}.term_unit = 'year'  THEN ${a}.term_count * (CASE WHEN ${a}.kind = 'recurring' THEN ${n} - (CASE WHEN ${a}.full_from IS NOT NULL AND ${n} >= 1 THEN 1 ELSE 0 END) ELSE 1 END) ELSE 0 END,
@@ -1468,17 +1462,40 @@ export const LAST_DAY = (sql: Sql | TransactionSql, alias = "h") => {
       + CASE WHEN (CASE WHEN ${a}.kind = 'recurring' THEN ${n} ELSE 1 END) >= ${a}.gift_from THEN ${a}.gift_days ELSE 0 END - 1)`;
 };
 
+/** The periods a stored membership (alias `alias`) runs for: those paid, or a minimum term's where that
+ *  ends it (18v-i), whose part month, where the gym bills on one day, comes on top; where notice is given
+ *  (18v-ii-a), `stops_after`, the part month among them; the earlier of the two. */
+const RUNS_FOR = (sql: Sql | TransactionSql, alias: string) => {
+  const a = sql(alias);
+  return sql`(CASE WHEN ${a}.renews AND (${a}.contract_then = 'ends' OR (${a}.kind = 'recurring' AND ${a}.stops_after IS NOT NULL))
+    THEN LEAST(CASE WHEN ${a}.contract_then = 'ends' THEN ${a}.contract_periods + (CASE WHEN ${a}.full_from IS NOT NULL THEN 1 ELSE 0 END) END, CASE WHEN ${a}.kind = 'recurring' THEN ${a}.stops_after END)
+    ELSE ${a}.paid_periods END)`;
+};
+
+/** The first day of period `k` of a repeating membership (alias `alias`), as `periodStart` in
+ *  `@app/shared` works it out: from its start, or from its billing day after the part month, so many
+ *  terms on, plus the days frozen, plus its free days where that period is one they were added to. */
+const PERIOD_START = (sql: Sql | TransactionSql, alias: string, k: ReturnType<typeof RUNS_FOR>) => {
+  const a = sql(alias);
+  const whole = sql`(${k} - (CASE WHEN ${a}.full_from IS NOT NULL AND ${k} >= 1 THEN 1 ELSE 0 END))`;
+  return sql`
+  ((CASE WHEN ${a}.full_from IS NOT NULL AND ${k} >= 1 THEN ${a}.full_from ELSE ${a}.starts_on END + make_interval(
+      years  => CASE WHEN ${a}.term_unit = 'year'  THEN ${a}.term_count * ${whole} ELSE 0 END,
+      months => CASE WHEN ${a}.term_unit = 'month' THEN ${a}.term_count * ${whole} ELSE 0 END,
+      weeks  => CASE WHEN ${a}.term_unit = 'week'  THEN ${a}.term_count * ${whole} ELSE 0 END,
+      days   => CASE WHEN ${a}.term_unit = 'day'   THEN ${a}.term_count * ${whole} ELSE 0 END
+    ))::date + ${a}.frozen_days + CASE WHEN ${k} >= ${a}.gift_from THEN ${a}.gift_days ELSE 0 END)`;
+};
+
 /** A repeating membership (alias `alias`) that renews is still renewing on its gym's day at `now`: one
- *  whose minimum term ends it (18v-i) has a renewal left only while its last period has not begun (a
- *  frozen one, whose dates still move, counts as renewing). The caller's clock, never the database's. */
+ *  whose minimum term (18v-i) or a notice given (18v-ii-a) ends it has a renewal left only while its last
+ *  period has not begun, that period's first day worked out as the rule does (round one, L4); a frozen
+ *  one, whose dates still move, counts as renewing. The caller's clock, never the database's. */
 export const STILL_RENEWS = (sql: Sql | TransactionSql, now: Date, alias = "h") => {
   const a = sql(alias);
   return sql`
   (${a}.kind = 'recurring' AND ${a}.renews AND ((${a}.contract_then IS DISTINCT FROM 'ends' AND ${a}.stops_after IS NULL) OR ${a}.status = 'frozen'
-    OR (${LAST_DAY(sql, alias)} + 1 - make_interval(
-         years => CASE WHEN ${a}.term_unit = 'year' THEN ${a}.term_count ELSE 0 END,
-         months => CASE WHEN ${a}.term_unit = 'month' THEN ${a}.term_count ELSE 0 END,
-         weeks => CASE WHEN ${a}.term_unit = 'week' THEN ${a}.term_count ELSE 0 END))::date
+    OR ${PERIOD_START(sql, alias, sql`(${RUNS_FOR(sql, alias)} - 1)`)}
        > (${now}::timestamptz AT TIME ZONE (SELECT g.timezone FROM gyms g WHERE g.id = ${a}.gym_id))::date))`;
 };
 

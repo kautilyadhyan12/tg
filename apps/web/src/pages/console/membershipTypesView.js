@@ -411,6 +411,8 @@ export function draftProblems(draft, currency) {
       problems.noticeDays = `Type how many days, from 1 to ${String(MEMBERSHIP_NOTICE_DAYS_MAX)}, or leave it empty.`;
     } else if (priceMinor === 0) {
       problems.noticeDays = 'A free membership has no notice to cancel. Leave it empty.';
+    } else if (draftHasContract(draft) && draft.contractThen === 'ends') {
+      problems.noticeDays = 'A minimum term that ends by itself has no notice to cancel. Leave it empty.';
     }
   }
   if (draft.choice === 'pack') {

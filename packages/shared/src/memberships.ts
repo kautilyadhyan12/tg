@@ -243,6 +243,8 @@ function refineMembershipType(value: z.infer<typeof membershipTypeObject>, ctx: 
   if (value.contractPeriods !== null && (value.kind !== "recurring" || value.priceMinor === 0)) wrong("contractPeriods");
   // A notice to cancel is a repeating type's that has a price, as a minimum term is.
   if (value.noticeDays !== null && (value.kind !== "recurring" || value.priceMinor === 0)) wrong("noticeDays");
+  // A minimum term that ends by itself takes no notice (round one, H2).
+  if (value.noticeDays !== null && value.contractThen === "ends") wrong("noticeDays");
 }
 
 /** How long a contract of `periods` payments, each every `termCount` `termUnit`, runs:

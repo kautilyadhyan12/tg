@@ -5,9 +5,11 @@
 // date below was read off the calendar (`date -d`), not worked out by the code.
 import { describe, expect, it } from "vitest";
 import {
+  addGiftDays,
   agreementFacts,
   billsToOpen,
   cancelHeldMembershipRequestSchema,
+  giftDaysNextDay,
   giveHeldMembership,
   heldMembershipView,
   linkHeldMembership,
@@ -162,6 +164,50 @@ describe("notice and a minimum term", () => {
   it("a release inside the term lets them out of the notice too, with one reason", () => {
     const m = moved(term(), { type: "cancel", when: "today", release: "medical" }, "2026-11-10");
     expect(m.status).toBe("cancelled");
+  });
+});
+
+describe("round one's findings", () => {
+  it("C1: Change membership stops the old one, today or on the next payment date, not held to the notice or the term", () => {
+    const term: HeldMembership = { ...given({ ...notice30, contractPeriods: 12, contractThen: "renews" }, "2026-10-01", "2026-10-01"), paidPeriods: 2 };
+    for (const m of [ana(), moved(ana(), { type: "cancel", when: "notice" }, "2026-11-10"), term]) {
+      const later = moveHeldMembership(m, { type: "cancel", when: "period_end", change: true }, "2026-11-10");
+      expect(later.ok && later.membership.renews).toBe(false);
+      const now = moveHeldMembership(m, { type: "cancel", when: "today", change: true }, "2026-11-10");
+      expect(now.ok && now.membership.status).toBe("cancelled");
+    }
+  });
+
+  it("H1: Refer a friend days after notice is given say the day it ends, never a renewal that will not come", () => {
+    const noticed = moved({ ...given(notice30, "2026-10-15", "2026-10-15"), paidPeriods: 1 }, { type: "cancel", when: "notice" }, "2026-11-10");
+    expect(heldMembershipView(noticed, "2026-11-10").endsOn).toBe("2026-12-14");
+    const gift = addGiftDays(noticed, 7, "2026-11-20");
+    if (gift === null) throw new Error("no gift");
+    expect(giftDaysNextDay(gift.membership, gift.from)).toEqual({ renews: false, day: "2026-12-21" });
+    expect(heldMembershipView(gift.membership, "2026-11-20")).toMatchObject({ endsOn: "2026-12-21", renewsOn: null });
+  });
+
+  it("H2: no notice line on a membership a minimum term ends, by itself or set by staff", () => {
+    const ends: HeldMembership = { ...given({ ...notice30, contractPeriods: 12, contractThen: "ends" }, "2026-10-01", "2026-10-01"), paidPeriods: 2 };
+    expect(heldMembershipView(ends, "2026-11-10").notice).toBeNull();
+    const setToEnd = moved({ ...given({ ...notice30, contractPeriods: 12, contractThen: "renews" }, "2026-10-01", "2026-10-01"), paidPeriods: 2 }, { type: "cancel", when: "contract_end" }, "2026-11-10");
+    expect(heldMembershipView(setToEnd, "2026-11-10").notice).toBeNull();
+    // And the price list refuses a notice on a line whose term ends by itself.
+    const line = {
+      name: "Gold", description: null, kind: "recurring", priceMinor: 5000, termCount: 1, termUnit: "month", packClasses: null, packDays: null,
+      access: "all_classes", bookingsLimit: null, bookingsPeriod: null, classTypeIds: null, contractPeriods: 12,
+    };
+    expect(saveGymMembershipTypeRequestSchema.safeParse({ ...line, contractThen: "ends", noticeDays: 30 }).success).toBe(false);
+    expect(saveGymMembershipTypeRequestSchema.safeParse({ ...line, contractThen: "renews", noticeDays: 30 }).success).toBe(true);
+  });
+
+  it("L1: frozen and paid as far as the notice runs, giving notice is still offered, and ends it at the end of what is paid", () => {
+    const frozen = moved({ ...ana(), paidPeriods: 3 }, { type: "freeze" }, "2026-11-05");
+    const view = heldMembershipView(frozen, "2026-11-10");
+    expect(view.can.cancelAtPeriodEnd).toBeNull();
+    expect(view.can.cancelAfterNotice).toBe("2027-01-05");
+    const noticed = moved(frozen, { type: "cancel", when: "notice" }, "2026-11-10");
+    expect(noticed.stopsAfter).toBe(3);
   });
 });
 

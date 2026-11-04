@@ -556,7 +556,8 @@ export function heldMembershipView(stored: HeldMembership, today: string): HeldM
   return {
     ...facts,
     contract,
-    notice: noticeDays === null ? null : { days: noticeDays, given },
+    // Not on one a minimum term ends by itself: no notice applies to it (round one, H2).
+    notice: noticeDays === null || (!given && endsAfter(m) !== null) ? null : { days: noticeDays, given },
     can: {
       freeze: m.status === "active" && !upcoming,
       unfreeze: frozen,
@@ -568,7 +569,7 @@ export function heldMembershipView(stored: HeldMembership, today: string): HeldM
       releaseNeeded: inContract,
       // Offered where it ends on a day no other way does: later than what is paid, and than the term's end.
       cancelAfterNotice:
-        willEnd !== null && willEnd.periods > m.paidPeriods && !(contract !== null && !paidPast && willEnd.lastDay === contract.until) ? willEnd.lastDay : null,
+        willEnd !== null && (willEnd.periods > m.paidPeriods || paidTo === null) && !(contract !== null && !paidPast && willEnd.lastDay === contract.until) ? willEnd.lastDay : null,
       noticeEnds,
       markPaid,
       undoPaid,
@@ -583,7 +584,7 @@ export type HeldMembershipEvent =
    *  `contract_end`: it runs, and is paid for, to the end of its contract, then stops
    *  (18v-i). Today or at the end of what is paid, while a contract runs, lets the member
    *  out of it: `release` says why, and without it the cancel is refused. */
-  | { type: "cancel"; when: CancelWhen; release?: ContractRelease }
+  | { type: "cancel"; when: CancelWhen; release?: ContractRelease; change?: true }
   /** The count of paid periods to move to: one more, or one fewer. */
   | { type: "paid"; paidPeriods: number };
 
@@ -638,7 +639,9 @@ export function moveHeldMembership(stored: HeldMembership, event: HeldMembership
       // What is already so is answered before the contract is asked about: a request sent twice is one.
       if (event.when === "period_end" && m.status === "active" && m.kind === "recurring" && !m.renews) return same;
       if (event.when === "today" && m.status === "cancelled") return same;
-      if ((releaseAsked(view, event.when) || noticeAsked(view, event.when)) && event.release === undefined) return { ok: false, reason: "release_needed" };
+      // Change membership stops the old one with `change`: it is not held to a minimum term or a notice,
+      // as the member stays, on another membership (18v-i; 18v-ii-a, round one, C1).
+      if (event.change !== true && (releaseAsked(view, event.when) || noticeAsked(view, event.when)) && event.release === undefined) return { ok: false, reason: "release_needed" };
       if (event.when === "period_end") {
         if (m.status === "active" && m.kind === "recurring" && !m.renews) return same;
         if (view.can.cancelAtPeriodEnd === null) return refused;
@@ -956,7 +959,9 @@ export function giftDaysNeverReached(stored: HeldMembership, days: number, from:
  *  null while it is frozen, whose dates move when it is unfrozen. */
 export function giftDaysNextDay(m: HeldMembership, from: number): { renews: boolean; day: string } | null {
   if (m.status === "frozen") return null;
-  if (m.kind === "recurring" && m.renews) return { renews: true, day: periodStart(m, from) };
+  // Where a notice given or a minimum term ends it, a period from `from` on may never come (round one, H1).
+  const cap = endsAfter(m);
+  if (m.kind === "recurring" && m.renews && (cap === null || from < cap)) return { renews: true, day: periodStart(m, from) };
   const last = lastDay(m);
   return last === null ? null : { renews: false, day: last };
 }

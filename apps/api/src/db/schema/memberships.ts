@@ -87,7 +87,7 @@ export const gymMembershipTypes = pgTable(
     ),
     check(
       "gym_membership_types_notice_check",
-      sql`${t.noticeDays} IS NULL OR (${t.kind} = 'recurring' AND ${t.priceMinor} > 0 AND ${t.noticeDays} BETWEEN 1 AND 90)`,
+      sql`${t.noticeDays} IS NULL OR (${t.kind} = 'recurring' AND ${t.priceMinor} > 0 AND ${t.noticeDays} BETWEEN 1 AND 90 AND ${t.contractThen} IS DISTINCT FROM 'ends')`,
     ),
     check("gym_membership_types_access_check", sql`${t.access} IN ('all_classes','limited','gym_only')`),
     check(
@@ -289,7 +289,7 @@ export const gymHeldMemberships = pgTable(
     ),
     check(
       "gym_held_memberships_notice_check",
-      sql`(${t.noticeDays} IS NULL OR (${t.kind} = 'recurring' AND ${t.noticeDays} BETWEEN 1 AND 90)) AND (${t.stopsAfter} IS NULL OR (${t.noticeDays} IS NOT NULL AND ${t.stopsAfter} BETWEEN 1 AND 1000)) AND (${t.noticeWaived} IS NULL OR (${t.noticeWaived} IN ('moved','medical','death','other') AND ${t.noticeDays} IS NOT NULL AND (${t.status} = 'cancelled' OR NOT ${t.renews})))`,
+      sql`(${t.noticeDays} IS NULL OR (${t.kind} = 'recurring' AND ${t.noticeDays} BETWEEN 1 AND 90)) AND (${t.stopsAfter} IS NULL OR (${t.noticeDays} IS NOT NULL AND ${t.stopsAfter} >= 1)) AND (${t.noticeWaived} IS NULL OR (${t.noticeWaived} IN ('moved','medical','death','other') AND ${t.noticeDays} IS NOT NULL AND (${t.status} = 'cancelled' OR NOT ${t.renews})))`,
     ),
     check(
       "gym_held_memberships_discount_check",
