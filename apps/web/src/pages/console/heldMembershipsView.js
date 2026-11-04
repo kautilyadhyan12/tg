@@ -566,7 +566,7 @@ export function doneWords(what, m) {
     }
     case 'cancelCoolingOff': {
       const amount = coolingOffAmount(m);
-      return amount === null ? `${m.typeName} is cancelled.` : `${m.typeName} is cancelled. Refund the ${amount} they paid: press Refund under it.`;
+      return amount === null ? `${m.typeName} is cancelled.` : `${m.typeName} is cancelled. Refund the ${amount} they paid: press Refund beside it.`;
     }
     case 'cancelContract':
       return m.view.can.cancelAtContractEnd ? `${m.typeName} ends on ${dayWords(m.view.can.cancelAtContractEnd)}, at the end of its minimum term.` : `${m.typeName} ends at the end of its minimum term.`;

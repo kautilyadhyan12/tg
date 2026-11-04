@@ -101,7 +101,7 @@ describe("a person's page", () => {
   });
 
   it('once cancelled, it says what is left to refund with its button, then that it was refunded', () => {
-    expect(doneWords('cancelCoolingOff', held('2026-11-05'))).toBe('Gold is cancelled. Refund the $50.00 they paid: press Refund under it.');
+    expect(doneWords('cancelCoolingOff', held('2026-11-05'))).toBe('Gold is cancelled. Refund the $50.00 they paid: press Refund beside it.');
     expect(doneWords('cancelCoolingOff', held('2026-11-05', { left: null }))).toBe('Gold is cancelled.');
     const after = (opts) => held('2026-11-05', { moves: [COOL], ...opts });
     expect(after().view.status).toBe('cancelled');

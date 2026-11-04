@@ -2285,7 +2285,7 @@ describe('cancelling with a full refund in the cooling-off period', () => {
     fireEvent.click(ask.getByRole('button', { name: 'Cancel with full refund' }));
     await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledTimes(1));
     expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, 'cancel', { when: 'cooling_off' });
-    expect(await b.findByText('Gold 3 days is cancelled. Refund the £49.99 they paid: press Refund under it.')).toBeTruthy();
+    expect(await b.findByText('Gold 3 days is cancelled. Refund the £49.99 they paid: press Refund beside it.')).toBeTruthy();
     // Cancelled, it is not folded away under earlier memberships while money is owed back.
     const line = within(b.getByTestId('held-changed-mind-line'));
     expect(line.getByText('Cancelled in its cooling-off period: £49.99 to refund')).toBeTruthy();

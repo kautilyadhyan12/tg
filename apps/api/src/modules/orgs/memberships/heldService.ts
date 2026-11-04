@@ -142,9 +142,10 @@ function billingOf(
   const newest = bills.slice(0, BILLS_SHOWN);
   const owedBill = pay === null ? undefined : bills.find((b) => b.periodIndex === pay.periodIndex);
   const coolingOffRefund = coolingOffRefundOf(row.membership, view, bills, payments);
-  // The bill of the payment its cooling-off refund opens on, however old, as the bill owed is (18v-iii).
-  const refundBill = coolingOffRefund === null ? undefined : bills.find((b) => payments.some((p) => p.id === coolingOffRefund.paymentId && p.billId === b.id));
-  const sent = [owedBill, refundBill].reduce<BillRow[]>((list, b) => (b === undefined || list.includes(b) ? list : [...list, b]), newest);
+  // Every bill with money of its cooling-off refund left on it, however old, as the bill owed is: Overview's Refund
+  // opens each of those payments here (18v-iii; round one, L2).
+  const refundBills = coolingOffRefund === null ? [] : bills.filter((b) => payments.some((p) => p.billId === b.id && paymentRefundableMinor(b, p) > 0));
+  const sent = [owedBill, ...refundBills].reduce<BillRow[]>((list, b) => (b === undefined || list.includes(b) ? list : [...list, b]), newest);
   const mark = !ctx.past && newestBack === null && view.can.undoPaid !== null && !settledAt(view.can.undoPaid.paidPeriods) ? view.can.undoPaid : null;
   const refundOf = (r: RefundRow) => ({
     id: r.id,
