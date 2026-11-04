@@ -42,7 +42,7 @@ import {
   onboardingResponseSchema,
   UNANSWERED_HEALTH_SCREENING,
 } from "./schemas.js";
-import { genderSchema, type Gender } from "@app/shared";
+import { genderSchema, ownedGymLine, type Gender } from "@app/shared";
 import type {
   ConsentListResponse,
   ConsentRecord,
@@ -596,6 +596,31 @@ export async function listConsents(deps: UsersDeps, userId: string): Promise<Con
   return consentListResponseSchema.parse({ consents: rows.map(toConsent), total });
 }
 
+/** "Iron House", "Iron House and Lotus Yoga", "Iron House, Lotus Yoga and Pulse". */
+function joinNames(names: readonly string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1] ?? ""}`;
+}
+
+/** The refusal an owner reads, in the browser's Delete box and on the phone (19b-ii; Kd,
+ *  2026-11-04): Make owner is the console's own name for handing a gym over. */
+function ownsGym(gyms: readonly repo.OwnedGym[]): UsersError {
+  const names = joinNames(gyms.map((gym) => gym.name));
+  return new UsersError(
+    409,
+    "owns_gym",
+    gyms.length === 1
+      ? ownedGymLine({ name: names, askedName: null })
+      : `You own ${names}. Before you delete your account, make someone else the owner of each.`,
+  );
+}
+
+/** Refused before a code is sent or spent: an owner is told at the first press. */
+async function refuseOwner(deps: UsersDeps, userId: string): Promise<void> {
+  const owned = await repo.openGymsOwnedBy(deps.sql, userId);
+  if (owned.length > 0) throw ownsGym(owned);
+}
+
 /** Deleting an account is confirmed with a code emailed to the account's own
  *  address (there is no password to ask for — Kd 2026-09-07). The address
  *  comes from the signed-in user's own row, never from the request, so a code
@@ -606,6 +631,7 @@ export async function requestDeleteCode(
 ): Promise<{ resendAfterSeconds: number; expiresInSeconds: number }> {
   const row = await repo.getProfile(deps.sql, userId);
   if (row === null) throw new UsersError(401, "unauthorized", "authentication required");
+  await refuseOwner(deps, userId);
   if (row.email === null) {
     throw new UsersError(400, "no_email", "This account has no email address, so a code cannot be sent.");
   }
@@ -628,6 +654,7 @@ export async function deleteAccount(
 ): Promise<{ emailSent: boolean; leftGymIds: string[] }> {
   const row = await repo.getProfile(deps.sql, userId);
   if (row === null) throw new UsersError(401, "unauthorized", "authentication required");
+  await refuseOwner(deps, userId);
   if (row.email === null) {
     throw new UsersError(400, "no_email", "This account has no email address, so a code cannot be checked.");
   }
@@ -639,15 +666,22 @@ export async function deleteAccount(
   // Nobody is there to ask, so the sessions booked with a trainer who deletes their
   // account end without a box, by the clock every other removal reads.
   const at = deps.now?.() ?? new Date();
-  const deleted = await repo.softDeleteUser(
-    deps.sql,
-    userId,
-    invites === null ? null : emailHmac(invites.hmacKey, row.email),
-    async (tx, gymId) => {
-      await endLeaversBookings(tx, gymId, [userId], null);
-    },
-    async (tx, gymId) => endedAuditMeta(await endTrainersSessions(tx, gymId, userId, at)),
-  );
+  let deleted: repo.DeletedUserRow | null;
+  try {
+    deleted = await repo.softDeleteUser(
+      deps.sql,
+      userId,
+      invites === null ? null : emailHmac(invites.hmacKey, row.email),
+      async (tx, gymId) => {
+        await endLeaversBookings(tx, gymId, [userId], null);
+      },
+      async (tx, gymId) => endedAuditMeta(await endTrainersSessions(tx, gymId, userId, at)),
+    );
+  } catch (err) {
+    // A gym made by them, or handed to them, since the check above.
+    if (err instanceof repo.OwnsGymError) throw ownsGym(err.gyms);
+    throw err;
+  }
   // null = the row stopped being active between the profile read above and
   // this write (a racing second tap): quiet success, no second undo email.
   // A repeat DELETE from a deleted session never gets here — authenticate

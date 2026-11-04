@@ -174,6 +174,8 @@ export interface OrgsDeps {
   paymentsEnvironment?: "sandbox" | "production";
   /** The clock a removal reads; tests move it. Production leaves it out. */
   now?: () => Date;
+  /** `WEB_ORIGIN`: the console's address, for an owner's hand-over link (19b-ii). */
+  webOrigin: string;
   /** Gyms that never paid one owner may have; tests raise it. Production leaves it out. */
   unpaidGymLimit?: number;
   /** REQUIRED, and the one caller that needs it is the attendance hook.
@@ -325,6 +327,7 @@ export async function createOrg(
       };
     } catch (err) {
       if (err instanceof repo.OrgNameTakenError) continue;
+      if (err instanceof repo.OwnerGoneError) throw new OrgsError(401, "unauthorized", "authentication required");
       if (err instanceof repo.UnpaidGymLimitError) {
         throw new OrgsError(
           403,
@@ -555,7 +558,7 @@ export async function listMyOrgs(
   // just ended. One REPEATABLE READ transaction makes the pair one snapshot; at
   // READ COMMITTED each statement takes its own.
   const { rows, former, newMessages, deviceTrialUsed } = await deps.sql.begin("isolation level repeatable read read only", async (tx) => ({
-    rows: await repo.listOrgsForUser(tx, userId),
+    rows: await repo.listOrgsForUser(tx, userId, deps.now?.() ?? new Date()),
     former: await repo.listFormerOrgsForUser(tx, userId),
     // The caller's own new messages a gym, for the menu's dot (20a-ii): the inbox's count.
     newMessages: await messagesRepo.unreadCounts(tx, userId, deps.now?.() ?? new Date()),
@@ -584,6 +587,10 @@ export async function listMyOrgs(
       ...toOrgSummary(r),
       staffRole: r.staffRole,
       coOwner: r.coOwner,
+      // Where the owner chooses a new owner: the console's Staff tab, said at its top (19b-ii).
+      ...(r.handOver === null
+        ? {}
+        : { handOver: { url: `${deps.webOrigin}/console/${encodeURIComponent(r.slug)}/members?view=staff&handOver=1`, askedName: r.handOver.askedName } }),
       // WHAT THIS CALLER MAY DO HERE, so the console can stop deciding on the
       // role NAME (T3 round 1 C/H-1). Run through the SAME `privilegesFor` that
       // `requirePrivilege` uses, so the answer a screen draws and the answer the

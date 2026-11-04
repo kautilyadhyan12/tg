@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { authService } from '../api/authApi';
 import { resetTimezoneSync, syncTimezone, userService } from '../api/userApi';
-import { forgetDoor, forgetJoinCode } from '../pages/landingRoute';
+import { forgetDoor, forgetJoinCode, forgetReturn } from '../pages/landingRoute';
 import { forgetUnsavedScan } from '../components/nutrition/unsavedScan';
 import { resetInvitations } from '../components/gym/invitationsStore';
 import { setCurrentUserId } from '../utils/storage';
@@ -180,6 +180,7 @@ export function AuthProvider({ children }) {
       // behind, it would send the next person at a gym's front-desk browser to
       // whichever screen the last person picked.
       forgetDoor();
+      forgetReturn();
       // A poster's code kept for this sign-in goes too, or the next person
       // finds it filled in, one tap from asking to join a gym they never chose.
       forgetJoinCode();

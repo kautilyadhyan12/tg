@@ -117,6 +117,61 @@ export function forgetDoor(store = defaultStore()) {
   }
 }
 
+// ── A console page opened signed out, opened again after sign-in (19b-ii) ───
+// The phone's Choose a new owner opens a gym's Staff tab in the phone's browser, which is
+// usually signed out: without this, signing in lands on the console's front page and the
+// place is lost. Only this site's own console pages are kept, for 30 minutes, in this tab.
+
+const RETURN_KEY = 'aihg.signInReturn';
+export const RETURN_FOR_MS = 30 * 60 * 1000;
+
+/** A page of this site's console: "/console/iron-house/members?view=staff". Never another site. */
+export function isReturnPath(path) {
+  return typeof path === 'string' && /^\/console\/[A-Za-z0-9-]/.test(path) && !path.includes('\\') && !path.includes('//');
+}
+
+/** The page asked for when sign-in was needed; any other page forgets an older one. */
+export function rememberReturn(path, store = defaultStore(), now = Date.now()) {
+  if (store === null) return false;
+  try {
+    if (isReturnPath(path)) store.setItem(RETURN_KEY, JSON.stringify({ path, at: now }));
+    else store.removeItem(RETURN_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The page to open after signing in, once: null when there is none, or it is too old. */
+export function takeReturn(store = defaultStore(), now = Date.now()) {
+  if (store === null) return null;
+  let raw;
+  try {
+    raw = store.getItem(RETURN_KEY);
+    store.removeItem(RETURN_KEY);
+  } catch {
+    return null;
+  }
+  try {
+    const kept = JSON.parse(raw ?? 'null');
+    if (kept === null || typeof kept.at !== 'number' || now - kept.at > RETURN_FOR_MS || now < kept.at) return null;
+    return isReturnPath(kept.path) ? kept.path : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Forgotten on sign-out, with the door: the next person at a shared browser starts fresh. */
+export function forgetReturn(store = defaultStore()) {
+  if (store === null) return false;
+  try {
+    store.removeItem(RETURN_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // ── A poster's code, kept through sign-in and setup (ROADMAP 4b-ii-b) ───────
 //
 // SWITCHED OFF with join codes (ROADMAP 3c; spec Part 3 §10.6): nothing keeps a

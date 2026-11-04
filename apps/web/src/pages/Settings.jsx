@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useSyncExternalStore } from 'react';
+import { Link } from 'react-router-dom';
 import { useMyGyms } from '../hooks/useMyGyms';
 import { myOrgsWords } from '../components/gym/gymMembershipView';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -19,7 +20,9 @@ import {
 import { DIET_ICONS, EQUIPMENT_ICONS, GOAL_ICONS, PLACE_ICONS, WEIGHT_GOAL_ICONS } from './onboarding/onboardingIcons';
 import HealthQuestion from './onboarding/HealthQuestion';
 import { useHealthScreening } from './onboarding/useHealthScreening';
-import { ADULT_AGE, CURRENT_DISCLAIMER_VERSION, DISCLAIMER_WORDINGS, UNDER_AGE_LINE } from '@app/shared';
+import { ADULT_AGE, CURRENT_DISCLAIMER_VERSION, DISCLAIMER_WORDINGS, UNDER_AGE_LINE, ownedGymLine } from '@app/shared';
+import { consoleOrgsSnapshot, ensureConsoleOrgs, refreshConsoleOrgsAfterChange, subscribeConsoleOrgs } from './console/consoleOrgs';
+import { inAppPath, ownedForDelete } from './deleteOwnerView';
 import { authService } from '../api/authApi';
 import mlApi from '../api/mlApi'; // KEPT: avatar/profile-picture only — no new-API home (owed card)
 import Select from '../components/common/Select';
@@ -640,7 +643,9 @@ function GymTab() {
 // with Google, so the "Change Password" card is SWITCHED OFF — the server
 // routes stay, the screen no longer shows a form nobody can fill in. Deleting
 // the account is confirmed with a code emailed to the account's own address,
-// for the same reason.
+// for the same reason. A gym's own owner is not deleted until they make someone else its owner
+// (19b-ii): their box says so and its button opens that gym's Staff tab, where Make owner is.
+
 function AccountTab({ profile, onSaved }) {
   const { logout, updateUser } = useAuth();
   const { triggerTransition } = useTransition();
@@ -649,11 +654,16 @@ function AccountTab({ profile, onSaved }) {
   const [delLoading,     setDelLoading]     = useState(false);
   const [resetLoading,   setResetLoading]   = useState(false);
   const [showDeleteModal,setShowDeleteModal] = useState(false);
+  // Read again when the window is back, as the console does: the owner may have handed a gym over.
+  const orgsState = useSyncExternalStore(subscribeConsoleOrgs, consoleOrgsSnapshot);
+  useEffect(() => { ensureConsoleOrgs(); }, []);
+  const owned = orgsState.status === 'ready' ? ownedForDelete(orgsState.orgs) : [];
 
   const openDeleteModal = () => {
     setDelCode('');
     setDelCodeSent(false);
     setShowDeleteModal(true);
+    refreshConsoleOrgsAfterChange();
   };
 
   const handleSendDeleteCode = async () => {
@@ -663,6 +673,8 @@ function AccountTab({ profile, onSaved }) {
       setDelCodeSent(true);
       toast.success(`Code sent to ${profile.email}`);
     } catch (err) {
+      // A gym this page did not know they own: read again, and the box turns to choosing a new owner.
+      if (err.response?.data?.error === 'owns_gym') refreshConsoleOrgsAfterChange();
       toast.error(err.response?.data?.message || 'We could not send the code. Please try again.');
     } finally {
       setDelLoading(false);
@@ -705,6 +717,10 @@ function AccountTab({ profile, onSaved }) {
       triggerTransition(() => logout());
     } catch (err) {
       // A wrong code keeps the modal open so the person can try again.
+      if (err.response?.data?.error === 'owns_gym') {
+        setDelCodeSent(false);
+        refreshConsoleOrgsAfterChange();
+      }
       toast.error(err.response?.data?.message || 'Failed to delete account');
       setDelCode('');
     } finally {
@@ -791,6 +807,10 @@ function AccountTab({ profile, onSaved }) {
                   <p className="text-xs" style={{ color: 'rgba(255,255,255,0.50)' }}>Confirmed with a code we email you</p>
                 </div>
               </div>
+              {owned.length > 0 ? (
+                <OwnerFirst owned={owned} onClose={() => setShowDeleteModal(false)} />
+              ) : (
+              <>
               <p className="text-sm mb-4" style={{ color: 'rgba(255,255,255,0.65)' }}>
                 Your workouts, nutrition logs, badges and progress will be deleted.
                 {delCodeSent
@@ -833,11 +853,45 @@ function AccountTab({ profile, onSaved }) {
                   </button>
                 )}
               </div>
+              </>
+              )}
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+/** Delete account for a gym's own owner: what to do first, and the button to the gym's Staff tab. */
+function OwnerFirst({ owned, onClose }) {
+  return (
+    <>
+      {owned.map((gym) => (
+        <p key={gym.id} className="text-sm mb-3" style={{ color: 'rgba(255,255,255,0.65)' }}>
+          {ownedGymLine(gym)}
+        </p>
+      ))}
+      <div className="flex flex-col gap-3 mt-5">
+        {owned.map((gym) => {
+          const path = inAppPath(gym.url);
+          const label = owned.length === 1 ? 'Choose a new owner' : `Choose a new owner for ${gym.name}`;
+          const look = { background: 'linear-gradient(135deg, #FF8A1F, #FFB347)', boxShadow: '0 4px 16px rgba(255,138,31,0.25)' };
+          return path === null ? null : (
+            <Link key={gym.id} to={path}
+              className="w-full py-2.5 rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2"
+              style={look}>
+              {label}
+            </Link>
+          );
+        })}
+        <button type="button" onClick={onClose}
+          className="w-full py-2.5 rounded-xl text-sm font-semibold"
+          style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.70)' }}>
+          Cancel
+        </button>
+      </div>
+    </>
   );
 }
 
