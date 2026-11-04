@@ -1200,6 +1200,12 @@ d("member list: keeping it by hand (real Postgres)", () => {
       // the friend's next payment gives no second gift; a record deleted for good lets the
       // friend go and the gift still waits for its member (`referrals.memberGift.routes.test.ts`).
       "gym_referral_member_gifts.friend_entry_id",
+      // The reminder before a renewal or a minimum term's end (0204; 18v-iv), to whoever pays: not moved
+      // by the join. A record joined or deleted for good lets go of it (`entry_id` alone to null); one still
+      // waiting is then never sent, and the next morning writes it again for the payer as they are
+      // (`memberships.renewalReminders.routes.test.ts`).
+      "gym_renewal_reminders.entry_id",
+      "gym_renewal_reminders.gym_id",
       // What the person bought at the desk (0102): moved by the join, and kept as a
       // walk-in's when the record is deleted for good (`register.routes.test.ts`).
       "gym_sales.entry_id",
