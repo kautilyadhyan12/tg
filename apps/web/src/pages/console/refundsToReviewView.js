@@ -37,6 +37,11 @@ export function reviewWhy(row) {
       if (row.amountMinor < row.paidMinor) return `${owed} ${reviewAmount(row)} of ${formatMinor(row.paidMinor, row.currency)} is left to refund.`;
       return owed;
     }
+    case 'cooling_off': {
+      const when = row.on === null ? 'Cancelled in its cooling-off period.' : `Cancelled in its cooling-off period on ${dayWords(row.on)}.`;
+      if (row.amountMinor < row.paidMinor) return `${when} ${reviewAmount(row)} of the ${formatMinor(row.paidMinor, row.currency)} they paid is left to refund.`;
+      return `${when} Refund the ${reviewAmount(row)} they paid.`;
+    }
     case 'place':
       return `${row.chargeback === true ? `You lost a ${reviewAmount(row)} chargeback on this sale.` : `Square refunded ${reviewAmount(row)} of this sale.`} Which product was it for? It counts in your reports once you choose.`;
     case 'failed':
@@ -55,6 +60,8 @@ export function reviewButtons(row) {
   const open = row.sale !== null ? 'Open Sell' : 'Open their page';
   if (row.kind === 'late') return { open, decide: null };
   if (row.kind === 'place') return { open: 'Choose product', decide: null };
+  // A full refund the member is owed (18v-iii): nothing takes it off but the refund.
+  if (row.kind === 'cooling_off') return { open: 'Refund', decide: null };
   if (row.kind === 'fee') return { open: row.member.byHand ? (row.past ? open : 'Void payment') : 'Refund', decide: 'Keep the fee' };
   return { open: 'Refund', decide: 'No refund needed' };
 }

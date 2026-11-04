@@ -126,8 +126,10 @@ export type TerminalPaymentResponse = z.infer<typeof terminalPaymentResponseSche
 /** The Terminal's second button when a payment asks to keep the card: the payment goes ahead either way. */
 export const TERMINAL_KEEP_DISAGREE = "Pay without saving";
 
-/** What the Terminal shows before a payment that keeps the card: the membership, then the card agreement word for word. */
-export const terminalKeepWords = (membershipLine: string, agreement: string): string => `${membershipLine}\n\n${agreement}`;
+/** What the Terminal shows before a payment that keeps the card: the membership and its terms, one a line (Kd, 2026-11-04;
+ *  `membershipTermLines`), then the card agreement word for word. */
+export const terminalKeepWords = (membershipLine: string, agreement: string, terms: readonly string[] = []): string =>
+  `${[membershipLine, ...terms].join("\n")}\n\n${agreement}`;
 
 /** The server's refusals, as staff read them. */
 export const TERMINAL_PAYMENT_WORDS = {

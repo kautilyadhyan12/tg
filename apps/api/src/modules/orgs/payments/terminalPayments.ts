@@ -30,6 +30,7 @@ import {
   TERMINAL_PAYMENT_WORDS,
   cardAgreementWords,
   formatMinor,
+  membershipTermLines,
   renewingMembershipLine,
   terminalKeepWords,
   terminalPaymentResponseSchema,
@@ -751,7 +752,9 @@ async function keepAsk(deps: PaymentsDeps, gymId: string, gym: repo.GymForPaymen
   const held = await readOwnHeld({ sql: deps.sql, now: deps.now }, gymId, entryId, dayInTz(deps.now(), gym.timezone));
   const membership = held.memberships.find((m) => m.id === membershipId);
   if (membership === undefined) throw new OrgsError(404, "held_membership_not_found", "That membership was not found.");
-  return { words: terminalKeepWords(renewingMembershipLine(membership, held.taxIncluded), cardAgreementWords(gym.name)), confirmKey: randomUUID(), cardKey: randomUUID() };
+  // Its terms too, as its agreement says them (Kd, 2026-11-04).
+  const words = terminalKeepWords(renewingMembershipLine(membership, held.taxIncluded), cardAgreementWords(gym.name), membershipTermLines(membership));
+  return { words, confirmKey: randomUUID(), cardKey: randomUUID() };
 }
 
 /** Take payment on Terminal: the amount goes to the chosen Terminal. The same press sent twice is

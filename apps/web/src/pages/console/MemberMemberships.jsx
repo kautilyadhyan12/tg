@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useInRouterContext } from 'react-router-dom';
 import { Check, CreditCard, Loader2, Plus } from 'lucide-react';
-import { MEMBER_FEE_WORDS, formatMinor, memberGiftDaysLine } from '@app/shared';
+import { MEMBER_FEE_WORDS, formatMinor, memberGiftDaysLine, paidThroughSquare } from '@app/shared';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import PlaceLink from '../../components/console/PlaceLink';
 import PtSessionsEnding from '../../components/console/PtSessionsEnding';
@@ -20,7 +20,7 @@ import { FriendGiftNote, MemberGiftNote, MemberGiftWaiting } from './FriendGift'
 import { useCameBack } from './useCameBack';
 import { useLiveNews } from './liveNews';
 import { ENDING_NOT_TOLD, bookingsStoppedLine } from './bookingsEndView';
-import { contractLine, leaveFeeLine, noticeLine, termLine } from './membershipTypesView';
+import { contractLine, coolingOffLine, leaveFeeLine, noticeLine, termLine } from './membershipTypesView';
 import { changeBody, changeChoice, changeCreditLine, changeDoneWords, changeEndingWords, changeForm, changeLine, showsChange, squareSetUpLine } from './membershipChangeView';
 import { viewerPrivileges } from './consoleView';
 import { placeFor } from './consolePlaces';
@@ -36,6 +36,9 @@ import {
   askWords,
   RELEASE_CHOICES,
   contractShownLine,
+  changedMindLine,
+  coolingOffShownLine,
+  coolingOffWords,
   leaveFeeShownLine,
   leftEarlyLine,
   releaseShownLine,
@@ -155,7 +158,7 @@ const VOIDED = { color: 'var(--t3)', textDecoration: 'line-through' };
 // A payment or a refund: columns with its button at the end; on a phone, one under another.
 const LINE = 'flex flex-col gap-1.5 md:flex-row md:items-center md:gap-x-3';
 /** Refusals that mean the page is out of date: it is read again. */
-const STALE_CODES = ['held_membership_changed', 'membership_type_not_found', 'bill_has_payment', 'refund_too_much', 'refund_not_settled', 'member_fee_changed'];
+const STALE_CODES = ['held_membership_changed', 'membership_type_not_found', 'bill_has_payment', 'refund_too_much', 'refund_not_settled', 'member_fee_changed', 'cooling_off_over'];
 /** A card on file that may not be charged again yet, or at all (18d-iii-ii-a): said under its button. */
 const CARD_RETRY_REFUSALS = ['card_charge_wait', 'card_charge_stopped', 'card_charge_tried_out'];
 
@@ -182,8 +185,6 @@ export default function MemberMemberships({
   managesTypes = true,
   membershipsTo = null,
   addNow = false,
-  /** A membership Add member has just given (18u-i): its agreement box opens, with Sign later. */
-  signNow = null,
   /** Opened by Take payment on Failed payments (18d-iii-ii-b): { membershipId, feeBillId }, the
    *  bill whose Record payment is open already, once, when their memberships have loaded. */
   payNow = null,
@@ -215,13 +216,7 @@ export default function MemberMemberships({
   const [refusal, setRefusal] = useState(null);
   const [showPast, setShowPast] = useState(false);
   /** The membership whose agreement box is open (18u-i): { id, justGiven }, or null. */
-  const [agreementFor, setAgreementFor] = useState(() => (signNow === null ? null : { id: signNow, justGiven: true }));
-  // A membership Add member gives after this box was drawn opens its agreement too.
-  const [signNowSeen, setSignNowSeen] = useState(signNow);
-  if (signNow !== signNowSeen) {
-    setSignNowSeen(signNow);
-    if (signNow !== null) setAgreementFor({ id: signNow, justGiven: true });
-  }
+  const [agreementFor, setAgreementFor] = useState(null);
   /** The receipt open under its payment or refund, by its number. */
   const [receiptFor, setReceiptFor] = useState(null);
   const toggleReceipt = (number) => setReceiptFor((was) => (was === number ? null : number));
@@ -444,6 +439,10 @@ export default function MemberMemberships({
       setFeeForm({ what: 'voidFeePayment', ...feePayDraft(fee, newRequestKey), tried: false });
       setVoidForm({ reason: '', tried: false });
       setOpen({ what: 'voidFeePayment', id: m.id });
+    } else if (m?.billing && refundNow.voidFeeId === null && paymentOf(m, refundNow.paymentId) !== null && !paidThroughSquare(paymentOf(m, refundNow.paymentId).method)) {
+      // Paid by hand, on a membership cancelled in its cooling-off period (18v-iii): Note a refund, its reason picked.
+      setRefundForm({ ...refundDraft(m, paymentOf(m, refundNow.paymentId), newRequestKey), reason: 'leaving', tried: false });
+      setOpen({ what: 'refund', id: m.id });
     } else if (m?.billing && refundNow.voidFeeId === null && paymentOf(m, refundNow.paymentId) !== null) {
       setOpen({ what: 'cardRefund', id: m.id, paymentId: refundNow.paymentId });
     } else {
@@ -451,11 +450,11 @@ export default function MemberMemberships({
     }
   }
   const scrolledNow = useRef(false);
-  const payOpenNow = (paidNow && (open?.what === 'pay' || open?.what === 'payFee')) || (refundedNow && (open?.what === 'cardRefund' || open?.what === 'voidFeePayment'));
+  const payOpenNow = (paidNow && (open?.what === 'pay' || open?.what === 'payFee')) || (refundedNow && (open?.what === 'cardRefund' || open?.what === 'voidFeePayment' || open?.what === 'refund')) || (addsNow && open?.what === 'add');
   useEffect(() => {
     if (!payOpenNow || scrolledNow.current) return;
     scrolledNow.current = true;
-    document.querySelector('[data-testid="held-pay"], [data-testid="held-fee-pay"], [data-testid="card-refund-box"], [data-testid="held-fee-void"]')?.scrollIntoView?.({ block: 'center' });
+    document.querySelector('[data-testid="held-pay"], [data-testid="held-fee-pay"], [data-testid="card-refund-box"], [data-testid="held-fee-void"], [data-testid="held-refund-form"], [data-testid="held-add"]')?.scrollIntoView?.({ block: 'center' });
   }, [payOpenNow]);
   // What their list says their membership is, where they do not hold it here.
   const listed = shown === null ? null : listedRow(shown.listed, name, managesTypes);
@@ -499,7 +498,8 @@ export default function MemberMemberships({
   const today = shown.today;
   /** A bill of it can be paid now, or a fee of it is owed: one that is over and still owes
    *  is not folded away. */
-  const owes = (m) => m.billing !== null && (m.billing.pay !== null || feesOwed(m).length > 0);
+  // One cancelled in its cooling-off period with money left to refund is not folded away either (18v-iii).
+  const owes = (m) => m.billing !== null && (m.billing.pay !== null || feesOwed(m).length > 0 || m.billing.coolingOffRefund !== null);
   const live = shown.memberships.filter((m) => isLive(m) || owes(m));
   const over = shown.memberships.filter((m) => !isLive(m) && !owes(m));
   const canAct = !readOnly && !shown.past;
@@ -560,7 +560,7 @@ export default function MemberMemberships({
       setRefusal(errorText(err, "We couldn't save that. Please try again."));
       // A discount refused or changed: read the discounts again, and keep the form open.
       const code = errorCode(err);
-      if (what === 'give' && typeof code === 'string' && (code.startsWith('discount_') || code === 'membership_discount_changed' || code === 'membership_price_changed' || code === 'membership_minimum_term_changed' || code === 'membership_notice_changed' || code === 'membership_leave_fee_changed')) {
+      if (what === 'give' && typeof code === 'string' && (code.startsWith('discount_') || code === 'membership_discount_changed' || code === 'membership_price_changed' || code === 'membership_minimum_term_changed' || code === 'membership_notice_changed' || code === 'membership_leave_fee_changed' || code === 'membership_cooling_off_changed')) {
         setAttempt((n) => n + 1);
       }
       // The gym's billing day changed (18y): read it again, and keep the box open with its new total.
@@ -639,6 +639,20 @@ export default function MemberMemberships({
     setEnding(null);
     setRefundForm({ ...refundDraft(m, payment, newRequestKey), tried: false });
     setOpen({ what: 'refund', id: m.id });
+  };
+
+  /** Refund on a membership cancelled in its cooling-off period (18v-iii): the box of the payment the server named,
+   *  Refund to card where Square took it, else Note a refund with its reason picked. */
+  const startCoolingOffRefund = (m) => {
+    const paymentId = m.billing?.coolingOffRefund?.paymentId ?? null;
+    const payment = paymentId === null ? null : paymentOf(m, paymentId);
+    if (payment === null) return;
+    if (paidThroughSquare(payment.method)) {
+      startCardRefund(m, paymentId);
+      return;
+    }
+    startRefund(m, paymentId);
+    setRefundForm((f) => (f === null ? f : { ...f, reason: 'leaving' }));
   };
 
   /** Refund to card (18d-iv-a): its box opens under the payment, and asks Square about it. */
@@ -1976,6 +1990,7 @@ export default function MemberMemberships({
     return (
       <div className="rounded-[14px] p-3 flex flex-col gap-2" style={{ background: 'var(--raise)' }} data-testid={`held-ask-${open.what}`}>
         <p className="c-s15 c-w6 c-t1 m-0">{words.question}</p>
+        {cancelling ? renderCoolingOff(m) : null}
         <p className="c-s14 c-t2 m-0">{words.detail}</p>
         {open.what === 'freeze' && freezeFeeAsk(m, name, today) !== null ? (
           <div className="flex flex-col gap-2" data-testid="held-freeze-fee">
@@ -2018,6 +2033,23 @@ export default function MemberMemberships({
     );
   };
 
+  /** Cancel with a full refund, first in the Cancel box while its cooling-off period is open (18v-iii). */
+  const renderCoolingOff = (m) => {
+    const cool = coolingOffWords(m, name);
+    if (cool.coolButton === null) return null;
+    return (
+      <div className="flex flex-col gap-2 pb-3 mb-1" style={{ borderBottom: '1px solid var(--line)' }} data-testid="held-cooling-off">
+        <p className="c-s14 c-w5 c-t1 m-0">{cool.coolLine}</p>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className={DANGER} disabled={busy} onClick={() => void change('cancelCoolingOff', m, 'cancel', { when: 'cooling_off' })}>
+            {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+            {cool.coolButton}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   /** Cancel inside a running contract (18v-i): End with the contract, or release them with a reason. */
   const renderContractCancel = (m, words) => {
     const releaseWith = (what, when) => {
@@ -2031,6 +2063,7 @@ export default function MemberMemberships({
     return (
       <div className="rounded-[14px] p-3 flex flex-col gap-2" style={{ background: 'var(--raise)' }} data-testid="held-ask-cancel">
         <p className="c-s15 c-w6 c-t1 m-0">{words.question}</p>
+        {renderCoolingOff(m)}
         <p className="c-s14 c-t2 m-0">{words.detail}</p>
         {words.endButton !== null ? (
           <div className="flex flex-wrap gap-2">
@@ -2173,6 +2206,23 @@ export default function MemberMemberships({
             {noticeWaivedLine(m)}
           </span>
         ) : null}
+        {coolingOffShownLine(m) !== null ? (
+          <span className="c-s14 c-t2" data-testid="held-cooling-off-line">
+            {coolingOffShownLine(m)}
+          </span>
+        ) : null}
+        {changedMindLine(m) !== null ? (
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="held-changed-mind-line">
+            <span className="c-s14 c-w5" style={changedMindLine(m).refund ? { color: 'var(--warn)' } : undefined}>
+              {changedMindLine(m).text}
+            </span>
+            {changedMindLine(m).refund && !readOnly && !asking ? (
+              <button type="button" className={PAY} disabled={busy} onClick={() => startCoolingOffRefund(m)}>
+                Refund
+              </button>
+            ) : null}
+          </span>
+        ) : null}
         {changeLine(m, today) !== null ? (
           <span className="c-s14 c-t2" data-testid="held-change-line">
             {changeLine(m, today)}
@@ -2288,7 +2338,7 @@ export default function MemberMemberships({
     const giftUsed = giftFits && form.memberGiftOff !== true ? memberGift : null;
     const fee = joiningFeeFor(choice.type, form.joiningFee, shown.canBill, shown.memberships.some(isLive));
     const summary = choice.type === null ? null : membershipSummary(choice.type, discount, shown.taxIncluded, giftUsed, fee.feeMinor, part);
-    const ready = choice.type !== null && choice.problem === null && !choice.methodNeeded && summary !== null;
+    const ready = choice.type !== null && choice.problem === null && summary !== null;
     return (
       <form
         noValidate
@@ -2298,7 +2348,8 @@ export default function MemberMemberships({
         onSubmit={(e) => {
           e.preventDefault();
           if (!ready || busy) return;
-          void run('give', null, () => orgService.giveHeldMembership(gymId, entryId, giveBody(form.requestKey, choice.type, form, discount, summary, giftUsed, fee.feeMinor)));
+          // Given owed: the line it leaves says where its payment is recorded (Kd, 2026-11-04).
+          void run('give', null, () => orgService.giveHeldMembership(gymId, entryId, giveBody(form.requestKey, choice.type, form, discount, summary, giftUsed, fee.feeMinor)), free ? null : doneWords('giveOwed'));
         }}
       >
         <p className="c-s15 c-w6 c-t1 m-0">Add a membership for {name}</p>
@@ -2312,12 +2363,10 @@ export default function MemberMemberships({
         ) : (
           <>
             <MembershipChoice
-              country={gym?.country}
               types={types}
               today={today}
               value={form}
               canBill={shown.canBill}
-              paidMinor={summary === null || !summary.shows ? null : summary.totalMinor}
               onChange={(next) => setForm((f) => ({ ...f, ...next, ...(next.typeId !== undefined && next.typeId !== f.typeId ? { code: { ...f.code, note: null, appliedId: null }, joiningFee: 'auto' } : {}) }))}
             />
             <JoiningFeeTick type={choice.type} fee={fee} onChange={(joiningFee) => setForm((f) => ({ ...f, joiningFee }))} />
@@ -2334,6 +2383,11 @@ export default function MemberMemberships({
             {noticeLine(choice.type) !== null ? (
               <p className="c-s14 c-t2 m-0" data-testid="held-add-notice">
                 {noticeLine(choice.type)}
+              </p>
+            ) : null}
+            {coolingOffLine(choice.type) !== null ? (
+              <p className="c-s14 c-t2 m-0" data-testid="held-add-cooling-off">
+                {coolingOffLine(choice.type)}
               </p>
             ) : null}
             {gift !== null && choice.type !== null && !free ? (

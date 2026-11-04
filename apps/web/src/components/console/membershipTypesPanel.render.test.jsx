@@ -164,6 +164,25 @@ describe('adding a type', () => {
     expect(await screen.findByText('Notice to cancel: 30 days')).toBeTruthy();
   });
 
+  it('a cooling-off period (18v-iii): typed in days on any kind, said under the box, refused on a free line, and shown on its row', async () => {
+    orgService.createMembershipType.mockResolvedValue({ data: listOf({ types: [type({ name: 'Gold Monthly', coolingOffDays: 3 })] }) });
+    open(listOf());
+    fireEvent.click(await screen.findByRole('button', { name: 'Add a membership type' }));
+    type_('Name', 'Gold Monthly');
+    type_('Price (GBP)', '0');
+    expect(screen.getByText('Days after they sign in which members can cancel with a full refund. Weekends count. Leave empty for none.')).toBeTruthy();
+    type_('Cooling-off period', '3');
+    expect(screen.getByText('For 3 days after they sign, members can cancel with a full refund. Weekends count.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Add membership type' }));
+    expect(await screen.findByText('A free membership has no cooling-off period. Leave it empty.')).toBeTruthy();
+    expect(orgService.createMembershipType).not.toHaveBeenCalled();
+    type_('Price (GBP)', '49.99');
+    fireEvent.click(screen.getByRole('button', { name: 'Add membership type' }));
+    await waitFor(() => expect(orgService.createMembershipType).toHaveBeenCalledTimes(1));
+    expect(orgService.createMembershipType.mock.calls[0][1]).toMatchObject({ kind: 'recurring', priceMinor: 4999, coolingOffDays: 3 });
+    expect(await screen.findByText('Cooling-off period: 3 days')).toBeTruthy();
+  });
+
   it('a contract (18v-i): its boxes appear when chosen, say how long it runs, and are sent with the type', async () => {
     orgService.createMembershipType.mockResolvedValue({ data: listOf({ types: [type({ name: 'Gold 12 months', contractPeriods: 12, contractThen: 'ends' })] }) });
     open(listOf());
@@ -233,6 +252,7 @@ describe('adding a type', () => {
       contractThen: null,
       leaveFeeMinor: null,
       noticeDays: null,
+      coolingOffDays: null,
     });
     expect(await screen.findByText('£49.99 every month')).toBeTruthy();
     // The form closes on a save.

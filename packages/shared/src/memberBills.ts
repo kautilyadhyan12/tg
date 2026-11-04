@@ -399,6 +399,10 @@ export const memberBillingSchema = z
       ])
       .nullable()
       .default(null),
+    /** Its cooling-off period (18v-iii), while it is open or once it was cancelled in it: what was paid on its
+     *  bills and is not given back yet, and the newest payment with some of it left, whose bill is always among
+     *  `bills`. Null otherwise, and once nothing is left. */
+    coolingOffRefund: z.object({ leftMinor: z.number().int().min(1), paymentId: z.string().uuid() }).strict().nullable().default(null),
   })
   .strict();
 export type MemberBilling = z.infer<typeof memberBillingSchema>;

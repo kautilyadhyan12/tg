@@ -158,6 +158,19 @@ describe('the card on Overview', () => {
     await waitFor(() => expect(svc.list).toHaveBeenCalledTimes(2));
   });
 
+  it('a cooling-off refund (18v-iii) paid by hand: its Refund opens their page on that payment, and nothing else takes it off', async () => {
+    const cooling = { ...base, id: PAY, kind: 'cooling_off', amountMinor: 5000, paidMinor: 5000, on: '2026-11-07', member: member({ byHand: true }) };
+    svc.list.mockResolvedValue(answer([cooling]));
+    draw();
+    const row = within(await screen.findByTestId('refund-review-row'));
+    expect(row.getByText('Gold Monthly')).toBeTruthy();
+    expect(row.getByText('Cancelled in its cooling-off period on 7 November 2026. Refund the $50.00 they paid.')).toBeTruthy();
+    expect(row.getAllByRole('button').map((b) => b.textContent)).toEqual(['Maya Patel', 'Refund']);
+    fireEvent.click(row.getByRole('button', { name: 'Refund' }));
+    const page = await screen.findByRole('dialog', { name: `person ${ENTRY}` });
+    expect(JSON.parse(page.getAttribute('data-refund-now'))).toEqual({ membershipId: HELD, paymentId: PAY, voidFeeId: null });
+  });
+
   it('Void payment names the fee, and a name opens their page with no box', async () => {
     svc.list.mockResolvedValue(answer([{ ...base, member: member({ fee: noShow, byHand: true }) }]));
     draw();

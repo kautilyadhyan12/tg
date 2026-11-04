@@ -158,6 +158,10 @@ const rawSchema = z.object({
   notice_waived: contractReleaseSchema.nullable(),
   leave_fee_minor: z.number().int().nullable(),
   left_early: z.boolean(),
+  cooling_off_days: z.number().int().nullable(),
+  cooling_off_added: z.string().nullable(),
+  cooling_off_signed: z.string().nullable(),
+  changed_mind: z.boolean(),
   freeze_fee_minor: z.number().int(),
   from_list: z.boolean(),
   discount_name: z.string().nullable(),
@@ -218,6 +222,10 @@ function shape(row: unknown): HeldRow {
       stopsAfter: r.stops_after,
       leaveFeeMinor: r.leave_fee_minor,
       leftEarly: r.left_early,
+      coolingOffDays: r.cooling_off_days,
+      coolingOffAdded: r.cooling_off_added,
+      coolingOffSigned: r.cooling_off_signed,
+      changedMind: r.changed_mind,
     },
   };
 }
@@ -240,6 +248,7 @@ const typeSchema = z.object({
   contract_then: contractThenSchema.nullable(),
   notice_days: z.number().int().nullable(),
   leave_fee_minor: z.number().int().nullable(),
+  cooling_off_days: z.number().int().nullable(),
 });
 
 /** The tax rate a type charges, by id: what a membership given from it keeps. None for a
@@ -269,13 +278,14 @@ export function typeChoice(row: unknown): HeldMembershipTypeChoice {
     contractThen: t.contract_then,
     noticeDays: t.notice_days,
     leaveFeeMinor: t.leave_fee_minor,
+    coolingOffDays: t.cooling_off_days,
   };
 }
 
 /** A gym's live types, or the one named; a gym has at most 60. */
 export const liveTypes = (sql: Sql | TransactionSql, gymId: string, typeId: string | null) => sql`
   SELECT id, name, kind, price_minor, currency, term_count, term_unit, pack_classes, pack_days, updated_at, tax_rate_id, joining_fee_minor,
-         contract_periods, contract_then, notice_days, leave_fee_minor,
+         contract_periods, contract_then, notice_days, leave_fee_minor, cooling_off_days,
          (SELECT r.name FROM gym_tax_rates r WHERE r.gym_id = gym_membership_types.gym_id AND r.id = gym_membership_types.tax_rate_id) AS tax_name,
          (SELECT r.rate_bp FROM gym_tax_rates r WHERE r.gym_id = gym_membership_types.gym_id AND r.id = gym_membership_types.tax_rate_id) AS tax_bp
   FROM gym_membership_types
@@ -290,6 +300,17 @@ const COLUMNS = (sql: Sql | TransactionSql) => sql`
   h.frozen_on::text AS frozen_on, h.cancelled_on::text AS cancelled_on,
   h.paid_periods, h.paid_floor, h.renews, h.classes_left, h.from_list, h.full_from::text AS full_from,
   h.contract_periods, h.contract_then, h.contract_release, h.notice_days, h.stops_after, h.notice_waived, h.leave_fee_minor, h.left_early,
+  h.cooling_off_days, h.changed_mind,
+  -- What its cooling-off days count from (18v-iii; the rule decides, coolingOffFrom): the gym's day it was given, none
+  -- where it was changed to another membership that stands, and the gym's day its agreement was signed.
+  CASE WHEN EXISTS (SELECT 1 FROM gym_held_memberships n WHERE n.gym_id = h.gym_id AND n.replaces_id = h.id AND n.status <> 'cancelled')
+    THEN NULL
+    ELSE h.cooling_off_added::text
+  END AS cooling_off_added,
+  CASE WHEN h.cooling_off_days IS NULL THEN NULL
+    ELSE (SELECT to_char(s.signed_at AT TIME ZONE g.timezone, 'YYYY-MM-DD') FROM gym_agreement_signatures s JOIN gyms g ON g.id = s.gym_id
+          WHERE s.gym_id = h.gym_id AND s.held_membership_id = h.id)
+  END AS cooling_off_signed,
   h.freeze_fee_minor, h.discount_name, h.discount_minor, h.discount_payments,
   (SELECT r.name FROM gym_tax_rates r WHERE r.gym_id = h.gym_id AND r.id = h.tax_rate_id) AS tax_name,
   (SELECT r.rate_bp FROM gym_tax_rates r WHERE r.gym_id = h.gym_id AND r.id = h.tax_rate_id) AS tax_bp,
@@ -470,6 +491,12 @@ export type HeldWriteOutcome =
   | { kind: "notice_changed" }
   /** The early cancellation fee is not the one the screen showed: leaving early, or the line's on Add or Change membership (18v-ii-b). */
   | { kind: "leave_fee_changed" }
+  /** The line's cooling-off period is not the one the Add form showed (18v-iii). */
+  | { kind: "cooling_off_changed" }
+  /** Cancel with a full refund, where the membership's cooling-off period is not open today (18v-iii). */
+  | { kind: "cooling_off_over" }
+  /** Cancel with a full refund, and part of a bill of it is paid while the rest is owed (18v-iii). */
+  | { kind: "cooling_off_part_paid" }
   /** The person has this type running already. `ends`: the one they hold has a last day,
    *  so a start date after it would be taken; a repeating one that renews has none. */
   | { kind: "already_held"; typeName: string; ends: boolean }
@@ -701,6 +728,8 @@ export interface GiveHeldInput {
   shownMinimumTerm?: { periods: number; then: string; leaveFeeMinor?: number | null | undefined } | null;
   /** The notice to cancel the screen showed (18v-ii-a), null for none; undefined where it showed no word of it. */
   shownNoticeDays?: number | null;
+  /** The cooling-off period the screen showed (18v-iii), null for none; undefined where it showed no word of it. */
+  shownCoolingOffDays?: number | null;
   /** Whether this reader may give a type that has a joining fee without it. */
   mayWaiveJoiningFee: boolean;
   /** Given in place of another membership (18x, `changeRepo.ts`): the one it replaces and
@@ -755,6 +784,8 @@ export async function giveHeldIn(tx: TransactionSql, input: GiveHeldInput): Prom
   }
   // A notice to cancel set or changed since the screen opened is refused the same way (18v-ii-a).
   if (input.shownNoticeDays !== undefined && input.shownNoticeDays !== type.noticeDays) return { kind: "notice_changed" };
+  // And a cooling-off period (18v-iii).
+  if (input.shownCoolingOffDays !== undefined && input.shownCoolingOffDays !== type.coolingOffDays) return { kind: "cooling_off_changed" };
   // The type's rate as it is now, read under the gym's lock that its changes take: the
   // membership keeps it, and its first bill charges it.
   const taxRateId = typeTaxRateId(rawType);
@@ -847,14 +878,15 @@ export async function giveHeldIn(tx: TransactionSql, input: GiveHeldInput): Prom
        term_count, term_unit, pack_classes, pack_days, starts_on, status,
        paid_periods, paid_floor, renews, classes_left,
        discount_id, discount_name, discount_minor, discount_payments, tax_rate_id, tax_included, replaces_id, replaced_stopped, full_from,
-       contract_periods, contract_then, notice_days, leave_fee_minor)
+       contract_periods, contract_then, notice_days, leave_fee_minor, cooling_off_days, cooling_off_added)
     VALUES (${input.gymId}, ${input.entryId}, ${input.typeId}, ${input.requestKey}, ${m.kind},
             ${priceMinor}, ${type.currency}, ${m.termCount}, ${m.termUnit}, ${m.packClasses},
             ${m.packDays}, ${m.startsOn}::date, ${m.status},
             ${m.paidPeriods}, ${m.paidFloor}, ${m.renews}, ${m.classesLeft},
             ${used?.id ?? null}, ${used?.name ?? null}, ${used?.offMinor ?? 0}, ${used?.payments ?? null}, ${rate?.id ?? null}, ${tax?.included ?? null},
             ${change?.fromId ?? null}, ${change?.stoppedOld ?? false}, ${m.fullFrom}::date,
-            ${m.contractPeriods ?? null}, ${m.contractThen ?? null}, ${m.noticeDays ?? null}, ${m.leaveFeeMinor ?? null})
+            ${m.contractPeriods ?? null}, ${m.contractThen ?? null}, ${m.noticeDays ?? null}, ${m.leaveFeeMinor ?? null},
+            ${change === null ? (m.coolingOffDays ?? null) : null}, ${change === null && (m.coolingOffDays ?? null) !== null ? input.today : null}::date)
     RETURNING id`;
   if (created === undefined) throw new Error("held membership insert returned no row");
 
@@ -1035,7 +1067,8 @@ export async function moveHeld(
     const leaving = input.event.type === "cancel" && input.event.when === "leave_early";
     if (leaving && before.membership.leftEarly !== true && input.leaveFeeMinor !== (before.membership.leaveFeeMinor ?? null)) return { kind: "leave_fee_changed" };
     const move = moveHeldMembership(before.membership, input.event, input.today);
-    if (!move.ok) return { kind: move.reason };
+    const coolingOff = input.event.type === "cancel" && input.event.when === "cooling_off";
+    if (!move.ok) return coolingOff ? { kind: "cooling_off_over" } : { kind: move.reason };
     if (!move.changed) return { kind: "ok" };
     const m = move.membership;
     const leftEarly = leaving && m.leftEarly === true && before.membership.leftEarly !== true;
@@ -1067,7 +1100,15 @@ export async function moveHeld(
     // A cancel takes with it the bills for days after its last day (18a-i): nobody is left
     // owing, or reading Overdue, for a month they never had.
     let voided: string[] = [];
-    if (input.event.type === "cancel") {
+    if (coolingOff) {
+      // Cancelled in its cooling-off period, nothing of it is owed (18v-iii): every bill with nothing paid on it
+      // is cancelled, whatever day it fell due. A bill part paid can be neither refunded nor cancelled until
+      // that payment is voided, so it stops the cancel.
+      const bills = await billsFor(tx, input.gymId, [before.id]);
+      const open = bills.filter((b) => b.status === "open");
+      if (open.some((b) => b.paidMinor > 0)) return { kind: "cooling_off_part_paid" };
+      voided = open.map((b) => b.id);
+    } else if (input.event.type === "cancel") {
       const lastDay = m.status === "cancelled" ? input.today : heldMembershipView(m, input.today).endsOn;
       if (lastDay !== null) {
         const bills = await billsFor(tx, input.gymId, [before.id]);
@@ -1095,7 +1136,7 @@ export async function moveHeld(
           cancelled_on = ${m.cancelledOn}::date, paid_periods = ${m.paidPeriods}, renews = ${m.renews},
           contract_then = ${m.contractThen ?? null}, contract_release = ${release},
           stops_after = ${m.stopsAfter ?? null}, notice_waived = ${noticeWaived}, left_early = ${m.leftEarly === true},
-          freeze_fee_minor = ${freezeFee}, updated_at = ${input.now}
+          changed_mind = ${m.changedMind === true}, freeze_fee_minor = ${freezeFee}, updated_at = ${input.now}
       WHERE gym_id = ${input.gymId} AND entry_id = ${input.entryId} AND id = ${input.membershipId}`;
     const ended = ends === null ? null : await bookings.end(tx, input.gymId, ends, input.now);
     // The early cancellation fee, a fee bill of its own, due today (18v-ii-b).

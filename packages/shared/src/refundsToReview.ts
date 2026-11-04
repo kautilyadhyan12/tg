@@ -10,11 +10,12 @@ const minorSchema = z.number().int().min(0).max(99_999_999);
 /** Rows a page, read a page at a time: refunds that went wrong first, then fees, the newest first in each. */
 export const REFUNDS_TO_REVIEW_PAGE = 10;
 
-export const REFUND_REVIEW_KINDS = ["fee", "failed", "lost", "late", "place"] as const;
+/** `cooling_off` (18v-iii): a payment of a membership cancelled in its cooling-off period, with some of it not given back yet. */
+export const REFUND_REVIEW_KINDS = ["fee", "failed", "lost", "late", "place", "cooling_off"] as const;
 
 export const refundToReviewSchema = z
   .object({
-    /** The fee's bill for a fee; the refund press for the rest. */
+    /** The fee's bill for a fee; the payment for a cooling-off refund; the refund press for the rest. */
     id: z.string().uuid(),
     kind: z.enum(REFUND_REVIEW_KINDS),
     /** Choose product on a lost chargeback, not a refund made in Square (18d-iv-e-ii-b). */
@@ -30,7 +31,7 @@ export const refundToReviewSchema = z
     name: z.string().nullable(),
     past: z.boolean(),
     personDeleted: z.boolean(),
-    /** The gym's day the refund was pressed; null on a fee. */
+    /** The gym's day the refund was pressed; the day it was cancelled, on a cooling-off refund; null on a fee. */
     on: daySchema.nullable(),
     member: z
       .object({

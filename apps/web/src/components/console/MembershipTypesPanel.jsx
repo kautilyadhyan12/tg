@@ -37,6 +37,8 @@ import {
   leaveFeeLine,
   noticeHint,
   noticeLine,
+  coolingOffHint,
+  coolingOffLine,
   termUnitOptions,
   typesSummary,
   withChoice,
@@ -384,6 +386,26 @@ function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRate
           </Field>
         ) : null}
 
+        <Field id={id('cooling-off')} label="Cooling-off period" problem={problems?.coolingOffDays}>
+          <div className="flex flex-wrap items-center gap-2" style={{ maxWidth: 520 }}>
+            <input
+              id={id('cooling-off')}
+              aria-invalid={problems?.coolingOffDays ? 'true' : undefined}
+              value={draft.coolingOffDays}
+              inputMode="numeric"
+              onChange={text('coolingOffDays')}
+              className="c-input"
+              style={{ width: 104, flexShrink: 0 }}
+            />
+            <span className="c-s15 c-t1">days</span>
+          </div>
+          <p className="c-s13 c-t3 m-0">
+            {[coolingOffHint(draft), editing ? 'Members who already hold it keep the cooling-off period they joined on.' : null]
+              .filter((line) => line !== null)
+              .join(' ')}
+          </p>
+        </Field>
+
         {choice === 'pack' ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" style={{ maxWidth: 480 }}>
             <Field id={id('pack-classes')} label="Classes in the pack" problem={problems?.packClasses}>
@@ -581,6 +603,7 @@ function TypeRow({ type, orgType, taxLine = null, agreementLine = null, agreemen
           {contractLine(type) !== null ? <p className="c-s14 c-t2 m-0">{contractLine(type)}</p> : null}
           {leaveFeeLine(type) !== null ? <p className="c-s14 c-t2 m-0">{leaveFeeLine(type)}</p> : null}
           {noticeLine(type) !== null ? <p className="c-s14 c-t2 m-0">{noticeLine(type)}</p> : null}
+          {coolingOffLine(type) !== null ? <p className="c-s14 c-t2 m-0">{coolingOffLine(type)}</p> : null}
           {taxLine !== null ? <p className="c-s14 c-t2 m-0">{taxLine}</p> : null}
           <p className="c-s14 c-t2 m-0">{includesLine(type, orgType)}</p>
           {agreementLine !== null ? (

@@ -13,7 +13,7 @@ const view = (over: Partial<Membership["view"]> = {}): Membership["view"] => ({
   payment: null,
   contract: null,
   notice: null,
-  can: { freeze: true, unfreeze: false, cancel: true, cancelAtPeriodEnd: null, cancelAtContractEnd: null, releaseNeeded: false, cancelAfterNotice: null, noticeEnds: null, noticePaid: false, leaveEarly: null, markPaid: null, undoPaid: null },
+  can: { freeze: true, unfreeze: false, cancel: true, cancelAtPeriodEnd: null, cancelAtContractEnd: null, releaseNeeded: false, cancelAfterNotice: null, noticeEnds: null, noticePaid: false, leaveEarly: null, coolingOff: null, markPaid: null, undoPaid: null },
   ...over,
 });
 
@@ -146,7 +146,7 @@ const sampleBill = {
   cardUnchecked: null,
   charging: false,
 };
-const emptyBilling = { bills: [], billsNotShown: 0, pay: null, cancel: null, undo: null, fees: [], change: null };
+const emptyBilling = { bills: [], billsNotShown: 0, pay: null, cancel: null, undo: null, fees: [], change: null, coolingOffRefund: null };
 
 describe("agreementSignable", () => {
   it.each([
