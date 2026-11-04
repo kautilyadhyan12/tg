@@ -138,8 +138,9 @@ export type MemberRefundMethod = z.infer<typeof memberRefundMethodSchema>;
 
 /** A fee for a late cancel or a no-show (18h-i): a bill of the membership the booking
  *  used, of no period. It is the amount the gym set, its tax in, and it moves no date. A
- *  freeze fee (18z) is one for each month a renewing membership is frozen. */
-export const MEMBER_FEES = ["late_cancel", "no_show", "freeze"] as const;
+ *  freeze fee (18z) is one for each month a renewing membership is frozen. An early cancellation
+ *  fee (18v-ii-b) is one for a membership ended inside its minimum term. */
+export const MEMBER_FEES = ["late_cancel", "no_show", "freeze", "leave_early"] as const;
 export const memberFeeKindSchema = z.enum(MEMBER_FEES);
 export type MemberFeeKind = z.infer<typeof memberFeeKindSchema>;
 
@@ -147,6 +148,7 @@ export const MEMBER_FEE_WORDS: Readonly<Record<MemberFeeKind, string>> = {
   late_cancel: "Late cancel fee",
   no_show: "No-show fee",
   freeze: "Freeze fee",
+  leave_early: "Early cancellation fee",
 };
 
 /** What a fee is called on a receipt, in a download and in the day's takings. */

@@ -7,7 +7,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import { z } from "zod";
-import { onboardingQuerySchema } from "@app/shared";
+import { onboardingQuerySchema, type DeleteAccountResponse } from "@app/shared";
 import { createDualRateLimit, giveBackRateLimit, type DualRateLimitOptions } from "../auth/rateLimit.js";
 import type { AppConfig } from "../../config.js";
 import type { RedisLike } from "../../redis.js";
@@ -310,7 +310,8 @@ export function registerUserRoutes(
       message: emailSent
         ? `Account scheduled for deletion. You have ${String(DPDP_RETENTION_DAYS)} days to undo via the link we emailed you.`
         : `Account scheduled for deletion. It will be permanently removed after ${String(DPDP_RETENTION_DAYS)} days.`,
-    });
+      emailSent,
+    } satisfies DeleteAccountResponse);
   });
 
   // 5/hr — the reset-class limit (rateLimiter.js:17-18 ported at P2.1; GAP-4).

@@ -64,6 +64,8 @@ export const gymMembershipTypes = pgTable(
     contractThen: text("contract_then"),
     /** Its notice to cancel in days (0201; 18v-ii-a); null for none. */
     noticeDays: integer("notice_days"),
+    /** Its minimum term's early cancellation fee (0202; 18v-ii-b); null for none. */
+    leaveFeeMinor: integer("leave_fee_minor"),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -88,6 +90,10 @@ export const gymMembershipTypes = pgTable(
     check(
       "gym_membership_types_notice_check",
       sql`${t.noticeDays} IS NULL OR (${t.kind} = 'recurring' AND ${t.priceMinor} > 0 AND ${t.noticeDays} BETWEEN 1 AND 90 AND ${t.contractThen} IS DISTINCT FROM 'ends')`,
+    ),
+    check(
+      "gym_membership_types_leave_fee_check",
+      sql`${t.leaveFeeMinor} IS NULL OR (${t.contractPeriods} IS NOT NULL AND ${t.leaveFeeMinor} BETWEEN 1 AND 99999999)`,
     ),
     check("gym_membership_types_access_check", sql`${t.access} IN ('all_classes','limited','gym_only')`),
     check(
@@ -198,6 +204,10 @@ export const gymHeldMemberships = pgTable(
     stopsAfter: integer("stops_after"),
     /** Why it was ended before its notice allowed, outside a minimum term. */
     noticeWaived: text("notice_waived"),
+    /** Its minimum term's early cancellation fee as it was given (0202; 18v-ii-b); null for none. */
+    leaveFeeMinor: integer("leave_fee_minor"),
+    /** Ended inside its minimum term with that fee: the fee is a bill of it (`fee` 'leave_early'). */
+    leftEarly: boolean("left_early").notNull().default(false),
     classesLeft: integer("classes_left"),
     fromList: boolean("from_list").notNull().default(false),
     /** The discount it was given with (`0107`). Its key to `gym_discounts` is the
@@ -290,6 +300,10 @@ export const gymHeldMemberships = pgTable(
     check(
       "gym_held_memberships_notice_check",
       sql`(${t.noticeDays} IS NULL OR (${t.kind} = 'recurring' AND ${t.noticeDays} BETWEEN 1 AND 90)) AND (${t.stopsAfter} IS NULL OR (${t.noticeDays} IS NOT NULL AND ${t.stopsAfter} >= 1)) AND (${t.noticeWaived} IS NULL OR (${t.noticeWaived} IN ('moved','medical','death','other') AND ${t.noticeDays} IS NOT NULL AND (${t.status} = 'cancelled' OR NOT ${t.renews})))`,
+    ),
+    check(
+      "gym_held_memberships_leave_fee_check",
+      sql`(${t.leaveFeeMinor} IS NULL OR (${t.contractPeriods} IS NOT NULL AND ${t.leaveFeeMinor} BETWEEN 1 AND 99999999)) AND (NOT ${t.leftEarly} OR (${t.leaveFeeMinor} IS NOT NULL AND (${t.status} IN ('cancelled','ended') OR NOT ${t.renews} OR ${t.stopsAfter} IS NOT NULL)))`,
     ),
     check(
       "gym_held_memberships_discount_check",
@@ -393,13 +407,17 @@ export const gymMemberBills = pgTable(
     ),
     check(
       "gym_member_bills_fee_check",
-      sql`(${t.periodIndex} IS NULL) = (${t.fee} IS NOT NULL) AND (${t.fee} IS NULL OR (${t.fee} IN ('late_cancel','no_show','freeze') AND char_length(${t.feeFor}) BETWEEN 1 AND 80 AND ${t.coversFrom} IS NOT NULL)) AND (${t.fee} IS NOT NULL OR ${t.feeFor} IS NULL) AND (${t.classBookingId} IS NULL OR ${t.fee} IS NOT NULL) AND (${t.fee} <> 'freeze' OR (${t.classBookingId} IS NULL AND ${t.ptAppointmentId} IS NULL))`,
+      sql`(${t.periodIndex} IS NULL) = (${t.fee} IS NOT NULL) AND (${t.fee} IS NULL OR (${t.fee} IN ('late_cancel','no_show','freeze','leave_early') AND char_length(${t.feeFor}) BETWEEN 1 AND 80 AND ${t.coversFrom} IS NOT NULL)) AND (${t.fee} IS NOT NULL OR ${t.feeFor} IS NULL) AND (${t.classBookingId} IS NULL OR ${t.fee} IS NOT NULL) AND (${t.fee} NOT IN ('freeze','leave_early') OR (${t.classBookingId} IS NULL AND ${t.ptAppointmentId} IS NULL))`,
     ),
     // `0136` holds its foreign key, which sets the booking to null when it goes.
     // One freeze fee a month of a membership (0156; 18z); a waived one counts.
     uniqueIndex("gym_member_bills_freeze_fee_uq")
       .on(t.heldMembershipId, t.coversFrom)
       .where(sql`${t.fee} = 'freeze' AND (${t.status} <> 'void' OR ${t.voidReason} = 'waived')`),
+    // One early cancellation fee a membership (0202; 18v-ii-b); a waived one counts.
+    uniqueIndex("gym_member_bills_leave_fee_uq")
+      .on(t.heldMembershipId)
+      .where(sql`${t.fee} = 'leave_early' AND (${t.status} <> 'void' OR ${t.voidReason} = 'waived')`),
     uniqueIndex("gym_member_bills_class_fee_uq").on(t.classBookingId).where(sql`${t.classBookingId} IS NOT NULL AND ${t.status} <> 'void'`),
     // `0138` holds the session's foreign key, which sets it to null when the session goes.
     check("gym_member_bills_pt_fee_check", sql`(${t.ptAppointmentId} IS NULL OR ${t.fee} IS NOT NULL) AND (${t.ptAppointmentId} IS NULL OR ${t.classBookingId} IS NULL)`),

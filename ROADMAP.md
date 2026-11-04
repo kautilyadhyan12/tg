@@ -350,7 +350,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 18v-i. [x] **Minimum term** (contract length) — merged 2026-11-03 (PR #457).
      - 18v-ii. **Notice to cancel and a fee for leaving early**, both waived for a release, in two parts since 2026-11-04:
        - 18v-ii-a. [x] **Notice to cancel** — merged 2026-11-04 (PR #461).
-       - 18v-ii-b. [ ] **A fee for leaving early**: a set amount on the line, put on a member who leaves inside the minimum term, none for a release. Web folder 2.
+       - 18v-ii-b. [x] **An early cancellation fee** — merged 2026-11-04 (PR #464).
      - 18v-iii. [ ] **Days to change their mind** after signing, with a full refund. Web folder 2.
      - 18v-iv. [ ] **A reminder before a renewal or a contract's end**; a price change's is 18w's, a trial's end is sent already. Web folder 2.
    - 18w. [ ] **Raise the price for existing members** from their next payment, with each place's notice (Kd, 2026-10-22). Web folder 2.
@@ -613,7 +613,8 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
           - 18b-ii-b. [x] **A comment or reply on your post** · merged 2026-11-03 · PR #453
 19. **Settings and account** (split 2026-11-03 in four: Settings first).
     - 19a. [x] **Settings on the phone** — merged 2026-11-04 (PR #459).
-    - 19b. [ ] **Download my data, delete my account and undo.**
+    - 19b. [x] **Download my data, delete my account and undo** · merged 2026-11-04 · PR #465
+    - 19b-ii. [ ] **An owner hands the gym over before deleting their account** (Kd, 2026-11-04): the server refuses to delete a gym's own owner; the phone's Delete box says so and points to the console's hand-over (4b-ii).
     - 19c. [ ] **Change email** (Stage 2's 3b-iii).
     - 19d. [ ] **Notification switches that save.**
 20. [ ] **What the gym side adds for members**, each after its web job: the waiver (3e), the membership agreement signed in the app (18u), the referral link (20e), the member photo (5b-vi), saving their card (18d-ii), buying from the gym (18k), stopping a membership (18l), a gym's plan for a member (19e).
