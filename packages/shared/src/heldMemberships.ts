@@ -40,7 +40,7 @@
 //   `leaveFeeMinor` its minimum term's early cancellation fee (18v-ii-b), copied as the term is;
 //   `leftEarly`   staff ended it inside its minimum term with that fee: the term holds it no more;
 //   `coolingOffDays` its cooling-off period (18v-iii), copied from its type when it was given;
-//   `coolingOffAdded` the gym's day it was added (read, never stored); null where it was changed to
+//   `coolingOffAdded` the gym's day it was added, stored with the days (`cooling_off_added`); null where it was changed to
 //                  another membership that stands;
 //   `coolingOffSigned` the gym's day its agreement was signed, where it was (read, never stored);
 //   `changedMind` staff cancelled it inside its cooling-off period, with a full refund;
