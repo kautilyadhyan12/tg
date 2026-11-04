@@ -674,7 +674,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 35c. **The Progress screen** (split 2026-11-04 in five, Kd's "go": the page as drawn first).
       - 35c-i. [ ] **The Progress page as drawn**: five periods, Calories Burned, the workouts in bars, Personal Records, Consistency.
       - 35c-ii. [ ] **The predictions on Progress** (35a's forecast, this week's goal, steady pace, best time).
-      - 35c-iii. [ ] **The workout calendar and activity**.
+      - 35c-iii. [ ] **The workout calendar, a year of activity and Exercise Categories** (the browser's three boxes).
       - 35c-iv. [ ] **Body measurements and weigh-ins**.
       - 35c-v. [ ] **Achievements**: badges, the weekly challenges, the leaderboard.
 36. [ ] **The weekly plan**: the plan builder on the server (6a), the week screen (6b). Doing a planned workout (6c) is exercise folder 2's item 64. Once the plan names a week's sessions, calories burned joins the starter goals with the plan's own number (RULINGS 2026-10-13). Its Workout tab in Recommended For You takes the three choices and rules of spec Part 6 §16.6.

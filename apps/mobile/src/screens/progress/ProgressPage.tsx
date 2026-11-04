@@ -53,6 +53,10 @@ export const trendRead = (period: ProgressPeriod) => `/v1/progress/trend?period=
 const CHART_HEIGHT = 120;
 /** Room above the tallest bar for its number. */
 const BAR_ROOM = 18;
+/** The gap between two bars, and between their dates. */
+const LABEL_GAP = 8;
+/** The top point's label: room for "12,345 kcal" at the phone's largest text. */
+const PEAK_WIDTH = 120;
 const STEP_EACH = { day: "Each day", week: "Each week", month: "Each month", year: "Each year" } as const;
 
 export function ProgressPage({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -229,7 +233,7 @@ function Records({ records }: { records: PersonalRecords }) {
 }
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
-const RING = 96;
+const RING = 84;
 const RING_STROKE = 9;
 
 /** The days with a workout as a ring that fills, over the strap's woven bars. */
@@ -290,7 +294,9 @@ function Area({ bars, said }: { bars: readonly Bucket[]; said: string }) {
   const drawn = useGrow(1, 260, 1100);
   const top = Math.max(1, ...bars.map((b) => b.kcal));
   const edge = 8;
-  const x = (i: number) => (bars.length === 1 ? width / 2 : edge + (i / (bars.length - 1)) * (width - 2 * edge));
+  // Each point stands over its own date, as the bars do below: the middle of its column.
+  const column = (width - LABEL_GAP * (bars.length - 1)) / Math.max(1, bars.length);
+  const x = (i: number) => column * (i + 0.5) + LABEL_GAP * i;
   const y = (kcal: number) => edge + 14 + (1 - kcal / top) * (CHART_HEIGHT - 2 * edge - 14);
   const line = bars.map((b, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)} ${y(b.kcal).toFixed(1)}`).join(" ");
   const peak = bars.reduce((best, b, i) => ((bars[best]?.kcal ?? 0) < b.kcal ? i : best), 0);
@@ -328,8 +334,8 @@ function Area({ bars, said }: { bars: readonly Bucket[]; said: string }) {
                   ))}
             </Svg>
             {peakBar === undefined || peakBar.kcal === 0 ? null : (
-              <View pointerEvents="none" style={[styles.peak, { left: Math.max(0, Math.min(width - 64, x(peak) - 32)), top: Math.max(0, y(peakBar.kcal) - 24) }]}>
-                <Txt kind="tiny" colour="orangeLight" style={styles.peakWords}>
+              <View pointerEvents="none" style={[styles.peak, { left: Math.max(0, Math.min(width - PEAK_WIDTH, x(peak) - PEAK_WIDTH / 2)), top: Math.max(0, y(peakBar.kcal) - 24) }]}>
+                <Txt kind="tiny" colour="orangeLight" numberOfLines={1} style={styles.peakWords}>
                   {count(peakBar.kcal)} kcal
                 </Txt>
               </View>
@@ -406,25 +412,26 @@ const styles = StyleSheet.create({
   cut: { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 12, borderRadius: 14, backgroundColor: colours.orangeFill },
   split: { flexDirection: "row", padding: 0, gap: 0 },
   // Beside the rows and never under them, as on the Dashboard's boxes.
-  sideArt: { width: 112 },
+  sideArt: { width: 128, marginVertical: 10 },
   fill: { position: "absolute", width: "100%", height: "100%" },
   record: { flexDirection: "row", alignItems: "center", gap: 12 },
   // The picture on the right half, the box's own colour under the words on the left.
   consistency: { minHeight: 170 },
   consistencyArt: { position: "absolute", top: 0, bottom: 0, right: 0, width: "62%" },
-  consistencyWords: { width: "70%" },
+  // Room for "12 of 30 days" beside the ring on a narrow phone; the shade is still the box's own colour here.
+  consistencyWords: { width: "80%" },
   shade: { experimental_backgroundImage: boxShade },
   ringRow: { flexDirection: "row", alignItems: "center", gap: 14 },
   ringMiddle: { alignItems: "center", justifyContent: "center" },
   chart: { gap: 6 },
   reveal: { height: CHART_HEIGHT, overflow: "hidden" },
-  peak: { position: "absolute", width: 64, alignItems: "center" },
+  peak: { position: "absolute", width: PEAK_WIDTH, alignItems: "center" },
   peakWords: { fontFamily: fonts.semibold },
-  bars: { flexDirection: "row", alignItems: "flex-end", gap: 8 },
+  bars: { flexDirection: "row", alignItems: "flex-end", gap: LABEL_GAP },
   column: { flex: 1, justifyContent: "flex-end", height: "100%", gap: 4 },
   // Flat ends at the foot, round at the top, light orange running down to orange; it never has a border.
   bar: { borderTopLeftRadius: 7, borderTopRightRadius: 7, borderBottomLeftRadius: 2, borderBottomRightRadius: 2, backgroundColor: colours.orange, experimental_backgroundImage: barGradient },
-  labels: { flexDirection: "row", gap: 8 },
+  labels: { flexDirection: "row", gap: LABEL_GAP },
   label: { flex: 1, alignItems: "center", overflow: "visible" },
   centre: { textAlign: "center" },
   // Wider than a thin bar: a crowded row names only some bars, so a name runs under its blank neighbours.
