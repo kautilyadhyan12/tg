@@ -455,6 +455,34 @@ export const bodyMeasurementListResponseSchema = z.object({
   nextCursor: z.string().nullable(),
 }).strict();
 export type BodyMeasurement = z.infer<typeof bodyMeasurementSchema>;
+/** POST /v1/nutrition/body-measurements answers with the entry as it is kept. */
+export const bodyMeasurementResponseSchema = z.object({ measurement: bodyMeasurementSchema }).strict();
+
+// ── A body measurement kept on the phone until the server has it (ROADMAP Stage 5 35c-ii) ──
+// Each entry, and each removal of one, is written to the person's own file before it is sent, and
+// sent in the order made. Read back through these whenever the app opens.
+export const BODY_OUTBOX_MOST = 200;
+
+/** An entry waiting to be sent: what the POST carries, its time read without the server's "not more
+ *  than a day ahead" rule, which is the server's to apply. `tried`: sent at least once. */
+export const waitingBodyEntrySchema = z.object({
+  id: z.string().uuid().toLowerCase(),
+  measuredAt: z.string().datetime(),
+  weightKg: z.number().positive().lt(1000).nullable(),
+  metrics: z.record(z.number().finite().nonnegative()),
+  tried: z.boolean(),
+}).strict();
+export type WaitingBodyEntry = z.infer<typeof waitingBodyEntrySchema>;
+
+export const bodyOutboxEntrySchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("save"), entry: waitingBodyEntrySchema }).strict(),
+  z.object({ kind: z.literal("remove"), id: z.string().uuid().toLowerCase() }).strict(),
+]);
+export type BodyOutboxEntry = z.infer<typeof bodyOutboxEntrySchema>;
+
+/** An entry the server would not take, said on Body until the person presses OK. */
+export const bodyOutboxRefusedSchema = z.object({ id: z.string().uuid().toLowerCase(), message: z.string().max(500) }).strict();
+export type BodyOutboxRefused = z.infer<typeof bodyOutboxRefusedSchema>;
 
 export const nutritionListQuerySchema = z.object({ limit: z.coerce.number().int().min(1).max(100).default(20), cursor: z.string().optional() }).strict();
 export const foodSearchQuerySchema = z.object({ q: z.string().trim().min(1).max(100), limit: z.coerce.number().int().min(1).max(50).default(10) }).strict();

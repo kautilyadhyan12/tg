@@ -39,7 +39,8 @@ import { forgetExports } from "./session/personFiles";
 import { PlacesProvider, usePlaces } from "./screens/places";
 import { tabWord } from "./screens/placesHeading";
 import { FoodScreen } from "./screens/Food";
-import { mealFile, photoSheetFile } from "./screens/food/fileStore";
+import { bodyFile, mealFile, photoSheetFile } from "./screens/food/fileStore";
+import { BodyOutboxProvider } from "./screens/progress/BodyOutbox";
 import { MealOutboxProvider } from "./screens/food/MealOutbox";
 import { PhotoSheetStoreProvider } from "./screens/food/PhotoSheetStore";
 import type { TextStore } from "./screens/food/outbox";
@@ -128,9 +129,11 @@ function FiveTabs({ mealStore }: { mealStore: (userId: string) => TextStore }) {
   return (
     <PlacesProvider>
       <MealOutboxProvider store={mealStore}>
-        <NotificationsProvider onTapped={openGymTab}>
-          <TabsOfPlaces />
-        </NotificationsProvider>
+        <BodyOutboxProvider store={bodyFile}>
+          <NotificationsProvider onTapped={openGymTab}>
+            <TabsOfPlaces />
+          </NotificationsProvider>
+        </BodyOutboxProvider>
       </MealOutboxProvider>
     </PlacesProvider>
   );
