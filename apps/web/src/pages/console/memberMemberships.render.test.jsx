@@ -2327,12 +2327,36 @@ describe('cancelling early with the early cancellation fee', () => {
     fireEvent.click(b.getByRole('button', { name: 'Cancel membership' }));
     const box = within(b.getByTestId('held-ask-cancel'));
     expect(box.getByText('Or cancel early: Ada Lovelace pays the early cancellation fee of £99.00, and it ends on 3 November 2026. A release has no fee.')).toBeTruthy();
-    orgService.changeHeldMembership.mockResolvedValueOnce(answer([inTerm([[{ type: 'cancel', when: 'leave_early' }, TODAY]])]));
+    // What the server sends back: paid to its last day, so nothing but the fee is owed.
+    const left = inTerm([[{ type: 'cancel', when: 'leave_early' }, TODAY]]);
+    const fee = {
+      id: '66666666-6666-4666-8666-666666666667',
+      fee: 'leave_early',
+      of: 'membership',
+      forName: 'Gold 12 fee',
+      on: TODAY,
+      to: null,
+      amountMinor: 9900,
+      tax: null,
+      dueOn: TODAY,
+      state: 'due',
+      waived: null,
+      stillOwed: true,
+      payments: [],
+      voidedPayments: [],
+      can: { pay: true, waive: true, voidPaymentId: null },
+    };
+    orgService.changeHeldMembership.mockResolvedValueOnce(answer([{ ...left, billing: { ...left.billing, pay: null, fees: [fee] } }]));
     fireEvent.click(box.getByRole('button', { name: 'Cancel early, £99.00 fee' }));
     await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledTimes(1));
     expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, 'cancel', { when: 'leave_early', leaveFeeMinor: 9900 });
     expect(await b.findByText('Gold 12 fee is cancelled early. The early cancellation fee of £99.00 is on their bills.')).toBeTruthy();
     expect(b.getByTestId('held-left-early-line').textContent).toBe('Cancelled early, with the early cancellation fee of £99.00');
+    // The fee is on their bills, with its own Record payment; there is no month left to pay.
+    const row = within(b.getByTestId('held-fee'));
+    expect(row.getByText('Early cancellation fee')).toBeTruthy();
+    expect(row.getByRole('button', { name: 'Record payment · £99.00' })).toBeTruthy();
+    expect(b.queryByRole('button', { name: /^Record payment( early)?$/ })).toBeNull();
     // The minimum term no longer holds them: no term line, no fee line, no second fee.
     expect(b.queryByTestId('held-contract-line')).toBeNull();
     expect(b.queryByTestId('held-leave-fee-line')).toBeNull();

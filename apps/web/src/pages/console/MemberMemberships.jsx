@@ -2117,9 +2117,11 @@ export default function MemberMemberships({
     ) : null;
     // Record payment sits inside the bill it is for; where that period has no bill yet
     // (a payment taken early), it is in the bar with what acts on the whole membership.
-    const payInBill = canPay && m.billing.bills.some((b) => b.periodIndex === m.billing.pay.periodIndex);
+    // Only a fee can be owed with no period to pay: cancelled early and paid to its last day (18v-ii-b).
+    const payPeriod = canPay && m.billing.pay !== null;
+    const payInBill = payPeriod && m.billing.bills.some((b) => b.periodIndex === m.billing.pay.periodIndex);
     const payButton =
-      canPay && !payInBill ? (
+      payPeriod && !payInBill ? (
         <button type="button" className={PAY} disabled={busy} onClick={() => startPay(m)}>
           {payLabel(m, today)}
         </button>
