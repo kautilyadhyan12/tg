@@ -193,6 +193,30 @@ describe("Delete account (the worst thing: after deleting, the phone still shows
     expect(new File(Paths.document, `meals-${RAVI.id}.json`).exists).toBe(true);
   });
 
+  it("a DELETE with no reply, then a sign-in on another phone, deletes nothing on the phone and says why", async () => {
+    write(`meals-${RAVI.id}.json`, '{"meals":["Poha"]}');
+    let elsewhere = false;
+    const server = fakeServer(
+      routes({
+        [ME]: (body) => {
+          if (body !== undefined && typeof body === "object" && body !== null && "code" in body) {
+            elsewhere = true; // no reply; meanwhile the person signs in on another phone
+            return lost();
+          }
+          return elsewhere ? refusal(401, "unauthorized", "Sign in again.") : { status: 200, body: profile(true) };
+        },
+        "/v1/auth/refresh": () =>
+          elsewhere ? refusal(401, SIGNED_IN_ELSEWHERE.error, SIGNED_IN_ELSEWHERE.message) : { status: 200, body: { tokens: tokens(2) } },
+      }),
+    );
+    await openSettings(server.ask);
+    await upToTheCode();
+    await fireEvent.press(screen.getByLabelText("Delete"));
+    expect(await screen.findByText(SIGNED_IN_ELSEWHERE.message)).toBeTruthy();
+    expect(screen.queryByText(/will be deleted on/)).toBeNull();
+    expect(new File(Paths.document, `meals-${RAVI.id}.json`).exists).toBe(true);
+  });
+
   it("a meal written while the sign-in is being forgotten is removed too", async () => {
     // The key store is cleared in the middle of forgetting the person: a write already on its way lands then.
     const store = memoryStore(kept(1));
