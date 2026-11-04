@@ -37,7 +37,8 @@ export const myPaymentSchema = z
   .strict();
 export type MyPayment = z.infer<typeof myPaymentSchema>;
 
-/** A late cancel or no-show fee (18h): owed, paid, refunded or waived. A fee taken off is not sent. */
+/** A late cancel or no-show fee (18h), a freeze fee (18z) or an early cancellation fee (18v-ii-b): owed, paid,
+ *  refunded or waived. A fee taken off is not sent. */
 export const myFeeSchema = z
   .object({
     fee: memberFeeKindSchema,

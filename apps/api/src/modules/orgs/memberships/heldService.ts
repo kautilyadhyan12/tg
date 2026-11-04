@@ -424,6 +424,9 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
       classesLeft: row.membership.classesLeft,
       contractPeriods: row.membership.contractPeriods ?? null,
       release: row.contractRelease,
+      noticeWaived: row.noticeWaived,
+      leaveFeeMinor: row.membership.leaveFeeMinor ?? null,
+      leftEarly: row.membership.leftEarly === true,
       fromList: row.fromList,
       notCharged: list.bills.some((b) => b.membershipId === row.id && b.cancelled !== null && b.periodIndex === row.membership.paidPeriods - 1),
       refundedInFull: list.bills.some((b) => b.membershipId === row.id && b.status === "refunded" && b.periodIndex === row.membership.paidPeriods - 1),
@@ -536,8 +539,12 @@ function throwOnFailure(outcome: repo.HeldWriteOutcome): void {
       throw new OrgsError(409, "membership_price_changed", "The price of this membership changed while this was open. Nothing was saved: check the total and press again.");
     case "minimum_term_changed":
       throw new OrgsError(409, "membership_minimum_term_changed", "The minimum term of this membership changed while this was open. Nothing was saved: check it and press again.");
+    case "notice_changed":
+      throw new OrgsError(409, "membership_notice_changed", "The notice to cancel of this membership changed while this was open. Nothing was saved: check it and press again.");
     case "bill_day_changed":
       throw new OrgsError(409, "membership_bill_day_changed", "Your gym's billing day changed while this was open. Nothing was saved: check the total and press again.");
+    case "leave_fee_changed":
+      throw new OrgsError(409, "membership_leave_fee_changed", "The early cancellation fee of this membership changed while this was open. Nothing was saved: check it and press again.");
     case "freeze_fee_changed":
       throw new OrgsError(409, "membership_freeze_fee_changed", "Your gym's freeze fee changed while this was open. Nothing was saved: check the fee and press Freeze again.");
     case "discount_not_found":
@@ -632,6 +639,7 @@ export async function giveHeldMembership(
       // A screen that showed a price and said nothing of a part month showed none (18y).
       ...(req.priceMinor === undefined && req.fullFrom === undefined ? {} : { shownFullFrom: req.fullFrom ?? null }),
       ...(req.minimumTerm === undefined ? {} : { shownMinimumTerm: req.minimumTerm }),
+      ...(req.noticeDays === undefined ? {} : { shownNoticeDays: req.noticeDays }),
       // Leaving the fee off is waiving it, which is where payments are taken, as a discount is.
       mayWaiveJoiningFee: canBill,
       discount: req.discountId === undefined || req.discountMinor === undefined ? null : { id: req.discountId, shownOffMinor: req.discountMinor },
@@ -656,6 +664,8 @@ export async function moveHeldMembership(
   confirmBookings: string | null = null,
   confirmPtSessions: string | null = null,
   freezeFeeMinor = 0,
+  /** Leaving early (18v-ii-b): the early cancellation fee the screen showed. */
+  leaveFeeMinor?: number,
 ): Promise<BookingsAnswer<HeldMembershipsResponse>> {
   const { org, privileges } = await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   const now = deps.now();
@@ -671,6 +681,7 @@ export async function moveHeldMembership(
     freezeFeeMinor,
     // Freezing with no fee where the gym charges one is a waiver: staff who record payments only.
     mayWaiveFreezeFee: privileges.includes(BILLING),
+    ...(leaveFeeMinor === undefined ? {} : { leaveFeeMinor }),
     actorUserId: userId,
     now,
   });
@@ -707,6 +718,7 @@ export async function changeHeldMembership(
     shownStartsOn: req.startsOn,
     shownFullFrom: req.fullFrom ?? null,
     ...(req.minimumTerm === undefined ? {} : { shownMinimumTerm: req.minimumTerm }),
+    ...(req.noticeDays === undefined ? {} : { shownNoticeDays: req.noticeDays }),
     paid: req.paid,
     method: req.method ?? null,
     confirmBookings: req.confirmBookings ?? null,

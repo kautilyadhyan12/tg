@@ -44,6 +44,7 @@ export default function MembershipDiscounts({ org, readOnly, typesKey, onTaxChan
       {routed ? <ToDiscounts /> : null}
       <TaxRates
         gymId={gymId}
+        country={org.country ?? null}
         page={mine.page}
         locked={readOnly}
         lockedNote={readOnlyNote(org.orgType)}

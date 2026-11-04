@@ -8,6 +8,7 @@ import {
   CONTRACT_RELEASE_WORDS,
   contractLengthWords,
   releaseAsked,
+  noticeAsked,
   HELD_STATUS_WORDS,
   HELD_START_AHEAD_DAYS,
   HELD_START_MIN,
@@ -180,7 +181,9 @@ export function askWords(what, m, name, today) {
     }
     case 'cancel': {
       // Inside a running contract (18v-i): end it with the contract, or release them with a reason.
-      if (m.view.can.releaseNeeded === true && m.view.contract) return contractCancelWords(m, name);
+      if (m.view.can.releaseNeeded === true && m.view.contract) return contractCancelWords(m, name, today);
+      // With a notice to cancel (18v-ii-a): end it after the notice, or sooner with a reason.
+      if (m.view.can.noticeEnds) return noticeCancelWords(m, name);
       const last = m.view.can.cancelAtPeriodEnd;
       // Cancelled before it starts, a change on the next payment date is undone (18x).
       const back = m.view.status === 'upcoming' && m.changedFrom?.stopped === true ? ` ${m.changedFrom.typeName} renews again, as it did before the change.` : '';
@@ -203,12 +206,63 @@ export function askWords(what, m, name, today) {
 export const RELEASE_CHOICES = CONTRACT_RELEASES.map((value) => ({ value, label: CONTRACT_RELEASE_WORDS[value] }));
 
 /** The Cancel box of a membership still in its contract (18v-i). `endButton` ends it with the
- *  contract, where it would otherwise renew; the release buttons stop it sooner and ask why. */
-export function contractCancelWords(m, name) {
+ *  contract, where it would otherwise renew; the release buttons stop it sooner and ask why;
+ *  `leaveButton` stops it sooner with its early cancellation fee, and asks nothing (18v-ii-b). */
+export function contractCancelWords(m, name, today) {
+  return { ...contractCancelBox(m, name), ...leaveEarlyWords(m, name, today) };
+}
+
+/** Cancel early with the fee (18v-ii-b): the sentence and the button, or nulls where it is not offered. */
+export function leaveEarlyWords(m, name, today) {
+  const leave = m.view.can.leaveEarly ?? null;
+  if (leave === null) return { leaveLine: null, leaveButton: null };
+  const fee = formatMinor(leave.feeMinor, m.currency);
+  const ends = leave.endsOn === today ? 'it ends today' : `it ends on ${dayWords(leave.endsOn)}`;
+  return {
+    leaveLine: `Or cancel early: ${name} pays the early cancellation fee of ${fee}, and ${ends}. A release has no fee.`,
+    leaveButton: `Cancel early, ${fee} fee`,
+  };
+}
+
+function contractCancelBox(m, name) {
   const whose = `${name}'s ${m.typeName}`;
   const until = m.view.contract.until;
   const end = m.view.can.cancelAtContractEnd ?? null;
   const paid = m.view.can.cancelAtPeriodEnd ?? null;
+  // Asked where it lets them out of the term, or ends before a notice that runs past it (round one, L2).
+  const releaseLater = paid === null || !(releaseAsked(m.view, 'period_end') || noticeAsked(m.view, 'period_end')) ? null : `Release on ${dayWords(paid)}`;
+  // Notice given already, or a notice that runs past the term's end (18v-ii-a).
+  if (m.view.notice?.given === true) {
+    return {
+      question: `Cancel ${whose}?`,
+      detail: `${name} has given notice: it ends on ${dayWords(m.view.can.noticeEnds)}. To stop it sooner, release them early.`,
+      endButton: null,
+      endWhen: null,
+      endDone: null,
+      releaseQuestion: 'Why are you releasing them?',
+      releaseLaterButton: releaseLater,
+      releaseButton: 'Release today',
+      releaseMissing: 'Pick why you are releasing them first.',
+    };
+  }
+  const afterNotice = m.view.can.cancelAfterNotice ?? null;
+  if (end === null && afterNotice !== null) {
+    return {
+      question: `Cancel ${whose}?`,
+      // Paid past where the notice ends, nothing more is owed: never "they keep paying" (re-check, H3).
+      detail:
+        m.view.can.noticePaid === true
+          ? `${name} is in their minimum term until ${dayWords(until)}, gives ${noticeWords(m.view.notice.days)} and has paid up to ${dayWords(afterNotice)}. End it then, with no more payments; or release them early.`
+          : `${name} is in their minimum term until ${dayWords(until)} and gives ${noticeWords(m.view.notice.days)}. End it on ${dayWords(afterNotice)}, and they keep paying until then; or release them early.`,
+      endButton: `End on ${dayWords(afterNotice)}`,
+      endWhen: 'notice',
+      endDone: 'cancelNotice',
+      releaseQuestion: 'Why are you releasing them?',
+      releaseLaterButton: releaseLater,
+      releaseButton: 'Release today',
+      releaseMissing: 'Pick why you are releasing them first.',
+    };
+  }
   // Paid past the minimum term already: it stops at the end of what is paid, which keeps every
   // month paid for and lets nobody out early (re-check, H1b).
   if (end === null && paid !== null && paid > until) {
@@ -235,10 +289,71 @@ export function contractCancelWords(m, name) {
     endDone: 'cancelContract',
     releaseQuestion: 'Why are you releasing them?',
     // On or after the term's last day, the end of what is paid lets nobody out early (round one, L2).
-    releaseLaterButton: paid === null || !releaseAsked(m.view, 'period_end') ? null : `Release on ${dayWords(paid)}`,
+    releaseLaterButton: releaseLater,
     releaseButton: 'Release today',
     releaseMissing: 'Pick why you are releasing them first.',
   };
+}
+
+/** "30 days' notice", "1 day's notice". */
+const noticeWords = (days) => (days === 1 ? "1 day's notice" : `${String(days)} days' notice`);
+
+/** The Cancel box of a membership with a notice to cancel, outside a minimum term (18v-ii-a). `endButton`
+ *  ends it after the notice, or at the end of what is paid where that is as late; the other buttons
+ *  end it sooner and ask why. */
+export function noticeCancelWords(m, name) {
+  const whose = `${name}'s ${m.typeName}`;
+  const ends = m.view.can.noticeEnds;
+  const days = m.view.notice?.days ?? 0;
+  const paid = m.view.can.cancelAtPeriodEnd ?? null;
+  const afterNotice = m.view.can.cancelAfterNotice ?? null;
+  const sooner = {
+    releaseQuestion: 'Why are you ending it without notice?',
+    releaseLaterButton: paid === null || !noticeAsked(m.view, 'period_end') ? null : `End on ${dayWords(paid)} without notice`,
+    releaseButton: 'End today without notice',
+    releaseMissing: 'Pick why you are ending it without notice first.',
+  };
+  if (m.view.notice?.given === true) {
+    return {
+      question: `Cancel ${whose}?`,
+      detail: `${name} has given notice: it ends on ${dayWords(ends)}. To stop it sooner, end it without notice.`,
+      endButton: null,
+      endWhen: null,
+      endDone: null,
+      ...sooner,
+    };
+  }
+  // Paid as far as the notice runs already: the end of what is paid is that same day.
+  const endWhen = afterNotice !== null ? 'notice' : 'period_end';
+  const endDay = afterNotice ?? paid;
+  return {
+    question: `Cancel ${whose}?`,
+    detail:
+      endDay === null
+        ? `${name} gives ${noticeWords(days)}: it can end on ${dayWords(ends)}. To stop it sooner, end it without notice.`
+        : afterNotice !== null && m.view.can.noticePaid !== true
+        ? `${name} gives ${noticeWords(days)}. End it on ${dayWords(afterNotice)}, and they keep paying until then; or end it sooner without notice.`
+        : `${name} gives ${noticeWords(days)} and has paid up to ${dayWords(ends)}. End it then, with no more payments; or end it sooner without notice.`,
+    endButton: endDay === null ? null : `End on ${dayWords(endDay)}`,
+    endWhen,
+    endDone: afterNotice !== null ? 'cancelNotice' : 'cancelLater',
+    ...sooner,
+  };
+}
+
+/** "Notice to cancel: 30 days", or "Notice given" once it is, for the membership's own lines (18v-ii-a). */
+export function noticeShownLine(m) {
+  const n = m.view?.notice ?? null;
+  if (n === null) return null;
+  return n.given ? `Notice given: it ends on ${dayWords(m.view.can.noticeEnds ?? m.view.endsOn)}` : `Notice to cancel: ${String(n.days)} day${n.days === 1 ? '' : 's'}`;
+}
+
+/** "Ended without notice: Moved away" on a membership ended before its notice allowed, "Ends without
+ *  notice: …" while it still runs to the end of what is paid (round one, L5); null for none. */
+export function noticeWaivedLine(m) {
+  if (!m.noticeWaived) return null;
+  const over = m.view?.status === 'ended' || m.view?.status === 'cancelled';
+  return `${over ? 'Ended' : 'Ends'} without notice: ${CONTRACT_RELEASE_WORDS[m.noticeWaived] ?? 'Other reason'}`;
 }
 
 /** "In contract until 14 Oct 2027" and its length, for the membership's own lines; null for none. */
@@ -249,6 +364,18 @@ export function contractShownLine(m) {
   const from = m.fullFrom ? ` from ${dayWords(m.fullFrom)}` : '';
   const length = m.contractPeriods !== null && m.contractPeriods !== undefined && m.termCount !== null && m.termUnit !== null ? `${contractLengthWords(m.contractPeriods, m.termCount, m.termUnit)}${from}, ` : '';
   return `Minimum term: ${length}until ${dayWords(c.until)}${c.then === 'ends' ? ', then it ends' : ''}`;
+}
+
+/** "Early cancellation fee: $99.00" while its minimum term runs (18v-ii-b); null for none. */
+export function leaveFeeShownLine(m) {
+  if ((m.view?.contract ?? null) === null || !(m.leaveFeeMinor > 0)) return null;
+  return `Early cancellation fee: ${formatMinor(m.leaveFeeMinor, m.currency)}`;
+}
+
+/** "Cancelled early, with the early cancellation fee of $99.00" on one staff cancelled early so (18v-ii-b). */
+export function leftEarlyLine(m) {
+  if (m.leftEarly !== true) return null;
+  return m.leaveFeeMinor > 0 ? `Cancelled early, with the early cancellation fee of ${formatMinor(m.leaveFeeMinor, m.currency)}` : 'Cancelled early, with the early cancellation fee';
 }
 
 /** "Released from contract: Moved away" on a membership cancelled inside one; null for none. */
@@ -381,6 +508,13 @@ export function doneWords(what, m) {
       return `${m.typeName} is running again.`;
     case 'cancelLater':
       return `${m.typeName} will end and won't renew.`;
+    case 'cancelNotice':
+      return m.view.can.cancelAfterNotice ? `${m.typeName} ends on ${dayWords(m.view.can.cancelAfterNotice)}, after the notice.` : `${m.typeName} ends after the notice.`;
+    case 'cancelEarly': {
+      const leave = m.view.can.leaveEarly ?? null;
+      const fee = leave === null ? 'The early cancellation fee' : `The early cancellation fee of ${formatMinor(leave.feeMinor, m.currency)}`;
+      return `${m.typeName} is cancelled early. ${fee} is on their bills.`;
+    }
     case 'cancelContract':
       return m.view.can.cancelAtContractEnd ? `${m.typeName} ends on ${dayWords(m.view.can.cancelAtContractEnd)}, at the end of its minimum term.` : `${m.typeName} ends at the end of its minimum term.`;
     case 'cancel':
@@ -473,7 +607,9 @@ export function giveBody(requestKey, type, value, discount = null, summary = nul
     // server gives nothing where the gym's day now says otherwise.
     fullFrom: value.startsOn === '' ? null : fullFromOf(type, value.startsOn, type.billDay ?? null),
     // The minimum term the form said (18v-i): the server gives nothing where the line's is now another.
-    minimumTerm: type.contractPeriods ? { periods: type.contractPeriods, then: type.contractThen ?? 'renews' } : null,
+    minimumTerm: type.contractPeriods ? { periods: type.contractPeriods, then: type.contractThen ?? 'renews', leaveFeeMinor: type.leaveFeeMinor ?? null } : null,
+    // The notice to cancel the form said (18v-ii-a), checked the same way.
+    noticeDays: type.noticeDays ?? null,
   };
   // The person's own Refer a friend gift, and what it takes off (20e-ii-b-ii-a).
   const gifted = memberGift === null || summary === null || !(summary.giftOffMinor > 0) ? shown : { ...shown, memberGiftId: memberGift.id, memberGiftMinor: summary.giftOffMinor };

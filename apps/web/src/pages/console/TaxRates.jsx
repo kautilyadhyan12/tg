@@ -21,6 +21,7 @@ import {
   rateUses,
   taxLine,
   taxModes,
+  taxNameHint,
 } from './sellView';
 import { TAX_RATES_MAX } from '@app/shared';
 
@@ -36,9 +37,10 @@ const LINE = { borderTop: '1px solid var(--line)' };
 const BAD = { color: 'var(--bad)' };
 
 /** `nested`: drawn inside another form, so it is a group, not a form of its own, and Enter
- *  saves the rate rather than the form around it. */
-function RateForm({ draft, setDraft, busy, error, onSave, onCancel, nested = false, rates = [] }) {
-  const problems = draft.pressed ? rateProblems(draft) : {};
+ *  saves the rate rather than the form around it. `country`: the gym's, whose own tax the
+ *  name box suggests (18b-iv). */
+function RateForm({ draft, setDraft, busy, error, onSave, onCancel, nested = false, rates = [], country = null }) {
+  const problems = draft.pressed ? rateProblems(draft, country) : {};
   const id = useId();
   const set = (patch) => setDraft((was) => ({ ...was, ...patch }));
   const Box = nested ? 'div' : 'form';
@@ -64,14 +66,14 @@ function RateForm({ draft, setDraft, busy, error, onSave, onCancel, nested = fal
         <label className="c-label" htmlFor={`${id}-name`}>
           Tax name
         </label>
-        <input id={`${id}-name`} className="c-input" style={{ maxWidth: 280 }} value={draft.name} maxLength={60} disabled={busy} onChange={(e) => set({ name: e.target.value })} placeholder="GST" />
+        <input id={`${id}-name`} className="c-input" style={{ maxWidth: 280 }} value={draft.name} maxLength={60} disabled={busy} onChange={(e) => set({ name: e.target.value })} placeholder={taxNameHint(country)} />
         {problems.name ? <p className="c-s14 m-0" style={BAD}>{problems.name}</p> : null}
       </div>
       <div className="c-field">
         <label className="c-label" htmlFor={`${id}-rate`}>
-          Rate, in percent
+          Rate (%)
         </label>
-        <input id={`${id}-rate`} className="c-input" style={{ maxWidth: 160 }} inputMode="decimal" value={draft.rate} disabled={busy} onChange={(e) => set({ rate: e.target.value })} placeholder="18" />
+        <input id={`${id}-rate`} className="c-input" style={{ maxWidth: 160 }} inputMode="decimal" value={draft.rate} disabled={busy} onChange={(e) => set({ rate: e.target.value })} />
         {problems.rate ? <p className="c-s14 m-0" style={BAD}>{problems.rate}</p> : null}
       </div>
       <p className="c-s13 c-t3 m-0">{draft.id === null ? RATE_HINT : rateChangeNote(rates.find((r) => r.id === draft.id))}</p>
@@ -92,11 +94,11 @@ function RateForm({ draft, setDraft, busy, error, onSave, onCancel, nested = fal
 /** A tax rate added from inside another form (a product's, a membership type's): the box
  *  opens where Add a tax rate was pressed, and the new rate is picked there at once.
  *  `onPage` takes the Sell page the server answers with; `onAdded` the new rate. */
-export function NewRateInline({ gymId, onPage = null, onAdded, onCancel }) {
+export function NewRateInline({ gymId, country = null, onPage = null, onAdded, onCancel }) {
   const [draft, setDraft] = useState(emptyRateDraft);
   const [state, setState] = useState({ busy: false, error: null });
   const save = async () => {
-    if (Object.keys(rateProblems(draft)).length > 0) {
+    if (Object.keys(rateProblems(draft, country)).length > 0) {
       setDraft((was) => ({ ...was, pressed: true }));
       return;
     }
@@ -112,7 +114,7 @@ export function NewRateInline({ gymId, onPage = null, onAdded, onCancel }) {
       setState({ busy: false, error: errorText(err, "We couldn't add that tax rate. Try again.") });
     }
   };
-  return <RateForm nested draft={draft} setDraft={setDraft} busy={state.busy} error={state.error} onSave={() => void save()} onCancel={onCancel} />;
+  return <RateForm nested country={country} draft={draft} setDraft={setDraft} busy={state.busy} error={state.error} onSave={() => void save()} onCancel={onCancel} />;
 }
 
 /** Tick what charges one rate: the gym's membership types, or its products. */
@@ -229,7 +231,7 @@ function TaxMode({ gymId, page, locked, onPage }) {
   );
 }
 
-export default function TaxRates({ gymId, page, locked, lockedNote = null, addAsk = 0, use = 'products', onPage }) {
+export default function TaxRates({ gymId, country = null, page, locked, lockedNote = null, addAsk = 0, use = 'products', onPage }) {
   const canManage = page.canManage;
   const rates = page.tax.rates;
   const full = rates.length >= TAX_RATES_MAX;
@@ -267,7 +269,7 @@ export default function TaxRates({ gymId, page, locked, lockedNote = null, addAs
   };
   const save = async () => {
     if (draft === null) return;
-    if (Object.keys(rateProblems(draft)).length > 0) {
+    if (Object.keys(rateProblems(draft, country)).length > 0) {
       setDraft((was) => ({ ...was, pressed: true }));
       return;
     }
@@ -312,7 +314,7 @@ export default function TaxRates({ gymId, page, locked, lockedNote = null, addAs
       {canManage && locked && lockedNote !== null ? <p className="c-s14 c-t3 m-0">{lockedNote}</p> : null}
       {canManage && full ? <p className="c-s14 c-t3 m-0">{TOO_MANY_RATES}</p> : null}
 
-      {draft !== null && draft.id === null ? <RateForm rates={rates} draft={draft} setDraft={setDraft} busy={state.busy} error={state.error} onSave={() => void save()} onCancel={cancel} /> : null}
+      {draft !== null && draft.id === null ? <RateForm rates={rates} country={country} draft={draft} setDraft={setDraft} busy={state.busy} error={state.error} onSave={() => void save()} onCancel={cancel} /> : null}
       {state.done !== null && noteAt === null ? <SavedNote>{state.done}</SavedNote> : null}
       {state.error !== null && draft === null ? <Refusal>{state.error}</Refusal> : null}
 
@@ -323,7 +325,7 @@ export default function TaxRates({ gymId, page, locked, lockedNote = null, addAs
             return (
               <li key={rate.id} className="flex flex-col gap-3 py-3" style={LINE} data-testid="tax-rate-row">
                 {draft !== null && draft.id === rate.id ? (
-                  <RateForm rates={rates} draft={draft} setDraft={setDraft} busy={state.busy} error={state.error} onSave={() => void save()} onCancel={cancel} />
+                  <RateForm rates={rates} country={country} draft={draft} setDraft={setDraft} busy={state.busy} error={state.error} onSave={() => void save()} onCancel={cancel} />
                 ) : (
                   <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                     <div className="flex flex-col min-w-0">

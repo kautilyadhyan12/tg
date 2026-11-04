@@ -50,7 +50,7 @@ const memberOf = (r: RawRow): RefundToReview["member"] => {
     fee:
       kind === null || r.covers_from === null
         ? null
-        : { kind, of: kind === "freeze" ? "membership" : r.of_pt ? "pt" : "class", forName: r.fee_for !== null && r.fee_for !== "" ? r.fee_for : (r.type_name ?? ""), on: r.covers_from, to: kind === "freeze" ? r.covers_to : null },
+        : { kind, of: kind === "freeze" || kind === "leave_early" ? "membership" : r.of_pt ? "pt" : "class", forName: r.fee_for !== null && r.fee_for !== "" ? r.fee_for : (r.type_name ?? ""), on: r.covers_from, to: kind === "freeze" ? r.covers_to : null },
   };
 };
 

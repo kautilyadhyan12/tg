@@ -50,6 +50,11 @@ export const CONTRACT_THEN = ["renews", "ends"] as const;
 export const contractThenSchema = z.enum(CONTRACT_THEN);
 export type ContractThen = z.infer<typeof contractThenSchema>;
 export const contractPeriodsSchema = z.number().int().min(1).max(MEMBERSHIP_CONTRACT_PERIODS_MAX);
+/** A repeating type's notice to cancel (18v-ii-a): so many days, at most 90. */
+export const MEMBERSHIP_NOTICE_DAYS_MAX = 90;
+export const noticeDaysSchema = z.number().int().min(1).max(MEMBERSHIP_NOTICE_DAYS_MAX);
+/** A minimum term's early cancellation fee (18v-ii-b): a set amount, the line's tax inside it. */
+export const leaveFeeMinorSchema = z.number().int().min(1).max(99_999_999);
 /** What a class limit is counted over. */
 export const MEMBERSHIP_LIMIT_PERIODS = ["week", "month"] as const;
 export const membershipLimitPeriodSchema = z.enum(MEMBERSHIP_LIMIT_PERIODS);
@@ -130,6 +135,10 @@ export const gymMembershipTypeSchema = z
     /** Its contract (18v-i): so many payments, then it renews or ends; both null for none. */
     contractPeriods: contractPeriodsSchema.nullable().default(null),
     contractThen: contractThenSchema.nullable().default(null),
+    /** Its notice to cancel in days (18v-ii-a); null for none. */
+    noticeDays: noticeDaysSchema.nullable().default(null),
+    /** Its minimum term's early cancellation fee (18v-ii-b); null for none. */
+    leaveFeeMinor: leaveFeeMinorSchema.nullable().default(null),
     archivedAt: z.string().datetime({ offset: true }).nullable(),
     /** When it was last changed. A change sends it back, so a form opened before
      *  somebody else's change is refused, never saved over theirs. */
@@ -188,6 +197,10 @@ const membershipTypeFields = {
   /** Left out of a NEW type is "no contract"; a change must say it (below). */
   contractPeriods: contractPeriodsSchema.nullable().default(null),
   contractThen: contractThenSchema.nullable().default(null),
+  /** Left out of a NEW type is "no notice"; a change must say it (below). */
+  noticeDays: noticeDaysSchema.nullable().default(null),
+  /** Left out of a NEW type is "no early cancellation fee"; a change must say it (below). */
+  leaveFeeMinor: leaveFeeMinorSchema.nullable().default(null),
 };
 const membershipTypeObject = z.object(membershipTypeFields);
 
@@ -234,6 +247,12 @@ function refineMembershipType(value: z.infer<typeof membershipTypeObject>, ctx: 
   // A contract is so many payments of a repeating type that has a price.
   if ((value.contractPeriods === null) !== (value.contractThen === null)) wrong("contractThen");
   if (value.contractPeriods !== null && (value.kind !== "recurring" || value.priceMinor === 0)) wrong("contractPeriods");
+  // A notice to cancel is a repeating type's that has a price, as a minimum term is.
+  if (value.noticeDays !== null && (value.kind !== "recurring" || value.priceMinor === 0)) wrong("noticeDays");
+  // A minimum term that ends by itself takes no notice (round one, H2).
+  if (value.noticeDays !== null && value.contractThen === "ends") wrong("noticeDays");
+  // An early cancellation fee is a minimum term's (18v-ii-b).
+  if (value.leaveFeeMinor !== null && value.contractPeriods === null) wrong("leaveFeeMinor");
 }
 
 /** How long a contract of `periods` payments, each every `termCount` `termUnit`, runs:
@@ -265,6 +284,8 @@ export const updateGymMembershipTypeRequestSchema = membershipTypeObject
     joiningFeeMinor: priceMinorSchema,
     contractPeriods: contractPeriodsSchema.nullable(),
     contractThen: contractThenSchema.nullable(),
+    noticeDays: noticeDaysSchema.nullable(),
+    leaveFeeMinor: leaveFeeMinorSchema.nullable(),
   })
   .strict()
   .superRefine(refineMembershipType);

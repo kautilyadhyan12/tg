@@ -34,6 +34,9 @@ import {
   usesJoiningFee,
   contractHint,
   contractLine,
+  leaveFeeLine,
+  noticeHint,
+  noticeLine,
   termUnitOptions,
   typesSummary,
   withChoice,
@@ -99,7 +102,7 @@ function Part({ title, children }) {
 
 /** `inRow`: the form is inside a row of a list, under that list's own heading.
  *  `error`: why the server refused the last save, said beside the button that sent it. */
-function TypeForm({ gymId, orgType, currency, options, taxRates, onRateAdded, draft, setDraft, problems, refused, busy, forWord, error, inRow, onSave, onCancel }) {
+function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRateAdded, draft, setDraft, problems, refused, busy, forWord, error, inRow, onSave, onCancel }) {
   const [addingRate, setAddingRate] = useState(false);
   const editing = draft.id !== null;
   const title = editing ? 'Change membership type' : (forWord?.heading ?? 'Add a membership type');
@@ -258,6 +261,7 @@ function TypeForm({ gymId, orgType, currency, options, taxRates, onRateAdded, dr
         {addingRate ? (
           <NewRateInline
             gymId={gymId}
+            country={country}
             onAdded={(rate) => {
               setAddingRate(false);
               onRateAdded(rate);
@@ -329,6 +333,51 @@ function TypeForm({ gymId, orgType, currency, options, taxRates, onRateAdded, dr
                 draft.contract === 'fixed' ? contractHint(draft) : 'Members can cancel at any time.',
                 editing ? 'Members who already hold it keep the minimum term they joined on.' : null,
               ]
+                .filter((line) => line !== null)
+                .join(' ')}
+            </p>
+          </Field>
+        ) : null}
+
+        {choice === 'recurring' && draft.contract === 'fixed' ? (
+          <Field id={id('leave-fee')} label={`Early cancellation fee (${currency})`} problem={problems?.leaveFee}>
+            <input
+              id={id('leave-fee')}
+              aria-invalid={problems?.leaveFee ? 'true' : undefined}
+              value={draft.leaveFee}
+              inputMode="decimal"
+              onChange={text('leaveFee')}
+              placeholder="None"
+              className="c-input"
+              style={{ maxWidth: 240 }}
+            />
+            <p className="c-s13 c-t3 m-0">
+              {[
+                'Added once to the bills of a member you cancel early, inside the minimum term. Members you release for a reason, such as moving away, pay none. Leave it empty for none.',
+                editing ? 'Members who already hold it keep the fee they joined on.' : null,
+              ]
+                .filter((line) => line !== null)
+                .join(' ')}
+            </p>
+          </Field>
+        ) : null}
+
+        {choice === 'recurring' ? (
+          <Field id={id('notice')} label="Notice to cancel" problem={problems?.noticeDays}>
+            <div className="flex flex-wrap items-center gap-2" style={{ maxWidth: 520 }}>
+              <input
+                id={id('notice')}
+                aria-invalid={problems?.noticeDays ? 'true' : undefined}
+                value={draft.noticeDays}
+                inputMode="numeric"
+                onChange={text('noticeDays')}
+                className="c-input"
+                style={{ width: 104, flexShrink: 0 }}
+              />
+              <span className="c-s15 c-t1">days</span>
+            </div>
+            <p className="c-s13 c-t3 m-0">
+              {[noticeHint(draft), editing ? 'Members who already hold it keep the notice they joined on.' : null]
                 .filter((line) => line !== null)
                 .join(' ')}
             </p>
@@ -530,6 +579,8 @@ function TypeRow({ type, orgType, taxLine = null, agreementLine = null, agreemen
           <p className="c-s14 c-t1 m-0">{termLine(type)}</p>
           {joiningFeeLine(type) !== null ? <p className="c-s14 c-t2 m-0">{joiningFeeLine(type)}</p> : null}
           {contractLine(type) !== null ? <p className="c-s14 c-t2 m-0">{contractLine(type)}</p> : null}
+          {leaveFeeLine(type) !== null ? <p className="c-s14 c-t2 m-0">{leaveFeeLine(type)}</p> : null}
+          {noticeLine(type) !== null ? <p className="c-s14 c-t2 m-0">{noticeLine(type)}</p> : null}
           {taxLine !== null ? <p className="c-s14 c-t2 m-0">{taxLine}</p> : null}
           <p className="c-s14 c-t2 m-0">{includesLine(type, orgType)}</p>
           {agreementLine !== null ? (
@@ -778,6 +829,7 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
     <TypeForm
       gymId={gymId}
       orgType={org.orgType}
+      country={org.country ?? null}
       currency={draftCurrency}
       options={classOptions(list, editing)}
       taxRates={list?.taxRates ?? []}

@@ -37,6 +37,8 @@ import {
   saleTaxWords,
   taxLine,
   taxModes,
+  taxNameHint,
+  RATE_HINT,
   saleVoidedLine,
   voidSaleQuestion,
   basketRefundTag,
@@ -379,12 +381,36 @@ describe('products and tax', () => {
     expect(rateProblems({ name: ' GST ', rate: '18' })).toEqual({});
     expect(rateBody({ name: ' GST ', rate: ' 18 ' })).toEqual({ name: 'GST', bp: 1800 });
     expect(rateBody({ name: 'Sales tax', rate: '8.25' })).toEqual({ name: 'Sales tax', bp: 825 });
-    expect(rateProblems({ name: '', rate: '18' })).toEqual({ name: 'Give the tax a name, such as GST, VAT or Sales tax.' });
+    expect(rateProblems({ name: '', rate: '18' })).toEqual({ name: 'Enter a tax name.' });
     expect(rateProblems({ name: 'x'.repeat(31), rate: '18' })).toEqual({ name: 'Keep the name to 30 characters.' });
     expect(rateProblems({ name: `GST${String.fromCharCode(0x200b)}`, rate: '18' })).toEqual({ name: HIDDEN_TEXT });
     for (const typed of ['', '0', '0.00', '8,25', '31', '8.255', '-1', 'ten']) {
-      expect(rateProblems({ name: 'GST', rate: typed })).toEqual({ rate: 'Enter the rate as a number above 0 and up to 30, like 8.25.' });
+      expect(rateProblems({ name: 'GST', rate: typed })).toEqual({ rate: 'Enter a rate from 0.01 to 30, with up to two decimal places.' });
     }
+  });
+  it('the tax box suggests the gym country’s own tax, and never a rate (18b-iv)', () => {
+    // The worst thing: a gym shown another country's tax name, which then prints on its receipts.
+    const table = [
+      ['US', 'Sales tax'],
+      ['GB', 'VAT'],
+      ['IE', 'VAT'],
+      ['FR', 'VAT'],
+      ['ES', 'VAT'],
+      ['IN', 'GST'],
+      ['AU', 'GST'],
+      ['CA', 'GST'],
+      ['JP', 'Consumption tax'],
+    ];
+    for (const [country, name] of table) {
+      expect(taxNameHint(country)).toBe(name);
+      expect(rateProblems({ name: ' ', rate: '10' }, country)).toEqual({ name: `Enter a tax name, such as ${name}.` });
+    }
+    for (const country of [null, undefined, 'DE', 'NZ']) {
+      expect(taxNameHint(country)).toBe('');
+      expect(rateProblems({ name: '', rate: '10' }, country)).toEqual({ name: 'Enter a tax name.' });
+    }
+    expect(RATE_HINT).toBe('Use the tax name and rate registered with your tax authority.');
+    expect(RATE_HINT).not.toMatch(/[0-9%]/);
   });
   it('a rate’s Choose box ticks what charges it, says what another one charges now, and says what was saved', () => {
     const page = {
@@ -423,13 +449,13 @@ describe('products and tax', () => {
   });
   it('the two ways are explained in the gym’s own money, with sums that are true', () => {
     expect(taxModes('GBP').map((m) => [m.value, m.label, m.hint])).toEqual([
-      ['added', 'Added on top of the price', 'For example, with a 10% tax, a price of £100.00 costs the customer £110.00. Usual in the United States and Canada.'],
-      ['included', 'Already included in the price', 'For example, with a 10% tax, a price of £100.00 costs the customer £100.00, and £9.09 of it is tax. Usual where VAT or GST is charged.'],
+      ['added', 'Added on top of the price', 'For example, with a 10% tax, a price of £100.00 costs the customer £110.00. Standard in the United States and Canada.'],
+      ['included', 'Already included in the price', 'For example, with a 10% tax, a price of £100.00 costs the customer £100.00, and £9.09 of it is tax. Standard where VAT, GST or consumption tax applies.'],
     ]);
     // With a rate of its own, the gym reads its own rate, never a made-up 10% (Kd's click-through).
     expect(taxModes('INR', rate({ name: 'GST', bp: 1800 })).map((m) => m.hint)).toEqual([
-      'With GST 18%, a price of ₹100.00 costs the customer ₹118.00. Usual in the United States and Canada.',
-      'With GST 18%, a price of ₹100.00 costs the customer ₹100.00, and ₹15.25 of it is tax. Usual where VAT or GST is charged.',
+      'With GST 18%, a price of ₹100.00 costs the customer ₹118.00. Standard in the United States and Canada.',
+      'With GST 18%, a price of ₹100.00 costs the customer ₹100.00, and ₹15.25 of it is tax. Standard where VAT, GST or consumption tax applies.',
     ]);
     // The example's own numbers, by the rule the server uses.
     const ten = [rate({ name: 'Tax', bp: 1000 })];

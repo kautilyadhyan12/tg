@@ -85,7 +85,9 @@ export async function changeHeld(
     /** The day it said the new one's full payments start (18y); null for none. */
     shownFullFrom: string | null;
     /** The new line's minimum term the screen showed (18v-i); undefined where it showed no word of it. */
-    shownMinimumTerm?: { periods: number; then: string } | null;
+    shownMinimumTerm?: { periods: number; then: string; leaveFeeMinor?: number | null | undefined } | null;
+    /** The new line's notice to cancel the screen showed (18v-ii-a); undefined where it showed no word of it. */
+    shownNoticeDays?: number | null;
     paid: boolean;
     method: MemberPaymentByHand | null;
     confirmBookings: string | null;
@@ -130,9 +132,12 @@ export async function changeHeld(
       if (to.fullFrom !== input.shownFullFrom) return { kind: "bill_day_changed" };
 
       // The membership changed: today it ends now; later it stops at the end of what is paid.
-      const event: HeldMembershipEvent = { type: "cancel", when: input.when === "today" ? "today" : "period_end" };
+      // Not held to a minimum term or a notice: the member stays, on the new one (18v-i; 18v-ii-a, C1).
+      const event: HeldMembershipEvent = { type: "cancel", when: input.when === "today" ? "today" : "period_end", change: true };
       const move = moveHeldMembership(before.membership, event, input.today);
-      // One already set to stop, or paid once, ends by itself on its last day: nothing to change.
+      // One already set to stop, or paid once, ends by itself on its last day: nothing to change. Any
+      // other refusal would leave the old one renewing beside the new one, billed twice: never written.
+      if (!move.ok && move.reason !== "not_allowed") throw new Error(`a change could not stop the membership it replaces: ${move.reason}`);
       const stops = move.ok ? move.membership : before.membership;
       const lastDay = input.when === "today" ? input.today : addDays(to.startsOn, -1);
       // Its bills for days after its last day go, as a cancel's do (18a-i); paid ones are the credit.
@@ -160,6 +165,7 @@ export async function changeHeld(
         joiningFeeMinor: null,
         shownFullFrom: to.fullFrom,
         ...(input.shownMinimumTerm === undefined ? {} : { shownMinimumTerm: input.shownMinimumTerm }),
+        ...(input.shownNoticeDays === undefined ? {} : { shownNoticeDays: input.shownNoticeDays }),
         mayWaiveJoiningFee: false,
         // Set to stop by this change: cancelling the new one before it starts undoes that (Low-2).
         change: { fromId: before.id, creditMinor: to.creditMinor, paidByChange: to.paidByChange, stoppedOld: before.membership.renews && !stops.renews && stops.status !== "cancelled" },

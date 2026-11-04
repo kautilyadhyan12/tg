@@ -128,6 +128,8 @@ function typeInput(req: SaveGymMembershipTypeRequest): repo.MembershipTypeInput 
     joiningFeeMinor: req.joiningFeeMinor,
     contractPeriods: req.contractPeriods,
     contractThen: req.contractThen,
+    noticeDays: req.noticeDays,
+    leaveFeeMinor: req.leaveFeeMinor,
   };
 }
 
