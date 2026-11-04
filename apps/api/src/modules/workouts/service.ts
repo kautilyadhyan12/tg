@@ -275,7 +275,7 @@ export async function getWorkoutSummary(
   const gate = await historyGate(deps, userId);
   const [me, records, isContinuation, hasEarlierToday, food] = await Promise.all([
     getGamificationMe({ sql: deps.sql }, userId, ctx.timezone),
-    repo.getPersonalRecords(deps.sql, userId, gate.floor),
+    repo.getPersonalRecords(deps.sql, userId, gate.floor, tz),
     isContinuationDay({ sql: deps.sql }, userId, ctx.timezone, workout.startedAt),
     repo.hasEarlierWorkoutOnDay(deps.sql, userId, workout.id, workout.startedAt, tz),
     // The meal ideas follow the person's diet as it is NOW (RULINGS 2026-09-13),
@@ -373,6 +373,18 @@ function sinceFor(period: ProgressPeriod, now: Date): Date | null {
   }
 }
 
+const PERIOD_DAYS: Record<ProgressPeriod, number | null> = { "7d": 7, "30d": 30, "90d": 90, "1y": 365, all: null };
+
+/** The start of the period's first whole day in the person's zone: 7d is today and the 6 days before. */
+async function calendarSince(sql: Sql, period: ProgressPeriod, timeZone: string): Promise<Date | null> {
+  const days = PERIOD_DAYS[period];
+  if (days === null) return null;
+  const [row] = await sql<{ since: Date }[]>`
+    SELECT ((date_trunc('day', now() AT TIME ZONE ${timeZone}) - make_interval(days => ${days - 1})) AT TIME ZONE ${timeZone}) AS since`;
+  if (row === undefined) throw new Error("calendarSince: no row");
+  return row.since;
+}
+
 async function userTz(sql: Sql, userId: string): Promise<string> {
   const ctx = await getUserSyncContext(sql, userId);
   return safeTimeZone(ctx.timezone);
@@ -453,19 +465,19 @@ export async function progressDistribution(
   period: ProgressPeriod,
 ): Promise<ProgressDistribution> {
   const gate = await historyGate(deps, userId);
-  const since = clamp(sinceFor(period, new Date()), gate.floor);
+  // Whole days in the person's own zone, today and the days before it (35c-i): the 7 days' sets
+  // never take in part of an eighth day, as a window of 7×24 hours back from now would.
+  const since = clamp(await calendarSince(deps.sql, period, await userTz(deps.sql, userId)), gate.floor);
   const families = await repo.getFamilyDistribution(deps.sql, userId, since);
   return { families, limitedToDays: gate.limitedToDays };
 }
 
 export async function personalRecords(deps: ReadDeps, userId: string): Promise<PersonalRecords> {
   const gate = await historyGate(deps, userId);
+  const ctx = await getUserSyncContext(deps.sql, userId);
   const [records, streak] = await Promise.all([
-    repo.getPersonalRecords(deps.sql, userId, gate.floor),
-    (async () => {
-      const ctx = await getUserSyncContext(deps.sql, userId);
-      return reconciledStreak({ sql: deps.sql }, userId, ctx.timezone);
-    })(),
+    repo.getPersonalRecords(deps.sql, userId, gate.floor, safeTimeZone(ctx.timezone)),
+    reconciledStreak({ sql: deps.sql }, userId, ctx.timezone),
   ]);
   // longestStreak stays ungated: streaks are identity, not history reads
   // (Part 7 §3.3 "longest is displayed forever").

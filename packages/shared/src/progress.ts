@@ -90,7 +90,8 @@ export type ProgressDistribution = z.infer<typeof progressDistributionSchema>;
 
 /** Personal records (progress.py:254-324, data-shaped). */
 const recordRefSchema = z
-  .object({ workoutId: z.string().uuid(), value: z.number() })
+  /** `day`: when it was set, "YYYY-MM-DD" in the person's own zone (35c-i). */
+  .object({ workoutId: z.string().uuid(), value: z.number(), day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) })
   .nullable();
 export const personalRecordsSchema = z.object({
   maxKcalWorkout: recordRefSchema,

@@ -4,7 +4,7 @@
 // run date so streak reconciliation can never rot the suite.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
-import { progressOverviewSchema, progressTrendSchema } from "@app/shared";
+import { personalRecordsSchema, progressDistributionSchema, progressOverviewSchema, progressTrendSchema } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { seed } from "../src/db/seed.js";
@@ -286,6 +286,23 @@ d("workouts history + progress + gamification (real Postgres)", () => {
     expect(asB.json<{ items: unknown[] }>().items.length).toBe(0);
   });
 
+  it("Exercise Categories' 7 days are today and the 6 days before: a part of an eighth day is not counted", { timeout: 60_000 }, async () => {
+    // Inside the last 7×24 hours, on the eighth calendar day back (UTC, the person's zone unset).
+    const d = await session("p23-dora@example.com");
+    const edge = new Date(Date.now() - 7 * 86_400_000 + 60_000).toISOString();
+    const inside = new Date(Date.now() - 3 * 86_400_000).toISOString();
+    expect((await sync(crypto.randomUUID(), edge, [squatSet(1), squatSet(2)], d.access)).statusCode).toBe(201);
+    expect((await sync(crypto.randomUUID(), inside, [squatSet(1)], d.access)).statusCode).toBe(201);
+    const week = progressDistributionSchema.parse((await inject({ method: "GET", url: "/v1/progress/distribution?period=7d", access: d.access })).json());
+    const month = progressDistributionSchema.parse((await inject({ method: "GET", url: "/v1/progress/distribution?period=30d", access: d.access })).json());
+    const sets = (x: typeof week) => x.families.reduce((n, f) => n + f.sets, 0);
+    // A run at 23:59 UTC would put the edge on today-6; then both reads hold all three sets.
+    const edgeDay = dayOf(edge);
+    const firstDay = dayOf(new Date(Date.now() - 6 * 86_400_000).toISOString());
+    expect(sets(week)).toBe(edgeDay < firstDay ? 1 : 3);
+    expect(sets(month)).toBe(3);
+  });
+
   it("a window can NARROW the plan read-gate but never widen it (Part 4 §0.2)", { timeout: 60_000 }, async () => {
     // A user of its own, so the far-past fixture cannot disturb the streak and
     // XP assertions the shared fixtures above and below depend on.
@@ -468,15 +485,11 @@ d("workouts history + progress + gamification (real Postgres)", () => {
     ]);
 
     const records = await inject({ method: "GET", url: "/v1/progress/records", access: cookieA });
-    const r = records.json<{
-      maxKcalWorkout: { workoutId: string; value: number } | null;
-      longestWorkout: { value: number } | null;
-      bestAvgForm: { value: number } | null;
-      totalWorkouts: number;
-      longestStreak: number;
-    }>();
+    const r = personalRecordsSchema.parse(records.json());
     expect(r.maxKcalWorkout?.value).toBe(600);
     expect(r.maxKcalWorkout?.workoutId).toBe(workoutIds[1]);
+    // The day each record was set, in the person's zone (unset here, so UTC): 35c-i shows it.
+    expect(r.maxKcalWorkout?.day).toBe(dayOf(daysAgoIso(2)));
     expect(r.longestWorkout?.value).toBe(3_600_000);
     expect(r.bestAvgForm?.value).toBe(84);
     expect(r.totalWorkouts).toBe(4);
