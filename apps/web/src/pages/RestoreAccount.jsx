@@ -53,6 +53,10 @@ export default function RestoreAccount() {
               <Link to="/login" className="btn-primary w-full inline-block text-center">
                 Sign in
               </Link>
+              {/* The email's link opens here even for someone who uses the phone app: this page cannot open it. */}
+              <p className="text-sm text-center" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                Using the app? Open AI Home Gym on your phone and sign in there.
+              </p>
             </>
           ) : (
             <>

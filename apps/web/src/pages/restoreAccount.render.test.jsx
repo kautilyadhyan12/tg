@@ -40,6 +40,8 @@ describe('the restore page', () => {
     // Gyms are left on deleting (Part 4 §5.2): the page never says everything is as it was.
     expect(screen.getByText(/join it again from its invitation/)).toBeTruthy();
     expect(screen.queryByText(/exactly as you left/)).toBeNull();
+    // A phone user is told to sign in in the app, not only offered the website.
+    expect(screen.getByText("Using the app? Open AI Home Gym on your phone and sign in there.")).toBeTruthy();
     fireEvent.click(screen.getByText('Sign in'));
     expect(await screen.findByText('GET STARTED')).toBeTruthy();
   });
