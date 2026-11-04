@@ -9,6 +9,7 @@ import {
   MEMBERSHIP_PACK_DAYS_MAX,
   MEMBERSHIP_PT_LIMIT_MAX,
   MEMBERSHIP_CONTRACT_PERIODS_MAX,
+  MEMBERSHIP_NOTICE_DAYS_MAX,
   MEMBERSHIP_TERM_COUNT_MAX,
   contractLengthWords,
   MEMBERSHIP_TYPES_MAX,
@@ -216,6 +217,20 @@ export function contractLine(type) {
   return `Minimum term: ${length}, then ${type.contractThen === 'ends' ? 'it ends' : 'renews until cancelled'}`;
 }
 
+/** "Notice to cancel: 30 days" (18v-ii-a); null for a type with none. */
+export function noticeLine(type) {
+  if (type === null || type === undefined || type.noticeDays === null || type.noticeDays === undefined) return null;
+  return `Notice to cancel: ${String(type.noticeDays)} day${type.noticeDays === 1 ? '' : 's'}`;
+}
+
+/** Under the notice box: what the days typed mean, where they read. */
+export function noticeHint(draft) {
+  const days = wholeNumber(draft.noticeDays, 1, MEMBERSHIP_NOTICE_DAYS_MAX);
+  if (String(draft.noticeDays ?? '').trim() === '') return 'Leave empty for no notice: members can stop at the end of what they have paid.';
+  if (days === null) return null;
+  return `Members who cancel give ${String(days)} day${days === 1 ? "'s" : "s'"} notice: they stay, and pay, to the end of the payment period it ends in.`;
+}
+
 /** Under the contract boxes: how long so many payments run, where the number reads. */
 export function contractHint(draft) {
   const periods = wholeNumber(draft.contractPeriods, 1, MEMBERSHIP_CONTRACT_PERIODS_MAX);
@@ -254,6 +269,7 @@ export function emptyDraft() {
     contract: 'none',
     contractPeriods: '12',
     contractThen: 'renews',
+    noticeDays: '',
   };
 }
 
@@ -287,6 +303,7 @@ export function draftFromType(type) {
     contract: type.contractPeriods === null || type.contractPeriods === undefined ? 'none' : 'fixed',
     contractPeriods: type.contractPeriods === null || type.contractPeriods === undefined ? base.contractPeriods : String(type.contractPeriods),
     contractThen: type.contractThen ?? base.contractThen,
+    noticeDays: type.noticeDays === null || type.noticeDays === undefined ? '' : String(type.noticeDays),
   };
 }
 
@@ -332,7 +349,7 @@ const usesTerm = (choice) => choice === 'recurring' || choice === 'one_time' || 
 const usesAccess = usesTerm;
 
 /** The boxes in the order the form draws them, so the first wrong one can be shown. */
-export const PROBLEM_ORDER = ['name', 'description', 'price', 'joiningFee', 'tax', 'termCount', 'contractPeriods', 'packClasses', 'packDays', 'bookingsLimit', 'classes', 'ptLimit'];
+export const PROBLEM_ORDER = ['name', 'description', 'price', 'joiningFee', 'tax', 'termCount', 'contractPeriods', 'noticeDays', 'packClasses', 'packDays', 'bookingsLimit', 'classes', 'ptLimit'];
 
 /** The first box that is wrong, top to bottom, or null. */
 export function firstProblem(problems) {
@@ -389,6 +406,13 @@ export function draftProblems(draft, currency) {
       problems.contractPeriods = 'A free membership has no minimum term. Choose No minimum term.';
     }
   }
+  if (draftHasNotice(draft)) {
+    if (wholeNumber(draft.noticeDays, 1, MEMBERSHIP_NOTICE_DAYS_MAX) === null) {
+      problems.noticeDays = `Type how many days, from 1 to ${String(MEMBERSHIP_NOTICE_DAYS_MAX)}, or leave it empty.`;
+    } else if (priceMinor === 0) {
+      problems.noticeDays = 'A free membership has no notice to cancel. Leave it empty.';
+    }
+  }
   if (draft.choice === 'pack') {
     if (wholeNumber(draft.packClasses, 1, MEMBERSHIP_PACK_CLASSES_MAX) === null) {
       problems.packClasses = `Type how many classes, from 1 to ${String(MEMBERSHIP_PACK_CLASSES_MAX)}.`;
@@ -419,6 +443,11 @@ export function draftProblems(draft, currency) {
 /** Whether the form sets a contract: a repeating type only (18v-i). */
 export function draftHasContract(draft) {
   return draft.choice === 'recurring' && draft.contract === 'fixed';
+}
+
+/** Whether the form sets a notice to cancel: a repeating type with days typed (18v-ii-a). */
+export function draftHasNotice(draft) {
+  return draft.choice === 'recurring' && String(draft.noticeDays ?? '').trim() !== '';
 }
 
 /** Whether the form's ticked classes apply: not for a gym-only type. */
@@ -474,6 +503,7 @@ export function draftBody(draft, currency) {
     joiningFeeMinor: draftJoiningFee(draft, currency),
     contractPeriods: draftHasContract(draft) ? wholeNumber(draft.contractPeriods, 1, MEMBERSHIP_CONTRACT_PERIODS_MAX) : null,
     contractThen: draftHasContract(draft) ? draft.contractThen : null,
+    noticeDays: draftHasNotice(draft) ? wholeNumber(draft.noticeDays, 1, MEMBERSHIP_NOTICE_DAYS_MAX) : null,
     // A change says which version of the type the form read.
     ...(draft.id === null ? {} : { updatedAt: draft.updatedAt }),
   };

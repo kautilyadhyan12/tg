@@ -20,7 +20,7 @@ import { FriendGiftNote, MemberGiftNote, MemberGiftWaiting } from './FriendGift'
 import { useCameBack } from './useCameBack';
 import { useLiveNews } from './liveNews';
 import { ENDING_NOT_TOLD, bookingsStoppedLine } from './bookingsEndView';
-import { contractLine, termLine } from './membershipTypesView';
+import { contractLine, noticeLine, termLine } from './membershipTypesView';
 import { changeBody, changeChoice, changeCreditLine, changeDoneWords, changeEndingWords, changeForm, changeLine, showsChange, squareSetUpLine } from './membershipChangeView';
 import { viewerPrivileges } from './consoleView';
 import { placeFor } from './consolePlaces';
@@ -37,6 +37,8 @@ import {
   RELEASE_CHOICES,
   contractShownLine,
   releaseShownLine,
+  noticeShownLine,
+  noticeWaivedLine,
   classesLine,
   datesLine,
   doneWords,
@@ -537,7 +539,12 @@ export default function MemberMemberships({
         setEnding({
           id: m.id,
           what,
-          later: what === 'cancelContract' ? (m.view.can.cancelAtContractEnd ?? true) : what === 'cancelLater',
+          later:
+            what === 'cancelContract'
+              ? (m.view.can.cancelAtContractEnd ?? true)
+              : what === 'cancelNotice'
+                ? (m.view.can.cancelAfterNotice ?? true)
+                : what === 'cancelLater',
           change: what === 'change',
           ending: booked,
           all: false,
@@ -1881,6 +1888,11 @@ export default function MemberMemberships({
                 {contractLine(choice.type)}
               </p>
             ) : null}
+            {noticeLine(choice.type) !== null ? (
+              <p className="c-s14 c-t2 m-0" data-testid="held-change-notice">
+                {noticeLine(choice.type)}
+              </p>
+            ) : null}
             {choice.paidLabel !== null ? (
               <div className="flex flex-col gap-2">
                 <Tick checked={changeDraft.paid} onChange={(paid) => set({ paid })}>
@@ -2115,6 +2127,16 @@ export default function MemberMemberships({
             {releaseShownLine(m)}
           </span>
         ) : null}
+        {noticeShownLine(m) !== null ? (
+          <span className="c-s14 c-t2" data-testid="held-notice-line">
+            {noticeShownLine(m)}
+          </span>
+        ) : null}
+        {noticeWaivedLine(m) !== null ? (
+          <span className="c-s14 c-t2" data-testid="held-notice-waived-line">
+            {noticeWaivedLine(m)}
+          </span>
+        ) : null}
         {changeLine(m, today) !== null ? (
           <span className="c-s14 c-t2" data-testid="held-change-line">
             {changeLine(m, today)}
@@ -2266,6 +2288,11 @@ export default function MemberMemberships({
             {contractLine(choice.type) !== null ? (
               <p className="c-s14 c-t2 m-0" data-testid="held-add-minimum-term">
                 {contractLine(choice.type)}
+              </p>
+            ) : null}
+            {noticeLine(choice.type) !== null ? (
+              <p className="c-s14 c-t2 m-0" data-testid="held-add-notice">
+                {noticeLine(choice.type)}
               </p>
             ) : null}
             {gift !== null && choice.type !== null && !free ? (
