@@ -720,7 +720,7 @@ const owing = (sql: Sql | TransactionSql, gymIds: readonly string[] | null) => s
          (h.price_minor = 0) AS free, h.starts_on::text AS starts_on, h.frozen_days, h.gift_days, h.gift_from, h.status,
          h.frozen_on::text AS frozen_on, h.cancelled_on::text AS cancelled_on,
          h.paid_periods, h.paid_floor, h.renews, h.classes_left, h.from_list, h.full_from::text AS full_from, h.contract_periods, h.contract_then,
-         h.gym_id, h.entry_id, g.timezone, h.price_minor, h.currency,
+         h.notice_days, h.stops_after, h.gym_id, h.entry_id, g.timezone, h.price_minor, h.currency,
          r.name AS tax_name, r.rate_bp AS tax_bp, h.tax_included
   FROM gym_held_memberships h
   JOIN gyms g ON g.id = h.gym_id AND g.status = 'active'

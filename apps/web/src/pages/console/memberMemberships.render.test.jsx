@@ -581,6 +581,7 @@ describe('adding a membership', () => {
       requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
       fullFrom: null,
       minimumTerm: null,
+      noticeDays: null,
       typeId: GOLD.id,
       startsOn: TODAY,
       paid: false,
@@ -747,6 +748,7 @@ describe('adding a membership', () => {
       requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
       fullFrom: null,
       minimumTerm: null,
+      noticeDays: null,
       typeId: TAXED.id,
       startsOn: TODAY,
       paid: false,
@@ -834,7 +836,7 @@ describe('adding a membership', () => {
     const [gym, entry, body] = orgService.giveHeldMembership.mock.calls[0];
     expect([gym, entry]).toEqual([GYM, ADA]);
     // The price and what the first bill comes to are sent as the screen showed them (18b-iii).
-    expect(body).toEqual({ requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/), typeId: GOLD.id, startsOn: TODAY, paid: true, method: 'cash', priceMinor: 4999, totalMinor: 4999, fullFrom: null, minimumTerm: null });
+    expect(body).toEqual({ requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/), typeId: GOLD.id, startsOn: TODAY, paid: true, method: 'cash', priceMinor: 4999, totalMinor: 4999, fullFrom: null, minimumTerm: null, noticeDays: null });
 
     // It failed: the form stays, and pressing again sends the same key, so one membership.
     expect(await (await boxSoon()).findByRole('alert')).toBeTruthy();
@@ -1289,6 +1291,7 @@ describe('Add member gives a membership in the same form', () => {
       requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
       fullFrom: null,
       minimumTerm: null,
+      noticeDays: null,
       typeId: PACK.id,
       startsOn: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
       paid: true,
@@ -2257,5 +2260,48 @@ it('paid past the minimum term: End stops it at the end of what is paid, sending
     fireEvent.click(ending.getByRole('button', { name: 'Cancel today and end 1 booking' }));
     await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledTimes(2));
     expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, 'cancel', { when: 'today', release: 'death', confirmBookings: 'e'.repeat(64) });
+  });
+});
+
+// A NOTICE TO CANCEL (18v-ii-a). The worst this box could do: end a membership before its notice
+// with nobody saying why, or on a day the box did not name.
+describe('cancelling a membership with a notice to cancel', () => {
+  const NOTICE = typeOf(5, { name: 'Gold 30 days', noticeDays: 30 });
+  const withNotice = (moves = []) => held(5, NOTICE, '2026-10-04', true, moves);
+
+  it('names the day the notice ends it, and sends exactly that on one press', async () => {
+    const gold = withNotice();
+    orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
+    render(draw(ADA, 'Ada Lovelace'));
+    const b = await boxSoon();
+    expect(b.getByTestId('held-notice-line').textContent).toBe('Notice to cancel: 30 days');
+    fireEvent.click(b.getByRole('button', { name: 'Cancel membership' }));
+    const box = within(b.getByTestId('held-ask-cancel'));
+    expect(box.getByText("Ada Lovelace gives 30 days' notice. End it on 3 December 2026, and they keep paying until then; or end it sooner without notice.")).toBeTruthy();
+    expect(box.queryByRole('button', { name: 'Cancel today' })).toBeNull();
+    orgService.changeHeldMembership.mockResolvedValueOnce(answer([withNotice([[{ type: 'cancel', when: 'notice' }, TODAY]])]));
+    fireEvent.click(box.getByRole('button', { name: 'End on 3 December 2026' }));
+    await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledTimes(1));
+    expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, 'cancel', { when: 'notice' });
+    expect(await b.findByText('Gold 30 days ends on 3 December 2026, after the notice.')).toBeTruthy();
+    expect(b.getByTestId('held-notice-line').textContent).toBe('Notice given: it ends on 3 December 2026');
+  });
+
+  it('ends it sooner only once a reason is picked, and sends that reason', async () => {
+    const gold = withNotice();
+    orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
+    render(draw(ADA, 'Ada Lovelace'));
+    const b = await boxSoon();
+    fireEvent.click(b.getByRole('button', { name: 'Cancel membership' }));
+    const box = within(b.getByTestId('held-ask-cancel'));
+    fireEvent.click(box.getByRole('button', { name: 'End today without notice' }));
+    expect(box.getByRole('alert').textContent).toBe('Pick why you are ending it without notice first.');
+    expect(orgService.changeHeldMembership).not.toHaveBeenCalled();
+    fireEvent.change(box.getByLabelText('Why are you ending it without notice?'), { target: { value: 'moved' } });
+    orgService.changeHeldMembership.mockResolvedValueOnce(answer([{ ...withNotice([[{ type: 'cancel', when: 'today', release: 'moved' }, TODAY]]), noticeWaived: 'moved' }]));
+    fireEvent.click(box.getByRole('button', { name: 'End today without notice' }));
+    await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledTimes(1));
+    expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, 'cancel', { when: 'today', release: 'moved' });
+    expect(await b.findByText('Gold 30 days is cancelled.')).toBeTruthy();
   });
 });
