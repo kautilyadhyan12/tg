@@ -346,18 +346,22 @@ function noticeFacts(m: AgreementFactsInput["membership"]): AgreementFact[] {
   return [{ label: "Notice to cancel", value: `${String(notice.days)} day${notice.days === 1 ? "" : "s"}` }];
 }
 
-/** Its cooling-off period (18v-iii), counted from the day the agreement is signed. */
+/** Its cooling-off period (18v-iii), while it is open today (round one, H2): signed today, its days count from today. */
 function coolingOffFacts(m: AgreementFactsInput["membership"]): AgreementFact[] {
   const cooling = m.coolingOffDays ?? null;
-  if (cooling === null || cooling <= 0 || m.priceMinor <= 0) return [];
+  if (cooling === null || cooling <= 0 || m.priceMinor <= 0 || m.view.can.coolingOff === null) return [];
   return [{ label: "Cooling-off period", value: `${cooling === 1 ? "1 day" : `${String(cooling)} days`} after signing, to cancel with a full refund` }];
 }
 
 /** THE MEMBERSHIP'S TERMS, as its agreement says them (Kd, 2026-11-04): the minimum term and its early cancellation fee,
- *  the notice to cancel and the cooling-off period, each a line "Label: value."; none it does not have. What the Terminal
- *  shows before it keeps a card for automatic payments. */
+ *  the notice to cancel, each a line "Label: value.", and its cooling-off period with its last day while it is open today
+ *  (round one, H2); none it does not have. What the Terminal shows before it keeps a card for automatic payments. */
 export function membershipTermLines(m: AgreementFactsInput["membership"]): string[] {
-  return [...minimumTermFacts(m), ...noticeFacts(m), ...coolingOffFacts(m)].map((fact) => `${fact.label}: ${fact.value}.`);
+  const cooling = m.priceMinor > 0 ? m.view.can.coolingOff : null;
+  return [
+    ...[...minimumTermFacts(m), ...noticeFacts(m)].map((fact) => `${fact.label}: ${fact.value}.`),
+    ...(cooling === null ? [] : [`Cooling-off period: until ${dayWords(cooling.until)}, to cancel with a full refund.`]),
+  ];
 }
 
 /** A membership's first bill among those listed: the one for its first period. */

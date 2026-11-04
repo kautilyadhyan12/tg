@@ -159,7 +159,8 @@ const rawSchema = z.object({
   leave_fee_minor: z.number().int().nullable(),
   left_early: z.boolean(),
   cooling_off_days: z.number().int().nullable(),
-  cooling_off_from: z.string().nullable(),
+  cooling_off_added: z.string().nullable(),
+  cooling_off_signed: z.string().nullable(),
   changed_mind: z.boolean(),
   freeze_fee_minor: z.number().int(),
   from_list: z.boolean(),
@@ -222,7 +223,8 @@ function shape(row: unknown): HeldRow {
       leaveFeeMinor: r.leave_fee_minor,
       leftEarly: r.left_early,
       coolingOffDays: r.cooling_off_days,
-      coolingOffFrom: r.cooling_off_from,
+      coolingOffAdded: r.cooling_off_added,
+      coolingOffSigned: r.cooling_off_signed,
       changedMind: r.changed_mind,
     },
   };
@@ -299,14 +301,16 @@ const COLUMNS = (sql: Sql | TransactionSql) => sql`
   h.paid_periods, h.paid_floor, h.renews, h.classes_left, h.from_list, h.full_from::text AS full_from,
   h.contract_periods, h.contract_then, h.contract_release, h.notice_days, h.stops_after, h.notice_waived, h.leave_fee_minor, h.left_early,
   h.cooling_off_days, h.changed_mind,
-  -- The day its cooling-off days count from (18v-iii): its agreement's signing day, else the day it was added,
-  -- each the gym's own day. None where it was changed to another membership that stands.
-  CASE WHEN h.cooling_off_days IS NULL
-         OR EXISTS (SELECT 1 FROM gym_held_memberships n WHERE n.gym_id = h.gym_id AND n.replaces_id = h.id AND n.status <> 'cancelled')
+  -- What its cooling-off days count from (18v-iii; the rule decides, coolingOffFrom): the gym's day it was given, none
+  -- where it was changed to another membership that stands, and the gym's day its agreement was signed.
+  CASE WHEN EXISTS (SELECT 1 FROM gym_held_memberships n WHERE n.gym_id = h.gym_id AND n.replaces_id = h.id AND n.status <> 'cancelled')
     THEN NULL
-    ELSE to_char(COALESCE((SELECT s.signed_at FROM gym_agreement_signatures s WHERE s.gym_id = h.gym_id AND s.held_membership_id = h.id), h.created_at)
-                 AT TIME ZONE (SELECT g.timezone FROM gyms g WHERE g.id = h.gym_id), 'YYYY-MM-DD')
-  END AS cooling_off_from,
+    ELSE h.cooling_off_added::text
+  END AS cooling_off_added,
+  CASE WHEN h.cooling_off_days IS NULL THEN NULL
+    ELSE (SELECT to_char(s.signed_at AT TIME ZONE g.timezone, 'YYYY-MM-DD') FROM gym_agreement_signatures s JOIN gyms g ON g.id = s.gym_id
+          WHERE s.gym_id = h.gym_id AND s.held_membership_id = h.id)
+  END AS cooling_off_signed,
   h.freeze_fee_minor, h.discount_name, h.discount_minor, h.discount_payments,
   (SELECT r.name FROM gym_tax_rates r WHERE r.gym_id = h.gym_id AND r.id = h.tax_rate_id) AS tax_name,
   (SELECT r.rate_bp FROM gym_tax_rates r WHERE r.gym_id = h.gym_id AND r.id = h.tax_rate_id) AS tax_bp,
@@ -874,7 +878,7 @@ export async function giveHeldIn(tx: TransactionSql, input: GiveHeldInput): Prom
        term_count, term_unit, pack_classes, pack_days, starts_on, status,
        paid_periods, paid_floor, renews, classes_left,
        discount_id, discount_name, discount_minor, discount_payments, tax_rate_id, tax_included, replaces_id, replaced_stopped, full_from,
-       contract_periods, contract_then, notice_days, leave_fee_minor, cooling_off_days)
+       contract_periods, contract_then, notice_days, leave_fee_minor, cooling_off_days, cooling_off_added)
     VALUES (${input.gymId}, ${input.entryId}, ${input.typeId}, ${input.requestKey}, ${m.kind},
             ${priceMinor}, ${type.currency}, ${m.termCount}, ${m.termUnit}, ${m.packClasses},
             ${m.packDays}, ${m.startsOn}::date, ${m.status},
@@ -882,7 +886,7 @@ export async function giveHeldIn(tx: TransactionSql, input: GiveHeldInput): Prom
             ${used?.id ?? null}, ${used?.name ?? null}, ${used?.offMinor ?? 0}, ${used?.payments ?? null}, ${rate?.id ?? null}, ${tax?.included ?? null},
             ${change?.fromId ?? null}, ${change?.stoppedOld ?? false}, ${m.fullFrom}::date,
             ${m.contractPeriods ?? null}, ${m.contractThen ?? null}, ${m.noticeDays ?? null}, ${m.leaveFeeMinor ?? null},
-            ${change === null ? (m.coolingOffDays ?? null) : null})
+            ${change === null ? (m.coolingOffDays ?? null) : null}, ${change === null && (m.coolingOffDays ?? null) !== null ? input.today : null}::date)
     RETURNING id`;
   if (created === undefined) throw new Error("held membership insert returned no row");
 

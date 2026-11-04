@@ -45,14 +45,12 @@ describe("the worst thing: a full refund only inside the days, from the first to
     ["one day: two days after", "2026-11-04", 1, "2026-11-06", null],
     ["thirty days: the last", "2026-11-04", 30, "2026-12-04", "2026-12-04"],
     ["thirty days: the day after", "2026-11-04", 30, "2026-12-05", null],
-    ["signed later: the signing day", "2026-11-10", 3, "2026-11-10", "2026-11-13"],
-    ["signed later: before the signing", "2026-11-10", 3, "2026-11-09", null],
     ["across a month's end", "2027-01-30", 3, "2027-02-02", "2027-02-02"],
     ["across a leap day", "2028-02-28", 3, "2028-03-02", "2028-03-02"],
     ["across a year's end", "2026-12-30", 3, "2027-01-02", "2027-01-02"],
     ["across a year's end, the day after", "2026-12-30", 3, "2027-01-03", null],
   ] as const)("%s", (_what, from, days, today, until) => {
-    const m: HeldMembership = { ...given({ ...monthly, coolingOffDays: days }, from, from), coolingOffFrom: from };
+    const m = given({ ...monthly, coolingOffDays: days }, from, from);
     expect(offered(m, today)).toEqual(until === null ? null : { until });
     const move = moveHeldMembership(m, COOL, today);
     if (until === null) expect(move).toEqual({ ok: false, reason: "not_allowed" });
@@ -60,8 +58,27 @@ describe("the worst thing: a full refund only inside the days, from the first to
   });
 
   it.each([
+    // [what, start, added, signed, today, until or null] (round one, H1)
+    ["signed the day it was added", "2026-11-04", "2026-11-04", "2026-11-04", "2026-11-07", "2026-11-07"],
+    ["signed inside the days: they count from the signing", "2026-11-04", "2026-11-04", "2026-11-06", "2026-11-09", "2026-11-09"],
+    ["signed inside the days, the day after the new last", "2026-11-04", "2026-11-04", "2026-11-06", "2026-11-10", null],
+    ["signed on the last day", "2026-11-04", "2026-11-04", "2026-11-07", "2026-11-10", "2026-11-10"],
+    ["signed the day after the days: never opened again", "2026-11-04", "2026-11-04", "2026-11-08", "2026-11-08", null],
+    ["signed months later: never opened again", "2026-11-01", "2026-11-01", "2027-02-01", "2027-02-02", null],
+    ["a start months before it was added: a member since then", "2026-08-01", "2026-11-04", null, "2026-11-04", null],
+    ["a start the day before it was added: counted from the start", "2026-11-03", "2026-11-04", null, "2026-11-06", "2026-11-06"],
+    ["a start the day before, the day after its last", "2026-11-03", "2026-11-04", null, "2026-11-07", null],
+    ["a start after it was added: counted from the day it was added", "2026-11-20", "2026-11-04", null, "2026-11-07", "2026-11-07"],
+    ["a start after it was added, on its start", "2026-11-20", "2026-11-04", null, "2026-11-20", null],
+  ] as const)("the days count from: %s", (_what, start, added, signed, today, until) => {
+    const m: HeldMembership = { ...given(monthly, start, added), coolingOffSigned: signed };
+    expect(offered(m, today)).toEqual(until === null ? null : { until });
+    expect(moveHeldMembership(m, COOL, today).ok).toBe(until !== null);
+  });
+
+  it.each([
     ["no cooling-off period", { coolingOffDays: null }],
-    ["no day to count from: changed to another membership", { coolingOffFrom: null }],
+    ["no day to count from: changed to another membership", { coolingOffAdded: null }],
     ["nothing to pay", { free: true }],
     ["cancelled already", { status: "cancelled", cancelledOn: "2026-11-04" }],
     ["cancelled in its cooling-off period already", { status: "cancelled", cancelledOn: "2026-11-04", changedMind: true }],
@@ -120,7 +137,7 @@ describe("inside the days, no minimum term, notice or fee holds them", () => {
 
 describe("given from a line", () => {
   it("copies the days from a line with a price, counting from the day it is added", () => {
-    expect(given(monthly, "2026-11-04", "2026-11-04")).toMatchObject({ coolingOffDays: 3, coolingOffFrom: "2026-11-04", changedMind: false });
+    expect(given(monthly, "2026-11-04", "2026-11-04")).toMatchObject({ coolingOffDays: 3, coolingOffAdded: "2026-11-04", coolingOffSigned: null, changedMind: false });
     expect(given({ ...monthly, coolingOffDays: null }, "2026-11-04", "2026-11-04")).toMatchObject({ coolingOffDays: null });
     expect(given({ ...monthly, priceMinor: 0 }, "2026-11-04", "2026-11-04")).toMatchObject({ coolingOffDays: null });
     const pack: HeldMembershipTerms = { kind: "pack", termCount: null, termUnit: null, packClasses: 10, packDays: 90, priceMinor: 12000, coolingOffDays: 5 };
@@ -222,11 +239,18 @@ describe("the Terminal names the terms before it keeps a card (Kd, 2026-11-04)",
       "Minimum term: 12 months, to 3 Nov 2027.",
       "Early cancellation fee: $99.00.",
       "Notice to cancel: 30 days.",
-      "Cooling-off period: 3 days after signing, to cancel with a full refund.",
+      "Cooling-off period: until 7 Nov 2026, to cancel with a full refund.",
     ]);
     expect(terminalKeepWords("Gold 12: $50.00 every month. Renews until you cancel.", "I agree.", membershipTermLines(term))).toBe(
-      "Gold 12: $50.00 every month. Renews until you cancel.\nMinimum term: 12 months, to 3 Nov 2027.\nEarly cancellation fee: $99.00.\nNotice to cancel: 30 days.\nCooling-off period: 3 days after signing, to cancel with a full refund.\n\nI agree.",
+      "Gold 12: $50.00 every month. Renews until you cancel.\nMinimum term: 12 months, to 3 Nov 2027.\nEarly cancellation fee: $99.00.\nNotice to cancel: 30 days.\nCooling-off period: until 7 Nov 2026, to cancel with a full refund.\n\nI agree.",
     );
+  });
+
+  it("no cooling-off line once its days are over, on the Terminal or in an agreement signed then (round one, H2)", () => {
+    const over = item({ ...monthly }, { view: heldMembershipView(ana(), "2026-11-08") });
+    expect(membershipTermLines(over)).toEqual([]);
+    const facts = agreementFacts({ gym: { name: "Iron House", postalAddress: null, contactPhone: null, contactEmail: null }, personName: "Ana Lopez", membership: over, firstBill: null, taxIncluded: false });
+    expect(facts.some((f) => f.label === "Cooling-off period")).toBe(false);
   });
 
   it("none it does not have, and the words stay as they were for a membership with no terms", () => {

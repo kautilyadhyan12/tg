@@ -213,6 +213,8 @@ export const gymHeldMemberships = pgTable(
     leftEarly: boolean("left_early").notNull().default(false),
     /** Its cooling-off period as it was given (0203; 18v-iii); null for none. */
     coolingOffDays: integer("cooling_off_days"),
+    /** The gym's day it was given, kept with its cooling-off days, which count from it. */
+    coolingOffAdded: date("cooling_off_added"),
     /** Cancelled inside its cooling-off period with a full refund. */
     changedMind: boolean("changed_mind").notNull().default(false),
     classesLeft: integer("classes_left"),
@@ -314,7 +316,7 @@ export const gymHeldMemberships = pgTable(
     ),
     check(
       "gym_held_memberships_cooling_off_check",
-      sql`(${t.coolingOffDays} IS NULL OR (${t.priceMinor} > 0 AND ${t.coolingOffDays} BETWEEN 1 AND 30)) AND (NOT ${t.changedMind} OR (${t.coolingOffDays} IS NOT NULL AND ${t.status} = 'cancelled'))`,
+      sql`(${t.coolingOffDays} IS NULL OR (${t.priceMinor} > 0 AND ${t.coolingOffDays} BETWEEN 1 AND 30)) AND ((${t.coolingOffDays} IS NULL) = (${t.coolingOffAdded} IS NULL)) AND (NOT ${t.changedMind} OR (${t.coolingOffDays} IS NOT NULL AND ${t.status} = 'cancelled'))`,
     ),
     check(
       "gym_held_memberships_discount_check",

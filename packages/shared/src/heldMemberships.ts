@@ -40,9 +40,9 @@
 //   `leaveFeeMinor` its minimum term's early cancellation fee (18v-ii-b), copied as the term is;
 //   `leftEarly`   staff ended it inside its minimum term with that fee: the term holds it no more;
 //   `coolingOffDays` its cooling-off period (18v-iii), copied from its type when it was given;
-//   `coolingOffFrom` the day those days count from: the day its agreement was signed, or the day it
-//                  was added where none was signed (read, never stored); null where it was changed to
+//   `coolingOffAdded` the gym's day it was added (read, never stored); null where it was changed to
 //                  another membership that stands;
+//   `coolingOffSigned` the gym's day its agreement was signed, where it was (read, never stored);
 //   `changedMind` staff cancelled it inside its cooling-off period, with a full refund;
 //   the end day, the renewal day and what is owed are worked out from those.
 import { z } from "zod";
@@ -221,19 +221,33 @@ export interface HeldMembership {
   leftEarly?: boolean;
   /** Its cooling-off period in days as it was given (18v-iii); null for none. A screen's own copy may leave it out. */
   coolingOffDays?: number | null;
-  /** The day its cooling-off days count from (18v-iii): its agreement's signing day, else the day it was added. */
-  coolingOffFrom?: string | null;
+  /** The gym's day it was added (18v-iii); null where it was changed to another membership that stands. */
+  coolingOffAdded?: string | null;
+  /** The gym's day its agreement was signed (18v-iii), where it was. */
+  coolingOffSigned?: string | null;
   /** Cancelled inside its cooling-off period, with a full refund (18v-iii). */
   changedMind?: boolean;
 }
 
+/** The day its cooling-off days count from (18v-iii; round one, H1): the day it was added, or its start where that is
+ *  earlier (somebody who has been a member since then is not new); a signing of its agreement inside those first days
+ *  moves them to the signing, and one after them never opens them again. Null where it has none. */
+function coolingOffFrom(m: HeldMembership): string | null {
+  const days = m.coolingOffDays ?? null;
+  const added = m.coolingOffAdded ?? null;
+  if (days === null || days <= 0 || added === null) return null;
+  const base = m.startsOn < added ? m.startsOn : added;
+  const signed = m.coolingOffSigned ?? null;
+  return signed !== null && signed > base && signed <= addDays(base, days) ? signed : base;
+}
+
 /** THE COOLING-OFF PERIOD (18v-iii): its last day, while a member may cancel with a full refund today. It
- *  runs from `coolingOffFrom` to so many days after, weekends counted: signed on 4 November with 3 days,
- *  to 7 November. Null where it has none or nothing to pay, today is outside it, it is over or cancelled,
- *  or it was cancelled early with a fee already. */
+ *  runs from `coolingOffFrom` to so many days after, weekends counted: added on 4 November with 3 days, to
+ *  7 November; signed on 6 November, to 9 November. Null where it has none or nothing to pay, today is outside
+ *  it, it is over or cancelled, or it was cancelled early with a fee already. */
 function coolingOffOf(m: HeldMembership, today: string): { until: string } | null {
   const days = m.coolingOffDays ?? null;
-  const from = m.coolingOffFrom ?? null;
+  const from = coolingOffFrom(m);
   if (days === null || days <= 0 || from === null || m.free || m.changedMind === true || m.leftEarly === true) return null;
   if (m.status !== "active" && m.status !== "frozen") return null;
   const until = addDays(from, days);
@@ -842,9 +856,10 @@ export function giveHeldMembership(type: HeldMembershipTerms, startsOn: string, 
     noticeDays: type.kind === "recurring" && type.priceMinor > 0 ? (type.noticeDays ?? null) : null,
     stopsAfter: null,
     leftEarly: false,
-    // Its cooling-off days count from today, the day it is added, until its agreement is signed (18v-iii).
+    // Its cooling-off days count from today, the day it is added, or its start where earlier (18v-iii).
     coolingOffDays: type.priceMinor > 0 ? (type.coolingOffDays ?? null) : null,
-    coolingOffFrom: today,
+    coolingOffAdded: today,
+    coolingOffSigned: null,
     changedMind: false,
   };
   const free = base.free;

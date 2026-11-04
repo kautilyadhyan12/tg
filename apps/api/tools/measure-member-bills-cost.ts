@@ -175,7 +175,7 @@ console.log(
 const deps = { sql, now: () => new Date() };
 // A cooling-off period on every membership of the gyms of 200, counted from today (18v-iii). The gym of 2,000 is
 // given its days after Cancel early is measured: inside them, that is not offered.
-await sql`UPDATE gym_held_memberships SET cooling_off_days = 3 WHERE gym_id = ANY(${ids}::uuid[]) AND kind = 'recurring'`;
+await sql`UPDATE gym_held_memberships SET cooling_off_days = 3, cooling_off_added = current_date WHERE gym_id = ANY(${ids}::uuid[]) AND kind = 'recurring'`;
 const calls: [string, () => Promise<unknown>][] = [
   ["read a person's page, with its bill", () => getHeldMemberships(deps, gyms[0]?.owner ?? "", ids[0] ?? "", gyms[0]?.first ?? "")],
   [
@@ -229,7 +229,8 @@ async function measureAll(list: [string, () => Promise<unknown>][]): Promise<voi
   }
 }
 await measureAll(calls);
-await sql`UPDATE gym_held_memberships SET cooling_off_days = 3 WHERE gym_id = ${big.id} AND kind = 'recurring'`;
+// Its days open: started today, as a member who has been one for 40 days has none (round one, H1).
+await sql`UPDATE gym_held_memberships SET cooling_off_days = 3, cooling_off_added = current_date, starts_on = current_date WHERE gym_id = ${big.id} AND kind = 'recurring'`;
 await measureAll(coolingCalls);
 // Every membership frozen 40 days ago with its fee: this month's fee is owed by every person.
 await sql`
@@ -253,7 +254,13 @@ console.log(
   `${"the freeze fee run, all 21 gyms, nothing owed".padEnd(52)} total median ${fmt(median(idleFees.map((t) => t.wall)))} (worst ${fmt(Math.max(...idleFees.map((t) => t.wall)))}) · thread busy median ${fmt(median(idleFees.map((t) => t.js)))}`,
 );
 
-// Every person of one gym of 200 pays their open bill in full and is cancelled with a full refund (18v-iii).
+// Every person of one gym of 200 joins today, pays their first bill in full and is cancelled with a full refund (18v-iii).
+await sql`DELETE FROM gym_member_bills WHERE gym_id = ${ids[0] ?? ""}`;
+await sql`
+  UPDATE gym_held_memberships SET status = 'active', frozen_on = NULL, frozen_days = 0, freeze_fee_minor = 0, starts_on = current_date,
+         paid_periods = 0, paid_floor = 0, renews = true, cooling_off_days = 3, cooling_off_added = current_date
+  WHERE gym_id = ${ids[0] ?? ""}`;
+await openDueBills({ sql, log }, { gymIds: [ids[0] ?? ""] });
 const owedBills = await sql<{ id: string; entry_id: string; period_index: number; amount_minor: number }[]>`
   SELECT h.id, h.entry_id, b.period_index, b.amount_minor FROM gym_held_memberships h
   JOIN gym_member_bills b ON b.gym_id = h.gym_id AND b.held_membership_id = h.id AND b.status = 'open' AND b.period_index IS NOT NULL

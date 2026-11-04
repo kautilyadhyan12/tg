@@ -307,7 +307,7 @@ d("a cooling-off period on a line of the price list (real Postgres)", () => {
   );
 
   it(
-    "the days count from the signing; inside them no minimum term, notice or fee holds them, and leaving early is not offered",
+    "the days count from the day it was added: a signing inside them moves them, a later one never opens them again, a start months back has none; inside them no term, notice or fee holds them",
     async () => {
       clock = noon(4);
       const owner = await makeUser("sign-owner");
@@ -315,41 +315,78 @@ d("a cooling-off period on a line of the price list (real Postgres)", () => {
       const saved = await put(`/v1/orgs/${gymId}/agreement`, { text: "Membership terms. You agree to pay each month." }, owner);
       expect(saved.statusCode, saved.body).toBe(200);
       const term = await addType(gymId, owner, monthly({ name: "Gold 12", contractPeriods: 12, contractThen: "renews", leaveFeeMinor: 9900, noticeDays: 30 }));
+      const boxOf = async (entryId: string, id: string) => membershipAgreementResponseSchema.parse(JSON.parse((await get(`${heldUrl(gymId, entryId)}/${id}/agreement`, owner)).body));
+      const sign = async (entryId: string, id: string, name: string) => {
+        const box = await boxOf(entryId, id);
+        const signed = await post(`${heldUrl(gymId, entryId)}/${id}/agreement/sign`, { agreementId: box.agreement?.id, factsKey: box.factsKey, signer: "person", name }, owner);
+        expect(signed.statusCode, signed.body).toBe(200);
+        return box;
+      };
       const cara = await addPerson(gymId, owner, "Cara Singh");
       const caraGold = await give(gymId, cara, owner, term, "2026-11-04");
+      const dave = await addPerson(gymId, owner, "Dave Rao");
+      const daveGold = await give(gymId, dave, owner, term, "2026-11-04");
 
-      // Signed on 10 November: the three days run to 13 November.
-      clock = noon(10);
-      const boxUrl = `${heldUrl(gymId, cara)}/${caraGold}/agreement`;
-      const box = membershipAgreementResponseSchema.parse(JSON.parse((await get(boxUrl, owner)).body));
-      expect(box.facts).toContainEqual({ label: "Cooling-off period", value: "3 days after signing, to cancel with a full refund" });
-      const signed = await post(`${boxUrl}/sign`, { agreementId: box.agreement?.id, factsKey: box.factsKey, signer: "person", name: "Cara Singh" }, owner);
-      expect(signed.statusCode, signed.body).toBe(200);
+      // Cara signs on 6 November, inside her days (4 to 7 November): they run from the signing, to 9 November.
+      clock = noon(6);
+      const caraBox = await sign(cara, caraGold, "Cara Singh");
+      expect(caraBox.facts).toContainEqual({ label: "Cooling-off period", value: "3 days after signing, to cancel with a full refund" });
       const inside = await pageOf(gymId, cara, owner, caraGold);
-      expect(inside.view.can.coolingOff).toEqual({ until: "2026-11-13" });
+      expect(inside.view.can.coolingOff).toEqual({ until: "2026-11-09" });
       // Inside them, the early cancellation fee is not what Cancel offers.
       expect(inside.view.can.leaveEarly).toBeNull();
       expect((await post(`${heldUrl(gymId, cara)}/${caraGold}/cancel`, { when: "leave_early", leaveFeeMinor: 9900 }, owner)).statusCode).toBe(409);
 
-      // 13 November: cancelled today with no reason, no notice and no fee.
-      clock = noon(13);
+      // 9 November: cancelled today with no reason, no notice and no fee.
+      clock = noon(9);
       const out = await post(`${heldUrl(gymId, cara)}/${caraGold}/cancel`, coolOff, owner);
       expect(out.statusCode, out.body).toBe(200);
-      expect(await stored(caraGold)).toMatchObject({ status: "cancelled", changed_mind: true, cancelled_on: "2026-11-13" });
+      expect(await stored(caraGold)).toMatchObject({ status: "cancelled", changed_mind: true, cancelled_on: "2026-11-09" });
       expect((await bills(caraGold)).filter((b) => b.fee !== null)).toEqual([]);
 
-      // Dave signed on 4 November: by 8 November his days are over.
-      clock = noon(4);
-      const dave = await addPerson(gymId, owner, "Dave Rao");
-      const daveGold = await give(gymId, dave, owner, term, "2026-11-04");
-      const daveBox = membershipAgreementResponseSchema.parse(JSON.parse((await get(`${heldUrl(gymId, dave)}/${daveGold}/agreement`, owner)).body));
-      expect(
-        (await post(`${heldUrl(gymId, dave)}/${daveGold}/agreement/sign`, { agreementId: daveBox.agreement?.id, factsKey: daveBox.factsKey, signer: "person", name: "Dave Rao" }, owner)).statusCode,
-      ).toBe(200);
-      clock = noon(8);
+      // Dave signs on 10 November, after his days: they never open again, and what he signs says no cooling-off (round one, H1, H2).
+      clock = noon(10);
+      const daveBox = await sign(dave, daveGold, "Dave Rao");
+      expect(daveBox.facts?.some((f) => f.label === "Cooling-off period")).toBe(false);
       expect((await pageOf(gymId, dave, owner, daveGold)).view.can.coolingOff).toBeNull();
       expect((await post(`${heldUrl(gymId, dave)}/${daveGold}/cancel`, coolOff, owner)).statusCode).toBe(409);
       expect(await stored(daveGold)).toMatchObject({ status: "active", changed_mind: false });
+
+      // Eli has been a member since 1 August, added on 4 November: none.
+      clock = noon(4);
+      const eli = await addPerson(gymId, owner, "Eli Park");
+      const eliGold = await give(gymId, eli, owner, term, "2026-08-01");
+      expect(await stored(eliGold)).toMatchObject({ cooling_off_days: 3 });
+      expect((await pageOf(gymId, eli, owner, eliGold)).view.can.coolingOff).toBeNull();
+      expect((await post(`${heldUrl(gymId, eli)}/${eliGold}/cancel`, coolOff, owner)).statusCode).toBe(409);
+      expect(await stored(eliGold)).toMatchObject({ status: "active", changed_mind: false });
+    },
+    T,
+  );
+
+  it(
+    "two payments on one bill, part of it moved by a change: the page and Overview never ask for more than is left of the bill",
+    async () => {
+      clock = noon(4);
+      const owner = await makeUser("cap-owner");
+      const gymId = await makeGym(owner, "Cool Cap Gym");
+      const gold = await addType(gymId, owner, monthly());
+      const ivy = await addPerson(gymId, owner, "Ivy Chen");
+      const ivyGold = await give(gymId, ivy, owner, gold, "2026-11-04", false);
+      const page = await pageOf(gymId, ivy, owner, ivyGold);
+      for (const amountMinor of [2000, 3000]) {
+        const paid = await post(`${heldUrl(gymId, ivy)}/${ivyGold}/payments`, { requestKey: nextForm(), periodIndex: page.billing?.pay?.periodIndex, amountMinor, method: "cash" }, owner);
+        expect(paid.statusCode, paid.body).toBe(200);
+      }
+      // $10.00 of the bill paid for another membership (a change's credit): $40.00 of the $50.00 is left to give back.
+      await sql`UPDATE gym_member_bills SET moved_minor = 1000 WHERE held_membership_id = ${ivyGold} AND period_index = 0`;
+      clock = noon(5);
+      expect((await post(`${heldUrl(gymId, ivy)}/${ivyGold}/cancel`, coolOff, owner)).statusCode).toBe(200);
+      expect((await pageOf(gymId, ivy, owner, ivyGold)).billing?.coolingOffRefund?.leftMinor).toBe(4000);
+      const rows = (await review(gymId, owner)).rows.filter((r) => r.kind === "cooling_off");
+      expect(rows.map((r) => r.amountMinor).reduce((a, b) => a + b, 0)).toBe(4000);
+      expect(rows).toHaveLength(2);
+      for (const r of rows) expect(r.amountMinor).toBeLessThanOrEqual(r.paidMinor);
     },
     T,
   );
@@ -400,6 +437,25 @@ d("a cooling-off period on a line of the price list (real Postgres)", () => {
       const all = held(await get(heldUrl(gymId, gil), owner)).memberships;
       expect(all.map((m) => m.view.can.coolingOff)).toEqual([null, null]);
       expect((await post(`${heldUrl(gymId, gil)}/${gilGold}/cancel`, coolOff, owner)).statusCode).toBe(409);
+
+      // Hana changes Gold for Platinum on her next payment date: Gold still runs, and offers none while the change stands;
+      // the change undone before it starts, Gold offers its days again.
+      clock = noon(4);
+      const hana = await addPerson(gymId, owner, "Hana Ito");
+      const hanaGold = await give(gymId, hana, owner, gold, "2026-11-04");
+      clock = noon(5);
+      const later = await post(
+        `${heldUrl(gymId, hana)}/${hanaGold}/change`,
+        { requestKey: nextForm(), typeId: platinum, when: "next_payment", startsOn: "2026-12-04", paid: false, priceMinor: 7000, creditMinor: 0, totalMinor: 7000 },
+        owner,
+      );
+      expect(later.statusCode, later.body).toBe(200);
+      const hanaPage = held(await get(heldUrl(gymId, hana), owner)).memberships;
+      expect(hanaPage.find((m) => m.id === hanaGold)?.view).toMatchObject({ status: "active", can: { coolingOff: null } });
+      expect((await post(`${heldUrl(gymId, hana)}/${hanaGold}/cancel`, coolOff, owner)).statusCode).toBe(409);
+      const [newer] = await sql<{ id: string }[]>`SELECT id FROM gym_held_memberships WHERE entry_id = ${hana} AND replaces_id = ${hanaGold}`;
+      expect((await post(`${heldUrl(gymId, hana)}/${newer?.id ?? ""}/cancel`, { when: "today" }, owner)).statusCode).toBe(200);
+      expect((await pageOf(gymId, hana, owner, hanaGold)).view.can.coolingOff).toEqual({ until: "2026-11-07" });
     },
     T,
   );
