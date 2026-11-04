@@ -11,7 +11,7 @@
 // key of the details it showed, and a signature is written only where the server works out the
 // same details again: what is kept and emailed is what the screen showed.
 import { z } from "zod";
-import { MEMBERSHIP_TYPES_MAX, formatMinor } from "./memberships.js";
+import { MEMBERSHIP_TYPES_MAX, contractLengthWords, formatMinor } from "./memberships.js";
 import type { HeldMembershipItem } from "./heldMemberships.js";
 import type { MemberBill, MemberBilling } from "./memberBills.js";
 import { coversWords, dayWords } from "./paymentsDownload.js";
@@ -251,7 +251,7 @@ export interface AgreementFactsInput {
   membership: Pick<
     HeldMembershipItem,
     "typeName" | "kind" | "priceMinor" | "currency" | "termCount" | "termUnit" | "packClasses" | "startsOn" | "discount" | "tax" | "view"
-  >;
+  > & { contractPeriods?: number | null; fullFrom?: string | null };
   /** Its first bill, as opened with it (`firstBillOf`); null where it has none listed. */
   firstBill: Pick<MemberBill, "amountMinor" | "joiningFeeMinor" | "part" | "covers" | "dueOn"> | null;
   /** The business's prices hold the tax, or it is added on top. */
@@ -311,8 +311,19 @@ export function agreementFacts(input: AgreementFactsInput): AgreementFact[] {
   }
   facts.push({ label: "Starts", value: dayWords(m.startsOn) });
   const endsOn = m.view.endsOn;
+  // Its contract (18v-i), while it runs: how long, and to which day.
+  const contract = m.view.contract;
+  const periods = m.contractPeriods ?? null;
+  if (m.kind === "recurring" && contract !== null && periods !== null && m.termCount !== null && m.termUnit !== null) {
+    // Billed from the gym's day, the part month comes before its whole payments (round one, H2).
+    const from = (m.fullFrom ?? null) === null ? "" : ` from ${dayWords(m.fullFrom ?? "")}`;
+    facts.push({ label: "Minimum term", value: `${contractLengthWords(periods, m.termCount, m.termUnit)}${from}, to ${dayWords(contract.until)}` });
+  }
   if (m.kind === "recurring") {
-    if (endsOn === null && m.termCount !== null && m.termUnit !== null) facts.push({ label: "Renews", value: `Every ${plural(m.termCount, m.termUnit)} until you cancel` });
+    if (endsOn === null && m.termCount !== null && m.termUnit !== null) {
+      const after = contract === null ? "" : " after the minimum term";
+      facts.push({ label: "Renews", value: `Every ${plural(m.termCount, m.termUnit)}${after} until you cancel` });
+    }
     else if (endsOn !== null) facts.push({ label: "Ends", value: dayWords(endsOn) });
   } else if (endsOn !== null) {
     facts.push({ label: m.kind === "pack" ? "Use by" : "Ends", value: dayWords(endsOn) });

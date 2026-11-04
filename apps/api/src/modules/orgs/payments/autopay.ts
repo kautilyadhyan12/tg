@@ -37,7 +37,7 @@ export async function readAutopay(deps: PaymentsDeps, userId: string, gymId: str
   const [card, pausedOn, { people, total }, chargebackStops] = await Promise.all([
     cards.readCard(deps.sql, gymId, entryId),
     autopay.pausedOn(deps.sql, gymId, entryId),
-    autopay.renewingPaidBy(deps.sql, gymId, entryId, NAMES_SHOWN),
+    autopay.renewingPaidBy(deps.sql, gymId, entryId, NAMES_SHOWN, deps.now()),
     autopay.chargebackStopsPayer(deps.sql, gymId, entryId),
   ]);
   const shown = shownCard(card, deps.square, row);

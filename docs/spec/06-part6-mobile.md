@@ -733,10 +733,11 @@ today's session, today's run) and its one main button: Log meal opens Food at Wh
 **What every choice keeps** (RULINGS 2026-09-07; CLAUDE.md §4). No calorie cut under 18, in pregnancy or
 for a flagged heart, blood-pressure or diabetes answer: a gym's or a person's own meal plan whose day is
 under what that person may eat says so in one line beside it and is never changed. Safe mode shows no
-workout or run from any choice until a professional's clearance, and says why. Every food shows its
-allergens, and a meal holding one of the person's own is marked on it ("Contains milk"), whoever wrote it.
+workout or run from any choice until a professional's clearance, and says why. Every food suggestion,
+whoever wrote it, carries the allergy line, "Have a food allergy? Always check the label." *(AMENDED
+2026-11-03, `rulings/2026-11-03-31f.md`: no allergy question, so no meal is marked for a person's own.)*
 
-**Suggested: food (31d, 31e).** The day's numbers stay the plan calculator's (`plan/maths.ts`: Mifflin–St
+**Suggested: food (31d).** The day's numbers stay the plan calculator's (`plan/maths.ts`: Mifflin–St
 Jeor, ISSN 2017, Iraki 2019, Morton 2018), inside or above the 1.2–1.6 g/kg of protein a day of the
 Dietary Guidelines for Americans 2025–2030. Measured on 2026-11-03 (`suggest.ts`, four people, four diets,
 60 days, four meals a day): the ideas follow calories and diet only, so a 100 kg person losing weight
@@ -760,14 +761,10 @@ ideas, and the app's own week, are drawn for the person:
    fish, egg or bean. Its test reads every suggested food's own name and table words against words from
    outside labels that the list has never held ("dry", "uncooked", "raw", "flour", "powder"), fruit and
    salad vegetables apart.
-6. **Allergies** (Kd, 2026-11-03). Asked once, where the meal ideas first show, as a pick list of the 14
-   allergens EU food labels must name (Regulation 1169/2011, Annex II), which hold the 9 of the US, the
-   11 of Canada and India's, with None one tap; changed in Settings. A food holding one is never
-   suggested. Each food that may be suggested carries its allergens, written once in the food list
-   (paneer: milk; hummus: sesame; tempeh and edamame: soy); a typed food, or a searched one with no such
-   words, shows "Check the label". The caution line stays on every suggestion. Its worst-thing test uses
-   real labels' and dishes' wording the list does not have (ghee, tahini, seitan, pesto, Worcestershire
-   sauce, Caesar dressing).
+6. **Allergies: warn only** (Kd, 2026-11-03, `rulings/2026-11-03-31f.md`; RULINGS 2026-09-09). The app
+   asks no allergy question and leaves no food out for one; "Have a food allergy? Always check the
+   label." stays on every suggestion. A packaged food still shows the allergens its pack lists (33b-iii).
+   Job 31e, which would have asked, is dropped.
 7. **Sugar.** Sweets and sugary drinks stay out (RULINGS 2026-09-12); 31d's plan reads the Dietary
    Guidelines 2025–2030's limit on added sugars in its primary text and checks the foods against it.
 8. **Why, in one short line** under the idea, so it never reads as out of nowhere: "41 g protein · your

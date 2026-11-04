@@ -120,7 +120,7 @@ async function reminderOf(deps: PaymentsDeps, card: cards.CardRow, today: string
             : "not_sent";
     return { expiryReminder: state, expiryReminderOn: notice.on };
   }
-  if (person.email !== null || !(await remindersOn(deps.sql, card.gymId)) || !(await cardPaysForRenewal(deps.sql, card))) return NO_REMINDER;
+  if (person.email !== null || !(await remindersOn(deps.sql, card.gymId)) || !(await cardPaysForRenewal(deps.sql, card, deps.now()))) return NO_REMINDER;
   return { expiryReminder: "no_email", expiryReminderOn: null };
 }
 

@@ -4,19 +4,19 @@ import { Icon, type IconName } from "./Icon";
 import { fonts, Txt } from "./Txt";
 
 /** One of a few choices side by side (helmet.html's `.chip`): the picked one is orange and glows.
- *  Drawn at least 40 tall, growing with its words, and pressed over 44. */
-export function Chip({ label, on, onPress, icon }: { label: string; on: boolean; onPress: () => void; icon?: IconName }) {
+ *  Drawn at least 40 tall (`small`: 32, beside a picture), growing with its words, and pressed over 44. */
+export function Chip({ label, on, onPress, icon, small = false }: { label: string; on: boolean; onPress: () => void; icon?: IconName; small?: boolean }) {
   return (
     <Pressable
       accessibilityRole="radio"
       accessibilityLabel={label}
       accessibilityState={{ selected: on }}
       onPress={onPress}
-      hitSlop={SLOP}
-      style={({ pressed }) => [styles.chip, on ? styles.on : null, pressed ? styles.pressed : null]}
+      hitSlop={small ? SMALL_SLOP : SLOP}
+      style={({ pressed }) => [styles.chip, small ? styles.small : null, on ? styles.on : null, pressed ? styles.pressed : null]}
     >
       {icon === undefined ? null : <Icon name={icon} size={14} colour={on ? "onOrange" : "textSoft"} />}
-      <Txt colour={on ? "onOrange" : "textSoft"} style={on ? styles.labelOn : styles.label}>
+      <Txt colour={on ? "onOrange" : "textSoft"} style={[on ? styles.labelOn : styles.label, small ? styles.smallLabel : null]}>
         {label}
       </Txt>
     </Pressable>
@@ -24,6 +24,7 @@ export function Chip({ label, on, onPress, icon }: { label: string; on: boolean;
 }
 
 const SLOP = { top: 2, bottom: 2, left: 0, right: 0 };
+const SMALL_SLOP = { top: 6, bottom: 6, left: 0, right: 0 };
 
 const styles = StyleSheet.create({
   chip: {
@@ -43,7 +44,9 @@ const styles = StyleSheet.create({
     experimental_backgroundImage: orangeGradient,
     boxShadow: shadows.chip,
   },
+  small: { minHeight: 32, paddingHorizontal: 12 },
   pressed: { opacity: 0.85 },
   label: { fontFamily: fonts.medium, fontSize: 14, lineHeight: 18 },
   labelOn: { fontFamily: fonts.semibold, fontSize: 14, lineHeight: 18 },
+  smallLabel: { fontSize: 13, lineHeight: 17 },
 });

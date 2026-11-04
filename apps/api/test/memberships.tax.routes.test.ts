@@ -165,6 +165,8 @@ d("tax on memberships (real Postgres)", () => {
       ptPeriod: t.ptPeriod,
       taxRateId,
       joiningFeeMinor: t.joiningFeeMinor,
+      contractPeriods: t.contractPeriods,
+      contractThen: t.contractThen,
       updatedAt: t.updatedAt,
     };
     return await put(`${typesUrl(gymId)}/${typeId}`, body, cookies);

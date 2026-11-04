@@ -79,9 +79,35 @@ export function versionOf(day: number, meals: unknown): string {
 const NO_PLAN = {
   days: [1, 2, 3, 4, 5, 6, 7].map((day) => ({ day, meals: [], planned: { kcal: 0, proteinG: 0, carbsG: 0, fatG: 0 }, target: null, off: null, version: versionOf(day, []) })),
   make: { status: "ok" },
+  choice: "suggested",
   caution: FOOD_ALLERGY_CAUTION,
   labelCaution: null,
 };
+
+/** A day of the phone's own calendar, n days before today, as the server writes it. */
+export function dayKey(back: number, now = new Date()): string {
+  const at = new Date(now.getFullYear(), now.getMonth(), now.getDate() - back);
+  return `${String(at.getFullYear())}-${String(at.getMonth() + 1).padStart(2, "0")}-${String(at.getDate()).padStart(2, "0")}`;
+}
+
+const NO_FACT = { under: 0, on: 0, over: 0, judged: 0 };
+/** The week in food (34f-i) as the server answers it: `span` days ending today, none with meals unless
+ *  `day` says otherwise (by how many days back it is). */
+export function foodWeekReply(span: 7 | 30 = 7, day: (back: number) => Record<string, unknown> = () => ({}), facts: Record<string, unknown> = {}) {
+  return {
+    span,
+    days: Array.from({ length: span }, (_, i) => {
+      const back = span - 1 - i;
+      return {
+        day: dayKey(back), today: back === 0, meals: 0, about: false, kcal: 0, proteinG: 0, carbsG: 0, fatG: 0,
+        fiberG: { amount: 0, notKnown: 0 }, sodiumMg: { amount: 0, notKnown: 0 },
+        targets: { kcal: 2300, proteinG: 120, carbsG: 280, fatG: 75 }, targetsOfTheDay: true, bands: null,
+        ...day(back),
+      };
+    }),
+    facts: { kcal: NO_FACT, proteinG: NO_FACT, carbsG: NO_FACT, fatG: NO_FACT, ...facts },
+  };
+}
 
 export function fakeServer(routes: Record<string, Route>): { ask: Ask; asked: Asked[]; paths: () => string[] } {
   const asked: Asked[] = [];
@@ -100,6 +126,8 @@ export function fakeServer(routes: Record<string, Route>): { ask: Ask; asked: As
     "/v1/users/me/consents": () => ({ status: 200, body: { consents: [], total: 0 } }),
     // No meal plan made yet, unless a test says otherwise.
     "/v1/nutrition/diet-plan": () => ({ status: 200, body: NO_PLAN }),
+    // No meals in the week, unless a test says otherwise.
+    "/v1/nutrition/food-week": () => ({ status: 200, body: foodWeekReply() }),
     ...routes,
   };
   const ask: Ask = async (url: string, init: AskInit) => {

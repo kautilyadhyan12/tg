@@ -84,6 +84,8 @@ export async function changeHeld(
     shownStartsOn: string;
     /** The day it said the new one's full payments start (18y); null for none. */
     shownFullFrom: string | null;
+    /** The new line's minimum term the screen showed (18v-i); undefined where it showed no word of it. */
+    shownMinimumTerm?: { periods: number; then: string } | null;
     paid: boolean;
     method: MemberPaymentByHand | null;
     confirmBookings: string | null;
@@ -157,6 +159,7 @@ export async function changeHeld(
         shownTotalMinor: input.shownTotalMinor,
         joiningFeeMinor: null,
         shownFullFrom: to.fullFrom,
+        ...(input.shownMinimumTerm === undefined ? {} : { shownMinimumTerm: input.shownMinimumTerm }),
         mayWaiveJoiningFee: false,
         // Set to stop by this change: cancelling the new one before it starts undoes that (Low-2).
         change: { fromId: before.id, creditMinor: to.creditMinor, paidByChange: to.paidByChange, stoppedOld: before.membership.renews && !stops.renews && stops.status !== "cancelled" },

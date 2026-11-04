@@ -344,7 +344,11 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 18u-iii. [x] **The signed papers of people deleted for good** — merged 2026-11-03 (PR #452).
      - 18u-iv. [x] **No new bookings until the membership agreement is signed** — merged 2026-11-03 (PR #455).
    - 18s. [x] **A business only from India and Square's countries** — merged 2026-10-24 (PR #351).
-   - 18v. [ ] **Each place's rules**: renewal on or off per type (Quebec: none paid), a longest term, a cooling-off refund, a notice period, a cancellation fee, release on death, disability or a move, reminders before a renewal, a price change or a trial's end (Kd, 2026-10-22; spec §14.8). No lawyer (Kd, 2026-10-23, `rulings/2026-10-23-18u-i.md`). Web folder 2.
+   - 18v. **Each place's rules**, in four parts since 2026-11-03 (the business sets its own terms per type and the app applies them; `handoff/2026-11-03-18v-i.md` keeps its line as first written):
+     - 18v-i. [x] **Minimum term** (contract length) — merged 2026-11-03 (PR #457).
+     - 18v-ii. [ ] **Notice to cancel and a fee for leaving early**, both waived for a release. Web folder 2.
+     - 18v-iii. [ ] **Days to change their mind** after signing, with a full refund. Web folder 2.
+     - 18v-iv. [ ] **A reminder before a renewal or a contract's end**; a price change's is 18w's, a trial's end is sent already. Web folder 2.
    - 18w. [ ] **Raise the price for existing members** from their next payment, with each place's notice (Kd, 2026-10-22). Web folder 2.
    - 18x. [x] **Move to another membership** · merged 2026-10-22 · PR #338
    - 18y. [x] **Bill everyone on one day of the month** · merged 2026-10-22 · PR #340
@@ -623,8 +627,8 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 31d. **Meal ideas that fit the person** (spec Part 6 §16.6; split 2026-11-03: the server first).
       - 31d-i. [x] **The ideas drawn for the person** — merged 2026-11-03 (PR #449).
       - 31d-ii. [x] **Why, in one line, under each idea on the phone** — merged 2026-11-03 (PR #454).
-    - 31e. [ ] **Food allergies** (§16.6): asked once where the meal ideas first show, changed in Settings; never suggested; marked on any plan's meal that holds one.
-    - 31f. [ ] **Recommended For You's three choices**: Suggested, the gym's and My plan, one choice for each kind, kept on the server and the same on the Dashboard and in Food (§16.6). The gym's appears with 31g.
+    - 31e. ~~**Food allergies**~~ — dropped 2026-11-03 (Kd: warn only, `rulings/2026-11-03-31f.md`).
+    - 31f. [x] **Suggested or My plan in Recommended For You** — merged 2026-11-03 (PR #458).
     - 31g. [ ] **The gym's meal plan on the phone** (§16.6). Waits for Stage 2's 24a.
 32. **Food** (split 2026-10-13: the server part needs no phone).
     - 32a. [x] **A meal sent twice from the phone is saved once** — merged 2026-10-13 (PR #238).
@@ -663,7 +667,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
         - 34e-ii-b. [x] **Build your own meal plan** — merged 2026-11-03 (PR #442).
     - 34f. **Your week in food** (7d; split 2026-10-14: the server part needs no phone).
       - 34f-i. [x] **The server works out your week in food** — merged 2026-10-14 (PR #269).
-      - 34f-ii. [ ] **The chart on the Food screen**, with the facts under it in words ("Protein was under target on 5 of 6 days"). Waits for 32b.
+      - 34f-ii. [x] **The chart on the Food screen** — merged 2026-11-04 (PR #460).
 35. **Progress** (split 2026-10-14: the parts on the server need no phone).
     - 35a. [x] **The predictions on the server** — merged 2026-10-14 (PR #270).
     - 35b. [x] **Weekly challenges on the server** — merged 2026-10-15 (PR #272).

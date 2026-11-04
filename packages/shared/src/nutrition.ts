@@ -859,9 +859,19 @@ export const dietPlanMakeSchema = z.discriminatedUnion("status", [
 ]);
 export type DietPlanMake = z.infer<typeof dietPlanMakeSchema>;
 
+/** Which food Recommended For You shows (spec Part 6 §16.6; ROADMAP 31f): the app's own ideas or
+ *  the person's own meal plan. The gym's plan joins with 31g. */
+export const foodChoiceSchema = z.enum(["suggested", "mine"]);
+export type FoodChoice = z.infer<typeof foodChoiceSchema>;
+/** The person picks one; kept on the server, so every screen and phone shows the same. */
+export const putFoodChoiceRequestSchema = z.object({ choice: foodChoiceSchema }).strict();
+export type PutFoodChoiceRequest = z.infer<typeof putFoodChoiceRequestSchema>;
+
 export const dietPlanResponseSchema = z.object({
   days: z.array(dietPlanDayReplySchema).length(7),
   make: dietPlanMakeSchema,
+  /** The person's pick; before they pick, My plan where their week has a meal, else Suggested. */
+  choice: foodChoiceSchema,
   caution: z.literal(FOOD_ALLERGY_CAUTION),
   /** For a vegetarian or vegan, or somebody with no diet answer; null for somebody who eats meat. */
   labelCaution: z.literal(DIET_LABEL_CAUTION).nullable(),

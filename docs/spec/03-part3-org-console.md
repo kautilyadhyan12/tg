@@ -4598,6 +4598,15 @@ extra security, at most ₹15,000 a charge without it, the bank's notice at leas
 each charge, withdrawal at any time; no card number kept but by the card companies. Registering
 and bonds (Texas, Florida, New York) are the gym's own.
 
+**Contract length, as built (18v-i; Kd, 2026-11-03, `rulings/2026-11-03-18v-i.md`).** 18v is four parts, each the
+business's own terms on a line of the price list, applied by the app, no place's law named on a screen: contract
+length (18v-i), notice and a fee for leaving early (18v-ii), days to change their mind (18v-iii), a reminder before
+a renewal or a contract's end (18v-iv). On screens it is the **minimum term** (Kd, 2026-11-03), never "contract", which would be read as the agreement. A repeating line with a price may hold one: so many payments (1 to
+156), then it renews until they cancel or it ends. A membership keeps the contract it was given; one taken from the
+gym's own list has none. One that ends opens no bill and takes no payment for a period after it, and reads Ended the
+day after. Once it has started, Cancel inside a contract offers End on its last day, or a release (Moved away,
+Medical or disability, Death, Other reason) today or at the end of what is paid; the reason is kept and said on it.
+
 **Also before launch:** a joining fee on the first bill (18t), moving to another membership with
 the difference worked out (18x), raising the price for existing members with each place's
 notice (18w), and the gym's own choices of billing everyone on one day with the first payment

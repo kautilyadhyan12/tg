@@ -3,7 +3,7 @@ import type { Meal, NutritionTargetsResponse, RecentFood } from "@app/shared";
 import { App } from "../../src/App";
 import type { TextStore } from "../../src/screens/food/outbox";
 import type { Ask, AskInit } from "../../src/session/calls";
-import { RAVI, fakeServer, kept, lost, memoryStore, tokens, type Reply, type Route } from "../kit";
+import { RAVI, fakeServer, foodWeekReply, kept, lost, memoryStore, tokens, type Reply, type Route } from "../kit";
 
 const extra = { copyName: "Feature 2", apiUrl: "http://localhost:3000" };
 const noWait = () => Promise.resolve();
@@ -863,5 +863,83 @@ describe("the ten figures (34b)", () => {
     await openFood({ meals: [] }, undefined, daily);
     await screen.findByText("No lunch logged yet.");
     expect(screen.queryByRole("button", { name: "Nutrients" })).toBeNull();
+  });
+});
+
+describe("your week in food (34f-ii)", () => {
+  const eaten = (kcal: number, band: "under" | "on" | "over") => ({
+    meals: 3, kcal, proteinG: 90, carbsG: 260, fatG: 70, bands: { kcal: band, proteinG: "under", carbsG: "on", fatG: "on" },
+  });
+  const facts = {
+    kcal: { under: 2, on: 3, over: 1, judged: 6 },
+    proteinG: { under: 6, on: 0, over: 0, judged: 6 },
+    carbsG: { under: 0, on: 6, over: 0, judged: 6 },
+    fatG: { under: 0, on: 6, over: 0, judged: 6 },
+  };
+  const week = (span: 7 | 30 = 7) => foodWeekReply(span, (back) => (back === 0 ? {} : eaten(2000 + back, back === 1 ? "over" : "on")), facts);
+
+  it("the worst thing: today's bar is the rings' own numbers, never a half day judged, and yesterday is yesterday's", async () => {
+    await openFood({ meals: [] }, undefined, { "/v1/nutrition/food-week": () => ({ status: 200, body: week() }) });
+    expect(await screen.findByText("Calories were on target on 3 of 6 days.")).toBeTruthy();
+    expect(screen.getByLabelText("Today, no meals")).toBeTruthy();
+    expect(screen.getAllByLabelText(/, 2,001 kcal of 2,300 kcal, over target$/)).toHaveLength(1);
+    await addOats();
+    // The server still says today has none; the bar says what the rings say.
+    expect(await screen.findByLabelText("Today, 307 kcal of 2,300 kcal, so far")).toBeTruthy();
+    expect(screen.getByLabelText("Calories, 307 of 2,300 kcal")).toBeTruthy();
+  });
+
+  it("is read again once the server takes a meal", async () => {
+    const server = await openFood({ meals: [] });
+    await screen.findByText("Your week shows here once you log meals.");
+    const reads = () => server.asked.filter((a) => a.path === "/v1/nutrition/food-week").length;
+    const before = reads();
+    await addOats();
+    await waitFor(() => { expect(reads()).toBeGreaterThan(before); });
+  });
+
+  it("See your week: any of the four figures, 7 or 30 days, and every fact in words", async () => {
+    const server = foodServer({ meals: [] });
+    const asked: string[] = [];
+    const ask: Ask = (url, init) => {
+      if (new URL(url).pathname !== "/v1/nutrition/food-week") return server.ask(url, init);
+      asked.push(new URL(url).search);
+      const body = week(new URL(url).searchParams.get("days") === "30" ? 30 : 7);
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) });
+    };
+    await render(<App extra={extra} ask={ask} store={memoryStore(kept(1))} wait={noWait} mealStore={files().store} />);
+    await fireEvent.press(await screen.findByRole("tab", { name: "Food" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "See your week" }));
+    expect(await screen.findByText("Protein was under target on all 6 days.")).toBeTruthy();
+    expect(screen.getByText("Carbs were on target on all 6 days.")).toBeTruthy();
+    expect(screen.getByText("Fat was on target on all 6 days.")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("radio", { name: "Protein" }));
+    expect(screen.getAllByLabelText(/, 90 g of 120 g, under target$/)).toHaveLength(6);
+    expect(screen.getByText("Line: your daily target, 120 g today")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("radio", { name: "30 days" }));
+    await waitFor(() => { expect(screen.getAllByLabelText(/, 90 g of 120 g, under target$/)).toHaveLength(29); });
+    expect(asked).toContain("?days=30");
+  });
+
+  it("with no daily numbers: bars keyed No target, and a button to set them in the box and in See your week", async () => {
+    const none = foodWeekReply(7, (back) => ({ targets: null, ...(back === 0 ? {} : { meals: 2, kcal: 1800 }) }));
+    await openFood({ meals: [] }, undefined, { "/v1/nutrition/food-week": () => ({ status: 200, body: none }) });
+    expect(await screen.findByText("Set your daily numbers to compare your days.")).toBeTruthy();
+    expect(screen.getByText("No target")).toBeTruthy();
+    expect(screen.queryByText("On target")).toBeNull();
+    expect(screen.getByRole("button", { name: "Set daily numbers" })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "See your week" }));
+    expect(await screen.findAllByRole("button", { name: "Set daily numbers" })).toHaveLength(2);
+  });
+
+  it("a week that could not load says so, and Try again reads it", async () => {
+    let fails = true;
+    await openFood({ meals: [] }, undefined, {
+      "/v1/nutrition/food-week": () => (fails ? { status: 503, body: { error: "unavailable", message: "Try again.", requestId: "r" } } : { status: 200, body: week() }),
+    });
+    expect(await screen.findByText("Your week couldn’t load.")).toBeTruthy();
+    fails = false;
+    await fireEvent.press(screen.getByRole("button", { name: "Load your week again" }));
+    expect(await screen.findByText("Calories were on target on 3 of 6 days.")).toBeTruthy();
   });
 });
