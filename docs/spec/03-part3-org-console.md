@@ -4612,7 +4612,8 @@ Medical or disability, Death, Other reason) today or at the end of what is paid;
 
 **A cooling-off period, as built (18v-iii; Kd, 2026-11-04, `rulings/2026-11-04-18v-iii.md`).** A line with a price may hold 1 to
 30 days, weekends counted, copied to a membership when it is given (never by Change membership or from the gym's own list).
-They count from the day its agreement is signed, or it was added where none is signed. Inside them Cancel offers **Cancel with
+They count from the day it was added, or its start where earlier; a signing of its agreement inside them moves them to
+the signing, and a later one never opens them again (round one, H1). Inside them Cancel offers **Cancel with
 full refund**: it ends today, held to no minimum term, notice or fee, and its unpaid bills are cancelled. What was paid for it is
 said on their page with Refund, and on Overview's Refunds to review, until it is all given back; the app sends no refund by itself.
 
