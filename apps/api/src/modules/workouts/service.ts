@@ -126,7 +126,9 @@ export interface ReadDeps {
 
 /** Part 4 §0.2 read-gate (P2.4 GAP-4/GAP-6): free plans see history_days
  *  days back; -1 = unlimited. Reads the keystone resolver (v1 §8) — never
- *  its own idea of the plan. */
+ *  its own idea of the plan. The days are whole days in the person's own zone,
+ *  today and the days before it (35c-i): a box saying "90 days" never counts
+ *  the evening of a 91st, as a floor of 90×24 hours back from now did. */
 async function historyGate(
   deps: ReadDeps,
   userId: string,
@@ -134,7 +136,7 @@ async function historyGate(
   const { entitlements } = await getEntitlements(deps, userId);
   const days = entitlements.history_days;
   if (days === -1) return { floor: null, limitedToDays: null };
-  return { floor: new Date(Date.now() - days * 86_400_000), limitedToDays: days };
+  return { floor: await daysSince(deps.sql, days, await userTz(deps.sql, userId)), limitedToDays: days };
 }
 
 /** Later of the requested window and the plan floor. */
@@ -275,7 +277,7 @@ export async function getWorkoutSummary(
   const gate = await historyGate(deps, userId);
   const [me, records, isContinuation, hasEarlierToday, food] = await Promise.all([
     getGamificationMe({ sql: deps.sql }, userId, ctx.timezone),
-    repo.getPersonalRecords(deps.sql, userId, gate.floor),
+    repo.getPersonalRecords(deps.sql, userId, gate.floor, tz),
     isContinuationDay({ sql: deps.sql }, userId, ctx.timezone, workout.startedAt),
     repo.hasEarlierWorkoutOnDay(deps.sql, userId, workout.id, workout.startedAt, tz),
     // The meal ideas follow the person's diet as it is NOW (RULINGS 2026-09-13),
@@ -373,6 +375,22 @@ function sinceFor(period: ProgressPeriod, now: Date): Date | null {
   }
 }
 
+const PERIOD_DAYS: Record<ProgressPeriod, number | null> = { "7d": 7, "30d": 30, "90d": 90, "1y": 365, all: null };
+
+/** The start of the first of the last `days` whole days in the person's zone: 7 is today and the 6 before. */
+async function daysSince(sql: Sql, days: number, timeZone: string): Promise<Date> {
+  const [row] = await sql<{ since: Date }[]>`
+    SELECT ((date_trunc('day', now() AT TIME ZONE ${timeZone}) - make_interval(days => ${days - 1})) AT TIME ZONE ${timeZone}) AS since`;
+  if (row === undefined) throw new Error("daysSince: no row");
+  return row.since;
+}
+
+/** The start of the period's first whole day in the person's zone; null for all of it. */
+async function calendarSince(sql: Sql, period: ProgressPeriod, timeZone: string): Promise<Date | null> {
+  const days = PERIOD_DAYS[period];
+  return days === null ? null : daysSince(sql, days, timeZone);
+}
+
 async function userTz(sql: Sql, userId: string): Promise<string> {
   const ctx = await getUserSyncContext(sql, userId);
   return safeTimeZone(ctx.timezone);
@@ -396,7 +414,9 @@ export async function progressOverview(
   ]);
   // progress.py:63-69: bounded periods only; min 100; 'all' reports 0 —
   // unless the plan floor bounds it anyway (then days = the visible window).
-  const days = since === null ? null : Math.max(1, Math.round((now.getTime() - since.getTime()) / 86_400_000));
+  // Where the plan floor bounds it, the visible window is the plan's own whole days.
+  const days =
+    since === null ? null : since === gate.floor && gate.limitedToDays !== null ? gate.limitedToDays : Math.max(1, Math.round((now.getTime() - since.getTime()) / 86_400_000));
   const consistencyPct = days === null ? 0 : Math.min(100, Math.round((agg.totalWorkouts / days) * 100));
   return {
     totalWorkouts: agg.totalWorkouts,
@@ -436,11 +456,12 @@ export async function progressWeekly(
   return { points, limitedToDays: gate.limitedToDays };
 }
 
-/** Last 365 days fixed (progress.py:194), plan-clamped (P2.4). */
+/** The last 365 whole days in the person's zone (progress.py:194; 35c-i), plan-clamped (P2.4). */
 export async function progressHeatmap(deps: ReadDeps, userId: string): Promise<ProgressHeatmap> {
   const gate = await historyGate(deps, userId);
-  const since = clamp(new Date(Date.now() - 365 * 86_400_000), gate.floor);
-  const days = await repo.getDailyTrend(deps.sql, userId, since, await userTz(deps.sql, userId));
+  const timeZone = await userTz(deps.sql, userId);
+  const since = clamp(await daysSince(deps.sql, 365, timeZone), gate.floor);
+  const days = await repo.getDailyTrend(deps.sql, userId, since, timeZone);
   return {
     days: days.map((d) => ({ date: d.date, count: d.workouts, kcal: d.kcal })),
     limitedToDays: gate.limitedToDays,
@@ -453,19 +474,19 @@ export async function progressDistribution(
   period: ProgressPeriod,
 ): Promise<ProgressDistribution> {
   const gate = await historyGate(deps, userId);
-  const since = clamp(sinceFor(period, new Date()), gate.floor);
+  // Whole days in the person's own zone, today and the days before it (35c-i): the 7 days' sets
+  // never take in part of an eighth day, as a window of 7×24 hours back from now would.
+  const since = clamp(await calendarSince(deps.sql, period, await userTz(deps.sql, userId)), gate.floor);
   const families = await repo.getFamilyDistribution(deps.sql, userId, since);
   return { families, limitedToDays: gate.limitedToDays };
 }
 
 export async function personalRecords(deps: ReadDeps, userId: string): Promise<PersonalRecords> {
   const gate = await historyGate(deps, userId);
+  const ctx = await getUserSyncContext(deps.sql, userId);
   const [records, streak] = await Promise.all([
-    repo.getPersonalRecords(deps.sql, userId, gate.floor),
-    (async () => {
-      const ctx = await getUserSyncContext(deps.sql, userId);
-      return reconciledStreak({ sql: deps.sql }, userId, ctx.timezone);
-    })(),
+    repo.getPersonalRecords(deps.sql, userId, gate.floor, safeTimeZone(ctx.timezone)),
+    reconciledStreak({ sql: deps.sql }, userId, ctx.timezone),
   ]);
   // longestStreak stays ungated: streaks are identity, not history reads
   // (Part 7 §3.3 "longest is displayed forever").

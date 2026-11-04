@@ -56,6 +56,8 @@ export const trendPointSchema = z.object({
   date: z.string(),
   kcal: z.number().int(),
   workouts: z.number().int(),
+  /** The day's training time, so a phone's whole-day period counts time on the same days as the rest (35c-i). */
+  durationMs: z.number().int(),
 });
 /** The days with a run, keyed the same way, apart from the workout points above (ROADMAP 31a). */
 export const runDaySchema = z.object({ date: z.string(), runs: z.number().int() });
@@ -88,7 +90,8 @@ export type ProgressDistribution = z.infer<typeof progressDistributionSchema>;
 
 /** Personal records (progress.py:254-324, data-shaped). */
 const recordRefSchema = z
-  .object({ workoutId: z.string().uuid(), value: z.number() })
+  /** `day`: when it was set, "YYYY-MM-DD" in the person's own zone (35c-i). */
+  .object({ workoutId: z.string().uuid(), value: z.number(), day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) })
   .nullable();
 export const personalRecordsSchema = z.object({
   maxKcalWorkout: recordRefSchema,
@@ -177,7 +180,7 @@ export type WeekGoalPrediction = z.infer<typeof weekGoalPredictionSchema>;
 /** One figure's average in the 4 weeks before and the last 2 weeks; null where either
  *  side has nothing to average or the earlier one is 0. */
 export const steadyFigureSchema = z
-  .object({ before: int, recent: int, changePct: z.number() })
+  .object({ before: z.number(), recent: z.number(), changePct: z.number() })
   .nullable();
 
 /** few_workouts: under the gate · nothing_to_compare: enough workouts, and no figure
