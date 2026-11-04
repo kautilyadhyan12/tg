@@ -8,6 +8,7 @@ import { Page } from "../look/Page";
 import { PictureTop } from "../look/PictureTop";
 import { Txt } from "../look/Txt";
 import { useSession } from "../session/SessionProvider";
+import { SettingsPage } from "./Settings";
 import { Setup } from "./setup/Setup";
 import { SignOutAsk } from "./SignOutAsk";
 import { ProgressPage } from "./progress/ProgressPage";
@@ -43,7 +44,7 @@ export function MeScreen() {
           style={styles.half}
         />
       </View>
-      <Soon icon="settings" title="Settings" />
+      <SettingsLink />
       <SignOut />
       <ThisCopy />
     </Page>
@@ -120,6 +121,38 @@ function ProgressCard() {
         <PictureCard picture="progress" height={120} label="Progress" icon="chart" />
       </Pressable>
       <ProgressPage
+        open={open}
+        onClose={() => {
+          setOpen(false);
+        }}
+      />
+    </>
+  );
+}
+
+/** Settings, opened over the tab: the name, units, Hide me, what each place can see, the account. */
+function SettingsLink() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Settings"
+        style={styles.press}
+        onPress={() => {
+          setOpen(true);
+        }}
+      >
+        <Card style={styles.row}>
+          <Badge icon="settings" />
+          <View style={styles.grow}>
+            <Txt kind="strong">Settings</Txt>
+            <Txt kind="small">Name, units, privacy and account</Txt>
+          </View>
+          <Icon name="go" size={18} colour="textFaint" />
+        </Card>
+      </Pressable>
+      <SettingsPage
         open={open}
         onClose={() => {
           setOpen(false);
