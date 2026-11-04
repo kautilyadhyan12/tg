@@ -1,0 +1,222 @@
+import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { Directory, File, Paths } from "expo-file-system";
+import { App } from "../../src/App";
+import { NO_ANSWER } from "../../src/screens/SignIn";
+import { deletesOnText, deletedNote, namesText } from "../../src/screens/Settings";
+import type { Ask } from "../../src/session/calls";
+import { RAVI, fakeServer, kept, lost, memoryStore, profile, refusal, tokens, type Reply, type Route } from "../kit";
+
+// Settings' Your data (ROADMAP Stage 5 item 19b): Download my data, and Delete account with the
+// emailed code; the undo is the link in the email, on the website's own page.
+
+const extra = { copyName: "Feature 1", apiUrl: "http://localhost:3000" };
+const noWait = () => Promise.resolve();
+const ok = (body: unknown) => (): Reply => ({ status: 200, body });
+
+const ME = "/v1/users/me";
+const CODE = "/v1/users/me/delete-code";
+const EXPORT = "/v1/users/me/export";
+const ANOTHER = "0e4f1d2c-3b4a-4596-8a7b-6c5d4e3f2a1b";
+const place = (name: string, more: object) => ({
+  id: name === "Iron House" ? "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f" : "2d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f6a",
+  name,
+  city: null,
+  orgType: "gym",
+  clockFormat: "12h",
+  slug: name.toLowerCase().replace(" ", "-"),
+  timezone: "Asia/Kolkata",
+  locale: "en",
+  currencyDisplay: "INR",
+  status: "active",
+  staffRole: null,
+  isMember: true,
+  joinedAt: "2026-10-01T00:00:00.000Z",
+  ...more,
+});
+const IRON = place("Iron House", {});
+const PULSE = place("Pulse Studio", { staffRole: "owner", isMember: false });
+const sentCode = ok({ message: "We emailed you a 6-digit code.", resendAfterSeconds: 60, expiresInSeconds: 600 });
+const deleted = (emailSent: boolean) => ok({ message: "Account scheduled for deletion.", emailSent });
+const anExport = (userId: string) => ({
+  exportedAt: "2026-11-04T06:00:00.000Z",
+  schemaVersion: 2,
+  user: { id: userId, email: RAVI.email, display_name: RAVI.displayName },
+  data: { meal_logs: [{ id: "m1", name: "Poha" }] },
+  truncated: {},
+});
+
+/** `/v1/users/me` reads the profile; with a code in the body it is the DELETE. */
+const me = (onDelete: Route): Route => (body) =>
+  body !== undefined && typeof body === "object" && body !== null && "code" in body ? onDelete(body) : { status: 200, body: profile(true) };
+
+async function openSettings(ask: Ask, store = memoryStore(kept(1))) {
+  await render(<App extra={extra} ask={ask} store={store} wait={noWait} />);
+  const tab = (await screen.findAllByRole("tab"))[4];
+  if (tab === undefined) throw new Error("no fifth tab");
+  await fireEvent.press(tab);
+  await fireEvent.press(await screen.findByLabelText("Settings"));
+  return store;
+}
+const routes = (over: Record<string, Route> = {}): Record<string, Route> => ({
+  "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+  "/v1/orgs/mine": ok({ orgs: [IRON, PULSE], formerOrgs: [] }),
+  [CODE]: sentCode,
+  ...over,
+});
+
+/** As far as the code: Delete account, Email me a code, the six digits typed. */
+async function upToTheCode(code = "123456") {
+  await fireEvent.press(await screen.findByLabelText("Delete account"));
+  await fireEvent.press(await screen.findByLabelText("Email me a code"));
+  await fireEvent.changeText(await screen.findByPlaceholderText("6-digit code"), code);
+}
+
+const write = (name: string, text: string) => {
+  const file = new File(Paths.document, name);
+  file.create();
+  file.write(text);
+};
+
+afterEach(() => {
+  for (const one of [...Paths.document.list(), ...new Directory("picked").list()]) one.delete();
+});
+
+describe("Delete account (the worst thing: after deleting, the phone still shows or keeps the person, or stays signed in)", () => {
+  it("signs out, keeps nothing of the person, leaves another person's waiting meals, and says when and how to undo", async () => {
+    write(`meals-${RAVI.id}.json`, '{"meals":["Poha"]}');
+    write(`photo-meal-${RAVI.id}.json`, '{"photo":"x"}');
+    const draft = new Directory(Paths.document, `post-draft-${RAVI.id}-${IRON.id}`);
+    draft.create();
+    new File(draft, "post.json").create();
+    write(`meals-${ANOTHER}.json`, '{"meals":["Idli"]}');
+    const server = fakeServer(routes({ [ME]: me(deleted(true)) }));
+    const store = await openSettings(server.ask);
+    await upToTheCode();
+    await fireEvent.press(screen.getByLabelText("Delete"));
+
+    expect(await screen.findByText(deletedNote(true, new Date()))).toBeTruthy();
+    expect(screen.queryByTestId("settings-page")).toBeNull();
+    expect(screen.queryAllByRole("tab")).toHaveLength(0);
+    expect(store.value).toBeNull();
+    expect(new File(Paths.document, `meals-${RAVI.id}.json`).exists).toBe(false);
+    expect(new File(Paths.document, `photo-meal-${RAVI.id}.json`).exists).toBe(false);
+    expect(draft.exists).toBe(false);
+    expect(new File(Paths.document, `meals-${ANOTHER}.json`).exists).toBe(true);
+    // The code went with the DELETE, and the server ended the sign-in itself: no Sign out is owed.
+    expect(server.asked.filter((a) => a.path === ME && a.method === "DELETE").map((a) => a.body)).toEqual([{ code: "123456" }]);
+    expect(server.paths()).not.toContain("/v1/auth/logout");
+  });
+
+  it("a wrong code keeps the box open with the server's words, and the person signed in", async () => {
+    const server = fakeServer(routes({ [ME]: me(() => refusal(400, "invalid_code", "That code didn’t work. Try again.")) }));
+    const store = await openSettings(server.ask);
+    await upToTheCode("000000");
+    await fireEvent.press(screen.getByLabelText("Delete"));
+    expect(await screen.findByText("That code didn’t work. Try again.")).toBeTruthy();
+    expect(screen.getByPlaceholderText("6-digit code").props.value).toBe("");
+    expect(screen.getByTestId("settings-page")).toBeTruthy();
+    expect(store.value).not.toBeNull();
+  });
+
+  it("with no answer it says so and deletes nothing on the phone", async () => {
+    write(`meals-${RAVI.id}.json`, '{"meals":["Poha"]}');
+    const server = fakeServer(routes({ [ME]: me(lost) }));
+    const store = await openSettings(server.ask);
+    await upToTheCode();
+    await fireEvent.press(screen.getByLabelText("Delete"));
+    expect(await screen.findByText(NO_ANSWER)).toBeTruthy();
+    expect(store.value).not.toBeNull();
+    expect(new File(Paths.document, `meals-${RAVI.id}.json`).exists).toBe(true);
+  });
+
+  it("never says an email was sent when the server says none went", async () => {
+    const server = fakeServer(routes({ [ME]: me(deleted(false)) }));
+    await openSettings(server.ask);
+    await upToTheCode();
+    await fireEvent.press(screen.getByLabelText("Delete"));
+    expect(await screen.findByText(deletedNote(false, new Date()))).toBeTruthy();
+    expect(screen.queryByText(/link we emailed/)).toBeNull();
+  });
+
+  it("names the places the person leaves and the one they own, and sends no code until asked", async () => {
+    const server = fakeServer(routes({ [ME]: me(deleted(true)) }));
+    await openSettings(server.ask);
+    await fireEvent.press(await screen.findByLabelText("Delete account"));
+    expect(await screen.findByText("You leave Iron House today. To come back, join again from the invitation.")).toBeTruthy();
+    expect(screen.getByText("You own Pulse Studio. Deleting your account does not close it.")).toBeTruthy();
+    expect(server.paths()).not.toContain(CODE);
+    await fireEvent.press(screen.getByLabelText("Cancel"));
+    expect(server.paths()).not.toContain(CODE);
+  });
+
+  it("with the places not loaded, it still says the person leaves them", async () => {
+    const server = fakeServer(routes({ "/v1/orgs/mine": () => refusal(500, "internal", "Something went wrong.") }));
+    await openSettings(server.ask);
+    await fireEvent.press(await screen.findByLabelText("Delete account"));
+    expect(await screen.findByText("You also leave every place you belong to.")).toBeTruthy();
+  });
+
+  it("a code refused by the server's limit says why and stays on the first step", async () => {
+    const server = fakeServer(routes({ [CODE]: () => refusal(429, "code_too_soon", "Wait a minute before asking for another code.") }));
+    await openSettings(server.ask);
+    await fireEvent.press(await screen.findByLabelText("Delete account"));
+    await fireEvent.press(await screen.findByLabelText("Email me a code"));
+    expect(await screen.findByText("Wait a minute before asking for another code.")).toBeTruthy();
+    expect(screen.queryByPlaceholderText("6-digit code")).toBeNull();
+  });
+});
+
+describe("Download my data", () => {
+  const saved = (name: string) => new File(`picked/Download/${name}`);
+
+  it("saves the server's file of the person's data in the folder picked, and says so in place", async () => {
+    const server = fakeServer(routes({ [EXPORT]: ok(anExport(RAVI.id)) }));
+    await openSettings(server.ask);
+    await fireEvent.press(await screen.findByLabelText("Download my data"));
+    expect(await screen.findByText("Saved as aihomegym-export-2026-11-04.json.")).toBeTruthy();
+    const file = saved("aihomegym-export-2026-11-04.json");
+    expect(file.exists).toBe(true);
+    expect(JSON.parse(await file.text())).toEqual(anExport(RAVI.id));
+  });
+
+  it("never saves a file that is not the signed-in person's", async () => {
+    const server = fakeServer(routes({ [EXPORT]: ok(anExport(ANOTHER)) }));
+    await openSettings(server.ask);
+    await fireEvent.press(await screen.findByLabelText("Download my data"));
+    expect(await screen.findByText(NO_ANSWER)).toBeTruthy();
+    expect(saved("aihomegym-export-2026-11-04.json").exists).toBe(false);
+  });
+
+  it("closing the folder box asks the server nothing and says nothing", async () => {
+    jest.mocked(Directory.pickDirectoryAsync).mockRejectedValueOnce(new Error("closed"));
+    const server = fakeServer(routes({ [EXPORT]: ok(anExport(RAVI.id)) }));
+    await openSettings(server.ask);
+    await fireEvent.press(await screen.findByLabelText("Download my data"));
+    await waitFor(() => {
+      expect(jest.mocked(Directory.pickDirectoryAsync)).toHaveBeenCalled();
+    });
+    expect(server.paths()).not.toContain(EXPORT);
+    expect(screen.queryByText(/Saved as/)).toBeNull();
+  });
+
+  it("a refusal shows the server's words", async () => {
+    const server = fakeServer(routes({ [EXPORT]: () => refusal(429, "rate_limited", "You've requested several exports recently. Please try again later.") }));
+    await openSettings(server.ask);
+    await fireEvent.press(await screen.findByLabelText("Download my data"));
+    expect(await screen.findByText("You've requested several exports recently. Please try again later.")).toBeTruthy();
+  });
+});
+
+describe("the words", () => {
+  it("the day is fourteen days on, across a month and a year", () => {
+    expect(deletesOnText(new Date(2026, 10, 4, 23, 30))).toBe("18 November");
+    expect(deletesOnText(new Date(2026, 11, 25, 0, 5))).toBe("8 January");
+    expect(deletesOnText(new Date(2027, 1, 20))).toBe("6 March");
+  });
+
+  it("names are joined as a sentence says them", () => {
+    expect(namesText(["Iron House"])).toBe("Iron House");
+    expect(namesText(["Iron House", "Pulse"])).toBe("Iron House and Pulse");
+    expect(namesText(["A", "B", "C"])).toBe("A, B and C");
+  });
+});

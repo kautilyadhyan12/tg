@@ -1,6 +1,19 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { AppState, Pressable, StyleSheet, View } from "react-native";
-import { displayNameSchema, myOrgsResponseSchema, onboardingResponseSchema, orgWords, userProfileResponseSchema, type MyOrgsResponse, type Units } from "@app/shared";
+import {
+  ACCOUNT_UNDO_DAYS,
+  deleteAccountResponseSchema,
+  displayNameSchema,
+  dpdpExportSchema,
+  myOrgsResponseSchema,
+  onboardingResponseSchema,
+  orgWords,
+  sendCodeResponseSchema,
+  userProfileResponseSchema,
+  type MyOrgsResponse,
+  type Units,
+} from "@app/shared";
+import { Directory } from "expo-file-system";
 import { Button } from "../look/Button";
 import { Avatar, Badge, Card } from "../look/Card";
 import { Segments } from "../look/Choice";
@@ -10,6 +23,7 @@ import { Field } from "../look/Field";
 import { Icon, type IconName } from "../look/Icon";
 import { Sheet } from "../look/Sheet";
 import { Txt } from "../look/Txt";
+import { forgetPersonFiles } from "../session/personFiles";
 import { useSession } from "../session/SessionProvider";
 import { HideMe, useHideMe } from "./gym/hideMe";
 import { CanSee } from "./Invitation";
@@ -21,6 +35,8 @@ import { NO_ANSWER } from "./SignIn";
 // Settings on the phone (ROADMAP Stage 5 item 19a): the browser's Profile name, Units, Hide me, what
 // each place can see and Account, opened over Me. Each part saves on its own and says so in its own
 // place; every answer shown is the server's. Setup's answers are under Me's "Your plan", not here again.
+// Your data (19b): the server's export saved to a folder the person picks, and Delete account with a
+// code emailed to the account's own address; the undo is the link in the email that follows.
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -40,6 +56,7 @@ export function SettingsPage({ open, onClose }: { open: boolean; onClose: () => 
 }
 
 type Places = { kind: "loading" } | { kind: "failed" } | { kind: "ok"; orgs: MyOrgsResponse["orgs"] };
+type Place = MyOrgsResponse["orgs"][number];
 
 function SettingsBody({ onClose }: { onClose: () => void }) {
   const { session } = useSession();
@@ -73,20 +90,22 @@ function SettingsBody({ onClose }: { onClose: () => void }) {
     const run = { live: true };
     void session.signedIn({ method: "GET", path: "/v1/orgs/mine" }, myOrgsResponseSchema).then((answer) => {
       if (!run.live) return;
-      setPlaces(answer.kind === "ok" ? { kind: "ok", orgs: answer.data.orgs.filter((org) => org.isMember) } : { kind: "failed" });
+      setPlaces(answer.kind === "ok" ? { kind: "ok", orgs: answer.data.orgs } : { kind: "failed" });
     });
     return () => {
       run.live = false;
     };
   }, [session, tries]);
+  const memberOf: Places = places.kind === "ok" ? { kind: "ok", orgs: places.orgs.filter((org) => org.isMember) } : places;
   return (
     <View testID="settings-page" style={styles.page}>
       <Profile since={since} />
       <NamePart saves={saves} />
       <UnitsPart saves={saves} />
-      <BoardsPart belongs={places.kind === "ok" && places.orgs.length > 0} />
-      <PlacesPart places={places} onAgain={() => { setTries((n) => n + 1); }} />
+      <BoardsPart belongs={memberOf.kind === "ok" && memberOf.orgs.length > 0} />
+      <PlacesPart places={memberOf} onAgain={() => { setTries((n) => n + 1); }} />
       <AccountPart onClose={onClose} />
+      <DataPart places={places} />
     </View>
   );
 }
@@ -204,7 +223,7 @@ function BoardsPart({ belongs }: { belongs: boolean }) {
 }
 
 function PlacesPart({ places, onAgain }: { places: Places; onAgain: () => void }) {
-  const [shown, setShown] = useState<MyOrgsResponse["orgs"][number] | null>(null);
+  const [shown, setShown] = useState<Place | null>(null);
   if (places.kind === "loading" || (places.kind === "ok" && places.orgs.length === 0)) return null;
   return (
     <Part title="Your privacy" icon="shield">
@@ -289,6 +308,174 @@ function AccountPart({ onClose }: { onClose: () => void }) {
         }}
       />
     </Part>
+  );
+}
+
+/** "Iron House", "Iron House and Lotus Yoga", "Iron House, Lotus Yoga and Pulse". */
+export function namesText(names: readonly string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1] ?? ""}`;
+}
+
+/** "18 November": the day an account deleted now is removed for good, on the phone's own calendar. */
+export function deletesOnText(now: Date): string {
+  const at = new Date(now.getFullYear(), now.getMonth(), now.getDate() + ACCOUNT_UNDO_DAYS);
+  return `${String(at.getDate())} ${MONTHS[at.getMonth()] ?? ""}`;
+}
+
+/** What the sign-in screen says once the account is deleted: the undo link only where one was sent. */
+export function deletedNote(emailSent: boolean, now: Date): string {
+  const day = deletesOnText(now);
+  return emailSent
+    ? `Your account will be deleted on ${day}. To keep it, open the link we emailed you before then.`
+    : `Your account will be deleted on ${day}.`;
+}
+
+/** The places a deleted account leaves at once (a member, or staff where they do not own it), and the ones it owns. */
+export function placesOnDelete(orgs: readonly Place[]): { leaves: string[]; owns: string[] } {
+  return {
+    leaves: orgs.filter((org) => org.isMember || (org.staffRole !== null && org.staffRole !== "owner")).map((org) => org.name),
+    owns: orgs.filter((org) => org.staffRole === "owner").map((org) => org.name),
+  };
+}
+
+function DataPart({ places }: { places: Places }) {
+  const { session, state } = useSession();
+  const [busy, setBusy] = useState(false);
+  const [said, setSaid] = useState<{ words: string; bad: boolean } | null>(null);
+  const [asking, setAsking] = useState(false);
+  const me = state.kind === "in" ? state.user.id : null;
+  const download = async () => {
+    if (busy || me === null) return;
+    setSaid(null);
+    // The folder first, as Save as does: closing the phone's own box saves nothing and says nothing.
+    let folder: Directory;
+    try {
+      folder = await Directory.pickDirectoryAsync();
+    } catch {
+      return;
+    }
+    setBusy(true);
+    const answer = await session.signedIn({ method: "GET", path: "/v1/users/me/export", waitMs: 60_000 }, dpdpExportSchema);
+    // The file is only ever that of the person who asked for it, still signed in.
+    if (answer.kind !== "ok" || answer.data.user["id"] !== me || session.state().kind !== "in") {
+      setBusy(false);
+      setSaid({ words: answer.kind === "refused" ? answer.message : NO_ANSWER, bad: true });
+      return;
+    }
+    const name = `aihomegym-export-${answer.data.exportedAt.slice(0, 10)}.json`;
+    try {
+      const file = folder.createFile(name, "application/json");
+      file.write(JSON.stringify(answer.data, null, 2));
+      setSaid({ words: `Saved as ${name}.`, bad: false });
+    } catch {
+      setSaid({ words: "Couldn’t save the file there. Try another folder.", bad: true });
+    }
+    setBusy(false);
+  };
+  return (
+    <Part title="Your data" icon="folder">
+      <Button label="Download my data" kind="link" icon="download" busy={busy} style={styles.start} onPress={() => void download()} />
+      <Said words={said?.words ?? null} bad={said?.bad ?? false} />
+      <View style={styles.rule} />
+      <Button label="Delete account" kind="link" icon="trash" style={styles.start} onPress={() => { setAsking(true); }} />
+      <DeleteAsk open={asking} places={places} onClose={() => { setAsking(false); }} />
+    </Part>
+  );
+}
+
+function DeleteAsk({ open, places, onClose }: { open: boolean; places: Places; onClose: () => void }) {
+  const { session, state } = useSession();
+  const [step, setStep] = useState<"ask" | "code">("ask");
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  // Each opening starts at its first step, with nothing typed.
+  useEffect(() => {
+    if (!open) return;
+    setStep("ask");
+    setCode("");
+    setProblem(null);
+  }, [open]);
+  if (state.kind !== "in") return null;
+  const me = state.user;
+  const { leaves, owns } = places.kind === "ok" ? placesOnDelete(places.orgs) : { leaves: [], owns: [] };
+  const sendCode = async () => {
+    if (busy) return;
+    setBusy(true);
+    setProblem(null);
+    const answer = await session.signedIn({ method: "POST", path: "/v1/users/me/delete-code" }, sendCodeResponseSchema);
+    setBusy(false);
+    if (answer.kind === "ok") {
+      setCode("");
+      setStep("code");
+    } else {
+      setProblem(answer.kind === "refused" ? answer.message : NO_ANSWER);
+    }
+  };
+  const remove = async () => {
+    if (busy || code.length !== 6) return;
+    setBusy(true);
+    setProblem(null);
+    const answer = await session.signedIn({ method: "DELETE", path: "/v1/users/me", body: { code } }, deleteAccountResponseSchema);
+    if (answer.kind !== "ok") {
+      setBusy(false);
+      if (answer.kind === "refused") setCode("");
+      setProblem(answer.kind === "refused" ? answer.message : NO_ANSWER);
+      return;
+    }
+    // Nothing of the person stays: their waiting meals and drafts, then the sign-in and its pass keys;
+    // the files again once nothing of theirs is open, for a write that was already on its way.
+    forgetPersonFiles(me.id);
+    await session.accountDeleted(deletedNote(answer.data.emailSent, new Date()));
+    forgetPersonFiles(me.id);
+  };
+  return (
+    <Sheet open={open} title="Delete account?" onClose={onClose}>
+      <View style={styles.ask}>
+        {step === "ask" ? (
+          <>
+            <Txt>
+              Your workouts, meals, goals and progress are deleted for good after {String(ACCOUNT_UNDO_DAYS)} days. Until then, the link we email you brings them back.
+            </Txt>
+            {leaves.length > 0 ? <Txt>You leave {namesText(leaves)} today. To come back, join again from the invitation.</Txt> : null}
+            {places.kind === "ok" ? null : <Txt>You also leave every place you belong to.</Txt>}
+            {owns.length > 0 ? <Txt>You own {namesText(owns)}. Deleting your account does not close it.</Txt> : null}
+            {problem === null ? null : <Txt kind="small" colour="badText">{problem}</Txt>}
+            <View style={styles.two}>
+              <Button label="Cancel" kind="plain" style={styles.half} onPress={onClose} />
+              <Button label="Email me a code" kind="danger" busy={busy} style={styles.half} onPress={() => void sendCode()} />
+            </View>
+          </>
+        ) : (
+          <>
+            <Txt>We emailed a 6-digit code to {me.email}.</Txt>
+            <Field
+              label="6-digit code"
+              bare
+              value={code}
+              onChange={(value) => {
+                setCode(value.replace(/\D/g, "").slice(0, 6));
+                setProblem(null);
+              }}
+              placeholder="6-digit code"
+              keyboard="number-pad"
+              fills="one-time-code"
+              maxLength={6}
+              spaced
+              ready
+              onDone={() => void remove()}
+            />
+            {problem === null ? null : <Txt kind="small" colour="badText">{problem}</Txt>}
+            <View style={styles.two}>
+              <Button label="Cancel" kind="plain" style={styles.half} onPress={onClose} />
+              <Button label="Delete" kind="danger" icon="trash" busy={busy} style={styles.half} onPress={() => void remove()} />
+            </View>
+            <Button label="Email me a new code" kind="link" style={styles.start} onPress={() => void sendCode()} />
+          </>
+        )}
+      </View>
+    </Sheet>
   );
 }
 

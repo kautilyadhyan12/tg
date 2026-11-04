@@ -68,6 +68,9 @@ export type RestoreAccountRequest = z.infer<typeof restoreAccountRequestSchema>;
  *  account's own address (there is no password to ask for since 2026-09-07). */
 export const deleteAccountRequestSchema = z.object({ code: signInCodeSchema }).strict();
 export type DeleteAccountRequest = z.infer<typeof deleteAccountRequestSchema>;
+/** `emailSent`: the undo link went to the account's address, so a screen may say so. */
+export const deleteAccountResponseSchema = z.object({ message: z.string(), emailSent: z.boolean() }).strict();
+export type DeleteAccountResponse = z.infer<typeof deleteAccountResponseSchema>;
 
 // ── onboarding / fitness profile (onboarding-storage card) ──────────────────
 // v1 §6.1:442 puts onboarding data in the users module; Part 4 defines no

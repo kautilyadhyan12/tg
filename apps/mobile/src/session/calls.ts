@@ -69,16 +69,18 @@ export async function call<T>(server: Server, request: Request, shape: Shape<T>,
       resolve(LATE);
     }, request.waitMs ?? waitMs);
   });
+  // A DELETE carries one only where it is given (deleting the account sends its code).
+  const withBody = WITH_BODY.includes(request.method) || (request.method === "DELETE" && request.body !== undefined);
   try {
     const reply = await Promise.race([
       server.ask(`${server.apiUrl}${request.path}`, {
         signal: stop.signal,
         method: request.method,
         headers: {
-          ...(WITH_BODY.includes(request.method) ? { "content-type": "application/json" } : {}),
+          ...(withBody ? { "content-type": "application/json" } : {}),
           ...(request.token === undefined ? {} : { authorization: `Bearer ${request.token}` }),
         },
-        ...(WITH_BODY.includes(request.method) ? { body: JSON.stringify(request.body ?? {}) } : {}),
+        ...(withBody ? { body: JSON.stringify(request.body ?? {}) } : {}),
       }),
       late,
     ]);
