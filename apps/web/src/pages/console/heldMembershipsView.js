@@ -232,7 +232,11 @@ export function contractCancelWords(m, name) {
   if (end === null && afterNotice !== null) {
     return {
       question: `Cancel ${whose}?`,
-      detail: `${name} is in their minimum term until ${dayWords(until)} and gives ${noticeWords(m.view.notice.days)}. End it on ${dayWords(afterNotice)}, and they keep paying until then; or release them early.`,
+      // Paid past where the notice ends, nothing more is owed: never "they keep paying" (re-check, H3).
+      detail:
+        m.view.can.noticePaid === true
+          ? `${name} is in their minimum term until ${dayWords(until)}, gives ${noticeWords(m.view.notice.days)} and has paid up to ${dayWords(afterNotice)}. End it then, with no more payments; or release them early.`
+          : `${name} is in their minimum term until ${dayWords(until)} and gives ${noticeWords(m.view.notice.days)}. End it on ${dayWords(afterNotice)}, and they keep paying until then; or release them early.`,
       endButton: `End on ${dayWords(afterNotice)}`,
       endWhen: 'notice',
       endDone: 'cancelNotice',
@@ -310,7 +314,7 @@ export function noticeCancelWords(m, name) {
     detail:
       endDay === null
         ? `${name} gives ${noticeWords(days)}: it can end on ${dayWords(ends)}. To stop it sooner, end it without notice.`
-        : afterNotice !== null
+        : afterNotice !== null && m.view.can.noticePaid !== true
         ? `${name} gives ${noticeWords(days)}. End it on ${dayWords(afterNotice)}, and they keep paying until then; or end it sooner without notice.`
         : `${name} gives ${noticeWords(days)} and has paid up to ${dayWords(ends)}. End it then, with no more payments; or end it sooner without notice.`,
     endButton: endDay === null ? null : `End on ${dayWords(endDay)}`,

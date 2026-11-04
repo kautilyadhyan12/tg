@@ -63,6 +63,7 @@ describe("the worst thing: nobody is charged after their notice ends, or for a n
     const before = heldMembershipView(ana(), "2026-11-10");
     expect(before.notice).toEqual({ days: 30, given: false });
     expect(before.can.cancelAfterNotice).toBe("2026-12-31");
+    expect(before.can.noticePaid).toBe(false);
     const m = moved(ana(), { type: "cancel", when: "notice" }, "2026-11-10");
     const view = heldMembershipView(m, "2026-11-10");
     expect(view.endsOn).toBe("2026-12-31");
@@ -206,6 +207,8 @@ describe("round one's findings", () => {
     const view = heldMembershipView(frozen, "2026-11-10");
     expect(view.can.cancelAtPeriodEnd).toBeNull();
     expect(view.can.cancelAfterNotice).toBe("2027-01-05");
+    // Nothing more is owed for it (re-check, H3).
+    expect(view.can.noticePaid).toBe(true);
     const noticed = moved(frozen, { type: "cancel", when: "notice" }, "2026-11-10");
     expect(noticed.stopsAfter).toBe(3);
   });

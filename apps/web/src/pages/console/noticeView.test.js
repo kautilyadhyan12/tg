@@ -77,6 +77,18 @@ describe("a person's page", () => {
     expect(words.releaseLaterButton).toBeNull();
   });
 
+  it('frozen and paid past the notice: End on its day says no more payments, never "they keep paying" (re-check, H3)', () => {
+    const made = giveHeldMembership(notice30, '2026-10-01', true, '2026-10-01');
+    if (!made.ok) throw new Error(made.reason);
+    const frozen = moveHeldMembership({ ...made.membership, paidPeriods: 3 }, { type: 'freeze' }, '2026-11-05');
+    if (!frozen.ok) throw new Error(frozen.reason);
+    const m = { id: 'h1', typeName: 'Gold Monthly', kind: 'recurring', termCount: 1, termUnit: 'month', release: null, noticeWaived: null, view: heldMembershipView(frozen.membership, '2026-11-10') };
+    const words = askWords('cancel', m, 'Ana', '2026-11-10');
+    expect(words.detail).toBe("Ana gives 30 days' notice and has paid up to 5 January 2027. End it then, with no more payments; or end it sooner without notice.");
+    expect(words.endButton).toBe('End on 5 January 2027');
+    expect(words.endWhen).toBe('notice');
+  });
+
   it('notice given: its line says the day, and Cancel offers only ending sooner, with a reason', () => {
     const m = held(notice30, '2026-10-01', 2, '2026-11-10', { type: 'cancel', when: 'notice' });
     expect(noticeShownLine(m)).toBe('Notice given: it ends on 31 December 2026');

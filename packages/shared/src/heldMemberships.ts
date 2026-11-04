@@ -404,6 +404,9 @@ export const heldMembershipViewSchema = z
         /** The earliest last day its notice allows (18v-ii-a): ending before it asks the reason. Null
          *  where no notice applies. */
         noticeEnds: z.string().nullable().default(null),
+        /** Giving notice today charges nothing more: what is paid already runs past the notice's end
+         *  (18v-ii-a, re-check H3). False where it has no notice. */
+        noticePaid: z.boolean().default(false),
         /** Mark paid: the count it moves to, and for a repeating one the day paid up to. */
         markPaid: z.object({ paidPeriods: z.number().int(), until: z.string().nullable() }).strict().nullable(),
         /** Take the last mark back. */
@@ -506,6 +509,7 @@ export function heldMembershipView(stored: HeldMembership, today: string): HeldM
         releaseNeeded: false,
         cancelAfterNotice: null,
         noticeEnds: null,
+        noticePaid: false,
         markPaid: null,
         undoPaid: null,
       },
@@ -571,6 +575,7 @@ export function heldMembershipView(stored: HeldMembership, today: string): HeldM
       cancelAfterNotice:
         willEnd !== null && (willEnd.periods > m.paidPeriods || paidTo === null) && !(contract !== null && !paidPast && willEnd.lastDay === contract.until) ? willEnd.lastDay : null,
       noticeEnds,
+      noticePaid: willEnd !== null && willEnd.periods <= m.paidPeriods,
       markPaid,
       undoPaid,
     },
