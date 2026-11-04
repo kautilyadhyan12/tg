@@ -68,21 +68,27 @@ export async function remindedHeld(
       billed_elsewhere: boolean;
     }[]
   >`
-    SELECT h.id, h.entry_id, e.full_name AS holder_name, t.renewal_reminder, t.renewal_reminder_days,
+    -- The memberships and whoever pays for each first, then both records by their key: just after an import of
+    -- 2,000, matched in one join the plan paired every record with every record (28 s for one gym).
+    WITH held AS MATERIALIZED (
+      SELECT h.id, h.entry_id, h.from_list, h.gym_id, t.renewal_reminder, t.renewal_reminder_days, COALESCE(x.payer_entry_id, h.entry_id) AS payer_id
+      FROM gym_held_memberships h
+      JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
+      LEFT JOIN gym_member_payers x ON x.gym_id = h.gym_id AND x.entry_id = h.entry_id
+      WHERE h.gym_id = ${q.gymId} AND h.status IN ('active','frozen') AND h.kind = 'recurring' AND (${asked}::boolean OR t.renewal_reminder IS NOT NULL)
+        AND (${q.typeId ?? null}::uuid IS NULL OR t.id = ${q.typeId ?? null}::uuid)
+        AND (${q.heldId ?? null}::uuid IS NULL OR h.id = ${q.heldId ?? null}::uuid)
+        AND (${q.entryId ?? null}::uuid IS NULL OR h.entry_id = ${q.entryId ?? null}::uuid)
+    )
+    SELECT h.id, h.entry_id, e.full_name AS holder_name, h.renewal_reminder, h.renewal_reminder_days,
            pe.id AS payer_entry_id, pe.full_name AS payer_name, pe.email::text AS payer_email, (pe.former_at IS NOT NULL) AS payer_former,
            -- One taken from the gym's own list is billed here only once a payment for it was recorded here.
            (h.from_list AND NOT EXISTS (
               SELECT 1 FROM gym_member_bills b JOIN gym_member_payments p ON p.gym_id = b.gym_id AND p.bill_id = b.id AND p.undone_at IS NULL
               WHERE b.gym_id = h.gym_id AND b.held_membership_id = h.id)) AS billed_elsewhere
-    FROM gym_held_memberships h
-    JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
-    JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id AND e.former_at IS NULL
-    JOIN gym_member_list_entries pe ON pe.gym_id = h.gym_id
-      AND pe.id = COALESCE((SELECT x.payer_entry_id FROM gym_member_payers x WHERE x.gym_id = h.gym_id AND x.entry_id = h.entry_id), h.entry_id)
-    WHERE h.gym_id = ${q.gymId} AND h.status IN ('active','frozen') AND h.kind = 'recurring' AND (${asked}::boolean OR t.renewal_reminder IS NOT NULL)
-      AND (${q.typeId ?? null}::uuid IS NULL OR t.id = ${q.typeId ?? null}::uuid)
-      AND (${q.heldId ?? null}::uuid IS NULL OR h.id = ${q.heldId ?? null}::uuid)
-      AND (${q.entryId ?? null}::uuid IS NULL OR h.entry_id = ${q.entryId ?? null}::uuid)
+    FROM held h
+    JOIN gym_member_list_entries e ON e.gym_id = ${q.gymId} AND e.id = h.entry_id AND e.former_at IS NULL
+    JOIN gym_member_list_entries pe ON pe.gym_id = ${q.gymId} AND pe.id = h.payer_id
     ORDER BY e.full_name, h.id`;
   const held = await heldRowsOf(
     sql,

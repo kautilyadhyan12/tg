@@ -84,7 +84,7 @@ export function reminderStatus(held: repo.RemindedHeld, today: string, written: 
 export async function sendDueRenewalReminders(deps: RenewalReminderDeps): Promise<RenewalReminderRun> {
   const run: RenewalReminderRun = { queued: 0, sent: 0, skipped: 0, dropped: 0, failed: 0, retried: 0, stoppedByProvider: false };
   if (deps.settings.paused) return run;
-  run.queued = await queueDue(deps);
+  run.queued = await queueDueRenewalReminders(deps);
   for (let taken = 0; taken < INVITE_SENDING.perRun; taken++) {
     const claim = await repo.claimNext(deps.sql, { now: deps.now(), leaseMs: INVITE_SENDING.leaseMs, gymIds: deps.gymIds ?? null });
     if (claim === null) break;
@@ -101,7 +101,7 @@ export async function sendDueRenewalReminders(deps: RenewalReminderDeps): Promis
 }
 
 /** Once a gym's day: write each reminder due today, for a payer with an address that can be sent to. */
-async function queueDue(deps: RenewalReminderDeps): Promise<number> {
+export async function queueDueRenewalReminders(deps: Pick<RenewalReminderDeps, "sql" | "now" | "gymIds">): Promise<number> {
   const now = deps.now();
   let queued = 0;
   for (const gym of await repo.gymsToCheck(deps.sql, { now, gymIds: deps.gymIds ?? null })) {
