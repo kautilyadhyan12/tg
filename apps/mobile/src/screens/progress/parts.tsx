@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Animated, Image, Pressable, StyleSheet, useWindowDimensions, View, type StyleProp, type ViewStyle } from "react-native";
 import Svg, { Circle, Defs, LinearGradient, Path, RadialGradient, Stop } from "react-native-svg";
 import { Button } from "../../look/Button";
-import { artShade, badges, badgeShine, bandShade, colours, orangeGradient, pickedRowGradient, pictureFadeUnderWords, shadows, sizes, topShade } from "../../look/colours";
+import { artShade, bandShade, chalk, chalkShadows, colours, orangeGradient, pictureFadeUnderWords, recordsShade, shadows, sizes, topShade } from "../../look/colours";
 import { Icon, type IconName } from "../../look/Icon";
 import { useLoop } from "../../look/Motion";
 import { pictures, type PictureName } from "../../look/pictures";
@@ -22,6 +22,9 @@ export const TABS = [
 ] as const;
 export type TabKey = (typeof TABS)[number]["key"];
 
+/** How far up the bandage sits, of the top's height: its arms clear of the title (Kd, 2026-11-04). */
+const HERO_LIFT = 0.16;
+
 /** The bandage, big and clear, slowly closing in, its warm glow breathing over it; the title and the four tabs on it. */
 export function Hero({ tab, onTab }: { tab: TabKey; onTab: (t: TabKey) => void }) {
   const { width, height } = useWindowDimensions();
@@ -37,7 +40,7 @@ export function Hero({ tab, onTab }: { tab: TabKey; onTab: (t: TabKey) => void }
           source={pictures.progress}
           resizeMode="cover"
           accessible={false}
-          style={[styles.photo, { height: tall, transform: [{ scale }] }]}
+          style={[styles.photo, { top: -tall * HERO_LIFT, height: tall, transform: [{ scale }] }]}
         />
         <Animated.View style={[StyleSheet.absoluteFill, { opacity: glow }]}>
           <Svg width="100%" height="100%">
@@ -138,7 +141,6 @@ export function ReadOr<T>({ read, again, what, children }: { read: Read<T>; agai
   return <>{children(read.data)}</>;
 }
 
-/** The flame of a day trained, gold at its tip running to deep orange, its heart pale. */
 /** A glowing pill that opens a box from the bottom to pick from: the period on Trends. */
 export function PickButton({ label, say, onPress }: { label: string; say: string; onPress: () => void }) {
   return (
@@ -151,69 +153,99 @@ export function PickButton({ label, say, onPress }: { label: string; say: string
   );
 }
 
-/** The rows of a box from the bottom to pick one from, the picked one lit with a tick (Kd's drawing 1). */
-export function PickList<V extends string>({ options, selected, onPick }: { options: readonly { value: V; label: string }[]; selected: V; onPick: (value: V) => void }) {
+export interface FigureOption<V extends string> {
+  value: V;
+  /** What a screen reader says: "Last 30 days". */
+  label: string;
+  /** "30". */
+  figure: string;
+  /** "days". */
+  unit: string;
+}
+
+/** Choices in a box from the bottom as tiles, two to a row, each its length in a big figure; an odd
+ *  last one across the whole row; the picked one glowing orange with a tick, as the tabs (Kd's drawing). */
+export function FigureTiles<V extends string>({ options, selected, onPick }: { options: readonly FigureOption<V>[]; selected: V; onPick: (value: V) => void }) {
+  const rows: FigureOption<V>[][] = [];
+  options.forEach((o, i) => {
+    if (i % 2 === 0) rows.push([]);
+    rows[rows.length - 1]?.push(o);
+  });
   return (
-    <View style={styles.pickList}>
-      {options.map((o) => {
-        const on = o.value === selected;
-        return (
-          <Pressable
-            key={o.value}
-            accessibilityRole="button"
-            accessibilityLabel={o.label}
-            accessibilityState={{ selected: on }}
-            onPress={() => {
-              onPick(o.value);
-            }}
-            style={({ pressed }) => [styles.pickRow, on ? styles.pickRowOn : null, pressed ? styles.pickPressed : null]}
-          >
-            <Txt colour={on ? "orangeLight" : "text"} style={styles.pickRowWords}>
-              {o.label}
-            </Txt>
-            {on ? <Icon name="check" size={20} colour="orangeLight" /> : null}
-          </Pressable>
-        );
-      })}
+    <View style={styles.tiles}>
+      {rows.map((row) => (
+        <View key={row.map((o) => o.value).join()} style={styles.tileRow}>
+          {row.map((o) => {
+            const on = o.value === selected;
+            const wide = row.length === 1;
+            return (
+              <Pressable
+                key={o.value}
+                accessibilityRole="button"
+                accessibilityLabel={o.label}
+                accessibilityState={{ selected: on }}
+                onPress={() => {
+                  onPick(o.value);
+                }}
+                style={({ pressed }) => [styles.tile, wide ? styles.tileWide : null, on ? styles.tileOn : null, pressed ? styles.pickPressed : null]}
+              >
+                <Txt colour={on ? "onOrange" : "text"} numberOfLines={1} fit style={wide ? styles.figureWide : styles.figure}>
+                  {o.figure}
+                </Txt>
+                <Txt kind="tiny" colour={on ? "onBar" : "textSoft"} style={[styles.unit, wide ? styles.unitWide : null]}>
+                  {o.unit}
+                </Txt>
+                {on ? (
+                  <View style={styles.tick}>
+                    <Icon name="check" size={15} colour="flameDeep" />
+                  </View>
+                ) : null}
+              </Pressable>
+            );
+          })}
+        </View>
+      ))}
     </View>
   );
 }
 
-export type BadgeTint = keyof typeof badges;
-
-/** A record's badge: a disc lit from its top left, a dark gap and a thin ring of its colour round it,
- *  a white sign on it, glowing in its own colour. */
-export function Badge({ icon, tint, size }: { icon: IconName; tint: BadgeTint; size: number }) {
-  const t = badges[tint];
-  const box = size + 10;
-  const mid = box / 2;
-  const r = size / 2;
+/** A record's sign, orange and glowing, in a chalk-white ring like the joint marks of the drawing
+ *  behind the records; faint, with no glow, for a record not yet set. */
+export function RingSign({ icon, size, held }: { icon: IconName; size: number; held: boolean }) {
   return (
-    <View style={{ width: box, height: box, alignItems: "center", justifyContent: "center" }} accessible={false}>
-      <View style={{ position: "absolute", width: size, height: size, borderRadius: r, backgroundColor: t.deep, boxShadow: t.glow }} />
-      <Svg width={box} height={box} style={StyleSheet.absoluteFill}>
-        <Defs>
-          <RadialGradient id="badgeDisc" cx="34%" cy="28%" r="75%">
-            <Stop offset="0" stopColor={t.light} />
-            <Stop offset="1" stopColor={t.deep} />
-          </RadialGradient>
-          <LinearGradient id="badgeShine" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor={badgeShine.top} stopOpacity={0.34} />
-            <Stop offset="0.45" stopColor={badgeShine.top} stopOpacity={0} />
-            <Stop offset="0.7" stopColor={badgeShine.foot} stopOpacity={0} />
-            <Stop offset="1" stopColor={badgeShine.foot} stopOpacity={0.24} />
-          </LinearGradient>
-        </Defs>
-        <Circle cx={mid} cy={mid} r={r + 3.75} fill="none" stroke={t.deep} strokeOpacity={0.65} strokeWidth={1.5} />
-        <Circle cx={mid} cy={mid} r={r + 1.5} fill="none" stroke={colours.box} strokeWidth={3} />
-        <Circle cx={mid} cy={mid} r={r} fill="url(#badgeDisc)" />
-        <Circle cx={mid} cy={mid} r={r - 0.5} fill="url(#badgeShine)" />
-      </Svg>
-      <Icon name={icon} size={Math.round(size * 0.46)} colour={tint === "none" ? "textSoft" : "onOrange"} />
+    <View style={[styles.ring, { width: size, height: size, borderRadius: size / 2 }, held ? styles.ringLit : styles.ringDim]} accessible={false}>
+      {held ? (
+        <Svg width={size - 3} height={size - 3} style={styles.ringGlow}>
+          <Defs>
+            <RadialGradient id="ringGlow" cx="50%" cy="50%" r="50%">
+              <Stop offset="0" stopColor={colours.orange} stopOpacity={0.32} />
+              <Stop offset="1" stopColor={colours.orange} stopOpacity={0} />
+            </RadialGradient>
+          </Defs>
+          <Circle cx={(size - 3) / 2} cy={(size - 3) / 2} r={(size - 3) / 2} fill="url(#ringGlow)" />
+        </Svg>
+      ) : null}
+      <Icon name={icon} size={Math.round(size * 0.46)} colour={held ? "orangeLight" : "textFaint"} />
     </View>
   );
 }
 
+/** A box with a chalk drawing behind all of it: its top clear for the title, darker under the numbers,
+ *  which lie on dark glass (Personal Records, Kd's drawing). The drawing keeps its left edge. */
+export function BehindBox({ picture, title, children }: { picture: PictureName; title: ReactNode; children: ReactNode }) {
+  return (
+    <View style={styles.box}>
+      <Image source={pictures[picture]} resizeMode="cover" style={styles.behind} accessible={false} />
+      <View style={[StyleSheet.absoluteFill, styles.behindShade]} />
+      <View style={styles.band}>
+        <View style={styles.bandTitle}>{title}</View>
+      </View>
+      <View style={styles.bandBody}>{children}</View>
+    </View>
+  );
+}
+
+/** The flame of a day trained, gold at its tip running to deep orange, its heart pale. */
 export function Flame({ size, glow = false }: { size: number; glow?: boolean }) {
   const tall = size * (28 / 24);
   const flame = (
@@ -257,12 +289,24 @@ const styles = StyleSheet.create({
   pick: { flexDirection: "row", alignSelf: "flex-start", alignItems: "center", gap: 8, minHeight: sizes.press, paddingHorizontal: 18, borderRadius: sizes.round, backgroundColor: colours.orangeFill, borderWidth: 1, borderColor: colours.orangeLine, boxShadow: shadows.chip },
   pickPressed: { opacity: 0.8 },
   pickWords: { fontFamily: fonts.bold },
-  pickList: { gap: 8 },
+  tiles: { gap: 10 },
+  tileRow: { flexDirection: "row", gap: 10 },
   // The same border picked or not: a gradient on a box whose border changes crashed Android (31a).
-  pickRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, minHeight: 54, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 16, backgroundColor: colours.fill, borderWidth: 1, borderColor: colours.line },
-  pickRowOn: { backgroundColor: colours.orangeFill, experimental_backgroundImage: pickedRowGradient, borderColor: colours.fieldOnLine },
-  pickRowWords: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 22, flexShrink: 1 },
-  photo: { position: "absolute", left: 0, right: 0, bottom: 0, width: "100%" },
+  tile: { flex: 1, minHeight: 96, justifyContent: "center", paddingHorizontal: 16, paddingVertical: 12, borderRadius: 18, backgroundColor: colours.fill, borderWidth: 1, borderColor: chalk.glassLine },
+  tileWide: { minHeight: 76, flexDirection: "row", alignItems: "center", gap: 12 },
+  tileOn: { backgroundColor: colours.orange, experimental_backgroundImage: orangeGradient, borderColor: colours.orange, boxShadow: chalkShadows.picked },
+  figure: { fontFamily: fonts.bold, fontSize: 40, lineHeight: 46, letterSpacing: -1.2 },
+  figureWide: { fontFamily: fonts.bold, fontSize: 30, lineHeight: 36, letterSpacing: -0.8 },
+  unit: { fontFamily: fonts.bold, letterSpacing: 1.6, textTransform: "uppercase" },
+  unitWide: { marginTop: 6 },
+  tick: { position: "absolute", top: 12, right: 12, width: 26, height: 26, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: colours.onOrange },
+  ring: { alignItems: "center", justifyContent: "center", borderWidth: 1.5, backgroundColor: chalk.ringInside },
+  ringLit: { borderColor: chalk.ring, boxShadow: chalkShadows.ring },
+  ringDim: { borderColor: colours.lineStrong },
+  ringGlow: { position: "absolute", top: 0, left: 0 },
+  behind: { position: "absolute", top: 0, bottom: 0, left: 0, width: "130%" },
+  behindShade: { experimental_backgroundImage: recordsShade },
+  photo: { position: "absolute", left: 0, right: 0, width: "100%" },
   fade: { experimental_backgroundImage: pictureFadeUnderWords },
   words: { position: "absolute", left: sizes.edge, right: sizes.edge, bottom: 14, gap: 4 },
   tabs: {

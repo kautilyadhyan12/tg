@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { progressHeatmapSchema, workoutPageSchema, type ProgressHeatmap } from "@app/shared";
-import { colours, shadows, sizes } from "../../look/colours";
+import { chalk, chalkShadows, colours, orangeGradient, shadows, sizes } from "../../look/colours";
 import { Icon } from "../../look/Icon";
 import { Rise } from "../../look/Motion";
 import { Sheet } from "../../look/Sheet";
@@ -109,6 +109,7 @@ function Activity({ heatmap }: { heatmap: ProgressHeatmap }) {
       <Sheet
         open={picking}
         title="Pick a month"
+        picture={CALENDAR_PICTURE}
         onClose={() => {
           setPicking(false);
         }}
@@ -126,6 +127,7 @@ function Activity({ heatmap }: { heatmap: ProgressHeatmap }) {
       <Sheet
         open={day !== null}
         title={day === null ? "" : dayTitle(day, today)}
+        picture={CALENDAR_PICTURE}
         onClose={() => {
           setDay(null);
         }}
@@ -137,44 +139,60 @@ function Activity({ heatmap }: { heatmap: ProgressHeatmap }) {
   );
 }
 
+/** The footprints across the calendar's boxes, as across its own. */
+const CALENDAR_PICTURE = { name: "steps", focus: 0.3 } as const;
+
+/** The months in rows of four, a short row keeping its boxes' width. */
+function rowsOfFour<T>(items: readonly T[]): T[][] {
+  const rows: T[][] = [];
+  items.forEach((item, i) => {
+    if (i % 4 === 0) rows.push([]);
+    rows[rows.length - 1]?.push(item);
+  });
+  return rows;
+}
+
 function MonthPicker({ years, month, onPick }: { years: readonly { year: number; months: readonly MonthPick[] }[]; month: Month; onPick: (m: Month) => void }) {
   return (
     <View style={styles.picker}>
       {years.map((y) => (
         <View key={y.year} style={styles.pickYear}>
-          <Txt kind="tiny" style={styles.head}>
-            {String(y.year)}
-          </Txt>
-          <View style={styles.pickGrid}>
-            {y.months.map((p) => {
-              const on = sameMonth(p.month, month);
-              return (
-                <Pressable
-                  key={p.label}
-                  accessibilityRole="button"
-                  accessibilityLabel={monthPickSaid(p)}
-                  accessibilityState={{ selected: on, disabled: !p.open }}
-                  disabled={!p.open}
-                  onPress={() => {
-                    onPick(p.month);
-                  }}
-                  style={({ pressed }) => [styles.pickMonth, on ? styles.pickOn : null, pressed ? styles.pressed : null, p.open ? null : styles.pickShut]}
-                >
-                  <Txt kind="strong" colour={on ? "onOrange" : p.open ? "text" : "textFaint"}>
-                    {p.label}
-                  </Txt>
-                  {p.open ? (
-                    <View style={styles.pickDays}>
-                      {p.active > 0 && !on ? <Flame size={9} /> : null}
-                      <Txt kind="tiny" colour={on ? "onBar" : p.active > 0 ? "orangeLight" : "textFaint"} style={styles.boldWords}>
-                        {p.active === 1 ? "1 day" : `${count(p.active)} days`}
-                      </Txt>
-                    </View>
-                  ) : null}
-                </Pressable>
-              );
-            })}
-          </View>
+          <Txt kind="eyebrow">{String(y.year)}</Txt>
+          {rowsOfFour(y.months).map((row) => (
+            <View key={row.map((p) => p.label).join()} style={styles.pickGrid}>
+              {row.map((p) => {
+                const on = sameMonth(p.month, month);
+                return (
+                  <Pressable
+                    key={p.label}
+                    accessibilityRole="button"
+                    accessibilityLabel={monthPickSaid(p)}
+                    accessibilityState={{ selected: on, disabled: !p.open }}
+                    disabled={!p.open}
+                    onPress={() => {
+                      onPick(p.month);
+                    }}
+                    style={({ pressed }) => [styles.pickMonth, p.active > 0 && p.open ? styles.pickLit : null, on ? styles.pickOn : null, pressed ? styles.pressed : null, p.open ? null : styles.pickShut]}
+                  >
+                    <Txt kind="strong" colour={on ? "onOrange" : p.open ? "text" : "textFaint"}>
+                      {p.label}
+                    </Txt>
+                    {p.open ? (
+                      <View style={styles.pickDays}>
+                        {p.active > 0 && !on ? <Flame size={9} /> : null}
+                        <Txt kind="tiny" colour={on ? "onBar" : p.active > 0 ? "orangeLight" : "textFaint"} style={styles.boldWords}>
+                          {p.active === 1 ? "1 day" : `${count(p.active)} days`}
+                        </Txt>
+                      </View>
+                    ) : null}
+                  </Pressable>
+                );
+              })}
+              {Array.from({ length: 4 - row.length }, (_, i) => (
+                <View key={`gap${String(i)}`} style={[styles.pickMonth, styles.unseen]} />
+              ))}
+            </View>
+          ))}
         </View>
       ))}
     </View>
@@ -427,10 +445,13 @@ const styles = StyleSheet.create({
   monthName: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: sizes.press },
   picker: { gap: 14 },
   pickYear: { gap: 8 },
-  pickGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  pickMonth: { width: "22%", flexGrow: 1, minHeight: 62, alignItems: "center", justifyContent: "center", gap: 2, borderRadius: 14, backgroundColor: colours.fill, borderWidth: 1, borderColor: colours.line },
-  pickOn: { backgroundColor: colours.orange, borderColor: colours.orange, boxShadow: shadows.chip },
-  pickShut: { opacity: 0.45 },
+  pickGrid: { flexDirection: "row", gap: 8 },
+  // The same border lit or not: a gradient on a box whose border changes crashed Android (31a).
+  pickMonth: { flex: 1, minHeight: 66, alignItems: "center", justifyContent: "center", gap: 2, borderRadius: 14, backgroundColor: colours.fill, borderWidth: 1, borderColor: chalk.glassLine },
+  pickLit: { borderColor: chalk.bestLine, boxShadow: chalkShadows.trained },
+  pickOn: { backgroundColor: colours.orange, experimental_backgroundImage: orangeGradient, borderColor: colours.orange, boxShadow: chalkShadows.picked },
+  pickShut: { opacity: 0.35 },
+  unseen: { opacity: 0 },
   pickDays: { flexDirection: "row", alignItems: "center", gap: 3 },
   boldWords: { fontFamily: fonts.bold },
   dayNone: { alignItems: "center", padding: 22, borderRadius: 16, backgroundColor: colours.fill, borderWidth: 1, borderColor: colours.line },

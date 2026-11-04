@@ -21,6 +21,8 @@ export interface Mini {
   lines: string[];
   /** Orange where something moved: a shorter workout, a tough week. */
   warm: boolean;
+  /** The plateau's figures, each its words and its change apart, the change drawn on the right. */
+  figures?: { words: string; change: string }[];
 }
 
 const LETTERS = ["S", "M", "T", "W", "T", "F", "S"] as const;
@@ -92,11 +94,12 @@ export function plateauMini(s: SteadyPace): Mini {
     const f = s[key];
     if (f !== null) figures.push({ key, ...f });
   }
-  const lines = figures.map((f) => `${FIGURE_NAMES[f.key]} ${tenths(f.before)} → ${tenths(f.recent)}${changeWords(f.changePct)}`);
-  if (s.steady) return { value: "Steady", lines, warm: false };
+  const parts = figures.map((f) => ({ words: `${FIGURE_NAMES[f.key]} ${tenths(f.before)} → ${tenths(f.recent)}`, change: changeWords(f.changePct).trim() }));
+  const lines = parts.map((p) => (p.change === "" ? p.words : `${p.words} ${p.change}`));
+  if (s.steady) return { value: "Steady", lines, warm: false, figures: parts };
   const moved = figures.reduce<(typeof figures)[number] | null>((most, f) => (most === null || Math.abs(f.changePct) > Math.abs(most.changePct) ? f : most), null);
-  if (moved === null) return { value: "Steady", lines, warm: false };
-  return { value: MOVED[moved.key][moved.changePct < 0 ? 0 : 1], lines, warm: moved.changePct < 0 };
+  if (moved === null) return { value: "Steady", lines, warm: false, figures: parts };
+  return { value: MOVED[moved.key][moved.changePct < 0 ? 0 : 1], lines, warm: moved.changePct < 0, figures: parts };
 }
 
 const BANDS = { reached: "Reached", on_track: "On track", doable: "Doable", tough: "Tough week" } as const;

@@ -6,12 +6,13 @@ import { count, hoursWords } from "../dashboard/words";
 // Dashboard's week is: the server's 7-day read begins 7×24 hours ago, part-way through an eighth day,
 // and that day is not counted. Pure, so tested alone.
 
-export const PERIODS: readonly { key: ProgressPeriod; label: string; days: number | null }[] = [
-  { key: "7d", label: "Last 7 days", days: 7 },
-  { key: "30d", label: "Last 30 days", days: 30 },
-  { key: "90d", label: "Last 90 days", days: 90 },
-  { key: "1y", label: "Last year", days: 365 },
-  { key: "all", label: "All time", days: null },
+/** Each period, its words, and its length as the period box draws it: a big figure and its unit. */
+export const PERIODS: readonly { key: ProgressPeriod; label: string; figure: string; unit: string; days: number | null }[] = [
+  { key: "7d", label: "Last 7 days", figure: "7", unit: "days", days: 7 },
+  { key: "30d", label: "Last 30 days", figure: "30", unit: "days", days: 30 },
+  { key: "90d", label: "Last 90 days", figure: "90", unit: "days", days: 90 },
+  { key: "1y", label: "Last year", figure: "1", unit: "year", days: 365 },
+  { key: "all", label: "All time", figure: "All", unit: "time", days: null },
 ];
 
 const DAY = 86_400_000;

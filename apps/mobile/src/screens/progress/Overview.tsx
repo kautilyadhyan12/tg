@@ -1,14 +1,14 @@
 import type { ReactNode } from "react";
 import { StyleSheet, View } from "react-native";
 import { personalRecordsSchema, progressPredictionsSchema, type PersonalRecords, type ProgressPredictions } from "@app/shared";
-import { colours } from "../../look/colours";
+import { bestRecordGradient, chalk, chalkShadows, colours, sizes } from "../../look/colours";
 import { Icon, type IconName } from "../../look/Icon";
 import { Rise } from "../../look/Motion";
 import { fonts, Txt } from "../../look/Txt";
 import { useZoneSaved } from "../../session/TimeZoneSync";
 import { useRead } from "../dashboard/useRead";
 import { ForecastDays } from "./charts";
-import { Badge, BandBox, BoxTitle, ReadOr } from "./parts";
+import { BandBox, BehindBox, BoxTitle, ReadOr, RingSign } from "./parts";
 import { bestTimeMini, forecastMini, plateauMini, predictionsFrom, weekGoalMini, type Mini } from "./predictionWords";
 import { dayKeyOf, recordRows, recordsFrom, type RecordRow } from "./progressRules";
 
@@ -42,14 +42,14 @@ export function Overview() {
         </BandBox>
       </Rise>
       <Rise delay={180}>
-        <BandBox
+        <BehindBox
           picture="pushup"
-          title={<BoxTitle icon="trophy" colour="gold" title="Personal Records" side={records.read.kind === "ok" ? <Txt kind="tiny">{recordsFrom(records.read.data)}</Txt> : undefined} />}
+          title={<BoxTitle icon="trophy" colour="gold" title="Personal Records" side={records.read.kind === "ok" ? <Txt kind="tiny" colour="textSoft">{recordsFrom(records.read.data)}</Txt> : undefined} />}
         >
           <ReadOr read={records.read} again={records.again} what="Personal records">
             {(r) => <Records records={r} />}
           </ReadOr>
-        </BandBox>
+        </BehindBox>
       </Rise>
     </>
   );
@@ -66,17 +66,17 @@ function PredictionGrid({ p }: { p: ProgressPredictions }) {
         {forecast.days.length === 0 ? null : <ForecastDays days={forecast.days} />}
       </MiniCard>
       <MiniCard title="Best time" mini={best} icon={best.slot === null ? undefined : best.slot === "morning" || best.slot === "afternoon" ? "sun" : "moon"} />
-      <MiniCard title="Plateau detector" mini={plateau} />
-      <MiniCard title="Weekly goal" mini={goal}>
+      <MiniCard title="Plateau detector" mini={plateau} wide />
+      <MiniCard title="Weekly goal" mini={goal} wide>
         {goal.steps === null ? null : <Steps done={goal.steps.done} of={goal.steps.of} />}
       </MiniCard>
     </View>
   );
 }
 
-function MiniCard({ title, mini, icon, children }: { title: string; mini: Mini; icon?: IconName | undefined; children?: ReactNode }) {
+function MiniCard({ title, mini, icon, wide = false, children }: { title: string; mini: Mini; icon?: IconName | undefined; wide?: boolean; children?: ReactNode }) {
   return (
-    <View style={styles.mini} accessible accessibilityLabel={[title, mini.value, mini.unit ?? "", ...mini.lines].filter((w) => w !== "").join(", ")}>
+    <View style={[styles.mini, wide ? styles.miniWide : null]} accessible accessibilityLabel={[title, mini.value, mini.unit ?? "", ...mini.lines].filter((w) => w !== "").join(", ")}>
       <Txt kind="tiny" style={styles.miniTitle}>
         {title}
       </Txt>
@@ -88,11 +88,24 @@ function MiniCard({ title, mini, icon, children }: { title: string; mini: Mini; 
         {mini.unit === undefined ? null : <Txt kind="small">{mini.unit}</Txt>}
       </View>
       {children}
-      {mini.lines.map((line) => (
-        <Txt key={line} kind="tiny" colour="textSoft">
-          {line}
-        </Txt>
-      ))}
+      {mini.figures === undefined
+        ? mini.lines.map((line) => (
+            <Txt key={line} kind="tiny" colour="textSoft">
+              {line}
+            </Txt>
+          ))
+        : mini.figures.map((f) => (
+            <View key={f.words} style={styles.figure}>
+              <Txt kind="small" colour="textSoft" style={styles.grow}>
+                {f.words}
+              </Txt>
+              {f.change === "" ? null : (
+                <Txt kind="small" colour="orangeLight" style={styles.change}>
+                  {f.change}
+                </Txt>
+              )}
+            </View>
+          ))}
     </View>
   );
 }
@@ -125,15 +138,23 @@ function Records({ records }: { records: PersonalRecords }) {
 function RecordTile({ row, wide = false }: { row: RecordRow; wide?: boolean }) {
   return (
     <View style={[styles.record, wide ? styles.recordWide : styles.recordHalf]} accessible accessibilityLabel={`${row.label}, ${row.value}${row.day === null ? "" : `, ${row.day}`}`}>
-      <Badge icon={row.icon} tint={row.held ? row.icon : "none"} size={wide ? 48 : 40} />
+      <RingSign icon={row.icon} held={row.held} size={wide ? 52 : 44} />
       <View style={styles.grow}>
-        <Txt kind="tiny">{row.label}</Txt>
-        <Txt kind={wide ? "big" : "strong"} colour={row.held ? "text" : "textSoft"} numberOfLines={1}>
+        <Txt kind="tiny" colour="textSoft">
+          {row.label}
+        </Txt>
+        <Txt colour={row.held ? "text" : "textSoft"} numberOfLines={1} style={wide ? styles.bestValue : styles.recordValue}>
           {row.value}
         </Txt>
         {row.day === null || wide ? null : <Txt kind="tiny">{row.day}</Txt>}
       </View>
-      {wide && row.day !== null ? <Txt kind="tiny">{row.day}</Txt> : null}
+      {wide && row.day !== null ? (
+        <View style={styles.dayPill}>
+          <Txt kind="tiny" colour="orangeLight" style={styles.bold}>
+            {row.day}
+          </Txt>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -147,9 +168,17 @@ const styles = StyleSheet.create({
   steps: { flexDirection: "row", gap: 6, marginVertical: 4 },
   step: { flex: 1, height: 8, borderRadius: 4, backgroundColor: colours.track },
   stepOn: { backgroundColor: colours.orange },
+  miniWide: { width: "100%", minHeight: 0 },
+  figure: { flexDirection: "row", alignItems: "baseline", gap: 8 },
+  change: { fontFamily: fonts.bold },
+  // Each record on dark glass over the push-up drawing; the best one warm, with an orange edge.
   records: { gap: 10 },
-  record: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12, borderRadius: 16, backgroundColor: colours.fill, borderWidth: 1, borderColor: colours.line },
-  recordWide: { backgroundColor: colours.orangeFill, borderColor: colours.orangeLine },
+  record: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 84, padding: 12, borderRadius: 16, backgroundColor: chalk.glass, borderWidth: 1, borderColor: chalk.glassLine },
+  recordWide: { experimental_backgroundImage: bestRecordGradient, borderColor: chalk.bestLine, boxShadow: chalkShadows.best },
   recordHalf: { width: "47%", flexGrow: 1 },
+  recordValue: { fontFamily: fonts.bold, fontSize: 20, lineHeight: 25 },
+  bestValue: { fontFamily: fonts.bold, fontSize: 29, lineHeight: 34 },
+  dayPill: { alignSelf: "flex-start", paddingHorizontal: 10, paddingVertical: 3, borderRadius: sizes.round, backgroundColor: colours.orangeFill, borderWidth: 1, borderColor: colours.fieldOnLine },
+  bold: { fontFamily: fonts.bold },
   grow: { flex: 1 },
 });

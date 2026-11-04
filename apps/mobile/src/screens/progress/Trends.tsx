@@ -11,7 +11,7 @@ import { useRead } from "../dashboard/useRead";
 import { count, hoursWords } from "../dashboard/words";
 import { CaloriesChart, DayDots, FamilyRing, FillRing, sliceColour, WeekBars } from "./charts";
 import { setsWords, slices } from "./otherRules";
-import { ArtBox, BoxTitle, PickButton, PickList, ReadOr } from "./parts";
+import { ArtBox, BoxTitle, FigureTiles, PickButton, ReadOr } from "./parts";
 import {
   PERIODS,
   addDays,
@@ -35,7 +35,10 @@ export const trendRead = (period: ProgressPeriod) => `/v1/progress/trend?period=
 export const distributionRead = (period: ProgressPeriod) => `/v1/progress/distribution?period=${period}`;
 const EACH = { day: "Each day", week: "Each week", month: "Each month", year: "Each year" } as const;
 
-const PERIOD_OPTIONS = PERIODS.map((p) => ({ value: p.key, label: p.label }));
+const PERIOD_OPTIONS = PERIODS.map((p) => ({ value: p.key, label: p.label, figure: p.figure, unit: p.unit }));
+
+/** The calories drawing across the period box, at the woman's face. */
+const PERIOD_PICTURE = { name: "etch", focus: 0.12 } as const;
 
 export function Trends() {
   const [period, setPeriod] = useState<ProgressPeriod>("30d");
@@ -43,7 +46,7 @@ export function Trends() {
   const label = PERIODS.find((p) => p.key === period)?.label ?? "";
   return (
     <>
-      {/* One button: the five in a box from the bottom, as Kd's drawing 1 (35c-i). */}
+      {/* One button: the five in a box from the bottom, under the calories drawing (Kd's drawing, 35c-i). */}
       <PickButton
         label={label}
         say={`Period: ${label}. Change`}
@@ -54,11 +57,12 @@ export function Trends() {
       <Sheet
         open={picking}
         title="Period"
+        picture={PERIOD_PICTURE}
         onClose={() => {
           setPicking(false);
         }}
       >
-        <PickList
+        <FigureTiles
           options={PERIOD_OPTIONS}
           selected={period}
           onPick={(value) => {

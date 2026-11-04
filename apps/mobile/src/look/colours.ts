@@ -73,8 +73,6 @@ export type ColourName = keyof typeof colours;
 
 /** What is pressed: orange running to light orange. */
 export const orangeGradient = `linear-gradient(135deg, ${colours.orange}, ${colours.orangeLight})`;
-/** The picked row of a box from the bottom: orange fading to the right (Progress's period, 35c-i). */
-export const pickedRowGradient = "linear-gradient(100deg, rgba(255,138,31,0.24), rgba(255,138,31,0.06))";
 /** A chart's bar: light orange at its top running to orange at its foot (Progress, 35c-i). */
 export const barGradient = `linear-gradient(to bottom, ${colours.orangeLight}, ${colours.orange})`;
 /** Across a box with a chalk drawing on its right: the box's own colour under the words, the drawing
@@ -119,18 +117,30 @@ export const shadows = {
   sheet: "0 -12px 48px rgba(0,0,0,0.6)",
 } as const;
 
-/** Personal Records' badges (35c-i, Kd's pick A of three drawings): a disc lit from its top left,
- *  light to deep, glowing in its own colour; grey for a record not yet set. */
-export const badges = {
-  clock: { light: "#FFD08A", deep: "#F06A0A", glow: "0 6px 18px rgba(255,120,20,0.45)" },
-  flame: { light: "#FFB070", deep: "#C2260C", glow: "0 6px 18px rgba(230,70,20,0.42)" },
-  star: { light: "#FBB6D8", deep: "#BE185D", glow: "0 6px 18px rgba(219,39,119,0.4)" },
-  dumbbell: { light: "#FDE68A", deep: "#B7791F", glow: "0 6px 18px rgba(202,138,4,0.4)" },
-  zap: { light: "#A5C8FF", deep: "#1D4ED8", glow: "0 6px 18px rgba(37,99,235,0.42)" },
-  none: { light: "#6B655D", deep: "#2B2824", glow: "0 0 0 rgba(0,0,0,0)" },
+/** Progress's redrawn boxes (35c-i, Kd's drawing of 2026-11-04, "excellent job"): the records over
+ *  the push-up drawing on dark glass, each sign in a chalk-white ring like the drawing's joint marks;
+ *  the boxes from the bottom under their tab's drawing; the picked tile glowing as the tabs do. */
+export const chalk = {
+  ring: "rgba(255,253,248,0.85)",
+  ringInside: "rgba(10,9,8,0.72)",
+  glass: "rgba(16,15,13,0.62)",
+  glassLine: "rgba(255,255,255,0.12)",
+  bestLine: "rgba(255,138,31,0.45)",
 } as const;
-/** A badge's shine: white at its top, its foot a little darker. */
-export const badgeShine = { top: colours.passLight, foot: colours.passDark } as const;
+export const chalkShadows = {
+  ring: "0 0 0 4px rgba(255,138,31,0.10), 0 0 16px rgba(255,138,31,0.35)",
+  best: "0 0 24px rgba(255,138,31,0.18)",
+  picked: "0 8px 26px rgba(255,138,31,0.5)",
+  trained: "0 0 16px rgba(255,138,31,0.18)",
+} as const;
+/** Over the drawing behind the records: clear at the top for the title, darker under the numbers. */
+export const recordsShade =
+  "linear-gradient(to bottom, rgba(18,17,16,0.05) 0%, rgba(18,17,16,0.35) 30%, rgba(18,17,16,0.55) 60%, rgba(18,17,16,0.82) 100%)";
+/** The best record's glass: warm on its left. */
+export const bestRecordGradient = "linear-gradient(100deg, rgba(64,36,12,0.78), rgba(16,15,13,0.62))";
+/** A box from the bottom's drawing, fading into the box under its title. */
+export const sheetBandShade =
+  "linear-gradient(to top, rgba(18,17,16,1) 0%, rgba(18,17,16,0.6) 40%, rgba(18,17,16,0.1) 80%, rgba(18,17,16,0.35) 100%)";
 
 export const sizes = {
   /** A page's edge, and the gap between its boxes. */

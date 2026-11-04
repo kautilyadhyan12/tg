@@ -1,9 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, type ReactNode } from "react";
-import { KeyboardAvoidingView, Pressable, StyleSheet, View } from "react-native";
+import { Image, KeyboardAvoidingView, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 import { Modal } from "./Modal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { colours, shadows, sizes } from "./colours";
+import { colours, shadows, sheetBandShade, sizes } from "./colours";
 import { Icon } from "./Icon";
+import { pictures, type PictureName } from "./pictures";
 import { MIDDLE_INSET } from "./sizing";
 import { Txt } from "./Txt";
 
@@ -31,11 +32,14 @@ interface SheetProps {
   place?: "bottom" | "middle";
   /** The box's own step back, after any deeper one (`useSheetBack`): true where it went back a step. */
   onBack?: () => boolean;
+  /** A drawing across the box's top, its title lying on its foot (Progress's boxes, 35c-i). `focus`
+   *  is how far down the drawing the band looks: 0 its top, 1 its foot. */
+  picture?: { name: PictureName; focus: number };
 }
 
 /** The box from the bottom, or in the middle (`place`): a question, or a short task, over the page it
  *  was opened from. */
-export function Sheet({ open, title, onClose, children, place = "bottom", onBack }: SheetProps) {
+export function Sheet({ open, title, onClose, children, place = "bottom", onBack, picture }: SheetProps) {
   const middle = place === "middle";
   const insets = useSafeAreaInsets();
   const registered = useRef<{ depth: number; step: Step }[]>([]);
@@ -73,12 +77,14 @@ export function Sheet({ open, title, onClose, children, place = "bottom", onBack
           accessibilityViewIsModal
           style={[styles.sheet, middle ? styles.sheetMiddle : { paddingBottom: insets.bottom + 24 }]}
         >
+          {picture === undefined || middle ? null : <SheetBand picture={picture} />}
           {middle ? null : <View style={styles.grab} />}
+          {picture === undefined || middle ? null : <View style={styles.bandRoom} />}
           <View style={styles.head}>
-            <Txt kind="h2" style={styles.title}>
+            <Txt kind="h2" style={[styles.title, picture === undefined ? null : styles.titleOnPicture]}>
               {title}
             </Txt>
-            <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} style={styles.close}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} style={[styles.close, picture === undefined ? null : styles.closeOnPicture]}>
               <Icon name="x" size={18} />
             </Pressable>
           </View>
@@ -88,6 +94,26 @@ export function Sheet({ open, title, onClose, children, place = "bottom", onBack
     </Modal>
   );
 }
+
+/** The drawing across a box's top: as wide as the box, its height from the drawing's own shape, moved
+ *  up by `focus` of what overhangs the band. */
+function SheetBand({ picture }: { picture: { name: PictureName; focus: number } }) {
+  const { width } = useWindowDimensions();
+  const source = pictures[picture.name];
+  const size = Image.resolveAssetSource(source);
+  const tall = size.width > 0 && size.height > 0 ? (width * size.height) / size.width : BAND_TALL;
+  const lift = Math.max(0, tall - BAND_TALL) * picture.focus;
+  return (
+    <View pointerEvents="none" style={styles.band}>
+      <Image source={source} resizeMode="cover" accessible={false} style={{ position: "absolute", left: 0, width, top: -lift, height: Math.max(tall, BAND_TALL) }} />
+      <View style={[StyleSheet.absoluteFill, styles.bandShade]} />
+    </View>
+  );
+}
+
+/** The drawing's band, and the room the title waits under it: the title's foot on the band's. */
+const BAND_TALL = 150;
+const BAND_ROOM = 58;
 
 /** A tall box stops this far under the clock; its list scrolls (`flexShrink` on the box). */
 const SHEET_TOP_GAP = 8;
@@ -113,6 +139,11 @@ const styles = StyleSheet.create({
   grab: { alignSelf: "center", width: 40, height: 4, borderRadius: 999, backgroundColor: colours.grab },
   head: { flexDirection: "row", alignItems: "center", gap: 10 },
   title: { flex: 1 },
+  titleOnPicture: { textShadowColor: colours.wordShadow, textShadowRadius: 8 },
+  band: { position: "absolute", top: 0, left: 0, right: 0, height: BAND_TALL, borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: "hidden" },
+  bandShade: { experimental_backgroundImage: sheetBandShade },
+  bandRoom: { height: BAND_ROOM },
+  closeOnPicture: { backgroundColor: colours.overPicture, borderColor: colours.lineStrong },
   close: {
     width: sizes.press,
     height: sizes.press,

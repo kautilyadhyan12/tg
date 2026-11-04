@@ -131,7 +131,17 @@ describe("Predictions, from the walk member's real reply", () => {
     expect(bestTimeMini(REAL.bestTime)).toEqual({ value: "Evening", lines: ["7 of 8 workouts", "5 pm – 10 pm"], warm: false, slot: "evening" });
   });
   it("calls the biggest move, every figure to one decimal so its sum adds up: 87.5 → 83.5 is 4.6% down", () => {
-    expect(plateauMini(REAL.steady)).toEqual({ value: "Shorter workouts", lines: ["Minutes 57.5 → 37.5 ▼34.8%", "Calories 21 → 21", "Form 87.5 → 83.5 ▼4.6%"], warm: true });
+    expect(plateauMini(REAL.steady)).toEqual({
+      value: "Shorter workouts",
+      lines: ["Minutes 57.5 → 37.5 ▼34.8%", "Calories 21 → 21", "Form 87.5 → 83.5 ▼4.6%"],
+      warm: true,
+      // Drawn as rows across the card, the change on the right, so each stays on one line.
+      figures: [
+        { words: "Minutes 57.5 → 37.5", change: "▼34.8%" },
+        { words: "Calories 21 → 21", change: "" },
+        { words: "Form 87.5 → 83.5", change: "▼4.6%" },
+      ],
+    });
   });
   it("counts the weeks the weekly goal still waits for", () => {
     expect(weekGoalMini(REAL.weekGoal)).toEqual({ value: "2 of 3 weeks", lines: ["Ready next week"], warm: false, steps: { done: 2, of: 3 } });
@@ -185,7 +195,10 @@ describe("Predictions, every other state the server sends", () => {
     [pace({ form: { before: 70, recent: 85, changePct: 21.4 } }), "Form rising", ["Form 70 → 85 ▲21.4%"], false],
     [pace({ form: { before: 90, recent: 80, changePct: -11.1 } }), "Form slipping", ["Form 90 → 80 ▼11.1%"], true],
   ])("plateau %j", (s, value, lines, warm) => {
-    expect(plateauMini(s)).toEqual({ value, lines, warm });
+    const mini = plateauMini(s);
+    expect(mini).toMatchObject({ value, lines, warm });
+    // Its rows say the same as its lines.
+    expect((mini.figures ?? []).map((f) => (f.change === "" ? f.words : `${f.words} ${f.change}`))).toEqual(mini.figures === undefined ? [] : lines);
   });
   it.each([
     [{ available: false, reason: "no_goal" } as const, "No goal", ["No weekly training goal set"], null],
