@@ -69,7 +69,8 @@ export type RestoreAccountRequest = z.infer<typeof restoreAccountRequestSchema>;
 export const deleteAccountRequestSchema = z.object({ code: signInCodeSchema }).strict();
 export type DeleteAccountRequest = z.infer<typeof deleteAccountRequestSchema>;
 /** `emailSent`: the undo link went to the account's address, so a screen may say so. */
-export const deleteAccountResponseSchema = z.object({ message: z.string(), emailSent: z.boolean() }).strict();
+// Not strict: a field the server adds later must not turn a deleted account into "no answer" on the phone.
+export const deleteAccountResponseSchema = z.object({ message: z.string(), emailSent: z.boolean() });
 export type DeleteAccountResponse = z.infer<typeof deleteAccountResponseSchema>;
 
 // ── onboarding / fitness profile (onboarding-storage card) ──────────────────

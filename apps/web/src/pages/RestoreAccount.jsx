@@ -48,7 +48,7 @@ export default function RestoreAccount() {
               <p className="text-gray-300 flex items-start gap-2">
                 <Check className="w-5 h-5 mt-0.5 flex-shrink-0" style={{ color: '#4ade80' }} />
                 Your workouts, meals, goals and progress are back. Sign in to continue. If you were a member of a
-                gym, join it again from its invitation after you sign in.
+                gym, ask it to add you again.
               </p>
               <Link to="/login" className="btn-primary w-full inline-block text-center">
                 Sign in

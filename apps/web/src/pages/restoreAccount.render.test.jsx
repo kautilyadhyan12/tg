@@ -38,7 +38,7 @@ describe('the restore page', () => {
     await waitFor(() => expect(api.restoreAccount).toHaveBeenCalledWith('abc123'));
     expect(await screen.findByText(/your account is back/i)).toBeTruthy();
     // Gyms are left on deleting (Part 4 §5.2): the page never says everything is as it was.
-    expect(screen.getByText(/join it again from its invitation/)).toBeTruthy();
+    expect(screen.getByText(/ask it to add you again/)).toBeTruthy();
     expect(screen.queryByText(/exactly as you left/)).toBeNull();
     // A phone user is told to sign in in the app, not only offered the website.
     expect(screen.getByText("Using the app? Open AI Home Gym on your phone and sign in there.")).toBeTruthy();

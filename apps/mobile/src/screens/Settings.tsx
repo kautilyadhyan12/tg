@@ -331,11 +331,13 @@ export function deletedNote(emailSent: boolean, now: Date): string {
     : `Your account will be deleted on ${day}.`;
 }
 
-/** The places a deleted account leaves at once (a member, or staff where they do not own it), and the ones it owns. */
+/** The places a deleted account leaves at once, and the ones it owns. The server keeps only a gym's own
+ *  owner; a co-owner, staff and members all leave (users/repo.ts softDeleteUser). */
 export function placesOnDelete(orgs: readonly Place[]): { leaves: string[]; owns: string[] } {
+  const ownsIt = (org: Place) => org.staffRole === "owner" && org.coOwner !== true;
   return {
-    leaves: orgs.filter((org) => org.isMember || (org.staffRole !== null && org.staffRole !== "owner")).map((org) => org.name),
-    owns: orgs.filter((org) => org.staffRole === "owner").map((org) => org.name),
+    leaves: orgs.filter((org) => !ownsIt(org) && (org.isMember || org.staffRole !== null)).map((org) => org.name),
+    owns: orgs.filter(ownsIt).map((org) => org.name),
   };
 }
 
@@ -349,7 +351,7 @@ function DataPart({ places }: { places: Places }) {
     if (busy || me === null) return;
     setSaid(null);
     setBusy(true);
-    const answer = await session.signedIn({ method: "GET", path: "/v1/users/me/export", waitMs: 60_000 }, dpdpExportSchema);
+    const answer = await session.signedIn({ method: "GET", path: "/v1/users/me/export", waitMs: 60_000 }, dpdpExportSchema.passthrough());
     // The file is only ever that of the person who asked for it, still signed in.
     if (answer.kind !== "ok" || answer.data.user["id"] !== me || session.state().kind !== "in") {
       setBusy(false);
@@ -389,12 +391,14 @@ function DeleteAsk({ open, places, onClose }: { open: boolean; places: Places; o
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  const [resent, setResent] = useState(false);
   // Each opening starts at its first step, with nothing typed.
   useEffect(() => {
     if (!open) return;
     setStep("ask");
     setCode("");
     setProblem(null);
+    setResent(false);
   }, [open]);
   if (state.kind !== "in") return null;
   const me = state.user;
@@ -403,10 +407,12 @@ function DeleteAsk({ open, places, onClose }: { open: boolean; places: Places; o
     if (busy) return;
     setBusy(true);
     setProblem(null);
+    setResent(false);
     const answer = await session.signedIn({ method: "POST", path: "/v1/users/me/delete-code" }, sendCodeResponseSchema);
     setBusy(false);
     if (answer.kind === "ok") {
       setCode("");
+      setResent(step === "code");
       setStep("code");
     } else {
       setProblem(answer.kind === "refused" ? answer.message : NO_ANSWER);
@@ -417,16 +423,28 @@ function DeleteAsk({ open, places, onClose }: { open: boolean; places: Places; o
     setBusy(true);
     setProblem(null);
     const answer = await session.signedIn({ method: "DELETE", path: "/v1/users/me", body: { code } }, deleteAccountResponseSchema);
-    if (answer.kind !== "ok") {
-      setBusy(false);
-      if (answer.kind === "refused") setCode("");
-      setProblem(answer.kind === "refused" ? answer.message : NO_ANSWER);
+    if (answer.kind === "ok") {
+      await forgetMe(answer.data.emailSent);
       return;
     }
-    // Nothing of the person stays: their waiting meals and drafts, then the sign-in and its pass keys;
-    // the files again once nothing of theirs is open, for a write that was already on its way.
+    // The server replies only once the undo email is sent, so its reply can be lost after the account is
+    // gone. Asked once more: a sign-in the server no longer knows means it was deleted.
+    if (answer.kind === "no_answer") {
+      await session.signedIn({ method: "GET", path: "/v1/users/me" }, userProfileResponseSchema);
+      if (session.state().kind === "out") {
+        await forgetMe(false);
+        return;
+      }
+    }
+    setBusy(false);
+    if (answer.kind === "refused") setCode("");
+    setProblem(answer.kind === "refused" ? answer.message : NO_ANSWER);
+  };
+  // Nothing of the person stays: their waiting meals and drafts, then the sign-in and its pass keys;
+  // the files again once nothing of theirs is open, for a write that was already on its way.
+  const forgetMe = async (emailSent: boolean) => {
     forgetPersonFiles(me.id);
-    await session.accountDeleted(deletedNote(answer.data.emailSent, new Date()));
+    await session.accountDeleted(deletedNote(emailSent, new Date()));
     forgetPersonFiles(me.id);
   };
   return (
@@ -437,8 +455,8 @@ function DeleteAsk({ open, places, onClose }: { open: boolean; places: Places; o
             <Txt>
               Your workouts, meals, goals and progress are deleted for good after {String(ACCOUNT_UNDO_DAYS)} days. Until then, the link we email you brings them back.
             </Txt>
-            {leaves.length > 0 ? <Txt>You leave {namesText(leaves)} today. To come back, join again from the invitation.</Txt> : null}
-            {places.kind === "ok" ? null : <Txt>You also leave every place you belong to.</Txt>}
+            {leaves.length > 0 ? <Txt>You leave {namesText(leaves)} today. To come back later, ask them to add you again.</Txt> : null}
+            {places.kind === "failed" ? <Txt>You leave the places you’re a member of today.</Txt> : null}
             {owns.length > 0 ? <Txt>You own {namesText(owns)}. Deleting your account does not close it.</Txt> : null}
             {problem === null ? null : <Txt kind="small" colour="badText">{problem}</Txt>}
             <View style={styles.stack}>
@@ -467,10 +485,11 @@ function DeleteAsk({ open, places, onClose }: { open: boolean; places: Places; o
             />
             {problem === null ? null : <Txt kind="small" colour="badText">{problem}</Txt>}
             <View style={styles.stack}>
-              <Button label="Delete" kind="danger" icon="trash" wide busy={busy} onPress={() => void remove()} />
+              <Button label="Delete" kind="danger" icon="trash" wide busy={busy} disabled={code.length !== 6} onPress={() => void remove()} />
               <Button label="Cancel" kind="plain" wide onPress={onClose} />
             </View>
-            <Button label="Email me a new code" kind="link" style={styles.start} onPress={() => void sendCode()} />
+            <Button label="Email me a new code" kind="link" busy={busy} style={styles.start} onPress={() => void sendCode()} />
+            {resent ? <Txt kind="small" colour="goodText">We emailed you a new code.</Txt> : null}
           </>
         )}
       </View>

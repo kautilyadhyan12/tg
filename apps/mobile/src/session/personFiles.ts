@@ -32,3 +32,19 @@ export function exportFileFor(userId: string, name: string, text: string): File 
   file.write(text);
   return file;
 }
+
+/** With nobody signed in, no download's copy stays on the phone: the next person to hold it is not its owner. */
+export function forgetExports(): void {
+  try {
+    for (const one of Paths.cache.list()) {
+      if (!one.name.startsWith("export-")) continue;
+      try {
+        one.delete();
+      } catch {
+        // Left; it is gone at the next sign-out.
+      }
+    }
+  } catch {
+    // Never a reason to take the app down.
+  }
+}

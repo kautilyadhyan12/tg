@@ -36,6 +36,8 @@ const place = (name: string, more: object) => ({
 });
 const IRON = place("Iron House", {});
 const PULSE = place("Pulse Studio", { staffRole: "owner", isMember: false });
+// A co-owner is removed from the gym on deleting; only the gym's own owner stays.
+const LOTUS = place("Lotus Yoga", { id: "3e4f5a6b-7c8d-4e9f-8a1b-2c3d4e5f6a7b", staffRole: "owner", coOwner: true, isMember: false });
 const sentCode = ok({ message: "We emailed you a 6-digit code.", resendAfterSeconds: 60, expiresInSeconds: 600 });
 const deleted = (emailSent: boolean) => ok({ message: "Account scheduled for deletion.", emailSent });
 const anExport = (userId: string) => ({
@@ -112,7 +114,8 @@ describe("Delete account (the worst thing: after deleting, the phone still shows
     expect(new File(Paths.document, `meals-${ANOTHER}.json`).exists).toBe(true);
     expect(exported.exists).toBe(false);
     expect(new File(exported, "aihomegym-export-2026-11-01.json").exists).toBe(false);
-    expect(theirs.exists).toBe(true);
+    // With nobody signed in no download's copy stays, anyone's: it is only ever a copy (their waiting meals stay).
+    expect(theirs.exists).toBe(false);
     // The code went with the DELETE, and the server ended the sign-in itself: no Sign out is owed.
     expect(server.asked.filter((a) => a.path === ME && a.method === "DELETE").map((a) => a.body)).toEqual([{ code: "123456" }]);
     expect(server.paths()).not.toContain("/v1/auth/logout");
@@ -140,6 +143,55 @@ describe("Delete account (the worst thing: after deleting, the phone still shows
     expect(new File(Paths.document, `meals-${RAVI.id}.json`).exists).toBe(true);
   });
 
+  it("a reply lost after the server deleted still leaves nothing of the person, and says the day", async () => {
+    write(`meals-${RAVI.id}.json`, '{"meals":["Poha"]}');
+    let gone = false;
+    const server = fakeServer(
+      routes({
+        [ME]: (body) => {
+          if (body !== undefined && typeof body === "object" && body !== null && "code" in body) {
+            gone = true; // deleted, and every sign-in ended; the reply never arrives
+            return lost();
+          }
+          return gone ? refusal(401, "unauthorized", "Sign in again.") : { status: 200, body: profile(true) };
+        },
+        "/v1/auth/refresh": () => (gone ? refusal(401, "unauthorized", "Sign in again.") : { status: 200, body: { tokens: tokens(2) } }),
+      }),
+    );
+    const store = await openSettings(server.ask);
+    await upToTheCode();
+    await fireEvent.press(screen.getByLabelText("Delete"));
+    expect(await screen.findByText(deletedNote(false, new Date()))).toBeTruthy();
+    expect(store.value).toBeNull();
+    expect(new File(Paths.document, `meals-${RAVI.id}.json`).exists).toBe(false);
+  });
+
+  it("a meal written while the sign-in is being forgotten is removed too", async () => {
+    // The key store is cleared in the middle of forgetting the person: a write already on its way lands then.
+    const store = memoryStore(kept(1));
+    store.clear = () => {
+      store.value = null;
+      write(`meals-${RAVI.id}.json`, '{"meals":["late"]}');
+      return Promise.resolve();
+    };
+    const server = fakeServer(routes({ [ME]: me(deleted(true)) }));
+    await openSettings(server.ask, store);
+    await upToTheCode();
+    await fireEvent.press(screen.getByLabelText("Delete"));
+    expect(await screen.findByText(deletedNote(true, new Date()))).toBeTruthy();
+    expect(new File(Paths.document, `meals-${RAVI.id}.json`).exists).toBe(false);
+  });
+
+  it("Delete waits for all six digits", async () => {
+    const server = fakeServer(routes({ [ME]: me(deleted(true)) }));
+    await openSettings(server.ask);
+    await upToTheCode("12345");
+    expect(screen.getByRole("button", { name: "Delete" }).props.accessibilityState).toMatchObject({ disabled: true });
+    await fireEvent.press(screen.getByLabelText("Email me a new code"));
+    expect(await screen.findByText("We emailed you a new code.")).toBeTruthy();
+    expect(server.asked.filter((a) => a.method === "DELETE")).toEqual([]);
+  });
+
   it("never says an email was sent when the server says none went", async () => {
     const server = fakeServer(routes({ [ME]: me(deleted(false)) }));
     await openSettings(server.ask);
@@ -149,11 +201,11 @@ describe("Delete account (the worst thing: after deleting, the phone still shows
     expect(screen.queryByText(/link we emailed/)).toBeNull();
   });
 
-  it("names the places the person leaves and the one they own, and sends no code until asked", async () => {
-    const server = fakeServer(routes({ [ME]: me(deleted(true)) }));
+  it("names the places the person leaves, a co-owned one among them, and the one they own, and sends no code until asked", async () => {
+    const server = fakeServer(routes({ [ME]: me(deleted(true)), "/v1/orgs/mine": ok({ orgs: [IRON, PULSE, LOTUS], formerOrgs: [] }) }));
     await openSettings(server.ask);
     await fireEvent.press(await screen.findByLabelText("Delete account"));
-    expect(await screen.findByText("You leave Iron House today. To come back, join again from the invitation.")).toBeTruthy();
+    expect(await screen.findByText("You leave Iron House and Lotus Yoga today. To come back later, ask them to add you again.")).toBeTruthy();
     expect(screen.getByText("You own Pulse Studio. Deleting your account does not close it.")).toBeTruthy();
     expect(server.paths()).not.toContain(CODE);
     await fireEvent.press(screen.getByLabelText("Cancel"));
@@ -164,7 +216,7 @@ describe("Delete account (the worst thing: after deleting, the phone still shows
     const server = fakeServer(routes({ "/v1/orgs/mine": () => refusal(500, "internal", "Something went wrong.") }));
     await openSettings(server.ask);
     await fireEvent.press(await screen.findByLabelText("Delete account"));
-    expect(await screen.findByText("You also leave every place you belong to.")).toBeTruthy();
+    expect(await screen.findByText("You leave the places you’re a member of today.")).toBeTruthy();
   });
 
   it("a code refused by the server's limit says why and stays on the first step", async () => {
@@ -197,6 +249,38 @@ describe("Download my data", () => {
     expect(await screen.findByText(NO_ANSWER)).toBeTruthy();
     expect(shared()).toEqual([]);
     expect(Paths.cache.list()).toEqual([]);
+  });
+
+  it("hands over nothing when the person signs out while the file is on its way", async () => {
+    let send: (reply: Reply) => void = () => undefined;
+    const server = fakeServer(routes({ [EXPORT]: () => new Promise<Reply>((resolve) => { send = resolve; }), "/v1/auth/logout": ok({}) }));
+    await openSettings(server.ask);
+    await fireEvent.press(await screen.findByLabelText("Download my data"));
+    await fireEvent.press(screen.getAllByLabelText("Close")[0] ?? screen.getByLabelText("Close"));
+    await fireEvent.press(await screen.findByRole("button", { name: "Sign out" }));
+    const inTheBox = screen.getAllByRole("button", { name: "Sign out" })[1];
+    if (inTheBox === undefined) throw new Error("the box's Sign out was expected");
+    await fireEvent.press(inTheBox);
+    expect(await screen.findByLabelText("Email")).toBeTruthy();
+    send({ status: 200, body: anExport(RAVI.id) });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(shared()).toEqual([]);
+    expect(Paths.cache.list()).toEqual([]);
+  });
+
+  it("signing out removes the copy handed to the Share box", async () => {
+    const server = fakeServer(routes({ [EXPORT]: ok(anExport(RAVI.id)), "/v1/auth/logout": ok({}) }));
+    await openSettings(server.ask);
+    await fireEvent.press(await screen.findByLabelText("Download my data"));
+    expect(await screen.findByText(`Your file is ${NAME}.`)).toBeTruthy();
+    expect(new File(`cache/export-${RAVI.id}/${NAME}`).exists).toBe(true);
+    await fireEvent.press(screen.getAllByLabelText("Close")[0] ?? screen.getByLabelText("Close"));
+    await fireEvent.press(await screen.findByRole("button", { name: "Sign out" }));
+    const inTheBox = screen.getAllByRole("button", { name: "Sign out" })[1];
+    if (inTheBox === undefined) throw new Error("the box's Sign out was expected");
+    await fireEvent.press(inTheBox);
+    expect(await screen.findByLabelText("Email")).toBeTruthy();
+    expect(new File(`cache/export-${RAVI.id}/${NAME}`).exists).toBe(false);
   });
 
   it("a refusal shows the server's words and shares nothing", async () => {
