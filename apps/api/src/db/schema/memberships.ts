@@ -66,6 +66,8 @@ export const gymMembershipTypes = pgTable(
     noticeDays: integer("notice_days"),
     /** Its minimum term's early cancellation fee (0202; 18v-ii-b); null for none. */
     leaveFeeMinor: integer("leave_fee_minor"),
+    /** Its cooling-off period in days (0203; 18v-iii); null for none. */
+    coolingOffDays: integer("cooling_off_days"),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -95,6 +97,7 @@ export const gymMembershipTypes = pgTable(
       "gym_membership_types_leave_fee_check",
       sql`${t.leaveFeeMinor} IS NULL OR (${t.contractPeriods} IS NOT NULL AND ${t.leaveFeeMinor} BETWEEN 1 AND 99999999)`,
     ),
+    check("gym_membership_types_cooling_off_check", sql`${t.coolingOffDays} IS NULL OR (${t.priceMinor} > 0 AND ${t.coolingOffDays} BETWEEN 1 AND 30)`),
     check("gym_membership_types_access_check", sql`${t.access} IN ('all_classes','limited','gym_only')`),
     check(
       "gym_membership_types_limit_check",
@@ -208,6 +211,10 @@ export const gymHeldMemberships = pgTable(
     leaveFeeMinor: integer("leave_fee_minor"),
     /** Ended inside its minimum term with that fee: the fee is a bill of it (`fee` 'leave_early'). */
     leftEarly: boolean("left_early").notNull().default(false),
+    /** Its cooling-off period as it was given (0203; 18v-iii); null for none. */
+    coolingOffDays: integer("cooling_off_days"),
+    /** Cancelled inside its cooling-off period with a full refund. */
+    changedMind: boolean("changed_mind").notNull().default(false),
     classesLeft: integer("classes_left"),
     fromList: boolean("from_list").notNull().default(false),
     /** The discount it was given with (`0107`). Its key to `gym_discounts` is the
@@ -306,6 +313,10 @@ export const gymHeldMemberships = pgTable(
       sql`(${t.leaveFeeMinor} IS NULL OR (${t.contractPeriods} IS NOT NULL AND ${t.leaveFeeMinor} BETWEEN 1 AND 99999999)) AND (NOT ${t.leftEarly} OR (${t.leaveFeeMinor} IS NOT NULL AND (${t.status} IN ('cancelled','ended') OR NOT ${t.renews} OR ${t.stopsAfter} IS NOT NULL)))`,
     ),
     check(
+      "gym_held_memberships_cooling_off_check",
+      sql`(${t.coolingOffDays} IS NULL OR (${t.priceMinor} > 0 AND ${t.coolingOffDays} BETWEEN 1 AND 30)) AND (NOT ${t.changedMind} OR (${t.coolingOffDays} IS NOT NULL AND ${t.status} = 'cancelled'))`,
+    ),
+    check(
       "gym_held_memberships_discount_check",
       sql`(${t.discountId} IS NULL) = (${t.discountName} IS NULL) AND (${t.discountId} IS NULL) = (${t.discountPayments} IS NULL) AND CASE WHEN ${t.discountId} IS NULL THEN ${t.discountMinor} = 0 ELSE ${t.discountMinor} BETWEEN 1 AND 99999999 AND ${t.discountPayments} IN ('first','every') AND (${t.discountPayments} = 'every' OR ${t.kind} = 'recurring') END`,
     ),
@@ -320,6 +331,7 @@ export const gymHeldMemberships = pgTable(
       foreignColumns: [gymMembershipTypes.gymId, gymMembershipTypes.id],
     }),
     index("gym_held_memberships_entry_idx").on(t.gymId, t.entryId),
+    index("gym_held_memberships_changed_mind_idx").on(t.gymId).where(sql`${t.changedMind}`),
     index("gym_held_memberships_type_idx").on(t.gymId, t.membershipTypeId),
     index("gym_held_memberships_discount_idx")
       .on(t.gymId, t.discountId)

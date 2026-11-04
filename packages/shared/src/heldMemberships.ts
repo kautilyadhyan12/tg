@@ -39,6 +39,11 @@
 //                  to the end of the period the notice's last day falls in;
 //   `leaveFeeMinor` its minimum term's early cancellation fee (18v-ii-b), copied as the term is;
 //   `leftEarly`   staff ended it inside its minimum term with that fee: the term holds it no more;
+//   `coolingOffDays` its cooling-off period (18v-iii), copied from its type when it was given;
+//   `coolingOffFrom` the day those days count from: the day its agreement was signed, or the day it
+//                  was added where none was signed (read, never stored); null where it was changed to
+//                  another membership that stands;
+//   `changedMind` staff cancelled it inside its cooling-off period, with a full refund;
 //   the end day, the renewal day and what is owed are worked out from those.
 import { z } from "zod";
 import {
@@ -214,6 +219,25 @@ export interface HeldMembership {
   leaveFeeMinor?: number | null;
   /** Ended inside its minimum term with that fee (18v-ii-b): the term holds it no more. */
   leftEarly?: boolean;
+  /** Its cooling-off period in days as it was given (18v-iii); null for none. A screen's own copy may leave it out. */
+  coolingOffDays?: number | null;
+  /** The day its cooling-off days count from (18v-iii): its agreement's signing day, else the day it was added. */
+  coolingOffFrom?: string | null;
+  /** Cancelled inside its cooling-off period, with a full refund (18v-iii). */
+  changedMind?: boolean;
+}
+
+/** THE COOLING-OFF PERIOD (18v-iii): its last day, while a member may cancel with a full refund today. It
+ *  runs from `coolingOffFrom` to so many days after, weekends counted: signed on 4 November with 3 days,
+ *  to 7 November. Null where it has none or nothing to pay, today is outside it, it is over or cancelled,
+ *  or it was cancelled early with a fee already. */
+function coolingOffOf(m: HeldMembership, today: string): { until: string } | null {
+  const days = m.coolingOffDays ?? null;
+  const from = m.coolingOffFrom ?? null;
+  if (days === null || days <= 0 || from === null || m.free || m.changedMind === true || m.leftEarly === true) return null;
+  if (m.status !== "active" && m.status !== "frozen") return null;
+  const until = addDays(from, days);
+  return today >= from && today <= until ? { until } : null;
 }
 
 /** The minimum term where it has one: a repeating membership only. `periods` is how many periods
@@ -263,6 +287,8 @@ function leaveOf(m: HeldMembership, today: string): { patch: Partial<HeldMembers
   const c = contractOf(m);
   if (fee === null || fee <= 0 || c === null || m.leftEarly === true || !m.renews || today < m.startsOn) return null;
   if (m.status !== "active" && m.status !== "frozen") return null;
+  // Inside its cooling-off period it is cancelled with a full refund, never with a fee (18v-iii).
+  if (coolingOffOf(m, today) !== null) return null;
   const frozenSoFar = m.status === "frozen" && m.frozenOn !== null ? Math.max(0, daysBetween(m.frozenOn, today)) : 0;
   const at: HeldMembership = { ...m, frozenDays: m.frozenDays + frozenSoFar };
   const termUntil = addDays(periodStart(at, c.periods), -1);
@@ -452,6 +478,8 @@ export const heldMembershipViewSchema = z
         /** Ending it inside its minimum term with its early cancellation fee (18v-ii-b): the fee, and the last
          *  day it would run. Null where it holds no fee, is in no running term, or would run to the term's end anyway. */
         leaveEarly: z.object({ feeMinor: z.number().int().min(1), endsOn: z.string() }).strict().nullable().default(null),
+        /** Cancel with a full refund (18v-iii): the last day of its cooling-off period, while today is inside it. */
+        coolingOff: z.object({ until: z.string() }).strict().nullable().default(null),
         /** Mark paid: the count it moves to, and for a repeating one the day paid up to. */
         markPaid: z.object({ paidPeriods: z.number().int(), until: z.string().nullable() }).strict().nullable(),
         /** Take the last mark back. */
@@ -556,6 +584,7 @@ export function heldMembershipView(stored: HeldMembership, today: string): HeldM
         noticeEnds: null,
         noticePaid: false,
         leaveEarly: null,
+        coolingOff: null,
         markPaid: null,
         undoPaid: null,
       },
@@ -623,6 +652,7 @@ export function heldMembershipView(stored: HeldMembership, today: string): HeldM
       noticeEnds,
       noticePaid: willEnd !== null && willEnd.periods <= m.paidPeriods,
       leaveEarly: ((leave) => (leave === null || !inContract ? null : { feeMinor: m.leaveFeeMinor ?? 0, endsOn: leave.lastDay }))(leaveOf(m, today)),
+      coolingOff: coolingOffOf(m, today),
       markPaid,
       undoPaid,
     },
@@ -641,8 +671,10 @@ export type HeldMembershipEvent =
   | { type: "paid"; paidPeriods: number };
 
 /** `notice`: it runs, and is paid for, to the end of the period its notice ends in, then stops (18v-ii-a).
- *  `leave_early`: it leaves a running minimum term with its early cancellation fee, ending as `leaveOf` says (18v-ii-b). */
-export type CancelWhen = "today" | "period_end" | "contract_end" | "notice" | "leave_early";
+ *  `leave_early`: it leaves a running minimum term with its early cancellation fee, ending as `leaveOf` says (18v-ii-b).
+ *  `cooling_off`: inside its cooling-off period it is cancelled today, held to no minimum term, notice or fee, and what
+ *  was paid for it is to be given back in full (18v-iii). */
+export type CancelWhen = "today" | "period_end" | "contract_end" | "notice" | "leave_early" | "cooling_off";
 
 export type HeldMembershipMove =
   /** `changed` false: it was already so, and nothing is to be written. */
@@ -678,6 +710,12 @@ export function moveHeldMembership(stored: HeldMembership, event: HeldMembership
     }
 
     case "cancel":
+      if (event.when === "cooling_off") {
+        // The same press twice is one: cancelled so already, it is answered as done.
+        if (m.changedMind === true) return same;
+        if (view.can.coolingOff === null) return refused;
+        return { ok: true, membership: { ...m, status: "cancelled", frozenOn: null, cancelledOn: today, changedMind: true }, changed: true };
+      }
       if (event.when === "leave_early") {
         if (m.leftEarly === true) return same;
         const leave = view.can.leaveEarly === null ? null : leaveOf(m, today);
@@ -723,7 +761,7 @@ export function moveHeldMembership(stored: HeldMembership, event: HeldMembership
  *  today, or at the end of what is paid where that is before the term's last day. Ending with the
  *  term, or on or after its last day, is no release (round one, L2). */
 export function releaseAsked(view: Pick<HeldMembershipView, "contract" | "can">, when: CancelWhen): boolean {
-  if (!view.can.releaseNeeded || view.contract === null || when === "contract_end" || when === "notice" || when === "leave_early") return false;
+  if (!view.can.releaseNeeded || view.contract === null || when === "contract_end" || when === "notice" || when === "leave_early" || when === "cooling_off") return false;
   if (when === "today") return true;
   const paidTo = view.can.cancelAtPeriodEnd;
   return paidTo !== null && paidTo < view.contract.until;
@@ -734,7 +772,7 @@ export function releaseAsked(view: Pick<HeldMembershipView, "contract" | "can">,
  *  or ending with a minimum term the notice does not run past, is not. */
 export function noticeAsked(view: Pick<HeldMembershipView, "can">, when: CancelWhen): boolean {
   const ends = view.can.noticeEnds;
-  if (ends === null || when === "contract_end" || when === "notice" || when === "leave_early") return false;
+  if (ends === null || when === "contract_end" || when === "notice" || when === "leave_early" || when === "cooling_off") return false;
   if (when === "today") return true;
   const paidTo = view.can.cancelAtPeriodEnd;
   return paidTo !== null && paidTo < ends;
@@ -755,6 +793,8 @@ export interface HeldMembershipTerms {
   noticeDays?: number | null;
   /** Its minimum term's early cancellation fee (18v-ii-b); left out is none. */
   leaveFeeMinor?: number | null;
+  /** Its cooling-off period in days (18v-iii); left out is none. */
+  coolingOffDays?: number | null;
 }
 
 /** The contract a membership given from `type` holds: a repeating one's only. */
@@ -802,6 +842,10 @@ export function giveHeldMembership(type: HeldMembershipTerms, startsOn: string, 
     noticeDays: type.kind === "recurring" && type.priceMinor > 0 ? (type.noticeDays ?? null) : null,
     stopsAfter: null,
     leftEarly: false,
+    // Its cooling-off days count from today, the day it is added, until its agreement is signed (18v-iii).
+    coolingOffDays: type.priceMinor > 0 ? (type.coolingOffDays ?? null) : null,
+    coolingOffFrom: today,
+    changedMind: false,
   };
   const free = base.free;
   const current = type.kind === "recurring" ? periodIndex(base, today) : 0;
@@ -1093,6 +1137,10 @@ export const heldMembershipSchema = z
     leaveFeeMinor: z.number().int().min(1).nullable().default(null),
     /** Staff ended it inside its minimum term with that fee (18v-ii-b). */
     leftEarly: z.boolean().default(false),
+    /** Its cooling-off period in days as it was given (18v-iii); null for none. */
+    coolingOffDays: z.number().int().min(1).nullable().default(null),
+    /** Staff cancelled it inside its cooling-off period, with a full refund (18v-iii). */
+    changedMind: z.boolean().default(false),
     /** Taken from the gym's own list (17a-iii): its start day was worked back from the
      *  list's day, so a screen does not print it as the day the person started. */
     fromList: z.boolean(),
@@ -1162,6 +1210,8 @@ export const heldMembershipTypeChoiceSchema = z
     noticeDays: z.number().int().min(1).nullable().default(null),
     /** Its minimum term's early cancellation fee (18v-ii-b), which a membership given from it holds; null for none. */
     leaveFeeMinor: z.number().int().min(1).nullable().default(null),
+    /** Its cooling-off period in days (18v-iii), which a membership given from it holds; null for none. */
+    coolingOffDays: z.number().int().min(1).nullable().default(null),
   })
   .strict();
 export type HeldMembershipTypeChoice = z.infer<typeof heldMembershipTypeChoiceSchema>;
@@ -1280,6 +1330,8 @@ export const giveHeldMembershipRequestSchema = z
     /** The notice to cancel the screen showed for the line (18v-ii-a), null for none: nothing is given
      *  where the line's is now another. Left out, the screen showed no word of it. */
     noticeDays: z.number().int().min(1).max(90).nullable().optional(),
+    /** The cooling-off period the screen showed for the line (18v-iii), null for none: checked the same way. */
+    coolingOffDays: z.number().int().min(1).max(30).nullable().optional(),
   })
   .strict()
   .refine((v) => (v.discountId === undefined) === (v.discountMinor === undefined) && (v.discountId === undefined || v.priceMinor !== undefined), {
@@ -1299,7 +1351,7 @@ export const cancelHeldMembershipRequestSchema = z
   .object({
     /** `contract_end`: runs to the end of its contract, then stops (18v-i). `notice`: runs to the end of
      *  the period its notice ends in, then stops (18v-ii-a). */
-    when: z.enum(["today", "period_end", "contract_end", "notice", "leave_early"]),
+    when: z.enum(["today", "period_end", "contract_end", "notice", "leave_early", "cooling_off"]),
     /** Why a member is let out of a running minimum term early: asked only then, and refused without it. */
     release: contractReleaseSchema.optional(),
     /** `leave_early` (18v-ii-b): the early cancellation fee the screen showed; refused where it is not the membership's. */
@@ -1309,7 +1361,7 @@ export const cancelHeldMembershipRequestSchema = z
   })
   .strict()
   // Ending with the minimum term lets nobody out early: a reason sent with it is refused (round one, L1).
-  .refine((v) => (v.when !== "contract_end" && v.when !== "notice" && v.when !== "leave_early") || v.release === undefined, { path: ["release"] })
+  .refine((v) => (v.when !== "contract_end" && v.when !== "notice" && v.when !== "leave_early" && v.when !== "cooling_off") || v.release === undefined, { path: ["release"] })
   // The fee goes with leaving early alone, and leaving early always says it (18v-ii-b).
   .refine((v) => (v.when === "leave_early") === (v.leaveFeeMinor !== undefined), { path: ["leaveFeeMinor"] });
 export type CancelHeldMembershipRequest = z.infer<typeof cancelHeldMembershipRequestSchema>;

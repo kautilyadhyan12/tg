@@ -251,7 +251,7 @@ export interface AgreementFactsInput {
   membership: Pick<
     HeldMembershipItem,
     "typeName" | "kind" | "priceMinor" | "currency" | "termCount" | "termUnit" | "packClasses" | "startsOn" | "discount" | "tax" | "view"
-  > & { contractPeriods?: number | null; fullFrom?: string | null; leaveFeeMinor?: number | null };
+  > & { contractPeriods?: number | null; fullFrom?: string | null; leaveFeeMinor?: number | null; coolingOffDays?: number | null };
   /** Its first bill, as opened with it (`firstBillOf`); null where it has none listed. */
   firstBill: Pick<MemberBill, "amountMinor" | "joiningFeeMinor" | "part" | "covers" | "dueOn"> | null;
   /** The business's prices hold the tax, or it is added on top. */
@@ -334,6 +334,9 @@ export function agreementFacts(input: AgreementFactsInput): AgreementFact[] {
   } else if (endsOn !== null) {
     facts.push({ label: m.kind === "pack" ? "Use by" : "Ends", value: dayWords(endsOn) });
   }
+  // Its cooling-off period (18v-iii): counted from the day this is signed.
+  const cooling = m.coolingOffDays ?? null;
+  if (cooling !== null && cooling > 0 && m.priceMinor > 0) facts.push({ label: "Cooling-off period", value: `${cooling === 1 ? "1 day" : `${String(cooling)} days`} after signing, to cancel with a full refund` });
   return facts;
 }
 
