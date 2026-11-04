@@ -1,8 +1,8 @@
 // A console page opened signed out is opened again after sign-in (19b-ii): the phone's Choose a new
 // owner opens a gym's Staff tab in a browser that is usually signed out. Only this site's console
-// pages, once, for 30 minutes.
+// pages, for 30 minutes, until a signed-in page is reached.
 import { describe, expect, it } from 'vitest';
-import { RETURN_FOR_MS, forgetReturn, isReturnPath, rememberReturn, takeReturn } from './landingRoute';
+import { RETURN_FOR_MS, forgetReturn, isReturnPath, rememberReturn, readReturn } from './landingRoute';
 
 const fakeStore = () => {
   const map = new Map();
@@ -40,29 +40,31 @@ describe('which pages are kept (the worst thing: sign-in sends somebody to anoth
   });
 });
 
-describe('kept once, for 30 minutes, in this tab', () => {
-  it('the page asked for is opened once after sign-in', () => {
+describe('kept for 30 minutes, in this tab, until a signed-in page is reached', () => {
+  it('every step of signing in reads the same page, and arriving forgets it', () => {
     const store = fakeStore();
     expect(rememberReturn(STAFF, store, 1_000)).toBe(true);
-    expect(takeReturn(store, 2_000)).toBe(STAFF);
-    expect(takeReturn(store, 3_000)).toBeNull();
+    expect(readReturn(store, 2_000)).toBe(STAFF);
+    expect(readReturn(store, 3_000)).toBe(STAFF);
+    forgetReturn(store);
+    expect(readReturn(store, 4_000)).toBeNull();
   });
 
   it('too old, or from a clock that went back, it is forgotten', () => {
     const store = fakeStore();
     rememberReturn(STAFF, store, 1_000);
-    expect(takeReturn(store, 1_000 + RETURN_FOR_MS + 1)).toBeNull();
+    expect(readReturn(store, 1_000 + RETURN_FOR_MS + 1)).toBeNull();
     rememberReturn(STAFF, store, 5_000);
-    expect(takeReturn(store, 4_000)).toBeNull();
+    expect(readReturn(store, 4_000)).toBeNull();
     rememberReturn(STAFF, store, 1_000);
-    expect(takeReturn(store, 1_000 + RETURN_FOR_MS)).toBe(STAFF);
+    expect(readReturn(store, 1_000 + RETURN_FOR_MS)).toBe(STAFF);
   });
 
   it('a page that is not kept forgets the one before it, and sign-out forgets it', () => {
     const store = fakeStore();
     rememberReturn(STAFF, store, 1_000);
     rememberReturn('/dashboard', store, 2_000);
-    expect(takeReturn(store, 3_000)).toBeNull();
+    expect(readReturn(store, 3_000)).toBeNull();
     rememberReturn(STAFF, store, 1_000);
     forgetReturn(store);
     expect(store.size()).toBe(0);
@@ -72,12 +74,12 @@ describe('kept once, for 30 minutes, in this tab', () => {
     for (const raw of ['not json', JSON.stringify({ path: '//evil.example', at: 1_000 }), JSON.stringify({ path: STAFF }), 'null']) {
       const store = fakeStore();
       store.setItem('aihg.signInReturn', raw);
-      expect(takeReturn(store, 2_000)).toBeNull();
+      expect(readReturn(store, 2_000)).toBeNull();
     }
   });
 
   it('with no storage at all, nothing is kept and nothing breaks', () => {
     expect(rememberReturn(STAFF, null)).toBe(false);
-    expect(takeReturn(null)).toBeNull();
+    expect(readReturn(null)).toBeNull();
   });
 });

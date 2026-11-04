@@ -142,13 +142,14 @@ export function rememberReturn(path, store = defaultStore(), now = Date.now()) {
   }
 }
 
-/** The page to open after signing in, once: null when there is none, or it is too old. */
-export function takeReturn(store = defaultStore(), now = Date.now()) {
+/** The page to open after signing in: null when there is none, or it is too old. Read by every
+ *  step of signing in alike (the form, the page guarding it, Google's landing), so none of them
+ *  sends the person somewhere else first; forgotten once they reach a signed-in page. */
+export function readReturn(store = defaultStore(), now = Date.now()) {
   if (store === null) return null;
   let raw;
   try {
     raw = store.getItem(RETURN_KEY);
-    store.removeItem(RETURN_KEY);
   } catch {
     return null;
   }
@@ -161,7 +162,8 @@ export function takeReturn(store = defaultStore(), now = Date.now()) {
   }
 }
 
-/** Forgotten on sign-out, with the door: the next person at a shared browser starts fresh. */
+/** Forgotten on reaching a signed-in page, and on sign-out with the door: the next person at a
+ *  shared browser starts fresh. */
 export function forgetReturn(store = defaultStore()) {
   if (store === null) return false;
   try {
