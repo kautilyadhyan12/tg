@@ -58,6 +58,8 @@ import { GOALS_READ, GoalsBox, GoalsPage, type GoalsOpen } from "./Goals";
 import { LeaderboardPage, type LeaderboardPlace } from "./gym/Leaderboard";
 import { rankWords } from "./gym/leaderboardView";
 import { useGymRank } from "./gym/useGymRank";
+import { AchievementsPage } from "./achievements/AchievementsPage";
+import type { TabKey as AchievementsTab } from "./achievements/achievementsRules";
 import { greetingAt } from "./greeting";
 import { COMING_SOON } from "./Soon";
 
@@ -119,10 +121,11 @@ export function DashboardScreen() {
   const toWorkout = () => {
     go.navigate("Workout");
   };
-  // Progress and Achievements live on Me (item 35c).
+  // Progress lives on Me (item 35c); Achievements opens over the Dashboard on the tab its box shows (35c-iii).
   const toMe = () => {
     go.navigate("Me");
   };
+  const [achievements, setAchievements] = useState<AchievementsTab | null>(null);
 
   return (
     <Page
@@ -179,7 +182,12 @@ export function DashboardScreen() {
         <PictureLink picture="running" label="View Progress" onPress={toMe} />
       </Swipe>
       <Swipe>
-        <Challenges read={challenges.read} />
+        <Challenges
+          read={challenges.read}
+          onPress={() => {
+            setAchievements("challenges");
+          }}
+        />
         {firstGym !== null ? (
           <GymRank key={firstGym.id} place={{ id: firstGym.id, name: firstGym.name, clockFormat: firstGym.clockFormat }} read={rank.read} onClosed={rank.again} />
         ) : places.read.kind === "ok" ? (
@@ -187,7 +195,12 @@ export function DashboardScreen() {
         ) : (
           <RankBox big={NOT_KNOWN} />
         )}
-        <Badges me={me.read} onPress={toMe} />
+        <Badges
+          me={me.read}
+          onPress={() => {
+            setAchievements("badges");
+          }}
+        />
       </Swipe>
       <Recommended
         onMore={() => {
@@ -209,6 +222,15 @@ export function DashboardScreen() {
         }}
         read={goals.read}
         again={goals.again}
+      />
+      <AchievementsPage
+        open={achievements !== null}
+        start={achievements ?? "badges"}
+        onClose={() => {
+          setAchievements(null);
+          me.again();
+          challenges.again();
+        }}
       />
     </Page>
   );
@@ -396,9 +418,9 @@ function Motivation({ running }: { running: boolean }) {
   );
 }
 
-function Challenges({ read }: { read: Read<WeeklyChallenges> }) {
+function Challenges({ read, onPress }: { read: Read<WeeklyChallenges>; onPress: () => void }) {
   return (
-    <View style={[styles.box, styles.challenges]}>
+    <Pressable accessibilityRole="button" accessibilityLabel="Weekly Challenges, see all" onPress={onPress} style={[styles.box, styles.challenges]}>
       <Image source={pictures.weeklychallenges} resizeMode="cover" style={styles.fill} accessible={false} />
       <View style={[StyleSheet.absoluteFill, styles.statShade]} />
       <View style={[styles.grow, styles.inner]}>
@@ -433,7 +455,7 @@ function Challenges({ read }: { read: Read<WeeklyChallenges> }) {
           ))
         )}
       </View>
-    </View>
+    </Pressable>
   );
 }
 

@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<!-- The Achievements medals (ROADMAP Stage 5 35c-iii), drawn from Kd's approved drawing
+     (reviews/35c-iii-achievements-mock-4.png, this folder's). make.py lays every one out on this
+     page, takes its picture through headless Edge on a clear background and cuts each to a WebP
+     under apps/mobile/assets/medals. Change a medal here, then run make.py again. -->
+<html><head><meta charset="utf-8"><style>
+html,body{margin:0;background:transparent}
+.cell{position:absolute;width:360px;height:420px}
+.cell svg{width:360px;height:420px;display:block}
+.cell.sq svg{width:360px;height:360px}
+</style></head><body>
+
+<svg width="0" height="0" style="position:absolute">
+<defs>
+ <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff7cf"/><stop offset=".22" stop-color="#f4cc58"/><stop offset=".46" stop-color="#a26d14"/><stop offset=".62" stop-color="#f9dc7c"/><stop offset=".82" stop-color="#c38d1d"/><stop offset="1" stop-color="#6a400a"/></linearGradient>
+ <linearGradient id="silver" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".22" stop-color="#dfe4ea"/><stop offset=".46" stop-color="#7c848d"/><stop offset=".62" stop-color="#f1f4f7"/><stop offset=".82" stop-color="#a5aeb7"/><stop offset="1" stop-color="#4d545b"/></linearGradient>
+ <linearGradient id="bronze" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe3c8"/><stop offset=".22" stop-color="#d98e55"/><stop offset=".46" stop-color="#7a4120"/><stop offset=".62" stop-color="#eeb07c"/><stop offset=".82" stop-color="#a65f2c"/><stop offset="1" stop-color="#47230c"/></linearGradient>
+ <linearGradient id="plat" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".22" stop-color="#d6f0ff"/><stop offset=".46" stop-color="#6f98ad"/><stop offset=".62" stop-color="#f4fcff"/><stop offset=".82" stop-color="#99c0d6"/><stop offset="1" stop-color="#3b505c"/></linearGradient>
+ <radialGradient id="e-crimson" cx=".4" cy=".35" r=".75"><stop offset="0" stop-color="#e2574a"/><stop offset=".6" stop-color="#9c1d16"/><stop offset="1" stop-color="#4d0a07"/></radialGradient>
+ <radialGradient id="e-royal" cx=".4" cy=".35" r=".75"><stop offset="0" stop-color="#5c86e6"/><stop offset=".6" stop-color="#1d3a93"/><stop offset="1" stop-color="#0b1645"/></radialGradient>
+ <radialGradient id="e-fire" cx=".5" cy=".7" r=".8"><stop offset="0" stop-color="#ffe9a3"/><stop offset=".35" stop-color="#ffab3a"/><stop offset=".7" stop-color="#e2461b"/><stop offset="1" stop-color="#7a160a"/></radialGradient>
+ <radialGradient id="e-night" cx=".4" cy=".3" r=".8"><stop offset="0" stop-color="#3d4f9e"/><stop offset=".7" stop-color="#141c48"/><stop offset="1" stop-color="#080c22"/></radialGradient>
+ <linearGradient id="e-dawn" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5a3c8c"/><stop offset=".45" stop-color="#e2708a"/><stop offset=".75" stop-color="#ffb36b"/><stop offset="1" stop-color="#ffe2a8"/></linearGradient>
+ <radialGradient id="e-green" cx=".4" cy=".35" r=".8"><stop offset="0" stop-color="#7fd46a"/><stop offset=".6" stop-color="#23733a"/><stop offset="1" stop-color="#0c3318"/></radialGradient>
+ <radialGradient id="e-lens" cx=".38" cy=".32" r=".75"><stop offset="0" stop-color="#d9f4ff"/><stop offset=".25" stop-color="#55a8e0"/><stop offset=".6" stop-color="#173f78"/><stop offset="1" stop-color="#050c1e"/></radialGradient>
+ <radialGradient id="e-teal" cx=".4" cy=".35" r=".8"><stop offset="0" stop-color="#5fe0d0"/><stop offset=".6" stop-color="#11716a"/><stop offset="1" stop-color="#062f2c"/></radialGradient>
+ <radialGradient id="e-purple" cx=".4" cy=".35" r=".8"><stop offset="0" stop-color="#b98aef"/><stop offset=".6" stop-color="#4d2190"/><stop offset="1" stop-color="#1d0a3c"/></radialGradient>
+ <radialGradient id="e-lava" cx=".5" cy=".25" r=".9"><stop offset="0" stop-color="#ffe08a"/><stop offset=".3" stop-color="#ff7a1f"/><stop offset=".65" stop-color="#8a1c0c"/><stop offset="1" stop-color="#2a0905"/></radialGradient>
+ <linearGradient id="bev" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".8"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".55"/></linearGradient><linearGradient id="gem" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".3" stop-color="#9fe3ff"/><stop offset=".6" stop-color="#2e8fd6"/><stop offset="1" stop-color="#0d3b7a"/></linearGradient>
+ <linearGradient id="leafgold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff2b0"/><stop offset=".5" stop-color="#f2b938"/><stop offset="1" stop-color="#a86a12"/></linearGradient>
+ <filter id="emb" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="1.3" stdDeviation=".7" flood-color="#000" flood-opacity=".75"/><feDropShadow dx="0" dy="-.6" stdDeviation=".3" flood-color="#fff" flood-opacity=".35"/></filter>
+ <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+ <path id="arcB" d="M26 90 A34 34 0 0 0 94 90"/>
+ <path id="arcBs" d="M30 92 A30 30 0 0 0 90 92"/>
+</defs></svg>
+<div id="out"></div>
+<script>
+
+const NS='http://www.w3.org/2000/svg';
+const g=(s)=>s;
+function ribbon(c1,c2){ // two tails from the top to the medal
+ return `<g><path d="M30 0 H50 L66 44 H50 Z" fill="${c1}"/><path d="M36 0 H44 L59 44 H53 Z" fill="${c2}" opacity=".95"/>
+ <path d="M90 0 H70 L54 44 H70 Z" fill="${c1}"/><path d="M84 0 H76 L61 44 H67 Z" fill="${c2}" opacity=".95"/>
+ <path d="M30 0 H90 V3 H30Z" fill="rgba(0,0,0,.35)"/><rect x="50" y="38" width="20" height="10" rx="3" fill="url(#METAL)"/></g>`;}
+function beads(cx,cy,r,n){let s='';for(let i=0;i<n;i++){const a=i/n*Math.PI*2;s+=`<circle cx="${(cx+r*Math.cos(a)).toFixed(1)}" cy="${(cy+r*Math.sin(a)).toFixed(1)}" r="1.25" fill="rgba(255,255,255,.55)"/>`;}return s;}
+function laurel(cx,cy,r,metal){let s='';for(const side of [-1,1]){for(let i=0;i<7;i++){const a=(110+i*17)*Math.PI/180;const x=cx+side*r*Math.cos(a)*-1, y=cy+r*Math.sin(a);const rot=(side>0? (i*17+20): -(i*17+20));s+=`<ellipse cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" rx="2.4" ry="5.6" transform="rotate(${rot} ${x.toFixed(1)} ${y.toFixed(1)})" fill="url(#${metal})" filter="url(#emb)"/>`;}}return s;}
+function shine(cx,cy,r){return `<path d="M${cx-r*.78} ${cy-r*.35} A${r} ${r} 0 0 1 ${cx+r*.2} ${cy-r*.97}" stroke="rgba(255,255,255,.55)" stroke-width="2.4" fill="none" stroke-linecap="round"/>`;}
+function coin({metal,enamel,emblem,rib,text,shape}){
+ const cx=60,cy=88;let body='';
+ if(shape==='flame'){
+  const F='M60 40 C66 56 92 66 92 98 C92 118 78 132 60 132 C42 132 28 118 28 98 C28 80 38 72 44 60 C47 70 52 74 54 78 C58 64 55 52 60 40 Z';
+  const Fi='M60 56 C64 68 82 76 82 100 C82 114 72 124 60 124 C48 124 38 114 38 100 C38 88 45 82 49 74 C51 81 55 84 57 87 C60 77 58 66 60 56 Z';
+  body=`<path d="${F}" fill="url(#${metal})" stroke="rgba(0,0,0,.45)" stroke-width="1"/><path d="${Fi}" fill="url(#${enamel})"/><path d="${Fi}" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1"/>${emblem}<path d="M40 92 C40 80 48 74 52 68" stroke="rgba(255,255,255,.6)" stroke-width="2" fill="none" stroke-linecap="round"/>`;
+ } else if(shape==='hex'){
+  const p=(r)=>{let a=[];for(let i=0;i<6;i++){const t=(i*60-90)*Math.PI/180;a.push((cx+r*Math.cos(t)).toFixed(1)+','+(cy+r*Math.sin(t)).toFixed(1));}return a.join(' ');};
+  body=`<polygon points="${p(46)}" fill="url(#${metal})" stroke="rgba(0,0,0,.45)"/><polygon points="${p(39)}" fill="rgba(0,0,0,.28)"/><polygon points="${p(34)}" fill="url(#${enamel})"/><polygon points="${p(34)}" fill="none" stroke="url(#${metal})" stroke-width="2"/>${emblem}`;
+ } else if(shape==='star'||shape==='star12'){
+  const n=shape==='star'?5:12, ro=shape==='star'?48:47, ri=shape==='star'?24:38;let a=[];for(let i=0;i<n*2;i++){const r=i%2?ri:ro;const t=(i*180/n-90)*Math.PI/180;a.push((cx+r*Math.cos(t)).toFixed(1)+','+(cy+r*Math.sin(t)).toFixed(1));}
+  let seg='';if(shape==='star12'){const cols=['#e2483b','#ff8a1f','#f2c14e','#7fd46a','#23a36a','#2fb3c4','#3a7be0','#5a4fd0','#8e4fd0','#c44fb0','#e24f86','#b8582c'];for(let i=0;i<12;i++){const t1=(i*30-90)*Math.PI/180,t2=((i+1)*30-90)*Math.PI/180;seg+=`<path d="M${cx} ${cy} L${(cx+31*Math.cos(t1)).toFixed(1)} ${(cy+31*Math.sin(t1)).toFixed(1)} A31 31 0 0 1 ${(cx+31*Math.cos(t2)).toFixed(1)} ${(cy+31*Math.sin(t2)).toFixed(1)} Z" fill="${cols[i]}"/>`;}seg+=`<circle cx="${cx}" cy="${cy}" r="31" fill="url(#e-teal)" opacity=".0"/><circle cx="${cx}" cy="${cy}" r="31" fill="none" stroke="url(#${metal})" stroke-width="2.5"/><circle cx="${cx}" cy="${cy}" r="18" fill="rgba(10,8,6,.55)"/>`;}
+  else seg=`<circle cx="${cx}" cy="${cy+2}" r="19" fill="url(#${enamel})"/><circle cx="${cx}" cy="${cy+2}" r="19" fill="none" stroke="url(#${metal})" stroke-width="2"/>`;
+  body=`<polygon points="${a.join(' ')}" fill="url(#${metal})" stroke="rgba(0,0,0,.45)"/>${seg}${emblem}`;
+ } else if(shape==='vitru'){
+  body=`<rect x="${cx-38}" y="${cy-38}" width="76" height="76" rx="3" fill="url(#${metal})" stroke="rgba(0,0,0,.45)"/><circle cx="${cx}" cy="${cy}" r="45" fill="url(#${metal})" stroke="rgba(0,0,0,.45)"/><rect x="${cx-38}" y="${cy-38}" width="76" height="76" rx="3" fill="none" stroke="rgba(0,0,0,.35)"/><circle cx="${cx}" cy="${cy}" r="36" fill="url(#${enamel})"/><circle cx="${cx}" cy="${cy}" r="35" fill="none" stroke="url(#${metal})" stroke-width="2"/>${emblem}${shine(cx,cy,45)}`;
+ } else if(shape==='sun'){
+  let rays='';for(let i=0;i<24;i++){const t=i*15*Math.PI/180,t1=t-.09,t2=t+.09;rays+=`<polygon points="${(cx+38*Math.cos(t1)).toFixed(1)},${(cy+38*Math.sin(t1)).toFixed(1)} ${(cx+50*Math.cos(t)).toFixed(1)},${(cy+50*Math.sin(t)).toFixed(1)} ${(cx+38*Math.cos(t2)).toFixed(1)},${(cy+38*Math.sin(t2)).toFixed(1)}" fill="url(#${metal})"/>`;}
+  body=`${rays}<circle cx="${cx}" cy="${cy}" r="40" fill="url(#${metal})" stroke="rgba(0,0,0,.45)"/><circle cx="${cx}" cy="${cy}" r="33" fill="url(#${enamel})"/><circle cx="${cx}" cy="${cy}" r="33" fill="none" stroke="rgba(0,0,0,.35)" stroke-width="2"/>${emblem}${shine(cx,cy,40)}`;
+ } else if(shape==='shield'){
+  const S=`M${cx-40} ${cy-42} H${cx+40} V${cy-2} C${cx+40} ${cy+26} ${cx+20} ${cy+40} ${cx} ${cy+48} C${cx-20} ${cy+40} ${cx-40} ${cy+26} ${cx-40} ${cy-2} Z`;
+  const Si=`M${cx-32} ${cy-34} H${cx+32} V${cy-2} C${cx+32} ${cy+20} ${cx+16} ${cy+32} ${cx} ${cy+39} C${cx-16} ${cy+32} ${cx-32} ${cy+20} ${cx-32} ${cy-2} Z`;
+  body=`<path d="${S}" fill="url(#${metal})" stroke="rgba(0,0,0,.45)"/><path d="${Si}" fill="url(#${enamel})"/><path d="${Si}" fill="none" stroke="rgba(0,0,0,.35)" stroke-width="2"/>${emblem}`;
+ } else {
+  body=`<circle cx="${cx}" cy="${cy}" r="45" fill="url(#${metal})" stroke="rgba(0,0,0,.45)"/><circle cx="${cx}" cy="${cy}" r="43.5" fill="none" stroke="url(#bev)" stroke-width="2.5"/>${beads(cx,cy,41.3,40)}<circle cx="${cx}" cy="${cy}" r="38" fill="url(#${metal})"/><circle cx="${cx}" cy="${cy}" r="38" fill="rgba(0,0,0,.25)"/><circle cx="${cx}" cy="${cy}" r="${shape==='lens'?30:31}" fill="url(#${enamel})"/>${shape==='lens'?'':'<ellipse cx="'+(cx-8)+'" cy="'+(cy-14)+'" rx="16" ry="8" fill="rgba(255,255,255,.14)"/>'}${emblem}${text?`<text font-family="Georgia,serif" font-size="7.5" font-weight="700" letter-spacing="2.2" fill="url(#${metal})" filter="url(#emb)"><textPath href="#arcB" startOffset="50%" text-anchor="middle">${text}</textPath></text>`:''}${shine(cx,cy,45)}`;
+ }
+ const r=rib?ribbon(rib[0],rib[1]).replace(/METAL/g,metal):'';
+ return `<svg viewBox="0 0 120 140" xmlns="${NS}">${r}${body}</svg>`;
+}
+const roman=(t,metal,size=34)=>`<text x="60" y="${88+size*.36}" text-anchor="middle" font-family="Georgia,'Times New Roman',serif" font-size="${size}" font-weight="700" fill="url(#${metal})" filter="url(#emb)">${t}</text>`;
+const num=(t,metal,y=106,size=26)=>`<text x="60" y="${y}" text-anchor="middle" font-family="Georgia,serif" font-size="${size}" font-weight="700" fill="#fff8e6" stroke="rgba(90,20,0,.6)" stroke-width=".8" filter="url(#emb)">${t}</text>`;
+const vitruvian=(metal,crown)=>`<g stroke="url(#${metal})" stroke-width="2.6" stroke-linecap="round" fill="none" filter="url(#emb)"><circle cx="60" cy="68" r="5.5" fill="url(#${metal})"/><path d="M60 74 V99 M60 99 L54 118 M60 99 L66 118 M60 99 L45 115 M60 99 L75 115 M60 81 L33 81 M60 81 L87 81 M60 81 L37 70 M60 81 L83 70" stroke-width="2.2"/><path d="M60 74 V99" stroke-width="4.5"/></g>${crown?laurelCrown(metal):''}`;
+const laurelCrown=(metal)=>{let s='';for(let i=0;i<4;i++){s+=`<ellipse cx="${52-i*3}" cy="${60-i*1.5}" rx="1.6" ry="3.6" transform="rotate(${-40-i*12} ${52-i*3} ${60-i*1.5})" fill="url(#leafgold)"/><ellipse cx="${68+i*3}" cy="${60-i*1.5}" rx="1.6" ry="3.6" transform="rotate(${40+i*12} ${68+i*3} ${60-i*1.5})" fill="url(#leafgold)"/>`;}return s;};
+const torch=(metal)=>`<g filter="url(#emb)"><path d="M52 96 H68 L64 120 H56 Z" fill="url(#${metal})"/><rect x="49" y="92" width="22" height="5" rx="2" fill="url(#${metal})"/><path d="M60 58 C63 68 72 72 70 82 C69 89 64 92 60 92 C56 92 51 89 50 82 C49 74 56 72 56 66 C58 70 59 72 60 74 C61 68 60 63 60 58Z" fill="url(#e-fire)" filter="url(#glow)"/></g>`;
+const volcano=(metal)=>`<g filter="url(#emb)"><path d="M34 112 L52 80 H68 L86 112 Z" fill="url(#${metal})"/><path d="M52 80 C55 84 65 84 68 80" fill="#3a0a04"/><path d="M60 80 C58 72 52 66 46 64 M60 80 C61 70 64 62 70 58 M60 80 C60 70 60 64 60 56" stroke="url(#e-fire)" stroke-width="4" stroke-linecap="round" fill="none" filter="url(#glow)"/><path d="M56 82 L54 96 M64 82 L67 100" stroke="#ff7a1f" stroke-width="2.4" stroke-linecap="round"/></g>`;
+const dawn=(metal)=>`<g><path d="M30 96 H90" stroke="url(#${metal})" stroke-width="2"/><path d="M42 96 A18 18 0 0 1 78 96 Z" fill="#fff1c2" filter="url(#glow)"/><g stroke="#fff1c2" stroke-width="1.6" stroke-linecap="round"><path d="M60 72 V66 M46 77 L42 72 M74 77 L78 72"/></g><path d="M44 108 H76 M50 114 H70" stroke="rgba(255,240,200,.6)" stroke-width="1.4"/><path d="M66 64 q3 -3 6 0 q3 -3 6 0" stroke="#2a1830" stroke-width="1.6" fill="none"/></g>`;
+const night=(metal)=>`<g filter="url(#emb)"><path d="M70 66 A22 22 0 1 0 74 104 A17 17 0 1 1 70 66 Z" fill="url(#${metal})"/></g><g fill="#fff6d0"><circle cx="78" cy="76" r="1.6"/><circle cx="44" cy="70" r="1.2"/><circle cx="82" cy="98" r="1.1"/><path d="M76 86 l1.2 3 3 1.2 -3 1.2 -1.2 3 -1.2 -3 -3 -1.2 3 -1.2z"/></g>`;
+const apple=(metal)=>`<g filter="url(#emb)"><path d="M60 72 C50 64 38 70 38 86 C38 102 48 114 55 114 C58 114 59 112 60 112 C61 112 62 114 65 114 C72 114 82 102 82 86 C82 70 70 64 60 72 Z" fill="url(#${metal})"/><path d="M60 72 C60 66 62 62 66 60" stroke="url(#${metal})" stroke-width="2.4" fill="none"/><path d="M62 64 C68 56 76 58 78 60 C74 66 66 66 62 64Z" fill="url(#e-green)"/></g><ellipse cx="50" cy="82" rx="4" ry="7" fill="rgba(255,255,255,.4)"/>`;
+const scales=(metal)=>`<g stroke="url(#${metal})" stroke-width="2.4" fill="none" stroke-linecap="round" filter="url(#emb)"><path d="M60 62 V114 M48 114 H72 M38 72 H82"/><path d="M38 72 L30 92 M38 72 L46 92 M82 72 L74 92 M82 72 L90 92"/></g><g filter="url(#emb)"><path d="M28 92 A10 6 0 0 0 48 92 Z" fill="url(#${metal})"/><path d="M72 92 A10 6 0 0 0 92 92 Z" fill="url(#${metal})"/><circle cx="60" cy="62" r="3.5" fill="url(#${metal})"/></g>`;
+const lens=(metal)=>`<circle cx="60" cy="88" r="22" fill="none" stroke="rgba(0,0,0,.6)" stroke-width="3"/><circle cx="60" cy="88" r="13" fill="#04081a"/><circle cx="60" cy="88" r="13" fill="none" stroke="url(#${metal})" stroke-width="1.4"/><ellipse cx="53" cy="80" rx="6" ry="4" fill="rgba(255,255,255,.75)" transform="rotate(-30 53 80)"/><circle cx="66" cy="95" r="2" fill="rgba(255,255,255,.4)"/>`;
+const diamond=`<g filter="url(#glow)"><polygon points="60,78 76,90 60,118 44,90" fill="url(#gem)"/><polygon points="44,90 60,78 76,90 60,94" fill="rgba(255,255,255,.55)"/><path d="M44 90 L60 118 L76 90 M52 90 L60 118 L68 90" stroke="rgba(255,255,255,.5)" stroke-width=".8" fill="none"/></g>`;
+
+const R={orange:['#ff8a1f','#2a1608'],red:['#c4261b','#f3d8a8'],blue:['#1d3a93','#f2e2b8'],green:['#23733a','#f2e2b8'],purple:['#4d2190','#f2c14e'],night:['#141c48','#9fb4ff'],teal:['#11716a','#f2e2b8']};
+const B={
+ first_workout:()=>coin({metal:'bronze',enamel:'e-crimson',emblem:roman('I','bronze',40)+laurel(60,88,26,'bronze'),rib:R.orange,text:'FIRST WORKOUT'}),
+ ten_workouts:()=>coin({metal:'silver',enamel:'e-crimson',emblem:roman('X','silver',38)+laurel(60,88,26,'silver'),rib:R.orange,text:'TEN WORKOUTS'}),
+ fifty_workouts:()=>coin({metal:'gold',enamel:'e-crimson',emblem:roman('L','gold',38)+laurel(60,88,26,'gold'),rib:R.orange,text:'FIFTY WORKOUTS'}),
+ hundred_workouts:()=>coin({metal:'plat',enamel:'e-royal',emblem:roman('C','plat',38)+laurel(60,88,26,'plat'),rib:R.blue,text:'CENTURION'}),
+ streak_3:()=>coin({metal:'bronze',enamel:'e-fire',emblem:num('3','bronze',112,28),shape:'flame',rib:R.red}),
+ streak_7:()=>coin({metal:'silver',enamel:'e-fire',emblem:num('7','silver',112,28),shape:'flame',rib:R.red}),
+ streak_30:()=>coin({metal:'gold',enamel:'e-fire',emblem:num('30','gold',110,24),shape:'flame',rib:R.red}),
+ streak_100:()=>coin({metal:'plat',enamel:'e-fire',emblem:diamond,shape:'flame',rib:R.red}),
+ form_perfect:()=>coin({metal:'silver',enamel:'e-royal',emblem:vitruvian('silver',false),shape:'vitru',rib:R.blue}),
+ form_master:()=>coin({metal:'gold',enamel:'e-royal',emblem:vitruvian('gold',true),shape:'vitru',rib:R.blue}),
+ calorie_1k:()=>coin({metal:'bronze',enamel:'e-lava',emblem:torch('bronze'),shape:'hex',rib:R.red}),
+ calorie_10k:()=>coin({metal:'gold',enamel:'e-lava',emblem:volcano('gold'),shape:'hex',rib:R.red}),
+ early_bird:()=>coin({metal:'silver',enamel:'e-dawn',emblem:dawn('silver'),shape:'sun',rib:R.orange}),
+ night_owl:()=>coin({metal:'silver',enamel:'e-night',emblem:night('silver'),rib:R.night,text:'NIGHT OWL'}),
+ variety_5:()=>coin({metal:'silver',enamel:'e-purple',emblem:roman('V','silver',22).replace('y="100.24"','y="96"'),shape:'star',rib:R.purple}),
+ variety_all:()=>coin({metal:'gold',enamel:'e-purple',emblem:roman('XII','gold',15),shape:'star12',rib:R.purple}),
+ first_meal:()=>coin({metal:'bronze',enamel:'e-green',emblem:apple('gold'),rib:R.green,text:'FIRST MEAL'}),
+ macro_master:()=>coin({metal:'gold',enamel:'e-green',emblem:scales('gold'),shape:'shield',rib:R.green}),
+ photo_meal:()=>coin({metal:'bronze',enamel:'e-lens',emblem:lens('bronze'),shape:'lens',rib:R.teal,text:'MEAL PHOTO'}),
+};
+
+const EMB={
+ training_days:(m)=>`<g stroke="url(#${m})" stroke-width="3.4" stroke-linecap="round" filter="url(#emb)"><path d="M44 88 H76 M47 78 V98 M73 78 V98 M41 82 V94 M79 82 V94"/></g>`,
+ kcal_burned:(m)=>`<path d="M60 64 C64 74 76 80 76 94 C76 104 69 112 60 112 C51 112 44 104 44 94 C44 86 49 82 51 76 C53 82 56 84 57 87 C60 80 59 72 60 64Z" fill="url(#e-fire)" stroke="url(#${m})" stroke-width="2" filter="url(#emb)"/>`,
+ training_minutes:(m)=>`<g stroke="url(#${m})" stroke-width="3.4" fill="none" stroke-linecap="round" filter="url(#emb)"><circle cx="60" cy="91" r="17"/><path d="M60 81 V91 L68 96 M54 68 H66 M60 68 V74"/></g>`,
+ form_80_workouts:(m)=>vitruvian(m,false),
+ form_90_workouts:(m)=>vitruvian(m,true),
+ families:(m)=>`<g fill="url(#${m})" filter="url(#emb)"><circle cx="50" cy="80" r="9"/><rect x="61" y="86" width="17" height="17" rx="2"/><polygon points="66,66 76,82 56,82"/><polygon points="44,96 54,96 49,106"/></g>`,
+ food_days:(m)=>apple(m),
+};
+const out=document.getElementById('out');const cells=[];
+const put=(name,svg,square)=>{const i=cells.length;const x=(i%8)*380,y=Math.floor(i/8)*440;cells.push({name,x,y,w:360,h:square?360:420});
+ out.insertAdjacentHTML('beforeend',`<div class="cell${square?' sq':''}" style="left:${x}px;top:${y}px">${svg}</div>`);};
+for(const k of Object.keys(B)) put('medal_'+k,B[k]());
+const sq=(svg)=>svg.replace('viewBox="0 0 120 140"','viewBox="12 40 96 96"');
+for(const m of Object.keys(EMB)) for(const metal of ['bronze','silver','gold']) put(`coin_${m}_${metal}`,sq(coin({metal,enamel:'e-crimson',emblem:EMB[m](metal)})),true);
+['gold','silver','bronze'].forEach((metal,i)=>put(`place_${i+1}`,sq(coin({metal,enamel:'e-crimson',emblem:roman(['I','II','III'][i],metal,i===2?28:32)})),true));
+document.title=JSON.stringify(cells);
+const pre=document.createElement('pre');pre.id='layout';pre.style.display='none';pre.textContent=JSON.stringify(cells);document.body.appendChild(pre);
+</script></body></html>
