@@ -17,6 +17,11 @@ export const userProfileSchema = z.object({
   /** The newest weigh-in (RULINGS 2026-09-10) — the only place weight lives. */
   weightKg: z.number().nullable(),
   leaderboardOptOut: z.boolean(),
+  /** The phone notifications the person lets the app send (ROADMAP Stage 5 19d): each on until
+   *  switched off in Settings. Off, that kind is never sent; a gym's messages still reach its Inbox. */
+  pushGymMessages: z.boolean(),
+  pushPlaces: z.boolean(),
+  pushComments: z.boolean(),
   /** Onboarding gate (v1 §6.1:442 — a users-module concern, which is why it is
    *  absent from the auth view). Stored on user_fitness_profiles; false when
    *  the user has no profile row yet (onboarding-storage card). */
@@ -54,6 +59,9 @@ export const updateProfileRequestSchema = z
     timezone: z.string().trim().min(1).max(64).nullable().optional(),
     weightKg: z.number().positive().lt(1000).multipleOf(0.01).nullable().optional(),
     leaderboardOptOut: z.boolean().optional(),
+    pushGymMessages: z.boolean().optional(),
+    pushPlaces: z.boolean().optional(),
+    pushComments: z.boolean().optional(),
   })
   .strict()
   .refine((o) => Object.keys(o).length > 0, { message: "at least one field required" });

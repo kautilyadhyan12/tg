@@ -102,7 +102,7 @@ d("a place in a class or an event, told to the phone (real Postgres)", () => {
     await sql`DELETE FROM plans WHERE code = ${LIVE_PLAN}`;
   };
 
-  const request = (method: "GET" | "POST" | "PUT" | "DELETE", path: string, opts: { payload?: unknown; bearer?: string; cookies?: Record<string, string> } = {}) =>
+  const request = (method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE", path: string, opts: { payload?: unknown; bearer?: string; cookies?: Record<string, string> } = {}) =>
     api().inject({
       method,
       url: path,
@@ -262,6 +262,32 @@ d("a place in a class or an event, told to the phone (real Postgres)", () => {
     expect(sentTo(chen)).toHaveLength(0);
     // Told once.
     expect((await sweep()).sent).toBe(1 - 1);
+  });
+
+  it("Classes and events switched off in Settings: that person's phone is told nothing, others waiting still are, and on again tells nothing old (19d)", { timeout: T }, async () => {
+    clock = NOON;
+    fresh();
+    const [asha, bina, chen] = [await member(gym, "asha"), await member(gym, "bina"), await member(gym, "chen")];
+    const switchTo = async (who: Person, on: boolean) => {
+      const res = await request("PATCH", "/v1/users/me", { bearer: who.accessToken, payload: { pushPlaces: on } });
+      expect(res.statusCode, res.body).toBe(200);
+    };
+    await switchTo(bina, false);
+    // Today 19:00: a free place inside the last day is told to everybody waiting.
+    const flow = await classAt(gym, 7, 1);
+    await book(gym, asha, flow);
+    await book(gym, bina, flow, true);
+    await book(gym, chen, flow, true);
+    await cancel(gym, asha, flow);
+
+    await sweep();
+    expect(sentTo(bina)).toHaveLength(0);
+    expect(sentTo(chen)).toHaveLength(1);
+    // Handled, so switching on again sends nothing about it.
+    await switchTo(bina, true);
+    clock = NOON + 2 * HOUR;
+    await sweep();
+    expect(sentTo(bina)).toHaveLength(0);
   });
 
   it("moved in, then the place is gone before the run: told nothing", { timeout: T }, async () => {

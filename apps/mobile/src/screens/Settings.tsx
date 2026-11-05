@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { AppState, Linking, Pressable, StyleSheet, View } from "react-native";
+import { AppState, Linking, Pressable, StyleSheet, Switch, View } from "react-native";
 import {
   ACCOUNT_UNDO_DAYS,
   authEmailSchema,
@@ -14,6 +14,7 @@ import {
   userProfileResponseSchema,
   type MyOrgsResponse,
   type Units,
+  type UserProfile,
 } from "@app/shared";
 import * as Sharing from "expo-sharing";
 import { Button } from "../look/Button";
@@ -25,6 +26,7 @@ import { Field } from "../look/Field";
 import { Icon, type IconName } from "../look/Icon";
 import { Sheet } from "../look/Sheet";
 import { Txt } from "../look/Txt";
+import { usePhoneAllows } from "../notifications/Notifications";
 import { exportFileFor, forgetPersonFiles } from "../session/personFiles";
 import { SIGNED_OUT_NOTES } from "../session/session";
 import { useSession } from "../session/SessionProvider";
@@ -42,6 +44,8 @@ import { NO_ANSWER } from "./SignIn";
 // code emailed to the account's own address; the undo is the link in the email that follows.
 // A gym's own owner deletes their account on the website where they manage the gym (19b-ii; Kd,
 // 2026-11-04): their box says so and opens the console's Your account page in the browser.
+// Notifications (19d): one switch for each kind the app sends, saved on the account at once; off, the
+// server sends that kind to none of the person's phones. Android's own switch for the app is read too.
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -61,21 +65,42 @@ export function SettingsPage({ open, onClose }: { open: boolean; onClose: () => 
 }
 
 type Places = { kind: "loading" } | { kind: "failed" } | { kind: "ok"; orgs: MyOrgsResponse["orgs"] };
+
+export type PushSwitch = "pushGymMessages" | "pushPlaces" | "pushComments";
+type PushNow = Pick<UserProfile, PushSwitch>;
+type Push = { kind: "loading" } | { kind: "failed" } | { kind: "ok"; now: PushNow };
+
+/** The three switches, named as the phone's own settings name the app's notification channels. */
+export const PUSH_SWITCHES: readonly { key: PushSwitch; label: string; on: string; off: string }[] = [
+  { key: "pushGymMessages", label: "Gym messages", on: "From each gym you belong to.", off: "Off. Messages still arrive in each gym’s Inbox." },
+  { key: "pushPlaces", label: "Classes and events", on: "A place for you, or a free place from the waitlist.", off: "Off. Check Classes and Events for places." },
+  { key: "pushComments", label: "Comments", on: "On your posts, and replies to your comments.", off: "Off. New comments still show on Updates." },
+];
+
+const pushOf = (user: UserProfile): PushNow => ({ pushGymMessages: user.pushGymMessages, pushPlaces: user.pushPlaces, pushComments: user.pushComments });
 type Place = MyOrgsResponse["orgs"][number];
 
 function SettingsBody({ onClose }: { onClose: () => void }) {
   const { session } = useSession();
   const [since, setSince] = useState<string | null>(null);
-  // Each name or units press counts here, so a read begun before it never puts the old answer back.
+  // Each name, units or switch press counts here, so a read begun before it never puts the old answer back.
   const saves = useRef(0);
+  const [push, setPush] = useState<Push>({ kind: "loading" });
+  const [pushTries, setPushTries] = useState(0);
   useEffect(() => {
     const run = { live: true };
     const read = () => {
       const at = saves.current;
       void session.signedIn({ method: "GET", path: "/v1/users/me" }, userProfileResponseSchema).then((answer) => {
-        if (!run.live || answer.kind !== "ok") return;
+        if (!run.live) return;
+        if (answer.kind !== "ok") {
+          // A failed read keeps what was shown.
+          setPush((was) => (was.kind === "ok" ? was : { kind: "failed" }));
+          return;
+        }
         setSince(memberSinceText(answer.data.user.createdAt));
         if (saves.current !== at) return;
+        setPush({ kind: "ok", now: pushOf(answer.data.user) });
         // What the server holds now, as another device may have changed it since this phone last heard.
         const { email, displayName, units } = answer.data.user;
         void (email === null ? session.keepName(displayName) : session.keepEmail(email, displayName)).then(() => session.keepUnits(units));
@@ -89,7 +114,7 @@ function SettingsBody({ onClose }: { onClose: () => void }) {
       run.live = false;
       back.remove();
     };
-  }, [session]);
+  }, [session, pushTries]);
   const [places, setPlaces] = useState<Places>({ kind: "loading" });
   const [tries, setTries] = useState(0);
   useEffect(() => {
@@ -118,6 +143,7 @@ function SettingsBody({ onClose }: { onClose: () => void }) {
       <Profile since={since} />
       <NamePart saves={saves} />
       <UnitsPart saves={saves} />
+      <NotificationsPart push={push} setPush={setPush} saves={saves} onAgain={() => { setPush({ kind: "loading" }); setPushTries((n) => n + 1); }} />
       <BoardsPart belongs={memberOf.kind === "ok" && memberOf.orgs.length > 0} />
       <PlacesPart places={memberOf} onAgain={() => { setTries((n) => n + 1); }} />
       <AccountPart onClose={onClose} saves={saves} />
@@ -222,6 +248,80 @@ function UnitsPart({ saves }: { saves: RefObject<number> }) {
     <Part title="Units" icon="ruler">
       <Txt kind="small">Weights and heights in the app.</Txt>
       <Segments options={UNIT_OPTIONS} selected={busy ?? now} onPick={(units) => void pick(units)} />
+      <Said words={said} bad />
+    </Part>
+  );
+}
+
+function NotificationsPart({ push, setPush, saves, onAgain }: { push: Push; setPush: (push: Push) => void; saves: RefObject<number>; onAgain: () => void }) {
+  const { session } = useSession();
+  const phone = usePhoneAllows();
+  const [busy, setBusy] = useState<PushSwitch | null>(null);
+  const [said, setSaid] = useState<string | null>(null);
+  const { readAgain } = phone;
+  // Back from the phone's own settings, where the person may have turned the app's notifications on.
+  useEffect(() => {
+    const back = AppState.addEventListener("change", (state) => {
+      if (state === "active") void readAgain();
+    });
+    return () => {
+      back.remove();
+    };
+  }, [readAgain]);
+  if (push.kind === "loading") return null;
+  const flip = async (key: PushSwitch, on: boolean) => {
+    if (busy !== null || push.kind !== "ok") return;
+    saves.current += 1;
+    setBusy(key);
+    setSaid(null);
+    const answer = await session.signedIn({ method: "PATCH", path: "/v1/users/me", body: { [key]: on } }, userProfileResponseSchema);
+    if (answer.kind === "ok") setPush({ kind: "ok", now: pushOf(answer.data.user) });
+    else setSaid(answer.kind === "refused" ? answer.message : NO_ANSWER);
+    setBusy(null);
+  };
+  return (
+    <Part title="Notifications" icon="bell">
+      {phone.allowed === "ask" || phone.allowed === "no" ? (
+        <View style={styles.phoneOff}>
+          <Txt kind="small" colour="badText">
+            Notifications are off on this phone.
+          </Txt>
+          {phone.allowed === "ask" ? (
+            <Button label="Turn on" kind="link" say="Turn on notifications" onPress={() => void phone.turnOn()} />
+          ) : (
+            <Button label="Open phone settings" kind="link" onPress={() => void Linking.openSettings()} />
+          )}
+        </View>
+      ) : null}
+      {push.kind === "failed" ? (
+        <View style={styles.between}>
+          <Txt kind="small" style={styles.grow}>
+            Couldn’t load your notifications.
+          </Txt>
+          <Button label="Try again" kind="link" say="Try notifications again" onPress={onAgain} />
+        </View>
+      ) : (
+        PUSH_SWITCHES.map((row) => {
+          const on = push.now[row.key];
+          return (
+            <View key={row.key} style={styles.between}>
+              <View style={styles.grow}>
+                <Txt kind="h3">{row.label}</Txt>
+                <Txt kind="small">{on ? row.on : row.off}</Txt>
+              </View>
+              <Switch
+                testID={`switch-${row.key}`}
+                accessibilityLabel={`${row.label} notifications`}
+                value={on}
+                disabled={busy !== null}
+                onValueChange={(value) => void flip(row.key, value)}
+                trackColor={{ false: colours.lineStrong, true: colours.orange }}
+                thumbColor={colours.text}
+              />
+            </View>
+          );
+        })
+      )}
       <Said words={said} bad />
     </Part>
   );
@@ -737,4 +837,6 @@ const styles = StyleSheet.create({
   // One above the other, the whole width: a box's words never spill out of its buttons on a small phone or in large text.
   stack: { gap: 10 },
   half: { flex: 1 },
+  // The words, then their button under them: a long label never spills out on a small phone.
+  phoneOff: { gap: 6, alignItems: "flex-start" },
 });

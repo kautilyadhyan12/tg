@@ -98,7 +98,7 @@ export async function sendPlaceNotifications(deps: {
   // `reached`: some phone has it, so it is never put back to be sent again. `again`: Firebase did not
   // answer for any phone, so the next run tries again.
   const tell = async (place: places.DuePlace, state: { reached: boolean; again: boolean }): Promise<void> => {
-    const tokens = place.stale ? [] : await repo.liveTokens(sql, place.userId, now);
+    const tokens = place.stale ? [] : await repo.liveTokens(sql, place.userId, now, "places");
     const today = dayIn(place.gymZone, now);
     const clock = gymClockFormatSchema.safeParse(place.clockFormat);
     const facts = tokens.length === 0 || today === null || !clock.success ? null : await stillTrue(sql, place, now);

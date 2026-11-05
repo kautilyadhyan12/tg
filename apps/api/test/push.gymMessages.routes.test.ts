@@ -96,7 +96,7 @@ d("phone notifications for a gym's messages (real Postgres)", () => {
   };
 
   const request = (
-    method: "POST" | "PUT",
+    method: "POST" | "PUT" | "PATCH",
     path: string,
     opts: { payload?: unknown; cookies?: Cookies; bearer?: string; ip?: string } = {},
   ) =>
@@ -133,6 +133,12 @@ d("phone notifications for a gym's messages (real Postgres)", () => {
   };
   const giveAddress = (phone: { accessToken: string }, token: string, ip?: string) =>
     request("PUT", "/v1/push-tokens", { bearer: phone.accessToken, payload: { token, platform: "android" }, ...(ip === undefined ? {} : { ip }) });
+  /** Settings' switch, through the real route the phone calls. */
+  const switchTo = async (phone: Phone, on: boolean) => {
+    const res = await request("PATCH", "/v1/users/me", { bearer: phone.accessToken, payload: { pushGymMessages: on } });
+    expect(res.statusCode, res.body).toBe(200);
+    expect((JSON.parse(res.body) as { user: { pushGymMessages: boolean } }).user.pushGymMessages).toBe(on);
+  };
   const signOut = async (phone: Phone) => {
     expect((await request("POST", "/v1/auth/logout", { payload: { refreshToken: phone.refreshToken } })).statusCode).toBe(200);
   };
@@ -216,6 +222,37 @@ d("phone notifications for a gym's messages (real Postgres)", () => {
     await message(gymB, ravi.userId, "Welcome to Iron Works.", minutes(at, 1));
     await sweep(minutes(at, 2));
     expect(sentTo(phoneToken).map((m) => [m.title, m.body, m.tag, m.userId])).toEqual([["Iron Works", "Welcome to Iron Works.", gymB, ravi.userId]]);
+  });
+
+  it("Gym messages switched off in Settings: that person's phone is told none, a member of the same gym still is, and switching on again sends nothing old (19d)", { timeout: TIMEOUT_MS }, async () => {
+    const at = minutes(noonIndia(), 200);
+    const asha = await phoneSignIn(email("switch-off"));
+    const ravi = await phoneSignIn(email("switch-on"));
+    await join(gymA, asha.userId);
+    await join(gymA, ravi.userId);
+    const ashaPhone = address("switch-off");
+    const raviPhone = address("switch-on");
+    expect((await giveAddress(asha, ashaPhone)).statusCode).toBe(200);
+    expect((await giveAddress(ravi, raviPhone)).statusCode).toBe(200);
+
+    await switchTo(asha, false);
+    await message(gymA, asha.userId, "Pool closed today.", minutes(at, -2));
+    await message(gymA, ravi.userId, "Pool closed today.", minutes(at, -2));
+    await sweep(at);
+    expect(sentTo(ashaPhone)).toEqual([]);
+    expect(sentTo(raviPhone).map((m) => m.body)).toEqual(["Pool closed today."]);
+    // Still in her Inbox, and handled for the notifications: nothing waits to be told later.
+    expect((await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_member_messages WHERE user_id = ${asha.userId} AND read_at IS NULL`)[0]?.n).toBe(1);
+    expect((await waiting(asha.userId))[0]?.n).toBe(0);
+
+    // On again: only what is sent from now on is told.
+    await switchTo(asha, true);
+    await sweep(minutes(at, 1));
+    expect(sentTo(ashaPhone)).toEqual([]);
+    await message(gymA, asha.userId, "Pool open again.", minutes(at, 2));
+    await sweep(minutes(at, 3));
+    // One notification, about the new message; the Inbox count it shows holds both unread.
+    expect(sentTo(ashaPhone).map((m) => [m.title, m.body])).toEqual([["Lotus Yoga · 2 new messages", "Pool open again."]]);
   });
 
   it("a phone that Asha left without signing out, now signed in as Meera, is told only Meera's", { timeout: TIMEOUT_MS }, async () => {
