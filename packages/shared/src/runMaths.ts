@@ -210,8 +210,10 @@ export interface RunSums {
   distanceM: number;
   /** From Start to Finish, pauses and all. */
   elapsedS: number;
-  /** Elapsed time less the pauses and less any stretch left out. */
+  /** Elapsed time less the pauses, any stretch left out, and any time standing. */
   movingS: number;
+  /** Time standing with no pause pressed: within STILL_M for STILL_MS or more. */
+  stillS: number;
   /** A stretch faster than anybody has ever run (a car, a bus, a train): not counted. */
   leftOutM: number;
   leftOutS: number;
@@ -457,10 +459,10 @@ function splitsOf(steps: readonly Step[], every: number): RunSplit[] {
   return out;
 }
 
-/** The time in a piece spent standing: each longest stretch whose points all lie within STILL_M of
+/** The spans of a piece spent standing: each longest stretch whose points all lie within STILL_M of
  *  its first, when it lasts STILL_MS or more. */
-function standingMs(piece: Fix[]): number {
-  let total = 0;
+function standingSpans(piece: Fix[]): [number, number][] {
+  const spans: [number, number][] = [];
   let i = 0;
   while (i < piece.length) {
     const first = piece[i];
@@ -473,11 +475,21 @@ function standingMs(piece: Fix[]): number {
     }
     const last = piece[j];
     if (last !== undefined && j > i && last.at - first.at >= STILL_MS) {
-      total += last.at - first.at;
+      spans.push([first.at, last.at]);
       i = j;
     } else {
       i++;
     }
+  }
+  return spans;
+}
+
+/** How much of `from`..`to` lies inside the standing spans (in time order). */
+function standingWithin(spans: readonly [number, number][], from: number, to: number): number {
+  let total = 0;
+  for (const [a, b] of spans) {
+    if (a >= to) break;
+    total += Math.max(0, Math.min(b, to) - Math.max(a, from));
   }
   return total;
 }
@@ -493,9 +505,14 @@ export function runSums(points: readonly RunPoint[], pauses: readonly RunPause[]
   let leftOutM = 0;
   let leftOutMs = 0;
   let stillMs = 0;
+  const still: [number, number][] = [];
   for (const raw of piecesBetweenPauses(points, cleaned, elapsed)) {
     const piece = withoutSpikes(raw);
-    stillMs += standingMs(piece);
+    const spans = standingSpans(piece);
+    for (const span of spans) {
+      stillMs += span[1] - span[0];
+      still.push(span);
+    }
     const flagged = tooFastSteps(piece);
     // The piece is cut where a too-fast stretch is left out; each part is smoothed on its own.
     let part: Fix[] = [];
@@ -525,7 +542,7 @@ export function runSums(points: readonly RunPoint[], pauses: readonly RunPause[]
         if (fix === undefined) continue;
         const m = geodesicMetres(last.lat, last.lng, fix.lat, fix.lng);
         if (m < MIN_STEP_M && i < path.length - 1) continue;
-        steps.push({ m, s: (fix.at - last.at) / 1000 });
+        steps.push({ m, s: (fix.at - last.at - standingWithin(still, last.at, fix.at)) / 1000 });
         track.push([fix.lat, fix.lng]);
         last = fix;
       }
@@ -546,6 +563,7 @@ export function runSums(points: readonly RunPoint[], pauses: readonly RunPause[]
     distanceM: Math.round(distanceM),
     elapsedS: Math.round(elapsed / 1000),
     movingS: Math.round(movingS),
+    stillS: Math.round(stillMs / 1000),
     leftOutM: Math.round(leftOutM),
     leftOutS: Math.round(leftOutMs / 1000),
     kcal: Math.round(kcal),

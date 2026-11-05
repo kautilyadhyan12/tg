@@ -169,6 +169,7 @@ export const phoneLocationsSchema = z.object({
 
 /** A saved run the server refused, kept whole on the phone: the person may send it again or
  *  remove it, and nothing they ran is ever thrown away by the app (round one of 37a, H1). */
-export const refusedRunSchema = z.object({ runId: z.string(), name: z.string(), message: z.string(), run: saveRunRequestSchema.optional() });
+// Kept as it was sent, read only on Try again: a run refused for its size must still read back.
+export const refusedRunSchema = z.object({ runId: z.string(), name: z.string(), message: z.string(), run: z.unknown().optional() });
 export type RefusedRun = z.infer<typeof refusedRunSchema>;
 export const runOutboxFileSchema = z.object({ version: z.literal(1), waiting: z.array(z.unknown()), refused: z.array(z.unknown()) });

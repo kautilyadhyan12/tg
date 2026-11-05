@@ -5,7 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { AppState, Linking, Pressable, ScrollView, StyleSheet, TextInput, Vibration, View } from "react-native";
 import * as Location from "expo-location";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { geodesicMetres, runSums, userProfileResponseSchema, type RunSums, type SaveRunRequest, type Units } from "@app/shared";
+import { RUN_MAX_POINTS, geodesicMetres, runSums, userProfileResponseSchema, type RunSums, type SaveRunRequest, type Units } from "@app/shared";
 import { Button } from "../../look/Button";
 import { colours, orangeGradient, shadows, sizes } from "../../look/colours";
 import { Icon } from "../../look/Icon";
@@ -303,7 +303,8 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
   const { now, sums } = useLiveNumbers(run, kg);
   const elapsed = elapsedMs(run, now);
   const paused = closedPauses(run, elapsedMs(run, now)).reduce((t, [a, b]) => t + (b - a), 0);
-  const moving = Math.max(0, elapsed - paused - (sums?.leftOutS ?? 0) * 1000) / 1000;
+  // The same moving time the summary gives: standing with no pause pressed is left out too.
+  const moving = Math.max(0, elapsed - paused - ((sums?.leftOutS ?? 0) + (sums?.stillS ?? 0)) * 1000) / 1000;
   const metres = sums?.distanceM ?? 0;
   const per = units === "imperial" ? METRES_PER_MILE : 1000;
   const isPaused = run.phase === "paused";
@@ -454,7 +455,7 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
       name: kept,
       effort,
       note: note.trim() === "" ? null : note.trim().slice(0, 1000),
-      points: run.points.map(([at, lat, lng, acc]) => [Math.round(at), lat, lng, acc]),
+      points: run.points.slice(0, RUN_MAX_POINTS).map(([at, lat, lng, acc]) => [Math.round(at), lat, lng, acc]),
       pauses: closedPauses(run, finished).map(([a, b]) => [Math.round(a), Math.round(b)]),
     };
     // The recorder's own files go only once the outbox holds the run on the phone (round one, L1).

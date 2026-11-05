@@ -156,8 +156,10 @@ export function createRunOutbox(store: TextStore, send: RunSender): RunOutbox {
     },
     retryRefused: async (runId) => {
       const refused = view.refused.find((r) => r.runId === runId);
-      if (refused?.run === undefined) return;
-      set({ ...view, refused: view.refused.filter((r) => r.runId !== runId), waiting: [...view.waiting.filter((r) => r.runId !== runId), refused.run] });
+      // Read only now: one the server could never take stays where it is, kept, for Remove.
+      const run = saveRunRequestSchema.safeParse(refused?.run);
+      if (!run.success) return;
+      set({ ...view, refused: view.refused.filter((r) => r.runId !== runId), waiting: [...view.waiting.filter((r) => r.runId !== runId), run.data] });
       await write();
     },
     removeRefused: (runId) => {

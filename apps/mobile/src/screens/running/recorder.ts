@@ -247,7 +247,8 @@ export async function takeLocations(data: unknown): Promise<void> {
     const accuracyM = location.coords.accuracy ?? null;
     const point: RunPoint = [at, location.coords.latitude, location.coords.longitude, accuracyM === null ? null : Math.round(accuracyM * 10) / 10];
     run.lastFix = { at: location.timestamp, accuracyM };
-    if (run.autoPause && run.pauses.length < RUN_MAX_PAUSES) {
+    // Past the most pauses a run may hold, Auto-pause pauses no more, but still starts one it holds.
+    if (run.autoPause && (run.pauses.length < RUN_MAX_PAUSES || run.phase === "paused")) {
       const next = nextAutoPause(auto, { at, lat: point[1], lng: point[2], accuracyM, speed: location.coords.speed ?? null });
       auto = next.state;
       const change = next.change;
@@ -260,7 +261,7 @@ export async function takeLocations(data: unknown): Promise<void> {
         closePause(run, change.at);
         run.phase = "running";
         // The steps that started the clock again were taken while paused: they are the run's.
-        for (const kept of pausedTail) if (kept[0] >= change.at) run.points.push(kept);
+        for (const kept of pausedTail) if (kept[0] >= change.at && run.points.length < RUN_MAX_POINTS) run.points.push(kept);
         writtenAt = 0;
       }
     }

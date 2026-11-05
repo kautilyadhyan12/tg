@@ -181,6 +181,21 @@ describe("moving time", () => {
     const sums = runSums(run.points, [], 660_000, 70);
     expect(sums.elapsedS).toBe(660);
     expect(Math.abs(sums.movingS - 600)).toBeLessThanOrEqual(3);
+    // The kilometres' times are moving time too: they add up to it, the minute standing left out.
+    const splitS = sums.splitsKm.reduce((t, x) => t + x.s, 0);
+    expect(Math.abs(splitS - sums.movingS)).toBeLessThanOrEqual(3);
+  });
+
+  it("Kd's walk inside his house, as his phone recorded it, Auto-pause off: the six still minutes are not moving time", () => {
+    const walk = z.object({ points: z.array(z.tuple([z.number(), z.number(), z.number(), z.number().nullable()])) }).parse(
+      JSON.parse(readFileSync(new URL("./fixtures/indoor-walk.json", import.meta.url), "utf8")),
+    );
+    const last = walk.points[walk.points.length - 1]?.[0] ?? 0;
+    const sums = runSums(walk.points, [], last, 70);
+    // Minutes 4 to 9 of the walk moved about a metre a minute: well over five minutes standing.
+    expect(sums.stillS).toBeGreaterThanOrEqual(300);
+    expect(sums.movingS).toBeLessThanOrEqual(sums.elapsedS - 300);
+    expect(sums.distanceM).toBeLessThan(80); // the phone saw 79 m of wander in all
   });
 
   it("never takes a slow walk for standing", () => {
