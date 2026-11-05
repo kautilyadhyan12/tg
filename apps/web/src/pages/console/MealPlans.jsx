@@ -22,7 +22,7 @@ import { consoleIsReadOnly, readOnlyNote } from './billingView';
 // this screen shows.
 
 const newId = () => globalThis.crypto.randomUUID();
-const REFUSED = 'Only the owner, and staff the owner has given Write meal plans on the Staff page, can open Meal plans.';
+const REFUSED = 'Only the owner, and staff the owner has given Write meal plans on the Staff page, can open Fitness plans.';
 
 function Notice({ notice, error }) {
   return (
@@ -125,7 +125,7 @@ function PlanList({ org, gymId, readOnly, words, notice: startNotice }) {
     <Page>
       <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between min-w-0">
         <div className="flex flex-col gap-1.5 min-w-0">
-          <h1 className="c-h1">Meal plans</h1>
+          <h1 className="c-h1">Fitness plans</h1>
           <p className="c-sub">{PLAN_WORDS.pageSub(words)}</p>
         </div>
         {!readOnly && !state.refused && plans !== null && !adding ? (
@@ -163,7 +163,7 @@ function PlanList({ org, gymId, readOnly, words, notice: startNotice }) {
           ) : null}
           {plans !== null && plans.length > 0 ? (
             <section className="flex flex-col gap-3" aria-label="Meal plans">
-              <h2 className="c-s15 c-w6 c-t1">{`Your meal plans (${String(plans.length)})`}</h2>
+              <h2 className="c-s15 c-w6 c-t1">{`Meal plans (${String(plans.length)})`}</h2>
               <ul className="flex flex-col gap-3">
                 {plans.map((p) => (
                   <li key={p.id} className="c-card p-4 md:p-5 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">

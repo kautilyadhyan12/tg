@@ -184,7 +184,7 @@ export function allergensLine(food) {
 }
 
 export const PLAN_WORDS = {
-  pageSub: (words) => `Write a week of meals once, then give it to your ${words.people}.`,
+  pageSub: (words) => `Plans you write once and give to your ${words.people}.`,
   none: 'No meal plans yet. Write your first one with New meal plan.',
   created: (name) => `${name} is ready. Add its meals, a day at a time.`,
   renamed: 'Name saved.',

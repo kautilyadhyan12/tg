@@ -269,7 +269,7 @@ describe('the page', () => {
   it('somebody without the tick reads who can open Plans', async () => {
     svc.list.mockRejectedValue(refusal(403, 'forbidden', "Your role doesn't allow that."));
     open('/console/iron-house/plans', { ...ORG, staffRole: 'manager', privileges: ['members.read'] });
-    expect(await screen.findByText('Only the owner, and staff the owner has given Write meal plans on the Staff page, can open Meal plans.')).toBeTruthy();
+    expect(await screen.findByText('Only the owner, and staff the owner has given Write meal plans on the Staff page, can open Fitness plans.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'New meal plan' })).toBeNull();
   });
 
