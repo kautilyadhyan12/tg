@@ -137,7 +137,7 @@ function AchievementsCard() {
           setOpen(true);
         }}
       >
-        <PictureCard picture="goddess" height={120} label="Achievements" icon="trophy" />
+        <PictureCard picture="goddess" height={120} label="Achievements" icon="trophy" whole />
       </Pressable>
       <AchievementsPage
         open={open}

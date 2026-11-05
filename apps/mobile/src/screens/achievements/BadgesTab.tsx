@@ -1,10 +1,9 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
 import Svg, { Circle, Defs, RadialGradient, Stop } from "react-native-svg";
 import type { Badge, BadgeList } from "@app/shared";
 import { colours, medal, medalShades } from "../../look/colours";
 import { medalPicture } from "../../look/medals";
-import { Rise } from "../../look/Motion";
 import { bandFor } from "../../look/bands";
 import { Sheet, type SheetPicture } from "../../look/Sheet";
 import { Txt } from "../../look/Txt";
@@ -19,7 +18,7 @@ import { Laurel } from "./parts";
 
 const count = (n: number) => n.toLocaleString("en-US");
 
-export function BadgesTab({ read, again }: { read: Read<BadgeList>; again: () => void }) {
+export const BadgesTab = memo(function BadgesTab({ read, again }: { read: Read<BadgeList>; again: () => void }) {
   const [open, setOpen] = useState<ShownBadge | null>(null);
   const now = new Date();
   return (
@@ -27,7 +26,7 @@ export function BadgesTab({ read, again }: { read: Read<BadgeList>; again: () =>
       <ReadOr read={read} again={again} what="Your badges">
         {(data) => (
           <View style={styles.groups}>
-            {badgeGroups(data.badges).map((g, gi) => (
+            {badgeGroups(data.badges).map((g) => (
               <View key={g.key}>
                 <View style={styles.heading}>
                   <Txt kind="eyebrow" style={styles.headingWords}>
@@ -39,10 +38,10 @@ export function BadgesTab({ read, again }: { read: Read<BadgeList>; again: () =>
                 {rowsOf(g.badges).map((row) => (
                   <View key={row.map((b) => b.badge.code).join()} style={styles.shelf}>
                     <View style={styles.ledge} />
-                    {row.map((b, i) => (
-                      <Rise key={b.badge.code} delay={gi * 60 + i * 40} style={styles.third}>
+                    {row.map((b) => (
+                      <View key={b.badge.code} style={styles.third}>
                         <MedalOnShelf b={b} now={now} onPress={() => { setOpen(b); }} />
-                      </Rise>
+                      </View>
                     ))}
                     {row.length < 3 ? Array.from({ length: 3 - row.length }, (_, i) => <View key={`gap${String(i)}`} style={styles.third} />) : null}
                   </View>
@@ -57,12 +56,12 @@ export function BadgesTab({ read, again }: { read: Read<BadgeList>; again: () =>
       </Sheet>
     </>
   );
-}
+});
 
 /** The badge's own painting across its box (Kd, 2026-11-05), or the Greek one where it has none. */
 function paintingFor(code: string): SheetPicture {
   const band = bandFor(code);
-  return band === null ? { name: "greekyoga", focus: 0.2 } : { source: band, focus: 0.25 };
+  return band === null ? { name: "greekyoga", focus: 0.2 } : { source: band, focus: 0, whole: true };
 }
 
 function rowsOf<T>(items: readonly T[]): T[][] {
@@ -98,7 +97,7 @@ function MedalOnShelf({ b, now, onPress }: { b: ShownBadge; now: Date; onPress: 
             <Circle cx={65} cy={65} r={65} fill="url(#earnedGlow)" />
           </Svg>
         ) : null}
-        {picture === null ? null : <Image source={picture} resizeMode="contain" accessible={false} style={styles.picture} />}
+        {picture === null ? null : <Image source={picture} resizeMode="contain" resizeMethod="resize" accessible={false} style={styles.picture} />}
       </View>
       <Txt kind="small" colour={earned ? "text" : "textSoft"} numberOfLines={2} style={styles.name}>
         {b.name}

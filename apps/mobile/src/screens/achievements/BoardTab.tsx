@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
 import type { LeaderboardResponse, LeaderboardRow, MyOrgsResponse } from "@app/shared";
 import { Button } from "../../look/Button";
@@ -23,7 +23,7 @@ import { PaintBox, Torch } from "./parts";
 const METALS = ["gold", "silver", "bronze"] as const;
 const PLACE_COINS = ["place_1", "place_2", "place_3"] as const;
 
-export function BoardTab({ places }: { places: Read<MyOrgsResponse> }) {
+export const BoardTab = memo(function BoardTab({ places }: { places: Read<MyOrgsResponse> }) {
   const gyms = places.kind === "ok" ? places.data.orgs.filter((o) => o.isMember) : [];
   const [picked, setPicked] = useState<string | null>(null);
   const gym = gyms.find((g) => g.id === picked) ?? gyms[0] ?? null;
@@ -43,7 +43,7 @@ export function BoardTab({ places }: { places: Read<MyOrgsResponse> }) {
       {place === null ? null : <GymBoard key={place.id} place={place} />}
     </View>
   );
-}
+});
 
 function GymBoard({ place }: { place: LeaderboardPlace }) {
   const rank = useGymRank(place.id);

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
 import type { WeeklyChallenge, WeeklyChallengeMeasure, WeeklyChallenges } from "@app/shared";
 import { colours, medal } from "../../look/colours";
@@ -41,7 +41,7 @@ const WHAT_COUNTS: Record<WeeklyChallengeMeasure, string> = {
 
 const DIFFICULTY = { easy: "Easy", medium: "Medium", hard: "Hard" } as const;
 
-export function ChallengesTab({ read, again }: { read: Read<WeeklyChallenges>; again: () => void }) {
+export const ChallengesTab = memo(function ChallengesTab({ read, again }: { read: Read<WeeklyChallenges>; again: () => void }) {
   const [open, setOpen] = useState<WeeklyChallenge | null>(null);
   const week = read.kind === "ok" ? read.data : null;
   return (
@@ -85,7 +85,7 @@ export function ChallengesTab({ read, again }: { read: Read<WeeklyChallenges>; a
       </Sheet>
     </>
   );
-}
+});
 
 function ChallengeCard({ c, onPress }: { c: WeeklyChallenge; onPress: () => void }) {
   const coin = medalPicture(coinOf(c));
@@ -159,7 +159,7 @@ export function endWords(weekEnd: string): { day: string; on: string } {
 /** The challenge's own painting (Kd, 2026-11-05), or the Viking one where it has none. */
 function paintingOf(c: WeeklyChallenge | null): SheetPicture {
   const band = c === null ? null : bandFor(`c_${c.measure}`);
-  return band === null ? { name: "vikingbell", focus: 0.5 } : { source: band, focus: 0.25 };
+  return band === null ? { name: "vikingbell", focus: 0.5 } : { source: band, focus: 0, whole: true };
 }
 
 /** A challenge's box: its coin and level, what counts, how far along, its XP and the week's end. */

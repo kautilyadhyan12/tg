@@ -22,6 +22,9 @@ export const ACHIEVEMENTS_READS = {
   places: "/v1/orgs/mine",
 } as const;
 
+/** About how long the page takes to slide in. */
+const SLIDE_MS = 400;
+
 export function AchievementsPage({ open, start = "badges", onClose }: { open: boolean; start?: TabKey; onClose: () => void }) {
   const [tab, setTab] = useState<TabKey>(start);
   // "4 of 19 badges" over the goddess, from the Badges tab's own read.
@@ -72,17 +75,22 @@ function Tabs({ tab, onCount }: { tab: TabKey; onCount: (words: string | null) =
     };
   }, [tab, motion, shown]);
   const page = (key: TabKey) => (tab === key ? { opacity: shown } : styles.away);
+  // The tab opened first is built with the page; the other two once it has slid in, so opening never waits on them.
+  const [rest, setRest] = useState(false);
+  useEffect(() => {
+    const later = setTimeout(() => {
+      setRest(true);
+    }, SLIDE_MS);
+    return () => {
+      clearTimeout(later);
+    };
+  }, []);
+  const built = (key: TabKey) => key === tab || rest;
   return (
     <View>
-      <Animated.View style={page("badges")}>
-        <BadgesTab read={badges.read} again={badges.again} />
-      </Animated.View>
-      <Animated.View style={page("challenges")}>
-        <ChallengesTab read={challenges.read} again={challenges.again} />
-      </Animated.View>
-      <Animated.View style={page("leaderboard")}>
-        <BoardTab places={places.read} />
-      </Animated.View>
+      <Animated.View style={page("badges")}>{built("badges") ? <BadgesTab read={badges.read} again={badges.again} /> : null}</Animated.View>
+      <Animated.View style={page("challenges")}>{built("challenges") ? <ChallengesTab read={challenges.read} again={challenges.again} /> : null}</Animated.View>
+      <Animated.View style={page("leaderboard")}>{built("leaderboard") ? <BoardTab places={places.read} /> : null}</Animated.View>
     </View>
   );
 }
