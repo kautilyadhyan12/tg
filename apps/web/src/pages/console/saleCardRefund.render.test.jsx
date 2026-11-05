@@ -23,7 +23,7 @@ const sale = (over = {}) => ({
   netMinor: 400,
   taxMinor: 0,
   totalMinor: 400,
-  taxBp: 0,
+  taxes: [],
   taxIncluded: false,
   currency: 'USD',
   method: 'terminal',

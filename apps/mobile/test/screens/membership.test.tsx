@@ -87,7 +87,7 @@ const paymentReceipt = (number: number, gym: string, over: Row = {}) =>
     currency: "INR",
     cancelled: false,
     item: { name: "Gold Monthly", covers: { from: "2026-10-04", to: "2026-11-03" }, part: false },
-    amounts: { listedMinor: 150_000, discount: null, tax: null, totalMinor: 150_000 },
+    amounts: { listedMinor: 150_000, discount: null, taxes: [], totalMinor: 150_000 },
     joiningFeeMinor: 0,
     changeCredit: null,
     paidMinor: 150_000,
@@ -310,7 +310,7 @@ describe("the My membership page", () => {
       [receiptOf(IRON, 12)]: ok(
         paymentReceipt(12, "Iron House", {
           method: "card_at_desk",
-          amounts: { listedMinor: 150_000, discount: null, tax: { name: "GST", bp: 1800, included: true, minor: 22_881 }, totalMinor: 150_000 },
+          amounts: { listedMinor: 150_000, discount: null, taxes: [{ name: "GST", pcm: 18000, included: true, minor: 22_881 }], totalMinor: 150_000 },
           refunds: [{ number: 14, on: "2026-10-10", amountMinor: 50_000 }],
         }),
       ),

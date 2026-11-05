@@ -123,7 +123,7 @@ d("Reports, money by product and by staff: whose sales, who reads them (real Pos
   };
 
   const addProduct = async (gymId: string, owner: User, name: string, priceMinor: number): Promise<string> => {
-    const res = await post(`/v1/orgs/${gymId}/register/products`, { name, priceMinor, taxRateId: null, stock: null }, owner.cookies);
+    const res = await post(`/v1/orgs/${gymId}/register/products`, { name, priceMinor, taxRateIds: [], stock: null }, owner.cookies);
     expect(res.statusCode, res.body).toBe(201);
     const found = (JSON.parse(res.body) as SellPageResponse).products.find((p) => p.name === name);
     if (found === undefined) throw new Error(`no product named ${name}`);
@@ -336,7 +336,7 @@ d("Reports, money by product and by staff: whose sales, who reads them (real Pos
       await sql`
         WITH n AS (UPDATE gyms SET receipts_issued = receipts_issued + 1 WHERE id = ${gym} RETURNING receipts_issued AS number)
         INSERT INTO gym_sales (gym_id, request_key, product_id, item_name, quantity, unit_price_minor, net_minor, tax_minor, total_minor,
-                               tax_bp, tax_included, currency, method, sold_on, recorded_by, receipt_number)
+                               tax_pcm, tax_included, currency, method, sold_on, recorded_by, receipt_number)
         SELECT gym_id, ${nextKey()}, product_id, item_name, 1, 7777, 7777, 0, 7777, 0, false, 'EUR', 'cash', '2026-10-04', recorded_by, n.number
         FROM gym_sales, n WHERE gym_id = ${gym} AND id = ${theirs}`;
 

@@ -334,7 +334,7 @@ d("move to another membership (real Postgres)", () => {
       clock = OCT_1;
       const owner = await makeUser("tax-owner");
       const gymId = (await makeGym(owner, "Chg Tax Gym")).org.id;
-      const rate = await post(`/v1/orgs/${gymId}/register/tax-rates`, { name: "Sales tax", bp: 1000 }, owner.cookies);
+      const rate = await post(`/v1/orgs/${gymId}/register/tax-rates`, { name: "Sales tax", pcm: 10000 }, owner.cookies);
       expect(rate.statusCode, rate.body).toBe(201);
       const [taxRow] = await sql<{ id: string }[]>`SELECT id FROM gym_tax_rates WHERE gym_id = ${gymId}`;
       const taxRateId = taxRow?.id ?? null;

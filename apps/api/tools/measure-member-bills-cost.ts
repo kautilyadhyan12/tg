@@ -89,7 +89,7 @@ async function seedGym(people: number): Promise<Gym> {
     VALUES (${typeId}, ${id}, 'Gold Monthly', 'recurring', 4999, 'GBP', 1, 'month', 'all_classes')`;
   // Every membership taxed (18b-iii): every bill opened works its tax out.
   const rateId = randomUUID();
-  await sql`INSERT INTO gym_tax_rates (id, gym_id, name, rate_bp) VALUES (${rateId}, ${id}, 'VAT', 2000)`;
+  await sql`INSERT INTO gym_tax_rates (id, gym_id, name, rate_pcm) VALUES (${rateId}, ${id}, 'VAT', 20000)`;
   await sql`UPDATE gym_membership_types SET tax_rate_id = ${rateId} WHERE id = ${typeId}`;
   const records = Array.from({ length: people }, (_, i) => {
     const entry = randomUUID();

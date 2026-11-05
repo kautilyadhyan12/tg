@@ -159,7 +159,7 @@ d("Take payment on Terminal at Sell: one sale for the money taken, at this gym a
     return sellPageResponseSchema.parse(JSON.parse(res.body));
   };
   const product = async (gym: Gym, name: string, priceMinor: number, stock: number | null = null): Promise<string> => {
-    const res = await send("POST", `/v1/orgs/${gym.id}/register/products`, gym.owner.cookies, { name, priceMinor, taxRateId: null, stock });
+    const res = await send("POST", `/v1/orgs/${gym.id}/register/products`, gym.owner.cookies, { name, priceMinor, taxRateIds: [], stock });
     expect(res.statusCode, res.body).toBe(201);
     const found = sellPageResponseSchema.parse(JSON.parse(res.body)).products.find((p) => p.name === name);
     if (found === undefined) throw new Error(`no product ${name}`);
@@ -393,7 +393,7 @@ d("Take payment on Terminal at Sell: one sale for the money taken, at this gym a
     });
     expect(bought.statusCode, bought.body).toBe(201);
     const listed = (await register(gym)).products.find((p) => p.id === bar);
-    const raised = await send("PUT", `/v1/orgs/${gym.id}/register/products/${bar}`, gym.owner.cookies, { name: "Protein bar", priceMinor: 350, taxRateId: null, stock: 0, updatedAt: listed?.updatedAt });
+    const raised = await send("PUT", `/v1/orgs/${gym.id}/register/products/${bar}`, gym.owner.cookies, { name: "Protein bar", priceMinor: 350, taxRateIds: [], stock: 0, updatedAt: listed?.updatedAt });
     expect(raised.statusCode, raised.body).toBe(200);
     // A sale by hand of the same basket is refused now; the one on the Terminal is recorded as it
     // was priced when the card was asked for, the count kept at none.

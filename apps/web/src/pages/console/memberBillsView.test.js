@@ -393,9 +393,9 @@ describe('Note a refund', () => {
 describe('a bill says its tax (18b-iii)', () => {
   const bill = (over = {}) => ({ amountMinor: 5900, tax: null, ...over });
   it('on top: the price before it, the tax, and its name and rate; inside: how much of it is tax; none: nothing', () => {
-    expect(billTaxLine(bill({ tax: { name: 'GST', bp: 1800, included: false, minor: 900 } }), 'USD')).toBe('$50.00 plus $9.00 GST 18%');
-    expect(billTaxLine(bill({ amountMinor: 5000, tax: { name: 'VAT', bp: 2000, included: true, minor: 833 } }), 'GBP')).toBe('Includes £8.33 VAT 20%');
-    expect(billTaxLine(bill({ amountMinor: 5411, tax: { name: 'Sales tax', bp: 825, included: false, minor: 412 } }), 'USD')).toBe('$49.99 plus $4.12 Sales tax 8.25%');
+    expect(billTaxLine(bill({ tax: { name: 'GST', pcm: 18000, included: false, minor: 900 } }), 'USD')).toBe('$50.00 plus $9.00 GST 18%');
+    expect(billTaxLine(bill({ amountMinor: 5000, tax: { name: 'VAT', pcm: 20000, included: true, minor: 833 } }), 'GBP')).toBe('Includes £8.33 VAT 20%');
+    expect(billTaxLine(bill({ amountMinor: 5411, tax: { name: 'Sales tax', pcm: 8250, included: false, minor: 412 } }), 'USD')).toBe('$49.99 plus $4.12 Sales tax 8.25%');
     expect(billTaxLine(bill(), 'USD')).toBeNull();
   });
 });

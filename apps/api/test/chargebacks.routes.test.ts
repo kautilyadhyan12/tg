@@ -595,7 +595,7 @@ d("A chargeback (real Postgres)", { timeout: T }, () => {
 
     it("a sale's chargeback stops nothing, and staff who cannot sell do not read it on a person's purchases", async () => {
       const ty = await paidByCard(gym, "Dispute Ty");
-      const made = await send("POST", `/v1/orgs/${gym.id}/register/products`, gym.owner.cookies, { name: `Band ${uniq()}`, priceMinor: 500, taxRateId: null, stock: null });
+      const made = await send("POST", `/v1/orgs/${gym.id}/register/products`, gym.owner.cookies, { name: `Band ${uniq()}`, priceMinor: 500, taxRateIds: [], stock: null });
       expect(made.statusCode, made.body).toBeLessThan(300);
       const product = (JSON.parse(made.body) as { products: { id: string; priceMinor: number }[] }).products.find((p) => p.priceMinor === 500);
       const sold = await send("POST", `/v1/orgs/${gym.id}/register/sales`, gym.owner.cookies, { requestKey: randomUUID(), method: "cash", entryId: ty.entryId, totalMinor: 500, lines: [{ productId: product?.id, quantity: 1, totalMinor: 500, discountId: null }] });
@@ -735,7 +735,7 @@ d("A chargeback (real Postgres)", { timeout: T }, () => {
       await lose(bea);
       await message(fresh.acct.merchantId, square.disputeInSquare(open.squarePaymentId).id);
       // A sale's is never there.
-      const made = await send("POST", `/v1/orgs/${fresh.id}/register/products`, fresh.owner.cookies, { name: `Band ${uniq()}`, priceMinor: 500, taxRateId: null, stock: null });
+      const made = await send("POST", `/v1/orgs/${fresh.id}/register/products`, fresh.owner.cookies, { name: `Band ${uniq()}`, priceMinor: 500, taxRateIds: [], stock: null });
       expect(made.statusCode, made.body).toBeLessThan(300);
       const product = (JSON.parse(made.body) as { products: { id: string; priceMinor: number }[] }).products.find((p) => p.priceMinor === 500);
       const sold = await send("POST", `/v1/orgs/${fresh.id}/register/sales`, fresh.owner.cookies, { requestKey: randomUUID(), method: "cash", entryId: null, totalMinor: 500, lines: [{ productId: product?.id, quantity: 1, totalMinor: 500, discountId: null }] });
@@ -1009,7 +1009,7 @@ d("A chargeback (real Postgres)", { timeout: T }, () => {
       const products: string[] = [];
       for (const priceMinor of prices) {
         const name = `Item ${uniq()}`;
-        const made = await send("POST", `/v1/orgs/${g.id}/register/products`, g.owner.cookies, { name, priceMinor, taxRateId: null, stock });
+        const made = await send("POST", `/v1/orgs/${g.id}/register/products`, g.owner.cookies, { name, priceMinor, taxRateIds: [], stock });
         expect(made.statusCode, made.body).toBeLessThan(300);
         const product = (JSON.parse(made.body) as { products: { id: string; name: string }[] }).products.find((p) => p.name === name);
         products.push(product?.id ?? "");

@@ -138,15 +138,15 @@ d("a basket at Sell (real Postgres)", () => {
     expect(res.statusCode, res.body).toBe(200);
     return page(res);
   };
-  const addRate = async (gymId: string, cookies: Cookies, name: string, bp: number): Promise<string> => {
-    const res = await post(`${register(gymId)}/tax-rates`, { name, bp }, cookies);
+  const addRate = async (gymId: string, cookies: Cookies, name: string, pcm: number): Promise<string> => {
+    const res = await post(`${register(gymId)}/tax-rates`, { name, pcm }, cookies);
     expect(res.statusCode, res.body).toBe(201);
     const found = page(res).tax.rates.find((r) => r.name === name);
     if (found === undefined) throw new Error(`no rate named ${name}`);
     return found.id;
   };
   const addProduct = async (gymId: string, cookies: Cookies, name: string, priceMinor: number, stock: number | null, taxRateId: string | null = null): Promise<GymProduct> => {
-    const res = await post(`${register(gymId)}/products`, { name, priceMinor, taxRateId, stock }, cookies);
+    const res = await post(`${register(gymId)}/products`, { name, priceMinor, taxRateIds: taxRateId === null ? [] : [taxRateId], stock }, cookies);
     expect(res.statusCode, res.body).toBe(201);
     const found = page(res).products.find((p) => p.name === name);
     if (found === undefined) throw new Error(`no product named ${name}`);
@@ -240,7 +240,7 @@ d("a basket at Sell (real Postgres)", () => {
       const maya = await addPerson(gymId, owner.cookies, "Maya Patel", "sb-maya@gmail.com");
       const ravi = await addPerson(gymId, owner.cookies, "Ravi Kumar", "sb-ravi@gmail.com");
       // Sales tax 8.25%, added on top in the United States.
-      const salesTax = await addRate(gymId, owner.cookies, "Sales tax", 825);
+      const salesTax = await addRate(gymId, owner.cookies, "Sales tax", 8250);
       const bar = await addProduct(gymId, owner.cookies, "Protein bar", 250, 10, salesTax);
       const water = await addProduct(gymId, owner.cookies, "Water", 199, 20);
       const towel = await addProduct(gymId, owner.cookies, "Towel", 500, 3);
@@ -267,7 +267,7 @@ d("a basket at Sell (real Postgres)", () => {
       const hers = await receipt(gymId, mine.receiptNumber, owner.cookies);
       if (hers.kind !== "sale") throw new Error("not a sale's receipt");
       expect(hers.person).toBe("Maya Patel");
-      expect(hers.lines.map((l) => [l.name, l.quantity, l.unitPriceMinor, l.amounts.listedMinor, l.amounts.tax?.minor ?? 0, l.amounts.totalMinor])).toEqual([
+      expect(hers.lines.map((l) => [l.name, l.quantity, l.unitPriceMinor, l.amounts.listedMinor, l.amounts.taxes.reduce((n, t) => n + t.minor, 0), l.amounts.totalMinor])).toEqual([
         ["Protein bar", 1, 250, 250, 21, 271],
         ["Water", 2, 199, 398, 0, 398],
       ]);

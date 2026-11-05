@@ -163,7 +163,7 @@ d("Refund to card at Sell (real Postgres)", { timeout: T }, () => {
     expect(squareFinishResponseSchema.parse(JSON.parse(done.body)).outcome).toBe("connected");
   };
   const productOf = async (gymId: string, owner: Person, name: string, priceMinor: number, stock: number | null): Promise<string> => {
-    const res = await send("POST", `/v1/orgs/${gymId}/register/products`, owner.cookies, { name, priceMinor, taxRateId: null, stock });
+    const res = await send("POST", `/v1/orgs/${gymId}/register/products`, owner.cookies, { name, priceMinor, taxRateIds: [], stock });
     expect(res.statusCode, res.body).toBe(201);
     const found = sellPageResponseSchema.parse(JSON.parse(res.body)).products.find((p) => p.name === name);
     if (found === undefined) throw new Error(`no product ${name}`);

@@ -277,7 +277,7 @@ d("Refer a friend: the member's gift as free days (real Postgres)", () => {
     goldA = await typeOf(gymA, owner.cookies, {});
     goldB = await typeOf(gymB, ownerB.cookies, {});
     packA = await typeOf(gymA, owner.cookies, { name: "Ten classes", kind: "pack", priceMinor: 9000, termCount: null, termUnit: null, packClasses: 10, packDays: 60 });
-    const product = await post(`/v1/orgs/${gymA.org.id}/register/products`, { name: "Protein tub", priceMinor: 2500, taxRateId: null, stock: null }, owner.cookies);
+    const product = await post(`/v1/orgs/${gymA.org.id}/register/products`, { name: "Protein tub", priceMinor: 2500, taxRateIds: [], stock: null }, owner.cookies);
     expect(product.statusCode, product.body).toBe(201);
     const [bar] = await sql<{ id: string }[]>`SELECT id FROM gym_products WHERE gym_id = ${gymA.org.id} AND name = 'Protein tub'`;
     if (bar === undefined) throw new Error("no product");

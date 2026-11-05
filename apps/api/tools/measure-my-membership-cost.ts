@@ -123,7 +123,7 @@ async function makeGym(n: number, t0: number, history: boolean): Promise<Gym> {
   const first = bills.length + 1;
   await sql`
     INSERT INTO gym_sales (gym_id, request_key, product_id, entry_id, for_member, item_name, quantity, unit_price_minor, net_minor, tax_minor, total_minor,
-                           tax_bp, tax_included, currency, method, sold_on, recorded_by, receipt_number)
+                           tax_pcm, tax_included, currency, method, sold_on, recorded_by, receipt_number)
     SELECT ${gymId}, gen_random_uuid(), ${product.id}, e.e, true, 'Water', 1, 2500, 2500, 0, 2500, 0, false, 'INR', 'cash',
            (${dayOf(t0)}::date - s), ${owner}, ${first} + (e.i - 1) * ${SALES} + s
     FROM unnest(${entries}::uuid[]) WITH ORDINALITY AS e(e, i), generate_series(0, ${SALES - 1}) AS s`;

@@ -148,15 +148,15 @@ d("receipts (real Postgres)", () => {
   };
   const register = (gymId: string) => `/v1/orgs/${gymId}/register`;
   const page = (res: { body: string }): SellPageResponse => sellPageResponseSchema.parse(JSON.parse(res.body));
-  const addRate = async (gymId: string, cookies: Cookies, name: string, bp: number): Promise<string> => {
-    const res = await post(`${register(gymId)}/tax-rates`, { name, bp }, cookies);
+  const addRate = async (gymId: string, cookies: Cookies, name: string, pcm: number): Promise<string> => {
+    const res = await post(`${register(gymId)}/tax-rates`, { name, pcm }, cookies);
     expect(res.statusCode, res.body).toBe(201);
     const found = page(res).tax.rates.find((r) => r.name === name);
     if (found === undefined) throw new Error(`no rate named ${name}`);
     return found.id;
   };
   const addProduct = async (gymId: string, cookies: Cookies, name: string, priceMinor: number, taxRateId: string | null = null): Promise<GymProduct> => {
-    const res = await post(`${register(gymId)}/products`, { name, priceMinor, taxRateId, stock: null }, cookies);
+    const res = await post(`${register(gymId)}/products`, { name, priceMinor, taxRateIds: taxRateId === null ? [] : [taxRateId], stock: null }, cookies);
     expect(res.statusCode, res.body).toBe(201);
     const found = page(res).products.find((p) => p.name === name);
     if (found === undefined) throw new Error(`no product named ${name}`);
@@ -241,7 +241,7 @@ d("receipts (real Postgres)", () => {
         (${gymId}, ${desk.userId}, 'trainer', ${["members.read", "billing.members"]})`;
 
       // Maya pays for Gold Monthly, $50.00 plus 8.25% sales tax; a walk-in and Maya each buy water.
-      const tax = await addRate(gymId, owner.cookies, "Sales tax", 825);
+      const tax = await addRate(gymId, owner.cookies, "Sales tax", 8250);
       const gold = await addType(gymId, owner.cookies, monthly({ taxRateId: tax }));
       const maya = await addPerson(gymId, owner.cookies, "Maya Patel");
       await give(gymId, maya, owner.cookies, gold, 5000, 5413);
@@ -301,7 +301,7 @@ d("receipts (real Postgres)", () => {
         currency: "USD",
         cancelled: false,
         item: { name: "Gold Monthly", covers: { from: "2026-10-15", to: "2026-11-14" }, part: false },
-        amounts: { listedMinor: 5000, discount: null, tax: { name: "Sales tax", bp: 825, included: false, minor: 413 }, totalMinor: 5413 },
+        amounts: { listedMinor: 5000, discount: null, taxes: [{ name: "Sales tax", pcm: 8250, included: false, minor: 413 }], totalMinor: 5413 },
         joiningFeeMinor: 0,
         changeCredit: null,
         paidMinor: 5413,
@@ -371,7 +371,7 @@ d("receipts (real Postgres)", () => {
     async () => {
       const owner = await makeUser("discount-owner");
       const gymId = await makeGym(owner, "Rcp Discount Gym");
-      const tax = await addRate(gymId, owner.cookies, "Sales tax", 825);
+      const tax = await addRate(gymId, owner.cookies, "Sales tax", 8250);
       const gold = await addType(gymId, owner.cookies, monthly({ taxRateId: tax }));
       const discount = async (name: string, percentBp: number, payments: "first" | "every") => {
         const res = await post(
@@ -401,11 +401,11 @@ d("receipts (real Postgres)", () => {
       await giveWith("Ben Every", every, 500, 4871);
       expect((await receipt(gymId, 1, owner.cookies)).kind === "payment").toBe(true);
       expect(await receipt(gymId, 1, owner.cookies)).toMatchObject({
-        amounts: { listedMinor: 5000, discount: { name: "First month 20", minor: 1000 }, tax: { name: "Sales tax", bp: 825, included: false, minor: 330 }, totalMinor: 4330 },
+        amounts: { listedMinor: 5000, discount: { name: "First month 20", minor: 1000 }, taxes: [{ name: "Sales tax", pcm: 8250, included: false, minor: 330 }], totalMinor: 4330 },
         paidMinor: 4330,
       });
       expect(await receipt(gymId, 2, owner.cookies)).toMatchObject({
-        amounts: { listedMinor: 5000, discount: { name: "Staff 10", minor: 500 }, tax: { name: "Sales tax", bp: 825, included: false, minor: 371 }, totalMinor: 4871 },
+        amounts: { listedMinor: 5000, discount: { name: "Staff 10", minor: 500 }, taxes: [{ name: "Sales tax", pcm: 8250, included: false, minor: 371 }], totalMinor: 4871 },
         paidMinor: 4871,
       });
     },
@@ -462,7 +462,7 @@ d("receipts (real Postgres)", () => {
         paidMinor: 4000,
         method: "card_at_desk",
         balance: { paidBeforeMinor: 2000, leftMinor: 0 },
-        amounts: { listedMinor: 6000, tax: null, totalMinor: 6000 },
+        amounts: { listedMinor: 6000, taxes: [], totalMinor: 6000 },
       });
 
       // $10.00 of the second payment is given back: a refund receipt of its own.
@@ -539,7 +539,7 @@ d("receipts (real Postgres)", () => {
       expect(await receipt(gymId, 5, owner.cookies)).toMatchObject({
         kind: "sale",
         cancelled: false,
-        lines: [{ name: "Water", quantity: 2, unitPriceMinor: 250, amounts: { listedMinor: 500, discount: { name: "Staff 20", minor: 100 }, tax: null, totalMinor: 400 } }],
+        lines: [{ name: "Water", quantity: 2, unitPriceMinor: 250, amounts: { listedMinor: 500, discount: { name: "Staff 20", minor: 100 }, taxes: [], totalMinor: 400 } }],
         totalMinor: 400,
         method: "bank_transfer",
       });

@@ -203,8 +203,8 @@ describe('discounts for memberships (18b-ii-b)', () => {
 });
 
 describe('tax on memberships (18b-iii)', () => {
-  const GST = { id: '44444444-4444-4444-8444-000000000001', name: 'GST', bp: 1800 };
-  const VAT = { id: '44444444-4444-4444-8444-000000000002', name: 'VAT', bp: 2000 };
+  const GST = { id: '44444444-4444-4444-8444-000000000001', name: 'GST', pcm: 18000 };
+  const VAT = { id: '44444444-4444-4444-8444-000000000002', name: 'VAT', pcm: 20000 };
   const rateRow = (r, over = {}) => ({ ...r, products: 0, membershipTypes: 1, memberships: 0, ...over });
   const sellPage = (rates) => ({
     currency: 'USD',
@@ -303,7 +303,7 @@ describe('tax on memberships (18b-iii)', () => {
     fireEvent.change(rate.getByLabelText('Tax name'), { target: { value: 'VAT' } });
     fireEvent.change(rate.getByLabelText('Rate (%)'), { target: { value: '20' } });
     fireEvent.click(rate.getByRole('button', { name: 'Add tax rate' }));
-    await waitFor(() => expect(register.addTaxRate).toHaveBeenCalledWith(IRON, { name: 'VAT', bp: 2000 }));
+    await waitFor(() => expect(register.addTaxRate).toHaveBeenCalledWith(IRON, { name: 'VAT', pcm: 20000 }));
     await waitFor(() => expect(form.getByLabelText('Tax').value).toBe(VAT.id));
     // Adding the rate saved nothing of the type.
     expect(orgService.updateMembershipType).not.toHaveBeenCalled();

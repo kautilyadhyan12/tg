@@ -188,7 +188,7 @@ describe("what a membership is given, what a gym may type, what a cancel may sen
 
   it("the signed agreement says the fee beside the minimum term, and its tax inside it", () => {
     const m = ana();
-    const facts = (tax: { name: string; bp: number } | null) =>
+    const facts = (tax: { name: string; pcm: number } | null) =>
       agreementFacts({
         gym: { name: "Iron Works", postalAddress: null, contactPhone: null, contactEmail: null },
         personName: "Ana Silva",
@@ -211,6 +211,6 @@ describe("what a membership is given, what a gym may type, what a cancel may sen
         taxIncluded: false,
       });
     expect(facts(null)).toContainEqual({ label: "Early cancellation fee", value: "$99.00" });
-    expect(facts({ name: "Sales tax", bp: 825 })).toContainEqual({ label: "Early cancellation fee", value: "$99.00, Sales tax included" });
+    expect(facts({ name: "Sales tax", pcm: 8250 })).toContainEqual({ label: "Early cancellation fee", value: "$99.00, Sales tax included" });
   });
 });

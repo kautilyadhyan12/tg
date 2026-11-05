@@ -130,7 +130,7 @@ d("UPI as a payment method, for gyms in India (real Postgres)", () => {
     return (JSON.parse(res.body) as { entry: { entryId: string } }).entry.entryId;
   };
   const addProduct = async (gymId: string, cookies: Cookies): Promise<string> => {
-    const res = await post(`/v1/orgs/${gymId}/register/products`, { name: "Water bottle", priceMinor: 5000, taxRateId: null, stock: null }, cookies);
+    const res = await post(`/v1/orgs/${gymId}/register/products`, { name: "Water bottle", priceMinor: 5000, taxRateIds: [], stock: null }, cookies);
     expect(res.statusCode, res.body).toBe(201);
     const found = sellPageResponseSchema.parse(JSON.parse(res.body)).products.find((p) => p.name === "Water bottle");
     if (found === undefined) throw new Error("no product");

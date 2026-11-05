@@ -66,25 +66,25 @@ describe("what a discount takes off", () => {
 });
 
 describe("what a sale with a discount comes to", () => {
-  const base = { unitPriceMinor: 199, quantity: 2, taxed: true, taxBp: 825, taxIncluded: false };
+  const base = { unitPriceMinor: 199, quantity: 2, taxPcms: [8250], taxIncluded: false };
 
   it("tax added on top is worked out on the price after the discount (Texas, 8.25%)", () => {
     // 3.98 less 0.40 is 3.58; 8.25% of 3.58 is 0.29535, so 0.30; 3.88 to pay.
-    expect(saleAmounts({ ...base, discountMinor: 40 })).toEqual({ ok: true, netMinor: 358, taxMinor: 30, totalMinor: 388 });
+    expect(saleAmounts({ ...base, discountMinor: 40 })).toEqual({ ok: true, netMinor: 358, taxMinor: 30, taxParts: [30], totalMinor: 388 });
   });
 
   it("tax inside the price is the tax part of what is left (the UK, 20%)", () => {
     // 10.00 less 2.00 is 8.00 paid; a sixth of it, 1.3333, is tax, so 1.33.
-    expect(saleAmounts({ unitPriceMinor: 1000, quantity: 1, taxed: true, taxBp: 2000, taxIncluded: true, discountMinor: 200 })).toEqual({ ok: true, netMinor: 667, taxMinor: 133, totalMinor: 800 });
+    expect(saleAmounts({ unitPriceMinor: 1000, quantity: 1, taxPcms: [20000], taxIncluded: true, discountMinor: 200 })).toEqual({ ok: true, netMinor: 667, taxMinor: 133, taxParts: [133], totalMinor: 800 });
   });
 
   it("no tax: the price less the discount", () => {
-    expect(saleAmounts({ ...base, taxed: false, discountMinor: 98 })).toEqual({ ok: true, netMinor: 300, taxMinor: 0, totalMinor: 300 });
+    expect(saleAmounts({ ...base, taxPcms: [], discountMinor: 98 })).toEqual({ ok: true, netMinor: 300, taxMinor: 0, taxParts: [], totalMinor: 300 });
   });
 
   it("no discount, and a discount of nothing, are the sale as it was", () => {
     const plain = saleAmounts(base);
-    expect(plain).toEqual({ ok: true, netMinor: 398, taxMinor: 33, totalMinor: 431 });
+    expect(plain).toEqual({ ok: true, netMinor: 398, taxMinor: 33, taxParts: [33], totalMinor: 431 });
     expect(saleAmounts({ ...base, discountMinor: 0 })).toEqual(plain);
   });
 
@@ -101,13 +101,13 @@ describe("what a sale with a discount comes to", () => {
 
   it("the three numbers always add up, and the total is never above the price before the discount plus its tax", () => {
     for (const taxIncluded of [true, false]) {
-      for (const taxBp of [0, 500, 825, 2000, 3000]) {
+      for (const taxPcms of [[], [5000], [8250], [20000], [30000], [5000, 9975]]) {
         for (const unitPriceMinor of [1, 2, 99, 199, 1250, 99_999]) {
-          const full = saleAmounts({ unitPriceMinor, quantity: 3, taxed: true, taxBp, taxIncluded });
+          const full = saleAmounts({ unitPriceMinor, quantity: 3, taxPcms, taxIncluded });
           if (!full.ok) throw new Error("the sale without a discount did not add up");
           for (const d of [percent(1), percent(1000), percent(3333), percent(9999), amount(1), amount(50)]) {
             const off = discountOff(d, unitPriceMinor * 3);
-            const got = saleAmounts({ unitPriceMinor, quantity: 3, taxed: true, taxBp, taxIncluded, discountMinor: off });
+            const got = saleAmounts({ unitPriceMinor, quantity: 3, taxPcms, taxIncluded, discountMinor: off });
             if (!got.ok) {
               expect(got.reason).toBe("nothing_to_pay");
               expect(off).toBe(unitPriceMinor * 3);

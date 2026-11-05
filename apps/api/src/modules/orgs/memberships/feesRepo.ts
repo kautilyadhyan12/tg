@@ -123,7 +123,7 @@ export async function openClassFees(tx: TransactionSql, gymId: string, bookingId
       pack_charged: boolean;
       currency: string;
       tax_name: string | null;
-      tax_bp: number | null;
+      tax_pcm: number | null;
       class_name: string;
       class_day: string;
       timezone: string;
@@ -132,7 +132,7 @@ export async function openClassFees(tx: TransactionSql, gymId: string, bookingId
       no_show: number;
     }[]
   >`
-    SELECT b.id, b.held_membership_id, b.pack_charged, h.currency, r.name AS tax_name, r.rate_bp AS tax_bp,
+    SELECT b.id, b.held_membership_id, b.pack_charged, h.currency, r.name AS tax_name, r.rate_pcm AS tax_pcm,
            left(t.name, 80) AS class_name, s.local_date::text AS class_day, g.timezone, g.country,
            g.class_late_cancel_fee_minor AS late, g.class_no_show_fee_minor AS no_show
     FROM gym_class_bookings b
@@ -148,7 +148,7 @@ export async function openClassFees(tx: TransactionSql, gymId: string, bookingId
     const minor = classFeeFor({ fee, heldMembershipId: row.held_membership_id, packCharged: row.pack_charged, fees: { lateCancelMinor: row.late, noShowMinor: row.no_show } });
     if (minor === 0 || row.held_membership_id === null || !feeMoneyMatches(row)) return [];
     // The amount the gym set is what the person pays: the membership's rate is inside it.
-    const tax = row.tax_name === null || row.tax_bp === null ? null : { name: row.tax_name, bp: row.tax_bp, included: true };
+    const tax = row.tax_name === null || row.tax_pcm === null ? null : { name: row.tax_name, pcm: row.tax_pcm, included: true };
     const bill = billOf(minor, tax);
     return [
       {
@@ -156,7 +156,7 @@ export async function openClassFees(tx: TransactionSql, gymId: string, bookingId
         b: row.id,
         a: bill.amountMinor,
         tm: bill.tax?.minor ?? 0,
-        tb: bill.tax?.bp ?? 0,
+        tb: bill.tax?.pcm ?? 0,
         tn: bill.tax?.name ?? null,
         ti: bill.tax?.included ?? null,
         c: row.currency,
@@ -169,7 +169,7 @@ export async function openClassFees(tx: TransactionSql, gymId: string, bookingId
   if (opening.length === 0) return 0;
   const opened = await tx<{ id: string }[]>`
     INSERT INTO gym_member_bills
-      (gym_id, held_membership_id, period_index, fee, fee_for, class_booking_id, amount_minor, tax_minor, tax_bp, tax_name, tax_included,
+      (gym_id, held_membership_id, period_index, fee, fee_for, class_booking_id, amount_minor, tax_minor, tax_pcm, tax_name, tax_included,
        currency, due_on, covers_from, covers_to, created_at, updated_at)
     SELECT ${gymId}, r.m, NULL, ${fee}, r.n, r.b, r.a, r.tm, r.tb, r.tn, r.ti, r.c, r.d, r.day, r.day, ${now}, ${now}
     FROM jsonb_to_recordset(${tx.json(opening)}) AS r(m uuid, b uuid, a int, tm int, tb int, tn text, ti boolean, c text, d date, day date, n text)
@@ -194,20 +194,20 @@ export async function openClassFees(tx: TransactionSql, gymId: string, bookingId
  *  it as a late cancel's is, and one a membership (`gym_member_bills_leave_fee_uq`, 0202). Answers
  *  whether it opened one. */
 export async function openLeaveFee(tx: TransactionSql, gymId: string, membershipId: string, today: string, now: Date): Promise<boolean> {
-  const [row] = await tx<{ id: string; fee: number | null; currency: string; type_name: string; tax_name: string | null; tax_bp: number | null }[]>`
-    SELECT h.id, h.leave_fee_minor AS fee, h.currency, left(t.name, 80) AS type_name, r.name AS tax_name, r.rate_bp AS tax_bp
+  const [row] = await tx<{ id: string; fee: number | null; currency: string; type_name: string; tax_name: string | null; tax_pcm: number | null }[]>`
+    SELECT h.id, h.leave_fee_minor AS fee, h.currency, left(t.name, 80) AS type_name, r.name AS tax_name, r.rate_pcm AS tax_pcm
     FROM gym_held_memberships h
     JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
     LEFT JOIN gym_tax_rates r ON r.gym_id = h.gym_id AND r.id = h.tax_rate_id
     WHERE h.gym_id = ${gymId} AND h.id = ${membershipId} AND h.left_early`;
   if (row === undefined || row.fee === null || row.fee <= 0) return false;
-  const tax = row.tax_name === null || row.tax_bp === null ? null : { name: row.tax_name, bp: row.tax_bp, included: true };
+  const tax = row.tax_name === null || row.tax_pcm === null ? null : { name: row.tax_name, pcm: row.tax_pcm, included: true };
   const bill = billOf(row.fee, tax);
   const opened = await tx<{ id: string }[]>`
     INSERT INTO gym_member_bills
-      (gym_id, held_membership_id, period_index, fee, fee_for, amount_minor, tax_minor, tax_bp, tax_name, tax_included,
+      (gym_id, held_membership_id, period_index, fee, fee_for, amount_minor, tax_minor, tax_pcm, tax_name, tax_included,
        currency, due_on, covers_from, covers_to, created_at, updated_at)
-    VALUES (${gymId}, ${row.id}, NULL, 'leave_early', ${row.type_name}, ${bill.amountMinor}, ${bill.tax?.minor ?? 0}, ${bill.tax?.bp ?? 0},
+    VALUES (${gymId}, ${row.id}, NULL, 'leave_early', ${row.type_name}, ${bill.amountMinor}, ${bill.tax?.minor ?? 0}, ${bill.tax?.pcm ?? 0},
             ${bill.tax?.name ?? null}, ${bill.tax?.included ?? null}, ${row.currency}, ${today}::date, ${today}::date, ${today}::date, ${now}, ${now})
     ON CONFLICT (held_membership_id) WHERE fee = 'leave_early' AND (status <> 'void' OR void_reason = 'waived') DO NOTHING
     RETURNING id`;
@@ -276,7 +276,7 @@ export async function openPtFees(tx: TransactionSql, gymId: string, appointmentI
       pack_charged: boolean;
       currency: string;
       tax_name: string | null;
-      tax_bp: number | null;
+      tax_pcm: number | null;
       trainer_name: string | null;
       trainer_email: string | null;
       day: string;
@@ -286,7 +286,7 @@ export async function openPtFees(tx: TransactionSql, gymId: string, appointmentI
       no_show: number;
     }[]
   >`
-    SELECT a.id, a.held_membership_id, a.pack_charged, h.currency, r.name AS tax_name, r.rate_bp AS tax_bp,
+    SELECT a.id, a.held_membership_id, a.pack_charged, h.currency, r.name AS tax_name, r.rate_pcm AS tax_pcm,
            u.display_name AS trainer_name, u.email::text AS trainer_email, a.local_date::text AS day, g.timezone, g.country,
            g.pt_late_cancel_fee_minor AS late, g.pt_no_show_fee_minor AS no_show
     FROM gym_pt_appointments a
@@ -301,7 +301,7 @@ export async function openPtFees(tx: TransactionSql, gymId: string, appointmentI
     const minor = classFeeFor({ fee, heldMembershipId: row.held_membership_id, packCharged: row.pack_charged, fees: { lateCancelMinor: row.late, noShowMinor: row.no_show } });
     if (minor === 0 || row.held_membership_id === null || !feeMoneyMatches(row)) return [];
     // The amount the gym set is what the person pays: the membership's rate is inside it.
-    const tax = row.tax_name === null || row.tax_bp === null ? null : { name: row.tax_name, bp: row.tax_bp, included: true };
+    const tax = row.tax_name === null || row.tax_pcm === null ? null : { name: row.tax_name, pcm: row.tax_pcm, included: true };
     const bill = billOf(minor, tax);
     return [
       {
@@ -309,7 +309,7 @@ export async function openPtFees(tx: TransactionSql, gymId: string, appointmentI
         s: row.id,
         a: bill.amountMinor,
         tm: bill.tax?.minor ?? 0,
-        tb: bill.tax?.bp ?? 0,
+        tb: bill.tax?.pcm ?? 0,
         tn: bill.tax?.name ?? null,
         ti: bill.tax?.included ?? null,
         c: row.currency,
@@ -322,7 +322,7 @@ export async function openPtFees(tx: TransactionSql, gymId: string, appointmentI
   if (opening.length === 0) return 0;
   const opened = await tx<{ id: string }[]>`
     INSERT INTO gym_member_bills
-      (gym_id, held_membership_id, period_index, fee, fee_for, pt_appointment_id, amount_minor, tax_minor, tax_bp, tax_name, tax_included,
+      (gym_id, held_membership_id, period_index, fee, fee_for, pt_appointment_id, amount_minor, tax_minor, tax_pcm, tax_name, tax_included,
        currency, due_on, covers_from, covers_to, created_at, updated_at)
     SELECT ${gymId}, r.m, NULL, ${fee}, r.n, r.s, r.a, r.tm, r.tb, r.tn, r.ti, r.c, r.d, r.day, r.day, ${now}, ${now}
     FROM jsonb_to_recordset(${tx.json(opening)}) AS r(m uuid, s uuid, a int, tm int, tb int, tn text, ti boolean, c text, d date, day date, n text)
@@ -427,7 +427,7 @@ export async function feesFor(sql: Sql | TransactionSql, gymId: string, membersh
       covers_to: string | null;
       amount_minor: number;
       tax_minor: number;
-      tax_bp: number;
+      tax_pcm: number;
       tax_name: string | null;
       tax_included: boolean | null;
       currency: string;
@@ -442,12 +442,12 @@ export async function feesFor(sql: Sql | TransactionSql, gymId: string, membersh
       kept_by: string | null;
     }[]
   >`
-    SELECT x.id, x.held_membership_id, x.fee, x.fee_for, x.of_pt, x.covers_from, x.covers_to, x.amount_minor, x.tax_minor, x.tax_bp,
+    SELECT x.id, x.held_membership_id, x.fee, x.fee_for, x.of_pt, x.covers_from, x.covers_to, x.amount_minor, x.tax_minor, x.tax_pcm,
            x.tax_name, x.tax_included, x.currency, x.due_on, x.status, x.void_reason, x.voided_on, v.display_name AS voided_by_name, x.still_owed,
            (x.fee_kept_at AT TIME ZONE g.timezone)::date::text AS kept_on, k.display_name AS kept_by
     FROM (
       SELECT b.id, b.held_membership_id, b.fee, b.fee_for, b.covers_from::text AS covers_from,
-             CASE WHEN b.fee = 'freeze' THEN b.covers_to::text END AS covers_to, b.amount_minor, b.tax_minor, b.tax_bp,
+             CASE WHEN b.fee = 'freeze' THEN b.covers_to::text END AS covers_to, b.amount_minor, b.tax_minor, b.tax_pcm,
              b.tax_name, b.tax_included, b.currency, b.due_on::text AS due_on, b.status, b.void_reason, b.voided_on::text AS voided_on,
              b.voided_by, b.created_at, b.gym_id, b.fee_kept_at, b.fee_kept_by, ${stillOwedSql(sql)} AS still_owed, b.pt_appointment_id IS NOT NULL AS of_pt,
              row_number() OVER (PARTITION BY b.held_membership_id, b.status = 'open' ORDER BY b.created_at DESC, b.id) AS n
@@ -499,7 +499,7 @@ export async function feesFor(sql: Sql | TransactionSql, gymId: string, membersh
       on: r.covers_from,
       to: r.covers_to,
       amountMinor: r.amount_minor,
-      tax: r.tax_name === null || r.tax_included === null ? null : { name: r.tax_name, bp: r.tax_bp, included: r.tax_included, minor: r.tax_minor },
+      tax: r.tax_name === null || r.tax_included === null ? null : { name: r.tax_name, pcm: r.tax_pcm, included: r.tax_included, minor: r.tax_minor },
       currency: r.currency,
       dueOn: r.due_on,
       status: memberBillStatusSchema.parse(r.status),

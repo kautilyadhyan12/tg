@@ -722,7 +722,7 @@ describe('adding a membership', () => {
   });
 
   it('with tax: the form shows the price, its tax and the total, sends what it showed, and the membership and its bill say the tax (18b-iii)', async () => {
-    const VAT = { name: 'VAT', bp: 2000 };
+    const VAT = { name: 'VAT', pcm: 20000 };
     const TAXED = typeOf(5, { name: 'Gold VAT', priceMinor: 5000, tax: VAT });
     orgService.getHeldMemberships.mockResolvedValue(answer([], false, { types: [TAXED, GOLD] }));
     // 20% on top of £50.00 is £10.00: £60.00 a bill.
@@ -766,7 +766,7 @@ describe('adding a membership', () => {
   });
 
   it('where the gym’s prices hold the tax, the total is the price and the form says how much of it is tax', async () => {
-    const TAXED = typeOf(5, { name: 'Gold VAT', priceMinor: 5000, tax: { name: 'VAT', bp: 2000 } });
+    const TAXED = typeOf(5, { name: 'Gold VAT', priceMinor: 5000, tax: { name: 'VAT', pcm: 20000 } });
     orgService.getHeldMemberships.mockResolvedValue(answer([], false, { types: [TAXED], taxIncluded: true }));
     render(draw(ADA, 'Ada Lovelace'));
     fireEvent.click(await (await boxSoon()).findByRole('button', { name: 'Add membership' }));
