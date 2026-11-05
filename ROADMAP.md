@@ -689,9 +689,16 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 35c-ii. [x] **Log body measurements on Body** — merged 2026-11-05 (PR #471).
       - 35c-iii. [x] **Achievements** — merged 2026-11-05 (PR #474).
 36. [ ] **The weekly plan**: the plan builder on the server (6a), the week screen (6b). Doing a planned workout (6c) is exercise folder 2's item 64. Once the plan names a week's sessions, calories burned joins the starter goals with the plan's own number (RULINGS 2026-10-13). Its Workout tab in Recommended For You takes the three choices and rules of spec Part 6 §16.6.
-37. [ ] **Running** (item 4; Stage 1's 7b): recording by GPS with the screen off, the map, the summary, the run plan, routes. Its Running tab in Recommended For You takes the three choices and rules of spec Part 6 §16.6.
+37. **Running** (item 4; Stage 1's 7b; split 2026-11-05 in seven, Kd's "go", `rulings/2026-11-05-37a.md`: recording first). Its Running tab in Recommended For You takes the three choices and rules of spec Part 6 §16.6.
+    - 37a. [x] **Record a run** · merged 2026-11-06 · PR #478
+    - 37a-ii. [ ] **A voice each kilometre or mile** (one more free Expo package).
+    - 37b. [ ] **The map under the run, and hills climbed** (MapLibre; elevation from a free public height map, as Strava's basemap does).
+    - 37c. [ ] **Your runs**: the list, a run's page, records (fastest 1 km or mile, 5 km, 10 km, longest run), the pace chart.
+    - 37d. [ ] **The run plan**, run-walk intervals with voice, and Recommended For You's Running tab.
+    - 37e. [ ] **Routes.**
+    - 37f. [ ] **Heart rate from a chest strap or watch.**
 38. [ ] **The global board** (its reminders moved to item 19e on 2026-11-05): last, as Kd ruled on 2026-11-01 (`rulings/2026-11-01-17c-ii-a.md`): Active days and Running, the server's checks, a stranger's profile, and follow requests for somebody who chose Hide me, seen from outside their gym; Follow with Followers and Following counts everywhere, gyms included (`rulings/2026-11-01-17c-ii-b.md`). It waits for items 18, 37, 53 and 64.
-39. [ ] **Share with your photo** (Kd, 2026-10-18; spec Part 2 §11.8): after a workout, a meal photo or a run, the person takes or picks a photo and the stats are drawn on it, made on the phone and sent through the phone's own share menu. Built once for all three, after items 33 and 37 and exercise folder 2's 64; it brings Part 7 §5's share cards forward from After launch.
+39. [ ] **Share with your photo** (Kd, 2026-10-18; spec Part 2 §11.8): after a workout, a meal photo or a run, the person takes or picks a photo and the stats are drawn on it, made on the phone and sent through the phone's own share menu. A run's map drawn on it hides its start and end near the person's home, as Strava's does (37a's plan, 2026-11-05). Built once for all three, after items 33 and 37 and exercise folder 2's 64; it brings Part 7 §5's share cards forward from After launch.
 
 **Exercise folder 1 — `D:\Projects\ai-home-gym-ex1`: the camera and the form rules** (spec Part 2 §11).
 

@@ -3,6 +3,11 @@
 // A screen names these; it never writes a colour of its own.
 export const colours = {
   page: "#0A0908",
+  /** A run's route where it is now or ended, and its best kilometre (37a, Kd: white mixed with gold). */
+  trail: "#FFFFFF",
+  trailGlow: "rgba(255,255,255,0.18)",
+  /** The run's numbers while it is paused. */
+  textDim: "rgba(255,255,255,0.55)",
   /** The pass's code: black on white whatever the look, as a scanner reads it. */
   passLight: "#FFFFFF",
   passDark: "#000000",
@@ -115,6 +120,8 @@ export const shadows = {
   barGlow: "0 0 0 6px rgba(255,138,31,0.16), 0 8px 22px rgba(255,138,31,0.35)",
   dotGlow: "0 0 8px rgba(255,138,31,0.75)",
   sheet: "0 -12px 48px rgba(0,0,0,0.6)",
+  /** A run's round Start, Pause and Resume (37a): a halo, then the glow under it. */
+  roundButton: "0 0 0 10px rgba(255,138,31,0.12), 0 0 0 22px rgba(255,138,31,0.05), 0 10px 38px rgba(255,138,31,0.55)",
 } as const;
 
 /** Progress's redrawn boxes (35c-i, Kd's drawing of 2026-11-04, "excellent job"): the records over

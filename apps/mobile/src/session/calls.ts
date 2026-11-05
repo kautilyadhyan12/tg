@@ -57,6 +57,8 @@ export interface Request {
   token?: string;
   /** How long its reply is waited for, where that is longer than usual (a meal photo's scan). */
   waitMs?: number;
+  /** Sent as its Idempotency-Key: the server saves a thing sent twice once (a run, 37a). */
+  key?: string;
 }
 
 /** One request, its reply read through its shape. A reply that comes after `waitMs` is dropped. */
@@ -79,6 +81,7 @@ export async function call<T>(server: Server, request: Request, shape: Shape<T>,
         headers: {
           ...(withBody ? { "content-type": "application/json" } : {}),
           ...(request.token === undefined ? {} : { authorization: `Bearer ${request.token}` }),
+          ...(request.key === undefined ? {} : { "idempotency-key": request.key }),
         },
         ...(withBody ? { body: JSON.stringify(request.body ?? {}) } : {}),
       }),

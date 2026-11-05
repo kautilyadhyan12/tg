@@ -5,6 +5,7 @@
 // no Idempotency-Key bookkeeping table needed for this path."
 import type { JSONValue, Sql } from "postgres";
 import { type SetMode, setModeSchema } from "@app/shared";
+import { RUN_COUNTS_FROM_M } from "../gamification/xp.js";
 import type { WorkoutSyncPayload } from "./schemas.js";
 
 /** calibration is z.record(z.unknown()) in the shared contract, so TS can't
@@ -505,6 +506,12 @@ export async function hasEarlierWorkoutOnDay(
           = to_char(${startedAt}::timestamptz AT TIME ZONE ${timeZone}, 'YYYY-MM-DD')
         AND (started_at < ${startedAt}
              OR (started_at = ${startedAt} AND id < ${workoutId}))
+    ) OR EXISTS (
+      SELECT 1 FROM runs
+      WHERE user_id = ${userId} AND distance_m >= ${RUN_COUNTS_FROM_M} AND run_calc_version IS NOT NULL
+        AND to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD')
+          = to_char(${startedAt}::timestamptz AT TIME ZONE ${timeZone}, 'YYYY-MM-DD')
+        AND started_at < ${startedAt}
     ) AS earlier`;
   return rows[0]?.earlier ?? false;
 }

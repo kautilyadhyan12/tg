@@ -71,6 +71,18 @@ export function configFor(copy: Copy, firebase = false): ExpoConfig {
       ["expo-image-picker", { photosPermission: "Allow $(PRODUCT_NAME) to open the photos you pick.", microphonePermission: false }],
       // A gym's messages as notifications (18b-i): the small icon and its colour on Android's bar.
       ["expo-notifications", { icon: "./assets/notification-icon.png", color: "#FF8A1F" }],
+      // Record a run (37a): the location while the app is in use, kept through a locked screen by a
+      // service with its notification. Never "all the time": Android's own rule is that a service the
+      // person starts keeps the location they gave the app in use.
+      [
+        "expo-location",
+        {
+          locationWhenInUsePermission: "Allow $(PRODUCT_NAME) to measure your runs.",
+          isAndroidBackgroundLocationEnabled: false,
+          isAndroidForegroundServiceEnabled: true,
+          isIosBackgroundLocationEnabled: false,
+        },
+      ],
       "./plugins/shortNativeBuild.js",
     ],
     extra,
