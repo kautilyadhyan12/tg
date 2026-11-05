@@ -1,12 +1,14 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
-import { AppState } from "react-native";
+import { AppState, Linking } from "react-native";
 import { RUN_MAX_POINTS, runSums, saveRunRequestSchema, type RunPoint, type SaveRunRequest } from "@app/shared";
 import { App } from "../../src/App";
-import { phoneRunFiles, resetRecorder, runNow, takeLocations } from "../../src/screens/running/recorder";
+import { closedPauses, phoneRunFiles, resetRecorder, runNow, takeLocations } from "../../src/screens/running/recorder";
+import { spokenTime } from "../../src/screens/running/runVoice";
 import { readRunFile } from "../../src/screens/running/runQueue";
 import { clock, distance, runName } from "../../src/screens/running/runWords";
 import type { Ask, AskInit } from "../../src/session/calls";
 import { RAVI, fakeServer, kept, memoryStore, profile, tokens, type Reply } from "../kit";
+import { realRuns, type RealPoint } from "../realRuns";
 
 // Record a run (ROADMAP Stage 5 37a), through the whole app. The worst thing on the phone's side:
 // somebody's run, which starts at their front door, shown to another person on the same phone, or a
@@ -38,13 +40,13 @@ beforeEach(async () => {
 });
 
 /** The server: the person's runs, a POST kept once for its id. `online` false is no signal. */
-function runServer() {
+function runServer(user = RAVI) {
   const saved: SaveRunRequest[] = [];
   const posts: { body: unknown; key: string | undefined }[] = [];
   const state = { online: true };
   const server = fakeServer({
     "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }),
-    "/v1/users/me": () => ({ status: 200, body: profile(true) }),
+    "/v1/users/me": () => ({ status: 200, body: profile(true, user) }),
     [PATH]: (body): Reply => {
       if (body === undefined) {
         const items = saved.map((r) => ({ id: r.runId, startedAt: r.startedAt, durationS: 600, distanceM: 1800, routeName: null, kcalPoint: 120, source: "mobile" }));
@@ -344,5 +346,157 @@ describe("a run stays inside what the server takes (round one of 37a, H1)", () =
       expect(s.saved).toHaveLength(1);
     });
     expect(s.saved[0]?.points).toHaveLength(RUN_MAX_POINTS);
+  });
+});
+
+// ── The voice (37a-ii) ────────────────────────────────────────────────────────────────────────
+// The worst thing: a runner told a wrong number out loud. The rule itself is proved against three
+// real runs in test/runVoice.test.ts; here a real run goes through the whole app, as Android hands
+// its points over with the screen locked, in each of the person's units.
+
+const voice = jest.requireMock<{ voice: { said: string[]; quieted: number; canSpeak: boolean } }>("../../src/screens/running/runVoiceNative").voice;
+
+/** A real run's points, thirty at a time, as Android hands them over with the screen off. */
+async function feedReal(points: readonly RealPoint[]) {
+  const run = runNow();
+  if (run === null) throw new Error("no run going");
+  for (let i = 0; i < points.length; i += 30) {
+    const locations = points.slice(i, i + 30).map(([t, latitude, longitude]) => ({ timestamp: run.startedAt + 2000 + t, coords: { latitude, longitude, accuracy: null, speed: null } }));
+    await act(() => takeLocations({ locations }));
+  }
+}
+
+const MARK = { kilometre: /^\d+ kilometres?\./, mile: /^\d+ miles?\./ } as const;
+const marksSaid = (unit: "kilometre" | "mile") => voice.said.filter((line) => MARK[unit].test(line));
+
+describe("the voice, through the whole app", () => {
+  beforeEach(() => {
+    Object.assign(voice, { said: [], quieted: 0, canSpeak: true });
+  });
+
+  it.each([
+    ["kilometres", RAVI, "kilometre", "mile"],
+    ["miles", { ...RAVI, units: "imperial" }, "mile", "kilometre"],
+  ] as const)("the worst thing: a real run in %s says each mark once, with the summary's own numbers", async (_name, user, unit, never) => {
+    const s = runServer(user);
+    await openRunning(s, user);
+    await startRunning();
+    await feedReal(realRuns().get("iphone") ?? []);
+    const run = runNow();
+    if (run === null) throw new Error("no run");
+    const end = run.points[run.points.length - 1]?.[0] ?? 0;
+    const final = runSums(run.points, closedPauses(run, end), end, 0);
+    const splits = unit === "mile" ? final.splitsMi : final.splitsKm;
+    const whole = Math.floor(final.distanceM / (unit === "mile" ? 1609.344 : 1000));
+    const said = marksSaid(unit);
+    expect(whole).toBeGreaterThan(4);
+    expect(said.length).toBeGreaterThanOrEqual(whole - 1);
+    expect(said.length).toBeLessThanOrEqual(whole);
+    said.forEach((line, i) => {
+      expect(line.startsWith(`${String(i + 1)} ${unit}${i === 0 ? "" : "s"}.`)).toBe(true);
+      // Each kilometre or mile's own time, as the summary will show it.
+      if (i > 0) expect(line).toContain(`Last ${unit} ${spokenTime(splits[i]?.s ?? -1)}.`);
+    });
+    for (const line of voice.said) expect(line).not.toContain(never);
+  });
+
+  it("says Auto-paused, Run paused and Run resumed; a kilometre passed just before a pause is said at the pause", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    await feed(0, 340, 3);
+    // About 1,017 m, a few seconds past the mark: not yet settled, so not yet said.
+    expect(marksSaid("kilometre")).toEqual([]);
+    const run = runNow();
+    if (run === null) throw new Error("no run");
+    const stillAt = 26.1445 + (339 * 3) / 111_132;
+    await act(() =>
+      takeLocations({ locations: Array.from({ length: 20 }, (_, i) => ({ timestamp: run.startedAt + (340 + i) * 1000, coords: { latitude: stillAt, longitude: 91.7362, accuracy: 5, speed: 0 } })) }),
+    );
+    expect(await screen.findByText("Auto-paused")).toBeTruthy();
+    expect(voice.said).toHaveLength(2);
+    expect(voice.said[0]).toMatch(/^1 kilometre\. Time 5 minutes 3\d seconds\./);
+    expect(voice.said[1]).toBe("Auto-paused.");
+    await feed(360, 10, 3, stillAt - (360 * 3) / 111_132);
+    await waitFor(() => {
+      expect(voice.said[2]).toBe("Run resumed.");
+    });
+    await fireEvent.press(screen.getByRole("button", { name: "Pause" }));
+    await waitFor(() => {
+      expect(voice.said[3]).toBe("Run paused.");
+    });
+    await fireEvent.press(screen.getByRole("button", { name: "Resume" }));
+    await waitFor(() => {
+      expect(voice.said[4]).toBe("Run resumed.");
+    });
+    // The first kilometre is never said again.
+    await feed(380, 60, 3, stillAt - (360 * 3) / 111_132);
+    expect(marksSaid("kilometre")).toHaveLength(1);
+    await fireEvent.press(screen.getByRole("button", { name: "Pause" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Finish" }));
+    await waitFor(() => {
+      expect(voice.quieted).toBeGreaterThan(0);
+    });
+  });
+
+  it("Voice off says nothing, stops what it was saying, and stays off for the next run", async () => {
+    const s = runServer();
+    await openRunning(s);
+    const toggle = await screen.findByRole("switch", { name: "Voice" });
+    expect(toggle.props.value).toBe(true);
+    expect(screen.getByText("Your time and pace each kilometre")).toBeTruthy();
+    await fireEvent(toggle, "valueChange", false);
+    await waitFor(() => {
+      expect(voice.quieted).toBe(1);
+    });
+    await startRunning();
+    await feed(0, 400, 3);
+    await fireEvent.press(screen.getByRole("button", { name: "Pause" }));
+    expect(voice.said).toEqual([]);
+    expect(JSON.parse((await phoneRunFiles.read("run-settings.json")) ?? "{}")).toMatchObject({ voice: false });
+  });
+
+  it("Voice turned on mid-run says the next mark, never one already passed", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await fireEvent(await screen.findByRole("switch", { name: "Voice" }), "valueChange", false);
+    await startRunning();
+    await feed(0, 400, 3);
+    await fireEvent.press(screen.getByRole("button", { name: "Back to the app" }));
+    const toggle = await screen.findByRole("switch", { name: "Voice" });
+    await fireEvent(toggle, "valueChange", true);
+    await waitFor(() => {
+      expect(screen.getByRole("switch", { name: "Voice" }).props.value).toBe(true);
+    });
+    await feed(400, 380, 3);
+    expect(marksSaid("kilometre").map((line) => line.split(".")[0])).toEqual(["2 kilometres"]);
+  });
+
+  it("a phone that cannot speak says so under the switch, with the button to its settings", async () => {
+    voice.canSpeak = false;
+    const opened = jest.spyOn(Linking, "sendIntent").mockResolvedValue(undefined);
+    const s = runServer();
+    await openRunning(s);
+    expect(await screen.findByText("Text-to-speech is off on this phone.")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Open text-to-speech settings" }));
+    expect(opened).toHaveBeenCalledWith("com.android.settings.TTS_SETTINGS");
+    // Turned on in the phone's settings: the line goes when the person comes back.
+    voice.canSpeak = true;
+    await act(() => {
+      comeBack();
+    });
+    await waitFor(() => {
+      expect(screen.queryByText("Text-to-speech is off on this phone.")).toBeNull();
+    });
+  });
+
+  it("keeps the account's units for a run the phone carries on with the app closed", async () => {
+    const user = { ...RAVI, units: "imperial" as const };
+    const s = runServer(user);
+    await openRunning(s, user);
+    expect(screen.getByText("Your time and pace each mile")).toBeTruthy();
+    await waitFor(async () => {
+      expect(JSON.parse((await phoneRunFiles.read("run-settings.json")) ?? "{}")).toMatchObject({ units: "imperial", voice: true, autoPause: true });
+    });
   });
 });

@@ -1,7 +1,7 @@
 // The Workout tab's Running page (ROADMAP Stage 5 item 37a): the GPS light, the last run, Start,
-// Auto-pause and the units. The run itself opens over the app (RunLayer).
+// Auto-pause, the voice (37a-ii) and the units. The run itself opens over the app (RunLayer).
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { Pressable, StyleSheet, Switch, View } from "react-native";
+import { AppState, Linking, Pressable, StyleSheet, Switch, View } from "react-native";
 import * as Location from "expo-location";
 import { useIsFocused } from "@react-navigation/native";
 import { runPageSchema, type Units } from "@app/shared";
@@ -11,9 +11,10 @@ import { colours, orangeGradient, shadows, sizes } from "../../look/colours";
 import { fonts, Txt } from "../../look/Txt";
 import { useRead } from "../dashboard/useRead";
 import { SettingsPage } from "../Settings";
-import { autoPauseChoice, chooseAutoPause, readAutoPauseChoice, subscribeRun } from "./recorder";
+import { autoPauseChoice, chooseAutoPause, chooseVoice, readRunChoices, subscribeRun, voiceChoice } from "./recorder";
 import { gpsLight, openAppSettings, START_PROBLEM_WORDS, useRunLayer, type StartProblem } from "./RunLayer";
 import { useRunOutbox } from "./RunOutbox";
+import { runVoiceNative } from "./runVoiceNative";
 import { clock, distance, unitWord } from "./runWords";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
@@ -58,9 +59,11 @@ export function RunningTab({ units }: { units: Units }) {
   const layer = useRunLayer();
   const { view, outbox } = useRunOutbox();
   const autoPause = useSyncExternalStore(subscribeRun, autoPauseChoice);
+  const voiceOn = useSyncExternalStore(subscribeRun, voiceChoice);
   useEffect(() => {
-    void readAutoPauseChoice();
+    void readRunChoices();
   }, []);
+  const canSpeak = useCanSpeak(focused && voiceOn);
   const [problem, setProblem] = useState<StartProblem | null>(null);
   const [settings, setSettings] = useState(false);
   const [removing, setRemoving] = useState<{ runId: string; name: string } | null>(null);
@@ -105,6 +108,31 @@ export function RunningTab({ units }: { units: Units }) {
             value={shownAuto}
             onValueChange={(on) => {
               void chooseAutoPause(on);
+            }}
+            trackColor={{ false: colours.lineStrong, true: colours.orange }}
+            thumbColor={colours.text}
+          />
+        </View>
+        <View style={[styles.row, styles.rowLine]}>
+          <View style={styles.grow}>
+            <Txt kind="body">Voice</Txt>
+            <Txt kind="small" colour="textFaint">
+              {units === "imperial" ? "Your time and pace each mile" : "Your time and pace each kilometre"}
+            </Txt>
+            {voiceOn && !canSpeak ? (
+              <View style={styles.problem}>
+                <Txt kind="small" colour="badText">
+                  Text-to-speech is off on this phone.
+                </Txt>
+                <Button kind="link" label="Turn it on" say="Open text-to-speech settings" onPress={openSpeechSettings} />
+              </View>
+            ) : null}
+          </View>
+          <Switch
+            accessibilityLabel="Voice"
+            value={voiceOn}
+            onValueChange={(on) => {
+              void chooseVoice(on);
             }}
             trackColor={{ false: colours.lineStrong, true: colours.orange }}
             thumbColor={colours.text}
@@ -223,6 +251,41 @@ export function RunningTab({ units }: { units: Units }) {
     </View>
   );
 }
+
+/** Whether the phone can speak, asked while the Voice switch is on and the page shown, and again
+ *  when the person comes back from the phone's settings. A phone with no voice code of this app's
+ *  (none on an iPhone yet) is not told its text-to-speech is off. */
+function useCanSpeak(asking: boolean): boolean {
+  const [can, setCan] = useState(true);
+  const [back, setBack] = useState(0);
+  useEffect(() => {
+    const heard = AppState.addEventListener("change", (next) => {
+      if (next === "active") setBack((n) => n + 1);
+    });
+    return () => {
+      heard.remove();
+    };
+  }, []);
+  useEffect(() => {
+    if (!asking || runVoiceNative === null) return;
+    let live = true;
+    void runVoiceNative.check().then(
+      (yes) => {
+        if (live) setCan(yes);
+      },
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [asking, back]);
+  return can;
+}
+
+/** Android's own Text-to-speech page; the app's settings where a phone has none by that name. */
+const openSpeechSettings = (): void => {
+  void Linking.sendIntent("com.android.settings.TTS_SETTINGS").catch(() => Linking.openSettings());
+};
 
 const styles = StyleSheet.create({
   page: { gap: 16 },

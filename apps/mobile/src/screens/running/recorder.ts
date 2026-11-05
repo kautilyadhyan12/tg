@@ -2,7 +2,8 @@
 // service Android keeps running with its own notification, so a run goes on with the screen locked
 // or the app in the background. Every point is kept in a file as it comes, so a run survives the
 // app being closed or the battery dying: the next time the app opens, the run is there to carry on
-// or finish. One run at a time on a phone.
+// or finish. One run at a time on a phone. The voice (37a-ii) is spoken from here, as the points
+// come, so it speaks with the screen locked.
 import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
 import { File, Paths } from "expo-file-system";
@@ -10,14 +11,20 @@ import {
   RUN_MAX_ELAPSED_MS,
   RUN_MAX_PAUSES,
   RUN_MAX_POINTS,
+  keptRunChoicesSchema,
   keptRunPointsSchema,
   keptRunStateSchema,
   phoneLocationsSchema,
+  runSums,
+  type KeptRunChoices,
   type RunPause,
   type RunPoint,
+  type Units,
 } from "@app/shared";
 import { colours } from "../../look/colours";
 import { AUTO_START, nextAutoPause, type AutoPauseState } from "./autoPause";
+import { PAUSE_WORDS, VOICE_AFTER_LOAD, VOICE_START, voiceCheck, type VoiceState } from "./runVoice";
+import { runVoiceNative } from "./runVoiceNative";
 
 export const RUN_TASK = "run-location";
 
@@ -102,44 +109,103 @@ export function subscribeRun(listener: () => void): () => void {
 
 export const runNow = (): LiveRun | null => current;
 
-// ── Auto-pause on or off: one choice, kept on the phone ─────────────────────────────────────────
-// The Running page's switch and the run's own Turn off Auto-pause change this one choice, and the
-// run going on with it, so the two never read differently. On until the person turns it off.
+// ── The run's choices, kept on the phone: Auto-pause, the voice and the units ───────────────────
+// The Running page's switches and the run's own Turn off Auto-pause change these, and the run going
+// on with them, so the two never read differently. Auto-pause and the voice are on until the person
+// turns them off. The units are the account's (RunLayer keeps them here), for a run the phone carries
+// on with the app closed.
 
 const SETTINGS_FILE = "run-settings.json";
-let autoChoice = true;
-let choiceRead = false;
+const DEFAULT_CHOICES: KeptRunChoices = { autoPause: true, voice: true, units: "metric" };
+let choices: KeptRunChoices = DEFAULT_CHOICES;
+let choicesRead: Promise<void> | null = null;
 
-export const autoPauseChoice = (): boolean => autoChoice;
+export const autoPauseChoice = (): boolean => choices.autoPause;
+export const voiceChoice = (): boolean => choices.voice;
 
-export async function readAutoPauseChoice(): Promise<void> {
-  if (choiceRead) return;
-  choiceRead = true;
-  try {
-    const text = await files.read(SETTINGS_FILE);
-    const kept: unknown = text === null ? null : JSON.parse(text);
-    if (typeof kept === "object" && kept !== null && Reflect.get(kept, "autoPause") === false) {
-      autoChoice = false;
-      tell();
+/** Read once; every change waits for it, so a change is never written over by the file. */
+export function readRunChoices(): Promise<void> {
+  choicesRead ??= (async () => {
+    try {
+      const text = await files.read(SETTINGS_FILE);
+      if (text === null) return;
+      const kept = keptRunChoicesSchema.safeParse(JSON.parse(text));
+      if (kept.success) {
+        choices = kept.data;
+        tell();
+      }
+    } catch {
+      // A file that cannot be read keeps the choices as they are.
     }
-  } catch {
-    // A file that cannot be read keeps the choice as it is.
-  }
+  })();
+  return choicesRead;
+}
+
+async function keepChoices(change: Partial<KeptRunChoices>): Promise<void> {
+  await readRunChoices();
+  choices = { ...choices, ...change };
+  tell();
+  await files.write(SETTINGS_FILE, JSON.stringify(choices)).catch(() => undefined);
 }
 
 export async function chooseAutoPause(on: boolean): Promise<void> {
-  autoChoice = on;
-  choiceRead = true;
-  tell();
+  await keepChoices({ autoPause: on });
   await setAutoPause(on);
-  await files.write(SETTINGS_FILE, JSON.stringify({ autoPause: on })).catch(() => undefined);
+}
+
+/** The voice on or off. Turned on mid-run, the marks already passed are counted, never said late. */
+export async function chooseVoice(on: boolean): Promise<void> {
+  if (!on) quietVoice();
+  await keepChoices({ voice: on });
+  primeVoice(current);
+}
+
+/** The account's units, as the app knows them. */
+export async function keepRunUnits(units: Units): Promise<void> {
+  await readRunChoices();
+  if (choices.units !== units) await keepChoices({ units });
+}
+
+// ── The voice (37a-ii) ────────────────────────────────────────────────────────────────────────
+
+let voice: VoiceState = VOICE_START;
+
+function say(lines: readonly string[]): void {
+  if (!choices.voice || runVoiceNative === null) return;
+  for (const line of lines) void runVoiceNative.say(line).catch(() => undefined);
+}
+
+function quietVoice(): void {
+  void runVoiceNative?.quiet().catch(() => undefined);
+}
+
+/** The marks a run has already passed, counted and never said: after the app was closed, or the
+ *  voice turned on mid-run. Counted now, from the points kept, so the next batch of points (several
+ *  minutes of them after the screen was off) cannot carry a mark past unsaid. */
+function primeVoice(run: LiveRun | null): void {
+  const at = run?.points[run.points.length - 1]?.[0];
+  if (run === null || at === undefined) {
+    voice = VOICE_START;
+    return;
+  }
+  voice = voiceCheck(VOICE_AFTER_LOAD, at, choices.units, () => runSums(run.points, closedPauses(run, at), at, 0), true).state;
+}
+
+/** The mark to say now, if any, as of the run's last point; settled at a pause. */
+function markNow(run: LiveRun, settled: boolean): string[] {
+  const at = run.points[run.points.length - 1]?.[0];
+  if (!choices.voice || at === undefined) return [];
+  const result = voiceCheck(voice, at, choices.units, () => runSums(run.points, closedPauses(run, at), at, 0), settled);
+  voice = result.state;
+  return result.line === null ? [] : [result.line];
 }
 
 /** Tests hand in their own files and start from nothing. */
 export function resetRecorder(withFiles: RunFiles = phoneRunFiles): void {
   generation += 1;
-  autoChoice = true;
-  choiceRead = false;
+  choices = DEFAULT_CHOICES;
+  choicesRead = null;
+  voice = VOICE_START;
   files = withFiles;
   current = null;
   auto = AUTO_START;
@@ -190,6 +256,7 @@ async function keep(run: LiveRun): Promise<void> {
 export async function loadRun(): Promise<LiveRun | null> {
   if (loaded) return current;
   loaded = true;
+  await readRunChoices();
   try {
     const text = await files.read(STATE_FILE);
     if (text === null) return null;
@@ -213,6 +280,7 @@ export async function loadRun(): Promise<LiveRun | null> {
       lastFix: last === undefined ? null : { at: state.startedAt + last[0], accuracyM: last[3] },
     };
     auto = { ...AUTO_START, paused: state.phase === "paused" };
+    primeVoice(current);
     tell();
     return current;
   } catch {
@@ -234,6 +302,7 @@ export async function takeLocations(data: unknown): Promise<void> {
   const mine = generation;
   const run = current ?? (await loadRun());
   if (run === null || run.phase === "finished" || mine !== generation) return;
+  const was = run.phase;
   let full = false;
   for (const location of parsed.data.locations) {
     const at = location.timestamp - run.startedAt;
@@ -285,6 +354,10 @@ export async function takeLocations(data: unknown): Promise<void> {
     await finishRun();
     return;
   }
+  // Only Auto-pause pauses a run here: a pause ends the stretch the maths smooths, so a mark passed
+  // before it is said at once.
+  if (current.phase === "running") say([...markNow(current, false), ...(was === "paused" ? [PAUSE_WORDS.resumed] : [])]);
+  else if (was === "running") say([...markNow(current, true), PAUSE_WORDS.auto]);
   if (Date.now() - writtenAt >= WRITE_EVERY_MS) {
     writtenAt = Date.now();
     await keep(current);
@@ -343,6 +416,7 @@ export async function startRun(userId: string, runId: string, autoPause: boolean
   generation += 1;
   current = run;
   auto = AUTO_START;
+  voice = VOICE_START;
   pausedTail = [];
   loaded = true;
   unwritten = 0;
@@ -356,11 +430,13 @@ export async function startRun(userId: string, runId: string, autoPause: boolean
 export async function pauseRun(now: number = Date.now()): Promise<void> {
   const run = current;
   if (run === null || run.phase === "finished") return;
+  const was = run.phase;
   if (run.phase === "running") run.pauses.push([Math.max(now - run.startedAt, lastOpenEnd(run)), null]);
   run.phase = "paused";
   run.pausedByPerson = true;
   auto = { ...AUTO_START, paused: true };
   current = { ...run };
+  if (was === "running") say([...markNow(current, true), PAUSE_WORDS.person]);
   await keep(current);
   tell();
 }
@@ -374,6 +450,7 @@ export async function resumeRun(now: number = Date.now()): Promise<void> {
   auto = AUTO_START;
   pausedTail = [];
   current = { ...run };
+  say([PAUSE_WORDS.resumed]);
   await keep(current);
   tell();
   // A run taken up again after the app was closed: Android's service is started once more.
@@ -388,6 +465,7 @@ export async function setAutoPause(on: boolean, now: number = Date.now()): Promi
   if (!on && run.phase === "paused" && !run.pausedByPerson) {
     closePause(run, elapsedMs(run, now));
     run.phase = "running";
+    say([PAUSE_WORDS.resumed]);
   }
   auto = run.phase === "paused" ? { ...AUTO_START, paused: true } : AUTO_START;
   current = { ...run, autoPause: on };
@@ -407,6 +485,7 @@ async function stopLocations(): Promise<void> {
 export async function finishRun(now: number = Date.now()): Promise<LiveRun | null> {
   const run = current;
   if (run === null) return null;
+  quietVoice();
   await stopLocations();
   if (run.phase === "finished") return run;
   // Never past a day: the most the server takes.
@@ -421,6 +500,7 @@ export async function finishRun(now: number = Date.now()): Promise<LiveRun | nul
 /** Saved, or thrown away: nothing of it is left on the phone but what the outbox keeps. */
 export async function forgetRun(): Promise<void> {
   generation += 1;
+  quietVoice();
   await stopLocations();
   const run = current;
   const count = run === null ? 0 : Math.ceil(run.points.length / POINTS_PER_FILE);

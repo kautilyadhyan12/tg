@@ -321,3 +321,22 @@ jest.mock("expo-location", () => {
     },
   };
 });
+// The run's voice (ROADMAP Stage 5 37a-ii), this app's own Android code: a test reads what was said,
+// whether it was told to stop, and sets whether the phone can speak.
+jest.mock("../../src/screens/running/runVoiceNative", () => {
+  const voice = { said: [], quieted: 0, canSpeak: true };
+  return {
+    voice,
+    runVoiceNative: {
+      say: (text) => {
+        voice.said.push(text);
+        return Promise.resolve();
+      },
+      quiet: () => {
+        voice.quieted += 1;
+        return Promise.resolve();
+      },
+      check: () => Promise.resolve(voice.canSpeak),
+    },
+  };
+});

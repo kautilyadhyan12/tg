@@ -27,6 +27,7 @@ import {
   resumeRun,
   runIsFull,
   chooseAutoPause,
+  keepRunUnits,
   runNow,
   startRun,
   subscribeRun,
@@ -102,6 +103,12 @@ export function RunLayerProvider({ children }: { children: ReactNode }) {
   const [counting, setCounting] = useState<{ autoPause: boolean } | null>(null);
   const [done, setDone] = useState<RunDone>(null);
   const [kg, setKg] = useState(0);
+
+  // The account's units, kept with the run's choices: the voice speaks in them with the app closed.
+  const signedIn = state.kind === "in";
+  useEffect(() => {
+    if (signedIn) void keepRunUnits(units);
+  }, [signedIn, units]);
 
   // The run kept on the phone, once: after the app was closed, it is there to carry on or finish. A
   // run whose service Android stopped (the phone restarted) is paused where its last point was.
