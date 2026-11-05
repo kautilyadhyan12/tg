@@ -32,14 +32,22 @@ interface PictureCardProps {
   icon?: IconName;
   /** A word over its corner about the thing it shows: Coming soon, New. */
   pill?: string;
+  /** The whole picture, standing on the box's right, never cut (the goddess on Me's Achievements). */
+  whole?: boolean;
   style?: StyleProp<ViewStyle>;
 }
 
 /** A picture that fills its box, cut to fit and never stretched, with its words over a shade. */
-export function PictureCard({ picture, height, eyebrow, title, label, icon, pill, style }: PictureCardProps) {
+export function PictureCard({ picture, height, eyebrow, title, label, icon, pill, whole = false, style }: PictureCardProps) {
   return (
     <View style={[styles.card, styles.picture, { height }, style]}>
-      <Image source={pictures[picture]} resizeMode="cover" style={styles.fill} accessible={false} />
+      {whole ? (
+        <View style={styles.whole}>
+          <Image source={pictures[picture]} resizeMode="contain" resizeMethod="resize" style={styles.full} accessible={false} />
+        </View>
+      ) : (
+        <Image source={pictures[picture]} resizeMode="cover" style={styles.fill} accessible={false} />
+      )}
       <View style={[StyleSheet.absoluteFill, styles.shade]} />
       {pill === undefined ? null : (
         <View style={styles.corner}>
@@ -128,6 +136,8 @@ const styles = StyleSheet.create({
   picture: { borderRadius: 22 },
   // A picture has a size of its own, so it is told the box's; "cover" then cuts it to fit.
   fill: { position: "absolute", width: "100%", height: "100%" },
+  whole: { position: "absolute", top: 4, bottom: 0, right: -10, width: "58%" },
+  full: { width: "100%", height: "100%" },
   shade: { experimental_backgroundImage: pictureShade },
   corner: { position: "absolute", top: 10, left: 10 },
   pictureWords: { position: "absolute", left: 14, right: 14, bottom: 14, gap: 8 },

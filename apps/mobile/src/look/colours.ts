@@ -155,3 +155,51 @@ export const sizes = {
   round: 999,
   tabBar: 68,
 } as const;
+
+/** Achievements (35c-iii, Kd's drawing of 2026-11-05): the medals' metals for the leaderboard's top three and its
+ *  lanes, the laurel's gold and empty leaves, the dark shelf the medals stand on, and a stone for every other place. */
+export const medal = {
+  gold: "#F2C14E",
+  goldLight: "#FFF3C4",
+  goldDeep: "#A8741A",
+  silver: "#DFE4EA",
+  silverLight: "#FFFFFF",
+  silverDeep: "#7D858E",
+  bronze: "#D98E55",
+  bronzeLight: "#FFE2C6",
+  bronzeDeep: "#7A4321",
+  bronzeFill: "rgba(205,127,50,0.16)",
+  silverFill: "rgba(192,192,192,0.14)",
+  /** Initials on a metal disc. */
+  onMetal: "#2A1A08",
+  leafEmpty: "rgba(255,255,255,0.04)",
+  leafLine: "rgba(255,255,255,0.28)",
+  leafLitLine: "rgba(255,230,160,0.9)",
+  leafVein: "rgba(120,70,10,0.7)",
+  leafVeinEmpty: "rgba(255,255,255,0.15)",
+  stem: "rgba(255,255,255,0.22)",
+  stone: "#2C2621",
+  stoneText: "rgba(255,235,210,0.8)",
+  laneTrack: "rgba(255,255,255,0.07)",
+  laneLine: "rgba(255,220,170,0.06)",
+  laneOther: "rgba(255,220,170,0.75)",
+  heading: "rgba(255,190,120,0.9)",
+  wreathInside: "#120D08",
+  wreathRing: "rgba(242,193,78,0.5)",
+  leafEdge: "rgba(90,50,5,0.5)",
+  levelWord: "#E8C98A",
+  keyEmpty: "rgba(255,255,255,0.14)",
+} as const;
+export const medalShades = {
+  shelf: "linear-gradient(to bottom, #3a3129 0%, #1a1511 70%, #0e0b09 100%)",
+  heading: "linear-gradient(90deg, rgba(255,190,120,0.35), rgba(255,190,120,0))",
+  gold: "linear-gradient(135deg, #FFF3C4 0%, #F2C14E 55%, #A8741A 100%)",
+  silver: "linear-gradient(135deg, #FFFFFF 0%, #D5DBE1 55%, #7D858E 100%)",
+  bronze: "linear-gradient(135deg, #FFE2C6 0%, #D48A52 55%, #7A4321 100%)",
+  stone: "linear-gradient(135deg, #3a332c 0%, #1d1915 100%)",
+  mine: "linear-gradient(90deg, rgba(255,138,31,0.18), rgba(255,138,31,0.04))",
+  /** Over a painting on the right of a box: the box's colour under the words on its left. */
+  paint: "linear-gradient(90deg, rgba(14,12,10,0.92) 0%, rgba(14,12,10,0.6) 48%, rgba(14,12,10,0.05) 100%)",
+  shelfShadow: "0 10px 18px rgba(0,0,0,0.7)",
+  mineEdge: "inset 3px 0 0 #FF8A1F",
+} as const;

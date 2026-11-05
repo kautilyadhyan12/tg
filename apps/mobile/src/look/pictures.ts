@@ -7,6 +7,8 @@
 // Progress's chalk drawings are Kd's posters (35c-i, 2026-11-04), cut without their words or made-up
 // numbers, the ink ones made negative: `runner`, `pushup`, `etch`, `rope`, `steps`, `balance`, `anatomy`, `plank`.
 // `setup` is the browser's setup picture (its Vitruvian figure), its lines drawn light and glowing for the dark page.
+// Achievements (35c-iii, 2026-11-05): `goddess` is Kd's "Greek Goddess Flexing in Classical Attire", cut from its white;
+// `greekyoga`, `vikingbell` and `egyptpush` are his painted posters, cut without their carved words.
 import anatomy from "../../assets/pictures/anatomy.webp";
 import balance from "../../assets/pictures/balance.webp";
 import benchpress from "../../assets/pictures/benchpress.webp";
@@ -17,6 +19,7 @@ import chairsquat from "../../assets/pictures/chairsquat.webp";
 import currentlevel from "../../assets/pictures/currentlevel.webp";
 import cyclingcrunch from "../../assets/pictures/cyclingcrunch.webp";
 import dailymotivation from "../../assets/pictures/dailymotivation.webp";
+import egyptpush from "../../assets/pictures/egyptpush.webp";
 import etch from "../../assets/pictures/etch.webp";
 import exhero from "../../assets/pictures/exhero.webp";
 import experiencepoints from "../../assets/pictures/experiencepoints.webp";
@@ -26,6 +29,8 @@ import foodbowl from "../../assets/pictures/foodbowl.webp";
 import getstarted from "../../assets/pictures/getstarted.webp";
 import goals from "../../assets/pictures/goals.webp";
 import goalsbox from "../../assets/pictures/goalsbox.webp";
+import goddess from "../../assets/pictures/goddess.webp";
+import greekyoga from "../../assets/pictures/greekyoga.webp";
 import hero from "../../assets/pictures/hero.webp";
 import hourstrained from "../../assets/pictures/hourstrained.webp";
 import jumpsquat from "../../assets/pictures/jumpsquat.webp";
@@ -49,6 +54,7 @@ import squat from "../../assets/pictures/squat.webp";
 import steps from "../../assets/pictures/steps.webp";
 import thisweek from "../../assets/pictures/thisweek.webp";
 import totalworkout from "../../assets/pictures/totalworkout.webp";
+import vikingbell from "../../assets/pictures/vikingbell.webp";
 import weeklychallenges from "../../assets/pictures/weeklychallenges.webp";
 import weight from "../../assets/pictures/weight.webp";
 import yoga from "../../assets/pictures/yoga.webp";
@@ -65,6 +71,7 @@ export const pictures = {
   currentlevel,
   cyclingcrunch,
   dailymotivation,
+  egyptpush,
   etch,
   exhero,
   experiencepoints,
@@ -74,6 +81,8 @@ export const pictures = {
   getstarted,
   goals,
   goalsbox,
+  goddess,
+  greekyoga,
   hero,
   hourstrained,
   jumpsquat,
@@ -97,6 +106,7 @@ export const pictures = {
   steps,
   thisweek,
   totalworkout,
+  vikingbell,
   weeklychallenges,
   weight,
   yoga,

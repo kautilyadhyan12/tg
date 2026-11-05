@@ -209,6 +209,7 @@ export async function getStats(
   const [agg] = await sql<
     {
       total_workouts: string;
+      scored_workouts: string;
       total_kcal: string;
       perfect_form_count: string;
       morning_workouts: string;
@@ -216,6 +217,7 @@ export async function getStats(
     }[]
   >`
     SELECT count(*) AS total_workouts,
+           count(*) FILTER (WHERE avg_form_score IS NOT NULL) AS scored_workouts,
            coalesce(sum(kcal_point), 0) AS total_kcal,
            count(*) FILTER (WHERE avg_form_score = 100) AS perfect_form_count,
            -- badges.py:129 "before 8am" / :137 "after 9pm" (R0.4)
@@ -239,6 +241,7 @@ export async function getStats(
     FROM meal_logs WHERE user_id = ${userId}`;
   return {
     total_workouts: Number(agg?.total_workouts ?? 0),
+    scored_workouts: Number(agg?.scored_workouts ?? 0),
     total_kcal: Number(agg?.total_kcal ?? 0),
     perfect_form_count: Number(agg?.perfect_form_count ?? 0),
     morning_workouts: Number(agg?.morning_workouts ?? 0),

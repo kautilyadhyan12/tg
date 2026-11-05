@@ -425,7 +425,6 @@ describe("its buttons open where each thing lives", () => {
     ["Start Training", 1, "Workout"],
     ["Browse Exercises", 0, "Workout"],
     ["View Progress", 0, "Me"],
-    ["Latest Badges, View all", 0, "Me"],
   ] as const)("%s (%i) opens %s", async (button, which, tab) => {
     await openApp(trained);
     await screen.findByText("24");

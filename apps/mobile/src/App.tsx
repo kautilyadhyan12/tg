@@ -10,6 +10,7 @@ import {
 // Two weights only, each from its own file, so the other four are never in the app.
 import { Oswald_400Regular } from "@expo-google-fonts/oswald/400Regular";
 import { Oswald_600SemiBold } from "@expo-google-fonts/oswald/600SemiBold";
+import Cinzel_800ExtraBold from "../assets/fonts/Cinzel_800ExtraBold.ttf";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { DarkTheme, NavigationContainer, createNavigationContainerRef, type Theme } from "@react-navigation/native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -167,6 +168,7 @@ export function App({ extra, ask = fetch, store = phoneKeyStore, google = askGoo
     Inter_700Bold,
     Oswald_400Regular,
     Oswald_600SemiBold,
+    Cinzel_800ExtraBold,
   });
   const copy = useMemo(() => ({ extra: extra === undefined ? readAppExtra() : extra, ask }), [extra, ask]);
   const apiUrl = copy.extra?.apiUrl;

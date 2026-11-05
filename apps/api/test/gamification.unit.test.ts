@@ -135,10 +135,10 @@ describe("streak machine (Part 7 §3)", () => {
 });
 
 describe("badge evaluator (badges.py port)", () => {
-  it("form_master needs the minWorkouts guard (badges.py:284)", () => {
+  it("form_master needs the minWorkouts guard (badges.py:284), in workouts the camera scored", () => {
     const criteria = { stat: "avg_form_last5", gte: 90, minWorkouts: 5 };
-    expect(evaluate(criteria, { avg_form_last5: 95, total_workouts: 4 })).toBe(false);
-    expect(evaluate(criteria, { avg_form_last5: 95, total_workouts: 5 })).toBe(true);
+    expect(evaluate(criteria, { avg_form_last5: 95, scored_workouts: 4, total_workouts: 9 })).toBe(false);
+    expect(evaluate(criteria, { avg_form_last5: 95, scored_workouts: 5 })).toBe(true);
   });
 
   it("missing stats read 0 — meal/photo badges stay unearned until their modules land", () => {
