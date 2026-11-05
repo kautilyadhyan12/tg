@@ -15,6 +15,7 @@ import {
   NO_PAYMENTS,
   cancelledLine,
   classesText,
+  coolingOffAsk,
   couldNotOpenReceipt,
   couldNotRead,
   datesText,
@@ -332,6 +333,7 @@ function MembershipCard({ m, gym, paidBy, receiptButton }: { m: MyMembership; gy
             <View key={t.key}>
               <Txt colour="text">{t.label}</Txt>
               <Txt kind="small">{termValue(t.value)}</Txt>
+              {t.key === "cooling_off" ? <Txt kind="small">{coolingOffAsk(gym)}</Txt> : null}
             </View>
           ))}
         </View>

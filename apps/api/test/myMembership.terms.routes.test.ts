@@ -214,10 +214,15 @@ d("my membership shows its terms (real Postgres)", { timeout: T }, () => {
       { key: "cooling_off", label: "Cooling-off period", value: "until 7 Nov 2026, to cancel with a full refund" },
     ]);
     // A membership with no terms shows none; Ben's answer carries nothing of Ana's.
-    expect(one(await mine(gym, ben), benPlain).terms).toEqual([]);
+    const bens = await mine(gym, ben);
+    expect(one(bens, benPlain).terms).toEqual([]);
+    expect(JSON.stringify(bens)).not.toContain(anaMax);
+    expect(JSON.stringify(bens)).not.toContain("full refund");
 
     clock = noon(7);
-    expect(keys(one(await mine(gym, ana), anaMax))).toEqual(["minimum_term", "early_cancellation_fee", "notice", "cooling_off"]);
+    const lastDay = one(await mine(gym, ana), anaMax);
+    expect(keys(lastDay)).toEqual(["minimum_term", "early_cancellation_fee", "notice", "cooling_off"]);
+    expect(lastDay.terms.find((t) => t.key === "cooling_off")?.value).toBe("until 7 Nov 2026, to cancel with a full refund");
     clock = noon(8);
     const after = one(await mine(gym, ana), anaMax);
     expect(keys(after)).toEqual(["minimum_term", "early_cancellation_fee", "notice"]);

@@ -86,7 +86,7 @@ export const myMembershipSchema = z
     terms: z.array(membershipTermSchema).max(4).default([]),
   })
   .strict();
-export type MyMembership= z.infer<typeof myMembershipSchema>;
+export type MyMembership = z.infer<typeof myMembershipSchema>;
 
 /** One sale at the desk under its receipt number, every line of it. A sale staff voided is not sent. */
 export const myPurchaseSchema = z

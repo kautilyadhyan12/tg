@@ -311,12 +311,12 @@ export function agreementFacts(input: AgreementFactsInput): AgreementFact[] {
   }
   facts.push({ label: "Starts", value: dayWords(m.startsOn) });
   const endsOn = m.view.endsOn;
-  facts.push(...minimumTermFacts(m));
+  facts.push(...minimumTermFacts(m).map(asFact));
   if (m.kind === "recurring") {
     if (endsOn === null && m.termCount !== null && m.termUnit !== null) {
       const after = m.view.contract === null ? "" : " after the minimum term";
       facts.push({ label: "Renews", value: `Every ${plural(m.termCount, m.termUnit)}${after} until you cancel` });
-      facts.push(...noticeFacts(m));
+      facts.push(...noticeFacts(m).map(asFact));
     }
     else if (endsOn !== null) facts.push({ label: "Ends", value: dayWords(endsOn) });
   } else if (endsOn !== null) {
@@ -326,24 +326,33 @@ export function agreementFacts(input: AgreementFactsInput): AgreementFact[] {
   return facts;
 }
 
+/** One of a membership's terms, by what it is: a member who is paid for is not shown the money ones (16d). */
+export const membershipTermSchema = z
+  .object({ key: z.enum(["minimum_term", "early_cancellation_fee", "notice", "cooling_off"]), label: z.string().min(1), value: z.string().min(1) })
+  .strict();
+export type MembershipTerm = z.infer<typeof membershipTermSchema>;
+
+/** A term as the agreement lists it, without what it is. */
+const asFact = ({ label, value }: MembershipTerm): AgreementFact => ({ label, value });
+
 /** Its minimum term (18v-i) while it runs, how long and to which day, and its early cancellation fee (18v-ii-b), the tax in it. */
-function minimumTermFacts(m: AgreementFactsInput["membership"]): AgreementFact[] {
+function minimumTermFacts(m: AgreementFactsInput["membership"]): MembershipTerm[] {
   const contract = m.view.contract;
   const periods = m.contractPeriods ?? null;
   if (m.kind !== "recurring" || contract === null || periods === null || m.termCount === null || m.termUnit === null) return [];
   // Billed from the gym's day, the part month comes before its whole payments (round one, H2).
   const from = (m.fullFrom ?? null) === null ? "" : ` from ${dayWords(m.fullFrom ?? "")}`;
-  const facts: AgreementFact[] = [{ label: "Minimum term", value: `${contractLengthWords(periods, m.termCount, m.termUnit)}${from}, to ${dayWords(contract.until)}` }];
+  const facts: MembershipTerm[] = [{ key: "minimum_term", label: "Minimum term", value: `${contractLengthWords(periods, m.termCount, m.termUnit)}${from}, to ${dayWords(contract.until)}` }];
   const fee = m.leaveFeeMinor ?? null;
-  if (fee !== null && fee > 0) facts.push({ label: "Early cancellation fee", value: `${formatMinor(fee, m.currency)}${m.tax === null ? "" : `, ${m.tax.name} included`}` });
+  if (fee !== null && fee > 0) facts.push({ key: "early_cancellation_fee", label: "Early cancellation fee", value: `${formatMinor(fee, m.currency)}${m.tax === null ? "" : `, ${m.tax.name} included`}` });
   return facts;
 }
 
 /** Its notice to cancel (18v-ii-a), while it renews. */
-function noticeFacts(m: AgreementFactsInput["membership"]): AgreementFact[] {
+function noticeFacts(m: AgreementFactsInput["membership"]): MembershipTerm[] {
   const notice = m.view.notice;
   if (m.kind !== "recurring" || m.view.endsOn !== null || notice === null) return [];
-  return [{ label: "Notice to cancel", value: `${String(notice.days)} day${notice.days === 1 ? "" : "s"}` }];
+  return [{ key: "notice", label: "Notice to cancel", value: `${String(notice.days)} day${notice.days === 1 ? "" : "s"}` }];
 }
 
 /** Its cooling-off period (18v-iii), while it is open today (round one, H2): signed today, its days count from today. */
@@ -353,28 +362,14 @@ function coolingOffFacts(m: AgreementFactsInput["membership"]): AgreementFact[] 
   return [{ label: "Cooling-off period", value: `${cooling === 1 ? "1 day" : `${String(cooling)} days`} after signing, to cancel with a full refund` }];
 }
 
-/** One of a membership's terms, by what it is: a member who is paid for is not shown the money ones (16d). */
-export const membershipTermSchema = z
-  .object({ key: z.enum(["minimum_term", "early_cancellation_fee", "notice", "cooling_off"]), label: z.string().min(1), value: z.string().min(1) })
-  .strict();
-export type MembershipTerm = z.infer<typeof membershipTermSchema>;
-
-const TERM_KEYS: Readonly<Record<string, MembershipTerm["key"]>> = {
-  "Minimum term": "minimum_term",
-  "Early cancellation fee": "early_cancellation_fee",
-  "Notice to cancel": "notice",
-};
-
 /** THE MEMBERSHIP'S TERMS, as its agreement says them (Kd, 2026-11-04): the minimum term and its early cancellation fee,
  *  the notice to cancel, and its cooling-off period with its last day while it is open today (round one, H2); none it
  *  does not have. What the Terminal shows before it keeps a card, and My membership on the phone (16d). */
 export function membershipTerms(m: AgreementFactsInput["membership"]): MembershipTerm[] {
   const cooling = m.priceMinor > 0 ? m.view.can.coolingOff : null;
   return [
-    ...[...minimumTermFacts(m), ...noticeFacts(m)].flatMap((fact) => {
-      const key = TERM_KEYS[fact.label];
-      return key === undefined ? [] : [{ key, label: fact.label, value: fact.value }];
-    }),
+    ...minimumTermFacts(m),
+    ...noticeFacts(m),
     ...(cooling === null ? [] : [{ key: "cooling_off" as const, label: "Cooling-off period", value: `until ${dayWords(cooling.until)}, to cancel with a full refund` }]),
   ];
 }

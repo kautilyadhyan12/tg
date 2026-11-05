@@ -481,6 +481,8 @@ describe("the My membership page", () => {
       expect(max.getByText(`${t.value.charAt(0).toUpperCase()}${t.value.slice(1)}`)).toBeTruthy();
     }
     expect(max.getByText("Until 7 Nov 2026, to cancel with a full refund")).toBeTruthy();
+    expect(max.getByText("To cancel, ask Iron House.")).toBeTruthy();
+    expect(page().getAllByText("To cancel, ask Iron House.")).toHaveLength(1);
     expect(within(page().getByTestId(`membership-${M2}`)).queryByText("Minimum term")).toBeNull();
     expect(page().queryByTestId(`terms-${M2}`)).toBeNull();
     expect(page().getAllByText("Cooling-off period")).toHaveLength(1);
