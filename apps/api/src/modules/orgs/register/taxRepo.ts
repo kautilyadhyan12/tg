@@ -33,8 +33,13 @@ export async function ratesOf(sql: Sql | TransactionSql, gymId: string, rateIds:
   const rows = await sql<{ id: string; name: string; rate_pcm: number }[]>`
     SELECT id, name, rate_pcm FROM gym_tax_rates WHERE gym_id = ${gymId} AND id = ANY(${rateIds}::uuid[])`;
   const byId = new Map(rows.map((r) => [r.id, { id: r.id, name: r.name, pcm: r.rate_pcm }]));
-  const found = rateIds.map((id) => byId.get(id));
-  return found.every((r) => r !== undefined) ? found.filter((r) => r !== undefined) : null;
+  const found: { id: string; name: string; pcm: number }[] = [];
+  for (const id of rateIds) {
+    const rate = byId.get(id);
+    if (rate === undefined) return null;
+    found.push(rate);
+  }
+  return found;
 }
 
 /** The gym's rates by name, each with what live charges it: products on sale, types on the
