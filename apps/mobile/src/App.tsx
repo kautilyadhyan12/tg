@@ -34,7 +34,7 @@ import { TimeZoneSync } from "./session/TimeZoneSync";
 import { DashboardScreen } from "./screens/Dashboard";
 import { GymScreen } from "./screens/GymTab";
 import { NotificationsProvider } from "./notifications/Notifications";
-import { forgetNotifications } from "./notifications/phone";
+import { forgetNotifications, type Tapped } from "./notifications/phone";
 import { emptyPhotoFolder } from "./screens/gym/photoFiles";
 import { forgetExports } from "./session/personFiles";
 import { PlacesProvider, usePlaces } from "./screens/places";
@@ -122,10 +122,20 @@ function SignedInOrOut({ mealStore, bodyStore }: { mealStore: (userId: string) =
   );
 }
 
-// The tabs, reached from outside them: a tapped notification opens the Gym tab.
+// The tabs, reached from outside them: a tapped notification opens the Gym tab, and a training reminder
+// Workout or Food (19e-i).
 const tabsRef = createNavigationContainerRef<Record<string, undefined>>();
-const openGymTab = () => {
-  if (tabsRef.isReady()) tabsRef.navigate("Gym");
+export const tabOfTap = (tapped: Tapped): "Gym" | "Workout" | "Food" =>
+  tapped.kind !== "training" ? "Gym" : tapped.open === "workout" ? "Workout" : "Food";
+// A tap that opened the app arrives before the tabs are drawn: held until they are.
+let heldTab: "Gym" | "Workout" | "Food" | null = null;
+const openTappedTab = (tapped: Tapped) => {
+  if (tabsRef.isReady()) tabsRef.navigate(tabOfTap(tapped));
+  else heldTab = tabOfTap(tapped);
+};
+const openHeldTab = () => {
+  if (heldTab !== null && tabsRef.isReady()) tabsRef.navigate(heldTab);
+  heldTab = null;
 };
 
 function FiveTabs({ mealStore, bodyStore }: { mealStore: (userId: string) => TextStore; bodyStore: (userId: string) => TextStore }) {
@@ -133,7 +143,7 @@ function FiveTabs({ mealStore, bodyStore }: { mealStore: (userId: string) => Tex
     <PlacesProvider>
       <MealOutboxProvider store={mealStore}>
         <BodyOutboxProvider store={bodyStore}>
-          <NotificationsProvider onTapped={openGymTab}>
+          <NotificationsProvider onTapped={openTappedTab}>
             <TabsOfPlaces />
           </NotificationsProvider>
         </BodyOutboxProvider>
@@ -149,7 +159,7 @@ function TabsOfPlaces() {
   // Lit while any of the person's places holds a message they have not opened.
   const dots: Record<string, string> = newMessages > 0 ? { Gym: newMessages === 1 ? "1 new message" : `${String(newMessages)} new messages` } : {};
   return (
-    <NavigationContainer ref={tabsRef} theme={theme}>
+    <NavigationContainer ref={tabsRef} theme={theme} onReady={openHeldTab}>
       <Tabs.Navigator screenOptions={{ headerShown: false }} tabBar={(props) => <TabBar {...props} icons={tabIcons} labels={labels} dots={dots} />}>
         {TABS.map((tab) => (
           <Tabs.Screen key={tab.name} name={tab.name} component={tab.screen} />
