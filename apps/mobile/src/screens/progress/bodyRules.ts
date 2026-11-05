@@ -40,6 +40,20 @@ const tenth = (n: number) => {
   return Number.isInteger(t) ? String(t) : t.toFixed(1);
 };
 
+/** A size most people would be near, for an empty box: its faint words say what goes in it. */
+const EXAMPLES: Readonly<Record<MeasureKey, readonly [number, number]>> = {
+  weight: [70, 155],
+  body_fat_pct: [20, 20],
+  waist_cm: [85, 33],
+  chest_cm: [95, 37],
+  hips_cm: [95, 37],
+  left_arm_cm: [32, 13],
+  right_arm_cm: [32, 13],
+  left_thigh_cm: [55, 22],
+  right_thigh_cm: [55, 22],
+};
+export const exampleOf = (key: MeasureKey, units: string): string => String(EXAMPLES[key][imperial(units) ? 1 : 0]);
+
 /** A kept value (kg, %, cm) in the person's units, to one place where it has one. */
 export function shown(value: number, kind: Kind, units: string): string {
   if (kind === "weight" && imperial(units)) return tenth(value / KG_PER_LB);

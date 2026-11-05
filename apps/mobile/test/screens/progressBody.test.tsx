@@ -22,7 +22,7 @@ function bodyServer(units: "metric" | "imperial" = "metric") {
   const rows: Row[] = [{ id: OLD, measuredAt: yesterday, weightKg: 70.5, metrics: { waist_cm: 84 }, source: "manual", createdAt: yesterday }];
   const posts: unknown[] = [];
   const deletes: string[] = [];
-  const state = { online: true };
+  const state = { online: true, listDown: false };
   const server = fakeServer({
     "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }),
     "/v1/users/me": () => ({ status: 200, body: profile(true, user) }),
@@ -49,13 +49,23 @@ function bodyServer(units: "metric" | "imperial" = "metric") {
       return { ok: true, status: 204, json: () => Promise.resolve(null) };
     }
     if (path === PATH && init.method === "POST" && !state.online) throw new Error("no signal");
+    if (path === PATH && init.method !== "POST" && state.listDown) throw new Error("no signal");
     return server.ask(url, init);
   };
-  return { ask, rows, posts, deletes, state, user };
+  // The phone's own file of waiting entries, this test's alone.
+  let file: string | null = null;
+  const bodyStore = () => ({
+    read: () => Promise.resolve(file),
+    write: (t: string) => {
+      file = t;
+      return Promise.resolve();
+    },
+  });
+  return { ask, rows, posts, deletes, state, user, bodyStore };
 }
 
 async function openBody(s: ReturnType<typeof bodyServer>) {
-  await render(<App extra={extra} store={memoryStore(kept(1, s.user))} ask={s.ask} />);
+  await render(<App extra={extra} store={memoryStore(kept(1, s.user))} ask={s.ask} bodyStore={s.bodyStore} />);
   await fireEvent.press(await screen.findByRole("tab", { name: "Me" }));
   await fireEvent.press(await screen.findByRole("button", { name: "Progress" }));
   await fireEvent.press(await screen.findByRole("tab", { name: "Body" }));
@@ -109,6 +119,23 @@ describe("Progress → Body → Log measurements", () => {
     await waitFor(() => {
       expect(screen.queryByLabelText(/Waiting to send/)).toBeNull();
     });
+  });
+
+  it("with the list not loaded, an entry waiting is shown and nothing is said of the history it cannot see", async () => {
+    const s = bodyServer();
+    s.state.online = false;
+    s.state.listDown = true;
+    await render(<App extra={extra} store={memoryStore(kept(1, s.user))} ask={s.ask} bodyStore={s.bodyStore} />);
+    await fireEvent.press(await screen.findByRole("tab", { name: "Me" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Progress" }));
+    await fireEvent.press(await screen.findByRole("tab", { name: "Body" }));
+    expect(await screen.findByText("Your measurements couldn’t load.")).toBeTruthy();
+    await log({ "Weight · kg": "69.4" });
+    expect(await screen.findByLabelText(/, Waiting to send, 69.4 kg$/)).toBeTruthy();
+    expect(screen.getByText("Your earlier measurements couldn’t load.")).toBeTruthy();
+    // The person has an older entry the phone cannot see: no line, no change, no "first entry".
+    expect(screen.queryByText(/your first entry|your last/)).toBeNull();
+    expect(screen.queryByText(/ since /)).toBeNull();
   });
 
   it("a number that cannot be right is said under its box, and nothing typed says what to do; neither sends", async () => {
