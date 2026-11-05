@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Image, KeyboardAvoidingView, Pressable, StyleSheet, View } from "react-native";
+import { Image, KeyboardAvoidingView, Pressable, StyleSheet, View, type ImageSourcePropType } from "react-native";
 import { Modal } from "./Modal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colours, shadows, sheetBandShade, sizes } from "./colours";
@@ -23,6 +23,9 @@ export function useSheetBack(depth: number, step: Step): void {
   useEffect(() => (steps === null ? undefined : steps.add(depth, () => latest.current())), [steps, depth]);
 }
 
+/** A drawing of the look's by its name, or a picture of a page's own (an Achievements painting). */
+export type SheetPicture = { name: PictureName; focus: number } | { source: ImageSourcePropType; focus: number; whole?: boolean };
+
 interface SheetProps {
   open: boolean;
   title: string;
@@ -34,13 +37,15 @@ interface SheetProps {
   onBack?: () => boolean;
   /** A drawing across the box's top, its title lying on its foot (Progress's boxes, 35c-i). `focus`
    *  is how far down the drawing the band looks: 0 its top, 1 its foot. */
-  picture?: { name: PictureName; focus: number };
+  picture?: SheetPicture;
 }
 
 /** The box from the bottom, or in the middle (`place`): a question, or a short task, over the page it
  *  was opened from. */
 export function Sheet({ open, title, onClose, children, place = "bottom", onBack, picture }: SheetProps) {
   const middle = place === "middle";
+  const [sheetWidth, setSheetWidth] = useState(0);
+  const bandTall = picture !== undefined && "source" in picture && picture.whole === true ? wholeTall(picture.source, sheetWidth) : BAND_TALL;
   const insets = useSafeAreaInsets();
   const registered = useRef<{ depth: number; step: Step }[]>([]);
   const steps = useMemo<Steps>(
@@ -76,10 +81,13 @@ export function Sheet({ open, title, onClose, children, place = "bottom", onBack
         <View
           accessibilityViewIsModal
           style={[styles.sheet, middle ? styles.sheetMiddle : { paddingBottom: insets.bottom + 24 }]}
+          onLayout={(e) => {
+            setSheetWidth(e.nativeEvent.layout.width);
+          }}
         >
-          {picture === undefined || middle ? null : <SheetBand picture={picture} />}
+          {picture === undefined || middle ? null : <SheetBand picture={picture} tall={bandTall} />}
           {middle ? null : <View style={styles.grab} />}
-          {picture === undefined || middle ? null : <View style={styles.bandRoom} />}
+          {picture === undefined || middle ? null : <View style={{ height: bandTall - (BAND_TALL - BAND_ROOM) }} />}
           <View style={styles.head}>
             <Txt kind="h2" style={[styles.title, picture === undefined ? null : styles.titleOnPicture]}>
               {title}
@@ -97,26 +105,32 @@ export function Sheet({ open, title, onClose, children, place = "bottom", onBack
 
 /** The drawing across a box's top: as wide as the box, its height from the drawing's own shape, moved
  *  up by `focus` of what overhangs the band. */
-function SheetBand({ picture }: { picture: { name: PictureName; focus: number } }) {
+function SheetBand({ picture, tall: band }: { picture: SheetPicture; tall: number }) {
   const [width, setWidth] = useState(0);
-  const source = pictures[picture.name];
+  const source = "source" in picture ? picture.source : pictures[picture.name];
   const size = Image.resolveAssetSource(source);
-  const tall = size.width > 0 && size.height > 0 ? (width * size.height) / size.width : BAND_TALL;
-  const lift = Math.max(0, tall - BAND_TALL) * picture.focus;
+  const tall = size.width > 0 && size.height > 0 ? (width * size.height) / size.width : band;
+  const lift = Math.max(0, tall - band) * picture.focus;
   return (
     <View
       pointerEvents="none"
-      style={styles.band}
+      style={[styles.band, { height: band }]}
       onLayout={(e) => {
         setWidth(e.nativeEvent.layout.width);
       }}
     >
       {width === 0 ? null : (
-        <Image source={source} resizeMode="cover" accessible={false} style={{ position: "absolute", left: 0, width, top: -lift, height: Math.max(tall, BAND_TALL) }} />
+        <Image source={source} resizeMode="cover" accessible={false} style={{ position: "absolute", left: 0, width, top: -lift, height: Math.max(tall, band) }} />
       )}
       <View style={[StyleSheet.absoluteFill, styles.bandShade]} />
     </View>
   );
+}
+
+/** A whole picture's band: as tall as the picture at the box's width, so none of it is cut. */
+function wholeTall(source: ImageSourcePropType, width: number): number {
+  const size = Image.resolveAssetSource(source);
+  return width > 0 && size.width > 0 && size.height > 0 ? Math.max((width * size.height) / size.width, BAND_TALL) : BAND_TALL;
 }
 
 /** The drawing's band, and the room the title waits under it: the title's foot on the band's. */
@@ -150,7 +164,6 @@ const styles = StyleSheet.create({
   titleOnPicture: { textShadowColor: colours.wordShadow, textShadowRadius: 8 },
   band: { position: "absolute", top: 0, left: 0, right: 0, height: BAND_TALL, borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: "hidden" },
   bandShade: { experimental_backgroundImage: sheetBandShade },
-  bandRoom: { height: BAND_ROOM },
   closeOnPicture: { backgroundColor: colours.overPicture, borderColor: colours.lineStrong },
   close: {
     width: sizes.press,
