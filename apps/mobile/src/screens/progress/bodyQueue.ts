@@ -13,7 +13,7 @@ import type { TextStore } from "../food/outbox";
 // 35c-ii), as a meal is (food/outbox.ts). Each entry, and each removal, is written to the person's own
 // file BEFORE anything is sent, and sent one at a time in the order made, so a removal always follows
 // its entry's save. A save carries the entry's own id: sent twice, the server keeps one entry, and an
-// entry removed there keeps its id, so a late save of it keeps nothing (0203). An entry removed before
+// entry removed there keeps its id, so a late save of it keeps nothing (0204). An entry removed before
 // it was ever sent is dropped and never reaches the server.
 
 export type BodySendResult = { kind: "done"; entry?: BodyMeasurement } | { kind: "later" } | { kind: "refused"; message: string };

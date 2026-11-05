@@ -230,26 +230,13 @@ describe('each button asks first, naming the person and what will happen', () =>
 });
 
 describe('the Add form works its line out by the rule the server gives with', () => {
-  it('shows the dates for the type and start day chosen, and what the paid tick would mean', () => {
-    expect(givePreview(monthly, '2026-10-20', false, TODAY)).toEqual({
-      line: 'Started 20 October 2026 · Renews 20 November 2026',
-      paidLabel: 'They have paid up to 20 November 2026',
-      problem: null,
-    });
-    // Started earlier: the tick means the period today is in.
-    expect(givePreview(monthly, '2026-07-04', true, TODAY)).toEqual({
-      line: 'Started 4 July 2026 · Renews 4 November 2026',
-      paidLabel: 'They have paid up to 4 November 2026',
-      problem: null,
-    });
+  it('shows the dates for the type and start day chosen', () => {
+    expect(givePreview(monthly, '2026-10-20', false, TODAY)).toEqual({ line: 'Started 20 October 2026 · Renews 20 November 2026', problem: null });
+    expect(givePreview(monthly, '2026-07-04', false, TODAY)).toEqual({ line: 'Started 4 July 2026 · Renews 4 November 2026', problem: null });
     expect(givePreview(monthly, '2026-11-01', false, TODAY).line).toBe('Starts 1 November 2026 · Renews 1 December 2026');
-    expect(givePreview(tenPack, '2026-10-20', false, TODAY)).toEqual({
-      line: 'Started 20 October 2026 · Ends 18 December 2026 · 10 of 10 classes left',
-      paidLabel: 'They have paid the £90.00',
-      problem: null,
-    });
-    expect(givePreview(freeWeek, '2026-10-20', false, TODAY)).toEqual({ line: 'Started 20 October 2026 · Ends 26 October 2026', paidLabel: null, problem: null });
-    expect(givePreview(null, '2026-10-20', false, TODAY)).toEqual({ line: null, paidLabel: null, problem: null });
+    expect(givePreview(tenPack, '2026-10-20', false, TODAY)).toEqual({ line: 'Started 20 October 2026 · Ends 18 December 2026 · 10 of 10 classes left', problem: null });
+    expect(givePreview(freeWeek, '2026-10-20', false, TODAY)).toEqual({ line: 'Started 20 October 2026 · Ends 26 October 2026', problem: null });
+    expect(givePreview(null, '2026-10-20', false, TODAY)).toEqual({ line: null, problem: null });
   });
 
   it('says why a start day cannot be used', () => {

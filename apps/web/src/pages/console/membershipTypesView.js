@@ -10,6 +10,7 @@ import {
   MEMBERSHIP_PT_LIMIT_MAX,
   MEMBERSHIP_CONTRACT_PERIODS_MAX,
   MEMBERSHIP_NOTICE_DAYS_MAX,
+  MEMBERSHIP_COOLING_OFF_DAYS_MAX,
   MEMBERSHIP_TERM_COUNT_MAX,
   contractLengthWords,
   MEMBERSHIP_TYPES_MAX,
@@ -229,6 +230,20 @@ export function noticeLine(type) {
   return `Notice to cancel: ${String(type.noticeDays)} day${type.noticeDays === 1 ? '' : 's'}`;
 }
 
+/** "Cooling-off period: 3 days" (18v-iii); null for a type with none. */
+export function coolingOffLine(type) {
+  if (type === null || type === undefined || !(type.coolingOffDays > 0) || !(type.priceMinor > 0)) return null;
+  return `Cooling-off period: ${String(type.coolingOffDays)} day${type.coolingOffDays === 1 ? '' : 's'}`;
+}
+
+/** Under the cooling-off box: what the days typed mean, where they read. */
+export function coolingOffHint(draft) {
+  if (String(draft.coolingOffDays ?? '').trim() === '') return 'Days after they sign in which members can cancel with a full refund. Weekends count. Leave empty for none.';
+  const days = wholeNumber(draft.coolingOffDays, 1, MEMBERSHIP_COOLING_OFF_DAYS_MAX);
+  if (days === null) return null;
+  return `For ${days === 1 ? '1 day' : `${String(days)} days`} after they sign, members can cancel with a full refund. Weekends count.`;
+}
+
 /** Under the notice box: what the days typed mean, where they read. */
 export function noticeHint(draft) {
   const days = wholeNumber(draft.noticeDays, 1, MEMBERSHIP_NOTICE_DAYS_MAX);
@@ -277,6 +292,7 @@ export function emptyDraft() {
     contractThen: 'renews',
     leaveFee: '',
     noticeDays: '',
+    coolingOffDays: '',
   };
 }
 
@@ -312,6 +328,7 @@ export function draftFromType(type) {
     contractThen: type.contractThen ?? base.contractThen,
     leaveFee: type.leaveFeeMinor > 0 ? minorToPriceText(type.leaveFeeMinor, type.currency) : '',
     noticeDays: type.noticeDays === null || type.noticeDays === undefined ? '' : String(type.noticeDays),
+    coolingOffDays: type.coolingOffDays === null || type.coolingOffDays === undefined ? '' : String(type.coolingOffDays),
   };
 }
 
@@ -365,7 +382,7 @@ const usesTerm = (choice) => choice === 'recurring' || choice === 'one_time' || 
 const usesAccess = usesTerm;
 
 /** The boxes in the order the form draws them, so the first wrong one can be shown. */
-export const PROBLEM_ORDER = ['name', 'description', 'price', 'joiningFee', 'tax', 'termCount', 'contractPeriods', 'leaveFee', 'noticeDays', 'packClasses', 'packDays', 'bookingsLimit', 'classes', 'ptLimit'];
+export const PROBLEM_ORDER = ['name', 'description', 'price', 'joiningFee', 'tax', 'termCount', 'contractPeriods', 'leaveFee', 'noticeDays', 'coolingOffDays', 'packClasses', 'packDays', 'bookingsLimit', 'classes', 'ptLimit'];
 
 /** The first box that is wrong, top to bottom, or null. */
 export function firstProblem(problems) {
@@ -437,6 +454,13 @@ export function draftProblems(draft, currency) {
       problems.noticeDays = 'A minimum term that ends by itself has no notice to cancel. Leave it empty.';
     }
   }
+  if (draftHasCoolingOff(draft)) {
+    if (wholeNumber(draft.coolingOffDays, 1, MEMBERSHIP_COOLING_OFF_DAYS_MAX) === null) {
+      problems.coolingOffDays = `Type how many days, from 1 to ${String(MEMBERSHIP_COOLING_OFF_DAYS_MAX)}, or leave it empty.`;
+    } else if (priceMinor === 0) {
+      problems.coolingOffDays = 'A free membership has no cooling-off period. Leave it empty.';
+    }
+  }
   if (draft.choice === 'pack') {
     if (wholeNumber(draft.packClasses, 1, MEMBERSHIP_PACK_CLASSES_MAX) === null) {
       problems.packClasses = `Type how many classes, from 1 to ${String(MEMBERSHIP_PACK_CLASSES_MAX)}.`;
@@ -472,6 +496,11 @@ export function draftHasContract(draft) {
 /** Whether the form sets a notice to cancel: a repeating type with days typed (18v-ii-a). */
 export function draftHasNotice(draft) {
   return draft.choice === 'recurring' && String(draft.noticeDays ?? '').trim() !== '';
+}
+
+/** Whether the form sets a cooling-off period: days typed, on any kind (18v-iii). */
+export function draftHasCoolingOff(draft) {
+  return String(draft.coolingOffDays ?? '').trim() !== '';
 }
 
 /** Whether the form's ticked classes apply: not for a gym-only type. */
@@ -529,6 +558,7 @@ export function draftBody(draft, currency) {
     contractThen: draftHasContract(draft) ? draft.contractThen : null,
     leaveFeeMinor: ((minor) => (minor === null || minor === 0 ? null : minor))(draftLeaveFee(draft, currency)),
     noticeDays: draftHasNotice(draft) ? wholeNumber(draft.noticeDays, 1, MEMBERSHIP_NOTICE_DAYS_MAX) : null,
+    coolingOffDays: draftHasCoolingOff(draft) ? wholeNumber(draft.coolingOffDays, 1, MEMBERSHIP_COOLING_OFF_DAYS_MAX) : null,
     // A change says which version of the type the form read.
     ...(draft.id === null ? {} : { updatedAt: draft.updatedAt }),
   };

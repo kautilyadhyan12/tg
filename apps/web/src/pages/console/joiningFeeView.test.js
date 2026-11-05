@@ -79,6 +79,8 @@ describe('the joining fee the desk is shown is the one the first bill charges', 
       fullFrom: null,
       minimumTerm: null,
       noticeDays: null,
+
+      coolingOffDays: null,
     });
   });
 

@@ -95,7 +95,8 @@ const hrefs = (el) => [...el.querySelectorAll('a[href]')].map((a) => a.getAttrib
 function menus() {
   const rail = hrefs(within(screen.getByTestId('console-rail')).getByRole('navigation', { name: 'Console' }));
   const tabs = hrefs(screen.getByTestId('console-tabbar')).filter((h) => h !== `${BASE}/more`);
-  const more = hrefs(screen.getByTestId('console-more')).filter((h) => h !== '/console');
+  // Your organisations and Your account are the person's own, not the gym's pages (checked below).
+  const more = hrefs(screen.getByTestId('console-more')).filter((h) => h !== '/console' && h !== `${BASE}/account`);
   return { rail, tabs, more };
 }
 
@@ -132,6 +133,13 @@ describe('nobody loses a page they can open today', () => {
       expect([...tabs, ...more].sort()).toEqual(openableToday(privileges));
     },
   );
+
+  it.each([['owner'], ['manager'], ['trainer']])('a %s reaches Your account, with Delete account, from the menu and from More (19b-ii)', async (role) => {
+    await openMore(role, [...ROLE_PRIVILEGES[role]]);
+    const rail = screen.getByTestId('console-rail');
+    expect(within(rail).getByRole('link', { name: 'Your account' }).getAttribute('href')).toBe(`${BASE}/account`);
+    expect(within(screen.getByTestId('console-more')).getByRole('link', { name: 'Your account' }).getAttribute('href')).toBe(`${BASE}/account`);
+  });
 
   it('a trainer on a phone has Attendance as a tab', async () => {
     await openMore('trainer', [...ROLE_PRIVILEGES.trainer]);

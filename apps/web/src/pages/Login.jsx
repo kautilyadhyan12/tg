@@ -6,7 +6,7 @@ import { useTransition } from '../context/TransitionContext';
 import { Dumbbell, ArrowRight, Zap, Mail } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { SIGN_IN_CODE_RULES, SIGN_IN_ROBOT_WORDS } from '@app/shared';
-import { GYM_DOOR, MEMBER_DOOR, landingRoute, readDoor, rememberDoor } from './landingRoute';
+import { GYM_DOOR, MEMBER_DOOR, landingRoute, readDoor, rememberDoor, returnForDoor } from './landingRoute';
 import { useRobotCheck } from './useRobotCheck';
 
 // ONE "GET STARTED" SCREEN (Kd, 2026-09-07). Sign-up and sign-in are the same
@@ -229,7 +229,8 @@ export default function Login() {
       if (res.isNewAccount) toast.success('Welcome! Your account is ready.');
       // The door comes from THIS component's state, not from storage: a browser
       // that refuses sessionStorage must still honour the button just pressed.
-      const dest = landingRoute(res.user, door);
+      // The console page they were opening, when sign-in was asked for on the way (19b-ii).
+      const dest = returnForDoor(door) ?? landingRoute(res.user, door);
       triggerTransition(() => navigate(dest));
     } catch (err) {
       setProblem(messageFrom(err, 'That code did not work. Please try again.'));

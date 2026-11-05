@@ -331,6 +331,36 @@ d("The card kept from a Terminal payment: only with their I agree, on their reco
     expect((JSON.parse(gone.body) as { card: unknown }).card).toBeNull();
   });
 
+  it("the membership's terms are on the Terminal before the card is kept, as its agreement says them (Kd, 2026-11-04)", async () => {
+    const now = new Date();
+    clock = now;
+    const { gym, acct, desk } = await setUp("Terms");
+    const termed = { ...gold, name: "Gold 12", contractPeriods: 12, contractThen: "renews", leaveFeeMinor: 9900, noticeDays: 30, coolingOffDays: 3 };
+    const res = await send("POST", `/v1/orgs/${gym.id}/membership-types`, gym.owner.cookies, termed);
+    expect(res.statusCode, res.body).toBe(201);
+    const typeId = (JSON.parse(res.body) as GymMembershipTypesResponse).types.find((t) => t.name === "Gold 12")?.id ?? "";
+    const ivy = await owing(gym, typeId, "Ivy Chen");
+    const started = await pay(gym, gym.owner, ivy, desk.id, { keepCard: true });
+    expect(started.payment.card).toMatchObject({ step: "agreeing" });
+    const words = square.agreement(desk.deviceId).words;
+    expect(words).toContain("Gold 12: $49.99 every month. Renews until you cancel.\nMinimum term: 12 months, to ");
+    for (const line of ["Early cancellation fee: $99.00.", "Notice to cancel: 30 days."]) expect(words).toContain(line);
+    // Added today: its cooling-off period is open, with its last day (round one, H2).
+    expect(words).toMatch(/\nCooling-off period: until \d{1,2} [A-Z][a-z]{2} \d{4}, to cancel with a full refund\.\n/);
+    expect(words).toContain(`I agree that ${gym.name} may save this card`);
+
+    // Added five days ago, its three days are over: the Terminal says nothing of one.
+    clock = new Date(now.getTime() - 5 * 24 * 60 * 60_000);
+    const ola = await owing(gym, typeId, "Ola Berg");
+    clock = now;
+    const second = await terminal(gym, acct);
+    const later = await pay(gym, gym.owner, ola, second.id, { keepCard: true });
+    expect(later.payment.card).toMatchObject({ step: "agreeing" });
+    const laterWords = square.agreement(second.deviceId).words;
+    expect(laterWords).toContain("Notice to cancel: 30 days.");
+    expect(laterWords).not.toContain("Cooling-off period");
+  });
+
   it("never offered where it cannot be: somebody else pays, another gym", async () => {
     clock = new Date();
     const { gym, goldId, desk } = await setUp("Offer");

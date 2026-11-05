@@ -1420,7 +1420,14 @@
       "idx": 202,
       "version": "7",
       "when": 1790726400203,
-      "tag": "0203_body_measurement_removed_ids",
+      "tag": "0203_cooling_off",
+      "breakpoints": true
+    },
+    {
+      "idx": 203,
+      "version": "7",
+      "when": 1790726400204,
+      "tag": "0204_body_measurement_removed_ids",
       "breakpoints": true
     }
   ]

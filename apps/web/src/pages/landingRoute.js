@@ -117,6 +117,93 @@ export function forgetDoor(store = defaultStore()) {
   }
 }
 
+// ── A console page opened signed out, opened again after sign-in (19b-ii) ───
+// The phone's Open the website opens the console's Your account page in the phone's browser,
+// which is usually signed out: without this, signing in lands on the console's front page and
+// the place is lost. Only this site's own console pages are kept, for 30 minutes, in this tab.
+//
+// Never the page somebody signs out FROM: the page still on screen renders once with nobody
+// signed in before the sign-in page opens, and keeping it then would hand it, and "Manage my
+// gym or studio", to the next person at a shared front-desk browser (19b-ii round one, H-1).
+
+const RETURN_KEY = 'aihg.signInReturn';
+export const RETURN_FOR_MS = 30 * 60 * 1000;
+
+// Set when this page load signs somebody out; cleared when somebody is signed in again. A page
+// opened from a link or the address bar is a new page load, so it starts unset.
+let signedOutHere = false;
+
+/** Sign-out: forget the kept page, and keep none until somebody signs in again. */
+export function noteSignedOut(store = defaultStore()) {
+  signedOutHere = true;
+  return forgetReturn(store);
+}
+
+/** Somebody is signed in: a later sign-out is theirs to note. */
+export function noteSignedIn() {
+  signedOutHere = false;
+}
+
+/** The kept page, for the door the person is going through: the console door only. */
+export function returnForDoor(door, store = defaultStore(), now = Date.now()) {
+  return door === GYM_DOOR ? readReturn(store, now) : null;
+}
+
+/** A page of this site's console: "/console/iron-house/members?view=staff". Never another site. */
+export function isReturnPath(path) {
+  return typeof path === 'string' && /^\/console\/[A-Za-z0-9-]/.test(path) && !path.includes('\\') && !path.includes('//');
+}
+
+/** The page asked for when sign-in was needed; any other page forgets an older one. A console page
+ *  also chooses "Manage my gym or studio" on the sign-in page, since that is who opens one (Kd,
+ *  2026-11-04: the owner signs in as the person who manages the gym). */
+export function rememberReturn(path, store = defaultStore(), now = Date.now()) {
+  if (store === null || signedOutHere) return false;
+  try {
+    if (isReturnPath(path)) {
+      store.setItem(RETURN_KEY, JSON.stringify({ path, at: now }));
+      rememberDoor(GYM_DOOR, store);
+    } else {
+      store.removeItem(RETURN_KEY);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The page to open after signing in: null when there is none, or it is too old. Read by every
+ *  step of signing in alike (the form, the page guarding it, Google's landing), so none of them
+ *  sends the person somewhere else first; forgotten once they reach a signed-in page. */
+export function readReturn(store = defaultStore(), now = Date.now()) {
+  if (store === null) return null;
+  let raw;
+  try {
+    raw = store.getItem(RETURN_KEY);
+  } catch {
+    return null;
+  }
+  try {
+    const kept = JSON.parse(raw ?? 'null');
+    if (kept === null || typeof kept.at !== 'number' || now - kept.at > RETURN_FOR_MS || now < kept.at) return null;
+    return isReturnPath(kept.path) ? kept.path : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Forgotten on reaching a signed-in page, and on sign-out with the door: the next person at a
+ *  shared browser starts fresh. */
+export function forgetReturn(store = defaultStore()) {
+  if (store === null) return false;
+  try {
+    store.removeItem(RETURN_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // ── A poster's code, kept through sign-in and setup (ROADMAP 4b-ii-b) ───────
 //
 // SWITCHED OFF with join codes (ROADMAP 3c; spec Part 3 §10.6): nothing keeps a

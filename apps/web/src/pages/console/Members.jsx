@@ -746,6 +746,7 @@ export default function Members() {
           onChanged={reloadRoster}
           onSeeActivity={(userId) => showTab('activity', { worker: userId })}
           onOpenActivity={() => showTab('activity', {})}
+          handingOver={searchParams.get('handOver') === '1'}
         />
       ) : null}
 

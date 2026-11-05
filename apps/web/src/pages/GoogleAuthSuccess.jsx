@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Loader2, Check } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { googleSuccessRoute } from './googleSuccessRoute';
+import { readDoor, returnForDoor } from './landingRoute';
 
 // web-repoint (Google half): the OAuth callback sets the SAME httpOnly cookies
 // as password login and redirects here with NOTHING in the URL. AuthProvider's
@@ -22,7 +23,8 @@ export default function GoogleAuthSuccess() {
     // Routing decision is a pure, unit-tested function (googleSuccessRoute).
     // null = AuthProvider is still restoring the cookie session — stay put.
     const dest = googleSuccessRoute(user, loading);
-    if (dest) navigate(dest, { replace: true });
+    // Signed in: the console page they were opening, if one was asked for on the way (19b-ii).
+    if (dest) navigate((user ? returnForDoor(readDoor()) : null) ?? dest, { replace: true });
   }, [user, loading, navigate]);
 
   return (

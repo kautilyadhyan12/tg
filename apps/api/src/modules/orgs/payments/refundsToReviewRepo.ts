@@ -1,4 +1,5 @@
-// Refunds to review (ROADMAP 18d-iv-b-iii): the list, and the two decisions that take a row off it. A row is one Square payment:
+// Refunds to review (ROADMAP 18d-iv-b-iii): the list, and the two decisions that take a row off it. A membership cancelled in its
+// cooling-off period lists each payment with some of it not given back (18v-iii), until it is; no decision takes it off. A row is one Square payment:
 // a basket's products share one, so its presses are read together, and a press on a fee no longer owed stands in for that fee's
 // own row. Every statement names the gym. A press leaves the list when refunds written after it cover its amount, the rule a
 // person's page reads (`openPressesOf`, `openPressesOfSales`).
@@ -134,6 +135,39 @@ export async function refundsToReview(sql: Sql, gymId: string, members: boolean,
         AND NOT ${stillOwedSql(sql)}
         AND NOT EXISTS (SELECT 1 FROM gym_square_refunds w WHERE w.gym_id = p.gym_id AND w.payment_id = p.id AND w.state = 'asking')
         AND NOT EXISTS (SELECT 1 FROM open_press o WHERE o.payment_id = p.id)
+      UNION ALL
+      -- A payment of a membership cancelled in its cooling-off period, with some of it not given back yet (18v-iii): what is
+      -- left of it, the payments of one bill together never more than is left of that bill, as the person's page counts
+      -- it (coolingOffRefundOf; round one, L3).
+      SELECT z.id, 'cooling_off', 2, z.at, LEAST(z.left_minor, GREATEST(z.room - z.before, 0)),
+             z.amount_minor, z.currency, z.full_name, z.past, false, z.on_day,
+             z.entry_id, z.membership_id, z.id, z.type_name, z.method, NULL, NULL,
+             false, NULL, NULL,
+             NULL, NULL, NULL, 0, 0, false
+      FROM (
+        SELECT p.id, p.created_at AS at, p.amount_minor, b.currency, e.full_name, e.former_at IS NOT NULL AS past, h.cancelled_on::text AS on_day,
+               e.id AS entry_id, h.id AS membership_id, t.name AS type_name, p.method, p.amount_minor - x.back AS left_minor, y.room,
+               COALESCE(sum(p.amount_minor - x.back) OVER (PARTITION BY b.id ORDER BY p.created_at, p.id ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 0)::int AS before
+        FROM gym_held_memberships h
+        JOIN gym_member_bills b ON b.gym_id = h.gym_id AND b.held_membership_id = h.id AND b.period_index IS NOT NULL AND b.status = 'paid'
+        JOIN gym_member_payments p ON p.gym_id = b.gym_id AND p.bill_id = b.id AND p.undone_at IS NULL
+        JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
+        JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id
+        CROSS JOIN LATERAL (SELECT COALESCE(sum(r.amount_minor), 0)::int AS back FROM gym_member_refunds r
+                            WHERE r.gym_id = p.gym_id AND r.payment_id = p.id AND r.undone_at IS NULL) x
+        CROSS JOIN LATERAL (
+          SELECT (COALESCE((SELECT sum(q.amount_minor) FROM gym_member_payments q WHERE q.gym_id = b.gym_id AND q.bill_id = b.id AND q.undone_at IS NULL), 0)
+                - COALESCE((SELECT sum(r.amount_minor) FROM gym_member_refunds r
+                            JOIN gym_member_payments q ON q.gym_id = r.gym_id AND q.id = r.payment_id
+                            WHERE r.gym_id = b.gym_id AND q.bill_id = b.id AND q.undone_at IS NULL AND r.undone_at IS NULL), 0)
+                - b.moved_minor)::int AS room
+        ) y
+        WHERE ${members}::boolean AND h.gym_id = ${gymId} AND h.changed_mind
+          AND p.amount_minor > x.back
+          AND NOT EXISTS (SELECT 1 FROM gym_square_refunds w WHERE w.gym_id = p.gym_id AND w.payment_id = p.id AND w.state = 'asking')
+          AND NOT EXISTS (SELECT 1 FROM open_press o WHERE o.payment_id = p.id)
+      ) z
+      WHERE z.room - z.before > 0
     )
     SELECT l.*, count(*) OVER ()::int AS total
     FROM listed l

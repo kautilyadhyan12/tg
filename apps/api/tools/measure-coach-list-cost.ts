@@ -79,6 +79,7 @@ try {
     redis: createMemoryRedis(),
     randomBytes: (n) => randomBytes(n),
     joinCodes: false,
+    webOrigin: "http://localhost:5173",
     invites: null,
     supportEmail: null,
     log: { warn: () => undefined },

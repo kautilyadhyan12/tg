@@ -141,7 +141,11 @@ function billingOf(
   // paid or cancelled is never left off the page.
   const newest = bills.slice(0, BILLS_SHOWN);
   const owedBill = pay === null ? undefined : bills.find((b) => b.periodIndex === pay.periodIndex);
-  const sent = owedBill === undefined || newest.includes(owedBill) ? newest : [...newest, owedBill];
+  const coolingOffRefund = coolingOffRefundOf(row.membership, view, bills, payments);
+  // Every bill with money of its cooling-off refund left on it, however old, as the bill owed is: Overview's Refund
+  // opens each of those payments here (18v-iii; round one, L2).
+  const refundBills = coolingOffRefund === null ? [] : bills.filter((b) => payments.some((p) => p.billId === b.id && paymentRefundableMinor(b, p) > 0));
+  const sent = [owedBill, ...refundBills].reduce<BillRow[]>((list, b) => (b === undefined || list.includes(b) ? list : [...list, b]), newest);
   const mark = !ctx.past && newestBack === null && view.can.undoPaid !== null && !settledAt(view.can.undoPaid.paidPeriods) ? view.can.undoPaid : null;
   const refundOf = (r: RefundRow) => ({
     id: r.id,
@@ -224,7 +228,34 @@ function billingOf(
     cancel: cancelBill === undefined ? null : { billId: cancelBill.id },
     undo: back !== null ? { kind: "payment", paymentId: back.paymentId } : mark !== null ? { kind: "mark", paidPeriods: mark.paidPeriods } : null,
     fees: fees.fees.map((f) => feeOf(f, fees.payments, ctx, { refunds: refundsOf, voided: voidedRefundsOf })),
+    coolingOffRefund,
   };
+}
+
+/** WHAT A FULL REFUND GIVES BACK (18v-iii): while its cooling-off period is open, or once it was cancelled in it,
+ *  what was paid on its bills and is not given back yet, each bill capped as a refund on it is
+ *  (`paymentRefundableMinor`), and the newest payment with some of it left. Null otherwise, and once nothing is left. */
+export function coolingOffRefundOf(
+  m: HeldMembership,
+  view: HeldMembershipView,
+  bills: readonly BillRow[],
+  payments: readonly PaymentRow[],
+): { leftMinor: number; paymentId: string } | null {
+  if (view.can.coolingOff === null && m.changedMind !== true) return null;
+  let leftMinor = 0;
+  let newest: PaymentRow | null = null;
+  for (const b of bills) {
+    let onBill = 0;
+    for (const p of payments) {
+      if (p.billId !== b.id) continue;
+      const left = paymentRefundableMinor(b, p);
+      if (left <= 0) continue;
+      onBill += left;
+      if (newest === null || p.seq > newest.seq) newest = p;
+    }
+    leftMinor += Math.min(onBill, Math.max(0, b.paidMinor - b.refundedMinor - b.movedMinor));
+  }
+  return leftMinor > 0 && newest !== null ? { leftMinor, paymentId: newest.id } : null;
 }
 
 /** Where a freeze today would charge the gym's fee (18z): today, or a month on where a fee of an
@@ -427,6 +458,8 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
       noticeWaived: row.noticeWaived,
       leaveFeeMinor: row.membership.leaveFeeMinor ?? null,
       leftEarly: row.membership.leftEarly === true,
+      coolingOffDays: row.membership.coolingOffDays ?? null,
+      changedMind: row.membership.changedMind === true,
       fromList: row.fromList,
       notCharged: list.bills.some((b) => b.membershipId === row.id && b.cancelled !== null && b.periodIndex === row.membership.paidPeriods - 1),
       refundedInFull: list.bills.some((b) => b.membershipId === row.id && b.status === "refunded" && b.periodIndex === row.membership.paidPeriods - 1),
@@ -545,6 +578,16 @@ function throwOnFailure(outcome: repo.HeldWriteOutcome): void {
       throw new OrgsError(409, "membership_bill_day_changed", "Your gym's billing day changed while this was open. Nothing was saved: check the total and press again.");
     case "leave_fee_changed":
       throw new OrgsError(409, "membership_leave_fee_changed", "The early cancellation fee of this membership changed while this was open. Nothing was saved: check it and press again.");
+    case "cooling_off_changed":
+      throw new OrgsError(409, "membership_cooling_off_changed", "The cooling-off period of this membership changed while this was open. Nothing was saved: check it and press again.");
+    case "cooling_off_over":
+      throw new OrgsError(409, "cooling_off_over", "The cooling-off period of this membership is over, so it can't be cancelled with a full refund. Nothing was changed.");
+    case "cooling_off_part_paid":
+      throw new OrgsError(
+        409,
+        "cooling_off_part_paid",
+        "Part of a bill of this membership is paid and the rest is still owed. Void that payment first, then cancel with a full refund.",
+      );
     case "freeze_fee_changed":
       throw new OrgsError(409, "membership_freeze_fee_changed", "Your gym's freeze fee changed while this was open. Nothing was saved: check the fee and press Freeze again.");
     case "discount_not_found":
@@ -640,6 +683,7 @@ export async function giveHeldMembership(
       ...(req.priceMinor === undefined && req.fullFrom === undefined ? {} : { shownFullFrom: req.fullFrom ?? null }),
       ...(req.minimumTerm === undefined ? {} : { shownMinimumTerm: req.minimumTerm }),
       ...(req.noticeDays === undefined ? {} : { shownNoticeDays: req.noticeDays }),
+      ...(req.coolingOffDays === undefined ? {} : { shownCoolingOffDays: req.coolingOffDays }),
       // Leaving the fee off is waiving it, which is where payments are taken, as a discount is.
       mayWaiveJoiningFee: canBill,
       discount: req.discountId === undefined || req.discountMinor === undefined ? null : { id: req.discountId, shownOffMinor: req.discountMinor },

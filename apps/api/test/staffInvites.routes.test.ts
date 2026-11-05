@@ -20,7 +20,7 @@ import { sendDueStaffInvites, type StaffSendRun, type StaffSenderDeps } from "..
 import { forgetOldStaffInvites } from "../src/modules/orgs/staffInvites/repo.js";
 import { emailHmac } from "../src/modules/orgs/invites/address.js";
 import { emailsUsedToday } from "../src/modules/orgs/invites/repo.js";
-import { restoreUser, softDeleteUser } from "../src/modules/users/repo.js";
+import { OwnsGymError, restoreUser, softDeleteUser } from "../src/modules/users/repo.js";
 import * as orgRepo from "../src/modules/orgs/repo.js";
 import {
   ROLE_PRIVILEGES,
@@ -1149,9 +1149,9 @@ d("staff invited by email (real Postgres)", () => {
         expect(await onStaffList(gym, who)).toBe(false);
       }
       expect(await staffRowOf(rival, zoe)).toBeNull();
-      // The owner's own deletion and restore leaves them owning their gym.
-      expect(await softDeleteUser(sql, gym.owner.userId)).not.toBeNull();
-      expect(await restoreUser(sql, gym.owner.userId)).toBe(true);
+      // The owner's own deletion is refused, and changes nothing (19b-ii).
+      await expect(softDeleteUser(sql, gym.owner.userId)).rejects.toBeInstanceOf(OwnsGymError);
+      expect(await restoreUser(sql, gym.owner.userId)).toBe(false);
       expect((await staffRowOf(gym, gym.owner))?.role).toBe("owner");
       expect(await readsMembers(gym, gym.owner)).toBe(200);
     },

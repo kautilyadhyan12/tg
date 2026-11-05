@@ -1,4 +1,4 @@
-import { OWNER_ONLY_PRIVILEGES, ROLE_PRIVILEGES, STAFF_INVITE_EMAIL_REASON_WORDS, STAFF_INVITE_RESENDS_MAX, orgWords, withArticle } from '@app/shared';
+import { OWNER_ONLY_PRIVILEGES, ROLE_PRIVILEGES, STAFF_INVITE_EMAIL_REASON_WORDS, STAFF_INVITE_RESENDS_MAX, orgWords, ownedGymLine, withArticle } from '@app/shared';
 import { formatJoinedAt, roleLabel } from './consoleView';
 
 // Pure view helpers for Members → Staff (it was Settings' Staff box until 23c-ii) — Part 3 §4.7 ("list,
@@ -146,6 +146,21 @@ export function isGymOwner(person) {
 /** Whether the person reading the Staff tab is the gym's own owner, from the server's list. */
 export function viewerIsGymOwner(staff) {
   return Array.isArray(staff) && staff.some((person) => person?.isYou === true && isGymOwner(person));
+}
+
+/** The line at the top of the Staff tab for a gym's own owner who came to hand it over before
+ *  deleting their account (19b-ii): what to press, or who they are waiting for; null otherwise. */
+export function handOverNote(staff, gymName) {
+  if (!viewerIsGymOwner(staff)) return null;
+  const waiting = staff.find((person) => person?.ownerRequest);
+  if (waiting !== undefined) return ownedGymLine({ name: gymName, askedName: waiting.displayName });
+  if (staff.some((person) => person?.role === 'owner' && person.coOwner === true)) {
+    return `To hand ${gymName} over, open a co-owner below and press Make owner. Once they accept, you can delete your account.`;
+  }
+  const others = staff.some((person) => person?.isYou !== true);
+  return others
+    ? `Only a co-owner can become the owner of ${gymName}. Open a staff member below and press Make co-owner, or press Invite staff and choose Co-owner.`
+    : `Only a co-owner can become the owner of ${gymName}. Press Invite staff and choose Co-owner.`;
 }
 
 /** What a person's panel says about being a co-owner, or null for nothing.

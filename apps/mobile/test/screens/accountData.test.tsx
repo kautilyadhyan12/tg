@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react-native";
+import { act, fireEvent, render, screen } from "@testing-library/react-native";
+import { AppState, Linking } from "react-native";
 import { SIGNED_IN_ELSEWHERE } from "@app/shared";
 import { Directory, File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
@@ -36,7 +37,10 @@ const place = (name: string, more: object) => ({
   ...more,
 });
 const IRON = place("Iron House", {});
-const PULSE = place("Pulse Studio", { staffRole: "owner", isMember: false });
+// The gym's own owner: the server sends the website's page where they delete their account (19b-ii).
+const PULSE_ACCOUNT = "http://localhost:5173/console/pulse-studio/account";
+const PULSE = place("Pulse Studio", { staffRole: "owner", isMember: false, handOver: { url: PULSE_ACCOUNT, askedName: null } });
+const ON_THE_WEB = "You own Pulse Studio. Delete your account on our website, where you manage your gym.";
 // A co-owner is removed from the gym on deleting; only the gym's own owner stays.
 const LOTUS = place("Lotus Yoga", { id: "3e4f5a6b-7c8d-4e9f-8a1b-2c3d4e5f6a7b", staffRole: "owner", coOwner: true, isMember: false });
 const sentCode = ok({ message: "We emailed you a 6-digit code.", resendAfterSeconds: 60, expiresInSeconds: 600 });
@@ -63,7 +67,7 @@ async function openSettings(ask: Ask, store = memoryStore(kept(1))) {
 }
 const routes = (over: Record<string, Route> = {}): Record<string, Route> => ({
   "/v1/auth/refresh": ok({ tokens: tokens(2) }),
-  "/v1/orgs/mine": ok({ orgs: [IRON, PULSE], formerOrgs: [] }),
+  "/v1/orgs/mine": ok({ orgs: [IRON], formerOrgs: [] }),
   [CODE]: sentCode,
   ...over,
 });
@@ -252,15 +256,71 @@ describe("Delete account (the worst thing: after deleting, the phone still shows
     expect(screen.queryByText(/link we emailed/)).toBeNull();
   });
 
-  it("names the places the person leaves, a co-owned one among them, and the one they own, and sends no code until asked", async () => {
-    const server = fakeServer(routes({ [ME]: me(deleted(true)), "/v1/orgs/mine": ok({ orgs: [IRON, PULSE, LOTUS], formerOrgs: [] }) }));
+  it("names the places the person leaves, a co-owned one among them, and sends no code until asked", async () => {
+    const server = fakeServer(routes({ [ME]: me(deleted(true)), "/v1/orgs/mine": ok({ orgs: [IRON, LOTUS], formerOrgs: [] }) }));
     await openSettings(server.ask);
     await fireEvent.press(await screen.findByLabelText("Delete account"));
     expect(await screen.findByText("You leave Iron House and Lotus Yoga today. To come back later, ask them to add you again.")).toBeTruthy();
-    expect(screen.getByText("You own Pulse Studio. Deleting your account does not close it.")).toBeTruthy();
+    expect(screen.getByLabelText("Email me a code")).toBeTruthy();
     expect(server.paths()).not.toContain(CODE);
     await fireEvent.press(screen.getByLabelText("Cancel"));
     expect(server.paths()).not.toContain(CODE);
+  });
+
+  it("THE OWNER (19b-ii): a gym's own owner is sent to the website to delete their account, never asked for a code here; a co-owner of another gym is not why", async () => {
+    const opened = jest.spyOn(Linking, "openURL").mockResolvedValue(true);
+    const server = fakeServer(routes({ "/v1/orgs/mine": ok({ orgs: [IRON, PULSE, LOTUS], formerOrgs: [] }) }));
+    await openSettings(server.ask);
+    await fireEvent.press(await screen.findByLabelText("Delete account"));
+    expect(await screen.findByText(ON_THE_WEB)).toBeTruthy();
+    expect(screen.queryByLabelText("Email me a code")).toBeNull();
+    expect(screen.queryByText(/Lotus Yoga/)).toBeNull();
+    await fireEvent.press(screen.getByLabelText("Open the website"));
+    expect(opened).toHaveBeenCalledWith(PULSE_ACCOUNT);
+    expect(server.paths()).not.toContain(CODE);
+    expect(server.asked.filter((a) => a.method === "DELETE")).toEqual([]);
+    opened.mockRestore();
+  });
+
+  it("an owner of two gyms is told both, and the website opens once", async () => {
+    const lotus = { ...LOTUS, coOwner: false, handOver: { url: "http://localhost:5173/console/lotus-yoga/account", askedName: null } };
+    const opened = jest.spyOn(Linking, "openURL").mockResolvedValue(true);
+    const server = fakeServer(routes({ "/v1/orgs/mine": ok({ orgs: [PULSE, lotus], formerOrgs: [] }) }));
+    await openSettings(server.ask);
+    await fireEvent.press(await screen.findByLabelText("Delete account"));
+    expect(await screen.findByText("You own Pulse Studio and Lotus Yoga. Delete your account on our website, where you manage them.")).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText("Open the website"));
+    expect(opened).toHaveBeenCalledWith(PULSE_ACCOUNT);
+    expect(opened).toHaveBeenCalledTimes(1);
+    opened.mockRestore();
+  });
+
+  it("a website that will not open is said in the box", async () => {
+    const opened = jest.spyOn(Linking, "openURL").mockRejectedValue(new Error("No app"));
+    const server = fakeServer(routes({ "/v1/orgs/mine": ok({ orgs: [PULSE], formerOrgs: [] }) }));
+    await openSettings(server.ask);
+    await fireEvent.press(await screen.findByLabelText("Delete account"));
+    await fireEvent.press(await screen.findByLabelText("Open the website"));
+    expect(await screen.findByText("Couldn’t open the browser.")).toBeTruthy();
+    opened.mockRestore();
+  });
+
+  it("an owner the phone did not know of reads the server's refusal, and the box turns to the website's", async () => {
+    let owns = false;
+    const server = fakeServer(
+      routes({
+        "/v1/orgs/mine": () => ({ status: 200, body: { orgs: owns ? [IRON, PULSE] : [IRON], formerOrgs: [] } }),
+        [CODE]: () => refusal(409, "owns_gym", "You own Pulse Studio. Before you delete your account, make someone else its owner."),
+      }),
+    );
+    await openSettings(server.ask);
+    await fireEvent.press(await screen.findByLabelText("Delete account"));
+    owns = true;
+    await fireEvent.press(await screen.findByLabelText("Email me a code"));
+    expect(await screen.findByText(ON_THE_WEB)).toBeTruthy();
+    expect(await screen.findByLabelText("Open the website")).toBeTruthy();
+    expect(screen.queryByLabelText("Email me a code")).toBeNull();
+    expect(screen.queryByPlaceholderText("6-digit code")).toBeNull();
   });
 
   it("with the places not loaded, it still says the person leaves them", async () => {
@@ -366,5 +426,29 @@ describe("the words", () => {
     expect(namesText(["Iron House"])).toBe("Iron House");
     expect(namesText(["Iron House", "Pulse"])).toBe("Iron House and Pulse");
     expect(namesText(["A", "B", "C"])).toBe("A, B and C");
+  });
+});
+
+describe("back from the browser (19b-ii)", () => {
+  it("once the new owner has accepted, the box reads the places again and asks for the code as for anybody", async () => {
+    const listeners: ((state: string) => void)[] = [];
+    // The last test of the file: put back mid-file, this breaks every later render.
+    jest.spyOn(AppState, "addEventListener").mockImplementation((_type, handler) => {
+      listeners.push(handler as (state: string) => void);
+      return { remove: () => undefined };
+    });
+    let handedOver = false;
+    const coOwner = { ...PULSE, coOwner: true, handOver: undefined };
+    const server = fakeServer(routes({ "/v1/orgs/mine": () => ({ status: 200, body: { orgs: [handedOver ? coOwner : PULSE], formerOrgs: [] } }) }));
+    await openSettings(server.ask);
+    await fireEvent.press(await screen.findByLabelText("Delete account"));
+    expect(await screen.findByLabelText("Open the website")).toBeTruthy();
+    handedOver = true;
+    await act(() => {
+      for (const listener of listeners) listener("active");
+    });
+    expect(await screen.findByText("You leave Pulse Studio today. To come back later, ask them to add you again.")).toBeTruthy();
+    expect(screen.getByLabelText("Email me a code")).toBeTruthy();
+    expect(screen.queryByLabelText("Open the website")).toBeNull();
   });
 });
