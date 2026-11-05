@@ -63,6 +63,7 @@ import {
   MEMBER_REMOVE_LARGE_WORDS,
   PT_SESSIONS_ENDING_ERROR,
   confirmPtSessionsQuerySchema,
+  giveGymMealPlanToSelectedRequestSchema,
 } from "@app/shared";
 import { PtSessionsEndAsk } from "../pt/changes.js";
 import type { RedisLike } from "../../../redis.js";
@@ -84,6 +85,7 @@ import * as duplicates from "./duplicates.js";
 import * as exporter from "./exportCsv.js";
 import * as notes from "./notes.js";
 import * as tags from "./tags.js";
+import { giveMealPlanSelected, previewMealPlanSelected } from "./mealPlan.js";
 import * as removal from "./removeSelected.js";
 import { deleteSelected, previewDeleteSelected } from "./deleteSelected.js";
 import { keepListed } from "./tidy.js";
@@ -757,6 +759,37 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
       const answer = await tags.tagSelected(listDeps, requireUserId(req), params.gymId, body, notesGate(req, reply));
       if (answer === null) return;
       return await reply.status(200).send(answer);
+    } catch (err) {
+      if (err instanceof SelectionChanged) return await sendSelectionChanged(err, req, reply);
+      throw err;
+    }
+  });
+
+  /** Give a meal plan to the people selected (24a-ii). */
+  app.post("/v1/orgs/:gymId/member-list/selected/meal-plan-preview", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(giveGymMealPlanToSelectedRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    try {
+      const preview = await previewMealPlanSelected(listDeps, requireUserId(req), params.gymId, body, readGate(req, reply));
+      if (preview === null) return;
+      return await reply.status(200).send({ preview });
+    } catch (err) {
+      if (err instanceof SelectionChanged) return await sendSelectionChanged(err, req, reply);
+      throw err;
+    }
+  });
+
+  app.post("/v1/orgs/:gymId/member-list/selected/meal-plan", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(giveGymMealPlanToSelectedRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    try {
+      const given = await giveMealPlanSelected(listDeps, requireUserId(req), params.gymId, body, notesGate(req, reply));
+      if (given === null) return;
+      return await reply.status(200).send({ given });
     } catch (err) {
       if (err instanceof SelectionChanged) return await sendSelectionChanged(err, req, reply);
       throw err;

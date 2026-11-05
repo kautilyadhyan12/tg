@@ -1,12 +1,13 @@
 // The meal plans a gym gives its members (spec Part 6 §16.6; ROADMAP Stage 2 24a-i). Staff with the
 // Plans tick write a week of meals from the food list, or foods of their own, and the server prices
 // every food as a person's own meal plan is priced (34e-ii-b), so a meal logged from it later logs at
-// the numbers the plan shows. A plan is never resized for anybody; who gets it is 24a-ii.
+// the numbers the plan shows. A plan is never resized for anybody; who gets it is
+// `gymMealPlanGivingService.ts` (24a-ii).
 import { createHash } from "node:crypto";
 import {
-  FOOD_ALLERGY_CAUTION, GYM_MEAL_PLANS_MOST, GYM_MEAL_PLAN_WORDS, gymMealPlanResponseSchema, gymMealPlansResponseSchema, isOwnFood,
+  FOOD_ALLERGY_CAUTION, GYM_MEAL_PLANS_MOST, GYM_MEAL_PLAN_WORDS, gymMealPlanResponseSchema, isOwnFood,
   type ChosenItem, type CreateGymMealPlanRequest, type FoodMeasure, type GymMealPlanDay, type GymMealPlanResponse,
-  type GymMealPlanSummary, type GymMealPlansResponse, type MealChoice, type MealItem, type PutGymMealPlanDayRequest,
+  type GymMealPlanSummary, type MealChoice, type MealItem, type PutGymMealPlanDayRequest,
   type RenameGymMealPlanRequest,
 } from "@app/shared";
 import { requirePrivilege, requireWritablePrivilege } from "../orgs/service.js";
@@ -32,7 +33,7 @@ const steady = (value: unknown): string =>
 /** A day's version: every food, amount and number of its meals, in order. */
 const dayVersion = (meals: readonly repo.StoredMeal[]): string => createHash("sha256").update(steady(meals)).digest("hex").slice(0, 16);
 
-function dayOf(day: number, meals: readonly repo.StoredMeal[]): GymMealPlanDay {
+export function dayOf(day: number, meals: readonly repo.StoredMeal[]): GymMealPlanDay {
   const all = totals(meals.flatMap((m) => m.items));
   return {
     day,
@@ -61,10 +62,11 @@ async function readPlan(deps: Pick<NutritionDeps, "sql">, gymId: string, planId:
   return plan;
 }
 
-export async function listGymMealPlans(deps: Pick<NutritionDeps, "sql">, staffId: string, gymId: string, limit: Limit): Promise<GymMealPlansResponse | null> {
+/** The gym's plans; who each is given to is added by `gymMealPlanGivingService.listGymMealPlans`. */
+export async function planSummaries(deps: Pick<NutritionDeps, "sql">, staffId: string, gymId: string, limit: Limit): Promise<GymMealPlanSummary[] | null> {
   await requirePrivilege(deps, gymId, staffId, TICK);
   if (!(await limit())) return null;
-  return gymMealPlansResponseSchema.parse({ plans: (await repo.listPlans(deps.sql, gymId)).map(summaryOf) });
+  return (await repo.listPlans(deps.sql, gymId)).map(summaryOf);
 }
 
 export async function getGymMealPlan(deps: Pick<NutritionDeps, "sql">, staffId: string, gymId: string, planId: string, limit: Limit): Promise<GymMealPlanResponse | null> {
