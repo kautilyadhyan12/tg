@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import { AppState, Linking, Pressable, StyleSheet, View } from "react-native";
 import {
   ACCOUNT_UNDO_DAYS,
+  authEmailSchema,
+  changeEmailResponseSchema,
   deleteAccountResponseSchema,
   displayNameSchema,
   dpdpExportSchema,
@@ -75,7 +77,8 @@ function SettingsBody({ onClose }: { onClose: () => void }) {
         setSince(memberSinceText(answer.data.user.createdAt));
         if (saves.current !== at) return;
         // What the server holds now, as another device may have changed it since this phone last heard.
-        void session.keepName(answer.data.user.displayName).then(() => session.keepUnits(answer.data.user.units));
+        const { email, displayName, units } = answer.data.user;
+        void (email === null ? session.keepName(displayName) : session.keepEmail(email, displayName)).then(() => session.keepUnits(units));
       });
     };
     read();
@@ -117,7 +120,7 @@ function SettingsBody({ onClose }: { onClose: () => void }) {
       <UnitsPart saves={saves} />
       <BoardsPart belongs={memberOf.kind === "ok" && memberOf.orgs.length > 0} />
       <PlacesPart places={memberOf} onAgain={() => { setTries((n) => n + 1); }} />
-      <AccountPart onClose={onClose} />
+      <AccountPart onClose={onClose} saves={saves} />
       <DataPart places={places} onStale={() => { setTries((n) => n + 1); }} />
     </View>
   );
@@ -271,7 +274,157 @@ function PlacesPart({ places, onAgain }: { places: Places; onAgain: () => void }
   );
 }
 
-function AccountPart({ onClose }: { onClose: () => void }) {
+/** Change email (19c), with what happened said under it. The address itself is at the page's head. */
+function EmailLine({ saves }: { saves: RefObject<number> }) {
+  const [open, setOpen] = useState(false);
+  const [said, setSaid] = useState<string | null>(null);
+  return (
+    <View style={styles.email}>
+      <Button label="Change email" kind="link" icon="mail" style={styles.start} onPress={() => { setSaid(null); setOpen(true); }} />
+      <Said words={said} bad={false} />
+      <ChangeEmail
+        open={open}
+        saves={saves}
+        onClose={() => { setOpen(false); }}
+        onChanged={(email) => {
+          setOpen(false);
+          setSaid(changedEmailLine(email));
+        }}
+      />
+    </View>
+  );
+}
+
+/** Said under the address once the account has moved. */
+export function changedEmailLine(email: string): string {
+  return `Your email is now ${email}. Sign in with it from now on.`;
+}
+
+/** Change email (19c; RULINGS 2026-09-23, E): the new address, then the code emailed to it. */
+function ChangeEmail({ open, saves, onClose, onChanged }: { open: boolean; saves: RefObject<number>; onClose: () => void; onChanged: (email: string) => void }) {
+  const { session } = useSession();
+  const [step, setStep] = useState<"address" | "code">("address");
+  const [typed, setTyped] = useState("");
+  const [sentTo, setSentTo] = useState("");
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [resent, setResent] = useState(false);
+  // Each opening starts at its first step, with nothing typed.
+  useEffect(() => {
+    if (!open) return;
+    setStep("address");
+    setTyped("");
+    setSentTo("");
+    setCode("");
+    setProblem(null);
+    setResent(false);
+  }, [open]);
+  const address = authEmailSchema.safeParse(typed);
+  const sendCode = async (to: string, again: boolean) => {
+    if (busy) return;
+    setBusy(true);
+    setProblem(null);
+    setResent(false);
+    const answer = await session.signedIn({ method: "POST", path: "/v1/users/me/email-code", body: { email: to } }, sendCodeResponseSchema);
+    setBusy(false);
+    if (answer.kind === "ok") {
+      setSentTo(to);
+      setCode("");
+      setResent(again);
+      setStep("code");
+    } else {
+      setProblem(answer.kind === "refused" ? answer.message : NO_ANSWER);
+    }
+  };
+  const change = async () => {
+    if (busy || code.length !== 6) return;
+    saves.current += 1;
+    setBusy(true);
+    setProblem(null);
+    const answer = await session.signedIn({ method: "POST", path: "/v1/users/me/email", body: { email: sentTo, code } }, changeEmailResponseSchema);
+    setBusy(false);
+    if (answer.kind === "ok") {
+      await session.keepEmail(answer.data.email, answer.data.displayName);
+      onChanged(answer.data.email);
+      return;
+    }
+    if (answer.kind === "refused") setCode("");
+    setProblem(answer.kind === "refused" ? answer.message : NO_ANSWER);
+  };
+  return (
+    <Sheet open={open} title="Change email" onClose={onClose}>
+      <View style={styles.ask}>
+        {step === "address" ? (
+          <>
+            <Field
+              key="email"
+              label="New email address"
+              bare
+              value={typed}
+              onChange={(value) => {
+                setTyped(value);
+                setProblem(null);
+              }}
+              placeholder="Email address"
+              keyboard="email-address"
+              fills="email"
+              maxLength={254}
+              ready
+              onDone={() => {
+                if (address.success) void sendCode(address.data, false);
+              }}
+            />
+            {typed.trim() !== "" && !address.success ? <Txt kind="small" colour="badText">Enter a valid email address.</Txt> : null}
+            {problem === null ? null : <Txt kind="small" colour="badText">{problem}</Txt>}
+            <View style={styles.stack}>
+              <Button
+                label="Email me a code"
+                wide
+                busy={busy}
+                disabled={!address.success}
+                onPress={() => {
+                  if (address.success) void sendCode(address.data, false);
+                }}
+              />
+              <Button label="Cancel" kind="plain" wide onPress={onClose} />
+            </View>
+          </>
+        ) : (
+          <>
+            <Txt>We emailed a 6-digit code to {sentTo}.</Txt>
+            <Field
+              key="code"
+              label="6-digit code"
+              bare
+              value={code}
+              onChange={(value) => {
+                setCode(value.replace(/\D/g, "").slice(0, 6));
+                setProblem(null);
+              }}
+              placeholder="6-digit code"
+              keyboard="number-pad"
+              fills="one-time-code"
+              maxLength={6}
+              spaced
+              ready
+              onDone={() => void change()}
+            />
+            {problem === null ? null : <Txt kind="small" colour="badText">{problem}</Txt>}
+            <View style={styles.stack}>
+              <Button label="Confirm" wide busy={busy} disabled={code.length !== 6} onPress={() => void change()} />
+              <Button label="Cancel" kind="plain" wide onPress={onClose} />
+            </View>
+            <Button label="Email me a new code" kind="link" busy={busy} style={styles.start} onPress={() => void sendCode(sentTo, true)} />
+            {resent ? <Txt kind="small" colour="goodText">We emailed you a new code.</Txt> : null}
+          </>
+        )}
+      </View>
+    </Sheet>
+  );
+}
+
+function AccountPart({ onClose, saves }: { onClose: () => void; saves: RefObject<number> }) {
   const { session } = useSession();
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -293,6 +446,8 @@ function AccountPart({ onClose }: { onClose: () => void }) {
   };
   return (
     <Part title="Account" icon="settings">
+      <EmailLine saves={saves} />
+      <View style={styles.rule} />
       <View style={styles.between}>
         <Txt kind="small">Sign-in</Txt>
         <Txt kind="strong" style={styles.value}>
@@ -572,6 +727,7 @@ const styles = StyleSheet.create({
   value: { flexShrink: 1, textAlign: "right" },
   rule: { height: 1, backgroundColor: colours.line },
   start: { alignSelf: "flex-start" },
+  email: { gap: 6 },
   ask: { gap: 14 },
   two: { flexDirection: "row", gap: 10 },
   // One above the other, the whole width: a box's words never spill out of its buttons on a small phone or in large text.

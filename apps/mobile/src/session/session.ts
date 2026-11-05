@@ -90,6 +90,8 @@ export interface Session {
   keepSignUpNote: (version: string) => Promise<void>;
   /** The name the server now holds for this person, kept with the sign-in and shown at once. */
   keepName: (displayName: string) => Promise<void>;
+  /** The address and name the server holds after Change email, kept with the sign-in and shown at once. */
+  keepEmail: (email: string, displayName: string) => Promise<void>;
   /** The units the server now holds for this person, kept with the sign-in and shown at once.
    *  `chosen`: the answer to a save from this phone, so they count as chosen from now on. */
   keepUnits: (units: string, chosen?: boolean) => Promise<void>;
@@ -386,6 +388,14 @@ export function createSession({
       const mine = kept;
       if (mine === null || mine.user.displayName === displayName) return;
       mine.user = { ...mine.user, displayName };
+      show({ kind: "in", user: mine.user });
+      await writeKept(mine);
+    },
+
+    keepEmail: async (email, displayName) => {
+      const mine = kept;
+      if (mine === null || (mine.user.email === email && mine.user.displayName === displayName)) return;
+      mine.user = { ...mine.user, email, displayName };
       show({ kind: "in", user: mine.user });
       await writeKept(mine);
     },
