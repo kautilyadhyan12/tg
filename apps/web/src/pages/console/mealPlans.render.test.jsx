@@ -12,7 +12,7 @@ const svc = {
   list: vi.fn(), get: vi.fn(), create: vi.fn(), rename: vi.fn(), remove: vi.fn(), putDay: vi.fn(), measures: vi.fn(), searchFoods: vi.fn(),
   given: vi.fn(), groups: vi.fn(), givePreview: vi.fn(), give: vi.fn(), stop: vi.fn(),
 };
-const NOBODY = { gets: 0, groups: [], members: [] };
+const NOBODY = { gets: 0, groups: [], chosen: 0, members: [] };
 const orgApi = { getMine: vi.fn() };
 vi.mock('../../api/mealPlansApi', () => ({ mealPlansService: svc }));
 vi.mock('../../api/orgsApi', async (importOriginal) => {
@@ -384,6 +384,7 @@ const GIVEN = {
     { audienceId: 'a1', kind: 'everyone', name: null, size: 40, gets: 38, givenBy: 'Sam Lee', givenAt: '2026-11-05T10:00:00.000Z' },
     { audienceId: 'a2', kind: 'tag', name: 'Beginners', size: 3, gets: 3, givenBy: 'Sam Lee', givenAt: '2026-11-05T11:00:00.000Z' },
   ],
+  chosen: 2,
   members: [
     { audienceId: 'a3', entryId: 'e1', name: 'Ann Lee', instead: null, givenBy: 'Sam Lee', givenAt: '2026-11-05T12:00:00.000Z' },
     { audienceId: 'a4', entryId: 'e2', name: 'Bob Ray', instead: 'Muscle week', givenBy: 'Sam Lee', givenAt: '2026-11-05T12:00:00.000Z' },

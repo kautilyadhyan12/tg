@@ -239,6 +239,8 @@ d("who gets a gym's meal plan (real Postgres)", () => {
     await sql`UPDATE gym_meal_plan_audiences SET given_at = now() - interval '1 hour' WHERE plan_id = ${lean}`;
     expect((await myPlan(gymId, bob))?.name).toBe("Lean week");
     expect((await myPlan(gymId, family))?.name).toBe("Lean week");
+    // Off the list, still in the app: Everybody is the list's everybody, and the console counts them out too.
+    expect(await myPlan(gymId, gone)).toBeNull();
     expect((await myPlan(gymId, ann))?.name).toBe("Diabetes care");
     expect(await myPlan(other.org.id, theirMember)).toBeNull();
 
@@ -373,7 +375,7 @@ d("who gets a gym's meal plan (real Postgres)", () => {
     ).preview;
     expect([swap.count, swap.switching, swap.replaces]).toEqual([2, 2, "Muscle week"]);
     await give(gymId, care, owner.cookies, { kind: "tag", tagId: beginners });
-    expect(gymMealPlanGivenResponseSchema.parse(ok(await get(`${planUrl(gymId, muscle)}/given`, owner.cookies))).given).toEqual({ gets: 0, groups: [], members: [] });
+    expect(gymMealPlanGivenResponseSchema.parse(ok(await get(`${planUrl(gymId, muscle)}/given`, owner.cookies))).given).toEqual({ gets: 0, groups: [], chosen: 0, members: [] });
     expect(await planOf(people.tagged)).toBe("Care week");
 
     // Stop giving it to the tag: Ada is back on Gold plan and Gil on Everybody's.
@@ -398,6 +400,52 @@ d("who gets a gym's meal plan (real Postgres)", () => {
     expect(await planOf(people.tagged)).toBe("Muscle week");
     await sql`DELETE FROM gym_member_entry_tags WHERE entry_id = ${people.tagged}`;
     expect(await planOf(people.tagged)).toBe("Lean week");
+  });
+
+  it("staff who give plans but cannot open Members see counts, never names, and no person's plan", { timeout: T }, async () => {
+    const owner = await makeUser("n-owner");
+    const iron = await makeGym(owner, "Giving Names");
+    const gymId = iron.org.id;
+    const cook = await makeUser("n-cook");
+    await memberOn(gymId, cook, null);
+    expect((await post(`/v1/orgs/${gymId}/staff`, { email: cook.email, role: "trainer" }, owner.cookies)).statusCode).toBe(201);
+    expect((await put(`/v1/orgs/${gymId}/staff/${cook.userId}/privileges`, { privileges: ["plans.manage"] }, owner.cookies)).statusCode).toBe(200);
+    const mary = await record(gymId, "Mary Day");
+    await record(gymId, "Bob Secret");
+    const care = await makePlan(gymId, owner.cookies, "Diabetes care");
+    expect((await giveTicked(gymId, care, owner.cookies, [mary])).count).toBe(1);
+
+    const preview = gymMealPlanGivePreviewResponseSchema.parse(ok(await post(`${planUrl(gymId, care)}/give-preview`, { to: { kind: "everyone" } }, cook.cookies))).preview;
+    expect([preview.count, preview.people]).toEqual([2, []]);
+    const given = gymMealPlanGivenResponseSchema.parse(ok(await get(`${planUrl(gymId, care)}/given`, cook.cookies))).given;
+    expect([given.chosen, given.members, given.gets]).toEqual([1, [], 1]);
+    const after = await give(gymId, care, cook.cookies, { kind: "everyone" });
+    expect([after.chosen, after.members]).toEqual([1, []]);
+    expect((await get(`/v1/orgs/${gymId}/member-list/entries/${mary}/meal-plan`, cook.cookies)).statusCode).toBe(403);
+    // The owner, who opens Members, sees who.
+    const owners = gymMealPlanGivenResponseSchema.parse(ok(await get(`${planUrl(gymId, care)}/given`, owner.cookies))).given;
+    expect(owners.members.map((m) => m.name)).toEqual(["Mary Day"]);
+    // A record that is not this gym's current one is not found.
+    expect((await get(`/v1/orgs/${gymId}/member-list/entries/${randomUUID()}/meal-plan`, owner.cookies)).statusCode).toBe(404);
+  });
+
+  it("in the real order, a member ticked and then Everybody given: the box says they switch, and they do", { timeout: T }, async () => {
+    const owner = await makeUser("o-owner");
+    const iron = await makeGym(owner, "Giving Order");
+    const gymId = iron.org.id;
+    const ann = await makeUser("o-ann", "Ann Lee");
+    const annRecord = await record(gymId, "Ann Lee", ann.email);
+    await memberOn(gymId, ann, annRecord);
+    await record(gymId, "Bob Ray");
+    const care = await makePlan(gymId, owner.cookies, "Care week");
+    const lean = await makePlan(gymId, owner.cookies, "Lean week");
+    await giveTicked(gymId, care, owner.cookies, [annRecord]);
+    const box = gymMealPlanGivePreviewResponseSchema.parse(ok(await post(`${planUrl(gymId, lean)}/give-preview`, { to: { kind: "everyone" } }, owner.cookies))).preview;
+    expect([box.count, box.switching, box.already]).toEqual([2, 1, 0]);
+    await give(gymId, lean, owner.cookies, { kind: "everyone" });
+    expect((await myPlan(gymId, ann))?.name).toBe("Lean week");
+    const careGiven = gymMealPlanGivenResponseSchema.parse(ok(await get(`${planUrl(gymId, care)}/given`, owner.cookies))).given;
+    expect(careGiven.members.map((m) => m.instead)).toEqual(["Lean week"]);
   });
 
   it("refuses a bad request, another gym's tag or type, and a plan or group that has gone", { timeout: T }, async () => {

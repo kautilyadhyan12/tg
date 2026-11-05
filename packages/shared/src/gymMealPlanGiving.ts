@@ -45,9 +45,10 @@ export const gymMealPlanGivePreviewSchema = z.object({
   people: z.array(personSchema).max(GYM_MEAL_PLAN_BOX_NAMES_MAX),
   /** Of them, how many get another of the gym's meal plans now: this one takes its place. */
   switching: z.number().int().nonnegative(),
-  /** The plan this group (or, for one person ticked, this person) was given before. */
+  /** The plan this group was given before, which this one replaces there; null for members ticked. */
   replaces: z.string().nullable(),
-  /** Members ticked who are no longer on the list: left out. */
+  /** Members ticked who are no longer on the list: left out. `people` is empty, the count kept, for staff
+   *  who give plans but cannot open Members. */
   gone: z.number().int().nonnegative(),
   /** Already given this plan, ticked again: nothing changes for them. */
   already: z.number().int().nonnegative(),
@@ -86,6 +87,9 @@ export type GymMealPlanGivenMember = z.infer<typeof gymMealPlanGivenMemberSchema
 export const gymMealPlanGivenSchema = z.object({
   gets: z.number().int().nonnegative(),
   groups: z.array(gymMealPlanGivenGroupSchema),
+  /** How many people on the list it is given to by name. */
+  chosen: z.number().int().nonnegative(),
+  /** Those people, for staff who can open Members; empty for anybody else. */
   members: z.array(gymMealPlanGivenMemberSchema),
 }).strict();
 export type GymMealPlanGiven = z.infer<typeof gymMealPlanGivenSchema>;
@@ -131,4 +135,5 @@ export const GYM_MEAL_PLAN_GIVING_WORDS = {
   type_not_found: "This membership was deleted. Pick another.",
   tag_not_found: "This tag was deleted. Pick another.",
   not_member: "You aren’t a member of this gym.",
+  entry_not_found: "This person is no longer on your list.",
 } as const;

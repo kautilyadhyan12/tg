@@ -21,6 +21,9 @@ import { dayOf, planSummaries } from "./gymMealPlanService.js";
 import { NutritionError } from "./service.js";
 
 const TICK = "plans.manage";
+/** Names on the gym's list are read with the list's own tick: Fitness plans alone shows counts. */
+const NAMES = "members.confirm";
+const seesNames = (privileges: readonly string[]): boolean => privileges.includes(NAMES);
 type Limit = () => Promise<boolean>;
 export interface GivingDeps {
   sql: Sql;
@@ -82,6 +85,7 @@ async function planNamed(sql: Sql, gymId: string, planId: string): Promise<{ id:
 function previewOf(
   who: WhoGets, plan: { id: string; name: string }, reached: readonly audiences.PersonRow[],
   extra: { groupName: string | null; replaces: string | null; gone: number },
+  names: boolean,
 ): GymMealPlanGivePreview {
   let switching = 0;
   let already = 0;
@@ -95,7 +99,7 @@ function previewOf(
     plan,
     groupName: extra.groupName,
     count: reached.length,
-    people: reached.slice(0, GYM_MEAL_PLAN_BOX_NAMES_MAX).map((p) => ({ entryId: p.id, name: p.name })),
+    people: names ? reached.slice(0, GYM_MEAL_PLAN_BOX_NAMES_MAX).map((p) => ({ entryId: p.id, name: p.name })) : [],
     switching,
     replaces: extra.replaces,
     gone: extra.gone,
@@ -122,7 +126,7 @@ const sameGroup = (a: Given, b: Given): boolean => a.kind === b.kind && a.target
 export async function previewGiveToGroup(
   deps: GivingDeps, staffId: string, gymId: string, planId: string, group: GymMealPlanGroup, limit: Limit,
 ): Promise<GymMealPlanGivePreview | null> {
-  await requirePrivilege(deps, gymId, staffId, TICK);
+  const { privileges } = await requirePrivilege(deps, gymId, staffId, TICK);
   if (!(await limit())) return null;
   const plan = await planNamed(deps.sql, gymId, planId);
   const groupName = await groupAsked(deps.sql, gymId, group);
@@ -134,14 +138,14 @@ export async function previewGiveToGroup(
   });
   const held = who.given.find((g) => sameGroup(g, asked));
   const names = held !== undefined && held.planId !== plan.id ? await audiences.planNames(deps.sql, gymId) : null;
-  return previewOf(who, plan, reached, { groupName, replaces: held === undefined ? null : names?.get(held.planId) ?? null, gone: 0 });
+  return previewOf(who, plan, reached, { groupName, replaces: held === undefined ? null : names?.get(held.planId) ?? null, gone: 0 }, seesNames(privileges));
 }
 
 /** Give a plan to a group: it takes the place of the one the group held. */
 export async function giveToGroup(
   deps: GivingDeps, staffId: string, gymId: string, planId: string, group: GymMealPlanGroup, limit: Limit,
 ): Promise<GymMealPlanGiven | null> {
-  await requireWritablePrivilege(deps, gymId, staffId, TICK);
+  const { privileges } = await requireWritablePrivilege(deps, gymId, staffId, TICK);
   if (!(await limit())) return null;
   await planNamed(deps.sql, gymId, planId);
   await groupAsked(deps.sql, gymId, group);
@@ -152,15 +156,15 @@ export async function giveToGroup(
     if ((await plans.getPlan(deps.sql, gymId, planId)) === null) throw planGone();
     throw groupGone(group);
   }
-  return await givenReply(deps, gymId, planId);
+  return await givenReply(deps, gymId, planId, seesNames(privileges));
 }
 
-/** The box before Give, for the records ticked (the caller has checked the asker may tick them). */
+/** The box before Give, for the records ticked (the caller has checked the asker opens the list). */
 export async function previewGiveToRecords(deps: GivingDeps, gymId: string, planId: string, ids: readonly string[]): Promise<GymMealPlanGivePreview> {
   const plan = await planNamed(deps.sql, gymId, planId);
   const unique = [...new Set(ids)];
   const who = await whoGets(deps, gymId, unique);
-  return previewOf(who, plan, who.people, { groupName: null, replaces: null, gone: unique.length - who.people.length });
+  return previewOf(who, plan, who.people, { groupName: null, replaces: null, gone: unique.length - who.people.length }, true);
 }
 
 /** Give a plan to the records ticked: each its own row; a past or another gym's record is nobody. */
@@ -175,7 +179,8 @@ export async function giveToRecords(deps: GivingDeps, staffId: string, gymId: st
   }
 }
 
-async function givenReply(deps: GivingDeps, gymId: string, planId: string): Promise<GymMealPlanGiven> {
+/** A plan's Who gets it. Without the list's tick, the people chosen are a count, never names. */
+async function givenReply(deps: GivingDeps, gymId: string, planId: string, showNames: boolean): Promise<GymMealPlanGiven> {
   const who = await whoGets(deps, gymId, null);
   const labels = await audiences.labels(deps.sql, gymId);
   const names = await audiences.planNames(deps.sql, gymId);
@@ -205,7 +210,8 @@ async function givenReply(deps: GivingDeps, gymId: string, planId: string): Prom
       givenBy: labels.get(g.audienceId)?.givenBy ?? null,
       givenAt: g.givenAt.toISOString(),
     })),
-    members: members.filter((m) => byId.has(m.entryId)),
+    chosen: members.length,
+    members: showNames ? members.filter((m) => byId.has(m.entryId)) : [],
   });
 }
 
@@ -218,21 +224,21 @@ export async function groupChoices(deps: GivingDeps, staffId: string, gymId: str
 
 /** A plan's Given to. */
 export async function givenOf(deps: GivingDeps, staffId: string, gymId: string, planId: string, limit: Limit): Promise<GymMealPlanGiven | null> {
-  await requirePrivilege(deps, gymId, staffId, TICK);
+  const { privileges } = await requirePrivilege(deps, gymId, staffId, TICK);
   if (!(await limit())) return null;
   await planNamed(deps.sql, gymId, planId);
-  return await givenReply(deps, gymId, planId);
+  return await givenReply(deps, gymId, planId, seesNames(privileges));
 }
 
 /** Stop giving a plan to some of its groups or people. Stopped already is not a fault. */
 export async function stopGiving(
   deps: GivingDeps, staffId: string, gymId: string, planId: string, audienceIds: readonly string[], limit: Limit,
 ): Promise<GymMealPlanGiven | null> {
-  await requireWritablePrivilege(deps, gymId, staffId, TICK);
+  const { privileges } = await requireWritablePrivilege(deps, gymId, staffId, TICK);
   if (!(await limit())) return null;
   await planNamed(deps.sql, gymId, planId);
   await audiences.stop(deps.sql, gymId, planId, audienceIds);
-  return await givenReply(deps, gymId, planId);
+  return await givenReply(deps, gymId, planId, seesNames(privileges));
 }
 
 /** The Plans list: each plan with who it is given to and how many on the list get it now. */
@@ -270,19 +276,24 @@ async function reachOfPlans(
   return out;
 }
 
-/** A person's page: the plan this record gets, and through which group. */
+/** A person's page: the plan this record gets, and through which group. For staff who open the list
+ *  and give plans; a record that is not one of this gym's current ones is not found. */
 export async function planForRecord(deps: GivingDeps, staffId: string, gymId: string, entryId: string, limit: Limit): Promise<GymMealPlanForEntryResponse | null> {
   await requirePrivilege(deps, gymId, staffId, TICK);
+  await requirePrivilege(deps, gymId, staffId, NAMES);
   if (!(await limit())) return null;
-  const got = (await whoGets(deps, gymId, [entryId])).got.get(entryId);
+  const who = await whoGets(deps, gymId, [entryId]);
+  if (who.people.length === 0) throw new NutritionError(404, "entry_not_found", GYM_MEAL_PLAN_GIVING_WORDS.entry_not_found);
+  const got = who.got.get(entryId);
   if (got === undefined) return gymMealPlanForEntryResponseSchema.parse({ plan: null, through: null });
   const plan = await planNamed(deps.sql, gymId, got.planId);
   const name = got.kind === "membership_type" || got.kind === "tag" ? (await audiences.labels(deps.sql, gymId)).get(got.audienceId)?.name ?? null : null;
   return gymMealPlanForEntryResponseSchema.parse({ plan, through: { kind: got.kind, name } });
 }
 
-/** The member's own: the plan the gym gives them, as written, or none. A record the list cannot say
- *  for certain is theirs (a family sharing one email) gives them nothing of its own: only Everybody. */
+/** The member's own: the plan the gym gives them, as written, or none. Only somebody on the gym's list
+ *  gets one, as the console counts: their own record's; where the list holds them but cannot say which
+ *  record is theirs (a family sharing one email), only Everybody's; off the list, nothing. */
 export async function myGymMealPlan(deps: GivingDeps, userId: string, gymId: string, limit: Limit): Promise<MemberGymMealPlanResponse | null> {
   if (!(await audiences.isLiveMember(deps.sql, gymId, userId))) {
     throw new NutritionError(404, "not_member", GYM_MEAL_PLAN_GIVING_WORDS.not_member);
@@ -291,9 +302,11 @@ export async function myGymMealPlan(deps: GivingDeps, userId: string, gymId: str
   const member = (await membersAgainstList(deps.sql, gymId, { email: null, phone: null, userIds: [userId] })).find((m) => m.userId === userId);
   const entryId = member === undefined ? null : currentRecordOf(member);
   const got =
-    entryId === null
-      ? (await audiences.givenOfGym(deps.sql, gymId, [])).find((g) => g.kind === "everyone")
-      : (await whoGets(deps, gymId, [entryId])).got.get(entryId);
+    entryId !== null
+      ? (await whoGets(deps, gymId, [entryId])).got.get(entryId)
+      : member?.unsure !== null && member?.unsure !== undefined
+        ? (await audiences.givenOfGym(deps.sql, gymId, [])).find((g) => g.kind === "everyone")
+        : undefined;
   if (got === undefined) return memberGymMealPlanResponseSchema.parse({ plan: null });
   const plan = await plans.getPlan(deps.sql, gymId, got.planId);
   // Deleted between the two reads: nothing is given now.

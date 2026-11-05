@@ -20,7 +20,7 @@ function PreviewLines({ preview, words, kind }) {
   const to = kind === null ? null : toLabel({ kind, name: preview.groupName });
   return (
     <div className="flex flex-col gap-2" data-testid="give-preview">
-      <p className="c-s15 c-t1">{GIVE_WORDS.willGet(preview.count, preview.plan.name, words)}</p>
+      <p className="c-s15 c-t1">{GIVE_WORDS.willGet(preview.count, preview.plan.name, words, preview.people.length > 0)}</p>
       {preview.count > 0 ? <Names people={preview.people} total={preview.count} testId="give-names" /> : null}
       {preview.count > 0 && preview.already === preview.count ? <p className="c-s14 c-t2">{GIVE_WORDS.already(preview.plan.name, preview.count)}</p> : null}
       {preview.switching > 0 ? <p className="c-s14 c-t2">{GIVE_WORDS.switching(preview.switching, preview.plan.name)}</p> : null}
@@ -244,7 +244,7 @@ export function GivenSection({ gymId, plan, given, readOnly, words, membersTo, m
     }
   };
 
-  const nothing = given !== null && given.groups.length === 0 && given.members.length === 0;
+  const nothing = given !== null && given.groups.length === 0 && given.chosen === 0;
   return (
     <section className="c-card p-5 md:p-6 flex flex-col gap-4" aria-label={GIVE_WORDS.heading} data-testid="given">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -315,6 +315,12 @@ export function GivenSection({ gymId, plan, given, readOnly, words, membersTo, m
             );
           })}
         </ul>
+      ) : null}
+      {given !== null && given.chosen > 0 && given.members.length === 0 ? (
+        <div className="flex flex-col gap-1" data-testid="given-members">
+          <h3 className="c-s15 c-w6 c-t1">{GIVE_WORDS.chosen(given.chosen)}</h3>
+          <p className="c-s14 c-t2">{GIVE_WORDS.namesHidden}</p>
+        </div>
       ) : null}
       {given !== null && given.members.length > 0 ? (
         <div className="flex flex-col gap-2" data-testid="given-members">
