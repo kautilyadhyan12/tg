@@ -47,6 +47,7 @@ const summaryOf = (p: repo.StoredGymPlan): GymMealPlanSummary => ({
   name: p.name,
   writtenBy: p.writtenBy,
   changedBy: p.changedBy,
+  createdAt: p.createdAt.toISOString(),
   updatedAt: p.updatedAt.toISOString(),
   meals: p.days.reduce((n, meals) => n + meals.length, 0),
 });

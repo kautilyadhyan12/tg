@@ -189,8 +189,10 @@ function FoodSearch({ onPick, disabled }) {
 }
 
 /** `start`: the meal's foods as rows, empty for a new meal; `searchFirst`: open on the search. `onSave(rows)` saves the meal to the
- *  plan and settles once the server has answered; it throws to keep the box open. */
-export default function MealPlanMealBox({ gymId, planId, day, dayName, at, mealType, start, searchFirst = false, onSave, onClose }) {
+ *  plan and settles once the server has answered; it throws to keep the box open. `onDirty(held)`: whether the box holds foods
+ *  not saved yet. `leaving`: the page asks to go somewhere else; the box asks "Save your changes?" and answers with
+ *  `onLeave()` (go on without saving) or `onStay()` (keep editing). */
+export default function MealPlanMealBox({ gymId, planId, day, dayName, at, mealType, start, searchFirst = false, onSave, onClose, onDirty, leaving = false, onLeave, onStay }) {
   const [rows, setRows] = useState(start);
   // A new meal, or a meal picked again under Add a meal, opens on the search.
   const [searching, setSearching] = useState(start.length === 0 || searchFirst);
@@ -201,6 +203,13 @@ export default function MealPlanMealBox({ gymId, planId, day, dayName, at, mealT
   /** Something in the box was changed, added or taken off: closing it asks first. */
   const [dirty, setDirty] = useState(false);
   const mealName = mealTypeName(mealType);
+  /** The amounts of the foods already in the meal could not be read; `tries` reads them again. */
+  const [amountsFailed, setAmountsFailed] = useState(false);
+  const [tries, setTries] = useState(0);
+  const held = dirty && rows.length > 0;
+  useEffect(() => {
+    onDirty?.(held);
+  }, [held, onDirty]);
 
   // A meal already in the plan: its foods' own measures, to change their amounts.
   useEffect(() => {
@@ -209,6 +218,7 @@ export default function MealPlanMealBox({ gymId, planId, day, dayName, at, mealT
     mealPlansService.measures(gymId, planId, day, at).then(
       (all) => {
         if (!live) return;
+        setAmountsFailed(false);
         setRows((now) =>
           now.map((r) => {
             const i = start.findIndex((s) => s.key === r.key);
@@ -216,12 +226,14 @@ export default function MealPlanMealBox({ gymId, planId, day, dayName, at, mealT
           }),
         );
       },
-      () => undefined,
+      () => {
+        if (live) setAmountsFailed(true);
+      },
     );
     return () => {
       live = false;
     };
-  }, [gymId, planId, day, at, start]);
+  }, [gymId, planId, day, at, start, tries]);
 
   const edit = (key, change) => {
     setRows((now) => now.map((r) => (r.key === key ? { ...r, ...change } : r)));
@@ -258,7 +270,7 @@ export default function MealPlanMealBox({ gymId, planId, day, dayName, at, mealT
     else onClose();
   };
 
-  if (asking) {
+  if (asking || leaving) {
     return (
       <div className="c-card p-5 flex flex-col gap-3" role="dialog" aria-label={PLAN_WORDS.leaveAsk}>
         <h3 className="c-s16 c-w6 c-t1">{PLAN_WORDS.leaveAsk}</h3>
@@ -272,8 +284,19 @@ export default function MealPlanMealBox({ gymId, planId, day, dayName, at, mealT
           <button type="button" onClick={save} disabled={saving} className="c-btn c-btn-p">
             Save to plan
           </button>
-          <button type="button" onClick={onClose} disabled={saving} className="c-btn c-btn-quiet">
+          <button type="button" onClick={leaving ? onLeave : onClose} disabled={saving} className="c-btn c-btn-quiet">
             Leave without saving
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setAsking(false);
+              if (leaving) onStay?.();
+            }}
+            disabled={saving}
+            className="c-btn c-btn-link"
+          >
+            Keep editing
           </button>
         </div>
       </div>
@@ -289,6 +312,16 @@ export default function MealPlanMealBox({ gymId, planId, day, dayName, at, mealT
         </button>
       </div>
 
+      {amountsFailed ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="c-s14" role="alert" style={{ color: 'var(--bad)' }}>
+            {'We couldn’t load the amounts.'}
+          </p>
+          <button type="button" onClick={() => setTries((n) => n + 1)} className="c-btn c-btn-s c-btn-sm">
+            Try again
+          </button>
+        </div>
+      ) : null}
       {rows.length > 0 ? (
         <ul className="flex flex-col" aria-label={`Foods in ${mealName}`}>
           {rows.map((r, i) => (

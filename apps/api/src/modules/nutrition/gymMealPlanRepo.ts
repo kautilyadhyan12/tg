@@ -22,6 +22,7 @@ export interface StoredGymPlan {
   recentChanges: readonly string[];
   writtenBy: string | null;
   changedBy: string | null;
+  createdAt: Date;
   updatedAt: Date;
 }
 
@@ -32,6 +33,7 @@ interface PlanRow {
   recent_changes: string[] | null;
   written_by: string | null;
   changed_by: string | null;
+  created_at: Date;
   updated_at: Date;
 }
 
@@ -42,12 +44,13 @@ const asPlan = (r: PlanRow): StoredGymPlan => ({
   recentChanges: r.recent_changes ?? [],
   writtenBy: r.written_by,
   changedBy: r.changed_by,
+  createdAt: r.created_at,
   updatedAt: r.updated_at,
 });
 
 /** A name is shown only for an account still in use, as a post's author is. */
 const PLAN_COLUMNS = (sql: Sql) => sql`
-  p.id, p.name, p.days, p.recent_changes, p.updated_at,
+  p.id, p.name, p.days, p.recent_changes, p.created_at, p.updated_at,
   CASE WHEN w.status = 'active' THEN nullif(btrim(w.display_name), '') END AS written_by,
   CASE WHEN c.status = 'active' THEN nullif(btrim(c.display_name), '') END AS changed_by`;
 
@@ -89,8 +92,9 @@ export async function createPlan(sql: Sql, gymId: string, staffId: string, planI
 
 async function createLocked(sql: Sql, gymId: string, staffId: string, planId: string, name: string, most: number): Promise<CreateOutcome> {
   return await sql.begin(async (tx) => {
-    // One gym's new plans one at a time: two at once cannot both pass the count.
-    await tx`SELECT id FROM gyms WHERE id = ${gymId} FOR UPDATE`;
+    // One gym's new plans one at a time: two at once cannot both pass the count. NO KEY UPDATE, so the
+    // gym's other writes (a check-in, a booking) never wait on it.
+    await tx`SELECT id FROM gyms WHERE id = ${gymId} FOR NO KEY UPDATE`;
     const held = await tx<{ gym_id: string }[]>`SELECT gym_id FROM gym_meal_plans WHERE id = ${planId}`;
     const owner = held[0];
     if (owner !== undefined) return owner.gym_id === gymId ? "already" : "elsewhere";

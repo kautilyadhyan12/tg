@@ -77,6 +77,8 @@ export const gymMealPlanSummarySchema = z.object({
   name: z.string().min(1),
   writtenBy: byNameSchema,
   changedBy: byNameSchema,
+  createdAt: z.string().datetime({ offset: true }),
+  /** The same as `createdAt` until the plan is first changed. */
   updatedAt: z.string().datetime({ offset: true }),
   /** How many meals the week holds. */
   meals: z.number().int().nonnegative(),

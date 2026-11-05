@@ -355,4 +355,35 @@ d("the meal plans a gym gives its members (real Postgres)", () => {
     const listed = gymMealPlansResponseSchema.parse(JSON.parse((await send("GET", plansUrl(gym.org.id), owner.cookies)).body));
     expect(listed.plans).toHaveLength(GYM_MEAL_PLANS_MOST);
   });
+
+  it("a gym not on a plan reads its plans and changes none; each limit answers 429 once used up; a plan says when it was made", { timeout: T }, async () => {
+    const owner = await makeUser("l-owner");
+    const gym = await makeGym(owner, "Plans Lapsed Gym");
+    const plan = await create(gym.org.id, owner.cookies, "Kept week");
+    expect(plan.createdAt).toBe(plan.updatedAt);
+    const changed = parsed(await putDay(gym.org.id, plan.id, 1, owner.cookies, MONDAY));
+    expect(Date.parse(changed.updatedAt)).toBeGreaterThan(Date.parse(changed.createdAt));
+
+    await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${gym.org.id}`;
+    expect((await send("GET", planUrl(gym.org.id, plan.id), owner.cookies)).statusCode).toBe(200);
+    for (const res of [
+      await post(plansUrl(gym.org.id), { id: randomUUID(), name: "New week" }, owner.cookies),
+      await send("PATCH", planUrl(gym.org.id, plan.id), owner.cookies, { name: "Renamed" }),
+      await putDay(gym.org.id, plan.id, 1, owner.cookies, [], changed.days[0]?.version),
+      await send("DELETE", planUrl(gym.org.id, plan.id), owner.cookies),
+    ]) {
+      expect(res.statusCode, res.body).toBe(409);
+      expect(errorOf(res)).toBe("gym_not_on_plan");
+    }
+    expect((await stored(plan.id))?.name).toBe("Kept week");
+
+    const other = await makeUser("l-limits");
+    const busy = await makeGym(other, "Plans Limits Gym");
+    for (let i = 0; i < 600; i += 1) await redis.incrWithTtl(`rl:gym_meal_plans_write:id:${other.userId}`, 3600);
+    expect((await post(plansUrl(busy.org.id), { id: randomUUID(), name: "Too many" }, other.cookies)).statusCode).toBe(429);
+    for (let i = 0; i < 1200; i += 1) await redis.incrWithTtl(`rl:gym_meal_plans_read:id:${other.userId}`, 3600);
+    expect((await send("GET", plansUrl(busy.org.id), other.cookies)).statusCode).toBe(429);
+    // The limit is asked after the tick: somebody else's count is never charged by a stranger.
+    expect((await send("GET", plansUrl(busy.org.id), owner.cookies)).statusCode).toBe(404);
+  });
 });

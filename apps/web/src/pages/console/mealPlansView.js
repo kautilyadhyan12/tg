@@ -47,11 +47,14 @@ function dayOf(iso, timeZone) {
   }
 }
 
-/** Who wrote it and when it last changed, on the gym's own calendar. */
+/** Who wrote it and when it was made or last changed, on the gym's own calendar. */
 export function byLine(plan, timeZone) {
   const when = dayOf(plan.updatedAt, timeZone);
   const by = plan.writtenBy === null ? null : `By ${plan.writtenBy}`;
-  const changed = plan.changedBy !== null && plan.changedBy !== plan.writtenBy ? `Changed ${when} by ${plan.changedBy}` : `Changed ${when}`;
+  const neverChanged = Date.parse(plan.updatedAt) <= Date.parse(plan.createdAt);
+  const changed = neverChanged
+    ? `Made ${dayOf(plan.createdAt, timeZone)}`
+    : plan.changedBy !== null && plan.changedBy !== plan.writtenBy ? `Changed ${when} by ${plan.changedBy}` : `Changed ${when}`;
   return by === null ? changed : `${by} · ${changed}`;
 }
 

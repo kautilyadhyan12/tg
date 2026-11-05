@@ -241,6 +241,10 @@ function PlanPage({ org, gymId, planId, readOnly, notice: startNotice }) {
   const [notice, setNotice] = useState(startNotice);
   const [error, setError] = useState(null);
   const [name, setName] = useState('');
+  /** The open meal box holds foods not saved yet. */
+  const [boxHeld, setBoxHeld] = useState(false);
+  /** Somewhere else was pressed while it did: `{ then }`, done once the box's question is answered. */
+  const [leaving, setLeaving] = useState(null);
 
   const load = useCallback(
     () =>
@@ -258,6 +262,31 @@ function PlanPage({ org, gymId, planId, readOnly, notice: startNotice }) {
     [gymId, planId],
   );
   useReadOnReturn(load);
+
+  // While a meal box holds unsaved foods, a link anywhere (the menu, All meal plans) asks first, and so does
+  // closing the tab.
+  useEffect(() => {
+    if (!boxHeld) return undefined;
+    const onClick = (e) => {
+      const a = e.target instanceof Element ? e.target.closest('a[href]') : null;
+      if (a === null || a.closest('[data-testid="meal-box"]') !== null) return;
+      const href = a.getAttribute('href');
+      if (href === null || !href.startsWith('/')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setLeaving({ then: () => navigate(href) });
+    };
+    const onUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    document.addEventListener('click', onClick, true);
+    window.addEventListener('beforeunload', onUnload);
+    return () => {
+      document.removeEventListener('click', onClick, true);
+      window.removeEventListener('beforeunload', onUnload);
+    };
+  }, [boxHeld, navigate]);
 
   const plan = state.plan;
   if (state.refused) {
@@ -291,6 +320,15 @@ function PlanPage({ org, gymId, planId, readOnly, notice: startNotice }) {
     setNotice(n);
     setError(e);
   };
+  /** Anything pressed while the meal box holds unsaved foods: the box's "Save your changes?" first. */
+  const guard = (action) => () => {
+    if (open?.kind === 'meal' && boxHeld) setLeaving({ then: action });
+    else action();
+  };
+  const closeBox = () => {
+    setOpen(null);
+    setBoxHeld(false);
+  };
   const failed = async (err, fallback) => {
     say(null, errorText(err, fallback));
     // Changed or deleted by someone else meanwhile: show what is true now.
@@ -300,15 +338,26 @@ function PlanPage({ org, gymId, planId, readOnly, notice: startNotice }) {
     const next = await mealPlansService.putDay(gymId, planId, day.day, { changeId: newId(), version: day.version, meals });
     setState((s) => ({ ...s, plan: next }));
   };
-  const saveMeal = async (at, mealType, rows) => {
+  /** A meal saved from its box: the day as it was when the box opened, at that day's version, so a change made
+   *  by somebody else since is refused and never laid over. Refused or deleted, the box closes and the day is
+   *  shown as it is now. */
+  const saveMeal = async (opened, rows) => {
     try {
-      await saveDay(dayMeals(day, at, mealType, rows));
+      const meals = dayMeals({ meals: opened.before }, opened.at, opened.mealType, rows);
+      const next = await mealPlansService.putDay(gymId, planId, opened.day, { changeId: newId(), version: opened.version, meals });
+      setState((s) => ({ ...s, plan: next }));
     } catch (err) {
-      if (errorCode(err) === 'plan_changed') await load();
-      throw err;
+      if (errorCode(err) !== 'plan_changed' && errorStatus(err) !== 404) throw err;
+      closeBox();
+      setLeaving(null);
+      await failed(err, "We couldn't save this meal. Please try again.");
+      return;
     }
-    setOpen(null);
-    say(PLAN_WORDS.mealSaved(mealTypeName(mealType), dayName));
+    closeBox();
+    const then = leaving?.then;
+    setLeaving(null);
+    then?.();
+    say(PLAN_WORDS.mealSaved(mealTypeName(opened.mealType), DAY_NAMES[opened.day - 1]));
   };
   const removeMeal = async (at) => {
     const mealType = day.meals[at]?.mealType;
@@ -349,30 +398,69 @@ function PlanPage({ org, gymId, planId, readOnly, notice: startNotice }) {
   };
   const openMeal = (at, searchFirst = false) => {
     say(null);
-    setOpen({ kind: 'meal', at, mealType: day.meals[at].mealType, start: day.meals[at].items.map((i) => rowOfItem(i, null)), searchFirst });
+    const meal = day.meals[at];
+    setOpen({ kind: 'meal', at, mealType: meal.mealType, start: meal.items.map((i) => rowOfItem(i, null)), searchFirst, day: day.day, version: day.version, before: day.meals });
   };
   /** A meal picked under Add a meal: the day's own Breakfast, Lunch or Dinner where it has one, else a new meal. */
   const pickMeal = (mealType) => {
     const join = mealToJoin(day, mealType);
     if (join >= 0) openMeal(join, true);
-    else setOpen({ kind: 'meal', at: null, mealType });
+    else setOpen({ kind: 'meal', at: null, mealType, start: [], searchFirst: false, day: day.day, version: day.version, before: day.meals });
   };
-  const box = (at, mealType, start, searchFirst = false) => (
+  const box = (opened) => (
     <MealPlanMealBox
-      key={`${String(dayAt)}-${String(at)}-${mealType}`}
+      key={`${String(opened.day)}-${String(opened.at)}-${opened.mealType}`}
       gymId={gymId}
       planId={planId}
-      day={day.day}
-      dayName={dayName}
-      at={at}
-      mealType={mealType}
-      start={start}
-      searchFirst={searchFirst}
-      onSave={(rows) => saveMeal(at, mealType, rows)}
-      onClose={() => setOpen(null)}
+      day={opened.day}
+      dayName={DAY_NAMES[opened.day - 1]}
+      at={opened.at}
+      mealType={opened.mealType}
+      start={opened.start}
+      searchFirst={opened.searchFirst}
+      onSave={(rows) => saveMeal(opened, rows)}
+      onClose={closeBox}
+      onDirty={setBoxHeld}
+      leaving={leaving !== null}
+      onLeave={() => {
+        const then = leaving?.then;
+        setLeaving(null);
+        closeBox();
+        then?.();
+      }}
+      onStay={() => setLeaving(null)}
     />
   );
   const full = day.meals.length >= MOST_PLAN_MEALS;
+  // The day's meals, with an open meal's box in its place. The box keeps one key wherever it sits, so a read of the
+  // plan made under it (staff coming back to the window) never throws away what is typed in it; where the day has
+  // changed since the box opened, every meal is shown as it is now and the box stays at its place.
+  const editing = open?.kind === 'meal' && open.at !== null ? open : null;
+  const sameDay = editing !== null && editing.day === day.day && editing.version === day.version;
+  const mealItems = day.meals.flatMap((meal, at) =>
+    sameDay && editing.at === at
+      ? []
+      : [
+          <MealCard
+            key={`${meal.mealType}-${String(at)}`}
+            meal={meal}
+            at={at}
+            dayName={dayName}
+            readOnly={readOnly}
+            busy={busy}
+            asking={open?.kind === 'remove' && open.at === at}
+            onAsk={(i) =>
+              guard(() => {
+                say(null);
+                setOpen(i === null ? null : { kind: 'remove', at: i });
+              })()
+            }
+            onChange={(i) => guard(() => openMeal(i))()}
+            onRemove={removeMeal}
+          />,
+        ],
+  );
+  if (editing !== null) mealItems.splice(Math.min(editing.at, mealItems.length), 0, <li key="meal-box">{box(editing)}</li>);
 
   return (
     <Page>
@@ -389,11 +477,11 @@ function PlanPage({ org, gymId, planId, readOnly, notice: startNotice }) {
           <div className="flex gap-2 self-start md:self-auto">
             <button
               type="button"
-              onClick={() => {
+              onClick={guard(() => {
                 say(null);
                 setName(plan.name);
                 setOpen({ kind: 'rename' });
-              }}
+              })}
               className="c-btn c-btn-s c-btn-sm"
             >
               <Pencil aria-hidden="true" className="w-4 h-4" />
@@ -401,10 +489,10 @@ function PlanPage({ org, gymId, planId, readOnly, notice: startNotice }) {
             </button>
             <button
               type="button"
-              onClick={() => {
+              onClick={guard(() => {
                 say(null);
                 setOpen({ kind: 'delete' });
-              }}
+              })}
               className="c-btn c-btn-quiet c-btn-sm"
             >
               <Trash2 aria-hidden="true" className="w-4 h-4" />
@@ -456,11 +544,11 @@ function PlanPage({ org, gymId, planId, readOnly, notice: startNotice }) {
             role="tab"
             aria-selected={dayAt === i}
             aria-label={DAY_NAMES[i]}
-            onClick={() => {
+            onClick={guard(() => {
               setDayAt(i);
               setOpen((o) => (o?.kind === 'rename' || o?.kind === 'delete' ? o : null));
               say(null);
-            }}
+            })}
             className={dayAt === i ? 'c-utab c-utab-on' : 'c-utab'}
           >
             {short}
@@ -474,33 +562,9 @@ function PlanPage({ org, gymId, planId, readOnly, notice: startNotice }) {
           <p className="c-s14 c-t2">{day.meals.length === 0 ? PLAN_WORDS.dayEmpty(dayName) : numbersLine(day.planned)}</p>
         </div>
         {open?.kind === 'meal' || open?.kind === 'pick' || open?.kind === 'remove' || open === null ? <Notice notice={notice} error={error} /> : null}
-        {day.meals.length > 0 ? (
-          <ul className="flex flex-col gap-3">
-            {day.meals.map((meal, at) =>
-              open?.kind === 'meal' && open.at === at ? (
-                <li key={`${meal.mealType}-${String(at)}`}>{box(at, open.mealType, open.start, open.searchFirst === true)}</li>
-              ) : (
-                <MealCard
-                  key={`${meal.mealType}-${String(at)}`}
-                  meal={meal}
-                  at={at}
-                  dayName={dayName}
-                  readOnly={readOnly}
-                  busy={busy}
-                  asking={open?.kind === 'remove' && open.at === at}
-                  onAsk={(i) => {
-                    say(null);
-                    setOpen(i === null ? null : { kind: 'remove', at: i });
-                  }}
-                  onChange={openMeal}
-                  onRemove={removeMeal}
-                />
-              ),
-            )}
-          </ul>
-        ) : null}
+        {mealItems.length > 0 ? <ul className="flex flex-col gap-3">{mealItems}</ul> : null}
 
-        {!readOnly && open?.kind === 'meal' && open.at === null ? box(null, open.mealType, []) : null}
+        {!readOnly && open?.kind === 'meal' && open.at === null ? box(open) : null}
         {!readOnly && open?.kind === 'pick' ? (
           <div className="c-card p-5 flex flex-col gap-3" data-testid="pick-meal">
             <h3 className="c-s16 c-w6 c-t1">{`Add a meal to ${dayName}`}</h3>
@@ -522,10 +586,10 @@ function PlanPage({ org, gymId, planId, readOnly, notice: startNotice }) {
           ) : (
             <button
               type="button"
-              onClick={() => {
+              onClick={guard(() => {
                 say(null);
                 setOpen({ kind: 'pick' });
-              }}
+              })}
               className="c-btn c-btn-soft self-start"
             >
               <Plus aria-hidden="true" className="w-[18px] h-[18px]" />

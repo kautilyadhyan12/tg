@@ -50,7 +50,7 @@ const day = (n, meals = []) => {
 const planOf = (days = {}, over = {}) => {
   const week = [1, 2, 3, 4, 5, 6, 7].map((n) => day(n, days[n] ?? []));
   return {
-    id: 'p1', name: 'Lean week', writtenBy: 'Sam Lee', changedBy: 'Sam Lee', updatedAt: '2026-11-05T10:00:00.000Z',
+    id: 'p1', name: 'Lean week', writtenBy: 'Sam Lee', changedBy: 'Sam Lee', createdAt: '2026-11-05T10:00:00.000Z', updatedAt: '2026-11-05T10:00:00.000Z',
     meals: week.reduce((n, d) => n + d.meals.length, 0), days: week, caution: FOOD_ALLERGY_CAUTION, ...over,
   };
 };
@@ -187,12 +187,14 @@ describe('a meal is saved to the day and the meal it was opened on, the rest of 
 
 describe('the page', () => {
   it('lists the gym’s plans, and New meal plan makes one and opens it', async () => {
-    svc.list.mockResolvedValue({ plans: [{ id: 'p0', name: 'Bulk week', writtenBy: 'Sam Lee', changedBy: 'Priya Shah', updatedAt: '2026-11-04T10:00:00.000Z', meals: 21 }] });
+    svc.list.mockResolvedValue({ plans: [{ id: 'p0', name: 'Bulk week', writtenBy: 'Sam Lee', changedBy: 'Priya Shah', createdAt: '2026-11-01T10:00:00.000Z', updatedAt: '2026-11-04T10:00:00.000Z', meals: 21 }, { id: 'p2', name: 'Cut week', writtenBy: 'Sam Lee', changedBy: 'Sam Lee', createdAt: '2026-11-03T10:00:00.000Z', updatedAt: '2026-11-03T10:00:00.000Z', meals: 0 }] });
     svc.create.mockResolvedValue(planOf({}, { id: 'p1', name: 'Lean week', meals: 0 }));
     svc.get.mockResolvedValue(planOf({}, { meals: 0 }));
     open('/console/iron-house/plans');
     await screen.findByRole('link', { name: 'Bulk week' });
     expect(screen.getByText('21 meals a week · By Sam Lee · Changed 4 Nov by Priya Shah')).toBeTruthy();
+    // A plan nobody has changed since it was made says so.
+    expect(screen.getByText('No meals yet · By Sam Lee · Made 3 Nov')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'New meal plan' }));
     const made = within(screen.getByTestId('new-plan'));
     fireEvent.click(made.getByRole('button', { name: 'Make plan' }));
@@ -227,7 +229,7 @@ describe('the page', () => {
     expect(svc.putDay.mock.calls[0][3].meals).toEqual([{ mealType: 'lunch', items: [{ canonical: 'rice_white_cooked', grams: 180 }] }]);
   });
 
-  it('a day changed by somebody else meanwhile: the save is refused, said in the box, and the plan read again', async () => {
+  it('a day changed by somebody else meanwhile: the save is refused, the box closes, and the page says why with the day read again', async () => {
     svc.get.mockResolvedValueOnce(planOf({ 1: [meal('lunch', [RICE])] })).mockResolvedValue(planOf({ 1: [meal('lunch', [RICE]), meal('dinner', [DAL])] }));
     svc.measures.mockResolvedValue([[{ id: 'g', name: 'g', grams: 1 }]]);
     svc.putDay.mockRejectedValue(refusal(409, 'plan_changed', 'This day was changed by someone else. Open it again to make this change.'));
@@ -236,8 +238,11 @@ describe('the page', () => {
     fireEvent.click(within(mealCard('Lunch')).getByRole('button', { name: 'Change Lunch' }));
     fireEvent.change(await box().findByRole('spinbutton', { name: 'How much Rice (white, cooked)' }), { target: { value: '150' } });
     fireEvent.click(box().getByRole('button', { name: 'Save to plan' }));
-    expect((await box().findByRole('alert')).textContent).toBe('This day was changed by someone else. Open it again to make this change.');
+    // Refused, the box closes and the page says why, beside the day as it is now.
+    expect((await screen.findByRole('alert')).textContent).toBe('This day was changed by someone else. Open it again to make this change.');
     await waitFor(() => expect(svc.get).toHaveBeenCalledTimes(2));
+    expect(screen.queryByTestId('meal-box')).toBeNull();
+    expect(await screen.findByRole('heading', { name: 'Dinner', level: 3 })).toBeTruthy();
   });
 
   it('Delete asks, names what goes, and takes staff back to the list', async () => {
@@ -266,5 +271,102 @@ describe('the page', () => {
     open();
     expect(await screen.findByText('This meal plan was deleted.')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'All meal plans' }).getAttribute('href')).toBe('/console/iron-house/plans');
+  });
+});
+
+describe('a meal box is never saved over a day changed since, and its unsaved foods are never lost without a question', () => {
+  const MONDAY = [meal('breakfast', [BANANA]), meal('lunch', [RICE]), meal('dinner', [DAL])];
+  const openLunchAndChange = async () => {
+    open();
+    await screen.findByRole('heading', { name: 'Lean week' });
+    fireEvent.click(within(mealCard('Lunch')).getByRole('button', { name: 'Change Lunch' }));
+    fireEvent.change(await box().findByRole('spinbutton', { name: 'How much Rice (white, cooked)' }), { target: { value: '150' } });
+  };
+
+  it('somebody else removes breakfast while lunch is open: the save is sent on the day as it was opened, refused, the box closes and says why', async () => {
+    const opened = planOf({ 1: MONDAY });
+    const since = planOf({ 1: [MONDAY[1], MONDAY[2]] });
+    since.days[0].version = '01ffffffffffffff';
+    svc.get.mockResolvedValueOnce(opened).mockResolvedValue(since);
+    svc.measures.mockResolvedValue([[{ id: 'g', name: 'g', grams: 1 }]]);
+    svc.putDay.mockRejectedValue(refusal(409, 'plan_changed', 'This day was changed by someone else. Open it again to make this change.'));
+    await openLunchAndChange();
+    // Staff come back to the window: the page reads the plan again under the open box.
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+    document.dispatchEvent(new Event('visibilitychange'));
+    await waitFor(() => expect(svc.get).toHaveBeenCalledTimes(2));
+    fireEvent.click(box().getByRole('button', { name: 'Save to plan' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('This day was changed by someone else. Open it again to make this change.');
+    const [, , n, body] = svc.putDay.mock.calls[0];
+    expect(n).toBe(1);
+    expect(body.version).toBe(opened.days[0].version);
+    expect(body.meals.map((m) => m.mealType)).toEqual(['breakfast', 'lunch', 'dinner']);
+    expect(body.meals[1].items).toEqual([{ canonical: 'rice_white_cooked', grams: 150 }]);
+    // The box is gone: there is no Save to press again, and the day is shown as it is now.
+    expect(screen.queryByTestId('meal-box')).toBeNull();
+    expect(svc.putDay).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('heading', { name: 'Breakfast', level: 3 })).toBeNull();
+  });
+
+  it('another day pressed with unsaved foods asks first: Keep editing keeps them, Leave without saving goes and sends nothing', async () => {
+    svc.get.mockResolvedValue(planOf({ 1: MONDAY }));
+    svc.measures.mockResolvedValue([[{ id: 'g', name: 'g', grams: 1 }]]);
+    await openLunchAndChange();
+    fireEvent.click(dayTab('Tuesday'));
+    const ask = screen.getByRole('dialog', { name: 'Save your changes?' });
+    expect(within(ask).getByText('Your changes to Lunch on Monday aren’t saved yet.')).toBeTruthy();
+    fireEvent.click(within(ask).getByRole('button', { name: 'Keep editing' }));
+    expect(box().getByRole('spinbutton', { name: 'How much Rice (white, cooked)' }).value).toBe('150');
+    expect(dayTab('Monday').getAttribute('aria-selected')).toBe('true');
+    for (const press of [
+      () => fireEvent.click(within(mealCard('Dinner')).getByRole('button', { name: 'Change Dinner' })),
+      () => fireEvent.click(screen.getByRole('button', { name: 'Rename' })),
+      () => fireEvent.click(screen.getByRole('button', { name: 'Delete' })),
+    ]) {
+      press();
+      fireEvent.click(within(screen.getByRole('dialog', { name: 'Save your changes?' })).getByRole('button', { name: 'Keep editing' }));
+      expect(box().getByRole('spinbutton', { name: 'How much Rice (white, cooked)' }).value).toBe('150');
+    }
+    fireEvent.click(dayTab('Tuesday'));
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Save your changes?' })).getByRole('button', { name: 'Leave without saving' }));
+    expect(dayTab('Tuesday').getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByText('No meals on Tuesday yet.')).toBeTruthy();
+    expect(svc.putDay).not.toHaveBeenCalled();
+  });
+
+  it('Save to plan in the question saves Monday, then opens the day pressed', async () => {
+    svc.get.mockResolvedValue(planOf({ 1: MONDAY }));
+    svc.measures.mockResolvedValue([[{ id: 'g', name: 'g', grams: 1 }]]);
+    svc.putDay.mockResolvedValue(planOf({ 1: MONDAY }));
+    await openLunchAndChange();
+    fireEvent.click(dayTab('Wednesday'));
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Save your changes?' })).getByRole('button', { name: 'Save to plan' }));
+    await screen.findByText('Lunch saved to Monday.');
+    expect(svc.putDay.mock.calls[0][2]).toBe(1);
+    expect(dayTab('Wednesday').getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('a link (All meal plans, the menu) with unsaved foods asks first, and goes once left', async () => {
+    svc.get.mockResolvedValue(planOf({ 1: MONDAY }));
+    svc.measures.mockResolvedValue([[{ id: 'g', name: 'g', grams: 1 }]]);
+    svc.list.mockResolvedValue({ plans: [] });
+    await openLunchAndChange();
+    fireEvent.click(screen.getByRole('link', { name: 'All meal plans' }));
+    expect(svc.list).not.toHaveBeenCalled();
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Save your changes?' })).getByRole('button', { name: 'Leave without saving' }));
+    expect(await screen.findByText('No meal plans yet. Write your first one with New meal plan.')).toBeTruthy();
+    expect(svc.putDay).not.toHaveBeenCalled();
+  });
+
+  it('amounts that fail to load say so, with Try again', async () => {
+    svc.get.mockResolvedValue(planOf({ 1: MONDAY }));
+    svc.measures.mockRejectedValueOnce(new Error('offline')).mockResolvedValue([[{ id: 'g', name: 'g', grams: 1 }]]);
+    open();
+    await screen.findByRole('heading', { name: 'Lean week' });
+    fireEvent.click(within(mealCard('Lunch')).getByRole('button', { name: 'Change Lunch' }));
+    expect(await box().findByText('We couldn’t load the amounts.')).toBeTruthy();
+    fireEvent.click(box().getByRole('button', { name: 'Try again' }));
+    expect(await box().findByRole('spinbutton', { name: 'How much Rice (white, cooked)' })).toBeTruthy();
+    expect(box().queryByText('We couldn’t load the amounts.')).toBeNull();
   });
 });
