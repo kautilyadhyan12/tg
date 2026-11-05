@@ -247,7 +247,7 @@ describe('what a changed membership says', () => {
       currency: 'GBP',
       cancelled: false,
       item: { name: 'Gold Monthly', covers: { from: '2026-10-16', to: '2026-11-15' } },
-      amounts: { listedMinor: 5420, discount: null, tax: null, totalMinor: 5420 },
+      amounts: { listedMinor: 5420, discount: null, taxes: [], totalMinor: 5420 },
       changeCredit: { minor: 2580, fromName: 'Basic Monthly' },
       paidMinor: 5420,
       method: 'cash',

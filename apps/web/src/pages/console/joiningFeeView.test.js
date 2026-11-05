@@ -107,7 +107,7 @@ describe('the joining fee the desk is shown is the one the first bill charges', 
   });
 
   it('with tax added on top and a first-month discount: the tax is on the fee too, the discount is off the membership alone', () => {
-    const taxed = { ...GOLD, tax: { name: 'GST', bp: 1800 } };
+    const taxed = { ...GOLD, tax: { name: 'GST', pcm: 18000 } };
     const summary = membershipSummary(taxed, firstMonth, false, null, 2500);
     // ($50.00 − $10.00 + $25.00) plus 18% is $76.70; every later payment $59.00.
     expect(summary.lines).toEqual([
@@ -218,7 +218,7 @@ describe('the bill and the receipt', () => {
       cancelled: false,
       kind: 'payment',
       item: { name: 'Gold Monthly', covers: { from: '2026-10-15', to: '2026-11-14' } },
-      amounts: { listedMinor: 7500, discount: { name: 'First month', minor: 1000 }, tax: { name: 'GST', bp: 1800, included: false, minor: 1170 }, totalMinor: 7670 },
+      amounts: { listedMinor: 7500, discount: { name: 'First month', minor: 1000 }, taxes: [{ name: 'GST', pcm: 18000, included: false, minor: 1170 }], totalMinor: 7670 },
       joiningFeeMinor: 2500,
       paidMinor: 7670,
       method: 'cash',

@@ -3,8 +3,8 @@ import {
   MEMBER_FEE_WORDS,
   MEMBER_PAYMENT_METHOD_WORDS,
   RECEIPT_WORDS,
-  bpToTaxRateText,
   formatMinor,
+  pcmToTaxRateText,
   type HeldMembershipShown,
   type MemberPaymentMethod,
   type MyFee,
@@ -243,7 +243,7 @@ export interface ReceiptLine {
 const membershipLabel = (item: { name: string; covers: { from: string; to: string } | null; part?: boolean }) =>
   item.covers === null ? item.name : `${item.name}, ${daysText(item.covers)}${item.part === true ? " (part month)" : ""}`;
 
-const taxText = (t: { name: string | null; bp: number }) => `${t.name ?? "Tax"} ${bpToTaxRateText(t.bp)}%`;
+const taxText = (t: { name: string | null; pcm: number }) => `${t.name ?? "Tax"} ${pcmToTaxRateText(t.pcm)}%`;
 
 const productLine = (line: SaleReceipt["lines"][number], money: (minor: number) => string): ReceiptLine => {
   const each = line.quantity > 1 ? ` at ${money(line.unitPriceMinor)} each` : "";
@@ -283,30 +283,31 @@ export function receiptLines(receipt: Receipt): ReceiptLine[] {
 }
 
 type Amounts = SaleReceipt["lines"][number]["amounts"];
+type Tax = Amounts["taxes"][number];
 
-/** The discount, a joining fee, a tax added on top, the total and a tax inside the price, in that order. */
+/** The discount, a joining fee, each tax added on top, the total and each tax inside the price, in that order. */
 function amountLines(lines: ReceiptLine[], amounts: Amounts, money: (minor: number) => string, fee = 0, totalLabel = "Total"): void {
   if (amounts.discount !== null) lines.push({ label: `Discount: ${amounts.discount.name}`, amount: `−${money(amounts.discount.minor)}` });
   if (fee > 0) lines.push({ label: "Joining fee", amount: money(fee) });
-  if (amounts.tax !== null && !amounts.tax.included) lines.push({ label: taxText(amounts.tax), amount: money(amounts.tax.minor) });
+  for (const t of amounts.taxes) if (!t.included) lines.push({ label: taxText(t), amount: money(t.minor) });
   lines.push({ label: totalLabel, amount: money(amounts.totalMinor), total: true });
-  if (amounts.tax !== null && amounts.tax.included) lines.push({ label: `Includes ${taxText(amounts.tax)}`, amount: money(amounts.tax.minor) });
+  for (const t of amounts.taxes) if (t.included) lines.push({ label: `Includes ${taxText(t)}`, amount: money(t.minor) });
 }
 
 /** A sale of several products, as a till's slip: each product with its discount under it, the subtotal and each tax
  *  added on top by its rate, the total, each tax inside the prices, and how it was paid. */
 function basketLines(receipt: SaleReceipt, money: (minor: number) => string): ReceiptLine[] {
   const lines: ReceiptLine[] = [];
-  const taxes = new Map<string, { tax: NonNullable<Amounts["tax"]>; minor: number }>();
+  const taxes = new Map<string, { tax: Tax; minor: number }>();
   let subtotal = 0;
   for (const line of receipt.lines) {
     const { amounts } = line;
     lines.push(productLine(line, money));
     if (amounts.discount !== null) lines.push({ label: `Discount: ${amounts.discount.name}`, amount: `−${money(amounts.discount.minor)}` });
-    subtotal += amounts.tax !== null && !amounts.tax.included ? amounts.totalMinor - amounts.tax.minor : amounts.totalMinor;
-    if (amounts.tax !== null) {
-      const key = `${amounts.tax.included ? "in" : "on"} ${taxText(amounts.tax)}`;
-      taxes.set(key, { tax: amounts.tax, minor: (taxes.get(key)?.minor ?? 0) + amounts.tax.minor });
+    subtotal += amounts.totalMinor - amounts.taxes.filter((t) => !t.included).reduce((n, t) => n + t.minor, 0);
+    for (const t of amounts.taxes) {
+      const key = `${t.included ? "in" : "on"} ${taxText(t)}`;
+      taxes.set(key, { tax: t, minor: (taxes.get(key)?.minor ?? 0) + t.minor });
     }
   }
   const onTop = [...taxes.values()].filter((t) => !t.tax.included);

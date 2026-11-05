@@ -10,7 +10,7 @@ const MemberPurchases = (await import('./MemberPurchases')).default;
 
 const GYM = { id: 'g1', slug: 'iron-house', staffRole: 'owner', privileges: ['members.confirm', 'billing.members'] };
 const PRESS = '00000000-0000-4000-8000-000000000001';
-const base = { unitPriceMinor: 400, netMinor: 400, taxMinor: 0, taxBp: 0, taxIncluded: false, currency: 'USD', method: 'terminal', soldOn: '2026-10-12', soldAt: '2026-10-12T14:05:00.000Z', by: 'Sam', person: { entryId: 'e1', name: 'Maya' }, undone: false, voided: null, canUndo: false, canRefund: true, toCard: true, cardRefund: null, refunds: [], refundedMinor: 0, receiptNumber: 7, toPlace: [] };
+const base = { unitPriceMinor: 400, netMinor: 400, taxMinor: 0, taxes: [], taxIncluded: false, currency: 'USD', method: 'terminal', soldOn: '2026-10-12', soldAt: '2026-10-12T14:05:00.000Z', by: 'Sam', person: { entryId: 'e1', name: 'Maya' }, undone: false, voided: null, canUndo: false, canRefund: true, toCard: true, cardRefund: null, refunds: [], refundedMinor: 0, receiptNumber: 7, toPlace: [] };
 const press = (over = {}) => ({ pressId: PRESS, amountMinor: 300, on: '2026-10-13', room: [{ saleId: 's1', minor: 400 }, { saleId: 's2', minor: 1500 }], ...over });
 const water = (over = {}) => ({ ...base, id: 's1', itemName: 'Water', quantity: 2, totalMinor: 400, stockCounted: true, lineNo: 1, toPlace: [press()], ...over });
 const towel = (over = {}) => ({ ...base, id: 's2', itemName: 'Towel', quantity: 1, totalMinor: 1500, stockCounted: false, lineNo: 2, ...over });

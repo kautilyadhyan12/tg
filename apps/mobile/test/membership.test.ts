@@ -55,7 +55,7 @@ const common = {
   currency: "INR",
   cancelled: false,
 };
-const amounts = (over: object = {}) => ({ listedMinor: 150_000, discount: null, tax: null, totalMinor: 150_000, ...over });
+const amounts = (over: object = {}) => ({ listedMinor: 150_000, discount: null, taxes: [], totalMinor: 150_000, ...over });
 const payment = (over: object = {}) =>
   receiptSchema.parse({
     ...common,
@@ -217,7 +217,7 @@ describe("a receipt's lines, as the browser prints them", () => {
 
   it("a discount, a joining fee and a tax added on top", () => {
     const r = payment({
-      amounts: amounts({ listedMinor: 200_000, discount: { name: "October offer", minor: 20_000 }, tax: { name: "GST", bp: 1800, included: false, minor: 32_400 }, totalMinor: 212_400 }),
+      amounts: amounts({ listedMinor: 200_000, discount: { name: "October offer", minor: 20_000 }, taxes: [{ name: "GST", pcm: 18000, included: false, minor: 32_400 }], totalMinor: 212_400 }),
       joiningFeeMinor: 50_000,
       paidMinor: 212_400,
     });
@@ -234,7 +234,7 @@ describe("a receipt's lines, as the browser prints them", () => {
   it("a tax inside the price, a part month, and a bill paid in parts", () => {
     const r = payment({
       item: { name: "Gold Monthly", covers: { from: "2026-10-20", to: "2026-10-31" }, part: true },
-      amounts: amounts({ listedMinor: 60_000, tax: { name: null, bp: 500, included: true, minor: 2_857 }, totalMinor: 60_000 }),
+      amounts: amounts({ listedMinor: 60_000, taxes: [{ name: null, pcm: 5000, included: true, minor: 2_857 }], totalMinor: 60_000 }),
       paidMinor: 20_000,
       balance: { paidBeforeMinor: 10_000, leftMinor: 30_000 },
     });
@@ -264,8 +264,8 @@ describe("a receipt's lines, as the browser prints them", () => {
     ]);
     const basket = sale(
       [
-        line("Shaker", 1, 50_000, { tax: { name: "GST", bp: 1800, included: false, minor: 9_000 }, totalMinor: 59_000 }),
-        line("Protein bar", 2, 8_000, { tax: { name: "GST", bp: 500, included: true, minor: 762 } }),
+        line("Shaker", 1, 50_000, { taxes: [{ name: "GST", pcm: 18000, included: false, minor: 9_000 }], totalMinor: 59_000 }),
+        line("Protein bar", 2, 8_000, { taxes: [{ name: "GST", pcm: 5000, included: true, minor: 762 }] }),
       ],
       75_000,
     );

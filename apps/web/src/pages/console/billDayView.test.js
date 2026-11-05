@@ -143,7 +143,7 @@ describe('the bill, the receipt and the setting', () => {
       cancelled: false,
       kind: 'payment',
       item: { name: 'Gold Monthly', covers: { from: '2026-10-15', to: '2026-10-31' }, part: true },
-      amounts: { listedMinor: 2741, discount: null, tax: null, totalMinor: 2741 },
+      amounts: { listedMinor: 2741, discount: null, taxes: [], totalMinor: 2741 },
       joiningFeeMinor: 0,
       paidMinor: 2741,
       method: 'cash',

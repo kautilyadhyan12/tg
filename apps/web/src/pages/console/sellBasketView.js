@@ -1,6 +1,6 @@
-import { MEMBER_GIFT_SALE_NAME, SALE_LINES_MAX, formatMinor, memberGiftOff, saleAmounts } from '@app/shared';
+import { MEMBER_GIFT_SALE_NAME, SALE_LINES_MAX, formatMinor, memberGiftOff } from '@app/shared';
 import { applyPromoCode, discountsFor, promoCodeNote } from './sellDiscountsView';
-import { discountMinorFor, quantityMax, rateById, rateLabel, saleProblem, saleSummary } from './sellView';
+import { discountMinorFor, productAmounts, quantityMax, rateLabel, saleProblem, saleSummary } from './sellView';
 
 // A BASKET AT SELL (spec Part 3 §14.3; ROADMAP 18q): several products rung up as one sale, with
 // one payment and one receipt, as Square, Mindbody and Gymdesk do. Each line keeps its own
@@ -166,19 +166,14 @@ function basketSummary(page, rows) {
   let net = 0;
   let total = 0;
   for (const row of rows) {
-    const rate = rateById(page.tax, row.product.taxRateId);
-    const amounts = saleAmounts({
-      unitPriceMinor: row.product.priceMinor,
-      quantity: row.quantity,
-      taxed: rate !== null,
-      taxBp: rate?.bp ?? 0,
-      taxIncluded: page.tax.included,
-      discountMinor: row.offMinor,
-    });
+    const { rates, amounts } = productAmounts(row.product, row.quantity, page.tax, row.offMinor);
     if (!amounts.ok) return null;
     net += amounts.netMinor;
     total += amounts.totalMinor;
-    if (rate !== null && amounts.taxMinor > 0) taxes.set(rate.id, { rate, minor: (taxes.get(rate.id)?.minor ?? 0) + amounts.taxMinor });
+    rates.forEach((rate, i) => {
+      const minor = amounts.taxParts[i] ?? 0;
+      if (minor > 0) taxes.set(rate.id, { rate, minor: (taxes.get(rate.id)?.minor ?? 0) + minor });
+    });
   }
   if (total > 99_999_999) return null;
   const lines = [];

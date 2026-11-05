@@ -50,7 +50,7 @@ const ORG = {
 };
 const SELLER = { ...ORG, staffRole: 'trainer', privileges: ['members.read', 'billing.members'] };
 
-const WATER = { id: 'p-water', name: 'Water', priceMinor: 199, currency: 'USD', taxRateId: 'r1', stock: null, archivedAt: null, updatedAt: '2026-10-13T10:00:00.000Z' };
+const WATER = { id: 'p-water', name: 'Water', priceMinor: 199, currency: 'USD', taxRateIds: ['r1'], stock: null, archivedAt: null, updatedAt: '2026-10-13T10:00:00.000Z' };
 const TOWEL = { ...WATER, id: 'p-towel', name: 'Towel', priceMinor: 500 };
 const discount = (over = {}) => ({
   id: 'd-summer',
@@ -81,7 +81,7 @@ const totals = (over = {}) => ({ count: 0, payments: 0, totalMinor: 0, taxMinor:
 const page = (over = {}) => ({
   currency: 'USD',
   today: '2026-10-13',
-  tax: { included: false, rates: [{ id: 'r1', name: 'Sales tax', bp: 825, products: 1, membershipTypes: 0, memberships: 0 }] },
+  tax: { included: false, rates: [{ id: 'r1', name: 'Sales tax', pcm: 8250, products: 1, membershipTypes: 0, memberships: 0 }] },
   products: [TOWEL, WATER],
   archived: [],
   archivedTotal: 0,
@@ -98,7 +98,7 @@ const page = (over = {}) => ({
   totals: totals(),
   ...over,
 });
-const SOLD = { id: 's1', itemName: 'Water', quantity: 2, unitPriceMinor: 199, netMinor: 318, taxMinor: 26, totalMinor: 344, taxBp: 825, taxName: 'Sales tax', taxIncluded: false, discountName: 'Summer sale', discountMinor: 80, currency: 'USD', method: 'cash', soldOn: '2026-10-13', soldAt: '2026-10-13T15:00:00.000Z', by: 'Sam Desk', person: null, undone: false, canUndo: true, receiptNumber: 41 };
+const SOLD = { id: 's1', itemName: 'Water', quantity: 2, unitPriceMinor: 199, netMinor: 318, taxMinor: 26, totalMinor: 344, taxes: [{ name: 'Sales tax', pcm: 8250, minor: 26 }], taxIncluded: false, discountName: 'Summer sale', discountMinor: 80, currency: 'USD', method: 'cash', soldOn: '2026-10-13', soldAt: '2026-10-13T15:00:00.000Z', by: 'Sam Desk', person: null, undone: false, canUndo: true, receiptNumber: 41 };
 const refusal = (status, message) => Object.assign(new Error(message), { response: { status, data: { message } } });
 
 const open = (org = ORG) => {

@@ -16,6 +16,7 @@ import {
   productProblems,
   productRow,
   rateLabel,
+  togetherPercent,
 } from './sellView';
 import { PRODUCTS_MAX } from '@app/shared';
 
@@ -43,7 +44,9 @@ export function SavedNote({ children }) {
 
 function ProductForm({ gymId, country, currency, rates, onPage, draft, setDraft, busy, error, onSave, onCancel }) {
   const [addingRate, setAddingRate] = useState(false);
-  const problems = draft.pressed ? productProblems(draft, currency) : {};
+  const problems = draft.pressed ? productProblems(draft, currency, rates) : {};
+  const ticked = rates.filter((r) => draft.taxRateIds.includes(r.id));
+  const tick = (rateId, on) => set({ taxRateIds: on ? [...draft.taxRateIds.filter((x) => x !== rateId), rateId] : draft.taxRateIds.filter((x) => x !== rateId) });
   const id = useId();
   const set = (patch) => setDraft((was) => ({ ...was, ...patch }));
   return (
@@ -71,18 +74,17 @@ function ProductForm({ gymId, country, currency, rates, onPage, draft, setDraft,
         <input id={`${id}-price`} className="c-input" style={{ maxWidth: 200 }} inputMode="decimal" value={draft.price} disabled={busy} onChange={(e) => set({ price: e.target.value })} placeholder={priceExample(currency)} />
         {problems.price ? <p className="c-s14 m-0" style={BAD}>{problems.price}</p> : null}
       </div>
-      <div className="c-field">
-        <label className="c-label" htmlFor={`${id}-tax`}>
-          Tax
-        </label>
-        <select id={`${id}-tax`} className="c-input" style={{ maxWidth: 280 }} value={draft.taxRateId} disabled={busy} onChange={(e) => set({ taxRateId: e.target.value })}>
-          <option value="">No tax</option>
-          {rates.map((rate) => (
-            <option key={rate.id} value={rate.id}>
-              {rateLabel(rate)}
-            </option>
-          ))}
-        </select>
+      <fieldset className="c-field m-0 p-0" style={{ border: 0 }}>
+        <legend className="c-label">Tax</legend>
+        {rates.length > 0 ? <p className="c-s13 c-t3 m-0">Tick each tax charged on this product. Leave all unticked for no tax.</p> : null}
+        {rates.map((rate) => (
+          <label key={rate.id} className="flex items-center gap-3 c-s15 c-t1" style={{ minHeight: 44 }}>
+            <input type="checkbox" checked={draft.taxRateIds.includes(rate.id)} disabled={busy} onChange={(e) => tick(rate.id, e.target.checked)} />
+            {rateLabel(rate)}
+          </label>
+        ))}
+        {ticked.length > 1 && !problems.tax ? <p className="c-s13 c-t2 m-0">{`Together: ${togetherPercent(ticked)}`}</p> : null}
+        {problems.tax ? <p className="c-s14 m-0" style={BAD}>{problems.tax}</p> : null}
         {addingRate ? null : (
           <p className="c-s13 c-t3 m-0 flex flex-wrap items-center gap-2">
             {rates.length === 0 ? 'You have no tax rates yet.' : null}
@@ -91,7 +93,7 @@ function ProductForm({ gymId, country, currency, rates, onPage, draft, setDraft,
             </button>
           </p>
         )}
-      </div>
+      </fieldset>
       {addingRate ? (
         <NewRateInline
           gymId={gymId}
@@ -99,7 +101,7 @@ function ProductForm({ gymId, country, currency, rates, onPage, draft, setDraft,
           onPage={onPage}
           onAdded={(rate) => {
             setAddingRate(false);
-            set({ taxRateId: rate.id });
+            tick(rate.id, true);
           }}
           onCancel={() => setAddingRate(false)}
         />
@@ -172,11 +174,11 @@ export default function SellProducts({ gymId, country = null, page, locked, lock
 
   const save = async () => {
     if (draft === null || page.currency === null) return;
-    if (Object.keys(productProblems(draft, page.currency)).length > 0) {
+    if (Object.keys(productProblems(draft, page.currency, page.tax.rates)).length > 0) {
       setDraft((was) => ({ ...was, pressed: true }));
       return;
     }
-    const body = productBody(draft, page.currency);
+    const body = productBody(draft, page.currency, page.tax.rates);
     const ok = await run(
       () => (draft.id === null ? registerService.addProduct(gymId, body) : registerService.changeProduct(gymId, draft.id, body)),
       draft.id === null ? `${body.name} added. It is now on the Sell form above.` : `${body.name} saved.`,

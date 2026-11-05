@@ -72,9 +72,9 @@ const SELLER = { ...ORG, staffRole: 'trainer', privileges: ['members.read', 'bil
 const PRICER = { ...ORG, staffRole: 'trainer', privileges: ['members.read', 'memberships.manage'] };
 const TRAINER = { ...ORG, staffRole: 'trainer', privileges: ['members.read', 'members.confirm'] };
 
-const RATE = { id: 'r1', name: 'Sales tax', bp: 825, products: 2, membershipTypes: 0, memberships: 0 };
+const RATE = { id: 'r1', name: 'Sales tax', pcm: 8250, products: 2, membershipTypes: 0, memberships: 0 };
 const NO_TAX = { included: false, rates: [] };
-const product = (over = {}) => ({ id: 'p-water', name: 'Water', priceMinor: 199, currency: 'USD', taxRateId: 'r1', stock: 8, archivedAt: null, updatedAt: '2026-10-12T10:00:00.000Z', ...over });
+const product = (over = {}) => ({ id: 'p-water', name: 'Water', priceMinor: 199, currency: 'USD', taxRateIds: ['r1'], stock: 8, archivedAt: null, updatedAt: '2026-10-12T10:00:00.000Z', ...over });
 const TOWEL = product({ id: 'p-towel', name: 'Towel', priceMinor: 500, stock: null });
 const sale = (over = {}) => ({
   id: 's1',
@@ -84,8 +84,7 @@ const sale = (over = {}) => ({
   netMinor: 398,
   taxMinor: 33,
   totalMinor: 431,
-  taxBp: 825,
-  taxName: 'Sales tax',
+  taxes: [{ name: 'Sales tax', pcm: 8250, minor: 33 }],
   taxIncluded: false,
   discountName: null,
   discountMinor: 0,
@@ -492,7 +491,7 @@ describe('receipts (18g-i)', () => {
     by: 'Sam Desk',
     currency: 'USD',
     cancelled: false,
-    lines: [{ name: 'Water', quantity: 2, unitPriceMinor: 199, amounts: { listedMinor: 398, discount: null, tax: { name: 'Sales tax', bp: 825, included: false, minor: 33 }, totalMinor: 431 } }],
+    lines: [{ name: 'Water', quantity: 2, unitPriceMinor: 199, amounts: { listedMinor: 398, discount: null, taxes: [{ name: 'Sales tax', pcm: 8250, included: false, minor: 33 }], totalMinor: 431 } }],
     totalMinor: 431,
     method: 'card_at_desk',
     ...over,
@@ -520,7 +519,7 @@ describe('receipts (18g-i)', () => {
   it("each of today's rows opens its own receipt under that row, and only that one", async () => {
     const payment = { id: 'm1', typeName: '1 Month', amountMinor: 4999, currency: 'USD', method: 'cash', paidAt: '2026-10-12T15:30:00.000Z', by: 'Sam Desk', person: { entryId: 'e-maya', name: 'Maya Patel' }, receiptNumber: 40 };
     svc.get.mockResolvedValue(page({ sales: [sale()], payments: [payment], totals: totals({ count: 1, payments: 1, totalMinor: 5430, cash: 5430 }) }));
-    svc.receipt.mockResolvedValue(paper({ kind: 'payment', number: 40, person: 'Maya Patel', item: { name: '1 Month', covers: { from: '2026-10-12', to: '2026-11-11' } }, amounts: { listedMinor: 4999, discount: null, tax: null, totalMinor: 4999 }, paidMinor: 4999, method: 'cash', balance: null, refunds: [] }));
+    svc.receipt.mockResolvedValue(paper({ kind: 'payment', number: 40, person: 'Maya Patel', item: { name: '1 Month', covers: { from: '2026-10-12', to: '2026-11-11' } }, amounts: { listedMinor: 4999, discount: null, taxes: [], totalMinor: 4999 }, paidMinor: 4999, method: 'cash', balance: null, refunds: [] }));
     open();
     const rows = await within(await screen.findByRole('region', { name: "Today's takings" })).findAllByTestId('takings-row');
     const paid = rows.find((r) => r.textContent.includes('1 Month'));
@@ -623,7 +622,7 @@ describe('products and tax', () => {
     fireEvent.click(within(form).getByLabelText('Count how many are in stock'));
     fireEvent.change(within(form).getByLabelText('How many you have now'), { target: { value: '24' } });
     fireEvent.click(within(form).getByRole('button', { name: 'Add product' }));
-    await waitFor(() => expect(svc.addProduct).toHaveBeenCalledWith('g1', { name: 'Water', priceMinor: 199, taxRateId: null, stock: 24 }));
+    await waitFor(() => expect(svc.addProduct).toHaveBeenCalledWith('g1', { name: 'Water', priceMinor: 199, taxRateIds: [], stock: 24 }));
     expect(await within(products()).findByText('Water added. It is now on the Sell form above.')).toBeTruthy();
     expect(within(products()).queryByRole('form')).toBeNull();
     expect(screen.getByLabelText('Add a product')).toBeTruthy();
@@ -642,7 +641,7 @@ describe('products and tax', () => {
     expect(within(form).getByLabelText('How many you have now').value).toBe('8');
     fireEvent.change(within(form).getByLabelText('How many you have now'), { target: { value: '20' } });
     fireEvent.click(within(form).getByRole('button', { name: 'Save product' }));
-    await waitFor(() => expect(svc.changeProduct).toHaveBeenCalledWith('g1', 'p-water', { name: 'Water', priceMinor: 199, taxRateId: 'r1', stock: 20, updatedAt: '2026-10-12T10:00:00.000Z' }));
+    await waitFor(() => expect(svc.changeProduct).toHaveBeenCalledWith('g1', 'p-water', { name: 'Water', priceMinor: 199, taxRateIds: ['r1'], stock: 20, updatedAt: '2026-10-12T10:00:00.000Z' }));
 
     fireEvent.click(await within(products()).findByRole('button', { name: 'Archive Water' }));
     expect(within(products()).getByText('Archive Water? It leaves the Sell form. Its past sales are kept, and you can put it back.')).toBeTruthy();
@@ -689,9 +688,9 @@ describe('products and tax', () => {
   });
 
   it('the Tax box: a rate is added with its name and percentage, says what is wrong first, and is changed', async () => {
-    const GST = { id: 'r2', name: 'GST', bp: 1800, products: 0, membershipTypes: 0, memberships: 0 };
+    const GST = { id: 'r2', name: 'GST', pcm: 18000, products: 0, membershipTypes: 0, memberships: 0 };
     svc.addTaxRate.mockResolvedValue(page({ tax: { included: false, rates: [GST, RATE] } }));
-    svc.changeTaxRate.mockResolvedValue(page({ tax: { included: false, rates: [{ ...GST, bp: 1200 }, RATE] } }));
+    svc.changeTaxRate.mockResolvedValue(page({ tax: { included: false, rates: [{ ...GST, pcm: 12000 }, RATE] } }));
     open();
     await screen.findByRole('region', { name: 'Tax' });
     expect(within(taxBox()).getByText('Tax is added on top of the price of each product and membership that charges it.')).toBeTruthy();
@@ -700,12 +699,12 @@ describe('products and tax', () => {
     const form = within(within(taxBox()).getByRole('form', { name: 'Add a tax rate' }));
     fireEvent.click(form.getByRole('button', { name: 'Add tax rate' }));
     expect(form.getByText('Enter a tax name.')).toBeTruthy();
-    expect(form.getByText('Enter a rate from 0.01 to 30, with up to two decimal places.')).toBeTruthy();
+    expect(form.getByText('Enter a rate from 0.001 to 30, with up to three decimal places.')).toBeTruthy();
     expect(svc.addTaxRate).not.toHaveBeenCalled();
     fireEvent.change(form.getByLabelText('Tax name'), { target: { value: ' GST ' } });
     fireEvent.change(form.getByLabelText('Rate (%)'), { target: { value: '18' } });
     fireEvent.click(form.getByRole('button', { name: 'Add tax rate' }));
-    await waitFor(() => expect(svc.addTaxRate).toHaveBeenCalledWith('g1', { name: 'GST', bp: 1800 }));
+    await waitFor(() => expect(svc.addTaxRate).toHaveBeenCalledWith('g1', { name: 'GST', pcm: 18000 }));
     expect(await within(taxBox()).findByText('GST 18% added. Now tick what charges it.')).toBeTruthy();
     // A new rate charges nothing: the box to tick what charges it opens under it by itself.
     expect(within(taxBox()).getByRole('group', { name: 'What charges GST 18%' })).toBeTruthy();
@@ -717,11 +716,11 @@ describe('products and tax', () => {
     expect(change.getByText('A new rate is charged on sales and bills from now on. Sales and bills already made keep the tax they were made with.')).toBeTruthy();
     fireEvent.change(change.getByLabelText('Rate (%)'), { target: { value: '12' } });
     fireEvent.click(change.getByRole('button', { name: 'Save tax rate' }));
-    await waitFor(() => expect(svc.changeTaxRate).toHaveBeenCalledWith('g1', 'r2', { name: 'GST', bp: 1200 }));
+    await waitFor(() => expect(svc.changeTaxRate).toHaveBeenCalledWith('g1', 'r2', { name: 'GST', pcm: 12000 }));
   });
 
   it('the Tax box: a rate in use says why it cannot go and sends nothing; one nothing charges is removed after the box is answered', async () => {
-    const SPARE = { id: 'r3', name: 'Spare', bp: 500, products: 0, membershipTypes: 0, memberships: 0 };
+    const SPARE = { id: 'r3', name: 'Spare', pcm: 5000, products: 0, membershipTypes: 0, memberships: 0 };
     const HELD = { ...RATE, memberships: 3 };
     svc.get.mockResolvedValue(page({ tax: { included: false, rates: [SPARE, HELD] } }));
     svc.removeTaxRate.mockResolvedValue(page({ tax: { included: false, rates: [HELD] } }));
@@ -729,7 +728,7 @@ describe('products and tax', () => {
     await screen.findByRole('region', { name: 'Tax' });
     fireEvent.click(within(taxBox()).getByRole('button', { name: 'Remove Sales tax' }));
     expect(within(taxBox()).getByRole('alert').textContent).toBe(
-      "Sales tax can't be removed: it is charged on 2 products and 3 members' memberships. Change those to another rate or No tax first. A membership keeps the tax it was sold with, so Sales tax can be removed once nobody holds one.",
+      "Sales tax can't be removed: it is charged on 2 products and 3 members' memberships. Take it off those first. A membership keeps the tax it was sold with, so Sales tax can be removed once nobody holds one.",
     );
     fireEvent.click(within(taxBox()).getByRole('button', { name: 'OK' }));
     expect(svc.removeTaxRate).not.toHaveBeenCalled();
@@ -773,29 +772,62 @@ describe('products and tax', () => {
     expect(within(taxBox()).getByText('Your prices include the tax. Each sale and each bill shows how much of it is tax.')).toBeTruthy();
   });
 
-  it('a product picks its tax, and a rate added from inside its form is picked there at once', async () => {
-    const GST = { id: 'r2', name: 'GST', bp: 1800, products: 0, membershipTypes: 0, memberships: 0 };
+  it('a product ticks its taxes, and a rate added from inside its form is ticked there at once (18b-v-a)', async () => {
+    const GST = { id: 'r2', name: 'GST', pcm: 18000, products: 0, membershipTypes: 0, memberships: 0 };
     svc.addTaxRate.mockResolvedValue(page({ tax: { included: false, rates: [GST, RATE] } }));
     svc.addProduct.mockResolvedValue(page());
     open();
     await screen.findByRole('region', { name: 'Products' });
     fireEvent.click(within(products()).getByRole('button', { name: 'Add a product' }));
     const form = within(within(products()).getByRole('form', { name: 'Add a product' }));
-    // The gym's one rate is picked to start with.
-    expect(form.getByLabelText('Tax').value).toBe('r1');
-    expect([...form.getByLabelText('Tax').querySelectorAll('option')].map((o) => o.textContent)).toEqual(['No tax', 'Sales tax 8.25%']);
+    // The gym's one rate is ticked to start with; every rate of the gym is a tick box.
+    const taxes = within(form.getByRole('group', { name: 'Tax' }));
+    expect(taxes.getAllByRole('checkbox').map((c) => [c.closest('label').textContent, c.checked])).toEqual([['Sales tax 8.25%', true]]);
     fireEvent.click(form.getByRole('button', { name: 'Add a tax rate' }));
     const rate = within(form.getByRole('group', { name: 'Add a tax rate' }));
     fireEvent.change(rate.getByLabelText('Tax name'), { target: { value: 'GST' } });
     fireEvent.change(rate.getByLabelText('Rate (%)'), { target: { value: '18' } });
     fireEvent.click(rate.getByRole('button', { name: 'Add tax rate' }));
-    await waitFor(() => expect(svc.addTaxRate).toHaveBeenCalledWith('g1', { name: 'GST', bp: 1800 }));
-    await waitFor(() => expect(form.getByLabelText('Tax').value).toBe('r2'));
+    await waitFor(() => expect(svc.addTaxRate).toHaveBeenCalledWith('g1', { name: 'GST', pcm: 18000 }));
+    await waitFor(() => expect(taxes.getByRole('checkbox', { name: 'GST 18%' }).checked).toBe(true));
+    expect(taxes.getByRole('checkbox', { name: 'Sales tax 8.25%' }).checked).toBe(true);
+    expect(taxes.getByText('Together: 26.25%')).toBeTruthy();
     expect(svc.addProduct).not.toHaveBeenCalled();
+    // Only GST on this one: untick the other.
+    fireEvent.click(taxes.getByRole('checkbox', { name: 'Sales tax 8.25%' }));
+    expect(taxes.queryByText(/^Together/)).toBeNull();
     fireEvent.change(form.getByLabelText('Product name'), { target: { value: 'Shake' } });
     fireEvent.change(form.getByLabelText('Price in USD'), { target: { value: '4' } });
     fireEvent.click(form.getByRole('button', { name: 'Add product' }));
-    await waitFor(() => expect(svc.addProduct).toHaveBeenCalledWith('g1', { name: 'Shake', priceMinor: 400, taxRateId: 'r2', stock: null }));
+    await waitFor(() => expect(svc.addProduct).toHaveBeenCalledWith('g1', { name: 'Shake', priceMinor: 400, taxRateIds: ['r2'], stock: null }));
+  });
+
+  it("a product with several taxes sends them in the Tax box's order, and taxes past 30% together are said before anything is sent (18b-v-a)", async () => {
+    const GST = { id: 'r2', name: 'GST', pcm: 5000, products: 0, membershipTypes: 0, memberships: 0 };
+    const QST = { id: 'r3', name: 'QST', pcm: 9975, products: 0, membershipTypes: 0, memberships: 0 };
+    const BIG = { id: 'r4', name: 'State tax', pcm: 25000, products: 0, membershipTypes: 0, memberships: 0 };
+    svc.get.mockResolvedValue(page({ tax: { included: false, rates: [GST, QST, RATE, BIG] } }));
+    svc.addProduct.mockResolvedValue(page());
+    open();
+    await screen.findByRole('region', { name: 'Products' });
+    fireEvent.click(within(products()).getByRole('button', { name: 'Add a product' }));
+    const form = within(within(products()).getByRole('form', { name: 'Add a product' }));
+    const taxes = within(form.getByRole('group', { name: 'Tax' }));
+    // Several rates: none ticked to start with.
+    expect(taxes.getAllByRole('checkbox').filter((c) => c.checked)).toHaveLength(0);
+    fireEvent.change(form.getByLabelText('Product name'), { target: { value: 'Day pass' } });
+    fireEvent.change(form.getByLabelText('Price in USD'), { target: { value: '100' } });
+    fireEvent.click(taxes.getByRole('checkbox', { name: 'QST 9.975%' }));
+    fireEvent.click(taxes.getByRole('checkbox', { name: 'State tax 25%' }));
+    fireEvent.click(form.getByRole('button', { name: 'Add product' }));
+    expect(taxes.getByText("These taxes come to 34.975% together. A product's taxes can come to 30% at most. Untick one.")).toBeTruthy();
+    expect(svc.addProduct).not.toHaveBeenCalled();
+    fireEvent.click(taxes.getByRole('checkbox', { name: 'State tax 25%' }));
+    fireEvent.click(taxes.getByRole('checkbox', { name: 'GST 5%' }));
+    expect(taxes.getByText('Together: 14.975%')).toBeTruthy();
+    fireEvent.click(form.getByRole('button', { name: 'Add product' }));
+    // Ticked QST, then GST: sent GST, then QST, as the Tax box lists them and a receipt names them.
+    await waitFor(() => expect(svc.addProduct).toHaveBeenCalledWith('g1', { name: 'Day pass', priceMinor: 10000, taxRateIds: ['r2', 'r3'], stock: null }));
   });
 
   it('a gym with no country is sent to set it, and has no Add button', async () => {

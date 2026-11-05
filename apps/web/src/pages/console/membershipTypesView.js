@@ -22,7 +22,7 @@ import {
   priceToMinor,
   MEMBERSHIP_PRICE_MINOR_MAX,
   TAXED_PRICE_MINOR_MAX,
-  bpToTaxRateText,
+  pcmToTaxRateText,
 } from '@app/shared';
 import { reminderDayOptions } from './renewalReminderView';
 
@@ -198,7 +198,7 @@ export function typeTaxLine(type, list) {
   if (type.taxRateId === null || type.taxRateId === undefined || list === null) return null;
   const rate = (list.taxRates ?? []).find((r) => r.id === type.taxRateId);
   if (rate === undefined) return null;
-  const label = `${rate.name} ${bpToTaxRateText(rate.bp)}%`;
+  const label = `${rate.name} ${pcmToTaxRateText(rate.pcm)}%`;
   return list.taxIncluded ? `Includes ${label}` : `Plus ${label} on each payment`;
 }
 

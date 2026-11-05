@@ -673,7 +673,7 @@ export function taxRateInUseWords(name: string, uses: { products: number; member
   ].filter((p): p is string => p !== null);
   const list = parts.length <= 1 ? parts.join("") : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1] ?? ""}`;
   const first = `${name} was not removed: it is charged on ${list}.`;
-  const change = uses.products > 0 || uses.membershipTypes > 0 ? " Change them to another rate or No tax first." : "";
+  const change = uses.products > 0 || uses.membershipTypes > 0 ? " Take it off them first." : "";
   const held =
     uses.memberships > 0
       ? ` A membership keeps the tax it was sold with, so ${name} can be removed once nobody holds one. You can still change its name or rate.`

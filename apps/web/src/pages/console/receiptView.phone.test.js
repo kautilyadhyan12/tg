@@ -18,7 +18,7 @@ const common = {
   currency: 'INR',
   cancelled: false,
 };
-const amounts = (over = {}) => ({ listedMinor: 150000, discount: null, tax: null, totalMinor: 150000, ...over });
+const amounts = (over = {}) => ({ listedMinor: 150000, discount: null, taxes: [], totalMinor: 150000, ...over });
 const payment = (over = {}) => ({
   ...common,
   kind: 'payment',
@@ -43,13 +43,13 @@ const sale = (lines, totalMinor, over = {}) => ({ ...common, kind: 'sale', lines
 const CASES = {
   'a whole payment': payment(),
   'a discount, a joining fee and a tax on top': payment({
-    amounts: amounts({ listedMinor: 200000, discount: { name: 'October offer', minor: 20000 }, tax: { name: 'GST', bp: 1800, included: false, minor: 32400 }, totalMinor: 212400 }),
+    amounts: amounts({ listedMinor: 200000, discount: { name: 'October offer', minor: 20000 }, taxes: [{ name: 'GST', pcm: 18000, included: false, minor: 32400 }], totalMinor: 212400 }),
     joiningFeeMinor: 50000,
     paidMinor: 212400,
   }),
   'a tax inside, a part month, paid in parts, with a refund': payment({
     item: { name: 'Gold Monthly', covers: { from: '2026-10-20', to: '2026-10-31' }, part: true },
-    amounts: amounts({ listedMinor: 60000, tax: { name: null, bp: 500, included: true, minor: 2857 }, totalMinor: 60000 }),
+    amounts: amounts({ listedMinor: 60000, taxes: [{ name: null, pcm: 5000, included: true, minor: 2857 }], totalMinor: 60000 }),
     paidMinor: 20000,
     balance: { paidBeforeMinor: 10000, leftMinor: 30000 },
     refunds: [{ number: 14, on: '2026-10-10', amountMinor: 5000 }],
@@ -59,8 +59,8 @@ const CASES = {
   'one product': sale([line('Water bottle', 2, 2500)], 5000),
   'a basket with two taxes and a refund': sale(
     [
-      line('Shaker', 1, 50000, { tax: { name: 'GST', bp: 1800, included: false, minor: 9000 }, totalMinor: 59000 }),
-      line('Protein bar', 2, 8000, { discount: { name: 'Bar deal', minor: 1000 }, listedMinor: 15000, tax: { name: 'GST', bp: 500, included: true, minor: 714 }, totalMinor: 15000 }),
+      line('Shaker', 1, 50000, { taxes: [{ name: 'GST', pcm: 18000, included: false, minor: 9000 }], totalMinor: 59000 }),
+      line('Protein bar', 2, 8000, { discount: { name: 'Bar deal', minor: 1000 }, listedMinor: 15000, taxes: [{ name: 'GST', pcm: 5000, included: true, minor: 714 }], totalMinor: 15000 }),
     ],
     74000,
     { refunds: [{ number: 21, on: '2026-10-23', amountMinor: 8000, item: 'Protein bar' }] },

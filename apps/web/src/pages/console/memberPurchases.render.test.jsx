@@ -18,7 +18,7 @@ const sale = (over = {}) => ({
   netMinor: 398,
   taxMinor: 33,
   totalMinor: 431,
-  taxBp: 825,
+  taxes: [{ name: null, pcm: 8250, minor: 33 }],
   taxIncluded: false,
   currency: 'USD',
   method: 'cash',
@@ -55,7 +55,7 @@ afterEach(() => {
 describe('bought at the desk', () => {
   it('lists what they bought, a voided sale marked with who and why, and opens Sell with them already picked', async () => {
     svc.purchases.mockResolvedValue({
-      sales: [sale(), sale({ id: 's0', quantity: 1, totalMinor: 215, taxMinor: 16, undone: true, voided: { reason: 'returned', on: '2026-10-12', by: 'Priya Desk' } })],
+      sales: [sale(), sale({ id: 's0', quantity: 1, totalMinor: 215, taxMinor: 16, taxes: [{ name: null, pcm: 8250, minor: 16 }], undone: true, voided: { reason: 'returned', on: '2026-10-12', by: 'Priya Desk' } })],
       notShown: 3,
     });
     open();

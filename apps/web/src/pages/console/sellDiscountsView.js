@@ -4,7 +4,7 @@ import {
   DISCOUNT_USES_MAX,
   billAmounts,
   bpToPercentText,
-  bpToTaxRateText,
+  pcmToTaxRateText,
   discountFits,
   discountStatus,
   formatMinor,
@@ -263,11 +263,11 @@ export function pickedDiscount(page, type, discountId) {
 /** The tax a type's bills charge, as the server works it out: null for none. */
 function typeTax(type, taxIncluded) {
   const t = type.tax;
-  return t === null || t === undefined ? null : { name: t.name, bp: t.bp, included: taxIncluded === true };
+  return t === null || t === undefined ? null : { name: t.name, pcm: t.pcm, included: taxIncluded === true };
 }
 
 /** "GST 18%". */
-const taxLabel = (tax) => `${tax.name} ${bpToTaxRateText(tax.bp)}%`;
+const taxLabel = (tax) => `${tax.name} ${pcmToTaxRateText(tax.pcm)}%`;
 
 /** What a membership comes to, as the lines above its button read: Price, Discount, its
  *  joining fee, its tax, Total, and what every later payment is (18b-ii-b, 18b-iii, 18t).
@@ -376,7 +376,7 @@ export function changeSummary(type, creditMinor, fromName, taxIncluded = false, 
 export function heldTaxLine(membership) {
   const t = membership.tax;
   if (t === null || t === undefined) return null;
-  return `Each bill charges ${t.name} ${bpToTaxRateText(t.bp)}%.`;
+  return `Each bill charges ${t.name} ${pcmToTaxRateText(t.pcm)}%.`;
 }
 
 /** A held membership's discount, said on a person's page; null where it had none. */

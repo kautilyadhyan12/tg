@@ -5,12 +5,12 @@ import { GONE_LINE, addToBasket, applyBasketCode, basketBody, basketView, newLin
 // A BASKET AT SELL (ROADMAP 18q): every case of where a discount and a gift go, and what the
 // basket comes to. The sums are worked out by hand from the prices, not by the code under test.
 
-const product = (over) => ({ currency: 'USD', taxRateId: null, stock: null, archivedAt: null, updatedAt: '2026-10-17T10:00:00.000Z', ...over });
-const WATER = product({ id: 'p-water', name: 'Water', priceMinor: 199, taxRateId: 'r1' });
-const BAR = product({ id: 'p-bar', name: 'Protein bar', priceMinor: 250, taxRateId: 'r2' });
+const product = (over) => ({ currency: 'USD', taxRateIds: [], stock: null, archivedAt: null, updatedAt: '2026-10-17T10:00:00.000Z', ...over });
+const WATER = product({ id: 'p-water', name: 'Water', priceMinor: 199, taxRateIds: ['r1'] });
+const BAR = product({ id: 'p-bar', name: 'Protein bar', priceMinor: 250, taxRateIds: ['r2'] });
 const TOWEL = product({ id: 'p-towel', name: 'Towel', priceMinor: 500, stock: 2 });
-const rate = (id, name, bp) => ({ id, name, bp, products: 1, membershipTypes: 0, memberships: 0 });
-const ON_TOP = { included: false, rates: [rate('r1', 'Sales tax', 825), rate('r2', 'County tax', 100)] };
+const rate = (id, name, pcm) => ({ id, name, pcm, products: 1, membershipTypes: 0, memberships: 0 });
+const ON_TOP = { included: false, rates: [rate('r1', 'Sales tax', 8250), rate('r2', 'County tax', 1000)] };
 const INSIDE = { ...ON_TOP, included: true };
 const discount = (over) => ({
   code: null,
