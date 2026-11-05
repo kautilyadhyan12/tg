@@ -688,7 +688,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 35c-iii. [x] **Achievements** — merged 2026-11-05 (PR #474).
 36. [ ] **The weekly plan**: the plan builder on the server (6a), the week screen (6b). Doing a planned workout (6c) is exercise folder 2's item 64. Once the plan names a week's sessions, calories burned joins the starter goals with the plan's own number (RULINGS 2026-10-13). Its Workout tab in Recommended For You takes the three choices and rules of spec Part 6 §16.6.
 37. **Running** (item 4; Stage 1's 7b; split 2026-11-05 in seven, Kd's "go", `rulings/2026-11-05-37a.md`: recording first). Its Running tab in Recommended For You takes the three choices and rules of spec Part 6 §16.6.
-    - 37a. [ ] **Record a run**: Start, 3 2 1, the screen locked, Pause and Auto-pause, the summary, Save once, Discard.
+    - 37a. [x] **Record a run** · merged 2026-11-06 · PR #478
     - 37a-ii. [ ] **A voice each kilometre or mile** (one more free Expo package).
     - 37b. [ ] **The map under the run, and hills climbed** (MapLibre; elevation from a free public height map, as Strava's basemap does).
     - 37c. [ ] **Your runs**: the list, a run's page, records (fastest 1 km or mile, 5 km, 10 km, longest run), the pace chart.

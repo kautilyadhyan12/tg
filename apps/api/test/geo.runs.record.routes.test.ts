@@ -235,7 +235,7 @@ d("record a run (real Postgres)", () => {
   });
 });
 
-describe("round one of 37a: nothing a person ran is refused for the phone's clock, and the server is never kept busy", () => {
+d("round one of 37a: nothing a person ran is refused for the phone's clock, and the server is never kept busy", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
   let app: App | undefined;
   const api = (): App => {
@@ -333,7 +333,7 @@ describe("round one of 37a: nothing a person ran is refused for the phone's cloc
   });
 });
 
-describe("which runs count for the streak and XP (round one of 37a, T1, T2, L6)", () => {
+d("which runs count for the streak and XP (round one of 37a, T1, T2, L6)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
   const USER = "6f1d2c3b-4a59-4e6f-8a7b-9c0d1e2f3a4b";
   const at = (day: string, hour: number) => new Date(`${day}T${String(hour).padStart(2, "0")}:00:00Z`);
