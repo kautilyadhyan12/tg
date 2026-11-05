@@ -6,6 +6,7 @@ import {
   minuteToTime,
   reminderNotification,
   reminderSaveSchema,
+  remindersDueNow,
   remindersToSend,
   timeToMinute,
   type ReminderKind,
@@ -41,17 +42,29 @@ describe("remindersToSend", () => {
   });
 });
 
+describe("remindersDueNow", () => {
+  it.each([
+    ["only the one whose time is now, not the one joining later", [row("workout", "18:30"), row("dinner", "19:00")], "18:30", ["workout"]],
+    ["none when only a later one is near", [row("dinner", "19:00")], "18:30", []],
+    ["29 minutes late is still due", [row("lunch", "13:00")], "13:29", ["lunch"]],
+    ["30 minutes late is not", [row("lunch", "13:00")], "13:30", []],
+    ["garbage sends nothing", [{ kind: "lunch" as const, minute: 780.5 }], "13:00", []],
+  ] as [string, { kind: ReminderKind; minute: number }[], string, ReminderKind[]][])("%s", (_name, owed, now, expected) => {
+    expect(remindersDueNow(owed, at(now))).toEqual(expected);
+  });
+});
+
 describe("reminderNotification", () => {
   const cases: [ReminderKind[], { title: string; body: string } | null][] = [
     [[], null],
-    [["workout"], { title: "Time to train", body: "Your workout for today is waiting." }],
-    [["workout", "dinner"], { title: "Time to train", body: "And log your dinner." }],
-    [["workout", "lunch", "dinner"], { title: "Time to train", body: "And log your lunch and dinner." }],
+    [["workout"], { title: "Time to train", body: "It's time for your workout." }],
+    [["workout", "dinner"], { title: "Time to train", body: "Your workout, then log your dinner." }],
+    [["workout", "lunch", "dinner"], { title: "Time to train", body: "Your workout, then log your lunch and dinner." }],
     [["breakfast"], { title: "Breakfast", body: "Log what you ate." }],
     [["lunch"], { title: "Lunch", body: "Log what you ate." }],
     [["dinner"], { title: "Dinner", body: "Log what you ate." }],
-    [["dinner", "lunch"], { title: "Log your meals", body: "Lunch and Dinner." }],
-    [["breakfast", "lunch", "dinner"], { title: "Log your meals", body: "Breakfast, Lunch and Dinner." }],
+    [["dinner", "lunch"], { title: "Log your meals", body: "Lunch and dinner." }],
+    [["breakfast", "lunch", "dinner"], { title: "Log your meals", body: "Breakfast, lunch and dinner." }],
   ];
   it.each(cases)("%j", (kinds, expected) => {
     expect(reminderNotification(kinds)).toEqual(expected);

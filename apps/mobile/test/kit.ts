@@ -140,7 +140,7 @@ export function fakeServer(routes: Record<string, Route>): { ask: Ask; asked: As
     // No meals in the week, unless a test says otherwise.
     "/v1/nutrition/food-week": () => ({ status: 200, body: foodWeekReply() }),
     // Every training reminder off, as they start, unless a test says otherwise.
-    "/v1/users/me/reminders": () => ({ status: 200, body: { reminders: OFF_REMINDERS } }),
+    "/v1/users/me/reminders": () => ({ status: 200, body: { reminders: OFF_REMINDERS, safeMode: false } }),
     ...routes,
   };
   const ask: Ask = async (url: string, init: AskInit) => {

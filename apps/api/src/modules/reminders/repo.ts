@@ -112,6 +112,16 @@ export async function claim(sql: SqlOrTx, userId: string, kinds: readonly Remind
     RETURNING t.kind, o.prev::text AS prev`;
 }
 
+/** Of these, the reminders still on and not paused: read again just before a send, so a switch-off made
+ *  while the run was reading never goes. */
+export async function stillOn(sql: SqlOrTx, userId: string, kinds: readonly ReminderKind[]): Promise<ReminderKind[]> {
+  if (kinds.length === 0) return [];
+  const rows = await sql<{ kind: ReminderKind }[]>`
+    SELECT kind FROM training_reminders
+    WHERE user_id = ${userId} AND kind IN ${sql(kinds)} AND is_on AND paused_at IS NULL`;
+  return rows.map((row) => row.kind);
+}
+
 /** Firebase reached no phone: today's is owed again, unless the person changed it since. */
 export async function unclaim(sql: SqlOrTx, userId: string, taken: readonly { kind: ReminderKind; prev: string | null }[], day: string): Promise<void> {
   for (const one of taken) {

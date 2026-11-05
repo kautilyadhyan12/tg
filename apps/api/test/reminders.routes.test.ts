@@ -61,12 +61,17 @@ d("the workout and meal reminders (real Postgres)", () => {
   const people: string[] = [];
   const sent: PushMessage[] = [];
   const answers = new Map<string, PushResult>();
+  /** Addresses whose next send throws, as a dropped connection would. */
+  const throwOnce = new Set<string>();
   const sender: PushSender = {
     send: (message) => {
+      if (throwOnce.delete(message.token)) return Promise.reject(new Error("connection dropped"));
       sent.push(message);
       return Promise.resolve(answers.get(message.token) ?? "sent");
     },
   };
+  /** The moment the routes read "today" from; the real clock unless a test sets it. */
+  let routesNow: Date | null = null;
   const sweep = (at: Date) => sendTrainingReminders({ sql, sender, now: () => at, userIds: people });
   const sentTo = (token: string) => sent.filter((m) => m.token === token);
 
@@ -80,6 +85,7 @@ d("the workout and meal reminders (real Postgres)", () => {
     await sql`DELETE FROM workouts WHERE user_id IN (${mine})`;
     await sql`DELETE FROM meal_logs WHERE user_id IN (${mine})`;
     await sql`DELETE FROM training_reminders WHERE user_id IN (${mine})`;
+    await sql`DELETE FROM user_health_screenings WHERE user_id IN (${mine})`;
     await sql`DELETE FROM push_tokens WHERE user_id IN (${mine})`;
     await sql`DELETE FROM sign_in_codes WHERE email LIKE 'remind-t-%@example.com'`;
     await sql`DELETE FROM users WHERE email LIKE 'remind-t-%@example.com'`;
@@ -133,7 +139,7 @@ d("the workout and meal reminders (real Postgres)", () => {
 
   beforeAll(async () => {
     await cleanup();
-    app = await buildApp(loadConfig(baseEnv), { redis: createMemoryRedis(), emailSender });
+    app = await buildApp(loadConfig(baseEnv), { redis: createMemoryRedis(), emailSender, reminders: { now: () => routesNow ?? new Date() } });
   }, TIMEOUT_MS);
 
   afterAll(async () => {
@@ -158,8 +164,7 @@ d("the workout and meal reminders (real Postgres)", () => {
     await sweep(india(18, 30));
     expect(sentTo(asha.token)).toEqual([]);
     expect(sentTo(ravi.token)).toHaveLength(1);
-    // Every notification names the person it is for, and goes only to their own phone.
-    for (const m of sent) expect(m.userId).toBe(m.token === ravi.token ? ravi.userId : "nobody");
+    expect(sent).toHaveLength(1);
   }, TIMEOUT_MS);
 
   it("after a sign-out, and with somebody else signed in on that phone, the reminder goes nowhere", async () => {
@@ -236,7 +241,7 @@ d("the workout and meal reminders (real Postgres)", () => {
     await sweep(india(18, 29));
     expect(sentTo(tara.token)).toEqual([]);
     await sweep(india(18, 30));
-    expect(sentTo(tara.token).map((m) => [m.title, m.body, m.data])).toEqual([["Time to train", "Your workout for today is waiting.", { kind: "training_reminder", open: "workout" }]]);
+    expect(sentTo(tara.token).map((m) => [m.title, m.body, m.data])).toEqual([["Time to train", "It's time for your workout.", { kind: "training_reminder", open: "workout" }]]);
     await sweep(india(18, 31));
     await sweep(india(18, 45));
     expect(sentTo(tara.token)).toHaveLength(1);
@@ -328,7 +333,7 @@ d("the workout and meal reminders (real Postgres)", () => {
     await set(dev, "dinner", "19:00");
     sent.length = 0;
     await sweep(india(18, 30));
-    expect(sentTo(dev.token).map((m) => [m.title, m.body])).toEqual([["Time to train", "And log your dinner."]]);
+    expect(sentTo(dev.token).map((m) => [m.title, m.body])).toEqual([["Time to train", "Your workout, then log your dinner."]]);
     await sweep(india(19, 0));
     expect(sentTo(dev.token)).toHaveLength(1);
   }, TIMEOUT_MS);
@@ -365,16 +370,78 @@ d("the workout and meal reminders (real Postgres)", () => {
     expect(sentTo(flaky.token)).toHaveLength(2);
   }, TIMEOUT_MS);
 
-  it("saved at a time already past today, it waits for tomorrow", async () => {
+  it("saved at a time already past today, it waits for tomorrow; a time still to come goes today", async () => {
     const late = await phone("late");
-    // Saved now, for a minute already gone today on her clock: the save marks today as had.
-    const nowHere = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date());
-    const minute = Number(nowHere.slice(0, 2)) * 60 + Number(nowHere.slice(3));
-    const past = Math.max(0, minute - 5 - (minute % 5));
-    const time = `${String(Math.floor(past / 60)).padStart(2, "0")}:${String(past % 60).padStart(2, "0")}`;
-    expect((await save(late, "breakfast", { on: true, time, days: [1, 2, 3, 4, 5, 6, 7] })).statusCode).toBe(200);
+    routesNow = india(9, 0);
+    try {
+      expect((await save(late, "breakfast", { on: true, time: "08:00", days: [1, 2, 3, 4, 5, 6, 7] })).statusCode).toBe(200);
+      expect((await save(late, "lunch", { on: true, time: "13:00", days: [1, 2, 3, 4, 5, 6, 7] })).statusCode).toBe(200);
+    } finally {
+      routesNow = null;
+    }
     sent.length = 0;
-    await sweep(new Date(Date.now() + 60_000));
-    expect(sentTo(late.token)).toEqual([]);
+    await sweep(india(9, 1));
+    await sweep(india(13, 0));
+    expect(sentTo(late.token).map((m) => m.title)).toEqual(["Lunch"]);
+    await sweep(india(8, 0, 1));
+    expect(sentTo(late.token).map((m) => m.title)).toEqual(["Lunch", "Breakfast"]);
+  }, TIMEOUT_MS);
+
+  // ── Round one (reviews/19e-i-2-findings.md) ──
+
+  it("the one due now already done: nothing goes early, and the later one goes at its own time (H1)", async () => {
+    const trained = await phone("trainedearly");
+    await set(trained, "workout", "18:30");
+    await set(trained, "dinner", "19:30");
+    await sql`
+      INSERT INTO workouts (id, user_id, started_at, platform, engine_version)
+      VALUES (${randomUUID()}, ${trained.userId}, ${india(7, 0)}, 'android', 'test')`;
+    const lunched = await phone("lunchedearly");
+    await set(lunched, "lunch", "13:00");
+    await set(lunched, "workout", "13:45");
+    await sql`
+      INSERT INTO meal_logs (user_id, taken_at, meal_type, items, kcal_point, kcal_low, kcal_high, portion_source, nutrition_sources, calc_version)
+      VALUES (${lunched.userId}, ${india(12, 40)}, 'lunch', '[]'::jsonb, 500, 400, 600, 'default', '{usda}', 1)`;
+    sent.length = 0;
+    await sweep(india(13, 0));
+    await sweep(india(18, 30));
+    expect(sentTo(trained.token)).toEqual([]);
+    expect(sentTo(lunched.token)).toEqual([]);
+    await sweep(india(13, 45));
+    await sweep(india(19, 30));
+    expect(sentTo(lunched.token).map((m) => [m.title, m.body])).toEqual([["Time to train", "It's time for your workout."]]);
+    expect(sentTo(trained.token).map((m) => [m.title, m.body])).toEqual([["Dinner", "Log what you ate."]]);
+  }, TIMEOUT_MS);
+
+  it("Safe mode: no workout reminder, the meals still go, and the list says Safe mode (H3)", async () => {
+    const safe = await phone("safemode");
+    await sql`INSERT INTO user_health_screenings (user_id, has_condition, check_first) VALUES (${safe.userId}, true, 'not_yet')`;
+    await set(safe, "workout", "18:30");
+    await set(safe, "dinner", "19:00");
+    sent.length = 0;
+    await sweep(india(18, 30));
+    await sweep(india(19, 0));
+    expect(sentTo(safe.token).map((m) => m.title)).toEqual(["Dinner"]);
+    const res = await request("GET", "/v1/users/me/reminders", { bearer: safe.accessToken });
+    const body = remindersResponseSchema.parse(JSON.parse(res.body));
+    expect(body.safeMode).toBe(true);
+    expect(body.reminders[0]).toMatchObject({ kind: "workout", on: true });
+    // Cleared by a professional: the workout reminder goes again.
+    await sql`UPDATE user_health_screenings SET check_first = 'cleared' WHERE user_id = ${safe.userId}`;
+    await sweep(india(18, 30, 2));
+    expect(sentTo(safe.token).map((m) => m.title)).toEqual(["Dinner", "Time to train"]);
+    expect(remindersResponseSchema.parse(JSON.parse((await request("GET", "/v1/users/me/reminders", { bearer: safe.accessToken })).body)).safeMode).toBe(false);
+  }, TIMEOUT_MS);
+
+  it("a send that throws is owed again on the next run, and goes once", async () => {
+    const dropped = await phone("dropped");
+    await set(dropped, "lunch", "13:00");
+    throwOnce.add(dropped.token);
+    sent.length = 0;
+    await sweep(india(13, 0));
+    expect(sentTo(dropped.token)).toEqual([]);
+    await sweep(india(13, 1));
+    await sweep(india(13, 2));
+    expect(sentTo(dropped.token)).toHaveLength(1);
   }, TIMEOUT_MS);
 });

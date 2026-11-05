@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import { App, tabOfTap } from "../../src/App";
 import { channelOf, identifierOf, tappedOf } from "../../src/notifications/phone";
-import { DONE_LINE, PAUSED_LINE } from "../../src/screens/remindersView";
+import { DONE_LINE, PAUSED_LINE, SAFE_MODE_LINE } from "../../src/screens/remindersView";
 import { NO_ANSWER } from "../../src/screens/SignIn";
 import type { Ask } from "../../src/session/calls";
 import { OFF_REMINDERS, fakeServer, kept, lost, memoryStore, refusal, tokens, type Reply, type Route } from "../kit";
@@ -21,9 +21,9 @@ const LIST = "/v1/users/me/reminders";
 
 type Held = (typeof OFF_REMINDERS)[number];
 /** The server's own reminders: only its answers change them. */
-function account(start: Partial<Record<string, Partial<Held>>> = {}) {
+function account(start: Partial<Record<string, Partial<Held>>> = {}, safeMode = false) {
   const held: Held[] = OFF_REMINDERS.map((r) => ({ ...r, days: [...r.days], ...start[r.kind] }));
-  const list: Route = () => ({ status: 200, body: { reminders: held } });
+  const list: Route = () => ({ status: 200, body: { reminders: held, safeMode } });
   const saveOf =
     (kind: string): Route =>
     (body) => {
@@ -31,7 +31,7 @@ function account(start: Partial<Record<string, Partial<Held>>> = {}) {
       if (one === undefined || body === undefined) return refusal(400, "validation_error", "no");
       const { on, time, days } = body as { on: boolean; time: string; days: number[] };
       Object.assign(one, { on, time, days: kind === "workout" ? days : [1, 2, 3, 4, 5, 6, 7], paused: on ? false : one.paused });
-      return { status: 200, body: { reminders: held } };
+      return { status: 200, body: { reminders: held, safeMode } };
     };
   const routes: Record<string, Route> = { [LIST]: list };
   for (const r of OFF_REMINDERS) routes[`${LIST}/${r.kind}`] = saveOf(r.kind);
@@ -177,6 +177,15 @@ describe("Your training shows and saves only the server's answer", () => {
     await waitFor(() => {
       expect(notifications.asked).toBe(asked + 1);
     });
+  });
+
+  it("Safe mode: the workout reminder says why it waits, keeps its switch, and shows no days or time; meals as usual", async () => {
+    await openSettings(fakeServer(routes(account({ workout: { on: true, time: "18:30", days: [1, 3, 5] }, lunch: { on: true } }, true).routes)).ask);
+    expect(screen.getByText(SAFE_MODE_LINE)).toBeTruthy();
+    expect(screen.getByLabelText("Workout reminder").props.value).toBe(true);
+    expect(screen.queryByLabelText("Monday")).toBeNull();
+    expect(screen.queryByLabelText("Workout reminder time, 6:30 PM")).toBeNull();
+    expect(screen.getByLabelText("Lunch time, 1:00 PM")).toBeTruthy();
   });
 
   it("Reminders turned off in the phone's own settings: the row says so", async () => {

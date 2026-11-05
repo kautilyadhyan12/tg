@@ -11,7 +11,7 @@ import { colours, orangeGradient, shadows, sizes } from "../look/colours";
 import { Sheet } from "../look/Sheet";
 import { fonts, Txt } from "../look/Txt";
 import { useSession } from "../session/SessionProvider";
-import { DONE_LINE, MINUTES, PAUSED_LINE, clockWords, reminderLine, timeWheels, wheelTime } from "./remindersView";
+import { DONE_LINE, MINUTES, PAUSED_LINE, SAFE_MODE_LINE, clockWords, reminderLine, timeWheels, wheelTime } from "./remindersView";
 import { NO_ANSWER } from "./SignIn";
 
 // Your training (ROADMAP Stage 5 item 19e-i): the workout reminder (its days and a time) and a reminder
@@ -22,7 +22,7 @@ import { NO_ANSWER } from "./SignIn";
 const LABEL: Record<ReminderKind, string> = { workout: "Workout reminder", breakfast: "Breakfast", lunch: "Lunch", dinner: "Dinner" };
 const DAY_LETTER = ["M", "T", "W", "T", "F", "S", "S"] as const;
 const DAY_NAME = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const;
-type Loaded = { kind: "loading" } | { kind: "failed" } | { kind: "ok"; reminders: Reminder[] };
+type Loaded = { kind: "loading" } | { kind: "failed" } | { kind: "ok"; reminders: Reminder[]; safeMode: boolean };
 
 /** `onTurnedOn`: a reminder was just switched on, so Android is asked, if it has not been, to let it show. */
 export function TrainingReminders({ offOnPhone, phoneAllowed, onTurnedOn }: { offOnPhone: boolean; phoneAllowed: boolean; onTurnedOn: () => void }) {
@@ -41,7 +41,7 @@ export function TrainingReminders({ offOnPhone, phoneAllowed, onTurnedOn }: { of
       const at = saves.current;
       void session.signedIn({ method: "GET", path: "/v1/users/me/reminders" }, remindersResponseSchema).then((answer) => {
         if (!run.live || saves.current !== at) return;
-        if (answer.kind === "ok") setLoaded({ kind: "ok", reminders: answer.data.reminders });
+        if (answer.kind === "ok") setLoaded({ kind: "ok", reminders: answer.data.reminders, safeMode: answer.data.safeMode });
         else setLoaded((was) => (was.kind === "ok" ? was : { kind: "failed" }));
       });
     };
@@ -65,7 +65,7 @@ export function TrainingReminders({ offOnPhone, phoneAllowed, onTurnedOn }: { of
     saves.current += 1;
     setBusy(null);
     if (answer.kind === "ok") {
-      setLoaded({ kind: "ok", reminders: answer.data.reminders });
+      setLoaded({ kind: "ok", reminders: answer.data.reminders, safeMode: answer.data.safeMode });
       if (change.on === true) onTurnedOn();
       return true;
     }
@@ -89,13 +89,15 @@ export function TrainingReminders({ offOnPhone, phoneAllowed, onTurnedOn }: { of
           {REMINDER_KINDS.map((kind) => {
             const reminder = loaded.reminders.find((r) => r.kind === kind);
             if (reminder === undefined) return null;
-            const live = reminder.on && !reminder.paused;
+            // Safe mode holds the workout reminder: its switch stays, its days and time wait.
+            const held = kind === "workout" && loaded.safeMode && reminder.on;
+            const live = reminder.on && !reminder.paused && !held;
             return (
               <View key={kind} style={styles.row} testID={`reminder-${kind}`}>
                 <View style={styles.between}>
                   <View style={styles.grow}>
                     <Txt kind="h3">{LABEL[kind]}</Txt>
-                    <Txt kind="small">{reminderLine(reminder)}</Txt>
+                    <Txt kind="small">{held ? SAFE_MODE_LINE : reminderLine(reminder)}</Txt>
                   </View>
                   {live && kind !== "workout" ? <TimePill reminder={reminder} disabled={busy !== null} onPress={() => { setTimeFor(reminder); }} /> : null}
                   <Switch
@@ -144,7 +146,7 @@ export function TrainingReminders({ offOnPhone, phoneAllowed, onTurnedOn }: { of
                     </View>
                   </>
                 ) : null}
-                {reminder.on && reminder.paused ? (
+                {reminder.on && reminder.paused && !held ? (
                   <View style={styles.paused}>
                     <Txt kind="small" colour="gold" style={styles.grow}>
                       {PAUSED_LINE}

@@ -17,6 +17,7 @@ import type { Sql } from "postgres";
 import type { RedisLike } from "../../redis.js";
 import { createDualRateLimit } from "../auth/rateLimit.js";
 import { localClock } from "./clock.js";
+import { getPlanHealth } from "../users/service.js";
 import * as repo from "./repo.js";
 
 /** All four, in order, each as saved or as it starts. */
@@ -27,7 +28,9 @@ export async function remindersOf(sql: Sql, userId: string): Promise<RemindersRe
     if (row === undefined) return { kind, on: false, time: minuteToTime(REMINDER_DEFAULT_MINUTE[kind]), days: bitsToDays(127), paused: false };
     return { kind, on: row.isOn, time: minuteToTime(row.minute), days: bitsToDays(row.days), paused: row.isOn && row.paused };
   });
-  return { reminders };
+  // Safe mode holds the workout reminder (the sender skips it); the switch and its days stay as saved.
+  const safeMode = (await getPlanHealth(sql, userId))?.safeMode === true;
+  return { reminders, safeMode };
 }
 
 const refused = (req: FastifyRequest, reply: FastifyReply, issues: readonly { path: PropertyKey[]; code: string }[]) =>

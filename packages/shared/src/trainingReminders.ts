@@ -46,7 +46,13 @@ export const reminderSchema = z
   .strict();
 export type Reminder = z.infer<typeof reminderSchema>;
 
-export const remindersResponseSchema = z.object({ reminders: z.array(reminderSchema).length(REMINDER_KINDS.length) }).strict();
+export const remindersResponseSchema = z
+  .object({
+    reminders: z.array(reminderSchema).length(REMINDER_KINDS.length),
+    /** Safe mode (the health question): no workout reminder goes until a professional clears the person. */
+    safeMode: z.boolean(),
+  })
+  .strict();
 export type RemindersResponse = z.infer<typeof remindersResponseSchema>;
 
 /** Saving one reminder: all of it, so two presses never mix. Turning it on again ends a pause. */
@@ -83,6 +89,15 @@ export const minuteToTime = (minute: number): string =>
   `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
 export const timeToMinute = (time: string): number => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
 
+const isDue = (minute: number, now: number) => now - minute >= 0 && now - minute < REMINDER_DUE_MINUTES;
+
+/** The reminders whose own time is now: passed less than `REMINDER_DUE_MINUTES` ago. Only these can start a
+ *  notification; one due later in the hour joins it (`remindersToSend`) only once one of these is going. */
+export function remindersDueNow(owed: readonly { kind: ReminderKind; minute: number }[], now: number): ReminderKind[] {
+  if (!Number.isInteger(now) || now < 0 || now > 1439) return [];
+  return REMINDER_KINDS.filter((kind) => owed.some((row) => row.kind === kind && Number.isInteger(row.minute) && isDue(row.minute, now)));
+}
+
 /** Which of one person's reminders go now, from those still owed today (on, not paused, today one of
  *  their days, not yet sent or skipped today), at `now`, minutes after midnight on their clock. None
  *  unless one is due (its time passed less than `REMINDER_DUE_MINUTES` ago); with it, any due within the
@@ -90,9 +105,9 @@ export const timeToMinute = (time: string): number => Number(time.slice(0, 2)) *
 export function remindersToSend(owed: readonly { kind: ReminderKind; minute: number }[], now: number): ReminderKind[] {
   if (!Number.isInteger(now) || now < 0 || now > 1439) return [];
   const ok = owed.filter((row) => Number.isInteger(row.minute) && row.minute >= 0 && row.minute <= 1439);
-  const due = ok.some((row) => now - row.minute >= 0 && now - row.minute < REMINDER_DUE_MINUTES);
+  const due = ok.some((row) => isDue(row.minute, now));
   if (!due) return [];
-  const going = ok.filter((row) => (now - row.minute >= 0 && now - row.minute < REMINDER_DUE_MINUTES) || (row.minute > now && row.minute - now <= REMINDER_BUNDLE_MINUTES));
+  const going = ok.filter((row) => isDue(row.minute, now) || (row.minute > now && row.minute - now <= REMINDER_BUNDLE_MINUTES));
   return REMINDER_KINDS.filter((kind) => going.some((row) => row.kind === kind));
 }
 
@@ -108,12 +123,13 @@ export function reminderNotification(kinds: readonly ReminderKind[]): { title: s
   const meals = REMINDER_KINDS.filter((kind): kind is MealReminderKind => kind !== "workout" && kinds.includes(kind));
   const lower = meals.map((meal) => MEAL_NAME[meal].toLowerCase());
   if (kinds.includes("workout")) {
-    return { title: "Time to train", body: meals.length === 0 ? "Your workout for today is waiting." : `And log your ${andList(lower)}.` };
+    return { title: "Time to train", body: meals.length === 0 ? "It's time for your workout." : `Your workout, then log your ${andList(lower)}.` };
   }
   const [only] = meals;
   if (only === undefined) return null;
   if (meals.length === 1) return { title: MEAL_NAME[only], body: "Log what you ate." };
-  return { title: "Log your meals", body: `${andList(meals.map((meal) => MEAL_NAME[meal]))}.` };
+  const list = andList(lower);
+  return { title: "Log your meals", body: `${list.charAt(0).toUpperCase()}${list.slice(1)}.` };
 }
 
 /** The Android channel the reminders arrive on; its name is what the phone's settings show. */
