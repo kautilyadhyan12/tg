@@ -2,6 +2,7 @@
 // Web is browse/plan only: route generation, saved_routes CRUD, runs read.
 // Run RECORDING (write/sync) and route-name geocoding-on-save are mobile (P5).
 import { z } from "zod";
+import { RUN_MAX_ELAPSED_MS, RUN_MAX_PAUSES, RUN_MAX_POINTS } from "./runMaths.js";
 
 // ── route generation (POST /v1/geo/routes/generate) ─────────────────────────
 // Bounds ported verbatim from running.py:123,126 (Part 0 rule 4): targetKm
@@ -76,6 +77,53 @@ export type RunPage = z.infer<typeof runPageSchema>;
 
 export const runDetailSchema = runSummarySchema.extend({ polyline: z.string().nullable() });
 export type RunDetail = z.infer<typeof runDetailSchema>;
+
+// ── Record a run (POST /v1/geo/runs; ROADMAP 37a) ──────────────────────────────────────────────
+// The phone sends the points and pauses it recorded; the server works every number out again
+// from them (`runMaths.ts`), so a typed distance can never be saved. Sent twice, saved once: the
+// run's id is the Idempotency-Key.
+const msIntoRun = z.number().int().min(0).max(RUN_MAX_ELAPSED_MS);
+
+export const saveRunRequestSchema = z
+  .object({
+    runId: z.string().uuid(),
+    startedAt: z.string().datetime(),
+    elapsedMs: msIntoRun,
+    name: z.string().trim().min(1).max(60),
+    /** How it felt, 1 (easy) to 10 (max effort); null when not given. */
+    effort: z.number().int().min(1).max(10).nullable(),
+    note: z.string().trim().max(1000).nullable(),
+    points: z
+      .array(z.tuple([msIntoRun, z.number().min(-90).max(90), z.number().min(-180).max(180), z.number().min(0).max(100_000).nullable()]))
+      .max(RUN_MAX_POINTS),
+    pauses: z.array(z.tuple([msIntoRun, msIntoRun])).max(RUN_MAX_PAUSES),
+  })
+  .strict();
+export type SaveRunRequest = z.infer<typeof saveRunRequestSchema>;
+
+export const runSplitSchema = z.object({ m: z.number().int().nonnegative(), s: z.number().int().nonnegative() });
+
+/** A saved run, everything its summary shows. */
+export const savedRunSchema = z.object({
+  id: z.string().uuid(),
+  startedAt: z.string().datetime(),
+  name: z.string(),
+  effort: z.number().int().nullable(),
+  note: z.string().nullable(),
+  distanceM: z.number().int().nonnegative(),
+  movingS: z.number().int().nonnegative(),
+  elapsedS: z.number().int().nonnegative(),
+  leftOutM: z.number().int().nonnegative(),
+  leftOutS: z.number().int().nonnegative(),
+  kcal: z.number().int().nonnegative(),
+  splitsKm: z.array(runSplitSchema),
+  splitsMi: z.array(runSplitSchema),
+  polyline: z.string(),
+});
+export type SavedRun = z.infer<typeof savedRunSchema>;
+
+export const saveRunResponseSchema = z.object({ status: z.enum(["created", "duplicate"]), run: savedRunSchema });
+export type SaveRunResponse = z.infer<typeof saveRunResponseSchema>;
 
 // ── shared list query (cursor pagination, R7.3) ─────────────────────────────
 export const geoListQuerySchema = z

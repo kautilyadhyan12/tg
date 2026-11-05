@@ -6,7 +6,11 @@
 // candidates only.
 import type { FastifyBaseLogger } from "fastify";
 import type { Sql } from "postgres";
-import type { GenerateRoutesRequest, RouteCandidate, SavedRoute, SavedRouteCreate, RunDetail, RunSummary } from "@app/shared";
+import { RUN_CALC_VERSION, encodePolyline, runSplitSchema, runSums } from "@app/shared";
+import type { GenerateRoutesRequest, RouteCandidate, SavedRoute, SavedRouteCreate, RunDetail, RunSummary, SaveRunRequest, SavedRun } from "@app/shared";
+import { z } from "zod";
+import { onWorkoutSynced } from "../gamification/service.js";
+import { getUserSyncContext } from "../users/service.js";
 import { GeoError } from "./errors.js";
 import type { RouteProvider } from "./ors.adapter.js";
 import * as repo from "./repo.js";
@@ -135,4 +139,73 @@ export async function getRun(deps: ReadDeps, userId: string, id: string): Promis
   // Detail includes the polyline (owner-only — the route WHERE already bound it
   // to userId; it is never logged or returned to any other user).
   return row === null ? null : { ...asRunSummary(row), polyline: row.polyline };
+}
+
+// ── Record a run (ROADMAP 37a) ─────────────────────────────────────────────────────────────────
+
+const splitsStoredSchema = z.object({ km: z.array(runSplitSchema), mi: z.array(runSplitSchema) });
+
+const asSavedRun = (r: repo.SavedRunRow): SavedRun => {
+  const splits = splitsStoredSchema.safeParse(r.splits);
+  return {
+    id: r.id,
+    startedAt: r.startedAt.toISOString(),
+    name: r.name ?? "Run",
+    effort: r.effort,
+    note: r.note,
+    distanceM: r.distanceM,
+    movingS: r.movingS,
+    elapsedS: r.elapsedS ?? r.movingS,
+    leftOutM: r.leftOutM ?? 0,
+    leftOutS: r.leftOutS ?? 0,
+    kcal: r.kcal ?? 0,
+    splitsKm: splits.success ? splits.data.km : [],
+    splitsMi: splits.success ? splits.data.mi : [],
+    polyline: r.polyline ?? "",
+  };
+};
+
+/** A run starting later than this past the server's own clock is refused: a phone's clock is
+ *  never that far out. */
+const FUTURE_LEEWAY_MS = 10 * 60_000;
+
+export class RunInFutureError extends Error {
+  constructor() {
+    super("run starts in the future");
+    this.name = "RunInFutureError";
+  }
+}
+
+/** Works every number out from the points with the shared rules and saves the run once. The
+ *  person's weight is the one they keep (70 kg when there is none), as workouts' calories are. */
+export async function saveRun(
+  deps: ReadDeps & { now: () => Date },
+  userId: string,
+  input: SaveRunRequest,
+): Promise<{ status: "created" | "duplicate"; run: SavedRun }> {
+  const startedAt = new Date(input.startedAt);
+  if (startedAt.getTime() > deps.now().getTime() + FUTURE_LEEWAY_MS) throw new RunInFutureError();
+  const ctx = await getUserSyncContext(deps.sql, userId);
+  const sums = runSums(input.points, input.pauses, input.elapsedMs, ctx.weightKg ?? 0);
+  const note = input.note === null || input.note === "" ? null : input.note;
+  const saved = await repo.insertRun(deps.sql, userId, {
+    id: input.runId,
+    startedAt,
+    name: input.name,
+    effort: input.effort,
+    note,
+    distanceM: sums.distanceM,
+    movingS: sums.movingS,
+    elapsedS: sums.elapsedS,
+    leftOutM: sums.leftOutM,
+    leftOutS: sums.leftOutS,
+    kcal: sums.kcal,
+    splits: { km: sums.splitsKm, mi: sums.splitsMi },
+    polyline: encodePolyline(sums.track),
+    calcVersion: RUN_CALC_VERSION,
+  });
+  // On every send, a repeat included, as a workout's sync does: the streak, badges and XP are
+  // worked out again from history, so a send whose first try failed here heals on the next.
+  await onWorkoutSynced({ sql: deps.sql }, userId, ctx.timezone);
+  return { status: saved.created ? "created" : "duplicate", run: asSavedRun(saved.row) };
 }

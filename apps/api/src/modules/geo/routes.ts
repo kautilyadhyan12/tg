@@ -11,7 +11,8 @@ import type { RedisLike } from "../../redis.js";
 import { requireQuota } from "../quotas/service.js";
 import type { GeocodeResolver } from "./geocode.js";
 import { createOrsRouteProvider, type RouteProvider } from "./ors.adapter.js";
-import { generateRoutesRequestSchema, geoListQuerySchema, savedRouteCreateSchema } from "./schemas.js";
+import { ForeignRunError } from "./repo.js";
+import { generateRoutesRequestSchema, geoListQuerySchema, saveRunRequestSchema, savedRouteCreateSchema } from "./schemas.js";
 import * as service from "./service.js";
 import type { GeoDeps } from "./service.js";
 
@@ -154,7 +155,37 @@ export function registerGeoRoutes(
     },
   );
 
-  // ── runs (read-only; record/sync = P5) ─────────────────────────────────────
+  // ── record a run (ROADMAP 37a) ────────────────────────────────────────────
+  // Twelve hours of points at one a second is about 2 MB of JSON; anything past this is refused
+  // before it is read.
+  app.post(
+    "/v1/geo/runs",
+    { preHandler: [app.authenticate], bodyLimit: 3 * 1024 * 1024 },
+    async (req, reply) => {
+      const input = parse(saveRunRequestSchema, req.body, req, reply);
+      if (input === null) return;
+      // The run's own id is its Idempotency-Key (as a workout's is): a mismatch is a broken phone.
+      if (req.headers["idempotency-key"] !== input.runId) {
+        return reply.status(400).send({
+          error: "idempotency_key_mismatch",
+          message: "Idempotency-Key header must equal body runId",
+          requestId: req.id,
+        });
+      }
+      try {
+        const saved = await service.saveRun({ sql: deps.sql, now: () => new Date() }, authedUserId(req), input);
+        return reply.status(saved.status === "created" ? 201 : 200).send(saved);
+      } catch (err) {
+        if (err instanceof ForeignRunError) return notFound(req, reply);
+        if (err instanceof service.RunInFutureError) {
+          return reply.status(400).send({ error: "validation_error", message: "startedAt: in the future", requestId: req.id });
+        }
+        throw err;
+      }
+    },
+  );
+
+  // ── runs (read) ────────────────────────────────────────────────────────────
 
   app.get("/v1/geo/runs", { preHandler: [app.authenticate] }, async (req, reply) => {
     const q = parse(geoListQuerySchema, req.query, req, reply);

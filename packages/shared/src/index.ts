@@ -20,6 +20,7 @@ export * from "./barcode.js";
 export * from "./labelRead.js";
 export * from "./mealVision.js";
 export * from "./geo.js";
+export * from "./runMaths.js";
 export * from "./privacy.js";
 export * from "./orgs.js";
 export * from "./orgWords.js";

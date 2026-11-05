@@ -221,3 +221,100 @@ export async function getLiveGymId(sql: Sql, userId: string): Promise<string | n
     LIMIT 1`;
   return rows[0]?.gym_id ?? null;
 }
+
+// ── Record a run (ROADMAP 37a) ─────────────────────────────────────────────────────────────────
+
+/** The run's id is already another person's: refused as if it were not there. */
+export class ForeignRunError extends Error {
+  constructor() {
+    super("run does not belong to the authenticated user");
+    this.name = "ForeignRunError";
+  }
+}
+
+export interface NewRun {
+  id: string;
+  startedAt: Date;
+  name: string;
+  effort: number | null;
+  note: string | null;
+  distanceM: number;
+  movingS: number;
+  elapsedS: number;
+  leftOutM: number;
+  leftOutS: number;
+  kcal: number;
+  splits: { km: { m: number; s: number }[]; mi: { m: number; s: number }[] };
+  polyline: string;
+  calcVersion: number;
+}
+
+export interface SavedRunRow {
+  id: string;
+  startedAt: Date;
+  name: string | null;
+  effort: number | null;
+  note: string | null;
+  distanceM: number;
+  movingS: number;
+  elapsedS: number | null;
+  leftOutM: number | null;
+  leftOutS: number | null;
+  kcal: number | null;
+  splits: unknown;
+  polyline: string | null;
+}
+
+interface SavedRunDbRow {
+  id: string;
+  started_at: Date;
+  name: string | null;
+  effort: number | null;
+  note: string | null;
+  distance_m: number;
+  duration_s: number;
+  elapsed_s: number | null;
+  left_out_m: number | null;
+  left_out_s: number | null;
+  kcal_point: number | null;
+  splits: unknown;
+  polyline: string | null;
+}
+
+const toSavedRun = (r: SavedRunDbRow): SavedRunRow => ({
+  id: r.id,
+  startedAt: r.started_at,
+  name: r.name,
+  effort: r.effort,
+  note: r.note,
+  distanceM: r.distance_m,
+  movingS: r.duration_s,
+  elapsedS: r.elapsed_s,
+  leftOutM: r.left_out_m,
+  leftOutS: r.left_out_s,
+  kcal: r.kcal_point,
+  splits: r.splits,
+  polyline: r.polyline,
+});
+
+/** Saves a run once: a second send of the same id changes nothing and reads back what the first
+ *  saved. Whose it is is checked on the row as it stands after the insert, so two people's first
+ *  sends of one id can never both pass. */
+export async function insertRun(sql: Sql, userId: string, run: NewRun): Promise<{ created: boolean; row: SavedRunRow }> {
+  return await sql.begin(async (tx) => {
+    const inserted = await tx`
+      INSERT INTO runs (id, user_id, started_at, duration_s, distance_m, polyline, splits, kcal_point,
+                        source, name, effort, note, elapsed_s, left_out_m, left_out_s, run_calc_version)
+      VALUES (${run.id}, ${userId}, ${run.startedAt}, ${run.movingS}, ${run.distanceM}, ${run.polyline},
+              ${tx.json(run.splits)}, ${run.kcal}, 'mobile', ${run.name}, ${run.effort}, ${run.note},
+              ${run.elapsedS}, ${run.leftOutM}, ${run.leftOutS}, ${run.calcVersion})
+      ON CONFLICT (id) DO NOTHING`;
+    const rows = await tx<(SavedRunDbRow & { user_id: string })[]>`
+      SELECT id, user_id, started_at, name, effort, note, distance_m, duration_s, elapsed_s, left_out_m,
+             left_out_s, kcal_point, splits, polyline
+      FROM runs WHERE id = ${run.id}`;
+    const row = rows[0];
+    if (row === undefined || row.user_id !== userId) throw new ForeignRunError();
+    return { created: inserted.count === 1, row: toSavedRun(row) };
+  });
+}

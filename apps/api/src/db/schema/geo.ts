@@ -4,6 +4,7 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -36,8 +37,26 @@ export const runs = pgTable(
     source: text("source").notNull().default("mobile"),
     legacyMongoId: text("legacy_mongo_id").unique(),
     createdAt: createdAt(),
+    // 0208 (ROADMAP 37a): what the person gave it, and the numbers worked out beside duration_s
+    // (the moving time) by the rules of runMaths.ts's run_calc_version.
+    name: text("name"),
+    effort: smallint("effort"),
+    note: text("note"),
+    elapsedS: integer("elapsed_s"),
+    leftOutM: integer("left_out_m"),
+    leftOutS: integer("left_out_s"),
+    runCalcVersion: smallint("run_calc_version"),
   },
-  (t) => [index("runs_user_started_idx").on(t.userId, t.startedAt.desc())],
+  (t) => [
+    index("runs_user_started_idx").on(t.userId, t.startedAt.desc()),
+    check("runs_effort_check", sql`${t.effort} BETWEEN 1 AND 10`),
+    check("runs_name_check", sql`char_length(${t.name}) BETWEEN 1 AND 60`),
+    check("runs_note_check", sql`char_length(${t.note}) BETWEEN 1 AND 1000`),
+    check(
+      "runs_numbers_check",
+      sql`${t.durationS} >= 0 AND ${t.distanceM} >= 0 AND ${t.elapsedS} >= ${t.durationS} AND ${t.leftOutM} >= 0 AND ${t.leftOutS} >= 0`,
+    ),
+  ],
 );
 
 export const savedRoutes = pgTable("saved_routes", {

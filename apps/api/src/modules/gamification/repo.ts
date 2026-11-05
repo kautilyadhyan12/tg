@@ -5,6 +5,7 @@
 import type { Sql, TransactionSql } from "postgres";
 import type { StreakState } from "./streak.js";
 import { EMPTY_STREAK } from "./streak.js";
+import { RUN_COUNTS_FROM_M } from "./xp.js";
 
 // A pooled handle OR a transaction context — safe for plain reads. The FOR
 // UPDATE lock below is typed TransactionSql (NOT this), because on a pooled
@@ -119,14 +120,16 @@ export async function getXp(sql: SqlOrTx, userId: string): Promise<number> {
 export async function getXpAccrualCounts(
   sql: SqlOrTx,
   userId: string,
-): Promise<{ workoutCount: number; perfectFormWorkouts: number; excellentFormWorkouts: number }> {
-  const [r] = await sql<{ workout_count: string; perfect: string; excellent: string }[]>`
+): Promise<{ workoutCount: number; runCount: number; perfectFormWorkouts: number; excellentFormWorkouts: number }> {
+  const [r] = await sql<{ workout_count: string; run_count: string; perfect: string; excellent: string }[]>`
     SELECT count(*) AS workout_count,
+           (SELECT count(*) FROM runs WHERE user_id = ${userId} AND distance_m >= ${RUN_COUNTS_FROM_M}) AS run_count,
            count(*) FILTER (WHERE avg_form_score >= 100) AS perfect,
            count(*) FILTER (WHERE avg_form_score >= 80 AND avg_form_score < 100) AS excellent
     FROM workouts WHERE user_id = ${userId}`;
   return {
     workoutCount: Number(r?.workout_count ?? 0),
+    runCount: Number(r?.run_count ?? 0),
     perfectFormWorkouts: Number(r?.perfect ?? 0),
     excellentFormWorkouts: Number(r?.excellent ?? 0),
   };
@@ -147,8 +150,12 @@ export async function getActivityDays(
   timeZone: string,
 ): Promise<string[]> {
   const rows = await tx<{ day: string }[]>`
-    SELECT DISTINCT to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day
-    FROM workouts WHERE user_id = ${userId} ORDER BY day ASC`;
+    SELECT to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day
+    FROM workouts WHERE user_id = ${userId}
+    UNION
+    SELECT to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day
+    FROM runs WHERE user_id = ${userId} AND distance_m >= ${RUN_COUNTS_FROM_M}
+    ORDER BY day ASC`;
   return rows.map((r) => r.day);
 }
 
@@ -191,6 +198,9 @@ export async function getStreakDays(
   const rows = await tx<{ day: string }[]>`
     SELECT to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day
     FROM workouts WHERE user_id = ${userId}
+    UNION
+    SELECT to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day
+    FROM runs WHERE user_id = ${userId} AND distance_m >= ${RUN_COUNTS_FROM_M}
     UNION
     SELECT day::text AS day
     FROM gym_attendance WHERE user_id = ${userId}

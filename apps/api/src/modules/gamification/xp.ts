@@ -75,8 +75,13 @@ import { dayDiff } from "./streak.js";
  *  WIRED TO NOTHING — the old app never awarded them (the same dead-constant
  *  class as the calendar `xp_earned`), and inventing that accrual would add a
  *  feature the spec is silent on (R0.2). */
+/** A run counts for the streak and XP from this many metres (ROADMAP 37a): an accidental Start
+ *  and Finish, or a phone left lying while its signal wanders, earns nothing. */
+export const RUN_COUNTS_FROM_M = 200;
+
 export const XP_REWARDS = {
   workout_completed: 50,
+  run_completed: 50, //          a run of RUN_COUNTS_FROM_M or more, as a workout (ROADMAP 37a)
   form_excellent_bonus: 20, //  form >= 80  (badges.py:204; applied :224-225)
   form_perfect_bonus: 50, //    form >= 100 (badges.py:205; applied :222-223)
   streak_day: 10, //            per consecutive-day continuation (:206; :247)
@@ -145,6 +150,8 @@ export function xpProgress(xp: number): XpProgress {
 export interface XpAccrualInputs {
   /** count of the user's workouts — base 50 each (workouts.py:221). */
   workoutCount: number;
+  /** count of the user's runs of RUN_COUNTS_FROM_M or more — 50 each, as a workout (ROADMAP 37a). */
+  runCount: number;
   /** workouts with avg_form_score >= 100 — +50 each (:222-223). */
   perfectFormWorkouts: number;
   /** workouts with avg_form_score in [80, 100) — +20 each (:224-225). */
@@ -161,6 +168,7 @@ export interface XpAccrualInputs {
 export function computeTotalXp(inp: XpAccrualInputs): number {
   return (
     XP_REWARDS.workout_completed * inp.workoutCount +
+    XP_REWARDS.run_completed * inp.runCount +
     XP_REWARDS.form_perfect_bonus * inp.perfectFormWorkouts +
     XP_REWARDS.form_excellent_bonus * inp.excellentFormWorkouts +
     XP_REWARDS.streak_day * inp.streakContinuationDays +
