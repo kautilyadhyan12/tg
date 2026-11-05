@@ -124,7 +124,7 @@ d("a body measurement sent twice, removed, or under somebody else's id (real Pos
     expect((await list(alice)).some((m) => m.id === id)).toBe(false);
   });
 
-  it("a removal and a save of one id at the same moment never leave the entry behind", async () => {
+  it("one person's removal and save of one id at the same moment never leave the entry behind", async () => {
     for (let i = 0; i < 5; i += 1) {
       const id = randomUUID();
       expect((await inject("POST", PATH, alice, entry(74, { id }))).statusCode).toBe(201);

@@ -846,7 +846,8 @@ export async function listMeasurements(
   return rows.map(toMeasurement);
 }
 
-/** A save and a removal of the same id wait for each other. */
+/** Two different people sending one id wait for each other here; one person's own saves and removals
+ *  are already in turn under `lockOwner`. */
 const lockMeasurementId = async (tx: TransactionSql, id: string): Promise<void> => {
   await tx`SELECT pg_advisory_xact_lock(hashtext(${`measurement:${id}`}))`;
 };

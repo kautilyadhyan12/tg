@@ -1,43 +1,11 @@
 import { createContext, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { AppState } from "react-native";
-import { bodyMeasurementResponseSchema, type WaitingBodyEntry } from "@app/shared";
-import type { Answer, Shape } from "../../session/calls";
-import type { Session } from "../../session/session";
 import { useSession } from "../../session/SessionProvider";
 import type { TextStore } from "../food/outbox";
-import { bodySaveBody, createBodyOutbox, type BodyOutbox, type BodyOutboxView, type BodySendResult } from "./bodyQueue";
+import { bodySender, createBodyOutbox, type BodyOutbox, type BodyOutboxView } from "./bodyQueue";
 
 /** While something waits, it is sent again this often, besides on opening and coming back to the app. */
 export const BODY_SEND_AGAIN_MS = 15_000;
-
-/** DELETE answers 204 with no body. */
-const nothing: Shape<null> = { safeParse: (raw) => (raw === null ? { success: true, data: null } : { success: false }) };
-
-/** The server cannot take it now: a lost connection, a sign-in being renewed, too many at once, or a
- *  fault of its own. Anything else it refuses, it will refuse again. */
-const now = (answer: Answer<unknown>): boolean =>
-  answer.kind === "no_answer" || (answer.kind === "refused" && (answer.status === 401 || answer.status === 429 || answer.status >= 500));
-
-export const BODY_REFUSED_WORDS = "These measurements couldn’t be saved. Log them again.";
-
-export function bodySender(session: Session) {
-  return {
-    save: async (entry: WaitingBodyEntry): Promise<BodySendResult> => {
-      const answer = await session.signedIn({ method: "POST", path: "/v1/nutrition/body-measurements", body: bodySaveBody(entry) }, bodyMeasurementResponseSchema);
-      if (answer.kind === "ok") return { kind: "done", entry: answer.data.measurement };
-      if (now(answer) || answer.kind !== "refused") return { kind: "later" };
-      // Removed before this late save arrived: nothing is left to keep.
-      if (answer.status === 404) return { kind: "done" };
-      return { kind: "refused", message: BODY_REFUSED_WORDS };
-    },
-    remove: async (id: string): Promise<BodySendResult> => {
-      const answer = await session.signedIn({ method: "DELETE", path: `/v1/nutrition/body-measurements/${id}` }, nothing);
-      if (answer.kind === "ok") return { kind: "done" };
-      // Already gone, or never there: nothing is left to remove.
-      return now(answer) ? { kind: "later" } : { kind: "done" };
-    },
-  };
-}
 
 const BodyOutboxContext = createContext<BodyOutbox | null>(null);
 

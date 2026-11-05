@@ -161,10 +161,47 @@ describe("a body measurement waiting on the phone", () => {
     await box.start();
     await box.add(entry(A));
     await box.send();
-    expect(box.view().refused).toEqual([{ id: A, message: "No." }]);
+    expect(box.view().refused).toMatchObject([{ id: A, message: "No." }]);
     expect(box.view().waiting).toEqual([]);
     box.forget(A);
     expect(box.view().refused).toEqual([]);
+  });
+
+  it("refused, it names its entry; removed meanwhile, nothing is said", async () => {
+    const net = server();
+    const box = createBodyOutbox(file(), net.sender);
+    await box.start();
+    net.refuse = true;
+    await box.add(entry(A, 69.4));
+    await box.send();
+    expect(box.view().refused).toEqual([{ id: A, message: "No.", measuredAt: "2026-11-04T08:00:00.000Z", weightKg: 69.4 }]);
+
+    // A save tried with no signal, removed by the person, then refused when it is sent again.
+    const later = server();
+    later.online = false;
+    const other = createBodyOutbox(file(), later.sender);
+    await other.start();
+    await other.add(entry(B));
+    await other.send();
+    await other.remove(B);
+    later.online = true;
+    later.refuse = true;
+    await other.send();
+    expect(other.view().refused).toEqual([]);
+  });
+
+  it("an entry logged before the file is read says it is not saved on the phone yet", async () => {
+    const disk = file();
+    let open: () => void = () => undefined;
+    const slow: TextStore = { read: () => new Promise((r) => { open = () => { r(null); }; }), write: disk.write };
+    const box = createBodyOutbox(slow, server().sender);
+    const starting = box.start();
+    await box.add(entry(A));
+    expect(box.view().unsaved).toBe(true);
+    open();
+    await starting;
+    await box.send();
+    expect(box.view().unsaved).toBe(false);
   });
 
   it("a landed entry is held until a read of the list has it", async () => {

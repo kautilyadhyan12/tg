@@ -22,12 +22,12 @@ function bodyServer(units: "metric" | "imperial" = "metric") {
   const rows: Row[] = [{ id: OLD, measuredAt: yesterday, weightKg: 70.5, metrics: { waist_cm: 84 }, source: "manual", createdAt: yesterday }];
   const posts: unknown[] = [];
   const deletes: string[] = [];
-  const state = { online: true, listDown: false };
+  const state = { online: true, listDown: false, more: false };
   const server = fakeServer({
     "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }),
     "/v1/users/me": () => ({ status: 200, body: profile(true, user) }),
     [PATH]: (body): Reply => {
-      if (body === undefined) return { status: 200, body: { items: [...rows].sort((a, b) => b.measuredAt.localeCompare(a.measuredAt)), nextCursor: null } };
+      if (body === undefined) return { status: 200, body: { items: [...rows].sort((a, b) => b.measuredAt.localeCompare(a.measuredAt)), nextCursor: state.more ? "older" : null } };
       posts.push(body);
       const b = body as { id: string; measuredAt: string; weightKg?: number; metrics: Record<string, number> };
       let row = rows.find((r) => r.id === b.id);
@@ -136,6 +136,30 @@ describe("Progress → Body → Log measurements", () => {
     // The person has an older entry the phone cannot see: no line, no change, no "first entry".
     expect(screen.queryByText(/your first entry|your last/)).toBeNull();
     expect(screen.queryByText(/ since /)).toBeNull();
+  });
+
+  it("offline with only a waist logged, it never says the member has no weight", async () => {
+    const s = bodyServer();
+    s.state.online = false;
+    s.state.listDown = true;
+    await render(<App extra={extra} store={memoryStore(kept(1, s.user))} ask={s.ask} bodyStore={s.bodyStore} />);
+    await fireEvent.press(await screen.findByRole("tab", { name: "Me" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Progress" }));
+    await fireEvent.press(await screen.findByRole("tab", { name: "Body" }));
+    expect(await screen.findByText("Your measurements couldn’t load.")).toBeTruthy();
+    await log({ "Waist · cm": "82" });
+    expect(await screen.findByLabelText(/, Waiting to send, –, 1 measurement$/)).toBeTruthy();
+    expect(screen.queryByText("No weight yet")).toBeNull();
+  });
+
+  it("a list longer than one read never calls an entry the first, nor says there is no weight", async () => {
+    const s = bodyServer();
+    s.state.more = true;
+    s.rows.splice(0, 1, { ...(s.rows[0] ?? { id: OLD, measuredAt: new Date().toISOString(), source: "manual", createdAt: new Date().toISOString() }), weightKg: null, metrics: { waist_cm: 84 } });
+    await openBody(s);
+    expect(await screen.findByText("Waist · your newest entry")).toBeTruthy();
+    expect(screen.queryByText(/your first entry/)).toBeNull();
+    expect(screen.queryByText("No weight yet")).toBeNull();
   });
 
   it("a number that cannot be right is said under its box, and nothing typed says what to do; neither sends", async () => {

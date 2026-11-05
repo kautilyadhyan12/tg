@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BodyMeasurement, WaitingBodyEntry } from "@app/shared";
-import { bodyList, buildEntry, changeWords, entryWords, holdsWords, lastValues, loggedMeasures, series, shownWithUnit } from "../src/screens/progress/bodyRules";
+import { bodyList, buildEntry, changeWords, entryWords, holdsWords, lastValues, loggedMeasures, refusedWords, series, shownWithUnit } from "../src/screens/progress/bodyRules";
 
 // Body's Log measurements (ROADMAP Stage 5 35c-ii). The worst thing on the phone's side: a number a
 // person typed kept as another (pounds kept as kilograms, inches as centimetres), so their weight goal
@@ -99,6 +99,12 @@ describe("what Body shows", () => {
     expect(entryWords(nth(0), "metric", true)).toMatchObject({ how: "Waiting to send", more: "1 measurement" });
     expect(holdsWords(nth(2))).toBe("Weight and 2 measurements");
     expect(holdsWords(m(ID(9), "2026-11-01", null, { hips_cm: 90 }))).toBe("1 measurement");
+  });
+
+  it("a refused entry is named by its day and weight, so two never read alike", () => {
+    expect(refusedWords({ message: "Log them again.", measuredAt: at("2026-11-03"), weightKg: 69.85 }, "imperial")).toBe("3 Nov 2026, 154 lb: Log them again.");
+    expect(refusedWords({ message: "Log them again.", measuredAt: at("2026-11-03"), weightKg: null }, "metric")).toBe("3 Nov 2026: Log them again.");
+    expect(refusedWords({ message: "Log them again." }, "metric")).toBe("Log them again.");
   });
 
   it("the list: the server's, what it just took and what still waits, newest first, none removed here", () => {

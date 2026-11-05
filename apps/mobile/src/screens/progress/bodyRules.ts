@@ -187,6 +187,13 @@ export function entryWords(m: BodyMeasurement, units: string, waiting: boolean):
   };
 }
 
+/** A refused entry's line: which entry it was, then why. */
+export function refusedWords(r: { message: string; measuredAt?: string | undefined; weightKg?: number | null | undefined }, units: string): string {
+  if (r.measuredAt === undefined) return r.message;
+  const what = `${dateWords(new Date(r.measuredAt))}${r.weightKg === null || r.weightKg === undefined ? "" : `, ${shownWithUnit(r.weightKg, "weight", units)}`}`;
+  return `${what}: ${r.message}`;
+}
+
 /** What the Remove box says the entry holds: "Weight and 2 measurements". */
 export function holdsWords(m: BodyMeasurement): string {
   const others = Object.keys(m.metrics).length;

@@ -22,6 +22,7 @@ import {
   changeWords,
   entryWords,
   exampleOf,
+  refusedWords,
   holdsWords,
   lastValues,
   loggedMeasures,
@@ -60,6 +61,8 @@ export function BodyTab() {
 
   const merged = bodyList(read ?? [], view);
   // What waits on the phone is shown even while the list cannot be read.
+  // The read reached the end of the person's list: only then is anything said to be their first or none.
+  const complete = list.read.kind === "ok" && list.read.data.nextCursor === null;
   const shownRead: Read<null> = list.read.kind === "ok" || merged.items.length > 0 ? { kind: "ok", data: null } : list.read;
   return (
     <Rise delay={60}>
@@ -79,7 +82,7 @@ export function BodyTab() {
         {view.refused.map((r) => (
           <View key={r.id} style={styles.refused}>
             <Txt kind="small" style={styles.grow}>
-              {r.message}
+              {refusedWords(r, units)}
             </Txt>
             <Button label="OK" kind="link" onPress={() => outbox?.forget(r.id)} />
           </View>
@@ -96,7 +99,7 @@ export function BodyTab() {
                   <Button label="Try again" kind="link" say="Load your measurements again" onPress={list.again} />
                 </View>
               )}
-              <Body items={merged.items} waiting={merged.waiting} units={units} whole={list.read.kind === "ok"} onRemove={setRemoving} />
+              <Body items={merged.items} waiting={merged.waiting} units={units} whole={list.read.kind === "ok"} complete={complete} onRemove={setRemoving} />
             </>
           )}
         </ReadOr>
@@ -134,8 +137,9 @@ export function BodyTab() {
 }
 
 /** `whole` false: only what waits on the phone is known, so nothing is said of the person's history
- *  (no chart, no change, no "first entry"). */
-function Body({ items, waiting, units, whole, onRemove }: { items: readonly BodyMeasurement[]; waiting: ReadonlySet<string>; units: string; whole: boolean; onRemove: (m: BodyMeasurement) => void }) {
+ *  (no chart, no change, no "No weight yet"). `complete`: the list read reached its end, so "first" and
+ *  "none" can be said. */
+function Body({ items, waiting, units, whole, complete, onRemove }: { items: readonly BodyMeasurement[]; waiting: ReadonlySet<string>; units: string; whole: boolean; complete: boolean; onRemove: (m: BodyMeasurement) => void }) {
   const logged = loggedMeasures(items);
   const [picked, setPicked] = useState<MeasureKey>("weight");
   const key = logged.includes(picked) ? picked : (logged[0] ?? "weight");
@@ -147,7 +151,7 @@ function Body({ items, waiting, units, whole, onRemove }: { items: readonly Body
   return (
     <>
       {latest === null || latest.weightKg === null ? (
-        <Txt kind="strong">No weight yet</Txt>
+        complete ? <Txt kind="strong">No weight yet</Txt> : null
       ) : (
         <View accessible accessibilityLabel={`Weight ${shownWithUnit(latest.weightKg, "weight", units)}, ${dateWords(entryDay(latest))}`}>
           <View style={styles.bigRow}>
@@ -167,7 +171,7 @@ function Body({ items, waiting, units, whole, onRemove }: { items: readonly Body
           <View style={styles.chart}>
             <View style={styles.chartHead}>
               <Txt kind="tiny" style={styles.grow} numberOfLines={2}>
-                {points.length === 1 ? `${measure.name} · your first entry` : `${measure.name} · your last ${String(points.length)} entries`}
+                {points.length > 1 ? `${measure.name} · your last ${String(points.length)} entries` : complete ? `${measure.name} · your first entry` : `${measure.name} · your newest entry`}
               </Txt>
               {change === null ? null : (
                 <View style={styles.change}>

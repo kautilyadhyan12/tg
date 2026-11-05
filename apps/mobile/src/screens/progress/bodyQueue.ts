@@ -1,5 +1,6 @@
 import {
   BODY_OUTBOX_MOST,
+  bodyMeasurementResponseSchema,
   bodyOutboxEntrySchema,
   bodyOutboxRefusedSchema,
   type BodyMeasurement,
@@ -7,6 +8,8 @@ import {
   type BodyOutboxRefused,
   type WaitingBodyEntry,
 } from "@app/shared";
+import type { Answer, Shape } from "../../session/calls";
+import type { Session } from "../../session/session";
 import type { TextStore } from "../food/outbox";
 
 // A body measurement is kept on the phone until the server has it (CLAUDE.md §4; ROADMAP Stage 5
@@ -144,7 +147,11 @@ export function createBodyOutbox(store: TextStore, sender: BodySender): BodyOutb
       const result = head.kind === "save" ? await sender.save(head.entry) : await sender.remove(head.id);
       if (stopped() || result.kind === "later") return;
       entries = entries.filter((e) => e !== head);
-      if (result.kind === "refused" && head.kind === "save") refused = [...refused, { id: head.entry.id, message: result.message.slice(0, 500) }];
+      // An entry the person removed meanwhile is not theirs to log again.
+      const removedSince = head.kind === "save" && entries.some((e) => e.kind === "remove" && e.id === head.entry.id);
+      if (result.kind === "refused" && head.kind === "save" && !removedSince) {
+        refused = [...refused, { id: head.entry.id, message: result.message.slice(0, 500), measuredAt: head.entry.measuredAt, weightKg: head.entry.weightKg }];
+      }
       if (result.kind === "done") {
         sent += 1;
         if (head.kind === "save" && result.entry !== undefined) landed = [...landed.filter((l) => l.id !== head.entry.id), result.entry];
@@ -197,6 +204,8 @@ export function createBodyOutbox(store: TextStore, sender: BodySender): BodyOutb
     add: async (entry) => {
       if (entries.length >= BODY_OUTBOX_MOST) return false;
       entries = [...entries, { kind: "save", entry: { ...entry, tried: false } }];
+      // The file is not read yet, so nothing can be written: held in memory only until it is.
+      if (!started) flags.unsaved = true;
       changed();
       await keep();
       void send();
@@ -230,6 +239,35 @@ export function createBodyOutbox(store: TextStore, sender: BodySender): BodyOutb
     stop: () => {
       flags.stopped = true;
       listeners.clear();
+    },
+  };
+}
+
+/** DELETE answers 204 with no body. */
+const nothing: Shape<null> = { safeParse: (raw) => (raw === null ? { success: true, data: null } : { success: false }) };
+
+/** The server cannot take it now: a lost connection, a sign-in being renewed, too many at once, or a
+ *  fault of its own. Anything else it refuses, it will refuse again. */
+const now = (answer: Answer<unknown>): boolean =>
+  answer.kind === "no_answer" || (answer.kind === "refused" && (answer.status === 401 || answer.status === 429 || answer.status >= 500));
+
+export const BODY_REFUSED_WORDS = "These measurements couldn’t be saved. Log them again.";
+
+export function bodySender(session: Session) {
+  return {
+    save: async (entry: WaitingBodyEntry): Promise<BodySendResult> => {
+      const answer = await session.signedIn({ method: "POST", path: "/v1/nutrition/body-measurements", body: bodySaveBody(entry) }, bodyMeasurementResponseSchema);
+      if (answer.kind === "ok") return { kind: "done", entry: answer.data.measurement };
+      if (now(answer) || answer.kind !== "refused") return { kind: "later" };
+      // Removed before this late save arrived: nothing is left to keep.
+      if (answer.status === 404) return { kind: "done" };
+      return { kind: "refused", message: BODY_REFUSED_WORDS };
+    },
+    remove: async (id: string): Promise<BodySendResult> => {
+      const answer = await session.signedIn({ method: "DELETE", path: `/v1/nutrition/body-measurements/${id}` }, nothing);
+      if (answer.kind === "ok") return { kind: "done" };
+      // Already gone, or never there: nothing is left to remove.
+      return now(answer) ? { kind: "later" } : { kind: "done" };
     },
   };
 }

@@ -481,7 +481,13 @@ export const bodyOutboxEntrySchema = z.discriminatedUnion("kind", [
 export type BodyOutboxEntry = z.infer<typeof bodyOutboxEntrySchema>;
 
 /** An entry the server would not take, said on Body until the person presses OK. */
-export const bodyOutboxRefusedSchema = z.object({ id: z.string().uuid().toLowerCase(), message: z.string().max(500) }).strict();
+export const bodyOutboxRefusedSchema = z.object({
+  id: z.string().uuid().toLowerCase(),
+  message: z.string().max(500),
+  /** Which entry it was, so two refusals never read alike. */
+  measuredAt: z.string().datetime().optional(),
+  weightKg: z.number().nullable().optional(),
+}).strict();
 export type BodyOutboxRefused = z.infer<typeof bodyOutboxRefusedSchema>;
 
 export const nutritionListQuerySchema = z.object({ limit: z.coerce.number().int().min(1).max(100).default(20), cursor: z.string().optional() }).strict();
