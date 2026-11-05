@@ -123,7 +123,7 @@ export function reminderNotification(kinds: readonly ReminderKind[]): { title: s
   const meals = REMINDER_KINDS.filter((kind): kind is MealReminderKind => kind !== "workout" && kinds.includes(kind));
   const lower = meals.map((meal) => MEAL_NAME[meal].toLowerCase());
   if (kinds.includes("workout")) {
-    return { title: "Time to train", body: meals.length === 0 ? "It's time for your workout." : `Your workout, then log your ${andList(lower)}.` };
+    return { title: "Time to train", body: meals.length === 0 ? "It’s time for your workout." : `Your workout, then log your ${andList(lower)}.` };
   }
   const [only] = meals;
   if (only === undefined) return null;

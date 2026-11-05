@@ -57,7 +57,7 @@ describe("remindersDueNow", () => {
 describe("reminderNotification", () => {
   const cases: [ReminderKind[], { title: string; body: string } | null][] = [
     [[], null],
-    [["workout"], { title: "Time to train", body: "It's time for your workout." }],
+    [["workout"], { title: "Time to train", body: "It’s time for your workout." }],
     [["workout", "dinner"], { title: "Time to train", body: "Your workout, then log your dinner." }],
     [["workout", "lunch", "dinner"], { title: "Time to train", body: "Your workout, then log your lunch and dinner." }],
     [["breakfast"], { title: "Breakfast", body: "Log what you ate." }],

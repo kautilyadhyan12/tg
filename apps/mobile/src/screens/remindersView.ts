@@ -33,7 +33,7 @@ export function reminderLine(reminder: Reminder): string {
 }
 
 /** The workout reminder's line in Safe mode, where its days and time would be. */
-export const SAFE_MODE_LINE = "Off in Safe mode until a professional clears you.";
+export const SAFE_MODE_LINE = "Waits while you’re in Safe mode, until a professional clears you.";
 export const PAUSED_LINE = "Paused because you haven’t opened the app in a week.";
 export const DONE_LINE = "Not sent on a day you have already trained or logged that meal.";
 

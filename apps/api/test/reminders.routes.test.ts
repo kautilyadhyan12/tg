@@ -241,7 +241,7 @@ d("the workout and meal reminders (real Postgres)", () => {
     await sweep(india(18, 29));
     expect(sentTo(tara.token)).toEqual([]);
     await sweep(india(18, 30));
-    expect(sentTo(tara.token).map((m) => [m.title, m.body, m.data])).toEqual([["Time to train", "It's time for your workout.", { kind: "training_reminder", open: "workout" }]]);
+    expect(sentTo(tara.token).map((m) => [m.title, m.body, m.data])).toEqual([["Time to train", "It’s time for your workout.", { kind: "training_reminder", open: "workout" }]]);
     await sweep(india(18, 31));
     await sweep(india(18, 45));
     expect(sentTo(tara.token)).toHaveLength(1);
@@ -409,7 +409,7 @@ d("the workout and meal reminders (real Postgres)", () => {
     expect(sentTo(lunched.token)).toEqual([]);
     await sweep(india(13, 45));
     await sweep(india(19, 30));
-    expect(sentTo(lunched.token).map((m) => [m.title, m.body])).toEqual([["Time to train", "It's time for your workout."]]);
+    expect(sentTo(lunched.token).map((m) => [m.title, m.body])).toEqual([["Time to train", "It’s time for your workout."]]);
     expect(sentTo(trained.token).map((m) => [m.title, m.body])).toEqual([["Dinner", "Log what you ate."]]);
   }, TIMEOUT_MS);
 
