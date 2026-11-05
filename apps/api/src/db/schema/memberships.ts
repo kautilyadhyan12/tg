@@ -1,7 +1,7 @@
 // WHAT A GYM SELLS (Part 3 §13.1; ROADMAP Stage 2 item 17a-i). Mirrors
 // `0069_membership_types.sql`, `0070_held_memberships.sql` and
 // `0073_membership_word_links.sql` 1:1, and `0075_class_bookings.sql`'s bookings; the
-// migrations carry the reasoning. `0112_tax_rates.sql` adds the tax rate columns.
+// migrations carry the reasoning. `0112_tax_rates.sql` adds the tax rate columns; `0208` the rates a type and a membership charge.
 import { sql } from "drizzle-orm";
 import {
   bigint,
@@ -11,6 +11,7 @@ import {
   foreignKey,
   index,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -51,8 +52,6 @@ export const gymMembershipTypes = pgTable(
     includesPt: boolean("includes_pt").notNull().default(false),
     ptLimit: integer("pt_limit"),
     ptPeriod: text("pt_period"),
-    /** The gym's tax rate its bills charge (0112); null for none. */
-    taxRateId: uuid("tax_rate_id"),
     /** Charged on the first bill of a membership given from it (0150; 18t); 0 for none. */
     joiningFeeMinor: integer("joining_fee_minor").notNull().default(0),
     /** The business's agreement a membership given from it is signed with (0161; 18u-ii-a);
@@ -137,15 +136,28 @@ export const gymMembershipTypes = pgTable(
     index("gym_membership_types_agreement_idx")
       .on(t.gymId, t.agreementDocumentId)
       .where(sql`${t.agreementDocumentId} IS NOT NULL`),
-    // `0112` clears only `tax_rate_id` when the rate goes; Drizzle cannot say which column.
+  ],
+);
+
+/** The gym's tax rates a membership type charges (0208; 18b-v-b), in the order they were picked, each once. */
+export const gymMembershipTypeTaxRates = pgTable(
+  "gym_membership_type_tax_rates",
+  {
+    gymId: uuid("gym_id").notNull(),
+    membershipTypeId: uuid("membership_type_id").notNull(),
+    taxRateId: uuid("tax_rate_id").notNull(),
+    position: integer("position").notNull(),
+  },
+  (t) => [
+    primaryKey({ name: "gym_membership_type_tax_rates_pk", columns: [t.membershipTypeId, t.taxRateId] }),
     foreignKey({
-      name: "gym_membership_types_tax_rate_fk",
-      columns: [t.gymId, t.taxRateId],
-      foreignColumns: [gymTaxRates.gymId, gymTaxRates.id],
-    }),
-    index("gym_membership_types_tax_rate_idx")
-      .on(t.gymId, t.taxRateId)
-      .where(sql`${t.taxRateId} IS NOT NULL`),
+      name: "gym_membership_type_tax_rates_type_fk",
+      columns: [t.gymId, t.membershipTypeId],
+      foreignColumns: [gymMembershipTypes.gymId, gymMembershipTypes.id],
+    }).onDelete("cascade"),
+    foreignKey({ name: "gym_membership_type_tax_rates_rate_fk", columns: [t.gymId, t.taxRateId], foreignColumns: [gymTaxRates.gymId, gymTaxRates.id] }).onDelete("cascade"),
+    check("gym_membership_type_tax_rates_position_check", sql`${t.position} >= 1`),
+    index("gym_membership_type_tax_rates_rate_idx").on(t.gymId, t.taxRateId),
   ],
 );
 
@@ -233,11 +245,9 @@ export const gymHeldMemberships = pgTable(
     discountName: text("discount_name"),
     discountMinor: integer("discount_minor").notNull().default(0),
     discountPayments: text("discount_payments"),
-    /** The tax rate it was sold with (0112): every bill opened from it charges that rate's
-     *  percentage as it is that day. Null for none. */
-    taxRateId: uuid("tax_rate_id"),
-    /** Whether its price held that tax when it was sold (0112): kept, so a gym changing how
-     *  it charges tax later moves nobody's total. Null with no rate. */
+    /** Whether its price held its taxes when it was sold (0112): kept, so a gym changing how
+     *  it charges tax later moves nobody's total. Set wherever it has a rate
+     *  (`gym_held_membership_tax_rates`, 0208). */
     taxIncluded: boolean("tax_included"),
     /** When its record was deleted for good (0116); set exactly when `entry_id` is null. */
     recordDeletedAt: timestamp("record_deleted_at", { withTimezone: true }),
@@ -260,7 +270,6 @@ export const gymHeldMemberships = pgTable(
       "gym_held_memberships_record_deleted_check",
       sql`(${t.entryId} IS NULL) = (${t.recordDeletedAt} IS NOT NULL) AND (${t.entryId} IS NOT NULL OR ${t.status} IN ('ended','cancelled'))`,
     ),
-    check("gym_held_memberships_tax_included_check", sql`${t.taxRateId} IS NULL OR ${t.taxIncluded} IS NOT NULL`),
     check("gym_held_memberships_freeze_fee_check", sql`${t.freezeFeeMinor} BETWEEN 0 AND 99999999`),
     check("gym_held_memberships_replaces_check", sql`${t.replacesId} IS NULL OR ${t.replacesId} <> ${t.id}`),
     check(
@@ -346,15 +355,28 @@ export const gymHeldMemberships = pgTable(
     index("gym_held_memberships_discount_idx")
       .on(t.gymId, t.discountId)
       .where(sql`${t.discountId} IS NOT NULL`),
-    // `0112` clears only `tax_rate_id` when the rate goes; Drizzle cannot say which column.
+  ],
+);
+
+/** The gym's tax rates a held membership was sold with (0208; 18b-v-b), in its type's order then. */
+export const gymHeldMembershipTaxRates = pgTable(
+  "gym_held_membership_tax_rates",
+  {
+    gymId: uuid("gym_id").notNull(),
+    heldMembershipId: uuid("held_membership_id").notNull(),
+    taxRateId: uuid("tax_rate_id").notNull(),
+    position: integer("position").notNull(),
+  },
+  (t) => [
+    primaryKey({ name: "gym_held_membership_tax_rates_pk", columns: [t.heldMembershipId, t.taxRateId] }),
     foreignKey({
-      name: "gym_held_memberships_tax_rate_fk",
-      columns: [t.gymId, t.taxRateId],
-      foreignColumns: [gymTaxRates.gymId, gymTaxRates.id],
-    }),
-    index("gym_held_memberships_tax_rate_idx")
-      .on(t.gymId, t.taxRateId)
-      .where(sql`${t.taxRateId} IS NOT NULL`),
+      name: "gym_held_membership_tax_rates_held_fk",
+      columns: [t.gymId, t.heldMembershipId],
+      foreignColumns: [gymHeldMemberships.gymId, gymHeldMemberships.id],
+    }).onDelete("cascade"),
+    foreignKey({ name: "gym_held_membership_tax_rates_rate_fk", columns: [t.gymId, t.taxRateId], foreignColumns: [gymTaxRates.gymId, gymTaxRates.id] }).onDelete("cascade"),
+    check("gym_held_membership_tax_rates_position_check", sql`${t.position} >= 1`),
+    index("gym_held_membership_tax_rates_rate_idx").on(t.gymId, t.taxRateId),
   ],
 );
 
@@ -383,12 +405,13 @@ export const gymMemberBills = pgTable(
     voidReason: text("void_reason"),
     voidedOn: date("voided_on"),
     voidedBy: uuid("voided_by").references(() => users.id, { onDelete: "set null" }),
-    /** The tax inside `amount_minor`, as the bill was opened (0112): how much, the rate's
-     *  percentage and name then, and whether the price held it. 0 and nulls for none. */
+    /** The tax inside `amount_minor`, as the bill was opened (0112): how much and the rates'
+     *  percentage, each added up, and whether the price held it. 0 and null for none. */
     taxMinor: integer("tax_minor").notNull().default(0),
     taxPcm: integer("tax_pcm").notNull().default(0),
-    taxName: text("tax_name"),
     taxIncluded: boolean("tax_included"),
+    /** Each tax, `{ name, pcm, minor }`, in the order charged (0208; 18b-v-b). */
+    taxes: jsonb("taxes").notNull().default(sql`'[]'`),
     /** A fee for a late cancel or a no-show (0136; 18h-i): which, the class's name, and the
      *  booking while it stands. The class's day is `covers_from` and `covers_to`. */
     fee: text("fee"),
@@ -447,7 +470,7 @@ export const gymMemberBills = pgTable(
     index("gym_member_bills_pt_appointment_idx").on(t.ptAppointmentId).where(sql`${t.ptAppointmentId} IS NOT NULL`),
     check(
       "gym_member_bills_tax_check",
-      sql`${t.taxPcm} BETWEEN 0 AND 30000 AND (${t.taxName} IS NULL) = (${t.taxPcm} = 0) AND (${t.taxName} IS NULL) = (${t.taxIncluded} IS NULL) AND ${t.taxMinor} >= 0 AND ${t.taxMinor} < ${t.amountMinor} AND (${t.taxPcm} > 0 OR ${t.taxMinor} = 0) AND (${t.taxName} IS NULL OR char_length(${t.taxName}) BETWEEN 1 AND 30)`,
+      sql`${t.taxPcm} BETWEEN 0 AND 30000 AND (${t.taxIncluded} IS NULL) = (${t.taxPcm} = 0) AND ${t.taxMinor} >= 0 AND ${t.taxMinor} < ${t.amountMinor} AND (${t.taxPcm} > 0 OR ${t.taxMinor} = 0) AND jsonb_typeof(${t.taxes}) = 'array' AND jsonb_array_length(${t.taxes}) <= 10 AND (${t.taxPcm} > 0) = (jsonb_array_length(${t.taxes}) > 0)`,
     ),
     unique("gym_member_bills_period_uq").on(t.heldMembershipId, t.periodIndex),
     check(

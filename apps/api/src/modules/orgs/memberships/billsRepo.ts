@@ -57,6 +57,7 @@ import {
   type RefundTarget,
 } from "./billsSql.js";
 import { listHeldMembership, lockedEntry, lockedHeld, settle, writeCountsAfterGap, writePaidPeriods, type CountMove, type ListHeldColumns } from "./heldRepo.js";
+import { appliedOf, heldTaxesSql, ratesOfJson } from "./taxesSql.js";
 
 export type BillWriteOutcome =
   | { kind: "ok" }
@@ -182,11 +183,11 @@ export async function recordPaymentIn(tx: TransactionSql, input: RecordPaymentIn
     const [opened] = await insertBills(
       tx,
       input.gymId,
-      [{ membershipId: row.id, periodIndex: target.periodIndex, amountMinor: opening.amountMinor, tax: opening.tax, currency: row.currency, dueOn: target.dueOn, covers: target.covers }],
+      [{ membershipId: row.id, periodIndex: target.periodIndex, amountMinor: opening.amountMinor, taxes: opening.taxes, currency: row.currency, dueOn: target.dueOn, covers: target.covers }],
       input.now,
     );
     if (opened === undefined) throw new Error("a bill to pay was not opened under the gym's lock");
-    bill = { id: opened.id, membershipId: row.id, periodIndex: target.periodIndex, amountMinor: opening.amountMinor, tax: opening.tax, joiningFeeMinor: 0, changeCreditMinor: 0, movedMinor: 0, currency: row.currency, dueOn: target.dueOn, covers: target.covers, status: "open", paidMinor: 0, refundedMinor: 0, cancelled: null };
+    bill = { id: opened.id, membershipId: row.id, periodIndex: target.periodIndex, amountMinor: opening.amountMinor, taxes: opening.taxes, joiningFeeMinor: 0, changeCreditMinor: 0, movedMinor: 0, currency: row.currency, dueOn: target.dueOn, covers: target.covers, status: "open", paidMinor: 0, refundedMinor: 0, cancelled: null };
   }
 
   const recorded = await insertPayment(
@@ -706,9 +707,8 @@ type Owing = ListHeldColumns & {
   timezone: string;
   price_minor: number;
   currency: string;
-  /** The rate the membership was sold with, as it is now; null for none (18b-iii). */
-  tax_name: string | null;
-  tax_pcm: number | null;
+  /** The rates the membership was sold with, as each is now, in order (18b-iii; 18b-v-b). */
+  taxes: unknown;
   tax_included: boolean | null;
 };
 
@@ -721,11 +721,10 @@ const owing = (sql: Sql | TransactionSql, gymIds: readonly string[] | null) => s
          h.frozen_on::text AS frozen_on, h.cancelled_on::text AS cancelled_on,
          h.paid_periods, h.paid_floor, h.renews, h.classes_left, h.from_list, h.full_from::text AS full_from, h.contract_periods, h.contract_then,
          h.notice_days, h.stops_after, h.gym_id, h.entry_id, g.timezone, h.price_minor, h.currency,
-         r.name AS tax_name, r.rate_pcm AS tax_pcm, h.tax_included
+         ${heldTaxesSql(sql)} AS taxes, h.tax_included
   FROM gym_held_memberships h
   JOIN gyms g ON g.id = h.gym_id AND g.status = 'active'
   JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
-  LEFT JOIN gym_tax_rates r ON r.gym_id = h.gym_id AND r.id = h.tax_rate_id
   JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id AND e.former_at IS NULL
   WHERE h.status = 'active' AND h.price_minor > 0
     AND ((h.kind = 'recurring' AND h.renews) OR (h.kind <> 'recurring' AND h.paid_periods = 0))
@@ -785,12 +784,12 @@ function owed(rows: readonly Owing[], billed: ReadonlyMap<string, ReadonlySet<nu
     }
     const opens = billsToOpen(membership, work.today, have);
     if (opens.length === 0) continue;
-    // Each bill charges the rate its membership was sold with, at its percentage today.
-    const tax = row.tax_name === null || row.tax_pcm === null ? null : { name: row.tax_name, pcm: row.tax_pcm, included: row.tax_included ?? false };
+    // Each bill charges the rates its membership was sold with, at each one's percentage today.
+    const tax = appliedOf(ratesOfJson(row.taxes), row.tax_included ?? false);
     for (const due of opens) {
       // The part month's share where it is the first period of one billed from the gym's day (18y).
       const bill = billOf(periodListedMinor(membership, due.periodIndex, row.price_minor), tax);
-      work.bills.push({ membershipId: row.id, periodIndex: due.periodIndex, amountMinor: bill.amountMinor, tax: bill.tax, currency: row.currency, dueOn: due.dueOn, covers: due.covers });
+      work.bills.push({ membershipId: row.id, periodIndex: due.periodIndex, amountMinor: bill.amountMinor, taxes: bill.taxes, currency: row.currency, dueOn: due.dueOn, covers: due.covers });
     }
   }
   for (const [gymId, work] of byGym) if (work.counts.length === 0 && work.bills.length === 0) byGym.delete(gymId);

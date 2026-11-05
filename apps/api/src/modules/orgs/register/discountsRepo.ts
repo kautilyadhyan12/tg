@@ -18,6 +18,7 @@ import {
   type MembershipPayments,
 } from "@app/shared";
 import { insertAudit, lockOrgRow } from "../repo.js";
+import { typeTaxRateIdsSql } from "../memberships/taxesSql.js";
 
 export interface DiscountRow {
   id: string;
@@ -150,9 +151,9 @@ export async function codeOrNameTaken(tx: TransactionSql, gymId: string, code: s
 }
 
 /** The gym's membership types on its price list, by name; a gym has at most 60. */
-export async function membershipTypeNames(sql: Sql | TransactionSql, gymId: string): Promise<{ id: string; name: string; taxRateId: string | null; free: boolean }[]> {
-  return await sql<{ id: string; name: string; taxRateId: string | null; free: boolean }[]>`
-    SELECT id, name, tax_rate_id AS "taxRateId", price_minor = 0 AS free FROM gym_membership_types
+export async function membershipTypeNames(sql: Sql | TransactionSql, gymId: string): Promise<{ id: string; name: string; taxRateIds: string[]; free: boolean }[]> {
+  return await sql<{ id: string; name: string; taxRateIds: string[]; free: boolean }[]>`
+    SELECT t.id, t.name, ${typeTaxRateIdsSql(sql)} AS "taxRateIds", t.price_minor = 0 AS free FROM gym_membership_types t
     WHERE gym_id = ${gymId} AND archived_at IS NULL
     ORDER BY lower(name), id`;
 }

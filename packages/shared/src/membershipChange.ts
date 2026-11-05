@@ -17,8 +17,8 @@ export interface ChangeBillFacts {
   status: "open" | "paid" | "void" | "refunded";
   /** What the person was asked to pay, its tax in. */
   amountMinor: number;
-  /** The tax in it, and whether the price held it; null for none. */
-  tax: { minor: number; included: boolean } | null;
+  /** The taxes in it, each with whether the price held it (18b-v-b); empty for none. */
+  taxes: readonly { minor: number; included: boolean }[];
   /** Its joining fee, before any tax added on top (18t): never part of the days. */
   joiningFeeMinor: number;
   /** A change's credit taken off it (18x): days already paid for under the membership before. */
@@ -45,12 +45,15 @@ export type ChangeFrom =
       byPeriod: { periodIndex: number; creditMinor: number }[];
     };
 
+/** The tax a bill adds on top of its price, its taxes added up; 0 where the price holds them. */
+const taxOnTopMinor = (b: ChangeBillFacts): number => b.taxes.reduce((n, t) => (t.included ? n : n + t.minor), 0);
+
 /** What a paid period's bill holds for its days, before tax: the money that stands on it,
  *  without its joining fee, and the credit an earlier change took off it. */
 export function billDaysMinor(b: ChangeBillFacts): number {
   // A bill staff cancelled was never charged: nothing stands for its days.
   if (b.status === "void") return 0;
-  const beforeTax = b.tax !== null && !b.tax.included ? b.amountMinor - b.tax.minor : b.amountMinor;
+  const beforeTax = b.amountMinor - taxOnTopMinor(b);
   const listed = Math.max(0, beforeTax - b.joiningFeeMinor);
   const stands = Math.min(b.amountMinor, Math.max(0, b.paidMinor - b.refundedMinor));
   return Math.floor((listed * stands) / b.amountMinor) + b.changeCreditMinor;
@@ -108,7 +111,7 @@ export function movedMoneyMinor(b: ChangeBillFacts, creditMinor: number): number
   const value = billDaysMinor(b);
   const stands = b.status === "void" ? 0 : Math.min(b.amountMinor, Math.max(0, b.paidMinor - b.refundedMinor));
   if (creditMinor <= 0 || value <= 0 || stands === 0) return 0;
-  const beforeTax = b.tax !== null && !b.tax.included ? b.amountMinor - b.tax.minor : b.amountMinor;
+  const beforeTax = b.amountMinor - taxOnTopMinor(b);
   if (beforeTax <= 0) return 0;
   // credit × stands × (days part of the price) / (price × value), in whole numbers that cannot overflow.
   const top = BigInt(Math.min(creditMinor, value)) * BigInt(stands) * BigInt(Math.max(0, beforeTax - b.joiningFeeMinor));

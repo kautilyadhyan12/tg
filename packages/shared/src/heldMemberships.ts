@@ -53,6 +53,7 @@ import {
   renewalReminderStatusSchema,
   renewalReminderWhenSchema,
   SALES_TAX_PCM_MAX,
+  TAX_RATES_MAX,
   type ContractThen,
   type MembershipKind,
   type MembershipTermUnit,
@@ -1118,6 +1119,8 @@ const daySchema = z.string().regex(DAY);
 /** A tax rate as a membership charges it: its name and percentage. */
 export const heldTaxSchema = z.object({ name: z.string(), pcm: z.number().int().min(1).max(SALES_TAX_PCM_MAX) }).strict();
 export type HeldTax = z.infer<typeof heldTaxSchema>;
+/** The rates a membership charges, in order (18b-v-b); empty for no tax. */
+export const heldTaxesSchema = z.array(heldTaxSchema).max(TAX_RATES_MAX);
 
 /** One held membership, as the console reads it. `typeName` is the type's name now;
  *  the price and the term are the type's as they were when it was given. */
@@ -1182,9 +1185,9 @@ export const heldMembershipSchema = z
     freeDays: z
       .array(z.object({ days: z.number().int().min(1).max(GIFT_DAYS_MAX), friendName: z.string().min(1).nullable() }).strict())
       .default([]),
-    /** The tax rate it was sold with, as the rate is now (18b-iii): every bill opened from
-     *  here on charges it. Null for no tax. */
-    tax: heldTaxSchema.nullable(),
+    /** The tax rates it was sold with, in order, as each rate is now (18b-iii; 18b-v-b): every
+     *  bill opened from here on charges them. Empty for no tax. */
+    taxes: heldTaxesSchema,
     view: heldMembershipViewSchema,
     /** Change membership (18x): the one it was changed from, by its type's name now. */
     changedFrom: z.object({ typeName: z.string(), stopped: z.boolean().default(false) }).strict().nullable().default(null),
@@ -1217,8 +1220,8 @@ export const heldMembershipTypeChoiceSchema = z
     termUnit: membershipTermUnitSchema.nullable(),
     packClasses: z.number().int().nullable(),
     packDays: z.number().int().nullable(),
-    /** The tax rate its bills charge (18b-iii); null for no tax. */
-    tax: heldTaxSchema.nullable(),
+    /** The tax rates its bills charge, in order (18b-iii; 18b-v-b); empty for no tax. */
+    taxes: heldTaxesSchema,
     /** Charged on the first bill (18t); 0 for none. */
     joiningFeeMinor: z.number().int().min(0).default(0),
     /** Its contract (18v-i), which a membership given from it holds; both null for none. */

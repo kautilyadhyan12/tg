@@ -6,9 +6,10 @@
 // row lock first, so the cap, the name check and the classes a type covers are
 // decided against a list nobody else is changing.
 import type { Sql, TransactionSql } from "postgres";
-import { MEMBERSHIP_ARCHIVED_PAGE, MEMBERSHIP_TYPES_MAX, memberCurrencyForCountry } from "@app/shared";
+import { MEMBERSHIP_ARCHIVED_PAGE, MEMBERSHIP_TYPES_MAX, SALES_TAX_PCM_MAX, memberCurrencyForCountry } from "@app/shared";
 import { insertAudit, lockOrgRow } from "../repo.js";
-import { rateOf, readRates, taxIncludedOf } from "../register/taxRepo.js";
+import { ratesOf, readRates, taxIncludedOf } from "../register/taxRepo.js";
+import { typeTaxRateIdsSql } from "./taxesSql.js";
 
 export interface MembershipTypeRow {
   id: string;
@@ -29,7 +30,8 @@ export interface MembershipTypeRow {
   includesPt: boolean;
   ptLimit: number | null;
   ptPeriod: string | null;
-  taxRateId: string | null;
+  /** The gym's rates its bills charge, in the order picked (18b-v-b); empty for none. */
+  taxRateIds: string[];
   /** Charged on the first bill of a membership given from it (18t); 0 for none. */
   joiningFeeMinor: number;
   /** The business's other agreement it is signed with (18u-ii-a); null for the main one. */
@@ -85,7 +87,7 @@ interface RawType {
   includes_pt: boolean;
   pt_limit: number | null;
   pt_period: string | null;
-  tax_rate_id: string | null;
+  tax_rate_ids: string[];
   joining_fee_minor: number;
   agreement_document_id: string | null;
   contract_periods: number | null;
@@ -106,10 +108,10 @@ export async function readPriceList(sql: Sql, gymId: string): Promise<PriceListR
   const readTypes = (archived: boolean, limit: number) => sql<RawType[]>`
     SELECT id, name, description, kind, price_minor, currency, term_count, term_unit,
            pack_classes, pack_days, access, bookings_limit, bookings_period,
-           covers_all_classes, includes_pt, pt_limit, pt_period, tax_rate_id, joining_fee_minor, agreement_document_id,
+           covers_all_classes, includes_pt, pt_limit, pt_period, ${typeTaxRateIdsSql(sql)} AS tax_rate_ids, joining_fee_minor, agreement_document_id,
            contract_periods, contract_then, notice_days, leave_fee_minor, cooling_off_days,
            renewal_reminder_days, term_reminder_days, archived_at, updated_at
-    FROM gym_membership_types
+    FROM gym_membership_types t
     WHERE gym_id = ${gymId} AND (archived_at IS NOT NULL) = ${archived}
     ORDER BY ${archived ? sql`archived_at DESC, id` : sql`lower(name), id`}
     LIMIT ${limit}`;
@@ -167,7 +169,7 @@ export async function readPriceList(sql: Sql, gymId: string): Promise<PriceListR
     includesPt: r.includes_pt,
     ptLimit: r.pt_limit,
     ptPeriod: r.pt_period,
-    taxRateId: r.tax_rate_id,
+    taxRateIds: r.tax_rate_ids,
     joiningFeeMinor: r.joining_fee_minor,
     agreementId: r.agreement_document_id,
     contractPeriods: r.contract_periods,
@@ -212,8 +214,8 @@ export interface MembershipTypeInput {
   /** How many personal training sessions a week or a month; both null: no limit. */
   ptLimit: number | null;
   ptPeriod: string | null;
-  /** The gym's tax rate its bills charge; null for none. */
-  taxRateId: string | null;
+  /** The gym's tax rates its bills charge, in order; empty for none. */
+  taxRateIds: string[];
   /** Charged on the first bill of a membership given from it; 0 for none. */
   joiningFeeMinor: number;
   /** Its contract (18v-i); both null for none. */
@@ -243,8 +245,54 @@ export type MembershipWriteOutcome =
   | { kind: "changed" }
   /** The gym's country has no money to price in. */
   | { kind: "no_currency" }
-  /** The tax rate named is not one of this gym's. */
-  | { kind: "rate_not_found" };
+  /** A tax rate named is not one of this gym's. */
+  | { kind: "rate_not_found" }
+  /** Its rates would come to more than 30% together (18b-v-b). */
+  | { kind: "taxes_over_cap" };
+
+/** The rates a type is saved with are this gym's, and come to 30% at most together (18b-v-b),
+ *  read under the gym's lock that a rate's change takes. */
+async function checkTypeRates(tx: TransactionSql, gymId: string, rateIds: readonly string[]): Promise<MembershipWriteOutcome | null> {
+  const rates = await ratesOf(tx, gymId, rateIds);
+  if (rates === null) return { kind: "rate_not_found" };
+  if (rates.reduce((n, r) => n + r.pcm, 0) > SALES_TAX_PCM_MAX) return { kind: "taxes_over_cap" };
+  return null;
+}
+
+/** A type's rates, replaced by these in this order. Memberships already given keep their own. */
+async function writeTypeRates(tx: TransactionSql, gymId: string, typeId: string, rateIds: readonly string[]): Promise<void> {
+  await tx`DELETE FROM gym_membership_type_tax_rates WHERE gym_id = ${gymId} AND membership_type_id = ${typeId}`;
+  if (rateIds.length === 0) return;
+  await tx`
+    INSERT INTO gym_membership_type_tax_rates (gym_id, membership_type_id, tax_rate_id, position)
+    SELECT ${gymId}, ${typeId}, r.id, r.n
+    FROM unnest(${rateIds}::uuid[]) WITH ORDINALITY AS r(id, n)`;
+}
+
+/** A type put back on the price list charges at most 30% in all (18b-v-b), as a product put back
+ *  on sale does: a rate may have been raised while it was archived, and nobody could then be given
+ *  it. Its last rates are taken off until it fits; their names, for the gym's record. */
+async function takeTypeRatesOverCap(tx: TransactionSql, gymId: string, typeId: string): Promise<string[]> {
+  const rates = await tx<{ tax_rate_id: string; name: string; rate_pcm: number }[]>`
+    SELECT x.tax_rate_id, r.name, r.rate_pcm
+    FROM gym_membership_type_tax_rates x
+    JOIN gym_tax_rates r ON r.gym_id = x.gym_id AND r.id = x.tax_rate_id
+    WHERE x.gym_id = ${gymId} AND x.membership_type_id = ${typeId}
+    ORDER BY x.position, x.tax_rate_id`;
+  let together = rates.reduce((n, r) => n + r.rate_pcm, 0);
+  const off: { id: string; name: string }[] = [];
+  for (const rate of [...rates].reverse()) {
+    if (together <= SALES_TAX_PCM_MAX) break;
+    together -= rate.rate_pcm;
+    off.push({ id: rate.tax_rate_id, name: rate.name });
+  }
+  if (off.length > 0) {
+    await tx`
+      DELETE FROM gym_membership_type_tax_rates
+      WHERE gym_id = ${gymId} AND membership_type_id = ${typeId} AND tax_rate_id = ANY(${off.map((r) => r.id)}::uuid[])`;
+  }
+  return off.map((r) => r.name);
+}
 
 async function liveCount(tx: TransactionSql, gymId: string): Promise<number> {
   const [row] = await tx<{ n: number }[]>`
@@ -313,23 +361,25 @@ export async function createMembershipType(
     if (!(await classesAreThisGyms(tx, input.gymId, input.classTypeIds))) {
       return { kind: "class_not_in_gym" };
     }
-    if (input.taxRateId !== null && (await rateOf(tx, input.gymId, input.taxRateId)) === null) return { kind: "rate_not_found" };
+    const ratesWrong = await checkTypeRates(tx, input.gymId, input.taxRateIds);
+    if (ratesWrong !== null) return ratesWrong;
 
     const [created] = await tx<{ id: string }[]>`
       INSERT INTO gym_membership_types
         (gym_id, name, description, kind, price_minor, currency, term_count, term_unit,
          pack_classes, pack_days, access, bookings_limit, bookings_period, covers_all_classes, includes_pt,
-         pt_limit, pt_period, tax_rate_id, joining_fee_minor, contract_periods, contract_then, notice_days, leave_fee_minor, cooling_off_days,
+         pt_limit, pt_period, joining_fee_minor, contract_periods, contract_then, notice_days, leave_fee_minor, cooling_off_days,
          renewal_reminder_days, term_reminder_days)
       VALUES (${input.gymId}, ${input.name}, ${input.description}, ${input.kind}, ${input.priceMinor},
               ${currency}, ${input.termCount}, ${input.termUnit}, ${input.packClasses},
               ${input.packDays}, ${input.access}, ${input.bookingsLimit}, ${input.bookingsPeriod},
-              ${input.classTypeIds === null}, ${input.includesPt}, ${input.ptLimit}, ${input.ptPeriod}, ${input.taxRateId}, ${input.joiningFeeMinor},
+              ${input.classTypeIds === null}, ${input.includesPt}, ${input.ptLimit}, ${input.ptPeriod}, ${input.joiningFeeMinor},
               ${input.contractPeriods}, ${input.contractThen}, ${input.noticeDays}, ${input.leaveFeeMinor}, ${input.coolingOffDays},
               ${input.renewalReminderDays}, ${input.termReminderDays})
       RETURNING id`;
     if (created === undefined) throw new Error("membership type insert returned no row");
     await writeCoveredClasses(tx, input.gymId, created.id, input.classTypeIds);
+    await writeTypeRates(tx, input.gymId, created.id, input.taxRateIds);
 
     await insertAudit(tx, {
       actorUserId: input.actorUserId,
@@ -383,7 +433,8 @@ export async function updateMembershipType(
     if (!(await classesAreThisGyms(tx, input.gymId, input.classTypeIds))) {
       return { kind: "class_not_in_gym" };
     }
-    if (input.taxRateId !== null && (await rateOf(tx, input.gymId, input.taxRateId)) === null) return { kind: "rate_not_found" };
+    const ratesWrong = await checkTypeRates(tx, input.gymId, input.taxRateIds);
+    if (ratesWrong !== null) return ratesWrong;
 
     await tx`
       UPDATE gym_membership_types
@@ -394,12 +445,13 @@ export async function updateMembershipType(
           bookings_period = ${input.bookingsPeriod},
           covers_all_classes = ${input.classTypeIds === null}, includes_pt = ${input.includesPt},
           pt_limit = ${input.ptLimit}, pt_period = ${input.ptPeriod},
-          tax_rate_id = ${input.taxRateId}, joining_fee_minor = ${input.joiningFeeMinor},
+          joining_fee_minor = ${input.joiningFeeMinor},
           contract_periods = ${input.contractPeriods}, contract_then = ${input.contractThen},
           notice_days = ${input.noticeDays}, leave_fee_minor = ${input.leaveFeeMinor}, cooling_off_days = ${input.coolingOffDays},
           renewal_reminder_days = ${input.renewalReminderDays}, term_reminder_days = ${input.termReminderDays}, updated_at = ${input.now}
       WHERE id = ${input.typeId} AND gym_id = ${input.gymId}`;
     await writeCoveredClasses(tx, input.gymId, input.typeId, input.classTypeIds);
+    await writeTypeRates(tx, input.gymId, input.typeId, input.taxRateIds);
     const reminderBefore = reminderWords(before.renewal_reminder_days, before.term_reminder_days);
     const reminderAfter = reminderWords(input.renewalReminderDays, input.termReminderDays);
 
@@ -492,13 +544,14 @@ export async function restoreMembershipType(
     await tx`
       UPDATE gym_membership_types SET archived_at = NULL, updated_at = ${input.now}
       WHERE id = ${input.typeId} AND gym_id = ${input.gymId}`;
+    const taken = await takeTypeRatesOverCap(tx, input.gymId, input.typeId);
     await insertAudit(tx, {
       actorUserId: input.actorUserId,
       gymId: input.gymId,
       action: "org.membership_type_restored",
       targetType: "gym_membership_type",
       targetId: input.typeId,
-      meta: { name: before.name },
+      meta: { name: before.name, ...(taken.length === 0 ? {} : { taxesTakenOff: taken.join(", ") }) },
     });
     return { kind: "ok" };
   });

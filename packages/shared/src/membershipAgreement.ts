@@ -251,7 +251,7 @@ export interface AgreementFactsInput {
   personName: string;
   membership: Pick<
     HeldMembershipItem,
-    "typeName" | "kind" | "priceMinor" | "currency" | "termCount" | "termUnit" | "packClasses" | "startsOn" | "discount" | "tax" | "view"
+    "typeName" | "kind" | "priceMinor" | "currency" | "termCount" | "termUnit" | "packClasses" | "startsOn" | "discount" | "taxes" | "view"
   > & { contractPeriods?: number | null; fullFrom?: string | null; leaveFeeMinor?: number | null; coolingOffDays?: number | null };
   /** Its first bill, as opened with it (`firstBillOf`); null where it has none listed. */
   firstBill: Pick<MemberBill, "amountMinor" | "joiningFeeMinor" | "part" | "covers" | "dueOn"> | null;
@@ -262,17 +262,21 @@ export interface AgreementFactsInput {
 const plural = (count: number, one: string): string => (count === 1 ? one : `${String(count)} ${one}s`);
 const oneLine = (text: string): string => text.replace(/\s*\n\s*/g, ", ").replace(/\s+/g, " ").trim();
 
-/** The tax as the price says it: ", GST 18% included" or ", plus GST 18%". */
-function taxWords(tax: { name: string; pcm: number } | null, included: boolean): string {
-  if (tax === null) return "";
-  const rate = `${tax.name} ${pcmToTaxRateText(tax.pcm)}%`;
-  return included ? `, ${rate} included` : `, plus ${rate}`;
+/** Names in a sentence: "GST", "GST and QST", "GST, PST and QST". */
+const andList = (names: readonly string[]): string =>
+  names.length <= 1 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1] ?? ""}`;
+
+/** The taxes as the price says them (18b-v-b): ", GST 18% included" or ", plus GST 5% and QST 9.975%". */
+function taxWords(taxes: readonly { name: string; pcm: number }[], included: boolean): string {
+  if (taxes.length === 0) return "";
+  const rates = andList(taxes.map((t) => `${t.name} ${pcmToTaxRateText(t.pcm)}%`));
+  return included ? `, ${rates} included` : `, plus ${rates}`;
 }
 
 function priceWords(m: AgreementFactsInput["membership"], taxIncluded: boolean): string {
   if (m.priceMinor === 0) return "Free";
   const price = formatMinor(m.priceMinor, m.currency);
-  const tax = taxWords(m.tax, taxIncluded);
+  const tax = taxWords(m.taxes, taxIncluded);
   if (m.kind === "recurring" && m.termCount !== null && m.termUnit !== null) return `${price} every ${plural(m.termCount, m.termUnit)}${tax}`;
   if (m.kind === "pack" && m.packClasses !== null) return `${price} for ${m.packClasses === 1 ? "1 class" : `${String(m.packClasses)} classes`}${tax}`;
   if (m.kind === "one_time") return `${price}, paid once${tax}`;
@@ -345,7 +349,7 @@ function minimumTermFacts(m: AgreementFactsInput["membership"]): MembershipTerm[
   const from = (m.fullFrom ?? null) === null ? "" : ` from ${dayWords(m.fullFrom ?? "")}`;
   const facts: MembershipTerm[] = [{ key: "minimum_term", label: "Minimum term", value: `${contractLengthWords(periods, m.termCount, m.termUnit)}${from}, to ${dayWords(contract.until)}` }];
   const fee = m.leaveFeeMinor ?? null;
-  if (fee !== null && fee > 0) facts.push({ key: "early_cancellation_fee", label: "Early cancellation fee", value: `${formatMinor(fee, m.currency)}${m.tax === null ? "" : `, ${m.tax.name} included`}` });
+  if (fee !== null && fee > 0) facts.push({ key: "early_cancellation_fee", label: "Early cancellation fee", value: `${formatMinor(fee, m.currency)}${m.taxes.length === 0 ? "" : `, ${andList(m.taxes.map((t) => t.name))} included`}` });
   return facts;
 }
 

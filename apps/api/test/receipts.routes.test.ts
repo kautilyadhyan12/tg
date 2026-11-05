@@ -242,7 +242,7 @@ d("receipts (real Postgres)", () => {
 
       // Maya pays for Gold Monthly, $50.00 plus 8.25% sales tax; a walk-in and Maya each buy water.
       const tax = await addRate(gymId, owner.cookies, "Sales tax", 8250);
-      const gold = await addType(gymId, owner.cookies, monthly({ taxRateId: tax }));
+      const gold = await addType(gymId, owner.cookies, monthly({ taxRateIds: [tax] }));
       const maya = await addPerson(gymId, owner.cookies, "Maya Patel");
       await give(gymId, maya, owner.cookies, gold, 5000, 5413);
       const water = await addProduct(gymId, owner.cookies, "Water", 250);
@@ -372,7 +372,7 @@ d("receipts (real Postgres)", () => {
       const owner = await makeUser("discount-owner");
       const gymId = await makeGym(owner, "Rcp Discount Gym");
       const tax = await addRate(gymId, owner.cookies, "Sales tax", 8250);
-      const gold = await addType(gymId, owner.cookies, monthly({ taxRateId: tax }));
+      const gold = await addType(gymId, owner.cookies, monthly({ taxRateIds: [tax] }));
       const discount = async (name: string, percentBp: number, payments: "first" | "every") => {
         const res = await post(
           `${register(gymId)}/discounts`,

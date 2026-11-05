@@ -42,7 +42,7 @@ function given(type: HeldMembershipTerms, startsOn: string, paid: boolean, today
 }
 
 function paidBill(periodIndex: number, amountMinor: number, more: Partial<ChangeBillFacts> = {}): ChangeBillFacts {
-  return { periodIndex, status: "paid", amountMinor, tax: null, joiningFeeMinor: 0, changeCreditMinor: 0, paidMinor: amountMinor, refundedMinor: 0, ...more };
+  return { periodIndex, status: "paid", amountMinor, taxes: [], joiningFeeMinor: 0, changeCreditMinor: 0, paidMinor: amountMinor, refundedMinor: 0, ...more };
 }
 
 function ok(from: ChangeFrom): Extract<ChangeFrom, { ok: true }> {
@@ -98,10 +98,10 @@ describe("what stands on a paid bill for its days", () => {
   const credit = (bill: ChangeBillFacts, held = 5000): number => ok(changeFrom(m, held, [bill], "2026-10-16")).creditMinor;
 
   it.each([
-    ["tax added on top is not the days' price", paidBill(0, 5500, { tax: { minor: 500, included: false } }), 2580],
-    ["a price that holds its tax is the amount itself", paidBill(0, 5500, { tax: { minor: 500, included: true } }), 2838], // 5500 × 16 / 31 = 2838.7
+    ["tax added on top is not the days' price", paidBill(0, 5500, { taxes: [{ minor: 500, included: false }] }), 2580],
+    ["a price that holds its tax is the amount itself", paidBill(0, 5500, { taxes: [{ minor: 500, included: true }] }), 2838], // 5500 × 16 / 31 = 2838.7
     ["a joining fee is never part of the days", paidBill(0, 7500, { joiningFeeMinor: 2500 }), 2580],
-    ["a fee and tax on top together", paidBill(0, 8250, { joiningFeeMinor: 2500, tax: { minor: 750, included: false } }), 2580],
+    ["a fee and tax on top together", paidBill(0, 8250, { joiningFeeMinor: 2500, taxes: [{ minor: 750, included: false }] }), 2580],
     ["a refund comes off what stands", paidBill(0, 5000, { refundedMinor: 2000 }), 1548], // 3000 × 16 / 31 = 1548.4
     ["refunded in full leaves nothing", paidBill(0, 5000, { status: "refunded", refundedMinor: 5000 }), 0],
     ["a bill staff cancelled was never charged", paidBill(0, 5000, { status: "void", paidMinor: 0 }), 0],
@@ -116,7 +116,7 @@ describe("what stands on a paid bill for its days", () => {
   });
 
   it("billDaysMinor reads a bill alone", () => {
-    expect(billDaysMinor(paidBill(0, 5500, { tax: { minor: 500, included: false }, changeCreditMinor: 100 }))).toBe(5100);
+    expect(billDaysMinor(paidBill(0, 5500, { taxes: [{ minor: 500, included: false }], changeCreditMinor: 100 }))).toBe(5100);
   });
 });
 
@@ -201,7 +201,7 @@ describe("Refer a friend's free days are never credited (round one, High-1)", ()
 describe("the money a change moved is never refunded from the old bill (round one, High-2)", () => {
   it.each([
     ["no tax: the $25.80 credited", paidBill(0, 5000), 2580, 2580],
-    ["tax on top: the credit and its tax", paidBill(0, 5500, { tax: { minor: 500, included: false } }), 2580, 2838],
+    ["tax on top: the credit and its tax", paidBill(0, 5500, { taxes: [{ minor: 500, included: false }] }), 2580, 2838],
     ["a joining fee stays refundable", paidBill(0, 7500, { joiningFeeMinor: 2500 }), 2580, 2580],
     ["a partial refund before the change: only what stands", paidBill(0, 5000, { refundedMinor: 2000 }), 1548, 1548],
     ["a month paid ahead moves whole", paidBill(1, 5000), 5000, 5000],

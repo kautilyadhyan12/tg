@@ -268,7 +268,7 @@ d("an early cancellation fee on a minimum term (real Postgres)", () => {
       const rate = await post(`/v1/orgs/${gymId}/register/tax-rates`, { name: "GST", pcm: 18000 }, owner);
       expect(rate.statusCode, rate.body).toBe(201);
       const [gst] = await sql<{ id: string }[]>`SELECT id FROM gym_tax_rates WHERE gym_id = ${gymId} AND name = 'GST'`;
-      const gold = await addType(gymId, owner, monthly({ taxRateId: gst?.id }));
+      const gold = await addType(gymId, owner, monthly({ taxRateIds: gst === undefined ? [] : [gst.id] }));
       const hal = await addPerson(gymId, owner, "Hal Moore");
       // $50.00 plus 18% is $59.00.
       const given = await post(heldUrl(gymId, hal), { requestKey: nextForm(), typeId: gold, startsOn: "2026-10-15", paid: true, method: "cash", priceMinor: 5000, totalMinor: 5900 }, owner);
@@ -280,9 +280,9 @@ d("an early cancellation fee on a minimum term (real Postgres)", () => {
       const presses = await Promise.all(Array.from({ length: 6 }, () => post(`${heldUrl(gymId, hal)}/${halGold}/cancel`, leave(), owner)));
       expect(presses.map((r) => r.statusCode)).toEqual([200, 200, 200, 200, 200, 200]);
       // The fee is the amount the gym set, its 18% inside it: 9,900 x 18 / 118 is 1,510.17.
-      const [fee] = await sql<{ id: string; amount_minor: number; tax_minor: number; tax_pcm: number; tax_name: string | null; tax_included: boolean | null }[]>`
-        SELECT id, amount_minor, tax_minor, tax_pcm, tax_name, tax_included FROM gym_member_bills WHERE held_membership_id = ${halGold} AND fee = 'leave_early'`;
-      expect(fee).toMatchObject({ amount_minor: 9900, tax_minor: 1510, tax_pcm: 18000, tax_name: "GST", tax_included: true });
+      const [fee] = await sql<{ id: string; amount_minor: number; tax_minor: number; tax_pcm: number; taxes: unknown; tax_included: boolean | null }[]>`
+        SELECT id, amount_minor, tax_minor, tax_pcm, taxes, tax_included FROM gym_member_bills WHERE held_membership_id = ${halGold} AND fee = 'leave_early'`;
+      expect(fee).toMatchObject({ amount_minor: 9900, tax_minor: 1510, tax_pcm: 18000, taxes: [{ name: "GST", pcm: 18000, minor: 1510 }], tax_included: true });
       expect(await leaveFees(halGold)).toHaveLength(1);
 
       // Waived: neither another press nor the opening itself puts it on again.
@@ -371,7 +371,7 @@ d("an early cancellation fee on a minimum term (real Postgres)", () => {
       if (t === undefined) throw new Error("no type");
       const change = await put(
         `${typesUrl(gymId)}/${gold}`,
-        { ...monthly({ leaveFeeMinor: 15000 }), includesPt: false, ptLimit: null, ptPeriod: null, taxRateId: null, joiningFeeMinor: 0, noticeDays: null, coolingOffDays: null, renewalReminderDays: null, termReminderDays: null, updatedAt: t.updatedAt },
+        { ...monthly({ leaveFeeMinor: 15000 }), includesPt: false, ptLimit: null, ptPeriod: null, taxRateIds: [], joiningFeeMinor: 0, noticeDays: null, coolingOffDays: null, renewalReminderDays: null, termReminderDays: null, updatedAt: t.updatedAt },
         owner,
       );
       expect(change.statusCode, change.body).toBe(200);

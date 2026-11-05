@@ -43,6 +43,13 @@ export const TAXED_PRICE_MINOR_MAX = 76_923_076;
 /** A tax rate in thousandths of a percent ("pcm", per cent mille; 18b-v-a): 9975 is 9.975%,
  *  8250 is 8.25%. 30% is the most one rate, or all of one thing's rates together, can be. */
 export const SALES_TAX_PCM_MAX = 30_000;
+/** How many named tax rates a gym can have (18b-iii), and so how many one thing can charge. */
+export const TAX_RATES_MAX = 10;
+/** The rates a membership type charges (18b-v-b): each of the gym's rates once, in order. */
+const taxRateIdsSchema = z
+  .array(z.string().uuid())
+  .max(TAX_RATES_MAX)
+  .refine((ids) => new Set(ids).size === ids.length, "rate_twice");
 export const MEMBERSHIP_TERM_COUNT_MAX = 365;
 export const MEMBERSHIP_PACK_CLASSES_MAX = 500;
 export const MEMBERSHIP_PACK_DAYS_MAX = 730;
@@ -199,8 +206,9 @@ export const gymMembershipTypeSchema = z
     includesPt: z.boolean(),
     ptLimit: ptLimitSchema.nullable(),
     ptPeriod: membershipLimitPeriodSchema.nullable(),
-    /** The gym's tax rate its bills charge (18b-iii); null for no tax. */
-    taxRateId: z.string().uuid().nullable(),
+    /** The gym's tax rates its bills charge, in the order they were picked (18b-iii; 18b-v-b);
+     *  empty for no tax. */
+    taxRateIds: z.array(z.string().uuid()).max(TAX_RATES_MAX),
     /** Charged on the first bill of a membership given from it (18t); 0 for none. */
     joiningFeeMinor: priceMinorSchema,
     /** The business's other agreement it is signed with (18u-ii-a); null for the main one. */
@@ -268,8 +276,9 @@ const membershipTypeFields = {
   /** Left out of a NEW type is "no limit"; a change must say both (below). */
   ptLimit: ptLimitSchema.nullable().default(null),
   ptPeriod: membershipLimitPeriodSchema.nullable().default(null),
-  /** Left out of a NEW type is "no tax"; a change must say it (below). */
-  taxRateId: z.string().uuid().nullable().default(null),
+  /** Left out of a NEW type is "no tax"; a change must say it (below). Each of the gym's rates
+   *  once; together at most 30% (checked on the server, which knows each rate). */
+  taxRateIds: taxRateIdsSchema.default([]),
   /** Left out of a NEW type is "no joining fee"; a change must say it (below). */
   joiningFeeMinor: priceMinorSchema.default(0),
   /** Left out of a NEW type is "no contract"; a change must say it (below). */
@@ -317,14 +326,15 @@ function refineMembershipType(value: z.infer<typeof membershipTypeObject>, ctx: 
   if (value.classTypeIds !== null && new Set(value.classTypeIds).size !== value.classTypeIds.length) {
     wrong("classTypeIds");
   }
-  if (value.taxRateId !== null && value.priceMinor > TAXED_PRICE_MINOR_MAX) wrong("priceMinor");
+  const taxed = value.taxRateIds.length > 0;
+  if (taxed && value.priceMinor > TAXED_PRICE_MINOR_MAX) wrong("priceMinor");
   // A free type opens no bill: it charges no tax.
-  if (value.taxRateId !== null && value.priceMinor === 0) wrong("taxRateId");
+  if (taxed && value.priceMinor === 0) wrong("taxRateIds");
   // A joining fee rides on the first bill: only a repeating or paid-once type with a price
   // opens one, and the two together are one bill, capped as one price.
   if (value.joiningFeeMinor > 0) {
     if ((value.kind !== "recurring" && value.kind !== "one_time") || value.priceMinor === 0) wrong("joiningFeeMinor");
-    const cap = value.taxRateId === null ? MEMBERSHIP_PRICE_MINOR_MAX : TAXED_PRICE_MINOR_MAX;
+    const cap = taxed ? TAXED_PRICE_MINOR_MAX : MEMBERSHIP_PRICE_MINOR_MAX;
     if (value.priceMinor + value.joiningFeeMinor > cap) wrong("joiningFeeMinor");
   }
   // A contract is so many payments of a repeating type that has a price.
@@ -372,7 +382,7 @@ export const updateGymMembershipTypeRequestSchema = membershipTypeObject
     includesPt: z.boolean(),
     ptLimit: ptLimitSchema.nullable(),
     ptPeriod: membershipLimitPeriodSchema.nullable(),
-    taxRateId: z.string().uuid().nullable(),
+    taxRateIds: taxRateIdsSchema,
     joiningFeeMinor: priceMinorSchema,
     contractPeriods: contractPeriodsSchema.nullable(),
     contractThen: contractThenSchema.nullable(),

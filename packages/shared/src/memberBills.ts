@@ -12,7 +12,7 @@
 // counted paid with no bill is one the gym's own list said was paid, or one marked
 // before bills were kept.
 import { z } from "zod";
-import { SALES_TAX_PCM_MAX } from "./memberships.js";
+import { SALES_TAX_PCM_MAX, TAX_RATES_MAX } from "./memberships.js";
 import { cardDeclinedSchema, cardSeenSchema, cardUncheckedSchema } from "./cardCharges.js";
 import { chargeStopSchema, chargebackSeenSchema } from "./chargebacks.js";
 
@@ -175,6 +175,15 @@ export const receiptNumberSchema = z.number().int().min(1).max(2_147_483_647);
 const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const minorSchema = z.number().int().min(0).max(99_999_999);
 
+/** One tax of a bill (18b-v-b), as it was opened: the rate's name and percentage then, whether
+ *  the price held it, and how much it is. */
+export const billTaxSchema = z
+  .object({ name: z.string(), pcm: z.number().int().min(1).max(SALES_TAX_PCM_MAX), included: z.boolean(), minor: minorSchema })
+  .strict();
+export type BillTax = z.infer<typeof billTaxSchema>;
+/** A bill's taxes, in the order charged; empty for none. */
+export const billTaxesSchema = z.array(billTaxSchema).max(TAX_RATES_MAX);
+
 /** A refund sent to the card through Square (18d-iv-a): where it stands there, and the card, where Square named it. `late`:
  *  still pending after Square's 14 days. `pressId`: the press it came from (`cardRefundResponseSchema`). */
 export const squareRefundSeenSchema = z
@@ -260,12 +269,10 @@ export const memberBillSchema = z
     part: z.boolean().default(false),
     /** What the person pays for it, its tax in. */
     amountMinor: minorSchema,
-    /** The tax in `amountMinor` (18b-iii), as the bill was opened: the rate's name and
-     *  percentage then, whether the price held it, and how much it is. Null for none. */
-    tax: z
-      .object({ name: z.string(), pcm: z.number().int().min(1).max(SALES_TAX_PCM_MAX), included: z.boolean(), minor: minorSchema })
-      .strict()
-      .nullable(),
+    /** The taxes in `amountMinor` (18b-iii; 18b-v-b), as the bill was opened, in the order
+     *  charged: each rate's name and percentage then, whether the price held it, and how much
+     *  it is. Empty for none. */
+    taxes: billTaxesSchema,
     /** The joining fee in `amountMinor`, before any tax added on top (18t): on the bill the
      *  membership was given with; 0 on every other. */
     joiningFeeMinor: minorSchema.default(0),
@@ -324,10 +331,8 @@ export const memberFeeSchema = z
     /** A freeze fee's last day of that month; null for every other fee. */
     to: daySchema.nullable().default(null),
     amountMinor: minorSchema,
-    tax: z
-      .object({ name: z.string(), pcm: z.number().int().min(1).max(SALES_TAX_PCM_MAX), included: z.boolean(), minor: minorSchema })
-      .strict()
-      .nullable(),
+    /** Its taxes, as on a bill (18b-v-b). */
+    taxes: billTaxesSchema,
     dueOn: daySchema,
     state: z.enum(MEMBER_FEE_STATES),
     /** Who waived it, on the gym's own day; null where it was not waived. */

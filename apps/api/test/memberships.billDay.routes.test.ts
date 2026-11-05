@@ -303,7 +303,7 @@ d("billing everyone on one day of the month (real Postgres)", () => {
       expect(rateRes.statusCode, rateRes.body).toBe(201);
       const rate = sellPageResponseSchema.parse(JSON.parse(rateRes.body)).tax.rates.find((r) => r.name === "Sales tax");
       if (rate === undefined) throw new Error("no rate");
-      const gold = await addType(gymId, owner.cookies, monthly("Gold Monthly", 6200, { joiningFeeMinor: 2500, taxRateId: rate.id }));
+      const gold = await addType(gymId, owner.cookies, monthly("Gold Monthly", 6200, { joiningFeeMinor: 2500, taxRateIds: [rate.id] }));
       await setBillDay(gymId, owner.cookies, 1);
       expect(held(await get(heldUrl(gymId, await addPerson(gymId, owner.cookies, "Look Only")), owner.cookies)).billDay).toBe(1);
       expect((JSON.parse((await get(`/v1/orgs/${gymId}/membership-types`, owner.cookies)).body) as GymMembershipTypesResponse).billDay).toBe(1);

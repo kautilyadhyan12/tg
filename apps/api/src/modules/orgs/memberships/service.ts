@@ -104,6 +104,8 @@ function throwOnFailure(outcome: repo.MembershipWriteOutcome): void {
       );
     case "rate_not_found":
       throw new OrgsError(409, "tax_rate_not_found", REGISTER_WORDS.rate_not_found);
+    case "taxes_over_cap":
+      throw new OrgsError(409, "taxes_over_cap", REGISTER_WORDS.taxes_over_cap);
     default: {
       const never: never = outcome;
       throw new Error(`unhandled membership write outcome: ${JSON.stringify(never)}`);
@@ -130,7 +132,7 @@ function typeInput(req: SaveGymMembershipTypeRequest): repo.MembershipTypeInput 
     includesPt: req.includesPt,
     ptLimit: req.ptLimit,
     ptPeriod: req.ptPeriod,
-    taxRateId: req.taxRateId,
+    taxRateIds: req.taxRateIds,
     joiningFeeMinor: req.joiningFeeMinor,
     contractPeriods: req.contractPeriods,
     contractThen: req.contractThen,

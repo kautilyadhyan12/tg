@@ -50,7 +50,7 @@ export function changeBillFacts(b: BillRow): ChangeBillFacts {
     periodIndex: b.periodIndex,
     status: b.status,
     amountMinor: b.amountMinor,
-    tax: b.tax === null ? null : { minor: b.tax.minor, included: b.tax.included },
+    taxes: b.taxes,
     joiningFeeMinor: b.joiningFeeMinor,
     changeCreditMinor: b.changeCreditMinor,
     paidMinor: b.paidMinor,

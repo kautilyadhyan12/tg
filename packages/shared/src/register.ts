@@ -11,7 +11,7 @@ import { z } from "zod";
 import { gymDiscountSchema } from "./discounts.js";
 import { chargebackSeenSchema } from "./chargebacks.js";
 import { cardRefundOpenSchema, memberPaymentByHandSchema, memberPaymentMethodSchema, receiptNumberSchema, salePaymentMethodSchema } from "./memberBills.js";
-import { MEMBERSHIP_PRICE_MINOR_MAX, SALES_TAX_PCM_MAX } from "./memberships.js";
+import { MEMBERSHIP_PRICE_MINOR_MAX, SALES_TAX_PCM_MAX, TAX_RATES_MAX } from "./memberships.js";
 import { isRealDay } from "./discounts.js";
 import { saleRefundSchema } from "./saleRefunds.js";
 import { VISIBLE_TEXT } from "./visibleText.js";
@@ -33,8 +33,6 @@ export const SALE_PEOPLE_FOUND = 8;
 
 /** The thousandths of a percent in a whole: 100% is 100,000. */
 const PCM_WHOLE = 100_000;
-/** How many named tax rates a gym can have (18b-iii). */
-export const TAX_RATES_MAX = 10;
 export const TAX_NAME_MAX = 30;
 
 /** Whether a country's shelf prices already hold the tax. In the United States and
@@ -97,11 +95,10 @@ export interface SaleAmounts {
 
 export type SaleAmountsResult = ({ ok: true } & SaleAmounts) | { ok: false; reason: "not_an_amount" | "too_much" | "nothing_to_pay" };
 
-/** The tax a bill is opened with: the rate's name and percentage as they are that day, and
- *  whether the gym's prices hold it. */
+/** The taxes a bill is opened with (18b-v-b): each rate's name and percentage as they are that
+ *  day, in the order its membership charges them, and whether the gym's prices hold them. */
 export interface TaxApplied {
-  name: string;
-  pcm: number;
+  rates: readonly { name: string; pcm: number }[];
   included: boolean;
 }
 
@@ -170,11 +167,12 @@ function shareTax(taxMinor: number, pcms: readonly number[]): number[] {
   return parts;
 }
 
-/** WHAT ONE MEMBERSHIP BILL COMES TO (18b-iii): its price, after any discount, with the tax
- *  of the rate its membership was sold with, by `saleAmounts`' own arithmetic. The bill's
- *  amount is `totalMinor`, what the person pays; `taxMinor` is the part of it that is tax. */
+/** WHAT ONE MEMBERSHIP BILL COMES TO (18b-iii; 18b-v-b): its price, after any discount, with
+ *  the taxes of the rates its membership was sold with, by `saleAmounts`' own arithmetic. The
+ *  bill's amount is `totalMinor`, what the person pays; `taxMinor` is the part of it that is
+ *  tax, `taxParts` each rate's share of it. */
 export function billAmounts(listedMinor: number, tax: TaxApplied | null): SaleAmountsResult {
-  return saleAmounts({ unitPriceMinor: listedMinor, quantity: 1, taxPcms: tax === null ? [] : [tax.pcm], taxIncluded: tax?.included ?? false });
+  return saleAmounts({ unitPriceMinor: listedMinor, quantity: 1, taxPcms: tax === null ? [] : tax.rates.map((r) => r.pcm), taxIncluded: tax?.included ?? false });
 }
 
 // ── The wire ────────────────────────────────────────────────────────────────
@@ -492,8 +490,8 @@ export const sellPageResponseSchema = z
         .object({
           id: z.string().uuid(),
           name: z.string(),
-          /** The tax rate its bills charge (18b-iii); null for none. */
-          taxRateId: z.string().uuid().nullable(),
+          /** The tax rates its bills charge, in order (18b-iii; 18b-v-b); empty for none. */
+          taxRateIds: z.array(z.string().uuid()).max(TAX_RATES_MAX),
           /** Free: it opens no bill, so it charges no tax. */
           free: z.boolean(),
         })
@@ -645,7 +643,7 @@ export const REGISTER_WORDS = {
   rate_name_taken: "You already have a tax rate with this name. Pick another name.",
   too_many_rates: `You can have ${String(TAX_RATES_MAX)} tax rates. Remove one you no longer charge first.`,
   taxed_price_too_high: "This price is too high to charge tax on. Lower the price, or choose No tax.",
-  taxes_over_cap: "A product's taxes can come to 30% at most together. Untick one, or lower a rate.",
+  taxes_over_cap: "Taxes can come to 30% at most together. Untick one, or lower a rate.",
   request_reused: "That form was already used for another sale. Nothing was sold: start the sale again.",
   sale_not_found: "That sale was not found.",
   sale_not_today: "Only a sale made today can be voided here.",
@@ -674,14 +672,7 @@ export function taxRateInUseWords(name: string, uses: { products: number; member
   ].filter((p): p is string => p !== null);
   const list = parts.length <= 1 ? parts.join("") : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1] ?? ""}`;
   const first = `${name} was not removed: it is charged on ${list}.`;
-  const change =
-    uses.products > 0 && uses.membershipTypes > 0
-      ? " Untick it on the products, and change the membership types to another rate or No tax first."
-      : uses.products > 0
-        ? " Untick it on them first."
-        : uses.membershipTypes > 0
-          ? " Change them to another rate or No tax first."
-          : "";
+  const change = uses.products > 0 || uses.membershipTypes > 0 ? " Untick it on them first." : "";
   const held =
     uses.memberships > 0
       ? ` A membership keeps the tax it was sold with, so ${name} can be removed once nobody holds one. You can still change its name or rate.`
@@ -689,10 +680,17 @@ export function taxRateInUseWords(name: string, uses: { products: number; member
   return first + change + held;
 }
 
-/** Why a change to a rate, or to what it is charged on, was refused (18b-v-a): one product's
- *  taxes would come to more than 30% together. */
+/** Why a change to a rate, or to what it is charged on, was refused (18b-v-a): one product's or
+ *  membership type's taxes would come to more than 30% together. */
 export function taxesOverCapWords(product: string): string {
   return `Nothing was saved: the taxes on ${product} would come to more than 30% together. Take a tax off ${product} first, or lower the rate.`;
+}
+
+/** Why a rate was not raised (18b-v-b): a membership keeps the taxes it was sold with, and these
+ *  would come to more than 30% together. */
+export function heldTaxesOverCapWords(count: number): string {
+  const which = count === 1 ? "1 membership charges" : `${String(count)} memberships charge`;
+  return `Nothing was saved: ${which} this tax with another, and together they would come to more than 30%. A membership keeps the taxes it was sold with. Choose a lower rate.`;
 }
 
 /** A discount that takes a set amount off, or Refer a friend's gift, on more than one product
