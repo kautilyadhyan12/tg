@@ -222,7 +222,7 @@ describe("the location, before a run", () => {
   it.each([
     ["not allowed", { granted: false, canAskAgain: true }, "Allow location to record your run.", "Allow location"],
     ["turned off for the app", { granted: false, canAskAgain: false }, "Location is off for this app. Turn it on in Settings.", "Open settings"],
-    ["approximate only", { accuracy: "coarse" }, "Turn on Precise location to measure your run.", "Open settings"],
+    ["approximate only", { accuracy: "coarse" }, "Turn on Precise location to measure your run.", "Allow precise location"],
     ["the phone's location off", { services: false }, "Turn on your phone's location to record your run.", null],
   ] as const)("%s: says what to do, with its button, and starts nothing", async (_, answer, words, button) => {
     Object.assign(location, answer);

@@ -83,6 +83,9 @@ export async function askLocation(): Promise<StartProblem | null> {
     if (!answer.canAskAgain) return "settings";
     answer = await Location.requestForegroundPermissionsAsync();
     if (!answer.granted) return answer.canAskAgain ? "denied" : "settings";
+  } else if (answer.android?.accuracy === "coarse") {
+    // Approximate given before this press: Android asks once more, with its own Precise button.
+    answer = await Location.requestForegroundPermissionsAsync();
   }
   if (answer.android?.accuracy === "coarse") return "approximate";
   return null;
@@ -211,6 +214,7 @@ function Countdown({ onGo }: { onGo: () => void }) {
       <Button
         kind="link"
         label="Start now"
+        style={styles.startNow}
         onPress={() => {
           if (went.current) return;
           went.current = true;
@@ -255,9 +259,9 @@ function useLiveNumbers(run: LiveRun, kg: number): { now: number; sums: RunSums 
 
 /** The pace over the last ten seconds, from where the person was then to where they are. */
 function paceNow(run: LiveRun, units: Units): string {
-  if (run.phase !== "running") return "–:–";
+  if (run.phase !== "running") return "--:--";
   const last = run.points[run.points.length - 1];
-  if (last === undefined) return "–:–";
+  if (last === undefined) return "--:--";
   let from = last;
   for (let i = run.points.length - 1; i >= 0; i--) {
     const p = run.points[i];
@@ -266,7 +270,7 @@ function paceNow(run: LiveRun, units: Units): string {
     if (last[0] - p[0] >= 10_000) break;
   }
   const seconds = (last[0] - from[0]) / 1000;
-  if (seconds < 5) return "–:–";
+  if (seconds < 5) return "--:--";
   return pace(seconds, geodesicMetres(from[1], from[2], last[1], last[2]), units);
 }
 
@@ -322,7 +326,7 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
           <Icon name="down" size={22} colour="textSoft" />
         </Pressable>
       </View>
-      <ScrollView contentContainerStyle={styles.liveNumbers}>
+      <ScrollView style={styles.grow} contentContainerStyle={styles.liveNumbers}>
         <Txt kind="eyebrow" colour="textFaint">
           Time
         </Txt>
@@ -347,7 +351,8 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
         </View>
         <View style={styles.pairs}>
           <Figure label="Pace now" value={paceNow(run, units)} unit={paceWord(units)} dim={isPaused} />
-          <Figure label="Average pace" value={pace(moving, metres, units)} unit={paceWord(units)} dim={isPaused} />
+          {/* No average until there is ground to average: a standing start reads as no pace. */}
+          <Figure label="Average pace" value={pace(moving, metres < 50 ? 0 : metres, units)} unit={paceWord(units)} dim={isPaused} />
         </View>
         <View style={styles.pairs}>
           <Figure label="Calories" value={String(sums?.kcal ?? 0)} dim={isPaused} />
@@ -357,11 +362,11 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
       <View style={styles.controls}>
         {isPaused ? (
           <>
-            <RoundButton label="Finish" kind="ghost" busy={busy} onPress={press(() => finishRun())} />
-            <RoundButton label="Resume" kind="main" busy={busy} onPress={press(() => resumeRun())} />
+            <RoundButton key="finish" label="Finish" kind="ghost" busy={busy} onPress={press(() => finishRun())} />
+            <RoundButton key="resume" label="Resume" kind="main" busy={busy} onPress={press(() => resumeRun())} />
           </>
         ) : (
-          <RoundButton label="Pause" kind="main" busy={busy} onPress={press(() => pauseRun())} />
+          <RoundButton key="pause" label="Pause" kind="main" busy={busy} onPress={press(() => pauseRun())} />
         )}
       </View>
     </View>
@@ -514,7 +519,8 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
             </View>
           </View>
         ) : null}
-        {(units === "imperial" ? sums.splitsMi : sums.splitsKm).length > 0 ? (
+        {/* A wave needs two to compare: a run under two kilometres or miles has its pace above. */}
+        {(units === "imperial" ? sums.splitsMi : sums.splitsKm).length > 1 ? (
           <View style={styles.card}>
             <Txt kind="h3">{units === "imperial" ? "Miles" : "Kilometres"}</Txt>
             <PaceWave splits={units === "imperial" ? sums.splitsMi : sums.splitsKm} units={units} />
@@ -575,6 +581,7 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
         <Button
           kind="dangerLink"
           label="Discard run"
+          style={styles.centred}
           onPress={() => {
             setAsking(true);
           }}
@@ -602,6 +609,7 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
         <Button
           kind="link"
           label="Keep run"
+          style={styles.centred}
           onPress={() => {
             setAsking(false);
           }}
@@ -648,6 +656,7 @@ const styles = StyleSheet.create({
   },
   countNumber: { fontFamily: fonts.bold, fontSize: 140, lineHeight: 160, color: colours.text },
   countWord: { marginTop: 18 },
+  startNow: { alignSelf: "center" },
   // The run
   livePage: { flex: 1, backgroundColor: colours.page, paddingHorizontal: 22 },
   pausedBar: { position: "absolute", top: 0, left: 0, right: 0, height: 5, backgroundColor: colours.orange, boxShadow: shadows.dotGlow },
@@ -672,7 +681,9 @@ const styles = StyleSheet.create({
   controls: { flexDirection: "row", justifyContent: "center", gap: 38, paddingTop: 12 },
   roundWrap: { alignItems: "center" },
   round: { width: 96, height: 96, borderRadius: sizes.round, alignItems: "center", justifyContent: "center" },
-  roundMain: { experimental_backgroundImage: orangeGradient, boxShadow: shadows.roundButton },
+  // Both keep a border of one width: Android stops the app when a view gains a gradient as its
+  // border goes (React Native's BackgroundImageDrawable, seen on the moto g35).
+  roundMain: { experimental_backgroundImage: orangeGradient, borderWidth: 2, borderColor: "transparent", boxShadow: shadows.roundButton },
   roundGhost: { borderWidth: 2, borderColor: colours.grab, backgroundColor: colours.fill },
   roundLabel: { marginTop: 10, fontFamily: fonts.bold },
   pauseMark: { flexDirection: "row", gap: 9 },
@@ -697,9 +708,10 @@ const styles = StyleSheet.create({
   routeBox: { borderRadius: 14, backgroundColor: colours.tabBar, borderWidth: 1, borderColor: colours.line, overflow: "hidden" },
   feel: { flexDirection: "row", gap: 5 },
   feelDot: { flex: 1, minHeight: sizes.press, borderRadius: sizes.round, alignItems: "center", justifyContent: "center", backgroundColor: colours.fill, borderWidth: 1, borderColor: colours.line },
-  feelPicked: { experimental_backgroundImage: orangeGradient, borderWidth: 0, boxShadow: shadows.chip },
+  feelPicked: { experimental_backgroundImage: orangeGradient, borderColor: "transparent", boxShadow: shadows.chip },
   feelNumber: { fontFamily: fonts.bold },
   ends: { flexDirection: "row", justifyContent: "space-between" },
   note: { minHeight: 74, borderRadius: 14, backgroundColor: colours.field, borderWidth: 1, borderColor: colours.fieldLine, padding: 14, fontFamily: fonts.regular, fontSize: 15, color: colours.text, textAlignVertical: "top" },
   save: { marginTop: 10 },
+  centred: { alignSelf: "center" },
 });

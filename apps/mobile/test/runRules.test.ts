@@ -9,7 +9,7 @@ describe("a run's words", () => {
   it("are the clock, the distance and the pace in the person's own units", () => {
     expect([clock(0), clock(59), clock(767), clock(3725)]).toEqual(["0:00", "0:59", "12:47", "1:02:05"]);
     expect([distance(5120, "metric"), distance(5129, "metric"), distance(5120, "imperial")]).toEqual(["5.12", "5.12", "3.18"]);
-    expect([pace(1720, 5120, "metric"), pace(1720, 5120, "imperial"), pace(0, 0, "metric"), pace(5000, 10, "metric")]).toEqual(["5:36", "9:01", "–:–", "–:–"]);
+    expect([pace(1720, 5120, "metric"), pace(1720, 5120, "imperial"), pace(0, 0, "metric"), pace(5000, 10, "metric")]).toEqual(["5:36", "9:01", "--:--", "--:--"]);
     expect([splitLabel(2, 1000, "metric"), splitLabel(5, 120, "metric"), splitLabel(0, 1609, "imperial")]).toEqual(["3", "0.12", "1"]);
     expect(leftOutLine(1840, "metric")).toBe("1.84 km isn't counted: it was faster than anyone has ever run.");
   });

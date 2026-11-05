@@ -42,7 +42,7 @@ function useAutoPauseChoice(): [boolean, (on: boolean) => void] {
 }
 
 /** The GPS light before a run: only while the page is on screen and the person already allowed it. */
-function useGpsBefore(watching: boolean): ReturnType<typeof gpsLight> | null {
+function useGpsBefore(watching: boolean, asked: number): ReturnType<typeof gpsLight> | null {
   const [fix, setFix] = useState<{ at: number; accuracyM: number | null } | null>(null);
   const [allowed, setAllowed] = useState(false);
   const [now, setNow] = useState(Date.now());
@@ -71,7 +71,8 @@ function useGpsBefore(watching: boolean): ReturnType<typeof gpsLight> | null {
       stop?.();
       clearInterval(timer);
     };
-  }, [watching]);
+    // Asked again after each Start, so a location allowed at Start lights it at once.
+  }, [watching, asked]);
   return allowed ? gpsLight(fix, now) : null;
 }
 
@@ -83,7 +84,8 @@ export function RunningTab({ units }: { units: Units }) {
   const [problem, setProblem] = useState<StartProblem | null>(null);
   const [settings, setSettings] = useState(false);
   const going = layer.run !== null;
-  const gps = useGpsBefore(focused && !going);
+  const [asked, setAsked] = useState(0);
+  const gps = useGpsBefore(focused && !going, asked);
   const last = useRead("/v1/geo/runs?limit=1", runPageSchema, view.sent);
   const lastRun = last.read.kind === "ok" ? (last.read.data.items[0] ?? null) : null;
 
@@ -91,6 +93,7 @@ export function RunningTab({ units }: { units: Units }) {
     setProblem(null);
     const said = await layer.start(autoPause);
     setProblem(said);
+    setAsked((n) => n + 1);
   };
 
   return (
@@ -121,7 +124,12 @@ export function RunningTab({ units }: { units: Units }) {
           <Txt kind="small" colour="badText">
             {START_PROBLEM_WORDS[problem]}
           </Txt>
-          {problem === "settings" || problem === "approximate" ? (
+          {problem === "approximate" ? (
+            <View style={styles.choices}>
+              <Button kind="link" label="Allow precise location" onPress={() => void start()} />
+              <Button kind="quiet" label="Open settings" onPress={openAppSettings} />
+            </View>
+          ) : problem === "settings" ? (
             <Button kind="link" label="Open settings" onPress={openAppSettings} />
           ) : problem === "denied" ? (
             <Button kind="link" label="Allow location" onPress={() => void start()} />
@@ -213,6 +221,7 @@ const styles = StyleSheet.create({
   },
   goWord: { fontFamily: fonts.bold, fontSize: 21, letterSpacing: 0.5, color: colours.onOrange },
   problem: { gap: 4, alignItems: "flex-start" },
+  choices: { flexDirection: "row", gap: 16, flexWrap: "wrap" },
   said: { textAlign: "center" },
   rows: { borderRadius: sizes.boxRadius, backgroundColor: colours.box, borderWidth: 1, borderColor: colours.line },
   row: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 12, minHeight: 64 },

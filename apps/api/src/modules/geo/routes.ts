@@ -174,7 +174,7 @@ export function registerGeoRoutes(
       }
       try {
         const saved = await service.saveRun({ sql: deps.sql, now: () => new Date() }, authedUserId(req), input);
-        return reply.status(saved.status === "created" ? 201 : 200).send(saved);
+        return await reply.status(saved.status === "created" ? 201 : 200).send(saved);
       } catch (err) {
         if (err instanceof ForeignRunError) return notFound(req, reply);
         if (err instanceof service.RunInFutureError) {

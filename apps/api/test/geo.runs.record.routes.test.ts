@@ -7,12 +7,12 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
+import { z } from "zod";
 import {
   runDetailSchema,
   runPageSchema,
   runSums,
   saveRunResponseSchema,
-  type RunPoint,
   type SaveRunRequest,
 } from "@app/shared";
 import { buildApp } from "../src/app.js";
@@ -47,8 +47,8 @@ const cookieMap = (res: { cookies: { name: string; value: string }[] }) => Objec
 
 const RAD = Math.PI / 180;
 /** A run going north from a front door in Guwahati at `mps` metres a second, one point a second. */
-function northRun(seconds: number, mps: number): RunPoint[] {
-  const points: RunPoint[] = [];
+function northRun(seconds: number, mps: number): SaveRunRequest["points"] {
+  const points: SaveRunRequest["points"] = [];
   for (let i = 0; i <= seconds; i++) points.push([i * 1000, 26.1445 + (i * mps) / 110_760, 91.7362 + 0.00001 * Math.sin(i * RAD * 7), 5]);
   return points;
 }
@@ -135,7 +135,7 @@ d("record a run (real Postgres)", () => {
       const taken = await save(stranger.cookies, body({ runId: run.runId, name: "Not yours", points: northRun(60, 3), elapsedMs: 60_000 }));
       expect(taken.statusCode).toBe(404);
       expect(taken.body).not.toContain("polyline");
-      const own = runDetailSchema.parse(JSON.parse((await inject({ method: "GET", url: `/v1/geo/runs/${run.runId}`, cookies: runner.cookies })).body).run);
+      const own = z.object({ run: runDetailSchema }).parse(JSON.parse((await inject({ method: "GET", url: `/v1/geo/runs/${run.runId}`, cookies: runner.cookies })).body)).run;
       expect(own.distanceM).toBeGreaterThan(3000);
       const kept = await sql<{ name: string; user_id: string }[]>`SELECT name, user_id FROM runs WHERE id = ${run.runId}`;
       expect(kept).toEqual([{ name: "Morning Run", user_id: runner.id }]);

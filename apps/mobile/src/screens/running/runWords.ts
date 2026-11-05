@@ -23,11 +23,11 @@ export function distance(metres: number, units: Units): string {
   return (hundredths / 100).toFixed(2);
 }
 
-/** "5:36" a kilometre or a mile; "–:–" with no distance or a pace nobody walks (over an hour a unit). */
+/** "5:36" a kilometre or a mile; "--:--" with no distance or a pace nobody walks (over an hour a unit). */
 export function pace(seconds: number, metres: number, units: Units): string {
-  if (metres <= 0 || seconds <= 0) return "–:–";
+  if (metres <= 0 || seconds <= 0) return "--:--";
   const each = Math.round((seconds / metres) * metresPer(units));
-  if (each >= 3600) return "–:–";
+  if (each >= 3600) return "--:--";
   return `${String(Math.floor(each / 60))}:${two(each % 60)}`;
 }
 
