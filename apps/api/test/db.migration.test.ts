@@ -647,7 +647,7 @@ d("0001_init on a real database", () => {
       WHERE conrelid = 'sign_in_codes'::regclass AND contype = 'c'
       ORDER BY conname`;
     const byName = new Map(rows.map((r) => [r.name, r.def.replace(/\s+/g, " ")]));
-    expect([...byName.keys()].sort()).toEqual(["sign_in_codes_attempts_check", "sign_in_codes_purpose_check"]);
+    expect([...byName.keys()].sort()).toEqual(["sign_in_codes_attempts_check", "sign_in_codes_purpose_check", "sign_in_codes_user_check"]);
     expect(byName.get("sign_in_codes_purpose_check")).toContain("'sign_in'");
     expect(byName.get("sign_in_codes_purpose_check")).toContain("'delete_account'");
     expect(byName.get("sign_in_codes_attempts_check")).toContain("attempts >= 0");
@@ -659,6 +659,13 @@ d("0001_init on a real database", () => {
     await refused(sql`
       INSERT INTO sign_in_codes (email, purpose, code_hash, expires_at, attempts)
       VALUES ('zz-0023@example.com', 'sign_in', repeat('0', 64), now(), -1)`);
+    // 0206: a change-email code is an account's, and no other code is.
+    await refused(sql`
+      INSERT INTO sign_in_codes (email, purpose, code_hash, expires_at)
+      VALUES ('zz-0023@example.com', 'change_email', repeat('0', 64), now())`);
+    await refused(sql`
+      INSERT INTO sign_in_codes (email, purpose, code_hash, expires_at, user_id)
+      VALUES ('zz-0023@example.com', 'sign_in', repeat('0', 64), now(), (SELECT id FROM users LIMIT 1))`);
     // Positive control, rolled back: a legitimate row is accepted.
     let accepted = false;
     try {
@@ -673,10 +680,11 @@ d("0001_init on a real database", () => {
       /* rolled back on purpose */
     }
     expect(accepted).toBe(true);
-    // No FK to users — by design (an address may have no account yet).
-    const fks = await sql`
-      SELECT 1 FROM pg_constraint WHERE conrelid = 'sign_in_codes'::regclass AND contype = 'f'`;
-    expect(fks).toHaveLength(0);
+    // The address has no FK to users — by design (an address may have no account yet). The one FK is
+    // 0206's `user_id`, which only a change-email code holds.
+    const fks = await sql<{ def: string }[]>`
+      SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conrelid = 'sign_in_codes'::regclass AND contype = 'f'`;
+    expect(fks.map((fk) => fk.def)).toEqual(["FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE"]);
   });
 
   /** `0024`'s ORG TYPE CHECK LISTS EXACTLY THE TYPES `orgTypeSchema` KNOWS — the
