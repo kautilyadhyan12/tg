@@ -43,6 +43,9 @@ export interface MembershipTypeRow {
   leaveFeeMinor: number | null;
   /** Its cooling-off period in days (18v-iii); null for none. */
   coolingOffDays: number | null;
+  /** Its renewal reminder (18v-iv); null for none. */
+  renewalReminderDays: number | null;
+  termReminderDays: number | null;
   archivedAt: Date | null;
   updatedAt: Date;
 }
@@ -90,6 +93,8 @@ interface RawType {
   notice_days: number | null;
   leave_fee_minor: number | null;
   cooling_off_days: number | null;
+  renewal_reminder_days: number | null;
+  term_reminder_days: number | null;
   archived_at: Date | null;
   updated_at: Date;
 }
@@ -102,7 +107,8 @@ export async function readPriceList(sql: Sql, gymId: string): Promise<PriceListR
     SELECT id, name, description, kind, price_minor, currency, term_count, term_unit,
            pack_classes, pack_days, access, bookings_limit, bookings_period,
            covers_all_classes, includes_pt, pt_limit, pt_period, tax_rate_id, joining_fee_minor, agreement_document_id,
-           contract_periods, contract_then, notice_days, leave_fee_minor, cooling_off_days, archived_at, updated_at
+           contract_periods, contract_then, notice_days, leave_fee_minor, cooling_off_days,
+           renewal_reminder_days, term_reminder_days, archived_at, updated_at
     FROM gym_membership_types
     WHERE gym_id = ${gymId} AND (archived_at IS NOT NULL) = ${archived}
     ORDER BY ${archived ? sql`archived_at DESC, id` : sql`lower(name), id`}
@@ -169,6 +175,8 @@ export async function readPriceList(sql: Sql, gymId: string): Promise<PriceListR
     noticeDays: r.notice_days,
     leaveFeeMinor: r.leave_fee_minor,
     coolingOffDays: r.cooling_off_days,
+    renewalReminderDays: r.renewal_reminder_days,
+    termReminderDays: r.term_reminder_days,
     archivedAt: r.archived_at,
     updatedAt: r.updated_at,
   });
@@ -217,6 +225,9 @@ export interface MembershipTypeInput {
   leaveFeeMinor: number | null;
   /** Its cooling-off period in days (18v-iii); null for none. */
   coolingOffDays: number | null;
+  /** Its renewal reminder (18v-iv); null for none. */
+  renewalReminderDays: number | null;
+  termReminderDays: number | null;
 }
 
 export type MembershipWriteOutcome =
@@ -308,12 +319,14 @@ export async function createMembershipType(
       INSERT INTO gym_membership_types
         (gym_id, name, description, kind, price_minor, currency, term_count, term_unit,
          pack_classes, pack_days, access, bookings_limit, bookings_period, covers_all_classes, includes_pt,
-         pt_limit, pt_period, tax_rate_id, joining_fee_minor, contract_periods, contract_then, notice_days, leave_fee_minor, cooling_off_days)
+         pt_limit, pt_period, tax_rate_id, joining_fee_minor, contract_periods, contract_then, notice_days, leave_fee_minor, cooling_off_days,
+         renewal_reminder_days, term_reminder_days)
       VALUES (${input.gymId}, ${input.name}, ${input.description}, ${input.kind}, ${input.priceMinor},
               ${currency}, ${input.termCount}, ${input.termUnit}, ${input.packClasses},
               ${input.packDays}, ${input.access}, ${input.bookingsLimit}, ${input.bookingsPeriod},
               ${input.classTypeIds === null}, ${input.includesPt}, ${input.ptLimit}, ${input.ptPeriod}, ${input.taxRateId}, ${input.joiningFeeMinor},
-              ${input.contractPeriods}, ${input.contractThen}, ${input.noticeDays}, ${input.leaveFeeMinor}, ${input.coolingOffDays})
+              ${input.contractPeriods}, ${input.contractThen}, ${input.noticeDays}, ${input.leaveFeeMinor}, ${input.coolingOffDays},
+              ${input.renewalReminderDays}, ${input.termReminderDays})
       RETURNING id`;
     if (created === undefined) throw new Error("membership type insert returned no row");
     await writeCoveredClasses(tx, input.gymId, created.id, input.classTypeIds);
@@ -334,6 +347,7 @@ export async function createMembershipType(
         ...(input.noticeDays === null ? {} : { noticeDays: String(input.noticeDays) }),
         ...(input.leaveFeeMinor === null ? {} : { leaveFeeMinor: String(input.leaveFeeMinor) }),
         ...(input.coolingOffDays === null ? {} : { coolingOffDays: String(input.coolingOffDays) }),
+        ...(input.renewalReminderDays === null && input.termReminderDays === null ? {} : { renewalReminder: reminderWords(input.renewalReminderDays, input.termReminderDays) }),
       },
     });
     return { kind: "ok" };
@@ -357,9 +371,9 @@ export async function updateMembershipType(
   return await sql.begin(async (tx) => {
     await lockOrgRow(tx, input.gymId);
     const [before] = await tx<
-      { name: string; kind: string; price_minor: number; joining_fee_minor: number; contract_periods: number | null; contract_then: string | null; notice_days: number | null; leave_fee_minor: number | null; cooling_off_days: number | null; updated_at: Date }[]
+      { name: string; kind: string; price_minor: number; joining_fee_minor: number; contract_periods: number | null; contract_then: string | null; notice_days: number | null; leave_fee_minor: number | null; cooling_off_days: number | null; renewal_reminder_days: number | null; term_reminder_days: number | null; updated_at: Date }[]
     >`
-      SELECT name, kind, price_minor, joining_fee_minor, contract_periods, contract_then, notice_days, leave_fee_minor, cooling_off_days, updated_at FROM gym_membership_types
+      SELECT name, kind, price_minor, joining_fee_minor, contract_periods, contract_then, notice_days, leave_fee_minor, cooling_off_days, renewal_reminder_days, term_reminder_days, updated_at FROM gym_membership_types
       WHERE id = ${input.typeId} AND gym_id = ${input.gymId} AND archived_at IS NULL`;
     if (before === undefined) return { kind: "not_found" };
     // To the millisecond, which is what the list sends and a form can send back.
@@ -382,9 +396,12 @@ export async function updateMembershipType(
           pt_limit = ${input.ptLimit}, pt_period = ${input.ptPeriod},
           tax_rate_id = ${input.taxRateId}, joining_fee_minor = ${input.joiningFeeMinor},
           contract_periods = ${input.contractPeriods}, contract_then = ${input.contractThen},
-          notice_days = ${input.noticeDays}, leave_fee_minor = ${input.leaveFeeMinor}, cooling_off_days = ${input.coolingOffDays}, updated_at = ${input.now}
+          notice_days = ${input.noticeDays}, leave_fee_minor = ${input.leaveFeeMinor}, cooling_off_days = ${input.coolingOffDays},
+          renewal_reminder_days = ${input.renewalReminderDays}, term_reminder_days = ${input.termReminderDays}, updated_at = ${input.now}
       WHERE id = ${input.typeId} AND gym_id = ${input.gymId}`;
     await writeCoveredClasses(tx, input.gymId, input.typeId, input.classTypeIds);
+    const reminderBefore = reminderWords(before.renewal_reminder_days, before.term_reminder_days);
+    const reminderAfter = reminderWords(input.renewalReminderDays, input.termReminderDays);
 
     await insertAudit(tx, {
       actorUserId: input.actorUserId,
@@ -415,10 +432,19 @@ export async function updateMembershipType(
               coolingOffBefore: before.cooling_off_days === null ? "none" : String(before.cooling_off_days),
               coolingOffAfter: input.coolingOffDays === null ? "none" : String(input.coolingOffDays),
             }),
+        ...(reminderBefore === reminderAfter ? {} : { renewalReminderBefore: reminderBefore, renewalReminderAfter: reminderAfter }),
       },
     });
+    // A changed reminder is looked for again today, so the line's box tells the truth (18v-iv).
+    if (reminderBefore !== reminderAfter) await tx`UPDATE gyms SET renewal_reminders_checked_at = NULL WHERE id = ${input.gymId}`;
     return { kind: "ok" };
   });
+}
+
+/** "renewal 7, term 30", "renewal none, term none", as Staff activity keeps a line's reminders (18v-iv). */
+function reminderWords(renewalDays: number | null, termDays: number | null): string {
+  const one = (days: number | null): string => (days === null ? "none" : String(days));
+  return `renewal ${one(renewalDays)}, term ${one(termDays)}`;
 }
 
 /** Archive: the type leaves the price list and is kept. */

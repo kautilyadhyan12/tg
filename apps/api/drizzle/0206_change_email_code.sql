@@ -1,5 +1,6 @@
 -- Change email (ROADMAP Stage 5 item 19c; RULINGS 2026-09-23, E). Forward-only. Hand-written, as
--- `0016` onwards are; its journal entry is part of this commit.
+-- `0016` onwards are; its journal entry is part of this commit. Written as 0204 and renumbered
+-- 0206 when 0204 and 0205 of two other folders merged first.
 --
 -- A code sent to the NEW address before an account moves to it is a sign-in code of a purpose of its
 -- own, counted apart from the sign-in door's and the delete code's.

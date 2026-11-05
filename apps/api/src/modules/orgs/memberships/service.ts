@@ -18,8 +18,14 @@ import {
   type GymMembershipTypesResponse,
   type SaveGymMembershipTypeRequest,
   type UpdateGymMembershipTypeRequest,
+  renewalReminderPreviewResponseSchema,
+  type RenewalReminderPreviewRequest,
+  type RenewalReminderPreviewResponse,
 } from "@app/shared";
+import { dayInTz } from "../../gamification/streak.js";
 import { OrgsError, holdsPrivilege, requirePrivilege, requireWritablePrivilege } from "../service.js";
+import { previewLine } from "./renewalReminders.js";
+import { typeOfGym } from "./renewalRemindersRepo.js";
 import * as repo from "./repo.js";
 
 export interface MembershipsDeps {
@@ -131,6 +137,8 @@ function typeInput(req: SaveGymMembershipTypeRequest): repo.MembershipTypeInput 
     noticeDays: req.noticeDays,
     leaveFeeMinor: req.leaveFeeMinor,
     coolingOffDays: req.coolingOffDays,
+    renewalReminderDays: req.renewalReminderDays,
+    termReminderDays: req.termReminderDays,
   };
 }
 
@@ -203,4 +211,18 @@ export async function restoreMembershipType(
     await repo.restoreMembershipType(deps.sql, { gymId, typeId, actorUserId: userId, now: deps.now() }),
   );
   return await readOr404(deps, gymId);
+}
+
+/** The line's box for a renewal reminder (18v-iv): everybody on the line now, and what this reminder would do
+ *  for each. Whoever may change the line may read it; another gym's line is not found. */
+export async function previewRenewalReminder(
+  deps: MembershipsDeps & { emailKey: Buffer | null },
+  userId: string,
+  gymId: string,
+  typeId: string,
+  req: RenewalReminderPreviewRequest,
+): Promise<RenewalReminderPreviewResponse> {
+  const { org } = await requirePrivilege(deps, gymId, userId, "memberships.manage");
+  if (!(await typeOfGym(deps.sql, gymId, typeId))) throw new OrgsError(404, "membership_type_not_found", NOT_FOUND_MESSAGE);
+  return renewalReminderPreviewResponseSchema.parse(await previewLine(deps.sql, deps.emailKey, gymId, typeId, req.renewalReminder, dayInTz(deps.now(), org.timezone)));
 }

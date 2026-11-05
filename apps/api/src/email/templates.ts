@@ -347,6 +347,27 @@ export function cardExpiringEmail(words: {
   return { to: words.to, subject: `Your card on file with ${words.gymName} expires this month`, text, html };
 }
 
+/** The reminder before a membership renews or its minimum term ends (ROADMAP 18v-iv), sent by the gym to
+ *  whoever pays for it. The words are `renewalReminderWords`'s, from names already cleaned. */
+export function renewalReminderEmail(words: {
+  to: string;
+  gymName: string;
+  greeting: string;
+  subject: string;
+  lines: readonly string[];
+  /** "If you have any questions, you can call 555 0100 or email desk@irongym.com." or null. */
+  contact: string | null;
+}): EmailMessage {
+  const lines = [words.greeting, ...words.lines, ...(words.contact === null ? [] : [words.contact]), "Thank you."];
+  const footer = `Sent by ${APP_NAME} on behalf of ${words.gymName}, about a membership with them.`;
+  const text = `${lines.join("\n\n")}\n\n${words.gymName}\n\n${footer}\n`;
+  const html =
+    lines.map((line) => `<p>${escapeHtml(line)}</p>`).join("") +
+    `<p>${escapeHtml(words.gymName)}</p>` +
+    `<p style="color:#666;font-size:12px">${escapeHtml(footer)}</p>`;
+  return { to: words.to, subject: words.subject, text, html };
+}
+
 /** The copy of a membership agreement a person signed at the desk (ROADMAP 18u-i): the
  *  details the app filled in, the business's own words and the signature, as signed. Plain
  *  text in both: the business's words are never made into links here. The gym name arrives

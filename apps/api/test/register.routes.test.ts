@@ -793,7 +793,7 @@ d("the register: products, sales and tax (real Postgres)", () => {
       if (first === undefined) throw new Error("no type");
       const today = (await read(gymId, owner.cookies)).today;
       // The owner puts the price up while the desk's form is open at the old one.
-      const raised = await put(`/v1/orgs/${gymId}/membership-types/${first.id}`, { ...type, priceMinor: 5999, taxRateId: null, joiningFeeMinor: 0, contractPeriods: null, contractThen: null, noticeDays: null, leaveFeeMinor: null, coolingOffDays: null, updatedAt: first.updatedAt }, owner.cookies);
+      const raised = await put(`/v1/orgs/${gymId}/membership-types/${first.id}`, { ...type, priceMinor: 5999, taxRateId: null, joiningFeeMinor: 0, contractPeriods: null, contractThen: null, noticeDays: null, leaveFeeMinor: null, coolingOffDays: null, renewalReminderDays: null, termReminderDays: null, updatedAt: first.updatedAt }, owner.cookies);
       expect(raised.statusCode, raised.body).toBe(200);
       const heldUrl = `/v1/orgs/${gymId}/member-list/entries/${maya}/memberships`;
       const rowsNow = async () => ({
