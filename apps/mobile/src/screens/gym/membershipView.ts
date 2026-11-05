@@ -120,7 +120,6 @@ export const coolingOffAsk = (gym: string): string => `To cancel, ask ${gym}.`;
 
 /** Said under a membership given in the app with a price and nothing paid on it yet. One from the place's own list
  *  with nothing paid here is paid in its other software, as the overdue messages read it: nothing is said. */
-
 export const NO_PAYMENTS = "No payments yet.";
 
 /** A fee and the membership it is on, as the Fees part draws it. */
