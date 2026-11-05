@@ -163,6 +163,26 @@ describe("Me → Achievements", () => {
     expect(screen.getByText("Paused in Safe mode")).toBeTruthy();
   });
 
+  it("a challenge pressed opens its box: what counts, how far, its XP and the week's end", async () => {
+    await openAchievements(server().ask);
+    await fireEvent.press(await screen.findByRole("tab", { name: "Challenges" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Log your food on 5 days, Medium, 2 of 5. See more" }));
+    expect(await screen.findByText("A day with any meal logged counts.")).toBeTruthy();
+    expect(screen.getByText("of 5 days")).toBeTruthy();
+    expect(screen.getByText("XP when done")).toBeTruthy();
+    expect(screen.getByText("Sun")).toBeTruthy();
+    expect(screen.getByText("ends 8 Nov")).toBeTruthy();
+    expect(screen.getByText("3 to go this week.")).toBeTruthy();
+  });
+
+  it("a paused challenge's box says it is paused, never how far to go", async () => {
+    await openAchievements(server().ask);
+    await fireEvent.press(await screen.findByRole("tab", { name: "Challenges" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Train for 300 minutes, Hard, 94 of 300 min. See more" }));
+    expect(await screen.findByText("Paused in Safe mode until the week ends.")).toBeTruthy();
+    expect(screen.queryByText(/to go this week/)).toBeNull();
+  });
+
   it("Leaderboard with no gym: only Worldwide, coming soon", async () => {
     await openAchievements(server().ask);
     await fireEvent.press(await screen.findByRole("tab", { name: "Leaderboard" }));

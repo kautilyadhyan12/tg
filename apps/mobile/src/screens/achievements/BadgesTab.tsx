@@ -5,7 +5,8 @@ import type { Badge, BadgeList } from "@app/shared";
 import { colours, medal, medalShades } from "../../look/colours";
 import { medalPicture } from "../../look/medals";
 import { Rise } from "../../look/Motion";
-import { Sheet } from "../../look/Sheet";
+import { bandFor } from "../../look/bands";
+import { Sheet, type SheetPicture } from "../../look/Sheet";
 import { Txt } from "../../look/Txt";
 import type { Read } from "../dashboard/useRead";
 import { ReadOr } from "../progress/parts";
@@ -51,11 +52,17 @@ export function BadgesTab({ read, again }: { read: Read<BadgeList>; again: () =>
           </View>
         )}
       </ReadOr>
-      <Sheet open={open !== null} title={open?.name ?? ""} picture={{ name: "greekyoga", focus: 0.2 }} onClose={() => { setOpen(null); }}>
+      <Sheet open={open !== null} title={open?.name ?? ""} picture={paintingFor(open?.badge.code ?? "")} onClose={() => { setOpen(null); }}>
         {open === null ? null : <BadgeBox b={open} now={now} />}
       </Sheet>
     </>
   );
+}
+
+/** The badge's own painting across its box (Kd, 2026-11-05), or the Greek one where it has none. */
+function paintingFor(code: string): SheetPicture {
+  const band = bandFor(code);
+  return band === null ? { name: "greekyoga", focus: 0.2 } : { source: band, focus: 0.5 };
 }
 
 function rowsOf<T>(items: readonly T[]): T[][] {

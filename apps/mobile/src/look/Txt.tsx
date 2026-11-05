@@ -12,6 +12,8 @@ export const fonts = {
   /** Oswald, tall and condensed: the Dashboard clock alone (Kd, 2026-10-28). */
   display: "Oswald_600SemiBold",
   displayLight: "Oswald_400Regular",
+  /** Cinzel, carved Roman capitals: Achievements' title and level (Kd, 2026-11-05). */
+  carved: "Cinzel_800ExtraBold",
 } as const;
 
 export type TxtKind = keyof typeof kinds;

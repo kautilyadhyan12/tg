@@ -1,12 +1,12 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Animated, Image, Pressable, StyleSheet, useWindowDimensions, View, type StyleProp, type ViewStyle } from "react-native";
-import Svg, { Circle, Defs, G, LinearGradient, Path, RadialGradient, Stop } from "react-native-svg";
+import Svg, { Circle, Defs, Ellipse, G, LinearGradient, Path, RadialGradient, Stop } from "react-native-svg";
 import type { XpView } from "@app/shared";
 import { colours, medal, medalShades, orangeGradient, pictureFadeUnderWords, shadows, sizes } from "../../look/colours";
 import { useLoop } from "../../look/Motion";
 import { pictures, type PictureName } from "../../look/pictures";
 import { pictureTopHeight } from "../../look/sizing";
-import { Txt } from "../../look/Txt";
+import { fonts, Txt } from "../../look/Txt";
 import { NOT_KNOWN } from "../dashboard/words";
 import { TABS, type TabKey } from "./achievementsRules";
 
@@ -42,9 +42,11 @@ export function Hero({ xp, badges, tab, onTab }: { xp: XpView | null; badges: st
       </View>
       <View style={[StyleSheet.absoluteFill, styles.fade]} />
       <View style={styles.words}>
-        <Txt kind="hero">Achievements</Txt>
+        <Txt kind="hero" style={styles.title}>
+          ACHIEVEMENTS
+        </Txt>
         <View style={styles.level}>
-          <LevelRing level={xp?.level ?? null} share={xp === null ? 0 : xp.progressPct / 100} />
+          <LevelWreath level={xp?.level ?? null} />
           <View style={styles.grow}>
             <Txt kind="strong" numberOfLines={1} fit>
               {xp === null ? NOT_KNOWN : `${count(xp.total)} XP`}
@@ -53,10 +55,7 @@ export function Hero({ xp, badges, tab, onTab }: { xp: XpView | null; badges: st
             <Txt kind="small" colour="textSoft" numberOfLines={1}>
               {xp === null || toNext === null ? " " : `${count(toNext)} XP to Level ${String(xp.level + 1)}`}
             </Txt>
-            <View style={styles.bar}>
-              <View style={[styles.barLit, { flex: Math.min(Math.max(xp?.progressPct ?? 0, 0), 100) / 100 }]} />
-              <View style={{ flex: 1 - Math.min(Math.max(xp?.progressPct ?? 0, 0), 100) / 100 }} />
-            </View>
+            <GreekKey share={xp === null ? 0 : xp.progressPct / 100} />
           </View>
         </View>
         <View style={styles.tabs} accessibilityRole="tablist">
@@ -82,37 +81,88 @@ export function Hero({ xp, badges, tab, onTab }: { xp: XpView | null; badges: st
   );
 }
 
-const RING = 64;
-const RING_STROKE = 5;
+const WREATH = 78;
 
-function LevelRing({ level, share }: { level: number | null; share: number }) {
-  const r = (RING - RING_STROKE) / 2;
-  const around = 2 * Math.PI * r;
-  const lit = Math.max(0, Math.min(1, Number.isFinite(share) ? share : 0));
+/** The level as a gold laurel wreath round its number, in carved capitals (Kd, 2026-11-05). */
+function LevelWreath({ level }: { level: number | null }) {
+  const leaves: { x: number; y: number; turn: number }[] = [];
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 8; i += 1) {
+      const a = ((105 + i * 19) * Math.PI) / 180;
+      leaves.push({ x: 39 - side * 33 * Math.cos(a), y: 39 + 33 * Math.sin(a), turn: side * (i * 19 + 15) });
+    }
+  }
   return (
-    <View style={styles.ring} accessible accessibilityLabel={level === null ? "Level not known yet" : `Level ${String(level)}`}>
-      <Svg width={RING} height={RING} style={StyleSheet.absoluteFill}>
-        <Circle cx={RING / 2} cy={RING / 2} r={r} stroke={colours.track} strokeWidth={RING_STROKE} fill="none" />
-        {lit > 0 ? (
-          <Circle
-            cx={RING / 2}
-            cy={RING / 2}
-            r={r}
-            stroke={colours.orange}
-            strokeWidth={RING_STROKE}
-            strokeLinecap="round"
-            strokeDasharray={`${String(around * lit)} ${String(around)}`}
-            fill="none"
-            transform={`rotate(-90 ${String(RING / 2)} ${String(RING / 2)})`}
+    <View style={styles.wreath} accessible accessibilityLabel={level === null ? "Level not known yet" : `Level ${String(level)}`}>
+      <Svg width={WREATH} height={WREATH} viewBox="0 0 78 78" style={StyleSheet.absoluteFill}>
+        <Defs>
+          <LinearGradient id="wreathGold" x1="0" y1="0" x2="1" y2="1">
+            <Stop offset="0" stopColor={medal.goldLight} />
+            <Stop offset="0.5" stopColor={medal.gold} />
+            <Stop offset="1" stopColor={medal.goldDeep} />
+          </LinearGradient>
+        </Defs>
+        <Circle cx={39} cy={39} r={27} fill={medal.wreathInside} stroke={medal.wreathRing} strokeWidth={1.5} />
+        {leaves.map((l) => (
+          <Ellipse
+            key={`${l.x.toFixed(1)}-${l.y.toFixed(1)}`}
+            cx={l.x}
+            cy={l.y}
+            rx={3}
+            ry={7}
+            transform={`rotate(${l.turn.toFixed(1)} ${l.x.toFixed(1)} ${l.y.toFixed(1)})`}
+            fill="url(#wreathGold)"
+            stroke={medal.leafEdge}
+            strokeWidth={0.5}
           />
-        ) : null}
+        ))}
       </Svg>
-      <Txt kind="tiny" colour="textSoft" style={styles.levelWord}>
+      <Txt style={styles.levelNumber}>{level === null ? NOT_KNOWN : String(level)}</Txt>
+      <Txt kind="tiny" style={styles.levelWord}>
         LEVEL
       </Txt>
-      <Txt kind="big" style={styles.levelNumber}>
-        {level === null ? NOT_KNOWN : String(level)}
-      </Txt>
+    </View>
+  );
+}
+
+const KEY_UNIT = 16;
+
+/** The XP line as a Greek key, the up-down line of Greek temples, gold for the share earned (Kd, 2026-11-05). */
+function GreekKey({ share }: { share: number }) {
+  const [width, setWidth] = useState(0);
+  const units = Math.max(Math.floor(width / KEY_UNIT), 0);
+  const lit = Math.round(units * Math.max(0, Math.min(1, Number.isFinite(share) ? share : 0)));
+  const unit = (x: number) => `M${String(x)} 14 V2 H${String(x + 12)} V10 H${String(x + 5)} V6 H${String(x + 9)}`;
+  const run = (from: number, to: number) => Array.from({ length: Math.max(to - from, 0) }, (_, i) => unit((from + i) * KEY_UNIT)).join(" ");
+  return (
+    <View
+      style={styles.key}
+      accessible
+      accessibilityRole="progressbar"
+      accessibilityLabel={`${String(Math.round(share * 100))} percent of the way to the next level`}
+      onLayout={(e) => {
+        setWidth(e.nativeEvent.layout.width);
+      }}
+    >
+      {units === 0 ? null : (
+        <Svg width={units * KEY_UNIT} height={16} viewBox={`0 0 ${String(units * KEY_UNIT)} 16`}>
+          <Defs>
+            <LinearGradient id="keyGold" x1="0" y1="0" x2="1" y2="1">
+              <Stop offset="0" stopColor={medal.goldLight} />
+              <Stop offset="0.5" stopColor={medal.gold} />
+              <Stop offset="1" stopColor={medal.goldDeep} />
+            </LinearGradient>
+          </Defs>
+          <Path d={`M0 14 H${String(units * KEY_UNIT)}`} stroke={medal.keyEmpty} strokeWidth={2} />
+          <Path d={run(lit, units)} stroke={medal.keyEmpty} strokeWidth={2} fill="none" />
+          {lit === 0 ? null : (
+            <>
+              <Path d={`M0 14 H${String(lit * KEY_UNIT)}`} stroke={medal.gold} strokeWidth={2.2} />
+              <Path d={run(0, lit)} stroke="url(#keyGold)" strokeWidth={2.2} fill="none" />
+            </>
+          )}
+        </Svg>
+      )}
     </View>
   );
 }
@@ -196,11 +246,11 @@ const styles = StyleSheet.create({
   words: { position: "absolute", left: sizes.edge, right: sizes.edge, bottom: 14, gap: 8 },
   level: { flexDirection: "row", alignItems: "center", gap: 14 },
   grow: { flex: 1, minWidth: 0, gap: 2 },
-  ring: { width: RING, height: RING, alignItems: "center", justifyContent: "center", borderRadius: RING / 2, backgroundColor: colours.page, boxShadow: shadows.logo },
-  levelWord: { letterSpacing: 0.8 },
-  levelNumber: { lineHeight: 24 },
-  bar: { flexDirection: "row", height: 6, borderRadius: 3, backgroundColor: colours.track, marginTop: 5, overflow: "hidden", maxWidth: 260 },
-  barLit: { height: 6, borderRadius: 3, backgroundColor: colours.orange, boxShadow: shadows.dotGlow },
+  wreath: { width: WREATH, height: WREATH, alignItems: "center", justifyContent: "center" },
+  title: { fontFamily: fonts.carved, fontSize: 32, lineHeight: 40, letterSpacing: 1, color: medal.gold, textShadowColor: colours.wordShadow, textShadowRadius: 8, textShadowOffset: { width: 0, height: 2 } },
+  key: { height: 16, marginTop: 4, maxWidth: 260 },
+  levelWord: { fontFamily: fonts.carved, letterSpacing: 1.6, color: medal.levelWord, marginTop: -4 },
+  levelNumber: { fontFamily: fonts.carved, fontSize: 28, lineHeight: 32, color: medal.goldLight },
   tabs: { flexDirection: "row", marginTop: 6, padding: 4, borderRadius: sizes.round, backgroundColor: colours.fill, borderWidth: 1, borderColor: colours.line },
   tab: { flex: 1, minHeight: sizes.press - 4, alignItems: "center", justifyContent: "center", borderRadius: sizes.round, paddingHorizontal: 6 },
   tabOn: { backgroundColor: colours.orange, experimental_backgroundImage: orangeGradient, boxShadow: shadows.chip },

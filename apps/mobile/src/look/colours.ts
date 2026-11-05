@@ -184,6 +184,11 @@ export const medal = {
   laneLine: "rgba(255,220,170,0.06)",
   laneOther: "rgba(255,220,170,0.75)",
   heading: "rgba(255,190,120,0.9)",
+  wreathInside: "#120D08",
+  wreathRing: "rgba(242,193,78,0.5)",
+  leafEdge: "rgba(90,50,5,0.5)",
+  levelWord: "#E8C98A",
+  keyEmpty: "rgba(255,255,255,0.14)",
 } as const;
 export const medalShades = {
   shelf: "linear-gradient(to bottom, #3a3129 0%, #1a1511 70%, #0e0b09 100%)",

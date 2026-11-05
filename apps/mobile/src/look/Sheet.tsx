@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Image, KeyboardAvoidingView, Pressable, StyleSheet, View } from "react-native";
+import { Image, KeyboardAvoidingView, Pressable, StyleSheet, View, type ImageSourcePropType } from "react-native";
 import { Modal } from "./Modal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colours, shadows, sheetBandShade, sizes } from "./colours";
@@ -23,6 +23,9 @@ export function useSheetBack(depth: number, step: Step): void {
   useEffect(() => (steps === null ? undefined : steps.add(depth, () => latest.current())), [steps, depth]);
 }
 
+/** A drawing of the look's by its name, or a picture of a page's own (an Achievements painting). */
+export type SheetPicture = { name: PictureName; focus: number } | { source: ImageSourcePropType; focus: number };
+
 interface SheetProps {
   open: boolean;
   title: string;
@@ -34,7 +37,7 @@ interface SheetProps {
   onBack?: () => boolean;
   /** A drawing across the box's top, its title lying on its foot (Progress's boxes, 35c-i). `focus`
    *  is how far down the drawing the band looks: 0 its top, 1 its foot. */
-  picture?: { name: PictureName; focus: number };
+  picture?: SheetPicture;
 }
 
 /** The box from the bottom, or in the middle (`place`): a question, or a short task, over the page it
@@ -97,9 +100,9 @@ export function Sheet({ open, title, onClose, children, place = "bottom", onBack
 
 /** The drawing across a box's top: as wide as the box, its height from the drawing's own shape, moved
  *  up by `focus` of what overhangs the band. */
-function SheetBand({ picture }: { picture: { name: PictureName; focus: number } }) {
+function SheetBand({ picture }: { picture: SheetPicture }) {
   const [width, setWidth] = useState(0);
-  const source = pictures[picture.name];
+  const source = "source" in picture ? picture.source : pictures[picture.name];
   const size = Image.resolveAssetSource(source);
   const tall = size.width > 0 && size.height > 0 ? (width * size.height) / size.width : BAND_TALL;
   const lift = Math.max(0, tall - BAND_TALL) * picture.focus;
