@@ -56,6 +56,7 @@ import ConsoleLeaderboard from './pages/console/Leaderboard';
 import ConsoleUpdates  from './pages/console/Updates';
 import ConsoleEvents   from './pages/console/Events';
 import ConsoleChallenges from './pages/console/Challenges';
+import ConsoleMealPlans from './pages/console/MealPlans';
 import ConsoleReports  from './pages/console/Reports';
 import ConsoleAtRisk   from './pages/console/AtRisk';
 import ConsoleFailedPayments from './pages/console/FailedPayments';
@@ -334,6 +335,17 @@ export default function App() {
             <Route path="/console/:orgSlug/events" element={
               <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
                 <ConsoleLayout><ConsoleEvents /></ConsoleLayout>
+              </ProtectedRoute>
+            } />
+            {/* THE GYM'S MEAL PLANS FOR ITS MEMBERS (24a-i): `plans.manage`'s. The list and one plan. */}
+            <Route path="/console/:orgSlug/plans" element={
+              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
+                <ConsoleLayout><ConsoleMealPlans /></ConsoleLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/console/:orgSlug/plans/:planId" element={
+              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
+                <ConsoleLayout><ConsoleMealPlans /></ConsoleLayout>
               </ProtectedRoute>
             } />
             {/* THE GYM'S CHALLENGES FOR STAFF (19d-i): `leaderboard.manage`'s. */}

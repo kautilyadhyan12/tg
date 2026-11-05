@@ -33,3 +33,4 @@ export * from "./foodWeek.js";
 export * from "./goneForGood.js";
 export * from "./referrals.js";
 export * from "./gymPayments.js";
+export * from "./gymMealPlans.js";
