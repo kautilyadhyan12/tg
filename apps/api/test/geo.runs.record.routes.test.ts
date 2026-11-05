@@ -328,7 +328,7 @@ describe("round one of 37a: nothing a person ran is refused for the phone's cloc
     const both = await Promise.all([post(a.cookies, shared, shared.runId), post(b.cookies, { ...shared, name: "Not theirs" }, shared.runId)]);
     expect(both.map((r) => r.statusCode).sort()).toEqual([201, 404]);
     const owner = await sql<{ user_id: string }[]>`SELECT user_id FROM runs WHERE id = ${shared.runId}`;
-    const winner = both[0]?.statusCode === 201 ? a.id : b.id;
+    const winner = both[0].statusCode === 201 ? a.id : b.id;
     expect(owner).toEqual([{ user_id: winner }]);
   });
 });
