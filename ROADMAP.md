@@ -264,7 +264,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
        - 18b-ii-b. [x] **The same discounts on memberships** — merged 2026-10-14 (PR #261).
      - 18b-iii. [x] **Tax on memberships, with named tax rates** — merged 2026-10-15 (PR #267).
      - 18b-iv. [x] **The tax box suggests the gym country’s own tax** — merged 2026-11-04 (PR #463).
-     - 18b-v. [ ] **Two taxes on one membership or product** (Kd, 2026-11-04): each named and shown on the bill and the receipt, as Quebec's GST 5% and QST 9.975% must be (Revenu Québec, "Showing the Taxes"). Before any gym in Quebec or British Columbia uses the app. Web folder 2.
+     - 18b-v. **Several taxes on one membership or product**, in two parts since 2026-11-05 (`handoff/2026-11-05-18b-v-a.md` keeps its line as first written):
+       - 18b-v-a. [ ] **Three decimals, and several taxes on a product** (Kd, 2026-11-05): a rate to three decimals (QST 9.975%); a product charges as many of the gym’s rates as it needs, at most 30% together, each named on the sale and the receipt. Web folder 2.
+       - 18b-v-b. [ ] **Several taxes on a membership**: the same on a membership type, its bills and their receipts. Web folder 2.
    - 18c. ~~Pay by the gym's own link~~ **Dropped 2026-10-15** (Kd, `rulings/2026-10-15-18g-i.md`): not standard practice; members pay through 18d's company or at the desk.
    - 18d. **The first Connect button: Square** (Kd's sign-up worked 2026-10-19; `rulings/2026-10-19-18d-i.md`), split that day in four (the line as first written is in `handoff/2026-10-19-18d-i.md`):
      - 18d-i. [x] **Connect Square and Disconnect** — merged 2026-10-20 (PR #319).
