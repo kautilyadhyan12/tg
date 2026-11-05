@@ -25,7 +25,7 @@ import {
   loadRun,
   pauseRun,
   resumeRun,
-  setAutoPause as setRunAutoPause,
+  chooseAutoPause,
   runNow,
   startRun,
   subscribeRun,
@@ -322,7 +322,7 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
               </Txt>
             </View>
             {run.pausedByPerson ? null : (
-              <Button kind="link" label="Turn off Auto-pause" onPress={press(() => setRunAutoPause(false))} />
+              <Button kind="link" label="Turn off Auto-pause" onPress={press(() => chooseAutoPause(false))} />
             )}
           </View>
         ) : (

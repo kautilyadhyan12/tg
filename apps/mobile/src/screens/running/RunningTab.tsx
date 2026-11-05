@@ -1,6 +1,6 @@
 // The Workout tab's Running page (ROADMAP Stage 5 item 37a): the GPS light, the last run, Start,
 // Auto-pause and the units. The run itself opens over the app (RunLayer).
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { Pressable, StyleSheet, Switch, View } from "react-native";
 import * as Location from "expo-location";
 import { useIsFocused } from "@react-navigation/native";
@@ -10,36 +10,12 @@ import { colours, orangeGradient, shadows, sizes } from "../../look/colours";
 import { fonts, Txt } from "../../look/Txt";
 import { useRead } from "../dashboard/useRead";
 import { SettingsPage } from "../Settings";
-import { phoneRunFiles, setAutoPause as setRunAutoPause } from "./recorder";
+import { autoPauseChoice, chooseAutoPause, readAutoPauseChoice, subscribeRun } from "./recorder";
 import { gpsLight, openAppSettings, START_PROBLEM_WORDS, useRunLayer, type StartProblem } from "./RunLayer";
 import { useRunOutbox } from "./RunOutbox";
 import { clock, distance, unitWord } from "./runWords";
 
-const SETTINGS_FILE = "run-settings.json";
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
-
-/** Auto-pause on or off, kept on the phone for the next run. On until the person turns it off. */
-function useAutoPauseChoice(): [boolean, (on: boolean) => void] {
-  const [on, setOn] = useState(true);
-  useEffect(() => {
-    void phoneRunFiles.read(SETTINGS_FILE).then((text) => {
-      if (text === null) return;
-      try {
-        const kept: unknown = JSON.parse(text);
-        if (typeof kept === "object" && kept !== null && Reflect.get(kept, "autoPause") === false) setOn(false);
-      } catch {
-        // A file that cannot be read keeps the choice as it is.
-      }
-    }, () => undefined);
-  }, []);
-  return [
-    on,
-    (next) => {
-      setOn(next);
-      void phoneRunFiles.write(SETTINGS_FILE, JSON.stringify({ autoPause: next })).catch(() => undefined);
-    },
-  ];
-}
 
 /** The GPS light before a run: only while the page is on screen and the person already allowed it. */
 function useGpsBefore(watching: boolean, asked: number): ReturnType<typeof gpsLight> | null {
@@ -80,7 +56,10 @@ export function RunningTab({ units }: { units: Units }) {
   const focused = useIsFocused();
   const layer = useRunLayer();
   const { view, outbox } = useRunOutbox();
-  const [autoPause, setAutoPause] = useAutoPauseChoice();
+  const autoPause = useSyncExternalStore(subscribeRun, autoPauseChoice);
+  useEffect(() => {
+    void readAutoPauseChoice();
+  }, []);
   const [problem, setProblem] = useState<StartProblem | null>(null);
   const [settings, setSettings] = useState(false);
   const going = layer.run !== null;
@@ -100,7 +79,7 @@ export function RunningTab({ units }: { units: Units }) {
 
   return (
     <View style={styles.page}>
-      {gps === null ? null : (
+      {gps === null || going ? null : (
         <View style={styles.pill} accessible accessibilityLabel={gps.word === "GPS" ? "GPS ready" : gps.word}>
           <View style={[styles.dot, gps.tone === "good" ? styles.dotGood : gps.tone === "weak" ? styles.dotWeak : styles.dotNone]} />
           <Txt kind="small">{gps.word === "GPS" ? "GPS ready" : gps.word}</Txt>
@@ -123,8 +102,7 @@ export function RunningTab({ units }: { units: Units }) {
             accessibilityLabel="Auto-pause"
             value={shownAuto}
             onValueChange={(on) => {
-              setAutoPause(on);
-              void setRunAutoPause(on);
+              void chooseAutoPause(on);
             }}
             trackColor={{ false: colours.lineStrong, true: colours.orange }}
             thumbColor={colours.text}
@@ -150,7 +128,7 @@ export function RunningTab({ units }: { units: Units }) {
       {going ? (
         <View style={styles.centre}>
           <Txt kind="h3">{layer.run?.phase === "finished" ? "Your run is waiting to be saved." : "Your run is going."}</Txt>
-          <Button label="Open run" onPress={layer.open} />
+          <Button label="Open run" onPress={layer.open} style={styles.middle} />
         </View>
       ) : (
         <Pressable accessibilityRole="button" accessibilityLabel="Start run" onPress={() => void start()} style={({ pressed }) => [styles.go, pressed ? styles.pressed : null]}>
@@ -213,6 +191,7 @@ const styles = StyleSheet.create({
   dotWeak: { backgroundColor: colours.gold },
   dotNone: { backgroundColor: colours.textFaint },
   centre: { alignItems: "center", gap: 12, paddingVertical: 18 },
+  middle: { alignSelf: "center" },
   go: {
     alignSelf: "center",
     width: 132,

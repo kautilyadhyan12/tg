@@ -295,6 +295,9 @@ describe("Auto-pause turned off during a run (Kd's click-through, 2026-11-05)", 
     );
     expect(runNow()?.phase).toBe("running");
     expect(screen.queryByText("Auto-paused")).toBeNull();
+    // One choice: the Running page's switch reads off too, for this run and the next.
+    await fireEvent.press(screen.getByRole("button", { name: "Back to the app" }));
+    expect((await screen.findByRole("switch", { name: "Auto-pause" })).props.value).toBe(false);
   });
 
   it("on the Running page, with the run behind it: the switch changes the run going on", async () => {

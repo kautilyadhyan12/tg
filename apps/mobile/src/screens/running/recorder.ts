@@ -90,9 +90,44 @@ export function subscribeRun(listener: () => void): () => void {
 
 export const runNow = (): LiveRun | null => current;
 
+// ── Auto-pause on or off: one choice, kept on the phone ─────────────────────────────────────────
+// The Running page's switch and the run's own Turn off Auto-pause change this one choice, and the
+// run going on with it, so the two never read differently. On until the person turns it off.
+
+const SETTINGS_FILE = "run-settings.json";
+let autoChoice = true;
+let choiceRead = false;
+
+export const autoPauseChoice = (): boolean => autoChoice;
+
+export async function readAutoPauseChoice(): Promise<void> {
+  if (choiceRead) return;
+  choiceRead = true;
+  try {
+    const text = await files.read(SETTINGS_FILE);
+    const kept: unknown = text === null ? null : JSON.parse(text);
+    if (typeof kept === "object" && kept !== null && Reflect.get(kept, "autoPause") === false) {
+      autoChoice = false;
+      tell();
+    }
+  } catch {
+    // A file that cannot be read keeps the choice as it is.
+  }
+}
+
+export async function chooseAutoPause(on: boolean): Promise<void> {
+  autoChoice = on;
+  choiceRead = true;
+  tell();
+  await setAutoPause(on);
+  await files.write(SETTINGS_FILE, JSON.stringify({ autoPause: on })).catch(() => undefined);
+}
+
 /** Tests hand in their own files and start from nothing. */
 export function resetRecorder(withFiles: RunFiles = phoneRunFiles): void {
   generation += 1;
+  autoChoice = true;
+  choiceRead = false;
   files = withFiles;
   current = null;
   auto = AUTO_START;
