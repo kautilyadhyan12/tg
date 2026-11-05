@@ -130,3 +130,40 @@ export const geoListQuerySchema = z
   .object({ limit: z.coerce.number().int().min(1).max(100).default(20), cursor: z.string().optional() })
   .strict();
 export type GeoListQuery = z.infer<typeof geoListQuerySchema>;
+
+// ── The phone's own files for a run (apps/mobile; ROADMAP 37a) ─────────────────────────────────
+// Read back through these, so a file the phone cannot read is never taken for a run.
+
+/** The run going on, kept beside its points (`apps/mobile/src/screens/running/recorder.ts`). */
+export const keptRunStateSchema = z.object({
+  runId: z.string().uuid(),
+  userId: z.string().uuid(),
+  startedAt: z.number(),
+  phase: z.enum(["running", "paused", "finished"]),
+  pausedByPerson: z.boolean(),
+  autoPause: z.boolean(),
+  pauses: z.array(z.tuple([z.number(), z.number().nullable()])),
+  finishedMs: z.number().nullable(),
+  files: z.number().int().nonnegative(),
+});
+export const keptRunPointsSchema = z.array(z.tuple([z.number(), z.number(), z.number(), z.number().nullable()]));
+
+/** What Android hands the app with each batch of a run's points (expo-location's task data). */
+export const phoneLocationsSchema = z.object({
+  locations: z.array(
+    z.object({
+      timestamp: z.number(),
+      coords: z.object({
+        latitude: z.number(),
+        longitude: z.number(),
+        accuracy: z.number().nullable().optional(),
+        speed: z.number().nullable().optional(),
+      }),
+    }),
+  ),
+});
+
+/** A saved run the server refused, kept to tell the person once. */
+export const refusedRunSchema = z.object({ runId: z.string(), name: z.string(), message: z.string() });
+export type RefusedRun = z.infer<typeof refusedRunSchema>;
+export const runOutboxFileSchema = z.object({ version: z.literal(1), waiting: z.array(z.unknown()), refused: z.array(z.unknown()) });

@@ -9,6 +9,8 @@
 // `setup` is the browser's setup picture (its Vitruvian figure), its lines drawn light and glowing for the dark page.
 // Achievements (35c-iii, 2026-11-05): `goddess` is Kd's "Greek Goddess Flexing in Classical Attire", cut from its white;
 // `greekyoga`, `vikingbell` and `egyptpush` are his painted posters, cut without their carved words.
+// Running (37a, 2026-11-05): `track` is Kd's "Silhouette Sprint and Long Shadow"; `greekrun` his "Ivory Greek
+// chiton running poster", cut above its carved words and its numbers.
 import anatomy from "../../assets/pictures/anatomy.webp";
 import balance from "../../assets/pictures/balance.webp";
 import benchpress from "../../assets/pictures/benchpress.webp";
@@ -30,6 +32,7 @@ import getstarted from "../../assets/pictures/getstarted.webp";
 import goals from "../../assets/pictures/goals.webp";
 import goalsbox from "../../assets/pictures/goalsbox.webp";
 import goddess from "../../assets/pictures/goddess.webp";
+import greekrun from "../../assets/pictures/greekrun.webp";
 import greekyoga from "../../assets/pictures/greekyoga.webp";
 import hero from "../../assets/pictures/hero.webp";
 import hourstrained from "../../assets/pictures/hourstrained.webp";
@@ -54,6 +57,7 @@ import squat from "../../assets/pictures/squat.webp";
 import steps from "../../assets/pictures/steps.webp";
 import thisweek from "../../assets/pictures/thisweek.webp";
 import totalworkout from "../../assets/pictures/totalworkout.webp";
+import track from "../../assets/pictures/track.webp";
 import vikingbell from "../../assets/pictures/vikingbell.webp";
 import weeklychallenges from "../../assets/pictures/weeklychallenges.webp";
 import weight from "../../assets/pictures/weight.webp";
@@ -82,6 +86,7 @@ export const pictures = {
   goals,
   goalsbox,
   goddess,
+  greekrun,
   greekyoga,
   hero,
   hourstrained,
@@ -106,6 +111,7 @@ export const pictures = {
   steps,
   thisweek,
   totalworkout,
+  track,
   vikingbell,
   weeklychallenges,
   weight,
