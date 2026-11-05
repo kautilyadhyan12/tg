@@ -104,7 +104,7 @@ describe("Me → Achievements", () => {
     expect(screen.getByLabelText("10 Workouts, Silver. Not earned yet, 8 of 10 workouts.")).toBeTruthy();
     expect(screen.getByLabelText("50 Workouts, Gold. Not earned yet, 50 of 50 workouts.")).toBeTruthy();
     expect(screen.getByLabelText("3-Day Streak, Bronze. Not earned yet, 2 of 3 days.")).toBeTruthy();
-    expect(screen.getByLabelText("Form Master, Gold. Not earned yet, 3 of 5 workouts first.")).toBeTruthy();
+    expect(screen.getByLabelText("Form Master, Gold. Not earned yet, 3 of 5 scored workouts first.")).toBeTruthy();
     expect(screen.queryAllByLabelText(/Earned/)).toHaveLength(1);
     // A code this phone does not know is left out, never shown raw, and is not counted.
     expect(screen.queryByText(/moon/i)).toBeNull();
@@ -195,6 +195,8 @@ describe("Me → Achievements", () => {
     await openAchievements(s.ask);
     await fireEvent.press(await screen.findByRole("tab", { name: "Leaderboard" }));
     expect(await screen.findByLabelText("1st, Priya S., 5 visits. See their profile")).toBeTruthy();
+    // Each lane's number says what it counts, as Your place does.
+    expect(screen.getAllByText("visits")).toHaveLength(2);
     expect(screen.getByLabelText("2nd, you, 2 visits. See the full board")).toBeTruthy();
     expect(screen.getByText("Visits · This week")).toBeTruthy();
     expect(screen.getByText("Your place · 2 visits")).toBeTruthy();

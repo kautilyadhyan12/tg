@@ -34,7 +34,7 @@ describe("a badge's words", () => {
     { b: badge("streak_7", { current: 2, target: 7 }), progress: "2 of 7 days", of: "of 7 days", toGo: "5 more days to go." },
     { b: badge("calorie_10k", { current: 1040, target: 10000 }), progress: "1,040 of 10,000 kcal", of: "of 10,000 kcal", toGo: "8,960 more kcal to go." },
     { b: badge("form_master", { current: 89, target: 90, workoutsFirst: { current: 5, target: 5 } }), progress: "Form 89 of 90", of: "of 90 average form", toGo: "Your average is 89. It needs 90." },
-    { b: badge("form_master", { current: 95, target: 90, workoutsFirst: { current: 3, target: 5 } }), progress: "3 of 5 workouts first", of: "of 5 workouts first", toGo: "2 more workouts first, then your average counts." },
+    { b: badge("form_master", { current: 95, target: 90, workoutsFirst: { current: 3, target: 5 } }), progress: "3 of 5 scored workouts first", of: "of 5 scored workouts first", toGo: "2 more scored workouts first, then your average counts." },
     { b: badge("first_meal", { current: 0, target: 1 }), progress: "0 of 1 meal", of: "of 1 meal", toGo: "1 more meal to go." },
     { b: badge("macro_master", { current: 3, target: 7 }), progress: "3 of 7 days", of: "of 7 days", toGo: "4 more days to go." },
   ])("$b.code at $b.current", ({ b, progress, of, toGo }) => {
