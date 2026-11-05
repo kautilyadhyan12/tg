@@ -10,7 +10,7 @@ import { badgeListSchema, foodWeekResponseSchema, gamificationMeSchema, nutritio
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
-import { onMealLogged } from "../src/modules/gamification/service.js";
+import { onMealLogged, onWorkoutSynced } from "../src/modules/gamification/service.js";
 import { dayInTz } from "../src/modules/gamification/streak.js";
 
 const url = process.env["DATABASE_URL"];
@@ -248,6 +248,17 @@ d("every badge (real Postgres)", () => {
       await onMealLogged({ sql }, eater.id, null);
       expect(await sql`SELECT 1 FROM user_achievements WHERE user_id = ${eater.id} AND code = 'macro_master'`).toHaveLength(1);
     });
+  });
+
+  it("a workout's save never fails on Your week in food: the other badges still come, and the list says it could not load", async () => {
+    const broken = await makePlanned("broken-plan");
+    // A plan no longer passes its own check (a height past 300 cm), so Your week in food cannot be read.
+    await sql`UPDATE user_fitness_profiles SET height_cm = 999 WHERE user_id = ${broken.id}`;
+    expect((await inject({ method: "GET", url: "/v1/nutrition/food-week?days=7", cookies: broken.cookies })).statusCode).toBe(500);
+    await putWorkouts(broken.id, 1);
+    await expect(onWorkoutSynced({ sql }, broken.id, null)).resolves.toBeDefined();
+    expect(await sql`SELECT 1 FROM user_achievements WHERE user_id = ${broken.id} AND code = 'first_workout'`).toHaveLength(1);
+    expect((await inject({ method: "GET", url: "/v1/gamification/badges", cookies: broken.cookies })).statusCode).toBe(500);
   });
 
   it("refuses nobody signed in, and a query", async () => {

@@ -62,7 +62,7 @@ export async function onWorkoutSynced(
     await repo.upsertStreak(tx, userId, after);
     return after;
   });
-  const stats = await badgeStats(deps, userId, tz);
+  const stats = await badgeStats(deps, userId, tz, new Date(), "skip");
   const codes = earnedCodes({ ...stats, current_streak: state.current });
   await repo.awardAchievements(deps.sql, userId, codes);
   await recomputeXp(deps, userId, tz); // AFTER awards — badge XP is part of the total
@@ -113,7 +113,7 @@ export async function onMealLogged(
   timezone: string | null,
 ): Promise<void> {
   const tz = safeTimeZone(timezone);
-  const stats = await badgeStats(deps, userId, tz);
+  const stats = await badgeStats(deps, userId, tz, new Date(), "skip");
   const streak = await reconciledStreak(deps, userId, timezone);
   const codes = earnedCodes({ ...stats, current_streak: streak.current });
   await repo.awardAchievements(deps.sql, userId, codes);
@@ -166,7 +166,7 @@ export async function onAttendanceMarked(
     await repo.upsertStreak(tx, userId, after);
     return after;
   });
-  const stats = await badgeStats(deps, userId, tz);
+  const stats = await badgeStats(deps, userId, tz, new Date(), "skip");
   const codes = earnedCodes({ ...stats, current_streak: state.current });
   await repo.awardAchievements(deps.sql, userId, codes);
   await recomputeXp(deps, userId, tz); // AFTER awards — badge XP is part of the total
@@ -251,10 +251,24 @@ export async function getMe(
  *  week in food itself so the two screens give one answer about a day. Its last 30 days are
  *  more than the badge's 7 in a row ending today or yesterday need. Loaded when called:
  *  nutrition's service calls this module at a meal's save. */
-async function badgeStats(deps: GamificationDeps, userId: string, tz: string, now: Date = new Date()): Promise<Record<string, number>> {
+async function badgeStats(
+  deps: GamificationDeps,
+  userId: string,
+  tz: string,
+  now: Date = new Date(),
+  foodFails: "skip" | "throw" = "throw",
+): Promise<Record<string, number>> {
   const { getFoodWeek } = await import("../nutrition/service.js");
-  const [stats, week] = await Promise.all([repo.getStats(deps.sql, userId, tz), getFoodWeek({ sql: deps.sql }, userId, 30, now)]);
-  return { ...stats, protein_target_streak: proteinRun(week.days) };
+  const stats = await repo.getStats(deps.sql, userId, tz);
+  try {
+    const week = await getFoodWeek({ sql: deps.sql }, userId, 30, now);
+    return { ...stats, protein_target_streak: proteinRun(week.days) };
+  } catch (err) {
+    // A workout's, a meal's or a visit's save never fails on Your week in food: Macro Master is judged at the
+    // next save or read. The badge list itself says it could not load rather than show a run of 0.
+    if (foodFails === "throw") throw err;
+    return { ...stats };
+  }
 }
 
 /** Every badge for the person, earned or not, with how far along they are (ROADMAP 35c-iii).
