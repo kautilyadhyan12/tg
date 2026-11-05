@@ -48,8 +48,7 @@ export async function people(sql: SqlOrTx, gymId: string, entryIds: readonly str
   if (entryIds !== null && entryIds.length === 0) return [];
   const ids = entryIds === null ? null : [...entryIds];
   const rows = await sql<{ id: string; full_name: string; tag_ids: string[] | null; word_type: string | null; ever_held: boolean }[]>`
-    SELECT e.id, e.full_name,
-           (SELECT array_agg(t.tag_id) FROM gym_member_entry_tags t WHERE t.gym_id = e.gym_id AND t.entry_id = e.id) AS tag_ids,
+    SELECT e.id, e.full_name, tg.tag_ids,
            w.type_id AS word_type,
            (w.type_id IS NOT NULL AND EXISTS (
              SELECT 1 FROM gym_held_memberships h WHERE h.gym_id = e.gym_id AND h.entry_id = e.id AND h.membership_type_id = w.type_id
@@ -64,6 +63,11 @@ export async function people(sql: SqlOrTx, gymId: string, entryIds: readonly str
       ) AS type_id
       WHERE btrim(coalesce(e.membership_type, '')) <> ''
     ) w ON TRUE
+    LEFT JOIN (
+      SELECT t.entry_id, array_agg(t.tag_id) AS tag_ids FROM gym_member_entry_tags t
+      WHERE t.gym_id = ${gymId} AND (${ids}::uuid[] IS NULL OR t.entry_id = ANY(${ids}::uuid[]))
+      GROUP BY t.entry_id
+    ) tg ON tg.entry_id = e.id
     WHERE e.gym_id = ${gymId} AND e.former_at IS NULL AND (${ids}::uuid[] IS NULL OR e.id = ANY(${ids}::uuid[]))
     ORDER BY lower(e.full_name), e.listed_seq`;
   return rows.map((r) => ({

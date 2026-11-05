@@ -46,11 +46,26 @@ export function newest(given: readonly Given[]): Given | null {
   return best;
 }
 
-/** What each person gets; somebody nothing reaches is not in the answer. */
+/** What each person gets; somebody nothing reaches is not in the answer. `reaching`'s rule, with the
+ *  groups looked up by what they name, so a gym of 10,000 is not 10,000 times every group. */
 export function pickAll(given: readonly Given[], people: readonly PersonFacts[]): Map<string, Given> {
+  const everyone = given.filter((g) => g.kind === "everyone");
+  const byTarget = (kind: AudienceKind) => {
+    const map = new Map<string, Given[]>();
+    for (const g of given) if (g.kind === kind && g.target !== null) map.set(g.target, [...(map.get(g.target) ?? []), g]);
+    return map;
+  };
+  const members = byTarget("member");
+  const tags = byTarget("tag");
+  const types = byTarget("membership_type");
   const out = new Map<string, Given>();
   for (const p of people) {
-    const got = newest(reaching(given, p));
+    const got = newest([
+      ...everyone,
+      ...(members.get(p.entryId) ?? []),
+      ...[...new Set(p.tagIds)].flatMap((t) => tags.get(t) ?? []),
+      ...[...p.typeIds].flatMap((t) => types.get(t) ?? []),
+    ]);
     if (got !== null) out.set(p.entryId, got);
   }
   return out;

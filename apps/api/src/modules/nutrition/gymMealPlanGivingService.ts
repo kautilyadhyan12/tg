@@ -44,15 +44,31 @@ interface WhoGets {
   got: Map<string, Given>;
 }
 
-/** The people asked about (every current record, for null), what reaches each, and what each gets. */
-async function whoGets(deps: GivingDeps, gymId: string, ids: readonly string[] | null): Promise<WhoGets> {
+/** The people asked about (every current record, for null), what reaches each, and what each gets.
+ *  Memberships are read only for the types a plan is given to (and `alsoType`, a box's own), and for
+ *  the people whose list's word is one of them: no other type changes what anybody gets. */
+async function whoGets(deps: GivingDeps, gymId: string, ids: readonly string[] | null, alsoType: string | null = null): Promise<WhoGets> {
   const people = await audiences.people(deps.sql, gymId, ids);
   const asked = ids === null ? null : people.map((p) => p.id);
-  const today = dayInTz((deps.now ?? (() => new Date()))(), await audiences.gymTimeZone(deps.sql, gymId));
-  const held = new Map<string, { typeId: string; membership: HeldMembership }[]>();
-  for (const h of await inUseTypesForList(deps.sql, gymId, asked)) held.set(h.entryId, [...(held.get(h.entryId) ?? []), h]);
-  const facts = people.map((p) => ({ entryId: p.id, tagIds: p.tagIds, typeIds: typesOf({ held: held.get(p.id) ?? [], word: p.word }, today) }));
   const given = await audiences.givenOfGym(deps.sql, gymId, asked);
+  const types = new Set([...given.flatMap((g) => (g.kind === "membership_type" && g.target !== null ? [g.target] : [])), ...(alsoType === null ? [] : [alsoType])]);
+  const held = new Map<string, { typeId: string; membership: HeldMembership }[]>();
+  let today = "";
+  if (types.size > 0) {
+    const byWord = people.flatMap((p) => (p.word !== null && types.has(p.word.typeId) ? [p.id] : []));
+    for (const h of await inUseTypesForList(deps.sql, gymId, asked, { typeIds: [...types], entryIds: byWord })) {
+      held.set(h.entryId, [...(held.get(h.entryId) ?? []), h]);
+    }
+    today = dayInTz((deps.now ?? (() => new Date()))(), await audiences.gymTimeZone(deps.sql, gymId));
+  }
+  const facts = people.map((p) => ({
+    entryId: p.id,
+    tagIds: p.tagIds,
+    typeIds:
+      types.size === 0
+        ? new Set<string>()
+        : typesOf({ held: held.get(p.id) ?? [], word: p.word !== null && types.has(p.word.typeId) ? p.word : null }, today),
+  }));
   return { people, facts, given, got: pickAll(given, facts) };
 }
 
@@ -110,7 +126,7 @@ export async function previewGiveToGroup(
   if (!(await limit())) return null;
   const plan = await planNamed(deps.sql, gymId, planId);
   const groupName = await groupAsked(deps.sql, gymId, group);
-  const who = await whoGets(deps, gymId, null);
+  const who = await whoGets(deps, gymId, null, group.kind === "membership_type" ? group.membershipTypeId : null);
   const asked = asGiven(group);
   const reached = who.people.filter((_, at) => {
     const facts = who.facts[at];

@@ -35,6 +35,8 @@ describe("the plan a person gets: the newest of what reaches them", () => {
     ];
     for (const [name, given, who, plan] of cases) {
       expect(newest(reaching(given, who))?.planId ?? null, name).toBe(plan);
+      // The whole gym at once, by what each group names, answers the same.
+      expect(pickAll(given, [who]).get(who.entryId)?.planId ?? null, `${name}, the whole gym`).toBe(plan);
     }
   });
 
