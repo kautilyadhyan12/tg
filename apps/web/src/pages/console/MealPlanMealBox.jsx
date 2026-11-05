@@ -316,12 +316,20 @@ export default function MealPlanMealBox({ gymId, planId, day, dayName, at, mealT
           onAdd={(row) => {
             add(row);
             setOwning(false);
+            setSearching(false);
           }}
           onCancel={() => setOwning(false)}
         />
       ) : searching ? (
         <div className="flex flex-col gap-2">
-          <FoodSearch onPick={(food) => add(rowOfFood(food))} disabled={saving} />
+          <FoodSearch
+            onPick={(food) => {
+              // Picked, the list closes, as on the phone: Save sits under the meal's foods.
+              add(rowOfFood(food));
+              setSearching(false);
+            }}
+            disabled={saving}
+          />
           <button type="button" onClick={() => setOwning(true)} className="c-btn c-btn-link self-start">
             Add your own food
           </button>

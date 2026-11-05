@@ -121,6 +121,9 @@ describe('a meal is saved to the day and the meal it was opened on, the rest of 
     fireEvent.change(box().getByRole('searchbox', { name: 'Search food' }), { target: { value: 'banana' } });
     fireEvent.click(await box().findByRole('button', { name: 'Add Banana' }, { timeout: 2000 }));
     expect(box().getByRole('combobox', { name: 'Measure of Banana' }).value).toBe('piece-1');
+    // Picked, the list closes: Save sits under the meal's foods.
+    expect(box().queryByRole('searchbox', { name: 'Search food' })).toBeNull();
+    expect(box().getByRole('button', { name: 'Add another food' })).toBeTruthy();
     fireEvent.click(box().getByRole('button', { name: 'Save to plan' }));
     await screen.findByText('Breakfast saved to Monday.');
     const [, , n, body] = svc.putDay.mock.calls[0];
