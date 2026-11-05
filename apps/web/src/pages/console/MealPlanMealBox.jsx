@@ -290,8 +290,12 @@ export default function MealPlanMealBox({ gymId, planId, day, dayName, at, mealT
 
       {rows.length > 0 ? (
         <ul className="flex flex-col" aria-label={`Foods in ${mealName}`}>
-          {rows.map((r) => (
-            <li key={r.key} className="c-row flex flex-col gap-2 py-3 md:flex-row md:items-center md:justify-between">
+          {rows.map((r, i) => (
+            <li
+              key={r.key}
+              className="flex flex-col items-start gap-2 py-3 md:flex-row md:items-center md:justify-between"
+              style={i > 0 ? { borderTop: '1px solid var(--line)' } : undefined}
+            >
               <p className="c-s15 c-t1 min-w-0">{r.name}</p>
               <div className="flex items-center gap-2">
                 <AmountBox row={r} disabled={saving} onChange={(change) => edit(r.key, change)} />
