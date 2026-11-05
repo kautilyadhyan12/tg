@@ -105,3 +105,31 @@ export const weeklyChallengesSchema = z.object({
   xpThisWeek: z.number().int().nonnegative(),
 });
 export type WeeklyChallenges = z.infer<typeof weeklyChallengesSchema>;
+
+// ── Every badge, earned or not (ROADMAP 35c-iii) ────────────────────────────
+// The person's own: each badge's metal, the XP it gives, the day it was earned or
+// null, and how far along they are. `code` is a plain string so an app older than a
+// new badge still reads the list; the screen keeps the words and skips a code it
+// does not know.
+
+export const badgeTierSchema = z.enum(["bronze", "silver", "gold", "platinum"]);
+export type BadgeTier = z.infer<typeof badgeTierSchema>;
+
+export const badgeSchema = z.object({
+  code: z.string().min(1),
+  tier: badgeTierSchema,
+  xp: z.number().int().positive(),
+  /** When it was earned; null while it is not. */
+  earnedAt: z.string().nullable(),
+  /** How far along, never above `target`; what it counts is the badge's own. */
+  current: z.number().int().nonnegative(),
+  target: z.number().int().positive(),
+  /** A badge that also needs this many workouts first (Form Master: its average is of the last 5). */
+  workoutsFirst: z.object({ current: z.number().int().nonnegative(), target: z.number().int().positive() }).nullable(),
+});
+export type Badge = z.infer<typeof badgeSchema>;
+
+export const badgeListSchema = z.object({ badges: z.array(badgeSchema) });
+export type BadgeList = z.infer<typeof badgeListSchema>;
+
+export const badgeListQuerySchema = z.object({}).strict();

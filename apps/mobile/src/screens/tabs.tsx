@@ -12,8 +12,9 @@ import { SettingsPage } from "./Settings";
 import { Setup } from "./setup/Setup";
 import { SignOutAsk } from "./SignOutAsk";
 import { ProgressPage } from "./progress/ProgressPage";
+import { AchievementsPage } from "./achievements/AchievementsPage";
 import { ThisCopy } from "./ThisCopy";
-import { COMING_SOON, Soon } from "./Soon";
+import { Soon } from "./Soon";
 
 // Each tab's page as the look draws it (docs/design/phone/pages). Its own picture runs edge to
 // edge from the top and into the page, never a box of its own, with the page's first words over it.
@@ -35,14 +36,7 @@ export function MeScreen() {
       <YourPlan />
       <View style={styles.two}>
         <ProgressCard />
-        <PictureCard
-          picture="monalisa"
-          height={120}
-          label="Achievements"
-          icon="trophy"
-          pill={COMING_SOON}
-          style={styles.half}
-        />
+        <AchievementsCard />
       </View>
       <SettingsLink />
       <SignOut />
@@ -121,6 +115,31 @@ function ProgressCard() {
         <PictureCard picture="progress" height={120} label="Progress" icon="chart" />
       </Pressable>
       <ProgressPage
+        open={open}
+        onClose={() => {
+          setOpen(false);
+        }}
+      />
+    </>
+  );
+}
+
+/** Achievements' picture, opening the page over the tab (35c-iii). */
+function AchievementsCard() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Achievements"
+        style={[styles.half, styles.press]}
+        onPress={() => {
+          setOpen(true);
+        }}
+      >
+        <PictureCard picture="goddess" height={120} label="Achievements" icon="trophy" whole />
+      </Pressable>
+      <AchievementsPage
         open={open}
         onClose={() => {
           setOpen(false);

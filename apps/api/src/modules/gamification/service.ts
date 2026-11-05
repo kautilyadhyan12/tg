@@ -4,7 +4,7 @@
 // upsert (R3.5).
 import type { Sql, TransactionSql } from "postgres";
 import * as repo from "./repo.js";
-import { badgeXpForCodes, earnedCodes } from "./badges.js";
+import { badgeList, badgeXpForCodes, earnedCodes, proteinRun } from "./badges.js";
 import {
   computeTotalXp,
   countStreakContinuationDays,
@@ -12,7 +12,7 @@ import {
   xpProgress,
 } from "./xp.js";
 import { dayInTz, reconcile, replayActivityDays, safeTimeZone, type StreakState } from "./streak.js";
-import { weeklyChallengeCodeSchema, type GamificationMe, type WeeklyChallengeCode, type WeeklyChallenges } from "@app/shared";
+import { weeklyChallengeCodeSchema, type BadgeList, type GamificationMe, type WeeklyChallengeCode, type WeeklyChallenges } from "@app/shared";
 import { getPlanHealth, getUserFitnessLevel, getUserSyncContext } from "../users/service.js";
 import {
   NO_FACTS,
@@ -62,7 +62,7 @@ export async function onWorkoutSynced(
     await repo.upsertStreak(tx, userId, after);
     return after;
   });
-  const stats = await repo.getStats(deps.sql, userId, tz);
+  const stats = await badgeStats(deps, userId, tz, new Date(), "skip");
   const codes = earnedCodes({ ...stats, current_streak: state.current });
   await repo.awardAchievements(deps.sql, userId, codes);
   await recomputeXp(deps, userId, tz); // AFTER awards — badge XP is part of the total
@@ -113,7 +113,7 @@ export async function onMealLogged(
   timezone: string | null,
 ): Promise<void> {
   const tz = safeTimeZone(timezone);
-  const stats = await repo.getStats(deps.sql, userId, tz);
+  const stats = await badgeStats(deps, userId, tz, new Date(), "skip");
   const streak = await reconciledStreak(deps, userId, timezone);
   const codes = earnedCodes({ ...stats, current_streak: streak.current });
   await repo.awardAchievements(deps.sql, userId, codes);
@@ -166,7 +166,7 @@ export async function onAttendanceMarked(
     await repo.upsertStreak(tx, userId, after);
     return after;
   });
-  const stats = await repo.getStats(deps.sql, userId, tz);
+  const stats = await badgeStats(deps, userId, tz, new Date(), "skip");
   const codes = earnedCodes({ ...stats, current_streak: state.current });
   await repo.awardAchievements(deps.sql, userId, codes);
   await recomputeXp(deps, userId, tz); // AFTER awards — badge XP is part of the total
@@ -179,9 +179,10 @@ export async function reconciledStreak(
   deps: GamificationDeps,
   userId: string,
   timezone: string | null,
+  now: Date = new Date(),
 ): Promise<StreakState> {
   const tz = safeTimeZone(timezone);
-  const today = dayInTz(new Date(), tz);
+  const today = dayInTz(now, tz);
   return await deps.sql.begin(async (tx) => {
     const before = await repo.getStreakForUpdate(tx, userId);
     const after = reconcile(before, today);
@@ -243,6 +244,49 @@ export async function getMe(
     },
     achievements: earned.map((e) => ({ code: e.code, earnedAt: e.earnedAt.toISOString() })),
   };
+}
+
+/** The figures the badges are judged on: the workouts' and meals' counts, and the days in a
+ *  row the person hit their protein target (Macro Master, ROADMAP 35c-iii), read from Your
+ *  week in food itself so the two screens give one answer about a day. Its last 30 days are
+ *  more than the badge's 7 in a row ending today or yesterday need. Loaded when called:
+ *  nutrition's service calls this module at a meal's save. */
+async function badgeStats(
+  deps: GamificationDeps,
+  userId: string,
+  tz: string,
+  now: Date = new Date(),
+  foodFails: "skip" | "throw" = "throw",
+): Promise<Record<string, number>> {
+  const { getFoodWeek } = await import("../nutrition/service.js");
+  const stats = await repo.getStats(deps.sql, userId, tz);
+  try {
+    const week = await getFoodWeek({ sql: deps.sql }, userId, 30, now);
+    return { ...stats, protein_target_streak: proteinRun(week.days) };
+  } catch (err) {
+    // A workout's, a meal's or a visit's save never fails on Your week in food: Macro Master is judged at the
+    // next save or read. The badge list itself says it could not load rather than show a run of 0.
+    if (foodFails === "throw") throw err;
+    return { ...stats };
+  }
+}
+
+/** Every badge for the person, earned or not, with how far along they are (ROADMAP 35c-iii).
+ *  A badge the figures already reach but that no workout, meal or visit has awarded yet (a
+ *  badge newer than the person's last one) is awarded here first, the way those do, so the
+ *  list never shows a badge as reached and not earned, and XP follows the award. */
+export async function getBadges(deps: GamificationDeps, userId: string, timezone: string | null, now: Date = new Date()): Promise<BadgeList> {
+  const tz = safeTimeZone(timezone);
+  const streak = await reconciledStreak(deps, userId, timezone, now);
+  const stats = { ...(await badgeStats(deps, userId, tz, now)), current_streak: streak.current };
+  let earned = await repo.listEarned(deps.sql, userId);
+  const owed = earnedCodes(stats).filter((code) => !earned.some((e) => e.code === code));
+  if (owed.length > 0) {
+    await repo.awardAchievements(deps.sql, userId, owed);
+    await recomputeXp(deps, userId, tz, now);
+    earned = await repo.listEarned(deps.sql, userId);
+  }
+  return { badges: badgeList(stats, new Map(earned.map((e) => [e.code, e.earnedAt]))) };
 }
 
 /** The week's codes as kept, minus any the app no longer has. */
