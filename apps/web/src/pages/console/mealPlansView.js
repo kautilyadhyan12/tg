@@ -228,7 +228,7 @@ export function givenLine(item, words) {
   ];
   if (parts.length === 0) return 'Not given to anyone yet';
   const to = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
-  return `Given to ${to} · ${count(item.gets)} get it`;
+  return `Given to ${to} · ${count(item.gets)} ${item.gets === 1 ? 'gets' : 'get'} it`;
 }
 
 /** What one plan was given through, on a person's page. */
@@ -258,7 +258,8 @@ export const GIVE_WORDS = {
   willGet: (n, plan, words) => (n === 0 ? `Nobody gets ${plan} this way right now.` : `${peopleCount(n, words)} will get ${plan}:`),
   switching: (n, plan) => `${count(n)} of them get another meal plan now. ${plan} takes its place.`,
   replaces: (to, was, plan) => `${capital(to)} had ${was}. ${plan} takes its place there.`,
-  already: (plan) => `They all get ${plan} already.`,
+  already: (plan, n) => (n === 1 ? `They already get ${plan}.` : `All of them already get ${plan}.`),
+  getsNow: (n, words) => `${peopleCount(n, words)} ${n === 1 ? 'gets' : 'get'} it now`,
   later: (kind) =>
     kind === 'everyone'
       ? 'Anyone who joins later gets it too.'

@@ -22,7 +22,7 @@ function PreviewLines({ preview, words, kind }) {
     <div className="flex flex-col gap-2" data-testid="give-preview">
       <p className="c-s15 c-t1">{GIVE_WORDS.willGet(preview.count, preview.plan.name, words)}</p>
       {preview.count > 0 ? <Names people={preview.people} total={preview.count} testId="give-names" /> : null}
-      {preview.count > 0 && preview.already === preview.count ? <p className="c-s14 c-t2">{GIVE_WORDS.already(preview.plan.name)}</p> : null}
+      {preview.count > 0 && preview.already === preview.count ? <p className="c-s14 c-t2">{GIVE_WORDS.already(preview.plan.name, preview.count)}</p> : null}
       {preview.switching > 0 ? <p className="c-s14 c-t2">{GIVE_WORDS.switching(preview.switching, preview.plan.name)}</p> : null}
       {preview.replaces !== null && to !== null ? <p className="c-s14 c-t2">{GIVE_WORDS.replaces(to, preview.replaces, preview.plan.name)}</p> : null}
       {preview.gone > 0 ? <p className="c-s14 c-t2">{GIVE_WORDS.gone(preview.gone)}</p> : null}
@@ -250,7 +250,7 @@ export function GivenSection({ gymId, plan, given, readOnly, words, membersTo, m
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex flex-col gap-1">
           <h2 className="c-h2">{GIVE_WORDS.heading}</h2>
-          {given !== null && !nothing ? <p className="c-s14 c-t2">{`${peopleCount(given.gets, words)} get it now`}</p> : null}
+          {given !== null && !nothing ? <p className="c-s14 c-t2">{GIVE_WORDS.getsNow(given.gets, words)}</p> : null}
         </div>
         {!readOnly && !boxOpen ? (
           <button
