@@ -115,6 +115,7 @@ import {
   gymClassMutationResponseSchema,
   gymClassWeekResponseSchema,
   gymMembershipTypesResponseSchema,
+  renewalReminderPreviewResponseSchema,
   heldMembershipsResponseSchema,
   memberGymTagsResponseSchema,
   memberPayersResponseSchema,
@@ -1744,6 +1745,13 @@ export const orgService = {
       gymMembershipTypesResponseSchema,
       'that membership type',
       authApi.put(`/v1/orgs/${encodeURIComponent(gymId)}/membership-types/${encodeURIComponent(typeId)}`, body),
+    ),
+  /** Who a line's renewal reminder would email, and when (18v-iv). */
+  previewRenewalReminder: (gymId, typeId, renewalReminder) =>
+    readThrough(
+      renewalReminderPreviewResponseSchema,
+      'who gets the reminder',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/membership-types/${encodeURIComponent(typeId)}/renewal-reminders/preview`, { renewalReminder }),
     ),
   archiveMembershipType: (gymId, typeId) =>
     readThrough(

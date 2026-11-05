@@ -352,7 +352,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
        - 18v-ii-a. [x] **Notice to cancel** — merged 2026-11-04 (PR #461).
        - 18v-ii-b. [x] **An early cancellation fee** — merged 2026-11-04 (PR #464).
      - 18v-iii. [x] **Days to change their mind** — merged 2026-11-04 (PR #466).
-     - 18v-iv. [ ] **A reminder before a renewal or a contract's end**; a price change's is 18w's, a trial's end is sent already. Web folder 2.
+     - 18v-iv. [x] **A reminder before a renewal or a minimum term's end** — merged 2026-11-05 (PR #469).
    - 18w. [ ] **Raise the price for existing members** from their next payment, with each place's notice (Kd, 2026-10-22). Web folder 2.
    - 18x. [x] **Move to another membership** · merged 2026-10-22 · PR #338
    - 18y. [x] **Bill everyone on one day of the month** · merged 2026-10-22 · PR #340
@@ -591,7 +591,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 16a. [x] **Classes** — merged 2026-10-29 (PR #385).
     - 16b. [x] **Personal training** — merged 2026-10-29 (PR #388).
     - 16c. [x] **My membership and receipts** — merged 2026-10-29 (PR #390).
-    - 16d. [ ] **My membership shows its terms** (Kd, 2026-11-04, `rulings/2026-11-04-18v-iii.md`): the minimum term, the early cancellation fee, the notice to cancel and the cooling-off period, as the agreement and the Terminal say them. Feature folder 1.
+    - 16d. [x] **My membership shows its terms** — merged 2026-11-05 (PR #470).
 17. **The gym's page**: Updates (post, photos, react, report, block), Events, Leaderboard, Challenges, a person's profile (spec Part 3 §15). Split 2026-10-29 in four (the browser's four pages are more than one terminal); comments added 2026-10-30. Risky; the two extra passes ran once, after the last of them (2026-11-02, PR #436).
     - 17a. [x] **Updates: read, react, report, block** — merged 2026-10-30 (PR #398).
     - 17b. [x] **Post an update** — merged 2026-10-31 (PR #405).
@@ -679,7 +679,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 35b. [x] **Weekly challenges on the server** — merged 2026-10-15 (PR #272).
     - 35c. **The Progress screen** (split 2026-11-04 in three, after Kd's drawing of the four tabs).
       - 35c-i. [x] **Progress in four tabs** — merged 2026-11-04 (PR #462).
-      - 35c-ii. [ ] **Log body measurements on Body**: kept on the phone until the server has it, and the server takes it once though it is sent twice.
+      - 35c-ii. [x] **Log body measurements on Body** — merged 2026-11-05 (PR #471).
       - 35c-iii. [ ] **Achievements**: badges, the weekly challenges, the leaderboard.
 36. [ ] **The weekly plan**: the plan builder on the server (6a), the week screen (6b). Doing a planned workout (6c) is exercise folder 2's item 64. Once the plan names a week's sessions, calories burned joins the starter goals with the plan's own number (RULINGS 2026-10-13). Its Workout tab in Recommended For You takes the three choices and rules of spec Part 6 §16.6.
 37. [ ] **Running** (item 4; Stage 1's 7b): recording by GPS with the screen off, the map, the summary, the run plan, routes. Its Running tab in Recommended For You takes the three choices and rules of spec Part 6 §16.6.

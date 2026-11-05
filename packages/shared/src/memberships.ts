@@ -59,6 +59,72 @@ export const leaveFeeMinorSchema = z.number().int().min(1).max(99_999_999);
  *  full refund, at most 30. Weekends count. */
 export const MEMBERSHIP_COOLING_OFF_DAYS_MAX = 30;
 export const coolingOffDaysSchema = z.number().int().min(1).max(MEMBERSHIP_COOLING_OFF_DAYS_MAX);
+
+/** A line's renewal reminder (18v-iv): an email so many days before every renewal, or before its minimum
+ *  term ends. The rule is `renewalReminders.ts`. */
+export const RENEWAL_REMINDER_WHEN = ["every_renewal", "term_end"] as const;
+export const renewalReminderWhenSchema = z.enum(RENEWAL_REMINDER_WHEN);
+export type RenewalReminderWhen = z.infer<typeof renewalReminderWhenSchema>;
+
+/** How many days before: picked, never typed. */
+export const RENEWAL_REMINDER_DAYS = [3, 7, 14, 30, 45, 60] as const;
+export const renewalReminderDaysSchema = z
+  .number()
+  .int()
+  .refine((n) => (RENEWAL_REMINDER_DAYS as readonly number[]).includes(n), { message: "not_a_choice" });
+
+export interface RenewalReminderSetting {
+  when: RenewalReminderWhen;
+  days: number;
+}
+
+/** The emails go from this hour of the gym's own morning. */
+export const RENEWAL_REMINDER_FROM_HOUR = 8;
+
+/** The fewest days one period of `count` `unit` can hold. */
+function shortestPeriodDays(count: number, unit: MembershipTermUnit): number {
+  if (unit === "day") return count;
+  if (unit === "week") return 7 * count;
+  if (unit === "month") return 28 * count;
+  return 365 * count;
+}
+
+/** The days a line paid every `termCount` `termUnit` offers. Before every renewal, fewer than one period
+ *  holds, so a reminder is never about the renewal after next: a weekly line offers 3 days. */
+export function renewalReminderDaysOffered(when: RenewalReminderWhen, termCount: number, termUnit: MembershipTermUnit): number[] {
+  if (when === "term_end") return [...RENEWAL_REMINDER_DAYS];
+  const longest = shortestPeriodDays(termCount, termUnit);
+  return RENEWAL_REMINDER_DAYS.filter((days) => days < longest);
+}
+export const renewalReminderSchema = z.object({ when: renewalReminderWhenSchema, days: renewalReminderDaysSchema }).strict();
+/** A line's reminders as the rule reads them: before every renewal first, then before its minimum term ends. */
+export function lineReminders(line: { renewalReminderDays?: number | null; termReminderDays?: number | null }): RenewalReminderSetting[] {
+  return [
+    ...((line.renewalReminderDays ?? null) === null ? [] : [{ when: "every_renewal" as const, days: line.renewalReminderDays ?? 0 }]),
+    ...((line.termReminderDays ?? null) === null ? [] : [{ when: "term_end" as const, days: line.termReminderDays ?? 0 }]),
+  ];
+}
+/** What happens to one membership's reminder: sent (`on` the gym's day); on its way; to be emailed (`on` the day
+ *  it goes); or why not. `aboutOn` is the day it names, where there is one to come. */
+export const RENEWAL_REMINDER_STATES = [
+  "sent",
+  "sending",
+  "will_send",
+  "no_email",
+  "address_blocked",
+  "not_sent",
+  "frozen",
+  "not_renewing",
+  "no_term",
+  "former_payer",
+  "billed_elsewhere",
+] as const;
+export const renewalReminderStatusSchema = z
+  .object({ state: z.enum(RENEWAL_REMINDER_STATES), on: z.string().nullable(), aboutOn: z.string().nullable() })
+  .strict();
+export type RenewalReminderStatus = z.infer<typeof renewalReminderStatusSchema>;
+
+
 /** What a class limit is counted over. */
 export const MEMBERSHIP_LIMIT_PERIODS = ["week", "month"] as const;
 export const membershipLimitPeriodSchema = z.enum(MEMBERSHIP_LIMIT_PERIODS);
@@ -145,6 +211,9 @@ export const gymMembershipTypeSchema = z
     leaveFeeMinor: leaveFeeMinorSchema.nullable().default(null),
     /** Its cooling-off period in days (18v-iii); null for none. */
     coolingOffDays: coolingOffDaysSchema.nullable().default(null),
+    /** Its reminders (18v-iv): so many days before every renewal, and before its minimum term ends; null for none. */
+    renewalReminderDays: renewalReminderDaysSchema.nullable().default(null),
+    termReminderDays: renewalReminderDaysSchema.nullable().default(null),
     archivedAt: z.string().datetime({ offset: true }).nullable(),
     /** When it was last changed. A change sends it back, so a form opened before
      *  somebody else's change is refused, never saved over theirs. */
@@ -209,6 +278,9 @@ const membershipTypeFields = {
   leaveFeeMinor: leaveFeeMinorSchema.nullable().default(null),
   /** Left out of a NEW type is "no cooling-off period"; a change must say it (below). */
   coolingOffDays: coolingOffDaysSchema.nullable().default(null),
+  /** Left out of a NEW type is "no reminder"; a change must say each (below). */
+  renewalReminderDays: renewalReminderDaysSchema.nullable().default(null),
+  termReminderDays: renewalReminderDaysSchema.nullable().default(null),
 };
 const membershipTypeObject = z.object(membershipTypeFields);
 
@@ -263,6 +335,13 @@ function refineMembershipType(value: z.infer<typeof membershipTypeObject>, ctx: 
   if (value.leaveFeeMinor !== null && value.contractPeriods === null) wrong("leaveFeeMinor");
   // A cooling-off period gives back what was paid: a line with a price, of any kind (18v-iii).
   if (value.coolingOffDays !== null && value.priceMinor === 0) wrong("coolingOffDays");
+  // A renewal reminder is a repeating line's with a price; before the minimum term ends, a line with one; before
+  // every renewal, fewer days than one period holds (18v-iv).
+  if (value.renewalReminderDays !== null) {
+    if (value.kind !== "recurring" || value.priceMinor === 0 || value.termCount === null || value.termUnit === null) wrong("renewalReminderDays");
+    else if (!renewalReminderDaysOffered("every_renewal", value.termCount, value.termUnit).includes(value.renewalReminderDays)) wrong("renewalReminderDays");
+  }
+  if (value.termReminderDays !== null && value.contractPeriods === null) wrong("termReminderDays");
 }
 
 /** How long a contract of `periods` payments, each every `termCount` `termUnit`, runs:
@@ -297,6 +376,8 @@ export const updateGymMembershipTypeRequestSchema = membershipTypeObject
     noticeDays: noticeDaysSchema.nullable(),
     leaveFeeMinor: leaveFeeMinorSchema.nullable(),
     coolingOffDays: coolingOffDaysSchema.nullable(),
+    renewalReminderDays: renewalReminderDaysSchema.nullable(),
+    termReminderDays: renewalReminderDaysSchema.nullable(),
   })
   .strict()
   .superRefine(refineMembershipType);

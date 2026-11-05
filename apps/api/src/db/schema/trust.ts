@@ -101,7 +101,7 @@ export const mealRemovedIds = pgTable(
   (t) => [index("meal_removed_ids_user_idx").on(t.userId)],
 );
 
-/** A removed body measurement's id, kept for its owner (0204): a late save of it keeps nothing. */
+/** A removed body measurement's id, kept for its owner (0205): a late save of it keeps nothing. */
 export const bodyMeasurementRemovedIds = pgTable(
   "body_measurement_removed_ids",
   {

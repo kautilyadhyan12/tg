@@ -68,6 +68,10 @@ export const gymMembershipTypes = pgTable(
     leaveFeeMinor: integer("leave_fee_minor"),
     /** Its cooling-off period in days (0203; 18v-iii); null for none. */
     coolingOffDays: integer("cooling_off_days"),
+    /** Its reminders (0204; 18v-iv): so many days before every renewal, and before its minimum term ends; null for
+     *  none. Read as they are now: never copied to a membership. */
+    renewalReminderDays: integer("renewal_reminder_days"),
+    termReminderDays: integer("term_reminder_days"),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -98,6 +102,10 @@ export const gymMembershipTypes = pgTable(
       sql`${t.leaveFeeMinor} IS NULL OR (${t.contractPeriods} IS NOT NULL AND ${t.leaveFeeMinor} BETWEEN 1 AND 99999999)`,
     ),
     check("gym_membership_types_cooling_off_check", sql`${t.coolingOffDays} IS NULL OR (${t.priceMinor} > 0 AND ${t.coolingOffDays} BETWEEN 1 AND 30)`),
+    check(
+      "gym_membership_types_renewal_reminder_check",
+      sql`(${t.renewalReminderDays} IS NULL OR (${t.renewalReminderDays} IN (3,7,14,30,45,60) AND ${t.kind} = 'recurring' AND ${t.priceMinor} > 0)) AND (${t.termReminderDays} IS NULL OR (${t.termReminderDays} IN (3,7,14,30,45,60) AND ${t.contractPeriods} IS NOT NULL))`,
+    ),
     check("gym_membership_types_access_check", sql`${t.access} IN ('all_classes','limited','gym_only')`),
     check(
       "gym_membership_types_limit_check",
