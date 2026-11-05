@@ -113,6 +113,11 @@ export function refundText(r: { amountMinor: number; method: MemberPaymentMethod
   return { title: `${formatMinor(r.amountMinor, currency)} ${r.pending === true ? "refund pending" : "given back"} · ${methodWords(r.method)}`, line: dayText(r.refundedOn) };
 }
 
+/** A term’s words on a line of their own under its label (16d): the agreement’s, begun with a capital. */
+export const termValue = (value: string): string => `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
+/** Under the cooling-off period, where the member asks for it (16d): the app has no Cancel for members yet. */
+export const coolingOffAsk = (gym: string): string => `To cancel, ask ${gym}.`;
+
 /** Said under a membership given in the app with a price and nothing paid on it yet. One from the place's own list
  *  with nothing paid here is paid in its other software, as the overdue messages read it: nothing is said. */
 export const NO_PAYMENTS = "No payments yet.";

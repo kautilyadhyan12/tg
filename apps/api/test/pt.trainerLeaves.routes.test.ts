@@ -456,7 +456,7 @@ d("a trainer leaves the staff, and came or no-show (real Postgres, two api insta
   );
 
   it(
-    "a trainer who deletes their own account: the sessions booked with them end with no box, at their gym and no other; an owner who deletes theirs keeps the gym and its sessions",
+    "a trainer who deletes their own account: the sessions booked with them end with no box, at their gym and no other; an owner's is refused (19b-ii), so the gym and its sessions stay",
     async () => {
       clock = NOW.getTime();
       const gym = await makeGym("Account Gone");
@@ -492,8 +492,9 @@ d("a trainer leaves the staff, and came or no-show (real Postgres, two api insta
       const [audit] = await auditOf(gym, "org.staff_removed", sam.userId);
       expect([audit?.["removedWith"], audit?.["ptSessionsEnded"], audit?.["ptPackSessionsBack"]]).toEqual(["account_deleted", "1", "1"]);
 
-      // The owner's account: the gym keeps its owner, so the sessions booked with them stay.
-      await deleteAccount(gym.owner);
+      // The owner's account is not deleted until the gym is handed over, so the sessions booked with them stay.
+      const owners409 = await inject("POST", "/v1/users/me/delete-code", gym.owner.cookies, {});
+      expect([owners409.statusCode, (JSON.parse(owners409.body) as { error: string }).error]).toEqual([409, "owns_gym"]);
       expect(await stateOf(gym, [owners, taras])).toEqual([
         ["booked", true],
         ["booked", true],

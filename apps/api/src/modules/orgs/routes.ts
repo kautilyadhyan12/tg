@@ -174,6 +174,7 @@ export function registerOrgRoutes(
     log: app.log,
     onlinePayments: deps.onlinePayments,
     paymentsEnvironment: deps.config.SQUARE_ENV,
+    webOrigin: deps.webOrigin,
     ...(overrides.now === undefined ? {} : { now: overrides.now }),
     ...(overrides.gymLimits === undefined ? {} : { unpaidGymLimit: overrides.gymLimits.unpaid }),
   };

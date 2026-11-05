@@ -591,7 +591,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 16a. [x] **Classes** — merged 2026-10-29 (PR #385).
     - 16b. [x] **Personal training** — merged 2026-10-29 (PR #388).
     - 16c. [x] **My membership and receipts** — merged 2026-10-29 (PR #390).
-    - 16d. [ ] **My membership shows its terms** (Kd, 2026-11-04, `rulings/2026-11-04-18v-iii.md`): the minimum term, the early cancellation fee, the notice to cancel and the cooling-off period, as the agreement and the Terminal say them. Feature folder 1.
+    - 16d. [x] **My membership shows its terms** — merged 2026-11-05 (PR #470).
 17. **The gym's page**: Updates (post, photos, react, report, block), Events, Leaderboard, Challenges, a person's profile (spec Part 3 §15). Split 2026-10-29 in four (the browser's four pages are more than one terminal); comments added 2026-10-30. Risky; the two extra passes ran once, after the last of them (2026-11-02, PR #436).
     - 17a. [x] **Updates: read, react, report, block** — merged 2026-10-30 (PR #398).
     - 17b. [x] **Post an update** — merged 2026-10-31 (PR #405).
@@ -615,7 +615,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 19. **Settings and account** (split 2026-11-03 in four: Settings first).
     - 19a. [x] **Settings on the phone** — merged 2026-11-04 (PR #459).
     - 19b. [x] **Download my data, delete my account and undo** · merged 2026-11-04 · PR #465
-    - 19b-ii. [ ] **An owner hands the gym over before deleting their account** (Kd, 2026-11-04): the server refuses to delete a gym's own owner; the phone's Delete box says so and points to the console's hand-over (4b-ii).
+    - 19b-ii. [x] **An owner hands the gym over before deleting their account** · merged 2026-11-05 · PR #468
     - 19c. [ ] **Change email** (Stage 2's 3b-iii).
     - 19d. [ ] **Notification switches that save.**
 20. [ ] **What the gym side adds for members**, each after its web job: the waiver (3e), the membership agreement signed in the app (18u), the referral link (20e), the member photo (5b-vi), saving their card (18d-ii), buying from the gym (18k), stopping a membership (18l), a gym's plan for a member (19e).

@@ -14,9 +14,11 @@
 import {
   PURCHASES_SHOWN,
   RECEIPT_WORDS,
+  membershipTerms,
   myMembershipResponseSchema,
   receiptSchema,
   type HeldMembershipItem,
+  type MembershipTerm,
   type MyMembership,
   type MyMembershipResponse,
   type MyPurchase,
@@ -82,11 +84,16 @@ function membershipOf(m: HeldMembershipItem): MyMembership {
         ? []
         : [{ fee: f.fee, forName: f.forName, on: f.on, amountMinor: f.amountMinor, dueOn: f.dueOn, state: f.state, refundedMinor: f.refundedMinor, refundPending: f.payments.some((p) => p.refunds.some((r) => r.square?.state === "pending")), receiptNumber: f.state === "paid" || f.state === "refunded" ? (f.payments[0]?.receiptNumber ?? null) : null }],
     ),
+    // The words its agreement and the Terminal say (16d).
+    terms: membershipTerms(m),
   };
 }
 
+/** The terms a member who is paid for reads: how long it holds them and the notice. The fee and the refund are the payer's. */
+const DATE_TERMS: ReadonlySet<MembershipTerm["key"]> = new Set(["minimum_term", "notice"]);
+
 /** A membership whose money is somebody else's to read: its dates, and no price, nothing owed or paid. */
-const datesOnly = (m: MyMembership): MyMembership => ({ ...m, priceMinor: null, owed: null, payments: [], olderPeriodsNotShown: 0, fees: [] });
+const datesOnly = (m: MyMembership): MyMembership => ({ ...m, priceMinor: null, owed: null, payments: [], olderPeriodsNotShown: 0, fees: [], terms: m.terms.filter((t) => DATE_TERMS.has(t.key)) });
 
 /** The lines of each sale under its one receipt, newest sale first, as `purchasesOf` reads them. */
 function purchasesFrom(lines: readonly SaleRow[]): MyPurchase[] {

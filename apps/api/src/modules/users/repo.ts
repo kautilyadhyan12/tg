@@ -643,6 +643,30 @@ export async function getSyncContext(sql: Sql, userId: string): Promise<UserSync
   };
 }
 
+/** An open gym whose own owner this person is (19b-ii; Kd, 2026-11-04). A co-owner's gym is not
+ *  theirs, and a gym that is archived has nobody left to run. */
+export interface OwnedGym {
+  id: string;
+  name: string;
+}
+
+/** The open gyms this person owns: an account that owns one is not deleted until it is handed
+ *  over, so no gym is left with nobody able to run it. */
+export async function openGymsOwnedBy(sql: SqlOrTx, userId: string): Promise<OwnedGym[]> {
+  return await sql<OwnedGym[]>`
+    SELECT id, name FROM gyms WHERE owner_user_id = ${userId} AND status = 'active' ORDER BY name, id`;
+}
+
+/** Thrown inside the deletion's transaction, so nothing of it is kept. */
+export class OwnsGymError extends Error {
+  readonly gyms: OwnedGym[];
+  constructor(gyms: OwnedGym[]) {
+    super("the account owns a gym");
+    this.name = "OwnsGymError";
+    this.gyms = gyms;
+  }
+}
+
 export interface DeletedUserRow {
   email: string | null;
   displayName: string;
@@ -653,7 +677,8 @@ export interface DeletedUserRow {
 /** Part 4 §5.2 Day 0, users-owned part, one transaction: soft-delete the row,
  *  close memberships, end staff access (not at a gym they own), delete push tokens. Refresh-token revocation is the
  *  auth module's (service call, in users/service.ts). Returns null when the
- *  user was not active (already deleted → idempotent no-op). */
+ *  user was not active (already deleted → idempotent no-op). Throws `OwnsGymError`, and
+ *  changes nothing, when the person owns an open gym (19b-ii). */
 export async function softDeleteUser(
   sql: Sql,
   userId: string,
@@ -688,6 +713,11 @@ export async function softDeleteUser(
       RETURNING email, display_name`;
     const row = rows[0];
     if (row === undefined) return null;
+    // 19b-ii: asked with the account's row held, so a gym made by them or handed to them in this
+    // instant is seen here, or waits for this and then finds the account deleted (orgs repo
+    // `createOrgAttempt`; a hand-over's Accept holds the gym's row, held above too).
+    const owned = await openGymsOwnedBy(tx, userId);
+    if (owned.length > 0) throw new OwnsGymError(owned);
     // T3 L-4 — THE ORDER OF THESE TWO STATEMENTS IS LOAD-BEARING AND WAS
     // BACKWARDS. The join card decides lock order ONCE — application, then
     // gym_members — because `confirmApplication` locks the application row and

@@ -279,9 +279,11 @@ d("users routes (real Postgres)", () => {
 
   it("DELETE runs the §5.2 Day-0 flow; deleted user 401s on authenticate AND refresh (CORRECTION 2)", { timeout: 30_000 }, async () => {
     const { userId, cookies } = await makeUser("p22u-delete@example.com");
-    // Fixtures the Day-0 flow must touch: a membership and a push token.
+    // Fixtures the Day-0 flow must touch: a membership and a push token. The gym is somebody
+    // else's: a gym's own owner is not deleted (19b-ii, users.ownerDeletes.routes.test.ts).
+    const gymOwner = await makeUser("p22u-delete-gym-owner@example.com");
     const gymRows = await sql<{ id: string }[]>`
-      INSERT INTO gyms (slug, name, owner_user_id) VALUES ('p22u-test-gym', 'P22 Gym', ${userId})
+      INSERT INTO gyms (slug, name, owner_user_id) VALUES ('p22u-test-gym', 'P22 Gym', ${gymOwner.userId})
       RETURNING id`;
     const gymId = gymRows[0]?.id;
     if (gymId === undefined) throw new Error("gym fixture insert failed");

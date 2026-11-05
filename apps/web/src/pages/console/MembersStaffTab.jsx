@@ -8,7 +8,7 @@ import SentencePlace from '../../components/console/SentencePlace';
 import { ptSessionsAsked } from './ptSessionsEndView';
 import { staffRoleText } from './consoleView';
 import { StaffInvitePanel, StaffPersonPanel } from './MembersStaffPanels';
-import { privilegesDiffer, sentAgainNotice, staffCountLabel, staffInviteView, staffSeatsNote, viewerIsGymOwner } from './staffView';
+import { handOverNote, privilegesDiffer, sentAgainNotice, staffCountLabel, staffInviteView, staffSeatsNote, viewerIsGymOwner } from './staffView';
 
 // The Members screen's Staff tab (spec Part 3 §10.3, §18; ROADMAP 4a-ii, 23c-ii): everyone
 // who runs the gym, the owner first, and the invitations still out. Invite staff opens the
@@ -120,7 +120,7 @@ function InvitedList({ invites, gym, orgType, viewerIsOwner, busyId, readOnly, n
 
 // `inviting`: whether the Invite staff form is open. The Members page keeps it, because
 // an address can ask for the form (Overview's Start here list); `onInviting` sets it.
-export default function MembersStaffTab({ gymId, gym = null, orgType, words, readOnly = false, inviting = false, onInviting = () => undefined, onChanged, onSeeActivity = null, onOpenActivity = null }) {
+export default function MembersStaffTab({ gymId, gym = null, orgType, words, readOnly = false, inviting = false, onInviting = () => undefined, onChanged, onSeeActivity = null, onOpenActivity = null, handingOver = false }) {
   // `paidPlan`: the gym's plan stops a hand-over for now, `paidPlanNote` says why (4b-ii);
   // `planStops`: a Paddle plan that stops renewing on a hand-over, and until when (4b-iii-a).
   const [staff, setStaff] = useState({ loading: true, error: null, list: [], paidPlan: false, paidPlanNote: null, planStops: null, squareConnected: false });
@@ -475,6 +475,13 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
         ) : null}
         </div>
       </div>
+
+      {/* Opened from Delete account (19b-ii): what the owner presses to hand the gym over first. */}
+      {handingOver && ready && gym !== null && handOverNote(staff.list, gym.name) !== null ? (
+        <p className="c-callout c-s14 m-0" data-testid="hand-over-note">
+          {handOverNote(staff.list, gym.name)}
+        </p>
+      ) : null}
 
       {notice !== null ? (
         <p className="c-s14 c-w5 m-0 flex items-center gap-2" style={{ color: 'var(--good)' }} role="status">

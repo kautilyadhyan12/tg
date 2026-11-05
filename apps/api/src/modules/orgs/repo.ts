@@ -97,6 +97,9 @@ export interface MyOrgRow extends OrgRow {
   staffRole: OrgRole | null;
   /** The caller is an owner here who is not the gym's own owner (4b-i). */
   coOwner: boolean;
+  /** The caller is this open gym's own owner, so their account is not deleted until they hand
+   *  it over (19b-ii), and the co-owner they asked to take it over, if one is waiting. */
+  handOver: { askedName: string | null } | null;
   /** THE STORED TICKS ON THE CALLER'S OWN STAFF ROW, raw. `null` means either no
    *  staff row at all (a plain member) or a row written before the column
    *  existed — the service's `privilegesFor` is the one place that tells those
@@ -331,6 +334,14 @@ export class OrgNameTakenError extends Error {
   }
 }
 
+/** The account making the gym was deleted in that same instant (19b-ii). */
+export class OwnerGoneError extends Error {
+  constructor() {
+    super("the owner's account is not active");
+    this.name = "OwnerGoneError";
+  }
+}
+
 /** The owner already has as many gyms that never paid as one owner may (2g). */
 export class UnpaidGymLimitError extends Error {
   constructor() {
@@ -396,6 +407,10 @@ export async function createOrgAttempt(
   try {
     return await sql.begin(async (tx) => {
       await tx`SELECT pg_advisory_xact_lock(hashtext(${`gym-create:${input.ownerUserId}`}))`;
+      // 19b-ii: the owner's row is held against a deletion until this gym is made, and a deletion
+      // already under way is waited for: an account that owns a gym is never deleted.
+      const live = await tx`SELECT 1 FROM users WHERE id = ${input.ownerUserId} AND status = 'active' FOR SHARE`;
+      if (live.length === 0) throw new OwnerGoneError();
       // The same press again, after its answer was lost: the gym it made, made once.
       if (input.createKey !== null) {
         const made = await tx<RawOrg[]>`
@@ -493,11 +508,13 @@ export const MY_ORGS_LIMIT = 100;
 /** Every org the caller has ANY relationship with. One row per org even when
  *  they are both staff and member (the default for an owner), so a caller can
  *  never render the same gym twice. */
-export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyOrgRow[]> {
+export async function listOrgsForUser(sql: SqlOrTx, userId: string, now: Date): Promise<MyOrgRow[]> {
   const rows = await sql<
     (RawOrg & {
       staff_role: string | null;
       co_owner: boolean;
+      owns_open: boolean;
+      hand_over_asked: string | null;
       privileges: string[] | null;
       is_member: boolean;
       joined_at: Date | null;
@@ -542,6 +559,17 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
   >`
     SELECT g.id, g.slug, g.name, g.city, g.country, g.org_type, g.timezone,
            g.locale, g.currency_display, g.clock_format, g.manual_attendance_enabled, g.status,
+           (g.owner_user_id = ${userId} AND g.status = 'active') AS owns_open,
+           -- The co-owner asked to take the gym over, as the Staff tab counts a waiting request
+           -- (coOwners/repo.ts waitingOwnerRequest): one a gym, by its partial unique index.
+           (SELECT hu.display_name FROM gym_owner_requests hr
+              JOIN gym_staff hs ON hs.gym_id = hr.gym_id AND hs.user_id = hr.user_id
+                               AND hs.created_at = hr.staff_since AND hs.role = 'owner'
+              JOIN users hu ON hu.id = hr.user_id
+             WHERE g.owner_user_id = ${userId}
+               AND hr.gym_id = g.id AND hr.state = 'pending' AND hr.expires_at > ${now}
+               AND hr.requested_by = g.owner_user_id AND hr.user_id <> g.owner_user_id
+             LIMIT 1) AS hand_over_asked,
            g.postal_address,
            g.billing_mobile,
            g.contact_phone,
@@ -778,6 +806,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
     ...toOrgRow(r),
     staffRole: r.staff_role === null ? null : toOrgRole(r.staff_role),
     coOwner: r.co_owner,
+    handOver: r.owns_open ? { askedName: r.hand_over_asked } : null,
     privileges: r.privileges,
     subscription:
       r.sub_status === null
@@ -1753,6 +1782,8 @@ export async function getOrgIdBySlug(sql: SqlOrTx, slug: string): Promise<string
 export type RestoreGymOutcome =
   | { kind: "restored"; org: OrgRow }
   | { kind: "not_archived"; org: OrgRow }
+  /** Its owner's account is deleted: an open gym always has an owner who can run it (19b-ii). */
+  | { kind: "owner_gone"; org: OrgRow }
   | { kind: "not_found" };
 
 /** RE-OPEN A CLOSED GYM — the other half of `archiveSweep.ts`, and today the
@@ -1816,6 +1847,12 @@ export async function restoreGym(
     // state that already holds, and telling them which is what stops an
     // operator re-running this and believing they fixed something.
     if (org.status !== "archived") return { kind: "not_archived", org };
+    // An archived gym's owner may delete their account (19b-ii), so its owner is asked for again
+    // here, held against a deletion until this commits.
+    const owner = await tx`
+      SELECT 1 FROM users u JOIN gyms g ON g.owner_user_id = u.id
+      WHERE g.id = ${input.gymId} AND u.status = 'active' FOR SHARE OF u`;
+    if (owner.length === 0) return { kind: "owner_gone", org };
 
     const updated = await tx<RawOrg[]>`
       UPDATE gyms SET status = 'active'

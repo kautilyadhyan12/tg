@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { AppState, Pressable, StyleSheet, View } from "react-native";
+import { AppState, Linking, Pressable, StyleSheet, View } from "react-native";
 import {
   ACCOUNT_UNDO_DAYS,
   deleteAccountResponseSchema,
@@ -38,6 +38,8 @@ import { NO_ANSWER } from "./SignIn";
 // place; every answer shown is the server's. Setup's answers are under Me's "Your plan", not here again.
 // Your data (19b): the server's export handed to the phone's Share box, and Delete account with a
 // code emailed to the account's own address; the undo is the link in the email that follows.
+// A gym's own owner deletes their account on the website where they manage the gym (19b-ii; Kd,
+// 2026-11-04): their box says so and opens the console's Your account page in the browser.
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -89,12 +91,22 @@ function SettingsBody({ onClose }: { onClose: () => void }) {
   const [tries, setTries] = useState(0);
   useEffect(() => {
     const run = { live: true };
-    void session.signedIn({ method: "GET", path: "/v1/orgs/mine" }, myOrgsResponseSchema).then((answer) => {
-      if (!run.live) return;
-      setPlaces(answer.kind === "ok" ? { kind: "ok", orgs: answer.data.orgs } : { kind: "failed" });
+    const read = (again: boolean) => {
+      void session.signedIn({ method: "GET", path: "/v1/orgs/mine" }, myOrgsResponseSchema).then((answer) => {
+        if (!run.live) return;
+        if (answer.kind === "ok") setPlaces({ kind: "ok", orgs: answer.data.orgs });
+        // Read again on coming back, a failure keeps what was shown.
+        else if (!again) setPlaces({ kind: "failed" });
+      });
+    };
+    read(false);
+    // Back from the browser, where an owner may have asked someone to take their gym over.
+    const back = AppState.addEventListener("change", (state) => {
+      if (state === "active") read(true);
     });
     return () => {
       run.live = false;
+      back.remove();
     };
   }, [session, tries]);
   const memberOf: Places = places.kind === "ok" ? { kind: "ok", orgs: places.orgs.filter((org) => org.isMember) } : places;
@@ -106,7 +118,7 @@ function SettingsBody({ onClose }: { onClose: () => void }) {
       <BoardsPart belongs={memberOf.kind === "ok" && memberOf.orgs.length > 0} />
       <PlacesPart places={memberOf} onAgain={() => { setTries((n) => n + 1); }} />
       <AccountPart onClose={onClose} />
-      <DataPart places={places} />
+      <DataPart places={places} onStale={() => { setTries((n) => n + 1); }} />
     </View>
   );
 }
@@ -332,17 +344,38 @@ export function deletedNote(emailSent: boolean, now: Date): string {
     : `Your account will be deleted on ${day}.`;
 }
 
-/** The places a deleted account leaves at once, and the ones it owns. The server keeps only a gym's own
- *  owner; a co-owner, staff and members all leave (users/repo.ts softDeleteUser). */
-export function placesOnDelete(orgs: readonly Place[]): { leaves: string[]; owns: string[] } {
+export interface OwnedPlace {
+  name: string;
+  /** The website's Your account page, where an owner deletes their account. */
+  url: string;
+  orgType: Place["orgType"];
+}
+
+/** The places a deleted account leaves at once, and the open gyms it owns: an owner deletes their account
+ *  on the website where they manage the gym (19b-ii; Kd, 2026-11-04), the server's own answer, sent to a
+ *  gym's own owner alone. A co-owner, staff and members all leave (users/repo.ts softDeleteUser). */
+export function placesOnDelete(orgs: readonly Place[]): { leaves: string[]; owns: OwnedPlace[] } {
   const ownsIt = (org: Place) => org.staffRole === "owner" && org.coOwner !== true;
+  const owns: OwnedPlace[] = [];
+  for (const org of orgs) {
+    if (org.handOver !== undefined) owns.push({ name: org.name, url: org.handOver.url, orgType: org.orgType });
+  }
   return {
     leaves: orgs.filter((org) => !ownsIt(org) && (org.isMember || org.staffRole !== null)).map((org) => org.name),
-    owns: orgs.filter(ownsIt).map((org) => org.name),
+    owns,
   };
 }
 
-function DataPart({ places }: { places: Places }) {
+/** "You own Iron House. Delete your account on our website, where you manage your gym." */
+export function ownerDeletesOnWebLine(owns: readonly OwnedPlace[]): string {
+  const first = owns[0];
+  const where = owns.length === 1 && first !== undefined ? `your ${orgWords(first.orgType).it}` : "them";
+  return `You own ${namesText(owns.map((place) => place.name))}. Delete your account on our website, where you manage ${where}.`;
+}
+
+
+
+function DataPart({ places, onStale }: { places: Places; onStale: () => void }) {
   const { session, state } = useSession();
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState<{ words: string; bad: boolean } | null>(null);
@@ -381,18 +414,19 @@ function DataPart({ places }: { places: Places }) {
       <Said words={said?.words ?? null} bad={said?.bad ?? false} />
       <View style={styles.rule} />
       <Button label="Delete account" kind="dangerLink" icon="trash" style={styles.start} onPress={() => { setAsking(true); }} />
-      <DeleteAsk open={asking} places={places} onClose={() => { setAsking(false); }} />
+      <DeleteAsk open={asking} places={places} onStale={onStale} onClose={() => { setAsking(false); }} />
     </Part>
   );
 }
 
-function DeleteAsk({ open, places, onClose }: { open: boolean; places: Places; onClose: () => void }) {
+function DeleteAsk({ open, places, onStale, onClose }: { open: boolean; places: Places; onStale: () => void; onClose: () => void }) {
   const { session, state } = useSession();
   const [step, setStep] = useState<"ask" | "code">("ask");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [resent, setResent] = useState(false);
+  const [noBrowser, setNoBrowser] = useState(false);
   // Each opening starts at its first step, with nothing typed.
   useEffect(() => {
     if (!open) return;
@@ -400,6 +434,7 @@ function DeleteAsk({ open, places, onClose }: { open: boolean; places: Places; o
     setCode("");
     setProblem(null);
     setResent(false);
+    setNoBrowser(false);
   }, [open]);
   if (state.kind !== "in") return null;
   const me = state.user;
@@ -417,6 +452,8 @@ function DeleteAsk({ open, places, onClose }: { open: boolean; places: Places; o
       setStep("code");
     } else {
       setProblem(answer.kind === "refused" ? answer.message : NO_ANSWER);
+      // The server knows of a gym they own that this box was not shown: read their places again.
+      if (answer.kind === "refused" && answer.error === "owns_gym") onStale();
     }
   };
   const remove = async () => {
@@ -443,6 +480,10 @@ function DeleteAsk({ open, places, onClose }: { open: boolean; places: Places; o
     setBusy(false);
     if (answer.kind === "refused") setCode("");
     setProblem(answer.kind === "refused" ? answer.message : NO_ANSWER);
+    if (answer.kind === "refused" && answer.error === "owns_gym") {
+      setStep("ask");
+      onStale();
+    }
   };
   // Nothing of the person stays: their waiting meals and drafts, then the sign-in and its pass keys;
   // the files again once nothing of theirs is open, for a write that was already on its way.
@@ -454,14 +495,33 @@ function DeleteAsk({ open, places, onClose }: { open: boolean; places: Places; o
   return (
     <Sheet open={open} title="Delete account?" onClose={onClose}>
       <View style={styles.ask}>
-        {step === "ask" ? (
+        {step === "ask" && owns[0] !== undefined ? (
+          <>
+            <Txt>{ownerDeletesOnWebLine(owns)}</Txt>
+            <View style={styles.stack}>
+              <Button
+                label="Open the website"
+                wide
+                onPress={() => {
+                  const to = owns[0]?.url;
+                  if (to === undefined) return;
+                  setNoBrowser(false);
+                  void Linking.openURL(to).catch(() => {
+                    setNoBrowser(true);
+                  });
+                }}
+              />
+              <Button label="Cancel" kind="plain" wide onPress={onClose} />
+            </View>
+            {noBrowser ? <Txt kind="small" colour="badText">Couldn’t open the browser.</Txt> : null}
+          </>
+        ) : step === "ask" ? (
           <>
             <Txt>
               Your workouts, meals, goals and progress are deleted for good after {String(ACCOUNT_UNDO_DAYS)} days. Until then, the link we email you brings them back.
             </Txt>
             {leaves.length > 0 ? <Txt>You leave {namesText(leaves)} today. To come back later, ask them to add you again.</Txt> : null}
             {places.kind === "failed" ? <Txt>You leave the places you’re a member of today.</Txt> : null}
-            {owns.length > 0 ? <Txt>You own {namesText(owns)}. Deleting your account does not close it.</Txt> : null}
             {problem === null ? null : <Txt kind="small" colour="badText">{problem}</Txt>}
             <View style={styles.stack}>
               <Button label="Email me a code" kind="danger" wide busy={busy} onPress={() => void sendCode()} />
