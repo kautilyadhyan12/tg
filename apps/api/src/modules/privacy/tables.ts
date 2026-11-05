@@ -168,6 +168,8 @@ export const CASCADE_COLLECTED_TABLES = [
  *  is gone; a table added here without a matching DELETE in repo.ts goes red
  *  there. */
 export const ADDRESS_KEYED_PURGE_TABLES = ["sign_in_codes"] as const;
+// Since 0206 a change-email code also holds the account's id (`sign_in_codes.user_id`), under the
+// new address it was sent to; the purge deletes those by the id as well (repo.ts).
 
 /** Every table that must hold NO row for a purged user. The union above —
  *  and the list the purge test asserts against, so a table added to either

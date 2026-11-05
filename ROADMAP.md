@@ -618,7 +618,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 19a. [x] **Settings on the phone** — merged 2026-11-04 (PR #459).
     - 19b. [x] **Download my data, delete my account and undo** · merged 2026-11-04 · PR #465
     - 19b-ii. [x] **An owner hands the gym over before deleting their account** · merged 2026-11-05 · PR #468
-    - 19c. [ ] **Change email** (Stage 2's 3b-iii).
+    - 19c. [x] **Change email** · merged 2026-11-05 · PR #472
     - 19d. [ ] **Notification switches that save.**
 20. [ ] **What the gym side adds for members**, each after its web job: the waiver (3e), the membership agreement signed in the app (18u), the referral link (20e), the member photo (5b-vi), saving their card (18d-ii), buying from the gym (18k), stopping a membership (18l), a gym's plan for a member (19e).
 21. [ ] **Paying, the stores and release**: the $10 plan through the stores (item 6), one device one trial (Stage 3's 2c), the store pages rated 18+, the Terms and Privacy pages that Get started's line opens (it opens nothing today, as the browser's), Google's closed test, then the iPhone version with Apple sign-in.

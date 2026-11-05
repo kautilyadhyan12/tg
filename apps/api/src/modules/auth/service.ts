@@ -378,7 +378,7 @@ export async function signInWithCode(
 
 export async function requestEmailCode(
   deps: { sql: Sql; config: AppConfig; log: FastifyBaseLogger },
-  input: { email: string; purpose: CodePurpose },
+  input: { email: string; purpose: CodePurpose; boundTo?: string },
   send: CodeSender,
 ): Promise<{ resendAfterSeconds: number; expiresInSeconds: number }> {
   return await codes.requestCode(deps, input, send);
@@ -386,9 +386,33 @@ export async function requestEmailCode(
 
 export async function redeemEmailCode(
   deps: { sql: Sql; config: AppConfig; log: FastifyBaseLogger },
-  input: { email: string; purpose: CodePurpose; code: string },
+  input: { email: string; purpose: CodePurpose; code: string; boundTo?: string },
 ): Promise<void> {
   await codes.redeemCode(deps, input);
+}
+
+// ── change email (19c; RULINGS 2026-09-23, E) ─────────────────────────────────
+// The users module asks for the code and moves the account through these, never through the repo.
+
+/** Whether an account, a deleted one in its undo days too, holds this address. */
+export async function emailTaken(sql: Sql, email: string): Promise<boolean> {
+  return await repo.emailTaken(sql, email);
+}
+
+/** The account moves to an address its holder has just proved. A name that was only the old
+ *  address's first part becomes the new one's (the boards print it); the Google sign-in tied to
+ *  the old address ends. */
+export async function moveAccountEmail(
+  sql: Sql,
+  input: { userId: string; from: string | null; to: string },
+): Promise<repo.MovedEmail> {
+  return await repo.moveEmail(sql, {
+    userId: input.userId,
+    from: input.from,
+    to: input.to,
+    nameFrom: input.from === null ? null : displayNameFromEmail(input.from),
+    nameTo: displayNameFromEmail(input.to),
+  });
 }
 
 // ── refresh (rotation + reuse detection) ────────────────────────────────────

@@ -337,9 +337,9 @@ d("several taxes on one product (real Postgres)", () => {
   it(
     "the migration: every rate and sale keeps its percentage times ten, a sale its one tax by name, and a basket waiting on the Terminal its lines",
     async () => {
-      // The data statements of 0206, as written, run against temporary tables of the shape they read
+      // The data statements of 0207, as written, run against temporary tables of the shape they read
       // (a temporary table hides the real one of its name), then dropped.
-      const text = readFileSync(new URL("../drizzle/0206_tax_thousandths.sql", import.meta.url), "utf8");
+      const text = readFileSync(new URL("../drizzle/0207_tax_thousandths.sql", import.meta.url), "utf8");
       const statements = text.split("--> statement-breakpoint").map((s) => s.replace(/^\s*--.*$/gm, "").trim());
       const sales = statements.find((s) => s.startsWith('UPDATE "gym_sales"'));
       const baskets = statements.find((s) => s.startsWith('UPDATE "gym_terminal_payments"'));
