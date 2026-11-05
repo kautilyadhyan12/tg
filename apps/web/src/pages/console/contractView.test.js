@@ -22,7 +22,7 @@ const listType = (over = {}) => ({
   includesPt: false,
   ptLimit: null,
   ptPeriod: null,
-  taxRateId: null,
+  taxRateIds: [],
   joiningFeeMinor: 0,
   contractPeriods: 12,
   contractThen: 'renews',

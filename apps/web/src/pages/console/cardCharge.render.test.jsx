@@ -61,7 +61,7 @@ const GOLD = {
   termUnit: 'month',
   packClasses: null,
   packDays: null,
-  tax: null,
+  taxes: [],
 };
 
 function held(n, paid) {
@@ -86,7 +86,7 @@ function held(n, paid) {
     notCharged: false,
     refundedInFull: false,
     discount: null,
-    tax: null,
+    taxes: [],
     view: heldMembershipView(m, TODAY),
     billing: billingFor(n, made.membership, m, GOLD.priceMinor, TODAY),
   };

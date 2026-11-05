@@ -82,7 +82,7 @@ const typeOf = (n, over = {}) => ({
   termUnit: 'month',
   packClasses: null,
   packDays: null,
-  tax: null,
+  taxes: [],
   ...over,
 });
 const GOLD = typeOf(1);
@@ -117,7 +117,7 @@ function held(n, type, startsOn, paid, moves = []) {
     notCharged: false,
     refundedInFull: false,
     discount: null,
-    tax: null,
+    taxes: [],
     view: heldMembershipView(m, TODAY),
     billing: billingFor(n, given, m, type.priceMinor, TODAY),
   };
@@ -723,15 +723,15 @@ describe('adding a membership', () => {
 
   it('with tax: the form shows the price, its tax and the total, sends what it showed, and the membership and its bill say the tax (18b-iii)', async () => {
     const VAT = { name: 'VAT', pcm: 20000 };
-    const TAXED = typeOf(5, { name: 'Gold VAT', priceMinor: 5000, tax: VAT });
+    const TAXED = typeOf(5, { name: 'Gold VAT', priceMinor: 5000, taxes: [VAT] });
     orgService.getHeldMemberships.mockResolvedValue(answer([], false, { types: [TAXED, GOLD] }));
     // 20% on top of £50.00 is £10.00: £60.00 a bill.
     const owed = held(5, { ...TAXED, priceMinor: 6000 }, TODAY, false);
     const sold = {
       ...owed,
       priceMinor: 5000,
-      tax: VAT,
-      billing: { ...owed.billing, bills: owed.billing.bills.map((b) => ({ ...b, tax: { ...VAT, included: false, minor: 1000 } })) },
+      taxes: [VAT],
+      billing: { ...owed.billing, bills: owed.billing.bills.map((b) => ({ ...b, taxes: [{ ...VAT, included: false, minor: 1000 }] })) },
     };
     orgService.giveHeldMembership.mockResolvedValue(answer([sold], false, { types: [TAXED, GOLD] }));
     render(draw(ADA, 'Ada Lovelace'));
@@ -766,7 +766,7 @@ describe('adding a membership', () => {
   });
 
   it('where the gym’s prices hold the tax, the total is the price and the form says how much of it is tax', async () => {
-    const TAXED = typeOf(5, { name: 'Gold VAT', priceMinor: 5000, tax: { name: 'VAT', pcm: 20000 } });
+    const TAXED = typeOf(5, { name: 'Gold VAT', priceMinor: 5000, taxes: [{ name: 'VAT', pcm: 20000 }] });
     orgService.getHeldMemberships.mockResolvedValue(answer([], false, { types: [TAXED], taxIncluded: true }));
     render(draw(ADA, 'Ada Lovelace'));
     fireEvent.click(await (await boxSoon()).findByRole('button', { name: 'Add membership' }));
@@ -975,7 +975,7 @@ describe('changing a membership', () => {
       on: TODAY,
       to: '2026-11-19',
       amountMinor: 1000,
-      tax: null,
+      taxes: [],
       dueOn: TODAY,
       state: 'due',
       waived: null,
@@ -1870,7 +1870,7 @@ describe('Take payment on Failed payments (18d-iii-ii-b)', () => {
       on: TODAY,
       to: '2026-11-19',
       amountMinor: 1000,
-      tax: null,
+      taxes: [],
       dueOn: TODAY,
       state: 'due',
       waived: null,
@@ -2214,7 +2214,7 @@ describe('cancelling early with the early cancellation fee', () => {
       on: TODAY,
       to: null,
       amountMinor: 9900,
-      tax: null,
+      taxes: [],
       dueOn: TODAY,
       state: 'due',
       waived: null,

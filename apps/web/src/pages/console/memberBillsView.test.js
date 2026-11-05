@@ -391,12 +391,15 @@ describe('Note a refund', () => {
 });
 
 describe('a bill says its tax (18b-iii)', () => {
-  const bill = (over = {}) => ({ amountMinor: 5900, tax: null, ...over });
+  const bill = (over = {}) => ({ amountMinor: 5900, taxes: [], ...over });
   it('on top: the price before it, the tax, and its name and rate; inside: how much of it is tax; none: nothing', () => {
-    expect(billTaxLine(bill({ tax: { name: 'GST', pcm: 18000, included: false, minor: 900 } }), 'USD')).toBe('$50.00 plus $9.00 GST 18%');
-    expect(billTaxLine(bill({ amountMinor: 5000, tax: { name: 'VAT', pcm: 20000, included: true, minor: 833 } }), 'GBP')).toBe('Includes £8.33 VAT 20%');
-    expect(billTaxLine(bill({ amountMinor: 5411, tax: { name: 'Sales tax', pcm: 8250, included: false, minor: 412 } }), 'USD')).toBe('$49.99 plus $4.12 Sales tax 8.25%');
+    expect(billTaxLine(bill({ taxes: [{ name: 'GST', pcm: 18000, included: false, minor: 900 }] }), 'USD')).toBe('$50.00 plus $9.00 GST 18%');
+    expect(billTaxLine(bill({ amountMinor: 5000, taxes: [{ name: 'VAT', pcm: 20000, included: true, minor: 833 }] }), 'GBP')).toBe('Includes £8.33 VAT 20%');
+    expect(billTaxLine(bill({ amountMinor: 5411, taxes: [{ name: 'Sales tax', pcm: 8250, included: false, minor: 412 }] }), 'USD')).toBe('$49.99 plus $4.12 Sales tax 8.25%');
     expect(billTaxLine(bill(), 'USD')).toBeNull();
+    // Several taxes, each with its own amount (18b-v-b).
+    expect(billTaxLine(bill({ amountMinor: 11498, taxes: [{ name: 'GST', pcm: 5000, included: false, minor: 500 }, { name: 'QST', pcm: 9975, included: false, minor: 998 }] }), 'CAD')).toBe('CA$100.00 plus CA$5.00 GST 5% and CA$9.98 QST 9.975%');
+    expect(billTaxLine(bill({ amountMinor: 100000, taxes: [{ name: 'CGST', pcm: 9000, included: true, minor: 7627 }, { name: 'SGST', pcm: 9000, included: true, minor: 7627 }] }), 'INR')).toBe('Includes ₹76.27 CGST 9% and ₹76.27 SGST 9%');
   });
 });
 
@@ -446,7 +449,7 @@ describe('a freeze fee on the bills (18z)', () => {
     on: '2026-10-22',
     to: '2026-11-21',
     amountMinor: 1000,
-    tax: null,
+    taxes: [],
     dueOn: '2026-10-22',
     state: 'due',
     waived: null,

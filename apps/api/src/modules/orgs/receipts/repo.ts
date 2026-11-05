@@ -20,6 +20,7 @@ import {
 } from "@app/shared";
 import { z } from "zod";
 import { billItemSql } from "../memberships/billsSql.js";
+import { appliedOf, keptTaxes } from "../memberships/taxesSql.js";
 
 /** The gym's next receipt number, as the CTE `n` (`number`) of the statement that writes
  *  the payment, refund or sale it is for: the count and the row move together or not at
@@ -36,10 +37,6 @@ const personName = (name: string | null): string => (name === null || name.trim(
 
 /** A receipt as its row holds it: the gym's name and address are the caller's. */
 export type ReceiptRow = Omit<SaleReceipt, "gym"> | Omit<PaymentReceipt, "gym"> | Omit<RefundReceipt, "gym">;
-
-/** A bill's one tax (18b-iii), as a receipt names it; null for none. */
-const taxOf = (r: { tax_pcm: number; tax_name: string | null; tax_included: boolean | null; tax_minor: number }) =>
-  r.tax_pcm > 0 ? { name: r.tax_name, pcm: r.tax_pcm, included: r.tax_included === true, minor: r.tax_minor } : null;
 
 /** A sale line's taxes (18b-v-a), each as it was sold: parsed, as a column of kept JSON. */
 const saleTaxesOf = (r: { taxes: unknown; tax_included: boolean }) =>
@@ -171,17 +168,15 @@ async function saleRefundReceipt(sql: Sql, gymId: string, number: number): Promi
 function billReceiptAmounts(r: {
   bill_minor: number;
   joining_fee: number;
-  tax_minor: number;
-  tax_pcm: number;
-  tax_name: string | null;
+  taxes: unknown;
   tax_included: boolean | null;
   held_price: number;
   discount_name: string | null;
   discount_minor: number;
   discount_payments: string | null;
 }, part: { days: number; fullDays: number } | null) {
-  const tax = taxOf(r);
-  const taxes = tax === null ? [] : [tax];
+  // Each tax the bill was opened with (18b-iii; 18b-v-b), in the order charged.
+  const taxes = keptTaxes(r);
   const plain = receiptAmounts({ totalMinor: r.bill_minor, taxes, discount: null });
   if (r.discount_name === null || r.discount_minor <= 0 || r.discount_payments === null) return plain;
   const share = (minor: number): number => (part === null ? minor : partMinor(minor, part));
@@ -190,8 +185,7 @@ function billReceiptAmounts(r: {
   const off = full - share(r.discount_payments === "every" ? r.held_price : r.held_price - r.discount_minor);
   // A joining fee (18t) is listed with the membership's price, and no discount comes off it.
   const listed = full + r.joining_fee;
-  const applied = tax === null ? null : { name: tax.name ?? "", pcm: tax.pcm, included: tax.included };
-  const came = billAmounts(listed - off, applied);
+  const came = billAmounts(listed - off, r.tax_included === null ? null : appliedOf(taxes, r.tax_included));
   if (off <= 0 || !came.ok || came.totalMinor !== r.bill_minor) return plain;
   return receiptAmounts({ totalMinor: r.bill_minor, listedMinor: listed, taxes, discount: { name: r.discount_name, minor: off } });
 }
@@ -230,9 +224,7 @@ async function paymentReceipt(sql: Sql, gymId: string, number: number): Promise<
       term_unit: string | null;
       starts_on: string;
       full_from: string | null;
-      tax_minor: number;
-      tax_pcm: number;
-      tax_name: string | null;
+      taxes: unknown;
       tax_included: boolean | null;
       paid_before: number;
       held_price: number;
@@ -248,7 +240,7 @@ async function paymentReceipt(sql: Sql, gymId: string, number: number): Promise<
             WHERE o.gym_id = h.gym_id AND o.id = h.replaces_id) AS change_from,
            b.covers_from::text AS covers_from, b.covers_to::text AS covers_to, (b.period_index = 0 AND h.full_from IS NOT NULL) AS part,
            h.kind, h.term_count, h.term_unit, h.starts_on::text AS starts_on, h.full_from::text AS full_from,
-           b.tax_minor, b.tax_pcm, b.tax_name, b.tax_included,
+           b.taxes, b.tax_included,
            COALESCE((SELECT sum(q.amount_minor) FROM gym_member_payments q
                      WHERE q.gym_id = p.gym_id AND q.bill_id = p.bill_id AND q.undone_at IS NULL AND q.seq < p.seq), 0)::int AS paid_before
     FROM gym_member_payments p

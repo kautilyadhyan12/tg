@@ -261,7 +261,7 @@ describe("what a gym may save as a membership type", () => {
 
   it("a change carries the stamp the list gave, and is refused without it", () => {
     const change = (value: unknown) => updateGymMembershipTypeRequestSchema.safeParse(value).success;
-    const stamped = { ...monthly, includesPt: false, ptLimit: null, ptPeriod: null, taxRateId: null, joiningFeeMinor: 0, contractPeriods: null, contractThen: null, noticeDays: null, leaveFeeMinor: null, coolingOffDays: null, renewalReminderDays: null, termReminderDays: null, updatedAt: "2026-10-04T10:00:00.000Z" };
+    const stamped = { ...monthly, includesPt: false, ptLimit: null, ptPeriod: null, taxRateIds: [], joiningFeeMinor: 0, contractPeriods: null, contractThen: null, noticeDays: null, leaveFeeMinor: null, coolingOffDays: null, renewalReminderDays: null, termReminderDays: null, updatedAt: "2026-10-04T10:00:00.000Z" };
     expect(change(stamped)).toBe(true);
     // And its early cancellation fee (18v-ii-b): left out, it would take the fee off the type.
     expect(change({ ...stamped, leaveFeeMinor: undefined })).toBe(false);
@@ -270,7 +270,7 @@ describe("what a gym may save as a membership type", () => {
     expect(change({ ...stamped, renewalReminderDays: undefined })).toBe(false);
     expect(change({ ...stamped, termReminderDays: undefined })).toBe(false);
     // A change says its tax outright: left out, it would take the tax off the type (18b-iii).
-    expect(change({ ...stamped, taxRateId: undefined })).toBe(false);
+    expect(change({ ...stamped, taxRateIds: undefined })).toBe(false);
     // And its joining fee (18t): left out, it would take the fee off the type.
     expect(change({ ...stamped, joiningFeeMinor: undefined })).toBe(false);
     // And its contract (18v-i): left out, it would take the contract off the type.

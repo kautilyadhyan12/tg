@@ -51,6 +51,7 @@ import {
   sellProductResponseSchema,
   taxRateInUseWords,
   taxesOverCapWords,
+  heldTaxesOverCapWords,
   type MemberPaymentMethod,
   type MemberPurchasesResponse,
   type OrgPrivilege,
@@ -221,7 +222,7 @@ async function read(deps: RegisterDeps, gymId: string, viewer: Viewer, asked: st
     discounts: offered.live.map(isoDiscount),
     archivedDiscounts: offered.archived.map(isoDiscount),
     archivedDiscountsTotal: offered.archivedTotal,
-    membershipTypes: types.map((t) => ({ id: t.id, name: t.name, taxRateId: t.taxRateId, free: t.free })),
+    membershipTypes: types.map((t) => ({ id: t.id, name: t.name, taxRateIds: t.taxRateIds, free: t.free })),
     canSell: viewer.canSell,
     canManage: viewer.canManage,
     sales: shownSales(await withChargebacks(deps, gymId, row.sales, viewer.canSell), today, viewer.canSell),
@@ -366,6 +367,8 @@ function throwOnRateFailure(outcome: tax.RateWriteOutcome): void {
       throw new OrgsError(409, "tax_rate_in_use", taxRateInUseWords(outcome.name, outcome));
     case "taxes_over_cap":
       throw new OrgsError(409, "taxes_over_cap", taxesOverCapWords(outcome.product));
+    case "held_taxes_over_cap":
+      throw new OrgsError(409, "taxes_over_cap", heldTaxesOverCapWords(outcome.count));
     default: {
       const never: never = outcome;
       throw new Error(`unhandled tax rate outcome: ${JSON.stringify(never)}`);

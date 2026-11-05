@@ -87,10 +87,11 @@ async function seedGym(people: number): Promise<Gym> {
   await sql`
     INSERT INTO gym_membership_types (id, gym_id, name, kind, price_minor, currency, term_count, term_unit, access)
     VALUES (${typeId}, ${id}, 'Gold Monthly', 'recurring', 4999, 'GBP', 1, 'month', 'all_classes')`;
-  // Every membership taxed (18b-iii): every bill opened works its tax out.
+  // Every membership taxed twice (18b-iii; 18b-v-b): every bill opened works out two taxes.
   const rateId = randomUUID();
-  await sql`INSERT INTO gym_tax_rates (id, gym_id, name, rate_pcm) VALUES (${rateId}, ${id}, 'VAT', 20000)`;
-  await sql`UPDATE gym_membership_types SET tax_rate_id = ${rateId} WHERE id = ${typeId}`;
+  const secondId = randomUUID();
+  await sql`INSERT INTO gym_tax_rates (id, gym_id, name, rate_pcm) VALUES (${rateId}, ${id}, 'VAT', 20000), (${secondId}, ${id}, 'Levy', 5000)`;
+  await sql`INSERT INTO gym_membership_type_tax_rates (gym_id, membership_type_id, tax_rate_id, position) VALUES (${id}, ${typeId}, ${rateId}, 1), (${id}, ${typeId}, ${secondId}, 2)`;
   const records = Array.from({ length: people }, (_, i) => {
     const entry = randomUUID();
     return {
@@ -106,9 +107,14 @@ async function seedGym(people: number): Promise<Gym> {
   // Given 40 days ago and never paid: the first month and the one that began since are owed.
   await sql`
     INSERT INTO gym_held_memberships
-      (gym_id, entry_id, membership_type_id, request_key, kind, price_minor, currency, term_count, term_unit, starts_on, status, paid_periods, renews, tax_rate_id, tax_included)
-    SELECT ${id}, e.id, ${typeId}, gen_random_uuid(), 'recurring', 4999, 'GBP', 1, 'month', current_date - 40, 'active', 0, true, ${rateId}, false
+      (gym_id, entry_id, membership_type_id, request_key, kind, price_minor, currency, term_count, term_unit, starts_on, status, paid_periods, renews, tax_included)
+    SELECT ${id}, e.id, ${typeId}, gen_random_uuid(), 'recurring', 4999, 'GBP', 1, 'month', current_date - 40, 'active', 0, true, false
     FROM gym_member_list_entries e WHERE e.gym_id = ${id}`;
+  await sql`
+    INSERT INTO gym_held_membership_tax_rates (gym_id, held_membership_id, tax_rate_id, position)
+    SELECT h.gym_id, h.id, r.id, r.n FROM gym_held_memberships h
+    CROSS JOIN (VALUES (${rateId}::uuid, 1), (${secondId}::uuid, 2)) AS r(id, n)
+    WHERE h.gym_id = ${id}`;
   // The first of the gym's billing days after the start, where one is set and it is not the start.
   if (BILL_DAY !== null) {
     await sql`

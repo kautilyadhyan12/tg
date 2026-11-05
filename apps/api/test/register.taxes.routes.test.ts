@@ -199,7 +199,7 @@ d("several taxes on one product (real Postgres)", () => {
   );
 
   it(
-    "India: ₹50 with CGST and SGST inside is ₹50, the ₹7.63 of tax in it shared ₹3.82 and ₹3.81, and the receipt adds up",
+    "India: ₹50 with CGST and SGST inside is ₹50, ₹3.81 each (9% of ₹42.37 before tax), and the receipt adds up",
     async () => {
       const owner = await makeUser("in-owner");
       const gymId = await makeGym(owner, "Pune Strength", "IN", "Asia/Kolkata");
@@ -211,12 +211,12 @@ d("several taxes on one product (real Postgres)", () => {
       expect(sold.statusCode, sold.body).toBe(201);
       const { receiptNumber, register } = sellProductResponseSchema.parse(JSON.parse(sold.body));
       expect(register.sales[0]).toMatchObject({
-        netMinor: 4237,
-        taxMinor: 763,
+        netMinor: 4238,
+        taxMinor: 762,
         totalMinor: 5000,
         taxIncluded: true,
         taxes: [
-          { name: "CGST", pcm: 9000, minor: 382 },
+          { name: "CGST", pcm: 9000, minor: 381 },
           { name: "SGST", pcm: 9000, minor: 381 },
         ],
       });
@@ -226,7 +226,7 @@ d("several taxes on one product (real Postgres)", () => {
         listedMinor: 5000,
         discount: null,
         taxes: [
-          { name: "CGST", pcm: 9000, included: true, minor: 382 },
+          { name: "CGST", pcm: 9000, included: true, minor: 381 },
           { name: "SGST", pcm: 9000, included: true, minor: 381 },
         ],
         totalMinor: 5000,

@@ -7,7 +7,7 @@ import { membershipSummary } from './sellDiscountsView';
 import { billRow } from './memberBillsView';
 import { receiptLines } from './receiptView';
 
-const GOLD = { id: 't-gold', name: 'Gold Monthly', kind: 'recurring', priceMinor: 5000, currency: 'USD', termCount: 1, termUnit: 'month', packClasses: null, packDays: null, tax: null, joiningFeeMinor: 2500 };
+const GOLD = { id: 't-gold', name: 'Gold Monthly', kind: 'recurring', priceMinor: 5000, currency: 'USD', termCount: 1, termUnit: 'month', packClasses: null, packDays: null, taxes: [], joiningFeeMinor: 2500 };
 const listType = (over = {}) => ({
   id: '22222222-2222-4222-8222-000000000001',
   name: 'Gold Monthly',
@@ -26,7 +26,7 @@ const listType = (over = {}) => ({
   includesPt: false,
   ptLimit: null,
   ptPeriod: null,
-  taxRateId: null,
+  taxRateIds: [],
   joiningFeeMinor: 2500,
   archivedAt: null,
   updatedAt: '2026-10-04T09:00:00.000Z',
@@ -107,7 +107,7 @@ describe('the joining fee the desk is shown is the one the first bill charges', 
   });
 
   it('with tax added on top and a first-month discount: the tax is on the fee too, the discount is off the membership alone', () => {
-    const taxed = { ...GOLD, tax: { name: 'GST', pcm: 18000 } };
+    const taxed = { ...GOLD, taxes: [{ name: 'GST', pcm: 18000 }] };
     const summary = membershipSummary(taxed, firstMonth, false, null, 2500);
     // ($50.00 − $10.00 + $25.00) plus 18% is $76.70; every later payment $59.00.
     expect(summary.lines).toEqual([
@@ -188,7 +188,7 @@ describe('the bill and the receipt', () => {
     periodIndex: 0,
     covers: { from: '2026-10-15', to: '2026-11-14' },
     amountMinor: 7500,
-    tax: null,
+    taxes: [],
     joiningFeeMinor: 2500,
     paidMinor: 0,
     dueOn: '2026-10-15',

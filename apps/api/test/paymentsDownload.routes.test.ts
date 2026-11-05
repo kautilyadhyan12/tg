@@ -256,7 +256,7 @@ d("download payments (real Postgres)", () => {
 
       // Maya pays for Gold Monthly, $50.00 plus 8.25% sales tax, and $10.00 is given back.
       const tax = await addRate(gymId, owner.cookies, "Sales tax", 8250);
-      const gold = await addType(gymId, owner.cookies, monthly({ taxRateId: tax }));
+      const gold = await addType(gymId, owner.cookies, monthly({ taxRateIds: [tax] }));
       const maya = await addPerson(gymId, owner.cookies, "Maya Patel");
       await give(gymId, maya, owner.cookies, gold, 5000, 5413);
       await refundPayment(gymId, maya, owner.cookies, 1000);

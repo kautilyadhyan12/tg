@@ -42,7 +42,7 @@ const GOLD = {
   termUnit: 'month',
   packClasses: null,
   packDays: null,
-  tax: null,
+  taxes: [],
 };
 const DESK = { id: '33333333-3333-4333-8333-000000000001', serial: '108CS1234567', practice: null };
 const BACK = { id: '33333333-3333-4333-8333-000000000002', serial: '108CS7654321', practice: null };
@@ -70,7 +70,7 @@ function held(n, paid) {
     notCharged: false,
     refundedInFull: false,
     discount: null,
-    tax: null,
+    taxes: [],
     view: heldMembershipView(m, TODAY),
     billing: billingFor(n, made.membership, m, GOLD.priceMinor, TODAY),
   };
@@ -267,7 +267,7 @@ describe('Take payment on Terminal for a fee', () => {
     forName: 'Spin',
     on: '2026-10-14',
     amountMinor: 1000,
-    tax: null,
+    taxes: [],
     dueOn: '2026-10-14',
     state: 'overdue',
     waived: null,

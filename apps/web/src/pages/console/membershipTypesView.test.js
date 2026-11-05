@@ -25,6 +25,7 @@ import {
   typesSummary,
   wholeNumber,
   withChoice,
+  restoredTypeWords,
 } from './membershipTypesView';
 
 const YOGA = { id: '33333333-3333-4333-8333-000000000001', name: 'Yoga' };
@@ -201,7 +202,7 @@ describe('the form', () => {
       includesPt: false,
       ptLimit: null,
       ptPeriod: null,
-      taxRateId: null,
+      taxRateIds: [],
       joiningFeeMinor: 0,
       contractPeriods: null,
       contractThen: null,
@@ -298,7 +299,7 @@ describe('the form', () => {
       includesPt: false,
       ptLimit: null,
       ptPeriod: null,
-      taxRateId: null,
+      taxRateIds: [],
       joiningFeeMinor: 0,
       contractPeriods: null,
       contractThen: null,
@@ -412,25 +413,43 @@ describe('the form', () => {
 describe('a type’s tax (18b-iii)', () => {
   const list = (over = {}) => ({ taxRates: [{ id: 'r1', name: 'GST', pcm: 18000 }], taxIncluded: false, ...over });
   it('says what its bills charge, on top or inside; nothing for no tax or a rate since removed', () => {
-    expect(typeTaxLine({ taxRateId: 'r1' }, list())).toBe('Plus GST 18% on each payment');
-    expect(typeTaxLine({ taxRateId: 'r1' }, list({ taxIncluded: true }))).toBe('Includes GST 18%');
-    expect(typeTaxLine({ taxRateId: null }, list())).toBeNull();
-    expect(typeTaxLine({ taxRateId: 'gone' }, list())).toBeNull();
+    expect(typeTaxLine({ taxRateIds: ['r1'] }, list())).toBe('Plus GST 18% on each payment');
+    expect(typeTaxLine({ taxRateIds: ['r1'] }, list({ taxIncluded: true }))).toBe('Includes GST 18%');
+    expect(typeTaxLine({ taxRateIds: [] }, list())).toBeNull();
+    expect(typeTaxLine({ taxRateIds: ['gone'] }, list())).toBeNull();
+    // Several, in the type's order (18b-v-b).
+    const quebec = list({ taxRates: [{ id: 'q', name: 'QST', pcm: 9975 }, { id: 'g', name: 'GST', pcm: 5000 }] });
+    expect(typeTaxLine({ taxRateIds: ['g', 'q'] }, quebec)).toBe('Plus GST 5% and QST 9.975% on each payment');
+  });
+  it('the form ticks each tax, sends them in order, and refuses more than 30% together (18b-v-b)', () => {
+    const rates = [{ id: 'a', name: 'A', pcm: 20000 }, { id: 'b', name: 'B', pcm: 15000 }, { id: 'c', name: 'C', pcm: 10000 }];
+    expect(draftBody({ ...emptyDraft(), name: 'Gold', price: '50', taxRateIds: ['c', 'a'] }, 'USD').taxRateIds).toEqual(['c', 'a']);
+    expect(draftProblems({ ...emptyDraft(), name: 'Gold', price: '50', taxRateIds: ['a', 'c'] }, 'USD', rates)).toBeNull();
+    expect(draftProblems({ ...emptyDraft(), name: 'Gold', price: '50', taxRateIds: ['a', 'b'] }, 'USD', rates)?.tax).toBe("These taxes come to 35% together. A membership's taxes can come to 30% at most. Untick one.");
+    expect(draftFromType(type({ taxRateIds: ['b', 'a'] })).taxRateIds).toEqual(['b', 'a']);
+  });
+  it('a type put back says which taxes were taken off it, and nothing where none were', () => {
+    const before = { id: 't', name: 'Bronze', taxRateIds: ['c', 'b'] };
+    const rates = [{ id: 'b', name: 'B', pcm: 25000 }, { id: 'c', name: 'C', pcm: 5000 }];
+    expect(restoredTypeWords(before, { taxRates: rates, types: [{ id: 't', taxRateIds: ['c'] }] })).toBe(
+      'Bronze is back on your price list. B 25% was taken off it, as its taxes came to more than 30% together. Press Change on Bronze to check its tax.',
+    );
+    expect(restoredTypeWords(before, { taxRates: rates, types: [{ id: 't', taxRateIds: ['c', 'b'] }] })).toBeNull();
   });
   it('the form keeps the tax, sends it, starts a new type on No tax, and refuses a taxed price too high to bill', () => {
-    expect(emptyDraft().taxRateId).toBe('');
-    expect(draftBody({ ...emptyDraft(), name: 'Gold', price: '50' }, 'USD').taxRateId).toBeNull();
-    expect(draftBody({ ...emptyDraft(), name: 'Gold', price: '50', taxRateId: 'r1' }, 'USD').taxRateId).toBe('r1');
-    expect(draftProblems({ ...emptyDraft(), name: 'Gold', price: '769230.76', taxRateId: 'r1' }, 'USD')).toBeNull();
-    expect(draftProblems({ ...emptyDraft(), name: 'Gold', price: '769230.77', taxRateId: 'r1' }, 'USD')?.price).toBe('A price with tax can be at most $769,230.76. Lower the price, or choose No tax.');
+    expect(emptyDraft().taxRateIds).toEqual([]);
+    expect(draftBody({ ...emptyDraft(), name: 'Gold', price: '50' }, 'USD').taxRateIds).toEqual([]);
+    expect(draftBody({ ...emptyDraft(), name: 'Gold', price: '50', taxRateIds: ['r1'] }, 'USD').taxRateIds).toEqual(['r1']);
+    expect(draftProblems({ ...emptyDraft(), name: 'Gold', price: '769230.76', taxRateIds: ['r1'] }, 'USD')).toBeNull();
+    expect(draftProblems({ ...emptyDraft(), name: 'Gold', price: '769230.77', taxRateIds: ['r1'] }, 'USD')?.price).toBe('A price with tax can be at most $769,230.76. Lower the price, or untick the taxes.');
     expect(draftProblems({ ...emptyDraft(), name: 'Gold', price: '999999.99' }, 'USD')).toBeNull();
   });
 });
 
 describe('a free type charges no tax (18b-iii, round one)', () => {
   it('says so under Tax, first of its kind of problem', () => {
-    const problems = draftProblems({ ...emptyDraft(), name: 'Free week', price: '0', taxRateId: 'r1' }, 'USD');
-    expect(problems?.tax).toBe('A free membership charges no tax. Choose No tax.');
+    const problems = draftProblems({ ...emptyDraft(), name: 'Free week', price: '0', taxRateIds: ['r1'] }, 'USD');
+    expect(problems?.tax).toBe('A free membership charges no tax. Untick the taxes.');
     expect(firstProblem(problems)).toBe('tax');
   });
 });

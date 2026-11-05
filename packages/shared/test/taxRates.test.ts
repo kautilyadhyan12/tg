@@ -17,8 +17,8 @@ import {
   type TaxApplied,
 } from "../src/index.js";
 
-const on = (name: string, pcm: number): TaxApplied => ({ name, pcm, included: false });
-const inside = (name: string, pcm: number): TaxApplied => ({ name, pcm, included: true });
+const on = (name: string, pcm: number): TaxApplied => ({ rates: [{ name, pcm }], included: false });
+const inside = (name: string, pcm: number): TaxApplied => ({ rates: [{ name, pcm }], included: true });
 
 describe("what one membership bill comes to", () => {
   const table: [string, number, TaxApplied | null, { netMinor: number; taxMinor: number; totalMinor: number }][] = [
@@ -50,7 +50,7 @@ describe("what one membership bill comes to", () => {
     for (const pcm of [1, 5000, 8250, 8875, 9975, 10000, 12000, 18000, 20000, 23000, SALES_TAX_PCM_MAX]) {
       for (const listed of [1, 2, 3, 99, 999, 1000, 2999, 4999, 5000, 12345, 999_999, TAXED_PRICE_MINOR_MAX]) {
         for (const included of [true, false]) {
-          const got = billAmounts(listed, { name: "Tax", pcm, included });
+          const got = billAmounts(listed, { rates: [{ name: "Tax", pcm }], included });
           if (!got.ok) throw new Error(`refused ${String(listed)} at ${String(pcm)}`);
           expect(got.netMinor + got.taxMinor).toBe(got.totalMinor);
           expect(got.taxMinor).toBeGreaterThanOrEqual(0);
@@ -67,18 +67,90 @@ describe("what one membership bill comes to", () => {
     expect(billAmounts(TAXED_PRICE_MINOR_MAX + 1, on("Tax", SALES_TAX_PCM_MAX))).toEqual({ ok: false, reason: "too_much" });
     const type = { name: "Gold", description: null, kind: "recurring", priceMinor: TAXED_PRICE_MINOR_MAX, termCount: 1, termUnit: "month", packClasses: null, packDays: null, access: "all_classes", bookingsLimit: null, bookingsPeriod: null, classTypeIds: null };
     const rate = "8e5f3c1a-2b4d-4c6e-8f0a-1b2c3d4e5f60";
-    expect(saveGymMembershipTypeRequestSchema.safeParse({ ...type, taxRateId: rate }).success).toBe(true);
-    expect(saveGymMembershipTypeRequestSchema.safeParse({ ...type, priceMinor: TAXED_PRICE_MINOR_MAX + 1, taxRateId: rate }).success).toBe(false);
+    expect(saveGymMembershipTypeRequestSchema.safeParse({ ...type, taxRateIds: [rate] }).success).toBe(true);
+    expect(saveGymMembershipTypeRequestSchema.safeParse({ ...type, priceMinor: TAXED_PRICE_MINOR_MAX + 1, taxRateIds: [rate] }).success).toBe(false);
     // Untaxed, the whole range stands as it did.
     expect(saveGymMembershipTypeRequestSchema.safeParse({ ...type, priceMinor: MEMBERSHIP_PRICE_MINOR_MAX }).success).toBe(true);
     // A type made without saying its tax charges none.
-    expect(saveGymMembershipTypeRequestSchema.parse(type).taxRateId).toBeNull();
+    expect(saveGymMembershipTypeRequestSchema.parse(type).taxRateIds).toEqual([]);
   });
 
   it("a bill of nothing is not a bill", () => {
     expect(billAmounts(0, on("GST", 18000))).toEqual({ ok: false, reason: "not_an_amount" });
     expect(billAmounts(-100, null)).toEqual({ ok: false, reason: "not_an_amount" });
     expect(billAmounts(10.5, null)).toEqual({ ok: false, reason: "not_an_amount" });
+  });
+});
+
+// SEVERAL TAXES ON ONE MEMBERSHIP (18b-v-b). Each amount is worked by hand from the published rates,
+// never from the function: Revenu Québec works GST 5% and QST 9.975% each on the price before tax
+// ("Calculating the Taxes", since 2013); British Columbia's GST 5% and PST 7%; India's GST of 18%
+// charged as CGST 9% and SGST 9%, inside the price where a gym's prices hold it.
+describe("what one membership bill comes to with several taxes", () => {
+  const rates = (...pairs: [string, number][]) => pairs.map(([name, pcm]) => ({ name, pcm }));
+  const table: [string, number, TaxApplied, { netMinor: number; taxParts: number[]; totalMinor: number }][] = [
+    // Quebec: $100.00 a month. GST $5.00; QST 9.975% of $100.00 is $9.975, $9.98. $114.98, never $115.48 (QST on the GST).
+    ["Quebec, $100.00 a month plus GST and QST is $114.98", 10000, { rates: rates(["GST", 5000], ["QST", 9975]), included: false }, { netMinor: 10000, taxParts: [500, 998], totalMinor: 11498 }],
+    // Quebec: $49.99. GST 2.4995 rounds to $2.50; QST 4.9865 rounds to $4.99. $57.48.
+    ["Quebec, $49.99 plus GST and QST is $57.48", 4999, { rates: rates(["GST", 5000], ["QST", 9975]), included: false }, { netMinor: 4999, taxParts: [250, 499], totalMinor: 5748 }],
+    // BC: $45.00. GST $2.25; PST 7% $3.15. $50.40.
+    ["British Columbia, $45.00 plus GST and PST is $50.40", 4500, { rates: rates(["GST", 5000], ["PST", 7000]), included: false }, { netMinor: 4500, taxParts: [225, 315], totalMinor: 5040 }],
+    // India, inside: ₹1,000.00 holds 18% of ₹847.46, ₹152.54; CGST and SGST are half each, ₹76.27.
+    ["India, ₹1,000 with CGST and SGST inside: ₹76.27 each", 100000, { rates: rates(["CGST", 9000], ["SGST", 9000]), included: true }, { netMinor: 84746, taxParts: [7627, 7627], totalMinor: 100000 }],
+    // India, inside, an odd paisa: ₹999.99 holds 152.5408 → ₹152.54 again, 7627 + 7627.
+    ["India, ₹999.99 with CGST and SGST inside", 99999, { rates: rates(["CGST", 9000], ["SGST", 9000]), included: true }, { netMinor: 84745, taxParts: [7627, 7627], totalMinor: 99999 }],
+    // India, inside, ₹500.01: ₹423.74 before tax; 9% of it is 38.1366, ₹38.14 each. Equal rates show equal amounts,
+    // as on an Indian GST invoice; the price before tax takes the rounding: ₹500.01 less ₹76.28 is ₹423.73.
+    ["India, ₹500.01 inside: equal rates, equal amounts", 50001, { rates: rates(["CGST", 9000], ["SGST", 9000]), included: true }, { netMinor: 42373, taxParts: [3814, 3814], totalMinor: 50001 }],
+    // India, inside, ₹100.00: ₹84.75 before tax (84.7458); 9% is 7.6275, ₹7.63 each; ₹84.74 is left before tax.
+    ["India, ₹100.00 inside: ₹7.63 each", 10000, { rates: rates(["CGST", 9000], ["SGST", 9000]), included: true }, { netMinor: 8474, taxParts: [763, 763], totalMinor: 10000 }],
+    // Three taxes on top, 5% + 7% + 2.5% of $80.00: $4.00, $5.60, $2.00. $91.60.
+    ["three taxes on $80.00 is $91.60", 8000, { rates: rates(["GST", 5000], ["PST", 7000], ["Levy", 2500]), included: false }, { netMinor: 8000, taxParts: [400, 560, 200], totalMinor: 9160 }],
+    // Two rates of 15% each is the most together, 30%: $100.00 is $130.00.
+    ["two rates at 30% together on $100.00 is $130.00", 10000, { rates: rates(["A", 15000], ["B", 15000]), included: false }, { netMinor: 10000, taxParts: [1500, 1500], totalMinor: 13000 }],
+  ];
+  it.each(table)("%s", (_name, listed, tax, want) => {
+    const taxMinor = want.taxParts.reduce((n, m) => n + m, 0);
+    expect(billAmounts(listed, tax)).toEqual({ ok: true, netMinor: want.netMinor, taxMinor, taxParts: want.taxParts, totalMinor: want.totalMinor });
+  });
+
+  it("equal rates inside the price always show equal amounts, and nothing goes below zero", () => {
+    for (let listed = 1; listed <= 5000; listed += 1) {
+      for (const pcms of [[9000, 9000], [2500, 2500], [6000, 6000, 6000], [15000, 15000]]) {
+        const got = billAmounts(listed, { rates: pcms.map((pcm, i) => ({ name: `T${String(i)}`, pcm })), included: true });
+        if (!got.ok) throw new Error(`refused ${String(listed)}`);
+        expect(new Set(got.taxParts).size).toBe(1);
+        expect(got.netMinor).toBeGreaterThanOrEqual(0);
+        expect(got.netMinor + got.taxMinor).toBe(listed);
+      }
+    }
+  });
+
+  it("over 30% together is refused, never a bill", () => {
+    expect(billAmounts(10000, { rates: rates(["A", 15000], ["B", 15001]), included: false })).toEqual({ ok: false, reason: "not_an_amount" });
+  });
+
+  it("the parts always add up to the tax, and the tax and the price to what is paid", () => {
+    const sets = [[5000, 9975], [9000, 9000], [5000, 7000, 2500], [1, 1], [8875, 1, 21124], [15000, 15000], [9975, 5000], [3333, 3333, 3334]];
+    for (const pcms of sets) {
+      for (const listed of [1, 2, 3, 7, 99, 999, 1001, 4999, 5000, 12345, 99_999, 999_999, TAXED_PRICE_MINOR_MAX]) {
+        for (const included of [true, false]) {
+          const got = billAmounts(listed, { rates: pcms.map((pcm, i) => ({ name: `T${String(i)}`, pcm })), included });
+          if (!got.ok) throw new Error(`refused ${String(listed)} at ${pcms.join("+")}`);
+          expect(got.taxParts).toHaveLength(pcms.length);
+          expect(got.taxParts.reduce((n, m) => n + m, 0)).toBe(got.taxMinor);
+          expect(got.netMinor + got.taxMinor).toBe(got.totalMinor);
+          if (included) expect(got.totalMinor).toBe(listed);
+          else {
+            expect(got.netMinor).toBe(listed);
+            // Each on the price before tax, never on another tax.
+            pcms.forEach((pcm, i) => {
+              expect(got.taxParts[i]).toBe(Math.floor((listed * pcm + 50_000) / 100_000));
+            });
+          }
+        }
+      }
+    }
   });
 });
 
@@ -112,12 +184,12 @@ describe("a gym's named rates", () => {
 
   it("says why a rate in use was not removed, with only what charges it", () => {
     expect(taxRateInUseWords("GST", { products: 2, membershipTypes: 0, memberships: 0 })).toBe("GST was not removed: it is charged on 2 products. Untick it on them first.");
-    expect(taxRateInUseWords("GST", { products: 1, membershipTypes: 1, memberships: 0 })).toBe("GST was not removed: it is charged on 1 product and 1 membership type. Untick it on the products, and change the membership types to another rate or No tax first.");
+    expect(taxRateInUseWords("GST", { products: 1, membershipTypes: 1, memberships: 0 })).toBe("GST was not removed: it is charged on 1 product and 1 membership type. Untick it on them first.");
     expect(taxRateInUseWords("VAT", { products: 0, membershipTypes: 0, memberships: 14 })).toBe(
       "VAT was not removed: it is charged on 14 members' memberships. A membership keeps the tax it was sold with, so VAT can be removed once nobody holds one. You can still change its name or rate.",
     );
     expect(taxRateInUseWords("GST", { products: 3, membershipTypes: 2, memberships: 1 })).toBe(
-      "GST was not removed: it is charged on 3 products, 2 membership types and 1 member's membership. Untick it on the products, and change the membership types to another rate or No tax first. A membership keeps the tax it was sold with, so GST can be removed once nobody holds one. You can still change its name or rate.",
+      "GST was not removed: it is charged on 3 products, 2 membership types and 1 member's membership. Untick it on them first. A membership keeps the tax it was sold with, so GST can be removed once nobody holds one. You can still change its name or rate.",
     );
   });
 });

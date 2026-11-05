@@ -163,7 +163,7 @@ d("tax on memberships (real Postgres)", () => {
       includesPt: t.includesPt,
       ptLimit: t.ptLimit,
       ptPeriod: t.ptPeriod,
-      taxRateId,
+      taxRateIds: taxRateId === null ? [] : [taxRateId],
       joiningFeeMinor: t.joiningFeeMinor,
       contractPeriods: t.contractPeriods,
       contractThen: t.contractThen,
@@ -204,7 +204,9 @@ d("tax on memberships (real Postgres)", () => {
   /** What is in the tables, read directly. */
   const membershipOf = async (gymId: string, entryId: string) => {
     const [row] = await sql<{ id: string; price_minor: number; tax_rate_id: string | null }[]>`
-      SELECT id, price_minor, tax_rate_id FROM gym_held_memberships WHERE gym_id = ${gymId} AND entry_id = ${entryId} ORDER BY created_at, id`;
+      SELECT h.id, h.price_minor,
+             (SELECT x.tax_rate_id FROM gym_held_membership_tax_rates x WHERE x.gym_id = h.gym_id AND x.held_membership_id = h.id ORDER BY x.position LIMIT 1) AS tax_rate_id
+      FROM gym_held_memberships h WHERE h.gym_id = ${gymId} AND h.entry_id = ${entryId} ORDER BY h.created_at, h.id`;
     if (row === undefined) throw new Error("no membership");
     return row;
   };
@@ -212,7 +214,7 @@ d("tax on memberships (real Postgres)", () => {
   const billsOf = (gymId: string, membershipId: string) => sql<
     { period_index: number; amount_minor: number; tax_minor: number; tax_pcm: number; tax_name: string | null; tax_included: boolean | null; due_on: string }[]
   >`
-    SELECT period_index, amount_minor, tax_minor, tax_pcm, tax_name, tax_included, due_on::text AS due_on
+    SELECT period_index, amount_minor, tax_minor, tax_pcm, taxes -> 0 ->> 'name' AS tax_name, tax_included, due_on::text AS due_on
     FROM gym_member_bills WHERE gym_id = ${gymId} AND held_membership_id = ${membershipId} ORDER BY period_index`;
   /** Each bill as [its day, what is paid, its tax, the tax's name]. */
   const bills = async (gymId: string, membershipId: string) => (await billsOf(gymId, membershipId)).map((b) => [b.due_on, b.amount_minor, b.tax_minor, b.tax_name]);
@@ -250,15 +252,15 @@ d("tax on memberships (real Postgres)", () => {
       const owner = await makeUser("worst-owner");
       const gymId = await makeGym(owner, "Mtx Worst Gym");
       const gst = await addRate(gymId, owner.cookies, "GST", 18000);
-      const gold = await addType(gymId, owner.cookies, monthly({ taxRateId: gst.id }));
+      const gold = await addType(gymId, owner.cookies, monthly({ taxRateIds: [gst.id] }));
       const silver = await addType(gymId, owner.cookies, monthly({ name: "Silver Monthly" }));
 
       // The Add form reads what each type charges, and that this gym adds the tax on top.
       const maya = await addPerson(gymId, owner.cookies, "Maya Patel");
       const before = held(await get(heldUrl(gymId, maya), owner.cookies));
       expect(before.taxIncluded).toBe(false);
-      expect(before.types.find((t) => t.id === gold)?.tax).toEqual({ name: "GST", pcm: 18000 });
-      expect(before.types.find((t) => t.id === silver)?.tax).toBeNull();
+      expect(before.types.find((t) => t.id === gold)?.taxes).toEqual([{ name: "GST", pcm: 18000 }]);
+      expect(before.types.find((t) => t.id === silver)?.taxes).toEqual([]);
 
       // $50.00 plus 18% is $59.00. A screen that showed the price without its tax, a cent
       // either way, or the tax on an untaxed type: nothing is given, nothing is paid.
@@ -372,8 +374,8 @@ d("tax on memberships (real Postgres)", () => {
       clock = new Date("2027-02-15T17:00:00Z");
       const page2 = held(await get(heldUrl(gymId, maya), owner.cookies));
       const shown = page2.memberships.find((m) => m.id === mayaGold.id);
-      expect(shown?.tax).toEqual({ name: "GST", pcm: 12000 });
-      expect(shown?.billing?.bills.find((b) => b.periodIndex === 0)).toMatchObject({ amountMinor: 5900, tax: { name: "GST", pcm: 18000, included: false, minor: 900 } });
+      expect(shown?.taxes).toEqual([{ name: "GST", pcm: 12000 }]);
+      expect(shown?.billing?.bills.find((b) => b.periodIndex === 0)).toMatchObject({ amountMinor: 5900, taxes: [{ name: "GST", pcm: 18000, included: false, minor: 900 }] });
       expect(shown?.billing?.pay).toMatchObject({ periodIndex: 1, leftMinor: 5900 });
     },
     T,
@@ -387,7 +389,7 @@ d("tax on memberships (real Postgres)", () => {
       const gymId = await makeGym(owner, "Mtx VAT Gym", "GB");
       const vat = await addRate(gymId, owner.cookies, "VAT", 20000);
       expect(page(await get(register(gymId), owner.cookies)).tax.included).toBe(true);
-      const gold = await addType(gymId, owner.cookies, monthly({ taxRateId: vat.id }));
+      const gold = await addType(gymId, owner.cookies, monthly({ taxRateIds: [vat.id] }));
       const zoe = await addPerson(gymId, owner.cookies, "Zoe Smith");
       // £50.00 with VAT in it: £50.00 to pay, £8.33 of it VAT.
       expect((await give(gymId, zoe, owner.cookies, giveBody(gold, 5000, 6000))).statusCode).toBe(409);
@@ -433,7 +435,7 @@ d("tax on memberships (real Postgres)", () => {
       const owner = await makeUser("early-owner");
       const gymId = await makeGym(owner, "Mtx Early Gym");
       const gst = await addRate(gymId, owner.cookies, "GST", 18000);
-      const gold = await addType(gymId, owner.cookies, monthly({ taxRateId: gst.id }));
+      const gold = await addType(gymId, owner.cookies, monthly({ taxRateIds: [gst.id] }));
       const zoe = await addPerson(gymId, owner.cookies, "Zoe Smith");
       expect((await give(gymId, zoe, owner.cookies, giveBody(gold, 5000, 5900))).statusCode).toBe(201);
       const zoeGold = await membershipOf(gymId, zoe);
@@ -459,10 +461,10 @@ d("tax on memberships (real Postgres)", () => {
       const owner = await makeUser("count-owner");
       const gymId = await makeGym(owner, "Mtx Count Gym");
       const gst = await addRate(gymId, owner.cookies, "GST", 18000);
-      const month = await addType(gymId, owner.cookies, monthly({ name: "One month", kind: "one_time", taxRateId: gst.id }));
-      const gold = await addType(gymId, owner.cookies, monthly({ name: "Gold Monthly", taxRateId: gst.id }));
+      const month = await addType(gymId, owner.cookies, monthly({ name: "One month", kind: "one_time", taxRateIds: [gst.id] }));
+      const gold = await addType(gymId, owner.cookies, monthly({ name: "Gold Monthly", taxRateIds: [gst.id] }));
       // A free type cannot charge a rate, given or ticked.
-      expect((await post(typesUrl(gymId), monthly({ name: "Free week", kind: "trial", termCount: 7, termUnit: "day", priceMinor: 0, taxRateId: gst.id }), owner.cookies)).statusCode).toBe(400);
+      expect((await post(typesUrl(gymId), monthly({ name: "Free week", kind: "trial", termCount: 7, termUnit: "day", priceMinor: 0, taxRateIds: [gst.id] }), owner.cookies)).statusCode).toBe(400);
       const free = await addType(gymId, owner.cookies, monthly({ name: "Free week", kind: "trial", termCount: 7, termUnit: "day", priceMinor: 0 }));
       const freeRes = await put(`${register(gymId)}/tax-rates/${gst.id}/charged-on`, { use: "memberships", ids: [month, gold, free] }, owner.cookies);
       expect(freeRes.statusCode).toBe(409);
@@ -503,7 +505,7 @@ d("tax on memberships (real Postgres)", () => {
       const owner = await makeUser("word-owner");
       const gymId = await makeGym(owner, "Mtx Word Gym");
       const gst = await addRate(gymId, owner.cookies, "GST", 18000);
-      const gold = await addType(gymId, owner.cookies, monthly({ taxRateId: gst.id }));
+      const gold = await addType(gymId, owner.cookies, monthly({ taxRateIds: [gst.id] }));
       const res = await post(`/v1/orgs/${gymId}/member-list/entries`, { fullName: "Pat Quinn", email: "mtx-p-word@example.com", membershipType: "Gold" }, owner.cookies);
       expect(res.statusCode, res.body).toBe(201);
       const words = `/v1/orgs/${gymId}/membership-words`;
@@ -512,7 +514,10 @@ d("tax on memberships (real Postgres)", () => {
       const { digest } = JSON.parse(preview.body) as { digest: string };
       const linked = await post(`${words}/link`, { word: "Gold", typeId: gold, groups: { settled: true, due: true, ask: true }, digest, paid: true }, owner.cookies);
       expect(linked.statusCode, linked.body).toBe(200);
-      expect(await sql<{ tax_rate_id: string | null; tax_included: boolean | null }[]>`SELECT tax_rate_id, tax_included FROM gym_held_memberships WHERE gym_id = ${gymId}`).toEqual([
+      expect(await sql<{ tax_rate_id: string | null; tax_included: boolean | null }[]>`
+        SELECT x.tax_rate_id, h.tax_included FROM gym_held_memberships h
+        LEFT JOIN gym_held_membership_tax_rates x ON x.gym_id = h.gym_id AND x.held_membership_id = h.id
+        WHERE h.gym_id = ${gymId}`).toEqual([
         { tax_rate_id: gst.id, tax_included: false },
       ]);
     },
@@ -568,8 +573,8 @@ d("tax on memberships (real Postgres)", () => {
       const gst = await addRate(gymId, owner.cookies, "GST", 18000);
       const vat = await addRate(gymId, owner.cookies, "VAT", 20000);
       const gold = await addType(gymId, owner.cookies, monthly());
-      const silver = await addType(gymId, owner.cookies, monthly({ name: "Silver Monthly", taxRateId: vat.id }));
-      const bronze = await addType(gymId, owner.cookies, monthly({ name: "Bronze Monthly", taxRateId: gst.id }));
+      const silver = await addType(gymId, owner.cookies, monthly({ name: "Silver Monthly", taxRateIds: [vat.id] }));
+      const bronze = await addType(gymId, owner.cookies, monthly({ name: "Bronze Monthly", taxRateIds: [gst.id] }));
       const theirs = await addType(otherGym, nextDoor.cookies, monthly({ name: "Their Gold" }));
       // Maya holds Bronze at GST before the change.
       const maya = await addPerson(gymId, owner.cookies, "Maya Patel");
@@ -577,8 +582,10 @@ d("tax on memberships (real Postgres)", () => {
       const charge = (gym: string, rateId: string, body: unknown, cookies: Cookies) => put(`${register(gym)}/tax-rates/${rateId}/charged-on`, body, cookies);
       const typesNow = async () =>
         (await sql<{ name: string; rate: string | null }[]>`
-          SELECT t.name, r.name AS rate FROM gym_membership_types t LEFT JOIN gym_tax_rates r ON r.id = t.tax_rate_id
-          WHERE t.gym_id = ${gymId} ORDER BY t.name`).map((r) => `${r.name}: ${r.rate ?? "none"}`);
+          SELECT t.name, string_agg(r.name, ', ' ORDER BY x.position) AS rate FROM gym_membership_types t
+          LEFT JOIN gym_membership_type_tax_rates x ON x.gym_id = t.gym_id AND x.membership_type_id = t.id
+          LEFT JOIN gym_tax_rates r ON r.gym_id = x.gym_id AND r.id = x.tax_rate_id
+          WHERE t.gym_id = ${gymId} GROUP BY t.id, t.name ORDER BY t.name`).map((r) => `${r.name}: ${r.rate ?? "none"}`);
       const before = await typesNow();
 
       // Refused, with nothing changed: next door's type on the list, next door asking, staff
@@ -596,13 +603,19 @@ d("tax on memberships (real Postgres)", () => {
       }
       expect(await typesNow()).toEqual(before);
 
-      // Gold and Silver ticked for GST, Bronze not: Gold charges GST, Silver moves from VAT
-      // to GST, Bronze charges none. Maya's Bronze keeps GST, as she was sold it.
-      const res = await charge(gymId, gst.id, { use: "memberships", ids: [gold, silver] }, owner.cookies);
+      // A type keeps its other rates (18b-v-b): Silver's VAT 20% and GST 18% would come to 38%,
+      // more than 30% together, so the press is refused by name and nothing changes.
+      const over = await charge(gymId, gst.id, { use: "memberships", ids: [gold, silver] }, owner.cookies);
+      expect(over.statusCode, over.body).toBe(409);
+      expect(messageOf(over)).toBe("Nothing was saved: the taxes on Silver Monthly would come to more than 30% together. Take a tax off Silver Monthly first, or lower the rate.");
+      expect(await typesNow()).toEqual(before);
+      // Gold ticked for GST, Bronze not: Gold charges GST, Bronze charges none, Silver keeps VAT.
+      // Maya's Bronze keeps GST, as she was sold it.
+      const res = await charge(gymId, gst.id, { use: "memberships", ids: [gold] }, owner.cookies);
       expect(res.statusCode, res.body).toBe(200);
-      expect(await typesNow()).toEqual(["Bronze Monthly: none", "Gold Monthly: GST", "Silver Monthly: GST"]);
+      expect(await typesNow()).toEqual(["Bronze Monthly: none", "Gold Monthly: GST", "Silver Monthly: VAT"]);
       expect((await membershipOf(gymId, maya)).tax_rate_id).toBe(gst.id);
-      expect(page(res).membershipTypes.find((t) => t.id === gold)?.taxRateId).toBe(gst.id);
+      expect(page(res).membershipTypes.find((t) => t.id === gold)?.taxRateIds).toEqual([gst.id]);
       // A new member on Gold now pays the tax.
       const liam = await addPerson(gymId, owner.cookies, "Liam Chen");
       expect((await give(gymId, liam, owner.cookies, giveBody(gold, 5000, 5900))).statusCode).toBe(201);
@@ -616,7 +629,7 @@ d("tax on memberships (real Postgres)", () => {
       const tooHigh = await charge(gymId, gst.id, { use: "memberships", ids: [gold, dear] }, owner.cookies);
       expect(tooHigh.statusCode).toBe(409);
       expect(messageOf(tooHigh)).toBe("Lifetime: This price is too high to charge tax on. Lower the price, or choose No tax.");
-      expect(await typesNow()).toEqual(["Bronze Monthly: none", "Gold Monthly: GST", "Lifetime: none", "Silver Monthly: GST"]);
+      expect(await typesNow()).toEqual(["Bronze Monthly: none", "Gold Monthly: GST", "Lifetime: none", "Silver Monthly: VAT"]);
     },
     T,
   );
@@ -639,12 +652,12 @@ d("tax on memberships (real Postgres)", () => {
       const onType = await setTypeTax(gymId, owner.cookies, gold, theirs.id);
       expect(onType.statusCode, onType.body).toBe(409);
       expect(errorOf(onType)).toBe("tax_rate_not_found");
-      const newType = await post(typesUrl(gymId), monthly({ name: "Theirs", taxRateId: theirs.id }), owner.cookies);
+      const newType = await post(typesUrl(gymId), monthly({ name: "Theirs", taxRateIds: [theirs.id] }), owner.cookies);
       expect(newType.statusCode).toBe(409);
       const product = await post(`${register(gymId)}/products`, { name: "Water", priceMinor: 200, taxRateIds: [theirs.id], stock: null }, owner.cookies);
       expect(product.statusCode).toBe(409);
       expect(errorOf(product)).toBe("tax_rate_not_found");
-      expect((await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_membership_types WHERE gym_id = ${gymId} AND tax_rate_id IS NOT NULL`)[0]?.n).toBe(0);
+      expect((await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_membership_type_tax_rates WHERE gym_id = ${gymId}`)[0]?.n).toBe(0);
       expect((await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_products WHERE gym_id = ${gymId}`)[0]?.n).toBe(0);
 
       // Next door cannot change or remove this gym's rate, through either gym's address.
@@ -674,7 +687,7 @@ d("tax on memberships (real Postgres)", () => {
       expect(inUse.statusCode).toBe(409);
       expect(errorOf(inUse)).toBe("tax_rate_in_use");
       expect(messageOf(inUse)).toBe(
-        "GST was not removed: it is charged on 1 membership type and 1 member's membership. Change them to another rate or No tax first. A membership keeps the tax it was sold with, so GST can be removed once nobody holds one. You can still change its name or rate.",
+        "GST was not removed: it is charged on 1 membership type and 1 member's membership. Untick it on them first. A membership keeps the tax it was sold with, so GST can be removed once nobody holds one. You can still change its name or rate.",
       );
       expect(page(await get(register(gymId), owner.cookies)).tax.rates[0]).toMatchObject({ name: "GST", products: 0, membershipTypes: 1, memberships: 1 });
       // One nothing charges: removed.

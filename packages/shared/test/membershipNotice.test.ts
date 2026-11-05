@@ -284,7 +284,7 @@ describe("what a gym may type, and what a cancel may send", () => {
         packClasses: null,
         startsOn: "2026-10-01",
         discount: null,
-        tax: null,
+        taxes: [],
         view: heldMembershipView(m, "2026-10-01"),
       },
       firstBill: null,

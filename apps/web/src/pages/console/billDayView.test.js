@@ -8,7 +8,7 @@ import { changeBody, changeChoice } from './membershipChangeView';
 import { billDayChoices, billDayExample, billRow } from './memberBillsView';
 import { receiptLines } from './receiptView';
 
-const GOLD = { id: 't-gold', name: 'Gold Monthly', kind: 'recurring', priceMinor: 5000, currency: 'USD', termCount: 1, termUnit: 'month', packClasses: null, packDays: null, tax: null, joiningFeeMinor: 0, billDay: 1 };
+const GOLD = { id: 't-gold', name: 'Gold Monthly', kind: 'recurring', priceMinor: 5000, currency: 'USD', termCount: 1, termUnit: 'month', packClasses: null, packDays: null, taxes: [], joiningFeeMinor: 0, billDay: 1 };
 const firstMonth = {
   id: 'd-first',
   name: 'First month',
@@ -113,7 +113,7 @@ describe('the bill, the receipt and the setting', () => {
     covers: { from: '2026-10-15', to: '2026-10-31' },
     part: true,
     amountMinor: 2741,
-    tax: null,
+    taxes: [],
     joiningFeeMinor: 0,
     paidMinor: 0,
     dueOn: '2026-10-15',

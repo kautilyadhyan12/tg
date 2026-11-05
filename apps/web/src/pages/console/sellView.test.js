@@ -464,15 +464,15 @@ describe('products and tax', () => {
     const page = {
       tax: { included: false, rates: [rate(), rate({ id: 'r2', name: 'VAT', pcm: 20000 })] },
       membershipTypes: [
-        { id: 't1', name: 'Gold', taxRateId: 'r1' },
-        { id: 't2', name: 'Silver', taxRateId: 'r2' },
-        { id: 't3', name: 'Bronze', taxRateId: null },
+        { id: 't1', name: 'Gold', taxRateIds: ['r1'] },
+        { id: 't2', name: 'Silver', taxRateIds: ['r2'] },
+        { id: 't3', name: 'Bronze', taxRateIds: [] },
       ],
       products: [water()],
     };
     expect(chargeChoices(page, rate(), 'memberships')).toEqual([
       { id: 't1', name: 'Gold', on: true, note: null },
-      { id: 't2', name: 'Silver', on: false, note: 'Now charges VAT 20%' },
+      { id: 't2', name: 'Silver', on: false, note: 'Also charges VAT 20%' },
       { id: 't3', name: 'Bronze', on: false, note: null },
     ]);
     expect(chargeChoices(page, rate(), 'products')).toEqual([{ id: 'p1', name: 'Water', on: true, note: null }]);
@@ -527,7 +527,7 @@ describe('round one of 18b-iii', () => {
     expect(rateChangeNote(r({ memberships: 4 }))).toContain("The next bill of the 4 members' memberships that charge GST changes too.");
   });
   it('a free membership is not offered to charge a rate', () => {
-    const page = { tax: { included: false, rates: [r()] }, membershipTypes: [{ id: 't1', name: 'Gold', taxRateId: null, free: false }, { id: 't2', name: 'Free week', taxRateId: null, free: true }], products: [] };
+    const page = { tax: { included: false, rates: [r()] }, membershipTypes: [{ id: 't1', name: 'Gold', taxRateIds: [], free: false }, { id: 't2', name: 'Free week', taxRateIds: [], free: true }], products: [] };
     expect(chargeChoices(page, r(), 'memberships').map((c) => c.name)).toEqual(['Gold']);
   });
 });
