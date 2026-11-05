@@ -42,13 +42,13 @@ export const gymMealPlanGivePreviewSchema = z.object({
   groupName: z.string().nullable(),
   /** How many people on the list it reaches now. */
   count: z.number().int().nonnegative(),
+  /** The first of them by name; empty, the count kept, for staff who give plans but cannot open Members. */
   people: z.array(personSchema).max(GYM_MEAL_PLAN_BOX_NAMES_MAX),
   /** Of them, how many get another of the gym's meal plans now: this one takes its place. */
   switching: z.number().int().nonnegative(),
   /** The plan this group was given before, which this one replaces there; null for members ticked. */
   replaces: z.string().nullable(),
-  /** Members ticked who are no longer on the list: left out. `people` is empty, the count kept, for staff
-   *  who give plans but cannot open Members. */
+  /** Members ticked who are no longer on the list: left out. */
   gone: z.number().int().nonnegative(),
   /** Already given this plan, ticked again: nothing changes for them. */
   already: z.number().int().nonnegative(),
