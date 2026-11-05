@@ -176,6 +176,21 @@ d("the streak reminder, badges and the Sunday summary (real Postgres)", () => {
     expect(sentTo(safe.token).map((m) => m.body)).toEqual(["This week: 1 workout."]);
   }, TIMEOUT_MS);
 
+  it("two people's new badges at the same minute: each phone names only its own person's", async () => {
+    const neha = await phone("nehabadge", india(9, 0, TUE));
+    const omar = await phone("omarbadge", india(9, 0, TUE));
+    await badge(neha, "ten_workouts", india(9, 30, TUE));
+    await badge(omar, "night_owl", india(9, 30, TUE));
+    // Omar's notifications wait behind another one, so the run reaches Neha with Omar's badge still untold.
+    await sql`UPDATE users SET recent_pushes = ${sql.array([india(9, 45, TUE)])}::timestamptz[] WHERE id = ${omar.userId}`;
+    sent.length = 0;
+    await sweep(india(10, 0, TUE));
+    expect(sentTo(neha.token).map((m) => [m.userId, m.body])).toEqual([[neha.userId, "You earned 10 Workouts."]]);
+    expect(sentTo(omar.token)).toEqual([]);
+    await sweep(india(11, 45, TUE));
+    expect(sentTo(omar.token).map((m) => [m.userId, m.body])).toEqual([[omar.userId, "You earned Night Owl."]]);
+  }, TIMEOUT_MS);
+
   it("after a sign-out, and with somebody else signed in on that phone, nothing goes to it", async () => {
     const meera = await phone("meera", india(9, 0, TUE));
     await streak(meera, 6, 0);
