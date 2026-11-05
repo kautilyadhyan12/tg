@@ -4,11 +4,14 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
+import { Redis } from "ioredis";
 import { changeEmailResponseSchema, sendCodeResponseSchema } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createIoRedis, createMemoryRedis, type RedisLike } from "../src/redis.js";
 import { emailChangedEmail, maskedAddress } from "../src/email/templates.js";
+import { liveChannel } from "../src/modules/live/news.js";
+import { changeEmailSenderFor, type ChangeEmailSender } from "../src/modules/users/changeEmailSender.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -43,6 +46,16 @@ d("change email (real Postgres)", { timeout: T }, () => {
   const signInCodes = new Map<string, string>();
   const changeCodes = new Map<string, string>();
   const told: { oldEmail: string; newEmail: string }[] = [];
+  /** A second app's sender, apart from the first's. */
+  const quietCodes = new Map<string, string>();
+  const quiet: ChangeEmailSender = {
+    sendCode: (to, code) => {
+      quietCodes.set(to.toLowerCase(), code);
+      return Promise.resolve();
+    },
+    sendInUse: () => Promise.resolve(),
+    sendChanged: () => Promise.resolve(),
+  };
   const receive = (to: string, what: string) => {
     inbox.set(to.toLowerCase(), [...(inbox.get(to.toLowerCase()) ?? []), what]);
   };
@@ -290,6 +303,8 @@ d("change email (real Postgres)", { timeout: T }, () => {
     const ivy = await person("ivy");
     const same = await askCode(ivy, ivy.email.toUpperCase());
     expect([same.statusCode, errorOf(same)]).toEqual([400, "same_email"]);
+    const sameAtTheMove = await confirm(ivy, ivy.email, "123456");
+    expect([sameAtTheMove.statusCode, errorOf(sameAtTheMove)]).toEqual([400, "same_email"]);
     expect([(await askCode(ivy, "not-an-address")).statusCode, (await confirm(ivy, ivy.email, "12345")).statusCode]).toEqual([400, 400]);
 
     const jon = await person("jon");
@@ -335,5 +350,103 @@ d("change email (real Postgres)", { timeout: T }, () => {
     for (let i = 0; i < 10; i++) expect((await askCode(max, address(`max-${String(i)}`))).statusCode).toBe(200);
     const eleventh = await askCode(max, address("max-10"));
     expect(eleventh.statusCode).toBe(429);
+  });
+
+  it("another account asking for the same address never cancels, uses up or burns a person's code: hers still moves her", async () => {
+    const nia = await person("nia");
+    const mal = await person("mal");
+    const target = address("nia-new");
+    /** One ask, and the code it sent, read before anybody else asks for the address. */
+    const ask = async (who: Person): Promise<{ status: number; code: string | undefined }> => {
+      await pastTheGap(target);
+      changeCodes.delete(target);
+      const res = await askCode(who, target);
+      return { status: res.statusCode, code: changeCodes.get(target) };
+    };
+    const first = await ask(nia);
+    expect(first.status).toBe(200);
+    // Mal asks for her address three times, the address's whole day, and a fourth is refused to Mal alone.
+    for (let i = 0; i < 3; i++) expect((await ask(mal)).status).toBe(200);
+    expect((await ask(mal)).status).toBe(429);
+    // Five wrong tries from Mal burn Mal's code, never hers.
+    for (let i = 0; i < 5; i++) expect(errorOf(await confirm(mal, target, "000000"))).toBe("invalid_code");
+    // Nia may still ask again, and her newest code moves her.
+    const again = await ask(nia);
+    expect(again.status).toBe(200);
+    if (again.code === undefined) throw new Error("no change code was sent");
+    const moved = await confirm(nia, target, again.code);
+    expect(moved.statusCode, moved.body).toBe(200);
+    expect([await emailOf(nia.userId), await emailOf(mal.userId)]).toEqual([target, mal.email]);
+  });
+
+  it("two moves at once to two addresses: one moves the account, the other is told its address changed, and the old address is told once", async () => {
+    const ola = await person("ola");
+    const [one, two] = [address("ola-one"), address("ola-two")];
+    const codes: string[] = [];
+    for (const to of [one, two]) {
+      changeCodes.delete(to);
+      expect((await askCode(ola, to)).statusCode).toBe(200);
+      const code = changeCodes.get(to);
+      if (code === undefined) throw new Error("no change code was sent");
+      codes.push(code);
+    }
+    const both = await Promise.all([confirm(ola, one, codes[0] ?? ""), confirm(ola, two, codes[1] ?? "")]);
+    expect(both.map((r) => r.statusCode).sort()).toEqual([200, 409]);
+    expect(both.map((r) => (r.statusCode === 409 ? errorOf(r) : "moved")).sort()).toEqual(["email_changed", "moved"]);
+    const won = both[0]?.statusCode === 200 ? one : two;
+    expect(await emailOf(ola.userId)).toBe(won);
+    expect(told.filter((t) => t.oldEmail === ola.email)).toEqual([{ oldEmail: ola.email, newEmail: won }]);
+  });
+
+  it("thirty tries at the code an hour; the thirty-first waits", async () => {
+    const pat = await person("pat");
+    const to = address("pat-new");
+    expect((await askCode(pat, to)).statusCode).toBe(200);
+    for (let i = 0; i < 30; i++) expect((await confirm(pat, to, "000000")).statusCode).toBe(400);
+    expect((await confirm(pat, to, "000000")).statusCode).toBe(429);
+  });
+
+  it("the app's own sender gives the old address the address members write to for help", async () => {
+    const sent: { to: string; text: string }[] = [];
+    const transport = { send: (message: { to: string; text: string }) => { sent.push(message); return Promise.resolve(); } };
+    const sender = changeEmailSenderFor(loadConfig({ ...baseEnv, SUPPORT_EMAIL: "help@kwazo.example" }), transport, api().log);
+    await sender.sendChanged("old@example.com", "new.person@example.com");
+    expect(sent.map((m) => m.to)).toEqual(["old@example.com"]);
+    expect(sent[0]?.text).toContain("write to us at help@kwazo.example");
+    expect(sent[0]?.text).toContain("n***@example.com");
+  });
+
+  // The person's gyms read again: their page shows the address, and the name where it changed with it.
+  it.skipIf(redisUrl === undefined || redisUrl === "")("the person's gyms are told to read their people again", async () => {
+    const owner = await person("gymowner");
+    const made = await inject("POST", "/v1/orgs", owner.cookies, { trainsHere: false, name: "Chem Gym", city: "Leeds", country: "GB", timezone: "Europe/London" });
+    expect(made.statusCode, made.body).toBe(201);
+    const gymId = (JSON.parse(made.body) as { org: { id: string } }).org.id;
+    const quinn = await person("quinn");
+    await sql`INSERT INTO gym_members (gym_id, user_id) VALUES (${gymId}, ${quinn.userId})`;
+    const withNews = await buildApp(loadConfig({ ...baseEnv, REDIS_URL: redisUrl ?? "" }), { redis: redis ?? createMemoryRedis(), changeEmailSender: quiet });
+    const ear = new Redis(redisUrl ?? "");
+    const heard: unknown[] = [];
+    try {
+      await ear.subscribe(liveChannel(url ?? ""));
+      ear.on("message", (_channel: string, raw: string) => heard.push(JSON.parse(raw)));
+      await withNews.ready();
+      const to = address("quinn-new");
+      const asked = await withNews.inject({ method: "POST", url: "/v1/users/me/email-code", remoteAddress: nextIp(), cookies: quinn.cookies, headers: { "content-type": "application/json" }, payload: JSON.stringify({ email: to }) });
+      expect(asked.statusCode, asked.body).toBe(200);
+      const code = quietCodes.get(to);
+      if (code === undefined) throw new Error("no change code was sent");
+      const moved = await withNews.inject({ method: "POST", url: "/v1/users/me/email", remoteAddress: nextIp(), cookies: quinn.cookies, headers: { "content-type": "application/json" }, payload: JSON.stringify({ email: to, code }) });
+      expect(moved.statusCode, moved.body).toBe(200);
+      await expect.poll(() => heard.filter((m) => (m as { gymId: string }).gymId === gymId)).toEqual([{ gymId, news: { what: "people" } }]);
+    } finally {
+      await ear.quit();
+      await withNews.close();
+      await sql`DELETE FROM gym_members WHERE gym_id = ${gymId}`;
+      await sql`DELETE FROM gym_staff WHERE gym_id = ${gymId}`;
+      await sql`DELETE FROM audit_log WHERE gym_id = ${gymId}`;
+      await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${gymId}`;
+      await sql`DELETE FROM gyms WHERE id = ${gymId}`;
+    }
   });
 });

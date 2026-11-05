@@ -56,6 +56,12 @@ export function createDevChangeEmailSender(log: FastifyBaseLogger, config: AppCo
   };
 }
 
+/** The app's own: Resend's, with the address members write to for help, when there is a transport;
+ *  the dev one otherwise. */
+export function changeEmailSenderFor(config: AppConfig, transport: EmailTransport | null, log: FastifyBaseLogger): ChangeEmailSender {
+  return transport === null ? createDevChangeEmailSender(log, config) : createResendChangeEmailSender(transport, log, config.SUPPORT_EMAIL ?? null);
+}
+
 const CODE_MINUTES = Math.round(SIGN_IN_CODE_RULES.ttlSeconds / 60);
 
 export function createResendChangeEmailSender(

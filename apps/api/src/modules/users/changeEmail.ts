@@ -51,7 +51,7 @@ export async function changeEmail(
   deps: ChangeEmailDeps,
   userId: string,
   input: { email: string; code: string },
-): Promise<{ email: string; displayName: string; nameChanged: boolean }> {
+): Promise<{ email: string; displayName: string }> {
   const row = await profileOf(deps, userId);
   if (row.email?.toLowerCase() === input.email) throw sameAddress();
   await redeemEmailCode(
@@ -63,7 +63,7 @@ export async function changeEmail(
     throw new UsersError(409, "email_in_use", "That address already has an account. Sign in with it instead, or choose another address.");
   }
   if (moved.kind === "stale") {
-    throw new UsersError(409, "email_changed", "Your email was changed somewhere else meanwhile. Close this and check it.");
+    throw new UsersError(409, "email_changed", "Your email address was changed on another device. Close this and check it.");
   }
   if (row.email !== null) {
     try {
@@ -76,5 +76,5 @@ export async function changeEmail(
       );
     }
   }
-  return { email: moved.email, displayName: moved.displayName, nameChanged: moved.displayName !== moved.nameWas };
+  return { email: moved.email, displayName: moved.displayName };
 }

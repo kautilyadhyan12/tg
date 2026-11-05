@@ -100,7 +100,7 @@ export async function emailTaken(sql: Sql, email: string): Promise<boolean> {
 }
 
 export type MovedEmail =
-  | { kind: "moved"; email: string; displayName: string; nameWas: string }
+  | { kind: "moved"; email: string; displayName: string }
   | { kind: "taken" }
   | { kind: "stale" };
 
@@ -123,7 +123,7 @@ export async function moveEmail(
       const name = input.nameFrom !== null && was.display_name === input.nameFrom ? input.nameTo : was.display_name;
       await tx`UPDATE users SET email = ${input.to}, display_name = ${name} WHERE id = ${input.userId}`;
       await tx`DELETE FROM auth_identities WHERE user_id = ${input.userId} AND provider = 'google'`;
-      return { kind: "moved", email: input.to, displayName: name, nameWas: was.display_name };
+      return { kind: "moved", email: input.to, displayName: name };
     });
   } catch (err) {
     if (isUniqueViolation(err)) return { kind: "taken" };
@@ -701,6 +701,9 @@ const signInCodeColumns = (r: SignInCodeDbRow): SignInCodeRow => ({
  *       would let an address ask again the instant it signed in;
  *    4. retire this address's live code of the same purpose (a resend
  *       REPLACES, Kd's ruling) and insert the new one.
+ *  A change-email code is the account's as well (`userId`, null for every other purpose):
+ *  each step above reads and writes that account's codes only, so another account asking
+ *  for the same address never ends, counts against or is found instead of this one's.
  *  Returns the new row's id so a failed send can take it back. */
 export async function issueCode(
   sql: Sql,
@@ -711,31 +714,33 @@ export async function issueCode(
     expiresAt: Date;
     pruneBefore: Date;
     since: Date;
+    userId: string | null;
     check: (recent: SignInCodeRow[]) => void;
   },
 ): Promise<IssuedCode> {
   return await sql.begin(async (tx) => {
     // hashtext is int4; the lock takes a bigint, and the cast is implicit.
-    await tx`SELECT pg_advisory_xact_lock(hashtext(${`${input.email}|${input.purpose}`}))`;
+    await tx`SELECT pg_advisory_xact_lock(hashtext(${`${input.email}|${input.purpose}|${input.userId ?? ""}`}))`;
     await tx`DELETE FROM sign_in_codes WHERE created_at < ${input.pruneBefore}`;
     const recent = await tx<SignInCodeDbRow[]>`
       SELECT id, code_hash, attempts, expires_at, used_at, created_at
       FROM sign_in_codes
-      WHERE email = ${input.email} AND purpose = ${input.purpose} AND created_at >= ${input.since}
+      WHERE email = ${input.email} AND purpose = ${input.purpose} AND user_id IS NOT DISTINCT FROM ${input.userId}::uuid
+        AND created_at >= ${input.since}
       ORDER BY created_at DESC`;
     input.check(recent.map(signInCodeColumns));
     const ended = await tx<{ id: string; expires_at: Date }[]>`
       WITH live AS (
         SELECT id, expires_at FROM sign_in_codes
-        WHERE email = ${input.email} AND purpose = ${input.purpose}
+        WHERE email = ${input.email} AND purpose = ${input.purpose} AND user_id IS NOT DISTINCT FROM ${input.userId}::uuid
           AND used_at IS NULL AND expires_at > now()
         FOR UPDATE)
       UPDATE sign_in_codes AS code SET expires_at = now()
       FROM live WHERE code.id = live.id
       RETURNING live.id, live.expires_at`;
     const rows = await tx<{ id: string }[]>`
-      INSERT INTO sign_in_codes (email, purpose, code_hash, expires_at)
-      VALUES (${input.email}, ${input.purpose}, ${input.codeHash}, ${input.expiresAt})
+      INSERT INTO sign_in_codes (email, purpose, code_hash, expires_at, user_id)
+      VALUES (${input.email}, ${input.purpose}, ${input.codeHash}, ${input.expiresAt}, ${input.userId})
       RETURNING id`;
     const id = rows[0]?.id;
     if (id === undefined) throw new Error("sign-in code insert returned no row");
@@ -763,16 +768,18 @@ export async function withdrawCode(sql: Sql, issued: IssuedCode): Promise<void> 
   });
 }
 
-/** The one code this address may still prove: unused and unexpired. */
+/** The one code this address (and, for change email, this account) may still prove: unused and
+ *  unexpired. */
 export async function findLiveCode(
   sql: Sql,
   email: string,
   purpose: CodePurpose,
+  userId: string | null,
 ): Promise<SignInCodeRow | null> {
   const rows = await sql<SignInCodeDbRow[]>`
     SELECT id, code_hash, attempts, expires_at, used_at, created_at
     FROM sign_in_codes
-    WHERE email = ${email} AND purpose = ${purpose}
+    WHERE email = ${email} AND purpose = ${purpose} AND user_id IS NOT DISTINCT FROM ${userId}::uuid
       AND used_at IS NULL AND expires_at > now()
     ORDER BY created_at DESC
     LIMIT 1`;

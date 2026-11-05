@@ -25,7 +25,7 @@ import {
   createResendUsersEmailSender,
   type UsersEmailSender,
 } from "./modules/users/email.js";
-import { createDevChangeEmailSender, createResendChangeEmailSender, type ChangeEmailSender } from "./modules/users/changeEmailSender.js";
+import { changeEmailSenderFor, type ChangeEmailSender } from "./modules/users/changeEmailSender.js";
 import { OnboardingIncompleteError, UsersError } from "./modules/users/service.js";
 import { createDevCoOwnerEmailSender, createResendCoOwnerEmailSender, type CoOwnerEmailSender } from "./modules/orgs/coOwners/email.js";
 import { createDevAgreementEmailSender, createResendAgreementEmailSender, type AgreementEmailSender } from "./modules/orgs/agreement/email.js";
@@ -365,11 +365,7 @@ export async function buildApp(
     (transport !== null
       ? createResendUsersEmailSender(transport, app.log, config.WEB_ORIGIN)
       : createDevUsersEmailSender(app.log, config));
-  const changeEmailSender =
-    overrides.changeEmailSender ??
-    (transport !== null
-      ? createResendChangeEmailSender(transport, app.log, config.SUPPORT_EMAIL ?? null)
-      : createDevChangeEmailSender(app.log, config));
+  const changeEmailSender = overrides.changeEmailSender ?? changeEmailSenderFor(config, transport, app.log);
 
   // One robot check for the whole app: the sign-in code past an address's first 20
   // an hour, and a gym page's enquiry form.

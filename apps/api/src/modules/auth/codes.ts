@@ -16,8 +16,10 @@
 // Settings asks for before deleting an account, and the code sent to a NEW
 // address before the account moves to it. They are counted separately
 // (purpose is in every key), so asking to delete never spends a sign-in.
-// A code may be bound to an account (`boundTo`): the account's id is in its
-// hash, so only the account that asked for it can prove it.
+// A code may be bound to an account (`boundTo`, change email's): it is kept,
+// counted, ended and found as that account's, and the account's id is in its
+// hash, so only the account that asked for it can prove it, and another account
+// asking for the same address never touches it.
 import { timingSafeEqual } from "node:crypto";
 import type { FastifyBaseLogger } from "fastify";
 import type { Sql } from "postgres";
@@ -128,6 +130,7 @@ export async function requestCode(
     expiresAt: new Date(now + SIGN_IN_CODE_RULES.ttlSeconds * 1000),
     pruneBefore: new Date(now - PRUNE_AFTER_MS),
     since: new Date(now - DAY_MS),
+    userId: input.boundTo ?? null,
     check: (recent) => {
       refuseIfOverRules(recent, now, input.robot);
     },
@@ -166,7 +169,7 @@ export async function redeemCode(
   deps: CodeDeps,
   input: { email: string; purpose: CodePurpose; code: string; boundTo?: string },
 ): Promise<void> {
-  const live = await repo.findLiveCode(deps.sql, input.email, input.purpose);
+  const live = await repo.findLiveCode(deps.sql, input.email, input.purpose, input.boundTo ?? null);
   if (live === null) throw invalidCode();
   // The try is taken BEFORE the guess is compared, in one statement, so guesses sent
   // at the same moment get five tries between them, never one each. No try left:
