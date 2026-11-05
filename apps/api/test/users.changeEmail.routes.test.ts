@@ -393,7 +393,7 @@ d("change email (real Postgres)", { timeout: T }, () => {
     const both = await Promise.all([confirm(ola, one, codes[0] ?? ""), confirm(ola, two, codes[1] ?? "")]);
     expect(both.map((r) => r.statusCode).sort()).toEqual([200, 409]);
     expect(both.map((r) => (r.statusCode === 409 ? errorOf(r) : "moved")).sort()).toEqual(["email_changed", "moved"]);
-    const won = both[0]?.statusCode === 200 ? one : two;
+    const won = both[0].statusCode === 200 ? one : two;
     expect(await emailOf(ola.userId)).toBe(won);
     expect(told.filter((t) => t.oldEmail === ola.email)).toEqual([{ oldEmail: ola.email, newEmail: won }]);
   });
