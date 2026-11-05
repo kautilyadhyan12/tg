@@ -62,7 +62,7 @@ export function BadgesTab({ read, again }: { read: Read<BadgeList>; again: () =>
 /** The badge's own painting across its box (Kd, 2026-11-05), or the Greek one where it has none. */
 function paintingFor(code: string): SheetPicture {
   const band = bandFor(code);
-  return band === null ? { name: "greekyoga", focus: 0.2 } : { source: band, focus: 0.5 };
+  return band === null ? { name: "greekyoga", focus: 0.2 } : { source: band, focus: 0.25 };
 }
 
 function rowsOf<T>(items: readonly T[]): T[][] {

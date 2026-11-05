@@ -159,7 +159,7 @@ export function endWords(weekEnd: string): { day: string; on: string } {
 /** The challenge's own painting (Kd, 2026-11-05), or the Viking one where it has none. */
 function paintingOf(c: WeeklyChallenge | null): SheetPicture {
   const band = c === null ? null : bandFor(`c_${c.measure}`);
-  return band === null ? { name: "vikingbell", focus: 0.5 } : { source: band, focus: 0.5 };
+  return band === null ? { name: "vikingbell", focus: 0.5 } : { source: band, focus: 0.25 };
 }
 
 /** A challenge's box: its coin and level, what counts, how far along, its XP and the week's end. */

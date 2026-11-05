@@ -42,7 +42,7 @@ export function Hero({ xp, badges, tab, onTab }: { xp: XpView | null; badges: st
       </View>
       <View style={[StyleSheet.absoluteFill, styles.fade]} />
       <View style={styles.words}>
-        <Txt kind="hero" style={styles.title}>
+        <Txt kind="hero" numberOfLines={1} fit style={styles.title}>
           ACHIEVEMENTS
         </Txt>
         <View style={styles.level}>
@@ -81,7 +81,7 @@ export function Hero({ xp, badges, tab, onTab }: { xp: XpView | null; badges: st
   );
 }
 
-const WREATH = 78;
+const WREATH = 84;
 
 /** The level as a gold laurel wreath round its number, in carved capitals (Kd, 2026-11-05). */
 function LevelWreath({ level }: { level: number | null }) {
@@ -118,7 +118,7 @@ function LevelWreath({ level }: { level: number | null }) {
         ))}
       </Svg>
       <Txt style={styles.levelNumber}>{level === null ? NOT_KNOWN : String(level)}</Txt>
-      <Txt kind="tiny" style={styles.levelWord}>
+      <Txt kind="tiny" numberOfLines={1} fit style={styles.levelWord}>
         LEVEL
       </Txt>
     </View>
@@ -249,7 +249,7 @@ const styles = StyleSheet.create({
   wreath: { width: WREATH, height: WREATH, alignItems: "center", justifyContent: "center" },
   title: { fontFamily: fonts.carved, fontSize: 32, lineHeight: 40, letterSpacing: 1, color: medal.gold, textShadowColor: colours.wordShadow, textShadowRadius: 8, textShadowOffset: { width: 0, height: 2 } },
   key: { height: 16, marginTop: 4, maxWidth: 260 },
-  levelWord: { fontFamily: fonts.carved, letterSpacing: 1.6, color: medal.levelWord, marginTop: -4 },
+  levelWord: { width: 40, textAlign: "center", fontFamily: fonts.carved, letterSpacing: 0.6, color: medal.levelWord, marginTop: -4 },
   levelNumber: { fontFamily: fonts.carved, fontSize: 28, lineHeight: 32, color: medal.goldLight },
   tabs: { flexDirection: "row", marginTop: 6, padding: 4, borderRadius: sizes.round, backgroundColor: colours.fill, borderWidth: 1, borderColor: colours.line },
   tab: { flex: 1, minHeight: sizes.press - 4, alignItems: "center", justifyContent: "center", borderRadius: sizes.round, paddingHorizontal: 6 },
