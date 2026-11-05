@@ -702,8 +702,10 @@ const signInCodeColumns = (r: SignInCodeDbRow): SignInCodeRow => ({
  *    4. retire this address's live code of the same purpose (a resend
  *       REPLACES, Kd's ruling) and insert the new one.
  *  A change-email code is the account's as well (`userId`, null for every other purpose):
- *  each step above reads and writes that account's codes only, so another account asking
- *  for the same address never ends, counts against or is found instead of this one's.
+ *  steps 3 and 4 read and write that account's codes only, so another account asking for
+ *  the same address never ends, counts against or is found instead of this one's. The lock
+ *  is still the address's, and `check` is also handed when every account's unproved codes
+ *  for the address were made (newest first), for the address's own ceiling.
  *  Returns the new row's id so a failed send can take it back. */
 export async function issueCode(
   sql: Sql,
@@ -715,12 +717,12 @@ export async function issueCode(
     pruneBefore: Date;
     since: Date;
     userId: string | null;
-    check: (recent: SignInCodeRow[]) => void;
+    check: (recent: SignInCodeRow[], everyone: Date[]) => void;
   },
 ): Promise<IssuedCode> {
   return await sql.begin(async (tx) => {
     // hashtext is int4; the lock takes a bigint, and the cast is implicit.
-    await tx`SELECT pg_advisory_xact_lock(hashtext(${`${input.email}|${input.purpose}|${input.userId ?? ""}`}))`;
+    await tx`SELECT pg_advisory_xact_lock(hashtext(${`${input.email}|${input.purpose}`}))`;
     await tx`DELETE FROM sign_in_codes WHERE created_at < ${input.pruneBefore}`;
     const recent = await tx<SignInCodeDbRow[]>`
       SELECT id, code_hash, attempts, expires_at, used_at, created_at
@@ -728,7 +730,17 @@ export async function issueCode(
       WHERE email = ${input.email} AND purpose = ${input.purpose} AND user_id IS NOT DISTINCT FROM ${input.userId}::uuid
         AND created_at >= ${input.since}
       ORDER BY created_at DESC`;
-    input.check(recent.map(signInCodeColumns));
+    const everyone =
+      input.userId === null
+        ? []
+        : await tx<{ created_at: Date }[]>`
+            SELECT created_at FROM sign_in_codes
+            WHERE email = ${input.email} AND purpose = ${input.purpose} AND used_at IS NULL AND created_at >= ${input.since}
+            ORDER BY created_at DESC`;
+    input.check(
+      recent.map(signInCodeColumns),
+      everyone.map((row) => row.created_at),
+    );
     const ended = await tx<{ id: string; expires_at: Date }[]>`
       WITH live AS (
         SELECT id, expires_at FROM sign_in_codes

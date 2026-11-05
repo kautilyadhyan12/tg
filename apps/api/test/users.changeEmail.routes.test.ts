@@ -365,7 +365,7 @@ d("change email (real Postgres)", { timeout: T }, () => {
     };
     const first = await ask(nia);
     expect(first.status).toBe(200);
-    // Mal asks for her address three times, the address's whole day, and a fourth is refused to Mal alone.
+    // Mal asks for her address three times, Mal's whole day for it, and a fourth is refused to Mal alone.
     for (let i = 0; i < 3; i++) expect((await ask(mal)).status).toBe(200);
     expect((await ask(mal)).status).toBe(429);
     // Five wrong tries from Mal burn Mal's code, never hers.
@@ -377,6 +377,32 @@ d("change email (real Postgres)", { timeout: T }, () => {
     const moved = await confirm(nia, target, again.code);
     expect(moved.statusCode, moved.body).toBe(200);
     expect([await emailOf(nia.userId), await emailOf(mal.userId)]).toEqual([target, mal.email]);
+  });
+
+  it("however many accounts ask, one address is sent ten change-email emails a day, taken or free, and the refusal names the address", async () => {
+    const crowd = await Promise.all(["ra", "rb", "rc", "rd"].map((who) => person(who)));
+    const free = address("crowd-free");
+    const taken = (await person("crowd-taken")).email;
+    for (const target of [free, taken]) {
+      const before = inbox.get(target)?.length ?? 0;
+      const answers: { status: number; error: string | null }[] = [];
+      for (let round = 0; round < 3; round++) {
+        for (const who of crowd) {
+          await pastTheGap(target);
+          const res = await askCode(who, target);
+          answers.push({ status: res.statusCode, error: res.statusCode === 200 ? null : errorOf(res) });
+        }
+      }
+      expect(answers.filter((a) => a.status === 200)).toHaveLength(10);
+      expect(answers.slice(10)).toEqual([
+        { status: 429, error: "address_limit" },
+        { status: 429, error: "address_limit" },
+      ]);
+      expect((inbox.get(target)?.length ?? 0) - before).toBe(10);
+    }
+    await pastTheGap(free);
+    const refused = await askCode(await person("re"), free);
+    expect(JSON.parse(refused.body)).toMatchObject({ message: "This address has had too many codes today. Try again tomorrow." });
   });
 
   it("two moves at once to two addresses: one moves the account, the other is told its address changed, and the old address is told once", async () => {

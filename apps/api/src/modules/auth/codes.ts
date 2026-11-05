@@ -78,6 +78,23 @@ function tooSoon(retryAfterMs: number): AuthError {
   );
 }
 
+/** The purpose as the hash reads it: an account's id joins it when the code is bound to one. */
+const hashPurpose = (purpose: CodePurpose, boundTo: string | undefined): string =>
+  boundTo === undefined ? purpose : `${purpose}:${boundTo}`;
+
+/** Change-email codes an address may be sent in a day, whichever accounts ask: each account's
+ *  own three are counted apart, so without this a crowd of accounts could fill one inbox. */
+export const CHANGE_EMAIL_CODES_PER_ADDRESS_PER_DAY = 10;
+
+/** The address's own ceiling, over every account's unproved codes for it (newest first). It names
+ *  the address, never the person asking, and reads the same whether the address has an account. */
+function refuseIfAddressFull(everyone: Date[], now: number): void {
+  const cap = CHANGE_EMAIL_CODES_PER_ADDRESS_PER_DAY;
+  if (everyone.length < cap) return;
+  const retryAt = (everyone[cap - 1]?.getTime() ?? now) + DAY_MS;
+  throw new AuthError(429, "address_limit", "This address has had too many codes today. Try again tomorrow.", roundUpSeconds(retryAt - now));
+}
+
 /** The two send-side rules, decided over this address's recent codes (newest
  *  first, used ones included). Runs INSIDE the issue transaction, under the
  *  address's lock, so two requests arriving together cannot both read "one so
@@ -86,10 +103,6 @@ function tooSoon(retryAfterMs: number): AuthError {
  *     person in is a sign-in, not a send to cap (Kd 2026-09-08).
  *   · The sixty-second gap is measured from the newest code of ANY state — a
  *     sign-in does not open the door to an immediate resend. */
-/** The purpose as the hash reads it: an account's id joins it when the code is bound to one. */
-const hashPurpose = (purpose: CodePurpose, boundTo: string | undefined): string =>
-  boundTo === undefined ? purpose : `${purpose}:${boundTo}`;
-
 function refuseIfOverRules(recent: SignInCodeRow[], now: number, robot: RobotAnswer | undefined): void {
   const unproved = recent.filter((r) => r.usedAt === null);
   // A door with no robot check (the delete-account code) stops at the free three.
@@ -131,8 +144,9 @@ export async function requestCode(
     pruneBefore: new Date(now - PRUNE_AFTER_MS),
     since: new Date(now - DAY_MS),
     userId: input.boundTo ?? null,
-    check: (recent) => {
+    check: (recent, everyone) => {
       refuseIfOverRules(recent, now, input.robot);
+      if (input.boundTo !== undefined) refuseIfAddressFull(everyone, now);
     },
   });
 
