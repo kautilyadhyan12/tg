@@ -440,8 +440,18 @@ d("DPDP Day-14 purge (real Postgres)", () => {
       const before = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM ${sql(t)} WHERE email = ${email}`;
       expect({ t, n: before[0]?.n }).toEqual({ t, n: 1 });
     }
+    // A change-email code (0206) under the new address the person asked for, which is not theirs yet,
+    // and the bystander's own one: only the purged person's goes.
+    const asked = uniqEmail("dpdp-addr-asked");
+    await sql`INSERT INTO sign_in_codes (email, purpose, code_hash, expires_at, user_id)
+              VALUES (${asked}, 'change_email', ${"c-" + u.userId}, now() + interval '10 minutes', ${u.userId}),
+                     (${asked}, 'change_email', ${"c-" + bystander.userId}, now() + interval '10 minutes', ${bystander.userId})`;
 
     await run();
+
+    const changeCodes = await sql<{ user_id: string }[]>`SELECT user_id FROM sign_in_codes WHERE email = ${asked}`;
+    expect(changeCodes.map((r) => r.user_id)).toEqual([bystander.userId]);
+    await sql`DELETE FROM sign_in_codes WHERE email = ${asked}`;
 
     for (const t of ADDRESS_KEYED_PURGE_TABLES) {
       const after = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM ${sql(t)} WHERE email = ${email}`;
@@ -951,7 +961,7 @@ d("DPDP Day-14 purge (real Postgres)", () => {
     expect(linked.length).toBeGreaterThan(20);
     expect(linked.map((r) => r.tbl)).toContain("workouts");
 
-    const accounted = new Set<string>([...PII_TABLES, ...USER_LINKED_NOT_PURGED_TABLES]);
+    const accounted = new Set<string>([...PII_TABLES, ...USER_LINKED_NOT_PURGED_TABLES, ...ADDRESS_KEYED_PURGE_TABLES]);
     const unaccounted = [...new Set(linked.map((r) => r.tbl))]
       .filter((t) => !accounted.has(t))
       .sort();

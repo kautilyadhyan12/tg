@@ -57,7 +57,7 @@ export interface PriceListRow {
   archivedTotal: number;
   classChoices: { id: string; name: string }[];
   /** The gym's tax rates, for a type's "Tax" (18b-iii), and whether its prices hold the tax. */
-  taxRates: { id: string; name: string; bp: number }[];
+  taxRates: { id: string; name: string; pcm: number }[];
   taxIncluded: boolean;
   /** The day of the month the gym bills everyone on (18y), for Add member's total; null for none. */
   billDay: number | null;
@@ -186,7 +186,7 @@ export async function readPriceList(sql: Sql, gymId: string): Promise<PriceListR
     archived: archived.map(shape),
     archivedTotal: totals[0]?.n ?? 0,
     classChoices: classChoices.map((c) => ({ id: c.id, name: c.name })),
-    taxRates: rates.map((r) => ({ id: r.id, name: r.name, bp: r.bp })),
+    taxRates: rates.map((r) => ({ id: r.id, name: r.name, pcm: r.pcm })),
     taxIncluded,
     billDay: gym.bills_day,
     agreements: agreements.flatMap((a) => (a.name === null ? [] : [{ id: a.id, name: a.name, inUse: a.in_use === true }])),

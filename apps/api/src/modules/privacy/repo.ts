@@ -206,6 +206,9 @@ export async function deleteAddressKeyedRows(tx: TransactionSql, userId: string)
   await tx`
     DELETE FROM sign_in_codes
     WHERE email = (SELECT email FROM users WHERE id = ${userId})`;
+  // A change-email code (0206) is kept under the NEW address the person asked for, with their id:
+  // the address above does not find it, the id does.
+  await tx`DELETE FROM sign_in_codes WHERE user_id = ${userId}`;
   // A second-trial code (2e-i) keeps the SHA-256 of the address's trial key, which a guess
   // of the address can be checked against. An unused one goes; a used one stays, as the
   // record of the trial it started, with its own id's hash in place of the address's.

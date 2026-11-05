@@ -386,7 +386,7 @@ export const gymMemberBills = pgTable(
     /** The tax inside `amount_minor`, as the bill was opened (0112): how much, the rate's
      *  percentage and name then, and whether the price held it. 0 and nulls for none. */
     taxMinor: integer("tax_minor").notNull().default(0),
-    taxBp: integer("tax_bp").notNull().default(0),
+    taxPcm: integer("tax_pcm").notNull().default(0),
     taxName: text("tax_name"),
     taxIncluded: boolean("tax_included"),
     /** A fee for a late cancel or a no-show (0136; 18h-i): which, the class's name, and the
@@ -447,7 +447,7 @@ export const gymMemberBills = pgTable(
     index("gym_member_bills_pt_appointment_idx").on(t.ptAppointmentId).where(sql`${t.ptAppointmentId} IS NOT NULL`),
     check(
       "gym_member_bills_tax_check",
-      sql`${t.taxBp} BETWEEN 0 AND 3000 AND (${t.taxName} IS NULL) = (${t.taxBp} = 0) AND (${t.taxName} IS NULL) = (${t.taxIncluded} IS NULL) AND ${t.taxMinor} >= 0 AND ${t.taxMinor} < ${t.amountMinor} AND (${t.taxBp} > 0 OR ${t.taxMinor} = 0) AND (${t.taxName} IS NULL OR char_length(${t.taxName}) BETWEEN 1 AND 30)`,
+      sql`${t.taxPcm} BETWEEN 0 AND 30000 AND (${t.taxName} IS NULL) = (${t.taxPcm} = 0) AND (${t.taxName} IS NULL) = (${t.taxIncluded} IS NULL) AND ${t.taxMinor} >= 0 AND ${t.taxMinor} < ${t.amountMinor} AND (${t.taxPcm} > 0 OR ${t.taxMinor} = 0) AND (${t.taxName} IS NULL OR char_length(${t.taxName}) BETWEEN 1 AND 30)`,
     ),
     unique("gym_member_bills_period_uq").on(t.heldMembershipId, t.periodIndex),
     check(

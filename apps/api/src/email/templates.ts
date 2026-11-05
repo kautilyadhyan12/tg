@@ -38,6 +38,48 @@ export function deleteAccountCodeEmail(to: string, code: string, minutes: number
   );
 }
 
+/** Change email (19c): the code goes to the NEW address. */
+export function changeEmailCodeEmail(to: string, code: string, minutes: number): EmailMessage {
+  return codeMessage(
+    to,
+    `${code} is your ${APP_NAME} code`,
+    `Someone asked to use this address for their ${APP_NAME} account. Type this code to confirm it's yours:`,
+    code,
+    minutes,
+  );
+}
+
+/** Change email asked for an address that already has an account: it gets this instead of a code,
+ *  and the screen says the same either way, so nobody learns which addresses have one. */
+export function emailInUseEmail(to: string): EmailMessage {
+  const lines = [
+    `Someone asked to use this address for their ${APP_NAME} account, but it already has an account, so nothing was changed.`,
+    "If it was you, sign in with this address instead. If it wasn't, you can ignore this email.",
+  ];
+  const text = `${lines.join("\n\n")}\n\n— ${APP_NAME}`;
+  const html = `${lines.map((line) => `<p>${escapeHtml(line)}</p>`).join("")}<p>— ${APP_NAME}</p>`;
+  return { to, subject: `This address already has an ${APP_NAME} account`, text, html };
+}
+
+/** "k***@example.com": enough for the old address's owner to know the new one, not the whole of it. */
+export function maskedAddress(email: string): string {
+  const at = email.lastIndexOf("@");
+  return at <= 0 ? "***" : `${email.slice(0, 1)}***${email.slice(at)}`;
+}
+
+/** Change email (19c): the OLD address is told, as banks and Google tell it. */
+export function emailChangedEmail(words: { to: string; newAddress: string; supportEmail: string | null }): EmailMessage {
+  const lines = [
+    `The email address of your ${APP_NAME} account was changed to ${maskedAddress(words.newAddress)}. You now sign in with that address.`,
+    words.supportEmail === null
+      ? "If you did this, there is nothing to do."
+      : `If you did this, there is nothing to do. If you didn't, write to us at ${words.supportEmail} straight away.`,
+  ];
+  const text = `${lines.join("\n\n")}\n\n— ${APP_NAME}`;
+  const html = `${lines.map((line) => `<p>${escapeHtml(line)}</p>`).join("")}<p>— ${APP_NAME}</p>`;
+  return { to: words.to, subject: `Your ${APP_NAME} email address was changed`, text, html };
+}
+
 /** An invitation's From line: the gym named, on our invitations' own mailbox (CAN-SPAM
  *  names the gym as the sender). `configured` is INVITE_EMAIL_FROM. The characters RFC
  *  5322 treats as special are left out of the display name, so it needs no quoting. */

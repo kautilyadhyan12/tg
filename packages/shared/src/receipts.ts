@@ -8,7 +8,7 @@
 // writes nothing here.
 import { z } from "zod";
 import { memberRefundMethodSchema, memberPaymentMethodSchema, receiptNumberSchema, salePaymentMethodSchema } from "./memberBills.js";
-import { MEMBERSHIP_PRICE_MINOR_MAX } from "./memberships.js";
+import { MEMBERSHIP_PRICE_MINOR_MAX, SALES_TAX_PCM_MAX } from "./memberships.js";
 import { SALE_LINES_MAX, SALE_QUANTITY_MAX } from "./register.js";
 
 const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -17,10 +17,10 @@ const currencySchema = z.string().regex(/^[A-Z]{3}$/);
 /** A price before its discount: up to 99 of the dearest thing a gym can sell. */
 const listedSchema = z.number().int().min(0).max(SALE_QUANTITY_MAX * MEMBERSHIP_PRICE_MINOR_MAX);
 
-/** The tax a receipt names: the rate's name and percentage as they were, whether the price
+/** A tax a receipt names: the rate's name and percentage as they were, whether the price
  *  held it, and how much it is. `name` is null for a sale made before rates had names. */
 const receiptTaxSchema = z
-  .object({ name: z.string().nullable(), bp: z.number().int().min(1).max(3000), included: z.boolean(), minor: minorSchema })
+  .object({ name: z.string().nullable(), pcm: z.number().int().min(1).max(SALES_TAX_PCM_MAX), included: z.boolean(), minor: minorSchema })
   .strict();
 
 /** What was paid for, and what it came to. `listedMinor` is the price before any discount,
@@ -29,7 +29,8 @@ const receiptAmountsSchema = z
   .object({
     listedMinor: listedSchema,
     discount: z.object({ name: z.string(), minor: listedSchema }).strict().nullable(),
-    tax: receiptTaxSchema.nullable(),
+    /** Each tax, in the order it was charged (18b-v-a); empty for none. */
+    taxes: z.array(receiptTaxSchema).max(10),
     totalMinor: minorSchema,
   })
   .strict();
@@ -136,16 +137,17 @@ export const receiptParamsSchema = z
   .pipe(z.object({ gymId: z.string().uuid(), number: receiptNumberSchema }).strict());
 
 /** A bill's or a sale's amounts as a receipt prints them. Where the tax is added on top,
- *  the price listed is the total less the tax; where the price holds it, the total. */
+ *  the price listed is the total less the taxes; where the price holds them, the total. */
 export function receiptAmounts(input: {
   totalMinor: number;
   listedMinor?: number;
-  tax: { name: string | null; bp: number; included: boolean; minor: number } | null;
+  taxes: readonly { name: string | null; pcm: number; included: boolean; minor: number }[];
   discount: { name: string; minor: number } | null;
 }): z.infer<typeof receiptAmountsSchema> {
-  const tax = input.tax !== null && input.tax.bp > 0 ? input.tax : null;
-  const listedMinor = input.listedMinor ?? (tax !== null && !tax.included ? input.totalMinor - tax.minor : input.totalMinor);
-  return { listedMinor, discount: input.discount, tax, totalMinor: input.totalMinor };
+  const taxes = input.taxes.filter((t) => t.pcm > 0);
+  const onTop = taxes.filter((t) => !t.included).reduce((n, t) => n + t.minor, 0);
+  const listedMinor = input.listedMinor ?? input.totalMinor - onTop;
+  return { listedMinor, discount: input.discount, taxes, totalMinor: input.totalMinor };
 }
 
 /** What a payment paid toward its bill, where the bill was paid in parts: null where this

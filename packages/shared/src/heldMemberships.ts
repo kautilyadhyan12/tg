@@ -52,6 +52,7 @@ import {
   contractThenSchema,
   renewalReminderStatusSchema,
   renewalReminderWhenSchema,
+  SALES_TAX_PCM_MAX,
   type ContractThen,
   type MembershipKind,
   type MembershipTermUnit,
@@ -1115,7 +1116,7 @@ export function giftDaysTarget<T extends { id: string; membership: HeldMembershi
 const daySchema = z.string().regex(DAY);
 
 /** A tax rate as a membership charges it: its name and percentage. */
-export const heldTaxSchema = z.object({ name: z.string(), bp: z.number().int().min(1).max(3000) }).strict();
+export const heldTaxSchema = z.object({ name: z.string(), pcm: z.number().int().min(1).max(SALES_TAX_PCM_MAX) }).strict();
 export type HeldTax = z.infer<typeof heldTaxSchema>;
 
 /** One held membership, as the console reads it. `typeName` is the type's name now;

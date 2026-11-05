@@ -68,7 +68,7 @@ describe("agreementFacts", () => {
     ["a trial's end", monthly({ kind: "trial", priceMinor: 0, termCount: 7, termUnit: "day", view: view({ endsOn: "2026-10-21" }) }), "Ends", "21 Oct 2026"],
     ["a paid trial", monthly({ kind: "trial", priceMinor: 1000, termCount: 7, termUnit: "day", view: view({ endsOn: "2026-10-21" }) }), "Price", "$10.00"],
     ["rupees", monthly({ currency: "INR", priceMinor: 150000 }), "Price", "₹1,500.00 every month"],
-    ["tax added", monthly({ tax: { name: "Sales tax", bp: 825 } }), "Price", "$50.00 every month, plus Sales tax 8.25%"],
+    ["tax added", monthly({ tax: { name: "Sales tax", pcm: 8250 } }), "Price", "$50.00 every month, plus Sales tax 8.25%"],
     ["a discount on the first payment", monthly({ discount: { name: "Spring offer", offMinor: 1000, payments: "first" } }), "Discount", "Spring offer: $10.00 off the first payment"],
     ["a discount on every payment", monthly({ discount: { name: "Staff", offMinor: 500, payments: "every" } }), "Discount", "Staff: $5.00 off every payment, already taken off the price"],
   ] as const)("%s", (_case, membership, label, expected) => {
@@ -85,8 +85,8 @@ describe("agreementFacts", () => {
   });
 
   it("tax already in the price says so; a free membership says nothing of tax or a first payment", () => {
-    expect(valueOf(facts(monthly({ tax: { name: "GST", bp: 1800 } }), { taxIncluded: true }), "Price")).toBe("$50.00 every month, GST 18% included");
-    const free = facts(monthly({ kind: "trial", priceMinor: 0, tax: { name: "GST", bp: 1800 }, termCount: 7, termUnit: "day", view: view({ endsOn: "2026-10-21" }) }));
+    expect(valueOf(facts(monthly({ tax: { name: "GST", pcm: 18000 } }), { taxIncluded: true }), "Price")).toBe("$50.00 every month, GST 18% included");
+    const free = facts(monthly({ kind: "trial", priceMinor: 0, tax: { name: "GST", pcm: 18000 }, termCount: 7, termUnit: "day", view: view({ endsOn: "2026-10-21" }) }));
     expect(valueOf(free, "Price")).toBe("Free");
     expect(valueOf(free, "First payment")).toBeUndefined();
   });

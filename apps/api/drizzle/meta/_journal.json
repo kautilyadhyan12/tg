@@ -1436,6 +1436,20 @@
       "when": 1790726400205,
       "tag": "0205_body_measurement_removed_ids",
       "breakpoints": true
+    },
+    {
+      "idx": 205,
+      "version": "7",
+      "when": 1790726400206,
+      "tag": "0206_change_email_code",
+      "breakpoints": true
+    },
+    {
+      "idx": 206,
+      "version": "7",
+      "when": 1790726400207,
+      "tag": "0207_tax_thousandths",
+      "breakpoints": true
     }
   ]
 }

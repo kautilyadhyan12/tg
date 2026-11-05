@@ -45,7 +45,7 @@ export const billItemSql = (sql: Sql | TransactionSql) => sql`
 /** The tax inside a bill's amount, as it was opened (18b-iii). */
 export interface BillTax {
   name: string;
-  bp: number;
+  pcm: number;
   included: boolean;
   minor: number;
 }
@@ -57,7 +57,7 @@ export interface BillTax {
 export function billOf(listedMinor: number, tax: TaxApplied | null): { amountMinor: number; tax: BillTax | null } {
   const amounts = billAmounts(listedMinor, tax);
   if (!amounts.ok) throw new Error(`a bill could not be worked out: ${amounts.reason}`);
-  return { amountMinor: amounts.totalMinor, tax: tax === null ? null : { name: tax.name, bp: tax.bp, included: tax.included, minor: amounts.taxMinor } };
+  return { amountMinor: amounts.totalMinor, tax: tax === null ? null : { name: tax.name, pcm: tax.pcm, included: tax.included, minor: amounts.taxMinor } };
 }
 
 export interface BillRow {
@@ -94,7 +94,7 @@ interface RawBill {
   period_index: number;
   amount_minor: number;
   tax_minor: number;
-  tax_bp: number;
+  tax_pcm: number;
   tax_name: string | null;
   tax_included: boolean | null;
   joining_fee_minor: number;
@@ -117,7 +117,7 @@ const bill = (r: RawBill): BillRow => ({
   membershipId: r.held_membership_id,
   periodIndex: r.period_index,
   amountMinor: r.amount_minor,
-  tax: r.tax_name === null || r.tax_included === null ? null : { name: r.tax_name, bp: r.tax_bp, included: r.tax_included, minor: r.tax_minor },
+  tax: r.tax_name === null || r.tax_included === null ? null : { name: r.tax_name, pcm: r.tax_pcm, included: r.tax_included, minor: r.tax_minor },
   joiningFeeMinor: r.joining_fee_minor,
   changeCreditMinor: r.change_credit_minor,
   movedMinor: r.moved_minor,
@@ -136,7 +136,7 @@ const bill = (r: RawBill): BillRow => ({
 export async function billsFor(sql: Sql | TransactionSql, gymId: string, membershipIds: readonly string[]): Promise<BillRow[]> {
   if (membershipIds.length === 0) return [];
   const rows = await sql<RawBill[]>`
-    SELECT b.id, b.held_membership_id, b.period_index, b.amount_minor, b.tax_minor, b.tax_bp, b.tax_name, b.tax_included, b.joining_fee_minor, b.change_credit_minor, b.moved_minor, b.currency,
+    SELECT b.id, b.held_membership_id, b.period_index, b.amount_minor, b.tax_minor, b.tax_pcm, b.tax_name, b.tax_included, b.joining_fee_minor, b.change_credit_minor, b.moved_minor, b.currency,
            b.due_on::text AS due_on, b.covers_from::text AS covers_from, b.covers_to::text AS covers_to, b.status,
            COALESCE((SELECT sum(p.amount_minor) FROM gym_member_payments p
                      WHERE p.gym_id = b.gym_id AND p.bill_id = b.id AND p.undone_at IS NULL), 0)::int AS paid_minor,
@@ -484,7 +484,7 @@ export async function insertBills(
     i: b.periodIndex,
     a: b.amountMinor,
     tm: b.tax?.minor ?? 0,
-    tb: b.tax?.bp ?? 0,
+    tb: b.tax?.pcm ?? 0,
     tn: b.tax?.name ?? null,
     ti: b.tax?.included ?? null,
     j: b.joiningFeeMinor ?? 0,
@@ -496,7 +496,7 @@ export async function insertBills(
   }));
   const rows = await tx<{ id: string; held_membership_id: string; period_index: number }[]>`
     INSERT INTO gym_member_bills
-      (gym_id, held_membership_id, period_index, amount_minor, tax_minor, tax_bp, tax_name, tax_included, joining_fee_minor, change_credit_minor, currency, due_on, covers_from, covers_to, created_at, updated_at)
+      (gym_id, held_membership_id, period_index, amount_minor, tax_minor, tax_pcm, tax_name, tax_included, joining_fee_minor, change_credit_minor, currency, due_on, covers_from, covers_to, created_at, updated_at)
     SELECT ${gymId}, r.m, r.i, r.a, r.tm, r.tb, r.tn, r.ti, r.j, r.cc, r.c, r.d, r.f, r.t, ${now}, ${now}
     FROM jsonb_to_recordset(${tx.json(payload)}) AS r(m uuid, i int, a int, tm int, tb int, tn text, ti boolean, j int, cc int, c text, d date, f date, t date)
     ON CONFLICT (held_membership_id, period_index) DO NOTHING

@@ -5,7 +5,7 @@
 // them into words.
 import {
   addDays,
-  bpToTaxRateText,
+  pcmToTaxRateText,
   BILL_DAY_MAX,
   BILL_CANCEL_REASONS,
   BILL_CANCEL_REASON_WORDS,
@@ -158,7 +158,7 @@ export function billsToDraw(billing, all) {
 export function billTaxLine(bill, currency) {
   const t = bill.tax;
   if (t === null || t === undefined) return null;
-  const label = `${t.name} ${bpToTaxRateText(t.bp)}%`;
+  const label = `${t.name} ${pcmToTaxRateText(t.pcm)}%`;
   if (t.included) return `Includes ${formatMinor(t.minor, currency)} ${label}`;
   return `${formatMinor(bill.amountMinor - t.minor, currency)} plus ${formatMinor(t.minor, currency)} ${label}`;
 }

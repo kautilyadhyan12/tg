@@ -153,15 +153,15 @@ d("download payments (real Postgres)", () => {
   };
   const register = (gymId: string) => `/v1/orgs/${gymId}/register`;
   const page = (res: { body: string }): SellPageResponse => sellPageResponseSchema.parse(JSON.parse(res.body));
-  const addRate = async (gymId: string, cookies: Cookies, name: string, bp: number): Promise<string> => {
-    const res = await post(`${register(gymId)}/tax-rates`, { name, bp }, cookies);
+  const addRate = async (gymId: string, cookies: Cookies, name: string, pcm: number): Promise<string> => {
+    const res = await post(`${register(gymId)}/tax-rates`, { name, pcm }, cookies);
     expect(res.statusCode, res.body).toBe(201);
     const found = page(res).tax.rates.find((r) => r.name === name);
     if (found === undefined) throw new Error(`no rate named ${name}`);
     return found.id;
   };
   const addProduct = async (gymId: string, cookies: Cookies, name: string, priceMinor: number): Promise<GymProduct> => {
-    const res = await post(`${register(gymId)}/products`, { name, priceMinor, taxRateId: null, stock: null }, cookies);
+    const res = await post(`${register(gymId)}/products`, { name, priceMinor, taxRateIds: [], stock: null }, cookies);
     expect(res.statusCode, res.body).toBe(201);
     const found = page(res).products.find((p) => p.name === name);
     if (found === undefined) throw new Error(`no product named ${name}`);
@@ -255,7 +255,7 @@ d("download payments (real Postgres)", () => {
         (${gymId}, ${books.userId}, 'trainer', ${["members.read", "reports.read", "billing.members"]})`;
 
       // Maya pays for Gold Monthly, $50.00 plus 8.25% sales tax, and $10.00 is given back.
-      const tax = await addRate(gymId, owner.cookies, "Sales tax", 825);
+      const tax = await addRate(gymId, owner.cookies, "Sales tax", 8250);
       const gold = await addType(gymId, owner.cookies, monthly({ taxRateId: tax }));
       const maya = await addPerson(gymId, owner.cookies, "Maya Patel");
       await give(gymId, maya, owner.cookies, gold, 5000, 5413);
@@ -518,9 +518,9 @@ d("download payments (real Postgres)", () => {
       await sql`
         WITH g AS (UPDATE gyms SET receipts_issued = receipts_issued + ${more} WHERE id = ${gymId} RETURNING receipts_issued - ${more} AS base)
         INSERT INTO gym_sales (gym_id, request_key, product_id, entry_id, item_name, quantity, unit_price_minor, net_minor, tax_minor, total_minor,
-                               tax_bp, tax_included, currency, method, sold_on, recorded_by, receipt_number, for_member)
+                               tax_pcm, taxes, tax_included, currency, method, sold_on, recorded_by, receipt_number, for_member)
         SELECT s.gym_id, gen_random_uuid(), s.product_id, s.entry_id, s.item_name, s.quantity, s.unit_price_minor, s.net_minor, s.tax_minor, s.total_minor,
-               s.tax_bp, s.tax_included, s.currency, s.method,
+               s.tax_pcm, s.taxes, s.tax_included, s.currency, s.method,
                CASE WHEN (g.base + n) % 2 = 1 THEN DATE '2026-10-14' ELSE DATE '2026-10-15' END, s.recorded_by, g.base + n, s.for_member
         FROM gym_sales s, g, generate_series(1, ${more}::int) n
         WHERE s.gym_id = ${gymId} AND s.id = ${first}`;

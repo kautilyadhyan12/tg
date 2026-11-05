@@ -12,6 +12,7 @@
 // same details again: what is kept and emailed is what the screen showed.
 import { z } from "zod";
 import { MEMBERSHIP_TYPES_MAX, contractLengthWords, formatMinor } from "./memberships.js";
+import { pcmToTaxRateText } from "./register.js";
 import type { HeldMembershipItem } from "./heldMemberships.js";
 import type { MemberBill, MemberBilling } from "./memberBills.js";
 import { coversWords, dayWords } from "./paymentsDownload.js";
@@ -262,9 +263,9 @@ const plural = (count: number, one: string): string => (count === 1 ? one : `${S
 const oneLine = (text: string): string => text.replace(/\s*\n\s*/g, ", ").replace(/\s+/g, " ").trim();
 
 /** The tax as the price says it: ", GST 18% included" or ", plus GST 18%". */
-function taxWords(tax: { name: string; bp: number } | null, included: boolean): string {
+function taxWords(tax: { name: string; pcm: number } | null, included: boolean): string {
   if (tax === null) return "";
-  const rate = `${tax.name} ${String(tax.bp / 100)}%`;
+  const rate = `${tax.name} ${pcmToTaxRateText(tax.pcm)}%`;
   return included ? `, ${rate} included` : `, plus ${rate}`;
 }
 

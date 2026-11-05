@@ -1,5 +1,5 @@
 // THE REGISTER (Part 3 §14.3; ROADMAP Stage 2 items 18b-i, 18b-ii-a and 18b-ii-b). Mirrors
-// `0102_register.sql`, `0104_discounts.sql`, `0107_membership_discounts.sql` and `0112_tax_rates.sql` and `0128_sale_refunds.sql` and `0135_sale_baskets.sql` 1:1; the migrations carry the reasoning.
+// `0102_register.sql`, `0104_discounts.sql`, `0107_membership_discounts.sql` and `0112_tax_rates.sql` and `0128_sale_refunds.sql` and `0135_sale_baskets.sql` and `0207_tax_thousandths.sql` 1:1; the migrations carry the reasoning.
 import { sql } from "drizzle-orm";
 import {
   bigint,
@@ -9,6 +9,7 @@ import {
   foreignKey,
   index,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   smallint,
@@ -37,8 +38,6 @@ export const gymProducts = pgTable(
     name: text("name").notNull(),
     priceMinor: integer("price_minor").notNull(),
     currency: text("currency").notNull(),
-    /** The gym's tax rate it charges; null for none. */
-    taxRateId: uuid("tax_rate_id"),
     /** How many are left; null where the gym does not count it. */
     stock: integer("stock"),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
@@ -54,15 +53,24 @@ export const gymProducts = pgTable(
     uniqueIndex("gym_products_name_uq")
       .on(t.gymId, sql`lower(${t.name})`)
       .where(sql`${t.archivedAt} IS NULL`),
-    // `0112` clears only `tax_rate_id` when the rate goes; Drizzle cannot say which column.
-    foreignKey({
-      name: "gym_products_tax_rate_fk",
-      columns: [t.gymId, t.taxRateId],
-      foreignColumns: [gymTaxRates.gymId, gymTaxRates.id],
-    }),
-    index("gym_products_tax_rate_idx")
-      .on(t.gymId, t.taxRateId)
-      .where(sql`${t.taxRateId} IS NOT NULL`),
+  ],
+);
+
+/** The gym's tax rates a product charges (0207; 18b-v-a), in the order they were picked, each once. */
+export const gymProductTaxRates = pgTable(
+  "gym_product_tax_rates",
+  {
+    gymId: uuid("gym_id").notNull(),
+    productId: uuid("product_id").notNull(),
+    taxRateId: uuid("tax_rate_id").notNull(),
+    position: integer("position").notNull(),
+  },
+  (t) => [
+    primaryKey({ name: "gym_product_tax_rates_pk", columns: [t.productId, t.taxRateId] }),
+    foreignKey({ name: "gym_product_tax_rates_product_fk", columns: [t.gymId, t.productId], foreignColumns: [gymProducts.gymId, gymProducts.id] }).onDelete("cascade"),
+    foreignKey({ name: "gym_product_tax_rates_rate_fk", columns: [t.gymId, t.taxRateId], foreignColumns: [gymTaxRates.gymId, gymTaxRates.id] }).onDelete("cascade"),
+    check("gym_product_tax_rates_position_check", sql`${t.position} >= 1`),
+    index("gym_product_tax_rates_rate_idx").on(t.gymId, t.taxRateId),
   ],
 );
 
@@ -198,9 +206,13 @@ export const gymSales = pgTable(
     netMinor: integer("net_minor").notNull(),
     taxMinor: integer("tax_minor").notNull(),
     totalMinor: integer("total_minor").notNull(),
-    taxBp: integer("tax_bp").notNull(),
+    /** The line's whole tax rate, its taxes' added up (0207: thousandths of a percent). */
+    taxPcm: integer("tax_pcm").notNull(),
     taxIncluded: boolean("tax_included").notNull(),
+    /** The tax's name where it had one tax; null where none, or several (`taxes`). */
     taxName: text("tax_name"),
+    /** Each tax, `{ name, pcm, minor }`, in the order charged (0207; 18b-v-a). */
+    taxes: jsonb("taxes").notNull().default(sql`'[]'`),
     currency: text("currency").notNull(),
     method: text("method").notNull(),
     /** Square's payment, for a sale paid on the Terminal (0153; 18d-vi-b-ii). */
@@ -243,7 +255,10 @@ export const gymSales = pgTable(
       "gym_sales_amounts_check",
       sql`${t.unitPriceMinor} BETWEEN 1 AND 99999999 AND ${t.netMinor} >= 0 AND ${t.taxMinor} >= 0 AND ${t.totalMinor} BETWEEN 1 AND 99999999 AND ${t.netMinor} + ${t.taxMinor} = ${t.totalMinor}`,
     ),
-    check("gym_sales_tax_check", sql`${t.taxBp} BETWEEN 0 AND 3000 AND (${t.taxBp} > 0 OR ${t.taxMinor} = 0)`),
+    check(
+      "gym_sales_tax_check",
+      sql`${t.taxPcm} BETWEEN 0 AND 30000 AND (${t.taxPcm} > 0 OR ${t.taxMinor} = 0) AND jsonb_typeof(${t.taxes}) = 'array' AND jsonb_array_length(${t.taxes}) <= 10 AND (${t.taxPcm} > 0) = (jsonb_array_length(${t.taxes}) > 0)`,
+    ),
     check("gym_sales_tax_name_check", sql`${t.taxName} IS NULL OR char_length(${t.taxName}) BETWEEN 1 AND 30`),
     check("gym_sales_currency_check", sql`${t.currency} ~ '^[A-Z]{3}$'`),
     check("gym_sales_method_check", sql`${t.method} IN ('cash','upi','card_at_desk','bank_transfer','terminal')`),

@@ -150,7 +150,7 @@ async function makeGym(people: number): Promise<Made> {
     WITH base AS (SELECT receipts_issued AS b FROM gyms WHERE id = ${gymId}),
     ins AS (
       INSERT INTO gym_sales (gym_id, request_key, product_id, item_name, quantity, unit_price_minor, net_minor, tax_minor, total_minor,
-                             tax_bp, tax_included, currency, method, sold_on, recorded_by, undone_at, receipt_number)
+                             tax_pcm, tax_included, currency, method, sold_on, recorded_by, undone_at, receipt_number)
       SELECT ${gymId}, gen_random_uuid(), p.id, p.name, 1 + k % 3, p.price_minor, p.price_minor * (1 + k % 3), 0, p.price_minor * (1 + k % 3),
              0, false, 'GBP', 'cash', (current_date - d)::date, ((${staff})::uuid[])[1 + k % 5],
              CASE WHEN k % 50 = 0 THEN now() END, base.b + row_number() OVER ()

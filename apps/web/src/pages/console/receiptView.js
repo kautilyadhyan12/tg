@@ -1,4 +1,4 @@
-import { MEMBER_PAYMENT_METHOD_WORDS, bpToTaxRateText, formatMinor } from '@app/shared';
+import { MEMBER_PAYMENT_METHOD_WORDS, formatMinor, pcmToTaxRateText } from '@app/shared';
 import { billDays, shortDay } from './memberBillsView';
 
 // A RECEIPT'S WORDS (spec Part 3 §14.3; ROADMAP 18g-i). Every line a receipt prints is made
@@ -34,7 +34,11 @@ export function cancelledLine(receipt) {
 const membershipLabel = (item) =>
   item.covers === null ? item.name : `${item.name}, ${billDays(item.covers)}${item.part === true ? ' (part month)' : ''}`;
 
-const tax = (t) => `${t.name ?? 'Tax'} ${bpToTaxRateText(t.bp)}%`;
+const tax = (t) => `${t.name ?? 'Tax'} ${pcmToTaxRateText(t.pcm)}%`;
+
+/** The taxes added on top of a price, and those inside it (18b-v-a: one line each). */
+const onTopOf = (amounts) => (amounts.taxes ?? []).filter((t) => !t.included);
+const insideOf = (amounts) => (amounts.taxes ?? []).filter((t) => t.included);
 
 /** The lines of a receipt, top to bottom: each a label and, where it has one, an amount.
  *  `strong` is the line that says what was paid or given back. */
@@ -61,9 +65,9 @@ export function receiptLines(receipt) {
   if (credit !== null) lines.push({ label: `Unused days of ${credit.fromName}`, amount: `−${money(credit.minor)}` });
   if (amounts.discount !== null) lines.push({ label: `Discount: ${amounts.discount.name}`, amount: `−${money(amounts.discount.minor)}` });
   if (fee > 0) lines.push({ label: 'Joining fee', amount: money(fee) });
-  if (amounts.tax !== null && !amounts.tax.included) lines.push({ label: tax(amounts.tax), amount: money(amounts.tax.minor) });
+  for (const t of onTopOf(amounts)) lines.push({ label: tax(t), amount: money(t.minor) });
   lines.push({ label: receipt.kind === 'payment' && receipt.balance !== null ? 'Bill total' : 'Total', amount: money(amounts.totalMinor), total: true });
-  if (amounts.tax !== null && amounts.tax.included) lines.push({ label: `Includes ${tax(amounts.tax)}`, amount: money(amounts.tax.minor) });
+  for (const t of insideOf(amounts)) lines.push({ label: `Includes ${tax(t)}`, amount: money(t.minor) });
   if (receipt.kind === 'sale') {
     lines.push({ label: `Paid by ${lower(methodWords(receipt.method))}`, amount: money(amounts.totalMinor), strong: true });
     return lines;
@@ -90,10 +94,10 @@ function basketLines(receipt, money) {
     const { amounts } = line;
     lines.push(productLine(line, money));
     if (amounts.discount !== null) lines.push({ label: `Discount: ${amounts.discount.name}`, amount: `−${money(amounts.discount.minor)}` });
-    subtotal += amounts.tax !== null && !amounts.tax.included ? amounts.totalMinor - amounts.tax.minor : amounts.totalMinor;
-    if (amounts.tax !== null) {
-      const key = `${amounts.tax.included ? 'in' : 'on'} ${tax(amounts.tax)}`;
-      taxes.set(key, { tax: amounts.tax, minor: (taxes.get(key)?.minor ?? 0) + amounts.tax.minor });
+    subtotal += amounts.totalMinor - onTopOf(amounts).reduce((n, t) => n + t.minor, 0);
+    for (const t of amounts.taxes ?? []) {
+      const key = `${t.included ? 'in' : 'on'} ${tax(t)}`;
+      taxes.set(key, { tax: t, minor: (taxes.get(key)?.minor ?? 0) + t.minor });
     }
   }
   const onTop = [...taxes.values()].filter((t) => !t.tax.included);

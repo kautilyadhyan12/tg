@@ -11,7 +11,7 @@ const payment = (over = {}) => ({
   ...common,
   kind: 'payment',
   item: { name: 'Gold Monthly', covers: { from: '2026-10-15', to: '2026-11-14' } },
-  amounts: { listedMinor: 5000, discount: null, tax: { name: 'Sales tax', bp: 825, included: false, minor: 413 }, totalMinor: 5413 },
+  amounts: { listedMinor: 5000, discount: null, taxes: [{ name: 'Sales tax', pcm: 8250, included: false, minor: 413 }], totalMinor: 5413 },
   paidMinor: 5413,
   method: 'cash',
   balance: null,
@@ -22,7 +22,7 @@ const sale = (over = {}) => ({
   ...common,
   kind: 'sale',
   person: null,
-  lines: [{ name: 'Water', quantity: 2, unitPriceMinor: 250, amounts: { listedMinor: 500, discount: { name: 'Staff 20', minor: 100 }, tax: { name: 'Sales tax', bp: 825, included: false, minor: 33 }, totalMinor: 433 } }],
+  lines: [{ name: 'Water', quantity: 2, unitPriceMinor: 250, amounts: { listedMinor: 500, discount: { name: 'Staff 20', minor: 100 }, taxes: [{ name: 'Sales tax', pcm: 8250, included: false, minor: 33 }], totalMinor: 433 } }],
   totalMinor: 433,
   method: 'card_at_desk',
   ...over,
@@ -41,7 +41,7 @@ const drawn = (receipt) => receiptLines(receipt).map((l) => (l.amount === null ?
 
 describe('receiptLines', () => {
   it('a membership sold with a discount: its full price, the discount, the tax on what was left', () => {
-    const off = payment({ amounts: { listedMinor: 5000, discount: { name: 'First month 20', minor: 1000 }, tax: { name: 'Sales tax', bp: 825, included: false, minor: 330 }, totalMinor: 4330 }, paidMinor: 4330 });
+    const off = payment({ amounts: { listedMinor: 5000, discount: { name: 'First month 20', minor: 1000 }, taxes: [{ name: 'Sales tax', pcm: 8250, included: false, minor: 330 }], totalMinor: 4330 }, paidMinor: 4330 });
     expect(drawn(off)).toEqual([
       'Gold Monthly, 15 Oct – 14 Nov 2026 | $50.00',
       'Discount: First month 20 | −$10.00',
@@ -68,7 +68,7 @@ describe('receiptLines', () => {
   it('tax inside the price is said under the total, never added to it', () => {
     const gst = payment({
       currency: 'INR',
-      amounts: { listedMinor: 200000, discount: null, tax: { name: 'GST', bp: 1800, included: true, minor: 30508 }, totalMinor: 200000 },
+      amounts: { listedMinor: 200000, discount: null, taxes: [{ name: 'GST', pcm: 18000, included: true, minor: 30508 }], totalMinor: 200000 },
       paidMinor: 200000,
       method: 'bank_transfer',
     });
@@ -82,9 +82,9 @@ describe('receiptLines', () => {
   });
 
   it('a bill paid in parts says what was paid before and what is left', () => {
-    const first = payment({ amounts: { listedMinor: 6000, discount: null, tax: null, totalMinor: 6000 }, paidMinor: 2000, balance: { paidBeforeMinor: 0, leftMinor: 4000 } });
+    const first = payment({ amounts: { listedMinor: 6000, discount: null, taxes: [], totalMinor: 6000 }, paidMinor: 2000, balance: { paidBeforeMinor: 0, leftMinor: 4000 } });
     expect(drawn(first)).toEqual(['Gold Monthly, 15 Oct – 14 Nov 2026 | $60.00', 'Bill total | $60.00', 'Paid by cash | $20.00', 'Left to pay | $40.00']);
-    const last = payment({ amounts: { listedMinor: 6000, discount: null, tax: null, totalMinor: 6000 }, paidMinor: 4000, balance: { paidBeforeMinor: 2000, leftMinor: 0 } });
+    const last = payment({ amounts: { listedMinor: 6000, discount: null, taxes: [], totalMinor: 6000 }, paidMinor: 4000, balance: { paidBeforeMinor: 2000, leftMinor: 0 } });
     expect(drawn(last)).toEqual(['Gold Monthly, 15 Oct – 14 Nov 2026 | $60.00', 'Bill total | $60.00', 'Paid before | $20.00', 'Paid by cash | $40.00', 'Left to pay | $0.00']);
   });
 
@@ -100,7 +100,7 @@ describe('receiptLines', () => {
       'Total | $4.33',
       'Paid by card at the desk | $4.33',
     ]);
-    expect(drawn(sale({ lines: [{ name: 'Water', quantity: 1, unitPriceMinor: 250, amounts: { listedMinor: 250, discount: null, tax: null, totalMinor: 250 } }], totalMinor: 250, method: 'cash' }))).toEqual([
+    expect(drawn(sale({ lines: [{ name: 'Water', quantity: 1, unitPriceMinor: 250, amounts: { listedMinor: 250, discount: null, taxes: [], totalMinor: 250 } }], totalMinor: 250, method: 'cash' }))).toEqual([
       '1 × Water | $2.50',
       'Total | $2.50',
       'Paid by cash | $2.50',
@@ -168,7 +168,7 @@ describe('the receipt on paper', () => {
     expect(html).toContain('<div class="gym">Iron Works</div><div class="kind">Refund receipt</div>');
     expect(html).toContain('<tr class="plain"><td colspan="2">Refund for receipt #12</td></tr>');
     const gst = receiptPrintHtml(
-      payment({ amounts: { listedMinor: 5000, discount: null, tax: { name: 'GST', bp: 1800, included: true, minor: 763 }, totalMinor: 5000 }, paidMinor: 5000 }),
+      payment({ amounts: { listedMinor: 5000, discount: null, taxes: [{ name: 'GST', pcm: 18000, included: true, minor: 763 }], totalMinor: 5000 }, paidMinor: 5000 }),
     );
     expect(gst).toContain('<tr class="plain"><td>Includes GST 18%</td><td class="amt">$7.63</td></tr>');
   });
@@ -178,7 +178,7 @@ describe('the receipt on paper', () => {
   });
 
   it("what staff or a member typed is printed as words, never as the page's own markup", () => {
-    const html = receiptPrintHtml(sale({ person: '<img src=x onerror=alert(1)>', gym: { name: 'Tom & Jerry\'s "Gym"', address: '<b>1</b>' }, lines: [{ name: '</td><script>x</script>', quantity: 1, unitPriceMinor: 250, amounts: { listedMinor: 250, discount: null, tax: null, totalMinor: 250 } }], totalMinor: 250 }));
+    const html = receiptPrintHtml(sale({ person: '<img src=x onerror=alert(1)>', gym: { name: 'Tom & Jerry\'s "Gym"', address: '<b>1</b>' }, lines: [{ name: '</td><script>x</script>', quantity: 1, unitPriceMinor: 250, amounts: { listedMinor: 250, discount: null, taxes: [], totalMinor: 250 } }], totalMinor: 250 }));
     expect(html).not.toContain('<img');
     expect(html).not.toContain('<script>');
     expect(html).not.toContain('<b>1</b>');
@@ -188,14 +188,14 @@ describe('the receipt on paper', () => {
 });
 
 describe('a sale of several products (18q)', () => {
-  const tax = (minor, included = false, name = 'Sales tax', bp = 825) => ({ name, bp, included, minor });
+  const tax = (minor, included = false, name = 'Sales tax', pcm = 8250) => [{ name, pcm, included, minor }];
   // Two waters at $2.50 with Staff 20 ($1.00 off) and 8.25% on $4.00 ($0.33); a towel at $5.00
   // with 8.25% ($0.41); a bar at $2.50 with County tax 1% ($0.03). By hand: $4.00 + $5.00 + $2.50
   // = $11.50, tax $0.74 + $0.03, total $12.27.
   const lines = [
-    { name: 'Water', quantity: 2, unitPriceMinor: 250, amounts: { listedMinor: 500, discount: { name: 'Staff 20', minor: 100 }, tax: tax(33), totalMinor: 433 } },
-    { name: 'Towel', quantity: 1, unitPriceMinor: 500, amounts: { listedMinor: 500, discount: null, tax: tax(41), totalMinor: 541 } },
-    { name: 'Protein bar', quantity: 1, unitPriceMinor: 250, amounts: { listedMinor: 250, discount: null, tax: tax(3, false, 'County tax', 100), totalMinor: 253 } },
+    { name: 'Water', quantity: 2, unitPriceMinor: 250, amounts: { listedMinor: 500, discount: { name: 'Staff 20', minor: 100 }, taxes: tax(33), totalMinor: 433 } },
+    { name: 'Towel', quantity: 1, unitPriceMinor: 500, amounts: { listedMinor: 500, discount: null, taxes: tax(41), totalMinor: 541 } },
+    { name: 'Protein bar', quantity: 1, unitPriceMinor: 250, amounts: { listedMinor: 250, discount: null, taxes: tax(3, false, 'County tax', 1000), totalMinor: 253 } },
   ];
 
   it('prints each product with its discount under it, what they come to, each tax by its rate, one total and how it was paid', () => {
@@ -214,8 +214,8 @@ describe('a sale of several products (18q)', () => {
 
   it('where the prices hold the tax, says it inside the total, by rate', () => {
     const inside = [
-      { name: 'Water', quantity: 1, unitPriceMinor: 200, amounts: { listedMinor: 200, discount: null, tax: tax(15, true, 'VAT', 800), totalMinor: 200 } },
-      { name: 'Towel', quantity: 1, unitPriceMinor: 540, amounts: { listedMinor: 540, discount: null, tax: tax(40, true, 'VAT', 800), totalMinor: 540 } },
+      { name: 'Water', quantity: 1, unitPriceMinor: 200, amounts: { listedMinor: 200, discount: null, taxes: tax(15, true, 'VAT', 8000), totalMinor: 200 } },
+      { name: 'Towel', quantity: 1, unitPriceMinor: 540, amounts: { listedMinor: 540, discount: null, taxes: tax(40, true, 'VAT', 8000), totalMinor: 540 } },
     ];
     expect(drawn(sale({ lines: inside, totalMinor: 740, method: 'card_at_desk' }))).toEqual(['1 × Water | $2.00', '1 × Towel | $5.40', 'Total | $7.40', 'Includes VAT 8% | $0.55', 'Paid by card at the desk | $7.40']);
   });

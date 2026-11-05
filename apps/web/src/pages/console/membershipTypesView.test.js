@@ -410,7 +410,7 @@ describe('the form', () => {
 });
 
 describe('a type’s tax (18b-iii)', () => {
-  const list = (over = {}) => ({ taxRates: [{ id: 'r1', name: 'GST', bp: 1800 }], taxIncluded: false, ...over });
+  const list = (over = {}) => ({ taxRates: [{ id: 'r1', name: 'GST', pcm: 18000 }], taxIncluded: false, ...over });
   it('says what its bills charge, on top or inside; nothing for no tax or a rate since removed', () => {
     expect(typeTaxLine({ taxRateId: 'r1' }, list())).toBe('Plus GST 18% on each payment');
     expect(typeTaxLine({ taxRateId: 'r1' }, list({ taxIncluded: true }))).toBe('Includes GST 18%');

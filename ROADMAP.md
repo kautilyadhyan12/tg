@@ -264,7 +264,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
        - 18b-ii-b. [x] **The same discounts on memberships** — merged 2026-10-14 (PR #261).
      - 18b-iii. [x] **Tax on memberships, with named tax rates** — merged 2026-10-15 (PR #267).
      - 18b-iv. [x] **The tax box suggests the gym country’s own tax** — merged 2026-11-04 (PR #463).
-     - 18b-v. [ ] **Two taxes on one membership or product** (Kd, 2026-11-04): each named and shown on the bill and the receipt, as Quebec's GST 5% and QST 9.975% must be (Revenu Québec, "Showing the Taxes"). Before any gym in Quebec or British Columbia uses the app. Web folder 2.
+     - 18b-v. **Several taxes on one membership or product**, in two parts since 2026-11-05 (`handoff/2026-11-05-18b-v-a.md` keeps its line as first written):
+       - 18b-v-a. [x] **Three decimals, and several taxes on a product** — merged 2026-11-05 (PR #473).
+       - 18b-v-b. [ ] **Several taxes on a membership**: the same on a membership type, its bills and their receipts. Web folder 2.
    - 18c. ~~Pay by the gym's own link~~ **Dropped 2026-10-15** (Kd, `rulings/2026-10-15-18g-i.md`): not standard practice; members pay through 18d's company or at the desk.
    - 18d. **The first Connect button: Square** (Kd's sign-up worked 2026-10-19; `rulings/2026-10-19-18d-i.md`), split that day in four (the line as first written is in `handoff/2026-10-19-18d-i.md`):
      - 18d-i. [x] **Connect Square and Disconnect** — merged 2026-10-20 (PR #319).
@@ -616,7 +618,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 19a. [x] **Settings on the phone** — merged 2026-11-04 (PR #459).
     - 19b. [x] **Download my data, delete my account and undo** · merged 2026-11-04 · PR #465
     - 19b-ii. [x] **An owner hands the gym over before deleting their account** · merged 2026-11-05 · PR #468
-    - 19c. [ ] **Change email** (Stage 2's 3b-iii).
+    - 19c. [x] **Change email** · merged 2026-11-05 · PR #472
     - 19d. [ ] **Notification switches that save.**
 20. [ ] **What the gym side adds for members**, each after its web job: the waiver (3e), the membership agreement signed in the app (18u), the referral link (20e), the member photo (5b-vi), saving their card (18d-ii), buying from the gym (18k), stopping a membership (18l), a gym's plan for a member (19e).
 21. [ ] **Paying, the stores and release**: the $10 plan through the stores (item 6), one device one trial (Stage 3's 2c), the store pages rated 18+, the Terms and Privacy pages that Get started's line opens (it opens nothing today, as the browser's), Google's closed test, then the iPhone version with Apple sign-in.

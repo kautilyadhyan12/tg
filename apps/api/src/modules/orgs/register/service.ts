@@ -50,6 +50,7 @@ import {
   salePeopleResponseSchema,
   sellProductResponseSchema,
   taxRateInUseWords,
+  taxesOverCapWords,
   type MemberPaymentMethod,
   type MemberPurchasesResponse,
   type OrgPrivilege,
@@ -298,6 +299,8 @@ function throwOnProductFailure(outcome: repo.ProductWriteOutcome): void {
       throw new OrgsError(409, "no_member_currency", REGISTER_WORDS.no_currency);
     case "rate_not_found":
       throw new OrgsError(409, "tax_rate_not_found", REGISTER_WORDS.rate_not_found);
+    case "taxes_over_cap":
+      throw new OrgsError(409, "taxes_over_cap", REGISTER_WORDS.taxes_over_cap);
     default: {
       const never: never = outcome;
       throw new Error(`unhandled product outcome: ${JSON.stringify(never)}`);
@@ -322,7 +325,7 @@ export async function updateProduct(
     await repo.updateProduct(deps.sql, {
       name: req.name,
       priceMinor: req.priceMinor,
-      taxRateId: req.taxRateId,
+      taxRateIds: req.taxRateIds,
       stock: req.stock,
       gymId,
       productId,
@@ -361,6 +364,8 @@ function throwOnRateFailure(outcome: tax.RateWriteOutcome): void {
       throw new OrgsError(409, "tax_rate_name_taken", REGISTER_WORDS.rate_name_taken);
     case "in_use":
       throw new OrgsError(409, "tax_rate_in_use", taxRateInUseWords(outcome.name, outcome));
+    case "taxes_over_cap":
+      throw new OrgsError(409, "taxes_over_cap", taxesOverCapWords(outcome.product));
     default: {
       const never: never = outcome;
       throw new Error(`unhandled tax rate outcome: ${JSON.stringify(never)}`);
@@ -369,17 +374,18 @@ function throwOnRateFailure(outcome: tax.RateWriteOutcome): void {
 }
 
 export async function createTaxRate(deps: RegisterDeps, userId: string, gymId: string, viewer: Viewer, req: SaveTaxRateRequest): Promise<SellPageResponse> {
-  throwOnRateFailure(await tax.createRate(deps.sql, { gymId, name: req.name, bp: req.bp, actorUserId: userId }));
+  throwOnRateFailure(await tax.createRate(deps.sql, { gymId, name: req.name, pcm: req.pcm, actorUserId: userId }));
   return await read(deps, gymId, viewer);
 }
 
 export async function updateTaxRate(deps: RegisterDeps, userId: string, gymId: string, viewer: Viewer, rateId: string, req: SaveTaxRateRequest): Promise<SellPageResponse> {
-  throwOnRateFailure(await tax.updateRate(deps.sql, { gymId, rateId, name: req.name, bp: req.bp, actorUserId: userId, now: deps.now() }));
+  throwOnRateFailure(await tax.updateRate(deps.sql, { gymId, rateId, name: req.name, pcm: req.pcm, actorUserId: userId, now: deps.now() }));
   return await read(deps, gymId, viewer);
 }
 
 export async function chargeTaxRate(deps: RegisterDeps, userId: string, gymId: string, viewer: Viewer, rateId: string, req: ChargeTaxRateRequest): Promise<SellPageResponse> {
   const outcome = await tax.chargeRate(deps.sql, { gymId, rateId, use: req.use, ids: req.ids, actorUserId: userId, now: deps.now() });
+  if (outcome.kind === "taxes_over_cap") throw new OrgsError(409, "taxes_over_cap", taxesOverCapWords(outcome.product));
   if (outcome.kind === "items_not_found") throw new OrgsError(409, "tax_charged_not_found", REGISTER_WORDS.charged_not_found);
   if (outcome.kind === "too_high") throw new OrgsError(409, "taxed_price_too_high", `${outcome.name}: ${REGISTER_WORDS.taxed_price_too_high}`);
   if (outcome.kind === "free") throw new OrgsError(409, "taxed_price_free", `${outcome.name} is free, so it charges no tax. Untick it and save again.`);

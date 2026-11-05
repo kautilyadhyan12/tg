@@ -2,7 +2,7 @@
 // Full profile view (v1 §6.1 users module); the minimal auth view stays in
 // auth.ts. All request bodies are .strict() (Part IV #5).
 import { z } from "zod";
-import { oneTimeTokenSchema, signInCodeSchema } from "./auth.js";
+import { authEmailSchema, oneTimeTokenSchema, signInCodeSchema } from "./auth.js";
 
 /** Part 4 §3.1 users columns exposed to the owner. emailVerified is DERIVED
  *  from a consumed verify_email one-time token (DECISIONS 2026-07-11). */
@@ -68,6 +68,17 @@ export type RestoreAccountRequest = z.infer<typeof restoreAccountRequestSchema>;
  *  account's own address (there is no password to ask for since 2026-09-07). */
 export const deleteAccountRequestSchema = z.object({ code: signInCodeSchema }).strict();
 export type DeleteAccountRequest = z.infer<typeof deleteAccountRequestSchema>;
+/** Change email (ROADMAP Stage 5 19c; RULINGS 2026-09-23, E): a code goes to the NEW address, and the
+ *  change is made only when that code comes back from the same account. */
+export const changeEmailCodeRequestSchema = z.object({ email: authEmailSchema }).strict();
+export type ChangeEmailCodeRequest = z.infer<typeof changeEmailCodeRequestSchema>;
+export const changeEmailRequestSchema = z.object({ email: authEmailSchema, code: signInCodeSchema }).strict();
+export type ChangeEmailRequest = z.infer<typeof changeEmailRequestSchema>;
+/** The account's address and name as they are now: a name that was only the old address's first part
+ *  becomes the new one's. Not strict, as the delete answer. */
+export const changeEmailResponseSchema = z.object({ message: z.string(), email: z.string(), displayName: z.string() });
+export type ChangeEmailResponse = z.infer<typeof changeEmailResponseSchema>;
+
 /** `emailSent`: the undo link went to the account's address, so a screen may say so. */
 // Not strict: a field the server adds later must not turn a deleted account into "no answer" on the phone.
 export const deleteAccountResponseSchema = z.object({ message: z.string(), emailSent: z.boolean() });

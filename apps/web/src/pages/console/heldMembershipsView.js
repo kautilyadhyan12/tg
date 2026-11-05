@@ -672,7 +672,7 @@ export function joiningFeeFor(type, choice, canBill, alreadyMember) {
 export function typeWithTax(type, list) {
   const rate = (list?.taxRates ?? []).find((r) => r.id === type.taxRateId);
   // With the gym's day of the month it bills everyone on (18y), for the first bill's part month.
-  return { ...type, tax: rate === undefined ? null : { name: rate.name, bp: rate.bp }, billDay: list?.billDay ?? null };
+  return { ...type, tax: rate === undefined ? null : { name: rate.name, pcm: rate.pcm }, billDay: list?.billDay ?? null };
 }
 
 /** A key the server takes one membership for, however often the request arrives. */

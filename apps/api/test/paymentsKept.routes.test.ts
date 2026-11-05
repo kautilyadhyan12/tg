@@ -152,7 +152,7 @@ d("payments kept when a record is deleted for good (real Postgres)", () => {
     return page(res);
   };
   const addProduct = async (gymId: string, cookies: Cookies, name: string, priceMinor: number): Promise<GymProduct> => {
-    const res = await post(`${register(gymId)}/products`, { name, priceMinor, taxRateId: null, stock: null }, cookies);
+    const res = await post(`${register(gymId)}/products`, { name, priceMinor, taxRateIds: [], stock: null }, cookies);
     expect(res.statusCode, res.body).toBe(201);
     const found = page(res).products.find((p) => p.name === name);
     if (found === undefined) throw new Error(`no product named ${name}`);

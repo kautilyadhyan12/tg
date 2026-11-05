@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { MEMBERSHIP_DESCRIPTION_MAX, MEMBERSHIP_NAME_MAX, aCoach, bpToTaxRateText, orgWords } from '@app/shared';
+import { MEMBERSHIP_DESCRIPTION_MAX, MEMBERSHIP_NAME_MAX, aCoach, pcmToTaxRateText, orgWords } from '@app/shared';
 import { Loader2, Plus } from 'lucide-react';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import { readOnlyNote } from '../../pages/console/billingView';
@@ -337,7 +337,7 @@ function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRate
             <option value="">No tax</option>
             {taxRates.map((rate) => (
               <option key={rate.id} value={rate.id}>
-                {`${rate.name} ${bpToTaxRateText(rate.bp)}%`}
+                {`${rate.name} ${pcmToTaxRateText(rate.pcm)}%`}
               </option>
             ))}
           </select>
@@ -954,7 +954,7 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
       currency={draftCurrency}
       options={classOptions(list, editing)}
       taxRates={list?.taxRates ?? []}
-      onRateAdded={(rate) => setList((was) => (was === null ? was : { ...was, taxRates: [...was.taxRates.filter((r) => r.id !== rate.id), { id: rate.id, name: rate.name, bp: rate.bp }] }))}
+      onRateAdded={(rate) => setList((was) => (was === null ? was : { ...was, taxRates: [...was.taxRates.filter((r) => r.id !== rate.id), { id: rate.id, name: rate.name, pcm: rate.pcm }] }))}
       draft={draft}
       setDraft={setDraft}
       problems={showProblems ? problems : null}

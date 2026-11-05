@@ -120,16 +120,16 @@ d("the register: discounts and promo codes (real Postgres)", () => {
     expect(res.statusCode, res.body).toBe(200);
     return page(res);
   };
-  const addProduct = async (gymId: string, cookies: Cookies, body: { name: string; priceMinor: number; taxRateId?: string | null; stock?: number | null }) => {
-    const res = await post(`${base(gymId)}/products`, { taxRateId: null, stock: null, ...body }, cookies);
+  const addProduct = async (gymId: string, cookies: Cookies, body: { name: string; priceMinor: number; taxRateIds?: string[]; stock?: number | null }) => {
+    const res = await post(`${base(gymId)}/products`, { taxRateIds: [], stock: null, ...body }, cookies);
     expect(res.statusCode, res.body).toBe(201);
     const found = page(res).products.find((p) => p.name === body.name);
     if (found === undefined) throw new Error(`no product named ${body.name}`);
     return found;
   };
   /** A named tax rate, made through the route (18b-iii). */
-  const addRate = async (gymId: string, cookies: Cookies, name: string, bp: number): Promise<string> => {
-    const res = await post(`${base(gymId)}/tax-rates`, { name, bp }, cookies);
+  const addRate = async (gymId: string, cookies: Cookies, name: string, pcm: number): Promise<string> => {
+    const res = await post(`${base(gymId)}/tax-rates`, { name, pcm }, cookies);
     expect(res.statusCode, res.body).toBe(201);
     const found = page(res).tax.rates.find((r) => r.name === name);
     if (found === undefined) throw new Error(`no rate named ${name}`);
@@ -217,8 +217,8 @@ d("the register: discounts and promo codes (real Postgres)", () => {
       const gymId = await makeGym(owner, "Regd Worst Gym");
       const otherGym = await makeGym(nextDoor, "Regd Worst Next Door");
       await staffWith(gymId, desk, "manager", null);
-      const salesTax = await addRate(gymId, owner.cookies, "Sales tax", 825);
-      const water = await addProduct(gymId, owner.cookies, { name: "Water 500 ml", priceMinor: 199, taxRateId: salesTax });
+      const salesTax = await addRate(gymId, owner.cookies, "Sales tax", 8250);
+      const water = await addProduct(gymId, owner.cookies, { name: "Water 500 ml", priceMinor: 199, taxRateIds: [salesTax] });
       const summer = await addDiscount(gymId, owner.cookies, "Summer sale", { code: "SUMMER20" });
       const firstThree = await addDiscount(gymId, owner.cookies, "First three", { percentBp: 1000, maxUses: 3 });
       const theirs = await addDiscount(otherGym, nextDoor.cookies, "Their half off", { percentBp: 5000, code: "HALF" });
@@ -419,7 +419,7 @@ d("the register: discounts and promo codes (real Postgres)", () => {
       expect((await send("PATCH", `/v1/orgs/${gymId}`, owner.cookies, { country: "GB" })).statusCode).toBe(200);
       const waterNow = (await read(gymId, owner.cookies)).products.find((p) => p.id === water.id);
       if (waterNow === undefined) throw new Error("the water is gone");
-      expect((await put(`${base(gymId)}/products/${water.id}`, { name: "Water", priceMinor: 200, taxRateId: null, stock: null, updatedAt: waterNow.updatedAt }, owner.cookies)).statusCode).toBe(200);
+      expect((await put(`${base(gymId)}/products/${water.id}`, { name: "Water", priceMinor: 200, taxRateIds: [], stock: null, updatedAt: waterNow.updatedAt }, owner.cookies)).statusCode).toBe(200);
       const inDollars = await sell(gymId, owner.cookies, sale(water.id, 100, { discountId: dollar.id }));
       expect(inDollars.statusCode).toBe(409);
       expect(errorOf(inDollars)).toBe("discount_other_currency");
@@ -601,8 +601,8 @@ d("the register: discounts and promo codes (real Postgres)", () => {
       // 20% VAT inside the price. A towel at 10.00 less 2.00 is 8.00 paid; a sixth of it,
       // 1.3333, is tax, so 1.33, and 6.67 before tax. Less 15% (1.50) it is 8.50 paid;
       // a sixth, 1.41667, so 1.42, and 7.08.
-      const vat = await addRate(gymId, owner.cookies, "VAT", 2000);
-      const towel = await addProduct(gymId, owner.cookies, { name: "Towel", priceMinor: 1000, taxRateId: vat });
+      const vat = await addRate(gymId, owner.cookies, "VAT", 20000);
+      const towel = await addProduct(gymId, owner.cookies, { name: "Towel", priceMinor: 1000, taxRateIds: [vat] });
       const two = await addDiscount(gymId, owner.cookies, "Two pounds off", { kind: "amount", percentBp: null, amountMinor: 200 });
       const fifteen = await addDiscount(gymId, owner.cookies, "Fifteen", { percentBp: 1500 });
       for (const wrong of [1000, 799, 801, 667]) {

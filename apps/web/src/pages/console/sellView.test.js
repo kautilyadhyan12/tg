@@ -20,6 +20,7 @@ import {
   purchaseLine,
   quantityMax,
   saleProblem,
+  restoredWords,
   saleSummary,
   soldWords,
   rowsOfKind,
@@ -45,11 +46,11 @@ import {
 } from './sellView';
 import { saleDiscountWords } from './sellView';
 
-const water = (over = {}) => ({ id: 'p1', name: 'Water', priceMinor: 199, currency: 'USD', taxRateId: 'r1', stock: null, archivedAt: null, updatedAt: '2026-10-12T10:00:00.000Z', ...over });
-const rate = (over = {}) => ({ id: 'r1', name: 'Sales tax', bp: 825, products: 0, membershipTypes: 0, memberships: 0, ...over });
+const water = (over = {}) => ({ id: 'p1', name: 'Water', priceMinor: 199, currency: 'USD', taxRateIds: ['r1'], stock: null, archivedAt: null, updatedAt: '2026-10-12T10:00:00.000Z', ...over });
+const rate = (over = {}) => ({ id: 'r1', name: 'Sales tax', pcm: 8250, products: 0, membershipTypes: 0, memberships: 0, ...over });
 const NO_TAX = { included: false, rates: [] };
 const TEXAS = { included: false, rates: [rate()] };
-const UK = { included: true, rates: [rate({ name: 'VAT', bp: 2000 })] };
+const UK = { included: true, rates: [rate({ name: 'VAT', pcm: 20000 })] };
 const sale = (over = {}) => ({
   id: 's1',
   itemName: 'Water',
@@ -58,8 +59,7 @@ const sale = (over = {}) => ({
   netMinor: 398,
   taxMinor: 33,
   totalMinor: 431,
-  taxBp: 825,
-  taxName: 'Sales tax',
+  taxes: [{ name: 'Sales tax', pcm: 8250, minor: 33 }],
   taxIncluded: false,
   currency: 'USD',
   method: 'cash',
@@ -210,18 +210,39 @@ describe('the sale as it is shown', () => {
     });
   });
   it('a product the gym does not tax shows no tax line, whatever the rate', () => {
-    expect(saleSummary(water({ taxRateId: null }), 1, TEXAS).lines).toEqual([{ label: 'Total', value: '$1.99', strong: true }]);
-    expect(saleSummary(water({ taxRateId: null }), 1, UK).lines).toEqual([{ label: 'Total', value: '$1.99', strong: true }]);
+    expect(saleSummary(water({ taxRateIds: [] }), 1, TEXAS).lines).toEqual([{ label: 'Total', value: '$1.99', strong: true }]);
+    expect(saleSummary(water({ taxRateIds: [] }), 1, UK).lines).toEqual([{ label: 'Total', value: '$1.99', strong: true }]);
     // A rate since removed is no tax, never a guess at one.
-    expect(saleSummary(water({ taxRateId: 'r-gone' }), 1, TEXAS).lines).toEqual([{ label: 'Total', value: '$1.99', strong: true }]);
+    expect(saleSummary(water({ taxRateIds: ['r-gone'] }), 1, TEXAS).lines).toEqual([{ label: 'Total', value: '$1.99', strong: true }]);
   });
   it('each product charges its own rate, by its own name', () => {
-    const two = { included: false, rates: [rate(), rate({ id: 'r2', name: 'Food tax', bp: 200 })] };
+    const two = { included: false, rates: [rate(), rate({ id: 'r2', name: 'Food tax', pcm: 2000 })] };
     expect(saleSummary(water(), 1, two).lines[1]).toEqual({ label: 'Sales tax 8.25%', value: '$0.16' });
-    expect(saleSummary(water({ taxRateId: 'r2' }), 1, two).lines).toEqual([
+    expect(saleSummary(water({ taxRateIds: ['r2'] }), 1, two).lines).toEqual([
       { label: 'Price', value: '$1.99' },
       { label: 'Food tax 2%', value: '$0.04' },
       { label: 'Total', value: '$2.03', strong: true },
+    ]);
+  });
+  it('several taxes on one product: each on its own line, each on the price, adding up to the total (18b-v-a)', () => {
+    // Quebec, worked by hand from Revenu Québec's rates: $100.00 is $5.00 GST and $9.98 QST, $114.98.
+    const quebec = { included: false, rates: [rate({ id: 'gst', name: 'GST', pcm: 5000 }), rate({ id: 'qst', name: 'QST', pcm: 9975 })] };
+    expect(saleSummary(water({ priceMinor: 10000, currency: 'CAD', taxRateIds: ['gst', 'qst'] }), 1, quebec)).toEqual({
+      totalMinor: 11498,
+      total: 'CA$114.98',
+      lines: [
+        { label: 'Price', value: 'CA$100.00' },
+        { label: 'GST 5%', value: 'CA$5.00' },
+        { label: 'QST 9.975%', value: 'CA$9.98' },
+        { label: 'Total', value: 'CA$114.98', strong: true },
+      ],
+    });
+    // India, both inside the price: ₹1,180 holds ₹90 CGST and ₹90 SGST.
+    const india = { included: true, rates: [rate({ id: 'c', name: 'CGST', pcm: 9000 }), rate({ id: 's', name: 'SGST', pcm: 9000 })] };
+    expect(saleSummary(water({ priceMinor: 118000, currency: 'INR', taxRateIds: ['c', 's'] }), 1, india).lines).toEqual([
+      { label: 'Total', value: '₹1,180.00', strong: true },
+      { label: 'Includes CGST 9%', value: '₹90.00' },
+      { label: 'Includes SGST 9%', value: '₹90.00' },
     ]);
   });
   it('nothing to add up with no product, or a number that is not one', () => {
@@ -327,7 +348,9 @@ describe('today', () => {
   it('a purchase on a person’s page', () => {
     expect(purchaseLine(sale())).toEqual({ title: '2 × Water', amount: '$4.31', facts: '12 Oct 2026 · Cash · $0.33 Sales tax', undone: false, voided: null, refundTag: null, receiptNumber: 41 });
     // A sale made before rates had names says "tax".
-    expect(saleTaxWords(sale({ taxName: null }))).toBe('$0.33 tax');
+    expect(saleTaxWords(sale({ taxes: [{ name: null, pcm: 8250, minor: 33 }] }))).toBe('$0.33 tax');
+    // Several taxes, each by its name (18b-v-a).
+    expect(saleTaxWords(sale({ taxMinor: 1498, taxes: [{ name: 'GST', pcm: 5000, minor: 500 }, { name: 'QST', pcm: 9975, minor: 998 }] }))).toBe('$5.00 GST and $9.98 QST');
     expect(saleTaxWords(sale({ taxMinor: 0 }))).toBeNull();
     expect(purchaseLine(sale({ taxMinor: 0, method: 'bank_transfer', undone: true, voided: { reason: 'mistake', on: '2026-10-12', by: 'Sam Desk' } }))).toEqual({
       title: '2 × Water',
@@ -356,22 +379,43 @@ describe('products and tax', () => {
     expect(productProblems({ ...good, counts: true, stock: '2.5' }, 'USD')).toEqual({ stock: 'Enter how many you have, from 0 to 100,000.' });
     expect(productProblems({ ...good, counts: true, stock: '100001' }, 'USD')).toEqual({ stock: 'Enter how many you have, from 0 to 100,000.' });
     expect(productProblems({ ...good, counts: true, stock: '0' }, 'USD')).toEqual({});
+    // The taxes ticked can come to 30% at most together (18b-v-a); 30% itself stands.
+    const rates = [rate({ id: 'a', name: 'State', pcm: 20000 }), rate({ id: 'b', name: 'City', pcm: 10001 }), rate({ id: 'c', name: 'Small', pcm: 10000 })];
+    expect(productProblems({ ...good, taxRateIds: ['a', 'b'] }, 'USD', rates)).toEqual({
+      tax: "These taxes come to 30.001% together. A product's taxes can come to 30% at most. Untick one.",
+    });
+    expect(productProblems({ ...good, taxRateIds: ['a', 'c'] }, 'USD', rates)).toEqual({});
   });
   it('the form as the server takes it, new and changed', () => {
     // A new product charges the gym's one rate; with no rate, or several, it starts on No tax.
-    expect(productBody({ ...emptyProductDraft(TEXAS), name: ' Water ', price: '1.99' }, 'USD')).toEqual({ name: 'Water', priceMinor: 199, taxRateId: 'r1', stock: null });
-    expect(emptyProductDraft(NO_TAX).taxRateId).toBe('');
-    expect(emptyProductDraft({ included: false, rates: [rate(), rate({ id: 'r2', name: 'Food tax' })] }).taxRateId).toBe('');
-    expect(productBody({ ...emptyProductDraft(NO_TAX), name: 'Water', price: '1.99' }, 'USD').taxRateId).toBeNull();
-    const draft = draftFromProduct(water({ stock: 8, taxRateId: null }));
-    expect(draft).toEqual({ id: 'p1', name: 'Water', price: '1.99', taxRateId: '', counts: true, stock: '8', updatedAt: '2026-10-12T10:00:00.000Z' });
-    expect(productBody({ ...draft, stock: '12' }, 'USD')).toEqual({ name: 'Water', priceMinor: 199, taxRateId: null, stock: 12, updatedAt: '2026-10-12T10:00:00.000Z' });
+    expect(productBody({ ...emptyProductDraft(TEXAS), name: ' Water ', price: '1.99' }, 'USD', TEXAS.rates)).toEqual({ name: 'Water', priceMinor: 199, taxRateIds: ['r1'], stock: null });
+    expect(emptyProductDraft(NO_TAX).taxRateIds).toEqual([]);
+    expect(emptyProductDraft({ included: false, rates: [rate(), rate({ id: 'r2', name: 'Food tax' })] }).taxRateIds).toEqual([]);
+    expect(productBody({ ...emptyProductDraft(NO_TAX), name: 'Water', price: '1.99' }, 'USD').taxRateIds).toEqual([]);
+    const draft = draftFromProduct(water({ stock: 8, taxRateIds: [] }));
+    expect(draft).toEqual({ id: 'p1', name: 'Water', price: '1.99', taxRateIds: [], counts: true, stock: '8', updatedAt: '2026-10-12T10:00:00.000Z' });
+    expect(productBody({ ...draft, stock: '12' }, 'USD')).toEqual({ name: 'Water', priceMinor: 199, taxRateIds: [], stock: 12, updatedAt: '2026-10-12T10:00:00.000Z' });
+    // Rates go in the order they were picked: a product keeps the places of the rates it had (round one, Low).
+    const had = draftFromProduct(water({ taxRateIds: ['qst', 'gst'] }));
+    expect(productBody({ ...had, taxRateIds: [...had.taxRateIds, 'city'] }, 'USD').taxRateIds).toEqual(['qst', 'gst', 'city']);
+  });
+  it('a product whose taxes came to more than 30% says why it is not sold, and where to fix it; one put back says what was taken off (round one, High)', () => {
+    const tax = { included: false, rates: [rate({ id: 's', name: 'State tax', pcm: 20000 }), rate({ id: 'c', name: 'City tax', pcm: 15000 })] };
+    const bar = water({ name: 'Bar', taxRateIds: ['s', 'c'] });
+    expect(saleProblem({ product: bar, quantity: 1, who: 'walkin', person: null, tax })).toBe('The taxes on Bar come to more than 30% together. Press Change on Bar under Products and untick one.');
+    expect(saleProblem({ product: water({ taxRateIds: ['s'] }), quantity: 1, who: 'walkin', person: null, tax })).toBeNull();
+    expect(restoredWords(bar, { tax, products: [{ ...bar, taxRateIds: ['s'] }] })).toBe(
+      'Bar is for sale again. City tax 15% was taken off it, as its taxes came to more than 30% together. Press Change on Bar to check its tax.',
+    );
+    expect(restoredWords(water(), { tax: TEXAS, products: [water()] })).toBe('Water is for sale again.');
   });
   it('a product in the list says its price, its tax only where the gym charges one, and its stock', () => {
     expect(productRow(water(), NO_TAX)).toBe('$1.99 · stock not counted');
     expect(productRow(water({ stock: 8 }), TEXAS)).toBe('$1.99 · plus Sales tax 8.25% · 8 in stock');
     expect(productRow(water({ stock: 0, currency: 'GBP' }), UK)).toBe('£1.99 · VAT 20% included · out of stock');
-    expect(productRow(water({ taxRateId: null }), TEXAS)).toBe('$1.99 · no tax · stock not counted');
+    expect(productRow(water({ taxRateIds: [] }), TEXAS)).toBe('$1.99 · no tax · stock not counted');
+    const quebec = { included: false, rates: [rate({ id: 'gst', name: 'GST', pcm: 5000 }), rate({ id: 'qst', name: 'QST', pcm: 9975 })] };
+    expect(productRow(water({ taxRateIds: ['gst', 'qst'] }), quebec)).toBe('$1.99 · plus GST 5% and QST 9.975% · stock not counted');
     expect(productRow(water(), NO_TAX, 'USD')).toBe('$1.99 · stock not counted');
     expect(productRow(water(), NO_TAX, 'GBP')).toBe('$1.99 · priced in USD: save its price in GBP to sell it · stock not counted');
   });
@@ -379,13 +423,17 @@ describe('products and tax', () => {
     expect(emptyRateDraft()).toEqual({ id: null, name: '', rate: '' });
     expect(draftFromRate(rate())).toEqual({ id: 'r1', name: 'Sales tax', rate: '8.25' });
     expect(rateProblems({ name: ' GST ', rate: '18' })).toEqual({});
-    expect(rateBody({ name: ' GST ', rate: ' 18 ' })).toEqual({ name: 'GST', bp: 1800 });
-    expect(rateBody({ name: 'Sales tax', rate: '8.25' })).toEqual({ name: 'Sales tax', bp: 825 });
+    expect(rateBody({ name: ' GST ', rate: ' 18 ' })).toEqual({ name: 'GST', pcm: 18000 });
+    expect(rateBody({ name: 'Sales tax', rate: '8.25' })).toEqual({ name: 'Sales tax', pcm: 8250 });
+    // Three decimals (18b-v-a): Quebec's QST, New York City's sales tax.
+    expect(rateBody({ name: 'QST', rate: '9.975' })).toEqual({ name: 'QST', pcm: 9975 });
+    expect(rateProblems({ name: 'Sales tax', rate: '8.875' })).toEqual({});
+    expect(draftFromRate(rate({ pcm: 9975 })).rate).toBe('9.975');
     expect(rateProblems({ name: '', rate: '18' })).toEqual({ name: 'Enter a tax name.' });
     expect(rateProblems({ name: 'x'.repeat(31), rate: '18' })).toEqual({ name: 'Keep the name to 30 characters.' });
     expect(rateProblems({ name: `GST${String.fromCharCode(0x200b)}`, rate: '18' })).toEqual({ name: HIDDEN_TEXT });
-    for (const typed of ['', '0', '0.00', '8,25', '31', '8.255', '-1', 'ten']) {
-      expect(rateProblems({ name: 'GST', rate: typed })).toEqual({ rate: 'Enter a rate from 0.01 to 30, with up to two decimal places.' });
+    for (const typed of ['', '0', '0.000', '8,25', '31', '30.001', '8.2555', '-1', 'ten']) {
+      expect(rateProblems({ name: 'GST', rate: typed })).toEqual({ rate: 'Enter a rate from 0.001 to 30, with up to three decimal places.' });
     }
   });
   it('the tax box suggests the gym country’s own tax, and never a rate (18b-iv)', () => {
@@ -414,7 +462,7 @@ describe('products and tax', () => {
   });
   it('a rate’s Choose box ticks what charges it, says what another one charges now, and says what was saved', () => {
     const page = {
-      tax: { included: false, rates: [rate(), rate({ id: 'r2', name: 'VAT', bp: 2000 })] },
+      tax: { included: false, rates: [rate(), rate({ id: 'r2', name: 'VAT', pcm: 20000 })] },
       membershipTypes: [
         { id: 't1', name: 'Gold', taxRateId: 'r1' },
         { id: 't2', name: 'Silver', taxRateId: 'r2' },
@@ -428,6 +476,11 @@ describe('products and tax', () => {
       { id: 't3', name: 'Bronze', on: false, note: null },
     ]);
     expect(chargeChoices(page, rate(), 'products')).toEqual([{ id: 'p1', name: 'Water', on: true, note: null }]);
+    // A product keeps its other rates, and says them (18b-v-a).
+    expect(chargeChoices({ ...page, products: [water({ taxRateIds: ['r2'] }), water({ id: 'p2', name: 'Towel', taxRateIds: ['r1', 'r2'] })] }, rate(), 'products')).toEqual([
+      { id: 'p1', name: 'Water', on: false, note: 'Also charges VAT 20%' },
+      { id: 'p2', name: 'Towel', on: true, note: 'Also charges VAT 20%' },
+    ]);
     expect(chargedWords(rate(), ['Gold'], 'memberships')).toBe('Sales tax 8.25% is now charged on Gold.');
     expect(chargedWords(rate(), ['A', 'B', 'C', 'D', 'E'], 'memberships')).toBe('Sales tax 8.25% is now charged on A, B, C and 2 more.');
     expect(chargedWords(rate(), [], 'products')).toBe('Sales tax 8.25% is now charged on no products.');
@@ -437,7 +490,7 @@ describe('products and tax', () => {
     expect(rateRemoveBlock(rate())).toBeNull();
     expect(rateUses(rate({ products: 1 }))).toBe('Charged on 1 product.');
     expect(rateUses(rate({ products: 3, membershipTypes: 1, memberships: 12 }))).toBe("Charged on 3 products, 1 membership type and 12 members' memberships.");
-    expect(rateRemoveBlock(rate({ products: 2 }))).toBe("Sales tax can't be removed: it is charged on 2 products. Change those to another rate or No tax first.");
+    expect(rateRemoveBlock(rate({ products: 2 }))).toBe("Sales tax can't be removed: it is charged on 2 products. Untick it on those first.");
     expect(rateRemoveBlock(rate({ memberships: 1 }))).toBe(
       "Sales tax can't be removed: it is charged on 1 member's membership. A membership keeps the tax it was sold with, so Sales tax can be removed once nobody holds one.",
     );
@@ -453,19 +506,19 @@ describe('products and tax', () => {
       ['included', 'Already included in the price', 'For example, with a 10% tax, a price of £100.00 costs the customer £100.00, and £9.09 of it is tax. Standard where VAT, GST or consumption tax applies.'],
     ]);
     // With a rate of its own, the gym reads its own rate, never a made-up 10% (Kd's click-through).
-    expect(taxModes('INR', rate({ name: 'GST', bp: 1800 })).map((m) => m.hint)).toEqual([
+    expect(taxModes('INR', rate({ name: 'GST', pcm: 18000 })).map((m) => m.hint)).toEqual([
       'With GST 18%, a price of ₹100.00 costs the customer ₹118.00. Standard in the United States and Canada.',
       'With GST 18%, a price of ₹100.00 costs the customer ₹100.00, and ₹15.25 of it is tax. Standard where VAT, GST or consumption tax applies.',
     ]);
     // The example's own numbers, by the rule the server uses.
-    const ten = [rate({ name: 'Tax', bp: 1000 })];
+    const ten = [rate({ name: 'Tax', pcm: 10000 })];
     expect(saleSummary(water({ priceMinor: 1000 }), 1, { included: false, rates: ten }).totalMinor).toBe(1100);
     expect(saleSummary(water({ priceMinor: 1000 }), 1, { included: true, rates: ten }).lines[1]).toEqual({ label: 'Includes Tax 10%', value: '$0.91' });
   });
 });
 
 describe('round one of 18b-iii', () => {
-  const r = (over = {}) => ({ id: 'r1', name: 'GST', bp: 1800, products: 0, membershipTypes: 0, memberships: 0, ...over });
+  const r = (over = {}) => ({ id: 'r1', name: 'GST', pcm: 18000, products: 0, membershipTypes: 0, memberships: 0, ...over });
   it('a rate’s Change form says whose next bill a new percentage reaches', () => {
     expect(rateChangeNote(r())).toBe('A new rate is charged on sales and bills from now on. Sales and bills already made keep the tax they were made with.');
     expect(rateChangeNote(r({ memberships: 1 }))).toBe(
