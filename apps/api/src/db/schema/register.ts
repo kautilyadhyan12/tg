@@ -1,5 +1,5 @@
 // THE REGISTER (Part 3 §14.3; ROADMAP Stage 2 items 18b-i, 18b-ii-a and 18b-ii-b). Mirrors
-// `0102_register.sql`, `0104_discounts.sql`, `0107_membership_discounts.sql` and `0112_tax_rates.sql` and `0128_sale_refunds.sql` and `0135_sale_baskets.sql` and `0205_tax_thousandths.sql` 1:1; the migrations carry the reasoning.
+// `0102_register.sql`, `0104_discounts.sql`, `0107_membership_discounts.sql` and `0112_tax_rates.sql` and `0128_sale_refunds.sql` and `0135_sale_baskets.sql` and `0206_tax_thousandths.sql` 1:1; the migrations carry the reasoning.
 import { sql } from "drizzle-orm";
 import {
   bigint,
@@ -56,7 +56,7 @@ export const gymProducts = pgTable(
   ],
 );
 
-/** The gym's tax rates a product charges (0205; 18b-v-a), in the order they were picked, each once. */
+/** The gym's tax rates a product charges (0206; 18b-v-a), in the order they were picked, each once. */
 export const gymProductTaxRates = pgTable(
   "gym_product_tax_rates",
   {
@@ -206,12 +206,12 @@ export const gymSales = pgTable(
     netMinor: integer("net_minor").notNull(),
     taxMinor: integer("tax_minor").notNull(),
     totalMinor: integer("total_minor").notNull(),
-    /** The line's whole tax rate, its taxes' added up (0205: thousandths of a percent). */
+    /** The line's whole tax rate, its taxes' added up (0206: thousandths of a percent). */
     taxPcm: integer("tax_pcm").notNull(),
     taxIncluded: boolean("tax_included").notNull(),
     /** The tax's name where it had one tax; null where none, or several (`taxes`). */
     taxName: text("tax_name"),
-    /** Each tax, `{ name, pcm, minor }`, in the order charged (0205; 18b-v-a). */
+    /** Each tax, `{ name, pcm, minor }`, in the order charged (0206; 18b-v-a). */
     taxes: jsonb("taxes").notNull().default(sql`'[]'`),
     currency: text("currency").notNull(),
     method: text("method").notNull(),

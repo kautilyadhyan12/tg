@@ -80,6 +80,7 @@ export async function deleteUserOwnedRows(tx: TransactionSql, userId: string): P
   await tx`DELETE FROM saved_routes WHERE user_id = ${userId}`;
   await tx`DELETE FROM run_schedules WHERE user_id = ${userId}`;
   await tx`DELETE FROM body_measurements WHERE user_id = ${userId}`;
+  await tx`DELETE FROM body_measurement_removed_ids WHERE user_id = ${userId}`;
   await tx`DELETE FROM workout_templates WHERE user_id = ${userId}`;
   // workout_sets is deliberately NOT deleted by its user_id here. That column
   // is a DENORMALISED copy; the set's true owner is whoever owns its workout

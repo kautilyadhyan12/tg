@@ -39,7 +39,8 @@ import { forgetExports } from "./session/personFiles";
 import { PlacesProvider, usePlaces } from "./screens/places";
 import { tabWord } from "./screens/placesHeading";
 import { FoodScreen } from "./screens/Food";
-import { mealFile, photoSheetFile } from "./screens/food/fileStore";
+import { bodyFile, mealFile, photoSheetFile } from "./screens/food/fileStore";
+import { BodyOutboxProvider } from "./screens/progress/BodyOutbox";
 import { MealOutboxProvider } from "./screens/food/MealOutbox";
 import { PhotoSheetStoreProvider } from "./screens/food/PhotoSheetStore";
 import type { TextStore } from "./screens/food/outbox";
@@ -80,6 +81,8 @@ interface AppProps {
   wait?: (ms: number) => Promise<void>;
   /** Where a person's waiting meals are kept: the phone's own file, or a test's. */
   mealStore?: (userId: string) => TextStore;
+  /** Where a person's waiting body measurements are kept: the phone's file, or a test's. */
+  bodyStore?: (userId: string) => TextStore;
   /** Where a person's photo meal not yet saved is kept (33b-i). */
   photoStore?: (userId: string) => TextStore;
 }
@@ -87,7 +90,7 @@ interface AppProps {
 /** Signed out, the sign-in screen and nothing of anybody's; signed in, "Before you start" until
  *  the person has ticked it, then any invitation waiting, then setup until it is finished, then
  *  the five tabs. */
-function SignedInOrOut({ mealStore }: { mealStore: (userId: string) => TextStore }) {
+function SignedInOrOut({ mealStore, bodyStore }: { mealStore: (userId: string) => TextStore; bodyStore: (userId: string) => TextStore }) {
   const { state } = useSession();
   // With nobody signed in, nothing of the last person's stays: an app killed with Updates open left its photos.
   useEffect(() => {
@@ -110,7 +113,7 @@ function SignedInOrOut({ mealStore }: { mealStore: (userId: string) => TextStore
       <TimeZoneSync>
         <InvitationsGate>
           <SetupGate>
-            <FiveTabs mealStore={mealStore} />
+            <FiveTabs mealStore={mealStore} bodyStore={bodyStore} />
           </SetupGate>
         </InvitationsGate>
       </TimeZoneSync>
@@ -124,13 +127,15 @@ const openGymTab = () => {
   if (tabsRef.isReady()) tabsRef.navigate("Gym");
 };
 
-function FiveTabs({ mealStore }: { mealStore: (userId: string) => TextStore }) {
+function FiveTabs({ mealStore, bodyStore }: { mealStore: (userId: string) => TextStore; bodyStore: (userId: string) => TextStore }) {
   return (
     <PlacesProvider>
       <MealOutboxProvider store={mealStore}>
-        <NotificationsProvider onTapped={openGymTab}>
-          <TabsOfPlaces />
-        </NotificationsProvider>
+        <BodyOutboxProvider store={bodyStore}>
+          <NotificationsProvider onTapped={openGymTab}>
+            <TabsOfPlaces />
+          </NotificationsProvider>
+        </BodyOutboxProvider>
       </MealOutboxProvider>
     </PlacesProvider>
   );
@@ -153,7 +158,7 @@ function TabsOfPlaces() {
   );
 }
 
-export function App({ extra, ask = fetch, store = phoneKeyStore, google = askGoogle, wait, mealStore = mealFile, photoStore = photoSheetFile }: AppProps) {
+export function App({ extra, ask = fetch, store = phoneKeyStore, google = askGoogle, wait, mealStore = mealFile, bodyStore = bodyFile, photoStore = photoSheetFile }: AppProps) {
   // A font that cannot be read must not leave a blank page: the phone's own font shows instead.
   const [fontsReady, fontsFailed] = useFonts({
     Inter_400Regular,
@@ -180,7 +185,7 @@ export function App({ extra, ask = fetch, store = phoneKeyStore, google = askGoo
           ) : (
             <SessionProvider server={server} store={store} google={google} wait={wait}>
               <PhotoSheetStoreProvider store={photoStore}>
-                <SignedInOrOut mealStore={mealStore} />
+                <SignedInOrOut mealStore={mealStore} bodyStore={bodyStore} />
               </PhotoSheetStoreProvider>
             </SessionProvider>
           )}

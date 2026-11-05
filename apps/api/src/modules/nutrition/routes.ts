@@ -635,7 +635,8 @@ export function registerNutritionRoutes(
     // An account deleted while this request waited on it is a 401 from the
     // service — the answer sign-in gives every request after a deletion.
     const measurement = await service.createMeasurement(readDeps, authedUserId(req), v);
-    return reply.status(201).send({ measurement });
+    // The phone's id is somebody else's, or the entry was removed: nothing is kept.
+    return measurement === null ? notFound(req, reply) : reply.status(201).send({ measurement });
   });
 
   app.patch<{ Params: { id: string } }>(

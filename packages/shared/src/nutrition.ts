@@ -418,6 +418,9 @@ export const dishwareResponseSchema = z.object({ dishware: dishwareSchema }).str
 export type PatchDishware = z.infer<typeof patchDishwareSchema>;
 
 export const bodyMeasurementInputSchema = z.object({
+  // The entry's id, made by the phone (ROADMAP 35c-ii): sent twice it is one entry, and one
+  // removed stays removed. Without it every send is a new entry, as the web's is.
+  id: z.string().uuid().toLowerCase().optional(),
   // Same ≤24h-future bound as takenAt (T3 P2.6a: a measurement dated 2099
   // would stay the person's weight, as the newest weigh-in, forever).
   measuredAt: z
@@ -429,9 +432,9 @@ export const bodyMeasurementInputSchema = z.object({
   weightKg: z.number().positive().lt(1000).multipleOf(0.01).nullable().optional(),
   metrics: z.record(z.number().finite().nonnegative()).default({}), source: z.literal("manual").default("manual"),
 }).strict();
-// `source` is not patchable: a row the person typed ("self_reported") must
+// `source` and `id` are not patchable: a row the person typed ("self_reported") must
 // not be relabelled a weigh-in, and nothing else is ever sent for it.
-export const patchBodyMeasurementSchema = bodyMeasurementInputSchema.omit({ source: true }).partial().refine((v) => Object.keys(v).length > 0, { message: "at least one field required" });
+export const patchBodyMeasurementSchema = bodyMeasurementInputSchema.omit({ source: true, id: true }).partial().refine((v) => Object.keys(v).length > 0, { message: "at least one field required" });
 export type BodyMeasurementInput = z.infer<typeof bodyMeasurementInputSchema>;
 export type PatchBodyMeasurement = z.infer<typeof patchBodyMeasurementSchema>;
 
@@ -452,6 +455,40 @@ export const bodyMeasurementListResponseSchema = z.object({
   nextCursor: z.string().nullable(),
 }).strict();
 export type BodyMeasurement = z.infer<typeof bodyMeasurementSchema>;
+/** POST /v1/nutrition/body-measurements answers with the entry as it is kept. */
+export const bodyMeasurementResponseSchema = z.object({ measurement: bodyMeasurementSchema }).strict();
+
+// ── A body measurement kept on the phone until the server has it (ROADMAP Stage 5 35c-ii) ──
+// Each entry, and each removal of one, is written to the person's own file before it is sent, and
+// sent in the order made. Read back through these whenever the app opens.
+export const BODY_OUTBOX_MOST = 200;
+
+/** An entry waiting to be sent: what the POST carries, its time read without the server's "not more
+ *  than a day ahead" rule, which is the server's to apply. `tried`: sent at least once. */
+export const waitingBodyEntrySchema = z.object({
+  id: z.string().uuid().toLowerCase(),
+  measuredAt: z.string().datetime(),
+  weightKg: z.number().positive().lt(1000).nullable(),
+  metrics: z.record(z.number().finite().nonnegative()),
+  tried: z.boolean(),
+}).strict();
+export type WaitingBodyEntry = z.infer<typeof waitingBodyEntrySchema>;
+
+export const bodyOutboxEntrySchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("save"), entry: waitingBodyEntrySchema }).strict(),
+  z.object({ kind: z.literal("remove"), id: z.string().uuid().toLowerCase() }).strict(),
+]);
+export type BodyOutboxEntry = z.infer<typeof bodyOutboxEntrySchema>;
+
+/** An entry the server would not take, said on Body until the person presses OK. */
+export const bodyOutboxRefusedSchema = z.object({
+  id: z.string().uuid().toLowerCase(),
+  message: z.string().max(500),
+  /** Which entry it was, so two refusals never read alike. */
+  measuredAt: z.string().datetime().optional(),
+  weightKg: z.number().nullable().optional(),
+}).strict();
+export type BodyOutboxRefused = z.infer<typeof bodyOutboxRefusedSchema>;
 
 export const nutritionListQuerySchema = z.object({ limit: z.coerce.number().int().min(1).max(100).default(20), cursor: z.string().optional() }).strict();
 export const foodSearchQuerySchema = z.object({ q: z.string().trim().min(1).max(100), limit: z.coerce.number().int().min(1).max(50).default(10) }).strict();

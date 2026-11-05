@@ -6,7 +6,7 @@ import { check, integer, pgTable, text, timestamp, unique, uniqueIndex, uuid } f
 import { createdAt } from "./common.js";
 import { gyms } from "./tenancy.js";
 
-/** One named rate: `rate_pcm` is thousandths of a percent (0205), 8250 for 8.25%, 9975 for 9.975%. */
+/** One named rate: `rate_pcm` is thousandths of a percent (0206), 8250 for 8.25%, 9975 for 9.975%. */
 export const gymTaxRates = pgTable(
   "gym_tax_rates",
   {

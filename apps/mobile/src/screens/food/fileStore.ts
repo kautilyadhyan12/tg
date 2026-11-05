@@ -6,7 +6,15 @@ import type { TextStore } from "./outbox";
  *  second file and moved over the first; the move deletes the first before it renames, so a phone
  *  that dies between the two leaves only the second, and a read finds it there. */
 export function mealFile(userId: string): TextStore {
-  const name = `meals-${userId}.json`;
+  return keptFile(`meals-${userId}.json`, `meals-${userId}.unread.json`);
+}
+
+/** A person's waiting body measurements (ROADMAP Stage 5 35c-ii), kept as their meals are. */
+export function bodyFile(userId: string): TextStore {
+  return keptFile(`body-${userId}.json`, `body-${userId}.unread.json`);
+}
+
+function keptFile(name: string, unread: string): TextStore {
   return {
     read: async () => {
       const file = new File(Paths.document, name);
@@ -23,7 +31,7 @@ export function mealFile(userId: string): TextStore {
     },
     // The last file that could not all be read, kept as it was.
     aside: (text) => {
-      const kept = new File(Paths.document, `meals-${userId}.unread.json`);
+      const kept = new File(Paths.document, unread);
       if (kept.exists) kept.delete();
       kept.create();
       kept.write(text);
