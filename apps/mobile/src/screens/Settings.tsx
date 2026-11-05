@@ -143,7 +143,7 @@ function SettingsBody({ onClose }: { onClose: () => void }) {
       <Profile since={since} />
       <NamePart saves={saves} />
       <UnitsPart saves={saves} />
-      <NotificationsPart push={push} setPush={setPush} saves={saves} onAgain={() => { setPush({ kind: "loading" }); setPushTries((n) => n + 1); }} />
+      <NotificationsPart push={push} setPush={setPush} saves={saves} noPlace={memberOf.kind === "ok" && memberOf.orgs.length === 0} onAgain={() => { setPush({ kind: "loading" }); setPushTries((n) => n + 1); }} />
       <BoardsPart belongs={memberOf.kind === "ok" && memberOf.orgs.length > 0} />
       <PlacesPart places={memberOf} onAgain={() => { setTries((n) => n + 1); }} />
       <AccountPart onClose={onClose} saves={saves} />
@@ -253,7 +253,11 @@ function UnitsPart({ saves }: { saves: RefObject<number> }) {
   );
 }
 
-function NotificationsPart({ push, setPush, saves, onAgain }: { push: Push; setPush: (push: Push) => void; saves: RefObject<number>; onAgain: () => void }) {
+/** Every notification the app sends today comes from a place the person belongs to. */
+export const NO_PLACE_PUSH_LINE = "These start when you join a gym.";
+
+function NotificationsPart(props: { push: Push; setPush: (push: Push) => void; saves: RefObject<number>; noPlace: boolean; onAgain: () => void }) {
+  const { push, setPush, saves, noPlace, onAgain } = props;
   const { session } = useSession();
   const phone = usePhoneAllows();
   const [busy, setBusy] = useState<PushSwitch | null>(null);
@@ -281,6 +285,7 @@ function NotificationsPart({ push, setPush, saves, onAgain }: { push: Push; setP
   };
   return (
     <Part title="Notifications" icon="bell">
+      {noPlace ? <Txt kind="small">{NO_PLACE_PUSH_LINE}</Txt> : null}
       {phone.allowed === "ask" || phone.allowed === "no" ? (
         <View style={styles.phoneOff}>
           <Txt kind="small" colour="badText">

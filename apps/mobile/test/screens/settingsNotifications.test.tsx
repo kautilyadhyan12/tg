@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-
 import { Linking } from "react-native";
 import { App } from "../../src/App";
 import { NO_ANSWER } from "../../src/screens/SignIn";
-import { PUSH_SWITCHES } from "../../src/screens/Settings";
+import { NO_PLACE_PUSH_LINE, PUSH_SWITCHES } from "../../src/screens/Settings";
 import type { Ask } from "../../src/session/calls";
 import { fakeServer, kept, lost, memoryStore, profile, refusal, tokens, type Reply, type Route } from "../kit";
 
@@ -123,6 +123,27 @@ describe("the notification switches show and save only the server's answer", () 
     fail = false;
     await fireEvent.press(screen.getByLabelText("Try notifications again"));
     expect((await switchOf("Gym messages")).props.value).toBe(false);
+  });
+});
+
+describe("somebody in no gym", () => {
+  const IRON = { id: "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f", name: "Iron House" };
+  const org = { ...IRON, city: null, orgType: "gym", clockFormat: "12h", slug: "iron-house", timezone: "Asia/Kolkata", locale: "en", currencyDisplay: "INR", status: "active", staffRole: null, isMember: true, joinedAt: "2026-10-01T00:00:00.000Z" };
+
+  it("is told the notifications start when they join a gym, and can still set them", async () => {
+    const acct = account();
+    await openSettings(fakeServer(routes({ [ME]: acct.me })).ask);
+    expect(await screen.findByText(NO_PLACE_PUSH_LINE)).toBeTruthy();
+    await act(() => fireEvent(screen.getByLabelText("Comments notifications"), "valueChange", false));
+    await waitFor(() => {
+      expect(acct.held.pushComments).toBe(false);
+    });
+  });
+
+  it("a member of a gym is not told it", async () => {
+    await openSettings(fakeServer(routes({ [ME]: account().me, "/v1/orgs/mine": ok({ orgs: [org], formerOrgs: [] }) })).ask);
+    await switchOf("Gym messages");
+    expect(screen.queryByText(NO_PLACE_PUSH_LINE)).toBeNull();
   });
 });
 
