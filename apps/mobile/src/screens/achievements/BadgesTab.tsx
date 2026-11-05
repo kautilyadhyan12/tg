@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
+import Svg, { Circle, Defs, RadialGradient, Stop } from "react-native-svg";
 import type { Badge, BadgeList } from "@app/shared";
 import { colours, medal, medalShades } from "../../look/colours";
 import { medalPicture } from "../../look/medals";
@@ -78,7 +79,18 @@ function MedalOnShelf({ b, now, onPress }: { b: ShownBadge; now: Date; onPress: 
       style={({ pressed }) => [styles.medal, pressed ? styles.pressed : null]}
     >
       <View style={styles.art}>
-        {earned ? <View style={styles.glow} /> : null}
+        {earned ? (
+          <Svg width={130} height={130} style={styles.glow}>
+            <Defs>
+              <RadialGradient id="earnedGlow" cx="50%" cy="50%" r="50%">
+                <Stop offset="0" stopColor={medal.gold} stopOpacity={0.34} />
+                <Stop offset="0.6" stopColor={medal.gold} stopOpacity={0.08} />
+                <Stop offset="1" stopColor={medal.gold} stopOpacity={0} />
+              </RadialGradient>
+            </Defs>
+            <Circle cx={65} cy={65} r={65} fill="url(#earnedGlow)" />
+          </Svg>
+        ) : null}
         {picture === null ? null : <Image source={picture} resizeMode="contain" accessible={false} style={styles.picture} />}
       </View>
       <Txt kind="small" colour={earned ? "text" : "textSoft"} numberOfLines={2} style={styles.name}>
@@ -153,7 +165,7 @@ const styles = StyleSheet.create({
   medal: { alignItems: "center", paddingBottom: 6 },
   pressed: { opacity: 0.75 },
   art: { height: 118, width: "100%", alignItems: "center", justifyContent: "flex-end" },
-  glow: { position: "absolute", top: 18, width: 84, height: 84, borderRadius: 42, boxShadow: medalShades.earnedGlow },
+  glow: { position: "absolute", top: 0 },
   picture: { width: 100, height: 117 },
   name: { textAlign: "center", fontWeight: "700", marginTop: 16, paddingHorizontal: 2 },
   line: { textAlign: "center", marginTop: 2 },

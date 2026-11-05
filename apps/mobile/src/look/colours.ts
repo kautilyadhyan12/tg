@@ -195,7 +195,6 @@ export const medalShades = {
   mine: "linear-gradient(90deg, rgba(255,138,31,0.18), rgba(255,138,31,0.04))",
   /** Over a painting on the right of a box: the box's colour under the words on its left. */
   paint: "linear-gradient(90deg, rgba(14,12,10,0.92) 0%, rgba(14,12,10,0.6) 48%, rgba(14,12,10,0.05) 100%)",
-  earnedGlow: "0 0 26px rgba(255,190,90,0.32)",
   shelfShadow: "0 10px 18px rgba(0,0,0,0.7)",
   mineEdge: "inset 3px 0 0 #FF8A1F",
 } as const;

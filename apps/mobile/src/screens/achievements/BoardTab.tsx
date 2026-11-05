@@ -85,7 +85,7 @@ function GymBoard({ place }: { place: LeaderboardPlace }) {
       {board !== null && board.me.hidden === null && board.me.place !== null && !board.rows.some((r) => r.isMe) ? (
         <Txt kind="small" style={styles.centre}>{`Members see the top 100. You are ${ordinal(board.me.place)}.`}</Txt>
       ) : null}
-      <Button label="See the full board" wide onPress={() => { setFull(true); }} />
+      <Button label="See the full board" style={styles.middle} onPress={() => { setFull(true); }} />
       <LeaderboardPage
         place={full ? place : null}
         onClose={() => {
@@ -107,14 +107,16 @@ function Top({ board }: { board: LeaderboardResponse }) {
   return (
     <>
       <Txt kind="h3">{board.board === "streak" ? tab : `${tab} · This week`}</Txt>
-      <Txt kind="small">{`${board.gymName} · ${String(board.ranked)} on the board`}</Txt>
+      <Txt kind="small">{status === null ? `${board.gymName} · ${String(board.ranked)} on the board` : board.gymName}</Txt>
       {status !== null ? (
         <Txt colour="text" style={styles.gap}>{status}</Txt>
       ) : (
         <View style={styles.mine}>
-          <Txt kind="hero" colour="orange" style={styles.place}>
-            {words.big}
-          </Txt>
+          {board.me.hidden !== null || board.me.place === null ? null : (
+            <Txt kind="hero" colour="orange" style={styles.place}>
+              {words.big}
+            </Txt>
+          )}
           <View style={styles.grow}>
             <Txt kind="small" colour="text">{board.me.hidden !== null ? hiddenText(board.me.hidden, board.gymName) : `Your place · ${valueText(board.me.value, board.board)}`}</Txt>
             {next === null ? null : <Txt kind="small" colour="orangeLight">{next}</Txt>}
@@ -187,6 +189,7 @@ const styles = StyleSheet.create({
   grow: { flex: 1, minWidth: 0 },
   gap: { marginTop: 12 },
   centre: { textAlign: "center" },
+  middle: { alignSelf: "center" },
   lanes: { borderRadius: 22, borderWidth: 1, borderColor: colours.line, backgroundColor: colours.box, overflow: "hidden", paddingVertical: 4 },
   lane: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, paddingVertical: 10, minHeight: 64, borderTopWidth: 1, borderTopColor: medal.laneLine },
   laneMine: { experimental_backgroundImage: medalShades.mine, boxShadow: medalShades.mineEdge },

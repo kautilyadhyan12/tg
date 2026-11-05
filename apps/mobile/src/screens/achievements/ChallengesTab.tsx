@@ -30,8 +30,8 @@ const WHAT_COUNTS: Record<WeeklyChallengeMeasure, string> = {
   training_days: "Any workout counts.",
   kcal_burned: "Calories from your workouts.",
   training_minutes: "Every workout's time adds up.",
-  form_80_workouts: "Workouts the camera scored.",
-  form_90_workouts: "Workouts the camera scored.",
+  form_80_workouts: "Scored by the camera.",
+  form_90_workouts: "Scored by the camera.",
   families: "Different kinds of exercise.",
   food_days: "Any meal you log counts.",
 };
@@ -89,7 +89,7 @@ function ChallengeCard({ c }: { c: WeeklyChallenge }) {
                 {DIFFICULTY[c.difficulty]}
               </Txt>
             </View>
-            <Txt kind="tiny" colour="textSoft" numberOfLines={1} style={styles.grow}>
+            <Txt kind="tiny" colour="textSoft" numberOfLines={2} style={styles.grow}>
               {WHAT_COUNTS[c.measure]}
             </Txt>
           </View>

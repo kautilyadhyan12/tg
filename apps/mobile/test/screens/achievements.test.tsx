@@ -115,6 +115,22 @@ describe("Me → Achievements", () => {
     expect(screen.getByRole("tab", { name: "Badges" }).props.accessibilityState).toEqual({ selected: true });
   });
 
+  // Found on the walk: the badges' read awards a badge already reached, with its XP; the level read at the same moment
+  // still said the XP before it.
+  it("reads the level again once the badges are in, so a badge awarded on the read shows its XP", async () => {
+    let badgesRead = false;
+    const s = server({
+      [ACHIEVEMENTS_READS.me]: () => ({ status: 200, body: badgesRead ? { ...ME, xp: { ...ME.xp, total: 1390, nextLevelAt: 1400 } } : ME }),
+      [ACHIEVEMENTS_READS.badges]: () => {
+        badgesRead = true;
+        return { status: 200, body: BADGES };
+      },
+    });
+    await openAchievements(s.ask);
+    expect(await screen.findByText("1,390 XP · 1 of 5 badges")).toBeTruthy();
+    expect(screen.getByText("10 XP to Level 5")).toBeTruthy();
+  });
+
   it("a badge pressed opens its box: not earned yet, what it takes, how far to go", async () => {
     await openAchievements(server().ask);
     await fireEvent.press(await screen.findByLabelText("10 Workouts, Silver. Not earned yet, 8 of 10 workouts."));

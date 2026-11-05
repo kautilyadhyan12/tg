@@ -209,5 +209,5 @@ const styles = StyleSheet.create({
   paintFull: { width: "100%", height: "100%" },
   paintShade: { experimental_backgroundImage: medalShades.paint },
   inner: { padding: 16, gap: 8 },
-  laurel: { height: 52, width: "100%" },
+  laurel: { width: "100%", aspectRatio: 372 / 68 },
 });

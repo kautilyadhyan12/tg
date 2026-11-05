@@ -39,6 +39,11 @@ export function AchievementsPage({ open, start = "badges", onClose }: { open: bo
 function Top({ tab, onTab, badges }: { tab: TabKey; onTab: (t: TabKey) => void; badges: string | null }) {
   const zoneSaved = useZoneSaved();
   const me = useRead(ACHIEVEMENTS_READS.me, gamificationMeSchema, zoneSaved);
+  // The badges' read awards a badge already reached, and its XP with it: the level is read again once they are in.
+  const again = me.again;
+  useEffect(() => {
+    if (badges !== null) again();
+  }, [badges, again]);
   return <Hero xp={me.read.kind === "ok" ? me.read.data.xp : null} badges={badges} tab={tab} onTab={onTab} />;
 }
 
