@@ -32,6 +32,7 @@ import { SIGNED_OUT_NOTES } from "../session/session";
 import { useSession } from "../session/SessionProvider";
 import { HideMe, useHideMe } from "./gym/hideMe";
 import { CanSee } from "./Invitation";
+import { tabWord } from "./placesHeading";
 import { Setup, accountUnits } from "./setup/Setup";
 import { UNIT_OPTIONS } from "./setup/SetupScreens";
 import { setupPath } from "./setup/useSetupAnswers";
@@ -70,9 +71,11 @@ export type PushSwitch = "pushGymMessages" | "pushPlaces" | "pushComments";
 type PushNow = Pick<UserProfile, PushSwitch>;
 type Push = { kind: "loading" } | { kind: "failed" } | { kind: "ok"; now: PushNow };
 
-/** The three switches, named as the phone's own settings name the app's notification channels. */
+/** The three switches, named as the phone's own settings name the app's notification channels. Every
+ *  word fits each kind of place (a gym, a studio, a trainer, a clinic); the place itself is named by
+ *  `messagesFrom`. */
 export const PUSH_SWITCHES: readonly { key: PushSwitch; label: string; on: string; off: string }[] = [
-  { key: "pushGymMessages", label: "Gym messages", on: "From each gym you belong to.", off: "Off. Messages still arrive in each gym’s Inbox." },
+  { key: "pushGymMessages", label: "Messages", on: "From the places you belong to.", off: "Off. They still arrive in each Inbox." },
   { key: "pushPlaces", label: "Classes and events", on: "A place for you, or a free place from the waitlist.", off: "Off. Check Classes and Events for places." },
   { key: "pushComments", label: "Comments", on: "On your posts, and replies to your comments.", off: "Off. New comments still show on Updates." },
 ];
@@ -143,7 +146,7 @@ function SettingsBody({ onClose }: { onClose: () => void }) {
       <Profile since={since} />
       <NamePart saves={saves} />
       <UnitsPart saves={saves} />
-      <NotificationsPart push={push} setPush={setPush} saves={saves} noPlace={memberOf.kind === "ok" && memberOf.orgs.length === 0} onAgain={() => { setPush({ kind: "loading" }); setPushTries((n) => n + 1); }} />
+      <NotificationsPart push={push} setPush={setPush} saves={saves} places={memberOf} onAgain={() => { setPush({ kind: "loading" }); setPushTries((n) => n + 1); }} />
       <BoardsPart belongs={memberOf.kind === "ok" && memberOf.orgs.length > 0} />
       <PlacesPart places={memberOf} onAgain={() => { setTries((n) => n + 1); }} />
       <AccountPart onClose={onClose} saves={saves} />
@@ -253,11 +256,17 @@ function UnitsPart({ saves }: { saves: RefObject<number> }) {
   );
 }
 
-/** Every notification the app sends today comes from a place the person belongs to. */
-export const NO_PLACE_PUSH_LINE = "These start when you join a gym.";
+/** The Messages line: the one place by its name, else every place the person belongs to. */
+export function messagesFrom(places: Places): string | null {
+  if (places.kind !== "ok") return null;
+  const [only, ...more] = places.orgs;
+  return only !== undefined && more.length === 0 ? `From ${only.name}.` : null;
+}
 
-function NotificationsPart(props: { push: Push; setPush: (push: Push) => void; saves: RefObject<number>; noPlace: boolean; onAgain: () => void }) {
-  const { push, setPush, saves, noPlace, onAgain } = props;
+// Every notification the app sends today is about a place the person belongs to, so somebody in none
+// has nothing to set here yet; while their places are still being read, nothing is drawn.
+function NotificationsPart(props: { push: Push; setPush: (push: Push) => void; saves: RefObject<number>; places: Places; onAgain: () => void }) {
+  const { push, setPush, saves, places, onAgain } = props;
   const { session } = useSession();
   const phone = usePhoneAllows();
   const [busy, setBusy] = useState<PushSwitch | null>(null);
@@ -272,7 +281,10 @@ function NotificationsPart(props: { push: Push; setPush: (push: Push) => void; s
       back.remove();
     };
   }, [readAgain]);
-  if (push.kind === "loading") return null;
+  if (push.kind === "loading" || places.kind === "loading" || (places.kind === "ok" && places.orgs.length === 0)) return null;
+  // The same word as the person's tab: "Gym", "Studio", "Trainer", "Clinic", or "Places".
+  const heading = places.kind === "ok" ? tabWord(places.orgs.map((org) => org.orgType)) : null;
+  const from = messagesFrom(places);
   const flip = async (key: PushSwitch, on: boolean) => {
     if (busy !== null || push.kind !== "ok") return;
     saves.current += 1;
@@ -285,7 +297,6 @@ function NotificationsPart(props: { push: Push; setPush: (push: Push) => void; s
   };
   return (
     <Part title="Notifications" icon="bell">
-      {noPlace ? <Txt kind="small">{NO_PLACE_PUSH_LINE}</Txt> : null}
       {phone.allowed === "ask" || phone.allowed === "no" ? (
         <View style={styles.phoneOff}>
           <Txt kind="small" colour="badText">
@@ -306,13 +317,16 @@ function NotificationsPart(props: { push: Push; setPush: (push: Push) => void; s
           <Button label="Try again" kind="link" say="Try notifications again" onPress={onAgain} />
         </View>
       ) : (
-        PUSH_SWITCHES.map((row) => {
+        <>
+          {heading === null ? null : <Txt kind="eyebrow">{heading}</Txt>}
+          {PUSH_SWITCHES.map((row) => {
           const on = push.now[row.key];
+          const line = on ? (row.key === "pushGymMessages" && from !== null ? from : row.on) : row.off;
           return (
             <View key={row.key} style={styles.between}>
               <View style={styles.grow}>
                 <Txt kind="h3">{row.label}</Txt>
-                <Txt kind="small">{on ? row.on : row.off}</Txt>
+                <Txt kind="small">{line}</Txt>
               </View>
               <Switch
                 testID={`switch-${row.key}`}
@@ -325,7 +339,8 @@ function NotificationsPart(props: { push: Push; setPush: (push: Push) => void; s
               />
             </View>
           );
-        })
+          })}
+        </>
       )}
       <Said words={said} bad />
     </Part>

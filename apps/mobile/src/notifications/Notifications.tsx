@@ -50,7 +50,7 @@ export const usePhoneAllows = () => useContext(AllowsContext);
 
 export const NOTIFICATIONS_ASK = {
   title: "Turn on notifications?",
-  line: "Get your gym's messages, class reminders and places from the waitlist, even when the app is closed.",
+  line: "Get messages, free places and comments, even when the app is closed.",
 } as const;
 
 export function NotificationsProvider({ children, onTapped }: { children: ReactNode; onTapped?: () => void }) {

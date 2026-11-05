@@ -100,7 +100,7 @@ describe("asking for notifications", () => {
     const server = fakeServer(routes());
     await open(server);
     expect(await screen.findByText("Turn on notifications?")).toBeTruthy();
-    expect(screen.getByText("Get your gym's messages, class reminders and places from the waitlist, even when the app is closed.")).toBeTruthy();
+    expect(screen.getByText("Get messages, free places and comments, even when the app is closed.")).toBeTruthy();
     expect(notifications.asked).toBe(0);
     expect(addressesGiven(server)).toEqual([]);
     await fireEvent.press(screen.getByRole("button", { name: "Continue" }));
@@ -108,7 +108,7 @@ describe("asking for notifications", () => {
     expect(notifications.asked).toBe(1);
     expect(addressesGiven(server)).toEqual([{ token: "phone-address-1", platform: "android" }]);
     expect(notifications.channels).toEqual([
-      expect.objectContaining({ id: "gym-messages", name: "Gym messages" }),
+      expect.objectContaining({ id: "gym-messages", name: "Messages" }),
       expect.objectContaining({ id: "gym-places", name: "Classes and events" }),
       expect.objectContaining({ id: "gym-comments", name: "Comments" }),
     ]);
@@ -392,7 +392,7 @@ describe("a tapped notification about a place", () => {
   it("is shown in the app, and Android names its channel", async () => {
     notifications.permission = YES;
     await open(watched());
-    expect(notifications.channels.map((c) => c.name)).toEqual(expect.arrayContaining(["Gym messages", "Classes and events"]));
+    expect(notifications.channels.map((c) => c.name)).toEqual(expect.arrayContaining(["Messages", "Classes and events"]));
     const shown = await notifications.handler?.handleNotification({ request: { content: { data: placeTap(IRON.id, "class", SESSION).notification.request.content.data } } });
     expect(shown?.shouldShowBanner).toBe(true);
   });

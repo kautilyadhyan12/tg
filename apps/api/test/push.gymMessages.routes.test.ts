@@ -224,7 +224,7 @@ d("phone notifications for a gym's messages (real Postgres)", () => {
     expect(sentTo(phoneToken).map((m) => [m.title, m.body, m.tag, m.userId])).toEqual([["Iron Works", "Welcome to Iron Works.", gymB, ravi.userId]]);
   });
 
-  it("Gym messages switched off in Settings: that person's phone is told none, a member of the same gym still is, and switching on again sends nothing old (19d)", { timeout: TIMEOUT_MS }, async () => {
+  it("Messages switched off in Settings: that person's phone is told none, a member of the same gym still is, and switching on again sends nothing old (19d)", { timeout: TIMEOUT_MS }, async () => {
     const at = minutes(noonIndia(), 200);
     const asha = await phoneSignIn(email("switch-off"));
     const ravi = await phoneSignIn(email("switch-on"));

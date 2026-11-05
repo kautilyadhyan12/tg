@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-
 import { Linking } from "react-native";
 import { App } from "../../src/App";
 import { NO_ANSWER } from "../../src/screens/SignIn";
-import { NO_PLACE_PUSH_LINE, PUSH_SWITCHES } from "../../src/screens/Settings";
+import { PUSH_SWITCHES } from "../../src/screens/Settings";
 import type { Ask } from "../../src/session/calls";
 import { fakeServer, kept, lost, memoryStore, profile, refusal, tokens, type Reply, type Route } from "../kit";
 
@@ -30,9 +30,18 @@ function account(start: Partial<Held> = {}) {
   return { held, me };
 }
 
+/** A place the person belongs to, of one kind. */
+const place = (name: string, orgType: string, id: string) => ({
+  id, name, orgType, city: null, clockFormat: "12h", slug: name.toLowerCase().replace(" ", "-"), timezone: "Asia/Kolkata",
+  locale: "en", currencyDisplay: "INR", status: "active", staffRole: null, isMember: true, joinedAt: "2026-10-01T00:00:00.000Z",
+});
+const IRON = place("Iron House", "gym", "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f");
+const LOTUS = place("Lotus Yoga", "yoga_studio", "2c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f");
+const mine = (...orgs: object[]) => ok({ orgs, formerOrgs: [] });
+
 const routes = (over: Record<string, Route> = {}): Record<string, Route> => ({
   "/v1/auth/refresh": ok({ tokens: tokens(2) }),
-  "/v1/orgs/mine": ok({ orgs: [], formerOrgs: [] }),
+  "/v1/orgs/mine": mine(IRON),
   ...over,
 });
 
@@ -62,11 +71,12 @@ describe("the notification switches show and save only the server's answer", () 
   it("each switch reads what the server holds, and Off is said with what still comes", async () => {
     const acct = account({ pushPlaces: false });
     await openSettings(fakeServer(routes({ [ME]: acct.me })).ask);
-    expect((await switchOf("Gym messages")).props.value).toBe(true);
+    expect((await switchOf("Messages")).props.value).toBe(true);
     expect((await switchOf("Classes and events")).props.value).toBe(false);
     expect((await switchOf("Comments")).props.value).toBe(true);
     expect(screen.getByText(words("pushPlaces").off)).toBeTruthy();
-    expect(screen.getByText(words("pushGymMessages").on)).toBeTruthy();
+    // One place: Messages names it.
+    expect(screen.getByText("From Iron House.")).toBeTruthy();
   });
 
   it("switched off: the server is sent that switch alone, holds it, and the switch reads it", async () => {
@@ -93,11 +103,11 @@ describe("the notification switches show and save only the server's answer", () 
     let refuse = false;
     const me: Route = (body) => (refuse && body !== undefined ? refusal(429, "rate_limited", "Too many changes. Please try again later.") : acct.me(body));
     await openSettings(fakeServer(routes({ [ME]: me })).ask);
-    await switchOf("Gym messages");
+    await switchOf("Messages");
     refuse = true;
-    await act(() => fireEvent(screen.getByLabelText("Gym messages notifications"), "valueChange", false));
+    await act(() => fireEvent(screen.getByLabelText("Messages notifications"), "valueChange", false));
     expect(await screen.findByText("Too many changes. Please try again later.")).toBeTruthy();
-    expect(screen.getByLabelText("Gym messages notifications").props.value).toBe(true);
+    expect(screen.getByLabelText("Messages notifications").props.value).toBe(true);
     expect(acct.held.pushGymMessages).toBe(true);
   });
 
@@ -119,38 +129,42 @@ describe("the notification switches show and save only the server's answer", () 
     const me: Route = (body) => (fail ? refusal(500, "internal", "Something went wrong.") : acct.me(body));
     await openSettings(fakeServer(routes({ [ME]: me })).ask);
     expect(await screen.findByText("Couldn’t load your notifications.")).toBeTruthy();
-    expect(screen.queryByLabelText("Gym messages notifications")).toBeNull();
+    expect(screen.queryByLabelText("Messages notifications")).toBeNull();
     fail = false;
     await fireEvent.press(screen.getByLabelText("Try notifications again"));
-    expect((await switchOf("Gym messages")).props.value).toBe(false);
+    expect((await switchOf("Messages")).props.value).toBe(false);
   });
 });
 
-describe("somebody in no gym", () => {
-  const IRON = { id: "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f", name: "Iron House" };
-  const org = { ...IRON, city: null, orgType: "gym", clockFormat: "12h", slug: "iron-house", timezone: "Asia/Kolkata", locale: "en", currencyDisplay: "INR", status: "active", staffRole: null, isMember: true, joinedAt: "2026-10-01T00:00:00.000Z" };
-
-  it("is told the notifications start when they join a gym, and can still set them", async () => {
-    const acct = account();
-    await openSettings(fakeServer(routes({ [ME]: acct.me })).ask);
-    expect(await screen.findByText(NO_PLACE_PUSH_LINE)).toBeTruthy();
-    await act(() => fireEvent(screen.getByLabelText("Comments notifications"), "valueChange", false));
-    await waitFor(() => {
-      expect(acct.held.pushComments).toBe(false);
-    });
+describe("the words fit every kind of place", () => {
+  it("a yoga studio's member reads Studio and the studio's name, never gym", async () => {
+    await openSettings(fakeServer(routes({ [ME]: account().me, "/v1/orgs/mine": mine(LOTUS) })).ask);
+    await switchOf("Messages");
+    // The tab and the heading over the switches: one word for one thing.
+    expect(screen.getAllByText("Studio")).toHaveLength(2);
+    expect(screen.getByText("From Lotus Yoga.")).toBeTruthy();
+    expect(screen.queryByText(/gym/i)).toBeNull();
   });
 
-  it("a member of a gym is not told it", async () => {
-    await openSettings(fakeServer(routes({ [ME]: account().me, "/v1/orgs/mine": ok({ orgs: [org], formerOrgs: [] }) })).ask);
-    await switchOf("Gym messages");
-    expect(screen.queryByText(NO_PLACE_PUSH_LINE)).toBeNull();
+  it("places of two kinds read Places, and Messages comes from all of them", async () => {
+    await openSettings(fakeServer(routes({ [ME]: account().me, "/v1/orgs/mine": mine(IRON, LOTUS) })).ask);
+    await switchOf("Messages");
+    expect(screen.getAllByText("Places").length).toBeGreaterThan(0);
+    expect(screen.getByText(words("pushGymMessages").on)).toBeTruthy();
+  });
+
+  it("somebody who belongs to no place has nothing to set yet, so no switches are drawn", async () => {
+    await openSettings(fakeServer(routes({ [ME]: account().me, "/v1/orgs/mine": mine() })).ask);
+    expect(await screen.findByText("Units")).toBeTruthy();
+    expect(screen.queryByText("Notifications")).toBeNull();
+    expect(screen.queryByLabelText("Messages notifications")).toBeNull();
   });
 });
 
 describe("Android's own switch for the app", () => {
   it("allowed: no line about the phone", async () => {
     await openSettings(fakeServer(routes({ [ME]: account().me })).ask);
-    await switchOf("Gym messages");
+    await switchOf("Messages");
     expect(screen.queryByText("Notifications are off on this phone.")).toBeNull();
   });
 
