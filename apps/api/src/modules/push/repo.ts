@@ -47,12 +47,23 @@ export async function saveToken(
   });
 }
 
-/** The addresses a notification for this person may go to now: only those given under a phone
- *  sign-in that is still open. */
-export async function liveTokens(sql: SqlOrTx, userId: string, now: Date): Promise<string[]> {
+/** The kinds of phone notification, each with the person's own switch in Settings (Stage 5 19d). */
+export type PushKind = "gym_messages" | "places" | "comments";
+
+/** Fixed kind→column map: the column name is never built from input. */
+const SWITCH_COLUMN: Record<PushKind, string> = {
+  gym_messages: "push_gym_messages",
+  places: "push_places",
+  comments: "push_comments",
+};
+
+/** The addresses a notification of this kind for this person may go to now: none while the person has
+ *  switched that kind off, else only those given under a phone sign-in that is still open. */
+export async function liveTokens(sql: SqlOrTx, userId: string, now: Date, kind: PushKind): Promise<string[]> {
   const rows = await sql<{ token: string }[]>`
     SELECT p.token FROM push_tokens p
-    WHERE p.user_id = ${userId}
+    JOIN users u ON u.id = p.user_id
+    WHERE p.user_id = ${userId} AND u.${sql(SWITCH_COLUMN[kind])}
       AND EXISTS (
         SELECT 1 FROM refresh_tokens rt
         WHERE rt.user_id = p.user_id AND rt.family_id = p.family_id AND rt.client = 'phone'

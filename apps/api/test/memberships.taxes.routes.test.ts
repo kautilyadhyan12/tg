@@ -494,9 +494,9 @@ d("several taxes on one membership (real Postgres)", () => {
   );
 
   it(
-    "migration 0208 keeps every bill's one tax by name, and every type's and membership's one rate as its first",
+    "migration 0209 keeps every bill's one tax by name, and every type's and membership's one rate as its first",
     async () => {
-      const text = readFileSync(new URL("../drizzle/0208_membership_taxes.sql", import.meta.url), "utf8");
+      const text = readFileSync(new URL("../drizzle/0209_membership_taxes.sql", import.meta.url), "utf8");
       const statements = text.split("--> statement-breakpoint").map((s) => s.replace(/^\s*--.*$/gm, "").trim());
       const types = statements.find((s) => s.startsWith('INSERT INTO "gym_membership_type_tax_rates"'));
       const helds = statements.find((s) => s.startsWith('INSERT INTO "gym_held_membership_tax_rates"'));

@@ -99,6 +99,20 @@ export function startNotifications(): void {
   }
 }
 
+/** The app's channels the person turned off in the phone's own settings (each kind has its own). */
+export async function channelsOff(ids: readonly string[]): Promise<string[]> {
+  const off: string[] = [];
+  for (const id of ids) {
+    try {
+      const channel = await Notifications.getNotificationChannelAsync(id);
+      if (channel !== null && channel.importance === Notifications.AndroidImportance.NONE) off.push(id);
+    } catch {
+      // Not readable: nothing is said about it.
+    }
+  }
+  return off;
+}
+
 export async function notificationsAllowed(): Promise<NotificationsAllowed> {
   try {
     const now = await Notifications.getPermissionsAsync();

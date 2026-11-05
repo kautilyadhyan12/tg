@@ -1,7 +1,7 @@
 // WHAT A GYM SELLS (Part 3 §13.1; ROADMAP Stage 2 item 17a-i). Mirrors
 // `0069_membership_types.sql`, `0070_held_memberships.sql` and
 // `0073_membership_word_links.sql` 1:1, and `0075_class_bookings.sql`'s bookings; the
-// migrations carry the reasoning. `0112_tax_rates.sql` adds the tax rate columns; `0208` the rates a type and a membership charge.
+// migrations carry the reasoning. `0112_tax_rates.sql` adds the tax rate columns; `0209` the rates a type and a membership charge.
 import { sql } from "drizzle-orm";
 import {
   bigint,
@@ -139,7 +139,7 @@ export const gymMembershipTypes = pgTable(
   ],
 );
 
-/** The gym's tax rates a membership type charges (0208; 18b-v-b), in the order they were picked, each once. */
+/** The gym's tax rates a membership type charges (0209; 18b-v-b), in the order they were picked, each once. */
 export const gymMembershipTypeTaxRates = pgTable(
   "gym_membership_type_tax_rates",
   {
@@ -247,7 +247,7 @@ export const gymHeldMemberships = pgTable(
     discountPayments: text("discount_payments"),
     /** Whether its price held its taxes when it was sold (0112): kept, so a gym changing how
      *  it charges tax later moves nobody's total. Set wherever it has a rate
-     *  (`gym_held_membership_tax_rates`, 0208). */
+     *  (`gym_held_membership_tax_rates`, 0209). */
     taxIncluded: boolean("tax_included"),
     /** When its record was deleted for good (0116); set exactly when `entry_id` is null. */
     recordDeletedAt: timestamp("record_deleted_at", { withTimezone: true }),
@@ -358,7 +358,7 @@ export const gymHeldMemberships = pgTable(
   ],
 );
 
-/** The gym's tax rates a held membership was sold with (0208; 18b-v-b), in its type's order then. */
+/** The gym's tax rates a held membership was sold with (0209; 18b-v-b), in its type's order then. */
 export const gymHeldMembershipTaxRates = pgTable(
   "gym_held_membership_tax_rates",
   {
@@ -410,7 +410,7 @@ export const gymMemberBills = pgTable(
     taxMinor: integer("tax_minor").notNull().default(0),
     taxPcm: integer("tax_pcm").notNull().default(0),
     taxIncluded: boolean("tax_included"),
-    /** Each tax, `{ name, pcm, minor }`, in the order charged (0208; 18b-v-b). */
+    /** Each tax, `{ name, pcm, minor }`, in the order charged (0209; 18b-v-b). */
     taxes: jsonb("taxes").notNull().default(sql`'[]'`),
     /** A fee for a late cancel or a no-show (0136; 18h-i): which, the class's name, and the
      *  booking while it stands. The class's day is `covers_from` and `covers_to`. */

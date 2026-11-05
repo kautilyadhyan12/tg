@@ -226,6 +226,8 @@ d("DPDP data export (real Postgres)", () => {
       expect({ t, n: out.data[t]?.length ?? -1 }).toEqual({ t, n: 1 });
     }
     expect(out.user["display_name"]).toBe(u.name);
+    // The notification switches they set in Settings (19d).
+    expect(out.user).toMatchObject({ push_gym_messages: true, push_places: true, push_comments: true });
     // The consent log rides beside the PII tables (kept after a purge, still
     // the person's own record) — present, and carrying the words verbatim.
     expect(out.data["consent_log"]).toHaveLength(1);

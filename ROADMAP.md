@@ -266,7 +266,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 18b-iv. [x] **The tax box suggests the gym country’s own tax** — merged 2026-11-04 (PR #463).
      - 18b-v. **Several taxes on one membership or product**, in two parts since 2026-11-05 (`handoff/2026-11-05-18b-v-a.md` keeps its line as first written):
        - 18b-v-a. [x] **Three decimals, and several taxes on a product** — merged 2026-11-05 (PR #473).
-       - 18b-v-b. [ ] **Several taxes on a membership**: the same on a membership type, its bills and their receipts. Web folder 2.
+       - 18b-v-b. [x] **Several taxes on a membership** — merged 2026-11-05 (PR #476).
    - 18c. ~~Pay by the gym's own link~~ **Dropped 2026-10-15** (Kd, `rulings/2026-10-15-18g-i.md`): not standard practice; members pay through 18d's company or at the desk.
    - 18d. **The first Connect button: Square** (Kd's sign-up worked 2026-10-19; `rulings/2026-10-19-18d-i.md`), split that day in four (the line as first written is in `handoff/2026-10-19-18d-i.md`):
      - 18d-i. [x] **Connect Square and Disconnect** — merged 2026-10-20 (PR #319).
@@ -619,7 +619,8 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 19b. [x] **Download my data, delete my account and undo** · merged 2026-11-04 · PR #465
     - 19b-ii. [x] **An owner hands the gym over before deleting their account** · merged 2026-11-05 · PR #468
     - 19c. [x] **Change email** · merged 2026-11-05 · PR #472
-    - 19d. [ ] **Notification switches that save.**
+    - 19d. [x] **Notification switches that save** · merged 2026-11-05 · PR #475
+    - 19e. [ ] **Your training's notifications**: a workout reminder (days and a time), a meal reminder, a streak reminder, badges and the weekly summary, each with its switch, for everyone (Kd, 2026-11-05, `rulings/2026-11-05-19d.md`); taken from item 38.
 20. [ ] **What the gym side adds for members**, each after its web job: the waiver (3e), the membership agreement signed in the app (18u), the referral link (20e), the member photo (5b-vi), saving their card (18d-ii), buying from the gym (18k), stopping a membership (18l), a gym's plan for a member (19e).
 21. [ ] **Paying, the stores and release**: the $10 plan through the stores (item 6), one device one trial (Stage 3's 2c), the store pages rated 18+, the Terms and Privacy pages that Get started's line opens (it opens nothing today, as the browser's), Google's closed test, then the iPhone version with Apple sign-in.
 
@@ -685,7 +686,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 35c-iii. [x] **Achievements** — merged 2026-11-05 (PR #474).
 36. [ ] **The weekly plan**: the plan builder on the server (6a), the week screen (6b). Doing a planned workout (6c) is exercise folder 2's item 64. Once the plan names a week's sessions, calories burned joins the starter goals with the plan's own number (RULINGS 2026-10-13). Its Workout tab in Recommended For You takes the three choices and rules of spec Part 6 §16.6.
 37. [ ] **Running** (item 4; Stage 1's 7b): recording by GPS with the screen off, the map, the summary, the run plan, routes. Its Running tab in Recommended For You takes the three choices and rules of spec Part 6 §16.6.
-38. [ ] **Reminders** for workouts, meals and streaks (the six switches the web drew and never saved); the global board last, as Kd ruled on 2026-11-01 (`rulings/2026-11-01-17c-ii-a.md`): Active days and Running, the server's checks, a stranger's profile, and follow requests for somebody who chose Hide me, seen from outside their gym; Follow with Followers and Following counts everywhere, gyms included (`rulings/2026-11-01-17c-ii-b.md`). It waits for items 18, 37, 53 and 64.
+38. [ ] **The global board** (its reminders moved to item 19e on 2026-11-05): last, as Kd ruled on 2026-11-01 (`rulings/2026-11-01-17c-ii-a.md`): Active days and Running, the server's checks, a stranger's profile, and follow requests for somebody who chose Hide me, seen from outside their gym; Follow with Followers and Following counts everywhere, gyms included (`rulings/2026-11-01-17c-ii-b.md`). It waits for items 18, 37, 53 and 64.
 39. [ ] **Share with your photo** (Kd, 2026-10-18; spec Part 2 §11.8): after a workout, a meal photo or a run, the person takes or picks a photo and the stats are drawn on it, made on the phone and sent through the phone's own share menu. Built once for all three, after items 33 and 37 and exercise folder 2's 64; it brings Part 7 §5's share cards forward from After launch.
 
 **Exercise folder 1 — `D:\Projects\ai-home-gym-ex1`: the camera and the form rules** (spec Part 2 §11).

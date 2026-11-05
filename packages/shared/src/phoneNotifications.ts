@@ -32,7 +32,7 @@ export function pushHourOpen(hour: unknown): boolean {
 export const PUSH_WITHIN_HOURS = 24;
 
 /** The Android channel a gym's messages arrive on; its name is what the phone's settings show. */
-export const GYM_MESSAGES_CHANNEL = { id: "gym-messages", name: "Gym messages" } as const;
+export const GYM_MESSAGES_CHANNEL = { id: "gym-messages", name: "Messages" } as const;
 
 /** What the phone shows for a gym's new messages: the gym's name, and its count once more than one is
  *  new (the same count as the Inbox button), over the newest message. */

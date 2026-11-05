@@ -29,6 +29,10 @@ export const users = pgTable(
     leaderboardOptOut: boolean("leaderboard_opt_out").notNull().default(false), // Part 3 §4.4
     // When the person chose Show me; an under-18 stays off every board until then (§15.5).
     leaderboardShownAt: timestamp("leaderboard_shown_at", { withTimezone: true }),
+    // 0208: the phone notifications the person lets the app send (Stage 5 19d); each on by default.
+    pushGymMessages: boolean("push_gym_messages").notNull().default(true),
+    pushPlaces: boolean("push_places").notNull().default(true),
+    pushComments: boolean("push_comments").notNull().default(true),
     locale: text("locale").notNull().default("en"),
     units: text("units").notNull().default("metric"),
     timezone: text("timezone"), // recaps only; quotas stay UTC (v1)

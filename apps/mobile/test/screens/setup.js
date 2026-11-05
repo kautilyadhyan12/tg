@@ -203,16 +203,18 @@ jest.mock("expo-notifications", () => {
     last: null,
     handler: null,
     channels: [],
+    channelsOff: [],
     registeredTasks: [],
   };
   // Listeners stay: the app listens for taps from the moment it starts, once.
   const reset = () => {
-    Object.assign(notifications, { permission: off, afterAsk: off, asked: 0, token: "phone-address-1", presented: [], dismissed: [], dismissedAll: 0, unregistered: 0, last: null, handler: null, channels: [], scheduled: [] });
+    Object.assign(notifications, { permission: off, afterAsk: off, asked: 0, token: "phone-address-1", presented: [], dismissed: [], dismissedAll: 0, unregistered: 0, last: null, handler: null, channels: [], channelsOff: [], scheduled: [] });
   };
   return {
     notifications,
     reset,
-    AndroidImportance: { DEFAULT: 5 },
+    AndroidImportance: { NONE: 2, DEFAULT: 5 },
+    getNotificationChannelAsync: (id) => Promise.resolve({ id, importance: notifications.channelsOff.includes(id) ? 2 : 5 }),
     setNotificationHandler: (handler) => {
       notifications.handler = handler;
     },
