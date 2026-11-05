@@ -31,12 +31,12 @@ export const gymMealPlans = pgTable(
     check("gym_meal_plans_days_check", sql`jsonb_typeof(${t.days}) = 'array' AND jsonb_array_length(${t.days}) = 7`),
     check("gym_meal_plans_name_check", sql`char_length(${t.name}) BETWEEN 1 AND 60`),
     uniqueIndex("gym_meal_plans_gym_name_uq").on(t.gymId, sql`lower(${t.name})`),
-    // What an audience row's plan key points at, with its gym (0211).
+    // What an audience row's plan key points at, with its gym (0213).
     unique("gym_meal_plans_gym_id_uq").on(t.gymId, t.id),
   ],
 );
 
-// Who gets a plan (migration 0211; ROADMAP Stage 2 24a-ii): one row a group, each group one plan.
+// Who gets a plan (migration 0213; ROADMAP Stage 2 24a-ii): one row a group, each group one plan.
 // `gymMealPlanAudienceRepo.ts` is the only file that reads or writes it.
 export const gymMealPlanAudiences = pgTable(
   "gym_meal_plan_audiences",

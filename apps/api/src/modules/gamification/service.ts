@@ -95,6 +95,7 @@ async function recomputeXp(deps: GamificationDeps, userId: string, tz: string, n
     const total =
       computeTotalXp({
         workoutCount: counts.workoutCount,
+        runCount: counts.runCount,
         perfectFormWorkouts: counts.perfectFormWorkouts,
         excellentFormWorkouts: counts.excellentFormWorkouts,
         streakContinuationDays: countStreakContinuationDays(days),

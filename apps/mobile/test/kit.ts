@@ -112,6 +112,14 @@ export function foodWeekReply(span: 7 | 30 = 7, day: (back: number) => Record<st
   };
 }
 
+/** The four training reminders as they start (19e-i). */
+export const OFF_REMINDERS = [
+  { kind: "workout", on: false, time: "18:00", days: [1, 2, 3, 4, 5, 6, 7], paused: false },
+  { kind: "breakfast", on: false, time: "08:00", days: [1, 2, 3, 4, 5, 6, 7], paused: false },
+  { kind: "lunch", on: false, time: "13:00", days: [1, 2, 3, 4, 5, 6, 7], paused: false },
+  { kind: "dinner", on: false, time: "19:30", days: [1, 2, 3, 4, 5, 6, 7], paused: false },
+];
+
 export function fakeServer(routes: Record<string, Route>): { ask: Ask; asked: Asked[]; paths: () => string[] } {
   const asked: Asked[] = [];
   const all: Record<string, Route> = {
@@ -131,6 +139,8 @@ export function fakeServer(routes: Record<string, Route>): { ask: Ask; asked: As
     "/v1/nutrition/diet-plan": () => ({ status: 200, body: NO_PLAN }),
     // No meals in the week, unless a test says otherwise.
     "/v1/nutrition/food-week": () => ({ status: 200, body: foodWeekReply() }),
+    // Every training reminder off, as they start, unless a test says otherwise.
+    "/v1/users/me/reminders": () => ({ status: 200, body: { reminders: OFF_REMINDERS, safeMode: false } }),
     ...routes,
   };
   const ask: Ask = async (url: string, init: AskInit) => {

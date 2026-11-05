@@ -289,3 +289,35 @@ jest.mock("expo-secure-store", () => {
     },
   };
 });
+// The phone's location (ROADMAP Stage 5 37a): a test sets what Android answers (`location.state`) and
+// reads what was asked of it; the points themselves are handed in by the test, as Android hands them
+// to the run's task.
+jest.mock("expo-location", () => {
+  const state = { services: true, granted: true, canAskAgain: true, accuracy: "fine", asked: 0, started: [], running: false, watching: 0 };
+  const answer = () => ({ granted: state.granted, canAskAgain: state.canAskAgain, status: state.granted ? "granted" : "denied", android: { accuracy: state.granted ? state.accuracy : "none" } });
+  return {
+    state,
+    Accuracy: { BestForNavigation: 6 },
+    ActivityType: { Fitness: 3 },
+    hasServicesEnabledAsync: () => Promise.resolve(state.services),
+    getForegroundPermissionsAsync: () => Promise.resolve(answer()),
+    requestForegroundPermissionsAsync: () => {
+      state.asked += 1;
+      return Promise.resolve(answer());
+    },
+    startLocationUpdatesAsync: (task, options) => {
+      state.started.push({ task, options });
+      state.running = true;
+      return Promise.resolve();
+    },
+    hasStartedLocationUpdatesAsync: () => Promise.resolve(state.running),
+    stopLocationUpdatesAsync: () => {
+      state.running = false;
+      return Promise.resolve();
+    },
+    watchPositionAsync: () => {
+      state.watching += 1;
+      return Promise.resolve({ remove: () => { state.watching -= 1; } });
+    },
+  };
+});

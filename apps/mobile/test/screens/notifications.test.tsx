@@ -100,7 +100,7 @@ describe("asking for notifications", () => {
     const server = fakeServer(routes());
     await open(server);
     expect(await screen.findByText("Turn on notifications?")).toBeTruthy();
-    expect(screen.getByText("Get messages, free places and comments, even when the app is closed.")).toBeTruthy();
+    expect(screen.getByText("Get your reminders and messages, even when the app is closed.")).toBeTruthy();
     expect(notifications.asked).toBe(0);
     expect(addressesGiven(server)).toEqual([]);
     await fireEvent.press(screen.getByRole("button", { name: "Continue" }));
@@ -111,6 +111,7 @@ describe("asking for notifications", () => {
       expect.objectContaining({ id: "gym-messages", name: "Messages" }),
       expect.objectContaining({ id: "gym-places", name: "Classes and events" }),
       expect.objectContaining({ id: "gym-comments", name: "Comments" }),
+      expect.objectContaining({ id: "training-reminders", name: "Reminders" }),
     ]);
   });
 

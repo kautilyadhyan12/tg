@@ -14,6 +14,11 @@ export function bodyFile(userId: string): TextStore {
   return keptFile(`body-${userId}.json`, `body-${userId}.unread.json`);
 }
 
+/** A person's saved runs not yet on the server (ROADMAP Stage 5 37a), kept as their meals are. */
+export function runFile(userId: string): TextStore {
+  return keptFile(`runs-${userId}.json`, `runs-${userId}.unread.json`);
+}
+
 function keptFile(name: string, unread: string): TextStore {
   return {
     read: async () => {

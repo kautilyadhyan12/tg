@@ -34,13 +34,15 @@ import { TimeZoneSync } from "./session/TimeZoneSync";
 import { DashboardScreen } from "./screens/Dashboard";
 import { GymScreen } from "./screens/GymTab";
 import { NotificationsProvider } from "./notifications/Notifications";
-import { forgetNotifications } from "./notifications/phone";
+import { forgetNotifications, type Tapped } from "./notifications/phone";
 import { emptyPhotoFolder } from "./screens/gym/photoFiles";
 import { forgetExports } from "./session/personFiles";
 import { PlacesProvider, usePlaces } from "./screens/places";
 import { tabWord } from "./screens/placesHeading";
 import { FoodScreen } from "./screens/Food";
-import { bodyFile, mealFile, photoSheetFile } from "./screens/food/fileStore";
+import { bodyFile, mealFile, photoSheetFile, runFile } from "./screens/food/fileStore";
+import { RunLayerProvider } from "./screens/running/RunLayer";
+import { RunOutboxProvider } from "./screens/running/RunOutbox";
 import { BodyOutboxProvider } from "./screens/progress/BodyOutbox";
 import { MealOutboxProvider } from "./screens/food/MealOutbox";
 import { PhotoSheetStoreProvider } from "./screens/food/PhotoSheetStore";
@@ -86,12 +88,16 @@ interface AppProps {
   bodyStore?: (userId: string) => TextStore;
   /** Where a person's photo meal not yet saved is kept (33b-i). */
   photoStore?: (userId: string) => TextStore;
+  /** Where a person's saved runs not yet on the server are kept (37a). */
+  runStore?: (userId: string) => TextStore;
 }
 
 /** Signed out, the sign-in screen and nothing of anybody's; signed in, "Before you start" until
  *  the person has ticked it, then any invitation waiting, then setup until it is finished, then
  *  the five tabs. */
-function SignedInOrOut({ mealStore, bodyStore }: { mealStore: (userId: string) => TextStore; bodyStore: (userId: string) => TextStore }) {
+type Stores = { mealStore: (userId: string) => TextStore; bodyStore: (userId: string) => TextStore; runStore: (userId: string) => TextStore };
+
+function SignedInOrOut({ mealStore, bodyStore, runStore }: Stores) {
   const { state } = useSession();
   // With nobody signed in, nothing of the last person's stays: an app killed with Updates open left its photos.
   useEffect(() => {
@@ -114,7 +120,7 @@ function SignedInOrOut({ mealStore, bodyStore }: { mealStore: (userId: string) =
       <TimeZoneSync>
         <InvitationsGate>
           <SetupGate>
-            <FiveTabs mealStore={mealStore} bodyStore={bodyStore} />
+            <FiveTabs mealStore={mealStore} bodyStore={bodyStore} runStore={runStore} />
           </SetupGate>
         </InvitationsGate>
       </TimeZoneSync>
@@ -122,20 +128,34 @@ function SignedInOrOut({ mealStore, bodyStore }: { mealStore: (userId: string) =
   );
 }
 
-// The tabs, reached from outside them: a tapped notification opens the Gym tab.
+// The tabs, reached from outside them: a tapped notification opens the Gym tab, and a training reminder
+// Workout or Food (19e-i).
 const tabsRef = createNavigationContainerRef<Record<string, undefined>>();
-const openGymTab = () => {
-  if (tabsRef.isReady()) tabsRef.navigate("Gym");
+export const tabOfTap = (tapped: Tapped): "Gym" | "Workout" | "Food" =>
+  tapped.kind !== "training" ? "Gym" : tapped.open === "workout" ? "Workout" : "Food";
+// A tap that opened the app arrives before the tabs are drawn: held until they are.
+let heldTab: "Gym" | "Workout" | "Food" | null = null;
+const openTappedTab = (tapped: Tapped) => {
+  if (tabsRef.isReady()) tabsRef.navigate(tabOfTap(tapped));
+  else heldTab = tabOfTap(tapped);
+};
+const openHeldTab = () => {
+  if (heldTab !== null && tabsRef.isReady()) tabsRef.navigate(heldTab);
+  heldTab = null;
 };
 
-function FiveTabs({ mealStore, bodyStore }: { mealStore: (userId: string) => TextStore; bodyStore: (userId: string) => TextStore }) {
+function FiveTabs({ mealStore, bodyStore, runStore }: Stores) {
   return (
     <PlacesProvider>
       <MealOutboxProvider store={mealStore}>
         <BodyOutboxProvider store={bodyStore}>
-          <NotificationsProvider onTapped={openGymTab}>
-            <TabsOfPlaces />
-          </NotificationsProvider>
+          <RunOutboxProvider store={runStore}>
+            <RunLayerProvider>
+              <NotificationsProvider onTapped={openTappedTab}>
+                <TabsOfPlaces />
+              </NotificationsProvider>
+            </RunLayerProvider>
+          </RunOutboxProvider>
         </BodyOutboxProvider>
       </MealOutboxProvider>
     </PlacesProvider>
@@ -149,7 +169,7 @@ function TabsOfPlaces() {
   // Lit while any of the person's places holds a message they have not opened.
   const dots: Record<string, string> = newMessages > 0 ? { Gym: newMessages === 1 ? "1 new message" : `${String(newMessages)} new messages` } : {};
   return (
-    <NavigationContainer ref={tabsRef} theme={theme}>
+    <NavigationContainer ref={tabsRef} theme={theme} onReady={openHeldTab}>
       <Tabs.Navigator screenOptions={{ headerShown: false }} tabBar={(props) => <TabBar {...props} icons={tabIcons} labels={labels} dots={dots} />}>
         {TABS.map((tab) => (
           <Tabs.Screen key={tab.name} name={tab.name} component={tab.screen} />
@@ -159,7 +179,7 @@ function TabsOfPlaces() {
   );
 }
 
-export function App({ extra, ask = fetch, store = phoneKeyStore, google = askGoogle, wait, mealStore = mealFile, bodyStore = bodyFile, photoStore = photoSheetFile }: AppProps) {
+export function App({ extra, ask = fetch, store = phoneKeyStore, google = askGoogle, wait, mealStore = mealFile, bodyStore = bodyFile, photoStore = photoSheetFile, runStore = runFile }: AppProps) {
   // A font that cannot be read must not leave a blank page: the phone's own font shows instead.
   const [fontsReady, fontsFailed] = useFonts({
     Inter_400Regular,
@@ -187,7 +207,7 @@ export function App({ extra, ask = fetch, store = phoneKeyStore, google = askGoo
           ) : (
             <SessionProvider server={server} store={store} google={google} wait={wait}>
               <PhotoSheetStoreProvider store={photoStore}>
-                <SignedInOrOut mealStore={mealStore} bodyStore={bodyStore} />
+                <SignedInOrOut mealStore={mealStore} bodyStore={bodyStore} runStore={runStore} />
               </PhotoSheetStoreProvider>
             </SessionProvider>
           )}

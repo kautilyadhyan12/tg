@@ -15,6 +15,7 @@ import {
   phoneAddress,
   saidNotNowAt,
   startNotifications,
+  type GymTapped,
   type NotificationsAllowed,
   type Tapped,
 } from "./phone";
@@ -24,12 +25,12 @@ import {
 // person signed in, each time the app opens and whenever Firebase changes it. Drawn under the
 // sign-in's own key, so somebody else signing in starts it again and the address moves to them.
 // A tap on a gym's notification asks for that gym's Inbox, or for the class or event it is about
-// (`useTapAsked`). Settings reads whether Android lets the app show them, and turns them on (19d:
+// (`useTapAsked`); a training reminder's tap opens Workout or Food (19e-i). Settings reads whether Android lets the app show them, and turns them on (19d:
 // `usePhoneAllows`).
 
 interface Asked {
   /** What a tapped notification asked for, until the Gym tab has opened it. */
-  tapAsked: Tapped | null;
+  tapAsked: GymTapped | null;
   tapOpened: () => void;
 }
 
@@ -50,13 +51,13 @@ export const usePhoneAllows = () => useContext(AllowsContext);
 
 export const NOTIFICATIONS_ASK = {
   title: "Turn on notifications?",
-  line: "Get messages, free places and comments, even when the app is closed.",
+  line: "Get your reminders and messages, even when the app is closed.",
 } as const;
 
-export function NotificationsProvider({ children, onTapped }: { children: ReactNode; onTapped?: () => void }) {
+export function NotificationsProvider({ children, onTapped }: { children: ReactNode; onTapped?: (tapped: Tapped) => void }) {
   const { session } = useSession();
   const [asking, setAsking] = useState(false);
-  const [tapAsked, setTapAsked] = useState<Tapped | null>(null);
+  const [tapAsked, setTapAsked] = useState<GymTapped | null>(null);
   const [allowed, setAllowed] = useState<NotificationsAllowed | null>(null);
   // The last answer read, so the address is given only when notifications have just been allowed.
   const lastAllowed = useRef<NotificationsAllowed | null>(null);
@@ -91,8 +92,8 @@ export function NotificationsProvider({ children, onTapped }: { children: ReactN
     const offAddress = onNewAddress((address) => void give(address));
     const offTap = onNotificationTapped((tapped) => {
       if (!live()) return;
-      setTapAsked(tapped);
-      onTapped?.();
+      if (tapped.kind !== "training") setTapAsked(tapped);
+      onTapped?.(tapped);
     });
     return () => {
       run.live = false;
