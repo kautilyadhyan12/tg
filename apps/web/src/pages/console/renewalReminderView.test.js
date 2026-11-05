@@ -56,8 +56,8 @@ describe('the box of who gets it', () => {
       'every_renewal',
     );
     expect(box?.groups.map((g) => [g.title, g.people.map((p) => p.line)])).toEqual([
-      ['Will be emailed (2)', ['Ana Ruiz · emailed 7 Nov · renews 10 Nov', 'Kim Child, paid by Tom Payer · emailed 8 Nov · renews 11 Nov']],
-      ['Already emailed (1)', ['Sam Sent · emailed 5 Nov']],
+      ['Will be emailed (2)', ['Ana Ruiz · to be emailed 7 Nov · renews 10 Nov', 'Kim Child, paid by Tom Payer · to be emailed 8 Nov · renews 11 Nov']],
+      ['Already emailed (1)', ['Sam Sent · emailed 5 Nov · renews 8 Nov']],
       ['Not emailed: no email address on the record of whoever pays (1)', ['Nell Phone']],
       ['Not emailed: their membership will not renew (1)', ['Ben Stops']],
     ]);
@@ -67,7 +67,7 @@ describe('the box of who gets it', () => {
 
   it('says "term ends" for a reminder before the minimum term ends', () => {
     const box = renewalReminderBox({ people: [person('a', 'Ana Ruiz', status('will_send', '2027-10-04', '2027-11-02'))] }, 'term_end');
-    expect(box?.groups[0]?.people[0]?.line).toBe('Ana Ruiz · emailed 4 Oct · term ends 2 Nov');
+    expect(box?.groups[0]?.people[0]?.line).toBe('Ana Ruiz · to be emailed 4 Oct · term ends 2 Nov');
   });
 });
 
@@ -76,7 +76,8 @@ describe("a person's page", () => {
     expect(reminderStatusLine(status('sent', '2026-11-05', '2026-11-08'))).toBe('Renewal reminder emailed on 5 Nov.');
     expect(reminderStatusLine(status('will_send', '2026-11-07', '2026-11-10'))).toBe('Renewal reminder will be emailed on 7 Nov.');
     expect(reminderStatusLine(status('no_email', null, '2026-11-10'))).toBe('No renewal reminder can be emailed: whoever pays for it has no email address on their record.');
-    for (const quiet of ['frozen', 'not_renewing', 'no_term', 'billed_elsewhere']) expect(reminderStatusLine(status(quiet))).toBeNull();
+    for (const quiet of ['frozen', 'not_renewing', 'no_term']) expect(reminderStatusLine(status(quiet))).toBeNull();
+    expect(reminderStatusLine(status('billed_elsewhere'))).toBe('No renewal reminder is emailed: it is paid in your other software.');
     expect(reminderStatusLine(null)).toBeNull();
     expect(reminderStatusLine(status('sent', '2026-11-05', '2027-11-02'), 'term_end')).toBe('Minimum term reminder emailed on 5 Nov.');
     expect(reminderStatusLine(status('no_email'), 'term_end')).toBe('No minimum term reminder can be emailed: whoever pays for it has no email address on their record.');

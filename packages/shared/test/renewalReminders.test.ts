@@ -211,6 +211,14 @@ describe("the email's words", () => {
     ]);
   });
 
+  it("a renewal inside a running minimum term: no offer to stop it, the term's last day instead (round one, H1)", () => {
+    expect(renewalReminderWords({ ...base, every: "month", term: { until: "2027-11-02", ends: false } }).lines[2]).toBe("The minimum term runs until 2 Nov 2027.");
+    expect(renewalReminderWords({ ...base, every: "month", term: { until: "2027-11-02", ends: true } }).lines[2]).toBe("The minimum term runs until 2 Nov 2027, then it ends.");
+    // Even with a notice to cancel: inside the term, notice cannot stop this payment.
+    const noticed = renewalReminderWords({ ...base, notice: { days: 30, lastDay: "2027-01-02" }, term: { until: "2027-11-02", ends: false } });
+    expect(noticed.lines.join(" ")).not.toContain("cancel");
+  });
+
   it("notice already given: no offer to cancel, its last day", () => {
     expect(renewalReminderWords({ ...base, lastDay: "2027-01-02" }).lines[2]).toBe("It then ends on 2 Jan 2027.");
   });

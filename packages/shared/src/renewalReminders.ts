@@ -104,6 +104,9 @@ export interface RenewalReminderWordsInput {
   endWithTermOn: string | null;
   /** Its last day, where it is set to end after this renewal (notice given): nothing to cancel. */
   lastDay: string | null;
+  /** A renewal inside a running minimum term (round one, H1): its last day, and whether the membership then ends.
+   *  They cannot stop the renewal, so nothing offers to. Null where the renewal falls after it, or there is none. */
+  term?: { until: string; ends: boolean } | null;
 }
 
 export interface RenewalReminderWords {
@@ -150,8 +153,11 @@ export function renewalReminderWords(input: RenewalReminderWordsInput): RenewalR
     };
   }
   const paid = input.card === null ? "The payment is due that day." : `It will be paid with ${input.forName === null ? "your" : "the"} ${input.card} that day.`;
+  const term = input.term ?? null;
   const cancel =
-    input.lastDay !== null
+    term !== null
+      ? `The minimum term runs until ${dayWords(term.until)}${term.ends ? ", then it ends" : ""}.`
+      : input.lastDay !== null
       ? `It then ends on ${dayWords(input.lastDay)}.`
       : (noticeLine("If you'd rather it didn't renew,") ?? `If you'd rather it didn't renew, please let us know before ${day}.`);
   return {

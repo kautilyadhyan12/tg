@@ -55,8 +55,9 @@ function personLine(p, when) {
   const who = p.paidBy === null ? name : `${name}, paid by ${p.paidBy || 'somebody on your list'}`;
   const s = p.status;
   const about = s.aboutOn === null ? null : `${when === 'term_end' ? 'term ends' : 'renews'} ${shortDay(s.aboutOn, false)}`;
-  if (s.state === 'will_send' && s.on !== null) return [who, `emailed ${shortDay(s.on, false)}`, about].filter(Boolean).join(' · ');
-  if (s.state === 'sent' && s.on !== null) return [who, `emailed ${shortDay(s.on, false)}`].join(' · ');
+  if (s.state === 'will_send' && s.on !== null) return [who, `to be emailed ${shortDay(s.on, false)}`, about].filter(Boolean).join(' · ');
+  // A sent one names the day the email named, which a freeze since may have moved.
+  if (s.state === 'sent' && s.on !== null) return [who, `emailed ${shortDay(s.on, false)}`, about].filter(Boolean).join(' · ');
   return who;
 }
 
@@ -97,6 +98,8 @@ export function reminderStatusLine(status, when = 'every_renewal') {
       return `The ${lower} could not be delivered.`;
     case 'former_payer':
       return `No ${lower} is emailed: whoever pays for it is a past member.`;
+    case 'billed_elsewhere':
+      return `No ${lower} is emailed: it is paid in your other software.`;
     default:
       return null;
   }

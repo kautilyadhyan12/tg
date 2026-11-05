@@ -70,7 +70,8 @@ export function reminderStatus(held: repo.RemindedHeld, today: string, written: 
   const { occasion, sendOn, aboutOn } = plan.next;
   const row = written.find((w) => w.heldId === held.row.id && w.occasion === occasion);
   if (row !== undefined) {
-    if (row.state === "sent") return { state: "sent", on: row.on, aboutOn };
+    // The day the email named, which a freeze since may have moved (round one, L1): the screen says what was sent.
+    if (row.state === "sent") return { state: "sent", on: row.on, aboutOn: row.aboutOn };
     if (row.state === "queued" || row.state === "sending") return { state: "sending", on: null, aboutOn };
     return { state: row.reason === "address_blocked" ? "address_blocked" : "not_sent", on: null, aboutOn };
   }
@@ -114,7 +115,7 @@ export async function queueDueRenewalReminders(deps: Pick<RenewalReminderDeps, "
       due.push({ gymId: gym.gymId, heldId: one.row.id, entryId: one.payerEntryId, occasion: plan.next.occasion, what: plan.next.what, aboutOn: plan.next.aboutOn, email: one.payerEmail });
     }
     queued += await repo.queueReminders(deps.sql, due, now);
-    await repo.markChecked(deps.sql, gym.gymId, gym.today);
+    await repo.markChecked(deps.sql, gym.gymId, now);
   }
   return queued;
 }
@@ -150,7 +151,10 @@ async function sendOne(deps: RenewalReminderDeps, claim: repo.ClaimedReminder): 
   if (checked === "not_due") return await notDue(deps, claim, hmac);
   if (checked === "lost") return await notDue(deps, claim, hmac);
 
-  const card = await repo.chargedCard(deps.sql, claim.gymId, claim.heldId);
+  // The card is read for the payment the email names; none where it ends.
+  const plan = renewalReminderNext(checked.letter.held.row.membership, checked.letter.held.setting, checked.letter.today);
+  const periodIndex = plan.kind === "next" ? plan.next.periodIndex : null;
+  const card = periodIndex === null ? null : await repo.chargedCard(deps.sql, claim.gymId, claim.heldId, periodIndex);
   const message = reminderMessage(deps, claim, email, gymName, gym, checked.letter, card);
   const result = await deps.transport.send(message);
   switch (result.kind) {
@@ -209,6 +213,8 @@ export function reminderLines(
     notice: notice !== null && !notice.given && view.can.noticeEnds !== null ? { days: notice.days, lastDay: view.can.noticeEnds } : null,
     endWithTermOn: what === "term_renews" ? view.can.cancelAtContractEnd : null,
     lastDay: what === "renews" && notice !== null && notice.given ? view.endsOn : null,
+    // A renewal on or before the minimum term's last day cannot be stopped: the email says the term instead.
+    term: what === "renews" && view.contract !== null && aboutOn <= view.contract.until ? { until: view.contract.until, ends: view.contract.then === "ends" } : null,
   });
   const contact = [gym.contactPhone === null ? null : `call ${gym.contactPhone}`, gym.contactEmail === null ? null : `email ${gym.contactEmail}`].filter((x): x is string => x !== null);
   return {

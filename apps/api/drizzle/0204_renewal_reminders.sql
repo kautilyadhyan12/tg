@@ -10,9 +10,9 @@ ALTER TABLE "gym_membership_types" ADD COLUMN "renewal_reminder_days" integer;--
 ALTER TABLE "gym_membership_types" ADD COLUMN "term_reminder_days" integer;--> statement-breakpoint
 ALTER TABLE "gym_membership_types" ADD CONSTRAINT "gym_membership_types_renewal_reminder_check" CHECK (("renewal_reminder_days" IS NULL OR ("renewal_reminder_days" IN (3,7,14,30,45,60) AND "kind" = 'recurring' AND "price_minor" > 0)) AND ("term_reminder_days" IS NULL OR ("term_reminder_days" IN (3,7,14,30,45,60) AND "contract_periods" IS NOT NULL)));--> statement-breakpoint
 --
--- The day each gym's reminders were last looked for: once a gym's day, from 8 in the morning there, and
--- again the day a line's reminder is changed (set back to null).
-ALTER TABLE "gyms" ADD COLUMN "renewal_reminders_checked_on" date;--> statement-breakpoint
+-- When each gym's reminders were last looked for: every hour from 8 in the morning there, and at once after a
+-- line's reminder is changed (set back to null).
+ALTER TABLE "gyms" ADD COLUMN "renewal_reminders_checked_at" timestamp with time zone;--> statement-breakpoint
 --
 -- One email a membership and occasion (`renew:<period>` before that period, `term` before its minimum
 -- term's end), to whoever pays for it (`entry_id`, their record). The address is kept only while the email

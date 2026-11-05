@@ -436,7 +436,7 @@ export async function updateMembershipType(
       },
     });
     // A changed reminder is looked for again today, so the line's box tells the truth (18v-iv).
-    if (reminderBefore !== reminderAfter) await tx`UPDATE gyms SET renewal_reminders_checked_on = NULL WHERE id = ${input.gymId}`;
+    if (reminderBefore !== reminderAfter) await tx`UPDATE gyms SET renewal_reminders_checked_at = NULL WHERE id = ${input.gymId}`;
     return { kind: "ok" };
   });
 }

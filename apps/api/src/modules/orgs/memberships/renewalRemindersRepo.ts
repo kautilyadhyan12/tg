@@ -11,24 +11,25 @@ import { chargebackStops } from "../payments/chargebacksRepo.js";
 
 type SqlOrTx = Sql | TransactionSql;
 
-/** The gyms whose reminders are to be looked for now: open, past 8 in the morning on their own clock, not yet
- *  looked at today, with a line that asks for one. */
+/** The gyms whose reminders are to be looked for now: open, past 8 in the morning on their own clock, not looked
+ *  at in the last hour, with a line that asks for one. Every hour, so a membership given, unfrozen or paid, or an
+ *  address added, during the day is written that day (round one, H3). */
 export async function gymsToCheck(sql: SqlOrTx, q: { now: Date; gymIds: readonly string[] | null }): Promise<{ gymId: string; today: string }[]> {
   const rows = await sql<{ id: string; today: string }[]>`
     SELECT g.id, ((${q.now}::timestamptz AT TIME ZONE g.timezone)::date)::text AS today
     FROM gyms g
     WHERE g.status = 'active'
       AND extract(hour FROM ${q.now}::timestamptz AT TIME ZONE g.timezone) >= ${RENEWAL_REMINDER_FROM_HOUR}
-      AND (g.renewal_reminders_checked_on IS NULL OR g.renewal_reminders_checked_on < (${q.now}::timestamptz AT TIME ZONE g.timezone)::date)
+      AND (g.renewal_reminders_checked_at IS NULL OR g.renewal_reminders_checked_at <= ${q.now}::timestamptz - interval '1 hour')
       AND EXISTS (SELECT 1 FROM gym_membership_types t WHERE t.gym_id = g.id AND (t.renewal_reminder_days IS NOT NULL OR t.term_reminder_days IS NOT NULL))
       AND (${q.gymIds === null}::boolean OR g.id = ANY(${[...(q.gymIds ?? [])]}::uuid[]))
     ORDER BY g.id`;
   return rows.map((r) => ({ gymId: r.id, today: r.today }));
 }
 
-/** The gym's day the reminders were looked for; a gym looked at again the same day is not marked twice. */
-export async function markChecked(sql: SqlOrTx, gymId: string, today: string): Promise<void> {
-  await sql`UPDATE gyms SET renewal_reminders_checked_on = ${today}::date WHERE id = ${gymId}`;
+/** When the gym's reminders were looked for. */
+export async function markChecked(sql: SqlOrTx, gymId: string, at: Date): Promise<void> {
+  await sql`UPDATE gyms SET renewal_reminders_checked_at = ${at} WHERE id = ${gymId}`;
 }
 
 /** One membership whose line asks for a reminder, with whoever pays for it. */
@@ -152,17 +153,19 @@ export interface ReminderWritten {
   state: ReminderState;
   on: string | null;
   reason: string | null;
+  /** The day the email named. */
+  aboutOn: string;
 }
 
 /** The reminders written for these memberships, each with the gym's day it was sent. */
 export async function remindersOf(sql: SqlOrTx, gymId: string, heldIds: readonly string[]): Promise<ReminderWritten[]> {
   if (heldIds.length === 0) return [];
-  const rows = await sql<{ held_membership_id: string; occasion: string; state: ReminderState; reason: string | null; on: string | null }[]>`
-    SELECT n.held_membership_id, n.occasion, n.state, n.reason,
+  const rows = await sql<{ held_membership_id: string; occasion: string; state: ReminderState; reason: string | null; on: string | null; about_on: string }[]>`
+    SELECT n.held_membership_id, n.occasion, n.state, n.reason, n.about_on::text AS about_on,
            CASE WHEN n.state = 'sent' THEN ((n.finished_at AT TIME ZONE g.timezone)::date)::text END AS on
     FROM gym_renewal_reminders n JOIN gyms g ON g.id = n.gym_id
     WHERE n.gym_id = ${gymId} AND n.held_membership_id = ANY(${[...heldIds]}::uuid[])`;
-  return rows.map((r) => ({ heldId: r.held_membership_id, occasion: r.occasion, state: r.state, on: r.on, reason: r.reason }));
+  return rows.map((r) => ({ heldId: r.held_membership_id, occasion: r.occasion, state: r.state, on: r.on, reason: r.reason, aboutOn: r.about_on }));
 }
 
 /** The gym's day now. */
@@ -173,7 +176,7 @@ export async function gymToday(sql: SqlOrTx, gymId: string, now: Date): Promise<
 
 /** The card the app would charge for this membership by itself: whoever pays for it, in the Square account the
  *  gym is connected to, with automatic payments not paused and no chargeback stopping them. "Visa", "1111". */
-export async function chargedCard(sql: SqlOrTx, gymId: string, heldId: string): Promise<{ brand: string; last4: string } | null> {
+export async function chargedCard(sql: SqlOrTx, gymId: string, heldId: string, periodIndex: number): Promise<{ brand: string; last4: string } | null> {
   const [row] = await sql<{ brand: string; last4: string }[]>`
     SELECT k.brand, k.last4
     FROM gym_held_memberships h
@@ -181,7 +184,13 @@ export async function chargedCard(sql: SqlOrTx, gymId: string, heldId: string): 
     JOIN gym_member_cards k ON k.gym_id = h.gym_id AND k.environment = c.environment AND k.account_id = c.account_id
       AND k.entry_id = COALESCE((SELECT p.payer_entry_id FROM gym_member_payers p WHERE p.gym_id = h.gym_id AND p.entry_id = h.entry_id), h.entry_id)
     WHERE h.gym_id = ${gymId} AND h.id = ${heldId} AND h.currency = c.currency
+      AND h.kind = 'recurring' AND h.renews AND h.status = 'active'
       AND NOT EXISTS (${autopayPaused(sql)}) AND NOT EXISTS (${chargebackStops(sql)})
+      -- As the app's own charge reads it (appChargesKind in cardChargesRepo.ts): periods are paid in order, so a
+      -- renewal is charged only while no earlier period's bill is still owed (round one, H2).
+      AND NOT EXISTS (
+        SELECT 1 FROM gym_member_bills o
+        WHERE o.gym_id = h.gym_id AND o.held_membership_id = h.id AND o.fee IS NULL AND o.status = 'open' AND o.period_index < ${periodIndex})
     LIMIT 1`;
   return row ?? null;
 }

@@ -497,7 +497,7 @@ function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRate
         </Field>
 
         {choice === 'recurring' ? <ReminderField gymId={gymId} draft={draft} set={set} problem={problems?.renewalReminderDays} id={id} when="every_renewal" /> : null}
-        {choice === 'recurring' && draft.contract === 'fixed' ? <ReminderField gymId={gymId} draft={draft} set={set} problem={null} id={id} when="term_end" /> : null}
+        {choice === 'recurring' && draft.contract === 'fixed' ? <ReminderField gymId={gymId} draft={draft} set={set} problem={problems?.termReminderDays} id={id} when="term_end" /> : null}
 
         {choice === 'pack' ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" style={{ maxWidth: 480 }}>

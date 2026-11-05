@@ -124,7 +124,7 @@ line(
   }),
   ` · ${String(queued)} written`,
 );
-await sql`UPDATE gyms SET renewal_reminders_checked_on = NULL WHERE id = ANY(${ids}::uuid[])`;
+await sql`UPDATE gyms SET renewal_reminders_checked_at = NULL WHERE id = ANY(${ids}::uuid[])`;
 line(
   "a morning with every one written already",
   await time(async () => {
