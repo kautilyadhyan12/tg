@@ -1429,6 +1429,13 @@
       "when": 1790726400204,
       "tag": "0204_renewal_reminders",
       "breakpoints": true
+    },
+    {
+      "idx": 204,
+      "version": "7",
+      "when": 1790726400205,
+      "tag": "0205_body_measurement_removed_ids",
+      "breakpoints": true
     }
   ]
 }

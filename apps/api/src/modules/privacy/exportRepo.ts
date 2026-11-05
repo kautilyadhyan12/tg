@@ -76,6 +76,8 @@ export const EXPORT_READERS: Record<ExportedTable, (sql: Sql, userId: string) =>
 
   body_measurements: (sql, u) =>
     sql<Row[]>`SELECT * FROM body_measurements WHERE user_id = ${u} ORDER BY measured_at, id`,
+  body_measurement_removed_ids: (sql, u) =>
+    sql<Row[]>`SELECT * FROM body_measurement_removed_ids WHERE user_id = ${u} ORDER BY removed_at, id`,
 
   workout_templates: (sql, u) =>
     sql<Row[]>`SELECT * FROM workout_templates WHERE user_id = ${u} ORDER BY created_at, id`,
