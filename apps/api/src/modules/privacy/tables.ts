@@ -77,7 +77,7 @@ export const DIRECT_DELETE_TABLES = [
   // Which plan Recommended For You shows (migration 0200; ROADMAP 31f): the person's own
   // pick, deleted at Day 14 and exported.
   "recommended_choices",
-  // The workout and meal reminders the person set (migration 0210; ROADMAP 19e-i): their own,
+  // The workout and meal reminders the person set (migration 0211; ROADMAP 19e-i): their own,
   // deleted at Day 14 and exported.
   "training_reminders",
   // Each day's food targets (migration 0110; ROADMAP 34f-i): their own, deleted at Day 14
@@ -471,6 +471,10 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // gym_challenges.created_by_user_id — which member of staff made one of the gym's
   // challenges (`0082`), on gym_events' footing: the gym's own; `ON DELETE set null`.
   "gym_challenges",
+  // gym_meal_plans.written_by_user_id and changed_by_user_id — which member of staff wrote one of
+  // the gym's meal plans and who changed it last (`0210`), on gym_events' footing: the gym's own;
+  // `ON DELETE set null`, and a name is shown only for an account still in use.
+  "gym_meal_plans",
   // gym_event_places.user_id — which events a member said they were coming to, waited for or
   // pulled out of (Part 3 §15.4, migration `0080`). On gym_class_bookings' footing: the
   // same dated record of a person at a gym, kept as the gym's count of its event, and

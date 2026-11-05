@@ -326,6 +326,13 @@ function privilegeCopy(orgType) {
     },
     {
       // Spec Part 3 §14.2 (18a-i): owner and manager by default.
+      // Spec Part 6 §16.6 (24a-i): the owner by default.
+      value: 'plans.manage',
+      label: 'Write meal plans',
+      hint: `Write the meal plans on Plans for your ${words.people}, change them and delete them.`,
+    },
+    {
+      // Spec Part 3 §14.2 (18a-i): owner and manager by default.
       value: 'billing.members',
       label: "Record members' payments",
       hint: `See a ${words.person}'s bills on their page, record what they paid and void a payment recorded by mistake.`,

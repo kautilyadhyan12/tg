@@ -1126,7 +1126,7 @@ async function scanFailed(
 
 // ── A pack's label (ROADMAP Stage 5 33b-iii-c) ───────────────────────────────
 
-const LABEL_CANONICAL_PREFIX = "label_";
+export const LABEL_CANONICAL_PREFIX = "label_";
 /** A label's protein, carbs and fat can come to a little over 100 g in 100 g, from rounding a small serving. */
 const LABEL_MOST_GRAMS_PER_100 = 110;
 

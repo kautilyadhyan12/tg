@@ -53,6 +53,8 @@ function openableToday(privileges) {
     // Personal training (17e-i) is every member of staff's: their own hours and sessions.
     `${BASE}/personal-training`,
     ...(has('posts.manage') ? [`${BASE}/updates`, `${BASE}/events`] : []),
+    // Plans (24a-i): the gym's meal plans, for whoever holds the tick.
+    ...(has('plans.manage') ? [`${BASE}/plans`] : []),
     ...(has('leaderboard.manage') ? [`${BASE}/leaderboard`, `${BASE}/challenges`] : []),
     // Reports (21a-i): its own page, for whoever may read the gym's figures.
     ...(has('reports.read') ? [`${BASE}/reports`] : []),
