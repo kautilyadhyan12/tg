@@ -181,7 +181,8 @@ describe("Your training shows and saves only the server's answer", () => {
 
   it("Safe mode: the workout reminder says why it waits, keeps its switch, and shows no days or time; meals as usual", async () => {
     await openSettings(fakeServer(routes(account({ workout: { on: true, time: "18:30", days: [1, 3, 5] }, lunch: { on: true } }, true).routes)).ask);
-    expect(screen.getByText(SAFE_MODE_LINE)).toBeTruthy();
+    // The workout reminder's, and the streak reminder's under it (19e-ii).
+    expect(screen.getAllByText(SAFE_MODE_LINE)).toHaveLength(2);
     expect(screen.getByLabelText("Workout reminder").props.value).toBe(true);
     expect(screen.queryByLabelText("Monday")).toBeNull();
     expect(screen.queryByLabelText("Workout reminder time, 6:30 PM")).toBeNull();
@@ -209,5 +210,16 @@ describe("a reminder's notification on the phone", () => {
     expect(tabOfTap(workout)).toBe("Workout");
     expect(tabOfTap(food)).toBe("Food");
     expect(tabOfTap({ kind: "inbox", gymId: "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f" })).toBe("Gym");
+  });
+  it("the streak reminder opens Workout, a badge Me (where Achievements is), the summary the Dashboard (19e-ii)", () => {
+    const streak = tappedOf({ kind: "training_nudge", open: "workout" });
+    const badge = tappedOf({ kind: "training_nudge", open: "achievements" });
+    const week = tappedOf({ kind: "training_nudge", open: "dashboard" });
+    expect(tappedOf({ kind: "training_nudge", open: "settings" })).toBeNull();
+    if (streak === null || badge === null || week === null) throw new Error("not read");
+    expect([streak, badge, week].map(channelOf)).toEqual(["training-progress", "training-progress", "training-progress"]);
+    expect(identifierOf(streak)).toBe(identifierOf(week));
+    expect(identifierOf(streak)).not.toBe(identifierOf({ kind: "training", open: "workout" }));
+    expect([streak, badge, week].map(tabOfTap)).toEqual(["Workout", "Me", "Dashboard"]);
   });
 });

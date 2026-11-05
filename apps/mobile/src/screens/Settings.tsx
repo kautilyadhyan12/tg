@@ -10,6 +10,7 @@ import {
   GYM_COMMENTS_CHANNEL,
   GYM_MESSAGES_CHANNEL,
   GYM_PLACES_CHANNEL,
+  TRAINING_PROGRESS_CHANNEL,
   TRAINING_REMINDERS_CHANNEL,
   myOrgsResponseSchema,
   onboardingResponseSchema,
@@ -38,6 +39,7 @@ import { useSession } from "../session/SessionProvider";
 import { HideMe, useHideMe } from "./gym/hideMe";
 import { CanSee } from "./Invitation";
 import { tabWord } from "./placesHeading";
+import { SAFE_MODE_LINE } from "./remindersView";
 import { TrainingReminders } from "./TrainingReminders";
 import { Setup, accountUnits } from "./setup/Setup";
 import { UNIT_OPTIONS } from "./setup/SetupScreens";
@@ -73,7 +75,7 @@ export function SettingsPage({ open, onClose }: { open: boolean; onClose: () => 
 
 type Places = { kind: "loading" } | { kind: "failed" } | { kind: "ok"; orgs: MyOrgsResponse["orgs"] };
 
-export type PushSwitch = "pushGymMessages" | "pushPlaces" | "pushComments";
+export type PushSwitch = "pushGymMessages" | "pushPlaces" | "pushComments" | "pushStreak" | "pushBadges" | "pushSummary";
 type PushNow = Pick<UserProfile, PushSwitch>;
 type Push = { kind: "loading" } | { kind: "failed" } | { kind: "ok"; now: PushNow };
 
@@ -86,7 +88,22 @@ export const PUSH_SWITCHES: readonly { key: PushSwitch; channel: string; label: 
   { key: "pushComments", channel: GYM_COMMENTS_CHANNEL.id, label: "Comments", on: "On your posts, and replies to your comments.", off: "Off. New comments still show on Updates." },
 ];
 
-const pushOf = (user: UserProfile): PushNow => ({ pushGymMessages: user.pushGymMessages, pushPlaces: user.pushPlaces, pushComments: user.pushComments });
+/** The three the app decides by itself (19e-ii), under Your training for everyone. */
+export const PROGRESS_SWITCHES: readonly { key: PushSwitch; channel: string; label: string; on: string; off: string }[] = [
+  { key: "pushStreak", channel: TRAINING_PROGRESS_CHANNEL.id, label: "Streak reminder", on: "At 7 PM, when your streak would end at midnight.", off: "Off." },
+  { key: "pushBadges", channel: TRAINING_PROGRESS_CHANNEL.id, label: "Badges", on: "When you earn a new badge.", off: "Off. New badges still show in Achievements." },
+  { key: "pushSummary", channel: TRAINING_PROGRESS_CHANNEL.id, label: "Sunday summary", on: "Your week, on Sunday at 6 PM.", off: "Off." },
+];
+export const PROGRESS_FOOT = "At most one of these a day, and never at night.";
+
+const pushOf = (user: UserProfile): PushNow => ({
+  pushGymMessages: user.pushGymMessages,
+  pushPlaces: user.pushPlaces,
+  pushComments: user.pushComments,
+  pushStreak: user.pushStreak,
+  pushBadges: user.pushBadges,
+  pushSummary: user.pushSummary,
+});
 type Place = MyOrgsResponse["orgs"][number];
 
 function SettingsBody({ onClose }: { onClose: () => void }) {
@@ -276,7 +293,8 @@ function NotificationsPart(props: { push: Push; setPush: (push: Push) => void; s
   const { session } = useSession();
   const phone = usePhoneAllows();
   const [busy, setBusy] = useState<PushSwitch | null>(null);
-  const [said, setSaid] = useState<string | null>(null);
+  // What a failed save said, and whether under the place's switches or Your training's.
+  const [said, setSaid] = useState<{ words: string; progress: boolean } | null>(null);
   const { readAgain } = phone;
   // Each kind can also be turned off in the phone's own settings, apart from the app's switch.
   const [offOnPhone, setOffOnPhone] = useState<readonly string[]>([]);
@@ -284,7 +302,7 @@ function NotificationsPart(props: { push: Push; setPush: (push: Push) => void; s
   useEffect(() => {
     const run = { live: true };
     const readChannels = () => {
-      void channelsOff([...PUSH_SWITCHES.map((row) => row.channel), TRAINING_REMINDERS_CHANNEL.id]).then((off) => {
+      void channelsOff([...PUSH_SWITCHES.map((row) => row.channel), TRAINING_REMINDERS_CHANNEL.id, TRAINING_PROGRESS_CHANNEL.id]).then((off) => {
         if (run.live) setOffOnPhone(off);
       });
     };
@@ -312,9 +330,47 @@ function NotificationsPart(props: { push: Push; setPush: (push: Push) => void; s
     const answer = await session.signedIn({ method: "PATCH", path: "/v1/users/me", body: { [key]: on } }, userProfileResponseSchema);
     // Counted again when it ends, so a read that began during the save never puts back what it read.
     saves.current += 1;
-    if (answer.kind === "ok") setPush({ kind: "ok", now: pushOf(answer.data.user) });
-    else setSaid(answer.kind === "refused" ? answer.message : NO_ANSWER);
+    const progress = PROGRESS_SWITCHES.some((row) => row.key === key);
+    if (answer.kind === "ok") {
+      setPush({ kind: "ok", now: pushOf(answer.data.user) });
+      // Switched on with Android not yet asked: it is asked now, so what was switched on can show.
+      if (on && progress && phone.allowed === "ask") void phone.turnOn();
+    } else setSaid({ words: answer.kind === "refused" ? answer.message : NO_ANSWER, progress });
     setBusy(null);
+  };
+  // One switch, its line, and a word when the phone's own settings turned its kind off.
+  const switchRow = (row: (typeof PUSH_SWITCHES)[number], heldLine?: string) => {
+    if (push.kind !== "ok") return null;
+      const on = push.now[row.key];
+      const line = on && heldLine !== undefined ? heldLine : on ? (row.key === "pushGymMessages" && from !== null ? from : row.on) : row.off;
+      const phoneOff = on && phone.allowed === "yes" && offOnPhone.includes(row.channel);
+      return (
+        <View key={row.key} style={styles.email}>
+          <View style={styles.between}>
+            <View style={styles.grow}>
+              <Txt kind="h3">{row.label}</Txt>
+              <Txt kind="small">{line}</Txt>
+            </View>
+            <Switch
+              testID={`switch-${row.key}`}
+              accessibilityLabel={`${row.label} notifications`}
+              value={on}
+              disabled={busy !== null}
+              onValueChange={(value) => void flip(row.key, value)}
+              trackColor={{ false: colours.lineStrong, true: colours.orange }}
+              thumbColor={colours.text}
+            />
+          </View>
+          {phoneOff ? (
+            <View style={styles.phoneOff}>
+              <Txt kind="small" colour="badText">
+                Off on this phone.
+              </Txt>
+              <Button label="Open phone settings" kind="link" say={`Open phone settings for ${row.label}`} onPress={() => void Linking.openSettings()} />
+            </View>
+          ) : null}
+        </View>
+      );
   };
   return (
     <Part title="Notifications" icon="bell">
@@ -340,47 +396,35 @@ function NotificationsPart(props: { push: Push; setPush: (push: Push) => void; s
       ) : (
         <>
           {heading === null ? null : <Txt kind="eyebrow">{heading}</Txt>}
-          {PUSH_SWITCHES.map((row) => {
-            const on = push.now[row.key];
-            const line = on ? (row.key === "pushGymMessages" && from !== null ? from : row.on) : row.off;
-            const phoneOff = on && phone.allowed === "yes" && offOnPhone.includes(row.channel);
-            return (
-              <View key={row.key} style={styles.email}>
-                <View style={styles.between}>
-                  <View style={styles.grow}>
-                    <Txt kind="h3">{row.label}</Txt>
-                    <Txt kind="small">{line}</Txt>
-                  </View>
-                  <Switch
-                    testID={`switch-${row.key}`}
-                    accessibilityLabel={`${row.label} notifications`}
-                    value={on}
-                    disabled={busy !== null}
-                    onValueChange={(value) => void flip(row.key, value)}
-                    trackColor={{ false: colours.lineStrong, true: colours.orange }}
-                    thumbColor={colours.text}
-                  />
-                </View>
-                {phoneOff ? (
-                  <View style={styles.phoneOff}>
-                    <Txt kind="small" colour="badText">
-                      Off on this phone.
-                    </Txt>
-                    <Button label="Open phone settings" kind="link" say={`Open phone settings for ${row.label}`} onPress={() => void Linking.openSettings()} />
-                  </View>
-                ) : null}
-              </View>
-            );
-          })}
+          {PUSH_SWITCHES.map((row) => switchRow(row))}
         </>
       )}
-      <Said words={said} bad />
+      <Said words={said !== null && !said.progress ? said.words : null} bad />
       <TrainingReminders
         phoneAllowed={phone.allowed === "yes"}
         offOnPhone={offOnPhone.includes(TRAINING_REMINDERS_CHANNEL.id)}
         onTurnedOn={() => {
           if (phone.allowed === "ask") void phone.turnOn();
         }}
+        after={(safeMode) =>
+          push.kind === "failed" ? (
+            belongs ? null : (
+              <View style={styles.between}>
+                <Txt kind="small" style={styles.grow}>
+                  Couldn’t load your notifications.
+                </Txt>
+                <Button label="Try again" kind="link" say="Try notifications again" onPress={onAgain} />
+              </View>
+            )
+          ) : (
+            <>
+              {/* Safe mode: the streak reminder waits, as the workout reminder does. */}
+              {PROGRESS_SWITCHES.map((row) => switchRow(row, row.key === "pushStreak" && safeMode === true ? SAFE_MODE_LINE : undefined))}
+              <Said words={said?.progress === true ? said.words : null} bad />
+              <Txt kind="tiny">{PROGRESS_FOOT}</Txt>
+            </>
+          )
+        }
       />
     </Part>
   );

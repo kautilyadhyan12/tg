@@ -112,6 +112,7 @@ describe("asking for notifications", () => {
       expect.objectContaining({ id: "gym-places", name: "Classes and events" }),
       expect.objectContaining({ id: "gym-comments", name: "Comments" }),
       expect.objectContaining({ id: "training-reminders", name: "Reminders" }),
+      expect.objectContaining({ id: "training-progress", name: "Streaks, badges and your week" }),
     ]);
   });
 

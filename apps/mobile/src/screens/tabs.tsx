@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { Button } from "../look/Button";
 import { Avatar, Badge, Card, PictureCard } from "../look/Card";
@@ -161,9 +161,30 @@ function ProgressCard() {
   );
 }
 
+// A tapped badge notification opens Achievements over the Me tab (19e-ii): asked before the tab is drawn,
+// it opens once the tab is.
+let achievementsAsked = false;
+const achievementsWatchers = new Set<() => void>();
+export function openAchievements(): void {
+  achievementsAsked = true;
+  for (const watcher of achievementsWatchers) watcher();
+}
+
 /** Achievements' picture, opening the page over the tab (35c-iii). */
 function AchievementsCard() {
   const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const take = () => {
+      if (!achievementsAsked) return;
+      achievementsAsked = false;
+      setOpen(true);
+    };
+    take();
+    achievementsWatchers.add(take);
+    return () => {
+      achievementsWatchers.delete(take);
+    };
+  }, []);
   return (
     <>
       <Pressable

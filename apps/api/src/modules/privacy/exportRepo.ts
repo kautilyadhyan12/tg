@@ -31,7 +31,7 @@ type Row = Record<string, unknown>;
 export async function selectExportUser(sql: Sql, userId: string): Promise<Row | null> {
   const rows = await sql<Row[]>`
     SELECT id, email, display_name, locale, units, timezone,
-           leaderboard_opt_out, leaderboard_shown_at, push_gym_messages, push_places, push_comments, starter_goals_at, status, last_active_at, created_at
+           leaderboard_opt_out, leaderboard_shown_at, push_gym_messages, push_places, push_comments, push_streak, push_badges, push_summary, starter_goals_at, status, last_active_at, created_at
     FROM users
     WHERE id = ${userId}`;
   return rows[0] ?? null;

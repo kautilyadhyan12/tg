@@ -103,6 +103,7 @@ export async function sendGymMessageNotifications(deps: {
       }
     }
     state.again = failed && !state.reached;
+    if (state.reached) await repo.noteReached(sql, pair.userId, now).catch(onError);
   };
 
   const handle = async (pair: repo.PendingPair): Promise<void> => {

@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   check,
+  date,
   index,
   inet,
   integer,
@@ -33,6 +34,14 @@ export const users = pgTable(
     pushGymMessages: boolean("push_gym_messages").notNull().default(true),
     pushPlaces: boolean("push_places").notNull().default(true),
     pushComments: boolean("push_comments").notNull().default(true),
+    // 0213: the streak reminder, badges and the Sunday summary (19e-ii); each on by default. When the newest
+    // three notifications reached the phone, the day one of the three last went, the week summed up last.
+    pushStreak: boolean("push_streak").notNull().default(true),
+    pushBadges: boolean("push_badges").notNull().default(true),
+    pushSummary: boolean("push_summary").notNull().default(true),
+    recentPushes: timestamp("recent_pushes", { withTimezone: true }).array().notNull().default(sql`'{}'`),
+    nudgeDay: date("nudge_day"),
+    summaryWeek: date("summary_week"),
     locale: text("locale").notNull().default("en"),
     units: text("units").notNull().default("metric"),
     timezone: text("timezone"), // recaps only; quotas stay UTC (v1)
@@ -49,6 +58,7 @@ export const users = pgTable(
   (t) => [
     check("users_hash_algo_check", sql`${t.hashAlgo} IN ('bcrypt','argon2id')`),
     check("users_status_check", sql`${t.status} IN ('active','deleted')`),
+    check("users_recent_pushes_check", sql`cardinality(${t.recentPushes}) <= 3`),
     index("users_trial_person_key_idx").on(t.trialPersonKey).where(sql`${t.trialPersonKey} IS NOT NULL`),
   ],
 );
