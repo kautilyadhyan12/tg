@@ -255,6 +255,19 @@ d("phone notifications for a gym's messages (real Postgres)", () => {
     expect(sentTo(ashaPhone).map((m) => [m.title, m.body])).toEqual([["Lotus Yoga · 2 new messages", "Pool open again."]]);
   });
 
+  it("each switch is its own: the other two kinds switched off, Messages still reach the phone (19d)", { timeout: TIMEOUT_MS }, async () => {
+    const at = minutes(noonIndia(), 230);
+    const kiran = await phoneSignIn(email("only-messages"));
+    await join(gymA, kiran.userId);
+    const phone = address("only-messages");
+    expect((await giveAddress(kiran, phone)).statusCode).toBe(200);
+    const res = await request("PATCH", "/v1/users/me", { bearer: kiran.accessToken, payload: { pushPlaces: false, pushComments: false } });
+    expect(res.statusCode, res.body).toBe(200);
+    await message(gymA, kiran.userId, "Holiday hours this week.", minutes(at, -1));
+    await sweep(at);
+    expect(sentTo(phone).map((m) => m.body)).toEqual(["Holiday hours this week."]);
+  });
+
   it("a phone that Asha left without signing out, now signed in as Meera, is told only Meera's", { timeout: TIMEOUT_MS }, async () => {
     const at = minutes(noonIndia(), 10);
     const phoneToken = address("handed-on");

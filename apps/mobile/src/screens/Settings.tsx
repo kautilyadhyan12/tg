@@ -7,6 +7,9 @@ import {
   deleteAccountResponseSchema,
   displayNameSchema,
   dpdpExportSchema,
+  GYM_COMMENTS_CHANNEL,
+  GYM_MESSAGES_CHANNEL,
+  GYM_PLACES_CHANNEL,
   myOrgsResponseSchema,
   onboardingResponseSchema,
   orgWords,
@@ -27,6 +30,7 @@ import { Icon, type IconName } from "../look/Icon";
 import { Sheet } from "../look/Sheet";
 import { Txt } from "../look/Txt";
 import { usePhoneAllows } from "../notifications/Notifications";
+import { channelsOff } from "../notifications/phone";
 import { exportFileFor, forgetPersonFiles } from "../session/personFiles";
 import { SIGNED_OUT_NOTES } from "../session/session";
 import { useSession } from "../session/SessionProvider";
@@ -74,10 +78,10 @@ type Push = { kind: "loading" } | { kind: "failed" } | { kind: "ok"; now: PushNo
 /** The three switches, named as the phone's own settings name the app's notification channels. Every
  *  word fits each kind of place (a gym, a studio, a trainer, a clinic); the place itself is named by
  *  `messagesFrom`. */
-export const PUSH_SWITCHES: readonly { key: PushSwitch; label: string; on: string; off: string }[] = [
-  { key: "pushGymMessages", label: "Messages", on: "From the places you belong to.", off: "Off. They still arrive in each Inbox." },
-  { key: "pushPlaces", label: "Classes and events", on: "A place for you, or a free place from the waitlist.", off: "Off. Check Classes and Events for places." },
-  { key: "pushComments", label: "Comments", on: "On your posts, and replies to your comments.", off: "Off. New comments still show on Updates." },
+export const PUSH_SWITCHES: readonly { key: PushSwitch; channel: string; label: string; on: string; off: string }[] = [
+  { key: "pushGymMessages", channel: GYM_MESSAGES_CHANNEL.id, label: "Messages", on: "From the places you belong to.", off: "Off. They still arrive in each Inbox." },
+  { key: "pushPlaces", channel: GYM_PLACES_CHANNEL.id, label: "Classes and events", on: "A place for you, or a free place from the waitlist.", off: "Off. Check Classes and Events for places." },
+  { key: "pushComments", channel: GYM_COMMENTS_CHANNEL.id, label: "Comments", on: "On your posts, and replies to your comments.", off: "Off. New comments still show on Updates." },
 ];
 
 const pushOf = (user: UserProfile): PushNow => ({ pushGymMessages: user.pushGymMessages, pushPlaces: user.pushPlaces, pushComments: user.pushComments });
@@ -272,12 +276,24 @@ function NotificationsPart(props: { push: Push; setPush: (push: Push) => void; s
   const [busy, setBusy] = useState<PushSwitch | null>(null);
   const [said, setSaid] = useState<string | null>(null);
   const { readAgain } = phone;
-  // Back from the phone's own settings, where the person may have turned the app's notifications on.
+  // Each kind can also be turned off in the phone's own settings, apart from the app's switch.
+  const [offOnPhone, setOffOnPhone] = useState<readonly string[]>([]);
+  // Back from the phone's own settings, where the person may have turned notifications on again.
   useEffect(() => {
+    const run = { live: true };
+    const readChannels = () => {
+      void channelsOff(PUSH_SWITCHES.map((row) => row.channel)).then((off) => {
+        if (run.live) setOffOnPhone(off);
+      });
+    };
+    readChannels();
     const back = AppState.addEventListener("change", (state) => {
-      if (state === "active") void readAgain();
+      if (state !== "active") return;
+      void readAgain();
+      readChannels();
     });
     return () => {
+      run.live = false;
       back.remove();
     };
   }, [readAgain]);
@@ -291,6 +307,8 @@ function NotificationsPart(props: { push: Push; setPush: (push: Push) => void; s
     setBusy(key);
     setSaid(null);
     const answer = await session.signedIn({ method: "PATCH", path: "/v1/users/me", body: { [key]: on } }, userProfileResponseSchema);
+    // Counted again when it ends, so a read that began during the save never puts back what it read.
+    saves.current += 1;
     if (answer.kind === "ok") setPush({ kind: "ok", now: pushOf(answer.data.user) });
     else setSaid(answer.kind === "refused" ? answer.message : NO_ANSWER);
     setBusy(null);
@@ -320,25 +338,36 @@ function NotificationsPart(props: { push: Push; setPush: (push: Push) => void; s
         <>
           {heading === null ? null : <Txt kind="eyebrow">{heading}</Txt>}
           {PUSH_SWITCHES.map((row) => {
-          const on = push.now[row.key];
-          const line = on ? (row.key === "pushGymMessages" && from !== null ? from : row.on) : row.off;
-          return (
-            <View key={row.key} style={styles.between}>
-              <View style={styles.grow}>
-                <Txt kind="h3">{row.label}</Txt>
-                <Txt kind="small">{line}</Txt>
+            const on = push.now[row.key];
+            const line = on ? (row.key === "pushGymMessages" && from !== null ? from : row.on) : row.off;
+            const phoneOff = on && phone.allowed === "yes" && offOnPhone.includes(row.channel);
+            return (
+              <View key={row.key} style={styles.email}>
+                <View style={styles.between}>
+                  <View style={styles.grow}>
+                    <Txt kind="h3">{row.label}</Txt>
+                    <Txt kind="small">{line}</Txt>
+                  </View>
+                  <Switch
+                    testID={`switch-${row.key}`}
+                    accessibilityLabel={`${row.label} notifications`}
+                    value={on}
+                    disabled={busy !== null}
+                    onValueChange={(value) => void flip(row.key, value)}
+                    trackColor={{ false: colours.lineStrong, true: colours.orange }}
+                    thumbColor={colours.text}
+                  />
+                </View>
+                {phoneOff ? (
+                  <View style={styles.phoneOff}>
+                    <Txt kind="small" colour="badText">
+                      Off on this phone.
+                    </Txt>
+                    <Button label="Open phone settings" kind="link" say={`Open phone settings for ${row.label}`} onPress={() => void Linking.openSettings()} />
+                  </View>
+                ) : null}
               </View>
-              <Switch
-                testID={`switch-${row.key}`}
-                accessibilityLabel={`${row.label} notifications`}
-                value={on}
-                disabled={busy !== null}
-                onValueChange={(value) => void flip(row.key, value)}
-                trackColor={{ false: colours.lineStrong, true: colours.orange }}
-                thumbColor={colours.text}
-              />
-            </View>
-          );
+            );
           })}
         </>
       )}

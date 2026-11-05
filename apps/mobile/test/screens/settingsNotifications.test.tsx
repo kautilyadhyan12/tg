@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
-import { Linking } from "react-native";
+import { AppState, Linking } from "react-native";
 import { App } from "../../src/App";
 import { NO_ANSWER } from "../../src/screens/SignIn";
 import { PUSH_SWITCHES } from "../../src/screens/Settings";
@@ -9,7 +9,7 @@ import { fakeServer, kept, lost, memoryStore, profile, refusal, tokens, type Rep
 // Settings' notification switches (ROADMAP Stage 5 item 19d). The worst thing: a switch reads Off while
 // the server still holds On, so the phone keeps sounding. Every switch shown is the server's answer.
 
-const { notifications, reset } = jest.requireMock<{ notifications: { permission: unknown; afterAsk: unknown; asked: number }; reset: () => void }>("expo-notifications");
+const { notifications, reset } = jest.requireMock<{ notifications: { permission: unknown; afterAsk: unknown; asked: number; channelsOff: string[] }; reset: () => void }>("expo-notifications");
 const YES = { granted: true, canAskAgain: true, status: "granted" };
 const ASK = { granted: false, canAskAgain: true, status: "undetermined" };
 const NO = { granted: false, canAskAgain: false, status: "denied" };
@@ -52,6 +52,20 @@ async function openSettings(ask: Ask) {
   await fireEvent.press(tab);
   await fireEvent.press(await screen.findByLabelText("Settings"));
 }
+/** The app coming back to the front, as Android says it. */
+function listenForComeBack(): () => Promise<void> {
+  const listeners: ((state: string) => void)[] = [];
+  jest.spyOn(AppState, "addEventListener").mockImplementation((_type, handler) => {
+    listeners.push(handler as (state: string) => void);
+    return { remove: () => undefined };
+  });
+  return async () => {
+    await act(() => {
+      for (const one of listeners) one("active");
+    });
+  };
+}
+
 const switchOf = (label: string) => screen.findByLabelText(`${label} notifications`);
 const words = (key: keyof Held) => {
   const row = PUSH_SWITCHES.find((one) => one.key === key);
@@ -171,6 +185,8 @@ describe("Android's own switch for the app", () => {
   it("turned off in the phone's settings: says so, and opens the phone's settings", async () => {
     notifications.permission = NO;
     const opened = jest.spyOn(Linking, "openSettings").mockResolvedValue(undefined);
+    // React Native's own stand-in keeps every earlier test's calls.
+    opened.mockClear();
     await openSettings(fakeServer(routes({ [ME]: account().me })).ask);
     expect(await screen.findByText("Notifications are off on this phone.")).toBeTruthy();
     await fireEvent.press(screen.getByText("Open phone settings"));
@@ -194,6 +210,92 @@ describe("Android's own switch for the app", () => {
       expect(screen.queryByText("Notifications are off on this phone.")).toBeNull();
     });
     expect(notifications.asked).toBe(1);
+    expect(server.asked.filter((a) => a.path === "/v1/push-tokens").map((a) => a.method)).toEqual(["PUT"]);
+  });
+});
+
+describe("round one's findings", () => {
+  it("another phone changed it meanwhile: the switch reads the server's answer, not the press (T3)", async () => {
+    const acct = account();
+    const me: Route = (body) => {
+      if (body === undefined) return acct.me(undefined);
+      // Another phone switched Comments on again just after this press: the server holds On.
+      acct.held.pushComments = true;
+      return { status: 200, body: { user: { ...profile(true).user, ...acct.held } } };
+    };
+    await openSettings(fakeServer(routes({ [ME]: me })).ask);
+    await switchOf("Comments");
+    await act(() => fireEvent(screen.getByLabelText("Comments notifications"), "valueChange", false));
+    await waitFor(() => {
+      expect(screen.getByLabelText("Comments notifications").props.value).toBe(true);
+    });
+  });
+
+  it("a read begun during a save and answered after it never puts the old value back (L2)", async () => {
+    const comeBack = listenForComeBack();
+    const acct = account();
+    const server = fakeServer(routes({ [ME]: acct.me }));
+    const held: { patch: (() => void) | null; read: (() => void) | null } = { patch: null, read: null };
+    let hold = false;
+    const ask: Ask = (url, init) => {
+      if (!hold || new URL(url).pathname !== ME) return server.ask(url, init);
+      if (init.method === "PATCH") {
+        // Reaches the server only when let go.
+        return new Promise((done) => {
+          held.patch = () => void server.ask(url, init).then(done);
+        });
+      }
+      // The server answers now (still On); the answer reaches the phone only when let go.
+      const answer = server.ask(url, init);
+      return new Promise((done) => {
+        held.read = () => void answer.then(done);
+      });
+    };
+    await openSettings(ask);
+    await switchOf("Comments");
+    hold = true;
+    await act(() => fireEvent(screen.getByLabelText("Comments notifications"), "valueChange", false));
+    await comeBack();
+    await act(async () => {
+      held.patch?.();
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(screen.getByLabelText("Comments notifications").props.value).toBe(false);
+    });
+    await act(async () => {
+      held.read?.();
+      await Promise.resolve();
+    });
+    // Let anything the late read would do happen.
+    await act(() => new Promise((done) => setTimeout(done, 50)));
+    expect(screen.getByLabelText("Comments notifications").props.value).toBe(false);
+    expect(acct.held.pushComments).toBe(false);
+  });
+
+  it("one kind turned off in the phone's own settings: that row says so and opens them (L1)", async () => {
+    notifications.channelsOff = ["gym-comments"];
+    const opened = jest.spyOn(Linking, "openSettings").mockResolvedValue(undefined);
+    // React Native's own stand-in keeps every earlier test's calls.
+    opened.mockClear();
+    await openSettings(fakeServer(routes({ [ME]: account().me })).ask);
+    expect(await screen.findByText("Off on this phone.")).toBeTruthy();
+    expect(screen.getAllByText("Off on this phone.")).toHaveLength(1);
+    await fireEvent.press(screen.getByLabelText("Open phone settings for Comments"));
+    expect(opened).toHaveBeenCalledTimes(1);
+  });
+
+  it("back from the phone's settings with notifications turned on: the line goes and the phone's address is given (T2)", async () => {
+    const comeBack = listenForComeBack();
+    notifications.permission = NO;
+    const server = fakeServer(routes({ [ME]: account().me, "/v1/push-tokens": ok({ saved: true }) }));
+    await openSettings(server.ask);
+    expect(await screen.findByText("Notifications are off on this phone.")).toBeTruthy();
+    notifications.permission = YES;
+    await comeBack();
+    await waitFor(() => {
+      expect(screen.queryByText("Notifications are off on this phone.")).toBeNull();
+    });
     expect(server.asked.filter((a) => a.path === "/v1/push-tokens").map((a) => a.method)).toEqual(["PUT"]);
   });
 });
