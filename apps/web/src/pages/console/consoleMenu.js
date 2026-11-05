@@ -11,6 +11,7 @@ import { canReadReports } from './reportsView';
 import { canSeeAtRisk } from './atRiskView';
 import { canOpenSell } from './sellView';
 import { canSeeFailedPayments } from './failedPaymentsAccess';
+import { canManagePlans } from './mealPlansView';
 
 /** Settings holds sections gated on two permissions (the gym's details: `org.manage`;
  *  Booking rules: `schedule.manage`), so its page is drawn for whoever holds either.
@@ -64,6 +65,8 @@ export function consoleMenu(orgSlug, privileges, orgType) {
     Array.isArray(privileges) && { key: 'training', to: `${base}/personal-training`, end: false, label: 'Personal training', phone: 'more' },
     canManagePosts(privileges) && { key: 'updates', to: `${base}/updates`, end: false, label: 'Updates', phone: 'more' },
     canManagePosts(privileges) && { key: 'events', to: `${base}/events`, end: false, label: 'Events', phone: 'more' },
+    // The meal plans the gym gives its members (24a-i): written and changed every week.
+    canManagePlans(privileges) && { key: 'plans', to: `${base}/plans`, end: false, label: 'Plans', phone: 'more' },
     canSeeLeaderboard(privileges) && {
       key: 'leaderboard',
       to: `${base}/leaderboard`,
