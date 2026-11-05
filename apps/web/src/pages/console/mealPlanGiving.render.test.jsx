@@ -42,7 +42,7 @@ describe('the Members bar’s Meal plan box', () => {
     fireEvent.change(pick, { target: { value: 'p2' } });
     expect(await sheet().findByText('2 members will get Muscle week:')).toBeTruthy();
     expect(sheet().getByText('Ann Lee')).toBeTruthy();
-    expect(sheet().getByText('1 of them get another meal plan now. Muscle week takes its place.')).toBeTruthy();
+    expect(sheet().getByText('1 of them gets another meal plan now. Muscle week takes its place.')).toBeTruthy();
     expect(sheet().getByText('1 is no longer on your list and won’t get it.')).toBeTruthy();
     expect(svc.previewSelected).toHaveBeenCalledWith('g1', 'p2', TICKED);
     fireEvent.click(sheet().getByRole('button', { name: 'Give to 2 members' }));

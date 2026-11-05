@@ -467,6 +467,16 @@ describe('who gets a plan', () => {
     expect(box.queryByRole('button', { name: /^Give/ })).toBeNull();
   });
 
+  it('without the Members tick, the members chosen are a count and who can see their names', async () => {
+    svc.get.mockResolvedValue(planOf({ 1: [meal('lunch', [RICE])] }));
+    svc.given.mockResolvedValue({ ...GIVEN, members: [] });
+    open();
+    await screen.findByTestId('given');
+    expect(await given().findByText('Chosen members (2)')).toBeTruthy();
+    expect(given().getByText('Only staff who can open Members see their names.')).toBeTruthy();
+    expect(given().queryByText('Ann Lee')).toBeNull();
+  });
+
   it('Stop asks first, then stops that one group only', async () => {
     svc.get.mockResolvedValue(planOf({ 1: [meal('lunch', [RICE])] }));
     svc.given.mockResolvedValue(GIVEN);
