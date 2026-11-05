@@ -351,7 +351,7 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
           </View>
           {sums !== null && sums.track.length > 1 ? (
             <View style={styles.trace}>
-              <RouteLine track={sums.track} starts={sums.trackStarts} units={units} height={110} marks={false} testID="live-route" />
+              <RouteLine track={sums.track} starts={sums.trackStarts} units={units} height={110} marks={false} live={run.phase === "running"} testID="live-route" />
             </View>
           ) : null}
         </View>

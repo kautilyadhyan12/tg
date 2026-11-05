@@ -6,7 +6,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { AUTO_START, nextAutoPause, type AutoPauseChange, type Fix } from "../src/screens/running/autoPause";
-import { fitPath, unitMarks } from "../src/screens/running/routeShape";
+import { fitPath, heading, unitMarks } from "../src/screens/running/routeShape";
 import { clock, distance, leftOutLine, pace, runName, runWhen, splitLabel } from "../src/screens/running/runWords";
 
 describe("a run's words", () => {
@@ -105,5 +105,16 @@ describe("a route laid flat", () => {
     // 1.5 km, a pause during which the person moved 3 km, then 0.6 km more.
     const track = [north(0), north(500), north(1000), north(1500), north(4500), north(5100)];
     expect(unitMarks(track, [0, 4], "metric")).toEqual([2, 5]);
+  });
+});
+
+describe("the beam at the front of a run going on", () => {
+  it("points the way the person is heading, and nowhere until they have moved", () => {
+    // Screen points: x to the right (east), y down (south).
+    expect(heading([[0, 0], [10, 0]], [0])).toBeCloseTo(0, 6); // east
+    expect(heading([[0, 10], [0, 0]], [0])).toBeCloseTo(-Math.PI / 2, 6); // north, up the screen
+    expect(heading([[0, 0], [2, 0]], [0])).toBeNull(); // two pixels: no way yet
+    // After a pause the beam reads the new stretch alone, never the line across the gap.
+    expect(heading([[0, 0], [50, 0], [50, 30], [50, 20]], [0, 2])).toBeCloseTo(-Math.PI / 2, 6);
   });
 });

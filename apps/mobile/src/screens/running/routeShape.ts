@@ -51,3 +51,18 @@ export const pathOf = (points: readonly (readonly [number, number])[], starts: r
   return points.map(([x, y], i) => `${i === 0 || begins.has(i) ? "M" : "L"}${x.toFixed(1)} ${y.toFixed(1)}`).join(" ");
 };
 
+
+/** The way the person is heading at the front of the path, as an angle on the screen (radians, 0
+ *  east, clockwise as the screen's y runs down): from a point at least `least` pixels back, within
+ *  the last stretch. null while the front has not moved that far. */
+export function heading(points: readonly (readonly [number, number])[], starts: readonly number[], least = 6): number | null {
+  const last = points[points.length - 1];
+  if (last === undefined) return null;
+  const from = Math.max(0, ...starts.filter((i) => i < points.length));
+  for (let i = points.length - 2; i >= from; i--) {
+    const p = points[i];
+    if (p === undefined) break;
+    if (Math.hypot(last[0] - p[0], last[1] - p[1]) >= least) return Math.atan2(last[1] - p[1], last[0] - p[0]);
+  }
+  return null;
+}

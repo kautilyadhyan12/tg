@@ -2,19 +2,22 @@
 // its pace as a glowing wave (ROADMAP Stage 5 37a, Kd's drawing of 2026-11-05: white mixed with
 // gold, never Strava's orange line; a wave in place of straight bars).
 import { useState } from "react";
-import { StyleSheet, View, type LayoutChangeEvent } from "react-native";
-import Svg, { Circle, Defs, G, LinearGradient, Path, Stop } from "react-native-svg";
+import { Animated, StyleSheet, View, type LayoutChangeEvent } from "react-native";
+import Svg, { Circle, Defs, G, LinearGradient, Path, RadialGradient, Stop } from "react-native-svg";
 import type { RunSplit, Units } from "@app/shared";
 import { colours } from "../../look/colours";
+import { useLoop } from "../../look/Motion";
 import { fonts, Txt } from "../../look/Txt";
-import { fitPath, pathOf, unitMarks } from "./routeShape";
+import { fitPath, heading, pathOf, unitMarks } from "./routeShape";
 import { pace, splitLabel } from "./runWords";
 
 const GOLD = colours.gold;
 const PALE = colours.flamePale;
 
 /** The route: soft gold where it began, brightening to white where it is now or ended. */
-export function RouteLine({ track, starts, units, height, marks = true, testID }: { track: readonly (readonly [number, number])[]; starts: readonly number[]; units: Units; height: number; marks?: boolean; testID?: string }) {
+/** `live`: the front of a run going on, a pulsing light with a beam the way the person is heading,
+ *  as a map's own "you are here" (Kd, 37a's click-through: "like in Strava and Google Maps"). */
+export function RouteLine({ track, starts, units, height, marks = true, live = false, testID }: { track: readonly (readonly [number, number])[]; starts: readonly number[]; units: Units; height: number; marks?: boolean; live?: boolean; testID?: string }) {
   const [width, setWidth] = useState(0);
   const onLayout = (e: LayoutChangeEvent) => {
     setWidth(Math.round(e.nativeEvent.layout.width));
@@ -25,6 +28,7 @@ export function RouteLine({ track, starts, units, height, marks = true, testID }
   const last = points[points.length - 1];
   const d = pathOf(points, starts);
   const stones = marks ? unitMarks(track, starts, units) : [];
+  const facing = live ? heading(points, starts) : null;
   return (
     <View onLayout={onLayout} style={{ height }} testID={testID} accessible accessibilityLabel="Your route">
       {width > 0 && first !== undefined && last !== undefined ? (
@@ -45,10 +49,22 @@ export function RouteLine({ track, starts, units, height, marks = true, testID }
             return p === undefined ? null : <Circle key={String(n)} cx={p[0]} cy={p[1]} r={10} fill={colours.page} stroke={PALE} strokeWidth={1.6} />;
           })}
           <Circle cx={first[0]} cy={first[1]} r={marks ? 5.5 : 4} fill={GOLD} />
+          {facing === null ? null : (
+            <>
+              <Defs>
+                <RadialGradient id="beam" cx={last[0]} cy={last[1]} r={BEAM_LONG} gradientUnits="userSpaceOnUse">
+                  <Stop offset="0" stopColor={colours.trail} stopOpacity={0.55} />
+                  <Stop offset="1" stopColor={colours.trail} stopOpacity={0} />
+                </RadialGradient>
+              </Defs>
+              <Path d={beamPath(last[0], last[1], facing)} fill="url(#beam)" />
+            </>
+          )}
           <Circle cx={last[0]} cy={last[1]} r={marks ? 11 : 8} fill={colours.trail} fillOpacity={0.16} />
           <Circle cx={last[0]} cy={last[1]} r={marks ? 5.5 : 4.5} fill={colours.trail} />
         </Svg>
       ) : null}
+      {live && width > 0 && last !== undefined ? <Pulse x={last[0]} y={last[1]} /> : null}
       {width > 0
         ? stones.map((index, n) => {
             const p = points[index];
@@ -56,6 +72,32 @@ export function RouteLine({ track, starts, units, height, marks = true, testID }
           })
         : null}
     </View>
+  );
+}
+
+/** How far the beam reaches, and half its spread. */
+const BEAM_LONG = 30;
+const BEAM_HALF = Math.PI / 6;
+
+/** A fan of light from the front, the way the person is heading. */
+function beamPath(x: number, y: number, angle: number): string {
+  const at = (a: number) => `${(x + BEAM_LONG * Math.cos(a)).toFixed(1)} ${(y + BEAM_LONG * Math.sin(a)).toFixed(1)}`;
+  return `M${x.toFixed(1)} ${y.toFixed(1)} L${at(angle - BEAM_HALF)} A${String(BEAM_LONG)} ${String(BEAM_LONG)} 0 0 1 ${at(angle + BEAM_HALF)} Z`;
+}
+
+const PULSE = 34;
+
+/** A ring of light that swells from the front and fades, over and over, while the run goes on. */
+function Pulse({ x, y }: { x: number; y: number }) {
+  const loop = useLoop(900);
+  const scale = loop.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1.2] });
+  const opacity = loop.interpolate({ inputRange: [0, 1], outputRange: [0.75, 0.05] });
+  return (
+    <Animated.View
+      pointerEvents="none"
+      testID="run-front"
+      style={[styles.pulse, { left: x - PULSE / 2, top: y - PULSE / 2, opacity, transform: [{ scale }] }]}
+    />
   );
 }
 
@@ -72,6 +114,7 @@ function Label({ x, y, text, bold = false, gold = false, faint = false }: { x: n
 
 const styles = StyleSheet.create({
   label: { position: "absolute", width: 64, height: 16, alignItems: "center", justifyContent: "center" },
+  pulse: { position: "absolute", width: PULSE, height: PULSE, borderRadius: PULSE / 2, backgroundColor: colours.trailGlow, borderWidth: 1.5, borderColor: colours.trail },
   labelText: { fontFamily: fonts.regular, fontSize: 11, lineHeight: 14 },
   bold: { fontFamily: fonts.bold, fontSize: 12 },
 });
