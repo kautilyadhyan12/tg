@@ -6,7 +6,7 @@
 // Montreal gym's $100.00 a month with GST 5% and QST 9.975%, which Revenu Québec works out as $5.00
 // and $9.98 ("Calculating the Taxes": each on the price, never QST on the GST), $114.98 the first
 // month and every month after, each named on the bill, on the member's page and on the receipt; and
-// India's CGST 9% and SGST 9% inside ₹1,000.00, ₹76.27 each. Every refusal is checked by reading the
+// India's CGST 9% and SGST 9% inside ₹100.00, ₹7.63 and ₹7.62. Every refusal is checked by reading the
 // tables, not the reply.
 import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -293,7 +293,7 @@ d("several taxes on one membership (real Postgres)", () => {
   );
 
   it(
-    "India, prices that hold the tax: ₹1,000.00 a month holds CGST ₹76.27 and SGST ₹76.27, and the bill is ₹1,000.00",
+    "India, prices that hold the tax: ₹100.00 a month holds CGST ₹7.63 and SGST ₹7.62, and the bill is ₹100.00",
     async () => {
       clock = new Date("2026-10-15T06:30:00Z");
       const owner = await makeUser("india-owner");
@@ -305,8 +305,11 @@ d("several taxes on one membership (real Postgres)", () => {
       expect(held(await get(heldUrl(gymId, asha), owner)).taxIncluded).toBe(true);
       const given = await give(gymId, asha, owner, gold, 10000, 10000);
       expect(given.statusCode, given.body).toBe(201);
+      // Her membership keeps both rates, for every bill after this one.
+      const ashaGold = await membershipOf(gymId, asha);
+      expect(await heldRates(ashaGold)).toEqual(["CGST", "SGST"]);
       // 10000 × 18 / 118 is 1525.42: 1525 paise, shared 762.5 and 762.5, the odd paisa to the first.
-      expect(await billsOf(await membershipOf(gymId, asha))).toEqual([
+      expect(await billsOf(ashaGold)).toEqual([
         { period_index: 0, amount_minor: 10000, tax_minor: 1525, tax_pcm: 18000, tax_included: true, taxes: [{ name: "CGST", pcm: 9000, minor: 763 }, { name: "SGST", pcm: 9000, minor: 762 }] },
       ]);
     },
