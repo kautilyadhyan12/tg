@@ -101,9 +101,12 @@ export const signInCodes = pgTable(
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     usedAt: timestamp("used_at", { withTimezone: true }),
     createdAt: createdAt(),
+    // A change-email code is the account's as well as the address's (0206); the others are the address's alone.
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
   },
   (t) => [
-    check("sign_in_codes_purpose_check", sql`${t.purpose} IN ('sign_in','delete_account')`),
+    check("sign_in_codes_purpose_check", sql`${t.purpose} IN ('sign_in','delete_account','change_email')`),
+    check("sign_in_codes_user_check", sql`(${t.purpose} = 'change_email') = (${t.userId} IS NOT NULL)`),
     check("sign_in_codes_attempts_check", sql`${t.attempts} >= 0`),
     index("sign_in_codes_email_purpose_created_idx").on(t.email, t.purpose, t.createdAt.desc()),
     index("sign_in_codes_created_idx").on(t.createdAt),

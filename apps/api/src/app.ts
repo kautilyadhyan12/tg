@@ -25,6 +25,7 @@ import {
   createResendUsersEmailSender,
   type UsersEmailSender,
 } from "./modules/users/email.js";
+import { changeEmailSenderFor, type ChangeEmailSender } from "./modules/users/changeEmailSender.js";
 import { OnboardingIncompleteError, UsersError } from "./modules/users/service.js";
 import { createDevCoOwnerEmailSender, createResendCoOwnerEmailSender, type CoOwnerEmailSender } from "./modules/orgs/coOwners/email.js";
 import { createDevAgreementEmailSender, createResendAgreementEmailSender, type AgreementEmailSender } from "./modules/orgs/agreement/email.js";
@@ -70,6 +71,8 @@ import { sentryOptions } from "./sentry.js";
 export interface BuildAppOverrides {
   emailSender?: EmailSender;
   usersEmailSender?: UsersEmailSender;
+  /** Change email's code and notes (Stage 5 19c). */
+  changeEmailSender?: ChangeEmailSender;
   /** The co-owner request's email (ROADMAP 4b-i). */
   coOwnerEmailSender?: CoOwnerEmailSender;
   /** The copy of a signed membership agreement (ROADMAP 18u-i). */
@@ -362,6 +365,7 @@ export async function buildApp(
     (transport !== null
       ? createResendUsersEmailSender(transport, app.log, config.WEB_ORIGIN)
       : createDevUsersEmailSender(app.log, config));
+  const changeEmailSender = overrides.changeEmailSender ?? changeEmailSenderFor(config, transport, app.log);
 
   // One robot check for the whole app: the sign-in code past an address's first 20
   // an hour, and a gym page's enquiry form.
@@ -378,7 +382,7 @@ export async function buildApp(
   });
   registerWorkoutRoutes(app, { sql, redis, news });
   // Deleting an account ends things at its gyms, so it reads the gyms' clock.
-  registerUserRoutes(app, { sql, config, redis, emailSender: usersEmailSender, news, ...(overrides.orgs?.now === undefined ? {} : { now: overrides.orgs.now }) });
+  registerUserRoutes(app, { sql, config, redis, emailSender: usersEmailSender, changeEmailSender, news,...(overrides.orgs?.now === undefined ? {} : { now: overrides.orgs.now }) });
   // Part 4 §5.2's export right. Serves /v1/users/me/export but lives in the
   // privacy module, next to the Day-14 delete list it must stay in step with.
   registerPrivacyRoutes(app, { sql, redis });

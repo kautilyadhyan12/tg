@@ -7,7 +7,13 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import { z } from "zod";
-import { onboardingQuerySchema, type DeleteAccountResponse } from "@app/shared";
+import {
+  changeEmailCodeRequestSchema,
+  changeEmailRequestSchema,
+  onboardingQuerySchema,
+  type ChangeEmailResponse,
+  type DeleteAccountResponse,
+} from "@app/shared";
 import { createDualRateLimit, giveBackRateLimit, type DualRateLimitOptions } from "../auth/rateLimit.js";
 import type { AppConfig } from "../../config.js";
 import type { RedisLike } from "../../redis.js";
@@ -15,6 +21,8 @@ import { DPDP_RETENTION_DAYS } from "../../retention.js";
 import { onHealthAnswered } from "../gamification/service.js";
 import { safeTimeZone } from "../gamification/streak.js";
 import { createLogOnlyUsersEmailSender, type UsersEmailSender } from "./email.js";
+import { changeEmail, requestChangeEmailCode, type ChangeEmailDeps } from "./changeEmail.js";
+import { createLogOnlyChangeEmailSender, type ChangeEmailSender } from "./changeEmailSender.js";
 import {
   deleteAccountRequestSchema,
   patchOnboardingRequestSchema,
@@ -71,7 +79,15 @@ function parseTimeZone(req: FastifyRequest, reply: FastifyReply): string | null 
 
 export function registerUserRoutes(
   app: FastifyInstance,
-  deps: { sql: Sql; config: AppConfig; redis: RedisLike; emailSender?: UsersEmailSender; news: LiveNewsSender; now?: () => Date },
+  deps: {
+    sql: Sql;
+    config: AppConfig;
+    redis: RedisLike;
+    emailSender?: UsersEmailSender;
+    changeEmailSender?: ChangeEmailSender;
+    news: LiveNewsSender;
+    now?: () => Date;
+  },
 ): void {
   const usersDeps: service.UsersDeps = {
     sql: deps.sql,
@@ -80,6 +96,12 @@ export function registerUserRoutes(
     emailSender: deps.emailSender ?? createLogOnlyUsersEmailSender(app.log),
     log: app.log,
     ...(deps.now === undefined ? {} : { now: deps.now }),
+  };
+  const changeEmailDeps: ChangeEmailDeps = {
+    sql: deps.sql,
+    config: deps.config,
+    log: app.log,
+    sender: deps.changeEmailSender ?? createLogOnlyChangeEmailSender(app.log),
   };
 
   const authedUserId = (req: FastifyRequest): string => {
@@ -312,6 +334,51 @@ export function registerUserRoutes(
         : `Account scheduled for deletion. It will be permanently removed after ${String(DPDP_RETENTION_DAYS)} days.`,
       emailSent,
     } satisfies DeleteAccountResponse);
+  });
+
+  // Change email (Stage 5 19c). Each new address keeps the code's own day cap and resend gap; a
+  // person may also try ten addresses a day, and the code back thirty times an hour. Keyed on the
+  // person alone: a gym's members share its wi-fi.
+  const changeEmailCodeLimit = createDualRateLimit({
+    name: "change_email_code",
+    max: 10,
+    ipMax: null,
+    windowMs: 24 * 60 * 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+    message: "You’ve asked for many codes today. Please try again tomorrow.",
+  });
+  const changeEmailLimit = createDualRateLimit({
+    name: "change_email",
+    max: 30,
+    ipMax: null,
+    windowMs: 60 * 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+    message: "You’ve tried many codes in the last hour. Please try again later.",
+  });
+
+  // Step 1: a code to the new address.
+  app.post("/v1/users/me/email-code", { preHandler: [app.authenticate, changeEmailCodeLimit] }, async (req, reply) => {
+    const input = parseBody(changeEmailCodeRequestSchema, req, reply);
+    if (input === null) return;
+    const rules = await requestChangeEmailCode(changeEmailDeps, authedUserId(req), input.email);
+    return reply.status(200).send({ message: `We emailed a 6-digit code to ${input.email}.`, ...rules });
+  });
+
+  // Step 2: the code proves the new address; the account moves to it.
+  app.post("/v1/users/me/email", { preHandler: [app.authenticate, changeEmailLimit] }, async (req, reply) => {
+    const input = parseBody(changeEmailRequestSchema, req, reply);
+    if (input === null) return;
+    const userId = authedUserId(req);
+    const changed = await changeEmail(changeEmailDeps, userId, input);
+    // The person's gyms show the address on their page, and the name where it changed with it.
+    tellMembersGyms(deps.sql, deps.news, app.log, userId, { what: "people" });
+    return reply.status(200).send({
+      message: `Your email is now ${changed.email}.`,
+      email: changed.email,
+      displayName: changed.displayName,
+    } satisfies ChangeEmailResponse);
   });
 
   // 5/hr — the reset-class limit (rateLimiter.js:17-18 ported at P2.1; GAP-4).
