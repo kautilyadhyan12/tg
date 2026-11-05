@@ -1,6 +1,6 @@
 -- Record a run on the phone (ROADMAP Stage 5 item 37a). Forward-only. Hand-written, as `0016`
--- onwards are; its journal entry is part of this commit. Written as 0208 and renumbered 0210 when
--- 0208 and 0209 of two other folders merged first.
+-- onwards are; its journal entry is part of this commit. Written as 0208 and renumbered 0211 when
+-- 0208, 0209 and 0210 of other folders merged first.
 --
 -- What the person gives a run when they save it (its name, how it felt from 1 to 10, a private
 -- note), and the numbers the server works out from its points beside the ones `runs` already keeps:

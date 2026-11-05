@@ -37,6 +37,7 @@ import {
   swapDietPlanMealRequestSchema,
 } from "./schemas.js";
 import * as dietPlan from "./dietPlanService.js";
+import { registerGymMealPlanRoutes } from "./gymMealPlanRoutes.js";
 import * as service from "./service.js";
 import { createLabelReader, createMealMatchChecker, createMealVisionProvider, type LabelReader, type MatchChecker, type VisionProvider } from "./vision.adapter.js";
 
@@ -143,6 +144,8 @@ export function registerNutritionRoutes(
     reportError: deps.reportError,
   };
   const readDeps = { sql: deps.sql };
+  // The meal plans a gym gives its members (ROADMAP Stage 2 24a-i), priced by this module.
+  registerGymMealPlanRoutes(app, nutritionDeps);
   app.decorateRequest("nutritionScanInput", undefined);
   app.decorateRequest("nutritionUsedRetake", undefined);
   app.decorateRequest("nutritionScanQuotaKey", undefined);

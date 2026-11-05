@@ -7,9 +7,9 @@ const keys = (list) => list.map((p) => p.key);
 describe('where each page sits on a phone', () => {
   it('an owner: four tabs; Memberships, Leads, Personal training, Updates, Leaderboard and Settings under More', () => {
     const menu = consoleMenu('iron-house', ROLE_PRIVILEGES.owner, 'gym');
-    expect(keys(menu.pages)).toEqual(['overview', 'members', 'memberships', 'sell', 'failed-payments', 'leads', 'attendance', 'at-risk', 'classes', 'training', 'updates', 'events', 'leaderboard', 'challenges', 'reports', 'settings']);
+    expect(keys(menu.pages)).toEqual(['overview', 'members', 'memberships', 'sell', 'failed-payments', 'leads', 'attendance', 'at-risk', 'classes', 'training', 'updates', 'events', 'plans', 'leaderboard', 'challenges', 'reports', 'settings']);
     expect(keys(menu.tabs)).toEqual(['overview', 'members', 'attendance', 'classes']);
-    expect(keys(menu.more)).toEqual(['memberships', 'sell', 'failed-payments', 'leads', 'at-risk', 'training', 'updates', 'events', 'leaderboard', 'challenges', 'reports', 'settings']);
+    expect(keys(menu.more)).toEqual(['memberships', 'sell', 'failed-payments', 'leads', 'at-risk', 'training', 'updates', 'events', 'plans', 'leaderboard', 'challenges', 'reports', 'settings']);
   });
 
   // A manager's usual permissions hold the price list (17a-i): Memberships, a page of its
@@ -74,6 +74,12 @@ describe('where each page sits on a phone', () => {
     const menu = consoleMenu('iron-house', [...ROLE_PRIVILEGES.trainer, 'posts.manage'], 'gym');
     expect(keys(menu.more)).toEqual(['at-risk', 'training', 'updates', 'events']);
     expect(menu.more[2].to).toBe('/console/iron-house/updates');
+  });
+  it('Plans goes with its tick: a trainer given it has the page, a manager without it does not', () => {
+    const trainer = consoleMenu('iron-house', [...ROLE_PRIVILEGES.trainer, 'plans.manage'], 'gym');
+    expect(keys(trainer.more)).toEqual(['at-risk', 'training', 'plans']);
+    expect(trainer.more[2].to).toBe('/console/iron-house/plans');
+    expect(keys(consoleMenu('iron-house', ROLE_PRIVILEGES.manager, 'gym').pages)).not.toContain('plans');
   });
 
   it('a trainer the owner gave Reports: it is under More, and a manager without the tick has no such line', () => {
