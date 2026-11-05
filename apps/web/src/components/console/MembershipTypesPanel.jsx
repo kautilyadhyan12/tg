@@ -30,6 +30,8 @@ import {
   priceExample,
   termLine,
   typeTaxLine,
+  togetherText,
+  restoredTypeWords,
   joiningFeeLine,
   usesJoiningFee,
   contractHint,
@@ -204,6 +206,8 @@ function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRate
   const choice = draft.choice;
   const hasTerm = choice === 'recurring' || choice === 'one_time' || choice === 'trial';
   const picksClasses = !(hasTerm && draft.access === 'gym_only') && options.length > 0;
+  const tickedRates = taxRates.filter((r) => draft.taxRateIds.includes(r.id));
+  const tickRate = (rateId, on) => set({ taxRateIds: on ? [...draft.taxRateIds.filter((x) => x !== rateId), rateId] : draft.taxRateIds.filter((x) => x !== rateId) });
   const toggleClass = (classId) =>
     set({ classIds: draft.classIds.includes(classId) ? draft.classIds.filter((c) => c !== classId) : [...draft.classIds, classId] });
   const first = firstProblem(problems);
@@ -332,24 +336,26 @@ function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRate
           </Field>
         ) : null}
 
-        <Field id={id('tax')} label="Tax" problem={problems?.tax}>
-          <select id={id('tax')} aria-invalid={problems?.tax ? 'true' : undefined} value={draft.taxRateId} onChange={text('taxRateId')} className="c-input" style={{ maxWidth: 280 }}>
-            <option value="">No tax</option>
-            {taxRates.map((rate) => (
-              <option key={rate.id} value={rate.id}>
-                {`${rate.name} ${pcmToTaxRateText(rate.pcm)}%`}
-              </option>
-            ))}
-          </select>
+        <fieldset className="c-field m-0 p-0" style={{ border: 0 }}>
+          <legend className="c-label">Tax</legend>
+          {taxRates.length > 0 ? <p className="c-s13 c-t3 m-0">Tick each tax charged on this membership. Leave all unticked for no tax.</p> : null}
+          {taxRates.map((rate) => (
+            <label key={rate.id} className="flex items-center gap-3 c-s15 c-t1" style={{ minHeight: 44 }}>
+              <input type="checkbox" checked={draft.taxRateIds.includes(rate.id)} aria-invalid={problems?.tax ? 'true' : undefined} disabled={busy} onChange={(e) => tickRate(rate.id, e.target.checked)} />
+              {`${rate.name} ${pcmToTaxRateText(rate.pcm)}%`}
+            </label>
+          ))}
+          {tickedRates.length > 1 && !problems?.tax ? <p className="c-s13 c-t2 m-0">{`Together: ${togetherText(tickedRates)}`}</p> : null}
+          {problems?.tax ? <p className="c-s14 m-0" style={BAD}>{problems.tax}</p> : null}
           {addingRate ? null : (
             <p className="c-s13 c-t3 m-0 flex flex-wrap items-center gap-2">
-              {[taxRates.length === 0 ? 'You have no tax rates yet.' : null, editing ? 'Members who already hold it keep the tax they were sold with.' : null].filter((line) => line !== null).join(' ') || null}
+              {[taxRates.length === 0 ? 'You have no tax rates yet.' : null, editing ? 'Members who already hold it keep the taxes they were sold with.' : null].filter((line) => line !== null).join(' ') || null}
               <button type="button" className="c-btn-link c-s13 c-w6" style={{ minHeight: 44 }} disabled={busy} onClick={() => setAddingRate(true)}>
                 Add a tax rate
               </button>
             </p>
           )}
-        </Field>
+        </fieldset>
         {addingRate ? (
           <NewRateInline
             gymId={gymId}
@@ -357,7 +363,7 @@ function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRate
             onAdded={(rate) => {
               setAddingRate(false);
               onRateAdded(rate);
-              set({ taxRateId: rate.id });
+              set({ taxRateIds: [...draft.taxRateIds.filter((x) => x !== rate.id), rate.id] });
             }}
             onCancel={() => setAddingRate(false)}
           />
@@ -798,6 +804,8 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
   const [showProblems, setShowProblems] = useState(false);
   const [refused, setRefused] = useState(0);
   const [busy, setBusy] = useState(false);
+  // What putting a type back took off it (18b-v-b); null for nothing to say.
+  const [restored, setRestored] = useState(null);
   const [actionError, setActionError] = useState(null);
   const [showArchived, setShowArchived] = useState(false);
   // The name from the member list the form was opened for, and the name whose
@@ -854,7 +862,7 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
   const editing = draft !== null && draft.id !== null ? (list?.types ?? []).find((t) => t.id === draft.id) : undefined;
   // A type is changed in the money it was made in; a new one is in the gym's.
   const draftCurrency = editing?.currency ?? list?.currency ?? null;
-  const problems = draft !== null && draftCurrency !== null ? draftProblems(draft, draftCurrency) : null;
+  const problems = draft !== null && draftCurrency !== null ? draftProblems(draft, draftCurrency, list?.taxRates ?? []) : null;
 
   const closeForm = () => {
     setDraft(null);
@@ -897,7 +905,7 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
         busy={fromList.busy}
         error={fromList.error}
         inRow={inRow}
-        taxLine={typeTaxLine((list?.types ?? []).find((t) => t.id === fromList.preview.type.id) ?? { taxRateId: null }, list)}
+        taxLine={typeTaxLine((list?.types ?? []).find((t) => t.id === fromList.preview.type.id) ?? { taxRateIds: [] }, list)}
         onGive={(body) => void fromList.give(body)}
         onCancel={fromList.closeBox}
       />
@@ -1105,6 +1113,11 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
             done={noteRow === null ? fromList.done : null}
           />
 
+          {restored !== null ? (
+            <p className="c-s15 m-0" style={{ color: 'var(--good)' }} role="status">
+              {restored}
+            </p>
+          ) : null}
           {list.archivedTotal > 0 ? (
             <div className="flex flex-col gap-3">
               <button
@@ -1130,7 +1143,9 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
                           <button
                             type="button"
                             disabled={readOnly || anyBusy || locked}
-                            onClick={() => void run(() => orgService.restoreMembershipType(gymId, type.id), "We couldn't put that back. Please try again.")}
+                            onClick={() =>
+                              void run(() => orgService.restoreMembershipType(gymId, type.id), "We couldn't put that back. Please try again.").then((next) => setRestored(next === null ? null : restoredTypeWords(type, next)))
+                            }
                             aria-label={`Put back ${type.name}`}
                             className="c-btn c-btn-s c-btn-sm"
                           >

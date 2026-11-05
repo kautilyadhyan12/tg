@@ -562,8 +562,8 @@ export function taxModes(currency, rate = null) {
   const pcm = rate === null || rate === undefined ? 10000 : rate.pcm;
   const name = rate === null || rate === undefined ? 'a 10% tax' : rateLabel(rate);
   const price = 10000;
-  const onTop = billAmounts(price, { name: 'Tax', pcm, included: false });
-  const inside = billAmounts(price, { name: 'Tax', pcm, included: true });
+  const onTop = billAmounts(price, { rates: [{ name: 'Tax', pcm }], included: false });
+  const inside = billAmounts(price, { rates: [{ name: 'Tax', pcm }], included: true });
   const example = rate === null || rate === undefined ? 'For example, with a 10% tax' : `With ${name}`;
   return [
     {
@@ -580,8 +580,8 @@ export function taxModes(currency, rate = null) {
 }
 
 /** What a rate's "Choose" box lists: the gym's membership types or its products, each
- *  ticked where it charges this rate. A type charges one rate, so one charging another says
- *  so (ticking it moves it here); a product keeps its other rates, and says them (18b-v-a). */
+ *  ticked where it charges this rate. Each keeps its other rates, and says them (18b-v-a;
+ *  18b-v-b). */
 export function chargeChoices(page, rate, use) {
   if (use === 'products') {
     return page.products.map((item) => {
@@ -593,8 +593,8 @@ export function chargeChoices(page, rate, use) {
   return page.membershipTypes
     .filter((item) => item.free !== true)
     .map((item) => {
-      const other = item.taxRateId !== null && item.taxRateId !== rate.id ? rateById(page.tax, item.taxRateId) : null;
-      return { id: item.id, name: item.name, on: item.taxRateId === rate.id, note: other === null ? null : `Now charges ${rateLabel(other)}` };
+      const others = productRates(page.tax, item).filter((r) => r.id !== rate.id);
+      return { id: item.id, name: item.name, on: (item.taxRateIds ?? []).includes(rate.id), note: others.length === 0 ? null : `Also charges ${ratesLabel(others)}` };
     });
 }
 
@@ -629,13 +629,9 @@ export function rateUses(rate) {
   return `Charged on ${list}.`;
 }
 
-/** What to do first, where products or membership types charge a rate: a product's tick is
- *  unticked; a type, which charges one rate, is changed to another or to No tax. */
+/** What to do first, where products or membership types charge a rate: untick it on them (18b-v-b). */
 function takeOffWords(products, types, them) {
-  if (products > 0 && types > 0) return ' Untick it on the products, and change the membership types to another rate or No tax first.';
-  if (products > 0) return ` Untick it on ${them} first.`;
-  if (types > 0) return ` Change ${them} to another rate or No tax first.`;
-  return '';
+  return products > 0 || types > 0 ? ` Untick it on ${them} first.` : '';
 }
 
 /** Why a rate cannot be removed now, or null where it can. */

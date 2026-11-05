@@ -247,7 +247,7 @@ describe('adding a type', () => {
       includesPt: false,
       ptLimit: null,
       ptPeriod: null,
-      taxRateId: null,
+      taxRateIds: [],
       joiningFeeMinor: 0,
       contractPeriods: null,
       contractThen: null,

@@ -129,7 +129,9 @@ describe("what one membership bill comes to with several taxes", () => {
           else {
             expect(got.netMinor).toBe(listed);
             // Each on the price before tax, never on another tax.
-            pcms.forEach((pcm, i) => expect(got.taxParts[i]).toBe(Math.floor((listed * pcm + 50_000) / 100_000)));
+            pcms.forEach((pcm, i) => {
+              expect(got.taxParts[i]).toBe(Math.floor((listed * pcm + 50_000) / 100_000));
+            });
           }
         }
       }

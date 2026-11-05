@@ -607,7 +607,7 @@ describe('a membership', () => {
 describe('products and tax', () => {
   it('a gym with no products is offered the form from the sale box, and the form says what is wrong before it is sent', async () => {
     svc.get.mockResolvedValue(page({ products: [], tax: NO_TAX }));
-    svc.addProduct.mockResolvedValue(page({ products: [product({ stock: null, taxRateId: null })], tax: NO_TAX }));
+    svc.addProduct.mockResolvedValue(page({ products: [product({ stock: null, taxRateIds: [] })], tax: NO_TAX }));
     open();
     await screen.findByRole('region', { name: 'New sale' });
     expect(within(newSale()).getByText('You have no products yet. Add what you sell at the desk, such as water or a towel, and it appears here.')).toBeTruthy();
@@ -743,7 +743,7 @@ describe('products and tax', () => {
   });
 
   it('the Tax box: Choose products ticks what charges a rate, sends every one ticked, and says it in the same place', async () => {
-    svc.chargeTaxRate.mockResolvedValue(page({ products: [TOWEL, product({ taxRateId: null })] }));
+    svc.chargeTaxRate.mockResolvedValue(page({ products: [TOWEL, product({ taxRateIds: [] })] }));
     open();
     await screen.findByRole('region', { name: 'Tax' });
     fireEvent.click(within(taxBox()).getByRole('button', { name: 'Choose products for Sales tax' }));

@@ -60,7 +60,7 @@ const GOLD = {
   termUnit: 'month',
   packClasses: null,
   packDays: null,
-  tax: null,
+  taxes: [],
 };
 const PACK = { ...GOLD, id: '22222222-2222-4222-8222-000000000002', name: '10 classes', kind: 'pack', termCount: null, termUnit: null, packClasses: 10, packDays: 60, priceMinor: 9000 };
 
@@ -92,7 +92,7 @@ function held(n, type, startsOn, paid, moves = []) {
     notCharged: false,
     refundedInFull: false,
     discount: null,
-    tax: null,
+    taxes: [],
     view: heldMembershipView(m, TODAY),
     billing: billingFor(n, made.membership, m, type.priceMinor, TODAY),
   };
@@ -697,7 +697,7 @@ describe('a late cancel or no-show fee, under its membership (18h-i)', () => {
     forName: 'Spin',
     on: '2026-10-14',
     amountMinor: 500,
-    tax: null,
+    taxes: [],
     dueOn: '2026-10-14',
     state: 'overdue',
     waived: null,

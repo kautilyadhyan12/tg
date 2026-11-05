@@ -70,7 +70,7 @@ describe("a bill's card lines", () => {
     covers: { from: '2026-10-20', to: '2026-11-19' },
     part: false,
     amountMinor: 2500,
-    tax: null,
+    taxes: [],
     joiningFeeMinor: 0,
     changeCreditMinor: 0,
     movedMinor: 0,

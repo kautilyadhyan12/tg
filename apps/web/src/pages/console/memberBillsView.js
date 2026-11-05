@@ -153,14 +153,17 @@ export function billsToDraw(billing, all) {
   return { bills, hidden: billing.bills.length - bills.length };
 }
 
-/** The tax in a bill, in one line (18b-iii): "$45.00 plus $8.10 GST 18%", or "Includes $7.63
- *  GST 18%" where the price held it; null for none. */
+/** The taxes in a bill, in one line (18b-iii; 18b-v-b): "$45.00 plus $8.10 GST 18%", "$100.00
+ *  plus $5.00 GST 5% and $9.98 QST 9.975%", or "Includes $7.63 GST 18%" where the price held
+ *  them; null for none. */
 export function billTaxLine(bill, currency) {
-  const t = bill.tax;
-  if (t === null || t === undefined) return null;
-  const label = `${t.name} ${pcmToTaxRateText(t.pcm)}%`;
-  if (t.included) return `Includes ${formatMinor(t.minor, currency)} ${label}`;
-  return `${formatMinor(bill.amountMinor - t.minor, currency)} plus ${formatMinor(t.minor, currency)} ${label}`;
+  const taxes = bill.taxes ?? [];
+  if (taxes.length === 0) return null;
+  const parts = taxes.map((t) => `${formatMinor(t.minor, currency)} ${t.name} ${pcmToTaxRateText(t.pcm)}%`);
+  const phrase = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+  if (taxes[0].included) return `Includes ${phrase}`;
+  const onTop = taxes.reduce((n, t) => n + t.minor, 0);
+  return `${formatMinor(bill.amountMinor - onTop, currency)} plus ${phrase}`;
 }
 
 /** "Voided 15 Oct 2026 by Priya Desk · Wrong amount": who voided a payment, a refund or a

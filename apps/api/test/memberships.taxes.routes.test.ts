@@ -156,8 +156,15 @@ d("several taxes on one membership (real Postgres)", () => {
   const setTypeRates = async (gymId: string, cookies: Cookies, typeId: string, taxRateIds: string[]) => {
     const t = (await typesOf(gymId, cookies)).types.find((x) => x.id === typeId);
     if (t === undefined) throw new Error("no such type");
-    const { id: _id, currency: _c, classTypes: _ct, agreementId: _a, archivedAt: _ar, ...fields } = t;
-    return await put(`${typesUrl(gymId)}/${typeId}`, { ...fields, classTypeIds: null, taxRateIds }, cookies);
+    // Every field the change takes, as the list read it; the rates are this call's.
+    const body = {
+      name: t.name, description: t.description, kind: t.kind, priceMinor: t.priceMinor, termCount: t.termCount, termUnit: t.termUnit,
+      packClasses: t.packClasses, packDays: t.packDays, access: t.access, bookingsLimit: t.bookingsLimit, bookingsPeriod: t.bookingsPeriod,
+      classTypeIds: null, includesPt: t.includesPt, ptLimit: t.ptLimit, ptPeriod: t.ptPeriod, taxRateIds, joiningFeeMinor: t.joiningFeeMinor,
+      contractPeriods: t.contractPeriods, contractThen: t.contractThen, noticeDays: t.noticeDays, leaveFeeMinor: t.leaveFeeMinor,
+      coolingOffDays: t.coolingOffDays, renewalReminderDays: t.renewalReminderDays, termReminderDays: t.termReminderDays, updatedAt: t.updatedAt,
+    };
+    return await put(`${typesUrl(gymId)}/${typeId}`, body, cookies);
   };
 
   const heldUrl = (gymId: string, entryId: string) => `/v1/orgs/${gymId}/member-list/entries/${entryId}/memberships`;
@@ -178,7 +185,9 @@ d("several taxes on one membership (real Postgres)", () => {
     sql<{ period_index: number | null; amount_minor: number; tax_minor: number; tax_pcm: number; tax_included: boolean | null; taxes: unknown }[]>`
       SELECT period_index, amount_minor, tax_minor, tax_pcm, tax_included, taxes FROM gym_member_bills
       WHERE held_membership_id = ${membershipId} ORDER BY period_index NULLS LAST, created_at`;
-  const run = async (gymId: string, iso: string) => expect((await openDueBills({ sql, log }, { now: new Date(iso), gymIds: [gymId] })).failed).toBe(0);
+  const run = async (gymId: string, iso: string) => {
+    expect((await openDueBills({ sql, log }, { now: new Date(iso), gymIds: [gymId] })).failed).toBe(0);
+  };
 
   beforeAll(async () => {
     await cleanup();

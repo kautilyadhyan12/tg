@@ -41,7 +41,7 @@ const GOLD = {
   termUnit: 'month',
   packClasses: null,
   packDays: null,
-  tax: null,
+  taxes: [],
 };
 const VISA = { brand: 'VISA', last4: '1111' };
 
@@ -71,7 +71,7 @@ function held(change) {
     notCharged: false,
     refundedInFull: false,
     discount: null,
-    tax: null,
+    taxes: [],
     view: heldMembershipView(m, TODAY),
     billing,
   };
@@ -123,7 +123,7 @@ const fee = (pay = {}, over = {}) => ({
   on: '2026-10-18',
   to: null,
   amountMinor: 1000,
-  tax: null,
+  taxes: [],
   dueOn: '2026-10-18',
   state: 'paid',
   waived: null,

@@ -555,7 +555,7 @@ d("a person's memberships: the gym's own day, who may read and change them, and 
       expect(read.earlierNotShown).toBe(0);
       // The price list comes with it, for the Add form.
       expect(read.types).toEqual([
-        { id: gold, name: "Gold Monthly", kind: "recurring", priceMinor: 4999, currency: "GBP", termCount: 1, termUnit: "month", packClasses: null, packDays: null, tax: null, joiningFeeMinor: 0, contractPeriods: null, contractThen: null, noticeDays: null, leaveFeeMinor: null, coolingOffDays: null },
+        { id: gold, name: "Gold Monthly", kind: "recurring", priceMinor: 4999, currency: "GBP", termCount: 1, termUnit: "month", packClasses: null, packDays: null, taxes: [], joiningFeeMinor: 0, contractPeriods: null, contractThen: null, noticeDays: null, leaveFeeMinor: null, coolingOffDays: null },
       ]);
 
       // Filled to the most one person can have running: the next is refused.
