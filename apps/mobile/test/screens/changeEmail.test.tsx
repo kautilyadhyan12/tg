@@ -38,7 +38,8 @@ async function upToTheCode(address = NEW) {
   await fireEvent.press(await screen.findByLabelText("Change email"));
   await fireEvent.changeText(await screen.findByLabelText("New email address"), address);
   await fireEvent.press(screen.getByLabelText("Email me a code"));
-  await screen.findByText(`We emailed a 6-digit code to ${address}.`);
+  await screen.findByText("We emailed a 6-digit code to");
+  expect(screen.getByText(address)).toBeTruthy();
 }
 
 describe("Change email (the worst thing: the phone shows or keeps an address the server never moved the account to)", () => {
@@ -59,7 +60,7 @@ describe("Change email (the worst thing: the phone shows or keeps an address the
     await fireEvent.press(screen.getByLabelText("Confirm"));
     expect(await screen.findByText(WRONG)).toBeTruthy();
     expect(keptUser(store)?.email).toBe(RAVI.email);
-    expect(screen.queryByText(NEW)).toBeNull();
+    expect(within(screen.getByTestId("settings-page")).getByText(RAVI.email)).toBeTruthy();
 
     await fireEvent.changeText(screen.getByPlaceholderText("6-digit code"), "222222");
     await fireEvent.press(screen.getByLabelText("Confirm"));
@@ -92,13 +93,17 @@ describe("Change email (the worst thing: the phone shows or keeps an address the
     expect(within(screen.getByTestId("settings-page")).getByText("ravi.kumar")).toBeTruthy();
   });
 
-  it("an address that is not one is said under the box, and nothing is sent", async () => {
+  it("an empty box or an address that is not one is said once Email me a code is pressed, never while typing, and nothing is sent", async () => {
     const server = fakeServer(routes());
     await openSettings(server.ask);
     await fireEvent.press(await screen.findByLabelText("Change email"));
-    await fireEvent.changeText(await screen.findByLabelText("New email address"), "ravi@gmail");
-    expect(screen.getByText("Enter a valid email address.")).toBeTruthy();
+    await fireEvent.press(await screen.findByLabelText("Email me a code"));
+    expect(screen.getByText("Enter your new email address.")).toBeTruthy();
+    await fireEvent.changeText(screen.getByLabelText("New email address"), "ravi@gmail");
+    expect(screen.queryByText("Enter your new email address.")).toBeNull();
+    expect(screen.queryByText("Enter a valid email address.")).toBeNull();
     await fireEvent.press(screen.getByLabelText("Email me a code"));
+    expect(screen.getByText("Enter a valid email address.")).toBeTruthy();
     expect(server.asked.filter((a) => a.path === CODE)).toHaveLength(0);
   });
 

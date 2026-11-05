@@ -321,6 +321,11 @@ function ChangeEmail({ open, saves, onClose, onChanged }: { open: boolean; saves
     setResent(false);
   }, [open]);
   const address = authEmailSchema.safeParse(typed);
+  // Said once Email me a code is pressed, never while the address is still being typed.
+  const ask = () => {
+    if (address.success) void sendCode(address.data, false);
+    else setProblem(typed.trim() === "" ? "Enter your new email address." : "Enter a valid email address.");
+  };
   const sendCode = async (to: string, again: boolean) => {
     if (busy) return;
     setBusy(true);
@@ -366,33 +371,26 @@ function ChangeEmail({ open, saves, onClose, onChanged }: { open: boolean; saves
                 setTyped(value);
                 setProblem(null);
               }}
-              placeholder="Email address"
+              placeholder="New email address"
               keyboard="email-address"
               fills="email"
               maxLength={254}
               ready
-              onDone={() => {
-                if (address.success) void sendCode(address.data, false);
-              }}
+              onDone={ask}
             />
-            {typed.trim() !== "" && !address.success ? <Txt kind="small" colour="badText">Enter a valid email address.</Txt> : null}
             {problem === null ? null : <Txt kind="small" colour="badText">{problem}</Txt>}
             <View style={styles.stack}>
-              <Button
-                label="Email me a code"
-                wide
-                busy={busy}
-                disabled={!address.success}
-                onPress={() => {
-                  if (address.success) void sendCode(address.data, false);
-                }}
-              />
+              <Button label="Email me a code" wide busy={busy} onPress={ask} />
               <Button label="Cancel" kind="plain" wide onPress={onClose} />
             </View>
           </>
         ) : (
           <>
-            <Txt>We emailed a 6-digit code to {sentTo}.</Txt>
+            {/* An address is long and is never cut: it has the whole line. */}
+            <View>
+              <Txt>We emailed a 6-digit code to</Txt>
+              <Txt kind="strong">{sentTo}</Txt>
+            </View>
             <Field
               key="code"
               label="6-digit code"
