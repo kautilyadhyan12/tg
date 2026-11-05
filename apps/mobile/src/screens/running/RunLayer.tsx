@@ -109,13 +109,15 @@ export function RunLayerProvider({ children }: { children: ReactNode }) {
     });
   }, [me]);
 
-  // The person's weight, for the calories as the run goes (the server works them out again).
+  // The person's weight, for the calories as the run goes (the server works them out again): read
+  // when a run is there, never at every opening of the app.
+  const hasRun = run !== null;
   useEffect(() => {
-    if (me === null) return;
+    if (me === null || !hasRun) return;
     void session.signedIn({ method: "GET", path: "/v1/users/me" }, userProfileResponseSchema).then((answer) => {
       if (answer.kind === "ok") setKg(answer.data.user.weightKg ?? 0);
     });
-  }, [me, session]);
+  }, [me, session, hasRun]);
 
   const start = useCallback(async (autoPause: boolean): Promise<StartProblem | null> => {
     const problem = await askLocation();

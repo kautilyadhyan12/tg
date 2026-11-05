@@ -7,6 +7,7 @@ import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
 import { File, Paths } from "expo-file-system";
 import { keptRunPointsSchema, keptRunStateSchema, phoneLocationsSchema, type RunPause, type RunPoint } from "@app/shared";
+import { colours } from "../../look/colours";
 import { AUTO_START, nextAutoPause, type AutoPauseState } from "./autoPause";
 
 export const RUN_TASK = "run-location";
@@ -252,7 +253,7 @@ export const RUN_LOCATION_OPTIONS: Location.LocationTaskOptions = {
   foregroundService: {
     notificationTitle: "Recording your run",
     notificationBody: "Tap to open your run.",
-    notificationColor: "#FF8A1F",
+    notificationColor: colours.orange,
     killServiceOnDestroy: false,
   },
 };
