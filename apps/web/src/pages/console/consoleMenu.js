@@ -66,7 +66,7 @@ export function consoleMenu(orgSlug, privileges, orgType) {
     canManagePosts(privileges) && { key: 'updates', to: `${base}/updates`, end: false, label: 'Updates', phone: 'more' },
     canManagePosts(privileges) && { key: 'events', to: `${base}/events`, end: false, label: 'Events', phone: 'more' },
     // The meal plans the gym gives its members (24a-i): written and changed every week.
-    canManagePlans(privileges) && { key: 'plans', to: `${base}/plans`, end: false, label: 'Plans', phone: 'more' },
+    canManagePlans(privileges) && { key: 'plans', to: `${base}/plans`, end: false, label: 'Meal plans', phone: 'more' },
     canSeeLeaderboard(privileges) && {
       key: 'leaderboard',
       to: `${base}/leaderboard`,
