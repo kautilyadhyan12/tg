@@ -268,6 +268,8 @@ function PlanPage({ org, gymId, planId, readOnly, notice: startNotice }) {
   useEffect(() => {
     if (!boxHeld) return undefined;
     const onClick = (e) => {
+      // A link opened in a new tab loses nothing here.
+      if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey) return;
       const a = e.target instanceof Element ? e.target.closest('a[href]') : null;
       if (a === null || a.closest('[data-testid="meal-box"]') !== null) return;
       const href = a.getAttribute('href');

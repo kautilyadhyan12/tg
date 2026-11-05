@@ -383,7 +383,8 @@ d("the meal plans a gym gives its members (real Postgres)", () => {
     expect((await post(plansUrl(busy.org.id), { id: randomUUID(), name: "Too many" }, other.cookies)).statusCode).toBe(429);
     for (let i = 0; i < 1200; i += 1) await redis.incrWithTtl(`rl:gym_meal_plans_read:id:${other.userId}`, 3600);
     expect((await send("GET", plansUrl(busy.org.id), other.cookies)).statusCode).toBe(429);
-    // The limit is asked after the tick: somebody else's count is never charged by a stranger.
+    // The limit is asked after the tick: a stranger whose own count is used up is still told the gym is not theirs (404), never 429.
+    for (let i = 0; i < 1200; i += 1) await redis.incrWithTtl(`rl:gym_meal_plans_read:id:${owner.userId}`, 3600);
     expect((await send("GET", plansUrl(busy.org.id), owner.cookies)).statusCode).toBe(404);
   });
 });
