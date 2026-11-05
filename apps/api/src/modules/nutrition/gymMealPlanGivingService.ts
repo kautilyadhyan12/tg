@@ -4,9 +4,9 @@
 // write), then the rate limit, then the handler.
 import {
   FOOD_ALLERGY_CAUTION, GYM_MEAL_PLAN_BOX_NAMES_MAX, GYM_MEAL_PLAN_GIVING_WORDS, GYM_MEAL_PLAN_WORDS,
-  gymMealPlanForEntryResponseSchema, gymMealPlanGivePreviewSchema, gymMealPlansResponseSchema, gymMealPlanGivenSchema, memberGymMealPlanResponseSchema,
+  gymMealPlanForEntryResponseSchema, gymMealPlanGivePreviewSchema, gymMealPlansResponseSchema, gymMealPlanGivenSchema, gymMealPlanGroupsResponseSchema, memberGymMealPlanResponseSchema,
   type GymMealPlanForEntryResponse, type GymMealPlanGivePreview, type GymMealPlanGiven, type GymMealPlanGivenToSelected,
-  type GymMealPlanGroup, type GymMealPlansResponse, type HeldMembership, type MemberGymMealPlanResponse,
+  type GymMealPlanGroup, type GymMealPlanGroupsResponse, type GymMealPlansResponse, type HeldMembership, type MemberGymMealPlanResponse,
 } from "@app/shared";
 import type { Sql } from "postgres";
 import { dayInTz } from "../gamification/streak.js";
@@ -191,6 +191,13 @@ async function givenReply(deps: GivingDeps, gymId: string, planId: string): Prom
     })),
     members: members.filter((m) => byId.has(m.entryId)),
   });
+}
+
+/** What a plan can be given to from its page. */
+export async function groupChoices(deps: GivingDeps, staffId: string, gymId: string, limit: Limit): Promise<GymMealPlanGroupsResponse | null> {
+  await requirePrivilege(deps, gymId, staffId, TICK);
+  if (!(await limit())) return null;
+  return gymMealPlanGroupsResponseSchema.parse(await audiences.groupChoices(deps.sql, gymId));
 }
 
 /** A plan's Given to. */

@@ -110,6 +110,14 @@ export function registerGymMealPlanRoutes(app: FastifyInstance, deps: NutritionD
     return reply.status(200).send(mine);
   });
 
+  app.get("/v1/orgs/:gymId/meal-plans/groups", { preHandler: app.authenticate }, async (req, reply) => {
+    const p = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (p === null) return;
+    const groups = await giving.groupChoices(deps, requireUserId(req), p.gymId, gate(readLimit)(req, reply));
+    if (groups === null) return;
+    return reply.status(200).send(groups);
+  });
+
   app.get("/v1/orgs/:gymId/meal-plans/:planId/given", { preHandler: app.authenticate }, async (req, reply) => {
     const p = parseOr400(gymMealPlanParamsSchema, req.params, req, reply);
     if (p === null) return;

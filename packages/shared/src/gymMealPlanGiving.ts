@@ -120,6 +120,13 @@ export type MemberGymMealPlan = z.infer<typeof memberGymMealPlanSchema>;
 export const memberGymMealPlanResponseSchema = z.object({ plan: memberGymMealPlanSchema.nullable() }).strict();
 export type MemberGymMealPlanResponse = z.infer<typeof memberGymMealPlanResponseSchema>;
 
+/** What a plan can be given to from its page: the gym's live membership types and its tags. */
+export const gymMealPlanGroupsResponseSchema = z.object({
+  membershipTypes: z.array(z.object({ id: z.string().uuid(), name: z.string().min(1) }).strict()),
+  tags: z.array(z.object({ id: z.string().uuid(), name: z.string().min(1) }).strict()),
+}).strict();
+export type GymMealPlanGroupsResponse = z.infer<typeof gymMealPlanGroupsResponseSchema>;
+
 export const GYM_MEAL_PLAN_GIVING_WORDS = {
   type_not_found: "This membership was deleted. Pick another.",
   tag_not_found: "This tag was deleted. Pick another.",

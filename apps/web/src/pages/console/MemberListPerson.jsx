@@ -36,6 +36,8 @@ import { leadMatchLine } from '@app/shared';
 import { canRecordPayments } from './memberBillsView';
 import { canManageMemberships } from './membershipTypesView';
 import { viewerPrivileges } from './consoleView';
+import { PersonMealPlan } from './MealPlanGiving';
+import { canManagePlans } from './mealPlansView';
 import { canOpenPlace, placeFor } from './consolePlaces';
 import { DELETE_WHAT_HAPPENS, SQUARE_OWNER_ONLY, deleteSquareLineOne, deletedOneSquareLine } from './memberListDeleteView';
 import { useCameBack } from './useCameBack';
@@ -1406,6 +1408,10 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           hasEmail={typeof p.email === 'string' && p.email !== ''}
           onCardAsked={() => setCardReads((n) => n + 1)}
         />
+        {/* The meal plan they get, for staff who give the gym's plans (24a-ii). */}
+        {canManagePlans(viewerPrivileges(gym)) && p.formerAt === null ? (
+          <PersonMealPlan key={`meal-plan-${p.entryId}`} gymId={gymId} gymSlug={gym?.slug ?? ''} entryId={p.entryId} words={words} readOnly={readOnly} />
+        ) : null}
         <MemberPayer key={`payer-${p.entryId}`} gymId={gymId} gym={gym} entryId={p.entryId} name={p.fullName} readOnly={readOnly} onChanged={onChanged} />
         {/* The card on file is for staff holding the payments tick alone (18d-ii). */}
         {canRecordPayments(viewerPrivileges(gym)) ? (

@@ -10,7 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import {
   FOOD_ALLERGY_CAUTION, gymMealPlanForEntryResponseSchema, gymMealPlanGivePreviewResponseSchema, gymMealPlanGivenResponseSchema,
-  gymMealPlanGivenToSelectedResponseSchema, gymMealPlanResponseSchema, gymMealPlansResponseSchema, memberGymMealPlanResponseSchema,
+  gymMealPlanGivenToSelectedResponseSchema, gymMealPlanGroupsResponseSchema, gymMealPlanResponseSchema, gymMealPlansResponseSchema, memberGymMealPlanResponseSchema,
 } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
@@ -282,6 +282,7 @@ d("who gets a gym's meal plan (real Postgres)", () => {
         await post(`${planUrl(gymId, plan)}/give`, { to: { kind: "everyone" } }, who),
         await post(`${planUrl(gymId, plan)}/give-preview`, { to: { kind: "everyone" } }, who),
         await get(`${planUrl(gymId, plan)}/given`, who),
+        await get(`${plansUrl(gymId)}/groups`, who),
         await post(`${planUrl(gymId, plan)}/stop`, { audienceIds: [audienceId] }, who),
         await get(`/v1/orgs/${gymId}/member-list/entries/${memberRecord}/meal-plan`, who),
         await post(`/v1/orgs/${gymId}/member-list/selected/meal-plan`, { planId: plan, selection: { kind: "ticked", entryIds: [memberRecord] } }, who),
@@ -317,6 +318,10 @@ d("who gets a gym's meal plan (real Postgres)", () => {
     await sql`INSERT INTO gym_membership_word_links (gym_id, word_key, word, membership_type_id) VALUES (${gymId}, 'gld', 'GLD', ${gold})`;
     const beginners = await tag(gymId, "Beginners", people.tagged, people.gold);
 
+    expect(gymMealPlanGroupsResponseSchema.parse(ok(await get(`${plansUrl(gymId)}/groups`, owner.cookies)))).toEqual({
+      membershipTypes: [{ id: gold, name: "Gold Monthly" }, { id: silver, name: "Silver Monthly" }],
+      tags: [{ id: beginners, name: "Beginners" }],
+    });
     const lean = await makePlan(gymId, owner.cookies, "Lean week");
     const goldPlan = await makePlan(gymId, owner.cookies, "Gold plan");
     const muscle = await makePlan(gymId, owner.cookies, "Muscle week");

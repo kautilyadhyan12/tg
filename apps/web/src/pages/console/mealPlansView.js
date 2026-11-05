@@ -199,3 +199,95 @@ export const PLAN_WORDS = {
   leaveAsk: 'Save your changes?',
   leaveWhy: (meal, day) => `Your changes to ${meal} on ${day} aren’t saved yet.`,
 };
+
+// ── Who gets a plan (24a-ii) ──
+
+const count = (k) => k.toLocaleString('en-US');
+/** "1 member", "32 members". */
+export const peopleCount = (k, words) => `${count(k)} ${k === 1 ? words.person : words.people}`;
+
+/** A group a plan is given to, as its line names it. */
+export function groupLabel(group) {
+  if (group.kind === 'everyone') return 'Everybody';
+  return group.kind === 'membership_type' ? `${group.name} membership` : `${group.name} tag`;
+}
+
+/** A group in a sentence: "everybody", "the Gold Monthly membership", "the Beginners tag". */
+export function toLabel(group) {
+  if (group.kind === 'everyone') return 'everybody';
+  return group.kind === 'membership_type' ? `the ${group.name} membership` : `the ${group.name} tag`;
+}
+const capital = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+
+/** The Plans list's line: who a plan is given to, and how many get it. */
+export function givenLine(item, words) {
+  const parts = [
+    ...(item.givenTo.everyone ? ['everybody'] : []),
+    ...item.givenTo.groups,
+    ...(item.givenTo.members > 0 ? [peopleCount(item.givenTo.members, words)] : []),
+  ];
+  if (parts.length === 0) return 'Not given to anyone yet';
+  const to = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+  return `Given to ${to} · ${count(item.gets)} get it`;
+}
+
+/** What one plan was given through, on a person's page. */
+export function throughLine(through) {
+  if (through === null) return null;
+  if (through.kind === 'everyone') return 'Given to everybody';
+  if (through.kind === 'member') return 'Chosen for them';
+  return through.kind === 'membership_type' ? `From their ${through.name} membership` : `From the ${through.name} tag`;
+}
+
+export const GIVE_WORDS = {
+  heading: 'Who gets it',
+  none: 'Not given to anyone yet.',
+  give: 'Give to members',
+  choose: (plan) => `Give ${plan} to`,
+  everyone: 'Everybody',
+  membership: 'A membership',
+  tag: 'A tag',
+  members: 'Members you choose',
+  pickMembership: 'Membership',
+  pickTag: 'Tag',
+  noMemberships: 'You have no memberships yet.',
+  noMembershipsAsk: 'The owner can add memberships on the Memberships page.',
+  noTags: 'You have no tags yet. Tags are added on Members.',
+  chooseHow: 'Tick the members on Members, then press Meal plan.',
+  chooseButton: 'Choose on Members',
+  willGet: (n, plan, words) => (n === 0 ? `Nobody gets ${plan} this way right now.` : `${peopleCount(n, words)} will get ${plan}:`),
+  switching: (n, plan) => `${count(n)} of them get another meal plan now. ${plan} takes its place.`,
+  replaces: (to, was, plan) => `${capital(to)} had ${was}. ${plan} takes its place there.`,
+  already: (plan) => `They all get ${plan} already.`,
+  later: (kind) =>
+    kind === 'everyone'
+      ? 'Anyone who joins later gets it too.'
+      : kind === 'membership_type'
+        ? 'Anyone who takes this membership later gets it too.'
+        : 'Anyone given this tag later gets it too.',
+  gone: (n) => `${count(n)} ${n === 1 ? 'is' : 'are'} no longer on your list and won’t get it.`,
+  press: (n, words) => (n === 0 ? 'Give it' : `Give to ${peopleCount(n, words)}`),
+  given: (plan, to) => `${plan} given to ${to}.`,
+  givenMembers: (plan, n, words) => `${plan} given to ${peopleCount(n, words)}.`,
+  groupSize: (g, words) => peopleCount(g.size, words),
+  newer: (g) => `${count(g.gets)} of them get it. ${count(g.size - g.gets)} ${g.size - g.gets === 1 ? 'was' : 'were'} given a newer meal plan.`,
+  chosen: (n) => `Chosen members (${count(n)})`,
+  instead: (plan) => `Gets ${plan} instead`,
+  stop: 'Stop',
+  stopAll: 'Stop for all of them',
+  stopAsk: (plan, to) => `Stop giving ${plan} to ${to}?`,
+  stopWhy: 'They stop getting it. Where another meal plan is given to them, they get that one.',
+  stopped: (plan, to) => `${plan} is no longer given to ${to}.`,
+  deleteWhy: (gets, words) =>
+    gets === 0 ? PLAN_WORDS.deleteWhy : `Its meals are deleted with it, and the ${peopleCount(gets, words)} who get it stop getting it. This can’t be undone.`,
+  sheetTitle: 'Give a meal plan',
+  pickPlan: 'Meal plan',
+  pickPlanFirst: 'Choose a meal plan',
+  noPlans: 'You have no meal plans yet.',
+  writePlan: 'Write a meal plan',
+  openPlan: (plan) => `Open ${plan}`,
+  personHeading: 'Meal plan',
+  personNone: 'No meal plan given.',
+  personGive: 'Give a meal plan',
+  personChange: 'Change',
+};

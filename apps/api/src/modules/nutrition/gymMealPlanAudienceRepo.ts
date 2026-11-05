@@ -164,6 +164,14 @@ export async function stop(sql: SqlOrTx, gymId: string, planId: string, audience
   return rows.length;
 }
 
+/** The gym's live membership types and its tags, by name. */
+export async function groupChoices(sql: SqlOrTx, gymId: string): Promise<{ membershipTypes: { id: string; name: string }[]; tags: { id: string; name: string }[] }> {
+  const membershipTypes = await sql<{ id: string; name: string }[]>`
+    SELECT id, name FROM gym_membership_types WHERE gym_id = ${gymId} AND archived_at IS NULL ORDER BY lower(name), id`;
+  const tags = await sql<{ id: string; name: string }[]>`SELECT id, name FROM gym_member_tags WHERE gym_id = ${gymId} ORDER BY lower(name), id`;
+  return { membershipTypes: [...membershipTypes], tags: [...tags] };
+}
+
 /** A live member of this gym. */
 export async function isLiveMember(sql: SqlOrTx, gymId: string, userId: string): Promise<boolean> {
   const rows = await sql<{ one: number }[]>`
