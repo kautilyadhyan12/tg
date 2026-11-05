@@ -8,7 +8,7 @@ import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleS
 import { Field } from './ClassFields';
 import MealPlanMealBox from './MealPlanMealBox';
 import {
-  DAY_NAMES, DAY_SHORT, MEAL_TYPES, MOST_PLAN_MEALS, PLAN_WORDS, byLine, dayMeals, itemAmount, mealNumbers, mealTypeName, mealsLine, numbersLine, rowOfItem,
+  DAY_NAMES, DAY_SHORT, MEAL_TYPES, MOST_PLAN_MEALS, PLAN_WORDS, byLine, dayMeals, itemAmount, mealNumbers, mealToJoin, mealTypeName, mealsLine, numbersLine, rowOfItem,
 } from './mealPlansView';
 import { useConsoleOrg } from './useConsoleOrg';
 import { orgWords } from './consoleView';
@@ -347,11 +347,17 @@ function PlanPage({ org, gymId, planId, readOnly, notice: startNotice }) {
       await failed(err, "We couldn't delete this plan. Please try again.");
     }
   };
-  const openMeal = (at) => {
+  const openMeal = (at, searchFirst = false) => {
     say(null);
-    setOpen({ kind: 'meal', at, mealType: day.meals[at].mealType, start: day.meals[at].items.map((i) => rowOfItem(i, null)) });
+    setOpen({ kind: 'meal', at, mealType: day.meals[at].mealType, start: day.meals[at].items.map((i) => rowOfItem(i, null)), searchFirst });
   };
-  const box = (at, mealType, start) => (
+  /** A meal picked under Add a meal: the day's own Breakfast, Lunch or Dinner where it has one, else a new meal. */
+  const pickMeal = (mealType) => {
+    const join = mealToJoin(day, mealType);
+    if (join >= 0) openMeal(join, true);
+    else setOpen({ kind: 'meal', at: null, mealType });
+  };
+  const box = (at, mealType, start, searchFirst = false) => (
     <MealPlanMealBox
       key={`${String(dayAt)}-${String(at)}-${mealType}`}
       gymId={gymId}
@@ -361,6 +367,7 @@ function PlanPage({ org, gymId, planId, readOnly, notice: startNotice }) {
       at={at}
       mealType={mealType}
       start={start}
+      searchFirst={searchFirst}
       onSave={(rows) => saveMeal(at, mealType, rows)}
       onClose={() => setOpen(null)}
     />
@@ -471,7 +478,7 @@ function PlanPage({ org, gymId, planId, readOnly, notice: startNotice }) {
           <ul className="flex flex-col gap-3">
             {day.meals.map((meal, at) =>
               open?.kind === 'meal' && open.at === at ? (
-                <li key={`${meal.mealType}-${String(at)}`}>{box(at, open.mealType, open.start)}</li>
+                <li key={`${meal.mealType}-${String(at)}`}>{box(at, open.mealType, open.start, open.searchFirst === true)}</li>
               ) : (
                 <MealCard
                   key={`${meal.mealType}-${String(at)}`}
@@ -499,7 +506,7 @@ function PlanPage({ org, gymId, planId, readOnly, notice: startNotice }) {
             <h3 className="c-s16 c-w6 c-t1">{`Add a meal to ${dayName}`}</h3>
             <div className="flex flex-wrap gap-2">
               {MEAL_TYPES.map((m) => (
-                <button key={m.type} type="button" onClick={() => setOpen({ kind: 'meal', at: null, mealType: m.type })} className="c-btn c-btn-s">
+                <button key={m.type} type="button" onClick={() => pickMeal(m.type)} className="c-btn c-btn-s">
                   {m.name}
                 </button>
               ))}

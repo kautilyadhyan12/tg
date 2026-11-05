@@ -110,7 +110,7 @@ describe('a meal is saved to the day and the meal it was opened on, the rest of 
     ]);
   });
 
-  it('a new breakfast on Monday from the search goes in after Monday’s meals, by the food’s own measure', async () => {
+  it('a new breakfast on Monday from the search goes in before Monday’s lunch, as the phone orders a day, by the food’s own measure', async () => {
     svc.get.mockResolvedValue(planOf({ 1: [meal('lunch', [RICE])] }));
     svc.searchFoods.mockResolvedValue([SEARCHED_BANANA]);
     svc.putDay.mockResolvedValue(planOf({ 1: [meal('lunch', [RICE]), meal('breakfast', [BANANA])] }));
@@ -126,9 +126,36 @@ describe('a meal is saved to the day and the meal it was opened on, the rest of 
     const [, , n, body] = svc.putDay.mock.calls[0];
     expect(n).toBe(1);
     expect(body.meals).toEqual([
-      { mealType: 'lunch', items: [{ canonical: 'rice_white_cooked', grams: 180 }] },
       { mealType: 'breakfast', items: [{ canonical: 'banana', measure: 'piece-1', amount: 1 }] },
+      { mealType: 'lunch', items: [{ canonical: 'rice_white_cooked', grams: 180 }] },
     ]);
+  });
+
+  it('Breakfast picked again on a day that has one opens that breakfast, and its new food joins it; a second snack is a meal of its own', async () => {
+    svc.get.mockResolvedValue(planOf({ 1: [meal('breakfast', [BANANA]), meal('snack', [BANANA])] }));
+    svc.measures.mockResolvedValue([[{ id: 'g', name: 'g', grams: 1 }]]);
+    svc.searchFoods.mockResolvedValue([{ ...SEARCHED_BANANA, canonical: 'rice_white_cooked', name: 'Rice (white, cooked)', measures: [{ id: 'g', name: 'g', grams: 1 }], startsAt: { measure: 'g', amount: 150 } }]);
+    svc.putDay.mockResolvedValue(planOf({ 1: [meal('breakfast', [BANANA, RICE]), meal('snack', [BANANA])] }));
+    open();
+    await screen.findByRole('heading', { name: 'Lean week' });
+    fireEvent.click(screen.getByRole('button', { name: 'Add a meal' }));
+    fireEvent.click(within(screen.getByTestId('pick-meal')).getByRole('button', { name: 'Breakfast' }));
+    expect(box().getByRole('heading', { name: 'Breakfast · Monday' })).toBeTruthy();
+    expect(box().getByText('Banana')).toBeTruthy();
+    await waitFor(() => expect(svc.measures).toHaveBeenCalledWith('g1', 'p1', 1, 0));
+    fireEvent.change(box().getByRole('searchbox', { name: 'Search food' }), { target: { value: 'rice' } });
+    fireEvent.click(await box().findByRole('button', { name: 'Add Rice (white, cooked)' }, { timeout: 2000 }));
+    fireEvent.click(box().getByRole('button', { name: 'Save to plan' }));
+    await screen.findByText('Breakfast saved to Monday.');
+    expect(svc.putDay.mock.calls[0][3].meals).toEqual([
+      { mealType: 'breakfast', items: [{ canonical: 'banana', grams: 118 }, { canonical: 'rice_white_cooked', grams: 150 }] },
+      { mealType: 'snack', items: [{ canonical: 'banana', grams: 118 }] },
+    ]);
+    // A snack picked again is a second snack.
+    fireEvent.click(screen.getByRole('button', { name: 'Add a meal' }));
+    fireEvent.click(within(screen.getByTestId('pick-meal')).getByRole('button', { name: 'Snack' }));
+    expect(box().getByRole('heading', { name: 'Snack · Monday' })).toBeTruthy();
+    expect(box().getByText('No foods in this meal yet.')).toBeTruthy();
   });
 
   it('a food of the writer’s own is sent with its name, grams, protein, carbs and fat, and refused when they weigh more than it', async () => {

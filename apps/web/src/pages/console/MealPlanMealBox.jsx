@@ -188,11 +188,12 @@ function FoodSearch({ onPick, disabled }) {
   );
 }
 
-/** `start`: the meal's foods as rows, empty for a new meal. `onSave(rows)` saves the meal to the
+/** `start`: the meal's foods as rows, empty for a new meal; `searchFirst`: open on the search. `onSave(rows)` saves the meal to the
  *  plan and settles once the server has answered; it throws to keep the box open. */
-export default function MealPlanMealBox({ gymId, planId, day, dayName, at, mealType, start, onSave, onClose }) {
+export default function MealPlanMealBox({ gymId, planId, day, dayName, at, mealType, start, searchFirst = false, onSave, onClose }) {
   const [rows, setRows] = useState(start);
-  const [searching, setSearching] = useState(start.length === 0);
+  // A new meal, or a meal picked again under Add a meal, opens on the search.
+  const [searching, setSearching] = useState(start.length === 0 || searchFirst);
   const [owning, setOwning] = useState(false);
   const [asking, setAsking] = useState(false);
   const [saving, setSaving] = useState(false);

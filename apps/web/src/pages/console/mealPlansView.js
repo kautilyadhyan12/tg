@@ -133,13 +133,31 @@ export function choiceOf(row) {
   return row.measure === 'g' ? { canonical: row.canonical, grams: row.amount } : { canonical: row.canonical, measure: row.measure, amount: row.amount };
 }
 
+/** Where a meal goes in a day as people eat them, the phone's own order: breakfast, lunch, a snack, dinner. */
+const MEAL_ORDER = { breakfast: 0, lunch: 1, snack: 2, dinner: 3 };
+
+/** A day's meals with a new one put in its place: after the last meal that comes before or with it. */
+function withNewMeal(meals, meal) {
+  let at = 0;
+  meals.forEach((m, i) => {
+    if (MEAL_ORDER[m.mealType] <= MEAL_ORDER[meal.mealType]) at = i + 1;
+  });
+  return [...meals.slice(0, at), meal, ...meals.slice(at)];
+}
+
+/** The meal of the day a new Breakfast, Lunch or Dinner goes into: the day's own one where it has it, so
+ *  its foods join it. A snack is a meal of its own each time: two a day is usual. -1 for a new meal. */
+export function mealToJoin(day, mealType) {
+  return mealType === 'snack' ? -1 : day.meals.findIndex((m) => m.mealType === mealType);
+}
+
 /** A day's meals as the server takes them, with one meal changed (`at`), added (`at` null) or
  *  removed (`rows` null). */
 export function dayMeals(day, at, mealType, rows) {
   const kept = day.meals.map((m) => ({ mealType: m.mealType, items: m.items.map(planItemChoice) }));
   if (rows === null) return kept.filter((_, i) => i !== at);
   const meal = { mealType, items: rows.map(choiceOf) };
-  return at === null ? [...kept, meal] : kept.map((m, i) => (i === at ? meal : m));
+  return at === null ? withNewMeal(kept, meal) : kept.map((m, i) => (i === at ? meal : m));
 }
 
 /** A measure's name in the amount box. */
